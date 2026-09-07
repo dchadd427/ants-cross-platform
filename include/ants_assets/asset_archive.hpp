@@ -126,6 +126,7 @@ private:
 
     // Hash Maps for O(1) String Lookups
     std::unordered_map<std::string, uint32_t> sprite_name_map_;
+    std::unordered_map<std::string, uint32_t> lower_sprite_name_map_;
     std::unordered_map<std::string, uint32_t> sound_name_map_;
     std::unordered_map<std::string, uint32_t> anim_name_map_;
     std::unordered_map<std::string, uint32_t> dir_anim_map_;

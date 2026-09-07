@@ -102,25 +102,27 @@ void SimulationEngine::init(const ants::assets::LevelData& level, uint32_t rando
     impl_->world_state_dirty_ = true;
     impl_->reserved_queue_slots_.clear();
 
+    for (uint8_t p = 0; p < MAX_PLAYERS; ++p) {
+        impl_->stats_.set_egg_count(p, 10);
+    }
+
     for (const auto& a : level.anthill_spawns) {
         if (a.team_id < MAX_PLAYERS) {
-            impl_->stats_.set_egg_count(a.team_id, 10);
-            static const int offsets[5][2] = {
-                { 0,  0},
-                {-1,  0},
-                { 1,  0},
-                { 0, -1},
-                { 0,  1}
-            };
-            for (int i = 0; i < 5; ++i) {
-                int32_t sx = static_cast<int32_t>(a.x) + offsets[i][0];
-                int32_t sy = static_cast<int32_t>(a.y) + offsets[i][1];
-                if (!impl_->grid_.in_bounds(sx, sy) || !impl_->grid_.get_cell(sx, sy).is_passable()) {
-                    sx = a.x;
-                    sy = a.y;
+            int32_t sx = a.x;
+            int32_t sy = a.y;
+            if (!impl_->grid_.in_bounds(sx, sy) || !impl_->grid_.get_cell(sx, sy).is_passable()) {
+                static const int offsets[4][2] = { {0, -1}, {0, 1}, {-1, 0}, {1, 0} };
+                for (const auto& off : offsets) {
+                    int32_t nx = sx + off[0];
+                    int32_t ny = sy + off[1];
+                    if (impl_->grid_.in_bounds(nx, ny) && impl_->grid_.get_cell(nx, ny).is_passable()) {
+                        sx = nx;
+                        sy = ny;
+                        break;
+                    }
                 }
-                spawn_unit(a.team_id, AntType::Worker, TileCoord{static_cast<uint16_t>(sx), static_cast<uint16_t>(sy)});
             }
+            spawn_unit(a.team_id, AntType::Worker, TileCoord{static_cast<uint16_t>(sx), static_cast<uint16_t>(sy)});
         }
     }
 }
@@ -625,6 +627,7 @@ uint32_t SimulationEngine::spawn_unit(uint8_t player_id, AntType type, TileCoord
     uint32_t id = impl_->next_ant_id_++;
     auto unit = std::make_unique<AntUnit>(id, static_cast<TeamId>(player_id % 4), type, pos.x, pos.y);
     unit->player_id = player_id;
+    unit->facing = static_cast<Direction>(impl_->prng_.rand() % 8);
     AntUnit* unit_ptr = unit.get();
     impl_->ants_.push_back(std::move(unit));
     if (type == AntType::Combat) {

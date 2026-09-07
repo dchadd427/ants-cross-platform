@@ -95,14 +95,25 @@ public:
     TextureCache(const TextureCache&) = delete;
     TextureCache& operator=(const TextureCache&) = delete;
 
-    SDL_Texture* get_sprite_texture(uint32_t sprite_id, bool mirrored = false);
-    SDL_Texture* get_named_sprite_texture(const std::string& name, bool mirrored = false);
+    SDL_Texture* get_sprite_texture(uint32_t sprite_id, bool mirrored = false, uint8_t team_id = 0);
+    SDL_Texture* get_named_sprite_texture(const std::string& name, bool mirrored = false, uint8_t team_id = 0);
     void clear();
 
 private:
     SDL_Renderer* renderer_{nullptr};
     const ants::assets::AssetArchive& archive_;
-    std::unordered_map<uint64_t, SDL_Texture*> textures_; // Key: (sprite_id << 1) | (mirrored ? 1 : 0)
+    std::unordered_map<uint64_t, SDL_Texture*> textures_; // Key: (sprite_id << 4) | (team_id << 1) | (mirrored ? 1 : 0)
+};
+
+/**
+ * @brief Static map decoration or multi-tile structure instance (e.g. grass, bear, glasses).
+ */
+struct StaticMapObject {
+    int32_t world_x{0};
+    int32_t world_y{0};
+    int32_t sprite_id{-1};
+    int32_t width{32};
+    int32_t height{32};
 };
 
 /**
@@ -177,8 +188,11 @@ private:
     uint32_t map_width_{0};
     uint32_t map_height_{0};
     std::vector<int32_t> tile_sprite_ids_; // Pre-resolved tile dictionary to sprite ID cache
+    std::vector<std::vector<int32_t>> tile_anim_frames_; // Pre-resolved animated tile frames
+    uint32_t anim_tick_{0};
     std::array<SDL_Point, 4> anthill_bases_{};
     bool has_anthill_bases_{false};
+    std::vector<StaticMapObject> static_decor_objects_;
     std::vector<RenderItem> render_queue_;
     std::string pending_screenshot_;
 };

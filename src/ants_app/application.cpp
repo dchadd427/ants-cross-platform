@@ -29,6 +29,10 @@ bool Application::init(int argc, char* argv[]) {
             cfg.screenshot_path = argv[++i];
         } else if (std::strcmp(argv[i], "--frames") == 0 && i + 1 < argc) {
             cfg.screenshot_frames = std::stoi(argv[++i]);
+        } else if (std::strcmp(argv[i], "--select-ant") == 0 && i + 1 < argc) {
+            cfg.select_ant_id = std::stoi(argv[++i]);
+        } else if (std::strcmp(argv[i], "--select-base") == 0 && i + 1 < argc) {
+            cfg.select_base_team = std::stoi(argv[++i]);
         }
     }
     return init(cfg);
@@ -137,6 +141,11 @@ bool Application::init(const ApplicationConfig& config) {
     if (!config_.start_in_map_select) {
         state_ = AppState::Playing;
         midi_player_.stop();
+        if (config_.select_ant_id > 0) {
+            hud_.select_ant(static_cast<uint32_t>(config_.select_ant_id));
+        } else if (config_.select_base_team >= 0) {
+            hud_.select_base(config_.select_base_team);
+        }
     } else {
         state_ = AppState::MapSelect;
         midi_player_.play(true); // Loop INTRO.MID exclusively during map selection
@@ -193,6 +202,12 @@ bool Application::start_game(const std::string& map_path) {
     hud_.init(0);
     hud_.reset();
     scorecard_.hide();
+
+    if (config_.select_ant_id > 0) {
+        hud_.select_ant(static_cast<uint32_t>(config_.select_ant_id));
+    } else if (config_.select_base_team >= 0) {
+        hud_.select_base(config_.select_base_team);
+    }
 
     // 6. Transition to Playing state
     state_ = AppState::Playing;

@@ -82,9 +82,14 @@ size_t AssetArchive::total_memory_bytes() const noexcept {
 
 void AssetArchive::build_index_tables() {
     sprite_name_map_.clear();
+    lower_sprite_name_map_.clear();
     sprite_name_map_.reserve(sprites_.size());
+    lower_sprite_name_map_.reserve(sprites_.size());
     for (size_t i = 0; i < sprites_.size(); ++i) {
         sprite_name_map_[sprites_[i].name] = static_cast<uint32_t>(i);
+        std::string low = sprites_[i].name;
+        for (char& c : low) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+        lower_sprite_name_map_.emplace(low, static_cast<uint32_t>(i));
     }
 
     sound_name_map_.clear();
@@ -240,6 +245,12 @@ const Sprite* AssetArchive::find_sprite(const std::string& name) const noexcept 
     if (it != sprite_name_map_.end()) {
         return &sprites_[it->second];
     }
+    std::string low = name;
+    for (char& c : low) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    auto it_low = lower_sprite_name_map_.find(low);
+    if (it_low != lower_sprite_name_map_.end()) {
+        return &sprites_[it_low->second];
+    }
     return nullptr;
 }
 
@@ -247,6 +258,12 @@ int32_t AssetArchive::find_sprite_id(const std::string& name) const noexcept {
     auto it = sprite_name_map_.find(name);
     if (it != sprite_name_map_.end()) {
         return static_cast<int32_t>(it->second);
+    }
+    std::string low = name;
+    for (char& c : low) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    auto it_low = lower_sprite_name_map_.find(low);
+    if (it_low != lower_sprite_name_map_.end()) {
+        return static_cast<int32_t>(it_low->second);
     }
     return -1;
 }
