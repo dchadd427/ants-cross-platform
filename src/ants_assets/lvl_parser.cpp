@@ -207,14 +207,18 @@ bool LVLParser::load_from_memory(const uint8_t* data, size_t size, LevelData& ou
             }
 
             const std::string& tname = out_level.get_tile_name(sp.tile_id);
-            if (tname.find("BSTART") != std::string::npos) {
-                sp.team_id = 0; // Black
-            } else if (tname.find("USTART") != std::string::npos) {
-                sp.team_id = 1; // Blue
-            } else if (tname.find("RSTART") != std::string::npos) {
-                sp.team_id = 2; // Red
-            } else if (tname.find("GSTART") != std::string::npos) {
-                sp.team_id = 3; // Green
+            if (tname.find("GSTART") != std::string::npos || tname.find("GREENHILL") != std::string::npos ||
+                tname.find("ghill") != std::string::npos || tname.find("gstart") != std::string::npos) {
+                sp.team_id = 0; // Green
+            } else if (tname.find("RSTART") != std::string::npos || tname.find("REDHILL") != std::string::npos ||
+                       tname.find("rhill") != std::string::npos || tname.find("rstart") != std::string::npos) {
+                sp.team_id = 1; // Red
+            } else if (tname.find("USTART") != std::string::npos || tname.find("BLUEHILL") != std::string::npos ||
+                       tname.find("blhill") != std::string::npos || tname.find("ustart") != std::string::npos) {
+                sp.team_id = 2; // Blue
+            } else if (tname.find("BSTART") != std::string::npos || tname.find("BLACKHILL") != std::string::npos ||
+                       tname.find("bkhill") != std::string::npos || tname.find("bstart") != std::string::npos) {
+                sp.team_id = 3; // Black
             } else {
                 sp.team_id = 255;
             }

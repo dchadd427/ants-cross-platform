@@ -8,10 +8,10 @@ namespace ants::app {
 namespace {
 
 constexpr assets::ColorRGBA TEAM_COLORS[4] = {
-    {79, 87, 111, 255},   // 0: Black
-    {119, 175, 239, 255}, // 1: Blue
-    {251, 51, 91, 255},   // 2: Red
-    {83, 147, 43, 255}    // 3: Green
+    {83, 147, 43, 255},   // 0: Green
+    {251, 51, 91, 255},   // 1: Red
+    {119, 175, 239, 255}, // 2: Blue
+    {79, 87, 111, 255}    // 3: Black
 };
 
 } // anonymous namespace

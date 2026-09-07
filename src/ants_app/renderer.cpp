@@ -199,7 +199,7 @@ SDL_Texture* TextureCache::get_sprite_texture(uint32_t sprite_id, bool mirrored,
     if (sp.width == 0 || sp.height == 0) return nullptr;
 
 // Authentic Ants HUD palette remap for indices 1..24 (Bevels, Frames, Buttons)
-static const ants::assets::ColorRGBA TEAM0_BLACK_HUD[24] = {
+static const ants::assets::ColorRGBA TEAM_BLACK_HUD[24] = {
     {195, 192, 201, 255}, {170, 167, 177, 255}, {146, 144, 153, 255}, {111, 110, 117, 255},
     {111, 106, 118, 255}, {107,  99, 117, 255}, {101,  97, 111, 255}, { 99,  99, 110, 255},
     { 93,  89, 101, 255}, { 91,  88,  96, 255}, { 85,  81,  86, 255}, { 95,  87,  79, 255},
@@ -208,7 +208,7 @@ static const ants::assets::ColorRGBA TEAM0_BLACK_HUD[24] = {
     { 54,  48,  61, 255}, { 45,  39,  53, 255}, { 54,  50,  61, 255}, { 84,  81,  90, 255}
 };
 
-static const ants::assets::ColorRGBA TEAM1_BLUE_HUD[24] = {
+static const ants::assets::ColorRGBA TEAM_BLUE_HUD[24] = {
     {239, 243, 255, 255}, {195, 195, 231, 255}, {147, 147, 199, 255}, { 75,  75, 135, 255},
     { 75,  75, 135, 255}, { 71,  79, 115, 255}, { 47,  47, 103, 255}, { 51,  59,  99, 255},
     { 51,  59,  99, 255}, { 47,  47, 103, 255}, { 47,  47, 103, 255}, { 47,  47, 103, 255},
@@ -217,7 +217,7 @@ static const ants::assets::ColorRGBA TEAM1_BLUE_HUD[24] = {
     { 31,  31,  59, 255}, { 31,  31,  59, 255}, { 15,  19,  35, 255}, { 15,  19,  35, 255}
 };
 
-static const ants::assets::ColorRGBA TEAM2_RED_HUD[24] = {
+static const ants::assets::ColorRGBA TEAM_RED_HUD[24] = {
     {231, 159, 200, 255}, {215, 140, 181, 255}, {206, 119, 165, 255}, {166,  82, 121, 255},
     {188,  67, 124, 255}, {182,  55, 116, 255}, {171,  61, 113, 255}, {164,  48, 108, 255},
     {158,  44, 100, 255}, {153,  46,  98, 255}, {136,  41,  90, 255}, {146,  45,  90, 255},
@@ -228,26 +228,37 @@ static const ants::assets::ColorRGBA TEAM2_RED_HUD[24] = {
 
     // Convert 8-bit paletted sprite to 32-bit RGBA
     auto pal = archive_.get_palette();
-    if (team_id > 0 && team_id < 4) {
-        // Authentic Ants palette remap:
-        // Team 0 (Black): indices 80..99
-        // Team 1 (Blue): indices 100..119 (+20 shift)
-        // Team 2 (Red): indices 120..139 (+40 shift)
-        // Team 3 (Green): indices 140..159 (+60 shift)
-        const auto& base_pal = archive_.get_palette();
-        const size_t offset = static_cast<size_t>(team_id) * 20;
-        for (size_t i = 80; i <= 99; ++i) {
-            pal[i] = base_pal[i + offset];
+    if (team_id < 4) {
+        // Authentic Ants sprite palette remap:
+        // Team 0 (Green): indices 80..99 -> base 140..159 (+60 shift)
+        // Team 1 (Red):   indices 80..99 -> base 120..139 (+40 shift)
+        // Team 2 (Blue):  indices 80..99 -> base 100..119 (+20 shift)
+        // Team 3 (Black): indices 80..99 -> base 80..99 (base black palette)
+        size_t offset = 0;
+        if (team_id == 0) offset = 60;
+        else if (team_id == 1) offset = 40;
+        else if (team_id == 2) offset = 20;
+        else if (team_id == 3) offset = 0;
+
+        if (offset > 0) {
+            const auto& base_pal = archive_.get_palette();
+            for (size_t i = 80; i <= 99; ++i) {
+                pal[i] = base_pal[i + offset];
+            }
         }
     }
 
-    // Authentic HUD palette tinting for indices 1..24
-    if (team_id == 0) {
-        for (size_t i = 1; i <= 24; ++i) pal[i] = TEAM0_BLACK_HUD[i - 1];
-    } else if (team_id == 1) {
-        for (size_t i = 1; i <= 24; ++i) pal[i] = TEAM1_BLUE_HUD[i - 1];
+    // Authentic HUD palette tinting for indices 1..24:
+    // Team 0 (Green): Default green HUD from ants.chd (no tint remap needed)
+    // Team 1 (Red):   TEAM_RED_HUD
+    // Team 2 (Blue):  TEAM_BLUE_HUD
+    // Team 3 (Black): TEAM_BLACK_HUD
+    if (team_id == 1) {
+        for (size_t i = 1; i <= 24; ++i) pal[i] = TEAM_RED_HUD[i - 1];
     } else if (team_id == 2) {
-        for (size_t i = 1; i <= 24; ++i) pal[i] = TEAM2_RED_HUD[i - 1];
+        for (size_t i = 1; i <= 24; ++i) pal[i] = TEAM_BLUE_HUD[i - 1];
+    } else if (team_id == 3) {
+        for (size_t i = 1; i <= 24; ++i) pal[i] = TEAM_BLACK_HUD[i - 1];
     }
 
     std::vector<uint8_t> rgba = sp.to_rgba32(pal);
@@ -450,7 +461,7 @@ void Renderer::set_level(const ants::assets::LevelData& level) {
     }
 
     // Identify 4x4 Anthill base bounding origins from Layer 2
-    for (int t = 0; t < 4; ++t) {
+    for (size_t t = 0; t < 4; ++t) {
         anthill_bases_[t] = { -1, -1 };
     }
     has_anthill_bases_ = false;
@@ -461,17 +472,18 @@ void Renderer::set_level(const ants::assets::LevelData& level) {
             if (c2.tile_index < level.tile_dictionary.size()) {
                 const std::string& tname = level.tile_dictionary[c2.tile_index];
                 int team = -1;
-                if (tname == "BLACKHILL" || tname == "blackhill") team = 0;
-                else if (tname == "BLUEHILL" || tname == "bluehill") team = 1;
-                else if (tname == "REDHILL" || tname == "redhill") team = 2;
-                else if (tname == "GREENHILL" || tname == "greenhill") team = 3;
+                if (tname == "GREENHILL" || tname == "greenhill") team = 0;
+                else if (tname == "REDHILL" || tname == "redhill") team = 1;
+                else if (tname == "BLUEHILL" || tname == "bluehill") team = 2;
+                else if (tname == "BLACKHILL" || tname == "blackhill") team = 3;
 
                 if (team >= 0) {
-                    if (anthill_bases_[team].x < 0 || static_cast<int32_t>(x) < anthill_bases_[team].x) {
-                        anthill_bases_[team].x = static_cast<int32_t>(x);
+                    size_t st = static_cast<size_t>(team);
+                    if (anthill_bases_[st].x < 0 || static_cast<int32_t>(x) < anthill_bases_[st].x) {
+                        anthill_bases_[st].x = static_cast<int32_t>(x);
                     }
-                    if (anthill_bases_[team].y < 0 || static_cast<int32_t>(y) < anthill_bases_[team].y) {
-                        anthill_bases_[team].y = static_cast<int32_t>(y);
+                    if (anthill_bases_[st].y < 0 || static_cast<int32_t>(y) < anthill_bases_[st].y) {
+                        anthill_bases_[st].y = static_cast<int32_t>(y);
                     }
                     has_anthill_bases_ = true;
                 }
@@ -755,10 +767,10 @@ void Renderer::render_terrain_layer2_structures(const ants::sim::Grid& grid) {
         }
     }
 
-    // Anthill Bases (Authentic 128x128 4x4 bases: bkhill, blhill, rhill, ghill)
-    static const char* hill_sprites[4] = { "bkhill.bmp", "blhill.bmp", "rhill.bmp", "ghill.bmp" };
+    // Anthill Bases (Authentic 128x128 4x4 bases: ghill, rhill, blhill, bkhill)
+    static const char* hill_sprites[4] = { "ghill.bmp", "rhill.bmp", "blhill.bmp", "bkhill.bmp" };
     if (has_anthill_bases_) {
-        for (int t = 0; t < 4; ++t) {
+        for (size_t t = 0; t < 4; ++t) {
             if (anthill_bases_[t].x >= 0 && anthill_bases_[t].y >= 0) {
                 int32_t sx = 0, sy = 0;
                 camera_.world_to_screen(anthill_bases_[t].x * TILE_SIZE, anthill_bases_[t].y * TILE_SIZE, sx, sy);
@@ -812,16 +824,24 @@ void Renderer::draw_single_ant(const ants::sim::AntSnapshot& ant, bool is_select
     std::string prefix = class_prefixes[static_cast<size_t>(ant.type) % 6];
     std::string action = "st"; // Default Idle
 
-    if (ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::Walking)) {
+    if (ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::Walking) ||
+        ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::Intercepting) ||
+        ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::ReturningToPost)) {
         action = ant.is_holding ? "ws" : (ant.is_swimming ? "sw" : "wg");
+    } else if (ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::Swimming)) {
+        action = "sw";
     } else if (ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::Attacking)) {
         action = "at";
     } else if (ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::Knockback)) {
         action = "gf";
     } else if (ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::Bounce)) {
         action = "gb";
+    } else if (ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::Flinch)) {
+        action = "gh";
     } else if (ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::Drowning)) {
         action = "dr";
+    } else {
+        action = "st";
     }
 
     ants::assets::Direction dir = static_cast<ants::assets::Direction>(ant.facing & 7);
@@ -1023,36 +1043,48 @@ void Renderer::render_minimap(const ants::sim::WorldState& world,
 void Renderer::render_hud_chrome(const ants::sim::WorldState&, int32_t) {
     if (!renderer_) return;
 
+    // Right panel base backing fill to ensure zero dark gaps between modular HUD tiles
+    static const SDL_Color hud_bg_colors[4] = {
+        {43, 107, 95, 255},  // Green (Player 0)
+        {115, 35, 35, 255},  // Red (Player 1)
+        {35, 65, 115, 255},  // Blue (Player 2)
+        {48, 48, 52, 255}    // Black (Player 3)
+    };
+    const auto& bg_col = hud_bg_colors[hud_team_id_ % 4];
+    SDL_SetRenderDrawColor(renderer_, bg_col.r, bg_col.g, bg_col.b, bg_col.a);
+    SDL_Rect right_bg = { 480, 22, 160, 458 };
+    SDL_RenderFillRect(renderer_, &right_bg);
+
     // Top Bar (640x22)
-    SDL_Texture* top_tex = texture_cache_->get_named_sprite_texture("x0y0.bmp");
+    SDL_Texture* top_tex = texture_cache_->get_named_sprite_texture("x0y0.bmp", false, hud_team_id_);
     if (top_tex) {
         SDL_Rect top_rect = { 0, 0, 640, 22 };
         SDL_RenderCopy(renderer_, top_tex, nullptr, &top_rect);
     }
 
     // Left Border (17x458)
-    SDL_Texture* left_tex = texture_cache_->get_named_sprite_texture("x0y22.bmp");
+    SDL_Texture* left_tex = texture_cache_->get_named_sprite_texture("x0y22.bmp", false, hud_team_id_);
     if (left_tex) {
         SDL_Rect left_rect = { 0, 22, 17, 458 };
         SDL_RenderCopy(renderer_, left_tex, nullptr, &left_rect);
     }
 
     // Right Divider (22x426)
-    SDL_Texture* div_tex = texture_cache_->get_named_sprite_texture("x458y35.bmp");
+    SDL_Texture* div_tex = texture_cache_->get_named_sprite_texture("x458y35.bmp", false, hud_team_id_);
     if (div_tex) {
         SDL_Rect div_rect = { 458, 35, 22, 426 };
         SDL_RenderCopy(renderer_, div_tex, nullptr, &div_rect);
     }
 
     // Bottom News Banner (623x19)
-    SDL_Texture* bot_tex = texture_cache_->get_named_sprite_texture("x17y461.bmp");
+    SDL_Texture* bot_tex = texture_cache_->get_named_sprite_texture("x17y461.bmp", false, hud_team_id_);
     if (bot_tex) {
         SDL_Rect bot_rect = { 17, 461, 623, 19 };
         SDL_RenderCopy(renderer_, bot_tex, nullptr, &bot_rect);
     }
 
     // Selection Card Backing (160x128)
-    SDL_Texture* card_tex = texture_cache_->get_named_sprite_texture("x480y126.bmp");
+    SDL_Texture* card_tex = texture_cache_->get_named_sprite_texture("x480y126.bmp", false, hud_team_id_);
     if (card_tex) {
         SDL_Rect card_rect = { CARD_X, CARD_Y, CARD_W, CARD_H };
         SDL_RenderCopy(renderer_, card_tex, nullptr, &card_rect);

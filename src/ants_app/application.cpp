@@ -106,7 +106,11 @@ bool Application::init(const ApplicationConfig& config) {
     renderer_->set_level(current_level_);
 
     // Center camera on Player 0's base spawn
-    if (!current_level_.anthill_spawns.empty()) {
+    const auto* base = sim_.grid().find_anthill(0);
+    if (base) {
+        renderer_->camera().center_on(base->x * TILE_SIZE, base->y * TILE_SIZE,
+                                      current_level_.width, current_level_.height);
+    } else if (!current_level_.anthill_spawns.empty()) {
         const auto& spawn = current_level_.anthill_spawns[0];
         renderer_->camera().center_on(spawn.x * TILE_SIZE, spawn.y * TILE_SIZE,
                                       current_level_.width, current_level_.height);
@@ -160,6 +164,14 @@ bool Application::init(const ApplicationConfig& config) {
         midi_player_.stop();
         if (config_.select_ant_id > 0) {
             hud_.select_ant(static_cast<uint32_t>(config_.select_ant_id));
+            if (renderer_) {
+                for (const auto& a : sim_.get_world_state().ants) {
+                    if (a.id == static_cast<uint32_t>(config_.select_ant_id)) {
+                        renderer_->camera().center_on(a.px, a.py, current_level_.width, current_level_.height);
+                        break;
+                    }
+                }
+            }
         } else if (config_.select_base_team >= 0) {
             hud_.select_base(config_.select_base_team);
         }
@@ -225,6 +237,14 @@ bool Application::start_game(const std::string& map_path) {
 
     if (config_.select_ant_id > 0) {
         hud_.select_ant(static_cast<uint32_t>(config_.select_ant_id));
+        if (renderer_) {
+            for (const auto& a : sim_.get_world_state().ants) {
+                if (a.id == static_cast<uint32_t>(config_.select_ant_id)) {
+                    renderer_->camera().center_on(a.px, a.py, current_level_.width, current_level_.height);
+                    break;
+                }
+            }
+        }
     } else if (config_.select_base_team >= 0) {
         hud_.select_base(config_.select_base_team);
     }
