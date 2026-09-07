@@ -229,9 +229,12 @@ public:
     std::string get_sprite_prefix() const;
 
     void set_destination(int32_t target_tx, int32_t target_ty);
+    void set_path(std::vector<TileCoord> path);
     void clear_path() noexcept {
         waypoints.clear();
         current_waypoint_idx = 0;
+        anim_tick = 0;
+        anim_subitem = 0;
     }
 
     void start_flinch() noexcept {
@@ -252,7 +255,7 @@ public:
         anim_tick = 0;
     }
 
-    void tick_movement(bool is_swimming);
+    void tick_movement(bool is_swimming, SurfaceType surface = SurfaceType::Grass);
     void tick_timers() noexcept;
 };
 

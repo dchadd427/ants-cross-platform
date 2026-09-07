@@ -453,7 +453,7 @@ int main(int argc, char* argv[]) {
     (void)argc; (void)argv;
 
     std::cout << "=======================================================\n"
-              << " Microsoft Ants Remake - Challenger M1-IT2 Suite\n"
+              << " Ants Remake - Challenger M1-IT2 Suite\n"
               << " Target: Aliasing, In-Place Reflection, LevelData Contract\n"
               << "=======================================================\n";
 

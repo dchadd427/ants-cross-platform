@@ -1,8 +1,8 @@
-# E2E Test Infrastructure Specification: Microsoft Ants Remake
+# E2E Test Infrastructure Specification: Ants Remake
 
 ## 1. Test Philosophy: Opaque-Box & Requirement-Driven
 
-The End-to-End (E2E) testing track for the Microsoft Ants remake adheres to an **opaque-box, requirement-driven testing philosophy**. Tests treat the engine, simulation, and asset decoders as closed units governed strictly by:
+The End-to-End (E2E) testing track for the Ants remake adheres to an **opaque-box, requirement-driven testing philosophy**. Tests treat the engine, simulation, and asset decoders as closed units governed strictly by:
 1. The authoritative reverse-engineering specification (`GAME_REVERSE_ENGINEERING.md`).
 2. The user requirements and directives (`ORIGINAL_REQUEST.md`).
 3. The decoupled interface contracts and milestone definitions (`PROJECT.md`).

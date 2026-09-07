@@ -21,7 +21,7 @@ MapSelectScreen::MapSelectScreen() = default;
 void MapSelectScreen::init(const std::string& maps_dir) {
     maps_.clear();
 
-    // Standard authentic Microsoft Ants maps in canonical order
+    // Standard authentic Ants maps in canonical order
     struct DefaultMap {
         const char* file;
         const char* title;

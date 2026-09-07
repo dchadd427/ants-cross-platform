@@ -164,7 +164,7 @@ bool LVLParser::load_from_memory(const uint8_t* data, size_t size, LevelData& ou
 
         // 3. Grid Dimensions (8 bytes)
         if (!r.read_u32(out_level.width) || !r.read_u32(out_level.height)) return false;
-        // Enforce upper sanity limit on map dimensions (Microsoft Ants max is 60x60, allow up to 256x256)
+        // Enforce upper sanity limit on map dimensions (Ants max is 60x60, allow up to 256x256)
         if (out_level.width == 0 || out_level.height == 0 ||
             out_level.width > 256 || out_level.height > 256) {
             return false;

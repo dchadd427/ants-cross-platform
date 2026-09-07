@@ -129,6 +129,7 @@ private:
     std::unordered_map<std::string, uint32_t> lower_sprite_name_map_;
     std::unordered_map<std::string, uint32_t> sound_name_map_;
     std::unordered_map<std::string, uint32_t> anim_name_map_;
+    std::unordered_map<std::string, uint32_t> lower_anim_name_map_;
     std::unordered_map<std::string, uint32_t> dir_anim_map_;
 };
 

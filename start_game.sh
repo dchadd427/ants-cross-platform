@@ -6,7 +6,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
 echo "======================================================================"
-echo "                MICROSOFT ANTS ENGINE REMAKE (macOS)                  "
+echo "                      ANTS ENGINE REMAKE (macOS)                      "
 echo "======================================================================"
 
 # 1. Ensure build directory and binary exist
@@ -54,7 +54,7 @@ echo "   * M:                         Toggle background music"
 echo "   * Esc / C:                   Clear selection / Cancel order / Return to Menu"
 echo "----------------------------------------------------------------------"
 echo ""
-echo "[LAUNCHER] Starting Microsoft Ants..."
+echo "[LAUNCHER] Starting Ants..."
 echo ""
 
 exec ./build/src/ants_app/ants "$@"

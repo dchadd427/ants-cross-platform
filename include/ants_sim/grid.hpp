@@ -92,12 +92,32 @@ struct WorldCoord {
     }
 };
 
+// Surface Types for terrain-dependent locomotion speeds
+enum class SurfaceType : uint8_t {
+    Grass  = 0, // Normal turf: 1.00x baseline
+    Mud    = 1, // Wet mud: ~0.65x (slower than gravel)
+    Gravel = 2, // Dirt / Gravel path: ~1.20x (faster than mud)
+    Slate  = 3, // Slate / flagstone: ~1.40x (faster than gravel)
+    Water  = 4  // Water surface
+};
+
+inline constexpr int32_t get_surface_speed_multiplier_fx(SurfaceType surf) noexcept {
+    switch (surf) {
+        case SurfaceType::Slate:  return 91750; // 1.40x in 16.16
+        case SurfaceType::Gravel: return 78643; // 1.20x in 16.16
+        case SurfaceType::Mud:    return 42598; // 0.65x in 16.16
+        case SurfaceType::Grass:
+        default:                  return 65536; // 1.00x in 16.16
+    }
+}
+
 /**
  * @brief Single grid cell representation combining Layer 1 terrain and Layer 2 interactive objects.
  */
 struct TileCell {
     uint16_t terrain_id{0};                  // Layer 1 terrain dictionary index
     uint8_t  terrain_type{TERRAIN_WALKABLE}; // 0 = Walkable, 1 = Obstacle, 2 = Water
+    SurfaceType surface_type{SurfaceType::Grass}; // Terrain surface locomotion classification
     uint16_t flags{0};                       // Layer 1 property flags (0x02 bomb, 0x04 fire)
 
     uint16_t interactive_id{TILE_EMPTY};     // Layer 2 overlay item (or 0x7FFE)
@@ -106,6 +126,9 @@ struct TileCell {
     uint32_t lunchbox_points{0};             // Points carried if lunchbox
     bool     is_food{false};                 // True only if genuine food item
     bool     is_mud{false};                  // True if terrain is mud / dirt path
+    bool     is_powerup{false};              // True if cell contains a power-up
+    uint8_t  powerup_type{0};                // 1=Bomber, 2=Fire, 3=Thief, 4=Combat, 5=Swimmer
+    bool     is_obstacle_overlay{false};     // True if Layer 2 item is a solid obstacle (rock, grass clump, etc.)
 
     int32_t  occupant_ant_id{-1};            // Ant occupying this cell (-1 = none)
 
@@ -124,6 +147,9 @@ struct TileCell {
         return is_food && !is_empty_overlay() && !has_fire() && !has_completed_bridge() &&
                !has_partial_bridge() && !has_bomb() && !has_lunchbox();
     }
+    constexpr bool has_powerup() const noexcept {
+        return is_powerup && !is_empty_overlay();
+    }
     constexpr bool has_lunchbox() const noexcept { return interactive_id == TILE_LUNCHBOX; }
 
     constexpr bool can_place_bomb() const noexcept {
@@ -137,7 +163,7 @@ struct TileCell {
      * @brief Passability check for pathfinding and locomotion.
      */
     constexpr bool is_passable(bool is_swimmer = false, bool is_fire_ant = false) const noexcept {
-        if (terrain_type == TERRAIN_OBSTACLE) return false;
+        if (terrain_type == TERRAIN_OBSTACLE || is_obstacle_overlay) return false;
 
         if (terrain_type == TERRAIN_WATER) {
             if (has_completed_bridge()) return true;
@@ -165,7 +191,7 @@ struct ActiveFoodSchedule {
 };
 
 /**
- * @brief 32x32 integer tile grid representation for Microsoft Ants.
+ * @brief 32x32 integer tile grid representation for Ants.
  */
 class Grid {
 public:
@@ -206,14 +232,24 @@ public:
                 cell.occupant_ant_id = -1;
                 cell.lunchbox_points = 0;
                 cell.is_mud = false;
+                cell.surface_type = SurfaceType::Grass;
                 if (cell.terrain_type == TERRAIN_WALKABLE) {
                     const std::string& l1_name = level.get_tile_name(c1.tile_index);
                     if (!l1_name.empty()) {
                         char ch = static_cast<char>(std::tolower(static_cast<unsigned char>(l1_name[0])));
-                        if (ch == 'm') {
+                        if (ch == 's') {
+                            cell.surface_type = SurfaceType::Slate;
+                        } else if (ch == 'd') {
+                            cell.surface_type = SurfaceType::Gravel;
+                        } else if (ch == 'm') {
+                            cell.surface_type = SurfaceType::Mud;
                             cell.is_mud = true;
+                        } else {
+                            cell.surface_type = SurfaceType::Grass;
                         }
                     }
+                } else if (cell.terrain_type == TERRAIN_WATER) {
+                    cell.surface_type = SurfaceType::Water;
                 }
             }
         }
@@ -227,14 +263,28 @@ public:
                 cell.interactive_owner = 255;
                 cell.timer_ticks = 0;
                 cell.is_food = false;
+                cell.is_powerup = false;
+                cell.powerup_type = 0;
+                cell.is_obstacle_overlay = false;
 
                 if (c2.tile_index != TILE_EMPTY && c2.tile_index != 0xFFFF && c2.tile_index != 0x7FFE) {
                     const std::string& tname = level.get_tile_name(c2.tile_index);
-                    if (!tname.empty()) {
+                    if (!tname.empty() && tname != ".") {
                         std::string lower_name = tname;
                         for (char& ch : lower_name) ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
                         if (lower_name.rfind("fd", 0) == 0 || lower_name.rfind("food", 0) == 0) {
                             cell.is_food = true;
+                        } else if (lower_name.rfind("pu_", 0) == 0) {
+                            cell.is_powerup = true;
+                            if (lower_name == "pu_comb") cell.powerup_type = 4; // Combat
+                            else if (lower_name == "pu_thief") cell.powerup_type = 3; // Thief
+                            else if (lower_name == "pu_bomb") cell.powerup_type = 1; // Bomber
+                            else if (lower_name == "pu_swim") cell.powerup_type = 5; // Swimmer
+                            else if (lower_name == "pu_mason" || lower_name == "pu_fire") cell.powerup_type = 2; // Fire
+                        } else if (lower_name.find("hill") != std::string::npos || lower_name.find("start") != std::string::npos) {
+                            cell.is_obstacle_overlay = false;
+                        } else {
+                            cell.is_obstacle_overlay = true;
                         }
                     }
                 }
@@ -456,6 +506,32 @@ public:
     void set_tile_flags(int32_t x, int32_t y, uint16_t flags) noexcept {
         if (!in_bounds(x, y)) return;
         get_cell_mut(static_cast<uint32_t>(x), static_cast<uint32_t>(y)).flags = flags;
+    }
+
+    bool has_powerup_at(TileCoord pos) const noexcept {
+        if (!in_bounds(pos)) return false;
+        return get_cell(pos).has_powerup();
+    }
+
+    uint8_t get_powerup_type(TileCoord pos) const noexcept {
+        if (!in_bounds(pos)) return 0;
+        return get_cell(pos).powerup_type;
+    }
+
+    void clear_powerup(int32_t x, int32_t y) noexcept {
+        if (!in_bounds(x, y)) return;
+        auto& cell = get_cell_mut(static_cast<uint32_t>(x), static_cast<uint32_t>(y));
+        cell.is_powerup = false;
+        cell.powerup_type = 0;
+        cell.interactive_id = TILE_EMPTY;
+    }
+
+    void place_powerup(int32_t x, int32_t y, uint8_t powerup_type) noexcept {
+        if (!in_bounds(x, y)) return;
+        auto& cell = get_cell_mut(static_cast<uint32_t>(x), static_cast<uint32_t>(y));
+        cell.is_powerup = true;
+        cell.powerup_type = powerup_type;
+        cell.interactive_id = 0x8000u | static_cast<uint16_t>(powerup_type);
     }
 
 private:

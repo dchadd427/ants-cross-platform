@@ -1,4 +1,4 @@
-# TEST_READY — Microsoft Ants Remake E2E Test Suite
+# TEST_READY — Ants Remake E2E Test Suite
 
 **Status**: READY  
 **Date**: 2026-09-06  
@@ -10,7 +10,7 @@
 
 ## 1. Executive Summary
 
-The comprehensive, opaque-box End-to-End (E2E) test suite for the Microsoft Ants remake has been fully designed, implemented, compiled, and verified. The test suite operates strictly as an opaque-box validator against authoritative reverse-engineering specifications (`GAME_REVERSE_ENGINEERING.md`), original assets (`Original-Ants/ants.chd`, `Original-Ants/Maps/*.LVL`), and project requirements (`PROJECT.md`, `ORIGINAL_REQUEST.md`).
+The comprehensive, opaque-box End-to-End (E2E) test suite for the Ants remake has been fully designed, implemented, compiled, and verified. The test suite operates strictly as an opaque-box validator against authoritative reverse-engineering specifications (`GAME_REVERSE_ENGINEERING.md`), original assets (`Original-Ants/ants.chd`, `Original-Ants/Maps/*.LVL`), and project requirements (`PROJECT.md`, `ORIGINAL_REQUEST.md`).
 
 All 49 features cataloged in `TEST_INFRA.md` are covered across 4 testing tiers, fulfilling all quality gate thresholds:
 - **Tier 1 (Feature Coverage)**: >= 5 tests per feature (Features 1–49 = 245 tests).
@@ -24,7 +24,7 @@ All 49 features cataloged in `TEST_INFRA.md` are covered across 4 testing tiers,
 
 ```text
 ======================================================================
-       MICROSOFT ANTS REMAKE - OPAQUE-BOX E2E TEST RUNNER             
+             ANTS REMAKE - OPAQUE-BOX E2E TEST RUNNER                 
 ======================================================================
 
 ----------------------------------------------------------------------
@@ -166,4 +166,4 @@ cmake --build build_e2e
 
 ## 7. Conclusion
 
-The E2E test harness and test suites are production-ready. Any agent implementing core engine components or user-facing systems can run `./build_e2e/e2e_runner --all` at any time to verify regression-free compliance with the original Microsoft Ants game rules and asset pipelines.
+The E2E test harness and test suites are production-ready. Any agent implementing core engine components or user-facing systems can run `./build_e2e/e2e_runner --all` at any time to verify regression-free compliance with the original Ants game rules and asset pipelines.
