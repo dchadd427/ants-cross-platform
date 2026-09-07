@@ -432,12 +432,12 @@ void Application::handle_key_down(const SDL_KeyboardEvent& key) {
     }
 
     if (key.keysym.sym == SDLK_h) {
-        const auto* base = sim_.grid().find_anthill(local_player_id_);
-        if (base) {
-            renderer_->camera().center_on(base->x * 32, base->y * 32, current_level_.width, current_level_.height);
-            hud_.queue_news_message("Camera Centered on Home Anthill", 40, false);
+        bool ctrl = (key.keysym.mod & KMOD_CTRL) || (key.keysym.mod & KMOD_GUI);
+        if (ctrl) {
+            hud_.select_base(local_player_id_);
+            hud_.queue_news_message("Home Anthill Selected", 40, false);
+            return;
         }
-        return;
     }
 
     if (key.keysym.sym == SDLK_a) {

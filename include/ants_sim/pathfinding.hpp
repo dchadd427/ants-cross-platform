@@ -21,7 +21,8 @@ public:
         TileCoord target,
         bool is_swimmer = false,
         bool is_fire_ant = false,
-        size_t max_nodes = 4000
+        size_t max_nodes = 4000,
+        const std::vector<TileCoord>& obstacles = {}
     );
 
     /**

@@ -14,15 +14,17 @@ struct Node {
     int32_t f;
 
     bool operator>(const Node& o) const noexcept {
-        return f > o.f;
+        if (f != o.f) return f > o.f;
+        return g < o.g; // Prefer larger g (closer to goal) for straight diagonal paths
     }
 };
 
-// Octile distance heuristic (multiplied by 10 for integer math)
+// Octile distance heuristic scaled for admissibility across fastest terrain (Slate: 7/10)
 inline int32_t octile_heuristic(TileCoord a, TileCoord b) noexcept {
     int32_t dx = std::abs(a.x - b.x);
     int32_t dy = std::abs(a.y - b.y);
-    return 10 * (dx + dy) + (14 - 20) * std::min(dx, dy);
+    int32_t base = 10 * (dx + dy) + (14 - 20) * std::min(dx, dy);
+    return (base * 7) / 10;
 }
 
 } // anonymous namespace
@@ -40,7 +42,7 @@ TileCoord PathFinder::find_nearest_passable(
     }
 
     TileCoord best{-1, -1};
-    int32_t min_dist = INT32_MAX;
+    int32_t min_score = INT32_MAX;
 
     // Search outward in Chebyshev rings up to radius 5
     for (int32_t r = 1; r <= 5; ++r) {
@@ -51,9 +53,12 @@ TileCoord PathFinder::find_nearest_passable(
                 if (!grid.in_bounds(candidate)) continue;
                 if (!grid.get_cell(candidate).is_passable(is_swimmer, is_fire_ant)) continue;
 
-                int32_t d = candidate.manhattan_dist(origin);
-                if (d < min_dist) {
-                    min_dist = d;
+                int32_t cd = std::max(std::abs(candidate.x - origin.x), std::abs(candidate.y - origin.y));
+                int32_t ed = (candidate.x - origin.x) * (candidate.x - origin.x) +
+                             (candidate.y - origin.y) * (candidate.y - origin.y);
+                int32_t score = cd * 1000 + ed;
+                if (score < min_score) {
+                    min_score = score;
                     best = candidate;
                 }
             }
@@ -72,7 +77,8 @@ std::vector<TileCoord> PathFinder::find_path(
     TileCoord target,
     bool is_swimmer,
     bool is_fire_ant,
-    size_t max_nodes)
+    size_t max_nodes,
+    const std::vector<TileCoord>& obstacles)
 {
     if (!grid.in_bounds(start)) return {};
     if (start == target) return {start};
@@ -102,10 +108,10 @@ std::vector<TileCoord> PathFinder::find_path(
     g_score[start_idx] = 0;
     open_set.push(Node{start, 0, octile_heuristic(start, real_target)});
 
-    // 8 movement directions
-    static const int32_t dir_dx[8] = { 0,  1,  0, -1,  1,  1, -1, -1 };
-    static const int32_t dir_dy[8] = { 1,  0, -1,  0,  1, -1,  1, -1 };
-    static const int32_t dir_cost[8] = { 10, 10, 10, 10, 14, 14, 14, 14 };
+    // 8 movement directions: prioritize diagonals first for natural shortest paths
+    static const int32_t dir_dx[8] = {  1,  1, -1, -1,  0,  1,  0, -1 };
+    static const int32_t dir_dy[8] = {  1, -1,  1, -1,  1,  0, -1,  0 };
+    static const int32_t dir_cost[8] = { 14, 14, 14, 14, 10, 10, 10, 10 };
 
     size_t visited_count = 0;
     bool found = false;
@@ -131,12 +137,25 @@ std::vector<TileCoord> PathFinder::find_path(
             if (!grid.in_bounds(neighbor)) continue;
             if (!grid.get_cell(neighbor).is_passable(is_swimmer, is_fire_ant)) continue;
 
-            // Diagonal corner-cutting check: prevent squeezing diagonally past wall corners
+            // Avoid dynamic obstacles (e.g. enemy units) unless destination itself
+            if (neighbor != real_target && !obstacles.empty()) {
+                bool is_obs = false;
+                for (const auto& obs : obstacles) {
+                    if (obs == neighbor) {
+                        is_obs = true;
+                        break;
+                    }
+                }
+                if (is_obs) continue;
+            }
+
+            // Diagonal corner-cutting check: only block if BOTH orthogonal sides are impassable
             if (dir_dx[i] != 0 && dir_dy[i] != 0) {
                 TileCoord ortho1{current.pos.x + dir_dx[i], current.pos.y};
                 TileCoord ortho2{current.pos.x, current.pos.y + dir_dy[i]};
-                if (!grid.in_bounds(ortho1) || !grid.get_cell(ortho1).is_passable(is_swimmer, is_fire_ant) ||
-                    !grid.in_bounds(ortho2) || !grid.get_cell(ortho2).is_passable(is_swimmer, is_fire_ant)) {
+                bool ortho1_blocked = !grid.in_bounds(ortho1) || !grid.get_cell(ortho1).is_passable(is_swimmer, is_fire_ant);
+                bool ortho2_blocked = !grid.in_bounds(ortho2) || !grid.get_cell(ortho2).is_passable(is_swimmer, is_fire_ant);
+                if (ortho1_blocked && ortho2_blocked) {
                     continue;
                 }
             }
@@ -148,7 +167,7 @@ std::vector<TileCoord> PathFinder::find_path(
                 step_cost = (step_cost * 7) / 10; // Slate is fastest (~1.4x speed)
             } else if (n_cell.surface_type == SurfaceType::Gravel) {
                 step_cost = (step_cost * 8) / 10; // Gravel is fast (~1.2x speed)
-            } else if (n_cell.surface_type == SurfaceType::Mud) {
+            } else if (n_cell.surface_type == SurfaceType::Mud || n_cell.is_mud) {
                 step_cost = (step_cost * 15) / 10; // Mud is slow (~0.65x speed)
             }
             int32_t tentative_g = current.g + step_cost;
