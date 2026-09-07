@@ -586,7 +586,8 @@ void Renderer::render_world(const ants::sim::WorldState& world,
                             bool show_all_health_bars,
                             bool show_tile_grid,
                             int32_t mouse_x,
-                            int32_t mouse_y) {
+                            int32_t mouse_y,
+                            int32_t selected_base_team_id) {
     if (!renderer_) return;
     render_queue_.clear();
 
@@ -599,6 +600,29 @@ void Renderer::render_world(const ants::sim::WorldState& world,
 
     // 3. Layer 2 Structures / Interactive Objects
     render_terrain_layer2_structures(grid);
+
+    // 3.5 Anthill Selection Brackets (if a base is selected)
+    if (selected_base_team_id >= 0) {
+        int32_t base_sx = -1000, base_sy = -1000;
+        if (has_anthill_bases_ && selected_base_team_id < 4) {
+            size_t b_idx = static_cast<size_t>(selected_base_team_id);
+            if (anthill_bases_[b_idx].x >= 0 && anthill_bases_[b_idx].y >= 0) {
+                camera_.world_to_screen(anthill_bases_[b_idx].x * TILE_SIZE,
+                                        anthill_bases_[b_idx].y * TILE_SIZE, base_sx, base_sy);
+            }
+        } else {
+            for (const auto& a : grid.anthills()) {
+                if (static_cast<int32_t>(a.team_id) == selected_base_team_id) {
+                    camera_.world_to_screen((static_cast<int32_t>(a.x) - 1) * TILE_SIZE,
+                                            (static_cast<int32_t>(a.y) - 1) * TILE_SIZE, base_sx, base_sy);
+                    break;
+                }
+            }
+        }
+        if (base_sx >= -128 && base_sx <= PLAYFIELD_W + 128 && base_sy >= -128 && base_sy <= PLAYFIELD_H + 128) {
+            draw_anthill_selection_brackets(base_sx, base_sy, 128, 128);
+        }
+    }
 
     // 4. Ant Units (Depth-Sorted)
     render_ant_units(world, selected_unit_id, selected_unit_ids, show_all_health_bars);
@@ -969,6 +993,44 @@ void Renderer::draw_single_ant(const ants::sim::AntSnapshot& ant, bool is_select
         else SDL_SetRenderDrawColor(renderer_, 230, 40, 40, 255);
         SDL_RenderFillRect(renderer_, &bar_fg);
     }
+}
+
+void Renderer::draw_anthill_selection_brackets(int32_t x, int32_t y, int32_t w, int32_t h) {
+    SDL_SetRenderDrawColor(renderer_, 50, 220, 50, 255);
+    int32_t arm = 20;
+    int32_t thick = 3;
+
+    // Top-Left bracket
+    for (int32_t t = 0; t < thick; ++t) {
+        SDL_RenderDrawLine(renderer_, x + 2, y + t, x + arm, y + t);
+        SDL_RenderDrawLine(renderer_, x + t, y + 2, x + t, y + arm);
+    }
+    SDL_RenderDrawLine(renderer_, x + 1, y + 1, x + 2, y);
+    SDL_RenderDrawLine(renderer_, x, y + 2, x + 1, y + 1);
+
+    // Top-Right bracket
+    for (int32_t t = 0; t < thick; ++t) {
+        SDL_RenderDrawLine(renderer_, x + w - arm, y + t, x + w - 3, y + t);
+        SDL_RenderDrawLine(renderer_, x + w - 1 - t, y + 2, x + w - 1 - t, y + arm);
+    }
+    SDL_RenderDrawLine(renderer_, x + w - 3, y, x + w - 2, y + 1);
+    SDL_RenderDrawLine(renderer_, x + w - 2, y + 1, x + w - 1, y + 2);
+
+    // Bottom-Left bracket
+    for (int32_t t = 0; t < thick; ++t) {
+        SDL_RenderDrawLine(renderer_, x + 2, y + h - 1 - t, x + arm, y + h - 1 - t);
+        SDL_RenderDrawLine(renderer_, x + t, y + h - arm, x + t, y + h - 3);
+    }
+    SDL_RenderDrawLine(renderer_, x, y + h - 3, x + 1, y + h - 2);
+    SDL_RenderDrawLine(renderer_, x + 1, y + h - 2, x + 2, y + h - 1);
+
+    // Bottom-Right bracket
+    for (int32_t t = 0; t < thick; ++t) {
+        SDL_RenderDrawLine(renderer_, x + w - arm, y + h - 1 - t, x + w - 3, y + h - 1 - t);
+        SDL_RenderDrawLine(renderer_, x + w - 1 - t, y + h - arm, x + w - 1 - t, y + h - 3);
+    }
+    SDL_RenderDrawLine(renderer_, x + w - 1, y + h - 3, x + w - 2, y + h - 2);
+    SDL_RenderDrawLine(renderer_, x + w - 2, y + h - 2, x + w - 3, y + h - 1);
 }
 
 void Renderer::render_ant_units(const ants::sim::WorldState& world,
