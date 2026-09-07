@@ -824,7 +824,7 @@ void run_suite_8_unit_health_and_map_select() {
         ASSERT_TRUE(started_map.find("TINY.LVL") != std::string::npos);
     } TEST_END();
 
-    TEST_CASE("8.3 Map Select Mouse Interaction & Double-Click Launch") {
+    TEST_CASE("8.3 Map Select Mouse Interaction & Stepper Launch") {
         MapSelectScreen screen;
         screen.init("Original-Ants/Maps");
 
@@ -833,9 +833,8 @@ void run_suite_8_unit_health_and_map_select() {
             launched_path = path;
         });
 
-        // Click on 2nd card (SMALL.LVL at y = CARD_Y + (CARD_H + CARD_SPACING))
-        int32_t card1_y = MapSelectScreen::CARD_Y + 1 * (MapSelectScreen::CARD_H + MapSelectScreen::CARD_SPACING) + 10;
-        screen.handle_mouse_down(MapSelectScreen::CARD_X + 50, card1_y, SDL_BUTTON_LEFT);
+        // Click Down arrow button to advance to 2nd map (SMALL.LVL)
+        screen.handle_mouse_down(MapSelectScreen::BTN_DOWN_X + 10, MapSelectScreen::BTN_DOWN_Y + 10, SDL_BUTTON_LEFT);
         ASSERT_EQ(screen.get_selected_index(), 1);
         ASSERT_TRUE(launched_path.empty()); // Single click does not launch immediately
 
@@ -843,6 +842,34 @@ void run_suite_8_unit_health_and_map_select() {
         screen.handle_mouse_down(MapSelectScreen::BTN_START_X + 20, MapSelectScreen::BTN_START_Y + 10, SDL_BUTTON_LEFT);
         ASSERT_FALSE(launched_path.empty());
         ASSERT_TRUE(launched_path.find("SMALL.LVL") != std::string::npos);
+    } TEST_END();
+
+    TEST_CASE("8.5 Fog of War Toggle and Player Drop Status Controls") {
+        MapSelectScreen screen;
+        screen.init("Original-Ants/Maps");
+
+        // Default: Fog of War enabled
+        ASSERT_TRUE(screen.is_fog_of_war_enabled());
+
+        // Click "Off" button
+        screen.handle_mouse_down(MapSelectScreen::BTN_FOW_OFF_X + 5, MapSelectScreen::BTN_FOW_OFF_Y + 5, SDL_BUTTON_LEFT);
+        ASSERT_FALSE(screen.is_fog_of_war_enabled());
+
+        // Click "On" button
+        screen.handle_mouse_down(MapSelectScreen::BTN_FOW_ON_X + 5, MapSelectScreen::BTN_FOW_ON_Y + 5, SDL_BUTTON_LEFT);
+        ASSERT_TRUE(screen.is_fog_of_war_enabled());
+
+        // Player 2 initial state is unready (thumbs down)
+        ASSERT_FALSE(screen.is_player_ready(2));
+        ASSERT_TRUE(screen.is_player_ready(0));
+        ASSERT_TRUE(screen.is_player_ready(1));
+
+        // Click Drop button -> toggles Player 2 ready state
+        screen.handle_mouse_down(MapSelectScreen::BTN_DROP_X + 10, MapSelectScreen::BTN_DROP_Y + 10, SDL_BUTTON_LEFT);
+        ASSERT_TRUE(screen.is_player_ready(2));
+
+        screen.handle_mouse_down(MapSelectScreen::BTN_DROP_X + 10, MapSelectScreen::BTN_DROP_Y + 10, SDL_BUTTON_LEFT);
+        ASSERT_FALSE(screen.is_player_ready(2));
     } TEST_END();
 
     TEST_CASE("8.4 INTRO.MID Lifecycle & In-Game Music Silence") {
