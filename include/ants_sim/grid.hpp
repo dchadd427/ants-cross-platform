@@ -1,0 +1,453 @@
+#pragma once
+
+#include <cstdint>
+#include <vector>
+#include <array>
+#include <string>
+#include <algorithm>
+#include <cstdlib>
+
+#include "ants_assets/lvl_parser.hpp"
+
+namespace ants::sim {
+
+constexpr int32_t TILE_PIXELS = 32;
+constexpr uint16_t TILE_EMPTY = 0x7FFEu;
+
+// Layer 1 Terrain Categories
+constexpr uint8_t TERRAIN_WALKABLE = 0;
+constexpr uint8_t TERRAIN_OBSTACLE = 1;
+constexpr uint8_t TERRAIN_WATER    = 2;
+
+// Layer 1 Tile Property Flag Bits (Disasm 0x10071dd, 0x1007202)
+constexpr uint16_t FLAG_CAN_PLACE_BOMB = 0x0002u;
+constexpr uint16_t FLAG_CAN_PLACE_FIRE = 0x0004u;
+
+// Layer 2 Key Tile Indices
+constexpr uint16_t TILE_FIREWALL = 134u; // wallup04
+constexpr uint16_t TILE_BRIDGE1  = 34u;
+constexpr uint16_t TILE_BRIDGE2  = 35u;
+constexpr uint16_t TILE_BRIDGE3  = 36u;
+constexpr uint16_t TILE_BRIDGE4  = 37u;  // Completed bridge
+constexpr uint16_t TILE_LUNCHBOX = 356u; // Dropped food lunchbox (Anim 356, Sprite 513)
+
+// Power-Up Tile IDs (Disasm 0x1021087)
+constexpr uint16_t PU_COMBAT  = 62u;
+constexpr uint16_t PU_THIEF   = 63u;
+constexpr uint16_t PU_BOMBER  = 64u;
+constexpr uint16_t PU_SWIMMER = 65u;
+constexpr uint16_t PU_FIRE    = 66u;
+
+// Team Bombs
+constexpr uint16_t BOMB_BLACK = 100u;
+constexpr uint16_t BOMB_BLUE  = 101u;
+constexpr uint16_t BOMB_RED   = 102u;
+constexpr uint16_t BOMB_GREEN = 103u;
+
+// Structure Lifetime: 180 seconds @ 20 Hz = 3,600 ticks
+constexpr uint32_t LIFETIME_180S_TICKS = 3600u;
+
+/**
+ * @brief Discrete 2D integer tile coordinate.
+ */
+struct TileCoord {
+    int32_t x{0};
+    int32_t y{0};
+
+    constexpr bool operator==(const TileCoord& o) const noexcept { return x == o.x && y == o.y; }
+    constexpr bool operator!=(const TileCoord& o) const noexcept { return !(*this == o); }
+
+    constexpr int32_t chebyshev_dist(const TileCoord& o) const noexcept {
+        return std::max(std::abs(x - o.x), std::abs(y - o.y));
+    }
+
+    constexpr int32_t manhattan_dist(const TileCoord& o) const noexcept {
+        return std::abs(x - o.x) + std::abs(y - o.y);
+    }
+
+    constexpr bool is_cardinal_adjacent(const TileCoord& o) const noexcept {
+        int32_t dx = std::abs(x - o.x);
+        int32_t dy = std::abs(y - o.y);
+        return (dx + dy == 1);
+    }
+};
+
+using Vec2i = TileCoord;
+
+/**
+ * @brief Discrete 2D integer pixel coordinate in world space.
+ */
+struct WorldCoord {
+    int32_t px{0};
+    int32_t py{0};
+
+    constexpr bool operator==(const WorldCoord& o) const noexcept { return px == o.px && py == o.py; }
+    constexpr bool operator!=(const WorldCoord& o) const noexcept { return !(*this == o); }
+
+    constexpr TileCoord to_tile() const noexcept {
+        return TileCoord{
+            (px >= 0) ? (px / TILE_PIXELS) : ((px - (TILE_PIXELS - 1)) / TILE_PIXELS),
+            (py >= 0) ? (py / TILE_PIXELS) : ((py - (TILE_PIXELS - 1)) / TILE_PIXELS)
+        };
+    }
+};
+
+/**
+ * @brief Single grid cell representation combining Layer 1 terrain and Layer 2 interactive objects.
+ */
+struct TileCell {
+    uint16_t terrain_id{0};                  // Layer 1 terrain dictionary index
+    uint8_t  terrain_type{TERRAIN_WALKABLE}; // 0 = Walkable, 1 = Obstacle, 2 = Water
+    uint16_t flags{0};                       // Layer 1 property flags (0x02 bomb, 0x04 fire)
+
+    uint16_t interactive_id{TILE_EMPTY};     // Layer 2 overlay item (or 0x7FFE)
+    uint8_t  interactive_owner{255};         // Player ID owner of bomb/structure (0..3, or 255)
+    uint32_t timer_ticks{0};                 // Active ticks remaining for firewall / bridge (180s)
+    uint32_t lunchbox_points{0};             // Points carried if lunchbox
+
+    int32_t  occupant_ant_id{-1};            // Ant occupying this cell (-1 = none)
+
+    constexpr bool is_empty_overlay() const noexcept { return interactive_id == TILE_EMPTY; }
+    constexpr bool has_fire() const noexcept { return interactive_id == TILE_FIREWALL; }
+    constexpr bool has_completed_bridge() const noexcept { return interactive_id == TILE_BRIDGE4; }
+    constexpr bool has_partial_bridge() const noexcept {
+        return interactive_id >= TILE_BRIDGE1 && interactive_id < TILE_BRIDGE4;
+    }
+    constexpr bool has_bomb() const noexcept {
+        return interactive_id >= BOMB_BLACK && interactive_id <= BOMB_GREEN;
+    }
+    constexpr bool has_food() const noexcept {
+        return !is_empty_overlay() && !has_fire() && !has_completed_bridge() &&
+               !has_partial_bridge() && !has_bomb() && !has_lunchbox();
+    }
+    constexpr bool has_lunchbox() const noexcept { return interactive_id == TILE_LUNCHBOX; }
+
+    constexpr bool can_place_bomb() const noexcept {
+        return (flags & FLAG_CAN_PLACE_BOMB) != 0 && is_empty_overlay();
+    }
+    constexpr bool can_place_fire() const noexcept {
+        return (flags & FLAG_CAN_PLACE_FIRE) != 0 && is_empty_overlay();
+    }
+
+    /**
+     * @brief Passability check for pathfinding and locomotion.
+     */
+    constexpr bool is_passable(bool is_swimmer, bool is_fire_ant) const noexcept {
+        if (terrain_type == TERRAIN_OBSTACLE) return false;
+
+        if (terrain_type == TERRAIN_WATER) {
+            if (has_completed_bridge()) return true;
+            return is_swimmer;
+        }
+
+        if (has_fire()) {
+            return is_fire_ant;
+        }
+
+        return true;
+    }
+};
+
+/**
+ * @brief Dynamic food respawn tracker linked to LevelData Block 2.
+ */
+struct ActiveFoodSchedule {
+    uint16_t x{0};
+    uint16_t y{0};
+    uint32_t respawn_interval_ticks{0};
+    uint32_t countdown_ticks{0};
+    bool     active{true};
+    std::vector<ants::assets::FoodItemVariant> variants;
+};
+
+/**
+ * @brief 32x32 integer tile grid representation for Microsoft Ants.
+ */
+class Grid {
+public:
+    Grid() = default;
+
+    bool init_empty(uint32_t w, uint32_t h) {
+        width_ = w;
+        height_ = h;
+        if (width_ == 0 || height_ == 0) return false;
+        cells_.assign(static_cast<size_t>(width_ * height_), TileCell{});
+        for (auto& cell : cells_) {
+            cell.flags = FLAG_CAN_PLACE_BOMB | FLAG_CAN_PLACE_FIRE;
+            cell.terrain_type = TERRAIN_WALKABLE;
+        }
+        anthills_.clear();
+        food_schedules_.clear();
+        return true;
+    }
+
+    /**
+     * @brief Initializes the grid from parsed LevelData.
+     */
+    bool init_from_level(const ants::assets::LevelData& level) {
+        width_ = level.width;
+        height_ = level.height;
+        if (width_ == 0 || height_ == 0) return false;
+
+        cells_.resize(static_cast<size_t>(width_ * height_));
+
+        // Populate Layer 1
+        for (uint32_t y = 0; y < height_; ++y) {
+            for (uint32_t x = 0; x < width_; ++x) {
+                const auto& c1 = level.get_cell_layer1(x, y);
+                auto& cell = get_cell_mut(x, y);
+                cell.terrain_id = c1.tile_index;
+                cell.flags = c1.flags;
+                cell.terrain_type = determine_terrain_type(c1.tile_index, c1.flags);
+                cell.occupant_ant_id = -1;
+                cell.lunchbox_points = 0;
+            }
+        }
+
+        // Populate Layer 2
+        for (uint32_t y = 0; y < height_; ++y) {
+            for (uint32_t x = 0; x < width_; ++x) {
+                const auto& c2 = level.get_cell_layer2(x, y);
+                auto& cell = get_cell_mut(x, y);
+                cell.interactive_id = c2.tile_index;
+                cell.interactive_owner = 255;
+                cell.timer_ticks = 0;
+            }
+        }
+
+        anthills_ = level.anthill_spawns;
+
+        food_schedules_.clear();
+        for (const auto& fs : level.food_schedules) {
+            ActiveFoodSchedule afs{};
+            afs.x = fs.x;
+            afs.y = fs.y;
+            afs.respawn_interval_ticks = static_cast<uint32_t>(fs.respawn_interval) * 20u; // 20 Hz
+            afs.countdown_ticks = static_cast<uint32_t>(fs.initial_delay) * 20u;
+            afs.variants = fs.variants;
+            afs.active = true;
+            food_schedules_.push_back(afs);
+        }
+
+        return true;
+    }
+
+    uint32_t width() const noexcept { return width_; }
+    uint32_t height() const noexcept { return height_; }
+    int32_t  pixel_width() const noexcept { return static_cast<int32_t>(width_ * TILE_PIXELS); }
+    int32_t  pixel_height() const noexcept { return static_cast<int32_t>(height_ * TILE_PIXELS); }
+
+    bool in_bounds(int32_t x, int32_t y) const noexcept {
+        return x >= 0 && static_cast<uint32_t>(x) < width_ &&
+               y >= 0 && static_cast<uint32_t>(y) < height_;
+    }
+
+    bool in_bounds(const TileCoord& c) const noexcept {
+        return in_bounds(c.x, c.y);
+    }
+
+    bool is_solid_obstacle(int32_t x, int32_t y) const noexcept {
+        if (!in_bounds(x, y)) return true;
+        return get_cell(static_cast<uint32_t>(x), static_cast<uint32_t>(y)).terrain_type == TERRAIN_OBSTACLE;
+    }
+
+    const TileCell& get_cell(uint32_t x, uint32_t y) const noexcept {
+        return cells_[y * width_ + x];
+    }
+    TileCell& get_cell_mut(uint32_t x, uint32_t y) noexcept {
+        return cells_[y * width_ + x];
+    }
+    const TileCell& get_cell(const TileCoord& c) const noexcept {
+        return get_cell(static_cast<uint32_t>(c.x), static_cast<uint32_t>(c.y));
+    }
+    TileCell& get_cell_mut(const TileCoord& c) noexcept {
+        return get_cell_mut(static_cast<uint32_t>(c.x), static_cast<uint32_t>(c.y));
+    }
+
+    const std::vector<TileCell>& cells() const noexcept { return cells_; }
+    std::vector<TileCell>& cells_mut() noexcept { return cells_; }
+
+    const std::vector<ants::assets::AnthillSpawn>& anthills() const noexcept { return anthills_; }
+    std::vector<ants::assets::AnthillSpawn>& anthills_mut() noexcept { return anthills_; }
+
+    const std::vector<ActiveFoodSchedule>& food_schedules() const noexcept { return food_schedules_; }
+    std::vector<ActiveFoodSchedule>& food_schedules_mut() noexcept { return food_schedules_; }
+
+    const ants::assets::AnthillSpawn* find_anthill(uint8_t team_id) const noexcept {
+        for (const auto& a : anthills_) {
+            if (a.team_id == team_id) return &a;
+        }
+        return nullptr;
+    }
+
+    void set_anthill(uint8_t team_id, TileCoord pos) {
+        for (auto& a : anthills_) {
+            if (a.team_id == team_id) {
+                a.x = static_cast<uint16_t>(pos.x);
+                a.y = static_cast<uint16_t>(pos.y);
+                return;
+            }
+        }
+        ants::assets::AnthillSpawn s{};
+        s.team_id = team_id;
+        s.x = static_cast<uint16_t>(pos.x);
+        s.y = static_cast<uint16_t>(pos.y);
+        anthills_.push_back(s);
+    }
+
+    void place_firewall(uint32_t x, uint32_t y, uint8_t owner_player) noexcept {
+        if (!in_bounds(static_cast<int32_t>(x), static_cast<int32_t>(y))) return;
+        auto& cell = get_cell_mut(x, y);
+        cell.interactive_id = TILE_FIREWALL;
+        cell.interactive_owner = owner_player;
+        cell.timer_ticks = LIFETIME_180S_TICKS;
+    }
+
+    void clear_firewall(uint32_t x, uint32_t y) noexcept {
+        if (!in_bounds(static_cast<int32_t>(x), static_cast<int32_t>(y))) return;
+        auto& cell = get_cell_mut(x, y);
+        if (cell.interactive_id == TILE_FIREWALL) {
+            cell.interactive_id = TILE_EMPTY;
+            cell.timer_ticks = 0;
+        }
+    }
+
+    void place_bomb(uint32_t x, uint32_t y, uint8_t team_id) noexcept {
+        if (!in_bounds(static_cast<int32_t>(x), static_cast<int32_t>(y))) return;
+        auto& cell = get_cell_mut(x, y);
+        cell.interactive_id = static_cast<uint16_t>(BOMB_BLACK + (team_id % 4u));
+        cell.interactive_owner = team_id;
+        cell.timer_ticks = 0;
+    }
+
+    void clear_bomb(uint32_t x, uint32_t y) noexcept {
+        if (!in_bounds(static_cast<int32_t>(x), static_cast<int32_t>(y))) return;
+        auto& cell = get_cell_mut(x, y);
+        if (cell.has_bomb()) {
+            cell.interactive_id = TILE_EMPTY;
+            cell.interactive_owner = 255;
+        }
+    }
+
+    void advance_bridge(uint32_t x, uint32_t y, uint8_t owner_player) noexcept {
+        if (!in_bounds(static_cast<int32_t>(x), static_cast<int32_t>(y))) return;
+        auto& cell = get_cell_mut(x, y);
+        if (cell.interactive_id < TILE_BRIDGE1 || cell.interactive_id > TILE_BRIDGE4) {
+            cell.interactive_id = TILE_BRIDGE1;
+        } else if (cell.interactive_id < TILE_BRIDGE4) {
+            cell.interactive_id++;
+        }
+        cell.interactive_owner = owner_player;
+        if (cell.interactive_id == TILE_BRIDGE4) {
+            cell.timer_ticks = LIFETIME_180S_TICKS;
+        }
+    }
+
+    void collapse_bridge(uint32_t x, uint32_t y) noexcept {
+        if (!in_bounds(static_cast<int32_t>(x), static_cast<int32_t>(y))) return;
+        auto& cell = get_cell_mut(x, y);
+        cell.interactive_id = TILE_EMPTY;
+        cell.timer_ticks = 0;
+    }
+
+    void drop_lunchbox(uint32_t x, uint32_t y, uint32_t points = 0) noexcept {
+        if (!in_bounds(static_cast<int32_t>(x), static_cast<int32_t>(y))) return;
+        auto& cell = get_cell_mut(x, y);
+        cell.interactive_id = TILE_LUNCHBOX;
+        cell.lunchbox_points = points;
+    }
+
+    void clear_lunchbox(uint32_t x, uint32_t y) noexcept {
+        if (!in_bounds(static_cast<int32_t>(x), static_cast<int32_t>(y))) return;
+        auto& cell = get_cell_mut(x, y);
+        if (cell.has_lunchbox()) {
+            cell.interactive_id = TILE_EMPTY;
+            cell.lunchbox_points = 0;
+        }
+    }
+
+    bool has_fire_at(TileCoord pos) const noexcept {
+        if (!in_bounds(pos)) return false;
+        return get_cell(pos).has_fire();
+    }
+
+    bool has_bomb_at(TileCoord pos) const noexcept {
+        if (!in_bounds(pos)) return false;
+        return get_cell(pos).has_bomb();
+    }
+
+    bool has_bridge_at(TileCoord pos) const noexcept {
+        if (!in_bounds(pos)) return false;
+        return get_cell(pos).interactive_id >= TILE_BRIDGE1 && get_cell(pos).interactive_id <= TILE_BRIDGE4;
+    }
+
+    bool has_lunchbox_at(TileCoord pos) const noexcept {
+        if (!in_bounds(pos)) return false;
+        return get_cell(pos).has_lunchbox();
+    }
+
+    int get_bridge_stage(TileCoord pos) const noexcept {
+        if (!in_bounds(pos)) return 0;
+        uint16_t id = get_cell(pos).interactive_id;
+        if (id >= TILE_BRIDGE1 && id <= TILE_BRIDGE4) {
+            return static_cast<int>(id - TILE_BRIDGE1 + 1);
+        }
+        return 0;
+    }
+
+    uint32_t get_fire_timer(TileCoord pos) const noexcept {
+        if (!in_bounds(pos)) return 0;
+        const auto& cell = get_cell(pos);
+        return cell.has_fire() ? cell.timer_ticks : 0;
+    }
+
+    uint32_t get_lunchbox_points(TileCoord pos) const noexcept {
+        if (!in_bounds(pos)) return 0;
+        return get_cell(pos).lunchbox_points;
+    }
+
+    void set_fire_at(TileCoord pos, uint32_t timer_ticks) noexcept {
+        if (!in_bounds(pos)) return;
+        auto& cell = get_cell_mut(pos);
+        cell.interactive_id = TILE_FIREWALL;
+        cell.timer_ticks = timer_ticks;
+    }
+
+    void set_bridge_at(TileCoord pos, int stage, uint32_t timer_ticks) noexcept {
+        if (!in_bounds(pos)) return;
+        auto& cell = get_cell_mut(pos);
+        if (stage >= 1 && stage <= 4) {
+            cell.interactive_id = static_cast<uint16_t>(TILE_BRIDGE1 + (stage - 1));
+            cell.timer_ticks = timer_ticks;
+        }
+    }
+
+    void set_terrain(int32_t x, int32_t y, uint8_t terrain_type) noexcept {
+        if (!in_bounds(x, y)) return;
+        get_cell_mut(static_cast<uint32_t>(x), static_cast<uint32_t>(y)).terrain_type = terrain_type;
+    }
+
+    void set_tile_flags(int32_t x, int32_t y, uint16_t flags) noexcept {
+        if (!in_bounds(x, y)) return;
+        get_cell_mut(static_cast<uint32_t>(x), static_cast<uint32_t>(y)).flags = flags;
+    }
+
+private:
+    uint8_t determine_terrain_type(uint16_t tile_index, uint16_t flags) const noexcept {
+        if (tile_index == 2 || (flags & 0x0100u) != 0) {
+            return TERRAIN_WATER;
+        }
+        if (tile_index == 1 || (flags & 0x0001u) != 0) {
+            return TERRAIN_OBSTACLE;
+        }
+        return TERRAIN_WALKABLE;
+    }
+
+    uint32_t width_{0};
+    uint32_t height_{0};
+    std::vector<TileCell> cells_;
+    std::vector<ants::assets::AnthillSpawn> anthills_;
+    std::vector<ActiveFoodSchedule> food_schedules_;
+};
+
+} // namespace ants::sim
