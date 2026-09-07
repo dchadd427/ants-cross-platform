@@ -131,9 +131,11 @@ public:
 
     // Selection controls
     void select_ant(uint32_t ant_id);
+    void select_base(int32_t team_id) noexcept;
     void clear_selection() noexcept;
     uint32_t get_selected_ant_id() const noexcept { return selected_ant_id_; }
     const std::vector<uint32_t>& get_selected_ant_ids() const noexcept { return selected_ant_ids_; }
+    int32_t get_selected_base_team_id() const noexcept { return selected_base_team_id_; }
     bool is_ant_selected(uint32_t id) const noexcept;
     void select_all_friendly(const sim::WorldState& world);
     void select_ants_in_rect(int32_t x1, int32_t y1, int32_t x2, int32_t y2, const sim::WorldState& world);
@@ -185,6 +187,8 @@ private:
     uint8_t local_player_id_{0};
     uint32_t selected_ant_id_{0};
     std::vector<uint32_t> selected_ant_ids_{};
+    int32_t selected_base_team_id_{-1};
+    std::deque<std::string> chat_log_{};
     sim::OrderType active_order_mode_{sim::OrderType::None};
 
     // Marquee drag selection

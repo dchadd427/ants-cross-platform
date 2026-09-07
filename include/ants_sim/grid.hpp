@@ -105,6 +105,7 @@ struct TileCell {
     uint32_t timer_ticks{0};                 // Active ticks remaining for firewall / bridge (180s)
     uint32_t lunchbox_points{0};             // Points carried if lunchbox
     bool     is_food{false};                 // True only if genuine food item
+    bool     is_mud{false};                  // True if terrain is mud / dirt path
 
     int32_t  occupant_ant_id{-1};            // Ant occupying this cell (-1 = none)
 
@@ -204,6 +205,16 @@ public:
                 cell.terrain_type = determine_terrain_type(c1.tile_index, c1.flags);
                 cell.occupant_ant_id = -1;
                 cell.lunchbox_points = 0;
+                cell.is_mud = false;
+                if (cell.terrain_type == TERRAIN_WALKABLE) {
+                    const std::string& l1_name = level.get_tile_name(c1.tile_index);
+                    if (!l1_name.empty()) {
+                        char ch = static_cast<char>(std::tolower(static_cast<unsigned char>(l1_name[0])));
+                        if (ch == 'm') {
+                            cell.is_mud = true;
+                        }
+                    }
+                }
             }
         }
 

@@ -37,12 +37,16 @@ HUD::HUD() {
 void HUD::init(uint8_t local_player_id) {
     local_player_id_ = local_player_id;
     selected_ant_id_ = 0;
+    selected_ant_ids_.clear();
+    selected_base_team_id_ = -1;
     active_order_mode_ = sim::OrderType::None;
     is_dragging_ = false;
     is_radar_dragging_ = false;
     incubation_timer_ticks_ = 0;
     is_incubating_ = false;
     news_queue_.clear();
+    chat_log_.clear();
+    chat_log_.push_back("[0:00] News Flash: Game started! Go get that food!");
 
     // Configure Top Header Buttons (x0y0.bmp)
     help_button_ = {475, 0, 45, 22, 0, 0, 0, false, true, false};
@@ -148,6 +152,10 @@ void HUD::queue_news_message(const std::string& msg, uint32_t duration_ticks, bo
     news_queue_.push_back({msg, duration_ticks, is_alarm, 255});
     if (news_queue_.size() > 32) {
         news_queue_.pop_front();
+    }
+    chat_log_.push_back(msg);
+    if (chat_log_.size() > 20) {
+        chat_log_.pop_front();
     }
 }
 
@@ -287,17 +295,21 @@ void HUD::render_radar(IRenderer& renderer, const assets::AssetArchive&,
     // Rasterize ground terrain tiles
     if (world.cells.size() == world.width * world.height) {
         for (uint32_t ty = 0; ty < world.height; ++ty) {
-            int32_t py = ry + static_cast<int32_t>(ty * scale_y);
-            int32_t ph = std::max(1, static_cast<int32_t>((ty + 1) * scale_y) - static_cast<int32_t>(ty * scale_y));
+            float fty = static_cast<float>(ty);
+            int32_t py = ry + static_cast<int32_t>(fty * scale_y);
+            int32_t ph = std::max(1, static_cast<int32_t>((fty + 1.0f) * scale_y) - static_cast<int32_t>(fty * scale_y));
             for (uint32_t tx = 0; tx < world.width; ++tx) {
                 const auto& cell = world.cells[ty * world.width + tx];
-                int32_t px = rx + static_cast<int32_t>(tx * scale_x);
-                int32_t pw = std::max(1, static_cast<int32_t>((tx + 1) * scale_x) - static_cast<int32_t>(tx * scale_x));
-                assets::ColorRGBA col{60, 110, 42, 255}; // Walkable grass
+                float ftx = static_cast<float>(tx);
+                int32_t px = rx + static_cast<int32_t>(ftx * scale_x);
+                int32_t pw = std::max(1, static_cast<int32_t>((ftx + 1.0f) * scale_x) - static_cast<int32_t>(ftx * scale_x));
+                assets::ColorRGBA col{135, 120, 110, 255}; // Walkable ground / gravel (tan)
                 if (cell.terrain_type == sim::TERRAIN_WATER) {
                     col = {25, 75, 150, 255}; // Water
                 } else if (cell.terrain_type == sim::TERRAIN_OBSTACLE) {
                     col = {45, 42, 38, 255}; // Obstacle / rock
+                } else if (cell.is_mud) {
+                    col = {65, 65, 65, 255}; // Mud path (dark charcoal)
                 } else if (cell.has_completed_bridge()) {
                     col = {140, 100, 60, 255}; // Bridge
                 } else if (cell.has_fire()) {
@@ -365,7 +377,37 @@ void HUD::render_selection_card(IRenderer& renderer, const assets::AssetArchive&
     }
 
     if (!sel) {
-        renderer.draw_text("No Selection", CARD_X + 32, CARD_Y + 50, {160, 160, 160, 255});
+        if (selected_base_team_id_ >= 0) {
+            // Anthill Base Selection Card
+            static const char* hill_sprites[4] = { "bkhill_s.bmp", "blhill_s.bmp", "rhill_s.bmp", "GHILL_s.bmp" };
+            static const char* hill_names[4] = { "Black Anthill", "Blue Anthill", "Red Anthill", "Green Anthill" };
+            uint8_t tid = static_cast<uint8_t>(selected_base_team_id_ % 4);
+
+            renderer.draw_named_sprite("wtype.bmp", 488, 130);
+            renderer.draw_text(hill_names[tid], 505, 133, TEAM_COLORS[tid]);
+
+            // Anthill Portrait
+            renderer.draw_named_sprite(hill_sprites[tid], 530, 145);
+
+            // Eggs & Score status
+            uint32_t eggs = (tid < world.player_eggs.size()) ? world.player_eggs[tid] : 0;
+            int32_t score = (tid < world.player_scores.size()) ? world.player_scores[tid] : 0;
+
+            renderer.draw_named_sprite("wstatus.bmp", 488, 206);
+            std::string base_status = (tid == local_player_id_) ? "Home Colony" : "Colony Base";
+            renderer.draw_text(base_status, 510, 209, {255, 255, 255, 255});
+            renderer.draw_text("Eggs: " + std::to_string(eggs) + "  Food: " + std::to_string(score), 496, 192, {255, 215, 0, 255});
+            return;
+        }
+
+        // No selection: Render authentic chat log / news box
+        renderer.draw_named_sprite("wchat.bmp", 488, 135);
+        int32_t ty = 140;
+        size_t start_idx = (chat_log_.size() > 7) ? (chat_log_.size() - 7) : 0;
+        for (size_t i = start_idx; i < chat_log_.size(); ++i) {
+            renderer.draw_text(chat_log_[i], 494, ty, {20, 50, 40, 255});
+            ty += 13;
+        }
         return;
     }
 
@@ -444,14 +486,10 @@ void HUD::render_hatch_panel(IRenderer& renderer, const assets::AssetArchive&, c
     assets::ColorRGBA cost_color = hatch_button_.is_enabled ? assets::ColorRGBA{255, 215, 0, 255} : assets::ColorRGBA{130, 130, 130, 255};
     renderer.draw_text("200 pts", 540, 270, cost_color);
 
-    // Egg Pile visualization: compact eggsc.bmp (83x35) at (490, 305)
+    // Egg display: authentic egg.bmp (12x16)
     uint32_t eggs = (local_player_id_ < world.player_eggs.size()) ? world.player_eggs[local_player_id_] : 0;
-    if (eggs > 0) {
-        renderer.draw_named_sprite("eggsc.bmp", 490, 305);
-    }
-
-    // Numerical egg count
-    renderer.draw_text("x " + std::to_string(eggs), 580, 316, {255, 255, 255, 255});
+    renderer.draw_named_sprite("egg.bmp", 495, 305);
+    renderer.draw_text("Eggs: " + std::to_string(eggs), 515, 307, {255, 255, 255, 255});
 }
 
 void HUD::render_action_buttons(IRenderer& renderer, const assets::AssetArchive&, const sim::WorldState&) {
@@ -596,14 +634,22 @@ void HUD::render_marquee_box(IRenderer& renderer) {
 void HUD::select_ant(uint32_t ant_id) {
     selected_ant_id_ = ant_id;
     selected_ant_ids_.clear();
+    selected_base_team_id_ = -1;
     if (ant_id != 0) {
         selected_ant_ids_.push_back(ant_id);
     }
 }
 
+void HUD::select_base(int32_t team_id) noexcept {
+    selected_base_team_id_ = team_id;
+    selected_ant_id_ = 0;
+    selected_ant_ids_.clear();
+}
+
 void HUD::clear_selection() noexcept {
     selected_ant_id_ = 0;
     selected_ant_ids_.clear();
+    selected_base_team_id_ = -1;
 }
 
 bool HUD::is_ant_selected(uint32_t id) const noexcept {
@@ -612,6 +658,7 @@ bool HUD::is_ant_selected(uint32_t id) const noexcept {
 }
 
 void HUD::select_all_friendly(const sim::WorldState& world) {
+    selected_base_team_id_ = -1;
     selected_ant_ids_.clear();
     for (const auto& ant : world.ants) {
         if (ant.hp == 0 || ant.is_drowning) continue;
@@ -770,12 +817,57 @@ bool HUD::handle_mouse_down(int32_t x, int32_t y, uint8_t button,
             drag_curr_x_ = x;
             drag_curr_y_ = y;
             return true;
-        } else if (button == 3) { // Right-click: trigger special abilities or cancel armed order
+        } else if (button == 3) { // Right-click: standard RTS context command
             if (active_order_mode_ != sim::OrderType::None) {
                 cancel_order_mode();
-            } else {
-                dispatch_smart_special_ability(world_x, world_y, sim);
+                return true;
             }
+
+            int32_t target_tile_x = world_x / 32;
+            int32_t target_tile_y = world_y / 32;
+
+            // 1. Check if clicked on an enemy ant
+            const sim::AntSnapshot* enemy_target = nullptr;
+            const auto& world = sim.get_world_state();
+            for (const auto& ant : world.ants) {
+                if (ant.hp == 0 || ant.is_drowning) continue;
+                if (ant.player_id != local_player_id_ &&
+                    std::abs(ant.px - world_x) <= 16 &&
+                    world_y >= ant.py - 29 && world_y <= ant.py + 12) {
+                    enemy_target = &ant;
+                    break;
+                }
+            }
+            if (enemy_target) {
+                dispatch_attack_order(enemy_target->id, sim);
+                return true;
+            }
+
+            // 2. Check if clicked on an anthill base (4x4 footprint)
+            const assets::AnthillSpawn* target_base = nullptr;
+            for (const auto& base : world.anthills) {
+                if (target_tile_x >= base.x && target_tile_x < base.x + 4 &&
+                    target_tile_y >= base.y && target_tile_y < base.y + 4) {
+                    target_base = &base;
+                    break;
+                }
+            }
+            if (target_base) {
+                if (target_base->team_id == local_player_id_) {
+                    for (uint32_t aid : selected_ant_ids_) {
+                        sim::AntOrder order;
+                        order.ant_id = aid;
+                        order.type = sim::OrderType::ReturnToBase;
+                        sim.issue_order(order);
+                    }
+                } else {
+                    dispatch_smart_special_ability(world_x, world_y, sim);
+                }
+                return true;
+            }
+
+            // 3. Dispatch unit smart ability (Move for Worker/Queen, PlantBomb for Bomber, BuildBridge for Swimmer, IgniteFire for Fire, etc.)
+            dispatch_smart_special_ability(world_x, world_y, sim);
             return true;
         }
     }
@@ -832,17 +924,19 @@ bool HUD::handle_mouse_up(int32_t x, int32_t y, uint8_t button,
             int32_t target_tile_x = world_x / 32;
             int32_t target_tile_y = world_y / 32;
 
-            // 1. Check if clicked directly on an ant
+            // 1. Check if clicked directly on an ant (testing full 40px sprite height)
             const sim::AntSnapshot* hit_ant = nullptr;
             for (const auto& ant : world.ants) {
                 if (ant.hp == 0 || ant.is_drowning) continue;
-                if (std::abs(ant.px - world_x) <= 20 && std::abs(ant.py - world_y) <= 20) {
+                if (std::abs(ant.px - world_x) <= 16 &&
+                    world_y >= ant.py - 29 && world_y <= ant.py + 12) {
                     hit_ant = &ant;
                     break;
                 }
             }
 
             if (hit_ant) {
+                selected_base_team_id_ = -1;
                 if (hit_ant->player_id == local_player_id_) {
                     // Friendly ant clicked: select single ant
                     select_ant(hit_ant->id);
@@ -859,44 +953,50 @@ bool HUD::handle_mouse_up(int32_t x, int32_t y, uint8_t button,
                 return true;
             }
 
-            // 2. Check if clicked on an anthill base
+            // 2. Check if clicked on an anthill base (4x4 footprint)
             const assets::AnthillSpawn* hit_base = nullptr;
             for (const auto& base : world.anthills) {
-                if (base.x == target_tile_x && base.y == target_tile_y) {
+                if (target_tile_x >= base.x && target_tile_x < base.x + 4 &&
+                    target_tile_y >= base.y && target_tile_y < base.y + 4) {
                     hit_base = &base;
                     break;
                 }
             }
 
             if (hit_base) {
-                if (hit_base->team_id == local_player_id_) {
-                    // Friendly anthill: return selected friendly ants to base
-                    for (uint32_t aid : selected_ant_ids_) {
-                        sim::AntOrder order;
-                        order.ant_id = aid;
-                        order.type = sim::OrderType::ReturnToBase;
-                        sim.issue_order(order);
-                    }
-                } else {
-                    // Enemy anthill clicked
-                    bool has_thief = false;
-                    for (uint32_t aid : selected_ant_ids_) {
-                        for (const auto& a : world.ants) {
-                            if (a.id == aid && a.type == sim::AntType::Thief) {
-                                has_thief = true;
-                                sim::AntOrder order;
-                                order.ant_id = aid;
-                                order.type = sim::OrderType::InfiltrateAnthill;
-                                order.target_x = target_tile_x;
-                                order.target_y = target_tile_y;
-                                sim.issue_order(order);
+                if (!selected_ant_ids_.empty()) {
+                    if (hit_base->team_id == local_player_id_) {
+                        // Friendly anthill: return selected friendly ants to base
+                        for (uint32_t aid : selected_ant_ids_) {
+                            sim::AntOrder order;
+                            order.ant_id = aid;
+                            order.type = sim::OrderType::ReturnToBase;
+                            sim.issue_order(order);
+                        }
+                    } else {
+                        // Enemy anthill clicked
+                        bool has_thief = false;
+                        for (uint32_t aid : selected_ant_ids_) {
+                            for (const auto& a : world.ants) {
+                                if (a.id == aid && a.type == sim::AntType::Thief) {
+                                    has_thief = true;
+                                    sim::AntOrder order;
+                                    order.ant_id = aid;
+                                    order.type = sim::OrderType::InfiltrateAnthill;
+                                    order.target_x = target_tile_x;
+                                    order.target_y = target_tile_y;
+                                    sim.issue_order(order);
+                                }
                             }
                         }
+                        if (!has_thief) {
+                            // Propose alliance to target player
+                            sim.propose_alliance(local_player_id_, hit_base->team_id);
+                        }
                     }
-                    if (!has_thief) {
-                        // Propose alliance to target player
-                        sim.propose_alliance(local_player_id_, hit_base->team_id);
-                    }
+                } else {
+                    // No units selected: Select the base!
+                    select_base(static_cast<int32_t>(hit_base->team_id));
                 }
                 return true;
             }

@@ -47,6 +47,8 @@ struct ApplicationConfig {
     bool start_in_map_select{true};
     std::string screenshot_path{""};
     int screenshot_frames{5};
+    int select_ant_id{-1};
+    int select_base_team{-1};
 };
 
 /**
