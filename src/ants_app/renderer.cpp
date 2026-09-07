@@ -283,9 +283,76 @@ void Renderer::set_level(const ants::assets::LevelData& level) {
         const std::string& name = level.tile_dictionary[i];
         if (name.empty() || name == ".") continue;
 
+        // Suppress start marker tiles (editor markers with 'A')
+        if (name == "BSTART" || name == "USTART" || name == "RSTART" || name == "GSTART" ||
+            name == "bstart" || name == "ustart" || name == "rstart" || name == "gstart") {
+            tile_sprite_ids_[i] = -1;
+            continue;
+        }
+
+        // Map anthills to authentic 128x128 sprites
+        if (name == "BLACKHILL" || name == "blackhill") {
+            tile_sprite_ids_[i] = archive_->find_sprite_id("bkhill.bmp");
+            continue;
+        }
+        if (name == "BLUEHILL" || name == "bluehill") {
+            tile_sprite_ids_[i] = archive_->find_sprite_id("blhill.bmp");
+            continue;
+        }
+        if (name == "REDHILL" || name == "redhill") {
+            tile_sprite_ids_[i] = archive_->find_sprite_id("rhill.bmp");
+            continue;
+        }
+        if (name == "GREENHILL" || name == "greenhill") {
+            tile_sprite_ids_[i] = archive_->find_sprite_id("ghill.bmp");
+            continue;
+        }
+
+        // Map food items to authentic food morsel
+        std::string lower_name = name;
+        for (char& ch : lower_name) ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+        if (lower_name.rfind("fd", 0) == 0 || lower_name.rfind("food", 0) == 0) {
+            int32_t sid = archive_->find_sprite_id(name + ".bmp");
+            if (sid < 0) sid = archive_->find_sprite_id(name);
+            if (sid < 0) sid = archive_->find_sprite_id("meatmov1.bmp");
+            if (sid < 0) sid = archive_->find_sprite_id("foodse.bmp");
+            tile_sprite_ids_[i] = sid;
+            continue;
+        }
+
         int32_t sid = archive_->find_sprite_id(name);
         if (sid < 0) sid = archive_->find_sprite_id(name + ".bmp");
         tile_sprite_ids_[i] = sid;
+    }
+
+    // Identify 4x4 Anthill base bounding origins from Layer 2
+    for (int t = 0; t < 4; ++t) {
+        anthill_bases_[t] = { -1, -1 };
+    }
+    has_anthill_bases_ = false;
+
+    for (uint32_t y = 0; y < level.height; ++y) {
+        for (uint32_t x = 0; x < level.width; ++x) {
+            const auto& c2 = level.get_cell_layer2(x, y);
+            if (c2.tile_index < level.tile_dictionary.size()) {
+                const std::string& tname = level.tile_dictionary[c2.tile_index];
+                int team = -1;
+                if (tname == "BLACKHILL" || tname == "blackhill") team = 0;
+                else if (tname == "BLUEHILL" || tname == "bluehill") team = 1;
+                else if (tname == "REDHILL" || tname == "redhill") team = 2;
+                else if (tname == "GREENHILL" || tname == "greenhill") team = 3;
+
+                if (team >= 0) {
+                    if (anthill_bases_[team].x < 0 || static_cast<int32_t>(x) < anthill_bases_[team].x) {
+                        anthill_bases_[team].x = static_cast<int32_t>(x);
+                    }
+                    if (anthill_bases_[team].y < 0 || static_cast<int32_t>(y) < anthill_bases_[team].y) {
+                        anthill_bases_[team].y = static_cast<int32_t>(y);
+                    }
+                    has_anthill_bases_ = true;
+                }
+            }
+        }
     }
 }
 
@@ -408,23 +475,70 @@ void Renderer::render_terrain_layer2_structures(const ants::sim::Grid& grid) {
                 continue;
             }
 
-            // 5. Generic Food Items
+            // 5. Authentic Food Items
             if (cell.has_food()) {
-                SDL_Texture* tex = texture_cache_->get_named_sprite_texture("food.bmp");
-                if (tex) SDL_RenderCopy(renderer_, tex, nullptr, &dst);
+                SDL_Texture* tex = nullptr;
+                if (cell.interactive_id < tile_sprite_ids_.size() && tile_sprite_ids_[cell.interactive_id] >= 0) {
+                    tex = texture_cache_->get_sprite_texture(static_cast<uint32_t>(tile_sprite_ids_[cell.interactive_id]));
+                }
+                if (!tex) {
+                    tex = texture_cache_->get_named_sprite_texture("meatmov1.bmp");
+                }
+                if (!tex) {
+                    tex = texture_cache_->get_named_sprite_texture("foodse.bmp");
+                }
+                if (tex) {
+                    SDL_Rect food_dst = { sx + 2, sy + 2, 28, 28 };
+                    SDL_RenderCopy(renderer_, tex, nullptr, &food_dst);
+                }
                 continue;
+            }
+
+            // 6. Decorative Terrain Overlays (rocks, plants, flowers, grassmed)
+            if (cell.interactive_id < tile_sprite_ids_.size()) {
+                int32_t sid = tile_sprite_ids_[cell.interactive_id];
+                if (sid >= 0) {
+                    const auto& sp = archive_->get_sprite(static_cast<uint32_t>(sid));
+                    // Skip 128x128 anthills here (rendered in dedicated anthill pass below)
+                    if (sp.width == 128 && sp.height == 128) {
+                        continue;
+                    }
+                    SDL_Texture* tex = texture_cache_->get_sprite_texture(static_cast<uint32_t>(sid));
+                    if (tex) {
+                        SDL_Rect decor_dst = { sx, sy, static_cast<int>(sp.width > 0 ? sp.width : TILE_SIZE),
+                                                        static_cast<int>(sp.height > 0 ? sp.height : TILE_SIZE) };
+                        SDL_RenderCopy(renderer_, tex, nullptr, &decor_dst);
+                    }
+                }
             }
         }
     }
 
-    // Anthill Bases
-    for (const auto& a : grid.anthills()) {
-        int32_t sx = 0, sy = 0;
-        if (camera_.world_to_screen(a.x * TILE_SIZE, a.y * TILE_SIZE, sx, sy)) {
-            static const char* hill_names[4] = { "bstart.bmp", "ustart.bmp", "rstart.bmp", "gstart.bmp" };
-            SDL_Rect dst = { sx, sy, TILE_SIZE, TILE_SIZE };
-            SDL_Texture* tex = texture_cache_->get_named_sprite_texture(hill_names[a.team_id % 4]);
-            if (tex) SDL_RenderCopy(renderer_, tex, nullptr, &dst);
+    // Anthill Bases (Authentic 128x128 4x4 bases: bkhill, blhill, rhill, ghill)
+    static const char* hill_sprites[4] = { "bkhill.bmp", "blhill.bmp", "rhill.bmp", "ghill.bmp" };
+    if (has_anthill_bases_) {
+        for (int t = 0; t < 4; ++t) {
+            if (anthill_bases_[t].x >= 0 && anthill_bases_[t].y >= 0) {
+                int32_t sx = 0, sy = 0;
+                camera_.world_to_screen(anthill_bases_[t].x * TILE_SIZE, anthill_bases_[t].y * TILE_SIZE, sx, sy);
+                SDL_Rect dst = { sx, sy, 128, 128 };
+                SDL_Texture* tex = texture_cache_->get_named_sprite_texture(hill_sprites[t]);
+                if (tex) {
+                    SDL_RenderCopy(renderer_, tex, nullptr, &dst);
+                }
+            }
+        }
+    } else {
+        // Fallback for custom test grids using grid.anthills()
+        for (const auto& a : grid.anthills()) {
+            int32_t sx = 0, sy = 0;
+            camera_.world_to_screen((static_cast<int32_t>(a.x) - 1) * TILE_SIZE,
+                                    (static_cast<int32_t>(a.y) - 1) * TILE_SIZE, sx, sy);
+            SDL_Rect dst = { sx, sy, 128, 128 };
+            SDL_Texture* tex = texture_cache_->get_named_sprite_texture(hill_sprites[a.team_id % 4]);
+            if (tex) {
+                SDL_RenderCopy(renderer_, tex, nullptr, &dst);
+            }
         }
     }
 }
@@ -680,6 +794,10 @@ void Renderer::render_hud_chrome(const ants::sim::WorldState&, int32_t) {
 
 void Renderer::end_frame() {
     if (renderer_) {
+        if (!pending_screenshot_.empty()) {
+            save_screenshot(pending_screenshot_);
+            pending_screenshot_.clear();
+        }
         SDL_RenderPresent(renderer_);
     }
 }
@@ -748,6 +866,41 @@ void Renderer::draw_text(const std::string& text, int32_t x, int32_t y, ants::as
         }
         cur_x += 8;
     }
+}
+
+bool Renderer::save_screenshot(const std::string& path) {
+    if (!renderer_) return false;
+    int w = 0, h = 0;
+    SDL_GetRendererOutputSize(renderer_, &w, &h);
+    if (w <= 0 || h <= 0) { w = CANVAS_WIDTH; h = CANVAS_HEIGHT; }
+
+    SDL_Surface* surf = SDL_CreateRGBSurfaceWithFormat(0, w, h, 32, SDL_PIXELFORMAT_ARGB8888);
+    if (!surf) return false;
+
+    if (SDL_RenderReadPixels(renderer_, nullptr, SDL_PIXELFORMAT_ARGB8888, surf->pixels, surf->pitch) != 0) {
+        SDL_FreeSurface(surf);
+        return false;
+    }
+
+    std::string bmp_path = path;
+    bool convert_png = false;
+    if (path.size() >= 4 && path.substr(path.size() - 4) == ".png") {
+        bmp_path = path.substr(0, path.size() - 4) + ".bmp";
+        convert_png = true;
+    }
+
+    if (SDL_SaveBMP(surf, bmp_path.c_str()) != 0) {
+        SDL_FreeSurface(surf);
+        return false;
+    }
+    SDL_FreeSurface(surf);
+
+    if (convert_png) {
+        std::string cmd = "python3 -c \"from PIL import Image; Image.open('" + bmp_path + "').save('" + path + "')\" > /dev/null 2>&1 && rm -f \"" + bmp_path + "\"";
+        int ret = system(cmd.c_str());
+        (void)ret;
+    }
+    return true;
 }
 
 } // namespace ants::app

@@ -159,6 +159,8 @@ public:
     SDL_Renderer* get_sdl_renderer() const noexcept { return renderer_; }
     TextureCache* get_texture_cache() const noexcept { return texture_cache_.get(); }
     const ants::assets::AssetArchive* get_archive() const noexcept { return archive_; }
+    void request_screenshot(const std::string& path) { pending_screenshot_ = path; }
+    bool save_screenshot(const std::string& path);
 
 private:
     void render_terrain_layer1(const ants::sim::Grid& grid);
@@ -175,7 +177,10 @@ private:
     uint32_t map_width_{0};
     uint32_t map_height_{0};
     std::vector<int32_t> tile_sprite_ids_; // Pre-resolved tile dictionary to sprite ID cache
+    std::array<SDL_Point, 4> anthill_bases_{};
+    bool has_anthill_bases_{false};
     std::vector<RenderItem> render_queue_;
+    std::string pending_screenshot_;
 };
 
 } // namespace ants::app

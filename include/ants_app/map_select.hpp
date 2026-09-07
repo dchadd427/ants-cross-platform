@@ -36,26 +36,34 @@ struct MapSelectEntry {
  */
 class MapSelectScreen {
 public:
-    static constexpr int32_t CARD_X = 25;
-    static constexpr int32_t CARD_Y = 70;
-    static constexpr int32_t CARD_W = 410;
+    static constexpr int32_t BANNER_X = 149;
+    static constexpr int32_t BANNER_Y = 12;
+
+    static constexpr int32_t CARD_X = 45;
+    static constexpr int32_t CARD_Y = 86;
+    static constexpr int32_t CARD_W = 246;
     static constexpr int32_t CARD_H = 48;
-    static constexpr int32_t CARD_SPACING = 8;
+    static constexpr int32_t CARD_SPACING = 6;
 
-    static constexpr int32_t PREVIEW_X = 450;
-    static constexpr int32_t PREVIEW_Y = 70;
-    static constexpr int32_t PREVIEW_W = 165;
-    static constexpr int32_t PREVIEW_H = 270;
+    static constexpr int32_t BTN_UP_X = 245;
+    static constexpr int32_t BTN_UP_Y = 86;
+    static constexpr int32_t BTN_UP_W = 46;
+    static constexpr int32_t BTN_UP_H = 22;
 
-    static constexpr int32_t BTN_START_X = 450;
-    static constexpr int32_t BTN_START_Y = 350;
-    static constexpr int32_t BTN_START_W = 165;
-    static constexpr int32_t BTN_START_H = 38;
+    static constexpr int32_t BTN_DOWN_X = 245;
+    static constexpr int32_t BTN_DOWN_Y = 110;
+    static constexpr int32_t BTN_DOWN_W = 47;
+    static constexpr int32_t BTN_DOWN_H = 20;
 
-    static constexpr int32_t BTN_QUIT_X = 450;
-    static constexpr int32_t BTN_QUIT_Y = 398;
-    static constexpr int32_t BTN_QUIT_W = 165;
-    static constexpr int32_t BTN_QUIT_H = 34;
+    static constexpr int32_t BTN_START_X = 190;
+    static constexpr int32_t BTN_START_Y = 405;
+    static constexpr int32_t BTN_START_W = 98;
+    static constexpr int32_t BTN_START_H = 27;
+
+    static constexpr int32_t BTN_QUIT_X = 350;
+    static constexpr int32_t BTN_QUIT_Y = 407;
+    static constexpr int32_t BTN_QUIT_W = 99;
+    static constexpr int32_t BTN_QUIT_H = 24;
 
     MapSelectScreen();
     ~MapSelectScreen() = default;
@@ -88,20 +96,22 @@ private:
 
     std::vector<MapSelectEntry> maps_;
     int32_t selected_index_{0};
-    int32_t hovered_index_{-1};
 
     int32_t mouse_x_{0};
     int32_t mouse_y_{0};
     bool btn_start_hovered_{false};
     bool btn_quit_hovered_{false};
+    bool btn_up_hovered_{false};
+    bool btn_down_hovered_{false};
+
     bool btn_start_pressed_{false};
     bool btn_quit_pressed_{false};
+    bool btn_up_pressed_{false};
+    bool btn_down_pressed_{false};
 
-    uint32_t last_click_timestamp_{0};
-    int32_t last_click_card_{-1};
-
-    std::function<void(const std::string& map_path)> on_start_;
-    std::function<void()> on_quit_;
+    uint32_t connection_ticks_{0};
+    std::function<void(const std::string& map_path)> on_start_{nullptr};
+    std::function<void()> on_quit_{nullptr};
 };
 
 } // namespace ants::app

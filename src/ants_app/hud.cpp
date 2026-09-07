@@ -44,6 +44,19 @@ void HUD::init(uint8_t local_player_id) {
     is_incubating_ = false;
     news_queue_.clear();
 
+    // Configure Top Header Buttons (x0y0.bmp)
+    help_button_ = {475, 0, 45, 22, 0, 0, 0, false, true, false};
+    options_button_ = {525, 0, 50, 22, 0, 0, 0, false, true, false};
+    quit_button_ = {580, 0, 48, 22, 0, 0, 0, false, true, false};
+
+    // Configure Quit Confirmation Dialog Buttons
+    yes_button_ = {205, 255, 49, 24, 0, 0, 0, false, true, false};
+    no_button_ = {345, 255, 49, 24, 0, 0, 0, false, true, false};
+
+    show_quit_dialog_ = false;
+    show_quick_help_ = false;
+    show_options_ = false;
+
     // Configure Hatch Button at (492, 262)
     hatch_button_.x = 492;
     hatch_button_.y = 262;
@@ -200,11 +213,20 @@ void HUD::render(IRenderer& renderer, const assets::AssetArchive& assets,
 
     // 3. Top & Bottom Frames
     render_top_bar(renderer, assets, world);
-    render_news_banner(renderer, assets);
+    render_news_banner(renderer, assets, world);
 
     // 4. Marquee Selection Box
     if (is_dragging_) {
         render_marquee_box(renderer);
+    }
+
+    // 5. Overlays and Dialogs
+    if (show_quick_help_) {
+        render_quick_help(renderer, assets);
+    } else if (show_options_) {
+        render_options_dialog(renderer, assets);
+    } else if (show_quit_dialog_) {
+        render_quit_dialog(renderer, assets);
     }
 }
 
@@ -212,13 +234,12 @@ void HUD::render_top_bar(IRenderer& renderer, const assets::AssetArchive&, const
     // Top border backdrop: x0y0.bmp (640x22)
     renderer.draw_named_sprite("x0y0.bmp", 0, 0);
 
-    // Match Clock countdown
+    // Box 1 (Top-Left): Match Clock countdown in pre-cut black box at (61..129, 4..17)
     uint32_t ms = world.match_time_remaining_ms;
     uint32_t mm = (ms / 1000) / 60;
     uint32_t ss = (ms / 1000) % 60;
 
-    // Render [MM:SS] digits
-    int32_t cx = 300, cy = 6;
+    int32_t cx = 75, cy = 5;
     std::string dig_m0 = "dig" + std::to_string(mm / 10) + ".bmp";
     std::string dig_m1 = "dig" + std::to_string(mm % 10) + ".bmp";
     std::string dig_s0 = "dig" + std::to_string(ss / 10) + ".bmp";
@@ -230,28 +251,19 @@ void HUD::render_top_bar(IRenderer& renderer, const assets::AssetArchive&, const
     renderer.draw_named_sprite(dig_s0, cx + 24, cy);
     renderer.draw_named_sprite(dig_s1, cx + 32, cy);
 
-    // Multi-Faction Live Scores
-    // Left side: Team 0 & Team 1
-    renderer.fill_rect(25, 6, 8, 8, TEAM_COLORS[0]);
-    renderer.draw_text("Black: " + std::to_string(world.player_scores[0]), 36, 6, {255, 255, 255, 255});
+    // Box 2 (Top-Right above Playfield): Local player's own score in pre-cut black box at (402..456, 4..17)
+    int32_t my_score = (local_player_id_ < world.player_scores.size()) ? world.player_scores[local_player_id_] : 0;
+    renderer.draw_text(std::to_string(my_score), 415, 5, {255, 255, 255, 255});
 
-    renderer.fill_rect(140, 6, 8, 8, TEAM_COLORS[1]);
-    renderer.draw_text("Blue: " + std::to_string(world.player_scores[1]), 151, 6, {255, 255, 255, 255});
-
-    // Right side: Team 2 & Team 3
-    renderer.fill_rect(380, 6, 8, 8, TEAM_COLORS[2]);
-    renderer.draw_text("Red: " + std::to_string(world.player_scores[2]), 391, 6, {255, 255, 255, 255});
-
-    renderer.fill_rect(500, 6, 8, 8, TEAM_COLORS[3]);
-    renderer.draw_text("Green: " + std::to_string(world.player_scores[3]), 511, 6, {255, 255, 255, 255});
-
-    // Alliance grouping display
-    for (uint8_t p = 0; p < 4; ++p) {
-        uint8_t ally = world.player_alliances[p];
-        if (ally < 4 && ally > p) {
-            std::string ally_tag = "[" + std::to_string(p) + "+" + std::to_string(ally) + "]";
-            renderer.draw_text(ally_tag, 255, 6, {255, 215, 0, 255});
-        }
+    // Top Header Buttons feedback (Help, Options, Quit)
+    if (help_button_.is_pressed || show_quick_help_) {
+        renderer.draw_named_sprite("buthelpd.bmp", 475, 0);
+    }
+    if (options_button_.is_pressed || show_options_) {
+        renderer.draw_named_sprite("butoptd.bmp", 525, 0);
+    }
+    if (quit_button_.is_pressed || show_quit_dialog_) {
+        renderer.draw_named_sprite("butquitd.bmp", 580, 0);
     }
 }
 
@@ -260,24 +272,53 @@ void HUD::render_radar(IRenderer& renderer, const assets::AssetArchive&,
     // Minimap panel background at (599, 35)
     renderer.draw_named_sprite("x599y35.bmp", 599, 35);
 
-    const int32_t rw = 110, rh = 90;
-    const int32_t rx = 485, ry = 28;
+    // Exact inner viewport bounds matching frame bezels
+    const int32_t rx = 480, ry = 35;
+    const int32_t rw = 119, rh = 91;
 
-    // Fill radar black / dark base
+    // Fill radar dark base
     renderer.fill_rect(rx, ry, rw, rh, {30, 25, 20, 255});
-    renderer.draw_rect(rx, ry, rw, rh, {120, 100, 80, 255});
 
     if (world.width == 0 || world.height == 0) return;
 
     float scale_x = static_cast<float>(rw) / static_cast<float>(world.width);
     float scale_y = static_cast<float>(rh) / static_cast<float>(world.height);
 
-    // Anthill base markers
+    // Rasterize ground terrain tiles
+    if (world.cells.size() == world.width * world.height) {
+        for (uint32_t ty = 0; ty < world.height; ++ty) {
+            int32_t py = ry + static_cast<int32_t>(ty * scale_y);
+            int32_t ph = std::max(1, static_cast<int32_t>((ty + 1) * scale_y) - static_cast<int32_t>(ty * scale_y));
+            for (uint32_t tx = 0; tx < world.width; ++tx) {
+                const auto& cell = world.cells[ty * world.width + tx];
+                int32_t px = rx + static_cast<int32_t>(tx * scale_x);
+                int32_t pw = std::max(1, static_cast<int32_t>((tx + 1) * scale_x) - static_cast<int32_t>(tx * scale_x));
+                assets::ColorRGBA col{60, 110, 42, 255}; // Walkable grass
+                if (cell.terrain_type == sim::TERRAIN_WATER) {
+                    col = {25, 75, 150, 255}; // Water
+                } else if (cell.terrain_type == sim::TERRAIN_OBSTACLE) {
+                    col = {45, 42, 38, 255}; // Obstacle / rock
+                } else if (cell.has_completed_bridge()) {
+                    col = {140, 100, 60, 255}; // Bridge
+                } else if (cell.has_fire()) {
+                    col = {240, 80, 20, 255}; // Fire
+                } else if (cell.is_food) {
+                    col = {230, 210, 50, 255}; // Food morsel
+                }
+                renderer.fill_rect(px, py, pw, ph, col);
+            }
+        }
+    }
+
+    // Anthill base markers (4x4 footprint)
     for (const auto& base : world.anthills) {
         int32_t bx = rx + static_cast<int32_t>(base.x * scale_x);
         int32_t by = ry + static_cast<int32_t>(base.y * scale_y);
+        int32_t bw = std::max(4, static_cast<int32_t>(4.0f * scale_x));
+        int32_t bh = std::max(4, static_cast<int32_t>(4.0f * scale_y));
         assets::ColorRGBA c = (base.team_id < 4) ? TEAM_COLORS[base.team_id] : assets::ColorRGBA{200, 200, 200, 255};
-        renderer.fill_rect(bx - 2, by - 2, 5, 5, c);
+        renderer.fill_rect(bx, by, bw, bh, c);
+        renderer.draw_rect(bx, by, bw, bh, {255, 255, 255, 200});
     }
 
     // Active live ants
@@ -388,8 +429,10 @@ void HUD::render_selection_card(IRenderer& renderer, const assets::AssetArchive&
 }
 
 void HUD::render_hatch_panel(IRenderer& renderer, const assets::AssetArchive&, const sim::WorldState& world) {
-    // Backing trim
-    renderer.draw_named_sprite("x480y266.bmp", 480, 266);
+    // Fill right panel backing with authentic HUD frame green
+    renderer.fill_rect(480, 254, 160, 212, assets::ColorRGBA{43, 107, 95, 255});
+
+    // Decorative relief column
     renderer.draw_named_sprite("x521y254.bmp", 521, 254);
 
     // Hatch button
@@ -401,20 +444,14 @@ void HUD::render_hatch_panel(IRenderer& renderer, const assets::AssetArchive&, c
     assets::ColorRGBA cost_color = hatch_button_.is_enabled ? assets::ColorRGBA{255, 215, 0, 255} : assets::ColorRGBA{130, 130, 130, 255};
     renderer.draw_text("200 pts", 540, 270, cost_color);
 
-    // Egg Pile visualization
+    // Egg Pile visualization: compact eggsc.bmp (83x35) at (490, 305)
     uint32_t eggs = (local_player_id_ < world.player_eggs.size()) ? world.player_eggs[local_player_id_] : 0;
-    if (eggs >= 8) {
-        renderer.draw_named_sprite("eggs.bmp", 495, 305);
-    } else if (eggs >= 5) {
-        renderer.draw_named_sprite("eggsa.bmp", 495, 305);
-    } else if (eggs >= 2) {
-        renderer.draw_named_sprite("eggsb.bmp", 495, 305);
-    } else if (eggs == 1) {
-        renderer.draw_named_sprite("egg.bmp", 530, 315);
+    if (eggs > 0) {
+        renderer.draw_named_sprite("eggsc.bmp", 490, 305);
     }
 
     // Numerical egg count
-    renderer.draw_text("Eggs: " + std::to_string(eggs), 560, 335, {255, 255, 255, 255});
+    renderer.draw_text("x " + std::to_string(eggs), 580, 316, {255, 255, 255, 255});
 }
 
 void HUD::render_action_buttons(IRenderer& renderer, const assets::AssetArchive&, const sim::WorldState&) {
@@ -441,22 +478,93 @@ void HUD::render_action_buttons(IRenderer& renderer, const assets::AssetArchive&
     }
 }
 
-void HUD::render_news_banner(IRenderer& renderer, const assets::AssetArchive&) {
+void HUD::render_news_banner(IRenderer& renderer, const assets::AssetArchive&, const sim::WorldState& world) {
     // Bottom banner background: x17y461.bmp (623x19)
     renderer.draw_named_sprite("x17y461.bmp", BANNER_X, BANNER_Y);
 
-    if (news_queue_.empty()) return;
-
-    const auto& item = news_queue_.front();
-    assets::ColorRGBA text_color = {255, 255, 255, 255};
-
-    if (item.is_alarm) {
-        // Blinking red/yellow for base alarm
-        bool blink = (alarm_blink_ticks_ / 4) % 2 == 0;
-        text_color = blink ? assets::ColorRGBA{255, 50, 50, 255} : assets::ColorRGBA{255, 255, 50, 255};
+    // Render other 3 players' scores in the 3 pre-cut black boxes:
+    // Box 3: x = 105..159, y = 466
+    // Box 4: x = 254..308, y = 466
+    // Box 5: x = 402..456, y = 466
+    std::vector<uint8_t> other_players;
+    for (uint8_t p = 0; p < 4; ++p) {
+        if (p != local_player_id_) other_players.push_back(p);
     }
 
-    renderer.draw_text(item.text, BANNER_X + 20, BANNER_Y + 5, text_color);
+    static const char* TEAM_NAMES[4] = {"Black:", "Blue:", "Red:", "Green:"};
+    const int32_t box_xs[3] = {105, 254, 402};
+
+    for (size_t i = 0; i < 3 && i < other_players.size(); ++i) {
+        uint8_t p = other_players[i];
+        int32_t bx = box_xs[i];
+        // Team color label to the left of the box
+        renderer.draw_text(TEAM_NAMES[p], bx - 52, 466, TEAM_COLORS[p]);
+        // Player score inside black box
+        int32_t s = (p < world.player_scores.size()) ? world.player_scores[p] : 0;
+        renderer.draw_text(std::to_string(s), bx + 6, 466, {255, 255, 255, 255});
+    }
+
+    // If there is an active news message in queue
+    if (!news_queue_.empty()) {
+        const auto& item = news_queue_.front();
+        assets::ColorRGBA text_color = {255, 255, 255, 255};
+        if (item.is_alarm) {
+            bool blink = (alarm_blink_ticks_ / 4) % 2 == 0;
+            text_color = blink ? assets::ColorRGBA{255, 50, 50, 255} : assets::ColorRGBA{255, 255, 50, 255};
+        }
+        renderer.draw_text(item.text, 470, 466, text_color);
+    }
+}
+
+void HUD::render_quit_dialog(IRenderer& renderer, const assets::AssetArchive&) {
+    using assets::ColorRGBA;
+
+    // Dim background overlay
+    renderer.fill_rect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, ColorRGBA{0, 0, 0, 160});
+
+    // Dialog window at (170, 160, 300, 150)
+    const int32_t dx = 170, dy = 160, dw = 300, dh = 150;
+    renderer.fill_rect(dx, dy, dw, dh, ColorRGBA{192, 192, 192, 255});
+
+    // 3D beveled borders
+    renderer.fill_rect(dx, dy, dw, 2, ColorRGBA{255, 255, 255, 255});
+    renderer.fill_rect(dx, dy, 2, dh, ColorRGBA{255, 255, 255, 255});
+    renderer.fill_rect(dx, dy + dh - 2, dw, 2, ColorRGBA{64, 64, 64, 255});
+    renderer.fill_rect(dx + dw - 2, dy, 2, dh, ColorRGBA{64, 64, 64, 255});
+
+    // Title bar
+    renderer.fill_rect(dx + 3, dy + 3, dw - 6, 20, ColorRGBA{0, 0, 128, 255});
+    renderer.draw_text("Quit Microsoft Ants", dx + 8, dy + 6, ColorRGBA{255, 255, 255, 255});
+
+    // Prompt text
+    renderer.draw_text("Are you sure you want to", dx + 38, dy + 42, ColorRGBA{0, 0, 0, 255});
+    renderer.draw_text("quit the game?", dx + 80, dy + 60, ColorRGBA{0, 0, 0, 255});
+
+    // Yes button at (205, 255, 49, 24)
+    const char* yes_spr = yes_button_.is_pressed ? "yes3.bmp" : (yes_button_.is_active ? "yes2.bmp" : "yes1.bmp");
+    renderer.draw_named_sprite(yes_spr, yes_button_.x, yes_button_.y);
+
+    // No button at (345, 255, 49, 24)
+    const char* no_spr = no_button_.is_pressed ? "no3.bmp" : (no_button_.is_active ? "no2.bmp" : "no1.bmp");
+    renderer.draw_named_sprite(no_spr, no_button_.x, no_button_.y);
+}
+
+void HUD::render_quick_help(IRenderer& renderer, const assets::AssetArchive&) {
+    using assets::ColorRGBA;
+
+    // Full screen Quick Help overlay
+    renderer.fill_rect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, ColorRGBA{0, 0, 0, 190});
+
+    // Authentic qh1.bmp (257x461) and qh2.bmp (362x463)
+    renderer.draw_named_sprite("qh1.bmp", 10, 9);
+    renderer.draw_named_sprite("qh2.bmp", 267, 9);
+}
+
+void HUD::render_options_dialog(IRenderer& renderer, const assets::AssetArchive&) {
+    using assets::ColorRGBA;
+
+    renderer.fill_rect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, ColorRGBA{0, 0, 0, 160});
+    renderer.draw_named_sprite("optcap1.bmp", 124, 150);
 }
 
 void HUD::render_marquee_box(IRenderer& renderer) {
@@ -548,51 +656,97 @@ void HUD::select_ants_in_rect(int32_t x1, int32_t y1, int32_t x2, int32_t y2, co
 
 bool HUD::handle_mouse_down(int32_t x, int32_t y, uint8_t button,
                             sim::SimulationEngine& sim, ViewportCamera& camera) {
-    // 1. Check Hatch Button click
-    if (hatch_button_.contains(x, y)) {
-        if (hatch_button_.is_enabled) {
-            hatch_button_.is_pressed = true;
-            sim.hatch_ant(local_player_id_, sim::AntType::Worker);
-            is_incubating_ = true;
-            incubation_timer_ticks_ = 60; // 3 seconds @ 20 Hz
-        }
+    if (button != SDL_BUTTON_LEFT && button != SDL_BUTTON_RIGHT) return false;
+
+    // 0. Overlays and Modals intercept clicks first
+    if (show_quick_help_) {
+        if (button == SDL_BUTTON_LEFT) close_quick_help();
         return true;
     }
+    if (show_options_) {
+        if (button == SDL_BUTTON_LEFT) close_options();
+        return true;
+    }
+    if (show_quit_dialog_) {
+        if (button == SDL_BUTTON_LEFT) {
+            if (yes_button_.contains(x, y)) {
+                yes_button_.is_pressed = true;
+                return true;
+            }
+            if (no_button_.contains(x, y)) {
+                no_button_.is_pressed = true;
+                return true;
+            }
+        }
+        return true; // Consume all clicks while dialog is open
+    }
 
-    // 2. Check Action Buttons
-    for (size_t i = 0; i < action_buttons_.size(); ++i) {
-        if (action_buttons_[i].contains(x, y)) {
-            if (action_buttons_[i].is_enabled) {
-                action_buttons_[i].is_pressed = true;
-                switch (static_cast<ActionButtonId>(i)) {
-                    case ActionButtonId::Move:   set_active_order_mode(sim::OrderType::Move); break;
-                    case ActionButtonId::Attack: set_active_order_mode(sim::OrderType::Attack); break;
-                    case ActionButtonId::Bomb:   set_active_order_mode(sim::OrderType::PlantBomb); break;
-                    case ActionButtonId::Fire:   set_active_order_mode(sim::OrderType::IgniteFire); break;
-                    case ActionButtonId::Bridge: set_active_order_mode(sim::OrderType::BuildBridge); break;
-                    case ActionButtonId::Thief:  set_active_order_mode(sim::OrderType::InfiltrateAnthill); break;
-                    case ActionButtonId::Cancel: cancel_order_mode(); clear_selection(); break;
-                    default: break;
-                }
+    if (button != SDL_BUTTON_LEFT) {
+        // Right clicks continue to playfield handling below
+    } else {
+        // Top Header Buttons
+        if (help_button_.contains(x, y)) {
+            help_button_.is_pressed = true;
+            show_quick_help_ = !show_quick_help_;
+            return true;
+        }
+        if (options_button_.contains(x, y)) {
+            options_button_.is_pressed = true;
+            show_options_ = !show_options_;
+            return true;
+        }
+        if (quit_button_.contains(x, y)) {
+            quit_button_.is_pressed = true;
+            open_quit_dialog();
+            return true;
+        }
+
+        // 1. Check Hatch Button click
+        if (hatch_button_.contains(x, y)) {
+            if (hatch_button_.is_enabled) {
+                hatch_button_.is_pressed = true;
+                sim.hatch_ant(local_player_id_, sim::AntType::Worker);
+                is_incubating_ = true;
+                incubation_timer_ticks_ = 60; // 3 seconds @ 20 Hz
             }
             return true;
         }
-    }
 
-    // 3. Check Minimap Radar click
-    const int32_t rw = 110, rh = 90;
-    const int32_t rx = 485, ry = 28;
-    if (x >= rx && x < (rx + rw) && y >= ry && y < (ry + rh)) {
-        is_radar_dragging_ = true;
-        const auto& world = sim.get_world_state();
-        if (world.width > 0 && world.height > 0) {
-            int32_t tile_x = static_cast<int32_t>((static_cast<float>(x - rx) / rw) * static_cast<float>(world.width));
-            int32_t tile_y = static_cast<int32_t>((static_cast<float>(y - ry) / rh) * static_cast<float>(world.height));
-            tile_x = std::clamp(tile_x, 0, static_cast<int32_t>(world.width - 1));
-            tile_y = std::clamp(tile_y, 0, static_cast<int32_t>(world.height - 1));
-            camera.center_on(tile_x * 32, tile_y * 32, world.width, world.height);
+        // 2. Check Action Buttons
+        for (size_t i = 0; i < action_buttons_.size(); ++i) {
+            if (action_buttons_[i].contains(x, y)) {
+                if (action_buttons_[i].is_enabled) {
+                    action_buttons_[i].is_pressed = true;
+                    switch (static_cast<ActionButtonId>(i)) {
+                        case ActionButtonId::Move:   set_active_order_mode(sim::OrderType::Move); break;
+                        case ActionButtonId::Attack: set_active_order_mode(sim::OrderType::Attack); break;
+                        case ActionButtonId::Bomb:   set_active_order_mode(sim::OrderType::PlantBomb); break;
+                        case ActionButtonId::Fire:   set_active_order_mode(sim::OrderType::IgniteFire); break;
+                        case ActionButtonId::Bridge: set_active_order_mode(sim::OrderType::BuildBridge); break;
+                        case ActionButtonId::Thief:  set_active_order_mode(sim::OrderType::InfiltrateAnthill); break;
+                        case ActionButtonId::Cancel: cancel_order_mode(); clear_selection(); break;
+                        default: break;
+                    }
+                }
+                return true;
+            }
         }
-        return true;
+
+        // 3. Check Minimap Radar click
+        const int32_t rx = 480, ry = 35;
+        const int32_t rw = 119, rh = 91;
+        if (x >= rx && x < (rx + rw) && y >= ry && y < (ry + rh)) {
+            is_radar_dragging_ = true;
+            const auto& world = sim.get_world_state();
+            if (world.width > 0 && world.height > 0) {
+                int32_t tile_x = static_cast<int32_t>((static_cast<float>(x - rx) / rw) * static_cast<float>(world.width));
+                int32_t tile_y = static_cast<int32_t>((static_cast<float>(y - ry) / rh) * static_cast<float>(world.height));
+                tile_x = std::clamp(tile_x, 0, static_cast<int32_t>(world.width - 1));
+                tile_y = std::clamp(tile_y, 0, static_cast<int32_t>(world.height - 1));
+                camera.center_on(tile_x * 32, tile_y * 32, world.width, world.height);
+            }
+            return true;
+        }
     }
 
     // 4. Playfield Interactions
@@ -629,11 +783,33 @@ bool HUD::handle_mouse_down(int32_t x, int32_t y, uint8_t button,
     return false;
 }
 
-bool HUD::handle_mouse_up(int32_t, int32_t, uint8_t button,
+bool HUD::handle_mouse_up(int32_t x, int32_t y, uint8_t button,
                           sim::SimulationEngine& sim, ViewportCamera& camera) {
+    help_button_.is_pressed = false;
+    options_button_.is_pressed = false;
+    quit_button_.is_pressed = false;
     hatch_button_.is_pressed = false;
     for (auto& btn : action_buttons_) btn.is_pressed = false;
     is_radar_dragging_ = false;
+
+    if (show_quit_dialog_) {
+        if (yes_button_.is_pressed) {
+            yes_button_.is_pressed = false;
+            if (yes_button_.contains(x, y)) {
+                close_quit_dialog();
+                if (on_quit_) on_quit_();
+            }
+            return true;
+        }
+        if (no_button_.is_pressed) {
+            no_button_.is_pressed = false;
+            if (no_button_.contains(x, y)) {
+                close_quit_dialog();
+            }
+            return true;
+        }
+        return true;
+    }
 
     if (is_dragging_ && button == 1) {
         is_dragging_ = false;
@@ -751,6 +927,12 @@ bool HUD::handle_mouse_up(int32_t, int32_t, uint8_t button,
 
 bool HUD::handle_mouse_motion(int32_t x, int32_t y,
                               sim::SimulationEngine& sim, ViewportCamera& camera) {
+    if (show_quit_dialog_) {
+        yes_button_.is_active = yes_button_.contains(x, y);
+        no_button_.is_active = no_button_.contains(x, y);
+        return true;
+    }
+
     if (is_dragging_) {
         drag_curr_x_ = x;
         drag_curr_y_ = y;
@@ -758,8 +940,8 @@ bool HUD::handle_mouse_motion(int32_t x, int32_t y,
     }
 
     if (is_radar_dragging_) {
-        const int32_t rw = 110, rh = 90;
-        const int32_t rx = 485, ry = 28;
+        const int32_t rx = 480, ry = 35;
+        const int32_t rw = 119, rh = 91;
         const auto& world = sim.get_world_state();
         if (world.width > 0 && world.height > 0) {
             int32_t tile_x = static_cast<int32_t>((static_cast<float>(x - rx) / rw) * static_cast<float>(world.width));
@@ -775,6 +957,36 @@ bool HUD::handle_mouse_motion(int32_t x, int32_t y,
 }
 
 bool HUD::handle_key_down(int32_t key, sim::SimulationEngine& sim, ViewportCamera& camera) {
+    // 1. Modals capture keyboard events
+    if (show_quit_dialog_) {
+        if (key == 'y' || key == 'Y' || key == SDLK_RETURN || key == SDLK_KP_ENTER) {
+            close_quit_dialog();
+            if (on_quit_) on_quit_();
+            return true;
+        }
+        if (key == 'n' || key == 'N' || key == SDLK_ESCAPE) {
+            close_quit_dialog();
+            return true;
+        }
+        return true; // Modal blocks all other gameplay keys
+    }
+
+    if (show_quick_help_) {
+        if (key == SDLK_ESCAPE || key == SDLK_RETURN || key == SDLK_SPACE || key == 'h' || key == 'H') {
+            close_quick_help();
+            return true;
+        }
+        return true;
+    }
+
+    if (show_options_) {
+        if (key == SDLK_ESCAPE || key == SDLK_RETURN || key == 'o' || key == 'O') {
+            close_options();
+            return true;
+        }
+        return true;
+    }
+
     const auto& world = sim.get_world_state();
     switch (key) {
         case 'm': case 'M': set_active_order_mode(sim::OrderType::Move); return true;
@@ -840,7 +1052,14 @@ bool HUD::handle_key_down(int32_t key, sim::SimulationEngine& sim, ViewportCamer
             }
             return true;
         }
-        case 27: // Escape
+        case 27: // Escape: open quit dialog, or cancel armed order if active
+            if (active_order_mode_ != sim::OrderType::None || !selected_ant_ids_.empty()) {
+                cancel_order_mode();
+                clear_selection();
+            } else {
+                open_quit_dialog();
+            }
+            return true;
         case 'c': case 'C':
             cancel_order_mode();
             clear_selection();

@@ -150,13 +150,30 @@ public:
     uint8_t get_local_player_id() const noexcept { return local_player_id_; }
     void set_local_player_id(uint8_t id) noexcept { local_player_id_ = id; }
 
+    // Dialog and Modal overlays
+    void open_quit_dialog() noexcept { show_quit_dialog_ = true; }
+    void close_quit_dialog() noexcept { show_quit_dialog_ = false; }
+    bool is_quit_dialog_open() const noexcept { return show_quit_dialog_; }
+    void set_on_quit(std::function<void()> cb) { on_quit_ = std::move(cb); }
+
+    void open_quick_help() noexcept { show_quick_help_ = true; }
+    void close_quick_help() noexcept { show_quick_help_ = false; }
+    bool is_quick_help_open() const noexcept { return show_quick_help_; }
+
+    void open_options() noexcept { show_options_ = true; }
+    void close_options() noexcept { show_options_ = false; }
+    bool is_options_open() const noexcept { return show_options_; }
+
 private:
     void render_top_bar(IRenderer& renderer, const assets::AssetArchive& assets, const sim::WorldState& world);
     void render_radar(IRenderer& renderer, const assets::AssetArchive& assets, const sim::WorldState& world, const ViewportCamera& camera);
     void render_selection_card(IRenderer& renderer, const assets::AssetArchive& assets, const sim::WorldState& world);
     void render_hatch_panel(IRenderer& renderer, const assets::AssetArchive& assets, const sim::WorldState& world);
     void render_action_buttons(IRenderer& renderer, const assets::AssetArchive& assets, const sim::WorldState& world);
-    void render_news_banner(IRenderer& renderer, const assets::AssetArchive& assets);
+    void render_news_banner(IRenderer& renderer, const assets::AssetArchive& assets, const sim::WorldState& world);
+    void render_quit_dialog(IRenderer& renderer, const assets::AssetArchive& assets);
+    void render_quick_help(IRenderer& renderer, const assets::AssetArchive& assets);
+    void render_options_dialog(IRenderer& renderer, const assets::AssetArchive& assets);
     void render_marquee_box(IRenderer& renderer);
 
     void update_action_buttons_state(const sim::WorldState& world);
@@ -191,6 +208,20 @@ private:
 
     // Minimap drag navigation state
     bool is_radar_dragging_{false};
+
+    // Top Header Buttons
+    UIButton help_button_{};
+    UIButton options_button_{};
+    UIButton quit_button_{};
+
+    // Dialog & Modal State
+    bool show_quit_dialog_{false};
+    UIButton yes_button_{};
+    UIButton no_button_{};
+    std::function<void()> on_quit_{nullptr};
+
+    bool show_quick_help_{false};
+    bool show_options_{false};
 };
 
 } // namespace ants::app

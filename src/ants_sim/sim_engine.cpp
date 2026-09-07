@@ -105,6 +105,22 @@ void SimulationEngine::init(const ants::assets::LevelData& level, uint32_t rando
     for (const auto& a : level.anthill_spawns) {
         if (a.team_id < MAX_PLAYERS) {
             impl_->stats_.set_egg_count(a.team_id, 10);
+            static const int offsets[5][2] = {
+                { 0,  0},
+                {-1,  0},
+                { 1,  0},
+                { 0, -1},
+                { 0,  1}
+            };
+            for (int i = 0; i < 5; ++i) {
+                int32_t sx = static_cast<int32_t>(a.x) + offsets[i][0];
+                int32_t sy = static_cast<int32_t>(a.y) + offsets[i][1];
+                if (!impl_->grid_.in_bounds(sx, sy) || !impl_->grid_.get_cell(sx, sy).is_passable()) {
+                    sx = a.x;
+                    sy = a.y;
+                }
+                spawn_unit(a.team_id, AntType::Worker, TileCoord{static_cast<uint16_t>(sx), static_cast<uint16_t>(sy)});
+            }
         }
     }
 }
@@ -244,6 +260,7 @@ void SimulationEngine::tick() {
             auto& cell = impl_->grid_.get_cell_mut(ant_ptr->pos);
             if (cell.has_food()) {
                 cell.interactive_id = TILE_EMPTY;
+                cell.is_food = false;
                 ant_ptr->pick_up_food(1, 25);
             }
         }
