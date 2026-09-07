@@ -50,6 +50,7 @@ struct ApplicationConfig {
     int select_ant_id{-1};
     int select_base_team{-1};
     bool open_options{false};
+    bool show_tile_grid{false};
 };
 
 /**
@@ -74,6 +75,10 @@ public:
     bool is_unit_health_visible() const noexcept { return show_unit_health_; }
     void set_unit_health_visible(bool visible) noexcept { show_unit_health_ = visible; }
     void toggle_unit_health_visibility() noexcept { show_unit_health_ = !show_unit_health_; }
+
+    bool is_tile_grid_visible() const noexcept { return show_tile_grid_; }
+    void set_tile_grid_visible(bool visible) noexcept { show_tile_grid_ = visible; }
+    void toggle_tile_grid_visibility() noexcept { show_tile_grid_ = !show_tile_grid_; }
 
     AppState state() const noexcept { return state_; }
     void set_state(AppState st) noexcept { state_ = st; }
@@ -104,6 +109,7 @@ private:
     bool is_running_{false};
     bool is_paused_{false};
     bool show_unit_health_{false};
+    bool show_tile_grid_{false};
 
     SDL_Window* window_{nullptr};
     std::unique_ptr<Renderer> renderer_;

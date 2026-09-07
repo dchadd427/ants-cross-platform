@@ -891,6 +891,29 @@ void run_suite_8_unit_health_and_map_select() {
         app.return_to_map_select();
         ASSERT_EQ(app.state(), AppState::MapSelect);
     } TEST_END();
+
+    TEST_CASE("8.6 Ctrl+G Tile Grid Display Toggling and Visibility State") {
+        Application app;
+        ApplicationConfig cfg;
+        cfg.headless = true;
+        cfg.start_in_map_select = false;
+        ASSERT_TRUE(app.init(cfg));
+
+        // Default: Tile grid overlay is OFF
+        ASSERT_FALSE(app.is_tile_grid_visible());
+
+        // Toggle ON
+        app.toggle_tile_grid_visibility();
+        ASSERT_TRUE(app.is_tile_grid_visible());
+
+        // Toggle OFF
+        app.toggle_tile_grid_visibility();
+        ASSERT_FALSE(app.is_tile_grid_visible());
+
+        // Direct setter
+        app.set_tile_grid_visible(true);
+        ASSERT_TRUE(app.is_tile_grid_visible());
+    } TEST_END();
 }
 
 // ============================================================================

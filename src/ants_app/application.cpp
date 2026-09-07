@@ -36,6 +36,8 @@ bool Application::init(int argc, char* argv[]) {
         } else if (std::strcmp(argv[i], "--open-options") == 0) {
             cfg.open_options = true;
             cfg.start_in_map_select = false;
+        } else if (std::strcmp(argv[i], "--show-grid") == 0) {
+            cfg.show_tile_grid = true;
         }
     }
     return init(cfg);
@@ -43,6 +45,7 @@ bool Application::init(int argc, char* argv[]) {
 
 bool Application::init(const ApplicationConfig& config) {
     config_ = config;
+    show_tile_grid_ = config_.show_tile_grid;
 
     // 1. Initialize SDL2
     uint32_t sdl_flags = SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_TIMER;
@@ -415,6 +418,13 @@ void Application::handle_key_down(const SDL_KeyboardEvent& key) {
         return;
     }
 
+    // Ctrl+G / Cmd+G / G: Toggle Tile Grid Display
+    if (key.keysym.sym == SDLK_g) {
+        show_tile_grid_ = !show_tile_grid_;
+        hud_.queue_news_message(show_tile_grid_ ? "Tile Grid: ON" : "Tile Grid: OFF", 60, false);
+        return;
+    }
+
     if (key.keysym.sym == SDLK_F12) {
         renderer_->save_screenshot("screenshot.png");
         hud_.queue_news_message("Screenshot saved to screenshot.png", 60, false);
@@ -541,7 +551,8 @@ void Application::render_frame() {
     } else {
         const auto& world = sim_.get_world_state();
         renderer_->render_world(world, sim_.grid(), static_cast<int32_t>(hud_.get_selected_ant_id()),
-                                hud_.get_selected_ant_ids(), show_unit_health_);
+                                hud_.get_selected_ant_ids(), show_unit_health_, show_tile_grid_,
+                                mouse_screen_x_, mouse_screen_y_);
         hud_.render(*renderer_, assets_, world, renderer_->camera());
     }
 
