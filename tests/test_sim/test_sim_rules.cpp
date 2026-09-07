@@ -929,21 +929,34 @@ static void run_suite_13_authentic_fidelity() {
         // Mound tile is impassable
         ASSERT_FALSE(sim.grid().get_cell(20, 20).is_passable());
         ASSERT_FALSE(sim.grid().get_cell(22, 22).is_passable());
-        // Entrance and queue staging spot are passable
+        // Entrance and queue staging spot (to the left of base: 19, 23) are passable
         ASSERT_TRUE(sim.grid().get_cell(21, 21).is_passable());
-        ASSERT_TRUE(sim.grid().get_cell(20, 23).is_passable());
+        ASSERT_TRUE(sim.grid().get_cell(19, 23).is_passable());
 
-        // Return to base order routes to bottom-left queuing point (20, 23)
+        // First worker gets priority immediately and routes straight in to base entrance (21, 21)
         uint32_t worker = sim.spawn_unit(0, AntType::Worker, {10, 10});
         AntOrder ret{};
         ret.ant_id = worker;
         ret.type = OrderType::ReturnToBase;
         sim.issue_order(ret);
 
+        ASSERT_EQ(sim.get_active_depositing_ant(0), worker);
         ASSERT_FALSE(sim.get_unit(worker).waypoints.empty());
         TileCoord last_wp = sim.get_unit(worker).waypoints.back();
-        ASSERT_EQ(last_wp.x, 20);
-        ASSERT_EQ(last_wp.y, 23);
+        ASSERT_EQ(last_wp.x, 21);
+        ASSERT_EQ(last_wp.y, 21);
+
+        // Second worker while worker 1 has priority routes to queue staging slot 1 (19, 22)
+        uint32_t worker2 = sim.spawn_unit(0, AntType::Worker, {10, 15});
+        AntOrder ret2{};
+        ret2.ant_id = worker2;
+        ret2.type = OrderType::ReturnToBase;
+        sim.issue_order(ret2);
+
+        ASSERT_FALSE(sim.get_unit(worker2).waypoints.empty());
+        TileCoord last_wp2 = sim.get_unit(worker2).waypoints.back();
+        ASSERT_EQ(last_wp2.x, 19);
+        ASSERT_EQ(last_wp2.y, 22);
     } TEST_END();
 
     TEST_CASE("13.5 Thief Cannot Steal From Base With 0 Food") {

@@ -30,11 +30,13 @@ namespace SoundID {
     constexpr uint32_t AlliancePro    = 51; // allypro.wav
     constexpr uint32_t AllianceNot    = 52; // allynot.wav
     constexpr uint32_t AllianceYes    = 53; // allyyes.wav
+    constexpr uint32_t BaseEnter      = 55; // sound_55.wav (anthill entrance underground)
     constexpr uint32_t VictoryFanfare = 56; // winner.wav (22kHz, 4.67s)
     constexpr uint32_t MeleeAttack    = 57; // attack.wav
     constexpr uint32_t BaseAlarmSiren = 58; // underattack.wav (2566 Hz alarm)
     constexpr uint32_t FlingThumpA    = 64; // flythumpa.wav
     constexpr uint32_t FlingThumpB    = 65; // flythumpb.wav
+    constexpr uint32_t FoodHarvest    = 66; // harvest.wav
     constexpr uint32_t FireBeam       = 67; // firestarta.wav
     constexpr uint32_t FireErupt      = 68; // firestartb.wav
     constexpr uint32_t FireExtinguish = 69; // fireextinguish.wav
@@ -84,6 +86,12 @@ struct AntOrder {
     int32_t   target_x{0};
     int32_t   target_y{0};
     int32_t   target_entity_id{-1};
+};
+
+struct PendingHatch {
+    uint8_t  player_id{0};
+    AntType  type{AntType::Worker};
+    uint32_t ticks_remaining{0};
 };
 
 struct AudioEvent {
@@ -171,6 +179,8 @@ public:
     void tick();
     void issue_order(const AntOrder& order);
     bool hatch_ant(uint8_t player_id, AntType type);
+    size_t get_pending_hatch_count(uint8_t player_id) const;
+    void set_hatch_delay_ticks(uint32_t ticks);
 
     // Dynamic Alliances
     void propose_alliance(uint8_t from_player, uint8_t to_player);
@@ -240,6 +250,16 @@ public:
     void release_queue_slot(TileCoord slot);
     void clear_reserved_queue_slots();
     bool is_queue_slot_reserved(TileCoord slot) const;
+
+    void join_base_queue(uint32_t ant_id);
+    void leave_base_queue(uint32_t ant_id);
+    bool is_ant_in_base_queue(uint32_t ant_id) const;
+    uint32_t get_active_depositing_ant(uint8_t player_id) const;
+    size_t get_base_queue_size(uint8_t player_id) const;
+    TileCoord get_base_queue_slot(uint8_t player_id, size_t index) const;
+    void send_ant_straight_into_base(uint32_t ant_id);
+    void dispatch_next_base_queue(uint8_t player_id);
+
     void step_base_entry_animation(uint32_t ant_id, uint16_t target_frame);
 
     void start_thief_infiltration(uint32_t ant_id, uint8_t target_team_id);

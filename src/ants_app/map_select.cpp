@@ -4,24 +4,6 @@
 
 namespace ants::app {
 
-namespace {
-
-void draw_sunken_box(IRenderer& renderer, int32_t x, int32_t y, int32_t w, int32_t h) {
-    using ants::assets::ColorRGBA;
-    // Black interior fill
-    renderer.fill_rect(x, y, w, h, ColorRGBA{0, 0, 0, 255});
-    // Outer frame outline
-    renderer.draw_rect(x, y, w, h, ColorRGBA{23, 71, 47, 255});
-    // Top & left inner bevel shadow
-    renderer.fill_rect(x + 1, y + 1, w - 2, 1, ColorRGBA{11, 27, 19, 255});
-    renderer.fill_rect(x + 1, y + 1, 1, h - 2, ColorRGBA{11, 27, 19, 255});
-    // Bottom & right inner bevel highlight
-    renderer.fill_rect(x + 1, y + h - 2, w - 2, 1, ColorRGBA{59, 151, 111, 255});
-    renderer.fill_rect(x + w - 2, y + 1, 1, h - 2, ColorRGBA{59, 151, 111, 255});
-}
-
-} // anonymous namespace
-
 MapSelectScreen::MapSelectScreen() = default;
 
 void MapSelectScreen::init(const std::string& maps_dir) {
@@ -61,7 +43,7 @@ void MapSelectScreen::init(const std::string& maps_dir) {
 
     selected_index_ = 0;
     connection_ticks_ = 0;
-    fog_of_war_ = true;
+    fog_of_war_ = false;
     player_ready_mask_ = 0b0011; // Player 0 & 1 ready, Player 2 unready matching reference screenshot
 
     btn_start_hovered_ = false;
@@ -245,40 +227,33 @@ void MapSelectScreen::handle_key_down(SDL_Keycode key) {
     }
 }
 
-void MapSelectScreen::render(IRenderer& renderer, const ants::assets::AssetArchive&) {
+void MapSelectScreen::render(IRenderer& renderer, const ants::assets::AssetArchive& archive) {
     using ants::assets::ColorRGBA;
 
     connection_ticks_++;
 
-    // 1. Classic Setup Screen Background (Authentic CHD palette index 173)
-    renderer.fill_rect(0, 0, 640, 480, ColorRGBA{219, 75, 19, 255});
+    // 1. Authentic st_screen composite setup dialog (129 frame elements from Table 4 Animation 106)
+    // Rendered in reverse order to produce authentic 640x480 terracotta layout with frames,
+    // banners, headers, boxes, and Fog of War texts.
+    const auto* anim = archive.find_animation("st_screen");
+    if (anim && !anim->subitems.empty()) {
+        const auto& frames = anim->subitems[0].frames;
+        for (size_t i = frames.size(); i-- > 0; ) {
+            const auto& fr = frames[i];
+            renderer.draw_sprite(fr.sprite_index, fr.dx, fr.dy);
+        }
+    } else {
+        renderer.fill_rect(0, 0, 640, 480, ColorRGBA{219, 75, 19, 255});
+    }
 
-    // Outer 3px dark teal frame with bevel
-    renderer.draw_rect(0, 0, 640, 480, ColorRGBA{23, 71, 47, 255});
-    renderer.draw_rect(1, 1, 638, 478, ColorRGBA{59, 151, 111, 255});
-    renderer.draw_rect(2, 2, 636, 476, ColorRGBA{23, 71, 47, 255});
-
-    // 2. Top Header Banner: hostbanr.bmp at (140, 1)
-    renderer.draw_named_sprite("hostbanr.bmp", BANNER_X, BANNER_Y);
-
-    // 3. Leave Game Button at (525, 12)
+    // 2. Top Header Leave Game Button at (525, 12)
     const char* leave_spr = btn_quit_pressed_ ? "bleave3.bmp" : (btn_quit_hovered_ ? "bleave2.bmp" : "bleave1.bmp");
     renderer.draw_named_sprite(leave_spr, BTN_QUIT_X, BTN_QUIT_Y);
 
-    // 4. Left Column:
-    // Setup Logo: gamesetup.bmp at (42, 87)
-    renderer.draw_named_sprite("gamesetup.bmp", LOGO_X, LOGO_Y);
-
-    // Pick a Map Header: pickmap.bmp at (30, 281)
-    renderer.draw_named_sprite("pickmap.bmp", PICKMAP_X, PICKMAP_Y);
-
-    // Map Name Box: w_map.bmp at (27, 306)
-    renderer.draw_named_sprite("w_map.bmp", W_MAP_X, W_MAP_Y);
-
-    // Current Map Name inside w_map.bmp
+    // 3. Current Map Name inside Pick a Map box
     if (selected_index_ >= 0 && selected_index_ < static_cast<int32_t>(maps_.size())) {
         const auto& cur = maps_[static_cast<size_t>(selected_index_)];
-        renderer.draw_text(cur.display_name, 35, 320, ColorRGBA{255, 255, 255, 255});
+        renderer.draw_text(cur.display_name, 38, 320, ColorRGBA{255, 255, 255, 255});
     }
 
     // Up/Down Stepper Buttons at (226, 303) and (226, 327)
@@ -287,95 +262,34 @@ void MapSelectScreen::render(IRenderer& renderer, const ants::assets::AssetArchi
     renderer.draw_named_sprite(up_spr, BTN_UP_X, BTN_UP_Y);
     renderer.draw_named_sprite(dn_spr, BTN_DOWN_X, BTN_DOWN_Y);
 
-    // Map Info Header: mapinfo.bmp at (29, 352)
-    renderer.draw_named_sprite("mapinfo.bmp", MAPINFO_X, MAPINFO_Y);
-
-    // Map Info Box at (27, 376)
-    draw_sunken_box(renderer, INFO_BOX_X, INFO_BOX_Y, INFO_BOX_W, INFO_BOX_H);
+    // 4. Map Info Description inside Map Info box
     if (selected_index_ >= 0 && selected_index_ < static_cast<int32_t>(maps_.size())) {
         const auto& cur = maps_[static_cast<size_t>(selected_index_)];
         std::string info_text = cur.description + " (" + std::to_string(cur.minutes) + " min)";
-        renderer.draw_text(info_text, 35, 389, ColorRGBA{255, 255, 255, 255});
+        renderer.draw_text(info_text, 38, 387, ColorRGBA{255, 255, 255, 255});
     }
 
-    // Status Line: statline.bmp at (25, 434)
-    renderer.draw_named_sprite("statline.bmp", STATLINE_X, STATLINE_Y);
-    renderer.draw_text("Game started, initializing...", 35, 456, ColorRGBA{255, 255, 255, 255});
+    // 5. Status line: authentic prompt text
+    renderer.draw_text("Press START when all players' thumbs have appeared.", 38, 445, ColorRGBA{255, 255, 255, 255});
 
-    // 5. Right Column:
-    // Players' Status Header: playstat.bmp at (368, 56)
-    renderer.draw_named_sprite("playstat.bmp", PLAYSTAT_X, PLAYSTAT_Y);
-
-    // Players' Status Box at (366, 82)
-    draw_sunken_box(renderer, PLAYERS_BOX_X, PLAYERS_BOX_Y, PLAYERS_BOX_W, PLAYERS_BOX_H);
-
-    // Slot 0: Green Ant, Dethcon, thumbs up (if ready)
+    // 6. Players' Status (Only connected players shown)
+    std::string display_user = player_name_.empty() ? "Player" : player_name_;
     renderer.set_hud_team(0); // Team 0 = Green
-    renderer.draw_named_sprite("agst201.bmp", 385, 88);
+    renderer.draw_named_sprite("agst301.bmp", 385, 95);
     renderer.set_hud_team(0);
-    renderer.draw_text("Dethcon", 415, 103, ColorRGBA{255, 255, 255, 255});
-    renderer.draw_named_sprite(is_player_ready(0) ? "thumb1.bmp" : "thumb3.bmp", 540, 97);
+    renderer.draw_text(display_user, 415, 107, ColorRGBA{255, 255, 255, 255});
+    renderer.draw_named_sprite("thumb1.bmp", 540, 101);
 
-    // Slot 1: Blue Ant, OneStarNoTip, thumbs up (if ready)
-    renderer.set_hud_team(2); // Team 2 = Blue
-    renderer.draw_named_sprite("agst201.bmp", 385, 138);
-    renderer.set_hud_team(0); // Reset before drawing thumb
-    renderer.draw_text("OneStarNoTip", 415, 153, ColorRGBA{255, 255, 255, 255});
-    renderer.draw_named_sprite(is_player_ready(1) ? "thumb1.bmp" : "thumb3.bmp", 540, 147);
-
-    // Slot 2: Red Ant, Sgeo, thumbs down (if unready)
-    renderer.set_hud_team(1); // Team 1 = Red
-    renderer.draw_named_sprite("agst201.bmp", 385, 188);
-    renderer.set_hud_team(0); // Reset before drawing thumb
-    renderer.draw_text("Sgeo", 415, 203, ColorRGBA{255, 255, 255, 255});
-    renderer.draw_named_sprite(is_player_ready(2) ? "thumb1.bmp" : "thumb3.bmp", 540, 197);
-
-    // Reset hud team back to 0
-    renderer.set_hud_team(0);
-
-    // Drop Button at (576, 192)
-    const char* drop_spr = btn_drop_pressed_ ? "drop3.bmp" : (btn_drop_hovered_ ? "drop2.bmp" : "drop1.bmp");
-    renderer.draw_named_sprite(drop_spr, BTN_DROP_X, BTN_DROP_Y);
-
-    // Fog of War Header at (367, 376)
-    renderer.draw_named_sprite("fowar.bmp", FOW_HEADER_X, FOW_HEADER_Y);
-
-    // Fog of War "On" & "Off" pill toggle buttons
+    // 7. Fog of War On/Off Buttons using authentic sprites
     if (fog_of_war_) {
-        // "On" button (Raised, active)
-        renderer.fill_rect(BTN_FOW_ON_X, BTN_FOW_ON_Y, BTN_FOW_ON_W, BTN_FOW_ON_H, ColorRGBA{50, 110, 97, 255});
-        renderer.draw_rect(BTN_FOW_ON_X, BTN_FOW_ON_Y, BTN_FOW_ON_W, BTN_FOW_ON_H, ColorRGBA{23, 71, 47, 255});
-        renderer.fill_rect(BTN_FOW_ON_X + 1, BTN_FOW_ON_Y + 1, BTN_FOW_ON_W - 2, 1, ColorRGBA{105, 155, 123, 255});
-        renderer.fill_rect(BTN_FOW_ON_X + 1, BTN_FOW_ON_Y + 1, 1, BTN_FOW_ON_H - 2, ColorRGBA{105, 155, 123, 255});
-        renderer.fill_rect(BTN_FOW_ON_X + 1, BTN_FOW_ON_Y + BTN_FOW_ON_H - 1, BTN_FOW_ON_W - 1, 1, ColorRGBA{11, 27, 19, 255});
-        renderer.fill_rect(BTN_FOW_ON_X + BTN_FOW_ON_W - 1, BTN_FOW_ON_Y + 1, 1, BTN_FOW_ON_H - 1, ColorRGBA{11, 27, 19, 255});
-        renderer.draw_text("On", BTN_FOW_ON_X + 11, BTN_FOW_ON_Y + 6, ColorRGBA{220, 240, 230, 255});
-
-        // "Off" button (Sunken, inactive)
-        renderer.fill_rect(BTN_FOW_OFF_X, BTN_FOW_OFF_Y, BTN_FOW_OFF_W, BTN_FOW_OFF_H, ColorRGBA{7, 17, 20, 255});
-        renderer.draw_rect(BTN_FOW_OFF_X, BTN_FOW_OFF_Y, BTN_FOW_OFF_W, BTN_FOW_OFF_H, ColorRGBA{23, 71, 47, 255});
-        renderer.draw_text("Off", BTN_FOW_OFF_X + 14, BTN_FOW_OFF_Y + 6, ColorRGBA{50, 110, 97, 255});
+        renderer.draw_named_sprite("optond.bmp", 520, 374);
+        renderer.draw_named_sprite("dbutoffu.bmp", 572, 376);
     } else {
-        // "On" button (Sunken, inactive)
-        renderer.fill_rect(BTN_FOW_ON_X, BTN_FOW_ON_Y, BTN_FOW_ON_W, BTN_FOW_ON_H, ColorRGBA{7, 17, 20, 255});
-        renderer.draw_rect(BTN_FOW_ON_X, BTN_FOW_ON_Y, BTN_FOW_ON_W, BTN_FOW_ON_H, ColorRGBA{23, 71, 47, 255});
-        renderer.draw_text("On", BTN_FOW_ON_X + 11, BTN_FOW_ON_Y + 6, ColorRGBA{50, 110, 97, 255});
-
-        // "Off" button (Raised, active)
-        renderer.fill_rect(BTN_FOW_OFF_X, BTN_FOW_OFF_Y, BTN_FOW_OFF_W, BTN_FOW_OFF_H, ColorRGBA{50, 110, 97, 255});
-        renderer.draw_rect(BTN_FOW_OFF_X, BTN_FOW_OFF_Y, BTN_FOW_OFF_W, BTN_FOW_OFF_H, ColorRGBA{23, 71, 47, 255});
-        renderer.fill_rect(BTN_FOW_OFF_X + 1, BTN_FOW_OFF_Y + 1, BTN_FOW_OFF_W - 2, 1, ColorRGBA{105, 155, 123, 255});
-        renderer.fill_rect(BTN_FOW_OFF_X + 1, BTN_FOW_OFF_Y + 1, 1, BTN_FOW_OFF_H - 2, ColorRGBA{105, 155, 123, 255});
-        renderer.fill_rect(BTN_FOW_OFF_X + 1, BTN_FOW_OFF_Y + BTN_FOW_OFF_H - 1, BTN_FOW_OFF_W - 1, 1, ColorRGBA{11, 27, 19, 255});
-        renderer.fill_rect(BTN_FOW_OFF_X + BTN_FOW_OFF_W - 1, BTN_FOW_OFF_Y + 1, 1, BTN_FOW_OFF_H - 1, ColorRGBA{11, 27, 19, 255});
-        renderer.draw_text("Off", BTN_FOW_OFF_X + 14, BTN_FOW_OFF_Y + 6, ColorRGBA{220, 240, 230, 255});
+        renderer.draw_named_sprite("dbutonu.bmp", 522, 376);
+        renderer.draw_named_sprite("optoffd.bmp", 570, 374);
     }
 
-    // Fog of War Subtitle text
-    renderer.draw_named_sprite("fowtext1.bmp", FOW_TEXT1_X, FOW_TEXT1_Y);
-    renderer.draw_named_sprite("fowtext2.bmp", FOW_TEXT2_X, FOW_TEXT2_Y);
-
-    // 6. Action Button: START! at (526, 442)
+    // 8. Action Button: START! at (526, 442)
     const char* start_spr = btn_start_pressed_ ? "bstart3.bmp" : (btn_start_hovered_ ? "bstart2.bmp" : "bstart1.bmp");
     renderer.draw_named_sprite(start_spr, BTN_START_X, BTN_START_Y);
 }

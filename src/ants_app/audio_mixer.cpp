@@ -291,8 +291,10 @@ void AudioMixer::ingest_simulation_events(const std::vector<ants::sim::AudioEven
             continue;
         }
 
-        // Check if sound is non-spatial or broadcast
-        if (ev.world_x == 0 && ev.world_y == 0) {
+        // Check if sound is non-spatial, broadcast, or player score notification
+        if ((ev.world_x == 0 && ev.world_y == 0) ||
+            ev.sound_id == ants::sim::SoundID::BaseScoreUp ||
+            ev.sound_id == ants::sim::SoundID::BaseScoreDn) {
             play_sfx(ev.sound_id, 1.0f, ev.priority);
         } else {
             play_spatial(ev.sound_id, ev.world_x, ev.world_y, ev.priority);

@@ -2,8 +2,35 @@
 #include <iostream>
 #include <cstring>
 #include <algorithm>
+#include <cstdlib>
+#if defined(_WIN32)
+  #include <winsock2.h>
+  #include <windows.h>
+#else
+  #include <unistd.h>
+#endif
 
 namespace ants::app {
+
+namespace {
+
+std::string get_system_username() {
+    const char* user = std::getenv("USER");
+    if (!user) user = std::getenv("USERNAME");
+    std::string u = (user && *user) ? user : "Player";
+    char host[256] = {0};
+    if (gethostname(host, sizeof(host) - 1) == 0 && host[0]) {
+        std::string h(host);
+        size_t dot = h.find('.');
+        if (dot != std::string::npos) {
+            h = h.substr(0, dot);
+        }
+        return u + "@" + h;
+    }
+    return u;
+}
+
+} // anonymous namespace
 
 Application::Application() = default;
 
@@ -137,11 +164,11 @@ bool Application::init(const ApplicationConfig& config) {
     });
 
     scorecard_.set_on_quit([this]() {
-        return_to_map_select();
+        quit();
     });
 
     hud_.set_on_quit([this]() {
-        return_to_map_select();
+        quit();
     });
 
     hud_.set_on_sfx_volume([this](float v) {
@@ -159,7 +186,10 @@ bool Application::init(const ApplicationConfig& config) {
     });
 
     // 9. Initialize Map Selection Screen
+    std::string player_name = get_system_username();
     map_select_.init("Original-Ants/Maps");
+    map_select_.set_player_name(player_name);
+    scorecard_.set_local_player_name(player_name);
     map_select_.set_on_start([this](const std::string& map_path) {
         start_game(map_path);
     });
@@ -194,6 +224,9 @@ bool Application::init(const ApplicationConfig& config) {
 
     is_running_ = true;
     last_tick_time_ = SDL_GetPerformanceCounter();
+    mouse_screen_x_ = 320;
+    mouse_screen_y_ = 240;
+    mouse_has_moved_ = false;
     return true;
 }
 
@@ -244,6 +277,11 @@ bool Application::start_game(const std::string& map_path) {
     hud_.reset();
     scorecard_.hide();
 
+    // Reset simulated cursor to middle of screen until actually seen moving
+    mouse_screen_x_ = 320;
+    mouse_screen_y_ = 240;
+    mouse_has_moved_ = false;
+
     if (config_.select_ant_id > 0) {
         hud_.select_ant(static_cast<uint32_t>(config_.select_ant_id));
         if (renderer_) {
@@ -269,6 +307,9 @@ void Application::return_to_map_select() {
     hud_.close_quit_dialog();
     hud_.close_quick_help();
     hud_.close_options();
+    mouse_screen_x_ = 320;
+    mouse_screen_y_ = 240;
+    mouse_has_moved_ = false;
     midi_player_.play(true); // Resumes INTRO.MID during map selection
 }
 
@@ -282,6 +323,11 @@ int Application::run() {
         uint64_t current_time = SDL_GetPerformanceCounter();
         float delta_time = static_cast<float>(current_time - last_frame_time) / static_cast<float>(perf_freq);
         last_frame_time = current_time;
+
+        if (delta_time > 0.0001f) {
+            float instant_fps = 1.0f / delta_time;
+            current_fps_ = current_fps_ * 0.9f + instant_fps * 0.1f;
+        }
 
         handle_events();
 
@@ -366,39 +412,47 @@ void Application::handle_events() {
         return;
     }
 
-    // Camera Navigation: Free Scrolling Mode (Edge Pan & Keyboard Pan)
-    if (!scorecard_.is_open()) {
-        float pan_x = 0.0f, pan_y = 0.0f;
+    handle_camera_panning(0.020f);
+}
 
-        // Keyboard Arrow Keys / WASD
-        const uint8_t* keystate = SDL_GetKeyboardState(nullptr);
+void Application::handle_camera_panning(float dt) {
+    if (state_ == AppState::MapSelect || scorecard_.is_open()) return;
+
+    float pan_x = 0.0f, pan_y = 0.0f;
+
+    // Keyboard Arrow Keys / WASD
+    const uint8_t* keystate = SDL_GetKeyboardState(nullptr);
+    if (keystate) {
         if (keystate[SDL_SCANCODE_UP] || keystate[SDL_SCANCODE_W]) pan_y -= 1.0f;
         if (keystate[SDL_SCANCODE_DOWN] || keystate[SDL_SCANCODE_S]) pan_y += 1.0f;
         if (keystate[SDL_SCANCODE_LEFT]) pan_x -= 1.0f;
         if (keystate[SDL_SCANCODE_RIGHT]) pan_x += 1.0f;
+    }
 
-        // Edge Pan Scrolling (Command & Conquer / League of Legends style)
-        // Uses logical canvas coordinate space (640x480)
-        constexpr int LOGICAL_W = 640;
-        constexpr int LOGICAL_H = 480;
-        constexpr int EDGE_MARGIN = 24; // 24px border zone
+    // Edge Pan Scrolling (Command & Conquer / League of Legends style)
+    // Uses logical canvas coordinate space (640x480)
+    constexpr int LOGICAL_W = 640;
+    constexpr int LOGICAL_H = 480;
+    constexpr int EDGE_MARGIN = 24; // 24px border zone
 
-        if (mouse_screen_x_ >= 0 && mouse_screen_x_ < LOGICAL_W &&
-            mouse_screen_y_ >= 0 && mouse_screen_y_ < LOGICAL_H) {
-            if (mouse_screen_x_ <= EDGE_MARGIN) {
-                pan_x -= 1.0f;
-            } else if (mouse_screen_x_ >= LOGICAL_W - EDGE_MARGIN) {
-                pan_x += 1.0f;
-            }
-            if (mouse_screen_y_ <= EDGE_MARGIN) {
-                pan_y -= 1.0f;
-            } else if (mouse_screen_y_ >= LOGICAL_H - EDGE_MARGIN) {
-                pan_y += 1.0f;
-            }
+    if (mouse_has_moved_ &&
+        mouse_screen_x_ >= 0 && mouse_screen_x_ < LOGICAL_W &&
+        mouse_screen_y_ >= 0 && mouse_screen_y_ < LOGICAL_H) {
+        if (mouse_screen_x_ <= EDGE_MARGIN) {
+            pan_x -= 1.0f;
+        } else if (mouse_screen_x_ >= LOGICAL_W - EDGE_MARGIN) {
+            pan_x += 1.0f;
         }
+        if (mouse_screen_y_ <= EDGE_MARGIN) {
+            pan_y -= 1.0f;
+        } else if (mouse_screen_y_ >= LOGICAL_H - EDGE_MARGIN) {
+            pan_y += 1.0f;
+        }
+    }
 
-        if (pan_x != 0.0f || pan_y != 0.0f) {
-            renderer_->camera().pan(pan_x, pan_y, 0.020f, current_level_.width, current_level_.height);
+    if (pan_x != 0.0f || pan_y != 0.0f) {
+        if (renderer_) {
+            renderer_->camera().pan(pan_x, pan_y, dt, current_level_.width, current_level_.height);
         }
     }
 }
@@ -424,8 +478,8 @@ void Application::handle_key_down(const SDL_KeyboardEvent& key) {
         return;
     }
 
-    // Tile Grid Display Toggle: G, Ctrl+G, Cmd+G, Option+G, F3, or F10
-    if (key.keysym.sym == SDLK_g || key.keysym.sym == SDLK_F3 || key.keysym.sym == SDLK_F10) {
+    // Tile Grid Display Toggle: T, Ctrl+T, Cmd+T, Option+T, F3, or F10
+    if (key.keysym.sym == SDLK_t || key.keysym.sym == SDLK_F3 || key.keysym.sym == SDLK_F10) {
         show_tile_grid_ = !show_tile_grid_;
         hud_.queue_news_message(show_tile_grid_ ? "Tile Grid: ON" : "Tile Grid: OFF", 60, false);
         return;
@@ -490,13 +544,21 @@ void Application::handle_key_down(const SDL_KeyboardEvent& key) {
 void Application::handle_mouse_motion(const SDL_MouseMotionEvent& motion) {
     mouse_screen_x_ = motion.x;
     mouse_screen_y_ = motion.y;
+    mouse_has_moved_ = true;
 
-    if (scorecard_.is_open()) return;
+    if (scorecard_.is_open()) {
+        scorecard_.handle_mouse_motion(motion.x, motion.y);
+        return;
+    }
 
     hud_.handle_mouse_motion(motion.x, motion.y, sim_, renderer_->camera());
 }
 
 void Application::handle_mouse_button(const SDL_MouseButtonEvent& button) {
+    mouse_screen_x_ = button.x;
+    mouse_screen_y_ = button.y;
+    mouse_has_moved_ = true;
+
     if (scorecard_.is_open()) {
         if (button.type == SDL_MOUSEBUTTONDOWN) {
             scorecard_.handle_mouse_down(button.x, button.y);
@@ -566,6 +628,12 @@ void Application::render_frame() {
                                 hud_.get_selected_base_team_id());
         hud_.render(*renderer_, assets_, world, renderer_->camera());
     }
+
+    // Frame rate counter in the bottom right hand corner: small white text
+    int fps_val = std::max(1, static_cast<int>(std::round(current_fps_)));
+    std::string fps_text = std::to_string(fps_val) + " FPS";
+    int32_t text_w = static_cast<int32_t>(fps_text.size()) * 6;
+    renderer_->draw_text(fps_text, 638 - text_w, 471, {255, 255, 255, 255});
 
     renderer_->end_frame();
 }

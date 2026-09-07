@@ -68,6 +68,7 @@ std::string AntUnit::get_sprite_prefix() const {
 void AntUnit::set_destination(int32_t target_tx, int32_t target_ty) {
     waypoints.clear();
     waypoints.push_back(TileCoord{target_tx, target_ty});
+    final_dest = TileCoord{target_tx, target_ty};
     current_waypoint_idx = 0;
     anim_tick = 0;
     anim_subitem = 0;
@@ -75,6 +76,9 @@ void AntUnit::set_destination(int32_t target_tx, int32_t target_ty) {
 }
 
 void AntUnit::set_path(std::vector<TileCoord> path) {
+    if (!path.empty()) {
+        final_dest = path.back();
+    }
     waypoints = std::move(path);
     current_waypoint_idx = 0;
     anim_tick = 0;
@@ -176,12 +180,21 @@ void AntUnit::tick_movement(bool is_swimming, SurfaceType surface) {
         pos = dest;
         current_waypoint_idx++;
         if (current_waypoint_idx >= waypoints.size()) {
+            if (final_dest.x >= 0 && final_dest.y >= 0 && (pos.x != final_dest.x || pos.y != final_dest.y)) {
+                // Persistent retrying: keep trying if spot is not available
+                waypoints.clear();
+                waypoints.push_back(final_dest);
+                current_waypoint_idx = 0;
+                state = UnitState::Walking;
+                return;
+            }
             if (type == AntType::Swimmer && is_swimming) {
                 state = UnitState::Swimming;
             } else {
                 state = (type == AntType::Combat) ? UnitState::GuardIdle : UnitState::Idle;
             }
             waypoints.clear();
+            final_dest = TileCoord{-1, -1};
             current_waypoint_idx = 0;
             anim_tick = 0;
             anim_subitem = 0;

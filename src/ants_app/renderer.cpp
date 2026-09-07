@@ -548,24 +548,48 @@ void Renderer::set_level(const ants::assets::LevelData& level) {
         }
     }
 
-    // 3rd Layer Decor from LevelData Block 1 (items with team_id == 255: clovers, flowers, etc.)
+    // 3rd Layer Canopy Decor from LevelData Block 1 (items with team_id == 255: clovers, flowers, tree tops, etc.)
+    layer3_canopy_objects_.clear();
     for (const auto& sp_item : level.anthill_spawns) {
         if (sp_item.team_id == 255 && sp_item.tile_id < level.tile_dictionary.size()) {
-            int32_t sid = (sp_item.tile_id < tile_sprite_ids_.size()) ? tile_sprite_ids_[sp_item.tile_id] : -1;
-            if (sid >= 0) {
-                const auto& sp = archive_->get_sprite(static_cast<uint32_t>(sid));
-                if (sp.width > 0 && sp.height > 0) {
-                    int32_t off_x = (sp_item.tile_id < tile_offsets_.size()) ? tile_offsets_[sp_item.tile_id].first : 0;
-                    int32_t off_y = (sp_item.tile_id < tile_offsets_.size()) ? tile_offsets_[sp_item.tile_id].second : 0;
+            const std::string& tname = level.tile_dictionary[sp_item.tile_id];
+            const auto* anim = archive_->find_animation(tname);
+            if (!anim) {
+                std::string low = tname;
+                for (char& ch : low) ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+                anim = archive_->find_animation(low);
+            }
+            if (anim && !anim->subitems.empty() && !anim->subitems[0].frames.empty()) {
+                for (const auto& fr : anim->subitems[0].frames) {
+                    const auto& sp = archive_->get_sprite(fr.sprite_index);
+                    if (sp.width > 0 && sp.height > 0) {
+                        StaticMapObject obj{};
+                        obj.world_x = static_cast<int32_t>(sp_item.x * TILE_SIZE + TILE_SIZE / 2) + fr.dx;
+                        obj.world_y = static_cast<int32_t>(sp_item.y * TILE_SIZE + TILE_SIZE / 2) + fr.dy;
+                        obj.sprite_id = static_cast<int32_t>(fr.sprite_index);
+                        obj.width = static_cast<int32_t>(sp.width);
+                        obj.height = static_cast<int32_t>(sp.height);
+                        obj.is_food = false;
+                        layer3_canopy_objects_.push_back(std::move(obj));
+                    }
+                }
+            } else {
+                int32_t sid = (sp_item.tile_id < tile_sprite_ids_.size()) ? tile_sprite_ids_[sp_item.tile_id] : -1;
+                if (sid >= 0) {
+                    const auto& sp = archive_->get_sprite(static_cast<uint32_t>(sid));
+                    if (sp.width > 0 && sp.height > 0) {
+                        int32_t off_x = (sp_item.tile_id < tile_offsets_.size()) ? tile_offsets_[sp_item.tile_id].first : 0;
+                        int32_t off_y = (sp_item.tile_id < tile_offsets_.size()) ? tile_offsets_[sp_item.tile_id].second : 0;
 
-                    StaticMapObject obj{};
-                    obj.world_x = static_cast<int32_t>(sp_item.x * TILE_SIZE) + off_x;
-                    obj.world_y = static_cast<int32_t>(sp_item.y * TILE_SIZE) + off_y;
-                    obj.sprite_id = sid;
-                    obj.width = static_cast<int32_t>(sp.width);
-                    obj.height = static_cast<int32_t>(sp.height);
-                    obj.is_food = false;
-                    static_decor_objects_.push_back(std::move(obj));
+                        StaticMapObject obj{};
+                        obj.world_x = static_cast<int32_t>(sp_item.x * TILE_SIZE + TILE_SIZE / 2) + off_x;
+                        obj.world_y = static_cast<int32_t>(sp_item.y * TILE_SIZE + TILE_SIZE / 2) + off_y;
+                        obj.sprite_id = sid;
+                        obj.width = static_cast<int32_t>(sp.width);
+                        obj.height = static_cast<int32_t>(sp.height);
+                        obj.is_food = false;
+                        layer3_canopy_objects_.push_back(std::move(obj));
+                    }
                 }
             }
         }
@@ -626,6 +650,9 @@ void Renderer::render_world(const ants::sim::WorldState& world,
 
     // 4. Ant Units (Depth-Sorted)
     render_ant_units(world, selected_unit_id, selected_unit_ids, show_all_health_bars);
+
+    // 4.5 Layer 3 Canopy Overhang (rendered after ants so ants walk beneath foliage)
+    render_terrain_layer3_canopy();
 
     // 5. Tile Grid Overlay (if enabled)
     if (show_tile_grid) {
@@ -771,30 +798,58 @@ void Renderer::render_terrain_layer2_structures(const ants::sim::Grid& grid) {
 
     // 5. Static Decorative Overlays & Multi-Tile Food Objects (Rendered once per unique anchor instance)
     for (const auto& obj : static_decor_objects_) {
+        int32_t active_sid = obj.sprite_id;
+        int32_t obj_x = obj.world_x;
+        int32_t obj_y = obj.world_y;
+        int32_t obj_w = obj.width;
+        int32_t obj_h = obj.height;
+
         // If it is food, check if any of its footprint cells still has food
         if (obj.is_food) {
             bool has_any_food = false;
+            uint16_t cur_tile = ants::assets::LVL_EMPTY_TILE;
             for (const auto& tile : obj.food_tiles) {
-                if (grid.in_bounds(tile.first, tile.second) && grid.get_cell(tile.first, tile.second).has_food()) {
-                    has_any_food = true;
-                    break;
+                if (grid.in_bounds(tile.first, tile.second)) {
+                    const auto& cell = grid.get_cell(tile.first, tile.second);
+                    if (cell.has_food()) {
+                        has_any_food = true;
+                        cur_tile = cell.interactive_id;
+                        break;
+                    }
                 }
             }
             if (!has_any_food) continue; // All food in this item has been gathered
+
+            // If the food stage changed, dynamically update active sprite and offsets
+            if (cur_tile != ants::assets::LVL_EMPTY_TILE && cur_tile < tile_sprite_ids_.size()) {
+                int32_t sid = tile_sprite_ids_[cur_tile];
+                if (sid >= 0) {
+                    active_sid = sid;
+                    const auto& sp = archive_->get_sprite(static_cast<uint32_t>(sid));
+                    int32_t off_x = (cur_tile < tile_offsets_.size()) ? tile_offsets_[cur_tile].first : 0;
+                    int32_t off_y = (cur_tile < tile_offsets_.size()) ? tile_offsets_[cur_tile].second : 0;
+                    if (!obj.food_tiles.empty()) {
+                        obj_x = static_cast<int32_t>(obj.food_tiles[0].first * TILE_SIZE) + off_x;
+                        obj_y = static_cast<int32_t>(obj.food_tiles[0].second * TILE_SIZE) + off_y;
+                        obj_w = static_cast<int32_t>(sp.width);
+                        obj_h = static_cast<int32_t>(sp.height);
+                    }
+                }
+            }
         }
 
-        int32_t right = obj.world_x + obj.width;
-        int32_t bottom = obj.world_y + obj.height;
-        if (right < camera_.world_x || obj.world_x > camera_.world_x + camera_.viewport_w ||
-            bottom < camera_.world_y || obj.world_y > camera_.world_y + camera_.viewport_h) {
+        int32_t right = obj_x + obj_w;
+        int32_t bottom = obj_y + obj_h;
+        if (right < camera_.world_x || obj_x > camera_.world_x + camera_.viewport_w ||
+            bottom < camera_.world_y || obj_y > camera_.world_y + camera_.viewport_h) {
             continue;
         }
 
-        int32_t sx = PLAYFIELD_X + (obj.world_x - camera_.world_x);
-        int32_t sy = PLAYFIELD_Y + (obj.world_y - camera_.world_y);
-        SDL_Texture* tex = texture_cache_->get_sprite_texture(static_cast<uint32_t>(obj.sprite_id));
+        int32_t sx = PLAYFIELD_X + (obj_x - camera_.world_x);
+        int32_t sy = PLAYFIELD_Y + (obj_y - camera_.world_y);
+        SDL_Texture* tex = texture_cache_->get_sprite_texture(static_cast<uint32_t>(active_sid));
         if (tex) {
-            SDL_Rect decor_dst = { sx, sy, obj.width, obj.height };
+            SDL_Rect decor_dst = { sx, sy, obj_w, obj_h };
             SDL_RenderCopy(renderer_, tex, nullptr, &decor_dst);
         }
     }
@@ -828,6 +883,25 @@ void Renderer::render_terrain_layer2_structures(const ants::sim::Grid& grid) {
     }
 }
 
+void Renderer::render_terrain_layer3_canopy() {
+    for (const auto& obj : layer3_canopy_objects_) {
+        int32_t right = obj.world_x + obj.width;
+        int32_t bottom = obj.world_y + obj.height;
+        if (right < camera_.world_x || obj.world_x > camera_.world_x + camera_.viewport_w ||
+            bottom < camera_.world_y || obj.world_y > camera_.world_y + camera_.viewport_h) {
+            continue;
+        }
+
+        int32_t sx = PLAYFIELD_X + (obj.world_x - camera_.world_x);
+        int32_t sy = PLAYFIELD_Y + (obj.world_y - camera_.world_y);
+        SDL_Texture* tex = texture_cache_->get_sprite_texture(static_cast<uint32_t>(obj.sprite_id));
+        if (tex) {
+            SDL_Rect dst = { sx, sy, obj.width, obj.height };
+            SDL_RenderCopy(renderer_, tex, nullptr, &dst);
+        }
+    }
+}
+
 void Renderer::draw_ant_shadow(int32_t anchor_sx, int32_t anchor_sy, int32_t altitude_z) {
     SDL_Texture* shadow_tex = texture_cache_->get_named_sprite_texture("shadow.bmp");
     if (!shadow_tex) return;
@@ -851,12 +925,35 @@ void Renderer::draw_single_ant(const ants::sim::AntSnapshot& ant, bool is_select
         draw_ant_shadow(sx, sy, altitude_z);
     }
 
+    int32_t render_y = sy - altitude_z;
+
     // 2. Resolve Action Animation Prefix
     static const char* class_prefixes[6] = { "ag", "ab", "af", "at", "ac", "as" };
     std::string prefix = class_prefixes[static_cast<size_t>(ant.type) % 6];
     std::string action = "st"; // Default Idle
 
     bool is_infiltrating = (ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::Infiltrating));
+    bool is_entering_base = (ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::EnteringBase));
+
+    if (ant.is_underground) return; // Fully underground inside base hole, do not draw
+
+    if (is_entering_base) {
+        std::string anim_name = ant.is_holding ? "hgen301" : "agen301";
+        const auto* base_seq = archive_->find_animation(anim_name);
+        if (!base_seq) base_seq = archive_->find_animation("agen301");
+        if (base_seq && !base_seq->subitems.empty()) {
+            size_t sub_idx = std::min(static_cast<size_t>(ant.anim_frame), base_seq->subitems.size() - 1);
+            const auto& sub = base_seq->subitems[sub_idx];
+            for (const auto& f : sub.frames) {
+                SDL_Texture* tex = texture_cache_->get_sprite_texture(f.sprite_index, false, static_cast<uint8_t>(ant.player_id));
+                if (!tex) continue;
+                const auto& sp = archive_->get_sprite(f.sprite_index);
+                SDL_Rect dst = { sx + f.dx, render_y + f.dy, static_cast<int>(sp.width), static_cast<int>(sp.height) };
+                SDL_RenderCopy(renderer_, tex, nullptr, &dst);
+            }
+        }
+        return;
+    }
 
     if (ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::Walking) ||
         ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::Intercepting) ||
@@ -886,12 +983,17 @@ void Renderer::draw_single_ant(const ants::sim::AntSnapshot& ant, bool is_select
         action = "gh";
     } else if (ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::Drowning)) {
         action = "dr";
+    } else if (ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::QueuingBase)) {
+        if (ant.is_holding) {
+            action = "ws";
+        } else {
+            action = "st";
+        }
     } else {
         action = "st";
     }
 
     ants::assets::Direction dir = static_cast<ants::assets::Direction>(ant.facing & 7);
-    int32_t render_y = sy - altitude_z;
 
     if (is_infiltrating) {
         const auto* infil_seq = archive_->find_animation("atcr501");

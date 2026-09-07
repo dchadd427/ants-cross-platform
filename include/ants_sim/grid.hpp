@@ -188,6 +188,9 @@ struct ActiveFoodSchedule {
     uint32_t countdown_ticks{0};
     bool     active{true};
     std::vector<ants::assets::FoodItemVariant> variants;
+    int32_t  remaining_bites{0};
+    uint16_t current_tile_id{0};
+    std::vector<TileCoord> footprint;
 };
 
 /**
@@ -241,16 +244,18 @@ public:
                     if (ch == 'w') {
                         cell.terrain_type = TERRAIN_WATER;
                         cell.surface_type = SurfaceType::Water;
-                    } else if (cell.terrain_type == TERRAIN_OBSTACLE) {
-                        cell.surface_type = SurfaceType::Grass;
                     } else if (ch == 's') {
+                        cell.terrain_type = TERRAIN_WALKABLE;
                         cell.surface_type = SurfaceType::Slate;
                     } else if (ch == 'd') {
+                        cell.terrain_type = TERRAIN_WALKABLE;
                         cell.surface_type = SurfaceType::Gravel;
                     } else if (ch == 'm') {
+                        cell.terrain_type = TERRAIN_WALKABLE;
                         cell.surface_type = SurfaceType::Mud;
                         cell.is_mud = true;
                     } else {
+                        cell.terrain_type = TERRAIN_WALKABLE;
                         cell.surface_type = SurfaceType::Grass;
                     }
                 }
@@ -346,7 +351,7 @@ public:
                 // Ensure bottom-left queuing staging cell is passable
                 uint32_t qx = sp.x;
                 uint32_t qy = sp.y + 3;
-                if (in_bounds(qx, qy)) {
+                if (in_bounds(static_cast<int32_t>(qx), static_cast<int32_t>(qy))) {
                     auto& qcell = get_cell_mut(qx, qy);
                     qcell.terrain_type = TERRAIN_WALKABLE;
                     qcell.is_obstacle_overlay = false;
@@ -366,6 +371,29 @@ public:
             afs.countdown_ticks = static_cast<uint32_t>(fs.initial_delay) * 20u;
             afs.variants = fs.variants;
             afs.active = true;
+            if (!afs.variants.empty()) {
+                afs.remaining_bites = static_cast<int32_t>(afs.variants[0].weight);
+                afs.current_tile_id = afs.variants[0].tile_id;
+            }
+            // Populate footprint of all connected cells matching this food item's layer2 tile
+            uint16_t anchor_tile = afs.current_tile_id;
+            if (anchor_tile != ants::assets::LVL_EMPTY_TILE && anchor_tile != 32766) {
+                for (int32_t dy = -4; dy <= 4; ++dy) {
+                    for (int32_t dx = -4; dx <= 4; ++dx) {
+                        int32_t fx = static_cast<int32_t>(fs.x) + dx;
+                        int32_t fy = static_cast<int32_t>(fs.y) + dy;
+                        if (in_bounds(fx, fy)) {
+                            const auto& c2 = level.get_cell_layer2(static_cast<uint32_t>(fx), static_cast<uint32_t>(fy));
+                            if (c2.tile_index == anchor_tile) {
+                                afs.footprint.push_back(TileCoord{fx, fy});
+                            }
+                        }
+                    }
+                }
+            }
+            if (afs.footprint.empty()) {
+                afs.footprint.push_back(TileCoord{static_cast<int32_t>(fs.x), static_cast<int32_t>(fs.y)});
+            }
             food_schedules_.push_back(afs);
         }
 
@@ -517,6 +545,11 @@ public:
         return get_cell(pos).has_bomb();
     }
 
+    bool has_food_at(TileCoord pos) const noexcept {
+        if (!in_bounds(pos)) return false;
+        return get_cell(pos).has_food();
+    }
+
     bool has_bridge_at(TileCoord pos) const noexcept {
         if (!in_bounds(pos)) return false;
         return get_cell(pos).interactive_id >= TILE_BRIDGE1 && get_cell(pos).interactive_id <= TILE_BRIDGE4;
@@ -604,7 +637,7 @@ private:
         if (tile_index == 2 || (flags & 0x0100u) != 0) {
             return TERRAIN_WATER;
         }
-        if (tile_index == 1 || (flags & 0x0001u) != 0) {
+        if (tile_index == 1) {
             return TERRAIN_OBSTACLE;
         }
         return TERRAIN_WALKABLE;

@@ -186,6 +186,7 @@ public:
 private:
     void render_terrain_layer1(const ants::sim::Grid& grid);
     void render_terrain_layer2_structures(const ants::sim::Grid& grid);
+    void render_terrain_layer3_canopy();
     void render_ant_units(const ants::sim::WorldState& world, int32_t selected_unit_id, const std::vector<uint32_t>& selected_unit_ids = {}, bool show_all_health_bars = false);
     void render_tile_grid(const ants::sim::Grid& grid, int32_t mouse_x, int32_t mouse_y);
     void draw_ant_shadow(int32_t anchor_sx, int32_t anchor_sy, int32_t altitude_z);
@@ -205,7 +206,8 @@ private:
     uint32_t anim_tick_{0};
     std::array<SDL_Point, 4> anthill_bases_{};
     bool has_anthill_bases_{false};
-    std::vector<StaticMapObject> static_decor_objects_;
+    std::vector<StaticMapObject> static_decor_objects_; // Layer 2 interactive objects
+    std::vector<StaticMapObject> layer3_canopy_objects_; // Layer 3 overhanging canopy decorations
     std::vector<RenderItem> render_queue_;
     std::string pending_screenshot_;
     uint8_t hud_team_id_{0};

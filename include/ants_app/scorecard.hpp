@@ -38,32 +38,29 @@ public:
     static constexpr int32_t OTHER_BOX_W       = 558;
     static constexpr int32_t OTHER_BOX_H       = 130;
 
-    // 4 Statistic column X coordinates (aligned with newstats.bmp arrow tips)
-    static constexpr int32_t COL_SCORE_X       = 496;
-    static constexpr int32_t COL_LOST_X        = 536;
-    static constexpr int32_t COL_KILLED_X      = 557;
-    static constexpr int32_t COL_HATCHED_X     = 578;
+    // 4 Statistic column X coordinates (aligned with re_screen arrow tips)
+    static constexpr int32_t COL_SCORE_X       = 497;
+    static constexpr int32_t COL_LOST_X        = 537;
+    static constexpr int32_t COL_KILLED_X      = 558;
+    static constexpr int32_t COL_HATCHED_X     = 579;
 
-    // Interactive button positions
-    static constexpr int32_t OK_BTN_X          = 530;
-    static constexpr int32_t OK_BTN_Y          = 448;
-    static constexpr int32_t OK_BTN_W          = 46;
-    static constexpr int32_t OK_BTN_H          = 20;
-
-    static constexpr int32_t QUIT_BTN_X        = 420;
-    static constexpr int32_t QUIT_BTN_Y        = 448;
-    static constexpr int32_t QUIT_BTN_W        = 98;
-    static constexpr int32_t QUIT_BTN_H        = 26;
+    // Interactive button positions: Leave Game button (bleave1.bmp at 525, 12)
+    static constexpr int32_t QUIT_BTN_X        = 525;
+    static constexpr int32_t QUIT_BTN_Y        = 12;
+    static constexpr int32_t QUIT_BTN_W        = 100;
+    static constexpr int32_t QUIT_BTN_H        = 28;
 
     ScorecardModal();
     ~ScorecardModal() = default;
 
+    void set_local_player_name(std::string name) { local_player_name_ = std::move(name); }
     void show(const sim::MatchResult& result, uint8_t local_player_id);
     void hide() noexcept { is_active_ = false; }
     bool is_open() const noexcept { return is_active_; }
 
     bool handle_mouse_down(int32_t x, int32_t y);
     bool handle_mouse_up(int32_t x, int32_t y);
+    void handle_mouse_motion(int32_t x, int32_t y);
 
     void render(IRenderer& renderer, const assets::AssetArchive& assets);
 
@@ -75,7 +72,11 @@ public:
     void set_on_replay(std::function<void()> cb) { on_replay_ = std::move(cb); }
     void set_on_quit(std::function<void()> cb) { on_quit_ = std::move(cb); }
 
+    bool is_quit_hovered() const noexcept { return quit_hovered_; }
+    bool is_quit_pressed() const noexcept { return quit_pressed_; }
+
 private:
+    std::string local_player_name_{};
     struct PlayerEntry {
         uint8_t player_id{0};
         std::string name;
@@ -90,8 +91,8 @@ private:
     bool is_active_{false};
     uint8_t local_player_id_{0};
     uint32_t audio_to_play_{0}; // Sound 56 (winner) vs Sound 41 (loser)
-    bool ok_pressed_{false};
     bool quit_pressed_{false};
+    bool quit_hovered_{false};
 
     PlayerEntry winner_entry_{};
     std::vector<PlayerEntry> other_entries_{};

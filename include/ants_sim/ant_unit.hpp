@@ -11,6 +11,8 @@
 
 namespace ants::sim {
 
+enum class OrderType : uint8_t;
+
 /**
  * @brief Discrete ant unit types matching original binary type IDs.
  */
@@ -160,6 +162,13 @@ public:
 
     std::vector<TileCoord> waypoints;
     size_t      current_waypoint_idx{0};
+    TileCoord   final_dest{-1, -1};
+    TileCoord   harvest_origin{-1, -1};
+    bool        is_thief_steal{false};
+    bool        had_food_at_base_entry{false};
+    bool        is_newborn{false};
+    OrderType   pending_ability{static_cast<OrderType>(0)};
+    TileCoord   ability_target{-1, -1};
 
     AntUnit(uint32_t unit_id, TeamId team_in, AntType type_in, int32_t start_tx, int32_t start_ty);
 
@@ -241,6 +250,7 @@ public:
     void set_path(std::vector<TileCoord> path);
     void clear_path() noexcept {
         waypoints.clear();
+        final_dest = TileCoord{-1, -1};
         current_waypoint_idx = 0;
         anim_tick = 0;
         anim_subitem = 0;

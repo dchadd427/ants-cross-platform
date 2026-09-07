@@ -219,6 +219,7 @@ private:
     UIButton ability_pedestal_button_{};
     UIButton stop_button_{};
     UIButton send_to_button_{};
+    UIButton team_up_button_{};
     bool send_to_all_{true};
 
     // News Flash FIFO queue
@@ -249,6 +250,13 @@ private:
     bool chat_enabled_{true};
     bool quick_help_enabled_{false};
     bool opt_ok_button_pressed_{false};
+    bool opt_return_button_pressed_{false};
+    std::string quick_chat_keys_[4]{
+        "Now you are in for it!$_",
+        "Let me be!",
+        "Attack!",
+        "Do you want to ally?"
+    };
     int active_slider_dragging_{-1}; // -1 none, 0 sfx, 1 music, 2 scroll
     std::function<void(float)> on_sfx_volume_{nullptr};
     std::function<void(float)> on_music_volume_{nullptr};
