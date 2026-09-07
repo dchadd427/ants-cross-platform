@@ -1106,8 +1106,8 @@ bool HUD::handle_mouse_down(int32_t x, int32_t y, uint8_t button,
             for (const auto& ant : world.ants) {
                 if (ant.hp == 0 || ant.is_drowning) continue;
                 if (ant.player_id != local_player_id_ &&
-                    std::abs(ant.px - world_x) <= 16 &&
-                    world_y >= ant.py - 29 && world_y <= ant.py + 12) {
+                    std::abs(ant.px - world_x) <= 12 &&
+                    world_y >= ant.py - 20 && world_y <= ant.py + 10) {
                     enemy_target = &ant;
                     break;
                 }
@@ -1214,8 +1214,8 @@ bool HUD::handle_mouse_up(int32_t x, int32_t y, uint8_t button,
             const sim::AntSnapshot* hit_ant = nullptr;
             for (const auto& ant : world.ants) {
                 if (ant.hp == 0 || ant.is_drowning) continue;
-                if (std::abs(ant.px - world_x) <= 16 &&
-                    world_y >= ant.py - 29 && world_y <= ant.py + 12) {
+                if (std::abs(ant.px - world_x) <= 12 &&
+                    world_y >= ant.py - 20 && world_y <= ant.py + 10) {
                     hit_ant = &ant;
                     break;
                 }

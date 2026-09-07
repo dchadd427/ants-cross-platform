@@ -151,6 +151,8 @@ public:
     uint16_t    anim_subitem{0};
     uint16_t    anim_tick{0};
     uint16_t    state_timer{0};
+    uint16_t    transform_timer{0};
+    bool        is_on_mud{false};
 
     std::vector<TileCoord> waypoints;
     size_t      current_waypoint_idx{0};
@@ -168,6 +170,9 @@ public:
     }
     bool is_underground() const noexcept {
         return underground;
+    }
+    bool is_transforming() const noexcept {
+        return transform_timer > 0;
     }
 
     void heal_full() noexcept {

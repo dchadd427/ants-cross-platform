@@ -291,7 +291,9 @@ void SimulationEngine::tick() {
             if (new_type == AntType::Combat) ant_ptr->max_hp = 12;
             else ant_ptr->max_hp = 10;
             ant_ptr->hp = ant_ptr->max_hp;
+            ant_ptr->transform_timer = 11;
             impl_->audio_queue_.push_back(AudioEvent{SoundID::PowerUpHeal, ant_ptr->pixel_x, ant_ptr->pixel_y, 1, ant_ptr->player_id});
+            impl_->audio_queue_.push_back(AudioEvent{SoundID::PowerUpChime, ant_ptr->pixel_x, ant_ptr->pixel_y, 2, ant_ptr->player_id});
         }
 
         // Static Layer 2 food harvest
@@ -303,10 +305,10 @@ void SimulationEngine::tick() {
                 ant_ptr->pick_up_food(1, 25);
                 impl_->audio_queue_.push_back(AudioEvent{SoundID::BaseScoreUp, ant_ptr->pixel_x, ant_ptr->pixel_y, 1, ant_ptr->player_id});
 
-                // Worker automatically returns to base upon collecting food
+                // Worker automatically returns to base queue upon collecting food
                 const auto* home = impl_->grid_.find_anthill(ant_ptr->player_id);
                 if (home) {
-                    issue_move_order(ant_ptr->id, TileCoord{home->x, home->y});
+                    issue_move_order(ant_ptr->id, TileCoord{static_cast<int32_t>(home->x), static_cast<int32_t>(home->y + 3)});
                 }
             }
         }
@@ -318,7 +320,7 @@ void SimulationEngine::tick() {
                 auto [food, pts] = ant_ptr->deposit_food();
                 uint32_t deposit_pts = (pts > 0) ? pts : (food * 25);
                 impl_->stats_.add_score(ant_ptr->player_id, static_cast<int32_t>(deposit_pts));
-                impl_->audio_queue_.push_back(AudioEvent{SoundID::BaseScoreUp, ant_ptr->pixel_x, ant_ptr->pixel_y, 1, ant_ptr->player_id});
+                impl_->audio_queue_.push_back(AudioEvent{55, ant_ptr->pixel_x, ant_ptr->pixel_y, 1, ant_ptr->player_id});
             } else if (ant_ptr->anim_subitem == 8) {
                 ant_ptr->heal_full();
                 ant_ptr->underground = true;
@@ -327,6 +329,10 @@ void SimulationEngine::tick() {
                 ant_ptr->underground = false;
                 ant_ptr->state = (ant_ptr->type == AntType::Combat) ? UnitState::GuardIdle : UnitState::Idle;
                 ant_ptr->anim_subitem = 0;
+                const auto* friendly_base = impl_->grid_.find_anthill(ant_ptr->player_id);
+                if (friendly_base) {
+                    ant_ptr->set_tile_pos(friendly_base->x, friendly_base->y + 3);
+                }
             }
             continue;
         }
@@ -345,37 +351,64 @@ void SimulationEngine::tick() {
                 ant_ptr->anim_subitem = 0;
                 const auto* home = impl_->grid_.find_anthill(ant_ptr->player_id);
                 if (home) {
-                    issue_move_order(ant_ptr->id, TileCoord{home->x, home->y});
+                    issue_move_order(ant_ptr->id, TileCoord{static_cast<int32_t>(home->x), static_cast<int32_t>(home->y + 3)});
                 }
             }
             continue;
         }
 
-        // Check arrival at friendly anthill with food or needing healing (4x4 anthill footprint)
+        // Check arrival at friendly anthill with food or needing healing
         const auto* friendly_base = impl_->grid_.find_anthill(ant_ptr->player_id);
-        if (friendly_base &&
-            ant_ptr->pos.x >= friendly_base->x && ant_ptr->pos.x < friendly_base->x + 4 &&
-            ant_ptr->pos.y >= friendly_base->y && ant_ptr->pos.y < friendly_base->y + 4) {
-            if (ant_ptr->is_holding() || ant_ptr->hp < ant_ptr->max_hp) {
-                if (ant_ptr->state != UnitState::EnteringBase) {
-                    ant_ptr->state = UnitState::EnteringBase;
-                    ant_ptr->anim_subitem = 0;
-                    ant_ptr->clear_path();
+        if (friendly_base) {
+            int32_t ent_x = friendly_base->x + 1;
+            int32_t ent_y = friendly_base->y + 1;
+            int32_t q_x = friendly_base->x;
+            int32_t q_y = friendly_base->y + 3;
+
+            // If ant arrived at bottom-left queuing location, step into top entrance
+            if (ant_ptr->pos.x == q_x && ant_ptr->pos.y == q_y) {
+                if (ant_ptr->is_holding() || ant_ptr->hp < ant_ptr->max_hp) {
+                    issue_move_order(ant_ptr->id, TileCoord{ent_x, ent_y});
+                }
+            }
+            // If ant reached the top entrance hole, start entering base
+            else if (ant_ptr->pos.x == ent_x && ant_ptr->pos.y == ent_y) {
+                if (ant_ptr->is_holding() || ant_ptr->hp < ant_ptr->max_hp) {
+                    if (ant_ptr->state != UnitState::EnteringBase) {
+                        ant_ptr->state = UnitState::EnteringBase;
+                        ant_ptr->anim_subitem = 0;
+                        ant_ptr->clear_path();
+                    }
                 }
             }
         }
 
         // Check thief arrival at enemy anthill
-        if (ant_ptr->type == AntType::Thief) {
+        if (ant_ptr->type == AntType::Thief && ant_ptr->state != UnitState::Infiltrating) {
             for (uint8_t p = 0; p < MAX_PLAYERS; ++p) {
                 if (p != ant_ptr->player_id && !impl_->stats_.are_allies(ant_ptr->player_id, p)) {
                     const auto* enemy_base = impl_->grid_.find_anthill(p);
-                    if (enemy_base && ant_ptr->pos.x == enemy_base->x && ant_ptr->pos.y == enemy_base->y) {
-                        ant_ptr->target_team_id = p;
-                        ant_ptr->state = UnitState::Infiltrating;
-                        ant_ptr->anim_subitem = 0;
-                        ant_ptr->clear_path();
-                        break;
+                    if (enemy_base) {
+                        int32_t ent_x = enemy_base->x + 1;
+                        int32_t ent_y = enemy_base->y + 1;
+                        if ((ant_ptr->pos.x == ent_x && ant_ptr->pos.y == ent_y) ||
+                            (ant_ptr->pos.chebyshev_dist(TileCoord{ent_x, ent_y}) <= 1)) {
+                            if (impl_->stats_.get_individual_score(p) > 0) {
+                                ant_ptr->target_team_id = p;
+                                ant_ptr->state = UnitState::Infiltrating;
+                                ant_ptr->anim_subitem = 0;
+                                ant_ptr->clear_path();
+                            } else {
+                                // Base has 0 food, cannot steal!
+                                ant_ptr->clear_path();
+                                ant_ptr->state = UnitState::Idle;
+                                const auto* home = impl_->grid_.find_anthill(ant_ptr->player_id);
+                                if (home) {
+                                    issue_move_order(ant_ptr->id, TileCoord{static_cast<int32_t>(home->x), static_cast<int32_t>(home->y + 3)});
+                                }
+                            }
+                            break;
+                        }
                     }
                 }
             }
@@ -475,13 +508,37 @@ void SimulationEngine::issue_order(const AntOrder& order) {
         case OrderType::ReturnToBase: {
             const auto* anthill = impl_->grid_.find_anthill(unit->player_id);
             if (anthill) {
-                issue_move_order(order.ant_id, TileCoord{anthill->x, anthill->y});
+                issue_move_order(order.ant_id, TileCoord{static_cast<int32_t>(anthill->x), static_cast<int32_t>(anthill->y + 3)});
             }
             break;
         }
         case OrderType::Attack:
             if (order.target_entity_id >= 0) {
-                execute_melee_attack(order.ant_id, static_cast<uint32_t>(order.target_entity_id));
+                uint32_t target_id = static_cast<uint32_t>(order.target_entity_id);
+                AntUnit* target = impl_->find_unit(target_id);
+                if (target && target->is_alive()) {
+                    int32_t dist = unit->pos.chebyshev_dist(target->pos);
+                    if (dist <= 1) {
+                        execute_melee_attack(order.ant_id, target_id);
+                    } else {
+                        TileCoord best_neighbor = target->pos;
+                        int32_t best_dist = 999999;
+                        for (int32_t dy = -1; dy <= 1; ++dy) {
+                            for (int32_t dx = -1; dx <= 1; ++dx) {
+                                if (dx == 0 && dy == 0) continue;
+                                TileCoord cand{target->pos.x + dx, target->pos.y + dy};
+                                if (impl_->grid_.in_bounds(cand) && impl_->grid_.get_cell(cand).is_passable()) {
+                                    int32_t d = unit->pos.chebyshev_dist(cand);
+                                    if (d < best_dist) {
+                                        best_dist = d;
+                                        best_neighbor = cand;
+                                    }
+                                }
+                            }
+                        }
+                        issue_move_order(order.ant_id, best_neighbor);
+                    }
+                }
             }
             break;
         case OrderType::PlantBomb:
@@ -505,16 +562,22 @@ void SimulationEngine::issue_order(const AntOrder& order) {
             int32_t ty = order.target_y;
             if (tx == 0 && ty == 0 && target_team < MAX_PLAYERS) {
                 const auto* ah = impl_->grid_.find_anthill(target_team);
-                if (ah) { tx = ah->x; ty = ah->y; }
+                if (ah) { tx = ah->x + 1; ty = ah->y + 1; }
             }
             if (target_team == 255) {
                 for (uint8_t p = 0; p < MAX_PLAYERS; ++p) {
                     const auto* ah = impl_->grid_.find_anthill(p);
-                    if (ah && ah->x == tx && ah->y == ty) {
+                    if (ah && tx >= ah->x && tx < ah->x + 4 && ty >= ah->y && ty < ah->y + 4) {
                         target_team = p;
+                        tx = ah->x + 1;
+                        ty = ah->y + 1;
                         break;
                     }
                 }
+            }
+            if (target_team < MAX_PLAYERS && impl_->stats_.get_individual_score(target_team) <= 0) {
+                impl_->news_queue_.push_back(NewsEvent{unit->player_id, "Enemy anthill has no food!", impl_->match_time_remaining_ms_, 0});
+                break;
             }
             unit->target_team_id = target_team;
             if (unit->pos.x == tx && unit->pos.y == ty) {
@@ -638,6 +701,9 @@ const WorldState& SimulationEngine::get_world_state() const {
             s.is_swimming = (a->state == UnitState::Swimming);
             s.is_underground = a->underground;
             s.is_drowning = (a->state == UnitState::Drowning);
+            s.is_on_mud = a->is_on_mud;
+            s.is_transforming = a->is_transforming();
+            s.transform_anim_frame = (a->transform_timer > 0) ? static_cast<uint16_t>(11 - a->transform_timer) : 0;
             impl_->world_state_cache_.ants.push_back(s);
         }
 
@@ -840,6 +906,27 @@ void SimulationEngine::execute_melee_attack(uint32_t attacker_id, uint32_t targe
 void SimulationEngine::issue_move_order(uint32_t ant_id, TileCoord dest) {
     AntUnit* unit = impl_->find_unit(ant_id);
     if (!unit || !unit->is_alive() || unit->is_stunned()) return;
+
+    // Authentic mud "humping" animation cancel:
+    // Reissuing a move order while traversing mud resets the struggle cycle and gives a micro-step
+    if (unit->is_on_mud && unit->state == UnitState::Walking) {
+        unit->anim_tick = 0;
+        unit->anim_subitem = 0;
+        if (unit->current_waypoint_idx < unit->waypoints.size()) {
+            const TileCoord wpt = unit->waypoints[unit->current_waypoint_idx];
+            int32_t target_px = wpt.x * 32 + 16;
+            int32_t target_py = wpt.y * 32 + 16;
+            int32_t cur_px = unit->fx_x >> 16;
+            int32_t cur_py = unit->fx_y >> 16;
+            int32_t dx = target_px - cur_px;
+            int32_t dy = target_py - cur_py;
+            if (dx > 0) unit->fx_x += (2 << 16);
+            else if (dx < 0) unit->fx_x -= (2 << 16);
+            if (dy > 0) unit->fx_y += (2 << 16);
+            else if (dy < 0) unit->fx_y -= (2 << 16);
+            unit->sync_pixel_from_fx();
+        }
+    }
 
     bool is_swimmer = (unit->type == AntType::Swimmer);
     bool is_fire_ant = (unit->type == AntType::Fire);
@@ -1112,6 +1199,7 @@ void SimulationEngine::execute_thief_loot(uint32_t ant_id, uint8_t target_team_i
     if (!u) return;
 
     int32_t victim_score = impl_->stats_.get_individual_score(target_team_id);
+    if (victim_score <= 0) return;
     int32_t stolen = std::min(MAX_THIEF_STEAL, victim_score);
     impl_->stats_.deduct_score(target_team_id, stolen);
     u->steal_points(static_cast<uint16_t>(stolen));

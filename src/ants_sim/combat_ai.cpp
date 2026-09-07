@@ -70,6 +70,7 @@ void CombatAIController::update(const std::vector<AntUnit*>& all_units,
                                 uint32_t random_seed) {
     if (owner_.type != AntType::Combat || !owner_.is_alive()) return;
     if (owner_.is_stunned() || owner_.state == UnitState::Flinch || owner_.state == UnitState::Knockback) return;
+    if (owner_.state == UnitState::Walking) return; // Respect user movement commands
 
     if (owner_.state == UnitState::GuardIdle || owner_.state == UnitState::Idle) {
         guard_state_ = CombatGuardState::Idle;

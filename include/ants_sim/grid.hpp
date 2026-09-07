@@ -284,7 +284,15 @@ public:
                             else if (lower_name == "pu_bomb") cell.powerup_type = 1; // Bomber
                             else if (lower_name == "pu_swim") cell.powerup_type = 5; // Swimmer
                             else if (lower_name == "pu_mason" || lower_name == "pu_fire") cell.powerup_type = 2; // Fire
-                        } else if (lower_name.find("hill") != std::string::npos || lower_name.find("start") != std::string::npos) {
+                        } else if (lower_name.find("hill") != std::string::npos) {
+                            if ((c2.flags & 1) != 0) {
+                                cell.terrain_type = TERRAIN_WALKABLE;
+                                cell.surface_type = SurfaceType::Gravel;
+                                cell.is_obstacle_overlay = false;
+                            } else {
+                                cell.is_obstacle_overlay = true;
+                            }
+                        } else if (lower_name.find("start") != std::string::npos) {
                             cell.terrain_type = TERRAIN_WALKABLE;
                             cell.is_obstacle_overlay = false;
                         } else if (lower_name.find("bridge") != std::string::npos ||
@@ -301,7 +309,53 @@ public:
             }
         }
 
-        anthills_ = level.anthill_spawns;
+        // Identify true 4x4 anthill base origins from Layer 2
+        std::array<TileCoord, 4> hill_origins{{{ -1, -1 }, { -1, -1 }, { -1, -1 }, { -1, -1 }}};
+        for (uint32_t y = 0; y < height_; ++y) {
+            for (uint32_t x = 0; x < width_; ++x) {
+                const auto& c2 = level.get_cell_layer2(x, y);
+                if (c2.tile_index < level.tile_dictionary.size()) {
+                    const std::string& tname = level.tile_dictionary[c2.tile_index];
+                    int team = -1;
+                    if (tname == "GREENHILL" || tname == "greenhill") team = 0;
+                    else if (tname == "REDHILL" || tname == "redhill") team = 1;
+                    else if (tname == "BLUEHILL" || tname == "bluehill") team = 2;
+                    else if (tname == "BLACKHILL" || tname == "blackhill") team = 3;
+                    if (team >= 0) {
+                        size_t st = static_cast<size_t>(team);
+                        if (hill_origins[st].x < 0 || static_cast<int32_t>(x) < hill_origins[st].x) {
+                            hill_origins[st].x = static_cast<int32_t>(x);
+                        }
+                        if (hill_origins[st].y < 0 || static_cast<int32_t>(y) < hill_origins[st].y) {
+                            hill_origins[st].y = static_cast<int32_t>(y);
+                        }
+                    }
+                }
+            }
+        }
+
+        anthills_.clear();
+        for (uint8_t t = 0; t < 4; ++t) {
+            if (hill_origins[t].x >= 0 && hill_origins[t].y >= 0) {
+                ants::assets::AnthillSpawn sp{};
+                sp.team_id = t;
+                sp.x = static_cast<uint16_t>(hill_origins[t].x);
+                sp.y = static_cast<uint16_t>(hill_origins[t].y);
+                anthills_.push_back(sp);
+
+                // Ensure bottom-left queuing staging cell is passable
+                uint32_t qx = sp.x;
+                uint32_t qy = sp.y + 3;
+                if (in_bounds(qx, qy)) {
+                    auto& qcell = get_cell_mut(qx, qy);
+                    qcell.terrain_type = TERRAIN_WALKABLE;
+                    qcell.is_obstacle_overlay = false;
+                }
+            }
+        }
+        if (anthills_.empty()) {
+            anthills_ = level.anthill_spawns;
+        }
 
         food_schedules_.clear();
         for (const auto& fs : level.food_schedules) {

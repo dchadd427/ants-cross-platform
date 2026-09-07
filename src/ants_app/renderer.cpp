@@ -824,10 +824,20 @@ void Renderer::draw_single_ant(const ants::sim::AntSnapshot& ant, bool is_select
     std::string prefix = class_prefixes[static_cast<size_t>(ant.type) % 6];
     std::string action = "st"; // Default Idle
 
+    bool is_infiltrating = (ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::Infiltrating));
+
     if (ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::Walking) ||
         ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::Intercepting) ||
         ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::ReturningToPost)) {
-        action = ant.is_holding ? "ws" : (ant.is_swimming ? "sw" : "wg");
+        if (ant.is_holding) {
+            action = "ws";
+        } else if (ant.is_swimming) {
+            action = "sw";
+        } else if (ant.is_on_mud) {
+            action = "wm";
+        } else {
+            action = "wg";
+        }
     } else if (ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::Swimming)) {
         action = "sw";
     } else if (ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::Attacking)) {
@@ -845,31 +855,62 @@ void Renderer::draw_single_ant(const ants::sim::AntSnapshot& ant, bool is_select
     }
 
     ants::assets::Direction dir = static_cast<ants::assets::Direction>(ant.facing & 7);
-    const auto* seq = archive_->get_directional_animation(prefix + action, dir);
-
     int32_t render_y = sy - altitude_z;
 
-    if (seq && !seq->subitems.empty()) {
-        size_t sub_idx = ant.anim_frame % seq->subitems.size();
-        const auto& sub = seq->subitems[sub_idx];
-
-        for (const auto& f : sub.frames) {
-            bool mirrored = ants::assets::get_direction_mapping(dir).mirrored;
-            SDL_Texture* tex = texture_cache_->get_sprite_texture(f.sprite_index, mirrored, static_cast<uint8_t>(ant.player_id));
-            if (!tex) continue;
-
-            const auto& sp = mirrored ? archive_->get_mirrored_sprite(f.sprite_index)
-                                      : archive_->get_sprite(f.sprite_index);
-            SDL_Rect dst = { sx + f.dx, render_y + f.dy, static_cast<int>(sp.width), static_cast<int>(sp.height) };
-            SDL_RenderCopy(renderer_, tex, nullptr, &dst);
+    if (is_infiltrating) {
+        const auto* infil_seq = archive_->find_animation("atcr501");
+        if (infil_seq && !infil_seq->subitems.empty()) {
+            size_t sub_idx = ant.anim_frame % infil_seq->subitems.size();
+            const auto& sub = infil_seq->subitems[sub_idx];
+            for (const auto& f : sub.frames) {
+                SDL_Texture* tex = texture_cache_->get_sprite_texture(f.sprite_index, false, static_cast<uint8_t>(ant.player_id));
+                if (!tex) continue;
+                const auto& sp = archive_->get_sprite(f.sprite_index);
+                SDL_Rect dst = { sx + f.dx, render_y + f.dy, static_cast<int>(sp.width), static_cast<int>(sp.height) };
+                SDL_RenderCopy(renderer_, tex, nullptr, &dst);
+            }
         }
     } else {
-        // Fallback: draw directional stand sprite
-        std::string fallback_name = prefix + "st301.bmp";
-        SDL_Texture* tex = texture_cache_->get_named_sprite_texture(fallback_name, false, static_cast<uint8_t>(ant.player_id));
-        if (tex) {
-            SDL_Rect dst = { sx - 16, render_y - 16, 32, 32 };
-            SDL_RenderCopy(renderer_, tex, nullptr, &dst);
+        const auto* seq = archive_->get_directional_animation(prefix + action, dir);
+        if (seq && !seq->subitems.empty()) {
+            size_t sub_idx = ant.anim_frame % seq->subitems.size();
+            const auto& sub = seq->subitems[sub_idx];
+
+            for (const auto& f : sub.frames) {
+                bool mirrored = ants::assets::get_direction_mapping(dir).mirrored;
+                SDL_Texture* tex = texture_cache_->get_sprite_texture(f.sprite_index, mirrored, static_cast<uint8_t>(ant.player_id));
+                if (!tex) continue;
+
+                const auto& sp = mirrored ? archive_->get_mirrored_sprite(f.sprite_index)
+                                          : archive_->get_sprite(f.sprite_index);
+                SDL_Rect dst = { sx + f.dx, render_y + f.dy, static_cast<int>(sp.width), static_cast<int>(sp.height) };
+                SDL_RenderCopy(renderer_, tex, nullptr, &dst);
+            }
+        } else {
+            // Fallback: draw directional stand sprite
+            std::string fallback_name = prefix + "st301.bmp";
+            SDL_Texture* tex = texture_cache_->get_named_sprite_texture(fallback_name, false, static_cast<uint8_t>(ant.player_id));
+            if (tex) {
+                SDL_Rect dst = { sx - 16, render_y - 16, 32, 32 };
+                SDL_RenderCopy(renderer_, tex, nullptr, &dst);
+            }
+        }
+    }
+
+    // 2.5 Power-Up Transformation Animation (11 frames of getpow: pucov1..5.bmp)
+    if (ant.is_transforming) {
+        const auto* pow_seq = archive_->find_animation("getpow");
+        if (pow_seq && !pow_seq->subitems.empty()) {
+            size_t psub = ant.transform_anim_frame % pow_seq->subitems.size();
+            const auto& sub = pow_seq->subitems[psub];
+            for (const auto& f : sub.frames) {
+                SDL_Texture* ptex = texture_cache_->get_sprite_texture(f.sprite_index, false, static_cast<uint8_t>(ant.player_id));
+                if (ptex) {
+                    const auto& sp = archive_->get_sprite(f.sprite_index);
+                    SDL_Rect pdst = { sx + f.dx, render_y + f.dy, static_cast<int>(sp.width), static_cast<int>(sp.height) };
+                    SDL_RenderCopy(renderer_, ptex, nullptr, &pdst);
+                }
+            }
         }
     }
 
@@ -899,28 +940,22 @@ void Renderer::draw_single_ant(const ants::sim::AntSnapshot& ant, bool is_select
         SDL_RenderDrawLine(renderer_, bx + bw, by + bh, bx + bw, by + bh - arm);
     }
 
-    // 4. Integer Unit Health Display (Centered underneath the ant in white digits with 1px black outline)
+    // 4. Overhead Unit Health Bar (Framed bar with health-percentage coloring)
     if (is_selected || show_health_bar) {
-        std::string hp_str = std::to_string(ant.hp);
-        int32_t text_w = 0;
-        for (char c : hp_str) {
-            uint8_t ch = static_cast<uint8_t>(c);
-            if (ch >= 32 && ch < 128) text_w += FONT_5X7[ch - 32].width + 1;
-        }
-        int32_t hpx = sx - (text_w / 2);
-        int32_t hpy = render_y + 11;
+        SDL_Rect bar_border = { sx - 13, render_y - 36, 26, 6 };
+        SDL_SetRenderDrawColor(renderer_, 0, 0, 0, 255);
+        SDL_RenderDrawRect(renderer_, &bar_border);
 
-        // 1px black outline in 8 directions
-        static const int8_t OFFSETS[8][2] = {
-            {-1,-1}, {0,-1}, {1,-1},
-            {-1, 0},         {1, 0},
-            {-1, 1}, {0, 1}, {1, 1}
-        };
-        for (const auto& off : OFFSETS) {
-            draw_text(hp_str, hpx + off[0], hpy + off[1], {0, 0, 0, 255});
-        }
-        // White foreground text
-        draw_text(hp_str, hpx, hpy, {255, 255, 255, 255});
+        SDL_Rect bar_bg = { sx - 12, render_y - 35, 24, 4 };
+        SDL_SetRenderDrawColor(renderer_, 40, 40, 40, 220);
+        SDL_RenderFillRect(renderer_, &bar_bg);
+
+        int hp_w = (ant.max_hp > 0) ? std::clamp((ant.hp * 24) / ant.max_hp, 0, 24) : 0;
+        SDL_Rect bar_fg = { sx - 12, render_y - 35, hp_w, 4 };
+        if (ant.hp > 6) SDL_SetRenderDrawColor(renderer_, 50, 220, 50, 255);
+        else if (ant.hp > 3) SDL_SetRenderDrawColor(renderer_, 230, 200, 30, 255);
+        else SDL_SetRenderDrawColor(renderer_, 230, 40, 40, 255);
+        SDL_RenderFillRect(renderer_, &bar_fg);
     }
 }
 
