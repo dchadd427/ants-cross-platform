@@ -88,6 +88,8 @@ bool Application::init(const ApplicationConfig& config) {
     if (config_.fullscreen) win_flags |= SDL_WINDOW_FULLSCREEN_DESKTOP;
     if (config_.headless)   win_flags = SDL_WINDOW_HIDDEN;
 
+    SDL_SetHint(SDL_HINT_GRAB_KEYBOARD, "1");
+
     window_ = SDL_CreateWindow(
         config_.title.c_str(),
         SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
@@ -97,6 +99,10 @@ bool Application::init(const ApplicationConfig& config) {
     if (!window_) {
         std::cerr << "[Application] Failed to create SDL Window: " << SDL_GetError() << std::endl;
         return false;
+    }
+
+    if (!config_.headless) {
+        SDL_SetWindowKeyboardGrab(window_, SDL_TRUE);
     }
 
     // 7. Initialize Renderer
@@ -418,8 +424,8 @@ void Application::handle_key_down(const SDL_KeyboardEvent& key) {
         return;
     }
 
-    // Ctrl+G / Cmd+G / G: Toggle Tile Grid Display
-    if (key.keysym.sym == SDLK_g) {
+    // Tile Grid Display Toggle: G, Ctrl+G, Cmd+G, Option+G, F3, or F10
+    if (key.keysym.sym == SDLK_g || key.keysym.sym == SDLK_F3 || key.keysym.sym == SDLK_F10) {
         show_tile_grid_ = !show_tile_grid_;
         hud_.queue_news_message(show_tile_grid_ ? "Tile Grid: ON" : "Tile Grid: OFF", 60, false);
         return;
