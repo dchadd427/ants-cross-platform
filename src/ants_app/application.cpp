@@ -200,6 +200,8 @@ bool Application::init(const ApplicationConfig& config) {
     map_select_.init("Original-Ants/Maps");
     map_select_.set_player_name(player_name);
     scorecard_.set_local_player_name(player_name);
+    hud_.set_player_name(player_name);
+    SDL_StartTextInput();
     map_select_.set_on_start([this](const std::string& map_path) {
         start_game(map_path);
     });
@@ -443,6 +445,11 @@ void Application::handle_events() {
 
         // Gameplay Event Dispatch
         switch (event.type) {
+            case SDL_TEXTINPUT:
+                if (state_ == AppState::Playing) {
+                    hud_.handle_text_input(event.text.text);
+                }
+                break;
             case SDL_KEYDOWN:
                 handle_key_down(event.key);
                 break;
@@ -508,10 +515,25 @@ void Application::handle_camera_panning(float dt) {
 }
 
 void Application::handle_key_down(const SDL_KeyboardEvent& key) {
-    if (key.keysym.sym == SDLK_ESCAPE) {
-        if (scorecard_.is_open()) {
+    if (scorecard_.is_open()) {
+        if (key.keysym.sym == SDLK_ESCAPE) {
             return_to_map_select();
-        } else if (hud_.get_active_order_mode() != sim::OrderType::None) {
+        }
+        return;
+    }
+
+    // 1. If chat input is currently focused, route control keys to chat
+    if (hud_.is_chat_focused()) {
+        if (key.keysym.sym == SDLK_RETURN || key.keysym.sym == SDLK_KP_ENTER ||
+            key.keysym.sym == SDLK_ESCAPE || key.keysym.sym == SDLK_BACKSPACE) {
+            hud_.handle_key_down(key.keysym.sym, sim_, renderer_->camera(), key.keysym.mod);
+        }
+        return;
+    }
+
+    // 2. Escape when chat is not focused: cancel order mode or clear selection
+    if (key.keysym.sym == SDLK_ESCAPE) {
+        if (hud_.get_active_order_mode() != sim::OrderType::None) {
             hud_.cancel_order_mode();
         } else {
             hud_.clear_selection();
@@ -519,48 +541,55 @@ void Application::handle_key_down(const SDL_KeyboardEvent& key) {
         return;
     }
 
-    if (scorecard_.is_open()) return;
-
-    // L / Ctrl+L: Toggle Unit Health Display
-    if (key.keysym.sym == SDLK_l) {
-        show_unit_health_ = !show_unit_health_;
-        hud_.queue_news_message(show_unit_health_ ? "Unit Health Display: ON" : "Unit Health Display: OFF", 60, false);
+    // 3. Return / Enter focuses chat!
+    if (key.keysym.sym == SDLK_RETURN || key.keysym.sym == SDLK_KP_ENTER) {
+        hud_.focus_chat();
         return;
     }
 
-    // Tile Grid Display Toggle: T, Ctrl+T, Cmd+T, Option+T, F3, or F10
-    if (key.keysym.sym == SDLK_t || key.keysym.sym == SDLK_F3 || key.keysym.sym == SDLK_F10) {
-        show_tile_grid_ = !show_tile_grid_;
-        hud_.queue_news_message(show_tile_grid_ ? "Tile Grid: ON" : "Tile Grid: OFF", 60, false);
-        return;
-    }
+    bool ctrl_or_gui = (key.keysym.mod & KMOD_CTRL) || (key.keysym.mod & KMOD_GUI);
 
+    // 4. Screenshots: F12
     if (key.keysym.sym == SDLK_F12) {
         renderer_->save_screenshot("screenshot.png");
         hud_.queue_news_message("Screenshot saved to screenshot.png", 60, false);
         return;
     }
 
-    if (key.keysym.sym == SDLK_h) {
-        bool ctrl = (key.keysym.mod & KMOD_CTRL) || (key.keysym.mod & KMOD_GUI);
-        if (ctrl) {
-            if (hud_.get_selected_base_team_id() == local_player_id_) {
-                sim_.hatch_ant(local_player_id_, sim::AntType::Worker);
-            } else {
-                hud_.select_base(local_player_id_);
-                hud_.queue_news_message("Home Anthill Selected", 40, false);
-            }
-            return;
-        }
+    // 5. Tile Grid Display Toggle: Ctrl+T, Cmd+T, F3, or F10 (F3 and F10 are function keys, but T strictly requires Ctrl/Cmd!)
+    if ((key.keysym.sym == SDLK_t && ctrl_or_gui) || key.keysym.sym == SDLK_F3 || key.keysym.sym == SDLK_F10) {
+        show_tile_grid_ = !show_tile_grid_;
+        hud_.queue_news_message(show_tile_grid_ ? "Tile Grid: ON" : "Tile Grid: OFF", 60, false);
+        return;
     }
 
-    if (key.keysym.sym == SDLK_a) {
+    // 6. Unit Health Display Toggle: strictly requires Ctrl or Cmd!
+    if (key.keysym.sym == SDLK_l && ctrl_or_gui) {
+        show_unit_health_ = !show_unit_health_;
+        hud_.queue_news_message(show_unit_health_ ? "Unit Health Display: ON" : "Unit Health Display: OFF", 60, false);
+        return;
+    }
+
+    // 7. Hatch / Select Home Base: strictly requires Ctrl or Cmd!
+    if (key.keysym.sym == SDLK_h && ctrl_or_gui) {
+        if (hud_.get_selected_base_team_id() == local_player_id_) {
+            sim_.hatch_ant(local_player_id_, sim::AntType::Worker);
+        } else {
+            hud_.select_base(local_player_id_);
+            hud_.queue_news_message("Home Anthill Selected", 40, false);
+        }
+        return;
+    }
+
+    // 8. Select All Friendly Ants: strictly requires Ctrl or Cmd!
+    if (key.keysym.sym == SDLK_a && ctrl_or_gui) {
         hud_.select_all_friendly(sim_.get_world_state());
         hud_.queue_news_message("All Friendly Ants Selected", 40, false);
         return;
     }
 
-    if (key.keysym.sym == SDLK_m) {
+    // 9. Music Mute Toggle: strictly requires Ctrl or Cmd!
+    if (key.keysym.sym == SDLK_m && ctrl_or_gui) {
         is_music_muted_ = !is_music_muted_;
         if (is_music_muted_) {
             midi_player_.stop();
@@ -576,8 +605,7 @@ void Application::handle_key_down(const SDL_KeyboardEvent& key) {
         return;
     }
 
-    // Control key modifier to change teams: Ctrl+1..4, Cmd+1..4, Ctrl+Tab, Cmd+Tab, Ctrl+C
-    bool ctrl_or_gui = (key.keysym.mod & KMOD_CTRL) || (key.keysym.mod & KMOD_GUI);
+    // 10. Change teams: Ctrl+1..4, Cmd+1..4, Ctrl+Tab, Cmd+Tab, Ctrl+C
     if (ctrl_or_gui) {
         if (key.keysym.sym >= SDLK_1 && key.keysym.sym <= SDLK_4) {
             uint8_t target_team = static_cast<uint8_t>(key.keysym.sym - SDLK_1);
@@ -591,6 +619,7 @@ void Application::handle_key_down(const SDL_KeyboardEvent& key) {
         }
     }
 
+    // 11. Space: Center on selected ant or base
     if (key.keysym.sym == SDLK_SPACE) {
         if (hud_.get_selected_ant_id() != 0) {
             const auto& world = sim_.get_world_state();
@@ -608,7 +637,8 @@ void Application::handle_key_down(const SDL_KeyboardEvent& key) {
         return;
     }
 
-    hud_.handle_key_down(key.keysym.sym, sim_, renderer_->camera());
+    // 12. Forward other keys to HUD with modifier flags
+    hud_.handle_key_down(key.keysym.sym, sim_, renderer_->camera(), key.keysym.mod);
 }
 
 void Application::handle_mouse_motion(const SDL_MouseMotionEvent& motion) {

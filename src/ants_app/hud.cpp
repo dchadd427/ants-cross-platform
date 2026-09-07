@@ -62,9 +62,15 @@ void HUD::init(uint8_t local_player_id) {
     // Configure Authentic Stop Button at (602, 176, 34, 50)
     stop_button_ = {602, 176, 34, 50, 0, 0, 0, false, true, false};
 
-    // Configure Authentic Send-to Toggle Button at (532, 443, 46, 24)
-    send_to_button_ = {532, 443, 46, 24, 0, 0, 0, false, true, false};
+    // Configure Authentic Send-to Toggle Button at (532, 443, 44, 24)
+    send_to_button_ = {532, 443, 44, 24, 0, 0, 0, false, true, false};
+    // Configure Authentic Team Toggle Button at (579, 443, 46, 24)
+    team_button_    = {579, 443, 46, 24, 0, 0, 0, false, true, false};
     send_to_all_ = true;
+    is_on_team_ = false;
+    chat_input_.clear();
+    chat_input_focused_ = false;
+    cursor_blink_ticks_ = 0;
 
     // Configure Quit Confirmation Dialog Buttons
     yes_button_ = {184, 264, 49, 24, 0, 0, 0, false, true, false};
@@ -161,6 +167,15 @@ void HUD::update(const sim::WorldState& world, uint32_t delta_ticks) {
 
     // 4. Update button contextual enabled status
     update_action_buttons_state(world);
+
+    // 5. Cursor blink ticks and alliance team status
+    cursor_blink_ticks_ += delta_ticks;
+    is_on_team_ = (local_player_id_ < world.player_alliances.size() &&
+                   world.player_alliances[local_player_id_] < sim::MAX_PLAYERS &&
+                   world.player_alliances[local_player_id_] != local_player_id_);
+    if (!is_on_team_) {
+        send_to_all_ = true;
+    }
 }
 
 void HUD::poll_sim_events(sim::SimulationEngine& sim) {
@@ -178,8 +193,24 @@ void HUD::queue_news_message(const std::string& msg, uint32_t duration_ticks, bo
     if (news_queue_.size() > 32) {
         news_queue_.pop_front();
     }
-    chat_log_.push_back(msg);
-    if (chat_log_.size() > 20) {
+    constexpr size_t MAX_CHARS_PER_LINE = 22;
+    size_t start = 0;
+    while (start < msg.length()) {
+        if (msg.length() - start <= MAX_CHARS_PER_LINE) {
+            chat_log_.push_back(msg.substr(start));
+            break;
+        }
+        size_t split = msg.rfind(' ', start + MAX_CHARS_PER_LINE);
+        if (split == std::string::npos || split <= start) {
+            split = start + MAX_CHARS_PER_LINE;
+        }
+        chat_log_.push_back(msg.substr(start, split - start));
+        start = split;
+        while (start < msg.length() && msg[start] == ' ') {
+            ++start;
+        }
+    }
+    while (chat_log_.size() > 50) {
         chat_log_.pop_front();
     }
 }
@@ -396,12 +427,35 @@ void HUD::render(IRenderer& renderer, const assets::AssetArchive& assets,
 
     // Chat text input box wtype.bmp (143x14) at (479, 423)
     renderer.draw_named_sprite("wtype.bmp", 479, 423);
-    renderer.draw_text("_", 484, 425, {20, 50, 40, 255});
+    std::string input_display = chat_input_;
+    if (input_display.length() > 20) {
+        input_display = input_display.substr(input_display.length() - 20);
+    }
+    if (chat_input_focused_) {
+        if ((cursor_blink_ticks_ / 15) % 2 == 0) {
+            input_display += "_";
+        }
+    } else {
+        if (input_display.empty()) {
+            input_display = "_";
+        }
+    }
+    renderer.draw_text(input_display, 484, 425, {20, 50, 40, 255});
 
-    // Bottom bar x480y466.bmp (160x25) at (480, 436) containing "Send to:" and [All] button
+    // Bottom bar x480y466.bmp (160x25) at (480, 436) containing "Send to:" and [All] / [Team] buttons
     renderer.draw_named_sprite("x480y466.bmp", 480, 436);
-    if (send_to_button_.is_pressed) {
+    if (!is_on_team_) {
+        // In FFA or non-team mode, only [All] is active/shown
         renderer.draw_named_sprite("butalld.bmp", 532, 443);
+    } else {
+        // When on a team, display both [All] and [Team] with active state
+        if (send_to_all_) {
+            renderer.draw_named_sprite("butalld.bmp", 532, 443);
+            renderer.draw_named_sprite("butteamu.bmp", 579, 443);
+        } else {
+            renderer.draw_named_sprite("butallu.bmp", 532, 443);
+            renderer.draw_named_sprite("butteamd.bmp", 579, 443);
+        }
     }
 
     // Vertical right border strip x521y254.bmp (19x182) placed at x=621, y=254 (seals right screen edge)
@@ -1177,10 +1231,23 @@ bool HUD::handle_mouse_down(int32_t x, int32_t y, uint8_t button,
             return true;
         }
 
-        // 3. Check Authentic Send-to Toggle Button click
+        // 3. Check Chat Text Input box click (wtype.bmp at 479, 423, 143x14)
+        if (x >= 479 && x < (479 + 143) && y >= 423 && y < (423 + 14)) {
+            focus_chat();
+            return true;
+        }
+
+        // 4. Check Authentic [All] Button click (532, 443, 44x24)
         if (send_to_button_.contains(x, y)) {
             send_to_button_.is_pressed = true;
-            send_to_all_ = !send_to_all_;
+            send_to_all_ = true;
+            return true;
+        }
+
+        // 5. Check Authentic [Team] Button click (579, 443, 46x24)
+        if (is_on_team_ && team_button_.contains(x, y)) {
+            team_button_.is_pressed = true;
+            send_to_all_ = false;
             return true;
         }
 
@@ -1328,6 +1395,7 @@ bool HUD::handle_mouse_up(int32_t x, int32_t y, uint8_t button,
     ability_pedestal_button_.is_pressed = false;
     stop_button_.is_pressed = false;
     send_to_button_.is_pressed = false;
+    team_button_.is_pressed = false;
     hatch_button_.is_pressed = false;
     team_up_button_.is_pressed = false;
     for (auto& btn : action_buttons_) btn.is_pressed = false;
@@ -1535,7 +1603,7 @@ bool HUD::handle_mouse_motion(int32_t x, int32_t y,
     return false;
 }
 
-bool HUD::handle_key_down(int32_t key, sim::SimulationEngine& sim, ViewportCamera& camera) {
+bool HUD::handle_key_down(int32_t key, sim::SimulationEngine& sim, ViewportCamera& camera, uint16_t mod) {
     // 1. Modals capture keyboard events
     if (show_quit_dialog_) {
         if (key == 'y' || key == 'Y' || key == SDLK_RETURN || key == SDLK_KP_ENTER) {
@@ -1566,110 +1634,205 @@ bool HUD::handle_key_down(int32_t key, sim::SimulationEngine& sim, ViewportCamer
         return true;
     }
 
-    const auto& world = sim.get_world_state();
-    switch (key) {
-        case 'm': case 'M': set_active_order_mode(sim::OrderType::Move); return true;
-        case 'b': case 'B': set_active_order_mode(sim::OrderType::PlantBomb); return true;
-        case 'f': case 'F': set_active_order_mode(sim::OrderType::IgniteFire); return true;
-        case 's': case 'S': set_active_order_mode(sim::OrderType::BuildBridge); return true;
-        case 't': case 'T': set_active_order_mode(sim::OrderType::InfiltrateAnthill); return true;
-        case 'a': case 'A':
-            select_all_friendly(world);
-            queue_news_message("All Friendly Ants Selected", 40, false);
+    // 2. Chat Input Active
+    if (chat_input_focused_) {
+        if (key == SDLK_RETURN || key == SDLK_KP_ENTER) {
+            send_chat_message();
+            chat_input_focused_ = false;
             return true;
-        case 'n': case 'N': { // Next friendly ant
-            std::vector<uint32_t> friendly;
-            for (const auto& a : world.ants) {
-                if (a.player_id == local_player_id_ && a.hp > 0 && !a.is_drowning) {
-                    friendly.push_back(a.id);
-                }
-            }
-            if (!friendly.empty()) {
-                auto it = std::find(friendly.begin(), friendly.end(), selected_ant_id_);
-                if (it == friendly.end() || ++it == friendly.end()) {
-                    select_ant(friendly.front());
-                } else {
-                    select_ant(*it);
-                }
-                for (const auto& a : world.ants) {
-                    if (a.id == selected_ant_id_) {
-                        camera.center_on(a.px, a.py, world.width, world.height);
-                        break;
-                    }
-                }
+        }
+        if (key == SDLK_ESCAPE) {
+            chat_input_.clear();
+            chat_input_focused_ = false;
+            return true;
+        }
+        if (key == SDLK_BACKSPACE) {
+            if (!chat_input_.empty()) {
+                chat_input_.pop_back();
             }
             return true;
         }
-        case 'p': case 'P': { // Previous friendly ant
-            std::vector<uint32_t> friendly;
-            for (const auto& a : world.ants) {
-                if (a.player_id == local_player_id_ && a.hp > 0 && !a.is_drowning) {
-                    friendly.push_back(a.id);
-                }
-            }
-            if (!friendly.empty()) {
-                auto it = std::find(friendly.begin(), friendly.end(), selected_ant_id_);
-                if (it == friendly.end() || it == friendly.begin()) {
-                    select_ant(friendly.back());
-                } else {
-                    select_ant(*(--it));
-                }
-                for (const auto& a : world.ants) {
-                    if (a.id == selected_ant_id_) {
-                        camera.center_on(a.px, a.py, world.width, world.height);
-                        break;
-                    }
-                }
+        // Printable ASCII typing fallback (for direct key events / unit tests)
+        bool ctrl = (mod & KMOD_CTRL) || (mod & KMOD_GUI);
+        if (!ctrl && key >= 32 && key <= 126) {
+            if (chat_input_.size() < 120) {
+                chat_input_.push_back(static_cast<char>(key));
             }
             return true;
         }
-        case 'h': case 'H': {
-            if (selected_base_team_id_ == local_player_id_) {
-                int32_t score = (local_player_id_ < world.player_scores.size()) ? world.player_scores[local_player_id_] : 0;
-                uint32_t eggs = (local_player_id_ < world.player_eggs.size()) ? world.player_eggs[local_player_id_] : 0;
-                if (score >= 200 && eggs > 0) {
-                    sim.hatch_ant(local_player_id_, sim::AntType::Worker);
-                    is_incubating_ = true;
-                    incubation_timer_ticks_ = 60;
-                }
-            } else {
-                select_base(local_player_id_);
-                queue_news_message("Home Anthill Selected", 40, false);
-            }
-            return true;
-        }
-        case 27: // Escape: quick way to bring up quit menu (or close if already open)
-            if (show_quit_dialog_) {
-                close_quit_dialog();
-            } else if (show_options_) {
-                close_options();
-            } else {
-                open_quit_dialog();
-            }
-            return true;
-        case 'c': case 'C':
-            cancel_order_mode();
-            clear_selection();
-            return true;
-        case ' ': // Space: Center on selected ant or home base
-            if (selected_ant_id_ != 0) {
-                for (const auto& a : world.ants) {
-                    if (a.id == selected_ant_id_) {
-                        camera.center_on(a.px, a.py, world.width, world.height);
-                        return true;
-                    }
-                }
-            }
-            {
-                const auto* base = sim.grid().find_anthill(local_player_id_);
-                if (base) {
-                    camera.center_on(base->x * 32, base->y * 32, world.width, world.height);
-                }
-            }
-            return true;
-        default: break;
+        return true; // While chat is focused, swallow all other keys
     }
+
+    // 3. Not focused: Enter focuses chat
+    if (key == SDLK_RETURN || key == SDLK_KP_ENTER) {
+        focus_chat();
+        return true;
+    }
+
+    // 4. Hotkeys requiring Control or Command modifier
+    bool ctrl = (mod & KMOD_CTRL) || (mod & KMOD_GUI);
+    const auto& world = sim.get_world_state();
+
+    if (ctrl) {
+        switch (key) {
+            case 'm': case 'M': set_active_order_mode(sim::OrderType::Move); return true;
+            case 'b': case 'B': set_active_order_mode(sim::OrderType::PlantBomb); return true;
+            case 'f': case 'F': set_active_order_mode(sim::OrderType::IgniteFire); return true;
+            case 's': case 'S': set_active_order_mode(sim::OrderType::BuildBridge); return true;
+            case 't': case 'T': set_active_order_mode(sim::OrderType::InfiltrateAnthill); return true;
+            case 'a': case 'A':
+                select_all_friendly(world);
+                queue_news_message("All Friendly Ants Selected", 40, false);
+                return true;
+            case 'n': case 'N': { // Next friendly ant
+                std::vector<uint32_t> friendly;
+                for (const auto& a : world.ants) {
+                    if (a.player_id == local_player_id_ && a.hp > 0 && !a.is_drowning) {
+                        friendly.push_back(a.id);
+                    }
+                }
+                if (!friendly.empty()) {
+                    auto it = std::find(friendly.begin(), friendly.end(), selected_ant_id_);
+                    if (it == friendly.end() || ++it == friendly.end()) {
+                        select_ant(friendly.front());
+                    } else {
+                        select_ant(*it);
+                    }
+                    for (const auto& a : world.ants) {
+                        if (a.id == selected_ant_id_) {
+                            camera.center_on(a.px, a.py, world.width, world.height);
+                            break;
+                        }
+                    }
+                }
+                return true;
+            }
+            case 'p': case 'P': { // Previous friendly ant
+                std::vector<uint32_t> friendly;
+                for (const auto& a : world.ants) {
+                    if (a.player_id == local_player_id_ && a.hp > 0 && !a.is_drowning) {
+                        friendly.push_back(a.id);
+                    }
+                }
+                if (!friendly.empty()) {
+                    auto it = std::find(friendly.begin(), friendly.end(), selected_ant_id_);
+                    if (it == friendly.end() || it == friendly.begin()) {
+                        select_ant(friendly.back());
+                    } else {
+                        select_ant(*(--it));
+                    }
+                    for (const auto& a : world.ants) {
+                        if (a.id == selected_ant_id_) {
+                            camera.center_on(a.px, a.py, world.width, world.height);
+                            break;
+                        }
+                    }
+                }
+                return true;
+            }
+            case 'h': case 'H': {
+                if (selected_base_team_id_ == local_player_id_) {
+                    int32_t score = (local_player_id_ < world.player_scores.size()) ? world.player_scores[local_player_id_] : 0;
+                    uint32_t eggs = (local_player_id_ < world.player_eggs.size()) ? world.player_eggs[local_player_id_] : 0;
+                    if (score >= 200 && eggs > 0) {
+                        sim.hatch_ant(local_player_id_, sim::AntType::Worker);
+                        is_incubating_ = true;
+                        incubation_timer_ticks_ = 60;
+                    }
+                } else {
+                    select_base(local_player_id_);
+                    queue_news_message("Home Anthill Selected", 40, false);
+                }
+                return true;
+            }
+            case 'c': case 'C':
+                cancel_order_mode();
+                clear_selection();
+                return true;
+            default: break;
+        }
+    }
+
+    if (key == 27 || key == SDLK_ESCAPE) {
+        if (show_quit_dialog_) {
+            close_quit_dialog();
+        } else if (show_options_) {
+            close_options();
+        } else {
+            open_quit_dialog();
+        }
+        return true;
+    }
+
+    if (key == ' ' || key == SDLK_SPACE) {
+        if (selected_ant_id_ != 0) {
+            for (const auto& a : world.ants) {
+                if (a.id == selected_ant_id_) {
+                    camera.center_on(a.px, a.py, world.width, world.height);
+                    return true;
+                }
+            }
+        }
+        const auto* base = sim.grid().find_anthill(local_player_id_);
+        if (base) {
+            camera.center_on(base->x * 32, base->y * 32, world.width, world.height);
+        }
+        return true;
+    }
+
     return false;
+}
+
+void HUD::handle_text_input(const std::string& text) {
+    if (text.empty()) return;
+    if (!chat_input_focused_) {
+        chat_input_focused_ = true;
+    }
+    for (char c : text) {
+        if (c >= 32 && c <= 126) {
+            if (chat_input_.size() < 120) {
+                chat_input_.push_back(c);
+            }
+        }
+    }
+}
+
+void HUD::send_chat_message() {
+    if (chat_input_.empty()) return;
+
+    std::string sender = player_name_.empty() ? "Player" : player_name_;
+    add_chat_entry(sender, chat_input_, is_on_team_ && !send_to_all_);
+    chat_input_.clear();
+
+    play_sfx(sim::SoundID::ChatSend);
+}
+
+void HUD::add_chat_entry(const std::string& sender, const std::string& message, bool team_only) {
+    std::string prefix = sender + (team_only ? " (Team): " : ": ");
+    std::string full_msg = prefix + message;
+
+    // Word-wrap into lines of at most 22 characters to fit inside wchat.bmp (143px)
+    constexpr size_t MAX_CHARS_PER_LINE = 22;
+    size_t start = 0;
+    while (start < full_msg.length()) {
+        if (full_msg.length() - start <= MAX_CHARS_PER_LINE) {
+            chat_log_.push_back(full_msg.substr(start));
+            break;
+        }
+        size_t split = full_msg.rfind(' ', start + MAX_CHARS_PER_LINE);
+        if (split == std::string::npos || split <= start) {
+            split = start + MAX_CHARS_PER_LINE;
+        }
+        chat_log_.push_back(full_msg.substr(start, split - start));
+        start = split;
+        while (start < full_msg.length() && full_msg[start] == ' ') {
+            ++start;
+        }
+    }
+
+    while (chat_log_.size() > 50) {
+        chat_log_.pop_front();
+    }
 }
 
 void HUD::dispatch_targeted_order(int32_t world_x, int32_t world_y, sim::SimulationEngine& sim) {

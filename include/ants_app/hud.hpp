@@ -127,7 +127,26 @@ public:
                          sim::SimulationEngine& sim, ViewportCamera& camera);
     bool handle_mouse_motion(int32_t x, int32_t y,
                              sim::SimulationEngine& sim, ViewportCamera& camera);
-    bool handle_key_down(int32_t key, sim::SimulationEngine& sim, ViewportCamera& camera);
+    bool handle_key_down(int32_t key, sim::SimulationEngine& sim, ViewportCamera& camera, uint16_t mod = 0);
+
+    // Chat System & Text Input
+    void focus_chat() noexcept { chat_input_focused_ = true; }
+    void unfocus_chat() noexcept { chat_input_focused_ = false; }
+    bool is_chat_focused() const noexcept { return chat_input_focused_; }
+    const std::string& get_chat_input() const noexcept { return chat_input_; }
+    void set_chat_input(const std::string& input) { chat_input_ = input; }
+    void handle_text_input(const std::string& text);
+    void send_chat_message();
+    void add_chat_entry(const std::string& sender, const std::string& message, bool team_only = false);
+    const std::deque<std::string>& get_chat_log() const noexcept { return chat_log_; }
+
+    // Chat recipient & Team state
+    bool is_send_to_all() const noexcept { return send_to_all_; }
+    void set_send_to_all(bool send_to_all) noexcept { send_to_all_ = send_to_all; }
+    bool is_on_team() const noexcept { return is_on_team_; }
+    void set_on_team(bool on_team) noexcept { is_on_team_ = on_team; }
+    void set_player_name(std::string name) { player_name_ = std::move(name); }
+    const std::string& get_player_name() const noexcept { return player_name_; }
 
     // Selection controls
     void select_ant(uint32_t ant_id);
@@ -221,8 +240,16 @@ private:
     UIButton ability_pedestal_button_{};
     UIButton stop_button_{};
     UIButton send_to_button_{};
+    UIButton team_button_{};
     UIButton team_up_button_{};
     bool send_to_all_{true};
+    bool is_on_team_{false};
+
+    // Chat text input state
+    std::string chat_input_{};
+    bool chat_input_focused_{false};
+    uint32_t cursor_blink_ticks_{0};
+    std::string player_name_{"Player"};
 
     // News Flash FIFO queue
     std::deque<NewsBannerItem> news_queue_{};

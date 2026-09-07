@@ -749,27 +749,31 @@ void run_suite_7_input_controls() {
         HUD hud;
         hud.init(0);
 
-        // 'A' key selects all friendly units
-        hud.handle_key_down('a', sim, camera);
+        // Bare 'a' key without Ctrl does NOT trigger hotkey (does not select units)
+        hud.handle_key_down('a', sim, camera, 0);
+        ASSERT_EQ(hud.get_selected_ant_ids().size(), 0u);
+
+        // 'Ctrl+A' key selects all friendly units
+        hud.handle_key_down('a', sim, camera, KMOD_CTRL);
         ASSERT_EQ(hud.get_selected_ant_ids().size(), 3u);
 
-        // 'N' key cycles to next ant
+        // 'Ctrl+N' key cycles to next ant
         hud.select_ant(a1);
-        hud.handle_key_down('n', sim, camera);
+        hud.handle_key_down('n', sim, camera, KMOD_CTRL);
         ASSERT_EQ(hud.get_selected_ant_id(), a2);
 
-        hud.handle_key_down('n', sim, camera);
+        hud.handle_key_down('n', sim, camera, KMOD_CTRL);
         ASSERT_EQ(hud.get_selected_ant_id(), a3);
 
-        hud.handle_key_down('n', sim, camera); // Wrap around
+        hud.handle_key_down('n', sim, camera, KMOD_CTRL); // Wrap around
         ASSERT_EQ(hud.get_selected_ant_id(), a1);
 
-        // 'P' key cycles to previous ant
-        hud.handle_key_down('p', sim, camera); // Wrap around backwards
+        // 'Ctrl+P' key cycles to previous ant
+        hud.handle_key_down('p', sim, camera, KMOD_CTRL); // Wrap around backwards
         ASSERT_EQ(hud.get_selected_ant_id(), a3);
 
-        // 'C' key clears selection
-        hud.handle_key_down('c', sim, camera);
+        // 'Ctrl+C' key clears selection
+        hud.handle_key_down('c', sim, camera, KMOD_CTRL);
         ASSERT_EQ(hud.get_selected_ant_id(), 0u);
         ASSERT_TRUE(hud.get_selected_ant_ids().empty());
 
@@ -1358,6 +1362,152 @@ void run_suite_9_gameplay_mechanics_and_options() {
         ViewportCamera cam;
         hud.handle_mouse_down(100, 100, SDL_BUTTON_RIGHT, sim_engine, cam);
         ASSERT_TRUE(last_sfx == 17 || last_sfx == 15); // gantgo or gantcommand
+    } TEST_END();
+
+    TEST_CASE("9.7 Chat Input System, Team Chat Toggle & Hotkey Modifier Isolation") {
+        Application app;
+        ApplicationConfig cfg;
+        cfg.headless = true;
+        cfg.default_map_path = "Original-Ants/Maps/TREASURE.LVL";
+        cfg.start_in_map_select = false;
+        ASSERT_TRUE(app.init(cfg));
+
+        auto& hud = app.hud();
+        auto& sim_engine = app.sim();
+        ViewportCamera cam;
+
+        // 1. Verify bare hotkeys do NOT trigger gameplay commands
+        // In Application: SDLK_l (without Ctrl) should not toggle health display
+        bool initial_health = app.is_unit_health_visible();
+        SDL_KeyboardEvent key_ev{};
+        key_ev.type = SDL_KEYDOWN;
+        key_ev.keysym.sym = SDLK_l;
+        key_ev.keysym.mod = 0; // No Ctrl!
+        app.handle_key_down(key_ev);
+        ASSERT_EQ(app.is_unit_health_visible(), initial_health);
+
+        // Bare SDLK_t should not toggle tile grid
+        bool initial_grid = app.is_tile_grid_visible();
+        key_ev.keysym.sym = SDLK_t;
+        key_ev.keysym.mod = 0; // No Ctrl!
+        app.handle_key_down(key_ev);
+        ASSERT_EQ(app.is_tile_grid_visible(), initial_grid);
+
+        // With Ctrl modifier, Ctrl+T DOES toggle tile grid
+        key_ev.keysym.mod = KMOD_LCTRL;
+        app.handle_key_down(key_ev);
+        ASSERT_NE(app.is_tile_grid_visible(), initial_grid);
+
+        // With Ctrl modifier, Ctrl+L DOES toggle unit health
+        key_ev.keysym.sym = SDLK_l;
+        app.handle_key_down(key_ev);
+        ASSERT_NE(app.is_unit_health_visible(), initial_health);
+
+        // 2. Chat Focus and Input Handling
+        ASSERT_FALSE(hud.is_chat_focused());
+
+        // Pressing Enter (SDLK_RETURN) focuses chat
+        key_ev.keysym.sym = SDLK_RETURN;
+        key_ev.keysym.mod = 0;
+        app.handle_key_down(key_ev);
+        ASSERT_TRUE(hud.is_chat_focused());
+
+        // Typing characters via handle_text_input
+        hud.handle_text_input("Rush the base!");
+        ASSERT_EQ(hud.get_chat_input(), "Rush the base!");
+
+        // Backspace removes character
+        key_ev.keysym.sym = SDLK_BACKSPACE;
+        app.handle_key_down(key_ev);
+        ASSERT_EQ(hud.get_chat_input(), "Rush the base");
+
+        // Sound callback tracking
+        uint32_t played_sound = 0;
+        hud.set_on_play_sfx([&](uint32_t sid) {
+            played_sound = sid;
+        });
+
+        // Sending message with Enter
+        key_ev.keysym.sym = SDLK_RETURN;
+        app.handle_key_down(key_ev);
+        ASSERT_FALSE(hud.is_chat_focused());
+        ASSERT_TRUE(hud.get_chat_input().empty());
+        ASSERT_EQ(played_sound, ants::sim::SoundID::ChatSend);
+
+        // Verify message in chat log (wrapped across lines)
+        const auto& log = hud.get_chat_log();
+        ASSERT_FALSE(log.empty());
+        bool found_msg = false;
+        for (const auto& entry : log) {
+            if (entry.find("Rush the") != std::string::npos) {
+                found_msg = true;
+                break;
+            }
+        }
+        ASSERT_TRUE(found_msg);
+
+        // 3. Word Wrapping Test for Long Chat Messages
+        size_t log_size_before = log.size();
+        hud.focus_chat();
+        hud.handle_text_input("This is a really long chat message that will exceed twenty-two characters per line");
+        hud.send_chat_message();
+        ASSERT_TRUE(hud.get_chat_input().empty());
+        // Should have created multiple wrapped lines
+        ASSERT_TRUE(log.size() >= log_size_before + 3);
+
+        // 4. Team Chat Button and Scoping
+        // In FFA, is_on_team is false, send_to_all is true
+        ASSERT_FALSE(hud.is_on_team());
+        ASSERT_TRUE(hud.is_send_to_all());
+
+        // Clicking Team button when not on team does nothing
+        hud.handle_mouse_down(590, 450, SDL_BUTTON_LEFT, sim_engine, cam);
+        ASSERT_TRUE(hud.is_send_to_all());
+
+        // Now set on team
+        hud.set_on_team(true);
+        ASSERT_TRUE(hud.is_on_team());
+
+        // Clicking Team button (579..625, 443..467) switches send_to_all to false
+        hud.handle_mouse_down(590, 450, SDL_BUTTON_LEFT, sim_engine, cam);
+        ASSERT_FALSE(hud.is_send_to_all());
+
+        // Send a team message
+        hud.set_player_name("QueenAnt");
+        hud.set_chat_input("Teammates defend!");
+        hud.send_chat_message();
+        bool found_team_msg = false;
+        for (const auto& entry : log) {
+            if (entry.find("QueenAnt (Team):") != std::string::npos) {
+                found_team_msg = true;
+                break;
+            }
+        }
+        ASSERT_TRUE(found_team_msg);
+
+        // Clicking All button (532..576, 443..467) switches back to All
+        hud.handle_mouse_down(545, 450, SDL_BUTTON_LEFT, sim_engine, cam);
+        ASSERT_TRUE(hud.is_send_to_all());
+
+        // Send an all message
+        hud.set_chat_input("GG everyone");
+        hud.send_chat_message();
+        bool found_all_msg = false;
+        for (const auto& entry : log) {
+            if (entry.find("QueenAnt: GG") != std::string::npos) {
+                found_all_msg = true;
+                break;
+            }
+        }
+        ASSERT_TRUE(found_all_msg);
+
+        // 5. Escape cancels chat input without sending
+        hud.focus_chat();
+        hud.set_chat_input("Unsent message");
+        key_ev.keysym.sym = SDLK_ESCAPE;
+        app.handle_key_down(key_ev);
+        ASSERT_FALSE(hud.is_chat_focused());
+        ASSERT_TRUE(hud.get_chat_input().empty());
     } TEST_END();
 }
 

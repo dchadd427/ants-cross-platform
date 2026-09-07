@@ -108,10 +108,10 @@ public:
     int32_t mouse_screen_x() const noexcept { return mouse_screen_x_; }
     int32_t mouse_screen_y() const noexcept { return mouse_screen_y_; }
     bool mouse_has_moved() const noexcept { return mouse_has_moved_; }
+    void render_frame();
 
 private:
     void handle_events();
-    void render_frame();
 
     ApplicationConfig config_{};
     AppState state_{AppState::MapSelect};
