@@ -52,6 +52,8 @@ namespace SoundID {
     constexpr uint32_t BomberAttack   = 38; // bombattack.wav
     constexpr uint32_t BomberDo       = 39; // bombdo.wav
     constexpr uint32_t PlayerDefeat   = 41; // playerout.wav (11kHz, 0.94s)
+    constexpr uint32_t ChatSendA      = 45; // chatsnda.wav
+    constexpr uint32_t ChatSend       = 46; // chatsnd.wav
     constexpr uint32_t AllianceBreak  = 49; // allyoff.wav
     constexpr uint32_t AllianceOn     = 50; // allyon.wav
     constexpr uint32_t AlliancePro    = 51; // allypro.wav
