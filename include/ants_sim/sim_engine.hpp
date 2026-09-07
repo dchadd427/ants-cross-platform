@@ -20,9 +20,10 @@ constexpr uint32_t TICK_RATE_HZ = 20u;
 constexpr uint32_t TICK_MS      = 50u;
 
 namespace SoundID {
+    constexpr uint32_t PowerUpHeal    = 1;  // powerupc.wav
+    constexpr uint32_t PowerUpChime   = 2;  // powerupc2.wav
     constexpr uint32_t BombDetonate   = 4;  // bombexp.wav (22kHz, 1.14s)
     constexpr uint32_t FireBurnout    = 5;  // fireburnout.wav
-    constexpr uint32_t PowerUpHeal    = 36; // powerupc.wav
     constexpr uint32_t PlayerDefeat   = 41; // playerout.wav (11kHz, 0.94s)
     constexpr uint32_t AllianceBreak  = 49; // allyoff.wav
     constexpr uint32_t AllianceOn     = 50; // allyon.wav
@@ -125,6 +126,9 @@ struct AntSnapshot {
     bool     is_swimming{false};
     bool     is_underground{false};
     bool     is_drowning{false};
+    bool     is_on_mud{false};
+    bool     is_transforming{false};
+    uint16_t transform_anim_frame{0};
 };
 
 struct WorldState {

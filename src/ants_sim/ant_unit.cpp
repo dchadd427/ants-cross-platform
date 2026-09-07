@@ -153,10 +153,16 @@ void AntUnit::tick_movement(bool is_swimming, SurfaceType surface) {
     if (dy > 0) fx_y += std::min(step_fx, dy << 16);
     else if (dy < 0) fx_y -= std::min(step_fx, (-dy) << 16);
 
+    is_on_mud = (surface == SurfaceType::Mud);
+
     sync_pixel_from_fx();
 }
 
 void AntUnit::tick_timers() noexcept {
+    if (transform_timer > 0) {
+        transform_timer--;
+    }
+
     if (stun_ticks_remaining > 0) {
         stun_ticks_remaining--;
         if (stun_ticks_remaining == 0 && state == UnitState::Stunned) {

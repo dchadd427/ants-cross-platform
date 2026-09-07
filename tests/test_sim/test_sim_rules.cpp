@@ -584,7 +584,7 @@ void run_suite_9_anthill() {
         ASSERT_TRUE(sim.has_audio_event(87)); // Sound 87
     } TEST_END();
 
-    TEST_CASE("9.3 Frame 8 Underground 100% Full Heal (Sound 36 powerupc.wav)") {
+    TEST_CASE("9.3 Frame 8 Underground 100% Full Heal (Sound 1 powerupc.wav)") {
         SimulationEngine sim;
         sim.init_test_world(60, 60, 1);
         sim.set_anthill(0, {30, 30});
@@ -594,7 +594,7 @@ void run_suite_9_anthill() {
 
         sim.step_base_entry_animation(u, 8);
         ASSERT_EQ(sim.get_unit(u).hp, 10);
-        ASSERT_TRUE(sim.has_audio_event(36)); // Sound 36
+        ASSERT_TRUE(sim.has_audio_event(SoundID::PowerUpHeal)); // Sound 1 powerupc.wav
     } TEST_END();
 
     TEST_CASE("9.4 Frame 16 Emergence Ready") {
@@ -837,6 +837,157 @@ void run_suite_12_game_over() {
     } TEST_END();
 }
 
+static void run_suite_13_authentic_fidelity() {
+    std::cout << "\n=======================================================\n";
+    std::cout << " [SUITE] Suite 13: Combat Range, Mud Cancel, Anthill Passability & PowerUp\n";
+    std::cout << "=======================================================\n";
+
+    TEST_CASE("13.1 Distant Attack Order Paths to Melee Range Instead of Teleport Strike") {
+        SimulationEngine sim;
+        sim.init_test_world(60, 60, 1);
+        uint32_t a1 = sim.spawn_unit(0, AntType::Combat, {10, 10});
+        uint32_t a2 = sim.spawn_unit(1, AntType::Worker, {25, 25});
+
+        AntOrder order{};
+        order.ant_id = a1;
+        order.type = OrderType::Attack;
+        order.target_x = 25;
+        order.target_y = 25;
+        order.target_entity_id = static_cast<int32_t>(a2);
+        sim.issue_order(order);
+
+        // Distant defender should take NO damage immediately
+        ASSERT_EQ(sim.get_unit(a2).hp, 10);
+        // Attacker should receive a movement path
+        ASSERT_EQ(sim.get_unit(a1).state, UnitState::Walking);
+    } TEST_END();
+
+    TEST_CASE("13.2 Combat AI Respects User Walking Orders and Does Not Auto-Hijack") {
+        SimulationEngine sim;
+        sim.init_test_world(60, 60, 1);
+        uint32_t combat = sim.spawn_unit(0, AntType::Combat, {10, 10});
+        [[maybe_unused]] uint32_t enemy = sim.spawn_unit(1, AntType::Worker, {12, 10}); // within 3 tiles aggro
+
+        AntOrder move{};
+        move.ant_id = combat;
+        move.type = OrderType::Move;
+        move.target_x = 10;
+        move.target_y = 20;
+        sim.issue_order(move);
+
+        ASSERT_EQ(sim.get_unit(combat).state, UnitState::Walking);
+        sim.tick();
+        // Should remain walking towards user destination, not hijacked to Intercepting
+        ASSERT_EQ(sim.get_unit(combat).state, UnitState::Walking);
+    } TEST_END();
+
+    TEST_CASE("13.3 Mud Humping Animation Cancel Accelerates Movement") {
+        SimulationEngine sim;
+        sim.init_test_world(60, 60, 1);
+        // Set path to mud surface
+        for (uint32_t y = 9; y <= 15; ++y) {
+            for (uint32_t x = 9; x <= 15; ++x) {
+                sim.grid_mut().get_cell_mut(x, y).surface_type = SurfaceType::Mud;
+                sim.grid_mut().get_cell_mut(x, y).is_mud = true;
+            }
+        }
+        uint32_t ant = sim.spawn_unit(0, AntType::Worker, {10, 10});
+        AntOrder move1{};
+        move1.ant_id = ant;
+        move1.type = OrderType::Move;
+        move1.target_x = 10;
+        move1.target_y = 15;
+        sim.issue_order(move1);
+
+        sim.tick();
+        ASSERT_TRUE(sim.get_unit(ant).is_on_mud);
+        sim.get_unit(ant).anim_tick = 10;
+
+        // Reissue move order on mud ("humping")
+        int32_t prev_fx = sim.get_unit(ant).fx_y;
+        sim.issue_order(move1);
+        ASSERT_EQ(sim.get_unit(ant).anim_tick, 0); // Animation delay reset
+        ASSERT_GT(sim.get_unit(ant).fx_y, prev_fx); // Immediate pulse advance
+    } TEST_END();
+
+    TEST_CASE("13.4 Anthill Mound Impassability & Queue Staging") {
+        SimulationEngine sim;
+        sim.init_test_world(60, 60, 1);
+        // Place a 4x4 anthill base at (20, 20)
+        sim.set_anthill(0, {20, 20});
+        // Set up 4x4 base: entrance at (21, 21), bottom-left queuing spot at (20, 23), mound elsewhere
+        for (uint32_t y = 20; y < 24; ++y) {
+            for (uint32_t x = 20; x < 24; ++x) {
+                if ((x == 21 && y == 21) || (x == 20 && y == 23)) {
+                    sim.grid_mut().get_cell_mut(x, y).is_obstacle_overlay = false;
+                } else {
+                    sim.grid_mut().get_cell_mut(x, y).is_obstacle_overlay = true;
+                }
+            }
+        }
+
+        // Mound tile is impassable
+        ASSERT_FALSE(sim.grid().get_cell(20, 20).is_passable());
+        ASSERT_FALSE(sim.grid().get_cell(22, 22).is_passable());
+        // Entrance and queue staging spot are passable
+        ASSERT_TRUE(sim.grid().get_cell(21, 21).is_passable());
+        ASSERT_TRUE(sim.grid().get_cell(20, 23).is_passable());
+
+        // Return to base order routes to bottom-left queuing point (20, 23)
+        uint32_t worker = sim.spawn_unit(0, AntType::Worker, {10, 10});
+        AntOrder ret{};
+        ret.ant_id = worker;
+        ret.type = OrderType::ReturnToBase;
+        sim.issue_order(ret);
+
+        ASSERT_FALSE(sim.get_unit(worker).waypoints.empty());
+        TileCoord last_wp = sim.get_unit(worker).waypoints.back();
+        ASSERT_EQ(last_wp.x, 20);
+        ASSERT_EQ(last_wp.y, 23);
+    } TEST_END();
+
+    TEST_CASE("13.5 Thief Cannot Steal From Base With 0 Food") {
+        SimulationEngine sim;
+        sim.init_test_world(60, 60, 1);
+        sim.set_anthill(1, {30, 30});
+        uint32_t thief = sim.spawn_unit(0, AntType::Thief, {30, 30});
+        ASSERT_EQ(sim.get_player_score(1), 0);
+
+        AntOrder infil{};
+        infil.ant_id = thief;
+        infil.type = OrderType::InfiltrateAnthill;
+        infil.target_entity_id = 1;
+        sim.issue_order(infil);
+
+        // Cannot infiltrate 0-food anthill
+        ASSERT_NE(sim.get_unit(thief).state, UnitState::Infiltrating);
+
+        // Direct execute_thief_loot call is also a no-op
+        sim.execute_thief_loot(thief, 1);
+        ASSERT_EQ(sim.get_unit(thief).carried_points, 0);
+    } TEST_END();
+
+    TEST_CASE("13.6 Power-Up Pickup Emits Sounds 1 & 2 and Starts 11-Tick Transformation") {
+        SimulationEngine sim;
+        sim.init_test_world(60, 60, 1);
+        sim.grid_mut().place_powerup(10, 10, 4); // Combat power-up
+        uint32_t ant = sim.spawn_unit(0, AntType::Worker, {10, 10});
+
+        sim.clear_audio_events();
+        sim.tick();
+
+        ASSERT_EQ(sim.get_unit(ant).type, AntType::Combat);
+        ASSERT_EQ(sim.get_unit(ant).transform_timer, 11);
+        ASSERT_TRUE(sim.get_unit(ant).is_transforming());
+        ASSERT_TRUE(sim.has_audio_event(SoundID::PowerUpHeal)); // Sound 1
+        ASSERT_TRUE(sim.has_audio_event(SoundID::PowerUpChime)); // Sound 2
+
+        const auto& ws = sim.get_world_state();
+        ASSERT_TRUE(ws.ants[0].is_transforming);
+        ASSERT_EQ(ws.ants[0].transform_anim_frame, 0);
+    } TEST_END();
+}
+
 int main() {
     std::cout << "\n=======================================================\n";
     std::cout << " ANTS - LIBANTS-SIM HEADLESS RULES TEST SUITE            \n";
@@ -854,6 +1005,7 @@ int main() {
     run_suite_10_thief();
     run_suite_11_alliances();
     run_suite_12_game_over();
+    run_suite_13_authentic_fidelity();
 
     std::cout << "\n=======================================================\n";
     std::cout << " TEST SUMMARY\n";
@@ -864,7 +1016,7 @@ int main() {
     std::cout << "=======================================================\n";
 
     if (g_test_failures == 0) {
-        std::cout << " >>> ALL 12 TEST SUITES PASSED CLEANLY (100% PASS) <<<\n\n";
+        std::cout << " >>> ALL 13 TEST SUITES PASSED CLEANLY (100% PASS) <<<\n\n";
         return 0;
     } else {
         std::cout << " >>> " << g_test_failures << " TEST(S) FAILED <<<\n\n";
