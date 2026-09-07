@@ -87,6 +87,8 @@ public:
     bool start_game(const std::string& map_path);
     void return_to_map_select();
     MapSelectScreen& map_select() noexcept { return map_select_; }
+    uint8_t local_player_id() const noexcept { return local_player_id_; }
+    void set_local_player(uint8_t team_id);
 
     const ApplicationConfig& config() const noexcept { return config_; }
     ants::sim::SimulationEngine& sim() noexcept { return sim_; }
@@ -136,10 +138,16 @@ private:
     int32_t mouse_screen_y_{240};
     bool mouse_has_moved_{false};
 
+    void toggle_fullscreen();
+    void play_next_ingame_music();
+    void play_startup_sound();
+
     // 20 Hz Discrete Simulation Timing
     uint64_t last_tick_time_{0};
     float tick_accumulator_{0.0f};
     float current_fps_{60.0f};
+    int last_music_track_{-1};
+    bool is_music_muted_{false};
 };
 
 } // namespace ants::app

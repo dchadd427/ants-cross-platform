@@ -120,9 +120,9 @@ void ScorecardModal::render(IRenderer& renderer, const assets::AssetArchive& ass
 
     // 3. Winner Row (Inside Winner Box at y=222..275)
     int32_t wy = 243;
-    // Tinted ant portrait: agst301.bmp at (54, 233)
+    // Tinted ant portrait: agst301.bmp at (54, 227) (vertically centered in 50px tall box at y=222..272)
     renderer.set_hud_team(winner_entry_.player_id);
-    renderer.draw_named_sprite("agst301.bmp", 54, 233);
+    renderer.draw_named_sprite("agst301.bmp", 54, 227);
     renderer.set_hud_team(0);
 
     // Winner Name

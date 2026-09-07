@@ -117,6 +117,8 @@ struct StaticMapObject {
     int32_t width{32};
     int32_t height{32};
     bool is_food{false};
+    uint16_t anchor_x{0};
+    uint16_t anchor_y{0};
     std::vector<std::pair<uint16_t, uint16_t>> food_tiles{};
 };
 
@@ -143,6 +145,7 @@ public:
               const ants::assets::AssetArchive& archive,
               bool integer_scale = true);
     void shutdown();
+    void set_fullscreen(bool fullscreen);
 
     void set_level(const ants::assets::LevelData& level);
 
@@ -211,6 +214,8 @@ private:
     std::vector<RenderItem> render_queue_;
     std::string pending_screenshot_;
     uint8_t hud_team_id_{0};
+    bool integer_scale_{true};
+    bool is_fullscreen_{false};
 };
 
 } // namespace ants::app

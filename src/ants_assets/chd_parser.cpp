@@ -363,7 +363,25 @@ bool CHDParser::parse_table2_sounds(const uint8_t* data, size_t size, size_t off
             }
 
             if (fn_buf.empty()) {
-                snd.name = "sound_" + std::to_string(i) + ".wav";
+                // Authentic canonical names reverse-engineered from Table 4 animation triggers & engine references
+                switch (i) {
+                    case 6:  snd.name = "mslogo.wav"; break;
+                    case 17: snd.name = "gantgo.wav"; break;
+                    case 40: snd.name = "powerupd.wav"; break;
+                    case 42: snd.name = "losers.wav"; break;
+                    case 43: snd.name = "exithill.wav"; break;
+                    case 45: snd.name = "chatsnda.wav"; break;
+                    case 46: snd.name = "chatsnd.wav"; break;
+                    case 48: snd.name = "anthill.wav"; break;
+                    case 54: snd.name = "30sec.wav"; break;
+                    case 55: snd.name = "1min.wav"; break;
+                    case 59: snd.name = "combat1.wav"; break;
+                    case 60: snd.name = "combat2.wav"; break;
+                    case 75: snd.name = "attack_alt.wav"; break;
+                    case 77: snd.name = "harvest_alt.wav"; break;
+                    case 80: snd.name = "wateraction.wav"; break;
+                    default: snd.name = "sound_" + std::to_string(i) + ".wav"; break;
+                }
             } else {
                 snd.name.assign(fn_buf.data(), fn_buf.size());
             }

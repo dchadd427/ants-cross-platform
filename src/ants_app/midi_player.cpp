@@ -4,6 +4,7 @@
 #include <fstream>
 #include <algorithm>
 #include <cstring>
+#include <cmath>
 
 #if defined(__APPLE__)
 #include <AudioToolbox/AudioToolbox.h>
@@ -32,10 +33,24 @@ struct MidiPlayer::Impl {
 #if defined(__APPLE__)
     MusicPlayer player{nullptr};
     MusicSequence sequence{nullptr};
+    AudioUnit synth_unit{nullptr};
 #endif
+
+    void apply_volume(float vol) {
+#if defined(__APPLE__)
+        if (synth_unit && !headless) {
+            float v = std::clamp(vol, 0.0f, 1.0f);
+            float db_vol = (v <= 0.0001f) ? -120.0f : (20.0f * std::log10(v));
+            AudioUnitSetParameter(synth_unit, 1 /* Volume */, kAudioUnitScope_Global, 0, db_vol, 0);
+        }
+#else
+        (void)vol;
+#endif
+    }
 
     void cleanup() {
 #if defined(__APPLE__)
+        synth_unit = nullptr;
         if (player) {
             MusicPlayerStop(player);
             DisposeMusicPlayer(player);
@@ -147,6 +162,16 @@ bool MidiPlayer::load_file(const std::string& path) {
     }
 
     MusicPlayerPreroll(impl_->player);
+
+    AUGraph graph = nullptr;
+    if (MusicSequenceGetAUGraph(impl_->sequence, &graph) == noErr && graph) {
+        AUNode dls_node;
+        if (AUGraphGetIndNode(graph, 0, &dls_node) == noErr) {
+            AudioComponentDescription desc;
+            AUGraphNodeInfo(graph, dls_node, &desc, &impl_->synth_unit);
+        }
+    }
+    impl_->apply_volume(impl_->volume);
     impl_->loaded = true;
     return true;
 #else
@@ -178,6 +203,7 @@ void MidiPlayer::play(bool loop) {
     if (impl_->player && !impl_->headless) {
         MusicPlayerSetTime(impl_->player, 0.0);
         MusicPlayerStart(impl_->player);
+        impl_->apply_volume(impl_->volume);
     }
 #endif
 }
@@ -202,6 +228,7 @@ void MidiPlayer::resume() {
 #if defined(__APPLE__)
     if (impl_->player && !impl_->headless) {
         MusicPlayerStart(impl_->player);
+        impl_->apply_volume(impl_->volume);
     }
 #endif
 }
@@ -254,6 +281,7 @@ uint32_t MidiPlayer::get_track_count() const noexcept {
 void MidiPlayer::set_volume(float volume) {
     if (!impl_) return;
     impl_->volume = std::clamp(volume, 0.0f, 1.0f);
+    impl_->apply_volume(impl_->volume);
 }
 
 float MidiPlayer::get_volume() const noexcept {
@@ -271,6 +299,7 @@ void MidiPlayer::fade_out(float duration_seconds) {
 void MidiPlayer::fade_in(float duration_seconds) {
     if (!impl_) return;
     impl_->volume = 0.0f;
+    impl_->apply_volume(0.0f);
     impl_->target_volume = 1.0f;
     impl_->is_fading = true;
     impl_->fade_duration = std::max(0.01f, duration_seconds);
@@ -308,16 +337,20 @@ void MidiPlayer::update(float delta_seconds) {
         if (impl_->target_volume < impl_->volume) {
             // Fading out
             impl_->volume = std::max(0.0f, (1.0f - progress) * (impl_->volume > 0.0f ? 1.0f : 0.0f));
+            impl_->apply_volume(impl_->volume);
             if (progress >= 1.0f) {
                 impl_->volume = 0.0f;
+                impl_->apply_volume(0.0f);
                 impl_->is_fading = false;
                 stop();
             }
         } else {
             // Fading in
             impl_->volume = progress;
+            impl_->apply_volume(impl_->volume);
             if (progress >= 1.0f) {
                 impl_->volume = 1.0f;
+                impl_->apply_volume(1.0f);
                 impl_->is_fading = false;
             }
         }

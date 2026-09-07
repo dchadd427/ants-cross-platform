@@ -458,14 +458,13 @@ void HUD::render_top_bar(IRenderer& renderer, const assets::AssetArchive&, const
     }
 
     // Box 2 (Top-Right above Playfield): Local player's own score in box at (402..456, 4..17)
-    // Color the box with the correct team color
-    renderer.draw_rect(402, 4, 54, 14, TEAM_COLORS[local_player_id_ % 4]);
-    renderer.draw_rect(403, 5, 52, 12, TEAM_COLORS[local_player_id_ % 4]);
+    // Fill the entire box with the team color
+    renderer.fill_rect(402, 4, 54, 14, TEAM_COLORS[local_player_id_ % 4]);
     int32_t my_score = (local_player_id_ < world.player_scores.size()) ? world.player_scores[local_player_id_] : 0;
     std::string my_score_str = std::to_string(my_score);
     int32_t score_text_w = static_cast<int32_t>(my_score_str.size()) * 6 - 1;
     int32_t score_text_x = 453 - score_text_w;
-    renderer.draw_text(my_score_str, score_text_x, 5, {255, 255, 255, 255});
+    renderer.draw_text(my_score_str, score_text_x, 7, {255, 255, 255, 255});
 
     // Top Header Buttons feedback (Help at 476, 7; Options at 525, 7; Quit at 579, 7)
     // Note: In unpressed state, Help/Options/Quit are already pre-rendered inside x0y0.bmp.
@@ -754,9 +753,8 @@ void HUD::render_news_banner(IRenderer& renderer, const assets::AssetArchive&, c
     for (size_t i = 0; i < 3 && i < other_players.size(); ++i) {
         uint8_t p = other_players[i];
         int32_t bx = box_xs[i];
-        // Team color box border
-        renderer.draw_rect(bx, 464, 54, 14, TEAM_COLORS[p]);
-        renderer.draw_rect(bx + 1, 465, 52, 12, TEAM_COLORS[p]);
+        // Team color box fill
+        renderer.fill_rect(bx, 464, 54, 14, TEAM_COLORS[p]);
         // Player score inside box (right-justified)
         int32_t s = (p < world.player_scores.size()) ? world.player_scores[p] : 0;
         std::string s_str = std::to_string(s);
@@ -944,6 +942,12 @@ void HUD::select_all_friendly(const sim::WorldState& world) {
     }
     if (!selected_ant_ids_.empty()) {
         selected_ant_id_ = selected_ant_ids_.front();
+        for (const auto& ant : world.ants) {
+            if (ant.id == selected_ant_id_ && ant.player_id == local_player_id_) {
+                play_sfx(sim::get_ready_voice_sound(ant.type, voice_variant_++));
+                break;
+            }
+        }
     } else {
         selected_ant_id_ = 0;
     }
@@ -968,6 +972,12 @@ void HUD::select_ants_in_rect(int32_t x1, int32_t y1, int32_t x2, int32_t y2, co
     }
     if (!selected_ant_ids_.empty()) {
         selected_ant_id_ = selected_ant_ids_.front();
+        for (const auto& ant : world.ants) {
+            if (ant.id == selected_ant_id_ && ant.player_id == local_player_id_) {
+                play_sfx(sim::get_ready_voice_sound(ant.type, voice_variant_++));
+                break;
+            }
+        }
     } else {
         selected_ant_id_ = 0;
     }
@@ -1154,6 +1164,7 @@ bool HUD::handle_mouse_down(int32_t x, int32_t y, uint8_t button,
         if (stop_button_.contains(x, y)) {
             stop_button_.is_pressed = true;
             cancel_order_mode();
+            play_sfx(sim::SoundID::AntStop);
             for (uint32_t aid : selected_ant_ids_) {
                 const auto& u = sim.get_unit(aid);
                 sim::AntOrder order;
@@ -1286,6 +1297,7 @@ bool HUD::handle_mouse_down(int32_t x, int32_t y, uint8_t button,
             }
             if (target_base) {
                 if (target_base->team_id == local_player_id_) {
+                    play_sfx(sim::SoundID::GeneralCommand);
                     for (uint32_t aid : selected_ant_ids_) {
                         sim::AntOrder order;
                         order.ant_id = aid;
@@ -1392,6 +1404,7 @@ bool HUD::handle_mouse_up(int32_t x, int32_t y, uint8_t button,
                 if (hit_ant->player_id == local_player_id_) {
                     // Friendly ant clicked: select single ant
                     select_ant(hit_ant->id);
+                    play_sfx(sim::get_ready_voice_sound(hit_ant->type, voice_variant_++));
                 } else {
                     // Enemy ant clicked
                     if (!selected_ant_ids_.empty()) {
@@ -1691,6 +1704,18 @@ void HUD::dispatch_move_order(int32_t target_tile_x, int32_t target_tile_y, sim:
     }
     if (targets.empty()) return;
 
+    // Play authentic Move / Go voice clip for the primary selected friendly unit
+    const auto& world = sim.get_world_state();
+    for (uint32_t aid : targets) {
+        for (const auto& a : world.ants) {
+            if (a.id == aid && a.player_id == local_player_id_) {
+                play_sfx(sim::get_move_voice_sound(a.type, voice_variant_++));
+                goto move_voice_done;
+            }
+        }
+    }
+move_voice_done:
+
     if (targets.size() == 1) {
         sim::AntOrder order;
         order.ant_id = targets[0];
@@ -1758,6 +1783,16 @@ void HUD::dispatch_attack_order(uint32_t target_enemy_id, sim::SimulationEngine&
     }
 
     for (uint32_t aid : targets) {
+        for (const auto& a : world.ants) {
+            if (a.id == aid && a.player_id == local_player_id_) {
+                play_sfx(sim::get_attack_voice_sound(a.type, voice_variant_++));
+                goto attack_voice_done;
+            }
+        }
+    }
+attack_voice_done:
+
+    for (uint32_t aid : targets) {
         sim::AntOrder order;
         order.ant_id = aid;
         order.type = sim::OrderType::Attack;
@@ -1779,6 +1814,7 @@ void HUD::dispatch_smart_special_ability(int32_t world_x, int32_t world_y, sim::
     int32_t target_tile_y = world_y / 32;
 
     const auto& world = sim.get_world_state();
+    bool played_voice = false;
 
     for (uint32_t aid : targets) {
         const sim::AntSnapshot* sel = nullptr;
@@ -1848,6 +1884,15 @@ void HUD::dispatch_smart_special_ability(int32_t world_x, int32_t world_y, sim::
                 default:
                     order.type = sim::OrderType::Move;
                     break;
+            }
+        }
+
+        if (!played_voice) {
+            played_voice = true;
+            if (order.type == sim::OrderType::Move) {
+                play_sfx(sim::get_move_voice_sound(sel->type, voice_variant_++));
+            } else {
+                play_sfx(sim::get_ability_voice_sound(sel->type));
             }
         }
 

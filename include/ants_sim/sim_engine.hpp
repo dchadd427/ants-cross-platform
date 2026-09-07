@@ -24,6 +24,33 @@ namespace SoundID {
     constexpr uint32_t PowerUpChime   = 2;  // powerupc2.wav
     constexpr uint32_t BombDetonate   = 4;  // bombexp.wav (22kHz, 1.14s)
     constexpr uint32_t FireBurnout    = 5;  // fireburnout.wav
+    constexpr uint32_t GeneralOrders  = 13; // gantorders.wav
+    constexpr uint32_t GeneralReady   = 14; // gantrdy.wav
+    constexpr uint32_t GeneralCommand = 15; // gantcommand.wav
+    constexpr uint32_t GeneralAttack  = 16; // gantattack.wav
+    constexpr uint32_t GeneralGo      = 17; // gantgo.wav
+    constexpr uint32_t ThiefReady     = 18; // theifrdy.wav
+    constexpr uint32_t ThiefGo        = 19; // theifgo.wav
+    constexpr uint32_t ThiefAttack    = 20; // theifattack.wav
+    constexpr uint32_t ThiefDo        = 21; // theifdo.wav
+    constexpr uint32_t FireReady      = 22; // firerdy.wav
+    constexpr uint32_t FireGo         = 23; // firego.wav
+    constexpr uint32_t FireAttack     = 24; // fireattack.wav
+    constexpr uint32_t FireDo         = 25; // firedo.wav
+    constexpr uint32_t CombatReady2   = 26; // combrdy2.wav
+    constexpr uint32_t CombatReady1   = 27; // combrdy1.wav
+    constexpr uint32_t CombatGo1      = 28; // combgo1.wav
+    constexpr uint32_t CombatGo2      = 29; // combgo2.wav
+    constexpr uint32_t CombatDo2      = 30; // combdo2.wav
+    constexpr uint32_t CombatDo1      = 31; // combdo1.wav
+    constexpr uint32_t BridgeReady    = 32; // brdgrdy.wav
+    constexpr uint32_t BridgeGo       = 33; // brdggo.wav
+    constexpr uint32_t BridgeAttack   = 34; // brdgat.wav
+    constexpr uint32_t BridgeDo       = 35; // brdgdo.wav
+    constexpr uint32_t BomberReady    = 36; // bombrdy.wav
+    constexpr uint32_t BomberGo       = 37; // bombgo.wav
+    constexpr uint32_t BomberAttack   = 38; // bombattack.wav
+    constexpr uint32_t BomberDo       = 39; // bombdo.wav
     constexpr uint32_t PlayerDefeat   = 41; // playerout.wav (11kHz, 0.94s)
     constexpr uint32_t AllianceBreak  = 49; // allyoff.wav
     constexpr uint32_t AllianceOn     = 50; // allyon.wav
@@ -34,6 +61,8 @@ namespace SoundID {
     constexpr uint32_t VictoryFanfare = 56; // winner.wav (22kHz, 4.67s)
     constexpr uint32_t MeleeAttack    = 57; // attack.wav
     constexpr uint32_t BaseAlarmSiren = 58; // underattack.wav (2566 Hz alarm)
+    constexpr uint32_t AntStop        = 61; // antstop.wav
+    constexpr uint32_t CantGo         = 63; // cantgo.wav
     constexpr uint32_t FlingThumpA    = 64; // flythumpa.wav
     constexpr uint32_t FlingThumpB    = 65; // flythumpb.wav
     constexpr uint32_t FoodHarvest    = 66; // harvest.wav
@@ -55,6 +84,53 @@ namespace SoundID {
     constexpr uint32_t BaseScoreUp    = 87; // scoreup.wav
     constexpr uint32_t BaseScoreDn    = 88; // scoredn.wav
     constexpr uint32_t BombPick       = 90; // bombpick.wav
+}
+
+inline uint32_t get_move_voice_sound(AntType type, uint32_t variant = 0) {
+    switch (type) {
+        case AntType::Worker:  return (variant % 2 == 0) ? SoundID::GeneralGo : SoundID::GeneralCommand;
+        case AntType::Swimmer: return SoundID::BridgeGo;
+        case AntType::Fire:    return SoundID::FireGo;
+        case AntType::Combat:  return (variant % 2 == 0) ? SoundID::CombatGo1 : SoundID::CombatGo2;
+        case AntType::Bomber:  return SoundID::BomberGo;
+        case AntType::Thief:   return SoundID::ThiefGo;
+        default:               return SoundID::GeneralGo;
+    }
+}
+
+inline uint32_t get_ready_voice_sound(AntType type, uint32_t variant = 0) {
+    switch (type) {
+        case AntType::Worker:  return (variant % 2 == 0) ? SoundID::GeneralReady : SoundID::GeneralOrders;
+        case AntType::Swimmer: return SoundID::BridgeReady;
+        case AntType::Fire:    return SoundID::FireReady;
+        case AntType::Combat:  return (variant % 2 == 0) ? SoundID::CombatReady1 : SoundID::CombatReady2;
+        case AntType::Bomber:  return SoundID::BomberReady;
+        case AntType::Thief:   return SoundID::ThiefReady;
+        default:               return SoundID::GeneralReady;
+    }
+}
+
+inline uint32_t get_attack_voice_sound(AntType type, uint32_t variant = 0) {
+    switch (type) {
+        case AntType::Worker:  return SoundID::GeneralAttack;
+        case AntType::Swimmer: return SoundID::BridgeAttack;
+        case AntType::Fire:    return SoundID::FireAttack;
+        case AntType::Combat:  return (variant % 2 == 0) ? SoundID::CombatDo1 : SoundID::CombatDo2;
+        case AntType::Bomber:  return SoundID::BomberAttack;
+        case AntType::Thief:   return SoundID::ThiefAttack;
+        default:               return SoundID::GeneralAttack;
+    }
+}
+
+inline uint32_t get_ability_voice_sound(AntType type) {
+    switch (type) {
+        case AntType::Swimmer: return SoundID::BridgeDo;
+        case AntType::Fire:    return SoundID::FireDo;
+        case AntType::Combat:  return SoundID::CombatDo2;
+        case AntType::Bomber:  return SoundID::BomberDo;
+        case AntType::Thief:   return SoundID::ThiefDo;
+        default:               return SoundID::GeneralGo;
+    }
 }
 
 namespace StringID {

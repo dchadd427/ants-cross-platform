@@ -169,6 +169,8 @@ public:
     void set_on_sfx_volume(std::function<void(float)> cb) { on_sfx_volume_ = std::move(cb); }
     void set_on_music_volume(std::function<void(float)> cb) { on_music_volume_ = std::move(cb); }
     void set_on_scroll_rate(std::function<void(float)> cb) { on_scroll_rate_ = std::move(cb); }
+    void set_on_play_sfx(std::function<void(uint32_t)> cb) { on_play_sfx_ = std::move(cb); }
+    void play_sfx(uint32_t sound_id) { if (on_play_sfx_) on_play_sfx_(sound_id); }
 
     float get_sfx_volume() const noexcept { return sfx_volume_; }
     float get_music_volume() const noexcept { return music_volume_; }
@@ -258,9 +260,11 @@ private:
         "Do you want to ally?"
     };
     int active_slider_dragging_{-1}; // -1 none, 0 sfx, 1 music, 2 scroll
+    uint32_t voice_variant_{0};
     std::function<void(float)> on_sfx_volume_{nullptr};
     std::function<void(float)> on_music_volume_{nullptr};
     std::function<void(float)> on_scroll_rate_{nullptr};
+    std::function<void(uint32_t)> on_play_sfx_{nullptr};
 };
 
 } // namespace ants::app
