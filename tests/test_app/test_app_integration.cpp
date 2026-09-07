@@ -547,6 +547,64 @@ void run_suite_6_scorecard_and_audio_routing() {
         modal.hide();
         ASSERT_FALSE(modal.is_open());
     } TEST_END();
+
+    TEST_CASE("6.3 Scorecard Modal Leave Game Closes Application / Triggers Quit") {
+        SimulationEngine sim;
+        sim.init_test_world(60, 60, 100, 60000);
+
+        ScorecardModal modal;
+        modal.show(sim.get_world_state().match_result, 0);
+        ASSERT_TRUE(modal.is_open());
+
+        bool quit_called = false;
+        bool replay_called = false;
+        modal.set_on_quit([&]() { quit_called = true; });
+        modal.set_on_replay([&]() { replay_called = true; });
+
+        // Hover over Leave Game button at (525, 12)
+        modal.handle_mouse_motion(550, 20);
+        ASSERT_TRUE(modal.is_quit_hovered());
+
+        // Mouse down on Leave Game button
+        modal.handle_mouse_down(550, 20);
+        ASSERT_TRUE(modal.is_quit_pressed());
+
+        // Mouse up on Leave Game button
+        modal.handle_mouse_up(550, 20);
+        ASSERT_FALSE(modal.is_quit_pressed());
+        ASSERT_TRUE(quit_called);
+        ASSERT_FALSE(replay_called); // Must NOT trigger replay/restart
+
+        // Verify with Application instance: clicking Leave Game on end screen calls quit()
+        Application app;
+        ApplicationConfig cfg;
+        cfg.headless = true;
+        cfg.start_in_map_select = false;
+        ASSERT_TRUE(app.init(cfg));
+        ASSERT_TRUE(app.is_running());
+
+        // Trigger scorecard to show
+        app.scorecard().show(app.sim().get_world_state().match_result, 0);
+        ASSERT_TRUE(app.scorecard().is_open());
+
+        // Click Leave Game button via Application input handler
+        SDL_MouseButtonEvent down_ev{};
+        down_ev.type = SDL_MOUSEBUTTONDOWN;
+        down_ev.button = SDL_BUTTON_LEFT;
+        down_ev.x = 550;
+        down_ev.y = 20;
+        app.handle_mouse_button(down_ev);
+
+        SDL_MouseButtonEvent up_ev{};
+        up_ev.type = SDL_MOUSEBUTTONUP;
+        up_ev.button = SDL_BUTTON_LEFT;
+        up_ev.x = 550;
+        up_ev.y = 20;
+        app.handle_mouse_button(up_ev);
+
+        // Application must have received quit() and stopped running
+        ASSERT_FALSE(app.is_running());
+    } TEST_END();
 }
 
 // ============================================================================
@@ -710,10 +768,16 @@ void run_suite_7_input_controls() {
         hud.handle_key_down('p', sim, camera); // Wrap around backwards
         ASSERT_EQ(hud.get_selected_ant_id(), a3);
 
-        // 'Esc' clears selection
-        hud.handle_key_down(27, sim, camera);
+        // 'C' key clears selection
+        hud.handle_key_down('c', sim, camera);
         ASSERT_EQ(hud.get_selected_ant_id(), 0u);
         ASSERT_TRUE(hud.get_selected_ant_ids().empty());
+
+        // 'Esc' toggles quit menu
+        hud.handle_key_down(27, sim, camera);
+        ASSERT_TRUE(hud.is_quit_dialog_open());
+        hud.handle_key_down(27, sim, camera);
+        ASSERT_FALSE(hud.is_quit_dialog_open());
     } TEST_END();
 
     TEST_CASE("7.6 Camera Viewport Edge Panning & Minimap Jump Navigation") {
@@ -736,6 +800,57 @@ void run_suite_7_input_controls() {
         int32_t expected_y = 960 - 439 / 2;
         ASSERT_EQ(camera.world_x, expected_x);
         ASSERT_EQ(camera.world_y, expected_y);
+    } TEST_END();
+
+    TEST_CASE("7.7 Cursor Simulated in Screen Middle On Game Start (No Unwanted Edge Panning)") {
+        Application app;
+        ApplicationConfig cfg;
+        cfg.headless = true;
+        cfg.start_in_map_select = true; // Start in map select screen
+        ASSERT_TRUE(app.init(cfg));
+        ASSERT_EQ(app.state(), AppState::MapSelect);
+
+        // Pick map and start game
+        ASSERT_TRUE(app.start_game("Original-Ants/Maps/SMALL.LVL"));
+        ASSERT_EQ(app.state(), AppState::Playing);
+
+        // Cursor simulated in middle of screen (320, 240) and has not yet moved
+        ASSERT_EQ(app.mouse_screen_x(), 320);
+        ASSERT_EQ(app.mouse_screen_y(), 240);
+        ASSERT_FALSE(app.mouse_has_moved());
+
+        // Set camera away from boundaries using center_on so panning in any direction is unclamped
+        app.renderer().camera().center_on(600, 600, app.sim().grid().width(), app.sim().grid().height());
+        int32_t init_cam_x = app.renderer().camera().world_x;
+        int32_t init_cam_y = app.renderer().camera().world_y;
+
+        // Step camera updates without any mouse motion event
+        for (int i = 0; i < 20; ++i) {
+            app.handle_camera_panning(0.020f);
+        }
+
+        // Camera must NOT have panned toward top-left (stays centered at 600, 600)
+        ASSERT_EQ(app.renderer().camera().world_x, init_cam_x);
+        ASSERT_EQ(app.renderer().camera().world_y, init_cam_y);
+
+        // Simulate actual mouse motion to the top-left edge margin (x=10, y=10)
+        SDL_MouseMotionEvent motion{};
+        motion.type = SDL_MOUSEMOTION;
+        motion.x = 10;
+        motion.y = 10;
+        app.handle_mouse_motion(motion);
+
+        ASSERT_TRUE(app.mouse_has_moved());
+        ASSERT_EQ(app.mouse_screen_x(), 10);
+        ASSERT_EQ(app.mouse_screen_y(), 10);
+
+        // Step camera updates with mouse at top-left edge: camera now pans towards top-left
+        for (int i = 0; i < 5; ++i) {
+            app.handle_camera_panning(0.020f);
+        }
+
+        ASSERT_LT(app.renderer().camera().world_x, init_cam_x);
+        ASSERT_LT(app.renderer().camera().world_y, init_cam_y);
     } TEST_END();
 }
 
@@ -848,16 +963,16 @@ void run_suite_8_unit_health_and_map_select() {
         MapSelectScreen screen;
         screen.init("Original-Ants/Maps");
 
-        // Default: Fog of War enabled
-        ASSERT_TRUE(screen.is_fog_of_war_enabled());
-
-        // Click "Off" button
-        screen.handle_mouse_down(MapSelectScreen::BTN_FOW_OFF_X + 5, MapSelectScreen::BTN_FOW_OFF_Y + 5, SDL_BUTTON_LEFT);
+        // Default: Fog of War disabled (authentic reference specification)
         ASSERT_FALSE(screen.is_fog_of_war_enabled());
 
         // Click "On" button
         screen.handle_mouse_down(MapSelectScreen::BTN_FOW_ON_X + 5, MapSelectScreen::BTN_FOW_ON_Y + 5, SDL_BUTTON_LEFT);
         ASSERT_TRUE(screen.is_fog_of_war_enabled());
+
+        // Click "Off" button
+        screen.handle_mouse_down(MapSelectScreen::BTN_FOW_OFF_X + 5, MapSelectScreen::BTN_FOW_OFF_Y + 5, SDL_BUTTON_LEFT);
+        ASSERT_FALSE(screen.is_fog_of_war_enabled());
 
         // Player 2 initial state is unready (thumbs down)
         ASSERT_FALSE(screen.is_player_ready(2));
@@ -955,6 +1070,780 @@ void run_suite_8_unit_health_and_map_select() {
 }
 
 // ============================================================================
+// Suite 9: Gameplay Mechanics, Food Schedules, Hangman Pathing & Options Dialog
+// ============================================================================
+void run_suite_9_gameplay_mechanics_and_options() {
+    std::cout << "\n=======================================================\n"
+              << " [SUITE] Suite 9: Gameplay Mechanics, Hangman & Options\n"
+              << "=======================================================\n";
+
+    TEST_CASE("9.1 Multi-Stage Food Harvesting & Schedule Depletion") {
+        Application app;
+        ApplicationConfig cfg;
+        cfg.headless = true;
+        cfg.default_map_path = "Original-Ants/Maps/TREASURE.LVL";
+        cfg.start_in_map_select = false;
+        ASSERT_TRUE(app.init(cfg));
+
+        auto& sim_engine = app.sim();
+        auto& grid = sim_engine.grid_mut();
+
+        // Verify active food schedules loaded from TREASURE.LVL
+        const auto& schedules = grid.food_schedules();
+        ASSERT_TRUE(!schedules.empty());
+
+        // Locate a food cell with schedule
+        int32_t fx = -1, fy = -1;
+        for (const auto& fs : schedules) {
+            if (fs.remaining_bites > 0 && !fs.footprint.empty()) {
+                fx = fs.footprint[0].x;
+                fy = fs.footprint[0].y;
+                break;
+            }
+        }
+        ASSERT_TRUE(fx >= 0 && fy >= 0);
+
+        // Find pointer to schedule in grid
+        ActiveFoodSchedule* sched = nullptr;
+        for (auto& fs : grid.food_schedules_mut()) {
+            for (const auto& c : fs.footprint) {
+                if (c.x == fx && c.y == fy) {
+                    sched = &fs;
+                    break;
+                }
+            }
+            if (sched) break;
+        }
+        ASSERT_TRUE(sched != nullptr);
+        int32_t initial_bites = sched->remaining_bites;
+        ASSERT_TRUE(initial_bites > 0);
+
+        // Spawn a worker directly on the food cell
+        uint32_t ant_id = sim_engine.spawn_unit(0, AntType::Worker, TileCoord{fx, fy});
+        auto& ant = sim_engine.get_unit(ant_id);
+        ASSERT_FALSE(ant.is_holding());
+
+        // Tick simulation to execute harvest
+        sim_engine.tick();
+
+        // Verify bites decremented, ant is holding food, and harvest_origin recorded
+        ASSERT_TRUE(sched->remaining_bites < initial_bites);
+        ASSERT_TRUE(ant.is_holding());
+        ASSERT_EQ(ant.harvest_origin.x, fx);
+        ASSERT_EQ(ant.harvest_origin.y, fy);
+    } TEST_END();
+
+    TEST_CASE("9.2 Anthill Hangman Pathing, Lifecycle & Sound 55") {
+        Application app;
+        ApplicationConfig cfg;
+        cfg.headless = true;
+        cfg.default_map_path = "Original-Ants/Maps/SMALL.LVL";
+        cfg.start_in_map_select = false;
+        ASSERT_TRUE(app.init(cfg));
+
+        auto& sim_engine = app.sim();
+        const auto* base = sim_engine.grid().find_anthill(0);
+        ASSERT_TRUE(base != nullptr);
+        int32_t bx = base->x;
+        int32_t by = base->y;
+
+        // Spawn damaged worker carrying food at base queue spot (bx, by+3)
+        uint32_t ant_id = sim_engine.spawn_unit(0, AntType::Worker, TileCoord{bx, by + 3});
+        auto& ant = sim_engine.get_unit(ant_id);
+        ant.hp = 20; // Damaged
+        ant.pick_up_food(1, 25);
+        ant.harvest_origin = TileCoord{15, 15};
+
+        // Issue move order to base hole (bx+1, by+1)
+        sim_engine.issue_move_order(ant_id, TileCoord{bx + 1, by + 1});
+
+        // Tick movement until entering hole
+        for (int i = 0; i < 60 && ant.state != UnitState::EnteringBase; ++i) {
+            sim_engine.tick();
+        }
+
+        // Must enter EnteringBase state
+        ASSERT_EQ(static_cast<uint16_t>(ant.state), static_cast<uint16_t>(UnitState::EnteringBase));
+
+        // Advance through entering hole animation to frame 8 (underground) and beyond
+        for (int i = 0; i < 25 && ant.state == UnitState::EnteringBase; ++i) {
+            sim_engine.tick();
+        }
+
+        // Food deposited and ant fully healed
+        ASSERT_FALSE(ant.is_holding());
+        ASSERT_EQ(ant.hp, ant.max_hp);
+    } TEST_END();
+
+    TEST_CASE("9.3 Friendly Ant Pathing Around Stationary Ant (No Pushing)") {
+        Application app;
+        ApplicationConfig cfg;
+        cfg.headless = true;
+        cfg.default_map_path = "Original-Ants/Maps/SMALL.LVL";
+        cfg.start_in_map_select = false;
+        ASSERT_TRUE(app.init(cfg));
+
+        auto& sim_engine = app.sim();
+
+        // Spawn stationary ant at (10, 8)
+        uint32_t stationary_id = sim_engine.spawn_unit(0, AntType::Combat, TileCoord{10, 8});
+        auto& stat_ant = sim_engine.get_unit(stationary_id);
+        stat_ant.state = UnitState::Idle;
+
+        // Spawn moving ant at (9, 8) heading to (11, 8)
+        uint32_t mover_id = sim_engine.spawn_unit(0, AntType::Worker, TileCoord{9, 8});
+        sim_engine.issue_move_order(mover_id, TileCoord{11, 8});
+
+        // Tick simulation
+        for (int i = 0; i < 40; ++i) {
+            sim_engine.tick();
+        }
+
+        // Stationary ant stays anchored at (10, 8) and is NOT pushed
+        const auto& mover = sim_engine.get_unit(mover_id);
+        ASSERT_EQ(stat_ant.pos.x, 10);
+        ASSERT_EQ(stat_ant.pos.y, 8);
+        ASSERT_EQ(mover.pos.x, 11);
+        ASSERT_EQ(mover.pos.y, 8);
+    } TEST_END();
+
+    TEST_CASE("9.4 Options Menu Navigation, Sliders and Return Button") {
+        Application app;
+        ApplicationConfig cfg;
+        cfg.headless = true;
+        cfg.start_in_map_select = false;
+        ASSERT_TRUE(app.init(cfg));
+
+        auto& hud = app.hud();
+        auto& sim_engine = app.sim();
+        ViewportCamera cam;
+
+        // Open options dialog
+        ASSERT_FALSE(hud.is_options_open());
+        hud.open_options();
+        ASSERT_TRUE(hud.is_options_open());
+
+        // Drag sound volume slider (x=280, y=185)
+        hud.handle_mouse_down(280, 185, SDL_BUTTON_LEFT, sim_engine, cam);
+        hud.handle_mouse_motion(320, 185, sim_engine, cam);
+        hud.handle_mouse_up(320, 185, SDL_BUTTON_LEFT, sim_engine, cam);
+        ASSERT_TRUE(hud.get_sfx_volume() > 0.6f);
+
+        // Click Return to Game button at (355, 427, bounds 345..455, 423..455)
+        hud.handle_mouse_down(380, 435, SDL_BUTTON_LEFT, sim_engine, cam);
+        hud.handle_mouse_up(380, 435, SDL_BUTTON_LEFT, sim_engine, cam);
+        ASSERT_FALSE(hud.is_options_open());
+    } TEST_END();
+
+    TEST_CASE("9.5 Frame Rate Counter and Tile Grid Visibility") {
+        Application app;
+        ApplicationConfig cfg;
+        cfg.headless = true;
+        cfg.start_in_map_select = false;
+        ASSERT_TRUE(app.init(cfg));
+
+        // FPS getter returns non-negative
+        ASSERT_TRUE(app.get_current_fps() >= 0.0f);
+
+        // Toggle tile grid
+        ASSERT_FALSE(app.is_tile_grid_visible());
+        app.toggle_tile_grid_visibility();
+        ASSERT_TRUE(app.is_tile_grid_visible());
+        app.toggle_tile_grid_visibility();
+        ASSERT_FALSE(app.is_tile_grid_visible());
+    } TEST_END();
+}
+
+// ============================================================================
+// SUITE 10: Egg Economy, Incubation Emergence, Team-Up & Smart Abilities
+// ============================================================================
+void run_suite_10_egg_economy_incubation_teamup_abilities() {
+    TEST_SUITE("Suite 10: Egg Economy, Incubation Emergence, Team-Up & Smart Abilities");
+
+    TEST_CASE("10.1 Per-Map Egg Stock & Boundary Param Mapping") {
+        std::vector<std::pair<std::string, uint16_t>> expected_map_eggs = {
+            {"TREASURE.LVL", 9},
+            {"MEDIUM.LVL", 6},
+            {"GAUNTLET.LVL", 6},
+            {"ISLANDS.LVL", 4},
+            {"TINY.LVL", 3},
+            {"SMALL.LVL", 2}
+        };
+
+        for (const auto& [map_name, expected_eggs] : expected_map_eggs) {
+            std::string path = std::string(ORIGINAL_ASSETS_DIR) + "/Maps/" + map_name;
+            ants::assets::LevelData lvl;
+            if (lvl.load_lvl(path)) {
+                ASSERT_EQ(lvl.boundary_param, expected_eggs);
+                ASSERT_EQ(lvl.initial_eggs(), expected_eggs);
+
+                SimulationEngine sim;
+                sim.init(lvl, 42);
+                for (uint8_t p = 0; p < MAX_PLAYERS; ++p) {
+                    ASSERT_EQ(sim.get_player_eggs(p), expected_eggs);
+                }
+            }
+        }
+    } TEST_END();
+
+    TEST_CASE("10.2 Egg Consumption & Zero Egg Prohibits Hatching") {
+        SimulationEngine sim;
+        sim.init_test_world(60, 60, 42, 12 * 60 * 1000);
+        sim.set_player_score(0, 600);
+        sim.set_player_eggs(0, 2);
+
+        ASSERT_EQ(sim.get_player_eggs(0), 2u);
+        ASSERT_EQ(sim.get_player_score(0), 600);
+
+        // 1st Hatch: 600 -> 400 pts, 2 -> 1 eggs
+        bool h1 = sim.hatch_ant(0, AntType::Worker);
+        ASSERT_TRUE(h1);
+        ASSERT_EQ(sim.get_player_score(0), 400);
+        ASSERT_EQ(sim.get_player_eggs(0), 1u);
+
+        // 2nd Hatch: 400 -> 200 pts, 1 -> 0 eggs
+        bool h2 = sim.hatch_ant(0, AntType::Worker);
+        ASSERT_TRUE(h2);
+        ASSERT_EQ(sim.get_player_score(0), 200);
+        ASSERT_EQ(sim.get_player_eggs(0), 0u);
+
+        // 3rd Hatch: score is 200 (sufficient score), but 0 eggs available -> Must fail!
+        bool h3 = sim.hatch_ant(0, AntType::Worker);
+        ASSERT_FALSE(h3);
+        ASSERT_EQ(sim.get_player_score(0), 200);
+        ASSERT_EQ(sim.get_player_eggs(0), 0u);
+
+        // Even with huge score (e.g. 10,000 pts), 0 eggs strictly prohibits hatching
+        sim.set_player_score(0, 10000);
+        bool h4 = sim.hatch_ant(0, AntType::Worker);
+        ASSERT_FALSE(h4);
+        ASSERT_EQ(sim.get_player_score(0), 10000);
+        ASSERT_EQ(sim.get_player_eggs(0), 0u);
+    } TEST_END();
+
+    TEST_CASE("10.3 Hatch Incubation Delay, Hole Emergence & Idle Routing") {
+        SimulationEngine sim;
+        sim.init_test_world(60, 60, 42, 12 * 60 * 1000);
+        sim.grid_mut().set_anthill(0, TileCoord{10, 10});
+        sim.set_player_score(0, 500);
+        sim.set_player_eggs(0, 5);
+        sim.set_hatch_delay_ticks(20); // 20 ticks delay for testing
+
+        const auto* home = sim.grid().find_anthill(0);
+        ASSERT_TRUE(home != nullptr);
+        int32_t bx = home->x;
+        int32_t by = home->y;
+
+        bool hatched = sim.hatch_ant(0, AntType::Worker);
+        ASSERT_TRUE(hatched);
+
+        // Newborn spawned underground at the anthill hole (bx+1, by+1)
+        ASSERT_EQ(sim.get_pending_hatch_count(0), 1u);
+        const auto& ws0 = sim.get_world_state();
+        bool found_newborn = false;
+        uint32_t newborn_id = 0;
+        for (const auto& a : ws0.ants) {
+            if (a.player_id == 0 && a.is_underground) {
+                found_newborn = true;
+                newborn_id = a.id;
+                ASSERT_EQ(a.tile_x, bx + 1);
+                ASSERT_EQ(a.tile_y, by + 1);
+                break;
+            }
+        }
+        ASSERT_TRUE(found_newborn);
+
+        // Tick 10 ticks: still incubating underground
+        for (int i = 0; i < 10; ++i) sim.tick();
+        ASSERT_EQ(sim.get_pending_hatch_count(0), 1u);
+        const auto& u_inc = sim.get_unit(newborn_id);
+        ASSERT_TRUE(u_inc.underground);
+
+        // Tick 15 more ticks (total 25 ticks > 20 delay): emergence triggered
+        for (int i = 0; i < 15; ++i) sim.tick();
+        ASSERT_EQ(sim.get_pending_hatch_count(0), 0u);
+
+        // Advance simulation until ant completes emergence and walks to idle spot (bx+3, by+3)
+        for (int i = 0; i < 80; ++i) sim.tick();
+
+        const auto& u_final = sim.get_unit(newborn_id);
+        ASSERT_EQ(u_final.pos.x, bx + 3);
+        ASSERT_EQ(u_final.pos.y, by + 3);
+        ASSERT_EQ(u_final.state, UnitState::Idle);
+    } TEST_END();
+
+    TEST_CASE("10.4 Right-Click Special Abilities Autonomous Approach") {
+        SimulationEngine sim;
+        sim.init_test_world(60, 60, 100, 60000);
+        uint32_t bomber = sim.spawn_unit(0, AntType::Bomber, TileCoord{5, 5});
+
+        ViewportCamera camera;
+        camera.x = 0.0f; camera.y = 0.0f;
+        camera.world_x = 0; camera.world_y = 0;
+
+        HUD hud;
+        hud.init(0);
+
+        // 1. Bomber at (5, 5) orders bomb at distance (8, 5) -> pixel (8*32 + 16, 5*32 + 16) = (272, 176)
+        hud.select_ant(bomber);
+        int32_t bx = 272 + HUD::PLAYFIELD_X;
+        int32_t by = 176 + HUD::PLAYFIELD_Y;
+        hud.handle_mouse_down(bx, by, 3, sim, camera);
+
+        const auto& b_unit = sim.get_unit(bomber);
+        ASSERT_EQ(b_unit.pending_ability, OrderType::PlantBomb);
+        ASSERT_EQ(b_unit.ability_target.x, 8);
+        ASSERT_EQ(b_unit.ability_target.y, 5);
+
+        // Step simulation until Bomber arrives and plants bomb
+        for (int i = 0; i < 60; ++i) sim.tick();
+        ASSERT_TRUE(sim.has_bomb_at(TileCoord{8, 5}));
+
+        // 2. Swimmer at (6, 8). Set water at distance (10, 8). Right-click (10, 8) -> pixel (10*32 + 16, 8*32 + 16)
+        uint32_t swimmer2 = sim.spawn_unit(0, AntType::Swimmer, TileCoord{6, 8});
+        sim.set_terrain(10, 8, 2); // 2 = TERRAIN_WATER
+        hud.select_ant(swimmer2);
+        int32_t sx = (10 * 32 + 16) + HUD::PLAYFIELD_X;
+        int32_t sy = (8 * 32 + 16) + HUD::PLAYFIELD_Y;
+        hud.handle_mouse_down(sx, sy, 3, sim, camera);
+
+        const auto& s_unit = sim.get_unit(swimmer2);
+        ASSERT_EQ(s_unit.pending_ability, OrderType::BuildBridge);
+        ASSERT_EQ(s_unit.ability_target.x, 10);
+        ASSERT_EQ(s_unit.ability_target.y, 8);
+
+        for (int i = 0; i < 80; ++i) sim.tick();
+        ASSERT_TRUE(sim.has_bridge_at(TileCoord{10, 8}));
+
+        // 3. Swimmer right-clicking land tile -> standard Move order (no bridge built on land)
+        hud.select_ant(swimmer2);
+        int32_t mx = (6 * 32 + 16) + HUD::PLAYFIELD_X;
+        int32_t my = (6 * 32 + 16) + HUD::PLAYFIELD_Y;
+        hud.handle_mouse_down(mx, my, 3, sim, camera);
+        const auto& s_unit2 = sim.get_unit(swimmer2);
+        ASSERT_EQ(s_unit2.pending_ability, OrderType::None);
+        ASSERT_FALSE(sim.has_bridge_at(TileCoord{6, 6}));
+    } TEST_END();
+
+    TEST_CASE("10.5 Enemy Base Click & Team-Up Option") {
+        SimulationEngine sim;
+        sim.init_test_world(60, 60, 100, 60000);
+        sim.grid_mut().set_anthill(0, TileCoord{2, 2});
+        sim.grid_mut().set_anthill(1, TileCoord{8, 8});
+
+        ViewportCamera camera;
+        camera.x = 0.0f; camera.y = 0.0f;
+        camera.world_x = 0; camera.world_y = 0;
+
+        HUD hud;
+        hud.init(0); // local player is 0
+
+        const auto* enemy_base = sim.grid().find_anthill(1);
+        ASSERT_TRUE(enemy_base != nullptr);
+        int32_t ebx = enemy_base->x;
+        int32_t eby = enemy_base->y;
+
+        // Click on enemy base in world -> selects enemy base
+        int32_t cx = (ebx * 32 + 16) + HUD::PLAYFIELD_X;
+        int32_t cy = (eby * 32 + 16) + HUD::PLAYFIELD_Y;
+        hud.handle_mouse_down(cx, cy, 1, sim, camera);
+        hud.handle_mouse_up(cx, cy, 1, sim, camera);
+
+        ASSERT_EQ(hud.get_selected_base_team_id(), 1);
+
+        // Click Team Up button (Pedestal 1 at x=495, y=165)
+        hud.handle_mouse_down(495, 165, 1, sim, camera);
+        hud.handle_mouse_up(495, 165, 1, sim, camera);
+
+        // Check proposal registered
+        auto audio = sim.poll_audio_events();
+        bool has_pro_sound = false;
+        for (const auto& ev : audio) {
+            if (ev.sound_id == SoundID::AlliancePro) has_pro_sound = true;
+        }
+        ASSERT_TRUE(has_pro_sound);
+
+        // AI accepts after ~30 ticks (1.5s)
+        for (int i = 0; i < 35; ++i) sim.tick();
+        const auto& ws_allied = sim.get_world_state();
+        ASSERT_EQ(ws_allied.player_alliances[0], 1u);
+        ASSERT_EQ(ws_allied.player_alliances[1], 0u);
+
+        // Clicking Team Up again breaks alliance
+        hud.handle_mouse_down(495, 165, 1, sim, camera);
+        hud.handle_mouse_up(495, 165, 1, sim, camera);
+
+        auto audio_break = sim.poll_audio_events();
+        bool has_break_sound = false;
+        for (const auto& ev : audio_break) {
+            if (ev.sound_id == SoundID::AllianceBreak) has_break_sound = true;
+        }
+        ASSERT_TRUE(has_break_sound);
+        const auto& ws_broken = sim.get_world_state();
+        ASSERT_NE(ws_broken.player_alliances[0], 1u);
+    } TEST_END();
+}
+
+// ============================================================================
+// SUITE 11: Anthill Queuing & Priority Serialization
+// ============================================================================
+void run_suite_11_anthill_queuing_and_priority() {
+    TEST_SUITE("Suite 11: Anthill Queuing & Priority Serialization");
+
+    TEST_CASE("11.1 Base Queuing Location Strictly To The Left of Base") {
+        SimulationEngine sim;
+        sim.init_test_world(60, 60, 42, 12 * 60 * 1000);
+        sim.grid_mut().set_anthill(0, TileCoord{20, 20});
+        const auto* base = sim.grid().find_anthill(0);
+        ASSERT_TRUE(base != nullptr);
+        int32_t bx = base->x;
+        int32_t by = base->y;
+
+        // Slot coordinates strictly to the left of the base mound [bx..bx+3, by..by+3]
+        TileCoord s0 = sim.get_base_queue_slot(0, 0);
+        TileCoord s1 = sim.get_base_queue_slot(0, 1);
+        TileCoord s2 = sim.get_base_queue_slot(0, 2);
+        TileCoord s3 = sim.get_base_queue_slot(0, 3);
+        TileCoord s4 = sim.get_base_queue_slot(0, 4);
+
+        ASSERT_EQ(s0.x, bx - 1);
+        ASSERT_EQ(s0.y, by + 3);
+
+        ASSERT_EQ(s1.x, bx - 1);
+        ASSERT_EQ(s1.y, by + 2);
+
+        ASSERT_EQ(s2.x, bx - 1);
+        ASSERT_EQ(s2.y, by + 1);
+
+        ASSERT_EQ(s3.x, bx - 1);
+        ASSERT_EQ(s3.y, by);
+
+        ASSERT_EQ(s4.x, bx - 2);
+        ASSERT_EQ(s4.y, by + 3);
+
+        // First worker joining empty queue gets priority immediately and goes straight into base
+        uint32_t w1 = sim.spawn_unit(0, AntType::Worker, TileCoord{10, 10});
+        AntOrder ret1{};
+        ret1.ant_id = w1;
+        ret1.type = OrderType::ReturnToBase;
+        sim.issue_order(ret1);
+
+        ASSERT_TRUE(sim.is_ant_in_base_queue(w1));
+        ASSERT_EQ(sim.get_active_depositing_ant(0), w1);
+        const auto& unit1 = sim.get_unit(w1);
+        ASSERT_FALSE(unit1.waypoints.empty());
+        ASSERT_EQ(unit1.waypoints.back().x, bx + 1);
+        ASSERT_EQ(unit1.waypoints.back().y, by + 1);
+
+        // Second worker joining while w1 has priority routes to queue slot 1 (bx - 1, by + 2)
+        uint32_t w2 = sim.spawn_unit(0, AntType::Worker, TileCoord{10, 15});
+        AntOrder ret2{};
+        ret2.ant_id = w2;
+        ret2.type = OrderType::ReturnToBase;
+        sim.issue_order(ret2);
+
+        ASSERT_TRUE(sim.is_ant_in_base_queue(w2));
+        ASSERT_EQ(sim.get_active_depositing_ant(0), w1);
+        const auto& unit2 = sim.get_unit(w2);
+        ASSERT_FALSE(unit2.waypoints.empty());
+        ASSERT_EQ(unit2.waypoints.back().x, bx - 1);
+        ASSERT_EQ(unit2.waypoints.back().y, by + 2);
+    } TEST_END();
+
+    TEST_CASE("11.2 Serialized Base Entry & Priority Queue (Stand Off to Side & Wait)") {
+        SimulationEngine sim;
+        sim.init_test_world(60, 60, 42, 12 * 60 * 1000);
+        sim.grid_mut().set_anthill(0, TileCoord{20, 20});
+        const auto* base = sim.grid().find_anthill(0);
+        ASSERT_TRUE(base != nullptr);
+        int32_t bx = base->x;
+        int32_t by = base->y;
+
+        // Spawn 3 workers carrying food directly at queue slots 0, 1, 2
+        uint32_t a1 = sim.spawn_unit(0, AntType::Worker, TileCoord{bx - 1, by + 3});
+        uint32_t a2 = sim.spawn_unit(0, AntType::Worker, TileCoord{bx - 1, by + 2});
+        uint32_t a3 = sim.spawn_unit(0, AntType::Worker, TileCoord{bx - 1, by + 1});
+
+        sim.get_unit(a1).pick_up_food(1, 25);
+        sim.get_unit(a2).pick_up_food(1, 25);
+        sim.get_unit(a3).pick_up_food(1, 25);
+
+        // Join base queue in order 1, 2, 3
+        sim.join_base_queue(a1);
+        sim.join_base_queue(a2);
+        sim.join_base_queue(a3);
+
+        ASSERT_EQ(sim.get_base_queue_size(0), 3u);
+
+        // Step simulation 1 tick
+        sim.tick();
+
+        // Ant 1 is at head slot, granted priority to enter!
+        ASSERT_EQ(sim.get_active_depositing_ant(0), a1);
+        ASSERT_EQ(sim.get_unit(a1).state, UnitState::Walking);
+
+        // Ant 2 and Ant 3 must stand off to the side in QueuingBase, facing East towards the base!
+        ASSERT_EQ(sim.get_unit(a2).state, UnitState::QueuingBase);
+        ASSERT_EQ(sim.get_unit(a2).facing, Direction::East);
+        ASSERT_TRUE(sim.get_unit(a2).waypoints.empty());
+
+        ASSERT_EQ(sim.get_unit(a3).state, UnitState::QueuingBase);
+        ASSERT_EQ(sim.get_unit(a3).facing, Direction::East);
+        ASSERT_TRUE(sim.get_unit(a3).waypoints.empty());
+
+        // Step simulation until Ant 1 reaches hole and deposits food
+        for (int i = 0; i < 80 && sim.get_unit(a1).is_holding(); ++i) {
+            sim.tick();
+            // During Ant 1's journey, Ant 2 and Ant 3 must remain waiting
+            if (sim.get_unit(a1).is_holding()) {
+                ASSERT_EQ(sim.get_unit(a2).state, UnitState::QueuingBase);
+                ASSERT_EQ(sim.get_unit(a3).state, UnitState::QueuingBase);
+            }
+        }
+
+        // Ant 1 deposited food: score increased by 25, scoreup.wav (Sound 87) triggered
+        ASSERT_FALSE(sim.get_unit(a1).is_holding());
+        ASSERT_EQ(sim.get_player_score(0), 25);
+        ASSERT_TRUE(sim.has_audio_event(SoundID::BaseScoreUp));
+
+        // Advance 1 more tick: Ant 1 has deposited and popped. Now Ant 2 gets priority!
+        sim.tick();
+        ASSERT_EQ(sim.get_active_depositing_ant(0), a2);
+        ASSERT_EQ(sim.get_unit(a2).state, UnitState::Walking);
+
+        // Step simulation until Ant 2 reaches hole and deposits food
+        for (int i = 0; i < 80 && sim.get_unit(a2).is_holding(); ++i) {
+            sim.tick();
+            if (sim.get_unit(a2).is_holding()) {
+                // Ant 3 advanced to slot 1 or is waiting in QueuingBase
+                ASSERT_TRUE(sim.get_unit(a3).state == UnitState::Walking || sim.get_unit(a3).state == UnitState::QueuingBase);
+            }
+        }
+
+        // Ant 2 deposited food: score increased to 50
+        ASSERT_FALSE(sim.get_unit(a2).is_holding());
+        ASSERT_EQ(sim.get_player_score(0), 50);
+
+        // Advance 1 more tick: Ant 3 now gets priority!
+        sim.tick();
+        ASSERT_EQ(sim.get_active_depositing_ant(0), a3);
+        ASSERT_EQ(sim.get_unit(a3).state, UnitState::Walking);
+
+        // Step simulation until Ant 3 deposits food
+        for (int i = 0; i < 80 && sim.get_unit(a3).is_holding(); ++i) {
+            sim.tick();
+        }
+
+        // Ant 3 deposited food: total score 75
+        ASSERT_FALSE(sim.get_unit(a3).is_holding());
+        ASSERT_EQ(sim.get_player_score(0), 75);
+    } TEST_END();
+
+    TEST_CASE("11.3 Escape Key Quick Quit Menu Trigger") {
+        SimulationEngine sim;
+        sim.init_test_world(60, 60, 42, 60000);
+        ViewportCamera camera;
+        HUD hud;
+        hud.init(0);
+        uint32_t a1 = sim.spawn_unit(0, AntType::Worker, TileCoord{10, 10});
+        hud.select_ant(a1);
+        ASSERT_FALSE(hud.get_selected_ant_ids().empty());
+        ASSERT_FALSE(hud.is_quit_dialog_open());
+
+        // Press Escape key (27)
+        hud.handle_key_down(27, sim, camera);
+        ASSERT_TRUE(hud.is_quit_dialog_open());
+
+        // Press Escape key again toggles closed
+        hud.handle_key_down(27, sim, camera);
+        ASSERT_FALSE(hud.is_quit_dialog_open());
+    } TEST_END();
+
+    TEST_CASE("11.4 Base Queue Priority Across Map & Interruption Release") {
+        SimulationEngine sim;
+        sim.init_test_world(60, 60, 42, 12 * 60 * 1000);
+        sim.grid_mut().set_anthill(0, TileCoord{20, 20});
+        sim.grid_mut().set_anthill(1, TileCoord{40, 40});
+        const auto* base = sim.grid().find_anthill(0);
+        ASSERT_TRUE(base != nullptr);
+        int32_t bx = base->x;
+        int32_t by = base->y;
+
+        // Ant 1 on the far side of the map (10, 10) picks up food and joins queue
+        uint32_t a1 = sim.spawn_unit(0, AntType::Worker, TileCoord{10, 10});
+        sim.get_unit(a1).pick_up_food(1, 25);
+        sim.join_base_queue(a1);
+
+        // Ant 1 gets priority immediately and heads straight into the base entrance
+        ASSERT_EQ(sim.get_active_depositing_ant(0), a1);
+        ASSERT_EQ(sim.get_unit(a1).final_dest, (TileCoord{bx + 1, by + 1}));
+        ASSERT_FALSE(sim.get_unit(a1).waypoints.empty());
+        ASSERT_EQ(sim.get_unit(a1).waypoints.back(), (TileCoord{bx + 1, by + 1}));
+
+        // Ant 2 at (10, 15) joins while Ant 1 has priority: Ant 2 routes to queue slot
+        uint32_t a2 = sim.spawn_unit(0, AntType::Worker, TileCoord{10, 15});
+        sim.get_unit(a2).pick_up_food(1, 25);
+        sim.join_base_queue(a2);
+
+        ASSERT_EQ(sim.get_active_depositing_ant(0), a1);
+        ASSERT_EQ(sim.get_unit(a2).final_dest, sim.get_base_queue_slot(0, 1));
+
+        // Interruption Case 1: User moves Ant 1 to a different location
+        AntOrder move_cmd{};
+        move_cmd.ant_id = a1;
+        move_cmd.type = OrderType::Move;
+        move_cmd.target_x = 5;
+        move_cmd.target_y = 5;
+        sim.issue_order(move_cmd);
+
+        // Ant 1 releases priority and is no longer in base queue
+        ASSERT_FALSE(sim.is_ant_in_base_queue(a1));
+        ASSERT_NE(sim.get_active_depositing_ant(0), a1);
+
+        // Ant 2 immediately claims priority and heads straight into the base!
+        ASSERT_EQ(sim.get_active_depositing_ant(0), a2);
+        ASSERT_EQ(sim.get_unit(a2).final_dest, (TileCoord{bx + 1, by + 1}));
+        ASSERT_FALSE(sim.get_unit(a2).waypoints.empty());
+        ASSERT_EQ(sim.get_unit(a2).waypoints.back(), (TileCoord{bx + 1, by + 1}));
+
+        // Spawn Ant 3 at (10, 20) and join queue
+        uint32_t a3 = sim.spawn_unit(0, AntType::Worker, TileCoord{10, 20});
+        sim.get_unit(a3).pick_up_food(1, 25);
+        sim.join_base_queue(a3);
+
+        ASSERT_EQ(sim.get_active_depositing_ant(0), a2);
+        ASSERT_EQ(sim.get_unit(a3).final_dest, sim.get_base_queue_slot(0, 1));
+
+        // Interruption Case 2: Ant 2 gets attacked by enemy
+        uint32_t enemy = sim.spawn_unit(1, AntType::Combat, TileCoord{sim.get_unit(a2).pos.x + 1, sim.get_unit(a2).pos.y});
+        sim.execute_melee_attack(enemy, a2);
+
+        // Ant 2 releases priority
+        ASSERT_FALSE(sim.is_ant_in_base_queue(a2));
+        ASSERT_NE(sim.get_active_depositing_ant(0), a2);
+
+        // Ant 3 immediately claims priority and heads straight into the base!
+        ASSERT_EQ(sim.get_active_depositing_ant(0), a3);
+        ASSERT_EQ(sim.get_unit(a3).final_dest, (TileCoord{bx + 1, by + 1}));
+        ASSERT_FALSE(sim.get_unit(a3).waypoints.empty());
+        ASSERT_EQ(sim.get_unit(a3).waypoints.back(), (TileCoord{bx + 1, by + 1}));
+    } TEST_END();
+}
+
+// ============================================================================
+// Suite 12: Unit Selection & Occupied Tile Collision Handling
+// ============================================================================
+void run_suite_12_unit_selection_and_occupied_tile_movement() {
+    TEST_SUITE("Suite 12: Unit Selection & Occupied Tile Collision Handling");
+
+    TEST_CASE("12.1 Tile Click Unit Selection With Pre-Selected Unit") {
+        SimulationEngine sim;
+        sim.init_test_world(60, 60, 100, 60000);
+        uint32_t a1 = sim.spawn_unit(0, AntType::Worker, TileCoord{5, 5});
+        uint32_t a2 = sim.spawn_unit(0, AntType::Combat, TileCoord{8, 8});
+
+        ViewportCamera camera;
+        camera.x = 0.0f; camera.y = 0.0f;
+        camera.world_x = 0; camera.world_y = 0;
+
+        HUD hud;
+        hud.init(0);
+
+        // Pre-select a1
+        hud.select_ant(a1);
+        ASSERT_EQ(hud.get_selected_ant_id(), a1);
+
+        // Click within a2's tile (8, 8) -> center is pixel (8*32+16, 8*32+16) = (272, 272)
+        // Test an off-center click at (272 + 10, 272 - 12) = (282, 260)
+        int32_t click_x = 282 + HUD::PLAYFIELD_X;
+        int32_t click_y = 260 + HUD::PLAYFIELD_Y;
+
+        hud.handle_mouse_down(click_x, click_y, 1, sim, camera);
+        hud.handle_mouse_up(click_x, click_y, 1, sim, camera);
+
+        // a2 must be selected instead of moving a1 to a2's tile!
+        ASSERT_EQ(hud.get_selected_ant_id(), a2);
+        ASSERT_EQ(hud.get_selected_ant_ids().size(), 1u);
+        ASSERT_EQ(hud.get_selected_ant_ids()[0], a2);
+
+        // a1 must remain idle at its starting tile and not have been ordered to move
+        ASSERT_EQ(sim.get_unit(a1).pos, (TileCoord{5, 5}));
+        ASSERT_TRUE(sim.get_unit(a1).waypoints.empty());
+    } TEST_END();
+
+    TEST_CASE("12.2 Move Order to Occupied Friendly Tile (Stops Cleanly Without Bumping Loop)") {
+        SimulationEngine sim;
+        sim.init_test_world(60, 60, 100, 60000);
+
+        // Spawn stationary friendly ant at (15, 15)
+        uint32_t stat_id = sim.spawn_unit(0, AntType::Combat, TileCoord{15, 15});
+        auto& stat_ant = sim.get_unit(stat_id);
+        stat_ant.state = UnitState::Idle;
+
+        // Spawn moving friendly ant at (15, 12)
+        uint32_t mover_id = sim.spawn_unit(0, AntType::Worker, TileCoord{15, 12});
+
+        // Issue move order directly to the stationary ant's tile (15, 15)
+        sim.issue_move_order(mover_id, TileCoord{15, 15});
+
+        // Step simulation until mover ant arrives
+        for (int i = 0; i < 60; ++i) {
+            sim.tick();
+        }
+
+        const auto& mover = sim.get_unit(mover_id);
+
+        // Stationary ant stays at (15, 15) and was not pushed
+        ASSERT_EQ(stat_ant.pos.x, 15);
+        ASSERT_EQ(stat_ant.pos.y, 15);
+
+        // Mover ant stopped at an adjacent tile
+        int32_t dx = std::abs(mover.pos.x - 15);
+        int32_t dy = std::abs(mover.pos.y - 15);
+        ASSERT_TRUE(dx <= 1 && dy <= 1);
+        ASSERT_FALSE(mover.pos.x == 15 && mover.pos.y == 15);
+
+        // Mover ant is idle, not walking or struggling
+        ASSERT_EQ(mover.state, UnitState::Idle);
+        ASSERT_TRUE(mover.waypoints.empty());
+
+        // Audio queue must NOT contain FlingThumpA (Sound 64)
+        ASSERT_FALSE(sim.has_audio_event(SoundID::FlingThumpA));
+
+        // Step 30 more ticks: mover ant must remain stationary without bouncing
+        TileCoord mover_settled_pos = mover.pos;
+        for (int i = 0; i < 30; ++i) {
+            sim.tick();
+            ASSERT_EQ(sim.get_unit(mover_id).pos, mover_settled_pos);
+            ASSERT_FALSE(sim.has_audio_event(SoundID::FlingThumpA));
+        }
+    } TEST_END();
+
+    TEST_CASE("12.3 Already-Adjacent Move Order Stops Immediately") {
+        SimulationEngine sim;
+        sim.init_test_world(60, 60, 100, 60000);
+
+        // Spawn stationary ant at (20, 20)
+        uint32_t stat_id = sim.spawn_unit(0, AntType::Combat, TileCoord{20, 20});
+        auto& stat_ant = sim.get_unit(stat_id);
+        stat_ant.state = UnitState::Idle;
+
+        // Spawn friendly ant at adjacent tile (20, 21)
+        uint32_t adj_id = sim.spawn_unit(0, AntType::Worker, TileCoord{20, 21});
+        auto& adj_ant = sim.get_unit(adj_id);
+        adj_ant.state = UnitState::Idle;
+
+        // Ordering adj_ant to move to (20, 20) stops immediately since it is already adjacent
+        sim.issue_move_order(adj_id, TileCoord{20, 20});
+
+        ASSERT_EQ(adj_ant.state, UnitState::Idle);
+        ASSERT_TRUE(adj_ant.waypoints.empty());
+        ASSERT_EQ(adj_ant.pos, (TileCoord{20, 21}));
+        ASSERT_FALSE(sim.has_audio_event(SoundID::FlingThumpA));
+    } TEST_END();
+}
+
+// ============================================================================
 // Master Test Runner Main
 // ============================================================================
 int main() {
@@ -970,6 +1859,10 @@ int main() {
     run_suite_6_scorecard_and_audio_routing();
     run_suite_7_input_controls();
     run_suite_8_unit_health_and_map_select();
+    run_suite_9_gameplay_mechanics_and_options();
+    run_suite_10_egg_economy_incubation_teamup_abilities();
+    run_suite_11_anthill_queuing_and_priority();
+    run_suite_12_unit_selection_and_occupied_tile_movement();
 
     std::cout << "\n=======================================================\n"
               << " INTEGRATION TEST SUMMARY\n"

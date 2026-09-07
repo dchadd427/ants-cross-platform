@@ -15,13 +15,6 @@ const char* PLAYER_NAMES[4] = {
     "Black Team"
 };
 
-constexpr assets::ColorRGBA TEAM_COLORS[4] = {
-    {83, 147, 43, 255},   // 0: Green
-    {251, 51, 91, 255},   // 1: Red
-    {119, 175, 239, 255}, // 2: Blue
-    {79, 87, 111, 255}    // 3: Black
-};
-
 } // anonymous namespace
 
 ScorecardModal::ScorecardModal() = default;
@@ -29,7 +22,7 @@ ScorecardModal::ScorecardModal() = default;
 void ScorecardModal::show(const sim::MatchResult& result, uint8_t local_player_id) {
     is_active_ = true;
     local_player_id_ = local_player_id;
-    ok_pressed_ = false;
+    quit_hovered_ = false;
     quit_pressed_ = false;
 
     // Check if local player won
@@ -39,7 +32,11 @@ void ScorecardModal::show(const sim::MatchResult& result, uint8_t local_player_i
     // Find winner entry
     uint8_t winner_id = result.winning_players.empty() ? 0 : result.winning_players[0];
     winner_entry_.player_id = winner_id;
-    winner_entry_.name = std::string(PLAYER_NAMES[winner_id % 4]) + " (Winner)";
+    if (winner_id == local_player_id && !local_player_name_.empty()) {
+        winner_entry_.name = local_player_name_;
+    } else {
+        winner_entry_.name = std::string(PLAYER_NAMES[winner_id % 4]);
+    }
     winner_entry_.score = result.final_scores[winner_id % 4];
     winner_entry_.friendly_lost = result.stats[winner_id % 4].friendly_lost;
     winner_entry_.enemy_killed = result.stats[winner_id % 4].enemy_killed;
@@ -69,14 +66,7 @@ void ScorecardModal::show(const sim::MatchResult& result, uint8_t local_player_i
 bool ScorecardModal::handle_mouse_down(int32_t x, int32_t y) {
     if (!is_active_) return false;
 
-    // Test OK button
-    if (x >= OK_BTN_X && x < (OK_BTN_X + OK_BTN_W) &&
-        y >= OK_BTN_Y && y < (OK_BTN_Y + OK_BTN_H)) {
-        ok_pressed_ = true;
-        return true;
-    }
-
-    // Test Quit button
+    // Test Leave Game button
     if (x >= QUIT_BTN_X && x < (QUIT_BTN_X + QUIT_BTN_W) &&
         y >= QUIT_BTN_Y && y < (QUIT_BTN_Y + QUIT_BTN_H)) {
         quit_pressed_ = true;
@@ -88,15 +78,6 @@ bool ScorecardModal::handle_mouse_down(int32_t x, int32_t y) {
 
 bool ScorecardModal::handle_mouse_up(int32_t x, int32_t y) {
     if (!is_active_) return false;
-
-    if (ok_pressed_) {
-        ok_pressed_ = false;
-        if (x >= OK_BTN_X && x < (OK_BTN_X + OK_BTN_W) &&
-            y >= OK_BTN_Y && y < (OK_BTN_Y + OK_BTN_H)) {
-            if (on_replay_) on_replay_();
-            return true;
-        }
-    }
 
     if (quit_pressed_) {
         quit_pressed_ = false;
@@ -110,84 +91,80 @@ bool ScorecardModal::handle_mouse_up(int32_t x, int32_t y) {
     return true;
 }
 
-void ScorecardModal::render(IRenderer& renderer, const assets::AssetArchive&) {
+void ScorecardModal::handle_mouse_motion(int32_t x, int32_t y) {
+    if (!is_active_) return;
+    quit_hovered_ = (x >= QUIT_BTN_X && x < (QUIT_BTN_X + QUIT_BTN_W) &&
+                     y >= QUIT_BTN_Y && y < (QUIT_BTN_Y + QUIT_BTN_H));
+}
+
+void ScorecardModal::render(IRenderer& renderer, const assets::AssetArchive& assets) {
     if (!is_active_) return;
 
-    // 1. Full-screen tiled clay backdrop: dclay96.bmp (96x96)
-    for (int32_t y = 0; y < 480; y += 96) {
-        for (int32_t x = 0; x < 640; x += 96) {
-            renderer.draw_named_sprite("dclay96.bmp", x, y);
+    // 1. Authentic re_screen composite dialog (149 frame elements from Table 4 Animation 25)
+    // Rendered in reverse order to produce authentic 640x480 terracotta layout with frames,
+    // banners, headers, boxes, and column arrows.
+    const auto* anim = assets.find_animation("re_screen");
+    if (anim && !anim->subitems.empty()) {
+        const auto& frames = anim->subitems[0].frames;
+        for (size_t i = frames.size(); i-- > 0; ) {
+            const auto& fr = frames[i];
+            renderer.draw_sprite(fr.sprite_index, fr.dx, fr.dy);
+        }
+    } else {
+        renderer.fill_rect(0, 0, 640, 480, assets::ColorRGBA{219, 75, 19, 255});
+    }
+
+    // 2. Top-Right "Leave Game" button at (525, 12)
+    const char* leave_spr = quit_pressed_ ? "bleave3.bmp" : (quit_hovered_ ? "bleave2.bmp" : "bleave1.bmp");
+    renderer.draw_named_sprite(leave_spr, QUIT_BTN_X, QUIT_BTN_Y);
+
+    // 3. Winner Row (Inside Winner Box at y=222..275)
+    int32_t wy = 243;
+    // Tinted ant portrait: agst301.bmp at (54, 233)
+    renderer.set_hud_team(winner_entry_.player_id);
+    renderer.draw_named_sprite("agst301.bmp", 54, 233);
+    renderer.set_hud_team(0);
+
+    // Winner Name
+    renderer.draw_text(winner_entry_.name, 90, wy, {255, 255, 255, 255});
+
+    // 4 Columns aligned with column arrow tips
+    auto draw_centered_num = [&](int32_t val, int32_t col_x) {
+        std::string s = std::to_string(val);
+        int32_t tx = col_x - (static_cast<int32_t>(s.size()) * 6) / 2;
+        renderer.draw_text(s, tx, wy, {255, 255, 255, 255});
+    };
+
+    draw_centered_num(winner_entry_.score, COL_SCORE_X);
+    draw_centered_num(static_cast<int32_t>(winner_entry_.friendly_lost), COL_LOST_X);
+    draw_centered_num(static_cast<int32_t>(winner_entry_.enemy_killed), COL_KILLED_X);
+    draw_centered_num(static_cast<int32_t>(winner_entry_.new_hatched), COL_HATCHED_X);
+
+    // 4. Other Players Section (Inside other box at y=310..463)
+    // Only rendered if other human players are present (multiplayer)
+    if (!other_entries_.empty() && !local_player_name_.empty()) {
+        int32_t py = 320;
+        for (const auto& pe : other_entries_) {
+            if (pe.score == 0 && pe.friendly_lost == 0 && pe.enemy_killed == 0 && pe.new_hatched == 0) {
+                continue;
+            }
+            renderer.set_hud_team(pe.player_id);
+            renderer.draw_named_sprite("agst301.bmp", 54, py - 4);
+            renderer.set_hud_team(0);
+            renderer.draw_text(pe.name, 90, py + 4, {220, 220, 220, 255});
+
+            std::string ps_score = std::to_string(pe.score);
+            renderer.draw_text(ps_score, COL_SCORE_X - (static_cast<int32_t>(ps_score.size()) * 6) / 2, py + 4, {220, 220, 220, 255});
+            std::string ps_lost = std::to_string(pe.friendly_lost);
+            renderer.draw_text(ps_lost, COL_LOST_X - (static_cast<int32_t>(ps_lost.size()) * 6) / 2, py + 4, {200, 200, 200, 255});
+            std::string ps_killed = std::to_string(pe.enemy_killed);
+            renderer.draw_text(ps_killed, COL_KILLED_X - (static_cast<int32_t>(ps_killed.size()) * 6) / 2, py + 4, {200, 200, 200, 255});
+            std::string ps_hatched = std::to_string(pe.new_hatched);
+            renderer.draw_text(ps_hatched, COL_HATCHED_X - (static_cast<int32_t>(ps_hatched.size()) * 6) / 2, py + 4, {200, 200, 200, 255});
+
+            py += 35;
         }
     }
-
-    // 2. Beveled Outer Frame Border Trim
-    for (int32_t x = 0; x < 640; x += 96) {
-        renderer.draw_named_sprite("dfram296.bmp", x, 0);   // top
-        renderer.draw_named_sprite("dfram796.bmp", x, 464); // bottom
-    }
-    for (int32_t y = 0; y < 480; y += 96) {
-        renderer.draw_named_sprite("dfram496.bmp", 0, y);   // left
-        renderer.draw_named_sprite("dfram596.bmp", 624, y); // right
-    }
-
-    // 3. Top Banner Header: resbanr.bmp (340x34) at (140, 0)
-    renderer.draw_named_sprite("resbanr.bmp", BANNER_X, BANNER_Y);
-
-    // 4. Title Art: yoscore.bmp (302x127) at (41, 55)
-    renderer.draw_named_sprite("yoscore.bmp", TITLE_X, TITLE_Y);
-
-    // 5. Stats Header: newstats.bmp (259x133) at (342, 84)
-    renderer.draw_named_sprite("newstats.bmp", STATS_X, STATS_Y);
-
-    // 6. Winner Section
-    renderer.draw_named_sprite("winnr.bmp", WINNER_HDR_X, WINNER_HDR_Y); // (117x19)
-
-    // Winner Box: bg50x100.bmp tiled across 558x50 at (40, 222)
-    for (int32_t bx = WINNER_BOX_X; bx < (WINNER_BOX_X + WINNER_BOX_W); bx += 100) {
-        renderer.draw_named_sprite("bg50x100.bmp", bx, WINNER_BOX_Y);
-    }
-
-    // Winner Row Data
-    int32_t wy = WINNER_BOX_Y + 16;
-    renderer.fill_rect(WINNER_BOX_X + 16, wy + 2, 10, 10, TEAM_COLORS[winner_entry_.player_id % 4]);
-    renderer.draw_text(winner_entry_.name, WINNER_BOX_X + 34, wy + 2, {255, 255, 255, 255});
-
-    // 4 Columns aligned with newstats.bmp arrow tips
-    renderer.draw_text(std::to_string(winner_entry_.score), COL_SCORE_X, wy, {255, 215, 0, 255});
-    renderer.draw_text(std::to_string(winner_entry_.friendly_lost), COL_LOST_X, wy, {255, 255, 255, 255});
-    renderer.draw_text(std::to_string(winner_entry_.enemy_killed), COL_KILLED_X, wy, {255, 255, 255, 255});
-    renderer.draw_text(std::to_string(winner_entry_.new_hatched), COL_HATCHED_X, wy, {255, 255, 255, 255});
-
-    // 7. Other Players Section
-    renderer.draw_named_sprite("otherp.bmp", OTHER_HDR_X, OTHER_HDR_Y); // (203x25)
-
-    // Other Players Box: efrbg100.bmp tiled across 558x130 at (40, 310)
-    for (int32_t oy = OTHER_BOX_Y; oy < (OTHER_BOX_Y + OTHER_BOX_H); oy += 100) {
-        for (int32_t ox = OTHER_BOX_X; ox < (OTHER_BOX_X + OTHER_BOX_W); ox += 100) {
-            renderer.draw_named_sprite("efrbg100.bmp", ox, oy);
-        }
-    }
-
-    // Other Player Rows
-    int32_t py = OTHER_BOX_Y + 12;
-    for (const auto& pe : other_entries_) {
-        renderer.fill_rect(OTHER_BOX_X + 16, py + 2, 8, 8, TEAM_COLORS[pe.player_id % 4]);
-        renderer.draw_text(pe.name, OTHER_BOX_X + 34, py + 2, {220, 220, 220, 255});
-
-        renderer.draw_text(std::to_string(pe.score), COL_SCORE_X, py, {255, 255, 255, 255});
-        renderer.draw_text(std::to_string(pe.friendly_lost), COL_LOST_X, py, {200, 200, 200, 255});
-        renderer.draw_text(std::to_string(pe.enemy_killed), COL_KILLED_X, py, {200, 200, 200, 255});
-        renderer.draw_text(std::to_string(pe.new_hatched), COL_HATCHED_X, py, {200, 200, 200, 255});
-
-        py += 35;
-    }
-
-    // 8. Action Buttons
-    // OK Button: dbutoku.bmp (46x20)
-    renderer.draw_named_sprite("dbutoku.bmp", OK_BTN_X, OK_BTN_Y);
-
-    // Quit / Return Button: breturn1.bmp (98x26)
-    renderer.draw_named_sprite("breturn1.bmp", QUIT_BTN_X, QUIT_BTN_Y);
 }
 
 } // namespace ants::app

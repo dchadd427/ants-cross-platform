@@ -80,6 +80,8 @@ public:
     void set_tile_grid_visible(bool visible) noexcept { show_tile_grid_ = visible; }
     void toggle_tile_grid_visibility() noexcept { show_tile_grid_ = !show_tile_grid_; }
 
+    float get_current_fps() const noexcept { return current_fps_; }
+
     AppState state() const noexcept { return state_; }
     void set_state(AppState st) noexcept { state_ = st; }
     bool start_game(const std::string& map_path);
@@ -95,13 +97,18 @@ public:
     MidiPlayer& midi_player() noexcept { return midi_player_; }
     const ants::assets::AssetArchive& assets() const noexcept { return assets_; }
 
-private:
-    void handle_events();
     void handle_key_down(const SDL_KeyboardEvent& key);
     void handle_mouse_motion(const SDL_MouseMotionEvent& motion);
     void handle_mouse_button(const SDL_MouseButtonEvent& button);
-
+    void handle_camera_panning(float dt = 0.020f);
     void update_simulation(float dt);
+
+    int32_t mouse_screen_x() const noexcept { return mouse_screen_x_; }
+    int32_t mouse_screen_y() const noexcept { return mouse_screen_y_; }
+    bool mouse_has_moved() const noexcept { return mouse_has_moved_; }
+
+private:
+    void handle_events();
     void render_frame();
 
     ApplicationConfig config_{};
@@ -125,12 +132,14 @@ private:
     MidiPlayer midi_player_;
 
     uint8_t local_player_id_{0};
-    int32_t mouse_screen_x_{0};
-    int32_t mouse_screen_y_{0};
+    int32_t mouse_screen_x_{320};
+    int32_t mouse_screen_y_{240};
+    bool mouse_has_moved_{false};
 
     // 20 Hz Discrete Simulation Timing
     uint64_t last_tick_time_{0};
     float tick_accumulator_{0.0f};
+    float current_fps_{60.0f};
 };
 
 } // namespace ants::app

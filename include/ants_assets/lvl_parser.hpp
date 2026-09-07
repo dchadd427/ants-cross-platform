@@ -122,7 +122,9 @@ public:
     uint16_t ambient_flag{0};                 // Block 3
     uint16_t ambient_tile_or_sound{LVL_EMPTY_TILE}; // Block 3
     std::vector<Waypoint> waypoints;          // Block 4
-    uint16_t boundary_param{0};               // f_last (final parameter before EOF)
+    uint16_t boundary_param{0};               // f_last (final parameter before EOF: per-player egg stock)
+
+    constexpr uint16_t initial_eggs() const noexcept { return boundary_param; }
 
     LevelData() {
         layer1_terrain.parent = this;

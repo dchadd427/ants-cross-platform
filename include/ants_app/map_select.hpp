@@ -160,6 +160,8 @@ public:
         player_ready_mask_ ^= (1u << player_idx);
     }
 
+    void set_player_name(std::string name) { player_name_ = std::move(name); }
+
 private:
     void trigger_start();
     void trigger_quit();
@@ -183,8 +185,9 @@ private:
     bool btn_down_pressed_{false};
     bool btn_drop_pressed_{false};
 
-    bool fog_of_war_{true};
+    bool fog_of_war_{false};
     uint8_t player_ready_mask_{0b0011}; // Player 0 & 1 ready, Player 2 unready (matching reference)
+    std::string player_name_{};
 
     uint32_t connection_ticks_{0};
     std::function<void(const std::string& map_path)> on_start_{nullptr};
