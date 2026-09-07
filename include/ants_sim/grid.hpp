@@ -104,10 +104,13 @@ struct TileCell {
     uint8_t  interactive_owner{255};         // Player ID owner of bomb/structure (0..3, or 255)
     uint32_t timer_ticks{0};                 // Active ticks remaining for firewall / bridge (180s)
     uint32_t lunchbox_points{0};             // Points carried if lunchbox
+    bool     is_food{false};                 // True only if genuine food item
 
     int32_t  occupant_ant_id{-1};            // Ant occupying this cell (-1 = none)
 
-    constexpr bool is_empty_overlay() const noexcept { return interactive_id == TILE_EMPTY; }
+    constexpr bool is_empty_overlay() const noexcept {
+        return interactive_id == TILE_EMPTY || interactive_id == 0xFFFF || interactive_id == 0x7FFE;
+    }
     constexpr bool has_fire() const noexcept { return interactive_id == TILE_FIREWALL; }
     constexpr bool has_completed_bridge() const noexcept { return interactive_id == TILE_BRIDGE4; }
     constexpr bool has_partial_bridge() const noexcept {
@@ -117,7 +120,7 @@ struct TileCell {
         return interactive_id >= BOMB_BLACK && interactive_id <= BOMB_GREEN;
     }
     constexpr bool has_food() const noexcept {
-        return !is_empty_overlay() && !has_fire() && !has_completed_bridge() &&
+        return is_food && !is_empty_overlay() && !has_fire() && !has_completed_bridge() &&
                !has_partial_bridge() && !has_bomb() && !has_lunchbox();
     }
     constexpr bool has_lunchbox() const noexcept { return interactive_id == TILE_LUNCHBOX; }
@@ -132,7 +135,7 @@ struct TileCell {
     /**
      * @brief Passability check for pathfinding and locomotion.
      */
-    constexpr bool is_passable(bool is_swimmer, bool is_fire_ant) const noexcept {
+    constexpr bool is_passable(bool is_swimmer = false, bool is_fire_ant = false) const noexcept {
         if (terrain_type == TERRAIN_OBSTACLE) return false;
 
         if (terrain_type == TERRAIN_WATER) {
@@ -212,6 +215,18 @@ public:
                 cell.interactive_id = c2.tile_index;
                 cell.interactive_owner = 255;
                 cell.timer_ticks = 0;
+                cell.is_food = false;
+
+                if (c2.tile_index != TILE_EMPTY && c2.tile_index != 0xFFFF && c2.tile_index != 0x7FFE) {
+                    const std::string& tname = level.get_tile_name(c2.tile_index);
+                    if (!tname.empty()) {
+                        std::string lower_name = tname;
+                        for (char& ch : lower_name) ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+                        if (lower_name.rfind("fd", 0) == 0 || lower_name.rfind("food", 0) == 0) {
+                            cell.is_food = true;
+                        }
+                    }
+                }
             }
         }
 

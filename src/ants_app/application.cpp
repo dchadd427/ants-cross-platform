@@ -25,6 +25,10 @@ bool Application::init(int argc, char* argv[]) {
             cfg.random_seed = static_cast<uint32_t>(std::stoul(argv[++i]));
         } else if (std::strcmp(argv[i], "--fullscreen") == 0) {
             cfg.fullscreen = true;
+        } else if (std::strcmp(argv[i], "--screenshot") == 0 && i + 1 < argc) {
+            cfg.screenshot_path = argv[++i];
+        } else if (std::strcmp(argv[i], "--frames") == 0 && i + 1 < argc) {
+            cfg.screenshot_frames = std::stoi(argv[++i]);
         }
     }
     return init(cfg);
@@ -116,6 +120,10 @@ bool Application::init(const ApplicationConfig& config) {
         return_to_map_select();
     });
 
+    hud_.set_on_quit([this]() {
+        return_to_map_select();
+    });
+
     // 9. Initialize Map Selection Screen
     map_select_.init("Original-Ants/Maps");
     map_select_.set_on_start([this](const std::string& map_path) {
@@ -194,6 +202,9 @@ bool Application::start_game(const std::string& map_path) {
 void Application::return_to_map_select() {
     state_ = AppState::MapSelect;
     scorecard_.hide();
+    hud_.close_quit_dialog();
+    hud_.close_quick_help();
+    hud_.close_options();
     midi_player_.play(true); // Resumes INTRO.MID during map selection
 }
 
@@ -214,9 +225,17 @@ int Application::run() {
             update_simulation(delta_time);
         }
 
+        if (!config_.screenshot_path.empty()) {
+            if (--config_.screenshot_frames == 1) {
+                renderer_->request_screenshot(config_.screenshot_path);
+            } else if (config_.screenshot_frames <= 0) {
+                is_running_ = false;
+            }
+        }
+
         render_frame();
 
-        if (config_.headless) {
+        if (config_.headless && config_.screenshot_path.empty()) {
             if (++headless_frame_count >= 10) {
                 is_running_ = false;
             }
@@ -286,23 +305,22 @@ void Application::handle_events() {
         if (keystate[SDL_SCANCODE_RIGHT]) pan_x += 1.0f;
 
         // Edge Pan Scrolling (Command & Conquer / League of Legends style)
-        if (window_) {
-            int win_w = 0, win_h = 0;
-            SDL_GetWindowSize(window_, &win_w, &win_h);
-            constexpr int EDGE_MARGIN = 24; // 24px border zone
+        // Uses logical canvas coordinate space (640x480)
+        constexpr int LOGICAL_W = 640;
+        constexpr int LOGICAL_H = 480;
+        constexpr int EDGE_MARGIN = 24; // 24px border zone
 
-            if (mouse_screen_x_ >= 0 && mouse_screen_x_ < win_w &&
-                mouse_screen_y_ >= 0 && mouse_screen_y_ < win_h) {
-                if (mouse_screen_x_ <= EDGE_MARGIN) {
-                    pan_x -= 1.0f;
-                } else if (mouse_screen_x_ >= win_w - EDGE_MARGIN) {
-                    pan_x += 1.0f;
-                }
-                if (mouse_screen_y_ <= EDGE_MARGIN) {
-                    pan_y -= 1.0f;
-                } else if (mouse_screen_y_ >= win_h - EDGE_MARGIN) {
-                    pan_y += 1.0f;
-                }
+        if (mouse_screen_x_ >= 0 && mouse_screen_x_ < LOGICAL_W &&
+            mouse_screen_y_ >= 0 && mouse_screen_y_ < LOGICAL_H) {
+            if (mouse_screen_x_ <= EDGE_MARGIN) {
+                pan_x -= 1.0f;
+            } else if (mouse_screen_x_ >= LOGICAL_W - EDGE_MARGIN) {
+                pan_x += 1.0f;
+            }
+            if (mouse_screen_y_ <= EDGE_MARGIN) {
+                pan_y -= 1.0f;
+            } else if (mouse_screen_y_ >= LOGICAL_H - EDGE_MARGIN) {
+                pan_y += 1.0f;
             }
         }
 
@@ -330,6 +348,12 @@ void Application::handle_key_down(const SDL_KeyboardEvent& key) {
     if (key.keysym.sym == SDLK_l) {
         show_unit_health_ = !show_unit_health_;
         hud_.queue_news_message(show_unit_health_ ? "Unit Health Display: ON" : "Unit Health Display: OFF", 60, false);
+        return;
+    }
+
+    if (key.keysym.sym == SDLK_F12) {
+        renderer_->save_screenshot("screenshot.png");
+        hud_.queue_news_message("Screenshot saved to screenshot.png", 60, false);
         return;
     }
 

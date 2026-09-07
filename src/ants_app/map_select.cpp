@@ -5,6 +5,17 @@
 
 namespace ants::app {
 
+namespace {
+
+constexpr assets::ColorRGBA TEAM_COLORS[4] = {
+    {79, 87, 111, 255},   // 0: Black
+    {119, 175, 239, 255}, // 1: Blue
+    {251, 51, 91, 255},   // 2: Red
+    {83, 147, 43, 255}    // 3: Green
+};
+
+} // anonymous namespace
+
 MapSelectScreen::MapSelectScreen() = default;
 
 void MapSelectScreen::init(const std::string& maps_dir) {
@@ -41,16 +52,21 @@ void MapSelectScreen::init(const std::string& maps_dir) {
     }
 
     selected_index_ = 0;
-    hovered_index_ = -1;
+    connection_ticks_ = 0;
+    btn_start_hovered_ = false;
+    btn_quit_hovered_ = false;
+    btn_up_hovered_ = false;
+    btn_down_hovered_ = false;
+    btn_start_pressed_ = false;
+    btn_quit_pressed_ = false;
+    btn_up_pressed_ = false;
+    btn_down_pressed_ = false;
 }
 
 void MapSelectScreen::set_selected_index(int32_t idx) noexcept {
     if (maps_.empty()) return;
-    if (idx < 0) idx = 0;
-    if (idx >= static_cast<int32_t>(maps_.size())) {
-        idx = static_cast<int32_t>(maps_.size()) - 1;
-    }
-    selected_index_ = idx;
+    int32_t count = static_cast<int32_t>(maps_.size());
+    selected_index_ = ((idx % count) + count) % count;
 }
 
 const std::string& MapSelectScreen::get_selected_map_path() const {
@@ -78,59 +94,65 @@ void MapSelectScreen::handle_mouse_motion(int32_t screen_x, int32_t screen_y) {
     mouse_x_ = screen_x;
     mouse_y_ = screen_y;
 
-    hovered_index_ = -1;
-    for (size_t i = 0; i < maps_.size(); ++i) {
-        int32_t cy = CARD_Y + static_cast<int32_t>(i) * (CARD_H + CARD_SPACING);
-        if (screen_x >= CARD_X && screen_x <= CARD_X + CARD_W &&
-            screen_y >= cy && screen_y <= cy + CARD_H) {
-            hovered_index_ = static_cast<int32_t>(i);
-            break;
-        }
-    }
+    btn_up_hovered_ = (screen_x >= BTN_UP_X && screen_x < BTN_UP_X + BTN_UP_W &&
+                       screen_y >= BTN_UP_Y && screen_y < BTN_UP_Y + BTN_UP_H);
 
-    btn_start_hovered_ = (screen_x >= BTN_START_X && screen_x <= BTN_START_X + BTN_START_W &&
-                          screen_y >= BTN_START_Y && screen_y <= BTN_START_Y + BTN_START_H);
+    btn_down_hovered_ = (screen_x >= BTN_DOWN_X && screen_x < BTN_DOWN_X + BTN_DOWN_W &&
+                         screen_y >= BTN_DOWN_Y && screen_y < BTN_DOWN_Y + BTN_DOWN_H);
 
-    btn_quit_hovered_ = (screen_x >= BTN_QUIT_X && screen_x <= BTN_QUIT_X + BTN_QUIT_W &&
-                         screen_y >= BTN_QUIT_Y && screen_y <= BTN_QUIT_Y + BTN_QUIT_H);
+    btn_start_hovered_ = (screen_x >= BTN_START_X && screen_x < BTN_START_X + BTN_START_W &&
+                          screen_y >= BTN_START_Y && screen_y < BTN_START_Y + BTN_START_H);
+
+    btn_quit_hovered_ = (screen_x >= BTN_QUIT_X && screen_x < BTN_QUIT_X + BTN_QUIT_W &&
+                         screen_y >= BTN_QUIT_Y && screen_y < BTN_QUIT_Y + BTN_QUIT_H);
 }
 
 void MapSelectScreen::handle_mouse_down(int32_t screen_x, int32_t screen_y, uint8_t button) {
     if (button != SDL_BUTTON_LEFT) return;
 
-    uint32_t now = SDL_GetTicks();
+    // Up Arrow Button
+    if (screen_x >= BTN_UP_X && screen_x < BTN_UP_X + BTN_UP_W &&
+        screen_y >= BTN_UP_Y && screen_y < BTN_UP_Y + BTN_UP_H) {
+        btn_up_pressed_ = true;
+        set_selected_index(selected_index_ - 1);
+        return;
+    }
 
-    // Check Map Cards
+    // Down Arrow Button
+    if (screen_x >= BTN_DOWN_X && screen_x < BTN_DOWN_X + BTN_DOWN_W &&
+        screen_y >= BTN_DOWN_Y && screen_y < BTN_DOWN_Y + BTN_DOWN_H) {
+        btn_down_pressed_ = true;
+        set_selected_index(selected_index_ + 1);
+        return;
+    }
+
+    // Check Map Card / Slot clicks
     for (size_t i = 0; i < maps_.size(); ++i) {
         int32_t cy = CARD_Y + static_cast<int32_t>(i) * (CARD_H + CARD_SPACING);
         if (screen_x >= CARD_X && screen_x <= CARD_X + CARD_W &&
             screen_y >= cy && screen_y <= cy + CARD_H) {
-            
-            // Detect double-click within 400ms on the same item
-            if (last_click_card_ == static_cast<int32_t>(i) && (now - last_click_timestamp_ < 400)) {
-                selected_index_ = static_cast<int32_t>(i);
-                trigger_start();
-                return;
-            }
-
-            selected_index_ = static_cast<int32_t>(i);
-            last_click_card_ = static_cast<int32_t>(i);
-            last_click_timestamp_ = now;
+            set_selected_index(static_cast<int32_t>(i));
             return;
         }
     }
 
-    // Check Start Button
-    if (screen_x >= BTN_START_X && screen_x <= BTN_START_X + BTN_START_W &&
-        screen_y >= BTN_START_Y && screen_y <= BTN_START_Y + BTN_START_H) {
+    // Clicking on w_map box directly advances map
+    if (screen_x >= 45 && screen_x < 240 && screen_y >= 86 && screen_y < 125) {
+        set_selected_index(selected_index_ + 1);
+        return;
+    }
+
+    // Start Button
+    if (screen_x >= BTN_START_X && screen_x < BTN_START_X + BTN_START_W &&
+        screen_y >= BTN_START_Y && screen_y < BTN_START_Y + BTN_START_H) {
         btn_start_pressed_ = true;
         trigger_start();
         return;
     }
 
-    // Check Quit Button
-    if (screen_x >= BTN_QUIT_X && screen_x <= BTN_QUIT_X + BTN_QUIT_W &&
-        screen_y >= BTN_QUIT_Y && screen_y <= BTN_QUIT_Y + BTN_QUIT_H) {
+    // Leave Game Button
+    if (screen_x >= BTN_QUIT_X && screen_x < BTN_QUIT_X + BTN_QUIT_W &&
+        screen_y >= BTN_QUIT_Y && screen_y < BTN_QUIT_Y + BTN_QUIT_H) {
         btn_quit_pressed_ = true;
         trigger_quit();
         return;
@@ -139,6 +161,8 @@ void MapSelectScreen::handle_mouse_down(int32_t screen_x, int32_t screen_y, uint
 
 void MapSelectScreen::handle_mouse_up(int32_t, int32_t, uint8_t button) {
     if (button == SDL_BUTTON_LEFT) {
+        btn_up_pressed_ = false;
+        btn_down_pressed_ = false;
         btn_start_pressed_ = false;
         btn_quit_pressed_ = false;
     }
@@ -147,15 +171,12 @@ void MapSelectScreen::handle_mouse_up(int32_t, int32_t, uint8_t button) {
 void MapSelectScreen::handle_key_down(SDL_Keycode key) {
     if (maps_.empty()) return;
 
-    if (key == SDLK_UP) {
-        selected_index_ = (selected_index_ + static_cast<int32_t>(maps_.size()) - 1) % static_cast<int32_t>(maps_.size());
-    } else if (key == SDLK_DOWN) {
-        selected_index_ = (selected_index_ + 1) % static_cast<int32_t>(maps_.size());
+    if (key == SDLK_UP || key == SDLK_LEFT) {
+        set_selected_index(selected_index_ - 1);
+    } else if (key == SDLK_DOWN || key == SDLK_RIGHT) {
+        set_selected_index(selected_index_ + 1);
     } else if (key >= SDLK_1 && key <= SDLK_6) {
-        int idx = key - SDLK_1;
-        if (idx < static_cast<int32_t>(maps_.size())) {
-            selected_index_ = idx;
-        }
+        set_selected_index(key - SDLK_1);
     } else if (key == SDLK_RETURN || key == SDLK_KP_ENTER || key == SDLK_SPACE) {
         trigger_start();
     } else if (key == SDLK_ESCAPE) {
@@ -163,110 +184,122 @@ void MapSelectScreen::handle_key_down(SDL_Keycode key) {
     }
 }
 
-void MapSelectScreen::render(IRenderer& renderer, const ants::assets::AssetArchive& archive) {
+void MapSelectScreen::render(IRenderer& renderer, const ants::assets::AssetArchive&) {
     using ants::assets::ColorRGBA;
 
-    // 1. Clear Virtual Canvas Background (Dark Navy)
-    renderer.fill_rect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT, ColorRGBA{16, 20, 30, 255});
+    connection_ticks_++;
 
-    // 2. Top Header Banner
-    renderer.fill_rect(0, 0, CANVAS_WIDTH, 56, ColorRGBA{24, 30, 44, 255});
-    renderer.fill_rect(0, 56, CANVAS_WIDTH, 2, ColorRGBA{210, 175, 55, 255}); // Gold divider
+    // 1. Classic Windows 95 Setup Dialog Background (Authentic CHD palette index 173)
+    renderer.fill_rect(0, 0, 640, 480, ColorRGBA{219, 75, 19, 255});
 
-    // Banner Text
-    renderer.draw_text("MICROSOFT ANTS", CARD_X, 14, ColorRGBA{245, 215, 80, 255});
-    renderer.draw_text("SELECT BATTLEFIELD & MAP CONFIGURATION", CARD_X, 32, ColorRGBA{170, 185, 210, 255});
+    // Outer subtle 3D border
+    renderer.draw_rect(0, 0, 640, 480, ColorRGBA{160, 50, 10, 255});
+    renderer.draw_rect(2, 2, 636, 476, ColorRGBA{240, 125, 60, 255});
+    renderer.draw_rect(4, 4, 632, 472, ColorRGBA{180, 55, 12, 255});
 
-    // Audio status badge
-    renderer.fill_rect(445, 14, 170, 28, ColorRGBA{20, 40, 28, 255});
-    renderer.draw_rect(445, 14, 170, 28, ColorRGBA{60, 160, 90, 255});
-    renderer.draw_text("INTRO MUSIC ACTIVE", 456, 23, ColorRGBA{90, 230, 130, 255});
+    // 2. Authentic Header Banner: hostbanr.bmp at (149, 12)
+    renderer.draw_named_sprite("hostbanr.bmp", BANNER_X, BANNER_Y);
 
-    // 3. Render Map Cards
-    for (size_t i = 0; i < maps_.size(); ++i) {
-        const auto& map = maps_[i];
-        int32_t cy = CARD_Y + static_cast<int32_t>(i) * (CARD_H + CARD_SPACING);
+    // 3. Left Column: Map Selection
+    // Header: pickmap.bmp at (45, 60)
+    renderer.draw_named_sprite("pickmap.bmp", 45, 60);
 
-        bool is_sel = (static_cast<int32_t>(i) == selected_index_);
-        bool is_hov = (static_cast<int32_t>(i) == hovered_index_);
+    // Map Name Box: w_map.bmp at (45, 86)
+    renderer.draw_named_sprite("w_map.bmp", 45, 86);
 
-        ColorRGBA bg_col = is_sel ? ColorRGBA{36, 52, 78, 255}
-                                  : (is_hov ? ColorRGBA{28, 38, 56, 255}
-                                            : ColorRGBA{22, 28, 40, 255});
-
-        ColorRGBA border_col = is_sel ? ColorRGBA{240, 210, 50, 255}
-                                      : (is_hov ? ColorRGBA{100, 140, 200, 255}
-                                                : ColorRGBA{45, 55, 75, 255});
-
-        renderer.fill_rect(CARD_X, cy, CARD_W, CARD_H, bg_col);
-        renderer.draw_rect(CARD_X, cy, CARD_W, CARD_H, border_col);
-
-        // Indicator tag
-        if (is_sel) {
-            renderer.fill_rect(CARD_X + 2, cy + 2, 4, CARD_H - 4, ColorRGBA{240, 210, 50, 255});
-        }
-
-        // Line 1: [1] MAPNAME.LVL - Title
-        std::string title_line = "[" + std::to_string(i + 1) + "] " + map.filename + "  -  " + map.display_name;
-        ColorRGBA title_col = is_sel ? ColorRGBA{255, 240, 130, 255} : ColorRGBA{230, 235, 245, 255};
-        renderer.draw_text(title_line, CARD_X + 16, cy + 8, title_col);
-
-        // Line 2: Grid & Description
-        std::string desc_line = "Grid: " + std::to_string(map.width) + "x" + std::to_string(map.height) +
-                                " | " + std::to_string(map.anthills_count) + " Bases | " + map.description;
-        renderer.draw_text(desc_line, CARD_X + 24, cy + 26, ColorRGBA{130, 175, 215, 255});
-    }
-
-    // 4. Right Preview Panel
-    renderer.fill_rect(PREVIEW_X, PREVIEW_Y, PREVIEW_W, PREVIEW_H, ColorRGBA{22, 28, 40, 255});
-    renderer.draw_rect(PREVIEW_X, PREVIEW_Y, PREVIEW_W, PREVIEW_H, ColorRGBA{55, 70, 95, 255});
-
-    renderer.draw_text("MAP PREVIEW", PREVIEW_X + 38, PREVIEW_Y + 10, ColorRGBA{210, 220, 240, 255});
-
-    // Draw authentic pickmap.bmp artwork if available
-    int32_t pick_sid = archive.find_sprite_id("pickmap.bmp");
-    if (pick_sid >= 0) {
-        renderer.draw_sprite(static_cast<uint32_t>(pick_sid), PREVIEW_X + 7, PREVIEW_Y + 28);
-    } else {
-        renderer.fill_rect(PREVIEW_X + 12, PREVIEW_Y + 28, 140, 120, ColorRGBA{14, 18, 26, 255});
-        renderer.draw_text("NO PREVIEW", PREVIEW_X + 38, PREVIEW_Y + 80, ColorRGBA{100, 120, 150, 255});
-    }
-
-    // Map summary below preview image
+    // Current Map Name inside w_map.bmp
     if (selected_index_ >= 0 && selected_index_ < static_cast<int32_t>(maps_.size())) {
         const auto& cur = maps_[static_cast<size_t>(selected_index_)];
-        renderer.draw_text(cur.filename, PREVIEW_X + 14, PREVIEW_Y + 185, ColorRGBA{255, 220, 90, 255});
-        
-        std::string dim_str = "Size: " + std::to_string(cur.width) + " x " + std::to_string(cur.height);
-        renderer.draw_text(dim_str, PREVIEW_X + 14, PREVIEW_Y + 205, ColorRGBA{180, 200, 225, 255});
-
-        std::string base_str = "Spawns: " + std::to_string(cur.anthills_count) + " Anthills";
-        renderer.draw_text(base_str, PREVIEW_X + 14, PREVIEW_Y + 225, ColorRGBA{180, 200, 225, 255});
-
-        renderer.draw_text("Rules: Standard", PREVIEW_X + 14, PREVIEW_Y + 245, ColorRGBA{120, 210, 160, 255});
+        renderer.draw_text(cur.display_name, 56, 99, ColorRGBA{255, 255, 255, 255});
     }
 
-    // 5. Action Buttons
-    // Start Button
-    ColorRGBA start_bg = btn_start_pressed_ ? ColorRGBA{25, 80, 35, 255}
-                                            : (btn_start_hovered_ ? ColorRGBA{50, 155, 65, 255}
-                                                                  : ColorRGBA{38, 120, 50, 255});
-    renderer.fill_rect(BTN_START_X, BTN_START_Y, BTN_START_W, BTN_START_H, start_bg);
-    renderer.draw_rect(BTN_START_X, BTN_START_Y, BTN_START_W, BTN_START_H, ColorRGBA{100, 230, 120, 255});
-    renderer.draw_text("START GAME  [ENTER]", BTN_START_X + 12, BTN_START_Y + 14, ColorRGBA{255, 255, 255, 255});
+    // Up/Down Arrow Buttons next to w_map.bmp
+    const char* up_spr = btn_up_pressed_ ? "up3.bmp" : (btn_up_hovered_ ? "up2.bmp" : "up1.bmp");
+    const char* dn_spr = btn_down_pressed_ ? "down3.bmp" : (btn_down_hovered_ ? "down2.bmp" : "down1.bmp");
+    renderer.draw_named_sprite(up_spr, BTN_UP_X, BTN_UP_Y);
+    renderer.draw_named_sprite(dn_spr, BTN_DOWN_X, BTN_DOWN_Y);
 
-    // Quit Button
-    ColorRGBA quit_bg = btn_quit_pressed_ ? ColorRGBA{75, 25, 25, 255}
-                                          : (btn_quit_hovered_ ? ColorRGBA{130, 42, 42, 255}
-                                                               : ColorRGBA{95, 32, 32, 255});
-    renderer.fill_rect(BTN_QUIT_X, BTN_QUIT_Y, BTN_QUIT_W, BTN_QUIT_H, quit_bg);
-    renderer.draw_rect(BTN_QUIT_X, BTN_QUIT_Y, BTN_QUIT_W, BTN_QUIT_H, ColorRGBA{200, 75, 75, 255});
-    renderer.draw_text("QUIT GAME    [ESC]", BTN_QUIT_X + 16, BTN_QUIT_Y + 12, ColorRGBA{235, 220, 220, 255});
+    // Map Info: mapinfo.bmp at (45, 140)
+    renderer.draw_named_sprite("mapinfo.bmp", 45, 140);
 
-    // 6. Footer Navigation Bar
-    renderer.fill_rect(0, 442, CANVAS_WIDTH, 1, ColorRGBA{50, 60, 80, 255});
-    renderer.draw_text("[1-6 / UP / DOWN] Select Map      [ENTER] Launch Match      [ESC] Quit Game",
-                       CARD_X, 455, ColorRGBA{130, 165, 195, 255});
+    // Map Details Box (Sunken black bevel box matching w_map style)
+    renderer.fill_rect(45, 168, 246, 95, ColorRGBA{0, 0, 0, 255});
+    renderer.draw_rect(45, 168, 246, 95, ColorRGBA{35, 71, 47, 255});
+    renderer.draw_rect(46, 169, 244, 93, ColorRGBA{11, 27, 19, 255});
+
+    if (selected_index_ >= 0 && selected_index_ < static_cast<int32_t>(maps_.size())) {
+        const auto& cur = maps_[static_cast<size_t>(selected_index_)];
+        renderer.draw_text(cur.filename, 56, 178, ColorRGBA{255, 220, 90, 255});
+        std::string dim_str = "Size: " + std::to_string(cur.width) + " x " + std::to_string(cur.height) + " Grid";
+        renderer.draw_text(dim_str, 56, 198, ColorRGBA{200, 225, 245, 255});
+        std::string spawn_str = "Spawns: " + std::to_string(cur.anthills_count) + " Anthills";
+        renderer.draw_text(spawn_str, 56, 218, ColorRGBA{200, 225, 245, 255});
+        renderer.draw_text(cur.description, 56, 238, ColorRGBA{140, 215, 160, 255});
+    }
+
+    // Fog of War: fowar.bmp at (45, 280) and fowno.bmp at (195, 276)
+    renderer.draw_named_sprite("fowar.bmp", 45, 280);
+    renderer.draw_named_sprite("fowno.bmp", 195, 276);
+
+    // 4. Right Column: Player Roster & Status
+    // Header: playstat.bmp at (360, 60)
+    renderer.draw_named_sprite("playstat.bmp", 360, 60);
+
+    // Roster panel box (Sunken black bevel box matching w_map style)
+    renderer.fill_rect(360, 90, 235, 173, ColorRGBA{0, 0, 0, 255});
+    renderer.draw_rect(360, 90, 235, 173, ColorRGBA{35, 71, 47, 255});
+    renderer.draw_rect(361, 91, 233, 171, ColorRGBA{11, 27, 19, 255});
+
+    // 4 Player Slots
+    struct PlayerSlot {
+        const char* name;
+        const char* role;
+        uint8_t team;
+    };
+    static const PlayerSlot slots[4] = {
+        { "Black Ant", "Host (Player 1)", 0 },
+        { "Blue Ant",  "Computer (AI)",   1 },
+        { "Red Ant",   "Computer (AI)",   2 },
+        { "Green Ant", "Computer (AI)",   3 }
+    };
+
+    for (size_t i = 0; i < 4; ++i) {
+        int32_t sy = 98 + static_cast<int32_t>(i) * 40;
+        // Team color marker
+        renderer.fill_rect(372, sy + 2, 10, 10, TEAM_COLORS[slots[i].team]);
+        renderer.draw_rect(372, sy + 2, 10, 10, ColorRGBA{255, 255, 255, 200});
+
+        // Line 1: Name & READY
+        renderer.draw_text(slots[i].name, 390, sy, ColorRGBA{240, 240, 250, 255});
+        renderer.draw_text("READY", 535, sy, ColorRGBA{90, 230, 130, 255});
+
+        // Line 2: Role (indented below name)
+        renderer.draw_text(slots[i].role, 390, sy + 15, ColorRGBA{160, 185, 215, 255});
+    }
+
+    // 5. Center Status Bar: statline.bmp at (164, 335)
+    renderer.draw_named_sprite("statline.bmp", 164, 335);
+
+    // Connection progression text
+    std::string stat_msg;
+    if (connection_ticks_ < 30) {
+        stat_msg = "Finding game...";
+    } else if (connection_ticks_ < 70) {
+        stat_msg = "Network communication initialized.";
+    } else {
+        stat_msg = "All players ready. Press START to launch!";
+    }
+    renderer.draw_text(stat_msg, 182, 348, ColorRGBA{255, 240, 150, 255});
+
+    // 6. Action Buttons: START! & Leave Game
+    const char* start_spr = btn_start_pressed_ ? "bstart3.bmp" : (btn_start_hovered_ ? "bstart2.bmp" : "bstart1.bmp");
+    const char* leave_spr = btn_quit_pressed_ ? "bleave3.bmp" : (btn_quit_hovered_ ? "bleave2.bmp" : "bleave1.bmp");
+    renderer.draw_named_sprite(start_spr, BTN_START_X, BTN_START_Y);
+    renderer.draw_named_sprite(leave_spr, BTN_QUIT_X, BTN_QUIT_Y);
+
+    // 7. Footer Instructions
+    renderer.draw_text("[UP / DOWN / CLICK] Select Map      [ENTER / START] Launch Match      [ESC / LEAVE] Quit",
+                       50, 452, ColorRGBA{255, 255, 255, 230});
 }
 
 } // namespace ants::app

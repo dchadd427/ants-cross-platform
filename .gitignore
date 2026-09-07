@@ -31,3 +31,9 @@ cmake-build-*/
 # Temporary logs & crash reports
 *.log
 *.tmp
+*.bmp
+*.png
+
+# Test artifacts and temporary captures
+tests/temp/
+tests/artifacts/

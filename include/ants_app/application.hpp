@@ -45,6 +45,8 @@ struct ApplicationConfig {
     std::string midi_path{"Original-Ants/INTRO.MID"};
     uint32_t random_seed{1337};
     bool start_in_map_select{true};
+    std::string screenshot_path{""};
+    int screenshot_frames{5};
 };
 
 /**
