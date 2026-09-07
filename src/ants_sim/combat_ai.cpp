@@ -162,6 +162,7 @@ void CombatAIController::update_intercepting(const std::vector<AntUnit*>& all_un
     int32_t step_dx = (target->pos.x > owner_.pos.x) ? 1 : ((target->pos.x < owner_.pos.x) ? -1 : 0);
     int32_t step_dy = (target->pos.y > owner_.pos.y) ? 1 : ((target->pos.y < owner_.pos.y) ? -1 : 0);
 
+    TileCoord prev_pos = owner_.pos;
     TileCoord next_pos{owner_.pos.x + step_dx, owner_.pos.y + step_dy};
     if (grid.in_bounds(next_pos) && !grid.is_solid_obstacle(next_pos.x, next_pos.y)) {
         owner_.set_tile_pos(next_pos.x, next_pos.y);
@@ -171,6 +172,12 @@ void CombatAIController::update_intercepting(const std::vector<AntUnit*>& all_un
     } else if (step_dy != 0 && grid.in_bounds(TileCoord{owner_.pos.x, owner_.pos.y + step_dy}) &&
                !grid.is_solid_obstacle(owner_.pos.x, owner_.pos.y + step_dy)) {
         owner_.set_tile_pos(owner_.pos.x, owner_.pos.y + step_dy);
+    }
+
+    if (owner_.pos != prev_pos) {
+        owner_.facing = ants::assets::vector_to_direction(owner_.pos.x - prev_pos.x, owner_.pos.y - prev_pos.y);
+        owner_.anim_tick++;
+        owner_.anim_subitem = (owner_.anim_tick / 3);
     }
 
     if (owner_.pos.chebyshev_dist(target->pos) <= 1) {
@@ -243,6 +250,7 @@ void CombatAIController::update_returning(const Grid& grid) {
     int32_t step_dx = (anchor_tx_ > owner_.pos.x) ? 1 : ((anchor_tx_ < owner_.pos.x) ? -1 : 0);
     int32_t step_dy = (anchor_ty_ > owner_.pos.y) ? 1 : ((anchor_ty_ < owner_.pos.y) ? -1 : 0);
 
+    TileCoord prev_pos = owner_.pos;
     TileCoord next_pos{owner_.pos.x + step_dx, owner_.pos.y + step_dy};
     if (grid.in_bounds(next_pos) && !grid.is_solid_obstacle(next_pos.x, next_pos.y)) {
         owner_.set_tile_pos(next_pos.x, next_pos.y);
@@ -252,6 +260,12 @@ void CombatAIController::update_returning(const Grid& grid) {
     } else if (step_dy != 0 && grid.in_bounds(TileCoord{owner_.pos.x, owner_.pos.y + step_dy}) &&
                !grid.is_solid_obstacle(owner_.pos.x, owner_.pos.y + step_dy)) {
         owner_.set_tile_pos(owner_.pos.x, owner_.pos.y + step_dy);
+    }
+
+    if (owner_.pos != prev_pos) {
+        owner_.facing = ants::assets::vector_to_direction(owner_.pos.x - prev_pos.x, owner_.pos.y - prev_pos.y);
+        owner_.anim_tick++;
+        owner_.anim_subitem = (owner_.anim_tick / 3);
     }
 
     if (owner_.pos.x == anchor_tx_ && owner_.pos.y == anchor_ty_) {

@@ -13,10 +13,10 @@ namespace {
 
 // Authentic Team color RGB palettes
 constexpr assets::ColorRGBA TEAM_COLORS[4] = {
-    {79, 87, 111, 255},   // 0: Black
-    {119, 175, 239, 255}, // 1: Blue
-    {251, 51, 91, 255},   // 2: Red
-    {83, 147, 43, 255}    // 3: Green
+    {83, 147, 43, 255},   // 0: Green
+    {251, 51, 91, 255},   // 1: Red
+    {119, 175, 239, 255}, // 2: Blue
+    {79, 87, 111, 255}    // 3: Black
 };
 
 const char* ANT_TYPE_NAMES[] = {
@@ -223,6 +223,15 @@ void HUD::render(IRenderer& renderer, const assets::AssetArchive& assets,
                  const sim::WorldState& world, const ViewportCamera& camera) {
     renderer.set_hud_team(local_player_id_);
 
+    // Base backing fill to ensure zero gaps between modular HUD tiles
+    static const assets::ColorRGBA hud_bg_colors[4] = {
+        {43, 107, 95, 255},  // Green (Player 0)
+        {115, 35, 35, 255},  // Red (Player 1)
+        {35, 65, 115, 255},  // Blue (Player 2)
+        {48, 48, 52, 255}    // Black (Player 3)
+    };
+    renderer.fill_rect(480, 22, 160, 458, hud_bg_colors[local_player_id_ % 4]);
+
     // 1. Playfield Frame Borders
     renderer.draw_named_sprite("x0y22.bmp", 0, 22);
     renderer.draw_named_sprite("x458y35.bmp", 458, 35);
@@ -291,8 +300,8 @@ void HUD::render(IRenderer& renderer, const assets::AssetArchive& assets,
         renderer.draw_named_sprite("lunchicon.bmp", 598, 133);
     }
 
-    // Recessed status box wstatus.bmp (143x14) at (488, 240)
-    renderer.draw_named_sprite("wstatus.bmp", 488, 240);
+    // Recessed status box wstatus.bmp (143x14) at (480, 253)
+    renderer.draw_named_sprite("wstatus.bmp", 480, 253);
     std::string status_text = "Ready.";
     if (sel_ant) {
         if (sel_ant->is_drowning) status_text = "Drowning!";
@@ -304,7 +313,7 @@ void HUD::render(IRenderer& renderer, const assets::AssetArchive& assets,
     } else if (selected_base_team_id_ >= 0) {
         status_text = (selected_base_team_id_ == local_player_id_) ? "Home Colony." : "Colony Base.";
     }
-    renderer.draw_text(status_text, 494, 243, {175, 110, 215, 255});
+    renderer.draw_text(status_text, 486, 256, {175, 110, 215, 255});
 
     // 2.3 Chat Section:
     // Cursive embossed Chat header at (480, 266)
@@ -499,8 +508,8 @@ void HUD::render_selection_card(IRenderer& renderer, const assets::AssetArchive&
     if (!sel) {
         if (selected_base_team_id_ >= 0) {
             // Anthill Base Selection Card
-            static const char* hill_sprites[4] = { "bkhill_s.bmp", "blhill_s.bmp", "rhill_s.bmp", "GHILL_s.bmp" };
-            static const char* hill_names[4] = { "Black Anthill", "Blue Anthill", "Red Anthill", "Green Anthill" };
+            static const char* hill_sprites[4] = { "GHILL_s.bmp", "rhill_s.bmp", "blhill_s.bmp", "bkhill_s.bmp" };
+            static const char* hill_names[4] = { "Green Anthill", "Red Anthill", "Blue Anthill", "Black Anthill" };
             uint8_t tid = static_cast<uint8_t>(selected_base_team_id_ % 4);
 
             renderer.draw_named_sprite("wtype.bmp", 488, 130);
@@ -717,7 +726,7 @@ void HUD::render_options_dialog(IRenderer& renderer, const assets::AssetArchive&
     const auto* anim = assets.find_animation("op_screen");
     if (anim && !anim->subitems.empty()) {
         const auto& frames = anim->subitems[0].frames;
-        for (int i = static_cast<int>(frames.size()) - 1; i >= 0; --i) {
+        for (size_t i = frames.size(); i-- > 0; ) {
             const auto& fr = frames[i];
             renderer.draw_sprite(fr.sprite_index, fr.dx, fr.dy);
         }
@@ -1523,7 +1532,8 @@ void HUD::dispatch_move_order(int32_t target_tile_x, int32_t target_tile_y, sim:
     std::vector<std::pair<int32_t, int32_t>> slots;
     slots.reserve(targets.size());
 
-    if (grid.in_bounds(target_tile_x, target_tile_y) && grid.get_cell(target_tile_x, target_tile_y).is_passable()) {
+    if (grid.in_bounds(target_tile_x, target_tile_y) &&
+        grid.get_cell(static_cast<uint32_t>(target_tile_x), static_cast<uint32_t>(target_tile_y)).is_passable()) {
         slots.push_back({target_tile_x, target_tile_y});
     }
 
@@ -1533,7 +1543,8 @@ void HUD::dispatch_move_order(int32_t target_tile_x, int32_t target_tile_y, sim:
                 if (std::max(std::abs(dx), std::abs(dy)) != r) continue;
                 int32_t nx = target_tile_x + dx;
                 int32_t ny = target_tile_y + dy;
-                if (grid.in_bounds(nx, ny) && grid.get_cell(nx, ny).is_passable()) {
+                if (grid.in_bounds(nx, ny) &&
+                    grid.get_cell(static_cast<uint32_t>(nx), static_cast<uint32_t>(ny)).is_passable()) {
                     slots.push_back({nx, ny});
                 }
             }

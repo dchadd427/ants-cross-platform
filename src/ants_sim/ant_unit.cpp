@@ -175,7 +175,7 @@ void AntUnit::tick_timers() noexcept {
     }
 
     // Continuous idle standing animation cycle
-    if (state == UnitState::Idle || state == UnitState::GuardIdle) {
+    if (state == UnitState::Idle || state == UnitState::GuardIdle || state == UnitState::QueuingBase) {
         anim_tick++;
         anim_subitem = (anim_tick / 4);
     }

@@ -251,15 +251,15 @@ void run_suite_3_hud_and_radar() {
 
     TEST_CASE("3.2 Radar Team Color Fidelity") {
         // Authentic team palette definitions:
-        // Black: RGB(79, 87, 111)
-        // Blue: RGB(119, 175, 239)
-        // Red: RGB(251, 51, 91)
-        // Green: RGB(83, 147, 43)
+        // Team 0 (Green): RGB(83, 147, 43)
+        // Team 1 (Red):   RGB(251, 51, 91)
+        // Team 2 (Blue):  RGB(119, 175, 239)
+        // Team 3 (Black): RGB(79, 87, 111)
         uint32_t team_colors[4] = {
-            0xFF6F574F, // Team 0 (Black)
-            0xFFEFAF77, // Team 1 (Blue)
-            0xFF5B33FB, // Team 2 (Red)
-            0xFF2B9353  // Team 3 (Green)
+            0xFF2B9353, // Team 0 (Green)
+            0xFF5B33FB, // Team 1 (Red)
+            0xFFEFAF77, // Team 2 (Blue)
+            0xFF6F574F  // Team 3 (Black)
         };
 
         ASSERT_NE(team_colors[0], team_colors[1]);

@@ -205,6 +205,7 @@ public:
         for (auto& cell : cells_) {
             cell.flags = FLAG_CAN_PLACE_BOMB | FLAG_CAN_PLACE_FIRE;
             cell.terrain_type = TERRAIN_WALKABLE;
+            cell.surface_type = SurfaceType::Gravel;
         }
         anthills_.clear();
         food_schedules_.clear();
@@ -233,23 +234,25 @@ public:
                 cell.lunchbox_points = 0;
                 cell.is_mud = false;
                 cell.surface_type = SurfaceType::Grass;
-                if (cell.terrain_type == TERRAIN_WALKABLE) {
-                    const std::string& l1_name = level.get_tile_name(c1.tile_index);
-                    if (!l1_name.empty()) {
-                        char ch = static_cast<char>(std::tolower(static_cast<unsigned char>(l1_name[0])));
-                        if (ch == 's') {
-                            cell.surface_type = SurfaceType::Slate;
-                        } else if (ch == 'd') {
-                            cell.surface_type = SurfaceType::Gravel;
-                        } else if (ch == 'm') {
-                            cell.surface_type = SurfaceType::Mud;
-                            cell.is_mud = true;
-                        } else {
-                            cell.surface_type = SurfaceType::Grass;
-                        }
+
+                const std::string& l1_name = level.get_tile_name(c1.tile_index);
+                if (!l1_name.empty() && l1_name != ".") {
+                    char ch = static_cast<char>(std::tolower(static_cast<unsigned char>(l1_name[0])));
+                    if (ch == 'w') {
+                        cell.terrain_type = TERRAIN_WATER;
+                        cell.surface_type = SurfaceType::Water;
+                    } else if (cell.terrain_type == TERRAIN_OBSTACLE) {
+                        cell.surface_type = SurfaceType::Grass;
+                    } else if (ch == 's') {
+                        cell.surface_type = SurfaceType::Slate;
+                    } else if (ch == 'd') {
+                        cell.surface_type = SurfaceType::Gravel;
+                    } else if (ch == 'm') {
+                        cell.surface_type = SurfaceType::Mud;
+                        cell.is_mud = true;
+                    } else {
+                        cell.surface_type = SurfaceType::Grass;
                     }
-                } else if (cell.terrain_type == TERRAIN_WATER) {
-                    cell.surface_type = SurfaceType::Water;
                 }
             }
         }
@@ -282,10 +285,17 @@ public:
                             else if (lower_name == "pu_swim") cell.powerup_type = 5; // Swimmer
                             else if (lower_name == "pu_mason" || lower_name == "pu_fire") cell.powerup_type = 2; // Fire
                         } else if (lower_name.find("hill") != std::string::npos || lower_name.find("start") != std::string::npos) {
+                            cell.terrain_type = TERRAIN_WALKABLE;
+                            cell.is_obstacle_overlay = false;
+                        } else if (lower_name.find("bridge") != std::string::npos ||
+                                   (c2.tile_index >= TILE_BRIDGE1 && c2.tile_index <= TILE_BRIDGE4)) {
                             cell.is_obstacle_overlay = false;
                         } else {
+                            // Solid obstacle overlay: rocks, cans, pencils, grass clusters (grass1..4, grassbig*, grassmed*), toys, flowers, etc.
                             cell.is_obstacle_overlay = true;
                         }
+                    } else {
+                        cell.is_obstacle_overlay = true;
                     }
                 }
             }
@@ -324,7 +334,8 @@ public:
 
     bool is_solid_obstacle(int32_t x, int32_t y) const noexcept {
         if (!in_bounds(x, y)) return true;
-        return get_cell(static_cast<uint32_t>(x), static_cast<uint32_t>(y)).terrain_type == TERRAIN_OBSTACLE;
+        const auto& cell = get_cell(static_cast<uint32_t>(x), static_cast<uint32_t>(y));
+        return cell.terrain_type == TERRAIN_OBSTACLE || cell.is_obstacle_overlay || cell.terrain_type == TERRAIN_WATER;
     }
 
     const TileCell& get_cell(uint32_t x, uint32_t y) const noexcept {
