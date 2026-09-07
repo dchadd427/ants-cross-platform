@@ -74,11 +74,11 @@ void HUD::init(uint8_t local_player_id) {
     show_quick_help_ = false;
     show_options_ = false;
 
-    // Configure Hatch Button at (490, 275)
-    hatch_button_.x = 490;
-    hatch_button_.y = 275;
-    hatch_button_.w = 110;
-    hatch_button_.h = 32;
+    // Configure Hatch Button matching Primary Pedestal at (488, 140, 53, 86)
+    hatch_button_.x = 488;
+    hatch_button_.y = 140;
+    hatch_button_.w = 53;
+    hatch_button_.h = 86;
     hatch_button_.sprite_up = 2683;    // buthatup.bmp
     hatch_button_.sprite_down = 2684;  // buthatd.bmp
     hatch_button_.sprite_label = 2682; // labhatch.bmp
@@ -256,25 +256,37 @@ void HUD::render(IRenderer& renderer, const assets::AssetArchive& assets,
     }
 
     if (selected_base_team_id_ >= 0) {
-        // Anthill Base Selection Card
-        static const char* hill_sprites[4] = { "GHILL_s.bmp", "rhill_s.bmp", "blhill_s.bmp", "bkhill_s.bmp" };
-        static const char* hill_names[4] = { "Green Anthill", "Red Anthill", "Blue Anthill", "Black Anthill" };
-        uint8_t tid = static_cast<uint8_t>(selected_base_team_id_ % 4);
+        if (selected_base_team_id_ == local_player_id_) {
+            // Authentic Home Anthill Hatch Interface (Replaces unit action buttons)
+            bool hatch_down = hatch_button_.is_pressed;
+            renderer.draw_named_sprite(hatch_down ? "butdown.bmp" : "butup.bmp", 488, 155);
+            renderer.draw_named_sprite(hatch_down ? "buthatd.bmp" : "buthatup.bmp", 503, hatch_down ? 166 : 164);
+            renderer.draw_named_sprite("labhatch.bmp", 497, 140);
 
-        renderer.draw_named_sprite("wtype.bmp", 488, 130);
-        renderer.draw_text(hill_names[tid], 505, 133, TEAM_COLORS[tid]);
+            // 3x3 Egg Grid in middle slot (authentic egg tray)
+            uint32_t eggs = (local_player_id_ < world.player_eggs.size()) ? world.player_eggs[local_player_id_] : 0;
+            for (uint32_t i = 0; i < std::min(eggs, 9u); ++i) {
+                int32_t ex = 553 + static_cast<int32_t>(i % 3) * 14;
+                int32_t ey = 164 + static_cast<int32_t>(i / 3) * 18;
+                renderer.draw_named_sprite("egg.bmp", ex, ey);
+            }
 
-        // Anthill Portrait
-        renderer.draw_named_sprite(hill_sprites[tid], 530, 145);
+            // Authentic Stop Button on right
+            renderer.draw_named_sprite("labcan.bmp", 603, 176);
+            renderer.draw_named_sprite(stop_button_.is_pressed ? "butcand.bmp" : "butcanu.bmp", 602, 192);
 
-        // Eggs & Score status
-        uint32_t eggs = (tid < world.player_eggs.size()) ? world.player_eggs[tid] : 0;
-        int32_t score = (tid < world.player_scores.size()) ? world.player_scores[tid] : 0;
-
-        renderer.draw_named_sprite("wstatus.bmp", 488, 206);
-        std::string base_status = (tid == local_player_id_) ? "Home Colony" : "Colony Base";
-        renderer.draw_text(base_status, 510, 209, {255, 255, 255, 255});
-        renderer.draw_text("Eggs: " + std::to_string(eggs) + "  Food: " + std::to_string(score), 496, 192, {255, 215, 0, 255});
+            // Recessed status box wstatus.bmp (143x14) at (480, 253)
+            renderer.draw_named_sprite("wstatus.bmp", 480, 253);
+            // Empty status box matching authentic appearance
+        } else {
+            // Enemy Base Selection Card
+            static const char* hill_names[4] = { "Green Anthill", "Red Anthill", "Blue Anthill", "Black Anthill" };
+            uint8_t tid = static_cast<uint8_t>(selected_base_team_id_ % 4);
+            renderer.draw_named_sprite("wtype.bmp", 488, 130);
+            renderer.draw_text(hill_names[tid], 505, 133, TEAM_COLORS[tid]);
+            renderer.draw_named_sprite("wstatus.bmp", 480, 253);
+            renderer.draw_text("Enemy Colony", 486, 256, {255, 100, 100, 255});
+        }
     } else {
         // Pedestal 1: Move (Always present)
         bool ped1_down = move_pedestal_button_.is_pressed || (active_order_mode_ == sim::OrderType::Move);
@@ -335,38 +347,34 @@ void HUD::render(IRenderer& renderer, const assets::AssetArchive& assets,
         renderer.draw_text(status_text, 486, 256, {175, 110, 215, 255});
     }
 
-    // 2.3 Lower Panel: Hatch Panel (if local anthill selected) or Chat Section
-    if (selected_base_team_id_ == local_player_id_) {
-        render_hatch_panel(renderer, assets, world);
-    } else {
-        // Cursive embossed Chat header at (480, 266)
-        renderer.draw_named_sprite("x480y266.bmp", 480, 266);
+    // 2.3 Lower Panel: Always render Chat Section
+    // Cursive embossed Chat header at (480, 266)
+    renderer.draw_named_sprite("x480y266.bmp", 480, 266);
 
-        // White chat history log wchat.bmp (143x103) at (479, 298)
-        renderer.draw_named_sprite("wchat.bmp", 479, 298);
-        int32_t cty = 302;
-        size_t start_cidx = (chat_log_.size() > 6) ? (chat_log_.size() - 6) : 0;
-        for (size_t i = start_cidx; i < chat_log_.size(); ++i) {
-            renderer.draw_text(chat_log_[i], 484, cty, {20, 50, 40, 255});
-            cty += 15;
-        }
-
-        // Ant relief horizontal divider bar x480y400.bmp (141x24) at (480, 400)
-        renderer.draw_named_sprite("x480y400.bmp", 480, 400);
-
-        // Chat text input box wtype.bmp (143x14) at (479, 423)
-        renderer.draw_named_sprite("wtype.bmp", 479, 423);
-        renderer.draw_text("_", 484, 425, {20, 50, 40, 255});
-
-        // Bottom bar x480y466.bmp (160x25) at (480, 436) containing "Send to:" and [All] button
-        renderer.draw_named_sprite("x480y466.bmp", 480, 436);
-        if (send_to_button_.is_pressed) {
-            renderer.draw_named_sprite("butalld.bmp", 532, 443);
-        }
-
-        // Vertical right border strip x521y254.bmp (19x182) placed at x=621, y=254 (seals right screen edge)
-        renderer.draw_named_sprite("x521y254.bmp", 621, 254);
+    // White chat history log wchat.bmp (143x103) at (479, 298)
+    renderer.draw_named_sprite("wchat.bmp", 479, 298);
+    int32_t cty = 302;
+    size_t start_cidx = (chat_log_.size() > 6) ? (chat_log_.size() - 6) : 0;
+    for (size_t i = start_cidx; i < chat_log_.size(); ++i) {
+        renderer.draw_text(chat_log_[i], 484, cty, {20, 50, 40, 255});
+        cty += 15;
     }
+
+    // Ant relief horizontal divider bar x480y400.bmp (141x24) at (480, 400)
+    renderer.draw_named_sprite("x480y400.bmp", 480, 400);
+
+    // Chat text input box wtype.bmp (143x14) at (479, 423)
+    renderer.draw_named_sprite("wtype.bmp", 479, 423);
+    renderer.draw_text("_", 484, 425, {20, 50, 40, 255});
+
+    // Bottom bar x480y466.bmp (160x25) at (480, 436) containing "Send to:" and [All] button
+    renderer.draw_named_sprite("x480y466.bmp", 480, 436);
+    if (send_to_button_.is_pressed) {
+        renderer.draw_named_sprite("butalld.bmp", 532, 443);
+    }
+
+    // Vertical right border strip x521y254.bmp (19x182) placed at x=621, y=254 (seals right screen edge)
+    renderer.draw_named_sprite("x521y254.bmp", 621, 254);
 
     // 3. Top & Bottom Frames
     render_top_bar(renderer, assets, world);
@@ -1004,6 +1012,30 @@ bool HUD::handle_mouse_down(int32_t x, int32_t y, uint8_t button,
             return true;
         }
 
+        // 0. Check Authentic Base Selection Buttons
+        if (selected_base_team_id_ >= 0) {
+            if (selected_base_team_id_ == local_player_id_) {
+                if (hatch_button_.contains(x, y) || move_pedestal_button_.contains(x, y)) {
+                    hatch_button_.is_pressed = true;
+                    int32_t score = (local_player_id_ < sim.get_world_state().player_scores.size())
+                                        ? sim.get_world_state().player_scores[local_player_id_] : 0;
+                    uint32_t eggs = (local_player_id_ < sim.get_world_state().player_eggs.size())
+                                        ? sim.get_world_state().player_eggs[local_player_id_] : 0;
+                    if (score >= 200 && eggs > 0) {
+                        sim.hatch_ant(local_player_id_, sim::AntType::Worker);
+                        is_incubating_ = true;
+                        incubation_timer_ticks_ = 60;
+                    }
+                    return true;
+                }
+            }
+            if (stop_button_.contains(x, y)) {
+                stop_button_.is_pressed = true;
+                clear_selection();
+                return true;
+            }
+        }
+
         // 1. Check Authentic Primary Action Pedestal (Move) click
         if (move_pedestal_button_.contains(x, y)) {
             move_pedestal_button_.is_pressed = true;
@@ -1484,10 +1516,17 @@ bool HUD::handle_key_down(int32_t key, sim::SimulationEngine& sim, ViewportCamer
             return true;
         }
         case 'h': case 'H': {
-            const auto* base = sim.grid().find_anthill(local_player_id_);
-            if (base) {
-                camera.center_on(base->x * 32, base->y * 32, world.width, world.height);
-                queue_news_message("Camera Centered on Home Anthill", 40, false);
+            if (selected_base_team_id_ == local_player_id_) {
+                int32_t score = (local_player_id_ < world.player_scores.size()) ? world.player_scores[local_player_id_] : 0;
+                uint32_t eggs = (local_player_id_ < world.player_eggs.size()) ? world.player_eggs[local_player_id_] : 0;
+                if (score >= 200 && eggs > 0) {
+                    sim.hatch_ant(local_player_id_, sim::AntType::Worker);
+                    is_incubating_ = true;
+                    incubation_timer_ticks_ = 60;
+                }
+            } else {
+                select_base(local_player_id_);
+                queue_news_message("Home Anthill Selected", 40, false);
             }
             return true;
         }

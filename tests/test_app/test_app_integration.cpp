@@ -914,6 +914,44 @@ void run_suite_8_unit_health_and_map_select() {
         app.set_tile_grid_visible(true);
         ASSERT_TRUE(app.is_tile_grid_visible());
     } TEST_END();
+
+    TEST_CASE("8.7 Anthill Selection and Hatch Action") {
+        Application app;
+        ApplicationConfig cfg;
+        cfg.headless = true;
+        cfg.start_in_map_select = false;
+        ASSERT_TRUE(app.init(cfg));
+
+        auto& sim = app.sim();
+        auto& hud = app.hud();
+
+        // 1. Select Home Base (Player 0)
+        hud.select_base(0);
+        ASSERT_EQ(hud.get_selected_base_team_id(), 0);
+        ASSERT_EQ(hud.get_selected_ant_id(), 0u);
+
+        // 2. Set score for Player 0 to 500
+        sim.set_player_score(0, 500);
+        uint32_t initial_eggs = sim.get_player_eggs(0);
+        size_t initial_ants = sim.get_world_state().ants.size();
+
+        // 3. Click Hatch button at (500, 165)
+        ViewportCamera cam;
+        bool down_res = hud.handle_mouse_down(500, 165, SDL_BUTTON_LEFT, sim, cam);
+        ASSERT_TRUE(down_res);
+        hud.handle_mouse_up(500, 165, SDL_BUTTON_LEFT, sim, cam);
+
+        ASSERT_EQ(sim.get_player_eggs(0), initial_eggs - 1);
+        ASSERT_EQ(sim.get_player_score(0), 300);
+        ASSERT_EQ(sim.get_world_state().ants.size(), initial_ants + 1);
+
+        // 4. Click Stop button at (610, 195) to deselect base
+        bool stop_down = hud.handle_mouse_down(610, 195, SDL_BUTTON_LEFT, sim, cam);
+        ASSERT_TRUE(stop_down);
+        hud.handle_mouse_up(610, 195, SDL_BUTTON_LEFT, sim, cam);
+
+        ASSERT_EQ(hud.get_selected_base_team_id(), -1);
+    } TEST_END();
 }
 
 // ============================================================================

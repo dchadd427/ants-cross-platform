@@ -440,8 +440,12 @@ void Application::handle_key_down(const SDL_KeyboardEvent& key) {
     if (key.keysym.sym == SDLK_h) {
         bool ctrl = (key.keysym.mod & KMOD_CTRL) || (key.keysym.mod & KMOD_GUI);
         if (ctrl) {
-            hud_.select_base(local_player_id_);
-            hud_.queue_news_message("Home Anthill Selected", 40, false);
+            if (hud_.get_selected_base_team_id() == local_player_id_) {
+                sim_.hatch_ant(local_player_id_, sim::AntType::Worker);
+            } else {
+                hud_.select_base(local_player_id_);
+                hud_.queue_news_message("Home Anthill Selected", 40, false);
+            }
             return;
         }
     }
@@ -558,7 +562,8 @@ void Application::render_frame() {
         const auto& world = sim_.get_world_state();
         renderer_->render_world(world, sim_.grid(), static_cast<int32_t>(hud_.get_selected_ant_id()),
                                 hud_.get_selected_ant_ids(), show_unit_health_, show_tile_grid_,
-                                mouse_screen_x_, mouse_screen_y_);
+                                mouse_screen_x_, mouse_screen_y_,
+                                hud_.get_selected_base_team_id());
         hud_.render(*renderer_, assets_, world, renderer_->camera());
     }
 
