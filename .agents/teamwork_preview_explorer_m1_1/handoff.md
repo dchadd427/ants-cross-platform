@@ -14,7 +14,7 @@
    - Header inspection via `python3` command unpacked 7 little-endian `uint32` values:
      `v=9, ts=0x378d661c, t1=1052, t2=6835937, t3=7903773, t4=7903835, pal_sz=1024`.
    - Table 1 verified: exactly 2,794 paletted sprites parsed. Sprite 0 (`dclay48.bmp`) has `pitch = 48`, `width = 45`, `height = 47`, demonstrating row stride padding ($pitch > width$) with trailing bytes filled with $0x00$.
-   - Table 2 verified: exactly 91 digital audio clips parsed. Format is unsigned 8-bit PCM. Exactly 3 clips are stereo (`channels = 2`: Sound 6 Microsoft logo, Sound 45, Sound 46); 88 clips are mono (`channels = 1`). Sample rates are either 11,025 Hz or 22,050 Hz.
+   - Table 2 verified: exactly 91 digital audio clips parsed. Format is unsigned 8-bit PCM. Exactly 3 clips are stereo (`channels = 2`: Sound 6 Ants logo, Sound 45, Sound 46); 88 clips are mono (`channels = 1`). Sample rates are either 11,025 Hz or 22,050 Hz.
    - Table 3 verified: 62 bytes containing event tags 3 (`HITGROUND`), 4 (`ATTACKHIT`), 5 (`HEAL`), and 10 (null terminator).
    - Table 4 verified: exactly 1,344 animation sequences parsed. String lengths `name_len` are byte-exact and not padded to 4 bytes. Exactly 365 subitems feature active sound triggers (`default_sp < 91`).
 2. **Map Binary Consistency (`Maps/*.LVL`):**

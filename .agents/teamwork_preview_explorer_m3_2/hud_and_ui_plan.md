@@ -1,4 +1,4 @@
-# Microsoft Ants Remake — Milestone 3 HUD, UI Controls, Input Dispatch & Scorecard Modal Plan
+# Ants Remake — Milestone 3 HUD, UI Controls, Input Dispatch & Scorecard Modal Plan
 
 **Document Version:** 1.0  
 **Author:** explorer_m3_2 (M3 Explorer 2: HUD, UI Controls, Input Dispatch & Scorecard Modal)  
@@ -9,7 +9,7 @@
 
 ## 1. Executive Summary & Architectural Overview
 
-The user interface subsystem for *Microsoft Ants* (`ants-app`) is responsible for delivering the authentic 1995/1998 MSN Gaming Zone user interface at 640×480 logical resolution, integer-scaled to modern displays. The UI is completely decoupled from the deterministic simulation core (`ants-sim`) and asset decoder (`ants-assets`), interacting solely through clean data contracts, event queues, and state snapshots.
+The user interface subsystem for *Ants* (`ants-app`) is responsible for delivering the authentic 1995/1998 MSN Gaming Zone user interface at 640×480 logical resolution, integer-scaled to modern displays. The UI is completely decoupled from the deterministic simulation core (`ants-sim`) and asset decoder (`ants-assets`), interacting solely through clean data contracts, event queues, and state snapshots.
 
 ```
 +-----------------------------------------------------------------------------------------+
@@ -185,7 +185,7 @@ The user interface subsystem for *Microsoft Ants* (`ants-app`) is responsible fo
   - FIFO queue holding up to 32 alerts.
   - Each message has a display lifetime of 100 ticks (5.0 seconds at 20 Hz).
   - Smooth dismiss transition (fade or swipe) when timer reaches 0.
-  - Idle state: Displays `"Microsoft Ants Remake"` when queue is empty.
+  - Idle state: Displays `"Ants Remake"` when queue is empty.
 - **Reverse-Engineered String Ingestion:**
   - Thief Base Alarm: `"[mm:ss] A ThiefAnt is at your anthill!"` (String ID 53, blinking red text).
   - Food Stolen: `"Food stolen..."` (String ID 62).
@@ -375,7 +375,7 @@ struct UIButton {
 };
 
 /**
- * @brief Master In-Game HUD subsystem for Microsoft Ants Remake.
+ * @brief Master In-Game HUD subsystem for Ants Remake.
  */
 class HUD {
 public:
@@ -682,7 +682,7 @@ void HUD::init(uint8_t local_player_id) {
     // 7. Cancel
     action_buttons_[6] = {540, 435, 45, 25, 2706, 2707, 2705, false, true, false}; // butcanu, butcand, labcan
 
-    queue_news_message("Microsoft Ants Remake", 200, false);
+    queue_news_message("Ants Remake", 200, false);
 }
 
 void HUD::reset() {

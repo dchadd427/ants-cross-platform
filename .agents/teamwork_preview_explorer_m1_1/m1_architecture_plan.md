@@ -10,7 +10,7 @@
 
 ## 1. Executive Summary
 
-Milestone 1 (`ants-assets`) delivers the zero-dependency, bit-exact native binary asset decoding tier for the Microsoft Ants remake. It directly parses `Original-Ants/ants.chd` (8,411,866 bytes) and all 6 maps in `Original-Ants/Maps/*.LVL` into high-performance, memory-safe C++17 data structures without any pre-conversion, intermediate assets, or external dependencies.
+Milestone 1 (`ants-assets`) delivers the zero-dependency, bit-exact native binary asset decoding tier for the Ants remake. It directly parses `Original-Ants/ants.chd` (8,411,866 bytes) and all 6 maps in `Original-Ants/Maps/*.LVL` into high-performance, memory-safe C++17 data structures without any pre-conversion, intermediate assets, or external dependencies.
 
 This document establishes:
 1. The definitive public C++ API headers under `include/ants_assets/`:
@@ -770,7 +770,7 @@ Every map parses to **0 remaining bytes** (`rem = 0`):
 ### 5.1 Root `CMakeLists.txt` Integration
 ```cmake
 cmake_minimum_required(VERSION 3.16)
-project(MicrosoftAntsRemake VERSION 1.0.0 LANGUAGES C CXX)
+project(AntsAntsRemake VERSION 1.0.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)

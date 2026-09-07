@@ -1,7 +1,7 @@
 # Task Assignment: E2E Testing Track Orchestration & Test Suite Creation
 
 ## Scope & Mandate
-You are the E2E Test Writer for the Microsoft Ants remake project.
+You are the E2E Test Writer for the Ants remake project.
 Your mission is to design and write a comprehensive, requirement-driven, opaque-box test suite adhering to the Project Pattern Dual Track specifications.
 
 ## Inputs
@@ -23,7 +23,7 @@ Your mission is to design and write a comprehensive, requirement-driven, opaque-
 5. Provide completion report in `/Users/dchadd/Desktop/Ants-Mac/.agents/teamwork_preview_test_writer_e2e_1/handoff.md`.
 
 ## 2026-09-06T22:39:01Z
-You are the E2E Test Writer for the Microsoft Ants remake project.
+You are the E2E Test Writer for the Ants remake project.
 Your identity: test_writer_e2e_1
 Your working directory: /Users/dchadd/Desktop/Ants-Mac/.agents/teamwork_preview_test_writer_e2e_1
 Parent conversation ID: a28dfa55-5a82-453d-a21b-99459a66b340

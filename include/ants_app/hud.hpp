@@ -68,7 +68,7 @@ struct UIButton {
 };
 
 /**
- * @brief Master In-Game HUD subsystem for Microsoft Ants Remake.
+ * @brief Master In-Game HUD subsystem for Ants Remake.
  */
 class HUD {
 public:
@@ -166,6 +166,16 @@ public:
     void close_options() noexcept { show_options_ = false; }
     bool is_options_open() const noexcept { return show_options_; }
 
+    void set_on_sfx_volume(std::function<void(float)> cb) { on_sfx_volume_ = std::move(cb); }
+    void set_on_music_volume(std::function<void(float)> cb) { on_music_volume_ = std::move(cb); }
+    void set_on_scroll_rate(std::function<void(float)> cb) { on_scroll_rate_ = std::move(cb); }
+
+    float get_sfx_volume() const noexcept { return sfx_volume_; }
+    float get_music_volume() const noexcept { return music_volume_; }
+    float get_scroll_rate() const noexcept { return scroll_rate_; }
+    bool is_chat_enabled() const noexcept { return chat_enabled_; }
+    bool is_quick_help_enabled() const noexcept { return quick_help_enabled_; }
+
 private:
     void render_top_bar(IRenderer& renderer, const assets::AssetArchive& assets, const sim::WorldState& world);
     void render_radar(IRenderer& renderer, const assets::AssetArchive& assets, const sim::WorldState& world, const ViewportCamera& camera);
@@ -205,6 +215,11 @@ private:
 
     // Action buttons
     std::array<UIButton, static_cast<size_t>(ActionButtonId::Count)> action_buttons_{};
+    UIButton move_pedestal_button_{};
+    UIButton ability_pedestal_button_{};
+    UIButton stop_button_{};
+    UIButton send_to_button_{};
+    bool send_to_all_{true};
 
     // News Flash FIFO queue
     std::deque<NewsBannerItem> news_queue_{};
@@ -226,6 +241,18 @@ private:
 
     bool show_quick_help_{false};
     bool show_options_{false};
+
+    // Options menu controls state
+    float sfx_volume_{0.8f};
+    float music_volume_{0.8f};
+    float scroll_rate_{0.5f};
+    bool chat_enabled_{true};
+    bool quick_help_enabled_{false};
+    bool opt_ok_button_pressed_{false};
+    int active_slider_dragging_{-1}; // -1 none, 0 sfx, 1 music, 2 scroll
+    std::function<void(float)> on_sfx_volume_{nullptr};
+    std::function<void(float)> on_music_volume_{nullptr};
+    std::function<void(float)> on_scroll_rate_{nullptr};
 };
 
 } // namespace ants::app

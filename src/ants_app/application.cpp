@@ -33,6 +33,9 @@ bool Application::init(int argc, char* argv[]) {
             cfg.select_ant_id = std::stoi(argv[++i]);
         } else if (std::strcmp(argv[i], "--select-base") == 0 && i + 1 < argc) {
             cfg.select_base_team = std::stoi(argv[++i]);
+        } else if (std::strcmp(argv[i], "--open-options") == 0) {
+            cfg.open_options = true;
+            cfg.start_in_map_select = false;
         }
     }
     return init(cfg);
@@ -128,6 +131,20 @@ bool Application::init(const ApplicationConfig& config) {
         return_to_map_select();
     });
 
+    hud_.set_on_sfx_volume([this](float v) {
+        audio_mixer_.set_sfx_volume(v);
+    });
+
+    hud_.set_on_music_volume([this](float v) {
+        midi_player_.set_volume(v);
+    });
+
+    hud_.set_on_scroll_rate([this](float r) {
+        if (renderer_) {
+            renderer_->camera().scroll_speed = 240.0f + r * 480.0f;
+        }
+    });
+
     // 9. Initialize Map Selection Screen
     map_select_.init("Original-Ants/Maps");
     map_select_.set_on_start([this](const std::string& map_path) {
@@ -145,6 +162,9 @@ bool Application::init(const ApplicationConfig& config) {
             hud_.select_ant(static_cast<uint32_t>(config_.select_ant_id));
         } else if (config_.select_base_team >= 0) {
             hud_.select_base(config_.select_base_team);
+        }
+        if (config_.open_options) {
+            hud_.open_options();
         }
     } else {
         state_ = AppState::MapSelect;
@@ -253,6 +273,15 @@ int Application::run() {
         if (config_.headless && config_.screenshot_path.empty()) {
             if (++headless_frame_count >= 10) {
                 is_running_ = false;
+            }
+        }
+
+        // 60 FPS target frame limiter (~16.666 ms per frame)
+        if (!config_.headless) {
+            uint64_t frame_end = SDL_GetPerformanceCounter();
+            float elapsed_ms = (static_cast<float>(frame_end - current_time) * 1000.0f) / static_cast<float>(perf_freq);
+            if (elapsed_ms < 16.666f) {
+                SDL_Delay(static_cast<uint32_t>(16.666f - elapsed_ms));
             }
         }
     }

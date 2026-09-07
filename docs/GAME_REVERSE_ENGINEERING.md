@@ -1,15 +1,15 @@
-# Microsoft Ants (1995/1998) - Complete Reverse Engineering Specification
+# Ants (1995/1998) - Complete Reverse Engineering Specification
 
-**Document Version:** 1.0  
-**Target Project:** High-Performance Multi-Platform Engine Remake  
-**Binary Analyzed:** `Ants.exe` (PE32 Intel 80386, DirectX 3.0 / Windows 95)  
-**Data Archives Analyzed:** `ants.chd` (8.4 MB Art/Sound Archive), `Maps/*.LVL` (Original Map Files)
+> **Document Classification:** Engineering Specification & Reverse Engineering Ground Truth  
+> **Target Deliverable:** Deterministic Cross-Platform C++17/SDL3 Native Engine Remake  
+> **Source Artifacts:** `Original-Ants/Ants.exe` (PE32 x86), `Original-Ants/ants.chd`, `Original-Ants/Maps/*.LVL`  
+> **Date:** September 2026
 
 ---
 
-## 1. Executive Summary & Game Overview
+## 1. Executive Summary & Engine Architecture
 
-**Microsoft Ants** is an RTS / arcade-strategy game developed for Windows 95 and the MSN Gaming Zone (~1995-1998).
+**Ants** is an RTS / arcade-strategy game developed for Windows 95 and the MSN Gaming Zone (~1995-1998).
 Players control colonies of ants in a top-down tile-based grid environment (typically 60×60 isometric/orthogonal cells). The objective is to command ants manually to collect food items scattered across the map, store them in the colony anthill, harass opponents, hatch new ants, and achieve the highest score before the match timer runs out.
 
 ### Key Gameplay Mechanics
@@ -39,7 +39,7 @@ Players control colonies of ants in a top-down tile-based grid environment (typi
 ## 2. Reverse Engineering Findings (via Capstone & PE Analysis)
 
 ### 2.1 Binary Characteristics
-- **Binary:** PE32 GUI Intel 80386 executable compiled with Microsoft Visual C++ 4.x/5.0.
+- **Binary:** PE32 GUI Intel 80386 executable compiled with Visual C++ 4.x/5.0.
 - **Base Address:** `0x01000000`
 - **Sections:**
   - `.text`: `0x1001000` - `0x1046C00` (Code, constants, RTTI, vtables)
@@ -236,7 +236,7 @@ The engine internal dispatch maps each ant class to an integer ID and correspond
 
 ### 5.1 Unit Damage Matrix & Combat Knockback Physics
 
-Every ant type in *Microsoft Ants* possesses a melee attack (`*at*`), triggered either manually or automatically when engaging enemy ants. Melee attack damage is strictly split into two tiers:
+Every ant type in *Ants* possesses a melee attack (`*at*`), triggered either manually or automatically when engaging enemy ants. Melee attack damage is strictly split into two tiers:
 
 | Ant Class | Class Code | Direct Melee Strike Damage | Special Ability Attack Damage | Knockback Distance | Autonomous AI Guard? |
 |---|---|---|---|---|---|
@@ -405,7 +405,7 @@ Both temporary field structures created by specialized ants have strictly revers
 
 ### 5.7 Complete Special Ability & Combat Hit Reaction Animation Suite
 
-Every special ability and combat interaction in *Microsoft Ants* is governed by dedicated multi-stage animation sequences in `ants.chd` and synchronized with sound effects via subitem audio triggers (`default_sp`).
+Every special ability and combat interaction in *Ants* is governed by dedicated multi-stage animation sequences in `ants.chd` and synchronized with sound effects via subitem audio triggers (`default_sp`).
 
 #### 1. Fire Ant (`af`): Magnifying Glass Ignition & Extinguishing
 - **Set Fire (`afsf301`, `afsf701`, `afsf901` - 22 Subitems / 32 Frames):**
@@ -508,7 +508,7 @@ In `libants-assets`, while loading `ants.chd` at initialization, the engine can 
 
 ### 5.9 Game End Sequence & Authentic Scorecard Specification (`re_screen` / Animation 25)
 
-When the match timer reaches `0:00` (or round end condition is met), *Microsoft Ants* immediately freezes unit simulation and transitions to the authentic full-screen **Game Results Scorecard** (`re_screen`, Animation 25 in `ants.chd` Table 4).
+When the match timer reaches `0:00` (or round end condition is met), *Ants* immediately freezes unit simulation and transitions to the authentic full-screen **Game Results Scorecard** (`re_screen`, Animation 25 in `ants.chd` Table 4).
 
 ```text
 ┌─────────────────────────────────────────────────────────────────────────┐
@@ -561,7 +561,7 @@ Every player row displays 4 exact statistics aligned directly under the `newstat
 
 ### 5.10 Combat Ant Autonomous AI Guard Mechanic
 
-Combat Ants (`ac`) are the **sole unit type in *Microsoft Ants* equipped with autonomous AI behavior**. All other units remain idle until explicitly issued commands by the player.
+Combat Ants (`ac`) are the **sole unit type in *Ants* equipped with autonomous AI behavior**. All other units remain idle until explicitly issued commands by the player.
 
 #### State Machine & Guard Rule:
 1. **Guard Origin Anchor (`guard_tile`):** When a Combat Ant is ordered to a tile and enters Idle state, its current coordinates `(x_g, y_g)` are saved as its `guard_tile`.
@@ -575,7 +575,7 @@ Combat Ants (`ac`) are the **sole unit type in *Microsoft Ants* equipped with au
 
 ### 5.11 Teaming Up & In-Game Alliances (`0x01023f9f`, `0x01028f04`)
 
-Matches in *Microsoft Ants* commence in a default **Free-For-All (FFA)** configuration, where every player operates as an independent faction (`ally_id = 4`). During active gameplay, players can negotiate and establish in-game alliances dynamically through an interactive invite/response protocol.
+Matches in *Ants* commence in a default **Free-For-All (FFA)** configuration, where every player operates as an independent faction (`ally_id = 4`). During active gameplay, players can negotiate and establish in-game alliances dynamically through an interactive invite/response protocol.
 
 #### 1. Alliance Invitation Protocol & Audio Routing
 1. **Initiation via Anthill Click:**
@@ -621,7 +621,7 @@ Matches in *Microsoft Ants* commence in a default **Free-For-All (FFA)** configu
 
 ### 5.12 Water Splashing & Ant Drowning Animation Architecture
 
-When an ant is launched into deep water (by a Combat Ant heavy punch, bomb explosion impulse, or collapsing bridge), *Microsoft Ants* triggers specialized aquatic visual effects and sound sequences in `ants.chd`:
+When an ant is launched into deep water (by a Combat Ant heavy punch, bomb explosion impulse, or collapsing bridge), *Ants* triggers specialized aquatic visual effects and sound sequences in `ants.chd`:
 
 #### 1. Standalone Water Splash (`dsplash` / Animation 40)
 - **Visuals:** 5-frame plume sequence (`9splas04.bmp` through `9splas09.bmp`, Table 1 Sprites 121..125).

@@ -11,7 +11,7 @@ Implement the complete, authentic, modern C++17 library libants_app, interactive
 - Milestone: M3 (Desktop Client & Application Layer)
 
 ## 🔒 Key Constraints
-- Authentic reproduction of 1996 Microsoft Ants client architecture.
+- Authentic reproduction of 1996 Ants client architecture.
 - Follow blueprints in explorer_m3_1, explorer_m3_2, explorer_m3_3.
 - C++17 modern idioms, SDL2, AudioToolbox on macOS.
 - Headless testing support: tests run offscreen/mocked audio without opening windows.

@@ -33,7 +33,7 @@ enum class AppState {
 };
 
 struct ApplicationConfig {
-    std::string title{"Microsoft Ants"};
+    std::string title{"Ants"};
     int window_width{1280};  // Default 2x integer scale
     int window_height{960};
     bool fullscreen{false};
@@ -49,6 +49,7 @@ struct ApplicationConfig {
     int screenshot_frames{5};
     int select_ant_id{-1};
     int select_base_team{-1};
+    bool open_options{false};
 };
 
 /**

@@ -782,7 +782,7 @@ void run_suite_6_adversarial_challenges() {
 
 int main() {
     std::cout << "\n=======================================================\n";
-    std::cout << " MICROSOFT ANTS - CHALLENGER M2.2 STRESS TEST SUITE   \n";
+    std::cout << " ANTS - CHALLENGER M2.2 STRESS TEST SUITE              \n";
     std::cout << " (Base Lifecycle, Economy, Alliances, Game Over Split) \n";
     std::cout << "=======================================================\n";
 

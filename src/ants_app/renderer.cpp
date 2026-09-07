@@ -7,104 +7,111 @@
 namespace ants::app {
 
 // ============================================================================
-// Built-in 8x8 ASCII Bitmap Font (ASCII 32 ' ' through 126 '~')
 // ============================================================================
-static const uint8_t FONT_8X8[95][8] = {
-    {0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00}, // 32 ' '
-    {0x18,0x3C,0x3C,0x18,0x18,0x00,0x18,0x00}, // 33 '!'
-    {0x66,0x66,0x24,0x00,0x00,0x00,0x00,0x00}, // 34 '"'
-    {0x6C,0x6C,0xFE,0x6C,0xFE,0x6C,0x6C,0x00}, // 35 '#'
-    {0x18,0x7E,0xC0,0x7C,0x06,0xFC,0x18,0x00}, // 36 '$'
-    {0x00,0xC6,0xCC,0x18,0x30,0x66,0xC6,0x00}, // 37 '%'
-    {0x38,0x6C,0x38,0x76,0xDC,0xCC,0x76,0x00}, // 38 '&'
-    {0x30,0x30,0x18,0x00,0x00,0x00,0x00,0x00}, // 39 '''
-    {0x0C,0x18,0x30,0x30,0x30,0x18,0x0C,0x00}, // 40 '('
-    {0x30,0x18,0x0C,0x0C,0x0C,0x18,0x30,0x00}, // 41 ')'
-    {0x00,0x66,0x3C,0xFF,0x3C,0x66,0x00,0x00}, // 42 '*'
-    {0x00,0x18,0x18,0x7E,0x18,0x18,0x00,0x00}, // 43 '+'
-    {0x00,0x00,0x00,0x00,0x00,0x18,0x18,0x30}, // 44 ','
-    {0x00,0x00,0x00,0x7E,0x00,0x00,0x00,0x00}, // 45 '-'
-    {0x00,0x00,0x00,0x00,0x00,0x18,0x18,0x00}, // 46 '.'
-    {0x06,0x0C,0x18,0x30,0x60,0xC0,0x80,0x00}, // 47 '/'
-    {0x7C,0xC6,0xCE,0xD6,0xE6,0xC6,0x7C,0x00}, // 48 '0'
-    {0x18,0x38,0x18,0x18,0x18,0x18,0x7E,0x00}, // 49 '1'
-    {0x7C,0xC6,0x06,0x1C,0x30,0x66,0xFE,0x00}, // 50 '2'
-    {0x7C,0xC6,0x06,0x3C,0x06,0xC6,0x7C,0x00}, // 51 '3'
-    {0x1C,0x3C,0x6C,0xCC,0xFE,0x0C,0x0C,0x00}, // 52 '4'
-    {0xFE,0xC0,0xFC,0x06,0x06,0xC6,0x7C,0x00}, // 53 '5'
-    {0x7C,0xC6,0xC0,0xFC,0xC6,0xC6,0x7C,0x00}, // 54 '6'
-    {0xFE,0x06,0x0C,0x18,0x30,0x30,0x30,0x00}, // 55 '7'
-    {0x7C,0xC6,0xC6,0x7C,0xC6,0xC6,0x7C,0x00}, // 56 '8'
-    {0x7C,0xC6,0xC6,0x7E,0x06,0xC6,0x7C,0x00}, // 57 '9'
-    {0x00,0x18,0x18,0x00,0x18,0x18,0x00,0x00}, // 58 ':'
-    {0x00,0x18,0x18,0x00,0x18,0x18,0x30,0x00}, // 59 ';'
-    {0x06,0x0C,0x18,0x30,0x18,0x0C,0x06,0x00}, // 60 '<'
-    {0x00,0x00,0x7E,0x00,0x7E,0x00,0x00,0x00}, // 61 '='
-    {0x60,0x30,0x18,0x0C,0x18,0x30,0x60,0x00}, // 62 '>'
-    {0x7C,0xC6,0x0C,0x18,0x18,0x00,0x18,0x00}, // 63 '?'
-    {0x7C,0xC6,0xDE,0xDE,0xDE,0xC0,0x78,0x00}, // 64 '@'
-    {0x38,0x6C,0xC6,0xC6,0xFE,0xC6,0xC6,0x00}, // 65 'A'
-    {0xFC,0x66,0x66,0x7C,0x66,0x66,0xFC,0x00}, // 66 'B'
-    {0x3C,0x66,0xC0,0xC0,0xC0,0x66,0x3C,0x00}, // 67 'C'
-    {0xF8,0x6C,0x66,0x66,0x66,0x6C,0xF8,0x00}, // 68 'D'
-    {0xFE,0x62,0x68,0x78,0x68,0x62,0xFE,0x00}, // 69 'E'
-    {0xFE,0x62,0x68,0x78,0x68,0x60,0xF0,0x00}, // 70 'F'
-    {0x3C,0x66,0xC0,0xC0,0xCE,0x66,0x3E,0x00}, // 71 'G'
-    {0xC6,0xC6,0xC6,0xFE,0xC6,0xC6,0xC6,0x00}, // 72 'H'
-    {0x7E,0x18,0x18,0x18,0x18,0x18,0x7E,0x00}, // 73 'I'
-    {0x1E,0x0C,0x0C,0x0C,0xCC,0xCC,0x78,0x00}, // 74 'J'
-    {0xE6,0x66,0x6C,0x78,0x6C,0x66,0xE6,0x00}, // 75 'K'
-    {0xF0,0x60,0x60,0x60,0x62,0x66,0xFE,0x00}, // 76 'L'
-    {0xC6,0xEE,0xFE,0xD6,0xC6,0xC6,0xC6,0x00}, // 77 'M'
-    {0xC6,0xE6,0xF6,0xDE,0xCE,0xC6,0xC6,0x00}, // 78 'N'
-    {0x7C,0xC6,0xC6,0xC6,0xC6,0xC6,0x7C,0x00}, // 79 'O'
-    {0xFC,0x66,0x66,0x7C,0x60,0x60,0xF0,0x00}, // 80 'P'
-    {0x7C,0xC6,0xC6,0xC6,0xD6,0xDE,0x7C,0x06}, // 81 'Q'
-    {0xFC,0x66,0x66,0x7C,0x6C,0x66,0xE6,0x00}, // 82 'R'
-    {0x7C,0xC6,0x60,0x38,0x0C,0xC6,0x7C,0x00}, // 83 'S'
-    {0x7E,0x18,0x18,0x18,0x18,0x18,0x18,0x00}, // 84 'T'
-    {0xC6,0xC6,0xC6,0xC6,0xC6,0xC6,0x7C,0x00}, // 85 'U'
-    {0xC6,0xC6,0xC6,0xC6,0xC6,0x6C,0x38,0x00}, // 86 'V'
-    {0xC6,0xC6,0xC6,0xD6,0xFE,0xEE,0xC6,0x00}, // 87 'W'
-    {0xC6,0xC6,0x6C,0x38,0x6C,0xC6,0xC6,0x00}, // 88 'X'
-    {0x66,0x66,0x66,0x3C,0x18,0x18,0x3C,0x00}, // 89 'Y'
-    {0xFE,0xC6,0x0C,0x18,0x30,0x66,0xFE,0x00}, // 90 'Z'
-    {0x3C,0x30,0x30,0x30,0x30,0x30,0x3C,0x00}, // 91 '['
-    {0xC0,0x60,0x30,0x18,0x0C,0x06,0x02,0x00}, // 92 '\'
-    {0x3C,0x0C,0x0C,0x0C,0x0C,0x0C,0x3C,0x00}, // 93 ']'
-    {0x10,0x38,0x6C,0xC6,0x00,0x00,0x00,0x00}, // 94 '^'
-    {0x00,0x00,0x00,0x00,0x00,0x00,0x00,0xFF}, // 95 '_'
-    {0x30,0x18,0x0C,0x00,0x00,0x00,0x00,0x00}, // 96 '`'
-    {0x00,0x00,0x78,0x0C,0x7C,0xCC,0x76,0x00}, // 97 'a'
-    {0xE0,0x60,0x7C,0x66,0x66,0x66,0xDC,0x00}, // 98 'b'
-    {0x00,0x00,0x7C,0xC6,0xC0,0xC6,0x7C,0x00}, // 99 'c'
-    {0x1C,0x0C,0x7C,0xCC,0xCC,0xCC,0x76,0x00}, // 100 'd'
-    {0x00,0x00,0x7C,0xC6,0xFE,0xC0,0x7C,0x00}, // 101 'e'
-    {0x1C,0x36,0x30,0x78,0x30,0x30,0x78,0x00}, // 102 'f'
-    {0x00,0x00,0x76,0xCC,0xCC,0x7C,0x0C,0xF8}, // 103 'g'
-    {0xE0,0x60,0x6C,0x76,0x66,0x66,0xE6,0x00}, // 104 'h'
-    {0x18,0x00,0x38,0x18,0x18,0x18,0x3C,0x00}, // 105 'i'
-    {0x0C,0x00,0x1C,0x0C,0x0C,0xCC,0xCC,0x78}, // 106 'j'
-    {0xE0,0x60,0x66,0x6C,0x78,0x6C,0xE6,0x00}, // 107 'k'
-    {0x38,0x18,0x18,0x18,0x18,0x18,0x3C,0x00}, // 108 'l'
-    {0x00,0x00,0xE6,0xFF,0xDB,0xC9,0xC9,0x00}, // 109 'm'
-    {0x00,0x00,0xDC,0x66,0x66,0x66,0x66,0x00}, // 110 'n'
-    {0x00,0x00,0x7C,0xC6,0xC6,0xC6,0x7C,0x00}, // 111 'o'
-    {0x00,0x00,0xDC,0x66,0x66,0x7C,0x60,0xF0}, // 112 'p'
-    {0x00,0x00,0x76,0xCC,0xCC,0x7C,0x0C,0x1E}, // 113 'q'
-    {0x00,0x00,0xDC,0x76,0x60,0x60,0xF0,0x00}, // 114 'r'
-    {0x00,0x00,0x7C,0xC0,0x7C,0x06,0xFC,0x00}, // 115 's'
-    {0x30,0x30,0x7C,0x30,0x30,0x34,0x18,0x00}, // 116 't'
-    {0x00,0x00,0xCC,0xCC,0xCC,0xCC,0x76,0x00}, // 117 'u'
-    {0x00,0x00,0xC6,0xC6,0xC6,0x6C,0x38,0x00}, // 118 'v'
-    {0x00,0x00,0xC6,0xD6,0xD6,0xFE,0x6C,0x00}, // 119 'w'
-    {0x00,0x00,0xC6,0x6C,0x38,0x6C,0xC6,0x00}, // 120 'x'
-    {0x00,0x00,0xC6,0xC6,0xCE,0x76,0x06,0xFC}, // 121 'y'
-    {0x00,0x00,0xFE,0x8C,0x18,0x32,0xFE,0x00}, // 122 'z'
-    {0x0E,0x18,0x18,0x70,0x18,0x18,0x0E,0x00}, // 123 '{'
-    {0x18,0x18,0x18,0x00,0x18,0x18,0x18,0x00}, // 124 '|'
-    {0x70,0x18,0x18,0x0E,0x18,0x18,0x70,0x00}, // 125 '}'
-    {0x76,0xDC,0x00,0x00,0x00,0x00,0x00,0x00}  // 126 '~'
+// Built-in Proportional 5x7 ASCII Bitmap Font (ASCII 32 ' ' through 126 '~')
+// Authentic compact font matching Windows Small Fonts / MS Sans Serif 6pt
+// ============================================================================
+struct Glyph5x7 {
+    uint8_t width;
+    uint8_t rows[7];
+};
+
+static const Glyph5x7 FONT_5X7[95] = {
+    {2, {0x00,0x00,0x00,0x00,0x00,0x00,0x00}}, // 32 ' '
+    {1, {0x80,0x80,0x80,0x80,0x00,0x00,0x80}}, // 33 '!'
+    {3, {0xA0,0xA0,0x40,0x00,0x00,0x00,0x00}}, // 34 '"'
+    {5, {0x50,0xF8,0x50,0x50,0xF8,0x50,0x00}}, // 35 '#'
+    {5, {0x20,0x78,0xA0,0x70,0x28,0xF0,0x20}}, // 36 '$'
+    {5, {0xC8,0xD0,0x20,0x40,0x98,0x98,0x00}}, // 37 '%'
+    {5, {0x60,0x90,0x60,0xA8,0x90,0x68,0x00}}, // 38 '&'
+    {1, {0x80,0x80,0x00,0x00,0x00,0x00,0x00}}, // 39 '\''
+    {2, {0x80,0x40,0x40,0x40,0x40,0x40,0x80}}, // 40 '('
+    {2, {0x40,0x80,0x80,0x80,0x80,0x80,0x40}}, // 41 ')'
+    {3, {0x00,0xA0,0x40,0xA0,0x00,0x00,0x00}}, // 42 '*'
+    {3, {0x00,0x40,0xE0,0x40,0x00,0x00,0x00}}, // 43 '+'
+    {2, {0x00,0x00,0x00,0x00,0x00,0x80,0x40}}, // 44 ','
+    {3, {0x00,0x00,0x00,0xE0,0x00,0x00,0x00}}, // 45 '-'
+    {1, {0x00,0x00,0x00,0x00,0x00,0x00,0x80}}, // 46 '.'
+    {4, {0x10,0x20,0x20,0x40,0x40,0x80,0x80}}, // 47 '/'
+    {4, {0x60,0x90,0x90,0x90,0x90,0x90,0x60}}, // 48 '0'
+    {3, {0x40,0xC0,0x40,0x40,0x40,0x40,0xE0}}, // 49 '1'
+    {4, {0x60,0x90,0x10,0x20,0x40,0x80,0xF0}}, // 50 '2'
+    {4, {0x60,0x90,0x10,0x60,0x10,0x90,0x60}}, // 51 '3'
+    {4, {0x20,0x60,0xA0,0xA0,0xF0,0x20,0x20}}, // 52 '4'
+    {4, {0xF0,0x80,0xE0,0x10,0x10,0x90,0x60}}, // 53 '5'
+    {4, {0x60,0x80,0x80,0xE0,0x90,0x90,0x60}}, // 54 '6'
+    {4, {0xF0,0x10,0x20,0x20,0x40,0x40,0x40}}, // 55 '7'
+    {4, {0x60,0x90,0x90,0x60,0x90,0x90,0x60}}, // 56 '8'
+    {4, {0x60,0x90,0x90,0x70,0x10,0x10,0x60}}, // 57 '9'
+    {1, {0x00,0x80,0x00,0x00,0x80,0x00,0x00}}, // 58 ':'
+    {2, {0x00,0x80,0x00,0x00,0x80,0x80,0x40}}, // 59 ';'
+    {3, {0x20,0x40,0x80,0x40,0x20,0x00,0x00}}, // 60 '<'
+    {3, {0x00,0xE0,0x00,0xE0,0x00,0x00,0x00}}, // 61 '='
+    {3, {0x80,0x40,0x20,0x40,0x80,0x00,0x00}}, // 62 '>'
+    {4, {0x60,0x90,0x10,0x20,0x20,0x00,0x20}}, // 63 '?'
+    {5, {0x70,0x88,0xA8,0xA8,0x88,0x70,0x00}}, // 64 '@'
+    {4, {0x60,0x90,0x90,0xF0,0x90,0x90,0x90}}, // 65 'A'
+    {4, {0xE0,0x90,0x90,0xE0,0x90,0x90,0xE0}}, // 66 'B'
+    {4, {0x60,0x90,0x80,0x80,0x80,0x90,0x60}}, // 67 'C'
+    {4, {0xE0,0x90,0x90,0x90,0x90,0x90,0xE0}}, // 68 'D'
+    {4, {0xF0,0x80,0x80,0xE0,0x80,0x80,0xF0}}, // 69 'E'
+    {4, {0xF0,0x80,0x80,0xE0,0x80,0x80,0x80}}, // 70 'F'
+    {4, {0x60,0x90,0x80,0xB0,0x90,0x90,0x60}}, // 71 'G'
+    {4, {0x90,0x90,0x90,0xF0,0x90,0x90,0x90}}, // 72 'H'
+    {3, {0xE0,0x40,0x40,0x40,0x40,0x40,0xE0}}, // 73 'I'
+    {4, {0x10,0x10,0x10,0x10,0x10,0x90,0x60}}, // 74 'J'
+    {4, {0x90,0xA0,0xC0,0xC0,0xA0,0x90,0x90}}, // 75 'K'
+    {4, {0x80,0x80,0x80,0x80,0x80,0x80,0xF0}}, // 76 'L'
+    {5, {0x88,0xD8,0xA8,0x88,0x88,0x88,0x88}}, // 77 'M'
+    {4, {0x90,0xD0,0xD0,0xB0,0xB0,0x90,0x90}}, // 78 'N'
+    {4, {0x60,0x90,0x90,0x90,0x90,0x90,0x60}}, // 79 'O'
+    {4, {0xE0,0x90,0x90,0xE0,0x80,0x80,0x80}}, // 80 'P'
+    {4, {0x60,0x90,0x90,0x90,0xB0,0x90,0x50}}, // 81 'Q'
+    {4, {0xE0,0x90,0x90,0xE0,0xA0,0x90,0x90}}, // 82 'R'
+    {4, {0x60,0x90,0x80,0x60,0x10,0x90,0x60}}, // 83 'S'
+    {5, {0xF8,0x20,0x20,0x20,0x20,0x20,0x20}}, // 84 'T'
+    {4, {0x90,0x90,0x90,0x90,0x90,0x90,0x60}}, // 85 'U'
+    {5, {0x88,0x88,0x88,0x88,0x50,0x50,0x20}}, // 86 'V'
+    {5, {0x88,0x88,0x88,0xA8,0xA8,0xD8,0x88}}, // 87 'W'
+    {5, {0x88,0x50,0x20,0x20,0x50,0x88,0x88}}, // 88 'X'
+    {5, {0x88,0x88,0x50,0x20,0x20,0x20,0x20}}, // 89 'Y'
+    {4, {0xF0,0x10,0x20,0x40,0x80,0x80,0xF0}}, // 90 'Z'
+    {2, {0xC0,0x80,0x80,0x80,0x80,0x80,0xC0}}, // 91 '['
+    {3, {0x80,0x80,0x40,0x40,0x20,0x20,0x20}}, // 92 '\\'
+    {2, {0xC0,0x40,0x40,0x40,0x40,0x40,0xC0}}, // 93 ']'
+    {3, {0x40,0xA0,0x00,0x00,0x00,0x00,0x00}}, // 94 '^'
+    {4, {0x00,0x00,0x00,0x00,0x00,0x00,0xF0}}, // 95 '_'
+    {2, {0x80,0x40,0x00,0x00,0x00,0x00,0x00}}, // 96 '`'
+    {4, {0x00,0x00,0x60,0x10,0x70,0x90,0x70}}, // 97 'a'
+    {4, {0x80,0x80,0xE0,0x90,0x90,0x90,0xE0}}, // 98 'b'
+    {4, {0x00,0x00,0x60,0x90,0x80,0x90,0x60}}, // 99 'c'
+    {4, {0x10,0x10,0x70,0x90,0x90,0x90,0x70}}, // 100 'd'
+    {4, {0x00,0x00,0x60,0x90,0xF0,0x80,0x70}}, // 101 'e'
+    {3, {0x40,0xA0,0x80,0xE0,0x80,0x80,0x80}}, // 102 'f'
+    {4, {0x00,0x00,0x70,0x90,0x70,0x10,0x60}}, // 103 'g'
+    {4, {0x80,0x80,0xE0,0x90,0x90,0x90,0x90}}, // 104 'h'
+    {1, {0x80,0x00,0x80,0x80,0x80,0x80,0x80}}, // 105 'i'
+    {2, {0x40,0x00,0x40,0x40,0x40,0x80,0x80}}, // 106 'j'
+    {4, {0x80,0x80,0x90,0xA0,0xC0,0xA0,0x90}}, // 107 'k'
+    {1, {0x80,0x80,0x80,0x80,0x80,0x80,0x80}}, // 108 'l'
+    {5, {0x00,0x00,0xD0,0xA8,0xA8,0x88,0x88}}, // 109 'm'
+    {4, {0x00,0x00,0xE0,0x90,0x90,0x90,0x90}}, // 110 'n'
+    {4, {0x00,0x00,0x60,0x90,0x90,0x90,0x60}}, // 111 'o'
+    {4, {0x00,0x00,0xE0,0x90,0x90,0xE0,0x80}}, // 112 'p'
+    {4, {0x00,0x00,0x70,0x90,0x90,0x70,0x10}}, // 113 'q'
+    {4, {0x00,0x00,0xA0,0xC0,0x80,0x80,0x80}}, // 114 'r'
+    {3, {0x00,0x00,0x60,0x80,0x60,0x20,0xC0}}, // 115 's'
+    {3, {0x40,0x40,0xE0,0x40,0x40,0x40,0x20}}, // 116 't'
+    {4, {0x00,0x00,0x90,0x90,0x90,0x90,0x70}}, // 117 'u'
+    {3, {0x00,0x00,0xA0,0xA0,0xA0,0x40,0x40}}, // 118 'v'
+    {5, {0x00,0x00,0x88,0xA8,0xA8,0xA8,0x50}}, // 119 'w'
+    {3, {0x00,0x00,0xA0,0x40,0x40,0xA0,0xA0}}, // 120 'x'
+    {4, {0x00,0x00,0x90,0x90,0x70,0x10,0x60}}, // 121 'y'
+    {3, {0x00,0x00,0xE0,0x40,0x80,0xE0,0xE0}}, // 122 'z'
+    {3, {0x20,0x40,0x40,0x80,0x40,0x40,0x20}}, // 123 '{'
+    {1, {0x80,0x80,0x80,0x80,0x80,0x80,0x80}}, // 124 '|'
+    {3, {0x80,0x40,0x40,0x20,0x40,0x40,0x80}}, // 125 '}'
+    {4, {0x50,0xA0,0x00,0x00,0x00,0x00,0x00}}  // 126 '~'
 };
 
 // ============================================================================
@@ -191,10 +198,38 @@ SDL_Texture* TextureCache::get_sprite_texture(uint32_t sprite_id, bool mirrored,
                               : archive_.get_sprite(sprite_id);
     if (sp.width == 0 || sp.height == 0) return nullptr;
 
+// Authentic Ants HUD palette remap for indices 1..24 (Bevels, Frames, Buttons)
+static const ants::assets::ColorRGBA TEAM0_BLACK_HUD[24] = {
+    {195, 192, 201, 255}, {170, 167, 177, 255}, {146, 144, 153, 255}, {111, 110, 117, 255},
+    {111, 106, 118, 255}, {107,  99, 117, 255}, {101,  97, 111, 255}, { 99,  99, 110, 255},
+    { 93,  89, 101, 255}, { 91,  88,  96, 255}, { 85,  81,  86, 255}, { 95,  87,  79, 255},
+    { 88,  85,  96, 255}, { 94,  91, 101, 255}, { 79,  77,  90, 255}, {115, 110, 120, 255},
+    { 90,  84,  98, 255}, { 58,  57,  66, 255}, {102, 100, 110, 255}, { 51,  44,  58, 255},
+    { 54,  48,  61, 255}, { 45,  39,  53, 255}, { 54,  50,  61, 255}, { 84,  81,  90, 255}
+};
+
+static const ants::assets::ColorRGBA TEAM1_BLUE_HUD[24] = {
+    {239, 243, 255, 255}, {195, 195, 231, 255}, {147, 147, 199, 255}, { 75,  75, 135, 255},
+    { 75,  75, 135, 255}, { 71,  79, 115, 255}, { 47,  47, 103, 255}, { 51,  59,  99, 255},
+    { 51,  59,  99, 255}, { 47,  47, 103, 255}, { 47,  47, 103, 255}, { 47,  47, 103, 255},
+    { 35,  39,  79, 255}, { 47,  47, 103, 255}, { 51,  59,  99, 255}, { 35,  39,  79, 255},
+    { 39,  43,  83, 255}, { 39,  43,  83, 255}, { 35,  35,  71, 255}, { 35,  35,  71, 255},
+    { 31,  31,  59, 255}, { 31,  31,  59, 255}, { 15,  19,  35, 255}, { 15,  19,  35, 255}
+};
+
+static const ants::assets::ColorRGBA TEAM2_RED_HUD[24] = {
+    {231, 159, 200, 255}, {215, 140, 181, 255}, {206, 119, 165, 255}, {166,  82, 121, 255},
+    {188,  67, 124, 255}, {182,  55, 116, 255}, {171,  61, 113, 255}, {164,  48, 108, 255},
+    {158,  44, 100, 255}, {153,  46,  98, 255}, {136,  41,  90, 255}, {146,  45,  90, 255},
+    {142,  43,  89, 255}, {156,  54, 101, 255}, {141,  35,  92, 255}, {150,  85, 121, 255},
+    {130,  44,  83, 255}, {116,  26,  65, 255}, {170,  74, 123, 255}, { 75,  37,  49, 255},
+    { 82,  37,  55, 255}, { 75,  27,  44, 255}, { 98,  31,  59, 255}, {132,  61,  98, 255}
+};
+
     // Convert 8-bit paletted sprite to 32-bit RGBA
     auto pal = archive_.get_palette();
     if (team_id > 0 && team_id < 4) {
-        // Authentic Microsoft Ants palette remap:
+        // Authentic Ants palette remap:
         // Team 0 (Black): indices 80..99
         // Team 1 (Blue): indices 100..119 (+20 shift)
         // Team 2 (Red): indices 120..139 (+40 shift)
@@ -204,6 +239,15 @@ SDL_Texture* TextureCache::get_sprite_texture(uint32_t sprite_id, bool mirrored,
         for (size_t i = 80; i <= 99; ++i) {
             pal[i] = base_pal[i + offset];
         }
+    }
+
+    // Authentic HUD palette tinting for indices 1..24
+    if (team_id == 0) {
+        for (size_t i = 1; i <= 24; ++i) pal[i] = TEAM0_BLACK_HUD[i - 1];
+    } else if (team_id == 1) {
+        for (size_t i = 1; i <= 24; ++i) pal[i] = TEAM1_BLUE_HUD[i - 1];
+    } else if (team_id == 2) {
+        for (size_t i = 1; i <= 24; ++i) pal[i] = TEAM2_RED_HUD[i - 1];
     }
 
     std::vector<uint8_t> rgba = sp.to_rgba32(pal);
@@ -293,9 +337,11 @@ void Renderer::set_level(const ants::assets::LevelData& level) {
     map_height_ = level.height;
     camera_.clamp_to_bounds(map_width_, map_height_);
 
-    // Pre-resolve tile dictionary strings to sprite IDs
+    // Pre-resolve tile dictionary strings to sprite IDs and Table 4 (dx, dy) anchor offsets
     tile_sprite_ids_.assign(level.tile_dictionary.size(), -1);
+    tile_offsets_.assign(level.tile_dictionary.size(), {0, 0});
     tile_anim_frames_.assign(level.tile_dictionary.size(), {});
+
     for (size_t i = 0; i < level.tile_dictionary.size(); ++i) {
         const std::string& name = level.tile_dictionary[i];
         if (name.empty() || name == ".") continue;
@@ -325,59 +371,30 @@ void Renderer::set_level(const ants::assets::LevelData& level) {
             continue;
         }
 
-        // Map food items to authentic food morsel
         std::string lower_name = name;
         for (char& ch : lower_name) ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
-        if (lower_name.rfind("fd", 0) == 0 || lower_name.rfind("food", 0) == 0) {
-            int32_t sid = archive_->find_sprite_id(name + ".bmp");
-            if (sid < 0) sid = archive_->find_sprite_id(name);
-            if (sid < 0) {
-                const auto* anim = archive_->find_animation(lower_name);
-                if (!anim) anim = archive_->find_animation(name);
-                if (anim && !anim->subitems.empty() && !anim->subitems[0].frames.empty()) {
-                    sid = static_cast<int32_t>(anim->subitems[0].frames[0].sprite_index);
-                }
-            }
-            if (sid < 0) {
-                // Try base animation with '1' suffix e.g. fdburgr1, fdsuckr1, fdgumw1
-                std::string stem = lower_name;
-                while (!stem.empty() && std::isdigit(static_cast<unsigned char>(stem.back()))) {
-                    stem.pop_back();
-                }
-                const auto* anim1 = archive_->find_animation(stem + "1");
-                if (!anim1) anim1 = archive_->find_animation(stem);
-                if (anim1 && !anim1->subitems.empty() && !anim1->subitems[0].frames.empty()) {
-                    sid = static_cast<int32_t>(anim1->subitems[0].frames[0].sprite_index);
-                }
-            }
-            if (sid < 0) {
-                if (lower_name.find("pez") != std::string::npos) sid = archive_->find_sprite_id("pez1.bmp");
-                else if (lower_name.find("pizz") != std::string::npos) sid = archive_->find_sprite_id("pizza.bmp");
-                else if (lower_name.find("fish") != std::string::npos) sid = archive_->find_sprite_id("fish.bmp");
-                else if (lower_name.find("chick") != std::string::npos) sid = archive_->find_sprite_id("chicken.bmp");
-                else if (lower_name.find("pmeat") != std::string::npos) sid = archive_->find_sprite_id("meata.bmp");
-                else if (lower_name.find("crak") != std::string::npos) sid = archive_->find_sprite_id("cracker.bmp");
-                else if (lower_name.find("egg") != std::string::npos) sid = archive_->find_sprite_id("eggs.bmp");
-                else if (lower_name.find("cornd") != std::string::npos) sid = archive_->find_sprite_id("corndog.bmp");
-                else if (lower_name.find("twin") != std::string::npos) sid = archive_->find_sprite_id("twink.bmp");
-                else if (lower_name.find("jelo") != std::string::npos) sid = archive_->find_sprite_id("jello1.bmp");
-                else if (lower_name.find("frl") != std::string::npos) sid = archive_->find_sprite_id("fried.bmp");
-            }
-            if (sid < 0) sid = archive_->find_sprite_id("meatmov1.bmp");
-            if (sid < 0) sid = archive_->find_sprite_id("foodse.bmp");
-            tile_sprite_ids_[i] = sid;
-            continue;
+
+        int32_t sid = -1;
+        int32_t off_x = 0, off_y = 0;
+
+        // 1. Table 4 animation resolution (handles grass1..4, grassmed1..4, rocks, food, center items)
+        const auto* anim = archive_->find_animation(name);
+        if (!anim) anim = archive_->find_animation(lower_name);
+        if (anim && !anim->subitems.empty() && !anim->subitems[0].frames.empty()) {
+            sid = static_cast<int32_t>(anim->subitems[0].frames[0].sprite_index);
+            off_x = anim->subitems[0].frames[0].dx;
+            off_y = anim->subitems[0].frames[0].dy;
         }
 
-        // 1. Direct or .bmp lookup (archive_->find_sprite_id is case-insensitive)
-        int32_t sid = archive_->find_sprite_id(name);
+        // 2. Direct or .bmp lookup
+        if (sid < 0) sid = archive_->find_sprite_id(name);
         if (sid < 0) sid = archive_->find_sprite_id(name + ".bmp");
 
-        // 2. Numerical variant resolution (e.g. M01b -> m01b2.bmp)
+        // 3. Numerical variant resolution (e.g. M01b -> m01b2.bmp)
         if (sid < 0) sid = archive_->find_sprite_id(lower_name + "2.bmp");
         if (sid < 0) sid = archive_->find_sprite_id(lower_name + "2");
 
-        // 3. Strip suffix after underscore (e.g. m01d_a -> M01d2.bmp)
+        // 4. Strip suffix after underscore (e.g. m01d_a -> M01d2.bmp)
         if (sid < 0 && lower_name.find('_') != std::string::npos) {
             std::string prefix = lower_name.substr(0, lower_name.find('_'));
             sid = archive_->find_sprite_id(prefix);
@@ -386,7 +403,7 @@ void Renderer::set_level(const ants::assets::LevelData& level) {
             if (sid < 0) sid = archive_->find_sprite_id(prefix + "2");
         }
 
-        // 4. Base category fallback for mud, grass, water
+        // 5. Base category fallback for mud, grass, water
         if (sid < 0) {
             if (lower_name.rfind("m01", 0) == 0 || lower_name.rfind("mw", 0) == 0 || lower_name.rfind("wm", 0) == 0) {
                 sid = archive_->find_sprite_id("M01a.bmp");
@@ -397,8 +414,9 @@ void Renderer::set_level(const ants::assets::LevelData& level) {
             }
         }
         tile_sprite_ids_[i] = sid;
+        tile_offsets_[i] = {off_x, off_y};
 
-        // 5. Resolve animated frame sequences for water and mud
+        // 6. Resolve animated frame sequences for water and mud
         if (sid >= 0) {
             std::vector<int32_t> frames;
             frames.push_back(sid);
@@ -461,15 +479,8 @@ void Renderer::set_level(const ants::assets::LevelData& level) {
         }
     }
 
-    // Deduplicate Layer 2 multi-tile decor objects into unique instances
+    // Instantiate all Layer 2 objects via authentic anchor flags ((flags & 1) != 0)
     static_decor_objects_.clear();
-    struct DecorGroup {
-        int32_t min_x{999999};
-        int32_t min_y{999999};
-        uint16_t tile_index{0};
-    };
-    std::unordered_map<uint32_t, DecorGroup> groups;
-
     for (uint32_t y = 0; y < level.height; ++y) {
         for (uint32_t x = 0; x < level.width; ++x) {
             const auto& c2 = level.get_cell_layer2(x, y);
@@ -481,10 +492,15 @@ void Renderer::set_level(const ants::assets::LevelData& level) {
 
             std::string low = tname;
             for (char& ch : low) ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
-            if (low.find("hill") != std::string::npos || low.find("start") != std::string::npos ||
-                low.rfind("fd", 0) == 0 || low.rfind("food", 0) == 0) {
+            if (low.find("hill") != std::string::npos || low.find("start") != std::string::npos) {
                 continue;
             }
+            if (low.rfind("pu_", 0) == 0 || low.rfind("pu", 0) == 0) {
+                continue; // Dynamic powerups on ground: rendered exclusively via cell.has_powerup()
+            }
+
+            // Only anchor tiles ((flags & 1) != 0) define object instances
+            if ((c2.flags & 1) == 0) continue;
 
             int32_t sid = (c2.tile_index < tile_sprite_ids_.size()) ? tile_sprite_ids_[c2.tile_index] : -1;
             if (sid < 0) continue;
@@ -492,36 +508,54 @@ void Renderer::set_level(const ants::assets::LevelData& level) {
             if (sp.width == 0 || sp.height == 0) continue;
             if (sp.width == 128 && sp.height == 128) continue; // Anthills handled separately
 
-            if (c2.properties != 0) {
-                uint32_t key = (static_cast<uint32_t>(c2.tile_index) << 16) | c2.properties;
-                auto& grp = groups[key];
-                grp.tile_index = c2.tile_index;
-                grp.min_x = std::min(grp.min_x, static_cast<int32_t>(x));
-                grp.min_y = std::min(grp.min_y, static_cast<int32_t>(y));
-            } else {
-                StaticMapObject obj{};
-                obj.world_x = static_cast<int32_t>(x * TILE_SIZE);
-                obj.world_y = static_cast<int32_t>(y * TILE_SIZE);
-                obj.sprite_id = sid;
-                obj.width = static_cast<int32_t>(sp.width);
-                obj.height = static_cast<int32_t>(sp.height);
-                static_decor_objects_.push_back(obj);
-            }
-        }
-    }
+            int32_t off_x = (c2.tile_index < tile_offsets_.size()) ? tile_offsets_[c2.tile_index].first : 0;
+            int32_t off_y = (c2.tile_index < tile_offsets_.size()) ? tile_offsets_[c2.tile_index].second : 0;
 
-    for (const auto& pair : groups) {
-        const auto& grp = pair.second;
-        int32_t sid = (grp.tile_index < tile_sprite_ids_.size()) ? tile_sprite_ids_[grp.tile_index] : -1;
-        if (sid >= 0) {
-            const auto& sp = archive_->get_sprite(static_cast<uint32_t>(sid));
             StaticMapObject obj{};
-            obj.world_x = grp.min_x * TILE_SIZE;
-            obj.world_y = grp.min_y * TILE_SIZE;
+            obj.world_x = static_cast<int32_t>(x * TILE_SIZE) + off_x;
+            obj.world_y = static_cast<int32_t>(y * TILE_SIZE) + off_y;
             obj.sprite_id = sid;
             obj.width = static_cast<int32_t>(sp.width);
             obj.height = static_cast<int32_t>(sp.height);
-            static_decor_objects_.push_back(obj);
+
+            bool is_food = (low.rfind("fd", 0) == 0 || low.rfind("food", 0) == 0);
+            obj.is_food = is_food;
+            if (is_food) {
+                // Find all cells belonging to this food clump
+                for (uint32_t fy = 0; fy < level.height; ++fy) {
+                    for (uint32_t fx = 0; fx < level.width; ++fx) {
+                        const auto& fc = level.get_cell_layer2(fx, fy);
+                        if (fc.tile_index == c2.tile_index && (c2.properties == 0 || fc.properties == c2.properties)) {
+                            obj.food_tiles.push_back({static_cast<uint16_t>(fx), static_cast<uint16_t>(fy)});
+                        }
+                    }
+                }
+            }
+
+            static_decor_objects_.push_back(std::move(obj));
+        }
+    }
+
+    // 3rd Layer Decor from LevelData Block 1 (items with team_id == 255: clovers, flowers, etc.)
+    for (const auto& sp_item : level.anthill_spawns) {
+        if (sp_item.team_id == 255 && sp_item.tile_id < level.tile_dictionary.size()) {
+            int32_t sid = (sp_item.tile_id < tile_sprite_ids_.size()) ? tile_sprite_ids_[sp_item.tile_id] : -1;
+            if (sid >= 0) {
+                const auto& sp = archive_->get_sprite(static_cast<uint32_t>(sid));
+                if (sp.width > 0 && sp.height > 0) {
+                    int32_t off_x = (sp_item.tile_id < tile_offsets_.size()) ? tile_offsets_[sp_item.tile_id].first : 0;
+                    int32_t off_y = (sp_item.tile_id < tile_offsets_.size()) ? tile_offsets_[sp_item.tile_id].second : 0;
+
+                    StaticMapObject obj{};
+                    obj.world_x = static_cast<int32_t>(sp_item.x * TILE_SIZE) + off_x;
+                    obj.world_y = static_cast<int32_t>(sp_item.y * TILE_SIZE) + off_y;
+                    obj.sprite_id = sid;
+                    obj.width = static_cast<int32_t>(sp.width);
+                    obj.height = static_cast<int32_t>(sp.height);
+                    obj.is_food = false;
+                    static_decor_objects_.push_back(std::move(obj));
+                }
+            }
         }
     }
 }
@@ -576,8 +610,21 @@ void Renderer::render_terrain_layer1(const ants::sim::Grid& grid) {
             int32_t sid = (cell.terrain_id < tile_sprite_ids_.size()) ? tile_sprite_ids_[cell.terrain_id] : -1;
             if (cell.terrain_id < tile_anim_frames_.size() && !tile_anim_frames_[cell.terrain_id].empty()) {
                 const auto& frames = tile_anim_frames_[cell.terrain_id];
-                size_t frame_idx = (anim_tick_ / 4) % frames.size();
-                sid = frames[frame_idx];
+                if (cell.is_mud) {
+                    // Mud bubbles: idle on flat mud (frames[0]) for ~96 ticks (~1.6s @ 60Hz), then pop over 24 ticks (400ms)
+                    uint32_t phase = (static_cast<uint32_t>(c) * 17 + static_cast<uint32_t>(r) * 31);
+                    uint32_t local_tick = (anim_tick_ + phase) % 120;
+                    if (local_tick < 96 || frames.size() <= 1) {
+                        sid = frames[0];
+                    } else {
+                        size_t pop_idx = (local_tick - 96) * (frames.size() - 1) / 24;
+                        sid = frames[1 + std::min(pop_idx, frames.size() - 2)];
+                    }
+                } else {
+                    // Water ripples: cycle every 9 frames (150ms)
+                    size_t frame_idx = (anim_tick_ / 9) % frames.size();
+                    sid = frames[frame_idx];
+                }
             }
 
             if (sid >= 0) {
@@ -653,29 +700,45 @@ void Renderer::render_terrain_layer2_structures(const ants::sim::Grid& grid) {
                 continue;
             }
 
-            // 5. Authentic Food Items
-            if (cell.has_food()) {
-                SDL_Texture* tex = nullptr;
-                if (cell.interactive_id < tile_sprite_ids_.size() && tile_sprite_ids_[cell.interactive_id] >= 0) {
-                    tex = texture_cache_->get_sprite_texture(static_cast<uint32_t>(tile_sprite_ids_[cell.interactive_id]));
+            // 5. Power-up Potions on Ground
+            if (cell.has_powerup()) {
+                const char* pu_name = nullptr;
+                switch (cell.powerup_type) {
+                    case 1: pu_name = "pubomb.bmp"; break;
+                    case 2: pu_name = "pufire.bmp"; break;
+                    case 3: pu_name = "puthief01.bmp"; break;
+                    case 4: pu_name = "pucomb.bmp"; break;
+                    case 5: pu_name = "puswim01.bmp"; break;
+                    default: break;
                 }
-                if (!tex) {
-                    tex = texture_cache_->get_named_sprite_texture("meatmov1.bmp");
+                if (pu_name) {
+                    SDL_Texture* tex = texture_cache_->get_named_sprite_texture(pu_name);
+                    if (tex) {
+                        int pw = 24, ph = 24;
+                        SDL_QueryTexture(tex, nullptr, nullptr, &pw, &ph);
+                        SDL_Rect pu_dst = { sx + (32 - pw) / 2, sy + (32 - ph) / 2, pw, ph };
+                        SDL_RenderCopy(renderer_, tex, nullptr, &pu_dst);
+                        continue;
+                    }
                 }
-                if (!tex) {
-                    tex = texture_cache_->get_named_sprite_texture("foodse.bmp");
-                }
-                if (tex) {
-                    SDL_Rect food_dst = { sx + 2, sy + 2, 28, 28 };
-                    SDL_RenderCopy(renderer_, tex, nullptr, &food_dst);
-                }
-                continue;
             }
         }
     }
 
-    // 6. Static Decorative Overlays (Rendered once per unique instance with full bounds culling)
+    // 5. Static Decorative Overlays & Multi-Tile Food Objects (Rendered once per unique anchor instance)
     for (const auto& obj : static_decor_objects_) {
+        // If it is food, check if any of its footprint cells still has food
+        if (obj.is_food) {
+            bool has_any_food = false;
+            for (const auto& tile : obj.food_tiles) {
+                if (grid.in_bounds(tile.first, tile.second) && grid.get_cell(tile.first, tile.second).has_food()) {
+                    has_any_food = true;
+                    break;
+                }
+            }
+            if (!has_any_food) continue; // All food in this item has been gathered
+        }
+
         int32_t right = obj.world_x + obj.width;
         int32_t bottom = obj.world_y + obj.height;
         if (right < camera_.world_x || obj.world_x > camera_.world_x + camera_.viewport_w ||
@@ -790,26 +853,54 @@ void Renderer::draw_single_ant(const ants::sim::AntSnapshot& ant, bool is_select
         }
     }
 
-    // 3. Selection Indicator (Yellow Box encompassing the full ant height 40px, head at render_y - 28)
+    // 3. Selection Indicator (4 bright green corner brackets framing the unit)
     if (is_selected) {
-        SDL_SetRenderDrawColor(renderer_, 255, 255, 0, 255); // Yellow Selection Ring
-        SDL_Rect sel_box = { sx - 14, render_y - 29, 28, 41 };
-        SDL_RenderDrawRect(renderer_, &sel_box);
+        SDL_SetRenderDrawColor(renderer_, 50, 220, 50, 255);
+        int32_t bx = sx - 15;
+        int32_t by = render_y - 28;
+        int32_t bw = 30;
+        int32_t bh = 38;
+        int32_t arm = 6;
+
+        // Top-left
+        SDL_RenderDrawLine(renderer_, bx, by, bx + arm, by);
+        SDL_RenderDrawLine(renderer_, bx, by, bx, by + arm);
+
+        // Top-right
+        SDL_RenderDrawLine(renderer_, bx + bw, by, bx + bw - arm, by);
+        SDL_RenderDrawLine(renderer_, bx + bw, by, bx + bw, by + arm);
+
+        // Bottom-left
+        SDL_RenderDrawLine(renderer_, bx, by + bh, bx + arm, by + bh);
+        SDL_RenderDrawLine(renderer_, bx, by + bh, bx, by + bh - arm);
+
+        // Bottom-right
+        SDL_RenderDrawLine(renderer_, bx + bw, by + bh, bx + bw - arm, by + bh);
+        SDL_RenderDrawLine(renderer_, bx + bw, by + bh, bx + bw, by + bh - arm);
     }
 
-    // 4. Overhead Health Bar (Drawn if selected OR if global unit health display is ON)
+    // 4. Integer Unit Health Display (Centered underneath the ant in white digits with 1px black outline)
     if (is_selected || show_health_bar) {
-        // Health Bar (10 HP standard, 24x4 px anchored at sx-12, render_y-35 above the ant's head)
-        SDL_Rect bar_bg = { sx - 12, render_y - 35, 24, 4 };
-        SDL_SetRenderDrawColor(renderer_, 40, 40, 40, 200);
-        SDL_RenderFillRect(renderer_, &bar_bg);
+        std::string hp_str = std::to_string(ant.hp);
+        int32_t text_w = 0;
+        for (char c : hp_str) {
+            uint8_t ch = static_cast<uint8_t>(c);
+            if (ch >= 32 && ch < 128) text_w += FONT_5X7[ch - 32].width + 1;
+        }
+        int32_t hpx = sx - (text_w / 2);
+        int32_t hpy = render_y + 11;
 
-        int hp_w = (ant.max_hp > 0) ? (ant.hp * 24) / ant.max_hp : 0;
-        SDL_Rect bar_fg = { sx - 12, render_y - 35, hp_w, 4 };
-        if (ant.hp > 6) SDL_SetRenderDrawColor(renderer_, 50, 220, 50, 255);
-        else if (ant.hp > 3) SDL_SetRenderDrawColor(renderer_, 230, 200, 30, 255);
-        else SDL_SetRenderDrawColor(renderer_, 230, 40, 40, 255);
-        SDL_RenderFillRect(renderer_, &bar_fg);
+        // 1px black outline in 8 directions
+        static const int8_t OFFSETS[8][2] = {
+            {-1,-1}, {0,-1}, {1,-1},
+            {-1, 0},         {1, 0},
+            {-1, 1}, {0, 1}, {1, 1}
+        };
+        for (const auto& off : OFFSETS) {
+            draw_text(hp_str, hpx + off[0], hpy + off[1], {0, 0, 0, 255});
+        }
+        // White foreground text
+        draw_text(hp_str, hpx, hpy, {255, 255, 255, 255});
     }
 }
 
@@ -859,13 +950,13 @@ void Renderer::render_minimap(const ants::sim::WorldState& world,
         for (uint32_t x = 0; x < map_width_; x += 2) {
             const auto& cell = grid.get_cell(x, y);
             if (cell.terrain_type == ants::sim::TERRAIN_WATER) {
-                SDL_SetRenderDrawColor(renderer_, 25, 75, 150, 255);
-            } else if (cell.terrain_type == ants::sim::TERRAIN_OBSTACLE) {
-                SDL_SetRenderDrawColor(renderer_, 45, 42, 38, 255);
+                SDL_SetRenderDrawColor(renderer_, 45, 90, 220, 255);
+            } else if (cell.terrain_type == ants::sim::TERRAIN_OBSTACLE || cell.is_obstacle_overlay) {
+                SDL_SetRenderDrawColor(renderer_, 47, 81, 48, 255);
             } else if (cell.is_mud) {
-                SDL_SetRenderDrawColor(renderer_, 65, 65, 65, 255);
+                SDL_SetRenderDrawColor(renderer_, 75, 55, 45, 255);
             } else {
-                SDL_SetRenderDrawColor(renderer_, 135, 120, 110, 255);
+                SDL_SetRenderDrawColor(renderer_, 155, 115, 108, 255);
             }
             SDL_Rect dot = {
                 MINIMAP_X + static_cast<int>(x * sx_scale),
@@ -984,7 +1075,7 @@ void Renderer::end_frame() {
 
 void Renderer::draw_sprite(uint32_t sprite_id, int32_t x, int32_t y, bool mirrored) {
     if (!renderer_ || !texture_cache_ || !archive_) return;
-    SDL_Texture* tex = texture_cache_->get_sprite_texture(sprite_id, mirrored);
+    SDL_Texture* tex = texture_cache_->get_sprite_texture(sprite_id, mirrored, hud_team_id_);
     if (!tex) return;
 
     const auto& sp = mirrored ? archive_->get_mirrored_sprite(sprite_id) : archive_->get_sprite(sprite_id);
@@ -1030,17 +1121,17 @@ void Renderer::draw_text(const std::string& text, int32_t x, int32_t y, ants::as
         }
 
         uint8_t glyph_idx = (c >= 32 && c <= 126) ? static_cast<uint8_t>(c - 32) : static_cast<uint8_t>('?' - 32);
-        const uint8_t* glyph = FONT_8X8[glyph_idx];
+        const auto& glyph = FONT_5X7[glyph_idx];
 
-        for (int row = 0; row < 8; ++row) {
-            uint8_t row_bits = glyph[row];
-            for (int col = 0; col < 8; ++col) {
+        for (int row = 0; row < 7; ++row) {
+            uint8_t row_bits = glyph.rows[row];
+            for (int col = 0; col < glyph.width; ++col) {
                 if (row_bits & (0x80 >> col)) {
                     SDL_RenderDrawPoint(renderer_, cur_x + col, cur_y + row);
                 }
             }
         }
-        cur_x += 8;
+        cur_x += glyph.width + 1;
     }
 }
 

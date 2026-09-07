@@ -1010,7 +1010,7 @@ void run_suite_6_adversarial_stress() {
 
 int main() {
     std::cout << "=======================================================\n"
-              << " MICROSOFT ANTS - CHALLENGER M2_1 STRESS TEST SUITE    \n"
+              << " ANTS - CHALLENGER M2_1 STRESS TEST SUITE          \n"
               << "=======================================================\n";
 
     run_suite_1_combat_guard_ai();

@@ -21,7 +21,7 @@ cmake --build build_asan --target test_challenger_m1_1
 **Observed Output:**
 ```text
 =======================================================
- Microsoft Ants Native Asset Decoder ADVERSARIAL Suite
+ Ants Native Asset Decoder ADVERSARIAL Suite
  Target: libants-assets (Milestone 1 Challenger)
 =======================================================
 Located Assets Directory: /Users/dchadd/Desktop/Ants-Mac/tests/test_assets/../../Original-Ants

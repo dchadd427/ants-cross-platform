@@ -1,4 +1,5 @@
 #include "ants_sim/sim_engine.hpp"
+#include "ants_sim/pathfinding.hpp"
 #include <unordered_map>
 #include <memory>
 #include <algorithm>
@@ -245,16 +246,52 @@ void SimulationEngine::tick() {
     for (auto& ant_ptr : impl_->ants_) {
         if (!ant_ptr || !ant_ptr->is_alive()) continue;
         ant_ptr->tick_timers();
-        bool in_water = (impl_->grid_.in_bounds(ant_ptr->pos) &&
-                         impl_->grid_.get_cell(ant_ptr->pos).terrain_type == TERRAIN_WATER &&
-                         !impl_->grid_.get_cell(ant_ptr->pos).has_completed_bridge());
-        ant_ptr->tick_movement(in_water);
+        SurfaceType surf = SurfaceType::Grass;
+        bool in_water = false;
+        if (impl_->grid_.in_bounds(ant_ptr->pos)) {
+            const auto& cell = impl_->grid_.get_cell(ant_ptr->pos);
+            surf = cell.surface_type;
+            in_water = (cell.terrain_type == TERRAIN_WATER && !cell.has_completed_bridge());
+        }
+        ant_ptr->tick_movement(in_water, surf);
 
         // Universal lunchbox pickup
         if (ant_ptr->is_alive() && !ant_ptr->is_holding() && impl_->grid_.has_lunchbox_at(ant_ptr->pos)) {
             uint32_t pts = impl_->grid_.get_lunchbox_points(ant_ptr->pos);
             impl_->grid_.clear_lunchbox(static_cast<uint32_t>(ant_ptr->pos.x), static_cast<uint32_t>(ant_ptr->pos.y));
             ant_ptr->pick_up_food(1, static_cast<uint16_t>(pts > 0 ? pts : 25));
+        }
+
+        // Power-up pickup, transformation & swap
+        if (ant_ptr->is_alive() && impl_->grid_.in_bounds(ant_ptr->pos) && impl_->grid_.has_powerup_at(ant_ptr->pos)) {
+            AntType old_type = ant_ptr->type;
+            uint8_t new_type_id = impl_->grid_.get_powerup_type(ant_ptr->pos);
+            AntType new_type = static_cast<AntType>(new_type_id);
+            impl_->grid_.clear_powerup(static_cast<uint32_t>(ant_ptr->pos.x), static_cast<uint32_t>(ant_ptr->pos.y));
+
+            // If ant already possessed a power-up, drop previous power-up onto an adjacent free tile
+            if (old_type != AntType::Worker) {
+                bool dropped = false;
+                for (int32_t dy = -1; dy <= 1 && !dropped; ++dy) {
+                    for (int32_t dx = -1; dx <= 1 && !dropped; ++dx) {
+                        if (dx == 0 && dy == 0) continue;
+                        TileCoord adj{ant_ptr->pos.x + dx, ant_ptr->pos.y + dy};
+                        if (impl_->grid_.in_bounds(adj) &&
+                            impl_->grid_.get_cell(adj).is_passable() &&
+                            impl_->grid_.get_cell(adj).is_empty_overlay()) {
+                            impl_->grid_.place_powerup(static_cast<uint32_t>(adj.x), static_cast<uint32_t>(adj.y), static_cast<uint8_t>(old_type));
+                            dropped = true;
+                        }
+                    }
+                }
+            }
+
+            // Transform ant
+            ant_ptr->type = new_type;
+            if (new_type == AntType::Combat) ant_ptr->max_hp = 12;
+            else ant_ptr->max_hp = 10;
+            ant_ptr->hp = ant_ptr->max_hp;
+            impl_->audio_queue_.push_back(AudioEvent{SoundID::PowerUpHeal, ant_ptr->pixel_x, ant_ptr->pixel_y, 1, ant_ptr->player_id});
         }
 
         // Static Layer 2 food harvest
@@ -264,6 +301,13 @@ void SimulationEngine::tick() {
                 cell.interactive_id = TILE_EMPTY;
                 cell.is_food = false;
                 ant_ptr->pick_up_food(1, 25);
+                impl_->audio_queue_.push_back(AudioEvent{SoundID::BaseScoreUp, ant_ptr->pixel_x, ant_ptr->pixel_y, 1, ant_ptr->player_id});
+
+                // Worker automatically returns to base upon collecting food
+                const auto* home = impl_->grid_.find_anthill(ant_ptr->player_id);
+                if (home) {
+                    issue_move_order(ant_ptr->id, TileCoord{home->x, home->y});
+                }
             }
         }
 
@@ -307,13 +351,17 @@ void SimulationEngine::tick() {
             continue;
         }
 
-        // Check arrival at friendly anthill with food or needing healing
+        // Check arrival at friendly anthill with food or needing healing (4x4 anthill footprint)
         const auto* friendly_base = impl_->grid_.find_anthill(ant_ptr->player_id);
-        if (friendly_base && ant_ptr->pos.x == friendly_base->x && ant_ptr->pos.y == friendly_base->y) {
+        if (friendly_base &&
+            ant_ptr->pos.x >= friendly_base->x && ant_ptr->pos.x < friendly_base->x + 4 &&
+            ant_ptr->pos.y >= friendly_base->y && ant_ptr->pos.y < friendly_base->y + 4) {
             if (ant_ptr->is_holding() || ant_ptr->hp < ant_ptr->max_hp) {
-                ant_ptr->state = UnitState::EnteringBase;
-                ant_ptr->anim_subitem = 0;
-                ant_ptr->clear_path();
+                if (ant_ptr->state != UnitState::EnteringBase) {
+                    ant_ptr->state = UnitState::EnteringBase;
+                    ant_ptr->anim_subitem = 0;
+                    ant_ptr->clear_path();
+                }
             }
         }
 
@@ -329,6 +377,79 @@ void SimulationEngine::tick() {
                         ant_ptr->clear_path();
                         break;
                     }
+                }
+            }
+        }
+    }
+
+    // 5.5 Step Ant-Ant Elastic Collision & Tile Occupancy Separation
+    for (size_t i = 0; i < impl_->ants_.size(); ++i) {
+        auto& a1 = impl_->ants_[i];
+        if (!a1 || !a1->is_alive() || a1->underground || a1->state == UnitState::EnteringBase || a1->state == UnitState::Infiltrating) continue;
+        for (size_t j = i + 1; j < impl_->ants_.size(); ++j) {
+            auto& a2 = impl_->ants_[j];
+            if (!a2 || !a2->is_alive() || a2->underground || a2->state == UnitState::EnteringBase || a2->state == UnitState::Infiltrating) continue;
+
+            int32_t dx = a1->pixel_x - a2->pixel_x;
+            int32_t dy = a1->pixel_y - a2->pixel_y;
+            int32_t dist_sq = dx * dx + dy * dy;
+            // Collision radius threshold: 22 pixels (each tile is 32x32)
+            if (dist_sq < 22 * 22) {
+                float dist = std::sqrt(static_cast<float>(dist_sq));
+                float nx = 1.0f, ny = 0.0f;
+                if (dist > 0.01f) {
+                    nx = static_cast<float>(dx) / dist;
+                    ny = static_cast<float>(dy) / dist;
+                } else {
+                    dist = 0.01f;
+                }
+
+                float overlap = 22.0f - dist;
+                int32_t sep_x = static_cast<int32_t>(nx * (overlap * 0.5f) + (nx >= 0 ? 0.5f : -0.5f));
+                int32_t sep_y = static_cast<int32_t>(ny * (overlap * 0.5f) + (ny >= 0 ? 0.5f : -0.5f));
+
+                // Apply elastic separation to both ants if passable
+                int32_t cand1_x = (a1->pixel_x + sep_x) / 32;
+                int32_t cand1_y = (a1->pixel_y + sep_y) / 32;
+                if (impl_->grid_.in_bounds(cand1_x, cand1_y) && impl_->grid_.get_cell(cand1_x, cand1_y).is_passable()) {
+                    a1->pixel_x += sep_x;
+                    a1->pixel_y += sep_y;
+                    a1->fx_x = a1->pixel_x << 16;
+                    a1->fx_y = a1->pixel_y << 16;
+                    a1->pos.x = cand1_x;
+                    a1->pos.y = cand1_y;
+                }
+
+                int32_t cand2_x = (a2->pixel_x - sep_x) / 32;
+                int32_t cand2_y = (a2->pixel_y - sep_y) / 32;
+                if (impl_->grid_.in_bounds(cand2_x, cand2_y) && impl_->grid_.get_cell(cand2_x, cand2_y).is_passable()) {
+                    a2->pixel_x -= sep_x;
+                    a2->pixel_y -= sep_y;
+                    a2->fx_x = a2->pixel_x << 16;
+                    a2->fx_y = a2->pixel_y << 16;
+                    a2->pos.x = cand2_x;
+                    a2->pos.y = cand2_y;
+                }
+
+                // If both are on exact same tile, displace one to an adjacent free passable tile
+                if (a1->pos.x == a2->pos.x && a1->pos.y == a2->pos.y) {
+                    static const int adj[8][2] = {
+                        {1, 0}, {0, 1}, {-1, 0}, {0, -1},
+                        {1, 1}, {-1, 1}, {1, -1}, {-1, -1}
+                    };
+                    for (const auto& off : adj) {
+                        int32_t free_x = a2->pos.x + off[0];
+                        int32_t free_y = a2->pos.y + off[1];
+                        if (impl_->grid_.in_bounds(free_x, free_y) && impl_->grid_.get_cell(free_x, free_y).is_passable()) {
+                            a2->set_tile_pos(free_x, free_y);
+                            break;
+                        }
+                    }
+                }
+
+                // Periodic bump audio
+                if (impl_->current_tick_ % 8 == 0) {
+                    impl_->audio_queue_.push_back(AudioEvent{SoundID::FlingThumpA, a1->pixel_x, a1->pixel_y, 1, 255});
                 }
             }
         }
@@ -719,7 +840,15 @@ void SimulationEngine::execute_melee_attack(uint32_t attacker_id, uint32_t targe
 void SimulationEngine::issue_move_order(uint32_t ant_id, TileCoord dest) {
     AntUnit* unit = impl_->find_unit(ant_id);
     if (!unit || !unit->is_alive() || unit->is_stunned()) return;
-    unit->set_destination(dest.x, dest.y);
+
+    bool is_swimmer = (unit->type == AntType::Swimmer);
+    bool is_fire_ant = (unit->type == AntType::Fire);
+    auto path = PathFinder::find_path(impl_->grid_, unit->pos, dest, is_swimmer, is_fire_ant);
+    if (!path.empty()) {
+        unit->set_path(std::move(path));
+    } else {
+        unit->set_destination(dest.x, dest.y);
+    }
 }
 
 bool SimulationEngine::validate_cardinal_placement(TileCoord from, TileCoord to) const {

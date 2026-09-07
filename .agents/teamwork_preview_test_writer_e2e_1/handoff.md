@@ -14,7 +14,7 @@
    - `Original-Ants/ants.chd`: Verified exists at size 8,411,866 bytes, containing 2,794 sprite records, 91 PCM audio records, and 1,344 animation records.
    - `Original-Ants/Maps/`: Verified 6 original maps present: `GARDEN.LVL` (5,188 bytes, 36x36), `LAWN.LVL` (7,020 bytes, 42x42), `PARK.LVL` (6,240 bytes, 39x40), `PATIO.LVL` (5,700 bytes, 38x38), `PICNIC.LVL` (6,240 bytes, 39x40), `SANDPIT.LVL` (6,240 bytes, 39x40). All maps successfully parsed and validated against header geometry.
 2. **Project Guidelines & Layout**:
-   - `ORIGINAL_REQUEST.md`: Remake Microsoft Ants in C++ / SDL3 with modern tooling, preserving pixel-exact gameplay and CHD/LVL asset compatibility.
+   - `ORIGINAL_REQUEST.md`: Remake Ants in C++ / SDL3 with modern tooling, preserving pixel-exact gameplay and CHD/LVL asset compatibility.
    - `PROJECT.md`: Specifies test layout in `tests/e2e/`, build system using CMake, and strict isolation of `.agents/` directory to agent metadata only.
 3. **Compilation Command and Output**:
    Command:
@@ -48,7 +48,7 @@
    Output:
    ```text
    ======================================================================
-          MICROSOFT ANTS REMAKE - OPAQUE-BOX E2E TEST RUNNER             
+          ANTS REMAKE - OPAQUE-BOX E2E TEST RUNNER             
    ======================================================================
 
    ----------------------------------------------------------------------
@@ -109,7 +109,7 @@
 
 ## 4. Conclusion
 
-The E2E test track for Microsoft Ants remake is complete and fully operational.
+The E2E test track for Ants remake is complete and fully operational.
 - Total Tests: 506
 - Total Passing: 506 (100%)
 - Total Features Covered: 49 / 49 (100%)

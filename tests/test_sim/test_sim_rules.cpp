@@ -839,7 +839,7 @@ void run_suite_12_game_over() {
 
 int main() {
     std::cout << "\n=======================================================\n";
-    std::cout << " MICROSOFT ANTS - LIBANTS-SIM HEADLESS RULES TEST SUITE \n";
+    std::cout << " ANTS - LIBANTS-SIM HEADLESS RULES TEST SUITE            \n";
     std::cout << "=======================================================\n";
 
     run_suite_1_clock();

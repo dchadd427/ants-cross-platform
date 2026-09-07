@@ -1,7 +1,7 @@
 # BRIEFING — 2026-09-06T22:37:30Z
 
 ## Mission
-Extract and document the exact, complete specification for Simulation Rules (11 key areas) for the Microsoft Ants remake.
+Extract and document the exact, complete specification for Simulation Rules (11 key areas) for the Ants remake.
 
 ## 🔒 My Identity
 - Archetype: Specification Miner

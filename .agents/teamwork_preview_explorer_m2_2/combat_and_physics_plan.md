@@ -31,9 +31,9 @@
 
 ## 1. Executive Summary & Architectural Overview
 
-Milestone 2 (`ants-sim`) implements the headless, deterministic, tick-based simulation core of Microsoft Ants. This document establishes the complete, production-ready C++17 design for three critical subsystems:
+Milestone 2 (`ants-sim`) implements the headless, deterministic, tick-based simulation core of Ants. This document establishes the complete, production-ready C++17 design for three critical subsystems:
 1. **Unit Entity System (`ant_unit.hpp`)**: Encapsulates the 6 ant classes (`Worker`, `Bomber`, `Fire`, `Thief`, `Combat`, `Swimmer`), universal 10 HP tracking, 20 Hz movement state machine with integer/fixed-point sub-pixel spatial coordinates, 8-directional facings, and carried food/points holding state suites (`ht*` / `h*`).
-2. **Combat Ant Autonomous Guard AI (`combat_ai.hpp`)**: Implements the **sole autonomous unit behavior** in Microsoft Ants: anchor post retention `(x_g, y_g)`, continuous 3-tile Chebyshev aggro scanning (`max(|dx|, |dy|) <= 3`), ally/underground target filtering, autonomous pursuit, 2 HP heavy punch delivery with 4–5 tile ballistic knockback, and automatic return-to-post disengagement.
+2. **Combat Ant Autonomous Guard AI (`combat_ai.hpp`)**: Implements the **sole autonomous unit behavior** in Ants: anchor post retention `(x_g, y_g)`, continuous 3-tile Chebyshev aggro scanning (`max(|dx|, |dy|) <= 3`), ally/underground target filtering, autonomous pursuit, 2 HP heavy punch delivery with 4–5 tile ballistic knockback, and automatic return-to-post disengagement.
 3. **Ballistic Physics & Collision Engine (`physics.hpp`)**: Implements deterministic 3D parabolic trajectory arcs for heavy punch (4–5 tiles) and bomb detonation (2–3 tiles), obstacle raycast collisions terminating flight, water landing detection causing instant drowning (`death_status = 0xF`, HP = 0, Sound 71/72, rising bubbles) for non-swimmers while Swimmers survive unharmed, +1 fire contact ricochet physics with reflection and chaining, and 12-tick (600 ms) stun recovery.
 
 All math is strictly integer and fixed-point (zero floating-point operations in the simulation step), guaranteeing 100% deterministic bitwise execution across macOS, Linux, and Windows.
@@ -298,7 +298,7 @@ struct AudioEvent;
 
 /**
  * @brief Autonomous Guard AI state machine states for Combat Ants.
- * Combat Ants are the SOLE unit type with autonomous AI in Microsoft Ants.
+ * Combat Ants are the SOLE unit type with autonomous AI in Ants.
  * Reference: survey_sim.md Section 3, GAME_REVERSE_ENGINEERING.md Section 5.10
  */
 enum class CombatGuardState : uint8_t {

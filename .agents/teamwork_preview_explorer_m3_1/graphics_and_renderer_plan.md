@@ -1,4 +1,4 @@
-# Microsoft Ants Remake — Graphics, Windowing, Viewport & Sprite Rendering Architecture
+# Ants Remake — Graphics, Windowing, Viewport & Sprite Rendering Architecture
 **Document Version:** 1.0  
 **Author:** explorer_m3_1 (M3 Explorer 1: Graphics & Renderer Architecture)  
 **Target Milestone:** Milestone 3 (`ants-app`)  
@@ -10,7 +10,7 @@
 
 This specification defines the complete graphics, windowing, camera viewport, terrain compositing, and animated sprite rendering subsystem for `ants-app`. 
 
-`ants-app` serves as the interactive desktop presentation client of the Microsoft Ants remake. It sits cleanly on top of `libants-assets` (asset decompression and format decoding) and `libants-sim` (deterministic 20 Hz simulation engine).
+`ants-app` serves as the interactive desktop presentation client of the Ants remake. It sits cleanly on top of `libants-assets` (asset decompression and format decoding) and `libants-sim` (deterministic 20 Hz simulation engine).
 
 ### Key Architectural Pillars
 1. **Authentic 4:3 640×480 Virtual Canvas:**
@@ -36,7 +36,7 @@ This specification defines the complete graphics, windowing, camera viewport, te
 ## 2. Windowing, Virtual Resolution & 4:3 Aspect Scaling Architecture
 
 ### 2.1 Virtual Canvas Geometry
-The original 1995/1998 Microsoft Ants ran exclusively at 640×480 with a 256-color palette. To preserve authentic presentation across modern displays (1080p, 1440p, 4K, 5K Retina) without blurriness, the client implements fixed logical integer scaling:
+The original 1995/1998 Ants ran exclusively at 640×480 with a 256-color palette. To preserve authentic presentation across modern displays (1080p, 1440p, 4K, 5K Retina) without blurriness, the client implements fixed logical integer scaling:
 
 ```
 0,0 ───────────────────────────────────────────────────────────── 640,0
@@ -73,7 +73,7 @@ if (headless_mode) {
 }
 
 SDL_Window* window = SDL_CreateWindow(
-    "Microsoft Ants",
+    "Ants",
     SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
     1280, 960, // Default 2x integer scale
     window_flags
@@ -213,7 +213,7 @@ Composited directly on top of Layer 1:
 ## 6. Animated Ant Sprite Rendering Pipeline
 
 ### 6.1 Ant Classes, Facings & Mirroring
-Microsoft Ants contains 6 playable ant classes:
+Ants contains 6 playable ant classes:
 - `Worker` (`ag`)
 - `Bomber` (`ab`)
 - `Fire` (`af`)
@@ -466,7 +466,7 @@ private:
 namespace ants::app {
 
 struct ApplicationConfig {
-    std::string title{"Microsoft Ants"};
+    std::string title{"Ants"};
     int window_width{1280};  // Default 2x integer scale
     int window_height{960};
     bool fullscreen{false};

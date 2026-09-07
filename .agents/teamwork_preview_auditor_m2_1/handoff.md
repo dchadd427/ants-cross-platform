@@ -71,7 +71,7 @@
      Output:
      ```
      =======================================================
-      MICROSOFT ANTS - LIBANTS-SIM HEADLESS RULES TEST SUITE 
+      ANTS - LIBANTS-SIM HEADLESS RULES TEST SUITE 
      =======================================================
        Total Test Cases: 62
        Total Assertions: 2193

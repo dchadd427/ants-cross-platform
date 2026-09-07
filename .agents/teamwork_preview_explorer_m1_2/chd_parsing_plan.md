@@ -9,7 +9,7 @@
 
 ## 1. Executive Summary & Verification Metrics
 
-`ants.chd` is the central asset repository for Microsoft Ants (1995/1998). It packages all visual sprites, digital audio waveforms, animation timelines, and synchronization event tags into a single uncompressed, custom binary archive.
+`ants.chd` is the central asset repository for Ants (1995/1998). It packages all visual sprites, digital audio waveforms, animation timelines, and synchronization event tags into a single uncompressed, custom binary archive.
 
 All specifications, data structures, and algorithms in this document have been **empirically validated** against the authentic game archive `Original-Ants/ants.chd` and verified under **Clang C++17 with AddressSanitizer (`-fsanitize=address`) and UndefinedBehaviorSanitizer (`-fsanitize=undefined`)** with zero memory errors, zero unaligned access faults, and zero leaks.
 
@@ -214,7 +214,7 @@ static_assert(sizeof(RawWaveFormatEx) == 18, "RawWaveFormatEx must be 18 bytes")
 ### 4.3 Channels & Unnamed Clips
 - **Channels:**
   - Mono (1 channel): 88 clips.
-  - Stereo (2 channels): 3 clips — Sound 6 (Microsoft logo fanfare, 65,190 bytes), Sound 45 (11,026 bytes), Sound 46 (11,026 bytes).
+  - Stereo (2 channels): 3 clips — Sound 6 (Ants logo fanfare, 65,190 bytes), Sound 45 (11,026 bytes), Sound 46 (11,026 bytes).
 - **Unnamed Clips:** 15 sound clips have `filename_len == 1` and `filename == "\0"`.
   - Sound IDs: 6, 17, 40, 42, 43, 45, 46, 48, 54, 55, 59, 60, 75, 77, 80.
   - Fallback naming rule: `sound_<id>.wav`.
@@ -267,7 +267,7 @@ std::vector<uint8_t> SoundClip::create_riff_wav() const {
 | **3** | `combatnetfairy.wav` | 11,025 Hz | Mono | 6,860 B | Combat Ant transformation chord |
 | **4** | `bombexp.wav` | 22,050 Hz | Mono | 25,216 B | Bomber Ant mine detonation blast |
 | **5** | `fireburnout.wav` | 11,025 Hz | Mono | 6,387 B | Firewall 180s natural burnout sputter |
-| **6** | *(unnamed)* | 11,025 Hz | **Stereo** | 65,190 B | Microsoft startup logo fanfare (`mslogo`) |
+| **6** | *(unnamed)* | 11,025 Hz | **Stereo** | 65,190 B | Ants startup logo fanfare (`mslogo`) |
 | **7..12**| `rndm6.wav` .. `rndm1.wav` | 22,050 Hz | Mono | 12K..23K B | Random ambient sound bites 1 through 6 |
 | **13** | `gantorders.wav` | 22,050 Hz | Mono | 13,394 B | Worker Ant selection ("Orders?") |
 | **14** | `gantrdy.wav` | 22,050 Hz | Mono | 16,126 B | Worker Ant hatch ready ("Ready!") |

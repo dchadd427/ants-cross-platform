@@ -871,7 +871,7 @@ void run_suite_8_unit_health_and_map_select() {
 // ============================================================================
 int main() {
     std::cout << "=======================================================\n"
-              << " MICROSOFT ANTS REMAKE — HEADLESS INTEGRATION HARNESS\n"
+              << " ANTS REMAKE — HEADLESS INTEGRATION HARNESS\n"
               << "=======================================================\n";
 
     run_suite_1_surface_compositing();

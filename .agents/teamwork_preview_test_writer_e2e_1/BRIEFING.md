@@ -1,7 +1,7 @@
 # BRIEFING — 2026-09-06T22:50:00Z
 
 ## Mission
-Design and implement the comprehensive opaque-box E2E test suite (Tier 1-4), TEST_INFRA.md, and TEST_READY.md for the Microsoft Ants remake project.
+Design and implement the comprehensive opaque-box E2E test suite (Tier 1-4), TEST_INFRA.md, and TEST_READY.md for the Ants remake project.
 
 ## 🔒 My Identity
 - Archetype: test_writer

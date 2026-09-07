@@ -54,7 +54,7 @@
    Output:
    ```text
    =======================================================
-    Microsoft Ants Native Asset Decoder Test Suite
+    Ants Native Asset Decoder Test Suite
     Target: libants-assets (Milestone 1)
    =======================================================
    Located Assets Directory: /Users/dchadd/Desktop/Ants-Mac/tests/test_assets/../../Original-Ants
@@ -173,7 +173,7 @@
 
 ## 4. Conclusion
 
-Milestone 1 (`ants-assets`) is complete, fully functional, and verified against the authentic binary assets of Microsoft Ants. The library `libants_assets` provides clean, zero-dependency C++17 public headers conforming directly to the interface contracts in `PROJECT.md`, enabling immediate integration with Milestone 2 (`libants-sim`).
+Milestone 1 (`ants-assets`) is complete, fully functional, and verified against the authentic binary assets of Ants. The library `libants_assets` provides clean, zero-dependency C++17 public headers conforming directly to the interface contracts in `PROJECT.md`, enabling immediate integration with Milestone 2 (`libants-sim`).
 
 ---
 

@@ -1,7 +1,7 @@
 # BRIEFING — 2026-09-06T23:48:50Z
 
 ## Mission
-Sentinel monitoring and lifecycle orchestration for Microsoft Ants deterministic engine remake.
+Sentinel monitoring and lifecycle orchestration for Ants deterministic engine remake.
 
 ## 🔒 My Identity
 - Archetype: sentinel

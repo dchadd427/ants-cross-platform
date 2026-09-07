@@ -1,7 +1,7 @@
 # BRIEFING — 2026-09-06T22:49:00Z
 
 ## Mission
-Implement Milestone 1 (`libants-assets`), the zero-dependency C++17 asset decoding library for Microsoft Ants remake, and comprehensive programmatic verification suite.
+Implement Milestone 1 (`libants-assets`), the zero-dependency C++17 asset decoding library for Ants remake, and comprehensive programmatic verification suite.
 
 ## 🔒 My Identity
 - Archetype: worker

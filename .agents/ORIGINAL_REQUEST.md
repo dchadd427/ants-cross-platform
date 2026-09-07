@@ -2,7 +2,7 @@
 
 ## 2026-09-06T22:30:38Z
 
-A modern, high-performance, deterministic cross-platform engine remake of Microsoft Ants (1995/1998) that directly loads original raw binary assets (ants.chd and Maps/*.LVL) without pre-conversion, faithfully executing all authentic mechanics, physics, and audiovisual presentation.
+A modern, high-performance, deterministic cross-platform engine remake of Ants (1995/1998) that directly loads original raw binary assets (ants.chd and Maps/*.LVL) without pre-conversion, faithfully executing all authentic mechanics, physics, and audiovisual presentation.
 
 Working directory: /Users/dchadd/Desktop/Ants-Mac
 Integrity mode: development

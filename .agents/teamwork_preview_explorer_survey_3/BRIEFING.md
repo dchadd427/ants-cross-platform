@@ -1,7 +1,7 @@
 # BRIEFING — 2026-09-06T22:37:00Z
 
 ## Mission
-Survey the architecture, UI/HUD, audio mixer, technology stack, native toolchains, and automated testing strategy for the Microsoft Ants remake.
+Survey the architecture, UI/HUD, audio mixer, technology stack, native toolchains, and automated testing strategy for the Ants remake.
 
 ## 🔒 My Identity
 - Archetype: explorer

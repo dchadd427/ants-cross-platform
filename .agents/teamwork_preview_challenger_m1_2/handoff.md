@@ -30,7 +30,7 @@ While the 5-to-8 directional mirroring engine and standard level decoder impleme
    Verbatim output:
    ```text
    =======================================================
-    Microsoft Ants Challenger 2 Adversarial Test Suite
+    Ants Challenger 2 Adversarial Test Suite
     Target: libants_assets (5-to-8 Mirroring & Level Decoder)
    =======================================================
    Target Assets Directory: /Users/dchadd/Desktop/Ants-Mac/tests/test_assets/../../Original-Ants
@@ -145,7 +145,7 @@ While the 5-to-8 directional mirroring engine and standard level decoder impleme
 - **Mitigation:**
   In `src/ants_assets/lvl_parser.cpp` at line 157:
   ```cpp
-  // 1. Enforce upper sanity limit on map dimensions (Microsoft Ants max is 60x60, allow up to 256x256)
+  // 1. Enforce upper sanity limit on map dimensions (Ants max is 60x60, allow up to 256x256)
   if (out_level.width > 256 || out_level.height > 256) {
       return false;
   }

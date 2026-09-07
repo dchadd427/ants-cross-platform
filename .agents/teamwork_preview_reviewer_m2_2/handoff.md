@@ -84,7 +84,7 @@
    - *Conclusion*: Simulation engine is mathematically deterministic.
 
 2. **PRNG Reproducibility**:
-   - *Premise*: Authentic Microsoft Ants gameplay requires reproducing the original game's MSVC 4.x/5.0 CRT linear congruential generator.
+   - *Premise*: Authentic Ants gameplay requires reproducing the original game's MSVC 4.x/5.0 CRT linear congruential generator.
    - *Finding*: `ants::sim::PRNG` implements $S_{n+1} = (S_n \times 214013 + 2531011) \pmod{2^{32}}$ and extracts bits 16..30 (`(state >> 16) & 0x7FFF`). Independent test verified exact equivalence with MSVC standard reference values.
    - *Conclusion*: PRNG is authentic and reproducible.
 

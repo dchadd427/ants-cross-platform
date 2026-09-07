@@ -1,7 +1,7 @@
 # Sentinel Dispatch Handoff Report
 
 ## Observation
-The user requested a modern, high-performance, deterministic cross-platform engine remake of Microsoft Ants (1995/1998) loading original binary assets (`ants.chd`, `Maps/*.LVL`).
+The user requested a modern, high-performance, deterministic cross-platform engine remake of Ants (1995/1998) loading original binary assets (`ants.chd`, `Maps/*.LVL`).
 Requirements span:
 - R1: Native Binary Asset Decoder (`ants-assets`)
 - R2: Deterministic Simulation Engine & Game Rules (`ants-sim`)

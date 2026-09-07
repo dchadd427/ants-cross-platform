@@ -1,7 +1,7 @@
 # BRIEFING — 2026-09-06T22:31:30Z
 
 ## Mission
-Orchestrate end-to-end implementation and verification of the modern, deterministic cross-platform Microsoft Ants remake adhering strictly to ORIGINAL_REQUEST.md and GAME_REVERSE_ENGINEERING.md.
+Orchestrate end-to-end implementation and verification of the modern, deterministic cross-platform Ants remake adhering strictly to ORIGINAL_REQUEST.md and GAME_REVERSE_ENGINEERING.md.
 
 ## 🔒 My Identity
 - Archetype: teamwork_preview_orchestrator

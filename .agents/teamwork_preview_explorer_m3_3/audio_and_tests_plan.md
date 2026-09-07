@@ -12,7 +12,7 @@
 
 ## 1. Executive Summary & Architectural Overview
 
-The audio and verification architecture for *Microsoft Ants* (Milestone 3) provides:
+The audio and verification architecture for *Ants* (Milestone 3) provides:
 1. **Multi-Channel Software Audio Mixer (32 concurrent channels):** A zero-dependency, high-performance software PCM mixer that resamples raw 8-bit unsigned mono PCM clips (sampled at 11,025 Hz or 22,050 Hz from `ants.chd`) to 44,100 Hz 16-bit signed stereo with linear interpolation. It implements equal-power spatial panning and distance attenuation based on unit distance from the active viewport camera center, priority-based channel preemption, targeted audio filtering (e.g. thief alarm sirens), and an SDL2 audio device callback with headless memory-rendering fallback for automated testing.
 2. **Native macOS AudioToolbox MIDI Synthesizer:** Direct integration with macOS `AudioToolbox.framework` (`MusicSequence`, `MusicPlayer`, and Apple DLS General MIDI synth) to play `Original-Ants/INTRO.MID` (9,261 bytes, 38 tracks, 96.01 beats duration) with zero third-party dependencies, seamless looping, volume control, and smooth volume fading. Includes a headless mock mode for automated test suites.
 3. **Headless Automated Verification Harness (`test_app_integration.cpp`):** A headless test suite that validates the entire frontend pipeline in RAM without requiring a physical monitor or audio hardware:
@@ -1739,7 +1739,7 @@ void run_suite_6_scorecard_and_audio_routing() {
 // ============================================================================
 int main() {
     std::cout << "=======================================================\n"
-              << " MICROSOFT ANTS REMAKE — HEADLESS INTEGRATION HARNESS\n"
+              << " ANTS REMAKE — HEADLESS INTEGRATION HARNESS\n"
               << "=======================================================\n";
 
     run_suite_1_surface_compositing();

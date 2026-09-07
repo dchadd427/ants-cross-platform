@@ -67,7 +67,7 @@ Deliver your handoff report to:
 and send a completion message to your parent.
 
 ## 2026-09-06T23:01:33Z
-You are the M1 Iteration 2 Worker for the Microsoft Ants remake project.
+You are the M1 Iteration 2 Worker for the Ants remake project.
 Your identity: worker_m1_it2
 Your working directory: /Users/dchadd/Desktop/Ants-Mac/.agents/teamwork_preview_worker_m1_it2
 Parent conversation ID: a28dfa55-5a82-453d-a21b-99459a66b340

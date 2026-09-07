@@ -225,7 +225,7 @@ while [ "$#" -gt 0 ]; do
 done
 
 echo -e "${BOLD}${CYAN}======================================================================${RESET}"
-echo -e "${BOLD}${CYAN}           MICROSOFT ANTS ENGINE REMAKE - MASTER TEST RUNNER          ${RESET}"
+echo -e "${BOLD}${CYAN}           ANTS ENGINE REMAKE - MASTER TEST RUNNER          ${RESET}"
 echo -e "${BOLD}${CYAN}======================================================================${RESET}"
 
 NCPU=$(sysctl -n hw.ncpu 2>/dev/null || nproc 2>/dev/null || echo 4)

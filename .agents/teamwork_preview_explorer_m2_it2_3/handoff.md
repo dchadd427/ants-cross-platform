@@ -119,7 +119,7 @@
    - Replacing this shortcut with `SimulationEngine::resolve_fire_contact` and `SimulationEngine::apply_knockback` delegates collision resolution directly to `PhysicsEngine`, allowing tests and gameplay to use authentic physics.
 
 3. **Autonomous Simulation Tick Integration**:
-   - In Microsoft Ants, ants carrying harvested food return to base and autonomously enter the anthill (`EnteringBase`), deposit food at frame 4 (+score, Sound 87), heal 100% at frame 8 (Sound 36), and emerge at frame 16.
+   - In Ants, ants carrying harvested food return to base and autonomously enter the anthill (`EnteringBase`), deposit food at frame 4 (+score, Sound 87), heal 100% at frame 8 (Sound 36), and emerge at frame 16.
    - Thief ants entering enemy anthills autonomously dive (`Infiltrating`), sound Siren 58 and News String 53 at frame 19, steal up to 50 points at frame 32, and retrieve a lunchbox.
    - Adding `OrderType::ReturnToBase` to `issue_order()` commands units toward their friendly base coordinates (`find_anthill`).
    - Integrating state checks into `SimulationEngine::tick()` enables units to autonomously advance through base entry and infiltration without manual test harness shims.

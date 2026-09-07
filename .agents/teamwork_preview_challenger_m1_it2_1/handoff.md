@@ -12,7 +12,7 @@
 
 1. **Defense Mechanisms in `src/ants_assets/lvl_parser.cpp` (lines 167–178):**
    ```cpp
-   // Enforce upper sanity limit on map dimensions (Microsoft Ants max is 60x60, allow up to 256x256)
+   // Enforce upper sanity limit on map dimensions (Ants max is 60x60, allow up to 256x256)
    if (out_level.width == 0 || out_level.height == 0 ||
        out_level.width > 256 || out_level.height > 256) {
        return false;

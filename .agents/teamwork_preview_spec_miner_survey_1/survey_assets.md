@@ -1,13 +1,13 @@
-# Microsoft Ants (1995/1998) — Asset & Format Specification
+# Ants (1995/1998) — Asset & Format Specification
 **Document Version:** 1.0  
 **Author:** Asset Specification Miner (`miner_survey_1`)  
-**Target Project:** Microsoft Ants Remake (`ants-assets`, `ants-sim`, `ants-audio`, `ants-app`)  
+**Target Project:** Ants Remake (`ants-assets`, `ants-sim`, `ants-audio`, `ants-app`)  
 **Authoritative References:** `Original-Ants/ants.chd`, `Original-Ants/Maps/*.LVL`, `Original-Ants/Ants.exe`, `GAME_REVERSE_ENGINEERING.md`  
 
 ---
 
 ## Executive Summary
-This document provides the exact, byte-level specification for all raw binary assets utilized by Microsoft Ants (1995/1998). It details the internal container structure of `ants.chd` (header, 256-color palette, 2,794 raw paletted sprites, 91 PCM audio clips, 4 event tags, and 1,344 animation sequences with frame sound triggers), the complete `.LVL` map binary layout (header, tile dictionary, 6-byte terrain Layer 1, 6-byte interactive Layer 2, and 4 trailing configuration blocks validated across all 6 original levels), the 5-to-8 directional horizontal mirroring algorithm for O(1) rendering, and the complete audio mapping for Sound IDs 0 through 90.
+This document provides the exact, byte-level specification for all raw binary assets utilized by Ants (1995/1998). It details the internal container structure of `ants.chd` (header, 256-color palette, 2,794 raw paletted sprites, 91 PCM audio clips, 4 event tags, and 1,344 animation sequences with frame sound triggers), the complete `.LVL` map binary layout (header, tile dictionary, 6-byte terrain Layer 1, 6-byte interactive Layer 2, and 4 trailing configuration blocks validated across all 6 original levels), the 5-to-8 directional horizontal mirroring algorithm for O(1) rendering, and the complete audio mapping for Sound IDs 0 through 90.
 
 ---
 
@@ -43,8 +43,8 @@ This document provides the exact, byte-level specification for all raw binary as
 | 1 | Palette Index 0 vs 254 | Sprite rendering with index `0` vs index `254` (`0xFE`) | Index `254` is the true DirectDraw color key (`DDCOLORKEY` Magenta `RGB(255,0,255)`) rendered as `Alpha = 0`. Index `0` is an opaque dark grayish-blue (`RGB(119,119,127)`). However, sprite row pitch padding bytes at row ends (`pitch > width`) are filled with `0x00`. Treat row padding as discarded stride, and index 254 as transparent. |
 | 2 | Palette RGB/BGR Channel Order | Reading palette entries as `[B, G, R, Flags]` instead of `[R, G, B, Flags]` | Swaps red and blue channels: Red team sprites (Team 2, indices 178..181) appear cyan/blue, and Blue team sprites (Team 1, indices 34..39) appear orange/red. File stores `[R, G, B, Flags]`. |
 | 3 | Sprite Row Stride Padding | Sprite 0 `dclay48.bmp` with `width = 45`, `pitch = 48` | Row buffer contains 45 visible pixel indices followed by 3 bytes of padding (`0x00`). Reading `pitch * height` is required to advance the file pointer correctly, but rendering must use `x + y * pitch` with row stride clamping to `width`. |
-| 4 | Unnamed Sound Clips in Table 2 | Sound IDs 6, 17, 40, 42, 43, 45, 46, 48, 54, 55, 59, 60, 75, 77, 80 | Sound record has `filename_len = 1` and `filename = "\0"`. The engine relies strictly on numeric Sound ID (0..90). Sound 6 is the Microsoft startup fanfare (65,190 bytes stereo). Sound 75 is an attack hit sound. Sound 77 is airborne fling whoosh. Sound 80 is water dive splash. |
-| 5 | Stereo vs Mono PCM in Table 2 | Sound 6 (Microsoft logo), Sound 45, Sound 46 | Contain `nChannels = 2` (Stereo), whereas all other 88 clips are `nChannels = 1` (Mono). Mixer must handle 2-channel 8-bit unsigned PCM interleaved `(L, R, L, R...)`. |
+| 4 | Unnamed Sound Clips in Table 2 | Sound IDs 6, 17, 40, 42, 43, 45, 46, 48, 54, 55, 59, 60, 75, 77, 80 | Sound record has `filename_len = 1` and `filename = "\0"`. The engine relies strictly on numeric Sound ID (0..90). Sound 6 is the Ants startup fanfare (65,190 bytes stereo). Sound 75 is an attack hit sound. Sound 77 is airborne fling whoosh. Sound 80 is water dive splash. |
+| 5 | Stereo vs Mono PCM in Table 2 | Sound 6 (Ants logo), Sound 45, Sound 46 | Contain `nChannels = 2` (Stereo), whereas all other 88 clips are `nChannels = 1` (Mono). Mixer must handle 2-channel 8-bit unsigned PCM interleaved `(L, R, L, R...)`. |
 | 6 | Horizontal Mirroring Offset Inversion | Mirrored direction NW (from NE Dir 8, `width = W`, frame offset `dx`) | Naive horizontal flipping without adjusting `dx` causes sprite to render shifted by `W` pixels to the right. Correct anchor transformation requires $dx' = -(dx + W)$ and $box\_left' = -box\_right, box\_right' = -box\_left$. |
 | 7 | Directional Digit Anomaly: `atcr501` | Animation 1095 Thief Ant crawl / infiltration has direction digit `5` | Unlike the 5 standard directional digits (2, 3, 7, 8, 9), `atcr501` represents the non-directional underground dive into an enemy anthill. It is an omnidirectional / non-mirrored animation. |
 | 8 | Map Layer 2 Empty Tile Sentinel | Layer 2 cell with `tile_id = 0x7FFE` (32,766) | In `0x10069d8`, `0x7FFE` is shifted left by 1 to yield `0xFFFC`. Any cell with `0x7FFE` is recognized as an empty interactive tile (no obstacle, bridge, food, or bomb). |
@@ -251,7 +251,7 @@ Each animation subitem carries a 32-bit `default_sp` field:
 
 ## 2. Map File Format (`Maps/*.LVL`)
 
-All 6 official maps included with Microsoft Ants follow the exact binary layout detailed below.
+All 6 official maps included with Ants follow the exact binary layout detailed below.
 
 ### 2.1 The 6 Official Maps
 
@@ -509,7 +509,7 @@ The following table documents every sound effect entry in `ants.chd` Table 2:
 | **3** | `0x00687829` | `combatnetfairy.wav` | 11,025 Hz | 8-bit | Mono | 6,860 B | 0.62 s | Combat Ant power-up transformation chord (`battle` subitem 0) |
 | **4** | `0x00689326` | `bombexp.wav` | 22,050 Hz | 8-bit | Mono | 25,216 B | 1.14 s | Bomber Ant mine detonation blast (`bombex` subitem 0) |
 | **5** | `0x0068F5D0` | `fireburnout.wav` | 11,025 Hz | 8-bit | Mono | 6,387 B | 0.58 s | Fire wall 180s natural burnout sputter (`sputter` subitem 0) |
-| **6** | `0x00690EF1` | *(unnamed)* | 11,025 Hz | 8-bit | **Stereo** | 65,190 B | 5.91 s | Microsoft startup logo musical fanfare (`mslogo` subitem 0) |
+| **6** | `0x00690EF1` | *(unnamed)* | 11,025 Hz | 8-bit | **Stereo** | 65,190 B | 5.91 s | Ants startup logo musical fanfare (`mslogo` subitem 0) |
 | **7** | `0x006A0DB6` | `rndm6.wav` | 22,050 Hz | 8-bit | Mono | 15,754 B | 0.71 s | Random ambient sound bite 6 |
 | **8** | `0x006A4B68` | `rndm5.wav` | 22,050 Hz | 8-bit | Mono | 23,441 B | 1.06 s | Random ambient sound bite 5 |
 | **9** | `0x006AA721` | `rndm4.wav` | 22,050 Hz | 8-bit | Mono | 23,212 B | 1.05 s | Random ambient sound bite 4 |

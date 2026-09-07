@@ -69,10 +69,20 @@ void AntUnit::set_destination(int32_t target_tx, int32_t target_ty) {
     waypoints.clear();
     waypoints.push_back(TileCoord{target_tx, target_ty});
     current_waypoint_idx = 0;
+    anim_tick = 0;
+    anim_subitem = 0;
     state = UnitState::Walking;
 }
 
-void AntUnit::tick_movement(bool is_swimming) {
+void AntUnit::set_path(std::vector<TileCoord> path) {
+    waypoints = std::move(path);
+    current_waypoint_idx = 0;
+    anim_tick = 0;
+    anim_subitem = 0;
+    state = UnitState::Walking;
+}
+
+void AntUnit::tick_movement(bool is_swimming, SurfaceType surface) {
     if (state != UnitState::Walking || waypoints.empty()) {
         return;
     }
@@ -81,6 +91,8 @@ void AntUnit::tick_movement(bool is_swimming) {
         state = (type == AntType::Combat) ? UnitState::GuardIdle : UnitState::Idle;
         waypoints.clear();
         current_waypoint_idx = 0;
+        anim_tick = 0;
+        anim_subitem = 0;
         return;
     }
 
@@ -106,6 +118,8 @@ void AntUnit::tick_movement(bool is_swimming) {
             state = (type == AntType::Combat) ? UnitState::GuardIdle : UnitState::Idle;
             waypoints.clear();
             current_waypoint_idx = 0;
+            anim_tick = 0;
+            anim_subitem = 0;
         }
         return;
     }
@@ -113,12 +127,21 @@ void AntUnit::tick_movement(bool is_swimming) {
     // Set facing direction
     facing = ants::assets::vector_to_direction(dx, dy);
 
+    // Advance walk cycle animation
+    anim_tick++;
+    anim_subitem = (anim_tick / 3);
+
     // Speed selection
     int32_t speed_fx = SPEED_STANDARD_FX;
     if (type == AntType::Thief) {
         speed_fx = SPEED_THIEF_FX;
     } else if (type == AntType::Swimmer && is_swimming) {
         speed_fx = SPEED_AQUATIC_FX;
+    }
+
+    // Apply surface speed multiplier (Slate > Gravel > Grass > Mud)
+    if (!(type == AntType::Swimmer && is_swimming)) {
+        speed_fx = FixedPointMath::mul(speed_fx, get_surface_speed_multiplier_fx(surface));
     }
 
     const bool is_diagonal = (dx != 0 && dy != 0);
@@ -149,6 +172,12 @@ void AntUnit::tick_timers() noexcept {
         if (state_timer == 0 && state == UnitState::Flinch) {
             state = (type == AntType::Combat) ? UnitState::GuardIdle : UnitState::Idle;
         }
+    }
+
+    // Continuous idle standing animation cycle
+    if (state == UnitState::Idle || state == UnitState::GuardIdle) {
+        anim_tick++;
+        anim_subitem = (anim_tick / 4);
     }
 }
 

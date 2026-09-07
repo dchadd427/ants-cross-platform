@@ -1,15 +1,15 @@
-# Microsoft Ants Remake — Architecture, HUD & Platform Toolchain Survey
+# Ants Remake — Architecture, HUD & Platform Toolchain Survey
 
 **Document Version:** 1.0  
 **Author:** explorer_survey_3 (Architecture Explorer)  
-**Target Project:** Modern Native Remake of Microsoft Ants (1995/1998)  
+**Target Project:** Modern Native Remake of Ants (1995/1998)  
 **Host Environment:** macOS 15.x / Darwin 25.6.0 (Apple Silicon arm64)
 
 ---
 
 ## 1. Executive Summary
 
-This architecture survey evaluates the platform toolchains, frontend application requirements, user interface (HUD), audio subsystem, and automated testing strategy for the modern remake of *Microsoft Ants*.
+This architecture survey evaluates the platform toolchains, frontend application requirements, user interface (HUD), audio subsystem, and automated testing strategy for the modern remake of *Ants*.
 
 ### Key Architectural Conclusions
 1. **Host Toolchain Reality:** The macOS environment features **Apple Clang 21.0.0 (C++17/C++20/C++23)**, **CMake 4.3.2**, **GNU Make 3.81**, Homebrew **SDL2 2.32.10**, **SDL2_mixer 2.8.1**, and native macOS frameworks (`AudioToolbox`, `CoreAudio`, `Cocoa`). **Rust (`rustc`/`cargo`) is NOT installed** in this environment. Therefore, a modular **Modern C++ (C++17)** architecture with CMake is the definitive, native, zero-friction choice.
@@ -207,7 +207,7 @@ Ants-Mac/
 
 ### 4.2 Complete In-Game HUD Inventory & Asset Mapping
 
-Reverse engineering of `ants.chd` extracted the exact coordinates, sprite indices, and visual assets used to assemble the authentic Microsoft Ants HUD:
+Reverse engineering of `ants.chd` extracted the exact coordinates, sprite indices, and visual assets used to assemble the authentic Ants HUD:
 
 #### A. Minimap (Radar) Subsystem
 - **Location:** X: `480` to `640`, Y: `22` to `126` (Panel Width: 160 px, Height: 104 px).

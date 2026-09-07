@@ -14,7 +14,7 @@ During Milestone 1 adversarial stress testing, Challengers `challenger_m1_1` and
 
 1. **Unbounded Map Dimensions in `LVLParser`:**
    In `src/ants_assets/lvl_parser.cpp` (lines 155–163), `out_level.width` and `out_level.height` were read as arbitrary 32-bit integers. Immediately afterward, `out_level.layer1_terrain.resize(cell_count)` was called with `cell_count = width * height` without checking:
-   - Whether dimensions satisfy authentic engine bounds (Microsoft Ants maps are 31×31, 40×40, 60×60).
+   - Whether dimensions satisfy authentic engine bounds (Ants maps are 31×31, 40×40, 60×60).
    - Whether the remaining stream contains sufficient payload bytes (`cell_count * 12` bytes for Layer 1 + Layer 2).
    - Whether memory allocation throws `std::bad_alloc` or triggers AddressSanitizer `allocation-size-too-big`.
    **Empirical Consequence:** In `test_challenger_m1_2.cpp` (Test 6.5), feeding a 19 KB map with dimensions $500 \times 500$ allocated 250,000 cells (1.5 MB) before failing. Fuzzed inputs with dimensions `0x7FFFFFFF` triggered AddressSanitizer abort or release build hangs attempting to allocate ~825 GB of RAM.
@@ -33,7 +33,7 @@ During Milestone 1 adversarial stress testing, Challengers `challenger_m1_1` and
 ### 2.1 Remediation 1: `LVLParser` (`src/ants_assets/lvl_parser.cpp`)
 
 #### 1. Dimension Sanity Bounds
-- **Invariant:** Microsoft Ants authentic maps have dimensions 31×31, 40×40, or 60×60.
+- **Invariant:** Ants authentic maps have dimensions 31×31, 40×40, or 60×60.
 - **Rule:** Reject any map with `width == 0 || height == 0 || width > 256 || height > 256`.
 - **Rationale:** 256×256 allows ample headroom for community/custom maps while strictly bounding `cell_count <= 65,536` cells, eliminating 32-bit/64-bit integer overflow.
 
@@ -128,7 +128,7 @@ During Milestone 1 adversarial stress testing, Challengers `challenger_m1_1` and
 ```cpp
     // 3. Grid Dimensions (8 bytes)
     if (!r.read_u32(out_level.width) || !r.read_u32(out_level.height)) return false;
-    // Enforce upper sanity limit on map dimensions (Microsoft Ants max is 60x60, allow up to 256x256)
+    // Enforce upper sanity limit on map dimensions (Ants max is 60x60, allow up to 256x256)
     if (out_level.width == 0 || out_level.height == 0 ||
         out_level.width > 256 || out_level.height > 256) {
         return false;

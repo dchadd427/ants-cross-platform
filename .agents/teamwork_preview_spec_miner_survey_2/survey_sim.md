@@ -1,4 +1,4 @@
-# Microsoft Ants - Simulation Rules & Deterministic Engine Specification (`survey_sim.md`)
+# Ants - Simulation Rules & Deterministic Engine Specification (`survey_sim.md`)
 
 **Document Version:** 1.0  
 **Author:** Specification Miner (`miner_survey_2`)  
@@ -58,7 +58,7 @@
 
 ### 1.3 PRNG Seed & Algorithm
 - **Algorithm (Disasm `0x10345b0` & `0x10345c0`):**
-  The original engine uses the standard Microsoft Visual C++ Linear Congruential Generator (LCG):
+  The original engine uses the standard Visual C++ Linear Congruential Generator (LCG):
   ```c
   static uint32_t holdrand = 1;
 

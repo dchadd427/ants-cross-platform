@@ -10,7 +10,7 @@
 
 ## 1. Executive Summary & Architectural Topology
 
-Milestone 2 establishes `libants-sim`, the deterministic headless simulation engine for the *Microsoft Ants* remake. In accordance with `PROJECT.md` and the project's decoupled 3-tier architecture:
+Milestone 2 establishes `libants-sim`, the deterministic headless simulation engine for the *Ants* remake. In accordance with `PROJECT.md` and the project's decoupled 3-tier architecture:
 - `libants-sim` has **zero external dependencies** (no SDL2, no DirectX, no OS audio/rendering libraries). It is pure Modern C++17.
 - It consumes level geometry, dictionaries, and spawn tables from `libants-assets` (`ants::assets::LevelData`).
 - It produces an immutable, complete snapshot of the world (`ants::sim::WorldState`), discrete event streams (`AudioEvent`, `NewsEvent`), and 4-stat scorecards (`PlayerMatchStats`) consumed by `ants-app` and automated test suites.
@@ -56,7 +56,7 @@ Milestone 2 establishes `libants-sim`, the deterministic headless simulation eng
 ## 2. Blueprint 1: `include/ants_sim/prng.hpp`
 
 ### 2.1 Technical Analysis & Disassembly Match
-Disassembly of `Original-Ants/Ants.exe` (`0x10345b0` & `0x10345c0`) confirms the exact standard Microsoft Visual C++ 32-bit Linear Congruential Generator:
+Disassembly of `Original-Ants/Ants.exe` (`0x10345b0` & `0x10345c0`) confirms the exact standard Visual C++ 32-bit Linear Congruential Generator:
 $$\text{holdrand} = \text{holdrand} \times 214013 + 2531011 \pmod{2^{32}}$$
 $$\text{sim\_rand}() = (\text{holdrand} \gg 16) \ \& \ \text{0x7FFF} \quad (\text{range } [0 \dots 32767])$$
 
@@ -582,7 +582,7 @@ struct ActiveFoodSchedule {
 };
 
 /**
- * @brief 32x32 integer tile grid representation for Microsoft Ants.
+ * @brief 32x32 integer tile grid representation for Ants.
  */
 class Grid {
 public:
@@ -983,7 +983,7 @@ struct WorldState {
 class SimulationEngineImpl;
 
 /**
- * @brief Master deterministic simulation engine for Microsoft Ants remake.
+ * @brief Master deterministic simulation engine for Ants remake.
  * 
  * Provides discrete 20 Hz lockstep progression, order dispatch, dynamic alliances,
  * audio/news event queues, and immutable world state inspection.

@@ -16,7 +16,7 @@
    - Output:
      ```text
      =======================================================
-      MICROSOFT ANTS - CHALLENGER M2.2 STRESS TEST SUITE   
+      ANTS - CHALLENGER M2.2 STRESS TEST SUITE   
       (Base Lifecycle, Economy, Alliances, Game Over Split) 
      =======================================================
      [CHALLENGER SUITE] Suite 1: Base Entry, 17-Frame Lifecycle & Full Heal: 4/4 PASS

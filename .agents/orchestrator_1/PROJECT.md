@@ -1,7 +1,7 @@
-# Project: Microsoft Ants Remake
+# Project: Ants Remake
 
 ## Architecture
-A modern, high-performance, deterministic cross-platform engine remake of Microsoft Ants (1995/1998) loading original binary assets (`ants.chd`, `Maps/*.LVL`).
+A modern, high-performance, deterministic cross-platform engine remake of Ants (1995/1998) loading original binary assets (`ants.chd`, `Maps/*.LVL`).
 The project is architected into 3 decoupled tiers using Modern C++ (C++17) with CMake, running on macOS via Apple Clang without external package managers or binary dependencies:
 
 ```

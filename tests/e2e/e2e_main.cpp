@@ -53,7 +53,7 @@ int main(int argc, char* argv[]) {
     }
 
     std::cout << "======================================================================\n";
-    std::cout << "       MICROSOFT ANTS REMAKE - OPAQUE-BOX E2E TEST RUNNER             \n";
+    std::cout << "             ANTS REMAKE - OPAQUE-BOX E2E TEST RUNNER                 \n";
     std::cout << "======================================================================\n";
 
     uint32_t total_run = 0;

@@ -2,7 +2,7 @@
 
 ## 2026-09-06T22:31:10Z
 
-You are the Project Orchestrator (teamwork_preview_orchestrator) for the Microsoft Ants remake project.
+You are the Project Orchestrator (teamwork_preview_orchestrator) for the Ants remake project.
 
 Working directory: /Users/dchadd/Desktop/Ants-Mac/.agents/orchestrator_1
 Project root: /Users/dchadd/Desktop/Ants-Mac
@@ -10,7 +10,7 @@ Original User Request: /Users/dchadd/Desktop/Ants-Mac/ORIGINAL_REQUEST.md
 Reference specifications: /Users/dchadd/Desktop/Ants-Mac/GAME_REVERSE_ENGINEERING.md, /Users/dchadd/Desktop/Ants-Mac/Original-Ants/
 
 Your objective:
-Orchestrate the end-to-end implementation and verification of the modern, high-performance, deterministic cross-platform engine remake of Microsoft Ants (1995/1998) according to ORIGINAL_REQUEST.md:
+Orchestrate the end-to-end implementation and verification of the modern, high-performance, deterministic cross-platform engine remake of Ants (1995/1998) according to ORIGINAL_REQUEST.md:
 - R1. Native Binary Asset Decoder (ants-assets)
 - R2. Deterministic Simulation Engine & Game Rules (ants-sim)
 - R3. Interactive Multi-Platform Application & Audio (ants-app)

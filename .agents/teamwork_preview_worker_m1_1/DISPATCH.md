@@ -1,7 +1,7 @@
 # Task Assignment: Milestone 1 Worker (`libants-assets`)
 
 ## Scope & Target
-Implement Milestone 1 (`ants-assets`): The Native Binary Asset Decoder for Microsoft Ants remake.
+Implement Milestone 1 (`ants-assets`): The Native Binary Asset Decoder for Ants remake.
 
 ## Inputs
 - Verbatim User Request: `/Users/dchadd/Desktop/Ants-Mac/ORIGINAL_REQUEST.md`
@@ -43,7 +43,7 @@ DO NOT CHEAT. All implementations must be genuine. DO NOT hardcode test results,
 43: 
 
 ## 2026-09-06T22:43:19Z
-You are the M1 Worker for the Microsoft Ants remake project.
+You are the M1 Worker for the Ants remake project.
 Your identity: worker_m1_1
 Your working directory: /Users/dchadd/Desktop/Ants-Mac/.agents/teamwork_preview_worker_m1_1
 Parent conversation ID: a28dfa55-5a82-453d-a21b-99459a66b340

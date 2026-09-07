@@ -82,6 +82,8 @@ public:
     virtual void fill_rect(int32_t x, int32_t y, int32_t w, int32_t h, ants::assets::ColorRGBA color) = 0;
     virtual void draw_rect(int32_t x, int32_t y, int32_t w, int32_t h, ants::assets::ColorRGBA color) = 0;
     virtual void draw_text(const std::string& text, int32_t x, int32_t y, ants::assets::ColorRGBA color) = 0;
+    virtual void set_hud_team(uint8_t team_id) = 0;
+    virtual uint8_t get_hud_team() const = 0;
 };
 
 /**
@@ -114,6 +116,8 @@ struct StaticMapObject {
     int32_t sprite_id{-1};
     int32_t width{32};
     int32_t height{32};
+    bool is_food{false};
+    std::vector<std::pair<uint16_t, uint16_t>> food_tiles{};
 };
 
 /**
@@ -161,6 +165,8 @@ public:
     void fill_rect(int32_t x, int32_t y, int32_t w, int32_t h, ants::assets::ColorRGBA color) override;
     void draw_rect(int32_t x, int32_t y, int32_t w, int32_t h, ants::assets::ColorRGBA color) override;
     void draw_text(const std::string& text, int32_t x, int32_t y, ants::assets::ColorRGBA color) override;
+    void set_hud_team(uint8_t team_id) override { hud_team_id_ = team_id; }
+    uint8_t get_hud_team() const override { return hud_team_id_; }
 
     // Camera Accessors
     ViewportCamera& camera() noexcept { return camera_; }
@@ -188,6 +194,7 @@ private:
     uint32_t map_width_{0};
     uint32_t map_height_{0};
     std::vector<int32_t> tile_sprite_ids_; // Pre-resolved tile dictionary to sprite ID cache
+    std::vector<std::pair<int32_t, int32_t>> tile_offsets_; // Pre-resolved Table 4 (dx, dy) anchor offsets
     std::vector<std::vector<int32_t>> tile_anim_frames_; // Pre-resolved animated tile frames
     uint32_t anim_tick_{0};
     std::array<SDL_Point, 4> anthill_bases_{};
@@ -195,6 +202,7 @@ private:
     std::vector<StaticMapObject> static_decor_objects_;
     std::vector<RenderItem> render_queue_;
     std::string pending_screenshot_;
+    uint8_t hud_team_id_{0};
 };
 
 } // namespace ants::app

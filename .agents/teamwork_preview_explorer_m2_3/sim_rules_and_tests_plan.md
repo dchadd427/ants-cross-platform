@@ -1,4 +1,4 @@
-# Microsoft Ants Remake - Simulation Rules, Special Abilities & Test Suite Specification
+# Ants Remake - Simulation Rules, Special Abilities & Test Suite Specification
 
 **Document:** `sim_rules_and_tests_plan.md`  
 **Milestone:** Milestone 2 (`ants-sim`)  
@@ -26,7 +26,7 @@
 
 ## 1. Executive Summary & Architectural Context
 
-The `libants-sim` library is the 100% deterministic, headless simulation core of the *Microsoft Ants* engine remake. Decoupled completely from rendering and OS audio, it implements a fixed **20 Hz discrete tick engine** (50 ms per tick, `dt = 50 ms`) operating purely on integer arithmetic.
+The `libants-sim` library is the 100% deterministic, headless simulation core of the *Ants* engine remake. Decoupled completely from rendering and OS audio, it implements a fixed **20 Hz discrete tick engine** (50 ms per tick, `dt = 50 ms`) operating purely on integer arithmetic.
 
 ### 1.1 Division of Responsibilities
 ```
@@ -1219,7 +1219,7 @@ void run_suite_12_game_over() {
 
 int main() {
     std::cout << "\n=======================================================\n";
-    std::cout << " MICROSOFT ANTS - LIBANTS-SIM HEADLESS RULES TEST SUITE \n";
+    std::cout << " ANTS - LIBANTS-SIM HEADLESS RULES TEST SUITE \n";
     std::cout << "=======================================================\n";
 
     run_suite_1_clock();

@@ -47,7 +47,7 @@ Direct binary inspections and Capstone disassemblies of `Original-Ants/ants.chd`
    - Sound 56: `winner.wav` (22,050 Hz, Mono, 102,860 bytes, 4.67s victory fanfare).
    - Sound 41: `playerout.wav` (11,025 Hz, Mono, 10,329 bytes, 0.94s defeat sting).
    - Sounds 73 (`bombdrop.wav`, 1,277 bytes) & 74 (`bombmuffle.wav`, 8,704 bytes): Bomber Ant defusal sequence.
-   - 15 clips have empty filenames (`filename_len = 1`, `"\0"`): Sound 6 is the 65,190-byte stereo Microsoft startup fanfare, Sound 75 is an attack hit variation, Sound 77 is airborne fling whoosh, and Sound 80 is water dive splash.
+   - 15 clips have empty filenames (`filename_len = 1`, `"\0"`): Sound 6 is the 65,190-byte stereo Ants startup fanfare, Sound 75 is an attack hit variation, Sound 77 is airborne fling whoosh, and Sound 80 is water dive splash.
 
 5. **Table 3: Event Tag Descriptors (Offset 7,903,773 / `0x00789A1D`, 62 bytes):**
    - Header `max_id = 10`.
@@ -101,7 +101,7 @@ Direct binary inspections and Capstone disassemblies of `Original-Ants/ants.chd`
 ## 3. Caveats
 
 - **MIDI Music:** `Original-Ants/INTRO.MID` is a standard Type 0 or Type 1 Standard MIDI file (9,261 bytes) played via WinMM in the original game; it is separate from the `.chd` container and must be played using a software synthesizer (e.g. TinySoundFont / SoundFont2).
-- **No Queen Ant:** Consistent with `ORIGINAL_REQUEST.md`, Microsoft Ants does not feature a queen ant unit or sprite; ant hatching is managed directly through the colony anthill.
+- **No Queen Ant:** Consistent with `ORIGINAL_REQUEST.md`, Ants does not feature a queen ant unit or sprite; ant hatching is managed directly through the colony anthill.
 
 ---
 

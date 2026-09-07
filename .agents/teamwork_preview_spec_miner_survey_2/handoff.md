@@ -122,7 +122,7 @@ Direct observations and evidence extracted from authoritative binary artifacts a
 
 ## 4. Conclusion
 
-The simulation rules and mechanics for *Microsoft Ants* have been completely mined, reverse-engineered, and documented in `/Users/dchadd/Desktop/Ants-Mac/.agents/teamwork_preview_spec_miner_survey_2/survey_sim.md`. The document includes:
+The simulation rules and mechanics for *Ants* have been completely mined, reverse-engineered, and documented in `/Users/dchadd/Desktop/Ants-Mac/.agents/teamwork_preview_spec_miner_survey_2/survey_sim.md`. The document includes:
 - Complete mathematical specifications for grid, 20 Hz tick engine, integer arithmetic, and MSVC LCG PRNG (`holdrand * 214013 + 2531011`).
 - Exact unit attributes, universal 1 HP melee strike, Combat Ant 2 HP heavy punch + 4–5 tile ballistic knockback.
 - Autonomous Combat Ant Guard AI state machine (3-tile Chebyshev aggro scan, intercept punch, return to post).

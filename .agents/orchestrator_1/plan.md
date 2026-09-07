@@ -1,7 +1,7 @@
-# Microsoft Ants Remake Orchestration Plan
+# Ants Remake Orchestration Plan
 
 ## Objective
-Build and verify a modern, high-performance, deterministic cross-platform engine remake of Microsoft Ants (1995/1998) that directly loads original raw binary assets (`ants.chd` and `Maps/*.LVL`) without pre-conversion, faithfully executing all authentic mechanics, physics, and audiovisual presentation.
+Build and verify a modern, high-performance, deterministic cross-platform engine remake of Ants (1995/1998) that directly loads original raw binary assets (`ants.chd` and `Maps/*.LVL`) without pre-conversion, faithfully executing all authentic mechanics, physics, and audiovisual presentation.
 
 ## Strategy: Dual Track Project Orchestration
 1. **Phase 0: Scope Survey & Feature Inventory**

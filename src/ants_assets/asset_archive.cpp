@@ -99,9 +99,14 @@ void AssetArchive::build_index_tables() {
     }
 
     anim_name_map_.clear();
+    lower_anim_name_map_.clear();
     anim_name_map_.reserve(animations_.size());
+    lower_anim_name_map_.reserve(animations_.size());
     for (size_t i = 0; i < animations_.size(); ++i) {
         anim_name_map_[animations_[i].name] = static_cast<uint32_t>(i);
+        std::string low = animations_[i].name;
+        for (char& c : low) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+        lower_anim_name_map_.emplace(low, static_cast<uint32_t>(i));
     }
 }
 
@@ -310,6 +315,12 @@ const AnimationSequence* AssetArchive::find_animation(const std::string& name) c
     if (it != anim_name_map_.end()) {
         return &animations_[it->second];
     }
+    std::string low = name;
+    for (char& c : low) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    auto it_low = lower_anim_name_map_.find(low);
+    if (it_low != lower_anim_name_map_.end()) {
+        return &animations_[it_low->second];
+    }
     return nullptr;
 }
 
@@ -317,6 +328,12 @@ int32_t AssetArchive::find_animation_id(const std::string& name) const noexcept 
     auto it = anim_name_map_.find(name);
     if (it != anim_name_map_.end()) {
         return static_cast<int32_t>(it->second);
+    }
+    std::string low = name;
+    for (char& c : low) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    auto it_low = lower_anim_name_map_.find(low);
+    if (it_low != lower_anim_name_map_.end()) {
+        return static_cast<int32_t>(it_low->second);
     }
     return -1;
 }
