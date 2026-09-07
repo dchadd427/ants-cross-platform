@@ -1,0 +1,1789 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ants Asset Catalog & Inspector</title>
+<style>
+  :root {
+    --bg-main: #0b0f19;
+    --bg-header: #070a12;
+    --bg-card: #131d31;
+    --bg-card-hover: #1e2c47;
+    --bg-card-active: #243552;
+    --border: #2a3b5c;
+    --border-subtle: #1c283f;
+    --accent: #38bdf8;
+    --accent-hover: #0ea5e9;
+    --accent-glow: rgba(56, 189, 248, 0.25);
+    --text-primary: #f8fafc;
+    --text-secondary: #94a3b8;
+    --text-dim: #64748b;
+    --badge-sound: #f59e0b;
+    --badge-anim: #10b981;
+    --badge-sprite: #8b5cf6;
+    --stage-green: #1e3a1e;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    height: 100%;
+    max-height: 100%;
+    overflow: hidden;
+  }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    background-color: var(--bg-main);
+    color: var(--text-primary);
+    display: flex;
+    flex-direction: column;
+  }
+  header {
+    background: var(--bg-header);
+    border-bottom: 1px solid var(--border);
+    padding: 0.85rem 1.75rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-shrink: 0;
+    z-index: 100;
+  }
+  .brand { display: flex; align-items: center; gap: 0.75rem; }
+  .brand svg { filter: drop-shadow(0 0 8px var(--accent-glow)); }
+  .brand h1 { font-size: 1.2rem; font-weight: 700; color: #fff; letter-spacing: -0.02em; }
+  .brand .tagline { font-size: 0.75rem; color: var(--text-secondary); margin-left: 0.5rem; }
+  .tabs { display: flex; gap: 0.5rem; }
+  .tab-btn {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text-secondary);
+    padding: 0.45rem 0.9rem;
+    border-radius: 6px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+  }
+  .tab-btn:hover { background: var(--bg-card-hover); color: #fff; }
+  .tab-btn.active {
+    background: var(--accent);
+    color: #0b0f19;
+    border-color: var(--accent);
+    box-shadow: 0 0 12px var(--accent-glow);
+  }
+  .header-actions { display: flex; align-items: center; gap: 0.6rem; }
+  .icon-btn {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    color: var(--text-secondary);
+    padding: 0.45rem 0.75rem;
+    border-radius: 6px;
+    font-size: 0.8rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    transition: all 0.15s ease;
+  }
+  .icon-btn:hover { background: var(--bg-card-hover); color: #fff; border-color: var(--accent); }
+
+  /* Search & Filter Bar */
+  .search-container {
+    background: #0f172a;
+    border-bottom: 1px solid var(--border);
+    padding: 0.75rem 1.75rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+    flex-shrink: 0;
+  }
+  .search-row {
+    display: flex;
+    gap: 1rem;
+    align-items: center;
+  }
+  .search-input-wrapper {
+    flex: 1;
+    position: relative;
+    display: flex;
+    align-items: center;
+  }
+  .search-input-wrapper svg {
+    position: absolute;
+    left: 0.85rem;
+    pointer-events: none;
+    color: var(--text-dim);
+  }
+  .search-input {
+    width: 100%;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    color: #fff;
+    padding: 0.55rem 1rem 0.55rem 2.4rem;
+    border-radius: 6px;
+    font-size: 0.875rem;
+    outline: none;
+    transition: border-color 0.15s ease;
+  }
+  .search-input:focus { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-glow); }
+  .search-clear {
+    position: absolute;
+    right: 0.75rem;
+    background: transparent;
+    border: none;
+    color: var(--text-dim);
+    cursor: pointer;
+    font-size: 1rem;
+    padding: 0 0.3rem;
+  }
+  .search-clear:hover { color: #fff; }
+  .count-info { font-size: 0.85rem; color: var(--text-secondary); white-space: nowrap; font-variant-numeric: tabular-nums; }
+  
+  .filter-chips {
+    display: flex;
+    gap: 0.4rem;
+    overflow-x: auto;
+    padding-bottom: 0.2rem;
+  }
+  .filter-chip {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    color: var(--text-secondary);
+    padding: 0.25rem 0.65rem;
+    border-radius: 12px;
+    font-size: 0.75rem;
+    font-weight: 500;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all 0.15s ease;
+  }
+  .filter-chip:hover { background: var(--bg-card-hover); color: #fff; }
+  .filter-chip.active {
+    background: #1e3a8a;
+    color: #bfdbfe;
+    border-color: #3b82f6;
+  }
+
+  main {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    overflow: hidden;
+  }
+  .tab-content {
+    flex: 1;
+    min-height: 0;
+    height: 100%;
+    display: none;
+    overflow-y: auto;
+    padding: 1.25rem 1.75rem;
+  }
+  .tab-content.active { display: flex; }
+
+  /* Badges */
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.18rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 700;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    line-height: 1.2;
+  }
+  .badge-sound { background: rgba(245, 158, 11, 0.18); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.4); }
+  .badge-anim { background: rgba(16, 185, 129, 0.18); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.4); }
+  .badge-sprite { background: rgba(139, 92, 246, 0.18); color: #a78bfa; border: 1px solid rgba(139, 92, 246, 0.4); }
+  
+  /* Buttons */
+  .copy-btn {
+    background: #1e293b;
+    border: 1px solid var(--border);
+    color: #cbd5e1;
+    padding: 0.3rem 0.6rem;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.75rem;
+    font-weight: 500;
+    transition: all 0.15s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+  }
+  .copy-btn:hover { background: #334155; color: #fff; border-color: var(--accent); }
+  .btn-group { display: flex; gap: 0.3rem; align-items: center; }
+
+  /* Sounds Table View */
+  #sounds-view { flex-direction: column; }
+  .table-wrapper {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  .sounds-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.875rem;
+  }
+  .sounds-table th {
+    text-align: left;
+    padding: 0.75rem 1rem;
+    background: #0d1527;
+    color: var(--text-secondary);
+    border-bottom: 2px solid var(--border);
+    font-weight: 600;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+  }
+  .sounds-table td {
+    padding: 0.65rem 1rem;
+    border-bottom: 1px solid var(--border-subtle);
+    vertical-align: middle;
+  }
+  .sounds-table tr:hover { background: #18243b; }
+  .sound-quick-play {
+    background: #1e293b;
+    border: 1px solid var(--border);
+    color: #38bdf8;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s ease;
+    border: 1px solid #334155;
+  }
+  .sound-quick-play:hover { background: #38bdf8; color: #0b0f19; transform: scale(1.08); }
+  .sound-quick-play.playing { background: #f59e0b; color: #0b0f19; border-color: #f59e0b; }
+
+  /* Master-Detail Layout for Animations */
+  #anims-view {
+    display: none;
+    padding: 0;
+    flex: 1;
+    min-height: 0;
+    height: 100%;
+    overflow: hidden;
+  }
+  #anims-view.active { display: flex; }
+  .anims-sidebar {
+    width: 340px;
+    min-height: 0;
+    height: 100%;
+    border-right: 1px solid var(--border);
+    overflow-y: auto;
+    background: #0d1527;
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+  }
+  .anim-item {
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid var(--border-subtle);
+    cursor: pointer;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    transition: background 0.1s ease;
+  }
+  .anim-item:hover { background: #162238; }
+  .anim-item.selected {
+    background: var(--bg-card-active);
+    border-left: 4px solid var(--accent);
+  }
+  .anim-item-left { display: flex; flex-direction: column; gap: 0.2rem; }
+  .anim-name { font-weight: 600; font-size: 0.85rem; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
+  .anim-meta { font-size: 0.75rem; color: var(--text-secondary); display: flex; gap: 0.5rem; align-items: center; }
+
+  .anims-detail {
+    flex: 1;
+    min-height: 0;
+    height: 100%;
+    overflow-y: auto;
+    padding: 1.25rem 1.75rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+  }
+  .anim-header-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1.25rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 1rem;
+    flex-shrink: 0;
+  }
+  .anim-title-area { display: flex; align-items: center; gap: 0.75rem; }
+  .anim-title-area h2 { font-size: 1.3rem; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-weight: 700; }
+  .anim-header-meta { font-size: 0.825rem; color: var(--text-secondary); margin-top: 0.35rem; display: flex; gap: 1rem; flex-wrap: wrap; }
+  
+  .anim-player-container {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1.25rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1rem;
+    flex-shrink: 0;
+  }
+  .stage-toolbar {
+    width: 100%;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    border-bottom: 1px solid var(--border-subtle);
+    padding-bottom: 0.6rem;
+  }
+  .stage-toolbar-group { display: flex; gap: 0.5rem; align-items: center; }
+  .stage-select {
+    background: #0f172a;
+    border: 1px solid var(--border);
+    color: #fff;
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    outline: none;
+  }
+  .canvas-stage {
+    position: relative;
+    border: 1px solid #334155;
+    border-radius: 6px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-width: 320px;
+    min-height: 260px;
+    max-width: 100%;
+    padding: 1.5rem;
+    overflow: auto;
+    transition: background 0.2s ease;
+  }
+  .canvas-stage.bg-checker {
+    background-color: #0b0f19;
+    background-image: 
+      linear-gradient(45deg, #162032 25%, transparent 25%), 
+      linear-gradient(-45deg, #162032 25%, transparent 25%), 
+      linear-gradient(45deg, transparent 75%, #162032 75%), 
+      linear-gradient(-45deg, transparent 75%, #162032 75%);
+    background-size: 16px 16px;
+    background-position: 0 0, 0 8px, 8px -8px, -8px 0px;
+  }
+  .canvas-stage.bg-black { background: #000; }
+  .canvas-stage.bg-gray { background: #334155; }
+  .canvas-stage.bg-green { background: #1b381b; }
+
+  canvas {
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+  }
+  
+  .player-controls {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    width: 100%;
+    max-width: 720px;
+    background: #0d1527;
+    border: 1px solid var(--border-subtle);
+    padding: 0.6rem 1rem;
+    border-radius: 6px;
+  }
+  .ctrl-btn {
+    background: var(--bg-card-hover);
+    border: 1px solid var(--border);
+    color: #fff;
+    padding: 0.4rem 0.75rem;
+    border-radius: 5px;
+    cursor: pointer;
+    font-weight: 600;
+    font-size: 0.8rem;
+    transition: all 0.15s ease;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .ctrl-btn:hover { background: var(--accent); color: #0b0f19; border-color: var(--accent); }
+  .scrubber { flex: 1; cursor: pointer; accent-color: var(--accent); }
+
+  /* Subitems Strip */
+  .timeline-section {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1.25rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.85rem;
+    flex-shrink: 0;
+  }
+  .timeline-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .timeline-header h3 { font-size: 0.95rem; font-weight: 600; }
+  .frames-scroll {
+    display: flex;
+    gap: 0.75rem;
+    overflow-x: auto;
+    padding-bottom: 0.75rem;
+  }
+  .subitem-card {
+    background: #0d1527;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 0.6rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.4rem;
+    min-width: 105px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    user-select: none;
+    position: relative;
+  }
+  .subitem-card:hover { border-color: var(--accent); transform: translateY(-2px); }
+  .subitem-card.active { border-color: var(--accent); background: #192b4a; box-shadow: 0 0 10px var(--accent-glow); }
+  .subitem-thumb {
+    width: 68px;
+    height: 68px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background: #0b0f19;
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  .subitem-thumb img {
+    max-width: 64px;
+    max-height: 64px;
+    image-rendering: pixelated;
+  }
+  .subitem-badge-snd {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    font-size: 0.7rem;
+    background: rgba(245, 158, 11, 0.85);
+    color: #000;
+    padding: 1px 4px;
+    border-radius: 3px;
+    font-weight: 700;
+  }
+
+  /* Layers Inspector */
+  .layers-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.8rem;
+    margin-top: 0.5rem;
+  }
+  .layers-table th {
+    text-align: left;
+    padding: 0.5rem 0.75rem;
+    background: #0d1527;
+    color: var(--text-secondary);
+    border-bottom: 1px solid var(--border);
+  }
+  .layers-table td {
+    padding: 0.45rem 0.75rem;
+    border-bottom: 1px solid var(--border-subtle);
+    vertical-align: middle;
+  }
+  .layer-thumb { width: 32px; height: 32px; object-fit: contain; image-rendering: pixelated; background: #0b0f19; border-radius: 3px; }
+
+  /* Sprites Grid */
+  #sprites-view { flex-direction: column; }
+  .sprites-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+    gap: 0.85rem;
+  }
+  .sprite-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 0.75rem 0.5rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.45rem;
+    transition: all 0.15s ease;
+    cursor: pointer;
+    position: relative;
+  }
+  .sprite-card:hover { transform: translateY(-3px); border-color: var(--accent); box-shadow: 0 4px 14px rgba(0,0,0,0.4); }
+  .sprite-preview-box {
+    width: 84px;
+    height: 84px;
+    background: #070a12;
+    border: 1px solid #1e293b;
+    border-radius: 4px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    overflow: hidden;
+  }
+  .sprite-preview-box img {
+    max-width: 78px;
+    max-height: 78px;
+    image-rendering: pixelated;
+  }
+  .sprite-label {
+    font-size: 0.75rem;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    text-align: center;
+    word-break: break-all;
+    max-width: 110px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .load-more-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 1rem;
+    padding: 1.5rem;
+    flex-shrink: 0;
+  }
+
+  /* Modal */
+  .modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0,0,0,0.75);
+    backdrop-filter: blur(4px);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s ease;
+  }
+  .modal-overlay.active { opacity: 1; pointer-events: auto; }
+  .modal-dialog {
+    background: #10192d;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    width: 90%;
+    max-width: 680px;
+    max-height: 85vh;
+    overflow-y: auto;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.8);
+    display: flex;
+    flex-direction: column;
+  }
+  .modal-header {
+    padding: 1rem 1.5rem;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: #0a0f1d;
+  }
+  .modal-header h3 { font-size: 1.1rem; }
+  .modal-close {
+    background: transparent;
+    border: none;
+    color: var(--text-secondary);
+    font-size: 1.5rem;
+    cursor: pointer;
+    line-height: 1;
+  }
+  .modal-close:hover { color: #fff; }
+  .modal-body { padding: 1.5rem; display: flex; flex-direction: column; gap: 1.25rem; }
+  .modal-preview-stage {
+    background: #070a12;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 2rem;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 180px;
+  }
+  .modal-preview-img {
+    max-width: 100%;
+    image-rendering: pixelated;
+    transition: transform 0.2s ease;
+  }
+  .meta-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 0.75rem;
+    background: #0a0f1d;
+    padding: 1rem;
+    border-radius: 6px;
+    border: 1px solid var(--border-subtle);
+  }
+  .meta-item { display: flex; flex-direction: column; gap: 0.2rem; }
+  .meta-label { font-size: 0.75rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.05em; }
+  .meta-val { font-size: 0.85rem; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; color: #fff; }
+  .anim-chips-wrap { display: flex; flex-wrap: wrap; gap: 0.4rem; max-height: 120px; overflow-y: auto; }
+  .anim-link-chip {
+    background: #1e293b;
+    border: 1px solid var(--border);
+    color: #34d399;
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    cursor: pointer;
+  }
+  .anim-link-chip:hover { background: #34d399; color: #0b0f19; }
+
+  /* Toast Notification */
+  #toast {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    background: #0f172a;
+    border: 1px solid var(--accent);
+    color: #fff;
+    padding: 0.75rem 1.25rem;
+    border-radius: 8px;
+    font-size: 0.85rem;
+    font-weight: 500;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.6), 0 0 15px var(--accent-glow);
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    transform: translateY(100px);
+    opacity: 0;
+    transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+    z-index: 2000;
+    pointer-events: none;
+  }
+  #toast.show {
+    transform: translateY(0);
+    opacity: 1;
+  }
+
+  /* Shortcuts Table */
+  .shortcut-row { display: flex; justify-content: space-between; padding: 0.5rem 0; border-bottom: 1px solid var(--border-subtle); }
+  .kbd {
+    background: #1e293b;
+    border: 1px solid #475569;
+    border-radius: 4px;
+    padding: 0.15rem 0.45rem;
+    font-size: 0.75rem;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    color: #e2e8f0;
+    box-shadow: 0 1px 0 1px rgba(0,0,0,0.3);
+  }
+
+  /* Scrollbars */
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-track { background: #0b0f19; }
+  ::-webkit-scrollbar-thumb { background: #1e2c47; border-radius: 4px; }
+  ::-webkit-scrollbar-thumb:hover { background: #2a3e63; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <ellipse cx="12" cy="5" rx="3" ry="2"/>
+      <ellipse cx="12" cy="11" rx="4" ry="3"/>
+      <ellipse cx="12" cy="18" rx="5" ry="4"/>
+      <path d="M9 5l-4-2M15 5l4-2"/>
+      <path d="M8 10L3 9M16 10l5-1"/>
+      <path d="M8 12l-5 4M16 12l5 4"/>
+      <path d="M8 17l-4 5M16 17l4 5"/>
+    </svg>
+    <div>
+      <h1>Ants Asset Catalog & Inspector</h1>
+    </div>
+    <span class="tagline">Authentic Game CHD Archive</span>
+  </div>
+  <div class="tabs">
+    <button class="tab-btn active" data-tab="sounds">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 5L6 9H2v6h4l5 4V5z"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>
+      Sounds (<span id="tab-sounds-count">91</span>)
+    </button>
+    <button class="tab-btn" data-tab="anims">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"/><line x1="7" y1="2" x2="7" y2="22"/><line x1="17" y1="2" x2="17" y2="22"/><line x1="2" y1="12" x2="22" y2="12"/><line x1="2" y1="7" x2="7" y2="7"/><line x1="2" y1="17" x2="7" y2="17"/><line x1="17" y1="17" x2="22" y2="17"/><line x1="17" y1="7" x2="22" y2="7"/></svg>
+      Animations (<span id="tab-anims-count">1344</span>)
+    </button>
+    <button class="tab-btn" data-tab="sprites">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+      Sprites (<span id="tab-sprites-count">2794</span>)
+    </button>
+  </div>
+  <div class="header-actions">
+    <button class="icon-btn" id="btn-shortcuts-help" title="Keyboard Shortcuts (?)">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+      Shortcuts
+    </button>
+  </div>
+</header>
+
+<div class="search-container">
+  <div class="search-row">
+    <div class="search-input-wrapper">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      <input type="text" id="global-search" class="search-input" placeholder="Filter items by ID or name... (Press '/' to focus, 'Esc' to clear)">
+      <button class="search-clear" id="btn-clear-search" style="display:none;" title="Clear search">&times;</button>
+    </div>
+    <div class="count-info" id="status-info">Loading catalog data...</div>
+  </div>
+  <div class="filter-chips" id="filter-chips-bar">
+    <!-- Category chips injected dynamically per tab -->
+  </div>
+</div>
+
+<main>
+  <!-- 1. Sounds View -->
+  <div id="sounds-view" class="tab-content active">
+    <div class="table-wrapper">
+      <table class="sounds-table">
+        <thead>
+          <tr>
+            <th style="width: 50px;">Play</th>
+            <th style="width: 75px;">ID</th>
+            <th>Audio Clip Name</th>
+            <th style="width: 110px;">Sample Rate</th>
+            <th style="width: 95px;">Duration</th>
+            <th style="width: 90px;">Size</th>
+            <th style="width: 320px;">Listen / Audio Controls</th>
+            <th style="width: 170px;">Actions</th>
+          </tr>
+        </thead>
+        <tbody id="sounds-tbody">
+          <!-- Injected by JS -->
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- 2. Animations View -->
+  <div id="anims-view" class="tab-content">
+    <div class="anims-sidebar" id="anims-list">
+      <!-- Injected by JS -->
+    </div>
+    <div class="anims-detail">
+      <div class="anim-header-card">
+        <div>
+          <div class="anim-title-area">
+            <span class="badge badge-anim" id="detail-anim-id">#0</span>
+            <h2 id="detail-anim-name">sequence_name</h2>
+            <button class="copy-btn" id="btn-copy-anim-name" title="Copy animation sequence name">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              Copy Name
+            </button>
+          </div>
+          <div class="anim-header-meta" id="detail-anim-meta">
+            <span>Subitems: 1</span>
+            <span>Total Sprite Layers: 1</span>
+            <span>Sequence Extents: 0x0</span>
+          </div>
+        </div>
+        <div id="detail-sound-box" style="display: flex; align-items: center; gap: 0.6rem;">
+          <!-- Audio trigger card if present -->
+        </div>
+      </div>
+
+      <div class="anim-player-container">
+        <div class="stage-toolbar">
+          <div class="stage-toolbar-group">
+            <span>Stage Background:</span>
+            <select id="stage-bg-select" class="stage-select">
+              <option value="bg-checker">Checkerboard Grid</option>
+              <option value="bg-black">Solid Black</option>
+              <option value="bg-gray">Neutral Gray</option>
+              <option value="bg-green">Game Turf (Green)</option>
+            </select>
+          </div>
+          <div class="stage-toolbar-group">
+            <span>Centering:</span>
+            <select id="stage-center-select" class="stage-select">
+              <option value="box" selected>Center Bounding Box</option>
+              <option value="origin">Center Origin (0,0)</option>
+            </select>
+          </div>
+          <div class="stage-toolbar-group">
+            <label style="display:flex; align-items:center; gap:0.3rem; cursor:pointer;">
+              <input type="checkbox" id="chk-crosshair" checked> Crosshair
+            </label>
+            <label style="display:flex; align-items:center; gap:0.3rem; cursor:pointer;">
+              <input type="checkbox" id="chk-bounds"> Bounds
+            </label>
+          </div>
+          <div class="stage-toolbar-group">
+            <span>Zoom:</span>
+            <select id="zoom-select" class="stage-select">
+              <option value="1">1x (Native)</option>
+              <option value="2" selected>2x Zoom</option>
+              <option value="3">3x Zoom</option>
+              <option value="4">4x Zoom</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="canvas-stage bg-checker" id="canvas-stage-element">
+          <canvas id="anim-canvas" width="480" height="360"></canvas>
+        </div>
+
+        <div class="player-controls">
+          <button class="ctrl-btn" id="btn-play-pause" title="Play/Pause (Space)">Pause</button>
+          <button class="ctrl-btn" id="btn-step-prev" title="Previous Frame (Left Arrow)">&lt;</button>
+          <input type="range" id="frame-scrubber" class="scrubber" min="0" max="0" value="0">
+          <button class="ctrl-btn" id="btn-step-next" title="Next Frame (Right Arrow)">&gt;</button>
+          <span id="frame-counter" style="font-family: ui-monospace, monospace; font-size: 0.85rem; min-width: 90px; text-align: center;">1 / 1</span>
+          
+          <select id="speed-select" class="stage-select" style="padding:0.4rem 0.6rem;">
+            <option value="0.25">0.25x</option>
+            <option value="0.5">0.5x</option>
+            <option value="1" selected>1.0x (20 fps)</option>
+            <option value="1.5">1.5x</option>
+            <option value="2">2.0x</option>
+          </select>
+
+          <button class="ctrl-btn" id="btn-sound-toggle" title="Toggle audio playback on sound triggers">
+            🔊 Sound On
+          </button>
+        </div>
+      </div>
+
+      <!-- Sequence Timeline Strip -->
+      <div class="timeline-section">
+        <div class="timeline-header">
+          <h3>Subitem Steps Sequence Timeline (<span id="timeline-count">0</span> steps)</h3>
+          <span style="font-size:0.8rem; color:var(--text-secondary);">Click any step to inspect</span>
+        </div>
+        <div class="frames-scroll" id="frames-scroll-container">
+          <!-- Subitem cards injected by JS -->
+        </div>
+
+        <!-- Current Subitem Layers Table -->
+        <div style="margin-top: 0.75rem;">
+          <h4 style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 0.4rem;">
+            Active Step Sprite Layers (<span id="current-step-layers-count">1</span> layers)
+          </h4>
+          <table class="layers-table">
+            <thead>
+              <tr>
+                <th style="width: 40px;">Thumb</th>
+                <th style="width: 60px;">Layer</th>
+                <th style="width: 80px;">Sprite ID</th>
+                <th>Sprite BMP Filename</th>
+                <th style="width: 100px;">Offset (dx, dy)</th>
+                <th style="width: 90px;">Size</th>
+                <th style="width: 150px;">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="layers-tbody">
+              <!-- Injected by JS -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 3. Sprites View -->
+  <div id="sprites-view" class="tab-content">
+    <div class="sprites-grid" id="sprites-grid-container">
+      <!-- Sprites injected by JS -->
+    </div>
+    <div class="load-more-container" id="sprites-load-more-box">
+      <button class="ctrl-btn" id="btn-load-more" style="padding:0.6rem 1.4rem;">Load More Sprites (+200)</button>
+      <button class="ctrl-btn" id="btn-load-all" style="padding:0.6rem 1.4rem; background: #1e3a8a;">Load All 2,794 Sprites</button>
+    </div>
+  </div>
+</main>
+
+<!-- Sprite Details Modal -->
+<div class="modal-overlay" id="sprite-modal">
+  <div class="modal-dialog">
+    <div class="modal-header">
+      <h3 id="modal-sprite-title">Sprite Inspector</h3>
+      <button class="modal-close" id="btn-close-modal">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div class="modal-preview-stage">
+        <img id="modal-sprite-img" class="modal-preview-img" src="" alt="Sprite Preview">
+      </div>
+      
+      <div style="display:flex; justify-content:center; gap:0.5rem; align-items:center;">
+        <span style="font-size:0.8rem; color:var(--text-secondary);">Modal Preview Zoom:</span>
+        <button class="ctrl-btn" onclick="setModalZoom(1)">1x</button>
+        <button class="ctrl-btn" onclick="setModalZoom(2)">2x</button>
+        <button class="ctrl-btn" onclick="setModalZoom(4)">4x</button>
+        <button class="ctrl-btn" onclick="setModalZoom(8)">8x</button>
+      </div>
+
+      <div class="meta-grid">
+        <div class="meta-item">
+          <span class="meta-label">Sprite ID</span>
+          <span class="meta-val" id="modal-meta-id">#0</span>
+        </div>
+        <div class="meta-item">
+          <span class="meta-label">BMP Filename</span>
+          <span class="meta-val" id="modal-meta-name">file.bmp</span>
+        </div>
+        <div class="meta-item">
+          <span class="meta-label">Dimensions</span>
+          <span class="meta-val" id="modal-meta-dims">0 × 0 px</span>
+        </div>
+        <div class="meta-item">
+          <span class="meta-label">Exported File</span>
+          <span class="meta-val" id="modal-meta-file">sprites/sprite_0000.png</span>
+        </div>
+      </div>
+
+      <div class="btn-group" style="justify-content: center; gap: 0.75rem;">
+        <button class="copy-btn" id="modal-btn-copy-name">Copy BMP Name</button>
+        <button class="copy-btn" id="modal-btn-copy-path">Copy PNG Path</button>
+        <button class="copy-btn" id="modal-btn-copy-id">Copy ID</button>
+      </div>
+
+      <div style="margin-top:0.5rem;">
+        <h4 style="font-size:0.85rem; color:var(--text-secondary); margin-bottom:0.4rem;">
+          Used In Animations (<span id="modal-used-count">0</span> sequences):
+        </h4>
+        <div class="anim-chips-wrap" id="modal-used-chips">
+          <!-- Chips injected by JS -->
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Shortcuts Help Modal -->
+<div class="modal-overlay" id="shortcuts-modal">
+  <div class="modal-dialog" style="max-width: 480px;">
+    <div class="modal-header">
+      <h3>Keyboard Shortcuts</h3>
+      <button class="modal-close" id="btn-close-shortcuts">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div class="shortcut-row"><span class="kbd">Space</span> <span>Play / Pause animation</span></div>
+      <div class="shortcut-row"><span class="kbd">&larr;</span> / <span class="kbd">&rarr;</span> <span>Step Backward / Forward 1 frame</span></div>
+      <div class="shortcut-row"><span class="kbd">Home</span> / <span class="kbd">End</span> <span>Jump to first / last frame</span></div>
+      <div class="shortcut-row"><span class="kbd">1</span> / <span class="kbd">2</span> / <span class="kbd">3</span> <span>Switch to Sounds / Animations / Sprites</span></div>
+      <div class="shortcut-row"><span class="kbd">/</span> <span>Focus search input</span></div>
+      <div class="shortcut-row"><span class="kbd">Esc</span> <span>Clear search filter or close modal</span></div>
+      <div class="shortcut-row"><span class="kbd">?</span> <span>Toggle this shortcuts cheat sheet</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- Toast Notification -->
+<div id="toast">
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+  <span id="toast-text">Notification</span>
+</div>
+
+<script src="catalog_data.js"></script>
+<script>
+// State Management
+let currentTab = 'sounds';
+let activeAnimIndex = 0;
+let animPlaying = true;
+let animTimer = null;
+let currentSubIndex = 0;
+let playbackFps = 20;
+let soundEnabled = true;
+let currentZoom = 2;
+let centerMode = 'box'; // 'box' or 'origin'
+let spritesRenderLimit = 200;
+let activeFilterCategory = 'all';
+
+// Pre-computed Reverse Maps & Caches
+const imageCache = new Map();
+const spriteUsageMap = new Map(); // sprite_id -> Set(anim_id)
+const soundUsageMap = new Map();  // sound_id -> Set(anim_id)
+let currentlyPlayingAudio = null;
+
+// Build reverse indexes
+function initReverseIndexes() {
+  CATALOG_DATA.animations.forEach(a => {
+    a.subitems.forEach(sub => {
+      if (sub.sound_id >= 0) {
+        if (!soundUsageMap.has(sub.sound_id)) soundUsageMap.set(sub.sound_id, new Set());
+        soundUsageMap.get(sub.sound_id).add(a.id);
+      }
+      sub.frames.forEach(f => {
+        if (!spriteUsageMap.has(f.sprite_id)) spriteUsageMap.set(f.sprite_id, new Set());
+        spriteUsageMap.get(f.sprite_id).add(a.id);
+      });
+    });
+  });
+}
+
+function getSpriteImage(spriteId) {
+  if (imageCache.has(spriteId)) return imageCache.get(spriteId);
+  const img = new Image();
+  img.src = `sprites/sprite_${String(spriteId).padStart(4, '0')}.png`;
+  imageCache.set(spriteId, img);
+  return img;
+}
+
+// Toast Helper
+let toastTimer = null;
+function showToast(msg) {
+  const toast = document.getElementById('toast');
+  document.getElementById('toast-text').textContent = msg;
+  toast.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => {
+    toast.classList.remove('show');
+  }, 2200);
+}
+
+// Modern Clipboard Copy with Fallback
+function copyText(text, label) {
+  const displayMsg = label ? `Copied ${label} "${text}" to clipboard!` : `Copied "${text}" to clipboard!`;
+  if (navigator.clipboard && window.isSecureContext !== false) {
+    navigator.clipboard.writeText(text).then(() => {
+      showToast(displayMsg);
+    }).catch(() => fallbackCopy(text, displayMsg));
+  } else {
+    fallbackCopy(text, displayMsg);
+  }
+}
+
+function fallbackCopy(text, displayMsg) {
+  const ta = document.createElement('textarea');
+  ta.value = text;
+  ta.style.position = 'fixed';
+  ta.style.left = '-9999px';
+  document.body.appendChild(ta);
+  ta.select();
+  try {
+    document.execCommand('copy');
+    showToast(displayMsg);
+  } catch (e) {
+    showToast(`Copied: ${text}`);
+  }
+  document.body.removeChild(ta);
+}
+
+// Tab Switching
+function switchTab(tabName) {
+  currentTab = tabName;
+  document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.tab === tabName);
+  });
+  document.querySelectorAll('.tab-content').forEach(view => {
+    view.classList.toggle('active', view.id === tabName + '-view');
+  });
+  activeFilterCategory = 'all';
+  updateFilterChips();
+  applySearchFilter();
+}
+
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => switchTab(btn.dataset.tab));
+});
+
+// Category Filter Definitions
+const CATEGORIES = {
+  sounds: [
+    { id: 'all', label: 'All Sounds (91)' },
+    { id: 'voices', label: 'Ant Voices & Orders', match: s => /^(gant|theif|queen|work|fly|rdy|order|command|attack|do)/i.test(s.name) },
+    { id: 'combat', label: 'Combat & SFX', match: s => /^(bomb|exp|shoot|hit|fire|burn|hurt|death|die|net|spark)/i.test(s.name) },
+    { id: 'ui', label: 'UI & Buttons', match: s => /^(button|click|power|select|opt|menu|error|snd|score)/i.test(s.name) },
+    { id: 'ambient', label: 'Ambient & Misc', match: s => /^(rndm|grass|rain|wind|water|dig|chew|hatch|sound)/i.test(s.name) }
+  ],
+  anims: [
+    { id: 'all', label: 'All Animations (1344)' },
+    { id: 'with_sound', label: '🔊 With Audio Trigger', match: a => a.subitems.some(s => s.sound_id >= 0) },
+    { id: 'guard', label: 'Guard Ant (g*)', match: a => /^g[m|a|d|s]/i.test(a.name) },
+    { id: 'worker', label: 'Worker Ant (w*)', match: a => /^w[m|a|d|s|c]/i.test(a.name) },
+    { id: 'queen', label: 'Queen Ant (q*)', match: a => /^q/i.test(a.name) },
+    { id: 'digger', label: 'Digger / Drone (d*)', match: a => /^d[m|a|d|s|i]/i.test(a.name) },
+    { id: 'cursor', label: 'Combat & HUD (c_*)', match: a => /^c_/i.test(a.name) },
+    { id: 'screens', label: 'UI & Screens (op_*, re_*)', match: a => /^(op_|re_|qh_|logo|shell|breturn)/i.test(a.name) },
+    { id: 'props', label: 'Terrain & Foliage', match: a => /^(grass|plant|cer|fd|broken)/i.test(a.name) }
+  ],
+  sprites: [
+    { id: 'all', label: 'All Sprites (2794)' },
+    { id: 'units', label: 'Units & Ants', match: sp => /^[g|w|q|d|s][m|a|d|s|c]/i.test(sp.name) },
+    { id: 'ui', label: 'UI & Buttons', match: sp => /^(opt|but|dith|breturn|slid|efram|dclay)/i.test(sp.name) },
+    { id: 'cursor', label: 'Cursors & Reticles', match: sp => /^c_/i.test(sp.name) },
+    { id: 'props', label: 'Foliage & Environment', match: sp => /^(grass|plant|cer|food|mud|rock)/i.test(sp.name) }
+  ]
+};
+
+function updateFilterChips() {
+  const chipsBar = document.getElementById('filter-chips-bar');
+  chipsBar.innerHTML = '';
+  const list = CATEGORIES[currentTab] || [];
+  list.forEach(c => {
+    const chip = document.createElement('button');
+    chip.className = 'filter-chip' + (c.id === activeFilterCategory ? ' active' : '');
+    chip.textContent = c.label;
+    chip.onclick = () => {
+      activeFilterCategory = c.id;
+      document.querySelectorAll('.filter-chip').forEach(ch => ch.classList.remove('active'));
+      chip.classList.add('active');
+      applySearchFilter();
+    };
+    chipsBar.appendChild(chip);
+  });
+}
+
+// 1. Sounds View Logic
+function renderSounds(items) {
+  const tbody = document.getElementById('sounds-tbody');
+  tbody.innerHTML = '';
+  items.forEach(s => {
+    const tr = document.createElement('tr');
+    const usedInCount = soundUsageMap.has(s.id) ? soundUsageMap.get(s.id).size : 0;
+    tr.innerHTML = `
+      <td>
+        <button class="sound-quick-play" id="btn-play-sound-${s.id}" title="Quick Play" onclick="quickPlaySound(${s.id}, '${s.file}', this)">
+          ▶
+        </button>
+      </td>
+      <td><span class="badge badge-sound">#${s.id}</span></td>
+      <td>
+        <div style="font-family: ui-monospace, monospace; font-weight: 600;">${s.name}</div>
+        ${usedInCount > 0 ? `<div style="font-size: 0.7rem; color: #34d399; cursor: pointer;" onclick="filterAnimsBySound(${s.id})">Triggered in ${usedInCount} animation${usedInCount > 1 ? 's' : ''} &rarr;</div>` : ''}
+      </td>
+      <td>${s.rate.toLocaleString()} Hz</td>
+      <td>${s.duration_ms} ms</td>
+      <td>${(s.size / 1024).toFixed(1)} KB</td>
+      <td>
+        <audio controls preload="none" style="height: 32px; width: 100%;" src="${s.file}" id="audio-elem-${s.id}"></audio>
+      </td>
+      <td>
+        <div class="btn-group">
+          <button class="copy-btn" onclick="copyText('${s.name}', 'clip name')" title="Copy WAV name">Copy Name</button>
+          <button class="copy-btn" onclick="copyText('${s.file}', 'file path')" title="Copy relative path">Path</button>
+        </div>
+      </td>
+    `;
+    tbody.appendChild(tr);
+  });
+  document.getElementById('status-info').textContent = `Showing ${items.length} of ${CATALOG_DATA.sounds.length} sounds`;
+}
+
+function quickPlaySound(id, file, btn) {
+  if (currentlyPlayingAudio && !currentlyPlayingAudio.paused) {
+    currentlyPlayingAudio.pause();
+    currentlyPlayingAudio.currentTime = 0;
+    document.querySelectorAll('.sound-quick-play').forEach(b => {
+      b.textContent = '▶';
+      b.classList.remove('playing');
+    });
+    if (btn.dataset.active === 'true') {
+      btn.dataset.active = 'false';
+      return;
+    }
+  }
+
+  document.querySelectorAll('.sound-quick-play').forEach(b => {
+    b.textContent = '▶';
+    b.classList.remove('playing');
+    b.dataset.active = 'false';
+  });
+
+  const snd = new Audio(file);
+  currentlyPlayingAudio = snd;
+  btn.textContent = '■';
+  btn.classList.add('playing');
+  btn.dataset.active = 'true';
+  snd.play();
+  snd.onended = () => {
+    btn.textContent = '▶';
+    btn.classList.remove('playing');
+    btn.dataset.active = 'false';
+  };
+}
+
+function filterAnimsBySound(soundId) {
+  switchTab('anims');
+  const search = document.getElementById('global-search');
+  const snd = CATALOG_DATA.sounds[soundId];
+  search.value = snd ? snd.name : '';
+  applySearchFilter();
+}
+
+// 2. Animations View Logic
+function getAnimBounds(anim) {
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  let hasFrames = false;
+  anim.subitems.forEach(sub => {
+    sub.frames.forEach(f => {
+      hasFrames = true;
+      if (f.dx < minX) minX = f.dx;
+      if (f.dy < minY) minY = f.dy;
+      if (f.dx + f.w > maxX) maxX = f.dx + f.w;
+      if (f.dy + f.h > maxY) maxY = f.dy + f.h;
+    });
+  });
+  if (!hasFrames) return { minX: -16, minY: -16, maxX: 16, maxY: 16, width: 32, height: 32 };
+  return { minX, minY, maxX, maxY, width: maxX - minX, height: maxY - minY };
+}
+
+function renderAnimsList(items) {
+  const container = document.getElementById('anims-list');
+  container.innerHTML = '';
+  items.forEach(a => {
+    const totalFrames = a.subitems.reduce((sum, s) => sum + s.frames.length, 0);
+    const soundSub = a.subitems.find(s => s.sound_id >= 0);
+    const div = document.createElement('div');
+    div.className = 'anim-item' + (a.id === activeAnimIndex ? ' selected' : '');
+    div.innerHTML = `
+      <div class="anim-item-left">
+        <div class="anim-name"><span class="badge badge-anim" style="margin-right:4px;">#${a.id}</span> ${a.name}</div>
+        <div class="anim-meta">
+          <span>${a.subitems.length} step${a.subitems.length > 1 ? 's' : ''} (${totalFrames} layer${totalFrames > 1 ? 's' : ''})</span>
+          ${soundSub ? `<span style="color:#fbbf24;" title="Audio trigger: ${soundSub.sound_name}">🔊</span>` : ''}
+        </div>
+      </div>
+    `;
+    div.onclick = () => selectAnimation(a.id);
+    container.appendChild(div);
+  });
+  document.getElementById('status-info').textContent = `Showing ${items.length} of ${CATALOG_DATA.animations.length} animations`;
+}
+
+function selectAnimation(animId) {
+  activeAnimIndex = animId;
+  currentSubIndex = 0;
+
+  document.querySelectorAll('.anim-item').forEach(el => {
+    const isSelected = el.textContent.includes('#' + animId + ' ');
+    el.classList.toggle('selected', isSelected);
+    if (isSelected) {
+      el.scrollIntoView({ block: 'nearest' });
+    }
+  });
+
+  const anim = CATALOG_DATA.animations[animId];
+  if (!anim) return;
+
+  // Header Details
+  document.getElementById('detail-anim-id').textContent = '#' + anim.id;
+  document.getElementById('detail-anim-name').textContent = anim.name;
+  document.getElementById('btn-copy-anim-name').onclick = () => copyText(anim.name, 'animation sequence name');
+
+  const totalLayers = anim.subitems.reduce((sum, s) => sum + s.frames.length, 0);
+  const bounds = getAnimBounds(anim);
+  document.getElementById('detail-anim-meta').innerHTML = `
+    <span><strong>Subitems:</strong> ${anim.subitems.length}</span>
+    <span><strong>Total Sprite Layers:</strong> ${totalLayers}</span>
+    <span><strong>Extents:</strong> [dx: ${bounds.minX}..${bounds.maxX}, dy: ${bounds.minY}..${bounds.maxY}] (${bounds.width}×${bounds.height} px)</span>
+  `;
+
+  // Sound Trigger Box
+  const soundBox = document.getElementById('detail-sound-box');
+  soundBox.innerHTML = '';
+  const firstSound = anim.subitems.find(s => s.sound_id >= 0);
+  if (firstSound) {
+    const sndObj = CATALOG_DATA.sounds[firstSound.sound_id];
+    const sndFile = sndObj ? sndObj.file : '';
+    soundBox.innerHTML = `
+      <div style="background: rgba(245, 158, 11, 0.15); border: 1px solid rgba(245, 158, 11, 0.4); border-radius: 6px; padding: 0.4rem 0.75rem; display: flex; align-items: center; gap: 0.6rem;">
+        <span class="badge badge-sound">🔊 Sound #${firstSound.sound_id}</span>
+        <span style="font-size: 0.8rem; font-family: monospace;">${firstSound.sound_name}</span>
+        <button class="ctrl-btn" style="padding: 0.25rem 0.55rem; font-size: 0.75rem;" onclick="new Audio('${sndFile}').play()">▶ Play</button>
+      </div>
+    `;
+  }
+
+  // Preload sprites for this animation
+  anim.subitems.forEach(sub => {
+    sub.frames.forEach(f => getSpriteImage(f.sprite_id));
+  });
+
+  // Render Subitem Strip
+  renderSubitemsStrip(anim);
+
+  // Setup scrubber
+  const scrubber = document.getElementById('frame-scrubber');
+  scrubber.max = Math.max(0, anim.subitems.length - 1);
+  scrubber.value = 0;
+  currentSubIndex = 0;
+
+  updateCanvasFrame();
+  updateScrubberAndUI();
+  restartAnimTimer();
+}
+
+function renderSubitemsStrip(anim) {
+  const strip = document.getElementById('frames-scroll-container');
+  strip.innerHTML = '';
+  document.getElementById('timeline-count').textContent = anim.subitems.length;
+
+  anim.subitems.forEach((sub, sIdx) => {
+    const card = document.createElement('div');
+    card.className = 'subitem-card' + (sIdx === currentSubIndex ? ' active' : '');
+    const firstSpriteId = sub.frames.length > 0 ? sub.frames[0].sprite_id : null;
+    const thumbSrc = firstSpriteId !== null ? `sprites/sprite_${String(firstSpriteId).padStart(4, '0')}.png` : '';
+    
+    card.innerHTML = `
+      ${sub.sound_id >= 0 ? `<span class="subitem-badge-snd" title="Audio #${sub.sound_id}">🔊</span>` : ''}
+      <div class="subitem-thumb">
+        ${thumbSrc ? `<img src="${thumbSrc}" alt="Step ${sIdx}">` : '<span style="color:var(--text-dim);font-size:0.7rem;">Empty</span>'}
+      </div>
+      <div style="font-size:0.75rem; font-weight:700;">Step #${sIdx}</div>
+      <div style="font-size:0.68rem; color:var(--text-secondary);">${sub.frames.length} layer${sub.frames.length > 1 ? 's' : ''}</div>
+    `;
+    card.onclick = () => {
+      currentSubIndex = sIdx;
+      updateCanvasFrame();
+      updateScrubberAndUI();
+    };
+    strip.appendChild(card);
+  });
+}
+
+function updateScrubberAndUI() {
+  const anim = CATALOG_DATA.animations[activeAnimIndex];
+  if (!anim) return;
+
+  document.getElementById('frame-scrubber').value = currentSubIndex;
+  document.getElementById('frame-counter').textContent = `Step ${currentSubIndex + 1} / ${anim.subitems.length}`;
+
+  // Highlight active card
+  document.querySelectorAll('.subitem-card').forEach((c, idx) => {
+    const isActive = idx === currentSubIndex;
+    c.classList.toggle('active', isActive);
+    if (isActive) {
+      c.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    }
+  });
+
+  // Render layers table for active subitem
+  const curSub = anim.subitems[currentSubIndex];
+  const tbody = document.getElementById('layers-tbody');
+  tbody.innerHTML = '';
+  if (curSub) {
+    document.getElementById('current-step-layers-count').textContent = curSub.frames.length;
+    curSub.frames.forEach((f, lIdx) => {
+      const tr = document.createElement('tr');
+      const thumbSrc = `sprites/sprite_${String(f.sprite_id).padStart(4, '0')}.png`;
+      tr.innerHTML = `
+        <td><img src="${thumbSrc}" class="layer-thumb" alt="#${f.sprite_id}"></td>
+        <td><span style="font-weight:600;">L${lIdx + 1}</span></td>
+        <td><span class="badge badge-sprite">#${f.sprite_id}</span></td>
+        <td><strong style="font-family: monospace;">${f.sprite_name}</strong></td>
+        <td><span style="font-family: monospace;">(${f.dx >= 0 ? '+' + f.dx : f.dx}, ${f.dy >= 0 ? '+' + f.dy : f.dy})</span></td>
+        <td>${f.w} × ${f.h} px</td>
+        <td>
+          <div class="btn-group">
+            <button class="copy-btn" onclick="copyText('${f.sprite_name}', 'sprite filename')">Copy</button>
+            <button class="copy-btn" onclick="openSpriteModal(${f.sprite_id})">Inspect</button>
+          </div>
+        </td>
+      `;
+      tbody.appendChild(tr);
+    });
+  }
+}
+
+function updateCanvasFrame() {
+  const canvas = document.getElementById('anim-canvas');
+  const ctx = canvas.getContext('2d');
+  ctx.imageSmoothingEnabled = false;
+
+  const anim = CATALOG_DATA.animations[activeAnimIndex];
+  if (!anim || anim.subitems.length === 0) {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    return;
+  }
+
+  const bounds = getAnimBounds(anim);
+  const zoom = currentZoom;
+
+  // Auto size canvas according to bounds and zoom (with comfortable min/max padding)
+  const targetW = Math.max(320, Math.min(800, (bounds.width + 48) * zoom));
+  const targetH = Math.max(240, Math.min(600, (bounds.height + 48) * zoom));
+  if (canvas.width !== targetW || canvas.height !== targetH) {
+    canvas.width = targetW;
+    canvas.height = targetH;
+    ctx.imageSmoothingEnabled = false;
+  }
+
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  // Compute Origin (ox, oy)
+  let ox = canvas.width / 2;
+  let oy = canvas.height / 2;
+  if (centerMode === 'box') {
+    const boxCenterX = (bounds.minX + bounds.maxX) / 2;
+    const boxCenterY = (bounds.minY + bounds.maxY) / 2;
+    ox = canvas.width / 2 - boxCenterX * zoom;
+    oy = canvas.height / 2 - boxCenterY * zoom;
+  }
+
+  // Draw Origin Crosshair if checked
+  if (document.getElementById('chk-crosshair').checked) {
+    ctx.strokeStyle = 'rgba(56, 189, 248, 0.35)';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([4, 4]);
+    ctx.beginPath();
+    ctx.moveTo(0, oy); ctx.lineTo(canvas.width, oy);
+    ctx.moveTo(ox, 0); ctx.lineTo(ox, canvas.height);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
+  // Draw Sequence Bounds if checked
+  if (document.getElementById('chk-bounds').checked) {
+    ctx.strokeStyle = 'rgba(245, 158, 11, 0.45)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(ox + bounds.minX * zoom, oy + bounds.minY * zoom, bounds.width * zoom, bounds.height * zoom);
+  }
+
+  // Draw all sprite layers for current subitem
+  const curSub = anim.subitems[currentSubIndex % anim.subitems.length];
+  if (curSub) {
+    curSub.frames.forEach(f => {
+      const img = getSpriteImage(f.sprite_id);
+      const drawX = ox + f.dx * zoom;
+      const drawY = oy + f.dy * zoom;
+      const drawW = f.w * zoom;
+      const drawH = f.h * zoom;
+
+      if (img.complete && img.naturalWidth !== 0) {
+        ctx.drawImage(img, drawX, drawY, drawW, drawH);
+      } else {
+        img.onload = () => {
+          ctx.drawImage(img, drawX, drawY, drawW, drawH);
+        };
+      }
+    });
+  }
+}
+
+function restartAnimTimer() {
+  if (animTimer) clearInterval(animTimer);
+  if (!animPlaying) return;
+
+  const speedMultiplier = parseFloat(document.getElementById('speed-select').value);
+  const interval = 1000 / (playbackFps * speedMultiplier);
+
+  animTimer = setInterval(() => {
+    const anim = CATALOG_DATA.animations[activeAnimIndex];
+    if (!anim || anim.subitems.length <= 1) return;
+
+    currentSubIndex = (currentSubIndex + 1) % anim.subitems.length;
+    
+    // Check for sound trigger
+    if (soundEnabled) {
+      const sub = anim.subitems[currentSubIndex];
+      if (sub && sub.sound_id >= 0) {
+        const snd = CATALOG_DATA.sounds[sub.sound_id];
+        if (snd) {
+          const a = new Audio(snd.file);
+          a.volume = 0.6;
+          a.play().catch(() => {});
+        }
+      }
+    }
+
+    updateCanvasFrame();
+    updateScrubberAndUI();
+  }, interval);
+}
+
+// 3. Sprites Grid & Modal Logic
+function renderSprites(items) {
+  const grid = document.getElementById('sprites-grid-container');
+  grid.innerHTML = '';
+  const displayItems = items.slice(0, spritesRenderLimit);
+
+  displayItems.forEach(sp => {
+    const card = document.createElement('div');
+    card.className = 'sprite-card';
+    card.innerHTML = `
+      <div class="sprite-preview-box">
+        <img src="${sp.file}" alt="${sp.name}" loading="lazy">
+      </div>
+      <span class="badge badge-sprite">#${sp.id}</span>
+      <div class="sprite-label" title="${sp.name}">${sp.name}</div>
+      <div style="font-size:0.7rem; color:var(--text-secondary);">${sp.width} × ${sp.height}</div>
+      <div class="btn-group" style="margin-top: 0.2rem;">
+        <button class="copy-btn" onclick="event.stopPropagation(); copyText('${sp.name}', 'sprite filename')">Copy</button>
+      </div>
+    `;
+    card.onclick = () => openSpriteModal(sp.id);
+    grid.appendChild(card);
+  });
+
+  const loadMoreBox = document.getElementById('sprites-load-more-box');
+  loadMoreBox.style.display = displayItems.length < items.length ? 'flex' : 'none';
+  document.getElementById('status-info').textContent = `Showing ${displayItems.length} of ${items.length} sprites (search filters all 2,794)`;
+}
+
+document.getElementById('btn-load-more').onclick = () => {
+  spritesRenderLimit += 200;
+  applySearchFilter();
+};
+document.getElementById('btn-load-all').onclick = () => {
+  spritesRenderLimit = CATALOG_DATA.sprites.length;
+  applySearchFilter();
+};
+
+let modalCurrentZoom = 2;
+function setModalZoom(z) {
+  modalCurrentZoom = z;
+  const img = document.getElementById('modal-sprite-img');
+  img.style.transform = `scale(${z})`;
+}
+
+function openSpriteModal(spriteId) {
+  const sp = CATALOG_DATA.sprites[spriteId];
+  if (!sp) return;
+
+  document.getElementById('modal-sprite-title').textContent = `Sprite #${sp.id}: ${sp.name}`;
+  const img = document.getElementById('modal-sprite-img');
+  img.src = sp.file;
+  setModalZoom(2);
+
+  document.getElementById('modal-meta-id').textContent = `#${sp.id}`;
+  document.getElementById('modal-meta-name').textContent = sp.name;
+  document.getElementById('modal-meta-dims').textContent = `${sp.width} × ${sp.height} px`;
+  document.getElementById('modal-meta-file').textContent = sp.file;
+
+  document.getElementById('modal-btn-copy-name').onclick = () => copyText(sp.name, 'sprite name');
+  document.getElementById('modal-btn-copy-path').onclick = () => copyText(sp.file, 'sprite path');
+  document.getElementById('modal-btn-copy-id').onclick = () => copyText(String(sp.id), 'sprite ID');
+
+  // Reverse animations lookup
+  const usedAnimIds = spriteUsageMap.get(sp.id) || new Set();
+  document.getElementById('modal-used-count').textContent = usedAnimIds.size;
+  const chipsWrap = document.getElementById('modal-used-chips');
+  chipsWrap.innerHTML = '';
+  if (usedAnimIds.size === 0) {
+    chipsWrap.innerHTML = '<span style="font-size:0.8rem; color:var(--text-dim);">Not used in any animation sequence</span>';
+  } else {
+    usedAnimIds.forEach(aId => {
+      const a = CATALOG_DATA.animations[aId];
+      if (!a) return;
+      const chip = document.createElement('button');
+      chip.className = 'anim-link-chip';
+      chip.textContent = `#${a.id} ${a.name}`;
+      chip.onclick = () => {
+        closeModal();
+        switchTab('anims');
+        selectAnimation(a.id);
+      };
+      chipsWrap.appendChild(chip);
+    });
+  }
+
+  document.getElementById('sprite-modal').classList.add('active');
+}
+
+function closeModal() {
+  document.querySelectorAll('.modal-overlay').forEach(m => m.classList.remove('active'));
+}
+document.getElementById('btn-close-modal').onclick = closeModal;
+document.getElementById('btn-close-shortcuts').onclick = closeModal;
+document.querySelectorAll('.modal-overlay').forEach(m => {
+  m.onclick = (e) => {
+    if (e.target === m) closeModal();
+  };
+});
+
+// Search & Filter Execution
+function applySearchFilter() {
+  const query = document.getElementById('global-search').value.toLowerCase().trim();
+  document.getElementById('btn-clear-search').style.display = query ? 'block' : 'none';
+
+  const catDef = (CATEGORIES[currentTab] || []).find(c => c.id === activeFilterCategory);
+
+  if (currentTab === 'sounds') {
+    let filtered = CATALOG_DATA.sounds;
+    if (catDef && catDef.match) filtered = filtered.filter(catDef.match);
+    if (query) {
+      filtered = filtered.filter(s => s.name.toLowerCase().includes(query) || String(s.id).includes(query));
+    }
+    renderSounds(filtered);
+  } else if (currentTab === 'anims') {
+    let filtered = CATALOG_DATA.animations;
+    if (catDef && catDef.match) filtered = filtered.filter(catDef.match);
+    if (query) {
+      filtered = filtered.filter(a =>
+        a.name.toLowerCase().includes(query) || 
+        String(a.id).includes(query) ||
+        a.subitems.some(s => s.sound_name.toLowerCase().includes(query)) ||
+        a.subitems.some(s => s.frames.some(f => f.sprite_name.toLowerCase().includes(query)))
+      );
+    }
+    renderAnimsList(filtered);
+    if (filtered.length > 0 && !filtered.some(a => a.id === activeAnimIndex)) {
+      selectAnimation(filtered[0].id);
+    }
+  } else if (currentTab === 'sprites') {
+    let filtered = CATALOG_DATA.sprites;
+    if (catDef && catDef.match) filtered = filtered.filter(catDef.match);
+    if (query) {
+      filtered = filtered.filter(sp => sp.name.toLowerCase().includes(query) || String(sp.id).includes(query));
+    }
+    renderSprites(filtered);
+  }
+}
+
+document.getElementById('global-search').addEventListener('input', () => {
+  spritesRenderLimit = 200;
+  applySearchFilter();
+});
+document.getElementById('btn-clear-search').addEventListener('click', () => {
+  document.getElementById('global-search').value = '';
+  spritesRenderLimit = 200;
+  applySearchFilter();
+});
+
+// Stage Controls
+document.getElementById('stage-bg-select').onchange = (e) => {
+  const stage = document.getElementById('canvas-stage-element');
+  stage.className = 'canvas-stage ' + e.target.value;
+};
+document.getElementById('stage-center-select').onchange = (e) => {
+  centerMode = e.target.value;
+  updateCanvasFrame();
+};
+document.getElementById('zoom-select').onchange = (e) => {
+  currentZoom = parseFloat(e.target.value);
+  updateCanvasFrame();
+};
+document.getElementById('chk-crosshair').onchange = updateCanvasFrame;
+document.getElementById('chk-bounds').onchange = updateCanvasFrame;
+
+// Animation Playback Controls
+document.getElementById('btn-play-pause').onclick = () => {
+  animPlaying = !animPlaying;
+  document.getElementById('btn-play-pause').textContent = animPlaying ? 'Pause' : 'Play';
+  restartAnimTimer();
+};
+document.getElementById('btn-step-prev').onclick = () => {
+  animPlaying = false;
+  document.getElementById('btn-play-pause').textContent = 'Play';
+  const anim = CATALOG_DATA.animations[activeAnimIndex];
+  if (anim && anim.subitems.length > 0) {
+    currentSubIndex = (currentSubIndex - 1 + anim.subitems.length) % anim.subitems.length;
+    updateCanvasFrame();
+    updateScrubberAndUI();
+  }
+  restartAnimTimer();
+};
+document.getElementById('btn-step-next').onclick = () => {
+  animPlaying = false;
+  document.getElementById('btn-play-pause').textContent = 'Play';
+  const anim = CATALOG_DATA.animations[activeAnimIndex];
+  if (anim && anim.subitems.length > 0) {
+    currentSubIndex = (currentSubIndex + 1) % anim.subitems.length;
+    updateCanvasFrame();
+    updateScrubberAndUI();
+  }
+  restartAnimTimer();
+};
+document.getElementById('frame-scrubber').oninput = (e) => {
+  animPlaying = false;
+  document.getElementById('btn-play-pause').textContent = 'Play';
+  currentSubIndex = parseInt(e.target.value, 10);
+  updateCanvasFrame();
+  updateScrubberAndUI();
+  restartAnimTimer();
+};
+document.getElementById('speed-select').onchange = restartAnimTimer;
+document.getElementById('btn-sound-toggle').onclick = () => {
+  soundEnabled = !soundEnabled;
+  document.getElementById('btn-sound-toggle').textContent = soundEnabled ? '🔊 Sound On' : '🔇 Audio Muted';
+  showToast(soundEnabled ? 'Animation audio enabled' : 'Animation audio muted');
+};
+
+// Keyboard Shortcuts Modal Toggle
+document.getElementById('btn-shortcuts-help').onclick = () => {
+  document.getElementById('shortcuts-modal').classList.add('active');
+};
+
+// Global Keyboard Handler
+window.addEventListener('keydown', (e) => {
+  // If active input, only handle Esc
+  const inInput = ['INPUT', 'SELECT', 'TEXTAREA'].includes(document.activeElement.tagName);
+  if (inInput) {
+    if (e.key === 'Escape') {
+      document.activeElement.blur();
+      document.getElementById('global-search').value = '';
+      applySearchFilter();
+    }
+    return;
+  }
+
+  if (e.key === 'Escape') {
+    closeModal();
+  } else if (e.key === ' ' || e.code === 'Space') {
+    e.preventDefault();
+    if (currentTab === 'anims') {
+      document.getElementById('btn-play-pause').click();
+    }
+  } else if (e.key === 'ArrowLeft') {
+    e.preventDefault();
+    if (currentTab === 'anims') document.getElementById('btn-step-prev').click();
+  } else if (e.key === 'ArrowRight') {
+    e.preventDefault();
+    if (currentTab === 'anims') document.getElementById('btn-step-next').click();
+  } else if (e.key === 'Home') {
+    e.preventDefault();
+    if (currentTab === 'anims') {
+      currentSubIndex = 0;
+      updateCanvasFrame();
+      updateScrubberAndUI();
+    }
+  } else if (e.key === 'End') {
+    e.preventDefault();
+    if (currentTab === 'anims') {
+      const anim = CATALOG_DATA.animations[activeAnimIndex];
+      if (anim) {
+        currentSubIndex = anim.subitems.length - 1;
+        updateCanvasFrame();
+        updateScrubberAndUI();
+      }
+    }
+  } else if (e.key === '1') {
+    switchTab('sounds');
+  } else if (e.key === '2') {
+    switchTab('anims');
+  } else if (e.key === '3') {
+    switchTab('sprites');
+  } else if (e.key === '/') {
+    e.preventDefault();
+    document.getElementById('global-search').focus();
+  } else if (e.key === '?') {
+    document.getElementById('shortcuts-modal').classList.toggle('active');
+  }
+});
+
+// Initial Setup
+window.addEventListener('DOMContentLoaded', () => {
+  initReverseIndexes();
+  renderSounds(CATALOG_DATA.sounds);
+  renderAnimsList(CATALOG_DATA.animations);
+  selectAnimation(0);
+  renderSprites(CATALOG_DATA.sprites);
+  switchTab('sounds');
+});
+</script>
+</body>
+</html>

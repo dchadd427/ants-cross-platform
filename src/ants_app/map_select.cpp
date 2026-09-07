@@ -253,7 +253,7 @@ void MapSelectScreen::render(IRenderer& renderer, const ants::assets::AssetArchi
     // 3. Current Map Name inside Pick a Map box
     if (selected_index_ >= 0 && selected_index_ < static_cast<int32_t>(maps_.size())) {
         const auto& cur = maps_[static_cast<size_t>(selected_index_)];
-        renderer.draw_text(cur.display_name, 38, 320, ColorRGBA{255, 255, 255, 255});
+        renderer.draw_text(cur.display_name, 38, 318, ColorRGBA{255, 255, 255, 255});
     }
 
     // Up/Down Stepper Buttons at (226, 303) and (226, 327)
@@ -266,18 +266,18 @@ void MapSelectScreen::render(IRenderer& renderer, const ants::assets::AssetArchi
     if (selected_index_ >= 0 && selected_index_ < static_cast<int32_t>(maps_.size())) {
         const auto& cur = maps_[static_cast<size_t>(selected_index_)];
         std::string info_text = cur.description + " (" + std::to_string(cur.minutes) + " min)";
-        renderer.draw_text(info_text, 38, 387, ColorRGBA{255, 255, 255, 255});
+        renderer.draw_text(info_text, 38, 388, ColorRGBA{255, 255, 255, 255});
     }
 
-    // 5. Status line: authentic prompt text
-    renderer.draw_text("Press START when all players' thumbs have appeared.", 38, 445, ColorRGBA{255, 255, 255, 255});
+    // 5. Status line: authentic prompt text (vertically centered in statline box at y=445..464)
+    renderer.draw_text("Press START when all players' thumbs have appeared.", 38, 451, ColorRGBA{255, 255, 255, 255});
 
-    // 6. Players' Status (Only connected players shown)
+    // 6. Players' Status (Only connected players shown, vertically centered with thumb icon)
     std::string display_user = player_name_.empty() ? "Player" : player_name_;
     renderer.set_hud_team(0); // Team 0 = Green
     renderer.draw_named_sprite("agst301.bmp", 385, 95);
     renderer.set_hud_team(0);
-    renderer.draw_text(display_user, 415, 107, ColorRGBA{255, 255, 255, 255});
+    renderer.draw_text(display_user, 415, 110, ColorRGBA{255, 255, 255, 255});
     renderer.draw_named_sprite("thumb1.bmp", 540, 101);
 
     // 7. Fog of War On/Off Buttons using authentic sprites

@@ -987,7 +987,7 @@ void run_suite_8_unit_health_and_map_select() {
         ASSERT_FALSE(screen.is_player_ready(2));
     } TEST_END();
 
-    TEST_CASE("8.4 INTRO.MID Lifecycle & In-Game Music Silence") {
+    TEST_CASE("8.4 INTRO.MID Lifecycle & In-Game Music") {
         Application app;
         ApplicationConfig cfg;
         cfg.headless = true;
@@ -997,14 +997,15 @@ void run_suite_8_unit_health_and_map_select() {
         // Starts in MapSelect with INTRO.MID active
         ASSERT_EQ(app.state(), AppState::MapSelect);
 
-        // When starting game, state transitions to Playing and MIDI stops
+        // When starting game, state transitions to Playing and in-game MIDI track starts
         ASSERT_TRUE(app.start_game("Original-Ants/Maps/SMALL.LVL"));
         ASSERT_EQ(app.state(), AppState::Playing);
-        ASSERT_FALSE(app.midi_player().is_playing()); // In-game music is silent!
+        ASSERT_TRUE(app.midi_player().is_playing()); // In-game music shuffle is playing!
 
-        // When returning to map select, MIDI resumes
+        // When returning to map select, MIDI reloads INTRO.MID and resumes looping
         app.return_to_map_select();
         ASSERT_EQ(app.state(), AppState::MapSelect);
+        ASSERT_TRUE(app.midi_player().is_playing());
     } TEST_END();
 
     TEST_CASE("8.6 Ctrl+G Tile Grid Display Toggling and Visibility State") {
@@ -1066,6 +1067,57 @@ void run_suite_8_unit_health_and_map_select() {
         hud.handle_mouse_up(610, 195, SDL_BUTTON_LEFT, sim, cam);
 
         ASSERT_EQ(hud.get_selected_base_team_id(), -1);
+    } TEST_END();
+
+    TEST_CASE("8.8 Team Switching and Camera Base Centering") {
+        Application app;
+        ApplicationConfig cfg;
+        cfg.headless = true;
+        cfg.start_in_map_select = false;
+        ASSERT_TRUE(app.init(cfg));
+
+        // Default starts as Player 0 (Green)
+        ASSERT_EQ(app.local_player_id(), 0);
+
+        // Verify camera is centered on Team 0's base (accounting for viewport dimensions & clamping)
+        const auto* base0 = app.sim().grid().find_anthill(0);
+        ASSERT_TRUE(base0 != nullptr);
+        const auto& cam = app.renderer().camera();
+        int32_t expected_x = std::clamp(base0->x * 32 + 16 - cam.viewport_w / 2, 0, static_cast<int32_t>(app.sim().grid().width() * 32 - static_cast<uint32_t>(cam.viewport_w)));
+        int32_t expected_y = std::clamp(base0->y * 32 + 16 - cam.viewport_h / 2, 0, static_cast<int32_t>(app.sim().grid().height() * 32 - static_cast<uint32_t>(cam.viewport_h)));
+        ASSERT_EQ(cam.world_x, expected_x);
+        ASSERT_EQ(cam.world_y, expected_y);
+
+        // Switch to Team 1 (Red) via Ctrl+2 key event
+        SDL_KeyboardEvent key_event{};
+        key_event.type = SDL_KEYDOWN;
+        key_event.keysym.sym = SDLK_2;
+        key_event.keysym.mod = KMOD_LCTRL;
+        app.handle_key_down(key_event);
+
+        ASSERT_EQ(app.local_player_id(), 1);
+        const auto* base1 = app.sim().grid().find_anthill(1);
+        ASSERT_TRUE(base1 != nullptr);
+        expected_x = std::clamp(base1->x * 32 + 16 - cam.viewport_w / 2, 0, static_cast<int32_t>(app.sim().grid().width() * 32 - static_cast<uint32_t>(cam.viewport_w)));
+        expected_y = std::clamp(base1->y * 32 + 16 - cam.viewport_h / 2, 0, static_cast<int32_t>(app.sim().grid().height() * 32 - static_cast<uint32_t>(cam.viewport_h)));
+        ASSERT_EQ(cam.world_x, expected_x);
+        ASSERT_EQ(cam.world_y, expected_y);
+
+        // Switch to Team 2 via direct setter
+        app.set_local_player(2);
+        ASSERT_EQ(app.local_player_id(), 2);
+        const auto* base2 = app.sim().grid().find_anthill(2);
+        ASSERT_TRUE(base2 != nullptr);
+        expected_x = std::clamp(base2->x * 32 + 16 - cam.viewport_w / 2, 0, static_cast<int32_t>(app.sim().grid().width() * 32 - static_cast<uint32_t>(cam.viewport_w)));
+        expected_y = std::clamp(base2->y * 32 + 16 - cam.viewport_h / 2, 0, static_cast<int32_t>(app.sim().grid().height() * 32 - static_cast<uint32_t>(cam.viewport_h)));
+        ASSERT_EQ(cam.world_x, expected_x);
+        ASSERT_EQ(cam.world_y, expected_y);
+
+        // Cycle to next team (Team 3) via Ctrl+Tab
+        key_event.keysym.sym = SDLK_TAB;
+        key_event.keysym.mod = KMOD_LCTRL;
+        app.handle_key_down(key_event);
+        ASSERT_EQ(app.local_player_id(), 3);
     } TEST_END();
 }
 
@@ -1229,6 +1281,13 @@ void run_suite_9_gameplay_mechanics_and_options() {
         hud.handle_mouse_up(320, 185, SDL_BUTTON_LEFT, sim_engine, cam);
         ASSERT_TRUE(hud.get_sfx_volume() > 0.6f);
 
+        // Drag music volume slider (x=280, y=223)
+        hud.handle_mouse_down(280, 223, SDL_BUTTON_LEFT, sim_engine, cam);
+        hud.handle_mouse_motion(340, 223, sim_engine, cam);
+        hud.handle_mouse_up(340, 223, SDL_BUTTON_LEFT, sim_engine, cam);
+        ASSERT_TRUE(hud.get_music_volume() > 0.7f);
+        ASSERT_NEAR(app.midi_player().get_volume(), hud.get_music_volume(), 0.01f);
+
         // Click Return to Game button at (355, 427, bounds 345..455, 423..455)
         hud.handle_mouse_down(380, 435, SDL_BUTTON_LEFT, sim_engine, cam);
         hud.handle_mouse_up(380, 435, SDL_BUTTON_LEFT, sim_engine, cam);
@@ -1251,6 +1310,54 @@ void run_suite_9_gameplay_mechanics_and_options() {
         ASSERT_TRUE(app.is_tile_grid_visible());
         app.toggle_tile_grid_visibility();
         ASSERT_FALSE(app.is_tile_grid_visible());
+    } TEST_END();
+
+    TEST_CASE("9.6 Ant Type Movement and Ready Voice Confirmations") {
+        // Verify authentic voice sound ID mapping across all 6 ant types
+        ASSERT_EQ(ants::sim::get_move_voice_sound(ants::sim::AntType::Worker, 0), 17); // gantgo.wav
+        ASSERT_EQ(ants::sim::get_move_voice_sound(ants::sim::AntType::Worker, 1), 15); // gantcommand.wav
+        ASSERT_EQ(ants::sim::get_move_voice_sound(ants::sim::AntType::Swimmer, 0), 33); // brdggo.wav
+        ASSERT_EQ(ants::sim::get_move_voice_sound(ants::sim::AntType::Fire, 0), 23); // firego.wav
+        ASSERT_EQ(ants::sim::get_move_voice_sound(ants::sim::AntType::Combat, 0), 28); // combgo1.wav
+        ASSERT_EQ(ants::sim::get_move_voice_sound(ants::sim::AntType::Combat, 1), 29); // combgo2.wav
+        ASSERT_EQ(ants::sim::get_move_voice_sound(ants::sim::AntType::Bomber, 0), 37); // bombgo.wav
+        ASSERT_EQ(ants::sim::get_move_voice_sound(ants::sim::AntType::Thief, 0), 19); // theifgo.wav
+
+        ASSERT_EQ(ants::sim::get_ready_voice_sound(ants::sim::AntType::Worker, 0), 14); // gantrdy.wav
+        ASSERT_EQ(ants::sim::get_ready_voice_sound(ants::sim::AntType::Worker, 1), 13); // gantorders.wav
+        ASSERT_EQ(ants::sim::get_ready_voice_sound(ants::sim::AntType::Combat, 0), 27); // combrdy1.wav
+        ASSERT_EQ(ants::sim::get_ready_voice_sound(ants::sim::AntType::Combat, 1), 26); // combrdy2.wav
+
+        ASSERT_EQ(ants::sim::get_attack_voice_sound(ants::sim::AntType::Worker, 0), 16); // gantattack.wav
+        ASSERT_EQ(ants::sim::get_ability_voice_sound(ants::sim::AntType::Bomber), 39); // bombdo.wav
+        ASSERT_EQ(ants::sim::get_ability_voice_sound(ants::sim::AntType::Swimmer), 35); // brdgdo.wav
+        ASSERT_EQ(ants::sim::get_ability_voice_sound(ants::sim::AntType::Fire), 25); // firedo.wav
+        ASSERT_EQ(ants::sim::get_ability_voice_sound(ants::sim::AntType::Thief), 21); // theifdo.wav
+
+        // Test HUD order triggering sfx callback
+        Application app;
+        ApplicationConfig cfg;
+        cfg.headless = true;
+        cfg.default_map_path = "Original-Ants/Maps/TREASURE.LVL";
+        cfg.start_in_map_select = false;
+        ASSERT_TRUE(app.init(cfg));
+
+        auto& hud = app.hud();
+        auto& sim_engine = app.sim();
+
+        uint32_t last_sfx = 0;
+        hud.set_on_play_sfx([&](uint32_t sid) {
+            last_sfx = sid;
+        });
+
+        // Select all friendly ants
+        hud.select_all_friendly(sim_engine.get_world_state());
+        ASSERT_TRUE(last_sfx == 14 || last_sfx == 13); // gantrdy or gantorders
+
+        // Issue move order via right click on playfield
+        ViewportCamera cam;
+        hud.handle_mouse_down(100, 100, SDL_BUTTON_RIGHT, sim_engine, cam);
+        ASSERT_TRUE(last_sfx == 17 || last_sfx == 15); // gantgo or gantcommand
     } TEST_END();
 }
 
@@ -1840,6 +1947,41 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         ASSERT_TRUE(adj_ant.waypoints.empty());
         ASSERT_EQ(adj_ant.pos, (TileCoord{20, 21}));
         ASSERT_FALSE(sim.has_audio_event(SoundID::FlingThumpA));
+    } TEST_END();
+
+    TEST_CASE("12.4 Discrete Tile Bouncing & Cascade Resolution") {
+        SimulationEngine sim;
+        sim.init_test_world(60, 60, 100, 60000);
+
+        // Spawn ant 1 at (25, 25)
+        uint32_t a1_id = sim.spawn_unit(0, AntType::Combat, TileCoord{25, 25});
+        // Spawn ant 2 at (25, 25)
+        uint32_t a2_id = sim.spawn_unit(0, AntType::Worker, TileCoord{25, 25});
+        // Spawn ant 3 at adjacent (26, 25) to test cascade displacement
+        uint32_t a3_id = sim.spawn_unit(0, AntType::Worker, TileCoord{26, 25});
+
+        // Step 1 tick to trigger collision and bounce cascade
+        sim.tick();
+
+        const auto& a1 = sim.get_unit(a1_id);
+        const auto& a2 = sim.get_unit(a2_id);
+        const auto& a3 = sim.get_unit(a3_id);
+
+        // Bounce sound was triggered
+        ASSERT_TRUE(sim.has_audio_event(SoundID::FlingThumpA));
+
+        // All 3 ants must occupy distinct discrete tiles
+        ASSERT_FALSE(a1.pos == a2.pos);
+        ASSERT_FALSE(a1.pos == a3.pos);
+        ASSERT_FALSE(a2.pos == a3.pos);
+
+        // Discrete tile center guarantee: All 3 ants must be snapped to exact tile centers (NEVER halfway between tiles)
+        ASSERT_EQ(a1.pixel_x, a1.pos.x * 32 + 16);
+        ASSERT_EQ(a1.pixel_y, a1.pos.y * 32 + 16);
+        ASSERT_EQ(a2.pixel_x, a2.pos.x * 32 + 16);
+        ASSERT_EQ(a2.pixel_y, a2.pos.y * 32 + 16);
+        ASSERT_EQ(a3.pixel_x, a3.pos.x * 32 + 16);
+        ASSERT_EQ(a3.pixel_y, a3.pos.y * 32 + 16);
     } TEST_END();
 }
 

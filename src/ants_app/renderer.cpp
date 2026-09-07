@@ -322,9 +322,12 @@ bool Renderer::init(SDL_Window* window,
         }
     }
 
+    integer_scale_ = integer_scale;
     SDL_RenderSetLogicalSize(renderer_, CANVAS_WIDTH, CANVAS_HEIGHT);
-    if (integer_scale) {
+    if (integer_scale_ && !is_fullscreen_) {
         SDL_RenderSetIntegerScale(renderer_, SDL_TRUE);
+    } else {
+        SDL_RenderSetIntegerScale(renderer_, SDL_FALSE);
     }
 
     texture_cache_ = std::make_unique<TextureCache>(renderer_, archive);
@@ -341,6 +344,22 @@ void Renderer::shutdown() {
         renderer_ = nullptr;
     }
     archive_ = nullptr;
+}
+
+void Renderer::set_fullscreen(bool fullscreen) {
+    is_fullscreen_ = fullscreen;
+    if (!renderer_) return;
+    SDL_RenderSetLogicalSize(renderer_, CANVAS_WIDTH, CANVAS_HEIGHT);
+    if (is_fullscreen_) {
+        // Fullscreen: fit vertically to monitor height, preserve 4:3 aspect ratio with pillarboxing (no horizontal stretching)
+        SDL_RenderSetIntegerScale(renderer_, SDL_FALSE);
+    } else {
+        if (integer_scale_) {
+            SDL_RenderSetIntegerScale(renderer_, SDL_TRUE);
+        } else {
+            SDL_RenderSetIntegerScale(renderer_, SDL_FALSE);
+        }
+    }
 }
 
 void Renderer::set_level(const ants::assets::LevelData& level) {
@@ -529,18 +548,27 @@ void Renderer::set_level(const ants::assets::LevelData& level) {
             obj.sprite_id = sid;
             obj.width = static_cast<int32_t>(sp.width);
             obj.height = static_cast<int32_t>(sp.height);
+            obj.anchor_x = static_cast<uint16_t>(x);
+            obj.anchor_y = static_cast<uint16_t>(y);
 
             bool is_food = (low.rfind("fd", 0) == 0 || low.rfind("food", 0) == 0);
             obj.is_food = is_food;
             if (is_food) {
-                // Find all cells belonging to this food clump
-                for (uint32_t fy = 0; fy < level.height; ++fy) {
-                    for (uint32_t fx = 0; fx < level.width; ++fx) {
-                        const auto& fc = level.get_cell_layer2(fx, fy);
+                // Find local cells belonging to this food clump (within radius 4 of anchor)
+                int32_t min_x = std::max(0, static_cast<int32_t>(x) - 4);
+                int32_t max_x = std::min(static_cast<int32_t>(level.width) - 1, static_cast<int32_t>(x) + 4);
+                int32_t min_y = std::max(0, static_cast<int32_t>(y) - 4);
+                int32_t max_y = std::min(static_cast<int32_t>(level.height) - 1, static_cast<int32_t>(y) + 4);
+                for (int32_t fy = min_y; fy <= max_y; ++fy) {
+                    for (int32_t fx = min_x; fx <= max_x; ++fx) {
+                        const auto& fc = level.get_cell_layer2(static_cast<uint32_t>(fx), static_cast<uint32_t>(fy));
                         if (fc.tile_index == c2.tile_index && (c2.properties == 0 || fc.properties == c2.properties)) {
                             obj.food_tiles.push_back({static_cast<uint16_t>(fx), static_cast<uint16_t>(fy)});
                         }
                     }
+                }
+                if (obj.food_tiles.empty()) {
+                    obj.food_tiles.push_back({static_cast<uint16_t>(x), static_cast<uint16_t>(y)});
                 }
             }
 
@@ -828,12 +856,10 @@ void Renderer::render_terrain_layer2_structures(const ants::sim::Grid& grid) {
                     const auto& sp = archive_->get_sprite(static_cast<uint32_t>(sid));
                     int32_t off_x = (cur_tile < tile_offsets_.size()) ? tile_offsets_[cur_tile].first : 0;
                     int32_t off_y = (cur_tile < tile_offsets_.size()) ? tile_offsets_[cur_tile].second : 0;
-                    if (!obj.food_tiles.empty()) {
-                        obj_x = static_cast<int32_t>(obj.food_tiles[0].first * TILE_SIZE) + off_x;
-                        obj_y = static_cast<int32_t>(obj.food_tiles[0].second * TILE_SIZE) + off_y;
-                        obj_w = static_cast<int32_t>(sp.width);
-                        obj_h = static_cast<int32_t>(sp.height);
-                    }
+                    obj_x = static_cast<int32_t>(obj.anchor_x * TILE_SIZE) + off_x;
+                    obj_y = static_cast<int32_t>(obj.anchor_y * TILE_SIZE) + off_y;
+                    obj_w = static_cast<int32_t>(sp.width);
+                    obj_h = static_cast<int32_t>(sp.height);
                 }
             }
         }

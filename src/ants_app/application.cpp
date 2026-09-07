@@ -44,7 +44,6 @@ bool Application::init(int argc, char* argv[]) {
     for (int i = 1; i < argc; ++i) {
         if (std::strcmp(argv[i], "--headless") == 0) {
             cfg.headless = true;
-            cfg.start_in_map_select = false;
         } else if (std::strcmp(argv[i], "--map") == 0 && i + 1 < argc) {
             cfg.default_map_path = argv[++i];
             cfg.start_in_map_select = false;
@@ -65,6 +64,8 @@ bool Application::init(int argc, char* argv[]) {
             cfg.start_in_map_select = false;
         } else if (std::strcmp(argv[i], "--show-grid") == 0) {
             cfg.show_tile_grid = true;
+        } else if (std::strcmp(argv[i], "--map-select") == 0) {
+            cfg.start_in_map_select = true;
         }
     }
     return init(cfg);
@@ -141,14 +142,16 @@ bool Application::init(const ApplicationConfig& config) {
 
     renderer_->set_level(current_level_);
 
-    // Center camera on Player 0's base spawn
-    const auto* base = sim_.grid().find_anthill(0);
+    // Center camera on current player's base spawn
+    const auto* base = sim_.grid().find_anthill(local_player_id_);
     if (base) {
-        renderer_->camera().center_on(base->x * TILE_SIZE, base->y * TILE_SIZE,
+        renderer_->camera().center_on(base->x * TILE_SIZE + TILE_SIZE / 2,
+                                      base->y * TILE_SIZE + TILE_SIZE / 2,
                                       current_level_.width, current_level_.height);
     } else if (!current_level_.anthill_spawns.empty()) {
         const auto& spawn = current_level_.anthill_spawns[0];
-        renderer_->camera().center_on(spawn.x * TILE_SIZE, spawn.y * TILE_SIZE,
+        renderer_->camera().center_on(spawn.x * TILE_SIZE + TILE_SIZE / 2,
+                                      spawn.y * TILE_SIZE + TILE_SIZE / 2,
                                       current_level_.width, current_level_.height);
     }
 
@@ -184,6 +187,13 @@ bool Application::init(const ApplicationConfig& config) {
             renderer_->camera().scroll_speed = 240.0f + r * 480.0f;
         }
     });
+
+    hud_.set_on_play_sfx([this](uint32_t sound_id) {
+        audio_mixer_.play_sfx(sound_id, 1.0f, 255);
+    });
+
+    audio_mixer_.set_sfx_volume(hud_.get_sfx_volume());
+    midi_player_.set_volume(hud_.get_music_volume());
 
     // 9. Initialize Map Selection Screen
     std::string player_name = get_system_username();
@@ -248,8 +258,15 @@ void Application::shutdown() {
 }
 
 bool Application::start_game(const std::string& map_path) {
-    // 1. Stop INTRO.MID immediately upon entering match gameplay
-    midi_player_.stop();
+    // 1. In-Game Music: Shuffle between ANTS2A.MID, ANTS2B.MID, ANTSFUN3.MID
+    if (!is_music_muted_) {
+        play_next_ingame_music();
+    } else {
+        midi_player_.stop();
+    }
+
+    // Play authentic random game startup sound (rndm1..6.wav / Sound IDs 7..12)
+    play_startup_sound();
 
     // 2. Load the chosen map level
     if (!current_level_.load_from_file(map_path)) {
@@ -262,12 +279,18 @@ bool Application::start_game(const std::string& map_path) {
     // 3. Re-initialize simulation
     sim_.init(current_level_, config_.random_seed);
 
-    // 4. Update renderer & camera
+    // 4. Update renderer & camera centered on the base of the current player
     if (renderer_) {
         renderer_->set_level(current_level_);
-        if (!current_level_.anthill_spawns.empty()) {
+        const auto* base = sim_.grid().find_anthill(local_player_id_);
+        if (base) {
+            renderer_->camera().center_on(base->x * TILE_SIZE + TILE_SIZE / 2,
+                                          base->y * TILE_SIZE + TILE_SIZE / 2,
+                                          current_level_.width, current_level_.height);
+        } else if (!current_level_.anthill_spawns.empty()) {
             const auto& spawn = current_level_.anthill_spawns[0];
-            renderer_->camera().center_on(spawn.x * TILE_SIZE, spawn.y * TILE_SIZE,
+            renderer_->camera().center_on(spawn.x * TILE_SIZE + TILE_SIZE / 2,
+                                          spawn.y * TILE_SIZE + TILE_SIZE / 2,
                                           current_level_.width, current_level_.height);
         }
     }
@@ -310,7 +333,10 @@ void Application::return_to_map_select() {
     mouse_screen_x_ = 320;
     mouse_screen_y_ = 240;
     mouse_has_moved_ = false;
-    midi_player_.play(true); // Resumes INTRO.MID during map selection
+    midi_player_.load_file(config_.midi_path);
+    if (!is_music_muted_) {
+        midi_player_.play(true); // Resumes INTRO.MID during map selection
+    }
 }
 
 int Application::run() {
@@ -369,6 +395,30 @@ void Application::handle_events() {
         if (event.type == SDL_QUIT) {
             quit();
             return;
+        }
+
+        if (event.type == SDL_WINDOWEVENT) {
+            if (event.window.event == SDL_WINDOWEVENT_SIZE_CHANGED ||
+                event.window.event == SDL_WINDOWEVENT_RESIZED) {
+                if (renderer_ && window_) {
+                    uint32_t flags = SDL_GetWindowFlags(window_);
+                    bool is_fs = (flags & (SDL_WINDOW_FULLSCREEN | SDL_WINDOW_FULLSCREEN_DESKTOP)) != 0;
+                    renderer_->set_fullscreen(is_fs);
+                }
+            }
+        }
+
+        // Global Fullscreen hotkeys: F11, Alt+Enter, or Cmd+F
+        if (event.type == SDL_KEYDOWN) {
+            bool is_f11 = (event.key.keysym.sym == SDLK_F11);
+            bool is_alt_enter = ((event.key.keysym.mod & KMOD_ALT) != 0 &&
+                                 (event.key.keysym.sym == SDLK_RETURN || event.key.keysym.sym == SDLK_KP_ENTER));
+            bool is_cmd_f = ((event.key.keysym.mod & KMOD_GUI) != 0 &&
+                             (event.key.keysym.sym == SDLK_f));
+            if (is_f11 || is_alt_enter || is_cmd_f) {
+                toggle_fullscreen();
+                continue;
+            }
         }
 
         if (state_ == AppState::MapSelect) {
@@ -511,14 +561,34 @@ void Application::handle_key_down(const SDL_KeyboardEvent& key) {
     }
 
     if (key.keysym.sym == SDLK_m) {
-        if (midi_player_.is_playing()) {
+        is_music_muted_ = !is_music_muted_;
+        if (is_music_muted_) {
             midi_player_.stop();
             hud_.queue_news_message("Music Muted", 40, false);
         } else {
-            midi_player_.play(true);
+            if (state_ == AppState::Playing) {
+                play_next_ingame_music();
+            } else {
+                midi_player_.play(true);
+            }
             hud_.queue_news_message("Music Enabled", 40, false);
         }
         return;
+    }
+
+    // Control key modifier to change teams: Ctrl+1..4, Cmd+1..4, Ctrl+Tab, Cmd+Tab, Ctrl+C
+    bool ctrl_or_gui = (key.keysym.mod & KMOD_CTRL) || (key.keysym.mod & KMOD_GUI);
+    if (ctrl_or_gui) {
+        if (key.keysym.sym >= SDLK_1 && key.keysym.sym <= SDLK_4) {
+            uint8_t target_team = static_cast<uint8_t>(key.keysym.sym - SDLK_1);
+            set_local_player(target_team);
+            return;
+        }
+        if (key.keysym.sym == SDLK_TAB || key.keysym.sym == SDLK_c) {
+            uint8_t next_team = static_cast<uint8_t>((local_player_id_ + 1) % 4);
+            set_local_player(next_team);
+            return;
+        }
     }
 
     if (key.keysym.sym == SDLK_SPACE) {
@@ -533,7 +603,7 @@ void Application::handle_key_down(const SDL_KeyboardEvent& key) {
         }
         const auto* base = sim_.grid().find_anthill(local_player_id_);
         if (base) {
-            renderer_->camera().center_on(base->x * 32, base->y * 32, current_level_.width, current_level_.height);
+            renderer_->camera().center_on(base->x * 32 + 16, base->y * 32 + 16, current_level_.width, current_level_.height);
         }
         return;
     }
@@ -611,6 +681,9 @@ void Application::update_simulation(float dt) {
                                        renderer_->camera().world_y + PLAYFIELD_H / 2);
 
     midi_player_.update(dt);
+    if (state_ == AppState::Playing && !is_music_muted_ && !midi_player_.is_playing() && !sim_.is_match_over()) {
+        play_next_ingame_music();
+    }
 }
 
 void Application::render_frame() {
@@ -636,6 +709,60 @@ void Application::render_frame() {
     renderer_->draw_text(fps_text, 638 - text_w, 471, {255, 255, 255, 255});
 
     renderer_->end_frame();
+}
+
+void Application::toggle_fullscreen() {
+    if (!window_) return;
+    config_.fullscreen = !config_.fullscreen;
+    uint32_t flags = config_.fullscreen ? SDL_WINDOW_FULLSCREEN_DESKTOP : 0;
+    SDL_SetWindowFullscreen(window_, flags);
+    if (renderer_) {
+        renderer_->set_fullscreen(config_.fullscreen);
+    }
+}
+
+void Application::play_next_ingame_music() {
+    static const std::string IN_GAME_TRACKS[3] = {
+        "Original-Ants/ANTS2A.MID",
+        "Original-Ants/ANTS2B.MID",
+        "Original-Ants/ANTSFUN3.MID"
+    };
+
+    // Authentic shuffle sequence: rand() % 3, avoiding immediate repeat of previous track
+    int track = std::rand() % 3;
+    if (track == last_music_track_) {
+        track = (track + 1) % 3;
+    }
+    last_music_track_ = track;
+
+    midi_player_.load_file(IN_GAME_TRACKS[track]);
+    midi_player_.play(false);
+}
+
+void Application::play_startup_sound() {
+    // Authentic game start sound: picks one of 6 random voice clips (Sound IDs 7..12)
+    // rndm6.wav (7), rndm5.wav (8), rndm4.wav (9), rndm3.wav (10), rndm2.wav (11), rndm1.wav (12)
+    // Includes "We love this game!", "Spike and I are buds", etc.
+    uint32_t s_id = 7 + static_cast<uint32_t>(std::rand() % 6);
+    audio_mixer_.play_sfx(s_id, 1.0f, 255);
+}
+
+void Application::set_local_player(uint8_t team_id) {
+    if (team_id >= 4) return;
+    local_player_id_ = team_id;
+    hud_.init(local_player_id_);
+    hud_.clear_selection();
+    if (renderer_) {
+        renderer_->set_hud_team(local_player_id_);
+        const auto* base = sim_.grid().find_anthill(local_player_id_);
+        if (base) {
+            renderer_->camera().center_on(base->x * TILE_SIZE + TILE_SIZE / 2,
+                                          base->y * TILE_SIZE + TILE_SIZE / 2,
+                                          current_level_.width, current_level_.height);
+        }
+    }
+    static const char* TEAM_NAMES[4] = {"Green", "Red", "Blue", "Black"};
+    hud_.queue_news_message("Switched to Team " + std::to_string(team_id) + " (" + TEAM_NAMES[team_id] + ")", 60, false);
 }
 
 } // namespace ants::app

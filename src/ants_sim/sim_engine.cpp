@@ -88,6 +88,112 @@ public:
     }
 };
 
+namespace {
+
+bool is_tile_free_and_passable(const Grid& grid,
+                               const std::vector<std::unique_ptr<AntUnit>>& ants,
+                               int32_t tx, int32_t ty,
+                               uint32_t ignore_id,
+                               AntType unit_type) {
+    if (!grid.in_bounds(tx, ty)) return false;
+    const auto& cell = grid.get_cell(static_cast<uint32_t>(tx), static_cast<uint32_t>(ty));
+    if (!cell.is_passable()) return false;
+    if (unit_type != AntType::Swimmer && cell.terrain_type == TERRAIN_WATER && !cell.has_completed_bridge()) return false;
+    if (unit_type != AntType::Fire && cell.has_fire()) return false;
+
+    for (const auto& other : ants) {
+        if (other && other->is_alive() && !other->underground && other->id != ignore_id) {
+            if (other->pos.x == tx && other->pos.y == ty) {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+void bounce_unit_cascade(SimulationEngineImpl& impl,
+                         AntUnit& unit,
+                         int32_t from_x, int32_t from_y,
+                         int depth = 0) {
+    if (depth > 10) return;
+
+    unit.state = UnitState::Bounce;
+    unit.state_timer = 5;
+    unit.anim_tick = 0;
+    unit.anim_subitem = 0;
+    unit.clear_path();
+
+    impl.audio_queue_.push_back(AudioEvent{SoundID::FlingThumpA, unit.pixel_x, unit.pixel_y, 1, 255});
+
+    int32_t bdx = unit.pos.x - from_x;
+    int32_t bdy = unit.pos.y - from_y;
+    if (bdx == 0 && bdy == 0) {
+        bdx = (unit.id % 2 == 0) ? 1 : -1;
+        bdy = (unit.id % 3 == 0) ? 1 : -1;
+    }
+
+    static const int base_adj[8][2] = {
+        {1, 0}, {0, 1}, {-1, 0}, {0, -1},
+        {1, 1}, {-1, 1}, {1, -1}, {-1, -1}
+    };
+    std::vector<std::pair<int32_t, int32_t>> candidates;
+    candidates.reserve(8);
+    for (const auto& off : base_adj) {
+        candidates.push_back({unit.pos.x + off[0], unit.pos.y + off[1]});
+    }
+
+    // Sort candidates by alignment with (bdx, bdy)
+    std::sort(candidates.begin(), candidates.end(), [&](const std::pair<int32_t, int32_t>& c1, const std::pair<int32_t, int32_t>& c2) {
+        int32_t dot1 = (c1.first - unit.pos.x) * bdx + (c1.second - unit.pos.y) * bdy;
+        int32_t dot2 = (c2.first - unit.pos.x) * bdx + (c2.second - unit.pos.y) * bdy;
+        return dot1 > dot2;
+    });
+
+    // 1. Look for an immediately available (unoccupied and passable) tile
+    for (const auto& cand : candidates) {
+        if (is_tile_free_and_passable(impl.grid_, impl.ants_, cand.first, cand.second, unit.id, unit.type)) {
+            unit.set_tile_pos(cand.first, cand.second);
+            unit.final_dest = unit.pos;
+            return;
+        }
+    }
+
+    // 2. If no immediate tile is free, bounce into the best passable candidate tile and bounce that ant away!
+    for (const auto& cand : candidates) {
+        if (!impl.grid_.in_bounds(cand.first, cand.second)) continue;
+        const auto& cell = impl.grid_.get_cell(static_cast<uint32_t>(cand.first), static_cast<uint32_t>(cand.second));
+        if (!cell.is_passable()) continue;
+
+        AntUnit* occupying = nullptr;
+        for (const auto& other : impl.ants_) {
+            if (other && other->is_alive() && !other->underground && other->id != unit.id) {
+                if (other->pos.x == cand.first && other->pos.y == cand.second) {
+                    occupying = other.get();
+                    break;
+                }
+            }
+        }
+
+        if (occupying) {
+            // Cascade bounce the occupying ant!
+            bounce_unit_cascade(impl, *occupying, unit.pos.x, unit.pos.y, depth + 1);
+            unit.set_tile_pos(cand.first, cand.second);
+            unit.final_dest = unit.pos;
+            return;
+        } else {
+            unit.set_tile_pos(cand.first, cand.second);
+            unit.final_dest = unit.pos;
+            return;
+        }
+    }
+
+    // Fallback: strictly snapped to tile center
+    unit.set_tile_pos(unit.pos.x, unit.pos.y);
+    unit.final_dest = unit.pos;
+}
+
+} // anonymous namespace
+
 SimulationEngine::SimulationEngine()
     : impl_(std::make_unique<SimulationEngineImpl>()) {}
 
@@ -788,6 +894,7 @@ void SimulationEngine::tick() {
                         // a1 has arrived as close as possible to a2: stop a1 cleanly!
                         a1->clear_path();
                         a1->state = (a1->type == AntType::Combat) ? UnitState::GuardIdle : UnitState::Idle;
+                        a1->set_tile_pos(a1->pos.x, a1->pos.y);
                         a1->final_dest = a1->pos;
                     } else {
                         // Repath around stationary a2
@@ -831,6 +938,7 @@ void SimulationEngine::tick() {
                         // a2 has arrived as close as possible to a1: stop a2 cleanly!
                         a2->clear_path();
                         a2->state = (a2->type == AntType::Combat) ? UnitState::GuardIdle : UnitState::Idle;
+                        a2->set_tile_pos(a2->pos.x, a2->pos.y);
                         a2->final_dest = a2->pos;
                     } else {
                         // Repath around stationary a1
@@ -866,25 +974,23 @@ void SimulationEngine::tick() {
                     }
                 }
 
-                // If both are still on exact same tile, displace the MOVING one to an adjacent free passable tile (never the stationary one!)
+                // If both are still on exact same tile, bounce the moving/colliding one to an available tile (cascading until each finds an available tile)
                 if (a1->pos.x == a2->pos.x && a1->pos.y == a2->pos.y) {
-                    AntUnit* to_displace = (a1_moving && !a2_moving) ? a1.get() : ((!a1_moving && a2_moving) ? a2.get() : a2.get());
-                    static const int adj[8][2] = {
-                        {1, 0}, {0, 1}, {-1, 0}, {0, -1},
-                        {1, 1}, {-1, 1}, {1, -1}, {-1, -1}
-                    };
-                    for (const auto& off : adj) {
-                        int32_t free_x = to_displace->pos.x + off[0];
-                        int32_t free_y = to_displace->pos.y + off[1];
-                        if (impl_->grid_.in_bounds(free_x, free_y) && impl_->grid_.get_cell(static_cast<uint32_t>(free_x), static_cast<uint32_t>(free_y)).is_passable()) {
-                            to_displace->set_tile_pos(free_x, free_y);
-                            to_displace->clear_path();
-                            to_displace->state = (to_displace->type == AntType::Combat) ? UnitState::GuardIdle : UnitState::Idle;
-                            to_displace->final_dest = to_displace->pos;
-                            break;
-                        }
-                    }
+                    AntUnit* to_displace = (a1_moving && !a2_moving) ? a1.get() : ((!a1_moving && a2_moving) ? a2.get() : (a1->id > a2->id ? a1.get() : a2.get()));
+                    AntUnit* anchor_ant = (to_displace == a1.get()) ? a2.get() : a1.get();
+                    bounce_unit_cascade(*impl_, *to_displace, anchor_ant->pos.x, anchor_ant->pos.y);
                 }
+            }
+        }
+    }
+
+    // Discrete tile center guarantee: Ants must NEVER settle halfway between tiles
+    for (auto& u : impl_->ants_) {
+        if (!u || !u->is_alive() || u->underground) continue;
+        if (u->state == UnitState::Idle || u->state == UnitState::GuardIdle ||
+            u->state == UnitState::Bounce || u->state == UnitState::QueuingBase) {
+            if (u->pixel_x != u->pos.x * 32 + 16 || u->pixel_y != u->pos.y * 32 + 16) {
+                u->set_tile_pos(u->pos.x, u->pos.y);
             }
         }
     }
