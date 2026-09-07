@@ -1,0 +1,33 @@
+# Build directories and binaries
+build/
+build_asan/
+build_e2e/
+bin/
+lib/
+out/
+cmake-build-*/
+
+# Object files & debug symbols
+*.o
+*.a
+*.dylib
+*.so
+*.dSYM/
+
+# macOS system files
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100
+.Trashes
+
+# IDE / Editor configuration
+.vscode/
+.idea/
+*.swp
+*~
+
+# Temporary logs & crash reports
+*.log
+*.tmp

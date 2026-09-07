@@ -1,0 +1,434 @@
+--- src/ants_assets/chd_parser.cpp	2026-09-06 15:48:27
++++ .agents/teamwork_preview_explorer_m1_it2_2/proposed_chd_parser.cpp	2026-09-06 15:59:25
+@@ -233,218 +233,268 @@
+ 
+ bool CHDParser::parse_table1_sprites(const uint8_t* data, size_t size, size_t offset,
+                                      std::vector<Sprite>& out_sprites) {
+-    if (!data || offset + 4 > size) return false;
+-    BinaryReader r(data, size);
+-    if (!r.seek(offset)) return false;
++    try {
++        if (!data || offset + 4 > size) return false;
++        BinaryReader r(data, size);
++        if (!r.seek(offset)) return false;
+ 
+-    uint32_t count = 0;
+-    if (!r.read_u32(count) || count != 2794) return false;
+-
+-    std::vector<uint32_t> offsets(count);
+-    for (uint32_t i = 0; i < count; ++i) {
+-        if (!r.read_u32(offsets[i])) return false;
+-        if (offsets[i] >= size) return false;
+-    }
+-
+-    out_sprites.resize(count);
+-    for (uint32_t i = 0; i < count; ++i) {
+-        if (!r.seek(offsets[i])) return false;
+-        Sprite& sp = out_sprites[i];
+-        sp.id = i;
+-
+-        uint32_t fn_len = 0;
+-        if (!r.read_u32(sp.pitch) || !r.read_u32(sp.width) ||
+-            !r.read_u32(sp.height) || !r.read_u32(fn_len)) {
+-            return false;
+-        }
++        uint32_t count = 0;
++        if (!r.read_u32(count) || count != 2794) return false;
++        if (r.remaining() < static_cast<size_t>(count) * 4) return false;
+ 
+-        if (sp.width == 0 || sp.height == 0 || sp.pitch < sp.width || fn_len == 0 || fn_len > 256) {
+-            return false;
++        std::vector<uint32_t> offsets(count);
++        for (uint32_t i = 0; i < count; ++i) {
++            if (!r.read_u32(offsets[i])) return false;
++            if (offsets[i] >= size) return false;
+         }
+ 
+-        std::vector<char> fn_buf(fn_len);
+-        if (!r.read_bytes(fn_buf.data(), fn_len)) return false;
+-        while (!fn_buf.empty() && fn_buf.back() == '\0') {
+-            fn_buf.pop_back();
++        out_sprites.resize(count);
++        for (uint32_t i = 0; i < count; ++i) {
++            if (!r.seek(offsets[i])) return false;
++            Sprite& sp = out_sprites[i];
++            sp.id = i;
++
++            uint32_t fn_len = 0;
++            if (!r.read_u32(sp.pitch) || !r.read_u32(sp.width) ||
++                !r.read_u32(sp.height) || !r.read_u32(fn_len)) {
++                return false;
++            }
++
++            if (sp.width == 0 || sp.height == 0 || sp.pitch < sp.width || fn_len == 0 || fn_len > 256) {
++                return false;
++            }
++            if (fn_len > r.remaining()) return false;
++
++            std::vector<char> fn_buf(fn_len);
++            if (!r.read_bytes(fn_buf.data(), fn_len)) return false;
++            while (!fn_buf.empty() && fn_buf.back() == '\0') {
++                fn_buf.pop_back();
++            }
++            sp.name.assign(fn_buf.data(), fn_buf.size());
++            sp.filename = sp.name;
++
++            uint64_t pixel_bytes = static_cast<uint64_t>(sp.pitch) * sp.height;
++            // Stream capacity check BEFORE allocating sprite pixel buffer
++            if (pixel_bytes > r.remaining()) {
++                return false;
++            }
++
++            sp.pixels.resize(static_cast<size_t>(pixel_bytes));
++            if (!r.read_bytes(sp.pixels.data(), static_cast<size_t>(pixel_bytes))) return false;
+         }
+-        sp.name.assign(fn_buf.data(), fn_buf.size());
+-        sp.filename = sp.name;
+ 
+-        size_t pixel_bytes = static_cast<size_t>(sp.pitch) * sp.height;
+-        sp.pixels.resize(pixel_bytes);
+-        if (!r.read_bytes(sp.pixels.data(), pixel_bytes)) return false;
++        return true;
++    } catch (...) {
++        out_sprites.clear();
++        return false;
+     }
+-
+-    return true;
+ }
+ 
+ bool CHDParser::parse_table2_sounds(const uint8_t* data, size_t size, size_t offset,
+                                     std::vector<SoundClip>& out_sounds) {
+-    if (!data || offset + 4 > size) return false;
+-    BinaryReader r(data, size);
+-    if (!r.seek(offset)) return false;
++    try {
++        if (!data || offset + 4 > size) return false;
++        BinaryReader r(data, size);
++        if (!r.seek(offset)) return false;
+ 
+-    uint32_t count = 0;
+-    if (!r.read_u32(count) || count != 91) return false;
+-
+-    std::vector<uint32_t> offsets(count);
+-    for (uint32_t i = 0; i < count; ++i) {
+-        if (!r.read_u32(offsets[i])) return false;
+-        if (offsets[i] >= size) return false;
+-    }
+-
+-    out_sounds.resize(count);
+-    for (uint32_t i = 0; i < count; ++i) {
+-        if (!r.seek(offsets[i])) return false;
+-        SoundClip& snd = out_sounds[i];
+-        snd.id = i;
+-
+-        uint32_t fmt_len = 0;
+-        if (!r.read_u32(fmt_len) || fmt_len < 16) return false;
++        uint32_t count = 0;
++        if (!r.read_u32(count) || count != 91) return false;
++        if (r.remaining() < static_cast<size_t>(count) * 4) return false;
+ 
+-        if (!r.read_u16(snd.format.format_tag) ||
+-            !r.read_u16(snd.format.channels) ||
+-            !r.read_u32(snd.format.samples_per_sec) ||
+-            !r.read_u32(snd.format.avg_bytes_per_sec) ||
+-            !r.read_u16(snd.format.block_align) ||
+-            !r.read_u16(snd.format.bits_per_sample)) {
+-            return false;
++        std::vector<uint32_t> offsets(count);
++        for (uint32_t i = 0; i < count; ++i) {
++            if (!r.read_u32(offsets[i])) return false;
++            if (offsets[i] >= size) return false;
+         }
+ 
+-        if (fmt_len >= 18) {
+-            if (!r.read_u16(snd.format.extra_size)) return false;
+-            if (fmt_len > 18) {
+-                if (!r.skip(fmt_len - 18)) return false;
++        out_sounds.resize(count);
++        for (uint32_t i = 0; i < count; ++i) {
++            if (!r.seek(offsets[i])) return false;
++            SoundClip& snd = out_sounds[i];
++            snd.id = i;
++
++            uint32_t fmt_len = 0;
++            if (!r.read_u32(fmt_len) || fmt_len < 16) return false;
++
++            if (!r.read_u16(snd.format.format_tag) ||
++                !r.read_u16(snd.format.channels) ||
++                !r.read_u32(snd.format.samples_per_sec) ||
++                !r.read_u32(snd.format.avg_bytes_per_sec) ||
++                !r.read_u16(snd.format.block_align) ||
++                !r.read_u16(snd.format.bits_per_sample)) {
++                return false;
+             }
+-        } else {
+-            snd.format.extra_size = 0;
+-            if (fmt_len > 16) {
+-                if (!r.skip(fmt_len - 16)) return false;
++
++            if (fmt_len >= 18) {
++                if (!r.read_u16(snd.format.extra_size)) return false;
++                if (fmt_len > 18) {
++                    if (!r.skip(fmt_len - 18)) return false;
++                }
++            } else {
++                snd.format.extra_size = 0;
++                if (fmt_len > 16) {
++                    if (!r.skip(fmt_len - 16)) return false;
++                }
+             }
+-        }
+ 
+-        uint32_t pcm_len = 0;
+-        if (!r.read_u32(pcm_len)) return false;
+-        snd.pcm_data.resize(pcm_len);
+-        if (pcm_len > 0) {
+-            if (!r.read_bytes(snd.pcm_data.data(), pcm_len)) return false;
+-        }
++            uint32_t pcm_len = 0;
++            if (!r.read_u32(pcm_len)) return false;
+ 
+-        uint32_t fn_len = 0;
+-        if (!r.read_u32(fn_len)) return false;
+-        std::vector<char> fn_buf(fn_len);
+-        if (fn_len > 0) {
+-            if (!r.read_bytes(fn_buf.data(), fn_len)) return false;
+-        }
+-        while (!fn_buf.empty() && fn_buf.back() == '\0') {
+-            fn_buf.pop_back();
+-        }
++            // Stream capacity check BEFORE allocating PCM sound buffer
++            if (pcm_len > r.remaining()) {
++                return false;
++            }
+ 
+-        if (fn_buf.empty()) {
+-            snd.name = "sound_" + std::to_string(i) + ".wav";
+-        } else {
+-            snd.name.assign(fn_buf.data(), fn_buf.size());
++            snd.pcm_data.resize(pcm_len);
++            if (pcm_len > 0) {
++                if (!r.read_bytes(snd.pcm_data.data(), pcm_len)) return false;
++            }
++
++            uint32_t fn_len = 0;
++            if (!r.read_u32(fn_len)) return false;
++            if (fn_len > 256 || fn_len > r.remaining()) return false;
++
++            std::vector<char> fn_buf(fn_len);
++            if (fn_len > 0) {
++                if (!r.read_bytes(fn_buf.data(), fn_len)) return false;
++            }
++            while (!fn_buf.empty() && fn_buf.back() == '\0') {
++                fn_buf.pop_back();
++            }
++
++            if (fn_buf.empty()) {
++                snd.name = "sound_" + std::to_string(i) + ".wav";
++            } else {
++                snd.name.assign(fn_buf.data(), fn_buf.size());
++            }
++            snd.filename = snd.name;
+         }
+-        snd.filename = snd.name;
+-    }
+ 
+-    return true;
++        return true;
++    } catch (...) {
++        out_sounds.clear();
++        return false;
++    }
+ }
+ 
+ bool CHDParser::parse_table3_tags(const uint8_t* data, size_t size, size_t offset,
+                                   std::vector<EventTag>& out_tags) {
+-    if (!data || offset + 4 > size) return false;
+-    BinaryReader r(data, size);
+-    if (!r.seek(offset)) return false;
++    try {
++        if (!data || offset + 4 > size) return false;
++        BinaryReader r(data, size);
++        if (!r.seek(offset)) return false;
+ 
+-    uint32_t max_tag_id = 0;
+-    if (!r.read_u32(max_tag_id)) return false;
++        uint32_t max_tag_id = 0;
++        if (!r.read_u32(max_tag_id)) return false;
+ 
+-    out_tags.clear();
+-    // Read up to 4 tags or until data exhausted
+-    while (r.remaining() >= 8 && out_tags.size() < 4) {
+-        uint32_t tag_id = 0, name_len = 0;
+-        if (!r.read_u32(tag_id) || !r.read_u32(name_len)) return false;
+-        std::vector<char> tag_buf(name_len);
+-        if (name_len > 0) {
+-            if (!r.read_bytes(tag_buf.data(), name_len)) return false;
++        out_tags.clear();
++        // Read up to 4 tags or until data exhausted
++        while (r.remaining() >= 8 && out_tags.size() < 4) {
++            uint32_t tag_id = 0, name_len = 0;
++            if (!r.read_u32(tag_id) || !r.read_u32(name_len)) return false;
++            if (name_len > 256 || name_len > r.remaining()) return false;
++
++            std::vector<char> tag_buf(name_len);
++            if (name_len > 0) {
++                if (!r.read_bytes(tag_buf.data(), name_len)) return false;
++            }
++            while (!tag_buf.empty() && tag_buf.back() == '\0') {
++                tag_buf.pop_back();
++            }
++            EventTag tag;
++            tag.id = tag_id;
++            tag.tag_id = tag_id;
++            tag.name.assign(tag_buf.data(), tag_buf.size());
++            out_tags.push_back(tag);
++            if (tag_id == max_tag_id) break;
+         }
+-        while (!tag_buf.empty() && tag_buf.back() == '\0') {
+-            tag_buf.pop_back();
+-        }
+-        EventTag tag;
+-        tag.id = tag_id;
+-        tag.tag_id = tag_id;
+-        tag.name.assign(tag_buf.data(), tag_buf.size());
+-        out_tags.push_back(tag);
+-        if (tag_id == max_tag_id) break;
+-    }
+ 
+-    return (out_tags.size() == 4);
++        return (out_tags.size() == 4);
++    } catch (...) {
++        out_tags.clear();
++        return false;
++    }
+ }
+ 
+ bool CHDParser::parse_table4_animations(const uint8_t* data, size_t size, size_t offset,
+                                         std::vector<AnimationSequence>& out_anims) {
+-    if (!data || offset + 4 > size) return false;
+-    BinaryReader r(data, size);
+-    if (!r.seek(offset)) return false;
++    try {
++        if (!data || offset + 4 > size) return false;
++        BinaryReader r(data, size);
++        if (!r.seek(offset)) return false;
+ 
+-    uint32_t count = 0;
+-    if (!r.read_u32(count) || count != 1344) return false;
++        uint32_t count = 0;
++        if (!r.read_u32(count) || count != 1344) return false;
++        if (r.remaining() < static_cast<size_t>(count) * 4) return false;
+ 
+-    std::vector<uint32_t> offsets(count);
+-    for (uint32_t i = 0; i < count; ++i) {
+-        if (!r.read_u32(offsets[i])) return false;
+-        if (offsets[i] >= size) return false;
+-    }
++        std::vector<uint32_t> offsets(count);
++        for (uint32_t i = 0; i < count; ++i) {
++            if (!r.read_u32(offsets[i])) return false;
++            if (offsets[i] >= size) return false;
++        }
+ 
+-    out_anims.resize(count);
+-    for (uint32_t i = 0; i < count; ++i) {
+-        if (!r.seek(offsets[i])) return false;
+-        AnimationSequence& anim = out_anims[i];
+-        anim.id = i;
++        out_anims.resize(count);
++        for (uint32_t i = 0; i < count; ++i) {
++            if (!r.seek(offsets[i])) return false;
++            AnimationSequence& anim = out_anims[i];
++            anim.id = i;
+ 
+-        uint32_t name_len = 0;
+-        if (!r.read_u32(name_len) || name_len == 0 || name_len > 64) return false;
++            uint32_t name_len = 0;
++            if (!r.read_u32(name_len) || name_len == 0 || name_len > 64) return false;
++            if (name_len > r.remaining()) return false;
+ 
+-        std::vector<char> name_buf(name_len);
+-        if (!r.read_bytes(name_buf.data(), name_len)) return false;
+-        while (!name_buf.empty() && name_buf.back() == '\0') {
+-            name_buf.pop_back();
+-        }
+-        anim.name.assign(name_buf.data(), name_buf.size());
++            std::vector<char> name_buf(name_len);
++            if (!r.read_bytes(name_buf.data(), name_len)) return false;
++            while (!name_buf.empty() && name_buf.back() == '\0') {
++                name_buf.pop_back();
++            }
++            anim.name.assign(name_buf.data(), name_buf.size());
+ 
+-        uint32_t subitem_count = 0;
+-        if (!r.read_u32(anim.flag1) || !r.read_u32(anim.flag2) ||
+-            !r.read_u32(anim.flag3) || !r.read_u32(subitem_count)) {
+-            return false;
+-        }
++            uint32_t subitem_count = 0;
++            if (!r.read_u32(anim.flag1) || !r.read_u32(anim.flag2) ||
++                !r.read_u32(anim.flag3) || !r.read_u32(subitem_count)) {
++                return false;
++            }
+ 
+-        anim.subitems.resize(subitem_count);
+-        for (uint32_t s = 0; s < subitem_count; ++s) {
+-            AnimationSubItem& sub = anim.subitems[s];
+-            uint32_t frame_count = 0;
+-
+-            if (!r.read_u32(sub.val1) || !r.read_u32(sub.val2) || !r.read_u32(sub.val3) ||
+-                !r.read_i32(sub.box_left) || !r.read_i32(sub.box_top) ||
+-                !r.read_i32(sub.box_right) || !r.read_i32(sub.box_bottom) ||
+-                !r.read_u32(sub.flags) || !r.read_u32(sub.default_sp) ||
+-                !r.read_u32(frame_count)) {
++            // Each subitem requires at least 40 bytes for fixed fields (10 x uint32_t/int32_t)
++            if (static_cast<uint64_t>(subitem_count) * 40 > r.remaining()) {
+                 return false;
+             }
+-            sub.v8 = sub.flags;
+ 
+-            sub.frames.resize(frame_count);
+-            for (uint32_t f = 0; f < frame_count; ++f) {
+-                AnimationFrame& fr = sub.frames[f];
+-                if (!r.read_i32(fr.dx) || !r.read_i32(fr.dy) || !r.read_u32(fr.sprite_index)) {
++            anim.subitems.resize(subitem_count);
++            for (uint32_t s = 0; s < subitem_count; ++s) {
++                AnimationSubItem& sub = anim.subitems[s];
++                uint32_t frame_count = 0;
++
++                if (!r.read_u32(sub.val1) || !r.read_u32(sub.val2) || !r.read_u32(sub.val3) ||
++                    !r.read_i32(sub.box_left) || !r.read_i32(sub.box_top) ||
++                    !r.read_i32(sub.box_right) || !r.read_i32(sub.box_bottom) ||
++                    !r.read_u32(sub.flags) || !r.read_u32(sub.default_sp) ||
++                    !r.read_u32(frame_count)) {
+                     return false;
+                 }
++                sub.v8 = sub.flags;
++
++                // Each frame requires at least 12 bytes (dx, dy, sprite_index)
++                if (static_cast<uint64_t>(frame_count) * 12 > r.remaining()) {
++                    return false;
++                }
++
++                sub.frames.resize(frame_count);
++                for (uint32_t f = 0; f < frame_count; ++f) {
++                    AnimationFrame& fr = sub.frames[f];
++                    if (!r.read_i32(fr.dx) || !r.read_i32(fr.dy) || !r.read_u32(fr.sprite_index)) {
++                        return false;
++                    }
++                }
+             }
+         }
+-    }
+ 
+-    return true;
++        return true;
++    } catch (...) {
++        out_anims.clear();
++        return false;
++    }
+ }
+ 
+ } // namespace ants::assets
