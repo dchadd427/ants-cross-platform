@@ -583,7 +583,10 @@ void Renderer::render_world(const ants::sim::WorldState& world,
                             const ants::sim::Grid& grid,
                             int32_t selected_unit_id,
                             const std::vector<uint32_t>& selected_unit_ids,
-                            bool show_all_health_bars) {
+                            bool show_all_health_bars,
+                            bool show_tile_grid,
+                            int32_t mouse_x,
+                            int32_t mouse_y) {
     if (!renderer_) return;
     render_queue_.clear();
 
@@ -600,7 +603,12 @@ void Renderer::render_world(const ants::sim::WorldState& world,
     // 4. Ant Units (Depth-Sorted)
     render_ant_units(world, selected_unit_id, selected_unit_ids, show_all_health_bars);
 
-    // 5. Unset clipping for full-canvas chrome
+    // 5. Tile Grid Overlay (if enabled)
+    if (show_tile_grid) {
+        render_tile_grid(grid, mouse_x, mouse_y);
+    }
+
+    // 6. Unset clipping for full-canvas chrome
     SDL_RenderSetClipRect(renderer_, nullptr);
 }
 
@@ -993,6 +1001,75 @@ void Renderer::render_ant_units(const ants::sim::WorldState& world,
     }
 }
 
+void Renderer::render_tile_grid(const ants::sim::Grid& grid, int32_t mouse_x, int32_t mouse_y) {
+    if (!renderer_) return;
+
+    SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
+
+    int32_t start_col = std::max(0, static_cast<int32_t>(camera_.x) / TILE_SIZE);
+    int32_t end_col   = std::min(static_cast<int32_t>(grid.width()) - 1,
+                                 (static_cast<int32_t>(camera_.x) + PLAYFIELD_W + 31) / TILE_SIZE);
+    int32_t start_row = std::max(0, static_cast<int32_t>(camera_.y) / TILE_SIZE);
+    int32_t end_row   = std::min(static_cast<int32_t>(grid.height()) - 1,
+                                 (static_cast<int32_t>(camera_.y) + PLAYFIELD_H + 31) / TILE_SIZE);
+
+    // Determine hovered tile under mouse
+    int32_t hover_tx = -1;
+    int32_t hover_ty = -1;
+    if (mouse_x >= PLAYFIELD_X && mouse_x < PLAYFIELD_X + PLAYFIELD_W &&
+        mouse_y >= PLAYFIELD_Y && mouse_y < PLAYFIELD_Y + PLAYFIELD_H) {
+        int32_t world_x = camera_.world_x + (mouse_x - PLAYFIELD_X);
+        int32_t world_y = camera_.world_y + (mouse_y - PLAYFIELD_Y);
+        hover_tx = std::clamp(world_x / TILE_SIZE, 0, static_cast<int32_t>(grid.width()) - 1);
+        hover_ty = std::clamp(world_y / TILE_SIZE, 0, static_cast<int32_t>(grid.height()) - 1);
+    } else {
+        hover_tx = std::clamp((camera_.world_x + PLAYFIELD_W / 2) / TILE_SIZE, 0, static_cast<int32_t>(grid.width()) - 1);
+        hover_ty = std::clamp((camera_.world_y + PLAYFIELD_H / 2) / TILE_SIZE, 0, static_cast<int32_t>(grid.height()) - 1);
+    }
+
+    // 1. Draw tile outline for each tile and coordinates in bottom-left of each tile
+    for (int32_t r = start_row; r <= end_row; ++r) {
+        for (int32_t c = start_col; c <= end_col; ++c) {
+            int32_t sx = 0, sy = 0;
+            camera_.world_to_screen(c * TILE_SIZE, r * TILE_SIZE, sx, sy);
+
+            // Subtle semi-transparent tile outline
+            SDL_SetRenderDrawColor(renderer_, 255, 255, 255, 75);
+            SDL_Rect tile_rect = { sx, sy, TILE_SIZE, TILE_SIZE };
+            SDL_RenderDrawRect(renderer_, &tile_rect);
+
+            // Coordinates inside bottom-left of tile
+            std::string c_str = std::to_string(c) + "," + std::to_string(r);
+            draw_text(c_str, sx + 3, sy + 24, ants::assets::ColorRGBA{0, 0, 0, 180});
+            draw_text(c_str, sx + 2, sy + 23, ants::assets::ColorRGBA{255, 255, 200, 220});
+        }
+    }
+
+    // 2. Active hovered tile highlight
+    if (hover_tx >= 0 && hover_ty >= 0) {
+        int32_t hsx = 0, hsy = 0;
+        camera_.world_to_screen(hover_tx * TILE_SIZE, hover_ty * TILE_SIZE, hsx, hsy);
+        SDL_SetRenderDrawColor(renderer_, 0, 255, 255, 255);
+        SDL_Rect h1 = { hsx, hsy, TILE_SIZE, TILE_SIZE };
+        SDL_RenderDrawRect(renderer_, &h1);
+        SDL_SetRenderDrawColor(renderer_, 255, 255, 0, 220);
+        SDL_Rect h2 = { hsx + 1, hsy + 1, TILE_SIZE - 2, TILE_SIZE - 2 };
+        SDL_RenderDrawRect(renderer_, &h2);
+    }
+
+    // 3. Tile coordinates readout badge in the bottom left-hand corner of the playfield
+    int32_t badge_x = PLAYFIELD_X + 4;
+    int32_t badge_y = PLAYFIELD_Y + PLAYFIELD_H - 18;
+    int32_t badge_w = 88;
+    int32_t badge_h = 16;
+
+    fill_rect(badge_x, badge_y, badge_w, badge_h, ants::assets::ColorRGBA{0, 0, 0, 210});
+    draw_rect(badge_x, badge_y, badge_w, badge_h, ants::assets::ColorRGBA{0, 255, 255, 230});
+
+    std::string badge_text = "X: " + std::to_string(hover_tx) + "  Y: " + std::to_string(hover_ty);
+    draw_text(badge_text, badge_x + 6, badge_y + 4, ants::assets::ColorRGBA{255, 255, 255, 255});
+}
+
 void Renderer::render_minimap(const ants::sim::WorldState& world,
                               const ants::sim::Grid& grid) {
     if (!renderer_ || map_width_ == 0 || map_height_ == 0) return;
@@ -1161,20 +1238,35 @@ void Renderer::draw_named_sprite(const std::string& name, int32_t x, int32_t y, 
 
 void Renderer::fill_rect(int32_t x, int32_t y, int32_t w, int32_t h, ants::assets::ColorRGBA color) {
     if (!renderer_) return;
+    if (color.a < 255) {
+        SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
+    }
     SDL_SetRenderDrawColor(renderer_, color.r, color.g, color.b, color.a);
     SDL_Rect rect = { x, y, w, h };
     SDL_RenderFillRect(renderer_, &rect);
+    if (color.a < 255) {
+        SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_NONE);
+    }
 }
 
 void Renderer::draw_rect(int32_t x, int32_t y, int32_t w, int32_t h, ants::assets::ColorRGBA color) {
     if (!renderer_) return;
+    if (color.a < 255) {
+        SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
+    }
     SDL_SetRenderDrawColor(renderer_, color.r, color.g, color.b, color.a);
     SDL_Rect rect = { x, y, w, h };
     SDL_RenderDrawRect(renderer_, &rect);
+    if (color.a < 255) {
+        SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_NONE);
+    }
 }
 
 void Renderer::draw_text(const std::string& text, int32_t x, int32_t y, ants::assets::ColorRGBA color) {
     if (!renderer_) return;
+    if (color.a < 255) {
+        SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
+    }
     SDL_SetRenderDrawColor(renderer_, color.r, color.g, color.b, color.a);
 
     int32_t cur_x = x;
@@ -1199,6 +1291,9 @@ void Renderer::draw_text(const std::string& text, int32_t x, int32_t y, ants::as
             }
         }
         cur_x += glyph.width + 1;
+    }
+    if (color.a < 255) {
+        SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_NONE);
     }
 }
 

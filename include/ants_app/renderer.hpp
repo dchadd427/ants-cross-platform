@@ -152,7 +152,10 @@ public:
                       const ants::sim::Grid& grid,
                       int32_t selected_unit_id,
                       const std::vector<uint32_t>& selected_unit_ids = {},
-                      bool show_all_health_bars = false);
+                      bool show_all_health_bars = false,
+                      bool show_tile_grid = false,
+                      int32_t mouse_x = -1,
+                      int32_t mouse_y = -1);
     void render_minimap(const ants::sim::WorldState& world,
                         const ants::sim::Grid& grid);
     void render_hud_chrome(const ants::sim::WorldState& world,
@@ -183,6 +186,7 @@ private:
     void render_terrain_layer1(const ants::sim::Grid& grid);
     void render_terrain_layer2_structures(const ants::sim::Grid& grid);
     void render_ant_units(const ants::sim::WorldState& world, int32_t selected_unit_id, const std::vector<uint32_t>& selected_unit_ids = {}, bool show_all_health_bars = false);
+    void render_tile_grid(const ants::sim::Grid& grid, int32_t mouse_x, int32_t mouse_y);
     void draw_ant_shadow(int32_t anchor_sx, int32_t anchor_sy, int32_t altitude_z);
     void draw_single_ant(const ants::sim::AntSnapshot& ant, bool is_selected, bool show_health_bar = false);
 
