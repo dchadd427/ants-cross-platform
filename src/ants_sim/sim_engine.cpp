@@ -195,6 +195,8 @@ void SimulationEngine::tick() {
                         if (ant_ptr && ant_ptr->is_alive() && ant_ptr->pos.x == static_cast<int32_t>(x) && ant_ptr->pos.y == static_cast<int32_t>(y)) {
                             if (ant_ptr->type == AntType::Swimmer) {
                                 ant_ptr->state = UnitState::Swimming;
+                                ant_ptr->was_in_water = true;
+                                ant_ptr->in_water = true;
                                 impl_->audio_queue_.push_back(AudioEvent{SoundID::WaterSplash, ant_ptr->pixel_x, ant_ptr->pixel_y, 1, 255});
                             } else {
                                 ant_ptr->start_drowning();
@@ -225,6 +227,11 @@ void SimulationEngine::tick() {
                     if (bomb_owner < MAX_PLAYERS) {
                         impl_->stats_.get_player_stats_mut(bomb_owner).enemy_killed++;
                     }
+                } else if (ant_ptr->hp == 1 && ant_ptr->state != UnitState::EnteringBase && !ant_ptr->underground) {
+                    const auto* home = impl_->grid_.find_anthill(ant_ptr->player_id);
+                    if (home) {
+                        issue_move_order(ant_ptr->id, TileCoord{static_cast<int32_t>(home->x), static_cast<int32_t>(home->y + 3)});
+                    }
                 }
                 impl_->physics_.apply_knockback(*ant_ptr, ant_ptr->pixel_x, ant_ptr->pixel_y, 2, 3, DamageSource::BombBlast, impl_->audio_queue_, impl_->prng_.rand());
             }
@@ -254,6 +261,14 @@ void SimulationEngine::tick() {
             in_water = (cell.terrain_type == TERRAIN_WATER && !cell.has_completed_bridge());
         }
         ant_ptr->tick_movement(in_water, surf);
+
+        // Water splash audio trigger on swimmer dive or exit
+        if (ant_ptr->type == AntType::Swimmer) {
+            if ((ant_ptr->state == UnitState::DivingInWater && ant_ptr->anim_tick == 1) ||
+                (ant_ptr->state == UnitState::ExitingWater && ant_ptr->anim_tick == 1)) {
+                impl_->audio_queue_.push_back(AudioEvent{SoundID::WaterSplash, ant_ptr->pixel_x, ant_ptr->pixel_y, 1, 255});
+            }
+        }
 
         // Universal lunchbox pickup
         if (ant_ptr->is_alive() && !ant_ptr->is_holding() && impl_->grid_.has_lunchbox_at(ant_ptr->pos)) {
@@ -438,10 +453,49 @@ void SimulationEngine::tick() {
                 }
 
                 float overlap = 22.0f - dist;
+
+                bool are_enemies = (a1->player_id != a2->player_id && !impl_->stats_.are_allies(a1->player_id, a2->player_id));
+                if (are_enemies) {
+                    // Hostile units must never push each other out of their tiles!
+                    bool a1_moving = (a1->state == UnitState::Walking);
+                    bool a2_moving = (a2->state == UnitState::Walking);
+                    if (a1_moving && !a2_moving) {
+                        int32_t push_x = static_cast<int32_t>(nx * overlap + (nx >= 0 ? 0.5f : -0.5f));
+                        int32_t push_y = static_cast<int32_t>(ny * overlap + (ny >= 0 ? 0.5f : -0.5f));
+                        a1->pixel_x += push_x;
+                        a1->pixel_y += push_y;
+                        a1->fx_x = a1->pixel_x << 16;
+                        a1->fx_y = a1->pixel_y << 16;
+                        a1->pos.x = a1->pixel_x / 32;
+                        a1->pos.y = a1->pixel_y / 32;
+                    } else if (!a1_moving && a2_moving) {
+                        int32_t push_x = static_cast<int32_t>(nx * overlap + (nx >= 0 ? 0.5f : -0.5f));
+                        int32_t push_y = static_cast<int32_t>(ny * overlap + (ny >= 0 ? 0.5f : -0.5f));
+                        a2->pixel_x -= push_x;
+                        a2->pixel_y -= push_y;
+                        a2->fx_x = a2->pixel_x << 16;
+                        a2->fx_y = a2->pixel_y << 16;
+                        a2->pos.x = a2->pixel_x / 32;
+                        a2->pos.y = a2->pixel_y / 32;
+                    } else {
+                        int32_t push_x = static_cast<int32_t>(nx * (overlap * 0.5f) + (nx >= 0 ? 0.5f : -0.5f));
+                        int32_t push_y = static_cast<int32_t>(ny * (overlap * 0.5f) + (ny >= 0 ? 0.5f : -0.5f));
+                        a1->pixel_x += push_x;
+                        a1->pixel_y += push_y;
+                        a1->fx_x = a1->pixel_x << 16;
+                        a1->fx_y = a1->pixel_y << 16;
+                        a2->pixel_x -= push_x;
+                        a2->pixel_y -= push_y;
+                        a2->fx_x = a2->pixel_x << 16;
+                        a2->fx_y = a2->pixel_y << 16;
+                    }
+                    continue;
+                }
+
                 int32_t sep_x = static_cast<int32_t>(nx * (overlap * 0.5f) + (nx >= 0 ? 0.5f : -0.5f));
                 int32_t sep_y = static_cast<int32_t>(ny * (overlap * 0.5f) + (ny >= 0 ? 0.5f : -0.5f));
 
-                // Apply elastic separation to both ants if passable
+                // Apply elastic separation to both friendly ants if passable
                 int32_t cand1_x = (a1->pixel_x + sep_x) / 32;
                 int32_t cand1_y = (a1->pixel_y + sep_y) / 32;
                 if (impl_->grid_.in_bounds(cand1_x, cand1_y) && impl_->grid_.get_cell(cand1_x, cand1_y).is_passable()) {
@@ -681,6 +735,8 @@ const WorldState& SimulationEngine::get_world_state() const {
         impl_->world_state_cache_.ants.clear();
         for (const auto& a : impl_->ants_) {
             if (!a) continue;
+            // Eliminated units with 0 HP disappear from active world state (unless drowning animation active)
+            if (a->hp == 0 && a->state != UnitState::Drowning) continue;
             AntSnapshot s{};
             s.id = a->id;
             s.player_id = a->player_id;
@@ -698,7 +754,7 @@ const WorldState& SimulationEngine::get_world_state() const {
             s.carried_points = a->carried_points;
             s.is_airborne = (a->state == UnitState::Knockback);
             s.is_stunned = a->is_stunned();
-            s.is_swimming = (a->state == UnitState::Swimming);
+            s.is_swimming = (a->state == UnitState::Swimming || a->in_water);
             s.is_underground = a->underground;
             s.is_drowning = (a->state == UnitState::Drowning);
             s.is_on_mud = a->is_on_mud;
@@ -859,7 +915,6 @@ void SimulationEngine::execute_melee_attack(uint32_t attacker_id, uint32_t targe
 
     if (attacker->type == AntType::Combat) {
         // Combat Ant: 2 HP heavy punch, Sound 78, 4-5 tile knockback, 12-tick stun
-        impl_->audio_queue_.push_back(AudioEvent{SoundID::HeavyPunch, attacker->pixel_x, attacker->pixel_y, 1, 255});
         bool lethal = target->take_damage(2, DamageSource::CombatPunch, attacker->id);
         if (lethal) {
             impl_->stats_.get_player_stats_mut(target->player_id).friendly_lost++;
@@ -884,6 +939,7 @@ void SimulationEngine::execute_melee_attack(uint32_t attacker_id, uint32_t targe
         }
 
         target->set_tile_pos(land_pos.x, land_pos.y);
+        target->state = UnitState::Knockback;
         target->start_stun(AntUnit::STUN_TICKS);
         impl_->audio_queue_.push_back(AudioEvent{SoundID::HeavyPunch, attacker->pixel_x, attacker->pixel_y, 1, 255});
         impl_->audio_queue_.push_back(AudioEvent{SoundID::StunRecover, target->pixel_x, target->pixel_y, 0, 255});
@@ -892,6 +948,13 @@ void SimulationEngine::execute_melee_attack(uint32_t attacker_id, uint32_t targe
         if (impl_->grid_.has_fire_at(target->pos)) {
             impl_->physics_.resolve_fire_contact(*target, impl_->grid_, impl_->audio_queue_, impl_->prng_, dx, dy);
         }
+
+        if (!lethal && target->hp == 1 && target->state != UnitState::EnteringBase && !target->underground) {
+            const auto* home = impl_->grid_.find_anthill(target->player_id);
+            if (home) {
+                issue_move_order(target->id, TileCoord{static_cast<int32_t>(home->x), static_cast<int32_t>(home->y + 3)});
+            }
+        }
     } else {
         // Standard Ant: 1 HP melee strike, Sound 57
         impl_->audio_queue_.push_back(AudioEvent{SoundID::MeleeAttack, attacker->pixel_x, attacker->pixel_y, 1, 255});
@@ -899,6 +962,15 @@ void SimulationEngine::execute_melee_attack(uint32_t attacker_id, uint32_t targe
         if (lethal) {
             impl_->stats_.get_player_stats_mut(target->player_id).friendly_lost++;
             impl_->stats_.get_player_stats_mut(attacker->player_id).enemy_killed++;
+        } else {
+            target->start_flinch();
+
+            if (target->hp == 1 && target->state != UnitState::EnteringBase && !target->underground) {
+                const auto* home = impl_->grid_.find_anthill(target->player_id);
+                if (home) {
+                    issue_move_order(target->id, TileCoord{static_cast<int32_t>(home->x), static_cast<int32_t>(home->y + 3)});
+                }
+            }
         }
     }
 }
@@ -930,7 +1002,21 @@ void SimulationEngine::issue_move_order(uint32_t ant_id, TileCoord dest) {
 
     bool is_swimmer = (unit->type == AntType::Swimmer);
     bool is_fire_ant = (unit->type == AntType::Fire);
-    auto path = PathFinder::find_path(impl_->grid_, unit->pos, dest, is_swimmer, is_fire_ant);
+
+    std::vector<TileCoord> enemy_obstacles;
+    for (const auto& other : impl_->ants_) {
+        if (other && other->is_alive() && !other->underground && other->id != unit->id &&
+            other->player_id != unit->player_id && !impl_->stats_.are_allies(unit->player_id, other->player_id)) {
+            if (other->pos != unit->pos && other->pos != dest) {
+                enemy_obstacles.push_back(other->pos);
+            }
+        }
+    }
+
+    auto path = PathFinder::find_path(impl_->grid_, unit->pos, dest, is_swimmer, is_fire_ant, 4000, enemy_obstacles);
+    if (path.empty() && !enemy_obstacles.empty()) {
+        path = PathFinder::find_path(impl_->grid_, unit->pos, dest, is_swimmer, is_fire_ant, 4000);
+    }
     if (!path.empty()) {
         unit->set_path(std::move(path));
     } else {

@@ -846,8 +846,12 @@ void Renderer::draw_single_ant(const ants::sim::AntSnapshot& ant, bool is_select
         } else {
             action = "wg";
         }
+    } else if (ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::DivingInWater)) {
+        action = "di";
+    } else if (ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::ExitingWater)) {
+        action = "go";
     } else if (ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::Swimming)) {
-        action = "sw";
+        action = "tw";
     } else if (ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::Attacking)) {
         action = "at";
     } else if (ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::Knockback)) {
@@ -973,6 +977,7 @@ void Renderer::render_ant_units(const ants::sim::WorldState& world,
                                 bool show_all_health_bars) {
     for (const auto& a : world.ants) {
         if (a.is_underground) continue;
+        if (a.hp == 0 && !a.is_drowning) continue;
 
         bool is_sel = false;
         if (!selected_unit_ids.empty()) {

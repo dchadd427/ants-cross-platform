@@ -43,7 +43,9 @@ enum class UnitState : uint8_t {
     Intercepting   = 13, // Combat Ant intercepting detected intruder
     ReturningToPost= 14, // Combat Ant returning to guard post
     Swimming       = 15, // Swimmer Ant actively swimming in water
-    Infiltrating   = 16  // Thief Ant diving into enemy base
+    Infiltrating   = 16, // Thief Ant diving into enemy base
+    DivingInWater  = 17, // Swimmer Ant diving into water (asdi*, Sound 71)
+    ExitingWater   = 18  // Swimmer Ant emerging from water onto land (asgo*, Sound 71)
 };
 
 /**
@@ -153,6 +155,8 @@ public:
     uint16_t    state_timer{0};
     uint16_t    transform_timer{0};
     bool        is_on_mud{false};
+    bool        was_in_water{false};
+    bool        in_water{false};
 
     std::vector<TileCoord> waypoints;
     size_t      current_waypoint_idx{0};

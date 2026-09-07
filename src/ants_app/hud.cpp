@@ -74,11 +74,11 @@ void HUD::init(uint8_t local_player_id) {
     show_quick_help_ = false;
     show_options_ = false;
 
-    // Configure Hatch Button at (492, 262)
-    hatch_button_.x = 492;
-    hatch_button_.y = 262;
-    hatch_button_.w = 36;
-    hatch_button_.h = 26;
+    // Configure Hatch Button at (490, 275)
+    hatch_button_.x = 490;
+    hatch_button_.y = 275;
+    hatch_button_.w = 110;
+    hatch_button_.h = 32;
     hatch_button_.sprite_up = 2683;    // buthatup.bmp
     hatch_button_.sprite_down = 2684;  // buthatd.bmp
     hatch_button_.sprite_label = 2682; // labhatch.bmp
@@ -255,94 +255,118 @@ void HUD::render(IRenderer& renderer, const assets::AssetArchive& assets,
         }
     }
 
-    // Pedestal 1: Move (Always present)
-    bool ped1_down = move_pedestal_button_.is_pressed || (active_order_mode_ == sim::OrderType::Move);
-    renderer.draw_named_sprite(ped1_down ? "butdown.bmp" : "butup.bmp", 488, 155);
-    renderer.draw_named_sprite(ped1_down ? "butmovd.bmp" : "butmovu.bmp", 503, 176);
-    renderer.draw_named_sprite("labmov.bmp", 497, 140);
+    if (selected_base_team_id_ >= 0) {
+        // Anthill Base Selection Card
+        static const char* hill_sprites[4] = { "GHILL_s.bmp", "rhill_s.bmp", "blhill_s.bmp", "bkhill_s.bmp" };
+        static const char* hill_names[4] = { "Green Anthill", "Red Anthill", "Blue Anthill", "Black Anthill" };
+        uint8_t tid = static_cast<uint8_t>(selected_base_team_id_ % 4);
 
-    // Pedestal 2: Class-Specific Ability Pedestal
-    if (sel_ant) {
-        if (sel_ant->type == sim::AntType::Swimmer) {
-            bool ped2_down = ability_pedestal_button_.is_pressed || (active_order_mode_ == sim::OrderType::BuildBridge);
-            renderer.draw_named_sprite(ped2_down ? "butdown.bmp" : "butup.bmp", 544, 155);
-            renderer.draw_named_sprite(ped2_down ? "swimd.bmp" : "swimup.bmp", 556, 180);
-            renderer.draw_named_sprite("labswim.bmp", 551, 140);
-        } else if (sel_ant->type == sim::AntType::Fire) {
-            bool ped2_down = ability_pedestal_button_.is_pressed || (active_order_mode_ == sim::OrderType::IgniteFire);
-            renderer.draw_named_sprite(ped2_down ? "butdown.bmp" : "butup.bmp", 544, 155);
-            renderer.draw_named_sprite("butfireu.bmp", 555, 177);
-            renderer.draw_named_sprite("labfire.bmp", 546, 140);
-        } else if (sel_ant->type == sim::AntType::Combat) {
-            bool ped2_down = ability_pedestal_button_.is_pressed || (active_order_mode_ == sim::OrderType::Attack);
-            renderer.draw_named_sprite(ped2_down ? "butdown.bmp" : "butup.bmp", 544, 155);
-            renderer.draw_named_sprite(ped2_down ? "butattd.bmp" : "butattu.bmp", 553, 179);
-            renderer.draw_named_sprite("labatt.bmp", 550, 140);
-        } else if (sel_ant->type == sim::AntType::Bomber) {
-            bool ped2_down = ability_pedestal_button_.is_pressed || (active_order_mode_ == sim::OrderType::PlantBomb);
-            renderer.draw_named_sprite(ped2_down ? "butdown.bmp" : "butup.bmp", 544, 155);
-            renderer.draw_named_sprite(ped2_down ? "butbomd.bmp" : "butbomu.bmp", 554, 175);
-            renderer.draw_named_sprite("labbom.bmp", 553, 140);
-        } else if (sel_ant->type == sim::AntType::Thief) {
-            bool ped2_down = ability_pedestal_button_.is_pressed || (active_order_mode_ == sim::OrderType::InfiltrateAnthill);
-            renderer.draw_named_sprite(ped2_down ? "butdown.bmp" : "butup.bmp", 544, 155);
-            renderer.draw_named_sprite(ped2_down ? "butthfd.bmp" : "butthfu.bmp", 556, 177);
-            renderer.draw_named_sprite("labthf.bmp", 554, 140);
+        renderer.draw_named_sprite("wtype.bmp", 488, 130);
+        renderer.draw_text(hill_names[tid], 505, 133, TEAM_COLORS[tid]);
+
+        // Anthill Portrait
+        renderer.draw_named_sprite(hill_sprites[tid], 530, 145);
+
+        // Eggs & Score status
+        uint32_t eggs = (tid < world.player_eggs.size()) ? world.player_eggs[tid] : 0;
+        int32_t score = (tid < world.player_scores.size()) ? world.player_scores[tid] : 0;
+
+        renderer.draw_named_sprite("wstatus.bmp", 488, 206);
+        std::string base_status = (tid == local_player_id_) ? "Home Colony" : "Colony Base";
+        renderer.draw_text(base_status, 510, 209, {255, 255, 255, 255});
+        renderer.draw_text("Eggs: " + std::to_string(eggs) + "  Food: " + std::to_string(score), 496, 192, {255, 215, 0, 255});
+    } else {
+        // Pedestal 1: Move (Always present)
+        bool ped1_down = move_pedestal_button_.is_pressed || (active_order_mode_ == sim::OrderType::Move);
+        renderer.draw_named_sprite(ped1_down ? "butdown.bmp" : "butup.bmp", 488, 155);
+        renderer.draw_named_sprite(ped1_down ? "butmovd.bmp" : "butmovu.bmp", 503, ped1_down ? 166 : 164);
+        renderer.draw_named_sprite("labmov.bmp", 497, 140);
+
+        // Pedestal 2: Class-Specific Ability Pedestal
+        if (sel_ant) {
+            if (sel_ant->type == sim::AntType::Swimmer) {
+                bool ped2_down = ability_pedestal_button_.is_pressed || (active_order_mode_ == sim::OrderType::BuildBridge);
+                renderer.draw_named_sprite(ped2_down ? "butdown.bmp" : "butup.bmp", 544, 155);
+                renderer.draw_named_sprite(ped2_down ? "swimd.bmp" : "swimup.bmp", 556, ped2_down ? 167 : 165);
+                renderer.draw_named_sprite("labswim.bmp", 551, 140);
+            } else if (sel_ant->type == sim::AntType::Fire) {
+                bool ped2_down = ability_pedestal_button_.is_pressed || (active_order_mode_ == sim::OrderType::IgniteFire);
+                renderer.draw_named_sprite(ped2_down ? "butdown.bmp" : "butup.bmp", 544, 155);
+                renderer.draw_named_sprite("butfireu.bmp", 555, ped2_down ? 166 : 164);
+                renderer.draw_named_sprite("labfire.bmp", 546, 140);
+            } else if (sel_ant->type == sim::AntType::Combat) {
+                bool ped2_down = ability_pedestal_button_.is_pressed || (active_order_mode_ == sim::OrderType::Attack);
+                renderer.draw_named_sprite(ped2_down ? "butdown.bmp" : "butup.bmp", 544, 155);
+                renderer.draw_named_sprite(ped2_down ? "butattd.bmp" : "butattu.bmp", 553, ped2_down ? 167 : 165);
+                renderer.draw_named_sprite("labatt.bmp", 550, 140);
+            } else if (sel_ant->type == sim::AntType::Bomber) {
+                bool ped2_down = ability_pedestal_button_.is_pressed || (active_order_mode_ == sim::OrderType::PlantBomb);
+                renderer.draw_named_sprite(ped2_down ? "butdown.bmp" : "butup.bmp", 544, 155);
+                renderer.draw_named_sprite(ped2_down ? "butbomd.bmp" : "butbomu.bmp", 554, ped2_down ? 165 : 163);
+                renderer.draw_named_sprite("labbom.bmp", 553, 140);
+            } else if (sel_ant->type == sim::AntType::Thief) {
+                bool ped2_down = ability_pedestal_button_.is_pressed || (active_order_mode_ == sim::OrderType::InfiltrateAnthill);
+                renderer.draw_named_sprite(ped2_down ? "butdown.bmp" : "butup.bmp", 544, 155);
+                renderer.draw_named_sprite(ped2_down ? "butthfd.bmp" : "butthfu.bmp", 556, ped2_down ? 166 : 164);
+                renderer.draw_named_sprite("labthf.bmp", 554, 140);
+            }
         }
+
+        // Stop circular button at (602, 192) with "Stop" label at (603, 176)
+        renderer.draw_named_sprite("labcan.bmp", 603, 176);
+        renderer.draw_named_sprite(stop_button_.is_pressed ? "butcand.bmp" : "butcanu.bmp", 602, 192);
+
+        // Golden Lunchbox Indicator: Displayed above Stop button at (598, 133) ONLY when carrying food
+        if (sel_ant && sel_ant->is_holding) {
+            renderer.draw_named_sprite("lunchicon.bmp", 598, 133);
+        }
+
+        // Recessed status box wstatus.bmp (143x14) at (480, 253)
+        renderer.draw_named_sprite("wstatus.bmp", 480, 253);
+        std::string status_text = "Ready.";
+        if (sel_ant) {
+            if (sel_ant->is_drowning) status_text = "Drowning!";
+            else if (sel_ant->is_underground) status_text = "In base.";
+            else if (sel_ant->is_holding) status_text = "Holds pick up...";
+            else if (sel_ant->anim_state == 1 || sel_ant->anim_state == 2) status_text = "On my way.";
+            else if (sel_ant->anim_state == 3) status_text = "In combat!";
+            else status_text = "Waiting for orders.";
+        }
+        renderer.draw_text(status_text, 486, 256, {175, 110, 215, 255});
     }
 
-    // Stop circular button at (602, 192) with "Stop" label at (603, 176)
-    renderer.draw_named_sprite("labcan.bmp", 603, 176);
-    renderer.draw_named_sprite(stop_button_.is_pressed ? "butcand.bmp" : "butcanu.bmp", 602, 192);
+    // 2.3 Lower Panel: Hatch Panel (if local anthill selected) or Chat Section
+    if (selected_base_team_id_ == local_player_id_) {
+        render_hatch_panel(renderer, assets, world);
+    } else {
+        // Cursive embossed Chat header at (480, 266)
+        renderer.draw_named_sprite("x480y266.bmp", 480, 266);
 
-    // Golden Lunchbox Indicator: Displayed above Stop button at (598, 133) ONLY when carrying food
-    if (sel_ant && sel_ant->is_holding) {
-        renderer.draw_named_sprite("lunchicon.bmp", 598, 133);
+        // White chat history log wchat.bmp (143x103) at (479, 298)
+        renderer.draw_named_sprite("wchat.bmp", 479, 298);
+        int32_t cty = 302;
+        size_t start_cidx = (chat_log_.size() > 6) ? (chat_log_.size() - 6) : 0;
+        for (size_t i = start_cidx; i < chat_log_.size(); ++i) {
+            renderer.draw_text(chat_log_[i], 484, cty, {20, 50, 40, 255});
+            cty += 15;
+        }
+
+        // Ant relief horizontal divider bar x480y400.bmp (141x24) at (480, 400)
+        renderer.draw_named_sprite("x480y400.bmp", 480, 400);
+
+        // Chat text input box wtype.bmp (143x14) at (479, 423)
+        renderer.draw_named_sprite("wtype.bmp", 479, 423);
+        renderer.draw_text("_", 484, 425, {20, 50, 40, 255});
+
+        // Bottom bar x480y466.bmp (160x25) at (480, 436) containing "Send to:" and [All] button
+        renderer.draw_named_sprite("x480y466.bmp", 480, 436);
+        if (send_to_button_.is_pressed) {
+            renderer.draw_named_sprite("butalld.bmp", 532, 443);
+        }
+
+        // Vertical right border strip x521y254.bmp (19x182) placed at x=621, y=254 (seals right screen edge)
+        renderer.draw_named_sprite("x521y254.bmp", 621, 254);
     }
-
-    // Recessed status box wstatus.bmp (143x14) at (480, 253)
-    renderer.draw_named_sprite("wstatus.bmp", 480, 253);
-    std::string status_text = "Ready.";
-    if (sel_ant) {
-        if (sel_ant->is_drowning) status_text = "Drowning!";
-        else if (sel_ant->is_underground) status_text = "In base.";
-        else if (sel_ant->is_holding) status_text = "Holds pick up...";
-        else if (sel_ant->anim_state == 1 || sel_ant->anim_state == 2) status_text = "On my way.";
-        else if (sel_ant->anim_state == 3) status_text = "In combat!";
-        else status_text = "Waiting for orders.";
-    } else if (selected_base_team_id_ >= 0) {
-        status_text = (selected_base_team_id_ == local_player_id_) ? "Home Colony." : "Colony Base.";
-    }
-    renderer.draw_text(status_text, 486, 256, {175, 110, 215, 255});
-
-    // 2.3 Chat Section:
-    // Cursive embossed Chat header at (480, 266)
-    renderer.draw_named_sprite("x480y266.bmp", 480, 266);
-
-    // White chat history log wchat.bmp (143x103) at (479, 298)
-    renderer.draw_named_sprite("wchat.bmp", 479, 298);
-    int32_t cty = 302;
-    size_t start_cidx = (chat_log_.size() > 6) ? (chat_log_.size() - 6) : 0;
-    for (size_t i = start_cidx; i < chat_log_.size(); ++i) {
-        renderer.draw_text(chat_log_[i], 484, cty, {20, 50, 40, 255});
-        cty += 15;
-    }
-
-    // Ant relief horizontal divider bar x480y400.bmp (141x24) at (480, 400)
-    renderer.draw_named_sprite("x480y400.bmp", 480, 400);
-
-    // Chat text input box wtype.bmp (143x14) at (479, 423)
-    renderer.draw_named_sprite("wtype.bmp", 479, 423);
-    renderer.draw_text("_", 484, 425, {20, 50, 40, 255});
-
-    // Bottom bar x480y466.bmp (160x25) at (480, 436) containing "Send to:" and [All] button
-    renderer.draw_named_sprite("x480y466.bmp", 480, 436);
-    if (send_to_button_.is_pressed) {
-        renderer.draw_named_sprite("butalld.bmp", 532, 443);
-    }
-
-    // Vertical right border strip x521y254.bmp (19x182) placed at x=621, y=254 (seals right screen edge)
-    renderer.draw_named_sprite("x521y254.bmp", 621, 254);
 
     // 3. Top & Bottom Frames
     render_top_bar(renderer, assets, world);
@@ -600,25 +624,40 @@ void HUD::render_selection_card(IRenderer& renderer, const assets::AssetArchive&
 }
 
 void HUD::render_hatch_panel(IRenderer& renderer, const assets::AssetArchive&, const sim::WorldState& world) {
-    // Fill right panel backing with authentic HUD frame green
-    renderer.fill_rect(480, 254, 160, 212, assets::ColorRGBA{43, 107, 95, 255});
+    // Fill right panel backing with authentic HUD frame color
+    static const assets::ColorRGBA hud_bg_colors[4] = {
+        {43, 107, 95, 255},  // Green (Player 0)
+        {115, 35, 35, 255},  // Red (Player 1)
+        {35, 65, 115, 255},  // Blue (Player 2)
+        {48, 48, 52, 255}    // Black (Player 3)
+    };
+    renderer.fill_rect(480, 254, 160, 212, hud_bg_colors[local_player_id_ % 4]);
+
+    // Status label at (480, 253)
+    renderer.draw_named_sprite("wstatus.bmp", 480, 253);
+    renderer.draw_text("Home Colony.", 486, 256, {175, 110, 215, 255});
 
     // Decorative relief column
-    renderer.draw_named_sprite("x521y254.bmp", 521, 254);
+    renderer.draw_named_sprite("x521y254.bmp", 521, 275);
 
-    // Hatch button
+    // Hatch label and button
     std::string btn_name = hatch_button_.is_pressed ? "buthatd.bmp" : "buthatup.bmp";
-    renderer.draw_named_sprite(btn_name, hatch_button_.x, hatch_button_.y);
-    renderer.draw_named_sprite("labhatch.bmp", hatch_button_.x + 2, hatch_button_.y + 6);
+    renderer.draw_named_sprite("labhatch.bmp", 492, 282);
+    renderer.draw_named_sprite(btn_name, 532, 275);
 
     // Cost text: 200 pts
     assets::ColorRGBA cost_color = hatch_button_.is_enabled ? assets::ColorRGBA{255, 215, 0, 255} : assets::ColorRGBA{130, 130, 130, 255};
-    renderer.draw_text("200 pts", 540, 270, cost_color);
+    renderer.draw_text("200 pts", 562, 282, cost_color);
 
     // Egg display: authentic egg.bmp (12x16)
     uint32_t eggs = (local_player_id_ < world.player_eggs.size()) ? world.player_eggs[local_player_id_] : 0;
-    renderer.draw_named_sprite("egg.bmp", 495, 305);
-    renderer.draw_text("Eggs: " + std::to_string(eggs), 515, 307, {255, 255, 255, 255});
+    renderer.draw_named_sprite("egg.bmp", 495, 320);
+    renderer.draw_text("Eggs: " + std::to_string(eggs), 518, 322, {255, 255, 255, 255});
+
+    // Divider and bottom border
+    renderer.draw_named_sprite("x480y400.bmp", 480, 400);
+    renderer.draw_named_sprite("x480y466.bmp", 480, 436);
+    renderer.draw_named_sprite("x521y254.bmp", 621, 254);
 }
 
 void HUD::render_action_buttons(IRenderer& renderer, const assets::AssetArchive&, const sim::WorldState&) {
