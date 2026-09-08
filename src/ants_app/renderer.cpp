@@ -1152,6 +1152,10 @@ void Renderer::draw_single_ant(const ants::sim::AntSnapshot& ant, bool is_select
         action = "st";
     }
 
+    if (action == "gf" || action == "gb" || action == "gh" || action == "dr") {
+        prefix = normal_prefixes[static_cast<size_t>(ant.type) % 6];
+    }
+
     ants::assets::Direction dir = static_cast<ants::assets::Direction>(ant.facing & 7);
     if (ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::Drowning) ||
         ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::CantGo)) {
@@ -1188,7 +1192,22 @@ void Renderer::draw_single_ant(const ants::sim::AntSnapshot& ant, bool is_select
     } else {
         const auto* seq = archive_->get_directional_animation(prefix + action, dir);
         if (seq && !seq->subitems.empty()) {
-            size_t sub_idx = ant.anim_frame % seq->subitems.size();
+            size_t sub_idx = 0;
+            if (action == "gf") {
+                // Ballistic flight lasts 10 ticks; map tick to animation sequence frames
+                sub_idx = (ant.anim_frame * seq->subitems.size()) / 10;
+                if (sub_idx >= seq->subitems.size()) {
+                    sub_idx = seq->subitems.size() - 1;
+                }
+            } else if (action == "gb") {
+                // 1-Tile bounce lasts 4 ticks; map across the sequence frames
+                sub_idx = (ant.anim_frame * seq->subitems.size()) / 4;
+                if (sub_idx >= seq->subitems.size()) {
+                    sub_idx = seq->subitems.size() - 1;
+                }
+            } else {
+                sub_idx = ant.anim_frame % seq->subitems.size();
+            }
             const auto& sub = seq->subitems[sub_idx];
 
             auto frames = sub.frames;

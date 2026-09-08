@@ -4109,6 +4109,166 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
             }
         }
     } TEST_END();
+
+    TEST_CASE("12.41 Standard Attack 1-Tile Pushback & Bounce Animation on Land") {
+        SimulationEngine sim;
+        sim.init_test_world(60, 60, 100, 60000);
+
+        uint32_t attacker = sim.spawn_unit(0, AntType::Worker, TileCoord{10, 10});
+        uint32_t defender = sim.spawn_unit(1, AntType::Worker, TileCoord{11, 10});
+
+        sim.execute_melee_attack(attacker, defender);
+
+        const auto& def = sim.get_unit(defender);
+        ASSERT_EQ(def.hp, 9);
+        // Pushed 1 tile East away from attacker at (10, 10)
+        ASSERT_EQ(def.pos.x, 12);
+        ASSERT_EQ(def.pos.y, 10);
+        ASSERT_EQ(def.state, UnitState::Bounce);
+        ASSERT_EQ(def.facing, Direction::East);
+
+        // Advance 4 ticks for bounce animation recovery
+        for (int i = 0; i < 4; ++i) {
+            sim.tick();
+        }
+        ASSERT_EQ(sim.get_unit(defender).state, UnitState::Idle);
+    } TEST_END();
+
+    TEST_CASE("12.42 Standard Attack 1-Tile Pushback into Water (Instant Drowning & Death)") {
+        SimulationEngine sim;
+        sim.init_test_world(60, 60, 100, 60000);
+
+        // Water at (12, 10)
+        sim.grid_mut().set_terrain(12, 10, TERRAIN_WATER);
+
+        uint32_t attacker = sim.spawn_unit(0, AntType::Worker, TileCoord{10, 10});
+        uint32_t defender = sim.spawn_unit(1, AntType::Worker, TileCoord{11, 10});
+
+        sim.clear_audio_events();
+        sim.execute_melee_attack(attacker, defender);
+
+        const auto& def = sim.get_unit(defender);
+        ASSERT_EQ(def.pos.x, 12);
+        ASSERT_EQ(def.pos.y, 10);
+        // Non-swimmer worker pushed into water dies instantly!
+        ASSERT_EQ(def.hp, 0);
+        ASSERT_EQ(def.state, UnitState::Drowning);
+        ASSERT_EQ(def.death_status, DeathStatus::Drowned);
+        ASSERT_TRUE(sim.has_audio_event(SoundID::WaterSplash));
+        ASSERT_TRUE(sim.has_audio_event(SoundID::AntDrown));
+        ASSERT_EQ(sim.stats_manager().get_player_stats(1).friendly_lost, 1u);
+        ASSERT_EQ(sim.stats_manager().get_player_stats(0).enemy_killed, 1u);
+    } TEST_END();
+
+    TEST_CASE("12.43 Combat Ant 4-Tile Ballistic Fling & Type-Specific Animation for All 6 Ant Types") {
+        SimulationEngine sim;
+        sim.init_test_world(60, 60, 100, 60000);
+
+        AssetArchive archive;
+        std::string chd_path = std::string(ORIGINAL_ASSETS_DIR) + "/ants.chd";
+        ASSERT_TRUE(archive.load_chd(chd_path));
+
+        AntType types[6] = {AntType::Worker, AntType::Bomber, AntType::Fire,
+                            AntType::Thief, AntType::Combat, AntType::Swimmer};
+        const char* pfx[6] = {"aggf", "abgf", "afgf", "atgf", "acgf", "asgf"};
+
+        for (size_t i = 0; i < 6; ++i) {
+            AntType type = types[i];
+            const auto* seq = archive.get_directional_animation(pfx[i], Direction::East);
+            ASSERT_TRUE(seq != nullptr);
+            ASSERT_FALSE(seq->subitems.empty());
+
+            uint32_t combat = sim.spawn_unit(0, AntType::Combat, TileCoord{10, static_cast<int32_t>(10 + i * 4)});
+            uint32_t victim = sim.spawn_unit(1, type, TileCoord{11, static_cast<int32_t>(10 + i * 4)});
+
+            sim.execute_melee_attack(combat, victim);
+
+            const auto& v = sim.get_unit(victim);
+            ASSERT_EQ(v.state, UnitState::Knockback);
+            ASSERT_EQ(v.facing, Direction::East);
+            ASSERT_EQ(v.pos.x, 15); // Logical destination tile is 4 tiles East
+
+            // Advance through ballistic flight
+            for (int t = 0; t < 15; ++t) {
+                sim.tick();
+                if (sim.get_unit(victim).state != UnitState::Knockback) break;
+            }
+
+            // Landed 4 tiles East at x = 15
+            const auto& landed = sim.get_unit(victim);
+            ASSERT_EQ(landed.pos.x, 15);
+            ASSERT_EQ(landed.state, UnitState::Stunned);
+        }
+    } TEST_END();
+
+    TEST_CASE("12.44 Combat Ant 4-Tile Fling into Water (Instant Drowning & Death)") {
+        SimulationEngine sim;
+        sim.init_test_world(60, 60, 100, 60000);
+
+        // Water at landing tile (15, 10)
+        sim.grid_mut().set_terrain(15, 10, TERRAIN_WATER);
+
+        uint32_t combat = sim.spawn_unit(0, AntType::Combat, TileCoord{10, 10});
+        uint32_t victim = sim.spawn_unit(1, AntType::Worker, TileCoord{11, 10});
+
+        sim.execute_melee_attack(combat, victim);
+        ASSERT_EQ(sim.get_unit(victim).state, UnitState::Knockback);
+
+        // Advance until flight completes
+        for (int t = 0; t < 15; ++t) {
+            sim.tick();
+            if (sim.get_unit(victim).state != UnitState::Knockback) break;
+        }
+
+        const auto& landed = sim.get_unit(victim);
+        ASSERT_EQ(landed.pos.x, 15);
+        ASSERT_EQ(landed.pos.y, 10);
+        // Landed in water: non-swimmer worker drowns and dies instantly!
+        ASSERT_EQ(landed.hp, 0);
+        ASSERT_EQ(landed.state, UnitState::Drowning);
+        ASSERT_EQ(landed.death_status, DeathStatus::Drowned);
+    } TEST_END();
+
+    TEST_CASE("12.45 Swimmer Ant Pushback and Fling into Water Survives Without Drowning") {
+        SimulationEngine sim;
+        sim.init_test_world(60, 60, 100, 60000);
+
+        // 1. Standard attack pushback into water
+        sim.grid_mut().set_terrain(12, 10, TERRAIN_WATER);
+        uint32_t attacker = sim.spawn_unit(0, AntType::Worker, TileCoord{10, 10});
+        uint32_t swimmer = sim.spawn_unit(1, AntType::Swimmer, TileCoord{11, 10});
+
+        sim.execute_melee_attack(attacker, swimmer);
+
+        const auto& sw1 = sim.get_unit(swimmer);
+        ASSERT_EQ(sw1.pos.x, 12);
+        ASSERT_EQ(sw1.pos.y, 10);
+        // Swimmer survives in water!
+        ASSERT_EQ(sw1.hp, 9);
+        ASSERT_EQ(sw1.state, UnitState::Swimming);
+        ASSERT_TRUE(sw1.in_water);
+        ASSERT_EQ(sw1.death_status, DeathStatus::Alive);
+
+        // 2. Combat Ant 4-tile fling into water
+        sim.grid_mut().set_terrain(25, 20, TERRAIN_WATER);
+        uint32_t combat = sim.spawn_unit(0, AntType::Combat, TileCoord{20, 20});
+        uint32_t swimmer2 = sim.spawn_unit(1, AntType::Swimmer, TileCoord{21, 20});
+
+        sim.execute_melee_attack(combat, swimmer2);
+        for (int t = 0; t < 15; ++t) {
+            sim.tick();
+            if (sim.get_unit(swimmer2).state != UnitState::Knockback) break;
+        }
+
+        const auto& sw2 = sim.get_unit(swimmer2);
+        ASSERT_EQ(sw2.pos.x, 25);
+        ASSERT_EQ(sw2.pos.y, 20);
+        // Swimmer landed in water without drowning!
+        ASSERT_EQ(sw2.hp, 8); // 10 - 2 punch damage
+        ASSERT_EQ(sw2.state, UnitState::Swimming);
+        ASSERT_TRUE(sw2.in_water);
+        ASSERT_EQ(sw2.death_status, DeathStatus::Alive);
+    } TEST_END();
 }
 
 // ============================================================================

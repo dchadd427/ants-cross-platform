@@ -705,8 +705,32 @@ public:
             // Feature 9: Standard 1 HP melee strike
             tgt->hp -= 1;
             audio_events_.push_back({57, tgt->pos.x, tgt->pos.y, 1, 255}); // Sound 57: attack.wav
+            if (tgt->hp <= 0) {
+                on_unit_killed(*tgt, att->team);
+                return true;
+            }
+
             tgt->state = AntState::Flinching;
             tgt->state_ticks = 4;
+
+            // 1-Tile Pushback away from attacker
+            int32_t dx = tgt->pos.x - att->pos.x;
+            int32_t dy = tgt->pos.y - att->pos.y;
+            if (dx == 0 && dy == 0) dx = 1;
+            int32_t dir_x = (dx > 0) ? 1 : ((dx < 0) ? -1 : 0);
+            int32_t dir_y = (dy > 0) ? 1 : ((dy < 0) ? -1 : 0);
+
+            Vec2i push_pos = {tgt->pos.x + dir_x, tgt->pos.y + dir_y};
+            if (in_bounds(push_pos.x, push_pos.y) && get_terrain(push_pos.x, push_pos.y) != 1) {
+                tgt->pos = push_pos;
+            }
+
+            if (get_terrain(tgt->pos.x, tgt->pos.y) == 2 && !has_bridge(tgt->pos)) {
+                if (tgt->type != AntType::Swimmer) {
+                    drown_unit(*tgt);
+                }
+            }
+            return true;
         }
 
         if (tgt->hp <= 0) {
