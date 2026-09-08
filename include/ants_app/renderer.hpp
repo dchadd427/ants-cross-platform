@@ -99,12 +99,16 @@ public:
 
     SDL_Texture* get_sprite_texture(uint32_t sprite_id, bool mirrored = false, uint8_t team_id = 0);
     SDL_Texture* get_named_sprite_texture(const std::string& name, bool mirrored = false, uint8_t team_id = 0);
+    bool is_base_bomb_sprite(uint32_t sprite_id) const noexcept;
+    uint32_t get_team_bomb_sprite_index(uint8_t team_id) const noexcept;
     void clear();
 
 private:
     SDL_Renderer* renderer_{nullptr};
     const ants::assets::AssetArchive& archive_;
     std::unordered_map<uint64_t, SDL_Texture*> textures_; // Key: (sprite_id << 4) | (team_id << 1) | (mirrored ? 1 : 0)
+    int32_t base_bomb_sprite_id_{-1};
+    int32_t team_bomb_sprite_ids_[4]{-1, -1, -1, -1};
 };
 
 /**

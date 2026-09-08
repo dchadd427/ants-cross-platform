@@ -318,7 +318,7 @@ public:
     bool validate_cardinal_placement(TileCoord from, TileCoord to) const;
     bool plant_bomb(uint32_t ant_id, TileCoord target, bool instant = true);
     bool defuse_bomb(uint32_t ant_id, TileCoord target);
-    bool ignite_fire(uint32_t ant_id, TileCoord target);
+    bool ignite_fire(uint32_t ant_id, TileCoord target, bool instant = true);
     bool extinguish_fire(uint32_t ant_id, TileCoord target);
     bool build_bridge_step(uint32_t ant_id, TileCoord target);
     bool demolish_bridge_step(uint32_t ant_id, TileCoord target);
