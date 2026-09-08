@@ -54,7 +54,8 @@ enum class UnitState : uint8_t {
     DefusingBomb      = 22, // Bomber Ant defusing bomb (*db*, Action 9, 12 ticks)
     PlacingFire       = 23, // Fire Ant placing firewall (*sf*, Action 6, 22 ticks)
     ExtinguishingFire = 24, // Fire Ant extinguishing fire (*xf*, Action 7, 12 ticks)
-    CantGo            = 25  // Blocked path / impossible order reaction (*cg*, Action 20, Sound 63)
+    CantGo            = 25, // Blocked path / impossible order reaction (*cg*, Action 20, Sound 63)
+    HarvestingFood    = 26  // Harvesting / grabbing food sequence (Sound 66, 6 ticks)
 };
 
 /**

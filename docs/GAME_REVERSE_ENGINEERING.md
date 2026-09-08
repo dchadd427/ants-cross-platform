@@ -267,10 +267,10 @@ Every ant type in *Ants* possesses a melee attack (`*at*`), triggered either man
     Ants **cannot** place bombs or fire diagonally (North-East, South-East, South-West, North-West). If a player issues a placement command on a diagonal or distant tile, the ant cannot execute placement from its current position; it must first walk into an orthogonal adjacent tile where `|dx| + |dy| = 1`.
 - **Tile Placement Validity (Disasm `0x1007202` & `0x10071dd`):**
   - Bombs and fire cannot be placed everywhere; they are restricted by terrain flags in the tile properties table:
-    - **Bomb Placement:** Requires flag bit `0x02` (`CAN_PLACE_BOMB`).
+    - **Bomb Placement:** Requires flag bit `0x02` (`CAN_PLACE_BOMB`). Only valid non-mud walkable terrain (grass, slate, gravel/dirt) has this flag.
+    - **Mud Bomb Prohibition:** Mud cells (`SurfaceType::Mud` / `is_mud`) strictly prohibit bomb placement (`CAN_PLACE_BOMB` bit `0x02` is never set on mud, and `can_place_bomb()` rejects mud). Attempting to plant a bomb on mud is strictly disallowed.
     - **Fire Placement:** Requires flag bit `0x04` (`CAN_PLACE_FIRE`).
-    - Mud, water, deep water, stone walls, and rocks do not have these flags and strictly reject fire and bomb placement.
-    - Anywhere fire can be placed, a bomb can also be placed.
+    - Water, deep water, stone walls, and rocks strictly reject both fire and bomb placement.
 - **Voluntary Pathfinding Inaccessibility:**
   - Fire tiles (`wallup04`, index 134) are treated as solid blocking obstacles by the A* pathfinder (`0x1008bb7`).
   - Standard ants **cannot voluntarily walk or path onto fire**.
@@ -363,8 +363,11 @@ Both temporary field structures created by specialized ants have strictly revers
     - As points drain from the victim's score counter, **Sound 88 (`scoredn.wav`)** plays on the victim's client (a descending tone indicating score loss), and the HUD status reads `"Food stolen..."` (String ID 62).
 - **Return Journey & Score Delivery:** The thief ant switches to the holding animation set (`hten301` / `htwg*`), visibly carrying the lunchbox in front, and must manually travel all the way back across the map to its home anthill. When entering its home anthill, points are added to the team's score (`0x0101e2b3`), playing **Sound 87 (`scoreup.wav`)**.
 
-### 5.5 Food Carrying, Lunchpail Visuals & Dropping on Death (`0x0100ce53`, `0x0101aefe`)
-- **Food Harvesting:** Any ant can harvest food pieces distributed across the map (burgers, suckers, chocolates, pretzels, skittles, gummy worms) or power-up fruits.
+### 5.5 Food Harvesting, Lunchpail Visuals & Dropping on Death (`0x0100ce53`, `0x0101aefe`, `0x0101b688`)
+- **Food Harvesting Adjacency Requirement:**
+  - Ants can only harvest food pieces or retrieve dropped lunchboxes when they are in an **adjacent tile** (`chebyshev_dist == 1`) or standing directly on the food tile itself (`pos == food_pos`).
+  - Distant or mid-path pickup is strictly prohibited; the ant must navigate to an adjacent tile before initiating the harvest.
+  - **Harvesting Sequence & Audio Trigger (`0x0101b688`):** Upon reaching the adjacent tile, the ant performs a harvest action, triggering **Sound 66 (`harvest.wav`)** and advancing the multi-stage food bite/schedule on Layer 2 before setting the holding flag.
 - **Visual Carrying Animation Switch (`h*` Sets, Disasm `0x0101aefe`):**
   - When an ant picks up food or stolen points, its holding flag is set: `[esi + 0xe8] = 1`.
   - The animation dispatcher (`0x0101ad02`) dynamically switches the ant's entire animation suite from the empty-handed `a*` tables (offset `+0x3d0`) to the dedicated **holding food** `h*` tables (offset `+0x868`):
@@ -374,6 +377,9 @@ Both temporary field structures created by specialized ants have strictly revers
     - `ac` (Combat Ant) -> **`hc`** (`hcwg...`, `hcws...`, `hcst...`)
     - `as` (Swimmer Ant) -> **`hs`** (`hswg...`, `hsws...`, `hsst...`)
     - `at` (Thief Ant) -> **`ht`** (`htwg...`, `htws...`, `htst...`)
+  - **Bomb Placement While Carrying Food (`absb` Fallback):**
+    - The archive `ants.chd` does NOT contain an `hbsb` sequence (only `hbwg`, `hbst`, `hben`, `hbh0`, `hbcg`, `hbsd`, `hbws`, `hbwd`, `hbwm`).
+    - When a Bomber ant plants a bomb while holding food, the renderer falls back to the authentic `absb` sequence (`absb301`, `absb701`, `absb901`) with proper layering so the ant never disappears.
   - **Directional Lunchpail Sprites (`*lb*.bmp`):** The `ants.chd` archive contains 78 directional lunchpail sprites (`0lb0000` through `7lb0007`) composited into the ant's mouth/forelegs between the head and body across all 8 movement angles and ground terrain types (grass, sand, dirt, mud). The lunchbox is layered **on top / in front** of the ant body.
 - **Death Drop Mechanism (`Anim 356: lunchbox`, `0x0100ceb6` -> `0x0100fe20`):**
   - If a carrier ant dies for any reason (combat damage, bomb explosion, or drowning in water):
@@ -420,11 +426,13 @@ Every special ability and combat interaction in *Ants* is governed by dedicated 
   - Flame is erased (`0x7ffe`), sputtering smoke plays (`sputter`, Anim 135), and the 180s timer is deallocated.
 
 #### 2. Bomber Ant (`ab`): Bomb Planting & Body Crush Neutralization
-- **Set Bomb (`absb301`, `absb701`, `absb901` - 17 Subitems / 23 Frames):**
-  - **Phase 1 (Subitems 0–8):** Bomber Ant crouches down low to the ground (`absb301..309.bmp`).
-  - **Phase 2 (Subitem 9):** Reaches into equipment pack and pulls out the bomb, firing sound **90 (`bombpick.wav`)**.
-  - **Phase 3 (Subitems 10–14):** Plants the bomb (`2bomb.bmp` / `blackbomb`..`bluebomb`) on the ground tile and arms the fuse.
-  - **Phase 4 (Subitems 15–16):** Steps backwards away from the live mine and returns to upright stance.
+- **Set Bomb (`absb301`, `absb701`, `absb901` - 17 Subitems / 28 Simulation Ticks):**
+  - **Full Authentic Duration (1,360ms – 1,400ms / 28 Ticks @ 20Hz):**
+    - The CHD animation consists of 17 subitems with cumulative duration ~1,360ms (27–28 ticks at 50ms/tick). The animation runs across 28 simulation ticks without being rushed.
+    - **Phase 1 (Subitems 0–8 / Ticks 0–13):** Bomber Ant crouches down low to the ground (`absb301..309.bmp`).
+    - **Phase 2 (Subitem 9 / Tick 14):** Reaches into equipment pack and pulls out the bomb, firing sound **90 (`bombpick.wav`)**.
+    - **Phase 3 (Subitems 10–14 / Ticks 15–23):** Plants the bomb (`2bomb.bmp` / `blackbomb`..`bluebomb`) on the ground tile (appearing at subitem 11 / tick 18) and arms the fuse.
+    - **Phase 4 (Subitems 15–16 / Ticks 24–27):** Steps backwards away from the live mine and returns to upright stance.
 - **Crush / Neutralize Bomb (`abdb301`, `abdb701`, `abdb901` - 12 Subitems / 15 Frames):**
   - **Phase 1 (Subitems 0–2):** Approaches and leans forward over the active mine (`abdb301..303.bmp`).
   - **Phase 2 (Subitem 3):** Grabs and pins down the bomb casing, firing sound **73 (`bombdrop.wav`)**.
@@ -463,12 +471,19 @@ Every special ability and combat interaction in *Ants* is governed by dedicated 
 #### 6. Combat Strike, "Hit Back", & Ballistic Reaction Suite
 All ant classes share a unified, symmetrical combat and ballistic physical reaction pipeline:
 
+- **Single Attack Execution Per Order:**
+  - In `Original-Ants/Ants.exe`, issuing an attack command causes the ant to approach the enemy and execute **one single attack strike**.
+  - Upon connecting, the attacker clears its target ID (`attack_target_id = 0`), completes its attack recovery frames, and transitions to `UnitState::Idle` (or `GuardIdle` for Combat Ant), standing still rather than automatically pursuing or continuously looping strikes.
+  - **Attack Cooldown Invariant:** The ant enforces its attack cooldown (10 ticks for standard ants, 12 ticks for Combat Ant) before any subsequent strike can be executed.
+- **Pushback Facing Direction Preservation:**
+  - When an ant is pushed back 1 tile by a standard attack, it **preserves its current facing direction**. It is not reoriented to face the pushback displacement vector.
+
 | Reaction State | Action Code | Key CHD Anims | Frame Characteristics | Sound Triggers | Physical Effect |
 |---|---|---|---|---|---|
-| **Attack / "Hit Back"** | `*at*` (Action 1) | `agat`, `abat`, `afat`, `acat`, `asat`, `atat` | Directional forward strike (5 directions: 2, 3, 7, 8, 9). | Sound 57 (`attack.wav`) / Sound 78 (`attack2.wav`) | Deals 1 HP damage (Worker, Thief, Bomber, Fire, Swimmer) or 2 HP damage (Combat Ant). |
+| **Attack / "Hit Back"** | `*at*` (Action 1) | `agat`, `abat`, `afat`, `acat`, `asat`, `atat` | Directional forward strike (5 directions: 2, 3, 7, 8, 9). | Sound 57 (`attack.wav`) / Sound 78 (`attack2.wav`) | Deals 1 HP damage (Worker, Thief, Bomber, Fire, Swimmer) or 2 HP damage (Combat Ant). Single attack per order. |
 | **Get Hit (Flinch)** | `*gh*` (Action 10) | `aggh`, `abgh`, `afgh`, `acgh`, `asgh`, `atgh` | Staggered flinch reaction (Subitems 0–8). | Sound 64 (`flythumpa.wav`) @ frame 0, Sound 65 (`flythumpb.wav`) @ frame 3 | Brief stagger interrupt (stun for 4 ticks). |
 | **Get Fling (Airborne Knockback)** | `*gf*` (Action 14) | `aggf`, `abgf`, `afgf`, `acgf`, `asgf`, `atgf` | Ant spins and tumbles head-over-heels airborne (`1652..1658.bmp`). | Sound 64/65 on launch | Displaced 4–5 tiles along impact vector at high velocity. |
-| **Get Bounce (Landing Skid & Stun)** | `*gb*` (Action 19) | `aggb`, `abgb`, `afgb`, `acgb`, `asgb`, `atgb` | Hard ground landing rebound (`1612..1619.bmp`), skids forward, rolls to a stop (12 subitems). | Sound 64 @ impact, Sound 65 @ stop, Sound 70 (`stun.wav`) | Enters stunned recovery state (Action 12) for 12 ticks before resuming orders. |
+| **Get Bounce (Landing Skid & Stun)** | `*gb*` (Action 19) | `aggb`, `abgb`, `afgb`, `acgb`, `asgb`, `atgb` | Hard ground landing rebound (`1612..1619.bmp`), skids forward, rolls to a stop (12 subitems). | Sound 64 @ impact, Sound 65 @ stop, Sound 70 (`stun.wav`) | Enters stunned recovery state (Action 12) for 12 ticks before resuming orders. Maintains pre-knockback facing. |
 
 #### 7. Animation Audio Trigger Architecture (`default_sp`)
 In `ants.chd` Table 4, each animation subitem includes a `default_sp` field:
@@ -648,6 +663,21 @@ Every non-swimmer ant class has a dedicated 22-subitem drowning and sinking deat
 #### 3. Swimmer Ant (`as`) Aquatic Immunity
 - Swimmer Ants possess complete immunity to drowning and have **no drowning animation** (`asdr*` does not exist in `ants.chd`).
 - When entering deep water or falling from an expired bridge, the Swimmer Ant plays its dive-in animation (`asdi*`, Sound 71 `splash.wav`), transitions to swimming strokes (`assw*`), and treads water (`astw*`) indefinitely without taking damage.
+
+---
+
+### 5.13 Skull & Crossbones Death Animation Suite (`death1`, `death2`, `death3`)
+
+When an ant perishes due to HP depletion (melee combat damage, bomb blast shockwave, or fire contact) — as opposed to water drowning — *Ants* plays an authentic animated ant skeleton / skull & crossbones effect centered at the unit's death location:
+
+| Animation Sequence | Anim ID | Subitems / Frames | Visual Description | Key Sprites |
+| :--- | :---: | :---: | :--- | :--- |
+| **`death1`** | 102 | 11 Subitems | Initial smoke burst, followed by an ant skull/skeleton (`9death04.bmp`) with a fiery glow, disintegrating into outward-scattering bone fragments and ashes. | `9death01.bmp`..`04.bmp`, `9death06.bmp`..`12.bmp` |
+| **`death2`** | 103 | 12 Subitems | Smoke burst, glowing ant skeleton, followed by the skeleton ascending and floating up into the air as a spirit before fading. | `9death01.bmp`..`04.bmp`, `9death205.bmp`..`212.bmp` |
+| **`death3`** | 104 | 10 Subitems | Smoke burst, glowing skull & crossbones ant (`9death302.bmp`), collapsing and crumbling down into bone dust on the ground. | `9death01.bmp`..`03.bmp`, `9death302.bmp`..`307.bmp` |
+
+- **Exclusion on Drowning:** Ants drowning in water (`DeathStatus::Drowned`) never trigger `death1`..`death3`; they exclusively play the aquatic drowning sequence (`*dr301` and `dsplash`).
+- **Trigger Mechanic (`0x01015f81`):** When unit HP reaches zero on land, one of the three authentic death sequences is spawned as a visual effect at `(pixel_x, pixel_y)`.
 
 ---
 

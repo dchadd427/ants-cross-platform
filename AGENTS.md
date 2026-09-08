@@ -27,3 +27,8 @@ Native C++17 macOS port and remake of the 1998 classic RTS game *Ants*, featurin
 ### 4. Mandatory Capstone Reverse Engineering & Original Logic Parity
 - **Authentic Fidelity Verification**: Always compare and verify our logic, timings, animation sequencing, sprite layering, and behavioral mechanics against the original 1998 executable (`Original-Ants/Ants.exe`) and asset archive (`Original-Ants/ants.chd`) using Capstone reverse engineering disassembly and binary inspection.
 - **Match Original Behavior**: The goal is to make the remake as completely faithful to the original 1998 game as possible. Never guess or approximate when the ground-truth logic and constants can be extracted directly via disassembly and reverse engineering.
+
+### 5. Reverse Engineering Documentation Invariant & Living Memory
+- **Maintain Up-to-Date RE Docs**: Continually document and maintain all reverse engineering findings, disassembly addresses, opcode traces, and verified asset IDs in `docs/GAME_REVERSE_ENGINEERING.md`.
+- **Assume Existing Docs Potentially Outdated**: Always treat pre-existing text in `docs/GAME_REVERSE_ENGINEERING.md` as potentially unverified or outdated until explicitly validated against the original game binary (`Original-Ants/Ants.exe`) and asset archive (`Original-Ants/ants.chd`).
+- **Primary Source First**: Always attempt to reverse-engineer directly from the original game binary using Capstone disassembly, using `docs/GAME_REVERSE_ENGINEERING.md` as a living guide and proactively updating it whenever new ground-truth logic is discovered.

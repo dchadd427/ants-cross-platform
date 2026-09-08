@@ -1126,7 +1126,8 @@ void Renderer::draw_single_ant(const ants::sim::AntSnapshot& ant, bool is_select
         action = "go";
     } else if (ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::Swimming)) {
         action = "tw";
-    } else if (ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::Attacking)) {
+    } else if (ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::Attacking) ||
+               ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::HarvestingFood)) {
         action = "at";
     } else if (ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::Knockback)) {
         action = "gf";
@@ -1152,7 +1153,11 @@ void Renderer::draw_single_ant(const ants::sim::AntSnapshot& ant, bool is_select
         action = "st";
     }
 
-    if (action == "gf" || action == "gb" || action == "gh" || action == "dr") {
+    if (action == "gf" || action == "gb" || action == "gh" || action == "dr" ||
+        action == "sb" || action == "db" || action == "sf" || action == "xf" ||
+        action == "bbl" || action == "bbw" || action == "dbl" || action == "dbw" ||
+        action == "di" || action == "go" ||
+        (action == "at" && ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::HarvestingFood))) {
         prefix = normal_prefixes[static_cast<size_t>(ant.type) % 6];
     }
 
@@ -1202,6 +1207,12 @@ void Renderer::draw_single_ant(const ants::sim::AntSnapshot& ant, bool is_select
             } else if (action == "gb") {
                 // 1-Tile bounce lasts 4 ticks; map across the sequence frames
                 sub_idx = (ant.anim_frame * seq->subitems.size()) / 4;
+                if (sub_idx >= seq->subitems.size()) {
+                    sub_idx = seq->subitems.size() - 1;
+                }
+            } else if (action == "sb") {
+                // Planting bomb lasts 28 ticks; map across the sequence frames
+                sub_idx = (ant.anim_frame * seq->subitems.size()) / 28;
                 if (sub_idx >= seq->subitems.size()) {
                     sub_idx = seq->subitems.size() - 1;
                 }
