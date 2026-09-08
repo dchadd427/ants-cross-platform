@@ -1084,12 +1084,12 @@ void run_suite_8_unit_health_and_map_select() {
         // Default starts as Player 0 (Green)
         ASSERT_EQ(app.local_player_id(), 0);
 
-        // Verify camera is centered on Team 0's base (accounting for viewport dimensions & clamping)
+        // Verify camera is centered on Team 0's base (accounting for 4x4 anthill center & viewport bounds clamping)
         const auto* base0 = app.sim().grid().find_anthill(0);
         ASSERT_TRUE(base0 != nullptr);
         const auto& cam = app.renderer().camera();
-        int32_t expected_x = std::clamp(base0->x * 32 + 16 - cam.viewport_w / 2, 0, static_cast<int32_t>(app.sim().grid().width() * 32 - static_cast<uint32_t>(cam.viewport_w)));
-        int32_t expected_y = std::clamp(base0->y * 32 + 16 - cam.viewport_h / 2, 0, static_cast<int32_t>(app.sim().grid().height() * 32 - static_cast<uint32_t>(cam.viewport_h)));
+        int32_t expected_x = std::clamp(base0->x * 32 + 64 - cam.viewport_w / 2, 0, static_cast<int32_t>(app.sim().grid().width() * 32 - static_cast<uint32_t>(cam.viewport_w)));
+        int32_t expected_y = std::clamp(base0->y * 32 + 64 - cam.viewport_h / 2, 0, static_cast<int32_t>(app.sim().grid().height() * 32 - static_cast<uint32_t>(cam.viewport_h)));
         ASSERT_EQ(cam.world_x, expected_x);
         ASSERT_EQ(cam.world_y, expected_y);
 
@@ -1103,8 +1103,8 @@ void run_suite_8_unit_health_and_map_select() {
         ASSERT_EQ(app.local_player_id(), 1);
         const auto* base1 = app.sim().grid().find_anthill(1);
         ASSERT_TRUE(base1 != nullptr);
-        expected_x = std::clamp(base1->x * 32 + 16 - cam.viewport_w / 2, 0, static_cast<int32_t>(app.sim().grid().width() * 32 - static_cast<uint32_t>(cam.viewport_w)));
-        expected_y = std::clamp(base1->y * 32 + 16 - cam.viewport_h / 2, 0, static_cast<int32_t>(app.sim().grid().height() * 32 - static_cast<uint32_t>(cam.viewport_h)));
+        expected_x = std::clamp(base1->x * 32 + 64 - cam.viewport_w / 2, 0, static_cast<int32_t>(app.sim().grid().width() * 32 - static_cast<uint32_t>(cam.viewport_w)));
+        expected_y = std::clamp(base1->y * 32 + 64 - cam.viewport_h / 2, 0, static_cast<int32_t>(app.sim().grid().height() * 32 - static_cast<uint32_t>(cam.viewport_h)));
         ASSERT_EQ(cam.world_x, expected_x);
         ASSERT_EQ(cam.world_y, expected_y);
 
@@ -1113,8 +1113,8 @@ void run_suite_8_unit_health_and_map_select() {
         ASSERT_EQ(app.local_player_id(), 2);
         const auto* base2 = app.sim().grid().find_anthill(2);
         ASSERT_TRUE(base2 != nullptr);
-        expected_x = std::clamp(base2->x * 32 + 16 - cam.viewport_w / 2, 0, static_cast<int32_t>(app.sim().grid().width() * 32 - static_cast<uint32_t>(cam.viewport_w)));
-        expected_y = std::clamp(base2->y * 32 + 16 - cam.viewport_h / 2, 0, static_cast<int32_t>(app.sim().grid().height() * 32 - static_cast<uint32_t>(cam.viewport_h)));
+        expected_x = std::clamp(base2->x * 32 + 64 - cam.viewport_w / 2, 0, static_cast<int32_t>(app.sim().grid().width() * 32 - static_cast<uint32_t>(cam.viewport_w)));
+        expected_y = std::clamp(base2->y * 32 + 64 - cam.viewport_h / 2, 0, static_cast<int32_t>(app.sim().grid().height() * 32 - static_cast<uint32_t>(cam.viewport_h)));
         ASSERT_EQ(cam.world_x, expected_x);
         ASSERT_EQ(cam.world_y, expected_y);
 

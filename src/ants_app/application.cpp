@@ -142,16 +142,16 @@ bool Application::init(const ApplicationConfig& config) {
 
     renderer_->set_level(current_level_);
 
-    // Center camera on current player's base spawn
+    // Center camera on current player's base spawn (center of 4x4 anthill structure)
     const auto* base = sim_.grid().find_anthill(local_player_id_);
     if (base) {
-        renderer_->camera().center_on(base->x * TILE_SIZE + TILE_SIZE / 2,
-                                      base->y * TILE_SIZE + TILE_SIZE / 2,
+        renderer_->camera().center_on(base->x * TILE_SIZE + 2 * TILE_SIZE,
+                                      base->y * TILE_SIZE + 2 * TILE_SIZE,
                                       current_level_.width, current_level_.height);
     } else if (!current_level_.anthill_spawns.empty()) {
         const auto& spawn = current_level_.anthill_spawns[0];
-        renderer_->camera().center_on(spawn.x * TILE_SIZE + TILE_SIZE / 2,
-                                      spawn.y * TILE_SIZE + TILE_SIZE / 2,
+        renderer_->camera().center_on(spawn.x * TILE_SIZE + 2 * TILE_SIZE,
+                                      spawn.y * TILE_SIZE + 2 * TILE_SIZE,
                                       current_level_.width, current_level_.height);
     }
 
@@ -286,13 +286,13 @@ bool Application::start_game(const std::string& map_path) {
         renderer_->set_level(current_level_);
         const auto* base = sim_.grid().find_anthill(local_player_id_);
         if (base) {
-            renderer_->camera().center_on(base->x * TILE_SIZE + TILE_SIZE / 2,
-                                          base->y * TILE_SIZE + TILE_SIZE / 2,
+            renderer_->camera().center_on(base->x * TILE_SIZE + 2 * TILE_SIZE,
+                                          base->y * TILE_SIZE + 2 * TILE_SIZE,
                                           current_level_.width, current_level_.height);
         } else if (!current_level_.anthill_spawns.empty()) {
             const auto& spawn = current_level_.anthill_spawns[0];
-            renderer_->camera().center_on(spawn.x * TILE_SIZE + TILE_SIZE / 2,
-                                          spawn.y * TILE_SIZE + TILE_SIZE / 2,
+            renderer_->camera().center_on(spawn.x * TILE_SIZE + 2 * TILE_SIZE,
+                                          spawn.y * TILE_SIZE + 2 * TILE_SIZE,
                                           current_level_.width, current_level_.height);
         }
     }
@@ -627,7 +627,7 @@ void Application::handle_key_down(const SDL_KeyboardEvent& key) {
         }
         const auto* base = sim_.grid().find_anthill(local_player_id_);
         if (base) {
-            renderer_->camera().center_on(base->x * 32 + 16, base->y * 32 + 16, current_level_.width, current_level_.height);
+            renderer_->camera().center_on(base->x * 32 + 64, base->y * 32 + 64, current_level_.width, current_level_.height);
         }
         return;
     }
@@ -782,8 +782,8 @@ void Application::set_local_player(uint8_t team_id) {
         renderer_->set_hud_team(local_player_id_);
         const auto* base = sim_.grid().find_anthill(local_player_id_);
         if (base) {
-            renderer_->camera().center_on(base->x * TILE_SIZE + TILE_SIZE / 2,
-                                          base->y * TILE_SIZE + TILE_SIZE / 2,
+            renderer_->camera().center_on(base->x * TILE_SIZE + 2 * TILE_SIZE,
+                                          base->y * TILE_SIZE + 2 * TILE_SIZE,
                                           current_level_.width, current_level_.height);
         }
     }
