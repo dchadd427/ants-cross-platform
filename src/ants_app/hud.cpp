@@ -6,6 +6,7 @@
 #include <sstream>
 #include <iomanip>
 #include <iostream>
+#include <unordered_set>
 
 namespace ants::app {
 
@@ -46,7 +47,27 @@ void HUD::init(uint8_t local_player_id) {
     is_incubating_ = false;
     news_queue_.clear();
     chat_log_.clear();
-    chat_log_.push_back("[0:00] News Flash: Game started! Go get that food!");
+    chat_scroll_offset_ = 0;
+    {
+        constexpr size_t MAX_CHARS = 21;
+        std::string start_msg = "[0:00] News Flash: Game started! Go get that food!";
+        size_t s_idx = 0;
+        while (s_idx < start_msg.length()) {
+            if (start_msg.length() - s_idx <= MAX_CHARS) {
+                chat_log_.push_back(start_msg.substr(s_idx));
+                break;
+            }
+            size_t split = start_msg.rfind(' ', s_idx + MAX_CHARS);
+            if (split == std::string::npos || split <= s_idx) {
+                split = s_idx + MAX_CHARS;
+            }
+            chat_log_.push_back(start_msg.substr(s_idx, split - s_idx));
+            s_idx = split;
+            while (s_idx < start_msg.length() && start_msg[s_idx] == ' ') {
+                ++s_idx;
+            }
+        }
+    }
 
     // Configure Top Header Buttons (x0y0.bmp)
     help_button_ = {476, 7, 46, 23, 0, 0, 0, false, true, false};
@@ -193,7 +214,7 @@ void HUD::queue_news_message(const std::string& msg, uint32_t duration_ticks, bo
     if (news_queue_.size() > 32) {
         news_queue_.pop_front();
     }
-    constexpr size_t MAX_CHARS_PER_LINE = 22;
+    constexpr size_t MAX_CHARS_PER_LINE = 21;
     size_t start = 0;
     while (start < msg.length()) {
         if (msg.length() - start <= MAX_CHARS_PER_LINE) {
@@ -416,9 +437,14 @@ void HUD::render(IRenderer& renderer, const assets::AssetArchive& assets,
     // White chat history log wchat.bmp (143x103) at (479, 298)
     renderer.draw_named_sprite("wchat.bmp", 479, 298);
     int32_t cty = 302;
-    size_t start_cidx = (chat_log_.size() > 6) ? (chat_log_.size() - 6) : 0;
-    for (size_t i = start_cidx; i < chat_log_.size(); ++i) {
-        renderer.draw_text(chat_log_[i], 484, cty, {20, 50, 40, 255});
+    constexpr int32_t VISIBLE_LINES = 6;
+    int32_t total_lines = static_cast<int32_t>(chat_log_.size());
+    int32_t max_scroll = std::max(0, total_lines - VISIBLE_LINES);
+    chat_scroll_offset_ = std::clamp(chat_scroll_offset_, 0, max_scroll);
+    int32_t start_cidx = (total_lines > VISIBLE_LINES) ? (total_lines - VISIBLE_LINES - chat_scroll_offset_) : 0;
+    int32_t end_cidx = std::min(total_lines, start_cidx + VISIBLE_LINES);
+    for (int32_t i = start_cidx; i < end_cidx; ++i) {
+        renderer.draw_text(chat_log_[static_cast<size_t>(i)], 484, cty, {20, 50, 40, 255});
         cty += 15;
     }
 
@@ -570,7 +596,7 @@ void HUD::render_radar(IRenderer& renderer, const assets::AssetArchive&,
                     col = {47, 81, 48, 255}; // Obstacle / Grass (green)
                 } else if (cell.is_mud) {
                     col = {95, 90, 85, 255}; // Mud path: Slate gray matching original
-                } else if (cell.has_completed_bridge()) {
+                } else if (cell.has_completed_bridge() || cell.has_partial_bridge()) {
                     col = {160, 110, 60, 255}; // Bridge
                 } else if (cell.has_fire()) {
                     col = {240, 80, 20, 255}; // Fire
@@ -661,9 +687,14 @@ void HUD::render_selection_card(IRenderer& renderer, const assets::AssetArchive&
         // No selection: Render authentic chat log / news box
         renderer.draw_named_sprite("wchat.bmp", 488, 135);
         int32_t ty = 140;
-        size_t start_idx = (chat_log_.size() > 7) ? (chat_log_.size() - 7) : 0;
-        for (size_t i = start_idx; i < chat_log_.size(); ++i) {
-            renderer.draw_text(chat_log_[i], 494, ty, {20, 50, 40, 255});
+        constexpr int32_t TOP_VISIBLE_LINES = 7;
+        int32_t total_l = static_cast<int32_t>(chat_log_.size());
+        int32_t max_top_scroll = std::max(0, total_l - TOP_VISIBLE_LINES);
+        int32_t top_scroll = std::clamp(chat_scroll_offset_, 0, max_top_scroll);
+        int32_t start_idx = (total_l > TOP_VISIBLE_LINES) ? (total_l - TOP_VISIBLE_LINES - top_scroll) : 0;
+        int32_t end_idx = std::min(total_l, start_idx + TOP_VISIBLE_LINES);
+        for (int32_t i = start_idx; i < end_idx; ++i) {
+            renderer.draw_text(chat_log_[static_cast<size_t>(i)], 494, ty, {20, 50, 40, 255});
             ty += 13;
         }
         return;
@@ -959,10 +990,11 @@ void HUD::render_marquee_box(IRenderer& renderer) {
 // Selection Controls
 // =========================================================================
 
-void HUD::select_ant(uint32_t ant_id) {
+void HUD::select_ant(uint32_t ant_id, bool is_multi) {
     selected_ant_id_ = ant_id;
     selected_ant_ids_.clear();
     selected_base_team_id_ = -1;
+    is_multi_select_mode_ = is_multi;
     if (ant_id != 0) {
         selected_ant_ids_.push_back(ant_id);
     }
@@ -972,12 +1004,14 @@ void HUD::select_base(int32_t team_id) noexcept {
     selected_base_team_id_ = team_id;
     selected_ant_id_ = 0;
     selected_ant_ids_.clear();
+    is_multi_select_mode_ = false;
 }
 
 void HUD::clear_selection() noexcept {
     selected_ant_id_ = 0;
     selected_ant_ids_.clear();
     selected_base_team_id_ = -1;
+    is_multi_select_mode_ = false;
 }
 
 bool HUD::is_ant_selected(uint32_t id) const noexcept {
@@ -994,6 +1028,7 @@ void HUD::select_all_friendly(const sim::WorldState& world) {
             selected_ant_ids_.push_back(ant.id);
         }
     }
+    is_multi_select_mode_ = (selected_ant_ids_.size() > 1);
     if (!selected_ant_ids_.empty()) {
         selected_ant_id_ = selected_ant_ids_.front();
         for (const auto& ant : world.ants) {
@@ -1024,6 +1059,7 @@ void HUD::select_ants_in_rect(int32_t x1, int32_t y1, int32_t x2, int32_t y2, co
             }
         }
     }
+    is_multi_select_mode_ = true;
     if (!selected_ant_ids_.empty()) {
         selected_ant_id_ = selected_ant_ids_.front();
         for (const auto& ant : world.ants) {
@@ -1042,7 +1078,7 @@ void HUD::select_ants_in_rect(int32_t x1, int32_t y1, int32_t x2, int32_t y2, co
 // =========================================================================
 
 bool HUD::handle_mouse_down(int32_t x, int32_t y, uint8_t button,
-                            sim::SimulationEngine& sim, ViewportCamera& camera) {
+                            sim::SimulationEngine& sim, ViewportCamera& camera, uint16_t mod) {
     if (button != SDL_BUTTON_LEFT && button != SDL_BUTTON_RIGHT) return false;
 
     // 0. Overlays and Modals intercept clicks first
@@ -1221,12 +1257,19 @@ bool HUD::handle_mouse_down(int32_t x, int32_t y, uint8_t button,
             play_sfx(sim::SoundID::AntStop);
             for (uint32_t aid : selected_ant_ids_) {
                 const auto& u = sim.get_unit(aid);
-                sim::AntOrder order;
-                order.ant_id = aid;
-                order.type = sim::OrderType::Move;
-                order.target_x = u.pos.x;
-                order.target_y = u.pos.y;
-                sim.issue_order(order);
+                if (u.state == sim::UnitState::BuildingBridge || u.state == sim::UnitState::DemolishingBridge) {
+                    continue; // Swimmer cannot be interrupted while building/demolishing a bridge!
+                }
+                if (u.is_transforming() || u.on_powerup || (sim.grid().in_bounds(u.pos) && sim.grid().has_powerup_at(u.pos))) {
+                    sim.interrupt_transformation(aid);
+                } else {
+                    sim::AntOrder order;
+                    order.ant_id = aid;
+                    order.type = sim::OrderType::Move;
+                    order.target_x = u.pos.x;
+                    order.target_y = u.pos.y;
+                    sim.issue_order(order);
+                }
             }
             return true;
         }
@@ -1349,6 +1392,10 @@ bool HUD::handle_mouse_down(int32_t x, int32_t y, uint8_t button,
                 }
             }
             if (enemy_target) {
+                if (enemy_target->on_powerup || (enemy_target->type == sim::AntType::Swimmer && enemy_target->is_swimming)) {
+                    play_sfx(sim::SoundID::AntStop);
+                    return true;
+                }
                 dispatch_attack_order(enemy_target->id, sim);
                 return true;
             }
@@ -1362,6 +1409,9 @@ bool HUD::handle_mouse_down(int32_t x, int32_t y, uint8_t button,
                     break;
                 }
             }
+            bool shift_held = ((mod & (KMOD_LSHIFT | KMOD_RSHIFT)) != 0) ||
+                              ((static_cast<uint16_t>(SDL_GetModState()) & KMOD_SHIFT) != 0);
+
             if (target_base) {
                 if (target_base->team_id == local_player_id_) {
                     play_sfx(sim::SoundID::GeneralCommand);
@@ -1372,13 +1422,13 @@ bool HUD::handle_mouse_down(int32_t x, int32_t y, uint8_t button,
                         sim.issue_order(order);
                     }
                 } else {
-                    dispatch_smart_special_ability(world_x, world_y, sim);
+                    dispatch_smart_special_ability(world_x, world_y, sim, shift_held);
                 }
                 return true;
             }
 
             // 3. Dispatch unit smart ability (Move for Worker/Queen, PlantBomb for Bomber, BuildBridge for Swimmer, IgniteFire for Fire, etc.)
-            dispatch_smart_special_ability(world_x, world_y, sim);
+            dispatch_smart_special_ability(world_x, world_y, sim, shift_held);
             return true;
         }
     }
@@ -1387,7 +1437,7 @@ bool HUD::handle_mouse_down(int32_t x, int32_t y, uint8_t button,
 }
 
 bool HUD::handle_mouse_up(int32_t x, int32_t y, uint8_t button,
-                          sim::SimulationEngine& sim, ViewportCamera& camera) {
+                          sim::SimulationEngine& sim, ViewportCamera& camera, uint16_t mod) {
     help_button_.is_pressed = false;
     options_button_.is_pressed = false;
     quit_button_.is_pressed = false;
@@ -1435,6 +1485,8 @@ bool HUD::handle_mouse_up(int32_t x, int32_t y, uint8_t button,
         int32_t dy = std::abs(drag_curr_y_ - drag_start_y_);
 
         const auto& world = sim.get_world_state();
+        bool shift_held = ((mod & (KMOD_LSHIFT | KMOD_RSHIFT)) != 0) ||
+                          ((static_cast<uint16_t>(SDL_GetModState()) & KMOD_SHIFT) != 0);
 
         if (dx > 4 || dy > 4) {
             // Authentic Marquee Box Selection (> 4px drag threshold)
@@ -1470,17 +1522,17 @@ bool HUD::handle_mouse_up(int32_t x, int32_t y, uint8_t button,
             if (hit_ant) {
                 selected_base_team_id_ = -1;
                 if (hit_ant->player_id == local_player_id_) {
-                    // Friendly ant clicked: select single ant
-                    select_ant(hit_ant->id);
+                    // Friendly ant clicked: select single ant (shift_held enables multi-select mode)
+                    select_ant(hit_ant->id, shift_held);
                     play_sfx(sim::get_ready_voice_sound(hit_ant->type, voice_variant_++));
                 } else {
                     // Enemy ant clicked
-                    if (!selected_ant_ids_.empty()) {
+                    if (!selected_ant_ids_.empty() && !hit_ant->on_powerup && !(hit_ant->type == sim::AntType::Swimmer && hit_ant->is_swimming)) {
                         // Issue Attack order against target enemy
                         dispatch_attack_order(hit_ant->id, sim);
                     } else {
                         // Inspect enemy unit
-                        select_ant(hit_ant->id);
+                        select_ant(hit_ant->id, false);
                     }
                 }
                 return true;
@@ -1547,7 +1599,28 @@ bool HUD::handle_mouse_up(int32_t x, int32_t y, uint8_t button,
             }
 
             if (has_friendly) {
-                dispatch_move_order(target_tile_x, target_tile_y, sim);
+                if (sim.has_bomb_at({target_tile_x, target_tile_y})) {
+                    bool is_single_bomber = (!is_multi_select() && !shift_held && selected_ant_ids_.size() == 1);
+                    if (is_single_bomber) {
+                        const auto& sel_u = sim.get_unit(selected_ant_ids_[0]);
+                        if (sel_u.type == sim::AntType::Bomber) {
+                            sim::AntOrder order;
+                            order.ant_id = selected_ant_ids_[0];
+                            order.type = sim::OrderType::DefuseBomb;
+                            order.target_x = target_tile_x;
+                            order.target_y = target_tile_y;
+                            sim.issue_order(order);
+                            play_sfx(sim::get_ability_voice_sound(sim::AntType::Bomber));
+                        } else {
+                            dispatch_move_order(target_tile_x, target_tile_y, sim, true /* allow_friendly_bomb */);
+                        }
+                    } else {
+                        // Multi-select or Shift-held or non-bomber: hit bomb!
+                        dispatch_move_order(target_tile_x, target_tile_y, sim, true /* allow_friendly_bomb */);
+                    }
+                } else {
+                    dispatch_move_order(target_tile_x, target_tile_y, sim, false);
+                }
             } else {
                 clear_selection();
             }
@@ -1611,7 +1684,7 @@ bool HUD::handle_key_down(int32_t key, sim::SimulationEngine& sim, ViewportCamer
             if (on_quit_) on_quit_();
             return true;
         }
-        if (key == 'n' || key == 'N' || key == SDLK_ESCAPE) {
+        if (key == 'n' || key == 'N' || key == SDLK_ESCAPE || key == 27) {
             close_quit_dialog();
             return true;
         }
@@ -1619,7 +1692,7 @@ bool HUD::handle_key_down(int32_t key, sim::SimulationEngine& sim, ViewportCamer
     }
 
     if (show_quick_help_) {
-        if (key == SDLK_ESCAPE || key == SDLK_RETURN || key == SDLK_SPACE || key == 'h' || key == 'H') {
+        if (key == SDLK_ESCAPE || key == 27 || key == SDLK_RETURN || key == SDLK_SPACE || key == 'h' || key == 'H') {
             close_quick_help();
             return true;
         }
@@ -1627,7 +1700,7 @@ bool HUD::handle_key_down(int32_t key, sim::SimulationEngine& sim, ViewportCamer
     }
 
     if (show_options_) {
-        if (key == SDLK_ESCAPE || key == SDLK_RETURN || key == 'o' || key == 'O') {
+        if (key == SDLK_ESCAPE || key == 27 || key == SDLK_RETURN || key == 'o' || key == 'O') {
             close_options();
             return true;
         }
@@ -1652,6 +1725,22 @@ bool HUD::handle_key_down(int32_t key, sim::SimulationEngine& sim, ViewportCamer
             }
             return true;
         }
+        if (key == SDLK_PAGEUP) {
+            scroll_chat_up(4);
+            return true;
+        }
+        if (key == SDLK_PAGEDOWN) {
+            scroll_chat_down(4);
+            return true;
+        }
+        if (key == SDLK_UP) {
+            scroll_chat_up(1);
+            return true;
+        }
+        if (key == SDLK_DOWN) {
+            scroll_chat_down(1);
+            return true;
+        }
         // Printable ASCII typing fallback (for direct key events / unit tests)
         bool ctrl = (mod & KMOD_CTRL) || (mod & KMOD_GUI);
         if (!ctrl && key >= 32 && key <= 126) {
@@ -1661,6 +1750,15 @@ bool HUD::handle_key_down(int32_t key, sim::SimulationEngine& sim, ViewportCamer
             return true;
         }
         return true; // While chat is focused, swallow all other keys
+    }
+
+    if (key == SDLK_PAGEUP) {
+        scroll_chat_up(4);
+        return true;
+    }
+    if (key == SDLK_PAGEDOWN) {
+        scroll_chat_down(4);
+        return true;
     }
 
     // 3. Not focused: Enter focuses chat
@@ -1758,6 +1856,8 @@ bool HUD::handle_key_down(int32_t key, sim::SimulationEngine& sim, ViewportCamer
             close_quit_dialog();
         } else if (show_options_) {
             close_options();
+        } else if (show_quick_help_) {
+            close_quick_help();
         } else {
             open_quit_dialog();
         }
@@ -1803,6 +1903,7 @@ void HUD::send_chat_message() {
     std::string sender = player_name_.empty() ? "Player" : player_name_;
     add_chat_entry(sender, chat_input_, is_on_team_ && !send_to_all_);
     chat_input_.clear();
+    chat_scroll_offset_ = 0;
 
     play_sfx(sim::SoundID::ChatSend);
 }
@@ -1811,8 +1912,8 @@ void HUD::add_chat_entry(const std::string& sender, const std::string& message, 
     std::string prefix = sender + (team_only ? " (Team): " : ": ");
     std::string full_msg = prefix + message;
 
-    // Word-wrap into lines of at most 22 characters to fit inside wchat.bmp (143px)
-    constexpr size_t MAX_CHARS_PER_LINE = 22;
+    // Word-wrap into lines of at most 21 characters to fit inside wchat.bmp (143px)
+    constexpr size_t MAX_CHARS_PER_LINE = 21;
     size_t start = 0;
     while (start < full_msg.length()) {
         if (full_msg.length() - start <= MAX_CHARS_PER_LINE) {
@@ -1835,11 +1936,38 @@ void HUD::add_chat_entry(const std::string& sender, const std::string& message, 
     }
 }
 
-void HUD::dispatch_targeted_order(int32_t world_x, int32_t world_y, sim::SimulationEngine& sim) {
-    if (active_order_mode_ == sim::OrderType::Move) {
-        dispatch_move_order(world_x / 32, world_y / 32, sim);
-        return;
+void HUD::scroll_chat_up(int32_t lines) noexcept {
+    constexpr int32_t VISIBLE_LINES = 6;
+    int32_t total_lines = static_cast<int32_t>(chat_log_.size());
+    int32_t max_scroll = std::max(0, total_lines - VISIBLE_LINES);
+    chat_scroll_offset_ = std::clamp(chat_scroll_offset_ + lines, 0, max_scroll);
+}
+
+void HUD::scroll_chat_down(int32_t lines) noexcept {
+    constexpr int32_t VISIBLE_LINES = 6;
+    int32_t total_lines = static_cast<int32_t>(chat_log_.size());
+    int32_t max_scroll = std::max(0, total_lines - VISIBLE_LINES);
+    chat_scroll_offset_ = std::clamp(chat_scroll_offset_ - lines, 0, max_scroll);
+}
+
+void HUD::handle_mouse_wheel(int32_t screen_x, int32_t screen_y, int32_t wheel_y) {
+    if (wheel_y == 0) return;
+    bool in_lower_chat = (screen_x >= 475 && screen_x <= 635 && screen_y >= 265 && screen_y <= 445);
+    bool in_upper_chat = (selected_ant_ids_.empty() && selected_ant_id_ == 0 && selected_base_team_id_ < 0 &&
+                          screen_x >= 475 && screen_x <= 635 && screen_y >= 130 && screen_y <= 245);
+
+    if (in_lower_chat || in_upper_chat) {
+        if (wheel_y > 0) {
+            scroll_chat_up(wheel_y);
+        } else {
+            scroll_chat_down(-wheel_y);
+        }
     }
+}
+
+void HUD::dispatch_targeted_order(int32_t world_x, int32_t world_y, sim::SimulationEngine& sim) {
+    int32_t target_tile_x = world_x / 32;
+    int32_t target_tile_y = world_y / 32;
 
     std::vector<uint32_t> targets = selected_ant_ids_;
     if (targets.empty() && selected_ant_id_ != 0) {
@@ -1847,8 +1975,48 @@ void HUD::dispatch_targeted_order(int32_t world_x, int32_t world_y, sim::Simulat
     }
     if (targets.empty()) return;
 
-    int32_t target_tile_x = world_x / 32;
-    int32_t target_tile_y = world_y / 32;
+    if (active_order_mode_ == sim::OrderType::Move) {
+        bool has_bomb = sim.has_bomb_at({target_tile_x, target_tile_y});
+        bool allow_bomb = false;
+        if (has_bomb) {
+            bool is_single_bomber = (targets.size() == 1 && !is_multi_select());
+            if (is_single_bomber) {
+                const auto& sel_u = sim.get_unit(targets[0]);
+                if (sel_u.type == sim::AntType::Bomber) {
+                    sim::AntOrder order;
+                    order.ant_id = targets[0];
+                    order.type = sim::OrderType::DefuseBomb;
+                    order.target_x = target_tile_x;
+                    order.target_y = target_tile_y;
+                    sim.issue_order(order);
+                    play_sfx(sim::get_ability_voice_sound(sim::AntType::Bomber));
+                    return;
+                }
+            }
+            allow_bomb = true;
+        }
+        dispatch_move_order(target_tile_x, target_tile_y, sim, allow_bomb);
+        return;
+    }
+
+    if (active_order_mode_ == sim::OrderType::BuildBridge) {
+        const auto& grid = sim.grid();
+        if (grid.in_bounds({target_tile_x, target_tile_y})) {
+            const auto& cell = grid.get_cell({target_tile_x, target_tile_y});
+            if (cell.has_completed_bridge() || cell.has_partial_bridge()) {
+                for (uint32_t aid : targets) {
+                    sim::AntOrder order;
+                    order.ant_id = aid;
+                    order.type = sim::OrderType::DemolishBridge;
+                    order.target_x = target_tile_x;
+                    order.target_y = target_tile_y;
+                    sim.issue_order(order);
+                }
+                play_sfx(sim::get_ability_voice_sound(sim::AntType::Swimmer));
+                return;
+            }
+        }
+    }
 
     for (uint32_t aid : targets) {
         sim::AntOrder order;
@@ -1860,7 +2028,7 @@ void HUD::dispatch_targeted_order(int32_t world_x, int32_t world_y, sim::Simulat
     }
 }
 
-void HUD::dispatch_move_order(int32_t target_tile_x, int32_t target_tile_y, sim::SimulationEngine& sim) {
+void HUD::dispatch_move_order(int32_t target_tile_x, int32_t target_tile_y, sim::SimulationEngine& sim, bool allow_friendly_bomb) {
     std::vector<uint32_t> targets = selected_ant_ids_;
     if (targets.empty() && selected_ant_id_ != 0) {
         targets.push_back(selected_ant_id_);
@@ -1885,7 +2053,21 @@ move_voice_done:
         order.type = sim::OrderType::Move;
         order.target_x = target_tile_x;
         order.target_y = target_tile_y;
+        order.allow_friendly_bomb = allow_friendly_bomb;
         sim.issue_order(order);
+        return;
+    }
+
+    if (allow_friendly_bomb && sim.grid().has_bomb_at({target_tile_x, target_tile_y})) {
+        for (uint32_t aid : targets) {
+            sim::AntOrder order;
+            order.ant_id = aid;
+            order.type = sim::OrderType::Move;
+            order.target_x = target_tile_x;
+            order.target_y = target_tile_y;
+            order.allow_friendly_bomb = true;
+            sim.issue_order(order);
+        }
         return;
     }
 
@@ -1893,22 +2075,55 @@ move_voice_done:
     const auto& grid = sim.grid();
     std::vector<std::pair<int32_t, int32_t>> slots;
     slots.reserve(targets.size());
+    std::unordered_set<uint64_t> visited;
+    auto add_slot = [&](int32_t x, int32_t y) {
+        uint64_t key = (static_cast<uint64_t>(x) << 32) | static_cast<uint32_t>(y);
+        if (visited.insert(key).second) {
+            if (grid.in_bounds(x, y) && grid.get_cell(static_cast<uint32_t>(x), static_cast<uint32_t>(y)).is_passable()) {
+                slots.push_back({x, y});
+            }
+        }
+    };
 
-    if (grid.in_bounds(target_tile_x, target_tile_y) &&
-        grid.get_cell(static_cast<uint32_t>(target_tile_x), static_cast<uint32_t>(target_tile_y)).is_passable()) {
-        slots.push_back({target_tile_x, target_tile_y});
+    if (grid.has_food_at({target_tile_x, target_tile_y}) || grid.has_lunchbox_at({target_tile_x, target_tile_y})) {
+        const sim::ActiveFoodSchedule* matched_fs = nullptr;
+        for (const auto& afs : grid.food_schedules()) {
+            if (!afs.active) continue;
+            for (const auto& c : afs.footprint) {
+                if (c.x == target_tile_x && c.y == target_tile_y) {
+                    matched_fs = &afs;
+                    break;
+                }
+            }
+            if (matched_fs) break;
+        }
+        if (matched_fs) {
+            for (const auto& c : matched_fs->footprint) add_slot(c.x, c.y);
+            for (const auto& c : matched_fs->footprint) {
+                for (int32_t dy = -1; dy <= 1; ++dy) {
+                    for (int32_t dx = -1; dx <= 1; ++dx) {
+                        add_slot(c.x + dx, c.y + dy);
+                    }
+                }
+            }
+        } else {
+            add_slot(target_tile_x, target_tile_y);
+            for (int32_t dy = -1; dy <= 1; ++dy) {
+                for (int32_t dx = -1; dx <= 1; ++dx) {
+                    add_slot(target_tile_x + dx, target_tile_y + dy);
+                }
+            }
+        }
+    } else if (grid.in_bounds(target_tile_x, target_tile_y) &&
+               grid.get_cell(static_cast<uint32_t>(target_tile_x), static_cast<uint32_t>(target_tile_y)).is_passable()) {
+        add_slot(target_tile_x, target_tile_y);
     }
 
     for (int32_t r = 1; slots.size() < targets.size() && r < 20; ++r) {
         for (int32_t dy = -r; dy <= r && slots.size() < targets.size(); ++dy) {
             for (int32_t dx = -r; dx <= r && slots.size() < targets.size(); ++dx) {
                 if (std::max(std::abs(dx), std::abs(dy)) != r) continue;
-                int32_t nx = target_tile_x + dx;
-                int32_t ny = target_tile_y + dy;
-                if (grid.in_bounds(nx, ny) &&
-                    grid.get_cell(static_cast<uint32_t>(nx), static_cast<uint32_t>(ny)).is_passable()) {
-                    slots.push_back({nx, ny});
-                }
+                add_slot(target_tile_x + dx, target_tile_y + dy);
             }
         }
     }
@@ -1917,6 +2132,7 @@ move_voice_done:
         sim::AntOrder order;
         order.ant_id = targets[i];
         order.type = sim::OrderType::Move;
+        order.allow_friendly_bomb = allow_friendly_bomb;
         if (i < slots.size()) {
             order.target_x = slots[i].first;
             order.target_y = slots[i].second;
@@ -1929,12 +2145,19 @@ move_voice_done:
 }
 
 void HUD::dispatch_attack_order(uint32_t target_enemy_id, sim::SimulationEngine& sim) {
+    const auto& world = sim.get_world_state();
+    for (const auto& a : world.ants) {
+        if (a.id == target_enemy_id && (a.on_powerup || (a.type == sim::AntType::Swimmer && a.is_swimming))) {
+            play_sfx(sim::SoundID::AntStop);
+            return;
+        }
+    }
+
     std::vector<uint32_t> targets = selected_ant_ids_;
     if (targets.empty() && selected_ant_id_ != 0) {
         targets.push_back(selected_ant_id_);
     }
 
-    const auto& world = sim.get_world_state();
     int32_t target_x = 0;
     int32_t target_y = 0;
     for (const auto& a : world.ants) {
@@ -1948,6 +2171,9 @@ void HUD::dispatch_attack_order(uint32_t target_enemy_id, sim::SimulationEngine&
     for (uint32_t aid : targets) {
         for (const auto& a : world.ants) {
             if (a.id == aid && a.player_id == local_player_id_) {
+                if (a.state == sim::UnitState::BuildingBridge || a.state == sim::UnitState::DemolishingBridge) {
+                    continue;
+                }
                 play_sfx(sim::get_attack_voice_sound(a.type, voice_variant_++));
                 goto attack_voice_done;
             }
@@ -1956,6 +2182,15 @@ void HUD::dispatch_attack_order(uint32_t target_enemy_id, sim::SimulationEngine&
 attack_voice_done:
 
     for (uint32_t aid : targets) {
+        bool skip = false;
+        for (const auto& a : world.ants) {
+            if (a.id == aid && (a.state == sim::UnitState::BuildingBridge || a.state == sim::UnitState::DemolishingBridge)) {
+                skip = true;
+                break;
+            }
+        }
+        if (skip) continue;
+
         sim::AntOrder order;
         order.ant_id = aid;
         order.type = sim::OrderType::Attack;
@@ -1966,7 +2201,7 @@ attack_voice_done:
     }
 }
 
-void HUD::dispatch_smart_special_ability(int32_t world_x, int32_t world_y, sim::SimulationEngine& sim) {
+void HUD::dispatch_smart_special_ability(int32_t world_x, int32_t world_y, sim::SimulationEngine& sim, bool shift_held) {
     std::vector<uint32_t> targets = selected_ant_ids_;
     if (targets.empty() && selected_ant_id_ != 0) {
         targets.push_back(selected_ant_id_);
@@ -1976,25 +2211,85 @@ void HUD::dispatch_smart_special_ability(int32_t world_x, int32_t world_y, sim::
     int32_t target_tile_x = world_x / 32;
     int32_t target_tile_y = world_y / 32;
 
+    const auto& grid = sim.grid();
+    bool is_food_or_pu = grid.has_food_at({target_tile_x, target_tile_y}) ||
+                         grid.has_powerup_at({target_tile_x, target_tile_y}) ||
+                         grid.has_lunchbox_at({target_tile_x, target_tile_y});
+
+    std::vector<std::pair<int32_t, int32_t>> slots;
+    if (targets.size() > 1 && is_food_or_pu) {
+        slots.reserve(targets.size());
+        std::unordered_set<uint64_t> visited;
+        auto add_slot = [&](int32_t x, int32_t y) {
+            uint64_t key = (static_cast<uint64_t>(x) << 32) | static_cast<uint32_t>(y);
+            if (visited.insert(key).second) {
+                if (grid.in_bounds(x, y) && grid.get_cell(static_cast<uint32_t>(x), static_cast<uint32_t>(y)).is_passable()) {
+                    slots.push_back({x, y});
+                }
+            }
+        };
+
+        const sim::ActiveFoodSchedule* matched_fs = nullptr;
+        for (const auto& afs : grid.food_schedules()) {
+            if (!afs.active) continue;
+            for (const auto& c : afs.footprint) {
+                if (c.x == target_tile_x && c.y == target_tile_y) {
+                    matched_fs = &afs;
+                    break;
+                }
+            }
+            if (matched_fs) break;
+        }
+
+        if (matched_fs) {
+            for (const auto& c : matched_fs->footprint) add_slot(c.x, c.y);
+            for (const auto& c : matched_fs->footprint) {
+                for (int32_t dy = -1; dy <= 1; ++dy) {
+                    for (int32_t dx = -1; dx <= 1; ++dx) {
+                        add_slot(c.x + dx, c.y + dy);
+                    }
+                }
+            }
+        } else {
+            add_slot(target_tile_x, target_tile_y);
+            for (int32_t dy = -1; dy <= 1; ++dy) {
+                for (int32_t dx = -1; dx <= 1; ++dx) {
+                    add_slot(target_tile_x + dx, target_tile_y + dy);
+                }
+            }
+        }
+
+        for (int32_t r = 2; slots.size() < targets.size() && r < 15; ++r) {
+            for (int32_t dy = -r; dy <= r && slots.size() < targets.size(); ++dy) {
+                for (int32_t dx = -r; dx <= r && slots.size() < targets.size(); ++dx) {
+                    if (std::max(std::abs(dx), std::abs(dy)) != r) continue;
+                    add_slot(target_tile_x + dx, target_tile_y + dy);
+                }
+            }
+        }
+    }
+
     const auto& world = sim.get_world_state();
     bool played_voice = false;
 
-    for (uint32_t aid : targets) {
+    for (size_t ti = 0; ti < targets.size(); ++ti) {
+        uint32_t aid = targets[ti];
         const sim::AntSnapshot* sel = nullptr;
         for (const auto& a : world.ants) {
             if (a.id == aid) { sel = &a; break; }
         }
         if (!sel || sel->player_id != local_player_id_ || sel->hp == 0 || sel->is_drowning) continue;
+        if (sel->state == sim::UnitState::BuildingBridge || sel->state == sim::UnitState::DemolishingBridge) continue;
 
         sim::AntOrder order;
         order.ant_id = aid;
-        order.target_x = target_tile_x;
-        order.target_y = target_tile_y;
-
-        const auto& grid = sim.grid();
-        bool is_food_or_pu = grid.has_food_at({target_tile_x, target_tile_y}) ||
-                             grid.has_powerup_at({target_tile_x, target_tile_y}) ||
-                             grid.has_lunchbox_at({target_tile_x, target_tile_y});
+        if (!slots.empty() && ti < slots.size()) {
+            order.target_x = slots[ti].first;
+            order.target_y = slots[ti].second;
+        } else {
+            order.target_x = target_tile_x;
+            order.target_y = target_tile_y;
+        }
 
         if (is_food_or_pu) {
             order.type = sim::OrderType::Move;
@@ -2002,57 +2297,96 @@ void HUD::dispatch_smart_special_ability(int32_t world_x, int32_t world_y, sim::
             switch (sel->type) {
                 case sim::AntType::Bomber:
                     if (sim.has_bomb_at({target_tile_x, target_tile_y})) {
-                        order.type = sim::OrderType::DefuseBomb;
+                        if (is_multi_select() || shift_held) {
+                            order.type = sim::OrderType::Move;
+                            order.allow_friendly_bomb = true;
+                        } else {
+                            order.type = sim::OrderType::DefuseBomb;
+                        }
                     } else {
                         order.type = sim::OrderType::PlantBomb;
                     }
                     break;
                 case sim::AntType::Fire:
-                    if (sim.has_fire_at({target_tile_x, target_tile_y})) {
+                    if (sim.has_bomb_at({target_tile_x, target_tile_y})) {
+                        order.type = sim::OrderType::Move;
+                        order.allow_friendly_bomb = true;
+                    } else if (sim.has_fire_at({target_tile_x, target_tile_y})) {
                         order.type = sim::OrderType::ExtinguishFire;
                     } else {
                         order.type = sim::OrderType::IgniteFire;
                     }
                     break;
                 case sim::AntType::Swimmer:
-                    if (grid.in_bounds({target_tile_x, target_tile_y}) &&
-                        (grid.get_cell({target_tile_x, target_tile_y}).terrain_type == sim::TERRAIN_WATER ||
-                         grid.get_cell({target_tile_x, target_tile_y}).surface_type == sim::SurfaceType::Water)) {
-                        order.type = sim::OrderType::BuildBridge;
+                    if (sim.has_bomb_at({target_tile_x, target_tile_y})) {
+                        order.type = sim::OrderType::Move;
+                        order.allow_friendly_bomb = true;
+                    } else if (grid.in_bounds({target_tile_x, target_tile_y})) {
+                        const auto& cell = grid.get_cell({target_tile_x, target_tile_y});
+                        if (cell.has_completed_bridge() || cell.has_partial_bridge()) {
+                            order.type = sim::OrderType::DemolishBridge;
+                        } else if (cell.terrain_type == sim::TERRAIN_WATER ||
+                                   cell.surface_type == sim::SurfaceType::Water) {
+                            order.type = sim::OrderType::BuildBridge;
+                        } else {
+                            order.type = sim::OrderType::Move;
+                        }
                     } else {
                         order.type = sim::OrderType::Move;
                     }
                     break;
                 case sim::AntType::Thief: {
-                    bool hit_enemy_base = false;
-                    for (const auto& base : world.anthills) {
-                        if (base.team_id != sel->player_id &&
-                            target_tile_x >= base.x && target_tile_x < base.x + 4 &&
-                            target_tile_y >= base.y && target_tile_y < base.y + 4) {
-                            hit_enemy_base = true;
-                            break;
-                        }
-                    }
-                    if (hit_enemy_base) {
-                        order.type = sim::OrderType::InfiltrateAnthill;
-                    } else {
+                    if (sim.has_bomb_at({target_tile_x, target_tile_y})) {
                         order.type = sim::OrderType::Move;
+                        order.allow_friendly_bomb = true;
+                    } else {
+                        bool hit_enemy_base = false;
+                        for (const auto& base : world.anthills) {
+                            if (base.team_id != sel->player_id &&
+                                target_tile_x >= base.x && target_tile_x < base.x + 4 &&
+                                target_tile_y >= base.y && target_tile_y < base.y + 4) {
+                                hit_enemy_base = true;
+                                break;
+                            }
+                        }
+                        if (hit_enemy_base) {
+                            order.type = sim::OrderType::InfiltrateAnthill;
+                        } else {
+                            order.type = sim::OrderType::Move;
+                        }
                     }
                     break;
                 }
                 case sim::AntType::Combat:
                     order.type = sim::OrderType::Move;
+                    if (sim.has_bomb_at({target_tile_x, target_tile_y})) {
+                        order.allow_friendly_bomb = true;
+                    }
                     break;
                 case sim::AntType::Worker:
                 default:
                     order.type = sim::OrderType::Move;
+                    if (sim.has_bomb_at({target_tile_x, target_tile_y})) {
+                        order.allow_friendly_bomb = true;
+                    }
                     break;
             }
         }
 
+        bool is_swimmer = (sel->type == sim::AntType::Swimmer);
+        bool is_fire = (sel->type == sim::AntType::Fire);
+        bool dest_passable = grid.in_bounds(order.target_x, order.target_y) &&
+                             grid.get_cell(static_cast<uint32_t>(order.target_x), static_cast<uint32_t>(order.target_y)).is_passable(is_swimmer, is_fire);
+        if (order.type == sim::OrderType::Move && !dest_passable &&
+            (sel->is_transforming || sel->on_powerup || grid.has_powerup_at({sel->tile_x, sel->tile_y}))) {
+            sim.interrupt_transformation(aid);
+            play_sfx(sim::SoundID::AntStop);
+            continue;
+        }
+
         if (!played_voice) {
             played_voice = true;
-            if (order.type == sim::OrderType::Move) {
+            if (order.type == sim::OrderType::Move || order.type == sim::OrderType::PlantBomb) {
                 play_sfx(sim::get_move_voice_sound(sel->type, voice_variant_++));
             } else {
                 play_sfx(sim::get_ability_voice_sound(sel->type));

@@ -460,6 +460,11 @@ void Application::handle_events() {
             case SDL_MOUSEBUTTONUP:
                 handle_mouse_button(event.button);
                 break;
+            case SDL_MOUSEWHEEL:
+                if (state_ == AppState::Playing) {
+                    hud_.handle_mouse_wheel(mouse_screen_x_, mouse_screen_y_, event.wheel.y);
+                }
+                break;
             default:
                 break;
         }
@@ -531,17 +536,7 @@ void Application::handle_key_down(const SDL_KeyboardEvent& key) {
         return;
     }
 
-    // 2. Escape when chat is not focused: cancel order mode or clear selection
-    if (key.keysym.sym == SDLK_ESCAPE) {
-        if (hud_.get_active_order_mode() != sim::OrderType::None) {
-            hud_.cancel_order_mode();
-        } else {
-            hud_.clear_selection();
-        }
-        return;
-    }
-
-    // 3. Return / Enter focuses chat!
+    // 2. Return / Enter focuses chat!
     if (key.keysym.sym == SDLK_RETURN || key.keysym.sym == SDLK_KP_ENTER) {
         hud_.focus_chat();
         return;
@@ -668,10 +663,11 @@ void Application::handle_mouse_button(const SDL_MouseButtonEvent& button) {
         return;
     }
 
+    uint16_t mod = static_cast<uint16_t>(SDL_GetModState());
     if (button.type == SDL_MOUSEBUTTONDOWN) {
-        hud_.handle_mouse_down(button.x, button.y, button.button, sim_, renderer_->camera());
+        hud_.handle_mouse_down(button.x, button.y, button.button, sim_, renderer_->camera(), mod);
     } else if (button.type == SDL_MOUSEBUTTONUP) {
-        hud_.handle_mouse_up(button.x, button.y, button.button, sim_, renderer_->camera());
+        hud_.handle_mouse_up(button.x, button.y, button.button, sim_, renderer_->camera(), mod);
     }
 }
 

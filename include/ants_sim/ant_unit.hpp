@@ -47,7 +47,9 @@ enum class UnitState : uint8_t {
     Swimming       = 15, // Swimmer Ant actively swimming in water
     Infiltrating   = 16, // Thief Ant diving into enemy base
     DivingInWater  = 17, // Swimmer Ant diving into water (asdi*, Sound 71)
-    ExitingWater   = 18  // Swimmer Ant emerging from water onto land (asgo*, Sound 71)
+    ExitingWater   = 18, // Swimmer Ant emerging from water onto land (asgo*, Sound 71)
+    BuildingBridge = 19, // Swimmer Ant digging / building bridge (asbb*, Action 13)
+    DemolishingBridge = 20 // Swimmer Ant digging / demolishing bridge (asdb*, Action 14)
 };
 
 /**
@@ -169,6 +171,13 @@ public:
     bool        is_newborn{false};
     OrderType   pending_ability{static_cast<OrderType>(0)};
     TileCoord   ability_target{-1, -1};
+    uint16_t    attack_cooldown_ticks{0};
+    uint32_t    attack_target_id{0};
+    bool        allow_friendly_bomb{false};
+    uint8_t     pending_powerup_type{255};
+    AntType     previous_type{AntType::Worker};
+    bool        transformation_interrupted{false};
+    bool        on_powerup{false};
 
     AntUnit(uint32_t unit_id, TeamId team_in, AntType type_in, int32_t start_tx, int32_t start_ty);
 

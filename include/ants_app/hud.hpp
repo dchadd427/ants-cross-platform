@@ -122,9 +122,9 @@ public:
 
     // Mouse & Keyboard Input Dispatch
     bool handle_mouse_down(int32_t x, int32_t y, uint8_t button,
-                           sim::SimulationEngine& sim, ViewportCamera& camera);
+                           sim::SimulationEngine& sim, ViewportCamera& camera, uint16_t mod = 0);
     bool handle_mouse_up(int32_t x, int32_t y, uint8_t button,
-                         sim::SimulationEngine& sim, ViewportCamera& camera);
+                         sim::SimulationEngine& sim, ViewportCamera& camera, uint16_t mod = 0);
     bool handle_mouse_motion(int32_t x, int32_t y,
                              sim::SimulationEngine& sim, ViewportCamera& camera);
     bool handle_key_down(int32_t key, sim::SimulationEngine& sim, ViewportCamera& camera, uint16_t mod = 0);
@@ -139,6 +139,10 @@ public:
     void send_chat_message();
     void add_chat_entry(const std::string& sender, const std::string& message, bool team_only = false);
     const std::deque<std::string>& get_chat_log() const noexcept { return chat_log_; }
+    void scroll_chat_up(int32_t lines = 1) noexcept;
+    void scroll_chat_down(int32_t lines = 1) noexcept;
+    void handle_mouse_wheel(int32_t screen_x, int32_t screen_y, int32_t wheel_y);
+    int32_t get_chat_scroll_offset() const noexcept { return chat_scroll_offset_; }
 
     // Chat recipient & Team state
     bool is_send_to_all() const noexcept { return send_to_all_; }
@@ -149,30 +153,46 @@ public:
     const std::string& get_player_name() const noexcept { return player_name_; }
 
     // Selection controls
-    void select_ant(uint32_t ant_id);
+    void select_ant(uint32_t ant_id, bool is_multi = false);
     void select_base(int32_t team_id) noexcept;
     void clear_selection() noexcept;
     uint32_t get_selected_ant_id() const noexcept { return selected_ant_id_; }
     const std::vector<uint32_t>& get_selected_ant_ids() const noexcept { return selected_ant_ids_; }
+    void set_selected_ant_ids(std::vector<uint32_t> ids) {
+        selected_ant_ids_ = std::move(ids);
+        if (!selected_ant_ids_.empty()) selected_ant_id_ = selected_ant_ids_[0];
+        else selected_ant_id_ = 0;
+        is_multi_select_mode_ = (selected_ant_ids_.size() > 1);
+    }
     int32_t get_selected_base_team_id() const noexcept { return selected_base_team_id_; }
     bool is_ant_selected(uint32_t id) const noexcept;
     void select_all_friendly(const sim::WorldState& world);
     void select_ants_in_rect(int32_t x1, int32_t y1, int32_t x2, int32_t y2, const sim::WorldState& world);
+    bool is_multi_select() const noexcept { return is_multi_select_mode_ || selected_ant_ids_.size() > 1; }
+    bool is_multi_select_mode() const noexcept { return is_multi_select_mode_; }
+    void set_multi_select_mode(bool multi) noexcept { is_multi_select_mode_ = multi; }
 
     // News banner
     void queue_news_message(const std::string& msg, uint32_t duration_ticks = 100, bool is_alarm = false);
 
-    // Order mode
+    // Order mode & dispatch
     sim::OrderType get_active_order_mode() const noexcept { return active_order_mode_; }
     void set_active_order_mode(sim::OrderType mode) noexcept;
     void cancel_order_mode() noexcept { set_active_order_mode(sim::OrderType::None); }
+    void dispatch_targeted_order(int32_t world_x, int32_t world_y, sim::SimulationEngine& sim);
+    void dispatch_move_order(int32_t target_tile_x, int32_t target_tile_y, sim::SimulationEngine& sim, bool allow_friendly_bomb = false);
+    void dispatch_attack_order(uint32_t target_enemy_id, sim::SimulationEngine& sim);
+    void dispatch_smart_special_ability(int32_t world_x, int32_t world_y, sim::SimulationEngine& sim, bool shift_held = false);
 
     // Local player identity
     uint8_t get_local_player_id() const noexcept { return local_player_id_; }
     void set_local_player_id(uint8_t id) noexcept { local_player_id_ = id; }
 
     // Dialog and Modal overlays
-    void open_quit_dialog() noexcept { show_quit_dialog_ = true; }
+    void open_quit_dialog() noexcept {
+        cancel_order_mode();
+        show_quit_dialog_ = true;
+    }
     void close_quit_dialog() noexcept { show_quit_dialog_ = false; }
     bool is_quit_dialog_open() const noexcept { return show_quit_dialog_; }
     void set_on_quit(std::function<void()> cb) { on_quit_ = std::move(cb); }
@@ -210,14 +230,11 @@ private:
     void render_marquee_box(IRenderer& renderer);
 
     void update_action_buttons_state(const sim::WorldState& world);
-    void dispatch_targeted_order(int32_t world_x, int32_t world_y, sim::SimulationEngine& sim);
-    void dispatch_move_order(int32_t target_tile_x, int32_t target_tile_y, sim::SimulationEngine& sim);
-    void dispatch_attack_order(uint32_t target_enemy_id, sim::SimulationEngine& sim);
-    void dispatch_smart_special_ability(int32_t world_x, int32_t world_y, sim::SimulationEngine& sim);
 
     uint8_t local_player_id_{0};
     uint32_t selected_ant_id_{0};
     std::vector<uint32_t> selected_ant_ids_{};
+    bool is_multi_select_mode_{false};
     int32_t selected_base_team_id_{-1};
     std::deque<std::string> chat_log_{};
     sim::OrderType active_order_mode_{sim::OrderType::None};
@@ -248,6 +265,7 @@ private:
     // Chat text input state
     std::string chat_input_{};
     bool chat_input_focused_{false};
+    int32_t chat_scroll_offset_{0};
     uint32_t cursor_blink_ticks_{0};
     std::string player_name_{"Player"};
 

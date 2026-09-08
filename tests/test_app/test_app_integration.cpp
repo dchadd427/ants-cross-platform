@@ -12,6 +12,7 @@
 #include "ants_assets/asset_archive.hpp"
 #include "ants_assets/lvl_parser.hpp"
 #include "ants_sim/sim_engine.hpp"
+#include "ants_sim/pathfinding.hpp"
 #include "ants_app/audio_mixer.hpp"
 #include "ants_app/midi_player.hpp"
 #include "ants_app/renderer.hpp"
@@ -1914,6 +1915,57 @@ void run_suite_11_anthill_queuing_and_priority() {
         // Press Escape key again toggles closed
         hud.handle_key_down(27, sim, camera);
         ASSERT_FALSE(hud.is_quit_dialog_open());
+
+        // Press SDLK_ESCAPE directly
+        hud.handle_key_down(SDLK_ESCAPE, sim, camera);
+        ASSERT_TRUE(hud.is_quit_dialog_open());
+        hud.handle_key_down(SDLK_ESCAPE, sim, camera);
+        ASSERT_FALSE(hud.is_quit_dialog_open());
+
+        // Verify full Application::handle_key_down wiring
+        ApplicationConfig cfg;
+        cfg.headless = true;
+        cfg.start_in_map_select = false;
+        Application app;
+        ASSERT_TRUE(app.init(cfg));
+        ASSERT_TRUE(app.is_running());
+        ASSERT_FALSE(app.hud().is_quit_dialog_open());
+
+        SDL_KeyboardEvent esc_ev{};
+        esc_ev.type = SDL_KEYDOWN;
+        esc_ev.keysym.sym = SDLK_ESCAPE;
+
+        // Press Escape in-game opens quit dialog
+        app.handle_key_down(esc_ev);
+        ASSERT_TRUE(app.hud().is_quit_dialog_open());
+
+        // Press Escape again closes quit dialog
+        app.handle_key_down(esc_ev);
+        ASSERT_FALSE(app.hud().is_quit_dialog_open());
+
+        // Press Escape with active order mode: cancels order mode and opens quit dialog
+        app.hud().set_active_order_mode(ants::sim::OrderType::BuildBridge);
+        ASSERT_EQ(app.hud().get_active_order_mode(), ants::sim::OrderType::BuildBridge);
+        app.handle_key_down(esc_ev);
+        ASSERT_TRUE(app.hud().is_quit_dialog_open());
+        ASSERT_EQ(app.hud().get_active_order_mode(), ants::sim::OrderType::None);
+
+        // Pressing 'N' closes quit dialog
+        SDL_KeyboardEvent n_ev{};
+        n_ev.type = SDL_KEYDOWN;
+        n_ev.keysym.sym = SDLK_n;
+        app.handle_key_down(n_ev);
+        ASSERT_FALSE(app.hud().is_quit_dialog_open());
+
+        // Press Escape and then 'Y' quits the game
+        app.handle_key_down(esc_ev);
+        ASSERT_TRUE(app.hud().is_quit_dialog_open());
+        SDL_KeyboardEvent y_ev{};
+        y_ev.type = SDL_KEYDOWN;
+        y_ev.keysym.sym = SDLK_y;
+        app.handle_key_down(y_ev);
+        ASSERT_FALSE(app.hud().is_quit_dialog_open());
+        ASSERT_FALSE(app.is_running());
     } TEST_END();
 
     TEST_CASE("11.4 Base Queue Priority Across Map & Interruption Release") {
@@ -2132,6 +2184,1025 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         ASSERT_EQ(a2.pixel_y, a2.pos.y * 32 + 16);
         ASSERT_EQ(a3.pixel_x, a3.pos.x * 32 + 16);
         ASSERT_EQ(a3.pixel_y, a3.pos.y * 32 + 16);
+    } TEST_END();
+
+    TEST_CASE("12.5 Multi-Ant Food Harvesting & Perimeter Bite") {
+        SimulationEngine sim;
+        sim.init_test_world(60, 60, 100, 60000);
+
+        // Place a 2x2 cracker food schedule at (20, 20) with 8 bites
+        ActiveFoodSchedule afs{};
+        afs.x = 20;
+        afs.y = 20;
+        afs.active = true;
+        afs.remaining_bites = 8;
+        afs.footprint = { {20, 20}, {21, 20}, {20, 21}, {21, 21} };
+        afs.variants.push_back({301, 8});
+        afs.current_tile_id = 301;
+        sim.grid_mut().food_schedules_mut().push_back(afs);
+        for (const auto& c : afs.footprint) {
+            auto& cell = sim.grid_mut().get_cell_mut(c);
+            cell.is_food = true;
+            cell.interactive_id = 301;
+        }
+
+        // Spawn 4 workers at (15, 20), (15, 21), (16, 20), (16, 21)
+        uint32_t w1 = sim.spawn_unit(0, AntType::Worker, TileCoord{15, 20});
+        uint32_t w2 = sim.spawn_unit(0, AntType::Worker, TileCoord{15, 21});
+        uint32_t w3 = sim.spawn_unit(0, AntType::Worker, TileCoord{16, 20});
+        uint32_t w4 = sim.spawn_unit(0, AntType::Worker, TileCoord{16, 21});
+
+        HUD hud;
+        hud.init(0);
+        hud.select_ant(w1);
+        hud.set_selected_ant_ids({w1, w2, w3, w4});
+
+        // Right-click on the food clump (pixel 20 * 32 + 16, 20 * 32 + 16)
+        hud.dispatch_smart_special_ability(20 * 32 + 16, 20 * 32 + 16, sim);
+
+        // Advance simulation for 50 ticks
+        int harvest_sound_count = 0;
+        for (int t = 0; t < 50; ++t) {
+            sim.tick();
+            if (sim.has_audio_event(SoundID::FoodHarvest)) {
+                harvest_sound_count++;
+            }
+        }
+
+        // All 4 ants successfully reached food and gathered food without freezing
+        const auto& u1 = sim.get_unit(w1);
+        const auto& u2 = sim.get_unit(w2);
+        const auto& u3 = sim.get_unit(w3);
+        const auto& u4 = sim.get_unit(w4);
+        ASSERT_TRUE(u1.is_holding() || u1.state == UnitState::EnteringBase);
+        ASSERT_TRUE(u2.is_holding() || u2.state == UnitState::EnteringBase);
+        ASSERT_TRUE(u3.is_holding() || u3.state == UnitState::EnteringBase);
+        ASSERT_TRUE(u4.is_holding() || u4.state == UnitState::EnteringBase);
+        ASSERT_TRUE(harvest_sound_count >= 4);
+    } TEST_END();
+
+    TEST_CASE("12.6 Swarm Movement Non-Bouncing") {
+        SimulationEngine sim;
+        sim.init_test_world(60, 60, 100, 60000);
+
+        // Spawn 8 worker ants closely grouped
+        std::vector<uint32_t> swarm;
+        for (int dy = 0; dy < 3; ++dy) {
+            for (int dx = 0; dx < 3; ++dx) {
+                if (dx == 1 && dy == 1) continue;
+                swarm.push_back(sim.spawn_unit(0, AntType::Worker, TileCoord{10 + dx, 10 + dy}));
+            }
+        }
+        ASSERT_EQ(swarm.size(), 8u);
+
+        HUD hud;
+        hud.init(0);
+        hud.select_ant(swarm[0]);
+        hud.set_selected_ant_ids(swarm);
+
+        // Move group to (20, 20)
+        hud.dispatch_move_order(20, 20, sim);
+
+        // Step 120 ticks: moving ants should never bounce or wipe waypoints
+        bool had_bounce = false;
+        for (int t = 0; t < 120; ++t) {
+            sim.tick();
+            if (sim.has_audio_event(SoundID::FlingThumpA)) {
+                had_bounce = true;
+            }
+        }
+
+        // Must NOT have bounced moving ants
+        ASSERT_FALSE(had_bounce);
+
+        // All ants must have made substantial progress toward (20, 20)
+        for (uint32_t aid : swarm) {
+            const auto& ant = sim.get_unit(aid);
+            int32_t d = ant.pos.chebyshev_dist(TileCoord{20, 20});
+            ASSERT_TRUE(d <= 3);
+        }
+    } TEST_END();
+
+    TEST_CASE("12.7 Attack Cooldown & Adjacency Requirement") {
+        SimulationEngine sim;
+        sim.init_test_world(60, 60, 100, 60000);
+
+        // Spawn Combat Ant at (10, 10) on Team 0
+        uint32_t combat_id = sim.spawn_unit(0, AntType::Combat, TileCoord{10, 10});
+        // Spawn Enemy Worker at (15, 10) on Team 1 (Chebyshev dist = 5)
+        uint32_t target_id = sim.spawn_unit(1, AntType::Worker, TileCoord{15, 10});
+
+        auto& attacker = sim.get_unit(combat_id);
+        auto& target = sim.get_unit(target_id);
+        int32_t init_hp = target.hp;
+
+        // Ordering attack from distance (dist = 5)
+        AntOrder atk_order{};
+        atk_order.ant_id = combat_id;
+        atk_order.type = OrderType::Attack;
+        atk_order.target_x = 15;
+        atk_order.target_y = 10;
+        atk_order.target_entity_id = static_cast<int32_t>(target_id);
+        sim.issue_order(atk_order);
+
+        // Target must NOT have taken damage immediately (not adjacent)
+        ASSERT_EQ(target.hp, init_hp);
+        ASSERT_EQ(attacker.attack_target_id, target_id);
+
+        // Step simulation while approaching: target takes no damage until attacker reaches adjacency
+        while (target.hp == init_hp) {
+            ASSERT_TRUE(attacker.pos.chebyshev_dist(target.pos) >= 1);
+            sim.tick();
+        }
+
+        // On adjacency tick: attack struck! Target took 2 HP punch damage
+        ASSERT_EQ(target.hp, init_hp - 2);
+        // Attacker must have entered Attacking state and set attack_cooldown_ticks == 12
+        ASSERT_TRUE(attacker.attack_cooldown_ticks > 0);
+
+        // On immediately subsequent tick, cannot attack again (cooldown in effect)
+        uint16_t prev_cooldown = attacker.attack_cooldown_ticks;
+        sim.tick();
+        ASSERT_EQ(target.hp, init_hp - 2); // No extra attack spammed
+        ASSERT_EQ(attacker.attack_cooldown_ticks, prev_cooldown - 1);
+    } TEST_END();
+
+    TEST_CASE("12.8 Bomber Ant Plant Bomb On Gravel") {
+        SimulationEngine sim;
+        sim.init_test_world(60, 60, 100, 60000);
+
+        // Set gravel surface at (20, 20) with walkable terrain
+        auto& cell = sim.grid_mut().get_cell_mut({20, 20});
+        cell.surface_type = SurfaceType::Gravel;
+        cell.terrain_type = TERRAIN_WALKABLE;
+        cell.flags |= (FLAG_CAN_PLACE_BOMB | FLAG_CAN_PLACE_FIRE);
+
+        ASSERT_TRUE(cell.can_place_bomb());
+
+        // Spawn bomber ant at (20, 23) (3 tiles south)
+        uint32_t bomber_id = sim.spawn_unit(0, AntType::Bomber, TileCoord{20, 23});
+
+        HUD hud;
+        hud.init(0);
+        hud.select_ant(bomber_id);
+
+        // Right-click gravel tile (20, 20)
+        hud.dispatch_smart_special_ability(20 * 32 + 16, 20 * 32 + 16, sim);
+
+        // Step simulation for 50 ticks until bomber approaches cardinal neighbor (20, 21) and drops bomb
+        for (int t = 0; t < 50; ++t) {
+            sim.tick();
+            if (sim.has_bomb_at({20, 20})) break;
+        }
+
+        // Bomb successfully planted on gravel tile!
+        ASSERT_TRUE(sim.has_bomb_at(TileCoord{20, 20}));
+        ASSERT_TRUE(sim.has_audio_event(SoundID::BombPick));
+    } TEST_END();
+
+    TEST_CASE("12.9 Chat Scrolling & Initial Message Wrapping") {
+        HUD hud;
+        hud.init(0);
+
+        // Verify initial news message was wrapped to <= 21 chars per line
+        const auto& log = hud.get_chat_log();
+        ASSERT_TRUE(!log.empty());
+        for (const auto& line : log) {
+            ASSERT_TRUE(line.length() <= 21);
+        }
+
+        // Add 10 chat messages
+        for (int i = 0; i < 10; ++i) {
+            hud.add_chat_entry("Player", "Message number " + std::to_string(i));
+        }
+
+        int32_t initial_lines = static_cast<int32_t>(hud.get_chat_log().size());
+        ASSERT_TRUE(initial_lines >= 12);
+        ASSERT_EQ(hud.get_chat_scroll_offset(), 0);
+
+        // Scroll up
+        hud.scroll_chat_up(2);
+        ASSERT_EQ(hud.get_chat_scroll_offset(), 2);
+
+        // Scroll up past max
+        hud.scroll_chat_up(100);
+        ASSERT_EQ(hud.get_chat_scroll_offset(), initial_lines - 6);
+
+        // Scroll down
+        hud.scroll_chat_down(3);
+        ASSERT_EQ(hud.get_chat_scroll_offset(), initial_lines - 9);
+
+        // Mouse wheel scrolling over lower chat box (x: 500, y: 350)
+        hud.handle_mouse_wheel(500, 350, 1); // Wheel up
+        ASSERT_EQ(hud.get_chat_scroll_offset(), initial_lines - 8);
+
+        hud.handle_mouse_wheel(500, 350, -1); // Wheel down
+        ASSERT_EQ(hud.get_chat_scroll_offset(), initial_lines - 9);
+
+        // Mouse wheel outside chat box does not scroll
+        hud.handle_mouse_wheel(100, 100, 1);
+        ASSERT_EQ(hud.get_chat_scroll_offset(), initial_lines - 9);
+
+        // Sending a chat message resets scroll offset to 0
+        hud.set_chat_input("Hello Colony!");
+        hud.send_chat_message();
+        ASSERT_EQ(hud.get_chat_scroll_offset(), 0);
+    } TEST_END();
+
+    TEST_CASE("12.10 Bomb Size & Team Color Rendering") {
+        // Authentic Table 4 animations (129-132) define bombs as 12x24 pixels centered at (sx + 10, sy + 4)
+        constexpr int32_t kTileDim = 32;
+        constexpr int32_t BOMB_WIDTH = 12;
+        constexpr int32_t BOMB_HEIGHT = 24;
+        constexpr int32_t OFFSET_X = 10;
+        constexpr int32_t OFFSET_Y = 4;
+
+        int32_t sx = 100;
+        int32_t sy = 200;
+        SDL_Rect bomb_dst = { sx + OFFSET_X, sy + OFFSET_Y, BOMB_WIDTH, BOMB_HEIGHT };
+
+        ASSERT_EQ(bomb_dst.w, 12);
+        ASSERT_EQ(bomb_dst.h, 24);
+        ASSERT_EQ(bomb_dst.x, 110);
+        ASSERT_EQ(bomb_dst.y, 204);
+        ASSERT_EQ(OFFSET_X * 2 + BOMB_WIDTH, kTileDim); // Perfectly centered horizontally: (32 - 12) / 2 = 10
+        ASSERT_EQ(OFFSET_Y + BOMB_HEIGHT + 4, kTileDim);
+
+        // Verify team color mapping: 0=Green, 1=Red, 2=Blue, 3=Black
+        static const char* bomb_names[4] = { "1bombgrn.bmp", "1bombred.bmp", "1bombblu.bmp", "1bombblk.bmp" };
+        ASSERT_TRUE(std::string(bomb_names[0]) == "1bombgrn.bmp");
+        ASSERT_TRUE(std::string(bomb_names[1]) == "1bombred.bmp");
+        ASSERT_TRUE(std::string(bomb_names[2]) == "1bombblu.bmp");
+        ASSERT_TRUE(std::string(bomb_names[3]) == "1bombblk.bmp");
+    } TEST_END();
+
+    TEST_CASE("12.11 Friendly Bomb Autonomous Pathfinding Avoidance") {
+        SimulationEngine sim;
+        sim.init_test_world(60, 60, 100, 60000);
+
+        // Place friendly bomb at (20, 20) owned by Team 0
+        sim.grid_mut().place_bomb(20, 20, 0);
+        ASSERT_TRUE(sim.has_bomb_at(TileCoord{20, 20}));
+
+        // Spawn Team 0 unit at (20, 18)
+        uint32_t friendly_id = sim.spawn_unit(0, AntType::Bomber, TileCoord{20, 18});
+
+        // Issue move order across bomb to (20, 22)
+        sim.issue_move_order(friendly_id, TileCoord{20, 22});
+
+        const auto& unit = sim.get_unit(friendly_id);
+        // Verify pathfinder routed around (20, 20)
+        for (const auto& wp : unit.waypoints) {
+            ASSERT_FALSE((wp == TileCoord{20, 20}));
+        }
+
+        // Tick simulation until reached destination
+        for (int t = 0; t < 100; ++t) {
+            sim.tick();
+            ASSERT_FALSE((sim.get_unit(friendly_id).pos == TileCoord{20, 20}));
+            if (sim.get_unit(friendly_id).pos == TileCoord{20, 22}) {
+                break;
+            }
+        }
+        ASSERT_TRUE((sim.get_unit(friendly_id).pos == TileCoord{20, 22}));
+        ASSERT_TRUE(sim.has_bomb_at(TileCoord{20, 20})); // Friendly bomb remains unexploded
+
+        // Ordering move directly onto friendly bomb redirects destination to nearest passable neighbor
+        sim.issue_move_order(friendly_id, TileCoord{20, 20});
+        ASSERT_FALSE((sim.get_unit(friendly_id).final_dest == TileCoord{20, 20}));
+        for (int t = 0; t < 50; ++t) {
+            sim.tick();
+            ASSERT_FALSE((sim.get_unit(friendly_id).pos == TileCoord{20, 20}));
+        }
+        ASSERT_TRUE(sim.has_bomb_at(TileCoord{20, 20}));
+    } TEST_END();
+
+    TEST_CASE("12.12 Enemy Bomb Proximity Detonation & 4-Space Knockback") {
+        SimulationEngine sim;
+        sim.init_test_world(60, 60, 100, 60000);
+
+        // Place Team 0 bomb at (20, 20)
+        sim.grid_mut().place_bomb(20, 20, 0);
+
+        // Spawn Team 1 enemy ant at (18, 20)
+        uint32_t enemy_id = sim.spawn_unit(1, AntType::Combat, TileCoord{18, 20});
+        auto& enemy = sim.get_unit(enemy_id);
+        enemy.hp = 5;
+        enemy.max_hp = 5;
+
+        // Move to (22, 20) through (20, 20)
+        sim.issue_move_order(enemy_id, TileCoord{22, 20});
+
+        bool detonated = false;
+        for (int t = 0; t < 100; ++t) {
+            sim.tick();
+            if (!sim.has_bomb_at(TileCoord{20, 20})) {
+                detonated = true;
+                break;
+            }
+        }
+        ASSERT_TRUE(detonated);
+        ASSERT_TRUE(sim.has_audio_event(SoundID::BombDetonate));
+
+        // Victim took 2 HP damage
+        ASSERT_EQ(enemy.hp, 3);
+        ASSERT_TRUE(enemy.state == UnitState::Knockback);
+
+        // Step simulation through 10-tick ballistic knockback flight
+        for (int t = 0; t < 15; ++t) {
+            sim.tick();
+            if (enemy.state != UnitState::Knockback) break;
+        }
+
+        // Enemy was moving East, so impulse propelled it 4 spaces West to (16, 20)
+        ASSERT_EQ(enemy.pos.x, 16);
+        ASSERT_EQ(enemy.pos.y, 20);
+    } TEST_END();
+
+    TEST_CASE("12.13 Swimmer Bridge Digging Animation & Multi-Stage Progression") {
+        SimulationEngine sim;
+        sim.init_test_world(60, 60, 100, 60000);
+
+        // Water tile at (20, 20)
+        sim.grid_mut().set_terrain(20, 20, TERRAIN_WATER);
+
+        // Swimmer ant at adjacent tile (19, 20)
+        uint32_t swimmer_id = sim.spawn_unit(0, AntType::Swimmer, TileCoord{19, 20});
+        auto& swimmer = sim.get_unit(swimmer_id);
+
+        // Issue BuildBridge order to (20, 20)
+        AntOrder order{};
+        order.ant_id = swimmer_id;
+        order.type = OrderType::BuildBridge;
+        order.target_x = 20;
+        order.target_y = 20;
+        sim.issue_order(order);
+
+        // Unit enters BuildingBridge state, faces East towards bridge, snapped to center of tile
+        ASSERT_EQ(swimmer.state, UnitState::BuildingBridge);
+        ASSERT_EQ(swimmer.facing, Direction::East);
+        ASSERT_EQ(swimmer.pixel_x, 19 * 32 + 16);
+        ASSERT_EQ(swimmer.pixel_y, 20 * 32 + 16);
+        ASSERT_EQ(sim.get_bridge_stage(TileCoord{20, 20}), 1);
+        ASSERT_TRUE(sim.has_audio_event(SoundID::ShovelWater));
+
+        // Advance simulation: each digging cycle is 8 ticks, with shovel impact frame advancing stage
+        // By tick 30 (~1.5 seconds), all 4 stages are complete and ant returns to Idle
+        for (int t = 0; t < 30; ++t) {
+            sim.tick();
+        }
+
+        // Bridge is now fully constructed (stage 4)
+        ASSERT_TRUE(sim.has_bridge_at(TileCoord{20, 20}));
+        ASSERT_EQ(sim.get_bridge_stage(TileCoord{20, 20}), 4);
+        ASSERT_TRUE(sim.grid().get_cell(TileCoord{20, 20}).has_completed_bridge());
+
+        // Swimmer completed digging and transitioned to Idle, staying centered
+        ASSERT_EQ(swimmer.state, UnitState::Idle);
+        ASSERT_EQ(swimmer.pixel_x, 19 * 32 + 16);
+        ASSERT_EQ(swimmer.pixel_y, 20 * 32 + 16);
+
+        // Non-swimmer unit can now traverse the completed bridge
+        ASSERT_TRUE(sim.can_unit_traverse(AntType::Worker, TileCoord{20, 20}));
+    } TEST_END();
+
+    TEST_CASE("12.14 Authentic Bridge Sprite Geometry & Offsets") {
+        // Verify authentic dimensions and offsets matching Table 4 animations 34..38
+        // Stage 1 (34): bridge1.bmp 16x16 at dx=8, dy=9
+        // Stage 2 (35): bridge2.bmp 19x17 at dx=7, dy=7
+        // Stage 3 (36): bridge3.bmp 27x24 at dx=3, dy=5
+        // Stage 4 (37): bridge4a.bmp 32x32 at dx=0, dy=0
+        // Tile 38 (38): bridge4b.bmp 29x30 at dx=2, dy=1
+        struct ExpectedBridge {
+            uint16_t tile_id;
+            const char* name;
+            int dx, dy, w, h;
+        };
+        const ExpectedBridge expected[5] = {
+            { TILE_BRIDGE1,  "bridge1.bmp",  8, 9, 16, 16 },
+            { TILE_BRIDGE2,  "bridge2.bmp",  7, 7, 19, 17 },
+            { TILE_BRIDGE3,  "bridge3.bmp",  3, 5, 27, 24 },
+            { TILE_BRIDGE4,  "bridge4a.bmp", 0, 0, 32, 32 },
+            { TILE_BRIDGE4B, "bridge4b.bmp", 2, 1, 29, 30 }
+        };
+
+        for (const auto& b : expected) {
+            int dx = 0, dy = 0, bw = 32, bh = 32;
+            switch (b.tile_id) {
+                case TILE_BRIDGE1:  dx = 8; dy = 9; bw = 16; bh = 16; break;
+                case TILE_BRIDGE2:  dx = 7; dy = 7; bw = 19; bh = 17; break;
+                case TILE_BRIDGE3:  dx = 3; dy = 5; bw = 27; bh = 24; break;
+                case TILE_BRIDGE4:  dx = 0; dy = 0; bw = 32; bh = 32; break;
+                case TILE_BRIDGE4B: dx = 2; dy = 1; bw = 29; bh = 30; break;
+                default: break;
+            }
+            ASSERT_EQ(dx, b.dx);
+            ASSERT_EQ(dy, b.dy);
+            ASSERT_EQ(bw, b.w);
+            ASSERT_EQ(bh, b.h);
+        }
+    } TEST_END();
+
+    TEST_CASE("12.15 Single Bomber Left-Click and Right-Click Defuse Friendly Bomb") {
+        SimulationEngine sim;
+        sim.init_test_world(60, 60, 100, 60000);
+        ViewportCamera cam;
+        cam.world_x = 20 * 32 - 100;
+        cam.world_y = 20 * 32 - 100;
+        HUD hud;
+        hud.init(0);
+
+        // Place friendly bomb at (20, 20)
+        sim.grid_mut().place_bomb(20, 20, 0);
+        ASSERT_TRUE(sim.has_bomb_at(TileCoord{20, 20}));
+
+        // Spawn friendly bomber at (20, 19)
+        uint32_t b_id = sim.spawn_unit(0, AntType::Bomber, TileCoord{20, 19});
+
+        // 1. Single select bomber without shift
+        hud.select_ant(b_id, false);
+        ASSERT_EQ(hud.get_selected_ant_id(), b_id);
+        ASSERT_FALSE(hud.is_multi_select());
+
+        // Screen coords for (20, 20)
+        int32_t screen_x = HUD::PLAYFIELD_X + (20 * 32 + 16) - cam.world_x;
+        int32_t screen_y = HUD::PLAYFIELD_Y + (20 * 32 + 16) - cam.world_y;
+
+        // Left-click on friendly bomb defuses bomb
+        hud.handle_mouse_down(screen_x, screen_y, 1, sim, cam, 0);
+        hud.handle_mouse_up(screen_x, screen_y, 1, sim, cam, 0);
+
+        // Check defusal occurred
+        for (int t = 0; t < 20; ++t) {
+            sim.tick();
+            if (!sim.has_bomb_at(TileCoord{20, 20})) break;
+        }
+        ASSERT_FALSE(sim.has_bomb_at(TileCoord{20, 20}));
+
+        // 2. Right-click also defuses
+        sim.grid_mut().place_bomb(20, 20, 0);
+        ASSERT_TRUE(sim.has_bomb_at(TileCoord{20, 20}));
+
+        hud.handle_mouse_down(screen_x, screen_y, 3, sim, cam, 0);
+        for (int t = 0; t < 20; ++t) {
+            sim.tick();
+            if (!sim.has_bomb_at(TileCoord{20, 20})) break;
+        }
+        ASSERT_FALSE(sim.has_bomb_at(TileCoord{20, 20}));
+    } TEST_END();
+
+    TEST_CASE("12.16 Non-Bomber Moves Directly Onto Friendly Bomb, Explodes & 4-Space Knockback") {
+        SimulationEngine sim;
+        sim.init_test_world(60, 60, 100, 60000);
+        ViewportCamera cam;
+        cam.world_x = 20 * 32 - 100;
+        cam.world_y = 20 * 32 - 100;
+        HUD hud;
+        hud.init(0);
+
+        // Place friendly bomb at (20, 20)
+        sim.grid_mut().place_bomb(20, 20, 0);
+
+        // Spawn friendly worker at (18, 20)
+        uint32_t worker_id = sim.spawn_unit(0, AntType::Worker, TileCoord{18, 20});
+        hud.select_ant(worker_id, false);
+
+        int32_t screen_x = HUD::PLAYFIELD_X + (20 * 32 + 16) - cam.world_x;
+        int32_t screen_y = HUD::PLAYFIELD_Y + (20 * 32 + 16) - cam.world_y;
+
+        // Left-click on friendly bomb: instructs worker to hit the bomb!
+        hud.handle_mouse_down(screen_x, screen_y, 1, sim, cam, 0);
+        hud.handle_mouse_up(screen_x, screen_y, 1, sim, cam, 0);
+
+        bool detonated = false;
+        for (int t = 0; t < 100; ++t) {
+            sim.tick();
+            if (!sim.has_bomb_at(TileCoord{20, 20})) {
+                detonated = true;
+                break;
+            }
+        }
+        ASSERT_TRUE(detonated);
+        ASSERT_TRUE(sim.has_audio_event(SoundID::BombDetonate));
+        auto& worker = sim.get_unit(worker_id);
+        ASSERT_EQ(worker.hp, 8); // 10 - 2 = 8 HP
+        ASSERT_TRUE(worker.state == UnitState::Knockback);
+
+        // Step through knockback flight
+        for (int t = 0; t < 15; ++t) {
+            sim.tick();
+            if (worker.state != UnitState::Knockback) break;
+        }
+
+        // Propelled 4 spaces West to (16, 20)
+        ASSERT_EQ(worker.pos.x, 16);
+        ASSERT_EQ(worker.pos.y, 20);
+    } TEST_END();
+
+    TEST_CASE("12.17 Shift-Selected Bomber and Multi-Selected Bomber Move Onto Bomb to Hit It") {
+        SimulationEngine sim;
+        sim.init_test_world(60, 60, 100, 60000);
+        ViewportCamera cam;
+        cam.world_x = 20 * 32 - 100;
+        cam.world_y = 20 * 32 - 100;
+        HUD hud;
+        hud.init(0);
+
+        // Case A: Shift-selected Bomber hits the bomb
+        sim.grid_mut().place_bomb(20, 20, 0);
+        uint32_t b1 = sim.spawn_unit(0, AntType::Bomber, TileCoord{18, 20});
+        // Select with shift modifier
+        hud.select_ant(b1, true); // shift-selected
+        ASSERT_TRUE(hud.is_multi_select());
+
+        int32_t screen_x = HUD::PLAYFIELD_X + (20 * 32 + 16) - cam.world_x;
+        int32_t screen_y = HUD::PLAYFIELD_Y + (20 * 32 + 16) - cam.world_y;
+
+        hud.handle_mouse_down(screen_x, screen_y, 1, sim, cam, 0);
+        hud.handle_mouse_up(screen_x, screen_y, 1, sim, cam, 0);
+
+        bool detonated = false;
+        for (int t = 0; t < 100; ++t) {
+            sim.tick();
+            if (!sim.has_bomb_at(TileCoord{20, 20})) {
+                detonated = true;
+                break;
+            }
+        }
+        ASSERT_TRUE(detonated);
+        ASSERT_EQ(sim.get_unit(b1).hp, 8);
+
+        // Case B: Multi-unit selection containing Bomber hits the bomb
+        sim.grid_mut().place_bomb(30, 30, 0);
+        uint32_t b2 = sim.spawn_unit(0, AntType::Bomber, TileCoord{28, 30});
+        uint32_t w2 = sim.spawn_unit(0, AntType::Worker, TileCoord{28, 31});
+        hud.set_selected_ant_ids({b2, w2});
+        ASSERT_TRUE(hud.is_multi_select());
+
+        cam.world_x = 30 * 32 - 100;
+        cam.world_y = 30 * 32 - 100;
+        int32_t screen_x2 = HUD::PLAYFIELD_X + (30 * 32 + 16) - cam.world_x;
+        int32_t screen_y2 = HUD::PLAYFIELD_Y + (30 * 32 + 16) - cam.world_y;
+
+        hud.handle_mouse_down(screen_x2, screen_y2, 3, sim, cam, 0); // Right click on bomb
+
+        bool detonated2 = false;
+        for (int t = 0; t < 100; ++t) {
+            sim.tick();
+            if (!sim.has_bomb_at(TileCoord{30, 30})) {
+                detonated2 = true;
+                break;
+            }
+        }
+        ASSERT_TRUE(detonated2);
+    } TEST_END();
+
+    TEST_CASE("12.18 Swimmer Ant Snorkel Animation Advances in Water") {
+        SimulationEngine sim;
+        sim.init_test_world(60, 60, 100, 60000);
+
+        // Place water tile at (20, 20)
+        sim.grid_mut().set_terrain(20, 20, TERRAIN_WATER);
+
+        uint32_t swimmer_id = sim.spawn_unit(0, AntType::Swimmer, TileCoord{20, 20});
+        auto& swimmer = sim.get_unit(swimmer_id);
+        ASSERT_EQ(swimmer.state, UnitState::Swimming);
+        ASSERT_TRUE(swimmer.in_water);
+
+        uint16_t initial_tick = swimmer.anim_tick;
+        uint16_t initial_subitem = swimmer.anim_subitem;
+
+        for (int t = 0; t < 10; ++t) {
+            sim.tick();
+        }
+
+        // Snorkel animation advances smoothly each tick (anim_tick and anim_subitem increment)
+        ASSERT_EQ(swimmer.anim_tick, initial_tick + 10);
+        ASSERT_EQ(swimmer.anim_subitem, initial_subitem + 10);
+    } TEST_END();
+
+    TEST_CASE("12.19 Single-Tile Bridge Diagonal Pathfinding Traversability") {
+        SimulationEngine sim;
+        sim.init_test_world(60, 60, 100, 60000);
+
+        // Build a water canal around a single bridge at (20, 20)
+        // Land at (19, 19) and (21, 21), water at (19, 20) and (20, 19)
+        sim.grid_mut().set_terrain(19, 20, TERRAIN_WATER);
+        sim.grid_mut().set_terrain(20, 19, TERRAIN_WATER);
+        sim.grid_mut().set_terrain(20, 21, TERRAIN_WATER);
+        sim.grid_mut().set_terrain(21, 20, TERRAIN_WATER);
+
+        // Single bridge completed at (20, 20)
+        sim.grid_mut().set_terrain(20, 20, TERRAIN_WATER);
+        for (int s = 0; s < 4; ++s) {
+            sim.grid_mut().advance_bridge(20, 20, 0);
+        }
+        ASSERT_TRUE(sim.grid().get_cell(20, 20).has_completed_bridge());
+
+        // Worker on land at (19, 19) pathfinding diagonally across the bridge to (21, 21)
+        uint32_t worker_id = sim.spawn_unit(0, AntType::Worker, TileCoord{19, 19});
+        sim.issue_move_order(worker_id, TileCoord{21, 21});
+
+        auto& worker = sim.get_unit(worker_id);
+        ASSERT_FALSE(worker.waypoints.empty());
+
+        // Step simulation until worker arrives at (21, 21)
+        for (int t = 0; t < 100; ++t) {
+            sim.tick();
+            if (worker.pos == TileCoord{21, 21}) break;
+        }
+        ASSERT_EQ(worker.pos.x, 21);
+        ASSERT_EQ(worker.pos.y, 21);
+    } TEST_END();
+
+    TEST_CASE("12.20 Swimmer Ant Bridge Demolition Multi-Stage Removal") {
+        SimulationEngine sim;
+        sim.init_test_world(60, 60, 100, 60000);
+
+        // Bridge at (20, 20)
+        sim.grid_mut().set_terrain(20, 20, TERRAIN_WATER);
+        for (int s = 0; s < 4; ++s) {
+            sim.grid_mut().advance_bridge(20, 20, 0);
+        }
+        ASSERT_TRUE(sim.grid().get_cell(20, 20).has_completed_bridge());
+        ASSERT_EQ(sim.get_bridge_stage(TileCoord{20, 20}), 4);
+
+        // Swimmer at (19, 20)
+        uint32_t swimmer_id = sim.spawn_unit(0, AntType::Swimmer, TileCoord{19, 20});
+
+        ViewportCamera cam;
+        cam.world_x = 20 * 32 - 100;
+        cam.world_y = 20 * 32 - 100;
+        HUD hud;
+        hud.init(0);
+        hud.select_ant(swimmer_id, false);
+
+        int32_t screen_x = HUD::PLAYFIELD_X + (20 * 32 + 16) - cam.world_x;
+        int32_t screen_y = HUD::PLAYFIELD_Y + (20 * 32 + 16) - cam.world_y;
+
+        // Right-click on existing bridge dispatches DemolishBridge
+        hud.handle_mouse_down(screen_x, screen_y, 3, sim, cam, 0);
+
+        // Step simulation while swimmer demolishes the bridge through stages 3, 2, 1 to 0 (water)
+        for (int t = 0; t < 150; ++t) {
+            sim.tick();
+            if (!sim.has_bridge_at(TileCoord{20, 20})) break;
+        }
+
+        // Bridge is completely demolished back to water
+        ASSERT_FALSE(sim.has_bridge_at(TileCoord{20, 20}));
+        ASSERT_FALSE(sim.grid().get_cell(20, 20).has_completed_bridge());
+        ASSERT_FALSE(sim.grid().get_cell(20, 20).has_partial_bridge());
+        ASSERT_TRUE(sim.grid().get_cell(20, 20).terrain_type == TERRAIN_WATER);
+
+        // Worker can no longer traverse (water is impassable for worker)
+        ASSERT_FALSE(sim.can_unit_traverse(AntType::Worker, TileCoord{20, 20}));
+    } TEST_END();
+
+    // ------------------------------------------------------------------------
+    // 12.21: Power-Up Arrival Timing & Transformation Lifecycle
+    // ------------------------------------------------------------------------
+    TEST_CASE("12.21 Power-Up Arrival Timing & Transformation Lifecycle") {
+        SimulationEngine sim;
+        sim.init_test_world(60, 60, 100, 60000);
+
+        // Place powerup at (13, 10) (Type 4 = Combat Ant)
+        sim.grid_mut().place_powerup(13, 10, 4);
+        ASSERT_TRUE(sim.grid().has_powerup_at(TileCoord{13, 10}));
+
+        // Worker ant at (10, 10)
+        uint32_t ant_id = sim.spawn_unit(0, AntType::Worker, TileCoord{10, 10});
+        auto& ant = sim.get_unit(ant_id);
+        ASSERT_EQ(ant.type, AntType::Worker);
+        ASSERT_FALSE(ant.is_transforming());
+
+        // Order worker to move to power-up tile (13, 10)
+        sim.issue_move_order(ant_id, TileCoord{13, 10});
+
+        // Step simulation ticks while walking towards (13, 10)
+        // When adjacent at (12, 10), it should NOT yet have triggered transformation
+        bool saw_adjacent_not_triggered = false;
+        while (ant.pos.x < 13) {
+            sim.tick();
+            if (ant.pos.x == 12) {
+                saw_adjacent_not_triggered = true;
+                ASSERT_FALSE(ant.is_transforming());
+                ASSERT_TRUE(sim.grid().has_powerup_at(TileCoord{13, 10}));
+            }
+        }
+        ASSERT_TRUE(saw_adjacent_not_triggered);
+
+        // Advance until arriving at tile center of (13, 10)
+        while (ant.is_alive() && !ant.is_transforming() && !ant.waypoints.empty()) {
+            sim.tick();
+        }
+
+        // Unit has arrived and started transforming
+        ASSERT_EQ(ant.pos, (TileCoord{13, 10}));
+        ASSERT_TRUE(ant.is_transforming());
+        ASSERT_FALSE(sim.grid().has_powerup_at(TileCoord{13, 10}));
+
+        // In world snapshot, unit is transforming and on_powerup is true
+        const auto& ws = sim.get_world_state();
+        const AntSnapshot* snap = nullptr;
+        for (const auto& a : ws.ants) {
+            if (a.id == ant_id) { snap = &a; break; }
+        }
+        ASSERT_TRUE(snap != nullptr);
+        ASSERT_TRUE(snap->is_transforming);
+        ASSERT_TRUE(snap->on_powerup);
+
+        // Step 12 ticks to complete transformation
+        for (int t = 0; t < 12; ++t) {
+            sim.tick();
+        }
+
+        // Emerges as Combat ant
+        ASSERT_FALSE(ant.is_transforming());
+        ASSERT_EQ(ant.type, AntType::Combat);
+        ASSERT_EQ(ant.max_hp, 12);
+    } TEST_END();
+
+    // ------------------------------------------------------------------------
+    // 12.22: Power-Up Transformation Interruption via Impossible Order
+    // ------------------------------------------------------------------------
+    TEST_CASE("12.22 Power-Up Transformation Interruption & Standing on Power-Up") {
+        SimulationEngine sim;
+        sim.init_test_world(60, 60, 100, 60000);
+
+        // Place powerup at (10, 10) (Type 4 = Combat)
+        sim.grid_mut().place_powerup(10, 10, 4);
+
+        // Set tile (10, 11) to water (impassable for non-swimmer)
+        sim.grid_mut().set_terrain(10, 11, TERRAIN_WATER);
+
+        // Worker ant at (10, 10)
+        uint32_t ant_id = sim.spawn_unit(0, AntType::Worker, TileCoord{10, 10});
+        auto& ant = sim.get_unit(ant_id);
+
+        // Step 1 tick to trigger power-up pickup on tile center
+        sim.tick();
+        ASSERT_TRUE(ant.is_transforming());
+        ASSERT_FALSE(sim.grid().has_powerup_at(TileCoord{10, 10}));
+
+        // Issue an impossible move instruction: move into water tile (10, 11)
+        sim.issue_move_order(ant_id, TileCoord{10, 11});
+
+        // Interruption should take effect immediately:
+        // 1. Transformation halted
+        ASSERT_FALSE(ant.is_transforming());
+        // 2. Reverts to previous type (Worker)
+        ASSERT_EQ(ant.type, AntType::Worker);
+        // 3. Power-up remains on the ground at (10, 10)
+        ASSERT_TRUE(sim.grid().has_powerup_at(TileCoord{10, 10}));
+        // 4. Stands on top of power-up and flagged interrupted
+        ASSERT_TRUE(ant.on_powerup);
+        ASSERT_TRUE(ant.transformation_interrupted);
+
+        // In subsequent ticks, standing on top of power-up does NOT re-trigger transformation
+        for (int t = 0; t < 20; ++t) {
+            sim.tick();
+            ASSERT_FALSE(ant.is_transforming());
+            ASSERT_TRUE(ant.on_powerup);
+            ASSERT_TRUE(sim.grid().has_powerup_at(TileCoord{10, 10}));
+        }
+
+        // Cancel order / Stop order also safely keeps unit on power-up
+        AntOrder cancel_order;
+        cancel_order.ant_id = ant_id;
+        cancel_order.type = OrderType::Cancel;
+        sim.issue_order(cancel_order);
+        ASSERT_FALSE(ant.is_transforming());
+        ASSERT_TRUE(ant.on_powerup);
+    } TEST_END();
+
+    // ------------------------------------------------------------------------
+    // 12.23: Unattackability While Standing on Power-Up
+    // ------------------------------------------------------------------------
+    TEST_CASE("12.23 Unattackability While Standing on Power-Up") {
+        SimulationEngine sim;
+        sim.init_test_world(60, 60, 100, 60000);
+
+        // Place powerup at (10, 10)
+        sim.grid_mut().place_powerup(10, 10, 4);
+
+        // Friendly worker at (10, 10), trigger and interrupt
+        uint32_t friendly_id = sim.spawn_unit(0, AntType::Worker, TileCoord{10, 10});
+        sim.tick();
+        sim.interrupt_transformation(friendly_id);
+
+        auto& friendly = sim.get_unit(friendly_id);
+        ASSERT_TRUE(friendly.on_powerup);
+        uint16_t initial_hp = friendly.hp;
+
+        // Enemy Combat ant at (11, 10) (adjacent)
+        uint32_t enemy_id = sim.spawn_unit(1, AntType::Combat, TileCoord{11, 10});
+        auto& enemy = sim.get_unit(enemy_id);
+
+        // 1. Combat AI should NOT target friendly unit on powerup
+        CombatAIController controller(enemy);
+        ASSERT_FALSE(controller.is_valid_target(friendly, enemy, sim.stats_manager()));
+
+        // 2. Direct melee attack attempt deals 0 damage
+        sim.execute_melee_attack(enemy_id, friendly_id);
+        ASSERT_EQ(friendly.hp, initial_hp);
+
+        // 3. HUD attack order rejects attacking an enemy on a powerup
+        HUD hud;
+        hud.init(1); // Player 1 (enemy team)
+        hud.select_ant(enemy_id, false);
+        hud.dispatch_attack_order(friendly_id, sim);
+
+        // Enemy should NOT have attack order targeting friendly_id
+        ASSERT_NE(enemy.attack_target_id, friendly_id);
+    } TEST_END();
+
+    // ------------------------------------------------------------------------
+    // 12.24: Swimmer Bridge Protection During Digging and Demolishing
+    // ------------------------------------------------------------------------
+    TEST_CASE("12.24 Swimmer Bridge Protection During Digging and Demolishing") {
+        SimulationEngine sim;
+        sim.init_test_world(60, 60, 100, 60000);
+        sim.grid_mut().set_terrain(20, 20, TERRAIN_WATER);
+
+        // Swimmer at (19, 20)
+        uint32_t swimmer_id = sim.spawn_unit(0, AntType::Swimmer, TileCoord{19, 20});
+        auto& swimmer = sim.get_unit(swimmer_id);
+
+        // Start bridge building step towards (20, 20)
+        ASSERT_TRUE(sim.build_bridge_step(swimmer_id, TileCoord{20, 20}));
+        ASSERT_EQ(swimmer.state, UnitState::BuildingBridge);
+
+        // Try to interrupt swimmer with move order
+        sim.issue_move_order(swimmer_id, TileCoord{18, 20});
+        // State remains BuildingBridge (cannot be interrupted)
+        ASSERT_EQ(swimmer.state, UnitState::BuildingBridge);
+
+        // Try to interrupt via generic order
+        AntOrder move_order;
+        move_order.ant_id = swimmer_id;
+        move_order.type = OrderType::Move;
+        move_order.target_x = 18;
+        move_order.target_y = 20;
+        sim.issue_order(move_order);
+        ASSERT_EQ(swimmer.state, UnitState::BuildingBridge);
+
+        // Step simulation until bridge building completes
+        for (int t = 0; t < 50; ++t) {
+            sim.tick();
+            if (swimmer.state != UnitState::BuildingBridge) break;
+        }
+        ASSERT_NE(swimmer.state, UnitState::BuildingBridge);
+        ASSERT_TRUE(sim.grid().get_cell(20, 20).has_completed_bridge());
+
+        // Start demolish step
+        ASSERT_TRUE(sim.demolish_bridge_step(swimmer_id, TileCoord{20, 20}));
+        ASSERT_EQ(swimmer.state, UnitState::DemolishingBridge);
+
+        // Try to interrupt demolish with move order
+        sim.issue_move_order(swimmer_id, TileCoord{18, 20});
+        ASSERT_EQ(swimmer.state, UnitState::DemolishingBridge);
+
+        // Step simulation until demolish action finishes
+        for (int t = 0; t < 50; ++t) {
+            sim.tick();
+            if (swimmer.state != UnitState::DemolishingBridge) break;
+        }
+        ASSERT_NE(swimmer.state, UnitState::DemolishingBridge);
+        ASSERT_TRUE(sim.grid().get_cell(20, 20).terrain_type == TERRAIN_WATER);
+    } TEST_END();
+
+    // ------------------------------------------------------------------------
+    // 12.25: Bridge Locomotion Speed Matches Mud Speed
+    // ------------------------------------------------------------------------
+    TEST_CASE("12.25 Bridge Locomotion Speed Matches Mud Speed (~0.65x)") {
+        SimulationEngine sim;
+        sim.init_test_world(60, 60, 100, 60000);
+
+        // Mud corridor on row 12 (rows 11 to 13)
+        for (int y = 11; y <= 13; ++y) {
+            for (int x = 10; x <= 16; ++x) {
+                sim.grid_mut().get_cell_mut(TileCoord{x, y}).surface_type = SurfaceType::Mud;
+            }
+        }
+
+        // Row 14: 6 tiles of Completed Bridge (10, 14) to (16, 14)
+        for (int x = 10; x <= 16; ++x) {
+            sim.grid_mut().set_terrain(x, 14, TERRAIN_WATER);
+            uint32_t ux = static_cast<uint32_t>(x);
+            for (int s = 0; s < 4; ++s) {
+                sim.grid_mut().advance_bridge(ux, 14, 0);
+            }
+            ASSERT_TRUE(sim.grid().get_cell(ux, 14).has_completed_bridge());
+        }
+
+        // Verify pathfinder step cost for bridge matches mud (1.5x)
+        auto path_dirt = PathFinder::find_path(sim.grid(), TileCoord{10, 10}, TileCoord{15, 10}, false, false);
+        auto path_bridge = PathFinder::find_path(sim.grid(), TileCoord{10, 14}, TileCoord{15, 14}, false, false);
+        ASSERT_FALSE(path_bridge.empty());
+        ASSERT_EQ(path_dirt.size(), path_bridge.size());
+
+        // Spawn workers
+        uint32_t w_dirt = sim.spawn_unit(0, AntType::Worker, TileCoord{10, 10});
+        uint32_t w_mud = sim.spawn_unit(0, AntType::Worker, TileCoord{10, 12});
+        uint32_t w_bridge = sim.spawn_unit(0, AntType::Worker, TileCoord{10, 14});
+
+        sim.issue_move_order(w_dirt, TileCoord{15, 10});
+        sim.issue_move_order(w_mud, TileCoord{15, 12});
+        sim.issue_move_order(w_bridge, TileCoord{15, 14});
+
+        int ticks_dirt = 0;
+        int ticks_mud = 0;
+        int ticks_bridge = 0;
+
+        for (int t = 1; t <= 300; ++t) {
+            sim.tick();
+            if (ticks_dirt == 0 && sim.get_unit(w_dirt).pos == TileCoord{15, 10} && sim.get_unit(w_dirt).state != UnitState::Walking) {
+                ticks_dirt = t;
+            }
+            if (ticks_mud == 0 && sim.get_unit(w_mud).pos == TileCoord{15, 12} && sim.get_unit(w_mud).state != UnitState::Walking) {
+                ticks_mud = t;
+            }
+            if (ticks_bridge == 0 && sim.get_unit(w_bridge).pos == TileCoord{15, 14} && sim.get_unit(w_bridge).state != UnitState::Walking) {
+                ticks_bridge = t;
+            }
+            if (ticks_dirt > 0 && ticks_mud > 0 && ticks_bridge > 0) break;
+        }
+
+        // Both Mud and Bridge take significantly more ticks than normal dirt
+        ASSERT_TRUE(ticks_dirt > 0);
+        ASSERT_TRUE(ticks_mud > ticks_dirt);
+        ASSERT_TRUE(ticks_bridge > ticks_dirt);
+
+        // Mud and Bridge tick times match exactly
+        ASSERT_EQ(ticks_bridge, ticks_mud);
+    } TEST_END();
+
+    // ------------------------------------------------------------------------
+    // 12.26: Swimmers Immune From Being Attacked Underwater
+    // ------------------------------------------------------------------------
+    TEST_CASE("12.26 Swimmers Immune From Being Attacked Underwater (Even by Other Swimmers)") {
+        SimulationEngine sim;
+        sim.init_test_world(60, 60, 100, 60000);
+
+        // Water pond around (20, 20)
+        for (int y = 19; y <= 21; ++y) {
+            for (int x = 20; x <= 22; ++x) {
+                sim.grid_mut().set_terrain(x, y, TERRAIN_WATER);
+            }
+        }
+
+        // Friendly swimmer in water at (20, 20)
+        uint32_t friendly_id = sim.spawn_unit(0, AntType::Swimmer, TileCoord{20, 20});
+        auto& friendly = sim.get_unit(friendly_id);
+        sim.tick();
+        ASSERT_TRUE(friendly.in_water);
+        uint16_t initial_hp = friendly.hp;
+
+        // Enemy swimmer in water at (21, 20) (adjacent underwater)
+        uint32_t enemy_swimmer_id = sim.spawn_unit(1, AntType::Swimmer, TileCoord{21, 20});
+        auto& enemy_swimmer = sim.get_unit(enemy_swimmer_id);
+        sim.tick();
+        ASSERT_TRUE(enemy_swimmer.in_water);
+
+        // Enemy Combat ant on land at (19, 20) (adjacent on bank)
+        uint32_t enemy_combat_id = sim.spawn_unit(1, AntType::Combat, TileCoord{19, 20});
+        auto& enemy_combat = sim.get_unit(enemy_combat_id);
+        ASSERT_FALSE(enemy_combat.in_water);
+
+        // 1. Combat AI on land cannot target swimmer underwater
+        CombatAIController controller(enemy_combat);
+        ASSERT_FALSE(controller.is_valid_target(friendly, enemy_combat, sim.stats_manager()));
+
+        // 2. Direct melee attack from land combat ant deals 0 damage
+        sim.execute_melee_attack(enemy_combat_id, friendly_id);
+        ASSERT_EQ(friendly.hp, initial_hp);
+
+        // 3. Direct melee attack from enemy swimmer underwater deals 0 damage
+        sim.execute_melee_attack(enemy_swimmer_id, friendly_id);
+        ASSERT_EQ(friendly.hp, initial_hp);
+
+        // 4. Autonomous pursuit ignores underwater swimmer
+        enemy_swimmer.attack_target_id = friendly_id;
+        sim.tick();
+        ASSERT_EQ(enemy_swimmer.attack_target_id, 0u);
+
+        // 5. HUD attack order rejects attacking an enemy swimmer in water
+        HUD hud;
+        hud.init(1); // Player 1 (enemy team)
+        hud.select_ant(enemy_swimmer_id, false);
+        hud.dispatch_attack_order(friendly_id, sim);
+        ASSERT_NE(enemy_swimmer.attack_target_id, friendly_id);
+
+        // 6. When swimmer exits water onto land, it can be attacked normally
+        friendly.pos = TileCoord{18, 20}; // Move friendly swimmer to land
+        friendly.in_water = false;
+        friendly.state = UnitState::Idle;
+        enemy_combat.pos = TileCoord{19, 20};
+
+        ASSERT_TRUE(controller.is_valid_target(friendly, enemy_combat, sim.stats_manager()));
+        sim.execute_melee_attack(enemy_combat_id, friendly_id);
+        ASSERT_LT(friendly.hp, initial_hp); // Takes damage on land!
     } TEST_END();
 }
 

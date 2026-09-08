@@ -766,13 +766,30 @@ void Renderer::render_terrain_layer2_structures(const ants::sim::Grid& grid) {
             camera_.world_to_screen(c * TILE_SIZE, r * TILE_SIZE, sx, sy);
             SDL_Rect dst = { sx, sy, TILE_SIZE, TILE_SIZE };
 
-            // 1. Bridges (Stages 1..4)
-            if (cell.interactive_id >= ants::sim::TILE_BRIDGE1 &&
-                cell.interactive_id <= ants::sim::TILE_BRIDGE4) {
-                int stage = cell.interactive_id - ants::sim::TILE_BRIDGE1 + 1;
-                std::string bname = (stage == 4) ? "bridge4a.bmp" : ("bridge" + std::to_string(stage) + ".bmp");
+            // 1. Bridges (Stages 1..4 and 4b, authentic Table 4 bounding boxes and sprite dimensions)
+            if ((cell.interactive_id >= ants::sim::TILE_BRIDGE1 &&
+                 cell.interactive_id <= ants::sim::TILE_BRIDGE4) ||
+                cell.interactive_id == ants::sim::TILE_BRIDGE4B) {
+                const char* bname = "bridge4a.bmp";
+                int dx = 0, dy = 0, bw = 32, bh = 32;
+                switch (cell.interactive_id) {
+                    case ants::sim::TILE_BRIDGE1:
+                        bname = "bridge1.bmp"; dx = 8; dy = 9; bw = 16; bh = 16; break;
+                    case ants::sim::TILE_BRIDGE2:
+                        bname = "bridge2.bmp"; dx = 7; dy = 7; bw = 19; bh = 17; break;
+                    case ants::sim::TILE_BRIDGE3:
+                        bname = "bridge3.bmp"; dx = 3; dy = 5; bw = 27; bh = 24; break;
+                    case ants::sim::TILE_BRIDGE4:
+                        bname = "bridge4a.bmp"; dx = 0; dy = 0; bw = 32; bh = 32; break;
+                    case ants::sim::TILE_BRIDGE4B:
+                        bname = "bridge4b.bmp"; dx = 2; dy = 1; bw = 29; bh = 30; break;
+                    default: break;
+                }
                 SDL_Texture* tex = texture_cache_->get_named_sprite_texture(bname);
-                if (tex) SDL_RenderCopy(renderer_, tex, nullptr, &dst);
+                if (tex) {
+                    SDL_Rect bridge_dst = { sx + dx, sy + dy, bw, bh };
+                    SDL_RenderCopy(renderer_, tex, nullptr, &bridge_dst);
+                }
                 continue;
             }
 
@@ -783,12 +800,15 @@ void Renderer::render_terrain_layer2_structures(const ants::sim::Grid& grid) {
                 continue;
             }
 
-            // 3. Bombs
+            // 3. Bombs (Authentic Table 4 animations: 12x24 centered, team 0=Green, 1=Red, 2=Blue, 3=Black)
             if (cell.has_bomb()) {
-                static const char* bomb_names[4] = { "1bombblk.bmp", "1bombblu.bmp", "1bombred.bmp", "1bombgrn.bmp" };
+                static const char* bomb_names[4] = { "1bombgrn.bmp", "1bombred.bmp", "1bombblu.bmp", "1bombblk.bmp" };
                 uint8_t owner = cell.interactive_owner % 4;
                 SDL_Texture* tex = texture_cache_->get_named_sprite_texture(bomb_names[owner]);
-                if (tex) SDL_RenderCopy(renderer_, tex, nullptr, &dst);
+                if (tex) {
+                    SDL_Rect bomb_dst = { sx + 10, sy + 4, 12, 24 };
+                    SDL_RenderCopy(renderer_, tex, nullptr, &bomb_dst);
+                }
                 continue;
             }
 
@@ -993,6 +1013,10 @@ void Renderer::draw_single_ant(const ants::sim::AntSnapshot& ant, bool is_select
         } else {
             action = "wg";
         }
+    } else if (ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::BuildingBridge)) {
+        action = ant.is_swimming ? "bbw" : "bbl";
+    } else if (ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::DemolishingBridge)) {
+        action = ant.is_swimming ? "dbw" : "dbl";
     } else if (ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::DivingInWater)) {
         action = "di";
     } else if (ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::ExitingWater)) {
@@ -1020,8 +1044,19 @@ void Renderer::draw_single_ant(const ants::sim::AntSnapshot& ant, bool is_select
     }
 
     ants::assets::Direction dir = static_cast<ants::assets::Direction>(ant.facing & 7);
+    if (ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::BuildingBridge) ||
+        ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::DemolishingBridge)) {
+        // asbbl/asbbw and asdbl/asdbw animations only exist for cardinal directions: North (7), South (3), East/West (9)
+        if (dir == ants::assets::Direction::NorthEast || dir == ants::assets::Direction::NorthWest) {
+            dir = ants::assets::Direction::North;
+        } else if (dir == ants::assets::Direction::SouthEast || dir == ants::assets::Direction::SouthWest) {
+            dir = ants::assets::Direction::South;
+        }
+    }
 
-    if (is_infiltrating) {
+    if (ant.is_transforming) {
+        // Authentic fidelity: ant body disappears during transformation while getpow animation plays
+    } else if (is_infiltrating) {
         const auto* infil_seq = archive_->find_animation("atcr501");
         if (infil_seq && !infil_seq->subitems.empty()) {
             size_t sub_idx = ant.anim_frame % infil_seq->subitems.size();
@@ -1317,10 +1352,10 @@ void Renderer::render_minimap(const ants::sim::WorldState& world,
     for (const auto& a : world.ants) {
         if (a.is_underground) continue;
         static const SDL_Color unit_colors[4] = {
-            { 200, 200, 220, 255 }, // Black team light dot
-            { 120, 180, 255, 255 }, // Blue
-            { 255, 70, 70, 255 },   // Red
-            { 90, 240, 90, 255 }    // Green
+            { 90, 240, 90, 255 },   // 0: Green
+            { 255, 70, 70, 255 },   // 1: Red
+            { 120, 180, 255, 255 }, // 2: Blue
+            { 200, 200, 220, 255 }  // 3: Black
         };
         const auto& c = unit_colors[a.player_id % 4];
         SDL_SetRenderDrawColor(renderer_, c.r, c.g, c.b, c.a);

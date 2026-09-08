@@ -28,7 +28,8 @@ constexpr uint16_t TILE_FIREWALL = 134u; // wallup04
 constexpr uint16_t TILE_BRIDGE1  = 34u;
 constexpr uint16_t TILE_BRIDGE2  = 35u;
 constexpr uint16_t TILE_BRIDGE3  = 36u;
-constexpr uint16_t TILE_BRIDGE4  = 37u;  // Completed bridge
+constexpr uint16_t TILE_BRIDGE4  = 37u;  // Completed bridge (bridge4a)
+constexpr uint16_t TILE_BRIDGE4B = 38u;  // Completed bridge (bridge4b)
 constexpr uint16_t TILE_LUNCHBOX = 356u; // Dropped food lunchbox (Anim 356, Sprite 513)
 
 // Power-Up Tile IDs (Disasm 0x1021087)
@@ -136,7 +137,9 @@ struct TileCell {
         return interactive_id == TILE_EMPTY || interactive_id == 0xFFFF || interactive_id == 0x7FFE;
     }
     constexpr bool has_fire() const noexcept { return interactive_id == TILE_FIREWALL; }
-    constexpr bool has_completed_bridge() const noexcept { return interactive_id == TILE_BRIDGE4; }
+    constexpr bool has_completed_bridge() const noexcept {
+        return interactive_id == TILE_BRIDGE4 || interactive_id == TILE_BRIDGE4B;
+    }
     constexpr bool has_partial_bridge() const noexcept {
         return interactive_id >= TILE_BRIDGE1 && interactive_id < TILE_BRIDGE4;
     }
@@ -259,6 +262,10 @@ public:
                         cell.surface_type = SurfaceType::Grass;
                     }
                 }
+
+                if (cell.terrain_type == TERRAIN_WALKABLE) {
+                    cell.flags |= (FLAG_CAN_PLACE_BOMB | FLAG_CAN_PLACE_FIRE);
+                }
             }
         }
 
@@ -301,7 +308,8 @@ public:
                             cell.terrain_type = TERRAIN_WALKABLE;
                             cell.is_obstacle_overlay = false;
                         } else if (lower_name.find("bridge") != std::string::npos ||
-                                   (c2.tile_index >= TILE_BRIDGE1 && c2.tile_index <= TILE_BRIDGE4)) {
+                                   (c2.tile_index >= TILE_BRIDGE1 && c2.tile_index <= TILE_BRIDGE4) ||
+                                   c2.tile_index == TILE_BRIDGE4B) {
                             cell.is_obstacle_overlay = false;
                         } else {
                             // Solid obstacle overlay: rocks, cans, pencils, grass clusters (grass1..4, grassbig*, grassmed*), toys, flowers, etc.
@@ -512,6 +520,23 @@ public:
         }
     }
 
+    void regress_bridge(uint32_t x, uint32_t y) noexcept {
+        if (!in_bounds(static_cast<int32_t>(x), static_cast<int32_t>(y))) return;
+        auto& cell = get_cell_mut(x, y);
+        if (cell.interactive_id == TILE_BRIDGE4 || cell.interactive_id == TILE_BRIDGE4B) {
+            cell.interactive_id = TILE_BRIDGE3;
+            cell.timer_ticks = 0;
+        } else if (cell.interactive_id == TILE_BRIDGE3) {
+            cell.interactive_id = TILE_BRIDGE2;
+        } else if (cell.interactive_id == TILE_BRIDGE2) {
+            cell.interactive_id = TILE_BRIDGE1;
+        } else if (cell.interactive_id == TILE_BRIDGE1) {
+            cell.interactive_id = TILE_EMPTY;
+            cell.timer_ticks = 0;
+            cell.interactive_owner = 255;
+        }
+    }
+
     void collapse_bridge(uint32_t x, uint32_t y) noexcept {
         if (!in_bounds(static_cast<int32_t>(x), static_cast<int32_t>(y))) return;
         auto& cell = get_cell_mut(x, y);
@@ -552,7 +577,8 @@ public:
 
     bool has_bridge_at(TileCoord pos) const noexcept {
         if (!in_bounds(pos)) return false;
-        return get_cell(pos).interactive_id >= TILE_BRIDGE1 && get_cell(pos).interactive_id <= TILE_BRIDGE4;
+        uint16_t id = get_cell(pos).interactive_id;
+        return (id >= TILE_BRIDGE1 && id <= TILE_BRIDGE4) || id == TILE_BRIDGE4B;
     }
 
     bool has_lunchbox_at(TileCoord pos) const noexcept {
@@ -566,6 +592,7 @@ public:
         if (id >= TILE_BRIDGE1 && id <= TILE_BRIDGE4) {
             return static_cast<int>(id - TILE_BRIDGE1 + 1);
         }
+        if (id == TILE_BRIDGE4B) return 4;
         return 0;
     }
 
