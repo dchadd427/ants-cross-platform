@@ -3282,6 +3282,87 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         ASSERT_TRUE(sim.grid().has_powerup_at(TileCoord{13, 12})); // Second powerup also untouched!
         ASSERT_EQ(ant.type, AntType::Combat);
     } TEST_END();
+
+    TEST_CASE("12.28 Enemy Ant Selection & Friendly Fire Command Rejection") {
+        SimulationEngine sim;
+        sim.init_test_world(60, 60, 100, 60000);
+
+        // Player 0 (Blue) ants: b1 at (10, 10), b2 at (10, 11)
+        uint32_t b1 = sim.spawn_unit(0, AntType::Combat, TileCoord{10, 10});
+        uint32_t b2 = sim.spawn_unit(0, AntType::Worker, TileCoord{10, 11});
+
+        // Player 1 (Green) ant: g1 at (8, 8)
+        uint32_t g1 = sim.spawn_unit(1, AntType::Combat, TileCoord{8, 8});
+
+        ViewportCamera camera;
+        camera.x = 0.0f; camera.y = 0.0f;
+        camera.world_x = 0; camera.world_y = 0;
+
+        HUD hud;
+        hud.init(1); // Local player is Green (Player 1)
+
+        // 1. Green player clicks on Blue Ant 1 at (10, 10) -> pixel (10*32+16, 10*32+16) = (336, 336)
+        int32_t b1_click_x = 336 + HUD::PLAYFIELD_X;
+        int32_t b1_click_y = 336 + HUD::PLAYFIELD_Y;
+        hud.handle_mouse_down(b1_click_x, b1_click_y, 1, sim, camera);
+        hud.handle_mouse_up(b1_click_x, b1_click_y, 1, sim, camera);
+
+        // Enemy ant b1 must NOT be selected!
+        ASSERT_FALSE(hud.is_ant_selected(b1));
+        ASSERT_NE(hud.get_selected_ant_id(), b1);
+        ASSERT_TRUE(hud.get_selected_ant_ids().empty());
+
+        // 2. Green player clicks on Blue Ant 2 at (10, 11) -> pixel (10*32+16, 11*32+16) = (336, 368)
+        int32_t b2_click_x = 336 + HUD::PLAYFIELD_X;
+        int32_t b2_click_y = 368 + HUD::PLAYFIELD_Y;
+        hud.handle_mouse_down(b2_click_x, b2_click_y, 1, sim, camera);
+        hud.handle_mouse_up(b2_click_x, b2_click_y, 1, sim, camera);
+
+        // Neither b1 nor b2 should have attack orders targeting each other!
+        ASSERT_NE(sim.get_unit(b1).attack_target_id, b2);
+        ASSERT_NE(sim.get_unit(b2).attack_target_id, b1);
+        ASSERT_FALSE(hud.is_ant_selected(b2));
+
+        // 3. Right-clicking b2 while nothing or enemy is selected does not issue attack orders
+        hud.handle_mouse_down(b2_click_x, b2_click_y, 3, sim, camera);
+        ASSERT_NE(sim.get_unit(b1).attack_target_id, b2);
+
+        // 4. Directly testing HUD attack order dispatch protection:
+        // Even if an enemy ant ID were artificially injected into selected_ant_ids:
+        hud.set_selected_ant_ids({b1});
+        hud.dispatch_attack_order(b2, sim);
+        // HUD must filter out non-friendly units so b1 NEVER targets b2!
+        ASSERT_NE(sim.get_unit(b1).attack_target_id, b2);
+
+        // 5. SimulationEngine layer protection:
+        // Even if a malformed AntOrder with b1 attacking b2 is fed to sim.issue_order:
+        AntOrder bad_order;
+        bad_order.ant_id = b1;
+        bad_order.type = OrderType::Attack;
+        bad_order.target_entity_id = static_cast<int32_t>(b2);
+        sim.issue_order(bad_order);
+        ASSERT_NE(sim.get_unit(b1).attack_target_id, b2);
+
+        // 6. execute_melee_attack deals 0 damage to teammates:
+        uint32_t b2_initial_hp = sim.get_unit(b2).hp;
+        sim.execute_melee_attack(b1, b2);
+        ASSERT_EQ(sim.get_unit(b2).hp, b2_initial_hp); // No damage dealt!
+
+        // 7. Legitimate Green ant g1 selecting and attacking b1 works as expected:
+        int32_t g1_click_x = 8 * 32 + 16 + HUD::PLAYFIELD_X;
+        int32_t g1_click_y = 8 * 32 + 16 + HUD::PLAYFIELD_Y;
+        hud.clear_selection();
+        hud.handle_mouse_down(g1_click_x, g1_click_y, 1, sim, camera);
+        hud.handle_mouse_up(g1_click_x, g1_click_y, 1, sim, camera);
+
+        ASSERT_TRUE(hud.is_ant_selected(g1));
+        ASSERT_EQ(hud.get_selected_ant_id(), g1);
+
+        // Green ant g1 attacks enemy b1
+        hud.handle_mouse_down(b1_click_x, b1_click_y, 1, sim, camera);
+        hud.handle_mouse_up(b1_click_x, b1_click_y, 1, sim, camera);
+        ASSERT_EQ(sim.get_unit(g1).attack_target_id, b1);
+    } TEST_END();
 }
 
 // ============================================================================

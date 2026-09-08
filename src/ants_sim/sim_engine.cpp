@@ -1238,6 +1238,9 @@ void SimulationEngine::issue_order(const AntOrder& order) {
                 uint32_t target_id = static_cast<uint32_t>(order.target_entity_id);
                 AntUnit* target = impl_->find_unit(target_id);
                 if (target && target->is_alive()) {
+                    if (target->player_id == unit->player_id || impl_->stats_.are_allies(unit->player_id, target->player_id)) {
+                        break; // Ants cannot attack friendly teammates or allies
+                    }
                     if (target->on_powerup || (target->type == AntType::Swimmer && target->in_water)) {
                         unit->attack_target_id = 0;
                         if (unit->is_transforming() || unit->on_powerup ||
@@ -1699,6 +1702,7 @@ void SimulationEngine::execute_melee_attack(uint32_t attacker_id, uint32_t targe
     AntUnit* attacker = impl_->find_unit(attacker_id);
     AntUnit* target = impl_->find_unit(target_id);
     if (!attacker || !target || !attacker->is_alive() || !target->is_alive()) return;
+    if (attacker->player_id == target->player_id || impl_->stats_.are_allies(attacker->player_id, target->player_id)) return;
     if (target->on_powerup || (impl_->grid_.in_bounds(target->pos) && impl_->grid_.has_powerup_at(target->pos))) return;
     if (target->type == AntType::Swimmer && target->in_water) return;
 

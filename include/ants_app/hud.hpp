@@ -171,6 +171,7 @@ public:
     bool is_multi_select() const noexcept { return is_multi_select_mode_ || selected_ant_ids_.size() > 1; }
     bool is_multi_select_mode() const noexcept { return is_multi_select_mode_; }
     void set_multi_select_mode(bool multi) noexcept { is_multi_select_mode_ = multi; }
+    bool has_friendly_selected(const sim::WorldState& world) const noexcept;
 
     // News banner
     void queue_news_message(const std::string& msg, uint32_t duration_ticks = 100, bool is_alarm = false);
