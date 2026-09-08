@@ -918,7 +918,7 @@ static void run_suite_13_authentic_fidelity() {
         // Set up 4x4 base: entrance at (21, 21), bottom-left queuing spot at (20, 23), mound elsewhere
         for (uint32_t y = 20; y < 24; ++y) {
             for (uint32_t x = 20; x < 24; ++x) {
-                if ((x == 21 && y == 21) || (x == 20 && y == 23)) {
+                if ((x == 21 && (y == 20 || y == 21)) || (x == 20 && y == 23)) {
                     sim.grid_mut().get_cell_mut(x, y).is_obstacle_overlay = false;
                 } else {
                     sim.grid_mut().get_cell_mut(x, y).is_obstacle_overlay = true;

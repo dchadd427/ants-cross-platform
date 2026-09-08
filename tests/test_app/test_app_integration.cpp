@@ -3939,31 +3939,20 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         ASSERT_EQ(u1.state, UnitState::EnteringBase);
         ASSERT_EQ(u1.pos, (TileCoord{bx + 1, by + 1}));
 
-        // Verify ant never walked on top of the base mound [bx..bx+2, by..by+2] \ {(bx+1, by+1), (bx+1, by)}
+        // Verify ant never walked on top of the base mound [bx..bx+3, by..by+3] \ {(bx+1, by+1), (bx+1, by)}
         for (const auto& pt : visited_coords) {
-            if (pt.x == bx && (pt.y == by + 3 || pt.y == by + 2 || pt.y == by + 1 || pt.y == by)) {
-                ASSERT_TRUE(false); // Walked on mound!
+            if (pt.x >= bx && pt.x <= bx + 3 && pt.y >= by && pt.y <= by + 3) {
+                if (!(pt.x == bx + 1 && (pt.y == by || pt.y == by + 1))) {
+                    ASSERT_TRUE(false); // Walked on mound!
+                }
             }
         }
 
-        // Verify the ant followed the 9-step path:
-        // Started along bx - 1 (x = 19)
-        // Turned East at (bx - 1, by - 1)
-        // Traversed top approach corridor (bx, by - 1) and (bx + 1, by - 1)
-        // Stepped down into (bx + 1, by) and into hole (bx + 1, by + 1)
-        bool visited_top_turn = false;
-        bool visited_red_sq1 = false;
-        bool visited_red_sq2 = false;
+        // Verify the ant entered through the top mouth into the hole
         bool visited_above_hole = false;
         for (const auto& pt : visited_coords) {
-            if (pt.x == bx - 1 && pt.y == by - 1) visited_top_turn = true;
-            if (pt.x == bx && pt.y == by - 1) visited_red_sq1 = true;
-            if (pt.x == bx + 1 && pt.y == by - 1) visited_red_sq2 = true;
             if (pt.x == bx + 1 && pt.y == by) visited_above_hole = true;
         }
-        ASSERT_TRUE(visited_top_turn);
-        ASSERT_TRUE(visited_red_sq1);
-        ASSERT_TRUE(visited_red_sq2);
         ASSERT_TRUE(visited_above_hole);
 
         // 4. Ant visiting without food emerges and routes to the idle position (bx + 4, by + 4)
@@ -3992,6 +3981,90 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         }
         ASSERT_EQ(sim.get_unit(w2).state, UnitState::Idle);
         ASSERT_EQ(sim.get_unit(w2).pos, (TileCoord{bx + 4, by + 4}));
+    } TEST_END();
+
+    TEST_CASE("12.39 Dynamic Base Deposit Path Avoids Queued Ants, Bombs and Fire Walls") {
+        SimulationEngine sim;
+        sim.init_test_world(60, 60, 42, 60000);
+        sim.grid_mut().set_anthill(0, TileCoord{20, 20});
+        const auto* base = sim.grid().find_anthill(0);
+        ASSERT_TRUE(base != nullptr);
+        int32_t bx = base->x; // 20
+        int32_t by = base->y; // 20
+
+        // Spawn 3 workers carrying food at queue slots 0, 1, 2
+        uint32_t a1 = sim.spawn_unit(0, AntType::Worker, TileCoord{bx - 1, by + 3});
+        uint32_t a2 = sim.spawn_unit(0, AntType::Worker, TileCoord{bx - 1, by + 2});
+        uint32_t a3 = sim.spawn_unit(0, AntType::Worker, TileCoord{bx - 1, by + 1});
+
+        sim.get_unit(a1).pick_up_food(1, 25);
+        sim.get_unit(a2).pick_up_food(1, 25);
+        sim.get_unit(a3).pick_up_food(1, 25);
+
+        // Join base queue
+        sim.join_base_queue(a1);
+        sim.join_base_queue(a2);
+        sim.join_base_queue(a3);
+
+        // Step 1 tick: Ant 1 has priority, Ant 2 & Ant 3 are waiting in QueuingBase
+        sim.tick();
+        ASSERT_EQ(sim.get_active_depositing_ant(0), a1);
+
+        // Ant 1 must NOT step on Ant 2's slot (bx-1, by+2) or Ant 3's slot (bx-1, by+1)
+        TileCoord a2_slot{bx - 1, by + 2};
+        TileCoord a3_slot{bx - 1, by + 1};
+
+        std::vector<TileCoord> a1_visited;
+        a1_visited.push_back(sim.get_unit(a1).pos);
+        TileCoord last_a1 = sim.get_unit(a1).pos;
+
+        for (int i = 0; i < 90 && sim.get_unit(a1).state != UnitState::EnteringBase; ++i) {
+            sim.tick();
+            if (sim.get_unit(a1).pos != last_a1) {
+                last_a1 = sim.get_unit(a1).pos;
+                a1_visited.push_back(last_a1);
+            }
+        }
+
+        ASSERT_EQ(sim.get_unit(a1).state, UnitState::EnteringBase);
+        ASSERT_EQ(sim.get_unit(a1).pos, (TileCoord{bx + 1, by + 1}));
+
+        // Assert Ant 1 never stepped on Ant 2 or Ant 3's positions
+        for (const auto& pt : a1_visited) {
+            ASSERT_NE(pt, a2_slot);
+            ASSERT_NE(pt, a3_slot);
+        }
+
+        // Advance until Ant 1 finishes depositing food and Ant 2 gains priority
+        for (int i = 0; i < 30 && sim.get_active_depositing_ant(0) != a2; ++i) {
+            sim.tick();
+        }
+        ASSERT_EQ(sim.get_active_depositing_ant(0), a2);
+
+        // Place a friendly bomb along column bx - 2 at (bx - 2, by)
+        sim.grid_mut().place_bomb(static_cast<uint32_t>(bx - 2), static_cast<uint32_t>(by), 0);
+        ASSERT_TRUE(sim.grid().has_bomb_at(TileCoord{bx - 2, by}));
+
+        // Ant 2 must path to base avoiding both Ant 3 at (bx - 1, by + 1) and the bomb at (bx - 2, by)
+        std::vector<TileCoord> a2_visited;
+        a2_visited.push_back(sim.get_unit(a2).pos);
+        TileCoord last_a2 = sim.get_unit(a2).pos;
+
+        for (int i = 0; i < 90 && sim.get_unit(a2).state != UnitState::EnteringBase; ++i) {
+            sim.tick();
+            if (sim.get_unit(a2).pos != last_a2) {
+                last_a2 = sim.get_unit(a2).pos;
+                a2_visited.push_back(last_a2);
+            }
+        }
+
+        ASSERT_EQ(sim.get_unit(a2).state, UnitState::EnteringBase);
+        ASSERT_EQ(sim.get_unit(a2).pos, (TileCoord{bx + 1, by + 1}));
+
+        for (const auto& pt : a2_visited) {
+            ASSERT_NE(pt, a3_slot);
+            ASSERT_NE(pt, (TileCoord{bx - 2, by}));
+        }
     } TEST_END();
 }
 
