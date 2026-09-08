@@ -1029,7 +1029,7 @@ void challenge_suite_6_level_fuzzing(const std::string& map_dir) {
 
                 try {
                     lvl.load_from_memory(mutant.data(), mutant.size());
-                } catch (const std::exception& e) {
+                } catch (const std::exception&) {
                     ++caught_exceptions;
                 }
             }

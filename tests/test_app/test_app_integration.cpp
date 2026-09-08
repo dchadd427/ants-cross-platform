@@ -4533,7 +4533,9 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
 // ============================================================================
 // Master Test Runner Main
 // ============================================================================
-int main() {
+int main(int argc, char* argv[]) {
+    (void)argc;
+    (void)argv;
     std::cout << "=======================================================\n"
               << " ANTS REMAKE — HEADLESS INTEGRATION HARNESS\n"
               << "=======================================================\n";

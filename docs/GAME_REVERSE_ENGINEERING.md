@@ -45,7 +45,7 @@ Players control colonies of ants in a top-down tile-based grid environment (typi
   - `.text`: `0x1001000` - `0x1046C00` (Code, constants, RTTI, vtables)
   - `.data`: `0x1047000` - `0x104B000` (Global states, player tables, strings)
   - `.rsrc`: `0x104D000` - `0x1050400` (Windows string tables, icons, dialogs)
-- **Subsystems Used in 1995 Original:** DirectDraw (256-color paletted surfaces), DirectSound (8-bit/11-22kHz PCM), WinMM sequencer (`MidiOut` for `INTRO.MID`), WinSock 1.1 (multiplayer sessions).
+- **Subsystems Used in 1995 Original:** DirectDraw (256-color paletted surfaces), DirectSound (8-bit/11-22kHz PCM), WinMM sequencer (`mciSendStringA`, `midiOutSetVolume`, `midiOutOpen`, `midiOutClose` for `INTRO.MID` playback and volume attenuation), WinSock 1.1 (multiplayer sessions).
 
 ### 2.2 Core Object Virtual Method Tables (VTables)
 Through Capstone disassembly of object constructors, the following key class vtables were identified:

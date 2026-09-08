@@ -59,16 +59,20 @@ struct TileCoord {
     constexpr bool operator!=(const TileCoord& o) const noexcept { return !(*this == o); }
 
     constexpr int32_t chebyshev_dist(const TileCoord& o) const noexcept {
-        return std::max(std::abs(x - o.x), std::abs(y - o.y));
+        int32_t dx = (x >= o.x) ? (x - o.x) : (o.x - x);
+        int32_t dy = (y >= o.y) ? (y - o.y) : (o.y - y);
+        return (dx > dy) ? dx : dy;
     }
 
     constexpr int32_t manhattan_dist(const TileCoord& o) const noexcept {
-        return std::abs(x - o.x) + std::abs(y - o.y);
+        int32_t dx = (x >= o.x) ? (x - o.x) : (o.x - x);
+        int32_t dy = (y >= o.y) ? (y - o.y) : (o.y - y);
+        return dx + dy;
     }
 
     constexpr bool is_cardinal_adjacent(const TileCoord& o) const noexcept {
-        int32_t dx = std::abs(x - o.x);
-        int32_t dy = std::abs(y - o.y);
+        int32_t dx = (x >= o.x) ? (x - o.x) : (o.x - x);
+        int32_t dy = (y >= o.y) ? (y - o.y) : (o.y - y);
         return (dx + dy == 1);
     }
 };
