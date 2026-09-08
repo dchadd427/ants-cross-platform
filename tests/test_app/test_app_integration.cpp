@@ -3204,6 +3204,84 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         sim.execute_melee_attack(enemy_combat_id, friendly_id);
         ASSERT_LT(friendly.hp, initial_hp); // Takes damage on land!
     } TEST_END();
+
+    TEST_CASE("12.27 Power-Up Obstacle Avoidance (Walks Around Power-Up Unless Directly Instructed)") {
+        SimulationEngine sim;
+        sim.init_test_world(60, 60, 100, 60000);
+
+        // Place a Combat power-up at (13, 10)
+        sim.grid_mut().place_powerup(13, 10, 4);
+        ASSERT_TRUE(sim.grid().has_powerup_at(TileCoord{13, 10}));
+
+        // Spawn a Worker ant at (10, 10)
+        uint32_t ant_id = sim.spawn_unit(0, AntType::Worker, TileCoord{10, 10});
+        auto& ant = sim.get_unit(ant_id);
+        ASSERT_EQ(ant.type, AntType::Worker);
+
+        // 1. Order ant to move PAST the powerup to (16, 10)
+        sim.issue_move_order(ant_id, TileCoord{16, 10});
+
+        // The path must NOT contain (13, 10) - it must route around the power-up tile
+        for (const auto& wp : ant.waypoints) {
+            ASSERT_FALSE(wp == (TileCoord{13, 10}));
+        }
+
+        // Step simulation until the ant reaches (16, 10)
+        int steps = 0;
+        while (ant.pos != (TileCoord{16, 10}) && steps++ < 200) {
+            sim.tick();
+            // At no point during travel should the ant ever be on (13, 10)
+            ASSERT_FALSE(ant.pos == (TileCoord{13, 10}));
+        }
+        ASSERT_EQ(ant.pos, (TileCoord{16, 10}));
+
+        // The powerup at (13, 10) must remain intact, and ant must NOT have transformed
+        ASSERT_TRUE(sim.grid().has_powerup_at(TileCoord{13, 10}));
+        ASSERT_EQ(ant.type, AntType::Worker);
+        ASSERT_FALSE(ant.is_transforming());
+
+        // 2. Now specifically instruct the ant to walk onto the powerup at (13, 10)
+        sim.issue_move_order(ant_id, TileCoord{13, 10});
+
+        // This time, the destination IS the powerup, so the ant routes directly to it
+        ASSERT_EQ(ant.final_dest, (TileCoord{13, 10}));
+
+        // Step simulation until the ant arrives and triggers transformation
+        steps = 0;
+        while (!ant.is_transforming() && steps++ < 150) {
+            sim.tick();
+        }
+
+        ASSERT_EQ(ant.pos, (TileCoord{13, 10}));
+        ASSERT_TRUE(ant.is_transforming());
+        ASSERT_FALSE(sim.grid().has_powerup_at(TileCoord{13, 10}));
+
+        // Finish the 11-frame transformation
+        for (int i = 0; i < 15; ++i) {
+            sim.tick();
+        }
+        ASSERT_FALSE(ant.is_transforming());
+        ASSERT_EQ(ant.type, AntType::Combat); // Successfully transformed into Combat Ant!
+
+        // 3. Place another power-up at (13, 12). Order ant from (13, 10) to move past it to (13, 14)
+        sim.grid_mut().place_powerup(13, 12, 1); // Bomber powerup
+        ASSERT_TRUE(sim.grid().has_powerup_at(TileCoord{13, 12}));
+
+        sim.issue_move_order(ant_id, TileCoord{13, 14});
+        // Waypoints must avoid (13, 12)
+        for (const auto& wp : ant.waypoints) {
+            ASSERT_FALSE(wp == (TileCoord{13, 12}));
+        }
+
+        steps = 0;
+        while (ant.pos != (TileCoord{13, 14}) && steps++ < 200) {
+            sim.tick();
+            ASSERT_FALSE(ant.pos == (TileCoord{13, 12}));
+        }
+        ASSERT_EQ(ant.pos, (TileCoord{13, 14}));
+        ASSERT_TRUE(sim.grid().has_powerup_at(TileCoord{13, 12})); // Second powerup also untouched!
+        ASSERT_EQ(ant.type, AntType::Combat);
+    } TEST_END();
 }
 
 // ============================================================================

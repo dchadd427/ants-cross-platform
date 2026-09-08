@@ -515,12 +515,21 @@ void SimulationEngine::tick() {
         }
         if (ant_ptr->current_waypoint_idx < ant_ptr->waypoints.size()) {
             TileCoord next_wp = ant_ptr->waypoints[ant_ptr->current_waypoint_idx];
-            if (impl_->grid_.in_bounds(next_wp) && impl_->grid_.has_bomb_at(next_wp)) {
-                const auto& bcell = impl_->grid_.get_cell(next_wp);
-                bool is_friendly = (bcell.interactive_owner == ant_ptr->player_id ||
-                                    impl_->stats_.are_allies(ant_ptr->player_id, bcell.interactive_owner));
-                TileCoord goal = (ant_ptr->final_dest.x >= 0) ? ant_ptr->final_dest : ant_ptr->waypoints.back();
-                if (is_friendly && (!ant_ptr->allow_friendly_bomb || next_wp != goal)) {
+            TileCoord goal = (ant_ptr->final_dest.x >= 0) ? ant_ptr->final_dest : ant_ptr->waypoints.back();
+            if (impl_->grid_.in_bounds(next_wp)) {
+                bool repath = false;
+                if (impl_->grid_.has_bomb_at(next_wp)) {
+                    const auto& bcell = impl_->grid_.get_cell(next_wp);
+                    bool is_friendly = (bcell.interactive_owner == ant_ptr->player_id ||
+                                        impl_->stats_.are_allies(ant_ptr->player_id, bcell.interactive_owner));
+                    if (is_friendly && (!ant_ptr->allow_friendly_bomb || next_wp != goal)) {
+                        repath = true;
+                    }
+                }
+                if (impl_->grid_.has_powerup_at(next_wp) && next_wp != goal) {
+                    repath = true;
+                }
+                if (repath) {
                     issue_move_order(ant_ptr->id, goal, ant_ptr->allow_friendly_bomb);
                 }
             }
@@ -559,11 +568,14 @@ void SimulationEngine::tick() {
             ant_ptr->state != UnitState::Drowning && ant_ptr->state != UnitState::EnteringBase &&
             !ant_ptr->underground && !ant_ptr->is_transforming()) {
             if (impl_->grid_.in_bounds(ant_ptr->pos) && impl_->grid_.has_powerup_at(ant_ptr->pos)) {
-                bool arrived = (ant_ptr->pixel_x == ant_ptr->pos.x * 32 + 16 &&
-                                ant_ptr->pixel_y == ant_ptr->pos.y * 32 + 16) ||
-                               (ant_ptr->state != UnitState::Walking);
-                if (arrived) {
-                    pu_target = ant_ptr->pos;
+                bool specifically_instructed = (ant_ptr->final_dest == ant_ptr->pos || ant_ptr->final_dest.x < 0 || ant_ptr->state != UnitState::Walking);
+                if (specifically_instructed) {
+                    bool arrived = (ant_ptr->pixel_x == ant_ptr->pos.x * 32 + 16 &&
+                                    ant_ptr->pixel_y == ant_ptr->pos.y * 32 + 16) ||
+                                   (ant_ptr->state != UnitState::Walking);
+                    if (arrived) {
+                        pu_target = ant_ptr->pos;
+                    }
                 }
             }
         }
@@ -1819,19 +1831,26 @@ void SimulationEngine::issue_move_order(uint32_t ant_id, TileCoord dest, bool al
 
     unit->allow_friendly_bomb = (can_hit_dest_bomb && impl_->grid_.has_bomb_at(dest));
 
-    // Collect friendly bombs as hard obstacles (friendly units must never walk on friendly bombs)
+    // Collect friendly bombs and powerups as hard obstacles
     std::vector<TileCoord> hard_obstacles;
     for (int32_t gy = 0; gy < static_cast<int32_t>(impl_->grid_.height()); ++gy) {
         for (int32_t gx = 0; gx < static_cast<int32_t>(impl_->grid_.width()); ++gx) {
+            TileCoord c{gx, gy};
             const auto& cell = impl_->grid_.get_cell(static_cast<uint32_t>(gx), static_cast<uint32_t>(gy));
             if (cell.has_bomb()) {
                 bool is_friendly = (cell.interactive_owner == unit->player_id ||
                                     impl_->stats_.are_allies(unit->player_id, cell.interactive_owner));
                 if (is_friendly) {
-                    if (can_hit_dest_bomb && TileCoord{gx, gy} == dest) {
+                    if (can_hit_dest_bomb && c == dest) {
                         continue;
                     }
-                    hard_obstacles.push_back(TileCoord{gx, gy});
+                    hard_obstacles.push_back(c);
+                }
+            }
+            if (cell.has_powerup()) {
+                // Unless specifically instructed to walk onto the powerup, treat as an obstacle and walk around it
+                if (c != dest && c != unit->pos) {
+                    hard_obstacles.push_back(c);
                 }
             }
         }
@@ -2274,12 +2293,18 @@ void SimulationEngine::send_ant_straight_into_base(uint32_t ant_id) {
         std::vector<TileCoord> hard_obstacles;
         for (int32_t gy = 0; gy < static_cast<int32_t>(impl_->grid_.height()); ++gy) {
             for (int32_t gx = 0; gx < static_cast<int32_t>(impl_->grid_.width()); ++gx) {
+                TileCoord c{gx, gy};
                 const auto& cell = impl_->grid_.get_cell(static_cast<uint32_t>(gx), static_cast<uint32_t>(gy));
                 if (cell.has_bomb()) {
                     bool is_friendly = (cell.interactive_owner == unit->player_id ||
                                         impl_->stats_.are_allies(unit->player_id, cell.interactive_owner));
                     if (is_friendly) {
-                        hard_obstacles.push_back(TileCoord{gx, gy});
+                        hard_obstacles.push_back(c);
+                    }
+                }
+                if (cell.has_powerup()) {
+                    if (c != ramp[0] && c != unit->pos) {
+                        hard_obstacles.push_back(c);
                     }
                 }
             }
