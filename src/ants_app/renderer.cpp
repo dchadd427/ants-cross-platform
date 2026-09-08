@@ -1081,7 +1081,21 @@ void Renderer::draw_single_ant(const ants::sim::AntSnapshot& ant, bool is_select
         if (base_seq && !base_seq->subitems.empty()) {
             size_t sub_idx = std::min(static_cast<size_t>(ant.anim_frame), base_seq->subitems.size() - 1);
             const auto& sub = base_seq->subitems[sub_idx];
-            for (const auto& f : sub.frames) {
+            auto frames = sub.frames;
+            if (carrying_food && frames.size() > 1) {
+                // Ensure lunchbox is rendered in the back (first), ant body in front (second)
+                std::stable_sort(frames.begin(), frames.end(), [&](const auto& a, const auto& b) {
+                    const auto& sp_a = archive_->get_sprite(a.sprite_index);
+                    const auto& sp_b = archive_->get_sprite(b.sprite_index);
+                    bool is_lb_a = (sp_a.name.find("lb") != std::string::npos);
+                    bool is_lb_b = (sp_b.name.find("lb") != std::string::npos);
+                    if (is_lb_a != is_lb_b) {
+                        return is_lb_a;
+                    }
+                    return false;
+                });
+            }
+            for (const auto& f : frames) {
                 SDL_Texture* tex = texture_cache_->get_sprite_texture(f.sprite_index, false, static_cast<uint8_t>(ant.player_id));
                 if (!tex) continue;
                 const auto& sp = archive_->get_sprite(f.sprite_index);
@@ -1177,7 +1191,22 @@ void Renderer::draw_single_ant(const ants::sim::AntSnapshot& ant, bool is_select
             size_t sub_idx = ant.anim_frame % seq->subitems.size();
             const auto& sub = seq->subitems[sub_idx];
 
-            for (const auto& f : sub.frames) {
+            auto frames = sub.frames;
+            if (ant.is_holding && frames.size() > 1) {
+                // Ensure lunchbox is rendered in the back (first), ant body in front (second)
+                std::stable_sort(frames.begin(), frames.end(), [&](const auto& a, const auto& b) {
+                    const auto& sp_a = archive_->get_sprite(a.sprite_index);
+                    const auto& sp_b = archive_->get_sprite(b.sprite_index);
+                    bool is_lb_a = (sp_a.name.find("lb") != std::string::npos);
+                    bool is_lb_b = (sp_b.name.find("lb") != std::string::npos);
+                    if (is_lb_a != is_lb_b) {
+                        return is_lb_a;
+                    }
+                    return false;
+                });
+            }
+
+            for (const auto& f : frames) {
                 uint32_t sp_idx = f.sprite_index;
                 if (ant.player_id < 4 && texture_cache_->is_base_bomb_sprite(sp_idx)) {
                     sp_idx = texture_cache_->get_team_bomb_sprite_index(static_cast<uint8_t>(ant.player_id));
