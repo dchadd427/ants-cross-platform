@@ -356,18 +356,31 @@ public:
                 sp.y = static_cast<uint16_t>(hill_origins[t].y);
                 anthills_.push_back(sp);
 
-                // Ensure bottom-left queuing staging cell is passable
-                uint32_t qx = sp.x;
-                uint32_t qy = sp.y + 3;
-                if (in_bounds(static_cast<int32_t>(qx), static_cast<int32_t>(qy))) {
-                    auto& qcell = get_cell_mut(qx, qy);
-                    qcell.terrain_type = TERRAIN_WALKABLE;
-                    qcell.is_obstacle_overlay = false;
+                // Ensure queuing and entry staging cells along dx = -1 are passable
+                for (int dy = 0; dy <= 3; ++dy) {
+                    int32_t qx = static_cast<int32_t>(sp.x) - 1;
+                    int32_t qy = static_cast<int32_t>(sp.y) + dy;
+                    if (in_bounds(qx, qy)) {
+                        auto& qcell = get_cell_mut(static_cast<uint32_t>(qx), static_cast<uint32_t>(qy));
+                        qcell.terrain_type = TERRAIN_WALKABLE;
+                        qcell.is_obstacle_overlay = false;
+                    }
                 }
             }
         }
         if (anthills_.empty()) {
             anthills_ = level.anthill_spawns;
+            for (const auto& sp : anthills_) {
+                for (int dy = 0; dy <= 3; ++dy) {
+                    int32_t qx = static_cast<int32_t>(sp.x) - 1;
+                    int32_t qy = static_cast<int32_t>(sp.y) + dy;
+                    if (in_bounds(qx, qy)) {
+                        auto& qcell = get_cell_mut(static_cast<uint32_t>(qx), static_cast<uint32_t>(qy));
+                        qcell.terrain_type = TERRAIN_WALKABLE;
+                        qcell.is_obstacle_overlay = false;
+                    }
+                }
+            }
         }
 
         food_schedules_.clear();
@@ -462,6 +475,15 @@ public:
             if (a.team_id == team_id) {
                 a.x = static_cast<uint16_t>(pos.x);
                 a.y = static_cast<uint16_t>(pos.y);
+                for (int dy = 0; dy <= 3; ++dy) {
+                    int32_t qx = static_cast<int32_t>(pos.x) - 1;
+                    int32_t qy = static_cast<int32_t>(pos.y) + dy;
+                    if (in_bounds(qx, qy)) {
+                        auto& qcell = get_cell_mut(static_cast<uint32_t>(qx), static_cast<uint32_t>(qy));
+                        qcell.terrain_type = TERRAIN_WALKABLE;
+                        qcell.is_obstacle_overlay = false;
+                    }
+                }
                 return;
             }
         }
@@ -470,6 +492,15 @@ public:
         s.x = static_cast<uint16_t>(pos.x);
         s.y = static_cast<uint16_t>(pos.y);
         anthills_.push_back(s);
+        for (int dy = 0; dy <= 3; ++dy) {
+            int32_t qx = static_cast<int32_t>(pos.x) - 1;
+            int32_t qy = static_cast<int32_t>(pos.y) + dy;
+            if (in_bounds(qx, qy)) {
+                auto& qcell = get_cell_mut(static_cast<uint32_t>(qx), static_cast<uint32_t>(qy));
+                qcell.terrain_type = TERRAIN_WALKABLE;
+                qcell.is_obstacle_overlay = false;
+            }
+        }
     }
 
     void place_firewall(uint32_t x, uint32_t y, uint8_t owner_player) noexcept {

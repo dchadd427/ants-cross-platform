@@ -900,7 +900,7 @@ void SimulationEngine::tick() {
                         TileCoord raw_idle{idle_x, idle_y};
                         TileCoord target_idle = raw_idle;
                         if (!impl_->grid_.in_bounds(raw_idle) || !impl_->grid_.get_cell(raw_idle).is_passable()) {
-                            TileCoord ramp0{friendly_base->x, friendly_base->y + 3};
+                            TileCoord ramp0{friendly_base->x - 1, friendly_base->y + 3};
                             target_idle = PathFinder::find_nearest_passable(
                                 impl_->grid_, ramp0, raw_idle, false, false, {});
                         }
@@ -1133,7 +1133,7 @@ void SimulationEngine::tick() {
                         ant_ptr->clear_path();
                     }
                 }
-            } else if ((ant_ptr->pos == TileCoord{bx - 1, by + 3} || ant_ptr->pos == TileCoord{bx, by + 3}) &&
+            } else if (ant_ptr->pos == TileCoord{bx - 1, by + 3} &&
                        (ant_ptr->is_holding() || ant_ptr->hp < ant_ptr->max_hp)) {
                 if (!is_ant_in_base_queue(ant_ptr->id)) {
                     join_base_queue(ant_ptr->id);
@@ -1998,14 +1998,15 @@ void SimulationEngine::issue_move_order(uint32_t ant_id, TileCoord dest, bool al
     // Check if unit or destination is on an anthill ramp
     int32_t unit_ramp_idx = -1;
     int32_t dest_ramp_idx = -1;
-    std::array<TileCoord, 6> matched_ramp{};
+    std::array<TileCoord, 7> matched_ramp{};
 
     for (const auto& ah : impl_->grid_.anthills()) {
         if (ah.team_id == unit->player_id || unit->type == AntType::Thief) {
             int32_t bx = static_cast<int32_t>(ah.x);
             int32_t by = static_cast<int32_t>(ah.y);
-            const std::array<TileCoord, 6> r = {{
-                {bx, by + 3}, {bx, by + 2}, {bx, by + 1}, {bx, by}, {bx + 1, by}, {bx + 1, by + 1}
+            const std::array<TileCoord, 7> r = {{
+                {bx - 1, by + 3}, {bx - 1, by + 2}, {bx - 1, by + 1}, {bx - 1, by},
+                {bx, by}, {bx + 1, by}, {bx + 1, by + 1}
             }};
             int32_t u_idx = -1;
             int32_t d_idx = -1;
@@ -2641,10 +2642,11 @@ void SimulationEngine::send_ant_straight_into_base(uint32_t ant_id) {
 
     int32_t bx = base->x;
     int32_t by = base->y;
-    const std::array<TileCoord, 6> ramp = {{
-        {bx, by + 3},
-        {bx, by + 2},
-        {bx, by + 1},
+    const std::array<TileCoord, 7> ramp = {{
+        {bx - 1, by + 3},
+        {bx - 1, by + 2},
+        {bx - 1, by + 1},
+        {bx - 1, by},
         {bx, by},
         {bx + 1, by},
         {bx + 1, by + 1}

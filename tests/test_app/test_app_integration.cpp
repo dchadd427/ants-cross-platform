@@ -1208,8 +1208,8 @@ void run_suite_9_gameplay_mechanics_and_options() {
         int32_t bx = base->x;
         int32_t by = base->y;
 
-        // Spawn damaged worker carrying food at base queue spot (bx, by+3)
-        uint32_t ant_id = sim_engine.spawn_unit(0, AntType::Worker, TileCoord{bx, by + 3});
+        // Spawn damaged worker carrying food at base queue spot (bx - 1, by + 3)
+        uint32_t ant_id = sim_engine.spawn_unit(0, AntType::Worker, TileCoord{bx - 1, by + 3});
         auto& ant = sim_engine.get_unit(ant_id);
         ant.hp = 20; // Damaged
         ant.pick_up_food(1, 25);
@@ -3867,6 +3867,72 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         ASSERT_EQ(worker.pos.y, 20);
         ASSERT_EQ(worker.state, UnitState::Stunned);
         ASSERT_TRUE(sim.has_audio_event(64)); // SOUND_FLY_THUMP_A
+    } TEST_END();
+
+    TEST_CASE("12.38 Anthill Base Deposit Path Shifted One Tile Left Off Mound") {
+        SimulationEngine sim;
+        sim.init_test_world(60, 60, 42, 60000);
+        sim.grid_mut().set_anthill(0, TileCoord{20, 20});
+        const auto* base = sim.grid().find_anthill(0);
+        ASSERT_TRUE(base != nullptr);
+        int32_t bx = base->x; // 20
+        int32_t by = base->y; // 20
+
+        // 1. Check queue slots: Slot 0..3 are along bx - 1 (x = 19)
+        ASSERT_EQ(sim.get_base_queue_slot(0, 0), (TileCoord{bx - 1, by + 3}));
+        ASSERT_EQ(sim.get_base_queue_slot(0, 1), (TileCoord{bx - 1, by + 2}));
+        ASSERT_EQ(sim.get_base_queue_slot(0, 2), (TileCoord{bx - 1, by + 1}));
+        ASSERT_EQ(sim.get_base_queue_slot(0, 3), (TileCoord{bx - 1, by}));
+
+        // 2. Spawn worker with food at (10, by + 3) and issue ReturnToBase
+        uint32_t w1 = sim.spawn_unit(0, AntType::Worker, TileCoord{10, by + 3});
+        auto& u1 = sim.get_unit(w1);
+        u1.pick_up_food(1, 25);
+        u1.harvest_origin = TileCoord{10, by + 3};
+
+        AntOrder ret1{};
+        ret1.ant_id = w1;
+        ret1.type = OrderType::ReturnToBase;
+        sim.issue_order(ret1);
+
+        // Track every tile visited by w1 on its journey into the base
+        std::vector<TileCoord> visited_coords;
+        TileCoord last_coord = u1.pos;
+        visited_coords.push_back(last_coord);
+
+        for (int i = 0; i < 150; ++i) {
+            sim.tick();
+            if (u1.pos != last_coord) {
+                last_coord = u1.pos;
+                visited_coords.push_back(last_coord);
+            }
+            if (u1.state == UnitState::EnteringBase) {
+                break;
+            }
+        }
+
+        ASSERT_EQ(u1.state, UnitState::EnteringBase);
+        ASSERT_EQ(u1.pos, (TileCoord{bx + 1, by + 1}));
+
+        // Verify that the ant walked vertically strictly along bx - 1 (x = 19)
+        // and NEVER stepped on column bx (x = 20) at rows by+3, by+2, by+1
+        bool stepped_on_mound_left_edge = false;
+        for (const auto& pt : visited_coords) {
+            if (pt.x == bx && (pt.y == by + 3 || pt.y == by + 2 || pt.y == by + 1)) {
+                stepped_on_mound_left_edge = true;
+            }
+        }
+        ASSERT_FALSE(stepped_on_mound_left_edge);
+
+        // Verify that the path passed through the vertical corridor at bx - 1
+        bool visited_corridor_bottom = false;
+        bool visited_corridor_top = false;
+        for (const auto& pt : visited_coords) {
+            if (pt.x == bx - 1 && pt.y == by + 3) visited_corridor_bottom = true;
+            if (pt.x == bx - 1 && pt.y == by) visited_corridor_top = true;
+        }
+        ASSERT_TRUE(visited_corridor_bottom);
+        ASSERT_TRUE(visited_corridor_top);
     } TEST_END();
 }
 
