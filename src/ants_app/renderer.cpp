@@ -679,6 +679,9 @@ void Renderer::render_world(const ants::sim::WorldState& world,
     // 4. Ant Units (Depth-Sorted)
     render_ant_units(world, selected_unit_id, selected_unit_ids, show_all_health_bars);
 
+    // 4.2 Visual Effects (e.g. bomb explosion bombex)
+    render_visual_effects(world);
+
     // 4.5 Layer 3 Canopy Overhang (rendered after ants so ants walk beneath foliage)
     render_terrain_layer3_canopy();
 
@@ -948,6 +951,31 @@ void Renderer::render_terrain_layer3_canopy() {
     }
 }
 
+void Renderer::render_visual_effects(const ants::sim::WorldState& world) {
+    if (!archive_ || !texture_cache_) return;
+    for (const auto& eff : world.effects) {
+        int32_t sx = 0, sy = 0;
+        if (!camera_.world_to_screen(eff.px, eff.py, sx, sy)) continue;
+        const auto* anim = archive_->find_animation(eff.anim_name);
+        if (!anim && !eff.anim_name.empty()) {
+            std::string low = eff.anim_name;
+            for (char& c : low) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+            anim = archive_->find_animation(low);
+        }
+        if (anim && !anim->subitems.empty()) {
+            size_t sub_idx = eff.frame % anim->subitems.size();
+            const auto& sub = anim->subitems[sub_idx];
+            for (const auto& f : sub.frames) {
+                SDL_Texture* tex = texture_cache_->get_sprite_texture(f.sprite_index);
+                if (!tex) continue;
+                const auto& sp = archive_->get_sprite(f.sprite_index);
+                SDL_Rect dst = { sx + f.dx, sy + f.dy, static_cast<int>(sp.width), static_cast<int>(sp.height) };
+                SDL_RenderCopy(renderer_, tex, nullptr, &dst);
+            }
+        }
+    }
+}
+
 void Renderer::draw_ant_shadow(int32_t anchor_sx, int32_t anchor_sy, int32_t altitude_z) {
     SDL_Texture* shadow_tex = texture_cache_->get_named_sprite_texture("shadow.bmp");
     if (!shadow_tex) return;
@@ -1033,6 +1061,16 @@ void Renderer::draw_single_ant(const ants::sim::AntSnapshot& ant, bool is_select
         action = "gh";
     } else if (ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::Drowning)) {
         action = "dr";
+    } else if (ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::PlantingBomb)) {
+        action = "sb";
+    } else if (ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::DefusingBomb)) {
+        action = "db";
+    } else if (ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::PlacingFire)) {
+        action = "sf";
+    } else if (ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::ExtinguishingFire)) {
+        action = "xf";
+    } else if (ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::CantGo)) {
+        action = "cg";
     } else if (ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::QueuingBase)) {
         if (ant.is_holding) {
             action = "ws";
@@ -1044,9 +1082,16 @@ void Renderer::draw_single_ant(const ants::sim::AntSnapshot& ant, bool is_select
     }
 
     ants::assets::Direction dir = static_cast<ants::assets::Direction>(ant.facing & 7);
-    if (ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::BuildingBridge) ||
-        ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::DemolishingBridge)) {
-        // asbbl/asbbw and asdbl/asdbw animations only exist for cardinal directions: North (7), South (3), East/West (9)
+    if (ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::Drowning) ||
+        ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::CantGo)) {
+        dir = ants::assets::Direction::South;
+    } else if (ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::BuildingBridge) ||
+               ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::DemolishingBridge) ||
+               ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::PlantingBomb) ||
+               ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::DefusingBomb) ||
+               ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::PlacingFire) ||
+               ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::ExtinguishingFire)) {
+        // These animations only exist for cardinal directions: North (7), South (3), East/West (9/5)
         if (dir == ants::assets::Direction::NorthEast || dir == ants::assets::Direction::NorthWest) {
             dir = ants::assets::Direction::North;
         } else if (dir == ants::assets::Direction::SouthEast || dir == ants::assets::Direction::SouthWest) {
@@ -1140,7 +1185,7 @@ void Renderer::draw_single_ant(const ants::sim::AntSnapshot& ant, bool is_select
     }
 
     // 4. Overhead Unit Health Bar (Framed bar with health-percentage coloring)
-    if (is_selected || show_health_bar) {
+    if ((is_selected || show_health_bar) && ant.hp > 0 && !ant.is_drowning) {
         SDL_Rect bar_border = { sx - 13, render_y - 36, 26, 6 };
         SDL_SetRenderDrawColor(renderer_, 0, 0, 0, 255);
         SDL_RenderDrawRect(renderer_, &bar_border);
@@ -1202,7 +1247,9 @@ void Renderer::render_ant_units(const ants::sim::WorldState& world,
                                 bool show_all_health_bars) {
     for (const auto& a : world.ants) {
         if (a.is_underground) continue;
-        if (a.hp == 0 && !a.is_drowning) continue;
+        if (a.hp == 0 && !a.is_drowning &&
+            a.anim_state != static_cast<uint16_t>(ants::sim::UnitState::Knockback) &&
+            a.anim_state != static_cast<uint16_t>(ants::sim::UnitState::Bounce)) continue;
 
         bool is_sel = false;
         if (!selected_unit_ids.empty()) {

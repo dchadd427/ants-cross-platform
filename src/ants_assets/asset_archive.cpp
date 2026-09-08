@@ -129,16 +129,17 @@ void AssetArchive::precompute_directional_animations() {
         char dir_char = anim.name[anim.name.size() - 3];
         std::string suffix = anim.name.substr(anim.name.size() - 2);
 
-        if (suffix == "01" && (dir_char == '7' || dir_char == '8' || dir_char == '9' || dir_char == '2' || dir_char == '3')) {
+        if (suffix == "01" && (dir_char == '7' || dir_char == '8' || dir_char == '9' || dir_char == '2' || dir_char == '3' ||
+                               dir_char == '6' || dir_char == '5' || dir_char == '4')) {
             std::string prefix = anim.name.substr(0, anim.name.size() - 3);
 
             // Register standard unmirrored directions
             if (dir_char == '7') {
                 dir_anim_map_[prefix + "_0"] = static_cast<uint32_t>(i);
-            } else if (dir_char == '8') {
+            } else if (dir_char == '8' || dir_char == '6') {
                 dir_anim_map_[prefix + "_1"] = static_cast<uint32_t>(i);
 
-                // Precompute mirrored NorthWest (7) from NorthEast (8)
+                // Precompute mirrored NorthWest (7) from NorthEast (8/6)
                 AnimationSequence nw_anim;
                 nw_anim.id = static_cast<uint32_t>(animations_.size() + dir_animations_.size());
                 nw_anim.name = prefix + "_mirrored_7";
@@ -167,10 +168,10 @@ void AssetArchive::precompute_directional_animations() {
                 uint32_t dir_idx = static_cast<uint32_t>(dir_animations_.size());
                 dir_animations_.push_back(std::move(nw_anim));
                 dir_anim_map_[prefix + "_7"] = 0x80000000u | dir_idx;
-            } else if (dir_char == '9') {
+            } else if (dir_char == '9' || dir_char == '5') {
                 dir_anim_map_[prefix + "_2"] = static_cast<uint32_t>(i);
 
-                // Precompute mirrored West (6) from East (9)
+                // Precompute mirrored West (6) from East (9/5)
                 AnimationSequence w_anim;
                 w_anim.id = static_cast<uint32_t>(animations_.size() + dir_animations_.size());
                 w_anim.name = prefix + "_mirrored_6";
@@ -199,10 +200,10 @@ void AssetArchive::precompute_directional_animations() {
                 uint32_t dir_idx = static_cast<uint32_t>(dir_animations_.size());
                 dir_animations_.push_back(std::move(w_anim));
                 dir_anim_map_[prefix + "_6"] = 0x80000000u | dir_idx;
-            } else if (dir_char == '2') {
+            } else if (dir_char == '2' || dir_char == '4') {
                 dir_anim_map_[prefix + "_3"] = static_cast<uint32_t>(i);
 
-                // Precompute mirrored SouthWest (5) from SouthEast (2)
+                // Precompute mirrored SouthWest (5) from SouthEast (2/4)
                 AnimationSequence sw_anim;
                 sw_anim.id = static_cast<uint32_t>(animations_.size() + dir_animations_.size());
                 sw_anim.name = prefix + "_mirrored_5";

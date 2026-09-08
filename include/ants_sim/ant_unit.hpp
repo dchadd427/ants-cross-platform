@@ -49,8 +49,28 @@ enum class UnitState : uint8_t {
     DivingInWater  = 17, // Swimmer Ant diving into water (asdi*, Sound 71)
     ExitingWater   = 18, // Swimmer Ant emerging from water onto land (asgo*, Sound 71)
     BuildingBridge = 19, // Swimmer Ant digging / building bridge (asbb*, Action 13)
-    DemolishingBridge = 20 // Swimmer Ant digging / demolishing bridge (asdb*, Action 14)
+    DemolishingBridge = 20, // Swimmer Ant digging / demolishing bridge (asdb*, Action 14)
+    PlantingBomb      = 21, // Bomber Ant planting bomb (*sb*, Action 8, 15 ticks)
+    DefusingBomb      = 22, // Bomber Ant defusing bomb (*db*, Action 9, 12 ticks)
+    PlacingFire       = 23, // Fire Ant placing firewall (*sf*, Action 6, 10 ticks)
+    ExtinguishingFire = 24, // Fire Ant extinguishing fire (*xf*, Action 7, 10 ticks)
+    CantGo            = 25  // Blocked path / impossible order reaction (*cg*, Action 20, Sound 63)
 };
+
+/**
+ * @brief Returns the duration in simulation ticks of the *cg301 Can't Go animation.
+ */
+inline constexpr uint16_t get_cant_go_duration(AntType type) noexcept {
+    switch (type) {
+        case AntType::Worker:  return 6;
+        case AntType::Bomber:  return 15;
+        case AntType::Fire:    return 9;
+        case AntType::Thief:   return 11;
+        case AntType::Combat:  return 6;
+        case AntType::Swimmer: return 12;
+    }
+    return 8;
+}
 
 /**
  * @brief Unit death classification status.
@@ -279,6 +299,7 @@ public:
     void start_drowning() noexcept {
         state = UnitState::Drowning;
         death_status = DeathStatus::Drowned;
+        facing = Direction::South;
         hp = 0;
         anim_subitem = 0;
         anim_tick = 0;

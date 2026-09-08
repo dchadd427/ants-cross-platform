@@ -33,6 +33,7 @@ public:
         uint32_t active_depositing_ant_id{0};
     };
     std::array<AnthillQueueState, MAX_PLAYERS> base_queues_{};
+    std::vector<VisualEffect> active_effects_;
 
     mutable WorldState world_state_cache_;
     mutable bool       world_state_dirty_{true};
@@ -332,6 +333,16 @@ void SimulationEngine::tick() {
     impl_->current_tick_++;
     impl_->world_state_dirty_ = true;
 
+    // Step Active Visual Effects (e.g. bomb explosion)
+    for (auto it = impl_->active_effects_.begin(); it != impl_->active_effects_.end();) {
+        it->frame++;
+        if (it->frame >= it->total_frames) {
+            it = impl_->active_effects_.erase(it);
+        } else {
+            ++it;
+        }
+    }
+
     // 2. Step Structure Timers (Firewall burnout & Bridge collapse)
     for (uint32_t y = 0; y < impl_->grid_.height(); ++y) {
         for (uint32_t x = 0; x < impl_->grid_.width(); ++x) {
@@ -379,6 +390,7 @@ void SimulationEngine::tick() {
             if (!is_friendly || ant_ptr->allow_friendly_bomb) {
                 ant_ptr->allow_friendly_bomb = false;
                 impl_->grid_.clear_bomb(static_cast<uint32_t>(ant_ptr->pos.x), static_cast<uint32_t>(ant_ptr->pos.y));
+                impl_->active_effects_.push_back(VisualEffect{"bombex", ant_ptr->pixel_x, ant_ptr->pixel_y, 0, 10});
                 impl_->audio_queue_.push_back(AudioEvent{SoundID::BombDetonate, ant_ptr->pixel_x, ant_ptr->pixel_y, 2, 255});
                 if (is_ant_in_base_queue(ant_ptr->id)) {
                     leave_base_queue(ant_ptr->id);
@@ -405,7 +417,7 @@ void SimulationEngine::tick() {
                 }
                 int32_t from_px = ant_ptr->pixel_x + facing_dx * 32;
                 int32_t from_py = ant_ptr->pixel_y + facing_dy * 32;
-                impl_->physics_.apply_knockback(*ant_ptr, from_px, from_py, 4, 4, DamageSource::BombBlast, impl_->audio_queue_, impl_->prng_.rand());
+                impl_->physics_.apply_knockback(*ant_ptr, from_px, from_py, 5, 5, DamageSource::BombBlast, impl_->audio_queue_, impl_->prng_.rand());
             }
         }
     }
@@ -525,7 +537,9 @@ void SimulationEngine::tick() {
 
     // 5. Step Unit Movement & Timers
     for (auto& ant_ptr : impl_->ants_) {
-        if (!ant_ptr || !ant_ptr->is_alive()) continue;
+        if (!ant_ptr) continue;
+        if (!ant_ptr->is_alive() && ant_ptr->state != UnitState::Drowning &&
+            ant_ptr->state != UnitState::Knockback && ant_ptr->state != UnitState::Bounce) continue;
         ant_ptr->tick_timers();
         SurfaceType surf = SurfaceType::Grass;
         bool in_water = false;
@@ -979,7 +993,95 @@ void SimulationEngine::tick() {
         continue;
     }
 
-        // Check arrival at friendly anthill with food or needing healing
+    // Planting Bomb progression (absb, 15 ticks)
+    if (ant_ptr->state == UnitState::PlantingBomb) {
+        ant_ptr->anim_tick++;
+        ant_ptr->anim_subitem = ant_ptr->anim_tick;
+        if (ant_ptr->anim_tick >= 15) {
+            ant_ptr->state = UnitState::Idle;
+            ant_ptr->anim_tick = 0;
+            ant_ptr->anim_subitem = 0;
+        }
+        continue;
+    }
+
+    // Defusing Bomb progression (abdb, 12 ticks)
+    if (ant_ptr->state == UnitState::DefusingBomb) {
+        ant_ptr->anim_tick++;
+        ant_ptr->anim_subitem = ant_ptr->anim_tick;
+        if (ant_ptr->anim_tick >= 12) {
+            ant_ptr->state = UnitState::Idle;
+            ant_ptr->anim_tick = 0;
+            ant_ptr->anim_subitem = 0;
+        }
+        continue;
+    }
+
+    // Placing Fire progression (afsf, 10 ticks)
+    if (ant_ptr->state == UnitState::PlacingFire) {
+        ant_ptr->anim_tick++;
+        ant_ptr->anim_subitem = ant_ptr->anim_tick;
+        if (ant_ptr->anim_tick >= 10) {
+            ant_ptr->state = UnitState::Idle;
+            ant_ptr->anim_tick = 0;
+            ant_ptr->anim_subitem = 0;
+        }
+        continue;
+    }
+
+    // Extinguishing Fire progression (afxf, 10 ticks)
+    if (ant_ptr->state == UnitState::ExtinguishingFire) {
+        ant_ptr->anim_tick++;
+        ant_ptr->anim_subitem = ant_ptr->anim_tick;
+        if (ant_ptr->anim_tick >= 10) {
+            ant_ptr->state = UnitState::Idle;
+            ant_ptr->anim_tick = 0;
+            ant_ptr->anim_subitem = 0;
+        }
+        continue;
+    }
+
+    // Can't Go progression (*cg301)
+    if (ant_ptr->state == UnitState::CantGo) {
+        ant_ptr->anim_tick++;
+        ant_ptr->anim_subitem = ant_ptr->anim_tick;
+        if (ant_ptr->anim_tick >= get_cant_go_duration(ant_ptr->type)) {
+            ant_ptr->state = (ant_ptr->type == AntType::Combat) ? UnitState::GuardIdle : UnitState::Idle;
+            ant_ptr->anim_tick = 0;
+            ant_ptr->anim_subitem = 0;
+        }
+        continue;
+    }
+
+    // Bounce progression (*gb*, 4 ticks)
+    if (ant_ptr->state == UnitState::Bounce) {
+        ant_ptr->anim_tick++;
+        ant_ptr->anim_subitem = ant_ptr->anim_tick;
+        if (ant_ptr->anim_tick >= 4) {
+            if (ant_ptr->hp == 0) {
+                ant_ptr->state = UnitState::Dead;
+            } else {
+                ant_ptr->state = (ant_ptr->type == AntType::Combat) ? UnitState::GuardIdle : UnitState::Idle;
+            }
+            ant_ptr->anim_tick = 0;
+            ant_ptr->anim_subitem = 0;
+        }
+        continue;
+    }
+
+    // Drowning progression (*dr301, 22 subitems)
+    if (ant_ptr->state == UnitState::Drowning) {
+        ant_ptr->anim_tick++;
+        ant_ptr->anim_subitem = ant_ptr->anim_tick;
+        if (ant_ptr->anim_tick >= 22) {
+            ant_ptr->state = UnitState::Dead;
+            ant_ptr->anim_tick = 0;
+            ant_ptr->anim_subitem = 0;
+        }
+        continue;
+    }
+
+    // Check arrival at friendly anthill with food or needing healing
         const auto* friendly_base = impl_->grid_.find_anthill(ant_ptr->player_id);
         if (friendly_base) {
             int32_t bx = friendly_base->x;
@@ -1219,7 +1321,8 @@ void SimulationEngine::tick() {
     for (auto& u : impl_->ants_) {
         if (!u || !u->is_alive() || u->underground) continue;
         if (u->state == UnitState::Idle || u->state == UnitState::GuardIdle ||
-            u->state == UnitState::Bounce || u->state == UnitState::QueuingBase) {
+            u->state == UnitState::Bounce || u->state == UnitState::QueuingBase ||
+            u->state == UnitState::CantGo) {
             if (u->pixel_x != u->pos.x * 32 + 16 || u->pixel_y != u->pos.y * 32 + 16) {
                 u->set_tile_pos(u->pos.x, u->pos.y);
             }
@@ -1234,7 +1337,7 @@ void SimulationEngine::issue_order(const AntOrder& order) {
     AntUnit* unit = impl_->find_unit(order.ant_id);
     if (!unit || !unit->is_alive() || unit->is_stunned()) return;
 
-    // You should not be able to interrupt the swimmer when he is digging or demolishing a bridge
+    // You should not be able to interrupt actions currently animating
     if (unit->state == UnitState::BuildingBridge || unit->state == UnitState::DemolishingBridge) {
         return;
     }
@@ -1545,8 +1648,8 @@ const WorldState& SimulationEngine::get_world_state() const {
         impl_->world_state_cache_.ants.clear();
         for (const auto& a : impl_->ants_) {
             if (!a) continue;
-            // Eliminated units with 0 HP disappear from active world state (unless drowning animation active)
-            if (a->hp == 0 && a->state != UnitState::Drowning) continue;
+            // Eliminated units with 0 HP disappear from active world state (unless drowning, knockback, or bounce active)
+            if (a->hp == 0 && a->state != UnitState::Drowning && a->state != UnitState::Knockback && a->state != UnitState::Bounce) continue;
             AntSnapshot s{};
             s.id = a->id;
             s.player_id = a->player_id;
@@ -1574,6 +1677,8 @@ const WorldState& SimulationEngine::get_world_state() const {
             s.state = a->state;
             impl_->world_state_cache_.ants.push_back(s);
         }
+
+        impl_->world_state_cache_.effects = impl_->active_effects_;
 
         for (uint8_t i = 0; i < MAX_PLAYERS; ++i) {
             impl_->world_state_cache_.player_stats[i] = impl_->stats_.get_player_stats(i);
@@ -1691,6 +1796,8 @@ uint32_t SimulationEngine::spawn_unit(uint8_t player_id, AntType type, TileCoord
             unit_ptr->was_in_water = true;
             if (type == AntType::Swimmer) {
                 unit_ptr->state = UnitState::Swimming;
+            } else {
+                unit_ptr->start_drowning();
             }
         }
     }
@@ -1763,7 +1870,7 @@ void SimulationEngine::execute_melee_attack(uint32_t attacker_id, uint32_t targe
         int32_t dx = target->pos.x - attacker->pos.x;
         int32_t dy = target->pos.y - attacker->pos.y;
         if (dx == 0 && dy == 0) dx = 1;
-        int32_t dist = 4 + (impl_->prng_.rand() & 1);
+        int32_t dist = 5;
 
         TileCoord land_pos = target->pos;
         for (int32_t s = 1; s <= dist; ++s) {
@@ -1824,7 +1931,7 @@ void SimulationEngine::issue_move_order(uint32_t ant_id, TileCoord dest, bool al
     AntUnit* unit = impl_->find_unit(ant_id);
     if (!unit || !unit->is_alive() || unit->is_stunned()) return;
 
-    // You should not be able to interrupt the swimmer when he is digging or demolishing a bridge
+    // You should not be able to interrupt actions currently animating
     if (unit->state == UnitState::BuildingBridge || unit->state == UnitState::DemolishingBridge) {
         return;
     }
@@ -1862,6 +1969,14 @@ void SimulationEngine::issue_move_order(uint32_t ant_id, TileCoord dest, bool al
             interrupt_transformation(ant_id);
             return;
         }
+        unit->clear_path();
+        unit->set_tile_pos(unit->pos.x, unit->pos.y);
+        unit->state = UnitState::CantGo;
+        unit->facing = Direction::South;
+        unit->anim_tick = 0;
+        unit->anim_subitem = 0;
+        impl_->audio_queue_.push_back(AudioEvent{SoundID::CantGo, unit->pixel_x, unit->pixel_y, 1, 255});
+        return;
     } else if (dest != unit->pos) {
         unit->transformation_interrupted = false;
     }
@@ -2022,7 +2137,13 @@ void SimulationEngine::issue_move_order(uint32_t ant_id, TileCoord dest, bool al
             interrupt_transformation(ant_id);
             return;
         }
-        unit->set_destination(dest.x, dest.y);
+        unit->clear_path();
+        unit->set_tile_pos(unit->pos.x, unit->pos.y);
+        unit->state = UnitState::CantGo;
+        unit->facing = Direction::South;
+        unit->anim_tick = 0;
+        unit->anim_subitem = 0;
+        impl_->audio_queue_.push_back(AudioEvent{SoundID::CantGo, unit->pixel_x, unit->pixel_y, 1, 255});
     }
 }
 
@@ -2040,6 +2161,17 @@ bool SimulationEngine::plant_bomb(uint32_t ant_id, TileCoord target) {
     if (!impl_->grid_.in_bounds(target) || !impl_->grid_.get_cell(target).can_place_bomb()) return false;
 
     ant->set_tile_pos(ant->pos.x, ant->pos.y);
+    int32_t dx = target.x - ant->pos.x;
+    int32_t dy = target.y - ant->pos.y;
+    if (dy < 0) ant->facing = Direction::North;
+    else if (dy > 0) ant->facing = Direction::South;
+    else if (dx > 0) ant->facing = Direction::East;
+    else if (dx < 0) ant->facing = Direction::West;
+    ant->state = UnitState::PlantingBomb;
+    ant->anim_tick = 0;
+    ant->anim_subitem = 0;
+    ant->ability_target = target;
+
     impl_->grid_.place_bomb(static_cast<uint32_t>(target.x), static_cast<uint32_t>(target.y), ant->player_id);
     impl_->audio_queue_.push_back(AudioEvent{SoundID::BombPick, ant->pixel_x, ant->pixel_y, 1, 255});
     impl_->stats_.get_player_stats_mut(ant->player_id).bombs_planted++;
@@ -2053,6 +2185,17 @@ bool SimulationEngine::defuse_bomb(uint32_t ant_id, TileCoord target) {
     if (!impl_->grid_.has_bomb_at(target)) return false;
 
     ant->set_tile_pos(ant->pos.x, ant->pos.y);
+    int32_t dx = target.x - ant->pos.x;
+    int32_t dy = target.y - ant->pos.y;
+    if (dy < 0) ant->facing = Direction::North;
+    else if (dy > 0) ant->facing = Direction::South;
+    else if (dx > 0) ant->facing = Direction::East;
+    else if (dx < 0) ant->facing = Direction::West;
+    ant->state = UnitState::DefusingBomb;
+    ant->anim_tick = 0;
+    ant->anim_subitem = 0;
+    ant->ability_target = target;
+
     impl_->grid_.clear_bomb(static_cast<uint32_t>(target.x), static_cast<uint32_t>(target.y));
     impl_->audio_queue_.push_back(AudioEvent{SoundID::BombDefuseGrab, ant->pixel_x, ant->pixel_y, 1, 255});
     impl_->audio_queue_.push_back(AudioEvent{SoundID::BombBodySquash, ant->pixel_x, ant->pixel_y, 1, 255});
@@ -2067,6 +2210,17 @@ bool SimulationEngine::ignite_fire(uint32_t ant_id, TileCoord target) {
     if (!impl_->grid_.in_bounds(target) || !impl_->grid_.get_cell(target).can_place_fire()) return false;
 
     ant->set_tile_pos(ant->pos.x, ant->pos.y);
+    int32_t dx = target.x - ant->pos.x;
+    int32_t dy = target.y - ant->pos.y;
+    if (dy < 0) ant->facing = Direction::North;
+    else if (dy > 0) ant->facing = Direction::South;
+    else if (dx > 0) ant->facing = Direction::East;
+    else if (dx < 0) ant->facing = Direction::West;
+    ant->state = UnitState::PlacingFire;
+    ant->anim_tick = 0;
+    ant->anim_subitem = 0;
+    ant->ability_target = target;
+
     impl_->grid_.place_firewall(static_cast<uint32_t>(target.x), static_cast<uint32_t>(target.y), ant->player_id);
     impl_->audio_queue_.push_back(AudioEvent{SoundID::FireBeam, ant->pixel_x, ant->pixel_y, 1, 255});
     impl_->audio_queue_.push_back(AudioEvent{SoundID::FireErupt, ant->pixel_x, ant->pixel_y, 1, 255});
@@ -2081,6 +2235,17 @@ bool SimulationEngine::extinguish_fire(uint32_t ant_id, TileCoord target) {
     if (!impl_->grid_.has_fire_at(target)) return false;
 
     ant->set_tile_pos(ant->pos.x, ant->pos.y);
+    int32_t dx = target.x - ant->pos.x;
+    int32_t dy = target.y - ant->pos.y;
+    if (dy < 0) ant->facing = Direction::North;
+    else if (dy > 0) ant->facing = Direction::South;
+    else if (dx > 0) ant->facing = Direction::East;
+    else if (dx < 0) ant->facing = Direction::West;
+    ant->state = UnitState::ExtinguishingFire;
+    ant->anim_tick = 0;
+    ant->anim_subitem = 0;
+    ant->ability_target = target;
+
     impl_->grid_.clear_firewall(static_cast<uint32_t>(target.x), static_cast<uint32_t>(target.y));
     impl_->audio_queue_.push_back(AudioEvent{SoundID::FireExtinguish, ant->pixel_x, ant->pixel_y, 1, 255});
     return true;

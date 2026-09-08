@@ -2478,7 +2478,7 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         ASSERT_TRUE(sim.has_bomb_at(TileCoord{20, 20}));
     } TEST_END();
 
-    TEST_CASE("12.12 Enemy Bomb Proximity Detonation & 4-Space Knockback") {
+    TEST_CASE("12.12 Enemy Bomb Proximity Detonation & 5-Space Knockback") {
         SimulationEngine sim;
         sim.init_test_world(60, 60, 100, 60000);
 
@@ -2515,8 +2515,8 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
             if (enemy.state != UnitState::Knockback) break;
         }
 
-        // Enemy was moving East, so impulse propelled it 4 spaces West to (16, 20)
-        ASSERT_EQ(enemy.pos.x, 16);
+        // Enemy was moving East, so impulse propelled it 5 spaces West to (15, 20)
+        ASSERT_EQ(enemy.pos.x, 15);
         ASSERT_EQ(enemy.pos.y, 20);
     } TEST_END();
 
@@ -2652,7 +2652,7 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         ASSERT_FALSE(sim.has_bomb_at(TileCoord{20, 20}));
     } TEST_END();
 
-    TEST_CASE("12.16 Non-Bomber Moves Directly Onto Friendly Bomb, Explodes & 4-Space Knockback") {
+    TEST_CASE("12.16 Non-Bomber Moves Directly Onto Friendly Bomb, Explodes & 5-Space Knockback") {
         SimulationEngine sim;
         sim.init_test_world(60, 60, 100, 60000);
         ViewportCamera cam;
@@ -2695,8 +2695,8 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
             if (worker.state != UnitState::Knockback) break;
         }
 
-        // Propelled 4 spaces West to (16, 20)
-        ASSERT_EQ(worker.pos.x, 16);
+        // Propelled 5 spaces West to (15, 20)
+        ASSERT_EQ(worker.pos.x, 15);
         ASSERT_EQ(worker.pos.y, 20);
     } TEST_END();
 
@@ -3500,6 +3500,125 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         }
         // With 8 free directions, 24 trials should sample multiple distinct directions (>= 4)
         ASSERT_TRUE(chosen_directions.size() >= 4);
+    } TEST_END();
+
+    TEST_CASE("12.30 Blocked Path Can't Go Reaction, Ability Animations & Drowning Sequence") {
+        SimulationEngine sim;
+        sim.init_test_world(60, 60, 100, 60000);
+
+        // 1. Can't Go Reaction on Impassable/Blocked Path
+        sim.grid_mut().set_terrain(12, 10, TERRAIN_WATER);
+        uint32_t w_id = sim.spawn_unit(0, AntType::Worker, TileCoord{10, 10});
+        auto& w_ant = sim.get_unit(w_id);
+
+        // Issue move order directly to impassable water tile (Worker cannot swim)
+        sim.issue_move_order(w_id, TileCoord{12, 10});
+
+        // Ant immediately enters CantGo, faces South, snaps to tile center, and plays CantGo sound
+        ASSERT_EQ(w_ant.state, UnitState::CantGo);
+        ASSERT_EQ(w_ant.facing, Direction::South);
+        ASSERT_EQ(w_ant.pixel_x, 10 * 32 + 16);
+        ASSERT_EQ(w_ant.pixel_y, 10 * 32 + 16);
+        ASSERT_TRUE(w_ant.waypoints.empty());
+        ASSERT_TRUE(sim.has_audio_event(SoundID::CantGo));
+
+        // Advance simulation through CantGo duration (6 ticks for Worker)
+        for (int t = 0; t < 6; ++t) {
+            sim.tick();
+        }
+        ASSERT_EQ(w_ant.state, UnitState::Idle);
+
+        // 2. Bomber Ability Animations (PlantingBomb and DefusingBomb)
+        uint32_t b_id = sim.spawn_unit(0, AntType::Bomber, TileCoord{20, 20});
+        auto& b_ant = sim.get_unit(b_id);
+
+        sim.plant_bomb(b_id, TileCoord{21, 20});
+        ASSERT_EQ(b_ant.state, UnitState::PlantingBomb);
+        ASSERT_EQ(b_ant.facing, Direction::East);
+
+        // Plant animation is 15 ticks
+        for (int t = 0; t < 15; ++t) {
+            sim.tick();
+        }
+        ASSERT_TRUE(sim.has_bomb_at(TileCoord{21, 20}));
+        ASSERT_EQ(b_ant.state, UnitState::Idle);
+
+        // Defuse bomb (12 ticks)
+        sim.defuse_bomb(b_id, TileCoord{21, 20});
+        ASSERT_EQ(b_ant.state, UnitState::DefusingBomb);
+        ASSERT_EQ(b_ant.facing, Direction::East);
+
+        for (int t = 0; t < 12; ++t) {
+            sim.tick();
+        }
+        ASSERT_FALSE(sim.has_bomb_at(TileCoord{21, 20}));
+        ASSERT_EQ(b_ant.state, UnitState::Idle);
+
+        // 3. Fire Ant Ability Animations (PlacingFire and ExtinguishingFire)
+        uint32_t f_id = sim.spawn_unit(0, AntType::Fire, TileCoord{25, 25});
+        auto& f_ant = sim.get_unit(f_id);
+
+        sim.ignite_fire(f_id, TileCoord{25, 26});
+        ASSERT_EQ(f_ant.state, UnitState::PlacingFire);
+        ASSERT_EQ(f_ant.facing, Direction::South);
+
+        // Fire placing is 10 ticks
+        for (int t = 0; t < 10; ++t) {
+            sim.tick();
+        }
+        ASSERT_TRUE(sim.grid().get_cell(TileCoord{25, 26}).has_fire());
+        ASSERT_EQ(f_ant.state, UnitState::Idle);
+
+        // Extinguish fire (10 ticks)
+        sim.extinguish_fire(f_id, TileCoord{25, 26});
+        ASSERT_EQ(f_ant.state, UnitState::ExtinguishingFire);
+        ASSERT_EQ(f_ant.facing, Direction::South);
+
+        for (int t = 0; t < 10; ++t) {
+            sim.tick();
+        }
+        ASSERT_FALSE(sim.grid().get_cell(TileCoord{25, 26}).has_fire());
+        ASSERT_EQ(f_ant.state, UnitState::Idle);
+
+        // 4. Drowning sequence progression (22 ticks)
+        sim.grid_mut().set_terrain(30, 30, TERRAIN_WATER);
+        uint32_t drown_id = sim.spawn_unit(0, AntType::Worker, TileCoord{30, 30});
+        auto& drown_ant = sim.get_unit(drown_id);
+
+        // Unit enters Drowning state, faces South, snapped to center
+        ASSERT_EQ(drown_ant.state, UnitState::Drowning);
+        ASSERT_EQ(drown_ant.facing, Direction::South);
+        ASSERT_EQ(drown_ant.pixel_x, 30 * 32 + 16);
+        ASSERT_EQ(drown_ant.pixel_y, 30 * 32 + 16);
+
+        // Advance 22 ticks
+        for (int t = 0; t < 22; ++t) {
+            ASSERT_EQ(drown_ant.state, UnitState::Drowning);
+            ASSERT_EQ(drown_ant.facing, Direction::South);
+            sim.tick();
+        }
+        // After 22 ticks, drowning completes and unit dies
+        ASSERT_EQ(drown_ant.state, UnitState::Dead);
+        ASSERT_FALSE(drown_ant.is_alive());
+
+        // 5. Bomb Detonation Visual Effect
+        sim.grid_mut().place_bomb(35, 35, 0);
+        uint32_t trigger_id = sim.spawn_unit(1, AntType::Combat, TileCoord{35, 36});
+        sim.issue_move_order(trigger_id, TileCoord{35, 34});
+        for (int t = 0; t < 20; ++t) {
+            sim.tick();
+            if (!sim.has_bomb_at(TileCoord{35, 35})) break;
+        }
+        // WorldState includes bombex visual effect
+        const auto& snap = sim.get_world_state();
+        bool found_bombex = false;
+        for (const auto& fx : snap.effects) {
+            if (fx.anim_name == "bombex") {
+                found_bombex = true;
+                break;
+            }
+        }
+        ASSERT_TRUE(found_bombex);
     } TEST_END();
 }
 
