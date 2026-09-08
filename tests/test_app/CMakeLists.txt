@@ -1,6 +1,6 @@
 # SDL2 configuration
 find_package(SDL2 QUIET)
-if(NOT SDL2_FOUND)
+if(NOT SDL2_FOUND AND NOT DEFINED SDL2_INCLUDE_DIRS)
     find_path(SDL2_INCLUDE_DIRS SDL.h PATH_SUFFIXES SDL2 /opt/homebrew/include/SDL2 /opt/homebrew/opt/sdl2/include/SDL2)
     find_library(SDL2_LIBRARIES NAMES SDL2 PATHS /opt/homebrew/lib /opt/homebrew/opt/sdl2/lib)
 endif()
@@ -32,6 +32,15 @@ if(APPLE)
         "-framework CoreFoundation"
         "-framework CoreAudio"
     )
+endif()
+
+if(WIN32)
+    target_link_libraries(test_app_integration PRIVATE ws2_32 winmm)
+    if(DEFINED SDL2_DLL)
+        add_custom_command(TARGET test_app_integration POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different "${SDL2_DLL}" "$<TARGET_FILE_DIR:test_app_integration>"
+        )
+    endif()
 endif()
 
 target_compile_definitions(test_app_integration PRIVATE

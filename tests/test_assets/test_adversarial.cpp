@@ -820,7 +820,7 @@ void test_suite_8_concurrency(const std::string& chd_path) {
                 std::uniform_int_distribution<uint32_t> spr_dist(0, 2793);
                 std::uniform_int_distribution<uint32_t> snd_dist(0, 90);
                 std::uniform_int_distribution<uint32_t> anim_dist(0, 1343);
-                std::uniform_int_distribution<uint8_t> dir_dist(0, 7);
+                std::uniform_int_distribution<uint32_t> dir_dist(0, 7);
 
                 const auto& pal = archive.get_palette();
 

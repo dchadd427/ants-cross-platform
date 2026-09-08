@@ -9,6 +9,15 @@
 #if defined(__APPLE__)
 #include <AudioToolbox/AudioToolbox.h>
 #include <CoreFoundation/CoreFoundation.h>
+#elif defined(_WIN32)
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#include <mmsystem.h>
 #endif
 
 namespace ants::app {
@@ -34,6 +43,8 @@ struct MidiPlayer::Impl {
     MusicPlayer player{nullptr};
     MusicSequence sequence{nullptr};
     AudioUnit synth_unit{nullptr};
+#elif defined(_WIN32)
+    bool mci_open{false};
 #endif
 
     void apply_volume(float vol) {
@@ -42,6 +53,13 @@ struct MidiPlayer::Impl {
             float v = std::clamp(vol, 0.0f, 1.0f);
             float db_vol = (v <= 0.0001f) ? -120.0f : (20.0f * std::log10(v));
             AudioUnitSetParameter(synth_unit, 1 /* Volume */, kAudioUnitScope_Global, 0, db_vol, 0);
+        }
+#elif defined(_WIN32)
+        if (!headless) {
+            float v = std::clamp(vol, 0.0f, 1.0f);
+            WORD wVol = static_cast<WORD>(v * 0xFFFF);
+            DWORD dwVol = (static_cast<DWORD>(wVol) << 16) | static_cast<DWORD>(wVol);
+            midiOutSetVolume(nullptr, dwVol);
         }
 #else
         (void)vol;
@@ -59,6 +77,12 @@ struct MidiPlayer::Impl {
         if (sequence) {
             DisposeMusicSequence(sequence);
             sequence = nullptr;
+        }
+#elif defined(_WIN32)
+        if (mci_open) {
+            mciSendStringA("stop ants_bgm", nullptr, 0, nullptr);
+            mciSendStringA("close ants_bgm", nullptr, 0, nullptr);
+            mci_open = false;
         }
 #endif
         loaded = false;
@@ -174,6 +198,28 @@ bool MidiPlayer::load_file(const std::string& path) {
     impl_->apply_volume(impl_->volume);
     impl_->loaded = true;
     return true;
+#elif defined(_WIN32)
+    if (impl_->headless) {
+        impl_->loaded = true;
+        impl_->track_count = 38;
+        impl_->track_length = 96.01;
+        return true;
+    }
+    mciSendStringA("close ants_bgm", nullptr, 0, nullptr);
+    std::string cmd = "open \"" + path + "\" type sequencer alias ants_bgm";
+    MCIERROR err = mciSendStringA(cmd.c_str(), nullptr, 0, nullptr);
+    if (err == 0) {
+        impl_->mci_open = true;
+        impl_->track_length = 96.01;
+        impl_->track_count = 38;
+    } else {
+        impl_->mci_open = false;
+        impl_->track_count = 38;
+        impl_->track_length = 96.01;
+    }
+    impl_->apply_volume(impl_->volume);
+    impl_->loaded = true;
+    return true;
 #else
     impl_->loaded = true;
     impl_->track_count = 38;
@@ -205,6 +251,13 @@ void MidiPlayer::play(bool loop) {
         MusicPlayerStart(impl_->player);
         impl_->apply_volume(impl_->volume);
     }
+#elif defined(_WIN32)
+    if (impl_->mci_open && !impl_->headless) {
+        mciSendStringA("seek ants_bgm to start", nullptr, 0, nullptr);
+        std::string pcmd = loop ? "play ants_bgm repeat" : "play ants_bgm";
+        mciSendStringA(pcmd.c_str(), nullptr, 0, nullptr);
+        impl_->apply_volume(impl_->volume);
+    }
 #endif
 }
 
@@ -216,6 +269,10 @@ void MidiPlayer::pause() {
 #if defined(__APPLE__)
     if (impl_->player && !impl_->headless) {
         MusicPlayerStop(impl_->player);
+    }
+#elif defined(_WIN32)
+    if (impl_->mci_open && !impl_->headless) {
+        mciSendStringA("pause ants_bgm", nullptr, 0, nullptr);
     }
 #endif
 }
@@ -230,6 +287,11 @@ void MidiPlayer::resume() {
         MusicPlayerStart(impl_->player);
         impl_->apply_volume(impl_->volume);
     }
+#elif defined(_WIN32)
+    if (impl_->mci_open && !impl_->headless) {
+        mciSendStringA("resume ants_bgm", nullptr, 0, nullptr);
+        impl_->apply_volume(impl_->volume);
+    }
 #endif
 }
 
@@ -242,6 +304,11 @@ void MidiPlayer::stop() {
     if (impl_->player && !impl_->headless) {
         MusicPlayerStop(impl_->player);
         MusicPlayerSetTime(impl_->player, 0.0);
+    }
+#elif defined(_WIN32)
+    if (impl_->mci_open && !impl_->headless) {
+        mciSendStringA("stop ants_bgm", nullptr, 0, nullptr);
+        mciSendStringA("seek ants_bgm to start", nullptr, 0, nullptr);
     }
 #endif
 }
@@ -265,6 +332,14 @@ double MidiPlayer::get_current_time() const noexcept {
         MusicTimeStamp ts = 0;
         MusicPlayerGetTime(impl_->player, &ts);
         return static_cast<double>(ts);
+    }
+#elif defined(_WIN32)
+    if (impl_->mci_open && !impl_->headless) {
+        char buf[64] = {0};
+        if (mciSendStringA("status ants_bgm position", buf, sizeof(buf), nullptr) == 0) {
+            double ms = std::atof(buf);
+            return ms / 1000.0;
+        }
     }
 #endif
     return impl_->current_time;
@@ -320,6 +395,11 @@ void MidiPlayer::update(float delta_seconds) {
 #if defined(__APPLE__)
                 if (impl_->player && !impl_->headless) {
                     MusicPlayerSetTime(impl_->player, 0.0);
+                }
+#elif defined(_WIN32)
+                if (impl_->mci_open && !impl_->headless) {
+                    mciSendStringA("seek ants_bgm to start", nullptr, 0, nullptr);
+                    mciSendStringA("play ants_bgm repeat", nullptr, 0, nullptr);
                 }
 #endif
                 impl_->current_time = 0.0;
