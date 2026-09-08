@@ -30,10 +30,19 @@ target_link_libraries(ants_app PUBLIC
     ants_sim
     ants_assets
     ${SDL2_LIBRARIES}
-    "-framework AudioToolbox"
-    "-framework CoreFoundation"
-    "-framework CoreAudio"
 )
+
+if(APPLE)
+    target_link_libraries(ants_app PUBLIC
+        "-framework AudioToolbox"
+        "-framework CoreFoundation"
+        "-framework CoreAudio"
+    )
+endif()
+
+if(WIN32)
+    target_link_libraries(ants_app PUBLIC ws2_32)
+endif()
 
 set_target_properties(ants_app PROPERTIES
     POSITION_INDEPENDENT_CODE ON
