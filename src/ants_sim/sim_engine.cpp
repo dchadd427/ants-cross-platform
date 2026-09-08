@@ -621,18 +621,24 @@ void SimulationEngine::tick() {
             ant_ptr->pending_powerup_type = new_type_id;
             ant_ptr->dropped_powerup_pos = TileCoord{-1, -1};
 
-            // If ant already possessed a power-up, drop previous power-up onto an adjacent valid tile
+            // If ant already possessed a power-up, drop previous power-up onto an adjacent valid tile (chosen uniformly at random)
             if (old_type != AntType::Worker) {
                 static constexpr std::array<TileCoord, 8> CANDIDATE_OFFSETS = {{{0, -1}, {1, 0}, {0, 1}, {-1, 0}, {1, -1}, {1, 1}, {-1, 1}, {-1, -1}}};
+                std::array<TileCoord, 8> valid_tiles{};
+                size_t valid_count = 0;
                 for (const auto& offset : CANDIDATE_OFFSETS) {
                     TileCoord adj{ant_ptr->pos.x + offset.x, ant_ptr->pos.y + offset.y};
                     if (impl_->is_valid_powerup_drop_tile(adj)) {
-                        impl_->grid_.place_powerup(adj.x, adj.y, static_cast<uint8_t>(old_type));
-                        ant_ptr->dropped_powerup_pos = adj;
-                        break;
+                        valid_tiles[valid_count++] = adj;
                     }
                 }
-                // If there are no valid tiles, it disappears and is no longer available for the rest of the game
+                if (valid_count > 0) {
+                    size_t chosen_idx = static_cast<size_t>(impl_->prng_.rand() % static_cast<uint16_t>(valid_count));
+                    TileCoord chosen = valid_tiles[chosen_idx];
+                    impl_->grid_.place_powerup(chosen.x, chosen.y, static_cast<uint8_t>(old_type));
+                    ant_ptr->dropped_powerup_pos = chosen;
+                }
+                // If there are no valid tiles (valid_count == 0), it disappears and is no longer available for the rest of the game
             }
 
             // Transform ant (11-tick getpow cocoon animation)
