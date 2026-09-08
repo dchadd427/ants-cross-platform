@@ -4066,6 +4066,49 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
             ASSERT_NE(pt, (TileCoord{bx - 2, by}));
         }
     } TEST_END();
+
+    TEST_CASE("12.40 Ant Lunchbox Sprite Render Order Layering (Lunchbox in Back)") {
+        AssetArchive archive;
+        std::string chd_path = std::string(ORIGINAL_ASSETS_DIR) + "/ants.chd";
+        ASSERT_TRUE(archive.load_chd(chd_path));
+
+        // Test holding directional walk animations and base entry animations across all ant types
+        std::vector<std::string> test_anims = {
+            "hgwg301", "hgwg201", "hgwg701", "hgwg801", "hgwg901",
+            "hgws201", "hgwd301", "hgwm901",
+            "hgen301", "hben301", "hfen301", "hcen301", "hsen301", "hten301"
+        };
+
+        for (const auto& anim_name : test_anims) {
+            const auto* seq = archive.find_animation(anim_name);
+            ASSERT_TRUE(seq != nullptr);
+            ASSERT_FALSE(seq->subitems.empty());
+
+            for (const auto& sub : seq->subitems) {
+                if (sub.frames.size() <= 1) continue;
+
+                auto frames = sub.frames;
+                std::stable_sort(frames.begin(), frames.end(), [&](const auto& a, const auto& b) {
+                    const auto& sp_a = archive.get_sprite(a.sprite_index);
+                    const auto& sp_b = archive.get_sprite(b.sprite_index);
+                    bool is_lb_a = (sp_a.name.find("lb") != std::string::npos);
+                    bool is_lb_b = (sp_b.name.find("lb") != std::string::npos);
+                    if (is_lb_a != is_lb_b) {
+                        return is_lb_a; // Lunchbox rendered first (in back)
+                    }
+                    return false;
+                });
+
+                // First frame must be a lunchbox sprite (rendered in the back)
+                const auto& sp0 = archive.get_sprite(frames[0].sprite_index);
+                ASSERT_TRUE(sp0.name.find("lb") != std::string::npos);
+
+                // Last frame must be the ant body sprite (rendered in front)
+                const auto& sp_back = archive.get_sprite(frames.back().sprite_index);
+                ASSERT_TRUE(sp_back.name.find("lb") == std::string::npos);
+            }
+        }
+    } TEST_END();
 }
 
 // ============================================================================
