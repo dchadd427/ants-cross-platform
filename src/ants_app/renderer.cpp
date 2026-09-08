@@ -1053,8 +1053,10 @@ void Renderer::draw_single_ant(const ants::sim::AntSnapshot& ant, bool is_select
     int32_t render_y = sy - altitude_z;
 
     // 2. Resolve Action Animation Prefix
-    static const char* class_prefixes[6] = { "ag", "ab", "af", "at", "ac", "as" };
-    std::string prefix = class_prefixes[static_cast<size_t>(ant.type) % 6];
+    static const char* normal_prefixes[6]  = { "ag", "ab", "af", "at", "ac", "as" };
+    static const char* holding_prefixes[6] = { "hg", "hb", "hf", "ht", "hc", "hs" };
+    std::string prefix = ant.is_holding ? holding_prefixes[static_cast<size_t>(ant.type) % 6]
+                                        : normal_prefixes[static_cast<size_t>(ant.type) % 6];
     std::string action = "st"; // Default Idle
 
     bool is_infiltrating = (ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::Infiltrating));
@@ -1063,9 +1065,19 @@ void Renderer::draw_single_ant(const ants::sim::AntSnapshot& ant, bool is_select
     if (ant.is_underground) return; // Fully underground inside base hole, do not draw
 
     if (is_entering_base) {
-        std::string anim_name = ant.is_holding ? "hgen301" : "agen301";
+        // Base entry animation for each ant type:
+        // Worker:  agen301 / hgen301
+        // Bomber:  aben301 / hben301
+        // Fire:    afen301 / hfen301
+        // Combat:  acen301 / hcen301
+        // Swimmer: asen301 / hsen301
+        // Thief:   aten301 / hten301
+        static const char* type_letters[6] = { "g", "b", "f", "t", "c", "s" };
+        char type_ch = type_letters[static_cast<size_t>(ant.type) % 6][0];
+        bool carrying_food = (ant.is_holding || ant.had_food_at_base_entry);
+        std::string anim_name = (carrying_food ? std::string("h") : std::string("a")) + type_ch + "en301";
         const auto* base_seq = archive_->find_animation(anim_name);
-        if (!base_seq) base_seq = archive_->find_animation("agen301");
+        if (!base_seq) base_seq = archive_->find_animation(carrying_food ? "hgen301" : "agen301");
         if (base_seq && !base_seq->subitems.empty()) {
             size_t sub_idx = std::min(static_cast<size_t>(ant.anim_frame), base_seq->subitems.size() - 1);
             const auto& sub = base_seq->subitems[sub_idx];
@@ -1083,9 +1095,7 @@ void Renderer::draw_single_ant(const ants::sim::AntSnapshot& ant, bool is_select
     if (ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::Walking) ||
         ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::Intercepting) ||
         ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::ReturningToPost)) {
-        if (ant.is_holding) {
-            action = "ws";
-        } else if (ant.is_swimming) {
+        if (ant.is_swimming && !ant.is_holding) {
             action = "sw";
         } else if (ant.is_on_mud) {
             action = "wm";
@@ -1123,11 +1133,7 @@ void Renderer::draw_single_ant(const ants::sim::AntSnapshot& ant, bool is_select
     } else if (ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::CantGo)) {
         action = "cg";
     } else if (ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::QueuingBase)) {
-        if (ant.is_holding) {
-            action = "ws";
-        } else {
-            action = "st";
-        }
+        action = "st";
     } else {
         action = "st";
     }

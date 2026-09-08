@@ -187,15 +187,8 @@ void AntUnit::tick_movement(bool is_swimming, SurfaceType surface) {
         pixel_y = dest_py;
         pos = dest;
         current_waypoint_idx++;
+        blocked_ticks = 0;
         if (current_waypoint_idx >= waypoints.size()) {
-            if (final_dest.x >= 0 && final_dest.y >= 0 && (pos.x != final_dest.x || pos.y != final_dest.y)) {
-                // Persistent retrying: keep trying if spot is not available
-                waypoints.clear();
-                waypoints.push_back(final_dest);
-                current_waypoint_idx = 0;
-                state = UnitState::Walking;
-                return;
-            }
             if (type == AntType::Swimmer && is_swimming) {
                 state = UnitState::Swimming;
             } else {
@@ -206,6 +199,7 @@ void AntUnit::tick_movement(bool is_swimming, SurfaceType surface) {
             current_waypoint_idx = 0;
             anim_tick = 0;
             anim_subitem = 0;
+            blocked_ticks = 0;
         }
         return;
     }

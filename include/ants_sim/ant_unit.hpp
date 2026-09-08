@@ -178,6 +178,8 @@ public:
     uint16_t    anim_tick{0};
     uint16_t    state_timer{0};
     uint16_t    transform_timer{0};
+    uint16_t    blocked_ticks{0};
+    uint16_t    base_dwell_ticks{0};
     bool        is_on_mud{false};
     bool        was_in_water{false};
     bool        in_water{false};
@@ -188,6 +190,7 @@ public:
     TileCoord   harvest_origin{-1, -1};
     bool        is_thief_steal{false};
     bool        had_food_at_base_entry{false};
+    bool        underground_visited{false};
     bool        is_newborn{false};
     OrderType   pending_ability{static_cast<OrderType>(0)};
     TileCoord   ability_target{-1, -1};
