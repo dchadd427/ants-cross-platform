@@ -24,10 +24,15 @@ target_link_libraries(test_app_integration PRIVATE
     ants_sim
     ants_assets
     ${SDL2_LIBRARIES}
-    "-framework AudioToolbox"
-    "-framework CoreFoundation"
-    "-framework CoreAudio"
 )
+
+if(APPLE)
+    target_link_libraries(test_app_integration PRIVATE
+        "-framework AudioToolbox"
+        "-framework CoreFoundation"
+        "-framework CoreAudio"
+    )
+endif()
 
 target_compile_definitions(test_app_integration PRIVATE
     ORIGINAL_ASSETS_DIR="${CMAKE_SOURCE_DIR}/Original-Ants"
