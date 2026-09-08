@@ -42,6 +42,8 @@ bool CombatAIController::is_valid_target(const AntUnit& candidate,
     if (stats.are_allies(candidate.player_id, owner.player_id)) return false;
     if (candidate.is_underground() || candidate.state == UnitState::EnteringBase) return false;
     if (candidate.state == UnitState::Knockback || candidate.state == UnitState::Drowning) return false;
+    if (candidate.on_powerup) return false;
+    if (candidate.type == AntType::Swimmer && candidate.in_water) return false;
 
     return true;
 }
@@ -152,10 +154,14 @@ void CombatAIController::update_intercepting(const std::vector<AntUnit*>& all_un
 
     int32_t dist = owner_.pos.chebyshev_dist(target->pos);
     if (dist <= 1) {
-        guard_state_ = CombatGuardState::Striking;
-        owner_.state = UnitState::Attacking;
-        strike_timer_ = ATTACK_ANIM_TICKS;
-        update_striking(all_units, grid, audio_out, random_seed);
+        if (owner_.attack_cooldown_ticks == 0) {
+            guard_state_ = CombatGuardState::Striking;
+            owner_.state = UnitState::Attacking;
+            strike_timer_ = ATTACK_ANIM_TICKS;
+            update_striking(all_units, grid, audio_out, random_seed);
+        } else {
+            owner_.state = UnitState::GuardIdle;
+        }
         return;
     }
 
@@ -182,9 +188,13 @@ void CombatAIController::update_intercepting(const std::vector<AntUnit*>& all_un
     }
 
     if (owner_.pos.chebyshev_dist(target->pos) <= 1) {
-        guard_state_ = CombatGuardState::Striking;
-        owner_.state = UnitState::Attacking;
-        strike_timer_ = ATTACK_ANIM_TICKS;
+        if (owner_.attack_cooldown_ticks == 0) {
+            guard_state_ = CombatGuardState::Striking;
+            owner_.state = UnitState::Attacking;
+            strike_timer_ = ATTACK_ANIM_TICKS;
+        } else {
+            owner_.state = UnitState::GuardIdle;
+        }
     }
 }
 
@@ -201,6 +211,13 @@ void CombatAIController::update_striking(const std::vector<AntUnit*>& all_units,
             }
         }
         if (target && target->is_alive()) {
+            if (owner_.pos.chebyshev_dist(target->pos) > 1 || owner_.attack_cooldown_ticks > 0) {
+                target_unit_id_ = std::nullopt;
+                guard_state_ = CombatGuardState::Returning;
+                owner_.state = UnitState::ReturningToPost;
+                return;
+            }
+            owner_.attack_cooldown_ticks = 12;
             audio_out.push_back(AudioEvent{SoundID::HeavyPunch, owner_.pixel_x, owner_.pixel_y, 1, 255});
             target->take_damage(2, DamageSource::CombatPunch, owner_.id);
 

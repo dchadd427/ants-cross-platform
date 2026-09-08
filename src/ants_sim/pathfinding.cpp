@@ -34,10 +34,19 @@ TileCoord PathFinder::find_nearest_passable(
     TileCoord origin,
     TileCoord impassable_target,
     bool is_swimmer,
-    bool is_fire_ant)
+    bool is_fire_ant,
+    const std::vector<TileCoord>& hard_obstacles)
 {
+    auto is_hard_obstacle = [&](TileCoord c) {
+        for (const auto& h : hard_obstacles) {
+            if (h == c) return true;
+        }
+        return false;
+    };
+
     if (grid.in_bounds(impassable_target) &&
-        grid.get_cell(impassable_target).is_passable(is_swimmer, is_fire_ant)) {
+        grid.get_cell(impassable_target).is_passable(is_swimmer, is_fire_ant) &&
+        !is_hard_obstacle(impassable_target)) {
         return impassable_target;
     }
 
@@ -52,6 +61,7 @@ TileCoord PathFinder::find_nearest_passable(
                 TileCoord candidate{impassable_target.x + dx, impassable_target.y + dy};
                 if (!grid.in_bounds(candidate)) continue;
                 if (!grid.get_cell(candidate).is_passable(is_swimmer, is_fire_ant)) continue;
+                if (is_hard_obstacle(candidate)) continue;
 
                 int32_t cd = std::max(std::abs(candidate.x - origin.x), std::abs(candidate.y - origin.y));
                 int32_t ed = (candidate.x - origin.x) * (candidate.x - origin.x) +
@@ -66,7 +76,7 @@ TileCoord PathFinder::find_nearest_passable(
         if (best.x >= 0) return best;
     }
 
-    return (grid.in_bounds(origin) && grid.get_cell(origin).is_passable(is_swimmer, is_fire_ant))
+    return (grid.in_bounds(origin) && grid.get_cell(origin).is_passable(is_swimmer, is_fire_ant) && !is_hard_obstacle(origin))
                ? origin
                : impassable_target;
 }
@@ -78,7 +88,8 @@ std::vector<TileCoord> PathFinder::find_path(
     bool is_swimmer,
     bool is_fire_ant,
     size_t max_nodes,
-    const std::vector<TileCoord>& obstacles)
+    const std::vector<TileCoord>& obstacles,
+    const std::vector<TileCoord>& hard_obstacles)
 {
     if (!grid.in_bounds(start)) return {};
     if (start == target) return {start};
@@ -87,10 +98,17 @@ std::vector<TileCoord> PathFinder::find_path(
     uint32_t h = grid.height();
     if (w == 0 || h == 0) return {};
 
-    // If target is impassable, find nearest passable neighbor
+    auto is_hard_obstacle = [&](TileCoord c) {
+        for (const auto& h : hard_obstacles) {
+            if (h == c) return true;
+        }
+        return false;
+    };
+
+    // If target is impassable or in hard_obstacles, find nearest passable neighbor
     TileCoord real_target = target;
-    if (!grid.in_bounds(target) || !grid.get_cell(target).is_passable(is_swimmer, is_fire_ant)) {
-        real_target = find_nearest_passable(grid, start, target, is_swimmer, is_fire_ant);
+    if (!grid.in_bounds(target) || !grid.get_cell(target).is_passable(is_swimmer, is_fire_ant) || is_hard_obstacle(target)) {
+        real_target = find_nearest_passable(grid, start, target, is_swimmer, is_fire_ant, hard_obstacles);
         if (real_target.x < 0 || real_target == start) return {};
     }
 
@@ -136,6 +154,7 @@ std::vector<TileCoord> PathFinder::find_path(
 
             if (!grid.in_bounds(neighbor)) continue;
             if (!grid.get_cell(neighbor).is_passable(is_swimmer, is_fire_ant)) continue;
+            if (is_hard_obstacle(neighbor)) continue;
 
             // Avoid dynamic obstacles (e.g. enemy units) unless destination itself
             if (neighbor != real_target && !obstacles.empty()) {
@@ -149,13 +168,16 @@ std::vector<TileCoord> PathFinder::find_path(
                 if (is_obs) continue;
             }
 
-            // Diagonal corner-cutting check: only block if BOTH orthogonal sides are impassable
+            // Diagonal corner-cutting check: only block if BOTH orthogonal sides are solid obstacles
             if (dir_dx[i] != 0 && dir_dy[i] != 0) {
                 TileCoord ortho1{current.pos.x + dir_dx[i], current.pos.y};
                 TileCoord ortho2{current.pos.x, current.pos.y + dir_dy[i]};
-                bool ortho1_blocked = !grid.in_bounds(ortho1) || !grid.get_cell(ortho1).is_passable(is_swimmer, is_fire_ant);
-                bool ortho2_blocked = !grid.in_bounds(ortho2) || !grid.get_cell(ortho2).is_passable(is_swimmer, is_fire_ant);
-                if (ortho1_blocked && ortho2_blocked) {
+                auto is_solid_corner = [&](TileCoord c) {
+                    if (!grid.in_bounds(c)) return true;
+                    const auto& cell = grid.get_cell(c);
+                    return cell.terrain_type == TERRAIN_OBSTACLE || cell.is_obstacle_overlay;
+                };
+                if (is_solid_corner(ortho1) && is_solid_corner(ortho2)) {
                     continue;
                 }
             }
@@ -167,8 +189,8 @@ std::vector<TileCoord> PathFinder::find_path(
                 step_cost = (step_cost * 7) / 10; // Slate is fastest (~1.4x speed)
             } else if (n_cell.surface_type == SurfaceType::Gravel) {
                 step_cost = (step_cost * 8) / 10; // Gravel is fast (~1.2x speed)
-            } else if (n_cell.surface_type == SurfaceType::Mud || n_cell.is_mud) {
-                step_cost = (step_cost * 15) / 10; // Mud is slow (~0.65x speed)
+            } else if (n_cell.surface_type == SurfaceType::Mud || n_cell.is_mud || n_cell.has_completed_bridge()) {
+                step_cost = (step_cost * 15) / 10; // Mud and bridges are slow (~0.65x speed)
             }
             int32_t tentative_g = current.g + step_cost;
 

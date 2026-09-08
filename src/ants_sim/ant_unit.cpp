@@ -24,6 +24,14 @@ bool AntUnit::take_damage(uint16_t amount, DamageSource source, [[maybe_unused]]
         return false;
     }
 
+    if (on_powerup && (source == DamageSource::MeleeStandard || source == DamageSource::CombatPunch)) {
+        return false; // Standing on top of power-up: not attackable!
+    }
+
+    if (type == AntType::Swimmer && in_water && (source == DamageSource::MeleeStandard || source == DamageSource::CombatPunch)) {
+        return false; // Swimmer in water: immune from being attacked underwater!
+    }
+
     if (amount >= hp) {
         hp = 0;
         state = UnitState::Dead;
@@ -241,6 +249,10 @@ void AntUnit::tick_timers() noexcept {
         transform_timer--;
     }
 
+    if (attack_cooldown_ticks > 0) {
+        attack_cooldown_ticks--;
+    }
+
     if (stun_ticks_remaining > 0) {
         stun_ticks_remaining--;
         if (stun_ticks_remaining == 0 && state == UnitState::Stunned) {
@@ -253,12 +265,12 @@ void AntUnit::tick_timers() noexcept {
 
     if (state_timer > 0) {
         state_timer--;
-        if (state_timer == 0 && (state == UnitState::Flinch || state == UnitState::Bounce)) {
+        if (state_timer == 0 && (state == UnitState::Flinch || state == UnitState::Bounce || state == UnitState::Attacking)) {
             state = (type == AntType::Combat) ? UnitState::GuardIdle : UnitState::Idle;
         }
     }
 
-    if (state == UnitState::Bounce) {
+    if (state == UnitState::Bounce || state == UnitState::Attacking) {
         anim_tick++;
         anim_subitem = (anim_tick / 2);
     }

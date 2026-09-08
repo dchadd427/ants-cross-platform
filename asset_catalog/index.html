@@ -216,12 +216,18 @@
   .btn-group { display: flex; gap: 0.3rem; align-items: center; }
 
   /* Sounds Table View */
-  #sounds-view { flex-direction: column; }
+  #sounds-view {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
   .table-wrapper {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
     background: var(--bg-card);
     border: 1px solid var(--border);
     border-radius: 8px;
-    overflow: hidden;
   }
   .sounds-table {
     width: 100%;
@@ -846,7 +852,7 @@
           <canvas id="anim-canvas" width="480" height="360"></canvas>
         </div>
 
-        <div class="player-controls">
+        <div class="player-controls" id="anim-playback-controls">
           <button class="ctrl-btn" id="btn-play-pause" title="Play/Pause (Space)">Pause</button>
           <button class="ctrl-btn" id="btn-step-prev" title="Previous Frame (Left Arrow)">&lt;</button>
           <input type="range" id="frame-scrubber" class="scrubber" min="0" max="0" value="0">
@@ -864,6 +870,14 @@
           <button class="ctrl-btn" id="btn-sound-toggle" title="Toggle audio playback on sound triggers">
             🔊 Sound On
           </button>
+        </div>
+
+        <div class="player-controls" id="static-composite-banner" style="display:none; justify-content: space-between; align-items: center;">
+          <div style="display:flex; align-items:center; gap:0.6rem;">
+            <span class="badge badge-sprite" style="font-size:0.8rem; padding:0.3rem 0.65rem;" id="static-badge">Static Composite</span>
+            <span id="static-desc" style="font-size:0.85rem; color:var(--text-secondary);">Composited sprite assemblage</span>
+          </div>
+          <div style="font-size:0.8rem; color:var(--text-dim);">Background rendered below foreground layers</div>
         </div>
       </div>
 
@@ -1104,28 +1118,34 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
 const CATEGORIES = {
   sounds: [
     { id: 'all', label: 'All Sounds (91)' },
-    { id: 'voices', label: 'Ant Voices & Orders', match: s => /^(gant|theif|queen|work|fly|rdy|order|command|attack|do)/i.test(s.name) },
-    { id: 'combat', label: 'Combat & SFX', match: s => /^(bomb|exp|shoot|hit|fire|burn|hurt|death|die|net|spark)/i.test(s.name) },
-    { id: 'ui', label: 'UI & Buttons', match: s => /^(button|click|power|select|opt|menu|error|snd|score)/i.test(s.name) },
-    { id: 'ambient', label: 'Ambient & Misc', match: s => /^(rndm|grass|rain|wind|water|dig|chew|hatch|sound)/i.test(s.name) }
+    { id: 'voices', label: 'Ant Voices & Orders', match: s => /^(gant|theif|thief|comb|brdg|bomb|fir|rdy|order|command|attack)/i.test(s.name) },
+    { id: 'combat', label: 'Combat & SFX', match: s => /^(bomb|exp|shoot|hit|fire|burn|hurt|death|die|net|spark|stun|splash|flythump|bump|waterattack|wateraction|theifwhip)/i.test(s.name) },
+    { id: 'ui', label: 'UI & Buttons', match: s => /^(button|click|power|select|opt|menu|error|snd|score|chat|30sec|1min|countdwn|winner|losers|ally)/i.test(s.name) },
+    { id: 'ambient', label: 'Ambient & Harvesting', match: s => /^(rndm|grass|rain|wind|water|dig|chew|hatch|sound|harvest|shovel|exithill|anthill|powerdrip)/i.test(s.name) }
   ],
   anims: [
     { id: 'all', label: 'All Animations (1344)' },
     { id: 'with_sound', label: '🔊 With Audio Trigger', match: a => a.subitems.some(s => s.sound_id >= 0) },
-    { id: 'guard', label: 'Guard Ant (g*)', match: a => /^g[m|a|d|s]/i.test(a.name) },
-    { id: 'worker', label: 'Worker Ant (w*)', match: a => /^w[m|a|d|s|c]/i.test(a.name) },
-    { id: 'queen', label: 'Queen Ant (q*)', match: a => /^q/i.test(a.name) },
-    { id: 'digger', label: 'Digger / Drone (d*)', match: a => /^d[m|a|d|s|i]/i.test(a.name) },
-    { id: 'cursor', label: 'Combat & HUD (c_*)', match: a => /^c_/i.test(a.name) },
-    { id: 'screens', label: 'UI & Screens (op_*, re_*)', match: a => /^(op_|re_|qh_|logo|shell|breturn)/i.test(a.name) },
-    { id: 'props', label: 'Terrain & Foliage', match: a => /^(grass|plant|cer|fd|broken)/i.test(a.name) }
+    { id: 'general', label: 'General Ant (ag*, hg*)', match: a => /^(ag|hg|gant|gen|pu_gen)/i.test(a.name) },
+    { id: 'bomber', label: 'Bomber Ant (ab*, hb*)', match: a => /^(ab|hb|bomb|bmb|pu_bomb|blackbomb|greenbomb|redbomb|bluebomb)/i.test(a.name) },
+    { id: 'fire', label: 'Fire Ant (af*, hf*)', match: a => /^(af|hf|fire|pu_fire)/i.test(a.name) },
+    { id: 'thief', label: 'Thief Ant (at*, ht*)', match: a => /^(at|ht|theif|thief|pu_thief|steal)/i.test(a.name) },
+    { id: 'combat', label: 'Combat Ant (ac*, hc*)', match: a => /^(ac|hc|comb|pu_comb)/i.test(a.name) && !/accept/i.test(a.name) },
+    { id: 'swimmer', label: 'Swimmer Ant (as*, hs*)', match: a => /^(as|hs|swim|brdg|bridge|pu_swim)/i.test(a.name) },
+    { id: 'worker', label: 'Worker / Forager (m*, w*)', match: a => /^(mw|m0|md|mg|wm|gd|gm|dg|dm|sd|sg|s0|d0|g0|w0|work|pu_mason)/i.test(a.name) },
+    { id: 'food', label: 'Food & Morsels', match: a => /^(fd|can|food|cer|donut|apple|pretzel)/i.test(a.name) },
+    { id: 'anthill', label: 'Anthills & Hatching', match: a => /(hill|egg|bstart|hatch|bath|ath|hth|gstart|rstart|ustart)/i.test(a.name) },
+    { id: 'screens', label: 'Screens & UI Dialogs', match: a => /^(op_|re_|st_|nh_|d_shell|std_dialg|logo|antslogo|qh_|breturn|but|trn|slid|dclay|opt|dith|dok|d_on|d_off|accept|decline|yes|no|dyn_|dad_|bleave|dogears|yelears|redears|hillears|zobj|getpow|battle|banner|panel|icon|dw_|al_|ui_|stat_|score|help|dialg|quit|leave|start|down|up|obstacle)/i.test(a.name) },
+    { id: 'fx', label: 'Combat FX & Cursors', match: a => /^(c_|death|bombex|sputter|dsplash|xmarks|cur|CUR|hit|stun|withdraw|spark|splash)/i.test(a.name) },
+    { id: 'environment', label: 'Environment & Foliage', match: a => /^(grass|plant|mud|rock|flower|stick|tree|water|shov|dither|pebble|wall)/i.test(a.name) }
   ],
   sprites: [
     { id: 'all', label: 'All Sprites (2794)' },
-    { id: 'units', label: 'Units & Ants', match: sp => /^[g|w|q|d|s][m|a|d|s|c]/i.test(sp.name) },
-    { id: 'ui', label: 'UI & Buttons', match: sp => /^(opt|but|dith|breturn|slid|efram|dclay)/i.test(sp.name) },
-    { id: 'cursor', label: 'Cursors & Reticles', match: sp => /^c_/i.test(sp.name) },
-    { id: 'props', label: 'Foliage & Environment', match: sp => /^(grass|plant|cer|food|mud|rock)/i.test(sp.name) }
+    { id: 'units', label: 'Units & Characters', match: sp => /^[a|h][g|b|f|t|c|s]|^[m|w|g|d|s][w|0|d|m|g]/i.test(sp.name) },
+    { id: 'ui', label: 'UI & Screens', match: sp => /^(opt|but|dith|breturn|slid|efram|dclay|yes|no|quit|help|logo)/i.test(sp.name) },
+    { id: 'cursor', label: 'Cursors & Reticles', match: sp => /^(c_|cur|CUR)/i.test(sp.name) },
+    { id: 'food', label: 'Food & Items', match: sp => /^(food|cer|donut|apple|pretzel|can|lunch|pdrop)/i.test(sp.name) },
+    { id: 'props', label: 'Foliage & Environment', match: sp => /^(grass|plant|cer|food|mud|rock|stick|tree|flower)/i.test(sp.name) }
   ]
 };
 
@@ -1247,13 +1267,17 @@ function renderAnimsList(items) {
   items.forEach(a => {
     const totalFrames = a.subitems.reduce((sum, s) => sum + s.frames.length, 0);
     const soundSub = a.subitems.find(s => s.sound_id >= 0);
+    const isComposite = a.subitems.length === 1 && totalFrames > 1;
+    const isSingle = a.subitems.length === 1 && totalFrames === 1;
+    const badgeType = isComposite ? 'badge badge-sprite' : 'badge badge-anim';
+    const typeLabel = isComposite ? `Composite (${totalFrames} layers)` : (isSingle ? '1 frame' : `${a.subitems.length} steps (${totalFrames} layers)`);
     const div = document.createElement('div');
     div.className = 'anim-item' + (a.id === activeAnimIndex ? ' selected' : '');
     div.innerHTML = `
       <div class="anim-item-left">
-        <div class="anim-name"><span class="badge badge-anim" style="margin-right:4px;">#${a.id}</span> ${a.name}</div>
+        <div class="anim-name"><span class="${badgeType}" style="margin-right:4px;">#${a.id}</span> ${a.name}</div>
         <div class="anim-meta">
-          <span>${a.subitems.length} step${a.subitems.length > 1 ? 's' : ''} (${totalFrames} layer${totalFrames > 1 ? 's' : ''})</span>
+          <span>${typeLabel}</span>
           ${soundSub ? `<span style="color:#fbbf24;" title="Audio trigger: ${soundSub.sound_name}">🔊</span>` : ''}
         </div>
       </div>
@@ -1279,14 +1303,18 @@ function selectAnimation(animId) {
   const anim = CATALOG_DATA.animations[animId];
   if (!anim) return;
 
+  const totalLayers = anim.subitems.reduce((sum, s) => sum + s.frames.length, 0);
+  const bounds = getAnimBounds(anim);
+  const isComposite = anim.subitems.length <= 1;
+
   // Header Details
   document.getElementById('detail-anim-id').textContent = '#' + anim.id;
+  document.getElementById('detail-anim-id').className = (isComposite && totalLayers > 1) ? 'badge badge-sprite' : 'badge badge-anim';
   document.getElementById('detail-anim-name').textContent = anim.name;
   document.getElementById('btn-copy-anim-name').onclick = () => copyText(anim.name, 'animation sequence name');
 
-  const totalLayers = anim.subitems.reduce((sum, s) => sum + s.frames.length, 0);
-  const bounds = getAnimBounds(anim);
   document.getElementById('detail-anim-meta').innerHTML = `
+    <span><strong>Type:</strong> ${isComposite ? (totalLayers > 1 ? 'Static Multi-Layer Composite' : 'Single Frame Sprite') : 'Multi-Step Animation'}</span>
     <span><strong>Subitems:</strong> ${anim.subitems.length}</span>
     <span><strong>Total Sprite Layers:</strong> ${totalLayers}</span>
     <span><strong>Extents:</strong> [dx: ${bounds.minX}..${bounds.maxX}, dy: ${bounds.minY}..${bounds.maxY}] (${bounds.width}×${bounds.height} px)</span>
@@ -1312,6 +1340,26 @@ function selectAnimation(animId) {
   anim.subitems.forEach(sub => {
     sub.frames.forEach(f => getSpriteImage(f.sprite_id));
   });
+
+  // Setup Controls: Hide animation playback bar on static composites
+  const pbControls = document.getElementById('anim-playback-controls');
+  const scBanner = document.getElementById('static-composite-banner');
+  const timelineSec = document.querySelector('.timeline-section');
+  if (isComposite) {
+    if (pbControls) pbControls.style.display = 'none';
+    if (scBanner) {
+      scBanner.style.display = 'flex';
+      document.getElementById('static-badge').textContent = totalLayers > 1 ? `Static Composite (${totalLayers} Layers)` : 'Single Sprite';
+      document.getElementById('static-desc').textContent = totalLayers > 1 
+        ? `Full multi-layer composite assembled in reverse order (${totalLayers} layers)` 
+        : 'Single frame static sprite';
+    }
+    if (timelineSec) timelineSec.style.display = 'none';
+  } else {
+    if (pbControls) pbControls.style.display = 'flex';
+    if (scBanner) scBanner.style.display = 'none';
+    if (timelineSec) timelineSec.style.display = 'block';
+  }
 
   // Render Subitem Strip
   renderSubitemsStrip(anim);
@@ -1453,10 +1501,12 @@ function updateCanvasFrame() {
     ctx.strokeRect(ox + bounds.minX * zoom, oy + bounds.minY * zoom, bounds.width * zoom, bounds.height * zoom);
   }
 
-  // Draw all sprite layers for current subitem
+  // Draw all sprite layers for current subitem in REVERSE order
+  // (Table 4 backgrounds and backplates are at the end, foreground elements at the start)
   const curSub = anim.subitems[currentSubIndex % anim.subitems.length];
   if (curSub) {
-    curSub.frames.forEach(f => {
+    for (let i = curSub.frames.length - 1; i >= 0; i--) {
+      const f = curSub.frames[i];
       const img = getSpriteImage(f.sprite_id);
       const drawX = ox + f.dx * zoom;
       const drawY = oy + f.dy * zoom;
@@ -1467,10 +1517,10 @@ function updateCanvasFrame() {
         ctx.drawImage(img, drawX, drawY, drawW, drawH);
       } else {
         img.onload = () => {
-          ctx.drawImage(img, drawX, drawY, drawW, drawH);
+          updateCanvasFrame();
         };
       }
-    });
+    }
   }
 }
 

@@ -153,6 +153,7 @@ enum class OrderType : uint8_t {
     IgniteFire,
     ExtinguishFire,
     BuildBridge,
+    DemolishBridge,
     InfiltrateAnthill,
     ReturnToBase,
     Cancel
@@ -164,6 +165,7 @@ struct AntOrder {
     int32_t   target_x{0};
     int32_t   target_y{0};
     int32_t   target_entity_id{-1};
+    bool      allow_friendly_bomb{false};
 };
 
 struct PendingHatch {
@@ -215,6 +217,8 @@ struct AntSnapshot {
     bool     is_on_mud{false};
     bool     is_transforming{false};
     uint16_t transform_anim_frame{0};
+    bool     on_powerup{false};
+    UnitState state{UnitState::Idle};
 };
 
 struct WorldState {
@@ -300,7 +304,7 @@ public:
     void kill_unit(uint32_t ant_id);
 
     void execute_melee_attack(uint32_t attacker_id, uint32_t target_id);
-    void issue_move_order(uint32_t ant_id, TileCoord dest);
+    void issue_move_order(uint32_t ant_id, TileCoord dest, bool allow_friendly_bomb = false);
 
     bool validate_cardinal_placement(TileCoord from, TileCoord to) const;
     bool plant_bomb(uint32_t ant_id, TileCoord target);
@@ -308,6 +312,9 @@ public:
     bool ignite_fire(uint32_t ant_id, TileCoord target);
     bool extinguish_fire(uint32_t ant_id, TileCoord target);
     bool build_bridge_step(uint32_t ant_id, TileCoord target);
+    bool demolish_bridge_step(uint32_t ant_id, TileCoord target);
+    bool interrupt_transformation(uint32_t ant_id);
+    void set_unit_transformation_interrupted(uint32_t ant_id, bool interrupted);
 
     bool can_unit_traverse(AntType type, TileCoord pos) const;
 
