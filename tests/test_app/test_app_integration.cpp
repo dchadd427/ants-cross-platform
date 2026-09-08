@@ -724,7 +724,10 @@ void run_suite_7_input_controls() {
         int32_t bx = 208 + HUD::PLAYFIELD_X;
         int32_t by = 176 + HUD::PLAYFIELD_Y;
         hud.handle_mouse_down(bx, by, 3, sim, camera);
-
+        // Step through 15-tick planting animation
+        for (int t = 0; t < 15; ++t) {
+            sim.tick();
+        }
         ASSERT_TRUE(sim.has_bomb_at(TileCoord{6, 5}));
 
         // 2. Set water at (8, 7) and right click with Swimmer -> BuildBridge -> pixel (272, 240)
@@ -2478,7 +2481,7 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         ASSERT_TRUE(sim.has_bomb_at(TileCoord{20, 20}));
     } TEST_END();
 
-    TEST_CASE("12.12 Enemy Bomb Proximity Detonation & 5-Space Knockback") {
+    TEST_CASE("12.12 Enemy Bomb Proximity Detonation & 4-Space Knockback") {
         SimulationEngine sim;
         sim.init_test_world(60, 60, 100, 60000);
 
@@ -2515,8 +2518,8 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
             if (enemy.state != UnitState::Knockback) break;
         }
 
-        // Enemy was moving East, so impulse propelled it 5 spaces West to (15, 20)
-        ASSERT_EQ(enemy.pos.x, 15);
+        // Enemy was moving East, so impulse propelled it 4 spaces West to (16, 20)
+        ASSERT_EQ(enemy.pos.x, 16);
         ASSERT_EQ(enemy.pos.y, 20);
     } TEST_END();
 
@@ -2652,7 +2655,7 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         ASSERT_FALSE(sim.has_bomb_at(TileCoord{20, 20}));
     } TEST_END();
 
-    TEST_CASE("12.16 Non-Bomber Moves Directly Onto Friendly Bomb, Explodes & 5-Space Knockback") {
+    TEST_CASE("12.16 Non-Bomber Moves Directly Onto Friendly Bomb, Explodes & 4-Space Knockback") {
         SimulationEngine sim;
         sim.init_test_world(60, 60, 100, 60000);
         ViewportCamera cam;
@@ -2695,8 +2698,8 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
             if (worker.state != UnitState::Knockback) break;
         }
 
-        // Propelled 5 spaces West to (15, 20)
-        ASSERT_EQ(worker.pos.x, 15);
+        // Propelled 4 spaces West to (16, 20)
+        ASSERT_EQ(worker.pos.x, 16);
         ASSERT_EQ(worker.pos.y, 20);
     } TEST_END();
 
@@ -3532,14 +3535,18 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         uint32_t b_id = sim.spawn_unit(0, AntType::Bomber, TileCoord{20, 20});
         auto& b_ant = sim.get_unit(b_id);
 
-        sim.plant_bomb(b_id, TileCoord{21, 20});
+        sim.plant_bomb(b_id, TileCoord{21, 20}, false);
         ASSERT_EQ(b_ant.state, UnitState::PlantingBomb);
         ASSERT_EQ(b_ant.facing, Direction::East);
+        // Bomb is NOT placed on the grid tile yet while animation is playing!
+        ASSERT_FALSE(sim.has_bomb_at(TileCoord{21, 20}));
 
         // Plant animation is 15 ticks
         for (int t = 0; t < 15; ++t) {
+            ASSERT_FALSE(sim.has_bomb_at(TileCoord{21, 20}));
             sim.tick();
         }
+        // Placed only after the animation is done!
         ASSERT_TRUE(sim.has_bomb_at(TileCoord{21, 20}));
         ASSERT_EQ(b_ant.state, UnitState::Idle);
 
