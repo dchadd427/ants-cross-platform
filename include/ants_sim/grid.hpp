@@ -453,6 +453,23 @@ public:
     }
 
     void configure_anthill_cells(TileCoord pos) {
+        // Ensure 4x4 mound cells are obstacles EXCEPT entrance mouth (bx + 1, by) and entrance hole (bx + 1, by + 1)
+        for (int dy = 0; dy < 4; ++dy) {
+            for (int dx = 0; dx < 4; ++dx) {
+                int32_t mx = static_cast<int32_t>(pos.x) + dx;
+                int32_t my = static_cast<int32_t>(pos.y) + dy;
+                if (in_bounds(mx, my)) {
+                    auto& mcell = get_cell_mut(static_cast<uint32_t>(mx), static_cast<uint32_t>(my));
+                    if (dx == 1 && (dy == 0 || dy == 1)) {
+                        mcell.terrain_type = TERRAIN_WALKABLE;
+                        mcell.is_obstacle_overlay = false;
+                        mcell.flags &= ~(FLAG_CAN_PLACE_BOMB | FLAG_CAN_PLACE_FIRE);
+                    } else {
+                        mcell.is_obstacle_overlay = true;
+                    }
+                }
+            }
+        }
         // Ensure queuing and entry staging cells along dx = -1 are passable (dy = -1..3)
         for (int dy = -1; dy <= 3; ++dy) {
             int32_t qx = static_cast<int32_t>(pos.x) - 1;
@@ -490,6 +507,7 @@ public:
             int32_t bx = static_cast<int32_t>(ah.x);
             int32_t by = static_cast<int32_t>(ah.y);
             if (pos.y == by - 1 && pos.x >= bx && pos.x <= bx + 2) return true;
+            if (pos.x == bx + 1 && (pos.y == by || pos.y == by + 1)) return true;
         }
         return false;
     }
