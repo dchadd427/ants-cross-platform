@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <fstream>
 #include <functional>
+#include <set>
 
 #include "ants_assets/asset_archive.hpp"
 #include "ants_assets/lvl_parser.hpp"
@@ -3382,20 +3383,31 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         ASSERT_FALSE(sim.get_unit(a1).is_transforming());
         ASSERT_EQ(sim.get_unit(a1).type, AntType::Combat);
 
-        // 2. Combat Ant transforms into Bomber -> drops original Combat powerup (Type 4) on free adjacent tile
+        // 2. Combat Ant transforms into Bomber -> drops original Combat powerup (Type 4) on an adjacent free tile
         sim.grid_mut().place_powerup(10, 10, 1); // Bomber powerup
         sim.tick(); // Start transformation
         ASSERT_TRUE(sim.get_unit(a1).is_transforming());
-        // Cardinal North (10, 9) was free -> powerup drops at (10, 9)
-        ASSERT_TRUE(sim.grid().has_powerup_at(TileCoord{10, 9}));
-        ASSERT_EQ(sim.grid().get_powerup_type(TileCoord{10, 9}), 4); // Dropped old Combat powerup
+        // Exactly 1 of the 8 neighbors receives the dropped Combat powerup
+        int drop_count = 0;
+        TileCoord dropped_tile{-1, -1};
+        for (const auto& off : OFFSETS) {
+            TileCoord adj{10 + off.x, 10 + off.y};
+            if (sim.grid().has_powerup_at(adj)) {
+                ++drop_count;
+                dropped_tile = adj;
+            }
+        }
+        ASSERT_EQ(drop_count, 1);
+        ASSERT_EQ(sim.grid().get_powerup_type(dropped_tile), 4); // Dropped old Combat powerup
         for (int i = 0; i < 15; ++i) sim.tick();
         ASSERT_FALSE(sim.get_unit(a1).is_transforming());
         ASSERT_EQ(sim.get_unit(a1).type, AntType::Bomber);
 
         // 3. Occupied tile avoidance: place an ant on (10, 9), transform Bomber into Swimmer
-        // Clean up the dropped powerup at (10, 9) first to make it a passable tile
-        sim.grid_mut().clear_powerup(10, 9);
+        // Clean up any powerup around (10, 10) first to ensure known board state
+        for (const auto& off : OFFSETS) {
+            sim.grid_mut().clear_powerup(10 + off.x, 10 + off.y);
+        }
         uint32_t blocker = sim.spawn_unit(0, AntType::Worker, TileCoord{10, 9});
         (void)blocker;
         sim.grid_mut().place_powerup(10, 10, 5); // Swimmer powerup
@@ -3403,9 +3415,19 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         ASSERT_TRUE(sim.get_unit(a1).is_transforming());
         // (10, 9) is occupied by blocker ant -> MUST NOT drop at (10, 9)
         ASSERT_FALSE(sim.grid().has_powerup_at(TileCoord{10, 9}));
-        // Next candidate is East (11, 10) -> Bomber powerup (Type 1) drops at (11, 10)
-        ASSERT_TRUE(sim.grid().has_powerup_at(TileCoord{11, 10}));
-        ASSERT_EQ(sim.grid().get_powerup_type(TileCoord{11, 10}), 1); // Dropped old Bomber powerup
+        // Exactly 1 unoccupied neighbor receives the dropped Bomber powerup (Type 1)
+        drop_count = 0;
+        dropped_tile = TileCoord{-1, -1};
+        for (const auto& off : OFFSETS) {
+            TileCoord adj{10 + off.x, 10 + off.y};
+            if (sim.grid().has_powerup_at(adj)) {
+                ++drop_count;
+                dropped_tile = adj;
+            }
+        }
+        ASSERT_EQ(drop_count, 1);
+        ASSERT_NE(dropped_tile, (TileCoord{10, 9})); // Blocker was avoided!
+        ASSERT_EQ(sim.grid().get_powerup_type(dropped_tile), 1); // Dropped old Bomber powerup
         for (int i = 0; i < 15; ++i) sim.tick();
         ASSERT_FALSE(sim.get_unit(a1).is_transforming());
         ASSERT_EQ(sim.get_unit(a1).type, AntType::Swimmer);
@@ -3443,9 +3465,11 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         sim.tick(); // Start transformation
         auto& ant3 = sim.get_unit(a3);
         ASSERT_TRUE(ant3.is_transforming());
-        // Dropped Thief powerup (Type 3) at North (30, 29)
-        ASSERT_TRUE(sim.grid().has_powerup_at(TileCoord{30, 29}));
-        ASSERT_EQ(sim.grid().get_powerup_type(TileCoord{30, 29}), 3);
+        // Verify dropped Thief powerup (Type 3) landed on a valid neighbor
+        dropped_tile = ant3.dropped_powerup_pos;
+        ASSERT_TRUE(dropped_tile.x >= 0 && dropped_tile.y >= 0);
+        ASSERT_TRUE(sim.grid().has_powerup_at(dropped_tile));
+        ASSERT_EQ(sim.grid().get_powerup_type(dropped_tile), 3);
 
         // Issue impossible move order into water at (30, 31)
         sim.issue_move_order(a3, TileCoord{30, 31});
@@ -3453,8 +3477,29 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         ASSERT_EQ(ant3.type, AntType::Thief); // Reverted to Thief
         ASSERT_TRUE(ant3.on_powerup);
         ASSERT_TRUE(sim.grid().has_powerup_at(TileCoord{30, 30})); // Bomber restored
-        // Dropped powerup at (30, 29) must be cleaned up to prevent duplication!
-        ASSERT_FALSE(sim.grid().has_powerup_at(TileCoord{30, 29}));
+        // Dropped powerup at dropped_tile must be cleaned up to prevent duplication!
+        ASSERT_FALSE(sim.grid().has_powerup_at(dropped_tile));
+
+        // 6. Multi-direction randomized landing verification:
+        // Over multiple transformations with all 8 directions free, verify that the
+        // dropped powerup lands randomly across multiple distinct directions, NOT always above.
+        std::set<std::pair<int32_t, int32_t>> chosen_directions;
+        for (int iter = 0; iter < 24; ++iter) {
+            TileCoord origin{40 + (iter % 3) * 5, 40 + (iter / 3) * 5};
+            uint32_t tester = sim.spawn_unit(0, AntType::Combat, origin);
+            sim.grid_mut().place_powerup(origin.x, origin.y, 1); // Bomber
+            sim.tick();
+            auto& t_ant = sim.get_unit(tester);
+            if (t_ant.dropped_powerup_pos.x >= 0) {
+                int32_t dx = t_ant.dropped_powerup_pos.x - origin.x;
+                int32_t dy = t_ant.dropped_powerup_pos.y - origin.y;
+                chosen_directions.insert({dx, dy});
+            }
+            // Complete transformation
+            for (int i = 0; i < 15; ++i) sim.tick();
+        }
+        // With 8 free directions, 24 trials should sample multiple distinct directions (>= 4)
+        ASSERT_TRUE(chosen_directions.size() >= 4);
     } TEST_END();
 }
 
