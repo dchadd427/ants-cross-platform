@@ -74,6 +74,34 @@ public:
         return ptr;
     }
 
+    bool is_valid_powerup_drop_tile(TileCoord adj) const noexcept {
+        if (!grid_.in_bounds(adj)) return false;
+        if (grid_.is_solid_obstacle(adj.x, adj.y)) return false;
+        const auto& cell = grid_.get_cell(adj);
+        if (!cell.is_passable()) return false;
+        if (cell.terrain_type == TERRAIN_WATER || cell.surface_type == SurfaceType::Water) return false;
+        if (!cell.is_empty_overlay() || cell.has_powerup() || cell.has_bomb() || cell.has_fire() || cell.has_food() || cell.has_lunchbox()) return false;
+
+        for (const auto& ah : grid_.anthills()) {
+            if (adj.x >= static_cast<int32_t>(ah.x) && adj.x < static_cast<int32_t>(ah.x) + 4 &&
+                adj.y >= static_cast<int32_t>(ah.y) && adj.y < static_cast<int32_t>(ah.y) + 4) {
+                return false;
+            }
+        }
+
+        for (const auto& other : ants_) {
+            if (!other || !other->is_alive() || other->is_underground()) continue;
+            if (other->pos == adj) return false;
+            TileCoord other_tile{
+                (other->pixel_x >= 0) ? (other->pixel_x / 32) : ((other->pixel_x - 31) / 32),
+                (other->pixel_y >= 0) ? (other->pixel_y / 32) : ((other->pixel_y - 31) / 32)
+            };
+            if (other_tile == adj) return false;
+        }
+
+        return true;
+    }
+
     void handle_game_over() {
         match_state_ = MatchState::GameOver;
         match_time_remaining_ms_ = 0;
@@ -591,22 +619,20 @@ void SimulationEngine::tick() {
 
             ant_ptr->previous_type = old_type;
             ant_ptr->pending_powerup_type = new_type_id;
+            ant_ptr->dropped_powerup_pos = TileCoord{-1, -1};
 
-            // If ant already possessed a power-up, drop previous power-up onto an adjacent free tile
+            // If ant already possessed a power-up, drop previous power-up onto an adjacent valid tile
             if (old_type != AntType::Worker) {
-                bool dropped = false;
-                for (int32_t dy = -1; dy <= 1 && !dropped; ++dy) {
-                    for (int32_t dx = -1; dx <= 1 && !dropped; ++dx) {
-                        if (dx == 0 && dy == 0) continue;
-                        TileCoord adj{ant_ptr->pos.x + dx, ant_ptr->pos.y + dy};
-                        if (impl_->grid_.in_bounds(adj) &&
-                            impl_->grid_.get_cell(adj).is_passable() &&
-                            impl_->grid_.get_cell(adj).is_empty_overlay()) {
-                            impl_->grid_.place_powerup(adj.x, adj.y, static_cast<uint8_t>(old_type));
-                            dropped = true;
-                        }
+                static constexpr std::array<TileCoord, 8> CANDIDATE_OFFSETS = {{{0, -1}, {1, 0}, {0, 1}, {-1, 0}, {1, -1}, {1, 1}, {-1, 1}, {-1, -1}}};
+                for (const auto& offset : CANDIDATE_OFFSETS) {
+                    TileCoord adj{ant_ptr->pos.x + offset.x, ant_ptr->pos.y + offset.y};
+                    if (impl_->is_valid_powerup_drop_tile(adj)) {
+                        impl_->grid_.place_powerup(adj.x, adj.y, static_cast<uint8_t>(old_type));
+                        ant_ptr->dropped_powerup_pos = adj;
+                        break;
                     }
                 }
+                // If there are no valid tiles, it disappears and is no longer available for the rest of the game
             }
 
             // Transform ant (11-tick getpow cocoon animation)
@@ -621,6 +647,7 @@ void SimulationEngine::tick() {
 
         if (ant_ptr->transform_timer == 0 && ant_ptr->pending_powerup_type != 255) {
             ant_ptr->pending_powerup_type = 255;
+            ant_ptr->dropped_powerup_pos = TileCoord{-1, -1};
             if (ant_ptr->type == AntType::Combat) {
                 impl_->get_or_create_ai(*ant_ptr);
             }
@@ -2610,6 +2637,13 @@ bool SimulationEngine::interrupt_transformation(uint32_t ant_id) {
         if (ant->pending_powerup_type != 255) {
             impl_->grid_.place_powerup(ant->pos.x, ant->pos.y, ant->pending_powerup_type);
             ant->pending_powerup_type = 255;
+        }
+        if (ant->dropped_powerup_pos.x >= 0) {
+            if (impl_->grid_.in_bounds(ant->dropped_powerup_pos) &&
+                impl_->grid_.has_powerup_at(ant->dropped_powerup_pos)) {
+                impl_->grid_.clear_powerup(ant->dropped_powerup_pos.x, ant->dropped_powerup_pos.y);
+            }
+            ant->dropped_powerup_pos = TileCoord{-1, -1};
         }
     }
 

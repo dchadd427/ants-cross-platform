@@ -3363,6 +3363,99 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         hud.handle_mouse_up(b1_click_x, b1_click_y, 1, sim, camera);
         ASSERT_EQ(sim.get_unit(g1).attack_target_id, b1);
     } TEST_END();
+
+    TEST_CASE("12.29 Power-Up Drop On Transformation & Occupied Tile Avoidance / Disappearance") {
+        SimulationEngine sim;
+        sim.init_test_world(60, 60, 100, 60000);
+
+        // 1. Worker Ant transforms into Combat Ant -> No powerup dropped
+        uint32_t a1 = sim.spawn_unit(0, AntType::Worker, TileCoord{10, 10});
+        sim.grid_mut().place_powerup(10, 10, 4); // Combat powerup
+        sim.tick(); // Start transformation
+        ASSERT_TRUE(sim.get_unit(a1).is_transforming());
+        // Verify none of the 8 neighbors have any powerup
+        static constexpr std::array<TileCoord, 8> OFFSETS = {{{0, -1}, {1, 0}, {0, 1}, {-1, 0}, {1, -1}, {1, 1}, {-1, 1}, {-1, -1}}};
+        for (const auto& off : OFFSETS) {
+            ASSERT_FALSE(sim.grid().has_powerup_at(TileCoord{10 + off.x, 10 + off.y}));
+        }
+        for (int i = 0; i < 15; ++i) sim.tick();
+        ASSERT_FALSE(sim.get_unit(a1).is_transforming());
+        ASSERT_EQ(sim.get_unit(a1).type, AntType::Combat);
+
+        // 2. Combat Ant transforms into Bomber -> drops original Combat powerup (Type 4) on free adjacent tile
+        sim.grid_mut().place_powerup(10, 10, 1); // Bomber powerup
+        sim.tick(); // Start transformation
+        ASSERT_TRUE(sim.get_unit(a1).is_transforming());
+        // Cardinal North (10, 9) was free -> powerup drops at (10, 9)
+        ASSERT_TRUE(sim.grid().has_powerup_at(TileCoord{10, 9}));
+        ASSERT_EQ(sim.grid().get_powerup_type(TileCoord{10, 9}), 4); // Dropped old Combat powerup
+        for (int i = 0; i < 15; ++i) sim.tick();
+        ASSERT_FALSE(sim.get_unit(a1).is_transforming());
+        ASSERT_EQ(sim.get_unit(a1).type, AntType::Bomber);
+
+        // 3. Occupied tile avoidance: place an ant on (10, 9), transform Bomber into Swimmer
+        // Clean up the dropped powerup at (10, 9) first to make it a passable tile
+        sim.grid_mut().clear_powerup(10, 9);
+        uint32_t blocker = sim.spawn_unit(0, AntType::Worker, TileCoord{10, 9});
+        (void)blocker;
+        sim.grid_mut().place_powerup(10, 10, 5); // Swimmer powerup
+        sim.tick(); // Start transformation
+        ASSERT_TRUE(sim.get_unit(a1).is_transforming());
+        // (10, 9) is occupied by blocker ant -> MUST NOT drop at (10, 9)
+        ASSERT_FALSE(sim.grid().has_powerup_at(TileCoord{10, 9}));
+        // Next candidate is East (11, 10) -> Bomber powerup (Type 1) drops at (11, 10)
+        ASSERT_TRUE(sim.grid().has_powerup_at(TileCoord{11, 10}));
+        ASSERT_EQ(sim.grid().get_powerup_type(TileCoord{11, 10}), 1); // Dropped old Bomber powerup
+        for (int i = 0; i < 15; ++i) sim.tick();
+        ASSERT_FALSE(sim.get_unit(a1).is_transforming());
+        ASSERT_EQ(sim.get_unit(a1).type, AntType::Swimmer);
+
+        // 4. Surrounded ant: all 8 neighbors blocked / occupied / water -> powerup permanently disappears
+        uint32_t a2 = sim.spawn_unit(1, AntType::Combat, TileCoord{20, 20});
+        sim.grid_mut().set_terrain(20, 19, TERRAIN_WATER);    // N: Water
+        sim.grid_mut().set_terrain(21, 20, TERRAIN_OBSTACLE); // E: Obstacle
+        sim.spawn_unit(1, AntType::Worker, TileCoord{20, 21}); // S: Ant
+        sim.spawn_unit(1, AntType::Worker, TileCoord{19, 20}); // W: Ant
+        sim.spawn_unit(1, AntType::Worker, TileCoord{21, 19}); // NE: Ant
+        sim.spawn_unit(1, AntType::Worker, TileCoord{21, 21}); // SE: Ant
+        sim.spawn_unit(1, AntType::Worker, TileCoord{19, 21}); // SW: Ant
+        sim.spawn_unit(1, AntType::Worker, TileCoord{19, 19}); // NW: Ant
+
+        sim.grid_mut().place_powerup(20, 20, 3); // Thief powerup
+        sim.tick(); // Start transformation
+        ASSERT_TRUE(sim.get_unit(a2).is_transforming());
+        // None of the 8 neighbors should receive a dropped powerup
+        for (const auto& off : OFFSETS) {
+            ASSERT_FALSE(sim.grid().has_powerup_at(TileCoord{20 + off.x, 20 + off.y}));
+        }
+        for (int i = 0; i < 15; ++i) sim.tick();
+        ASSERT_FALSE(sim.get_unit(a2).is_transforming());
+        ASSERT_EQ(sim.get_unit(a2).type, AntType::Thief);
+        // Still no powerup on any of the 8 neighbors: permanently disappeared!
+        for (const auto& off : OFFSETS) {
+            ASSERT_FALSE(sim.grid().has_powerup_at(TileCoord{20 + off.x, 20 + off.y}));
+        }
+
+        // 5. Interrupted transformation cleans up dropped powerup and restores original ant
+        uint32_t a3 = sim.spawn_unit(0, AntType::Thief, TileCoord{30, 30});
+        sim.grid_mut().place_powerup(30, 30, 1); // Bomber powerup
+        sim.grid_mut().set_terrain(30, 31, TERRAIN_WATER); // S: Water (for impossible order)
+        sim.tick(); // Start transformation
+        auto& ant3 = sim.get_unit(a3);
+        ASSERT_TRUE(ant3.is_transforming());
+        // Dropped Thief powerup (Type 3) at North (30, 29)
+        ASSERT_TRUE(sim.grid().has_powerup_at(TileCoord{30, 29}));
+        ASSERT_EQ(sim.grid().get_powerup_type(TileCoord{30, 29}), 3);
+
+        // Issue impossible move order into water at (30, 31)
+        sim.issue_move_order(a3, TileCoord{30, 31});
+        ASSERT_FALSE(ant3.is_transforming());
+        ASSERT_EQ(ant3.type, AntType::Thief); // Reverted to Thief
+        ASSERT_TRUE(ant3.on_powerup);
+        ASSERT_TRUE(sim.grid().has_powerup_at(TileCoord{30, 30})); // Bomber restored
+        // Dropped powerup at (30, 29) must be cleaned up to prevent duplication!
+        ASSERT_FALSE(sim.grid().has_powerup_at(TileCoord{30, 29}));
+    } TEST_END();
 }
 
 // ============================================================================

@@ -178,6 +178,7 @@ public:
     AntType     previous_type{AntType::Worker};
     bool        transformation_interrupted{false};
     bool        on_powerup{false};
+    TileCoord   dropped_powerup_pos{-1, -1};
 
     AntUnit(uint32_t unit_id, TeamId team_in, AntType type_in, int32_t start_tx, int32_t start_ty);
 
