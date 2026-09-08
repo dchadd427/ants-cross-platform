@@ -206,6 +206,7 @@ struct AntSnapshot {
     uint16_t anim_frame{0};
 
     bool     is_holding{false};
+    bool     had_food_at_base_entry{false};
     uint16_t held_item_id{TILE_EMPTY};
     int32_t  carried_points{0};
 
