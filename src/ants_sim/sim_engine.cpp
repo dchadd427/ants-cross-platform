@@ -866,9 +866,8 @@ void SimulationEngine::tick() {
                     uint32_t deposit_pts = (pts > 0) ? pts : (food * 25);
                     impl_->stats_.add_score(ant_ptr->player_id, static_cast<int32_t>(deposit_pts));
                     impl_->audio_queue_.push_back(AudioEvent{SoundID::BaseScoreUp, ant_ptr->pixel_x, ant_ptr->pixel_y, 1, ant_ptr->player_id});
-                } else {
-                    impl_->audio_queue_.push_back(AudioEvent{SoundID::BaseEnter, ant_ptr->pixel_x, ant_ptr->pixel_y, 1, ant_ptr->player_id});
                 }
+                // When entering without food: no sound played per authentic RTS behavior
                 ant_ptr->heal_full();
                 ant_ptr->underground = true;
 
@@ -897,11 +896,19 @@ void SimulationEngine::tick() {
                         // Route back to origin food harvest location
                         issue_move_order(ant_ptr->id, ant_ptr->harvest_origin);
                     } else {
-                        // Newborn ant, had no food, or was thief ant: route to IDLE spot (bx+3, by+3)
-                        issue_move_order(ant_ptr->id, TileCoord{idle_x, idle_y});
+                        // Newborn ant, had no food, or was thief ant: route to IDLE spot
+                        TileCoord raw_idle{idle_x, idle_y};
+                        TileCoord target_idle = raw_idle;
+                        if (!impl_->grid_.in_bounds(raw_idle) || !impl_->grid_.get_cell(raw_idle).is_passable()) {
+                            TileCoord ramp0{friendly_base->x, friendly_base->y + 3};
+                            target_idle = PathFinder::find_nearest_passable(
+                                impl_->grid_, ramp0, raw_idle, false, false, {});
+                        }
+                        issue_move_order(ant_ptr->id, target_idle);
                     }
                 }
                 ant_ptr->is_newborn = false;
+                ant_ptr->had_food_at_base_entry = false;
             }
             continue;
         }
@@ -1117,7 +1124,8 @@ void SimulationEngine::tick() {
 
             // If ant reached the top entrance hole, start entering base
             if (ant_ptr->pos.x == ent_x && ant_ptr->pos.y == ent_y) {
-                if (ant_ptr->is_holding() || ant_ptr->hp < ant_ptr->max_hp || ant_ptr->is_newborn) {
+                if (ant_ptr->is_holding() || ant_ptr->hp < ant_ptr->max_hp || ant_ptr->is_newborn ||
+                    is_ant_in_base_queue(ant_ptr->id) || ant_ptr->final_dest == TileCoord{ent_x, ent_y}) {
                     if (ant_ptr->state != UnitState::EnteringBase) {
                         ant_ptr->state = UnitState::EnteringBase;
                         ant_ptr->anim_subitem = 0;
@@ -1987,8 +1995,37 @@ void SimulationEngine::issue_move_order(uint32_t ant_id, TileCoord dest, bool al
     bool is_fire_ant = (unit->type == AntType::Fire);
     bool can_hit_dest_bomb = allow_friendly_bomb;
 
+    // Check if unit or destination is on an anthill ramp
+    int32_t unit_ramp_idx = -1;
+    int32_t dest_ramp_idx = -1;
+    std::array<TileCoord, 6> matched_ramp{};
+
+    for (const auto& ah : impl_->grid_.anthills()) {
+        if (ah.team_id == unit->player_id || unit->type == AntType::Thief) {
+            int32_t bx = static_cast<int32_t>(ah.x);
+            int32_t by = static_cast<int32_t>(ah.y);
+            const std::array<TileCoord, 6> r = {{
+                {bx, by + 3}, {bx, by + 2}, {bx, by + 1}, {bx, by}, {bx + 1, by}, {bx + 1, by + 1}
+            }};
+            int32_t u_idx = -1;
+            int32_t d_idx = -1;
+            for (size_t i = 0; i < r.size(); ++i) {
+                if (unit->pos == r[i]) u_idx = static_cast<int32_t>(i);
+                if (dest == r[i]) d_idx = static_cast<int32_t>(i);
+            }
+            if (u_idx >= 0 || d_idx >= 0) {
+                matched_ramp = r;
+                unit_ramp_idx = u_idx;
+                dest_ramp_idx = d_idx;
+                break;
+            }
+        }
+    }
+
     // Impossible move instruction check (e.g. water for non-swimmer, solid obstacle, out of bounds)
-    bool dest_passable = impl_->grid_.in_bounds(dest) && impl_->grid_.get_cell(dest).is_passable(is_swimmer, is_fire_ant);
+    bool is_dest_on_ramp = (dest_ramp_idx >= 0);
+    bool dest_passable = is_dest_on_ramp ||
+        (impl_->grid_.in_bounds(dest) && impl_->grid_.get_cell(dest).is_passable(is_swimmer, is_fire_ant));
     if (!dest_passable) {
         if (unit->is_transforming() || unit->on_powerup ||
             (impl_->grid_.in_bounds(unit->pos) && impl_->grid_.has_powerup_at(unit->pos))) {
@@ -2005,6 +2042,37 @@ void SimulationEngine::issue_move_order(uint32_t ant_id, TileCoord dest, bool al
         return;
     } else if (dest != unit->pos) {
         unit->transformation_interrupted = false;
+    }
+
+    if (unit->pos == dest) {
+        unit->clear_path();
+        unit->state = (unit->type == AntType::Combat) ? UnitState::GuardIdle : UnitState::Idle;
+        unit->final_dest = unit->pos;
+        return;
+    }
+
+    if (unit->state == UnitState::EnteringBase) {
+        unit->underground = false;
+        unit->anim_subitem = 0;
+        unit->state = UnitState::Idle;
+    }
+
+    // Case 1: Both unit and dest are on the ramp
+    if (unit_ramp_idx >= 0 && dest_ramp_idx >= 0) {
+        std::vector<TileCoord> waypoints;
+        if (dest_ramp_idx < unit_ramp_idx) {
+            for (int32_t i = unit_ramp_idx - 1; i >= dest_ramp_idx; --i) {
+                waypoints.push_back(matched_ramp[static_cast<size_t>(i)]);
+            }
+        } else {
+            for (int32_t i = unit_ramp_idx + 1; i <= dest_ramp_idx; ++i) {
+                waypoints.push_back(matched_ramp[static_cast<size_t>(i)]);
+            }
+        }
+        unit->set_path(std::move(waypoints));
+        unit->final_dest = dest;
+        unit->state = UnitState::Walking;
+        return;
     }
 
     unit->allow_friendly_bomb = (can_hit_dest_bomb && impl_->grid_.has_bomb_at(dest));
@@ -2147,6 +2215,83 @@ void SimulationEngine::issue_move_order(uint32_t ant_id, TileCoord dest, bool al
                     dynamic_obstacles.push_back(other->pos);
                 }
             }
+        }
+    }
+
+    // Case 2: Unit is on anthill ramp (ramp[1..5]), destination is outside
+    if (unit_ramp_idx > 0 && dest_ramp_idx < 0) {
+        auto h_it = std::remove(hard_obstacles.begin(), hard_obstacles.end(), matched_ramp[0]);
+        hard_obstacles.erase(h_it, hard_obstacles.end());
+        auto d_it = std::remove(dynamic_obstacles.begin(), dynamic_obstacles.end(), matched_ramp[0]);
+        dynamic_obstacles.erase(d_it, dynamic_obstacles.end());
+
+        std::vector<TileCoord> waypoints;
+        for (int32_t i = unit_ramp_idx - 1; i >= 0; --i) {
+            waypoints.push_back(matched_ramp[static_cast<size_t>(i)]);
+        }
+
+        if (dest == matched_ramp[0]) {
+            unit->set_path(std::move(waypoints));
+            unit->final_dest = dest;
+            unit->state = UnitState::Walking;
+            return;
+        }
+
+        auto path = PathFinder::find_path(impl_->grid_, matched_ramp[0], dest, is_swimmer, is_fire_ant, 4000, dynamic_obstacles, hard_obstacles);
+        if (path.empty() && !dynamic_obstacles.empty()) {
+            path = PathFinder::find_path(impl_->grid_, matched_ramp[0], dest, is_swimmer, is_fire_ant, 4000, {}, hard_obstacles);
+        }
+        if (!path.empty()) {
+            for (const auto& pt : path) {
+                waypoints.push_back(pt);
+            }
+            unit->set_path(std::move(waypoints));
+            unit->final_dest = dest;
+            unit->state = UnitState::Walking;
+            return;
+        } else {
+            unit->clear_path();
+            unit->set_tile_pos(unit->pos.x, unit->pos.y);
+            unit->state = UnitState::CantGo;
+            unit->facing = Direction::South;
+            unit->anim_tick = 0;
+            unit->anim_subitem = 0;
+            impl_->audio_queue_.push_back(AudioEvent{SoundID::CantGo, unit->pixel_x, unit->pixel_y, 1, 255});
+            return;
+        }
+    }
+
+    // Case 3: Unit is in the field, destination is on anthill ramp (ramp[1..5])
+    if (unit_ramp_idx < 0 && dest_ramp_idx > 0) {
+        auto h_it = std::remove(hard_obstacles.begin(), hard_obstacles.end(), matched_ramp[0]);
+        hard_obstacles.erase(h_it, hard_obstacles.end());
+        auto d_it = std::remove(dynamic_obstacles.begin(), dynamic_obstacles.end(), matched_ramp[0]);
+        dynamic_obstacles.erase(d_it, dynamic_obstacles.end());
+
+        std::vector<TileCoord> path;
+        if (unit->pos != matched_ramp[0]) {
+            path = PathFinder::find_path(impl_->grid_, unit->pos, matched_ramp[0], is_swimmer, is_fire_ant, 4000, dynamic_obstacles, hard_obstacles);
+            if (path.empty() && !dynamic_obstacles.empty()) {
+                path = PathFinder::find_path(impl_->grid_, unit->pos, matched_ramp[0], is_swimmer, is_fire_ant, 4000, {}, hard_obstacles);
+            }
+        }
+        if (!path.empty() || unit->pos == matched_ramp[0]) {
+            for (int32_t i = 1; i <= dest_ramp_idx; ++i) {
+                path.push_back(matched_ramp[static_cast<size_t>(i)]);
+            }
+            unit->set_path(std::move(path));
+            unit->final_dest = dest;
+            unit->state = UnitState::Walking;
+            return;
+        } else {
+            unit->clear_path();
+            unit->set_tile_pos(unit->pos.x, unit->pos.y);
+            unit->state = UnitState::CantGo;
+            unit->facing = Direction::South;
+            unit->anim_tick = 0;
+            unit->anim_subitem = 0;
+            impl_->audio_queue_.push_back(AudioEvent{SoundID::CantGo, unit->pixel_x, unit->pixel_y, 1, 255});
+            return;
         }
     }
 

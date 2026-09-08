@@ -820,18 +820,45 @@ void Renderer::render_terrain_layer2_structures(const ants::sim::Grid& grid) {
                 continue;
             }
 
-            // 2. Fire Walls
+            // 2. Fire Walls (Table 4 Anim 134 wallup04: 5 frames at 120ms each)
             if (cell.has_fire()) {
-                SDL_Texture* tex = texture_cache_->get_named_sprite_texture("9fire01.bmp");
-                if (tex) SDL_RenderCopy(renderer_, tex, nullptr, &dst);
+                static const struct {
+                    const char* name;
+                    int dx;
+                    int dy;
+                    int w;
+                    int h;
+                } fire_frames[5] = {
+                    { "9fire01.bmp", 1, 0, 29, 33 },
+                    { "9fire02.bmp", 1, 2, 30, 31 },
+                    { "9fire03.bmp", 0, 1, 30, 32 },
+                    { "9fire04.bmp", 1, 2, 30, 31 },
+                    { "9fire05.bmp", 0, 1, 31, 32 }
+                };
+
+                uint32_t phase = static_cast<uint32_t>(c) * 2u + static_cast<uint32_t>(r) * 3u;
+                size_t frame_idx = ((anim_tick_ / 7u) + phase) % 5u;
+                const auto& ff = fire_frames[frame_idx];
+                SDL_Texture* tex = texture_cache_->get_named_sprite_texture(ff.name);
+                if (tex) {
+                    SDL_Rect fire_dst = { sx + ff.dx, sy + ff.dy, ff.w, ff.h };
+                    SDL_RenderCopy(renderer_, tex, nullptr, &fire_dst);
+                }
                 continue;
             }
 
-            // 3. Bombs (Authentic Table 4 animations: 12x24 centered, team 0=Green, 1=Red, 2=Blue, 3=Black)
+            // 3. Bombs (Table 4 Anim 129..132: 2 frames at 100ms each, team 0=Green, 1=Red, 2=Blue, 3=Black)
             if (cell.has_bomb()) {
-                static const char* bomb_names[4] = { "1bombgrn.bmp", "1bombred.bmp", "1bombblu.bmp", "1bombblk.bmp" };
-                uint8_t owner = cell.interactive_owner % 4;
-                SDL_Texture* tex = texture_cache_->get_named_sprite_texture(bomb_names[owner]);
+                static const char* const bomb_frames[4][2] = {
+                    { "1bombgrn.bmp", "2bombgrn.bmp" },
+                    { "1bombred.bmp", "2bombred.bmp" },
+                    { "1bombblu.bmp", "2bombblu.bmp" },
+                    { "1bombblk.bmp", "2bombblk.bmp" }
+                };
+                uint8_t owner = cell.interactive_owner % 4u;
+                uint32_t phase = static_cast<uint32_t>(c) * 3u + static_cast<uint32_t>(r) * 5u;
+                size_t b_frame = ((anim_tick_ / 6u) + phase) % 2u;
+                SDL_Texture* tex = texture_cache_->get_named_sprite_texture(bomb_frames[owner][b_frame]);
                 if (tex) {
                     SDL_Rect bomb_dst = { sx + 10, sy + 4, 12, 24 };
                     SDL_RenderCopy(renderer_, tex, nullptr, &bomb_dst);

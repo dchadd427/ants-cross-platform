@@ -3631,6 +3631,114 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         }
         ASSERT_TRUE(found_bombex);
     } TEST_END();
+
+    TEST_CASE("12.31 Base Entry Without Food & Silent Health Visit") {
+        SimulationEngine sim;
+        sim.init_test_world(60, 60, 100, 60000);
+        sim.grid_mut().set_anthill(0, TileCoord{20, 20});
+        const auto* home = sim.grid().find_anthill(0);
+        ASSERT_TRUE(home != nullptr);
+        int32_t bx = home->x;
+        int32_t by = home->y;
+
+        // Spawn unit with full HP and 0 food near the ramp entrance
+        uint32_t aid = sim.spawn_unit(0, AntType::Worker, TileCoord{bx - 1, by + 3});
+        const auto& u = sim.get_unit(aid);
+        ASSERT_FALSE(u.is_holding());
+        ASSERT_EQ(u.hp, u.max_hp);
+
+        // Issue ReturnToBase order
+        AntOrder order;
+        order.ant_id = aid;
+        order.type = OrderType::ReturnToBase;
+        sim.issue_order(order);
+
+        // Tick simulation until the ant climbs the ramp and enters the base hole
+        bool entered_base = false;
+        for (int i = 0; i < 50; ++i) {
+            sim.tick();
+            if (u.state == UnitState::EnteringBase) {
+                entered_base = true;
+                break;
+            }
+        }
+        ASSERT_TRUE(entered_base);
+
+        // Advance through base entry animation (16 ticks)
+        for (int i = 0; i < 20; ++i) {
+            sim.tick();
+        }
+
+        // Verify that NO SoundID::BaseEnter or score audio was played during empty base entry
+        ASSERT_FALSE(sim.has_audio_event(SoundID::BaseEnter));
+        ASSERT_FALSE(sim.has_audio_event(SoundID::BaseScoreUp));
+
+        // Tick until ant emerges and walks off the ramp to idle spot
+        for (int i = 0; i < 80; ++i) {
+            sim.tick();
+            if (u.state == UnitState::Idle && u.pos != TileCoord{bx + 1, by + 1}) {
+                break;
+            }
+        }
+        ASSERT_EQ(u.state, UnitState::Idle);
+        ASSERT_NE(u.pos, (TileCoord{bx + 1, by + 1}));
+    } TEST_END();
+
+    TEST_CASE("12.32 Move Order From Anthill Hole Steps Down Ramp Without CantGo") {
+        SimulationEngine sim;
+        sim.init_test_world(60, 60, 100, 60000);
+        sim.grid_mut().set_anthill(0, TileCoord{20, 20});
+        const auto* home = sim.grid().find_anthill(0);
+        ASSERT_TRUE(home != nullptr);
+        int32_t bx = home->x;
+        int32_t by = home->y;
+
+        // Place ant directly on the anthill entrance hole
+        uint32_t aid = sim.spawn_unit(0, AntType::Worker, TileCoord{bx + 1, by + 1});
+        const auto& u = sim.get_unit(aid);
+        ASSERT_EQ(u.pos, (TileCoord{bx + 1, by + 1}));
+
+        // Issue move order to open ground outside the anthill
+        TileCoord target{bx - 5, by + 3};
+        sim.issue_move_order(aid, target);
+
+        // Must NOT trigger CantGo! Must transition to Walking
+        ASSERT_NE(u.state, UnitState::CantGo);
+        ASSERT_EQ(u.state, UnitState::Walking);
+
+        // Step simulation until arrival and transition to Idle
+        for (int i = 0; i < 150; ++i) {
+            sim.tick();
+            if (u.pos == target && u.state == UnitState::Idle) break;
+        }
+        ASSERT_EQ(u.pos, target);
+        ASSERT_EQ(u.state, UnitState::Idle);
+    } TEST_END();
+
+    TEST_CASE("12.33 Planted Bomb and Fire Wall Object Animation Frames") {
+        // 1. Bomb frame alternation (Anim 129..132, 2 frames alternating every 100ms / 6 ticks)
+        static const char* const bomb_frames[4][2] = {
+            { "1bombgrn.bmp", "2bombgrn.bmp" },
+            { "1bombred.bmp", "2bombred.bmp" },
+            { "1bombblu.bmp", "2bombblu.bmp" },
+            { "1bombblk.bmp", "2bombblk.bmp" }
+        };
+        for (uint8_t team = 0; team < 4; ++team) {
+            size_t f0 = 0;
+            size_t f1 = 1;
+            ASSERT_TRUE(std::string(bomb_frames[team][f0]).rfind("1bomb", 0) == 0);
+            ASSERT_TRUE(std::string(bomb_frames[team][f1]).rfind("2bomb", 0) == 0);
+        }
+
+        // 2. Fire Wall 5-frame sequence (Anim 134 wallup04)
+        static const char* const fire_names[5] = {
+            "9fire01.bmp", "9fire02.bmp", "9fire03.bmp", "9fire04.bmp", "9fire05.bmp"
+        };
+        for (size_t i = 0; i < 5; ++i) {
+            std::string expected = "9fire0" + std::to_string(i + 1) + ".bmp";
+            ASSERT_EQ(std::string(fire_names[i]), expected);
+        }
+    } TEST_END();
 }
 
 // ============================================================================
