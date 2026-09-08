@@ -2394,8 +2394,13 @@ void HUD::dispatch_smart_special_ability(int32_t world_x, int32_t world_y, sim::
                         } else {
                             order.type = sim::OrderType::DefuseBomb;
                         }
-                    } else {
+                    } else if (active_order_mode_ == sim::OrderType::PlantBomb) {
                         order.type = sim::OrderType::PlantBomb;
+                    } else if (grid.in_bounds({target_tile_x, target_tile_y}) &&
+                               grid.get_cell({target_tile_x, target_tile_y}).can_place_bomb()) {
+                        order.type = sim::OrderType::PlantBomb;
+                    } else {
+                        order.type = sim::OrderType::Move;
                     }
                     break;
                 case sim::AntType::Fire:

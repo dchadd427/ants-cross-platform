@@ -724,8 +724,8 @@ void run_suite_7_input_controls() {
         int32_t bx = 208 + HUD::PLAYFIELD_X;
         int32_t by = 176 + HUD::PLAYFIELD_Y;
         hud.handle_mouse_down(bx, by, 3, sim, camera);
-        // Step through 15-tick planting animation
-        for (int t = 0; t < 15; ++t) {
+        // Step through planting animation (placed at tick 18)
+        for (int t = 0; t < 20; ++t) {
             sim.tick();
         }
         ASSERT_TRUE(sim.has_bomb_at(TileCoord{6, 5}));
@@ -3541,13 +3541,17 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         // Bomb is NOT placed on the grid tile yet while animation is playing!
         ASSERT_FALSE(sim.has_bomb_at(TileCoord{21, 20}));
 
-        // Plant animation is 15 ticks
-        for (int t = 0; t < 15; ++t) {
+        // Plant animation is 28 ticks (bomb placed at tick 18, finished at tick 28)
+        for (int t = 0; t < 17; ++t) {
             ASSERT_FALSE(sim.has_bomb_at(TileCoord{21, 20}));
             sim.tick();
         }
-        // Placed only after the animation is done!
+        ASSERT_FALSE(sim.has_bomb_at(TileCoord{21, 20}));
+        sim.tick(); // Tick 18: bomb placed!
         ASSERT_TRUE(sim.has_bomb_at(TileCoord{21, 20}));
+        for (int t = 18; t < 28; ++t) {
+            sim.tick();
+        }
         ASSERT_EQ(b_ant.state, UnitState::Idle);
 
         // Defuse bomb (12 ticks)
@@ -4116,7 +4120,7 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
 
         uint32_t attacker = sim.spawn_unit(0, AntType::Worker, TileCoord{10, 10});
         uint32_t defender = sim.spawn_unit(1, AntType::Worker, TileCoord{11, 10});
-
+        Direction orig_facing = sim.get_unit(defender).facing;
         sim.execute_melee_attack(attacker, defender);
 
         const auto& def = sim.get_unit(defender);
@@ -4125,7 +4129,7 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         ASSERT_EQ(def.pos.x, 12);
         ASSERT_EQ(def.pos.y, 10);
         ASSERT_EQ(def.state, UnitState::Bounce);
-        ASSERT_EQ(def.facing, Direction::East);
+        ASSERT_EQ(def.facing, orig_facing); // Preserves original facing direction per authentic RE fidelity
 
         // Advance 4 ticks for bounce animation recovery
         for (int i = 0; i < 4; ++i) {
@@ -4268,6 +4272,261 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         ASSERT_EQ(sw2.state, UnitState::Swimming);
         ASSERT_TRUE(sw2.in_water);
         ASSERT_EQ(sw2.death_status, DeathStatus::Alive);
+    } TEST_END();
+
+    TEST_CASE("12.46 Bomb Placement Disallowed on Mud Surface") {
+        SimulationEngine sim;
+        sim.init_test_world(60, 60, 100, 60000);
+
+        uint32_t bomber = sim.spawn_unit(0, AntType::Bomber, TileCoord{10, 10});
+        // Set (11, 10) to mud
+        sim.grid_mut().get_cell_mut({11, 10}).is_mud = true;
+        sim.grid_mut().get_cell_mut({11, 10}).surface_type = SurfaceType::Mud;
+
+        ASSERT_FALSE(sim.grid().get_cell({11, 10}).can_place_bomb());
+
+        // Direct ability call fails on mud
+        bool res = sim.plant_bomb(bomber, {11, 10}, false);
+        ASSERT_FALSE(res);
+        ASSERT_FALSE(sim.has_bomb_at({11, 10}));
+
+        // Issue order fails on mud
+        AntOrder order{};
+        order.type = OrderType::PlantBomb;
+        order.ant_id = bomber;
+        order.target_x = 11;
+        order.target_y = 10;
+        sim.issue_order(order);
+        ASSERT_NE(sim.get_unit(bomber).state, UnitState::PlantingBomb);
+        ASSERT_FALSE(sim.has_bomb_at({11, 10}));
+
+        // Placement succeeds on valid gravel at (10, 9)
+        bool ok = sim.plant_bomb(bomber, {10, 9}, false);
+        ASSERT_TRUE(ok);
+        ASSERT_EQ(sim.get_unit(bomber).state, UnitState::PlantingBomb);
+    } TEST_END();
+
+    TEST_CASE("12.47 Food Pickup Adjacency Requirement & 6-Tick Harvesting Sequence") {
+        SimulationEngine sim;
+        sim.init_test_world(60, 60, 100, 60000);
+
+        // Place food morsel at (14, 10)
+        sim.grid_mut().get_cell_mut({14, 10}).interactive_id = 239;
+        sim.grid_mut().get_cell_mut({14, 10}).is_food = true;
+
+        uint32_t worker = sim.spawn_unit(0, AntType::Worker, TileCoord{10, 10});
+        // Move worker to (13, 10), adjacent to food
+        sim.issue_move_order(worker, TileCoord{13, 10});
+
+        // Step simulation until arrival
+        while (!sim.get_unit(worker).waypoints.empty() || sim.get_unit(worker).state == UnitState::Walking) {
+            sim.tick();
+            if (sim.get_unit(worker).pos.x < 13) {
+                // Not adjacent/arrived yet, must not have collected food
+                ASSERT_FALSE(sim.get_unit(worker).is_holding());
+            }
+        }
+
+        // Worker reached (13, 10), adjacent to food at (14, 10)
+        ASSERT_EQ(sim.get_unit(worker).pos.x, 13);
+        ASSERT_EQ(sim.get_unit(worker).pos.y, 10);
+        ASSERT_EQ(sim.get_unit(worker).state, UnitState::HarvestingFood);
+        ASSERT_EQ(sim.get_unit(worker).facing, Direction::East);
+        ASSERT_TRUE(sim.get_unit(worker).is_holding());
+        ASSERT_FALSE(sim.grid().get_cell({14, 10}).has_food());
+
+        // Harvesting animation runs 6 ticks facing food before returning to idle/base queue
+        for (int i = 0; i < 5; ++i) {
+            sim.tick();
+            ASSERT_EQ(sim.get_unit(worker).state, UnitState::HarvestingFood);
+            ASSERT_TRUE(sim.get_unit(worker).is_holding());
+        }
+
+        // 6th tick completes harvesting animation sequence
+        sim.tick();
+        const auto& w = sim.get_unit(worker);
+        ASSERT_TRUE(w.is_holding());
+        ASSERT_EQ(w.carried_food, 1);
+        ASSERT_EQ(w.state, UnitState::Idle);
+    } TEST_END();
+
+    TEST_CASE("12.48 Bomber Carrying Food Placing Bomb Uses absb and Does Not Disappear") {
+        SimulationEngine sim;
+        sim.init_test_world(60, 60, 100, 60000);
+
+        uint32_t bomber = sim.spawn_unit(0, AntType::Bomber, TileCoord{10, 10});
+        auto* b_unit = const_cast<AntUnit*>(&sim.get_unit(bomber));
+        b_unit->pick_up_food(1, 25);
+        ASSERT_TRUE(b_unit->is_holding());
+
+        bool ok = sim.plant_bomb(bomber, {11, 10}, false);
+        ASSERT_TRUE(ok);
+        ASSERT_EQ(b_unit->state, UnitState::PlantingBomb);
+        ASSERT_TRUE(b_unit->is_holding());
+    } TEST_END();
+
+    TEST_CASE("12.49 Bomb Placement Animation Runs Authentic 28 Ticks with Sound at Tick 14 and Placement at Tick 18") {
+        SimulationEngine sim;
+        sim.init_test_world(60, 60, 100, 60000);
+
+        uint32_t bomber = sim.spawn_unit(0, AntType::Bomber, TileCoord{10, 10});
+        bool ok = sim.plant_bomb(bomber, {11, 10}, false);
+        ASSERT_TRUE(ok);
+        ASSERT_EQ(sim.get_unit(bomber).state, UnitState::PlantingBomb);
+
+        // Advance 13 ticks: no bomb on grid yet
+        for (int i = 0; i < 13; ++i) {
+            sim.tick();
+        }
+        ASSERT_FALSE(sim.has_bomb_at({11, 10}));
+
+        // Tick 14: Sound 90 (BombPick) triggered
+        sim.tick();
+        ASSERT_FALSE(sim.has_bomb_at({11, 10}));
+
+        // Advance 3 more ticks (tick 17): still no bomb on grid
+        for (int i = 0; i < 3; ++i) {
+            sim.tick();
+        }
+        ASSERT_FALSE(sim.has_bomb_at({11, 10}));
+
+        // Tick 18: Bomb placed on grid!
+        sim.tick();
+        ASSERT_TRUE(sim.has_bomb_at({11, 10}));
+        ASSERT_EQ(sim.get_unit(bomber).state, UnitState::PlantingBomb);
+
+        // Complete up to 28 ticks
+        for (int i = 0; i < 10; ++i) {
+            sim.tick();
+        }
+        ASSERT_EQ(sim.get_unit(bomber).state, UnitState::Idle);
+    } TEST_END();
+
+    TEST_CASE("12.50 Single Attack Order Executes One Strike, Stops and Enforces Cooldown") {
+        SimulationEngine sim;
+        sim.init_test_world(60, 60, 100, 60000);
+
+        uint32_t attacker = sim.spawn_unit(0, AntType::Worker, TileCoord{10, 10});
+        uint32_t defender = sim.spawn_unit(1, AntType::Worker, TileCoord{11, 10});
+
+        AntOrder order{};
+        order.type = OrderType::Attack;
+        order.ant_id = attacker;
+        order.target_entity_id = static_cast<int32_t>(defender);
+        sim.issue_order(order);
+
+        // Strike executed: defender damaged, knocked back to (12, 10)
+        sim.tick();
+        const auto& atk = sim.get_unit(attacker);
+        ASSERT_EQ(atk.attack_target_id, 0); // Attack target cleared after single order execution!
+        ASSERT_GT(atk.attack_cooldown_ticks, 0);
+
+        // Advance past attack animation (6 ticks) and cooldown (10 ticks)
+        for (int i = 0; i < 15; ++i) {
+            sim.tick();
+        }
+        ASSERT_EQ(sim.get_unit(attacker).state, UnitState::Idle);
+        ASSERT_EQ(sim.get_unit(attacker).attack_target_id, 0);
+        // Defender took only 1 damage (HP was 10, now 9) and was not attacked again
+        ASSERT_EQ(sim.get_unit(defender).hp, 9);
+    } TEST_END();
+
+    TEST_CASE("12.51 Pushback Preserves Victim Original Facing Direction") {
+        SimulationEngine sim;
+        sim.init_test_world(60, 60, 100, 60000);
+
+        uint32_t attacker = sim.spawn_unit(0, AntType::Worker, TileCoord{10, 10});
+        uint32_t defender = sim.spawn_unit(1, AntType::Worker, TileCoord{11, 10});
+
+        auto* def_unit = const_cast<AntUnit*>(&sim.get_unit(defender));
+        def_unit->facing = Direction::North;
+
+        sim.execute_melee_attack(attacker, defender);
+        // Pushed East to (12, 10)
+        ASSERT_EQ(def_unit->pos.x, 12);
+        ASSERT_EQ(def_unit->pos.y, 10);
+        // Facing is strictly preserved as North
+        ASSERT_EQ(def_unit->facing, Direction::North);
+    } TEST_END();
+
+    TEST_CASE("12.52 Lethal 0 HP Death Spawns Skull & Crossbones Effect While Water Drowning Exclusively Plays Drown Sequence") {
+        // 1. Lethal Melee Attack
+        {
+            SimulationEngine sim;
+            sim.init_test_world(60, 60, 100, 60000);
+
+            uint32_t attacker = sim.spawn_unit(0, AntType::Worker, TileCoord{10, 10});
+            uint32_t defender = sim.spawn_unit(1, AntType::Worker, TileCoord{11, 10});
+            auto* def = const_cast<AntUnit*>(&sim.get_unit(defender));
+            def->hp = 1; // 1 HP, lethal against 1 HP melee strike
+
+            sim.execute_melee_attack(attacker, defender);
+            ASSERT_EQ(def->hp, 0);
+            ASSERT_EQ(def->state, UnitState::Dead);
+
+            const auto& effects = sim.get_world_state().effects;
+            ASSERT_FALSE(effects.empty());
+            bool has_death_anim = false;
+            for (const auto& eff : effects) {
+                if (eff.anim_name == "death1" || eff.anim_name == "death2" || eff.anim_name == "death3") {
+                    has_death_anim = true;
+                    break;
+                }
+            }
+            ASSERT_TRUE(has_death_anim);
+        }
+
+        // 2. Lethal Bomb Blast
+        {
+            SimulationEngine sim;
+            sim.init_test_world(60, 60, 100, 60000);
+
+            uint32_t victim = sim.spawn_unit(0, AntType::Worker, TileCoord{15, 15});
+            auto* vic = const_cast<AntUnit*>(&sim.get_unit(victim));
+            vic->hp = 2; // lethal against 2 damage bomb blast
+            sim.grid_mut().place_bomb(15, 15, 1); // Enemy team bomb
+
+            sim.tick(); // Detonates
+            ASSERT_EQ(vic->hp, 0);
+
+            const auto& effects = sim.get_world_state().effects;
+            bool has_death_anim = false;
+            for (const auto& eff : effects) {
+                if (eff.anim_name == "death1" || eff.anim_name == "death2" || eff.anim_name == "death3") {
+                    has_death_anim = true;
+                    break;
+                }
+            }
+            ASSERT_TRUE(has_death_anim);
+        }
+
+        // 3. Pushback into Water (Non-swimmer drowns, NO skull death animation)
+        {
+            SimulationEngine sim;
+            sim.init_test_world(60, 60, 100, 60000);
+
+            sim.grid_mut().set_terrain(12, 10, TERRAIN_WATER);
+            uint32_t attacker = sim.spawn_unit(0, AntType::Worker, TileCoord{10, 10});
+            uint32_t victim = sim.spawn_unit(1, AntType::Worker, TileCoord{11, 10});
+
+            sim.execute_melee_attack(attacker, victim);
+            const auto& vic = sim.get_unit(victim);
+            ASSERT_EQ(vic.pos.x, 12);
+            ASSERT_EQ(vic.pos.y, 10);
+            ASSERT_EQ(vic.state, UnitState::Drowning);
+            ASSERT_EQ(vic.death_status, DeathStatus::Drowned);
+
+            // Verify no skull & crossbones effect was spawned for drowning
+            const auto& effects = sim.get_world_state().effects;
+            bool has_death_anim = false;
+            for (const auto& eff : effects) {
+                if (eff.anim_name == "death1" || eff.anim_name == "death2" || eff.anim_name == "death3") {
+                    has_death_anim = true;
+                    break;
+                }
+            }
+            ASSERT_FALSE(has_death_anim);
+        }
     } TEST_END();
 }
 
