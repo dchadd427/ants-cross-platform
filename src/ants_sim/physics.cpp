@@ -70,6 +70,62 @@ void PhysicsEngine::tick(std::vector<AntUnit*>& all_units,
             continue;
         }
 
+        // On first tick, resolve the final destination tile
+        if (!f.destination_resolved) {
+            f.destination_resolved = true;
+
+            int32_t start_tx = (f.start_px >= 0) ? (f.start_px / 32) : ((f.start_px - 31) / 32);
+            int32_t start_ty = (f.start_py >= 0) ? (f.start_py / 32) : ((f.start_py - 31) / 32);
+            int32_t dir_x = (f.target_px > f.start_px) ? 1 : ((f.target_px < f.start_px) ? -1 : 0);
+            int32_t dir_y = (f.target_py > f.start_py) ? 1 : ((f.target_py < f.start_py) ? -1 : 0);
+            int32_t nominal_tiles = std::max(std::abs(f.target_px - f.start_px),
+                                             std::abs(f.target_py - f.start_py)) / 32;
+            if (nominal_tiles <= 0) {
+                nominal_tiles = 4;
+            }
+
+            auto is_available = [&](int32_t tx, int32_t ty) -> bool {
+                if (!grid.in_bounds(tx, ty)) return false;
+                const auto& cell = grid.get_cell(static_cast<uint32_t>(tx), static_cast<uint32_t>(ty));
+                return (cell.terrain_type != TERRAIN_OBSTACLE && !cell.is_obstacle_overlay);
+            };
+
+            int32_t nominal_tx = start_tx + dir_x * nominal_tiles;
+            int32_t nominal_ty = start_ty + dir_y * nominal_tiles;
+
+            if (is_available(nominal_tx, nominal_ty)) {
+                // Available tile on the other side: intermediate terrain/water is flown over
+                f.target_px = nominal_tx * 32 + 16;
+                f.target_py = nominal_ty * 32 + 16;
+            } else {
+                // Nominal tile is not available (solid obstacle or out of bounds).
+                // Trace backward along trajectory to find the last available tile before the obstacle.
+                int32_t land_tx = start_tx;
+                int32_t land_ty = start_ty;
+                int32_t land_dist = 0;
+                for (int32_t s = nominal_tiles - 1; s >= 0; --s) {
+                    int32_t tx = start_tx + dir_x * s;
+                    int32_t ty = start_ty + dir_y * s;
+                    if (is_available(tx, ty)) {
+                        land_tx = tx;
+                        land_ty = ty;
+                        land_dist = s;
+                        break;
+                    }
+                }
+                f.target_px = land_tx * 32 + 16;
+                f.target_py = land_ty * 32 + 16;
+                if (land_dist == 0) {
+                    f.total_ticks = 1;
+                    f.apex_height_px = 0;
+                } else {
+                    f.total_ticks = std::max<uint16_t>(2, static_cast<uint16_t>((land_dist * 10) / nominal_tiles));
+                    f.apex_height_px = std::max(12, (36 * land_dist) / nominal_tiles);
+                }
+                audio_out.push_back(AudioEvent{SOUND_FLY_THUMP_A, f.target_px, f.target_py, 1, 255});
+            }
+        }
+
         f.current_tick++;
         if (f.total_ticks == 0) f.total_ticks = 1;
 
@@ -84,21 +140,19 @@ void PhysicsEngine::tick(std::vector<AntUnit*>& all_units,
         unit->anim_tick = f.current_tick;
         unit->anim_subitem = f.current_tick;
 
-        int32_t tx = unit->pos.x;
-        int32_t ty = unit->pos.y;
         int32_t inc_dx = (f.target_px > f.start_px) ? 1 : ((f.target_px < f.start_px) ? -1 : 0);
         int32_t inc_dy = (f.target_py > f.start_py) ? 1 : ((f.target_py < f.start_py) ? -1 : 0);
 
-        // Check obstacle collision
-        if (!grid.in_bounds(tx, ty) || grid.is_solid_obstacle(tx, ty)) {
+        // Safety check for exiting map bounds
+        if (!grid.in_bounds(unit->pos.x, unit->pos.y)) {
             unit->altitude_z = 0;
-            audio_out.push_back(AudioEvent{SOUND_FLY_THUMP_A, cur_px, cur_py, 1, 255});
             resolve_landing(*unit, grid, audio_out, prng, inc_dx, inc_dy);
             it = active_flights_.erase(it);
             continue;
         }
 
         if (f.current_tick >= f.total_ticks) {
+            unit->set_pixel_pos(f.target_px, f.target_py);
             unit->altitude_z = 0;
             resolve_landing(*unit, grid, audio_out, prng, inc_dx, inc_dy);
             it = active_flights_.erase(it);
@@ -152,9 +206,13 @@ void PhysicsEngine::resolve_water_entry(AntUnit& unit,
                                         std::vector<AudioEvent>& audio_out) {
     if (unit.type == AntType::Swimmer) {
         unit.state = UnitState::Swimming;
+        unit.in_water = true;
+        unit.was_in_water = true;
         audio_out.push_back(AudioEvent{SOUND_SPLASH, unit.pixel_x, unit.pixel_y, 1, 255});
     } else {
         unit.start_drowning();
+        unit.in_water = true;
+        unit.was_in_water = true;
         unit.set_tile_pos(unit.pos.x, unit.pos.y);
         unit.facing = ants::assets::Direction::South;
         audio_out.push_back(AudioEvent{SOUND_SPLASH, unit.pixel_x, unit.pixel_y, 1, 255});

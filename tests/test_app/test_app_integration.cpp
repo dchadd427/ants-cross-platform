@@ -3739,6 +3739,135 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
             ASSERT_EQ(std::string(fire_names[i]), expected);
         }
     } TEST_END();
+
+    TEST_CASE("12.34 Knockback Flies Over Intermediate Rock Obstacle to Available Ground Tile") {
+        SimulationEngine sim;
+        sim.init_test_world(60, 60, 100, 60000);
+
+        // Place a solid obstacle rock at (22, 20)
+        sim.grid_mut().set_terrain(22, 20, TERRAIN_OBSTACLE);
+
+        // Spawn worker at (20, 20) and apply 4-tile knockback East towards (24, 20)
+        uint32_t worker_id = sim.spawn_unit(0, AntType::Worker, TileCoord{20, 20});
+        auto& worker = sim.get_unit(worker_id);
+
+        sim.apply_knockback(worker_id, 19 * 32 + 16, 20 * 32 + 16, 4, 4);
+        ASSERT_EQ(worker.state, UnitState::Knockback);
+
+        for (int t = 0; t < 15; ++t) {
+            sim.tick();
+            if (worker.state != UnitState::Knockback) break;
+        }
+
+        // Flew over rock at (22, 20) and landed at ground tile (24, 20)
+        ASSERT_EQ(worker.pos.x, 24);
+        ASSERT_EQ(worker.pos.y, 20);
+        ASSERT_EQ(worker.state, UnitState::Stunned);
+    } TEST_END();
+
+    TEST_CASE("12.35 Knockback Flies Over Intermediate Water to Available Ground Tile") {
+        SimulationEngine sim;
+        sim.init_test_world(60, 60, 100, 60000);
+
+        // Water spans 3 spaces at (21, 20), (22, 20), (23, 20)
+        sim.grid_mut().set_terrain(21, 20, TERRAIN_WATER);
+        sim.grid_mut().set_terrain(22, 20, TERRAIN_WATER);
+        sim.grid_mut().set_terrain(23, 20, TERRAIN_WATER);
+
+        // Spawn worker at (20, 20) and knock East 4 tiles to ground at (24, 20)
+        uint32_t worker_id = sim.spawn_unit(0, AntType::Worker, TileCoord{20, 20});
+        auto& worker = sim.get_unit(worker_id);
+
+        sim.apply_knockback(worker_id, 19 * 32 + 16, 20 * 32 + 16, 4, 4);
+        ASSERT_EQ(worker.state, UnitState::Knockback);
+
+        for (int t = 0; t < 15; ++t) {
+            sim.tick();
+            if (worker.state != UnitState::Knockback) break;
+        }
+
+        // Airborne ant flew over water without drowning, landed safely on ground
+        ASSERT_EQ(worker.pos.x, 24);
+        ASSERT_EQ(worker.pos.y, 20);
+        ASSERT_EQ(worker.state, UnitState::Stunned);
+        ASSERT_FALSE(worker.in_water);
+        ASSERT_EQ(worker.death_status, DeathStatus::Alive);
+    } TEST_END();
+
+    TEST_CASE("12.36 Knockback Flies Over Intermediate Rock Obstacle into Water (Drowning)") {
+        SimulationEngine sim;
+        sim.init_test_world(60, 60, 100, 60000);
+
+        // Intermediate rock at (22, 20), water at landing tile (24, 20)
+        sim.grid_mut().set_terrain(22, 20, TERRAIN_OBSTACLE);
+        sim.grid_mut().set_terrain(24, 20, TERRAIN_WATER);
+
+        // Plant enemy bomb at (20, 20)
+        sim.grid_mut().place_bomb(20, 20, 1);
+
+        // Spawn worker at (21, 20) and order movement West onto bomb at (20, 20)
+        uint32_t worker_id = sim.spawn_unit(0, AntType::Worker, TileCoord{21, 20});
+        auto& worker = sim.get_unit(worker_id);
+
+        AntOrder move_order{};
+        move_order.ant_id = worker_id;
+        move_order.type = OrderType::Move;
+        move_order.target_x = 20;
+        move_order.target_y = 20;
+        sim.issue_order(move_order);
+
+        // Advance until detonation
+        bool detonated = false;
+        for (int t = 0; t < 100; ++t) {
+            sim.tick();
+            if (!sim.has_bomb_at(TileCoord{20, 20})) {
+                detonated = true;
+                break;
+            }
+        }
+        ASSERT_TRUE(detonated);
+        ASSERT_EQ(worker.state, UnitState::Knockback);
+
+        // Step through knockback flight
+        for (int t = 0; t < 15; ++t) {
+            sim.tick();
+            if (worker.state != UnitState::Knockback) break;
+        }
+
+        // Flew over rock at (22, 20), landed at (24, 20) in water, and drowned
+        ASSERT_EQ(worker.pos.x, 24);
+        ASSERT_EQ(worker.pos.y, 20);
+        ASSERT_EQ(worker.state, UnitState::Drowning);
+        ASSERT_EQ(worker.death_status, DeathStatus::Drowned);
+        ASSERT_TRUE(sim.has_audio_event(SoundID::WaterSplash));
+        ASSERT_TRUE(sim.has_audio_event(SoundID::AntDrown));
+    } TEST_END();
+
+    TEST_CASE("12.37 Knockback Truncates Cleanly at Impassable Rock Barrier") {
+        SimulationEngine sim;
+        sim.init_test_world(60, 60, 100, 60000);
+
+        // Solid rock wall across spaces 2, 3, 4 at (22..24, 20)
+        sim.grid_mut().set_terrain(22, 20, TERRAIN_OBSTACLE);
+        sim.grid_mut().set_terrain(23, 20, TERRAIN_OBSTACLE);
+        sim.grid_mut().set_terrain(24, 20, TERRAIN_OBSTACLE);
+
+        uint32_t worker_id = sim.spawn_unit(0, AntType::Worker, TileCoord{20, 20});
+        auto& worker = sim.get_unit(worker_id);
+
+        sim.apply_knockback(worker_id, 19 * 32 + 16, 20 * 32 + 16, 4, 4);
+
+        for (int t = 0; t < 15; ++t) {
+            sim.tick();
+            if (worker.state != UnitState::Knockback) break;
+        }
+
+        // Stops at last available tile before barrier: (21, 20)
+        ASSERT_EQ(worker.pos.x, 21);
+        ASSERT_EQ(worker.pos.y, 20);
+        ASSERT_EQ(worker.state, UnitState::Stunned);
+        ASSERT_TRUE(sim.has_audio_event(64)); // SOUND_FLY_THUMP_A
+    } TEST_END();
 }
 
 // ============================================================================
