@@ -168,7 +168,16 @@ bool ViewportCamera::is_tile_visible(int32_t tx, int32_t ty) const noexcept {
 // ============================================================================
 
 TextureCache::TextureCache(SDL_Renderer* renderer, const ants::assets::AssetArchive& archive)
-    : renderer_(renderer), archive_(archive) {}
+    : renderer_(renderer), archive_(archive) {
+    for (size_t i = 0; i < archive_.sprite_count(); ++i) {
+        const auto& name = archive_.get_sprite(static_cast<uint32_t>(i)).name;
+        if (name == "2bomb.bmp") base_bomb_sprite_id_ = static_cast<int32_t>(i);
+        else if (name == "2bombgrn.bmp") team_bomb_sprite_ids_[0] = static_cast<int32_t>(i);
+        else if (name == "2bombred.bmp") team_bomb_sprite_ids_[1] = static_cast<int32_t>(i);
+        else if (name == "2bombblu.bmp") team_bomb_sprite_ids_[2] = static_cast<int32_t>(i);
+        else if (name == "2bombblk.bmp") team_bomb_sprite_ids_[3] = static_cast<int32_t>(i);
+    }
+}
 
 TextureCache::~TextureCache() {
     clear();
@@ -183,10 +192,25 @@ void TextureCache::clear() {
     textures_.clear();
 }
 
-SDL_Texture* TextureCache::get_sprite_texture(uint32_t sprite_id, bool mirrored, uint8_t team_id) {
-    if (!renderer_ || sprite_id >= archive_.sprite_count()) return nullptr;
+bool TextureCache::is_base_bomb_sprite(uint32_t sprite_id) const noexcept {
+    return base_bomb_sprite_id_ >= 0 && sprite_id == static_cast<uint32_t>(base_bomb_sprite_id_);
+}
 
-    uint64_t key = (static_cast<uint64_t>(sprite_id) << 4) |
+uint32_t TextureCache::get_team_bomb_sprite_index(uint8_t team_id) const noexcept {
+    if (team_id < 4 && team_bomb_sprite_ids_[team_id] >= 0) {
+        return static_cast<uint32_t>(team_bomb_sprite_ids_[team_id]);
+    }
+    return base_bomb_sprite_id_ >= 0 ? static_cast<uint32_t>(base_bomb_sprite_id_) : 0;
+}
+
+SDL_Texture* TextureCache::get_sprite_texture(uint32_t sprite_id, bool mirrored, uint8_t team_id) {
+    uint32_t eff_sprite_id = sprite_id;
+    if (team_id < 4 && is_base_bomb_sprite(sprite_id)) {
+        eff_sprite_id = get_team_bomb_sprite_index(team_id);
+    }
+    if (!renderer_ || eff_sprite_id >= archive_.sprite_count()) return nullptr;
+
+    uint64_t key = (static_cast<uint64_t>(eff_sprite_id) << 4) |
                    (static_cast<uint64_t>(team_id & 0x07) << 1) |
                    (mirrored ? 1 : 0);
     auto it = textures_.find(key);
@@ -194,8 +218,8 @@ SDL_Texture* TextureCache::get_sprite_texture(uint32_t sprite_id, bool mirrored,
         return it->second;
     }
 
-    const auto& sp = mirrored ? archive_.get_mirrored_sprite(sprite_id)
-                              : archive_.get_sprite(sprite_id);
+    const auto& sp = mirrored ? archive_.get_mirrored_sprite(eff_sprite_id)
+                              : archive_.get_sprite(eff_sprite_id);
     if (sp.width == 0 || sp.height == 0) return nullptr;
 
 // Authentic Ants HUD palette remap for indices 1..24 (Bevels, Frames, Buttons)
@@ -1121,12 +1145,16 @@ void Renderer::draw_single_ant(const ants::sim::AntSnapshot& ant, bool is_select
             const auto& sub = seq->subitems[sub_idx];
 
             for (const auto& f : sub.frames) {
+                uint32_t sp_idx = f.sprite_index;
+                if (ant.player_id < 4 && texture_cache_->is_base_bomb_sprite(sp_idx)) {
+                    sp_idx = texture_cache_->get_team_bomb_sprite_index(static_cast<uint8_t>(ant.player_id));
+                }
                 bool mirrored = ants::assets::get_direction_mapping(dir).mirrored;
-                SDL_Texture* tex = texture_cache_->get_sprite_texture(f.sprite_index, mirrored, static_cast<uint8_t>(ant.player_id));
+                SDL_Texture* tex = texture_cache_->get_sprite_texture(sp_idx, mirrored, static_cast<uint8_t>(ant.player_id));
                 if (!tex) continue;
 
-                const auto& sp = mirrored ? archive_->get_mirrored_sprite(f.sprite_index)
-                                          : archive_->get_sprite(f.sprite_index);
+                const auto& sp = mirrored ? archive_->get_mirrored_sprite(sp_idx)
+                                          : archive_->get_sprite(sp_idx);
                 SDL_Rect dst = { sx + f.dx, render_y + f.dy, static_cast<int>(sp.width), static_cast<int>(sp.height) };
                 SDL_RenderCopy(renderer_, tex, nullptr, &dst);
             }

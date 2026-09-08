@@ -3565,23 +3565,27 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         uint32_t f_id = sim.spawn_unit(0, AntType::Fire, TileCoord{25, 25});
         auto& f_ant = sim.get_unit(f_id);
 
-        sim.ignite_fire(f_id, TileCoord{25, 26});
+        sim.ignite_fire(f_id, TileCoord{25, 26}, false);
         ASSERT_EQ(f_ant.state, UnitState::PlacingFire);
         ASSERT_EQ(f_ant.facing, Direction::South);
+        // Fire is NOT placed on the grid tile yet while animation is playing!
+        ASSERT_FALSE(sim.grid().get_cell(TileCoord{25, 26}).has_fire());
 
-        // Fire placing is 10 ticks
-        for (int t = 0; t < 10; ++t) {
+        // Fire placing is 22 ticks (afsf subitems 0..21)
+        for (int t = 0; t < 22; ++t) {
+            ASSERT_FALSE(sim.grid().get_cell(TileCoord{25, 26}).has_fire());
             sim.tick();
         }
+        // Placed only after the animation completes!
         ASSERT_TRUE(sim.grid().get_cell(TileCoord{25, 26}).has_fire());
         ASSERT_EQ(f_ant.state, UnitState::Idle);
 
-        // Extinguish fire (10 ticks)
+        // Extinguish fire (12 ticks)
         sim.extinguish_fire(f_id, TileCoord{25, 26});
         ASSERT_EQ(f_ant.state, UnitState::ExtinguishingFire);
         ASSERT_EQ(f_ant.facing, Direction::South);
 
-        for (int t = 0; t < 10; ++t) {
+        for (int t = 0; t < 12; ++t) {
             sim.tick();
         }
         ASSERT_FALSE(sim.grid().get_cell(TileCoord{25, 26}).has_fire());

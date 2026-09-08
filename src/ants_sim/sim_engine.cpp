@@ -785,7 +785,7 @@ void SimulationEngine::tick() {
                         defuse_bomb(ant_ptr->id, target);
                         break;
                     case OrderType::IgniteFire:
-                        ignite_fire(ant_ptr->id, target);
+                        ignite_fire(ant_ptr->id, target, false);
                         break;
                     case OrderType::ExtinguishFire:
                         extinguish_fire(ant_ptr->id, target);
@@ -1000,6 +1000,9 @@ void SimulationEngine::tick() {
     if (ant_ptr->state == UnitState::PlantingBomb) {
         ant_ptr->anim_tick++;
         ant_ptr->anim_subitem = ant_ptr->anim_tick;
+        if (ant_ptr->anim_tick == 9) {
+            impl_->audio_queue_.push_back(AudioEvent{SoundID::BombPick, ant_ptr->pixel_x, ant_ptr->pixel_y, 1, 255});
+        }
         if (ant_ptr->anim_tick >= 15) {
             ant_ptr->state = UnitState::Idle;
             ant_ptr->anim_tick = 0;
@@ -1008,7 +1011,6 @@ void SimulationEngine::tick() {
                 impl_->grid_.place_bomb(static_cast<uint32_t>(ant_ptr->ability_target.x),
                                         static_cast<uint32_t>(ant_ptr->ability_target.y),
                                         ant_ptr->player_id);
-                impl_->audio_queue_.push_back(AudioEvent{SoundID::BombPick, ant_ptr->pixel_x, ant_ptr->pixel_y, 1, 255});
                 impl_->stats_.get_player_stats_mut(ant_ptr->player_id).bombs_planted++;
                 ant_ptr->ability_target = TileCoord{-1, -1};
             }
@@ -1028,23 +1030,36 @@ void SimulationEngine::tick() {
         continue;
     }
 
-    // Placing Fire progression (afsf, 10 ticks)
+    // Placing Fire progression (afsf, 22 ticks)
     if (ant_ptr->state == UnitState::PlacingFire) {
         ant_ptr->anim_tick++;
         ant_ptr->anim_subitem = ant_ptr->anim_tick;
-        if (ant_ptr->anim_tick >= 10) {
+        if (ant_ptr->anim_tick == 5) {
+            impl_->audio_queue_.push_back(AudioEvent{SoundID::FireBeam, ant_ptr->pixel_x, ant_ptr->pixel_y, 1, 255});
+        }
+        if (ant_ptr->anim_tick == 17) {
+            impl_->audio_queue_.push_back(AudioEvent{SoundID::FireErupt, ant_ptr->pixel_x, ant_ptr->pixel_y, 1, 255});
+        }
+        if (ant_ptr->anim_tick >= 22) {
             ant_ptr->state = UnitState::Idle;
             ant_ptr->anim_tick = 0;
             ant_ptr->anim_subitem = 0;
+            if (ant_ptr->ability_target.x >= 0 && impl_->grid_.in_bounds(ant_ptr->ability_target)) {
+                impl_->grid_.place_firewall(static_cast<uint32_t>(ant_ptr->ability_target.x),
+                                            static_cast<uint32_t>(ant_ptr->ability_target.y),
+                                            ant_ptr->player_id);
+                impl_->stats_.get_player_stats_mut(ant_ptr->player_id).fires_lit++;
+                ant_ptr->ability_target = TileCoord{-1, -1};
+            }
         }
         continue;
     }
 
-    // Extinguishing Fire progression (afxf, 10 ticks)
+    // Extinguishing Fire progression (afxf, 12 ticks)
     if (ant_ptr->state == UnitState::ExtinguishingFire) {
         ant_ptr->anim_tick++;
         ant_ptr->anim_subitem = ant_ptr->anim_tick;
-        if (ant_ptr->anim_tick >= 10) {
+        if (ant_ptr->anim_tick >= 12) {
             ant_ptr->state = UnitState::Idle;
             ant_ptr->anim_tick = 0;
             ant_ptr->anim_subitem = 0;
@@ -1449,7 +1464,7 @@ void SimulationEngine::issue_order(const AntOrder& order) {
                 bool ok = false;
                 if (order.type == OrderType::PlantBomb) ok = plant_bomb(order.ant_id, target, false);
                 else if (order.type == OrderType::DefuseBomb) ok = defuse_bomb(order.ant_id, target);
-                else if (order.type == OrderType::IgniteFire) ok = ignite_fire(order.ant_id, target);
+                else if (order.type == OrderType::IgniteFire) ok = ignite_fire(order.ant_id, target, false);
                 else if (order.type == OrderType::ExtinguishFire) ok = extinguish_fire(order.ant_id, target);
                 else if (order.type == OrderType::BuildBridge) ok = build_bridge_step(order.ant_id, target);
                 else if (order.type == OrderType::DemolishBridge) ok = demolish_bridge_step(order.ant_id, target);
@@ -2222,7 +2237,7 @@ bool SimulationEngine::defuse_bomb(uint32_t ant_id, TileCoord target) {
     return true;
 }
 
-bool SimulationEngine::ignite_fire(uint32_t ant_id, TileCoord target) {
+bool SimulationEngine::ignite_fire(uint32_t ant_id, TileCoord target, bool instant) {
     AntUnit* ant = impl_->find_unit(ant_id);
     if (!ant || !ant->is_alive() || ant->type != AntType::Fire) return false;
     if (!validate_cardinal_placement(ant->pos, target)) return false;
@@ -2235,15 +2250,23 @@ bool SimulationEngine::ignite_fire(uint32_t ant_id, TileCoord target) {
     else if (dy > 0) ant->facing = Direction::South;
     else if (dx > 0) ant->facing = Direction::East;
     else if (dx < 0) ant->facing = Direction::West;
-    ant->state = UnitState::PlacingFire;
-    ant->anim_tick = 0;
-    ant->anim_subitem = 0;
-    ant->ability_target = target;
 
-    impl_->grid_.place_firewall(static_cast<uint32_t>(target.x), static_cast<uint32_t>(target.y), ant->player_id);
-    impl_->audio_queue_.push_back(AudioEvent{SoundID::FireBeam, ant->pixel_x, ant->pixel_y, 1, 255});
-    impl_->audio_queue_.push_back(AudioEvent{SoundID::FireErupt, ant->pixel_x, ant->pixel_y, 1, 255});
-    impl_->stats_.get_player_stats_mut(ant->player_id).fires_lit++;
+    if (instant) {
+        impl_->grid_.place_firewall(static_cast<uint32_t>(target.x), static_cast<uint32_t>(target.y), ant->player_id);
+        impl_->audio_queue_.push_back(AudioEvent{SoundID::FireBeam, ant->pixel_x, ant->pixel_y, 1, 255});
+        impl_->audio_queue_.push_back(AudioEvent{SoundID::FireErupt, ant->pixel_x, ant->pixel_y, 1, 255});
+        impl_->stats_.get_player_stats_mut(ant->player_id).fires_lit++;
+        ant->state = UnitState::Idle;
+        ant->anim_tick = 0;
+        ant->anim_subitem = 0;
+        ant->ability_target = TileCoord{-1, -1};
+    } else {
+        ant->state = UnitState::PlacingFire;
+        ant->anim_tick = 0;
+        ant->anim_subitem = 0;
+        ant->ability_target = target;
+    }
+
     return true;
 }
 
