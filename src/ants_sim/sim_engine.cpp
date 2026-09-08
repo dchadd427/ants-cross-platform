@@ -2008,7 +2008,7 @@ void SimulationEngine::execute_melee_attack(uint32_t attacker_id, uint32_t targe
     }
 
     if (attacker->type == AntType::Combat) {
-        // Combat Ant: 2 HP heavy punch, Sound 78, 4-5 tile knockback, 12-tick stun
+        // Combat Ant: 2 HP heavy punch, Sound 78, 4 tile knockback, 12-tick stun
         bool lethal = target->take_damage(2, DamageSource::CombatPunch, attacker->id);
         if (lethal) {
             impl_->stats_.get_player_stats_mut(target->player_id).friendly_lost++;
@@ -2019,34 +2019,44 @@ void SimulationEngine::execute_melee_attack(uint32_t attacker_id, uint32_t targe
         int32_t dx = target->pos.x - attacker->pos.x;
         int32_t dy = target->pos.y - attacker->pos.y;
         if (dx == 0 && dy == 0) dx = 1;
+        int32_t dir_x = (dx > 0) ? 1 : ((dx < 0) ? -1 : 0);
+        int32_t dir_y = (dy > 0) ? 1 : ((dy < 0) ? -1 : 0);
         int32_t dist = 4;
 
         TileCoord land_pos = target->pos;
         for (int32_t s = 1; s <= dist; ++s) {
-            TileCoord next_pos{target->pos.x + dx * s, target->pos.y + dy * s};
-            if (!impl_->grid_.in_bounds(next_pos) || impl_->grid_.is_solid_obstacle(next_pos.x, next_pos.y)) {
+            TileCoord next_pos{target->pos.x + dir_x * s, target->pos.y + dir_y * s};
+            if (!impl_->grid_.in_bounds(next_pos)) {
                 break;
             }
+            const auto& cell = impl_->grid_.get_cell(static_cast<uint32_t>(next_pos.x), static_cast<uint32_t>(next_pos.y));
+            if (cell.terrain_type == TERRAIN_OBSTACLE || cell.is_obstacle_overlay) {
+                break; // Stop before solid rock obstacle
+            }
             land_pos = next_pos;
-            if (impl_->grid_.has_fire_at(next_pos)) {
+            if (cell.has_fire()) {
                 break; // Flight interrupted by fire contact!
             }
         }
 
-        target->pos = land_pos;
-        target->pixel_x = land_pos.x * 32 + 16;
-        target->pixel_y = land_pos.y * 32 + 16;
-        target->fx_x = target->pixel_x << 16;
-        target->fx_y = target->pixel_y << 16;
-        target->clear_path();
-        target->state = UnitState::Knockback;
-        target->start_stun(AntUnit::STUN_TICKS);
+        int32_t land_dist = std::max(std::abs(land_pos.x - target->pos.x), std::abs(land_pos.y - target->pos.y));
+        if (land_dist <= 0) land_dist = 1;
+
         impl_->audio_queue_.push_back(AudioEvent{SoundID::HeavyPunch, attacker->pixel_x, attacker->pixel_y, 1, 255});
         impl_->audio_queue_.push_back(AudioEvent{SoundID::StunRecover, target->pixel_x, target->pixel_y, 0, 255});
 
+        target->clear_path();
+        int32_t from_px = attacker->pixel_x;
+        int32_t from_py = attacker->pixel_y;
+        impl_->physics_.apply_knockback(*target, from_px, from_py, land_dist, land_dist,
+                                        DamageSource::CombatPunch, impl_->audio_queue_, impl_->prng_.rand());
+        target->pos = land_pos;
+        target->stun_ticks_remaining = AntUnit::STUN_TICKS;
+        target->state = UnitState::Knockback;
+
         // Fire collision check on landing / contact
         if (impl_->grid_.has_fire_at(target->pos)) {
-            impl_->physics_.resolve_fire_contact(*target, impl_->grid_, impl_->audio_queue_, impl_->prng_, dx, dy);
+            impl_->physics_.resolve_fire_contact(*target, impl_->grid_, impl_->audio_queue_, impl_->prng_, dir_x, dir_y);
         }
 
         if (!lethal && target->hp == 1 && target->state != UnitState::EnteringBase && !target->underground) {
@@ -2063,15 +2073,73 @@ void SimulationEngine::execute_melee_attack(uint32_t attacker_id, uint32_t targe
             impl_->stats_.get_player_stats_mut(target->player_id).friendly_lost++;
             impl_->stats_.get_player_stats_mut(attacker->player_id).enemy_killed++;
             attacker->attack_target_id = 0;
-        } else {
-            target->start_flinch();
+        }
 
-            if (target->hp == 1 && target->state != UnitState::EnteringBase && !target->underground) {
-                const auto* home = impl_->grid_.find_anthill(target->player_id);
-                if (home) {
-                    join_base_queue(target->id);
+        // 1-Tile Pushback away from attacker
+        if (!lethal) {
+            int32_t dx = target->pos.x - attacker->pos.x;
+            int32_t dy = target->pos.y - attacker->pos.y;
+            if (dx == 0 && dy == 0) dx = 1;
+            int32_t dir_x = (dx > 0) ? 1 : ((dx < 0) ? -1 : 0);
+            int32_t dir_y = (dy > 0) ? 1 : ((dy < 0) ? -1 : 0);
+
+            TileCoord push_pos{target->pos.x + dir_x, target->pos.y + dir_y};
+            bool can_push = impl_->grid_.in_bounds(push_pos);
+            if (can_push) {
+                const auto& dest_cell = impl_->grid_.get_cell(static_cast<uint32_t>(push_pos.x), static_cast<uint32_t>(push_pos.y));
+                if (dest_cell.terrain_type == TERRAIN_OBSTACLE || dest_cell.is_obstacle_overlay) {
+                    can_push = false; // Blocked by rock obstacle
                 }
             }
+
+            if (can_push) {
+                target->set_tile_pos(push_pos.x, push_pos.y);
+                target->clear_path();
+            }
+
+            // Terrain check at target position:
+            const auto& land_cell = impl_->grid_.get_cell(static_cast<uint32_t>(target->pos.x), static_cast<uint32_t>(target->pos.y));
+            bool in_water = (land_cell.terrain_type == TERRAIN_WATER && !land_cell.has_completed_bridge());
+
+            if (in_water) {
+                if (target->type != AntType::Swimmer) {
+                    // Non-swimmer dies instantly when pushed into water!
+                    target->start_drowning();
+                    target->hp = 0;
+                    target->death_status = DeathStatus::Drowned;
+                    target->clear_inventory();
+                    impl_->stats_.get_player_stats_mut(target->player_id).friendly_lost++;
+                    impl_->stats_.get_player_stats_mut(attacker->player_id).enemy_killed++;
+                    attacker->attack_target_id = 0;
+                    impl_->audio_queue_.push_back(AudioEvent{SoundID::WaterSplash, target->pixel_x, target->pixel_y, 1, 255});
+                    impl_->audio_queue_.push_back(AudioEvent{SoundID::AntDrown, target->pixel_x, target->pixel_y, 2, 255});
+                } else {
+                    target->state = UnitState::Swimming;
+                    target->in_water = true;
+                    target->was_in_water = true;
+                    impl_->audio_queue_.push_back(AudioEvent{SoundID::WaterSplash, target->pixel_x, target->pixel_y, 1, 255});
+                }
+            } else {
+                target->state = UnitState::Bounce;
+                target->state_timer = 4;
+                target->anim_tick = 0;
+                target->anim_subitem = 0;
+                target->facing = ants::assets::vector_to_direction(dir_x, dir_y);
+
+                // Fire contact check
+                if (land_cell.has_fire()) {
+                    impl_->physics_.resolve_fire_contact(*target, impl_->grid_, impl_->audio_queue_, impl_->prng_, dir_x, dir_y);
+                }
+
+                if (target->hp == 1 && target->state != UnitState::EnteringBase && !target->underground) {
+                    const auto* home = impl_->grid_.find_anthill(target->player_id);
+                    if (home) {
+                        join_base_queue(target->id);
+                    }
+                }
+            }
+        } else {
+            target->state = UnitState::Dead;
         }
     }
 }
