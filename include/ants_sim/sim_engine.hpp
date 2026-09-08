@@ -316,7 +316,7 @@ public:
     void issue_move_order(uint32_t ant_id, TileCoord dest, bool allow_friendly_bomb = false);
 
     bool validate_cardinal_placement(TileCoord from, TileCoord to) const;
-    bool plant_bomb(uint32_t ant_id, TileCoord target);
+    bool plant_bomb(uint32_t ant_id, TileCoord target, bool instant = true);
     bool defuse_bomb(uint32_t ant_id, TileCoord target);
     bool ignite_fire(uint32_t ant_id, TileCoord target);
     bool extinguish_fire(uint32_t ant_id, TileCoord target);

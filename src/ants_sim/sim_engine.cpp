@@ -417,7 +417,10 @@ void SimulationEngine::tick() {
                 }
                 int32_t from_px = ant_ptr->pixel_x + facing_dx * 32;
                 int32_t from_py = ant_ptr->pixel_y + facing_dy * 32;
-                impl_->physics_.apply_knockback(*ant_ptr, from_px, from_py, 5, 5, DamageSource::BombBlast, impl_->audio_queue_, impl_->prng_.rand());
+                impl_->physics_.apply_knockback(*ant_ptr, from_px, from_py,
+                                                PhysicsEngine::BOMB_BLAST_MIN_TILES,
+                                                PhysicsEngine::BOMB_BLAST_MAX_TILES,
+                                                DamageSource::BombBlast, impl_->audio_queue_, impl_->prng_.rand());
             }
         }
     }
@@ -776,7 +779,7 @@ void SimulationEngine::tick() {
 
                 switch (ability) {
                     case OrderType::PlantBomb:
-                        plant_bomb(ant_ptr->id, target);
+                        plant_bomb(ant_ptr->id, target, false);
                         break;
                     case OrderType::DefuseBomb:
                         defuse_bomb(ant_ptr->id, target);
@@ -1001,6 +1004,14 @@ void SimulationEngine::tick() {
             ant_ptr->state = UnitState::Idle;
             ant_ptr->anim_tick = 0;
             ant_ptr->anim_subitem = 0;
+            if (ant_ptr->ability_target.x >= 0 && impl_->grid_.in_bounds(ant_ptr->ability_target)) {
+                impl_->grid_.place_bomb(static_cast<uint32_t>(ant_ptr->ability_target.x),
+                                        static_cast<uint32_t>(ant_ptr->ability_target.y),
+                                        ant_ptr->player_id);
+                impl_->audio_queue_.push_back(AudioEvent{SoundID::BombPick, ant_ptr->pixel_x, ant_ptr->pixel_y, 1, 255});
+                impl_->stats_.get_player_stats_mut(ant_ptr->player_id).bombs_planted++;
+                ant_ptr->ability_target = TileCoord{-1, -1};
+            }
         }
         continue;
     }
@@ -1436,7 +1447,7 @@ void SimulationEngine::issue_order(const AntOrder& order) {
                 unit->set_tile_pos(unit->pos.x, unit->pos.y);
                 unit->facing = ants::assets::vector_to_direction(target.x - unit->pos.x, target.y - unit->pos.y);
                 bool ok = false;
-                if (order.type == OrderType::PlantBomb) ok = plant_bomb(order.ant_id, target);
+                if (order.type == OrderType::PlantBomb) ok = plant_bomb(order.ant_id, target, false);
                 else if (order.type == OrderType::DefuseBomb) ok = defuse_bomb(order.ant_id, target);
                 else if (order.type == OrderType::IgniteFire) ok = ignite_fire(order.ant_id, target);
                 else if (order.type == OrderType::ExtinguishFire) ok = extinguish_fire(order.ant_id, target);
@@ -1870,7 +1881,7 @@ void SimulationEngine::execute_melee_attack(uint32_t attacker_id, uint32_t targe
         int32_t dx = target->pos.x - attacker->pos.x;
         int32_t dy = target->pos.y - attacker->pos.y;
         if (dx == 0 && dy == 0) dx = 1;
-        int32_t dist = 5;
+        int32_t dist = 4;
 
         TileCoord land_pos = target->pos;
         for (int32_t s = 1; s <= dist; ++s) {
@@ -2154,7 +2165,7 @@ bool SimulationEngine::validate_cardinal_placement(TileCoord from, TileCoord to)
     return (std::abs(dx) + std::abs(dy) == 1);
 }
 
-bool SimulationEngine::plant_bomb(uint32_t ant_id, TileCoord target) {
+bool SimulationEngine::plant_bomb(uint32_t ant_id, TileCoord target, bool instant) {
     AntUnit* ant = impl_->find_unit(ant_id);
     if (!ant || !ant->is_alive() || ant->type != AntType::Bomber) return false;
     if (!validate_cardinal_placement(ant->pos, target)) return false;
@@ -2167,14 +2178,22 @@ bool SimulationEngine::plant_bomb(uint32_t ant_id, TileCoord target) {
     else if (dy > 0) ant->facing = Direction::South;
     else if (dx > 0) ant->facing = Direction::East;
     else if (dx < 0) ant->facing = Direction::West;
-    ant->state = UnitState::PlantingBomb;
-    ant->anim_tick = 0;
-    ant->anim_subitem = 0;
-    ant->ability_target = target;
 
-    impl_->grid_.place_bomb(static_cast<uint32_t>(target.x), static_cast<uint32_t>(target.y), ant->player_id);
-    impl_->audio_queue_.push_back(AudioEvent{SoundID::BombPick, ant->pixel_x, ant->pixel_y, 1, 255});
-    impl_->stats_.get_player_stats_mut(ant->player_id).bombs_planted++;
+    if (instant) {
+        impl_->grid_.place_bomb(static_cast<uint32_t>(target.x), static_cast<uint32_t>(target.y), ant->player_id);
+        impl_->audio_queue_.push_back(AudioEvent{SoundID::BombPick, ant->pixel_x, ant->pixel_y, 1, 255});
+        impl_->stats_.get_player_stats_mut(ant->player_id).bombs_planted++;
+        ant->state = UnitState::Idle;
+        ant->anim_tick = 0;
+        ant->anim_subitem = 0;
+        ant->ability_target = TileCoord{-1, -1};
+    } else {
+        ant->state = UnitState::PlantingBomb;
+        ant->anim_tick = 0;
+        ant->anim_subitem = 0;
+        ant->ability_target = target;
+    }
+
     return true;
 }
 

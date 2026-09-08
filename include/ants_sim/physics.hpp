@@ -44,10 +44,10 @@ public:
     static constexpr uint32_t SOUND_DROWN         = 72; // antdrown.wav
     static constexpr uint32_t SOUND_ATTACK_COMBAT = 78; // attack2.wav
 
-    static constexpr int32_t COMBAT_PUNCH_MIN_TILES = 5;
-    static constexpr int32_t COMBAT_PUNCH_MAX_TILES = 5;
-    static constexpr int32_t BOMB_BLAST_MIN_TILES   = 5;
-    static constexpr int32_t BOMB_BLAST_MAX_TILES   = 5;
+    static constexpr int32_t COMBAT_PUNCH_MIN_TILES = 4;
+    static constexpr int32_t COMBAT_PUNCH_MAX_TILES = 4;
+    static constexpr int32_t BOMB_BLAST_MIN_TILES   = 4;
+    static constexpr int32_t BOMB_BLAST_MAX_TILES   = 4;
 
     static constexpr uint16_t STUN_RECOVERY_TICKS   = 12;
 

@@ -699,7 +699,7 @@ public:
             int32_t dx = tgt->pos.x - att->pos.x;
             int32_t dy = tgt->pos.y - att->pos.y;
             if (dx == 0 && dy == 0) dx = 1;
-            int32_t dist = 5; // 5 tiles knockback
+            int32_t dist = 4; // 4 tiles knockback (5 spaces counting bomb/punch tile)
             apply_knockback(*tgt, dx, dy, dist);
         } else {
             // Feature 9: Standard 1 HP melee strike
