@@ -1019,6 +1019,24 @@ bool HUD::is_ant_selected(uint32_t id) const noexcept {
     return std::find(selected_ant_ids_.begin(), selected_ant_ids_.end(), id) != selected_ant_ids_.end();
 }
 
+bool HUD::has_friendly_selected(const sim::WorldState& world) const noexcept {
+    for (uint32_t aid : selected_ant_ids_) {
+        for (const auto& a : world.ants) {
+            if (a.id == aid && a.player_id == local_player_id_ && a.hp > 0 && !a.is_drowning) {
+                return true;
+            }
+        }
+    }
+    if (selected_ant_id_ != 0) {
+        for (const auto& a : world.ants) {
+            if (a.id == selected_ant_id_ && a.player_id == local_player_id_ && a.hp > 0 && !a.is_drowning) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
 void HUD::select_all_friendly(const sim::WorldState& world) {
     selected_base_team_id_ = -1;
     selected_ant_ids_.clear();
@@ -1257,6 +1275,7 @@ bool HUD::handle_mouse_down(int32_t x, int32_t y, uint8_t button,
             play_sfx(sim::SoundID::AntStop);
             for (uint32_t aid : selected_ant_ids_) {
                 const auto& u = sim.get_unit(aid);
+                if (u.player_id != local_player_id_) continue;
                 if (u.state == sim::UnitState::BuildingBridge || u.state == sim::UnitState::DemolishingBridge) {
                     continue; // Swimmer cannot be interrupted while building/demolishing a bridge!
                 }
@@ -1378,7 +1397,7 @@ bool HUD::handle_mouse_down(int32_t x, int32_t y, uint8_t button,
             const auto& world = sim.get_world_state();
             for (const auto& ant : world.ants) {
                 if (ant.hp == 0 || ant.is_drowning) continue;
-                if (ant.player_id != local_player_id_) {
+                if (ant.player_id != local_player_id_ && !sim.stats_manager().are_allies(local_player_id_, ant.player_id)) {
                     bool in_bbox = (std::abs(ant.px - world_x) <= 18 &&
                                     world_y >= ant.py - 24 && world_y <= ant.py + 18);
                     bool on_tile = (ant.tile_x == target_tile_x && ant.tile_y == target_tile_y);
@@ -1392,6 +1411,10 @@ bool HUD::handle_mouse_down(int32_t x, int32_t y, uint8_t button,
                 }
             }
             if (enemy_target) {
+                if (!has_friendly_selected(world)) {
+                    play_sfx(sim::SoundID::AntStop);
+                    return true;
+                }
                 if (enemy_target->on_powerup || (enemy_target->type == sim::AntType::Swimmer && enemy_target->is_swimming)) {
                     play_sfx(sim::SoundID::AntStop);
                     return true;
@@ -1416,10 +1439,15 @@ bool HUD::handle_mouse_down(int32_t x, int32_t y, uint8_t button,
                 if (target_base->team_id == local_player_id_) {
                     play_sfx(sim::SoundID::GeneralCommand);
                     for (uint32_t aid : selected_ant_ids_) {
-                        sim::AntOrder order;
-                        order.ant_id = aid;
-                        order.type = sim::OrderType::ReturnToBase;
-                        sim.issue_order(order);
+                        for (const auto& a : world.ants) {
+                            if (a.id == aid && a.player_id == local_player_id_) {
+                                sim::AntOrder order;
+                                order.ant_id = aid;
+                                order.type = sim::OrderType::ReturnToBase;
+                                sim.issue_order(order);
+                                break;
+                            }
+                        }
                     }
                 } else {
                     dispatch_smart_special_ability(world_x, world_y, sim, shift_held);
@@ -1526,13 +1554,18 @@ bool HUD::handle_mouse_up(int32_t x, int32_t y, uint8_t button,
                     select_ant(hit_ant->id, shift_held);
                     play_sfx(sim::get_ready_voice_sound(hit_ant->type, voice_variant_++));
                 } else {
-                    // Enemy ant clicked
-                    if (!selected_ant_ids_.empty() && !hit_ant->on_powerup && !(hit_ant->type == sim::AntType::Swimmer && hit_ant->is_swimming)) {
-                        // Issue Attack order against target enemy
+                    // Enemy or allied ant clicked
+                    bool is_ally = sim.stats_manager().are_allies(local_player_id_, hit_ant->player_id);
+                    if (has_friendly_selected(world) && !is_ally && !hit_ant->on_powerup && !(hit_ant->type == sim::AntType::Swimmer && hit_ant->is_swimming)) {
+                        // Issue Attack order against target enemy for selected friendly ants
                         dispatch_attack_order(hit_ant->id, sim);
                     } else {
-                        // Inspect enemy unit
-                        select_ant(hit_ant->id, false);
+                        // Cannot select or command enemy/allied ants!
+                        if (has_friendly_selected(world)) {
+                            play_sfx(sim::SoundID::AntStop);
+                        } else {
+                            clear_selection();
+                        }
                     }
                 }
                 return true;
@@ -1549,21 +1582,26 @@ bool HUD::handle_mouse_up(int32_t x, int32_t y, uint8_t button,
             }
 
             if (hit_base) {
-                if (!selected_ant_ids_.empty()) {
+                if (has_friendly_selected(world)) {
                     if (hit_base->team_id == local_player_id_) {
                         // Friendly anthill: return selected friendly ants to base
                         for (uint32_t aid : selected_ant_ids_) {
-                            sim::AntOrder order;
-                            order.ant_id = aid;
-                            order.type = sim::OrderType::ReturnToBase;
-                            sim.issue_order(order);
+                            for (const auto& a : world.ants) {
+                                if (a.id == aid && a.player_id == local_player_id_) {
+                                    sim::AntOrder order;
+                                    order.ant_id = aid;
+                                    order.type = sim::OrderType::ReturnToBase;
+                                    sim.issue_order(order);
+                                    break;
+                                }
+                            }
                         }
                     } else {
                         // Enemy anthill clicked
                         bool has_thief = false;
                         for (uint32_t aid : selected_ant_ids_) {
                             for (const auto& a : world.ants) {
-                                if (a.id == aid && a.type == sim::AntType::Thief) {
+                                if (a.id == aid && a.player_id == local_player_id_ && a.type == sim::AntType::Thief) {
                                     has_thief = true;
                                     sim::AntOrder order;
                                     order.ant_id = aid;
@@ -1571,6 +1609,7 @@ bool HUD::handle_mouse_up(int32_t x, int32_t y, uint8_t button,
                                     order.target_x = target_tile_x;
                                     order.target_y = target_tile_y;
                                     sim.issue_order(order);
+                                    break;
                                 }
                             }
                         }
@@ -1969,9 +2008,19 @@ void HUD::dispatch_targeted_order(int32_t world_x, int32_t world_y, sim::Simulat
     int32_t target_tile_x = world_x / 32;
     int32_t target_tile_y = world_y / 32;
 
-    std::vector<uint32_t> targets = selected_ant_ids_;
-    if (targets.empty() && selected_ant_id_ != 0) {
-        targets.push_back(selected_ant_id_);
+    const auto& world = sim.get_world_state();
+    std::vector<uint32_t> raw_targets = selected_ant_ids_;
+    if (raw_targets.empty() && selected_ant_id_ != 0) {
+        raw_targets.push_back(selected_ant_id_);
+    }
+    std::vector<uint32_t> targets;
+    for (uint32_t aid : raw_targets) {
+        for (const auto& a : world.ants) {
+            if (a.id == aid && a.player_id == local_player_id_ && a.hp > 0 && !a.is_drowning) {
+                targets.push_back(aid);
+                break;
+            }
+        }
     }
     if (targets.empty()) return;
 
@@ -2029,14 +2078,23 @@ void HUD::dispatch_targeted_order(int32_t world_x, int32_t world_y, sim::Simulat
 }
 
 void HUD::dispatch_move_order(int32_t target_tile_x, int32_t target_tile_y, sim::SimulationEngine& sim, bool allow_friendly_bomb) {
-    std::vector<uint32_t> targets = selected_ant_ids_;
-    if (targets.empty() && selected_ant_id_ != 0) {
-        targets.push_back(selected_ant_id_);
+    const auto& world = sim.get_world_state();
+    std::vector<uint32_t> raw_targets = selected_ant_ids_;
+    if (raw_targets.empty() && selected_ant_id_ != 0) {
+        raw_targets.push_back(selected_ant_id_);
+    }
+    std::vector<uint32_t> targets;
+    for (uint32_t aid : raw_targets) {
+        for (const auto& a : world.ants) {
+            if (a.id == aid && a.player_id == local_player_id_ && a.hp > 0 && !a.is_drowning) {
+                targets.push_back(aid);
+                break;
+            }
+        }
     }
     if (targets.empty()) return;
 
     // Play authentic Move / Go voice clip for the primary selected friendly unit
-    const auto& world = sim.get_world_state();
     for (uint32_t aid : targets) {
         for (const auto& a : world.ants) {
             if (a.id == aid && a.player_id == local_player_id_) {
@@ -2147,16 +2205,36 @@ move_voice_done:
 void HUD::dispatch_attack_order(uint32_t target_enemy_id, sim::SimulationEngine& sim) {
     const auto& world = sim.get_world_state();
     for (const auto& a : world.ants) {
-        if (a.id == target_enemy_id && (a.on_powerup || (a.type == sim::AntType::Swimmer && a.is_swimming))) {
-            play_sfx(sim::SoundID::AntStop);
-            return;
+        if (a.id == target_enemy_id) {
+            // Cannot attack friendly teammates or allies
+            if (a.player_id == local_player_id_ || sim.stats_manager().are_allies(local_player_id_, a.player_id)) {
+                play_sfx(sim::SoundID::AntStop);
+                return;
+            }
+            if (a.on_powerup || (a.type == sim::AntType::Swimmer && a.is_swimming)) {
+                play_sfx(sim::SoundID::AntStop);
+                return;
+            }
+            break;
         }
     }
 
-    std::vector<uint32_t> targets = selected_ant_ids_;
-    if (targets.empty() && selected_ant_id_ != 0) {
-        targets.push_back(selected_ant_id_);
+    std::vector<uint32_t> raw_targets = selected_ant_ids_;
+    if (raw_targets.empty() && selected_ant_id_ != 0) {
+        raw_targets.push_back(selected_ant_id_);
     }
+
+    // STRICT INVARIANT: Only friendly units owned by local_player_id_ may ever receive attack orders!
+    std::vector<uint32_t> targets;
+    for (uint32_t aid : raw_targets) {
+        for (const auto& a : world.ants) {
+            if (a.id == aid && a.player_id == local_player_id_ && a.hp > 0 && !a.is_drowning) {
+                targets.push_back(aid);
+                break;
+            }
+        }
+    }
+    if (targets.empty()) return;
 
     int32_t target_x = 0;
     int32_t target_y = 0;
@@ -2202,9 +2280,19 @@ attack_voice_done:
 }
 
 void HUD::dispatch_smart_special_ability(int32_t world_x, int32_t world_y, sim::SimulationEngine& sim, bool shift_held) {
-    std::vector<uint32_t> targets = selected_ant_ids_;
-    if (targets.empty() && selected_ant_id_ != 0) {
-        targets.push_back(selected_ant_id_);
+    const auto& world = sim.get_world_state();
+    std::vector<uint32_t> raw_targets = selected_ant_ids_;
+    if (raw_targets.empty() && selected_ant_id_ != 0) {
+        raw_targets.push_back(selected_ant_id_);
+    }
+    std::vector<uint32_t> targets;
+    for (uint32_t aid : raw_targets) {
+        for (const auto& a : world.ants) {
+            if (a.id == aid && a.player_id == local_player_id_ && a.hp > 0 && !a.is_drowning) {
+                targets.push_back(aid);
+                break;
+            }
+        }
     }
     if (targets.empty()) return;
 
@@ -2269,7 +2357,6 @@ void HUD::dispatch_smart_special_ability(int32_t world_x, int32_t world_y, sim::
         }
     }
 
-    const auto& world = sim.get_world_state();
     bool played_voice = false;
 
     for (size_t ti = 0; ti < targets.size(); ++ti) {
