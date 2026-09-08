@@ -23,3 +23,7 @@ Native C++17 macOS port and remake of the 1998 classic RTS game *Ants*, featurin
 
 ### 3. Forbidden Terms
 - Strictly **NEVER** write or mention the forbidden word ("M-i-c-r-o-s-o-f-t") anywhere in code, comments, commit messages, or documentation.
+
+### 4. Mandatory Capstone Reverse Engineering & Original Logic Parity
+- **Authentic Fidelity Verification**: Always compare and verify our logic, timings, animation sequencing, sprite layering, and behavioral mechanics against the original 1998 executable (`Original-Ants/Ants.exe`) and asset archive (`Original-Ants/ants.chd`) using Capstone reverse engineering disassembly and binary inspection.
+- **Match Original Behavior**: The goal is to make the remake as completely faithful to the original 1998 game as possible. Never guess or approximate when the ground-truth logic and constants can be extracted directly via disassembly and reverse engineering.
