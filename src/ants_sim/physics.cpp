@@ -42,6 +42,9 @@ void PhysicsEngine::apply_knockback(AntUnit& victim,
     flight.flight_dir = ants::assets::vector_to_direction(dir_x, dir_y);
 
     victim.state = UnitState::Knockback;
+    victim.facing = flight.flight_dir;
+    victim.anim_tick = 0;
+    victim.anim_subitem = 0;
     audio_out.push_back(AudioEvent{SOUND_FLY_THUMP_A, victim.pixel_x, victim.pixel_y, 1, 255});
 
     cancel_flight(victim.id);
@@ -62,7 +65,7 @@ void PhysicsEngine::tick(std::vector<AntUnit*>& all_units,
             }
         }
 
-        if (!unit || !unit->is_alive()) {
+        if (!unit || (unit->state != UnitState::Knockback && !unit->is_alive())) {
             it = active_flights_.erase(it);
             continue;
         }
@@ -77,6 +80,9 @@ void PhysicsEngine::tick(std::vector<AntUnit*>& all_units,
 
         unit->set_pixel_pos(cur_px, cur_py);
         unit->altitude_z = z;
+        unit->facing = f.flight_dir;
+        unit->anim_tick = f.current_tick;
+        unit->anim_subitem = f.current_tick;
 
         int32_t tx = unit->pos.x;
         int32_t ty = unit->pos.y;
@@ -111,6 +117,7 @@ void PhysicsEngine::resolve_landing(AntUnit& unit,
                                     int32_t incoming_dy) {
     unit.altitude_z = 0;
     if (!grid.in_bounds(unit.pos.x, unit.pos.y)) {
+        if (unit.hp == 0) unit.state = UnitState::Dead;
         return;
     }
 
@@ -129,9 +136,16 @@ void PhysicsEngine::resolve_landing(AntUnit& unit,
     }
 
     // 3. Ground Landing
-    audio_out.push_back(AudioEvent{SOUND_FLY_THUMP_B, unit.pixel_x, unit.pixel_y, 0, 255});
-    audio_out.push_back(AudioEvent{SOUND_STUN, unit.pixel_x, unit.pixel_y, 0, 255});
-    unit.start_stun(STUN_RECOVERY_TICKS);
+    if (unit.hp == 0) {
+        unit.state = UnitState::Bounce;
+        unit.anim_tick = 0;
+        unit.anim_subitem = 0;
+        audio_out.push_back(AudioEvent{SOUND_FLY_THUMP_B, unit.pixel_x, unit.pixel_y, 0, 255});
+    } else {
+        audio_out.push_back(AudioEvent{SOUND_FLY_THUMP_B, unit.pixel_x, unit.pixel_y, 0, 255});
+        audio_out.push_back(AudioEvent{SOUND_STUN, unit.pixel_x, unit.pixel_y, 0, 255});
+        unit.start_stun(STUN_RECOVERY_TICKS);
+    }
 }
 
 void PhysicsEngine::resolve_water_entry(AntUnit& unit,
@@ -141,6 +155,8 @@ void PhysicsEngine::resolve_water_entry(AntUnit& unit,
         audio_out.push_back(AudioEvent{SOUND_SPLASH, unit.pixel_x, unit.pixel_y, 1, 255});
     } else {
         unit.start_drowning();
+        unit.set_tile_pos(unit.pos.x, unit.pos.y);
+        unit.facing = ants::assets::Direction::South;
         audio_out.push_back(AudioEvent{SOUND_SPLASH, unit.pixel_x, unit.pixel_y, 1, 255});
         audio_out.push_back(AudioEvent{SOUND_DROWN, unit.pixel_x, unit.pixel_y, 2, 255});
         unit.clear_inventory();

@@ -221,6 +221,14 @@ struct AntSnapshot {
     UnitState state{UnitState::Idle};
 };
 
+struct VisualEffect {
+    std::string anim_name;
+    int32_t px{0};
+    int32_t py{0};
+    uint16_t frame{0};
+    uint16_t total_frames{0};
+};
+
 struct WorldState {
     uint64_t   tick_number{0};
     uint32_t   match_time_remaining_ms{0};
@@ -231,6 +239,7 @@ struct WorldState {
 
     std::vector<TileCell>    cells;
     std::vector<AntSnapshot> ants;
+    std::vector<VisualEffect> effects;
 
     std::array<PlayerMatchStats, MAX_PLAYERS> player_stats{};
     std::array<int32_t, MAX_PLAYERS>          player_scores{};

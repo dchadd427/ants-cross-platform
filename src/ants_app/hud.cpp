@@ -2094,12 +2094,16 @@ void HUD::dispatch_move_order(int32_t target_tile_x, int32_t target_tile_y, sim:
     }
     if (targets.empty()) return;
 
-    // Play authentic Move / Go voice clip for the primary selected friendly unit
-    for (uint32_t aid : targets) {
-        for (const auto& a : world.ants) {
-            if (a.id == aid && a.player_id == local_player_id_) {
-                play_sfx(sim::get_move_voice_sound(a.type, voice_variant_++));
-                goto move_voice_done;
+    // Play authentic Move / Go voice clip for the primary selected friendly unit (if destination is passable)
+    bool dest_is_passable = sim.grid().in_bounds(target_tile_x, target_tile_y) &&
+                            sim.grid().get_cell(static_cast<uint32_t>(target_tile_x), static_cast<uint32_t>(target_tile_y)).is_passable();
+    if (dest_is_passable) {
+        for (uint32_t aid : targets) {
+            for (const auto& a : world.ants) {
+                if (a.id == aid && a.player_id == local_player_id_) {
+                    play_sfx(sim::get_move_voice_sound(a.type, voice_variant_++));
+                    goto move_voice_done;
+                }
             }
         }
     }
