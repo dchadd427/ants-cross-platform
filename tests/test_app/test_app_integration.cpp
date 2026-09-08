@@ -1219,7 +1219,7 @@ void run_suite_9_gameplay_mechanics_and_options() {
         sim_engine.issue_move_order(ant_id, TileCoord{bx + 1, by + 1});
 
         // Tick movement until entering hole
-        for (int i = 0; i < 60 && ant.state != UnitState::EnteringBase; ++i) {
+        for (int i = 0; i < 90 && ant.state != UnitState::EnteringBase; ++i) {
             sim_engine.tick();
         }
 
@@ -1625,12 +1625,12 @@ void run_suite_10_egg_economy_incubation_teamup_abilities() {
         for (int i = 0; i < 15; ++i) sim.tick();
         ASSERT_EQ(sim.get_pending_hatch_count(0), 0u);
 
-        // Advance simulation until ant completes emergence and walks to idle spot (bx+3, by+3)
-        for (int i = 0; i < 80; ++i) sim.tick();
+        // Advance simulation until ant completes emergence and walks to idle spot (bx+4, by+4)
+        for (int i = 0; i < 130; ++i) sim.tick();
 
         const auto& u_final = sim.get_unit(newborn_id);
-        ASSERT_EQ(u_final.pos.x, bx + 3);
-        ASSERT_EQ(u_final.pos.y, by + 3);
+        ASSERT_EQ(u_final.pos.x, bx + 4);
+        ASSERT_EQ(u_final.pos.y, by + 4);
         ASSERT_EQ(u_final.state, UnitState::Idle);
     } TEST_END();
 
@@ -3655,7 +3655,7 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
 
         // Tick simulation until the ant climbs the ramp and enters the base hole
         bool entered_base = false;
-        for (int i = 0; i < 50; ++i) {
+        for (int i = 0; i < 80; ++i) {
             sim.tick();
             if (u.state == UnitState::EnteringBase) {
                 entered_base = true;
@@ -3673,15 +3673,15 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         ASSERT_FALSE(sim.has_audio_event(SoundID::BaseEnter));
         ASSERT_FALSE(sim.has_audio_event(SoundID::BaseScoreUp));
 
-        // Tick until ant emerges and walks off the ramp to idle spot
-        for (int i = 0; i < 80; ++i) {
+        // Tick until ant emerges and walks off the ramp to idle spot (bx+4, by+4)
+        for (int i = 0; i < 140; ++i) {
             sim.tick();
             if (u.state == UnitState::Idle && u.pos != TileCoord{bx + 1, by + 1}) {
                 break;
             }
         }
         ASSERT_EQ(u.state, UnitState::Idle);
-        ASSERT_NE(u.pos, (TileCoord{bx + 1, by + 1}));
+        ASSERT_EQ(u.pos, (TileCoord{bx + 4, by + 4}));
     } TEST_END();
 
     TEST_CASE("12.32 Move Order From Anthill Hole Steps Down Ramp Without CantGo") {
@@ -3869,7 +3869,7 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         ASSERT_TRUE(sim.has_audio_event(64)); // SOUND_FLY_THUMP_A
     } TEST_END();
 
-    TEST_CASE("12.38 Anthill Base Deposit Path Shifted One Tile Left Off Mound") {
+    TEST_CASE("12.38 Anthill Base Queuing, 9-Step Approach, Blocked Squares, and Idle Spot") {
         SimulationEngine sim;
         sim.init_test_world(60, 60, 42, 60000);
         sim.grid_mut().set_anthill(0, TileCoord{20, 20});
@@ -3884,7 +3884,32 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         ASSERT_EQ(sim.get_base_queue_slot(0, 2), (TileCoord{bx - 1, by + 1}));
         ASSERT_EQ(sim.get_base_queue_slot(0, 3), (TileCoord{bx - 1, by}));
 
-        // 2. Spawn worker with food at (10, by + 3) and issue ReturnToBase
+        // 2. Approach Corridor Placement Block: Verify 3 red squares above base (row by - 1)
+        for (int dx = 0; dx <= 2; ++dx) {
+            TileCoord red_sq{bx + dx, by - 1};
+            const auto& cell = sim.grid().get_cell(red_sq);
+            ASSERT_FALSE(cell.can_place_bomb());
+            ASSERT_FALSE(cell.can_place_fire());
+            ASSERT_TRUE(sim.grid().is_anthill_reserved_spot(red_sq));
+
+            // Verify direct grid placement is blocked
+            sim.grid_mut().place_bomb(static_cast<uint32_t>(red_sq.x), static_cast<uint32_t>(red_sq.y), 0);
+            ASSERT_FALSE(sim.grid().has_bomb_at(red_sq));
+
+            sim.grid_mut().place_firewall(static_cast<uint32_t>(red_sq.x), static_cast<uint32_t>(red_sq.y), 0);
+            ASSERT_FALSE(sim.grid().has_fire_at(red_sq));
+        }
+
+        // Verify ability order rejection on red squares
+        uint32_t bomber = sim.spawn_unit(0, AntType::Bomber, TileCoord{bx, by - 2});
+        ASSERT_FALSE(sim.plant_bomb(bomber, TileCoord{bx, by - 1}));
+        ASSERT_FALSE(sim.plant_bomb(bomber, TileCoord{bx, by - 1}, true));
+
+        uint32_t fire_ant = sim.spawn_unit(0, AntType::Fire, TileCoord{bx + 1, by - 2});
+        ASSERT_FALSE(sim.ignite_fire(fire_ant, TileCoord{bx + 1, by - 1}));
+        ASSERT_FALSE(sim.ignite_fire(fire_ant, TileCoord{bx + 1, by - 1}, true));
+
+        // 3. Spawn worker with food at (10, by + 3) and issue ReturnToBase
         uint32_t w1 = sim.spawn_unit(0, AntType::Worker, TileCoord{10, by + 3});
         auto& u1 = sim.get_unit(w1);
         u1.pick_up_food(1, 25);
@@ -3914,25 +3939,59 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         ASSERT_EQ(u1.state, UnitState::EnteringBase);
         ASSERT_EQ(u1.pos, (TileCoord{bx + 1, by + 1}));
 
-        // Verify that the ant walked vertically strictly along bx - 1 (x = 19)
-        // and NEVER stepped on column bx (x = 20) at rows by+3, by+2, by+1
-        bool stepped_on_mound_left_edge = false;
+        // Verify ant never walked on top of the base mound [bx..bx+2, by..by+2] \ {(bx+1, by+1), (bx+1, by)}
         for (const auto& pt : visited_coords) {
-            if (pt.x == bx && (pt.y == by + 3 || pt.y == by + 2 || pt.y == by + 1)) {
-                stepped_on_mound_left_edge = true;
+            if (pt.x == bx && (pt.y == by + 3 || pt.y == by + 2 || pt.y == by + 1 || pt.y == by)) {
+                ASSERT_TRUE(false); // Walked on mound!
             }
         }
-        ASSERT_FALSE(stepped_on_mound_left_edge);
 
-        // Verify that the path passed through the vertical corridor at bx - 1
-        bool visited_corridor_bottom = false;
-        bool visited_corridor_top = false;
+        // Verify the ant followed the 9-step path:
+        // Started along bx - 1 (x = 19)
+        // Turned East at (bx - 1, by - 1)
+        // Traversed top approach corridor (bx, by - 1) and (bx + 1, by - 1)
+        // Stepped down into (bx + 1, by) and into hole (bx + 1, by + 1)
+        bool visited_top_turn = false;
+        bool visited_red_sq1 = false;
+        bool visited_red_sq2 = false;
+        bool visited_above_hole = false;
         for (const auto& pt : visited_coords) {
-            if (pt.x == bx - 1 && pt.y == by + 3) visited_corridor_bottom = true;
-            if (pt.x == bx - 1 && pt.y == by) visited_corridor_top = true;
+            if (pt.x == bx - 1 && pt.y == by - 1) visited_top_turn = true;
+            if (pt.x == bx && pt.y == by - 1) visited_red_sq1 = true;
+            if (pt.x == bx + 1 && pt.y == by - 1) visited_red_sq2 = true;
+            if (pt.x == bx + 1 && pt.y == by) visited_above_hole = true;
         }
-        ASSERT_TRUE(visited_corridor_bottom);
-        ASSERT_TRUE(visited_corridor_top);
+        ASSERT_TRUE(visited_top_turn);
+        ASSERT_TRUE(visited_red_sq1);
+        ASSERT_TRUE(visited_red_sq2);
+        ASSERT_TRUE(visited_above_hole);
+
+        // 4. Ant visiting without food emerges and routes to the idle position (bx + 4, by + 4)
+        uint32_t w2 = sim.spawn_unit(0, AntType::Worker, TileCoord{bx - 1, by + 3});
+        AntOrder ret2{};
+        ret2.ant_id = w2;
+        ret2.type = OrderType::ReturnToBase;
+        sim.issue_order(ret2);
+
+        for (int i = 0; i < 90 && sim.get_unit(w2).state != UnitState::EnteringBase; ++i) {
+            sim.tick();
+        }
+        ASSERT_EQ(sim.get_unit(w2).state, UnitState::EnteringBase);
+
+        // Advance through base entry animation (16 ticks)
+        for (int i = 0; i < 20; ++i) {
+            sim.tick();
+        }
+
+        // Tick until ant emerges and finishes moving to idle spot
+        for (int i = 0; i < 140; ++i) {
+            sim.tick();
+            if (sim.get_unit(w2).state == UnitState::Idle && sim.get_unit(w2).pos != TileCoord{bx + 1, by + 1}) {
+                break;
+            }
+        }
+        ASSERT_EQ(sim.get_unit(w2).state, UnitState::Idle);
+        ASSERT_EQ(sim.get_unit(w2).pos, (TileCoord{bx + 4, by + 4}));
     } TEST_END();
 }
 

@@ -888,8 +888,8 @@ void SimulationEngine::tick() {
                 ant_ptr->state = (ant_ptr->type == AntType::Combat) ? UnitState::GuardIdle : UnitState::Idle;
                 const auto* friendly_base = impl_->grid_.find_anthill(ant_ptr->player_id);
                 if (friendly_base) {
-                    int32_t idle_x = friendly_base->x + 3;
-                    int32_t idle_y = friendly_base->y + 3;
+                    int32_t idle_x = friendly_base->x + 4;
+                    int32_t idle_y = friendly_base->y + 4;
 
                     if (!ant_ptr->is_newborn && ant_ptr->had_food_at_base_entry && !ant_ptr->is_thief_steal &&
                         ant_ptr->harvest_origin.x >= 0 && ant_ptr->harvest_origin.y >= 0) {
@@ -1998,15 +1998,16 @@ void SimulationEngine::issue_move_order(uint32_t ant_id, TileCoord dest, bool al
     // Check if unit or destination is on an anthill ramp
     int32_t unit_ramp_idx = -1;
     int32_t dest_ramp_idx = -1;
-    std::array<TileCoord, 7> matched_ramp{};
+    std::array<TileCoord, 9> matched_ramp{};
 
     for (const auto& ah : impl_->grid_.anthills()) {
         if (ah.team_id == unit->player_id || unit->type == AntType::Thief) {
             int32_t bx = static_cast<int32_t>(ah.x);
             int32_t by = static_cast<int32_t>(ah.y);
-            const std::array<TileCoord, 7> r = {{
+            const std::array<TileCoord, 9> r = {{
                 {bx - 1, by + 3}, {bx - 1, by + 2}, {bx - 1, by + 1}, {bx - 1, by},
-                {bx, by}, {bx + 1, by}, {bx + 1, by + 1}
+                {bx - 1, by - 1}, {bx, by - 1}, {bx + 1, by - 1}, {bx + 1, by},
+                {bx + 1, by + 1}
             }};
             int32_t u_idx = -1;
             int32_t d_idx = -1;
@@ -2330,7 +2331,7 @@ bool SimulationEngine::plant_bomb(uint32_t ant_id, TileCoord target, bool instan
     AntUnit* ant = impl_->find_unit(ant_id);
     if (!ant || !ant->is_alive() || ant->type != AntType::Bomber) return false;
     if (!validate_cardinal_placement(ant->pos, target)) return false;
-    if (!impl_->grid_.in_bounds(target) || !impl_->grid_.get_cell(target).can_place_bomb()) return false;
+    if (!impl_->grid_.in_bounds(target) || impl_->grid_.is_anthill_reserved_spot(target) || !impl_->grid_.get_cell(target).can_place_bomb()) return false;
 
     ant->set_tile_pos(ant->pos.x, ant->pos.y);
     int32_t dx = target.x - ant->pos.x;
@@ -2387,7 +2388,7 @@ bool SimulationEngine::ignite_fire(uint32_t ant_id, TileCoord target, bool insta
     AntUnit* ant = impl_->find_unit(ant_id);
     if (!ant || !ant->is_alive() || ant->type != AntType::Fire) return false;
     if (!validate_cardinal_placement(ant->pos, target)) return false;
-    if (!impl_->grid_.in_bounds(target) || !impl_->grid_.get_cell(target).can_place_fire()) return false;
+    if (!impl_->grid_.in_bounds(target) || impl_->grid_.is_anthill_reserved_spot(target) || !impl_->grid_.get_cell(target).can_place_fire()) return false;
 
     ant->set_tile_pos(ant->pos.x, ant->pos.y);
     int32_t dx = target.x - ant->pos.x;
@@ -2642,12 +2643,14 @@ void SimulationEngine::send_ant_straight_into_base(uint32_t ant_id) {
 
     int32_t bx = base->x;
     int32_t by = base->y;
-    const std::array<TileCoord, 7> ramp = {{
+    const std::array<TileCoord, 9> ramp = {{
         {bx - 1, by + 3},
         {bx - 1, by + 2},
         {bx - 1, by + 1},
         {bx - 1, by},
-        {bx, by},
+        {bx - 1, by - 1},
+        {bx, by - 1},
+        {bx + 1, by - 1},
         {bx + 1, by},
         {bx + 1, by + 1}
     }};

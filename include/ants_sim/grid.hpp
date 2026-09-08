@@ -355,31 +355,13 @@ public:
                 sp.x = static_cast<uint16_t>(hill_origins[t].x);
                 sp.y = static_cast<uint16_t>(hill_origins[t].y);
                 anthills_.push_back(sp);
-
-                // Ensure queuing and entry staging cells along dx = -1 are passable
-                for (int dy = 0; dy <= 3; ++dy) {
-                    int32_t qx = static_cast<int32_t>(sp.x) - 1;
-                    int32_t qy = static_cast<int32_t>(sp.y) + dy;
-                    if (in_bounds(qx, qy)) {
-                        auto& qcell = get_cell_mut(static_cast<uint32_t>(qx), static_cast<uint32_t>(qy));
-                        qcell.terrain_type = TERRAIN_WALKABLE;
-                        qcell.is_obstacle_overlay = false;
-                    }
-                }
+                configure_anthill_cells(TileCoord{static_cast<int32_t>(sp.x), static_cast<int32_t>(sp.y)});
             }
         }
         if (anthills_.empty()) {
             anthills_ = level.anthill_spawns;
             for (const auto& sp : anthills_) {
-                for (int dy = 0; dy <= 3; ++dy) {
-                    int32_t qx = static_cast<int32_t>(sp.x) - 1;
-                    int32_t qy = static_cast<int32_t>(sp.y) + dy;
-                    if (in_bounds(qx, qy)) {
-                        auto& qcell = get_cell_mut(static_cast<uint32_t>(qx), static_cast<uint32_t>(qy));
-                        qcell.terrain_type = TERRAIN_WALKABLE;
-                        qcell.is_obstacle_overlay = false;
-                    }
-                }
+                configure_anthill_cells(TileCoord{static_cast<int32_t>(sp.x), static_cast<int32_t>(sp.y)});
             }
         }
 
@@ -470,29 +452,9 @@ public:
         return nullptr;
     }
 
-    void set_anthill(uint8_t team_id, TileCoord pos) {
-        for (auto& a : anthills_) {
-            if (a.team_id == team_id) {
-                a.x = static_cast<uint16_t>(pos.x);
-                a.y = static_cast<uint16_t>(pos.y);
-                for (int dy = 0; dy <= 3; ++dy) {
-                    int32_t qx = static_cast<int32_t>(pos.x) - 1;
-                    int32_t qy = static_cast<int32_t>(pos.y) + dy;
-                    if (in_bounds(qx, qy)) {
-                        auto& qcell = get_cell_mut(static_cast<uint32_t>(qx), static_cast<uint32_t>(qy));
-                        qcell.terrain_type = TERRAIN_WALKABLE;
-                        qcell.is_obstacle_overlay = false;
-                    }
-                }
-                return;
-            }
-        }
-        ants::assets::AnthillSpawn s{};
-        s.team_id = team_id;
-        s.x = static_cast<uint16_t>(pos.x);
-        s.y = static_cast<uint16_t>(pos.y);
-        anthills_.push_back(s);
-        for (int dy = 0; dy <= 3; ++dy) {
+    void configure_anthill_cells(TileCoord pos) {
+        // Ensure queuing and entry staging cells along dx = -1 are passable (dy = -1..3)
+        for (int dy = -1; dy <= 3; ++dy) {
             int32_t qx = static_cast<int32_t>(pos.x) - 1;
             int32_t qy = static_cast<int32_t>(pos.y) + dy;
             if (in_bounds(qx, qy)) {
@@ -501,10 +463,57 @@ public:
                 qcell.is_obstacle_overlay = false;
             }
         }
+        // Ensure top approach corridor (bx + dx, by - 1) for dx = 0..2 is passable,
+        // but strictly blocked from placing fire or bombs on
+        for (int dx = 0; dx <= 2; ++dx) {
+            int32_t rx = static_cast<int32_t>(pos.x) + dx;
+            int32_t ry = static_cast<int32_t>(pos.y) - 1;
+            if (in_bounds(rx, ry)) {
+                auto& rcell = get_cell_mut(static_cast<uint32_t>(rx), static_cast<uint32_t>(ry));
+                rcell.terrain_type = TERRAIN_WALKABLE;
+                rcell.is_obstacle_overlay = false;
+                rcell.flags &= ~(FLAG_CAN_PLACE_BOMB | FLAG_CAN_PLACE_FIRE);
+            }
+        }
+        // Ensure idle spot (pos.x + 4, pos.y + 4) is passable
+        int32_t ix = static_cast<int32_t>(pos.x) + 4;
+        int32_t iy = static_cast<int32_t>(pos.y) + 4;
+        if (in_bounds(ix, iy)) {
+            auto& icell = get_cell_mut(static_cast<uint32_t>(ix), static_cast<uint32_t>(iy));
+            icell.terrain_type = TERRAIN_WALKABLE;
+            icell.is_obstacle_overlay = false;
+        }
+    }
+
+    bool is_anthill_reserved_spot(TileCoord pos) const noexcept {
+        for (const auto& ah : anthills_) {
+            int32_t bx = static_cast<int32_t>(ah.x);
+            int32_t by = static_cast<int32_t>(ah.y);
+            if (pos.y == by - 1 && pos.x >= bx && pos.x <= bx + 2) return true;
+        }
+        return false;
+    }
+
+    void set_anthill(uint8_t team_id, TileCoord pos) {
+        for (auto& a : anthills_) {
+            if (a.team_id == team_id) {
+                a.x = static_cast<uint16_t>(pos.x);
+                a.y = static_cast<uint16_t>(pos.y);
+                configure_anthill_cells(pos);
+                return;
+            }
+        }
+        ants::assets::AnthillSpawn s{};
+        s.team_id = team_id;
+        s.x = static_cast<uint16_t>(pos.x);
+        s.y = static_cast<uint16_t>(pos.y);
+        anthills_.push_back(s);
+        configure_anthill_cells(pos);
     }
 
     void place_firewall(uint32_t x, uint32_t y, uint8_t owner_player) noexcept {
         if (!in_bounds(static_cast<int32_t>(x), static_cast<int32_t>(y))) return;
+        if (is_anthill_reserved_spot(TileCoord{static_cast<int32_t>(x), static_cast<int32_t>(y)})) return;
         auto& cell = get_cell_mut(x, y);
         cell.interactive_id = TILE_FIREWALL;
         cell.interactive_owner = owner_player;
@@ -522,6 +531,7 @@ public:
 
     void place_bomb(uint32_t x, uint32_t y, uint8_t team_id) noexcept {
         if (!in_bounds(static_cast<int32_t>(x), static_cast<int32_t>(y))) return;
+        if (is_anthill_reserved_spot(TileCoord{static_cast<int32_t>(x), static_cast<int32_t>(y)})) return;
         auto& cell = get_cell_mut(x, y);
         cell.interactive_id = static_cast<uint16_t>(BOMB_BLACK + (team_id % 4u));
         cell.interactive_owner = team_id;
