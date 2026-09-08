@@ -1914,7 +1914,7 @@ bool HUD::handle_key_down(int32_t key, sim::SimulationEngine& sim, ViewportCamer
         }
         const auto* base = sim.grid().find_anthill(local_player_id_);
         if (base) {
-            camera.center_on(base->x * 32, base->y * 32, world.width, world.height);
+            camera.center_on(base->x * 32 + 64, base->y * 32 + 64, world.width, world.height);
         }
         return true;
     }
