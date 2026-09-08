@@ -29,6 +29,7 @@ struct BallisticFlight {
 
     Direction flight_dir{Direction::South};
     DamageSource origin_source{DamageSource::CombatPunch};
+    bool destination_resolved{false};
 };
 
 /**
