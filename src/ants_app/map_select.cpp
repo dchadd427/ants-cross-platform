@@ -252,11 +252,11 @@ void MapSelectScreen::render(IRenderer& renderer, const ants::assets::AssetArchi
 
     int32_t th = renderer.get_text_height(FontSize::Small);
 
-    // 3. Current Map Name inside Pick a Map box (vertically centered in inner cavity y=307..339, h=33)
+    // 3. Current Map Name inside Pick a Map box (vertically centered in inner cavity y=307..335)
     if (selected_index_ >= 0 && selected_index_ < static_cast<int32_t>(maps_.size())) {
         const auto& cur = maps_[static_cast<size_t>(selected_index_)];
-        int32_t name_y = 307 + (33 - th) / 2;
-        renderer.draw_text(cur.display_name, 38, name_y, ColorRGBA{255, 255, 255, 255}, FontSize::Small);
+        int32_t name_y = 309;
+        renderer.draw_text(cur.display_name, 38, name_y, ColorRGBA{255, 255, 255, 255}, FontSize::Medium);
     }
 
     // Up/Down Stepper Buttons at (226, 303) and (226, 327)
@@ -277,9 +277,9 @@ void MapSelectScreen::render(IRenderer& renderer, const ants::assets::AssetArchi
     int32_t stat_y = 445 + (19 - th) / 2;
     renderer.draw_text("Press START when all players' thumbs have appeared.", 38, stat_y, ColorRGBA{255, 255, 255, 255}, FontSize::Small);
 
-    // 6. Players' Status: Animated ant standing facing south (agst201) next to user name
+    // 6. Players' Status: Animated ant standing facing south (agst301) next to user name
     std::string display_user = player_name_.empty() ? "Player" : player_name_;
-    const auto* anim_stand = archive.find_animation("agst201");
+    const auto* anim_stand = archive.find_animation("agst301");
     if (anim_stand && !anim_stand->subitems.empty()) {
         uint32_t total_duration_ms = 0;
         for (const auto& sub : anim_stand->subitems) {
@@ -311,7 +311,7 @@ void MapSelectScreen::render(IRenderer& renderer, const ants::assets::AssetArchi
         }
     } else {
         renderer.set_hud_team(player_team_);
-        renderer.draw_named_sprite("agst201.bmp", 385, 92);
+        renderer.draw_named_sprite("agst301.bmp", 385, 94);
         renderer.set_hud_team(0);
     }
 

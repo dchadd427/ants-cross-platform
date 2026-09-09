@@ -428,7 +428,7 @@ void HUD::render(IRenderer& renderer, const assets::AssetArchive& assets,
             else if (sel_ant->anim_state == 3) status_text = "In combat!";
             else status_text = "Waiting for orders.";
         }
-        renderer.draw_text(status_text, 486, 253, {175, 110, 215, 255});
+        renderer.draw_text(status_text, 486, 253, {16, 40, 24, 255});
     }
 
     // 2.3 Lower Panel: Always render Chat Section
@@ -755,7 +755,7 @@ void HUD::render_selection_card(IRenderer& renderer, const assets::AssetArchive&
     else if (sel->anim_state == 3) status_str = "Attacking";
     else if (sel->is_holding) status_str = "Carrying Food";
 
-    renderer.draw_text(status_str, 510, 206, {255, 255, 255, 255});
+    renderer.draw_text(status_str, 510, 206, {16, 40, 24, 255});
 }
 
 void HUD::render_hatch_panel(IRenderer& renderer, const assets::AssetArchive&, const sim::WorldState& world) {
@@ -770,7 +770,7 @@ void HUD::render_hatch_panel(IRenderer& renderer, const assets::AssetArchive&, c
 
     // Status label at (480, 253)
     renderer.draw_named_sprite("wstatus.bmp", 480, 253);
-    renderer.draw_text("Home Colony.", 486, 253, {175, 110, 215, 255});
+    renderer.draw_text("Home Colony.", 486, 253, {16, 40, 24, 255});
 
     // Decorative relief column
     renderer.draw_named_sprite("x521y254.bmp", 521, 275);

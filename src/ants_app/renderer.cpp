@@ -1127,6 +1127,13 @@ void Renderer::draw_single_ant(const ants::sim::AntSnapshot& ant, bool is_select
                                         : normal_prefixes[static_cast<size_t>(ant.type) % 6];
     std::string action = "st"; // Default Idle
 
+    // Swimmer ant does not have carrying/holding animation while swimming in water;
+    // default back to normal swimming ("as")
+    if (ant.type == ants::sim::AntType::Swimmer &&
+        (ant.is_swimming || ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::Swimming))) {
+        prefix = "as";
+    }
+
     bool is_infiltrating = (ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::Infiltrating));
     bool is_entering_base = (ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::EnteringBase));
 
@@ -1177,7 +1184,7 @@ void Renderer::draw_single_ant(const ants::sim::AntSnapshot& ant, bool is_select
     if (ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::Walking) ||
         ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::Intercepting) ||
         ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::ReturningToPost)) {
-        if (ant.is_swimming && !ant.is_holding) {
+        if (ant.is_swimming) {
             action = "sw";
         } else if (ant.is_on_mud) {
             action = "wm";
