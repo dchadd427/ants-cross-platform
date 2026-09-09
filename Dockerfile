@@ -12,6 +12,10 @@ COPY src/ ./src/
 COPY web/ ./web/
 COPY Original-Ants/ ./Original-Ants/
 
+# Inject dynamic build timestamp into shell.html so JS, WASM and data bundles share lockstep versioning
+RUN BUILD_TIME=$(date +%s) && \
+    sed -i "s/@@BUILD_TIMESTAMP@@/${BUILD_TIME}/g" web/shell.html
+
 # Configure and compile using default Makefiles
 RUN emcmake cmake -B build_web \
     -DCMAKE_BUILD_TYPE=Release \
@@ -20,7 +24,8 @@ RUN emcmake cmake -B build_web \
 RUN cmake --build build_web -j$(nproc)
 
 # Append dynamic build cache-buster to index.js script tag to prevent stale browser caching
-RUN sed -i 's/src="index.js"/src="index.js?v='$(date +%s)'"/g' /src/build_web/src/ants_app/index.html
+RUN BUILD_TIME=$(date +%s) && \
+    sed -i -E 's/(src=)("?)index\.js("?)/\1\2index.js?v='"${BUILD_TIME}"'\3/g' /src/build_web/src/ants_app/index.html
 
 # =============================================================================
 # Stage 2: High-Performance Lightweight Nginx Web Server
@@ -32,6 +37,9 @@ RUN rm -rf /usr/share/nginx/html/*
 
 # Copy compiled WebAssembly artifacts atomically in a single layer
 COPY --from=builder /src/build_web/src/ants_app/index.* /usr/share/nginx/html/
+
+# Copy favicon assets
+COPY web/favicon.* /usr/share/nginx/html/
 
 # Copy Asset Catalog & Viewer for reference on beta site
 COPY asset_catalog/ /usr/share/nginx/html/asset_catalog/

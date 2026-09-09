@@ -33,6 +33,7 @@ cmake-build-*/
 *.tmp
 *.bmp
 *.png
+!web/favicon.png
 !asset_catalog/sprites/
 !asset_catalog/sprites/**
 

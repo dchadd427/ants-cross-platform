@@ -36,6 +36,7 @@ cp -f "${BUILD_DIR}/src/ants_app/index.html" "${DIST_DIR}/"
 cp -f "${BUILD_DIR}/src/ants_app/index.js" "${DIST_DIR}/"
 cp -f "${BUILD_DIR}/src/ants_app/index.wasm" "${DIST_DIR}/"
 cp -f "${BUILD_DIR}/src/ants_app/index.data" "${DIST_DIR}/"
+cp -f "${SCRIPT_DIR}/web"/favicon.* "${DIST_DIR}/"
 
 echo "========================================================"
 echo " Build Succeeded! Web distribution ready in: ${DIST_DIR}"
