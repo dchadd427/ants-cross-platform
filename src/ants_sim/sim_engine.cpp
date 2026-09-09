@@ -297,7 +297,8 @@ void SimulationEngine::init(const ants::assets::LevelData& level, uint32_t rando
     impl_->prng_.srand(random_seed);
     impl_->grid_.init_from_level(level);
     impl_->stats_.reset();
-    impl_->match_time_remaining_ms_ = 12 * 60 * 1000;
+    uint32_t match_minutes = (level.default_minutes > 0) ? level.default_minutes : 12;
+    impl_->match_time_remaining_ms_ = match_minutes * 60 * 1000;
     impl_->warned_one_minute_ = false;
     impl_->warned_thirty_seconds_ = false;
     impl_->last_countdown_second_ = 0;
@@ -933,7 +934,7 @@ void SimulationEngine::tick() {
                         }
                     }
                 }
-            } else if (!ant_ptr->is_holding() && impl_->grid_.get_cell(ant_ptr->pos).has_food()) {
+            } else if (ant_ptr->state == UnitState::Idle && !ant_ptr->is_holding() && impl_->grid_.get_cell(ant_ptr->pos).has_food()) {
                 food_target = ant_ptr->pos;
             }
         }

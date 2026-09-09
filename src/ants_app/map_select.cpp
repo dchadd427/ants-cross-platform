@@ -1,4 +1,5 @@
 #include "ants_app/map_select.hpp"
+#include "ants_assets/lvl_parser.hpp"
 #include <iostream>
 #include <algorithm>
 
@@ -9,7 +10,7 @@ MapSelectScreen::MapSelectScreen() = default;
 void MapSelectScreen::init(const std::string& maps_dir) {
     maps_.clear();
 
-    // Standard authentic Ants maps in canonical order
+    // Standard authentic Ants maps in canonical order (Ants.exe VA 0x10139e2)
     struct DefaultMap {
         const char* file;
         const char* title;
@@ -21,11 +22,11 @@ void MapSelectScreen::init(const std::string& maps_dir) {
 
     static const DefaultMap defaults[] = {
         { "TREASURE.LVL", "TREASURE", "One person's trash...",           60, 60, 12 },
-        { "SMALL.LVL",    "SMALL",    "Small map for fast game",         40, 40,  5 },
+        { "SMALL.LVL",    "SMALL",    "Small map for fast game",         40, 40,  8 },
         { "MEDIUM.LVL",   "MEDIUM",   "Intermediate map",                60, 60, 10 },
-        { "TINY.LVL",     "TINY",     "Tiny map with no PowerUps",       31, 31,  3 },
-        { "ISLANDS.LVL",  "ISLANDS",  "Island hopping, expert map",      60, 60, 20 },
-        { "GAUNTLET.LVL", "GAUNTLET", "Race for your life!",             60, 60, 15 }
+        { "TINY.LVL",     "TINY",     "Tiny map with no PowerUps",       31, 31,  6 },
+        { "ISLANDS.LVL",  "ISLANDS",  "Island hopping, expert map",      60, 60, 12 },
+        { "GAUNTLET.LVL", "GAUNTLET", "Race for your life!",             60, 60, 10 }
     };
 
     for (const auto& d : defaults) {
@@ -38,6 +39,29 @@ void MapSelectScreen::init(const std::string& maps_dir) {
         entry.height = d.h;
         entry.anthills_count = (entry.width <= 31) ? 2 : 4;
         entry.minutes = d.minutes;
+
+        // Dynamically parse authentic .LVL header from file if present
+        ants::assets::LevelData lvl;
+        if (lvl.load_from_file(entry.full_path)) {
+            if (lvl.default_minutes > 0) {
+                entry.minutes = lvl.default_minutes;
+            }
+            if (lvl.width > 0 && lvl.height > 0) {
+                entry.width = lvl.width;
+                entry.height = lvl.height;
+            }
+            if (!lvl.description.empty()) {
+                entry.description = lvl.description;
+            }
+            if (!lvl.anthill_spawns.empty()) {
+                uint32_t count = 0;
+                for (const auto& sp : lvl.anthill_spawns) {
+                    if (sp.team_id < 4) ++count;
+                }
+                if (count > 0) entry.anthills_count = count;
+            }
+        }
+
         maps_.push_back(std::move(entry));
     }
 

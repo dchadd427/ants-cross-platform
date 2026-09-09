@@ -5479,6 +5479,110 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         // One ant was displaced to avoid occupying the same tile
         ASSERT_FALSE(sim.get_unit(a1).pos == sim.get_unit(a2).pos);
     } TEST_END();
+
+    TEST_CASE("12.71 Authentic Map Duration & LVL Header Parsing") {
+        std::string maps_dir = std::string(ORIGINAL_ASSETS_DIR) + "/Maps";
+        MapSelectScreen screen;
+        screen.init(maps_dir);
+
+        const auto& maps = screen.get_maps();
+        ASSERT_GE(maps.size(), 6u);
+
+        std::vector<std::pair<std::string, uint32_t>> expected_mins = {
+            {"TINY.LVL", 6},
+            {"SMALL.LVL", 8},
+            {"MEDIUM.LVL", 10},
+            {"GAUNTLET.LVL", 10},
+            {"ISLANDS.LVL", 12},
+            {"TREASURE.LVL", 12}
+        };
+
+        for (const auto& [fname, exp_min] : expected_mins) {
+            bool found = false;
+            for (const auto& m : maps) {
+                if (m.filename == fname) {
+                    found = true;
+                    ASSERT_EQ(m.minutes, exp_min);
+
+                    // Verify SimulationEngine initializes remaining time to exact match minutes
+                    ants::assets::LevelData lvl;
+                    if (lvl.load_from_file(m.full_path)) {
+                        SimulationEngine sim;
+                        sim.init(lvl, 42);
+                        ASSERT_EQ(sim.get_match_time_remaining_ms(), exp_min * 60 * 1000u);
+                    }
+                    break;
+                }
+            }
+            ASSERT_TRUE(found);
+        }
+    } TEST_END();
+
+    TEST_CASE("12.72 TINY Map Central Enclosure Diagonal Pathfinding Walkability") {
+        std::string tiny_path = std::string(ORIGINAL_ASSETS_DIR) + "/Maps/TINY.LVL";
+        ants::assets::LevelData lvl;
+        ASSERT_TRUE(lvl.load_from_file(tiny_path));
+
+        SimulationEngine sim;
+        sim.init(lvl, 42);
+
+        // Spawn ant outside the central obstacle ring
+        uint32_t ant_id = sim.spawn_unit(0, AntType::Worker, TileCoord{10, 10});
+        ASSERT_TRUE(ant_id > 0);
+
+        // The 9 user-reported central tiles inside the ring
+        std::vector<TileCoord> targets = {
+            {16, 17}, {17, 16}, {14, 17}, {13, 16}, {14, 15},
+            {13, 14}, {14, 13}, {15, 14}, {16, 13}
+        };
+
+        // 1. Direct movement from outside the enclosure to each of the 9 tiles individually
+        for (const auto& target : targets) {
+            // Reset ant to outside position
+            sim.get_unit(ant_id).pos = TileCoord{10, 10};
+            sim.get_unit(ant_id).pixel_x = 10 * 32 + 16;
+            sim.get_unit(ant_id).pixel_y = 10 * 32 + 16;
+            sim.get_unit(ant_id).fx_x = (10 * 32 + 16) << 16;
+            sim.get_unit(ant_id).fx_y = (10 * 32 + 16) << 16;
+            sim.get_unit(ant_id).clear_path();
+            sim.get_unit(ant_id).state = UnitState::Idle;
+
+            sim.issue_move_order(ant_id, target, false);
+            const auto& ant = sim.get_unit(ant_id);
+
+            // Unit must not reject with CantGo, and destination must reach the target tile
+            ASSERT_FALSE(ant.state == UnitState::CantGo);
+            ASSERT_TRUE(!ant.waypoints.empty());
+            ASSERT_EQ(ant.final_dest, target);
+
+            // Run simulation ticks until the ant reaches the central target square
+            uint32_t ticks = 0;
+            while ((sim.get_unit(ant_id).pos != target || sim.get_unit(ant_id).state == UnitState::Walking) && ticks < 400) {
+                sim.tick();
+                ticks++;
+            }
+            ASSERT_EQ(sim.get_unit(ant_id).pos, target);
+        }
+
+        // 2. Sequential traversal between all 9 tiles inside the enclosure
+        for (const auto& target : targets) {
+            sim.issue_move_order(ant_id, target, false);
+            const auto& ant = sim.get_unit(ant_id);
+
+            // Unit must not reject with CantGo, and destination must reach the target tile
+            ASSERT_FALSE(ant.state == UnitState::CantGo);
+            ASSERT_TRUE(!ant.waypoints.empty());
+            ASSERT_EQ(ant.final_dest, target);
+
+            // Run simulation ticks until the ant reaches the central target square
+            uint32_t ticks = 0;
+            while ((sim.get_unit(ant_id).pos != target || sim.get_unit(ant_id).state == UnitState::Walking) && ticks < 400) {
+                sim.tick();
+                ticks++;
+            }
+            ASSERT_EQ(sim.get_unit(ant_id).pos, target);
+        }
+    } TEST_END();
 }
 
 
