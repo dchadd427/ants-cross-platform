@@ -2315,27 +2315,9 @@ void SimulationEngine::issue_move_order(uint32_t ant_id, TileCoord dest, bool al
     bool is_fire_ant = (unit->type == AntType::Fire);
     bool can_hit_dest_bomb = allow_friendly_bomb;
 
-    // Impossible move instruction check (e.g. water for non-swimmer, solid obstacle, out of bounds)
-    bool dest_passable = (impl_->grid_.in_bounds(dest) && impl_->grid_.get_cell(dest).is_passable(is_swimmer, is_fire_ant));
-    if (!dest_passable) {
-        if (unit->is_transforming() || unit->on_powerup ||
-            (impl_->grid_.in_bounds(unit->pos) && impl_->grid_.has_powerup_at(unit->pos))) {
-            interrupt_transformation(ant_id);
-            return;
-        }
-        unit->clear_path();
-        unit->set_tile_pos(unit->pos.x, unit->pos.y);
-        unit->final_dest = unit->pos;
-        unit->state = UnitState::CantGo;
-        unit->facing = Direction::South;
-        unit->anim_tick = 0;
-        unit->anim_subitem = 0;
-        unit->blocked_ticks = 0;
-        unit->attack_target_id = 0;
-        unit->pending_ability = OrderType::None;
-        unit->ability_target = TileCoord{-1, -1};
-        unit->harvest_origin = TileCoord{-1, -1};
-        impl_->audio_queue_.push_back(AudioEvent{SoundID::CantGo, unit->pixel_x, unit->pixel_y, 1, 255});
+    if (unit->is_transforming() || unit->on_powerup ||
+        (impl_->grid_.in_bounds(unit->pos) && impl_->grid_.has_powerup_at(unit->pos))) {
+        interrupt_transformation(ant_id);
         return;
     } else if (dest != unit->pos) {
         unit->transformation_interrupted = false;
@@ -2498,8 +2480,8 @@ void SimulationEngine::issue_move_order(uint32_t ant_id, TileCoord dest, bool al
         path = PathFinder::find_path(impl_->grid_, unit->pos, dest, is_swimmer, is_fire_ant, 4000, {}, hard_obstacles);
     }
     if (!path.empty()) {
+        unit->final_dest = path.back();
         unit->set_path(std::move(path));
-        unit->final_dest = dest;
     } else {
         if (unit->is_transforming() || unit->on_powerup ||
             (impl_->grid_.in_bounds(unit->pos) && impl_->grid_.has_powerup_at(unit->pos))) {
