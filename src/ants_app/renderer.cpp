@@ -1529,10 +1529,7 @@ void Renderer::draw_single_ant(const ants::sim::AntSnapshot& ant, bool is_select
             if (ears_id < archive_->animation_count()) {
                 const auto& ears_seq = archive_->get_animation(ears_id);
                 if (!ears_seq.subitems.empty()) {
-                    uint32_t step_ticks = 5; // 250ms (5 ticks) for dogears / c_dogears
-                    if (ears_id == 60 || ears_id == 150) step_ticks = 2; // ~125ms for yelears / c_yelears
-                    else if (ears_id == 61 || ears_id == 151) step_ticks = 1; // 60ms for redears / c_redears
-                    size_t sub_idx = (anim_tick_ / step_ticks) % ears_seq.subitems.size();
+                    size_t sub_idx = get_anim_subitem_by_time(ears_seq, SDL_GetTicks());
                     const auto& sub = ears_seq.subitems[sub_idx];
                     for (const auto& f : sub.frames) {
                         SDL_Texture* tex = texture_cache_->get_sprite_texture(f.sprite_index);
@@ -1590,13 +1587,29 @@ void Renderer::draw_single_ant(const ants::sim::AntSnapshot& ant, bool is_select
     }
 }
 
+size_t Renderer::get_anim_subitem_by_time(const ants::assets::AnimationSequence& seq, uint32_t now_ms) {
+    if (seq.subitems.empty()) return 0;
+    uint32_t total_ms = 0;
+    for (const auto& sub : seq.subitems) {
+        total_ms += (sub.val3 > 0 ? sub.val3 : 100);
+    }
+    if (total_ms == 0) return 0;
+    uint32_t t = now_ms % total_ms;
+    uint32_t accum = 0;
+    for (size_t i = 0; i < seq.subitems.size(); ++i) {
+        accum += (seq.subitems[i].val3 > 0 ? seq.subitems[i].val3 : 100);
+        if (t < accum) return i;
+    }
+    return 0;
+}
+
 void Renderer::draw_anthill_selection_brackets(int32_t x, int32_t y, int32_t w, int32_t h) {
     if (archive_ && texture_cache_ && 59 < archive_->animation_count()) {
         const auto& ears_seq = archive_->get_animation(59); // hillears
         if (!ears_seq.subitems.empty()) {
             int32_t cx = x + (w / 2);
             int32_t cy = y + (h / 2);
-            size_t sub_idx = (anim_tick_ / 4) % ears_seq.subitems.size(); // 200ms = 4 ticks
+            size_t sub_idx = get_anim_subitem_by_time(ears_seq, SDL_GetTicks());
             const auto& sub = ears_seq.subitems[sub_idx];
             for (const auto& f : sub.frames) {
                 SDL_Texture* tex = texture_cache_->get_sprite_texture(f.sprite_index);
