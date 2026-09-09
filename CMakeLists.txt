@@ -62,7 +62,11 @@ add_subdirectory(src/ants_sim)
 add_subdirectory(src/ants_app)
 
 # Testing
-option(BUILD_TESTS "Build test executables" ON)
+if(EMSCRIPTEN)
+    option(BUILD_TESTS "Build test executables" OFF)
+else()
+    option(BUILD_TESTS "Build test executables" ON)
+endif()
 if(BUILD_TESTS)
     enable_testing()
     add_subdirectory(tests/test_assets)

@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Ants (1998) — WebAssembly Remake</title>
+    <style>
+        :root {
+            --bg-color: #121513;
+            --panel-bg: #1c231e;
+            --panel-border: #384d3e;
+            --accent-green: #48b870;
+            --accent-gold: #e6b830;
+            --text-main: #d0e0d4;
+            --text-dim: #849688;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: flex-start;
+            min-height: 100vh;
+            padding: 12px;
+            overflow-x: hidden;
+        }
+
+        header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            width: 100%;
+            max-width: 960px;
+            margin-bottom: 10px;
+            padding: 4px 8px;
+        }
+
+        .title-group {
+            display: flex;
+            align-items: baseline;
+            gap: 10px;
+        }
+
+        h1 {
+            font-size: 1.4rem;
+            color: var(--accent-gold);
+            text-shadow: 0 0 10px rgba(230, 184, 48, 0.4);
+            letter-spacing: 1px;
+            text-transform: uppercase;
+        }
+
+        .subtitle {
+            font-size: 0.85rem;
+            color: var(--text-dim);
+        }
+
+        .header-actions {
+            display: flex;
+            gap: 8px;
+        }
+
+        button.nav-btn, a.nav-btn {
+            background-color: var(--panel-bg);
+            border: 1px solid var(--panel-border);
+            color: var(--text-main);
+            padding: 6px 12px;
+            border-radius: 4px;
+            font-size: 0.85rem;
+            cursor: pointer;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            transition: all 0.15s ease;
+        }
+
+        button.nav-btn:hover, a.nav-btn:hover {
+            background-color: #26332a;
+            border-color: var(--accent-green);
+            color: #ffffff;
+        }
+
+        button.nav-btn:active {
+            transform: translateY(1px);
+        }
+
+        #game-container {
+            position: relative;
+            width: 100%;
+            max-width: 960px;
+            aspect-ratio: 4 / 3;
+            background: #000;
+            border: 2px solid var(--panel-border);
+            border-radius: 6px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.7);
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        canvas.emscripten {
+            width: 100%;
+            height: 100%;
+            display: block;
+            image-rendering: -moz-crisp-edges;
+            image-rendering: -webkit-crisp-edges;
+            image-rendering: pixelated;
+            image-rendering: crisp-edges;
+            outline: none;
+        }
+
+        /* Overlay Splash / Loading Screen */
+        #splash-overlay {
+            position: absolute;
+            inset: 0;
+            background: rgba(10, 14, 11, 0.94);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 50;
+            cursor: pointer;
+            transition: opacity 0.3s ease;
+        }
+
+        .splash-card {
+            text-align: center;
+            padding: 24px;
+            max-width: 440px;
+        }
+
+        .splash-title {
+            font-size: 2rem;
+            color: var(--accent-gold);
+            margin-bottom: 8px;
+            font-weight: bold;
+            letter-spacing: 2px;
+        }
+
+        .splash-status {
+            font-size: 0.95rem;
+            color: var(--text-dim);
+            margin-bottom: 20px;
+            min-height: 24px;
+        }
+
+        .progress-bar-container {
+            width: 280px;
+            height: 12px;
+            background: #111;
+            border: 1px solid var(--panel-border);
+            border-radius: 6px;
+            overflow: hidden;
+            margin: 0 auto 16px auto;
+            display: none;
+        }
+
+        .progress-bar-fill {
+            width: 0%;
+            height: 100%;
+            background: linear-gradient(90deg, #2b7040, var(--accent-green));
+            transition: width 0.15s ease;
+        }
+
+        .play-prompt {
+            display: none;
+            font-size: 1.15rem;
+            font-weight: bold;
+            color: #fff;
+            background: #256b3b;
+            border: 2px solid var(--accent-green);
+            padding: 10px 24px;
+            border-radius: 6px;
+            box-shadow: 0 0 16px rgba(72, 184, 112, 0.5);
+            animation: pulse 1.6s infinite alternate;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(1.0); box-shadow: 0 0 12px rgba(72, 184, 112, 0.4); }
+            100% { transform: scale(1.04); box-shadow: 0 0 24px rgba(72, 184, 112, 0.8); }
+        }
+
+        /* Controls & Guide drawer */
+        #info-panel {
+            width: 100%;
+            max-width: 960px;
+            margin-top: 12px;
+            background: var(--panel-bg);
+            border: 1px solid var(--panel-border);
+            border-radius: 6px;
+            padding: 12px 16px;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 12px;
+            font-size: 0.82rem;
+        }
+
+        .info-col h3 {
+            color: var(--accent-green);
+            font-size: 0.88rem;
+            margin-bottom: 6px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .info-col ul {
+            list-style: none;
+            line-height: 1.5;
+            color: var(--text-dim);
+        }
+
+        .info-col li strong {
+            color: var(--text-main);
+        }
+
+        footer {
+            margin-top: 14px;
+            font-size: 0.78rem;
+            color: #55665a;
+            text-align: center;
+        }
+
+        footer a {
+            color: var(--accent-green);
+            text-decoration: none;
+        }
+
+        footer a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <div class="title-group">
+            <h1>Ants (1998)</h1>
+            <span class="subtitle">Classic RTS Remake</span>
+        </div>
+        <div class="header-actions">
+            <button id="fullscreen-btn" class="nav-btn" title="Toggle Fullscreen">
+                ⛶ Fullscreen
+            </button>
+            <a href="https://github.com/dchadd427/ants-cross-platform/issues" target="_blank" rel="noopener noreferrer" class="nav-btn" title="Give Feedback or Report Issues">
+                💬 Feedback
+            </a>
+        </div>
+    </header>
+
+    <div id="game-container">
+        <canvas class="emscripten" id="canvas" oncontextmenu="event.preventDefault()" tabindex="-1"></canvas>
+
+        <div id="splash-overlay">
+            <div class="splash-card">
+                <div class="splash-title">ANTS</div>
+                <div class="splash-status" id="status-text">Loading game assets...</div>
+                <div class="progress-bar-container" id="progress-container">
+                    <div class="progress-bar-fill" id="progress-fill"></div>
+                </div>
+                <div class="play-prompt" id="play-prompt">CLICK TO START</div>
+            </div>
+        </div>
+    </div>
+
+    <div id="info-panel">
+        <div class="info-col">
+            <h3>Basic Controls</h3>
+            <ul>
+                <li><strong>Left Click:</strong> Select Ant / Move / Attack / Harvest</li>
+                <li><strong>Right Click:</strong> Move / Defuse Bomb / Use Ability</li>
+                <li><strong>Drag Box:</strong> Multi-Ant Marquee Selection</li>
+            </ul>
+        </div>
+        <div class="info-col">
+            <h3>Camera & Viewport</h3>
+            <ul>
+                <li><strong>Arrows / WASD:</strong> Pan Viewport</li>
+                <li><strong>Edge Panning:</strong> Move mouse to screen edge</li>
+                <li><strong>Minimap:</strong> Click to immediately jump camera</li>
+            </ul>
+        </div>
+        <div class="info-col">
+            <h3>Special Ant Abilities</h3>
+            <ul>
+                <li><strong>Bomber:</strong> Plant bomb (defuses on single click)</li>
+                <li><strong>Fire:</strong> Lay impenetrable fire barrier</li>
+                <li><strong>Swimmer:</strong> Build & demolish water bridges</li>
+                <li><strong>Thief:</strong> Infiltrate enemy anthills</li>
+            </ul>
+        </div>
+        <div class="info-col">
+            <h3>Keyboard Shortcuts</h3>
+            <ul>
+                <li><strong>Ctrl+T:</strong> Toggle 32×32 Tile Grid</li>
+                <li><strong>Ctrl+L:</strong> Toggle Unit Health Bars</li>
+                <li><strong>Enter:</strong> In-Game Chat Broadcast</li>
+                <li><strong>Esc / F1:</strong> In-Game Options & Quick Help</li>
+            </ul>
+        </div>
+    </div>
+
+    <footer>
+        Ants 1998 Native Engine Remake & Port &bull; Built with C++17, WebAssembly & SDL2 &bull;
+        <a href="https://github.com/dchadd427/ants-cross-platform" target="_blank" rel="noopener noreferrer">GitHub Repository</a>
+    </footer>
+
+    <script>
+        var statusElement = document.getElementById('status-text');
+        var progressContainer = document.getElementById('progress-container');
+        var progressFill = document.getElementById('progress-fill');
+        var playPrompt = document.getElementById('play-prompt');
+        var splashOverlay = document.getElementById('splash-overlay');
+        var canvas = document.getElementById('canvas');
+        var isReadyToPlay = false;
+
+        var Module = {
+            preRun: [],
+            postRun: [function() {
+                // Game engine is initialized!
+                isReadyToPlay = true;
+                progressContainer.style.display = 'none';
+                statusElement.textContent = 'Audio ready. Click anywhere to play!';
+                playPrompt.style.display = 'inline-block';
+            }],
+            print: function(text) {
+                console.log(text);
+            },
+            printErr: function(text) {
+                console.error(text);
+            },
+            canvas: (function() {
+                var c = document.getElementById('canvas');
+                c.addEventListener("webglcontextlost", function(e) {
+                    alert('WebGL context lost. Please reload the page.');
+                    e.preventDefault();
+                }, false);
+                return c;
+            })(),
+            setStatus: function(text) {
+                if (!statusElement) return;
+                var m = text.match(/([^(]+)\((\d+(\.\d+)?)\/(\d+)\)/);
+                if (m) {
+                    text = m[1];
+                    var current = parseFloat(m[2]);
+                    var total = parseFloat(m[4]);
+                    var pct = Math.round((current / total) * 100);
+                    progressContainer.style.display = 'block';
+                    progressFill.style.width = pct + '%';
+                    statusElement.textContent = 'Downloading data (' + pct + '%)...';
+                } else if (text) {
+                    statusElement.textContent = text;
+                }
+            },
+            totalDependencies: 0,
+            monitorRunDependencies: function(left) {
+                this.totalDependencies = Math.max(this.totalDependencies, left);
+                if (left) {
+                    Module.setStatus('Preparing dependencies (' + (this.totalDependencies - left) + '/' + this.totalDependencies + ')...');
+                }
+            }
+        };
+
+        Module.setStatus('Downloading game data package...');
+
+        function unlockAudioAndStart() {
+            if (!isReadyToPlay) return;
+
+            // Resume Web Audio AudioContext if browser suspended it
+            if (typeof SDL2 !== 'undefined' && SDL2.audioContext && SDL2.audioContext.state === 'suspended') {
+                SDL2.audioContext.resume();
+            }
+            try {
+                var AudioContextClass = window.AudioContext || window.webkitAudioContext;
+                if (AudioContextClass) {
+                    var ctx = new AudioContextClass();
+                    if (ctx.state === 'suspended') {
+                        ctx.resume();
+                    }
+                }
+            } catch (e) {
+                // Ignore audio unlock exceptions
+            }
+
+            splashOverlay.style.opacity = '0';
+            setTimeout(function() {
+                splashOverlay.style.display = 'none';
+                canvas.focus();
+            }, 300);
+        }
+
+        splashOverlay.addEventListener('click', unlockAudioAndStart);
+
+        document.getElementById('fullscreen-btn').addEventListener('click', function() {
+            var el = document.getElementById('game-container');
+            if (!document.fullscreenElement) {
+                if (el.requestFullscreen) {
+                    el.requestFullscreen();
+                } else if (el.webkitRequestFullscreen) {
+                    el.webkitRequestFullscreen();
+                }
+            } else {
+                if (document.exitFullscreen) {
+                    document.exitFullscreen();
+                }
+            }
+        });
+    </script>
+    {{{ SCRIPT }}}
+</body>
+</html>

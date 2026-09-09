@@ -70,6 +70,8 @@ public:
     bool init(int argc, char* argv[]);
     bool init(const ApplicationConfig& config);
     int run();
+    void run_frame();
+    void run_frame_with_delta(float delta_time);
     void shutdown();
 
     bool is_running() const noexcept { return is_running_; }
@@ -147,6 +149,8 @@ private:
 
     // 20 Hz Discrete Simulation Timing
     uint64_t last_tick_time_{0};
+    uint64_t last_frame_time_{0};
+    int headless_frame_count_{0};
     float tick_accumulator_{0.0f};
     float current_fps_{60.0f};
     int last_music_track_{-1};
