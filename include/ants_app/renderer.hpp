@@ -108,6 +108,10 @@ public:
         (void)size;
         return static_cast<int32_t>(text.size()) * 6;
     }
+    virtual int32_t get_text_height(FontSize size = FontSize::Small) const {
+        (void)size;
+        return 7;
+    }
     virtual void set_hud_team(uint8_t team_id) = 0;
     virtual uint8_t get_hud_team() const = 0;
 };
@@ -204,6 +208,7 @@ public:
     void draw_text(const std::string& text, int32_t x, int32_t y, ants::assets::ColorRGBA color) override;
     void draw_text(const std::string& text, int32_t x, int32_t y, ants::assets::ColorRGBA color, FontSize size) override;
     int32_t get_text_width(const std::string& text, FontSize size = FontSize::Small) const override;
+    int32_t get_text_height(FontSize size = FontSize::Small) const override;
     void set_hud_team(uint8_t team_id) override { hud_team_id_ = team_id; }
     uint8_t get_hud_team() const override { return hud_team_id_; }
 

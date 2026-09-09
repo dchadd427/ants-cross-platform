@@ -66,6 +66,9 @@ bool Application::init(int argc, char* argv[]) {
             cfg.show_tile_grid = true;
         } else if (std::strcmp(argv[i], "--map-select") == 0) {
             cfg.start_in_map_select = true;
+        } else if (std::strcmp(argv[i], "--scorecard") == 0) {
+            cfg.show_scorecard = true;
+            cfg.start_in_map_select = false;
         }
     }
     return init(cfg);
@@ -228,6 +231,17 @@ bool Application::init(const ApplicationConfig& config) {
         }
         if (config_.open_options) {
             hud_.open_options();
+        }
+        if (config_.show_scorecard) {
+            sim::MatchResult mr{};
+            mr.is_over = true;
+            mr.winning_players = {0};
+            mr.final_scores = {1500, 850, 420, 100};
+            mr.stats[0] = {5, 18, 25};
+            mr.stats[1] = {12, 8, 15};
+            mr.stats[2] = {20, 4, 10};
+            mr.stats[3] = {25, 1, 5};
+            scorecard_.show(mr, 0);
         }
     } else {
         state_ = AppState::MapSelect;
@@ -753,16 +767,15 @@ void Application::render_frame() {
     // Frame rate counter and frametime sparkline in the bottom right hand corner
     int fps_val = std::max(1, static_cast<int>(std::round(fps_display_value_)));
     std::string fps_text = std::to_string(fps_val) + " FPS";
-    int32_t text_w = static_cast<int32_t>(fps_text.size()) * 6;
-    int32_t text_x = 636 - text_w;
-    int32_t text_y = 471;
-    renderer_->draw_text(fps_text, text_x, text_y, {255, 255, 255, 255});
-
-    // Frametime sparkline graph directly to the left of the FPS text
+    int32_t text_w = renderer_->get_text_width(fps_text, FontSize::Small);
+    int32_t text_h = renderer_->get_text_height(FontSize::Small);
+    int32_t text_x = 632 - text_w;
     constexpr int32_t spark_w = static_cast<int32_t>(SPARKLINE_SAMPLES);
     constexpr int32_t spark_h = 11;
     int32_t spark_x = text_x - spark_w - 6;
-    int32_t spark_y = 467;
+    int32_t spark_y = 465;
+    int32_t text_y = spark_y + (spark_h - text_h) / 2;
+    renderer_->draw_text(fps_text, text_x, text_y, {255, 255, 255, 255}, FontSize::Small);
 
     // Dark translucent background plate + subtle border
     renderer_->fill_rect(spark_x - 1, spark_y - 1, spark_w + 2, spark_h + 2, ants::assets::ColorRGBA{0, 0, 0, 160});

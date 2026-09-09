@@ -515,36 +515,23 @@ void HUD::render_top_bar(IRenderer& renderer, const assets::AssetArchive&, const
     uint32_t mm = (ms / 1000) / 60;
     uint32_t ss = (ms / 1000) % 60;
 
-    int32_t cy = 5;
-    std::string dig_m0 = "dig" + std::to_string(mm / 10) + ".bmp";
-    std::string dig_m1 = "dig" + std::to_string(mm % 10) + ".bmp";
-    std::string dig_s0 = "dig" + std::to_string(ss / 10) + ".bmp";
-    std::string dig_s1 = "dig" + std::to_string(ss % 10) + ".bmp";
-
-    if (mm >= 10) {
-        int32_t cx = 75;
-        renderer.draw_named_sprite(dig_m0, cx + 0, cy);
-        renderer.draw_named_sprite(dig_m1, cx + 8, cy);
-        renderer.draw_named_sprite("digc.bmp", cx + 16, cy); // colon
-        renderer.draw_named_sprite(dig_s0, cx + 24, cy);
-        renderer.draw_named_sprite(dig_s1, cx + 32, cy);
-    } else {
-        // Drop leading zero on minutes when < 10 (e.g. 4:00 instead of 04:00)
-        int32_t cx = 79;
-        renderer.draw_named_sprite(dig_m1, cx + 0, cy);
-        renderer.draw_named_sprite("digc.bmp", cx + 8, cy); // colon
-        renderer.draw_named_sprite(dig_s0, cx + 16, cy);
-        renderer.draw_named_sprite(dig_s1, cx + 24, cy);
-    }
+    std::string time_str = std::to_string(mm) + ":" + (ss < 10 ? "0" : "") + std::to_string(ss);
+    int32_t time_w = renderer.get_text_width(time_str, FontSize::Small);
+    int32_t time_h = renderer.get_text_height(FontSize::Small);
+    int32_t time_x = 61 + (68 - time_w) / 2;
+    int32_t time_y = 4 + (14 - time_h) / 2;
+    renderer.draw_text(time_str, time_x, time_y, {255, 255, 255, 255}, FontSize::Small);
 
     // Box 2 (Top-Right above Playfield): Local player's own score in box at (402..456, 4..17)
     // Fill the entire box with the team color
     renderer.fill_rect(402, 4, 54, 14, TEAM_COLORS[local_player_id_ % 4]);
     int32_t my_score = (local_player_id_ < world.player_scores.size()) ? world.player_scores[local_player_id_] : 0;
     std::string my_score_str = std::to_string(my_score);
-    int32_t score_text_w = renderer.get_text_width(my_score_str);
+    int32_t score_text_w = renderer.get_text_width(my_score_str, FontSize::Small);
+    int32_t score_text_h = renderer.get_text_height(FontSize::Small);
     int32_t score_text_x = 453 - score_text_w;
-    renderer.draw_text(my_score_str, score_text_x, 7, {255, 255, 255, 255});
+    int32_t score_text_y = 4 + (14 - score_text_h) / 2;
+    renderer.draw_text(my_score_str, score_text_x, score_text_y, {255, 255, 255, 255}, FontSize::Small);
 
     // Top Header Buttons feedback (Help at 476, 7; Options at 525, 7; Quit at 579, 7)
     // Note: In unpressed state, Help/Options/Quit are already pre-rendered inside x0y0.bmp.
@@ -843,9 +830,11 @@ void HUD::render_news_banner(IRenderer& renderer, const assets::AssetArchive&, c
         // Player score inside box (right-justified)
         int32_t s = (p < world.player_scores.size()) ? world.player_scores[p] : 0;
         std::string s_str = std::to_string(s);
-        int32_t s_text_w = renderer.get_text_width(s_str);
+        int32_t s_text_w = renderer.get_text_width(s_str, FontSize::Small);
+        int32_t s_text_h = renderer.get_text_height(FontSize::Small);
         int32_t s_text_x = bx + 51 - s_text_w;
-        renderer.draw_text(s_str, s_text_x, 467, {255, 255, 255, 255});
+        int32_t s_text_y = 464 + (14 - s_text_h) / 2;
+        renderer.draw_text(s_str, s_text_x, s_text_y, {255, 255, 255, 255}, FontSize::Small);
     }
 }
 
@@ -872,10 +861,11 @@ void HUD::render_quit_dialog(IRenderer& renderer, const assets::AssetArchive& as
 
     // Centered prompt text: "Do you really want to quit?"
     std::string prompt = "Do you really want to quit?";
-    int32_t text_w = static_cast<int32_t>(prompt.size()) * 6;
+    int32_t text_w = renderer.get_text_width(prompt, FontSize::Small);
+    int32_t text_h = renderer.get_text_height(FontSize::Small);
     int32_t text_x = dx + (320 - text_w) / 2;
-    int32_t text_y = dy + 88;
-    renderer.draw_text(prompt, text_x, text_y, ColorRGBA{27, 41, 30, 255});
+    int32_t text_y = dy + 88 + (10 - text_h) / 2;
+    renderer.draw_text(prompt, text_x, text_y, ColorRGBA{27, 41, 30, 255}, FontSize::Small);
 
     // Yes button at (184, 264)
     const char* yes_spr = yes_button_.is_pressed ? "yes3.bmp" : (yes_button_.is_active ? "yes2.bmp" : "yes1.bmp");
@@ -1943,8 +1933,6 @@ void HUD::send_chat_message() {
     add_chat_entry(sender, chat_input_, is_on_team_ && !send_to_all_);
     chat_input_.clear();
     chat_scroll_offset_ = 0;
-
-    play_sfx(sim::SoundID::ChatSend);
 }
 
 void HUD::add_chat_entry(const std::string& sender, const std::string& message, bool team_only) {
