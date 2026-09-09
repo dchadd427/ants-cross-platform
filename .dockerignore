@@ -1,0 +1,16 @@
+.git
+.github
+build
+build_*
+dist
+tests
+docs
+asset_catalog/sprites
+asset_catalog/sounds
+Original-Ants/*.exe
+Original-Ants/*.dll
+Original-Ants/ddraw.ini
+Original-Ants/cnc-ddraw config.exe
+*.md
+*.sh
+.DS_Store
