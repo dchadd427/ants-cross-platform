@@ -267,6 +267,7 @@ public:
 private:
     void render_terrain_layer1(const ants::sim::Grid& grid);
     void render_terrain_layer2_structures(const ants::sim::Grid& grid);
+    void render_flower_droppers(const ants::sim::WorldState& world);
     void render_terrain_layer3_canopy();
     void render_visual_effects(const ants::sim::WorldState& world);
     void render_ant_units(const ants::sim::WorldState& world, int32_t selected_unit_id, const std::vector<uint32_t>& selected_unit_ids = {}, bool show_all_health_bars = false);

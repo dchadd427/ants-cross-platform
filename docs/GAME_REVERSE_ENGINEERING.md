@@ -1003,6 +1003,35 @@ The authentic match clock routine at `0x1024839` evaluates remaining match milli
 
 ---
 
+### 5.29 Daisy Flower Power-Up Droppers & Falling Droplet Anims (`SMALL.LVL`)
+
+- **Daisy Plant Placement & Sway Animation:** On maps such as `SMALL.LVL`, cliff-top daisy flowers (`dflower1`, animation 420) are placed at `(2, 19)` and `(37, 19)`. The plant continuously renders its swaying animation loop (`anim 420`) above the cliff edges.
+- **Timing & Uniform Random Power-Up Drops:**
+  - **Initial Delay:** 90 seconds (1,800 ticks).
+  - **Respawn Interval:** 120 seconds (2,400 ticks) after the previous droplet lands.
+  - **Target Landing Coordinates:** Drops land at `(3, 19)` and `(38, 19)`.
+  - **Power-Up Selection:** Uniform random 1-of-5 selection across Combat (4), Fire (2), Bomber (1), Thief (3), and Swimmer (5).
+- **Falling Droplet Animation & Audio Cue:**
+  - When triggered, a 9-frame falling droplet animation begins playing directly above the target tile (`FD_COMB`, `FD_SWIM`, `FD_THIEF`, `FD_FIRE`, or `FD_BOMB`).
+  - At tick 2 (frame 1), sound 62 (`powerdrip.wav`) triggers at the drop coordinates.
+  - At tick 16 (~820ms, drop completion), the target ground tile receives the Layer 2 powerup item (`is_powerup = true`), making it collectible by approaching ants.
+
+---
+
+### 5.30 Anthill Hatch Emergence (`*hatch`) & Enemy Ant Inspection Selection
+
+- **Anthill Emergence (`*hatch` & `exithill.wav`):**
+  - Newborn ants and ants returning to the surface after healing dwelling at the base play the authentic 9-frame `*hatch` emergence animation (frames 0..8, where frame 8 is the fully emerged standing ant).
+  - Emergence triggers sound 43 (`exithill.wav`) at the anthill coordinates.
+  - The ant remains underground and invulnerable during healing until emergence commences.
+- **Enemy Ant Inspection Selection:**
+  - When no friendly ant is currently selected, clicking an enemy ant selects it in an "inspect" mode.
+  - The selection ears brackets (`*ears`) and the overhead health bar are rendered over the selected enemy ant, even when its health is otherwise full.
+  - Friendly commands (move, attack, ability) cannot be issued to enemy units, and ground clicks do not move them.
+  - Clicking any friendly unit or empty ground immediately clears the enemy inspection selection.
+
+---
+
 ## 6. Target Multi-Platform Architecture
 
 To achieve clean, modern, high-performance execution across macOS, Linux, Windows, and the Web (WebAssembly):

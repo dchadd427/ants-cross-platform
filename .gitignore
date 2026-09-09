@@ -33,7 +33,13 @@ cmake-build-*/
 *.tmp
 *.bmp
 *.png
+!asset_catalog/sprites/
+!asset_catalog/sprites/**
 
 # Test artifacts and temporary captures
 tests/temp/
 tests/artifacts/
+
+# Agent scratch directory
+.agents/
+

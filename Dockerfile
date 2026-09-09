@@ -19,6 +19,9 @@ RUN emcmake cmake -B build_web \
 
 RUN cmake --build build_web -j$(nproc)
 
+# Append dynamic build cache-buster to index.js script tag to prevent stale browser caching
+RUN sed -i 's/src="index.js"/src="index.js?v='$(date +%s)'"/g' /src/build_web/src/ants_app/index.html
+
 # =============================================================================
 # Stage 2: High-Performance Lightweight Nginx Web Server
 # =============================================================================
@@ -27,11 +30,8 @@ FROM nginx:alpine AS runner
 # Clear default static files
 RUN rm -rf /usr/share/nginx/html/*
 
-# Copy compiled WebAssembly artifacts from builder stage
-COPY --from=builder /src/build_web/src/ants_app/index.html /usr/share/nginx/html/
-COPY --from=builder /src/build_web/src/ants_app/index.js /usr/share/nginx/html/
-COPY --from=builder /src/build_web/src/ants_app/index.wasm /usr/share/nginx/html/
-COPY --from=builder /src/build_web/src/ants_app/index.data /usr/share/nginx/html/
+# Copy compiled WebAssembly artifacts atomically in a single layer
+COPY --from=builder /src/build_web/src/ants_app/index.* /usr/share/nginx/html/
 
 # Copy Asset Catalog & Viewer for reference on beta site
 COPY asset_catalog/ /usr/share/nginx/html/asset_catalog/

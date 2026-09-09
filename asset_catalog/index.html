@@ -694,11 +694,123 @@
     box-shadow: 0 1px 0 1px rgba(0,0,0,0.3);
   }
 
-  /* Scrollbars */
-  ::-webkit-scrollbar { width: 8px; height: 8px; }
-  ::-webkit-scrollbar-track { background: #0b0f19; }
-  ::-webkit-scrollbar-thumb { background: #1e2c47; border-radius: 4px; }
-  ::-webkit-scrollbar-thumb:hover { background: #2a3e63; }
+  /* Mobile Responsive Media Queries */
+  @media (max-width: 768px) {
+    html, body {
+      overflow-y: auto !important;
+      height: auto !important;
+      min-height: 100vh;
+    }
+    header {
+      padding: 0.6rem 0.8rem;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+    }
+    .brand h1 {
+      font-size: 1rem;
+    }
+    .brand .tagline {
+      display: none;
+    }
+    .tabs {
+      width: 100%;
+      overflow-x: auto;
+      padding-bottom: 2px;
+      order: 3;
+    }
+    .tab-btn {
+      padding: 0.4rem 0.65rem;
+      font-size: 0.8rem;
+      white-space: nowrap;
+      min-height: 40px;
+    }
+    .header-actions {
+      display: none;
+    }
+    .search-container {
+      padding: 0.6rem 0.8rem;
+    }
+    .search-row {
+      flex-wrap: wrap;
+      gap: 0.5rem;
+    }
+    .count-info {
+      font-size: 0.75rem;
+    }
+    main {
+      overflow: visible;
+      height: auto;
+    }
+    .tab-content {
+      padding: 0.75rem;
+      overflow-y: visible;
+      height: auto;
+    }
+    #anims-view {
+      flex-direction: column;
+      overflow-y: visible;
+      height: auto;
+    }
+    .anims-sidebar {
+      width: 100%;
+      max-height: 240px;
+      border-right: none;
+      border-bottom: 1px solid var(--border);
+    }
+    .anims-detail {
+      padding: 0.75rem;
+      overflow-y: visible;
+      height: auto;
+    }
+    .anim-header-card {
+      padding: 0.85rem;
+      gap: 0.6rem;
+    }
+    .anim-title-area h2 {
+      font-size: 1.1rem;
+    }
+    .canvas-stage {
+      min-width: unset;
+      width: 100%;
+      padding: 0.5rem;
+    }
+    .player-controls {
+      flex-wrap: wrap;
+      gap: 0.4rem;
+      padding: 0.5rem;
+    }
+    .sprites-grid {
+      grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+      gap: 0.5rem;
+    }
+    .sprite-card {
+      padding: 0.5rem 0.3rem;
+    }
+    .sprite-preview-box {
+      width: 68px;
+      height: 68px;
+    }
+    .copy-btn {
+      min-height: 32px;
+      padding: 0.3rem 0.5rem;
+    }
+    .table-wrapper {
+      overflow-x: auto;
+    }
+    .sounds-table {
+      font-size: 0.75rem;
+    }
+    .sounds-table th, .sounds-table td {
+      padding: 0.4rem 0.5rem;
+    }
+    .modal-dialog {
+      width: 95%;
+      max-height: 90vh;
+    }
+    .meta-grid {
+      grid-template-columns: 1fr;
+    }
+  }
 </style>
 </head>
 <body>
@@ -865,6 +977,10 @@
           <button class="ctrl-btn" id="btn-sound-toggle" title="Toggle audio playback on sound triggers">
             🔊 Sound On
           </button>
+
+          <button class="ctrl-btn" id="btn-download-composite" title="Download composite frame as PNG">
+            ⬇ Frame PNG
+          </button>
         </div>
 
         <div class="player-controls" id="static-composite-banner" style="display:none; justify-content: space-between; align-items: center;">
@@ -963,10 +1079,11 @@
         </div>
       </div>
 
-      <div class="btn-group" style="justify-content: center; gap: 0.75rem;">
+      <div class="btn-group" style="justify-content: center; gap: 0.75rem; flex-wrap: wrap;">
         <button class="copy-btn" id="modal-btn-copy-name">Copy BMP Name</button>
         <button class="copy-btn" id="modal-btn-copy-path">Copy PNG Path</button>
         <button class="copy-btn" id="modal-btn-copy-id">Copy ID</button>
+        <a class="copy-btn" id="modal-btn-download" download style="text-decoration:none; display:inline-flex; align-items:center; justify-content:center;">⬇ Download PNG</a>
       </div>
 
       <div style="margin-top:0.5rem;">
@@ -1242,8 +1359,8 @@ function renderSounds(items) {
       </td>
       <td>
         <div class="btn-group">
-          <button class="copy-btn" onclick="copyText('${s.name}', 'clip name')" title="Copy WAV name">Copy Name</button>
-          <button class="copy-btn" onclick="copyText('${s.file}', 'file path')" title="Copy relative path">Path</button>
+          <button class="copy-btn" onclick="copyText('${s.name}', 'clip name')" title="Copy WAV name">Copy</button>
+          <a href="${s.file}" download="${s.name}" class="copy-btn" title="Download WAV" style="text-decoration:none; display:inline-flex; align-items:center; justify-content:center;">⬇ WAV</a>
         </div>
       </td>
     `;
@@ -1487,6 +1604,7 @@ function updateScrubberAndUI() {
         <td>
           <div class="btn-group">
             <button class="copy-btn" onclick="copyText('${f.sprite_name}', 'sprite filename')">Copy</button>
+            <a href="${thumbSrc}" download="${f.sprite_name}" class="copy-btn" title="Download layer PNG" style="text-decoration:none; display:inline-flex; align-items:center; justify-content:center;">⬇ PNG</a>
             <button class="copy-btn" onclick="openSpriteModal(${f.sprite_id})">Inspect</button>
           </div>
         </td>
@@ -1634,6 +1752,7 @@ function renderSprites(items) {
       <div style="font-size:0.7rem; color:var(--text-secondary);">${sp.width} × ${sp.height}</div>
       <div class="btn-group" style="margin-top: 0.2rem;">
         <button class="copy-btn" onclick="event.stopPropagation(); copyText('${sp.name}', 'sprite filename')">Copy</button>
+        <a href="${sp.file}" download="${sp.name}" class="copy-btn" onclick="event.stopPropagation();" title="Download PNG" style="text-decoration:none; display:inline-flex; align-items:center; justify-content:center;">⬇ PNG</a>
       </div>
     `;
     card.onclick = () => openSpriteModal(sp.id);
@@ -1678,6 +1797,11 @@ function openSpriteModal(spriteId) {
   document.getElementById('modal-btn-copy-name').onclick = () => copyText(sp.name, 'sprite name');
   document.getElementById('modal-btn-copy-path').onclick = () => copyText(sp.file, 'sprite path');
   document.getElementById('modal-btn-copy-id').onclick = () => copyText(String(sp.id), 'sprite ID');
+  const modalDl = document.getElementById('modal-btn-download');
+  if (modalDl) {
+    modalDl.href = sp.file;
+    modalDl.download = sp.name;
+  }
 
   // Reverse animations lookup
   const usedAnimIds = spriteUsageMap.get(sp.id) || new Set();
@@ -1822,6 +1946,15 @@ document.getElementById('btn-sound-toggle').onclick = () => {
   soundEnabled = !soundEnabled;
   document.getElementById('btn-sound-toggle').textContent = soundEnabled ? '🔊 Sound On' : '🔇 Audio Muted';
   showToast(soundEnabled ? 'Animation audio enabled' : 'Animation audio muted');
+};
+document.getElementById('btn-download-composite').onclick = () => {
+  const canvas = document.getElementById('anim-canvas');
+  const anim = CATALOG_DATA.animations[activeAnimIndex];
+  const animName = anim ? anim.name : 'composite';
+  const link = document.createElement('a');
+  link.download = `${animName}_step${currentSubIndex + 1}.png`;
+  link.href = canvas.toDataURL('image/png');
+  link.click();
 };
 
 // Keyboard Shortcuts Modal Toggle
