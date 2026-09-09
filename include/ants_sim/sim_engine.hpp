@@ -22,6 +22,7 @@ constexpr uint32_t TICK_MS      = 50u;
 namespace SoundID {
     constexpr uint32_t PowerUpHeal    = 1;  // powerupc.wav
     constexpr uint32_t PowerUpChime   = 2;  // powerupc2.wav
+    constexpr uint32_t CombatNetFairy = 3;  // combatnetfairy.wav (11kHz, 0.62s, collision battle ball scuffle)
     constexpr uint32_t BombDetonate   = 4;  // bombexp.wav (22kHz, 1.14s)
     constexpr uint32_t FireBurnout    = 5;  // fireburnout.wav
     constexpr uint32_t GeneralOrders  = 13; // gantorders.wav

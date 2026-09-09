@@ -5720,6 +5720,43 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
             ASSERT_TRUE(has_flower);
         }
     } TEST_END();
+
+    TEST_CASE("12.74: Authentic 1998 Same-Tile Collision Scuffle Visual Effect & SoundID::CombatNetFairy") {
+        SimulationEngine sim;
+        ants::assets::LevelData lvl;
+        std::string lvl_path = std::string(ORIGINAL_ASSETS_DIR) + "/Maps/SMALL.LVL";
+        ASSERT_TRUE(lvl.load_lvl(lvl_path));
+        sim.init(lvl, 42);
+
+        // Spawn two units on the same tile to trigger immediate scuffle collision resolution
+        uint32_t a1_id = sim.spawn_unit(0, AntType::Worker, TileCoord{15, 15});
+        uint32_t a2_id = sim.spawn_unit(0, AntType::Combat, TileCoord{15, 15});
+
+        // Tick simulation once
+        sim.tick();
+
+        // Check that battle visual effect was spawned
+        const auto& ws = sim.get_world_state();
+        bool has_battle_effect = false;
+        for (const auto& eff : ws.effects) {
+            if (eff.anim_name == "battle") {
+                has_battle_effect = true;
+                break;
+            }
+        }
+        ASSERT_TRUE(has_battle_effect);
+
+        // Check that SoundID::CombatNetFairy (ID 3) was queued
+        ASSERT_TRUE(sim.has_audio_event(SoundID::CombatNetFairy));
+
+        // Check that bounce sound SoundID::FlingThumpB (ID 65) was queued
+        ASSERT_TRUE(sim.has_audio_event(SoundID::FlingThumpB));
+
+        // Ensure ants bounced apart onto different discrete tiles
+        const auto& a1 = sim.get_unit(a1_id);
+        const auto& a2 = sim.get_unit(a2_id);
+        ASSERT_FALSE(a1.pos == a2.pos);
+    } TEST_END();
 }
 
 

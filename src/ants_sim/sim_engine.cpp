@@ -228,6 +228,7 @@ void bounce_unit_cascade(SimulationEngineImpl& impl,
 
     impl.audio_queue_.push_back(AudioEvent{SoundID::Bump, unit.pixel_x, unit.pixel_y, 1, 255});
     impl.audio_queue_.push_back(AudioEvent{SoundID::FlingThumpA, unit.pixel_x, unit.pixel_y, 1, 255});
+    impl.audio_queue_.push_back(AudioEvent{SoundID::FlingThumpB, unit.pixel_x, unit.pixel_y, 1, 255});
 
     int32_t bdx = unit.pos.x - from_x;
     int32_t bdy = unit.pos.y - from_y;
@@ -279,6 +280,9 @@ void bounce_unit_cascade(SimulationEngineImpl& impl,
         }
 
         if (occupying) {
+            // Authentic 1998 battle scuffle visual effect and SoundID::CombatNetFairy (ID 3)
+            impl.active_effects_.push_back(VisualEffect{"battle", occupying->pixel_x, occupying->pixel_y, 0, 5});
+            impl.audio_queue_.push_back(AudioEvent{SoundID::CombatNetFairy, occupying->pixel_x, occupying->pixel_y, 1, 255});
             // Cascade bounce the occupying ant!
             bounce_unit_cascade(impl, *occupying, unit.pos.x, unit.pos.y, depth + 1);
             unit.set_tile_pos(cand.first, cand.second);
@@ -1711,6 +1715,9 @@ void SimulationEngine::tick() {
                 if (!a1_moving && !a2_moving && a1->pos.x == a2->pos.x && a1->pos.y == a2->pos.y) {
                     AntUnit* to_displace = (a1->id > a2->id ? a1.get() : a2.get());
                     AntUnit* anchor_ant = (to_displace == a1.get()) ? a2.get() : a1.get();
+                    // Authentic 1998 battle scuffle visual effect and SoundID::CombatNetFairy (ID 3)
+                    impl_->active_effects_.push_back(VisualEffect{"battle", anchor_ant->pixel_x, anchor_ant->pixel_y, 0, 5});
+                    impl_->audio_queue_.push_back(AudioEvent{SoundID::CombatNetFairy, anchor_ant->pixel_x, anchor_ant->pixel_y, 1, 255});
                     bounce_unit_cascade(*impl_, *to_displace, anchor_ant->pos.x, anchor_ant->pos.y);
                 }
             }
