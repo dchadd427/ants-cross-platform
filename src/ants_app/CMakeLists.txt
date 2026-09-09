@@ -60,7 +60,7 @@ if(SDL2_TTF_LIBRARIES)
     target_link_libraries(ants_app PUBLIC ${SDL2_TTF_LIBRARIES})
 endif()
 
-if(APPLE)
+if(APPLE AND NOT EMSCRIPTEN)
     target_link_libraries(ants_app PUBLIC
         "-framework AudioToolbox"
         "-framework CoreFoundation"
@@ -93,23 +93,10 @@ endif()
 
 if(EMSCRIPTEN)
     target_compile_options(ants_app PUBLIC "-sUSE_SDL=2")
+    target_compile_options(ants PRIVATE "-sUSE_SDL=2")
     set_target_properties(ants PROPERTIES
         OUTPUT_NAME "index"
         SUFFIX ".html"
-    )
-    target_link_options(ants PRIVATE
-        "-sUSE_SDL=2"
-        "-sALLOW_MEMORY_GROWTH=1"
-        "-sINITIAL_MEMORY=67108864"
-        "-sMAXIMUM_MEMORY=536870912"
-        "-sWASM=1"
-        "-sEXPORTED_RUNTIME_METHODS=['ccall','cwrap']"
-        "--preload-file" "${CMAKE_SOURCE_DIR}/Original-Ants/ants.chd@Original-Ants/ants.chd"
-        "--preload-file" "${CMAKE_SOURCE_DIR}/Original-Ants/Maps@Original-Ants/Maps"
-        "--preload-file" "${CMAKE_SOURCE_DIR}/Original-Ants/INTRO.MID@Original-Ants/INTRO.MID"
-        "--preload-file" "${CMAKE_SOURCE_DIR}/Original-Ants/ANTS2A.MID@Original-Ants/ANTS2A.MID"
-        "--preload-file" "${CMAKE_SOURCE_DIR}/Original-Ants/ANTS2B.MID@Original-Ants/ANTS2B.MID"
-        "--preload-file" "${CMAKE_SOURCE_DIR}/Original-Ants/ANTSFUN3.MID@Original-Ants/ANTSFUN3.MID"
-        "--shell-file" "${CMAKE_SOURCE_DIR}/web/shell.html"
+        LINK_FLAGS "-sUSE_SDL=2 -sALLOW_MEMORY_GROWTH=1 -sINITIAL_MEMORY=67108864 -sMAXIMUM_MEMORY=536870912 -sWASM=1 --preload-file ${CMAKE_SOURCE_DIR}/Original-Ants@Original-Ants --shell-file ${CMAKE_SOURCE_DIR}/web/shell.html"
     )
 endif()
