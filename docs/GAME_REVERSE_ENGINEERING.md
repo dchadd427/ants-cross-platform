@@ -818,6 +818,25 @@ Score boxes are NOT filled with bright ant unit colors; instead, `Ants.exe` spec
   - Renders right-aligned within label bounds in solid white (`0xFFFFFF`, font height 14px).
   - Score values are rendered right-justified inside the score boxes.
 
+#### 4. Game Setup Screen Geometry & Player Status Animation (`st_screen`, `agst201`)
+The host/client game setup screen (`st_screen`) presents map selection and player readiness:
+- **"Pick a Map" Box Geometry (`w_map.bmp` at `x=27, y=302, w=195, h=39`):**
+  - Inner Cavity Bounds: `[left=31, right=218, top=307, bottom=339]` (`height = 33px`).
+  - Text Vertical Centering Formula: `name_y = 307 + (33 - font_height) / 2`.
+  - For standard 14px small font: `name_y = 316` (symmetric 13px top and bottom margin to the inner bezel).
+- **"Map Info" Description Box Geometry (`efram` bezel at `x=27, y=373, w=308, h=38`):**
+  - Inner Cavity Bounds: `[left=31, right=331, top=377, bottom=405]` (`height = 29px`).
+  - Text Vertical Centering Formula: `info_y = 377 + (29 - font_height) / 2`.
+  - For standard 14px small font: `info_y = 384` (symmetric 10px top and bottom margin to the inner bezel).
+- **Player Status Standing Ant Animation (`agst201`):**
+  - Standing worker ant facing south (Animation ID 815, `agst201`) consists of 13 subitems cycling through `agst201.bmp` .. `agst207.bmp`:
+    - Frames 0..7: 150ms per frame
+    - Frames 8..9: 75ms per frame
+    - Frames 10..12: 150ms per frame
+    - Total cycle duration: 1800ms.
+  - Team Color Swap: Ant body accents and team indicators use palette indices 80..99, dynamically tinted to match the player's team slot.
+  - Base Anchor: Positioned at `(396, 124)` with frame-relative `dx, dy` offsets applied, ensuring the ant's feet anchor remains rock-solid while antennae and head bobble naturally.
+
 ---
 
 ## 6. Target Multi-Platform Architecture

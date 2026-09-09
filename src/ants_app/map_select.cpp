@@ -252,10 +252,10 @@ void MapSelectScreen::render(IRenderer& renderer, const ants::assets::AssetArchi
 
     int32_t th = renderer.get_text_height(FontSize::Small);
 
-    // 3. Current Map Name inside Pick a Map box
+    // 3. Current Map Name inside Pick a Map box (vertically centered in inner cavity y=307..339, h=33)
     if (selected_index_ >= 0 && selected_index_ < static_cast<int32_t>(maps_.size())) {
         const auto& cur = maps_[static_cast<size_t>(selected_index_)];
-        int32_t name_y = 303 + (44 - th) / 2;
+        int32_t name_y = 307 + (33 - th) / 2;
         renderer.draw_text(cur.display_name, 38, name_y, ColorRGBA{255, 255, 255, 255}, FontSize::Small);
     }
 
@@ -265,22 +265,56 @@ void MapSelectScreen::render(IRenderer& renderer, const ants::assets::AssetArchi
     renderer.draw_named_sprite(up_spr, BTN_UP_X, BTN_UP_Y);
     renderer.draw_named_sprite(dn_spr, BTN_DOWN_X, BTN_DOWN_Y);
 
-    // 4. Map Info Description inside Map Info box
+    // 4. Map Info Description inside Map Info box (vertically centered in inner cavity y=377..405, h=29)
     if (selected_index_ >= 0 && selected_index_ < static_cast<int32_t>(maps_.size())) {
         const auto& cur = maps_[static_cast<size_t>(selected_index_)];
         std::string info_text = cur.description + " (" + std::to_string(cur.minutes) + " min)";
-        renderer.draw_text(info_text, 38, 388, ColorRGBA{255, 255, 255, 255}, FontSize::Small);
+        int32_t info_y = 377 + (29 - th) / 2;
+        renderer.draw_text(info_text, 38, info_y, ColorRGBA{255, 255, 255, 255}, FontSize::Small);
     }
 
     // 5. Status line: authentic prompt text (vertically centered in statline box at y=445..464)
     int32_t stat_y = 445 + (19 - th) / 2;
     renderer.draw_text("Press START when all players' thumbs have appeared.", 38, stat_y, ColorRGBA{255, 255, 255, 255}, FontSize::Small);
 
-    // 6. Players' Status (Only connected players shown, vertically centered with thumb icon)
+    // 6. Players' Status: Animated ant standing facing south (agst201) next to user name
     std::string display_user = player_name_.empty() ? "Player" : player_name_;
-    renderer.set_hud_team(0); // Team 0 = Green
-    renderer.draw_named_sprite("agst301.bmp", 385, 95);
-    renderer.set_hud_team(0);
+    const auto* anim_stand = archive.find_animation("agst201");
+    if (anim_stand && !anim_stand->subitems.empty()) {
+        uint32_t total_duration_ms = 0;
+        for (const auto& sub : anim_stand->subitems) {
+            total_duration_ms += (sub.val3 > 0 ? sub.val3 : 150);
+        }
+        if (total_duration_ms == 0) total_duration_ms = 1800;
+
+        uint32_t current_time_ms = (connection_ticks_ * 1000u / 60u) % total_duration_ms;
+        uint32_t accum_ms = 0;
+        const assets::AnimationFrame* active_frame = nullptr;
+        for (const auto& sub : anim_stand->subitems) {
+            uint32_t dur = (sub.val3 > 0 ? sub.val3 : 150);
+            if (current_time_ms >= accum_ms && current_time_ms < accum_ms + dur) {
+                if (!sub.frames.empty()) {
+                    active_frame = &sub.frames[0];
+                }
+                break;
+            }
+            accum_ms += dur;
+        }
+        if (!active_frame && !anim_stand->subitems[0].frames.empty()) {
+            active_frame = &anim_stand->subitems[0].frames[0];
+        }
+
+        if (active_frame) {
+            renderer.set_hud_team(player_team_);
+            renderer.draw_sprite(active_frame->sprite_index, 396 + active_frame->dx, 124 + active_frame->dy);
+            renderer.set_hud_team(0);
+        }
+    } else {
+        renderer.set_hud_team(player_team_);
+        renderer.draw_named_sprite("agst201.bmp", 385, 92);
+        renderer.set_hud_team(0);
+    }
+
     int32_t player_y = 101 + (24 - th) / 2;
     renderer.draw_text(display_user, 415, player_y, ColorRGBA{255, 255, 255, 255}, FontSize::Small);
     renderer.draw_named_sprite("thumb1.bmp", 540, 101);
