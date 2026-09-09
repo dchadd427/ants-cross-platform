@@ -258,6 +258,10 @@ The engine internal dispatch maps each ant class to an integer ID and correspond
   - Upon pickup, the ant's movement waypoints are cleared. The unit state is reset from `Walking` to `Idle` (or `GuardIdle` for Combat Ants).
   - When the 11-tick `getpow` transformation timer elapses, the unit completes transformation and emerges into `Idle` / `GuardIdle` mode.
   - In `Idle` / `GuardIdle` mode, `anim_tick` continuously advances (`anim_subitem = anim_tick / 4`), ensuring the unit actively plays its directional standing animation cycle (`*st*`, including South `*st301`) rather than being left in a static frozen frame 0 of an empty `Walking` state.
+- **Power-Up Standing & Locomotion Departure Semantics (`0x1020cdb`, `0x1020d26`):**
+  - Ants positioned on a power-up tile (whether an already transformed class like Bomber Ant or an ant whose transformation was previously halted) are free to navigate off the tile. The engine treats the unit's current tile as traversable for departures (`c != unit->pos`).
+  - Transformation interruption (`SoundID::AntStop`, Anim 56 `pucov`) is strictly reserved for active transformation states (State 4 `getpow`) receiving impossible move commands (e.g. into deep water or obstruction barriers) or explicit Stop/Cancel actions.
+  - Issuing a valid move order to any passable destination allows the ant to depart immediately, clearing `on_powerup` without triggering stop sound effects or trapping the unit.
 
 ---
 
