@@ -4,6 +4,7 @@
 #include <string>
 #include <memory>
 #include <vector>
+#include <array>
 
 #if defined(__has_include)
   #if __has_include(<SDL.h>)
@@ -148,6 +149,14 @@ private:
     float current_fps_{60.0f};
     int last_music_track_{-1};
     bool is_music_muted_{false};
+
+    // Smoothed FPS Display and Frametime Sparkline
+    static constexpr size_t SPARKLINE_SAMPLES = 36;
+    std::array<float, SPARKLINE_SAMPLES> frametime_history_{};
+    size_t frametime_index_{0};
+    float fps_display_value_{60.0f};
+    float fps_time_accumulator_{0.0f};
+    int fps_frame_counter_{0};
 };
 
 } // namespace ants::app
