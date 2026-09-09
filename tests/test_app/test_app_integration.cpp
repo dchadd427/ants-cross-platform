@@ -1259,6 +1259,9 @@ void run_suite_9_gameplay_mechanics_and_options() {
         auto& ant = sim_engine.get_unit(ant_id);
         ASSERT_FALSE(ant.is_holding());
 
+        // Order worker to harvest food at {fx, fy}
+        sim_engine.issue_move_order(ant_id, TileCoord{fx, fy});
+
         // Tick simulation to execute harvest
         sim_engine.tick();
 
@@ -3391,10 +3394,16 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         hud.handle_mouse_down(b1_click_x, b1_click_y, 1, sim, camera);
         hud.handle_mouse_up(b1_click_x, b1_click_y, 1, sim, camera);
 
-        // Enemy ant b1 must NOT be selected!
-        ASSERT_FALSE(hud.is_ant_selected(b1));
-        ASSERT_NE(hud.get_selected_ant_id(), b1);
-        ASSERT_TRUE(hud.get_selected_ant_ids().empty());
+        // Enemy ant b1 CAN now be selected for inspection if no friendly units selected!
+        ASSERT_TRUE(hud.is_ant_selected(b1));
+        ASSERT_EQ(hud.get_selected_ant_id(), b1);
+
+        // But ground clicks must NOT move or command enemy ants!
+        int32_t ground_x = 350 + HUD::PLAYFIELD_X;
+        int32_t ground_y = 350 + HUD::PLAYFIELD_Y;
+        hud.handle_mouse_down(ground_x, ground_y, 1, sim, camera);
+        hud.handle_mouse_up(ground_x, ground_y, 1, sim, camera);
+        ASSERT_NE(sim.get_unit(b1).state, UnitState::Walking);
 
         // 2. Green player clicks on Blue Ant 2 at (10, 11) -> pixel (10*32+16, 11*32+16) = (336, 368)
         int32_t b2_click_x = 336 + HUD::PLAYFIELD_X;
@@ -3402,10 +3411,11 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         hud.handle_mouse_down(b2_click_x, b2_click_y, 1, sim, camera);
         hud.handle_mouse_up(b2_click_x, b2_click_y, 1, sim, camera);
 
-        // Neither b1 nor b2 should have attack orders targeting each other!
+        // b2 is now selected for inspection, neither unit has friendly attack orders
+        ASSERT_TRUE(hud.is_ant_selected(b2));
+        ASSERT_FALSE(hud.is_ant_selected(b1));
         ASSERT_NE(sim.get_unit(b1).attack_target_id, b2);
         ASSERT_NE(sim.get_unit(b2).attack_target_id, b1);
-        ASSERT_FALSE(hud.is_ant_selected(b2));
 
         // 3. Right-clicking b2 while nothing or enemy is selected does not issue attack orders
         hud.handle_mouse_down(b2_click_x, b2_click_y, 3, sim, camera);
@@ -5581,6 +5591,59 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
                 ticks++;
             }
             ASSERT_EQ(sim.get_unit(ant_id).pos, target);
+        }
+    } TEST_END();
+
+    TEST_CASE("12.33 Daisy Flower Power-Up Droppers and Food Avoidance") {
+        SimulationEngine sim;
+        std::string path = std::string(ORIGINAL_ASSETS_DIR) + "/Maps/SMALL.LVL";
+        ants::assets::LevelData lvl;
+        if (lvl.load_lvl(path)) {
+            sim.init(lvl, 42);
+
+            const auto& ws = sim.get_world_state();
+            ASSERT_EQ(ws.flower_droppers.size(), 2u);
+            bool has_left = false;
+            bool has_right = false;
+            for (const auto& fd : ws.flower_droppers) {
+                if (fd.x == 2 && fd.y == 19 && fd.drop_x == 3 && fd.drop_y == 19) has_left = true;
+                if (fd.x == 37 && fd.y == 19 && fd.drop_x == 38 && fd.drop_y == 19) has_right = true;
+            }
+            ASSERT_TRUE(has_left);
+            ASSERT_TRUE(has_right);
+
+            // Fast forward 1800 ticks (90s)
+            for (int i = 0; i < 1800; ++i) {
+                sim.tick();
+            }
+
+            const auto& ws_dropping = sim.get_world_state();
+            ASSERT_TRUE(ws_dropping.flower_droppers[0].is_dropping);
+
+            // Complete the 16-tick drop animation
+            for (int i = 0; i < 16; ++i) {
+                sim.tick();
+            }
+
+            const auto& ws_dropped = sim.get_world_state();
+            ASSERT_FALSE(ws_dropped.flower_droppers[0].is_dropping);
+            // Powerup placed at target
+            int32_t target_drop_x = ws.flower_droppers[0].drop_x;
+            int32_t target_drop_y = ws.flower_droppers[0].drop_y;
+            const auto& cell = sim.grid().get_cell(target_drop_x, target_drop_y);
+            ASSERT_TRUE(cell.has_powerup());
+
+            // Food avoidance: Intermediate food is treated as obstacle in pathfinding
+            sim.grid_mut().get_cell_mut(10, 10).is_food = true;
+            sim.grid_mut().get_cell_mut(10, 10).interactive_id = 301;
+            ASSERT_TRUE(sim.grid().get_cell(10, 10).has_food());
+
+            uint32_t a1 = sim.spawn_unit(0, AntType::Worker, TileCoord{10, 9});
+            sim.issue_move_order(a1, TileCoord{10, 11}, false);
+            // Unit should route around (10, 10) instead of passing through it
+            for (const auto& wp : sim.get_unit(a1).waypoints) {
+                ASSERT_FALSE(wp.x == 10 && wp.y == 10);
+            }
         }
     } TEST_END();
 }

@@ -53,7 +53,7 @@ Ants-Mac/
 │   └── sprites/            # Decoded 2,794 paletted PNG sprites (IDs 0..2793)
 ├── docs/                   # Reverse-engineering documentation and specifications
 │   ├── GAME_REVERSE_ENGINEERING.md  # Comprehensive technical mechanics reference
-│   └── ORIGINAL_REQUEST.md          # Project genesis and core requirements
+│   └── BUILD_AND_RUN.md             # Native and Docker build/run instructions
 ├── include/                # Public C++ headers
 │   ├── ants_assets/        # Archive decoders, map loaders, sprite/sound structs
 │   ├── ants_sim/           # Simulation engine, grid topology, ant units, combat AI

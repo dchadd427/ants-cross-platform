@@ -61,26 +61,8 @@ void HUD::init(uint8_t local_player_id) {
     news_queue_.clear();
     chat_log_.clear();
     chat_scroll_offset_ = 0;
-    {
-        constexpr size_t MAX_CHARS = 27; // Expanded from 21 to utilize full 133px width of wchat.bmp
-        std::string start_msg = "[0:00] News Flash: Game started! Go get that food!";
-        size_t s_idx = 0;
-        while (s_idx < start_msg.length()) {
-            if (start_msg.length() - s_idx <= MAX_CHARS) {
-                chat_log_.push_back(start_msg.substr(s_idx));
-                break;
-            }
-            size_t split = start_msg.rfind(' ', s_idx + MAX_CHARS);
-            if (split == std::string::npos || split <= s_idx) {
-                split = s_idx + MAX_CHARS;
-            }
-            chat_log_.push_back(start_msg.substr(s_idx, split - s_idx));
-            s_idx = split;
-            while (s_idx < start_msg.length() && start_msg[s_idx] == ' ') {
-                ++s_idx;
-            }
-        }
-    }
+    queue_news_message("Game started! Go get food!", 120, false);
+    add_chat_entry("System", "Game started! Go get food!");
 
     // Configure Top Header Buttons (x0y0.bmp)
     help_button_ = {476, 7, 46, 23, 0, 0, 0, false, true, false};
@@ -227,26 +209,6 @@ void HUD::queue_news_message(const std::string& msg, uint32_t duration_ticks, bo
     if (news_queue_.size() > 32) {
         news_queue_.pop_front();
     }
-    constexpr size_t MAX_CHARS_PER_LINE = 27;
-    size_t start = 0;
-    while (start < msg.length()) {
-        if (msg.length() - start <= MAX_CHARS_PER_LINE) {
-            chat_log_.push_back(msg.substr(start));
-            break;
-        }
-        size_t split = msg.rfind(' ', start + MAX_CHARS_PER_LINE);
-        if (split == std::string::npos || split <= start) {
-            split = start + MAX_CHARS_PER_LINE;
-        }
-        chat_log_.push_back(msg.substr(start, split - start));
-        start = split;
-        while (start < msg.length() && msg[start] == ' ') {
-            ++start;
-        }
-    }
-    while (chat_log_.size() > 50) {
-        chat_log_.pop_front();
-    }
 }
 
 void HUD::update_action_buttons_state(const sim::WorldState& world) {
@@ -354,7 +316,10 @@ void HUD::render(IRenderer& renderer, const assets::AssetArchive& assets,
 
             // Recessed status box wstatus.bmp (143x14) at (480, 253)
             renderer.draw_named_sprite("wstatus.bmp", 480, 253);
-            // Empty status box matching authentic appearance
+            if (!news_queue_.empty()) {
+                ants::assets::ColorRGBA col = news_queue_.front().is_alarm ? ants::assets::ColorRGBA{180, 30, 30, 255} : ants::assets::ColorRGBA{16, 40, 24, 255};
+                renderer.draw_text(news_queue_.front().text, 486, 253, col);
+            }
         } else {
             // Authentic Enemy Base Selection Interface
             bool is_allied = (local_player_id_ < world.player_alliances.size()) &&
@@ -368,7 +333,10 @@ void HUD::render(IRenderer& renderer, const assets::AssetArchive& assets,
 
             // Recessed status box wstatus.bmp (143x14) at (480, 253)
             renderer.draw_named_sprite("wstatus.bmp", 480, 253);
-            if (is_allied) {
+            if (!news_queue_.empty()) {
+                ants::assets::ColorRGBA col = news_queue_.front().is_alarm ? ants::assets::ColorRGBA{180, 30, 30, 255} : ants::assets::ColorRGBA{16, 40, 24, 255};
+                renderer.draw_text(news_queue_.front().text, 486, 253, col);
+            } else if (is_allied) {
                 renderer.draw_text("Allied Colony", 486, 253, {100, 255, 100, 255});
             }
         }
@@ -421,15 +389,22 @@ void HUD::render(IRenderer& renderer, const assets::AssetArchive& assets,
         // Recessed status box wstatus.bmp (143x14) at (480, 253)
         renderer.draw_named_sprite("wstatus.bmp", 480, 253);
         std::string status_text = "Ready.";
-        if (sel_ant) {
-            if (sel_ant->is_drowning) status_text = "Drowning!";
+        ants::assets::ColorRGBA status_color = {16, 40, 24, 255};
+        if (!news_queue_.empty()) {
+            status_text = news_queue_.front().text;
+            if (news_queue_.front().is_alarm) {
+                status_color = {180, 30, 30, 255};
+            }
+        } else if (sel_ant) {
+            if (sel_ant->player_id != local_player_id_) status_text = "Enemy ant.";
+            else if (sel_ant->is_drowning) status_text = "Drowning!";
             else if (sel_ant->is_underground) status_text = "In base.";
             else if (sel_ant->is_holding) status_text = "Holds pick up...";
             else if (sel_ant->anim_state == 1 || sel_ant->anim_state == 2) status_text = "On my way.";
             else if (sel_ant->anim_state == 3) status_text = "In combat!";
             else status_text = "Waiting for orders.";
         }
-        renderer.draw_text(status_text, 486, 253, {16, 40, 24, 255});
+        renderer.draw_text(status_text, 486, 253, status_color);
     }
 
     // 2.3 Lower Panel: Always render Chat Section
@@ -1652,11 +1627,11 @@ bool HUD::handle_mouse_up(int32_t x, int32_t y, uint8_t button,
                         if (on_spawn_click_marker_) on_spawn_click_marker_(world_x, world_y);
                         dispatch_move_to_unit_neighbor(hit_ant->tile_x, hit_ant->tile_y, sim);
                     } else {
-                        // Cannot select or command enemy/allied ants!
                         if (has_friendly_selected(world)) {
                             play_sfx(sim::SoundID::AntStop);
                         } else {
-                            clear_selection();
+                            // If no friendly ant is selected, select the enemy ant for inspection
+                            select_ant(hit_ant->id, false);
                         }
                     }
                 }

@@ -71,6 +71,7 @@ namespace SoundID {
     constexpr uint32_t MeleeAttack    = 57; // attack.wav
     constexpr uint32_t BaseAlarmSiren = 58; // underattack.wav (2566 Hz alarm)
     constexpr uint32_t AntStop        = 61; // antstop.wav
+    constexpr uint32_t PowerUpDrop    = 62; // powerdrip.wav
     constexpr uint32_t CantGo         = 63; // cantgo.wav
     constexpr uint32_t FlingThumpA    = 64; // flythumpa.wav
     constexpr uint32_t FlingThumpB    = 65; // flythumpb.wav
@@ -243,6 +244,16 @@ struct VisualEffect {
     uint16_t total_frames{0};
 };
 
+struct FlowerDropperSnapshot {
+    int32_t x{0};
+    int32_t y{0};
+    int32_t drop_x{0};
+    int32_t drop_y{0};
+    bool is_dropping{false};
+    uint8_t drop_frame{0}; // 0..8
+    uint8_t powerup_type{0}; // 0: Bomber, 1: Combat, 2: Thief, 3: Swimmer, 4: Fire
+};
+
 struct WorldState {
     uint64_t   tick_number{0};
     uint32_t   match_time_remaining_ms{0};
@@ -254,6 +265,7 @@ struct WorldState {
     std::vector<TileCell>    cells;
     std::vector<AntSnapshot> ants;
     std::vector<VisualEffect> effects;
+    std::vector<FlowerDropperSnapshot> flower_droppers;
 
     std::array<PlayerMatchStats, MAX_PLAYERS> player_stats{};
     std::array<int32_t, MAX_PLAYERS>          player_scores{};

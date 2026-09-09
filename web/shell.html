@@ -350,11 +350,25 @@
                 statusElement.textContent = 'Audio ready. Click anywhere to play!';
                 playPrompt.style.display = 'inline-block';
             }],
+            locateFile: function(path, prefix) {
+                // Enforce cache busting on wasm and data bundles so clients never run mismatched binaries
+                if (path.endsWith('.wasm') || path.endsWith('.data')) {
+                    return prefix + path + '?t=' + Date.now();
+                }
+                return prefix + path;
+            },
+            onAbort: function(what) {
+                console.error("[Emscripten Abort]:", what);
+                showCacheError();
+            },
             print: function(text) {
                 console.log(text);
             },
             printErr: function(text) {
                 console.error(text);
+                if (text && (text.indexOf('null function') !== -1 || text.indexOf('RuntimeError') !== -1)) {
+                    showCacheError();
+                }
             },
             canvas: (function() {
                 var c = document.getElementById('canvas');
@@ -387,6 +401,24 @@
                 }
             }
         };
+
+        function showCacheError() {
+            if (progressContainer) progressContainer.style.display = 'none';
+            if (playPrompt) playPrompt.style.display = 'none';
+            if (statusElement) {
+                statusElement.innerHTML = '<div style="background: rgba(220, 40, 40, 0.2); border: 1px solid #f87171; border-radius: 6px; padding: 12px; margin-top: 8px;">' +
+                    '<div style="color: #fca5a5; font-weight: bold; margin-bottom: 6px;">Browser Cache Mismatch Detected</div>' +
+                    '<div style="font-size: 0.8rem; color: #cbd5e1; margin-bottom: 10px;">Chrome has cached an older version of the game scripts.</div>' +
+                    '<button onclick="location.href=\'/?clear_cache=\' + Date.now();" style="background:#22c55e;color:#fff;border:none;padding:8px 16px;border-radius:4px;cursor:pointer;font-weight:bold;font-size:0.85rem;">🔄 Clear Cache & Reload</button>' +
+                    '</div>';
+            }
+        }
+
+        window.addEventListener('error', function(e) {
+            if (e.message && (e.message.indexOf('null function') !== -1 || e.message.indexOf('RuntimeError') !== -1)) {
+                showCacheError();
+            }
+        });
 
         Module.setStatus('Downloading game data package...');
 

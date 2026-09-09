@@ -746,6 +746,9 @@ void Renderer::render_world(const ants::sim::WorldState& world,
     // 3. Layer 2 Structures / Interactive Objects
     render_terrain_layer2_structures(grid);
 
+    // 3.2 Flower Droppers (Swaying daisy on cliffs & falling powerup droplets)
+    render_flower_droppers(world);
+
     // 3.5 Anthill Selection Brackets (if a base is selected)
     if (selected_base_team_id >= 0) {
         int32_t base_sx = -1000, base_sy = -1000;
@@ -1072,6 +1075,62 @@ void Renderer::render_terrain_layer3_canopy() {
     }
 }
 
+void Renderer::render_flower_droppers(const ants::sim::WorldState& world) {
+    if (!archive_ || !texture_cache_) return;
+
+    for (const auto& fd : world.flower_droppers) {
+        // 1. Render swaying daisy flower plant at (fd.x * 32 + 16, fd.y * 32 + 16)
+        int32_t sx = 0, sy = 0;
+        if (camera_.world_to_screen(fd.x * TILE_SIZE + 16, fd.y * TILE_SIZE + 16, sx, sy)) {
+            const auto* anim = archive_->find_animation("dflower1");
+            if (!anim) anim = archive_->find_animation("flower1");
+            if (anim && !anim->subitems.empty()) {
+                // Cycle swaying frames based on anim_tick_ (~100ms per frame -> 6 ticks at 60Hz)
+                size_t sub_idx = (anim_tick_ / 6u) % anim->subitems.size();
+                const auto& sub = anim->subitems[sub_idx];
+                // Subitem layers in reverse order: backplate/shadow first, foreground last
+                for (int i = static_cast<int>(sub.frames.size()) - 1; i >= 0; --i) {
+                    const auto& f = sub.frames[static_cast<size_t>(i)];
+                    SDL_Texture* tex = texture_cache_->get_sprite_texture(f.sprite_index);
+                    if (!tex) continue;
+                    const auto& sp = archive_->get_sprite(f.sprite_index);
+                    SDL_Rect dst = { sx + f.dx, sy + f.dy, static_cast<int>(sp.width), static_cast<int>(sp.height) };
+                    SDL_RenderCopy(renderer_, tex, nullptr, &dst);
+                }
+            }
+        }
+
+        // 2. Render falling powerup droplet if dropping
+        if (fd.is_dropping) {
+            int32_t drop_sx = 0, drop_sy = 0;
+            if (camera_.world_to_screen(fd.drop_x * TILE_SIZE + 16, fd.drop_y * TILE_SIZE + 16, drop_sx, drop_sy)) {
+                const char* anim_name = "FD_COMB";
+                switch (fd.powerup_type) {
+                    case 0: anim_name = "FD_BOMB"; break;
+                    case 1: anim_name = "FD_COMB"; break;
+                    case 2: anim_name = "FD_THIEF"; break;
+                    case 3: anim_name = "FD_SWIM"; break;
+                    case 4: anim_name = "FD_FIRE"; break;
+                    default: break;
+                }
+                const auto* drop_anim = archive_->find_animation(anim_name);
+                if (drop_anim && !drop_anim->subitems.empty()) {
+                    size_t frame_idx = std::min<size_t>(fd.drop_frame, drop_anim->subitems.size() - 1);
+                    const auto& sub = drop_anim->subitems[frame_idx];
+                    for (int i = static_cast<int>(sub.frames.size()) - 1; i >= 0; --i) {
+                        const auto& f = sub.frames[static_cast<size_t>(i)];
+                        SDL_Texture* tex = texture_cache_->get_sprite_texture(f.sprite_index);
+                        if (!tex) continue;
+                        const auto& sp = archive_->get_sprite(f.sprite_index);
+                        SDL_Rect dst = { drop_sx + f.dx, drop_sy + f.dy, static_cast<int>(sp.width), static_cast<int>(sp.height) };
+                        SDL_RenderCopy(renderer_, tex, nullptr, &dst);
+                    }
+                }
+            }
+        }
+    }
+}
+
 void Renderer::render_visual_effects(const ants::sim::WorldState& world) {
     if (!archive_ || !texture_cache_) return;
     for (const auto& eff : world.effects) {
@@ -1280,21 +1339,26 @@ void Renderer::draw_single_ant(const ants::sim::AntSnapshot& ant, bool is_select
     if (ant.is_underground) return; // Fully underground inside base hole, do not draw
 
     if (is_entering_base) {
-        // Base entry animation for each ant type:
-        // Worker:  agen301 / hgen301
-        // Bomber:  aben301 / hben301
-        // Fire:    afen301 / hfen301
-        // Combat:  acen301 / hcen301
-        // Swimmer: asen301 / hsen301
-        // Thief:   aten301 / hten301
+        // Base entry and emerge/hatch animations:
+        // Entering (frames 0..7): agen301 / aben301 / afen301 / aten301 / acen301 / asen301
+        // Emerging (frames 8..15): aghatch / abhatch / afhatch / athatch / achatch / ashatch
         static const char* type_letters[6] = { "g", "b", "f", "t", "c", "s" };
         char type_ch = type_letters[static_cast<size_t>(ant.type) % 6][0];
-        bool carrying_food = (ant.is_holding || ant.had_food_at_base_entry);
-        std::string anim_name = (carrying_food ? std::string("h") : std::string("a")) + type_ch + "en301";
+        bool is_emerging = (ant.anim_frame >= 8);
+        bool carrying_food = (!is_emerging && (ant.is_holding || ant.had_food_at_base_entry));
+        std::string anim_name;
+        if (is_emerging) {
+            anim_name = std::string("a") + type_ch + "hatch";
+        } else {
+            anim_name = (carrying_food ? std::string("h") : std::string("a")) + type_ch + "en301";
+        }
         const auto* base_seq = archive_->find_animation(anim_name);
-        if (!base_seq) base_seq = archive_->find_animation(carrying_food ? "hgen301" : "agen301");
+        if (!base_seq) {
+            base_seq = archive_->find_animation(is_emerging ? "aghatch" : "agen301");
+        }
         if (base_seq && !base_seq->subitems.empty()) {
-            size_t sub_idx = std::min(static_cast<size_t>(ant.anim_frame), base_seq->subitems.size() - 1);
+            size_t frame_index = is_emerging ? static_cast<size_t>(ant.anim_frame - 8) : static_cast<size_t>(ant.anim_frame);
+            size_t sub_idx = std::min(frame_index, base_seq->subitems.size() - 1);
             const auto& sub = base_seq->subitems[sub_idx];
             auto frames = sub.frames;
             if (carrying_food && frames.size() > 1) {
@@ -1568,8 +1632,9 @@ void Renderer::draw_single_ant(const ants::sim::AntSnapshot& ant, bool is_select
         }
     }
 
-    // 4. Overhead Unit Health Bar (Framed bar with health-percentage coloring)
-    if ((is_selected || show_health_bar) && ant.hp > 0 && !ant.is_drowning) {
+    // 4. Overhead Unit Health Bar (Damaged ants < 10 HP or selected ants always show; full health hides unless show_health_bar / Ctrl+L is active)
+    bool should_show_health = (is_selected || show_health_bar || (ant.hp < 10)) && ant.hp > 0 && !ant.is_drowning;
+    if (should_show_health) {
         SDL_Rect bar_border = { sx - 13, render_y - 36, 26, 6 };
         SDL_SetRenderDrawColor(renderer_, 0, 0, 0, 255);
         SDL_RenderDrawRect(renderer_, &bar_border);

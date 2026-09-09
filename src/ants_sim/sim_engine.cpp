@@ -38,6 +38,16 @@ public:
     std::array<AnthillQueueState, MAX_PLAYERS> base_queues_{};
     std::vector<VisualEffect> active_effects_;
 
+    struct FlowerDropper {
+        TileCoord pos;
+        TileCoord drop_pos;
+        uint32_t timer_ticks{1800}; // 90s initial delay (1800 ticks at 20Hz)
+        bool is_dropping{false};
+        uint32_t drop_tick{0};
+        uint8_t powerup_type{0}; // 0: Bomber, 1: Combat, 2: Thief, 3: Swimmer, 4: Fire
+    };
+    std::vector<FlowerDropper> flower_droppers_;
+
     mutable WorldState world_state_cache_;
     mutable bool       world_state_dirty_{true};
     void spawn_death_effect(int32_t px, int32_t py) {
@@ -314,6 +324,25 @@ void SimulationEngine::init(const ants::assets::LevelData& level, uint32_t rando
     for (auto& bq : impl_->base_queues_) {
         bq.queue.clear();
         bq.active_depositing_ant_id = 0;
+    }
+
+    impl_->flower_droppers_.clear();
+    for (const auto& wp : level.waypoints) {
+        if (wp.flag == 1 && wp.param == 15) {
+            SimulationEngineImpl::FlowerDropper fd;
+            fd.pos = TileCoord{static_cast<int32_t>(wp.x), static_cast<int32_t>(wp.y)};
+            fd.drop_pos = TileCoord{static_cast<int32_t>(wp.x) + 1, static_cast<int32_t>(wp.y)};
+            fd.timer_ticks = 1800; // 90s initial delay
+            fd.is_dropping = false;
+            fd.drop_tick = 0;
+            fd.powerup_type = 0;
+            impl_->flower_droppers_.push_back(fd);
+        }
+    }
+    if (impl_->flower_droppers_.empty() && level.width == 40 && level.height == 40) {
+        // Authentic SMALL.LVL cliff flower droppers at (2, 19) and (37, 19)
+        impl_->flower_droppers_.push_back({TileCoord{2, 19}, TileCoord{3, 19}, 1800, false, 0, 0});
+        impl_->flower_droppers_.push_back({TileCoord{37, 19}, TileCoord{38, 19}, 1800, false, 0, 0});
     }
 
     impl_->invite_pending_ticks_.fill(0);
@@ -934,8 +963,6 @@ void SimulationEngine::tick() {
                         }
                     }
                 }
-            } else if (ant_ptr->state == UnitState::Idle && !ant_ptr->is_holding() && impl_->grid_.get_cell(ant_ptr->pos).has_food()) {
-                food_target = ant_ptr->pos;
             }
         }
         if (food_target.x >= 0) {
@@ -1132,7 +1159,10 @@ void SimulationEngine::tick() {
                 if (ant_ptr->base_dwell_ticks > 0) {
                     ant_ptr->base_dwell_ticks--;
                     if (ant_ptr->base_dwell_ticks == 0) {
-                        // Eating complete! Clear active depositing ant from queue so next ant moves
+                        // Eating complete! Ant starts emerging from the hole (*hatch animation)
+                        ant_ptr->underground = false;
+                        impl_->audio_queue_.push_back(AudioEvent{SoundID::ExitHill, ant_ptr->pixel_x, ant_ptr->pixel_y, 1, ant_ptr->player_id});
+                        // Clear active depositing ant from queue so next ant moves
                         auto& bq = impl_->base_queues_[ant_ptr->player_id];
                         if (bq.active_depositing_ant_id == ant_ptr->id) {
                             auto pos = std::find(bq.queue.begin(), bq.queue.end(), ant_ptr->id);
@@ -1684,6 +1714,61 @@ void SimulationEngine::tick() {
 
     // 6. Step Ballistic Physics
     impl_->physics_.tick(ptrs, impl_->grid_, impl_->audio_queue_, impl_->prng_);
+
+    // 7. Update Daisy Plant Power-Up Droppers
+    for (auto& fd : impl_->flower_droppers_) {
+        if (fd.is_dropping) {
+            fd.drop_tick++;
+            impl_->world_state_dirty_ = true;
+            if (fd.drop_tick == 2) {
+                // Sound 62: powerdrip.wav
+                impl_->audio_queue_.push_back(AudioEvent{SoundID::PowerUpDrop, fd.drop_pos.x * 32 + 16, fd.drop_pos.y * 32 + 16, 1, 255});
+            }
+            if (fd.drop_tick >= 16) {
+                // 9-frame drop animation complete (~820ms): place powerup tile on Layer 2
+                fd.is_dropping = false;
+                fd.drop_tick = 0;
+                fd.timer_ticks = 2400; // 120s respawn interval
+                if (impl_->grid_.in_bounds(fd.drop_pos)) {
+                    auto& cell = impl_->grid_.get_cell_mut(fd.drop_pos);
+                    uint16_t tile_id = PU_COMBAT;
+                    uint8_t p_type = 4; // Combat
+                    switch (fd.powerup_type) {
+                        case 0: tile_id = PU_BOMBER;  p_type = 1; break; // Bomber
+                        case 1: tile_id = PU_COMBAT;  p_type = 4; break; // Combat
+                        case 2: tile_id = PU_THIEF;   p_type = 3; break; // Thief
+                        case 3: tile_id = PU_SWIMMER; p_type = 5; break; // Swimmer
+                        case 4: tile_id = PU_FIRE;    p_type = 2; break; // Fire
+                        default: break;
+                    }
+                    cell.interactive_id = tile_id;
+                    cell.is_powerup = true;
+                    cell.powerup_type = p_type;
+                }
+            }
+        } else {
+            if (fd.timer_ticks > 0) {
+                fd.timer_ticks--;
+            }
+            if (fd.timer_ticks == 0) {
+                // Drop if target tile is not already occupied by an uncollected powerup
+                bool occupied = false;
+                if (impl_->grid_.in_bounds(fd.drop_pos)) {
+                    const auto& cell = impl_->grid_.get_cell(fd.drop_pos);
+                    if (cell.has_powerup()) {
+                        occupied = true;
+                    }
+                }
+                if (!occupied) {
+                    fd.is_dropping = true;
+                    fd.drop_tick = 0;
+                    fd.powerup_type = static_cast<uint8_t>(impl_->prng_.rand() % 5);
+                    impl_->world_state_dirty_ = true;
+                }
+            }
+        }
+    }
+    impl_->world_state_dirty_ = true;
 }
 
 void SimulationEngine::issue_order(const AntOrder& order) {
@@ -2040,6 +2125,19 @@ const WorldState& SimulationEngine::get_world_state() const {
         }
 
         impl_->world_state_cache_.effects = impl_->active_effects_;
+
+        impl_->world_state_cache_.flower_droppers.clear();
+        for (const auto& fd : impl_->flower_droppers_) {
+            FlowerDropperSnapshot s{};
+            s.x = fd.pos.x;
+            s.y = fd.pos.y;
+            s.drop_x = fd.drop_pos.x;
+            s.drop_y = fd.drop_pos.y;
+            s.is_dropping = fd.is_dropping;
+            s.drop_frame = static_cast<uint8_t>(std::min(8u, (fd.drop_tick * 9) / 16));
+            s.powerup_type = fd.powerup_type;
+            impl_->world_state_cache_.flower_droppers.push_back(s);
+        }
 
         for (uint8_t i = 0; i < MAX_PLAYERS; ++i) {
             impl_->world_state_cache_.player_stats[i] = impl_->stats_.get_player_stats(i);
