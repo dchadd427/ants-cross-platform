@@ -346,13 +346,12 @@ bool Renderer::init(SDL_Window* window,
         }
     }
 
+    // Nearest neighbor scaling ensures retro pixel art stays sharp and crisp when scaled
+    SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "nearest");
+
     integer_scale_ = integer_scale;
     SDL_RenderSetLogicalSize(renderer_, CANVAS_WIDTH, CANVAS_HEIGHT);
-    if (integer_scale_ && !is_fullscreen_) {
-        SDL_RenderSetIntegerScale(renderer_, SDL_TRUE);
-    } else {
-        SDL_RenderSetIntegerScale(renderer_, SDL_FALSE);
-    }
+    SDL_RenderSetIntegerScale(renderer_, (integer_scale_ && !is_fullscreen_) ? SDL_TRUE : SDL_FALSE);
 
     texture_cache_ = std::make_unique<TextureCache>(renderer_, archive);
     return true;
