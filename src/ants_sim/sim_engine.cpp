@@ -638,9 +638,14 @@ void SimulationEngine::tick() {
             bool at_tile_center = (ant_ptr->pixel_x == ant_ptr->pos.x * 32 + 16 &&
                                    ant_ptr->pixel_y == ant_ptr->pos.y * 32 + 16);
 
-            if (at_tile_center && impl_->is_tile_blocked_for_ant(*ant_ptr, next_wp)) {
+            bool is_swimmer = (ant_ptr->type == AntType::Swimmer);
+            bool is_fire_ant = (ant_ptr->type == AntType::Fire);
+            bool next_passable = impl_->grid_.in_bounds(next_wp) &&
+                                 impl_->grid_.get_cell(next_wp).is_passable(is_swimmer, is_fire_ant);
+
+            if (at_tile_center && (!next_passable || impl_->is_tile_blocked_for_ant(*ant_ptr, next_wp))) {
                 ant_ptr->blocked_ticks++;
-                if (ant_ptr->blocked_ticks >= 6) {
+                if (!next_passable || ant_ptr->blocked_ticks >= 6) {
                     if (next_wp == goal || ant_ptr->pos.chebyshev_dist(goal) <= 1) {
                         ant_ptr->clear_path();
                         ant_ptr->state = (ant_ptr->type == AntType::Combat) ? UnitState::GuardIdle : UnitState::Idle;
@@ -971,7 +976,7 @@ void SimulationEngine::tick() {
         // Autonomous Attack Execution / Pursuit
         if (ant_ptr->is_alive() && ant_ptr->attack_target_id != 0 && ant_ptr->state != UnitState::Stunned &&
             ant_ptr->state != UnitState::Knockback && ant_ptr->state != UnitState::Drowning &&
-            ant_ptr->state != UnitState::EnteringBase && !ant_ptr->underground) {
+            ant_ptr->state != UnitState::EnteringBase && ant_ptr->state != UnitState::CantGo && !ant_ptr->underground) {
             AntUnit* target = impl_->find_unit(ant_ptr->attack_target_id);
             if (!target || !target->is_alive() || target->underground || target->state == UnitState::EnteringBase ||
                 target->on_powerup || (target->type == AntType::Swimmer && target->in_water)) {
@@ -987,7 +992,7 @@ void SimulationEngine::tick() {
                     if (ant_ptr->attack_cooldown_ticks == 0) {
                         execute_melee_attack(ant_ptr->id, target->id);
                     }
-                } else if (ant_ptr->state == UnitState::Idle || ant_ptr->state == UnitState::GuardIdle || ant_ptr->waypoints.empty()) {
+                } else if (ant_ptr->state == UnitState::Idle || ant_ptr->state == UnitState::GuardIdle) {
                     TileCoord best_neighbor = target->pos;
                     int32_t best_dist = 999999;
                     for (int32_t dy = -1; dy <= 1; ++dy) {
@@ -1499,16 +1504,18 @@ void SimulationEngine::tick() {
                     } else {
                         // Repath around stationary a2
                         bool needs_repath = false;
-                        for (size_t wi = a1->current_waypoint_idx; wi < a1->waypoints.size(); ++wi) {
-                            if (a1->waypoints[wi] == a2->pos) {
+                        if (a1->state == UnitState::Walking && !a1->waypoints.empty()) {
+                            for (size_t wi = a1->current_waypoint_idx; wi < a1->waypoints.size(); ++wi) {
+                                if (a1->waypoints[wi] == a2->pos) {
+                                    needs_repath = true;
+                                    break;
+                                }
+                            }
+                            if (!needs_repath && a1->waypoints.size() <= 1) {
                                 needs_repath = true;
-                                break;
                             }
                         }
-                        if (!needs_repath && a1->waypoints.size() <= 1) {
-                            needs_repath = true;
-                        }
-                        if (needs_repath && dest != a1->pos) {
+                        if (needs_repath && dest != a1->pos && a1->state != UnitState::CantGo) {
                             issue_move_order(a1->id, dest);
                         }
                     }
@@ -1543,16 +1550,18 @@ void SimulationEngine::tick() {
                     } else {
                         // Repath around stationary a1
                         bool needs_repath = false;
-                        for (size_t wi = a2->current_waypoint_idx; wi < a2->waypoints.size(); ++wi) {
-                            if (a2->waypoints[wi] == a1->pos) {
+                        if (a2->state == UnitState::Walking && !a2->waypoints.empty()) {
+                            for (size_t wi = a2->current_waypoint_idx; wi < a2->waypoints.size(); ++wi) {
+                                if (a2->waypoints[wi] == a1->pos) {
+                                    needs_repath = true;
+                                    break;
+                                }
+                            }
+                            if (!needs_repath && a2->waypoints.size() <= 1) {
                                 needs_repath = true;
-                                break;
                             }
                         }
-                        if (!needs_repath && a2->waypoints.size() <= 1) {
-                            needs_repath = true;
-                        }
-                        if (needs_repath && dest != a2->pos) {
+                        if (needs_repath && dest != a2->pos && a2->state != UnitState::CantGo) {
                             issue_move_order(a2->id, dest);
                         }
                     }
@@ -2316,10 +2325,16 @@ void SimulationEngine::issue_move_order(uint32_t ant_id, TileCoord dest, bool al
         }
         unit->clear_path();
         unit->set_tile_pos(unit->pos.x, unit->pos.y);
+        unit->final_dest = unit->pos;
         unit->state = UnitState::CantGo;
         unit->facing = Direction::South;
         unit->anim_tick = 0;
         unit->anim_subitem = 0;
+        unit->blocked_ticks = 0;
+        unit->attack_target_id = 0;
+        unit->pending_ability = OrderType::None;
+        unit->ability_target = TileCoord{-1, -1};
+        unit->harvest_origin = TileCoord{-1, -1};
         impl_->audio_queue_.push_back(AudioEvent{SoundID::CantGo, unit->pixel_x, unit->pixel_y, 1, 255});
         return;
     } else if (dest != unit->pos) {
@@ -2493,10 +2508,16 @@ void SimulationEngine::issue_move_order(uint32_t ant_id, TileCoord dest, bool al
         }
         unit->clear_path();
         unit->set_tile_pos(unit->pos.x, unit->pos.y);
+        unit->final_dest = unit->pos;
         unit->state = UnitState::CantGo;
         unit->facing = Direction::South;
         unit->anim_tick = 0;
         unit->anim_subitem = 0;
+        unit->blocked_ticks = 0;
+        unit->attack_target_id = 0;
+        unit->pending_ability = OrderType::None;
+        unit->ability_target = TileCoord{-1, -1};
+        unit->harvest_origin = TileCoord{-1, -1};
         impl_->audio_queue_.push_back(AudioEvent{SoundID::CantGo, unit->pixel_x, unit->pixel_y, 1, 255});
     }
 }

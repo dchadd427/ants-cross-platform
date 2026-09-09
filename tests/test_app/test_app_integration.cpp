@@ -4933,6 +4933,60 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         }
         ASSERT_TRUE(recent_text.find("Now you are in for it all!") != std::string::npos);
     } TEST_END();
+
+    TEST_CASE("12.60 Bridge Expiry No-Spam CantGo and Movement Cancellation") {
+        SimulationEngine sim;
+        sim.init_test_world(60, 60, 1);
+
+        // Water channel at column 25 separating land at x=24 and island at x=26
+        for (int y = 0; y < 60; ++y) {
+            sim.set_terrain(25, y, TERRAIN_WATER);
+            sim.set_tile_flags(25, y, 0x06);
+        }
+
+        // Bridge at {25, 20}
+        sim.grid_mut().set_bridge_at(TileCoord{25, 20}, 4, 3600);
+        ASSERT_TRUE(sim.grid().get_cell(TileCoord{25, 20}).has_completed_bridge());
+
+        // Spawn a Worker ant at {20, 20} and order to island {30, 20}
+        uint32_t w_id = sim.spawn_unit(0, AntType::Worker, TileCoord{20, 20});
+        sim.issue_move_order(w_id, TileCoord{30, 20});
+        ASSERT_EQ(sim.get_unit(w_id).state, UnitState::Walking);
+        ASSERT_FALSE(sim.get_unit(w_id).waypoints.empty());
+
+        // Advance 5 ticks: ant moves towards bridge
+        for (int i = 0; i < 5; ++i) sim.tick();
+        ASSERT_EQ(sim.get_unit(w_id).state, UnitState::Walking);
+
+        // Collapse the bridge
+        sim.grid_mut().collapse_bridge(25, 20);
+        ASSERT_FALSE(sim.grid().get_cell(TileCoord{25, 20}).has_completed_bridge());
+
+        // Clear audio events
+        sim.clear_audio_events();
+
+        // Advance simulation: ant approaches water edge, triggers CantGo ONCE and cancels movement
+        uint32_t cant_go_audio_count = 0;
+        for (int i = 0; i < 40; ++i) {
+            sim.tick();
+            auto events = sim.poll_audio_events();
+            for (const auto& ev : events) {
+                if (ev.sound_id == SoundID::CantGo) {
+                    cant_go_audio_count++;
+                }
+            }
+        }
+
+        // Must play CantGo audio event EXACTLY ONCE (no repeated spamming!)
+        ASSERT_EQ(cant_go_audio_count, 1u);
+
+        // Movement must be completely cancelled: ant is now Idle, not drowned, waypoints empty
+        const auto& w_ant = sim.get_unit(w_id);
+        ASSERT_TRUE(w_ant.state == UnitState::Idle || w_ant.state == UnitState::GuardIdle);
+        ASSERT_TRUE(w_ant.waypoints.empty());
+        ASSERT_EQ(w_ant.final_dest, w_ant.pos);
+        ASSERT_NE(w_ant.state, UnitState::Drowning);
+    } TEST_END();
 }
 
 

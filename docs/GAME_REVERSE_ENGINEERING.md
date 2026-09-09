@@ -827,20 +827,48 @@ Score boxes are NOT filled with bright ant unit colors; instead, `Ants.exe` spec
 The host/client game setup screen (`st_screen`) presents map selection and player readiness:
 - **"Pick a Map" Box Geometry (`w_map.bmp` at `x=27, y=302, w=195, h=39`):**
   - Inner Cavity Bounds: `[left=31, right=218, top=307, bottom=339]` (`height = 33px`).
-  - Text Vertical Centering Formula: `name_y = 307 + (33 - font_height) / 2`.
-  - For standard 14px small font: `name_y = 316` (symmetric 13px top and bottom margin to the inner bezel).
+  - Text Vertical Centering: Rendered using `FontSize::Medium` (22pt) positioned at `name_y = 309` to account for font ascent and glyph bounding box within the `y=307..335` cavity (6px top, 7px bottom margin).
 - **"Map Info" Description Box Geometry (`efram` bezel at `x=27, y=373, w=308, h=38`):**
   - Inner Cavity Bounds: `[left=31, right=331, top=377, bottom=405]` (`height = 29px`).
   - Text Vertical Centering Formula: `info_y = 377 + (29 - font_height) / 2`.
-  - For standard 14px small font: `info_y = 384` (symmetric 10px top and bottom margin to the inner bezel).
-- **Player Status Standing Ant Animation (`agst201`):**
-  - Standing worker ant facing south (Animation ID 815, `agst201`) consists of 13 subitems cycling through `agst201.bmp` .. `agst207.bmp`:
-    - Frames 0..7: 150ms per frame
-    - Frames 8..9: 75ms per frame
-    - Frames 10..12: 150ms per frame
+  - For standard 14px small font: `info_y = 381` (accounting for 4px font ascent baseline offset).
+- **Player Status Standing Ant Direction & Animation (`agst301`):**
+  - In the 1998 CHD sprite encoding, Heading 3 (`agst301`, Animation ID 811) is the authentic symmetric front-facing **South** animation, whereas Heading 2 (`agst201`, Animation ID 815) is diagonal **South-East**:
+    - Frames 0..7: 150ms per frame (`agst301.bmp` .. `agst306.bmp`)
+    - Frames 8..9: 75ms per frame (`agst307.bmp`, `agst303.bmp`)
+    - Frames 10..11: 150ms per frame (`agst304.bmp`, `agst306.bmp`)
     - Total cycle duration: 1800ms.
   - Team Color Swap: Ant body accents and team indicators use palette indices 80..99, dynamically tinted to match the player's team slot.
-  - Base Anchor: Positioned at `(396, 124)` with frame-relative `dx, dy` offsets applied, ensuring the ant's feet anchor remains rock-solid while antennae and head bobble naturally.
+  - Base Anchor: Positioned at `(396, 124)` with frame-relative `dx, dy` offsets applied.
+
+---
+
+### 5.17 Bridge Collapse, Movement Cancellation & CantGo Logic
+
+When a bridge tile collapses or is demolished while an ant is traversing towards an island or destination that now has no valid path:
+- **Instant Path Obstruction Detection:** When an ant arrives at tile center and the next waypoint is impassable water (`!is_passable`), the ant immediately stops traversal.
+- **Single CantGo Event & Movement Cancellation:**
+  - `find_path` returns empty because no path across water exists.
+  - The ant triggers `UnitState::CantGo` and Sound ID 63 (`cantgo.wav`) **exactly once**.
+  - Movement is cancelled cleanly: `final_dest` is reset to `unit->pos`, waypoints are cleared, and `blocked_ticks` is reset.
+  - Autonomous attack targets (`attack_target_id`), pending abilities, and harvest origins are cleared to prevent infinite repathing spam loops.
+  - Collision repathing is guarded against units in `UnitState::CantGo` or non-walking units.
+  - When `CantGo` animation (6 ticks) completes, the ant cleanly transitions to `Idle` (or `GuardIdle`) on the shore.
+
+---
+
+### 5.18 Swimmer Ant Aquatic Carrying Animation Fallback
+
+In `ants.chd`, standard terrestrial ant classes have dual animation sets: normal (`ag*`, `ab*`, `af*`, `ac*`, `at*`) and food-carrying (`hg*`, `hb*`, `hf*`, `hc*`, `ht*`). However, the Swimmer ant (`as`) does NOT possess dedicated food-carrying aquatic animations (`hssw*` or `hstw*`) in the 1998 archive.
+- When swimming in water (`is_swimming == true`), Swimmer ants default back to the normal swimming animation (`assw*` for swimming locomotion, `astw*` for stationary treading water/snorkeling) even when `is_holding == true`.
+- This prevents missing sprite fallbacks or invalid animation lookups while ensuring authentic fluid swimming visuals during water transit.
+
+---
+
+### 5.19 HUD Status Text Typography & High-Contrast Styling
+
+- The status label `wstatus.bmp` (160×13) features a pale seafoam / mint green recessed cavity `(115, 191, 155)`.
+- To ensure optimal legibility and contrast against this pale background, status text is rendered in deep dark green-black `{16, 40, 24, 255}`, completely eliminating washed-out low-contrast text.
 
 ---
 
