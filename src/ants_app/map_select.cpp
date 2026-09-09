@@ -250,10 +250,13 @@ void MapSelectScreen::render(IRenderer& renderer, const ants::assets::AssetArchi
     const char* leave_spr = btn_quit_pressed_ ? "bleave3.bmp" : (btn_quit_hovered_ ? "bleave2.bmp" : "bleave1.bmp");
     renderer.draw_named_sprite(leave_spr, BTN_QUIT_X, BTN_QUIT_Y);
 
+    int32_t th = renderer.get_text_height(FontSize::Small);
+
     // 3. Current Map Name inside Pick a Map box
     if (selected_index_ >= 0 && selected_index_ < static_cast<int32_t>(maps_.size())) {
         const auto& cur = maps_[static_cast<size_t>(selected_index_)];
-        renderer.draw_text(cur.display_name, 38, 318, ColorRGBA{255, 255, 255, 255});
+        int32_t name_y = 303 + (44 - th) / 2;
+        renderer.draw_text(cur.display_name, 38, name_y, ColorRGBA{255, 255, 255, 255}, FontSize::Small);
     }
 
     // Up/Down Stepper Buttons at (226, 303) and (226, 327)
@@ -266,18 +269,20 @@ void MapSelectScreen::render(IRenderer& renderer, const ants::assets::AssetArchi
     if (selected_index_ >= 0 && selected_index_ < static_cast<int32_t>(maps_.size())) {
         const auto& cur = maps_[static_cast<size_t>(selected_index_)];
         std::string info_text = cur.description + " (" + std::to_string(cur.minutes) + " min)";
-        renderer.draw_text(info_text, 38, 388, ColorRGBA{255, 255, 255, 255});
+        renderer.draw_text(info_text, 38, 388, ColorRGBA{255, 255, 255, 255}, FontSize::Small);
     }
 
     // 5. Status line: authentic prompt text (vertically centered in statline box at y=445..464)
-    renderer.draw_text("Press START when all players' thumbs have appeared.", 38, 451, ColorRGBA{255, 255, 255, 255});
+    int32_t stat_y = 445 + (19 - th) / 2;
+    renderer.draw_text("Press START when all players' thumbs have appeared.", 38, stat_y, ColorRGBA{255, 255, 255, 255}, FontSize::Small);
 
     // 6. Players' Status (Only connected players shown, vertically centered with thumb icon)
     std::string display_user = player_name_.empty() ? "Player" : player_name_;
     renderer.set_hud_team(0); // Team 0 = Green
     renderer.draw_named_sprite("agst301.bmp", 385, 95);
     renderer.set_hud_team(0);
-    renderer.draw_text(display_user, 415, 110, ColorRGBA{255, 255, 255, 255});
+    int32_t player_y = 101 + (24 - th) / 2;
+    renderer.draw_text(display_user, 415, player_y, ColorRGBA{255, 255, 255, 255}, FontSize::Small);
     renderer.draw_named_sprite("thumb1.bmp", 540, 101);
 
     // 7. Fog of War On/Off Buttons using authentic sprites

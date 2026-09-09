@@ -1437,7 +1437,7 @@ void run_suite_9_gameplay_mechanics_and_options() {
         app.handle_key_down(key_ev);
         ASSERT_FALSE(hud.is_chat_focused());
         ASSERT_TRUE(hud.get_chat_input().empty());
-        ASSERT_EQ(played_sound, ants::sim::SoundID::ChatSend);
+        ASSERT_EQ(played_sound, 0u); // Chat sound effect disabled per user request
 
         // Verify message in chat log (wrapped across lines)
         const auto& log = hud.get_chat_log();
@@ -4645,6 +4645,7 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         // Verify non-empty text width is positive
         int32_t small_w = renderer.get_text_width("that food!", ants::app::FontSize::Small);
         ASSERT_TRUE(small_w > 0);
+        ASSERT_TRUE(renderer.get_text_height(ants::app::FontSize::Small) > 0);
 
         // Verify proportional width scales monotonically with string length
         int32_t longer_w = renderer.get_text_width("that food! And extra text for width check.", ants::app::FontSize::Small);

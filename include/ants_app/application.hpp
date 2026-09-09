@@ -52,6 +52,7 @@ struct ApplicationConfig {
     int select_base_team{-1};
     bool open_options{false};
     bool show_tile_grid{false};
+    bool show_scorecard{false};
 };
 
 /**

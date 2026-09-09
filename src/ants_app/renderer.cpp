@@ -376,9 +376,9 @@ bool Renderer::init(SDL_Window* window,
             FILE* f = std::fopen(path.c_str(), "rb");
             if (f) {
                 std::fclose(f);
-                font_small_ = TTF_OpenFont(path.c_str(), 24);
-                font_medium_ = TTF_OpenFont(path.c_str(), 28);
-                font_large_ = TTF_OpenFont(path.c_str(), 36);
+                font_small_ = TTF_OpenFont(path.c_str(), 18);
+                font_medium_ = TTF_OpenFont(path.c_str(), 22);
+                font_large_ = TTF_OpenFont(path.c_str(), 26);
                 if (font_small_) {
                     std::cout << "[Renderer] High-quality TrueType font loaded: " << path << std::endl;
                     break;
@@ -1844,6 +1844,24 @@ int32_t Renderer::get_text_width(const std::string& text, FontSize size) const {
     (void)size;
 #endif
     return static_cast<int32_t>(text.size()) * 6;
+}
+
+int32_t Renderer::get_text_height(FontSize size) const {
+#ifdef ANTS_ENABLE_SDL_TTF
+    TTF_Font* font = font_small_;
+    if (size == FontSize::Medium && font_medium_) {
+        font = font_medium_;
+    } else if (size == FontSize::Large && font_large_) {
+        font = font_large_;
+    }
+    if (font) {
+        int h = TTF_FontHeight(font);
+        return (h + 1) / 2;
+    }
+#else
+    (void)size;
+#endif
+    return 7;
 }
 
 bool Renderer::save_screenshot(const std::string& path) {
