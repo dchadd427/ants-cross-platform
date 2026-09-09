@@ -7,6 +7,3 @@ services:
     restart: unless-stopped
     ports:
       - "${ANTS_PORT:-19980}:80"
-    environment:
-      - VIRTUAL_HOST=beta.playants.org
-      - LETSENCRYPT_HOST=beta.playants.org
