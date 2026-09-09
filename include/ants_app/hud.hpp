@@ -138,6 +138,7 @@ public:
     void handle_text_input(const std::string& text);
     void send_chat_message();
     void add_chat_entry(const std::string& sender, const std::string& message, bool team_only = false);
+    void trigger_quick_chat(size_t index);
     const std::deque<std::string>& get_chat_log() const noexcept { return chat_log_; }
     void scroll_chat_up(int32_t lines = 1) noexcept;
     void scroll_chat_down(int32_t lines = 1) noexcept;
@@ -203,7 +204,7 @@ public:
     bool is_quick_help_open() const noexcept { return show_quick_help_; }
 
     void open_options() noexcept { show_options_ = true; }
-    void close_options() noexcept { show_options_ = false; }
+    void close_options() noexcept { show_options_ = false; active_quick_chat_edit_ = -1; }
     bool is_options_open() const noexcept { return show_options_; }
 
     void set_on_sfx_volume(std::function<void(float)> cb) { on_sfx_volume_ = std::move(cb); }
@@ -217,6 +218,16 @@ public:
     float get_scroll_rate() const noexcept { return scroll_rate_; }
     bool is_chat_enabled() const noexcept { return chat_enabled_; }
     bool is_quick_help_enabled() const noexcept { return quick_help_enabled_; }
+
+    const std::string& get_quick_chat_key(size_t index) const {
+        static const std::string empty;
+        return (index < 4) ? quick_chat_keys_[index] : empty;
+    }
+    void set_quick_chat_key(size_t index, std::string text) {
+        if (index < 4) quick_chat_keys_[index] = std::move(text);
+    }
+    int get_active_quick_chat_edit() const noexcept { return active_quick_chat_edit_; }
+    void set_active_quick_chat_edit(int idx) noexcept { active_quick_chat_edit_ = idx; }
 
 private:
     void render_top_bar(IRenderer& renderer, const assets::AssetArchive& assets, const sim::WorldState& world);
@@ -300,11 +311,12 @@ private:
     bool opt_ok_button_pressed_{false};
     bool opt_return_button_pressed_{false};
     std::string quick_chat_keys_[4]{
-        "Now you are in for it!$_",
+        "Now you are in for it!",
         "Let me be!",
         "Attack!",
         "Do you want to ally?"
     };
+    int active_quick_chat_edit_{-1};
     int active_slider_dragging_{-1}; // -1 none, 0 sfx, 1 music, 2 scroll
     uint32_t voice_variant_{0};
     std::function<void(float)> on_sfx_volume_{nullptr};

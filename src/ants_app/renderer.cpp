@@ -1284,6 +1284,25 @@ void Renderer::draw_single_ant(const ants::sim::AntSnapshot& ant, bool is_select
                 if (sub_idx >= seq->subitems.size()) {
                     sub_idx = seq->subitems.size() - 1;
                 }
+            } else if (action == "sf") {
+                // Placing fire lasts 35 ticks (1760ms); map ticks authentically across the 22 subitems
+                // Subitems 0..6 (aiming glass, 7 frames @ 100ms = 700ms -> ticks 0..13)
+                // Subitems 7..17 (spark/flash/erupt, 11 frames @ 60ms = 660ms -> ticks 14..26)
+                // Subitems 18..21 (put away glass, 4 frames @ 100ms = 400ms -> ticks 27..34)
+                if (seq->subitems.size() == 22) {
+                    if (ant.anim_frame < 14) {
+                        sub_idx = (ant.anim_frame * 7) / 14;
+                    } else if (ant.anim_frame < 27) {
+                        sub_idx = 7 + ((ant.anim_frame - 14) * 11) / 13;
+                    } else {
+                        sub_idx = 18 + ((ant.anim_frame - 27) * 4) / 8;
+                    }
+                } else {
+                    sub_idx = (ant.anim_frame * seq->subitems.size()) / 35;
+                }
+                if (sub_idx >= seq->subitems.size()) {
+                    sub_idx = seq->subitems.size() - 1;
+                }
             } else {
                 sub_idx = ant.anim_frame % seq->subitems.size();
             }

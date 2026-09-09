@@ -247,6 +247,10 @@ void AntUnit::tick_timers() noexcept {
         attack_cooldown_ticks--;
     }
 
+    if (ability_cooldown_ticks > 0) {
+        ability_cooldown_ticks--;
+    }
+
     if (stun_ticks_remaining > 0) {
         stun_ticks_remaining--;
         if (stun_ticks_remaining == 0 && state == UnitState::Stunned) {

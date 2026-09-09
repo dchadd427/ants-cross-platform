@@ -441,12 +441,14 @@ Both temporary field structures created by specialized ants have strictly revers
 Every special ability and combat interaction in *Ants* is governed by dedicated multi-stage animation sequences in `ants.chd` and synchronized with sound effects via subitem audio triggers (`default_sp`).
 
 #### 1. Fire Ant (`af`): Magnifying Glass Ignition & Extinguishing
-- **Set Fire (`afsf301`, `afsf701`, `afsf901` - 22 Subitems / 32 Frames):**
-  - **Phase 1 (Subitems 0–3):** Fire Ant pulls out a handheld magnifying glass (`afsf301..304.bmp`) and positions it downward towards the ground.
-  - **Phase 2 (Subitems 4–7):** A focused sunbeam appears (`9botsf1..4.bmp`) through the lens onto the ground tile. At Subitem 5, sound trigger **67 (`firestarta.wav`)** fires.
-  - **Phase 3 (Subitems 8–16):** Smoke begins billowing from the focal point (`9smoke1..9.bmp` + `9botsf5..6.bmp`) while the ant holds the focus steady.
-  - **Phase 4 (Subitem 17):** Flames erupt (`9smoke10.bmp` + `9sf01.bmp`), triggering sound **68 (`firestartb.wav`)**.
-  - **Phase 5 (Subitems 18–21):** Wall of fire is fully ignited (`9fire01..04.bmp` + `9sf02..05.bmp`), the ant lowers the magnifying glass, and `wallup04` (Layer 2 tile 134) becomes active with its 180-second countdown timer.
+- **Set Fire (`afsf301`, `afsf701`, `afsf901` - 22 Subitems / 35 Simulation Ticks / 1,760ms):**
+  - **Full Authentic Duration (1,760ms / 35 Ticks @ 20Hz):**
+    - Subitems 0–6 run at 100ms each (700ms -> ticks 0..13): Fire Ant pulls out a handheld magnifying glass (`afsf301..304.bmp`) and positions it downward toward the ground. At tick 10 (subitem 5), sound trigger **67 (`firestarta.wav`)** fires as the focused sunbeam appears (`9botsf1..4.bmp`).
+    - Subitems 7–17 run at 60ms each (660ms -> ticks 14..26): Smoke and spark billow from the focal point (`9smoke1..9.bmp` + `9botsf5..6.bmp`).
+    - At tick 27 (1,360ms), flame erupts (`9smoke10.bmp` + `9sf01.bmp`), triggering sound **68 (`firestartb.wav`)** and placing the persistent firewall on the grid.
+    - Subitems 18–21 run at 100ms each (400ms -> ticks 27..34): Fire Ant puts away the magnifying glass and returns upright.
+  - **Ability Cooldown:**
+    - Verified from `Ants.exe` VA `0x101ba24` (`push 0x7d0; call 0x101c184`): Exactly **2,000ms (40 simulation ticks / 2.0s)** cooldown before the ability can be activated again.
 - **Extinguish Fire (`afxf301`, `afxf701`, `afxf901` - 12 Subitems / 12 Frames):**
   - Fire Ant advances to the flame tile (`afxf301..304.bmp`).
   - At Subitem 4, fires sound **69 (`fireextinguish.wav`)** as the ant smothers the flame (`afxf305.bmp`).
@@ -460,6 +462,8 @@ Every special ability and combat interaction in *Ants* is governed by dedicated 
     - **Phase 2 (Subitem 9 / Tick 14):** Reaches into equipment pack and pulls out the bomb, firing sound **90 (`bombpick.wav`)**.
     - **Phase 3 (Subitems 10–14 / Ticks 15–23):** Plants the bomb (`2bomb.bmp` / `blackbomb`..`bluebomb`) on the ground tile (appearing at subitem 11 / tick 18) and arms the fuse.
     - **Phase 4 (Subitems 15–16 / Ticks 24–27):** Steps backwards away from the live mine and returns to upright stance.
+  - **Ability Cooldown:**
+    - Verified from `Ants.exe` VA `0x101bdd1` (`push 0xbb8; call 0x101c184`): Exactly **3,000ms (60 simulation ticks / 3.0s)** cooldown before the ability can be activated again.
 - **Crush / Neutralize Bomb (`abdb301`, `abdb701`, `abdb901` - 12 Subitems / 15 Frames):**
   - **Phase 1 (Subitems 0–2):** Approaches and leans forward over the active mine (`abdb301..303.bmp`).
   - **Phase 2 (Subitem 3):** Grabs and pins down the bomb casing, firing sound **73 (`bombdrop.wav`)**.
@@ -482,6 +486,7 @@ Every special ability and combat interaction in *Ants* is governed by dedicated 
 - **Build Bridge on Land (`asbbl301` - 8 Subitems / 11 Frames):**
   - Shovels gravel and dirt (`asdm301..308.bmp` + `9md301..304.bmp`), triggering sound **81 (`shovelgravel.wav`)**.
 - **Dismantle Bridge (`asdbw301`, `asdbl301` - 8 Subitems):** Shovels away existing bridge structure.
+- **Bridge Demolition & Collapse Instant Drowning Invariant:** When a bridge is dismantled or regresses below full completion (`has_completed_bridge() == false`), or collapses upon expiration, all non-swimming ants on that water tile immediately plunge into the deep water and drown (`start_drowning()`, playing sounds 71 `splash.wav` and 72 `drown.wav`). Their carried food/inventory is lost and friendly casualty statistics increment immediately. Swimmer ants transition safely into the swimming state (`UnitState::Swimming`).
 - **Water Traversal Suite:**
   - **Dive In (`asdi*`):** Plunges into deep water, triggering sound **71 (`splash.wav`)**.
   - **Swimming (`assw*`):** 5-directional swimming stroke cycles with surface ripples.

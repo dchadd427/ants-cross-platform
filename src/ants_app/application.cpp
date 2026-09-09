@@ -439,6 +439,11 @@ void Application::handle_events() {
         }
 
         if (event.type == SDL_WINDOWEVENT) {
+            if (event.window.event == SDL_WINDOWEVENT_FOCUS_LOST ||
+                event.window.event == SDL_WINDOWEVENT_MINIMIZED ||
+                event.window.event == SDL_WINDOWEVENT_HIDDEN) {
+                hud_.unfocus_chat();
+            }
             if (event.window.event == SDL_WINDOWEVENT_SIZE_CHANGED ||
                 event.window.event == SDL_WINDOWEVENT_RESIZED ||
                 event.window.event == SDL_WINDOWEVENT_MAXIMIZED ||
@@ -452,9 +457,9 @@ void Application::handle_events() {
             }
         }
 
-        // Global Fullscreen hotkeys: F11, Alt+Enter, or Cmd+F
+        // Global Fullscreen hotkeys: F11 (outside gameplay), Alt+Enter, or Cmd+F
         if (event.type == SDL_KEYDOWN) {
-            bool is_f11 = (event.key.keysym.sym == SDLK_F11);
+            bool is_f11 = (event.key.keysym.sym == SDLK_F11 && state_ != AppState::Playing);
             bool is_alt_enter = ((event.key.keysym.mod & KMOD_ALT) != 0 &&
                                  (event.key.keysym.sym == SDLK_RETURN || event.key.keysym.sym == SDLK_KP_ENTER));
             bool is_cmd_f = ((event.key.keysym.mod & KMOD_GUI) != 0 &&
@@ -569,10 +574,15 @@ void Application::handle_key_down(const SDL_KeyboardEvent& key) {
         return;
     }
 
-    // 1. If chat input is currently focused, route control keys to chat
-    if (hud_.is_chat_focused()) {
+    bool ctrl_or_gui = (key.keysym.mod & KMOD_CTRL) || (key.keysym.mod & KMOD_GUI);
+
+    // 1. If chat input is currently focused AND user is not holding Ctrl/Cmd:
+    // Route control keys to chat. If Ctrl or Cmd is held, user wants to issue a command!
+    if (!ctrl_or_gui && hud_.is_chat_focused()) {
         if (key.keysym.sym == SDLK_RETURN || key.keysym.sym == SDLK_KP_ENTER ||
-            key.keysym.sym == SDLK_ESCAPE || key.keysym.sym == SDLK_BACKSPACE) {
+            key.keysym.sym == SDLK_ESCAPE || key.keysym.sym == SDLK_BACKSPACE ||
+            key.keysym.sym == SDLK_PAGEUP || key.keysym.sym == SDLK_PAGEDOWN ||
+            key.keysym.sym == SDLK_UP || key.keysym.sym == SDLK_DOWN) {
             hud_.handle_key_down(key.keysym.sym, sim_, renderer_->camera(), key.keysym.mod);
         }
         return;
@@ -584,17 +594,31 @@ void Application::handle_key_down(const SDL_KeyboardEvent& key) {
         return;
     }
 
-    bool ctrl_or_gui = (key.keysym.mod & KMOD_CTRL) || (key.keysym.mod & KMOD_GUI);
-
-    // 4. Screenshots: F12
+    // 3. Quick Chat Broadcast keys F9..F12
+    if (key.keysym.sym == SDLK_F9) {
+        hud_.trigger_quick_chat(0);
+        return;
+    }
+    if (key.keysym.sym == SDLK_F10) {
+        hud_.trigger_quick_chat(1);
+        return;
+    }
+    if (key.keysym.sym == SDLK_F11) {
+        hud_.trigger_quick_chat(2);
+        return;
+    }
     if (key.keysym.sym == SDLK_F12) {
-        renderer_->save_screenshot("screenshot.png");
-        hud_.queue_news_message("Screenshot saved to screenshot.png", 60, false);
+        if ((key.keysym.mod & KMOD_SHIFT) || ctrl_or_gui) {
+            renderer_->save_screenshot("screenshot.png");
+            hud_.queue_news_message("Screenshot saved to screenshot.png", 60, false);
+        } else {
+            hud_.trigger_quick_chat(3);
+        }
         return;
     }
 
-    // 5. Tile Grid Display Toggle: Ctrl+T, Cmd+T, F3, or F10 (F3 and F10 are function keys, but T strictly requires Ctrl/Cmd!)
-    if ((key.keysym.sym == SDLK_t && ctrl_or_gui) || key.keysym.sym == SDLK_F3 || key.keysym.sym == SDLK_F10) {
+    // 4. Tile Grid Display Toggle: Ctrl+T, Cmd+T, or F3 (F3 is function key, T strictly requires Ctrl/Cmd!)
+    if ((key.keysym.sym == SDLK_t && ctrl_or_gui) || key.keysym.sym == SDLK_F3) {
         show_tile_grid_ = !show_tile_grid_;
         hud_.queue_news_message(show_tile_grid_ ? "Tile Grid: ON" : "Tile Grid: OFF", 60, false);
         return;
@@ -703,6 +727,12 @@ void Application::handle_mouse_button(const SDL_MouseButtonEvent& button) {
             scorecard_.handle_mouse_up(button.x, button.y);
         }
         return;
+    }
+
+    if (button.type == SDL_MOUSEBUTTONDOWN) {
+        if (hud_.is_chat_focused() && !(button.x >= 479 && button.x < (479 + 143) && button.y >= 423 && button.y < (423 + 14))) {
+            hud_.unfocus_chat();
+        }
     }
 
     uint16_t mod = static_cast<uint16_t>(SDL_GetModState());
