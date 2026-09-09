@@ -38,7 +38,7 @@ struct ApplicationConfig {
     int window_width{1280};  // Default 2x integer scale
     int window_height{960};
     bool fullscreen{false};
-    bool integer_scaling{true};
+    bool integer_scaling{false};
     bool vsync{true};
     bool headless{false};
     std::string chd_path{"Original-Ants/ants.chd"};

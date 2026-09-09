@@ -420,10 +420,13 @@ void Application::handle_events() {
 
         if (event.type == SDL_WINDOWEVENT) {
             if (event.window.event == SDL_WINDOWEVENT_SIZE_CHANGED ||
-                event.window.event == SDL_WINDOWEVENT_RESIZED) {
+                event.window.event == SDL_WINDOWEVENT_RESIZED ||
+                event.window.event == SDL_WINDOWEVENT_MAXIMIZED ||
+                event.window.event == SDL_WINDOWEVENT_RESTORED) {
                 if (renderer_ && window_) {
                     uint32_t flags = SDL_GetWindowFlags(window_);
-                    bool is_fs = (flags & (SDL_WINDOW_FULLSCREEN | SDL_WINDOW_FULLSCREEN_DESKTOP)) != 0;
+                    bool is_fs = (flags & (SDL_WINDOW_FULLSCREEN | SDL_WINDOW_FULLSCREEN_DESKTOP | SDL_WINDOW_MAXIMIZED)) != 0;
+                    config_.fullscreen = (flags & (SDL_WINDOW_FULLSCREEN | SDL_WINDOW_FULLSCREEN_DESKTOP)) != 0;
                     renderer_->set_fullscreen(is_fs);
                 }
             }
