@@ -196,6 +196,7 @@ public:
     void dispatch_move_order(int32_t target_tile_x, int32_t target_tile_y, sim::SimulationEngine& sim, bool allow_friendly_bomb = false);
     void dispatch_attack_order(uint32_t target_enemy_id, sim::SimulationEngine& sim);
     void dispatch_smart_special_ability(int32_t world_x, int32_t world_y, sim::SimulationEngine& sim, bool shift_held = false);
+    void dispatch_move_to_unit_neighbor(int32_t target_tile_x, int32_t target_tile_y, sim::SimulationEngine& sim);
 
     // Local player identity
     uint8_t get_local_player_id() const noexcept { return local_player_id_; }

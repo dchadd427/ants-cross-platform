@@ -914,6 +914,31 @@ Through Capstone disassembly of `Original-Ants/Ants.exe` and inspection of `Orig
 
 ---
 
+### 5.21 Closest Passable Water Shoreline Fallback & Pathfinding Heuristics
+
+In the authentic 1998 executable, issuing a move order for a terrestrial (non-swimmer) unit onto water or an impassable obstacle does not immediately abort with `CantGo` (Sound 63).
+- **Shoreline Edge Fallback:** A* pathfinding tracks the explored node with the minimum heuristic distance to the requested goal (`best_node`). When the target is impassable or unreachable (e.g. deep water, isolated terrain across lakes, rock barriers), the engine reconstructs the path to `best_node`. The unit marches to the water's edge / shoreline and halts cleanly.
+- **Immediate Rejection Invariant:** If the unit is already positioned at `best_node` (i.e. `final_target == start`), no closer step is possible; the engine immediately transitions to `UnitState::CantGo` and plays Sound 63.
+- **Dynamic Obstacle Distinction:** When paths are blocked by dynamic unit obstacles (such as ants queuing at an anthill base entrance), the engine falls back to retrying without dynamic obstacles before reverting to shoreline truncation.
+
+---
+
+### 5.22 Allied Unit Walk-Over Movement & Interaction Semantics
+
+- **Cursor Evaluation:** When friendly units are selected, hovering over an allied teammate ant displays `CursorType::Move` (`c_mov1`), distinguishing allies from enemies which display `CursorType::Attack` (`c_attack`). Hovering in explicit force-attack mode displays `CursorType::Cant`.
+- **Walk-Over Movement:** Left-clicking or right-clicking on an allied ant does not trigger `AntStop` or attack logic. Instead, the engine spawns a ground confirmation marker (`xmarks`) and dispatches movement to the closest accessible Chebyshev neighbor tile ($\max(|dx|, |dy|) = 1$) surrounding the ally, stopping cleanly upon arrival.
+
+---
+
+### 5.23 Game Setup Map Selection Box Geometry & Centering
+
+- **Cavity Geometry:** The map name box `w_map.bmp` (195×39, rendered at $X=27, Y=302$) contains an inner black recessed cavity bounded vertically between $Y=307$ and $Y=335$ (height = 29px).
+- **Typography & Centering:** Authentic setup screen typography renders the map title with `FontSize::Large` dynamically centered within the 29px cavity:
+  $$\text{name\_y} = 307 + \frac{29 - \text{th}_{\text{map}}}{2}$$
+  With text height 15px, this yields $\text{name\_y} = 314$, producing symmetric 7px top and bottom padding.
+
+---
+
 ## 6. Target Multi-Platform Architecture
 
 To achieve clean, modern, high-performance execution across macOS, Linux, Windows, and the Web (WebAssembly):

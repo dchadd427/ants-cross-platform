@@ -1,5 +1,6 @@
 #include "ants_app/hud.hpp"
 #include "ants_app/renderer.hpp"
+#include "ants_sim/pathfinding.hpp"
 
 #include <cmath>
 #include <algorithm>
@@ -1458,18 +1459,25 @@ bool HUD::handle_mouse_down(int32_t x, int32_t y, uint8_t button,
             // 1. Check if clicked on an enemy ant
             const sim::AntSnapshot* enemy_target = nullptr;
             int32_t best_enemy_dist_sq = INT32_MAX;
+            const sim::AntSnapshot* ally_target = nullptr;
+            int32_t best_ally_dist_sq = INT32_MAX;
             const auto& world = sim.get_world_state();
             for (const auto& ant : world.ants) {
                 if (ant.hp == 0 || ant.is_drowning) continue;
-                if (ant.player_id != local_player_id_ && !sim.stats_manager().are_allies(local_player_id_, ant.player_id)) {
-                    bool in_bbox = (std::abs(ant.px - world_x) <= 18 &&
-                                    world_y >= ant.py - 24 && world_y <= ant.py + 18);
-                    bool on_tile = (ant.tile_x == target_tile_x && ant.tile_y == target_tile_y);
-                    if (in_bbox || on_tile) {
-                        int32_t d_sq = (ant.px - world_x) * (ant.px - world_x) + (ant.py - world_y) * (ant.py - world_y);
+                bool in_bbox = (std::abs(ant.px - world_x) <= 18 &&
+                                world_y >= ant.py - 24 && world_y <= ant.py + 18);
+                bool on_tile = (ant.tile_x == target_tile_x && ant.tile_y == target_tile_y);
+                if (in_bbox || on_tile) {
+                    int32_t d_sq = (ant.px - world_x) * (ant.px - world_x) + (ant.py - world_y) * (ant.py - world_y);
+                    if (ant.player_id != local_player_id_ && !sim.stats_manager().are_allies(local_player_id_, ant.player_id)) {
                         if (d_sq < best_enemy_dist_sq) {
                             best_enemy_dist_sq = d_sq;
                             enemy_target = &ant;
+                        }
+                    } else if (ant.player_id != local_player_id_ && sim.stats_manager().are_allies(local_player_id_, ant.player_id)) {
+                        if (d_sq < best_ally_dist_sq) {
+                            best_ally_dist_sq = d_sq;
+                            ally_target = &ant;
                         }
                     }
                 }
@@ -1485,6 +1493,11 @@ bool HUD::handle_mouse_down(int32_t x, int32_t y, uint8_t button,
                 }
                 if (on_spawn_click_marker_) on_spawn_click_marker_(world_x, world_y);
                 dispatch_attack_order(enemy_target->id, sim);
+                return true;
+            }
+            if (ally_target && has_friendly_selected(world)) {
+                if (on_spawn_click_marker_) on_spawn_click_marker_(world_x, world_y);
+                dispatch_move_to_unit_neighbor(ally_target->tile_x, ally_target->tile_y, sim);
                 return true;
             }
 
@@ -1634,6 +1647,10 @@ bool HUD::handle_mouse_up(int32_t x, int32_t y, uint8_t button,
                         // Issue Attack order against target enemy for selected friendly ants
                         if (on_spawn_click_marker_) on_spawn_click_marker_(world_x, world_y);
                         dispatch_attack_order(hit_ant->id, sim);
+                    } else if (has_friendly_selected(world) && is_ally) {
+                        // Authentic ally click: spawn marker, walk to adjacent tile without attacking
+                        if (on_spawn_click_marker_) on_spawn_click_marker_(world_x, world_y);
+                        dispatch_move_to_unit_neighbor(hit_ant->tile_x, hit_ant->tile_y, sim);
                     } else {
                         // Cannot select or command enemy/allied ants!
                         if (has_friendly_selected(world)) {
@@ -2222,9 +2239,22 @@ void HUD::dispatch_move_order(int32_t target_tile_x, int32_t target_tile_y, sim:
     }
     if (targets.empty()) return;
 
-    // Play authentic Move / Go voice clip for the primary selected friendly unit (if destination is passable)
+    // Play authentic Move / Go voice clip for the primary selected friendly unit (if destination is passable or edge-reachable)
     bool dest_is_passable = sim.grid().in_bounds(target_tile_x, target_tile_y) &&
                             sim.grid().get_cell(static_cast<uint32_t>(target_tile_x), static_cast<uint32_t>(target_tile_y)).is_passable();
+    if (!dest_is_passable) {
+        for (uint32_t aid : targets) {
+            const auto& u = sim.get_unit(aid);
+            if (u.id == aid) {
+                auto test_path = sim::PathFinder::find_path(sim.grid(), u.pos, {target_tile_x, target_tile_y},
+                                                            u.type == sim::AntType::Swimmer, u.type == sim::AntType::Fire, 500);
+                if (!test_path.empty()) {
+                    dest_is_passable = true;
+                    break;
+                }
+            }
+        }
+    }
     if (dest_is_passable) {
         for (uint32_t aid : targets) {
             for (const auto& a : world.ants) {
@@ -2621,6 +2651,61 @@ void HUD::dispatch_smart_special_ability(int32_t world_x, int32_t world_y, sim::
     }
 }
 
+void HUD::dispatch_move_to_unit_neighbor(int32_t target_tile_x, int32_t target_tile_y, sim::SimulationEngine& sim) {
+    const auto& world = sim.get_world_state();
+    std::vector<uint32_t> raw_targets = selected_ant_ids_;
+    if (raw_targets.empty() && selected_ant_id_ != 0) {
+        raw_targets.push_back(selected_ant_id_);
+    }
+    std::vector<uint32_t> targets;
+    for (uint32_t aid : raw_targets) {
+        for (const auto& a : world.ants) {
+            if (a.id == aid && a.player_id == local_player_id_ && a.hp > 0 && !a.is_drowning) {
+                targets.push_back(aid);
+                break;
+            }
+        }
+    }
+    if (targets.empty()) return;
+
+    // Find reference position of primary moving unit
+    int32_t ref_x = target_tile_x;
+    int32_t ref_y = target_tile_y;
+    for (const auto& a : world.ants) {
+        if (a.id == targets[0]) {
+            ref_x = a.tile_x;
+            ref_y = a.tile_y;
+            break;
+        }
+    }
+
+    // Find the closest passable neighbor tile around the target unit
+    const auto& grid = sim.grid();
+    static const int32_t dx[8] = { 0,  1, 0, -1,  1, -1,  1, -1 };
+    static const int32_t dy[8] = { -1, 0, 1,  0, -1, -1,  1,  1 };
+
+    int32_t best_dist = INT32_MAX;
+    sim::TileCoord best_neighbor{-1, -1};
+
+    for (int i = 0; i < 8; ++i) {
+        int32_t nx = target_tile_x + dx[i];
+        int32_t ny = target_tile_y + dy[i];
+        if (grid.in_bounds(nx, ny) && grid.get_cell(static_cast<uint32_t>(nx), static_cast<uint32_t>(ny)).is_passable()) {
+            int32_t d = std::max(std::abs(nx - ref_x), std::abs(ny - ref_y));
+            if (d < best_dist) {
+                best_dist = d;
+                best_neighbor = {nx, ny};
+            }
+        }
+    }
+
+    if (best_neighbor.x >= 0) {
+        dispatch_move_order(best_neighbor.x, best_neighbor.y, sim, false);
+    } else {
+        dispatch_move_order(target_tile_x, target_tile_y, sim, false);
+    }
+}
+
 CursorType HUD::evaluate_cursor(int32_t screen_x, int32_t screen_y,
                                const sim::WorldState& world,
                                const sim::Grid& grid,
@@ -2736,7 +2821,11 @@ CursorType HUD::evaluate_cursor(int32_t screen_x, int32_t screen_y,
     // 0. If an explicit order mode is active (from HUD button or hotkey)
     if (active_order_mode_ != sim::OrderType::None) {
         if (active_order_mode_ == sim::OrderType::Attack) {
-            if (hover_ant && hover_ant->player_id != local_player_id_) {
+            bool is_ally = hover_ant && (local_player_id_ < world.player_alliances.size() &&
+                                         hover_ant->player_id < world.player_alliances.size() &&
+                                         world.player_alliances[local_player_id_] == hover_ant->player_id &&
+                                         world.player_alliances[hover_ant->player_id] == local_player_id_);
+            if (hover_ant && hover_ant->player_id != local_player_id_ && !is_ally) {
                 current_cursor_ = CursorType::Attack;
             } else {
                 current_cursor_ = CursorType::Cant;
@@ -2814,6 +2903,15 @@ CursorType HUD::evaluate_cursor(int32_t screen_x, int32_t screen_y,
             current_cursor_ = CursorType::Select;
             return current_cursor_;
         } else {
+            bool is_ally = (local_player_id_ < world.player_alliances.size() &&
+                            hover_ant->player_id < world.player_alliances.size() &&
+                            world.player_alliances[local_player_id_] == hover_ant->player_id &&
+                            world.player_alliances[hover_ant->player_id] == local_player_id_);
+            if (is_ally) {
+                // Teammate / Ally ant -> Move towards without attacking
+                current_cursor_ = CursorType::Move;
+                return current_cursor_;
+            }
             // Enemy ant -> Attack!
             current_cursor_ = CursorType::Attack;
             return current_cursor_;

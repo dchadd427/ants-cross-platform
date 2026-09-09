@@ -3589,8 +3589,12 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         SimulationEngine sim;
         sim.init_test_world(60, 60, 100, 60000);
 
-        // 1. Can't Go Reaction on Impassable/Blocked Path
-        sim.grid_mut().set_terrain(12, 10, TERRAIN_WATER);
+        // 1. Can't Go Reaction on Impassable/Blocked Path (Ant at (10, 10) is at closest shoreline to (12, 10))
+        for (int32_t wx = 11; wx <= 15; ++wx) {
+            for (int32_t wy = 8; wy <= 12; ++wy) {
+                sim.grid_mut().set_terrain(wx, wy, TERRAIN_WATER);
+            }
+        }
         uint32_t w_id = sim.spawn_unit(0, AntType::Worker, TileCoord{10, 10});
         auto& w_ant = sim.get_unit(w_id);
 
@@ -5122,6 +5126,80 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         renderer.spawn_transient_effect("xmarks", 500, 500);
         renderer.update_transient_effects(0.200f);
         renderer.update_transient_effects(0.300f);
+    } TEST_END();
+
+    TEST_CASE("12.62 Closest Passable Water Shoreline Fallback, Ally Walk-Over Movement & Setup Screen Map Centering") {
+        SimulationEngine sim;
+        sim.init_test_world(60, 60, 100, 60000);
+
+        // 1. Water shoreline fallback: lake from x=13..20, y=5..15
+        for (int32_t wx = 13; wx <= 20; ++wx) {
+            for (int32_t wy = 5; wy <= 15; ++wy) {
+                sim.grid_mut().set_terrain(wx, wy, TERRAIN_WATER);
+            }
+        }
+        uint32_t w_id = sim.spawn_unit(0, AntType::Worker, TileCoord{10, 10});
+        auto& w_ant = sim.get_unit(w_id);
+
+        // Issue move order into middle of water at (16, 10)
+        sim.issue_move_order(w_id, TileCoord{16, 10});
+        // Non-swimmer ant does NOT immediately enter CantGo; it pathfinds to the water edge (12, 10)
+        ASSERT_NE(w_ant.state, UnitState::CantGo);
+        ASSERT_EQ(w_ant.final_dest, (TileCoord{12, 10}));
+
+        // Advance simulation until ant reaches the shoreline at (12, 10)
+        for (int t = 0; t < 100 && w_ant.pos != (TileCoord{12, 10}); ++t) {
+            sim.tick();
+        }
+        ASSERT_EQ(w_ant.pos, (TileCoord{12, 10}));
+
+        // Now that the ant is already at the closest possible tile, issuing move into water triggers CantGo
+        sim.issue_move_order(w_id, TileCoord{16, 10});
+        ASSERT_EQ(w_ant.state, UnitState::CantGo);
+        ASSERT_TRUE(sim.has_audio_event(SoundID::CantGo));
+
+        // Advance simulation through CantGo duration (6 ticks for Worker)
+        for (int t = 0; t < 6; ++t) {
+            sim.tick();
+        }
+        ASSERT_EQ(w_ant.state, UnitState::Idle);
+
+        // 2. Ally Walk-Over Movement & Cursors
+        uint32_t ally_id = sim.spawn_unit(1, AntType::Worker, TileCoord{8, 8});
+        (void)ally_id;
+        sim.form_alliance(0, 1);
+        ASSERT_TRUE(sim.stats_manager().are_allies(0, 1));
+
+        HUD hud;
+        hud.init(0);
+        ViewportCamera camera{0, 0};
+        hud.select_ant(w_id, false);
+
+        // Hover over ally with friendly selected: cursor is Move (not Attack)
+        int32_t ally_screen_x = PLAYFIELD_X + (8 * 32 + 16);
+        int32_t ally_screen_y = PLAYFIELD_Y + (8 * 32 + 16);
+        CursorType c_ally = hud.evaluate_cursor(ally_screen_x, ally_screen_y, sim.get_world_state(), sim.grid(), camera);
+        ASSERT_EQ(c_ally, CursorType::Move);
+
+        // Click ally ant: ant walks over to an adjacent neighbor of ally instead of attacking
+        hud.handle_mouse_down(ally_screen_x, ally_screen_y, 1, sim, camera, 0);
+        hud.handle_mouse_up(ally_screen_x, ally_screen_y, 1, sim, camera, 0);
+        ASSERT_EQ(w_ant.state, UnitState::Walking);
+        ASSERT_NE(w_ant.final_dest, (TileCoord{8, 8})); // Not directly on ally's tile
+        // Final destination must be an adjacent Chebyshev neighbor (Chebyshev dist == 1)
+        int32_t c_dist = std::max(std::abs(w_ant.final_dest.x - 8), std::abs(w_ant.final_dest.y - 8));
+        ASSERT_EQ(c_dist, 1);
+
+        // 3. Map Select Screen Vertical Centering Formula
+        Renderer renderer;
+        int32_t th_large = renderer.get_text_height(FontSize::Large);
+        int32_t name_y = 307 + (29 - th_large) / 2;
+        // Cavity top is 307, height is 29 (y=307..335). Text y must be strictly inside cavity with symmetric padding
+        ASSERT_GE(name_y, 307);
+        ASSERT_LE(name_y + th_large, 336);
+        int32_t top_pad = name_y - 307;
+        int32_t bot_pad = 336 - (name_y + th_large);
+        ASSERT_LE(std::abs(top_pad - bot_pad), 1); // Symmetric within 1 pixel
     } TEST_END();
 }
 

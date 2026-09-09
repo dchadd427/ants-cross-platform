@@ -252,11 +252,12 @@ void MapSelectScreen::render(IRenderer& renderer, const ants::assets::AssetArchi
 
     int32_t th = renderer.get_text_height(FontSize::Small);
 
-    // 3. Current Map Name inside Pick a Map box (vertically centered in inner cavity y=307..335)
+    // 3. Current Map Name inside Pick a Map box (vertically centered in inner cavity y=307..335, h=29)
     if (selected_index_ >= 0 && selected_index_ < static_cast<int32_t>(maps_.size())) {
         const auto& cur = maps_[static_cast<size_t>(selected_index_)];
-        int32_t name_y = 309;
-        renderer.draw_text(cur.display_name, 38, name_y, ColorRGBA{255, 255, 255, 255}, FontSize::Medium);
+        int32_t th_map = renderer.get_text_height(FontSize::Large);
+        int32_t name_y = 307 + (29 - th_map) / 2;
+        renderer.draw_text(cur.display_name, 38, name_y, ColorRGBA{255, 255, 255, 255}, FontSize::Large);
     }
 
     // Up/Down Stepper Buttons at (226, 303) and (226, 327)

@@ -105,12 +105,15 @@ std::vector<TileCoord> PathFinder::find_path(
         return false;
     };
 
-    // If target is impassable or in hard_obstacles, find nearest passable neighbor
-    TileCoord real_target = target;
-    if (!grid.in_bounds(target) || !grid.get_cell(target).is_passable(is_swimmer, is_fire_ant) || is_hard_obstacle(target)) {
-        real_target = find_nearest_passable(grid, start, target, is_swimmer, is_fire_ant, hard_obstacles);
-        if (real_target.x < 0 || real_target == start) return {};
+    TileCoord goal = target;
+    if (!grid.in_bounds(goal)) {
+        goal.x = std::clamp(goal.x, 0, static_cast<int32_t>(w) - 1);
+        goal.y = std::clamp(goal.y, 0, static_cast<int32_t>(h) - 1);
     }
+
+    bool goal_is_valid_dest = grid.in_bounds(goal) &&
+                              grid.get_cell(goal).is_passable(is_swimmer, is_fire_ant) &&
+                              !is_hard_obstacle(goal);
 
     size_t total_cells = static_cast<size_t>(w) * h;
     std::vector<int32_t> g_score(total_cells, INT32_MAX);
@@ -124,7 +127,11 @@ std::vector<TileCoord> PathFinder::find_path(
 
     size_t start_idx = coord_to_idx(start);
     g_score[start_idx] = 0;
-    open_set.push(Node{start, 0, octile_heuristic(start, real_target)});
+    open_set.push(Node{start, 0, octile_heuristic(start, goal)});
+
+    TileCoord best_node = start;
+    int32_t best_h = octile_heuristic(start, goal);
+    int32_t best_g = 0;
 
     // 8 movement directions: prioritize diagonals first for natural shortest paths
     static const int32_t dir_dx[8] = {  1,  1, -1, -1,  0,  1,  0, -1 };
@@ -138,7 +145,14 @@ std::vector<TileCoord> PathFinder::find_path(
         Node current = open_set.top();
         open_set.pop();
 
-        if (current.pos == real_target) {
+        int32_t heur = octile_heuristic(current.pos, goal);
+        if (heur < best_h || (heur == best_h && current.g < best_g)) {
+            best_h = heur;
+            best_g = current.g;
+            best_node = current.pos;
+        }
+
+        if (goal_is_valid_dest && current.pos == goal) {
             found = true;
             break;
         }
@@ -157,7 +171,7 @@ std::vector<TileCoord> PathFinder::find_path(
             if (is_hard_obstacle(neighbor)) continue;
 
             // Avoid dynamic obstacles (e.g. enemy units) unless destination itself
-            if (neighbor != real_target && !obstacles.empty()) {
+            if (neighbor != goal && !obstacles.empty()) {
                 bool is_obs = false;
                 for (const auto& obs : obstacles) {
                     if (obs == neighbor) {
@@ -197,19 +211,28 @@ std::vector<TileCoord> PathFinder::find_path(
             if (tentative_g < g_score[n_idx]) {
                 g_score[n_idx] = tentative_g;
                 came_from[n_idx] = current.pos;
-                int32_t f = tentative_g + octile_heuristic(neighbor, real_target);
+                int32_t f = tentative_g + octile_heuristic(neighbor, goal);
                 open_set.push(Node{neighbor, tentative_g, f});
             }
         }
     }
 
     if (!found) {
+        // If there were dynamic obstacles blocking the path to a valid destination,
+        // let the caller handle retry without dynamic obstacles.
+        if (!obstacles.empty() && goal_is_valid_dest) {
+            return {};
+        }
+    }
+
+    TileCoord final_target = found ? goal : best_node;
+    if (final_target == start) {
         return {};
     }
 
-    // Reconstruct path backward from real_target to start
+    // Reconstruct path backward from final_target to start
     std::vector<TileCoord> path;
-    TileCoord curr = real_target;
+    TileCoord curr = final_target;
     while (curr != start) {
         path.push_back(curr);
         size_t idx = coord_to_idx(curr);
