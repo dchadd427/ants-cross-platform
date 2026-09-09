@@ -3,6 +3,15 @@ setlocal enabledelayedexpansion
 
 cd /d "%~dp0"
 
+where cmake >nul 2>nul
+if errorlevel 1 (
+    for /f "usebackq tokens=*" %%V in (`dir /b /s "%ProgramFiles(x86)%\*vswhere.exe" 2^>nul`) do (
+        for /f "usebackq tokens=*" %%C in (`call "%%V" -latest -products * -find "**\cmake.exe" 2^>nul`) do (
+            set "PATH=%%~dpC;!PATH!"
+        )
+    )
+)
+
 echo ======================================================================
 echo                       ANTS ENGINE REMAKE (PC)
 echo ======================================================================

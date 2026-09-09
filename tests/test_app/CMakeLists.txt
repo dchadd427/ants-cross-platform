@@ -48,3 +48,4 @@ target_compile_definitions(test_app_integration PRIVATE
 )
 
 add_test(NAME test_app_integration COMMAND test_app_integration)
+set_tests_properties(test_app_integration PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
