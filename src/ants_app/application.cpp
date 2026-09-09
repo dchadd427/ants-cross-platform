@@ -204,6 +204,7 @@ bool Application::init(const ApplicationConfig& config) {
     std::string player_name = get_system_username();
     map_select_.init("Original-Ants/Maps");
     map_select_.set_player_name(player_name);
+    map_select_.set_player_team(config_.local_player_id);
     scorecard_.set_local_player_name(player_name);
     hud_.set_player_name(player_name);
     if (config_.local_player_id < 4) {
@@ -858,6 +859,7 @@ void Application::play_startup_sound() {
 void Application::set_local_player(uint8_t team_id) {
     if (team_id >= 4) return;
     local_player_id_ = team_id;
+    map_select_.set_player_team(local_player_id_);
     hud_.init(local_player_id_);
     hud_.clear_selection();
     if (renderer_) {

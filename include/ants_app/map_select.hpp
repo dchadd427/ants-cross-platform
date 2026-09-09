@@ -161,6 +161,8 @@ public:
     }
 
     void set_player_name(std::string name) { player_name_ = std::move(name); }
+    uint8_t get_player_team() const noexcept { return player_team_; }
+    void set_player_team(uint8_t team) noexcept { player_team_ = team; }
 
 private:
     void trigger_start();
@@ -188,6 +190,7 @@ private:
     bool fog_of_war_{false};
     uint8_t player_ready_mask_{0b0011}; // Player 0 & 1 ready, Player 2 unready (matching reference)
     std::string player_name_{};
+    uint8_t player_team_{0};
 
     uint32_t connection_ticks_{0};
     std::function<void(const std::string& map_path)> on_start_{nullptr};
