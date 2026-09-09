@@ -229,12 +229,12 @@
     border: 1px solid var(--border);
     border-radius: 8px;
   }
-  .sounds-table {
+  .sounds-table, .catalog-table {
     width: 100%;
     border-collapse: collapse;
     font-size: 0.875rem;
   }
-  .sounds-table th {
+  .sounds-table th, .catalog-table th {
     text-align: left;
     padding: 0.75rem 1rem;
     background: #0d1527;
@@ -260,12 +260,12 @@
     font-size: 0.75rem;
     color: var(--accent);
   }
-  .sounds-table td {
+  .sounds-table td, .catalog-table td {
     padding: 0.65rem 1rem;
     border-bottom: 1px solid var(--border-subtle);
     vertical-align: middle;
   }
-  .sounds-table tr:hover { background: #18243b; }
+  .sounds-table tr:hover, .catalog-table tr:hover { background: #18243b; }
   .sound-quick-play {
     background: #1e293b;
     border: 1px solid var(--border);
@@ -283,14 +283,45 @@
   .sound-quick-play:hover { background: #38bdf8; color: #0b0f19; transform: scale(1.08); }
   .sound-quick-play.playing { background: #f59e0b; color: #0b0f19; border-color: #f59e0b; }
 
+  /* View Mode Toggle Controls */
+  .view-toggle-group {
+    display: inline-flex;
+    background: #090e1a;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 2px;
+    gap: 2px;
+    align-items: center;
+  }
+  .view-toggle-btn {
+    background: transparent;
+    border: none;
+    color: var(--text-secondary);
+    padding: 0.25rem 0.6rem;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+  }
+  .view-toggle-btn:hover { color: #fff; background: var(--bg-card-hover); }
+  .view-toggle-btn.active {
+    background: var(--accent);
+    color: #0b0f19;
+    box-shadow: 0 0 8px var(--accent-glow);
+  }
+
   /* Master-Detail Layout for Animations */
   #anims-view {
     padding: 0;
     overflow: hidden;
   }
   .anims-sidebar {
-    width: 360px;
-    min-width: 360px;
+    width: 370px;
+    min-width: 370px;
     min-height: 0;
     height: 100%;
     border-right: 1px solid var(--border);
@@ -321,6 +352,7 @@
     align-items: center;
     gap: 0.25rem;
     transition: all 0.15s ease;
+    white-space: nowrap;
   }
   .sort-btn:hover { background: var(--bg-card-hover); color: #fff; border-color: var(--accent); }
   .sort-btn.active { background: var(--accent); color: #0b0f19; border-color: var(--accent); }
@@ -332,7 +364,7 @@
     flex-direction: column;
   }
   .anim-item {
-    padding: 0.5rem 0.75rem;
+    padding: 0.55rem 0.75rem;
     border-bottom: 1px solid var(--border-subtle);
     cursor: pointer;
     display: flex;
@@ -347,24 +379,52 @@
     border-left: 4px solid var(--accent);
   }
   .anim-thumb-box {
-    width: 44px;
-    height: 44px;
-    min-width: 44px;
+    width: 52px;
+    height: 52px;
+    min-width: 52px;
     background: #070a12;
     border: 1px solid #1e293b;
-    border-radius: 4px;
+    border-radius: 6px;
     display: flex;
     align-items: center;
     justify-content: center;
     overflow: hidden;
     flex-shrink: 0;
     position: relative;
+    box-shadow: inset 0 0 8px rgba(0,0,0,0.6);
   }
   .anim-thumb-img {
-    max-width: 40px;
-    max-height: 40px;
+    max-width: 46px;
+    max-height: 46px;
     object-fit: contain;
     image-rendering: pixelated;
+    transition: transform 0.1s ease;
+  }
+  .anim-thumb-badge {
+    position: absolute;
+    bottom: 2px;
+    right: 2px;
+    font-size: 0.58rem;
+    font-weight: 700;
+    font-family: ui-monospace, SFMono-Regular, monospace;
+    background: rgba(16, 185, 129, 0.9);
+    color: #041f14;
+    padding: 1px 3px;
+    border-radius: 3px;
+    line-height: 1;
+    pointer-events: none;
+  }
+  .anim-thumb-snd {
+    position: absolute;
+    top: 2px;
+    right: 2px;
+    font-size: 0.62rem;
+    background: rgba(245, 158, 11, 0.9);
+    color: #000;
+    padding: 1px 3px;
+    border-radius: 3px;
+    line-height: 1;
+    pointer-events: none;
   }
   .anim-thumb-empty {
     color: var(--text-dim);
@@ -978,8 +1038,9 @@
             <th class="sortable" onclick="setSoundSort('rate')" style="width: 120px;">Sample Rate <span id="sort-snd-rate-icon" class="sort-icon"></span></th>
             <th class="sortable" onclick="setSoundSort('duration')" style="width: 105px;">Duration <span id="sort-snd-duration-icon" class="sort-icon"></span></th>
             <th class="sortable" onclick="setSoundSort('size')" style="width: 100px;">Size <span id="sort-snd-size-icon" class="sort-icon"></span></th>
-            <th style="width: 320px;">Listen / Audio Controls</th>
-            <th style="width: 170px;">Actions</th>
+            <th class="sortable" onclick="setSoundSort('usage')" style="width: 120px;">Used In <span id="sort-snd-usage-icon" class="sort-icon"></span></th>
+            <th style="width: 270px;">Listen / Audio Controls</th>
+            <th style="width: 160px;">Actions</th>
           </tr>
         </thead>
         <tbody id="sounds-tbody">
@@ -990,154 +1051,193 @@
   </div>
 
   <!-- 2. Animations View -->
-  <div id="anims-view" class="tab-content">
-    <div class="anims-sidebar">
-      <div class="anim-sort-bar">
+  <div id="anims-view" class="tab-content" style="flex-direction: column;">
+    <div class="anim-sort-bar" style="padding: 0.55rem 1.75rem; justify-content: space-between; flex-wrap: wrap; gap: 0.5rem;">
+      <div style="display:flex; align-items:center; gap:0.4rem; flex-wrap:wrap;">
         <span style="font-size:0.75rem; color:var(--text-secondary); font-weight:600;">Sort:</span>
         <button class="sort-btn active" id="btn-sort-anim-id" onclick="setAnimSort('id')">ID <span id="sort-anim-id-icon" class="sort-icon">▲</span></button>
         <button class="sort-btn" id="btn-sort-anim-name" onclick="setAnimSort('name')">Name <span id="sort-anim-name-icon" class="sort-icon"></span></button>
         <button class="sort-btn" id="btn-sort-anim-steps" onclick="setAnimSort('steps')">Steps <span id="sort-anim-steps-icon" class="sort-icon"></span></button>
         <button class="sort-btn" id="btn-sort-anim-layers" onclick="setAnimSort('layers')">Layers <span id="sort-anim-layers-icon" class="sort-icon"></span></button>
+        <button class="sort-btn" id="btn-sort-anim-sound" onclick="setAnimSort('sound')">Audio <span id="sort-anim-sound-icon" class="sort-icon"></span></button>
+        <button class="sort-btn" id="btn-sort-anim-size" onclick="setAnimSort('size')">Size <span id="sort-anim-size-icon" class="sort-icon"></span></button>
+        <button class="sort-btn" id="btn-sort-anim-duration" onclick="setAnimSort('duration')">Duration <span id="sort-anim-duration-icon" class="sort-icon"></span></button>
+        <button class="sort-btn active" id="btn-anim-live-preview-toggle" onclick="toggleAnimLivePreviews()" title="Toggle continuous live animation previews">
+          🎬 Live Previews: ON
+        </button>
       </div>
-      <div class="anims-list-scroll" id="anims-list">
-        <!-- Injected by JS -->
+      <div class="view-toggle-group">
+        <button class="view-toggle-btn active" id="btn-anim-mode-split" onclick="setAnimViewMode('split')">🗂️ Split Inspector</button>
+        <button class="view-toggle-btn" id="btn-anim-mode-table" onclick="setAnimViewMode('table')">📋 Table Catalog</button>
       </div>
     </div>
-    <div class="anims-detail">
-      <div class="anim-header-card">
-        <div>
-          <div class="anim-title-area">
-            <span class="badge badge-anim" id="detail-anim-id">#0</span>
-            <h2 id="detail-anim-name">sequence_name</h2>
-            <button class="copy-btn" id="btn-copy-anim-name" title="Copy animation sequence name">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-              Copy Name
+
+    <!-- 2A. Split Inspector Container -->
+    <div id="anims-split-container" style="flex:1; min-height:0; display:flex; overflow:hidden;">
+      <div class="anims-sidebar">
+        <div class="anims-list-scroll" id="anims-list">
+          <!-- Injected by JS -->
+        </div>
+      </div>
+      <div class="anims-detail">
+        <div class="anim-header-card">
+          <div>
+            <div class="anim-title-area">
+              <span class="badge badge-anim" id="detail-anim-id">#0</span>
+              <h2 id="detail-anim-name">sequence_name</h2>
+              <button class="copy-btn" id="btn-copy-anim-name" title="Copy animation sequence name">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                Copy Name
+              </button>
+            </div>
+            <div class="anim-header-meta" id="detail-anim-meta">
+              <span>Subitems: 1</span>
+              <span>Total Sprite Layers: 1</span>
+              <span>Sequence Extents: 0x0</span>
+            </div>
+          </div>
+          <div id="detail-sound-box" style="display: flex; align-items: center; gap: 0.6rem;">
+            <!-- Audio trigger card if present -->
+          </div>
+        </div>
+
+        <div class="anim-player-container">
+          <div class="stage-toolbar">
+            <div class="stage-toolbar-group">
+              <span>Stage Background:</span>
+              <select id="stage-bg-select" class="stage-select">
+                <option value="bg-checker">Checkerboard Grid</option>
+                <option value="bg-black">Solid Black</option>
+                <option value="bg-gray">Neutral Gray</option>
+                <option value="bg-green">Game Turf (Green)</option>
+              </select>
+            </div>
+            <div class="stage-toolbar-group">
+              <span>Centering:</span>
+              <select id="stage-center-select" class="stage-select">
+                <option value="box" selected>Center Bounding Box</option>
+                <option value="origin">Center Origin (0,0)</option>
+              </select>
+            </div>
+            <div class="stage-toolbar-group">
+              <label style="display:flex; align-items:center; gap:0.3rem; cursor:pointer;">
+                <input type="checkbox" id="chk-crosshair" checked> Crosshair
+              </label>
+              <label style="display:flex; align-items:center; gap:0.3rem; cursor:pointer;">
+                <input type="checkbox" id="chk-bounds"> Bounds
+              </label>
+            </div>
+            <div class="stage-toolbar-group">
+              <span>Zoom:</span>
+              <select id="zoom-select" class="stage-select">
+                <option value="1">1x (Native)</option>
+                <option value="2" selected>2x Zoom</option>
+                <option value="3">3x Zoom</option>
+                <option value="4">4x Zoom</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="canvas-stage bg-checker" id="canvas-stage-element">
+            <canvas id="anim-canvas" width="480" height="360"></canvas>
+          </div>
+
+          <div class="player-controls" id="anim-playback-controls">
+            <button class="ctrl-btn" id="btn-play-pause" title="Play/Pause (Space)">Pause</button>
+            <button class="ctrl-btn" id="btn-step-prev" title="Previous Frame (Left Arrow)">&lt;</button>
+            <input type="range" id="frame-scrubber" class="scrubber" min="0" max="0" value="0">
+            <button class="ctrl-btn" id="btn-step-next" title="Next Frame (Right Arrow)">&gt;</button>
+            <span id="frame-counter" style="font-family: ui-monospace, monospace; font-size: 0.85rem; min-width: 90px; text-align: center;">1 / 1</span>
+            
+            <select id="speed-select" class="stage-select" style="padding:0.4rem 0.6rem;">
+              <option value="0.25">0.25x</option>
+              <option value="0.5">0.5x</option>
+              <option value="1" selected>1.0x (20 fps)</option>
+              <option value="1.5">1.5x</option>
+              <option value="2">2.0x</option>
+            </select>
+
+            <button class="ctrl-btn" id="btn-sound-toggle" title="Toggle audio playback on sound triggers">
+              🔊 Sound On
+            </button>
+
+            <button class="ctrl-btn" id="btn-download-composite" title="Download composite frame as PNG">
+              ⬇ Frame PNG
             </button>
           </div>
-          <div class="anim-header-meta" id="detail-anim-meta">
-            <span>Subitems: 1</span>
-            <span>Total Sprite Layers: 1</span>
-            <span>Sequence Extents: 0x0</span>
+
+          <div class="player-controls" id="static-composite-banner" style="display:none; justify-content: space-between; align-items: center;">
+            <div style="display:flex; align-items:center; gap:0.6rem;">
+              <span class="badge badge-sprite" style="font-size:0.8rem; padding:0.3rem 0.65rem;" id="static-badge">Static Composite</span>
+              <span id="static-desc" style="font-size:0.85rem; color:var(--text-secondary);">Composited sprite assemblage</span>
+            </div>
+            <div style="font-size:0.8rem; color:var(--text-dim);">Background rendered below foreground layers</div>
           </div>
         </div>
-        <div id="detail-sound-box" style="display: flex; align-items: center; gap: 0.6rem;">
-          <!-- Audio trigger card if present -->
+
+        <!-- Sequence Timeline Strip -->
+        <div class="timeline-section">
+          <div class="timeline-header">
+            <h3>Subitem Steps Sequence Timeline (<span id="timeline-count">0</span> steps)</h3>
+            <span style="font-size:0.8rem; color:var(--text-secondary);">Click any step to inspect</span>
+          </div>
+          <div class="frames-scroll" id="frames-scroll-container">
+            <!-- Subitem cards injected by JS -->
+          </div>
+
+          <!-- Current Subitem Layers Table -->
+          <div style="margin-top: 0.75rem;">
+            <h4 style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 0.4rem;">
+              Active Step Sprite Layers (<span id="current-step-layers-count">1</span> layers)
+            </h4>
+            <table class="layers-table">
+              <thead>
+                <tr>
+                  <th class="sortable" onclick="setLayerSort('thumb')" style="width: 50px;">Thumb <span id="sort-lay-thumb-icon" class="sort-icon"></span></th>
+                  <th class="sortable" onclick="setLayerSort('layer')" style="width: 70px;">Layer <span id="sort-lay-layer-icon" class="sort-icon">▲</span></th>
+                  <th class="sortable" onclick="setLayerSort('id')" style="width: 90px;">Sprite ID <span id="sort-lay-id-icon" class="sort-icon"></span></th>
+                  <th class="sortable" onclick="setLayerSort('name')">Sprite BMP Filename <span id="sort-lay-name-icon" class="sort-icon"></span></th>
+                  <th class="sortable" onclick="setLayerSort('offset')" style="width: 120px;">Offset (dx, dy) <span id="sort-lay-offset-icon" class="sort-icon"></span></th>
+                  <th class="sortable" onclick="setLayerSort('size')" style="width: 100px;">Size <span id="sort-lay-size-icon" class="sort-icon"></span></th>
+                  <th style="width: 150px;">Actions</th>
+                </tr>
+              </thead>
+              <tbody id="layers-tbody">
+                <!-- Injected by JS -->
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
+    </div>
 
-      <div class="anim-player-container">
-        <div class="stage-toolbar">
-          <div class="stage-toolbar-group">
-            <span>Stage Background:</span>
-            <select id="stage-bg-select" class="stage-select">
-              <option value="bg-checker">Checkerboard Grid</option>
-              <option value="bg-black">Solid Black</option>
-              <option value="bg-gray">Neutral Gray</option>
-              <option value="bg-green">Game Turf (Green)</option>
-            </select>
-          </div>
-          <div class="stage-toolbar-group">
-            <span>Centering:</span>
-            <select id="stage-center-select" class="stage-select">
-              <option value="box" selected>Center Bounding Box</option>
-              <option value="origin">Center Origin (0,0)</option>
-            </select>
-          </div>
-          <div class="stage-toolbar-group">
-            <label style="display:flex; align-items:center; gap:0.3rem; cursor:pointer;">
-              <input type="checkbox" id="chk-crosshair" checked> Crosshair
-            </label>
-            <label style="display:flex; align-items:center; gap:0.3rem; cursor:pointer;">
-              <input type="checkbox" id="chk-bounds"> Bounds
-            </label>
-          </div>
-          <div class="stage-toolbar-group">
-            <span>Zoom:</span>
-            <select id="zoom-select" class="stage-select">
-              <option value="1">1x (Native)</option>
-              <option value="2" selected>2x Zoom</option>
-              <option value="3">3x Zoom</option>
-              <option value="4">4x Zoom</option>
-            </select>
-          </div>
-        </div>
-
-        <div class="canvas-stage bg-checker" id="canvas-stage-element">
-          <canvas id="anim-canvas" width="480" height="360"></canvas>
-        </div>
-
-        <div class="player-controls" id="anim-playback-controls">
-          <button class="ctrl-btn" id="btn-play-pause" title="Play/Pause (Space)">Pause</button>
-          <button class="ctrl-btn" id="btn-step-prev" title="Previous Frame (Left Arrow)">&lt;</button>
-          <input type="range" id="frame-scrubber" class="scrubber" min="0" max="0" value="0">
-          <button class="ctrl-btn" id="btn-step-next" title="Next Frame (Right Arrow)">&gt;</button>
-          <span id="frame-counter" style="font-family: ui-monospace, monospace; font-size: 0.85rem; min-width: 90px; text-align: center;">1 / 1</span>
-          
-          <select id="speed-select" class="stage-select" style="padding:0.4rem 0.6rem;">
-            <option value="0.25">0.25x</option>
-            <option value="0.5">0.5x</option>
-            <option value="1" selected>1.0x (20 fps)</option>
-            <option value="1.5">1.5x</option>
-            <option value="2">2.0x</option>
-          </select>
-
-          <button class="ctrl-btn" id="btn-sound-toggle" title="Toggle audio playback on sound triggers">
-            🔊 Sound On
-          </button>
-
-          <button class="ctrl-btn" id="btn-download-composite" title="Download composite frame as PNG">
-            ⬇ Frame PNG
-          </button>
-        </div>
-
-        <div class="player-controls" id="static-composite-banner" style="display:none; justify-content: space-between; align-items: center;">
-          <div style="display:flex; align-items:center; gap:0.6rem;">
-            <span class="badge badge-sprite" style="font-size:0.8rem; padding:0.3rem 0.65rem;" id="static-badge">Static Composite</span>
-            <span id="static-desc" style="font-size:0.85rem; color:var(--text-secondary);">Composited sprite assemblage</span>
-          </div>
-          <div style="font-size:0.8rem; color:var(--text-dim);">Background rendered below foreground layers</div>
-        </div>
-      </div>
-
-      <!-- Sequence Timeline Strip -->
-      <div class="timeline-section">
-        <div class="timeline-header">
-          <h3>Subitem Steps Sequence Timeline (<span id="timeline-count">0</span> steps)</h3>
-          <span style="font-size:0.8rem; color:var(--text-secondary);">Click any step to inspect</span>
-        </div>
-        <div class="frames-scroll" id="frames-scroll-container">
-          <!-- Subitem cards injected by JS -->
-        </div>
-
-        <!-- Current Subitem Layers Table -->
-        <div style="margin-top: 0.75rem;">
-          <h4 style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 0.4rem;">
-            Active Step Sprite Layers (<span id="current-step-layers-count">1</span> layers)
-          </h4>
-          <table class="layers-table">
-            <thead>
-              <tr>
-                <th style="width: 44px;">Thumb</th>
-                <th class="sortable" onclick="setLayerSort('layer')" style="width: 70px;">Layer <span id="sort-lay-layer-icon" class="sort-icon">▲</span></th>
-                <th class="sortable" onclick="setLayerSort('id')" style="width: 90px;">Sprite ID <span id="sort-lay-id-icon" class="sort-icon"></span></th>
-                <th class="sortable" onclick="setLayerSort('name')">Sprite BMP Filename <span id="sort-lay-name-icon" class="sort-icon"></span></th>
-                <th class="sortable" onclick="setLayerSort('offset')" style="width: 120px;">Offset (dx, dy) <span id="sort-lay-offset-icon" class="sort-icon"></span></th>
-                <th class="sortable" onclick="setLayerSort('size')" style="width: 100px;">Size <span id="sort-lay-size-icon" class="sort-icon"></span></th>
-                <th style="width: 150px;">Actions</th>
-              </tr>
-            </thead>
-            <tbody id="layers-tbody">
-              <!-- Injected by JS -->
-            </tbody>
-          </table>
-        </div>
-      </div>
+    <!-- 2B. Animations Table Catalog Container -->
+    <div id="anims-table-wrapper" class="table-wrapper" style="display:none; margin: 0.75rem 1.75rem;">
+      <table class="catalog-table anims-table">
+        <thead>
+          <tr>
+            <th style="width: 60px;">Preview</th>
+            <th class="sortable" onclick="setAnimSort('id')" style="width: 80px;">ID <span id="sort-animtbl-id-icon" class="sort-icon">▲</span></th>
+            <th class="sortable" onclick="setAnimSort('name')">Sequence Name <span id="sort-animtbl-name-icon" class="sort-icon"></span></th>
+            <th class="sortable" onclick="setAnimSort('type')" style="width: 130px;">Type <span id="sort-animtbl-type-icon" class="sort-icon"></span></th>
+            <th class="sortable" onclick="setAnimSort('steps')" style="width: 90px;">Steps <span id="sort-animtbl-steps-icon" class="sort-icon"></span></th>
+            <th class="sortable" onclick="setAnimSort('layers')" style="width: 90px;">Layers <span id="sort-animtbl-layers-icon" class="sort-icon"></span></th>
+            <th class="sortable" onclick="setAnimSort('sound')" style="width: 150px;">Audio Trigger <span id="sort-animtbl-sound-icon" class="sort-icon"></span></th>
+            <th class="sortable" onclick="setAnimSort('size')" style="width: 130px;">Dimensions <span id="sort-animtbl-size-icon" class="sort-icon"></span></th>
+            <th class="sortable" onclick="setAnimSort('duration')" style="width: 100px;">Duration <span id="sort-animtbl-duration-icon" class="sort-icon"></span></th>
+            <th style="width: 150px;">Actions</th>
+          </tr>
+        </thead>
+        <tbody id="anims-tbody">
+          <!-- Injected by JS -->
+        </tbody>
+      </table>
     </div>
   </div>
 
   <!-- 3. Sprites View -->
-  <div id="sprites-view" class="tab-content">
-    <div class="sprites-toolbar" style="padding: 0.6rem 1.75rem 0.4rem 1.75rem; display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; background: #090e1a; border-bottom: 1px solid var(--border);">
+  <div id="sprites-view" class="tab-content" style="flex-direction: column;">
+    <div class="sprites-toolbar" style="padding: 0.6rem 1.75rem 0.4rem 1.75rem; display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; background: #090e1a; border-bottom: 1px solid var(--border); flex-wrap: wrap; gap: 0.5rem;">
       <div style="display:flex; align-items:center; gap:0.5rem; font-size:0.8rem; color:var(--text-secondary); flex-wrap:wrap;">
         <span style="font-weight:600;">Sort Sprites:</span>
         <button class="sort-btn active" id="btn-sort-spr-id" onclick="setSpriteSort('id')">ID <span id="sort-spr-id-icon" class="sort-icon">▲</span></button>
@@ -1147,13 +1247,40 @@
         <button class="sort-btn" id="btn-sort-spr-area" onclick="setSpriteSort('area')">Area <span id="sort-spr-area-icon" class="sort-icon"></span></button>
         <button class="sort-btn" id="btn-sort-spr-usage" onclick="setSpriteSort('usage')">Usage <span id="sort-spr-usage-icon" class="sort-icon"></span></button>
       </div>
+      <div class="view-toggle-group">
+        <button class="view-toggle-btn active" id="btn-spr-mode-grid" onclick="setSpriteViewMode('grid')">🖼️ Grid</button>
+        <button class="view-toggle-btn" id="btn-spr-mode-table" onclick="setSpriteViewMode('table')">📋 Table</button>
+      </div>
     </div>
+
+    <!-- 3A. Sprites Grid Mode -->
     <div class="sprites-grid" id="sprites-grid-container">
       <!-- Sprites injected by JS -->
     </div>
     <div class="load-more-container" id="sprites-load-more-box">
       <button class="ctrl-btn" id="btn-load-more" style="padding:0.6rem 1.4rem;">Load More Sprites (+200)</button>
       <button class="ctrl-btn" id="btn-load-all" style="padding:0.6rem 1.4rem; background: #1e3a8a;">Load All 2,794 Sprites</button>
+    </div>
+
+    <!-- 3B. Sprites Table Mode -->
+    <div id="sprites-table-wrapper" class="table-wrapper" style="display:none; margin: 0.75rem 1.75rem;">
+      <table class="catalog-table sprites-table">
+        <thead>
+          <tr>
+            <th class="sortable" onclick="setSpriteSort('id')" style="width: 54px;">Thumb</th>
+            <th class="sortable" onclick="setSpriteSort('id')" style="width: 90px;">Sprite ID <span id="sort-sprtbl-id-icon" class="sort-icon">▲</span></th>
+            <th class="sortable" onclick="setSpriteSort('name')">BMP Filename <span id="sort-sprtbl-name-icon" class="sort-icon"></span></th>
+            <th class="sortable" onclick="setSpriteSort('width')" style="width: 100px;">Width <span id="sort-sprtbl-width-icon" class="sort-icon"></span></th>
+            <th class="sortable" onclick="setSpriteSort('height')" style="width: 100px;">Height <span id="sort-sprtbl-height-icon" class="sort-icon"></span></th>
+            <th class="sortable" onclick="setSpriteSort('area')" style="width: 130px;">Dimensions / Area <span id="sort-sprtbl-area-icon" class="sort-icon"></span></th>
+            <th class="sortable" onclick="setSpriteSort('usage')" style="width: 160px;">Used in Animations <span id="sort-sprtbl-usage-icon" class="sort-icon"></span></th>
+            <th style="width: 170px;">Actions</th>
+          </tr>
+        </thead>
+        <tbody id="sprites-tbody">
+          <!-- Injected by JS -->
+        </tbody>
+      </table>
     </div>
   </div>
 </main>
@@ -1255,12 +1382,19 @@ let currentZoom = 2;
 let centerMode = 'box'; // 'box' or 'origin'
 let spritesRenderLimit = 200;
 let activeFilterCategory = 'all';
+let animViewMode = 'split'; // 'split' or 'table'
+let spriteViewMode = 'grid'; // 'grid' or 'table'
+let animPreviewsEnabled = true;
 
 // Pre-computed Reverse Maps & Caches
 const imageCache = new Map();
 const spriteUsageMap = new Map(); // sprite_id -> Set(anim_id)
 const soundUsageMap = new Map();  // sound_id -> Set(anim_id)
+const visibleAnimItems = new Set();
+const animCurrentStepMap = new Map();
 let currentlyPlayingAudio = null;
+let previewTicker = null;
+let animObserver = null;
 
 // Build reverse indexes
 function initReverseIndexes() {
@@ -1365,6 +1499,39 @@ function playAudioClip(file) {
   } catch (_) {}
 }
 
+// View Mode Toggles
+function setAnimViewMode(mode) {
+  animViewMode = mode;
+  const splitBtn = document.getElementById('btn-anim-mode-split');
+  const tblBtn = document.getElementById('btn-anim-mode-table');
+  if (splitBtn) splitBtn.classList.toggle('active', mode === 'split');
+  if (tblBtn) tblBtn.classList.toggle('active', mode === 'table');
+  
+  const splitCont = document.getElementById('anims-split-container');
+  const tblWrap = document.getElementById('anims-table-wrapper');
+  if (splitCont) splitCont.style.display = (mode === 'split' ? 'flex' : 'none');
+  if (tblWrap) tblWrap.style.display = (mode === 'table' ? 'block' : 'none');
+  
+  applySearchFilter();
+}
+
+function setSpriteViewMode(mode) {
+  spriteViewMode = mode;
+  const gridBtn = document.getElementById('btn-spr-mode-grid');
+  const tblBtn = document.getElementById('btn-spr-mode-table');
+  if (gridBtn) gridBtn.classList.toggle('active', mode === 'grid');
+  if (tblBtn) tblBtn.classList.toggle('active', mode === 'table');
+
+  const gridCont = document.getElementById('sprites-grid-container');
+  const moreBox = document.getElementById('sprites-load-more-box');
+  const tblWrap = document.getElementById('sprites-table-wrapper');
+  if (gridCont) gridCont.style.display = (mode === 'grid' ? 'grid' : 'none');
+  if (moreBox) moreBox.style.display = (mode === 'grid' ? 'flex' : 'none');
+  if (tblWrap) tblWrap.style.display = (mode === 'table' ? 'block' : 'none');
+
+  applySearchFilter();
+}
+
 // Tab Switching
 function switchTab(tabName) {
   if (!tabName) return;
@@ -1385,8 +1552,10 @@ function switchTab(tabName) {
     view.classList.toggle('active', view.id === tabName + '-view');
   });
 
-  if (tabName === 'anims' && animPlaying && !animTimer) {
-    restartAnimTimer();
+  if (tabName === 'anims') {
+    if (animPlaying && !animTimer) restartAnimTimer();
+    setupAnimObserver();
+    startPreviewTicker();
   }
 
   activeFilterCategory = 'all';
@@ -1469,7 +1638,7 @@ function setSoundSort(col) {
 }
 
 function updateSoundSortIcons() {
-  ['id', 'name', 'rate', 'duration', 'size'].forEach(col => {
+  ['id', 'name', 'rate', 'duration', 'size', 'usage'].forEach(col => {
     const el = document.getElementById(`sort-snd-${col}-icon`);
     if (el) el.textContent = (soundSort.col === col) ? (soundSort.dir === 'asc' ? '▲' : '▼') : '';
   });
@@ -1483,6 +1652,11 @@ function sortSoundsList(list) {
     else if (soundSort.col === 'rate') diff = a.rate - b.rate;
     else if (soundSort.col === 'duration') diff = a.duration_ms - b.duration_ms;
     else if (soundSort.col === 'size') diff = a.size - b.size;
+    else if (soundSort.col === 'usage') {
+      const uA = soundUsageMap.has(a.id) ? soundUsageMap.get(a.id).size : 0;
+      const uB = soundUsageMap.has(b.id) ? soundUsageMap.get(b.id).size : 0;
+      diff = uA - uB;
+    }
     return soundSort.dir === 'asc' ? diff : -diff;
   });
 }
@@ -1499,11 +1673,13 @@ function setAnimSort(col) {
 }
 
 function updateAnimSortButtons() {
-  ['id', 'name', 'steps', 'layers'].forEach(col => {
+  ['id', 'name', 'type', 'steps', 'layers', 'sound', 'size', 'duration'].forEach(col => {
     const btn = document.getElementById(`btn-sort-anim-${col}`);
     const icon = document.getElementById(`sort-anim-${col}-icon`);
+    const tblIcon = document.getElementById(`sort-animtbl-${col}-icon`);
     if (btn) btn.classList.toggle('active', animSort.col === col);
     if (icon) icon.textContent = (animSort.col === col) ? (animSort.dir === 'asc' ? '▲' : '▼') : '';
+    if (tblIcon) tblIcon.textContent = (animSort.col === col) ? (animSort.dir === 'asc' ? '▲' : '▼') : '';
   });
 }
 
@@ -1517,6 +1693,30 @@ function sortAnimsList(list) {
       const layA = a.subitems.reduce((s, x) => s + x.frames.length, 0);
       const layB = b.subitems.reduce((s, x) => s + x.frames.length, 0);
       diff = layA - layB;
+    }
+    else if (animSort.col === 'sound') {
+      const sndA = a.subitems.find(s => s.sound_id >= 0);
+      const sndB = b.subitems.find(s => s.sound_id >= 0);
+      const idA = sndA ? sndA.sound_id : -1;
+      const idB = sndB ? sndB.sound_id : -1;
+      diff = idA - idB;
+    }
+    else if (animSort.col === 'size') {
+      const bA = getAnimBounds(a);
+      const bB = getAnimBounds(b);
+      diff = (bA.width * bA.height) - (bB.width * bB.height);
+    }
+    else if (animSort.col === 'duration') {
+      const durA = a.subitems.reduce((sum, s) => sum + (s.val3 || 50), 0);
+      const durB = b.subitems.reduce((sum, s) => sum + (s.val3 || 50), 0);
+      diff = durA - durB;
+    }
+    else if (animSort.col === 'type') {
+      const isCompA = a.subitems.length === 1 && a.subitems[0].frames.length > 1;
+      const isCompB = b.subitems.length === 1 && b.subitems[0].frames.length > 1;
+      const tA = isCompA ? 2 : (a.subitems.length > 1 ? 1 : 3);
+      const tB = isCompB ? 2 : (b.subitems.length > 1 ? 1 : 3);
+      diff = tA - tB;
     }
     return animSort.dir === 'asc' ? diff : -diff;
   });
@@ -1534,7 +1734,7 @@ function setLayerSort(col) {
 }
 
 function updateLayerSortIcons() {
-  ['layer', 'id', 'name', 'offset', 'size'].forEach(col => {
+  ['thumb', 'layer', 'id', 'name', 'offset', 'size'].forEach(col => {
     const el = document.getElementById(`sort-lay-${col}-icon`);
     if (el) el.textContent = (layerSort.col === col) ? (layerSort.dir === 'asc' ? '▲' : '▼') : '';
   });
@@ -1545,7 +1745,7 @@ function sortLayersList(frames) {
   return withIdx.sort((a, b) => {
     let diff = 0;
     if (layerSort.col === 'layer') diff = a.originalIndex - b.originalIndex;
-    else if (layerSort.col === 'id') diff = a.sprite_id - b.sprite_id;
+    else if (layerSort.col === 'id' || layerSort.col === 'thumb') diff = a.sprite_id - b.sprite_id;
     else if (layerSort.col === 'name') diff = a.sprite_name.localeCompare(b.sprite_name);
     else if (layerSort.col === 'offset') diff = (a.dx * a.dx + a.dy * a.dy) - (b.dx * b.dx + b.dy * b.dy);
     else if (layerSort.col === 'size') diff = (a.w * a.h) - (b.w * b.h);
@@ -1568,8 +1768,10 @@ function updateSpriteSortButtons() {
   ['id', 'name', 'width', 'height', 'area', 'usage'].forEach(col => {
     const btn = document.getElementById(`btn-sort-spr-${col}`);
     const icon = document.getElementById(`sort-spr-${col}-icon`);
+    const tblIcon = document.getElementById(`sort-sprtbl-${col}-icon`);
     if (btn) btn.classList.toggle('active', spriteSort.col === col);
     if (icon) icon.textContent = (spriteSort.col === col) ? (spriteSort.dir === 'asc' ? '▲' : '▼') : '';
+    if (tblIcon) tblIcon.textContent = (spriteSort.col === col) ? (spriteSort.dir === 'asc' ? '▲' : '▼') : '';
   });
 }
 
@@ -1590,40 +1792,97 @@ function sortSpritesList(list) {
   });
 }
 
-// Hover animation preview logic for left sidebar
-let hoverPreviewInterval = null;
-let activeHoverImg = null;
-let activeHoverOriginalSrc = '';
+// Live Animation Preview Engine for Left-hand Sidebar & Tables
+function setupAnimObserver() {
+  if (animObserver) {
+    animObserver.disconnect();
+  }
+  visibleAnimItems.clear();
 
-function startAnimItemHover(animId, imgElem) {
-  stopAnimItemHover();
-  const anim = CATALOG_DATA.animations[animId];
-  if (!anim || anim.subitems.length <= 1 || !imgElem) return;
+  if (!animPreviewsEnabled) return;
 
-  activeHoverImg = imgElem;
-  activeHoverOriginalSrc = imgElem.src;
+  const scrollRoot = (animViewMode === 'table') ? document.getElementById('anims-table-wrapper') : document.getElementById('anims-list');
+  if (!scrollRoot) return;
 
-  let stepIdx = 0;
-  hoverPreviewInterval = setInterval(() => {
-    stepIdx = (stepIdx + 1) % anim.subitems.length;
-    const sub = anim.subitems[stepIdx];
-    if (sub && sub.frames && sub.frames.length > 0) {
-      const spId = sub.frames[0].sprite_id;
-      imgElem.src = `sprites/sprite_${String(spId).padStart(4, '0')}.png`;
+  animObserver = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      const animId = parseInt(entry.target.dataset.animId, 10);
+      if (isNaN(animId)) return;
+      if (entry.isIntersecting) {
+        visibleAnimItems.add(animId);
+      } else {
+        visibleAnimItems.delete(animId);
+      }
+    });
+  }, {
+    root: scrollRoot,
+    rootMargin: '100px 0px 100px 0px',
+    threshold: 0.01
+  });
+
+  const selector = (animViewMode === 'table') ? '.anim-table-row[data-anim-id]' : '.anim-item[data-anim-id]';
+  document.querySelectorAll(selector).forEach(el => {
+    const id = parseInt(el.dataset.animId, 10);
+    const a = CATALOG_DATA.animations[id];
+    if (a && a.subitems.length > 1) {
+      animObserver.observe(el);
     }
-  }, 90);
+  });
 }
 
-function stopAnimItemHover() {
-  if (hoverPreviewInterval) {
-    clearInterval(hoverPreviewInterval);
-    hoverPreviewInterval = null;
+function startPreviewTicker() {
+  if (previewTicker) clearInterval(previewTicker);
+  previewTicker = setInterval(() => {
+    if (!animPreviewsEnabled || currentTab !== 'anims') return;
+    if (visibleAnimItems.size === 0) return;
+
+    visibleAnimItems.forEach(animId => {
+      const a = CATALOG_DATA.animations[animId];
+      if (!a || a.subitems.length <= 1) return;
+
+      const curStep = (animCurrentStepMap.get(animId) || 0);
+      const nextStep = (curStep + 1) % a.subitems.length;
+      animCurrentStepMap.set(animId, nextStep);
+
+      const sub = a.subitems[nextStep];
+      if (sub && sub.frames && sub.frames.length > 0) {
+        const spId = sub.frames[0].sprite_id;
+        const img = document.getElementById(`anim-thumb-${animId}`);
+        if (img) {
+          img.src = `sprites/sprite_${String(spId).padStart(4, '0')}.png`;
+        }
+        const tblImg = document.getElementById(`anim-table-thumb-${animId}`);
+        if (tblImg) {
+          tblImg.src = `sprites/sprite_${String(spId).padStart(4, '0')}.png`;
+        }
+      }
+    });
+  }, 100); // 10 fps — clean, authentic retro cadence
+}
+
+function toggleAnimLivePreviews() {
+  animPreviewsEnabled = !animPreviewsEnabled;
+  const btn = document.getElementById('btn-anim-live-preview-toggle');
+  if (btn) {
+    btn.classList.toggle('active', animPreviewsEnabled);
+    btn.textContent = animPreviewsEnabled ? '🎬 Live Previews: ON' : '⏸️ Previews: PAUSED';
   }
-  if (activeHoverImg && activeHoverOriginalSrc) {
-    activeHoverImg.src = activeHoverOriginalSrc;
+  showToast(animPreviewsEnabled ? 'Live animation previews enabled' : 'Animation previews paused');
+  if (animPreviewsEnabled) {
+    setupAnimObserver();
+    startPreviewTicker();
+  } else {
+    visibleAnimItems.forEach(animId => {
+      const a = CATALOG_DATA.animations[animId];
+      if (a && a.subitems[0] && a.subitems[0].frames[0]) {
+        const spId = a.subitems[0].frames[0].sprite_id;
+        const img = document.getElementById(`anim-thumb-${animId}`);
+        if (img) img.src = `sprites/sprite_${String(spId).padStart(4, '0')}.png`;
+        const tblImg = document.getElementById(`anim-table-thumb-${animId}`);
+        if (tblImg) tblImg.src = `sprites/sprite_${String(spId).padStart(4, '0')}.png`;
+      }
+    });
   }
-  activeHoverImg = null;
-  activeHoverOriginalSrc = '';
 }
 
 // 1. Sounds View Logic
@@ -1642,11 +1901,13 @@ function renderSounds(items) {
       <td><span class="badge badge-sound">#${s.id}</span></td>
       <td>
         <div style="font-family: ui-monospace, monospace; font-weight: 600;">${s.name}</div>
-        ${usedInCount > 0 ? `<div style="font-size: 0.7rem; color: #34d399; cursor: pointer;" onclick="filterAnimsBySound(${s.id})">Triggered in ${usedInCount} animation${usedInCount > 1 ? 's' : ''} &rarr;</div>` : ''}
       </td>
       <td>${s.rate.toLocaleString()} Hz</td>
       <td>${s.duration_ms} ms</td>
       <td>${(s.size / 1024).toFixed(1)} KB</td>
+      <td>
+        ${usedInCount > 0 ? `<button class="copy-btn" style="color: #34d399; border-color: rgba(52, 211, 153, 0.3); font-weight: 600;" onclick="filterAnimsBySound(${s.id})" title="Filter animations using this sound">${usedInCount} anim${usedInCount > 1 ? 's' : ''} &rarr;</button>` : '<span style="color: var(--text-dim); font-size: 0.8rem;">—</span>'}
+      </td>
       <td>
         <audio controls preload="none" style="height: 32px; width: 100%;" src="${s.file}" id="audio-elem-${s.id}"></audio>
       </td>
@@ -1739,10 +2000,19 @@ function renderAnimsList(items) {
 
     const div = document.createElement('div');
     div.className = 'anim-item' + (a.id === activeAnimIndex ? ' selected' : '');
+    div.dataset.animId = a.id;
     
-    const thumbHtml = (firstSpriteId !== null)
-      ? `<div class="anim-thumb-box"><img src="sprites/sprite_${String(firstSpriteId).padStart(4, '0')}.png" loading="lazy" class="anim-thumb-img" alt="${a.name}" id="anim-thumb-${a.id}"></div>`
-      : `<div class="anim-thumb-box"><span class="anim-thumb-empty">None</span></div>`;
+    let thumbInner = '<span class="anim-thumb-empty">None</span>';
+    if (firstSpriteId !== null) {
+      thumbInner = `<img src="sprites/sprite_${String(firstSpriteId).padStart(4, '0')}.png" loading="lazy" class="anim-thumb-img" alt="${a.name}" id="anim-thumb-${a.id}">`;
+      if (a.subitems.length > 1) {
+        thumbInner += `<span class="anim-thumb-badge" title="${a.subitems.length} steps">${a.subitems.length}f</span>`;
+      }
+      if (soundSub) {
+        thumbInner += `<span class="anim-thumb-snd" title="Audio trigger: ${soundSub.sound_name}">🔊</span>`;
+      }
+    }
+    const thumbHtml = `<div class="anim-thumb-box">${thumbInner}</div>`;
 
     div.innerHTML = `
       ${thumbHtml}
@@ -1755,17 +2025,85 @@ function renderAnimsList(items) {
       </div>
     `;
 
-    const imgElem = div.querySelector('.anim-thumb-img');
-    if (imgElem && a.subitems.length > 1) {
-      div.addEventListener('mouseenter', () => startAnimItemHover(a.id, imgElem));
-      div.addEventListener('mouseleave', () => stopAnimItemHover());
-    }
-
-    div.dataset.animId = a.id;
     div.onclick = () => selectAnimation(a.id);
     container.appendChild(div);
   });
+  setupAnimObserver();
   document.getElementById('status-info').textContent = `Showing ${items.length} of ${CATALOG_DATA.animations.length} animations`;
+}
+
+function renderAnimsTable(items) {
+  const tbody = document.getElementById('anims-tbody');
+  if (!tbody) return;
+  tbody.innerHTML = '';
+
+  items.forEach(a => {
+    const totalFrames = a.subitems.reduce((sum, s) => sum + s.frames.length, 0);
+    const soundSub = a.subitems.find(s => s.sound_id >= 0);
+    const isComposite = a.subitems.length === 1 && totalFrames > 1;
+    const isSingle = a.subitems.length === 1 && totalFrames === 1;
+    const typeLabel = isComposite ? `Composite (${totalFrames}L)` : (isSingle ? '1 Frame' : `${a.subitems.length} Steps`);
+    const bounds = getAnimBounds(a);
+    const duration = a.subitems.length > 1 ? `${a.subitems.length * 50} ms` : '—';
+
+    let firstSpriteId = null;
+    for (const sub of a.subitems) {
+      if (sub.frames && sub.frames.length > 0 && sub.frames[0].sprite_id !== undefined) {
+        firstSpriteId = sub.frames[0].sprite_id;
+        break;
+      }
+    }
+
+    const tr = document.createElement('tr');
+    tr.className = 'anim-table-row' + (a.id === activeAnimIndex ? ' active-row' : '');
+    tr.dataset.animId = a.id;
+    tr.style.cursor = 'pointer';
+
+    let thumbInner = '<span class="anim-thumb-empty">None</span>';
+    if (firstSpriteId !== null) {
+      thumbInner = `<img src="sprites/sprite_${String(firstSpriteId).padStart(4, '0')}.png" loading="lazy" class="anim-thumb-img" alt="${a.name}" id="anim-table-thumb-${a.id}">`;
+      if (a.subitems.length > 1) {
+        thumbInner += `<span class="anim-thumb-badge">${a.subitems.length}f</span>`;
+      }
+    }
+
+    tr.innerHTML = `
+      <td>
+        <div class="anim-thumb-box" style="width: 44px; height: 44px; min-width: 44px;">
+          ${thumbInner}
+        </div>
+      </td>
+      <td><span class="badge ${isComposite ? 'badge-sprite' : 'badge-anim'}">#${a.id}</span></td>
+      <td>
+        <div style="font-family: ui-monospace, monospace; font-weight: 600; color: var(--text-primary);">${a.name}</div>
+      </td>
+      <td><span style="font-size:0.75rem; color:var(--text-secondary);">${typeLabel}</span></td>
+      <td style="font-family: monospace;">${a.subitems.length}</td>
+      <td style="font-family: monospace;">${totalFrames}</td>
+      <td>
+        ${soundSub ? `<button class="copy-btn" style="color:#fbbf24; border-color:rgba(251,191,36,0.3); font-size:0.75rem;" onclick="event.stopPropagation(); filterAnimsBySound(${soundSub.sound_id})" title="Filter by audio clip">🔊 #${soundSub.sound_id} ${soundSub.sound_name}</button>` : '<span style="color:var(--text-dim); font-size:0.8rem;">—</span>'}
+      </td>
+      <td style="font-family: monospace; font-size:0.8rem;">${bounds.width} × ${bounds.height} px</td>
+      <td style="font-family: monospace; font-size:0.8rem;">${duration}</td>
+      <td>
+        <div class="btn-group">
+          <button class="copy-btn" onclick="event.stopPropagation(); copyText('${a.name}', 'anim name')">Copy</button>
+          <button class="copy-btn" onclick="event.stopPropagation(); inspectAnimationInSplit(${a.id})">Inspect</button>
+        </div>
+      </td>
+    `;
+
+    tr.onclick = () => inspectAnimationInSplit(a.id);
+    tbody.appendChild(tr);
+  });
+
+  setupAnimObserver();
+  document.getElementById('status-info').textContent = `Showing ${items.length} of ${CATALOG_DATA.animations.length} animations`;
+}
+
+function inspectAnimationInSplit(animId) {
+  setAnimViewMode('split');
+  selectAnimation(animId);
 }
 
 function selectAnimation(animId) {
@@ -2081,6 +2419,52 @@ function renderSprites(items) {
   document.getElementById('status-info').textContent = `Showing ${displayItems.length} of ${items.length} sprites (search filters all 2,794)`;
 }
 
+function renderSpritesTable(items) {
+  const tbody = document.getElementById('sprites-tbody');
+  if (!tbody) return;
+  tbody.innerHTML = '';
+  const displayItems = items.slice(0, spritesRenderLimit);
+
+  displayItems.forEach(sp => {
+    const tr = document.createElement('tr');
+    tr.style.cursor = 'pointer';
+    const usedAnimIds = spriteUsageMap.get(sp.id) || new Set();
+    const usedCount = usedAnimIds.size;
+    const area = sp.width * sp.height;
+
+    tr.innerHTML = `
+      <td>
+        <div class="anim-thumb-box" style="width: 44px; height: 44px; min-width: 44px;">
+          <img src="${sp.file}" loading="lazy" class="anim-thumb-img" alt="${sp.name}">
+        </div>
+      </td>
+      <td><span class="badge badge-sprite">#${sp.id}</span></td>
+      <td><strong style="font-family: ui-monospace, monospace; color: var(--text-primary);">${sp.name}</strong></td>
+      <td style="font-family: monospace;">${sp.width} px</td>
+      <td style="font-family: monospace;">${sp.height} px</td>
+      <td style="font-family: monospace; font-size:0.8rem;">${sp.width} × ${sp.height} <span style="color:var(--text-dim);">(${area.toLocaleString()} px²)</span></td>
+      <td>
+        ${usedCount > 0 ? `<button class="copy-btn" style="color: #60a5fa; border-color: rgba(96,165,250,0.3); font-weight:600;" onclick="event.stopPropagation(); openSpriteModal(${sp.id})" title="Inspect usage">${usedCount} sequence${usedCount > 1 ? 's' : ''} &rarr;</button>` : '<span style="color:var(--text-dim); font-size:0.8rem;">—</span>'}
+      </td>
+      <td>
+        <div class="btn-group">
+          <button class="copy-btn" onclick="event.stopPropagation(); copyText('${sp.name}', 'sprite filename')">Copy</button>
+          <a href="${sp.file}" download="${sp.name}" class="copy-btn" onclick="event.stopPropagation();" title="Download PNG" style="text-decoration:none; display:inline-flex; align-items:center; justify-content:center;">⬇ PNG</a>
+          <button class="copy-btn" onclick="event.stopPropagation(); openSpriteModal(${sp.id})">Inspect</button>
+        </div>
+      </td>
+    `;
+    tr.onclick = () => openSpriteModal(sp.id);
+    tbody.appendChild(tr);
+  });
+
+  const loadMoreBox = document.getElementById('sprites-load-more-box');
+  if (loadMoreBox) {
+    loadMoreBox.style.display = displayItems.length < items.length ? 'flex' : 'none';
+  }
+  document.getElementById('status-info').textContent = `Showing ${displayItems.length} of ${items.length} sprites (search filters all 2,794)`;
+}
+
 document.getElementById('btn-load-more').onclick = () => {
   spritesRenderLimit += 200;
   applySearchFilter();
@@ -2184,7 +2568,11 @@ function applySearchFilter() {
       );
     }
     filtered = sortAnimsList(filtered);
-    renderAnimsList(filtered);
+    if (animViewMode === 'table') {
+      renderAnimsTable(filtered);
+    } else {
+      renderAnimsList(filtered);
+    }
     if (filtered.length > 0 && !filtered.some(a => a.id === activeAnimIndex)) {
       selectAnimation(filtered[0].id);
     }
@@ -2195,7 +2583,11 @@ function applySearchFilter() {
       filtered = filtered.filter(sp => sp.name.toLowerCase().includes(query) || String(sp.id).includes(query));
     }
     filtered = sortSpritesList(filtered);
-    renderSprites(filtered);
+    if (spriteViewMode === 'table') {
+      renderSpritesTable(filtered);
+    } else {
+      renderSprites(filtered);
+    }
   }
 }
 
@@ -2350,6 +2742,8 @@ window.addEventListener('DOMContentLoaded', () => {
   renderAnimsList(CATALOG_DATA.animations);
   selectAnimation(0);
   renderSprites(CATALOG_DATA.sprites);
+  setupAnimObserver();
+  startPreviewTicker();
   switchTab(currentTab || 'sounds');
 });
 </script>
