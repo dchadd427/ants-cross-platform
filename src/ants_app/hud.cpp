@@ -2267,6 +2267,20 @@ void HUD::dispatch_move_order(int32_t target_tile_x, int32_t target_tile_y, sim:
     }
 move_voice_done:
 
+    bool target_is_food = sim.grid().has_food_at({target_tile_x, target_tile_y});
+    if (!target_is_food) {
+        for (const auto& afs : sim.grid().food_schedules()) {
+            if (!afs.active) continue;
+            for (const auto& c : afs.footprint) {
+                if (c.x == target_tile_x && c.y == target_tile_y) {
+                    target_is_food = true;
+                    break;
+                }
+            }
+            if (target_is_food) break;
+        }
+    }
+
     if (targets.size() == 1) {
         sim::AntOrder order;
         order.ant_id = targets[0];
@@ -2274,6 +2288,7 @@ move_voice_done:
         order.target_x = target_tile_x;
         order.target_y = target_tile_y;
         order.allow_friendly_bomb = allow_friendly_bomb;
+        order.is_food_order = target_is_food;
         sim.issue_order(order);
         return;
     }
@@ -2286,6 +2301,7 @@ move_voice_done:
             order.target_x = target_tile_x;
             order.target_y = target_tile_y;
             order.allow_friendly_bomb = true;
+            order.is_food_order = target_is_food;
             sim.issue_order(order);
         }
         return;
@@ -2353,6 +2369,7 @@ move_voice_done:
         order.ant_id = targets[i];
         order.type = sim::OrderType::Move;
         order.allow_friendly_bomb = allow_friendly_bomb;
+        order.is_food_order = target_is_food;
         if (i < slots.size()) {
             order.target_x = slots[i].first;
             order.target_y = slots[i].second;
@@ -2462,7 +2479,20 @@ void HUD::dispatch_smart_special_ability(int32_t world_x, int32_t world_y, sim::
     int32_t target_tile_y = world_y / 32;
 
     const auto& grid = sim.grid();
-    bool is_food_or_pu = grid.has_food_at({target_tile_x, target_tile_y}) ||
+    const sim::ActiveFoodSchedule* matched_fs = nullptr;
+    for (const auto& afs : grid.food_schedules()) {
+        if (!afs.active) continue;
+        for (const auto& c : afs.footprint) {
+            if (c.x == target_tile_x && c.y == target_tile_y) {
+                matched_fs = &afs;
+                break;
+            }
+        }
+        if (matched_fs) break;
+    }
+
+    bool is_target_food = grid.has_food_at({target_tile_x, target_tile_y}) || (matched_fs != nullptr);
+    bool is_food_or_pu = is_target_food ||
                          grid.has_powerup_at({target_tile_x, target_tile_y}) ||
                          grid.has_lunchbox_at({target_tile_x, target_tile_y});
 
@@ -2478,18 +2508,6 @@ void HUD::dispatch_smart_special_ability(int32_t world_x, int32_t world_y, sim::
                 }
             }
         };
-
-        const sim::ActiveFoodSchedule* matched_fs = nullptr;
-        for (const auto& afs : grid.food_schedules()) {
-            if (!afs.active) continue;
-            for (const auto& c : afs.footprint) {
-                if (c.x == target_tile_x && c.y == target_tile_y) {
-                    matched_fs = &afs;
-                    break;
-                }
-            }
-            if (matched_fs) break;
-        }
 
         if (matched_fs) {
             for (const auto& c : matched_fs->footprint) add_slot(c.x, c.y);
@@ -2542,6 +2560,7 @@ void HUD::dispatch_smart_special_ability(int32_t world_x, int32_t world_y, sim::
 
         if (is_food_or_pu) {
             order.type = sim::OrderType::Move;
+            order.is_food_order = is_target_food;
         } else {
             switch (sel->type) {
                 case sim::AntType::Bomber:
