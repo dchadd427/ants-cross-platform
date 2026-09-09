@@ -1713,6 +1713,11 @@ void run_suite_10_egg_economy_incubation_teamup_abilities() {
 
         ASSERT_EQ(hud.get_selected_base_team_id(), 1);
 
+        // Clicking Stop button position (605, 195) does not clear enemy base selection (stop button is absent)
+        hud.handle_mouse_down(605, 195, 1, sim, camera);
+        hud.handle_mouse_up(605, 195, 1, sim, camera);
+        ASSERT_EQ(hud.get_selected_base_team_id(), 1);
+
         // Click Team Up button (Pedestal 1 at x=495, y=165)
         hud.handle_mouse_down(495, 165, 1, sim, camera);
         hud.handle_mouse_up(495, 165, 1, sim, camera);

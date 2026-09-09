@@ -343,31 +343,20 @@ void HUD::render(IRenderer& renderer, const assets::AssetArchive& assets,
             renderer.draw_named_sprite("wstatus.bmp", 480, 253);
             // Empty status box matching authentic appearance
         } else {
-            // Enemy Base Selection Card
-            static const char* hill_names[4] = { "Green Anthill", "Red Anthill", "Blue Anthill", "Black Anthill" };
-            uint8_t tid = static_cast<uint8_t>(selected_base_team_id_ % 4);
-            renderer.draw_named_sprite("wtype.bmp", 488, 130);
-            renderer.draw_text(hill_names[tid], 505, 133, TEAM_COLORS[tid]);
-
+            // Authentic Enemy Base Selection Interface
             bool is_allied = (local_player_id_ < world.player_alliances.size()) &&
                              (world.player_alliances[local_player_id_] == selected_base_team_id_);
 
-            // Team Up option on Pedestal 1 (488, 155):
+            // Pedestal 1 (488, 155): TeamUp option
             bool team_down = team_up_button_.is_pressed;
             renderer.draw_named_sprite(team_down ? "butdown.bmp" : "butup.bmp", 488, 155);
             renderer.draw_named_sprite(team_down ? "butdipd.bmp" : "butdipu.bmp", 503, team_down ? 166 : 164);
-            renderer.draw_named_sprite("labdib.bmp", 497, 140);
-
-            // Cancel / Stop button on right (602, 192)
-            renderer.draw_named_sprite("labcan.bmp", 603, 176);
-            renderer.draw_named_sprite(stop_button_.is_pressed ? "butcand.bmp" : "butcanu.bmp", 602, 192);
+            renderer.draw_named_sprite("labdib.bmp", 491, 140);
 
             // Recessed status box wstatus.bmp (143x14) at (480, 253)
             renderer.draw_named_sprite("wstatus.bmp", 480, 253);
             if (is_allied) {
                 renderer.draw_text("Allied Colony", 486, 256, {100, 255, 100, 255});
-            } else {
-                renderer.draw_text("Team Up", 486, 256, {255, 255, 100, 255});
             }
         }
     } else {
@@ -1202,6 +1191,11 @@ bool HUD::handle_mouse_down(int32_t x, int32_t y, uint8_t button,
                     }
                     return true;
                 }
+                if (stop_button_.contains(x, y)) {
+                    stop_button_.is_pressed = true;
+                    clear_selection();
+                    return true;
+                }
             } else {
                 if (team_up_button_.contains(x, y) || move_pedestal_button_.contains(x, y)) {
                     team_up_button_.is_pressed = true;
@@ -1216,11 +1210,6 @@ bool HUD::handle_mouse_down(int32_t x, int32_t y, uint8_t button,
                     }
                     return true;
                 }
-            }
-            if (stop_button_.contains(x, y)) {
-                stop_button_.is_pressed = true;
-                clear_selection();
-                return true;
             }
         }
 
