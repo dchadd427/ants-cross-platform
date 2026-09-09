@@ -6,6 +6,9 @@
 #if defined(_WIN32)
   #include <winsock2.h>
   #include <windows.h>
+#elif defined(__EMSCRIPTEN__)
+  #include <emscripten.h>
+  #include <unistd.h>
 #else
   #include <unistd.h>
 #endif
@@ -15,6 +18,9 @@ namespace ants::app {
 namespace {
 
 std::string get_system_username() {
+#if defined(__EMSCRIPTEN__)
+    return "WebPlayer";
+#else
     const char* user = std::getenv("USER");
     if (!user) user = std::getenv("USERNAME");
     std::string u = (user && *user) ? user : "Player";
@@ -28,6 +34,7 @@ std::string get_system_username() {
         return u + "@" + h;
     }
     return u;
+#endif
 }
 
 } // anonymous namespace
@@ -373,57 +380,91 @@ void Application::return_to_map_select() {
     }
 }
 
-int Application::run() {
-    uint64_t perf_freq = SDL_GetPerformanceFrequency();
-    uint64_t last_frame_time = SDL_GetPerformanceCounter();
+void Application::run_frame_with_delta(float delta_time) {
+    if (!is_running_) return;
 
-    int headless_frame_count = 0;
+    // Clamp delta_time to prevent physics / tick spiral when tab or window is backgrounded
+    if (delta_time > 0.100f) {
+        delta_time = 0.100f;
+    }
+
+    if (delta_time > 0.0001f) {
+        float instant_fps = 1.0f / delta_time;
+        current_fps_ = current_fps_ * 0.9f + instant_fps * 0.1f;
+
+        // Record frametime in ms for sparkline
+        float frame_ms = delta_time * 1000.0f;
+        frametime_history_[frametime_index_] = frame_ms;
+        frametime_index_ = (frametime_index_ + 1) % SPARKLINE_SAMPLES;
+
+        // Rolling average: update displayed FPS every 250ms (~4 times/sec) for clear, stable readability
+        fps_time_accumulator_ += delta_time;
+        fps_frame_counter_++;
+        if (fps_time_accumulator_ >= 0.25f) {
+            fps_display_value_ = static_cast<float>(fps_frame_counter_) / fps_time_accumulator_;
+            fps_time_accumulator_ = 0.0f;
+            fps_frame_counter_ = 0;
+        }
+    }
+
+    handle_events();
+
+    if (!is_paused_) {
+        update_simulation(delta_time);
+    }
+
+    if (!config_.screenshot_path.empty()) {
+        if (--config_.screenshot_frames == 1) {
+            renderer_->request_screenshot(config_.screenshot_path);
+        } else if (config_.screenshot_frames <= 0) {
+            is_running_ = false;
+        }
+    }
+
+    render_frame();
+
+    if (config_.headless && config_.screenshot_path.empty()) {
+        if (++headless_frame_count_ >= 10) {
+            is_running_ = false;
+        }
+    }
+}
+
+void Application::run_frame() {
+    uint64_t perf_freq = SDL_GetPerformanceFrequency();
+    uint64_t current_time = SDL_GetPerformanceCounter();
+    float delta_time = (last_frame_time_ > 0) ? (static_cast<float>(current_time - last_frame_time_) / static_cast<float>(perf_freq)) : 0.01666f;
+    last_frame_time_ = current_time;
+
+    run_frame_with_delta(delta_time);
+}
+
+#if defined(__EMSCRIPTEN__)
+static void emscripten_main_loop_iter(void* arg) {
+    auto* app = static_cast<Application*>(arg);
+    if (app && app->is_running()) {
+        app->run_frame();
+    }
+}
+#endif
+
+int Application::run() {
+    last_frame_time_ = SDL_GetPerformanceCounter();
+    headless_frame_count_ = 0;
+
+#if defined(__EMSCRIPTEN__)
+    // 0 fps synchronizes with requestAnimationFrame, 1 simulates infinite loop
+    emscripten_set_main_loop_arg(emscripten_main_loop_iter, this, 0, 1);
+    return 0;
+#else
+    uint64_t perf_freq = SDL_GetPerformanceFrequency();
 
     while (is_running_) {
         uint64_t current_time = SDL_GetPerformanceCounter();
-        float delta_time = static_cast<float>(current_time - last_frame_time) / static_cast<float>(perf_freq);
-        last_frame_time = current_time;
+        float delta_time = static_cast<float>(current_time - last_frame_time_) / static_cast<float>(perf_freq);
+        last_frame_time_ = current_time;
 
-        if (delta_time > 0.0001f) {
-            float instant_fps = 1.0f / delta_time;
-            current_fps_ = current_fps_ * 0.9f + instant_fps * 0.1f;
-
-            // Record frametime in ms for sparkline
-            float frame_ms = delta_time * 1000.0f;
-            frametime_history_[frametime_index_] = frame_ms;
-            frametime_index_ = (frametime_index_ + 1) % SPARKLINE_SAMPLES;
-
-            // Rolling average: update displayed FPS every 250ms (~4 times/sec) for clear, stable readability
-            fps_time_accumulator_ += delta_time;
-            fps_frame_counter_++;
-            if (fps_time_accumulator_ >= 0.25f) {
-                fps_display_value_ = static_cast<float>(fps_frame_counter_) / fps_time_accumulator_;
-                fps_time_accumulator_ = 0.0f;
-                fps_frame_counter_ = 0;
-            }
-        }
-
-        handle_events();
-
-        if (!is_paused_) {
-            update_simulation(delta_time);
-        }
-
-        if (!config_.screenshot_path.empty()) {
-            if (--config_.screenshot_frames == 1) {
-                renderer_->request_screenshot(config_.screenshot_path);
-            } else if (config_.screenshot_frames <= 0) {
-                is_running_ = false;
-            }
-        }
-
-        render_frame();
-
-        if (config_.headless && config_.screenshot_path.empty()) {
-            if (++headless_frame_count >= 10) {
-                is_running_ = false;
-            }
-        }
+        run_frame_with_delta(delta_time);
 
         // 60 FPS target frame limiter (~16.666 ms per frame)
         if (!config_.headless) {
@@ -435,6 +476,7 @@ int Application::run() {
         }
     }
     return 0;
+#endif
 }
 
 void Application::handle_events() {

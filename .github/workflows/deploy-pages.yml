@@ -1,0 +1,65 @@
+name: Deploy WebAssembly Game to GitHub Pages
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Emscripten
+        uses: mymindstorm/setup-emsdk@v14
+        with:
+          version: 3.1.58
+
+      - name: Verify Emscripten Compiler
+        run: emcc -v
+
+      - name: Configure CMake for WebAssembly
+        run: |
+          emcmake cmake -B build_web \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_TESTS=OFF
+
+      - name: Build WebAssembly Target
+        run: cmake --build build_web -j4
+
+      - name: Prepare Web Distribution
+        run: |
+          mkdir -p dist
+          cp -f build_web/src/ants_app/index.html dist/
+          cp -f build_web/src/ants_app/index.js dist/
+          cp -f build_web/src/ants_app/index.wasm dist/
+          cp -f build_web/src/ants_app/index.data dist/
+          ls -la dist/
+
+      - name: Upload GitHub Pages Artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

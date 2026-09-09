@@ -959,3 +959,15 @@ Ants-Mac/
 1. **Direct Binary Asset Compatibility:** Loads `ants.chd` and `Maps/*.LVL` directly into memory without requiring pre-conversion or asset destruction.
 2. **Deterministic Simulation:** Allows perfect multiplayer synchronization (lockstep / client-side prediction) and instant replay saves.
 3. **Hardware Acceleration:** Modern GPU vertex/fragment shaders for authentic 256-color palette swaps, crisp integer pixel scaling, and optional CRT/LCD filter shaders.
+
+---
+
+### 6.1 WebAssembly Browser Architecture & Virtual Filesystem Bundling
+
+To deliver authentic 1:1 gameplay inside standard web browsers with zero installation:
+- **Non-Blocking Main Loop**: WebAssembly applications cannot execute blocking `while` loops without hanging the browser UI thread. In `Application::run()`, compiling under Emscripten (`__EMSCRIPTEN__`) registers `emscripten_set_main_loop_arg` (0 fps, infinite simulated loop), binding every tick to browser `requestAnimationFrame` vsync callbacks.
+- **Delta-Time Spiral Protection**: When browser tabs lose focus or are backgrounded, delta-time accumulates rapidly. The simulation engine clamps per-frame `dt` to 0.100s, preventing simulation spiral of death.
+- **Asset Virtualization (`--preload-file`)**: The authentic binary package (`Original-Ants/ants.chd`, `Maps/*.LVL`, and `.MID` files) is bundled at compile time into an 8.1 MB `ants.data` virtual filesystem blob. The C++ file access calls (`load_from_file("Original-Ants/ants.chd")`) remain 100% unmodified and read from virtual memory.
+- **Web Audio Context Unlocking**: Modern browser autoplay policies suspend Web Audio until a user interaction occurs. The web shell provides an interactive splash overlay that simultaneously resumes `AudioContext` and focuses the WebGL canvas.
+- **Automated CI/CD GitHub Pages Deployment**: An automated GitHub Actions workflow compiles the project with `emcmake` and deploys the static artifacts (`index.html`, `index.js`, `index.wasm`, `index.data`) directly to GitHub Pages on every push to `main`.
+

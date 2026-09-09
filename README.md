@@ -96,10 +96,29 @@ sudo apt-get update && sudo apt-get install -y cmake g++ libsdl2-dev
 
 ---
 
-## Building and Running
+## Play in Browser (WebAssembly)
+
+Play the remake instantly in any modern web browser (Chrome, Firefox, Safari, Edge) without installing anything:
+
+👉 **[Play Ants Online on GitHub Pages](https://dchadd427.github.io/ants-cross-platform/)**
+
+- **Authentic 1998 Asset Pipeline**: Full 8.1 MB archive (`ants.chd`, maps, and audio) packed into browser memory.
+- **Hardware-Accelerated 2D Viewport**: Pixel-crisp 4:3 display scaling with WebGL2 rendering.
+- **32-Channel Spatial Sound**: Authentic ant voice clips, explosions, and melee sound effects powered by Web Audio.
+
+To build the WebAssembly port locally:
+```bash
+./build_web.sh
+python3 -m http.server 8080 -d dist
+# Open http://localhost:8080
+```
+
+---
+
+## Building and Running Locally (Native Desktop)
 
 ### Quick Launch
-To automatically build and launch the game in one step:
+To automatically build and launch the native desktop game in one step:
 
 ```bash
 ./start_game.sh
