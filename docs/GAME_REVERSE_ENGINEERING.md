@@ -1003,16 +1003,30 @@ The authentic match clock routine at `0x1024839` evaluates remaining match milli
 
 ---
 
-### 5.29 Daisy Flower Power-Up Droppers & Falling Droplet Anims (`SMALL.LVL`)
+### 5.29 Daisy Flower Power-Up Droppers & Falling Droplet Anims (Block 4 Waypoints)
 
-- **Daisy Plant Placement & Sway Animation:** On maps such as `SMALL.LVL`, cliff-top daisy flowers (`dflower1`, animation 420) are placed at `(2, 19)` and `(37, 19)`. The plant continuously renders its swaying animation loop (`anim 420`) above the cliff edges.
-- **Timing & Uniform Random Power-Up Drops:**
-  - **Initial Delay:** 90 seconds (1,800 ticks).
-  - **Respawn Interval:** 120 seconds (2,400 ticks) after the previous droplet lands.
-  - **Target Landing Coordinates:** Drops land at `(3, 19)` and `(38, 19)`.
-  - **Power-Up Selection:** Uniform random 1-of-5 selection across Combat (4), Fire (2), Bomber (1), Thief (3), and Swimmer (5).
+- **Flower Canopy Layering & Sprite Rendering:**
+  - On maps such as `SMALL.LVL` (at `(2, 19)` and `(37, 19)`), `GAUNTLET.LVL` (at `(3, 5)`), `ISLANDS.LVL` (at `(30, 55)` and `(30, 4)`), and `MEDIUM.LVL` (at `(29, 28)`), daisy flowers (`flower1`, Anim ID 421) are placed in Block 1 (`anthill_spawns`) with `team_id == 255`.
+  - These flowers render as static Layer 3 canopy objects. Dynamic simulation avoids rendering duplicate animated flower bodies over the static canopy, rendering only the falling droplet sequence during active drops.
+- **Timing & Block 4 Waypoint Configuration:**
+  - Block 4 waypoints with `flag == 1` define power-up spawn locations.
+  - `wp.param` dictates the delay and respawn interval in seconds (`wp.param * 20` simulation ticks):
+    - `SMALL.LVL`: 15s interval (300 ticks).
+    - `GAUNTLET.LVL`: 30s interval (600 ticks).
+    - `ISLANDS.LVL`: 30s / 60s interval (600 / 1,200 ticks).
+    - `MEDIUM.LVL`: 8s / 30s interval (160 / 600 ticks).
+  - Target landing coordinates match the waypoint tile `(wp.x, wp.y)`.
+- **Power-Up Probability Distribution (`wp.probabilities[5]`):**
+  - Each active waypoint stores 5 IEEE-754 64-bit doubles summing to 1.0, representing the drop probabilities for each power-up class:
+    - Index 0: Bomber (`PU_BOMBER`, Tile 64, `FD_BOMB`, Anim 426)
+    - Index 1: Combat (`PU_COMBAT`, Tile 62, `FD_COMB`, Anim 422)
+    - Index 2: Thief (`PU_THIEF`, Tile 63, `FD_THIEF`, Anim 424)
+    - Index 3: Swimmer (`PU_SWIMMER`, Tile 65, `FD_SWIM`, Anim 423)
+    - Index 4: Fire (`PU_FIRE`, Tile 66, `FD_FIRE`, Anim 425)
+  - For instance, `ISLANDS.LVL` sets Swimmer probability to 70% (`probs[3] = 0.70`), while waterless maps (`SMALL.LVL`, `MEDIUM.LVL`) zero out Swimmer or concentrate drops on Combat/Fire/Bomber.
 - **Falling Droplet Animation & Audio Cue:**
   - When triggered, a 9-frame falling droplet animation begins playing directly above the target tile (`FD_COMB`, `FD_SWIM`, `FD_THIEF`, `FD_FIRE`, or `FD_BOMB`).
+  - The droplet starts at `dy = -109` (directly below the flower head) and descends to `dy = -10` (ground level).
   - At tick 2 (frame 1), sound 62 (`powerdrip.wav`) triggers at the drop coordinates.
   - At tick 16 (~820ms, drop completion), the target ground tile receives the Layer 2 powerup item (`is_powerup = true`), making it collectible by approaching ants.
 

@@ -41,10 +41,12 @@ public:
     struct FlowerDropper {
         TileCoord pos;
         TileCoord drop_pos;
-        uint32_t timer_ticks{1800}; // 90s initial delay (1800 ticks at 20Hz)
+        uint32_t interval_ticks{300};
+        uint32_t timer_ticks{300};
         bool is_dropping{false};
         uint32_t drop_tick{0};
         uint8_t powerup_type{0}; // 0: Bomber, 1: Combat, 2: Thief, 3: Swimmer, 4: Fire
+        std::array<double, 5> probabilities{0.2, 0.2, 0.2, 0.2, 0.2};
     };
     std::vector<FlowerDropper> flower_droppers_;
 
@@ -328,21 +330,36 @@ void SimulationEngine::init(const ants::assets::LevelData& level, uint32_t rando
 
     impl_->flower_droppers_.clear();
     for (const auto& wp : level.waypoints) {
-        if (wp.flag == 1 && wp.param == 15) {
+        if (wp.flag == 1) {
             SimulationEngineImpl::FlowerDropper fd;
             fd.pos = TileCoord{static_cast<int32_t>(wp.x), static_cast<int32_t>(wp.y)};
-            fd.drop_pos = TileCoord{static_cast<int32_t>(wp.x) + 1, static_cast<int32_t>(wp.y)};
-            fd.timer_ticks = 1800; // 90s initial delay
+            fd.drop_pos = fd.pos;
+            fd.interval_ticks = (wp.param > 0 ? wp.param : 30) * 20;
+            fd.timer_ticks = fd.interval_ticks;
             fd.is_dropping = false;
             fd.drop_tick = 0;
             fd.powerup_type = 0;
+            fd.probabilities = wp.probabilities;
             impl_->flower_droppers_.push_back(fd);
         }
     }
     if (impl_->flower_droppers_.empty() && level.width == 40 && level.height == 40) {
-        // Authentic SMALL.LVL cliff flower droppers at (2, 19) and (37, 19)
-        impl_->flower_droppers_.push_back({TileCoord{2, 19}, TileCoord{3, 19}, 1800, false, 0, 0});
-        impl_->flower_droppers_.push_back({TileCoord{37, 19}, TileCoord{38, 19}, 1800, false, 0, 0});
+        // Fallback for SMALL.LVL if waypoints were absent
+        SimulationEngineImpl::FlowerDropper fd1;
+        fd1.pos = TileCoord{2, 19};
+        fd1.drop_pos = fd1.pos;
+        fd1.interval_ticks = 300;
+        fd1.timer_ticks = 300;
+        fd1.probabilities = {0.45, 0.0, 0.0, 0.1, 0.45};
+        impl_->flower_droppers_.push_back(fd1);
+
+        SimulationEngineImpl::FlowerDropper fd2;
+        fd2.pos = TileCoord{37, 19};
+        fd2.drop_pos = fd2.pos;
+        fd2.interval_ticks = 300;
+        fd2.timer_ticks = 300;
+        fd2.probabilities = {0.45, 0.0, 0.0, 0.1, 0.45};
+        impl_->flower_droppers_.push_back(fd2);
     }
 
     impl_->invite_pending_ticks_.fill(0);
@@ -1728,7 +1745,7 @@ void SimulationEngine::tick() {
                 // 9-frame drop animation complete (~820ms): place powerup tile on Layer 2
                 fd.is_dropping = false;
                 fd.drop_tick = 0;
-                fd.timer_ticks = 2400; // 120s respawn interval
+                fd.timer_ticks = fd.interval_ticks;
                 if (impl_->grid_.in_bounds(fd.drop_pos)) {
                     auto& cell = impl_->grid_.get_cell_mut(fd.drop_pos);
                     uint16_t tile_id = PU_COMBAT;
@@ -1762,7 +1779,27 @@ void SimulationEngine::tick() {
                 if (!occupied) {
                     fd.is_dropping = true;
                     fd.drop_tick = 0;
-                    fd.powerup_type = static_cast<uint8_t>(impl_->prng_.rand() % 5);
+
+                    // Sample powerup type using waypoint probabilities
+                    double prob_sum = 0.0;
+                    for (double p : fd.probabilities) {
+                        prob_sum += p;
+                    }
+                    if (prob_sum > 0.001) {
+                        double r = (static_cast<double>(impl_->prng_.rand() % 10000) / 10000.0) * prob_sum;
+                        double cum = 0.0;
+                        uint8_t selected = 0;
+                        for (size_t i = 0; i < 5; ++i) {
+                            cum += fd.probabilities[i];
+                            if (r <= cum) {
+                                selected = static_cast<uint8_t>(i);
+                                break;
+                            }
+                        }
+                        fd.powerup_type = selected;
+                    } else {
+                        fd.powerup_type = static_cast<uint8_t>(impl_->prng_.rand() % 5);
+                    }
                     impl_->world_state_dirty_ = true;
                 }
             }
