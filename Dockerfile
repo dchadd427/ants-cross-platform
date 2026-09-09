@@ -12,11 +12,10 @@ COPY src/ ./src/
 COPY web/ ./web/
 COPY Original-Ants/ ./Original-Ants/
 
-# Configure and compile with Ninja for optimal build times
+# Configure and compile using default Makefiles
 RUN emcmake cmake -B build_web \
     -DCMAKE_BUILD_TYPE=Release \
-    -DBUILD_TESTS=OFF \
-    -G Ninja
+    -DBUILD_TESTS=OFF
 
 RUN cmake --build build_web -j$(nproc)
 
