@@ -4528,6 +4528,114 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
             ASSERT_FALSE(has_death_anim);
         }
     } TEST_END();
+
+    // -------------------------------------------------------------------------
+    // Test 12.53: Power-Up Transformation & Continuous Idle Animation Facing South
+    // -------------------------------------------------------------------------
+    TEST_CASE("12.53 Power-Up Transformation & Continuous Idle Animation Facing South & All Headings") {
+        static constexpr std::array<std::pair<uint8_t, const char*>, 5> POWERUPS = {{
+            {1, "Bomber"},
+            {2, "Fire"},
+            {3, "Thief"},
+            {4, "Combat"},
+            {5, "Swimmer"}
+        }};
+
+        // 1. Verify all 5 powerup types when approached moving SOUTH
+        for (const auto& [pu_type, pu_name] : POWERUPS) {
+            SimulationEngine sim;
+            sim.init_test_world(30, 30, 100, 60000);
+            sim.grid_mut().place_powerup(15, 15, pu_type);
+
+            // Ant starts North of powerup at (15, 13), walks SOUTH to (15, 15)
+            uint32_t ant_id = sim.spawn_unit(0, AntType::Worker, TileCoord{15, 13});
+            sim.issue_move_order(ant_id, TileCoord{15, 15});
+
+            // Step simulation until arrival and transformation starts
+            while (sim.get_unit(ant_id).is_alive() && !sim.get_unit(ant_id).is_transforming() &&
+                   !sim.get_unit(ant_id).waypoints.empty()) {
+                sim.tick();
+            }
+
+            const auto& unit_trans = sim.get_unit(ant_id);
+            ASSERT_TRUE(unit_trans.is_transforming());
+            ASSERT_EQ(unit_trans.pos.x, 15);
+            ASSERT_EQ(unit_trans.pos.y, 15);
+            ASSERT_EQ(static_cast<uint8_t>(unit_trans.facing), static_cast<uint8_t>(Direction::South));
+
+            // Verify 11-tick transformation sequence progression
+            for (int t = 0; t < 11; ++t) {
+                const auto& ws = sim.get_world_state();
+                const AntSnapshot* snap = nullptr;
+                for (const auto& a : ws.ants) {
+                    if (a.id == ant_id) { snap = &a; break; }
+                }
+                ASSERT_TRUE(snap != nullptr);
+                ASSERT_TRUE(snap->is_transforming);
+                ASSERT_EQ(snap->transform_anim_frame, static_cast<uint16_t>(t));
+                sim.tick();
+            }
+
+            // Transformation completes: unit must emerge in Idle (or GuardIdle for Combat)
+            const auto& unit_done = sim.get_unit(ant_id);
+            ASSERT_FALSE(unit_done.is_transforming());
+            ASSERT_EQ(static_cast<uint8_t>(unit_done.type), pu_type);
+            ASSERT_EQ(static_cast<uint8_t>(unit_done.facing), static_cast<uint8_t>(Direction::South));
+
+            UnitState expected_state = (pu_type == 4) ? UnitState::GuardIdle : UnitState::Idle;
+            ASSERT_EQ(static_cast<uint8_t>(unit_done.state), static_cast<uint8_t>(expected_state));
+
+            // Step additional ticks and verify idle animation cycle is actively progressing (not static 0!)
+            uint16_t initial_anim_frame = 0;
+            {
+                const auto& ws = sim.get_world_state();
+                for (const auto& a : ws.ants) {
+                    if (a.id == ant_id) { initial_anim_frame = a.anim_frame; break; }
+                }
+            }
+            for (int t = 0; t < 20; ++t) {
+                sim.tick();
+            }
+            uint16_t post_anim_frame = 0;
+            {
+                const auto& ws = sim.get_world_state();
+                for (const auto& a : ws.ants) {
+                    if (a.id == ant_id) { post_anim_frame = a.anim_frame; break; }
+                }
+            }
+            ASSERT_TRUE(post_anim_frame > initial_anim_frame);
+        }
+
+        // 2. Verify all other 7 cardinal and diagonal approach headings
+        static constexpr std::array<std::pair<int, int>, 7> OTHER_DIRS = {{
+            {0, -1},  // North
+            {1, 0},   // East
+            {-1, 0},  // West
+            {1, 1},   // SouthEast
+            {-1, 1},  // SouthWest
+            {1, -1},  // NorthEast
+            {-1, -1}  // NorthWest
+        }};
+
+        for (const auto& [dx, dy] : OTHER_DIRS) {
+            SimulationEngine sim;
+            sim.init_test_world(30, 30, 100, 60000);
+            sim.grid_mut().place_powerup(15, 15, 4); // Combat Ant powerup
+
+            ants::sim::TileCoord start{15 - dx * 2, 15 - dy * 2};
+            uint32_t ant_id = sim.spawn_unit(0, AntType::Worker, start);
+            sim.issue_move_order(ant_id, TileCoord{15, 15});
+
+            for (int t = 0; t < 60; ++t) {
+                sim.tick();
+            }
+
+            const auto& unit = sim.get_unit(ant_id);
+            ASSERT_FALSE(unit.is_transforming());
+            ASSERT_EQ(unit.state, UnitState::GuardIdle);
+            ASSERT_TRUE(unit.anim_subitem > 0); // Actively animating
+        }
+    } TEST_END();
 }
 
 // ============================================================================
