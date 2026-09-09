@@ -542,7 +542,7 @@ void HUD::render_top_bar(IRenderer& renderer, const assets::AssetArchive&, const
     renderer.fill_rect(402, 4, 54, 14, TEAM_COLORS[local_player_id_ % 4]);
     int32_t my_score = (local_player_id_ < world.player_scores.size()) ? world.player_scores[local_player_id_] : 0;
     std::string my_score_str = std::to_string(my_score);
-    int32_t score_text_w = static_cast<int32_t>(my_score_str.size()) * 6 - 1;
+    int32_t score_text_w = renderer.get_text_width(my_score_str);
     int32_t score_text_x = 453 - score_text_w;
     renderer.draw_text(my_score_str, score_text_x, 7, {255, 255, 255, 255});
 
@@ -843,7 +843,7 @@ void HUD::render_news_banner(IRenderer& renderer, const assets::AssetArchive&, c
         // Player score inside box (right-justified)
         int32_t s = (p < world.player_scores.size()) ? world.player_scores[p] : 0;
         std::string s_str = std::to_string(s);
-        int32_t s_text_w = static_cast<int32_t>(s_str.size()) * 6 - 1;
+        int32_t s_text_w = renderer.get_text_width(s_str);
         int32_t s_text_x = bx + 51 - s_text_w;
         renderer.draw_text(s_str, s_text_x, 467, {255, 255, 255, 255});
     }

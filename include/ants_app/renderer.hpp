@@ -18,11 +18,29 @@
   #include <SDL2/SDL.h>
 #endif
 
+#ifdef ANTS_ENABLE_SDL_TTF
+  #if defined(__has_include)
+    #if __has_include(<SDL_ttf.h>)
+      #include <SDL_ttf.h>
+    #elif __has_include(<SDL2/SDL_ttf.h>)
+      #include <SDL2/SDL_ttf.h>
+    #endif
+  #else
+    #include <SDL2/SDL_ttf.h>
+  #endif
+#endif
+
 #include "ants_assets/asset_archive.hpp"
 #include "ants_assets/lvl_parser.hpp"
 #include "ants_sim/sim_engine.hpp"
 
 namespace ants::app {
+
+enum class FontSize : uint8_t {
+    Small = 0,   // ~12px (authentic HUD chat, status labels, unit badges)
+    Medium = 1,  // ~14px (buttons, scorecard rows, dialogs)
+    Large = 2    // ~18px (screen titles, victory headers)
+};
 
 // Authentic Virtual Canvas Constants
 constexpr int CANVAS_WIDTH  = 640;
@@ -82,6 +100,14 @@ public:
     virtual void fill_rect(int32_t x, int32_t y, int32_t w, int32_t h, ants::assets::ColorRGBA color) = 0;
     virtual void draw_rect(int32_t x, int32_t y, int32_t w, int32_t h, ants::assets::ColorRGBA color) = 0;
     virtual void draw_text(const std::string& text, int32_t x, int32_t y, ants::assets::ColorRGBA color) = 0;
+    virtual void draw_text(const std::string& text, int32_t x, int32_t y, ants::assets::ColorRGBA color, FontSize size) {
+        (void)size;
+        draw_text(text, x, y, color);
+    }
+    virtual int32_t get_text_width(const std::string& text, FontSize size = FontSize::Small) const {
+        (void)size;
+        return static_cast<int32_t>(text.size()) * 6;
+    }
     virtual void set_hud_team(uint8_t team_id) = 0;
     virtual uint8_t get_hud_team() const = 0;
 };
@@ -176,6 +202,8 @@ public:
     void fill_rect(int32_t x, int32_t y, int32_t w, int32_t h, ants::assets::ColorRGBA color) override;
     void draw_rect(int32_t x, int32_t y, int32_t w, int32_t h, ants::assets::ColorRGBA color) override;
     void draw_text(const std::string& text, int32_t x, int32_t y, ants::assets::ColorRGBA color) override;
+    void draw_text(const std::string& text, int32_t x, int32_t y, ants::assets::ColorRGBA color, FontSize size) override;
+    int32_t get_text_width(const std::string& text, FontSize size = FontSize::Small) const override;
     void set_hud_team(uint8_t team_id) override { hud_team_id_ = team_id; }
     uint8_t get_hud_team() const override { return hud_team_id_; }
 
@@ -200,6 +228,40 @@ private:
     void draw_ant_shadow(int32_t anchor_sx, int32_t anchor_sy, int32_t altitude_z);
     void draw_single_ant(const ants::sim::AntSnapshot& ant, bool is_selected, bool show_health_bar = false);
     void draw_anthill_selection_brackets(int32_t x, int32_t y, int32_t w, int32_t h);
+
+#ifdef ANTS_ENABLE_SDL_TTF
+    struct CachedTextEntry {
+        SDL_Texture* texture{nullptr};
+        int32_t width{0};
+        int32_t height{0};
+        uint32_t last_frame{0};
+    };
+
+    struct TextCacheKey {
+        std::string text;
+        uint32_t color{0};
+        uint8_t size{0};
+
+        bool operator==(const TextCacheKey& o) const noexcept {
+            return color == o.color && size == o.size && text == o.text;
+        }
+    };
+
+    struct TextCacheKeyHash {
+        size_t operator()(const TextCacheKey& k) const noexcept {
+            size_t h1 = std::hash<std::string>{}(k.text);
+            size_t h2 = std::hash<uint32_t>{}(k.color);
+            return h1 ^ (h2 << 1) ^ (static_cast<size_t>(k.size) << 2);
+        }
+    };
+
+    TTF_Font* font_small_{nullptr};
+    TTF_Font* font_medium_{nullptr};
+    TTF_Font* font_large_{nullptr};
+    bool ttf_initialized_{false};
+    uint32_t text_frame_counter_{0};
+    std::unordered_map<TextCacheKey, CachedTextEntry, TextCacheKeyHash> text_cache_;
+#endif
 
     SDL_Renderer* renderer_{nullptr};
     const ants::assets::AssetArchive* archive_{nullptr};
