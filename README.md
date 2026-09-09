@@ -115,8 +115,8 @@ To build and run the high-performance container on your Docker server:
 docker compose up -d --build
 
 # Or build and launch with Docker directly
-docker build -t ants-web .
-docker run -d -p 19980:80 --name ants-web ants-web
+docker build -t ants-beta .
+docker run -d -p 19980:80 --name ants-beta ants-beta
 ```
 
 ### Building the Web Port Locally (without Docker)
