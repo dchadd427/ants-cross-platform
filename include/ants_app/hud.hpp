@@ -129,6 +129,17 @@ public:
                              sim::SimulationEngine& sim, ViewportCamera& camera);
     bool handle_key_down(int32_t key, sim::SimulationEngine& sim, ViewportCamera& camera, uint16_t mod = 0);
 
+    // Cursor Evaluation & Ground Click Indicators
+    CursorType evaluate_cursor(int32_t screen_x, int32_t screen_y,
+                               const sim::WorldState& world,
+                               const sim::Grid& grid,
+                               const ViewportCamera& camera) const;
+    CursorType get_current_cursor() const noexcept { return current_cursor_; }
+    void set_on_spawn_click_marker(std::function<void(int32_t, int32_t)> cb) { on_spawn_click_marker_ = std::move(cb); }
+    void spawn_click_marker(int32_t world_x, int32_t world_y) {
+        if (on_spawn_click_marker_) on_spawn_click_marker_(world_x, world_y);
+    }
+
     // Chat System & Text Input
     void focus_chat() noexcept { chat_input_focused_ = true; }
     void unfocus_chat() noexcept { chat_input_focused_ = false; }
@@ -323,6 +334,8 @@ private:
     std::function<void(float)> on_music_volume_{nullptr};
     std::function<void(float)> on_scroll_rate_{nullptr};
     std::function<void(uint32_t)> on_play_sfx_{nullptr};
+    std::function<void(int32_t, int32_t)> on_spawn_click_marker_{nullptr};
+    mutable CursorType current_cursor_{CursorType::Normal};
 };
 
 } // namespace ants::app

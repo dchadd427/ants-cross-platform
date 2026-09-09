@@ -136,6 +136,7 @@ bool Application::init(const ApplicationConfig& config) {
 
     if (!config_.headless) {
         SDL_SetWindowKeyboardGrab(window_, SDL_TRUE);
+        SDL_ShowCursor(SDL_DISABLE);
     }
 
     // 7. Initialize Renderer
@@ -195,6 +196,12 @@ bool Application::init(const ApplicationConfig& config) {
 
     hud_.set_on_play_sfx([this](uint32_t sound_id) {
         audio_mixer_.play_sfx(sound_id, 1.0f, 255);
+    });
+
+    hud_.set_on_spawn_click_marker([this](int32_t wx, int32_t wy) {
+        if (renderer_) {
+            renderer_->spawn_transient_effect("xmarks", wx, wy);
+        }
     });
 
     audio_mixer_.set_sfx_volume(hud_.get_sfx_volume());
@@ -476,12 +483,21 @@ void Application::handle_events() {
                     map_select_.handle_key_down(event.key.keysym.sym);
                     break;
                 case SDL_MOUSEMOTION:
+                    mouse_screen_x_ = event.motion.x;
+                    mouse_screen_y_ = event.motion.y;
+                    mouse_has_moved_ = true;
                     map_select_.handle_mouse_motion(event.motion.x, event.motion.y);
                     break;
                 case SDL_MOUSEBUTTONDOWN:
+                    mouse_screen_x_ = event.button.x;
+                    mouse_screen_y_ = event.button.y;
+                    mouse_has_moved_ = true;
                     map_select_.handle_mouse_down(event.button.x, event.button.y, event.button.button);
                     break;
                 case SDL_MOUSEBUTTONUP:
+                    mouse_screen_x_ = event.button.x;
+                    mouse_screen_y_ = event.button.y;
+                    mouse_has_moved_ = true;
                     map_select_.handle_mouse_up(event.button.x, event.button.y, event.button.button);
                     break;
                 default:
@@ -778,6 +794,10 @@ void Application::update_simulation(float dt) {
     audio_mixer_.set_listener_position(renderer_->camera().world_x + PLAYFIELD_W / 2,
                                        renderer_->camera().world_y + PLAYFIELD_H / 2);
 
+    if (renderer_) {
+        renderer_->update_transient_effects(dt);
+    }
+
     midi_player_.update(dt);
     if (state_ == AppState::Playing && !is_music_muted_ && !midi_player_.is_playing() && !sim_.is_match_over()) {
         play_next_ingame_music();
@@ -846,6 +866,13 @@ void Application::render_frame() {
 
         renderer_->fill_rect(spark_x + i, bar_y, 1, bar_h, bar_color);
     }
+
+    // Authentic Software Cursor (Matching Ants.exe 0x1026c5c / 0x1027e65)
+    CursorType cur = CursorType::Normal;
+    if (state_ == AppState::Playing && !scorecard_.is_open()) {
+        cur = hud_.evaluate_cursor(mouse_screen_x_, mouse_screen_y_, sim_.get_world_state(), sim_.grid(), renderer_->camera());
+    }
+    renderer_->render_software_cursor(cur, mouse_screen_x_, mouse_screen_y_, static_cast<uint32_t>(sim_.current_tick()));
 
     renderer_->end_frame();
 }

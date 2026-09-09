@@ -1433,6 +1433,7 @@ bool HUD::handle_mouse_down(int32_t x, int32_t y, uint8_t button,
 
         if (button == 1) { // Left-click
             if (active_order_mode_ != sim::OrderType::None) {
+                if (on_spawn_click_marker_) on_spawn_click_marker_(world_x, world_y);
                 dispatch_targeted_order(world_x, world_y, sim);
                 cancel_order_mode();
                 return true;
@@ -1482,6 +1483,7 @@ bool HUD::handle_mouse_down(int32_t x, int32_t y, uint8_t button,
                     play_sfx(sim::SoundID::AntStop);
                     return true;
                 }
+                if (on_spawn_click_marker_) on_spawn_click_marker_(world_x, world_y);
                 dispatch_attack_order(enemy_target->id, sim);
                 return true;
             }
@@ -1500,25 +1502,34 @@ bool HUD::handle_mouse_down(int32_t x, int32_t y, uint8_t button,
 
             if (target_base) {
                 if (target_base->team_id == local_player_id_) {
-                    play_sfx(sim::SoundID::GeneralCommand);
-                    for (uint32_t aid : selected_ant_ids_) {
-                        for (const auto& a : world.ants) {
-                            if (a.id == aid && a.player_id == local_player_id_) {
-                                sim::AntOrder order;
-                                order.ant_id = aid;
-                                order.type = sim::OrderType::ReturnToBase;
-                                sim.issue_order(order);
-                                break;
+                    if (has_friendly_selected(world)) {
+                        if (on_spawn_click_marker_) on_spawn_click_marker_(world_x, world_y);
+                        play_sfx(sim::SoundID::GeneralCommand);
+                        for (uint32_t aid : selected_ant_ids_) {
+                            for (const auto& a : world.ants) {
+                                if (a.id == aid && a.player_id == local_player_id_) {
+                                    sim::AntOrder order;
+                                    order.ant_id = aid;
+                                    order.type = sim::OrderType::ReturnToBase;
+                                    sim.issue_order(order);
+                                    break;
+                                }
                             }
                         }
                     }
                 } else {
+                    if (has_friendly_selected(world)) {
+                        if (on_spawn_click_marker_) on_spawn_click_marker_(world_x, world_y);
+                    }
                     dispatch_smart_special_ability(world_x, world_y, sim, shift_held);
                 }
                 return true;
             }
 
             // 3. Dispatch unit smart ability (Move for Worker/Queen, PlantBomb for Bomber, BuildBridge for Swimmer, IgniteFire for Fire, etc.)
+            if (has_friendly_selected(world)) {
+                if (on_spawn_click_marker_) on_spawn_click_marker_(world_x, world_y);
+            }
             dispatch_smart_special_ability(world_x, world_y, sim, shift_held);
             return true;
         }
@@ -1621,6 +1632,7 @@ bool HUD::handle_mouse_up(int32_t x, int32_t y, uint8_t button,
                     bool is_ally = sim.stats_manager().are_allies(local_player_id_, hit_ant->player_id);
                     if (has_friendly_selected(world) && !is_ally && !hit_ant->on_powerup && !(hit_ant->type == sim::AntType::Swimmer && hit_ant->is_swimming)) {
                         // Issue Attack order against target enemy for selected friendly ants
+                        if (on_spawn_click_marker_) on_spawn_click_marker_(world_x, world_y);
                         dispatch_attack_order(hit_ant->id, sim);
                     } else {
                         // Cannot select or command enemy/allied ants!
@@ -1648,6 +1660,7 @@ bool HUD::handle_mouse_up(int32_t x, int32_t y, uint8_t button,
                 if (has_friendly_selected(world)) {
                     if (hit_base->team_id == local_player_id_) {
                         // Friendly anthill: return selected friendly ants to base
+                        if (on_spawn_click_marker_) on_spawn_click_marker_(world_x, world_y);
                         for (uint32_t aid : selected_ant_ids_) {
                             for (const auto& a : world.ants) {
                                 if (a.id == aid && a.player_id == local_player_id_) {
@@ -1676,7 +1689,9 @@ bool HUD::handle_mouse_up(int32_t x, int32_t y, uint8_t button,
                                 }
                             }
                         }
-                        if (!has_thief) {
+                        if (has_thief) {
+                            if (on_spawn_click_marker_) on_spawn_click_marker_(world_x, world_y);
+                        } else {
                             clear_selection();
                             select_base(static_cast<int32_t>(hit_base->team_id));
                         }
@@ -1701,6 +1716,7 @@ bool HUD::handle_mouse_up(int32_t x, int32_t y, uint8_t button,
             }
 
             if (has_friendly) {
+                if (on_spawn_click_marker_) on_spawn_click_marker_(world_x, world_y);
                 if (sim.has_bomb_at({target_tile_x, target_tile_y})) {
                     bool is_single_bomber = (!is_multi_select() && !shift_held && selected_ant_ids_.size() == 1);
                     if (is_single_bomber) {
@@ -2603,6 +2619,240 @@ void HUD::dispatch_smart_special_ability(int32_t world_x, int32_t world_y, sim::
 
         sim.issue_order(order);
     }
+}
+
+CursorType HUD::evaluate_cursor(int32_t screen_x, int32_t screen_y,
+                               const sim::WorldState& world,
+                               const sim::Grid& grid,
+                               const ViewportCamera& camera) const {
+    // 0. Overlays and Modals: Normal cursor
+    if (show_options_ || show_quit_dialog_ || show_quick_help_) {
+        current_cursor_ = CursorType::Normal;
+        return current_cursor_;
+    }
+
+    // 1. Edge Panning Bounds Check (Matching Ants.exe 0x1026b09..0x1026d11)
+    // Left <= 12, Right >= 628, Top <= 12, Bottom >= 468
+    int32_t map_pw = static_cast<int32_t>(grid.width()) * 32;
+    int32_t map_ph = static_cast<int32_t>(grid.height()) * 32;
+    int32_t max_cam_x = std::max(0, map_pw - PLAYFIELD_WIDTH);
+    int32_t max_cam_y = std::max(0, map_ph - PLAYFIELD_HEIGHT);
+
+    bool can_n = (camera.world_y > 0);
+    bool can_s = (camera.world_y < max_cam_y);
+    bool can_w = (camera.world_x > 0);
+    bool can_e = (camera.world_x < max_cam_x);
+
+    bool at_left = (screen_x <= 12);
+    bool at_right = (screen_x >= 628);
+    bool at_top = (screen_y <= 12);
+    bool at_bottom = (screen_y >= 468);
+
+    if (at_left && at_top && (can_w || can_n)) {
+        current_cursor_ = CursorType::ScrollNW;
+        return current_cursor_;
+    }
+    if (at_right && at_top && (can_e || can_n)) {
+        current_cursor_ = CursorType::ScrollNE;
+        return current_cursor_;
+    }
+    if (at_right && at_bottom && (can_e || can_s)) {
+        current_cursor_ = CursorType::ScrollSE;
+        return current_cursor_;
+    }
+    if (at_left && at_bottom && (can_w || can_s)) {
+        current_cursor_ = CursorType::ScrollSW;
+        return current_cursor_;
+    }
+    if (at_top && can_n) {
+        current_cursor_ = CursorType::ScrollN;
+        return current_cursor_;
+    }
+    if (at_bottom && can_s) {
+        current_cursor_ = CursorType::ScrollS;
+        return current_cursor_;
+    }
+    if (at_left && can_w) {
+        current_cursor_ = CursorType::ScrollW;
+        return current_cursor_;
+    }
+    if (at_right && can_e) {
+        current_cursor_ = CursorType::ScrollE;
+        return current_cursor_;
+    }
+
+    // 2. HUD Sidebar, Top Bar, Bottom News Banner: Normal pointer
+    if (screen_x >= 480 || screen_y < 22 || screen_y >= 461) {
+        current_cursor_ = CursorType::Normal;
+        return current_cursor_;
+    }
+
+    // 3. Over Playfield: Convert to world coordinates
+    int32_t world_x = camera.world_x + (screen_x - PLAYFIELD_X);
+    int32_t world_y = camera.world_y + (screen_y - PLAYFIELD_Y);
+    int32_t tx = world_x / 32;
+    int32_t ty = world_y / 32;
+
+    // Check if hovering over any alive ant
+    const sim::AntSnapshot* hover_ant = nullptr;
+    int32_t best_dist_sq = INT32_MAX;
+    for (const auto& ant : world.ants) {
+        if (ant.hp == 0 || ant.is_drowning || ant.is_underground) continue;
+        bool in_bbox = (std::abs(ant.px - world_x) <= 18 &&
+                        world_y >= ant.py - 24 && world_y <= ant.py + 18);
+        bool on_tile = (ant.tile_x == tx && ant.tile_y == ty);
+        if (in_bbox || on_tile) {
+            int32_t d_sq = (ant.px - world_x) * (ant.px - world_x) + (ant.py - world_y) * (ant.py - world_y);
+            if (d_sq < best_dist_sq) {
+                best_dist_sq = d_sq;
+                hover_ant = &ant;
+            }
+        }
+    }
+
+    // Check if hovering over an Anthill base
+    const assets::AnthillSpawn* hover_base = nullptr;
+    for (const auto& base : world.anthills) {
+        if (tx >= base.x && tx < base.x + 4 &&
+            ty >= base.y && ty < base.y + 4) {
+            hover_base = &base;
+            break;
+        }
+    }
+
+    bool has_friendly = has_friendly_selected(world);
+
+    // Case A: NO friendly ants selected
+    if (!has_friendly) {
+        if (hover_ant || hover_base) {
+            current_cursor_ = CursorType::Select;
+            return current_cursor_;
+        }
+        current_cursor_ = CursorType::Normal;
+        return current_cursor_;
+    }
+
+    // Case B: Friendly ants ARE selected (Command / Target mode)
+    // 0. If an explicit order mode is active (from HUD button or hotkey)
+    if (active_order_mode_ != sim::OrderType::None) {
+        if (active_order_mode_ == sim::OrderType::Attack) {
+            if (hover_ant && hover_ant->player_id != local_player_id_) {
+                current_cursor_ = CursorType::Attack;
+            } else {
+                current_cursor_ = CursorType::Cant;
+            }
+            return current_cursor_;
+        }
+        if (active_order_mode_ == sim::OrderType::InfiltrateAnthill) {
+            if (hover_base && hover_base->team_id != local_player_id_) {
+                current_cursor_ = CursorType::ThiefTarget;
+            } else {
+                current_cursor_ = CursorType::Cant;
+            }
+            return current_cursor_;
+        }
+        if (active_order_mode_ == sim::OrderType::BuildBridge) {
+            if (grid.in_bounds(tx, ty)) {
+                const auto& cell = grid.get_cell(static_cast<uint32_t>(tx), static_cast<uint32_t>(ty));
+                if (cell.terrain_type == sim::TERRAIN_WATER && !cell.has_completed_bridge()) {
+                    current_cursor_ = CursorType::Move;
+                    return current_cursor_;
+                }
+            }
+            current_cursor_ = CursorType::Cant;
+            return current_cursor_;
+        }
+    }
+
+    // Check if selected ant is a Thief
+    bool has_thief = false;
+    for (uint32_t aid : selected_ant_ids_) {
+        for (const auto& a : world.ants) {
+            if (a.id == aid && a.player_id == local_player_id_ && a.type == sim::AntType::Thief) {
+                has_thief = true;
+                break;
+            }
+        }
+        if (has_thief) break;
+    }
+
+    // 1. Food Check: Food tile or harvestable object
+    bool is_food_tile = false;
+    if (grid.in_bounds(tx, ty)) {
+        const auto& cell = grid.get_cell(static_cast<uint32_t>(tx), static_cast<uint32_t>(ty));
+        if (cell.is_food || cell.lunchbox_points > 0) {
+            is_food_tile = true;
+        }
+    }
+    if (is_food_tile) {
+        current_cursor_ = CursorType::Food;
+        return current_cursor_;
+    }
+
+    // 2. Base Check
+    if (hover_base) {
+        if (hover_base->team_id != local_player_id_) {
+            // Enemy base: if Thief selected -> ThiefTarget (c_targ1), else Select
+            if (has_thief) {
+                current_cursor_ = CursorType::ThiefTarget;
+                return current_cursor_;
+            } else {
+                current_cursor_ = CursorType::Select;
+                return current_cursor_;
+            }
+        } else {
+            // Friendly base -> Move into base
+            current_cursor_ = CursorType::Move;
+            return current_cursor_;
+        }
+    }
+
+    // 3. Unit Hover Check
+    if (hover_ant) {
+        if (hover_ant->player_id == local_player_id_) {
+            // Friendly ant -> Select
+            current_cursor_ = CursorType::Select;
+            return current_cursor_;
+        } else {
+            // Enemy ant -> Attack!
+            current_cursor_ = CursorType::Attack;
+            return current_cursor_;
+        }
+    }
+
+    // 4. Terrain Passability Check
+    if (grid.in_bounds(tx, ty)) {
+        const auto& cell = grid.get_cell(static_cast<uint32_t>(tx), static_cast<uint32_t>(ty));
+        if (cell.terrain_type == sim::TERRAIN_WATER && !cell.has_completed_bridge()) {
+            // Check if any selected unit can swim
+            bool all_swimmers = true;
+            for (uint32_t aid : selected_ant_ids_) {
+                for (const auto& a : world.ants) {
+                    if (a.id == aid && a.player_id == local_player_id_) {
+                        if (a.type != sim::AntType::Swimmer) {
+                            all_swimmers = false;
+                            break;
+                        }
+                    }
+                }
+                if (!all_swimmers) break;
+            }
+            if (!all_swimmers) {
+                current_cursor_ = CursorType::Cant;
+                return current_cursor_;
+            }
+        } else if (cell.terrain_type == sim::TERRAIN_OBSTACLE || cell.is_obstacle_overlay) {
+            current_cursor_ = CursorType::Cant;
+            return current_cursor_;
+        }
+    } else {
+        current_cursor_ = CursorType::Cant;
+        return current_cursor_;
+    }
+
+    // Open ground -> Move
+    current_cursor_ = CursorType::Move;
+    return current_cursor_;
 }
 
 } // namespace ants::app

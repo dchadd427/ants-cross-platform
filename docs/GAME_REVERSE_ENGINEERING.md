@@ -872,6 +872,48 @@ In `ants.chd`, standard terrestrial ant classes have dual animation sets: normal
 
 ---
 
+### 5.20 Mouse Cursors, Click Markers & Selection Brackets ("Ears")
+
+Through Capstone disassembly of `Original-Ants/Ants.exe` and inspection of `Original-Ants/ants.chd`, the complete software cursor and selection bracket rendering pipeline was recovered:
+
+#### 1. Software Cursor Architecture & System Cursor Hiding
+- **Window Initialization (`ShowCursor(FALSE)` at `0x10315b3`):** The authentic 1998 executable hides the OS hardware cursor and renders custom animated CHD sprites directly to the software surface every frame.
+- **Master Cursor Evaluation Routine (`0x1026c5c` – `0x1026f3a`):** Evaluates cursor state every frame based on screen coordinates, selected unit types, and hovered targets.
+- **Edge Panning Margins (`0x1026b09` – `0x1026d11`):**
+  - Left edge: $X \le 12$
+  - Right edge: $X \ge 628$
+  - Top edge: $Y \le 12$
+  - Bottom edge: $Y \ge 468$
+  - If the camera can pan in the hovered direction, the corresponding edge panning cursor (`CUR_DIR`) is returned.
+- **Cursor Dispatch Table (`0x1027e65`):** Maps logical modes 1..7 to Table 4 animation sequences in `ants.chd`:
+  - **Mode 1 — `c_normal` (Anim 41, sprite 126, 13×23, hotspot `dx=0, dy=0`):** Default pointer cursor over UI elements (HUD sidebar $X \ge 480$, top chrome, bottom news banner) and unselected map terrain.
+  - **Mode 2 — `c_select` (Anim 42, sprite 127, 17×21, hotspot `dx=-6, dy=1`):** Displayed when hovering over friendly ants, enemy ants when no friendly ants are selected, or bases.
+  - **Mode 3 — `c_mov1` (Anim 44, 3 frames @ 150ms, hotspot `dx=-12, dy=5`):** Move order cursor displayed over passable ground or friendly bases when friendly units are selected.
+  - **Mode 4 — `c_targ1` (Anim 43, 3 frames @ 150ms, hotspot `dx=-12, dy=-12`):** Infiltrate target reticle displayed when hovering over an enemy base with a friendly Thief ant selected.
+  - **Mode 5 — `c_attack` (Anim 33, 8 frames @ 100ms, hotspot `dx=-13, dy=-14`):** Sword attack cursor displayed when hovering over an enemy unit with friendly ants selected.
+  - **Mode 6 — Viewport Edge Panning (Anims 45..52, hotspot `dx=-15, dy=-15`):**
+    - `CUR_N` (Anim 51), `CUR_NE` (Anim 46), `CUR_E` (Anim 45), `CUR_SE` (Anim 49)
+    - `CUR_S` (Anim 48), `CUR_SW` (Anim 52), `CUR_W` (Anim 50), `CUR_NW` (Anim 47)
+  - **Mode 7 — `c_food` (Anim 54, 8 frames @ 80–150ms, hotspot `dx=-15, dy=-16`):** Hand grab cursor displayed when hovering over harvestable food tiles with friendly ants selected.
+  - **Action Prohibited — `c_cant` (Anim 39, 7 frames @ 60–200ms, hotspot `dx=-11, dy=-11`):** Red circle-slash displayed when attempting to order units into impassable terrain (e.g. water for non-swimmers, rock obstacles).
+
+#### 2. Ground Click Confirmation Markers (`xmarks`)
+- **`xmarks` (Anim 32, 7 frames @ 60ms, sprites 100..106):** Plays an animated ground marker at the clicked world coordinate when issuing movement, attack, or ability orders. Handled as a transient visual effect rendered underneath foliage layer 3 canopy.
+
+#### 3. Selection Brackets ("Ears")
+- **Regular Ants:**
+  - `dogears` (Anim 58, 4 frames @ 250ms, sprites 150..165): Bright green corner brackets framing the unit when at full/high health ($> 6$ HP).
+  - `yelears` (Anim 60, 4 frames @ 125ms, sprites 170..185): Yellow corner brackets framing the unit when wounded (4–6 HP).
+  - `redears` (Anim 61, 4 frames @ 60ms, sprites 186..201): Red corner brackets framing the unit when critically wounded ($\le 3$ HP).
+- **Combat Ants:**
+  - `c_dogears` (Anim 149, 4 frames @ 250ms, sprites 444..459): Heavy-duty green brackets.
+  - `c_yelears` (Anim 150, 4 frames @ 125ms, sprites 460..475): Heavy-duty yellow brackets.
+  - `c_redears` (Anim 151, 4 frames @ 60ms, sprites 476..491): Heavy-duty red brackets.
+- **Anthill Base:**
+  - `hillears` (Anim 59, 4 frames @ 200ms, sprites 166..169): 4-corner brackets framing the 4×4 base at offsets $(-70, -70)$, $(48, -70)$, $(-70, 49)$, and $(48, 49)$ relative to the anthill center.
+
+---
+
 ## 6. Target Multi-Platform Architecture
 
 To achieve clean, modern, high-performance execution across macOS, Linux, Windows, and the Web (WebAssembly):
