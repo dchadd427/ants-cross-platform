@@ -236,6 +236,11 @@ bool Application::init(const ApplicationConfig& config) {
 
     is_running_ = true;
     last_tick_time_ = SDL_GetPerformanceCounter();
+    frametime_history_.fill(16.666f);
+    frametime_index_ = 0;
+    fps_display_value_ = 60.0f;
+    fps_time_accumulator_ = 0.0f;
+    fps_frame_counter_ = 0;
     mouse_screen_x_ = 320;
     mouse_screen_y_ = 240;
     mouse_has_moved_ = false;
@@ -355,6 +360,20 @@ int Application::run() {
         if (delta_time > 0.0001f) {
             float instant_fps = 1.0f / delta_time;
             current_fps_ = current_fps_ * 0.9f + instant_fps * 0.1f;
+
+            // Record frametime in ms for sparkline
+            float frame_ms = delta_time * 1000.0f;
+            frametime_history_[frametime_index_] = frame_ms;
+            frametime_index_ = (frametime_index_ + 1) % SPARKLINE_SAMPLES;
+
+            // Rolling average: update displayed FPS every 250ms (~4 times/sec) for clear, stable readability
+            fps_time_accumulator_ += delta_time;
+            fps_frame_counter_++;
+            if (fps_time_accumulator_ >= 0.25f) {
+                fps_display_value_ = static_cast<float>(fps_frame_counter_) / fps_time_accumulator_;
+                fps_time_accumulator_ = 0.0f;
+                fps_frame_counter_ = 0;
+            }
         }
 
         handle_events();
@@ -728,11 +747,53 @@ void Application::render_frame() {
         hud_.render(*renderer_, assets_, world, renderer_->camera());
     }
 
-    // Frame rate counter in the bottom right hand corner: small white text
-    int fps_val = std::max(1, static_cast<int>(std::round(current_fps_)));
+    // Frame rate counter and frametime sparkline in the bottom right hand corner
+    int fps_val = std::max(1, static_cast<int>(std::round(fps_display_value_)));
     std::string fps_text = std::to_string(fps_val) + " FPS";
     int32_t text_w = static_cast<int32_t>(fps_text.size()) * 6;
-    renderer_->draw_text(fps_text, 638 - text_w, 471, {255, 255, 255, 255});
+    int32_t text_x = 636 - text_w;
+    int32_t text_y = 471;
+    renderer_->draw_text(fps_text, text_x, text_y, {255, 255, 255, 255});
+
+    // Frametime sparkline graph directly to the left of the FPS text
+    constexpr int32_t spark_w = static_cast<int32_t>(SPARKLINE_SAMPLES);
+    constexpr int32_t spark_h = 11;
+    int32_t spark_x = text_x - spark_w - 6;
+    int32_t spark_y = 467;
+
+    // Dark translucent background plate + subtle border
+    renderer_->fill_rect(spark_x - 1, spark_y - 1, spark_w + 2, spark_h + 2, ants::assets::ColorRGBA{0, 0, 0, 160});
+    renderer_->draw_rect(spark_x - 1, spark_y - 1, spark_w + 2, spark_h + 2, ants::assets::ColorRGBA{80, 85, 90, 180});
+
+    // 60 FPS reference guide line (16.67ms -> 5 pixels from bottom)
+    int32_t ref_line_y = spark_y + spark_h - 5;
+    renderer_->fill_rect(spark_x, ref_line_y, spark_w, 1, ants::assets::ColorRGBA{50, 80, 70, 150});
+
+    // Render each frame history sample (oldest on left, newest on right)
+    for (int32_t i = 0; i < spark_w; ++i) {
+        size_t sample_idx = (frametime_index_ + static_cast<size_t>(i)) % SPARKLINE_SAMPLES;
+        float ft = frametime_history_[sample_idx];
+
+        // 33.3ms (30 FPS) is full box height (11px); 16.67ms (60 FPS) is ~5.5px
+        int32_t bar_h = static_cast<int32_t>(std::round((ft / 33.333f) * static_cast<float>(spark_h)));
+        bar_h = std::clamp(bar_h, 1, spark_h);
+        int32_t bar_y = spark_y + spark_h - bar_h;
+
+        // Color coding based on frame pacing:
+        // Green: <= 18.0ms (55-60+ FPS, solid)
+        // Yellow: 18.1 - 25.0ms (40-55 FPS, minor drop)
+        // Red: > 25.0ms (< 40 FPS, stutter spike)
+        ants::assets::ColorRGBA bar_color;
+        if (ft <= 18.0f) {
+            bar_color = ants::assets::ColorRGBA{60, 230, 90, 220};
+        } else if (ft <= 25.0f) {
+            bar_color = ants::assets::ColorRGBA{240, 210, 50, 220};
+        } else {
+            bar_color = ants::assets::ColorRGBA{240, 60, 60, 240};
+        }
+
+        renderer_->fill_rect(spark_x + i, bar_y, 1, bar_h, bar_color);
+    }
 
     renderer_->end_frame();
 }
