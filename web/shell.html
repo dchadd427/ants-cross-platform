@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>Ants (1998) — beta.playants.org</title>
     <link rel="icon" type="image/png" href="/favicon.png">
     <link rel="shortcut icon" href="/favicon.ico">
@@ -34,7 +34,8 @@
             align-items: center;
             justify-content: flex-start;
             min-height: 100vh;
-            padding: 12px;
+            min-height: 100dvh;
+            padding: max(8px, env(safe-area-inset-top)) max(8px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left));
             overflow-x: hidden;
         }
 
@@ -76,25 +77,37 @@
             background-color: var(--panel-bg);
             border: 1px solid var(--panel-border);
             color: var(--text-main);
-            padding: 6px 12px;
-            border-radius: 4px;
+            padding: 8px 12px;
+            min-height: 40px;
+            border-radius: 6px;
             font-size: 0.85rem;
             cursor: pointer;
             text-decoration: none;
             display: inline-flex;
             align-items: center;
+            justify-content: center;
             gap: 6px;
-            transition: all 0.15s ease;
+            transition: background-color 0.15s ease, border-color 0.15s ease, transform 0.1s ease;
+            touch-action: manipulation;
+            -webkit-tap-highlight-color: transparent;
         }
 
-        button.nav-btn:hover, a.nav-btn:hover {
-            background-color: #26332a;
+        @media (hover: hover) {
+            button.nav-btn:hover, a.nav-btn:hover {
+                background-color: #26332a;
+                border-color: var(--accent-green);
+                color: #ffffff;
+            }
+        }
+
+        button.nav-btn:active, a.nav-btn:active {
+            background-color: #2e3d33;
             border-color: var(--accent-green);
-            color: #ffffff;
+            transform: scale(0.97);
         }
 
-        button.nav-btn:active {
-            transform: translateY(1px);
+        .btn-text-short {
+            display: none;
         }
 
         #game-container {
@@ -112,6 +125,25 @@
             justify-content: center;
         }
 
+        #game-container:fullscreen,
+        #game-container:-webkit-full-screen {
+            width: 100vw;
+            height: 100vh;
+            height: 100dvh;
+            max-width: none;
+            border: none;
+            border-radius: 0;
+            box-shadow: none;
+            background: #000;
+        }
+
+        #game-container:fullscreen canvas.emscripten,
+        #game-container:-webkit-full-screen canvas.emscripten {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+        }
+
         canvas.emscripten {
             width: 100%;
             height: 100%;
@@ -121,6 +153,7 @@
             image-rendering: pixelated;
             image-rendering: crisp-edges;
             outline: none;
+            touch-action: none;
         }
 
         /* Overlay Splash / Loading Screen */
@@ -194,32 +227,122 @@
             100% { transform: scale(1.04); box-shadow: 0 0 24px rgba(72, 184, 112, 0.8); }
         }
 
+        /* Mobile Orientation Tip Banner */
+        .mobile-tip-banner {
+            display: none;
+            width: 100%;
+            max-width: 960px;
+            margin-top: 8px;
+            background: rgba(230, 184, 48, 0.12);
+            border: 1px solid rgba(230, 184, 48, 0.35);
+            color: var(--accent-gold);
+            border-radius: 6px;
+            padding: 8px 12px;
+            font-size: 0.8rem;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .mobile-tip-banner button.tip-close {
+            background: none;
+            border: none;
+            color: var(--accent-gold);
+            font-size: 1.1rem;
+            cursor: pointer;
+            padding: 0 4px;
+            line-height: 1;
+            touch-action: manipulation;
+        }
+
+        @media (max-width: 768px) and (orientation: portrait) {
+            .mobile-tip-banner {
+                display: flex;
+            }
+        }
+
         /* Controls & Guide drawer */
-        #info-panel {
+        .info-panel-wrapper {
             width: 100%;
             max-width: 960px;
             margin-top: 12px;
+        }
+
+        .info-panel-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 4px 6px;
+            margin-bottom: 6px;
+        }
+
+        .info-panel-title {
+            font-size: 0.88rem;
+            color: var(--accent-gold);
+            font-weight: 600;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+        }
+
+        button.guide-toggle-btn {
+            display: none;
+            background: rgba(28, 35, 30, 0.9);
+            border: 1px solid var(--panel-border);
+            color: var(--text-dim);
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-size: 0.76rem;
+            cursor: pointer;
+            touch-action: manipulation;
+            -webkit-tap-highlight-color: transparent;
+            transition: all 0.15s ease;
+        }
+
+        button.guide-toggle-btn:hover {
+            color: var(--text-main);
+            border-color: var(--accent-green);
+        }
+
+        #info-panel {
+            width: 100%;
             background: var(--panel-bg);
             border: 1px solid var(--panel-border);
             border-radius: 6px;
             padding: 12px 16px;
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
             gap: 12px;
             font-size: 0.82rem;
         }
 
-        .info-col h3 {
+        details.info-col {
+            display: flex;
+            flex-direction: column;
+        }
+
+        details.info-col summary {
+            list-style: none;
+            cursor: default;
+            pointer-events: none;
+        }
+
+        details.info-col summary::-webkit-details-marker {
+            display: none;
+        }
+
+        details.info-col summary h3 {
             color: var(--accent-green);
             font-size: 0.88rem;
             margin-bottom: 6px;
             text-transform: uppercase;
             letter-spacing: 0.5px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
         }
 
         .info-col ul {
             list-style: none;
-            line-height: 1.5;
+            line-height: 1.55;
             color: var(--text-dim);
         }
 
@@ -232,15 +355,135 @@
             font-size: 0.78rem;
             color: #55665a;
             text-align: center;
+            line-height: 1.6;
+            padding: 0 8px 12px 8px;
         }
 
         footer a {
             color: var(--accent-green);
             text-decoration: none;
+            display: inline-block;
+            padding: 2px 4px;
         }
 
         footer a:hover {
             text-decoration: underline;
+        }
+
+        /* Mobile specific layout */
+        @media (max-width: 640px) {
+            header {
+                flex-direction: column;
+                align-items: stretch;
+                gap: 8px;
+                margin-bottom: 8px;
+                padding: 0 2px;
+            }
+
+            .title-group {
+                display: flex;
+                justify-content: space-between;
+                align-items: baseline;
+                width: 100%;
+            }
+
+            h1 {
+                font-size: 1.25rem;
+            }
+
+            .subtitle {
+                font-size: 0.78rem;
+            }
+
+            .header-actions {
+                display: grid;
+                grid-template-columns: repeat(4, 1fr);
+                gap: 6px;
+                width: 100%;
+            }
+
+            button.nav-btn, a.nav-btn {
+                min-height: 42px;
+                padding: 6px 2px;
+                font-size: 0.78rem;
+                border-radius: 6px;
+            }
+
+            .btn-text {
+                display: none;
+            }
+
+            .btn-text-short {
+                display: inline;
+            }
+
+            button.guide-toggle-btn {
+                display: inline-block;
+            }
+
+            #info-panel {
+                display: flex;
+                flex-direction: column;
+                gap: 8px;
+                background: transparent;
+                border: none;
+                padding: 0;
+            }
+
+            details.info-col {
+                background: var(--panel-bg);
+                border: 1px solid var(--panel-border);
+                border-radius: 6px;
+                overflow: hidden;
+            }
+
+            details.info-col[open] {
+                border-color: rgba(72, 184, 112, 0.45);
+            }
+
+            details.info-col summary {
+                pointer-events: auto;
+                cursor: pointer;
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                padding: 10px 14px;
+                min-height: 44px;
+                touch-action: manipulation;
+                -webkit-tap-highlight-color: transparent;
+                user-select: none;
+            }
+
+            details.info-col summary h3 {
+                margin-bottom: 0;
+                font-size: 0.84rem;
+            }
+
+            details.info-col summary::after {
+                content: '▾';
+                font-size: 0.85rem;
+                color: var(--accent-green);
+                transition: transform 0.2s ease;
+            }
+
+            details.info-col:not([open]) summary::after {
+                content: '▸';
+                color: var(--text-dim);
+            }
+
+            details.info-col .info-content {
+                padding: 6px 14px 12px 14px;
+                border-top: 1px solid rgba(56, 77, 62, 0.4);
+            }
+
+            .info-col ul {
+                line-height: 1.6;
+            }
+
+            footer {
+                margin-top: 16px;
+                padding-bottom: 24px;
+            }
         }
     </style>
 </head>
@@ -253,17 +496,17 @@
         </div>
         <div class="header-actions">
             <a href="/asset_catalog/" target="_blank" rel="noopener noreferrer" class="nav-btn" title="View 1998 Sprites, Animations & Audio SFX">
-                🎨 Asset Viewer
+                🎨 <span class="btn-text">Asset Viewer</span><span class="btn-text-short">Assets</span>
             </a>
-            <button id="fullscreen-btn" class="nav-btn" title="Toggle Fullscreen">
-                ⛶ Fullscreen
+            <button id="fullscreen-btn" type="button" class="nav-btn" title="Toggle Fullscreen">
+                ⛶ <span class="btn-text">Fullscreen</span><span class="btn-text-short">Full</span>
             </button>
             <a href="https://github.com/dchadd427/ants-cross-platform" target="_blank" rel="noopener noreferrer" class="nav-btn" title="View Source Code on GitHub">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" style="vertical-align: -2px;"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
-                GitHub
+                <span class="btn-text">GitHub</span><span class="btn-text-short">Code</span>
             </a>
             <a href="https://github.com/dchadd427/ants-cross-platform/issues" target="_blank" rel="noopener noreferrer" class="nav-btn" title="Give Feedback or Report Issues">
-                💬 Feedback
+                💬 <span class="btn-text">Feedback</span><span class="btn-text-short">Issues</span>
             </a>
         </div>
     </header>
@@ -283,52 +526,85 @@
         </div>
     </div>
 
-    <div id="info-panel">
-        <div class="info-col">
-            <h3>Basic Controls</h3>
-            <ul>
-                <li><strong>Left Click:</strong> Select Ant / Move / Attack / Harvest</li>
-                <li><strong>Right Click:</strong> Move / Defuse Bomb / Use Ability</li>
-                <li><strong>Drag Box:</strong> Multi-Ant Marquee Selection</li>
-                <li><strong>Spacebar:</strong> Center Camera on Ant or Base</li>
-            </ul>
+    <div class="mobile-tip-banner" id="mobile-tip-banner">
+        <span>💡 <strong>Tip:</strong> Rotate to <strong>landscape</strong> for full battlefield view</span>
+        <button type="button" class="tip-close" onclick="document.getElementById('mobile-tip-banner').style.display='none'" aria-label="Dismiss tip">&times;</button>
+    </div>
+
+    <div class="info-panel-wrapper">
+        <div class="info-panel-header">
+            <span class="info-panel-title">🎮 Controls & Field Guide</span>
+            <button type="button" id="toggle-all-guide-btn" class="guide-toggle-btn">Expand All</button>
         </div>
-        <div class="info-col">
-            <h3>Switch Teams</h3>
-            <ul>
-                <li><strong>Ctrl+1 / ⌘1:</strong> Team 0 (Green Ants)</li>
-                <li><strong>Ctrl+2 / ⌘2:</strong> Team 1 (Red Ants)</li>
-                <li><strong>Ctrl+3 / ⌘3:</strong> Team 2 (Blue Ants)</li>
-                <li><strong>Ctrl+4 / ⌘4:</strong> Team 3 (Black Ants)</li>
-                <li><strong>Ctrl+Tab / Ctrl+C:</strong> Cycle to Next Team</li>
-                <li><strong>Setup Screen:</strong> Click team icon to switch</li>
-            </ul>
-        </div>
-        <div class="info-col">
-            <h3>Camera & Viewport</h3>
-            <ul>
-                <li><strong>Arrows / WASD:</strong> Pan Viewport</li>
-                <li><strong>Edge Panning:</strong> Move mouse to screen edge</li>
-                <li><strong>Minimap:</strong> Click to immediately jump camera</li>
-            </ul>
-        </div>
-        <div class="info-col">
-            <h3>Special Ant Abilities</h3>
-            <ul>
-                <li><strong>Bomber:</strong> Plant bomb (defuses on single click)</li>
-                <li><strong>Fire:</strong> Lay impenetrable fire barrier</li>
-                <li><strong>Swimmer:</strong> Build & demolish water bridges</li>
-                <li><strong>Thief:</strong> Infiltrate enemy anthills</li>
-            </ul>
-        </div>
-        <div class="info-col">
-            <h3>Keyboard Shortcuts</h3>
-            <ul>
-                <li><strong>Ctrl+T:</strong> Toggle 32×32 Tile Grid</li>
-                <li><strong>Ctrl+L:</strong> Toggle Unit Health Bars</li>
-                <li><strong>Enter:</strong> In-Game Chat Broadcast</li>
-                <li><strong>Esc / F1:</strong> In-Game Options & Quick Help</li>
-            </ul>
+        <div id="info-panel">
+            <details class="info-col" open>
+                <summary><h3>📱 Touch & Mobile</h3></summary>
+                <div class="info-content">
+                    <ul>
+                        <li><strong>Tap:</strong> Select Ant / Move / Attack / Harvest</li>
+                        <li><strong>Long Press:</strong> Defuse Bomb / Use Ability</li>
+                        <li><strong>Minimap Tap:</strong> Jump Camera Across Map</li>
+                        <li><strong>Fullscreen:</strong> Tap ⛶ Full in Header</li>
+                        <li><strong>Rotate:</strong> Landscape Mode Recommended</li>
+                    </ul>
+                </div>
+            </details>
+            <details class="info-col" open>
+                <summary><h3>🖱️ Basic Controls</h3></summary>
+                <div class="info-content">
+                    <ul>
+                        <li><strong>Left Click:</strong> Select Ant / Move / Attack / Harvest</li>
+                        <li><strong>Right Click:</strong> Move / Defuse Bomb / Use Ability</li>
+                        <li><strong>Drag Box:</strong> Multi-Ant Marquee Selection</li>
+                        <li><strong>Spacebar:</strong> Center Camera on Ant or Base</li>
+                    </ul>
+                </div>
+            </details>
+            <details class="info-col" open>
+                <summary><h3>🐜 Switch Teams</h3></summary>
+                <div class="info-content">
+                    <ul>
+                        <li><strong>Ctrl+1 / ⌘1:</strong> Team 0 (Green Ants)</li>
+                        <li><strong>Ctrl+2 / ⌘2:</strong> Team 1 (Red Ants)</li>
+                        <li><strong>Ctrl+3 / ⌘3:</strong> Team 2 (Blue Ants)</li>
+                        <li><strong>Ctrl+4 / ⌘4:</strong> Team 3 (Black Ants)</li>
+                        <li><strong>Ctrl+Tab / Ctrl+C:</strong> Cycle to Next Team</li>
+                        <li><strong>Setup Screen:</strong> Click team icon to switch</li>
+                    </ul>
+                </div>
+            </details>
+            <details class="info-col" open>
+                <summary><h3>🗺️ Camera & Viewport</h3></summary>
+                <div class="info-content">
+                    <ul>
+                        <li><strong>Arrows / WASD:</strong> Pan Viewport</li>
+                        <li><strong>Edge Panning:</strong> Move mouse to screen edge</li>
+                        <li><strong>Minimap:</strong> Click to immediately jump camera</li>
+                    </ul>
+                </div>
+            </details>
+            <details class="info-col" open>
+                <summary><h3>⚡ Special Abilities</h3></summary>
+                <div class="info-content">
+                    <ul>
+                        <li><strong>Bomber:</strong> Plant bomb (defuses on single click)</li>
+                        <li><strong>Fire:</strong> Lay impenetrable fire barrier</li>
+                        <li><strong>Swimmer:</strong> Build & demolish water bridges</li>
+                        <li><strong>Thief:</strong> Infiltrate enemy anthills</li>
+                    </ul>
+                </div>
+            </details>
+            <details class="info-col" open>
+                <summary><h3>⌨️ Shortcuts</h3></summary>
+                <div class="info-content">
+                    <ul>
+                        <li><strong>Ctrl+T:</strong> Toggle 32×32 Tile Grid</li>
+                        <li><strong>Ctrl+L:</strong> Toggle Unit Health Bars</li>
+                        <li><strong>Enter:</strong> In-Game Chat Broadcast</li>
+                        <li><strong>Esc / F1:</strong> In-Game Options & Quick Help</li>
+                    </ul>
+                </div>
+            </details>
         </div>
     </div>
 
@@ -518,18 +794,49 @@
 
         document.getElementById('fullscreen-btn').addEventListener('click', function() {
             var el = document.getElementById('game-container');
-            if (!document.fullscreenElement) {
+            var isFs = document.fullscreenElement || document.webkitFullscreenElement;
+            if (!isFs) {
                 if (el.requestFullscreen) {
-                    el.requestFullscreen();
+                    el.requestFullscreen().catch(function() {});
                 } else if (el.webkitRequestFullscreen) {
                     el.webkitRequestFullscreen();
+                } else if (canvas.webkitEnterFullscreen) {
+                    canvas.webkitEnterFullscreen();
+                }
+                if (screen.orientation && screen.orientation.lock) {
+                    screen.orientation.lock('landscape').catch(function() {});
                 }
             } else {
                 if (document.exitFullscreen) {
-                    document.exitFullscreen();
+                    document.exitFullscreen().catch(function() {});
+                } else if (document.webkitExitFullscreen) {
+                    document.webkitExitFullscreen();
                 }
             }
         });
+
+        // Mobile accordion default collapse & Expand/Collapse All helper
+        (function() {
+            if (window.innerWidth <= 640) {
+                var cols = document.querySelectorAll('#info-panel details.info-col');
+                cols.forEach(function(col, idx) {
+                    // Keep the first item (Touch & Mobile) open, collapse others on small screens
+                    if (idx !== 0) {
+                        col.removeAttribute('open');
+                    }
+                });
+            }
+
+            var toggleBtn = document.getElementById('toggle-all-guide-btn');
+            if (toggleBtn) {
+                toggleBtn.addEventListener('click', function() {
+                    var cols = document.querySelectorAll('#info-panel details.info-col');
+                    var anyClosed = Array.from(cols).some(function(c) { return !c.open; });
+                    cols.forEach(function(c) { c.open = anyClosed; });
+                    toggleBtn.textContent = anyClosed ? 'Collapse All' : 'Expand All';
+                });
+            }
+        })();
     </script>
     <script>
         (function() {
