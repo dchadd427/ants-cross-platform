@@ -440,7 +440,7 @@ void Application::run_frame() {
 }
 
 #if defined(__EMSCRIPTEN__)
-static void emscripten_main_loop_iter(void* arg) {
+extern "C" void emscripten_main_loop_iter(void* arg) {
     auto* app = static_cast<Application*>(arg);
     if (app && app->is_running()) {
         app->run_frame();
