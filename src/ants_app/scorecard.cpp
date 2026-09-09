@@ -70,6 +70,7 @@ bool ScorecardModal::handle_mouse_down(int32_t x, int32_t y) {
     if (x >= QUIT_BTN_X && x < (QUIT_BTN_X + QUIT_BTN_W) &&
         y >= QUIT_BTN_Y && y < (QUIT_BTN_Y + QUIT_BTN_H)) {
         quit_pressed_ = true;
+        play_sfx(sim::SoundID::NavButtonClick);
         return true;
     }
 

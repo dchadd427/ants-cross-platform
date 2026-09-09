@@ -5757,6 +5757,153 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         const auto& a2 = sim.get_unit(a2_id);
         ASSERT_FALSE(a1.pos == a2.pos);
     } TEST_END();
+
+    TEST_CASE("12.75: Authentic NavButtonClick Audio Feedback on HUD, MapSelect, and Scorecard") {
+        ASSERT_EQ(SoundID::NavButtonClick, 89u);
+        ASSERT_EQ(SoundID::ButtonClick, 0u);
+
+        // 1. HUD Navigation Button SFX
+        {
+            HUD hud;
+            hud.init(0);
+            SimulationEngine sim;
+            sim.init_test_world(60, 60, 100, 60000);
+            ViewportCamera camera{0, 0};
+
+            std::vector<uint32_t> played_sounds;
+            hud.set_on_play_sfx([&](uint32_t s) { played_sounds.push_back(s); });
+
+            // Help button (476, 7, 46, 23)
+            played_sounds.clear();
+            hud.handle_mouse_down(485, 15, SDL_BUTTON_LEFT, sim, camera, 0);
+            ASSERT_FALSE(played_sounds.empty());
+            ASSERT_EQ(played_sounds.back(), SoundID::NavButtonClick);
+
+            // Quick help overlay dismiss
+            played_sounds.clear();
+            hud.handle_mouse_down(100, 100, SDL_BUTTON_LEFT, sim, camera, 0);
+            ASSERT_FALSE(played_sounds.empty());
+            ASSERT_EQ(played_sounds.back(), SoundID::NavButtonClick);
+
+            // Options button (525, 7, 52, 23)
+            played_sounds.clear();
+            hud.handle_mouse_down(540, 15, SDL_BUTTON_LEFT, sim, camera, 0);
+            ASSERT_FALSE(played_sounds.empty());
+            ASSERT_EQ(played_sounds.back(), SoundID::NavButtonClick);
+
+            // Options dialog Return button (402..455, 425..455)
+            played_sounds.clear();
+            hud.handle_mouse_down(420, 440, SDL_BUTTON_LEFT, sim, camera, 0);
+            ASSERT_FALSE(played_sounds.empty());
+            ASSERT_EQ(played_sounds.back(), SoundID::NavButtonClick);
+            hud.handle_mouse_up(420, 440, SDL_BUTTON_LEFT, sim, camera, 0);
+
+            // Quit button (579, 7, 46, 23) -> opens quit dialog
+            played_sounds.clear();
+            hud.handle_mouse_down(590, 15, SDL_BUTTON_LEFT, sim, camera, 0);
+            ASSERT_FALSE(played_sounds.empty());
+            ASSERT_EQ(played_sounds.back(), SoundID::NavButtonClick);
+            hud.handle_mouse_up(590, 15, SDL_BUTTON_LEFT, sim, camera, 0);
+
+            // Quit dialog "No" button (296, 264, 49, 24)
+            played_sounds.clear();
+            hud.handle_mouse_down(310, 275, SDL_BUTTON_LEFT, sim, camera, 0);
+            ASSERT_FALSE(played_sounds.empty());
+            ASSERT_EQ(played_sounds.back(), SoundID::NavButtonClick);
+            hud.handle_mouse_up(310, 275, SDL_BUTTON_LEFT, sim, camera, 0);
+
+            // Spawn and select friendly ant
+            uint32_t a_id = sim.spawn_unit(0, AntType::Worker, TileCoord{10, 10});
+            hud.select_ant(a_id, false);
+
+            // Move Pedestal (488, 140, 53, 86)
+            played_sounds.clear();
+            hud.handle_mouse_down(500, 150, SDL_BUTTON_LEFT, sim, camera, 0);
+            ASSERT_FALSE(played_sounds.empty());
+            ASSERT_EQ(played_sounds.back(), SoundID::NavButtonClick);
+
+            // Stop button (602, 176, 34, 50)
+            played_sounds.clear();
+            hud.handle_mouse_down(610, 190, SDL_BUTTON_LEFT, sim, camera, 0);
+            ASSERT_FALSE(played_sounds.empty());
+            bool saw_nav = false;
+            for (auto s : played_sounds) {
+                if (s == SoundID::NavButtonClick) saw_nav = true;
+            }
+            ASSERT_TRUE(saw_nav);
+
+            // Chat [All] button (532, 443, 44, 24)
+            played_sounds.clear();
+            hud.handle_mouse_down(545, 450, SDL_BUTTON_LEFT, sim, camera, 0);
+            ASSERT_FALSE(played_sounds.empty());
+            ASSERT_EQ(played_sounds.back(), SoundID::NavButtonClick);
+        }
+
+        // 2. MapSelectScreen Button SFX
+        {
+            MapSelectScreen screen;
+            std::vector<uint32_t> played_sounds;
+            screen.set_on_play_sfx([&](uint32_t s) { played_sounds.push_back(s); });
+
+            // Up button
+            played_sounds.clear();
+            screen.handle_mouse_down(MapSelectScreen::BTN_UP_X + 10, MapSelectScreen::BTN_UP_Y + 10, SDL_BUTTON_LEFT);
+            ASSERT_FALSE(played_sounds.empty());
+            ASSERT_EQ(played_sounds.back(), SoundID::NavButtonClick);
+
+            // Down button
+            played_sounds.clear();
+            screen.handle_mouse_down(MapSelectScreen::BTN_DOWN_X + 10, MapSelectScreen::BTN_DOWN_Y + 10, SDL_BUTTON_LEFT);
+            ASSERT_FALSE(played_sounds.empty());
+            ASSERT_EQ(played_sounds.back(), SoundID::NavButtonClick);
+
+            // FOW ON button
+            played_sounds.clear();
+            screen.handle_mouse_down(MapSelectScreen::BTN_FOW_ON_X + 5, MapSelectScreen::BTN_FOW_ON_Y + 5, SDL_BUTTON_LEFT);
+            ASSERT_FALSE(played_sounds.empty());
+            ASSERT_EQ(played_sounds.back(), SoundID::NavButtonClick);
+
+            // FOW OFF button
+            played_sounds.clear();
+            screen.handle_mouse_down(MapSelectScreen::BTN_FOW_OFF_X + 5, MapSelectScreen::BTN_FOW_OFF_Y + 5, SDL_BUTTON_LEFT);
+            ASSERT_FALSE(played_sounds.empty());
+            ASSERT_EQ(played_sounds.back(), SoundID::NavButtonClick);
+
+            // Drop button
+            played_sounds.clear();
+            screen.handle_mouse_down(MapSelectScreen::BTN_DROP_X + 10, MapSelectScreen::BTN_DROP_Y + 10, SDL_BUTTON_LEFT);
+            ASSERT_FALSE(played_sounds.empty());
+            ASSERT_EQ(played_sounds.back(), SoundID::NavButtonClick);
+
+            // Quit button
+            played_sounds.clear();
+            screen.handle_mouse_down(MapSelectScreen::BTN_QUIT_X + 10, MapSelectScreen::BTN_QUIT_Y + 10, SDL_BUTTON_LEFT);
+            ASSERT_FALSE(played_sounds.empty());
+            ASSERT_EQ(played_sounds.back(), SoundID::NavButtonClick);
+
+            // Start button
+            played_sounds.clear();
+            screen.handle_mouse_down(MapSelectScreen::BTN_START_X + 10, MapSelectScreen::BTN_START_Y + 10, SDL_BUTTON_LEFT);
+            ASSERT_FALSE(played_sounds.empty());
+            ASSERT_EQ(played_sounds.back(), SoundID::NavButtonClick);
+        }
+
+        // 3. ScorecardModal Button SFX
+        {
+            ScorecardModal modal;
+            MatchResult mr{};
+            mr.is_over = true;
+            modal.show(mr, 0);
+            std::vector<uint32_t> played_sounds;
+            modal.set_on_play_sfx([&](uint32_t s) { played_sounds.push_back(s); });
+
+            // Leave game button (525..625, 12..44)
+            played_sounds.clear();
+            modal.handle_mouse_down(550, 20);
+            ASSERT_FALSE(played_sounds.empty());
+            ASSERT_EQ(played_sounds.back(), SoundID::NavButtonClick);
+        }
+    } TEST_END();
 }
 
 

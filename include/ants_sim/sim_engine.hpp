@@ -20,6 +20,7 @@ constexpr uint32_t TICK_RATE_HZ = 20u;
 constexpr uint32_t TICK_MS      = 50u;
 
 namespace SoundID {
+    constexpr uint32_t ButtonClick    = 0;  // buttonclick.wav
     constexpr uint32_t PowerUpHeal    = 1;  // powerupc.wav
     constexpr uint32_t PowerUpChime   = 2;  // powerupc2.wav
     constexpr uint32_t CombatNetFairy = 3;  // combatnetfairy.wav (11kHz, 0.62s, collision battle ball scuffle)
@@ -94,6 +95,7 @@ namespace SoundID {
     constexpr uint32_t ThiefEmerge    = 86; // stealc.wav
     constexpr uint32_t BaseScoreUp    = 87; // scoreup.wav
     constexpr uint32_t BaseScoreDn    = 88; // scoredn.wav
+    constexpr uint32_t NavButtonClick = 89; // navbuttonclick.wav (11kHz, 0.13s, UI button click)
     constexpr uint32_t BombPick       = 90; // bombpick.wav
 }
 

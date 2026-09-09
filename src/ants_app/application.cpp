@@ -182,6 +182,9 @@ bool Application::init(const ApplicationConfig& config) {
     scorecard_.set_on_quit([this]() {
         quit();
     });
+    scorecard_.set_on_play_sfx([this](uint32_t sound_id) {
+        audio_mixer_.play_sfx(sound_id, 1.0f, 255);
+    });
 
     hud_.set_on_quit([this]() {
         quit();
@@ -230,6 +233,9 @@ bool Application::init(const ApplicationConfig& config) {
     });
     map_select_.set_on_quit([this]() {
         quit();
+    });
+    map_select_.set_on_play_sfx([this](uint32_t sound_id) {
+        audio_mixer_.play_sfx(sound_id, 1.0f, 255);
     });
 
     // Determine initial AppState & MIDI lifecycle

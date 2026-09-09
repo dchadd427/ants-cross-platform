@@ -139,6 +139,12 @@ public:
     void set_on_quit(std::function<void()> cb) {
         on_quit_ = std::move(cb);
     }
+    void set_on_play_sfx(std::function<void(uint32_t)> cb) {
+        on_play_sfx_ = std::move(cb);
+    }
+    void play_sfx(uint32_t sound_id) {
+        if (on_play_sfx_) on_play_sfx_(sound_id);
+    }
 
     int32_t get_selected_index() const noexcept { return selected_index_; }
     void set_selected_index(int32_t idx) noexcept;
@@ -195,6 +201,7 @@ private:
     uint32_t connection_ticks_{0};
     std::function<void(const std::string& map_path)> on_start_{nullptr};
     std::function<void()> on_quit_{nullptr};
+    std::function<void(uint32_t)> on_play_sfx_{nullptr};
 };
 
 } // namespace ants::app
