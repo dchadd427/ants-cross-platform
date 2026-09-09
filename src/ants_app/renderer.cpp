@@ -773,6 +773,7 @@ void Renderer::render_world(const ants::sim::WorldState& world,
 
     // 4.2 Visual Effects (e.g. bomb explosion bombex)
     render_visual_effects(world);
+    render_transient_effects();
 
     // 4.5 Layer 3 Canopy Overhang (rendered after ants so ants walk beneath foliage)
     render_terrain_layer3_canopy();
@@ -1095,6 +1096,144 @@ void Renderer::render_visual_effects(const ants::sim::WorldState& world) {
     }
 }
 
+void Renderer::spawn_transient_effect(const std::string& anim_name, int32_t px, int32_t py, bool is_screen_space) {
+    TransientEffect eff;
+    eff.anim_name = anim_name;
+    eff.px = px;
+    eff.py = py;
+    eff.elapsed_sec = 0.0f;
+    eff.is_screen_space = is_screen_space;
+    transient_effects_.push_back(std::move(eff));
+}
+
+void Renderer::update_transient_effects(float dt) {
+    if (transient_effects_.empty() || !archive_) return;
+    for (auto it = transient_effects_.begin(); it != transient_effects_.end();) {
+        it->elapsed_sec += dt;
+        const auto* anim = archive_->find_animation(it->anim_name);
+        if (!anim && !it->anim_name.empty()) {
+            std::string low = it->anim_name;
+            for (char& c : low) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+            anim = archive_->find_animation(low);
+        }
+        if (!anim || anim->subitems.empty()) {
+            it = transient_effects_.erase(it);
+            continue;
+        }
+        float total_dur = 0.0f;
+        for (const auto& sub : anim->subitems) {
+            float sub_dur = (sub.val3 > 0) ? (static_cast<float>(sub.val3) / 1000.0f) : 0.060f;
+            total_dur += sub_dur;
+        }
+        if (total_dur <= 0.0f) total_dur = 0.420f;
+        if (it->elapsed_sec >= total_dur) {
+            it = transient_effects_.erase(it);
+        } else {
+            ++it;
+        }
+    }
+}
+
+void Renderer::render_transient_effects() {
+    if (!archive_ || !texture_cache_) return;
+    for (const auto& eff : transient_effects_) {
+        int32_t sx = eff.px;
+        int32_t sy = eff.py;
+        if (!eff.is_screen_space) {
+            if (!camera_.world_to_screen(eff.px, eff.py, sx, sy)) continue;
+        }
+        const auto* anim = archive_->find_animation(eff.anim_name);
+        if (!anim && !eff.anim_name.empty()) {
+            std::string low = eff.anim_name;
+            for (char& c : low) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+            anim = archive_->find_animation(low);
+        }
+        if (!anim || anim->subitems.empty()) continue;
+
+        float accum = 0.0f;
+        size_t sub_idx = 0;
+        for (size_t i = 0; i < anim->subitems.size(); ++i) {
+            float sub_dur = (anim->subitems[i].val3 > 0) ? (static_cast<float>(anim->subitems[i].val3) / 1000.0f) : 0.060f;
+            if (eff.elapsed_sec < accum + sub_dur) {
+                sub_idx = i;
+                break;
+            }
+            accum += sub_dur;
+            if (i + 1 == anim->subitems.size()) {
+                sub_idx = i;
+            }
+        }
+        const auto& sub = anim->subitems[sub_idx];
+        for (const auto& f : sub.frames) {
+            SDL_Texture* tex = texture_cache_->get_sprite_texture(f.sprite_index);
+            if (!tex) continue;
+            const auto& sp = archive_->get_sprite(f.sprite_index);
+            SDL_Rect dst = { sx + f.dx, sy + f.dy, static_cast<int>(sp.width), static_cast<int>(sp.height) };
+            SDL_RenderCopy(renderer_, tex, nullptr, &dst);
+        }
+    }
+}
+
+void Renderer::render_software_cursor(CursorType type, int32_t screen_x, int32_t screen_y, uint32_t anim_tick) {
+    if (!archive_ || !texture_cache_ || !renderer_) return;
+    (void)anim_tick;
+
+    uint32_t anim_id = 41; // c_normal
+    switch (type) {
+        case CursorType::Normal:      anim_id = 41; break;
+        case CursorType::Select:      anim_id = 42; break;
+        case CursorType::Move:        anim_id = 44; break;
+        case CursorType::ThiefTarget: anim_id = 43; break;
+        case CursorType::Attack:      anim_id = 33; break;
+        case CursorType::ScrollN:     anim_id = 51; break;
+        case CursorType::ScrollNE:    anim_id = 46; break;
+        case CursorType::ScrollE:     anim_id = 45; break;
+        case CursorType::ScrollSE:    anim_id = 49; break;
+        case CursorType::ScrollS:     anim_id = 48; break;
+        case CursorType::ScrollSW:    anim_id = 52; break;
+        case CursorType::ScrollW:     anim_id = 50; break;
+        case CursorType::ScrollNW:    anim_id = 47; break;
+        case CursorType::Food:        anim_id = 54; break;
+        case CursorType::Cant:        anim_id = 39; break;
+        default:                      anim_id = 41; break;
+    }
+
+    if (anim_id >= archive_->animation_count()) return;
+    const auto& anim = archive_->get_animation(anim_id);
+    if (anim.subitems.empty()) return;
+
+    size_t sub_idx = 0;
+    if (anim.subitems.size() > 1) {
+        uint32_t total_dur_ms = 0;
+        for (const auto& sub : anim.subitems) {
+            total_dur_ms += (sub.val3 > 0) ? sub.val3 : 100;
+        }
+        if (total_dur_ms == 0) total_dur_ms = 1000;
+        uint32_t now_ms = SDL_GetTicks() % total_dur_ms;
+        uint32_t accum = 0;
+        for (size_t i = 0; i < anim.subitems.size(); ++i) {
+            uint32_t dur = (anim.subitems[i].val3 > 0) ? anim.subitems[i].val3 : 100;
+            if (now_ms < accum + dur) {
+                sub_idx = i;
+                break;
+            }
+            accum += dur;
+            if (i + 1 == anim.subitems.size()) {
+                sub_idx = i;
+            }
+        }
+    }
+
+    const auto& sub = anim.subitems[sub_idx];
+    for (const auto& f : sub.frames) {
+        SDL_Texture* tex = texture_cache_->get_sprite_texture(f.sprite_index);
+        if (!tex) continue;
+        const auto& sp = archive_->get_sprite(f.sprite_index);
+        SDL_Rect dst = { screen_x + f.dx, screen_y + f.dy, static_cast<int>(sp.width), static_cast<int>(sp.height) };
+        SDL_RenderCopy(renderer_, tex, nullptr, &dst);
+    }
+}
+
 void Renderer::draw_ant_shadow(int32_t anchor_sx, int32_t anchor_sy, int32_t altitude_z) {
     SDL_Texture* shadow_tex = texture_cache_->get_named_sprite_texture("shadow.bmp");
     if (!shadow_tex) return;
@@ -1372,30 +1511,63 @@ void Renderer::draw_single_ant(const ants::sim::AntSnapshot& ant, bool is_select
         }
     }
 
-    // 3. Selection Indicator (4 bright green corner brackets framing the unit)
+    // 3. Selection Indicator (Authentic 4-corner animated sprite brackets from ants.chd)
     if (is_selected) {
-        SDL_SetRenderDrawColor(renderer_, 50, 220, 50, 255);
-        int32_t bx = sx - 15;
-        int32_t by = render_y - 28;
-        int32_t bw = 30;
-        int32_t bh = 38;
-        int32_t arm = 6;
+        bool drawn_ears = false;
+        if (archive_ && texture_cache_) {
+            uint32_t ears_id = 58;
+            if (ant.type == ants::sim::AntType::Combat) {
+                if (ant.hp > 6) ears_id = 149;       // c_dogears
+                else if (ant.hp > 3) ears_id = 150;  // c_yelears
+                else ears_id = 151;                  // c_redears
+            } else {
+                if (ant.hp > 6) ears_id = 58;        // dogears
+                else if (ant.hp > 3) ears_id = 60;   // yelears
+                else ears_id = 61;                   // redears
+            }
+            if (ears_id < archive_->animation_count()) {
+                const auto& ears_seq = archive_->get_animation(ears_id);
+                if (!ears_seq.subitems.empty()) {
+                    uint32_t step_ticks = 5; // 250ms (5 ticks) for dogears / c_dogears
+                    if (ears_id == 60 || ears_id == 150) step_ticks = 2; // ~125ms for yelears / c_yelears
+                    else if (ears_id == 61 || ears_id == 151) step_ticks = 1; // 60ms for redears / c_redears
+                    size_t sub_idx = (anim_tick_ / step_ticks) % ears_seq.subitems.size();
+                    const auto& sub = ears_seq.subitems[sub_idx];
+                    for (const auto& f : sub.frames) {
+                        SDL_Texture* tex = texture_cache_->get_sprite_texture(f.sprite_index);
+                        if (!tex) continue;
+                        const auto& sp = archive_->get_sprite(f.sprite_index);
+                        SDL_Rect dst = { sx + f.dx, render_y + f.dy, static_cast<int>(sp.width), static_cast<int>(sp.height) };
+                        SDL_RenderCopy(renderer_, tex, nullptr, &dst);
+                    }
+                    drawn_ears = true;
+                }
+            }
+        }
+        if (!drawn_ears) {
+            SDL_SetRenderDrawColor(renderer_, 50, 220, 50, 255);
+            int32_t bx = sx - 15;
+            int32_t by = render_y - 28;
+            int32_t bw = 30;
+            int32_t bh = 38;
+            int32_t arm = 6;
 
-        // Top-left
-        SDL_RenderDrawLine(renderer_, bx, by, bx + arm, by);
-        SDL_RenderDrawLine(renderer_, bx, by, bx, by + arm);
+            // Top-left
+            SDL_RenderDrawLine(renderer_, bx, by, bx + arm, by);
+            SDL_RenderDrawLine(renderer_, bx, by, bx, by + arm);
 
-        // Top-right
-        SDL_RenderDrawLine(renderer_, bx + bw, by, bx + bw - arm, by);
-        SDL_RenderDrawLine(renderer_, bx + bw, by, bx + bw, by + arm);
+            // Top-right
+            SDL_RenderDrawLine(renderer_, bx + bw, by, bx + bw - arm, by);
+            SDL_RenderDrawLine(renderer_, bx + bw, by, bx + bw, by + arm);
 
-        // Bottom-left
-        SDL_RenderDrawLine(renderer_, bx, by + bh, bx + arm, by + bh);
-        SDL_RenderDrawLine(renderer_, bx, by + bh, bx, by + bh - arm);
+            // Bottom-left
+            SDL_RenderDrawLine(renderer_, bx, by + bh, bx + arm, by + bh);
+            SDL_RenderDrawLine(renderer_, bx, by + bh, bx, by + bh - arm);
 
-        // Bottom-right
-        SDL_RenderDrawLine(renderer_, bx + bw, by + bh, bx + bw - arm, by + bh);
-        SDL_RenderDrawLine(renderer_, bx + bw, by + bh, bx + bw, by + bh - arm);
+            // Bottom-right
+            SDL_RenderDrawLine(renderer_, bx + bw, by + bh, bx + bw - arm, by + bh);
+            SDL_RenderDrawLine(renderer_, bx + bw, by + bh, bx + bw, by + bh - arm);
+        }
     }
 
     // 4. Overhead Unit Health Bar (Framed bar with health-percentage coloring)
@@ -1418,6 +1590,25 @@ void Renderer::draw_single_ant(const ants::sim::AntSnapshot& ant, bool is_select
 }
 
 void Renderer::draw_anthill_selection_brackets(int32_t x, int32_t y, int32_t w, int32_t h) {
+    if (archive_ && texture_cache_ && 59 < archive_->animation_count()) {
+        const auto& ears_seq = archive_->get_animation(59); // hillears
+        if (!ears_seq.subitems.empty()) {
+            int32_t cx = x + (w / 2);
+            int32_t cy = y + (h / 2);
+            size_t sub_idx = (anim_tick_ / 4) % ears_seq.subitems.size(); // 200ms = 4 ticks
+            const auto& sub = ears_seq.subitems[sub_idx];
+            for (const auto& f : sub.frames) {
+                SDL_Texture* tex = texture_cache_->get_sprite_texture(f.sprite_index);
+                if (!tex) continue;
+                const auto& sp = archive_->get_sprite(f.sprite_index);
+                SDL_Rect dst = { cx + f.dx, cy + f.dy, static_cast<int>(sp.width), static_cast<int>(sp.height) };
+                SDL_RenderCopy(renderer_, tex, nullptr, &dst);
+            }
+            return;
+        }
+    }
+
+    // Fallback: draw geometry lines
     SDL_SetRenderDrawColor(renderer_, 50, 220, 50, 255);
     int32_t arm = 20;
     int32_t thick = 3;

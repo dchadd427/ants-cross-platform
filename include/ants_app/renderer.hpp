@@ -42,6 +42,38 @@ enum class FontSize : uint8_t {
     Large = 2    // ~18px (screen titles, victory headers)
 };
 
+/**
+ * @brief Authentic 1998 cursor modes reverse-engineered from Ants.exe (0x1026c5c & 0x1027e65).
+ */
+enum class CursorType : uint8_t {
+    Normal = 0,      // Mode 1: c_normal (Anim 41)
+    Select = 1,      // Mode 2: c_select (Anim 42)
+    Move = 2,        // Mode 3: c_mov1 (Anim 44)
+    ThiefTarget = 3, // Mode 4: c_targ1 (Anim 43)
+    Attack = 4,      // Mode 5: c_attack (Anim 33)
+    ScrollN = 5,     // Mode 6 dir 0: CUR_N (Anim 51)
+    ScrollNE = 6,    // Mode 6 dir 1: CUR_NE (Anim 46)
+    ScrollE = 7,     // Mode 6 dir 2: CUR_E (Anim 45)
+    ScrollSE = 8,    // Mode 6 dir 3: CUR_SE (Anim 49)
+    ScrollS = 9,     // Mode 6 dir 4: CUR_S (Anim 48)
+    ScrollSW = 10,   // Mode 6 dir 5: CUR_SW (Anim 52)
+    ScrollW = 11,    // Mode 6 dir 6: CUR_W (Anim 50)
+    ScrollNW = 12,   // Mode 6 dir 7: CUR_NW (Anim 47)
+    Food = 13,       // Mode 7: c_food (Anim 54)
+    Cant = 14        // c_cant (Anim 39)
+};
+
+/**
+ * @brief Client-side transient visual effect (e.g. xmarks ground click indicator).
+ */
+struct TransientEffect {
+    std::string anim_name;
+    int32_t px{0};
+    int32_t py{0};
+    float elapsed_sec{0.0f};
+    bool is_screen_space{false};
+};
+
 // Authentic Virtual Canvas Constants
 constexpr int CANVAS_WIDTH  = 640;
 constexpr int CANVAS_HEIGHT = 480;
@@ -223,6 +255,14 @@ public:
     void request_screenshot(const std::string& path) { pending_screenshot_ = path; }
     bool save_screenshot(const std::string& path);
 
+    // Software Cursor & Transient Effects
+    void spawn_transient_effect(const std::string& anim_name, int32_t px, int32_t py, bool is_screen_space = false);
+    void update_transient_effects(float dt);
+    void render_transient_effects();
+    void render_software_cursor(CursorType type, int32_t screen_x, int32_t screen_y, uint32_t anim_tick = 0);
+    void set_cursor(CursorType type) noexcept { current_cursor_ = type; }
+    CursorType get_cursor() const noexcept { return current_cursor_; }
+
 private:
     void render_terrain_layer1(const ants::sim::Grid& grid);
     void render_terrain_layer2_structures(const ants::sim::Grid& grid);
@@ -232,7 +272,7 @@ private:
     void render_tile_grid(const ants::sim::Grid& grid, int32_t mouse_x, int32_t mouse_y);
     void draw_ant_shadow(int32_t anchor_sx, int32_t anchor_sy, int32_t altitude_z);
     void draw_single_ant(const ants::sim::AntSnapshot& ant, bool is_selected, bool show_health_bar = false);
-    void draw_anthill_selection_brackets(int32_t x, int32_t y, int32_t w, int32_t h);
+    void draw_anthill_selection_brackets(int32_t x, int32_t y, int32_t w = 128, int32_t h = 128);
 
 #ifdef ANTS_ENABLE_SDL_TTF
     struct CachedTextEntry {
@@ -288,6 +328,8 @@ private:
     uint8_t hud_team_id_{0};
     bool integer_scale_{true};
     bool is_fullscreen_{false};
+    CursorType current_cursor_{CursorType::Normal};
+    std::vector<TransientEffect> transient_effects_{};
 };
 
 } // namespace ants::app

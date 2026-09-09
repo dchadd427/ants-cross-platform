@@ -4987,6 +4987,142 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         ASSERT_EQ(w_ant.final_dest, w_ant.pos);
         ASSERT_NE(w_ant.state, UnitState::Drowning);
     } TEST_END();
+
+    TEST_CASE("12.61 Authentic Cursors, Edge Panning, Click Markers & Selection Brackets") {
+        // 1. Asset verification in ants.chd
+        AssetArchive archive;
+        ASSERT_TRUE(archive.load_chd("Original-Ants/ants.chd"));
+
+        // Cursors
+        ASSERT_TRUE(archive.animation_count() > 54);
+        ASSERT_EQ(archive.get_animation(41).name, "c_normal");
+        ASSERT_EQ(archive.get_animation(42).name, "c_select");
+        ASSERT_EQ(archive.get_animation(44).name, "c_mov1");
+        ASSERT_EQ(archive.get_animation(43).name, "c_targ1");
+        ASSERT_EQ(archive.get_animation(33).name, "c_attack");
+        ASSERT_EQ(archive.get_animation(54).name, "c_food");
+        ASSERT_EQ(archive.get_animation(39).name, "c_cant");
+        ASSERT_EQ(archive.get_animation(32).name, "xmarks");
+
+        // Edge panning cursors
+        ASSERT_EQ(archive.get_animation(51).name, "CUR_N");
+        ASSERT_EQ(archive.get_animation(46).name, "CUR_NE");
+        ASSERT_EQ(archive.get_animation(45).name, "CUR_E");
+        ASSERT_EQ(archive.get_animation(49).name, "CUR_SE");
+        ASSERT_EQ(archive.get_animation(48).name, "CUR_S");
+        ASSERT_EQ(archive.get_animation(52).name, "CUR_SW");
+        ASSERT_EQ(archive.get_animation(50).name, "CUR_W");
+        ASSERT_EQ(archive.get_animation(47).name, "CUR_NW");
+
+        // Selection brackets
+        ASSERT_EQ(archive.get_animation(58).name, "dogears");
+        ASSERT_EQ(archive.get_animation(60).name, "yelears");
+        ASSERT_EQ(archive.get_animation(61).name, "redears");
+        ASSERT_EQ(archive.get_animation(149).name, "c_dogears");
+        ASSERT_EQ(archive.get_animation(150).name, "c_yelears");
+        ASSERT_EQ(archive.get_animation(151).name, "c_redears");
+        ASSERT_EQ(archive.get_animation(59).name, "hillears");
+
+        // 2. HUD evaluate_cursor Logic
+        SimulationEngine sim;
+        sim.init_test_world(60, 60, 100, 60000);
+
+        HUD hud;
+        hud.init(0);
+
+        ViewportCamera camera;
+        camera.viewport_w = 480;
+        camera.viewport_h = 440;
+        camera.world_x = 320;
+        camera.world_y = 320;
+
+        // A. Overlays: Normal cursor
+        hud.open_options();
+        ASSERT_EQ(hud.evaluate_cursor(200, 200, sim.get_world_state(), sim.grid(), camera), CursorType::Normal);
+        hud.close_options();
+
+        // B. Edge Panning Bounds Check (0x1026b09..0x1026d11)
+        ASSERT_EQ(hud.evaluate_cursor(5, 5, sim.get_world_state(), sim.grid(), camera), CursorType::ScrollNW);
+        ASSERT_EQ(hud.evaluate_cursor(320, 5, sim.get_world_state(), sim.grid(), camera), CursorType::ScrollN);
+        ASSERT_EQ(hud.evaluate_cursor(635, 5, sim.get_world_state(), sim.grid(), camera), CursorType::ScrollNE);
+        ASSERT_EQ(hud.evaluate_cursor(5, 240, sim.get_world_state(), sim.grid(), camera), CursorType::ScrollW);
+        ASSERT_EQ(hud.evaluate_cursor(635, 240, sim.get_world_state(), sim.grid(), camera), CursorType::ScrollE);
+        ASSERT_EQ(hud.evaluate_cursor(5, 475, sim.get_world_state(), sim.grid(), camera), CursorType::ScrollSW);
+        ASSERT_EQ(hud.evaluate_cursor(320, 475, sim.get_world_state(), sim.grid(), camera), CursorType::ScrollS);
+        ASSERT_EQ(hud.evaluate_cursor(635, 475, sim.get_world_state(), sim.grid(), camera), CursorType::ScrollSE);
+
+        // C. HUD Chrome: Normal cursor (between edge panning margins 13..467)
+        ASSERT_EQ(hud.evaluate_cursor(500, 200, sim.get_world_state(), sim.grid(), camera), CursorType::Normal);
+        ASSERT_EQ(hud.evaluate_cursor(200, 16, sim.get_world_state(), sim.grid(), camera), CursorType::Normal);
+        ASSERT_EQ(hud.evaluate_cursor(200, 464, sim.get_world_state(), sim.grid(), camera), CursorType::Normal);
+
+        // D. Playfield - No units selected
+        int32_t screen_tx15 = (15 * 32 + 16) - 320 + PLAYFIELD_X;
+        int32_t screen_ty15 = (15 * 32 + 16) - 320 + PLAYFIELD_Y;
+        ASSERT_EQ(hud.evaluate_cursor(screen_tx15, screen_ty15, sim.get_world_state(), sim.grid(), camera), CursorType::Normal);
+
+        uint32_t my_worker = sim.spawn_unit(0, AntType::Worker, TileCoord{15, 15});
+        uint32_t enemy_ant = sim.spawn_unit(1, AntType::Worker, TileCoord{18, 15});
+        (void)my_worker;
+        (void)enemy_ant;
+
+        // Hover over friendly or enemy ant with no units selected -> Select
+        ASSERT_EQ(hud.evaluate_cursor(screen_tx15, screen_ty15, sim.get_world_state(), sim.grid(), camera), CursorType::Select);
+        int32_t screen_tx18 = (18 * 32 + 16) - 320 + PLAYFIELD_X;
+        ASSERT_EQ(hud.evaluate_cursor(screen_tx18, screen_ty15, sim.get_world_state(), sim.grid(), camera), CursorType::Select);
+
+        // E. Playfield - Friendly Unit Selected
+        hud.select_ant(my_worker);
+        ASSERT_TRUE(hud.get_selected_ant_id() == my_worker);
+
+        // Friendly ant hover -> Select
+        ASSERT_EQ(hud.evaluate_cursor(screen_tx15, screen_ty15, sim.get_world_state(), sim.grid(), camera), CursorType::Select);
+        // Enemy ant hover -> Attack!
+        ASSERT_EQ(hud.evaluate_cursor(screen_tx18, screen_ty15, sim.get_world_state(), sim.grid(), camera), CursorType::Attack);
+
+        // Food tile hover -> Food
+        sim.grid_mut().get_cell_mut(16, 15).is_food = true;
+        int32_t screen_tx16 = (16 * 32 + 16) - 320 + PLAYFIELD_X;
+        ASSERT_EQ(hud.evaluate_cursor(screen_tx16, screen_ty15, sim.get_world_state(), sim.grid(), camera), CursorType::Food);
+
+        // Obstacle tile hover -> Cant
+        sim.grid_mut().set_terrain(17, 15, TERRAIN_OBSTACLE);
+        int32_t screen_tx17 = (17 * 32 + 16) - 320 + PLAYFIELD_X;
+        ASSERT_EQ(hud.evaluate_cursor(screen_tx17, screen_ty15, sim.get_world_state(), sim.grid(), camera), CursorType::Cant);
+
+        // Water tile hover with Worker selected -> Cant
+        sim.grid_mut().set_terrain(14, 15, TERRAIN_WATER);
+        int32_t screen_tx14 = (14 * 32 + 16) - 320 + PLAYFIELD_X;
+        ASSERT_EQ(hud.evaluate_cursor(screen_tx14, screen_ty15, sim.get_world_state(), sim.grid(), camera), CursorType::Cant);
+
+        // Water tile hover with Swimmer selected -> Move!
+        uint32_t my_swimmer = sim.spawn_unit(0, AntType::Swimmer, TileCoord{15, 16});
+        hud.select_ant(my_swimmer);
+        ASSERT_EQ(hud.evaluate_cursor(screen_tx14, screen_ty15, sim.get_world_state(), sim.grid(), camera), CursorType::Move);
+
+        // F. Anthill Bases & Thief
+        uint32_t my_thief = sim.spawn_unit(0, AntType::Thief, TileCoord{15, 17});
+        hud.select_ant(my_thief);
+
+        // 3. Click Marker Spawning Verification
+        int32_t spawned_wx = -1, spawned_wy = -1;
+        hud.set_on_spawn_click_marker([&](int32_t wx, int32_t wy) {
+            spawned_wx = wx;
+            spawned_wy = wy;
+        });
+
+        // Click ground to move: drag dx/dy <= 4 at screen (250, 250)
+        hud.handle_mouse_down(250, 250, 1, sim, camera, 0);
+        hud.handle_mouse_up(250, 250, 1, sim, camera, 0);
+        ASSERT_EQ(spawned_wx, camera.world_x + (250 - PLAYFIELD_X));
+        ASSERT_EQ(spawned_wy, camera.world_y + (250 - PLAYFIELD_Y));
+
+        // 4. Renderer Transient Effects Lifecycle
+        Renderer renderer;
+        renderer.spawn_transient_effect("xmarks", 500, 500);
+        renderer.update_transient_effects(0.200f);
+        renderer.update_transient_effects(0.300f);
+    } TEST_END();
 }
 
 
