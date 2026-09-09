@@ -1007,23 +1007,30 @@ The authentic match clock routine at `0x1024839` evaluates remaining match milli
 
 - **Flower Canopy Layering & Sprite Rendering:**
   - On maps such as `SMALL.LVL` (at `(2, 19)` and `(37, 19)`), `GAUNTLET.LVL` (at `(3, 5)`), `ISLANDS.LVL` (at `(30, 55)` and `(30, 4)`), and `MEDIUM.LVL` (at `(29, 28)`), daisy flowers (`flower1`, Anim ID 421) are placed in Block 1 (`anthill_spawns`) with `team_id == 255`.
-  - These flowers render as static Layer 3 canopy objects. Dynamic simulation avoids rendering duplicate animated flower bodies over the static canopy, rendering only the falling droplet sequence during active drops.
-- **Timing & Block 4 Waypoint Configuration:**
-  - Block 4 waypoints with `flag == 1` define power-up spawn locations.
-  - `wp.param` dictates the delay and respawn interval in seconds (`wp.param * 20` simulation ticks):
+  - In CHD Table 4, multi-sprite composite sequences (`flower1`, Anim ID 421) order their frames from front to back:
+    - Frame 0: Flower head (`flowerhead5.bmp`, 120x117 at `dx=-54, dy=-170`)
+    - Frame 1: Top stem (`topstem1.bmp`, 16x10 at `dx=-4, dy=-66`)
+    - Frame 2: Leaves (`leaves.bmp`, 80x76 at `dx=-28, dy=-48`)
+    - Frame 3: Bottom stem (`bottomstem2.bmp`, 16x11 at `dx=-6, dy=-23`)
+    - Frame 4: Ground shadow (`shadow.bmp`, 32x32 at `dx=-5, dy=-33`)
+  - To render correctly under the 2D painter's algorithm, canopy animation frames must be iterated in reverse order (`frames.size() - 1` down to 0) so background layers (shadow, base stem, leaves, top stem) render beneath foreground layers (flower head).
+- **Continuous Periodic Dropping & Layer 2 Replacement (Disasm `0x101e3d7`, `0x101e342`, `0x101ac8c`):**
+  - In `Ants.exe`, flower droppers run continuously on an interval cooldown (`wp.param * 20` simulation ticks):
     - `SMALL.LVL`: 15s interval (300 ticks).
     - `GAUNTLET.LVL`: 30s interval (600 ticks).
     - `ISLANDS.LVL`: 30s / 60s interval (600 / 1,200 ticks).
     - `MEDIUM.LVL`: 8s / 30s interval (160 / 600 ticks).
   - Target landing coordinates match the waypoint tile `(wp.x, wp.y)`.
-- **Power-Up Probability Distribution (`wp.probabilities[5]`):**
+  - The dropper does not pause if an uncollected power-up already sits on the target tile; upon drop completion, the incoming power-up replaces whatever item is underneath and immediately resets `timer_ticks = interval_ticks`.
+- **Power-Up Probability Distribution & Map Filtering (`wp.probabilities[5]`):**
   - Each active waypoint stores 5 IEEE-754 64-bit doubles summing to 1.0, representing the drop probabilities for each power-up class:
     - Index 0: Bomber (`PU_BOMBER`, Tile 64, `FD_BOMB`, Anim 426)
     - Index 1: Combat (`PU_COMBAT`, Tile 62, `FD_COMB`, Anim 422)
     - Index 2: Thief (`PU_THIEF`, Tile 63, `FD_THIEF`, Anim 424)
     - Index 3: Swimmer (`PU_SWIMMER`, Tile 65, `FD_SWIM`, Anim 423)
     - Index 4: Fire (`PU_FIRE`, Tile 66, `FD_FIRE`, Anim 425)
-  - For instance, `ISLANDS.LVL` sets Swimmer probability to 70% (`probs[3] = 0.70`), while waterless maps (`SMALL.LVL`, `MEDIUM.LVL`) zero out Swimmer or concentrate drops on Combat/Fire/Bomber.
+  - Zero-probability classes (`probabilities[i] <= 0.0001`) are strictly skipped during sampling.
+  - For example, `SMALL.LVL` (`[0.45, 0.0, 0.0, 0.1, 0.45]`) exclusively spawns Bomber (45%), Swimmer (10%), and Fire (45%), with Combat and Thief disabled. `GAUNTLET.LVL` (`[0.1, 0.4, 0.0, 0.1, 0.4]`) disables Thief, while `ISLANDS.LVL` concentrates 70% of drops on Swimmer.
 - **Falling Droplet Animation & Audio Cue:**
   - When triggered, a 9-frame falling droplet animation begins playing directly above the target tile (`FD_COMB`, `FD_SWIM`, `FD_THIEF`, `FD_FIRE`, or `FD_BOMB`).
   - The droplet starts at `dy = -109` (directly below the flower head) and descends to `dy = -10` (ground level).
