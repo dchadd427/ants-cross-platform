@@ -116,7 +116,7 @@ docker compose up -d --build
 
 # Or build and launch with Docker directly
 docker build -t ants-web .
-docker run -d -p 8080:80 --name ants-web ants-web
+docker run -d -p 19980:80 --name ants-web ants-web
 ```
 
 ### Building the Web Port Locally (without Docker)
