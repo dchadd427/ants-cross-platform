@@ -5399,6 +5399,15 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
             sim.tick();
         }
         ASSERT_TRUE(sim.has_audio_event(SoundID::Countdown)); // Sound 44 triggers again at 9s!
+
+        // Verify every remaining second from 8 down to 1 triggers Sound 44 (countdwn.wav)
+        for (int sec = 8; sec >= 1; --sec) {
+            sim.clear_audio_events();
+            for (int i = 0; i < 20; ++i) {
+                sim.tick();
+            }
+            ASSERT_TRUE(sim.has_audio_event(SoundID::Countdown)); // Sound 44 every second!
+        }
     } TEST_END();
 
     TEST_CASE("12.68 Match Defeat Triggers losers.wav (Sound 42) & Player Drop-Out Triggers playerout.wav (Sound 41)") {
