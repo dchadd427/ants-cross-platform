@@ -92,11 +92,12 @@ if(WIN32 AND DEFINED SDL2_DLL)
 endif()
 
 if(EMSCRIPTEN)
-    target_compile_options(ants_app PUBLIC "-sUSE_SDL=2")
-    target_compile_options(ants PRIVATE "-sUSE_SDL=2")
+    target_compile_definitions(ants_app PUBLIC ANTS_ENABLE_SDL_TTF=1)
+    target_compile_options(ants_app PUBLIC "-sUSE_SDL=2" "-sUSE_SDL_TTF=2")
+    target_compile_options(ants PRIVATE "-sUSE_SDL=2" "-sUSE_SDL_TTF=2")
     set_target_properties(ants PROPERTIES
         OUTPUT_NAME "index"
         SUFFIX ".html"
-        LINK_FLAGS "-sUSE_SDL=2 -sALLOW_MEMORY_GROWTH=1 -sINITIAL_MEMORY=67108864 -sMAXIMUM_MEMORY=536870912 -sWASM=1 --preload-file ${CMAKE_SOURCE_DIR}/Original-Ants@Original-Ants --shell-file ${CMAKE_SOURCE_DIR}/web/shell.html"
+        LINK_FLAGS "-sUSE_SDL=2 -sUSE_SDL_TTF=2 -sALLOW_MEMORY_GROWTH=1 -sINITIAL_MEMORY=67108864 -sMAXIMUM_MEMORY=536870912 -sWASM=1 -sFORCE_FILESYSTEM=1 -sEXPORTED_RUNTIME_METHODS=['FS'] --preload-file ${CMAKE_SOURCE_DIR}/Original-Ants@Original-Ants --shell-file ${CMAKE_SOURCE_DIR}/web/shell.html"
     )
 endif()
