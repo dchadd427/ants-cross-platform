@@ -245,6 +245,21 @@
     top: 0;
     z-index: 10;
   }
+  th.sortable {
+    cursor: pointer;
+    user-select: none;
+    transition: background 0.15s ease, color 0.15s ease;
+  }
+  th.sortable:hover {
+    background: #18253d;
+    color: var(--accent);
+  }
+  .sort-icon {
+    display: inline-block;
+    margin-left: 4px;
+    font-size: 0.75rem;
+    color: var(--accent);
+  }
   .sounds-table td {
     padding: 0.65rem 1rem;
     border-bottom: 1px solid var(--border-subtle);
@@ -274,33 +289,109 @@
     overflow: hidden;
   }
   .anims-sidebar {
-    width: 340px;
+    width: 360px;
+    min-width: 360px;
     min-height: 0;
     height: 100%;
     border-right: 1px solid var(--border);
-    overflow-y: auto;
     background: #0d1527;
     display: flex;
     flex-direction: column;
     flex-shrink: 0;
   }
+  .anim-sort-bar {
+    padding: 0.5rem 0.75rem;
+    background: #090e1a;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    flex-shrink: 0;
+  }
+  .sort-btn {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    color: var(--text-secondary);
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    transition: all 0.15s ease;
+  }
+  .sort-btn:hover { background: var(--bg-card-hover); color: #fff; border-color: var(--accent); }
+  .sort-btn.active { background: var(--accent); color: #0b0f19; border-color: var(--accent); }
+  .anims-list-scroll {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+  }
   .anim-item {
-    padding: 0.75rem 1rem;
+    padding: 0.5rem 0.75rem;
     border-bottom: 1px solid var(--border-subtle);
     cursor: pointer;
     display: flex;
-    justify-content: space-between;
     align-items: center;
+    gap: 0.75rem;
     transition: background 0.1s ease;
+    user-select: none;
   }
   .anim-item:hover { background: #162238; }
   .anim-item.selected {
     background: var(--bg-card-active);
     border-left: 4px solid var(--accent);
   }
-  .anim-item-left { display: flex; flex-direction: column; gap: 0.2rem; }
-  .anim-name { font-weight: 600; font-size: 0.85rem; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
-  .anim-meta { font-size: 0.75rem; color: var(--text-secondary); display: flex; gap: 0.5rem; align-items: center; }
+  .anim-thumb-box {
+    width: 44px;
+    height: 44px;
+    min-width: 44px;
+    background: #070a12;
+    border: 1px solid #1e293b;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    flex-shrink: 0;
+    position: relative;
+  }
+  .anim-thumb-img {
+    max-width: 40px;
+    max-height: 40px;
+    object-fit: contain;
+    image-rendering: pixelated;
+  }
+  .anim-thumb-empty {
+    color: var(--text-dim);
+    font-size: 0.65rem;
+  }
+  .anim-item-left {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+    min-width: 0;
+    flex: 1;
+  }
+  .anim-name {
+    font-weight: 600;
+    font-size: 0.85rem;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .anim-meta {
+    font-size: 0.72rem;
+    color: var(--text-secondary);
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+  }
 
   .anims-detail {
     flex: 1;
@@ -882,11 +973,11 @@
         <thead>
           <tr>
             <th style="width: 50px;">Play</th>
-            <th style="width: 75px;">ID</th>
-            <th>Audio Clip Name</th>
-            <th style="width: 110px;">Sample Rate</th>
-            <th style="width: 95px;">Duration</th>
-            <th style="width: 90px;">Size</th>
+            <th class="sortable" onclick="setSoundSort('id')" style="width: 80px;">ID <span id="sort-snd-id-icon" class="sort-icon">▲</span></th>
+            <th class="sortable" onclick="setSoundSort('name')">Audio Clip Name <span id="sort-snd-name-icon" class="sort-icon"></span></th>
+            <th class="sortable" onclick="setSoundSort('rate')" style="width: 120px;">Sample Rate <span id="sort-snd-rate-icon" class="sort-icon"></span></th>
+            <th class="sortable" onclick="setSoundSort('duration')" style="width: 105px;">Duration <span id="sort-snd-duration-icon" class="sort-icon"></span></th>
+            <th class="sortable" onclick="setSoundSort('size')" style="width: 100px;">Size <span id="sort-snd-size-icon" class="sort-icon"></span></th>
             <th style="width: 320px;">Listen / Audio Controls</th>
             <th style="width: 170px;">Actions</th>
           </tr>
@@ -900,8 +991,17 @@
 
   <!-- 2. Animations View -->
   <div id="anims-view" class="tab-content">
-    <div class="anims-sidebar" id="anims-list">
-      <!-- Injected by JS -->
+    <div class="anims-sidebar">
+      <div class="anim-sort-bar">
+        <span style="font-size:0.75rem; color:var(--text-secondary); font-weight:600;">Sort:</span>
+        <button class="sort-btn active" id="btn-sort-anim-id" onclick="setAnimSort('id')">ID <span id="sort-anim-id-icon" class="sort-icon">▲</span></button>
+        <button class="sort-btn" id="btn-sort-anim-name" onclick="setAnimSort('name')">Name <span id="sort-anim-name-icon" class="sort-icon"></span></button>
+        <button class="sort-btn" id="btn-sort-anim-steps" onclick="setAnimSort('steps')">Steps <span id="sort-anim-steps-icon" class="sort-icon"></span></button>
+        <button class="sort-btn" id="btn-sort-anim-layers" onclick="setAnimSort('layers')">Layers <span id="sort-anim-layers-icon" class="sort-icon"></span></button>
+      </div>
+      <div class="anims-list-scroll" id="anims-list">
+        <!-- Injected by JS -->
+      </div>
     </div>
     <div class="anims-detail">
       <div class="anim-header-card">
@@ -1017,12 +1117,12 @@
           <table class="layers-table">
             <thead>
               <tr>
-                <th style="width: 40px;">Thumb</th>
-                <th style="width: 60px;">Layer</th>
-                <th style="width: 80px;">Sprite ID</th>
-                <th>Sprite BMP Filename</th>
-                <th style="width: 100px;">Offset (dx, dy)</th>
-                <th style="width: 90px;">Size</th>
+                <th style="width: 44px;">Thumb</th>
+                <th class="sortable" onclick="setLayerSort('layer')" style="width: 70px;">Layer <span id="sort-lay-layer-icon" class="sort-icon">▲</span></th>
+                <th class="sortable" onclick="setLayerSort('id')" style="width: 90px;">Sprite ID <span id="sort-lay-id-icon" class="sort-icon"></span></th>
+                <th class="sortable" onclick="setLayerSort('name')">Sprite BMP Filename <span id="sort-lay-name-icon" class="sort-icon"></span></th>
+                <th class="sortable" onclick="setLayerSort('offset')" style="width: 120px;">Offset (dx, dy) <span id="sort-lay-offset-icon" class="sort-icon"></span></th>
+                <th class="sortable" onclick="setLayerSort('size')" style="width: 100px;">Size <span id="sort-lay-size-icon" class="sort-icon"></span></th>
                 <th style="width: 150px;">Actions</th>
               </tr>
             </thead>
@@ -1037,6 +1137,17 @@
 
   <!-- 3. Sprites View -->
   <div id="sprites-view" class="tab-content">
+    <div class="sprites-toolbar" style="padding: 0.6rem 1.75rem 0.4rem 1.75rem; display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; background: #090e1a; border-bottom: 1px solid var(--border);">
+      <div style="display:flex; align-items:center; gap:0.5rem; font-size:0.8rem; color:var(--text-secondary); flex-wrap:wrap;">
+        <span style="font-weight:600;">Sort Sprites:</span>
+        <button class="sort-btn active" id="btn-sort-spr-id" onclick="setSpriteSort('id')">ID <span id="sort-spr-id-icon" class="sort-icon">▲</span></button>
+        <button class="sort-btn" id="btn-sort-spr-name" onclick="setSpriteSort('name')">Name <span id="sort-spr-name-icon" class="sort-icon"></span></button>
+        <button class="sort-btn" id="btn-sort-spr-width" onclick="setSpriteSort('width')">Width <span id="sort-spr-width-icon" class="sort-icon"></span></button>
+        <button class="sort-btn" id="btn-sort-spr-height" onclick="setSpriteSort('height')">Height <span id="sort-spr-height-icon" class="sort-icon"></span></button>
+        <button class="sort-btn" id="btn-sort-spr-area" onclick="setSpriteSort('area')">Area <span id="sort-spr-area-icon" class="sort-icon"></span></button>
+        <button class="sort-btn" id="btn-sort-spr-usage" onclick="setSpriteSort('usage')">Usage <span id="sort-spr-usage-icon" class="sort-icon"></span></button>
+      </div>
+    </div>
     <div class="sprites-grid" id="sprites-grid-container">
       <!-- Sprites injected by JS -->
     </div>
@@ -1340,6 +1451,181 @@ function updateFilterChips() {
   });
 }
 
+// Sorting State & Handlers
+let soundSort = { col: 'id', dir: 'asc' };
+let animSort = { col: 'id', dir: 'asc' };
+let layerSort = { col: 'layer', dir: 'asc' };
+let spriteSort = { col: 'id', dir: 'asc' };
+
+function setSoundSort(col) {
+  if (soundSort.col === col) {
+    soundSort.dir = soundSort.dir === 'asc' ? 'desc' : 'asc';
+  } else {
+    soundSort.col = col;
+    soundSort.dir = 'asc';
+  }
+  updateSoundSortIcons();
+  applySearchFilter();
+}
+
+function updateSoundSortIcons() {
+  ['id', 'name', 'rate', 'duration', 'size'].forEach(col => {
+    const el = document.getElementById(`sort-snd-${col}-icon`);
+    if (el) el.textContent = (soundSort.col === col) ? (soundSort.dir === 'asc' ? '▲' : '▼') : '';
+  });
+}
+
+function sortSoundsList(list) {
+  return [...list].sort((a, b) => {
+    let diff = 0;
+    if (soundSort.col === 'id') diff = a.id - b.id;
+    else if (soundSort.col === 'name') diff = a.name.localeCompare(b.name);
+    else if (soundSort.col === 'rate') diff = a.rate - b.rate;
+    else if (soundSort.col === 'duration') diff = a.duration_ms - b.duration_ms;
+    else if (soundSort.col === 'size') diff = a.size - b.size;
+    return soundSort.dir === 'asc' ? diff : -diff;
+  });
+}
+
+function setAnimSort(col) {
+  if (animSort.col === col) {
+    animSort.dir = animSort.dir === 'asc' ? 'desc' : 'asc';
+  } else {
+    animSort.col = col;
+    animSort.dir = 'asc';
+  }
+  updateAnimSortButtons();
+  applySearchFilter();
+}
+
+function updateAnimSortButtons() {
+  ['id', 'name', 'steps', 'layers'].forEach(col => {
+    const btn = document.getElementById(`btn-sort-anim-${col}`);
+    const icon = document.getElementById(`sort-anim-${col}-icon`);
+    if (btn) btn.classList.toggle('active', animSort.col === col);
+    if (icon) icon.textContent = (animSort.col === col) ? (animSort.dir === 'asc' ? '▲' : '▼') : '';
+  });
+}
+
+function sortAnimsList(list) {
+  return [...list].sort((a, b) => {
+    let diff = 0;
+    if (animSort.col === 'id') diff = a.id - b.id;
+    else if (animSort.col === 'name') diff = a.name.localeCompare(b.name);
+    else if (animSort.col === 'steps') diff = a.subitems.length - b.subitems.length;
+    else if (animSort.col === 'layers') {
+      const layA = a.subitems.reduce((s, x) => s + x.frames.length, 0);
+      const layB = b.subitems.reduce((s, x) => s + x.frames.length, 0);
+      diff = layA - layB;
+    }
+    return animSort.dir === 'asc' ? diff : -diff;
+  });
+}
+
+function setLayerSort(col) {
+  if (layerSort.col === col) {
+    layerSort.dir = layerSort.dir === 'asc' ? 'desc' : 'asc';
+  } else {
+    layerSort.col = col;
+    layerSort.dir = 'asc';
+  }
+  updateLayerSortIcons();
+  updateScrubberAndUI();
+}
+
+function updateLayerSortIcons() {
+  ['layer', 'id', 'name', 'offset', 'size'].forEach(col => {
+    const el = document.getElementById(`sort-lay-${col}-icon`);
+    if (el) el.textContent = (layerSort.col === col) ? (layerSort.dir === 'asc' ? '▲' : '▼') : '';
+  });
+}
+
+function sortLayersList(frames) {
+  const withIdx = frames.map((f, idx) => ({ ...f, originalIndex: idx }));
+  return withIdx.sort((a, b) => {
+    let diff = 0;
+    if (layerSort.col === 'layer') diff = a.originalIndex - b.originalIndex;
+    else if (layerSort.col === 'id') diff = a.sprite_id - b.sprite_id;
+    else if (layerSort.col === 'name') diff = a.sprite_name.localeCompare(b.sprite_name);
+    else if (layerSort.col === 'offset') diff = (a.dx * a.dx + a.dy * a.dy) - (b.dx * b.dx + b.dy * b.dy);
+    else if (layerSort.col === 'size') diff = (a.w * a.h) - (b.w * b.h);
+    return layerSort.dir === 'asc' ? diff : -diff;
+  });
+}
+
+function setSpriteSort(col) {
+  if (spriteSort.col === col) {
+    spriteSort.dir = spriteSort.dir === 'asc' ? 'desc' : 'asc';
+  } else {
+    spriteSort.col = col;
+    spriteSort.dir = 'asc';
+  }
+  updateSpriteSortButtons();
+  applySearchFilter();
+}
+
+function updateSpriteSortButtons() {
+  ['id', 'name', 'width', 'height', 'area', 'usage'].forEach(col => {
+    const btn = document.getElementById(`btn-sort-spr-${col}`);
+    const icon = document.getElementById(`sort-spr-${col}-icon`);
+    if (btn) btn.classList.toggle('active', spriteSort.col === col);
+    if (icon) icon.textContent = (spriteSort.col === col) ? (spriteSort.dir === 'asc' ? '▲' : '▼') : '';
+  });
+}
+
+function sortSpritesList(list) {
+  return [...list].sort((a, b) => {
+    let diff = 0;
+    if (spriteSort.col === 'id') diff = a.id - b.id;
+    else if (spriteSort.col === 'name') diff = a.name.localeCompare(b.name);
+    else if (spriteSort.col === 'width') diff = a.width - b.width;
+    else if (spriteSort.col === 'height') diff = a.height - b.height;
+    else if (spriteSort.col === 'area') diff = (a.width * a.height) - (b.width * b.height);
+    else if (spriteSort.col === 'usage') {
+      const uA = spriteUsageMap.has(a.id) ? spriteUsageMap.get(a.id).size : 0;
+      const uB = spriteUsageMap.has(b.id) ? spriteUsageMap.get(b.id).size : 0;
+      diff = uA - uB;
+    }
+    return spriteSort.dir === 'asc' ? diff : -diff;
+  });
+}
+
+// Hover animation preview logic for left sidebar
+let hoverPreviewInterval = null;
+let activeHoverImg = null;
+let activeHoverOriginalSrc = '';
+
+function startAnimItemHover(animId, imgElem) {
+  stopAnimItemHover();
+  const anim = CATALOG_DATA.animations[animId];
+  if (!anim || anim.subitems.length <= 1 || !imgElem) return;
+
+  activeHoverImg = imgElem;
+  activeHoverOriginalSrc = imgElem.src;
+
+  let stepIdx = 0;
+  hoverPreviewInterval = setInterval(() => {
+    stepIdx = (stepIdx + 1) % anim.subitems.length;
+    const sub = anim.subitems[stepIdx];
+    if (sub && sub.frames && sub.frames.length > 0) {
+      const spId = sub.frames[0].sprite_id;
+      imgElem.src = `sprites/sprite_${String(spId).padStart(4, '0')}.png`;
+    }
+  }, 90);
+}
+
+function stopAnimItemHover() {
+  if (hoverPreviewInterval) {
+    clearInterval(hoverPreviewInterval);
+    hoverPreviewInterval = null;
+  }
+  if (activeHoverImg && activeHoverOriginalSrc) {
+    activeHoverImg.src = activeHoverOriginalSrc;
+  }
+  activeHoverImg = null;
+  activeHoverOriginalSrc = '';
+}
+
 // 1. Sounds View Logic
 function renderSounds(items) {
   const tbody = document.getElementById('sounds-tbody');
@@ -1442,9 +1728,24 @@ function renderAnimsList(items) {
     const isSingle = a.subitems.length === 1 && totalFrames === 1;
     const badgeType = isComposite ? 'badge badge-sprite' : 'badge badge-anim';
     const typeLabel = isComposite ? `Composite (${totalFrames} layers)` : (isSingle ? '1 frame' : `${a.subitems.length} steps (${totalFrames} layers)`);
+    
+    let firstSpriteId = null;
+    for (const sub of a.subitems) {
+      if (sub.frames && sub.frames.length > 0 && sub.frames[0].sprite_id !== undefined) {
+        firstSpriteId = sub.frames[0].sprite_id;
+        break;
+      }
+    }
+
     const div = document.createElement('div');
     div.className = 'anim-item' + (a.id === activeAnimIndex ? ' selected' : '');
+    
+    const thumbHtml = (firstSpriteId !== null)
+      ? `<div class="anim-thumb-box"><img src="sprites/sprite_${String(firstSpriteId).padStart(4, '0')}.png" loading="lazy" class="anim-thumb-img" alt="${a.name}" id="anim-thumb-${a.id}"></div>`
+      : `<div class="anim-thumb-box"><span class="anim-thumb-empty">None</span></div>`;
+
     div.innerHTML = `
+      ${thumbHtml}
       <div class="anim-item-left">
         <div class="anim-name"><span class="${badgeType}" style="margin-right:4px;">#${a.id}</span> ${a.name}</div>
         <div class="anim-meta">
@@ -1453,6 +1754,14 @@ function renderAnimsList(items) {
         </div>
       </div>
     `;
+
+    const imgElem = div.querySelector('.anim-thumb-img');
+    if (imgElem && a.subitems.length > 1) {
+      div.addEventListener('mouseenter', () => startAnimItemHover(a.id, imgElem));
+      div.addEventListener('mouseleave', () => stopAnimItemHover());
+    }
+
+    div.dataset.animId = a.id;
     div.onclick = () => selectAnimation(a.id);
     container.appendChild(div);
   });
@@ -1464,7 +1773,7 @@ function selectAnimation(animId) {
   currentSubIndex = 0;
 
   document.querySelectorAll('.anim-item').forEach(el => {
-    const isSelected = el.textContent.includes('#' + animId + ' ');
+    const isSelected = el.dataset.animId === String(animId);
     el.classList.toggle('selected', isSelected);
     if (isSelected && currentTab === 'anims') {
       try {
@@ -1598,12 +1907,13 @@ function updateScrubberAndUI() {
   tbody.innerHTML = '';
   if (curSub) {
     document.getElementById('current-step-layers-count').textContent = curSub.frames.length;
-    curSub.frames.forEach((f, lIdx) => {
+    const sortedLayers = sortLayersList(curSub.frames);
+    sortedLayers.forEach(f => {
       const tr = document.createElement('tr');
       const thumbSrc = `sprites/sprite_${String(f.sprite_id).padStart(4, '0')}.png`;
       tr.innerHTML = `
         <td><img src="${thumbSrc}" class="layer-thumb" alt="#${f.sprite_id}"></td>
-        <td><span style="font-weight:600;">L${lIdx + 1}</span></td>
+        <td><span style="font-weight:600;">L${f.originalIndex + 1}</span></td>
         <td><span class="badge badge-sprite">#${f.sprite_id}</span></td>
         <td><strong style="font-family: monospace;">${f.sprite_name}</strong></td>
         <td><span style="font-family: monospace;">(${f.dx >= 0 ? '+' + f.dx : f.dx}, ${f.dy >= 0 ? '+' + f.dy : f.dy})</span></td>
@@ -1860,6 +2170,7 @@ function applySearchFilter() {
     if (query) {
       filtered = filtered.filter(s => s.name.toLowerCase().includes(query) || String(s.id).includes(query));
     }
+    filtered = sortSoundsList(filtered);
     renderSounds(filtered);
   } else if (currentTab === 'anims') {
     let filtered = CATALOG_DATA.animations;
@@ -1872,6 +2183,7 @@ function applySearchFilter() {
         a.subitems.some(s => s.frames.some(f => f.sprite_name.toLowerCase().includes(query)))
       );
     }
+    filtered = sortAnimsList(filtered);
     renderAnimsList(filtered);
     if (filtered.length > 0 && !filtered.some(a => a.id === activeAnimIndex)) {
       selectAnimation(filtered[0].id);
@@ -1882,6 +2194,7 @@ function applySearchFilter() {
     if (query) {
       filtered = filtered.filter(sp => sp.name.toLowerCase().includes(query) || String(sp.id).includes(query));
     }
+    filtered = sortSpritesList(filtered);
     renderSprites(filtered);
   }
 }
@@ -2029,6 +2342,10 @@ window.addEventListener('keydown', (e) => {
 // Initial Setup
 window.addEventListener('DOMContentLoaded', () => {
   initReverseIndexes();
+  updateSoundSortIcons();
+  updateAnimSortButtons();
+  updateLayerSortIcons();
+  updateSpriteSortButtons();
   renderSounds(CATALOG_DATA.sounds);
   renderAnimsList(CATALOG_DATA.animations);
   selectAnimation(0);

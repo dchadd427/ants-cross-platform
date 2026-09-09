@@ -1057,6 +1057,22 @@ The authentic match clock routine at `0x1024839` evaluates remaining match milli
 
 ---
 
+### 5.31 Same-Tile Collision Scuffle Visual Effect (`battle`), `combatnetfairy.wav` & Bounce SFX (`flythumpb.wav`)
+
+- **Collision State & Visual Scuffle Ball (`0x10215cb`, `0x102151a`):**
+  - When two ants collide into the same tile (e.g., from an attack pushback, bomb blast, or simultaneous navigation collision), the engine resolves the conflict by playing a fighting "dust cloud / scuffle ball" effect before bouncing the displaced ant onto an adjacent passable tile.
+  - In CHD Table 4, this visual effect is sequence ID 56 (`battle`), consisting of 4 sequential subitems:
+    - Step 0 (70ms): `batt001.bmp` (Sprite 156, 69×59 px, offset `dx: -29, dy: -28`)
+    - Step 1 (60ms): `batt002.bmp` (Sprite 157, 63×62 px, offset `dx: -32, dy: -28`)
+    - Step 2 (80ms): `batt003.bmp` (Sprite 158, 73×54 px, offset `dx: -41, dy: -28`)
+    - Step 3 (60ms): `batt004.bmp` (Sprite 159, 65×65 px, offset `dx: -29, dy: -33`)
+  - Total duration is 270 ms (~5 simulation ticks at 20 Hz). The negative offsets center the 70×60 dust animation over the 32×32 ground tile center.
+- **Audio Cue Dispatch (`combatnetfairy.wav` & `flythumpb.wav`):**
+  - Frame 0 of sequence 56 specifies `sound_id = 3`, triggering `combatnetfairy.wav` (11,025 Hz, 6,860 bytes, 622 ms duration) upon scuffle contact.
+  - When the displaced ant bounces and lands on the adjacent tile, the collision bounce sound triggers `flythumpb.wav` (Sound ID 65) alongside `bump.wav` (Sound ID 47).
+
+---
+
 ## 6. Target Multi-Platform Architecture
 
 To achieve clean, modern, high-performance execution across macOS, Linux, Windows, and the Web (WebAssembly):
