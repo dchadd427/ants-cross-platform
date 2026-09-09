@@ -145,6 +145,7 @@ void MapSelectScreen::handle_mouse_down(int32_t screen_x, int32_t screen_y, uint
     if (screen_x >= BTN_UP_X && screen_x < BTN_UP_X + BTN_UP_W &&
         screen_y >= BTN_UP_Y && screen_y < BTN_UP_Y + BTN_UP_H) {
         btn_up_pressed_ = true;
+        play_sfx(sim::SoundID::NavButtonClick);
         set_selected_index(selected_index_ - 1);
         return;
     }
@@ -153,6 +154,7 @@ void MapSelectScreen::handle_mouse_down(int32_t screen_x, int32_t screen_y, uint
     if (screen_x >= BTN_DOWN_X && screen_x < BTN_DOWN_X + BTN_DOWN_W &&
         screen_y >= BTN_DOWN_Y && screen_y < BTN_DOWN_Y + BTN_DOWN_H) {
         btn_down_pressed_ = true;
+        play_sfx(sim::SoundID::NavButtonClick);
         set_selected_index(selected_index_ + 1);
         return;
     }
@@ -160,6 +162,7 @@ void MapSelectScreen::handle_mouse_down(int32_t screen_x, int32_t screen_y, uint
     // Clicking w_map box advances map
     if (screen_x >= W_MAP_X && screen_x < W_MAP_X + W_MAP_W &&
         screen_y >= W_MAP_Y && screen_y < W_MAP_Y + W_MAP_H) {
+        play_sfx(sim::SoundID::NavButtonClick);
         set_selected_index(selected_index_ + 1);
         return;
     }
@@ -167,6 +170,7 @@ void MapSelectScreen::handle_mouse_down(int32_t screen_x, int32_t screen_y, uint
     // Clicking map info box also advances map
     if (screen_x >= INFO_BOX_X && screen_x < INFO_BOX_X + INFO_BOX_W &&
         screen_y >= INFO_BOX_Y && screen_y < INFO_BOX_Y + INFO_BOX_H) {
+        play_sfx(sim::SoundID::NavButtonClick);
         set_selected_index(selected_index_ + 1);
         return;
     }
@@ -174,6 +178,7 @@ void MapSelectScreen::handle_mouse_down(int32_t screen_x, int32_t screen_y, uint
     // Fog of War "On" button
     if (screen_x >= BTN_FOW_ON_X && screen_x < BTN_FOW_ON_X + BTN_FOW_ON_W &&
         screen_y >= BTN_FOW_ON_Y && screen_y < BTN_FOW_ON_Y + BTN_FOW_ON_H) {
+        play_sfx(sim::SoundID::NavButtonClick);
         set_fog_of_war_enabled(true);
         return;
     }
@@ -181,6 +186,7 @@ void MapSelectScreen::handle_mouse_down(int32_t screen_x, int32_t screen_y, uint
     // Fog of War "Off" button
     if (screen_x >= BTN_FOW_OFF_X && screen_x < BTN_FOW_OFF_X + BTN_FOW_OFF_W &&
         screen_y >= BTN_FOW_OFF_Y && screen_y < BTN_FOW_OFF_Y + BTN_FOW_OFF_H) {
+        play_sfx(sim::SoundID::NavButtonClick);
         set_fog_of_war_enabled(false);
         return;
     }
@@ -189,6 +195,7 @@ void MapSelectScreen::handle_mouse_down(int32_t screen_x, int32_t screen_y, uint
     if (screen_x >= BTN_DROP_X && screen_x < BTN_DROP_X + BTN_DROP_W &&
         screen_y >= BTN_DROP_Y && screen_y < BTN_DROP_Y + BTN_DROP_H) {
         btn_drop_pressed_ = true;
+        play_sfx(sim::SoundID::NavButtonClick);
         toggle_player_ready(2);
         return;
     }
@@ -198,6 +205,7 @@ void MapSelectScreen::handle_mouse_down(int32_t screen_x, int32_t screen_y, uint
         for (uint8_t i = 0; i < 3; ++i) {
             int32_t ty = 97 + static_cast<int32_t>(i) * 50;
             if (screen_y >= ty && screen_y < ty + 24) {
+                play_sfx(sim::SoundID::NavButtonClick);
                 toggle_player_ready(i);
                 return;
             }
@@ -208,6 +216,7 @@ void MapSelectScreen::handle_mouse_down(int32_t screen_x, int32_t screen_y, uint
     if (screen_x >= BTN_START_X && screen_x < BTN_START_X + BTN_START_W &&
         screen_y >= BTN_START_Y && screen_y < BTN_START_Y + BTN_START_H) {
         btn_start_pressed_ = true;
+        play_sfx(sim::SoundID::NavButtonClick);
         trigger_start();
         return;
     }
@@ -216,6 +225,7 @@ void MapSelectScreen::handle_mouse_down(int32_t screen_x, int32_t screen_y, uint
     if (screen_x >= BTN_QUIT_X && screen_x < BTN_QUIT_X + BTN_QUIT_W &&
         screen_y >= BTN_QUIT_Y && screen_y < BTN_QUIT_Y + BTN_QUIT_H) {
         btn_quit_pressed_ = true;
+        play_sfx(sim::SoundID::NavButtonClick);
         trigger_quit();
         return;
     }

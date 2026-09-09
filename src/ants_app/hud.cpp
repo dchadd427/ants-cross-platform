@@ -1109,7 +1109,10 @@ bool HUD::handle_mouse_down(int32_t x, int32_t y, uint8_t button,
 
     // 0. Overlays and Modals intercept clicks first
     if (show_quick_help_) {
-        if (button == SDL_BUTTON_LEFT) close_quick_help();
+        if (button == SDL_BUTTON_LEFT) {
+            play_sfx(sim::SoundID::NavButtonClick);
+            close_quick_help();
+        }
         return true;
     }
     if (show_options_) {
@@ -1119,26 +1122,31 @@ bool HUD::handle_mouse_down(int32_t x, int32_t y, uint8_t button,
                 (x >= 402 && x <= 455 && y >= 425 && y <= 455)) {
                 opt_return_button_pressed_ = true;
                 opt_ok_button_pressed_ = true;
+                play_sfx(sim::SoundID::NavButtonClick);
                 return true;
             }
             // Chat ON (96..142, 287..311)
             if (x >= 96 && x <= 142 && y >= 287 && y <= 311) {
                 chat_enabled_ = true;
+                play_sfx(sim::SoundID::NavButtonClick);
                 return true;
             }
             // Chat OFF (146..192, 287..311)
             if (x >= 146 && x <= 192 && y >= 287 && y <= 311) {
                 chat_enabled_ = false;
+                play_sfx(sim::SoundID::NavButtonClick);
                 return true;
             }
             // Quick Help ON (358..404, 287..311)
             if (x >= 358 && x <= 404 && y >= 287 && y <= 311) {
                 quick_help_enabled_ = true;
+                play_sfx(sim::SoundID::NavButtonClick);
                 return true;
             }
             // Quick Help OFF (408..454, 287..311)
             if (x >= 408 && x <= 454 && y >= 287 && y <= 311) {
                 quick_help_enabled_ = false;
+                play_sfx(sim::SoundID::NavButtonClick);
                 return true;
             }
             // Sound FX slider (x 188..422, y 174..198)
@@ -1198,10 +1206,12 @@ bool HUD::handle_mouse_down(int32_t x, int32_t y, uint8_t button,
         if (button == SDL_BUTTON_LEFT) {
             if (yes_button_.contains(x, y)) {
                 yes_button_.is_pressed = true;
+                play_sfx(sim::SoundID::NavButtonClick);
                 return true;
             }
             if (no_button_.contains(x, y)) {
                 no_button_.is_pressed = true;
+                play_sfx(sim::SoundID::NavButtonClick);
                 return true;
             }
         }
@@ -1221,16 +1231,19 @@ bool HUD::handle_mouse_down(int32_t x, int32_t y, uint8_t button,
         // Top Header Buttons
         if (help_button_.contains(x, y)) {
             help_button_.is_pressed = true;
+            play_sfx(sim::SoundID::NavButtonClick);
             show_quick_help_ = !show_quick_help_;
             return true;
         }
         if (options_button_.contains(x, y)) {
             options_button_.is_pressed = true;
+            play_sfx(sim::SoundID::NavButtonClick);
             show_options_ = !show_options_;
             return true;
         }
         if (quit_button_.contains(x, y)) {
             quit_button_.is_pressed = true;
+            play_sfx(sim::SoundID::NavButtonClick);
             open_quit_dialog();
             return true;
         }
@@ -1240,6 +1253,7 @@ bool HUD::handle_mouse_down(int32_t x, int32_t y, uint8_t button,
             if (selected_base_team_id_ == local_player_id_) {
                 if (hatch_button_.contains(x, y) || move_pedestal_button_.contains(x, y)) {
                     hatch_button_.is_pressed = true;
+                    play_sfx(sim::SoundID::NavButtonClick);
                     int32_t score = (local_player_id_ < sim.get_world_state().player_scores.size())
                                         ? sim.get_world_state().player_scores[local_player_id_] : 0;
                     uint32_t eggs = (local_player_id_ < sim.get_world_state().player_eggs.size())
@@ -1253,12 +1267,14 @@ bool HUD::handle_mouse_down(int32_t x, int32_t y, uint8_t button,
                 }
                 if (stop_button_.contains(x, y)) {
                     stop_button_.is_pressed = true;
+                    play_sfx(sim::SoundID::NavButtonClick);
                     clear_selection();
                     return true;
                 }
             } else {
                 if (team_up_button_.contains(x, y) || move_pedestal_button_.contains(x, y)) {
                     team_up_button_.is_pressed = true;
+                    play_sfx(sim::SoundID::NavButtonClick);
                     uint8_t target_team = static_cast<uint8_t>(selected_base_team_id_);
                     const auto& ws = sim.get_world_state();
                     bool is_allied = (local_player_id_ < ws.player_alliances.size()) &&
@@ -1276,6 +1292,7 @@ bool HUD::handle_mouse_down(int32_t x, int32_t y, uint8_t button,
         // 1. Check Authentic Primary Action Pedestal (Move) click
         if (move_pedestal_button_.contains(x, y)) {
             move_pedestal_button_.is_pressed = true;
+            play_sfx(sim::SoundID::NavButtonClick);
             if (active_order_mode_ == sim::OrderType::Move) {
                 cancel_order_mode();
             } else {
@@ -1287,6 +1304,7 @@ bool HUD::handle_mouse_down(int32_t x, int32_t y, uint8_t button,
         // 1b. Check Authentic Secondary Action Pedestal (Class-Specific Ability) click
         if (ability_pedestal_button_.contains(x, y) && !selected_ant_ids_.empty()) {
             ability_pedestal_button_.is_pressed = true;
+            play_sfx(sim::SoundID::NavButtonClick);
             const auto& sel_u = sim.get_unit(selected_ant_ids_[0]);
             sim::OrderType ability_order = sim::OrderType::None;
             switch (sel_u.type) {
@@ -1311,6 +1329,7 @@ bool HUD::handle_mouse_down(int32_t x, int32_t y, uint8_t button,
         if (stop_button_.contains(x, y)) {
             stop_button_.is_pressed = true;
             cancel_order_mode();
+            play_sfx(sim::SoundID::NavButtonClick);
             play_sfx(sim::SoundID::AntStop);
             for (uint32_t aid : selected_ant_ids_) {
                 const auto& u = sim.get_unit(aid);
@@ -1341,6 +1360,7 @@ bool HUD::handle_mouse_down(int32_t x, int32_t y, uint8_t button,
         // 4. Check Authentic [All] Button click (532, 443, 44x24)
         if (send_to_button_.contains(x, y)) {
             send_to_button_.is_pressed = true;
+            play_sfx(sim::SoundID::NavButtonClick);
             send_to_all_ = true;
             return true;
         }
@@ -1348,6 +1368,7 @@ bool HUD::handle_mouse_down(int32_t x, int32_t y, uint8_t button,
         // 5. Check Authentic [Team] Button click (579, 443, 46x24)
         if (is_on_team_ && team_button_.contains(x, y)) {
             team_button_.is_pressed = true;
+            play_sfx(sim::SoundID::NavButtonClick);
             send_to_all_ = false;
             return true;
         }
@@ -1356,6 +1377,7 @@ bool HUD::handle_mouse_down(int32_t x, int32_t y, uint8_t button,
         if (hatch_button_.contains(x, y)) {
             if (hatch_button_.is_enabled) {
                 hatch_button_.is_pressed = true;
+                play_sfx(sim::SoundID::NavButtonClick);
                 sim.hatch_ant(local_player_id_, sim::AntType::Worker);
                 is_incubating_ = true;
                 incubation_timer_ticks_ = 60; // 3 seconds @ 20 Hz
@@ -1368,6 +1390,7 @@ bool HUD::handle_mouse_down(int32_t x, int32_t y, uint8_t button,
             if (action_buttons_[i].contains(x, y)) {
                 if (action_buttons_[i].is_enabled) {
                     action_buttons_[i].is_pressed = true;
+                    play_sfx(sim::SoundID::NavButtonClick);
                     switch (static_cast<ActionButtonId>(i)) {
                         case ActionButtonId::Move:   set_active_order_mode(sim::OrderType::Move); break;
                         case ActionButtonId::Attack: set_active_order_mode(sim::OrderType::Attack); break;

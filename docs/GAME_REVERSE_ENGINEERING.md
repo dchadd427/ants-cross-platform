@@ -1071,6 +1071,28 @@ The authentic match clock routine at `0x1024839` evaluates remaining match milli
   - Frame 0 of sequence 56 specifies `sound_id = 3`, triggering `combatnetfairy.wav` (11,025 Hz, 6,860 bytes, 622 ms duration) upon scuffle contact.
   - When the displaced ant bounces and lands on the adjacent tile, the collision bounce sound triggers `flythumpb.wav` (Sound ID 65) alongside `bump.wav` (Sound ID 47).
 
+### 5.25 Authentic Navigation Button Audio Feedback (`navbuttonclick.wav`, Sound ID 89)
+
+Reverse engineering of `Original-Ants/ants.chd` Table 4 animations and binary event loop handlers revealed the authentic UI click audio feedback system:
+- **Audio Asset Specification:**
+  - Asset name: `navbuttonclick.wav` (`sound_id` = 89).
+  - Format: 11,025 Hz, 8-bit mono PCM, 1,448 bytes, duration 131 ms.
+- **Animation Table Bindings (Table 4):**
+  - All interactive action pedestal and navigation button depression animations in Table 4 embed `sound_id: 89` in their initial keyframe:
+    - `butatt2d` (Anim 1191): Attack pedestal depression click.
+    - `butfir2d` (Anim 1192): Fire Wall pedestal depression click.
+    - `butaly2d` (Anim 1193): TeamUp pedestal depression click.
+    - `butbom2d` (Anim 1194): Bomb pedestal depression click.
+    - `butthf2d` (Anim 1195): Thief pedestal depression click.
+    - `butmov2d` (Anim 1196): Move pedestal depression click.
+    - `butswm2d` (Anim 1225): Swimmer Bridge pedestal depression click.
+    - `butegg2d` (Anim 1247): Base Incubate/Hatch button depression click.
+- **Universal Interactive Button Coverage:**
+  - All interactive button click events trigger `SoundID::NavButtonClick`:
+    - **In-Game HUD**: Top header buttons (`Help`, `Options`, `Quit`), Action Pedestals (`Move`, class abilities), Base Pedestals (`Hatch`, `TeamUp`), `Stop` button, Chat recipient buttons (`[All]`, `[Team]`), Quit Confirmation dialog buttons (`Yes`, `No`), and Quick Help / Options dialog buttons (`Return`, `Chat ON/OFF`, `Quick Help ON/OFF`).
+    - **Map Selection Setup Screen**: Arrow buttons (`Up`, `Down`), Map Box and Info Box click advance, Fog of War toggles (`On`, `Off`), Drop button, Player Ready slot toggles, `Start Game`, and `Quit / Leave Game`.
+    - **Scorecard Modal**: Top-right `Leave Game` button.
+
 ---
 
 ## 6. Target Multi-Platform Architecture
