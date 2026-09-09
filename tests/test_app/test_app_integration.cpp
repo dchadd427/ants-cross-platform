@@ -5632,6 +5632,28 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
             int32_t target_drop_y = ws.flower_droppers[0].drop_y;
             const auto& cell = sim.grid().get_cell(TileCoord{target_drop_x, target_drop_y});
             ASSERT_TRUE(cell.has_powerup());
+            // SMALL.LVL probabilities are [0.45, 0.0, 0.0, 0.1, 0.45] (Combat & Thief are 0%)
+            ASSERT_NE(cell.powerup_type, 4); // Not Combat
+            ASSERT_NE(cell.powerup_type, 3); // Not Thief
+
+            // Advance another 300 ticks (second 15s interval) with powerup still uncollected:
+            // Verifies dropper triggers continuously on cooldown and replaces existing powerup
+            for (int i = 0; i < 300; ++i) {
+                sim.tick();
+            }
+            const auto& ws_dropping2 = sim.get_world_state();
+            ASSERT_TRUE(ws_dropping2.flower_droppers[0].is_dropping);
+
+            // Complete the second 16-tick drop animation
+            for (int i = 0; i < 16; ++i) {
+                sim.tick();
+            }
+            const auto& ws_dropped2 = sim.get_world_state();
+            ASSERT_FALSE(ws_dropped2.flower_droppers[0].is_dropping);
+            const auto& cell2 = sim.grid().get_cell(TileCoord{target_drop_x, target_drop_y});
+            ASSERT_TRUE(cell2.has_powerup());
+            ASSERT_NE(cell2.powerup_type, 4);
+            ASSERT_NE(cell2.powerup_type, 3);
 
             // Food avoidance: Intermediate food is treated as obstacle in pathfinding
             sim.grid_mut().get_cell_mut(10, 10).is_food = true;

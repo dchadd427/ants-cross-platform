@@ -681,7 +681,11 @@ void Renderer::set_level(const ants::assets::LevelData& level) {
                 anim = archive_->find_animation(low);
             }
             if (anim && !anim->subitems.empty() && !anim->subitems[0].frames.empty()) {
-                for (const auto& fr : anim->subitems[0].frames) {
+                // Table 4 composite animation frames are ordered front-to-back (Frame 0 foreground, Frame N background/shadow).
+                // Iterate in reverse order so background layers (shadow, stem) render beneath foreground layers (flower head).
+                const auto& frames = anim->subitems[0].frames;
+                for (int i = static_cast<int>(frames.size()) - 1; i >= 0; --i) {
+                    const auto& fr = frames[static_cast<size_t>(i)];
                     const auto& sp = archive_->get_sprite(fr.sprite_index);
                     if (sp.width > 0 && sp.height > 0) {
                         StaticMapObject obj{};

@@ -1768,40 +1768,42 @@ void SimulationEngine::tick() {
                 fd.timer_ticks--;
             }
             if (fd.timer_ticks == 0) {
-                // Drop if target tile is not already occupied by an uncollected powerup
-                bool occupied = false;
-                if (impl_->grid_.in_bounds(fd.drop_pos)) {
-                    const auto& cell = impl_->grid_.get_cell(fd.drop_pos);
-                    if (cell.has_powerup()) {
-                        occupied = true;
-                    }
-                }
-                if (!occupied) {
-                    fd.is_dropping = true;
-                    fd.drop_tick = 0;
+                // In Ants 1998, the dropper triggers continuously on its interval cooldown,
+                // dropping and replacing any power-up currently on the target tile (Disasm 0x101e3d7, 0x101e342).
+                fd.is_dropping = true;
+                fd.drop_tick = 0;
 
-                    // Sample powerup type using waypoint probabilities
-                    double prob_sum = 0.0;
-                    for (double p : fd.probabilities) {
-                        prob_sum += p;
+                // Sample powerup type using waypoint probabilities
+                double prob_sum = 0.0;
+                for (double p : fd.probabilities) {
+                    prob_sum += p;
+                }
+                if (prob_sum > 0.001) {
+                    double r = ((static_cast<double>(impl_->prng_.rand() % 10000) + 0.5) / 10000.0) * prob_sum;
+                    double cum = 0.0;
+                    uint8_t selected = 0;
+                    bool found = false;
+                    for (size_t i = 0; i < 5; ++i) {
+                        if (fd.probabilities[i] <= 0.0001) continue;
+                        cum += fd.probabilities[i];
+                        if (r <= cum && !found) {
+                            selected = static_cast<uint8_t>(i);
+                            found = true;
+                        }
                     }
-                    if (prob_sum > 0.001) {
-                        double r = (static_cast<double>(impl_->prng_.rand() % 10000) / 10000.0) * prob_sum;
-                        double cum = 0.0;
-                        uint8_t selected = 0;
+                    if (!found) {
                         for (size_t i = 0; i < 5; ++i) {
-                            cum += fd.probabilities[i];
-                            if (r <= cum) {
+                            if (fd.probabilities[i] > 0.0001) {
                                 selected = static_cast<uint8_t>(i);
                                 break;
                             }
                         }
-                        fd.powerup_type = selected;
-                    } else {
-                        fd.powerup_type = static_cast<uint8_t>(impl_->prng_.rand() % 5);
                     }
-                    impl_->world_state_dirty_ = true;
+                    fd.powerup_type = selected;
+                } else {
+                    fd.powerup_type = static_cast<uint8_t>(impl_->prng_.rand() % 5);
                 }
+                impl_->world_state_dirty_ = true;
             }
         }
     }
