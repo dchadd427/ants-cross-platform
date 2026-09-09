@@ -20,6 +20,18 @@ constexpr assets::ColorRGBA TEAM_COLORS[4] = {
     {79, 87, 111, 255}    // 3: Black
 };
 
+// Authentic Team Score Box Background Colors from Ants.exe VA 0x100DA90..0x100DAD0:
+// Team 0 (Green in remake, Team 3 in Ants.exe): COLORREF 0x002F4307 -> RGB { 7, 67, 47 }
+// Team 1 (Red in remake, Team 2 in Ants.exe):   COLORREF 0x00000077 -> RGB { 119, 0, 0 }
+// Team 2 (Blue in remake, Team 1 in Ants.exe):  COLORREF 0x006B272B -> RGB { 43, 39, 107 }
+// Team 3 (Black in remake, Team 0 in Ants.exe): COLORREF 0x003B2727 -> RGB { 39, 39, 59 }
+constexpr assets::ColorRGBA SCORE_BG_COLORS[4] = {
+    {  7,  67,  47, 255}, // 0: Green
+    {119,   0,   0, 255}, // 1: Red
+    { 43,  39, 107, 255}, // 2: Blue
+    { 39,  39,  59, 255}  // 3: Black
+};
+
 const char* ANT_TYPE_NAMES[] = {
     "Worker Ant",
     "Bomber Ant",
@@ -287,12 +299,12 @@ void HUD::render(IRenderer& renderer, const assets::AssetArchive& assets,
                  const sim::WorldState& world, const ViewportCamera& camera) {
     renderer.set_hud_team(local_player_id_);
 
-    // Base backing fill to ensure zero gaps between modular HUD tiles
+    // Base backing fill to ensure zero gaps between modular HUD tiles (Authentic index 10)
     static const assets::ColorRGBA hud_bg_colors[4] = {
-        {43, 107, 95, 255},  // Green (Player 0)
-        {115, 35, 35, 255},  // Red (Player 1)
-        {35, 65, 115, 255},  // Blue (Player 2)
-        {48, 48, 52, 255}    // Black (Player 3)
+        { 43, 104,  95, 255},  // Green (Player 0) - Authentic index 10
+        {143,  35,  99, 255},  // Red   (Player 1) - Authentic index 10
+        { 51,  87, 163, 255},  // Blue  (Player 2) - Authentic index 10
+        { 87,  87,  91, 255}   // Black (Player 3) - Authentic index 10
     };
     renderer.fill_rect(480, 22, 160, 458, hud_bg_colors[local_player_id_ % 4]);
 
@@ -511,9 +523,9 @@ void HUD::render_top_bar(IRenderer& renderer, const assets::AssetArchive&, const
     int32_t time_y = 4 + (14 - time_h) / 2;
     renderer.draw_text(time_str, time_x, time_y, {255, 255, 255, 255}, FontSize::Small);
 
-    // Box 2 (Top-Right above Playfield): Local player's own score in box at (402..456, 4..17)
-    // Fill the entire box with the team color
-    renderer.fill_rect(402, 4, 54, 14, TEAM_COLORS[local_player_id_ % 4]);
+    // Box 2 (Top-Right above Playfield): Local player's own score in box at (402..455, 4..17)
+    // Fill the box with authentic score background color (Ants.exe VA 0x100DA90)
+    renderer.fill_rect(402, 4, 54, 14, SCORE_BG_COLORS[local_player_id_ % 4]);
     int32_t my_score = (local_player_id_ < world.player_scores.size()) ? world.player_scores[local_player_id_] : 0;
     std::string my_score_str = std::to_string(my_score);
     int32_t score_text_w = renderer.get_text_width(my_score_str, FontSize::Small);
@@ -521,6 +533,17 @@ void HUD::render_top_bar(IRenderer& renderer, const assets::AssetArchive&, const
     int32_t score_text_x = 453 - score_text_w;
     int32_t score_text_y = 4 + (14 - score_text_h) / 2;
     renderer.draw_text(my_score_str, score_text_x, score_text_y, {255, 255, 255, 255}, FontSize::Small);
+
+    // Player label to the left of the top score box in [312..399, 4..17] (Ants.exe VA 0x100E218)
+    static const char* TEAM_NAMES[4] = {"Green", "Red", "Blue", "Black"};
+    std::string p_name = player_name_.empty() ? TEAM_NAMES[local_player_id_ % 4] : player_name_;
+    if (p_name.size() > 15) p_name = p_name.substr(0, 15);
+    std::string my_label = p_name + ":";
+    int32_t label_w = renderer.get_text_width(my_label, FontSize::Small);
+    int32_t label_h = renderer.get_text_height(FontSize::Small);
+    int32_t label_x = std::max(312, 399 - label_w);
+    int32_t label_y = 4 + (14 - label_h) / 2;
+    renderer.draw_text(my_label, label_x, label_y, {255, 255, 255, 255}, FontSize::Small);
 
     // Top Header Buttons feedback (Help at 476, 7; Options at 525, 7; Quit at 579, 7)
     // Note: In unpressed state, Help/Options/Quit are already pre-rendered inside x0y0.bmp.
@@ -800,28 +823,51 @@ void HUD::render_news_banner(IRenderer& renderer, const assets::AssetArchive&, c
     // Bottom banner background: x17y461.bmp (623x19)
     renderer.draw_named_sprite("x17y461.bmp", BANNER_X, BANNER_Y);
 
-    // Render other 3 players' scores in the 3 pre-cut black boxes:
-    // Box 3: x = 105..159, y = 466
-    // Box 4: x = 254..308, y = 466
-    // Box 5: x = 402..456, y = 466
+    // Render other 3 players' scores and labels in the 3 pre-cut slots (Ants.exe VA 0x10021B8):
+    // Slot 0: label [5..101], score [105..158], y = 464..477
+    // Slot 1: label [163..251], score [254..307], y = 464..477
+    // Slot 2: label [312..399], score [402..455], y = 464..477
     std::vector<uint8_t> other_players;
     for (uint8_t p = 0; p < 4; ++p) {
         if (p != local_player_id_) other_players.push_back(p);
     }
 
-    const int32_t box_xs[3] = {105, 254, 402};
+    struct ScoreSlot {
+        int32_t label_left;
+        int32_t label_right;
+        int32_t box_x;
+    };
+    const ScoreSlot slots[3] = {
+        {5, 101, 105},
+        {163, 251, 254},
+        {312, 399, 402}
+    };
+
+    static const char* TEAM_NAMES[4] = {"Green", "Red", "Blue", "Black"};
 
     for (size_t i = 0; i < 3 && i < other_players.size(); ++i) {
         uint8_t p = other_players[i];
-        int32_t bx = box_xs[i];
-        // Team color box fill
-        renderer.fill_rect(bx, 464, 54, 14, TEAM_COLORS[p]);
+        const auto& slot = slots[i];
+
+        // Player/team label right-aligned before score box (Ants.exe VA 0x100E218)
+        std::string name = (p < 4) ? TEAM_NAMES[p] : "AI";
+        if (name.size() > 15) name = name.substr(0, 15);
+        std::string p_label = name + ":";
+        int32_t label_w = renderer.get_text_width(p_label, FontSize::Small);
+        int32_t label_h = renderer.get_text_height(FontSize::Small);
+        int32_t label_x = std::max(slot.label_left, slot.label_right - label_w);
+        int32_t label_y = 464 + (14 - label_h) / 2;
+        renderer.draw_text(p_label, label_x, label_y, {255, 255, 255, 255}, FontSize::Small);
+
+        // Score box fill with authentic background color
+        renderer.fill_rect(slot.box_x, 464, 54, 14, SCORE_BG_COLORS[p % 4]);
+
         // Player score inside box (right-justified)
         int32_t s = (p < world.player_scores.size()) ? world.player_scores[p] : 0;
         std::string s_str = std::to_string(s);
         int32_t s_text_w = renderer.get_text_width(s_str, FontSize::Small);
         int32_t s_text_h = renderer.get_text_height(FontSize::Small);
-        int32_t s_text_x = bx + 51 - s_text_w;
+        int32_t s_text_x = slot.box_x + 51 - s_text_w;
         int32_t s_text_y = 464 + (14 - s_text_h) / 2;
         renderer.draw_text(s_str, s_text_x, s_text_y, {255, 255, 255, 255}, FontSize::Small);
     }

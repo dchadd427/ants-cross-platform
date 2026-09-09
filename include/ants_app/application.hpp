@@ -53,6 +53,7 @@ struct ApplicationConfig {
     bool open_options{false};
     bool show_tile_grid{false};
     bool show_scorecard{false};
+    uint8_t local_player_id{0};
 };
 
 /**

@@ -66,6 +66,8 @@ bool Application::init(int argc, char* argv[]) {
             cfg.show_tile_grid = true;
         } else if (std::strcmp(argv[i], "--map-select") == 0) {
             cfg.start_in_map_select = true;
+        } else if (std::strcmp(argv[i], "--player") == 0 && i + 1 < argc) {
+            cfg.local_player_id = static_cast<uint8_t>(std::stoi(argv[++i]));
         } else if (std::strcmp(argv[i], "--scorecard") == 0) {
             cfg.show_scorecard = true;
             cfg.start_in_map_select = false;
@@ -204,6 +206,9 @@ bool Application::init(const ApplicationConfig& config) {
     map_select_.set_player_name(player_name);
     scorecard_.set_local_player_name(player_name);
     hud_.set_player_name(player_name);
+    if (config_.local_player_id < 4) {
+        set_local_player(config_.local_player_id);
+    }
     SDL_StartTextInput();
     map_select_.set_on_start([this](const std::string& map_path) {
         start_game(map_path);
@@ -317,7 +322,7 @@ bool Application::start_game(const std::string& map_path) {
     }
 
     // 5. Reset HUD & Scorecard
-    hud_.init(0);
+    hud_.init(local_player_id_);
     hud_.reset();
     scorecard_.hide();
 
