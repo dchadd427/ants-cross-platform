@@ -7,3 +7,9 @@ services:
     restart: unless-stopped
     ports:
       - "${ANTS_PORT:-19980}:80"
+    networks:
+      - proxy-network
+
+networks:
+  proxy-network:
+    external: true
