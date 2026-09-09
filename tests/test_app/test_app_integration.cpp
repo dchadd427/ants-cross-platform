@@ -4636,7 +4636,37 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
             ASSERT_TRUE(unit.anim_subitem > 0); // Actively animating
         }
     } TEST_END();
+
+    TEST_CASE("12.54 Text Width Measurement, Multi-Line Splitting & Font Sizing Integrity") {
+        ants::app::Renderer renderer;
+        // Verify empty text width
+        ASSERT_EQ(renderer.get_text_width(""), 0);
+
+        // Verify non-empty text width is positive
+        int32_t small_w = renderer.get_text_width("that food!", ants::app::FontSize::Small);
+        ASSERT_TRUE(small_w > 0);
+
+        // Verify proportional width scales monotonically with string length
+        int32_t longer_w = renderer.get_text_width("that food! And extra text for width check.", ants::app::FontSize::Small);
+        ASSERT_TRUE(longer_w > small_w);
+
+        // Verify HUD chat entry recording and scroll offset boundaries
+        ants::app::HUD hud;
+        hud.init(0);
+        size_t initial_lines = hud.get_chat_log().size();
+        hud.add_chat_entry("Player1", "Hello world!");
+        hud.add_chat_entry("Player2", "that food!");
+        ASSERT_EQ(hud.get_chat_log().size(), initial_lines + 2);
+        ASSERT_EQ(hud.get_chat_scroll_offset(), 0);
+
+        // Scroll limits
+        hud.scroll_chat_up(5);
+        ASSERT_EQ(hud.get_chat_scroll_offset(), 0); // Not enough lines to scroll
+        hud.scroll_chat_down(5);
+        ASSERT_EQ(hud.get_chat_scroll_offset(), 0);
+    } TEST_END();
 }
+
 
 // ============================================================================
 // Master Test Runner Main

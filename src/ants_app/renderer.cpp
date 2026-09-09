@@ -3,6 +3,7 @@
 #include <cmath>
 #include <iostream>
 #include <cstring>
+#include <cstdio>
 
 namespace ants::app {
 
@@ -354,10 +355,59 @@ bool Renderer::init(SDL_Window* window,
     SDL_RenderSetIntegerScale(renderer_, (integer_scale_ && !is_fullscreen_) ? SDL_TRUE : SDL_FALSE);
 
     texture_cache_ = std::make_unique<TextureCache>(renderer_, archive);
+
+#ifdef ANTS_ENABLE_SDL_TTF
+    if (TTF_Init() == 0) {
+        ttf_initialized_ = true;
+        const std::vector<std::string> font_candidates = {
+            "Original-Ants/Franklin Gothic Medium.ttf",
+            "Original-Ants/framd.ttf",
+            "/System/Library/Fonts/Supplemental/Arial.ttf",
+            "/System/Library/Fonts/Supplemental/Trebuchet MS.ttf",
+            "/System/Library/Fonts/Geneva.ttf",
+            "/Library/Fonts/Arial.ttf",
+            "C:\\Windows\\Fonts\\framd.ttf",
+            "C:\\Windows\\Fonts\\arial.ttf",
+            "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+            "/usr/share/fonts/truetype/freefont/FreeSans.ttf"
+        };
+        for (const auto& path : font_candidates) {
+            FILE* f = std::fopen(path.c_str(), "rb");
+            if (f) {
+                std::fclose(f);
+                font_small_ = TTF_OpenFont(path.c_str(), 24);
+                font_medium_ = TTF_OpenFont(path.c_str(), 28);
+                font_large_ = TTF_OpenFont(path.c_str(), 36);
+                if (font_small_) {
+                    std::cout << "[Renderer] High-quality TrueType font loaded: " << path << std::endl;
+                    break;
+                }
+            }
+        }
+    }
+#endif
+
     return true;
 }
 
 void Renderer::shutdown() {
+#ifdef ANTS_ENABLE_SDL_TTF
+    for (auto& pair : text_cache_) {
+        if (pair.second.texture) {
+            SDL_DestroyTexture(pair.second.texture);
+        }
+    }
+    text_cache_.clear();
+    if (font_small_) { TTF_CloseFont(font_small_); font_small_ = nullptr; }
+    if (font_medium_) { TTF_CloseFont(font_medium_); font_medium_ = nullptr; }
+    if (font_large_) { TTF_CloseFont(font_large_); font_large_ = nullptr; }
+    if (ttf_initialized_) {
+        TTF_Quit();
+        ttf_initialized_ = false;
+    }
+#endif
+
     if (texture_cache_) {
         texture_cache_->clear();
         texture_cache_.reset();
@@ -1605,6 +1655,21 @@ void Renderer::end_frame() {
             save_screenshot(pending_screenshot_);
             pending_screenshot_.clear();
         }
+#ifdef ANTS_ENABLE_SDL_TTF
+        ++text_frame_counter_;
+        if (text_frame_counter_ % 180 == 0 && text_cache_.size() > 64) {
+            for (auto it = text_cache_.begin(); it != text_cache_.end(); ) {
+                if (text_frame_counter_ - it->second.last_frame > 180) {
+                    if (it->second.texture) {
+                        SDL_DestroyTexture(it->second.texture);
+                    }
+                    it = text_cache_.erase(it);
+                } else {
+                    ++it;
+                }
+            }
+        }
+#endif
         SDL_RenderPresent(renderer_);
     }
 }
@@ -1659,7 +1724,74 @@ void Renderer::draw_rect(int32_t x, int32_t y, int32_t w, int32_t h, ants::asset
 }
 
 void Renderer::draw_text(const std::string& text, int32_t x, int32_t y, ants::assets::ColorRGBA color) {
-    if (!renderer_) return;
+    draw_text(text, x, y, color, FontSize::Small);
+}
+
+void Renderer::draw_text(const std::string& text, int32_t x, int32_t y, ants::assets::ColorRGBA color, FontSize size) {
+    if (!renderer_ || text.empty()) return;
+
+    // Handle multi-line strings
+    if (text.find('\n') != std::string::npos) {
+        int32_t cur_y = y;
+        int32_t line_height = (size == FontSize::Large) ? 20 : ((size == FontSize::Medium) ? 16 : 14);
+        size_t start = 0;
+        while (start < text.length()) {
+            size_t next = text.find('\n', start);
+            std::string line = (next == std::string::npos) ? text.substr(start) : text.substr(start, next - start);
+            if (!line.empty()) {
+                draw_text(line, x, cur_y, color, size);
+            }
+            cur_y += line_height;
+            if (next == std::string::npos) break;
+            start = next + 1;
+        }
+        return;
+    }
+
+#ifdef ANTS_ENABLE_SDL_TTF
+    TTF_Font* font = font_small_;
+    if (size == FontSize::Medium && font_medium_) {
+        font = font_medium_;
+    } else if (size == FontSize::Large && font_large_) {
+        font = font_large_;
+    }
+
+    if (font) {
+        uint32_t c_u32 = (static_cast<uint32_t>(color.r) << 24) |
+                         (static_cast<uint32_t>(color.g) << 16) |
+                         (static_cast<uint32_t>(color.b) << 8)  |
+                         static_cast<uint32_t>(color.a);
+        TextCacheKey key{text, c_u32, static_cast<uint8_t>(size)};
+        auto it = text_cache_.find(key);
+        if (it != text_cache_.end()) {
+            it->second.last_frame = text_frame_counter_;
+            SDL_Rect dst{x, y, it->second.width, it->second.height};
+            SDL_RenderCopy(renderer_, it->second.texture, nullptr, &dst);
+            return;
+        }
+
+        SDL_Color sc{color.r, color.g, color.b, color.a};
+        SDL_Surface* surf = TTF_RenderUTF8_Blended(font, text.c_str(), sc);
+        if (surf) {
+            SDL_Texture* tex = SDL_CreateTextureFromSurface(renderer_, surf);
+            if (tex) {
+                SDL_SetTextureScaleMode(tex, SDL_ScaleModeLinear);
+                // 2x ptsize mapped to logical canvas size:
+                int32_t lw = (surf->w + 1) / 2;
+                int32_t lh = (surf->h + 1) / 2;
+                CachedTextEntry entry{tex, lw, lh, text_frame_counter_};
+                text_cache_[key] = entry;
+                SDL_Rect dst{x, y, lw, lh};
+                SDL_RenderCopy(renderer_, tex, nullptr, &dst);
+                SDL_FreeSurface(surf);
+                return;
+            }
+            SDL_FreeSurface(surf);
+        }
+    }
+#endif
+
+    // Fallback: built-in 5x7 bitmap font
     if (color.a < 255) {
         SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
     }
@@ -1691,6 +1823,27 @@ void Renderer::draw_text(const std::string& text, int32_t x, int32_t y, ants::as
     if (color.a < 255) {
         SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_NONE);
     }
+}
+
+int32_t Renderer::get_text_width(const std::string& text, FontSize size) const {
+    if (text.empty()) return 0;
+#ifdef ANTS_ENABLE_SDL_TTF
+    TTF_Font* font = font_small_;
+    if (size == FontSize::Medium && font_medium_) {
+        font = font_medium_;
+    } else if (size == FontSize::Large && font_large_) {
+        font = font_large_;
+    }
+    if (font) {
+        int w = 0, h = 0;
+        if (TTF_SizeUTF8(font, text.c_str(), &w, &h) == 0) {
+            return (w + 1) / 2;
+        }
+    }
+#else
+    (void)size;
+#endif
+    return static_cast<int32_t>(text.size()) * 6;
 }
 
 bool Renderer::save_screenshot(const std::string& path) {

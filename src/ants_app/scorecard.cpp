@@ -131,7 +131,7 @@ void ScorecardModal::render(IRenderer& renderer, const assets::AssetArchive& ass
     // 4 Columns aligned with column arrow tips
     auto draw_centered_num = [&](int32_t val, int32_t col_x) {
         std::string s = std::to_string(val);
-        int32_t tx = col_x - (static_cast<int32_t>(s.size()) * 6) / 2;
+        int32_t tx = col_x - renderer.get_text_width(s) / 2;
         renderer.draw_text(s, tx, wy, {255, 255, 255, 255});
     };
 
@@ -154,13 +154,13 @@ void ScorecardModal::render(IRenderer& renderer, const assets::AssetArchive& ass
             renderer.draw_text(pe.name, 90, py + 4, {220, 220, 220, 255});
 
             std::string ps_score = std::to_string(pe.score);
-            renderer.draw_text(ps_score, COL_SCORE_X - (static_cast<int32_t>(ps_score.size()) * 6) / 2, py + 4, {220, 220, 220, 255});
+            renderer.draw_text(ps_score, COL_SCORE_X - renderer.get_text_width(ps_score) / 2, py + 4, {220, 220, 220, 255});
             std::string ps_lost = std::to_string(pe.friendly_lost);
-            renderer.draw_text(ps_lost, COL_LOST_X - (static_cast<int32_t>(ps_lost.size()) * 6) / 2, py + 4, {200, 200, 200, 255});
+            renderer.draw_text(ps_lost, COL_LOST_X - renderer.get_text_width(ps_lost) / 2, py + 4, {200, 200, 200, 255});
             std::string ps_killed = std::to_string(pe.enemy_killed);
-            renderer.draw_text(ps_killed, COL_KILLED_X - (static_cast<int32_t>(ps_killed.size()) * 6) / 2, py + 4, {200, 200, 200, 255});
+            renderer.draw_text(ps_killed, COL_KILLED_X - renderer.get_text_width(ps_killed) / 2, py + 4, {200, 200, 200, 255});
             std::string ps_hatched = std::to_string(pe.new_hatched);
-            renderer.draw_text(ps_hatched, COL_HATCHED_X - (static_cast<int32_t>(ps_hatched.size()) * 6) / 2, py + 4, {200, 200, 200, 255});
+            renderer.draw_text(ps_hatched, COL_HATCHED_X - renderer.get_text_width(ps_hatched) / 2, py + 4, {200, 200, 200, 255});
 
             py += 35;
         }

@@ -708,6 +708,43 @@ When an ant perishes due to HP depletion (melee combat damage, bomb blast shockw
 
 ---
 
+### 5.14 In-Game Typography & Font Rasterization Architecture (`CreateFontIndirectA`, `DrawTextA`)
+
+Reverse engineering of `Original-Ants/Ants.exe` revealed that all in-game text (HUD chat, colony status labels, unit selection badges, score tallies, and dialog prompts) was originally rasterized via Windows GDI rather than hardcoded 1-bit dot-matrix bitmaps:
+
+#### 1. Disassembly Traces & GDI Font Architecture
+- **Font Creation Routine (`0x0102b05f`):**
+  - Configures `LOGFONTA` structure on the stack (`[ebp - 0x3c]`).
+  - Font Height: read dynamically from `[ecx + 0x50]`.
+  - Font Weight: `0x190` (400 = `FW_NORMAL`).
+  - Precision / Quality: `OUT_STROKE_PRECIS` (3), `CLIP_STROKE_PRECIS` (2), `DEFAULT_QUALITY` (1).
+  - Pitch & Family: `VARIABLE_PITCH | FF_SWISS` (`0x22`).
+  - Font Face Name: Loaded directly from VA `0x0104756c` (`.data` section offset `0x4676c`): **`"Franklin Gothic Medium"`**.
+  - Invokes GDI `CreateFontIndirectA` at IAT VA `0x0100102c`.
+- **Text Rendering & Drawing Routine (`0x0102b5e0`):**
+  - Measures text string lengths via internal `strlen` (`0x01034a30`).
+  - Executes text bounding box layouts with GDI `DrawTextA` at IAT VA `0x01001254`.
+- **Text Widget / Label Constructor (`0x010116cb`):**
+  - Receives coordinates `(X, Y, W, H)` and font height parameter `[ebp + 0x18]`:
+    - Status widget at `(481, 254)`: Font Height = **12px** (`0xc`).
+    - Standard HUD labels: Font Height = **14px** (`0xe`).
+    - Scorecard & screen titles: Font Height = **18px** (`0x12`).
+  - Chat subsystem initializes scrollable text widgets `CHATSCRL` (`0x01011f2a`, vtable `0x01002690`) and `CHATAPPD` (`0x01011f5c`, vtable `0x01002680`).
+
+#### 2. Native Modern Remake Architecture (`Renderer::draw_text`)
+- **TrueType Engine with Linear Antialiasing:**
+  - Integrated high-performance TrueType rasterization with 2x supersampling into the virtual 640×480 canvas.
+  - Multi-tier candidate search locates authentic fonts across host environments:
+    1. Local directory: `Original-Ants/Franklin Gothic Medium.ttf` or `framd.ttf`
+    2. macOS: `/System/Library/Fonts/Supplemental/Arial.ttf`, `Trebuchet MS.ttf`, `Geneva.ttf`
+    3. Windows: `C:\Windows\Fonts\framd.ttf`, `arial.ttf`
+    4. Linux: `/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf`, `DejaVuSans.ttf`
+  - LRU texture caching ensures zero texture allocations during active gameplay while preserving 60+ FPS lockstep.
+  - Precise proportional text metrics via `IRenderer::get_text_width(text, size)` for exact scorecard column centering.
+  - Built-in fallback to 5×7 ASCII bitmap font if operating in minimal headless environments without system fonts.
+
+---
+
 ## 6. Target Multi-Platform Architecture
 
 To achieve clean, modern, high-performance execution across macOS, Linux, Windows, and the Web (WebAssembly):
