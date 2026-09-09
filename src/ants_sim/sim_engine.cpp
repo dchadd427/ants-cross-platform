@@ -760,6 +760,10 @@ void SimulationEngine::tick() {
                 // If there are no valid tiles (valid_count == 0), it disappears and is no longer available for the rest of the game
             }
 
+            ant_ptr->state = (new_type == AntType::Combat) ? UnitState::GuardIdle : UnitState::Idle;
+            ant_ptr->anim_tick = 0;
+            ant_ptr->anim_subitem = 0;
+
             // Transform ant (11-tick getpow cocoon animation)
             ant_ptr->type = new_type;
             if (new_type == AntType::Combat) ant_ptr->max_hp = 12;
@@ -773,6 +777,7 @@ void SimulationEngine::tick() {
         if (ant_ptr->transform_timer == 0 && ant_ptr->pending_powerup_type != 255) {
             ant_ptr->pending_powerup_type = 255;
             ant_ptr->dropped_powerup_pos = TileCoord{-1, -1};
+            ant_ptr->state = (ant_ptr->type == AntType::Combat) ? UnitState::GuardIdle : UnitState::Idle;
             if (ant_ptr->type == AntType::Combat) {
                 impl_->get_or_create_ai(*ant_ptr);
             }

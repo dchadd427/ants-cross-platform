@@ -234,6 +234,33 @@ The engine internal dispatch maps each ant class to an integer ID and correspond
 
 ---
 
+### 5.0.1 Power-Up Transformation Lifecycle & Animation State Machine (Disasm `0x1020d26`, `0x101b212`, `0x101ace3`)
+
+- **State 4 Dispatch (`0x1020d26`, `0x101b212`):**
+  - When an ant steps onto an eligible powerup tile, the engine executes `0x1020d26`:
+    ```x86
+    0x1020d26: push 4
+    0x1020d28: mov ecx, edi
+    0x1020d2a: call 0x101ace3
+    ```
+  - State 4 is dispatched via the animation jump table at `0x101b4db[4]` -> `0x101b212`:
+    ```x86
+    0x101b212: movzx eax, word ptr [esi + 0xd4]
+    0x101b219: mov ecx, dword ptr [0x104b350]
+    0x101b21f: push edi
+    0x101b220: push edi
+    0x101b221: push esi
+    0x101b222: mov ecx, dword ptr [ecx + eax*4 + 0x47e0] ; Loads getpow (Anim ID 55)
+    0x101b229: jmp 0x101b417                           ; call 0x102c0db (Play Animation)
+    ```
+  - `0x47e0` holds the team-mapped animation sequence pointer for `getpow` (Anim ID 55, 11 subitems: `pucov1..5.bmp` -> `empty.bmp` -> `pucov5..1.bmp`).
+- **Post-Transformation State Invariant:**
+  - Upon pickup, the ant's movement waypoints are cleared. The unit state is reset from `Walking` to `Idle` (or `GuardIdle` for Combat Ants).
+  - When the 11-tick `getpow` transformation timer elapses, the unit completes transformation and emerges into `Idle` / `GuardIdle` mode.
+  - In `Idle` / `GuardIdle` mode, `anim_tick` continuously advances (`anim_subitem = anim_tick / 4`), ensuring the unit actively plays its directional standing animation cycle (`*st*`, including South `*st301`) rather than being left in a static frozen frame 0 of an empty `Walking` state.
+
+---
+
 ### 5.1 Unit Damage Matrix & Combat Knockback Physics
 
 Every ant type in *Ants* possesses a melee attack (`*at*`), triggered either manually or automatically when engaging enemy ants. Melee attack damage is strictly split into two tiers:
