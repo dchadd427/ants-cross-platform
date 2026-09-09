@@ -2448,11 +2448,11 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         HUD hud;
         hud.init(0);
 
-        // Verify initial news message was wrapped to <= 21 chars per line
+        // Verify initial news message was wrapped to <= 27 chars per line
         const auto& log = hud.get_chat_log();
         ASSERT_TRUE(!log.empty());
         for (const auto& line : log) {
-            ASSERT_TRUE(line.length() <= 21);
+            ASSERT_TRUE(line.length() <= 27);
         }
 
         // Add 10 chat messages
@@ -2468,24 +2468,24 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         hud.scroll_chat_up(2);
         ASSERT_EQ(hud.get_chat_scroll_offset(), 2);
 
-        // Scroll up past max
+        // Scroll up past max (7 visible lines)
         hud.scroll_chat_up(100);
-        ASSERT_EQ(hud.get_chat_scroll_offset(), initial_lines - 6);
+        ASSERT_EQ(hud.get_chat_scroll_offset(), initial_lines - 7);
 
         // Scroll down
         hud.scroll_chat_down(3);
-        ASSERT_EQ(hud.get_chat_scroll_offset(), initial_lines - 9);
+        ASSERT_EQ(hud.get_chat_scroll_offset(), initial_lines - 10);
 
         // Mouse wheel scrolling over lower chat box (x: 500, y: 350)
         hud.handle_mouse_wheel(500, 350, 1); // Wheel up
-        ASSERT_EQ(hud.get_chat_scroll_offset(), initial_lines - 8);
+        ASSERT_EQ(hud.get_chat_scroll_offset(), initial_lines - 9);
 
         hud.handle_mouse_wheel(500, 350, -1); // Wheel down
-        ASSERT_EQ(hud.get_chat_scroll_offset(), initial_lines - 9);
+        ASSERT_EQ(hud.get_chat_scroll_offset(), initial_lines - 10);
 
         // Mouse wheel outside chat box does not scroll
         hud.handle_mouse_wheel(100, 100, 1);
-        ASSERT_EQ(hud.get_chat_scroll_offset(), initial_lines - 9);
+        ASSERT_EQ(hud.get_chat_scroll_offset(), initial_lines - 10);
 
         // Sending a chat message resets scroll offset to 0
         hud.set_chat_input("Hello Colony!");
@@ -3655,13 +3655,19 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         // Fire is NOT placed on the grid tile yet while animation is playing!
         ASSERT_FALSE(sim.grid().get_cell(TileCoord{25, 26}).has_fire());
 
-        // Fire placing is 22 ticks (afsf subitems 0..21)
-        for (int t = 0; t < 22; ++t) {
+        // Fire placing is 35 ticks (afsf 1760ms / 35 ticks matching ants.chd timing)
+        // Fire erupts at tick 27, and unit returns to Idle at tick 35
+        for (int t = 0; t < 26; ++t) {
             ASSERT_FALSE(sim.grid().get_cell(TileCoord{25, 26}).has_fire());
             sim.tick();
         }
-        // Placed only after the animation completes!
+        sim.tick(); // Tick 27: flames erupt and firewall is placed on the grid
         ASSERT_TRUE(sim.grid().get_cell(TileCoord{25, 26}).has_fire());
+
+        // Completes remaining ticks (28..34) putting away glass
+        for (int t = 27; t < 35; ++t) {
+            sim.tick();
+        }
         ASSERT_EQ(f_ant.state, UnitState::Idle);
 
         // Extinguish fire (12 ticks)
@@ -4745,6 +4751,187 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         ASSERT_EQ(hud.get_chat_scroll_offset(), 0); // Not enough lines to scroll
         hud.scroll_chat_down(5);
         ASSERT_EQ(hud.get_chat_scroll_offset(), 0);
+    } TEST_END();
+
+    TEST_CASE("12.55 Fire Ant 2.0s (40 Ticks) Ability Cooldown & Placement Timing") {
+        SimulationEngine sim;
+        sim.init_test_world(60, 60, 1);
+        uint32_t f_id = sim.spawn_unit(0, AntType::Fire, TileCoord{10, 10});
+        ASSERT_EQ(sim.get_unit(f_id).ability_cooldown_ticks, 0);
+
+        // Step 1: Initiate fire placement (non-instant)
+        sim.set_tile_flags(11, 10, 0x06);
+        ASSERT_TRUE(sim.ignite_fire(f_id, TileCoord{11, 10}, false));
+        ASSERT_EQ(sim.get_unit(f_id).state, UnitState::PlacingFire);
+
+        // Advance through ticks 0..26: no fire placed on grid yet
+        for (int t = 0; t < 26; ++t) {
+            ASSERT_FALSE(sim.grid().get_cell(TileCoord{11, 10}).has_fire());
+            sim.tick();
+        }
+
+        // Tick 27: fire is placed
+        sim.tick();
+        ASSERT_TRUE(sim.grid().get_cell(TileCoord{11, 10}).has_fire());
+
+        // Advance remaining ticks 28..34: finishes putting away glass
+        for (int t = 27; t < 34; ++t) {
+            sim.tick();
+        }
+        sim.tick(); // Tick 35: returns to Idle with 40-tick cooldown
+        ASSERT_EQ(sim.get_unit(f_id).state, UnitState::Idle);
+        ASSERT_EQ(sim.get_unit(f_id).ability_cooldown_ticks, 40);
+
+        // Attempting to ignite fire again during cooldown MUST be rejected
+        sim.set_tile_flags(10, 11, 0x06);
+        ASSERT_FALSE(sim.ignite_fire(f_id, TileCoord{10, 11}, false));
+
+        // Advance 39 ticks: cooldown remaining = 1, still rejected
+        for (int t = 0; t < 39; ++t) {
+            sim.tick();
+        }
+        ASSERT_EQ(sim.get_unit(f_id).ability_cooldown_ticks, 1);
+        ASSERT_FALSE(sim.ignite_fire(f_id, TileCoord{10, 11}, false));
+
+        // Advance 1 tick: cooldown reaches 0, now accepted
+        sim.tick();
+        ASSERT_EQ(sim.get_unit(f_id).ability_cooldown_ticks, 0);
+        ASSERT_TRUE(sim.ignite_fire(f_id, TileCoord{10, 11}, false));
+    } TEST_END();
+
+    TEST_CASE("12.56 Bomber Ant 3.0s (60 Ticks) Ability Cooldown & Rejection") {
+        SimulationEngine sim;
+        sim.init_test_world(60, 60, 1);
+        uint32_t b_id = sim.spawn_unit(0, AntType::Bomber, TileCoord{15, 15});
+        ASSERT_EQ(sim.get_unit(b_id).ability_cooldown_ticks, 0);
+
+        // Step 1: Initiate bomb planting (non-instant)
+        sim.set_tile_flags(16, 15, 0x06);
+        ASSERT_TRUE(sim.plant_bomb(b_id, TileCoord{16, 15}, false));
+        ASSERT_EQ(sim.get_unit(b_id).state, UnitState::PlantingBomb);
+
+        // Advance 28 ticks to complete bomb placement
+        for (int t = 0; t < 28; ++t) {
+            sim.tick();
+        }
+        ASSERT_EQ(sim.get_unit(b_id).state, UnitState::Idle);
+        ASSERT_EQ(sim.get_unit(b_id).ability_cooldown_ticks, 60); // Authentic 3.0s (60 ticks) cooldown
+
+        // Attempting to plant bomb during cooldown MUST be rejected
+        sim.set_tile_flags(15, 16, 0x06);
+        ASSERT_FALSE(sim.plant_bomb(b_id, TileCoord{15, 16}, false));
+
+        // Advance 59 ticks: cooldown remaining = 1, still rejected
+        for (int t = 0; t < 59; ++t) {
+            sim.tick();
+        }
+        ASSERT_EQ(sim.get_unit(b_id).ability_cooldown_ticks, 1);
+        ASSERT_FALSE(sim.plant_bomb(b_id, TileCoord{15, 16}, false));
+
+        // Advance 1 tick: cooldown reaches 0, now accepted
+        sim.tick();
+        ASSERT_EQ(sim.get_unit(b_id).ability_cooldown_ticks, 0);
+        ASSERT_TRUE(sim.plant_bomb(b_id, TileCoord{15, 16}, false));
+    } TEST_END();
+
+    TEST_CASE("12.57 Bridge Demolition & Collapse Instant Drowning for Non-Swimmers") {
+        SimulationEngine sim;
+        sim.init_test_world(60, 60, 1);
+
+        // Create a completed bridge over water at {20, 20}
+        sim.set_terrain(20, 20, TERRAIN_WATER);
+        sim.set_tile_flags(20, 20, 0x06);
+        sim.grid_mut().set_bridge_at(TileCoord{20, 20}, 4, 3600);
+        ASSERT_TRUE(sim.grid().get_cell(TileCoord{20, 20}).has_completed_bridge());
+
+        // Spawn a Worker ant and Swimmer ant on the bridge tile
+        uint32_t w_id = sim.spawn_unit(0, AntType::Worker, TileCoord{20, 20});
+        uint32_t s_id = sim.spawn_unit(0, AntType::Swimmer, TileCoord{20, 20});
+        ASSERT_NE(sim.get_unit(w_id).state, UnitState::Drowning);
+
+        // Demolish/regress the bridge so it's no longer completed
+        sim.grid_mut().regress_bridge(20, 20);
+        ASSERT_FALSE(sim.grid().get_cell(TileCoord{20, 20}).has_completed_bridge());
+
+        // One tick of simulation: Worker MUST instantly start drowning, Swimmer starts swimming
+        sim.tick();
+        ASSERT_EQ(sim.get_unit(w_id).state, UnitState::Drowning);
+        ASSERT_EQ(sim.get_unit(s_id).state, UnitState::Swimming);
+        ASSERT_TRUE(sim.has_audio_event(SoundID::WaterSplash));
+        ASSERT_TRUE(sim.has_audio_event(SoundID::AntDrown));
+    } TEST_END();
+
+    TEST_CASE("12.58 Chat Focus Control Key Bypass & Outside Click Unfocusing") {
+        HUD hud;
+        hud.init(0);
+        SimulationEngine sim;
+        sim.init_test_world(60, 60, 1);
+        ViewportCamera camera;
+
+        // Focus chat
+        hud.focus_chat();
+        ASSERT_TRUE(hud.is_chat_focused());
+
+        // Control key (e.g. Ctrl+A) MUST NOT be appended to chat input
+        hud.handle_key_down('a', sim, camera, KMOD_CTRL);
+        ASSERT_TRUE(hud.get_chat_input().empty());
+
+        // Left click outside chat input box (e.g. playfield at 200, 200) unfocuses chat
+        hud.handle_mouse_down(200, 200, SDL_BUTTON_LEFT, sim, camera);
+        ASSERT_FALSE(hud.is_chat_focused());
+
+        // Left click inside chat input box (479..622, 423..437) focuses chat
+        hud.handle_mouse_down(500, 428, SDL_BUTTON_LEFT, sim, camera);
+        ASSERT_TRUE(hud.is_chat_focused());
+    } TEST_END();
+
+    TEST_CASE("12.59 Options Dialog F9-F12 Quick Chat Editing & In-Game Broadcast Keys") {
+        HUD hud;
+        hud.init(0);
+        SimulationEngine sim;
+        sim.init_test_world(60, 60, 1);
+        ViewportCamera camera;
+
+        // Verify clean default strings (no "$_")
+        ASSERT_EQ(hud.get_quick_chat_key(0), "Now you are in for it!");
+        ASSERT_EQ(hud.get_quick_chat_key(1), "Let me be!");
+        ASSERT_EQ(hud.get_quick_chat_key(2), "Attack!");
+        ASSERT_EQ(hud.get_quick_chat_key(3), "Do you want to ally?");
+
+        // Open options dialog
+        hud.open_options();
+        ASSERT_TRUE(hud.is_options_open());
+        ASSERT_EQ(hud.get_active_quick_chat_edit(), -1);
+
+        // Click F9 box (89..235, 368..387)
+        hud.handle_mouse_down(120, 375, SDL_BUTTON_LEFT, sim, camera);
+        ASSERT_EQ(hud.get_active_quick_chat_edit(), 0);
+
+        // Backspace to delete "!"
+        hud.handle_key_down(SDLK_BACKSPACE, sim, camera);
+        ASSERT_EQ(hud.get_quick_chat_key(0), "Now you are in for it");
+
+        // Type characters
+        hud.handle_text_input(" all!");
+        ASSERT_EQ(hud.get_quick_chat_key(0), "Now you are in for it all!");
+
+        // Press Return to finish editing
+        hud.handle_key_down(SDLK_RETURN, sim, camera);
+        ASSERT_EQ(hud.get_active_quick_chat_edit(), -1);
+
+        // Close options
+        hud.close_options();
+        ASSERT_FALSE(hud.is_options_open());
+
+        // Press F9 in gameplay: broadcasts quick chat 0
+        size_t initial_log_size = hud.get_chat_log().size();
+        hud.handle_key_down(SDLK_F9, sim, camera);
+        ASSERT_TRUE(hud.get_chat_log().size() > initial_log_size);
+        std::string recent_text;
+        for (size_t li = initial_log_size; li < hud.get_chat_log().size(); ++li) {
+            recent_text += hud.get_chat_log()[li] + " ";
+        }
+        ASSERT_TRUE(recent_text.find("Now you are in for it all!") != std::string::npos);
     } TEST_END();
 }
 

@@ -196,6 +196,7 @@ public:
     OrderType   pending_ability{static_cast<OrderType>(0)};
     TileCoord   ability_target{-1, -1};
     uint16_t    attack_cooldown_ticks{0};
+    uint16_t    ability_cooldown_ticks{0};
     uint32_t    attack_target_id{0};
     bool        allow_friendly_bomb{false};
     uint8_t     pending_powerup_type{255};

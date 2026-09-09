@@ -418,18 +418,23 @@ void SimulationEngine::tick() {
                     impl_->grid_.collapse_bridge(x, y);
                     // Occupancy Drowning Scan
                     for (auto& ant_ptr : impl_->ants_) {
-                        if (ant_ptr && ant_ptr->is_alive() && ant_ptr->pos.x == static_cast<int32_t>(x) && ant_ptr->pos.y == static_cast<int32_t>(y)) {
-                            if (ant_ptr->type == AntType::Swimmer) {
-                                ant_ptr->state = UnitState::Swimming;
-                                ant_ptr->was_in_water = true;
-                                ant_ptr->in_water = true;
-                                impl_->audio_queue_.push_back(AudioEvent{SoundID::WaterSplash, ant_ptr->pixel_x, ant_ptr->pixel_y, 1, 255});
-                            } else {
-                                ant_ptr->start_drowning();
-                                impl_->stats_.get_player_stats_mut(ant_ptr->player_id).friendly_lost++;
-                                impl_->audio_queue_.push_back(AudioEvent{SoundID::WaterSplash, ant_ptr->pixel_x, ant_ptr->pixel_y, 1, 255});
-                                impl_->audio_queue_.push_back(AudioEvent{SoundID::AntDrown, ant_ptr->pixel_x, ant_ptr->pixel_y, 2, 255});
-                                ant_ptr->clear_inventory();
+                        if (ant_ptr && ant_ptr->is_alive() && !ant_ptr->underground) {
+                            int32_t atx = (ant_ptr->pixel_x + 16) / 32;
+                            int32_t aty = (ant_ptr->pixel_y + 16) / 32;
+                            if ((ant_ptr->pos.x == static_cast<int32_t>(x) && ant_ptr->pos.y == static_cast<int32_t>(y)) ||
+                                (atx == static_cast<int32_t>(x) && aty == static_cast<int32_t>(y))) {
+                                if (ant_ptr->type == AntType::Swimmer) {
+                                    ant_ptr->state = UnitState::Swimming;
+                                    ant_ptr->was_in_water = true;
+                                    ant_ptr->in_water = true;
+                                    impl_->audio_queue_.push_back(AudioEvent{SoundID::WaterSplash, ant_ptr->pixel_x, ant_ptr->pixel_y, 1, 255});
+                                } else if (ant_ptr->state != UnitState::Drowning && ant_ptr->state != UnitState::Knockback) {
+                                    ant_ptr->start_drowning();
+                                    impl_->stats_.get_player_stats_mut(ant_ptr->player_id).friendly_lost++;
+                                    impl_->audio_queue_.push_back(AudioEvent{SoundID::WaterSplash, ant_ptr->pixel_x, ant_ptr->pixel_y, 1, 255});
+                                    impl_->audio_queue_.push_back(AudioEvent{SoundID::AntDrown, ant_ptr->pixel_x, ant_ptr->pixel_y, 2, 255});
+                                    ant_ptr->clear_inventory();
+                                }
                             }
                         }
                     }
@@ -485,23 +490,29 @@ void SimulationEngine::tick() {
         }
     }
 
-    // 3.5 Step Swimmer Ant Idle Water Animation (Snorkel Bobbing & Movement)
+    // 3.5 Step Water State & Swimmer Ant Idle Animation (Snorkel Bobbing & Movement)
     for (auto& ant_ptr : impl_->ants_) {
         if (!ant_ptr || !ant_ptr->is_alive() || ant_ptr->underground) continue;
-        if (ant_ptr->type == AntType::Swimmer) {
-            if (impl_->grid_.in_bounds(ant_ptr->pos)) {
-                const auto& cell = impl_->grid_.get_cell(ant_ptr->pos);
-                if (cell.terrain_type == TERRAIN_WATER && !cell.has_completed_bridge()) {
+        if (impl_->grid_.in_bounds(ant_ptr->pos)) {
+            const auto& cell = impl_->grid_.get_cell(ant_ptr->pos);
+            if (cell.terrain_type == TERRAIN_WATER && !cell.has_completed_bridge()) {
+                if (ant_ptr->type == AntType::Swimmer) {
                     ant_ptr->in_water = true;
                     if (ant_ptr->state == UnitState::Idle) {
                         ant_ptr->state = UnitState::Swimming;
                     }
+                } else if (ant_ptr->state != UnitState::Drowning && ant_ptr->state != UnitState::Knockback) {
+                    ant_ptr->start_drowning();
+                    impl_->stats_.get_player_stats_mut(ant_ptr->player_id).friendly_lost++;
+                    impl_->audio_queue_.push_back(AudioEvent{SoundID::WaterSplash, ant_ptr->pixel_x, ant_ptr->pixel_y, 1, 255});
+                    impl_->audio_queue_.push_back(AudioEvent{SoundID::AntDrown, ant_ptr->pixel_x, ant_ptr->pixel_y, 2, 255});
+                    ant_ptr->clear_inventory();
                 }
             }
-            if (ant_ptr->state == UnitState::Swimming) {
-                ant_ptr->anim_tick++;
-                ant_ptr->anim_subitem = ant_ptr->anim_tick;
-            }
+        }
+        if (ant_ptr->type == AntType::Swimmer && ant_ptr->state == UnitState::Swimming) {
+            ant_ptr->anim_tick++;
+            ant_ptr->anim_subitem = ant_ptr->anim_tick;
         }
     }
 
@@ -1168,6 +1179,29 @@ void SimulationEngine::tick() {
             uint32_t sound_id = ant_ptr->in_water ? SoundID::ShovelWater : SoundID::ShovelGravel;
             impl_->audio_queue_.push_back(AudioEvent{sound_id, ant_ptr->pixel_x, ant_ptr->pixel_y, 1, 255});
             impl_->grid_.regress_bridge(static_cast<uint32_t>(target.x), static_cast<uint32_t>(target.y));
+            const auto& target_cell = impl_->grid_.get_cell(target);
+            if (!target_cell.has_completed_bridge() && target_cell.terrain_type == TERRAIN_WATER) {
+                for (auto& victim : impl_->ants_) {
+                    if (victim && victim->is_alive() && !victim->underground) {
+                        int32_t vtx = (victim->pixel_x + 16) / 32;
+                        int32_t vty = (victim->pixel_y + 16) / 32;
+                        if ((victim->pos.x == target.x && victim->pos.y == target.y) || (vtx == target.x && vty == target.y)) {
+                            if (victim->type == AntType::Swimmer) {
+                                victim->state = UnitState::Swimming;
+                                victim->was_in_water = true;
+                                victim->in_water = true;
+                                impl_->audio_queue_.push_back(AudioEvent{SoundID::WaterSplash, victim->pixel_x, victim->pixel_y, 1, 255});
+                            } else if (victim->state != UnitState::Drowning && victim->state != UnitState::Knockback) {
+                                victim->start_drowning();
+                                impl_->stats_.get_player_stats_mut(victim->player_id).friendly_lost++;
+                                impl_->audio_queue_.push_back(AudioEvent{SoundID::WaterSplash, victim->pixel_x, victim->pixel_y, 1, 255});
+                                impl_->audio_queue_.push_back(AudioEvent{SoundID::AntDrown, victim->pixel_x, victim->pixel_y, 2, 255});
+                                victim->clear_inventory();
+                            }
+                        }
+                    }
+                }
+            }
         }
 
         if (ant_ptr->anim_tick >= 8) {
@@ -1216,6 +1250,7 @@ void SimulationEngine::tick() {
             ant_ptr->state = UnitState::Idle;
             ant_ptr->anim_tick = 0;
             ant_ptr->anim_subitem = 0;
+            ant_ptr->ability_cooldown_ticks = 60; // 3.0s authentic cooldown (Ants.exe VA 0x101bdd1, 0xbb8)
             ant_ptr->ability_target = TileCoord{-1, -1};
         }
         continue;
@@ -1233,27 +1268,28 @@ void SimulationEngine::tick() {
         continue;
     }
 
-    // Placing Fire progression (afsf, 22 ticks)
+    // Placing Fire progression (afsf, 35 ticks / 1760ms matching ants.chd timing)
     if (ant_ptr->state == UnitState::PlacingFire) {
         ant_ptr->anim_tick++;
         ant_ptr->anim_subitem = ant_ptr->anim_tick;
-        if (ant_ptr->anim_tick == 5) {
+        if (ant_ptr->anim_tick == 10) {
             impl_->audio_queue_.push_back(AudioEvent{SoundID::FireBeam, ant_ptr->pixel_x, ant_ptr->pixel_y, 1, 255});
         }
-        if (ant_ptr->anim_tick == 17) {
+        if (ant_ptr->anim_tick == 27) {
             impl_->audio_queue_.push_back(AudioEvent{SoundID::FireErupt, ant_ptr->pixel_x, ant_ptr->pixel_y, 1, 255});
-        }
-        if (ant_ptr->anim_tick >= 22) {
-            ant_ptr->state = UnitState::Idle;
-            ant_ptr->anim_tick = 0;
-            ant_ptr->anim_subitem = 0;
             if (ant_ptr->ability_target.x >= 0 && impl_->grid_.in_bounds(ant_ptr->ability_target)) {
                 impl_->grid_.place_firewall(static_cast<uint32_t>(ant_ptr->ability_target.x),
                                             static_cast<uint32_t>(ant_ptr->ability_target.y),
                                             ant_ptr->player_id);
                 impl_->stats_.get_player_stats_mut(ant_ptr->player_id).fires_lit++;
-                ant_ptr->ability_target = TileCoord{-1, -1};
             }
+        }
+        if (ant_ptr->anim_tick >= 35) {
+            ant_ptr->state = UnitState::Idle;
+            ant_ptr->anim_tick = 0;
+            ant_ptr->anim_subitem = 0;
+            ant_ptr->ability_cooldown_ticks = 40; // 2.0s authentic cooldown (Ants.exe VA 0x101ba24, 0x7d0)
+            ant_ptr->ability_target = TileCoord{-1, -1};
         }
         continue;
     }
@@ -1911,6 +1947,7 @@ const WorldState& SimulationEngine::get_world_state() const {
             s.is_transforming = a->is_transforming();
             s.transform_anim_frame = (a->transform_timer > 0) ? static_cast<uint16_t>(11 - a->transform_timer) : 0;
             s.on_powerup = a->on_powerup;
+            s.ability_cooldown_ticks = a->ability_cooldown_ticks;
             s.state = a->state;
             impl_->world_state_cache_.ants.push_back(s);
         }
@@ -2474,6 +2511,7 @@ bool SimulationEngine::validate_cardinal_placement(TileCoord from, TileCoord to)
 bool SimulationEngine::plant_bomb(uint32_t ant_id, TileCoord target, bool instant) {
     AntUnit* ant = impl_->find_unit(ant_id);
     if (!ant || !ant->is_alive() || ant->type != AntType::Bomber) return false;
+    if (!instant && ant->ability_cooldown_ticks > 0) return false;
     if (!validate_cardinal_placement(ant->pos, target)) return false;
     if (!impl_->grid_.in_bounds(target) || impl_->grid_.is_anthill_reserved_spot(target) || !impl_->grid_.get_cell(target).can_place_bomb()) return false;
 
@@ -2531,6 +2569,7 @@ bool SimulationEngine::defuse_bomb(uint32_t ant_id, TileCoord target) {
 bool SimulationEngine::ignite_fire(uint32_t ant_id, TileCoord target, bool instant) {
     AntUnit* ant = impl_->find_unit(ant_id);
     if (!ant || !ant->is_alive() || ant->type != AntType::Fire) return false;
+    if (!instant && ant->ability_cooldown_ticks > 0) return false;
     if (!validate_cardinal_placement(ant->pos, target)) return false;
     if (!impl_->grid_.in_bounds(target) || impl_->grid_.is_anthill_reserved_spot(target) || !impl_->grid_.get_cell(target).can_place_fire()) return false;
 
