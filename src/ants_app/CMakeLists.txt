@@ -1,6 +1,6 @@
 if(EMSCRIPTEN)
     set(SDL2_INCLUDE_DIRS "")
-    set(SDL2_LIBRARIES "-sUSE_SDL=2")
+    set(SDL2_LIBRARIES "")
 else()
     # SDL2 configuration
     find_package(SDL2 QUIET)
@@ -40,8 +40,10 @@ add_library(ants_app STATIC
 target_include_directories(ants_app PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../../include>
     $<INSTALL_INTERFACE:include>
-    ${SDL2_INCLUDE_DIRS}
 )
+if(SDL2_INCLUDE_DIRS)
+    target_include_directories(ants_app PUBLIC ${SDL2_INCLUDE_DIRS})
+endif()
 if(SDL2_TTF_INCLUDE_DIRS)
     target_include_directories(ants_app PUBLIC ${SDL2_TTF_INCLUDE_DIRS})
 endif()
@@ -49,8 +51,10 @@ endif()
 target_link_libraries(ants_app PUBLIC
     ants_sim
     ants_assets
-    ${SDL2_LIBRARIES}
 )
+if(SDL2_LIBRARIES)
+    target_link_libraries(ants_app PUBLIC ${SDL2_LIBRARIES})
+endif()
 if(SDL2_TTF_LIBRARIES)
     target_compile_definitions(ants_app PUBLIC ANTS_ENABLE_SDL_TTF=1)
     target_link_libraries(ants_app PUBLIC ${SDL2_TTF_LIBRARIES})
