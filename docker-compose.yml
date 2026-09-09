@@ -1,6 +1,5 @@
 services:
   ants-web:
-    image: ants-web:latest
     build:
       context: .
       dockerfile: Dockerfile
