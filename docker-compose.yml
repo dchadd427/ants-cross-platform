@@ -7,7 +7,7 @@ services:
     container_name: ants-web
     restart: unless-stopped
     ports:
-      - "${ANTS_PORT:-8080}:80"
+      - "${ANTS_PORT:-19980}:80"
     environment:
       - VIRTUAL_HOST=beta.playants.org
       - LETSENCRYPT_HOST=beta.playants.org
