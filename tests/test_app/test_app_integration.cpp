@@ -5606,14 +5606,14 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
             bool has_left = false;
             bool has_right = false;
             for (const auto& fd : ws.flower_droppers) {
-                if (fd.x == 2 && fd.y == 19 && fd.drop_x == 3 && fd.drop_y == 19) has_left = true;
-                if (fd.x == 37 && fd.y == 19 && fd.drop_x == 38 && fd.drop_y == 19) has_right = true;
+                if (fd.x == 2 && fd.y == 19 && fd.drop_x == 2 && fd.drop_y == 19) has_left = true;
+                if (fd.x == 37 && fd.y == 19 && fd.drop_x == 37 && fd.drop_y == 19) has_right = true;
             }
             ASSERT_TRUE(has_left);
             ASSERT_TRUE(has_right);
 
-            // Fast forward 1800 ticks (90s)
-            for (int i = 0; i < 1800; ++i) {
+            // Fast forward 300 ticks (15s @ 20Hz, as defined by wp.param == 15 in SMALL.LVL)
+            for (int i = 0; i < 300; ++i) {
                 sim.tick();
             }
 
@@ -5630,7 +5630,7 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
             // Powerup placed at target
             int32_t target_drop_x = ws.flower_droppers[0].drop_x;
             int32_t target_drop_y = ws.flower_droppers[0].drop_y;
-            const auto& cell = sim.grid().get_cell(target_drop_x, target_drop_y);
+            const auto& cell = sim.grid().get_cell(TileCoord{target_drop_x, target_drop_y});
             ASSERT_TRUE(cell.has_powerup());
 
             // Food avoidance: Intermediate food is treated as obstacle in pathfinding
@@ -5644,6 +5644,20 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
             for (const auto& wp : sim.get_unit(a1).waypoints) {
                 ASSERT_FALSE(wp.x == 10 && wp.y == 10);
             }
+        }
+
+        // Verify GAUNTLET.LVL waypoints including top-left daisy flower at (3, 5)
+        std::string gauntlet_path = std::string(ORIGINAL_ASSETS_DIR) + "/Maps/GAUNTLET.LVL";
+        ants::assets::LevelData gauntlet_lvl;
+        if (gauntlet_lvl.load_lvl(gauntlet_path)) {
+            sim.init(gauntlet_lvl, 42);
+            const auto& g_ws = sim.get_world_state();
+            ASSERT_EQ(g_ws.flower_droppers.size(), 5u);
+            bool has_flower = false;
+            for (const auto& fd : g_ws.flower_droppers) {
+                if (fd.x == 3 && fd.y == 5 && fd.drop_x == 3 && fd.drop_y == 5) has_flower = true;
+            }
+            ASSERT_TRUE(has_flower);
         }
     } TEST_END();
 }

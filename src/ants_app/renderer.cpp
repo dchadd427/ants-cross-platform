@@ -1079,28 +1079,7 @@ void Renderer::render_flower_droppers(const ants::sim::WorldState& world) {
     if (!archive_ || !texture_cache_) return;
 
     for (const auto& fd : world.flower_droppers) {
-        // 1. Render swaying daisy flower plant at (fd.x * 32 + 16, fd.y * 32 + 16)
-        int32_t sx = 0, sy = 0;
-        if (camera_.world_to_screen(fd.x * TILE_SIZE + 16, fd.y * TILE_SIZE + 16, sx, sy)) {
-            const auto* anim = archive_->find_animation("dflower1");
-            if (!anim) anim = archive_->find_animation("flower1");
-            if (anim && !anim->subitems.empty()) {
-                // Cycle swaying frames based on anim_tick_ (~100ms per frame -> 6 ticks at 60Hz)
-                size_t sub_idx = (anim_tick_ / 6u) % anim->subitems.size();
-                const auto& sub = anim->subitems[sub_idx];
-                // Subitem layers in reverse order: backplate/shadow first, foreground last
-                for (int i = static_cast<int>(sub.frames.size()) - 1; i >= 0; --i) {
-                    const auto& f = sub.frames[static_cast<size_t>(i)];
-                    SDL_Texture* tex = texture_cache_->get_sprite_texture(f.sprite_index);
-                    if (!tex) continue;
-                    const auto& sp = archive_->get_sprite(f.sprite_index);
-                    SDL_Rect dst = { sx + f.dx, sy + f.dy, static_cast<int>(sp.width), static_cast<int>(sp.height) };
-                    SDL_RenderCopy(renderer_, tex, nullptr, &dst);
-                }
-            }
-        }
-
-        // 2. Render falling powerup droplet if dropping
+        // Render falling powerup droplet if dropping (flower plant itself is rendered as Layer 3 canopy decor)
         if (fd.is_dropping) {
             int32_t drop_sx = 0, drop_sy = 0;
             if (camera_.world_to_screen(fd.drop_x * TILE_SIZE + 16, fd.drop_y * TILE_SIZE + 16, drop_sx, drop_sy)) {
