@@ -745,6 +745,34 @@ Reverse engineering of `Original-Ants/Ants.exe` revealed that all in-game text (
 
 ---
 
+### 5.15 Authentic Anthill Selection HUD & Diplomacy Pedestal Architecture (`butalyu`, `butalyd`)
+
+Reverse engineering of `ants.chd` animation tables (Table 4) and HUD state handling in `Ants.exe` revealed the authentic layout of the right sidebar when clicking an enemy colony anthill:
+
+#### 1. Asset Catalog Animation Definitions
+- **`butalyu` (Anim ID 1179) — TeamUp Button Up:**
+  - `labdib.bmp` (Sprite ID 2575, 47×10): Embossed serif "TeamUp" label positioned directly above Pedestal 1.
+  - `butdipu.bmp` (Sprite ID 2576, 33×26): Handshake icon depicting cyan and golden ants shaking hands.
+  - `butup.bmp` (Sprite ID 2574, 53×71): Raised green stepped pedestal base.
+- **`butalyd` (Anim ID 1185) — TeamUp Button Pressed:**
+  - `labdib.bmp` (Sprite ID 2575, 47×10): "TeamUp" label.
+  - `butdipd.bmp` (Sprite ID 2587, 33×26): Pressed handshake icon.
+  - `butdown.bmp` (Sprite ID 2586, 55×75): Depressed green stepped pedestal base.
+- **`butaly2d` (Anim ID 1193) — TeamUp Click Feedback:**
+  - 2-frame animated depression sequence accompanied by `navbuttonclick.wav` (`sound_id` 89).
+
+#### 2. Layout & Behavioral Invariants for Enemy Anthill Selection
+- **Clean Sidebar Layout:**
+  - Unlike ant unit selection which shows Move + Class Ability + Stop buttons, enemy anthill selection displays **only** Pedestal 1 with the `TeamUp` button (`labdib.bmp` + `butup.bmp` + `butdipu.bmp`).
+  - **No Stop Button:** The Stop button (`labcan.bmp`, `butcanu.bmp`) is omitted entirely because enemy structures cannot receive cancellation commands.
+  - **No Unit Selection Header:** The white `wtype.bmp` header box and anthill name text are omitted; the upper sidebar displays a clean textured background with the TeamUp pedestal.
+  - **Recessed Status Box (`wstatus.bmp` at `(480, 253)`):** The recessed status bar is rendered but left completely blank/empty when the selected enemy colony is not allied. When an alliance is active, it indicates `"Allied Colony"`.
+- **Interaction Logic:**
+  - Clicking Pedestal 1 (`team_up_button_` at `(488, 140, 53, 86)`) sends an alliance proposal to the enemy team (`SoundID::AlliancePro`).
+  - Once allied, clicking Pedestal 1 dissolves the alliance (`SoundID::AllianceBreak`).
+
+---
+
 ## 6. Target Multi-Platform Architecture
 
 To achieve clean, modern, high-performance execution across macOS, Linux, Windows, and the Web (WebAssembly):
