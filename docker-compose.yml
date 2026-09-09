@@ -1,9 +1,9 @@
 services:
-  ants-web:
+  ants-beta:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: ants-web
+    container_name: ants-beta
     restart: unless-stopped
     ports:
       - "${ANTS_PORT:-19980}:80"
