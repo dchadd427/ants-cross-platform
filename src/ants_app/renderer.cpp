@@ -379,6 +379,7 @@ bool Renderer::init(SDL_Window* window,
     if (TTF_Init() == 0) {
         ttf_initialized_ = true;
         const std::vector<std::string> font_candidates = {
+            "Original-Ants/Arial.ttf",
             "Original-Ants/Franklin Gothic Medium.ttf",
             "Original-Ants/framd.ttf",
             "/System/Library/Fonts/Supplemental/Arial.ttf",
