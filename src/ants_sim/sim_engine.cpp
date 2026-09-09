@@ -1856,8 +1856,7 @@ void SimulationEngine::issue_order(const AntOrder& order) {
                     }
                     if (target->on_powerup || (target->type == AntType::Swimmer && target->in_water)) {
                         unit->attack_target_id = 0;
-                        if (unit->is_transforming() || unit->on_powerup ||
-                            (impl_->grid_.in_bounds(unit->pos) && impl_->grid_.has_powerup_at(unit->pos))) {
+                        if (unit->is_transforming()) {
                             interrupt_transformation(order.ant_id);
                         }
                         break;
@@ -1890,8 +1889,7 @@ void SimulationEngine::issue_order(const AntOrder& order) {
                     }
                 } else {
                     unit->attack_target_id = 0;
-                    if (unit->is_transforming() || unit->on_powerup ||
-                        (impl_->grid_.in_bounds(unit->pos) && impl_->grid_.has_powerup_at(unit->pos))) {
+                    if (unit->is_transforming()) {
                         interrupt_transformation(order.ant_id);
                     }
                 }
@@ -1924,8 +1922,7 @@ void SimulationEngine::issue_order(const AntOrder& order) {
                 else if (order.type == OrderType::ExtinguishFire) ok = extinguish_fire(order.ant_id, target);
                 else if (order.type == OrderType::BuildBridge) ok = build_bridge_step(order.ant_id, target);
                 else if (order.type == OrderType::DemolishBridge) ok = demolish_bridge_step(order.ant_id, target);
-                if (!ok && (unit->is_transforming() || unit->on_powerup ||
-                            (impl_->grid_.in_bounds(unit->pos) && impl_->grid_.has_powerup_at(unit->pos)))) {
+                if (!ok && unit->is_transforming()) {
                     interrupt_transformation(order.ant_id);
                 }
             } else {
@@ -1952,8 +1949,7 @@ void SimulationEngine::issue_order(const AntOrder& order) {
                     unit->ability_target = target;
                     issue_move_order(order.ant_id, target);
                 } else {
-                    if (unit->is_transforming() || unit->on_powerup ||
-                        (impl_->grid_.in_bounds(unit->pos) && impl_->grid_.has_powerup_at(unit->pos))) {
+                    if (unit->is_transforming()) {
                         interrupt_transformation(order.ant_id);
                     }
                 }
@@ -2636,20 +2632,18 @@ void SimulationEngine::issue_move_order(uint32_t ant_id, TileCoord dest, bool al
     bool is_fire_ant = (unit->type == AntType::Fire);
     bool can_hit_dest_bomb = allow_friendly_bomb;
 
-    if (unit->is_transforming() || unit->on_powerup ||
-        (impl_->grid_.in_bounds(unit->pos) && impl_->grid_.has_powerup_at(unit->pos))) {
-        interrupt_transformation(ant_id);
-        return;
-    } else if (dest != unit->pos) {
-        unit->transformation_interrupted = false;
-    }
-
     if (unit->pos == dest) {
+        if (unit->is_transforming()) {
+            interrupt_transformation(ant_id);
+            return;
+        }
         unit->clear_path();
         unit->state = (unit->type == AntType::Combat) ? UnitState::GuardIdle : UnitState::Idle;
         unit->final_dest = unit->pos;
         return;
     }
+
+    unit->transformation_interrupted = false;
 
     if (unit->state == UnitState::EnteringBase) {
         unit->underground = false;
@@ -2801,11 +2795,15 @@ void SimulationEngine::issue_move_order(uint32_t ant_id, TileCoord dest, bool al
         path = PathFinder::find_path(impl_->grid_, unit->pos, dest, is_swimmer, is_fire_ant, 4000, {}, hard_obstacles);
     }
     if (!path.empty()) {
+        if (unit->is_transforming()) {
+            interrupt_transformation(ant_id);
+        }
         unit->final_dest = path.back();
         unit->set_path(std::move(path));
+        unit->transformation_interrupted = false;
+        unit->on_powerup = false;
     } else {
-        if (unit->is_transforming() || unit->on_powerup ||
-            (impl_->grid_.in_bounds(unit->pos) && impl_->grid_.has_powerup_at(unit->pos))) {
+        if (unit->is_transforming()) {
             interrupt_transformation(ant_id);
             return;
         }

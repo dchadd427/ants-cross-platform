@@ -2625,8 +2625,7 @@ void HUD::dispatch_smart_special_ability(int32_t world_x, int32_t world_y, sim::
         bool is_fire = (sel->type == sim::AntType::Fire);
         bool dest_passable = grid.in_bounds(order.target_x, order.target_y) &&
                              grid.get_cell(static_cast<uint32_t>(order.target_x), static_cast<uint32_t>(order.target_y)).is_passable(is_swimmer, is_fire);
-        if (order.type == sim::OrderType::Move && !dest_passable &&
-            (sel->is_transforming || sel->on_powerup || grid.has_powerup_at({sel->tile_x, sel->tile_y}))) {
+        if (order.type == sim::OrderType::Move && !dest_passable && sel->is_transforming) {
             sim.interrupt_transformation(aid);
             play_sfx(sim::SoundID::AntStop);
             continue;

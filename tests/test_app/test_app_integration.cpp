@@ -3061,6 +3061,44 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         sim.issue_order(cancel_order);
         ASSERT_FALSE(ant.is_transforming());
         ASSERT_TRUE(ant.on_powerup);
+
+        // Move interrupted worker off the power-up to adjacent tile (11, 10)
+        sim.clear_audio_events();
+        sim.issue_move_order(ant_id, TileCoord{11, 10});
+        ASSERT_EQ(ant.state, UnitState::Walking);
+        ASSERT_FALSE(sim.has_audio_event(static_cast<uint32_t>(SoundID::AntStop)));
+
+        for (int t = 0; t < 50; ++t) {
+            sim.tick();
+            if (ant.pos == TileCoord{11, 10} && ant.state != UnitState::Walking) break;
+        }
+        ASSERT_EQ(ant.pos, (TileCoord{11, 10}));
+        ASSERT_FALSE(ant.on_powerup);
+        ASSERT_FALSE(ant.transformation_interrupted);
+        ASSERT_TRUE(sim.grid().has_powerup_at(TileCoord{10, 10}));
+
+        // Bomber ant standing on power-up at (10, 10)
+        uint32_t bomber_id = sim.spawn_unit(0, AntType::Bomber, TileCoord{10, 10});
+        auto& bomber = sim.get_unit(bomber_id);
+        bomber.transformation_interrupted = true;
+        bomber.on_powerup = true;
+        sim.tick();
+        ASSERT_TRUE(bomber.on_powerup);
+        ASSERT_FALSE(bomber.is_transforming());
+
+        // Issue move order to (12, 10): Bomber ant walks off power-up cleanly
+        sim.clear_audio_events();
+        sim.issue_move_order(bomber_id, TileCoord{12, 10});
+        ASSERT_EQ(bomber.state, UnitState::Walking);
+        ASSERT_FALSE(sim.has_audio_event(static_cast<uint32_t>(SoundID::AntStop)));
+
+        for (int t = 0; t < 50; ++t) {
+            sim.tick();
+            if (bomber.pos == TileCoord{12, 10} && bomber.state != UnitState::Walking) break;
+        }
+        ASSERT_EQ(bomber.pos, (TileCoord{12, 10}));
+        ASSERT_FALSE(bomber.on_powerup);
+        ASSERT_TRUE(sim.grid().has_powerup_at(TileCoord{10, 10}));
     } TEST_END();
 
     // ------------------------------------------------------------------------
