@@ -100,13 +100,26 @@ sudo apt-get update && sudo apt-get install -y cmake g++ libsdl2-dev
 
 Play the remake instantly in any modern web browser (Chrome, Firefox, Safari, Edge) without installing anything:
 
-👉 **[Play Ants Online on GitHub Pages](https://dchadd427.github.io/ants-cross-platform/)**
+👉 **[Play Ants Online at beta.playants.org](https://beta.playants.org)**
 
 - **Authentic 1998 Asset Pipeline**: Full 8.1 MB archive (`ants.chd`, maps, and audio) packed into browser memory.
 - **Hardware-Accelerated 2D Viewport**: Pixel-crisp 4:3 display scaling with WebGL2 rendering.
 - **32-Channel Spatial Sound**: Authentic ant voice clips, explosions, and melee sound effects powered by Web Audio.
 
-To build the WebAssembly port locally:
+### Self-Hosting with Docker (`beta.playants.org`)
+
+To build and run the high-performance container on your Docker server:
+
+```bash
+# Build and launch with Docker Compose
+docker compose up -d --build
+
+# Or build and launch with Docker directly
+docker build -t ants-web .
+docker run -d -p 8080:80 --name ants-web ants-web
+```
+
+### Building the Web Port Locally (without Docker)
 ```bash
 ./build_web.sh
 python3 -m http.server 8080 -d dist

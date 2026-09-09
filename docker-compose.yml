@@ -1,0 +1,12 @@
+services:
+  ants-web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ants-web
+    restart: unless-stopped
+    ports:
+      - "${ANTS_PORT:-8080}:80"
+    environment:
+      - VIRTUAL_HOST=beta.playants.org
+      - LETSENCRYPT_HOST=beta.playants.org
