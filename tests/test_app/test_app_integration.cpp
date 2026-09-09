@@ -5294,6 +5294,182 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         bool deflected_sideways = (def.pos == TileCoord{11, 9} || def.pos == TileCoord{11, 11});
         ASSERT_TRUE(deflected_sideways);
     } TEST_END();
+
+    TEST_CASE("12.66 Selection Bracket (*ears) Table 4 Duration Millisecond Time Mapping") {
+        AssetArchive archive;
+        bool loaded = archive.load_from_file(std::string(ORIGINAL_ASSETS_DIR) + "/ants.chd");
+        ASSERT_TRUE(loaded);
+
+        // 1. dogears (Anim 58) & c_dogears (Anim 149): 4 frames @ 250ms each (1000ms loop)
+        for (uint32_t aid : {58u, 149u}) {
+            const auto& seq = archive.get_animation(aid);
+            ASSERT_EQ(seq.subitems.size(), 4u);
+            ASSERT_EQ(Renderer::get_anim_subitem_by_time(seq, 0), 0u);
+            ASSERT_EQ(Renderer::get_anim_subitem_by_time(seq, 249), 0u);
+            ASSERT_EQ(Renderer::get_anim_subitem_by_time(seq, 250), 1u);
+            ASSERT_EQ(Renderer::get_anim_subitem_by_time(seq, 499), 1u);
+            ASSERT_EQ(Renderer::get_anim_subitem_by_time(seq, 500), 2u);
+            ASSERT_EQ(Renderer::get_anim_subitem_by_time(seq, 749), 2u);
+            ASSERT_EQ(Renderer::get_anim_subitem_by_time(seq, 750), 3u);
+            ASSERT_EQ(Renderer::get_anim_subitem_by_time(seq, 999), 3u);
+            ASSERT_EQ(Renderer::get_anim_subitem_by_time(seq, 1000), 0u);
+            ASSERT_EQ(Renderer::get_anim_subitem_by_time(seq, 1250), 1u);
+        }
+
+        // 2. hillears (Anim 59): 4 frames @ 200ms each (800ms loop)
+        {
+            const auto& seq = archive.get_animation(59);
+            ASSERT_EQ(seq.subitems.size(), 4u);
+            ASSERT_EQ(Renderer::get_anim_subitem_by_time(seq, 0), 0u);
+            ASSERT_EQ(Renderer::get_anim_subitem_by_time(seq, 199), 0u);
+            ASSERT_EQ(Renderer::get_anim_subitem_by_time(seq, 200), 1u);
+            ASSERT_EQ(Renderer::get_anim_subitem_by_time(seq, 399), 1u);
+            ASSERT_EQ(Renderer::get_anim_subitem_by_time(seq, 400), 2u);
+            ASSERT_EQ(Renderer::get_anim_subitem_by_time(seq, 599), 2u);
+            ASSERT_EQ(Renderer::get_anim_subitem_by_time(seq, 600), 3u);
+            ASSERT_EQ(Renderer::get_anim_subitem_by_time(seq, 799), 3u);
+            ASSERT_EQ(Renderer::get_anim_subitem_by_time(seq, 800), 0u);
+        }
+
+        // 3. yelears (Anim 60) & c_yelears (Anim 150): 4 frames: 60ms, 125ms, 125ms, 125ms (435ms loop)
+        for (uint32_t aid : {60u, 150u}) {
+            const auto& seq = archive.get_animation(aid);
+            ASSERT_EQ(seq.subitems.size(), 4u);
+            ASSERT_EQ(Renderer::get_anim_subitem_by_time(seq, 0), 0u);
+            ASSERT_EQ(Renderer::get_anim_subitem_by_time(seq, 59), 0u);
+            ASSERT_EQ(Renderer::get_anim_subitem_by_time(seq, 60), 1u);
+            ASSERT_EQ(Renderer::get_anim_subitem_by_time(seq, 184), 1u);
+            ASSERT_EQ(Renderer::get_anim_subitem_by_time(seq, 185), 2u);
+            ASSERT_EQ(Renderer::get_anim_subitem_by_time(seq, 309), 2u);
+            ASSERT_EQ(Renderer::get_anim_subitem_by_time(seq, 310), 3u);
+            ASSERT_EQ(Renderer::get_anim_subitem_by_time(seq, 434), 3u);
+            ASSERT_EQ(Renderer::get_anim_subitem_by_time(seq, 435), 0u);
+        }
+
+        // 4. redears (Anim 61) & c_redears (Anim 151): 4 frames @ 60ms each (240ms loop)
+        for (uint32_t aid : {61u, 151u}) {
+            const auto& seq = archive.get_animation(aid);
+            ASSERT_EQ(seq.subitems.size(), 4u);
+            ASSERT_EQ(Renderer::get_anim_subitem_by_time(seq, 0), 0u);
+            ASSERT_EQ(Renderer::get_anim_subitem_by_time(seq, 59), 0u);
+            ASSERT_EQ(Renderer::get_anim_subitem_by_time(seq, 60), 1u);
+            ASSERT_EQ(Renderer::get_anim_subitem_by_time(seq, 119), 1u);
+            ASSERT_EQ(Renderer::get_anim_subitem_by_time(seq, 120), 2u);
+            ASSERT_EQ(Renderer::get_anim_subitem_by_time(seq, 179), 2u);
+            ASSERT_EQ(Renderer::get_anim_subitem_by_time(seq, 180), 3u);
+            ASSERT_EQ(Renderer::get_anim_subitem_by_time(seq, 239), 3u);
+            ASSERT_EQ(Renderer::get_anim_subitem_by_time(seq, 240), 0u);
+        }
+    } TEST_END();
+
+    TEST_CASE("12.67 Match Timer 1-Minute, 30-Second & 10-Second Countdown Audio Warnings") {
+        SimulationEngine sim;
+        sim.init_test_world(60, 60, 100, 70000); // 70 seconds
+
+        // Step from 70s down to 60.05s: no warning yet
+        sim.set_match_time_remaining_ms(60050);
+        sim.clear_audio_events();
+        sim.clear_news_events();
+        sim.tick(); // now 60,000 ms (1 minute remaining!)
+
+        ASSERT_TRUE(sim.has_audio_event(SoundID::OneMinute)); // Sound 55
+        ASSERT_TRUE(sim.has_news_event(255, StringID::OneMinuteRemaining)); // String 49
+
+        // Step to 30.05s
+        sim.set_match_time_remaining_ms(30050);
+        sim.clear_audio_events();
+        sim.clear_news_events();
+        sim.tick(); // now 30,000 ms (30 seconds remaining!)
+
+        ASSERT_TRUE(sim.has_audio_event(SoundID::ThirtySeconds)); // Sound 54
+        ASSERT_TRUE(sim.has_news_event(255, StringID::ThirtySecondsRemaining)); // String 50
+
+        // Step to 10.05s
+        sim.set_match_time_remaining_ms(10050);
+        sim.clear_audio_events();
+        sim.clear_news_events();
+        sim.tick(); // now 10,000 ms (10 seconds countdown!)
+
+        ASSERT_TRUE(sim.has_audio_event(SoundID::Countdown)); // Sound 44
+        ASSERT_TRUE(sim.has_news_event(255, StringID::TenSecondsRemaining)); // String 59
+
+        // Step 20 ticks (1000ms = 1 second, reaching 9,000 ms)
+        sim.clear_audio_events();
+        for (int i = 0; i < 20; ++i) {
+            sim.tick();
+        }
+        ASSERT_TRUE(sim.has_audio_event(SoundID::Countdown)); // Sound 44 triggers again at 9s!
+    } TEST_END();
+
+    TEST_CASE("12.68 Match Defeat Triggers losers.wav (Sound 42) & Player Drop-Out Triggers playerout.wav (Sound 41)") {
+        SimulationEngine sim;
+        sim.init_test_world(60, 60, 100, 50);
+
+        sim.set_player_score(0, 500);
+        sim.set_player_score(1, 100);
+
+        sim.clear_audio_events();
+        sim.tick(); // Match game over
+
+        ASSERT_TRUE(sim.is_match_over());
+        // Winner gets Sound 56 (VictoryFanfare)
+        ASSERT_TRUE(sim.has_targeted_audio_event(0, SoundID::VictoryFanfare));
+        // Loser gets Sound 42 (PlayerDefeat / losers.wav)
+        ASSERT_TRUE(sim.has_targeted_audio_event(1, SoundID::PlayerDefeat));
+        ASSERT_EQ(SoundID::PlayerDefeat, 42u);
+
+        // Player dropout triggers Sound 41 (PlayerDropOut / playerout.wav)
+        sim.clear_audio_events();
+        sim.clear_news_events();
+        sim.trigger_player_dropout(1, "Player 1");
+
+        ASSERT_TRUE(sim.has_audio_event(SoundID::PlayerDropOut));
+        ASSERT_EQ(SoundID::PlayerDropOut, 41u);
+        ASSERT_TRUE(sim.has_news_event(255, StringID::PlayerDropOut));
+    } TEST_END();
+
+    TEST_CASE("12.69 Hatched Ant Emergence Triggers exithill.wav (Sound 43)") {
+        SimulationEngine sim;
+        sim.init_test_world(60, 60, 100, 60000);
+
+        sim.set_anthill(0, TileCoord{10, 10});
+        sim.set_player_score(0, 500);
+        sim.set_player_eggs(0, 10);
+        sim.set_hatch_delay_ticks(4); // Short incubation for testing
+
+        sim.clear_audio_events();
+        bool hatched = sim.hatch_ant(0, AntType::Worker);
+        ASSERT_TRUE(hatched);
+
+        // Advance incubation
+        bool got_exithill = false;
+        for (int i = 0; i < 20; ++i) {
+            sim.tick();
+            if (sim.has_audio_event(SoundID::ExitHill)) {
+                got_exithill = true;
+                break;
+            }
+        }
+        ASSERT_TRUE(got_exithill);
+        ASSERT_EQ(SoundID::ExitHill, 43u);
+    } TEST_END();
+
+    TEST_CASE("12.70 Two Ants Colliding on Single Tile Trigger bump.wav (Sound 47)") {
+        SimulationEngine sim;
+        sim.init_test_world(60, 60, 100, 60000);
+
+        uint32_t a1 = sim.spawn_unit(0, AntType::Combat, TileCoord{20, 20});
+        uint32_t a2 = sim.spawn_unit(0, AntType::Worker, TileCoord{20, 20});
+
+        sim.clear_audio_events();
+        sim.tick(); // Collision resolution on same tile
+
+        ASSERT_TRUE(sim.has_audio_event(SoundID::Bump));
+        ASSERT_EQ(SoundID::Bump, 47u);
+
+        // One ant was displaced to avoid occupying the same tile
+        ASSERT_FALSE(sim.get_unit(a1).pos == sim.get_unit(a2).pos);
+    } TEST_END();
 }
 
 

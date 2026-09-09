@@ -954,6 +954,7 @@ public:
                 if (are_allied(p, winner)) {
                     audio_events_.push_back({56, 0, 0, 10, p}); // Sound 56: winner.wav
                 } else {
+                    audio_events_.push_back({42, 0, 0, 10, p}); // Sound 42: losers.wav
                     audio_events_.push_back({41, 0, 0, 10, p}); // Sound 41: playerout.wav
                 }
             }

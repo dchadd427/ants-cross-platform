@@ -33,6 +33,9 @@ COPY --from=builder /src/build_web/src/ants_app/index.js /usr/share/nginx/html/
 COPY --from=builder /src/build_web/src/ants_app/index.wasm /usr/share/nginx/html/
 COPY --from=builder /src/build_web/src/ants_app/index.data /usr/share/nginx/html/
 
+# Copy Asset Catalog & Viewer for reference on beta site
+COPY asset_catalog/ /usr/share/nginx/html/asset_catalog/
+
 # Copy custom Nginx configuration
 COPY docker/nginx.conf /etc/nginx/conf.d/default.conf
 

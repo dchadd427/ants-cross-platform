@@ -51,15 +51,22 @@ namespace SoundID {
     constexpr uint32_t BomberGo       = 37; // bombgo.wav
     constexpr uint32_t BomberAttack   = 38; // bombattack.wav
     constexpr uint32_t BomberDo       = 39; // bombdo.wav
-    constexpr uint32_t PlayerDefeat   = 41; // playerout.wav (11kHz, 0.94s)
+    constexpr uint32_t PlayerDropOut  = 41; // playerout.wav (11kHz, 0.94s, player drops out)
+    constexpr uint32_t PlayerDefeat   = 42; // losers.wav (11kHz, 1.94s, match defeat sting)
+    constexpr uint32_t ExitHill       = 43; // exithill.wav (hatched ant emerges from anthill)
+    constexpr uint32_t Countdown      = 44; // countdwn.wav (10-second countdown tick)
     constexpr uint32_t ChatSendA      = 45; // chatsnda.wav
     constexpr uint32_t ChatSend       = 46; // chatsnd.wav
+    constexpr uint32_t Bump           = 47; // bump.wav (ants bump into each other)
+    constexpr uint32_t Anthill        = 48; // anthill.wav
     constexpr uint32_t AllianceBreak  = 49; // allyoff.wav
     constexpr uint32_t AllianceOn     = 50; // allyon.wav
     constexpr uint32_t AlliancePro    = 51; // allypro.wav
     constexpr uint32_t AllianceNot    = 52; // allynot.wav
     constexpr uint32_t AllianceYes    = 53; // allyyes.wav
-    constexpr uint32_t BaseEnter      = 55; // sound_55.wav (anthill entrance underground)
+    constexpr uint32_t ThirtySeconds  = 54; // 30sec.wav (30 seconds remaining warning)
+    constexpr uint32_t OneMinute      = 55; // 1min.wav (1 minute remaining warning)
+    constexpr uint32_t BaseEnter      = 55; // Legacy alias
     constexpr uint32_t VictoryFanfare = 56; // winner.wav (22kHz, 4.67s)
     constexpr uint32_t MeleeAttack    = 57; // attack.wav
     constexpr uint32_t BaseAlarmSiren = 58; // underattack.wav (2566 Hz alarm)
@@ -136,12 +143,16 @@ inline uint32_t get_ability_voice_sound(AntType type) {
 }
 
 namespace StringID {
-    constexpr uint16_t AllianceInvitePrompt   = 1;  // "%s (%s) invites you to form a team..."
-    constexpr uint16_t AllianceFormedBroadcast = 39; // "%s and %s have formed an alliance!"
-    constexpr uint16_t AllianceBrokenBroadcast = 40; // "%s broke their alliance with %s!"
-    constexpr uint16_t ThiefAlarmWarning      = 53; // "A ThiefAnt is at your anthill!"
-    constexpr uint16_t FoodStolenStatus       = 62; // "Food stolen..."
-    constexpr uint16_t AllianceDeclined       = 80; // "%s declined the alliance invitation."
+    constexpr uint16_t AllianceInvitePrompt       = 1;  // "%s (%s) invites you to form a team..."
+    constexpr uint16_t AllianceFormedBroadcast     = 39; // "%s and %s have formed an alliance!"
+    constexpr uint16_t AllianceBrokenBroadcast     = 40; // "%s broke their alliance with %s!"
+    constexpr uint16_t PlayerDropOut              = 46; // "%s dropped out of the game!"
+    constexpr uint16_t OneMinuteRemaining         = 49; // "1 minute left in the game."
+    constexpr uint16_t ThirtySecondsRemaining     = 50; // "30 seconds left in the game."
+    constexpr uint16_t ThiefAlarmWarning          = 53; // "A ThiefAnt is at your anthill!"
+    constexpr uint16_t TenSecondsRemaining        = 59; // "10 seconds and counting..."
+    constexpr uint16_t FoodStolenStatus           = 62; // "Food stolen..."
+    constexpr uint16_t AllianceDeclined           = 80; // "%s declined the alliance invitation."
 }
 
 enum class OrderType : uint8_t {
@@ -309,6 +320,7 @@ public:
     bool has_news_event(uint8_t player_id, uint16_t string_id) const;
     void clear_audio_events();
     void clear_news_events();
+    void trigger_player_dropout(uint8_t player_id, const std::string& player_name = "");
 
     uint32_t spawn_unit(uint8_t player_id, AntType type, TileCoord pos);
     AntUnit& get_unit(uint32_t ant_id);

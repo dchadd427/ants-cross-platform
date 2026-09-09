@@ -254,6 +254,7 @@ public:
     const ants::assets::AssetArchive* get_archive() const noexcept { return archive_; }
     void request_screenshot(const std::string& path) { pending_screenshot_ = path; }
     bool save_screenshot(const std::string& path);
+    static size_t get_anim_subitem_by_time(const ants::assets::AnimationSequence& seq, uint32_t now_ms);
 
     // Software Cursor & Transient Effects
     void spawn_transient_effect(const std::string& anim_name, int32_t px, int32_t py, bool is_screen_space = false);

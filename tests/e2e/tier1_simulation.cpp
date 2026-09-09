@@ -1335,10 +1335,13 @@ E2E_TIER1_TEST(Tier1_Sim, feat32_loser_audio_sound_41, 32) {
     sim.clear_audio_events();
     sim.tick();
     bool p1_loser = false;
+    bool p1_losers_wav = false;
     for (const auto& ev : sim.audio_events()) {
         if (ev.sound_id == 41 && ev.target_player == 1) p1_loser = true;
+        if (ev.sound_id == 42 && ev.target_player == 1) p1_losers_wav = true;
     }
     ASSERT_TRUE(p1_loser);
+    ASSERT_TRUE(p1_losers_wav);
 }
 
 E2E_TIER1_TEST(Tier1_Sim, feat32_allied_winners_both_receive_56, 32) {

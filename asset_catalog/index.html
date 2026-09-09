@@ -66,6 +66,7 @@
     align-items: center;
     gap: 0.4rem;
   }
+  .tab-btn * { pointer-events: none; }
   .tab-btn:hover { background: var(--bg-card-hover); color: #fff; }
   .tab-btn.active {
     background: var(--accent);
@@ -176,11 +177,11 @@
     flex: 1;
     min-height: 0;
     height: 100%;
-    display: none;
+    display: none !important;
     overflow-y: auto;
     padding: 1.25rem 1.75rem;
   }
-  .tab-content.active { display: flex; }
+  .tab-content.active { display: flex !important; }
 
   /* Badges */
   .badge {
@@ -217,12 +218,8 @@
 
   /* Sounds Table View */
   #sounds-view {
-    display: none;
     flex-direction: column;
     overflow: hidden;
-  }
-  #sounds-view.active {
-    display: flex;
   }
   .table-wrapper {
     flex: 1;
@@ -273,14 +270,9 @@
 
   /* Master-Detail Layout for Animations */
   #anims-view {
-    display: none;
     padding: 0;
-    flex: 1;
-    min-height: 0;
-    height: 100%;
     overflow: hidden;
   }
-  #anims-view.active { display: flex; }
   .anims-sidebar {
     width: 340px;
     min-height: 0;
@@ -728,15 +720,15 @@
     <span class="tagline">Authentic Game CHD Archive</span>
   </div>
   <div class="tabs">
-    <button class="tab-btn active" data-tab="sounds">
+    <button class="tab-btn active" data-tab="sounds" onclick="switchTab('sounds')">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 5L6 9H2v6h4l5 4V5z"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>
       Sounds (<span id="tab-sounds-count">91</span>)
     </button>
-    <button class="tab-btn" data-tab="anims">
+    <button class="tab-btn" data-tab="anims" onclick="switchTab('anims')">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"/><line x1="7" y1="2" x2="7" y2="22"/><line x1="17" y1="2" x2="17" y2="22"/><line x1="2" y1="12" x2="22" y2="12"/><line x1="2" y1="7" x2="7" y2="7"/><line x1="2" y1="17" x2="7" y2="17"/><line x1="17" y1="17" x2="22" y2="17"/><line x1="17" y1="7" x2="22" y2="7"/></svg>
       Animations (<span id="tab-anims-count">1344</span>)
     </button>
-    <button class="tab-btn" data-tab="sprites">
+    <button class="tab-btn" data-tab="sprites" onclick="switchTab('sprites')">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
       Sprites (<span id="tab-sprites-count">2794</span>)
     </button>
@@ -1099,25 +1091,69 @@ function fallbackCopy(text, displayMsg) {
   document.body.removeChild(ta);
 }
 
-// Tab Switching
-function switchTab(tabName) {
-  currentTab = tabName;
-  if (currentlyPlayingAudio && !currentlyPlayingAudio.paused) {
-    currentlyPlayingAudio.pause();
-    currentlyPlayingAudio.currentTime = 0;
+// Audio Management & Teardown
+function stopAllAudio() {
+  if (currentlyPlayingAudio) {
+    try {
+      currentlyPlayingAudio.pause();
+    } catch (_) {}
+    try {
+      currentlyPlayingAudio.currentTime = 0;
+    } catch (_) {}
+    currentlyPlayingAudio = null;
   }
   document.querySelectorAll('audio').forEach(a => {
-    if (!a.paused) {
-      a.pause();
+    try {
+      if (!a.paused) a.pause();
+    } catch (_) {}
+    try {
       a.currentTime = 0;
-    }
+    } catch (_) {}
   });
+  document.querySelectorAll('.sound-quick-play').forEach(b => {
+    b.textContent = '▶';
+    b.classList.remove('playing');
+    b.dataset.active = 'false';
+  });
+}
+
+function playAudioClip(file) {
+  stopAllAudio();
+  if (!file) return;
+  try {
+    const a = new Audio(file);
+    currentlyPlayingAudio = a;
+    a.play().catch(() => {});
+    a.onended = () => {
+      if (currentlyPlayingAudio === a) currentlyPlayingAudio = null;
+    };
+  } catch (_) {}
+}
+
+// Tab Switching
+function switchTab(tabName) {
+  if (!tabName) return;
+  currentTab = tabName;
+  stopAllAudio();
+
+  if (tabName !== 'anims') {
+    if (animTimer) {
+      clearInterval(animTimer);
+      animTimer = null;
+    }
+  }
+
   document.querySelectorAll('.tab-btn').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.tab === tabName);
   });
   document.querySelectorAll('.tab-content').forEach(view => {
     view.classList.toggle('active', view.id === tabName + '-view');
   });
+
+  if (tabName === 'anims' && animPlaying && !animTimer) {
+    restartAnimTimer();
+  }
+
   activeFilterCategory = 'all';
   updateFilterChips();
   applySearchFilter();
@@ -1217,36 +1253,34 @@ function renderSounds(items) {
 }
 
 function quickPlaySound(id, file, btn) {
-  if (currentlyPlayingAudio && !currentlyPlayingAudio.paused) {
-    currentlyPlayingAudio.pause();
-    currentlyPlayingAudio.currentTime = 0;
-    document.querySelectorAll('.sound-quick-play').forEach(b => {
-      b.textContent = '▶';
-      b.classList.remove('playing');
-    });
-    if (btn.dataset.active === 'true') {
-      btn.dataset.active = 'false';
-      return;
+  const wasPlayingThis = (btn && btn.dataset.active === 'true');
+  stopAllAudio();
+  if (wasPlayingThis) return;
+
+  try {
+    const snd = new Audio(file);
+    currentlyPlayingAudio = snd;
+    if (btn) {
+      btn.textContent = '■';
+      btn.classList.add('playing');
+      btn.dataset.active = 'true';
     }
-  }
-
-  document.querySelectorAll('.sound-quick-play').forEach(b => {
-    b.textContent = '▶';
-    b.classList.remove('playing');
-    b.dataset.active = 'false';
-  });
-
-  const snd = new Audio(file);
-  currentlyPlayingAudio = snd;
-  btn.textContent = '■';
-  btn.classList.add('playing');
-  btn.dataset.active = 'true';
-  snd.play();
-  snd.onended = () => {
-    btn.textContent = '▶';
-    btn.classList.remove('playing');
-    btn.dataset.active = 'false';
-  };
+    snd.play().catch(() => {
+      if (btn) {
+        btn.textContent = '▶';
+        btn.classList.remove('playing');
+        btn.dataset.active = 'false';
+      }
+    });
+    snd.onended = () => {
+      if (btn) {
+        btn.textContent = '▶';
+        btn.classList.remove('playing');
+        btn.dataset.active = 'false';
+      }
+      if (currentlyPlayingAudio === snd) currentlyPlayingAudio = null;
+    };
+  } catch (_) {}
 }
 
 function filterAnimsBySound(soundId) {
@@ -1308,8 +1342,10 @@ function selectAnimation(animId) {
   document.querySelectorAll('.anim-item').forEach(el => {
     const isSelected = el.textContent.includes('#' + animId + ' ');
     el.classList.toggle('selected', isSelected);
-    if (isSelected) {
-      el.scrollIntoView({ block: 'nearest' });
+    if (isSelected && currentTab === 'anims') {
+      try {
+        el.scrollIntoView({ block: 'nearest' });
+      } catch (_) {}
     }
   });
 
@@ -1344,7 +1380,7 @@ function selectAnimation(animId) {
       <div style="background: rgba(245, 158, 11, 0.15); border: 1px solid rgba(245, 158, 11, 0.4); border-radius: 6px; padding: 0.4rem 0.75rem; display: flex; align-items: center; gap: 0.6rem;">
         <span class="badge badge-sound">🔊 Sound #${firstSound.sound_id}</span>
         <span style="font-size: 0.8rem; font-family: monospace;">${firstSound.sound_name}</span>
-        <button class="ctrl-btn" style="padding: 0.25rem 0.55rem; font-size: 0.75rem;" onclick="new Audio('${sndFile}').play()">▶ Play</button>
+        <button class="ctrl-btn" style="padding: 0.25rem 0.55rem; font-size: 0.75rem;" onclick="playAudioClip('${sndFile}')">▶ Play</button>
       </div>
     `;
   }
@@ -1538,13 +1574,23 @@ function updateCanvasFrame() {
 }
 
 function restartAnimTimer() {
-  if (animTimer) clearInterval(animTimer);
-  if (!animPlaying) return;
+  if (animTimer) {
+    clearInterval(animTimer);
+    animTimer = null;
+  }
+  if (!animPlaying || currentTab !== 'anims') return;
 
   const speedMultiplier = parseFloat(document.getElementById('speed-select').value);
   const interval = 1000 / (playbackFps * speedMultiplier);
 
   animTimer = setInterval(() => {
+    if (currentTab !== 'anims') {
+      if (animTimer) {
+        clearInterval(animTimer);
+        animTimer = null;
+      }
+      return;
+    }
     const anim = CATALOG_DATA.animations[activeAnimIndex];
     if (!anim || anim.subitems.length <= 1) return;
 
@@ -1556,8 +1602,10 @@ function restartAnimTimer() {
       if (sub && sub.sound_id >= 0) {
         const snd = CATALOG_DATA.sounds[sub.sound_id];
         if (snd) {
+          stopAllAudio();
           const a = new Audio(snd.file);
           a.volume = 0.6;
+          currentlyPlayingAudio = a;
           a.play().catch(() => {});
         }
       }
@@ -1845,7 +1893,7 @@ window.addEventListener('DOMContentLoaded', () => {
   renderAnimsList(CATALOG_DATA.animations);
   selectAnimation(0);
   renderSprites(CATALOG_DATA.sprites);
-  switchTab('sounds');
+  switchTab(currentTab || 'sounds');
 });
 </script>
 </body>

@@ -908,16 +908,19 @@ Through Capstone disassembly of `Original-Ants/Ants.exe` and inspection of `Orig
 - **`xmarks` (Anim 32, 7 frames @ 60ms, sprites 100..106):** Plays an animated ground marker at the clicked world coordinate when issuing movement, attack, or ability orders. Handled as a transient visual effect rendered underneath foliage layer 3 canopy.
 
 #### 3. Selection Brackets ("Ears")
+- **Timing & Frame-Rate Decoupling:**
+  Selection brackets are animated using real-time wall-clock milliseconds (`SDL_GetTicks()`) rather than frame-render tick counts. Each subitem in Table 4 stores its authentic duration in `sub.val3` (milliseconds). Active frame index is calculated as:
+  $$t = \text{now\_ms} \pmod{\sum \text{val3}_i}, \quad \text{subitem} = \arg \min_k \left( \sum_{i=0}^k \text{val3}_i > t \right)$$
 - **Regular Ants:**
-  - `dogears` (Anim 58, 4 frames @ 250ms, sprites 150..165): Bright green corner brackets framing the unit when at full/high health ($> 6$ HP).
-  - `yelears` (Anim 60, 4 frames @ 125ms, sprites 170..185): Yellow corner brackets framing the unit when wounded (4–6 HP).
-  - `redears` (Anim 61, 4 frames @ 60ms, sprites 186..201): Red corner brackets framing the unit when critically wounded ($\le 3$ HP).
+  - `dogears` (Anim 58, 4 frames @ 250ms each, 1000ms cycle, sprites 150..165): Bright green corner brackets framing the unit when at full/high health ($> 6$ HP).
+  - `yelears` (Anim 60, 4 frames: 60ms, 125ms, 125ms, 125ms, 435ms cycle, sprites 170..185): Yellow corner brackets framing the unit when wounded (4–6 HP).
+  - `redears` (Anim 61, 4 frames @ 60ms each, 240ms cycle, sprites 186..201): Red corner brackets framing the unit when critically wounded ($\le 3$ HP).
 - **Combat Ants:**
-  - `c_dogears` (Anim 149, 4 frames @ 250ms, sprites 444..459): Heavy-duty green brackets.
-  - `c_yelears` (Anim 150, 4 frames @ 125ms, sprites 460..475): Heavy-duty yellow brackets.
-  - `c_redears` (Anim 151, 4 frames @ 60ms, sprites 476..491): Heavy-duty red brackets.
+  - `c_dogears` (Anim 149, 4 frames @ 250ms each, 1000ms cycle, sprites 444..459): Heavy-duty green brackets.
+  - `c_yelears` (Anim 150, 4 frames: 60ms, 125ms, 125ms, 125ms, 435ms cycle, sprites 460..475): Heavy-duty yellow brackets.
+  - `c_redears` (Anim 151, 4 frames @ 60ms each, 240ms cycle, sprites 476..491): Heavy-duty red brackets.
 - **Anthill Base:**
-  - `hillears` (Anim 59, 4 frames @ 200ms, sprites 166..169): 4-corner brackets framing the 4×4 base at offsets $(-70, -70)$, $(48, -70)$, $(-70, 49)$, and $(48, 49)$ relative to the anthill center.
+  - `hillears` (Anim 59, 4 frames @ 200ms each, 800ms cycle, sprites 166..169): 4-corner brackets framing the 4×4 base at offsets $(-70, -70)$, $(48, -70)$, $(-70, 49)$, and $(48, 49)$ relative to the anthill center.
 
 ---
 
@@ -943,6 +946,38 @@ In the authentic 1998 executable, issuing a move order for a terrestrial (non-sw
 - **Typography & Centering:** Authentic setup screen typography renders the map title with `FontSize::Large` dynamically centered within the 29px cavity:
   $$\text{name\_y} = 307 + \frac{29 - \text{th}_{\text{map}}}{2}$$
   With text height 15px, this yields $\text{name\_y} = 314$, producing symmetric 7px top and bottom padding.
+
+---
+
+### 5.24 Authentic GameSound Dispatch Table (`0x1002c28`)
+
+Disassembly of `Ants.exe` at `0x1018214` reveals a 57-entry lookup table mapping high-level game sound triggers to Table 4 animation indices (`0x1002c28`), which in turn fire specific Sound IDs:
+- **GameSound 30** $\rightarrow$ Anim 214 (`playerout`): Sound ID 41 (`playerout.wav`) — Player drops out of match.
+- **GameSound 31** $\rightarrow$ Anim 215 (`losers`): Sound ID 42 (`losers.wav`) — Defeat sting for losing teams.
+- **GameSound 32** $\rightarrow$ Anim 216 (`exithill`): Sound ID 43 (`exithill.wav`) — Hatched ant emerges from anthill hole.
+- **GameSound 33** $\rightarrow$ Anim 217 (`countdwn`): Sound ID 44 (`countdwn.wav`) — 10-second countdown tick.
+- **GameSound 36** $\rightarrow$ Anim 220 (`bump`): Sound ID 47 (`bump.wav`) — Ants bump into each other when colliding on a tile.
+- **GameSound 42** $\rightarrow$ Anim 227 (`30sec`): Sound ID 54 (`30sec.wav`) — 30 seconds remaining warning.
+- **GameSound 43** $\rightarrow$ Anim 228 (`1min`): Sound ID 55 (`1min.wav`) — 1 minute remaining warning.
+- **GameSound 44** $\rightarrow$ Anim 229 (`winner`): Sound ID 56 (`winner.wav`) — Victory fanfare for winning team.
+
+---
+
+### 5.25 Match Timer Warnings & Countdown Sequencing (`0x1024839`)
+
+The authentic match clock routine at `0x1024839` evaluates remaining match milliseconds against three sequential milestones:
+1. **1 Minute Remaining (60,000 ms):** Triggers GameSound 43 (`1min.wav` / Sound 55) and broadcasts String 49: `"1 minute left in the game."`. Sets next milestone to 31,000 ms.
+2. **30 Seconds Remaining (30,000 ms):** Triggers GameSound 42 (`30sec.wav` / Sound 54) and broadcasts String 50: `"30 seconds left in the game."`. Sets next milestone to 11,000 ms.
+3. **10-Second Countdown (10,000 ms down to 1,000 ms):** On the first tick (10s), broadcasts String 59: `"10 seconds and counting..."`. Every second thereafter (10s, 9s, 8s, 7s, 6s, 5s, 4s, 3s, 2s, 1s), decrements by 1000ms (`0xfffffc18`) and triggers GameSound 33 (`countdwn.wav` / Sound 44).
+
+---
+
+### 5.26 Defeat SFX (`losers.wav`), Drop-Out (`playerout.wav`), Emergence (`exithill.wav`) & Bumping (`bump.wav`)
+
+- **Match Defeat (`0x1015a37`):** When the match concludes, losing teams hear `losers.wav` (Sound 42 / GameSound 31), not `playerout.wav`. Winning teams hear `winner.wav` (Sound 56 / GameSound 44).
+- **Player Drop-Out (`0x100d072`):** When a connected player leaves or disconnects during an active game, the engine triggers `playerout.wav` (Sound 41 / GameSound 30) along with String 46: `"%s dropped out of the game!"`.
+- **Hatched Ant Emergence (`exithill.wav`):** Once incubation completes and a newly hatched ant surfaces from the anthill hole into the open playfield, the engine triggers Sound 43 (`exithill.wav`).
+- **Ant Collision & Bumping (`bump.wav`):** In the 1998 RTS simulation, two ants cannot occupy the same discrete tile. When ants attempt to move into an already-occupied tile or collide head-on, the moving ant bounces back to its originating tile, plays `bump.wav` (Sound 47), and transitions to `UnitState::Bounce` for 4 ticks (*gb* animation).
 
 ---
 

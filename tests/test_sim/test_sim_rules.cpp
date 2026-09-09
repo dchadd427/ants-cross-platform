@@ -793,7 +793,7 @@ void run_suite_12_game_over() {
         ASSERT_EQ(sim.get_unit(u).pos.y, frozen_pos.y);
     } TEST_END();
 
-    TEST_CASE("12.2 Audio Split: Winner (Sound 56) vs Loser (Sound 41)") {
+    TEST_CASE("12.2 Audio Split: Winner (Sound 56) vs Loser (Sound 42)") {
         SimulationEngine sim;
         sim.init_test_world(60, 60, 1, 50);
         sim.set_player_score(0, 500); // Winner
@@ -801,8 +801,8 @@ void run_suite_12_game_over() {
         sim.tick();
 
         ASSERT_TRUE(sim.has_targeted_audio_event(0, 56));  // Winner Sound 56
-        ASSERT_FALSE(sim.has_targeted_audio_event(0, 41)); // Winner never hears 41
-        ASSERT_TRUE(sim.has_targeted_audio_event(1, 41));  // Loser Sound 41
+        ASSERT_FALSE(sim.has_targeted_audio_event(0, 42)); // Winner never hears 42
+        ASSERT_TRUE(sim.has_targeted_audio_event(1, 42));  // Loser Sound 42 (losers.wav)
         ASSERT_FALSE(sim.has_targeted_audio_event(1, 56)); // Loser never hears 56
     } TEST_END();
 

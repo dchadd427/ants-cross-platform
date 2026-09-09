@@ -18,6 +18,9 @@ public:
 
     uint64_t current_tick_{0};
     uint32_t match_time_remaining_ms_{0};
+    bool warned_one_minute_{false};
+    bool warned_thirty_seconds_{false};
+    uint32_t last_countdown_second_{0};
 
     std::vector<std::unique_ptr<AntUnit>> ants_;
     std::unordered_map<uint32_t, std::unique_ptr<CombatAIController>> ai_controllers_;
@@ -211,6 +214,7 @@ void bounce_unit_cascade(SimulationEngineImpl& impl,
     unit.anim_subitem = 0;
     unit.clear_path();
 
+    impl.audio_queue_.push_back(AudioEvent{SoundID::Bump, unit.pixel_x, unit.pixel_y, 1, 255});
     impl.audio_queue_.push_back(AudioEvent{SoundID::FlingThumpA, unit.pixel_x, unit.pixel_y, 1, 255});
 
     int32_t bdx = unit.pos.x - from_x;
@@ -294,6 +298,9 @@ void SimulationEngine::init(const ants::assets::LevelData& level, uint32_t rando
     impl_->grid_.init_from_level(level);
     impl_->stats_.reset();
     impl_->match_time_remaining_ms_ = 12 * 60 * 1000;
+    impl_->warned_one_minute_ = false;
+    impl_->warned_thirty_seconds_ = false;
+    impl_->last_countdown_second_ = 0;
     impl_->match_state_ = MatchState::Running;
     impl_->current_tick_ = 0;
     impl_->ants_.clear();
@@ -340,6 +347,9 @@ void SimulationEngine::init_test_world(uint32_t width, uint32_t height, uint32_t
     impl_->grid_.init_empty(width, height);
     impl_->stats_.reset();
     impl_->match_time_remaining_ms_ = match_time_ms;
+    impl_->warned_one_minute_ = (match_time_ms <= 60000);
+    impl_->warned_thirty_seconds_ = (match_time_ms <= 30000);
+    impl_->last_countdown_second_ = (match_time_ms <= 10000) ? ((match_time_ms + 999) / 1000) : 0;
     impl_->match_state_ = MatchState::Running;
     impl_->current_tick_ = 0;
     impl_->ants_.clear();
@@ -388,9 +398,35 @@ void SimulationEngine::tick() {
         impl_->handle_game_over();
         return;
     }
+    uint32_t prev_time_ms = impl_->match_time_remaining_ms_;
     impl_->match_time_remaining_ms_ -= 50;
     impl_->current_tick_++;
     impl_->world_state_dirty_ = true;
+
+    // Timer warnings & countdown matching Ants.exe 0x1024839:
+    // 1 minute remaining warning (Sound 55: 1min.wav & String 49)
+    if (prev_time_ms > 60000 && impl_->match_time_remaining_ms_ <= 60000 && !impl_->warned_one_minute_) {
+        impl_->warned_one_minute_ = true;
+        impl_->audio_queue_.push_back(AudioEvent{SoundID::OneMinute, 0, 0, 1, 255});
+        impl_->news_queue_.push_back(NewsEvent{255, "1 minute left in the game.", impl_->match_time_remaining_ms_, StringID::OneMinuteRemaining});
+    }
+    // 30 seconds remaining warning (Sound 54: 30sec.wav & String 50)
+    if (prev_time_ms > 30000 && impl_->match_time_remaining_ms_ <= 30000 && !impl_->warned_thirty_seconds_) {
+        impl_->warned_thirty_seconds_ = true;
+        impl_->audio_queue_.push_back(AudioEvent{SoundID::ThirtySeconds, 0, 0, 1, 255});
+        impl_->news_queue_.push_back(NewsEvent{255, "30 seconds left in the game.", impl_->match_time_remaining_ms_, StringID::ThirtySecondsRemaining});
+    }
+    // 10-second countdown (Sound 44: countdwn.wav & String 59 at 10s)
+    if (impl_->match_time_remaining_ms_ <= 10000 && impl_->match_time_remaining_ms_ > 0) {
+        uint32_t current_sec = (impl_->match_time_remaining_ms_ + 999) / 1000;
+        if (current_sec >= 1 && current_sec <= 10 && current_sec != impl_->last_countdown_second_) {
+            impl_->last_countdown_second_ = current_sec;
+            impl_->audio_queue_.push_back(AudioEvent{SoundID::Countdown, 0, 0, 1, 255});
+            if (current_sec == 10) {
+                impl_->news_queue_.push_back(NewsEvent{255, "10 seconds and counting...", impl_->match_time_remaining_ms_, StringID::TenSecondsRemaining});
+            }
+        }
+    }
 
     // Step Active Visual Effects (e.g. bomb explosion)
     for (auto it = impl_->active_effects_.begin(); it != impl_->active_effects_.end();) {
@@ -1066,6 +1102,7 @@ void SimulationEngine::tick() {
                 ant_ptr->anim_subitem = 8;
                 ant_ptr->underground_visited = true;
                 ant_ptr->facing = Direction::South;
+                impl_->audio_queue_.push_back(AudioEvent{SoundID::ExitHill, ant_ptr->pixel_x, ant_ptr->pixel_y, 1, ant_ptr->player_id});
                 continue;
             }
 
@@ -1881,6 +1918,7 @@ bool SimulationEngine::hatch_ant(uint8_t player_id, AntType type) {
             unit->underground = false;
             unit->state_timer = 0;
             unit->anim_subitem = 8;
+            impl_->audio_queue_.push_back(AudioEvent{SoundID::ExitHill, unit->pixel_x, unit->pixel_y, 1, unit->player_id});
         }
     }
     return true;
@@ -2022,9 +2060,19 @@ uint32_t SimulationEngine::get_match_time_remaining_ms() const {
 
 void SimulationEngine::set_match_time_remaining_ms(uint32_t ms) {
     impl_->match_time_remaining_ms_ = ms;
+    if (ms > 60000) impl_->warned_one_minute_ = false;
+    if (ms > 30000) impl_->warned_thirty_seconds_ = false;
+    if (ms > 10000) impl_->last_countdown_second_ = 0;
     if (ms == 0 && impl_->match_state_ == MatchState::Running) {
         impl_->handle_game_over();
     }
+}
+
+void SimulationEngine::trigger_player_dropout(uint8_t player_id, const std::string& player_name) {
+    impl_->audio_queue_.push_back(AudioEvent{SoundID::PlayerDropOut, 0, 0, 1, 255});
+    std::string name = player_name.empty() ? ("Player " + std::to_string(player_id)) : player_name;
+    std::string msg = name + " dropped out of the game!";
+    impl_->news_queue_.push_back(NewsEvent{255, msg, impl_->match_time_remaining_ms_, StringID::PlayerDropOut});
 }
 
 bool SimulationEngine::is_match_over() const {
