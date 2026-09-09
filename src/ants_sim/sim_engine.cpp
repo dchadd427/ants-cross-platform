@@ -801,12 +801,12 @@ void SimulationEngine::tick() {
 
         // Multi-Stage & Schedule-Driven Food Harvest
         TileCoord food_target{-1, -1};
-        if (ant_ptr->is_alive() && !ant_ptr->is_holding() && impl_->grid_.in_bounds(ant_ptr->pos) &&
+        if (ant_ptr->is_alive() && impl_->grid_.in_bounds(ant_ptr->pos) &&
             ant_ptr->state != UnitState::HarvestingFood && ant_ptr->state != UnitState::EnteringBase &&
             ant_ptr->state != UnitState::Knockback && ant_ptr->state != UnitState::Stunned &&
             ant_ptr->state != UnitState::Drowning && !ant_ptr->underground) {
 
-            bool dest_is_food = false;
+            bool dest_is_food = ant_ptr->is_food_order;
             const ActiveFoodSchedule* dest_fs = nullptr;
             if (impl_->grid_.in_bounds(ant_ptr->final_dest)) {
                 if (impl_->grid_.get_cell(ant_ptr->final_dest).has_food()) {
@@ -826,41 +826,79 @@ void SimulationEngine::tick() {
             }
 
             if (dest_is_food) {
-                // If moving towards food, bite as soon as reaching the food's perimeter (chebyshev_dist <= 1)
-                if (dest_fs) {
-                    for (const auto& c : dest_fs->footprint) {
-                        if (ant_ptr->pos.chebyshev_dist(c) <= 1 && impl_->grid_.in_bounds(c) && impl_->grid_.get_cell(c).has_food()) {
-                            food_target = c;
-                            break;
-                        }
-                    }
-                } else if (ant_ptr->pos.chebyshev_dist(ant_ptr->final_dest) <= 1 &&
-                           impl_->grid_.in_bounds(ant_ptr->final_dest) &&
-                           impl_->grid_.get_cell(ant_ptr->final_dest).has_food()) {
-                    food_target = ant_ptr->final_dest;
-                }
-            }
-
-            bool arrived = ant_ptr->waypoints.empty() || ant_ptr->state == UnitState::Idle;
-            if (food_target.x < 0 && arrived) {
-                if (impl_->grid_.get_cell(ant_ptr->pos).has_food()) {
-                    food_target = ant_ptr->pos;
-                } else if (impl_->grid_.in_bounds(ant_ptr->final_dest) &&
-                           impl_->grid_.get_cell(ant_ptr->final_dest).has_food() &&
-                           ant_ptr->pos.chebyshev_dist(ant_ptr->final_dest) <= 1) {
-                    food_target = ant_ptr->final_dest;
-                } else {
-                    for (int32_t dy = -1; dy <= 1 && food_target.x < 0; ++dy) {
-                        for (int32_t dx = -1; dx <= 1 && food_target.x < 0; ++dx) {
-                            if (dx == 0 && dy == 0) continue;
-                            TileCoord adj{ant_ptr->pos.x + dx, ant_ptr->pos.y + dy};
-                            if (impl_->grid_.in_bounds(adj) && impl_->grid_.get_cell(adj).has_food()) {
-                                food_target = adj;
+                if (ant_ptr->is_holding()) {
+                    // Ant already has food: it must walk all the way over to the food first.
+                    // Upon arrival on top of the food or reaching destination, it realizes it has food and goes to base.
+                    bool at_food = false;
+                    if (dest_fs) {
+                        for (const auto& c : dest_fs->footprint) {
+                            if (ant_ptr->pos == c) {
+                                food_target = c;
+                                at_food = true;
                                 break;
                             }
                         }
+                    } else if (ant_ptr->pos == ant_ptr->final_dest &&
+                               impl_->grid_.in_bounds(ant_ptr->final_dest) &&
+                               impl_->grid_.get_cell(ant_ptr->final_dest).has_food()) {
+                        food_target = ant_ptr->final_dest;
+                        at_food = true;
+                    }
+
+                    bool arrived = ant_ptr->waypoints.empty() || ant_ptr->state == UnitState::Idle;
+                    if (!at_food && arrived) {
+                        if (dest_fs) {
+                            for (const auto& c : dest_fs->footprint) {
+                                if (ant_ptr->pos.chebyshev_dist(c) <= 1 && impl_->grid_.in_bounds(c) && impl_->grid_.get_cell(c).has_food()) {
+                                    food_target = c;
+                                    at_food = true;
+                                    break;
+                                }
+                            }
+                        } else if (impl_->grid_.in_bounds(ant_ptr->final_dest) &&
+                                   impl_->grid_.get_cell(ant_ptr->final_dest).has_food() &&
+                                   ant_ptr->pos.chebyshev_dist(ant_ptr->final_dest) <= 1) {
+                            food_target = ant_ptr->final_dest;
+                            at_food = true;
+                        }
+                    }
+
+                    if (at_food) {
+                        ant_ptr->clear_path();
+                        ant_ptr->final_dest = TileCoord{-1, -1};
+                        ant_ptr->is_food_order = false;
+                        ant_ptr->state = (ant_ptr->type == AntType::Combat) ? UnitState::GuardIdle : UnitState::Idle;
+                        join_base_queue(ant_ptr->id);
+                        food_target = TileCoord{-1, -1};
+                    }
+                } else {
+                    // Ant does NOT have food: bite as soon as reaching perimeter (chebyshev_dist <= 1)
+                    if (dest_fs) {
+                        for (const auto& c : dest_fs->footprint) {
+                            if (ant_ptr->pos.chebyshev_dist(c) <= 1 && impl_->grid_.in_bounds(c) && impl_->grid_.get_cell(c).has_food()) {
+                                food_target = c;
+                                break;
+                            }
+                        }
+                    } else if (ant_ptr->pos.chebyshev_dist(ant_ptr->final_dest) <= 1 &&
+                               impl_->grid_.in_bounds(ant_ptr->final_dest) &&
+                               impl_->grid_.get_cell(ant_ptr->final_dest).has_food()) {
+                        food_target = ant_ptr->final_dest;
+                    }
+
+                    bool arrived = ant_ptr->waypoints.empty() || ant_ptr->state == UnitState::Idle;
+                    if (food_target.x < 0 && arrived) {
+                        if (impl_->grid_.get_cell(ant_ptr->pos).has_food()) {
+                            food_target = ant_ptr->pos;
+                        } else if (impl_->grid_.in_bounds(ant_ptr->final_dest) &&
+                                   impl_->grid_.get_cell(ant_ptr->final_dest).has_food() &&
+                                   ant_ptr->pos.chebyshev_dist(ant_ptr->final_dest) <= 1) {
+                            food_target = ant_ptr->final_dest;
+                        }
                     }
                 }
+            } else if (!ant_ptr->is_holding() && impl_->grid_.get_cell(ant_ptr->pos).has_food()) {
+                food_target = ant_ptr->pos;
             }
         }
         if (food_target.x >= 0) {
@@ -871,6 +909,7 @@ void SimulationEngine::tick() {
             ant_ptr->ability_target = food_target;
             ant_ptr->clear_path();
             ant_ptr->final_dest = TileCoord{-1, -1};
+            ant_ptr->is_food_order = false;
             if (food_target != ant_ptr->pos) {
                 ant_ptr->facing = ants::assets::vector_to_direction(food_target.x - ant_ptr->pos.x, food_target.y - ant_ptr->pos.y);
             }
@@ -1635,7 +1674,7 @@ void SimulationEngine::issue_order(const AntOrder& order) {
         case OrderType::Move:
             unit->pending_ability = OrderType::None;
             unit->ability_target = TileCoord{-1, -1};
-            issue_move_order(order.ant_id, TileCoord{order.target_x, order.target_y}, order.allow_friendly_bomb);
+            issue_move_order(order.ant_id, TileCoord{order.target_x, order.target_y}, order.allow_friendly_bomb, order.is_food_order);
             break;
         case OrderType::ReturnToBase: {
             unit->pending_ability = OrderType::None;
@@ -2137,6 +2176,11 @@ void SimulationEngine::execute_melee_attack(uint32_t attacker_id, uint32_t targe
     attacker->state = UnitState::Attacking;
     attacker->state_timer = 6;
     attacker->facing = ants::assets::vector_to_direction(target->pos.x - attacker->pos.x, target->pos.y - attacker->pos.y);
+    int32_t to_att_x = attacker->pos.x - target->pos.x;
+    int32_t to_att_y = attacker->pos.y - target->pos.y;
+    if (to_att_x != 0 || to_att_y != 0) {
+        target->facing = ants::assets::vector_to_direction(to_att_x, to_att_y);
+    }
 
     if (is_ant_in_base_queue(target_id)) {
         leave_base_queue(target_id);
@@ -2212,27 +2256,104 @@ void SimulationEngine::execute_melee_attack(uint32_t attacker_id, uint32_t targe
             impl_->spawn_death_effect(target->pixel_x, target->pixel_y);
         }
 
-        // 1-Tile Pushback away from attacker
+        // 1-Tile Pushback away from attacker (strictly cardinal unless obstructed, then deflect sideways)
         if (!lethal) {
-            int32_t dx = target->pos.x - attacker->pos.x;
-            int32_t dy = target->pos.y - attacker->pos.y;
-            if (dx == 0 && dy == 0) dx = 1;
-            int32_t dir_x = (dx > 0) ? 1 : ((dx < 0) ? -1 : 0);
-            int32_t dir_y = (dy > 0) ? 1 : ((dy < 0) ? -1 : 0);
+            int32_t p_dx = target->pos.x - attacker->pos.x;
+            int32_t p_dy = target->pos.y - attacker->pos.y;
+            if (p_dx == 0 && p_dy == 0) {
+                p_dx = 1;
+                p_dy = 0;
+            }
 
-            TileCoord push_pos{target->pos.x + dir_x, target->pos.y + dir_y};
-            bool can_push = impl_->grid_.in_bounds(push_pos);
-            if (can_push) {
-                const auto& dest_cell = impl_->grid_.get_cell(static_cast<uint32_t>(push_pos.x), static_cast<uint32_t>(push_pos.y));
-                if (dest_cell.terrain_type == TERRAIN_OBSTACLE || dest_cell.is_obstacle_overlay) {
-                    can_push = false; // Blocked by rock obstacle
+            auto is_passable_push = [&](TileCoord c) -> bool {
+                if (!impl_->grid_.in_bounds(c)) return false;
+                const auto& cell = impl_->grid_.get_cell(static_cast<uint32_t>(c.x), static_cast<uint32_t>(c.y));
+                if (cell.terrain_type == TERRAIN_OBSTACLE || cell.is_obstacle_overlay) return false;
+                return true;
+            };
+
+            TileCoord chosen_push{-1, -1};
+
+            if (p_dx != 0 && p_dy == 0) {
+                // Direct horizontal displacement (East / West)
+                TileCoord primary{target->pos.x + p_dx, target->pos.y};
+                if (is_passable_push(primary)) {
+                    chosen_push = primary;
+                } else {
+                    // Obstructed by obstacle/wall: deflect sideways (North or South)
+                    TileCoord side1{target->pos.x, target->pos.y - 1};
+                    TileCoord side2{target->pos.x, target->pos.y + 1};
+                    bool p1 = is_passable_push(side1);
+                    bool p2 = is_passable_push(side2);
+                    if (p1 && p2) {
+                        chosen_push = (impl_->prng_.rand() % 2 == 0) ? side1 : side2;
+                    } else if (p1) {
+                        chosen_push = side1;
+                    } else if (p2) {
+                        chosen_push = side2;
+                    } else {
+                        // Sideways blocked: check diagonal flanks
+                        TileCoord diag1{target->pos.x + p_dx, target->pos.y - 1};
+                        TileCoord diag2{target->pos.x + p_dx, target->pos.y + 1};
+                        if (is_passable_push(diag1)) chosen_push = diag1;
+                        else if (is_passable_push(diag2)) chosen_push = diag2;
+                    }
+                }
+            } else if (p_dx == 0 && p_dy != 0) {
+                // Direct vertical displacement (North / South)
+                TileCoord primary{target->pos.x, target->pos.y + p_dy};
+                if (is_passable_push(primary)) {
+                    chosen_push = primary;
+                } else {
+                    // Obstructed by obstacle/wall: deflect sideways (West or East)
+                    TileCoord side1{target->pos.x - 1, target->pos.y};
+                    TileCoord side2{target->pos.x + 1, target->pos.y};
+                    bool p1 = is_passable_push(side1);
+                    bool p2 = is_passable_push(side2);
+                    if (p1 && p2) {
+                        chosen_push = (impl_->prng_.rand() % 2 == 0) ? side1 : side2;
+                    } else if (p1) {
+                        chosen_push = side1;
+                    } else if (p2) {
+                        chosen_push = side2;
+                    } else {
+                        TileCoord diag1{target->pos.x - 1, target->pos.y + p_dy};
+                        TileCoord diag2{target->pos.x + 1, target->pos.y + p_dy};
+                        if (is_passable_push(diag1)) chosen_push = diag1;
+                        else if (is_passable_push(diag2)) chosen_push = diag2;
+                    }
+                }
+            } else {
+                // Diagonal displacement: must NOT push diagonally unless cardinal directions are obstructed
+                TileCoord card1{target->pos.x + p_dx, target->pos.y};
+                TileCoord card2{target->pos.x, target->pos.y + p_dy};
+                bool p1 = is_passable_push(card1);
+                bool p2 = is_passable_push(card2);
+                if (p1 && p2) {
+                    chosen_push = (impl_->prng_.rand() % 2 == 0) ? card1 : card2;
+                } else if (p1) {
+                    chosen_push = card1;
+                } else if (p2) {
+                    chosen_push = card2;
+                } else {
+                    // Both cardinal paths obstructed: deflect sideways/diagonal
+                    TileCoord diag{target->pos.x + p_dx, target->pos.y + p_dy};
+                    if (is_passable_push(diag)) {
+                        chosen_push = diag;
+                    }
                 }
             }
 
-            if (can_push) {
-                target->set_tile_pos(push_pos.x, push_pos.y);
+            if (chosen_push.x >= 0) {
+                target->set_tile_pos(chosen_push.x, chosen_push.y);
                 target->clear_path();
             }
+
+            int32_t eff_dir_x = target->pos.x - attacker->pos.x;
+            int32_t eff_dir_y = target->pos.y - attacker->pos.y;
+            if (eff_dir_x == 0 && eff_dir_y == 0) eff_dir_x = 1;
+            int32_t dir_x = (eff_dir_x > 0) ? 1 : ((eff_dir_x < 0) ? -1 : 0);
+            int32_t dir_y = (eff_dir_y > 0) ? 1 : ((eff_dir_y < 0) ? -1 : 0);
 
             // Terrain check at target position:
             const auto& land_cell = impl_->grid_.get_cell(static_cast<uint32_t>(target->pos.x), static_cast<uint32_t>(target->pos.y));
@@ -2261,7 +2382,6 @@ void SimulationEngine::execute_melee_attack(uint32_t attacker_id, uint32_t targe
                 target->state_timer = 4;
                 target->anim_tick = 0;
                 target->anim_subitem = 0;
-                // Target preserves its existing facing direction per authentic RE fidelity
 
                 // Fire contact check
                 if (land_cell.has_fire()) {
@@ -2281,9 +2401,24 @@ void SimulationEngine::execute_melee_attack(uint32_t attacker_id, uint32_t targe
     }
 }
 
-void SimulationEngine::issue_move_order(uint32_t ant_id, TileCoord dest, bool allow_friendly_bomb) {
+void SimulationEngine::issue_move_order(uint32_t ant_id, TileCoord dest, bool allow_friendly_bomb, bool is_food_order) {
     AntUnit* unit = impl_->find_unit(ant_id);
     if (!unit || !unit->is_alive() || unit->is_stunned()) return;
+
+    bool dest_has_food = impl_->grid_.in_bounds(dest) && impl_->grid_.get_cell(dest).has_food();
+    if (!dest_has_food) {
+        for (const auto& afs : impl_->grid_.food_schedules()) {
+            if (!afs.active) continue;
+            for (const auto& c : afs.footprint) {
+                if (c == dest) {
+                    dest_has_food = true;
+                    break;
+                }
+            }
+            if (dest_has_food) break;
+        }
+    }
+    unit->is_food_order = (is_food_order || dest_has_food);
 
     // You should not be able to interrupt actions currently animating
     if (unit->state == UnitState::BuildingBridge || unit->state == UnitState::DemolishingBridge) {

@@ -166,6 +166,7 @@ struct AntOrder {
     int32_t   target_y{0};
     int32_t   target_entity_id{-1};
     bool      allow_friendly_bomb{false};
+    bool      is_food_order{false};
 };
 
 struct PendingHatch {
@@ -315,7 +316,7 @@ public:
     void kill_unit(uint32_t ant_id);
 
     void execute_melee_attack(uint32_t attacker_id, uint32_t target_id);
-    void issue_move_order(uint32_t ant_id, TileCoord dest, bool allow_friendly_bomb = false);
+    void issue_move_order(uint32_t ant_id, TileCoord dest, bool allow_friendly_bomb = false, bool is_food_order = false);
 
     bool validate_cardinal_placement(TileCoord from, TileCoord to) const;
     bool plant_bomb(uint32_t ant_id, TileCoord target, bool instant = true);

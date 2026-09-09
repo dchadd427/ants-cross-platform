@@ -217,9 +217,12 @@
 
   /* Sounds Table View */
   #sounds-view {
-    display: flex;
+    display: none;
     flex-direction: column;
     overflow: hidden;
+  }
+  #sounds-view.active {
+    display: flex;
   }
   .table-wrapper {
     flex: 1;
@@ -1099,6 +1102,16 @@ function fallbackCopy(text, displayMsg) {
 // Tab Switching
 function switchTab(tabName) {
   currentTab = tabName;
+  if (currentlyPlayingAudio && !currentlyPlayingAudio.paused) {
+    currentlyPlayingAudio.pause();
+    currentlyPlayingAudio.currentTime = 0;
+  }
+  document.querySelectorAll('audio').forEach(a => {
+    if (!a.paused) {
+      a.pause();
+      a.currentTime = 0;
+    }
+  });
   document.querySelectorAll('.tab-btn').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.tab === tabName);
   });

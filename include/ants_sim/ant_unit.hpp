@@ -199,6 +199,7 @@ public:
     uint16_t    ability_cooldown_ticks{0};
     uint32_t    attack_target_id{0};
     bool        allow_friendly_bomb{false};
+    bool        is_food_order{false};
     uint8_t     pending_powerup_type{255};
     AntType     previous_type{AntType::Worker};
     bool        transformation_interrupted{false};

@@ -4210,7 +4210,6 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
 
         uint32_t attacker = sim.spawn_unit(0, AntType::Worker, TileCoord{10, 10});
         uint32_t defender = sim.spawn_unit(1, AntType::Worker, TileCoord{11, 10});
-        Direction orig_facing = sim.get_unit(defender).facing;
         sim.execute_melee_attack(attacker, defender);
 
         const auto& def = sim.get_unit(defender);
@@ -4219,7 +4218,7 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         ASSERT_EQ(def.pos.x, 12);
         ASSERT_EQ(def.pos.y, 10);
         ASSERT_EQ(def.state, UnitState::Bounce);
-        ASSERT_EQ(def.facing, orig_facing); // Preserves original facing direction per authentic RE fidelity
+        ASSERT_EQ(def.facing, Direction::West); // Victim forced to face attacker West
 
         // Advance 4 ticks for bounce animation recovery
         for (int i = 0; i < 4; ++i) {
@@ -4418,8 +4417,17 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         }
 
         // Worker reached (13, 10), adjacent to food at (14, 10)
+        // Authentic fidelity: walking or standing on adjacent tiles must NOT automatically harvest food
         ASSERT_EQ(sim.get_unit(worker).pos.x, 13);
         ASSERT_EQ(sim.get_unit(worker).pos.y, 10);
+        ASSERT_EQ(sim.get_unit(worker).state, UnitState::Idle);
+        ASSERT_FALSE(sim.get_unit(worker).is_holding());
+        ASSERT_TRUE(sim.grid().get_cell({14, 10}).has_food());
+
+        // Now explicitly instruct worker to eat the food at (14, 10)
+        sim.issue_move_order(worker, TileCoord{14, 10});
+        sim.tick();
+
         ASSERT_EQ(sim.get_unit(worker).state, UnitState::HarvestingFood);
         ASSERT_EQ(sim.get_unit(worker).facing, Direction::East);
         ASSERT_TRUE(sim.get_unit(worker).is_holding());
@@ -4521,7 +4529,7 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         ASSERT_EQ(sim.get_unit(defender).hp, 9);
     } TEST_END();
 
-    TEST_CASE("12.51 Pushback Preserves Victim Original Facing Direction") {
+    TEST_CASE("12.51 Pushback Forces Victim to Face Attacker and Pushes Cardinal") {
         SimulationEngine sim;
         sim.init_test_world(60, 60, 100, 60000);
 
@@ -4535,8 +4543,8 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         // Pushed East to (12, 10)
         ASSERT_EQ(def_unit->pos.x, 12);
         ASSERT_EQ(def_unit->pos.y, 10);
-        // Facing is strictly preserved as North
-        ASSERT_EQ(def_unit->facing, Direction::North);
+        // Facing is forced towards attacker (West)
+        ASSERT_EQ(def_unit->facing, Direction::West);
     } TEST_END();
 
     TEST_CASE("12.52 Lethal 0 HP Death Spawns Skull & Crossbones Effect While Water Drowning Exclusively Plays Drown Sequence") {
@@ -5200,6 +5208,91 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         int32_t top_pad = name_y - 307;
         int32_t bot_pad = 336 - (name_y + th_large);
         ASSERT_LE(std::abs(top_pad - bot_pad), 1); // Symmetric within 1 pixel
+    } TEST_END();
+
+    TEST_CASE("12.63 Ant Carrying Food Instructed to Eat Food Walks to Food Then Returns to Base") {
+        SimulationEngine sim;
+        sim.init_test_world(60, 60, 100, 60000);
+
+        // Place anthill at (5, 5)
+        sim.grid_mut().set_anthill(0, TileCoord{5, 5});
+
+        // Place food morsel at (20, 10)
+        sim.grid_mut().get_cell_mut({20, 10}).interactive_id = 239;
+        sim.grid_mut().get_cell_mut({20, 10}).is_food = true;
+
+        uint32_t worker = sim.spawn_unit(0, AntType::Worker, TileCoord{10, 10});
+        auto* w = const_cast<AntUnit*>(&sim.get_unit(worker));
+        w->pick_up_food(1, 25);
+        ASSERT_TRUE(w->is_holding());
+        ASSERT_EQ(w->carried_food, 1);
+
+        // Instruct ant with food to move to the food tile
+        sim.issue_move_order(worker, TileCoord{20, 10}, false, true);
+
+        // Ant must walk towards food first (does NOT immediately return to base)
+        ASSERT_EQ(w->state, UnitState::Walking);
+        ASSERT_EQ(w->final_dest, (TileCoord{20, 10}));
+
+        // Advance simulation until ant reaches food
+        while (!w->waypoints.empty() && w->pos != TileCoord{20, 10}) {
+            sim.tick();
+            // During transit, still carrying exactly 1 food
+            ASSERT_EQ(w->carried_food, 1);
+        }
+
+        // Tick once on arrival: ant realizes upon arrival that it already has food
+        sim.tick();
+
+        // Food was NOT consumed (still on map) and ant carried_food is still 1 (no double bite)
+        ASSERT_TRUE(sim.grid().get_cell({20, 10}).has_food());
+        ASSERT_EQ(w->carried_food, 1);
+
+        // Ant has joined base queue and is routing back to base at (5, 5)
+        ASSERT_TRUE(sim.is_ant_in_base_queue(worker));
+    } TEST_END();
+
+    TEST_CASE("12.64 Diagonal Melee Attack Pushes Cardinal Away from Attacker") {
+        SimulationEngine sim;
+        sim.init_test_world(60, 60, 100, 60000);
+
+        uint32_t attacker = sim.spawn_unit(0, AntType::Worker, TileCoord{10, 10});
+        uint32_t defender = sim.spawn_unit(1, AntType::Worker, TileCoord{11, 11});
+
+        auto* def = const_cast<AntUnit*>(&sim.get_unit(defender));
+        def->facing = Direction::South;
+
+        sim.execute_melee_attack(attacker, defender);
+
+        // Defender was forced to face towards attacker at (10, 10) (North-West)
+        ASSERT_EQ(def->facing, Direction::NorthWest);
+
+        // Pushback MUST be strictly cardinal (either East to (12, 11) or South to (11, 12)), never diagonal (12, 12)
+        ASSERT_FALSE(def->pos.x == 12 && def->pos.y == 12);
+        bool is_cardinal_push = (def->pos == TileCoord{12, 11} || def->pos == TileCoord{11, 12});
+        ASSERT_TRUE(is_cardinal_push);
+    } TEST_END();
+
+    TEST_CASE("12.65 Melee Attack Pushback Deflects Sideways When Obstructed by Rock Wall") {
+        SimulationEngine sim;
+        sim.init_test_world(60, 60, 100, 60000);
+
+        // Attacker at (10, 10), defender at (11, 10)
+        uint32_t attacker = sim.spawn_unit(0, AntType::Worker, TileCoord{10, 10});
+        uint32_t defender = sim.spawn_unit(1, AntType::Worker, TileCoord{11, 10});
+
+        // Place solid obstacle at primary push destination (12, 10)
+        sim.grid_mut().set_terrain(12, 10, TERRAIN_OBSTACLE);
+
+        sim.execute_melee_attack(attacker, defender);
+
+        const auto& def = sim.get_unit(defender);
+        // Victim forced to face attacker (West)
+        ASSERT_EQ(def.facing, Direction::West);
+
+        // Because primary East (12, 10) is obstructed by wall, victim deflected sideways (North or South)
+        bool deflected_sideways = (def.pos == TileCoord{11, 9} || def.pos == TileCoord{11, 11});
+        ASSERT_TRUE(deflected_sideways);
     } TEST_END();
 }
 

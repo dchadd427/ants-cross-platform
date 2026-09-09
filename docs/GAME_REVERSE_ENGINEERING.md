@@ -507,8 +507,15 @@ All ant classes share a unified, symmetrical combat and ballistic physical react
   - In `Original-Ants/Ants.exe`, issuing an attack command causes the ant to approach the enemy and execute **one single attack strike**.
   - Upon connecting, the attacker clears its target ID (`attack_target_id = 0`), completes its attack recovery frames, and transitions to `UnitState::Idle` (or `GuardIdle` for Combat Ant), standing still rather than automatically pursuing or continuously looping strikes.
   - **Attack Cooldown Invariant:** The ant enforces its attack cooldown (10 ticks for standard ants, 12 ticks for Combat Ant) before any subsequent strike can be executed.
-- **Pushback Facing Direction Preservation:**
-  - When an ant is pushed back 1 tile by a standard attack, it **preserves its current facing direction**. It is not reoriented to face the pushback displacement vector.
+- **Combat Facing & Cardinal Pushback Mechanics:**
+  - **Victim Facing Orientation:** When an ant is attacked by an enemy ant, it is immediately forced to orient its facing direction toward the attacking ant (`target->facing = vector_to_direction(attacker->pos - target->pos)`).
+  - **Cardinal Pushback Priority:** Standard melee attacks push the victim 1 tile strictly in a cardinal direction (North, South, East, West) away from the attacker. Diagonal pushes do not occur unless cardinal paths are obstructed.
+  - **Obstacle Sideways Deflection:** If the primary cardinal push destination is blocked by an obstacle (solid rock or map boundary), the victim is deflected sideways (along the perpendicular cardinal axis) rather than being pinned.
+  - **Diagonal Attack Resolution:** When an attack occurs from a diagonal adjacency, the engine resolves pushback along an available cardinal axis away from the attacker rather than a diagonal vector. If both cardinal paths are blocked by an obstacle corner, the ant deflects along the diagonal.
+
+- **Food Harvesting & Base Return Invariants:**
+  - **Adjacent Movement Isolation:** Walking on or resting on tiles adjacent to food morsels does NOT trigger food harvesting. Ants only harvest food when explicitly commanded to target/eat that food, or when positioned directly on the food cell.
+  - **Carrying Food Deposit Reroute:** If an ant that is already carrying food is instructed to eat food again, it paths all the way across the map to the target food first. Upon arriving at the food, it detects that it already carries food (without taking a second bite or modifying food tile state) and automatically paths back to its anthill base to deposit.
 
 | Reaction State | Action Code | Key CHD Anims | Frame Characteristics | Sound Triggers | Physical Effect |
 |---|---|---|---|---|---|
