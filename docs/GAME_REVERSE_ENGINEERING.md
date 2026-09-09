@@ -771,6 +771,53 @@ Reverse engineering of `ants.chd` animation tables (Table 4) and HUD state handl
   - Clicking Pedestal 1 (`team_up_button_` at `(488, 140, 53, 86)`) sends an alliance proposal to the enemy team (`SoundID::AlliancePro`).
   - Once allied, clicking Pedestal 1 dissolves the alliance (`SoundID::AllianceBreak`).
 
+### 5.16 Authentic Team HUD Palettes, Frame Remapping & Score Background Geometry
+
+Reverse engineering of `Original-Ants/Ants.exe` revealed the authentic 1:1 mechanics for team-specific HUD chrome tinting, score box backgrounds, and player name label placement:
+
+#### 1. HUD Palette Remap Function (`0x100EA70`..`0x100EAF0`)
+When a match begins or player team is switched, `Ants.exe` updates the primary 8-bit palette via DirectDraw `SetEntries(dwFlags=0, dwBase=1, dwNumEntries=31, lpEntries)`:
+- Original binary team mapping:
+  - Team 0 (Black, Remake Team 3): Table at `0x1002260`
+  - Team 1 (Blue, Remake Team 2):  Table at `0x10022E0`
+  - Team 2 (Red, Remake Team 1):   Table at `0x1002360`
+  - Team 3 (Green, Remake Team 0): Table at `0x10023E0`
+- The function loops `cx` from 1 to 31 (`0x1F`), writing 31 4-byte `PALETTEENTRY` values (`peRed`, `peGreen`, `peBlue`, `peFlags=0`) into palette indices 1..31.
+- All HUD chrome frame sprites (`x0y0`, `x0y22`, `x458y35`, `x17y461`, `x480y126`, `x480y266`, `x480y400`, `x480y466`, `wstatus`, `wchat`, `wtype`, buttons) index into palette range 1..31 for their metallic bevels and borders.
+- The right sidebar backing fill uses table index 10 (1-based index 11):
+  - Green: `{ 43, 104,  95 }`
+  - Red:   `{ 143,  35,  99 }`
+  - Blue:  `{  51,  87, 163 }`
+  - Black: `{  87,  87,  91 }`
+
+#### 2. Team Score Box Background Colors (`0x100DA90`..`0x100DAD0`)
+Score boxes are NOT filled with bright ant unit colors; instead, `Ants.exe` specifies dedicated team score background `COLORREF` values:
+```assembly
+0x100daa7: sub edx, edi
+0x100daa9: je  0x100dacb ; Team 0 (Black): COLORREF 0x003B2727 -> RGB { 39,  39,  59 }
+0x100daab: dec edx
+0x100daac: je  0x100dac4 ; Team 1 (Blue):  COLORREF 0x006B272B -> RGB { 43,  39, 107 }
+0x100daae: dec edx
+0x100daaf: je  0x100dabf ; Team 2 (Red):   COLORREF 0x00000077 -> RGB { 119,  0,   0 }
+0x100dab1: dec edx
+0x100dab2: je  0x100dab8 ; Team 3 (Green): COLORREF 0x002F4307 -> RGB {  7,  67,  47 }
+```
+
+#### 3. Score Box & Player Label Geometry (`0x10021B8`..`0x1002230`, `0x100E1F0`..`0x100E2C0`)
+`Ants.exe` stores 32-byte descriptor blocks containing two `RECT` structures for each player's score presentation:
+- **Local Player (Top Bar)** at `0x1002218`:
+  - Label Rect: `[left=312, right=399, top=4, bottom=17]`
+  - Score Rect: `[left=402, right=455, top=4, bottom=17]` (54x14 box)
+- **Other Players (Bottom News Banner)** at `0x10021B8 + i*32`:
+  - Slot 0: Label `[5..101, 464..477]`, Score `[105..158, 464..477]` (54x14 box)
+  - Slot 1: Label `[163..251, 464..477]`, Score `[254..307, 464..477]` (54x14 box)
+  - Slot 2: Label `[312..399, 464..477]`, Score `[402..455, 464..477]` (54x14 box)
+- **Label Text Rendering (`0x100E231`..`0x100E2AE`):**
+  - Truncates player name to 15 characters (`push 0xF; call strncpy`).
+  - Appends `":"` (`push 0x1047210; call strcat`).
+  - Renders right-aligned within label bounds in solid white (`0xFFFFFF`, font height 14px).
+  - Score values are rendered right-justified inside the score boxes.
+
 ---
 
 ## 6. Target Multi-Platform Architecture

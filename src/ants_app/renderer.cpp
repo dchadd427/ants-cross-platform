@@ -223,32 +223,53 @@ SDL_Texture* TextureCache::get_sprite_texture(uint32_t sprite_id, bool mirrored,
                               : archive_.get_sprite(eff_sprite_id);
     if (sp.width == 0 || sp.height == 0) return nullptr;
 
-// Authentic Ants HUD palette remap for indices 1..24 (Bevels, Frames, Buttons)
-static const ants::assets::ColorRGBA TEAM_BLACK_HUD[24] = {
-    {195, 192, 201, 255}, {170, 167, 177, 255}, {146, 144, 153, 255}, {111, 110, 117, 255},
-    {111, 106, 118, 255}, {107,  99, 117, 255}, {101,  97, 111, 255}, { 99,  99, 110, 255},
-    { 93,  89, 101, 255}, { 91,  88,  96, 255}, { 85,  81,  86, 255}, { 95,  87,  79, 255},
-    { 88,  85,  96, 255}, { 94,  91, 101, 255}, { 79,  77,  90, 255}, {115, 110, 120, 255},
-    { 90,  84,  98, 255}, { 58,  57,  66, 255}, {102, 100, 110, 255}, { 51,  44,  58, 255},
-    { 54,  48,  61, 255}, { 45,  39,  53, 255}, { 54,  50,  61, 255}, { 84,  81,  90, 255}
+// Authentic Ants HUD palette tables from Ants.exe (31 entries for indices 1..31, VA 0x100EA70)
+// Team 0 (Green in remake, Team 3 in Ants.exe VA 0x10023E0)
+static const ants::assets::ColorRGBA AUTHENTIC_GREEN_HUD[31] = {
+    {251, 251, 255, 255}, {191, 239, 227, 255}, {115, 191, 155, 255}, { 59, 151, 111, 255},
+    { 51, 143, 103, 255}, { 39, 135,  95, 255}, { 31, 127,  87, 255}, { 23, 119,  79, 255},
+    { 23, 115,  79, 255}, { 43, 107,  79, 255}, { 43, 104,  95, 255}, { 43,  99,  97, 255},
+    { 19,  99,  75, 255}, { 47, 107,  75, 255}, { 43,  95,  67, 255}, { 43,  87,  63, 255},
+    { 23,  83,  63, 255}, { 27,  75,  63, 255}, { 19,  71,  47, 255}, { 27,  67,  43, 255},
+    { 23,  59,  39, 255}, { 19,  55,  47, 255}, { 19,  43,  27, 255}, { 11,  19,   7, 255},
+    {  0,   0,   0, 255}, {243, 219,  55, 255}, {211, 183,   0, 255}, {183, 155,   0, 255},
+    {151, 119,   0, 255}, {119,  87,   7, 255}, { 71,  63,   7, 255}
 };
 
-static const ants::assets::ColorRGBA TEAM_BLUE_HUD[24] = {
-    {239, 243, 255, 255}, {195, 195, 231, 255}, {147, 147, 199, 255}, { 75,  75, 135, 255},
-    { 75,  75, 135, 255}, { 71,  79, 115, 255}, { 47,  47, 103, 255}, { 51,  59,  99, 255},
-    { 51,  59,  99, 255}, { 47,  47, 103, 255}, { 47,  47, 103, 255}, { 47,  47, 103, 255},
-    { 35,  39,  79, 255}, { 47,  47, 103, 255}, { 51,  59,  99, 255}, { 35,  39,  79, 255},
-    { 39,  43,  83, 255}, { 39,  43,  83, 255}, { 35,  35,  71, 255}, { 35,  35,  71, 255},
-    { 31,  31,  59, 255}, { 31,  31,  59, 255}, { 15,  19,  35, 255}, { 15,  19,  35, 255}
+// Team 1 (Red in remake, Team 2 in Ants.exe VA 0x1002360)
+static const ants::assets::ColorRGBA AUTHENTIC_RED_HUD[31] = {
+    {251, 251, 255, 255}, {247, 175, 239, 255}, {227, 111, 163, 255}, {211,  83, 139, 255},
+    {195,  67, 115, 255}, {195,  39, 123, 255}, {171,  63, 111, 255}, {171,  35, 119, 255},
+    {175,  31, 115, 255}, {163,  31, 103, 255}, {143,  35,  99, 255}, {147,  35,  83, 255},
+    {139,  35,  75, 255}, {131,  35,  71, 255}, {111,  43,  75, 255}, {107,  39,  71, 255},
+    {107,  35,  55, 255}, { 87,  39,  67, 255}, { 87,  31,  47, 255}, { 67,  43,  43, 255},
+    { 71,  27,  39, 255}, { 63,  27,  35, 255}, { 39,  15,  23, 255}, { 19,   7,  11, 255},
+    {  0,   0,   0, 255}, {243, 219,  55, 255}, { 21, 183,   0, 255}, {183, 155,   0, 255},
+    {151, 119,   0, 255}, {119,  87,   7, 255}, { 71,  63,   7, 255}
 };
 
-static const ants::assets::ColorRGBA TEAM_RED_HUD[24] = {
-    {231, 159, 200, 255}, {215, 140, 181, 255}, {206, 119, 165, 255}, {166,  82, 121, 255},
-    {188,  67, 124, 255}, {182,  55, 116, 255}, {171,  61, 113, 255}, {164,  48, 108, 255},
-    {158,  44, 100, 255}, {153,  46,  98, 255}, {136,  41,  90, 255}, {146,  45,  90, 255},
-    {142,  43,  89, 255}, {156,  54, 101, 255}, {141,  35,  92, 255}, {150,  85, 121, 255},
-    {130,  44,  83, 255}, {116,  26,  65, 255}, {170,  74, 123, 255}, { 75,  37,  49, 255},
-    { 82,  37,  55, 255}, { 75,  27,  44, 255}, { 98,  31,  59, 255}, {132,  61,  98, 255}
+// Team 2 (Blue in remake, Team 1 in Ants.exe VA 0x10022E0)
+static const ants::assets::ColorRGBA AUTHENTIC_BLUE_HUD[31] = {
+    {251, 251, 255, 255}, {179, 191, 235, 255}, {115, 121, 219, 255}, { 79, 135, 199, 255},
+    { 75, 123, 183, 255}, { 79, 115, 175, 255}, { 63, 103, 179, 255}, { 75, 103, 159, 255},
+    { 55,  95, 171, 255}, { 47,  99, 163, 255}, { 51,  87, 163, 255}, { 47,  91, 155, 255},
+    { 43,  95, 143, 255}, { 39,  91, 139, 255}, { 47,  71, 147, 255}, { 43,  67, 123, 255},
+    { 39,  55, 107, 255}, { 31,  55,  87, 255}, { 31,  39,  79, 255}, { 27,  35,  71, 255},
+    { 19,  39,  59, 255}, { 23,  27,  55, 255}, { 15,  15,  35, 255}, {  7,   7,  15, 255},
+    {  0,   0,   0, 255}, {243, 219,  55, 255}, { 21, 183,   0, 255}, {183, 155,   0, 255},
+    {151, 119,   0, 255}, {119,  87,   7, 255}, { 71,  63,   7, 255}
+};
+
+// Team 3 (Black in remake, Team 0 in Ants.exe VA 0x1002260)
+static const ants::assets::ColorRGBA AUTHENTIC_BLACK_HUD[31] = {
+    {251, 251, 255, 255}, {195, 191, 199, 255}, {146, 135, 147, 255}, {119, 127, 131, 255},
+    {111, 107, 115, 255}, {115,  91, 119, 255}, {103,  91, 111, 255}, { 91,  95, 107, 255},
+    { 99,  87, 103, 255}, { 91,  87,  99, 255}, { 87,  87,  91, 255}, { 79,  87,  87, 255},
+    { 83,  79,  87, 255}, { 83,  67,  83, 255}, { 79,  63,  83, 255}, { 67,  55,  83, 255},
+    { 63,  63,  67, 255}, { 67,  51,  71, 255}, { 59,  39,  67, 255}, { 59,  31,  63, 255},
+    { 51,  35,  55, 255}, { 47,  31,  51, 255}, { 31,  19,  31, 255}, { 15,   7,  15, 255},
+    {  0,   0,   0, 255}, {243, 219,  55, 255}, { 21, 183,   0, 255}, {183, 155,   0, 255},
+    {151, 119,   0, 255}, {119,  87,   7, 255}, { 71,  63,   7, 255}
 };
 
     // Convert 8-bit paletted sprite to 32-bit RGBA
@@ -273,17 +294,15 @@ static const ants::assets::ColorRGBA TEAM_RED_HUD[24] = {
         }
     }
 
-    // Authentic HUD palette tinting for indices 1..24:
-    // Team 0 (Green): Default green HUD from ants.chd (no tint remap needed)
-    // Team 1 (Red):   TEAM_RED_HUD
-    // Team 2 (Blue):  TEAM_BLUE_HUD
-    // Team 3 (Black): TEAM_BLACK_HUD
-    if (team_id == 1) {
-        for (size_t i = 1; i <= 24; ++i) pal[i] = TEAM_RED_HUD[i - 1];
+    // Authentic HUD palette remap for indices 1..31 (Ants.exe 0x100EA70):
+    if (team_id == 0) {
+        for (size_t i = 1; i <= 31; ++i) pal[i] = AUTHENTIC_GREEN_HUD[i - 1];
+    } else if (team_id == 1) {
+        for (size_t i = 1; i <= 31; ++i) pal[i] = AUTHENTIC_RED_HUD[i - 1];
     } else if (team_id == 2) {
-        for (size_t i = 1; i <= 24; ++i) pal[i] = TEAM_BLUE_HUD[i - 1];
+        for (size_t i = 1; i <= 31; ++i) pal[i] = AUTHENTIC_BLUE_HUD[i - 1];
     } else if (team_id == 3) {
-        for (size_t i = 1; i <= 24; ++i) pal[i] = TEAM_BLACK_HUD[i - 1];
+        for (size_t i = 1; i <= 31; ++i) pal[i] = AUTHENTIC_BLACK_HUD[i - 1];
     }
 
     std::vector<uint8_t> rgba = sp.to_rgba32(pal);
@@ -1601,12 +1620,12 @@ void Renderer::render_minimap(const ants::sim::WorldState& world,
 void Renderer::render_hud_chrome(const ants::sim::WorldState&, int32_t) {
     if (!renderer_) return;
 
-    // Right panel base backing fill to ensure zero dark gaps between modular HUD tiles
+    // Right panel base backing fill to ensure zero dark gaps between modular HUD tiles (Authentic index 10)
     static const SDL_Color hud_bg_colors[4] = {
-        {43, 107, 95, 255},  // Green (Player 0)
-        {115, 35, 35, 255},  // Red (Player 1)
-        {35, 65, 115, 255},  // Blue (Player 2)
-        {48, 48, 52, 255}    // Black (Player 3)
+        { 43, 104,  95, 255},  // Green (Player 0) - Authentic index 10
+        {143,  35,  99, 255},  // Red   (Player 1) - Authentic index 10
+        { 51,  87, 163, 255},  // Blue  (Player 2) - Authentic index 10
+        { 87,  87,  91, 255}   // Black (Player 3) - Authentic index 10
     };
     const auto& bg_col = hud_bg_colors[hud_team_id_ % 4];
     SDL_SetRenderDrawColor(renderer_, bg_col.r, bg_col.g, bg_col.b, bg_col.a);

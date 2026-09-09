@@ -303,6 +303,81 @@ void run_suite_3_hud_and_radar() {
         ASSERT_EQ(sim.get_player_score(0), 150);
         ASSERT_EQ(sim.get_player_eggs(0), 4u);
     } TEST_END();
+
+    TEST_CASE("3.5 Authentic Team HUD Palettes & Score Background Colors") {
+        // Ground-truth COLORREF values from Ants.exe VA 0x100DA90..0x100DAD0
+        // COLORREF 0x00bbggrr -> RGBA
+        constexpr ColorRGBA SCORE_BG[4] = {
+            {  7,  67,  47, 255}, // Team 0 (Green): COLORREF 0x002F4307
+            {119,   0,   0, 255}, // Team 1 (Red):   COLORREF 0x00000077
+            { 43,  39, 107, 255}, // Team 2 (Blue):  COLORREF 0x006B272B
+            { 39,  39,  59, 255}  // Team 3 (Black): COLORREF 0x003B2727
+        };
+
+        ASSERT_EQ(SCORE_BG[0].r, 7);
+        ASSERT_EQ(SCORE_BG[0].g, 67);
+        ASSERT_EQ(SCORE_BG[0].b, 47);
+
+        ASSERT_EQ(SCORE_BG[1].r, 119);
+        ASSERT_EQ(SCORE_BG[1].g, 0);
+        ASSERT_EQ(SCORE_BG[1].b, 0);
+
+        ASSERT_EQ(SCORE_BG[2].r, 43);
+        ASSERT_EQ(SCORE_BG[2].g, 39);
+        ASSERT_EQ(SCORE_BG[2].b, 107);
+
+        ASSERT_EQ(SCORE_BG[3].r, 39);
+        ASSERT_EQ(SCORE_BG[3].g, 39);
+        ASSERT_EQ(SCORE_BG[3].b, 59);
+
+        // Sidebar backing fill colors (Authentic Index 10 from Ants.exe VA 0x100EA70 tables)
+        constexpr ColorRGBA SIDEBAR_BG[4] = {
+            { 43, 104,  95, 255}, // Team 0 (Green)
+            {143,  35,  99, 255}, // Team 1 (Red)
+            { 51,  87, 163, 255}, // Team 2 (Blue)
+            { 87,  87,  91, 255}  // Team 3 (Black)
+        };
+
+        ASSERT_EQ(SIDEBAR_BG[0].r, 43);
+        ASSERT_EQ(SIDEBAR_BG[0].g, 104);
+        ASSERT_EQ(SIDEBAR_BG[0].b, 95);
+
+        ASSERT_EQ(SIDEBAR_BG[1].r, 143);
+        ASSERT_EQ(SIDEBAR_BG[1].g, 35);
+        ASSERT_EQ(SIDEBAR_BG[1].b, 99);
+
+        ASSERT_EQ(SIDEBAR_BG[2].r, 51);
+        ASSERT_EQ(SIDEBAR_BG[2].g, 87);
+        ASSERT_EQ(SIDEBAR_BG[2].b, 163);
+
+        ASSERT_EQ(SIDEBAR_BG[3].r, 87);
+        ASSERT_EQ(SIDEBAR_BG[3].g, 87);
+        ASSERT_EQ(SIDEBAR_BG[3].b, 91);
+
+        // Score slot rects from Ants.exe VA 0x10021B8..0x1002230
+        struct SlotRect {
+            int32_t label_left, label_right;
+            int32_t box_left, box_right;
+            int32_t top, bottom;
+        };
+
+        SlotRect top_slot = { 312, 399, 402, 455, 4, 17 };
+        ASSERT_EQ(top_slot.box_right - top_slot.box_left + 1, 54);
+        ASSERT_EQ(top_slot.bottom - top_slot.top + 1, 14);
+        ASSERT_EQ(top_slot.box_left - top_slot.label_right, 3);
+
+        SlotRect bot_slots[3] = {
+            {   5, 101, 105, 158, 464, 477 },
+            { 163, 251, 254, 307, 464, 477 },
+            { 312, 399, 402, 455, 464, 477 }
+        };
+
+        for (int i = 0; i < 3; ++i) {
+            ASSERT_EQ(bot_slots[i].box_right - bot_slots[i].box_left + 1, 54);
+            ASSERT_EQ(bot_slots[i].bottom - bot_slots[i].top + 1, 14);
+            ASSERT_GE(bot_slots[i].box_left, bot_slots[i].label_right);
+        }
+    } TEST_END();
 }
 
 // ============================================================================
