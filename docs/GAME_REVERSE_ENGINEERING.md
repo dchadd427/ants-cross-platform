@@ -981,6 +981,28 @@ The authentic match clock routine at `0x1024839` evaluates remaining match milli
 
 ---
 
+### 5.27 Authentic Map Duration & LVL Binary Header Duration
+
+- **LVL Header Duration Field:** Disassembly of the map loader reveals that level files store their authentic default match duration in minutes directly in the binary header at offset `0x10` (`level.default_minutes`).
+- **Standard Map Durations:**
+  - `TINY.LVL`: 6 minutes
+  - `SMALL.LVL`: 8 minutes
+  - `MEDIUM.LVL`: 10 minutes
+  - `GAUNTLET.LVL`: 10 minutes
+  - `ISLANDS.LVL`: 12 minutes
+  - `TREASURE.LVL`: 12 minutes
+- **Engine Initialization:** `SimulationEngine::init` and `MapSelectScreen::init` dynamically initialize remaining match time from `level.default_minutes * 60 * 1000` ms, avoiding a hardcoded 12-minute default.
+
+---
+
+### 5.28 8-Connected Pathfinding, Diagonal Corner Traversability & Intermediate Food Obstacles
+
+- **8-Connected Grid (`0x1019c31`, `0x1020951`):** In `Ants.exe`, neighbor generation evaluates all 8 directions without artificial orthogonal corner-cutting blocking. Diagonal steps scale cost by $\sqrt{2} \approx 1.414$ (`fmul qword ptr [0x10049e0]`). This allows units to navigate intentional diagonal chokepoints placed by level designers (such as the 4 corner gaps accessing the central food collection on `TINY.LVL`).
+- **Intermediate Food Obstacle Rule (`0x101f955`):** During normal movement orders, cells containing food Layer 2 items (`[esi + 0x18] & 4`) are impassable obstacles (`jne 0x101fc16`) unless the unit order is Harvesting (`[ebx + 0xa8] == 5`) targeted directly at that item (`[ebx + 0xb0] == [esi + 0x38]`). This prevents units from trampling over food.
+- **Harvest Command Dispatcher (`0x1020818`, `0x10217f8`):** Food harvesting is only triggered when explicitly ordered (left/right click on food morsels) or when an idle unit is assigned a food task. Moving units traversing adjacent or crossing ground tiles do not cancel their move order or auto-harvest intermediate food.
+
+---
+
 ## 6. Target Multi-Platform Architecture
 
 To achieve clean, modern, high-performance execution across macOS, Linux, Windows, and the Web (WebAssembly):

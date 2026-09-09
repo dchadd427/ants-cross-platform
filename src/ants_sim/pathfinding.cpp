@@ -170,6 +170,10 @@ std::vector<TileCoord> PathFinder::find_path(
             if (!grid.get_cell(neighbor).is_passable(is_swimmer, is_fire_ant)) continue;
             if (is_hard_obstacle(neighbor)) continue;
 
+            // Authentic Ants.exe behavior (0x101f955): intermediate food items act as obstacles
+            // for units on normal movement orders, preventing ants from trampling over food.
+            if (neighbor != goal && grid.get_cell(neighbor).has_food()) continue;
+
             // Avoid dynamic obstacles (e.g. enemy units) unless destination itself
             if (neighbor != goal && !obstacles.empty()) {
                 bool is_obs = false;
@@ -182,19 +186,9 @@ std::vector<TileCoord> PathFinder::find_path(
                 if (is_obs) continue;
             }
 
-            // Diagonal corner-cutting check: only block if BOTH orthogonal sides are solid obstacles
-            if (dir_dx[i] != 0 && dir_dy[i] != 0) {
-                TileCoord ortho1{current.pos.x + dir_dx[i], current.pos.y};
-                TileCoord ortho2{current.pos.x, current.pos.y + dir_dy[i]};
-                auto is_solid_corner = [&](TileCoord c) {
-                    if (!grid.in_bounds(c)) return true;
-                    const auto& cell = grid.get_cell(c);
-                    return cell.terrain_type == TERRAIN_OBSTACLE || cell.is_obstacle_overlay;
-                };
-                if (is_solid_corner(ortho1) && is_solid_corner(ortho2)) {
-                    continue;
-                }
-            }
+            // Authentic Ants.exe 8-connected grid: Ants.exe (0x1019c31, 0x1019a66, 0x1020951)
+            // allows diagonal traversal without orthogonal corner blocking, enabling units to
+            // navigate through intentional diagonal chokepoints (e.g. the 4 corner gaps on TINY map).
 
             size_t n_idx = coord_to_idx(neighbor);
             int32_t step_cost = dir_cost[i];
