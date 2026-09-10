@@ -157,12 +157,6 @@ bool ViewportCamera::screen_to_world(int32_t sx, int32_t sy, int32_t& wx, int32_
     return true;
 }
 
-bool ViewportCamera::is_tile_visible(int32_t tx, int32_t ty) const noexcept {
-    int32_t px = tx * TILE_SIZE;
-    int32_t py = ty * TILE_SIZE;
-    return (px + TILE_SIZE >= static_cast<int32_t>(x) && px <= static_cast<int32_t>(x) + PLAYFIELD_W &&
-            py + TILE_SIZE >= static_cast<int32_t>(y) && py <= static_cast<int32_t>(y) + PLAYFIELD_H);
-}
 
 // ============================================================================
 // TextureCache Implementation
@@ -1564,13 +1558,7 @@ void Renderer::draw_single_ant(const ants::sim::AntSnapshot& ant, bool is_select
         const auto* seq = archive_->get_directional_animation(prefix + action, dir);
         if (seq && !seq->subitems.empty()) {
             size_t sub_idx = 0;
-            if (action == "gf") {
-                // Ballistic flight lasts 10 ticks; map tick to animation sequence frames
-                sub_idx = (ant.anim_frame * seq->subitems.size()) / 10;
-                if (sub_idx >= seq->subitems.size()) {
-                    sub_idx = seq->subitems.size() - 1;
-                }
-            } else if (action == "gb") {
+            if (action == "gb") {
                 // Ballistic knockback / bounce lasts 10-12 ticks; map across sequence frames
                 uint16_t total_ticks = (ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::Knockback)) ? 12 : 10;
                 sub_idx = (ant.anim_frame * seq->subitems.size()) / total_ticks;
@@ -1942,138 +1930,6 @@ void Renderer::render_tile_grid(const ants::sim::Grid& grid, int32_t mouse_x, in
     draw_text(badge_text, badge_x + 6, badge_y + 4, ants::assets::ColorRGBA{255, 255, 255, 255});
 }
 
-void Renderer::render_minimap(const ants::sim::WorldState& world,
-                              const ants::sim::Grid& grid) {
-    if (!renderer_ || map_width_ == 0 || map_height_ == 0) return;
-
-    float sx_scale = static_cast<float>(MINIMAP_W) / static_cast<float>(map_width_);
-    float sy_scale = static_cast<float>(MINIMAP_H) / static_cast<float>(map_height_);
-
-    // 1. Terrain Pass (Sampled)
-    for (uint32_t y = 0; y < map_height_; y += 2) {
-        for (uint32_t x = 0; x < map_width_; x += 2) {
-            const auto& cell = grid.get_cell(x, y);
-            if (cell.terrain_type == ants::sim::TERRAIN_WATER) {
-                SDL_SetRenderDrawColor(renderer_, 45, 90, 220, 255);
-            } else if (cell.terrain_type == ants::sim::TERRAIN_OBSTACLE || cell.is_obstacle_overlay) {
-                SDL_SetRenderDrawColor(renderer_, 47, 81, 48, 255);
-            } else if (cell.is_mud) {
-                SDL_SetRenderDrawColor(renderer_, 75, 55, 45, 255);
-            } else {
-                SDL_SetRenderDrawColor(renderer_, 155, 115, 108, 255);
-            }
-            SDL_Rect dot = {
-                MINIMAP_X + static_cast<int>(x * sx_scale),
-                MINIMAP_Y + static_cast<int>(y * sy_scale),
-                std::max(1, static_cast<int>(sx_scale * 2.0f)),
-                std::max(1, static_cast<int>(sy_scale * 2.0f))
-            };
-            SDL_RenderFillRect(renderer_, &dot);
-        }
-    }
-
-    // 2. Anthills (Bases)
-    for (const auto& hill : grid.anthills()) {
-        static const SDL_Color base_colors[4] = {
-            { 79, 87, 111, 255 },  // Team 0: Black
-            { 119, 175, 239, 255 }, // Team 1: Blue
-            { 251, 51, 91, 255 },   // Team 2: Red
-            { 83, 147, 43, 255 }    // Team 3: Green
-        };
-        const auto& c = base_colors[hill.team_id % 4];
-        SDL_SetRenderDrawColor(renderer_, c.r, c.g, c.b, c.a);
-        SDL_Rect bdot = {
-            MINIMAP_X + static_cast<int>(hill.x * sx_scale) - 2,
-            MINIMAP_Y + static_cast<int>(hill.y * sy_scale) - 2,
-            5, 5
-        };
-        SDL_RenderFillRect(renderer_, &bdot);
-    }
-
-    // 3. Units Pass
-    for (const auto& a : world.ants) {
-        if (a.is_underground || a.is_in_scuffle) continue;
-        static const SDL_Color unit_colors[4] = {
-            { 90, 240, 90, 255 },   // 0: Green
-            { 255, 70, 70, 255 },   // 1: Red
-            { 120, 180, 255, 255 }, // 2: Blue
-            { 200, 200, 220, 255 }  // 3: Black
-        };
-        const auto& c = unit_colors[a.player_id % 4];
-        SDL_SetRenderDrawColor(renderer_, c.r, c.g, c.b, c.a);
-        SDL_Rect udot = {
-            MINIMAP_X + static_cast<int>((a.px / 32) * sx_scale),
-            MINIMAP_Y + static_cast<int>((a.py / 32) * sy_scale),
-            2, 2
-        };
-        SDL_RenderFillRect(renderer_, &udot);
-    }
-
-    // 4. Viewport Wireframe Box
-    float map_w_px = static_cast<float>(map_width_ * TILE_SIZE);
-    float map_h_px = static_cast<float>(map_height_ * TILE_SIZE);
-    if (map_w_px > 0.0f && map_h_px > 0.0f) {
-        SDL_Rect cam_box = {
-            MINIMAP_X + static_cast<int>((camera_.x / map_w_px) * MINIMAP_W),
-            MINIMAP_Y + static_cast<int>((camera_.y / map_h_px) * MINIMAP_H),
-            std::max(4, static_cast<int>((PLAYFIELD_W / map_w_px) * MINIMAP_W)),
-            std::max(4, static_cast<int>((PLAYFIELD_H / map_h_px) * MINIMAP_H))
-        };
-        SDL_SetRenderDrawColor(renderer_, 255, 255, 255, 255);
-        SDL_RenderDrawRect(renderer_, &cam_box);
-    }
-}
-
-void Renderer::render_hud_chrome(const ants::sim::WorldState&, int32_t) {
-    if (!renderer_) return;
-
-    // Right panel base backing fill to ensure zero dark gaps between modular HUD tiles (Authentic index 10)
-    static const SDL_Color hud_bg_colors[4] = {
-        { 43, 104,  95, 255},  // Green (Player 0) - Authentic index 10
-        {143,  35,  99, 255},  // Red   (Player 1) - Authentic index 10
-        { 51,  87, 163, 255},  // Blue  (Player 2) - Authentic index 10
-        { 87,  87,  91, 255}   // Black (Player 3) - Authentic index 10
-    };
-    const auto& bg_col = hud_bg_colors[hud_team_id_ % 4];
-    SDL_SetRenderDrawColor(renderer_, bg_col.r, bg_col.g, bg_col.b, bg_col.a);
-    SDL_Rect right_bg = { 480, 22, 160, 458 };
-    SDL_RenderFillRect(renderer_, &right_bg);
-
-    // Top Bar (640x22)
-    SDL_Texture* top_tex = texture_cache_->get_named_sprite_texture("x0y0.bmp", false, hud_team_id_);
-    if (top_tex) {
-        SDL_Rect top_rect = { 0, 0, 640, 22 };
-        SDL_RenderCopy(renderer_, top_tex, nullptr, &top_rect);
-    }
-
-    // Left Border (17x458)
-    SDL_Texture* left_tex = texture_cache_->get_named_sprite_texture("x0y22.bmp", false, hud_team_id_);
-    if (left_tex) {
-        SDL_Rect left_rect = { 0, 22, 17, 458 };
-        SDL_RenderCopy(renderer_, left_tex, nullptr, &left_rect);
-    }
-
-    // Right Divider (22x426)
-    SDL_Texture* div_tex = texture_cache_->get_named_sprite_texture("x458y35.bmp", false, hud_team_id_);
-    if (div_tex) {
-        SDL_Rect div_rect = { 458, 35, 22, 426 };
-        SDL_RenderCopy(renderer_, div_tex, nullptr, &div_rect);
-    }
-
-    // Bottom News Banner (623x19)
-    SDL_Texture* bot_tex = texture_cache_->get_named_sprite_texture("x17y461.bmp", false, hud_team_id_);
-    if (bot_tex) {
-        SDL_Rect bot_rect = { 17, 461, 623, 19 };
-        SDL_RenderCopy(renderer_, bot_tex, nullptr, &bot_rect);
-    }
-
-    // Selection Card Backing (160x128)
-    SDL_Texture* card_tex = texture_cache_->get_named_sprite_texture("x480y126.bmp", false, hud_team_id_);
-    if (card_tex) {
-        SDL_Rect card_rect = { CARD_X, CARD_Y, CARD_W, CARD_H };
-        SDL_RenderCopy(renderer_, card_tex, nullptr, &card_rect);
-    }
-}
 
 void Renderer::end_frame() {
     if (renderer_) {

@@ -201,6 +201,7 @@ public:
     TileCoord   harvest_origin{-1, -1};
     bool        is_thief_steal{false};
     bool        had_food_at_base_entry{false};
+    bool        completed_base_deposit{false};
     bool        underground_visited{false};
     bool        is_newborn{false};
     OrderType   pending_ability{static_cast<OrderType>(0)};
@@ -289,10 +290,6 @@ public:
         carried_food = 0;
         carried_points = 0;
     }
-
-    std::string get_sprite_prefix() const;
-
-    void set_destination(int32_t target_tx, int32_t target_ty);
     void set_path(std::vector<TileCoord> path);
     void clear_path() noexcept {
         waypoints.clear();

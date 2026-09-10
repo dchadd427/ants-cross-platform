@@ -1319,5 +1319,26 @@ To deliver authentic 1:1 gameplay inside standard web browsers with zero install
 - **Anthill Ingress & Approach Corridor Routing (`0x010202e7`)**:
   - `FUN_010202e7`: Tries to pathfind directly to the anthill entrance hole `(bx + 1, by + 1)`. If obstructed by queued units or obstacles, falls back to the designated approach coordinate at offset `+0x46` `(bx + 2, by - 2)`, followed by concentric Chebyshev ring expansion outward to queue ants cleanly without gridlock.
 
+#### 16. Authentic Special Abilities & Base Queuing Stationarity (`Ants.exe` `0x0101bdd1`, `0x0101ba24`, `0x010202e7`, and `ants.chd` Table 4)
+- **Base Queuing Stationarity Invariant**:
+  - Waiting ants queued along the anthill queue slots `(bx - 1, by + 3 - k)` remain stationary in `UnitState::QueuingBase` facing East toward the mound.
+  - The waiting ant must NEVER advance toward the anthill entrance while the preceding ant is depositing or emerging.
+  - The preceding ant only releases the queue lock and allows the next ant to advance when it has completely finished underground dwell, completed emergence (`anim_subitem >= 16`), and stepped off the entrance hole tile (`pos != hole`).
+- **Bomber Bomb Defusal (`abdb`, 12 Ticks / 1,100ms)**:
+  - Subitem 3: Sound 73 (`bombdrop.wav` / `BombDefuseGrab`) fires as the Bomber grabs the bomb.
+  - Subitem 6: Sound 74 (`bombmuffle.wav` / `BombBodySquash`) fires and the bomb object is removed from the grid.
+  - Subitem 12: Bomber returns to Idle.
+- **Fire Ant Fire Extinguishing (`afxf`, 12 Ticks / 1,200ms)**:
+  - Subitem 4: Sound 69 (`fireextinguish.wav` / `FireExtinguish`) fires and the firewall object is extinguished from the grid.
+  - Subitem 12: Fire Ant returns to Idle.
+- **Thief Ant Base Infiltration (`atcr`, 33 Ticks / 3,510ms)**:
+  - Subitem 19: Sound 58 (`siren.wav` / `BaseAlarmSiren`) + Sound 84 (`steala.wav` / `ThiefDive`) fire, dispatching the in-game alarm news flash to the victim team.
+  - Subitem 26: Sound 85 (`stealb.wav` / `ThiefRummage`) fires as the Thief ransacks the subterranean storehouse.
+  - Subitem 31: Sound 86 (`stealc.wav` / `ThiefEmerge`) fires as the Thief resurfaces with loot.
+  - Subitem 33: Thief collects up to 50 food points into inventory and begins return march to home base.
+- **Worker Ant Food Harvest (`aggf`, 6 Ticks / 420ms)**:
+  - Subitem 4: Sound 77 (`foodgrab.wav` / `FoodGrab`) fires as the worker bites and lifts the food portion.
+
+
 
 
