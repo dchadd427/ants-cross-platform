@@ -144,7 +144,7 @@ public:
     static constexpr int32_t SPEED_AQUATIC_FX  = 209715; // 3.2 px/tick (2.0 tiles/sec)
     static constexpr int32_t DIAG_SCALE_FX     = 46341;  // 1 / sqrt(2) in 16.16
 
-    static constexpr uint16_t FLINCH_TICKS     = 4;
+    static constexpr uint16_t FLINCH_TICKS     = 14;
     static constexpr uint16_t STUN_TICKS       = 12;
 
     // Entity Public State Fields (directly inspectable & testable)
@@ -185,6 +185,13 @@ public:
     bool        is_on_mud{false};
     bool        was_in_water{false};
     bool        in_water{false};
+
+    int32_t     push_start_px{0};
+    int32_t     push_start_py{0};
+    int32_t     push_dest_px{0};
+    int32_t     push_dest_py{0};
+    uint8_t     push_ticks_total{4};
+    uint8_t     push_tick_current{0};
 
     std::vector<TileCoord> waypoints;
     size_t      current_waypoint_idx{0};
@@ -293,9 +300,11 @@ public:
         anim_subitem = 0;
     }
 
-    void start_flinch() noexcept {
+    void start_flinch(uint16_t ticks = FLINCH_TICKS) noexcept {
         state = UnitState::Flinch;
-        state_timer = FLINCH_TICKS;
+        state_timer = ticks;
+        anim_tick = 0;
+        anim_subitem = 0;
     }
 
     void start_stun(uint16_t ticks = STUN_TICKS) noexcept {

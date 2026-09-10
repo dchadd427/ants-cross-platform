@@ -4342,8 +4342,8 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         ASSERT_EQ(def.state, UnitState::Flinch);
         ASSERT_EQ(def.facing, Direction::West); // Victim forced to face attacker West
 
-        // Advance 4 ticks for flinch animation recovery
-        for (int i = 0; i < 4; ++i) {
+        // Advance 14 ticks for authentic flinch animation recovery
+        for (int i = 0; i < 14; ++i) {
             sim.tick();
         }
         ASSERT_EQ(sim.get_unit(defender).state, UnitState::Idle);
@@ -6232,6 +6232,110 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
 
         // After 11 ticks, state returns to Idle
         ASSERT_EQ(unit.state, UnitState::Idle);
+    } TEST_END();
+
+    TEST_CASE("12.100: Attack Approach Strictly Routes to Cardinal Neighbor (No Diagonal Stop)") {
+        SimulationEngine sim;
+        sim.init_test_world(60, 60, 100, 60000);
+
+        uint32_t attacker_id = sim.spawn_unit(0, AntType::Worker, TileCoord{10, 10});
+        uint32_t defender_id = sim.spawn_unit(1, AntType::Worker, TileCoord{11, 11});
+
+        AntOrder atk_order{};
+        atk_order.ant_id = attacker_id;
+        atk_order.type = OrderType::Attack;
+        atk_order.target_entity_id = static_cast<int32_t>(defender_id);
+        sim.issue_order(atk_order);
+
+        // Attacker is diagonal; must NOT attack immediately on tick 0
+        const auto& atk_init = sim.get_unit(attacker_id);
+        ASSERT_NE(atk_init.state, UnitState::Attacking);
+        // Candidate destination must be a cardinal neighbor of (11, 11), e.g. (11, 10) or (10, 11)
+        ASSERT_TRUE((atk_init.final_dest == TileCoord{11, 10} || atk_init.final_dest == TileCoord{10, 11}));
+
+        // Advance simulation until attacker reaches the cardinal tile and strikes
+        bool struck = false;
+        for (int i = 0; i < 20; ++i) {
+            sim.tick();
+            if (sim.get_unit(attacker_id).state == UnitState::Attacking) {
+                struck = true;
+                // Position at time of strike must be strictly cardinally adjacent
+                const auto& atk = sim.get_unit(attacker_id);
+                int32_t m_dist = std::abs(atk.pos.x - 11) + std::abs(atk.pos.y - 11);
+                ASSERT_EQ(m_dist, 1);
+                break;
+            }
+        }
+        ASSERT_TRUE(struck);
+    } TEST_END();
+
+    TEST_CASE("12.101: Complete Attack Animation Playback Across Full Duration (*at*)") {
+        SimulationEngine sim;
+        sim.init_test_world(60, 60, 100, 60000);
+
+        uint32_t attacker_id = sim.spawn_unit(0, AntType::Worker, TileCoord{10, 10});
+        uint32_t defender_id = sim.spawn_unit(1, AntType::Worker, TileCoord{11, 10});
+
+        sim.execute_melee_attack(attacker_id, defender_id);
+
+        const auto& atk = sim.get_unit(attacker_id);
+        ASSERT_EQ(atk.state, UnitState::Attacking);
+        ASSERT_EQ(atk.state_timer, 8); // 8 ticks for standard worker attack (agat301)
+        ASSERT_EQ(atk.anim_subitem, 0);
+
+        // Advance through 8 ticks; verify anim_subitem increments smoothly
+        for (int i = 0; i < 8; ++i) {
+            ASSERT_EQ(sim.get_unit(attacker_id).state, UnitState::Attacking);
+            ASSERT_EQ(sim.get_unit(attacker_id).anim_subitem, static_cast<uint16_t>(i));
+            sim.tick();
+        }
+
+        // After 8 ticks, attack completes and transitions cleanly to Idle
+        ASSERT_EQ(sim.get_unit(attacker_id).state, UnitState::Idle);
+    } TEST_END();
+
+    TEST_CASE("12.102: Smooth 1-Tile Pushback Slide Across First 4 Ticks (*gh*)") {
+        SimulationEngine sim;
+        sim.init_test_world(60, 60, 100, 60000);
+
+        uint32_t attacker_id = sim.spawn_unit(0, AntType::Worker, TileCoord{10, 10});
+        uint32_t defender_id = sim.spawn_unit(1, AntType::Worker, TileCoord{11, 10});
+
+        sim.execute_melee_attack(attacker_id, defender_id);
+
+        const auto& def = sim.get_unit(defender_id);
+        ASSERT_EQ(def.state, UnitState::Flinch);
+        ASSERT_EQ(def.state_timer, 14); // 14 ticks flinch duration
+        // Initial pixel position right upon impact
+        ASSERT_EQ(def.pixel_x, 11 * 32 + 16); // 368
+        ASSERT_EQ(def.push_dest_px, 12 * 32 + 16); // 400
+
+        // Tick 1: slides 8px East
+        sim.tick();
+        ASSERT_EQ(sim.get_unit(defender_id).pixel_x, 376);
+
+        // Tick 2: slides 8px East
+        sim.tick();
+        ASSERT_EQ(sim.get_unit(defender_id).pixel_x, 384);
+
+        // Tick 3: slides 8px East
+        sim.tick();
+        ASSERT_EQ(sim.get_unit(defender_id).pixel_x, 392);
+
+        // Tick 4: reaches destination 400px
+        sim.tick();
+        ASSERT_EQ(sim.get_unit(defender_id).pixel_x, 400);
+
+        // Ticks 5..13: remains at 400px while playing remaining stagger frames
+        for (int i = 4; i < 13; ++i) {
+            sim.tick();
+            ASSERT_EQ(sim.get_unit(defender_id).pixel_x, 400);
+            ASSERT_EQ(sim.get_unit(defender_id).state, UnitState::Flinch);
+        }
+
+        // Tick 14: flinch finishes and returns to Idle
+        sim.tick();
+        ASSERT_EQ(sim.get_unit(defender_id).state, UnitState::Idle);
     } TEST_END();
 }
 
