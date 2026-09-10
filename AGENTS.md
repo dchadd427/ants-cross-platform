@@ -25,13 +25,14 @@ Native C++17 macOS port and remake of the 1998 classic RTS game *Ants*, featurin
 - Strictly **NEVER** write or mention the forbidden word ("M-i-c-r-o-s-o-f-t") anywhere in code, comments, commit messages, or documentation.
 
 ### 4. Mandatory Capstone Reverse Engineering & Original Logic Parity
-- **Authentic Fidelity Verification**: Always compare and verify our logic, timings, animation sequencing, sprite layering, and behavioral mechanics against the original 1998 executable (`Original-Ants/Ants.exe`) and asset archive (`Original-Ants/ants.chd`) using Capstone reverse engineering disassembly and binary inspection.
+- **Dual Verification with Capstone & Ants.exe.c (ans.exe.c)**: Always compare and verify our logic, timings, animation sequencing, sprite layering, and behavioral mechanics against the original 1998 executable (`Original-Ants/Ants.exe`), the complete C decompilation (`docs/legacy/Ants.exe.c`, also referred to as `ans.exe.c`), and asset archive (`Original-Ants/ants.chd`).
+- **Synergy of Capstone Disassembly + Decompiled C**: Use Capstone disassembly (e.g. `tools/analyze_binary.py`) for exact assembly instruction sequences, opcode timings, register allocations, and jump tables, coupled with `docs/legacy/Ants.exe.c` (`ans.exe.c`) for high-level C logic flow, variable naming, struct definitions, state machines, sound triggers, and exact numeric constants.
 - **Match Original Behavior**: The goal is to make the remake as completely faithful to the original 1998 game as possible. Never guess or approximate when the ground-truth logic and constants can be extracted directly via disassembly and reverse engineering.
 
 ### 5. Reverse Engineering Documentation Invariant & Living Memory
 - **Maintain Up-to-Date RE Docs**: Continually document and maintain all reverse engineering findings, disassembly addresses, opcode traces, and verified asset IDs in `docs/GAME_REVERSE_ENGINEERING.md`.
-- **Assume Existing Docs Potentially Outdated**: Always treat pre-existing text in `docs/GAME_REVERSE_ENGINEERING.md` as potentially unverified or outdated until explicitly validated against the original game binary (`Original-Ants/Ants.exe`) and asset archive (`Original-Ants/ants.chd`).
-- **Primary Source First**: Always attempt to reverse-engineer directly from the original game binary using Capstone disassembly, using `docs/GAME_REVERSE_ENGINEERING.md` as a living guide and proactively updating it whenever new ground-truth logic is discovered.
+- **Assume Existing Docs Potentially Outdated**: Always treat pre-existing text in `docs/GAME_REVERSE_ENGINEERING.md` as potentially unverified or outdated until explicitly validated against the original game binary (`Original-Ants/Ants.exe`), `docs/legacy/Ants.exe.c` (`ans.exe.c`), and asset archive (`Original-Ants/ants.chd`).
+- **Primary Source First**: Always cross-reference directly with the primary sources: inspect the C decompilation (`docs/legacy/Ants.exe.c` / `ans.exe.c`) and reverse-engineer from the original game binary using Capstone disassembly, using `docs/GAME_REVERSE_ENGINEERING.md` as a living guide and proactively updating it whenever new ground-truth logic is discovered.
 
 ### 6. WebAssembly / Beta Deployment Synchronization & Cache Invariant
 - **Synchronize Web Builds**: Ensure any game logic, asset, or simulation engine changes remain continuously synchronized with the WebAssembly / Emscripten build and deployment pipeline (`docker/nginx.conf`, `web/`).

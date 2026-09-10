@@ -2,7 +2,7 @@
 
 > **Document Classification:** Engineering Specification & Reverse Engineering Ground Truth  
 > **Target Deliverable:** Deterministic Cross-Platform C++17/SDL3 Native Engine Remake  
-> **Source Artifacts:** `Original-Ants/Ants.exe` (PE32 x86), `Original-Ants/ants.chd`, `Original-Ants/Maps/*.LVL`  
+> **Source Artifacts:** `Original-Ants/Ants.exe` (PE32 x86), `docs/legacy/Ants.exe.c` (`ans.exe.c` Ghidra C decompilation), `Original-Ants/ants.chd`, `Original-Ants/Maps/*.LVL`  
 > **Date:** September 2026
 
 ---
@@ -36,7 +36,16 @@ Players control colonies of ants in a top-down tile-based grid environment (typi
 
 ---
 
-## 2. Reverse Engineering Findings (via Capstone & PE Analysis)
+## 2. Reverse Engineering Findings (via Capstone & Ants.exe.c Analysis)
+
+### 2.0 Dual Primary Reference Methodology
+To guarantee authentic 1:1 behavioral parity with the 1998 original game, all systems and mechanics are verified using a two-pronged reverse engineering methodology:
+1. **Capstone Disassembly (`Original-Ants/Ants.exe` via `tools/analyze_binary.py`)**:
+   - Inspects exact machine instructions, registers, calling conventions, jump tables, and execution order directly from the compiled 1998 binary.
+2. **C Decompilation (`docs/legacy/Ants.exe.c`, also referenced as `ans.exe.c`)**:
+   - Complete 59,000+ line Ghidra C decompilation of `Ants.exe`.
+   - Provides readable C pseudocode, loop bounds, math formulas, sound table lookups, switch-case dispatchers, and state machine transitions.
+   - Always cross-referenced with Capstone to verify exact opcode behavior and eliminate decompilation ambiguity.
 
 ### 2.1 Binary Characteristics
 - **Binary:** PE32 GUI Intel 80386 executable compiled with Visual C++ 4.x/5.0.
