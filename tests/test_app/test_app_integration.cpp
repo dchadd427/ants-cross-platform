@@ -973,9 +973,23 @@ void run_suite_7_input_controls() {
             app.handle_camera_panning(0.020f);
         }
 
-        // Camera must NOT have panned toward top-left (stays centered at 600, 600)
+        // Camera must NOT have panned (stays centered at 600, 600)
         ASSERT_EQ(app.renderer().camera().world_x, init_cam_x);
         ASSERT_EQ(app.renderer().camera().world_y, init_cam_y);
+
+        // Keyboard keys (W, S, Up, Down, Left, Right) must NOT pan the camera at all
+        const int32_t pan_test_keys[] = { SDLK_w, SDLK_s, SDLK_UP, SDLK_DOWN, SDLK_LEFT, SDLK_RIGHT, 'w', 's', 'a', 'd' };
+        for (int32_t k : pan_test_keys) {
+            SDL_KeyboardEvent key{};
+            key.type = SDL_KEYDOWN;
+            key.keysym.sym = k;
+            app.handle_key_down(key);
+            for (int i = 0; i < 5; ++i) {
+                app.handle_camera_panning(0.020f);
+            }
+            ASSERT_EQ(app.renderer().camera().world_x, init_cam_x);
+            ASSERT_EQ(app.renderer().camera().world_y, init_cam_y);
+        }
 
         // Simulate actual mouse motion to the top-left edge margin (x=10, y=10)
         SDL_MouseMotionEvent motion{};
