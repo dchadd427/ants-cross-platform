@@ -55,12 +55,9 @@ struct MidiPlayer::Impl {
             AudioUnitSetParameter(synth_unit, 1 /* Volume */, kAudioUnitScope_Global, 0, db_vol, 0);
         }
 #elif defined(_WIN32)
-        if (!headless) {
-            float v = std::clamp(vol, 0.0f, 1.0f);
-            WORD wVol = static_cast<WORD>(v * 0xFFFF);
-            DWORD dwVol = (static_cast<DWORD>(wVol) << 16) | static_cast<DWORD>(wVol);
-            midiOutSetVolume(nullptr, dwVol);
-        }
+        // On Windows, midiOutSetVolume with null handle causes WinMM/WASAPI driver deadlocks.
+        // Game audio and music are handled through AudioMixer / dr_mp3.
+        (void)vol;
 #else
         (void)vol;
 #endif

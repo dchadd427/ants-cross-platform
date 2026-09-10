@@ -143,6 +143,10 @@ bool Application::init(const ApplicationConfig& config) {
     }
 
     if (!config_.headless) {
+        SDL_RaiseWindow(window_);
+    }
+
+    if (!config_.headless) {
         SDL_SetWindowKeyboardGrab(window_, SDL_TRUE);
         SDL_ShowCursor(SDL_DISABLE);
     }
