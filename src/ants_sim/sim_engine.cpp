@@ -1532,6 +1532,15 @@ void SimulationEngine::tick() {
         continue;
     }
 
+    // Flinch progression (*gh*, 14 ticks: 4-tick slide + 10-tick recovery)
+    if (ant_ptr->state == UnitState::Flinch) {
+        // Landing tick: when pushback slide completes at tick 4 (Subitem 3 in CHD Table 4)
+        if (ant_ptr->push_tick_current == ant_ptr->push_ticks_total && ant_ptr->push_ticks_total > 0) {
+            ant_ptr->push_ticks_total = 0; // Trigger once upon landing
+            impl_->audio_queue_.push_back(AudioEvent{SoundID::FlingThumpB, ant_ptr->pixel_x, ant_ptr->pixel_y, 1, 255});
+        }
+    }
+
     // Bounce progression (*gb*, 10 ticks after scuffle)
     if (ant_ptr->state == UnitState::Bounce) {
         if (ant_ptr->is_in_scuffle) {
@@ -2613,8 +2622,15 @@ void SimulationEngine::execute_melee_attack(uint32_t attacker_id, uint32_t targe
             }
         }
     } else {
-        // Standard Ant: 1 HP melee strike, Sound 57
+        // Standard Ant: 1 HP melee strike, Sound 57 (attack.wav)
         impl_->audio_queue_.push_back(AudioEvent{SoundID::MeleeAttack, attacker->pixel_x, attacker->pixel_y, 1, 255});
+        if (attacker->type == AntType::Worker) {
+            impl_->audio_queue_.push_back(AudioEvent{SoundID::AttackAlt, attacker->pixel_x, attacker->pixel_y, 1, 255});
+        } else if (attacker->type == AntType::Swimmer) {
+            impl_->audio_queue_.push_back(AudioEvent{SoundID::WaterAttack, attacker->pixel_x, attacker->pixel_y, 1, 255});
+        } else if (attacker->type == AntType::Thief) {
+            impl_->audio_queue_.push_back(AudioEvent{SoundID::ThiefWhip, attacker->pixel_x, attacker->pixel_y, 1, 255});
+        }
         bool lethal = target->take_damage(1, DamageSource::MeleeStandard, attacker->id);
         if (lethal) {
             impl_->stats_.get_player_stats_mut(target->player_id).friendly_lost++;
@@ -2759,6 +2775,8 @@ void SimulationEngine::execute_melee_attack(uint32_t attacker_id, uint32_t targe
                 }
             } else {
                 target->start_flinch(14);
+                // Authentic 1998 hit impact sound: SoundID::FlingThumpA (Sound 64 / flythumpa.wav, Subitem 0 in CHD Table 4)
+                impl_->audio_queue_.push_back(AudioEvent{SoundID::FlingThumpA, target->pixel_x, target->pixel_y, 1, 255});
 
                 // Fire contact check
                 if (land_cell.has_fire()) {
