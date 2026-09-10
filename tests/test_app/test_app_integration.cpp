@@ -6871,10 +6871,10 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
 
     TEST_CASE("12.108: Version Invariant & Fog of War Cursor Concealment Parity") {
         // 1. Verify semantic versioning components
-        ASSERT_EQ(ants::VERSION_STRING, "v0.01");
+        ASSERT_EQ(ants::VERSION_STRING, "v0.0.1");
         ASSERT_EQ(ants::VERSION_MAJOR, 0);
-        ASSERT_EQ(ants::VERSION_MINOR, 1);
-        ASSERT_EQ(ants::VERSION_PATCH, 0);
+        ASSERT_EQ(ants::VERSION_MINOR, 0);
+        ASSERT_EQ(ants::VERSION_PATCH, 1);
 
         // 2. Setup simulation world with Fog of War enabled
         SimulationEngine sim;
