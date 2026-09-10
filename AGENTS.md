@@ -4,7 +4,8 @@
 Native C++17 macOS port and remake of the 1998 classic RTS game *Ants*, featuring SDL2 rendering, 32-channel spatial audio mixer, AudioToolbox MIDI playback, 20Hz deterministic simulation engine, custom 1998 CHD asset decoding, and full multiplayer & AI logic.
 
 ## Key Commands
-- **Build**: `cmake --build build -j8`
+- **Build Local**: `cmake --build build -j8`
+- **Build Web (Docker / beta.playants.org)**: `wsl docker build -t ants-beta .`
 - **Master Test Suite**: `./run_tests.sh` (Runs all asset, simulation, integration, and 506 E2E tests)
 - **Integration Tests**: `./build/tests/test_app/test_app_integration`
 - **E2E Test Runner**: `./build_e2e/e2e_runner`
@@ -12,9 +13,10 @@ Native C++17 macOS port and remake of the 1998 classic RTS game *Ants*, featurin
 
 ## Mandatory Operational Rules
 
-### 1. Frequent Git Commits & Pushes
+### 1. Frequent Git Commits & Pushes + Dual Local & Web Docker Builds
 - **ALWAYS commit and push promptly**: As soon as a task, bug fix, or feature is implemented and verified by automated tests, stage, commit with a clear and descriptive commit message, and immediately push to `origin main`.
 - **Never accumulate uncommitted changes**: Do not allow tested, working code to linger unstaged or uncommitted across multiple user requests.
+- **Mandatory Dual Local + Docker Web Builds**: Whenever making changes, committing, and pushing, ALWAYS build a new version for BOTH: (1) Local machine (`cmake --build build -j8`), and (2) Web (`beta.playants.org`) Docker image (`wsl docker build -t ants-beta .`). Verify that both build targets succeed and all test suites maintain 100% pass rate before committing and pushing.
 
 ### 2. Code Quality & Standards
 - **Compiler Flags**: Code must compile cleanly with `-Wall -Wextra -Werror -Wsign-conversion`. Zero warnings allowed.
@@ -36,6 +38,7 @@ Native C++17 macOS port and remake of the 1998 classic RTS game *Ants*, featurin
 
 ### 6. WebAssembly / Beta Deployment Synchronization & Cache Invariant
 - **Synchronize Web Builds**: Ensure any game logic, asset, or simulation engine changes remain continuously synchronized with the WebAssembly / Emscripten build and deployment pipeline (`docker/nginx.conf`, `web/`).
+- **Mandatory Docker Web Build**: Before committing and pushing changes, always execute `wsl docker build -t ants-beta .` to ensure the beta container for `beta.playants.org` builds and packages cleanly alongside local native builds.
 - **Cache Invalidation**: Web builds served on beta (e.g. `beta.playants.org`) must enforce strict revalidation headers (`Cache-Control: "no-cache, must-revalidate"`) for `.wasm`, `.data`, `.html`, `.js`, and `.css` so clients immediately execute updated game binaries without stale browser caching.
 
 ### 7. Version Tracking & Continuous Increment Invariant

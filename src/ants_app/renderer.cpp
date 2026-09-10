@@ -870,7 +870,6 @@ void Renderer::render_terrain_layer2_structures(const ants::sim::Grid& grid, con
 
             int32_t sx = 0, sy = 0;
             camera_.world_to_screen(c * TILE_SIZE, r * TILE_SIZE, sx, sy);
-            SDL_Rect dst = { sx, sy, TILE_SIZE, TILE_SIZE };
 
             // 1. Bridges (Stages 1..4 and 4b, authentic Table 4 bounding boxes and sprite dimensions)
             if ((cell.interactive_id >= ants::sim::TILE_BRIDGE1 &&
