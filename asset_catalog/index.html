@@ -1860,25 +1860,24 @@ const CATEGORIES = {
     { id: 'all', label: 'All Animations (1344)' },
     { id: 'with_sound', label: '🔊 With Audio Trigger', match: a => a.subitems.some(s => s.sound_id >= 0) },
     { id: 'general', label: 'General Ant (ag*, hg*)', match: a => /^(ag|hg|gant|gen|pu_gen)/i.test(a.name) },
-    { id: 'bomber', label: 'Bomber Ant (ab*, hb*)', match: a => /^(ab|hb|bomb|bmb|pu_bomb|blackbomb|greenbomb|redbomb|bluebomb)/i.test(a.name) },
-    { id: 'fire', label: 'Fire Ant (af*, hf*)', match: a => /^(af|hf|fire|pu_fire)/i.test(a.name) },
-    { id: 'thief', label: 'Thief Ant (at*, ht*)', match: a => /^(at|ht|theif|thief|pu_thief|steal)/i.test(a.name) },
-    { id: 'combat', label: 'Combat Ant (ac*, hc*)', match: a => /^(ac|hc|comb|pu_comb)/i.test(a.name) && !/accept/i.test(a.name) },
-    { id: 'swimmer', label: 'Swimmer Ant (as*, hs*)', match: a => /^(as|hs|swim|brdg|bridge|pu_swim)/i.test(a.name) },
-    { id: 'worker', label: 'Worker / Forager (m*, w*)', match: a => /^(mw|m0|md|mg|wm|gd|gm|dg|dm|sd|sg|s0|d0|g0|w0|work|pu_mason)/i.test(a.name) },
-    { id: 'food', label: 'Food & Morsels', match: a => /^(fd|can|food|cer|donut|apple|pretzel)/i.test(a.name) },
-    { id: 'anthill', label: 'Anthills & Hatching', match: a => /(hill|egg|bstart|hatch|bath|ath|hth|gstart|rstart|ustart)/i.test(a.name) },
+    { id: 'bomber', label: 'Bomber Ant (ab*, hb*)', match: a => /^(ab|hb|bomb|bmb|pu_bomb|blackbomb|greenbomb|redbomb|bluebomb|fd_bomb)/i.test(a.name) },
+    { id: 'fire', label: 'Fire Ant (af*, hf*)', match: a => /^(af|hf|fire|pu_fire|pu_mason|fd_fire|wallup|sputter)/i.test(a.name) },
+    { id: 'thief', label: 'Thief Ant (at*, ht*)', match: a => /^(at|ht|theif|thief|pu_thief|steal|fd_thief)/i.test(a.name) },
+    { id: 'combat', label: 'Combat Ant (ac*, hc*)', match: a => /^(ac|hc|comb|pu_comb|fd_comb)/i.test(a.name) && !/accept/i.test(a.name) },
+    { id: 'swimmer', label: 'Swimmer Ant (as*, hs*)', match: a => /^(as|hs|swim|brdg|bridge|pu_swim|fd_swim)/i.test(a.name) },
+    { id: 'food', label: 'Food & Morsels', match: a => /^(can|food|cer|donut|apple|pretzel|fd(?!_))/i.test(a.name) },
+    { id: 'anthill', label: 'Anthills & Hatching', match: a => /(hill|egg|bstart|hatch|bath|^ath|hth|gstart|rstart|ustart)/i.test(a.name) },
     { id: 'screens', label: 'Screens & UI Dialogs', match: a => /^(op_|re_|st_|nh_|d_shell|std_dialg|logo|antslogo|qh_|breturn|but|trn|slid|dclay|opt|dith|dok|d_on|d_off|accept|decline|yes|no|dyn_|dad_|bleave|dogears|yelears|redears|hillears|zobj|getpow|battle|banner|panel|icon|dw_|al_|ui_|stat_|score|help|dialg|quit|leave|start|down|up|obstacle)/i.test(a.name) },
-    { id: 'fx', label: 'Combat FX & Cursors', match: a => /^(c_|death|bombex|sputter|dsplash|xmarks|cur|CUR|hit|stun|withdraw|spark|splash)/i.test(a.name) },
-    { id: 'environment', label: 'Environment & Foliage', match: a => /^(grass|plant|mud|rock|flower|stick|tree|water|shov|dither|pebble|wall)/i.test(a.name) }
+    { id: 'fx', label: 'Combat FX & Cursors', match: a => /^(c_|death|bombex|dsplash|xmarks|cur|CUR|hit|stun|withdraw|spark|splash)/i.test(a.name) },
+    { id: 'environment', label: 'Terrain & Environment', match: a => /^(grass|plant|mud|rock|flower|stick|tree|water|shov|dither|pebble|wall(?!up)|clover|ivy|mw|m0|md|mg|wm|gd|gm|dg|dm|sd|sg|s0|d0|g0|w0)/i.test(a.name) }
   ],
   sprites: [
     { id: 'all', label: 'All Sprites (2794)' },
-    { id: 'units', label: 'Units & Characters', match: sp => /^[a|h][g|b|f|t|c|s]|^[m|w|g|d|s][w|0|d|m|g]/i.test(sp.name) },
+    { id: 'units', label: 'Units & Characters', match: sp => /^[a|h][g|b|f|t|c|s]/i.test(sp.name) },
     { id: 'ui', label: 'UI & Screens', match: sp => /^(opt|but|dith|breturn|slid|efram|dclay|yes|no|quit|help|logo)/i.test(sp.name) },
     { id: 'cursor', label: 'Cursors & Reticles', match: sp => /^(c_|cur|CUR)/i.test(sp.name) },
     { id: 'food', label: 'Food & Items', match: sp => /^(food|cer|donut|apple|pretzel|can|lunch|pdrop)/i.test(sp.name) },
-    { id: 'props', label: 'Foliage & Environment', match: sp => /^(grass|plant|cer|food|mud|rock|stick|tree|flower)/i.test(sp.name) }
+    { id: 'props', label: 'Terrain & Environment', match: sp => /^(grass|plant|mud|rock|stick|tree|flower|mw|m0|md|mg|wm|gd|gm|dg|dm|sd|sg|s0|d0|g0|w0)/i.test(sp.name) }
   ]
 };
 

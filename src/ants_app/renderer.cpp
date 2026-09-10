@@ -1491,6 +1491,8 @@ void Renderer::draw_single_ant(const ants::sim::AntSnapshot& ant, bool is_select
         action = "gb";
     } else if (ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::Flinch)) {
         action = "gh";
+    } else if (ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::Burn)) {
+        action = "bu";
     } else if (ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::Drowning)) {
         action = "dr";
     } else if (ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::PlantingBomb)) {
@@ -1509,7 +1511,7 @@ void Renderer::draw_single_ant(const ants::sim::AntSnapshot& ant, bool is_select
         action = "st";
     }
 
-    if (action == "gf" || action == "gb" || action == "gh" || action == "dr" ||
+    if (action == "gf" || action == "gb" || action == "gh" || action == "bu" || action == "dr" ||
         action == "sb" || action == "db" || action == "sf" || action == "xf" ||
         action == "bbl" || action == "bbw" || action == "dbl" || action == "dbw" ||
         action == "di" || action == "go" ||
@@ -1519,6 +1521,7 @@ void Renderer::draw_single_ant(const ants::sim::AntSnapshot& ant, bool is_select
 
     ants::assets::Direction dir = static_cast<ants::assets::Direction>(ant.facing & 7);
     if (ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::Drowning) ||
+        ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::Burn) ||
         ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::CantGo)) {
         dir = ants::assets::Direction::South;
     } else if (ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::BuildingBridge) ||

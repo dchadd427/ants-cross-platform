@@ -380,19 +380,32 @@ void SimulationEngine::init(const ants::assets::LevelData& level, uint32_t rando
     }
 
     impl_->flower_droppers_.clear();
-    for (const auto& wp : level.waypoints) {
-        if (wp.flag == 1) {
-            SimulationEngineImpl::FlowerDropper fd;
-            fd.pos = TileCoord{static_cast<int32_t>(wp.x), static_cast<int32_t>(wp.y)};
-            // Authentic 1998 placement: power-up drops to the open ground tile directly in front of the plant base (y + 1)
-            fd.drop_pos = TileCoord{fd.pos.x, fd.pos.y + 1};
-            fd.interval_ticks = (wp.param > 0 ? wp.param : 30) * 20;
-            fd.timer_ticks = fd.interval_ticks;
-            fd.is_dropping = false;
-            fd.drop_tick = 0;
-            fd.powerup_type = 0;
-            fd.probabilities = wp.probabilities;
-            impl_->flower_droppers_.push_back(fd);
+    // Authentic 1998 logic (Ants.exe 0x100fc00..0x100fdc4): Iterate over Block 1 decor objects
+    // where team_id == 255 and tile property bit 0x10 is set (plants/flowers). Query Block 4
+    // waypoints at the plant root tile (wp.x == sp.x && wp.y == sp.y); if wp.flag == 1, instantiate dropper.
+    for (const auto& sp : level.anthill_spawns) {
+        if (sp.team_id == 255 && sp.tile_id < level.tile_dictionary.size()) {
+            const std::string& tname = level.tile_dictionary[sp.tile_id];
+            std::string lower_name = tname;
+            for (char& ch : lower_name) ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+            if (lower_name.find("flower") != std::string::npos || lower_name.find("clover") != std::string::npos) {
+                for (const auto& wp : level.waypoints) {
+                    if (wp.x == sp.x && wp.y == sp.y && wp.flag == 1) {
+                        SimulationEngineImpl::FlowerDropper fd;
+                        fd.pos = TileCoord{static_cast<int32_t>(wp.x), static_cast<int32_t>(wp.y)};
+                        // Authentic 1998 placement: power-up drops to open ground directly in front of plant base (y + 1)
+                        fd.drop_pos = TileCoord{fd.pos.x, fd.pos.y + 1};
+                        fd.interval_ticks = (wp.param > 0 ? wp.param : 30) * 20;
+                        fd.timer_ticks = fd.interval_ticks;
+                        fd.is_dropping = false;
+                        fd.drop_tick = 0;
+                        fd.powerup_type = 0;
+                        fd.probabilities = wp.probabilities;
+                        impl_->flower_droppers_.push_back(fd);
+                        break;
+                    }
+                }
+            }
         }
     }
     if (impl_->flower_droppers_.empty() && level.width == 40 && level.height == 40) {
@@ -620,20 +633,22 @@ void SimulationEngine::tick() {
                         join_base_queue(ant_ptr->id);
                     }
                 }
-                static constexpr int32_t DIR_DX[8] = { 0,  1, 1, 1, 0, -1, -1, -1 };
-                static constexpr int32_t DIR_DY[8] = {-1, -1, 0, 1, 1,  1,  0, -1 };
-                size_t dir_idx = static_cast<size_t>(ant_ptr->facing) & 7;
-                int32_t facing_dx = DIR_DX[dir_idx];
-                int32_t facing_dy = DIR_DY[dir_idx];
-                if (facing_dx == 0 && facing_dy == 0) {
-                    facing_dx = 1;
+                if (!lethal) {
+                    static constexpr int32_t DIR_DX[8] = { 0,  1, 1, 1, 0, -1, -1, -1 };
+                    static constexpr int32_t DIR_DY[8] = {-1, -1, 0, 1, 1,  1,  0, -1 };
+                    size_t dir_idx = static_cast<size_t>(ant_ptr->facing) & 7;
+                    int32_t facing_dx = DIR_DX[dir_idx];
+                    int32_t facing_dy = DIR_DY[dir_idx];
+                    if (facing_dx == 0 && facing_dy == 0) {
+                        facing_dx = 1;
+                    }
+                    int32_t from_px = ant_ptr->pixel_x + facing_dx * 32;
+                    int32_t from_py = ant_ptr->pixel_y + facing_dy * 32;
+                    impl_->physics_.apply_knockback(*ant_ptr, from_px, from_py,
+                                                    PhysicsEngine::BOMB_BLAST_MIN_TILES,
+                                                    PhysicsEngine::BOMB_BLAST_MAX_TILES,
+                                                    DamageSource::BombBlast, impl_->audio_queue_, impl_->prng_.rand());
                 }
-                int32_t from_px = ant_ptr->pixel_x + facing_dx * 32;
-                int32_t from_py = ant_ptr->pixel_y + facing_dy * 32;
-                impl_->physics_.apply_knockback(*ant_ptr, from_px, from_py,
-                                                PhysicsEngine::BOMB_BLAST_MIN_TILES,
-                                                PhysicsEngine::BOMB_BLAST_MAX_TILES,
-                                                DamageSource::BombBlast, impl_->audio_queue_, impl_->prng_.rand());
             }
         }
     }
@@ -1185,7 +1200,7 @@ void SimulationEngine::tick() {
                             if (dx == 0 && dy == 0) continue;
                             TileCoord cand{target->pos.x + dx, target->pos.y + dy};
                             if (impl_->grid_.in_bounds(cand) && impl_->grid_.get_cell(cand).is_passable()) {
-                                int32_t d = ant_ptr->pos.chebyshev_dist(cand);
+                                int32_t d = ant_ptr->pos.euclidean_dist_sq(cand);
                                 if (d < best_dist) {
                                     best_dist = d;
                                     best_neighbor = cand;
@@ -1948,7 +1963,7 @@ void SimulationEngine::issue_order(const AntOrder& order) {
                                 if (dx == 0 && dy == 0) continue;
                                 TileCoord cand{target->pos.x + dx, target->pos.y + dy};
                                 if (impl_->grid_.in_bounds(cand) && impl_->grid_.get_cell(cand).is_passable()) {
-                                    int32_t d = unit->pos.chebyshev_dist(cand);
+                                    int32_t d = unit->pos.euclidean_dist_sq(cand);
                                     if (d < best_dist) {
                                         best_dist = d;
                                         best_neighbor = cand;
@@ -2198,8 +2213,9 @@ const WorldState& SimulationEngine::get_world_state() const {
         impl_->world_state_cache_.ants.clear();
         for (const auto& a : impl_->ants_) {
             if (!a) continue;
-            // Eliminated units with 0 HP disappear from active world state (unless drowning, knockback, or bounce active)
-            if (a->hp == 0 && a->state != UnitState::Drowning && a->state != UnitState::Knockback && a->state != UnitState::Bounce) continue;
+            // Eliminated units with 0 HP disappear from active world state (unless drowning, knockback, bounce, flinch, or burn active)
+            if (a->hp == 0 && a->state != UnitState::Drowning && a->state != UnitState::Knockback &&
+                a->state != UnitState::Bounce && a->state != UnitState::Flinch && a->state != UnitState::Burn) continue;
             AntSnapshot s{};
             s.id = a->id;
             s.player_id = a->player_id;
@@ -2660,7 +2676,7 @@ void SimulationEngine::execute_melee_attack(uint32_t attacker_id, uint32_t targe
                     impl_->audio_queue_.push_back(AudioEvent{SoundID::WaterSplash, target->pixel_x, target->pixel_y, 1, 255});
                 }
             } else {
-                target->state = UnitState::Bounce;
+                target->state = UnitState::Flinch;
                 target->state_timer = 4;
                 target->anim_tick = 0;
                 target->anim_subitem = 0;
