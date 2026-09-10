@@ -750,11 +750,56 @@
     top: 4px;
     right: 4px;
     font-size: 0.7rem;
-    background: rgba(245, 158, 11, 0.85);
+    background: rgba(245, 158, 11, 0.9);
     color: #000;
-    padding: 1px 4px;
+    padding: 1px 5px;
     border-radius: 3px;
     font-weight: 700;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    z-index: 5;
+  }
+  .subitem-badge-snd:hover {
+    background: #fbbf24;
+    transform: scale(1.1);
+    box-shadow: 0 0 8px rgba(245, 158, 11, 0.7);
+  }
+  .anim-sound-card {
+    background: rgba(245, 158, 11, 0.14);
+    border: 1px solid rgba(245, 158, 11, 0.35);
+    border-radius: 6px;
+    padding: 0.35rem 0.65rem;
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+    transition: all 0.2s ease;
+  }
+  .anim-sound-card:hover {
+    border-color: rgba(245, 158, 11, 0.7);
+    background: rgba(245, 158, 11, 0.22);
+  }
+  .anim-sound-card.sound-card-active {
+    background: rgba(245, 158, 11, 0.32) !important;
+    border-color: #f59e0b !important;
+    box-shadow: 0 0 12px rgba(245, 158, 11, 0.5) !important;
+    transform: translateY(-1px);
+  }
+  .step-link-btn {
+    font-size: 0.72rem !important;
+    padding: 2px 6px !important;
+    color: #38bdf8 !important;
+    border: 1px solid rgba(56, 189, 248, 0.4) !important;
+    background: rgba(56, 189, 248, 0.1) !important;
+    border-radius: 4px;
+    cursor: pointer;
+    font-weight: 600;
+    transition: all 0.15s ease;
+  }
+  .step-link-btn:hover {
+    background: rgba(56, 189, 248, 0.25) !important;
+    border-color: #38bdf8 !important;
+    color: #fff !important;
+    box-shadow: 0 0 6px rgba(56, 189, 248, 0.4);
   }
 
   /* Layers Inspector */
@@ -1382,11 +1427,12 @@
         <!-- Current Subitem Layers Section -->
         <div class="layers-section">
           <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.5rem; margin-bottom: 0.5rem;">
-            <div style="display:flex; align-items:center; gap:0.5rem;">
+            <div style="display:flex; align-items:center; gap:0.5rem; flex-wrap:wrap;">
               <h4 style="font-size: 0.85rem; color: var(--text-secondary); margin:0;">
                 Active Step Sprite Layers (<span id="current-step-layers-count">1</span> layers)
               </h4>
               <span id="layer-breakdown-badge" style="font-size:0.75rem; color:var(--text-dim);"></span>
+              <span id="current-step-sound-badge" style="display:none;"></span>
             </div>
             <div style="display:flex; align-items:center; gap:0.4rem; flex-wrap:wrap;">
               <button class="stage-pill-btn" id="btn-layers-show-all" onclick="showAllLayers()" title="Make all layers visible">👁️ Show All</button>
@@ -1929,11 +1975,17 @@ function sortAnimsList(list) {
       diff = layA - layB;
     }
     else if (animSort.col === 'sound') {
-      const sndA = a.subitems.find(s => s.sound_id >= 0);
-      const sndB = b.subitems.find(s => s.sound_id >= 0);
-      const idA = sndA ? sndA.sound_id : -1;
-      const idB = sndB ? sndB.sound_id : -1;
-      diff = idA - idB;
+      const sndsA = a.subitems.filter(s => s.sound_id >= 0);
+      const sndsB = b.subitems.filter(s => s.sound_id >= 0);
+      const countA = sndsA.length;
+      const countB = sndsB.length;
+      if (countA !== countB) {
+        diff = countA - countB;
+      } else {
+        const idA = countA > 0 ? sndsA[0].sound_id : -1;
+        const idB = countB > 0 ? sndsB[0].sound_id : -1;
+        diff = idA - idB;
+      }
     }
     else if (animSort.col === 'size') {
       const bA = getAnimBounds(a);
@@ -2352,7 +2404,12 @@ function renderAnimsList(items) {
   container.innerHTML = '';
   items.forEach(a => {
     const totalFrames = a.subitems.reduce((sum, s) => sum + s.frames.length, 0);
-    const soundSub = a.subitems.find(s => s.sound_id >= 0);
+    const soundSubs = [];
+    a.subitems.forEach((s, idx) => {
+      if (s.sound_id >= 0) {
+        soundSubs.push({ step: idx, sound_id: s.sound_id, sound_name: s.sound_name });
+      }
+    });
     const isComposite = a.subitems.length === 1 && totalFrames > 1;
     const isSingle = a.subitems.length === 1 && totalFrames === 1;
     const badgeType = isComposite ? 'badge badge-sprite' : 'badge badge-anim';
@@ -2376,11 +2433,22 @@ function renderAnimsList(items) {
       if (a.subitems.length > 1) {
         thumbInner += `<span class="anim-thumb-badge" title="${a.subitems.length} steps">${a.subitems.length}f</span>`;
       }
-      if (soundSub) {
-        thumbInner += `<span class="anim-thumb-snd" title="Audio trigger: ${soundSub.sound_name}">🔊</span>`;
+      if (soundSubs.length === 1) {
+        thumbInner += `<span class="anim-thumb-snd" title="Audio trigger: #${soundSubs[0].sound_id} ${soundSubs[0].sound_name} (Step #${soundSubs[0].step})">🔊</span>`;
+      } else if (soundSubs.length > 1) {
+        const tooltip = `${soundSubs.length} Audio Triggers:\n` + soundSubs.map(s => `• Step #${s.step}: #${s.sound_id} ${s.sound_name}`).join('\n');
+        thumbInner += `<span class="anim-thumb-snd" style="background:#d97706; padding:0 3px;" title="${tooltip}">🔊${soundSubs.length}</span>`;
       }
     }
     const thumbHtml = `<div class="anim-thumb-box">${thumbInner}</div>`;
+
+    let soundMetaHtml = '';
+    if (soundSubs.length === 1) {
+      soundMetaHtml = `<span style="color:#fbbf24;" title="Audio trigger: #${soundSubs[0].sound_id} ${soundSubs[0].sound_name} (Step #${soundSubs[0].step})">🔊</span>`;
+    } else if (soundSubs.length > 1) {
+      const tooltip = soundSubs.map(s => `Step #${s.step}: #${s.sound_id} ${s.sound_name}`).join(', ');
+      soundMetaHtml = `<span style="color:#fbbf24; font-weight:700; font-size:0.75rem;" title="${tooltip}">🔊 ${soundSubs.length} SFX</span>`;
+    }
 
     div.innerHTML = `
       ${thumbHtml}
@@ -2388,7 +2456,7 @@ function renderAnimsList(items) {
         <div class="anim-name"><span class="${badgeType}" style="margin-right:4px;">#${a.id}</span> ${a.name}</div>
         <div class="anim-meta">
           <span>${typeLabel}</span>
-          ${soundSub ? `<span style="color:#fbbf24;" title="Audio trigger: ${soundSub.sound_name}">🔊</span>` : ''}
+          ${soundMetaHtml}
         </div>
       </div>
     `;
@@ -2407,7 +2475,12 @@ function renderAnimsTable(items) {
 
   items.forEach(a => {
     const totalFrames = a.subitems.reduce((sum, s) => sum + s.frames.length, 0);
-    const soundSub = a.subitems.find(s => s.sound_id >= 0);
+    const soundSubs = [];
+    a.subitems.forEach((s, idx) => {
+      if (s.sound_id >= 0) {
+        soundSubs.push({ step: idx, sound_id: s.sound_id, sound_name: s.sound_name });
+      }
+    });
     const isComposite = a.subitems.length === 1 && totalFrames > 1;
     const isSingle = a.subitems.length === 1 && totalFrames === 1;
     const typeLabel = isComposite ? `Composite (${totalFrames}L)` : (isSingle ? '1 Frame' : `${a.subitems.length} Steps`);
@@ -2435,6 +2508,21 @@ function renderAnimsTable(items) {
       }
     }
 
+    let soundsCellHtml = '<span style="color:var(--text-dim); font-size:0.8rem;">—</span>';
+    if (soundSubs.length > 0) {
+      soundsCellHtml = `
+        <div style="display: flex; flex-wrap: wrap; gap: 4px;">
+          ${soundSubs.map(snd => `
+            <button class="copy-btn" style="color:#fbbf24; border-color:rgba(251,191,36,0.3); font-size:0.72rem; padding: 2px 6px; white-space: nowrap;" 
+              onclick="event.stopPropagation(); filterAnimsBySound(${snd.sound_id})" 
+              title="Filter by sound #${snd.sound_id} (${snd.sound_name}) — triggered on Step #${snd.step}">
+              🔊 #${snd.sound_id} ${snd.sound_name}${a.subitems.length > 1 ? ` <span style="opacity:0.65; font-size:0.68rem;">(s#${snd.step})</span>` : ''}
+            </button>
+          `).join('')}
+        </div>
+      `;
+    }
+
     tr.innerHTML = `
       <td>
         <div class="anim-thumb-box" style="width: 44px; height: 44px; min-width: 44px;">
@@ -2449,7 +2537,7 @@ function renderAnimsTable(items) {
       <td style="font-family: monospace;">${a.subitems.length}</td>
       <td style="font-family: monospace;">${totalFrames}</td>
       <td>
-        ${soundSub ? `<button class="copy-btn" style="color:#fbbf24; border-color:rgba(251,191,36,0.3); font-size:0.75rem;" onclick="event.stopPropagation(); filterAnimsBySound(${soundSub.sound_id})" title="Filter by audio clip">🔊 #${soundSub.sound_id} ${soundSub.sound_name}</button>` : '<span style="color:var(--text-dim); font-size:0.8rem;">—</span>'}
+        ${soundsCellHtml}
       </td>
       <td style="font-family: monospace; font-size:0.8rem;">${bounds.width} × ${bounds.height} px</td>
       <td style="font-family: monospace; font-size:0.8rem;">${duration}</td>
@@ -2477,6 +2565,9 @@ function inspectAnimationInSplit(animId) {
 function selectAnimation(animId) {
   activeAnimIndex = animId;
   currentSubIndex = 0;
+
+  const detailPane = document.querySelector('.anims-detail');
+  if (detailPane) detailPane.scrollTop = 0;
 
   document.querySelectorAll('.anim-item').forEach(el => {
     const isSelected = el.dataset.animId === String(animId);
@@ -2508,20 +2599,51 @@ function selectAnimation(animId) {
     <span><strong>Extents:</strong> [dx: ${bounds.minX}..${bounds.maxX}, dy: ${bounds.minY}..${bounds.maxY}] (${bounds.width}×${bounds.height} px)</span>
   `;
 
-  // Sound Trigger Box
+  // Sound Trigger Box - collect all steps with sound effects
   const soundBox = document.getElementById('detail-sound-box');
   soundBox.innerHTML = '';
-  const firstSound = anim.subitems.find(s => s.sound_id >= 0);
-  if (firstSound) {
-    const sndObj = CATALOG_DATA.sounds[firstSound.sound_id];
-    const sndFile = sndObj ? sndObj.file : '';
-    soundBox.innerHTML = `
-      <div style="background: rgba(245, 158, 11, 0.15); border: 1px solid rgba(245, 158, 11, 0.4); border-radius: 6px; padding: 0.4rem 0.75rem; display: flex; align-items: center; gap: 0.6rem;">
-        <span class="badge badge-sound">🔊 Sound #${firstSound.sound_id}</span>
-        <span style="font-size: 0.8rem; font-family: monospace;">${firstSound.sound_name}</span>
-        <button class="ctrl-btn" style="padding: 0.25rem 0.55rem; font-size: 0.75rem;" onclick="playAudioClip('${sndFile}')">▶ Play</button>
-      </div>
-    `;
+  const soundSteps = [];
+  anim.subitems.forEach((sub, sIdx) => {
+    if (sub.sound_id >= 0) {
+      soundSteps.push({ ...sub, stepIndex: sIdx });
+    }
+  });
+
+  if (soundSteps.length > 0) {
+    let cardsHtml = '';
+    soundSteps.forEach(sub => {
+      const sndObj = CATALOG_DATA.sounds[sub.sound_id];
+      const sndFile = sndObj ? sndObj.file : '';
+      cardsHtml += `
+        <div class="anim-sound-card ${sub.stepIndex === currentSubIndex ? 'sound-card-active' : ''}" 
+             id="sound-card-${sub.sound_id}-${sub.stepIndex}" 
+             data-step="${sub.stepIndex}">
+          <span class="badge badge-sound" style="font-weight: 700;">🔊 Sound #${sub.sound_id}</span>
+          <span style="font-size: 0.8rem; font-family: monospace; font-weight: 600; color: #fef08a;">${sub.sound_name}</span>
+          ${anim.subitems.length > 1 ? `
+            <button class="step-link-btn" onclick="event.stopPropagation(); jumpToStep(${sub.stepIndex})" title="Jump to Step #${sub.stepIndex}">
+              Step #${sub.stepIndex}
+            </button>
+          ` : ''}
+          <button class="ctrl-btn" style="padding: 0.22rem 0.55rem; font-size: 0.75rem;" onclick="event.stopPropagation(); playAudioClip('${sndFile}')" title="Play ${sub.sound_name}">▶ Play</button>
+        </div>
+      `;
+    });
+
+    if (soundSteps.length > 1) {
+      soundBox.innerHTML = `
+        <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 0.35rem;">
+          <div style="font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em; color: #fbbf24; font-weight: 700; display: flex; align-items: center; gap: 0.3rem;">
+            🔊 ${soundSteps.length} Audio Triggers:
+          </div>
+          <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; justify-content: flex-end;">
+            ${cardsHtml}
+          </div>
+        </div>
+      `;
+    } else {
+      soundBox.innerHTML = cardsHtml;
+    }
   }
 
   // Reset layer inspector state
@@ -2586,8 +2708,13 @@ function renderSubitemsStrip(anim) {
     const firstSpriteId = sub.frames.length > 0 ? sub.frames[0].sprite_id : null;
     const thumbSrc = firstSpriteId !== null ? `sprites/sprite_${String(firstSpriteId).padStart(4, '0')}.png` : '';
     
+    const sndObj = sub.sound_id >= 0 ? CATALOG_DATA.sounds[sub.sound_id] : null;
+    const sndFile = sndObj ? sndObj.file : '';
+
     card.innerHTML = `
-      ${sub.sound_id >= 0 ? `<span class="subitem-badge-snd" title="Audio #${sub.sound_id}">🔊</span>` : ''}
+      ${sub.sound_id >= 0 ? `
+        <span class="subitem-badge-snd" onclick="event.stopPropagation(); playAudioClip('${sndFile}')" title="Audio #${sub.sound_id}: ${sub.sound_name} (Click to play)">🔊 #${sub.sound_id}</span>
+      ` : ''}
       <div class="subitem-thumb">
         ${thumbSrc ? `<img src="${thumbSrc}" alt="Step ${sIdx}">` : '<span style="color:var(--text-dim);font-size:0.7rem;">Empty</span>'}
       </div>
@@ -2603,6 +2730,19 @@ function renderSubitemsStrip(anim) {
   });
 }
 
+function jumpToStep(stepIndex) {
+  const anim = CATALOG_DATA.animations[activeAnimIndex];
+  if (!anim || stepIndex < 0 || stepIndex >= anim.subitems.length) return;
+  currentSubIndex = stepIndex;
+  updateCanvasFrame();
+  updateScrubberAndUI();
+  const sub = anim.subitems[stepIndex];
+  if (sub && sub.sound_id >= 0) {
+    const snd = CATALOG_DATA.sounds[sub.sound_id];
+    if (snd) playAudioClip(snd.file);
+  }
+}
+
 function updateScrubberAndUI() {
   const anim = CATALOG_DATA.animations[activeAnimIndex];
   if (!anim) return;
@@ -2610,13 +2750,26 @@ function updateScrubberAndUI() {
   document.getElementById('frame-scrubber').value = currentSubIndex;
   document.getElementById('frame-counter').textContent = `Step ${currentSubIndex + 1} / ${anim.subitems.length}`;
 
-  // Highlight active card
+  // Highlight active card & horizontally scroll within timeline strip without scrolling page
+  const strip = document.getElementById('frames-scroll-container');
   document.querySelectorAll('.subitem-card').forEach((c, idx) => {
     const isActive = idx === currentSubIndex;
     c.classList.toggle('active', isActive);
-    if (isActive) {
-      c.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    if (isActive && strip) {
+      const cardLeft = c.offsetLeft;
+      const cardRight = cardLeft + c.offsetWidth;
+      if (cardLeft < strip.scrollLeft) {
+        strip.scrollLeft = cardLeft - 8;
+      } else if (cardRight > strip.scrollLeft + strip.clientWidth) {
+        strip.scrollLeft = cardRight - strip.clientWidth + 8;
+      }
     }
+  });
+
+  // Highlight matching sound cards in header
+  document.querySelectorAll('.anim-sound-card').forEach(card => {
+    const cardStep = parseInt(card.dataset.step, 10);
+    card.classList.toggle('sound-card-active', cardStep === currentSubIndex);
   });
 
   // Render layers table for active subitem
@@ -2625,6 +2778,26 @@ function updateScrubberAndUI() {
   tbody.innerHTML = '';
   if (curSub) {
     document.getElementById('current-step-layers-count').textContent = curSub.frames.length;
+
+    // Update active step sound badge in layers header
+    const stepSoundEl = document.getElementById('current-step-sound-badge');
+    if (stepSoundEl) {
+      if (curSub && curSub.sound_id >= 0) {
+        const sndObj = CATALOG_DATA.sounds[curSub.sound_id];
+        const sndFile = sndObj ? sndObj.file : '';
+        stepSoundEl.style.display = 'inline-flex';
+        stepSoundEl.innerHTML = `
+          <span class="badge badge-sound" style="cursor:pointer; display:inline-flex; align-items:center; gap:5px; font-size:0.75rem; padding:2px 8px; border-radius:4px;" 
+                onclick="playAudioClip('${sndFile}')" 
+                title="Click to play Step #${currentSubIndex} audio (${curSub.sound_name})">
+            🔊 Step #${currentSubIndex} Trigger: #${curSub.sound_id} ${curSub.sound_name} ▶
+          </span>
+        `;
+      } else {
+        stepSoundEl.style.display = 'none';
+        stepSoundEl.innerHTML = '';
+      }
+    }
 
     // Categorize layers for filter buttons & info banner
     let clayCount = 0;
@@ -3380,7 +3553,7 @@ function applySearchFilter() {
       filtered = filtered.filter(a =>
         a.name.toLowerCase().includes(query) || 
         String(a.id).includes(query) ||
-        a.subitems.some(s => s.sound_name.toLowerCase().includes(query)) ||
+        a.subitems.some(s => s.sound_name.toLowerCase().includes(query) || (s.sound_id >= 0 && (String(s.sound_id) === query || `sound #${s.sound_id}`.includes(query)))) ||
         a.subitems.some(s => s.frames.some(f => f.sprite_name.toLowerCase().includes(query)))
       );
     }
