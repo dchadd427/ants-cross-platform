@@ -42,3 +42,7 @@ Native C++17 macOS port and remake of the 1998 classic RTS game *Ants*, featurin
 - **Continuous Version Tracking**: Starting at `v0.0.1` (pre-release), track and increment semantic version numbers in `include/ants_app/version.hpp` on every release/feature cycle.
 - **On-Screen Version Meter**: The current version string must always be rendered on screen adjacent to the FPS counter / sparkline in the bottom-right corner of the viewport across all game states.
 
+### 8. No Bot AI Invariant
+- **Strictly No Bot AI**: Do NOT implement or add computer/bot player AI into the game at this stage. Keep the game strictly 1:1 authentic to the original 1998 mechanics where all ant commands are issued directly by human players (except Combat Ant guard post patrol). Minimize all changes to strictly reverse-engineered original logic.
+
+
