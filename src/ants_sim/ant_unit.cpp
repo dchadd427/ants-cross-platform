@@ -282,9 +282,36 @@ void AntUnit::tick_timers() noexcept {
             fx_x = pixel_x << 16;
             fx_y = pixel_y << 16;
         }
+    } else if (is_in_scuffle) {
+        if (scuffle_ticks > 0) {
+            scuffle_ticks--;
+        }
+        if (scuffle_ticks == 0) {
+            is_in_scuffle = false;
+            if (state == UnitState::Bounce) {
+                anim_tick = 0;
+                anim_subitem = 0;
+                push_tick_current = 0;
+                pixel_x = push_start_px;
+                pixel_y = push_start_py;
+                fx_x = pixel_x << 16;
+                fx_y = pixel_y << 16;
+            } else {
+                state = (type == AntType::Combat) ? UnitState::GuardIdle : UnitState::Idle;
+            }
+        }
     } else if (state == UnitState::Bounce) {
         anim_tick++;
         anim_subitem = static_cast<uint16_t>(anim_tick);
+        if (push_tick_current < push_ticks_total) {
+            push_tick_current++;
+            int32_t interp_x = push_start_px + ((push_dest_px - push_start_px) * static_cast<int32_t>(push_tick_current)) / static_cast<int32_t>(push_ticks_total);
+            int32_t interp_y = push_start_py + ((push_dest_py - push_start_py) * static_cast<int32_t>(push_tick_current)) / static_cast<int32_t>(push_ticks_total);
+            pixel_x = interp_x;
+            pixel_y = interp_y;
+            fx_x = pixel_x << 16;
+            fx_y = pixel_y << 16;
+        }
     }
 
     // Continuous idle standing animation cycle

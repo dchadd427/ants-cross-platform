@@ -236,6 +236,7 @@ struct AntSnapshot {
     uint16_t transform_anim_frame{0};
     bool     on_powerup{false};
     uint16_t ability_cooldown_ticks{0};
+    bool     is_in_scuffle{false};
     UnitState state{UnitState::Idle};
 };
 

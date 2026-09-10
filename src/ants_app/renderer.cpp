@@ -1420,7 +1420,7 @@ void Renderer::draw_single_ant(const ants::sim::AntSnapshot& ant, bool is_select
     bool is_infiltrating = (ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::Infiltrating));
     bool is_entering_base = (ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::EnteringBase));
 
-    if (ant.is_underground) return; // Fully underground inside base hole, do not draw
+    if (ant.is_underground || ant.is_in_scuffle) return; // Underground or concealed inside scuffle ball, do not draw
 
     if (is_entering_base) {
         // Base entry and emerge/hatch animations:
@@ -1832,7 +1832,7 @@ void Renderer::render_ant_units(const ants::sim::WorldState& world,
                                 const std::vector<uint32_t>& selected_unit_ids,
                                 bool show_all_health_bars) {
     for (const auto& a : world.ants) {
-        if (a.is_underground) continue;
+        if (a.is_underground || a.is_in_scuffle) continue;
         if (world.fog_of_war_enabled && a.player_id != hud_team_id_ &&
             !world.is_tile_revealed(a.tile_x, a.tile_y)) {
             continue; // Concealed enemy ant under fog of war
@@ -1987,7 +1987,7 @@ void Renderer::render_minimap(const ants::sim::WorldState& world,
 
     // 3. Units Pass
     for (const auto& a : world.ants) {
-        if (a.is_underground) continue;
+        if (a.is_underground || a.is_in_scuffle) continue;
         static const SDL_Color unit_colors[4] = {
             { 90, 240, 90, 255 },   // 0: Green
             { 255, 70, 70, 255 },   // 1: Red

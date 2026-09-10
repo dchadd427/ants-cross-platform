@@ -598,7 +598,7 @@ void HUD::render_radar(IRenderer& renderer, const assets::AssetArchive&,
 
     // Active live ants
     for (const auto& ant : world.ants) {
-        if (ant.hp == 0 || ant.is_drowning || ant.is_underground) continue;
+        if (ant.hp == 0 || ant.is_drowning || ant.is_underground || ant.is_in_scuffle) continue;
         if (world.fog_of_war_enabled && ant.player_id != local_player_id_ &&
             !world.is_tile_revealed(ant.tile_x, ant.tile_y)) {
             continue; // Shrouded enemy ant not visible on radar
@@ -2828,7 +2828,7 @@ CursorType HUD::evaluate_cursor(int32_t screen_x, int32_t screen_y,
     const sim::AntSnapshot* hover_ant = nullptr;
     int32_t best_dist_sq = INT32_MAX;
     for (const auto& ant : world.ants) {
-        if (ant.hp == 0 || ant.is_drowning || ant.is_underground) continue;
+        if (ant.hp == 0 || ant.is_drowning || ant.is_underground || ant.is_in_scuffle) continue;
         bool in_bbox = (std::abs(ant.px - world_x) <= 18 &&
                         world_y >= ant.py - 24 && world_y <= ant.py + 18);
         bool on_tile = (ant.tile_x == tx && ant.tile_y == ty);
