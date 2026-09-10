@@ -268,6 +268,8 @@ void bounce_unit_cascade(SimulationEngineImpl& impl,
     unit.anim_tick = 0;
     unit.anim_subitem = 0;
     unit.clear_path();
+    impl.physics_.cancel_flight(unit.id);
+    unit.altitude_z = 0;
     unit.attack_target_id = 0; // Clear target to break infinite bounce loop
     unit.attack_cooldown_ticks = std::max(unit.attack_cooldown_ticks, static_cast<uint16_t>(20));
 
