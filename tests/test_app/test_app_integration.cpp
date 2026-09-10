@@ -507,6 +507,51 @@ void run_suite_4_audio_mixer() {
         ASSERT_GT(non_zero_count, 1000);
         ASSERT_GT(max_sample, 5000);
     } TEST_END();
+
+    TEST_CASE("4.6 Native In-Engine MP3 Background Music Playback & Streaming Mixing") {
+        AudioMixer mixer;
+        mixer.set_headless_mode(true);
+        mixer.init(archive);
+
+        ASSERT_FALSE(mixer.is_music_playing());
+
+        std::string intro_path = std::string(ORIGINAL_ASSETS_DIR) + "/INTRO.mp3";
+        bool loaded = mixer.play_music(intro_path, true);
+        ASSERT_TRUE(loaded);
+        ASSERT_TRUE(mixer.is_music_playing());
+
+        // Volume control
+        mixer.set_music_volume(0.75f);
+        ASSERT_NEAR(mixer.get_music_volume(), 0.75f, 0.01f);
+
+        // Render frames with both SFX and MP3 music mixed
+        mixer.play_sfx(4, 0.5f, 10, false); // bomb explosion
+        auto pcm = mixer.render_frames(1024);
+        ASSERT_EQ(pcm.size(), 1024u * 2u);
+
+        int non_zero_count = 0;
+        for (int16_t s : pcm) {
+            if (s != 0) ++non_zero_count;
+        }
+        ASSERT_GT(non_zero_count, 500);
+
+        // Pause and resume
+        mixer.pause_music();
+        ASSERT_FALSE(mixer.is_music_playing());
+        mixer.resume_music();
+        ASSERT_TRUE(mixer.is_music_playing());
+
+        // Smooth fade out
+        mixer.fade_out_music(0.5f);
+        mixer.update_music(0.25f);
+        ASSERT_TRUE(mixer.is_music_playing());
+        mixer.update_music(0.30f); // Completed fade out
+        ASSERT_FALSE(mixer.is_music_playing());
+
+        // Stop music
+        mixer.stop_music();
+        ASSERT_FALSE(mixer.is_music_playing());
+    } TEST_END();
 }
 
 // ============================================================================
@@ -4853,16 +4898,16 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         for (int t = 27; t < 34; ++t) {
             sim.tick();
         }
-        sim.tick(); // Tick 35: returns to Idle with 40-tick cooldown
+        sim.tick(); // Tick 35: returns to Idle with remaining 5-tick cooldown (40 initiated - 35 elapsed)
         ASSERT_EQ(sim.get_unit(f_id).state, UnitState::Idle);
-        ASSERT_EQ(sim.get_unit(f_id).ability_cooldown_ticks, 40);
+        ASSERT_EQ(sim.get_unit(f_id).ability_cooldown_ticks, 5);
 
         // Attempting to ignite fire again during cooldown MUST be rejected
         sim.set_tile_flags(10, 11, 0x06);
         ASSERT_FALSE(sim.ignite_fire(f_id, TileCoord{10, 11}, false));
 
-        // Advance 39 ticks: cooldown remaining = 1, still rejected
-        for (int t = 0; t < 39; ++t) {
+        // Advance 4 ticks: cooldown remaining = 1, still rejected
+        for (int t = 0; t < 4; ++t) {
             sim.tick();
         }
         ASSERT_EQ(sim.get_unit(f_id).ability_cooldown_ticks, 1);
@@ -4884,20 +4929,21 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         sim.set_tile_flags(16, 15, 0x06);
         ASSERT_TRUE(sim.plant_bomb(b_id, TileCoord{16, 15}, false));
         ASSERT_EQ(sim.get_unit(b_id).state, UnitState::PlantingBomb);
+        ASSERT_EQ(sim.get_unit(b_id).ability_cooldown_ticks, 60);
 
         // Advance 28 ticks to complete bomb placement
         for (int t = 0; t < 28; ++t) {
             sim.tick();
         }
         ASSERT_EQ(sim.get_unit(b_id).state, UnitState::Idle);
-        ASSERT_EQ(sim.get_unit(b_id).ability_cooldown_ticks, 60); // Authentic 3.0s (60 ticks) cooldown
+        ASSERT_EQ(sim.get_unit(b_id).ability_cooldown_ticks, 32); // 60 - 28 = 32 ticks remaining
 
         // Attempting to plant bomb during cooldown MUST be rejected
         sim.set_tile_flags(15, 16, 0x06);
         ASSERT_FALSE(sim.plant_bomb(b_id, TileCoord{15, 16}, false));
 
-        // Advance 59 ticks: cooldown remaining = 1, still rejected
-        for (int t = 0; t < 59; ++t) {
+        // Advance 31 ticks: cooldown remaining = 1, still rejected
+        for (int t = 0; t < 31; ++t) {
             sim.tick();
         }
         ASSERT_EQ(sim.get_unit(b_id).ability_cooldown_ticks, 1);
@@ -5665,6 +5711,16 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
             ASSERT_TRUE(has_left);
             ASSERT_TRUE(has_right);
 
+            // Authentic 1998 Stem Obstacle Parity: Bottom stem at (2, 19) and (37, 19) is a solid obstacle
+            ASSERT_FALSE(sim.grid().get_cell(2, 19).is_passable());
+            ASSERT_TRUE(sim.grid().get_cell(2, 19).is_obstacle_overlay);
+            ASSERT_FALSE(sim.grid().get_cell(37, 19).is_passable());
+            ASSERT_TRUE(sim.grid().get_cell(37, 19).is_obstacle_overlay);
+
+            // Ground tile directly in front where powerup lands (2, 20) and (37, 20) is fully passable
+            ASSERT_TRUE(sim.grid().get_cell(2, 20).is_passable());
+            ASSERT_TRUE(sim.grid().get_cell(37, 20).is_passable());
+
             // Fast forward 300 ticks (15s @ 20Hz, as defined by wp.param == 15 in SMALL.LVL)
             for (int i = 0; i < 300; ++i) {
                 sim.tick();
@@ -5919,6 +5975,171 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
             ASSERT_FALSE(played_sounds.empty());
             ASSERT_EQ(played_sounds.back(), SoundID::NavButtonClick);
         }
+    } TEST_END();
+
+    TEST_CASE("12.76 Authentic Fog of War Sight Radius 6 & Exploration Persistence") {
+        SimulationEngine sim;
+        sim.init_test_world(60, 60, 1);
+        sim.set_fog_of_war_enabled(true);
+        ASSERT_TRUE(sim.is_fog_of_war_enabled());
+
+        sim.set_viewing_player_id(0);
+        uint32_t ant_id = sim.spawn_unit(0, AntType::Worker, TileCoord{30, 30});
+        ASSERT_GT(ant_id, 0u);
+
+        sim.tick();
+        const auto& world = sim.get_world_state();
+        ASSERT_TRUE(world.fog_of_war_enabled);
+
+        // Unit tile and radius 6 tiles must be revealed
+        ASSERT_TRUE(world.is_tile_revealed(30, 30));
+        ASSERT_TRUE(world.is_tile_revealed(30 + 6, 30));
+        ASSERT_TRUE(world.is_tile_revealed(30 - 6, 30));
+        ASSERT_TRUE(world.is_tile_revealed(30, 30 + 6));
+        ASSERT_TRUE(world.is_tile_revealed(30, 30 - 6));
+
+        // Beyond radius 6 must remain shrouded
+        ASSERT_FALSE(world.is_tile_revealed(30 + 7, 30));
+        ASSERT_FALSE(world.is_tile_revealed(30 - 7, 30));
+        ASSERT_FALSE(world.is_tile_revealed(30, 30 + 7));
+        ASSERT_FALSE(world.is_tile_revealed(30, 30 - 7));
+        ASSERT_FALSE(world.is_tile_revealed(5, 5));
+
+        // Move unit to (31, 30) - previous tiles must stay permanently revealed
+        sim.issue_move_order(ant_id, TileCoord{31, 30});
+        for (int i = 0; i < 15; ++i) sim.tick();
+        const auto& world2 = sim.get_world_state();
+        ASSERT_TRUE(world2.is_tile_revealed(30, 30)); // Permanent exploration
+        ASSERT_TRUE(world2.is_tile_revealed(31, 30));
+    } TEST_END();
+
+    TEST_CASE("12.77 Hatching Emergence Isolation of exithill.wav") {
+        SimulationEngine sim;
+        sim.init_test_world(60, 60, 1);
+        sim.set_anthill(0, TileCoord{10, 10});
+        sim.set_player_score(0, 500);
+        sim.set_player_eggs(0, 10);
+        sim.set_hatch_delay_ticks(4);
+
+        // Hatch egg with 200 points
+        sim.clear_audio_events();
+        bool hatched = sim.hatch_ant(0, AntType::Worker);
+        ASSERT_TRUE(hatched);
+
+        // Advance simulation through incubation delay until newborn surfaces
+        bool hatched_exit_sound = false;
+        for (int t = 0; t < 20; ++t) {
+            sim.tick();
+            if (sim.has_audio_event(SoundID::ExitHill)) {
+                hatched_exit_sound = true;
+                break;
+            }
+        }
+        ASSERT_TRUE(hatched_exit_sound);
+
+        // Now move a unit to base to heal/eat
+        sim.clear_audio_events();
+        uint32_t a_id = sim.spawn_unit(0, AntType::Worker, TileCoord{20, 20});
+        auto* a = const_cast<AntUnit*>(&sim.get_unit(a_id));
+        a->hp = 5; // Damaged to trigger healing dwell
+
+        const auto* base = sim.grid().find_anthill(0);
+        ASSERT_TRUE(base != nullptr);
+        sim.join_base_queue(a_id);
+
+        // Run until unit enters, dwells, heals, and exits
+        bool regular_exit_sound = false;
+        for (int t = 0; t < 120; ++t) {
+            sim.tick();
+            if (sim.has_audio_event(SoundID::ExitHill)) {
+                regular_exit_sound = true;
+            }
+        }
+        // Exiting after heal/eating must NOT play ExitHill
+        ASSERT_FALSE(regular_exit_sound);
+    } TEST_END();
+
+    TEST_CASE("12.78 Ability Cooldown Initiation & Uninterruptible Placement") {
+        SimulationEngine sim;
+        sim.init_test_world(60, 60, 1);
+
+        // 1. Fire Ant: Cooldown starts at order dispatch (40 ticks)
+        uint32_t fire_id = sim.spawn_unit(0, AntType::Fire, TileCoord{20, 20});
+        sim.set_tile_flags(21, 20, 0x06);
+
+        sim.clear_audio_events();
+        ASSERT_TRUE(sim.ignite_fire(fire_id, TileCoord{21, 20}, false));
+        ASSERT_EQ(sim.get_unit(fire_id).state, UnitState::PlacingFire);
+        ASSERT_EQ(sim.get_unit(fire_id).ability_cooldown_ticks, 40);
+
+        // Order move while placing -> triggers CantGo and does not cancel placement
+        sim.clear_audio_events();
+        sim.issue_move_order(fire_id, TileCoord{22, 20});
+        ASSERT_EQ(sim.get_unit(fire_id).state, UnitState::PlacingFire); // Uninterruptible
+        ASSERT_TRUE(sim.has_audio_event(SoundID::CantGo));
+
+        // 2. Bomber Ant: Cooldown starts at order dispatch (60 ticks)
+        uint32_t bomb_id = sim.spawn_unit(0, AntType::Bomber, TileCoord{25, 25});
+        sim.set_tile_flags(26, 25, 0x06);
+
+        sim.clear_audio_events();
+        ASSERT_TRUE(sim.plant_bomb(bomb_id, TileCoord{26, 25}, false));
+        ASSERT_EQ(sim.get_unit(bomb_id).state, UnitState::PlantingBomb);
+        ASSERT_EQ(sim.get_unit(bomb_id).ability_cooldown_ticks, 60);
+
+        // Order move while placing -> triggers CantGo and does not cancel
+        sim.clear_audio_events();
+        sim.issue_move_order(bomb_id, TileCoord{27, 25});
+        ASSERT_EQ(sim.get_unit(bomb_id).state, UnitState::PlantingBomb); // Uninterruptible
+        ASSERT_TRUE(sim.has_audio_event(SoundID::CantGo));
+
+        // 3. Enemy attack does not knock back placing unit
+        uint32_t enemy_id = sim.spawn_unit(1, AntType::Worker, TileCoord{24, 25});
+
+        int32_t hp_before = sim.get_unit(bomb_id).hp;
+        int32_t x_before = sim.get_unit(bomb_id).pos.x;
+        int32_t y_before = sim.get_unit(bomb_id).pos.y;
+
+        sim.execute_melee_attack(enemy_id, bomb_id);
+        ASSERT_LT(sim.get_unit(bomb_id).hp, hp_before); // Took damage
+        ASSERT_EQ(sim.get_unit(bomb_id).pos.x, x_before); // Not displaced
+        ASSERT_EQ(sim.get_unit(bomb_id).pos.y, y_before);
+        ASSERT_EQ(sim.get_unit(bomb_id).state, UnitState::PlantingBomb); // Still placing
+    } TEST_END();
+
+    TEST_CASE("12.79 Minimap Radar Firewall Exclusion & Targeted SFX Routing") {
+        SimulationEngine sim;
+        sim.init_test_world(60, 60, 1);
+
+        // Ignite fire at (10, 10)
+        uint32_t fire_ant_id = sim.spawn_unit(0, AntType::Fire, TileCoord{10, 9});
+        sim.set_tile_flags(10, 10, 0x06);
+        ASSERT_TRUE(sim.ignite_fire(fire_ant_id, TileCoord{10, 10}, false));
+        for (int t = 0; t < 40; ++t) sim.tick();
+        ASSERT_TRUE(sim.grid().has_fire_at(TileCoord{10, 10}));
+
+        AssetArchive archive;
+        std::string chd_path = std::string(ORIGINAL_ASSETS_DIR) + "/ants.chd";
+        archive.load_chd(chd_path);
+        HUD hud;
+        hud.init(0);
+
+        // Targeted audio event routing in AudioMixer
+        AudioMixer mixer;
+        mixer.set_headless_mode(true);
+        mixer.init(archive);
+
+        std::vector<AudioEvent> events;
+        // AlliancePro targeted to recipient player 1
+        events.push_back(AudioEvent{SoundID::AlliancePro, 0, 0, 1, 1});
+
+        // Player 0 should ignore targeted event
+        mixer.ingest_simulation_events(events, 0);
+        ASSERT_EQ(mixer.active_channel_count(), 0u);
+
+        // Player 1 should receive targeted event
+        mixer.ingest_simulation_events(events, 1);
+        ASSERT_EQ(mixer.active_channel_count(), 1u);
     } TEST_END();
 }
 

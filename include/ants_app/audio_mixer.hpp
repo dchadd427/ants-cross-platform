@@ -87,6 +87,17 @@ public:
     void mix_samples_f32(float* out_stereo, size_t num_frames);
     std::vector<int16_t> render_frames(size_t num_frames); // Headless testing helper
 
+    // Background Music (Streaming MP3)
+    bool play_music(const std::string& filepath, bool loop = true);
+    void stop_music();
+    void pause_music();
+    void resume_music();
+    void set_music_volume(float volume);
+    float get_music_volume() const noexcept;
+    bool is_music_playing() const;
+    void fade_out_music(float duration_sec);
+    void update_music(float dt);
+
     // Headless / Mock Mode
     void set_headless_mode(bool headless) noexcept { headless_mode_ = headless; }
     bool is_headless_mode() const noexcept { return headless_mode_; }
@@ -106,6 +117,9 @@ private:
 
     bool headless_mode_{false};
     uint32_t sdl_audio_device_{0};
+
+    struct MusicStream;
+    std::unique_ptr<MusicStream> music_stream_;
 
     mutable std::mutex mixer_mutex_;
 };

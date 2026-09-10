@@ -748,10 +748,7 @@ void Renderer::render_world(const ants::sim::WorldState& world,
     render_terrain_layer1(grid);
 
     // 3. Layer 2 Structures / Interactive Objects
-    render_terrain_layer2_structures(grid);
-
-    // 3.2 Flower Droppers (Swaying daisy on cliffs & falling powerup droplets)
-    render_flower_droppers(world);
+    render_terrain_layer2_structures(grid, &world);
 
     // 3.5 Anthill Selection Brackets (if a base is selected)
     if (selected_base_team_id >= 0) {
@@ -785,6 +782,14 @@ void Renderer::render_world(const ants::sim::WorldState& world,
 
     // 4.5 Layer 3 Canopy Overhang (rendered after ants so ants walk beneath foliage)
     render_terrain_layer3_canopy();
+
+    // 4.6 Flower Droppers (Swaying daisy on cliffs & falling powerup droplets - rendered in front of plant canopy)
+    render_flower_droppers(world);
+
+    // 4.8 Authentic Fog of War autotiling overlay
+    if (world.fog_of_war_enabled) {
+        render_fog_of_war(world);
+    }
 
     // 5. Tile Grid Overlay (if enabled)
     if (show_tile_grid) {
@@ -853,7 +858,7 @@ void Renderer::render_terrain_layer1(const ants::sim::Grid& grid) {
     }
 }
 
-void Renderer::render_terrain_layer2_structures(const ants::sim::Grid& grid) {
+void Renderer::render_terrain_layer2_structures(const ants::sim::Grid& grid, const ants::sim::WorldState* world) {
     int32_t start_col = std::max(0, static_cast<int32_t>(camera_.x) / TILE_SIZE);
     int32_t end_col   = std::min(static_cast<int32_t>(grid.width()) - 1,
                                  (static_cast<int32_t>(camera_.x) + PLAYFIELD_W + 31) / TILE_SIZE);
@@ -865,6 +870,7 @@ void Renderer::render_terrain_layer2_structures(const ants::sim::Grid& grid) {
         for (int32_t c = start_col; c <= end_col; ++c) {
             const auto& cell = grid.get_cell(static_cast<uint32_t>(c), static_cast<uint32_t>(r));
             if (cell.is_empty_overlay()) continue;
+            if (world && world->fog_of_war_enabled && !world->is_tile_revealed(c, r)) continue;
 
             int32_t sx = 0, sy = 0;
             camera_.world_to_screen(c * TILE_SIZE, r * TILE_SIZE, sx, sy);
@@ -996,6 +1002,9 @@ void Renderer::render_terrain_layer2_structures(const ants::sim::Grid& grid) {
 
         // If it is food, check if any of its footprint cells still has food
         if (obj.is_food) {
+            if (world && world->fog_of_war_enabled && !world->is_tile_revealed(obj.anchor_x, obj.anchor_y)) {
+                continue; // Shrouded food hidden under fog of war
+            }
             bool has_any_food = false;
             uint16_t cur_tile = ants::assets::LVL_EMPTY_TILE;
             for (const auto& tile : obj.food_tiles) {
@@ -1047,6 +1056,10 @@ void Renderer::render_terrain_layer2_structures(const ants::sim::Grid& grid) {
     if (has_anthill_bases_) {
         for (size_t t = 0; t < 4; ++t) {
             if (anthill_bases_[t].x >= 0 && anthill_bases_[t].y >= 0) {
+                if (world && world->fog_of_war_enabled && t != hud_team_id_ &&
+                    !world->is_tile_revealed(anthill_bases_[t].x, anthill_bases_[t].y)) {
+                    continue; // Enemy base shrouded under fog of war
+                }
                 int32_t sx = 0, sy = 0;
                 camera_.world_to_screen(anthill_bases_[t].x * TILE_SIZE, anthill_bases_[t].y * TILE_SIZE, sx, sy);
                 SDL_Rect dst = { sx, sy, 128, 128 };
@@ -1059,6 +1072,10 @@ void Renderer::render_terrain_layer2_structures(const ants::sim::Grid& grid) {
     } else {
         // Fallback for custom test grids using grid.anthills()
         for (const auto& a : grid.anthills()) {
+            if (world && world->fog_of_war_enabled && a.team_id != hud_team_id_ &&
+                !world->is_tile_revealed(static_cast<int32_t>(a.x), static_cast<int32_t>(a.y))) {
+                continue;
+            }
             int32_t sx = 0, sy = 0;
             camera_.world_to_screen((static_cast<int32_t>(a.x) - 1) * TILE_SIZE,
                                     (static_cast<int32_t>(a.y) - 1) * TILE_SIZE, sx, sy);
@@ -1121,6 +1138,64 @@ void Renderer::render_flower_droppers(const ants::sim::WorldState& world) {
                     }
                 }
             }
+        }
+    }
+}
+
+void Renderer::render_fog_of_war(const ants::sim::WorldState& world) {
+    if (!world.fog_of_war_enabled || world.fog_revealed.empty() || !archive_ || !texture_cache_) {
+        return;
+    }
+
+    int32_t start_col = std::max(0, static_cast<int32_t>(camera_.x) / TILE_SIZE);
+    int32_t end_col   = std::min(static_cast<int32_t>(world.width) - 1,
+                                 (static_cast<int32_t>(camera_.x) + PLAYFIELD_W + 31) / TILE_SIZE);
+    int32_t start_row = std::max(0, static_cast<int32_t>(camera_.y) / TILE_SIZE);
+    int32_t end_row   = std::min(static_cast<int32_t>(world.height) - 1,
+                                 (static_cast<int32_t>(camera_.y) + PLAYFIELD_H + 31) / TILE_SIZE);
+
+    // Authentic 1998 Ants.exe dither anim lookup table (Ants.exe VA 0x1001a7a & 0x10087c0..0x10087da)
+    // Formula: idx = ((c0 * 2 + c1) * 2 + 2 + c2) * 2 + c3
+    // c0 = North revealed (1/0), c1 = East revealed, c2 = South revealed, c3 = West revealed
+    // Sprites: dither0.bmp (352) through dither15.bmp (367)
+    static constexpr uint16_t FOG_DITHER_SPRITE_LUT[20] = {
+        0,   0,   0,   0,   // 0..3: unused
+        365, // idx  4: N=0 E=0 S=0 W=0 -> dither13.bmp
+        363, // idx  5: N=0 E=0 S=0 W=1 -> dither11.bmp
+        362, // idx  6: N=0 E=0 S=1 W=0 -> dither10.bmp
+        359, // idx  7: N=0 E=0 S=1 W=1 -> dither7.bmp
+        364, // idx  8: N=0 E=1 S=0 W=0 -> dither12.bmp
+        367, // idx  9: N=0 E=1 S=0 W=1 -> dither15.bmp
+        358, // idx 10: N=0 E=1 S=1 W=0 -> dither6.bmp
+        353, // idx 11: N=0 E=1 S=1 W=1 -> dither1.bmp
+        361, // idx 12: N=1 E=0 S=0 W=0 -> dither9.bmp
+        360, // idx 13: N=1 E=0 S=0 W=1 -> dither8.bmp
+        366, // idx 14: N=1 E=0 S=1 W=0 -> dither14.bmp
+        354, // idx 15: N=1 E=0 S=1 W=1 -> dither2.bmp
+        357, // idx 16: N=1 E=1 S=0 W=0 -> dither5.bmp
+        356, // idx 17: N=1 E=1 S=0 W=1 -> dither4.bmp
+        355, // idx 18: N=1 E=1 S=1 W=0 -> dither3.bmp
+        352  // idx 19: N=1 E=1 S=1 W=1 -> dither0.bmp
+    };
+
+    for (int32_t r = start_row; r <= end_row; ++r) {
+        for (int32_t c = start_col; c <= end_col; ++c) {
+            if (world.is_tile_revealed(c, r)) {
+                continue; // Revealed tiles are not covered by fog
+            }
+
+            int32_t c0 = world.is_tile_revealed(c, r - 1) ? 1 : 0; // North
+            int32_t c1 = world.is_tile_revealed(c + 1, r) ? 1 : 0; // East
+            int32_t c2 = world.is_tile_revealed(c, r + 1) ? 1 : 0; // South
+            int32_t c3 = world.is_tile_revealed(c - 1, r) ? 1 : 0; // West
+
+            int32_t idx = ((c0 * 2 + c1) * 2 + 2 + c2) * 2 + c3;
+            if (idx < 4 || idx > 19) continue;
+
+            uint32_t sprite_id = FOG_DITHER_SPRITE_LUT[idx];
+            int32_t sx = 0, sy = 0;
+            camera_.world_to_screen(c * TILE_SIZE, r * TILE_SIZE, sx, sy);
+            draw_sprite(sprite_id, sx, sy);
         }
     }
 }
@@ -1725,6 +1800,10 @@ void Renderer::render_ant_units(const ants::sim::WorldState& world,
                                 bool show_all_health_bars) {
     for (const auto& a : world.ants) {
         if (a.is_underground) continue;
+        if (world.fog_of_war_enabled && a.player_id != hud_team_id_ &&
+            !world.is_tile_revealed(a.tile_x, a.tile_y)) {
+            continue; // Concealed enemy ant under fog of war
+        }
         if (a.hp == 0 && !a.is_drowning &&
             a.anim_state != static_cast<uint16_t>(ants::sim::UnitState::Knockback) &&
             a.anim_state != static_cast<uint16_t>(ants::sim::UnitState::Bounce)) continue;

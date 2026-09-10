@@ -274,9 +274,19 @@ struct WorldState {
     std::array<int32_t, MAX_PLAYERS>          player_scores{};
     std::array<uint32_t, MAX_PLAYERS>         player_eggs{};
     std::array<uint8_t, MAX_PLAYERS>          player_alliances{};
-
     std::vector<ants::assets::AnthillSpawn> anthills;
     MatchResult match_result;
+
+    // Authentic Fog of War State
+    bool fog_of_war_enabled{false};
+    std::vector<uint8_t> fog_revealed{}; // size: width * height (1 = revealed, 0 = shrouded)
+
+    bool is_tile_revealed(int32_t x, int32_t y) const noexcept {
+        if (!fog_of_war_enabled) return true;
+        if (x < 0 || y < 0 || static_cast<uint32_t>(x) >= width || static_cast<uint32_t>(y) >= height) return false;
+        size_t idx = static_cast<size_t>(y) * width + static_cast<size_t>(x);
+        return idx < fog_revealed.size() && fog_revealed[idx] != 0;
+    }
 };
 
 class SimulationEngineImpl;
@@ -317,6 +327,11 @@ public:
     void set_match_time_remaining_ms(uint32_t ms);
     bool is_match_over() const;
     PlayerMatchStats get_player_stats(uint8_t player_id) const;
+
+    // Fog of War
+    void set_fog_of_war_enabled(bool enabled);
+    bool is_fog_of_war_enabled() const;
+    void set_viewing_player_id(uint8_t player_id);
 
     std::vector<AudioEvent> poll_audio_events();
     std::vector<NewsEvent> poll_news_events();

@@ -15,7 +15,49 @@
   #include <SDL2/SDL.h>
 #endif
 
+#include <fstream>
+
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wsign-conversion"
+#pragma GCC diagnostic ignored "-Wconversion"
+#pragma GCC diagnostic ignored "-Wunused-function"
+#pragma GCC diagnostic ignored "-Wunused-parameter"
+#define DR_MP3_IMPLEMENTATION
+#include "ants_app/dr_mp3.h"
+#pragma GCC diagnostic pop
+
 namespace ants::app {
+
+struct AudioMixer::MusicStream {
+    std::vector<uint8_t> file_data;
+    drmp3 decoder{};
+    bool is_open{false};
+    bool is_playing{false};
+    bool is_paused{false};
+    bool loop{true};
+    float volume{0.8f};
+    float fade_volume{1.0f};
+    float fade_duration{0.0f};
+    float fade_timer{0.0f};
+    bool is_fading{false};
+    std::string filepath;
+
+    void cleanup() {
+        if (is_open) {
+            drmp3_uninit(&decoder);
+            is_open = false;
+        }
+        file_data.clear();
+        is_playing = false;
+        is_paused = false;
+        is_fading = false;
+        fade_volume = 1.0f;
+    }
+
+    ~MusicStream() {
+        cleanup();
+    }
+};
 
 static void sdl_audio_callback(void* userdata, uint8_t* stream, int len) {
     auto* mixer = static_cast<AudioMixer*>(userdata);
@@ -24,10 +66,11 @@ static void sdl_audio_callback(void* userdata, uint8_t* stream, int len) {
     mixer->mix_samples_i16(reinterpret_cast<int16_t*>(stream), num_frames);
 }
 
-AudioMixer::AudioMixer() = default;
+AudioMixer::AudioMixer() : music_stream_(std::make_unique<MusicStream>()) {}
 
 AudioMixer::~AudioMixer() {
     shutdown_sdl_audio();
+    music_stream_.reset();
 }
 
 AudioMixer::AudioMixer(AudioMixer&& other) noexcept {
@@ -41,6 +84,7 @@ AudioMixer::AudioMixer(AudioMixer&& other) noexcept {
     sfx_volume_ = other.sfx_volume_;
     headless_mode_ = other.headless_mode_;
     sdl_audio_device_ = other.sdl_audio_device_;
+    music_stream_ = std::move(other.music_stream_);
 
     other.archive_ = nullptr;
     other.sdl_audio_device_ = 0;
@@ -59,6 +103,7 @@ AudioMixer& AudioMixer::operator=(AudioMixer&& other) noexcept {
         sfx_volume_ = other.sfx_volume_;
         headless_mode_ = other.headless_mode_;
         sdl_audio_device_ = other.sdl_audio_device_;
+        music_stream_ = std::move(other.music_stream_);
 
         other.archive_ = nullptr;
         other.sdl_audio_device_ = 0;
@@ -302,52 +347,239 @@ void AudioMixer::ingest_simulation_events(const std::vector<ants::sim::AudioEven
     }
 }
 
+bool AudioMixer::play_music(const std::string& filepath, bool loop) {
+    std::lock_guard<std::mutex> lock(mixer_mutex_);
+    if (!music_stream_) {
+        music_stream_ = std::make_unique<MusicStream>();
+    }
+    music_stream_->cleanup();
+
+    std::string candidate = filepath;
+    std::ifstream f(candidate, std::ios::binary | std::ios::ate);
+    if (!f.is_open()) {
+        std::string fb1 = std::string("Original-Ants/") + filepath;
+        f.open(fb1, std::ios::binary | std::ios::ate);
+        if (f.is_open()) {
+            candidate = fb1;
+        } else {
+            std::string fb2 = std::string("../") + filepath;
+            f.open(fb2, std::ios::binary | std::ios::ate);
+            if (f.is_open()) {
+                candidate = fb2;
+            }
+        }
+    }
+
+    if (!f.is_open()) {
+        if (headless_mode_) {
+            music_stream_->is_playing = true;
+            music_stream_->loop = loop;
+            music_stream_->filepath = filepath;
+            return true;
+        }
+        std::cerr << "[AudioMixer] Failed to open music file: " << filepath << "\n";
+        return false;
+    }
+
+    std::streamsize size = f.tellg();
+    f.seekg(0, std::ios::beg);
+    music_stream_->file_data.resize(static_cast<size_t>(size));
+    if (!f.read(reinterpret_cast<char*>(music_stream_->file_data.data()), size)) {
+        music_stream_->file_data.clear();
+        return false;
+    }
+    f.close();
+
+    if (!drmp3_init_memory(&music_stream_->decoder,
+                           music_stream_->file_data.data(),
+                           music_stream_->file_data.size(),
+                           nullptr)) {
+        music_stream_->file_data.clear();
+        std::cerr << "[AudioMixer] Failed to decode MP3 header: " << candidate << "\n";
+        return false;
+    }
+
+    music_stream_->is_open = true;
+    music_stream_->is_playing = true;
+    music_stream_->is_paused = false;
+    music_stream_->loop = loop;
+    music_stream_->fade_volume = 1.0f;
+    music_stream_->is_fading = false;
+    music_stream_->filepath = filepath;
+    return true;
+}
+
+void AudioMixer::stop_music() {
+    std::lock_guard<std::mutex> lock(mixer_mutex_);
+    if (music_stream_) {
+        music_stream_->cleanup();
+    }
+}
+
+void AudioMixer::pause_music() {
+    std::lock_guard<std::mutex> lock(mixer_mutex_);
+    if (music_stream_ && music_stream_->is_playing) {
+        music_stream_->is_paused = true;
+    }
+}
+
+void AudioMixer::resume_music() {
+    std::lock_guard<std::mutex> lock(mixer_mutex_);
+    if (music_stream_ && music_stream_->is_playing) {
+        music_stream_->is_paused = false;
+    }
+}
+
+void AudioMixer::set_music_volume(float volume) {
+    std::lock_guard<std::mutex> lock(mixer_mutex_);
+    if (music_stream_) {
+        music_stream_->volume = std::clamp(volume, 0.0f, 1.0f);
+    }
+}
+
+float AudioMixer::get_music_volume() const noexcept {
+    std::lock_guard<std::mutex> lock(mixer_mutex_);
+    return music_stream_ ? music_stream_->volume : 0.8f;
+}
+
+bool AudioMixer::is_music_playing() const {
+    std::lock_guard<std::mutex> lock(mixer_mutex_);
+    if (!music_stream_) return false;
+    return music_stream_->is_playing && !music_stream_->is_paused;
+}
+
+void AudioMixer::fade_out_music(float duration_sec) {
+    std::lock_guard<std::mutex> lock(mixer_mutex_);
+    if (!music_stream_ || !music_stream_->is_playing) return;
+    if (duration_sec <= 0.001f) {
+        music_stream_->fade_volume = 0.0f;
+        music_stream_->is_playing = false;
+        music_stream_->is_fading = false;
+    } else {
+        music_stream_->is_fading = true;
+        music_stream_->fade_duration = duration_sec;
+        music_stream_->fade_timer = duration_sec;
+    }
+}
+
+void AudioMixer::update_music(float dt) {
+    std::lock_guard<std::mutex> lock(mixer_mutex_);
+    if (!music_stream_) return;
+
+    if (music_stream_->is_playing && music_stream_->is_fading) {
+        music_stream_->fade_timer -= dt;
+        if (music_stream_->fade_timer <= 0.0f) {
+            music_stream_->fade_volume = 0.0f;
+            music_stream_->is_playing = false;
+            music_stream_->is_fading = false;
+        } else if (music_stream_->fade_duration > 0.0001f) {
+            music_stream_->fade_volume = std::clamp(music_stream_->fade_timer / music_stream_->fade_duration, 0.0f, 1.0f);
+        }
+    }
+}
+
 void AudioMixer::mix_samples_i16(int16_t* out_stereo, size_t num_frames) {
     std::lock_guard<std::mutex> lock(mixer_mutex_);
     std::memset(out_stereo, 0, num_frames * 2 * sizeof(int16_t));
 
-    const float gain = master_volume_ * sfx_volume_;
-    if (gain <= 0.0001f) return;
+    // Decode music frames if music is playing
+    std::vector<float> music_buf_storage;
+    float* music_buf = nullptr;
+    float stack_music_buf[2048 * 2];
+    bool has_music = false;
+    float music_gain = 0.0f;
+
+    if (music_stream_ && music_stream_->is_open && music_stream_->is_playing && !music_stream_->is_paused) {
+        music_gain = master_volume_ * music_stream_->volume * music_stream_->fade_volume;
+        uint32_t mp3_channels = music_stream_->decoder.channels;
+        if (mp3_channels == 1 || mp3_channels == 2) {
+            if (num_frames * mp3_channels <= sizeof(stack_music_buf) / sizeof(float)) {
+                music_buf = stack_music_buf;
+            } else {
+                music_buf_storage.resize(num_frames * mp3_channels);
+                music_buf = music_buf_storage.data();
+            }
+
+            size_t total_read = 0;
+            while (total_read < num_frames) {
+                drmp3_uint64 need = static_cast<drmp3_uint64>(num_frames - total_read);
+                drmp3_uint64 read = drmp3_read_pcm_frames_f32(&music_stream_->decoder, need, music_buf + total_read * mp3_channels);
+                if (read == 0) {
+                    if (music_stream_->loop) {
+                        drmp3_seek_to_pcm_frame(&music_stream_->decoder, 0);
+                        read = drmp3_read_pcm_frames_f32(&music_stream_->decoder, need, music_buf + total_read * mp3_channels);
+                        if (read == 0) {
+                            break;
+                        }
+                    } else {
+                        music_stream_->is_playing = false;
+                        break;
+                    }
+                }
+                total_read += static_cast<size_t>(read);
+            }
+            if (total_read < num_frames) {
+                std::memset(music_buf + total_read * mp3_channels, 0, (num_frames - total_read) * mp3_channels * sizeof(float));
+            }
+            has_music = (music_gain > 0.0001f);
+        }
+    }
+
+    if (master_volume_ <= 0.0001f) return;
+    const float sfx_gain = master_volume_ * sfx_volume_;
 
     for (size_t f = 0; f < num_frames; ++f) {
         float mix_l = 0.0f;
         float mix_r = 0.0f;
 
-        for (auto& ch : channels_) {
-            if (!ch.active || !ch.clip || ch.clip->pcm_data.empty()) continue;
+        if (sfx_gain > 0.0001f) {
+            for (auto& ch : channels_) {
+                if (!ch.active || !ch.clip || ch.clip->pcm_data.empty()) continue;
 
-            const auto& data = ch.clip->pcm_data;
-            size_t idx0 = static_cast<size_t>(ch.cursor);
-            double frac = ch.cursor - static_cast<double>(idx0);
+                const auto& data = ch.clip->pcm_data;
+                size_t idx0 = static_cast<size_t>(ch.cursor);
+                double frac = ch.cursor - static_cast<double>(idx0);
 
-            if (idx0 < data.size()) {
-                uint8_t b0 = data[idx0];
-                uint8_t b1 = (idx0 + 1 < data.size()) ? data[idx0 + 1] : b0;
+                if (idx0 < data.size()) {
+                    uint8_t b0 = data[idx0];
+                    uint8_t b1 = (idx0 + 1 < data.size()) ? data[idx0 + 1] : b0;
 
-                // 8-bit unsigned PCM to normalized float [-1.0f, 1.0f]
-                float s0 = (static_cast<float>(b0) - 128.0f) / 128.0f;
-                float s1 = (static_cast<float>(b1) - 128.0f) / 128.0f;
-                float sample = static_cast<float>((1.0 - frac) * static_cast<double>(s0) + frac * static_cast<double>(s1));
+                    // 8-bit unsigned PCM to normalized float [-1.0f, 1.0f]
+                    float s0 = (static_cast<float>(b0) - 128.0f) / 128.0f;
+                    float s1 = (static_cast<float>(b1) - 128.0f) / 128.0f;
+                    float sample = static_cast<float>((1.0 - frac) * static_cast<double>(s0) + frac * static_cast<double>(s1));
 
-                mix_l += sample * ch.vol_left;
-                mix_r += sample * ch.vol_right;
+                    mix_l += sample * ch.vol_left;
+                    mix_r += sample * ch.vol_right;
 
-                ch.cursor += ch.rate_step;
-                if (ch.cursor >= static_cast<double>(data.size())) {
-                    if (ch.loop) {
-                        ch.cursor -= static_cast<double>(data.size());
-                    } else {
-                        ch.active = false;
+                    ch.cursor += ch.rate_step;
+                    if (ch.cursor >= static_cast<double>(data.size())) {
+                        if (ch.loop) {
+                            ch.cursor -= static_cast<double>(data.size());
+                        } else {
+                            ch.active = false;
+                        }
                     }
+                } else {
+                    ch.active = false;
                 }
+            }
+            mix_l *= sfx_gain;
+            mix_r *= sfx_gain;
+        }
+
+        if (has_music && music_buf) {
+            if (music_stream_->decoder.channels == 2) {
+                mix_l += music_buf[f * 2 + 0] * music_gain;
+                mix_r += music_buf[f * 2 + 1] * music_gain;
             } else {
-                ch.active = false;
+                mix_l += music_buf[f] * music_gain;
+                mix_r += music_buf[f] * music_gain;
             }
         }
 
-        // Apply master/sfx gain and soft-clip
-        mix_l = std::clamp(mix_l * gain, -1.0f, 1.0f);
-        mix_r = std::clamp(mix_r * gain, -1.0f, 1.0f);
+        mix_l = std::clamp(mix_l, -1.0f, 1.0f);
+        mix_r = std::clamp(mix_r, -1.0f, 1.0f);
 
         out_stereo[f * 2 + 0] = static_cast<int16_t>(mix_l * 32767.0f);
         out_stereo[f * 2 + 1] = static_cast<int16_t>(mix_r * 32767.0f);
@@ -358,46 +590,103 @@ void AudioMixer::mix_samples_f32(float* out_stereo, size_t num_frames) {
     std::lock_guard<std::mutex> lock(mixer_mutex_);
     std::memset(out_stereo, 0, num_frames * 2 * sizeof(float));
 
-    const float gain = master_volume_ * sfx_volume_;
-    if (gain <= 0.0001f) return;
+    // Decode music frames if music is playing
+    std::vector<float> music_buf_storage;
+    float* music_buf = nullptr;
+    float stack_music_buf[2048 * 2];
+    bool has_music = false;
+    float music_gain = 0.0f;
+
+    if (music_stream_ && music_stream_->is_open && music_stream_->is_playing && !music_stream_->is_paused) {
+        music_gain = master_volume_ * music_stream_->volume * music_stream_->fade_volume;
+        uint32_t mp3_channels = music_stream_->decoder.channels;
+        if (mp3_channels == 1 || mp3_channels == 2) {
+            if (num_frames * mp3_channels <= sizeof(stack_music_buf) / sizeof(float)) {
+                music_buf = stack_music_buf;
+            } else {
+                music_buf_storage.resize(num_frames * mp3_channels);
+                music_buf = music_buf_storage.data();
+            }
+
+            size_t total_read = 0;
+            while (total_read < num_frames) {
+                drmp3_uint64 need = static_cast<drmp3_uint64>(num_frames - total_read);
+                drmp3_uint64 read = drmp3_read_pcm_frames_f32(&music_stream_->decoder, need, music_buf + total_read * mp3_channels);
+                if (read == 0) {
+                    if (music_stream_->loop) {
+                        drmp3_seek_to_pcm_frame(&music_stream_->decoder, 0);
+                        read = drmp3_read_pcm_frames_f32(&music_stream_->decoder, need, music_buf + total_read * mp3_channels);
+                        if (read == 0) {
+                            break;
+                        }
+                    } else {
+                        music_stream_->is_playing = false;
+                        break;
+                    }
+                }
+                total_read += static_cast<size_t>(read);
+            }
+            if (total_read < num_frames) {
+                std::memset(music_buf + total_read * mp3_channels, 0, (num_frames - total_read) * mp3_channels * sizeof(float));
+            }
+            has_music = (music_gain > 0.0001f);
+        }
+    }
+
+    if (master_volume_ <= 0.0001f) return;
+    const float sfx_gain = master_volume_ * sfx_volume_;
 
     for (size_t f = 0; f < num_frames; ++f) {
         float mix_l = 0.0f;
         float mix_r = 0.0f;
 
-        for (auto& ch : channels_) {
-            if (!ch.active || !ch.clip || ch.clip->pcm_data.empty()) continue;
+        if (sfx_gain > 0.0001f) {
+            for (auto& ch : channels_) {
+                if (!ch.active || !ch.clip || ch.clip->pcm_data.empty()) continue;
 
-            const auto& data = ch.clip->pcm_data;
-            size_t idx0 = static_cast<size_t>(ch.cursor);
-            double frac = ch.cursor - static_cast<double>(idx0);
+                const auto& data = ch.clip->pcm_data;
+                size_t idx0 = static_cast<size_t>(ch.cursor);
+                double frac = ch.cursor - static_cast<double>(idx0);
 
-            if (idx0 < data.size()) {
-                uint8_t b0 = data[idx0];
-                uint8_t b1 = (idx0 + 1 < data.size()) ? data[idx0 + 1] : b0;
+                if (idx0 < data.size()) {
+                    uint8_t b0 = data[idx0];
+                    uint8_t b1 = (idx0 + 1 < data.size()) ? data[idx0 + 1] : b0;
 
-                float s0 = (static_cast<float>(b0) - 128.0f) / 128.0f;
-                float s1 = (static_cast<float>(b1) - 128.0f) / 128.0f;
-                float sample = static_cast<float>((1.0 - frac) * static_cast<double>(s0) + frac * static_cast<double>(s1));
+                    float s0 = (static_cast<float>(b0) - 128.0f) / 128.0f;
+                    float s1 = (static_cast<float>(b1) - 128.0f) / 128.0f;
+                    float sample = static_cast<float>((1.0 - frac) * static_cast<double>(s0) + frac * static_cast<double>(s1));
 
-                mix_l += sample * ch.vol_left;
-                mix_r += sample * ch.vol_right;
+                    mix_l += sample * ch.vol_left;
+                    mix_r += sample * ch.vol_right;
 
-                ch.cursor += ch.rate_step;
-                if (ch.cursor >= static_cast<double>(data.size())) {
-                    if (ch.loop) {
-                        ch.cursor -= static_cast<double>(data.size());
-                    } else {
-                        ch.active = false;
+                    ch.cursor += ch.rate_step;
+                    if (ch.cursor >= static_cast<double>(data.size())) {
+                        if (ch.loop) {
+                            ch.cursor -= static_cast<double>(data.size());
+                        } else {
+                            ch.active = false;
+                        }
                     }
+                } else {
+                    ch.active = false;
                 }
+            }
+            mix_l *= sfx_gain;
+            mix_r *= sfx_gain;
+        }
+
+        if (has_music && music_buf) {
+            if (music_stream_->decoder.channels == 2) {
+                mix_l += music_buf[f * 2 + 0] * music_gain;
+                mix_r += music_buf[f * 2 + 1] * music_gain;
             } else {
-                ch.active = false;
+                mix_l += music_buf[f] * music_gain;
+                mix_r += music_buf[f] * music_gain;
             }
         }
 
-        out_stereo[f * 2 + 0] = std::clamp(mix_l * gain, -1.0f, 1.0f);
-        out_stereo[f * 2 + 1] = std::clamp(mix_r * gain, -1.0f, 1.0f);
+        out_stereo[f * 2 + 0] = std::clamp(mix_l, -1.0f, 1.0f);
+        out_stereo[f * 2 + 1] = std::clamp(mix_r, -1.0f, 1.0f);
     }
 }
 
