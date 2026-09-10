@@ -758,6 +758,31 @@
   }
 
   /* Layers Inspector */
+  .layers-section {
+    margin-top: 1rem;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 0.85rem 1rem;
+  }
+  .mosaic-callout {
+    background: rgba(30, 41, 59, 0.7);
+    border: 1px solid rgba(56, 189, 248, 0.35);
+    border-left: 4px solid #38bdf8;
+    border-radius: 6px;
+    padding: 0.75rem 1rem;
+    margin-bottom: 0.75rem;
+    font-size: 0.82rem;
+    line-height: 1.45;
+    color: var(--text-primary);
+  }
+  .mosaic-callout code {
+    background: rgba(15, 23, 42, 0.6);
+    padding: 1px 4px;
+    border-radius: 3px;
+    color: #38bdf8;
+    font-family: monospace;
+  }
   .layers-table {
     width: 100%;
     border-collapse: collapse;
@@ -766,15 +791,39 @@
   }
   .layers-table th {
     text-align: left;
-    padding: 0.5rem 0.75rem;
+    padding: 0.5rem 0.65rem;
     background: #0d1527;
     color: var(--text-secondary);
     border-bottom: 1px solid var(--border);
   }
   .layers-table td {
-    padding: 0.45rem 0.75rem;
+    padding: 0.4rem 0.65rem;
     border-bottom: 1px solid var(--border-subtle);
     vertical-align: middle;
+  }
+  .layers-table tr.layer-row {
+    transition: background 0.12s ease, opacity 0.15s ease;
+    cursor: pointer;
+  }
+  .layers-table tr.layer-row:hover, .layers-table tr.layer-row.hovered {
+    background: rgba(56, 189, 248, 0.15) !important;
+  }
+  .layers-table tr.layer-row.layer-hidden {
+    opacity: 0.38;
+    background: rgba(15, 23, 42, 0.4) !important;
+  }
+  .btn-layer-vis {
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    font-size: 1.05rem;
+    line-height: 1;
+    padding: 2px 4px;
+    border-radius: 3px;
+    transition: transform 0.1s ease;
+  }
+  .btn-layer-vis:hover {
+    transform: scale(1.2);
   }
   .layer-thumb { width: 32px; height: 32px; object-fit: contain; image-rendering: pixelated; background: #0b0f19; border-radius: 3px; }
 
@@ -1328,22 +1377,50 @@
           <div class="frames-scroll" id="frames-scroll-container">
             <!-- Subitem cards injected by JS -->
           </div>
+        </div>
 
-          <!-- Current Subitem Layers Table -->
-          <div style="margin-top: 0.75rem;">
-            <h4 style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 0.4rem;">
-              Active Step Sprite Layers (<span id="current-step-layers-count">1</span> layers)
-            </h4>
-            <table class="layers-table">
-              <thead>
+        <!-- Current Subitem Layers Section -->
+        <div class="layers-section">
+          <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.5rem; margin-bottom: 0.5rem;">
+            <div style="display:flex; align-items:center; gap:0.5rem;">
+              <h4 style="font-size: 0.85rem; color: var(--text-secondary); margin:0;">
+                Active Step Sprite Layers (<span id="current-step-layers-count">1</span> layers)
+              </h4>
+              <span id="layer-breakdown-badge" style="font-size:0.75rem; color:var(--text-dim);"></span>
+            </div>
+            <div style="display:flex; align-items:center; gap:0.4rem; flex-wrap:wrap;">
+              <button class="stage-pill-btn" id="btn-layers-show-all" onclick="showAllLayers()" title="Make all layers visible">👁️ Show All</button>
+              <button class="stage-pill-btn" id="btn-layers-toggle-clay" onclick="toggleClayLayers()" title="Toggle visibility of terracotta/clay fill tiles" style="display:none;">🧱 Toggle Clay Fills</button>
+              <button class="stage-pill-btn" id="btn-layers-toggle-borders" onclick="toggleBorderLayers()" title="Toggle visibility of border frame segments" style="display:none;">🖼️ Toggle Borders</button>
+              <button class="stage-pill-btn" id="btn-layers-toggle-fg" onclick="toggleForegroundLayers()" title="Toggle visibility of text, buttons, and foreground elements" style="display:none;">🔤 Toggle Content</button>
+              <div style="display:flex; align-items:center; gap:0.25rem; margin-left:0.35rem;">
+                <span style="font-size:0.75rem; color:var(--text-secondary);">Z-Order:</span>
+                <select id="layer-zorder-select" class="stage-select" style="font-size:0.75rem; padding:2px 6px;" onchange="setLayerZOrder(this.value)" title="Choose layer rendering order">
+                  <option value="auto" selected>Auto (Smart Layering)</option>
+                  <option value="reverse">Table 4 Reverse (N-1 → 0)</option>
+                  <option value="forward">Table 4 Forward (0 → N-1)</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <!-- Contextual Mosaic Callout Banner -->
+          <div id="mosaic-info-banner" class="mosaic-callout" style="display:none;">
+            <!-- Injected by JS -->
+          </div>
+
+          <div style="max-height: 420px; overflow-y: auto; border: 1px solid var(--border); border-radius: 6px; background: #0b0f19;">
+            <table class="layers-table" style="margin-top:0;">
+              <thead style="position: sticky; top: 0; z-index: 2;">
                 <tr>
-                  <th class="sortable" onclick="setLayerSort('thumb')" style="width: 50px;">Thumb <span id="sort-lay-thumb-icon" class="sort-icon"></span></th>
-                  <th class="sortable" onclick="setLayerSort('layer')" style="width: 70px;">Layer <span id="sort-lay-layer-icon" class="sort-icon">▲</span></th>
-                  <th class="sortable" onclick="setLayerSort('id')" style="width: 90px;">Sprite ID <span id="sort-lay-id-icon" class="sort-icon"></span></th>
+                  <th style="width: 38px; text-align: center;">Vis</th>
+                  <th class="sortable" onclick="setLayerSort('thumb')" style="width: 45px;">Thumb <span id="sort-lay-thumb-icon" class="sort-icon"></span></th>
+                  <th class="sortable" onclick="setLayerSort('layer')" style="width: 65px;">Layer <span id="sort-lay-layer-icon" class="sort-icon">▲</span></th>
+                  <th class="sortable" onclick="setLayerSort('id')" style="width: 80px;">Sprite ID <span id="sort-lay-id-icon" class="sort-icon"></span></th>
                   <th class="sortable" onclick="setLayerSort('name')">Sprite BMP Filename <span id="sort-lay-name-icon" class="sort-icon"></span></th>
-                  <th class="sortable" onclick="setLayerSort('offset')" style="width: 120px;">Offset (dx, dy) <span id="sort-lay-offset-icon" class="sort-icon"></span></th>
-                  <th class="sortable" onclick="setLayerSort('size')" style="width: 100px;">Size <span id="sort-lay-size-icon" class="sort-icon"></span></th>
-                  <th style="width: 150px;">Actions</th>
+                  <th class="sortable" onclick="setLayerSort('offset')" style="width: 115px;">Offset (dx, dy) <span id="sort-lay-offset-icon" class="sort-icon"></span></th>
+                  <th class="sortable" onclick="setLayerSort('size')" style="width: 95px;">Size <span id="sort-lay-size-icon" class="sort-icon"></span></th>
+                  <th style="width: 185px;">Actions</th>
                 </tr>
               </thead>
               <tbody id="layers-tbody">
@@ -1536,6 +1613,12 @@ let activeFilterCategory = 'all';
 let animViewMode = 'split'; // 'split' or 'table'
 let spriteViewMode = 'grid'; // 'grid' or 'table'
 let animPreviewsEnabled = true;
+
+// Layer Inspector & Z-Order State
+let hiddenLayers = new Set();
+let hoveredLayerIndex = null;
+let soloLayerIndex = null;
+let layerZOrderMode = 'auto'; // 'auto', 'reverse', 'forward'
 
 // Pre-computed Reverse Maps & Caches
 const imageCache = new Map();
@@ -1902,6 +1985,140 @@ function sortLayersList(frames) {
     else if (layerSort.col === 'size') diff = (a.w * a.h) - (b.w * b.h);
     return layerSort.dir === 'asc' ? diff : -diff;
   });
+}
+
+function getLayerCategory(name) {
+  const n = (name || '').toLowerCase();
+  if (n.startsWith('dclay') || n.startsWith('dith') || n.startsWith('shadow')) return 0; // Base background fill
+  if (n.startsWith('dfram') || n.startsWith('efram') || n.startsWith('rel') || n.startsWith('rer')) return 1; // Border frames
+  if (n.startsWith('dbut') || n.startsWith('efrbg') || n.startsWith('bg50') || n.startsWith('statline')) return 2; // Cavities & button backplates
+  return 3; // Foreground text, buttons, sliders, icons
+}
+
+function getRenderOrderedFrames(frames) {
+  const withIdx = frames.map((f, idx) => ({ ...f, originalIndex: idx }));
+  if (layerZOrderMode === 'forward') {
+    return withIdx;
+  }
+  if (layerZOrderMode === 'reverse') {
+    return [...withIdx].reverse();
+  }
+  // 'auto' mode: Smart layer ordering
+  return [...withIdx].sort((a, b) => {
+    const catA = getLayerCategory(a.sprite_name);
+    const catB = getLayerCategory(b.sprite_name);
+    if (catA !== catB) return catA - catB;
+    if (catA === 3) return b.originalIndex - a.originalIndex;
+    return a.originalIndex - b.originalIndex;
+  });
+}
+
+function setLayerZOrder(mode) {
+  layerZOrderMode = mode;
+  const sel = document.getElementById('layer-zorder-select');
+  if (sel) sel.value = mode;
+  updateCanvasFrame();
+}
+
+function toggleLayerVisibility(origIdx) {
+  if (hiddenLayers.has(origIdx)) {
+    hiddenLayers.delete(origIdx);
+  } else {
+    hiddenLayers.add(origIdx);
+  }
+  soloLayerIndex = null;
+  updateScrubberAndUI();
+  updateCanvasFrame();
+}
+
+function toggleSoloLayer(origIdx) {
+  const anim = CATALOG_DATA.animations[activeAnimIndex];
+  if (!anim) return;
+  const curSub = anim.subitems[currentSubIndex % anim.subitems.length];
+  if (!curSub) return;
+
+  if (soloLayerIndex === origIdx) {
+    soloLayerIndex = null;
+    hiddenLayers.clear();
+  } else {
+    soloLayerIndex = origIdx;
+    hiddenLayers.clear();
+    curSub.frames.forEach((_, i) => {
+      if (i !== origIdx) hiddenLayers.add(i);
+    });
+  }
+  updateScrubberAndUI();
+  updateCanvasFrame();
+}
+
+function showAllLayers() {
+  soloLayerIndex = null;
+  hiddenLayers.clear();
+  updateScrubberAndUI();
+  updateCanvasFrame();
+}
+
+function toggleClayLayers() {
+  const anim = CATALOG_DATA.animations[activeAnimIndex];
+  if (!anim) return;
+  const curSub = anim.subitems[currentSubIndex % anim.subitems.length];
+  if (!curSub) return;
+
+  const clayIndices = [];
+  curSub.frames.forEach((f, i) => {
+    if (getLayerCategory(f.sprite_name) === 0) clayIndices.push(i);
+  });
+  const anyHidden = clayIndices.some(i => hiddenLayers.has(i));
+  if (anyHidden) {
+    clayIndices.forEach(i => hiddenLayers.delete(i));
+  } else {
+    clayIndices.forEach(i => hiddenLayers.add(i));
+  }
+  soloLayerIndex = null;
+  updateScrubberAndUI();
+  updateCanvasFrame();
+}
+
+function toggleBorderLayers() {
+  const anim = CATALOG_DATA.animations[activeAnimIndex];
+  if (!anim) return;
+  const curSub = anim.subitems[currentSubIndex % anim.subitems.length];
+  if (!curSub) return;
+
+  const borderIndices = [];
+  curSub.frames.forEach((f, i) => {
+    if (getLayerCategory(f.sprite_name) === 1) borderIndices.push(i);
+  });
+  const anyHidden = borderIndices.some(i => hiddenLayers.has(i));
+  if (anyHidden) {
+    borderIndices.forEach(i => hiddenLayers.delete(i));
+  } else {
+    borderIndices.forEach(i => hiddenLayers.add(i));
+  }
+  soloLayerIndex = null;
+  updateScrubberAndUI();
+  updateCanvasFrame();
+}
+
+function toggleForegroundLayers() {
+  const anim = CATALOG_DATA.animations[activeAnimIndex];
+  if (!anim) return;
+  const curSub = anim.subitems[currentSubIndex % anim.subitems.length];
+  if (!curSub) return;
+
+  const fgIndices = [];
+  curSub.frames.forEach((f, i) => {
+    if (getLayerCategory(f.sprite_name) >= 2) fgIndices.push(i);
+  });
+  const anyHidden = fgIndices.some(i => hiddenLayers.has(i));
+  if (anyHidden) {
+    fgIndices.forEach(i => hiddenLayers.delete(i));
+  } else {
+    fgIndices.forEach(i => hiddenLayers.add(i));
+  }
+  soloLayerIndex = null;
+  updateScrubberAndUI();
+  updateCanvasFrame();
 }
 
 function setSpriteSort(col) {
@@ -2307,6 +2524,11 @@ function selectAnimation(animId) {
     `;
   }
 
+  // Reset layer inspector state
+  hiddenLayers.clear();
+  hoveredLayerIndex = null;
+  soloLayerIndex = null;
+
   // Preload sprites for this animation
   anim.subitems.forEach(sub => {
     sub.frames.forEach(f => getSpriteImage(f.sprite_id));
@@ -2322,7 +2544,7 @@ function selectAnimation(animId) {
       scBanner.style.display = 'flex';
       document.getElementById('static-badge').textContent = totalLayers > 1 ? `Static Composite (${totalLayers} Layers)` : 'Single Sprite';
       document.getElementById('static-desc').textContent = totalLayers > 1 
-        ? `Full multi-layer composite assembled in reverse order (${totalLayers} layers)` 
+        ? `Full multi-layer composite (${totalLayers} layers)` 
         : 'Single frame static sprite';
     }
     if (timelineSec) timelineSec.style.display = 'none';
@@ -2403,11 +2625,109 @@ function updateScrubberAndUI() {
   tbody.innerHTML = '';
   if (curSub) {
     document.getElementById('current-step-layers-count').textContent = curSub.frames.length;
+
+    // Categorize layers for filter buttons & info banner
+    let clayCount = 0;
+    let borderCount = 0;
+    let fgCount = 0;
+    curSub.frames.forEach(f => {
+      const cat = getLayerCategory(f.sprite_name);
+      if (cat === 0) clayCount++;
+      else if (cat === 1) borderCount++;
+      else fgCount++;
+    });
+
+    const breakdownEl = document.getElementById('layer-breakdown-badge');
+    if (breakdownEl) {
+      if (curSub.frames.length > 1) {
+        const parts = [];
+        if (clayCount > 0) parts.push(`${clayCount} clay fills`);
+        if (borderCount > 0) parts.push(`${borderCount} borders`);
+        if (fgCount > 0) parts.push(`${fgCount} content`);
+        breakdownEl.textContent = `(${parts.join(' • ')})`;
+      } else {
+        breakdownEl.textContent = '';
+      }
+    }
+
+    // Update quick filter buttons
+    const btnClay = document.getElementById('btn-layers-toggle-clay');
+    const btnBorders = document.getElementById('btn-layers-toggle-borders');
+    const btnFg = document.getElementById('btn-layers-toggle-fg');
+    if (btnClay) {
+      btnClay.style.display = clayCount > 0 ? 'inline-block' : 'none';
+      btnClay.textContent = `🧱 Toggle Clay (${clayCount})`;
+    }
+    if (btnBorders) {
+      btnBorders.style.display = borderCount > 0 ? 'inline-block' : 'none';
+      btnBorders.textContent = `🖼️ Toggle Borders (${borderCount})`;
+    }
+    if (btnFg) {
+      btnFg.style.display = fgCount > 0 ? 'inline-block' : 'none';
+      btnFg.textContent = `🔤 Toggle Content (${fgCount})`;
+    }
+
+    // Mosaic info banner for dialog shells and composites
+    const infoBanner = document.getElementById('mosaic-info-banner');
+    if (infoBanner) {
+      if (anim.name === 'd_shell') {
+        infoBanner.style.display = 'block';
+        infoBanner.innerHTML = `
+          <strong>ℹ️ Authentic 1998 Dialog Shell Mosaic (<code>d_shell</code>, Anim #0):</strong>
+          This sequence is a 442×439 px empty dialog window backdrop assembled from <strong>40 terracotta clay tiles</strong> (<code>dclay*.bmp</code>) and <strong>28 beveled border pieces</strong> (<code>dfram*.bmp</code>). Because the 40 clay tiles fit together seamlessly into a flat textured background, individual tile edges blend together into a uniform orange appearance.
+          <div style="margin-top: 0.35rem; display: flex; gap: 0.75rem; flex-wrap: wrap; font-size: 0.78rem;">
+            <span>• <strong>Hover</strong> any row in the table below (or move your mouse over the canvas) to highlight that specific tile/frame on the stage.</span>
+            <span>• Click <strong>🧱 Toggle Clay</strong> above to hide the orange background and view the 28-piece outer frame.</span>
+            <span>• Click <strong>🎯 Solo</strong> on any layer to inspect a single sprite in isolation.</span>
+          </div>
+        `;
+      } else if (anim.name === 'std_dialg') {
+        infoBanner.style.display = 'block';
+        infoBanner.innerHTML = `
+          <strong>ℹ️ Authentic Dialog Window Shell (<code>std_dialg</code>, Anim #67):</strong>
+          A 320×224 px dialog backdrop built from <strong>6 terracotta clay tiles</strong> and <strong>14 border pieces</strong>.
+        `;
+      } else if (curSub.frames.length > 15 && clayCount > 0) {
+        infoBanner.style.display = 'block';
+        infoBanner.innerHTML = `
+          <strong>ℹ️ Multi-Layer Mosaic Composite:</strong>
+          Assembled from <strong>${clayCount} background tiles</strong>, <strong>${borderCount} border segments</strong>, and <strong>${fgCount} content elements</strong>.
+          Hover over any layer in the table below to see its exact bounds and placement on the stage.
+        `;
+      } else {
+        infoBanner.style.display = 'none';
+      }
+    }
+
     const sortedLayers = sortLayersList(curSub.frames);
     sortedLayers.forEach(f => {
+      const isHidden = hiddenLayers.has(f.originalIndex);
+      const isHovered = hoveredLayerIndex === f.originalIndex;
+      const isSolo = soloLayerIndex === f.originalIndex;
       const tr = document.createElement('tr');
+      tr.className = `layer-row ${isHidden ? 'layer-hidden' : ''} ${isHovered ? 'hovered' : ''}`;
+      tr.id = `layer-row-${f.originalIndex}`;
+
+      tr.onmouseenter = () => {
+        hoveredLayerIndex = f.originalIndex;
+        document.querySelectorAll('.layer-row').forEach(r => r.classList.toggle('hovered', r.id === `layer-row-${f.originalIndex}`));
+        updateCanvasFrame();
+      };
+      tr.onmouseleave = () => {
+        if (hoveredLayerIndex === f.originalIndex) {
+          hoveredLayerIndex = null;
+          tr.classList.remove('hovered');
+          updateCanvasFrame();
+        }
+      };
+
       const thumbSrc = `sprites/sprite_${String(f.sprite_id).padStart(4, '0')}.png`;
       tr.innerHTML = `
+        <td style="text-align: center;">
+          <button class="btn-layer-vis" onclick="event.stopPropagation(); toggleLayerVisibility(${f.originalIndex})" title="${isHidden ? 'Show Layer' : 'Hide Layer'}">
+            ${isHidden ? '🙈' : '👁️'}
+          </button>
+        </td>
         <td><img src="${thumbSrc}" class="layer-thumb" alt="#${f.sprite_id}"></td>
         <td><span style="font-weight:600;">L${f.originalIndex + 1}</span></td>
         <td><span class="badge badge-sprite">#${f.sprite_id}</span></td>
@@ -2416,9 +2736,10 @@ function updateScrubberAndUI() {
         <td>${f.w} × ${f.h} px</td>
         <td>
           <div class="btn-group">
-            <button class="copy-btn" onclick="copyText('${f.sprite_name}', 'sprite filename')">Copy</button>
+            <button class="copy-btn ${isSolo ? 'active' : ''}" onclick="event.stopPropagation(); toggleSoloLayer(${f.originalIndex})" title="Isolate this layer only">${isSolo ? 'Unsolo' : '🎯 Solo'}</button>
+            <button class="copy-btn" onclick="event.stopPropagation(); copyText('${f.sprite_name}', 'sprite filename')">Copy</button>
             <a href="${thumbSrc}" download="${f.sprite_name}" class="copy-btn" title="Download layer PNG" style="text-decoration:none; display:inline-flex; align-items:center; justify-content:center;">⬇ PNG</a>
-            <button class="copy-btn" onclick="openSpriteModal(${f.sprite_id})">Inspect</button>
+            <button class="copy-btn" onclick="event.stopPropagation(); openSpriteModal(${f.sprite_id})">Inspect</button>
           </div>
         </td>
       `;
@@ -2543,14 +2864,67 @@ function setupStagePanAndZoom() {
   });
 
   stage.addEventListener('pointermove', (e) => {
-    if (!isPointerDown) return;
-    const dx = e.clientX - startClientX;
-    const dy = e.clientY - startClientY;
-    panX = startPanX + dx;
-    panY = startPanY + dy;
-    isFitMode = false;
-    updateZoomUI();
-    updateCanvasFrame();
+    if (isPointerDown) {
+      const dx = e.clientX - startClientX;
+      const dy = e.clientY - startClientY;
+      panX = startPanX + dx;
+      panY = startPanY + dy;
+      isFitMode = false;
+      updateZoomUI();
+      updateCanvasFrame();
+      return;
+    }
+
+    // Hover hit test across composite layers when moving over stage
+    const anim = CATALOG_DATA.animations[activeAnimIndex];
+    if (!anim) return;
+    const curSub = anim.subitems[currentSubIndex % anim.subitems.length];
+    if (!curSub || curSub.frames.length <= 1) return;
+
+    const canvas = document.getElementById('anim-canvas');
+    if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    const mouseX = e.clientX - rect.left;
+    const mouseY = e.clientY - rect.top;
+
+    const bounds = getAnimBounds(anim);
+    const zoom = currentZoom;
+    let ox = canvas.width / 2 + panX;
+    let oy = canvas.height / 2 + panY;
+    if (centerMode === 'box') {
+      const boxCenterX = (bounds.minX + bounds.maxX) / 2;
+      const boxCenterY = (bounds.minY + bounds.maxY) / 2;
+      ox = canvas.width / 2 + panX - boxCenterX * zoom;
+      oy = canvas.height / 2 + panY - boxCenterY * zoom;
+    }
+
+    const localX = (mouseX - ox) / zoom;
+    const localY = (mouseY - oy) / zoom;
+
+    // Find topmost visible layer hit (in reverse render order)
+    const renderOrder = getRenderOrderedFrames(curSub.frames);
+    let hitLayer = null;
+    for (let i = renderOrder.length - 1; i >= 0; i--) {
+      const f = renderOrder[i];
+      if (hiddenLayers.has(f.originalIndex)) continue;
+      if (localX >= f.dx && localX < f.dx + f.w && localY >= f.dy && localY < f.dy + f.h) {
+        hitLayer = f.originalIndex;
+        break;
+      }
+    }
+
+    if (hitLayer !== hoveredLayerIndex) {
+      hoveredLayerIndex = hitLayer;
+      updateCanvasFrame();
+      document.querySelectorAll('.layer-row').forEach(r => r.classList.remove('hovered'));
+      if (hitLayer !== null) {
+        const row = document.getElementById(`layer-row-${hitLayer}`);
+        if (row) {
+          row.classList.add('hovered');
+          row.scrollIntoView({ block: 'nearest' });
+        }
+      }
+    }
   });
 
   const endDrag = (e) => {
@@ -2564,6 +2938,13 @@ function setupStagePanAndZoom() {
 
   stage.addEventListener('pointerup', endDrag);
   stage.addEventListener('pointercancel', endDrag);
+  stage.addEventListener('pointerleave', () => {
+    if (hoveredLayerIndex !== null) {
+      hoveredLayerIndex = null;
+      document.querySelectorAll('.layer-row').forEach(r => r.classList.remove('hovered'));
+      updateCanvasFrame();
+    }
+  });
 
   // Double click resets to Fit
   stage.addEventListener('dblclick', (e) => {
@@ -2703,12 +3084,12 @@ function updateCanvasFrame() {
     ctx.strokeRect(compScreenX - 0.5, compScreenY - 0.5, compScreenW + 1, compScreenH + 1);
   }
 
-  // Draw all sprite layers for current subitem in REVERSE order
-  // (Table 4 backgrounds and backplates are at the end, foreground elements at the start)
+  // Draw all sprite layers for current subitem according to selected Z-Order mode
   const curSub = anim.subitems[currentSubIndex % anim.subitems.length];
   if (curSub) {
-    for (let i = curSub.frames.length - 1; i >= 0; i--) {
-      const f = curSub.frames[i];
+    const renderOrder = getRenderOrderedFrames(curSub.frames);
+    for (const f of renderOrder) {
+      if (hiddenLayers.has(f.originalIndex)) continue;
       const img = getSpriteImage(f.sprite_id);
       const drawX = Math.round(ox + f.dx * zoom);
       const drawY = Math.round(oy + f.dy * zoom);
@@ -2720,6 +3101,64 @@ function updateCanvasFrame() {
       } else {
         img.onload = () => updateCanvasFrame();
       }
+    }
+
+    // If a layer is hovered (via stage mouseover or table row hover), draw highlight overlay on top!
+    if (hoveredLayerIndex !== null && hoveredLayerIndex >= 0 && hoveredLayerIndex < curSub.frames.length) {
+      const hf = curSub.frames[hoveredLayerIndex];
+      const hx = Math.round(ox + hf.dx * zoom);
+      const hy = Math.round(oy + hf.dy * zoom);
+      const hw = Math.round(hf.w * zoom);
+      const hh = Math.round(hf.h * zoom);
+
+      ctx.save();
+      // Glowing highlight fill
+      ctx.fillStyle = 'rgba(56, 189, 248, 0.35)';
+      ctx.fillRect(hx, hy, hw, hh);
+
+      // Glowing border
+      ctx.strokeStyle = '#38bdf8';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(hx - 0.5, hy - 0.5, hw + 1, hh + 1);
+
+      // Corner accent brackets
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 2;
+      const bLen = Math.min(8, Math.max(4, Math.min(hw / 3, hh / 3)));
+      ctx.beginPath();
+      ctx.moveTo(hx, hy + bLen); ctx.lineTo(hx, hy); ctx.lineTo(hx + bLen, hy);
+      ctx.moveTo(hx + hw - bLen, hy); ctx.lineTo(hx + hw, hy); ctx.lineTo(hx + hw, hy + bLen);
+      ctx.moveTo(hx, hy + hh - bLen); ctx.lineTo(hx, hy + hh); ctx.lineTo(hx + bLen, hy + hh);
+      ctx.moveTo(hx + hw - bLen, hy + hh); ctx.lineTo(hx + hw, hy + hh); ctx.lineTo(hx + hw, hy + hh - bLen);
+      ctx.stroke();
+
+      // Tooltip tag
+      const label = `L${hoveredLayerIndex + 1}: ${hf.sprite_name} (${hf.w}×${hf.h}) at (${hf.dx >= 0 ? '+' + hf.dx : hf.dx}, ${hf.dy >= 0 ? '+' + hf.dy : hf.dy})`;
+      ctx.font = 'bold 11px monospace';
+      const textMetrics = ctx.measureText(label);
+      const tagW = textMetrics.width + 16;
+      const tagH = 22;
+      let tagX = hx;
+      let tagY = hy - tagH - 6;
+      if (tagY < 6) tagY = hy + hh + 6;
+      if (tagX + tagW > canvas.width - 6) tagX = canvas.width - tagW - 6;
+      if (tagX < 6) tagX = 6;
+
+      ctx.fillStyle = 'rgba(15, 23, 42, 0.94)';
+      ctx.strokeStyle = '#38bdf8';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      if (ctx.roundRect) {
+        ctx.roundRect(tagX, tagY, tagW, tagH, 4);
+      } else {
+        ctx.rect(tagX, tagY, tagW, tagH);
+      }
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.fillStyle = '#38bdf8';
+      ctx.fillText(label, tagX + 8, tagY + 15);
+      ctx.restore();
     }
   }
 }
@@ -3064,8 +3503,9 @@ document.getElementById('btn-download-composite').onclick = () => {
 
   const curSub = anim.subitems[currentSubIndex % anim.subitems.length];
   if (curSub) {
-    for (let i = curSub.frames.length - 1; i >= 0; i--) {
-      const f = curSub.frames[i];
+    const renderOrder = getRenderOrderedFrames(curSub.frames);
+    for (const f of renderOrder) {
+      if (hiddenLayers.has(f.originalIndex)) continue;
       const img = getSpriteImage(f.sprite_id);
       if (img.complete && img.naturalWidth !== 0) {
         offCtx.drawImage(img, f.dx - bounds.minX, f.dy - bounds.minY, f.w, f.h);
