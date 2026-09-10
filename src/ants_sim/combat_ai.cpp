@@ -40,7 +40,7 @@ bool CombatAIController::is_valid_target(const AntUnit& candidate,
     if (!candidate.is_alive() || candidate.death_status != DeathStatus::Alive) return false;
     if (candidate.team == owner.team) return false;
     if (stats.are_allies(candidate.player_id, owner.player_id)) return false;
-    if (candidate.is_underground() || candidate.state == UnitState::EnteringBase) return false;
+    if (candidate.is_underground() || candidate.state == UnitState::EnteringBase || candidate.state == UnitState::Infiltrating) return false;
     if (candidate.state == UnitState::Knockback || candidate.state == UnitState::Drowning) return false;
     if (candidate.is_in_scuffle || candidate.state == UnitState::Bounce) return false;
     if (candidate.on_powerup) return false;
@@ -74,7 +74,7 @@ void CombatAIController::update(const std::vector<AntUnit*>& all_units,
     if (owner_.type != AntType::Combat || !owner_.is_alive()) return;
     if (owner_.is_stunned() || owner_.state == UnitState::Flinch || owner_.state == UnitState::Knockback ||
         owner_.state == UnitState::Bounce || owner_.is_in_scuffle) return;
-    if (owner_.state == UnitState::Walking) return; // Respect user movement commands
+    if (owner_.state == UnitState::Walking) return; // Respect walking and user movement commands
 
     if (owner_.state == UnitState::GuardIdle || owner_.state == UnitState::Idle) {
         guard_state_ = CombatGuardState::Idle;
@@ -108,11 +108,14 @@ void CombatAIController::update_guard_idle(const std::vector<AntUnit*>& all_unit
         target_unit_id_ = target->id;
         int32_t dist = owner_.pos.chebyshev_dist(target->pos);
         if (dist <= 1) {
-            // Already within melee range: strike immediately!
-            guard_state_ = CombatGuardState::Striking;
-            owner_.state = UnitState::Attacking;
-            strike_timer_ = ATTACK_ANIM_TICKS;
-            update_striking(all_units, grid, audio_out, random_seed);
+            // Already within melee range: strike if ready!
+            if (owner_.attack_cooldown_ticks == 0) {
+                guard_state_ = CombatGuardState::Striking;
+                strike_timer_ = ATTACK_ANIM_TICKS;
+                update_striking(all_units, grid, audio_out, random_seed);
+            } else {
+                owner_.state = UnitState::GuardIdle;
+            }
         } else {
             guard_state_ = CombatGuardState::Intercepting;
             owner_.state = UnitState::Intercepting;
@@ -158,7 +161,6 @@ void CombatAIController::update_intercepting(const std::vector<AntUnit*>& all_un
     if (dist <= 1) {
         if (owner_.attack_cooldown_ticks == 0) {
             guard_state_ = CombatGuardState::Striking;
-            owner_.state = UnitState::Attacking;
             strike_timer_ = ATTACK_ANIM_TICKS;
             update_striking(all_units, grid, audio_out, random_seed);
         } else {
@@ -190,6 +192,8 @@ void CombatAIController::update_intercepting(const std::vector<AntUnit*>& all_un
         owner_.anim_tick++;
         owner_.anim_subitem = (owner_.anim_tick / 3);
     }
+
+    owner_.state = UnitState::Intercepting;
 
     if (owner_.pos.chebyshev_dist(target->pos) <= 1) {
         if (owner_.attack_cooldown_ticks == 0) {

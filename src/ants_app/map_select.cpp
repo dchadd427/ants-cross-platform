@@ -322,7 +322,7 @@ void MapSelectScreen::render(IRenderer& renderer, const ants::assets::AssetArchi
         }
         if (total_duration_ms == 0) total_duration_ms = 1800;
 
-        uint32_t current_time_ms = (connection_ticks_ * 1000u / 60u) % total_duration_ms;
+        uint32_t current_time_ms = SDL_GetTicks() % total_duration_ms;
         uint32_t accum_ms = 0;
         const assets::AnimationFrame* active_frame = nullptr;
         for (const auto& sub : anim_stand->subitems) {

@@ -200,7 +200,7 @@ bool Application::init(const ApplicationConfig& config) {
 
     hud_.set_on_scroll_rate([this](float r) {
         if (renderer_) {
-            renderer_->camera().scroll_speed = 240.0f + r * 480.0f;
+            renderer_->camera().scroll_speed = 120.0f + r * 240.0f;
         }
     });
 
@@ -426,6 +426,8 @@ void Application::run_frame_with_delta(float delta_time) {
 
     handle_events();
 
+    handle_camera_panning(delta_time);
+
     if (!is_paused_) {
         update_simulation(delta_time);
     }
@@ -505,10 +507,19 @@ void Application::handle_events() {
         }
 
         if (event.type == SDL_WINDOWEVENT) {
-            if (event.window.event == SDL_WINDOWEVENT_FOCUS_LOST ||
-                event.window.event == SDL_WINDOWEVENT_MINIMIZED ||
+            if (event.window.event == SDL_WINDOWEVENT_MINIMIZED ||
                 event.window.event == SDL_WINDOWEVENT_HIDDEN) {
                 hud_.unfocus_chat();
+                is_paused_ = true;
+                midi_player_.pause();
+            }
+            if (event.window.event == SDL_WINDOWEVENT_FOCUS_LOST) {
+                hud_.unfocus_chat();
+            }
+            if (event.window.event == SDL_WINDOWEVENT_RESTORED ||
+                event.window.event == SDL_WINDOWEVENT_SHOWN) {
+                is_paused_ = false;
+                midi_player_.resume();
             }
             if (event.window.event == SDL_WINDOWEVENT_SIZE_CHANGED ||
                 event.window.event == SDL_WINDOWEVENT_RESIZED ||
@@ -597,11 +608,6 @@ void Application::handle_events() {
         }
     }
 
-    if (state_ == AppState::MapSelect) {
-        return;
-    }
-
-    handle_camera_panning(0.020f);
 }
 
 void Application::handle_camera_panning(float dt) {
@@ -614,7 +620,7 @@ void Application::handle_camera_panning(float dt) {
     // Uses logical canvas coordinate space (640x480)
     constexpr int LOGICAL_W = 640;
     constexpr int LOGICAL_H = 480;
-    constexpr int EDGE_MARGIN = 24; // 24px border zone
+    constexpr int EDGE_MARGIN = 12; // Authentic 12px border zone (Ants.exe FUN_01026aa3 / 0xc)
 
     if (mouse_has_moved_ &&
         mouse_screen_x_ >= 0 && mouse_screen_x_ < LOGICAL_W &&
@@ -818,8 +824,10 @@ void Application::handle_mouse_button(const SDL_MouseButtonEvent& button) {
 }
 
 void Application::update_simulation(float dt) {
-    if (state_ == AppState::MapSelect) {
-        midi_player_.update(dt);
+    if (state_ == AppState::MapSelect || is_paused_) {
+        if (state_ == AppState::MapSelect) {
+            midi_player_.update(dt);
+        }
         return;
     }
 

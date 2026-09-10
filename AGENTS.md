@@ -25,14 +25,14 @@ Native C++17 macOS port and remake of the 1998 classic RTS game *Ants*, featurin
 - Strictly **NEVER** write or mention the forbidden word ("M-i-c-r-o-s-o-f-t") anywhere in code, comments, commit messages, or documentation.
 
 ### 4. Mandatory Capstone Reverse Engineering & Original Logic Parity
-- **Dual Verification with Capstone & Ants.exe.c (ans.exe.c)**: Always compare and verify our logic, timings, animation sequencing, sprite layering, and behavioral mechanics against the original 1998 executable (`Original-Ants/Ants.exe`), the complete C decompilation (`docs/legacy/Ants.exe.c`, also referred to as `ans.exe.c`), and asset archive (`Original-Ants/ants.chd`).
-- **Synergy of Capstone Disassembly + Decompiled C**: Use Capstone disassembly (e.g. `tools/analyze_binary.py`) for exact assembly instruction sequences, opcode timings, register allocations, and jump tables, coupled with `docs/legacy/Ants.exe.c` (`ans.exe.c`) for high-level C logic flow, variable naming, struct definitions, state machines, sound triggers, and exact numeric constants.
+- **Dual Verification with Capstone & Ants.exe.c**: Always compare and verify our logic, timings, animation sequencing, sprite layering, and behavioral mechanics against the original 1998 executable (`Original-Ants/Ants.exe`), the complete C decompilation (`docs/legacy/Ants.exe.c`), and asset archive (`Original-Ants/ants.chd`).
+- **Synergy of Capstone Disassembly + Decompiled C**: Use Capstone disassembly (e.g. `tools/analyze_binary.py`) for exact assembly instruction sequences, opcode timings, register allocations, and jump tables, coupled with `docs/legacy/Ants.exe.c` for high-level C logic flow, variable naming, struct definitions, state machines, sound triggers, and exact numeric constants.
 - **Match Original Behavior**: The goal is to make the remake as completely faithful to the original 1998 game as possible. Never guess or approximate when the ground-truth logic and constants can be extracted directly via disassembly and reverse engineering.
 
 ### 5. Reverse Engineering Documentation Invariant & Living Memory
 - **Maintain Up-to-Date RE Docs**: Continually document and maintain all reverse engineering findings, disassembly addresses, opcode traces, and verified asset IDs in `docs/GAME_REVERSE_ENGINEERING.md`.
-- **Assume Existing Docs Potentially Outdated**: Always treat pre-existing text in `docs/GAME_REVERSE_ENGINEERING.md` as potentially unverified or outdated until explicitly validated against the original game binary (`Original-Ants/Ants.exe`), `docs/legacy/Ants.exe.c` (`ans.exe.c`), and asset archive (`Original-Ants/ants.chd`).
-- **Primary Source First**: Always cross-reference directly with the primary sources: inspect the C decompilation (`docs/legacy/Ants.exe.c` / `ans.exe.c`) and reverse-engineer from the original game binary using Capstone disassembly, using `docs/GAME_REVERSE_ENGINEERING.md` as a living guide and proactively updating it whenever new ground-truth logic is discovered.
+- **Assume Existing Docs Potentially Outdated**: Always treat pre-existing text in `docs/GAME_REVERSE_ENGINEERING.md` as potentially unverified or outdated until explicitly validated against the original game binary (`Original-Ants/Ants.exe`), `docs/legacy/Ants.exe.c`, and asset archive (`Original-Ants/ants.chd`).
+- **Primary Source First**: Always cross-reference directly with the primary sources: inspect the C decompilation (`docs/legacy/Ants.exe.c`) and reverse-engineer from the original game binary using Capstone disassembly, using `docs/GAME_REVERSE_ENGINEERING.md` as a living guide and proactively updating it whenever new ground-truth logic is discovered.
 
 ### 6. WebAssembly / Beta Deployment Synchronization & Cache Invariant
 - **Synchronize Web Builds**: Ensure any game logic, asset, or simulation engine changes remain continuously synchronized with the WebAssembly / Emscripten build and deployment pipeline (`docker/nginx.conf`, `web/`).
@@ -44,5 +44,10 @@ Native C++17 macOS port and remake of the 1998 classic RTS game *Ants*, featurin
 
 ### 8. No Bot AI Invariant
 - **Strictly No Bot AI**: Do NOT implement or add computer/bot player AI into the game at this stage. Keep the game strictly 1:1 authentic to the original 1998 mechanics where all ant commands are issued directly by human players (except Combat Ant guard post patrol). Minimize all changes to strictly reverse-engineered original logic.
+
+### 9. Implementation Plan & Explicit User Approval Invariant
+- **Log in Implementation Plan**: Whenever the user provides tasks, features, or bug reports, thoroughly document all findings, reverse engineering references, planned code modifications, and test verifications into `implementation_plan.md`.
+- **Wait for Explicit Approval**: Always present the plan and explicitly ask the user for permission to proceed. STOP and WAIT for the user to say to proceed, go, or continue before making changes or executing execution steps.
+
 
 

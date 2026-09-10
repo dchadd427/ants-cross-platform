@@ -27,7 +27,7 @@ Players control colonies of ants in a top-down tile-based grid environment (typi
   - There is **no queen ant**; production is handled by the colony anthill.
 - **Ant Classes & Power-Ups:**
   - **6 Ant Unit Types:**
-  1. **Worker Ant (General Ant - `ag`):** Basic ant, gathers food pieces, attacks for 1 HP damage per hit.
+  1. **Worker Ant (General Ant - `ag`):** Basic ant produced from incubation, attacks for 1 HP damage per hit. (Note: ALL 6 ant species can harvest and deliver food pieces; the Worker Ant is simply the default basic form with no specialized combat or terrain power-up).
   2. **Thief Ant (`at`):** Fast scout. Infiltrates enemy anthills and steals 50 points of food at a time; attacks for 1 HP damage per hit.
   3. **Fire Ant (`af`):** Immune to fire, creates fire walls with a magnifying glass (`wallup04`), extinguishes fires; attacks for 1 HP damage per hit.
   4. **Bomber Ant (`ab`):** Plants mines/bombs on the ground in team colors (bombs deal 2 HP explosive damage); direct melee strike attacks for 1 HP damage per hit. Can defuse enemy bombs.
@@ -224,22 +224,25 @@ graph TD
     MapPickup -->|FD_BOMB| Bomber["Bomber Ant (ab)<br/>Places Permanent Landmines"]
     MapPickup -->|FD_SWIM| Swimmer["Swimmer Ant (as)<br/>Water Traversal + Bridge Builder"]
     
-    Worker -->|Harvest Food| Score["Team Score (Points)"]
+    AllAnts["All 6 Ant Types<br/>(Worker, Bomber, Fire, Thief, Combat, Swimmer)"] -->|Harvest Food| Score["Team Score (Points)"]
     Thief -->|Steal Points| Score
     Score -->|Highest at Timer Expiry| Victory["VICTORY"]
 ```
+
+> [!NOTE]
+> **Universal Food Harvesting Mechanics**: In the authentic 1998 simulation engine, ALL 6 ant species (Worker, Bomber, Fire Ant, Thief, Combat Ant, and Swimmer) are fully capable of harvesting, picking up, carrying, and delivering food pieces back to their colony anthill. While Worker ants are the default produced unit with no special ability, transformed specialist ants retain full harvesting functionality.
 
 ### 5.0 Ant Type ID & Power-Up Mapping Table (Disasm `0x1021087`, `0x10210c1`)
 The engine internal dispatch maps each ant class to an integer ID and corresponding Layer 2 powerup pickup tile:
 
 | Ant Type ID | Class Name | Sprite Prefix | Power-Up Tile | Tile Name | Core Special Attributes |
 |---|---|---|---|---|---|
-| **0** | Worker Ant | `ag` | None | N/A | Standard gatherer (no special power). 10 HP. |
-| **1** | Bomber Ant | `ab` | Tile 64 | `pu_bomb` | Places permanent team landmines (`redbomb`..`bluebomb`); defuses enemy bombs. |
-| **2** | Fire Ant (Mason) | `af` | Tile 66 | `pu_mason` | Places impassable firewalls (`wallup04`); walks freely on fire tiles. |
-| **3** | Thief Ant | `at` | Tile 63 | `pu_thief` | Infiltrates enemy anthills; steals `min(50, enemy_score)`. |
-| **4** | Combat Ant | `ac` | Tile 62 | `pu_comb` | 2 HP damage per strike + 4-5 tile ballistic knockback. Enlarged collision box `[-32..26, -46..16]`. |
-| **5** | Swimmer Ant | `as` | Tile 65 | `pu_swim` | Traverses deep water without drowning; constructs multi-stage bridges across water. |
+| **0** | Worker Ant | `ag` | None | N/A | Standard basic ant (no special power). 10 HP. Like all ants, can harvest and carry food. |
+| **1** | Bomber Ant | `ab` | Tile 64 | `pu_bomb` | Places permanent team landmines (`redbomb`..`bluebomb`); defuses enemy bombs. Can harvest food. |
+| **2** | Fire Ant (Mason) | `af` | Tile 66 | `pu_mason` | Places impassable firewalls (`wallup04`); walks freely on fire tiles. Can harvest food. |
+| **3** | Thief Ant | `at` | Tile 63 | `pu_thief` | Infiltrates enemy anthills; steals `min(50, enemy_score)`. Can harvest food. |
+| **4** | Combat Ant | `ac` | Tile 62 | `pu_comb` | 2 HP damage per strike + 4-5 tile ballistic knockback. Enlarged collision box `[-32..26, -46..16]`. Can harvest food. |
+| **5** | Swimmer Ant | `as` | Tile 65 | `pu_swim` | Traverses deep water without drowning; constructs multi-stage bridges across water. Can harvest food. |
 
 ---
 
@@ -1447,4 +1450,47 @@ To deliver authentic 1:1 gameplay inside standard web browsers with zero install
   - Actively walking friendly ants (`state == UnitState::Walking`) are excluded from pathfinding dynamic obstacles. Friendly ants plan direct paths knowing marching comrades will vacate intermediate tiles. Only stationary friendly ants and non-target enemies act as impassable obstacles (`cost = 8000`).
 - **Ant Order Confirmation Voice Dispatches (`0x101b78a`)**:
   - Capstone disassembly of `0x101b78a` confirms Worker (0) and Combat (4) jump to `ret 4` without vocal move acknowledgments, while Bomber (28), Fire (16), Thief (13), and Swimmer (25) play move lines. All 6 types possess selection "ready" voices (`0x101b711`).
+
+#### 20. Dropped Food Lunchbox Sprite, Walk Cycle Bytecode, Edge Panning & Minimap Geometry (`Ants.exe` `0x1005820`, `0x1026aa3`, Table 4 Anim 356 & Anim 123–128)
+- **Dropped Food Lunchbox Sprite Ground Truth (Table 4 Anim 356 / Sprite 513)**:
+  - In `Original-Ants/ants.chd` Table 4, entry 356 (named `lunchbox`) defines the ground-level dropped food item representation:
+    - Frame 0: Sprite ID 513 (`3lb0001.bmp`), dimensions 11×16 pixels.
+    - Render displacement offsets: `dx: 9, dy: 8`.
+  - Previously, the HUD 34×40 icon (`lunchicon.bmp`) was mistakenly rendered on the map ground when an ant carrying food died. Rendering Sprite 513 at `sx + 9, sy + 8` restores authentic 1:1 visual fidelity with the 1998 executable.
+- **Walk Cycle Bytecode & Stride Synchronization (Table 4 Anim 123–128)**:
+  - Table 4 walk animation entries for all ant species (`agwg301`, `abwg301`, `acwg301`, `afwg301`, `aswg301`, `atwg301`):
+    - 12 subitems per walk cycle.
+    - Each subitem specifies `duration_ms: 50` (exactly 1 simulation tick at 20Hz) and `dy: 4` (4 pixels displacement per subitem).
+    - Total cycle: 12 frames × 4 pixels = 48 pixels (exactly 1 standard tile).
+    - At 1 tick per frame, an ant advancing at standard speed (4 px/tick) covers exactly 48 pixels in 12 ticks (600ms), perfectly synchronizing leg locomotion 1:1 with ground displacement without artificial slide or skate.
+- **Camera Edge Panning & Scroll Speed Geometry (`0x1026aa3` / `FUN_01026aa3`)**:
+  - In `FUN_01026aa3`, viewport boundary proximity triggers camera edge panning when the cursor is within `0xc` (12 pixels) of the screen edges:
+    ```c
+    if (cursor_x < 12) { cam_x -= scroll_step; }
+    ```
+  - Map scroll speed slider ranges from 120 px/s to 360 px/s (10–25 px/tick at 20Hz), centered at 240 px/s.
+- **Minimap Radar Geometry & Viewport Wireframe Clamping (`0x1005820`–`0x1005823`)**:
+  - Radar panel rect: X in [480, 599] (width = 119), Y in [35, 126] (height = 91).
+  - Authentic minimap draws solid player-colored squares for anthill bases and single-pixel ant dots without artificial white outline borders.
+  - Viewport rectangle wireframe clamping enforces `fy2 = ry + rh = 126` when scrolled to the bottom limit of the map, eliminating any 1-pixel gap at the base of the radar display.
+- **Mid-Stride Re-Order Forward Routing (`0x101b590` / `FUN_0101b590`)**:
+  - When a moving ant receives a new move order while in mid-stride between `pos` and `next_wp`:
+    - If the target destination is `next_wp`, the ant finishes its step into `dest`.
+    - If `next_wp` is passable, the engine paths forward from `next_wp` and prepends `next_wp`, allowing the ant to step cleanly into `next_wp` and execute a crisp forward turn onto the new path instead of making an artificial 180° backward U-turn or oscillating between tiles.
+- **Thief Anthill Infiltration Subterranean Animation & Audio Ground Truth (`0x101f3e0`, Table 4 Anim 1095 `atcr501`)**:
+  - Thief infiltration animation `atcr501` (33 subitems, 3,510ms total duration):
+    - Subitem 19 (1,050ms): Plays `SoundID::BaseAlarmSiren` (58) + `SoundID::ThiefDive` (`steala.wav`, Sound 84) and overlays `9hillh2.bmp` (2503) & `atcr511.bmp` (2504) as the thief dives into the mound.
+    - Subitem 26 (1,950ms): Subterranean rummaging with `SoundID::ThiefRummage` (`stealb.wav`, Sound 85).
+    - Subitem 31 (2,850ms): Thief emerges with `SoundID::ThiefEmerge` (`stealc.wav`, Sound 86).
+    - Subitem 33 (3,510ms): Point deduction occurs. Crucially, `SoundID::BaseScoreDn` (`scoredn.wav`, Sound 88) is played ONLY if food points were actually stolen (`victim_score > 0`). If the victim base had 0 points, the thief still infiltrates and sits unattackable underground for the full duration, but emerges empty-handed without triggering `scoredn.wav`.
+- **Anthill Geometry & Defensive Firewall Placement (`0x101d8a4`, `0x100ee03`)**:
+  - The anthill mound sprite `9hill.bmp` spans 4×4 tiles, but the original collision map only reserves:
+    - 3 mound tiles on the left flank: `(bx - 2, by - 1)`, `(bx - 2, by)`, `(bx - 2, by + 1)`.
+    - Base center/origin `(bx, by)` and entrance hole `(bx + 1, by + 1)`.
+  - The 3 tiles directly to the right of the hole (`(bx + 2, by - 1)`, `(bx + 2, by)`, `(bx + 2, by + 1)`) are passable. Fire Ants can strategically place up to 3 firewalls (`wallup04`) in these tiles to trap infiltrating thieves or protect the base from theft.
+- **Action Pedestal Button Animations (Table 4 Anim 1215 `trnbalyd` & Anim 1216 `trnbmovu`)**:
+  - Selection Pop-Up (`trnbmovu` / Table 4 Anim 1216): 9 subitems, 60ms each (540ms total), shifts pedestal up into position.
+  - Deselection Retraction (`trnbalyd` / Table 4 Anim 1215): 9 subitems, 60ms each (540ms total), retracts pedestal into the base cavity.
+  - Move button is hidden when 0 friendly ants are selected.
+
 

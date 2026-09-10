@@ -61,6 +61,7 @@ struct UIButton {
     bool is_pressed{false};
     bool is_enabled{true};
     bool is_active{false}; // Highlighted when mode is armed
+    bool is_hovered{false};
 
     bool contains(int32_t px, int32_t py) const noexcept {
         return px >= x && px < (x + w) && py >= y && py < (y + h);
@@ -285,6 +286,10 @@ private:
     UIButton team_up_button_{};
     bool send_to_all_{true};
     bool is_on_team_{false};
+
+    enum class PedestalAnimState { Hidden, PoppingUp, Raised, Lowering };
+    PedestalAnimState move_pedestal_state_{PedestalAnimState::Hidden};
+    uint32_t move_pedestal_anim_start_ms_{0};
 
     // Chat text input state
     std::string chat_input_{};

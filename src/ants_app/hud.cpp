@@ -341,49 +341,91 @@ void HUD::render(IRenderer& renderer, const assets::AssetArchive& assets,
             }
         }
     } else {
-        // Pedestal 1: Move (Always present)
-        bool ped1_down = move_pedestal_button_.is_pressed || (active_order_mode_ == sim::OrderType::Move);
-        renderer.draw_named_sprite(ped1_down ? "butdown.bmp" : "butup.bmp", 488, 155);
-        renderer.draw_named_sprite(ped1_down ? "butmovd.bmp" : "butmovu.bmp", 503, ped1_down ? 166 : 164);
-        renderer.draw_named_sprite("labmov.bmp", 497, 140);
-
-        // Pedestal 2: Class-Specific Ability Pedestal
-        if (sel_ant) {
-            if (sel_ant->type == sim::AntType::Swimmer) {
-                bool ped2_down = ability_pedestal_button_.is_pressed || (active_order_mode_ == sim::OrderType::BuildBridge);
-                renderer.draw_named_sprite(ped2_down ? "butdown.bmp" : "butup.bmp", 544, 155);
-                renderer.draw_named_sprite(ped2_down ? "swimd.bmp" : "swimup.bmp", 556, ped2_down ? 167 : 165);
-                renderer.draw_named_sprite("labswim.bmp", 551, 140);
-            } else if (sel_ant->type == sim::AntType::Fire) {
-                bool ped2_down = ability_pedestal_button_.is_pressed || (active_order_mode_ == sim::OrderType::IgniteFire);
-                renderer.draw_named_sprite(ped2_down ? "butdown.bmp" : "butup.bmp", 544, 155);
-                renderer.draw_named_sprite("butfireu.bmp", 555, ped2_down ? 166 : 164);
-                renderer.draw_named_sprite("labfire.bmp", 546, 140);
-            } else if (sel_ant->type == sim::AntType::Combat) {
-                bool ped2_down = ability_pedestal_button_.is_pressed || (active_order_mode_ == sim::OrderType::Attack);
-                renderer.draw_named_sprite(ped2_down ? "butdown.bmp" : "butup.bmp", 544, 155);
-                renderer.draw_named_sprite(ped2_down ? "butattd.bmp" : "butattu.bmp", 553, ped2_down ? 167 : 165);
-                renderer.draw_named_sprite("labatt.bmp", 550, 140);
-            } else if (sel_ant->type == sim::AntType::Bomber) {
-                bool ped2_down = ability_pedestal_button_.is_pressed || (active_order_mode_ == sim::OrderType::PlantBomb);
-                renderer.draw_named_sprite(ped2_down ? "butdown.bmp" : "butup.bmp", 544, 155);
-                renderer.draw_named_sprite(ped2_down ? "butbomd.bmp" : "butbomu.bmp", 554, ped2_down ? 165 : 163);
-                renderer.draw_named_sprite("labbom.bmp", 553, 140);
-            } else if (sel_ant->type == sim::AntType::Thief) {
-                bool ped2_down = ability_pedestal_button_.is_pressed || (active_order_mode_ == sim::OrderType::InfiltrateAnthill);
-                renderer.draw_named_sprite(ped2_down ? "butdown.bmp" : "butup.bmp", 544, 155);
-                renderer.draw_named_sprite(ped2_down ? "butthfd.bmp" : "butthfu.bmp", 556, ped2_down ? 166 : 164);
-                renderer.draw_named_sprite("labthf.bmp", 554, 140);
+        bool has_ants = (!selected_ant_ids_.empty() || selected_ant_id_ != 0);
+        if (has_ants) {
+            if (move_pedestal_state_ == PedestalAnimState::Hidden || move_pedestal_state_ == PedestalAnimState::Lowering) {
+                move_pedestal_state_ = PedestalAnimState::PoppingUp;
+                move_pedestal_anim_start_ms_ = SDL_GetTicks();
+            }
+        } else {
+            if (move_pedestal_state_ == PedestalAnimState::Raised || move_pedestal_state_ == PedestalAnimState::PoppingUp) {
+                move_pedestal_state_ = PedestalAnimState::Lowering;
+                move_pedestal_anim_start_ms_ = SDL_GetTicks();
             }
         }
 
-        // Stop circular button at (602, 192) with "Stop" label at (603, 176)
-        renderer.draw_named_sprite("labcan.bmp", 603, 176);
-        renderer.draw_named_sprite(stop_button_.is_pressed ? "butcand.bmp" : "butcanu.bmp", 602, 192);
+        uint32_t now_ms = SDL_GetTicks();
+        uint32_t elapsed_ms = now_ms - move_pedestal_anim_start_ms_;
 
-        // Golden Lunchbox Indicator: Displayed above Stop button at (598, 133) ONLY when carrying food
-        if (sel_ant && sel_ant->is_holding) {
-            renderer.draw_named_sprite("lunchicon.bmp", 598, 133);
+        if (move_pedestal_state_ == PedestalAnimState::PoppingUp) {
+            if (elapsed_ms >= 540) {
+                move_pedestal_state_ = PedestalAnimState::Raised;
+            } else {
+                size_t frame = std::min(static_cast<size_t>(elapsed_ms / 60), static_cast<size_t>(8));
+                const auto* seq = assets.find_animation("trnbmovu");
+                if (seq && frame < seq->subitems.size() && !seq->subitems[frame].frames.empty()) {
+                    const auto& fr = seq->subitems[frame].frames[0];
+                    renderer.draw_sprite(fr.sprite_index, fr.dx, fr.dy);
+                }
+            }
+        } else if (move_pedestal_state_ == PedestalAnimState::Lowering) {
+            if (elapsed_ms >= 540) {
+                move_pedestal_state_ = PedestalAnimState::Hidden;
+            } else {
+                size_t frame = std::min(static_cast<size_t>(elapsed_ms / 60), static_cast<size_t>(8));
+                const auto* seq = assets.find_animation("trnbalyd");
+                if (seq && frame < seq->subitems.size() && !seq->subitems[frame].frames.empty()) {
+                    const auto& fr = seq->subitems[frame].frames[0];
+                    renderer.draw_sprite(fr.sprite_index, fr.dx, fr.dy);
+                }
+            }
+        }
+
+        if (move_pedestal_state_ == PedestalAnimState::Raised && has_ants) {
+            // Pedestal 1: Move
+            bool ped1_down = move_pedestal_button_.is_pressed || (active_order_mode_ == sim::OrderType::Move);
+            renderer.draw_named_sprite(ped1_down ? "butdown.bmp" : "butup.bmp", 488, 155);
+            renderer.draw_named_sprite(ped1_down ? "butmovd.bmp" : "butmovu.bmp", 503, ped1_down ? 166 : 164);
+            renderer.draw_named_sprite("labmov.bmp", 497, 140);
+
+            // Pedestal 2: Class-Specific Ability Pedestal
+            if (sel_ant) {
+                if (sel_ant->type == sim::AntType::Swimmer) {
+                    bool ped2_down = ability_pedestal_button_.is_pressed || (active_order_mode_ == sim::OrderType::BuildBridge);
+                    renderer.draw_named_sprite(ped2_down ? "butdown.bmp" : "butup.bmp", 544, 155);
+                    renderer.draw_named_sprite(ped2_down ? "swimd.bmp" : "swimup.bmp", 556, ped2_down ? 167 : 165);
+                    renderer.draw_named_sprite("labswim.bmp", 551, 140);
+                } else if (sel_ant->type == sim::AntType::Fire) {
+                    bool ped2_down = ability_pedestal_button_.is_pressed || (active_order_mode_ == sim::OrderType::IgniteFire);
+                    renderer.draw_named_sprite(ped2_down ? "butdown.bmp" : "butup.bmp", 544, 155);
+                    renderer.draw_named_sprite("butfireu.bmp", 555, ped2_down ? 166 : 164);
+                    renderer.draw_named_sprite("labfire.bmp", 546, 140);
+                } else if (sel_ant->type == sim::AntType::Combat) {
+                    bool ped2_down = ability_pedestal_button_.is_pressed || (active_order_mode_ == sim::OrderType::Attack);
+                    renderer.draw_named_sprite(ped2_down ? "butdown.bmp" : "butup.bmp", 544, 155);
+                    renderer.draw_named_sprite(ped2_down ? "butattd.bmp" : "butattu.bmp", 553, ped2_down ? 167 : 165);
+                    renderer.draw_named_sprite("labatt.bmp", 550, 140);
+                } else if (sel_ant->type == sim::AntType::Bomber) {
+                    bool ped2_down = ability_pedestal_button_.is_pressed || (active_order_mode_ == sim::OrderType::PlantBomb);
+                    renderer.draw_named_sprite(ped2_down ? "butdown.bmp" : "butup.bmp", 544, 155);
+                    renderer.draw_named_sprite(ped2_down ? "butbomd.bmp" : "butbomu.bmp", 554, ped2_down ? 165 : 163);
+                    renderer.draw_named_sprite("labbom.bmp", 553, 140);
+                } else if (sel_ant->type == sim::AntType::Thief) {
+                    bool ped2_down = ability_pedestal_button_.is_pressed || (active_order_mode_ == sim::OrderType::InfiltrateAnthill);
+                    renderer.draw_named_sprite(ped2_down ? "butdown.bmp" : "butup.bmp", 544, 155);
+                    renderer.draw_named_sprite(ped2_down ? "butthfd.bmp" : "butthfu.bmp", 556, ped2_down ? 166 : 164);
+                    renderer.draw_named_sprite("labthf.bmp", 554, 140);
+                }
+            }
+
+            // Stop circular button at (602, 192) with "Stop" label at (603, 176)
+            renderer.draw_named_sprite("labcan.bmp", 603, 176);
+            renderer.draw_named_sprite(stop_button_.is_pressed ? "butcand.bmp" : "butcanu.bmp", 602, 192);
+
+            // Golden Lunchbox Indicator: Displayed above Stop button at (598, 133) ONLY when carrying food
+            if (sel_ant && sel_ant->is_holding) {
+                renderer.draw_named_sprite("lunchicon.bmp", 598, 133);
+            }
         }
 
         // Recessed status box wstatus.bmp (143x14) at (480, 253)
@@ -449,16 +491,19 @@ void HUD::render(IRenderer& renderer, const assets::AssetArchive& assets,
     renderer.draw_named_sprite("x480y466.bmp", 480, 436);
     if (!is_on_team_) {
         // In FFA or non-team mode, only [All] is active/shown
-        renderer.draw_named_sprite("butalld.bmp", 532, 443);
+        const char* all_spr = send_to_button_.is_pressed ? "butalld.bmp"
+                            : (send_to_button_.is_hovered ? "butallr.bmp" : "butallu.bmp");
+        renderer.draw_named_sprite(all_spr, 532, 443);
     } else {
         // When on a team, display both [All] and [Team] with active state
-        if (send_to_all_) {
-            renderer.draw_named_sprite("butalld.bmp", 532, 443);
-            renderer.draw_named_sprite("butteamu.bmp", 579, 443);
-        } else {
-            renderer.draw_named_sprite("butallu.bmp", 532, 443);
-            renderer.draw_named_sprite("butteamd.bmp", 579, 443);
-        }
+        const char* all_spr = (send_to_button_.is_pressed || (send_to_all_ && !team_button_.is_pressed))
+                            ? "butalld.bmp"
+                            : (send_to_button_.is_hovered ? "butallr.bmp" : "butallu.bmp");
+        const char* team_spr = (team_button_.is_pressed || (!send_to_all_ && !send_to_button_.is_pressed))
+                             ? "butteamd.bmp"
+                             : (team_button_.is_hovered ? "butteamr.bmp" : "butteamu.bmp");
+        renderer.draw_named_sprite(all_spr, 532, 443);
+        renderer.draw_named_sprite(team_spr, 579, 443);
     }
 
     // Vertical right border strip x521y254.bmp (19x182) placed at x=621, y=254 (seals right screen edge)
@@ -593,7 +638,6 @@ void HUD::render_radar(IRenderer& renderer, const assets::AssetArchive&,
         int32_t bh = std::max(4, static_cast<int32_t>(4.0f * scale_y));
         assets::ColorRGBA c = (base.team_id < 4) ? TEAM_COLORS[base.team_id] : assets::ColorRGBA{200, 200, 200, 255};
         renderer.fill_rect(bx, by, bw, bh, c);
-        renderer.draw_rect(bx, by, bw, bh, {255, 255, 255, 200});
     }
 
     // Active live ants
@@ -607,28 +651,33 @@ void HUD::render_radar(IRenderer& renderer, const assets::AssetArchive&,
         int32_t ay = ry + static_cast<int32_t>(static_cast<float>(ant.tile_y) * scale_y);
         assets::ColorRGBA c = (ant.player_id < 4) ? TEAM_COLORS[ant.player_id] : assets::ColorRGBA{255, 255, 255, 255};
         renderer.fill_rect(ax, ay, 2, 2, c);
-
-        if (ant.id == selected_ant_id_) {
-            // Outline selected unit
-            renderer.draw_rect(ax - 1, ay - 1, 4, 4, {255, 255, 255, 255});
-        }
     }
 
     // Camera frustum wireframe box
     float map_w_px = static_cast<float>(world.width * 32);
     float map_h_px = static_cast<float>(world.height * 32);
     if (map_w_px > 0.0f && map_h_px > 0.0f) {
+        float max_cam_x = std::max(0.0f, map_w_px - static_cast<float>(camera.viewport_w));
+        float max_cam_y = std::max(0.0f, map_h_px - static_cast<float>(camera.viewport_h));
+
         float cam_tile_x = camera.x / 32.0f;
         float cam_tile_y = camera.y / 32.0f;
         float cam_tile_w = static_cast<float>(camera.viewport_w) / 32.0f;
         float cam_tile_h = static_cast<float>(camera.viewport_h) / 32.0f;
 
-        int32_t fx = rx + static_cast<int32_t>(cam_tile_x * scale_x);
-        int32_t fy = ry + static_cast<int32_t>(cam_tile_y * scale_y);
-        int32_t fw = static_cast<int32_t>(cam_tile_w * scale_x);
-        int32_t fh = static_cast<int32_t>(cam_tile_h * scale_y);
+        int32_t fx1 = rx + static_cast<int32_t>(cam_tile_x * scale_x);
+        int32_t fy1 = ry + static_cast<int32_t>(cam_tile_y * scale_y);
+        int32_t fx2 = (max_cam_x > 0.0f && camera.x >= max_cam_x - 0.5f)
+                          ? (rx + rw)
+                          : (rx + static_cast<int32_t>((cam_tile_x + cam_tile_w) * scale_x));
+        int32_t fy2 = (max_cam_y > 0.0f && camera.y >= max_cam_y - 0.5f)
+                          ? (ry + rh)
+                          : (ry + static_cast<int32_t>((cam_tile_y + cam_tile_h) * scale_y));
 
-        renderer.draw_rect(fx, fy, std::max(4, fw), std::max(4, fh), {255, 255, 255, 255});
+        int32_t fw = std::max(4, fx2 - fx1);
+        int32_t fh = std::max(4, fy2 - fy1);
+
+        renderer.draw_rect(fx1, fy1, fw, fh, {255, 255, 255, 255});
     }
 }
 
@@ -983,7 +1032,8 @@ void HUD::render_options_dialog(IRenderer& renderer, const assets::AssetArchive&
 void HUD::render_marquee_box(IRenderer& renderer) {
     int32_t dx = std::abs(drag_curr_x_ - drag_start_x_);
     int32_t dy = std::abs(drag_curr_y_ - drag_start_y_);
-    if (dx <= 4 && dy <= 4) return; // Authentic threshold: only render when dragged > 4px
+    int32_t threshold = (!selected_ant_ids_.empty() || selected_ant_id_ != 0) ? 10 : 4;
+    if (dx <= threshold && dy <= threshold) return;
 
     int32_t x1 = std::min(drag_start_x_, drag_curr_x_);
     int32_t y1 = std::min(drag_start_y_, drag_curr_y_);
@@ -1637,15 +1687,36 @@ bool HUD::handle_mouse_up(int32_t x, int32_t y, uint8_t button,
         bool shift_held = ((mod & (KMOD_LSHIFT | KMOD_RSHIFT)) != 0) ||
                           ((static_cast<uint16_t>(SDL_GetModState()) & KMOD_SHIFT) != 0);
 
-        if (dx > 4 || dy > 4) {
-            // Authentic Marquee Box Selection (> 4px drag threshold)
+        int32_t drag_threshold = has_friendly_selected(world) ? 10 : 4;
+        bool is_small_drag = (dx <= 20 && dy <= 20);
+
+        if (dx > drag_threshold || dy > drag_threshold) {
+            // Authentic Marquee Box Selection
             int32_t x1 = camera.world_x + (std::min(drag_start_x_, drag_curr_x_) - PLAYFIELD_X);
             int32_t y1 = camera.world_y + (std::min(drag_start_y_, drag_curr_y_) - PLAYFIELD_Y);
             int32_t x2 = camera.world_x + (std::max(drag_start_x_, drag_curr_x_) - PLAYFIELD_X);
             int32_t y2 = camera.world_y + (std::max(drag_start_y_, drag_curr_y_) - PLAYFIELD_Y);
+
+            if (is_small_drag && has_friendly_selected(world)) {
+                bool hit_any_friendly = false;
+                for (const auto& ant : world.ants) {
+                    if (ant.player_id == local_player_id_ && ant.hp > 0 && !ant.is_drowning) {
+                        if (ant.px >= x1 && ant.px <= x2 && ant.py >= y1 && ant.py <= y2) {
+                            hit_any_friendly = true;
+                            break;
+                        }
+                    }
+                }
+                if (!hit_any_friendly) {
+                    // Accidental micro drag on empty ground during rapid clicking!
+                    // Preserve selection and execute single-click order at (drag_start_x_, drag_start_y_)
+                    goto execute_single_click;
+                }
+            }
             select_ants_in_rect(x1, y1, x2, y2, world, shift_held);
         } else {
-            // Single Click (dx <= 4 && dy <= 4)
+        execute_single_click:
+            // Single Click
             int32_t world_x = camera.world_x + (drag_start_x_ - PLAYFIELD_X);
             int32_t world_y = camera.world_y + (drag_start_y_ - PLAYFIELD_Y);
             int32_t target_tile_x = world_x / 32;
@@ -1724,9 +1795,11 @@ bool HUD::handle_mouse_up(int32_t x, int32_t y, uint8_t button,
                     if (hit_base->team_id == local_player_id_) {
                         // Friendly anthill: return selected friendly ants to base
                         if (on_spawn_click_marker_) on_spawn_click_marker_(world_x, world_y);
+                        const sim::AntSnapshot* first_ant = nullptr;
                         for (uint32_t aid : selected_ant_ids_) {
                             for (const auto& a : world.ants) {
                                 if (a.id == aid && a.player_id == local_player_id_) {
+                                    if (!first_ant) first_ant = &a;
                                     sim::AntOrder order;
                                     order.ant_id = aid;
                                     order.type = sim::OrderType::ReturnToBase;
@@ -1735,28 +1808,48 @@ bool HUD::handle_mouse_up(int32_t x, int32_t y, uint8_t button,
                                 }
                             }
                         }
+                        if (first_ant) {
+                            play_sfx(sim::get_move_voice_sound(first_ant->type, voice_variant_++));
+                        }
                     } else {
                         // Enemy anthill clicked
                         bool has_thief = false;
+                        const sim::AntSnapshot* first_friendly = nullptr;
                         for (uint32_t aid : selected_ant_ids_) {
                             for (const auto& a : world.ants) {
-                                if (a.id == aid && a.player_id == local_player_id_ && a.type == sim::AntType::Thief) {
-                                    has_thief = true;
-                                    sim::AntOrder order;
-                                    order.ant_id = aid;
-                                    order.type = sim::OrderType::InfiltrateAnthill;
-                                    order.target_x = target_tile_x;
-                                    order.target_y = target_tile_y;
-                                    sim.issue_order(order);
-                                    break;
+                                if (a.id == aid && a.player_id == local_player_id_) {
+                                    if (!first_friendly) first_friendly = &a;
+                                    if (a.type == sim::AntType::Thief) {
+                                        has_thief = true;
+                                        sim::AntOrder order;
+                                        order.ant_id = aid;
+                                        order.type = sim::OrderType::InfiltrateAnthill;
+                                        order.target_x = target_tile_x;
+                                        order.target_y = target_tile_y;
+                                        sim.issue_order(order);
+                                    }
                                 }
                             }
                         }
                         if (has_thief) {
                             if (on_spawn_click_marker_) on_spawn_click_marker_(world_x, world_y);
-                        } else {
-                            clear_selection();
-                            select_base(static_cast<int32_t>(hit_base->team_id));
+                            play_sfx(sim::SoundID::ThiefGo);
+                        } else if (first_friendly) {
+                            if (on_spawn_click_marker_) on_spawn_click_marker_(world_x, world_y);
+                            for (uint32_t aid : selected_ant_ids_) {
+                                for (const auto& a : world.ants) {
+                                    if (a.id == aid && a.player_id == local_player_id_) {
+                                        sim::AntOrder order;
+                                        order.ant_id = aid;
+                                        order.type = sim::OrderType::Move;
+                                        order.target_x = target_tile_x;
+                                        order.target_y = target_tile_y;
+                                        sim.issue_order(order);
+                                        break;
+                                    }
+                                }
+                            }
+                            play_sfx(sim::get_move_voice_sound(first_friendly->type, voice_variant_++));
                         }
                     }
                 } else {
@@ -1814,6 +1907,12 @@ bool HUD::handle_mouse_up(int32_t x, int32_t y, uint8_t button,
 
 bool HUD::handle_mouse_motion(int32_t x, int32_t y,
                               sim::SimulationEngine& sim, ViewportCamera& camera) {
+    send_to_button_.is_hovered = send_to_button_.contains(x, y);
+    team_button_.is_hovered = is_on_team_ && team_button_.contains(x, y);
+    help_button_.is_hovered = help_button_.contains(x, y);
+    options_button_.is_hovered = options_button_.contains(x, y);
+    quit_button_.is_hovered = quit_button_.contains(x, y);
+
     if (show_options_) {
         if (active_slider_dragging_ == 0) {
             sfx_volume_ = std::clamp(static_cast<float>(x - 188) / 185.0f, 0.0f, 1.0f);
@@ -2254,8 +2353,88 @@ void HUD::dispatch_targeted_order(int32_t world_x, int32_t world_y, sim::Simulat
                 }
                 play_sfx(sim::get_ability_voice_sound(sim::AntType::Swimmer));
                 return;
+            } else if (cell.terrain_type == sim::TERRAIN_WATER || cell.surface_type == sim::SurfaceType::Water) {
+                for (uint32_t aid : targets) {
+                    sim::AntOrder order;
+                    order.ant_id = aid;
+                    order.type = sim::OrderType::BuildBridge;
+                    order.target_x = target_tile_x;
+                    order.target_y = target_tile_y;
+                    sim.issue_order(order);
+                }
+                play_sfx(sim::get_ability_voice_sound(sim::AntType::Swimmer));
+                return;
             }
         }
+        play_sfx(sim::SoundID::CantGo);
+        return;
+    }
+
+    if (active_order_mode_ == sim::OrderType::PlantBomb) {
+        const auto& grid = sim.grid();
+        if (grid.in_bounds({target_tile_x, target_tile_y})) {
+            const auto& cell = grid.get_cell({target_tile_x, target_tile_y});
+            if (cell.can_place_bomb() && cell.terrain_type != sim::TERRAIN_OBSTACLE && !cell.is_obstacle_overlay && cell.terrain_type != sim::TERRAIN_WATER) {
+                for (uint32_t aid : targets) {
+                    sim::AntOrder order;
+                    order.ant_id = aid;
+                    order.type = sim::OrderType::PlantBomb;
+                    order.target_x = target_tile_x;
+                    order.target_y = target_tile_y;
+                    sim.issue_order(order);
+                }
+                play_sfx(sim::get_move_voice_sound(sim::AntType::Bomber, voice_variant_++));
+                return;
+            }
+        }
+        play_sfx(sim::SoundID::CantGo);
+        return;
+    }
+
+    if (active_order_mode_ == sim::OrderType::IgniteFire) {
+        const auto& grid = sim.grid();
+        if (grid.in_bounds({target_tile_x, target_tile_y})) {
+            const auto& cell = grid.get_cell({target_tile_x, target_tile_y});
+            if (cell.can_place_fire() && cell.terrain_type != sim::TERRAIN_OBSTACLE && !cell.is_obstacle_overlay && cell.terrain_type != sim::TERRAIN_WATER) {
+                for (uint32_t aid : targets) {
+                    sim::AntOrder order;
+                    order.ant_id = aid;
+                    order.type = sim::OrderType::IgniteFire;
+                    order.target_x = target_tile_x;
+                    order.target_y = target_tile_y;
+                    sim.issue_order(order);
+                }
+                play_sfx(sim::get_ability_voice_sound(sim::AntType::Fire));
+                return;
+            }
+        }
+        play_sfx(sim::SoundID::CantGo);
+        return;
+    }
+
+    if (active_order_mode_ == sim::OrderType::InfiltrateAnthill) {
+        const assets::AnthillSpawn* target_base = nullptr;
+        for (const auto& base : world.anthills) {
+            if (target_tile_x >= base.x && target_tile_x < base.x + 4 &&
+                target_tile_y >= base.y && target_tile_y < base.y + 4) {
+                target_base = &base;
+                break;
+            }
+        }
+        if (target_base && target_base->team_id != local_player_id_) {
+            for (uint32_t aid : targets) {
+                sim::AntOrder order;
+                order.ant_id = aid;
+                order.type = sim::OrderType::InfiltrateAnthill;
+                order.target_x = target_tile_x;
+                order.target_y = target_tile_y;
+                sim.issue_order(order);
+            }
+            play_sfx(sim::SoundID::ThiefGo);
+            return;
+        }
+        play_sfx(sim::SoundID::CantGo);
+        return;
     }
 
     for (uint32_t aid : targets) {
@@ -2310,6 +2489,8 @@ void HUD::dispatch_move_order(int32_t target_tile_x, int32_t target_tile_y, sim:
                 }
             }
         }
+    } else {
+        play_sfx(sim::SoundID::CantGo);
     }
 move_voice_done:
 
@@ -2937,7 +3118,32 @@ CursorType HUD::evaluate_cursor(int32_t screen_x, int32_t screen_y,
         if (active_order_mode_ == sim::OrderType::BuildBridge) {
             if (grid.in_bounds(tx, ty)) {
                 const auto& cell = grid.get_cell(static_cast<uint32_t>(tx), static_cast<uint32_t>(ty));
-                if (cell.terrain_type == sim::TERRAIN_WATER && !cell.has_completed_bridge()) {
+                if ((cell.terrain_type == sim::TERRAIN_WATER || cell.surface_type == sim::SurfaceType::Water) && !cell.has_completed_bridge()) {
+                    current_cursor_ = CursorType::Move;
+                    return current_cursor_;
+                } else if (cell.has_completed_bridge() || cell.has_partial_bridge()) {
+                    current_cursor_ = CursorType::Move;
+                    return current_cursor_;
+                }
+            }
+            current_cursor_ = CursorType::Cant;
+            return current_cursor_;
+        }
+        if (active_order_mode_ == sim::OrderType::PlantBomb) {
+            if (grid.in_bounds(tx, ty)) {
+                const auto& cell = grid.get_cell(static_cast<uint32_t>(tx), static_cast<uint32_t>(ty));
+                if (cell.can_place_bomb() && cell.terrain_type != sim::TERRAIN_OBSTACLE && !cell.is_obstacle_overlay && cell.terrain_type != sim::TERRAIN_WATER) {
+                    current_cursor_ = CursorType::Move;
+                    return current_cursor_;
+                }
+            }
+            current_cursor_ = CursorType::Cant;
+            return current_cursor_;
+        }
+        if (active_order_mode_ == sim::OrderType::IgniteFire) {
+            if (grid.in_bounds(tx, ty)) {
+                const auto& cell = grid.get_cell(static_cast<uint32_t>(tx), static_cast<uint32_t>(ty));
+                if (cell.can_place_fire() && cell.terrain_type != sim::TERRAIN_OBSTACLE && !cell.is_obstacle_overlay && cell.terrain_type != sim::TERRAIN_WATER) {
                     current_cursor_ = CursorType::Move;
                     return current_cursor_;
                 }

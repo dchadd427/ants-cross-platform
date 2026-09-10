@@ -185,9 +185,9 @@ void AntUnit::tick_movement(bool is_swimming, SurfaceType surface) {
     // Set facing direction
     facing = ants::assets::vector_to_direction(dx, dy);
 
-    // Advance walk cycle animation
+    // Advance walk cycle animation (matching Table 4 50ms subitem duration at 20Hz)
     anim_tick++;
-    anim_subitem = (anim_tick / 3);
+    anim_subitem = (surface == SurfaceType::Mud) ? (anim_tick / 2) : anim_tick;
 
     // Speed selection
     int32_t speed_fx = SPEED_STANDARD_FX;
