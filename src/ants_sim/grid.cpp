@@ -233,6 +233,9 @@ void Grid::configure_anthill_cells(TileCoord pos) {
                     mcell.flags &= ~(FLAG_CAN_PLACE_BOMB | FLAG_CAN_PLACE_FIRE);
                 } else {
                     mcell.is_obstacle_overlay = true;
+                    if (dx == 2 && (dy >= 0 && dy <= 2)) {
+                        mcell.flags |= FLAG_CAN_PLACE_FIRE;
+                    }
                 }
             }
         }

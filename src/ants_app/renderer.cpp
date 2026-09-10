@@ -916,7 +916,7 @@ void Renderer::render_terrain_layer2_structures(const ants::sim::Grid& grid, con
                 };
 
                 uint32_t phase = static_cast<uint32_t>(c) * 2u + static_cast<uint32_t>(r) * 3u;
-                size_t frame_idx = ((anim_tick_ / 7u) + phase) % 5u;
+                size_t frame_idx = ((SDL_GetTicks() / 120u) + phase) % 5u;
                 const auto& ff = fire_frames[frame_idx];
                 SDL_Texture* tex = texture_cache_->get_named_sprite_texture(ff.name);
                 if (tex) {
@@ -936,7 +936,7 @@ void Renderer::render_terrain_layer2_structures(const ants::sim::Grid& grid, con
                 };
                 uint8_t owner = cell.interactive_owner % 4u;
                 uint32_t phase = static_cast<uint32_t>(c) * 3u + static_cast<uint32_t>(r) * 5u;
-                size_t b_frame = ((anim_tick_ / 6u) + phase) % 2u;
+                size_t b_frame = ((SDL_GetTicks() / 100u) + phase) % 2u;
                 SDL_Texture* tex = texture_cache_->get_named_sprite_texture(bomb_frames[owner][b_frame]);
                 if (tex) {
                     SDL_Rect bomb_dst = { sx + 10, sy + 4, 12, 24 };
@@ -945,10 +945,16 @@ void Renderer::render_terrain_layer2_structures(const ants::sim::Grid& grid, con
                 continue;
             }
 
-            // 4. Dropped Lunchbox
+            // 4. Dropped Lunchbox (Table 4 Anim 356 "lunchbox", Sprite 513 "3lb0001.bmp", 11x16, dx: 9, dy: 8)
             if (cell.has_lunchbox()) {
-                SDL_Texture* tex = texture_cache_->get_named_sprite_texture("lunchicon.bmp");
-                if (tex) SDL_RenderCopy(renderer_, tex, nullptr, &dst);
+                SDL_Texture* tex = texture_cache_->get_sprite_texture(513);
+                if (!tex) {
+                    tex = texture_cache_->get_named_sprite_texture("3lb0001.bmp");
+                }
+                if (tex) {
+                    SDL_Rect lb_dst = { sx + 9, sy + 8, 11, 16 };
+                    SDL_RenderCopy(renderer_, tex, nullptr, &lb_dst);
+                }
                 continue;
             }
 
@@ -1386,8 +1392,37 @@ void Renderer::draw_ant_shadow(int32_t anchor_sx, int32_t anchor_sy, int32_t alt
 }
 
 void Renderer::draw_single_ant(const ants::sim::AntSnapshot& ant, bool is_selected, bool show_health_bar) {
+    if (ant.is_underground || ant.is_in_scuffle) return; // Underground or concealed inside scuffle ball, do not draw
+
+    bool is_infiltrating = (ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::Infiltrating));
+    bool is_entering_base = (ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::EnteringBase));
+
     int32_t sx = 0, sy = 0;
-    if (!camera_.world_to_screen(ant.px, ant.py, sx, sy)) return;
+    if (is_infiltrating) {
+        int32_t hill_tx = -1, hill_ty = -1;
+        if (ant.target_team_id < 4 && has_anthill_bases_ && anthill_bases_[ant.target_team_id].x >= 0) {
+            hill_tx = anthill_bases_[ant.target_team_id].x;
+            hill_ty = anthill_bases_[ant.target_team_id].y;
+        } else if (has_anthill_bases_) {
+            for (size_t b = 0; b < 4; ++b) {
+                if (b != ant.player_id && anthill_bases_[b].x >= 0) {
+                    hill_tx = anthill_bases_[b].x;
+                    hill_ty = anthill_bases_[b].y;
+                    break;
+                }
+            }
+        }
+        if (hill_tx >= 0) {
+            // Authentic Table 4 Anthill anchor: (hill_tx * 32 + 32, hill_ty * 32 + 25)
+            int32_t anchor_world_x = hill_tx * 32 + 32;
+            int32_t anchor_world_y = hill_ty * 32 + 25;
+            if (!camera_.world_to_screen(anchor_world_x, anchor_world_y, sx, sy)) return;
+        } else {
+            if (!camera_.world_to_screen(ant.px, ant.py, sx, sy)) return;
+        }
+    } else {
+        if (!camera_.world_to_screen(ant.px, ant.py, sx, sy)) return;
+    }
 
     // 1. Calculate Parabolic Elevation (Knockback Altitude)
     int32_t altitude_z = 0;
@@ -1412,11 +1447,6 @@ void Renderer::draw_single_ant(const ants::sim::AntSnapshot& ant, bool is_select
         (ant.is_swimming || ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::Swimming))) {
         prefix = "as";
     }
-
-    bool is_infiltrating = (ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::Infiltrating));
-    bool is_entering_base = (ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::EnteringBase));
-
-    if (ant.is_underground || ant.is_in_scuffle) return; // Underground or concealed inside scuffle ball, do not draw
 
     if (is_entering_base) {
         // Base entry and emerge/hatch animations:

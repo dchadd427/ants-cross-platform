@@ -243,6 +243,7 @@ struct AntSnapshot {
     uint16_t ability_cooldown_ticks{0};
     bool     is_in_scuffle{false};
     UnitState state{UnitState::Idle};
+    uint8_t  target_team_id{255};
 };
 
 struct VisualEffect {

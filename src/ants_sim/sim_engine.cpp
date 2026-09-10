@@ -1238,6 +1238,7 @@ void SimulationEngine::tick() {
             ant_ptr->state != UnitState::Bounce && !ant_ptr->is_in_scuffle && !ant_ptr->underground) {
             AntUnit* target = impl_->find_unit(ant_ptr->attack_target_id);
             if (!target || !target->is_alive() || target->underground || target->state == UnitState::EnteringBase ||
+                target->state == UnitState::Infiltrating ||
                 target->on_powerup || (target->type == AntType::Swimmer && target->in_water)) {
                 ant_ptr->attack_target_id = 0;
             } else {
@@ -1603,6 +1604,11 @@ void SimulationEngine::tick() {
         continue;
     }
 
+    // Melee Attack progression (*at*, handled by AntUnit::tick_timers)
+    if (ant_ptr->state == UnitState::Attacking) {
+        continue;
+    }
+
     // Can't Go progression (*cg301)
     if (ant_ptr->state == UnitState::CantGo) {
         ant_ptr->anim_tick++;
@@ -1725,17 +1731,10 @@ void SimulationEngine::tick() {
                         int32_t ent_y = enemy_base->y + 1;
                         if ((ant_ptr->pos.x == ent_x && ant_ptr->pos.y == ent_y) ||
                             (ant_ptr->pos.chebyshev_dist(TileCoord{ent_x, ent_y}) <= 1)) {
-                            if (impl_->stats_.get_individual_score(p) > 0) {
-                                ant_ptr->target_team_id = p;
-                                ant_ptr->state = UnitState::Infiltrating;
-                                ant_ptr->anim_subitem = 0;
-                                ant_ptr->clear_path();
-                            } else {
-                                // Base has 0 food, cannot steal!
-                                ant_ptr->clear_path();
-                                ant_ptr->state = UnitState::Idle;
-                                join_base_queue(ant_ptr->id);
-                            }
+                            ant_ptr->target_team_id = p;
+                            ant_ptr->state = UnitState::Infiltrating;
+                            ant_ptr->anim_subitem = 0;
+                            ant_ptr->clear_path();
                             break;
                         }
                     }
@@ -2223,10 +2222,6 @@ void SimulationEngine::issue_order(const AntOrder& order) {
                     }
                 }
             }
-            if (target_team < MAX_PLAYERS && impl_->stats_.get_individual_score(target_team) <= 0) {
-                impl_->news_queue_.push_back(NewsEvent{unit->player_id, "Enemy anthill has no food!", impl_->match_time_remaining_ms_, 0});
-                break;
-            }
             unit->target_team_id = target_team;
             if (unit->pos.x == tx && unit->pos.y == ty) {
                 start_thief_infiltration(order.ant_id, target_team);
@@ -2399,6 +2394,7 @@ const WorldState& SimulationEngine::get_world_state() const {
             s.ability_cooldown_ticks = a->ability_cooldown_ticks;
             s.is_in_scuffle = a->is_in_scuffle;
             s.state = a->state;
+            s.target_team_id = a->target_team_id;
             impl_->world_state_cache_.ants.push_back(s);
         }
 
