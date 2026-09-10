@@ -5832,7 +5832,6 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         ASSERT_TRUE(lvl.load_lvl(lvl_path));
         sim.init(lvl, 42);
 
-        // Spawn two units on the same tile to trigger immediate scuffle collision resolution
         uint32_t a1_id = sim.spawn_unit(0, AntType::Worker, TileCoord{15, 15});
         uint32_t a2_id = sim.spawn_unit(0, AntType::Combat, TileCoord{15, 15});
 
@@ -5850,11 +5849,20 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         }
         ASSERT_TRUE(has_battle_effect);
 
-        // Check that SoundID::CombatNetFairy (ID 3) was queued
+        // Check that SoundID::CombatNetFairy (ID 3) and FlingThumpA (Sound 64) were queued at scuffle start
         ASSERT_TRUE(sim.has_audio_event(SoundID::CombatNetFairy));
+        ASSERT_TRUE(sim.has_audio_event(SoundID::FlingThumpA));
 
-        // Check that bounce sound SoundID::FlingThumpB (ID 65) was queued
-        ASSERT_TRUE(sim.has_audio_event(SoundID::FlingThumpB));
+        // Advance through scuffle (10 ticks) and bounce flight (6 ticks) until landing thump
+        bool got_landing_thump = false;
+        for (int t = 0; t < 20; ++t) {
+            sim.tick();
+            if (sim.has_audio_event(SoundID::FlingThumpB)) {
+                got_landing_thump = true;
+                break;
+            }
+        }
+        ASSERT_TRUE(got_landing_thump);
 
         // Ensure ants bounced apart onto different discrete tiles
         const auto& a1 = sim.get_unit(a1_id);
@@ -6300,7 +6308,7 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         ASSERT_EQ(sim.get_unit(attacker_id).state, UnitState::Idle);
     } TEST_END();
 
-    TEST_CASE("12.102: Smooth 1-Tile Pushback Slide Across First 4 Ticks (*gh*)") {
+    TEST_CASE("12.102: Smooth 1-Tile Pushback Slide Across First 6 Ticks (*gh*)") {
         SimulationEngine sim;
         sim.init_test_world(60, 60, 100, 60000);
 
@@ -6316,24 +6324,33 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         ASSERT_EQ(def.pixel_x, 11 * 32 + 16); // 368
         ASSERT_EQ(def.push_dest_px, 12 * 32 + 16); // 400
 
-        // Tick 1: slides 8px East
+        // Push flight across 6 ticks (~300ms, matching CHD Table 4 Subitem 3 at 320ms)
+        // Tick 1: 368 + (32 * 1) / 6 = 373
         sim.tick();
-        ASSERT_EQ(sim.get_unit(defender_id).pixel_x, 376);
+        ASSERT_EQ(sim.get_unit(defender_id).pixel_x, 373);
 
-        // Tick 2: slides 8px East
+        // Tick 2: 368 + (32 * 2) / 6 = 378
+        sim.tick();
+        ASSERT_EQ(sim.get_unit(defender_id).pixel_x, 378);
+
+        // Tick 3: 368 + (32 * 3) / 6 = 384
         sim.tick();
         ASSERT_EQ(sim.get_unit(defender_id).pixel_x, 384);
 
-        // Tick 3: slides 8px East
+        // Tick 4: 368 + (32 * 4) / 6 = 389
         sim.tick();
-        ASSERT_EQ(sim.get_unit(defender_id).pixel_x, 392);
+        ASSERT_EQ(sim.get_unit(defender_id).pixel_x, 389);
 
-        // Tick 4: reaches destination 400px
+        // Tick 5: 368 + (32 * 5) / 6 = 394
+        sim.tick();
+        ASSERT_EQ(sim.get_unit(defender_id).pixel_x, 394);
+
+        // Tick 6: reaches destination 400px (landing tick)
         sim.tick();
         ASSERT_EQ(sim.get_unit(defender_id).pixel_x, 400);
 
-        // Ticks 5..13: remains at 400px while playing remaining stagger frames
-        for (int i = 4; i < 13; ++i) {
+        // Ticks 7..13: remains at 400px while playing remaining recovery frames
+        for (int i = 6; i < 13; ++i) {
             sim.tick();
             ASSERT_EQ(sim.get_unit(defender_id).pixel_x, 400);
             ASSERT_EQ(sim.get_unit(defender_id).state, UnitState::Flinch);
@@ -6575,9 +6592,9 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
             ASSERT_EQ(victim.state, UnitState::Flinch);
             ASSERT_TRUE(sim.has_audio_event(SoundID::FlingThumpA));
 
-            // 3. Target slides for 4 ticks. On tick 4 (landing on destination tile), triggers FlingThumpB (Sound 65 / flythumpb.wav)
+            // 3. Target slides for 6 ticks. On tick 6 (landing on destination tile), triggers FlingThumpB (Sound 65 / flythumpb.wav)
             bool got_landing_thump = false;
-            for (int t = 0; t < 5; ++t) {
+            for (int t = 0; t < 7; ++t) {
                 sim.tick();
                 if (sim.has_audio_event(SoundID::FlingThumpB)) {
                     got_landing_thump = true;
@@ -6703,8 +6720,15 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
             bool hit_connected = false;
             for (int t = 0; t < 50; ++t) {
                 sim.tick();
+                const auto& att_u = sim.get_unit(att);
+                if (att_u.state == UnitState::Walking) {
+                    // While walking, no damage can be dealt mid-stride
+                    ASSERT_EQ(sim.get_unit(vic).hp, initial_vic_hp);
+                }
                 if (sim.get_unit(vic).hp < initial_vic_hp) {
                     hit_connected = true;
+                    // Strike connects only after completing walk into adjacent tile (19, 20)
+                    ASSERT_EQ(att_u.pos, (TileCoord{19, 20}));
                     break;
                 }
             }

@@ -1273,11 +1273,27 @@ To deliver authentic 1:1 gameplay inside standard web browsers with zero install
 - **Victim Facing Dynamics**:
   - In `Ants.exe` (`0x101dc7f`), whenever an ant connects with a melee strike, the victim immediately turns to face directly toward the attacker (`target->facing = vector_to_direction(attacker - target)`).
   - When an ant is displaced by a collision bounce, its facing direction is aligned along its bounce displacement vector away from the collision center (`vector_to_direction(chosen - collision_point)`), authentically allowing bounced units to face away from the collision point while attacked units always face their assailant.
-- **Bounce Animation Fidelity (`gh` vs. `gb`)**:
-  - In `ants.chd` Table 4, `*gb*` (`aggb301..aggb901`) represents the 4-tile high-altitude airborne fling resulting from Combat Ant punches or explosive blasts, featuring subitem 0 with displacement `val2 = -128` (128 pixels) and vertical apex height `dy = 59px`.
-  - In contrast, standard 1-tile collision bounce slide uses `*gh*` (`aggh301..aggh901`), remaining grounded with `val2 = -24px` and zero vertical loft.
-  - Renderer maps `UnitState::Bounce` to action `"gh"` instead of `"gb"`, matching authentic 1998 grounded slide aesthetics.
-- **Re-Collision Loop Breaking**:
-  - Upon collision bounce resolution, both the displaced unit and the anchor unit clear their paths (`clear_path()`), reset their attack targets (`attack_target_id = 0`), and anchor their final destinations to their current tile (`final_dest = pos`).
-  - This completely prevents the infinite bounce loop where units repeatedly walk back into the same collision tile after bouncing.
+- **Bounce Animation Fidelity (`gh` vs. `gb` vs. `gf`)**:
+  - In `ants.chd` Table 4, the three displacement and contact action prefixes decode as:
+    - `*gh*` ("Get Hit"): Combat flinch reaction. Subitems 0..2 execute the 1-tile pushback slide with Sound 64 (`flythumpa.wav`) at launch, and Sound 65 (`flythumpb.wav`) at Subitem 3 (arrival).
+    - `*gb*` ("Ground Bounce"): Full tumbling collision bounce sequence (`aggb*`, `abgb*`, `afgb*`, `acgb*`, `asgb*`, `atgb*`). Subitem 0 triggers Sound 64 (`flythumpa.wav`), Subitems 0..5 represent airborne tumble flight, and Subitem 6 (tick 6, ~300ms) triggers Sound 65 (`flythumpb.wav`) upon ground impact/landing.
+    - `*gf*` ("Grab Food"): Food harvesting / grabbing sequence (`aggf*`, `abgf*`, `afgf*`, `acgf*`, `asgf*`, `atgf*`), triggering Sound 66 (`grabfood.wav`) or Sound 77 (`grabfood_alt.wav`).
+  - Renderer authentically maps `UnitState::Bounce` to action `"gb"`, and `UnitState::Flinch` to action `"gh"`.
+- **Re-Collision Loop Breaking & Cascade Preservation**:
+  - Upon collision bounce resolution, both the displaced unit and the anchor unit clear their paths (`clear_path()`), reset their attack targets (`attack_target_id = 0`), enforce a 20-tick attack cooldown, and synchronize their Combat AI guard anchors to their respective positions.
+  - This completely prevents the infinite bounce loop where units repeatedly walk back into the same collision tile after bouncing, while authentically preserving domino cascade bouncing when a tumbling ant impacts an occupied neighbor.
+
+#### 14. Walking Animation Completion Before Attack, Discrete Adjacency & Scuffle Immunity (`Ants.exe` `0x101a86a`, `0x1020de7`, `0x10215cb`)
+- **Walking Locomotion Completion Before Melee Strike**:
+  - In authentic 1998 engine behavior, attacking ants traversing towards an adjacent tile must completely finish their walking stride into the tile center before transitioning to `UnitState::Attacking`.
+  - Melee attack execution (`execute_melee_attack`) strictly rejects attacks while `attacker->state == UnitState::Walking`.
+  - Autonomous pursuit logic in `sim_engine.cpp` allows walking units to complete their waypoint step before evaluating strike eligibility.
+  - Strict Chebyshev tile distance (`dist <= 1`) replaces premature sub-tile pixel bounding boxes (`px_dx <= 36 && px_dy <= 36`), preventing mid-stride interruption.
+- **Elastic Separation Immunity During Bounce, Knockback & Scuffle**:
+  - Units in physical flight or tumbling states (`UnitState::Bounce`, `UnitState::Knockback`, or `is_in_scuffle == true`) are strictly exempted from ground-plane mutual elastic separation.
+  - Prevents premature continuous pixel repositioning from overwriting discrete tile coordinates (`set_pixel_pos`) back to the collision source tile when the fight dust cloud clears.
+- **Combat AI Guard Anchor Synchronization**:
+  - When displaced by a collision bounce cascade or when holding ground as an anchor ant, the unit's `guard_anchor` and associated `CombatAIController::anchor_tx_/anchor_ty_` are immediately updated via `set_guard_anchor()`.
+  - Prevents combat guard AI from interpreting collision displacement as a deviation from its post and marching back into the stationary collision partner.
+
 

@@ -252,10 +252,10 @@ void bounce_unit_cascade(SimulationEngineImpl& impl,
     unit.anim_subitem = 0;
     unit.clear_path();
     unit.attack_target_id = 0; // Clear target to break infinite bounce loop
+    unit.attack_cooldown_ticks = std::max(unit.attack_cooldown_ticks, static_cast<uint16_t>(20));
 
     impl.audio_queue_.push_back(AudioEvent{SoundID::Bump, unit.pixel_x, unit.pixel_y, 1, 255});
     impl.audio_queue_.push_back(AudioEvent{SoundID::FlingThumpA, unit.pixel_x, unit.pixel_y, 1, 255});
-    impl.audio_queue_.push_back(AudioEvent{SoundID::FlingThumpB, unit.pixel_x, unit.pixel_y, 1, 255});
 
     int32_t collision_px = from_x * 32 + 16;
     int32_t collision_py = from_y * 32 + 16;
@@ -289,15 +289,36 @@ void bounce_unit_cascade(SimulationEngineImpl& impl,
         return dot1 > dot2;
     });
 
-    // Authentic Ants.exe (0x1020de7): Candidates query strictly terrain bounds and non-solid obstacles!
-    // Water, fire, bombs, and other ants DO NOT block the bounce!
+    // Authentic Ants.exe (0x1020de7): Candidates query terrain bounds and non-solid obstacles
+    // Prefer unoccupied passable tile first; if crowded, fall back to cascade bouncing into occupied ants
     TileCoord chosen{-1, -1};
     for (const auto& cand : candidates) {
         if (!impl.grid_.in_bounds(cand.first, cand.second)) continue;
         const auto& cell = impl.grid_.get_cell(static_cast<uint32_t>(cand.first), static_cast<uint32_t>(cand.second));
         if (cell.terrain_type == TERRAIN_OBSTACLE || cell.is_obstacle_overlay) continue;
-        chosen = TileCoord{cand.first, cand.second};
-        break;
+        if (unit.type != AntType::Swimmer && cell.terrain_type == TERRAIN_WATER && !cell.has_completed_bridge()) continue;
+        bool has_ant = false;
+        for (const auto& other : impl.ants_) {
+            if (other && other->is_alive() && !other->underground && other->id != unit.id) {
+                if (other->pos.x == cand.first && other->pos.y == cand.second) {
+                    has_ant = true;
+                    break;
+                }
+            }
+        }
+        if (!has_ant) {
+            chosen = TileCoord{cand.first, cand.second};
+            break;
+        }
+    }
+    if (chosen.x < 0) {
+        for (const auto& cand : candidates) {
+            if (!impl.grid_.in_bounds(cand.first, cand.second)) continue;
+            const auto& cell = impl.grid_.get_cell(static_cast<uint32_t>(cand.first), static_cast<uint32_t>(cand.second));
+            if (cell.terrain_type == TERRAIN_OBSTACLE || cell.is_obstacle_overlay) continue;
+            chosen = TileCoord{cand.first, cand.second};
+            break;
+        }
     }
     if (chosen.x < 0) {
         chosen = unit.pos;
@@ -329,9 +350,14 @@ void bounce_unit_cascade(SimulationEngineImpl& impl,
     }
 
     unit.set_tile_pos(chosen.x, chosen.y);
+    unit.guard_anchor = chosen;
+    auto it_ai = impl.ai_controllers_.find(unit.id);
+    if (it_ai != impl.ai_controllers_.end() && it_ai->second) {
+        it_ai->second->set_guard_anchor(chosen.x, chosen.y);
+    }
     unit.push_dest_px = chosen.x * 32 + 16;
     unit.push_dest_py = chosen.y * 32 + 16;
-    unit.push_ticks_total = 4;
+    unit.push_ticks_total = 6;
     unit.push_tick_current = 0;
     unit.final_dest = unit.pos;
 
@@ -1187,53 +1213,48 @@ void SimulationEngine::tick() {
         // Autonomous Attack Execution / Pursuit
         if (ant_ptr->is_alive() && ant_ptr->attack_target_id != 0 && ant_ptr->state != UnitState::Stunned &&
             ant_ptr->state != UnitState::Knockback && ant_ptr->state != UnitState::Drowning &&
-            ant_ptr->state != UnitState::EnteringBase && ant_ptr->state != UnitState::CantGo && !ant_ptr->underground) {
+            ant_ptr->state != UnitState::EnteringBase && ant_ptr->state != UnitState::CantGo &&
+            ant_ptr->state != UnitState::Bounce && !ant_ptr->is_in_scuffle && !ant_ptr->underground) {
             AntUnit* target = impl_->find_unit(ant_ptr->attack_target_id);
             if (!target || !target->is_alive() || target->underground || target->state == UnitState::EnteringBase ||
                 target->on_powerup || (target->type == AntType::Swimmer && target->in_water)) {
                 ant_ptr->attack_target_id = 0;
             } else {
-                int32_t dist = ant_ptr->pos.chebyshev_dist(target->pos);
-                int32_t px_dx = std::abs(ant_ptr->pixel_x - target->pixel_x);
-                int32_t px_dy = std::abs(ant_ptr->pixel_y - target->pixel_y);
-                if (dist > 1 && px_dx <= 36 && px_dy <= 36) {
-                    dist = 1;
-                }
-                if (dist <= 1) {
-                    if (!ant_ptr->waypoints.empty() || ant_ptr->state == UnitState::Walking) {
-                        ant_ptr->clear_path();
-                        ant_ptr->state = (ant_ptr->type == AntType::Combat) ? UnitState::GuardIdle : UnitState::Idle;
-                    }
-                    int32_t f_dx = target->pos.x - ant_ptr->pos.x;
-                    int32_t f_dy = target->pos.y - ant_ptr->pos.y;
-                    if (f_dx == 0 && f_dy == 0) {
-                        f_dx = target->pixel_x - ant_ptr->pixel_x;
-                        f_dy = target->pixel_y - ant_ptr->pixel_y;
-                    }
-                    if (f_dx != 0 || f_dy != 0) {
-                        ant_ptr->facing = ants::assets::vector_to_direction(f_dx, f_dy);
-                    }
-                    if (ant_ptr->attack_cooldown_ticks == 0) {
-                        execute_melee_attack(ant_ptr->id, target->id);
-                    }
-                } else if (ant_ptr->state == UnitState::Idle || ant_ptr->state == UnitState::GuardIdle) {
-                    TileCoord best_neighbor = target->pos;
-                    int32_t best_dist = 999999;
-                    for (int32_t dy = -1; dy <= 1; ++dy) {
-                        for (int32_t dx = -1; dx <= 1; ++dx) {
-                            if (dx == 0 && dy == 0) continue;
-                            TileCoord cand{target->pos.x + dx, target->pos.y + dy};
-                            if (impl_->grid_.in_bounds(cand) && impl_->grid_.get_cell(cand).is_passable()) {
-                                int32_t dist_cand = ant_ptr->pos.euclidean_dist_sq(cand);
-                                if (dist_cand < best_dist) {
-                                    best_dist = dist_cand;
-                                    best_neighbor = cand;
+                // If the ant is walking, allow it to complete its entire walking animation into the tile
+                if (ant_ptr->state != UnitState::Walking) {
+                    int32_t dist = ant_ptr->pos.chebyshev_dist(target->pos);
+                    if (dist <= 1) {
+                        int32_t f_dx = target->pos.x - ant_ptr->pos.x;
+                        int32_t f_dy = target->pos.y - ant_ptr->pos.y;
+                        if (f_dx == 0 && f_dy == 0) {
+                            f_dx = target->pixel_x - ant_ptr->pixel_x;
+                            f_dy = target->pixel_y - ant_ptr->pixel_y;
+                        }
+                        if (f_dx != 0 || f_dy != 0) {
+                            ant_ptr->facing = ants::assets::vector_to_direction(f_dx, f_dy);
+                        }
+                        if (ant_ptr->attack_cooldown_ticks == 0) {
+                            execute_melee_attack(ant_ptr->id, target->id);
+                        }
+                    } else if (ant_ptr->state == UnitState::Idle || ant_ptr->state == UnitState::GuardIdle) {
+                        TileCoord best_neighbor = target->pos;
+                        int32_t best_dist = 999999;
+                        for (int32_t dy = -1; dy <= 1; ++dy) {
+                            for (int32_t dx = -1; dx <= 1; ++dx) {
+                                if (dx == 0 && dy == 0) continue;
+                                TileCoord cand{target->pos.x + dx, target->pos.y + dy};
+                                if (impl_->grid_.in_bounds(cand) && impl_->grid_.get_cell(cand).is_passable()) {
+                                    int32_t dist_cand = ant_ptr->pos.euclidean_dist_sq(cand);
+                                    if (dist_cand < best_dist) {
+                                        best_dist = dist_cand;
+                                        best_neighbor = cand;
+                                    }
                                 }
                             }
                         }
-                    }
-                    if (best_dist < 999999) {
-                        issue_move_order(ant_ptr->id, best_neighbor);
+                        if (best_dist < 999999 && best_neighbor != target->pos) {
+                            issue_move_order(ant_ptr->id, best_neighbor);
+                        }
                     }
                 }
             }
@@ -1548,9 +1569,9 @@ void SimulationEngine::tick() {
         continue;
     }
 
-    // Flinch progression (*gh*, 14 ticks: 4-tick slide + 10-tick recovery)
+    // Flinch progression (*gh*, 14 ticks: 6-tick slide + 8-tick recovery)
     if (ant_ptr->state == UnitState::Flinch) {
-        // Landing tick: when pushback slide completes at tick 4 (Subitem 3 in CHD Table 4)
+        // Landing tick: when pushback slide completes at tick 6 (Subitem 3 in CHD Table 4)
         if (ant_ptr->push_tick_current == ant_ptr->push_ticks_total && ant_ptr->push_ticks_total > 0) {
             ant_ptr->push_ticks_total = 0; // Trigger once upon landing
             impl_->audio_queue_.push_back(AudioEvent{SoundID::FlingThumpB, ant_ptr->pixel_x, ant_ptr->pixel_y, 1, 255});
@@ -1562,11 +1583,11 @@ void SimulationEngine::tick() {
         if (ant_ptr->is_in_scuffle) {
             continue; // Concealed inside battle fight ball during scuffle
         }
-        ant_ptr->anim_tick++;
-        ant_ptr->anim_subitem = ant_ptr->anim_tick;
 
         // Check if just landed (push flight completed)
         if (ant_ptr->push_tick_current == ant_ptr->push_ticks_total && ant_ptr->push_ticks_total > 0) {
+            ant_ptr->push_ticks_total = 0; // Trigger once upon landing
+            impl_->audio_queue_.push_back(AudioEvent{SoundID::FlingThumpB, ant_ptr->pixel_x, ant_ptr->pixel_y, 1, 255});
             if (impl_->grid_.in_bounds(ant_ptr->pos)) {
                 const auto& cell = impl_->grid_.get_cell(static_cast<uint32_t>(ant_ptr->pos.x), static_cast<uint32_t>(ant_ptr->pos.y));
                 // Water landing: Swimmer survives & swims, others drown
@@ -1708,114 +1729,118 @@ void SimulationEngine::tick() {
                 bool a1_moving = (a1->state == UnitState::Walking);
                 bool a2_moving = (a2->state == UnitState::Walking);
 
-                if (a1_moving && !a2_moving) {
-                    // a1 is moving, a2 is stationary friendly:
-                    // a2 stands still and MUST NOT be pushed! a1 is pushed away from a2:
-                    int32_t push_x = static_cast<int32_t>(nx * overlap + (nx >= 0 ? 0.5f : -0.5f));
-                    int32_t push_y = static_cast<int32_t>(ny * overlap + (ny >= 0 ? 0.5f : -0.5f));
-                    int32_t cand1_x = (a1->pixel_x + push_x) / 32;
-                    int32_t cand1_y = (a1->pixel_y + push_y) / 32;
-                    if (impl_->grid_.in_bounds(cand1_x, cand1_y) && impl_->grid_.get_cell(static_cast<uint32_t>(cand1_x), static_cast<uint32_t>(cand1_y)).is_passable()) {
-                        a1->set_pixel_pos(a1->pixel_x + push_x, a1->pixel_y + push_y);
-                    } else {
-                        // Deflect perpendicular if blocked
-                        int32_t tang_x = -push_y;
-                        int32_t tang_y = push_x;
-                        int32_t t1_x = (a1->pixel_x + tang_x) / 32;
-                        int32_t t1_y = (a1->pixel_y + tang_y) / 32;
-                        if (impl_->grid_.in_bounds(t1_x, t1_y) && impl_->grid_.get_cell(static_cast<uint32_t>(t1_x), static_cast<uint32_t>(t1_y)).is_passable()) {
-                            a1->set_pixel_pos(a1->pixel_x + tang_x, a1->pixel_y + tang_y);
-                        }
-                    }
-
-                    // If a1 collides with stationary friendly a2
-                    TileCoord dest = (a1->final_dest.x >= 0) ? a1->final_dest : (!a1->waypoints.empty() ? a1->waypoints.back() : a1->pos);
-                    if (dest == a2->pos) {
-                        // a1 has arrived as close as possible to a2: stop a1 cleanly!
-                        a1->clear_path();
-                        a1->state = (a1->type == AntType::Combat) ? UnitState::GuardIdle : UnitState::Idle;
-                        a1->set_tile_pos(a1->pos.x, a1->pos.y);
-                        a1->final_dest = a1->pos;
-                    } else {
-                        // Repath around stationary a2
-                        bool needs_repath = false;
-                        if (a1->state == UnitState::Walking && !a1->waypoints.empty()) {
-                            for (size_t wi = a1->current_waypoint_idx; wi < a1->waypoints.size(); ++wi) {
-                                if (a1->waypoints[wi] == a2->pos) {
-                                    needs_repath = true;
-                                    break;
-                                }
-                            }
-                            if (!needs_repath && a1->waypoints.size() <= 1) {
-                                needs_repath = true;
-                            }
-                        }
-                        if (needs_repath && dest != a1->pos && a1->state != UnitState::CantGo) {
-                            issue_move_order(a1->id, dest);
-                        }
-                    }
-                } else if (!a1_moving && a2_moving) {
-                    // a2 is moving, a1 is stationary friendly:
-                    // a1 stands still and MUST NOT be pushed! a2 is pushed away from a1:
-                    int32_t push_x = static_cast<int32_t>(-nx * overlap + (-nx >= 0 ? 0.5f : -0.5f));
-                    int32_t push_y = static_cast<int32_t>(-ny * overlap + (-ny >= 0 ? 0.5f : -0.5f));
-                    int32_t cand2_x = (a2->pixel_x + push_x) / 32;
-                    int32_t cand2_y = (a2->pixel_y + push_y) / 32;
-                    if (impl_->grid_.in_bounds(cand2_x, cand2_y) && impl_->grid_.get_cell(static_cast<uint32_t>(cand2_x), static_cast<uint32_t>(cand2_y)).is_passable()) {
-                        a2->set_pixel_pos(a2->pixel_x + push_x, a2->pixel_y + push_y);
-                    } else {
-                        // Deflect perpendicular if blocked
-                        int32_t tang_x = -push_y;
-                        int32_t tang_y = push_x;
-                        int32_t t2_x = (a2->pixel_x + tang_x) / 32;
-                        int32_t t2_y = (a2->pixel_y + tang_y) / 32;
-                        if (impl_->grid_.in_bounds(t2_x, t2_y) && impl_->grid_.get_cell(static_cast<uint32_t>(t2_x), static_cast<uint32_t>(t2_y)).is_passable()) {
-                            a2->set_pixel_pos(a2->pixel_x + tang_x, a2->pixel_y + tang_y);
-                        }
-                    }
-
-                    // If a2 collides with stationary friendly a1
-                    TileCoord dest = (a2->final_dest.x >= 0) ? a2->final_dest : (!a2->waypoints.empty() ? a2->waypoints.back() : a2->pos);
-                    if (dest == a1->pos) {
-                        // a2 has arrived as close as possible to a1: stop a2 cleanly!
-                        a2->clear_path();
-                        a2->state = (a2->type == AntType::Combat) ? UnitState::GuardIdle : UnitState::Idle;
-                        a2->set_tile_pos(a2->pos.x, a2->pos.y);
-                        a2->final_dest = a2->pos;
-                    } else {
-                        // Repath around stationary a1
-                        bool needs_repath = false;
-                        if (a2->state == UnitState::Walking && !a2->waypoints.empty()) {
-                            for (size_t wi = a2->current_waypoint_idx; wi < a2->waypoints.size(); ++wi) {
-                                if (a2->waypoints[wi] == a1->pos) {
-                                    needs_repath = true;
-                                    break;
-                                }
-                            }
-                            if (!needs_repath && a2->waypoints.size() <= 1) {
-                                needs_repath = true;
-                            }
-                        }
-                        if (needs_repath && dest != a2->pos && a2->state != UnitState::CantGo) {
-                            issue_move_order(a2->id, dest);
-                        }
-                    }
-                } else if (!a1_moving && !a2_moving) {
-                    if (a1->pos != a2->pos) {
-                        // Both stationary friendly on different tiles: mutual separation
-                        int32_t sep_x = static_cast<int32_t>(nx * (overlap * 0.5f) + (nx >= 0 ? 0.5f : -0.5f));
-                        int32_t sep_y = static_cast<int32_t>(ny * (overlap * 0.5f) + (ny >= 0 ? 0.5f : -0.5f));
-
-                        int32_t cand1_x = (a1->pixel_x + sep_x) / 32;
-                        int32_t cand1_y = (a1->pixel_y + sep_y) / 32;
+                if (!a1->is_in_scuffle && !a2->is_in_scuffle &&
+                    a1->state != UnitState::Bounce && a2->state != UnitState::Bounce &&
+                    a1->state != UnitState::Knockback && a2->state != UnitState::Knockback) {
+                    if (a1_moving && !a2_moving) {
+                        // a1 is moving, a2 is stationary friendly:
+                        // a2 stands still and MUST NOT be pushed! a1 is pushed away from a2:
+                        int32_t push_x = static_cast<int32_t>(nx * overlap + (nx >= 0 ? 0.5f : -0.5f));
+                        int32_t push_y = static_cast<int32_t>(ny * overlap + (ny >= 0 ? 0.5f : -0.5f));
+                        int32_t cand1_x = (a1->pixel_x + push_x) / 32;
+                        int32_t cand1_y = (a1->pixel_y + push_y) / 32;
                         if (impl_->grid_.in_bounds(cand1_x, cand1_y) && impl_->grid_.get_cell(static_cast<uint32_t>(cand1_x), static_cast<uint32_t>(cand1_y)).is_passable()) {
-                            a1->set_pixel_pos(a1->pixel_x + sep_x, a1->pixel_y + sep_y);
+                            a1->set_pixel_pos(a1->pixel_x + push_x, a1->pixel_y + push_y);
+                        } else {
+                            // Deflect perpendicular if blocked
+                            int32_t tang_x = -push_y;
+                            int32_t tang_y = push_x;
+                            int32_t t1_x = (a1->pixel_x + tang_x) / 32;
+                            int32_t t1_y = (a1->pixel_y + tang_y) / 32;
+                            if (impl_->grid_.in_bounds(t1_x, t1_y) && impl_->grid_.get_cell(static_cast<uint32_t>(t1_x), static_cast<uint32_t>(t1_y)).is_passable()) {
+                                a1->set_pixel_pos(a1->pixel_x + tang_x, a1->pixel_y + tang_y);
+                            }
                         }
 
-                        int32_t cand2_x = (a2->pixel_x - sep_x) / 32;
-                        int32_t cand2_y = (a2->pixel_y - sep_y) / 32;
+                        // If a1 collides with stationary friendly a2
+                        TileCoord dest = (a1->final_dest.x >= 0) ? a1->final_dest : (!a1->waypoints.empty() ? a1->waypoints.back() : a1->pos);
+                        if (dest == a2->pos) {
+                            // a1 has arrived as close as possible to a2: stop a1 cleanly!
+                            a1->clear_path();
+                            a1->state = (a1->type == AntType::Combat) ? UnitState::GuardIdle : UnitState::Idle;
+                            a1->set_tile_pos(a1->pos.x, a1->pos.y);
+                            a1->final_dest = a1->pos;
+                        } else {
+                            // Repath around stationary a2
+                            bool needs_repath = false;
+                            if (a1->state == UnitState::Walking && !a1->waypoints.empty()) {
+                                for (size_t wi = a1->current_waypoint_idx; wi < a1->waypoints.size(); ++wi) {
+                                    if (a1->waypoints[wi] == a2->pos) {
+                                        needs_repath = true;
+                                        break;
+                                    }
+                                }
+                                if (!needs_repath && a1->waypoints.size() <= 1) {
+                                    needs_repath = true;
+                                }
+                            }
+                            if (needs_repath && dest != a1->pos && a1->state != UnitState::CantGo) {
+                                issue_move_order(a1->id, dest);
+                            }
+                        }
+                    } else if (!a1_moving && a2_moving) {
+                        // a2 is moving, a1 is stationary friendly:
+                        // a1 stands still and MUST NOT be pushed! a2 is pushed away from a1:
+                        int32_t push_x = static_cast<int32_t>(-nx * overlap + (-nx >= 0 ? 0.5f : -0.5f));
+                        int32_t push_y = static_cast<int32_t>(-ny * overlap + (-ny >= 0 ? 0.5f : -0.5f));
+                        int32_t cand2_x = (a2->pixel_x + push_x) / 32;
+                        int32_t cand2_y = (a2->pixel_y + push_y) / 32;
                         if (impl_->grid_.in_bounds(cand2_x, cand2_y) && impl_->grid_.get_cell(static_cast<uint32_t>(cand2_x), static_cast<uint32_t>(cand2_y)).is_passable()) {
-                            a2->set_pixel_pos(a2->pixel_x - sep_x, a2->pixel_y - sep_y);
+                            a2->set_pixel_pos(a2->pixel_x + push_x, a2->pixel_y + push_y);
+                        } else {
+                            // Deflect perpendicular if blocked
+                            int32_t tang_x = -push_y;
+                            int32_t tang_y = push_x;
+                            int32_t t2_x = (a2->pixel_x + tang_x) / 32;
+                            int32_t t2_y = (a2->pixel_y + tang_y) / 32;
+                            if (impl_->grid_.in_bounds(t2_x, t2_y) && impl_->grid_.get_cell(static_cast<uint32_t>(t2_x), static_cast<uint32_t>(t2_y)).is_passable()) {
+                                a2->set_pixel_pos(a2->pixel_x + tang_x, a2->pixel_y + tang_y);
+                            }
+                        }
+
+                        // If a2 collides with stationary friendly a1
+                        TileCoord dest = (a2->final_dest.x >= 0) ? a2->final_dest : (!a2->waypoints.empty() ? a2->waypoints.back() : a2->pos);
+                        if (dest == a1->pos) {
+                            // a2 has arrived as close as possible to a1: stop a2 cleanly!
+                            a2->clear_path();
+                            a2->state = (a2->type == AntType::Combat) ? UnitState::GuardIdle : UnitState::Idle;
+                            a2->set_tile_pos(a2->pos.x, a2->pos.y);
+                            a2->final_dest = a2->pos;
+                        } else {
+                            // Repath around stationary a1
+                            bool needs_repath = false;
+                            if (a2->state == UnitState::Walking && !a2->waypoints.empty()) {
+                                for (size_t wi = a2->current_waypoint_idx; wi < a2->waypoints.size(); ++wi) {
+                                    if (a2->waypoints[wi] == a1->pos) {
+                                        needs_repath = true;
+                                        break;
+                                    }
+                                }
+                                if (!needs_repath && a2->waypoints.size() <= 1) {
+                                    needs_repath = true;
+                                }
+                            }
+                            if (needs_repath && dest != a2->pos && a2->state != UnitState::CantGo) {
+                                issue_move_order(a2->id, dest);
+                            }
+                        }
+                    } else if (!a1_moving && !a2_moving) {
+                        if (a1->pos != a2->pos) {
+                            // Both stationary friendly on different tiles: mutual separation
+                            int32_t sep_x = static_cast<int32_t>(nx * (overlap * 0.5f) + (nx >= 0 ? 0.5f : -0.5f));
+                            int32_t sep_y = static_cast<int32_t>(ny * (overlap * 0.5f) + (ny >= 0 ? 0.5f : -0.5f));
+
+                            int32_t cand1_x = (a1->pixel_x + sep_x) / 32;
+                            int32_t cand1_y = (a1->pixel_y + sep_y) / 32;
+                            if (impl_->grid_.in_bounds(cand1_x, cand1_y) && impl_->grid_.get_cell(static_cast<uint32_t>(cand1_x), static_cast<uint32_t>(cand1_y)).is_passable()) {
+                                a1->set_pixel_pos(a1->pixel_x + sep_x, a1->pixel_y + sep_y);
+                            }
+
+                            int32_t cand2_x = (a2->pixel_x - sep_x) / 32;
+                            int32_t cand2_y = (a2->pixel_y - sep_y) / 32;
+                            if (impl_->grid_.in_bounds(cand2_x, cand2_y) && impl_->grid_.get_cell(static_cast<uint32_t>(cand2_x), static_cast<uint32_t>(cand2_y)).is_passable()) {
+                                a2->set_pixel_pos(a2->pixel_x - sep_x, a2->pixel_y - sep_y);
+                            }
                         }
                     }
                 }
@@ -1835,15 +1860,20 @@ void SimulationEngine::tick() {
                     anchor_ant->scuffle_ticks = 10;
                     anchor_ant->clear_path();
                     anchor_ant->attack_target_id = 0;
+                    anchor_ant->attack_cooldown_ticks = std::max(anchor_ant->attack_cooldown_ticks, static_cast<uint16_t>(20));
                     anchor_ant->final_dest = anchor_ant->pos;
                     anchor_ant->set_tile_pos(anchor_ant->pos.x, anchor_ant->pos.y);
+                    anchor_ant->guard_anchor = anchor_ant->pos;
+                    auto it_anchor = impl_->ai_controllers_.find(anchor_ant->id);
+                    if (it_anchor != impl_->ai_controllers_.end() && it_anchor->second) {
+                        it_anchor->second->set_guard_anchor(anchor_ant->pos.x, anchor_ant->pos.y);
+                    }
                     anchor_ant->push_start_px = anchor_ant->pos.x * 32 + 16;
                     anchor_ant->push_start_py = anchor_ant->pos.y * 32 + 16;
 
                     // Authentic 1998 battle scuffle visual effect and SoundID::CombatNetFairy (ID 3)
                     impl_->active_effects_.push_back(VisualEffect{"battle", anchor_ant->pixel_x, anchor_ant->pixel_y, 0, 10});
                     impl_->audio_queue_.push_back(AudioEvent{SoundID::CombatNetFairy, anchor_ant->pixel_x, anchor_ant->pixel_y, 1, 255});
-                    impl_->audio_queue_.push_back(AudioEvent{SoundID::FlingThumpB, anchor_ant->pixel_x, anchor_ant->pixel_y, 1, 255});
                     bounce_unit_cascade(*impl_, *to_displace, anchor_ant->pos.x, anchor_ant->pos.y);
                 }
             }
@@ -2003,14 +2033,7 @@ void SimulationEngine::issue_order(const AntOrder& order) {
                     }
                     unit->attack_target_id = target_id;
                     int32_t dist = unit->pos.chebyshev_dist(target->pos);
-                    int32_t px_dx = std::abs(unit->pixel_x - target->pixel_x);
-                    int32_t px_dy = std::abs(unit->pixel_y - target->pixel_y);
-                    if (dist > 1 && px_dx <= 36 && px_dy <= 36) {
-                        dist = 1;
-                    }
-                    if (dist <= 1) {
-                        unit->clear_path();
-                        unit->state = (unit->type == AntType::Combat) ? UnitState::GuardIdle : UnitState::Idle;
+                    if (dist <= 1 && unit->state != UnitState::Walking) {
                         int32_t f_dx = target->pos.x - unit->pos.x;
                         int32_t f_dy = target->pos.y - unit->pos.y;
                         if (f_dx == 0 && f_dy == 0) {
@@ -2039,7 +2062,7 @@ void SimulationEngine::issue_order(const AntOrder& order) {
                                 }
                             }
                         }
-                        if (best_dist < 999999) {
+                        if (best_dist < 999999 && best_neighbor != target->pos) {
                             issue_move_order(order.ant_id, best_neighbor);
                         }
                     }
@@ -2531,10 +2554,10 @@ void SimulationEngine::execute_melee_attack(uint32_t attacker_id, uint32_t targe
     if (target->on_powerup || (impl_->grid_.in_bounds(target->pos) && impl_->grid_.has_powerup_at(target->pos))) return;
     if (target->type == AntType::Swimmer && target->in_water) return;
 
+    if (attacker->state == UnitState::Walking) return;
+
     int32_t dist = attacker->pos.chebyshev_dist(target->pos);
-    int32_t px_dx = std::abs(attacker->pixel_x - target->pixel_x);
-    int32_t px_dy = std::abs(attacker->pixel_y - target->pixel_y);
-    if (dist > 1 && !(px_dx <= 36 && px_dy <= 36)) return;
+    if (dist > 1) return;
     if (attacker->attack_cooldown_ticks > 0) return;
 
     attacker->attack_cooldown_ticks = (attacker->type == AntType::Combat ? 12 : 10);
@@ -2589,10 +2612,10 @@ void SimulationEngine::execute_melee_attack(uint32_t attacker_id, uint32_t targe
             if (dx == 0 && dy == 0) dx = 1;
             int32_t dir_x = (dx > 0) ? 1 : ((dx < 0) ? -1 : 0);
             int32_t dir_y = (dy > 0) ? 1 : ((dy < 0) ? -1 : 0);
-            int32_t dist = 4;
+            int32_t punch_dist = 4;
 
             TileCoord land_pos = target->pos;
-            for (int32_t s = 1; s <= dist; ++s) {
+            for (int32_t s = 1; s <= punch_dist; ++s) {
                 TileCoord next_pos{target->pos.x + dir_x * s, target->pos.y + dir_y * s};
                 if (!impl_->grid_.in_bounds(next_pos)) {
                     break;
@@ -2748,7 +2771,7 @@ void SimulationEngine::execute_melee_attack(uint32_t attacker_id, uint32_t targe
                 target->push_start_py = start_py;
                 target->push_dest_px = chosen_push.x * 32 + 16;
                 target->push_dest_py = chosen_push.y * 32 + 16;
-                target->push_ticks_total = 4;
+                target->push_ticks_total = 6;
                 target->push_tick_current = 0;
             }
 
@@ -2934,12 +2957,11 @@ void SimulationEngine::issue_move_order(uint32_t ant_id, TileCoord dest, bool al
         return;
     }
 
-    // Check if dest is occupied by a stationary friendly ant
+    // Check if dest is occupied by a stationary ant
     const AntUnit* occ_ant = nullptr;
     for (const auto& other : impl_->ants_) {
         if (other && other->is_alive() && !other->underground && other->id != unit->id && other->pos == dest) {
-            bool is_enemy = (other->player_id != unit->player_id && !impl_->stats_.are_allies(unit->player_id, other->player_id));
-            if (!is_enemy && other->state != UnitState::Walking) {
+            if (other->state != UnitState::Walking) {
                 occ_ant = other.get();
                 break;
             }

@@ -42,6 +42,7 @@ bool CombatAIController::is_valid_target(const AntUnit& candidate,
     if (stats.are_allies(candidate.player_id, owner.player_id)) return false;
     if (candidate.is_underground() || candidate.state == UnitState::EnteringBase) return false;
     if (candidate.state == UnitState::Knockback || candidate.state == UnitState::Drowning) return false;
+    if (candidate.is_in_scuffle || candidate.state == UnitState::Bounce) return false;
     if (candidate.on_powerup) return false;
     if (candidate.type == AntType::Swimmer && candidate.in_water) return false;
 
@@ -71,7 +72,8 @@ void CombatAIController::update(const std::vector<AntUnit*>& all_units,
                                 std::vector<AudioEvent>& audio_out,
                                 uint32_t random_seed) {
     if (owner_.type != AntType::Combat || !owner_.is_alive()) return;
-    if (owner_.is_stunned() || owner_.state == UnitState::Flinch || owner_.state == UnitState::Knockback) return;
+    if (owner_.is_stunned() || owner_.state == UnitState::Flinch || owner_.state == UnitState::Knockback ||
+        owner_.state == UnitState::Bounce || owner_.is_in_scuffle) return;
     if (owner_.state == UnitState::Walking) return; // Respect user movement commands
 
     if (owner_.state == UnitState::GuardIdle || owner_.state == UnitState::Idle) {
@@ -171,12 +173,14 @@ void CombatAIController::update_intercepting(const std::vector<AntUnit*>& all_un
 
     TileCoord prev_pos = owner_.pos;
     TileCoord next_pos{owner_.pos.x + step_dx, owner_.pos.y + step_dy};
-    if (grid.in_bounds(next_pos) && !grid.is_solid_obstacle(next_pos.x, next_pos.y)) {
+    if (next_pos != target->pos && grid.in_bounds(next_pos) && !grid.is_solid_obstacle(next_pos.x, next_pos.y)) {
         owner_.set_tile_pos(next_pos.x, next_pos.y);
-    } else if (step_dx != 0 && grid.in_bounds(TileCoord{owner_.pos.x + step_dx, owner_.pos.y}) &&
+    } else if (step_dx != 0 && TileCoord{owner_.pos.x + step_dx, owner_.pos.y} != target->pos &&
+               grid.in_bounds(TileCoord{owner_.pos.x + step_dx, owner_.pos.y}) &&
                !grid.is_solid_obstacle(owner_.pos.x + step_dx, owner_.pos.y)) {
         owner_.set_tile_pos(owner_.pos.x + step_dx, owner_.pos.y);
-    } else if (step_dy != 0 && grid.in_bounds(TileCoord{owner_.pos.x, owner_.pos.y + step_dy}) &&
+    } else if (step_dy != 0 && TileCoord{owner_.pos.x, owner_.pos.y + step_dy} != target->pos &&
+               grid.in_bounds(TileCoord{owner_.pos.x, owner_.pos.y + step_dy}) &&
                !grid.is_solid_obstacle(owner_.pos.x, owner_.pos.y + step_dy)) {
         owner_.set_tile_pos(owner_.pos.x, owner_.pos.y + step_dy);
     }
