@@ -277,13 +277,29 @@ void bounce_unit_cascade(SimulationEngineImpl& impl,
     int32_t collision_px = from_x * 32 + 16;
     int32_t collision_py = from_y * 32 + 16;
 
+    // Calculate approach vector before overwriting push_start_px:
+    // If unit was pushed into the collision, approach is relative to push_start_px;
+    // otherwise, infer from unit.facing.
+    int32_t approach_dx = unit.pixel_x - unit.push_start_px;
+    int32_t approach_dy = unit.pixel_y - unit.push_start_py;
+    if (approach_dx == 0 && approach_dy == 0) {
+        static const int dir_offsets[8][2] = {
+            {0, -1}, {1, -1}, {1, 0}, {1, 1},
+            {0, 1}, {-1, 1}, {-1, 0}, {-1, -1}
+        };
+        size_t dir_idx = static_cast<size_t>(unit.facing) & 7;
+        approach_dx = dir_offsets[dir_idx][0];
+        approach_dy = dir_offsets[dir_idx][1];
+    }
+
     unit.is_in_scuffle = true;
     unit.scuffle_ticks = 10;
     unit.push_start_px = collision_px;
     unit.push_start_py = collision_py;
 
-    int32_t bdx = unit.pos.x - from_x;
-    int32_t bdy = unit.pos.y - from_y;
+    // Authentic bounce direction: fly backwards away from the collision tile back along approach vector
+    int32_t bdx = (approach_dx > 0) ? -1 : ((approach_dx < 0) ? 1 : 0);
+    int32_t bdy = (approach_dy > 0) ? -1 : ((approach_dy < 0) ? 1 : 0);
     if (bdx == 0 && bdy == 0) {
         bdx = (unit.id % 2 == 0) ? 1 : -1;
         bdy = (unit.id % 3 == 0) ? 1 : -1;
@@ -341,9 +357,9 @@ void bounce_unit_cascade(SimulationEngineImpl& impl,
         chosen = unit.pos;
     }
 
-    // Facing direction: when bouncing, face along the bounce trajectory away from collision center
-    int32_t f_dx = chosen.x - from_x;
-    int32_t f_dy = chosen.y - from_y;
+    // Facing direction: when bouncing backwards out of a scuffle, face towards the collision point
+    int32_t f_dx = from_x - chosen.x;
+    int32_t f_dy = from_y - chosen.y;
     if (f_dx != 0 || f_dy != 0) {
         unit.facing = ants::assets::vector_to_direction(f_dx, f_dy);
     }
@@ -1393,10 +1409,25 @@ void SimulationEngine::tick() {
                 impl_->audio_queue_.push_back(AudioEvent{SoundID::ThiefEmerge, ant_ptr->pixel_x, ant_ptr->pixel_y, 1, 255});
             } else if (ant_ptr->anim_subitem >= 33) {
                 execute_thief_loot(ant_ptr->id, victim);
-                ant_ptr->is_thief_steal = true;
-                ant_ptr->state = UnitState::Idle;
                 ant_ptr->anim_subitem = 0;
-                join_base_queue(ant_ptr->id);
+                if (ant_ptr->carried_points > 0) {
+                    ant_ptr->is_thief_steal = true;
+                    ant_ptr->state = UnitState::Idle;
+                    ant_ptr->underground = false;
+                    join_base_queue(ant_ptr->id);
+                } else {
+                    // Authentic 1998 behavior: If no food stolen, thief does not return to base.
+                    // It sits idle on the bottlecap (unable to be attacked / underground)
+                    // waiting for player instructions or another steal attempt.
+                    ant_ptr->is_thief_steal = false;
+                    ant_ptr->state = UnitState::Idle;
+                    ant_ptr->underground = true;
+                    const auto* enemy_base = impl_->grid_.find_anthill(victim);
+                    if (enemy_base) {
+                        ant_ptr->pos = TileCoord{enemy_base->x + 1, enemy_base->y + 1};
+                        ant_ptr->set_pixel_pos(enemy_base->x * 32 + 107, enemy_base->y * 32 + 58);
+                    }
+                }
             }
             continue;
         }
@@ -1722,11 +1753,16 @@ void SimulationEngine::tick() {
         }
 
         // Check thief arrival at enemy anthill
-        if (ant_ptr->type == AntType::Thief && ant_ptr->state != UnitState::Infiltrating) {
+        if (ant_ptr->type == AntType::Thief && ant_ptr->state != UnitState::Infiltrating && !ant_ptr->underground) {
             for (uint8_t p = 0; p < MAX_PLAYERS; ++p) {
                 if (p != ant_ptr->player_id && !impl_->stats_.are_allies(ant_ptr->player_id, p)) {
                     const auto* enemy_base = impl_->grid_.find_anthill(p);
                     if (enemy_base) {
+                        bool dest_on_base = (ant_ptr->final_dest.x >= enemy_base->x && ant_ptr->final_dest.x < enemy_base->x + 4 &&
+                                             ant_ptr->final_dest.y >= enemy_base->y && ant_ptr->final_dest.y < enemy_base->y + 4);
+                        bool is_targeting_base = (ant_ptr->target_team_id == p) || dest_on_base;
+                        if (!is_targeting_base) continue;
+
                         int32_t ent_x = enemy_base->x + 1;
                         int32_t ent_y = enemy_base->y + 1;
                         if ((ant_ptr->pos.x == ent_x && ant_ptr->pos.y == ent_y) ||
@@ -1735,6 +1771,8 @@ void SimulationEngine::tick() {
                             ant_ptr->state = UnitState::Infiltrating;
                             ant_ptr->anim_subitem = 0;
                             ant_ptr->clear_path();
+                            ant_ptr->pos = TileCoord{enemy_base->x + 1, enemy_base->y + 1};
+                            ant_ptr->set_pixel_pos(enemy_base->x * 32 + 107, enemy_base->y * 32 + 58);
                             break;
                         }
                     }
@@ -1916,8 +1954,18 @@ void SimulationEngine::tick() {
                         to_displace = a1.get();
                         anchor_ant = a2.get();
                     } else {
-                        to_displace = (a1->id > a2->id ? a1.get() : a2.get());
-                        anchor_ant = (to_displace == a1.get()) ? a2.get() : a1.get();
+                        bool a1_was_pushed = (a1->push_start_px != a1->pixel_x || a1->push_start_py != a1->pixel_y || a1->state == UnitState::Flinch || a1->state == UnitState::Knockback);
+                        bool a2_was_pushed = (a2->push_start_px != a2->pixel_x || a2->push_start_py != a2->pixel_y || a2->state == UnitState::Flinch || a2->state == UnitState::Knockback);
+                        if (a1_was_pushed && !a2_was_pushed) {
+                            to_displace = a1.get();
+                            anchor_ant = a2.get();
+                        } else if (a2_was_pushed && !a1_was_pushed) {
+                            to_displace = a2.get();
+                            anchor_ant = a1.get();
+                        } else {
+                            to_displace = (a1->id > a2->id ? a1.get() : a2.get());
+                            anchor_ant = (to_displace == a1.get()) ? a2.get() : a1.get();
+                        }
                     }
 
                     anchor_ant->is_in_scuffle = true;
@@ -2088,7 +2136,7 @@ void SimulationEngine::issue_order(const AntOrder& order) {
                     if (target->player_id == unit->player_id || impl_->stats_.are_allies(unit->player_id, target->player_id)) {
                         break; // Ants cannot attack friendly teammates or allies
                     }
-                    if (target->on_powerup || (target->type == AntType::Swimmer && target->in_water)) {
+                    if (target->underground || target->on_powerup || (target->type == AntType::Swimmer && target->in_water)) {
                         unit->attack_target_id = 0;
                         if (unit->is_transforming()) {
                             interrupt_transformation(order.ant_id);
@@ -2223,9 +2271,15 @@ void SimulationEngine::issue_order(const AntOrder& order) {
                 }
             }
             unit->target_team_id = target_team;
-            if (unit->pos.x == tx && unit->pos.y == ty) {
+            const auto* target_ah = impl_->grid_.find_anthill(target_team);
+            bool at_enemy_base = (target_ah && unit->pos.x >= target_ah->x && unit->pos.x < target_ah->x + 4 && unit->pos.y >= target_ah->y && unit->pos.y < target_ah->y + 4);
+            if (at_enemy_base || (unit->pos.x == tx && unit->pos.y == ty)) {
                 start_thief_infiltration(order.ant_id, target_team);
             } else {
+                if (unit->type == AntType::Thief && unit->underground) {
+                    unit->underground = false;
+                    unit->is_thief_steal = false;
+                }
                 issue_move_order(order.ant_id, TileCoord{tx, ty});
             }
             break;
@@ -2898,6 +2952,12 @@ void SimulationEngine::execute_melee_attack(uint32_t attacker_id, uint32_t targe
 void SimulationEngine::issue_move_order(uint32_t ant_id, TileCoord dest, bool allow_friendly_bomb, bool is_food_order) {
     AntUnit* unit = impl_->find_unit(ant_id);
     if (!unit || !unit->is_alive() || unit->is_stunned()) return;
+
+    if (unit->type == AntType::Thief && unit->underground) {
+        unit->underground = false;
+        unit->is_thief_steal = false;
+        unit->target_team_id = 255;
+    }
 
     bool dest_has_food = impl_->grid_.in_bounds(dest) && impl_->grid_.get_cell(dest).has_food();
     if (!dest_has_food) {
@@ -3732,6 +3792,12 @@ void SimulationEngine::start_thief_infiltration(uint32_t ant_id, uint8_t target_
     u->state = UnitState::Infiltrating;
     u->target_team_id = target_team_id;
     u->anim_subitem = 0;
+    u->underground = false;
+    const auto* enemy_base = impl_->grid_.find_anthill(target_team_id);
+    if (enemy_base) {
+        u->pos = TileCoord{enemy_base->x + 1, enemy_base->y + 1};
+        u->set_pixel_pos(enemy_base->x * 32 + 107, enemy_base->y * 32 + 58);
+    }
 }
 
 void SimulationEngine::step_thief_animation(uint32_t ant_id, uint16_t target_frame) {
