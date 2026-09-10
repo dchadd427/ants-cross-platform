@@ -1492,6 +1492,12 @@ bool HUD::handle_mouse_down(int32_t x, int32_t y, uint8_t button,
             const auto& world = sim.get_world_state();
             for (const auto& ant : world.ants) {
                 if (ant.hp == 0 || ant.is_drowning) continue;
+                if (world.fog_of_war_enabled && ant.player_id != local_player_id_) {
+                    bool is_ally = sim.stats_manager().are_allies(local_player_id_, ant.player_id);
+                    if (!is_ally && !world.is_tile_revealed(ant.tile_x, ant.tile_y)) {
+                        continue; // Cannot right-click target an unseen enemy in fog
+                    }
+                }
                 bool in_bbox = (std::abs(ant.px - world_x) <= 18 &&
                                 world_y >= ant.py - 24 && world_y <= ant.py + 18);
                 bool on_tile = (ant.tile_x == target_tile_x && ant.tile_y == target_tile_y);
@@ -1650,6 +1656,12 @@ bool HUD::handle_mouse_up(int32_t x, int32_t y, uint8_t button,
             int32_t best_ant_dist_sq = INT32_MAX;
             for (const auto& ant : world.ants) {
                 if (ant.hp == 0 || ant.is_drowning) continue;
+                if (world.fog_of_war_enabled && ant.player_id != local_player_id_) {
+                    bool is_ally = sim.stats_manager().are_allies(local_player_id_, ant.player_id);
+                    if (!is_ally && !world.is_tile_revealed(ant.tile_x, ant.tile_y)) {
+                        continue; // Cannot click-select or click-attack an enemy hidden in fog
+                    }
+                }
                 bool in_bbox = (std::abs(ant.px - world_x) <= 18 &&
                                 world_y >= ant.py - 24 && world_y <= ant.py + 18);
                 bool on_tile = (ant.tile_x == target_tile_x && ant.tile_y == target_tile_y);
@@ -1696,6 +1708,12 @@ bool HUD::handle_mouse_up(int32_t x, int32_t y, uint8_t button,
             for (const auto& base : world.anthills) {
                 if (target_tile_x >= base.x && target_tile_x < base.x + 4 &&
                     target_tile_y >= base.y && target_tile_y < base.y + 4) {
+                    if (world.fog_of_war_enabled && base.team_id != local_player_id_) {
+                        bool is_ally = sim.stats_manager().are_allies(local_player_id_, base.team_id);
+                        if (!is_ally && !world.is_tile_revealed(target_tile_x, target_tile_y)) {
+                            continue; // Cannot click enemy base hidden in fog
+                        }
+                    }
                     hit_base = &base;
                     break;
                 }
@@ -2824,11 +2842,34 @@ CursorType HUD::evaluate_cursor(int32_t screen_x, int32_t screen_y,
     int32_t tx = world_x / 32;
     int32_t ty = world_y / 32;
 
+    bool tile_revealed = world.is_tile_revealed(tx, ty);
+    bool has_friendly = has_friendly_selected(world);
+
+    // Fog of War concealment matching Ants.exe (FUN_01026aa3 lines 28356/28373 via FUN_01009825):
+    // If the hovered tile is unrevealed in Fog of War, cursor NEVER reveals enemy units, food, or enemy bases.
+    if (world.fog_of_war_enabled && !tile_revealed) {
+        if (has_friendly) {
+            current_cursor_ = CursorType::Move;
+        } else {
+            current_cursor_ = CursorType::Normal;
+        }
+        return current_cursor_;
+    }
+
     // Check if hovering over any alive ant
     const sim::AntSnapshot* hover_ant = nullptr;
     int32_t best_dist_sq = INT32_MAX;
     for (const auto& ant : world.ants) {
         if (ant.hp == 0 || ant.is_drowning || ant.is_underground || ant.is_in_scuffle) continue;
+        if (world.fog_of_war_enabled && ant.player_id != local_player_id_) {
+            bool is_ally = (local_player_id_ < world.player_alliances.size() &&
+                            ant.player_id < world.player_alliances.size() &&
+                            world.player_alliances[local_player_id_] == ant.player_id &&
+                            world.player_alliances[ant.player_id] == local_player_id_);
+            if (!is_ally && !world.is_tile_revealed(ant.tile_x, ant.tile_y)) {
+                continue;
+            }
+        }
         bool in_bbox = (std::abs(ant.px - world_x) <= 18 &&
                         world_y >= ant.py - 24 && world_y <= ant.py + 18);
         bool on_tile = (ant.tile_x == tx && ant.tile_y == ty);
@@ -2846,12 +2887,19 @@ CursorType HUD::evaluate_cursor(int32_t screen_x, int32_t screen_y,
     for (const auto& base : world.anthills) {
         if (tx >= base.x && tx < base.x + 4 &&
             ty >= base.y && ty < base.y + 4) {
+            if (world.fog_of_war_enabled && base.team_id != local_player_id_) {
+                bool is_ally = (local_player_id_ < world.player_alliances.size() &&
+                                base.team_id < world.player_alliances.size() &&
+                                world.player_alliances[local_player_id_] == base.team_id &&
+                                world.player_alliances[base.team_id] == local_player_id_);
+                if (!is_ally && !tile_revealed) {
+                    continue;
+                }
+            }
             hover_base = &base;
             break;
         }
     }
-
-    bool has_friendly = has_friendly_selected(world);
 
     // Case A: NO friendly ants selected
     if (!has_friendly) {

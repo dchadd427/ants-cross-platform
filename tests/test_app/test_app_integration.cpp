@@ -21,6 +21,7 @@
 #include "ants_app/scorecard.hpp"
 #include "ants_app/map_select.hpp"
 #include "ants_app/application.hpp"
+#include "ants_app/version.hpp"
 
 using namespace ants::app;
 using namespace ants::sim;
@@ -6866,6 +6867,76 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         }
         ASSERT_TRUE(snap != nullptr);
         ASSERT_EQ(snap->anim_state, static_cast<uint16_t>(UnitState::HarvestingFood));
+    } TEST_END();
+
+    TEST_CASE("12.108: Version Invariant & Fog of War Cursor Concealment Parity") {
+        // 1. Verify semantic versioning components
+        ASSERT_EQ(ants::VERSION_STRING, "v0.01");
+        ASSERT_EQ(ants::VERSION_MAJOR, 0);
+        ASSERT_EQ(ants::VERSION_MINOR, 1);
+        ASSERT_EQ(ants::VERSION_PATCH, 0);
+
+        // 2. Setup simulation world with Fog of War enabled
+        SimulationEngine sim;
+        sim.init_test_world(60, 60, 42, 60000);
+        sim.set_fog_of_war_enabled(true);
+        sim.set_viewing_player_id(0);
+
+        // Spawn friendly unit at (10, 10)
+        uint32_t friendly_id = sim.spawn_unit(0, AntType::Worker, TileCoord{10, 10});
+        // Spawn enemy unit deep in fog at (50, 50)
+        uint32_t enemy_id = sim.spawn_unit(1, AntType::Worker, TileCoord{50, 50});
+        (void)enemy_id;
+        // Place food deep in fog at (52, 52)
+        sim.grid_mut().get_cell_mut(52, 52).is_food = true;
+        sim.grid_mut().get_cell_mut(52, 52).lunchbox_points = 100;
+
+        // Tick once to update fog reveals around (10, 10)
+        sim.tick();
+        const auto& ws = sim.get_world_state();
+        ASSERT_TRUE(ws.fog_of_war_enabled);
+        ASSERT_TRUE(ws.is_tile_revealed(10, 10));
+        ASSERT_FALSE(ws.is_tile_revealed(50, 50));
+        ASSERT_FALSE(ws.is_tile_revealed(52, 52));
+
+        HUD hud;
+        hud.init(0);
+        ViewportCamera cam;
+        cam.world_x = 0;
+        cam.world_y = 0;
+
+        // Position camera so (50, 50) and (52, 52) are cleanly on screen
+        cam.world_x = 50 * 32 - 100;
+        cam.world_y = 50 * 32 - 100;
+
+        int32_t enemy_screen_x = HUD::PLAYFIELD_X + (50 * 32 + 16) - cam.world_x;
+        int32_t enemy_screen_y = HUD::PLAYFIELD_Y + (50 * 32 + 16) - cam.world_y;
+
+        int32_t food_screen_x = HUD::PLAYFIELD_X + (52 * 32 + 16) - cam.world_x;
+        int32_t food_screen_y = HUD::PLAYFIELD_Y + (52 * 32 + 16) - cam.world_y;
+
+        // Case A: Friendly unit is selected
+        hud.select_ant(friendly_id, false);
+        // Hovering over enemy in fog returns Move (c_mov1), NOT Attack (c_attack)!
+        CursorType cur_enemy = hud.evaluate_cursor(enemy_screen_x, enemy_screen_y, ws, sim.grid(), cam);
+        ASSERT_EQ(static_cast<int>(cur_enemy), static_cast<int>(CursorType::Move));
+
+        // Hovering over food in fog returns Move (c_mov1), NOT Food (c_food)!
+        CursorType cur_food = hud.evaluate_cursor(food_screen_x, food_screen_y, ws, sim.grid(), cam);
+        ASSERT_EQ(static_cast<int>(cur_food), static_cast<int>(CursorType::Move));
+
+        // Case B: No units selected
+        hud.clear_selection();
+        // Hovering over enemy in fog returns Normal (c_normal), NOT Select (c_select)!
+        CursorType cur_no_sel = hud.evaluate_cursor(enemy_screen_x, enemy_screen_y, ws, sim.grid(), cam);
+        ASSERT_EQ(static_cast<int>(cur_no_sel), static_cast<int>(CursorType::Normal));
+
+        // Case C: When Fog of War is disabled, hovering over enemy returns Attack (when unit selected)
+        sim.set_fog_of_war_enabled(false);
+        hud.select_ant(friendly_id, false);
+        const auto& ws_no_fog = sim.get_world_state();
+        CursorType cur_revealed = hud.evaluate_cursor(enemy_screen_x, enemy_screen_y, ws_no_fog, sim.grid(), cam);
+        ASSERT_EQ(static_cast<int>(cur_revealed), static_cast<int>(CursorType::Attack));
     } TEST_END();
 }
 

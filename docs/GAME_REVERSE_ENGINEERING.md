@@ -918,6 +918,14 @@ Through Capstone disassembly of `Original-Ants/Ants.exe` and inspection of `Orig
   - **Mode 7 — `c_food` (Anim 54, 8 frames @ 80–150ms, hotspot `dx=-15, dy=-16`):** Hand grab cursor displayed when hovering over harvestable food tiles with friendly ants selected.
   - **Action Prohibited — `c_cant` (Anim 39, 7 frames @ 60–200ms, hotspot `dx=-11, dy=-11`):** Red circle-slash displayed when attempting to order units into impassable terrain (e.g. water for non-swimmers, rock obstacles).
 
+#### 1.1 Fog of War Cursor Concealment & Targeting Invariant (`Ants.exe.c` `FUN_01026aa3` & `FUN_01009825`)
+- **Concealment Inspection**: In `Ants.exe.c` lines 28356 & 28373, cursor evaluation executes `FUN_01009825` to test whether the tile coordinate `(tx, ty)` is revealed by Fog of War.
+- **Information Leak Prevention**: If the tile is shrouded in Fog of War (`!is_tile_revealed`):
+  - The cursor NEVER inspects enemy units, enemy bases, or food items.
+  - If friendly units are selected: the cursor evaluates to `c_mov1` (Mode 3, `CursorType::Move`).
+  - If no friendly units are selected: the cursor evaluates to `c_normal` (Mode 1, `CursorType::Normal`).
+- **Targeting Protection**: Left-click selection and right-click context targeting reject shrouded enemy units and structures, treating clicks as ground move orders to prevent blind targeting through fog.
+
 #### 2. Ground Click Confirmation Markers (`xmarks`)
 - **`xmarks` (Anim 32, 7 frames @ 60ms, sprites 100..106):** Plays an animated ground marker at the clicked world coordinate when issuing movement, attack, or ability orders. Handled as a transient visual effect rendered underneath foliage layer 3 canopy.
 
