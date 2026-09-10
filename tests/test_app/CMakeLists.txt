@@ -41,6 +41,11 @@ if(WIN32)
             COMMAND ${CMAKE_COMMAND} -E copy_if_different "${SDL2_DLL}" "$<TARGET_FILE_DIR:test_app_integration>"
         )
     endif()
+    if(DEFINED SDL2_TTF_DLL)
+        add_custom_command(TARGET test_app_integration POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different "${SDL2_TTF_DLL}" "$<TARGET_FILE_DIR:test_app_integration>"
+        )
+    endif()
 endif()
 
 target_compile_definitions(test_app_integration PRIVATE
