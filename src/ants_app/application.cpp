@@ -605,15 +605,7 @@ void Application::handle_camera_panning(float dt) {
 
     float pan_x = 0.0f, pan_y = 0.0f;
 
-    // Keyboard Arrow Keys / WASD
-    const uint8_t* keystate = SDL_GetKeyboardState(nullptr);
-    if (keystate) {
-        if (keystate[SDL_SCANCODE_UP] || keystate[SDL_SCANCODE_W]) pan_y -= 1.0f;
-        if (keystate[SDL_SCANCODE_DOWN] || keystate[SDL_SCANCODE_S]) pan_y += 1.0f;
-        if (keystate[SDL_SCANCODE_LEFT]) pan_x -= 1.0f;
-        if (keystate[SDL_SCANCODE_RIGHT]) pan_x += 1.0f;
-    }
-
+    // Panning is strictly mouse-driven (mouse edge panning and minimap navigation); keyboard keys do not pan
     // Edge Pan Scrolling (Command & Conquer / League of Legends style)
     // Uses logical canvas coordinate space (640x480)
     constexpr int LOGICAL_W = 640;
