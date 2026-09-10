@@ -1239,3 +1239,28 @@ To deliver authentic 1:1 gameplay inside standard web browsers with zero install
   - **Water Drowning vs. Swimming**: Non-swimmer ants bouncing into open water instantly enter `UnitState::Drowning` with `hp = 0`, queuing Sound 72 `ant_drown.wav` and Sound 71 `watersplash.wav`, and playing the 22-subitem drowning sequence (`*dr301`). Swimmer ants landing in water safely transition into `UnitState::Swimming` (`in_water = true`).
   - **Fire Wall Contact**: Ants bouncing onto a burning tile take +1 HP fire damage and trigger fire contact audio/visual feedback.
   - **Bomb Detonation**: Ants bouncing onto a planted bomb instantly trigger detonation (`bombex` animation, Sound 24 `bombdetonate.wav`, 2 HP explosive blast damage, and clearing the bomb tile).
+
+#### 12. Authentic Attack Audio Sequencing, Sound 57 vs. 75 Differentiation & Flinch FlyThump Events (`ants.chd` Table 4 & `Ants.exe` `0x101dc7f`, `0x101e0ad`, `0x1020756`, `0x1021532`)
+- **Sound 57 (`attack.wav`) vs. Sound 75 (`attack_alt.wav`) Differentiation**:
+  - Both audio assets in `ants.chd` Table 2 share an identical file size (4,032 bytes), sampling rate (11,025 Hz), and bit depth (8-bit mono PCM, 365.7 ms duration).
+  - Comparing the raw sample buffers reveals 2,606 differing sample bytes between the two files.
+  - Sound 57 features a sharp high-frequency transient attack with high-pitch mandible snapping acoustics. Sound 75 is an alternate recording take featuring a lower acoustic resonance and crunchier bite snap.
+  - In `ants.chd` Table 4 (Animation Sequence Table):
+    - **Worker Ant** (`agat301..agat901`): Subitem 1 explicitly triggers **Sound 75 (`attack_alt.wav`)**.
+    - **Bomber Ant** (`abat201..abat901`): Subitem 3 explicitly triggers **Sound 57 (`attack.wav`)**.
+    - **Fire Ant** (`afat201..afat901`): Subitem 4 explicitly triggers **Sound 57 (`attack.wav`)**.
+    - **Combat Ant** (`acat201..acat901`): Subitem 2 explicitly triggers **Sound 78 (`attack2.wav` / Heavy Punch)**.
+    - **Swimmer Ant** (`asat201..asat901`): Subitem 5 explicitly triggers **Sound 79 (`waterattack.wav` / Water Splash Strike)**.
+    - **Thief Ant** (`atat201..atat901`): Subitem 4 explicitly triggers **Sound 83 (`theifwhip.wav` / Whip Crack Strike)**.
+- **Flinch Pushback Audio Sequencing (`flythumpa.wav` & `flythumpb.wav`)**:
+  - In `ants.chd` Table 4, all flinch animations across all 6 ant classes (`aggh*`, `abgh*`, `afgh*`, `acgh*`, `asgh*`, `atgh*`) define two critical audio event markers:
+    - **Subitem 0 (Tick 0 - Strike Impact & Slide Launch)**: Triggers **Sound 64 (`flythumpa.wav` / `SoundID::FlingThumpA`)**.
+    - **Subitem 3 (Tick 4 - Arrival & Destination Tile Landing)**: Triggers **Sound 65 (`flythumpb.wav` / `SoundID::FlingThumpB`)**.
+  - Binary Disassembly in `Ants.exe`:
+    - `0x101dc7f`: `push 0x39; call 0x100def5` -> plays Sound 57 (`attack.wav`) on melee strike connect.
+    - `0x101e0ad`: `push 0x40; call 0x100def5` -> plays Sound 64 (`flythumpa.wav`) when pushback / flinch begins.
+    - `0x1020756`: `push 0x41; call 0x100def5` -> plays Sound 65 (`flythumpb.wav`) when the ant completes its push slide and lands on the destination tile.
+- **Combat Ant Punch & Bomb Knockback Stun Audio**:
+  - When struck by a Combat Ant punch or caught in a Bomb blast, the victim is launched into ballistic flight:
+    - At launch: Sound 78 (`attack2.wav`) / Sound 24 (`bombdetonate.wav`) + Sound 64 (`flythumpa.wav`).
+    - At ground landing: Sound 65 (`flythumpb.wav`) + Sound 70 (`stun.wav` / `SoundID::StunRecover`), placing the victim into `UnitState::Stunned`.

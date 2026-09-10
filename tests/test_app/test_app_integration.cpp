@@ -6552,6 +6552,90 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
             ASSERT_EQ(u2.hp, u2.max_hp - 2);
         }
     } TEST_END();
+
+    TEST_CASE("12.105: Authentic Attack Audio Sequencing, Sound 57/75/78/79/83 & Flinch FlyThump Events") {
+        // Part A: Worker Ant Melee Attack Sound Sequence (Sound 57, Sound 75, Sound 64 launch, Sound 65 landing)
+        {
+            SimulationEngine sim;
+            sim.init_test_world(60, 60, 100, 60000);
+
+            uint32_t a1 = sim.spawn_unit(0, AntType::Worker, TileCoord{20, 20});
+            uint32_t a2 = sim.spawn_unit(1, AntType::Worker, TileCoord{21, 20});
+            // Ensure target has enough HP to flinch and survive
+            sim.get_unit(a2).hp = 4;
+
+            sim.execute_melee_attack(a1, a2); // Strike connects
+
+            // 1. Worker triggers both MeleeAttack (Sound 57) and AttackAlt (Sound 75)
+            ASSERT_TRUE(sim.has_audio_event(SoundID::MeleeAttack));
+            ASSERT_TRUE(sim.has_audio_event(SoundID::AttackAlt));
+
+            // 2. Target enters Flinch and triggers FlingThumpA (Sound 64 / flythumpa.wav) at launch
+            const auto& victim = sim.get_unit(a2);
+            ASSERT_EQ(victim.state, UnitState::Flinch);
+            ASSERT_TRUE(sim.has_audio_event(SoundID::FlingThumpA));
+
+            // 3. Target slides for 4 ticks. On tick 4 (landing on destination tile), triggers FlingThumpB (Sound 65 / flythumpb.wav)
+            bool got_landing_thump = false;
+            for (int t = 0; t < 5; ++t) {
+                sim.tick();
+                if (sim.has_audio_event(SoundID::FlingThumpB)) {
+                    got_landing_thump = true;
+                }
+            }
+            ASSERT_TRUE(got_landing_thump);
+            ASSERT_EQ(sim.get_unit(a2).pos, (TileCoord{22, 20}));
+        }
+
+        // Part B: Swimmer and Thief Type-Specific Attack Sound Verification
+        {
+            SimulationEngine sim;
+            sim.init_test_world(60, 60, 100, 60000);
+
+            uint32_t swimmer = sim.spawn_unit(0, AntType::Swimmer, TileCoord{10, 10});
+            uint32_t target1 = sim.spawn_unit(1, AntType::Worker, TileCoord{11, 10});
+            sim.get_unit(target1).hp = 4;
+            sim.execute_melee_attack(swimmer, target1);
+
+            ASSERT_TRUE(sim.has_audio_event(SoundID::MeleeAttack));
+            ASSERT_TRUE(sim.has_audio_event(SoundID::WaterAttack)); // Sound 79 (waterattack.wav)
+
+            uint32_t thief = sim.spawn_unit(0, AntType::Thief, TileCoord{15, 10});
+            uint32_t target2 = sim.spawn_unit(1, AntType::Worker, TileCoord{16, 10});
+            sim.get_unit(target2).hp = 4;
+            sim.execute_melee_attack(thief, target2);
+
+            ASSERT_TRUE(sim.has_audio_event(SoundID::MeleeAttack));
+            ASSERT_TRUE(sim.has_audio_event(SoundID::ThiefWhip)); // Sound 83 (theifwhip.wav)
+        }
+
+        // Part C: Combat Ant Heavy Punch Knockback & Stun Landing Sequencing
+        {
+            SimulationEngine sim;
+            sim.init_test_world(60, 60, 100, 60000);
+
+            uint32_t combat = sim.spawn_unit(0, AntType::Combat, TileCoord{30, 30});
+            uint32_t victim = sim.spawn_unit(1, AntType::Worker, TileCoord{31, 30});
+            sim.get_unit(victim).hp = 4;
+
+            sim.execute_melee_attack(combat, victim); // Combat punch connects
+
+            // Queues HeavyPunch (78) and FlingThumpA (64)
+            ASSERT_TRUE(sim.has_audio_event(SoundID::HeavyPunch));
+            ASSERT_TRUE(sim.has_audio_event(SoundID::FlingThumpA));
+
+            // Flight advances until ground landing: triggers FlingThumpB (65) and Stun (70)
+            bool got_stun_landing = false;
+            for (int t = 0; t < 15; ++t) {
+                sim.tick();
+                if (sim.has_audio_event(SoundID::FlingThumpB) && sim.has_audio_event(SoundID::Stun)) {
+                    got_stun_landing = true;
+                }
+            }
+            ASSERT_TRUE(got_stun_landing);
+            ASSERT_EQ(sim.get_unit(victim).state, UnitState::Stunned);
+        }
+    } TEST_END();
 }
 
 
