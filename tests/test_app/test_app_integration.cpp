@@ -5644,8 +5644,8 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
             bool has_left = false;
             bool has_right = false;
             for (const auto& fd : ws.flower_droppers) {
-                if (fd.x == 2 && fd.y == 19 && fd.drop_x == 2 && fd.drop_y == 19) has_left = true;
-                if (fd.x == 37 && fd.y == 19 && fd.drop_x == 37 && fd.drop_y == 19) has_right = true;
+                if (fd.x == 2 && fd.y == 19 && fd.drop_x == 2 && fd.drop_y == 20) has_left = true;
+                if (fd.x == 37 && fd.y == 19 && fd.drop_x == 37 && fd.drop_y == 20) has_right = true;
             }
             ASSERT_TRUE(has_left);
             ASSERT_TRUE(has_right);
@@ -5665,9 +5665,10 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
 
             const auto& ws_dropped = sim.get_world_state();
             ASSERT_FALSE(ws_dropped.flower_droppers[0].is_dropping);
-            // Powerup placed at target
+            // Powerup placed at target (open ground tile in front of the plant base: y + 1)
             int32_t target_drop_x = ws.flower_droppers[0].drop_x;
             int32_t target_drop_y = ws.flower_droppers[0].drop_y;
+            ASSERT_EQ(target_drop_y, ws.flower_droppers[0].y + 1);
             const auto& cell = sim.grid().get_cell(TileCoord{target_drop_x, target_drop_y});
             ASSERT_TRUE(cell.has_powerup());
             // SMALL.LVL probabilities are [0.45, 0.0, 0.0, 0.1, 0.45] (Combat & Thief are 0%)
@@ -5706,7 +5707,7 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
             }
         }
 
-        // Verify GAUNTLET.LVL waypoints including top-left daisy flower at (3, 5)
+        // Verify GAUNTLET.LVL waypoints including top-left daisy flower at (3, 5) -> drop at (3, 6)
         std::string gauntlet_path = std::string(ORIGINAL_ASSETS_DIR) + "/Maps/GAUNTLET.LVL";
         ants::assets::LevelData gauntlet_lvl;
         if (gauntlet_lvl.load_lvl(gauntlet_path)) {
@@ -5715,7 +5716,7 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
             ASSERT_EQ(g_ws.flower_droppers.size(), 5u);
             bool has_flower = false;
             for (const auto& fd : g_ws.flower_droppers) {
-                if (fd.x == 3 && fd.y == 5 && fd.drop_x == 3 && fd.drop_y == 5) has_flower = true;
+                if (fd.x == 3 && fd.y == 5 && fd.drop_x == 3 && fd.drop_y == 6) has_flower = true;
             }
             ASSERT_TRUE(has_flower);
         }

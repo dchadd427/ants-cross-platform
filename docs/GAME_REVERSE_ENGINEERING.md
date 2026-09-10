@@ -1024,7 +1024,7 @@ The authentic match clock routine at `0x1024839` evaluates remaining match milli
     - `GAUNTLET.LVL`: 30s interval (600 ticks).
     - `ISLANDS.LVL`: 30s / 60s interval (600 / 1,200 ticks).
     - `MEDIUM.LVL`: 8s / 30s interval (160 / 600 ticks).
-  - Target landing coordinates match the waypoint tile `(wp.x, wp.y)`.
+  - **Landing Target Coordinates `(wp.x, wp.y + 1)`:** The flower canopy decor base roots at `(wp.x, wp.y)`, with its mouth overhanging forward. The droplet descends directly onto the open ground tile immediately in front of the plant base: `(wp.x, wp.y + 1)`. (Placing the item at `(wp.x, wp.y)` would incorrectly place the powerup behind the stem sprite `bottomstem2.bmp` and shadow, obscuring it).
   - The dropper does not pause if an uncollected power-up already sits on the target tile; upon drop completion, the incoming power-up replaces whatever item is underneath and immediately resets `timer_ticks = interval_ticks`.
 - **Power-Up Probability Distribution & Map Filtering (`wp.probabilities[5]`):**
   - Each active waypoint stores 5 IEEE-754 64-bit doubles summing to 1.0, representing the drop probabilities for each power-up class:
@@ -1035,11 +1035,12 @@ The authentic match clock routine at `0x1024839` evaluates remaining match milli
     - Index 4: Fire (`PU_FIRE`, Tile 66, `FD_FIRE`, Anim 425)
   - Zero-probability classes (`probabilities[i] <= 0.0001`) are strictly skipped during sampling.
   - For example, `SMALL.LVL` (`[0.45, 0.0, 0.0, 0.1, 0.45]`) exclusively spawns Bomber (45%), Swimmer (10%), and Fire (45%), with Combat and Thief disabled. `GAUNTLET.LVL` (`[0.1, 0.4, 0.0, 0.1, 0.4]`) disables Thief, while `ISLANDS.LVL` concentrates 70% of drops on Swimmer.
-- **Falling Droplet Animation & Audio Cue:**
-  - When triggered, a 9-frame falling droplet animation begins playing directly above the target tile (`FD_COMB`, `FD_SWIM`, `FD_THIEF`, `FD_FIRE`, or `FD_BOMB`).
-  - The droplet starts at `dy = -109` (directly below the flower head) and descends to `dy = -10` (ground level).
+- **Falling Droplet Animation, Audio Cue & Pixel-Perfect Landing:**
+  - When triggered, a 9-frame falling droplet animation begins playing directly above the target ground tile `(wp.x, wp.y + 1)` (`FD_COMB`, `FD_SWIM`, `FD_THIEF`, `FD_FIRE`, or `FD_BOMB`).
+  - Offsets in Table 4 are defined relative to the top-left origin of tile `(wp.x, wp.y + 1)`. The droplet starts at `dy = -109` (directly below the flower head) and descends straight down to `dy = 0` / splash at `dy = 17` (ground level).
   - At tick 2 (frame 1), sound 62 (`powerdrip.wav`) triggers at the drop coordinates.
   - At tick 16 (~820ms, drop completion), the target ground tile receives the Layer 2 powerup item (`is_powerup = true`), making it collectible by approaching ants.
+  - **Seamless Visual Continuity:** Static Layer 2 ground power-up sprites use the exact CHD Table 4 `pu_*` animation frame offsets (`pu_swim` at `(0, 0)`, `pu_comb` at `(0, 1)`, `pu_mason` at `(2, 3)`, `pu_bomb` at `(1, -2)`), resulting in a 100% pixel-perfect seamless transition with 0px shift from Frame 8 of `FD_*` to the placed power-up.
 
 ---
 
