@@ -172,6 +172,20 @@ public:
         return true;
     }
 
+    bool has_living_ant_at(TileCoord target) const noexcept {
+        for (const auto& ant : ants_) {
+            if (ant && ant->is_alive() && !ant->underground) {
+                if (ant->pos == target) return true;
+                TileCoord cur_tile{
+                    (ant->pixel_x >= 0) ? (ant->pixel_x / 32) : ((ant->pixel_x - 31) / 32),
+                    (ant->pixel_y >= 0) ? (ant->pixel_y / 32) : ((ant->pixel_y - 31) / 32)
+                };
+                if (cur_tile == target) return true;
+            }
+        }
+        return false;
+    }
+
     bool is_tile_blocked_for_ant(const AntUnit& unit, TileCoord target_tile) const noexcept {
         if (!grid_.in_bounds(target_tile)) return true;
 
@@ -245,6 +259,9 @@ void bounce_unit_cascade(SimulationEngineImpl& impl,
                          int32_t from_x, int32_t from_y,
                          int depth = 0) {
     if (depth > 10) return;
+    if (unit.on_powerup || (impl.grid_.in_bounds(unit.pos) && impl.grid_.has_powerup_at(unit.pos))) {
+        return;
+    }
 
     unit.state = UnitState::Bounce;
     unit.state_timer = 20; // 10 ticks scuffle + 10 ticks bounce
@@ -853,6 +870,8 @@ void SimulationEngine::tick() {
                         ant_ptr->state = (ant_ptr->type == AntType::Combat) ? UnitState::GuardIdle : UnitState::Idle;
                         ant_ptr->final_dest = ant_ptr->pos;
                         ant_ptr->blocked_ticks = 0;
+                        impl_->audio_queue_.push_back(AudioEvent{SoundID::Bump, ant_ptr->pixel_x, ant_ptr->pixel_y, 1, 255});
+                        impl_->active_effects_.push_back(VisualEffect{"bump", ant_ptr->pixel_x, ant_ptr->pixel_y, 0, 10});
                     } else {
                         if (is_ant_in_base_queue(ant_ptr->id) &&
                             impl_->base_queues_[ant_ptr->player_id].active_depositing_ant_id == ant_ptr->id) {
@@ -1274,6 +1293,7 @@ void SimulationEngine::tick() {
                 ant_ptr->anim_subitem = 8;
                 ant_ptr->underground_visited = true;
                 ant_ptr->facing = Direction::South;
+                ant_ptr->invulnerable_ticks = 40;
                 impl_->audio_queue_.push_back(AudioEvent{SoundID::ExitHill, ant_ptr->pixel_x, ant_ptr->pixel_y, 1, ant_ptr->player_id});
                 continue;
             }
@@ -1323,6 +1343,7 @@ void SimulationEngine::tick() {
                 ant_ptr->base_dwell_ticks = 0;
                 ant_ptr->underground_visited = false;
                 ant_ptr->completed_base_deposit = true;
+                ant_ptr->invulnerable_ticks = 40;
                 ant_ptr->state = (ant_ptr->type == AntType::Combat) ? UnitState::GuardIdle : UnitState::Idle;
                 const auto* friendly_base = impl_->grid_.find_anthill(ant_ptr->player_id);
                 if (friendly_base) {
@@ -1780,6 +1801,8 @@ void SimulationEngine::tick() {
                             a1->state = (a1->type == AntType::Combat) ? UnitState::GuardIdle : UnitState::Idle;
                             a1->set_tile_pos(a1->pos.x, a1->pos.y);
                             a1->final_dest = a1->pos;
+                            impl_->audio_queue_.push_back(AudioEvent{SoundID::Bump, a1->pixel_x, a1->pixel_y, 1, 255});
+                            impl_->active_effects_.push_back(VisualEffect{"bump", a1->pixel_x, a1->pixel_y, 0, 10});
                         } else {
                             // Repath around stationary a2
                             bool needs_repath = false;
@@ -1826,6 +1849,8 @@ void SimulationEngine::tick() {
                             a2->state = (a2->type == AntType::Combat) ? UnitState::GuardIdle : UnitState::Idle;
                             a2->set_tile_pos(a2->pos.x, a2->pos.y);
                             a2->final_dest = a2->pos;
+                            impl_->audio_queue_.push_back(AudioEvent{SoundID::Bump, a2->pixel_x, a2->pixel_y, 1, 255});
+                            impl_->active_effects_.push_back(VisualEffect{"bump", a2->pixel_x, a2->pixel_y, 0, 10});
                         } else {
                             // Repath around stationary a1
                             bool needs_repath = false;
@@ -1873,8 +1898,22 @@ void SimulationEngine::tick() {
                     if (a1->push_tick_current < a1->push_ticks_total && a1->state == UnitState::Bounce) continue;
                     if (a2->push_tick_current < a2->push_ticks_total && a2->state == UnitState::Bounce) continue;
 
-                    AntUnit* to_displace = (a1->id > a2->id ? a1.get() : a2.get());
-                    AntUnit* anchor_ant = (to_displace == a1.get()) ? a2.get() : a1.get();
+                    bool a1_pu = a1->on_powerup || (impl_->grid_.in_bounds(a1->pos) && impl_->grid_.has_powerup_at(a1->pos));
+                    bool a2_pu = a2->on_powerup || (impl_->grid_.in_bounds(a2->pos) && impl_->grid_.has_powerup_at(a2->pos));
+                    if (a1_pu && a2_pu) continue;
+
+                    AntUnit* to_displace = nullptr;
+                    AntUnit* anchor_ant = nullptr;
+                    if (a1_pu) {
+                        to_displace = a2.get();
+                        anchor_ant = a1.get();
+                    } else if (a2_pu) {
+                        to_displace = a1.get();
+                        anchor_ant = a2.get();
+                    } else {
+                        to_displace = (a1->id > a2->id ? a1.get() : a2.get());
+                        anchor_ant = (to_displace == a1.get()) ? a2.get() : a1.get();
+                    }
 
                     anchor_ant->is_in_scuffle = true;
                     anchor_ant->scuffle_ticks = 10;
@@ -2102,7 +2141,11 @@ void SimulationEngine::issue_order(const AntOrder& order) {
         case OrderType::DemolishBridge: {
             TileCoord target{order.target_x, order.target_y};
             if (order.type == OrderType::PlantBomb) {
-                if (!impl_->grid_.in_bounds(target) || !impl_->grid_.get_cell(target).can_place_bomb() || impl_->grid_.is_anthill_reserved_spot(target)) {
+                if (!impl_->grid_.in_bounds(target) || !impl_->grid_.get_cell(target).can_place_bomb() || impl_->grid_.is_anthill_reserved_spot(target) || impl_->has_living_ant_at(target)) {
+                    break;
+                }
+            } else if (order.type == OrderType::IgniteFire) {
+                if (!impl_->grid_.in_bounds(target) || !impl_->grid_.get_cell(target).can_place_fire() || impl_->grid_.is_anthill_reserved_spot(target) || impl_->has_living_ant_at(target)) {
                     break;
                 }
             }
@@ -2561,7 +2604,9 @@ void SimulationEngine::execute_melee_attack(uint32_t attacker_id, uint32_t targe
     AntUnit* target = impl_->find_unit(target_id);
     if (!attacker || !target || !attacker->is_alive() || !target->is_alive()) return;
     if (attacker->player_id == target->player_id || impl_->stats_.are_allies(attacker->player_id, target->player_id)) return;
+    if (target->is_invulnerable()) return;
     if (target->on_powerup || (impl_->grid_.in_bounds(target->pos) && impl_->grid_.has_powerup_at(target->pos))) return;
+    if (attacker->in_water || target->in_water) return;
     if (target->type == AntType::Swimmer && target->in_water) return;
 
     if (attacker->state == UnitState::Walking) return;
@@ -2876,23 +2921,27 @@ void SimulationEngine::issue_move_order(uint32_t ant_id, TileCoord dest, bool al
 
     // Authentic mud "humping" animation cancel:
     // Reissuing a move order while traversing mud resets the struggle cycle and gives a micro-step
-    if (unit->is_on_mud && unit->state == UnitState::Walking) {
+    bool on_mud_terrain = unit->is_on_mud ||
+        (impl_->grid_.in_bounds(unit->pos) && (impl_->grid_.get_cell(unit->pos).is_mud || impl_->grid_.get_cell(unit->pos).surface_type == SurfaceType::Mud));
+    if (on_mud_terrain && unit->state == UnitState::Walking) {
         unit->anim_tick = 0;
         unit->anim_subitem = 0;
+        int32_t target_px = dest.x * 32 + 16;
+        int32_t target_py = dest.y * 32 + 16;
         if (unit->current_waypoint_idx < unit->waypoints.size()) {
             const TileCoord wpt = unit->waypoints[unit->current_waypoint_idx];
-            int32_t target_px = wpt.x * 32 + 16;
-            int32_t target_py = wpt.y * 32 + 16;
-            int32_t cur_px = unit->fx_x >> 16;
-            int32_t cur_py = unit->fx_y >> 16;
-            int32_t dx = target_px - cur_px;
-            int32_t dy = target_py - cur_py;
-            if (dx > 0) unit->fx_x += (2 << 16);
-            else if (dx < 0) unit->fx_x -= (2 << 16);
-            if (dy > 0) unit->fx_y += (2 << 16);
-            else if (dy < 0) unit->fx_y -= (2 << 16);
-            unit->sync_pixel_from_fx();
+            target_px = wpt.x * 32 + 16;
+            target_py = wpt.y * 32 + 16;
         }
+        int32_t cur_px = unit->fx_x >> 16;
+        int32_t cur_py = unit->fx_y >> 16;
+        int32_t dx = target_px - cur_px;
+        int32_t dy = target_py - cur_py;
+        if (dx > 0) unit->fx_x += (3 << 16);
+        else if (dx < 0) unit->fx_x -= (3 << 16);
+        if (dy > 0) unit->fx_y += (3 << 16);
+        else if (dy < 0) unit->fx_y -= (3 << 16);
+        unit->sync_pixel_from_fx();
     }
 
     bool is_swimmer = (unit->type == AntType::Swimmer);
@@ -3101,7 +3150,7 @@ bool SimulationEngine::plant_bomb(uint32_t ant_id, TileCoord target, bool instan
     if (!ant || !ant->is_alive() || ant->type != AntType::Bomber) return false;
     if (!instant && ant->ability_cooldown_ticks > 0) return false;
     if (!validate_cardinal_placement(ant->pos, target)) return false;
-    if (!impl_->grid_.in_bounds(target) || impl_->grid_.is_anthill_reserved_spot(target) || !impl_->grid_.get_cell(target).can_place_bomb()) return false;
+    if (!impl_->grid_.in_bounds(target) || impl_->grid_.is_anthill_reserved_spot(target) || !impl_->grid_.get_cell(target).can_place_bomb() || impl_->has_living_ant_at(target)) return false;
 
     ant->set_tile_pos(ant->pos.x, ant->pos.y);
     int32_t dx = target.x - ant->pos.x;
@@ -3167,7 +3216,7 @@ bool SimulationEngine::ignite_fire(uint32_t ant_id, TileCoord target, bool insta
     if (!ant || !ant->is_alive() || ant->type != AntType::Fire) return false;
     if (!instant && ant->ability_cooldown_ticks > 0) return false;
     if (!validate_cardinal_placement(ant->pos, target)) return false;
-    if (!impl_->grid_.in_bounds(target) || impl_->grid_.is_anthill_reserved_spot(target) || !impl_->grid_.get_cell(target).can_place_fire()) return false;
+    if (!impl_->grid_.in_bounds(target) || impl_->grid_.is_anthill_reserved_spot(target) || !impl_->grid_.get_cell(target).can_place_fire() || impl_->has_living_ant_at(target)) return false;
 
     ant->set_tile_pos(ant->pos.x, ant->pos.y);
     int32_t dx = target.x - ant->pos.x;
@@ -3299,6 +3348,10 @@ bool SimulationEngine::has_bomb_at(TileCoord pos) const {
 
 bool SimulationEngine::has_fire_at(TileCoord pos) const {
     return impl_->grid_.has_fire_at(pos);
+}
+
+bool SimulationEngine::has_living_ant_at(TileCoord pos) const {
+    return impl_->has_living_ant_at(pos);
 }
 
 uint32_t SimulationEngine::get_fire_timer(TileCoord pos) const {
@@ -3504,6 +3557,23 @@ void SimulationEngine::dispatch_next_base_queue(uint8_t player_id) {
     }
 
     if (bq.active_depositing_ant_id == 0 && !bq.queue.empty()) {
+        const auto* friendly_base = impl_->grid_.find_anthill(player_id);
+        if (friendly_base) {
+            int32_t bx = static_cast<int32_t>(friendly_base->x);
+            int32_t by = static_cast<int32_t>(friendly_base->y);
+            int count_on_mound = 0;
+            for (const auto& a : impl_->ants_) {
+                if (a && a->is_alive() && a->player_id == player_id && !a->underground) {
+                    if (a->pos.x >= bx && a->pos.x <= bx + 2 && a->pos.y >= by && a->pos.y <= by + 2) {
+                        count_on_mound++;
+                    }
+                }
+            }
+            if (count_on_mound >= 2) {
+                return; // Mound ramp congested, wait for exiting ants to step off
+            }
+        }
+
         uint32_t head_id = bq.queue.front();
         bq.active_depositing_ant_id = head_id;
         send_ant_straight_into_base(head_id);
@@ -3522,7 +3592,25 @@ void SimulationEngine::join_base_queue(uint32_t ant_id) {
         bq.queue.push_back(ant_id);
     }
 
-    if (bq.active_depositing_ant_id == 0 || bq.active_depositing_ant_id == ant_id) {
+    bool mound_congested = false;
+    const auto* friendly_base = impl_->grid_.find_anthill(unit->player_id);
+    if (friendly_base) {
+        int32_t bx = static_cast<int32_t>(friendly_base->x);
+        int32_t by = static_cast<int32_t>(friendly_base->y);
+        int count_on_mound = 0;
+        for (const auto& a : impl_->ants_) {
+            if (a && a->is_alive() && a->player_id == unit->player_id && !a->underground) {
+                if (a->pos.x >= bx && a->pos.x <= bx + 2 && a->pos.y >= by && a->pos.y <= by + 2) {
+                    count_on_mound++;
+                }
+            }
+        }
+        if (count_on_mound >= 2) {
+            mound_congested = true;
+        }
+    }
+
+    if (!mound_congested && (bq.active_depositing_ant_id == 0 || bq.active_depositing_ant_id == ant_id)) {
         bq.active_depositing_ant_id = ant_id;
         send_ant_straight_into_base(ant_id);
     } else {

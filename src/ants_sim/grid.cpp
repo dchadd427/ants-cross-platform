@@ -259,13 +259,15 @@ void Grid::configure_anthill_cells(TileCoord pos) {
             rcell.flags &= ~(FLAG_CAN_PLACE_BOMB | FLAG_CAN_PLACE_FIRE);
         }
     }
-    // Ensure idle spot (pos.x + 4, pos.y + 4) is passable
-    int32_t ix = static_cast<int32_t>(pos.x) + 4;
-    int32_t iy = static_cast<int32_t>(pos.y) + 4;
-    if (in_bounds(ix, iy)) {
-        auto& icell = get_cell_mut(static_cast<uint32_t>(ix), static_cast<uint32_t>(iy));
-        icell.terrain_type = TERRAIN_WALKABLE;
-        icell.is_obstacle_overlay = false;
+    // Ensure idle spot (pos.x + 3, pos.y + 3) is passable
+    for (int delta : {3, 4}) {
+        int32_t ix = static_cast<int32_t>(pos.x) + delta;
+        int32_t iy = static_cast<int32_t>(pos.y) + delta;
+        if (in_bounds(ix, iy)) {
+            auto& icell = get_cell_mut(static_cast<uint32_t>(ix), static_cast<uint32_t>(iy));
+            icell.terrain_type = TERRAIN_WALKABLE;
+            icell.is_obstacle_overlay = false;
+        }
     }
 }
 
@@ -273,8 +275,13 @@ bool Grid::is_anthill_reserved_spot(TileCoord pos) const noexcept {
     for (const auto& ah : anthills_) {
         int32_t bx = static_cast<int32_t>(ah.x);
         int32_t by = static_cast<int32_t>(ah.y);
+        // 1. The authentic 3 air vent / mound tiles (FUN_0101d8a4 in Ants.exe)
+        if (pos.x == bx - 2 && (pos.y >= by - 1 && pos.y <= by + 1)) return true;
+        // 2. Base origin and entrance mouth/hole (FUN_0101d858 in Ants.exe)
+        if (pos.x == bx && pos.y == by) return true;
+        if (pos.x == bx + 1 && (pos.y >= by && pos.y <= by + 2)) return true;
+        // 3. Top approach corridor (row by - 1 across bx..bx+2)
         if (pos.y == by - 1 && pos.x >= bx && pos.x <= bx + 2) return true;
-        if (pos.x == bx + 1 && (pos.y == by || pos.y == by + 1)) return true;
     }
     return false;
 }
@@ -298,7 +305,12 @@ void Grid::set_anthill(uint8_t team_id, TileCoord pos) {
 
 void Grid::place_firewall(uint32_t x, uint32_t y, uint8_t owner_player) noexcept {
     if (!in_bounds(static_cast<int32_t>(x), static_cast<int32_t>(y))) return;
-    if (is_anthill_reserved_spot(TileCoord{static_cast<int32_t>(x), static_cast<int32_t>(y)})) return;
+    for (const auto& ah : anthills_) {
+        int32_t bx = static_cast<int32_t>(ah.x);
+        int32_t by = static_cast<int32_t>(ah.y);
+        if (static_cast<int32_t>(y) == by - 1 && static_cast<int32_t>(x) >= bx && static_cast<int32_t>(x) <= bx + 2) return;
+        if (static_cast<int32_t>(x) == bx + 1 && (static_cast<int32_t>(y) == by || static_cast<int32_t>(y) == by + 1)) return;
+    }
     auto& cell = get_cell_mut(x, y);
     cell.interactive_id = TILE_FIREWALL;
     cell.interactive_owner = owner_player;
@@ -316,7 +328,12 @@ void Grid::clear_firewall(uint32_t x, uint32_t y) noexcept {
 
 void Grid::place_bomb(uint32_t x, uint32_t y, uint8_t team_id) noexcept {
     if (!in_bounds(static_cast<int32_t>(x), static_cast<int32_t>(y))) return;
-    if (is_anthill_reserved_spot(TileCoord{static_cast<int32_t>(x), static_cast<int32_t>(y)})) return;
+    for (const auto& ah : anthills_) {
+        int32_t bx = static_cast<int32_t>(ah.x);
+        int32_t by = static_cast<int32_t>(ah.y);
+        if (static_cast<int32_t>(y) == by - 1 && static_cast<int32_t>(x) >= bx && static_cast<int32_t>(x) <= bx + 2) return;
+        if (static_cast<int32_t>(x) == bx + 1 && (static_cast<int32_t>(y) == by || static_cast<int32_t>(y) == by + 1)) return;
+    }
     auto& cell = get_cell_mut(x, y);
     cell.interactive_id = static_cast<uint16_t>(BOMB_BLACK + (team_id % 4u));
     cell.interactive_owner = team_id;
