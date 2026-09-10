@@ -1291,10 +1291,11 @@ void SimulationEngine::tick() {
             if (!ant_ptr->is_newborn && ant_ptr->anim_subitem == 8) {
                 ant_ptr->underground = true;
                 if (!ant_ptr->underground_visited) {
+                    uint16_t missing_hp = (ant_ptr->max_hp > ant_ptr->hp) ? static_cast<uint16_t>(ant_ptr->max_hp - ant_ptr->hp) : 0;
                     ant_ptr->heal_full();
                     // Authentic timing reverse-engineered from Ants.exe (0x101e221: imul eax, eax, 0xc8 = 200ms per HP)
-                    // Base eating dwell: 4 ticks (200ms)
-                    ant_ptr->base_dwell_ticks = 4;
+                    // Base eating/healing dwell: 4 ticks (200ms) per missing HP healed, minimum 4 ticks (200ms)
+                    ant_ptr->base_dwell_ticks = (missing_hp > 0) ? static_cast<uint16_t>(missing_hp * 4) : 4;
                     ant_ptr->underground_visited = true;
                 }
 
@@ -2604,6 +2605,10 @@ void SimulationEngine::execute_melee_attack(uint32_t attacker_id, uint32_t targe
             impl_->stats_.get_player_stats_mut(target->player_id).friendly_lost++;
             impl_->stats_.get_player_stats_mut(attacker->player_id).enemy_killed++;
             impl_->spawn_death_effect(target->pixel_x, target->pixel_y);
+            if (target->is_holding()) {
+                impl_->grid_.drop_lunchbox(static_cast<uint32_t>(target->pos.x), static_cast<uint32_t>(target->pos.y), target->carried_points);
+                target->clear_inventory();
+            }
         }
 
         if (!lethal && !target_in_uninterruptible_ability) {
@@ -2672,6 +2677,10 @@ void SimulationEngine::execute_melee_attack(uint32_t attacker_id, uint32_t targe
             impl_->stats_.get_player_stats_mut(target->player_id).friendly_lost++;
             impl_->stats_.get_player_stats_mut(attacker->player_id).enemy_killed++;
             impl_->spawn_death_effect(target->pixel_x, target->pixel_y);
+            if (target->is_holding()) {
+                impl_->grid_.drop_lunchbox(static_cast<uint32_t>(target->pos.x), static_cast<uint32_t>(target->pos.y), target->carried_points);
+                target->clear_inventory();
+            }
         }
 
         // 1-Tile Pushback away from attacker (strictly cardinal unless obstructed, then deflect sideways)

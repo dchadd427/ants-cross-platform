@@ -1489,11 +1489,12 @@ void Renderer::draw_single_ant(const ants::sim::AntSnapshot& ant, bool is_select
         action = "go";
     } else if (ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::Swimming)) {
         action = "tw";
-    } else if (ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::Attacking) ||
-               ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::HarvestingFood)) {
+    } else if (ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::Attacking)) {
         action = "at";
+    } else if (ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::HarvestingFood)) {
+        action = "gf"; // Grab Food bite sequence (aggf301, abgf201, afgf201, acgf201, asgf301, atgf301)
     } else if (ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::Knockback)) {
-        action = "gf";
+        action = "gb"; // Ground Bounce tumbling flight (aggb301, abgb301, afgb201, acgb201, asgb201, atgb201)
     } else if (ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::Bounce)) {
         action = "gb";
     } else if (ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::Flinch)) {
@@ -1521,8 +1522,7 @@ void Renderer::draw_single_ant(const ants::sim::AntSnapshot& ant, bool is_select
     if (action == "gf" || action == "gb" || action == "gh" || action == "bu" || action == "dr" ||
         action == "sb" || action == "db" || action == "sf" || action == "xf" ||
         action == "bbl" || action == "bbw" || action == "dbl" || action == "dbw" ||
-        action == "di" || action == "go" ||
-        (action == "at" && ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::HarvestingFood))) {
+        action == "di" || action == "go") {
         prefix = normal_prefixes[static_cast<size_t>(ant.type) % 6];
     }
 
@@ -1571,8 +1571,15 @@ void Renderer::draw_single_ant(const ants::sim::AntSnapshot& ant, bool is_select
                     sub_idx = seq->subitems.size() - 1;
                 }
             } else if (action == "gb") {
-                // 1-Tile bounce lasts 10 ticks; map across the sequence frames
-                sub_idx = (ant.anim_frame * seq->subitems.size()) / 10;
+                // Ballistic knockback / bounce lasts 10-12 ticks; map across sequence frames
+                uint16_t total_ticks = (ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::Knockback)) ? 12 : 10;
+                sub_idx = (ant.anim_frame * seq->subitems.size()) / total_ticks;
+                if (sub_idx >= seq->subitems.size()) {
+                    sub_idx = seq->subitems.size() - 1;
+                }
+            } else if (action == "gf") {
+                // Food harvesting bite sequence lasts 6 ticks (300ms); map across sequence frames
+                sub_idx = (ant.anim_frame * seq->subitems.size()) / 6;
                 if (sub_idx >= seq->subitems.size()) {
                     sub_idx = seq->subitems.size() - 1;
                 }
@@ -1583,10 +1590,8 @@ void Renderer::draw_single_ant(const ants::sim::AntSnapshot& ant, bool is_select
                     sub_idx = seq->subitems.size() - 1;
                 }
             } else if (action == "at") {
-                // Melee strike lasts 8 ticks (Combat Ant lasts 11 ticks); food harvesting lasts 6 ticks
-                uint16_t total_ticks = (ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::HarvestingFood))
-                                           ? 6
-                                           : ((ant.type == ants::sim::AntType::Combat) ? 11 : 8);
+                // Melee strike lasts 8 ticks (Combat Ant lasts 11 ticks)
+                uint16_t total_ticks = (ant.type == ants::sim::AntType::Combat) ? 11 : 8;
                 sub_idx = (ant.anim_frame * seq->subitems.size()) / total_ticks;
                 if (sub_idx >= seq->subitems.size()) {
                     sub_idx = seq->subitems.size() - 1;

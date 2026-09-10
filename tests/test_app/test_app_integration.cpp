@@ -6775,6 +6775,87 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
             ASSERT_EQ(sim.get_unit(a2).attack_target_id, 0u);
         }
     } TEST_END();
+
+    TEST_CASE("12.107: Authentic Proportional Base Healing Dwell, Lethal Food Drops & Grab Food Action Mapping") {
+        SimulationEngine sim;
+        sim.init_test_world(60, 60, 100, 60000);
+        sim.grid_mut().set_anthill(0, TileCoord{20, 20});
+        const auto* base = sim.grid().find_anthill(0);
+        ASSERT_TRUE(base != nullptr);
+        int32_t bx = base->x;
+        int32_t by = base->y;
+
+        // 1. Proportional Base Healing Dwell:
+        // Wounded worker with 1 HP (missing 9 HP) arrives at base hole (bx+1, by+1)
+        uint32_t w1 = sim.spawn_unit(0, AntType::Worker, TileCoord{bx + 1, by + 1});
+        auto& u1 = sim.get_unit(w1);
+        u1.hp = 1; // 9 HP missing
+        u1.state = UnitState::EnteringBase;
+        u1.anim_subitem = 8;
+        u1.anim_tick = 0;
+
+        // Tick once to enter underground at Frame 8
+        sim.tick();
+        ASSERT_TRUE(u1.underground);
+        // Missing 9 HP * 4 ticks/HP = 36 ticks dwell
+        // First tick consumed 1 dwell tick, so 35 dwell ticks remaining
+        ASSERT_EQ(u1.base_dwell_ticks, 35u);
+
+        // Advance 34 ticks underground: still eating/healing
+        for (int t = 0; t < 34; ++t) {
+            sim.tick();
+        }
+        ASSERT_TRUE(u1.underground);
+        ASSERT_EQ(u1.state, UnitState::EnteringBase);
+
+        // Final dwell tick: completes dwell and emerges
+        sim.tick();
+        ASSERT_FALSE(u1.underground);
+        ASSERT_EQ(u1.hp, 10u);
+
+        // 2. Unwounded food depositor: dwell is 4 ticks (200ms)
+        uint32_t w2 = sim.spawn_unit(0, AntType::Worker, TileCoord{bx + 1, by + 1});
+        auto& u2 = sim.get_unit(w2);
+        u2.hp = 10;
+        u2.pick_up_food(1, 25);
+        u2.state = UnitState::EnteringBase;
+        u2.anim_subitem = 8;
+        u2.anim_tick = 0;
+
+        sim.tick();
+        ASSERT_TRUE(u2.underground);
+        // 4 ticks total, 1 consumed on entry
+        ASSERT_EQ(u2.base_dwell_ticks, 3u);
+
+        // 3. Lethal Melee Damage Drops Carried Lunchbox:
+        uint32_t attacker = sim.spawn_unit(0, AntType::Combat, TileCoord{30, 30});
+        uint32_t victim = sim.spawn_unit(1, AntType::Worker, TileCoord{31, 30});
+        auto& v = sim.get_unit(victim);
+        v.hp = 2; // Combat punch does 2 damage -> lethal
+        v.pick_up_food(1, 50);
+
+        ASSERT_FALSE(sim.grid().has_lunchbox_at(TileCoord{31, 30}));
+        sim.execute_melee_attack(attacker, victim);
+
+        ASSERT_EQ(v.hp, 0u);
+        ASSERT_EQ(v.state, UnitState::Dead);
+        ASSERT_FALSE(v.is_holding());
+        ASSERT_TRUE(sim.grid().has_lunchbox_at(TileCoord{31, 30}));
+        ASSERT_EQ(sim.grid().get_lunchbox_points(TileCoord{31, 30}), 50u);
+
+        // 4. Food Harvesting Sequence Action Verification
+        uint32_t harvester = sim.spawn_unit(0, AntType::Worker, TileCoord{40, 40});
+        auto& h = sim.get_unit(harvester);
+        h.state = UnitState::HarvestingFood;
+        h.anim_tick = 3;
+        const auto& ws = sim.get_world_state();
+        const AntSnapshot* snap = nullptr;
+        for (const auto& a : ws.ants) {
+            if (a.id == harvester) { snap = &a; break; }
+        }
+        ASSERT_TRUE(snap != nullptr);
+        ASSERT_EQ(snap->anim_state, static_cast<uint16_t>(UnitState::HarvestingFood));
+    } TEST_END();
 }
 
 
