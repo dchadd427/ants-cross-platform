@@ -179,7 +179,7 @@ public:
     int32_t get_selected_base_team_id() const noexcept { return selected_base_team_id_; }
     bool is_ant_selected(uint32_t id) const noexcept;
     void select_all_friendly(const sim::WorldState& world);
-    void select_ants_in_rect(int32_t x1, int32_t y1, int32_t x2, int32_t y2, const sim::WorldState& world);
+    void select_ants_in_rect(int32_t x1, int32_t y1, int32_t x2, int32_t y2, const sim::WorldState& world, bool additive = false);
     bool is_multi_select() const noexcept { return is_multi_select_mode_ || selected_ant_ids_.size() > 1; }
     bool is_multi_select_mode() const noexcept { return is_multi_select_mode_; }
     void set_multi_select_mode(bool multi) noexcept { is_multi_select_mode_ = multi; }
