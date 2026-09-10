@@ -1563,9 +1563,24 @@ void Renderer::draw_single_ant(const ants::sim::AntSnapshot& ant, bool is_select
                 if (sub_idx >= seq->subitems.size()) {
                     sub_idx = seq->subitems.size() - 1;
                 }
-            } else if (action == "gb" || action == "gh") {
-                // 1-Tile bounce/flinch lasts 4 ticks; map across the sequence frames
+            } else if (action == "gb") {
+                // 1-Tile bounce lasts 4 ticks; map across the sequence frames
                 sub_idx = (ant.anim_frame * seq->subitems.size()) / 4;
+                if (sub_idx >= seq->subitems.size()) {
+                    sub_idx = seq->subitems.size() - 1;
+                }
+            } else if (action == "gh") {
+                // Flinch reaction lasts 14 ticks (700ms); map across the 9 sequence frames
+                sub_idx = (ant.anim_frame * seq->subitems.size()) / 14;
+                if (sub_idx >= seq->subitems.size()) {
+                    sub_idx = seq->subitems.size() - 1;
+                }
+            } else if (action == "at") {
+                // Melee strike lasts 8 ticks (Combat Ant lasts 11 ticks); food harvesting lasts 6 ticks
+                uint16_t total_ticks = (ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::HarvestingFood))
+                                           ? 6
+                                           : ((ant.type == ants::sim::AntType::Combat) ? 11 : 8);
+                sub_idx = (ant.anim_frame * seq->subitems.size()) / total_ticks;
                 if (sub_idx >= seq->subitems.size()) {
                     sub_idx = seq->subitems.size() - 1;
                 }

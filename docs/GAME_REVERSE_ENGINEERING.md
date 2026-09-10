@@ -1194,5 +1194,18 @@ To deliver authentic 1:1 gameplay inside standard web browsers with zero install
 - Single-header, zero-dependency MP3 decoder integrated directly into `AudioMixer`.
 - Replaces DOM `<audio>` bridges with direct PCM decoding and buffer mixing, enabling unified volume control, looping, and cross-platform streaming across macOS and WebAssembly.
 
-
-
+#### 9. Authentic Combat Mechanics, Approach & Hit Reaction Parity (`Ants.exe` `0x101c4f2`, `0x101cb0c`, `0x101de7e`, `0x1022c57`)
+- **Strict Cardinal Approach & Distance Resolution**:
+  - In `Ants.exe`, an ant executing an attack order (`[esi + 0xa8] == 3`) navigates towards the target's position.
+  - When selecting candidate approach tiles, the engine evaluates strictly the **4 cardinal neighbors** (North, South, East, West). Diagonal neighbors are never targeted, guaranteeing straight-line approach and eliminating angled deviations on subsequent strikes.
+  - The ant only halts its walking step and strikes once it has arrived at the cardinal neighbor tile (`|dx| + |dy| <= 1` and at tile center), preventing premature stops one tile before reaching the enemy.
+- **Attack Animation Playback (`*at*`)**:
+  - `agat301` subitem sequence in `ants.chd` consists of 6 subitems with durations `(60, 60, 60, 90, 60, 90)` ms totaling 420ms (8.4 ticks @ 20Hz).
+  - `acat301` (Combat Ant) consists of 6 subitems with durations `(80, 100, 60, 80, 100, 120)` ms totaling 540ms (11 ticks @ 20Hz).
+  - Animation ticks (`anim_tick`, `anim_subitem`) reset to 0 upon executing an attack, allowing all 6 subitems (wind-up, strike, hit connect, recovery) to play completely across the full attack cycle.
+- **Pushback Slide & Flinch Reaction (`*gh*`)**:
+  - `aggh301..aggh901` in `ants.chd` consist of 9 subitems with durations totaling 800ms (16 ticks @ 20Hz) and subitem pixel displacement offsets `vals[1]`: `-24px` at tick 0..1, `-8px` at tick 2..3, `0px` at tick 4.
+  - Standard melee attack applies 1 HP damage and sets `target->state = UnitState::Flinch` with duration of 14 ticks (~700ms).
+  - During the first 4 ticks (200ms), the victim smoothly slides 32 pixels from origin to destination (8px per tick), completely eliminating abrupt 32px single-tick teleportation.
+  - During the remaining ticks (4..14), the victim stays on the destination tile, playing all stagger and recovery subitems of `aggh*`.
+  - The victim is forced to orient its facing direction toward the attacking ant at the moment of impact.

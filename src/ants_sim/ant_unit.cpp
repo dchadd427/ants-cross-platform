@@ -270,9 +270,21 @@ void AntUnit::tick_timers() noexcept {
         }
     }
 
-    if (state == UnitState::Bounce || state == UnitState::Attacking || state == UnitState::Flinch || state == UnitState::Burn) {
+    if (state == UnitState::Attacking || state == UnitState::Flinch || state == UnitState::Burn) {
         anim_tick++;
-        anim_subitem = (state == UnitState::Burn) ? anim_tick : (anim_tick / 2);
+        anim_subitem = anim_tick;
+        if (state == UnitState::Flinch && push_tick_current < push_ticks_total) {
+            push_tick_current++;
+            int32_t interp_x = push_start_px + ((push_dest_px - push_start_px) * static_cast<int32_t>(push_tick_current)) / static_cast<int32_t>(push_ticks_total);
+            int32_t interp_y = push_start_py + ((push_dest_py - push_start_py) * static_cast<int32_t>(push_tick_current)) / static_cast<int32_t>(push_ticks_total);
+            pixel_x = interp_x;
+            pixel_y = interp_y;
+            fx_x = pixel_x << 16;
+            fx_y = pixel_y << 16;
+        }
+    } else if (state == UnitState::Bounce) {
+        anim_tick++;
+        anim_subitem = static_cast<uint16_t>(anim_tick / 2);
     }
 
     // Continuous idle standing animation cycle

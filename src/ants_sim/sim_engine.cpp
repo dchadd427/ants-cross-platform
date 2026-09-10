@@ -1182,29 +1182,34 @@ void SimulationEngine::tick() {
                 target->on_powerup || (target->type == AntType::Swimmer && target->in_water)) {
                 ant_ptr->attack_target_id = 0;
             } else {
-                int32_t dist = ant_ptr->pos.chebyshev_dist(target->pos);
-                if (dist <= 1) {
-                    if (!ant_ptr->waypoints.empty() || ant_ptr->state == UnitState::Walking) {
-                        ant_ptr->clear_path();
-                        ant_ptr->state = (ant_ptr->type == AntType::Combat) ? UnitState::GuardIdle : UnitState::Idle;
-                    }
-                    ant_ptr->facing = ants::assets::vector_to_direction(target->pos.x - ant_ptr->pos.x, target->pos.y - ant_ptr->pos.y);
-                    if (ant_ptr->attack_cooldown_ticks == 0) {
-                        execute_melee_attack(ant_ptr->id, target->id);
+                int32_t m_dist = std::abs(target->pos.x - ant_ptr->pos.x) + std::abs(target->pos.y - ant_ptr->pos.y);
+                if (m_dist <= 1) {
+                    int32_t off_x = std::abs(ant_ptr->pixel_x - (ant_ptr->pos.x * 32 + 16));
+                    int32_t off_y = std::abs(ant_ptr->pixel_y - (ant_ptr->pos.y * 32 + 16));
+                    bool at_tile_center = (off_x <= 4 && off_y <= 4);
+                    if (ant_ptr->waypoints.empty() || at_tile_center) {
+                        if (!ant_ptr->waypoints.empty() || ant_ptr->state == UnitState::Walking) {
+                            ant_ptr->clear_path();
+                            ant_ptr->state = (ant_ptr->type == AntType::Combat) ? UnitState::GuardIdle : UnitState::Idle;
+                        }
+                        ant_ptr->facing = ants::assets::vector_to_direction(target->pos.x - ant_ptr->pos.x, target->pos.y - ant_ptr->pos.y);
+                        if (ant_ptr->attack_cooldown_ticks == 0) {
+                            execute_melee_attack(ant_ptr->id, target->id);
+                        }
                     }
                 } else if (ant_ptr->state == UnitState::Idle || ant_ptr->state == UnitState::GuardIdle) {
+                    static constexpr int32_t CARDINAL_DIRS[4][2] = {
+                        {0, -1}, {0, 1}, {-1, 0}, {1, 0}
+                    };
                     TileCoord best_neighbor = target->pos;
                     int32_t best_dist = 999999;
-                    for (int32_t dy = -1; dy <= 1; ++dy) {
-                        for (int32_t dx = -1; dx <= 1; ++dx) {
-                            if (dx == 0 && dy == 0) continue;
-                            TileCoord cand{target->pos.x + dx, target->pos.y + dy};
-                            if (impl_->grid_.in_bounds(cand) && impl_->grid_.get_cell(cand).is_passable()) {
-                                int32_t d = ant_ptr->pos.euclidean_dist_sq(cand);
-                                if (d < best_dist) {
-                                    best_dist = d;
-                                    best_neighbor = cand;
-                                }
+                    for (const auto& d : CARDINAL_DIRS) {
+                        TileCoord cand{target->pos.x + d[0], target->pos.y + d[1]};
+                        if (impl_->grid_.in_bounds(cand) && impl_->grid_.get_cell(cand).is_passable()) {
+                            int32_t dist_cand = ant_ptr->pos.euclidean_dist_sq(cand);
+                            if (dist_cand < best_dist) {
+                                best_dist = dist_cand;
+                                best_neighbor = cand;
                             }
                         }
                     }
@@ -1948,30 +1953,35 @@ void SimulationEngine::issue_order(const AntOrder& order) {
                         break;
                     }
                     unit->attack_target_id = target_id;
-                    int32_t dist = unit->pos.chebyshev_dist(target->pos);
-                    if (dist <= 1) {
+                    int32_t m_dist = std::abs(unit->pos.x - target->pos.x) + std::abs(unit->pos.y - target->pos.y);
+                    int32_t off_x = std::abs(unit->pixel_x - (unit->pos.x * 32 + 16));
+                    int32_t off_y = std::abs(unit->pixel_y - (unit->pos.y * 32 + 16));
+                    bool at_tile_center = (off_x <= 4 && off_y <= 4);
+                    if (m_dist <= 1 && at_tile_center) {
                         unit->clear_path();
                         unit->facing = ants::assets::vector_to_direction(target->pos.x - unit->pos.x, target->pos.y - unit->pos.y);
                         if (unit->attack_cooldown_ticks == 0) {
                             execute_melee_attack(order.ant_id, target_id);
                         }
                     } else {
+                        static constexpr int32_t CARDINAL_DIRS[4][2] = {
+                            {0, -1}, {0, 1}, {-1, 0}, {1, 0}
+                        };
                         TileCoord best_neighbor = target->pos;
                         int32_t best_dist = 999999;
-                        for (int32_t dy = -1; dy <= 1; ++dy) {
-                            for (int32_t dx = -1; dx <= 1; ++dx) {
-                                if (dx == 0 && dy == 0) continue;
-                                TileCoord cand{target->pos.x + dx, target->pos.y + dy};
-                                if (impl_->grid_.in_bounds(cand) && impl_->grid_.get_cell(cand).is_passable()) {
-                                    int32_t d = unit->pos.euclidean_dist_sq(cand);
-                                    if (d < best_dist) {
-                                        best_dist = d;
-                                        best_neighbor = cand;
-                                    }
+                        for (const auto& d : CARDINAL_DIRS) {
+                            TileCoord cand{target->pos.x + d[0], target->pos.y + d[1]};
+                            if (impl_->grid_.in_bounds(cand) && impl_->grid_.get_cell(cand).is_passable()) {
+                                int32_t dist_cand = unit->pos.euclidean_dist_sq(cand);
+                                if (dist_cand < best_dist) {
+                                    best_dist = dist_cand;
+                                    best_neighbor = cand;
                                 }
                             }
                         }
-                        issue_move_order(order.ant_id, best_neighbor);
+                        if (best_dist < 999999) {
+                            issue_move_order(order.ant_id, best_neighbor);
+                        }
                     }
                 } else {
                     unit->attack_target_id = 0;
@@ -2465,7 +2475,9 @@ void SimulationEngine::execute_melee_attack(uint32_t attacker_id, uint32_t targe
 
     attacker->attack_cooldown_ticks = (attacker->type == AntType::Combat ? 12 : 10);
     attacker->state = UnitState::Attacking;
-    attacker->state_timer = 6;
+    attacker->state_timer = (attacker->type == AntType::Combat ? 11 : 8);
+    attacker->anim_tick = 0;
+    attacker->anim_subitem = 0;
     attacker->facing = ants::assets::vector_to_direction(target->pos.x - attacker->pos.x, target->pos.y - attacker->pos.y);
     bool target_in_uninterruptible_ability = (
         target->state == UnitState::PlacingFire || target->state == UnitState::PlantingBomb ||
@@ -2642,9 +2654,17 @@ void SimulationEngine::execute_melee_attack(uint32_t attacker_id, uint32_t targe
                 }
             }
 
+            int32_t start_px = target->pixel_x;
+            int32_t start_py = target->pixel_y;
             if (chosen_push.x >= 0) {
-                target->set_tile_pos(chosen_push.x, chosen_push.y);
+                target->pos = chosen_push;
                 target->clear_path();
+                target->push_start_px = start_px;
+                target->push_start_py = start_py;
+                target->push_dest_px = chosen_push.x * 32 + 16;
+                target->push_dest_py = chosen_push.y * 32 + 16;
+                target->push_ticks_total = 4;
+                target->push_tick_current = 0;
             }
 
             int32_t eff_dir_x = target->pos.x - attacker->pos.x;
@@ -2660,6 +2680,9 @@ void SimulationEngine::execute_melee_attack(uint32_t attacker_id, uint32_t targe
             if (in_water) {
                 if (target->type != AntType::Swimmer) {
                     // Non-swimmer dies instantly when pushed into water!
+                    if (chosen_push.x >= 0) {
+                        target->set_tile_pos(chosen_push.x, chosen_push.y);
+                    }
                     target->start_drowning();
                     target->hp = 0;
                     target->death_status = DeathStatus::Drowned;
@@ -2670,16 +2693,16 @@ void SimulationEngine::execute_melee_attack(uint32_t attacker_id, uint32_t targe
                     impl_->audio_queue_.push_back(AudioEvent{SoundID::WaterSplash, target->pixel_x, target->pixel_y, 1, 255});
                     impl_->audio_queue_.push_back(AudioEvent{SoundID::AntDrown, target->pixel_x, target->pixel_y, 2, 255});
                 } else {
+                    if (chosen_push.x >= 0) {
+                        target->set_tile_pos(chosen_push.x, chosen_push.y);
+                    }
                     target->state = UnitState::Swimming;
                     target->in_water = true;
                     target->was_in_water = true;
                     impl_->audio_queue_.push_back(AudioEvent{SoundID::WaterSplash, target->pixel_x, target->pixel_y, 1, 255});
                 }
             } else {
-                target->state = UnitState::Flinch;
-                target->state_timer = 4;
-                target->anim_tick = 0;
-                target->anim_subitem = 0;
+                target->start_flinch(14);
 
                 // Fire contact check
                 if (land_cell.has_fire()) {
