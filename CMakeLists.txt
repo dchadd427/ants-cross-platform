@@ -44,6 +44,22 @@ if(WIN32)
             set(SDL2_DLL "${sdl2_prebuilt_SOURCE_DIR}/lib/x64/SDL2.dll" CACHE FILEPATH "SDL2 runtime DLL" FORCE)
         endif()
     endif()
+
+    find_package(SDL2_ttf QUIET)
+    if(NOT SDL2_TTF_FOUND)
+        FetchContent_Declare(
+            SDL2_ttf_prebuilt
+            URL https://github.com/libsdl-org/SDL_ttf/releases/download/release-2.22.0/SDL2_ttf-devel-2.22.0-VC.zip
+            DOWNLOAD_EXTRACT_TIMESTAMP TRUE
+        )
+        FetchContent_GetProperties(SDL2_ttf_prebuilt)
+        if(NOT sdl2_ttf_prebuilt_POPULATED)
+            FetchContent_Populate(SDL2_ttf_prebuilt)
+            set(SDL2_TTF_INCLUDE_DIRS "${sdl2_ttf_prebuilt_SOURCE_DIR}/include" CACHE PATH "SDL2_ttf include directory" FORCE)
+            set(SDL2_TTF_LIBRARIES "${sdl2_ttf_prebuilt_SOURCE_DIR}/lib/x64/SDL2_ttf.lib" CACHE STRING "SDL2_ttf libraries" FORCE)
+            set(SDL2_TTF_DLL "${sdl2_ttf_prebuilt_SOURCE_DIR}/lib/x64/SDL2_ttf.dll" CACHE FILEPATH "SDL2_ttf runtime DLL" FORCE)
+        endif()
+    endif()
 endif()
 
 # Sanitizer Option

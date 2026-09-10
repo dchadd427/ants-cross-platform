@@ -15,15 +15,17 @@ else()
     endif()
 
     # SDL2_ttf configuration
-    find_package(SDL2_ttf QUIET)
-    if(NOT SDL2_TTF_FOUND AND NOT DEFINED SDL2_TTF_INCLUDE_DIRS)
-        find_path(SDL2_TTF_INCLUDE_DIRS SDL_ttf.h PATH_SUFFIXES SDL2 /opt/homebrew/include/SDL2 /opt/homebrew/opt/sdl2_ttf/include/SDL2)
-        find_library(SDL2_TTF_LIBRARIES NAMES SDL2_ttf PATHS /opt/homebrew/lib /opt/homebrew/opt/sdl2_ttf/lib)
-    endif()
+    if(NOT DEFINED SDL2_TTF_INCLUDE_DIRS)
+        find_package(SDL2_ttf QUIET)
+        if(NOT SDL2_TTF_FOUND)
+            find_path(SDL2_TTF_INCLUDE_DIRS SDL_ttf.h PATH_SUFFIXES SDL2 /opt/homebrew/include/SDL2 /opt/homebrew/opt/sdl2_ttf/include/SDL2)
+            find_library(SDL2_TTF_LIBRARIES NAMES SDL2_ttf PATHS /opt/homebrew/lib /opt/homebrew/opt/sdl2_ttf/lib)
+        endif()
 
-    if(NOT SDL2_TTF_INCLUDE_DIRS AND EXISTS "/opt/homebrew/opt/sdl2_ttf/include/SDL2/SDL_ttf.h")
-        set(SDL2_TTF_INCLUDE_DIRS "/opt/homebrew/opt/sdl2_ttf/include/SDL2")
-        set(SDL2_TTF_LIBRARIES "-L/opt/homebrew/opt/sdl2_ttf/lib -lSDL2_ttf")
+        if(NOT SDL2_TTF_INCLUDE_DIRS AND EXISTS "/opt/homebrew/opt/sdl2_ttf/include/SDL2/SDL_ttf.h")
+            set(SDL2_TTF_INCLUDE_DIRS "/opt/homebrew/opt/sdl2_ttf/include/SDL2")
+            set(SDL2_TTF_LIBRARIES "-L/opt/homebrew/opt/sdl2_ttf/lib -lSDL2_ttf")
+        endif()
     endif()
 endif()
 
@@ -88,6 +90,11 @@ target_link_libraries(ants PRIVATE
 if(WIN32 AND DEFINED SDL2_DLL)
     add_custom_command(TARGET ants POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${SDL2_DLL}" "$<TARGET_FILE_DIR:ants>"
+    )
+endif()
+if(WIN32 AND DEFINED SDL2_TTF_DLL)
+    add_custom_command(TARGET ants POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${SDL2_TTF_DLL}" "$<TARGET_FILE_DIR:ants>"
     )
 endif()
 

@@ -129,8 +129,6 @@ bool Application::init(const ApplicationConfig& config) {
     if (config_.fullscreen) win_flags |= SDL_WINDOW_FULLSCREEN_DESKTOP;
     if (config_.headless)   win_flags = SDL_WINDOW_HIDDEN;
 
-    SDL_SetHint(SDL_HINT_GRAB_KEYBOARD, "1");
-
     window_ = SDL_CreateWindow(
         config_.title.c_str(),
         SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
@@ -144,10 +142,6 @@ bool Application::init(const ApplicationConfig& config) {
 
     if (!config_.headless) {
         SDL_RaiseWindow(window_);
-    }
-
-    if (!config_.headless) {
-        SDL_SetWindowKeyboardGrab(window_, SDL_TRUE);
         SDL_ShowCursor(SDL_DISABLE);
     }
 
@@ -527,6 +521,11 @@ void Application::handle_events() {
                     renderer_->set_fullscreen(is_fs);
                 }
             }
+        }
+
+        // Bypass Print Screen key so OS handles screenshots unimpeded
+        if (event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_PRINTSCREEN) {
+            continue;
         }
 
         // Global Fullscreen hotkeys: F11 (outside gameplay), Alt+Enter, or Cmd+F
