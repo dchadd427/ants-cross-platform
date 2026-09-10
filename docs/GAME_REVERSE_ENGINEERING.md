@@ -526,8 +526,8 @@ All ant classes share a unified, symmetrical combat and ballistic physical react
 | **Attack / "Hit Back"** | `*at*` (Action 1) | `agat`, `abat`, `afat`, `acat`, `asat`, `atat` | Directional forward strike (5 directions: 2, 3, 7, 8, 9). | Sound 57 (`attack.wav`) / Sound 78 (`attack2.wav`) | Deals 1 HP damage (Worker, Thief, Bomber, Fire, Swimmer) or 2 HP damage (Combat Ant). Single attack per order. |
 | **Get Hit (Flinch)** | `*gh*` (Action 10) | `aggh`, `abgh`, `afgh`, `acgh`, `asgh`, `atgh` | Staggered flinch reaction (Subitems 0–8). | Sound 64 (`flythumpa.wav`) @ frame 0, Sound 65 (`flythumpb.wav`) @ frame 3 | Brief stagger interrupt (stun for 4 ticks). Triggered on standard 1-tile melee hit pushback. |
 | **Burn / Scorch Stagger** | `*bu*` (Table `0x1004518`) | `agbu`, `abbu`, `afbu`, `acbu`, `asbu`, `atbu` | 11 subitems with smoke explosion puff (`*bu301..303`) and ground tumble (`aggh306..311`). | Sound 64 (`flythumpa.wav`) @ subitem 0, Sound 65 (`flythumpb.wav`) @ subitem 5 | Bomb dud / burn stagger for 11 ticks; unit remains in place. |
-| **Get Fling (Airborne Knockback)** | `*gf*` (Action 14) | `aggf`, `abgf`, `afgf`, `acgf`, `asgf`, `atgf` | Ant spins and tumbles head-over-heels airborne (`1652..1658.bmp`). | Sound 64/65 on launch | Displaced 4–5 tiles along impact vector at high velocity (Combat Ant punch). |
-| **Get Bounce (Landing Skid & Stun)** | `*gb*` (Action 19) | `aggb`, `abgb`, `afgb`, `acgb`, `asgb`, `atgb` | Hard ground landing rebound (`1612..1619.bmp`), skids forward, rolls to a stop (12 subitems). | Sound 64 @ impact, Sound 65 @ stop, Sound 70 (`stun.wav`) | Enters stunned recovery state (Action 12) for 12 ticks before resuming orders. Maintains pre-knockback facing. |
+| **Grab Food (Harvesting Bite)** | `*gf*` (Order 5) | `aggf`, `abgf`, `afgf`, `acgf`, `asgf`, `atgf` | Ant bites, chomps and harvests food morsel into carryable item (5–6 subitems, 300–440ms). | Sound 87 (`harvest.wav`) | Food harvested into inventory; unit switches to carrying `*h*` walk animations. |
+| **Ground Bounce (Ballistic Knockback & Bounce)** | `*gb*` (Action 14/19) | `aggb`, `abgb`, `afgb`, `acgb`, `asgb`, `atgb` | Hard ground landing rebound (`1612..1619.bmp`), skids forward, rolls to a stop (12 subitems, 128 px displacement). | Sound 64 @ impact, Sound 65 @ stop, Sound 70 (`stun.wav`) | Displaced 4–5 tiles along impact vector at high velocity (Combat Ant punch) or 1-tile collision bounce. Stunned for 10–12 ticks. |
 
 #### 7. Animation Audio Trigger Architecture (`default_sp`)
 In `ants.chd` Table 4, each animation subitem includes a `default_sp` field:
@@ -1295,5 +1295,29 @@ To deliver authentic 1:1 gameplay inside standard web browsers with zero install
 - **Combat AI Guard Anchor Synchronization**:
   - When displaced by a collision bounce cascade or when holding ground as an anchor ant, the unit's `guard_anchor` and associated `CombatAIController::anchor_tx_/anchor_ty_` are immediately updated via `set_guard_anchor()`.
   - Prevents combat guard AI from interpreting collision displacement as a deviation from its post and marching back into the stationary collision partner.
+
+#### 15. Disassembly Routines: Base Healing, Food Drops, and Knockback Deflection Search (`Ants.exe` `0x0101e204`, `0x0101e20d`, `0x0101e165`, `0x0101b5cf`, `0x0101d8ed`, `0x010202e7`)
+- **Proportional Base Healing Dwell (`0x0101e204` & `0x0101e20d`)**:
+  - `FUN_0101e204`: Computes missing health points `sVar2 = 10 - hp` (`max_hp = 10`).
+  - `FUN_0101e20d`: When `sVar2 != 0`, calculates underground dwell duration as `sVar2 * 200ms` (4 simulation ticks per missing HP healed).
+  - Unwounded food depositors dwell the default 4 ticks (200ms); severely wounded ants (e.g. 1 HP remaining) dwell `9 * 4 = 36` ticks (1,800ms) while undergoing underground treatment before emerging fully restored to 10 HP.
+- **Base Score Deposit and Exit Routine (`0x0101e165`)**:
+  - `FUN_0101e165`: Triggered upon completing underground dwell.
+  - Adds carried food points (`+0xf0`) to player score and triggers Sound 44 / Sound 87 (`scoreup.wav`).
+  - Clears carried inventory (`FUN_0101ac8c(this, 0, 0)`).
+  - Restores health: `hp = hp + (10 - hp) = 10`.
+- **Lethal Melee Damage Item Drop (`0x0101b5cf`)**:
+  - `FUN_0101b5cf`: When an ant takes lethal damage from combat strikes (`0x01022c57` / `FUN_01022c57`), any carried food item in its inventory is immediately spawned as a dropped food lunchbox on the victim's current grid cell.
+- **5-Angle Knockback Deflection Search (`0x0101d8ed`)**:
+  - `FUN_0101d8ed`: When an ant is pushed or flung by melee attacks or collisions, the engine tests 5 directions in strict priority order:
+    1. Primary direction along strike vector: `base_dir`
+    2. +45° deflection: `(base_dir + 1) % 8`
+    3. -45° deflection: `(base_dir + 7) % 8`
+    4. +90° deflection: `(base_dir + 2) % 8`
+    5. -90° deflection: `(base_dir + 6) % 8`
+  - If all 5 trajectories are obstructed by solid barriers or obstacles, it returns direction index `8` (no knockback displacement).
+- **Anthill Ingress & Approach Corridor Routing (`0x010202e7`)**:
+  - `FUN_010202e7`: Tries to pathfind directly to the anthill entrance hole `(bx + 1, by + 1)`. If obstructed by queued units or obstacles, falls back to the designated approach coordinate at offset `+0x46` `(bx + 2, by - 2)`, followed by concentric Chebyshev ring expansion outward to queue ants cleanly without gridlock.
+
 
 
