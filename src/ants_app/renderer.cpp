@@ -1563,8 +1563,8 @@ void Renderer::draw_single_ant(const ants::sim::AntSnapshot& ant, bool is_select
                 if (sub_idx >= seq->subitems.size()) {
                     sub_idx = seq->subitems.size() - 1;
                 }
-            } else if (action == "gb") {
-                // 1-Tile bounce lasts 4 ticks; map across the sequence frames
+            } else if (action == "gb" || action == "gh") {
+                // 1-Tile bounce/flinch lasts 4 ticks; map across the sequence frames
                 sub_idx = (ant.anim_frame * seq->subitems.size()) / 4;
                 if (sub_idx >= seq->subitems.size()) {
                     sub_idx = seq->subitems.size() - 1;
