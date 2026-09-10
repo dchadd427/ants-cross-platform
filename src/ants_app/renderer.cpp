@@ -1495,7 +1495,7 @@ void Renderer::draw_single_ant(const ants::sim::AntSnapshot& ant, bool is_select
     } else if (ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::Knockback)) {
         action = "gf";
     } else if (ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::Bounce)) {
-        action = "gb";
+        action = "gh";
     } else if (ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::Flinch)) {
         action = "gh";
     } else if (ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::Burn)) {
