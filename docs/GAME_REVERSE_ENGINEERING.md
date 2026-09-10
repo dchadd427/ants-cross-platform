@@ -919,7 +919,7 @@ Through Capstone disassembly of `Original-Ants/Ants.exe` and inspection of `Orig
     - `CUR_N` (Anim 51), `CUR_NE` (Anim 46), `CUR_E` (Anim 45), `CUR_SE` (Anim 49)
     - `CUR_S` (Anim 48), `CUR_SW` (Anim 52), `CUR_W` (Anim 50), `CUR_NW` (Anim 47)
   - **Mode 7 — `c_food` (Anim 54, 8 frames @ 80–150ms, hotspot `dx=-15, dy=-16`):** Hand grab cursor displayed when hovering over harvestable food tiles with friendly ants selected.
-  - **Action Prohibited — `c_cant` (Anim 39, 7 frames @ 60–200ms, hotspot `dx=-11, dy=-11`):** Red circle-slash displayed when attempting to order units into impassable terrain (e.g. water for non-swimmers, rock obstacles).
+  - **Unused CHD Asset — `c_cant` (Anim 39, 7 frames @ 60–200ms, sprites 117..120 `c_cant1.bmp`..`c_cant4.bmp`):** A red circle-with-slash animation present in `ants.chd`. Reverse engineering of `Ants.exe` (`FUN_01026aa3` and `FUN_01027e65`) confirms this cursor was **never loaded or referenced anywhere in the original game executable**. In the 1998 game, hovering over impassable terrain or invalid targets retains `c_mov1` (Mode 3); prohibition is conveyed strictly through audio feedback (`cantgo.wav` / Sound 45 and unit voice refusal lines) upon clicking, not through dynamic cursor changes.
 
 #### 1.1 Fog of War Cursor Concealment & Targeting Invariant (`Ants.exe.c` `FUN_01026aa3` & `FUN_01009825`)
 - **Concealment Inspection**: In `Ants.exe.c` lines 28356 & 28373, cursor evaluation executes `FUN_01009825` to test whether the tile coordinate `(tx, ty)` is revealed by Fog of War.
