@@ -1491,4 +1491,44 @@ To deliver authentic 1:1 gameplay inside standard web browsers with zero install
   - Deselection Retraction (`trnbalyd` / Table 4 Anim 1215): 9 subitems, 60ms each (540ms total), retracts pedestal into the base cavity.
   - Move button is hidden when 0 friendly ants are selected.
 
-
+#### 21. Match Start "Get Ready!" Modal, Mutual Friendly Bouncing & Snapped Redirection Ground Truth (`Ants.exe` `0x1015b65`, `0x1021cb0`, `0x101b938`, `.rsrc` Strings 100–105)
+- **Match Start Ready Modal (`0x1015b65` / `FUN_01015b65`, `0x100fe93` / `FUN_0100fe93`)**:
+  - In `Original-Ants/Ants.exe`, launching a match instantiates modal object `0x1015b65` (vtable `0x1002930`):
+    - **Resource Strings in `.rsrc`**:
+      - String 105 (`0x69`): `"Get ready to play!  You are the %s Ants."`
+      - String 104 (`0x68`): `"Waiting for others..."`
+      - String 100–103: `"Black"`, `"Blue"`, `"Red"`, `"Green"`
+    - **Aesthetic & Layout**:
+      - Centered in playfield viewport (`x = 86, y = 120, w = 300, h = 200`).
+      - Red-orange background fill (`#D84C1C` / RGB 216, 76, 28) with classic 3D beveled borders.
+      - Center graphic: Standing Worker ant sprite (`agst301`) mapped to local player's team palette.
+      - Top text: `Get ready to play!` / `You are the [Color] Ants.`
+      - Bottom text: `Waiting for others...`
+    - **Synchronization Hold & Non-Dismissability**:
+      - The modal functions as a non-dismissable network synchronization barrier (`"Waiting for others..."`). Mouse clicks and key presses do NOT dismiss it early.
+      - Displays for exactly **6.0 seconds** (120 simulation ticks @ 20Hz / while match timer counts from 12:00 to 11:54).
+      - Ant selection and movement orders are blocked while the modal is displayed.
+- **Mutual Friendly Bumping (`0x1021cb0`, `Ants.exe.c` lines 25255–25335)**:
+  - When two friendly ants collide into the same tile (e.g. from an enemy punch, bomb blast recoil, or navigation collision):
+    - In `Ants.exe.c` lines 25304–25335, the engine updates **both** units simultaneously:
+      ```c
+      FUN_0101ace3(this, 0);
+      FUN_0101ab56((int)this);
+      FUN_0101ace3(piVar6, 0);
+      FUN_0101ab56((int)piVar6);
+      FUN_0101da46((int)piVar6);
+      FUN_0101da46((int)this);
+      ```
+    - Unit 1 (`piVar6`) deflects to adjacent tile `(iVar2 + 0x10, 0x12)`.
+    - Unit 2 (`this`) deflects to opposing adjacent tile `(iVar2 + 0x14, 0x16)`.
+    - Both units clear paths, enter `UnitState::Bounce` (4–6 ticks recoil), and play `SoundID::Bump` (47) and `SoundID::FlingThumpB` (65).
+    - **Neither ant remains static!** Both ants bounce away from each other like billiard balls rebounding upon impact.
+    - Visuals: **NO `battle` dust cloud** (Anim 56) and **NO `combatnetfairy.wav`** (Sound 3, rolling-around-in-dirt scuffle sound effect).
+- **Enemy Collision Scuffle Separation (`Ants.exe.c` lines 19875–19908)**:
+  - Checked via `*(short *)(DAT_0104b350 + 0xf2a) != *(short *)((int)this + 0x56)`.
+  - Enemy collisions exclusively trigger sequence 56 (`battle`) and Sound 3 (`combatnetfairy.wav`).
+  - Overhead health bars and green selection brackets are suppressed while an ant is covered by the `battle` dust cloud.
+- **Snapped Movement Redirection & Stride Integrity (`Ants.exe.c` lines 20020–20030 & 20076–20090)**:
+  - In `Ants.exe`, movement is discrete tile-to-tile strides (cardinal or 45° diagonal) between tile centers.
+  - Waypoint step advances and turns occur when reaching tile center (`(ushort)iVar5 < 3 && (ushort)iVar10 < 3`).
+  - Mid-walk redirections cancel the remaining step, snap to the nearest tile center, reset `anim_tick = 0`, and path directly from that tile center, completely eliminating sub-tile axis-decoupled easing curves and detours.

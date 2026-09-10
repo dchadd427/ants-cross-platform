@@ -5845,7 +5845,7 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         sim.init(lvl, 42);
 
         uint32_t a1_id = sim.spawn_unit(0, AntType::Worker, TileCoord{15, 15});
-        uint32_t a2_id = sim.spawn_unit(0, AntType::Combat, TileCoord{15, 15});
+        uint32_t a2_id = sim.spawn_unit(1, AntType::Combat, TileCoord{15, 15});
 
         // Tick simulation once
         sim.tick();
@@ -6403,7 +6403,7 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         SimulationEngine sim_bounce;
         sim_bounce.init_test_world(60, 60, 100, 60000);
         uint32_t ant1 = sim_bounce.spawn_unit(0, AntType::Worker, TileCoord{10, 10});
-        uint32_t ant2 = sim_bounce.spawn_unit(0, AntType::Combat, TileCoord{10, 10});
+        uint32_t ant2 = sim_bounce.spawn_unit(1, AntType::Worker, TileCoord{10, 10});
 
         // Tick simulation to trigger same-tile collision resolution
         sim_bounce.tick();
@@ -6431,8 +6431,8 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         {
             SimulationEngine sim;
             sim.init_test_world(60, 60, 100, 60000);
-            uint32_t a1 = sim.spawn_unit(0, AntType::Combat, TileCoord{20, 20});
-            uint32_t a2 = sim.spawn_unit(0, AntType::Worker, TileCoord{20, 20});
+            uint32_t a1 = sim.spawn_unit(0, AntType::Worker, TileCoord{20, 20});
+            uint32_t a2 = sim.spawn_unit(1, AntType::Worker, TileCoord{20, 20});
 
             sim.tick(); // Collision scuffle triggers
 
@@ -6876,10 +6876,10 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
 
     TEST_CASE("12.108: Version Invariant & Fog of War Cursor Concealment Parity") {
         // 1. Verify semantic versioning components
-        ASSERT_EQ(ants::VERSION_STRING, "v0.0.5");
+        ASSERT_EQ(ants::VERSION_STRING, "v0.0.6");
         ASSERT_EQ(ants::VERSION_MAJOR, 0);
         ASSERT_EQ(ants::VERSION_MINOR, 0);
-        ASSERT_EQ(ants::VERSION_PATCH, 5);
+        ASSERT_EQ(ants::VERSION_PATCH, 6);
 
         // 2. Setup simulation world with Fog of War enabled
         SimulationEngine sim;
@@ -6951,7 +6951,13 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         SimulationEngine sim;
         sim.init_test_world(60, 60, 100, 60000);
 
-        // Mud terrain corridors on row 10 and row 14 from col 10 to 25
+        // Mud terrain corridors on row 10 and row 14 from col 10 to 25 bordered by obstacles
+        for (int x = 9; x <= 25; ++x) {
+            sim.grid_mut().get_cell_mut(TileCoord{x, 9}).terrain_type = TERRAIN_OBSTACLE;
+            sim.grid_mut().get_cell_mut(TileCoord{x, 11}).terrain_type = TERRAIN_OBSTACLE;
+            sim.grid_mut().get_cell_mut(TileCoord{x, 13}).terrain_type = TERRAIN_OBSTACLE;
+            sim.grid_mut().get_cell_mut(TileCoord{x, 15}).terrain_type = TERRAIN_OBSTACLE;
+        }
         for (int x = 10; x <= 25; ++x) {
             sim.grid_mut().get_cell_mut(TileCoord{x, 10}).surface_type = SurfaceType::Mud;
             sim.grid_mut().get_cell_mut(TileCoord{x, 10}).is_mud = true;
@@ -7386,6 +7392,96 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         ASSERT_EQ(sim.get_unit(combat_id).state, UnitState::Attacking);
         ASSERT_EQ(sim.get_unit(thief_id).state, UnitState::Knockback);
         ASSERT_EQ(sim.get_unit(thief_id).hp, 8);
+    } TEST_END();
+
+    // ------------------------------------------------------------------------
+    // 12.118: 6.0-Second Non-Dismissable Match Start Ready Modal (Ants.exe 0x1015b65)
+    // ------------------------------------------------------------------------
+    TEST_CASE("12.118 6.0-Second Non-Dismissable Match Start Ready Modal (Ants.exe 0x1015b65)") {
+        HUD hud;
+        hud.init(0);
+        SimulationEngine sim;
+        sim.init_test_world(60, 60, 100, 60000);
+        ViewportCamera camera;
+
+        // Starts inactive in headless tests until match launch
+        ASSERT_FALSE(hud.is_match_start_modal_active());
+
+        // Launch match modal
+        hud.start_match_modal();
+        ASSERT_TRUE(hud.is_match_start_modal_active());
+
+        // Clicks on playfield are consumed / blocked (non-dismissable hold)
+        bool consumed_lmb = hud.handle_mouse_down(200, 200, 1, sim, camera);
+        ASSERT_TRUE(consumed_lmb);
+        ASSERT_TRUE(hud.is_match_start_modal_active());
+
+        // Keyboard inputs are consumed / blocked
+        bool consumed_key = hud.handle_key_down(SDLK_SPACE, sim, camera);
+        ASSERT_TRUE(consumed_key);
+        ASSERT_TRUE(hud.is_match_start_modal_active());
+
+        // Advance 119 ticks (5.95s @ 20Hz): modal remains active
+        WorldState dummy_world{};
+        for (uint32_t t = 1; t < 120; ++t) {
+            hud.update(dummy_world, 1);
+            ASSERT_TRUE(hud.is_match_start_modal_active());
+        }
+
+        // At tick 120 (exactly 6.0s elapsed), modal auto-dismisses
+        hud.update(dummy_world, 1);
+        ASSERT_FALSE(hud.is_match_start_modal_active());
+    } TEST_END();
+
+    // ------------------------------------------------------------------------
+    // 12.119: Mutual Friendly Collision Bouncing (Neither Ant Static)
+    // ------------------------------------------------------------------------
+    TEST_CASE("12.119 Mutual Friendly Collision Bouncing (Neither Ant Static)") {
+        SimulationEngine sim;
+        sim.init_test_world(60, 60, 100, 60000);
+
+        // Friendly Ant 1 at (20, 20), Friendly Ant 2 at (21, 20)
+        uint32_t f1 = sim.spawn_unit(0, AntType::Combat, TileCoord{20, 20});
+        uint32_t f2 = sim.spawn_unit(0, AntType::Worker, TileCoord{21, 20});
+
+        // Enemy Worker at (19, 20) strikes friendly ant 1 eastwards into friendly ant 2
+        uint32_t enemy = sim.spawn_unit(1, AntType::Worker, TileCoord{19, 20});
+        sim.clear_audio_events();
+        sim.execute_melee_attack(enemy, f1);
+
+        const auto& u1 = sim.get_unit(f1);
+        ASSERT_EQ(u1.state, UnitState::Flinch);
+
+        // Advance until f1 lands on f2's tile (21, 20)
+        for (int i = 0; i < 7; ++i) {
+            sim.tick();
+        }
+
+        const auto& u1_after = sim.get_unit(f1);
+        const auto& u2_after = sim.get_unit(f2);
+
+        // Neither ant stands static: BOTH ants bounce away onto distinct tiles!
+        ASSERT_FALSE(u1_after.pos == u2_after.pos);
+        ASSERT_EQ(u1_after.state, UnitState::Bounce);
+        ASSERT_EQ(u2_after.state, UnitState::Bounce);
+
+        // Sound 47 (bump.wav) and FlingThump triggered
+        ASSERT_TRUE(sim.has_audio_event(SoundID::Bump));
+        ASSERT_TRUE(sim.has_audio_event(SoundID::FlingThumpA) || sim.has_audio_event(SoundID::FlingThumpB));
+
+        // ZERO battle dust cloud effects (no enemy scuffle)
+        const auto& ws = sim.get_world_state();
+        bool has_battle_cloud = false;
+        for (const auto& eff : ws.effects) {
+            if (eff.anim_name == "battle") {
+                has_battle_cloud = true;
+                break;
+            }
+        }
+        ASSERT_FALSE(has_battle_cloud);
+
+        // No CombatNetFairy sound effect
+        ASSERT_FALSE(sim.has_audio_event(SoundID::CombatNetFairy));
     } TEST_END();
 }
 

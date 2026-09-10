@@ -257,6 +257,7 @@ namespace {
 void bounce_unit_cascade(SimulationEngineImpl& impl,
                          AntUnit& unit,
                          int32_t from_x, int32_t from_y,
+                         bool is_enemy_scuffle = false,
                          int depth = 0) {
     if (depth > 10) return;
     if (unit.on_powerup || (impl.grid_.in_bounds(unit.pos) && impl.grid_.has_powerup_at(unit.pos))) {
@@ -264,7 +265,7 @@ void bounce_unit_cascade(SimulationEngineImpl& impl,
     }
 
     unit.state = UnitState::Bounce;
-    unit.state_timer = 20; // 10 ticks scuffle + 10 ticks bounce
+    unit.state_timer = is_enemy_scuffle ? 20 : 10; // 10 ticks scuffle + 10 ticks bounce if scuffle, else 10 ticks
     unit.anim_tick = 0;
     unit.anim_subitem = 0;
     unit.clear_path();
@@ -294,8 +295,13 @@ void bounce_unit_cascade(SimulationEngineImpl& impl,
         approach_dy = dir_offsets[dir_idx][1];
     }
 
-    unit.is_in_scuffle = true;
-    unit.scuffle_ticks = 10;
+    if (is_enemy_scuffle) {
+        unit.is_in_scuffle = true;
+        unit.scuffle_ticks = 10;
+    } else {
+        unit.is_in_scuffle = false;
+        unit.scuffle_ticks = 0;
+    }
     unit.push_start_px = collision_px;
     unit.push_start_py = collision_py;
 
@@ -378,10 +384,16 @@ void bounce_unit_cascade(SimulationEngineImpl& impl,
     }
 
     if (occupying) {
-        impl.active_effects_.push_back(VisualEffect{"battle", occupying->pixel_x, occupying->pixel_y, 0, 10});
-        impl.audio_queue_.push_back(AudioEvent{SoundID::CombatNetFairy, occupying->pixel_x, occupying->pixel_y, 1, 255});
+        bool are_enemies = (unit.player_id != occupying->player_id && !impl.stats_.are_allies(unit.player_id, occupying->player_id));
+        if (are_enemies) {
+            impl.active_effects_.push_back(VisualEffect{"battle", occupying->pixel_x, occupying->pixel_y, 0, 10});
+            impl.audio_queue_.push_back(AudioEvent{SoundID::CombatNetFairy, occupying->pixel_x, occupying->pixel_y, 1, 255});
+        } else {
+            impl.audio_queue_.push_back(AudioEvent{SoundID::Bump, occupying->pixel_x, occupying->pixel_y, 1, 255});
+            impl.audio_queue_.push_back(AudioEvent{SoundID::FlingThumpB, occupying->pixel_x, occupying->pixel_y, 1, 255});
+        }
         // Cascade bounce the occupying ant away!
-        bounce_unit_cascade(impl, *occupying, chosen.x, chosen.y, depth + 1);
+        bounce_unit_cascade(impl, *occupying, chosen.x, chosen.y, are_enemies, depth + 1);
     }
 
     unit.set_tile_pos(chosen.x, chosen.y);
@@ -1956,8 +1968,8 @@ void SimulationEngine::tick() {
                         to_displace = a1.get();
                         anchor_ant = a2.get();
                     } else {
-                        bool a1_was_pushed = (a1->push_start_px != a1->pixel_x || a1->push_start_py != a1->pixel_y || a1->state == UnitState::Flinch || a1->state == UnitState::Knockback);
-                        bool a2_was_pushed = (a2->push_start_px != a2->pixel_x || a2->push_start_py != a2->pixel_y || a2->state == UnitState::Flinch || a2->state == UnitState::Knockback);
+                        bool a1_was_pushed = (a1->state == UnitState::Flinch || a1->state == UnitState::Knockback || (a1->state == UnitState::Bounce && a1->push_tick_current < a1->push_ticks_total));
+                        bool a2_was_pushed = (a2->state == UnitState::Flinch || a2->state == UnitState::Knockback || (a2->state == UnitState::Bounce && a2->push_tick_current < a2->push_ticks_total));
                         if (a1_was_pushed && !a2_was_pushed) {
                             to_displace = a1.get();
                             anchor_ant = a2.get();
@@ -1969,25 +1981,39 @@ void SimulationEngine::tick() {
                             anchor_ant = (to_displace == a1.get()) ? a2.get() : a1.get();
                         }
                     }
-                    // Authentic 1998 logic (Ants.exe 0x102151a): Anchor ant remains visible on its tile
-                    // throughout the clash; only displaced ant recoils out of collision.
-                    anchor_ant->clear_path();
-                    anchor_ant->attack_target_id = 0;
-                    anchor_ant->attack_cooldown_ticks = std::max(anchor_ant->attack_cooldown_ticks, static_cast<uint16_t>(20));
-                    anchor_ant->final_dest = anchor_ant->pos;
-                    anchor_ant->set_tile_pos(anchor_ant->pos.x, anchor_ant->pos.y);
-                    anchor_ant->guard_anchor = anchor_ant->pos;
-                    auto it_anchor = impl_->ai_controllers_.find(anchor_ant->id);
-                    if (it_anchor != impl_->ai_controllers_.end() && it_anchor->second) {
-                        it_anchor->second->set_guard_anchor(anchor_ant->pos.x, anchor_ant->pos.y);
-                    }
-                    anchor_ant->push_start_px = anchor_ant->pos.x * 32 + 16;
-                    anchor_ant->push_start_py = anchor_ant->pos.y * 32 + 16;
+                    int32_t col_x = a1->pos.x;
+                    int32_t col_y = a1->pos.y;
+                    if (are_enemies) {
+                        // Authentic 1998 logic (Ants.exe 0x102151a): Anchor ant remains visible on its tile
+                        // throughout the clash; only displaced ant recoils out of collision.
+                        anchor_ant->clear_path();
+                        anchor_ant->attack_target_id = 0;
+                        anchor_ant->attack_cooldown_ticks = std::max(anchor_ant->attack_cooldown_ticks, static_cast<uint16_t>(20));
+                        anchor_ant->final_dest = anchor_ant->pos;
+                        anchor_ant->set_tile_pos(anchor_ant->pos.x, anchor_ant->pos.y);
+                        anchor_ant->guard_anchor = anchor_ant->pos;
+                        auto it_anchor = impl_->ai_controllers_.find(anchor_ant->id);
+                        if (it_anchor != impl_->ai_controllers_.end() && it_anchor->second) {
+                            it_anchor->second->set_guard_anchor(anchor_ant->pos.x, anchor_ant->pos.y);
+                        }
+                        anchor_ant->push_start_px = anchor_ant->pos.x * 32 + 16;
+                        anchor_ant->push_start_py = anchor_ant->pos.y * 32 + 16;
 
-                    // Authentic 1998 battle scuffle visual effect and SoundID::CombatNetFairy (ID 3)
-                    impl_->active_effects_.push_back(VisualEffect{"battle", anchor_ant->pixel_x, anchor_ant->pixel_y, 0, 10});
-                    impl_->audio_queue_.push_back(AudioEvent{SoundID::CombatNetFairy, anchor_ant->pixel_x, anchor_ant->pixel_y, 1, 255});
-                    bounce_unit_cascade(*impl_, *to_displace, anchor_ant->pos.x, anchor_ant->pos.y);
+                        // Authentic 1998 battle scuffle visual effect and SoundID::CombatNetFairy (ID 3)
+                        impl_->active_effects_.push_back(VisualEffect{"battle", anchor_ant->pixel_x, anchor_ant->pixel_y, 0, 10});
+                        impl_->audio_queue_.push_back(AudioEvent{SoundID::CombatNetFairy, anchor_ant->pixel_x, anchor_ant->pixel_y, 1, 255});
+                        bounce_unit_cascade(*impl_, *to_displace, col_x, col_y, true);
+                    } else {
+                        // Authentic friendly collision:
+                        // If one was pushed into another (or both moving), mutual bounce! Neither stands static.
+                        // If statically co-located on spawn with no push, only displace the excess ant.
+                        bool any_pushed = (a1->state == UnitState::Flinch || a1->state == UnitState::Knockback || (a1->state == UnitState::Bounce && a1->push_tick_current < a1->push_ticks_total) ||
+                                           a2->state == UnitState::Flinch || a2->state == UnitState::Knockback || (a2->state == UnitState::Bounce && a2->push_tick_current < a2->push_ticks_total));
+                        bounce_unit_cascade(*impl_, *to_displace, col_x, col_y, false);
+                        if (any_pushed) {
+                            bounce_unit_cascade(*impl_, *anchor_ant, col_x, col_y, false);
+                        }
+                    }
                 }
             }
         }
@@ -2986,7 +3012,7 @@ void SimulationEngine::issue_move_order(uint32_t ant_id, TileCoord dest, bool al
     // Reissuing a move order while traversing mud resets the struggle cycle and gives a micro-step
     bool on_mud_terrain = unit->is_on_mud ||
         (impl_->grid_.in_bounds(unit->pos) && (impl_->grid_.get_cell(unit->pos).is_mud || impl_->grid_.get_cell(unit->pos).surface_type == SurfaceType::Mud));
-    if (on_mud_terrain && unit->state == UnitState::Walking) {
+    if (unit->state == UnitState::Walking && unit->final_dest == dest && !unit->waypoints.empty() && on_mud_terrain) {
         unit->anim_tick = 0;
         unit->anim_subitem = 0;
         int32_t target_px = dest.x * 32 + 16;
@@ -3005,6 +3031,15 @@ void SimulationEngine::issue_move_order(uint32_t ant_id, TileCoord dest, bool al
         if (dy > 0) unit->fx_y += (3 << 16);
         else if (dy < 0) unit->fx_y -= (3 << 16);
         unit->sync_pixel_from_fx();
+        return;
+    } else if (unit->state == UnitState::Walking && !unit->waypoints.empty() && (unit->pos != dest || unit->final_dest != dest)) {
+        // Redirection mid-stride: cancel current step, snap to nearest tile center, reset stride anim
+        int32_t nearest_tx = std::clamp(unit->pixel_x / 32, 0, static_cast<int32_t>(impl_->grid_.width()) - 1);
+        int32_t nearest_ty = std::clamp(unit->pixel_y / 32, 0, static_cast<int32_t>(impl_->grid_.height()) - 1);
+        unit->set_tile_pos(nearest_tx, nearest_ty);
+        unit->pos = {nearest_tx, nearest_ty};
+        unit->anim_tick = 0;
+        unit->anim_subitem = 0;
     }
 
     bool is_swimmer = (unit->type == AntType::Swimmer);

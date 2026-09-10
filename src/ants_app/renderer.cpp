@@ -1390,7 +1390,7 @@ void Renderer::draw_ant_shadow(int32_t anchor_sx, int32_t anchor_sy, int32_t alt
     SDL_SetTextureAlphaMod(shadow_tex, 255);
 }
 
-void Renderer::draw_single_ant(const ants::sim::AntSnapshot& ant, bool is_selected, bool show_health_bar) {
+void Renderer::draw_single_ant(const ants::sim::AntSnapshot& ant, bool is_selected, bool show_health_bar, bool is_under_battle) {
     bool is_idle_thief_on_cap = (ant.type == ants::sim::AntType::Thief &&
                                  ant.is_underground &&
                                  ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::Idle));
@@ -1706,7 +1706,7 @@ void Renderer::draw_single_ant(const ants::sim::AntSnapshot& ant, bool is_select
     }
 
     // 3. Selection Indicator (Authentic 4-corner animated sprite brackets from ants.chd)
-    if (is_selected) {
+    if (is_selected && !is_under_battle) {
         bool drawn_ears = false;
         if (archive_ && texture_cache_) {
             uint32_t ears_id = 58;
@@ -1762,7 +1762,7 @@ void Renderer::draw_single_ant(const ants::sim::AntSnapshot& ant, bool is_select
     }
 
     // 4. Overhead Unit Health Bar (Damaged ants < 10 HP or selected ants always show; full health hides unless show_health_bar / Ctrl+L is active)
-    bool should_show_health = (is_selected || show_health_bar || (ant.hp < 10)) && ant.hp > 0 && !ant.is_drowning;
+    bool should_show_health = !is_under_battle && (is_selected || show_health_bar || (ant.hp < 10)) && ant.hp > 0 && !ant.is_drowning;
     if (should_show_health) {
         SDL_Rect bar_border = { sx - 13, render_y - 36, 26, 6 };
         SDL_SetRenderDrawColor(renderer_, 0, 0, 0, 255);
@@ -1880,10 +1880,24 @@ void Renderer::render_ant_units(const ants::sim::WorldState& world,
             is_sel = (a.id == static_cast<uint32_t>(selected_unit_id));
         }
 
+        bool is_under_battle = a.is_in_scuffle || (a.anim_state == static_cast<uint16_t>(ants::sim::UnitState::Bounce));
+        if (!is_under_battle) {
+            for (const auto& eff : world.effects) {
+                if (eff.anim_name == "battle") {
+                    int32_t edx = a.px - eff.px;
+                    int32_t edy = a.py - eff.py;
+                    if (edx * edx + edy * edy <= 32 * 32) {
+                        is_under_battle = true;
+                        break;
+                    }
+                }
+            }
+        }
+
         RenderItem item{};
         item.sort_y = a.py;
-        item.draw_func = [this, a, is_sel, show_all_health_bars](SDL_Renderer*, TextureCache&) {
-            this->draw_single_ant(a, is_sel, show_all_health_bars);
+        item.draw_func = [this, a, is_sel, show_all_health_bars, is_under_battle](SDL_Renderer*, TextureCache&) {
+            this->draw_single_ant(a, is_sel, show_all_health_bars, is_under_battle);
         };
         render_queue_.push_back(item);
     }

@@ -266,7 +266,7 @@ private:
     void render_ant_units(const ants::sim::WorldState& world, int32_t selected_unit_id, const std::vector<uint32_t>& selected_unit_ids = {}, bool show_all_health_bars = false);
     void render_tile_grid(const ants::sim::Grid& grid, int32_t mouse_x, int32_t mouse_y);
     void draw_ant_shadow(int32_t anchor_sx, int32_t anchor_sy, int32_t altitude_z);
-    void draw_single_ant(const ants::sim::AntSnapshot& ant, bool is_selected, bool show_health_bar = false);
+    void draw_single_ant(const ants::sim::AntSnapshot& ant, bool is_selected, bool show_health_bar = false, bool is_under_battle = false);
     void draw_anthill_selection_brackets(int32_t x, int32_t y, int32_t w = 128, int32_t h = 128);
 
 #ifdef ANTS_ENABLE_SDL_TTF

@@ -252,6 +252,8 @@ public:
         pixel_y = ty * 32 + 16;
         fx_x = pixel_x << 16;
         fx_y = pixel_y << 16;
+        push_start_px = pixel_x;
+        push_start_py = pixel_y;
     }
 
     void set_pixel_pos(int32_t px, int32_t py) noexcept {
