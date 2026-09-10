@@ -216,6 +216,7 @@ public:
     bool        transformation_interrupted{false};
     bool        on_powerup{false};
     TileCoord   dropped_powerup_pos{-1, -1};
+    uint16_t    invulnerable_ticks{0};
 
     AntUnit(uint32_t unit_id, TeamId team_in, AntType type_in, int32_t start_tx, int32_t start_ty);
 
@@ -233,6 +234,9 @@ public:
     }
     bool is_transforming() const noexcept {
         return transform_timer > 0;
+    }
+    bool is_invulnerable() const noexcept {
+        return invulnerable_ticks > 0;
     }
 
     void heal_full() noexcept {

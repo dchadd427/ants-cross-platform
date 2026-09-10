@@ -1393,7 +1393,28 @@ To deliver authentic 1:1 gameplay inside standard web browsers with zero install
   - News Flash Header: `[%ld:%02ld] News Flash` (binary string at VA `0x1047258`).
   - Teammate Chat Prefix: `%s (To Teammate):` (binary string at VA `0x1047428`).
 
-
-
-
-
+#### 18. Anthill 3-Vent Forbidden Ability Geometry, Occupied Bumping, Mud Animation Cancel & Power-Up Immunity (`Ants.exe` `0x101d8a4`, `0x101d762`, `0x101cad6`, `0x100ee03`)
+- **Anthill 3 Air Vent / Mound Ability Block (`0x0101d8a4` / `FUN_0101d8a4`)**:
+  - In `Ants.exe.c` lines 21238–21251, `FUN_0101d8a4` explicitly checks whether a targeted grid cell matches any of the 3 air vent coordinates on the anthill mound:
+    - Top vent: `(bx - 2, by - 1)` (`+0x36`, `+0x38`)
+    - Mid vent: `(bx - 2, by)` (`+0x3a`, `+0x3c`)
+    - Bottom vent: `(bx - 2, by + 1)` (`+0x3e`, `+0x40`)
+  - In `FUN_0101d762` lines 21160–21175, ability placement orders (Bomber planting landmines, Fire Ant placing firewall) invoke `FUN_0101d822` (calling `FUN_0101d858`), which rejects placement on these 3 vent tiles, the base origin `(bx, by)`, and the entrance hole.
+  - Additionally, `FUN_0101d762` line 21163 invokes `FUN_0100cf0f`, strictly rejecting bomb and fire placement on **any tile occupied by a living ant**.
+- **Anthill Coordinate Struct Layout (`Ants.exe.c` lines 9670–9690 / `0x0100ee03`–`0x0100ee25`)**:
+  - `+0x2e`, `+0x30`: Anthill base origin `(bx, by)`
+  - `+0x32`, `+0x34`: Anthill entrance hole `(bx + 1, by + 1)`
+  - `+0x36`, `+0x38`: Mound top vent `(bx - 2, by - 1)`
+  - `+0x3a`, `+0x3c`: Mound mid vent `(bx - 2, by)`
+  - `+0x3e`, `+0x40`: Mound bottom vent `(bx - 2, by + 1)`
+  - `+0x42`, `+0x44`: Subterranean exit / idle anchor `(bx + 3, by + 3)` (emerging ants step off 4×4 mound onto ground at `bx + 4, by + 4`)
+  - `+0x46`, `+0x48`: Base queue approach anchor `(bx + 2, by - 2)`
+- **Occupied Destination Bump Reaction (`0x0101cad6`–`0x0101cb05`)**:
+  - When an ant navigates towards a destination that has become occupied by another ant, `0x101cae3` pushes `0xdc` (220 = Animation `bump`), calls `0x10100e5`, triggers `SoundID::Bump` (Sound 47, `bump.wav`), and clears waypoints.
+  - The arriving ant stops cleanly on the adjacent available tile without displacing the occupant or becoming stuck in infinite pathing loops.
+- **Mud Animation Cancel / "Mud Humping" Locomotion**:
+  - Traversing mud naturally runs a struggle animation cycle at ~0.65× speed.
+  - Rapid manual single-tile clicks across mud cancel the struggle animation cycle (`anim_tick = 0, anim_subitem = 0`) and grant an immediate 3.0 px forward micro-propulsion step (`3 << 16`) along the heading towards the destination, allowing experienced players to cross mud significantly faster.
+- **Power-Up Standing Immunity**:
+  - When an ant stands on top of an uncollected or dropped power-up, it is 100% immune to incoming melee attacks (all melee attack orders against it are rejected, and `take_damage` with melee sources deals 0 damage).
+  - Standing ants on power-ups are strictly excluded from displacement during same-tile collision resolution and cannot be bounced by `bounce_unit_cascade`.

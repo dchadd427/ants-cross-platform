@@ -20,7 +20,7 @@ AntUnit::AntUnit(uint32_t unit_id, TeamId team_in, AntType type_in, int32_t star
 }
 
 bool AntUnit::take_damage(uint16_t amount, DamageSource source, [[maybe_unused]] uint32_t attacker_id) noexcept {
-    if (death_status != DeathStatus::Alive || hp == 0) {
+    if (death_status != DeathStatus::Alive || hp == 0 || is_invulnerable()) {
         return false;
     }
 
@@ -217,6 +217,10 @@ void AntUnit::tick_movement(bool is_swimming, SurfaceType surface) {
 }
 
 void AntUnit::tick_timers() noexcept {
+    if (invulnerable_ticks > 0) {
+        invulnerable_ticks--;
+    }
+
     if (transform_timer > 0) {
         transform_timer--;
     }

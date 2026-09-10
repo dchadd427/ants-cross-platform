@@ -377,6 +377,7 @@ public:
 
     bool has_bomb_at(TileCoord pos) const;
     bool has_fire_at(TileCoord pos) const;
+    bool has_living_ant_at(TileCoord pos) const;
     uint32_t get_fire_timer(TileCoord pos) const;
     void set_fire_at(TileCoord pos, uint32_t timer_ticks);
 

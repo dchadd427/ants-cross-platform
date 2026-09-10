@@ -6871,10 +6871,10 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
 
     TEST_CASE("12.108: Version Invariant & Fog of War Cursor Concealment Parity") {
         // 1. Verify semantic versioning components
-        ASSERT_EQ(ants::VERSION_STRING, "v0.0.1");
+        ASSERT_EQ(ants::VERSION_STRING, "v0.0.2");
         ASSERT_EQ(ants::VERSION_MAJOR, 0);
         ASSERT_EQ(ants::VERSION_MINOR, 0);
-        ASSERT_EQ(ants::VERSION_PATCH, 1);
+        ASSERT_EQ(ants::VERSION_PATCH, 2);
 
         // 2. Setup simulation world with Fog of War enabled
         SimulationEngine sim;
@@ -6937,6 +6937,275 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         const auto& ws_no_fog = sim.get_world_state();
         CursorType cur_revealed = hud.evaluate_cursor(enemy_screen_x, enemy_screen_y, ws_no_fog, sim.grid(), cam);
         ASSERT_EQ(static_cast<int>(cur_revealed), static_cast<int>(CursorType::Attack));
+    } TEST_END();
+
+    // ------------------------------------------------------------------------
+    // 12.109: Mud Animation Cancel ("Mud Humping") Speedup vs Passive Walking
+    // ------------------------------------------------------------------------
+    TEST_CASE("12.109 Mud Animation Cancel (\"Mud Humping\") Speedup vs Passive Walking") {
+        SimulationEngine sim;
+        sim.init_test_world(60, 60, 100, 60000);
+
+        // Mud terrain corridors on row 10 and row 14 from col 10 to 25
+        for (int x = 10; x <= 25; ++x) {
+            sim.grid_mut().get_cell_mut(TileCoord{x, 10}).surface_type = SurfaceType::Mud;
+            sim.grid_mut().get_cell_mut(TileCoord{x, 10}).is_mud = true;
+            sim.grid_mut().get_cell_mut(TileCoord{x, 14}).surface_type = SurfaceType::Mud;
+            sim.grid_mut().get_cell_mut(TileCoord{x, 14}).is_mud = true;
+        }
+
+        uint32_t w_passive = sim.spawn_unit(0, AntType::Worker, TileCoord{10, 10});
+        uint32_t w_cancel = sim.spawn_unit(0, AntType::Worker, TileCoord{10, 14});
+
+        sim.issue_move_order(w_passive, TileCoord{20, 10});
+        sim.issue_move_order(w_cancel, TileCoord{20, 14});
+
+        int ticks_passive = 0;
+        int ticks_cancel = 0;
+
+        for (int t = 1; t <= 300; ++t) {
+            // Player rapidly clicking ahead across the mud (anim cancelling and micro-stepping)
+            if (sim.get_unit(w_cancel).state == UnitState::Walking && t % 2 == 0) {
+                sim.issue_move_order(w_cancel, TileCoord{20, 14});
+                ASSERT_EQ(sim.get_unit(w_cancel).anim_tick, 0);
+            }
+
+            sim.tick();
+
+            if (ticks_passive == 0 && sim.get_unit(w_passive).pos == TileCoord{20, 10} &&
+                sim.get_unit(w_passive).state != UnitState::Walking) {
+                ticks_passive = t;
+            }
+            if (ticks_cancel == 0 && sim.get_unit(w_cancel).pos == TileCoord{20, 14} &&
+                sim.get_unit(w_cancel).state != UnitState::Walking) {
+                ticks_cancel = t;
+            }
+
+            if (ticks_passive > 0 && ticks_cancel > 0) break;
+        }
+
+        ASSERT_TRUE(ticks_passive > 0);
+        ASSERT_TRUE(ticks_cancel > 0);
+        // Mud humping completes significantly faster than passive walking across mud
+        ASSERT_TRUE(ticks_cancel < ticks_passive);
+    } TEST_END();
+
+    // ------------------------------------------------------------------------
+    // 12.110: Power-Up Standing Immunity to Bounce and Melee Attacks
+    // ------------------------------------------------------------------------
+    TEST_CASE("12.110 Power-Up Standing Immunity to Bounce and Melee Attacks") {
+        SimulationEngine sim;
+        sim.init_test_world(60, 60, 100, 60000);
+
+        // Place Bomber power-up at (15, 15)
+        sim.grid_mut().place_powerup(15, 15, static_cast<uint8_t>(AntType::Bomber));
+
+        // Friendly ant spawned directly on the power-up tile
+        uint32_t standing_ant = sim.spawn_unit(0, AntType::Worker, TileCoord{15, 15});
+        sim.tick(); // updates on_powerup flag and starts transformation
+        sim.interrupt_transformation(standing_ant);
+        ASSERT_TRUE(sim.get_unit(standing_ant).on_powerup);
+
+        // Second friendly ant moves into (15, 15) to trigger collision resolution
+        uint32_t incoming_ant = sim.spawn_unit(0, AntType::Worker, TileCoord{16, 15});
+        sim.issue_move_order(incoming_ant, TileCoord{15, 15});
+
+        for (int t = 0; t < 25; ++t) {
+            sim.tick();
+        }
+
+        // Standing ant on power-up must NEVER be displaced or bounced off
+        ASSERT_EQ(sim.get_unit(standing_ant).pos, (TileCoord{15, 15}));
+        ASSERT_NE(sim.get_unit(standing_ant).state, UnitState::Bounce);
+
+        // Enemy Combat ant attempts melee attack against ant on powerup
+        uint32_t enemy_combat = sim.spawn_unit(1, AntType::Combat, TileCoord{15, 16});
+        uint16_t hp_before = sim.get_unit(standing_ant).hp;
+        sim.execute_melee_attack(enemy_combat, standing_ant);
+        sim.tick();
+
+        // Standing ant is completely immune to melee attack
+        ASSERT_EQ(sim.get_unit(standing_ant).hp, hp_before);
+        ASSERT_FALSE(sim.get_unit(standing_ant).take_damage(2, DamageSource::CombatPunch, enemy_combat));
+        ASSERT_FALSE(sim.get_unit(standing_ant).take_damage(1, DamageSource::MeleeStandard, enemy_combat));
+        ASSERT_EQ(sim.get_unit(standing_ant).hp, hp_before);
+    } TEST_END();
+
+    // ------------------------------------------------------------------------
+    // 12.111: Occupied Destination Bumping (SoundID::Bump and Stopping Cleanly)
+    // ------------------------------------------------------------------------
+    TEST_CASE("12.111 Occupied Destination Bumping (SoundID::Bump and Stopping Cleanly)") {
+        SimulationEngine sim;
+        sim.init_test_world(60, 60, 100, 60000);
+
+        // Moving ant approaches towards destination (15, 15)
+        uint32_t mover = sim.spawn_unit(0, AntType::Worker, TileCoord{12, 15});
+        sim.issue_move_order(mover, TileCoord{15, 15});
+
+        // Later, blocker occupies destination (15, 15)
+        uint32_t blocker = sim.spawn_unit(0, AntType::Worker, TileCoord{15, 15});
+        sim.get_unit(blocker).state = UnitState::Idle;
+
+        bool bumped = false;
+        for (int t = 0; t < 60; ++t) {
+            sim.tick();
+            if (sim.has_audio_event(SoundID::Bump)) {
+                bumped = true;
+            }
+            if (sim.get_unit(mover).state == UnitState::Idle && sim.get_unit(mover).pos != TileCoord{12, 15}) {
+                break;
+            }
+        }
+
+        // Mover must stop at adjacent tile (distance 1 from occupied destination) and play Bump sound
+        ASSERT_TRUE(bumped);
+        ASSERT_EQ(sim.get_unit(mover).state, UnitState::Idle);
+        ASSERT_TRUE(sim.get_unit(mover).pos.chebyshev_dist(TileCoord{15, 15}) == 1);
+        ASSERT_EQ(sim.get_unit(mover).final_dest, sim.get_unit(mover).pos);
+    } TEST_END();
+
+    // ------------------------------------------------------------------------
+    // 12.112: Anthill 3-Tile Ability Block and Occupied Tile Ability Block
+    // ------------------------------------------------------------------------
+    TEST_CASE("12.112 Anthill 3-Tile Ability Block and Occupied Tile Ability Block") {
+        SimulationEngine sim;
+        sim.init_test_world(60, 60, 100, 60000);
+        sim.grid_mut().set_anthill(0, TileCoord{20, 20});
+        const auto* ah = sim.grid().find_anthill(0);
+        ASSERT_TRUE(ah != nullptr);
+        int32_t bx = ah->x;
+        int32_t by = ah->y;
+
+        // 1. The authentic 3 air vent / mound tiles: (bx - 2, by - 1), (bx - 2, by), (bx - 2, by + 1)
+        for (int dy = -1; dy <= 1; ++dy) {
+            TileCoord vent{bx - 2, by + dy};
+            ASSERT_TRUE(sim.grid().is_anthill_reserved_spot(vent));
+
+            // Bomber ant adjacent to vent cannot plant bomb on vent
+            uint32_t bomber = sim.spawn_unit(0, AntType::Bomber, TileCoord{vent.x - 1, vent.y});
+            ASSERT_FALSE(sim.plant_bomb(bomber, vent));
+            ASSERT_FALSE(sim.plant_bomb(bomber, vent, false));
+
+            // Fire ant adjacent to vent cannot ignite fire on vent
+            uint32_t fire_ant = sim.spawn_unit(0, AntType::Fire, TileCoord{vent.x - 1, vent.y});
+            ASSERT_FALSE(sim.ignite_fire(fire_ant, vent));
+            ASSERT_FALSE(sim.ignite_fire(fire_ant, vent, false));
+        }
+
+        // 2. Tile occupied by any living ant cannot have a bomb or fire planted on it
+        TileCoord occ{30, 30};
+        uint32_t occupant = sim.spawn_unit(0, AntType::Worker, occ);
+        sim.tick();
+        ASSERT_TRUE(sim.has_living_ant_at(occ));
+
+        uint32_t b2 = sim.spawn_unit(0, AntType::Bomber, TileCoord{29, 30});
+        ASSERT_FALSE(sim.plant_bomb(b2, occ));
+        ASSERT_FALSE(sim.plant_bomb(b2, occ, false));
+
+        uint32_t f2 = sim.spawn_unit(0, AntType::Fire, TileCoord{29, 30});
+        ASSERT_FALSE(sim.ignite_fire(f2, occ));
+        ASSERT_FALSE(sim.ignite_fire(f2, occ, false));
+        (void)occupant;
+    } TEST_END();
+
+    // ------------------------------------------------------------------------
+    // 12.113: Base Queue Mound Ramp Concurrency Limit (Max 2 Ants)
+    // ------------------------------------------------------------------------
+    TEST_CASE("12.113 Base Queue Mound Ramp Concurrency Limit (Max 2 Ants)") {
+        SimulationEngine sim;
+        sim.init_test_world(60, 60, 100, 60000);
+        sim.grid_mut().set_anthill(0, TileCoord{20, 20});
+        const auto* ah = sim.grid().find_anthill(0);
+        ASSERT_TRUE(ah != nullptr);
+        int32_t bx = ah->x;
+        int32_t by = ah->y;
+
+        // Place 2 friendly ants on mound ramp: (bx + 1, by) and (bx + 1, by + 1)
+        uint32_t ramp1 = sim.spawn_unit(0, AntType::Worker, TileCoord{bx + 1, by});
+        uint32_t ramp2 = sim.spawn_unit(0, AntType::Worker, TileCoord{bx + 1, by + 1});
+        (void)ramp1;
+        (void)ramp2;
+
+        // 3rd ant arrives with food and joins base queue
+        uint32_t q_ant = sim.spawn_unit(0, AntType::Worker, TileCoord{bx - 1, by + 3});
+        sim.get_unit(q_ant).pick_up_food(1, 25);
+        sim.join_base_queue(q_ant);
+
+        // Tick simulation: q_ant must NOT be dispatched onto ramp while 2 ants occupy mound
+        sim.tick();
+        ASSERT_EQ(sim.get_active_depositing_ant(0), 0u);
+
+        // Move one ramp ant away off the mound
+        sim.get_unit(ramp1).set_tile_pos(bx + 4, by + 4);
+        sim.tick();
+
+        // Now with < 2 ants on mound, queue dispatches next ant!
+        sim.dispatch_next_base_queue(0);
+        ASSERT_EQ(sim.get_active_depositing_ant(0), q_ant);
+    } TEST_END();
+
+    // ------------------------------------------------------------------------
+    // 12.114: Water Melee Combat Isolation and Emergence Invulnerability
+    // ------------------------------------------------------------------------
+    TEST_CASE("12.114 Water Melee Combat Isolation and Emergence Invulnerability") {
+        SimulationEngine sim;
+        sim.init_test_world(60, 60, 100, 60000);
+
+        // Part A: Emergence Invulnerability (40 ticks)
+        sim.grid_mut().set_anthill(0, TileCoord{20, 20});
+        uint32_t baby = sim.spawn_unit(0, AntType::Worker, TileCoord{21, 21});
+        sim.get_unit(baby).is_newborn = true;
+        sim.get_unit(baby).underground = true;
+        sim.get_unit(baby).state = UnitState::EnteringBase;
+        sim.get_unit(baby).state_timer = 1;
+
+        // Tick until newborn emerges onto surface
+        for (int t = 0; t < 5; ++t) {
+            sim.tick();
+            if (!sim.get_unit(baby).underground) break;
+        }
+
+        ASSERT_FALSE(sim.get_unit(baby).underground);
+        ASSERT_TRUE(sim.get_unit(baby).is_invulnerable());
+        ASSERT_EQ(sim.get_unit(baby).invulnerable_ticks, 40);
+
+        // Enemy Combat ant tries to attack newborn right after surfacing
+        uint32_t enemy = sim.spawn_unit(1, AntType::Combat, TileCoord{21, 22});
+        uint16_t baby_hp = sim.get_unit(baby).hp;
+        sim.execute_melee_attack(enemy, baby);
+        ASSERT_EQ(sim.get_unit(baby).hp, baby_hp);
+
+        // Direct damage also rejected while invulnerable
+        ASSERT_FALSE(sim.get_unit(baby).take_damage(2, DamageSource::CombatPunch, enemy));
+        ASSERT_EQ(sim.get_unit(baby).hp, baby_hp);
+
+        // Tick until baby emerges completely to Idle
+        for (int t = 0; t < 30; ++t) {
+            sim.tick();
+            if (sim.get_unit(baby).state == UnitState::Idle) break;
+        }
+        ASSERT_TRUE(sim.get_unit(baby).is_invulnerable());
+
+        // Tick down the 40 ticks
+        for (int t = 0; t < 40; ++t) {
+            sim.tick();
+        }
+        ASSERT_FALSE(sim.get_unit(baby).is_invulnerable());
+        ASSERT_EQ(sim.get_unit(baby).invulnerable_ticks, 0);
+
+        // Part B: Water Melee Combat Isolation
+        sim.grid_mut().set_terrain(10, 10, TERRAIN_WATER);
+        uint32_t swimmer = sim.spawn_unit(0, AntType::Swimmer, TileCoord{10, 10});
+        sim.get_unit(swimmer).in_water = true;
+        uint32_t land_ant = sim.spawn_unit(1, AntType::Combat, TileCoord{10, 11});
+
+        // Land ant cannot melee attack water ant
+        sim.execute_melee_attack(land_ant, swimmer);
+        ASSERT_NE(sim.get_unit(land_ant).state, UnitState::Attacking);
+
+        // Water ant cannot melee attack land ant
+        sim.execute_melee_attack(swimmer, land_ant);
+        ASSERT_NE(sim.get_unit(swimmer).state, UnitState::Attacking);
     } TEST_END();
 }
 
