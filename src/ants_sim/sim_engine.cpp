@@ -337,7 +337,8 @@ void SimulationEngine::init(const ants::assets::LevelData& level, uint32_t rando
         if (wp.flag == 1) {
             SimulationEngineImpl::FlowerDropper fd;
             fd.pos = TileCoord{static_cast<int32_t>(wp.x), static_cast<int32_t>(wp.y)};
-            fd.drop_pos = fd.pos;
+            // Authentic 1998 placement: power-up drops to the open ground tile directly in front of the plant base (y + 1)
+            fd.drop_pos = TileCoord{fd.pos.x, fd.pos.y + 1};
             fd.interval_ticks = (wp.param > 0 ? wp.param : 30) * 20;
             fd.timer_ticks = fd.interval_ticks;
             fd.is_dropping = false;
@@ -351,7 +352,7 @@ void SimulationEngine::init(const ants::assets::LevelData& level, uint32_t rando
         // Fallback for SMALL.LVL if waypoints were absent
         SimulationEngineImpl::FlowerDropper fd1;
         fd1.pos = TileCoord{2, 19};
-        fd1.drop_pos = fd1.pos;
+        fd1.drop_pos = TileCoord{2, 20};
         fd1.interval_ticks = 300;
         fd1.timer_ticks = 300;
         fd1.probabilities = {0.45, 0.0, 0.0, 0.1, 0.45};
@@ -359,7 +360,7 @@ void SimulationEngine::init(const ants::assets::LevelData& level, uint32_t rando
 
         SimulationEngineImpl::FlowerDropper fd2;
         fd2.pos = TileCoord{37, 19};
-        fd2.drop_pos = fd2.pos;
+        fd2.drop_pos = TileCoord{37, 20};
         fd2.interval_ticks = 300;
         fd2.timer_ticks = 300;
         fd2.probabilities = {0.45, 0.0, 0.0, 0.1, 0.45};

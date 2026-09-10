@@ -952,16 +952,27 @@ void Renderer::render_terrain_layer2_structures(const ants::sim::Grid& grid) {
 
             // 5. Power-up Potions on Ground
             if (cell.has_powerup()) {
+                const char* anim_name = nullptr;
                 const char* pu_name = nullptr;
                 switch (cell.powerup_type) {
-                    case 1: pu_name = "pubomb.bmp"; break;
-                    case 2: pu_name = "pufire.bmp"; break;
-                    case 3: pu_name = "puthief01.bmp"; break;
-                    case 4: pu_name = "pucomb.bmp"; break;
-                    case 5: pu_name = "puswim01.bmp"; break;
+                    case 1: anim_name = "pu_bomb"; pu_name = "pubomb.bmp"; break;
+                    case 2: anim_name = "pu_mason"; pu_name = "pufire.bmp"; break;
+                    case 3: anim_name = "pu_thief"; pu_name = "puthief01.bmp"; break;
+                    case 4: anim_name = "pu_comb"; pu_name = "pucomb.bmp"; break;
+                    case 5: anim_name = "pu_swim"; pu_name = "puswim01.bmp"; break;
                     default: break;
                 }
-                if (pu_name) {
+                const auto* anim = anim_name ? archive_->find_animation(anim_name) : nullptr;
+                if (anim && !anim->subitems.empty() && !anim->subitems[0].frames.empty()) {
+                    const auto& f = anim->subitems[0].frames[0];
+                    SDL_Texture* tex = texture_cache_->get_sprite_texture(f.sprite_index);
+                    if (tex) {
+                        const auto& sp = archive_->get_sprite(f.sprite_index);
+                        SDL_Rect pu_dst = { sx + f.dx, sy + f.dy, static_cast<int>(sp.width), static_cast<int>(sp.height) };
+                        SDL_RenderCopy(renderer_, tex, nullptr, &pu_dst);
+                        continue;
+                    }
+                } else if (pu_name) {
                     SDL_Texture* tex = texture_cache_->get_named_sprite_texture(pu_name);
                     if (tex) {
                         int pw = 24, ph = 24;
@@ -1086,7 +1097,7 @@ void Renderer::render_flower_droppers(const ants::sim::WorldState& world) {
         // Render falling powerup droplet if dropping (flower plant itself is rendered as Layer 3 canopy decor)
         if (fd.is_dropping) {
             int32_t drop_sx = 0, drop_sy = 0;
-            if (camera_.world_to_screen(fd.drop_x * TILE_SIZE + 16, fd.drop_y * TILE_SIZE + 16, drop_sx, drop_sy)) {
+            if (camera_.world_to_screen(fd.drop_x * TILE_SIZE, fd.drop_y * TILE_SIZE, drop_sx, drop_sy)) {
                 const char* anim_name = "FD_COMB";
                 switch (fd.powerup_type) {
                     case 0: anim_name = "FD_BOMB"; break;
