@@ -92,6 +92,8 @@ void HUD::init(uint8_t local_player_id) {
     yes_button_ = {184, 264, 49, 24, 0, 0, 0, false, true, false};
     no_button_  = {296, 264, 49, 24, 0, 0, 0, false, true, false};
 
+    show_match_start_modal_ = false;
+    match_start_modal_ticks_ = 0;
     show_quit_dialog_ = false;
     show_quick_help_ = false;
     show_options_ = false;
@@ -159,6 +161,14 @@ void HUD::set_active_order_mode(sim::OrderType mode) noexcept {
 }
 
 void HUD::update(const sim::WorldState& world, uint32_t delta_ticks) {
+    // 0. Match Start Modal Countdown (6.0s / 120 ticks at 20Hz)
+    if (show_match_start_modal_) {
+        match_start_modal_ticks_ += delta_ticks;
+        if (match_start_modal_ticks_ >= MATCH_START_MODAL_DURATION_TICKS) {
+            show_match_start_modal_ = false;
+        }
+    }
+
     // 1. Update news banner FIFO queue
     if (!news_queue_.empty()) {
         if (news_queue_.front().remaining_ticks <= delta_ticks) {
@@ -540,6 +550,8 @@ void HUD::render(IRenderer& renderer, const assets::AssetArchive& assets,
         render_options_dialog(renderer, assets);
     } else if (show_quit_dialog_) {
         render_quit_dialog(renderer, assets);
+    } else if (show_match_start_modal_) {
+        render_match_start_modal(renderer, assets);
     }
 }
 
@@ -959,6 +971,61 @@ void HUD::render_quit_dialog(IRenderer& renderer, const assets::AssetArchive& as
     renderer.draw_named_sprite(no_spr, no_button_.x, no_button_.y);
 }
 
+void HUD::render_match_start_modal(IRenderer& renderer, const assets::AssetArchive&) {
+    using assets::ColorRGBA;
+
+    // Centered in playfield (PLAYFIELD_X = 17, PLAYFIELD_Y = 22, PLAYFIELD_WIDTH = 441, PLAYFIELD_HEIGHT = 439)
+    const int32_t mw = 300;
+    const int32_t mh = 220;
+    const int32_t mx = PLAYFIELD_X + (PLAYFIELD_WIDTH - mw) / 2;
+    const int32_t my = PLAYFIELD_Y + (PLAYFIELD_HEIGHT - mh) / 2;
+
+    // Authentic dialog background fill (#DB4B13) and borders
+    renderer.fill_rect(mx, my, mw, mh, ColorRGBA{219, 75, 19, 255});
+
+    // Outer dark outline
+    renderer.draw_rect(mx, my, mw, mh, ColorRGBA{36, 82, 77, 255});
+
+    // 2px top & left light highlight
+    renderer.fill_rect(mx + 1, my + 1, mw - 2, 2, ColorRGBA{193, 207, 192, 255});
+    renderer.fill_rect(mx + 1, my + 1, 2, mh - 2, ColorRGBA{193, 207, 192, 255});
+
+    // 2px bottom & right dark shadow
+    renderer.fill_rect(mx + 1, my + mh - 3, mw - 2, 2, ColorRGBA{30, 60, 50, 255});
+    renderer.fill_rect(mx + mw - 3, my + 1, 2, mh - 2, ColorRGBA{30, 60, 50, 255});
+
+    // Authentic dark text color
+    const ColorRGBA text_color{27, 41, 30, 255};
+
+    // Header 1: "Get ready to play!"
+    const std::string h1 = "Get ready to play!";
+    int32_t w1 = renderer.get_text_width(h1, FontSize::Large);
+    renderer.draw_text(h1, mx + (mw - w1) / 2, my + 18, text_color, FontSize::Large);
+
+    // Header 2: "You are the [Color]"
+    static const char* TEAM_NAMES[4] = {"Green", "Red", "Blue", "Black"};
+    std::string h2 = "You are the " + std::string(TEAM_NAMES[local_player_id_ % 4]);
+    int32_t w2 = renderer.get_text_width(h2, FontSize::Large);
+    renderer.draw_text(h2, mx + (mw - w2) / 2, my + 44, text_color, FontSize::Large);
+
+    // Header 3: "Ants."
+    const std::string h3 = "Ants.";
+    int32_t w3 = renderer.get_text_width(h3, FontSize::Large);
+    renderer.draw_text(h3, mx + (mw - w3) / 2, my + 70, text_color, FontSize::Large);
+
+    // Centered Local Team Worker Ant Sprite facing South
+    int32_t ax = mx + (mw - 32) / 2;
+    int32_t ay = my + 104;
+    renderer.set_hud_team(local_player_id_);
+    renderer.draw_named_sprite("agst301.bmp", ax, ay);
+    renderer.set_hud_team(0);
+
+    // Footer: "Waiting for others..."
+    const std::string footer = "Waiting for others...";
+    int32_t wf = renderer.get_text_width(footer, FontSize::Medium);
+    renderer.draw_text(footer, mx + (mw - wf) / 2, my + 172, text_color, FontSize::Medium);
+}
+
 void HUD::render_quick_help(IRenderer& renderer, const assets::AssetArchive&) {
     using assets::ColorRGBA;
 
@@ -1296,6 +1363,9 @@ bool HUD::handle_mouse_down(int32_t x, int32_t y, uint8_t button,
             }
         }
         return true;
+    }
+    if (show_match_start_modal_) {
+        return true; // Consume all clicks while match start modal is open
     }
     if (show_quit_dialog_) {
         if (button == SDL_BUTTON_LEFT) {
@@ -1674,6 +1744,10 @@ bool HUD::handle_mouse_up(int32_t x, int32_t y, uint8_t button,
         return true;
     }
 
+    if (show_match_start_modal_) {
+        return true;
+    }
+
     if (show_quit_dialog_) {
         if (yes_button_.is_pressed) {
             yes_button_.is_pressed = false;
@@ -1972,6 +2046,11 @@ bool HUD::handle_mouse_motion(int32_t x, int32_t y,
 }
 
 bool HUD::handle_key_down(int32_t key, sim::SimulationEngine& sim, ViewportCamera& camera, uint16_t mod) {
+    // 0. Match Start Modal captures/blocks all keyboard events
+    if (show_match_start_modal_) {
+        return true;
+    }
+
     // 1. Modals capture keyboard events
     if (show_quit_dialog_) {
         if (key == 'y' || key == 'Y' || key == SDLK_RETURN || key == SDLK_KP_ENTER) {
@@ -2971,7 +3050,7 @@ CursorType HUD::evaluate_cursor(int32_t screen_x, int32_t screen_y,
                                const sim::Grid& grid,
                                const ViewportCamera& camera) const {
     // 0. Overlays and Modals: Normal cursor
-    if (show_options_ || show_quit_dialog_ || show_quick_help_) {
+    if (show_match_start_modal_ || show_options_ || show_quit_dialog_ || show_quick_help_) {
         current_cursor_ = CursorType::Normal;
         return current_cursor_;
     }

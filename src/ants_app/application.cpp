@@ -353,6 +353,7 @@ bool Application::start_game(const std::string& map_path) {
     // 5. Reset HUD & Scorecard
     hud_.init(local_player_id_);
     hud_.reset();
+    hud_.start_match_modal();
     scorecard_.hide();
 
     // Reset simulated cursor to middle of screen until actually seen moving

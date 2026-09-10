@@ -242,6 +242,10 @@ public:
     int get_active_quick_chat_edit() const noexcept { return active_quick_chat_edit_; }
     void set_active_quick_chat_edit(int idx) noexcept { active_quick_chat_edit_ = idx; }
 
+    bool is_match_start_modal_active() const noexcept { return show_match_start_modal_; }
+    void start_match_modal() noexcept { show_match_start_modal_ = true; match_start_modal_ticks_ = 0; }
+    void dismiss_match_start_modal() noexcept { show_match_start_modal_ = false; }
+
 private:
     void render_top_bar(IRenderer& renderer, const assets::AssetArchive& assets, const sim::WorldState& world);
     void render_radar(IRenderer& renderer, const assets::AssetArchive& assets, const sim::WorldState& world, const ViewportCamera& camera);
@@ -252,6 +256,7 @@ private:
     void render_quit_dialog(IRenderer& renderer, const assets::AssetArchive& assets);
     void render_quick_help(IRenderer& renderer, const assets::AssetArchive& assets);
     void render_options_dialog(IRenderer& renderer, const assets::AssetArchive& assets);
+    void render_match_start_modal(IRenderer& renderer, const assets::AssetArchive& assets);
     void render_marquee_box(IRenderer& renderer);
 
     void update_action_buttons_state(const sim::WorldState& world);
@@ -311,6 +316,10 @@ private:
     UIButton quit_button_{};
 
     // Dialog & Modal State
+    bool show_match_start_modal_{false};
+    uint32_t match_start_modal_ticks_{0};
+    static constexpr uint32_t MATCH_START_MODAL_DURATION_TICKS = 120; // 6.0s at 20Hz
+
     bool show_quit_dialog_{false};
     UIButton yes_button_{};
     UIButton no_button_{};
