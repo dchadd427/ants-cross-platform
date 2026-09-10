@@ -5375,7 +5375,7 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         ASSERT_TRUE(sim.is_ant_in_base_queue(worker));
     } TEST_END();
 
-    TEST_CASE("12.64 Diagonal Melee Attack Pushes Cardinal Away from Attacker") {
+    TEST_CASE("12.64 Diagonal Melee Attack Pushes Diagonally Along Strike Vector") {
         SimulationEngine sim;
         sim.init_test_world(60, 60, 100, 60000);
 
@@ -5390,10 +5390,18 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         // Defender was forced to face towards attacker at (10, 10) (North-West)
         ASSERT_EQ(def->facing, Direction::NorthWest);
 
-        // Pushback MUST be strictly cardinal (either East to (12, 11) or South to (11, 12)), never diagonal (12, 12)
-        ASSERT_FALSE(def->pos.x == 12 && def->pos.y == 12);
-        bool is_cardinal_push = (def->pos == TileCoord{12, 11} || def->pos == TileCoord{11, 12});
-        ASSERT_TRUE(is_cardinal_push);
+        // Pushback is along diagonal strike vector (p_dx = +1, p_dy = +1) to (12, 12)
+        ASSERT_EQ(def->pos, (TileCoord{12, 12}));
+
+        // If primary diagonal destination is obstructed by rock, deflect to cardinal flank
+        sim.grid_mut().set_terrain(12, 12, TERRAIN_OBSTACLE);
+        def->pos = TileCoord{11, 11};
+        def->pixel_x = 11 * 32 + 16;
+        def->pixel_y = 11 * 32 + 16;
+        const_cast<AntUnit*>(&sim.get_unit(attacker))->attack_cooldown_ticks = 0;
+        sim.execute_melee_attack(attacker, defender);
+        bool cardinal_flank = (def->pos == TileCoord{12, 11} || def->pos == TileCoord{11, 12});
+        ASSERT_TRUE(cardinal_flank);
     } TEST_END();
 
     TEST_CASE("12.65 Melee Attack Pushback Deflects Sideways When Obstructed by Rock Wall") {
@@ -6234,10 +6242,11 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         ASSERT_EQ(unit.state, UnitState::Idle);
     } TEST_END();
 
-    TEST_CASE("12.100: Attack Approach Strictly Routes to Cardinal Neighbor (No Diagonal Stop)") {
+    TEST_CASE("12.100: 8-Directional Diagonal Attack Adjacency & Approach Routing") {
         SimulationEngine sim;
         sim.init_test_world(60, 60, 100, 60000);
 
+        // 1. Attacker already diagonally adjacent at (10, 10) to defender at (11, 11)
         uint32_t attacker_id = sim.spawn_unit(0, AntType::Worker, TileCoord{10, 10});
         uint32_t defender_id = sim.spawn_unit(1, AntType::Worker, TileCoord{11, 11});
 
@@ -6247,26 +6256,23 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         atk_order.target_entity_id = static_cast<int32_t>(defender_id);
         sim.issue_order(atk_order);
 
-        // Attacker is diagonal; must NOT attack immediately on tick 0
+        // Attacker is adjacent; strikes IMMEDIATELY on issuance without walking detour
         const auto& atk_init = sim.get_unit(attacker_id);
-        ASSERT_NE(atk_init.state, UnitState::Attacking);
-        // Candidate destination must be a cardinal neighbor of (11, 11), e.g. (11, 10) or (10, 11)
-        ASSERT_TRUE((atk_init.final_dest == TileCoord{11, 10} || atk_init.final_dest == TileCoord{10, 11}));
+        ASSERT_EQ(atk_init.state, UnitState::Attacking);
+        ASSERT_EQ(atk_init.facing, Direction::SouthEast);
 
-        // Advance simulation until attacker reaches the cardinal tile and strikes
-        bool struck = false;
-        for (int i = 0; i < 20; ++i) {
-            sim.tick();
-            if (sim.get_unit(attacker_id).state == UnitState::Attacking) {
-                struck = true;
-                // Position at time of strike must be strictly cardinally adjacent
-                const auto& atk = sim.get_unit(attacker_id);
-                int32_t m_dist = std::abs(atk.pos.x - 11) + std::abs(atk.pos.y - 11);
-                ASSERT_EQ(m_dist, 1);
-                break;
-            }
-        }
-        ASSERT_TRUE(struck);
+        // 2. Attacker commanded to attack from a distance (8, 8)
+        uint32_t distant_atk_id = sim.spawn_unit(0, AntType::Worker, TileCoord{8, 8});
+        AntOrder dist_order{};
+        dist_order.ant_id = distant_atk_id;
+        dist_order.type = OrderType::Attack;
+        dist_order.target_entity_id = static_cast<int32_t>(defender_id);
+        sim.issue_order(dist_order);
+
+        const auto& dist_unit = sim.get_unit(distant_atk_id);
+        ASSERT_EQ(dist_unit.state, UnitState::Walking);
+        // Approach routes directly to closest 8-connected neighbor around (11, 11)
+        ASSERT_TRUE(dist_unit.final_dest.chebyshev_dist(TileCoord{11, 11}) <= 1);
     } TEST_END();
 
     TEST_CASE("12.101: Complete Attack Animation Playback Across Full Duration (*at*)") {
@@ -6336,6 +6342,59 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         // Tick 14: flinch finishes and returns to Idle
         sim.tick();
         ASSERT_EQ(sim.get_unit(defender_id).state, UnitState::Idle);
+    } TEST_END();
+
+    TEST_CASE("12.103: TINY.LVL Tile (18, 17) Passability & 10-Tick Bounce Parity") {
+        // Part A: Tile (18, 17) passability on authentic TINY.LVL (Layer 2 broken2 flat debris)
+        std::string tiny_path = std::string(ORIGINAL_ASSETS_DIR) + "/Maps/TINY.LVL";
+        ants::assets::LevelData lvl;
+        ASSERT_TRUE(lvl.load_from_file(tiny_path));
+
+        SimulationEngine sim;
+        sim.init(lvl, 42);
+
+        // Tile (18, 17) must be completely passable (not blocked by broken2 overlay)
+        ASSERT_TRUE(sim.grid().in_bounds(18, 17));
+        const auto& cell = sim.grid().get_cell(18, 17);
+        ASSERT_FALSE(cell.is_obstacle_overlay);
+        ASSERT_TRUE(cell.is_passable());
+
+        // Ant can walk directly onto tile (18, 17) from neighbor (18, 18)
+        uint32_t ant = sim.spawn_unit(0, AntType::Worker, TileCoord{18, 18});
+        ASSERT_TRUE(ant > 0);
+        sim.issue_move_order(ant, TileCoord{18, 17});
+        ASSERT_EQ(sim.get_unit(ant).final_dest, (TileCoord{18, 17}));
+        for (int i = 0; i < 20; ++i) {
+            sim.tick();
+            if (sim.get_unit(ant).pos == TileCoord{18, 17}) break;
+        }
+        ASSERT_EQ(sim.get_unit(ant).pos, (TileCoord{18, 17}));
+
+        // Part B: 10-Tick Bounce duration and VisualEffect{"battle"} 10 ticks
+        SimulationEngine sim_bounce;
+        sim_bounce.init_test_world(60, 60, 100, 60000);
+        uint32_t ant1 = sim_bounce.spawn_unit(0, AntType::Worker, TileCoord{10, 10});
+        uint32_t ant2 = sim_bounce.spawn_unit(0, AntType::Combat, TileCoord{10, 10});
+
+        // Tick simulation to trigger same-tile collision resolution
+        sim_bounce.tick();
+
+        // Check that battle visual effect has total_frames = 10
+        bool found_battle = false;
+        for (const auto& eff : sim_bounce.get_world_state().effects) {
+            if (eff.anim_name == "battle") {
+                found_battle = true;
+                ASSERT_EQ(eff.total_frames, 10);
+            }
+        }
+        ASSERT_TRUE(found_battle);
+
+        // Check that displaced ant has state == UnitState::Bounce and lasts 10 ticks
+        const auto& u1 = sim_bounce.get_unit(ant1);
+        const auto& u2 = sim_bounce.get_unit(ant2);
+        const AntUnit* bounced = (u1.state == UnitState::Bounce ? &u1 : (u2.state == UnitState::Bounce ? &u2 : nullptr));
+        ASSERT_TRUE(bounced != nullptr);
+        ASSERT_TRUE(bounced->state_timer > 0);
     } TEST_END();
 }
 

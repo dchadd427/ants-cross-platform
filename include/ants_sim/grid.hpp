@@ -324,6 +324,9 @@ public:
                                    (c2.tile_index >= TILE_BRIDGE1 && c2.tile_index <= TILE_BRIDGE4) ||
                                    c2.tile_index == TILE_BRIDGE4B) {
                             cell.is_obstacle_overlay = false;
+                        } else if (lower_name.rfind("broken", 0) == 0) {
+                            // Flat floor dishware/debris (broken1, broken2, broken3) is walkable
+                            cell.is_obstacle_overlay = false;
                         } else {
                             // Solid obstacle overlay: rocks, cans, pencils, grass clusters (grass1..4, grassbig*, grassmed*), toys, flowers, etc.
                             cell.is_obstacle_overlay = true;

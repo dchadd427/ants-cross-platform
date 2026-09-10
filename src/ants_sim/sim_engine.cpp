@@ -268,7 +268,7 @@ void bounce_unit_cascade(SimulationEngineImpl& impl,
     if (depth > 10) return;
 
     unit.state = UnitState::Bounce;
-    unit.state_timer = 5;
+    unit.state_timer = 10;
     unit.anim_tick = 0;
     unit.anim_subitem = 0;
     unit.clear_path();
@@ -328,7 +328,7 @@ void bounce_unit_cascade(SimulationEngineImpl& impl,
 
         if (occupying) {
             // Authentic 1998 battle scuffle visual effect and SoundID::CombatNetFairy (ID 3)
-            impl.active_effects_.push_back(VisualEffect{"battle", occupying->pixel_x, occupying->pixel_y, 0, 5});
+            impl.active_effects_.push_back(VisualEffect{"battle", occupying->pixel_x, occupying->pixel_y, 0, 10});
             impl.audio_queue_.push_back(AudioEvent{SoundID::CombatNetFairy, occupying->pixel_x, occupying->pixel_y, 1, 255});
             // Cascade bounce the occupying ant!
             bounce_unit_cascade(impl, *occupying, unit.pos.x, unit.pos.y, depth + 1);
@@ -1182,11 +1182,11 @@ void SimulationEngine::tick() {
                 target->on_powerup || (target->type == AntType::Swimmer && target->in_water)) {
                 ant_ptr->attack_target_id = 0;
             } else {
-                int32_t m_dist = std::abs(target->pos.x - ant_ptr->pos.x) + std::abs(target->pos.y - ant_ptr->pos.y);
-                if (m_dist <= 1) {
+                int32_t dist = ant_ptr->pos.chebyshev_dist(target->pos);
+                if (dist <= 1) {
                     int32_t off_x = std::abs(ant_ptr->pixel_x - (ant_ptr->pos.x * 32 + 16));
                     int32_t off_y = std::abs(ant_ptr->pixel_y - (ant_ptr->pos.y * 32 + 16));
-                    bool at_tile_center = (off_x <= 4 && off_y <= 4);
+                    bool at_tile_center = (off_x <= 6 && off_y <= 6);
                     if (ant_ptr->waypoints.empty() || at_tile_center) {
                         if (!ant_ptr->waypoints.empty() || ant_ptr->state == UnitState::Walking) {
                             ant_ptr->clear_path();
@@ -1198,18 +1198,18 @@ void SimulationEngine::tick() {
                         }
                     }
                 } else if (ant_ptr->state == UnitState::Idle || ant_ptr->state == UnitState::GuardIdle) {
-                    static constexpr int32_t CARDINAL_DIRS[4][2] = {
-                        {0, -1}, {0, 1}, {-1, 0}, {1, 0}
-                    };
                     TileCoord best_neighbor = target->pos;
                     int32_t best_dist = 999999;
-                    for (const auto& d : CARDINAL_DIRS) {
-                        TileCoord cand{target->pos.x + d[0], target->pos.y + d[1]};
-                        if (impl_->grid_.in_bounds(cand) && impl_->grid_.get_cell(cand).is_passable()) {
-                            int32_t dist_cand = ant_ptr->pos.euclidean_dist_sq(cand);
-                            if (dist_cand < best_dist) {
-                                best_dist = dist_cand;
-                                best_neighbor = cand;
+                    for (int32_t dy = -1; dy <= 1; ++dy) {
+                        for (int32_t dx = -1; dx <= 1; ++dx) {
+                            if (dx == 0 && dy == 0) continue;
+                            TileCoord cand{target->pos.x + dx, target->pos.y + dy};
+                            if (impl_->grid_.in_bounds(cand) && impl_->grid_.get_cell(cand).is_passable()) {
+                                int32_t dist_cand = ant_ptr->pos.euclidean_dist_sq(cand);
+                                if (dist_cand < best_dist) {
+                                    best_dist = dist_cand;
+                                    best_neighbor = cand;
+                                }
                             }
                         }
                     }
@@ -1529,11 +1529,11 @@ void SimulationEngine::tick() {
         continue;
     }
 
-    // Bounce progression (*gb*, 4 ticks)
+    // Bounce progression (*gb*, 10 ticks)
     if (ant_ptr->state == UnitState::Bounce) {
         ant_ptr->anim_tick++;
         ant_ptr->anim_subitem = ant_ptr->anim_tick;
-        if (ant_ptr->anim_tick >= 4) {
+        if (ant_ptr->anim_tick >= 10) {
             if (ant_ptr->hp == 0) {
                 ant_ptr->state = UnitState::Dead;
                 impl_->spawn_death_effect(ant_ptr->pixel_x, ant_ptr->pixel_y);
@@ -1794,7 +1794,7 @@ void SimulationEngine::tick() {
                     AntUnit* to_displace = (a1->id > a2->id ? a1.get() : a2.get());
                     AntUnit* anchor_ant = (to_displace == a1.get()) ? a2.get() : a1.get();
                     // Authentic 1998 battle scuffle visual effect and SoundID::CombatNetFairy (ID 3)
-                    impl_->active_effects_.push_back(VisualEffect{"battle", anchor_ant->pixel_x, anchor_ant->pixel_y, 0, 5});
+                    impl_->active_effects_.push_back(VisualEffect{"battle", anchor_ant->pixel_x, anchor_ant->pixel_y, 0, 10});
                     impl_->audio_queue_.push_back(AudioEvent{SoundID::CombatNetFairy, anchor_ant->pixel_x, anchor_ant->pixel_y, 1, 255});
                     bounce_unit_cascade(*impl_, *to_displace, anchor_ant->pos.x, anchor_ant->pos.y);
                 }
@@ -1953,29 +1953,29 @@ void SimulationEngine::issue_order(const AntOrder& order) {
                         break;
                     }
                     unit->attack_target_id = target_id;
-                    int32_t m_dist = std::abs(unit->pos.x - target->pos.x) + std::abs(unit->pos.y - target->pos.y);
+                    int32_t dist = unit->pos.chebyshev_dist(target->pos);
                     int32_t off_x = std::abs(unit->pixel_x - (unit->pos.x * 32 + 16));
                     int32_t off_y = std::abs(unit->pixel_y - (unit->pos.y * 32 + 16));
-                    bool at_tile_center = (off_x <= 4 && off_y <= 4);
-                    if (m_dist <= 1 && at_tile_center) {
+                    bool at_tile_center = (off_x <= 6 && off_y <= 6);
+                    if (dist <= 1 && (at_tile_center || unit->waypoints.empty())) {
                         unit->clear_path();
                         unit->facing = ants::assets::vector_to_direction(target->pos.x - unit->pos.x, target->pos.y - unit->pos.y);
                         if (unit->attack_cooldown_ticks == 0) {
                             execute_melee_attack(order.ant_id, target_id);
                         }
                     } else {
-                        static constexpr int32_t CARDINAL_DIRS[4][2] = {
-                            {0, -1}, {0, 1}, {-1, 0}, {1, 0}
-                        };
                         TileCoord best_neighbor = target->pos;
                         int32_t best_dist = 999999;
-                        for (const auto& d : CARDINAL_DIRS) {
-                            TileCoord cand{target->pos.x + d[0], target->pos.y + d[1]};
-                            if (impl_->grid_.in_bounds(cand) && impl_->grid_.get_cell(cand).is_passable()) {
-                                int32_t dist_cand = unit->pos.euclidean_dist_sq(cand);
-                                if (dist_cand < best_dist) {
-                                    best_dist = dist_cand;
-                                    best_neighbor = cand;
+                        for (int32_t dy = -1; dy <= 1; ++dy) {
+                            for (int32_t dx = -1; dx <= 1; ++dx) {
+                                if (dx == 0 && dy == 0) continue;
+                                TileCoord cand{target->pos.x + dx, target->pos.y + dy};
+                                if (impl_->grid_.in_bounds(cand) && impl_->grid_.get_cell(cand).is_passable()) {
+                                    int32_t dist_cand = unit->pos.euclidean_dist_sq(cand);
+                                    if (dist_cand < best_dist) {
+                                        best_dist = dist_cand;
+                                        best_neighbor = cand;
+                                    }
                                 }
                             }
                         }
@@ -2634,22 +2634,22 @@ void SimulationEngine::execute_melee_attack(uint32_t attacker_id, uint32_t targe
                     }
                 }
             } else {
-                // Diagonal displacement: must NOT push diagonally unless cardinal directions are obstructed
-                TileCoord card1{target->pos.x + p_dx, target->pos.y};
-                TileCoord card2{target->pos.x, target->pos.y + p_dy};
-                bool p1 = is_passable_push(card1);
-                bool p2 = is_passable_push(card2);
-                if (p1 && p2) {
-                    chosen_push = (impl_->prng_.rand() % 2 == 0) ? card1 : card2;
-                } else if (p1) {
-                    chosen_push = card1;
-                } else if (p2) {
-                    chosen_push = card2;
+                // Diagonal displacement: push diagonally along the strike vector
+                TileCoord diag{target->pos.x + p_dx, target->pos.y + p_dy};
+                if (is_passable_push(diag)) {
+                    chosen_push = diag;
                 } else {
-                    // Both cardinal paths obstructed: deflect sideways/diagonal
-                    TileCoord diag{target->pos.x + p_dx, target->pos.y + p_dy};
-                    if (is_passable_push(diag)) {
-                        chosen_push = diag;
+                    // Obstructed diagonally: deflect to flanking cardinal tiles
+                    TileCoord card1{target->pos.x + p_dx, target->pos.y};
+                    TileCoord card2{target->pos.x, target->pos.y + p_dy};
+                    bool p1 = is_passable_push(card1);
+                    bool p2 = is_passable_push(card2);
+                    if (p1 && p2) {
+                        chosen_push = (impl_->prng_.rand() % 2 == 0) ? card1 : card2;
+                    } else if (p1) {
+                        chosen_push = card1;
+                    } else if (p2) {
+                        chosen_push = card2;
                     }
                 }
             }

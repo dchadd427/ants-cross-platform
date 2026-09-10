@@ -284,7 +284,7 @@ void AntUnit::tick_timers() noexcept {
         }
     } else if (state == UnitState::Bounce) {
         anim_tick++;
-        anim_subitem = static_cast<uint16_t>(anim_tick / 2);
+        anim_subitem = static_cast<uint16_t>(anim_tick);
     }
 
     // Continuous idle standing animation cycle

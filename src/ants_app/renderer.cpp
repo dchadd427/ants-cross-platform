@@ -1220,7 +1220,14 @@ void Renderer::render_visual_effects(const ants::sim::WorldState& world) {
             anim = archive_->find_animation(low);
         }
         if (anim && !anim->subitems.empty()) {
-            size_t sub_idx = eff.frame % anim->subitems.size();
+            size_t sub_idx = 0;
+            if (eff.anim_name == "battle" || eff.anim_name == "BATTLE") {
+                // Battle scuffle ball loops for 2 complete cycles across 10 simulation ticks
+                size_t cycle_frames = anim->subitems.size() * 2;
+                sub_idx = ((static_cast<size_t>(eff.frame) * cycle_frames) / std::max<size_t>(1, eff.total_frames)) % anim->subitems.size();
+            } else {
+                sub_idx = eff.frame % anim->subitems.size();
+            }
             const auto& sub = anim->subitems[sub_idx];
             for (const auto& f : sub.frames) {
                 SDL_Texture* tex = texture_cache_->get_sprite_texture(f.sprite_index);
@@ -1564,8 +1571,8 @@ void Renderer::draw_single_ant(const ants::sim::AntSnapshot& ant, bool is_select
                     sub_idx = seq->subitems.size() - 1;
                 }
             } else if (action == "gb") {
-                // 1-Tile bounce lasts 4 ticks; map across the sequence frames
-                sub_idx = (ant.anim_frame * seq->subitems.size()) / 4;
+                // 1-Tile bounce lasts 10 ticks; map across the sequence frames
+                sub_idx = (ant.anim_frame * seq->subitems.size()) / 10;
                 if (sub_idx >= seq->subitems.size()) {
                     sub_idx = seq->subitems.size() - 1;
                 }
