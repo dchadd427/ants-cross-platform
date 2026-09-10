@@ -196,7 +196,7 @@ public:
 
             if (target_tile == hole || target_tile == mouth) {
                 for (const auto& other : ants_) {
-                    if (other && other->is_alive() && other->id != unit.id) {
+                    if (other && other->is_alive() && !other->underground && other->id != unit.id) {
                         if (other->state == UnitState::EnteringBase) {
                             return true; // Another ant is visiting or emerging from base
                         }
@@ -1286,6 +1286,12 @@ void SimulationEngine::tick() {
             if (ant_ptr->is_newborn && ant_ptr->underground) {
                 if (ant_ptr->state_timer > 0) {
                     ant_ptr->state_timer--;
+                    continue;
+                }
+                // Check if surface tile (bx+1, by+1) is occupied by any living ant (Ants.exe 0x10250fe-0x1025108)
+                // If occupied, postpone emergence by 20 ticks (1000ms / 1.0s)
+                if (impl_->has_living_ant_at(ant_ptr->pos)) {
+                    ant_ptr->state_timer = 20;
                     continue;
                 }
                 // Incubation delay complete: emerge onto surface at the hole
@@ -3100,6 +3106,12 @@ void SimulationEngine::issue_move_order(uint32_t ant_id, TileCoord dest, bool al
     for (const auto& other : impl_->ants_) {
         if (other && other->is_alive() && !other->underground && other->id != unit->id) {
             if (other->pos != unit->pos && other->pos != dest) {
+                // In Ants.exe 0x10209cd / Ants.exe.c line 23621, moving friendly ants are passable in A* routing
+                // unless executing base queue / entry orders (+0x60 != 0)
+                bool is_friendly = (other->player_id == unit->player_id || impl_->stats_.are_allies(unit->player_id, other->player_id));
+                if (is_friendly && other->state == UnitState::Walking && !is_ant_in_base_queue(other->id)) {
+                    continue;
+                }
                 dynamic_obstacles.push_back(other->pos);
             }
         }

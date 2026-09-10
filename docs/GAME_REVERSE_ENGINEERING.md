@@ -1418,3 +1418,33 @@ To deliver authentic 1:1 gameplay inside standard web browsers with zero install
 - **Power-Up Standing Immunity**:
   - When an ant stands on top of an uncollected or dropped power-up, it is 100% immune to incoming melee attacks (all melee attack orders against it are rejected, and `take_damage` with melee sources deals 0 damage).
   - Standing ants on power-ups are strictly excluded from displacement during same-tile collision resolution and cannot be bounced by `bounce_unit_cascade`.
+
+#### 19. Blocked Emergence Postponement, Moving-Ally A* Passability & Egg Economy Verification (`Ants.exe` `0x1010aca`, `0x1010c14`, `0x10250fe`, `0x10209cd`, `0x101b78a`)
+- **Egg Economy & Hatch Requirements Ground Truth (`0x1010aca` & `0x1010c14`)**:
+  - In `Ants.exe` Capstone disassembly at `0x1010aca`:
+    - `0x1010ae1`: `cmp word ptr [edi + 0x4a], bx` (compares current player egg count with 0).
+    - `0x1010ae5`: `jne 0x1010b11` $\rightarrow$ If egg count == 0, calls `0x100e944` ("out of eggs") and jumps to `0x1010b42`, returning immediately without hatching.
+    - `0x1010b56`: `cmp dword ptr [edi + 0x54], esi` (compares food score with `0xc8` = 200).
+    - `0x1010b59`: `jge 0x1010b9e` $\rightarrow$ If food score < 200, plays `cantgo.wav` (`0x102bd7e`) and returns without hatching.
+    - `0x1010c28`: `call 0x1010cc9` with `-200` (deducts 200 food points).
+    - `0x1010c37`: `mov word ptr [esi + 0x4a], ax` (decrements egg count by 1).
+  - Ground truth: The original 1998 executable strictly requires **both** `eggs > 0` **and** `score >= 200` for every hatch, and deducts both 200 food points and 1 egg.
+- **Blocked Base Emergence Postponement (`0x10250fe`–`0x1025108`)**:
+  - In `HATCHTSK` emergence routine (`0x1025072`), when an incubating/hatching ant's subterranean timer completes and it is ready to surface onto the anthill hole `(bx + 1, by + 1)`:
+    ```asm
+    0x10250fe: push 1
+    0x1025100: mov dword ptr [ebx + 0x1c], 0x3e8   ; 0x3e8 = 1000 ms (20 ticks at 20Hz)
+    0x1025107: pop eax
+    0x1025108: jmp 0x102522f                       ; returns 1 (delays emergence)
+    ```
+  - If any living ant is currently occupying the surface hole tile, emergence is postponed by exactly **1000ms (20 ticks / 1.0s)**. The ant remains cleanly underground until the surface hole clears.
+- **A* Pathfinding Moving-Ally Passability (`0x10209cd`)**:
+  - In `FUN_01020951` / `0x1020951` (edge traversal passability and cost function):
+    ```asm
+    0x10209cd: cmp dword ptr [eax + 0xd8], 0        ; check if ally has active movement vector/path
+    0x10209d4: jne 0x1020a29                       ; if moving -> PASSABLE!
+    ```
+  - Actively walking friendly ants (`state == UnitState::Walking`) are excluded from pathfinding dynamic obstacles. Friendly ants plan direct paths knowing marching comrades will vacate intermediate tiles. Only stationary friendly ants and non-target enemies act as impassable obstacles (`cost = 8000`).
+- **Ant Order Confirmation Voice Dispatches (`0x101b78a`)**:
+  - Capstone disassembly of `0x101b78a` confirms Worker (0) and Combat (4) jump to `ret 4` without vocal move acknowledgments, while Bomber (28), Fire (16), Thief (13), and Swimmer (25) play move lines. All 6 types possess selection "ready" voices (`0x101b711`).
+
