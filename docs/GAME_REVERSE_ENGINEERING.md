@@ -1264,3 +1264,20 @@ To deliver authentic 1:1 gameplay inside standard web browsers with zero install
   - When struck by a Combat Ant punch or caught in a Bomb blast, the victim is launched into ballistic flight:
     - At launch: Sound 78 (`attack2.wav`) / Sound 24 (`bombdetonate.wav`) + Sound 64 (`flythumpa.wav`).
     - At ground landing: Sound 65 (`flythumpb.wav`) + Sound 70 (`stun.wav` / `SoundID::StunRecover`), placing the victim into `UnitState::Stunned`.
+
+#### 13. Multi-Directional Attack Registration, Victim Facing Dynamics, Bounce Animation (`gh` vs. `gb`), and Re-Collision Loop Breaking (`Ants.exe` `0x101a86a`, `0x1020de7`, `0x10215cb`)
+- **Multi-Directional Attack Registration (All Headings)**:
+  - Attacks connect and apply damage reliably regardless of relative orientation (approaching from front, flanks, or rear).
+  - Melee attack engagement does not require units to align precisely within sub-tile center tolerances (`off_x <= 6 && off_y <= 6`), eliminating false rejections when striking while walking or from diagonal angles.
+  - Hostile units on adjacent tiles do not execute elastic separation pushback (`dist_sq < 22 * 22`), preventing attacker repulsion cycles that previously interrupted strike execution.
+- **Victim Facing Dynamics**:
+  - In `Ants.exe` (`0x101dc7f`), whenever an ant connects with a melee strike, the victim immediately turns to face directly toward the attacker (`target->facing = vector_to_direction(attacker - target)`).
+  - When an ant is displaced by a collision bounce, its facing direction is aligned along its bounce displacement vector away from the collision center (`vector_to_direction(chosen - collision_point)`), authentically allowing bounced units to face away from the collision point while attacked units always face their assailant.
+- **Bounce Animation Fidelity (`gh` vs. `gb`)**:
+  - In `ants.chd` Table 4, `*gb*` (`aggb301..aggb901`) represents the 4-tile high-altitude airborne fling resulting from Combat Ant punches or explosive blasts, featuring subitem 0 with displacement `val2 = -128` (128 pixels) and vertical apex height `dy = 59px`.
+  - In contrast, standard 1-tile collision bounce slide uses `*gh*` (`aggh301..aggh901`), remaining grounded with `val2 = -24px` and zero vertical loft.
+  - Renderer maps `UnitState::Bounce` to action `"gh"` instead of `"gb"`, matching authentic 1998 grounded slide aesthetics.
+- **Re-Collision Loop Breaking**:
+  - Upon collision bounce resolution, both the displaced unit and the anchor unit clear their paths (`clear_path()`), reset their attack targets (`attack_target_id = 0`), and anchor their final destinations to their current tile (`final_dest = pos`).
+  - This completely prevents the infinite bounce loop where units repeatedly walk back into the same collision tile after bouncing.
+

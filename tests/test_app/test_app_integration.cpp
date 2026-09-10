@@ -6636,6 +6636,121 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
             ASSERT_EQ(sim.get_unit(victim).state, UnitState::Stunned);
         }
     } TEST_END();
+
+    TEST_CASE("12.106: Multi-Directional Attack Registration, Victim Facing & Bounce Loop Prevention") {
+        // 1. Attack registration from all 8 directions against victim facing away:
+        // When attacked, regardless of which direction victim was facing, victim takes damage and turns to face attacker!
+        struct AttackDirectionTest {
+            int32_t att_dx;
+            int32_t att_dy;
+            Direction victim_initial_facing;
+            Direction expected_victim_turned_facing;
+        };
+
+        std::vector<AttackDirectionTest> dirs = {
+            {-1,  0, Direction::North, Direction::West},       // Attacker to West, victim faces North -> turns West
+            { 1,  0, Direction::North, Direction::East},       // Attacker to East, victim faces North -> turns East
+            { 0, -1, Direction::South, Direction::North},      // Attacker to North, victim faces South -> turns North
+            { 0,  1, Direction::North, Direction::South},      // Attacker to South, victim faces North -> turns South
+            {-1, -1, Direction::South, Direction::NorthWest},  // Attacker NorthWest, victim faces South -> turns NorthWest
+            { 1, -1, Direction::South, Direction::NorthEast},  // Attacker NorthEast, victim faces South -> turns NorthEast
+            {-1,  1, Direction::North, Direction::SouthWest},  // Attacker SouthWest, victim faces North -> turns SouthWest
+            { 1,  1, Direction::North, Direction::SouthEast},  // Attacker SouthEast, victim faces North -> turns SouthEast
+        };
+
+        for (const auto& d : dirs) {
+            SimulationEngine sim;
+            sim.init_test_world(60, 60, 100, 60000);
+
+            TileCoord victim_pos{20, 20};
+            TileCoord att_pos{20 + d.att_dx, 20 + d.att_dy};
+
+            uint32_t att = sim.spawn_unit(0, AntType::Worker, att_pos);
+            uint32_t vic = sim.spawn_unit(1, AntType::Combat, victim_pos);
+
+            sim.get_unit(vic).facing = d.victim_initial_facing;
+            uint32_t initial_hp = sim.get_unit(vic).hp;
+
+            // Worker strikes victim from side / behind:
+            sim.execute_melee_attack(att, vic);
+
+            // Victim took damage despite facing away:
+            ASSERT_LT(sim.get_unit(vic).hp, initial_hp);
+
+            // Victim turned and is now facing directly towards the attacker:
+            ASSERT_EQ(sim.get_unit(vic).facing, d.expected_victim_turned_facing);
+        }
+
+        // 2. Autonomous pursuit attack from the side / rear without elastic repulsion locking:
+        {
+            SimulationEngine sim;
+            sim.init_test_world(60, 60, 100, 60000);
+
+            // Friendly attacker at (18, 20), enemy stationary at (20, 20) facing South
+            uint32_t att = sim.spawn_unit(0, AntType::Worker, TileCoord{18, 20});
+            uint32_t vic = sim.spawn_unit(1, AntType::Worker, TileCoord{20, 20});
+            sim.get_unit(vic).facing = Direction::South;
+
+            AntOrder order;
+            order.ant_id = att;
+            order.type = OrderType::Attack;
+            order.target_x = 20;
+            order.target_y = 20;
+            order.target_entity_id = static_cast<int32_t>(vic);
+            sim.issue_order(order);
+
+            uint32_t initial_vic_hp = sim.get_unit(vic).hp;
+            bool hit_connected = false;
+            for (int t = 0; t < 50; ++t) {
+                sim.tick();
+                if (sim.get_unit(vic).hp < initial_vic_hp) {
+                    hit_connected = true;
+                    break;
+                }
+            }
+            ASSERT_TRUE(hit_connected);
+            // Victim turned West towards attacker
+            ASSERT_EQ(sim.get_unit(vic).facing, Direction::West);
+        }
+
+        // 3. Collision bounce: displaced ant faces along bounce trajectory and avoids infinite loop
+        {
+            SimulationEngine sim;
+            sim.init_test_world(60, 60, 100, 60000);
+
+            uint32_t a1 = sim.spawn_unit(0, AntType::Worker, TileCoord{25, 25});
+            uint32_t a2 = sim.spawn_unit(1, AntType::Worker, TileCoord{25, 25});
+
+            sim.tick(); // Triggers same-tile collision resolution scuffle
+
+            // One ant is anchored, other is displaced
+            const auto& u1 = sim.get_unit(a1);
+            const auto& u2 = sim.get_unit(a2);
+
+            const AntUnit* displaced = (u1.state == UnitState::Bounce) ? &u1 : &u2;
+            ASSERT_EQ(displaced->state, UnitState::Bounce);
+
+            // Displaced ant faces along its bounce trajectory away from collision point (25, 25)
+            int32_t b_dx = displaced->pos.x - 25;
+            int32_t b_dy = displaced->pos.y - 25;
+            if (b_dx != 0 || b_dy != 0) {
+                Direction expected_facing = ants::assets::vector_to_direction(b_dx, b_dy);
+                ASSERT_EQ(displaced->facing, expected_facing);
+            }
+
+            // Both ants must settle within 30 ticks without infinite re-collision loops
+            for (int t = 0; t < 30; ++t) {
+                sim.tick();
+            }
+
+            ASSERT_NE(sim.get_unit(a1).state, UnitState::Bounce);
+            ASSERT_NE(sim.get_unit(a2).state, UnitState::Bounce);
+            ASSERT_FALSE(sim.get_unit(a1).is_in_scuffle);
+            ASSERT_FALSE(sim.get_unit(a2).is_in_scuffle);
+            ASSERT_EQ(sim.get_unit(a1).attack_target_id, 0u);
+            ASSERT_EQ(sim.get_unit(a2).attack_target_id, 0u);
+        }
+    } TEST_END();
 }
 
 

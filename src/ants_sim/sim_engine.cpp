@@ -251,6 +251,7 @@ void bounce_unit_cascade(SimulationEngineImpl& impl,
     unit.anim_tick = 0;
     unit.anim_subitem = 0;
     unit.clear_path();
+    unit.attack_target_id = 0; // Clear target to break infinite bounce loop
 
     impl.audio_queue_.push_back(AudioEvent{SoundID::Bump, unit.pixel_x, unit.pixel_y, 1, 255});
     impl.audio_queue_.push_back(AudioEvent{SoundID::FlingThumpA, unit.pixel_x, unit.pixel_y, 1, 255});
@@ -300,6 +301,13 @@ void bounce_unit_cascade(SimulationEngineImpl& impl,
     }
     if (chosen.x < 0) {
         chosen = unit.pos;
+    }
+
+    // Facing direction: when bouncing, face along the bounce trajectory away from collision center
+    int32_t f_dx = chosen.x - from_x;
+    int32_t f_dy = chosen.y - from_y;
+    if (f_dx != 0 || f_dy != 0) {
+        unit.facing = ants::assets::vector_to_direction(f_dx, f_dy);
     }
 
     // Check if another ant is on the chosen tile: cascade bounce it!
@@ -1186,19 +1194,27 @@ void SimulationEngine::tick() {
                 ant_ptr->attack_target_id = 0;
             } else {
                 int32_t dist = ant_ptr->pos.chebyshev_dist(target->pos);
+                int32_t px_dx = std::abs(ant_ptr->pixel_x - target->pixel_x);
+                int32_t px_dy = std::abs(ant_ptr->pixel_y - target->pixel_y);
+                if (dist > 1 && px_dx <= 36 && px_dy <= 36) {
+                    dist = 1;
+                }
                 if (dist <= 1) {
-                    int32_t off_x = std::abs(ant_ptr->pixel_x - (ant_ptr->pos.x * 32 + 16));
-                    int32_t off_y = std::abs(ant_ptr->pixel_y - (ant_ptr->pos.y * 32 + 16));
-                    bool at_tile_center = (off_x <= 6 && off_y <= 6);
-                    if (ant_ptr->waypoints.empty() || at_tile_center) {
-                        if (!ant_ptr->waypoints.empty() || ant_ptr->state == UnitState::Walking) {
-                            ant_ptr->clear_path();
-                            ant_ptr->state = (ant_ptr->type == AntType::Combat) ? UnitState::GuardIdle : UnitState::Idle;
-                        }
-                        ant_ptr->facing = ants::assets::vector_to_direction(target->pos.x - ant_ptr->pos.x, target->pos.y - ant_ptr->pos.y);
-                        if (ant_ptr->attack_cooldown_ticks == 0) {
-                            execute_melee_attack(ant_ptr->id, target->id);
-                        }
+                    if (!ant_ptr->waypoints.empty() || ant_ptr->state == UnitState::Walking) {
+                        ant_ptr->clear_path();
+                        ant_ptr->state = (ant_ptr->type == AntType::Combat) ? UnitState::GuardIdle : UnitState::Idle;
+                    }
+                    int32_t f_dx = target->pos.x - ant_ptr->pos.x;
+                    int32_t f_dy = target->pos.y - ant_ptr->pos.y;
+                    if (f_dx == 0 && f_dy == 0) {
+                        f_dx = target->pixel_x - ant_ptr->pixel_x;
+                        f_dy = target->pixel_y - ant_ptr->pixel_y;
+                    }
+                    if (f_dx != 0 || f_dy != 0) {
+                        ant_ptr->facing = ants::assets::vector_to_direction(f_dx, f_dy);
+                    }
+                    if (ant_ptr->attack_cooldown_ticks == 0) {
+                        execute_melee_attack(ant_ptr->id, target->id);
                     }
                 } else if (ant_ptr->state == UnitState::Idle || ant_ptr->state == UnitState::GuardIdle) {
                     TileCoord best_neighbor = target->pos;
@@ -1685,41 +1701,8 @@ void SimulationEngine::tick() {
                 float overlap = 22.0f - dist;
 
                 bool are_enemies = (a1->player_id != a2->player_id && !impl_->stats_.are_allies(a1->player_id, a2->player_id));
-                if (are_enemies) {
-                    // Hostile units must never push each other out of their tiles!
-                    bool a1_moving = (a1->state == UnitState::Walking);
-                    bool a2_moving = (a2->state == UnitState::Walking);
-                    if (a1_moving && !a2_moving) {
-                        int32_t push_x = static_cast<int32_t>(nx * overlap + (nx >= 0 ? 0.5f : -0.5f));
-                        int32_t push_y = static_cast<int32_t>(ny * overlap + (ny >= 0 ? 0.5f : -0.5f));
-                        a1->pixel_x += push_x;
-                        a1->pixel_y += push_y;
-                        a1->fx_x = a1->pixel_x << 16;
-                        a1->fx_y = a1->pixel_y << 16;
-                        a1->pos.x = a1->pixel_x / 32;
-                        a1->pos.y = a1->pixel_y / 32;
-                    } else if (!a1_moving && a2_moving) {
-                        int32_t push_x = static_cast<int32_t>(nx * overlap + (nx >= 0 ? 0.5f : -0.5f));
-                        int32_t push_y = static_cast<int32_t>(ny * overlap + (ny >= 0 ? 0.5f : -0.5f));
-                        a2->pixel_x -= push_x;
-                        a2->pixel_y -= push_y;
-                        a2->fx_x = a2->pixel_x << 16;
-                        a2->fx_y = a2->pixel_y << 16;
-                        a2->pos.x = a2->pixel_x / 32;
-                        a2->pos.y = a2->pixel_y / 32;
-                    } else {
-                        int32_t push_x = static_cast<int32_t>(nx * (overlap * 0.5f) + (nx >= 0 ? 0.5f : -0.5f));
-                        int32_t push_y = static_cast<int32_t>(ny * (overlap * 0.5f) + (ny >= 0 ? 0.5f : -0.5f));
-                        a1->pixel_x += push_x;
-                        a1->pixel_y += push_y;
-                        a1->fx_x = a1->pixel_x << 16;
-                        a1->fx_y = a1->pixel_y << 16;
-                        a2->pixel_x -= push_x;
-                        a2->pixel_y -= push_y;
-                        a2->fx_x = a2->pixel_x << 16;
-                        a2->fx_y = a2->pixel_y << 16;
-                    }
-                    continue;
+                if (are_enemies && (a1->pos.x != a2->pos.x || a1->pos.y != a2->pos.y)) {
+                    continue; // Enemies on different tiles do not elastically repel; they engage in melee combat
                 }
 
                 bool a1_moving = (a1->state == UnitState::Walking);
@@ -1851,6 +1834,8 @@ void SimulationEngine::tick() {
                     anchor_ant->is_in_scuffle = true;
                     anchor_ant->scuffle_ticks = 10;
                     anchor_ant->clear_path();
+                    anchor_ant->attack_target_id = 0;
+                    anchor_ant->final_dest = anchor_ant->pos;
                     anchor_ant->set_tile_pos(anchor_ant->pos.x, anchor_ant->pos.y);
                     anchor_ant->push_start_px = anchor_ant->pos.x * 32 + 16;
                     anchor_ant->push_start_py = anchor_ant->pos.y * 32 + 16;
@@ -2018,12 +2003,23 @@ void SimulationEngine::issue_order(const AntOrder& order) {
                     }
                     unit->attack_target_id = target_id;
                     int32_t dist = unit->pos.chebyshev_dist(target->pos);
-                    int32_t off_x = std::abs(unit->pixel_x - (unit->pos.x * 32 + 16));
-                    int32_t off_y = std::abs(unit->pixel_y - (unit->pos.y * 32 + 16));
-                    bool at_tile_center = (off_x <= 6 && off_y <= 6);
-                    if (dist <= 1 && (at_tile_center || unit->waypoints.empty())) {
+                    int32_t px_dx = std::abs(unit->pixel_x - target->pixel_x);
+                    int32_t px_dy = std::abs(unit->pixel_y - target->pixel_y);
+                    if (dist > 1 && px_dx <= 36 && px_dy <= 36) {
+                        dist = 1;
+                    }
+                    if (dist <= 1) {
                         unit->clear_path();
-                        unit->facing = ants::assets::vector_to_direction(target->pos.x - unit->pos.x, target->pos.y - unit->pos.y);
+                        unit->state = (unit->type == AntType::Combat) ? UnitState::GuardIdle : UnitState::Idle;
+                        int32_t f_dx = target->pos.x - unit->pos.x;
+                        int32_t f_dy = target->pos.y - unit->pos.y;
+                        if (f_dx == 0 && f_dy == 0) {
+                            f_dx = target->pixel_x - unit->pixel_x;
+                            f_dy = target->pixel_y - unit->pixel_y;
+                        }
+                        if (f_dx != 0 || f_dy != 0) {
+                            unit->facing = ants::assets::vector_to_direction(f_dx, f_dy);
+                        }
                         if (unit->attack_cooldown_ticks == 0) {
                             execute_melee_attack(order.ant_id, target_id);
                         }
@@ -2535,7 +2531,10 @@ void SimulationEngine::execute_melee_attack(uint32_t attacker_id, uint32_t targe
     if (target->on_powerup || (impl_->grid_.in_bounds(target->pos) && impl_->grid_.has_powerup_at(target->pos))) return;
     if (target->type == AntType::Swimmer && target->in_water) return;
 
-    if (attacker->pos.chebyshev_dist(target->pos) > 1) return;
+    int32_t dist = attacker->pos.chebyshev_dist(target->pos);
+    int32_t px_dx = std::abs(attacker->pixel_x - target->pixel_x);
+    int32_t px_dy = std::abs(attacker->pixel_y - target->pixel_y);
+    if (dist > 1 && !(px_dx <= 36 && px_dy <= 36)) return;
     if (attacker->attack_cooldown_ticks > 0) return;
 
     attacker->attack_cooldown_ticks = (attacker->type == AntType::Combat ? 12 : 10);
@@ -2543,7 +2542,17 @@ void SimulationEngine::execute_melee_attack(uint32_t attacker_id, uint32_t targe
     attacker->state_timer = (attacker->type == AntType::Combat ? 11 : 8);
     attacker->anim_tick = 0;
     attacker->anim_subitem = 0;
-    attacker->facing = ants::assets::vector_to_direction(target->pos.x - attacker->pos.x, target->pos.y - attacker->pos.y);
+
+    int32_t att_to_tgt_x = target->pos.x - attacker->pos.x;
+    int32_t att_to_tgt_y = target->pos.y - attacker->pos.y;
+    if (att_to_tgt_x == 0 && att_to_tgt_y == 0) {
+        att_to_tgt_x = target->pixel_x - attacker->pixel_x;
+        att_to_tgt_y = target->pixel_y - attacker->pixel_y;
+    }
+    if (att_to_tgt_x != 0 || att_to_tgt_y != 0) {
+        attacker->facing = ants::assets::vector_to_direction(att_to_tgt_x, att_to_tgt_y);
+    }
+
     bool target_in_uninterruptible_ability = (
         target->state == UnitState::PlacingFire || target->state == UnitState::PlantingBomb ||
         target->state == UnitState::BuildingBridge || target->state == UnitState::DemolishingBridge
@@ -2551,6 +2560,10 @@ void SimulationEngine::execute_melee_attack(uint32_t attacker_id, uint32_t targe
 
     int32_t to_att_x = attacker->pos.x - target->pos.x;
     int32_t to_att_y = attacker->pos.y - target->pos.y;
+    if (to_att_x == 0 && to_att_y == 0) {
+        to_att_x = attacker->pixel_x - target->pixel_x;
+        to_att_y = attacker->pixel_y - target->pixel_y;
+    }
     if (!target_in_uninterruptible_ability && (to_att_x != 0 || to_att_y != 0)) {
         target->facing = ants::assets::vector_to_direction(to_att_x, to_att_y);
     }
