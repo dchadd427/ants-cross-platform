@@ -6396,6 +6396,162 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         ASSERT_TRUE(bounced != nullptr);
         ASSERT_TRUE(bounced->state_timer > 0);
     } TEST_END();
+
+    TEST_CASE("12.104: Collision Scuffle Model Concealment, Domino Cascade & Hazard Landing Parity") {
+        // Part A: Model Concealment during 10-tick collision scuffle
+        {
+            SimulationEngine sim;
+            sim.init_test_world(60, 60, 100, 60000);
+            uint32_t a1 = sim.spawn_unit(0, AntType::Combat, TileCoord{20, 20});
+            uint32_t a2 = sim.spawn_unit(0, AntType::Worker, TileCoord{20, 20});
+
+            sim.tick(); // Collision scuffle triggers
+
+            const auto& u1 = sim.get_unit(a1);
+            const auto& u2 = sim.get_unit(a2);
+
+            // Both ants must have is_in_scuffle active
+            ASSERT_TRUE(u1.is_in_scuffle);
+            ASSERT_TRUE(u2.is_in_scuffle);
+
+            // In world state snapshot, is_in_scuffle must be set to true for renderer suppression
+            const auto& ws = sim.get_world_state();
+            for (const auto& snap : ws.ants) {
+                if (snap.id == a1 || snap.id == a2) {
+                    ASSERT_TRUE(snap.is_in_scuffle);
+                }
+            }
+
+            // Visual effect "battle" active at collision center
+            bool battle_active = false;
+            for (const auto& eff : ws.effects) {
+                if (eff.anim_name == "battle" && eff.px == 20 * 32 + 16 && eff.py == 20 * 32 + 16) {
+                    battle_active = true;
+                }
+            }
+            ASSERT_TRUE(battle_active);
+
+            // Step through ticks 2 to 11 (10 scuffle ticks): ants remain concealed in scuffle
+            for (int t = 2; t <= 11; ++t) {
+                sim.tick();
+            }
+
+            // After 10 ticks, scuffle ends and displaced ant begins fly-out animation
+            const auto& u1_after = sim.get_unit(a1);
+            const auto& u2_after = sim.get_unit(a2);
+            ASSERT_FALSE(u1_after.is_in_scuffle);
+            ASSERT_FALSE(u2_after.is_in_scuffle);
+            const AntUnit* displaced = (u1_after.state == UnitState::Bounce ? &u1_after : &u2_after);
+            ASSERT_TRUE(displaced != nullptr);
+            ASSERT_EQ(displaced->state, UnitState::Bounce);
+        }
+
+        // Part B: Water Landing - Non-Swimmer Instant Drowning vs Swimmer Safe Swimming
+        {
+            SimulationEngine sim;
+            sim.init_test_world(60, 60, 100, 60000);
+
+            // Surround tile (30, 30) with rock obstacles except north tile (30, 29) which is water
+            for (int dy = -1; dy <= 1; ++dy) {
+                for (int dx = -1; dx <= 1; ++dx) {
+                    if (dx == 0 && dy == 0) continue;
+                    TileCoord c{30 + dx, 30 + dy};
+                    if (dx == 0 && dy == -1) {
+                        auto& wc = sim.grid_mut().get_cell_mut(c);
+                        wc.terrain_type = TERRAIN_WATER;
+                        wc.surface_type = SurfaceType::Water;
+                    } else {
+                        auto& oc = sim.grid_mut().get_cell_mut(c);
+                        oc.terrain_type = TERRAIN_OBSTACLE;
+                        oc.is_obstacle_overlay = true;
+                    }
+                }
+            }
+
+            // Collide two non-swimmer ants at (30, 30)
+            uint32_t a1 = sim.spawn_unit(0, AntType::Combat, TileCoord{30, 30});
+            uint32_t a2 = sim.spawn_unit(0, AntType::Worker, TileCoord{30, 30});
+            sim.tick();
+
+            // Displaced ant forced to bounce into north water tile (30, 29)
+            const auto& u1 = sim.get_unit(a1);
+            const auto& u2 = sim.get_unit(a2);
+            const AntUnit* displaced = (u1.state == UnitState::Drowning || u1.state == UnitState::Bounce ? &u1 : &u2);
+            ASSERT_EQ(displaced->pos, (TileCoord{30, 29}));
+            ASSERT_EQ(displaced->state, UnitState::Drowning);
+            ASSERT_EQ(displaced->hp, 0);
+            ASSERT_TRUE(sim.has_audio_event(SoundID::AntDrown));
+            ASSERT_TRUE(sim.has_audio_event(SoundID::WaterSplash));
+        }
+
+        {
+            // Swimmer ant bouncing into water safely transitions to Swimming
+            SimulationEngine sim;
+            sim.init_test_world(60, 60, 100, 60000);
+
+            for (int dy = -1; dy <= 1; ++dy) {
+                for (int dx = -1; dx <= 1; ++dx) {
+                    if (dx == 0 && dy == 0) continue;
+                    TileCoord c{30 + dx, 30 + dy};
+                    if (dx == 0 && dy == -1) {
+                        auto& wc = sim.grid_mut().get_cell_mut(c);
+                        wc.terrain_type = TERRAIN_WATER;
+                        wc.surface_type = SurfaceType::Water;
+                    } else {
+                        auto& oc = sim.grid_mut().get_cell_mut(c);
+                        oc.terrain_type = TERRAIN_OBSTACLE;
+                        oc.is_obstacle_overlay = true;
+                    }
+                }
+            }
+
+            // Spawn anchor ant 1 (lower id) and Swimmer ant 2 (higher id to be displaced)
+            uint32_t a1 = sim.spawn_unit(0, AntType::Combat, TileCoord{30, 30});
+            uint32_t a2 = sim.spawn_unit(0, AntType::Swimmer, TileCoord{30, 30});
+            (void)a1;
+            sim.tick();
+
+            const auto& swimmer = sim.get_unit(a2);
+            ASSERT_EQ(swimmer.pos, (TileCoord{30, 29}));
+            ASSERT_EQ(swimmer.state, UnitState::Swimming);
+            ASSERT_TRUE(swimmer.in_water);
+            ASSERT_TRUE(swimmer.hp > 0);
+        }
+
+        // Part C: Bomb Detonation & Fire Contact on Bounce Landing
+        {
+            SimulationEngine sim;
+            sim.init_test_world(60, 60, 100, 60000);
+
+            // Surround tile (40, 40) with obstacles except east tile (41, 40) which has a bomb
+            for (int dy = -1; dy <= 1; ++dy) {
+                for (int dx = -1; dx <= 1; ++dx) {
+                    if (dx == 0 && dy == 0) continue;
+                    TileCoord c{40 + dx, 40 + dy};
+                    if (dx == 1 && dy == 0) {
+                        sim.grid_mut().place_bomb(static_cast<uint32_t>(c.x), static_cast<uint32_t>(c.y), 1);
+                    } else {
+                        auto& oc = sim.grid_mut().get_cell_mut(c);
+                        oc.terrain_type = TERRAIN_OBSTACLE;
+                        oc.is_obstacle_overlay = true;
+                    }
+                }
+            }
+
+            uint32_t a1 = sim.spawn_unit(0, AntType::Worker, TileCoord{40, 40});
+            uint32_t a2 = sim.spawn_unit(0, AntType::Worker, TileCoord{40, 40});
+            (void)a1;
+            sim.tick();
+
+            const auto& u2 = sim.get_unit(a2);
+            ASSERT_EQ(u2.pos, (TileCoord{41, 40}));
+            // Bomb detonated upon landing
+            ASSERT_TRUE(sim.has_audio_event(SoundID::BombDetonate));
+            ASSERT_FALSE(sim.grid().has_bomb_at(TileCoord{41, 40}));
+            // Displaced ant took 2 damage from blast
+            ASSERT_EQ(u2.hp, u2.max_hp - 2);
+        }
+    } TEST_END();
 }
 
 

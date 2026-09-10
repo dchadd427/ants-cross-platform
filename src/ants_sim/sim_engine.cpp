@@ -240,27 +240,6 @@ public:
 
 namespace {
 
-bool is_tile_free_and_passable(const Grid& grid,
-                               const std::vector<std::unique_ptr<AntUnit>>& ants,
-                               int32_t tx, int32_t ty,
-                               uint32_t ignore_id,
-                               AntType unit_type) {
-    if (!grid.in_bounds(tx, ty)) return false;
-    const auto& cell = grid.get_cell(static_cast<uint32_t>(tx), static_cast<uint32_t>(ty));
-    if (!cell.is_passable()) return false;
-    if (unit_type != AntType::Swimmer && cell.terrain_type == TERRAIN_WATER && !cell.has_completed_bridge()) return false;
-    if (unit_type != AntType::Fire && cell.has_fire()) return false;
-
-    for (const auto& other : ants) {
-        if (other && other->is_alive() && !other->underground && other->id != ignore_id) {
-            if (other->pos.x == tx && other->pos.y == ty) {
-                return false;
-            }
-        }
-    }
-    return true;
-}
-
 void bounce_unit_cascade(SimulationEngineImpl& impl,
                          AntUnit& unit,
                          int32_t from_x, int32_t from_y,
@@ -268,7 +247,7 @@ void bounce_unit_cascade(SimulationEngineImpl& impl,
     if (depth > 10) return;
 
     unit.state = UnitState::Bounce;
-    unit.state_timer = 10;
+    unit.state_timer = 20; // 10 ticks scuffle + 10 ticks bounce
     unit.anim_tick = 0;
     unit.anim_subitem = 0;
     unit.clear_path();
@@ -276,6 +255,14 @@ void bounce_unit_cascade(SimulationEngineImpl& impl,
     impl.audio_queue_.push_back(AudioEvent{SoundID::Bump, unit.pixel_x, unit.pixel_y, 1, 255});
     impl.audio_queue_.push_back(AudioEvent{SoundID::FlingThumpA, unit.pixel_x, unit.pixel_y, 1, 255});
     impl.audio_queue_.push_back(AudioEvent{SoundID::FlingThumpB, unit.pixel_x, unit.pixel_y, 1, 255});
+
+    int32_t collision_px = from_x * 32 + 16;
+    int32_t collision_py = from_y * 32 + 16;
+
+    unit.is_in_scuffle = true;
+    unit.scuffle_ticks = 10;
+    unit.push_start_px = collision_px;
+    unit.push_start_py = collision_py;
 
     int32_t bdx = unit.pos.x - from_x;
     int32_t bdy = unit.pos.y - from_y;
@@ -291,60 +278,76 @@ void bounce_unit_cascade(SimulationEngineImpl& impl,
     std::vector<std::pair<int32_t, int32_t>> candidates;
     candidates.reserve(8);
     for (const auto& off : base_adj) {
-        candidates.push_back({unit.pos.x + off[0], unit.pos.y + off[1]});
+        candidates.push_back({from_x + off[0], from_y + off[1]});
     }
 
-    // Sort candidates by alignment with (bdx, bdy)
+    // Sort candidates by alignment with (bdx, bdy) away from collision center
     std::sort(candidates.begin(), candidates.end(), [&](const std::pair<int32_t, int32_t>& c1, const std::pair<int32_t, int32_t>& c2) {
-        int32_t dot1 = (c1.first - unit.pos.x) * bdx + (c1.second - unit.pos.y) * bdy;
-        int32_t dot2 = (c2.first - unit.pos.x) * bdx + (c2.second - unit.pos.y) * bdy;
+        int32_t dot1 = (c1.first - from_x) * bdx + (c1.second - from_y) * bdy;
+        int32_t dot2 = (c2.first - from_x) * bdx + (c2.second - from_y) * bdy;
         return dot1 > dot2;
     });
 
-    // 1. Look for an immediately available (unoccupied and passable) tile
-    for (const auto& cand : candidates) {
-        if (is_tile_free_and_passable(impl.grid_, impl.ants_, cand.first, cand.second, unit.id, unit.type)) {
-            unit.set_tile_pos(cand.first, cand.second);
-            unit.final_dest = unit.pos;
-            return;
-        }
-    }
-
-    // 2. If no immediate tile is free, bounce into the best passable candidate tile and bounce that ant away!
+    // Authentic Ants.exe (0x1020de7): Candidates query strictly terrain bounds and non-solid obstacles!
+    // Water, fire, bombs, and other ants DO NOT block the bounce!
+    TileCoord chosen{-1, -1};
     for (const auto& cand : candidates) {
         if (!impl.grid_.in_bounds(cand.first, cand.second)) continue;
         const auto& cell = impl.grid_.get_cell(static_cast<uint32_t>(cand.first), static_cast<uint32_t>(cand.second));
-        if (!cell.is_passable()) continue;
+        if (cell.terrain_type == TERRAIN_OBSTACLE || cell.is_obstacle_overlay) continue;
+        chosen = TileCoord{cand.first, cand.second};
+        break;
+    }
+    if (chosen.x < 0) {
+        chosen = unit.pos;
+    }
 
-        AntUnit* occupying = nullptr;
-        for (const auto& other : impl.ants_) {
-            if (other && other->is_alive() && !other->underground && other->id != unit.id) {
-                if (other->pos.x == cand.first && other->pos.y == cand.second) {
-                    occupying = other.get();
-                    break;
-                }
+    // Check if another ant is on the chosen tile: cascade bounce it!
+    AntUnit* occupying = nullptr;
+    for (const auto& other : impl.ants_) {
+        if (other && other->is_alive() && !other->underground && other->id != unit.id) {
+            if (other->pos.x == chosen.x && other->pos.y == chosen.y) {
+                occupying = other.get();
+                break;
             }
-        }
-
-        if (occupying) {
-            // Authentic 1998 battle scuffle visual effect and SoundID::CombatNetFairy (ID 3)
-            impl.active_effects_.push_back(VisualEffect{"battle", occupying->pixel_x, occupying->pixel_y, 0, 10});
-            impl.audio_queue_.push_back(AudioEvent{SoundID::CombatNetFairy, occupying->pixel_x, occupying->pixel_y, 1, 255});
-            // Cascade bounce the occupying ant!
-            bounce_unit_cascade(impl, *occupying, unit.pos.x, unit.pos.y, depth + 1);
-            unit.set_tile_pos(cand.first, cand.second);
-            unit.final_dest = unit.pos;
-            return;
-        } else {
-            unit.set_tile_pos(cand.first, cand.second);
-            unit.final_dest = unit.pos;
-            return;
         }
     }
 
-    // Fallback: strictly snapped to tile center
-    unit.set_tile_pos(unit.pos.x, unit.pos.y);
+    if (occupying) {
+        impl.active_effects_.push_back(VisualEffect{"battle", occupying->pixel_x, occupying->pixel_y, 0, 10});
+        impl.audio_queue_.push_back(AudioEvent{SoundID::CombatNetFairy, occupying->pixel_x, occupying->pixel_y, 1, 255});
+        // Cascade bounce the occupying ant away!
+        bounce_unit_cascade(impl, *occupying, chosen.x, chosen.y, depth + 1);
+    }
+
+    unit.set_tile_pos(chosen.x, chosen.y);
+    unit.push_dest_px = chosen.x * 32 + 16;
+    unit.push_dest_py = chosen.y * 32 + 16;
+    unit.push_ticks_total = 4;
+    unit.push_tick_current = 0;
     unit.final_dest = unit.pos;
+
+    // Check hazard on chosen tile:
+    if (impl.grid_.in_bounds(chosen)) {
+        const auto& land_cell = impl.grid_.get_cell(static_cast<uint32_t>(chosen.x), static_cast<uint32_t>(chosen.y));
+        if (land_cell.terrain_type == TERRAIN_WATER && !land_cell.has_completed_bridge()) {
+            if (unit.type == AntType::Swimmer) {
+                unit.state = UnitState::Swimming;
+                unit.in_water = true;
+            } else {
+                unit.start_drowning();
+                impl.audio_queue_.push_back(AudioEvent{SoundID::AntDrown, unit.pixel_x, unit.pixel_y, 0, 255});
+                impl.audio_queue_.push_back(AudioEvent{SoundID::WaterSplash, unit.pixel_x, unit.pixel_y, 0, 255});
+            }
+        } else if (land_cell.has_fire()) {
+            impl.physics_.resolve_fire_contact(unit, impl.grid_, impl.audio_queue_, impl.prng_, 0, 0);
+        } else if (impl.grid_.has_bomb_at(chosen)) {
+            impl.grid_.clear_bomb(static_cast<uint32_t>(chosen.x), static_cast<uint32_t>(chosen.y));
+            impl.active_effects_.push_back(VisualEffect{"bombex", unit.pixel_x, unit.pixel_y, 0, 10});
+            impl.audio_queue_.push_back(AudioEvent{SoundID::BombDetonate, unit.pixel_x, unit.pixel_y, 2, 255});
+            unit.take_damage(2, DamageSource::BombBlast, land_cell.interactive_owner);
+        }
+    }
 }
 
 } // anonymous namespace
@@ -1529,10 +1532,44 @@ void SimulationEngine::tick() {
         continue;
     }
 
-    // Bounce progression (*gb*, 10 ticks)
+    // Bounce progression (*gb*, 10 ticks after scuffle)
     if (ant_ptr->state == UnitState::Bounce) {
+        if (ant_ptr->is_in_scuffle) {
+            continue; // Concealed inside battle fight ball during scuffle
+        }
         ant_ptr->anim_tick++;
         ant_ptr->anim_subitem = ant_ptr->anim_tick;
+
+        // Check if just landed (push flight completed)
+        if (ant_ptr->push_tick_current == ant_ptr->push_ticks_total && ant_ptr->push_ticks_total > 0) {
+            if (impl_->grid_.in_bounds(ant_ptr->pos)) {
+                const auto& cell = impl_->grid_.get_cell(static_cast<uint32_t>(ant_ptr->pos.x), static_cast<uint32_t>(ant_ptr->pos.y));
+                // Water landing: Swimmer survives & swims, others drown
+                if (cell.terrain_type == TERRAIN_WATER && !cell.has_completed_bridge()) {
+                    if (ant_ptr->type == AntType::Swimmer) {
+                        ant_ptr->state = UnitState::Swimming;
+                        ant_ptr->in_water = true;
+                    } else {
+                        ant_ptr->start_drowning();
+                        impl_->audio_queue_.push_back(AudioEvent{SoundID::AntDrown, ant_ptr->pixel_x, ant_ptr->pixel_y, 0, 255});
+                        impl_->audio_queue_.push_back(AudioEvent{SoundID::WaterSplash, ant_ptr->pixel_x, ant_ptr->pixel_y, 0, 255});
+                        continue;
+                    }
+                }
+                // Fire landing: Take fire damage
+                if (cell.has_fire()) {
+                    impl_->physics_.resolve_fire_contact(*ant_ptr, impl_->grid_, impl_->audio_queue_, impl_->prng_, 0, 0);
+                }
+                // Bomb landing: Detonate bomb
+                if (impl_->grid_.has_bomb_at(ant_ptr->pos)) {
+                    impl_->grid_.clear_bomb(static_cast<uint32_t>(ant_ptr->pos.x), static_cast<uint32_t>(ant_ptr->pos.y));
+                    impl_->active_effects_.push_back(VisualEffect{"bombex", ant_ptr->pixel_x, ant_ptr->pixel_y, 0, 10});
+                    impl_->audio_queue_.push_back(AudioEvent{SoundID::BombDetonate, ant_ptr->pixel_x, ant_ptr->pixel_y, 2, 255});
+                    ant_ptr->take_damage(2, DamageSource::BombBlast, cell.interactive_owner);
+                }
+            }
+        }
+
         if (ant_ptr->anim_tick >= 10) {
             if (ant_ptr->hp == 0) {
                 ant_ptr->state = UnitState::Dead;
@@ -1772,30 +1809,47 @@ void SimulationEngine::tick() {
                         }
                     }
                 } else if (!a1_moving && !a2_moving) {
-                    // Both stationary friendly: mutual separation
-                    int32_t sep_x = static_cast<int32_t>(nx * (overlap * 0.5f) + (nx >= 0 ? 0.5f : -0.5f));
-                    int32_t sep_y = static_cast<int32_t>(ny * (overlap * 0.5f) + (ny >= 0 ? 0.5f : -0.5f));
+                    if (a1->pos != a2->pos) {
+                        // Both stationary friendly on different tiles: mutual separation
+                        int32_t sep_x = static_cast<int32_t>(nx * (overlap * 0.5f) + (nx >= 0 ? 0.5f : -0.5f));
+                        int32_t sep_y = static_cast<int32_t>(ny * (overlap * 0.5f) + (ny >= 0 ? 0.5f : -0.5f));
 
-                    int32_t cand1_x = (a1->pixel_x + sep_x) / 32;
-                    int32_t cand1_y = (a1->pixel_y + sep_y) / 32;
-                    if (impl_->grid_.in_bounds(cand1_x, cand1_y) && impl_->grid_.get_cell(static_cast<uint32_t>(cand1_x), static_cast<uint32_t>(cand1_y)).is_passable()) {
-                        a1->set_pixel_pos(a1->pixel_x + sep_x, a1->pixel_y + sep_y);
-                    }
+                        int32_t cand1_x = (a1->pixel_x + sep_x) / 32;
+                        int32_t cand1_y = (a1->pixel_y + sep_y) / 32;
+                        if (impl_->grid_.in_bounds(cand1_x, cand1_y) && impl_->grid_.get_cell(static_cast<uint32_t>(cand1_x), static_cast<uint32_t>(cand1_y)).is_passable()) {
+                            a1->set_pixel_pos(a1->pixel_x + sep_x, a1->pixel_y + sep_y);
+                        }
 
-                    int32_t cand2_x = (a2->pixel_x - sep_x) / 32;
-                    int32_t cand2_y = (a2->pixel_y - sep_y) / 32;
-                    if (impl_->grid_.in_bounds(cand2_x, cand2_y) && impl_->grid_.get_cell(static_cast<uint32_t>(cand2_x), static_cast<uint32_t>(cand2_y)).is_passable()) {
-                        a2->set_pixel_pos(a2->pixel_x - sep_x, a2->pixel_y - sep_y);
+                        int32_t cand2_x = (a2->pixel_x - sep_x) / 32;
+                        int32_t cand2_y = (a2->pixel_y - sep_y) / 32;
+                        if (impl_->grid_.in_bounds(cand2_x, cand2_y) && impl_->grid_.get_cell(static_cast<uint32_t>(cand2_x), static_cast<uint32_t>(cand2_y)).is_passable()) {
+                            a2->set_pixel_pos(a2->pixel_x - sep_x, a2->pixel_y - sep_y);
+                        }
                     }
                 }
 
                 // If both are stationary on exact same tile, bounce one to an available tile
                 if (!a1_moving && !a2_moving && a1->pos.x == a2->pos.x && a1->pos.y == a2->pos.y) {
+                    if (a1->is_in_scuffle || a2->is_in_scuffle) {
+                        continue;
+                    }
+                    if (a1->push_tick_current < a1->push_ticks_total && a1->state == UnitState::Bounce) continue;
+                    if (a2->push_tick_current < a2->push_ticks_total && a2->state == UnitState::Bounce) continue;
+
                     AntUnit* to_displace = (a1->id > a2->id ? a1.get() : a2.get());
                     AntUnit* anchor_ant = (to_displace == a1.get()) ? a2.get() : a1.get();
+
+                    anchor_ant->is_in_scuffle = true;
+                    anchor_ant->scuffle_ticks = 10;
+                    anchor_ant->clear_path();
+                    anchor_ant->set_tile_pos(anchor_ant->pos.x, anchor_ant->pos.y);
+                    anchor_ant->push_start_px = anchor_ant->pos.x * 32 + 16;
+                    anchor_ant->push_start_py = anchor_ant->pos.y * 32 + 16;
+
                     // Authentic 1998 battle scuffle visual effect and SoundID::CombatNetFairy (ID 3)
                     impl_->active_effects_.push_back(VisualEffect{"battle", anchor_ant->pixel_x, anchor_ant->pixel_y, 0, 10});
                     impl_->audio_queue_.push_back(AudioEvent{SoundID::CombatNetFairy, anchor_ant->pixel_x, anchor_ant->pixel_y, 1, 255});
+                    impl_->audio_queue_.push_back(AudioEvent{SoundID::FlingThumpB, anchor_ant->pixel_x, anchor_ant->pixel_y, 1, 255});
                     bounce_unit_cascade(*impl_, *to_displace, anchor_ant->pos.x, anchor_ant->pos.y);
                 }
             }
@@ -1805,6 +1859,7 @@ void SimulationEngine::tick() {
     // Discrete tile center guarantee: Ants must NEVER settle halfway between tiles
     for (auto& u : impl_->ants_) {
         if (!u || !u->is_alive() || u->underground) continue;
+        if (u->state == UnitState::Bounce && u->push_tick_current < u->push_ticks_total && u->pixel_x != u->push_dest_px) continue;
         if (u->state == UnitState::Idle || u->state == UnitState::GuardIdle ||
             u->state == UnitState::Bounce || u->state == UnitState::QueuingBase ||
             u->state == UnitState::CantGo) {
@@ -2252,6 +2307,7 @@ const WorldState& SimulationEngine::get_world_state() const {
             s.transform_anim_frame = (a->transform_timer > 0) ? static_cast<uint16_t>(11 - a->transform_timer) : 0;
             s.on_powerup = a->on_powerup;
             s.ability_cooldown_ticks = a->ability_cooldown_ticks;
+            s.is_in_scuffle = a->is_in_scuffle;
             s.state = a->state;
             impl_->world_state_cache_.ants.push_back(s);
         }

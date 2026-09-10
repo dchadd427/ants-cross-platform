@@ -192,6 +192,8 @@ public:
     int32_t     push_dest_py{0};
     uint8_t     push_ticks_total{4};
     uint8_t     push_tick_current{0};
+    bool        is_in_scuffle{false};
+    uint16_t    scuffle_ticks{0};
 
     std::vector<TileCoord> waypoints;
     size_t      current_waypoint_idx{0};
