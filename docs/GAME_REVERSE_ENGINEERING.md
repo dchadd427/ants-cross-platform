@@ -1194,11 +1194,13 @@ To deliver authentic 1:1 gameplay inside standard web browsers with zero install
 - Single-header, zero-dependency MP3 decoder integrated directly into `AudioMixer`.
 - Replaces DOM `<audio>` bridges with direct PCM decoding and buffer mixing, enabling unified volume control, looping, and cross-platform streaming across macOS and WebAssembly.
 
-#### 9. Authentic Combat Mechanics, Approach & Hit Reaction Parity (`Ants.exe` `0x101c4f2`, `0x101cb0c`, `0x101de7e`, `0x1022c57`)
-- **Strict Cardinal Approach & Distance Resolution**:
-  - In `Ants.exe`, an ant executing an attack order (`[esi + 0xa8] == 3`) navigates towards the target's position.
-  - When selecting candidate approach tiles, the engine evaluates strictly the **4 cardinal neighbors** (North, South, East, West). Diagonal neighbors are never targeted, guaranteeing straight-line approach and eliminating angled deviations on subsequent strikes.
-  - The ant only halts its walking step and strikes once it has arrived at the cardinal neighbor tile (`|dx| + |dy| <= 1` and at tile center), preventing premature stops one tile before reaching the enemy.
+#### 9. Authentic Combat Mechanics, 8-Directional Diagonal Attack & Hit Reaction Parity (`Ants.exe` `0x101c4f2`, `0x101cb0c`, `0x101de7e`, `0x1022c57`)
+- **8-Directional Diagonal Adjacency & Approach**:
+  - In `Ants.exe`, melee combat natively supports full 8-directional engagement (`chebyshev_dist <= 1`, including all 4 diagonal neighbors: North-East, North-West, South-East, South-West).
+  - When an ant is already adjacent to an enemy, it faces the enemy directly and attacks immediately on issuance without any detour.
+  - When an ant is ordered to attack from a distance, all 8 neighboring tiles are evaluated; the ant moves along the optimal path to the nearest passable neighbor (cardinal or diagonal).
+  - The ant completes its walk to the neighbor tile center (`at_tile_center || waypoints.empty()`) before swinging, preventing premature strikes one tile early while allowing instant strikes when adjacent.
+  - Diagonal melee strikes push the victim along the diagonal strike vector `(target->pos.x + p_dx, target->pos.y + p_dy)`, deflecting to cardinal flanks only if obstructed by walls or rock obstacles.
 - **Attack Animation Playback (`*at*`)**:
   - `agat301` subitem sequence in `ants.chd` consists of 6 subitems with durations `(60, 60, 60, 90, 60, 90)` ms totaling 420ms (8.4 ticks @ 20Hz).
   - `acat301` (Combat Ant) consists of 6 subitems with durations `(80, 100, 60, 80, 100, 120)` ms totaling 540ms (11 ticks @ 20Hz).
@@ -1209,3 +1211,13 @@ To deliver authentic 1:1 gameplay inside standard web browsers with zero install
   - During the first 4 ticks (200ms), the victim smoothly slides 32 pixels from origin to destination (8px per tick), completely eliminating abrupt 32px single-tick teleportation.
   - During the remaining ticks (4..14), the victim stays on the destination tile, playing all stagger and recovery subitems of `aggh*`.
   - The victim is forced to orient its facing direction toward the attacking ant at the moment of impact.
+
+#### 10. Authentic 10-Tick Collision Scuffle Ball & Layer 2 Floor Debris Walkability (`Ants.exe` `0x101a86a`, `0x1020951`, `0x10215cb`, `0x102162a`)
+- **10-Tick Scuffle Ball & 2-Cycle Spin**:
+  - In `Ants.exe`, collision scuffle (State 3) initializes timer `[esi + 0x74] = 0xa` (10 ticks / 500ms @ 20Hz).
+  - Visual effect `battle` (Anim 56, `batt001..batt004`) loops for **2 complete cycles** across the 10 ticks, matching the 622ms duration of Sound 3 `combatnetfairy.wav`.
+  - `UnitState::Bounce` lasts 10 ticks (500ms), allowing all 12 subitems of `*gb*` (`aggb301`) to render smoothly from airborne recoil to ground impact (`SoundID::FlingThumpB`) and standing recovery.
+- **Layer 2 Floor Debris Passability (`TINY.LVL` Tile 18, 17)**:
+  - In `Ants.exe` (`0x1020951`, `0x1008af7`), terrain passability queries tile descriptors in table `0x10049c8`.
+  - Layer 2 tiles consisting of flat floor debris such as `broken1`, `broken2` (`cerbol3.bmp`, `cerbol4.bmp`), and `broken3` (`spoon.bmp`) are non-obstacle ground decor (`is_obstacle_overlay = false`).
+  - This preserves walkability on pathways such as slate tile `(18, 17)` on `TINY.LVL`.

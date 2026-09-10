@@ -192,6 +192,7 @@ void PhysicsEngine::resolve_landing(AntUnit& unit,
     // 3. Ground Landing
     if (unit.hp == 0) {
         unit.state = UnitState::Bounce;
+        unit.state_timer = 10;
         unit.anim_tick = 0;
         unit.anim_subitem = 0;
         audio_out.push_back(AudioEvent{SOUND_FLY_THUMP_B, unit.pixel_x, unit.pixel_y, 0, 255});
