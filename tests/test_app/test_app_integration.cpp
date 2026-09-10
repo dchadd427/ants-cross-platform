@@ -754,6 +754,21 @@ void run_suite_7_input_controls() {
         ASSERT_TRUE(hud.is_ant_selected(a2));
         ASSERT_TRUE(hud.is_ant_selected(a3));
         ASSERT_FALSE(hud.is_ant_selected(enemy)); // Enemy not selected by marquee
+
+        // 7.2b: Partial sprite intersection test (marquee grazes top of sprite without encompassing center px/py)
+        // a1 at TileCoord{5, 5}: px = 176, py = 176, sprite top is ~150.
+        // Drag marquee that only covers y from 100 to 160 (center y=176 is outside, but head is inside):
+        hud.clear_selection();
+        int32_t p_sx1 = 150 + HUD::PLAYFIELD_X;
+        int32_t p_sy1 = 100 + HUD::PLAYFIELD_Y;
+        int32_t p_sx2 = 200 + HUD::PLAYFIELD_X;
+        int32_t p_sy2 = 160 + HUD::PLAYFIELD_Y; // Stops at 160, before ant center 176
+
+        hud.handle_mouse_down(p_sx1, p_sy1, 1, sim, camera);
+        hud.handle_mouse_motion(p_sx2, p_sy2, sim, camera);
+        hud.handle_mouse_up(p_sx2, p_sy2, 1, sim, camera);
+
+        ASSERT_TRUE(hud.is_ant_selected(a1)); // Any part of sprite inside marquee selects unit
     } TEST_END();
 
     TEST_CASE("7.3 Enemy Click with Friendly Selected Dispatches Attack Order") {

@@ -1068,20 +1068,42 @@ void HUD::select_all_friendly(const sim::WorldState& world) {
     }
 }
 
-void HUD::select_ants_in_rect(int32_t x1, int32_t y1, int32_t x2, int32_t y2, const sim::WorldState& world) {
+void HUD::select_ants_in_rect(int32_t x1, int32_t y1, int32_t x2, int32_t y2, const sim::WorldState& world, bool additive) {
     int32_t rx1 = std::min(x1, x2);
     int32_t rx2 = std::max(x1, x2);
     int32_t ry1 = std::min(y1, y2);
     int32_t ry2 = std::max(y1, y2);
 
-    selected_ant_ids_.clear();
+    if (!additive) {
+        selected_ant_ids_.clear();
+    }
     for (const auto& ant : world.ants) {
         if (ant.hp == 0 || ant.is_drowning) continue;
         if (ant.player_id == local_player_id_) {
-            int32_t ax = ant.px;
-            int32_t ay = ant.py;
-            if (ax >= rx1 && ax <= rx2 && ay >= ry1 && ay <= ry2) {
-                selected_ant_ids_.push_back(ant.id);
+            // Authentic ant sprite extents around anchor (ant.px, ant.py):
+            // Width spans 40-60px (dx ~ -20..+20, up to -30..+30 for Combat), height spans 44-46px (dy ~ -30..+16)
+            int32_t half_w = (ant.type == sim::AntType::Combat) ? 30 : 20;
+            int32_t top_h = 30;
+            int32_t bot_h = 16;
+            int32_t ant_x1 = ant.px - half_w;
+            int32_t ant_x2 = ant.px + half_w;
+            int32_t ant_y1 = ant.py - top_h;
+            int32_t ant_y2 = ant.py + bot_h;
+
+            // Also encompass the discrete tile bounds
+            int32_t tile_x1 = ant.tile_x * 32;
+            int32_t tile_x2 = tile_x1 + 32;
+            int32_t tile_y1 = ant.tile_y * 32;
+            int32_t tile_y2 = tile_y1 + 32;
+
+            // Select if the marquee box intersects any part of the ant's sprite bounding box or tile
+            bool hit_sprite = (rx1 <= ant_x2 && rx2 >= ant_x1 && ry1 <= ant_y2 && ry2 >= ant_y1);
+            bool hit_tile   = (rx1 <= tile_x2 && rx2 >= tile_x1 && ry1 <= tile_y2 && ry2 >= tile_y1);
+
+            if (hit_sprite || hit_tile) {
+                if (std::find(selected_ant_ids_.begin(), selected_ant_ids_.end(), ant.id) == selected_ant_ids_.end()) {
+                    selected_ant_ids_.push_back(ant.id);
+                }
             }
         }
     }
@@ -1607,7 +1629,7 @@ bool HUD::handle_mouse_up(int32_t x, int32_t y, uint8_t button,
             int32_t y1 = camera.world_y + (std::min(drag_start_y_, drag_curr_y_) - PLAYFIELD_Y);
             int32_t x2 = camera.world_x + (std::max(drag_start_x_, drag_curr_x_) - PLAYFIELD_X);
             int32_t y2 = camera.world_y + (std::max(drag_start_y_, drag_curr_y_) - PLAYFIELD_Y);
-            select_ants_in_rect(x1, y1, x2, y2, world);
+            select_ants_in_rect(x1, y1, x2, y2, world, shift_held);
         } else {
             // Single Click (dx <= 4 && dy <= 4)
             int32_t world_x = camera.world_x + (drag_start_x_ - PLAYFIELD_X);
