@@ -1143,7 +1143,10 @@ To deliver authentic 1:1 gameplay inside standard web browsers with zero install
     - `c1 = is_fog(x + 1, y)` (East)
     - `c2 = is_fog(x, y + 1)` (South)
     - `c3 = is_fog(x - 1, y)` (West)
+    - Polarity: `1` if neighbor is Fog (unrevealed or out-of-bounds), `0` if neighbor is Revealed (`Ants.exe 0x1008760..0x10087da: call 0x100a1aa; neg eax; sbb eax, eax; inc eax` converts revealed boolean into fog boolean).
   - The exact 1998 formula `((c0 * 2 + c1) * 2 + 2 + c2) * 2 + c3` maps all 16 permutations to `dither0.bmp` through `dither15.bmp` (Animation IDs 162..177 / Sprite IDs 352..367).
+    - Interior deep fog (`1, 1, 1, 1`) evaluates to `idx = 19` -> `dither0.bmp` (Anim 162 / Sprite 352), providing a uniform 50% checkerboard stipple veil without blotches or gaps.
+    - An isolated 1-tile island surrounded by light (`0, 0, 0, 0`) evaluates to `idx = 4` -> `dither13.bmp` (Anim 175 / Sprite 365, rounded circular island dot).
 - **Hidden Entities (`0x100823b`, `0x1008914`)**: Enemy units, enemy bases, food morsels, powerups, and bombs on unrevealed tiles are hidden. Base terrain is visible under the stipple dither overlay.
 - **Minimap Radar**: Unrevealed tiles are drawn dark/shrouded `{15, 12, 10, 255}`; enemy dots, food, and enemy anthill markers are omitted.
 

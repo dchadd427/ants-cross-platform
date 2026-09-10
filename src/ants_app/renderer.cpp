@@ -1184,10 +1184,18 @@ void Renderer::render_fog_of_war(const ants::sim::WorldState& world) {
                 continue; // Revealed tiles are not covered by fog
             }
 
-            int32_t c0 = world.is_tile_revealed(c, r - 1) ? 1 : 0; // North
-            int32_t c1 = world.is_tile_revealed(c + 1, r) ? 1 : 0; // East
-            int32_t c2 = world.is_tile_revealed(c, r + 1) ? 1 : 0; // South
-            int32_t c3 = world.is_tile_revealed(c - 1, r) ? 1 : 0; // West
+            auto is_fog = [&](int32_t x, int32_t y) -> int32_t {
+                if (x < 0 || x >= static_cast<int32_t>(world.width) ||
+                    y < 0 || y >= static_cast<int32_t>(world.height)) {
+                    return 1; // Out-of-bounds tiles are unrevealed fog
+                }
+                return world.is_tile_revealed(x, y) ? 0 : 1; // 1 = Fog, 0 = Revealed
+            };
+
+            int32_t c0 = is_fog(c, r - 1); // North
+            int32_t c1 = is_fog(c + 1, r); // East
+            int32_t c2 = is_fog(c, r + 1); // South
+            int32_t c3 = is_fog(c - 1, r); // West
 
             int32_t idx = ((c0 * 2 + c1) * 2 + 2 + c2) * 2 + c3;
             if (idx < 4 || idx > 19) continue;

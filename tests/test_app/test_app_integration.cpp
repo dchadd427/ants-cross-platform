@@ -6025,6 +6025,21 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         const auto& world2 = sim.get_world_state();
         ASSERT_TRUE(world2.is_tile_revealed(30, 30)); // Permanent exploration
         ASSERT_TRUE(world2.is_tile_revealed(31, 30));
+
+        // Authentic 1998 Fog of War Autotiling & Dither Mapping Verification (Ants.exe 0x1008760..0x10087da)
+        // c = 1 if neighbor is Fog, 0 if neighbor is Revealed
+        auto compute_idx = [](int32_t c0, int32_t c1, int32_t c2, int32_t c3) {
+            return ((c0 * 2 + c1) * 2 + 2 + c2) * 2 + c3;
+        };
+
+        // Deep interior fog: all neighbors are fog (1, 1, 1, 1) -> idx 19 -> dither0.bmp (352, solid 50% stipple)
+        ASSERT_EQ(compute_idx(1, 1, 1, 1), 19);
+
+        // Boundary fog: North neighbor is revealed (0, 1, 1, 1) -> idx 11 -> dither1.bmp (353, top edge fade)
+        ASSERT_EQ(compute_idx(0, 1, 1, 1), 11);
+
+        // Isolated fog island: all neighbors are revealed (0, 0, 0, 0) -> idx 4 -> dither13.bmp (365, rounded island dot)
+        ASSERT_EQ(compute_idx(0, 0, 0, 0), 4);
     } TEST_END();
 
     TEST_CASE("12.77 Hatching Emergence Isolation of exithill.wav") {
