@@ -195,6 +195,7 @@ bool Application::init(const ApplicationConfig& config) {
     });
 
     hud_.set_on_music_volume([this](float v) {
+        audio_mixer_.set_music_volume(v);
         midi_player_.set_volume(v);
     });
 
@@ -215,6 +216,7 @@ bool Application::init(const ApplicationConfig& config) {
     });
 
     audio_mixer_.set_sfx_volume(hud_.get_sfx_volume());
+    audio_mixer_.set_music_volume(hud_.get_music_volume());
     midi_player_.set_volume(hud_.get_music_volume());
 
     // 9. Initialize Map Selection Screen
@@ -238,9 +240,10 @@ bool Application::init(const ApplicationConfig& config) {
         audio_mixer_.play_sfx(sound_id, 1.0f, 255);
     });
 
-    // Determine initial AppState & MIDI lifecycle
+    // Determine initial AppState & audio lifecycle
     if (!config_.start_in_map_select) {
         state_ = AppState::Playing;
+        audio_mixer_.stop_music();
         midi_player_.stop();
         if (config_.select_ant_id > 0) {
             hud_.select_ant(static_cast<uint32_t>(config_.select_ant_id));
@@ -271,7 +274,10 @@ bool Application::init(const ApplicationConfig& config) {
         }
     } else {
         state_ = AppState::MapSelect;
-        midi_player_.play(true); // Loop INTRO.MID exclusively during map selection
+        audio_mixer_.play_music("Original-Ants/INTRO.mp3", true);
+        if (config_.headless) {
+            midi_player_.play(true); // Loop INTRO exclusively during map selection
+        }
     }
 
     is_running_ = true;
@@ -305,10 +311,11 @@ void Application::shutdown() {
 }
 
 bool Application::start_game(const std::string& map_path) {
-    // 1. In-Game Music: Shuffle between ANTS2A.MID, ANTS2B.MID, ANTSFUN3.MID
+    // 1. In-Game Music: Shuffle between ANTS2A, ANTS2B, ANTSFUN3
     if (!is_music_muted_) {
         play_next_ingame_music();
     } else {
+        audio_mixer_.stop_music();
         midi_player_.stop();
     }
 
@@ -324,6 +331,8 @@ bool Application::start_game(const std::string& map_path) {
     config_.default_map_path = map_path;
 
     // 3. Re-initialize simulation
+    sim_.set_fog_of_war_enabled(map_select_.is_fog_of_war_enabled());
+    sim_.set_viewing_player_id(local_player_id_);
     sim_.init(current_level_, config_.random_seed);
 
     // 4. Update renderer & camera centered on the base of the current player
@@ -382,7 +391,10 @@ void Application::return_to_map_select() {
     mouse_has_moved_ = false;
     midi_player_.load_file(config_.midi_path);
     if (!is_music_muted_) {
-        midi_player_.play(true); // Resumes INTRO.MID during map selection
+        audio_mixer_.play_music("Original-Ants/INTRO.mp3", true);
+        if (config_.headless) {
+            midi_player_.play(true); // Resumes INTRO during map selection
+        }
     }
 }
 
@@ -717,13 +729,15 @@ void Application::handle_key_down(const SDL_KeyboardEvent& key) {
     if (key.keysym.sym == SDLK_m && ctrl_or_gui) {
         is_music_muted_ = !is_music_muted_;
         if (is_music_muted_) {
+            audio_mixer_.stop_music();
             midi_player_.stop();
             hud_.queue_news_message("Music Muted", 40, false);
         } else {
             if (state_ == AppState::Playing) {
                 play_next_ingame_music();
             } else {
-                midi_player_.play(true);
+                audio_mixer_.play_music("Original-Ants/INTRO.mp3", true);
+                if (config_.headless) midi_player_.play(true);
             }
             hud_.queue_news_message("Music Enabled", 40, false);
         }
@@ -832,6 +846,7 @@ void Application::update_simulation(float dt) {
                     audio_mixer_.play_sfx(sting_sound, 1.0f, 255);
                     scorecard_.clear_audio_to_play();
                 }
+                audio_mixer_.fade_out_music(1.0f);
                 midi_player_.fade_out(1.0f);
             }
         }
@@ -846,8 +861,9 @@ void Application::update_simulation(float dt) {
         renderer_->update_transient_effects(dt);
     }
 
+    audio_mixer_.update_music(dt);
     midi_player_.update(dt);
-    if (state_ == AppState::Playing && !is_music_muted_ && !midi_player_.is_playing() && !sim_.is_match_over()) {
+    if (state_ == AppState::Playing && !is_music_muted_ && !audio_mixer_.is_music_playing() && !midi_player_.is_playing() && !sim_.is_match_over()) {
         play_next_ingame_music();
     }
 }
@@ -937,9 +953,9 @@ void Application::toggle_fullscreen() {
 
 void Application::play_next_ingame_music() {
     static const std::string IN_GAME_TRACKS[3] = {
-        "Original-Ants/ANTS2A.MID",
-        "Original-Ants/ANTS2B.MID",
-        "Original-Ants/ANTSFUN3.MID"
+        "ANTS2A",
+        "ANTS2B",
+        "ANTSFUN3"
     };
 
     // Authentic shuffle sequence: rand() % 3, avoiding immediate repeat of previous track
@@ -949,8 +965,11 @@ void Application::play_next_ingame_music() {
     }
     last_music_track_ = track;
 
-    midi_player_.load_file(IN_GAME_TRACKS[track]);
-    midi_player_.play(false);
+    audio_mixer_.play_music("Original-Ants/" + IN_GAME_TRACKS[track] + ".mp3", false);
+    midi_player_.load_file("Original-Ants/" + IN_GAME_TRACKS[track] + ".MID");
+    if (config_.headless) {
+        midi_player_.play(false);
+    }
 }
 
 void Application::play_startup_sound() {
@@ -964,6 +983,7 @@ void Application::play_startup_sound() {
 void Application::set_local_player(uint8_t team_id) {
     if (team_id >= 4) return;
     local_player_id_ = team_id;
+    sim_.set_viewing_player_id(local_player_id_);
     map_select_.set_player_team(local_player_id_);
     hud_.init(local_player_id_);
     hud_.clear_selection();

@@ -53,7 +53,9 @@ bool AntUnit::take_damage(uint16_t amount, DamageSource source, [[maybe_unused]]
     }
 
     hp = static_cast<uint16_t>(hp - amount);
-    if (state != UnitState::Knockback && state != UnitState::Stunned && state != UnitState::Drowning) {
+    bool uninterruptible = (state == UnitState::PlacingFire || state == UnitState::PlantingBomb ||
+                            state == UnitState::BuildingBridge || state == UnitState::DemolishingBridge);
+    if (!uninterruptible && state != UnitState::Knockback && state != UnitState::Stunned && state != UnitState::Drowning) {
         start_flinch();
     }
     return false; // Survived

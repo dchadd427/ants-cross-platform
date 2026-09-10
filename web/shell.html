@@ -751,22 +751,6 @@
                 // Ignore audio unlock exceptions
             }
 
-            // Immediately start background music if it was queued pending user gesture
-            if (window.antsBgm) {
-                if (window.antsBgmPendingPlay) {
-                    window.antsBgm.loop = window.antsBgmPendingPlay.loop;
-                    window.antsBgm.volume = window.antsBgmPendingPlay.volume;
-                    window.antsBgm.play().then(function() {
-                        window.antsBgmIsPlaying = true;
-                        window.antsBgmPendingPlay = null;
-                    }).catch(function(e) {
-                        console.warn("[BGM] Deferred play:", e);
-                    });
-                } else if (window.antsBgm.paused && window.antsBgmIsPlaying) {
-                    window.antsBgm.play().catch(function() {});
-                }
-            }
-
             splashOverlay.style.opacity = '0';
             setTimeout(function() {
                 splashOverlay.style.display = 'none';
@@ -779,14 +763,6 @@
         function ensureAudioUnlocked() {
             if (typeof SDL2 !== 'undefined' && SDL2.audioContext && SDL2.audioContext.state === 'suspended') {
                 SDL2.audioContext.resume();
-            }
-            if (window.antsBgm && window.antsBgmPendingPlay) {
-                window.antsBgm.loop = window.antsBgmPendingPlay.loop;
-                window.antsBgm.volume = window.antsBgmPendingPlay.volume;
-                window.antsBgm.play().then(function() {
-                    window.antsBgmIsPlaying = true;
-                    window.antsBgmPendingPlay = null;
-                }).catch(function() {});
             }
         }
         window.addEventListener('click', ensureAudioUnlocked, { capture: true });

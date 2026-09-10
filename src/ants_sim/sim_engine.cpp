@@ -38,6 +38,53 @@ public:
     std::array<AnthillQueueState, MAX_PLAYERS> base_queues_{};
     std::vector<VisualEffect> active_effects_;
 
+    // Fog of War State
+    bool fog_of_war_enabled_{false};
+    std::vector<uint8_t> fog_revealed_{};
+    uint8_t viewing_player_id_{0};
+
+    void reveal_fog_tile(int32_t x, int32_t y) {
+        if (x < 0 || y < 0 || static_cast<uint32_t>(x) >= grid_.width() || static_cast<uint32_t>(y) >= grid_.height()) return;
+        size_t idx = static_cast<size_t>(y) * grid_.width() + static_cast<size_t>(x);
+        if (idx < fog_revealed_.size() && fog_revealed_[idx] == 0) {
+            fog_revealed_[idx] = 1;
+            world_state_dirty_ = true;
+        }
+    }
+
+    void reveal_fog_box(int32_t min_x, int32_t min_y, int32_t max_x, int32_t max_y) {
+        for (int32_t y = min_y; y <= max_y; ++y) {
+            for (int32_t x = min_x; x <= max_x; ++x) {
+                reveal_fog_tile(x, y);
+            }
+        }
+    }
+
+    void update_fog_of_war() {
+        if (!fog_of_war_enabled_) return;
+        size_t total_tiles = static_cast<size_t>(grid_.width() * grid_.height());
+        if (fog_revealed_.size() != total_tiles) {
+            fog_revealed_.assign(total_tiles, 0);
+            world_state_dirty_ = true;
+        }
+
+        // Reveal viewing player's base (and allied bases)
+        for (const auto& ah : grid_.anthills()) {
+            if (ah.team_id == viewing_player_id_ || stats_.are_allies(viewing_player_id_, ah.team_id)) {
+                reveal_fog_box(static_cast<int32_t>(ah.x) - 6, static_cast<int32_t>(ah.y) - 6,
+                               static_cast<int32_t>(ah.x) + 9, static_cast<int32_t>(ah.y) + 9);
+            }
+        }
+
+        // Reveal friendly units (and allied units)
+        for (const auto& ant : ants_) {
+            if (!ant || !ant->is_alive() || ant->underground) continue;
+            if (ant->player_id == viewing_player_id_ || stats_.are_allies(viewing_player_id_, ant->player_id)) {
+                reveal_fog_box(ant->pos.x - 6, ant->pos.y - 6, ant->pos.x + 6, ant->pos.y + 6);
+            }
+        }
+    }
+
     struct FlowerDropper {
         TileCoord pos;
         TileCoord drop_pos;
@@ -365,6 +412,8 @@ void SimulationEngine::init(const ants::assets::LevelData& level, uint32_t rando
         fd2.timer_ticks = 300;
         fd2.probabilities = {0.45, 0.0, 0.0, 0.1, 0.45};
         impl_->flower_droppers_.push_back(fd2);
+        impl_->grid_.get_cell_mut(2, 19).is_obstacle_overlay = true;
+        impl_->grid_.get_cell_mut(37, 19).is_obstacle_overlay = true;
     }
 
     impl_->invite_pending_ticks_.fill(0);
@@ -391,6 +440,11 @@ void SimulationEngine::init(const ants::assets::LevelData& level, uint32_t rando
             }
             spawn_unit(a.team_id, AntType::Worker, TileCoord{static_cast<uint16_t>(sx), static_cast<uint16_t>(sy)});
         }
+    }
+
+    impl_->fog_revealed_.assign(static_cast<size_t>(impl_->grid_.width() * impl_->grid_.height()), 0);
+    if (impl_->fog_of_war_enabled_) {
+        impl_->update_fog_of_war();
     }
 }
 
@@ -419,6 +473,11 @@ void SimulationEngine::init_test_world(uint32_t width, uint32_t height, uint32_t
     for (uint8_t p = 0; p < MAX_PLAYERS; ++p) {
         impl_->stats_.set_egg_count(p, 10);
     }
+
+    impl_->fog_revealed_.assign(static_cast<size_t>(impl_->grid_.width() * impl_->grid_.height()), 0);
+    if (impl_->fog_of_war_enabled_) {
+        impl_->update_fog_of_war();
+    }
 }
 
 void SimulationEngine::reset() {
@@ -438,6 +497,7 @@ void SimulationEngine::reset() {
         bq.active_depositing_ant_id = 0;
     }
     impl_->invite_pending_ticks_.fill(0);
+    impl_->fog_revealed_.clear();
 }
 
 void SimulationEngine::tick() {
@@ -1183,7 +1243,6 @@ void SimulationEngine::tick() {
                     if (ant_ptr->base_dwell_ticks == 0) {
                         // Eating complete! Ant starts emerging from the hole (*hatch animation)
                         ant_ptr->underground = false;
-                        impl_->audio_queue_.push_back(AudioEvent{SoundID::ExitHill, ant_ptr->pixel_x, ant_ptr->pixel_y, 1, ant_ptr->player_id});
                         // Clear active depositing ant from queue so next ant moves
                         auto& bq = impl_->base_queues_[ant_ptr->player_id];
                         if (bq.active_depositing_ant_id == ant_ptr->id) {
@@ -1384,7 +1443,6 @@ void SimulationEngine::tick() {
             ant_ptr->state = UnitState::Idle;
             ant_ptr->anim_tick = 0;
             ant_ptr->anim_subitem = 0;
-            ant_ptr->ability_cooldown_ticks = 60; // 3.0s authentic cooldown (Ants.exe VA 0x101bdd1, 0xbb8)
             ant_ptr->ability_target = TileCoord{-1, -1};
         }
         continue;
@@ -1422,7 +1480,6 @@ void SimulationEngine::tick() {
             ant_ptr->state = UnitState::Idle;
             ant_ptr->anim_tick = 0;
             ant_ptr->anim_subitem = 0;
-            ant_ptr->ability_cooldown_ticks = 40; // 2.0s authentic cooldown (Ants.exe VA 0x101ba24, 0x7d0)
             ant_ptr->ability_target = TileCoord{-1, -1};
         }
         continue;
@@ -1815,6 +1872,10 @@ void SimulationEngine::tick() {
             }
         }
     }
+
+    if (impl_->fog_of_war_enabled_) {
+        impl_->update_fog_of_war();
+    }
     impl_->world_state_dirty_ = true;
 }
 
@@ -1822,8 +1883,10 @@ void SimulationEngine::issue_order(const AntOrder& order) {
     AntUnit* unit = impl_->find_unit(order.ant_id);
     if (!unit || !unit->is_alive() || unit->is_stunned()) return;
 
-    // You should not be able to interrupt actions currently animating
-    if (unit->state == UnitState::BuildingBridge || unit->state == UnitState::DemolishingBridge) {
+    // Special abilities (Fire and Bomb placement, Bridge construction) cannot be interrupted and trigger "Can't Go"
+    if (unit->state == UnitState::PlacingFire || unit->state == UnitState::PlantingBomb ||
+        unit->state == UnitState::BuildingBridge || unit->state == UnitState::DemolishingBridge) {
+        impl_->audio_queue_.push_back(AudioEvent{SoundID::CantGo, unit->pixel_x, unit->pixel_y, 1, 255});
         return;
     }
 
@@ -2191,6 +2254,8 @@ const WorldState& SimulationEngine::get_world_state() const {
 
         impl_->world_state_cache_.anthills = impl_->grid_.anthills();
         impl_->world_state_cache_.match_result = impl_->stats_.evaluate_victory();
+        impl_->world_state_cache_.fog_of_war_enabled = impl_->fog_of_war_enabled_;
+        impl_->world_state_cache_.fog_revealed = impl_->fog_revealed_;
         impl_->world_state_dirty_ = false;
     }
     return impl_->world_state_cache_;
@@ -2208,6 +2273,26 @@ void SimulationEngine::set_match_time_remaining_ms(uint32_t ms) {
     if (ms == 0 && impl_->match_state_ == MatchState::Running) {
         impl_->handle_game_over();
     }
+}
+
+void SimulationEngine::set_fog_of_war_enabled(bool enabled) {
+    impl_->fog_of_war_enabled_ = enabled;
+    if (enabled) {
+        impl_->update_fog_of_war();
+    }
+    impl_->world_state_dirty_ = true;
+}
+
+bool SimulationEngine::is_fog_of_war_enabled() const {
+    return impl_->fog_of_war_enabled_;
+}
+
+void SimulationEngine::set_viewing_player_id(uint8_t player_id) {
+    impl_->viewing_player_id_ = player_id;
+    if (impl_->fog_of_war_enabled_) {
+        impl_->update_fog_of_war();
+    }
+    impl_->world_state_dirty_ = true;
 }
 
 void SimulationEngine::trigger_player_dropout(uint8_t player_id, const std::string& player_name) {
@@ -2366,9 +2451,14 @@ void SimulationEngine::execute_melee_attack(uint32_t attacker_id, uint32_t targe
     attacker->state = UnitState::Attacking;
     attacker->state_timer = 6;
     attacker->facing = ants::assets::vector_to_direction(target->pos.x - attacker->pos.x, target->pos.y - attacker->pos.y);
+    bool target_in_uninterruptible_ability = (
+        target->state == UnitState::PlacingFire || target->state == UnitState::PlantingBomb ||
+        target->state == UnitState::BuildingBridge || target->state == UnitState::DemolishingBridge
+    );
+
     int32_t to_att_x = attacker->pos.x - target->pos.x;
     int32_t to_att_y = attacker->pos.y - target->pos.y;
-    if (to_att_x != 0 || to_att_y != 0) {
+    if (!target_in_uninterruptible_ability && (to_att_x != 0 || to_att_y != 0)) {
         target->facing = ants::assets::vector_to_direction(to_att_x, to_att_y);
     }
 
@@ -2387,53 +2477,55 @@ void SimulationEngine::execute_melee_attack(uint32_t attacker_id, uint32_t targe
             impl_->spawn_death_effect(target->pixel_x, target->pixel_y);
         }
 
-        int32_t dx = target->pos.x - attacker->pos.x;
-        int32_t dy = target->pos.y - attacker->pos.y;
-        if (dx == 0 && dy == 0) dx = 1;
-        int32_t dir_x = (dx > 0) ? 1 : ((dx < 0) ? -1 : 0);
-        int32_t dir_y = (dy > 0) ? 1 : ((dy < 0) ? -1 : 0);
-        int32_t dist = 4;
+        if (!lethal && !target_in_uninterruptible_ability) {
+            int32_t dx = target->pos.x - attacker->pos.x;
+            int32_t dy = target->pos.y - attacker->pos.y;
+            if (dx == 0 && dy == 0) dx = 1;
+            int32_t dir_x = (dx > 0) ? 1 : ((dx < 0) ? -1 : 0);
+            int32_t dir_y = (dy > 0) ? 1 : ((dy < 0) ? -1 : 0);
+            int32_t dist = 4;
 
-        TileCoord land_pos = target->pos;
-        for (int32_t s = 1; s <= dist; ++s) {
-            TileCoord next_pos{target->pos.x + dir_x * s, target->pos.y + dir_y * s};
-            if (!impl_->grid_.in_bounds(next_pos)) {
-                break;
+            TileCoord land_pos = target->pos;
+            for (int32_t s = 1; s <= dist; ++s) {
+                TileCoord next_pos{target->pos.x + dir_x * s, target->pos.y + dir_y * s};
+                if (!impl_->grid_.in_bounds(next_pos)) {
+                    break;
+                }
+                const auto& cell = impl_->grid_.get_cell(static_cast<uint32_t>(next_pos.x), static_cast<uint32_t>(next_pos.y));
+                if (cell.terrain_type == TERRAIN_OBSTACLE || cell.is_obstacle_overlay) {
+                    break; // Stop before solid rock obstacle
+                }
+                land_pos = next_pos;
+                if (cell.has_fire()) {
+                    break; // Flight interrupted by fire contact!
+                }
             }
-            const auto& cell = impl_->grid_.get_cell(static_cast<uint32_t>(next_pos.x), static_cast<uint32_t>(next_pos.y));
-            if (cell.terrain_type == TERRAIN_OBSTACLE || cell.is_obstacle_overlay) {
-                break; // Stop before solid rock obstacle
+
+            int32_t land_dist = std::max(std::abs(land_pos.x - target->pos.x), std::abs(land_pos.y - target->pos.y));
+            if (land_dist <= 0) land_dist = 1;
+
+            impl_->audio_queue_.push_back(AudioEvent{SoundID::HeavyPunch, attacker->pixel_x, attacker->pixel_y, 1, 255});
+            impl_->audio_queue_.push_back(AudioEvent{SoundID::StunRecover, target->pixel_x, target->pixel_y, 0, 255});
+
+            target->clear_path();
+            int32_t from_px = attacker->pixel_x;
+            int32_t from_py = attacker->pixel_y;
+            impl_->physics_.apply_knockback(*target, from_px, from_py, land_dist, land_dist,
+                                            DamageSource::CombatPunch, impl_->audio_queue_, impl_->prng_.rand());
+            target->pos = land_pos;
+            target->stun_ticks_remaining = AntUnit::STUN_TICKS;
+            target->state = UnitState::Knockback;
+
+            // Fire collision check on landing / contact
+            if (impl_->grid_.has_fire_at(target->pos)) {
+                impl_->physics_.resolve_fire_contact(*target, impl_->grid_, impl_->audio_queue_, impl_->prng_, dir_x, dir_y);
             }
-            land_pos = next_pos;
-            if (cell.has_fire()) {
-                break; // Flight interrupted by fire contact!
-            }
-        }
 
-        int32_t land_dist = std::max(std::abs(land_pos.x - target->pos.x), std::abs(land_pos.y - target->pos.y));
-        if (land_dist <= 0) land_dist = 1;
-
-        impl_->audio_queue_.push_back(AudioEvent{SoundID::HeavyPunch, attacker->pixel_x, attacker->pixel_y, 1, 255});
-        impl_->audio_queue_.push_back(AudioEvent{SoundID::StunRecover, target->pixel_x, target->pixel_y, 0, 255});
-
-        target->clear_path();
-        int32_t from_px = attacker->pixel_x;
-        int32_t from_py = attacker->pixel_y;
-        impl_->physics_.apply_knockback(*target, from_px, from_py, land_dist, land_dist,
-                                        DamageSource::CombatPunch, impl_->audio_queue_, impl_->prng_.rand());
-        target->pos = land_pos;
-        target->stun_ticks_remaining = AntUnit::STUN_TICKS;
-        target->state = UnitState::Knockback;
-
-        // Fire collision check on landing / contact
-        if (impl_->grid_.has_fire_at(target->pos)) {
-            impl_->physics_.resolve_fire_contact(*target, impl_->grid_, impl_->audio_queue_, impl_->prng_, dir_x, dir_y);
-        }
-
-        if (!lethal && target->hp == 1 && target->state != UnitState::EnteringBase && !target->underground) {
-            const auto* home = impl_->grid_.find_anthill(target->player_id);
-            if (home) {
-                join_base_queue(target->id);
+            if (target->hp == 1 && target->state != UnitState::EnteringBase && !target->underground) {
+                const auto* home = impl_->grid_.find_anthill(target->player_id);
+                if (home) {
+                    join_base_queue(target->id);
+                }
             }
         }
     } else {
@@ -2447,7 +2539,7 @@ void SimulationEngine::execute_melee_attack(uint32_t attacker_id, uint32_t targe
         }
 
         // 1-Tile Pushback away from attacker (strictly cardinal unless obstructed, then deflect sideways)
-        if (!lethal) {
+        if (!lethal && !target_in_uninterruptible_ability) {
             int32_t p_dx = target->pos.x - attacker->pos.x;
             int32_t p_dy = target->pos.y - attacker->pos.y;
             if (p_dx == 0 && p_dy == 0) {
@@ -2585,8 +2677,6 @@ void SimulationEngine::execute_melee_attack(uint32_t attacker_id, uint32_t targe
                     }
                 }
             }
-        } else {
-            target->state = UnitState::Dead;
         }
     }
 }
@@ -2610,8 +2700,10 @@ void SimulationEngine::issue_move_order(uint32_t ant_id, TileCoord dest, bool al
     }
     unit->is_food_order = (is_food_order || dest_has_food);
 
-    // You should not be able to interrupt actions currently animating
-    if (unit->state == UnitState::BuildingBridge || unit->state == UnitState::DemolishingBridge) {
+    // Special abilities (Fire and Bomb placement, Bridge construction) cannot be interrupted and trigger "Can't Go"
+    if (unit->state == UnitState::PlacingFire || unit->state == UnitState::PlantingBomb ||
+        unit->state == UnitState::BuildingBridge || unit->state == UnitState::DemolishingBridge) {
+        impl_->audio_queue_.push_back(AudioEvent{SoundID::CantGo, unit->pixel_x, unit->pixel_y, 1, 255});
         return;
     }
 
@@ -2866,6 +2958,7 @@ bool SimulationEngine::plant_bomb(uint32_t ant_id, TileCoord target, bool instan
         ant->anim_tick = 0;
         ant->anim_subitem = 0;
         ant->ability_target = target;
+        ant->ability_cooldown_ticks = 60; // Authentic 3.0s cooldown starts at order issuance (Ants.exe 0x101bdd1)
     }
 
     return true;
@@ -2925,6 +3018,7 @@ bool SimulationEngine::ignite_fire(uint32_t ant_id, TileCoord target, bool insta
         ant->anim_tick = 0;
         ant->anim_subitem = 0;
         ant->ability_target = target;
+        ant->ability_cooldown_ticks = 40; // Authentic 2.0s cooldown starts at order issuance (Ants.exe 0x101ba24)
     }
 
     return true;

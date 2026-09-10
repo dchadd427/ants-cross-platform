@@ -563,7 +563,9 @@ void HUD::render_radar(IRenderer& renderer, const assets::AssetArchive&,
                 int32_t px = rx + static_cast<int32_t>(ftx * scale_x);
                 int32_t pw = std::max(1, static_cast<int32_t>((ftx + 1.0f) * scale_x) - static_cast<int32_t>(ftx * scale_x));
                 assets::ColorRGBA col{155, 115, 108, 255}; // Walkable ground (authentic dirt tan)
-                if (cell.is_food) {
+                if (world.fog_of_war_enabled && !world.is_tile_revealed(static_cast<int32_t>(tx), static_cast<int32_t>(ty))) {
+                    col = {20, 20, 25, 255}; // Shrouded unrevealed fog tile
+                } else if (cell.is_food) {
                     col = {226, 147, 27, 255}; // Food morsel: Golden orange matching reference
                 } else if (cell.terrain_type == sim::TERRAIN_WATER) {
                     col = {58, 67, 192, 255}; // Water: Vibrant blue
@@ -573,8 +575,6 @@ void HUD::render_radar(IRenderer& renderer, const assets::AssetArchive&,
                     col = {95, 90, 85, 255}; // Mud path: Slate gray matching original
                 } else if (cell.has_completed_bridge() || cell.has_partial_bridge()) {
                     col = {160, 110, 60, 255}; // Bridge
-                } else if (cell.has_fire()) {
-                    col = {240, 80, 20, 255}; // Fire
                 }
                 renderer.fill_rect(px, py, pw, ph, col);
             }
@@ -583,6 +583,10 @@ void HUD::render_radar(IRenderer& renderer, const assets::AssetArchive&,
 
     // Anthill base markers (4x4 footprint)
     for (const auto& base : world.anthills) {
+        if (world.fog_of_war_enabled && base.team_id != local_player_id_ &&
+            !world.is_tile_revealed(base.x, base.y)) {
+            continue; // Shrouded enemy base not revealed on radar
+        }
         int32_t bx = rx + static_cast<int32_t>(base.x * scale_x);
         int32_t by = ry + static_cast<int32_t>(base.y * scale_y);
         int32_t bw = std::max(4, static_cast<int32_t>(4.0f * scale_x));
@@ -595,6 +599,10 @@ void HUD::render_radar(IRenderer& renderer, const assets::AssetArchive&,
     // Active live ants
     for (const auto& ant : world.ants) {
         if (ant.hp == 0 || ant.is_drowning || ant.is_underground) continue;
+        if (world.fog_of_war_enabled && ant.player_id != local_player_id_ &&
+            !world.is_tile_revealed(ant.tile_x, ant.tile_y)) {
+            continue; // Shrouded enemy ant not visible on radar
+        }
         int32_t ax = rx + static_cast<int32_t>(static_cast<float>(ant.tile_x) * scale_x);
         int32_t ay = ry + static_cast<int32_t>(static_cast<float>(ant.tile_y) * scale_y);
         assets::ColorRGBA c = (ant.player_id < 4) ? TEAM_COLORS[ant.player_id] : assets::ColorRGBA{255, 255, 255, 255};
