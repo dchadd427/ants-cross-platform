@@ -265,14 +265,14 @@ void AntUnit::tick_timers() noexcept {
 
     if (state_timer > 0) {
         state_timer--;
-        if (state_timer == 0 && (state == UnitState::Flinch || state == UnitState::Bounce || state == UnitState::Attacking)) {
+        if (state_timer == 0 && (state == UnitState::Flinch || state == UnitState::Bounce || state == UnitState::Attacking || state == UnitState::Burn)) {
             state = (type == AntType::Combat) ? UnitState::GuardIdle : UnitState::Idle;
         }
     }
 
-    if (state == UnitState::Bounce || state == UnitState::Attacking) {
+    if (state == UnitState::Bounce || state == UnitState::Attacking || state == UnitState::Flinch || state == UnitState::Burn) {
         anim_tick++;
-        anim_subitem = (anim_tick / 2);
+        anim_subitem = (state == UnitState::Burn) ? anim_tick : (anim_tick / 2);
     }
 
     // Continuous idle standing animation cycle

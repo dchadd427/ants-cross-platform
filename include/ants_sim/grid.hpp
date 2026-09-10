@@ -70,6 +70,12 @@ struct TileCoord {
         return dx + dy;
     }
 
+    constexpr int32_t euclidean_dist_sq(const TileCoord& o) const noexcept {
+        int32_t dx = x - o.x;
+        int32_t dy = y - o.y;
+        return dx * dx + dy * dy;
+    }
+
     constexpr bool is_cardinal_adjacent(const TileCoord& o) const noexcept {
         int32_t dx = (x >= o.x) ? (x - o.x) : (o.x - x);
         int32_t dy = (y >= o.y) ? (y - o.y) : (o.y - y);
@@ -329,7 +335,7 @@ public:
             }
         }
 
-        // Mark flower plants from Block 1 (team_id == 255) and flower dropper waypoints as solid obstacles at their root stem
+        // Mark flower plants from Block 1 (team_id == 255) as solid obstacles at their root stem
         for (const auto& sp : level.anthill_spawns) {
             if (sp.team_id == 255 && sp.tile_id < level.tile_dictionary.size()) {
                 const std::string& tname = level.tile_dictionary[sp.tile_id];
@@ -339,13 +345,6 @@ public:
                     if (in_bounds(static_cast<int32_t>(sp.x), static_cast<int32_t>(sp.y))) {
                         get_cell_mut(static_cast<uint32_t>(sp.x), static_cast<uint32_t>(sp.y)).is_obstacle_overlay = true;
                     }
-                }
-            }
-        }
-        for (const auto& wp : level.waypoints) {
-            if (wp.flag == 1) {
-                if (in_bounds(static_cast<int32_t>(wp.x), static_cast<int32_t>(wp.y))) {
-                    get_cell_mut(static_cast<uint32_t>(wp.x), static_cast<uint32_t>(wp.y)).is_obstacle_overlay = true;
                 }
             }
         }

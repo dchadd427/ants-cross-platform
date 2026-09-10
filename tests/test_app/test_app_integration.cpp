@@ -4326,7 +4326,7 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         }
     } TEST_END();
 
-    TEST_CASE("12.41 Standard Attack 1-Tile Pushback & Bounce Animation on Land") {
+    TEST_CASE("12.41 Standard Attack 1-Tile Pushback & Flinch Animation on Land") {
         SimulationEngine sim;
         sim.init_test_world(60, 60, 100, 60000);
 
@@ -4339,10 +4339,10 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         // Pushed 1 tile East away from attacker at (10, 10)
         ASSERT_EQ(def.pos.x, 12);
         ASSERT_EQ(def.pos.y, 10);
-        ASSERT_EQ(def.state, UnitState::Bounce);
+        ASSERT_EQ(def.state, UnitState::Flinch);
         ASSERT_EQ(def.facing, Direction::West); // Victim forced to face attacker West
 
-        // Advance 4 ticks for bounce animation recovery
+        // Advance 4 ticks for flinch animation recovery
         for (int i = 0; i < 4; ++i) {
             sim.tick();
         }
@@ -5798,12 +5798,22 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         if (gauntlet_lvl.load_lvl(gauntlet_path)) {
             sim.init(gauntlet_lvl, 42);
             const auto& g_ws = sim.get_world_state();
-            ASSERT_EQ(g_ws.flower_droppers.size(), 5u);
+            ASSERT_EQ(g_ws.flower_droppers.size(), 1u);
             bool has_flower = false;
             for (const auto& fd : g_ws.flower_droppers) {
                 if (fd.x == 3 && fd.y == 5 && fd.drop_x == 3 && fd.drop_y == 6) has_flower = true;
             }
             ASSERT_TRUE(has_flower);
+        }
+
+        // Verify TREASURE.LVL: Center plants have waypoints with flag == 0 (no power-up droppers)
+        // and corridor is traversable without spurious obstacles
+        std::string treasure_path = std::string(ORIGINAL_ASSETS_DIR) + "/Maps/TREASURE.LVL";
+        ants::assets::LevelData treasure_lvl;
+        if (treasure_lvl.load_lvl(treasure_path)) {
+            sim.init(treasure_lvl, 42);
+            const auto& t_ws = sim.get_world_state();
+            ASSERT_EQ(t_ws.flower_droppers.size(), 0u);
         }
     } TEST_END();
 
@@ -6169,6 +6179,59 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         // Player 1 should receive targeted event
         mixer.ingest_simulation_events(events, 1);
         ASSERT_EQ(mixer.active_channel_count(), 1u);
+    } TEST_END();
+
+    TEST_CASE("12.98: Attack Pursuit Straight-Line Engagement (No Diagonal Drift)") {
+        SimulationEngine sim;
+        sim.init_test_world(60, 60, 100, 60000);
+
+        uint32_t attacker_id = sim.spawn_unit(0, AntType::Worker, TileCoord{10, 10});
+        uint32_t defender_id = sim.spawn_unit(1, AntType::Worker, TileCoord{11, 10});
+
+        AntOrder atk_order{};
+        atk_order.ant_id = attacker_id;
+        atk_order.type = OrderType::Attack;
+        atk_order.target_entity_id = static_cast<int32_t>(defender_id);
+        sim.issue_order(atk_order);
+
+        // First strike triggers immediate 1-tile East pushback to (12, 10)
+        sim.tick();
+        const auto& def = sim.get_unit(defender_id);
+        ASSERT_EQ(def.pos.x, 12);
+        ASSERT_EQ(def.pos.y, 10);
+        ASSERT_EQ(def.state, UnitState::Flinch);
+
+        // Advance ticks: Attacker pursues straight East to (11, 10) rather than drifting diagonally
+        for (int i = 0; i < 15; ++i) {
+            sim.tick();
+        }
+        const auto& atk = sim.get_unit(attacker_id);
+        // Attacker must stay on the same horizontal line (y == 10) without diagonal deviation
+        ASSERT_EQ(atk.pos.y, 10);
+        ASSERT_TRUE(atk.pos.x == 10 || atk.pos.x == 11);
+    } TEST_END();
+
+    TEST_CASE("12.99: Bomb Dud Burn Animation Cycle (*bu301 / Table 0x1004518)") {
+        SimulationEngine sim;
+        sim.init_test_world(60, 60, 100, 60000);
+
+        uint32_t worker_id = sim.spawn_unit(0, AntType::Worker, TileCoord{15, 15});
+        auto& unit = sim.get_unit(worker_id);
+        unit.state = UnitState::Burn;
+        unit.state_timer = 11;
+        unit.anim_subitem = 0;
+        unit.anim_tick = 0;
+
+        ASSERT_EQ(unit.state, UnitState::Burn);
+
+        // Step through the 11 subitem frames
+        for (int i = 0; i < 11; ++i) {
+            ASSERT_EQ(unit.state, UnitState::Burn);
+            sim.tick();
+        }
+
+        // After 11 ticks, state returns to Idle
+        ASSERT_EQ(unit.state, UnitState::Idle);
     } TEST_END();
 }
 

@@ -524,8 +524,9 @@ All ant classes share a unified, symmetrical combat and ballistic physical react
 | Reaction State | Action Code | Key CHD Anims | Frame Characteristics | Sound Triggers | Physical Effect |
 |---|---|---|---|---|---|
 | **Attack / "Hit Back"** | `*at*` (Action 1) | `agat`, `abat`, `afat`, `acat`, `asat`, `atat` | Directional forward strike (5 directions: 2, 3, 7, 8, 9). | Sound 57 (`attack.wav`) / Sound 78 (`attack2.wav`) | Deals 1 HP damage (Worker, Thief, Bomber, Fire, Swimmer) or 2 HP damage (Combat Ant). Single attack per order. |
-| **Get Hit (Flinch)** | `*gh*` (Action 10) | `aggh`, `abgh`, `afgh`, `acgh`, `asgh`, `atgh` | Staggered flinch reaction (Subitems 0–8). | Sound 64 (`flythumpa.wav`) @ frame 0, Sound 65 (`flythumpb.wav`) @ frame 3 | Brief stagger interrupt (stun for 4 ticks). |
-| **Get Fling (Airborne Knockback)** | `*gf*` (Action 14) | `aggf`, `abgf`, `afgf`, `acgf`, `asgf`, `atgf` | Ant spins and tumbles head-over-heels airborne (`1652..1658.bmp`). | Sound 64/65 on launch | Displaced 4–5 tiles along impact vector at high velocity. |
+| **Get Hit (Flinch)** | `*gh*` (Action 10) | `aggh`, `abgh`, `afgh`, `acgh`, `asgh`, `atgh` | Staggered flinch reaction (Subitems 0–8). | Sound 64 (`flythumpa.wav`) @ frame 0, Sound 65 (`flythumpb.wav`) @ frame 3 | Brief stagger interrupt (stun for 4 ticks). Triggered on standard 1-tile melee hit pushback. |
+| **Burn / Scorch Stagger** | `*bu*` (Table `0x1004518`) | `agbu`, `abbu`, `afbu`, `acbu`, `asbu`, `atbu` | 11 subitems with smoke explosion puff (`*bu301..303`) and ground tumble (`aggh306..311`). | Sound 64 (`flythumpa.wav`) @ subitem 0, Sound 65 (`flythumpb.wav`) @ subitem 5 | Bomb dud / burn stagger for 11 ticks; unit remains in place. |
+| **Get Fling (Airborne Knockback)** | `*gf*` (Action 14) | `aggf`, `abgf`, `afgf`, `acgf`, `asgf`, `atgf` | Ant spins and tumbles head-over-heels airborne (`1652..1658.bmp`). | Sound 64/65 on launch | Displaced 4–5 tiles along impact vector at high velocity (Combat Ant punch). |
 | **Get Bounce (Landing Skid & Stun)** | `*gb*` (Action 19) | `aggb`, `abgb`, `afgb`, `acgb`, `asgb`, `atgb` | Hard ground landing rebound (`1612..1619.bmp`), skids forward, rolls to a stop (12 subitems). | Sound 64 @ impact, Sound 65 @ stop, Sound 70 (`stun.wav`) | Enters stunned recovery state (Action 12) for 12 ticks before resuming orders. Maintains pre-knockback facing. |
 
 #### 7. Animation Audio Trigger Architecture (`default_sp`)
@@ -1018,6 +1019,14 @@ The authentic match clock routine at `0x1024839` evaluates remaining match milli
     - Frame 3: Bottom stem (`bottomstem2.bmp`, 16x11 at `dx=-6, dy=-23`)
     - Frame 4: Ground shadow (`shadow.bmp`, 32x32 at `dx=-5, dy=-33`)
   - To render correctly under the 2D painter's algorithm, canopy animation frames must be iterated in reverse order (`frames.size() - 1` down to 0) so background layers (shadow, base stem, leaves, top stem) render beneath foreground layers (flower head).
+- **Decor Object & Waypoint Binding (`Ants.exe 0x100fc00..0x100fdc4`):**
+  - In the original engine, power-up droppers are instantiated by correlating Block 1 decor objects with Block 4 waypoints:
+    1. The level loader iterates over Block 1 decor objects (`anthill_spawns` with `team_id == 255`) where the tile property bit `0x10` is set (foliage/plants).
+    2. It queries Block 4 waypoints matching the root coordinates `(wp.x == sp.x && wp.y == sp.y)`.
+    3. If a waypoint exists at those exact coordinates and has `wp.flag == 1`, a dropper is instantiated.
+  - This authentic correlation explains map differences:
+    - On `TREASURE.LVL`, the center plant decor objects have matching waypoints, but their `flag == 0` (disabled/inert). Stray waypoints elsewhere have no plant object. Hence, `TREASURE.LVL` instantiates **0 droppers**, leaving the center corridor fully open.
+    - On `GAUNTLET.LVL`, only 1 plant at `(3, 5)` matches a waypoint with `flag == 1`, resulting in exactly **1 dropper**.
 - **Continuous Periodic Dropping & Layer 2 Replacement (Disasm `0x101e3d7`, `0x101e342`, `0x101ac8c`):**
   - In `Ants.exe`, flower droppers run continuously on an interval cooldown (`wp.param * 20` simulation ticks):
     - `SMALL.LVL`: 15s interval (300 ticks).
