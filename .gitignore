@@ -2,6 +2,8 @@
 build/
 build_asan/
 build_e2e/
+build_web/
+dist/
 bin/
 lib/
 out/
