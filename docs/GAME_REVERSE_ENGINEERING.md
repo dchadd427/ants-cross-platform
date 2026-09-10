@@ -1356,6 +1356,44 @@ To deliver authentic 1:1 gameplay inside standard web browsers with zero install
 - **Worker Ant Food Harvest (`aggf`, 6 Ticks / 420ms)**:
   - Subitem 4: Sound 77 (`foodgrab.wav` / `FoodGrab`) fires as the worker bites and lifts the food portion.
 
+#### 17. Base Ramp Concurrency, Invulnerability Tasks, Water Melee Isolation & Terrain Passability (`Ants.exe` `0x101f780`, `0x101cb0c`, `0x1024ae4`, `0x10049b8`, `0x1020951`)
+- **Base Mound / Ramp Max Concurrency Limit (`0x0101f780` / `FUN_0101f780`)**:
+  - `FUN_0101f780` lines 22796–22832: When evaluating if an ant can step onto the anthill base ramp/mound tiles (`+0x36`, `+0x38`, `+0x3a`, `+0x3c`, `+0x3e`, `+0x40`), the engine counts all friendly ants currently in state `1` (Walking/Entering) across those tiles:
+    ```c
+    if ((uVar6 & 0xffff) + (local_18 & 0xffff) + (uVar4 & 0xffff) == 2) { return 0; }
+    ```
+  - The original 1998 executable strictly enforces a hard ceiling of **2 friendly ants maximum** concurrently traversing the ramp mound tiles. Any 3rd ant attempting to step onto the ramp is blocked (`return 0`) and must remain in the queuing perimeter until one ant enters the hole or exits.
+- **Water Melee Combat Isolation (`0x0101cb0c` / `FUN_0101cb0c`)**:
+  - `FUN_0101cb0c` lines 20599–20605: Melee attack adjacency validation inspects the underlying terrain type for both the attacker's coordinates and the target's coordinates:
+    ```c
+    sVar1 = FUN_01008af7(*(void **)(DAT_0104b350 + 0x494c), *param_1, param_1[1]);
+    if (sVar1 != 2) {
+      sVar1 = FUN_01008af7(*(void **)(DAT_0104b350 + 0x494c), (ushort)local_c, local_c._2_2_);
+      if (sVar1 != 2) return 1;
+    }
+    ```
+  - If either cell is terrain type `2` (water), melee attack registration strictly returns `0` (rejection).
+  - Consequently, ants on land cannot execute melee attacks against swimming ants in water, and swimming ants in water cannot execute melee attacks against land units.
+- **Hatch & Emergence Temporary Invulnerability (`0x01024ae4` / `s_Invuln_010474c4`)**:
+  - Upon emergence from an anthill or completion of state transitions, ants are assigned an `Invuln` task (`s_Invuln_010474c4` at VA `0x1024ae4`) setting `+0x78 = 1`.
+  - While `+0x78 == 1`, `FUN_0101cb0c` line 20595 (`*(int *)((int)this + 0x78) != 1`) immediately rejects all incoming attacks and combat damage, preventing spawn-camping at the anthill hole.
+  - The invulnerability flag is cleared upon task expiry via `FUN_01024b8a` (`*(undefined4 *)(*(int *)(param_1 + 0x34) + 0x78) = 0`).
+- **Terrain Passability Matrix (`WORD_ARRAY_010049b8` at VA `0x10049b8`)**:
+  - Binary table at `0x10049b8` defines the 6 terrain layers: `[1, 1, 0, 1, 1, 0]`.
+    - Layer 0: Normal land (passable)
+    - Layer 1: Mud/sand (passable; bombs prohibited)
+    - Layer 2: Water (0; passable only for `AntType::Swimmer` at `FUN_0101f780` line 22739)
+    - Layer 3: Paved walkway (passable)
+    - Layer 4: Dirt Bridge (passable)
+    - Layer 5: Hard obstacle / rock barrier (0; impassable)
+- **Pathfinding Infinite Cost Sentinel (`0x01020951` / `FUN_01020951`)**:
+  - Original A* routing uses `8000` as the infinite-cost sentinel value for blocked or impassable nodes.
+- **Authentic Match Announcement Strings (`0x1047468`)**:
+  - Game Start: `"Game started! Go get that food!"` (binary string at VA `0x1047468`).
+  - News Flash Header: `[%ld:%02ld] News Flash` (binary string at VA `0x1047258`).
+  - Teammate Chat Prefix: `%s (To Teammate):` (binary string at VA `0x1047428`).
+
+
 
 
 

@@ -61,8 +61,8 @@ void HUD::init(uint8_t local_player_id) {
     news_queue_.clear();
     chat_log_.clear();
     chat_scroll_offset_ = 0;
-    queue_news_message("Game started! Go get food!", 120, false);
-    add_chat_entry("System", "Game started! Go get food!");
+    queue_news_message("Game started! Go get that food!", 120, false);
+    add_chat_entry("System", "Game started! Go get that food!");
 
     // Configure Top Header Buttons (x0y0.bmp)
     help_button_ = {476, 7, 46, 23, 0, 0, 0, false, true, false};
