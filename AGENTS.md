@@ -37,3 +37,8 @@ Native C++17 macOS port and remake of the 1998 classic RTS game *Ants*, featurin
 ### 6. WebAssembly / Beta Deployment Synchronization & Cache Invariant
 - **Synchronize Web Builds**: Ensure any game logic, asset, or simulation engine changes remain continuously synchronized with the WebAssembly / Emscripten build and deployment pipeline (`docker/nginx.conf`, `web/`).
 - **Cache Invalidation**: Web builds served on beta (e.g. `beta.playants.org`) must enforce strict revalidation headers (`Cache-Control: "no-cache, must-revalidate"`) for `.wasm`, `.data`, `.html`, `.js`, and `.css` so clients immediately execute updated game binaries without stale browser caching.
+
+### 7. Version Tracking & Continuous Increment Invariant
+- **Continuous Version Tracking**: Starting at `v0.01` (pre-release), track and increment semantic version numbers in `include/ants_app/version.hpp` on every release/feature cycle.
+- **On-Screen Version Meter**: The current version string must always be rendered on screen adjacent to the FPS counter / sparkline in the bottom-right corner of the viewport across all game states.
+

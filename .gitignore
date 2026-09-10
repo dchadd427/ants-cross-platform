@@ -44,3 +44,6 @@ tests/artifacts/
 # Agent scratch directory
 .agents/
 
+# Python cache
+__pycache__/
+*.pyc

@@ -1,4 +1,5 @@
 #include "ants_app/application.hpp"
+#include "ants_app/version.hpp"
 #include <iostream>
 #include <cstring>
 #include <algorithm>
@@ -888,6 +889,13 @@ void Application::render_frame() {
     int32_t spark_y = 465;
     int32_t text_y = spark_y + (spark_h - text_h) / 2;
     renderer_->draw_text(fps_text, text_x, text_y, {255, 255, 255, 255}, FontSize::Small);
+
+    // Version number display (bottom-right next to FPS sparkline)
+    std::string ver_text(ants::VERSION_STRING);
+    int32_t ver_w = renderer_->get_text_width(ver_text, FontSize::Small);
+    int32_t ver_x = spark_x - ver_w - 6;
+    int32_t ver_y = text_y;
+    renderer_->draw_text(ver_text, ver_x, ver_y, {180, 190, 200, 220}, FontSize::Small);
 
     // Dark translucent background plate + subtle border
     renderer_->fill_rect(spark_x - 1, spark_y - 1, spark_w + 2, spark_h + 2, ants::assets::ColorRGBA{0, 0, 0, 160});
