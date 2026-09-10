@@ -6,6 +6,16 @@ echo "    Building Ants (1998) WebAssembly / HTML5 Port       "
 echo "========================================================"
 
 if ! command -v emcmake &> /dev/null || ! command -v emcc &> /dev/null; then
+    if [ -f "${EMSDK}/emsdk_env.sh" ]; then
+        source "${EMSDK}/emsdk_env.sh" > /dev/null 2>&1
+    elif [ -f "$HOME/emsdk/emsdk_env.sh" ]; then
+        source "$HOME/emsdk/emsdk_env.sh" > /dev/null 2>&1
+    elif [ -f "/Users/dchadd/emsdk/emsdk_env.sh" ]; then
+        source "/Users/dchadd/emsdk/emsdk_env.sh" > /dev/null 2>&1
+    fi
+fi
+
+if ! command -v emcmake &> /dev/null || ! command -v emcc &> /dev/null; then
     echo "Error: Emscripten (emcmake / emcc) is not in your PATH."
     echo ""
     echo "To install Emscripten on macOS:"
