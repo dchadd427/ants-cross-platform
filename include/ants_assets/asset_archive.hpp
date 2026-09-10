@@ -34,7 +34,6 @@ public:
 
     // State Query
     bool is_loaded() const noexcept { return loaded_; }
-    size_t total_memory_bytes() const noexcept;
 
     // Master Palette (256 Colors)
     const std::array<ColorRGBA, 256>& get_palette() const noexcept { return palette_; }

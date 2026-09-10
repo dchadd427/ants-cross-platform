@@ -32,7 +32,6 @@ public:
 
     // Loading
     bool load_file(const std::string& path);
-    bool load_memory(const uint8_t* data, size_t size);
 
     // Playback Lifecycle
     void play(bool loop = true);
@@ -52,7 +51,6 @@ public:
     void set_volume(float volume); // 0.0f .. 1.0f
     float get_volume() const noexcept;
     void fade_out(float duration_seconds);
-    void fade_in(float duration_seconds);
     void update(float delta_seconds);
 
     // Headless / Testing Configuration

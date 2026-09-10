@@ -770,16 +770,18 @@ void SimulationEngine::tick() {
             if (interrupted) {
                 uint32_t int_id = bq.active_depositing_ant_id;
                 leave_base_queue(int_id);
-            } else if ((dep_ant->state == UnitState::EnteringBase &&
-                        ((dep_ant->had_food_at_base_entry && !dep_ant->is_holding()) ||
-                         (!dep_ant->had_food_at_base_entry && dep_ant->anim_subitem >= 8))) ||
-                       (dep_ant->state != UnitState::EnteringBase && dep_ant->state != UnitState::Walking && !dep_ant->is_holding())) {
-                auto pos = std::find(bq.queue.begin(), bq.queue.end(), bq.active_depositing_ant_id);
-                if (pos != bq.queue.end()) {
-                    bq.queue.erase(pos);
+            } else if (dep_ant->completed_base_deposit) {
+                TileCoord hole{base->x + 1, base->y + 1};
+                bool vacated = (dep_ant->pos != hole || dep_ant->state == UnitState::QueuingBase);
+                if (vacated || dep_ant->anim_tick > 20) {
+                    auto pos = std::find(bq.queue.begin(), bq.queue.end(), bq.active_depositing_ant_id);
+                    if (pos != bq.queue.end()) {
+                        bq.queue.erase(pos);
+                    }
+                    bq.active_depositing_ant_id = 0;
+                    dep_ant->completed_base_deposit = false;
+                    dispatch_next_base_queue(p);
                 }
-                bq.active_depositing_ant_id = 0;
-                dispatch_next_base_queue(p);
             }
         }
 
@@ -1304,16 +1306,6 @@ void SimulationEngine::tick() {
                     if (ant_ptr->base_dwell_ticks == 0) {
                         // Eating complete! Ant starts emerging from the hole (*hatch animation)
                         ant_ptr->underground = false;
-                        // Clear active depositing ant from queue so next ant moves
-                        auto& bq = impl_->base_queues_[ant_ptr->player_id];
-                        if (bq.active_depositing_ant_id == ant_ptr->id) {
-                            auto pos = std::find(bq.queue.begin(), bq.queue.end(), ant_ptr->id);
-                            if (pos != bq.queue.end()) {
-                                bq.queue.erase(pos);
-                            }
-                            bq.active_depositing_ant_id = 0;
-                            dispatch_next_base_queue(ant_ptr->player_id);
-                        }
                     }
                     continue; // Stay in underground chamber while eating
                 }
@@ -1330,6 +1322,7 @@ void SimulationEngine::tick() {
                 ant_ptr->anim_subitem = 0;
                 ant_ptr->base_dwell_ticks = 0;
                 ant_ptr->underground_visited = false;
+                ant_ptr->completed_base_deposit = true;
                 ant_ptr->state = (ant_ptr->type == AntType::Combat) ? UnitState::GuardIdle : UnitState::Idle;
                 const auto* friendly_base = impl_->grid_.find_anthill(ant_ptr->player_id);
                 if (friendly_base) {
@@ -1361,12 +1354,16 @@ void SimulationEngine::tick() {
         // Autonomous Thief Infiltration progression
         if (ant_ptr->state == UnitState::Infiltrating) {
             ant_ptr->anim_subitem++;
+            uint8_t victim = (ant_ptr->target_team_id < MAX_PLAYERS) ? ant_ptr->target_team_id : ((ant_ptr->player_id == 0) ? 1 : 0);
             if (ant_ptr->anim_subitem == 19) {
-                uint8_t victim = (ant_ptr->target_team_id < MAX_PLAYERS) ? ant_ptr->target_team_id : ((ant_ptr->player_id == 0) ? 1 : 0);
                 impl_->audio_queue_.push_back(AudioEvent{SoundID::BaseAlarmSiren, ant_ptr->pixel_x, ant_ptr->pixel_y, 2, victim});
+                impl_->audio_queue_.push_back(AudioEvent{SoundID::ThiefDive, ant_ptr->pixel_x, ant_ptr->pixel_y, 1, 255});
                 impl_->news_queue_.push_back(NewsEvent{victim, "A ThiefAnt is at your anthill!", impl_->match_time_remaining_ms_, StringID::ThiefAlarmWarning});
-            } else if (ant_ptr->anim_subitem >= 32) {
-                uint8_t victim = (ant_ptr->target_team_id < MAX_PLAYERS) ? ant_ptr->target_team_id : ((ant_ptr->player_id == 0) ? 1 : 0);
+            } else if (ant_ptr->anim_subitem == 26) {
+                impl_->audio_queue_.push_back(AudioEvent{SoundID::ThiefRummage, ant_ptr->pixel_x, ant_ptr->pixel_y, 1, 255});
+            } else if (ant_ptr->anim_subitem == 31) {
+                impl_->audio_queue_.push_back(AudioEvent{SoundID::ThiefEmerge, ant_ptr->pixel_x, ant_ptr->pixel_y, 1, 255});
+            } else if (ant_ptr->anim_subitem >= 33) {
                 execute_thief_loot(ant_ptr->id, victim);
                 ant_ptr->is_thief_steal = true;
                 ant_ptr->state = UnitState::Idle;
@@ -1471,10 +1468,13 @@ void SimulationEngine::tick() {
         continue;
     }
 
-    // Harvesting Food progression (*at*, 6 ticks chomp/bite)
+    // Harvesting Food progression (aggf, 6 ticks)
     if (ant_ptr->state == UnitState::HarvestingFood) {
         ant_ptr->anim_tick++;
         ant_ptr->anim_subitem = ant_ptr->anim_tick;
+        if (ant_ptr->anim_tick == 4) {
+            impl_->audio_queue_.push_back(AudioEvent{SoundID::FoodGrab, ant_ptr->pixel_x, ant_ptr->pixel_y, 1, ant_ptr->player_id});
+        }
         if (ant_ptr->anim_tick >= 6) {
             ant_ptr->state = (ant_ptr->type == AntType::Combat) ? UnitState::GuardIdle : UnitState::Idle;
             ant_ptr->anim_tick = 0;
@@ -1513,10 +1513,21 @@ void SimulationEngine::tick() {
     if (ant_ptr->state == UnitState::DefusingBomb) {
         ant_ptr->anim_tick++;
         ant_ptr->anim_subitem = ant_ptr->anim_tick;
+        if (ant_ptr->anim_tick == 3) {
+            impl_->audio_queue_.push_back(AudioEvent{SoundID::BombDefuseGrab, ant_ptr->pixel_x, ant_ptr->pixel_y, 1, 255});
+        }
+        if (ant_ptr->anim_tick == 6) {
+            impl_->audio_queue_.push_back(AudioEvent{SoundID::BombBodySquash, ant_ptr->pixel_x, ant_ptr->pixel_y, 1, 255});
+            if (ant_ptr->ability_target.x >= 0 && impl_->grid_.in_bounds(ant_ptr->ability_target)) {
+                impl_->grid_.clear_bomb(static_cast<uint32_t>(ant_ptr->ability_target.x), static_cast<uint32_t>(ant_ptr->ability_target.y));
+                impl_->stats_.get_player_stats_mut(ant_ptr->player_id).bombs_defused++;
+            }
+        }
         if (ant_ptr->anim_tick >= 12) {
             ant_ptr->state = UnitState::Idle;
             ant_ptr->anim_tick = 0;
             ant_ptr->anim_subitem = 0;
+            ant_ptr->ability_target = TileCoord{-1, -1};
         }
         continue;
     }
@@ -1550,10 +1561,17 @@ void SimulationEngine::tick() {
     if (ant_ptr->state == UnitState::ExtinguishingFire) {
         ant_ptr->anim_tick++;
         ant_ptr->anim_subitem = ant_ptr->anim_tick;
+        if (ant_ptr->anim_tick == 4) {
+            impl_->audio_queue_.push_back(AudioEvent{SoundID::FireExtinguish, ant_ptr->pixel_x, ant_ptr->pixel_y, 1, 255});
+            if (ant_ptr->ability_target.x >= 0 && impl_->grid_.in_bounds(ant_ptr->ability_target)) {
+                impl_->grid_.clear_firewall(static_cast<uint32_t>(ant_ptr->ability_target.x), static_cast<uint32_t>(ant_ptr->ability_target.y));
+            }
+        }
         if (ant_ptr->anim_tick >= 12) {
             ant_ptr->state = UnitState::Idle;
             ant_ptr->anim_tick = 0;
             ant_ptr->anim_subitem = 0;
+            ant_ptr->ability_target = TileCoord{-1, -1};
         }
         continue;
     }
@@ -1658,6 +1676,7 @@ void SimulationEngine::tick() {
                         ant_ptr->state = UnitState::EnteringBase;
                         ant_ptr->anim_subitem = 0;
                         ant_ptr->had_food_at_base_entry = ant_ptr->is_holding();
+                        ant_ptr->completed_base_deposit = false;
                         ant_ptr->clear_path();
                     }
                 }
@@ -2097,9 +2116,9 @@ void SimulationEngine::issue_order(const AntOrder& order) {
                 unit->facing = ants::assets::vector_to_direction(target.x - unit->pos.x, target.y - unit->pos.y);
                 bool ok = false;
                 if (order.type == OrderType::PlantBomb) ok = plant_bomb(order.ant_id, target, false);
-                else if (order.type == OrderType::DefuseBomb) ok = defuse_bomb(order.ant_id, target);
+                else if (order.type == OrderType::DefuseBomb) ok = defuse_bomb(order.ant_id, target, false);
                 else if (order.type == OrderType::IgniteFire) ok = ignite_fire(order.ant_id, target, false);
-                else if (order.type == OrderType::ExtinguishFire) ok = extinguish_fire(order.ant_id, target);
+                else if (order.type == OrderType::ExtinguishFire) ok = extinguish_fire(order.ant_id, target, false);
                 else if (order.type == OrderType::BuildBridge) ok = build_bridge_step(order.ant_id, target);
                 else if (order.type == OrderType::DemolishBridge) ok = demolish_bridge_step(order.ant_id, target);
                 if (!ok && unit->is_transforming()) {
@@ -2246,13 +2265,6 @@ void SimulationEngine::propose_alliance(uint8_t from_player, uint8_t to_player) 
     impl_->news_queue_.push_back(NewsEvent{to_player, "Alliance proposed", impl_->match_time_remaining_ms_, StringID::AllianceInvitePrompt});
 }
 
-void SimulationEngine::respond_alliance(uint8_t responding_player, uint8_t proposing_player, bool accept) {
-    if (accept) {
-        accept_alliance(responding_player, proposing_player);
-    } else {
-        deny_alliance(responding_player, proposing_player);
-    }
-}
 
 void SimulationEngine::accept_alliance(uint8_t responding_player, uint8_t proposing_player) {
     if (responding_player >= MAX_PLAYERS || proposing_player >= MAX_PLAYERS) return;
@@ -2445,9 +2457,6 @@ Grid& SimulationEngine::grid_mut() {
 }
 
 const PRNG& SimulationEngine::prng() const {
-    return impl_->prng_;
-}
-PRNG& SimulationEngine::prng_mut() {
     return impl_->prng_;
 }
 
@@ -3121,7 +3130,7 @@ bool SimulationEngine::plant_bomb(uint32_t ant_id, TileCoord target, bool instan
     return true;
 }
 
-bool SimulationEngine::defuse_bomb(uint32_t ant_id, TileCoord target) {
+bool SimulationEngine::defuse_bomb(uint32_t ant_id, TileCoord target, bool instant) {
     AntUnit* ant = impl_->find_unit(ant_id);
     if (!ant || !ant->is_alive() || ant->type != AntType::Bomber) return false;
     if (!validate_cardinal_placement(ant->pos, target)) return false;
@@ -3134,15 +3143,22 @@ bool SimulationEngine::defuse_bomb(uint32_t ant_id, TileCoord target) {
     else if (dy > 0) ant->facing = Direction::South;
     else if (dx > 0) ant->facing = Direction::East;
     else if (dx < 0) ant->facing = Direction::West;
-    ant->state = UnitState::DefusingBomb;
-    ant->anim_tick = 0;
-    ant->anim_subitem = 0;
-    ant->ability_target = target;
 
-    impl_->grid_.clear_bomb(static_cast<uint32_t>(target.x), static_cast<uint32_t>(target.y));
-    impl_->audio_queue_.push_back(AudioEvent{SoundID::BombDefuseGrab, ant->pixel_x, ant->pixel_y, 1, 255});
-    impl_->audio_queue_.push_back(AudioEvent{SoundID::BombBodySquash, ant->pixel_x, ant->pixel_y, 1, 255});
-    impl_->stats_.get_player_stats_mut(ant->player_id).bombs_defused++;
+    if (instant) {
+        impl_->grid_.clear_bomb(static_cast<uint32_t>(target.x), static_cast<uint32_t>(target.y));
+        impl_->audio_queue_.push_back(AudioEvent{SoundID::BombDefuseGrab, ant->pixel_x, ant->pixel_y, 1, 255});
+        impl_->audio_queue_.push_back(AudioEvent{SoundID::BombBodySquash, ant->pixel_x, ant->pixel_y, 1, 255});
+        impl_->stats_.get_player_stats_mut(ant->player_id).bombs_defused++;
+        ant->state = UnitState::Idle;
+        ant->anim_tick = 0;
+        ant->anim_subitem = 0;
+        ant->ability_target = TileCoord{-1, -1};
+    } else {
+        ant->state = UnitState::DefusingBomb;
+        ant->anim_tick = 0;
+        ant->anim_subitem = 0;
+        ant->ability_target = target;
+    }
     return true;
 }
 
@@ -3181,7 +3197,7 @@ bool SimulationEngine::ignite_fire(uint32_t ant_id, TileCoord target, bool insta
     return true;
 }
 
-bool SimulationEngine::extinguish_fire(uint32_t ant_id, TileCoord target) {
+bool SimulationEngine::extinguish_fire(uint32_t ant_id, TileCoord target, bool instant) {
     AntUnit* ant = impl_->find_unit(ant_id);
     if (!ant || !ant->is_alive() || ant->type != AntType::Fire) return false;
     if (!validate_cardinal_placement(ant->pos, target)) return false;
@@ -3194,13 +3210,20 @@ bool SimulationEngine::extinguish_fire(uint32_t ant_id, TileCoord target) {
     else if (dy > 0) ant->facing = Direction::South;
     else if (dx > 0) ant->facing = Direction::East;
     else if (dx < 0) ant->facing = Direction::West;
-    ant->state = UnitState::ExtinguishingFire;
-    ant->anim_tick = 0;
-    ant->anim_subitem = 0;
-    ant->ability_target = target;
 
-    impl_->grid_.clear_firewall(static_cast<uint32_t>(target.x), static_cast<uint32_t>(target.y));
-    impl_->audio_queue_.push_back(AudioEvent{SoundID::FireExtinguish, ant->pixel_x, ant->pixel_y, 1, 255});
+    if (instant) {
+        impl_->grid_.clear_firewall(static_cast<uint32_t>(target.x), static_cast<uint32_t>(target.y));
+        impl_->audio_queue_.push_back(AudioEvent{SoundID::FireExtinguish, ant->pixel_x, ant->pixel_y, 1, 255});
+        ant->state = UnitState::Idle;
+        ant->anim_tick = 0;
+        ant->anim_subitem = 0;
+        ant->ability_target = TileCoord{-1, -1};
+    } else {
+        ant->state = UnitState::ExtinguishingFire;
+        ant->anim_tick = 0;
+        ant->anim_subitem = 0;
+        ant->ability_target = target;
+    }
     return true;
 }
 
@@ -3744,11 +3767,5 @@ bool SimulationEngine::interrupt_transformation(uint32_t ant_id) {
     return true;
 }
 
-void SimulationEngine::set_unit_transformation_interrupted(uint32_t ant_id, bool interrupted) {
-    AntUnit* ant = impl_->find_unit(ant_id);
-    if (ant) {
-        ant->transformation_interrupted = interrupted;
-    }
-}
 
 } // namespace ants::sim

@@ -60,7 +60,6 @@ public:
     // Playback Controls
     int play_sfx(uint32_t sound_id, float volume = 1.0f, uint8_t priority = 128, bool loop = false);
     int play_spatial(uint32_t sound_id, int32_t world_x, int32_t world_y, uint8_t priority = 128, float volume = 1.0f, bool loop = false);
-    void stop_sound(int channel_id);
     void stop_all();
 
     // Queries
@@ -70,11 +69,9 @@ public:
 
     // Listener / Spatial Positioning
     void set_listener_position(int32_t world_x, int32_t world_y);
-    void get_listener_position(int32_t& world_x, int32_t& world_y) const;
     void calculate_spatial_pan(int32_t world_x, int32_t world_y, float base_vol, float& out_vol_l, float& out_vol_r) const;
 
     // Volume Controls (0.0f .. 1.0f)
-    void set_master_volume(float volume);
     void set_sfx_volume(float volume);
     float get_master_volume() const noexcept { return master_volume_; }
     float get_sfx_volume() const noexcept { return sfx_volume_; }
@@ -84,7 +81,6 @@ public:
 
     // Audio Rendering / DSP
     void mix_samples_i16(int16_t* out_stereo, size_t num_frames);
-    void mix_samples_f32(float* out_stereo, size_t num_frames);
     std::vector<int16_t> render_frames(size_t num_frames); // Headless testing helper
 
     // Background Music (Streaming MP3)

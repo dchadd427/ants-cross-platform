@@ -88,6 +88,7 @@ namespace SoundID {
     constexpr uint32_t BombDefuseGrab = 73; // bombdrop.wav
     constexpr uint32_t BombBodySquash = 74; // bombmuffle.wav
     constexpr uint32_t AttackAlt      = 75; // attack_alt.wav (Worker ant attack variation)
+    constexpr uint32_t FoodGrab       = 77; // foodgrab.wav (Worker ant food grab / bite)
     constexpr uint32_t HeavyPunch     = 78; // attack2.wav
     constexpr uint32_t WaterAttack    = 79; // waterattack.wav
     constexpr uint32_t ShovelGravel   = 81; // shovelgravel.wav
@@ -319,7 +320,6 @@ public:
 
     // Dynamic Alliances
     void propose_alliance(uint8_t from_player, uint8_t to_player);
-    void respond_alliance(uint8_t responding_player, uint8_t proposing_player, bool accept);
     void accept_alliance(uint8_t responding_player, uint8_t proposing_player);
     void deny_alliance(uint8_t responding_player, uint8_t proposing_player);
     void break_alliance(uint8_t player_id);
@@ -345,7 +345,6 @@ public:
     const Grid& grid() const;
     Grid& grid_mut();
     const PRNG& prng() const;
-    PRNG& prng_mut();
     const MatchStatsManager& stats_manager() const;
     MatchStatsManager& stats_manager_mut();
 
@@ -367,13 +366,12 @@ public:
 
     bool validate_cardinal_placement(TileCoord from, TileCoord to) const;
     bool plant_bomb(uint32_t ant_id, TileCoord target, bool instant = true);
-    bool defuse_bomb(uint32_t ant_id, TileCoord target);
+    bool defuse_bomb(uint32_t ant_id, TileCoord target, bool instant = true);
     bool ignite_fire(uint32_t ant_id, TileCoord target, bool instant = true);
-    bool extinguish_fire(uint32_t ant_id, TileCoord target);
+    bool extinguish_fire(uint32_t ant_id, TileCoord target, bool instant = true);
     bool build_bridge_step(uint32_t ant_id, TileCoord target);
     bool demolish_bridge_step(uint32_t ant_id, TileCoord target);
     bool interrupt_transformation(uint32_t ant_id);
-    void set_unit_transformation_interrupted(uint32_t ant_id, bool interrupted);
 
     bool can_unit_traverse(AntType type, TileCoord pos) const;
 

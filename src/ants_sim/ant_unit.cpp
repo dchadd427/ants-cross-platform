@@ -61,30 +61,6 @@ bool AntUnit::take_damage(uint16_t amount, DamageSource source, [[maybe_unused]]
     return false; // Survived
 }
 
-std::string AntUnit::get_sprite_prefix() const {
-    const char base_prefix = (holding != 0) ? 'h' : 'a';
-    char type_char = 'g';
-    switch (type) {
-        case AntType::Worker:  type_char = 'g'; break;
-        case AntType::Bomber:  type_char = 'b'; break;
-        case AntType::Fire:    type_char = 'f'; break;
-        case AntType::Thief:   type_char = 't'; break;
-        case AntType::Combat:  type_char = 'c'; break;
-        case AntType::Swimmer: type_char = 's'; break;
-    }
-    return std::string{base_prefix, type_char};
-}
-
-void AntUnit::set_destination(int32_t target_tx, int32_t target_ty) {
-    waypoints.clear();
-    waypoints.push_back(TileCoord{target_tx, target_ty});
-    final_dest = TileCoord{target_tx, target_ty};
-    current_waypoint_idx = 0;
-    anim_tick = 0;
-    anim_subitem = 0;
-    state = UnitState::Walking;
-}
-
 void AntUnit::set_path(std::vector<TileCoord> path) {
     if (!path.empty()) {
         final_dest = path.back();

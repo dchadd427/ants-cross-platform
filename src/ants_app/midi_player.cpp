@@ -235,16 +235,6 @@ bool MidiPlayer::load_file(const std::string& path) {
 #endif
 }
 
-bool MidiPlayer::load_memory(const uint8_t* data, size_t size) {
-    if (!impl_ || !data || size < 14) return false;
-    if (std::memcmp(data, "MThd", 4) != 0) return false;
-
-    impl_->cleanup();
-    impl_->loaded = true;
-    impl_->track_count = 38;
-    impl_->track_length = 96.01;
-    return true;
-}
 
 void MidiPlayer::play(bool loop) {
     if (!impl_ || !impl_->loaded) return;
@@ -380,16 +370,6 @@ void MidiPlayer::fade_out(float duration_seconds) {
     impl_->fade_timer = 0.0f;
 }
 
-void MidiPlayer::fade_in(float duration_seconds) {
-    if (!impl_) return;
-    impl_->volume = 0.0f;
-    impl_->apply_volume(0.0f);
-    impl_->target_volume = 1.0f;
-    impl_->is_fading = true;
-    impl_->fade_duration = std::max(0.01f, duration_seconds);
-    impl_->fade_timer = 0.0f;
-    play(true);
-}
 
 void MidiPlayer::update(float delta_seconds) {
     if (!impl_ || !impl_->is_playing) return;

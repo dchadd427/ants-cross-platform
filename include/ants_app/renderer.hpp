@@ -116,7 +116,6 @@ struct ViewportCamera {
 
     bool world_to_screen(int32_t wx, int32_t wy, int32_t& sx, int32_t& sy) const noexcept;
     bool screen_to_world(int32_t sx, int32_t sy, int32_t& wx, int32_t& wy) const noexcept;
-    bool is_tile_visible(int32_t tx, int32_t ty) const noexcept;
 };
 
 using Camera = ViewportCamera;
@@ -145,7 +144,6 @@ public:
         return 7;
     }
     virtual void set_hud_team(uint8_t team_id) = 0;
-    virtual uint8_t get_hud_team() const = 0;
 };
 
 /**
@@ -226,10 +224,6 @@ public:
                       int32_t mouse_x = -1,
                       int32_t mouse_y = -1,
                       int32_t selected_base_team_id = -1);
-    void render_minimap(const ants::sim::WorldState& world,
-                        const ants::sim::Grid& grid);
-    void render_hud_chrome(const ants::sim::WorldState& world,
-                           int32_t selected_unit_id);
     void end_frame();
 
     // IRenderer Implementation
@@ -242,7 +236,6 @@ public:
     int32_t get_text_width(const std::string& text, FontSize size = FontSize::Small) const override;
     int32_t get_text_height(FontSize size = FontSize::Small) const override;
     void set_hud_team(uint8_t team_id) override { hud_team_id_ = team_id; }
-    uint8_t get_hud_team() const override { return hud_team_id_; }
 
     // Camera Accessors
     ViewportCamera& camera() noexcept { return camera_; }

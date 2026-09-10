@@ -2025,8 +2025,14 @@ void run_suite_11_anthill_queuing_and_priority() {
         ASSERT_EQ(sim.get_player_score(0), 25);
         ASSERT_TRUE(sim.has_audio_event(SoundID::BaseScoreUp));
 
-        // Advance 1 more tick: Ant 1 has deposited and popped. Now Ant 2 gets priority!
-        sim.tick();
+        // Ant 1 completes emergence and vacates the hole. Ant 2 and Ant 3 remain waiting in QueuingBase!
+        for (int i = 0; i < 80 && sim.get_active_depositing_ant(0) == a1; ++i) {
+            sim.tick();
+            if (sim.get_active_depositing_ant(0) == a1) {
+                ASSERT_EQ(sim.get_unit(a2).state, UnitState::QueuingBase);
+                ASSERT_EQ(sim.get_unit(a3).state, UnitState::QueuingBase);
+            }
+        }
         ASSERT_EQ(sim.get_active_depositing_ant(0), a2);
         ASSERT_EQ(sim.get_unit(a2).state, UnitState::Walking);
 
@@ -2034,8 +2040,8 @@ void run_suite_11_anthill_queuing_and_priority() {
         for (int i = 0; i < 80 && sim.get_unit(a2).is_holding(); ++i) {
             sim.tick();
             if (sim.get_unit(a2).is_holding()) {
-                // Ant 3 advanced to slot 1 or is waiting in QueuingBase
-                ASSERT_TRUE(sim.get_unit(a3).state == UnitState::Walking || sim.get_unit(a3).state == UnitState::QueuingBase);
+                // Ant 3 advanced to slot 1 or is waiting in QueuingBase (or brief Idle on arrival frame)
+                ASSERT_TRUE(sim.get_unit(a3).state == UnitState::Walking || sim.get_unit(a3).state == UnitState::QueuingBase || sim.get_unit(a3).state == UnitState::Idle);
             }
         }
 
@@ -2043,8 +2049,13 @@ void run_suite_11_anthill_queuing_and_priority() {
         ASSERT_FALSE(sim.get_unit(a2).is_holding());
         ASSERT_EQ(sim.get_player_score(0), 50);
 
-        // Advance 1 more tick: Ant 3 now gets priority!
-        sim.tick();
+        // Ant 2 completes emergence and vacates the hole. Ant 3 remains waiting in QueuingBase!
+        for (int i = 0; i < 80 && sim.get_active_depositing_ant(0) == a2; ++i) {
+            sim.tick();
+            if (sim.get_active_depositing_ant(0) == a2) {
+                ASSERT_EQ(sim.get_unit(a3).state, UnitState::QueuingBase);
+            }
+        }
         ASSERT_EQ(sim.get_active_depositing_ant(0), a3);
         ASSERT_EQ(sim.get_unit(a3).state, UnitState::Walking);
 
@@ -3761,7 +3772,7 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         ASSERT_EQ(b_ant.state, UnitState::Idle);
 
         // Defuse bomb (12 ticks)
-        sim.defuse_bomb(b_id, TileCoord{21, 20});
+        sim.defuse_bomb(b_id, TileCoord{21, 20}, false);
         ASSERT_EQ(b_ant.state, UnitState::DefusingBomb);
         ASSERT_EQ(b_ant.facing, Direction::East);
 
@@ -3797,7 +3808,7 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         ASSERT_EQ(f_ant.state, UnitState::Idle);
 
         // Extinguish fire (12 ticks)
-        sim.extinguish_fire(f_id, TileCoord{25, 26});
+        sim.extinguish_fire(f_id, TileCoord{25, 26}, false);
         ASSERT_EQ(f_ant.state, UnitState::ExtinguishingFire);
         ASSERT_EQ(f_ant.facing, Direction::South);
 
@@ -4251,8 +4262,8 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
             ASSERT_NE(pt, a3_slot);
         }
 
-        // Advance until Ant 1 finishes depositing food and Ant 2 gains priority
-        for (int i = 0; i < 30 && sim.get_active_depositing_ant(0) != a2; ++i) {
+        // Advance until Ant 1 finishes depositing food, emerges, vacates hole, and Ant 2 gains priority
+        for (int i = 0; i < 80 && sim.get_active_depositing_ant(0) != a2; ++i) {
             sim.tick();
         }
         ASSERT_EQ(sim.get_active_depositing_ant(0), a2);

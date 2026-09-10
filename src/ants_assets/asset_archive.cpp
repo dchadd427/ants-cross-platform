@@ -49,37 +49,6 @@ bool AssetArchive::load_from_memory(const uint8_t* data, size_t size) {
     return true;
 }
 
-size_t AssetArchive::total_memory_bytes() const noexcept {
-    size_t total = sizeof(*this);
-    total += CHD_PALETTE_BYTE_SIZE;
-
-    for (const auto& sp : sprites_) {
-        total += sizeof(Sprite) + sp.name.capacity() + sp.filename.capacity() + sp.pixels.capacity();
-    }
-    for (const auto& sp : mirrored_sprites_) {
-        total += sizeof(Sprite) + sp.name.capacity() + sp.filename.capacity() + sp.pixels.capacity();
-    }
-    for (const auto& snd : sounds_) {
-        total += sizeof(SoundClip) + snd.name.capacity() + snd.filename.capacity() + snd.pcm_data.capacity();
-    }
-    for (const auto& tag : tags_) {
-        total += sizeof(EventTag) + tag.name.capacity();
-    }
-    for (const auto& anim : animations_) {
-        total += sizeof(AnimationSequence) + anim.name.capacity();
-        for (const auto& sub : anim.subitems) {
-            total += sizeof(AnimationSubItem) + (sub.frames.capacity() * sizeof(AnimationFrame));
-        }
-    }
-    for (const auto& anim : dir_animations_) {
-        total += sizeof(AnimationSequence) + anim.name.capacity();
-        for (const auto& sub : anim.subitems) {
-            total += sizeof(AnimationSubItem) + (sub.frames.capacity() * sizeof(AnimationFrame));
-        }
-    }
-    return total;
-}
-
 void AssetArchive::build_index_tables() {
     sprite_name_map_.clear();
     lower_sprite_name_map_.clear();
