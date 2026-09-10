@@ -275,7 +275,7 @@ bool Grid::is_anthill_reserved_spot(TileCoord pos) const noexcept {
     for (const auto& ah : anthills_) {
         int32_t bx = static_cast<int32_t>(ah.x);
         int32_t by = static_cast<int32_t>(ah.y);
-        // 1. The authentic 3 air vent / mound tiles (FUN_0101d8a4 in Ants.exe)
+        // 1. The authentic 3 blocked mound tiles (FUN_0101d8a4 in Ants.exe)
         if (pos.x == bx - 2 && (pos.y >= by - 1 && pos.y <= by + 1)) return true;
         // 2. Base origin and entrance mouth/hole (FUN_0101d858 in Ants.exe)
         if (pos.x == bx && pos.y == by) return true;
