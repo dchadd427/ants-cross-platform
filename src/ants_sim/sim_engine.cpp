@@ -711,11 +711,6 @@ void SimulationEngine::tick() {
                         impl_->stats_.get_player_stats_mut(bomb_owner).enemy_killed++;
                     }
                     impl_->spawn_death_effect(ant_ptr->pixel_x, ant_ptr->pixel_y);
-                } else if (ant_ptr->hp == 1 && ant_ptr->state != UnitState::EnteringBase && !ant_ptr->underground) {
-                    const auto* home = impl_->grid_.find_anthill(ant_ptr->player_id);
-                    if (home) {
-                        join_base_queue(ant_ptr->id);
-                    }
                 }
                 if (!lethal) {
                     static constexpr int32_t DIR_DX[8] = { 0,  1, 1, 1, 0, -1, -1, -1 };
@@ -1793,6 +1788,18 @@ void SimulationEngine::tick() {
                 }
             }
         }
+
+        // Authentic 1998 1 HP Automatic Return to Base to Heal (Ants.exe FUN_0101dded / FUN_0102151a)
+        // Initiates retreat ONLY once unit is idle and has fully settled from hit flinch, knockback, or bounce!
+        if (ant_ptr->is_alive() && ant_ptr->hp == 1 &&
+            (ant_ptr->state == UnitState::Idle || ant_ptr->state == UnitState::GuardIdle) &&
+            !ant_ptr->underground && ant_ptr->state != UnitState::EnteringBase &&
+            ant_ptr->state != UnitState::QueuingBase && !is_ant_in_base_queue(ant_ptr->id)) {
+            const auto* home = impl_->grid_.find_anthill(ant_ptr->player_id);
+            if (home) {
+                join_base_queue(ant_ptr->id);
+            }
+        }
     }
 
     // 5.5 Step Ant-Ant Elastic Collision & Tile Occupancy Separation
@@ -2791,13 +2798,6 @@ void SimulationEngine::execute_melee_attack(uint32_t attacker_id, uint32_t targe
             if (impl_->grid_.has_fire_at(target->pos)) {
                 impl_->physics_.resolve_fire_contact(*target, impl_->grid_, impl_->audio_queue_, impl_->prng_, dir_x, dir_y);
             }
-
-            if (target->hp == 1 && target->state != UnitState::EnteringBase && !target->underground) {
-                const auto* home = impl_->grid_.find_anthill(target->player_id);
-                if (home) {
-                    join_base_queue(target->id);
-                }
-            }
         }
     } else {
         // Standard Ant: 1 HP melee strike, Sound 57 (attack.wav)
@@ -2963,13 +2963,6 @@ void SimulationEngine::execute_melee_attack(uint32_t attacker_id, uint32_t targe
                 // Fire contact check
                 if (land_cell.has_fire()) {
                     impl_->physics_.resolve_fire_contact(*target, impl_->grid_, impl_->audio_queue_, impl_->prng_, dir_x, dir_y);
-                }
-
-                if (target->hp == 1 && target->state != UnitState::EnteringBase && !target->underground) {
-                    const auto* home = impl_->grid_.find_anthill(target->player_id);
-                    if (home) {
-                        join_base_queue(target->id);
-                    }
                 }
             }
         }

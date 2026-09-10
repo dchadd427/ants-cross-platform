@@ -106,7 +106,7 @@ bool LVLParser::load_from_file(const std::string& filepath, LevelData& out_level
         std::ifstream file(filepath, std::ios::binary | std::ios::ate);
         if (!file.is_open()) return false;
 
-        std::streamsize size = file.tellg();
+        std::streamsize size = static_cast<std::streamsize>(file.tellg());
         if (size < 42) return false;
         file.seekg(0, std::ios::beg);
 

@@ -6876,10 +6876,10 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
 
     TEST_CASE("12.108: Version Invariant & Fog of War Cursor Concealment Parity") {
         // 1. Verify semantic versioning components
-        ASSERT_EQ(ants::VERSION_STRING, "v0.0.6");
+        ASSERT_EQ(ants::VERSION_STRING, "v0.0.7");
         ASSERT_EQ(ants::VERSION_MAJOR, 0);
         ASSERT_EQ(ants::VERSION_MINOR, 0);
-        ASSERT_EQ(ants::VERSION_PATCH, 6);
+        ASSERT_EQ(ants::VERSION_PATCH, 7);
 
         // 2. Setup simulation world with Fog of War enabled
         SimulationEngine sim;
@@ -7482,6 +7482,52 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
 
         // No CombatNetFairy sound effect
         ASSERT_FALSE(sim.has_audio_event(SoundID::CombatNetFairy));
+    } TEST_END();
+
+    // 12.113: 2 HP Ant Struck into Friendly Ant Triggers Mutual Bounce Before 1 HP Retreat
+    TEST_CASE("12.113: 2 HP Ant Struck into Friendly Ant Triggers Mutual Bounce Before 1 HP Retreat") {
+        SimulationEngine sim;
+        sim.init_test_world(60, 60, 100, 60000);
+        sim.set_anthill(0, {30, 30});
+
+        // Friendly Ant 1 at (20, 20) with 2 HP, Friendly Ant 2 at (21, 20) with 10 HP
+        uint32_t f1 = sim.spawn_unit(0, AntType::Combat, TileCoord{20, 20});
+        uint32_t f2 = sim.spawn_unit(0, AntType::Worker, TileCoord{21, 20});
+
+        auto* u1_mut = const_cast<AntUnit*>(&sim.get_unit(f1));
+        u1_mut->hp = 2;
+
+        // Enemy Worker at (19, 20) strikes friendly ant 1 eastwards into friendly ant 2
+        uint32_t enemy = sim.spawn_unit(1, AntType::Worker, TileCoord{19, 20});
+        sim.clear_audio_events();
+        sim.execute_melee_attack(enemy, f1);
+
+        const auto& u1 = sim.get_unit(f1);
+        // Ant 1 took 1 damage: drops to 1 HP
+        ASSERT_EQ(u1.hp, 1);
+        // Must be in Flinch for pushback slide, NOT immediately Walking
+        ASSERT_EQ(u1.state, UnitState::Flinch);
+
+        // Advance 7 ticks until f1 slides onto f2's tile (21, 20)
+        for (int i = 0; i < 7; ++i) {
+            sim.tick();
+        }
+
+        const auto& u1_after = sim.get_unit(f1);
+        const auto& u2_after = sim.get_unit(f2);
+
+        // Mutual collision bounce occurred! Both ants entered Bounce state on distinct tiles
+        ASSERT_FALSE(u1_after.pos == u2_after.pos);
+        ASSERT_EQ(u1_after.state, UnitState::Bounce);
+        ASSERT_EQ(u2_after.state, UnitState::Bounce);
+
+        // Advance through bounce recovery (10 ticks) until ants settle into Idle
+        for (int i = 0; i < 11; ++i) {
+            sim.tick();
+        }
+
+        // Once idle, Ant 1 with 1 HP automatically joins base queue and heads home to heal!
+        ASSERT_TRUE(sim.is_ant_in_base_queue(f1));
     } TEST_END();
 }
 

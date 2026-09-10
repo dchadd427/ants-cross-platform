@@ -366,7 +366,7 @@ bool AudioMixer::play_music(const std::string& filepath, bool loop) {
         return false;
     }
 
-    std::streamsize size = f.tellg();
+    std::streamsize size = static_cast<std::streamsize>(f.tellg());
     f.seekg(0, std::ios::beg);
     music_stream_->file_data.resize(static_cast<size_t>(size));
     if (!f.read(reinterpret_cast<char*>(music_stream_->file_data.data()), size)) {

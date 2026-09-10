@@ -19,7 +19,7 @@ bool AssetArchive::load_from_file(const std::string& chd_path) {
     std::ifstream file(chd_path, std::ios::binary | std::ios::ate);
     if (!file.is_open()) return false;
 
-    std::streamsize size = file.tellg();
+    std::streamsize size = static_cast<std::streamsize>(file.tellg());
     if (size < 28) return false;
     file.seekg(0, std::ios::beg);
 
