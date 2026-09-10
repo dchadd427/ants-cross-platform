@@ -16,10 +16,15 @@ echo ======================================================================
 echo                       ANTS ENGINE REMAKE (PC)
 echo ======================================================================
 
-if not exist "build\src\ants_app\Release\ants.exe" (
-    echo [LAUNCHER] Game binary not found. Building release binary now...
+if not exist "build" (
     cmake -B build
-    cmake --build build --config Release --target ants -j8
+)
+echo [LAUNCHER] Ensuring Release binary is up to date...
+cmake --build build --config Release --target ants -j8
+if errorlevel 1 (
+    echo [LAUNCHER] Build failed. Please check compiler errors above.
+    pause
+    exit /b %errorlevel%
 )
 
 echo.
