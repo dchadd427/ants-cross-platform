@@ -1393,20 +1393,20 @@ To deliver authentic 1:1 gameplay inside standard web browsers with zero install
   - News Flash Header: `[%ld:%02ld] News Flash` (binary string at VA `0x1047258`).
   - Teammate Chat Prefix: `%s (To Teammate):` (binary string at VA `0x1047428`).
 
-#### 18. Anthill 3-Vent Forbidden Ability Geometry, Occupied Bumping, Mud Animation Cancel & Power-Up Immunity (`Ants.exe` `0x101d8a4`, `0x101d762`, `0x101cad6`, `0x100ee03`)
-- **Anthill 3 Air Vent / Mound Ability Block (`0x0101d8a4` / `FUN_0101d8a4`)**:
-  - In `Ants.exe.c` lines 21238–21251, `FUN_0101d8a4` explicitly checks whether a targeted grid cell matches any of the 3 air vent coordinates on the anthill mound:
-    - Top vent: `(bx - 2, by - 1)` (`+0x36`, `+0x38`)
-    - Mid vent: `(bx - 2, by)` (`+0x3a`, `+0x3c`)
-    - Bottom vent: `(bx - 2, by + 1)` (`+0x3e`, `+0x40`)
-  - In `FUN_0101d762` lines 21160–21175, ability placement orders (Bomber planting landmines, Fire Ant placing firewall) invoke `FUN_0101d822` (calling `FUN_0101d858`), which rejects placement on these 3 vent tiles, the base origin `(bx, by)`, and the entrance hole.
+#### 18. Anthill 3 Blocked Tiles Forbidden Ability Geometry, Occupied Bumping, Mud Animation Cancel & Power-Up Immunity (`Ants.exe` `0x101d8a4`, `0x101d762`, `0x101cad6`, `0x100ee03`)
+- **Anthill 3 Blocked Mound Tiles Ability Block (`0x0101d8a4` / `FUN_0101d8a4`)**:
+  - In `Ants.exe.c` lines 21238–21251, `FUN_0101d8a4` explicitly checks whether a targeted grid cell matches any of the 3 blocked coordinates on the anthill mound:
+    - Top blocked tile: `(bx - 2, by - 1)` (`+0x36`, `+0x38`)
+    - Mid blocked tile: `(bx - 2, by)` (`+0x3a`, `+0x3c`)
+    - Bottom blocked tile: `(bx - 2, by + 1)` (`+0x3e`, `+0x40`)
+  - In `FUN_0101d762` lines 21160–21175, ability placement orders (Bomber planting landmines, Fire Ant placing firewall) invoke `FUN_0101d822` (calling `FUN_0101d858`), which rejects placement on these 3 blocked mound tiles, the base origin `(bx, by)`, and the entrance hole.
   - Additionally, `FUN_0101d762` line 21163 invokes `FUN_0100cf0f`, strictly rejecting bomb and fire placement on **any tile occupied by a living ant**.
 - **Anthill Coordinate Struct Layout (`Ants.exe.c` lines 9670–9690 / `0x0100ee03`–`0x0100ee25`)**:
   - `+0x2e`, `+0x30`: Anthill base origin `(bx, by)`
   - `+0x32`, `+0x34`: Anthill entrance hole `(bx + 1, by + 1)`
-  - `+0x36`, `+0x38`: Mound top vent `(bx - 2, by - 1)`
-  - `+0x3a`, `+0x3c`: Mound mid vent `(bx - 2, by)`
-  - `+0x3e`, `+0x40`: Mound bottom vent `(bx - 2, by + 1)`
+  - `+0x36`, `+0x38`: Mound top blocked tile `(bx - 2, by - 1)`
+  - `+0x3a`, `+0x3c`: Mound mid blocked tile `(bx - 2, by)`
+  - `+0x3e`, `+0x40`: Mound bottom blocked tile `(bx - 2, by + 1)`
   - `+0x42`, `+0x44`: Subterranean exit / idle anchor `(bx + 3, by + 3)` (emerging ants step off 4×4 mound onto ground at `bx + 4, by + 4`)
   - `+0x46`, `+0x48`: Base queue approach anchor `(bx + 2, by - 2)`
 - **Occupied Destination Bump Reaction (`0x0101cad6`–`0x0101cb05`)**:

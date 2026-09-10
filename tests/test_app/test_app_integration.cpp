@@ -7076,20 +7076,20 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         int32_t bx = ah->x;
         int32_t by = ah->y;
 
-        // 1. The authentic 3 air vent / mound tiles: (bx - 2, by - 1), (bx - 2, by), (bx - 2, by + 1)
+        // 1. The authentic 3 blocked mound tiles: (bx - 2, by - 1), (bx - 2, by), (bx - 2, by + 1)
         for (int dy = -1; dy <= 1; ++dy) {
-            TileCoord vent{bx - 2, by + dy};
-            ASSERT_TRUE(sim.grid().is_anthill_reserved_spot(vent));
+            TileCoord blocked_tile{bx - 2, by + dy};
+            ASSERT_TRUE(sim.grid().is_anthill_reserved_spot(blocked_tile));
 
-            // Bomber ant adjacent to vent cannot plant bomb on vent
-            uint32_t bomber = sim.spawn_unit(0, AntType::Bomber, TileCoord{vent.x - 1, vent.y});
-            ASSERT_FALSE(sim.plant_bomb(bomber, vent));
-            ASSERT_FALSE(sim.plant_bomb(bomber, vent, false));
+            // Bomber ant adjacent to blocked tile cannot plant bomb on blocked tile
+            uint32_t bomber = sim.spawn_unit(0, AntType::Bomber, TileCoord{blocked_tile.x - 1, blocked_tile.y});
+            ASSERT_FALSE(sim.plant_bomb(bomber, blocked_tile));
+            ASSERT_FALSE(sim.plant_bomb(bomber, blocked_tile, false));
 
-            // Fire ant adjacent to vent cannot ignite fire on vent
-            uint32_t fire_ant = sim.spawn_unit(0, AntType::Fire, TileCoord{vent.x - 1, vent.y});
-            ASSERT_FALSE(sim.ignite_fire(fire_ant, vent));
-            ASSERT_FALSE(sim.ignite_fire(fire_ant, vent, false));
+            // Fire ant adjacent to blocked tile cannot ignite fire on blocked tile
+            uint32_t fire_ant = sim.spawn_unit(0, AntType::Fire, TileCoord{blocked_tile.x - 1, blocked_tile.y});
+            ASSERT_FALSE(sim.ignite_fire(fire_ant, blocked_tile));
+            ASSERT_FALSE(sim.ignite_fire(fire_ant, blocked_tile, false));
         }
 
         // 2. Tile occupied by any living ant cannot have a bomb or fire planted on it
