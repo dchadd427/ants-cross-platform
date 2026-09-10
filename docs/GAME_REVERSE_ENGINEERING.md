@@ -1243,12 +1243,10 @@ To deliver authentic 1:1 gameplay inside standard web browsers with zero install
   - This preserves walkability on pathways such as slate tile `(18, 17)` on `TINY.LVL`.
 
 #### 11. Authentic Collision Scuffle Model Concealment, Chaotic Domino Cascade & Hazard Landings (`Ants.exe` `0x10215cb`, `0x1020f60`, `0x1020de7`)
-- **Scuffle Entity Model Concealment (`0x10215cb`, State 3 / `0x100823b`)**:
-  - During the 10-tick same-tile collision scuffle, the rendering pipeline suppresses drawing both ant entity sprites, their health bars, and selection brackets (`is_in_scuffle == true`).
-  - Radar and hover selection also suppress scuffling units, ensuring that the destination landing location is never leaked to the player during the clash.
-  - The only visible element is the fighting ball dust cloud (`battle` effect / Anim 56) playing at the collision point.
-- **Post-Scuffle Airborne Recoil (`0x1020f60`)**:
-  - Once the 10-tick scuffle completes (`scuffle_ticks == 0`), `is_in_scuffle` is cleared and the displaced ant transitions into `UnitState::Bounce` with animation `*gb*` (`aggb301..aggb901`).
+- **Collision Scuffle Anchor Ant Visibility & Displaced Unit Recoil (`0x102151a`, `0x10215cb`, State 3)**:
+  - In `Ants.exe` (`0x102151a`), same-tile collision resolution operates specifically on the displaced ant (`State 3` / `Bounce`).
+  - The original binary never conceals or suppresses drawing the resident anchor ant standing on the collision tile. The anchor ant was already stationed on the tile and remains completely visible on the playfield under the dust cloud (`battle` / Anim 56) with full health bar and selection brackets, preventing jarring pop-in.
+  - The displaced ant resolves its collision clash by transitioning into `UnitState::Bounce` with animation `*gh*` (`aggh*` Ground Hit recoil / flinch flight with horizontal flipping for NW/W/SW directions).
   - Over a 4-tick interpolation window (80ms), the ant smoothly flies out from the collision clash center (`push_start_px, push_start_py`) to its destination tile center (`push_dest_px, push_dest_py`).
 - **Terrain-Only Passability Candidate Selection (`0x1020de7`)**:
   - When evaluating candidate bounce destination tiles around the collision point, the engine strictly checks whether tiles are within bounds and non-solid terrain (`terrain_type != TERRAIN_OBSTACLE && !cell.is_obstacle_overlay`).

@@ -6439,15 +6439,20 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
             const auto& u1 = sim.get_unit(a1);
             const auto& u2 = sim.get_unit(a2);
 
-            // Both ants must have is_in_scuffle active
-            ASSERT_TRUE(u1.is_in_scuffle);
-            ASSERT_TRUE(u2.is_in_scuffle);
+            const AntUnit* displaced = (u1.state == UnitState::Bounce ? &u1 : &u2);
+            const AntUnit* anchor = (displaced == &u1 ? &u2 : &u1);
 
-            // In world state snapshot, is_in_scuffle must be set to true for renderer suppression
+            // Displaced ant is in scuffle; anchor ant remains visible on field
+            ASSERT_TRUE(displaced->is_in_scuffle);
+            ASSERT_FALSE(anchor->is_in_scuffle);
+
+            // In world state snapshot, only displaced ant has is_in_scuffle active
             const auto& ws = sim.get_world_state();
             for (const auto& snap : ws.ants) {
-                if (snap.id == a1 || snap.id == a2) {
+                if (snap.id == displaced->id) {
                     ASSERT_TRUE(snap.is_in_scuffle);
+                } else if (snap.id == anchor->id) {
+                    ASSERT_FALSE(snap.is_in_scuffle);
                 }
             }
 
@@ -6470,7 +6475,7 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
             const auto& u2_after = sim.get_unit(a2);
             ASSERT_FALSE(u1_after.is_in_scuffle);
             ASSERT_FALSE(u2_after.is_in_scuffle);
-            const AntUnit* displaced = (u1_after.state == UnitState::Bounce ? &u1_after : &u2_after);
+            displaced = (u1_after.state == UnitState::Bounce ? &u1_after : &u2_after);
             ASSERT_TRUE(displaced != nullptr);
             ASSERT_EQ(displaced->state, UnitState::Bounce);
         }

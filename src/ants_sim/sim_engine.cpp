@@ -1969,9 +1969,8 @@ void SimulationEngine::tick() {
                             anchor_ant = (to_displace == a1.get()) ? a2.get() : a1.get();
                         }
                     }
-
-                    anchor_ant->is_in_scuffle = true;
-                    anchor_ant->scuffle_ticks = 10;
+                    // Authentic 1998 logic (Ants.exe 0x102151a): Anchor ant remains visible on its tile
+                    // throughout the clash; only displaced ant recoils out of collision.
                     anchor_ant->clear_path();
                     anchor_ant->attack_target_id = 0;
                     anchor_ant->attack_cooldown_ticks = std::max(anchor_ant->attack_cooldown_ticks, static_cast<uint16_t>(20));
