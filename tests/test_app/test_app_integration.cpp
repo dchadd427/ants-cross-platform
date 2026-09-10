@@ -6871,10 +6871,10 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
 
     TEST_CASE("12.108: Version Invariant & Fog of War Cursor Concealment Parity") {
         // 1. Verify semantic versioning components
-        ASSERT_EQ(ants::VERSION_STRING, "v0.0.2");
+        ASSERT_EQ(ants::VERSION_STRING, "v0.0.3");
         ASSERT_EQ(ants::VERSION_MAJOR, 0);
         ASSERT_EQ(ants::VERSION_MINOR, 0);
-        ASSERT_EQ(ants::VERSION_PATCH, 2);
+        ASSERT_EQ(ants::VERSION_PATCH, 3);
 
         // 2. Setup simulation world with Fog of War enabled
         SimulationEngine sim;
@@ -7206,6 +7206,108 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         // Water ant cannot melee attack land ant
         sim.execute_melee_attack(swimmer, land_ant);
         ASSERT_NE(sim.get_unit(swimmer).state, UnitState::Attacking);
+    } TEST_END();
+
+    // ------------------------------------------------------------------------
+    // 12.115: Blocked Base Emergence 20-Tick Postponement (Ants.exe 0x1025100)
+    // ------------------------------------------------------------------------
+    TEST_CASE("12.115 Blocked Base Emergence 20-Tick Postponement (Ants.exe 0x1025100)") {
+        SimulationEngine sim;
+        sim.init_test_world(60, 60, 100, 60000);
+        sim.grid_mut().set_anthill(0, TileCoord{20, 20});
+        const auto* ah = sim.grid().find_anthill(0);
+        ASSERT_TRUE(ah != nullptr);
+        TileCoord hole{ah->x + 1, ah->y + 1}; // (21, 21)
+
+        // 1. Place a stationary surface ant directly on the hole
+        uint32_t blocker = sim.spawn_unit(0, AntType::Worker, hole);
+        sim.tick();
+        ASSERT_TRUE(sim.has_living_ant_at(hole));
+
+        // 2. Hatch a newborn ant
+        sim.set_player_score(0, 500);
+        sim.set_player_eggs(0, 5);
+        ASSERT_TRUE(sim.hatch_ant(0, AntType::Worker));
+
+        // Find the newborn ant
+        const auto& world = sim.get_world_state();
+        uint32_t baby_id = 0;
+        for (const auto& a : world.ants) {
+            if (a.id != blocker && a.player_id == 0) {
+                baby_id = a.id;
+                break;
+            }
+        }
+        ASSERT_TRUE(baby_id != 0);
+        const auto& baby = sim.get_unit(baby_id);
+        ASSERT_TRUE(baby.is_underground());
+
+        // 3. Tick through the initial hatch delay (60 ticks)
+        for (int t = 0; t < 60; ++t) {
+            sim.tick();
+        }
+
+        // Because hole is occupied by blocker, newborn is postponed by 20 ticks (1000ms)
+        ASSERT_TRUE(sim.get_unit(baby_id).is_underground());
+        ASSERT_GT(sim.get_unit(baby_id).state_timer, 0);
+
+        // Advance 10 ticks (halfway through postponement)
+        for (int t = 0; t < 10; ++t) {
+            sim.tick();
+        }
+        ASSERT_TRUE(sim.get_unit(baby_id).is_underground());
+
+        // 4. Move the blocker away from the hole out into open ground
+        TileCoord target{ah->x - 5, ah->y + 3};
+        sim.issue_move_order(blocker, target);
+        for (int t = 0; t < 40; ++t) {
+            sim.tick();
+            if (!sim.has_living_ant_at(hole)) break;
+        }
+        ASSERT_FALSE(sim.has_living_ant_at(hole));
+
+        // Advance simulation ticks for newborn's postponement timer to count down and emerge
+        for (int t = 0; t < 25; ++t) {
+            sim.tick();
+            if (!sim.get_unit(baby_id).is_underground()) break;
+        }
+        ASSERT_FALSE(sim.get_unit(baby_id).is_underground());
+        ASSERT_TRUE(sim.get_unit(baby_id).is_invulnerable());
+    } TEST_END();
+
+    // ------------------------------------------------------------------------
+    // 12.116: A* Pathfinding Moving-Ally Passability (Ants.exe 0x10209cd)
+    // ------------------------------------------------------------------------
+    TEST_CASE("12.116 A* Pathfinding Moving-Ally Passability (Ants.exe 0x10209cd)") {
+        SimulationEngine sim;
+        sim.init_test_world(40, 40, 100, 60000);
+
+        // Build a narrow 1-tile corridor at y=10 from x=5 to x=25
+        // Flank with solid rocks above and below
+        for (int x = 5; x <= 25; ++x) {
+            sim.grid_mut().set_terrain(x, 9, TERRAIN_OBSTACLE);
+            sim.grid_mut().set_terrain(x, 11, TERRAIN_OBSTACLE);
+            sim.grid_mut().set_terrain(x, 10, TERRAIN_WALKABLE);
+        }
+
+        // Spawn friendly ant 1 marching east inside corridor
+        uint32_t ant1 = sim.spawn_unit(0, AntType::Worker, TileCoord{12, 10});
+        sim.issue_move_order(ant1, TileCoord{22, 10});
+        sim.tick();
+        ASSERT_EQ(sim.get_unit(ant1).state, UnitState::Walking);
+
+        // Spawn friendly ant 2 behind ant 1 inside corridor
+        uint32_t ant2 = sim.spawn_unit(0, AntType::Worker, TileCoord{8, 10});
+        ASSERT_EQ(sim.get_unit(ant2).state, UnitState::Idle);
+
+        // Issue move order to ant 2 targeting (20, 10) ahead of ant 1
+        sim.issue_move_order(ant2, TileCoord{20, 10});
+
+        // Moving ally ant1 is NOT an impassable obstacle in A* routing (0x10209cd)
+        // Ant 2 must successfully find a path directly through the corridor!
+        ASSERT_EQ(sim.get_unit(ant2).state, UnitState::Walking);
+        ASSERT_FALSE(sim.get_unit(ant2).waypoints.empty());
+        ASSERT_EQ(sim.get_unit(ant2).final_dest, (TileCoord{20, 10}));
     } TEST_END();
 }
 
