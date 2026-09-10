@@ -69,11 +69,11 @@ void HUD::init(uint8_t local_player_id) {
     options_button_ = {525, 7, 52, 23, 0, 0, 0, false, true, false};
     quit_button_ = {579, 7, 46, 23, 0, 0, 0, false, true, false};
 
-    // Configure Authentic Primary Action Pedestal (Move) at (488, 140, 53, 86)
-    move_pedestal_button_ = {488, 140, 53, 86, 0, 0, 0, false, true, false};
+    // Configure Authentic Primary Action Pedestal (Move) at (476, 158, 50, 67)
+    move_pedestal_button_ = {476, 158, 50, 67, 0, 0, 0, false, true, false};
 
-    // Configure Authentic Secondary Ability Pedestal at (544, 140, 53, 86)
-    ability_pedestal_button_ = {544, 140, 53, 86, 0, 0, 0, false, true, false};
+    // Configure Authentic Secondary Ability Pedestal at (537, 158, 50, 67)
+    ability_pedestal_button_ = {537, 158, 50, 67, 0, 0, 0, false, true, false};
 
     // Configure Authentic Stop Button at (602, 176, 34, 50)
     stop_button_ = {602, 176, 34, 50, 0, 0, 0, false, true, false};
@@ -341,8 +341,21 @@ void HUD::render(IRenderer& renderer, const assets::AssetArchive& assets,
             }
         }
     } else {
-        bool has_ants = (!selected_ant_ids_.empty() || selected_ant_id_ != 0);
-        if (has_ants) {
+        bool has_friendly_ants = false;
+        for (uint32_t aid : selected_ant_ids_) {
+            for (const auto& a : world.ants) {
+                if (a.id == aid && a.player_id == local_player_id_) {
+                    has_friendly_ants = true;
+                    break;
+                }
+            }
+            if (has_friendly_ants) break;
+        }
+        if (selected_ant_id_ != 0 && sel_ant && sel_ant->player_id == local_player_id_) {
+            has_friendly_ants = true;
+        }
+
+        if (has_friendly_ants) {
             if (move_pedestal_state_ == PedestalAnimState::Hidden || move_pedestal_state_ == PedestalAnimState::Lowering) {
                 move_pedestal_state_ = PedestalAnimState::PoppingUp;
                 move_pedestal_anim_start_ms_ = SDL_GetTicks();
@@ -364,8 +377,9 @@ void HUD::render(IRenderer& renderer, const assets::AssetArchive& assets,
                 size_t frame = std::min(static_cast<size_t>(elapsed_ms / 60), static_cast<size_t>(8));
                 const auto* seq = assets.find_animation("trnbmovu");
                 if (seq && frame < seq->subitems.size() && !seq->subitems[frame].frames.empty()) {
-                    const auto& fr = seq->subitems[frame].frames[0];
-                    renderer.draw_sprite(fr.sprite_index, fr.dx, fr.dy);
+                    for (const auto& fr : seq->subitems[frame].frames) {
+                        renderer.draw_sprite(fr.sprite_index, fr.dx, fr.dy);
+                    }
                 }
             }
         } else if (move_pedestal_state_ == PedestalAnimState::Lowering) {
@@ -375,46 +389,47 @@ void HUD::render(IRenderer& renderer, const assets::AssetArchive& assets,
                 size_t frame = std::min(static_cast<size_t>(elapsed_ms / 60), static_cast<size_t>(8));
                 const auto* seq = assets.find_animation("trnbalyd");
                 if (seq && frame < seq->subitems.size() && !seq->subitems[frame].frames.empty()) {
-                    const auto& fr = seq->subitems[frame].frames[0];
-                    renderer.draw_sprite(fr.sprite_index, fr.dx, fr.dy);
+                    for (const auto& fr : seq->subitems[frame].frames) {
+                        renderer.draw_sprite(fr.sprite_index, fr.dx, fr.dy);
+                    }
                 }
             }
         }
 
-        if (move_pedestal_state_ == PedestalAnimState::Raised && has_ants) {
-            // Pedestal 1: Move
+        if (move_pedestal_state_ == PedestalAnimState::Raised && has_friendly_ants) {
+            // Pedestal 1: Move (Authentic 476, 158)
             bool ped1_down = move_pedestal_button_.is_pressed || (active_order_mode_ == sim::OrderType::Move);
-            renderer.draw_named_sprite(ped1_down ? "butdown.bmp" : "butup.bmp", 488, 155);
-            renderer.draw_named_sprite(ped1_down ? "butmovd.bmp" : "butmovu.bmp", 503, ped1_down ? 166 : 164);
-            renderer.draw_named_sprite("labmov.bmp", 497, 140);
+            renderer.draw_named_sprite(ped1_down ? "buttrna5.bmp" : "buttrna1.bmp", 476, 158);
+            renderer.draw_named_sprite(ped1_down ? "trnamov4.bmp" : "trnamov1.bmp", 480, 163);
+            renderer.draw_named_sprite("labmov.bmp", 484, 140);
 
-            // Pedestal 2: Class-Specific Ability Pedestal
-            if (sel_ant) {
+            // Pedestal 2: Class-Specific Ability Pedestal (Authentic 537, 158)
+            if (sel_ant && sel_ant->player_id == local_player_id_) {
                 if (sel_ant->type == sim::AntType::Swimmer) {
                     bool ped2_down = ability_pedestal_button_.is_pressed || (active_order_mode_ == sim::OrderType::BuildBridge);
-                    renderer.draw_named_sprite(ped2_down ? "butdown.bmp" : "butup.bmp", 544, 155);
-                    renderer.draw_named_sprite(ped2_down ? "swimd.bmp" : "swimup.bmp", 556, ped2_down ? 167 : 165);
-                    renderer.draw_named_sprite("labswim.bmp", 551, 140);
+                    renderer.draw_named_sprite(ped2_down ? "buttrna5.bmp" : "buttrna1.bmp", 537, 158);
+                    renderer.draw_named_sprite(ped2_down ? "trnaswm4.bmp" : "trnaswm1.bmp", 543, 167);
+                    renderer.draw_named_sprite("labswim.bmp", 543, 140);
                 } else if (sel_ant->type == sim::AntType::Fire) {
                     bool ped2_down = ability_pedestal_button_.is_pressed || (active_order_mode_ == sim::OrderType::IgniteFire);
-                    renderer.draw_named_sprite(ped2_down ? "butdown.bmp" : "butup.bmp", 544, 155);
-                    renderer.draw_named_sprite("butfireu.bmp", 555, ped2_down ? 166 : 164);
-                    renderer.draw_named_sprite("labfire.bmp", 546, 140);
+                    renderer.draw_named_sprite(ped2_down ? "buttrna5.bmp" : "buttrna1.bmp", 537, 158);
+                    renderer.draw_named_sprite("butfireu.bmp", 548, ped2_down ? 165 : 164);
+                    renderer.draw_named_sprite("labfire.bmp", 538, 140);
                 } else if (sel_ant->type == sim::AntType::Combat) {
                     bool ped2_down = ability_pedestal_button_.is_pressed || (active_order_mode_ == sim::OrderType::Attack);
-                    renderer.draw_named_sprite(ped2_down ? "butdown.bmp" : "butup.bmp", 544, 155);
-                    renderer.draw_named_sprite(ped2_down ? "butattd.bmp" : "butattu.bmp", 553, ped2_down ? 167 : 165);
-                    renderer.draw_named_sprite("labatt.bmp", 550, 140);
+                    renderer.draw_named_sprite(ped2_down ? "buttrna5.bmp" : "buttrna1.bmp", 537, 158);
+                    renderer.draw_named_sprite(ped2_down ? "trnaatk4.bmp" : "trnaatk1.bmp", 541, 163);
+                    renderer.draw_named_sprite("labatt.bmp", 542, 140);
                 } else if (sel_ant->type == sim::AntType::Bomber) {
                     bool ped2_down = ability_pedestal_button_.is_pressed || (active_order_mode_ == sim::OrderType::PlantBomb);
-                    renderer.draw_named_sprite(ped2_down ? "butdown.bmp" : "butup.bmp", 544, 155);
-                    renderer.draw_named_sprite(ped2_down ? "butbomd.bmp" : "butbomu.bmp", 554, ped2_down ? 165 : 163);
-                    renderer.draw_named_sprite("labbom.bmp", 553, 140);
+                    renderer.draw_named_sprite(ped2_down ? "buttrna5.bmp" : "buttrna1.bmp", 537, 158);
+                    renderer.draw_named_sprite(ped2_down ? "trnabmb4.bmp" : "trnabmb1.bmp", 542, 164);
+                    renderer.draw_named_sprite("labbom.bmp", 545, 140);
                 } else if (sel_ant->type == sim::AntType::Thief) {
                     bool ped2_down = ability_pedestal_button_.is_pressed || (active_order_mode_ == sim::OrderType::InfiltrateAnthill);
-                    renderer.draw_named_sprite(ped2_down ? "butdown.bmp" : "butup.bmp", 544, 155);
-                    renderer.draw_named_sprite(ped2_down ? "butthfd.bmp" : "butthfu.bmp", 556, ped2_down ? 166 : 164);
-                    renderer.draw_named_sprite("labthf.bmp", 554, 140);
+                    renderer.draw_named_sprite(ped2_down ? "buttrna5.bmp" : "buttrna1.bmp", 537, 158);
+                    renderer.draw_named_sprite(ped2_down ? "trnastl4.bmp" : "trnastl1.bmp", 541, 163);
+                    renderer.draw_named_sprite("labthf.bmp", 546, 140);
                 }
             }
 
@@ -3103,7 +3118,7 @@ CursorType HUD::evaluate_cursor(int32_t screen_x, int32_t screen_y,
             if (hover_ant && hover_ant->player_id != local_player_id_ && !is_ally) {
                 current_cursor_ = CursorType::Attack;
             } else {
-                current_cursor_ = CursorType::Cant;
+                current_cursor_ = CursorType::Normal;
             }
             return current_cursor_;
         }
@@ -3111,7 +3126,7 @@ CursorType HUD::evaluate_cursor(int32_t screen_x, int32_t screen_y,
             if (hover_base && hover_base->team_id != local_player_id_) {
                 current_cursor_ = CursorType::ThiefTarget;
             } else {
-                current_cursor_ = CursorType::Cant;
+                current_cursor_ = CursorType::Normal;
             }
             return current_cursor_;
         }
@@ -3126,7 +3141,7 @@ CursorType HUD::evaluate_cursor(int32_t screen_x, int32_t screen_y,
                     return current_cursor_;
                 }
             }
-            current_cursor_ = CursorType::Cant;
+            current_cursor_ = CursorType::Normal;
             return current_cursor_;
         }
         if (active_order_mode_ == sim::OrderType::PlantBomb) {
@@ -3137,7 +3152,7 @@ CursorType HUD::evaluate_cursor(int32_t screen_x, int32_t screen_y,
                     return current_cursor_;
                 }
             }
-            current_cursor_ = CursorType::Cant;
+            current_cursor_ = CursorType::Normal;
             return current_cursor_;
         }
         if (active_order_mode_ == sim::OrderType::IgniteFire) {
@@ -3148,7 +3163,7 @@ CursorType HUD::evaluate_cursor(int32_t screen_x, int32_t screen_y,
                     return current_cursor_;
                 }
             }
-            current_cursor_ = CursorType::Cant;
+            current_cursor_ = CursorType::Normal;
             return current_cursor_;
         }
     }
@@ -3218,38 +3233,13 @@ CursorType HUD::evaluate_cursor(int32_t screen_x, int32_t screen_y,
         }
     }
 
-    // 4. Terrain Passability Check
+    // 4. Map Bounds Check: within playfield map -> Move; outside -> Normal
     if (grid.in_bounds(tx, ty)) {
-        const auto& cell = grid.get_cell(static_cast<uint32_t>(tx), static_cast<uint32_t>(ty));
-        if (cell.terrain_type == sim::TERRAIN_WATER && !cell.has_completed_bridge()) {
-            // Check if any selected unit can swim
-            bool all_swimmers = true;
-            for (uint32_t aid : selected_ant_ids_) {
-                for (const auto& a : world.ants) {
-                    if (a.id == aid && a.player_id == local_player_id_) {
-                        if (a.type != sim::AntType::Swimmer) {
-                            all_swimmers = false;
-                            break;
-                        }
-                    }
-                }
-                if (!all_swimmers) break;
-            }
-            if (!all_swimmers) {
-                current_cursor_ = CursorType::Cant;
-                return current_cursor_;
-            }
-        } else if (cell.terrain_type == sim::TERRAIN_OBSTACLE || cell.is_obstacle_overlay) {
-            current_cursor_ = CursorType::Cant;
-            return current_cursor_;
-        }
-    } else {
-        current_cursor_ = CursorType::Cant;
+        current_cursor_ = CursorType::Move;
         return current_cursor_;
     }
 
-    // Open ground -> Move
-    current_cursor_ = CursorType::Move;
+    current_cursor_ = CursorType::Normal;
     return current_cursor_;
 }
 

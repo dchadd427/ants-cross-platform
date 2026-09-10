@@ -59,8 +59,7 @@ enum class CursorType : uint8_t {
     ScrollSW = 10,   // Mode 6 dir 5: CUR_SW (Anim 52)
     ScrollW = 11,    // Mode 6 dir 6: CUR_W (Anim 50)
     ScrollNW = 12,   // Mode 6 dir 7: CUR_NW (Anim 47)
-    Food = 13,       // Mode 7: c_food (Anim 54)
-    Cant = 14        // c_cant (Anim 39)
+    Food = 13        // Mode 7: c_food (Anim 54)
 };
 
 /**

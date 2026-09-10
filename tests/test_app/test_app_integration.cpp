@@ -5232,15 +5232,15 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         int32_t screen_tx16 = (16 * 32 + 16) - 320 + PLAYFIELD_X;
         ASSERT_EQ(hud.evaluate_cursor(screen_tx16, screen_ty15, sim.get_world_state(), sim.grid(), camera), CursorType::Food);
 
-        // Obstacle tile hover -> Cant
+        // Obstacle tile hover -> Move (authentic 1998 behavior: move cursor shown across map)
         sim.grid_mut().set_terrain(17, 15, TERRAIN_OBSTACLE);
         int32_t screen_tx17 = (17 * 32 + 16) - 320 + PLAYFIELD_X;
-        ASSERT_EQ(hud.evaluate_cursor(screen_tx17, screen_ty15, sim.get_world_state(), sim.grid(), camera), CursorType::Cant);
+        ASSERT_EQ(hud.evaluate_cursor(screen_tx17, screen_ty15, sim.get_world_state(), sim.grid(), camera), CursorType::Move);
 
-        // Water tile hover with Worker selected -> Cant
+        // Water tile hover with Worker selected -> Move
         sim.grid_mut().set_terrain(14, 15, TERRAIN_WATER);
         int32_t screen_tx14 = (14 * 32 + 16) - 320 + PLAYFIELD_X;
-        ASSERT_EQ(hud.evaluate_cursor(screen_tx14, screen_ty15, sim.get_world_state(), sim.grid(), camera), CursorType::Cant);
+        ASSERT_EQ(hud.evaluate_cursor(screen_tx14, screen_ty15, sim.get_world_state(), sim.grid(), camera), CursorType::Move);
 
         // Water tile hover with Swimmer selected -> Move!
         uint32_t my_swimmer = sim.spawn_unit(0, AntType::Swimmer, TileCoord{15, 16});
@@ -6766,11 +6766,11 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
             const AntUnit* displaced = (u1.state == UnitState::Bounce) ? &u1 : &u2;
             ASSERT_EQ(displaced->state, UnitState::Bounce);
 
-            // Displaced ant faces along its bounce trajectory away from collision point (25, 25)
-            int32_t b_dx = displaced->pos.x - 25;
-            int32_t b_dy = displaced->pos.y - 25;
-            if (b_dx != 0 || b_dy != 0) {
-                Direction expected_facing = ants::assets::vector_to_direction(b_dx, b_dy);
+            // Displaced ant recoils backwards out of scuffle and faces towards collision point (25, 25)
+            int32_t face_dx = 25 - displaced->pos.x;
+            int32_t face_dy = 25 - displaced->pos.y;
+            if (face_dx != 0 || face_dy != 0) {
+                Direction expected_facing = ants::assets::vector_to_direction(face_dx, face_dy);
                 ASSERT_EQ(displaced->facing, expected_facing);
             }
 
@@ -6871,10 +6871,10 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
 
     TEST_CASE("12.108: Version Invariant & Fog of War Cursor Concealment Parity") {
         // 1. Verify semantic versioning components
-        ASSERT_EQ(ants::VERSION_STRING, "v0.0.4");
+        ASSERT_EQ(ants::VERSION_STRING, "v0.0.5");
         ASSERT_EQ(ants::VERSION_MAJOR, 0);
         ASSERT_EQ(ants::VERSION_MINOR, 0);
-        ASSERT_EQ(ants::VERSION_PATCH, 4);
+        ASSERT_EQ(ants::VERSION_PATCH, 5);
 
         // 2. Setup simulation world with Fog of War enabled
         SimulationEngine sim;
@@ -7308,6 +7308,79 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         ASSERT_EQ(sim.get_unit(ant2).state, UnitState::Walking);
         ASSERT_FALSE(sim.get_unit(ant2).waypoints.empty());
         ASSERT_EQ(sim.get_unit(ant2).final_dest, (TileCoord{20, 10}));
+    } TEST_END();
+
+    TEST_CASE("12.117 Thief Ant Zero-Food Sits Idle Underground on Bottlecap") {
+        SimulationEngine sim;
+        sim.init_test_world(60, 60, 100, 60000);
+        sim.grid_mut().set_anthill(0, TileCoord{5, 5});
+        sim.grid_mut().set_anthill(1, TileCoord{20, 20});
+
+        // Team 0 has Thief, Team 1 (victim) has Anthill at (20, 20) with 0 food points
+        uint32_t thief_id = sim.spawn_unit(0, AntType::Thief, TileCoord{18, 20});
+        const auto* enemy_base = sim.grid().find_anthill(1);
+        ASSERT_TRUE(enemy_base != nullptr);
+        ASSERT_EQ(sim.get_player_score(1), 0);
+
+        // Order Thief to infiltrate Team 1's base
+        AntOrder infil_order;
+        infil_order.ant_id = thief_id;
+        infil_order.type = OrderType::InfiltrateAnthill;
+        infil_order.target_x = enemy_base->x + 1;
+        infil_order.target_y = enemy_base->y + 1;
+        infil_order.target_entity_id = 1;
+        sim.issue_order(infil_order);
+
+        // Step simulation until thief arrives and enters Infiltrating state
+        for (int t = 0; t < 20; ++t) {
+            sim.tick();
+            if (sim.get_unit(thief_id).state == UnitState::Infiltrating) break;
+        }
+        ASSERT_EQ(sim.get_unit(thief_id).state, UnitState::Infiltrating);
+        ASSERT_EQ(sim.get_unit(thief_id).pixel_x, enemy_base->x * 32 + 107);
+        ASSERT_EQ(sim.get_unit(thief_id).pixel_y, enemy_base->y * 32 + 58);
+
+        // Step through infiltration dive and rummage (34 ticks)
+        for (int t = 0; t < 35; ++t) {
+            sim.tick();
+        }
+
+        // Empty steal: victim had 0 food -> thief stole 0 points
+        const auto& thief = sim.get_unit(thief_id);
+        ASSERT_EQ(thief.carried_points, 0);
+        ASSERT_FALSE(thief.is_thief_steal);
+
+        // Authentic 1998 behavior: thief does NOT return to base;
+        // it sits idle on the bottlecap underground (unable to be attacked)
+        ASSERT_EQ(thief.state, UnitState::Idle);
+        ASSERT_TRUE(thief.underground);
+        ASSERT_EQ(thief.pixel_x, enemy_base->x * 32 + 107);
+        ASSERT_EQ(thief.pixel_y, enemy_base->y * 32 + 58);
+
+        // Enemy Combat Ant spawns adjacent to bottlecap
+        uint32_t combat_id = sim.spawn_unit(1, AntType::Combat, TileCoord{enemy_base->x + 2, enemy_base->y + 2});
+        AntOrder atk_order;
+        atk_order.ant_id = combat_id;
+        atk_order.type = OrderType::Attack;
+        atk_order.target_entity_id = static_cast<int32_t>(thief_id);
+        sim.issue_order(atk_order);
+        sim.tick();
+
+        // Combat Ant CANNOT attack underground thief on bottlecap!
+        ASSERT_NE(sim.get_unit(combat_id).state, UnitState::Attacking);
+        ASSERT_EQ(sim.get_unit(thief_id).hp, 10); // Untouched (starts at 10 HP)
+
+        // When issued a move order, underground thief emerges from hole and walks
+        sim.issue_move_order(thief_id, TileCoord{enemy_base->x - 2, enemy_base->y});
+        ASSERT_FALSE(sim.get_unit(thief_id).underground);
+        ASSERT_EQ(sim.get_unit(thief_id).state, UnitState::Walking);
+
+        // Now that the thief has emerged on the surface, enemy ants can attack it
+        sim.issue_order(atk_order);
+        sim.tick();
+        ASSERT_EQ(sim.get_unit(combat_id).state, UnitState::Attacking);
+        ASSERT_EQ(sim.get_unit(thief_id).state, UnitState::Knockback);
+        ASSERT_EQ(sim.get_unit(thief_id).hp, 8);
     } TEST_END();
 }
 

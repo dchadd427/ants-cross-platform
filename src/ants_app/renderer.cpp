@@ -1340,7 +1340,6 @@ void Renderer::render_software_cursor(CursorType type, int32_t screen_x, int32_t
         case CursorType::ScrollW:     anim_id = 50; break;
         case CursorType::ScrollNW:    anim_id = 47; break;
         case CursorType::Food:        anim_id = 54; break;
-        case CursorType::Cant:        anim_id = 39; break;
         default:                      anim_id = 41; break;
     }
 
@@ -1392,7 +1391,10 @@ void Renderer::draw_ant_shadow(int32_t anchor_sx, int32_t anchor_sy, int32_t alt
 }
 
 void Renderer::draw_single_ant(const ants::sim::AntSnapshot& ant, bool is_selected, bool show_health_bar) {
-    if (ant.is_underground || ant.is_in_scuffle) return; // Underground or concealed inside scuffle ball, do not draw
+    bool is_idle_thief_on_cap = (ant.type == ants::sim::AntType::Thief &&
+                                 ant.is_underground &&
+                                 ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::Idle));
+    if ((ant.is_underground && !is_idle_thief_on_cap) || ant.is_in_scuffle) return; // Underground or concealed inside scuffle ball, do not draw
 
     bool is_infiltrating = (ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::Infiltrating));
     bool is_entering_base = (ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::EnteringBase));
@@ -1413,9 +1415,9 @@ void Renderer::draw_single_ant(const ants::sim::AntSnapshot& ant, bool is_select
             }
         }
         if (hill_tx >= 0) {
-            // Authentic Table 4 Anthill anchor: (hill_tx * 32 + 32, hill_ty * 32 + 25)
-            int32_t anchor_world_x = hill_tx * 32 + 32;
-            int32_t anchor_world_y = hill_ty * 32 + 25;
+            // Authentic Table 4 Anthill bottlecap anchor: (hill_tx * 32 + 107, hill_ty * 32 + 58)
+            int32_t anchor_world_x = hill_tx * 32 + 107;
+            int32_t anchor_world_y = hill_ty * 32 + 58;
             if (!camera_.world_to_screen(anchor_world_x, anchor_world_y, sx, sy)) return;
         } else {
             if (!camera_.world_to_screen(ant.px, ant.py, sx, sy)) return;
@@ -1522,7 +1524,7 @@ void Renderer::draw_single_ant(const ants::sim::AntSnapshot& ant, bool is_select
     } else if (ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::Knockback)) {
         action = "gb"; // Ground Bounce tumbling flight (aggb301, abgb301, afgb201, acgb201, asgb201, atgb201)
     } else if (ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::Bounce)) {
-        action = "gb";
+        action = "gh";
     } else if (ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::Flinch)) {
         action = "gh";
     } else if (ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::Burn)) {
@@ -1857,7 +1859,10 @@ void Renderer::render_ant_units(const ants::sim::WorldState& world,
                                 const std::vector<uint32_t>& selected_unit_ids,
                                 bool show_all_health_bars) {
     for (const auto& a : world.ants) {
-        if (a.is_underground || a.is_in_scuffle) continue;
+        bool is_idle_thief_on_cap = (a.type == ants::sim::AntType::Thief &&
+                                     a.is_underground &&
+                                     a.anim_state == static_cast<uint16_t>(ants::sim::UnitState::Idle));
+        if ((a.is_underground && !is_idle_thief_on_cap) || a.is_in_scuffle) continue;
         if (world.fog_of_war_enabled && a.player_id != hud_team_id_ &&
             !world.is_tile_revealed(a.tile_x, a.tile_y)) {
             continue; // Concealed enemy ant under fog of war
