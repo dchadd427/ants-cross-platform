@@ -65,7 +65,7 @@ void PhysicsEngine::tick(std::vector<AntUnit*>& all_units,
             }
         }
 
-        if (!unit || (unit->state != UnitState::Knockback && !unit->is_alive())) {
+        if (!unit || unit->state != UnitState::Knockback || !unit->is_alive()) {
             it = active_flights_.erase(it);
             continue;
         }
