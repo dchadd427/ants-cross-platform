@@ -510,19 +510,77 @@
     font-size: 0.75rem;
     outline: none;
   }
+  .stage-mini-btn {
+    background: var(--bg-card-hover);
+    border: 1px solid var(--border);
+    color: #cbd5e1;
+    width: 26px;
+    height: 26px;
+    padding: 0;
+    border-radius: 4px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    font-weight: 700;
+    font-size: 0.9rem;
+    line-height: 1;
+    transition: all 0.15s ease;
+  }
+  .stage-mini-btn:hover {
+    background: var(--accent);
+    color: #0b0f19;
+    border-color: var(--accent);
+  }
+  .stage-pill-btn {
+    background: var(--bg-card-hover);
+    border: 1px solid var(--border);
+    color: #cbd5e1;
+    font-size: 0.75rem;
+    font-weight: 600;
+    padding: 0.25rem 0.55rem;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    line-height: 1.2;
+  }
+  .stage-pill-btn:hover {
+    background: var(--accent);
+    color: #0b0f19;
+    border-color: var(--accent);
+  }
+  .stage-pill-btn.active {
+    background: #0284c7;
+    color: #fff;
+    border-color: #38bdf8;
+  }
   .canvas-stage {
     position: relative;
     border: 1px solid #334155;
     border-radius: 6px;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    min-width: 320px;
-    min-height: 260px;
-    max-width: 100%;
-    padding: 1.5rem;
-    overflow: auto;
+    width: 100%;
+    height: 520px;
+    min-height: 380px;
+    overflow: hidden;
+    cursor: grab;
+    user-select: none;
+    -webkit-user-select: none;
+    touch-action: none;
     transition: background 0.2s ease;
+    box-shadow: inset 0 0 24px rgba(0,0,0,0.6);
+  }
+  .canvas-stage.panning {
+    cursor: grabbing;
+  }
+  .canvas-stage canvas {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+    pointer-events: none;
   }
   .canvas-stage.bg-checker {
     background-color: #0b0f19;
@@ -538,10 +596,70 @@
   .canvas-stage.bg-gray { background: #334155; }
   .canvas-stage.bg-green { background: #1b381b; }
 
-  canvas {
-    image-rendering: pixelated;
-    image-rendering: crisp-edges;
-    box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+  .stage-overlay-hud {
+    position: absolute;
+    bottom: 12px;
+    right: 12px;
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    background: rgba(10, 16, 30, 0.85);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 20px;
+    padding: 3px 6px 3px 10px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.6);
+    z-index: 10;
+    pointer-events: auto;
+  }
+  .hud-zoom-badge {
+    font-size: 0.72rem;
+    font-weight: 700;
+    font-family: ui-monospace, SFMono-Regular, monospace;
+    color: #38bdf8;
+    min-width: 66px;
+    text-align: center;
+  }
+  .hud-btn-group {
+    display: flex;
+    gap: 2px;
+    align-items: center;
+  }
+  .hud-btn {
+    background: transparent;
+    border: 1px solid transparent;
+    color: #cbd5e1;
+    font-size: 0.75rem;
+    font-weight: 700;
+    padding: 3px 7px;
+    border-radius: 12px;
+    cursor: pointer;
+    line-height: 1;
+    transition: all 0.15s ease;
+  }
+  .hud-btn:hover {
+    background: rgba(255, 255, 255, 0.15);
+    color: #fff;
+  }
+  .hud-btn.active {
+    background: #0284c7;
+    color: #fff;
+  }
+  .stage-hint-pill {
+    position: absolute;
+    bottom: 12px;
+    left: 12px;
+    font-size: 0.7rem;
+    color: rgba(203, 213, 225, 0.7);
+    background: rgba(10, 16, 30, 0.75);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 12px;
+    padding: 3px 9px;
+    pointer-events: none;
+    z-index: 10;
   }
   
   .player-controls {
@@ -1102,7 +1220,7 @@
         </div>
 
         <div class="anim-player-container">
-          <div class="stage-toolbar">
+          <div class="stage-toolbar" style="flex-wrap: wrap; gap: 0.6rem;">
             <div class="stage-toolbar-group">
               <span>Stage Background:</span>
               <select id="stage-bg-select" class="stage-select">
@@ -1120,26 +1238,52 @@
               </select>
             </div>
             <div class="stage-toolbar-group">
-              <label style="display:flex; align-items:center; gap:0.3rem; cursor:pointer;">
+              <label style="display:flex; align-items:center; gap:0.3rem; cursor:pointer;" title="Show origin crosshair">
                 <input type="checkbox" id="chk-crosshair" checked> Crosshair
               </label>
-              <label style="display:flex; align-items:center; gap:0.3rem; cursor:pointer;">
-                <input type="checkbox" id="chk-bounds"> Bounds
+              <label style="display:flex; align-items:center; gap:0.3rem; cursor:pointer;" title="Show bounding box frame">
+                <input type="checkbox" id="chk-bounds" checked> Bounds
               </label>
             </div>
-            <div class="stage-toolbar-group">
+            <div class="stage-toolbar-group" style="margin-left: auto; display: flex; align-items: center; gap: 0.35rem;">
               <span>Zoom:</span>
-              <select id="zoom-select" class="stage-select">
-                <option value="1">1x (Native)</option>
-                <option value="2" selected>2x Zoom</option>
-                <option value="3">3x Zoom</option>
-                <option value="4">4x Zoom</option>
+              <button class="stage-mini-btn" id="btn-zoom-out" title="Zoom Out (-)">−</button>
+              <select id="zoom-select" class="stage-select" style="font-weight: 600; min-width: 105px;" title="Choose zoom level">
+                <option value="fit" selected>Fit to View</option>
+                <option value="0.25">25%</option>
+                <option value="0.5">50%</option>
+                <option value="0.75">75%</option>
+                <option value="1">100% (1:1)</option>
+                <option value="1.5">150%</option>
+                <option value="2">200% (2x)</option>
+                <option value="3">300% (3x)</option>
+                <option value="4">400% (4x)</option>
+                <option value="6">600% (6x)</option>
+                <option value="8">800% (8x)</option>
               </select>
+              <button class="stage-mini-btn" id="btn-zoom-in" title="Zoom In (+)">+</button>
+              <button class="stage-pill-btn active" id="btn-zoom-fit" title="Fit to View without distortion (F)">Fit</button>
+              <button class="stage-pill-btn" id="btn-zoom-100" title="100% Native Pixel Scale (1)">1:1</button>
+              <button class="stage-pill-btn" id="btn-reset-pan" title="Recenter pan offset (R)">Center</button>
             </div>
           </div>
 
-          <div class="canvas-stage bg-checker" id="canvas-stage-element">
-            <canvas id="anim-canvas" width="480" height="360"></canvas>
+          <div class="canvas-stage bg-checker" id="canvas-stage-element" title="Click and drag to pan • Scroll wheel to zoom • Double-click to fit">
+            <canvas id="anim-canvas"></canvas>
+            
+            <div class="stage-hint-pill" id="stage-hint">
+              <span>🖱️ Drag to pan • Scroll to zoom • Double-click to fit</span>
+            </div>
+
+            <div class="stage-overlay-hud">
+              <span class="hud-zoom-badge" id="hud-zoom-readout">Fit</span>
+              <div class="hud-btn-group">
+                <button class="hud-btn" id="hud-btn-out" title="Zoom Out (-)">−</button>
+                <button class="hud-btn active" id="hud-btn-fit" title="Fit to View (F)">Fit</button>
+                <button class="hud-btn" id="hud-btn-in" title="Zoom In (+)">+</button>
+                <button class="hud-btn" id="hud-btn-recenter" title="Recenter (R)">⌖</button>
+              </div>
+            </div>
           </div>
 
           <div class="player-controls" id="anim-playback-controls">
@@ -1353,6 +1497,10 @@
     <div class="modal-body">
       <div class="shortcut-row"><span class="kbd">Space</span> <span>Play / Pause animation</span></div>
       <div class="shortcut-row"><span class="kbd">&larr;</span> / <span class="kbd">&rarr;</span> <span>Step Backward / Forward 1 frame</span></div>
+      <div class="shortcut-row"><span class="kbd">+</span> / <span class="kbd">−</span> <span>Zoom In / Out on stage</span></div>
+      <div class="shortcut-row"><span class="kbd">F</span> <span>Fit composite to stage without distortion</span></div>
+      <div class="shortcut-row"><span class="kbd">R</span> <span>Recenter pan offset</span></div>
+      <div class="shortcut-row"><span class="kbd">Drag</span> / <span class="kbd">Scroll</span> <span>Pan view / Zoom at mouse cursor</span></div>
       <div class="shortcut-row"><span class="kbd">Home</span> / <span class="kbd">End</span> <span>Jump to first / last frame</span></div>
       <div class="shortcut-row"><span class="kbd">1</span> / <span class="kbd">2</span> / <span class="kbd">3</span> <span>Switch to Sounds / Animations / Sprites</span></div>
       <div class="shortcut-row"><span class="kbd">/</span> <span>Focus search input</span></div>
@@ -1378,7 +1526,10 @@ let animTimer = null;
 let currentSubIndex = 0;
 let playbackFps = 20;
 let soundEnabled = true;
-let currentZoom = 2;
+let currentZoom = 1.0;
+let isFitMode = true;
+let panX = 0;
+let panY = 0;
 let centerMode = 'box'; // 'box' or 'origin'
 let spritesRenderLimit = 200;
 let activeFilterCategory = 'all';
@@ -2190,6 +2341,13 @@ function selectAnimation(animId) {
   scrubber.value = 0;
   currentSubIndex = 0;
 
+  // Auto fit on initial load without distortion and with bars on whichever side is shorter
+  isFitMode = true;
+  panX = 0;
+  panY = 0;
+  currentZoom = getFitZoom(anim);
+  updateZoomUI();
+
   updateCanvasFrame();
   updateScrubberAndUI();
   restartAnimTimer();
@@ -2269,10 +2427,221 @@ function updateScrubberAndUI() {
   }
 }
 
+function getFitZoom(anim) {
+  if (!anim) return 1.0;
+  const stage = document.getElementById('canvas-stage-element');
+  const stageW = (stage && stage.clientWidth > 0) ? stage.clientWidth : 800;
+  const stageH = (stage && stage.clientHeight > 0) ? stage.clientHeight : 520;
+  
+  const bounds = getAnimBounds(anim);
+  const availW = Math.max(80, stageW - 48);
+  const availH = Math.max(80, stageH - 48);
+
+  const scaleX = availW / Math.max(1, bounds.width);
+  const scaleY = availH / Math.max(1, bounds.height);
+  const fitScale = Math.min(scaleX, scaleY);
+
+  const isLarge = (bounds.width > 240 || bounds.height > 200);
+  if (!isLarge) {
+    if (fitScale >= 3.0) return 3.0;
+    if (fitScale >= 2.0) return 2.0;
+    return fitScale;
+  }
+  return fitScale;
+}
+
+function setZoomFit() {
+  const anim = CATALOG_DATA.animations[activeAnimIndex];
+  if (!anim) return;
+  isFitMode = true;
+  panX = 0;
+  panY = 0;
+  currentZoom = getFitZoom(anim);
+  updateZoomUI();
+  updateCanvasFrame();
+}
+
+function setZoomLevel(z, resetPan = false) {
+  isFitMode = false;
+  currentZoom = Math.max(0.15, Math.min(16, z));
+  if (resetPan) {
+    panX = 0;
+    panY = 0;
+  }
+  updateZoomUI();
+  updateCanvasFrame();
+}
+
+function zoomStep(factor) {
+  const anim = CATALOG_DATA.animations[activeAnimIndex];
+  if (!anim) return;
+  let newZoom = currentZoom * factor;
+  newZoom = Math.max(0.15, Math.min(16, newZoom));
+  isFitMode = false;
+  currentZoom = newZoom;
+  updateZoomUI();
+  updateCanvasFrame();
+}
+
+function resetPan() {
+  panX = 0;
+  panY = 0;
+  updateCanvasFrame();
+}
+
+function updateZoomUI() {
+  const select = document.getElementById('zoom-select');
+  const hudBadge = document.getElementById('hud-zoom-readout');
+  const fitBtn = document.getElementById('btn-zoom-fit');
+  const hudFitBtn = document.getElementById('hud-btn-fit');
+  const btn100 = document.getElementById('btn-zoom-100');
+
+  const pct = Math.round(currentZoom * 100);
+  if (isFitMode) {
+    if (hudBadge) hudBadge.textContent = `Fit (${pct}%)`;
+    if (select) select.value = 'fit';
+    if (fitBtn) fitBtn.classList.add('active');
+    if (hudFitBtn) hudFitBtn.classList.add('active');
+    if (btn100) btn100.classList.remove('active');
+  } else {
+    if (hudBadge) hudBadge.textContent = `${pct}%`;
+    if (fitBtn) fitBtn.classList.remove('active');
+    if (hudFitBtn) hudFitBtn.classList.remove('active');
+    if (btn100) btn100.classList.toggle('active', Math.abs(currentZoom - 1.0) < 0.05);
+
+    if (select) {
+      const matchOpt = Array.from(select.options).find(opt => opt.value !== 'fit' && Math.abs(parseFloat(opt.value) - currentZoom) < 0.05);
+      if (matchOpt) {
+        select.value = matchOpt.value;
+      } else {
+        select.value = '';
+      }
+    }
+  }
+}
+
+function setupStagePanAndZoom() {
+  const stage = document.getElementById('canvas-stage-element');
+  if (!stage || stage.dataset.panSetup === 'true') return;
+  stage.dataset.panSetup = 'true';
+
+  let isPointerDown = false;
+  let startClientX = 0;
+  let startClientY = 0;
+  let startPanX = 0;
+  let startPanY = 0;
+
+  stage.addEventListener('pointerdown', (e) => {
+    if (e.target.closest('.stage-overlay-hud') || e.target.closest('button') || e.target.closest('select')) return;
+    isPointerDown = true;
+    startClientX = e.clientX;
+    startClientY = e.clientY;
+    startPanX = panX;
+    startPanY = panY;
+    stage.classList.add('panning');
+    stage.setPointerCapture(e.pointerId);
+  });
+
+  stage.addEventListener('pointermove', (e) => {
+    if (!isPointerDown) return;
+    const dx = e.clientX - startClientX;
+    const dy = e.clientY - startClientY;
+    panX = startPanX + dx;
+    panY = startPanY + dy;
+    isFitMode = false;
+    updateZoomUI();
+    updateCanvasFrame();
+  });
+
+  const endDrag = (e) => {
+    if (!isPointerDown) return;
+    isPointerDown = false;
+    stage.classList.remove('panning');
+    try {
+      stage.releasePointerCapture(e.pointerId);
+    } catch (_) {}
+  };
+
+  stage.addEventListener('pointerup', endDrag);
+  stage.addEventListener('pointercancel', endDrag);
+
+  // Double click resets to Fit
+  stage.addEventListener('dblclick', (e) => {
+    if (e.target.closest('.stage-overlay-hud') || e.target.closest('button')) return;
+    setZoomFit();
+  });
+
+  // Mouse Wheel Zoom centered at cursor
+  stage.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    const anim = CATALOG_DATA.animations[activeAnimIndex];
+    if (!anim) return;
+
+    const canvas = document.getElementById('anim-canvas');
+    const rect = canvas.getBoundingClientRect();
+    const mx = e.clientX - rect.left;
+    const my = e.clientY - rect.top;
+
+    const bounds = getAnimBounds(anim);
+    const boxCenterX = (centerMode === 'box') ? (bounds.minX + bounds.maxX) / 2 : 0;
+    const boxCenterY = (centerMode === 'box') ? (bounds.minY + bounds.maxY) / 2 : 0;
+
+    const oldZoom = currentZoom;
+    const factor = e.deltaY < 0 ? 1.15 : (1 / 1.15);
+    const newZoom = Math.max(0.15, Math.min(16, oldZoom * factor));
+
+    if (Math.abs(newZoom - oldZoom) < 0.001) return;
+
+    // World coordinate under mouse
+    const worldX = (mx - (canvas.width / 2 + panX)) / oldZoom + boxCenterX;
+    const worldY = (my - (canvas.height / 2 + panY)) / oldZoom + boxCenterY;
+
+    // Update pan so world coordinate stays under mouse
+    panX = mx - canvas.width / 2 - (worldX - boxCenterX) * newZoom;
+    panY = my - canvas.height / 2 - (worldY - boxCenterY) * newZoom;
+
+    currentZoom = newZoom;
+    isFitMode = false;
+    updateZoomUI();
+    updateCanvasFrame();
+  }, { passive: false });
+
+  // Stage resize observer
+  const ro = new ResizeObserver(() => {
+    const canvas = document.getElementById('anim-canvas');
+    if (canvas && stage && stage.clientWidth > 0 && stage.clientHeight > 0) {
+      if (canvas.width !== stage.clientWidth || canvas.height !== stage.clientHeight) {
+        canvas.width = stage.clientWidth;
+        canvas.height = stage.clientHeight;
+        if (isFitMode) {
+          const anim = CATALOG_DATA.animations[activeAnimIndex];
+          if (anim) {
+            currentZoom = getFitZoom(anim);
+            updateZoomUI();
+          }
+        }
+        updateCanvasFrame();
+      }
+    }
+  });
+  ro.observe(stage);
+}
+
 function updateCanvasFrame() {
   const canvas = document.getElementById('anim-canvas');
+  const stage = document.getElementById('canvas-stage-element');
+  if (!canvas || !stage) return;
+
   const ctx = canvas.getContext('2d');
   ctx.imageSmoothingEnabled = false;
+
+  const stageW = stage.clientWidth || 800;
+  const stageH = stage.clientHeight || 520;
+  if (canvas.width !== stageW || canvas.height !== stageH) {
+    canvas.width = stageW;
+    canvas.height = stageH;
+    ctx.imageSmoothingEnabled = false;
+  }
 
   const anim = CATALOG_DATA.animations[activeAnimIndex];
   if (!anim || anim.subitems.length === 0) {
@@ -2283,30 +2652,36 @@ function updateCanvasFrame() {
   const bounds = getAnimBounds(anim);
   const zoom = currentZoom;
 
-  // Auto size canvas according to bounds and zoom (with comfortable min/max padding)
-  const targetW = Math.max(320, Math.min(800, (bounds.width + 48) * zoom));
-  const targetH = Math.max(240, Math.min(600, (bounds.height + 48) * zoom));
-  if (canvas.width !== targetW || canvas.height !== targetH) {
-    canvas.width = targetW;
-    canvas.height = targetH;
-    ctx.imageSmoothingEnabled = false;
-  }
-
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
   // Compute Origin (ox, oy)
-  let ox = canvas.width / 2;
-  let oy = canvas.height / 2;
+  let ox = canvas.width / 2 + panX;
+  let oy = canvas.height / 2 + panY;
   if (centerMode === 'box') {
     const boxCenterX = (bounds.minX + bounds.maxX) / 2;
     const boxCenterY = (bounds.minY + bounds.maxY) / 2;
-    ox = canvas.width / 2 - boxCenterX * zoom;
-    oy = canvas.height / 2 - boxCenterY * zoom;
+    ox = canvas.width / 2 + panX - boxCenterX * zoom;
+    oy = canvas.height / 2 + panY - boxCenterY * zoom;
   }
+
+  const compScreenX = Math.round(ox + bounds.minX * zoom);
+  const compScreenY = Math.round(oy + bounds.minY * zoom);
+  const compScreenW = Math.round(bounds.width * zoom);
+  const compScreenH = Math.round(bounds.height * zoom);
+
+  // Draw Game Screen Shadow & Dark Backdrop (with letterbox / pillarbox framing)
+  ctx.save();
+  ctx.shadowColor = 'rgba(0, 0, 0, 0.7)';
+  ctx.shadowBlur = 24;
+  ctx.shadowOffsetX = 0;
+  ctx.shadowOffsetY = 6;
+  ctx.fillStyle = '#060911';
+  ctx.fillRect(compScreenX, compScreenY, compScreenW, compScreenH);
+  ctx.restore();
 
   // Draw Origin Crosshair if checked
   if (document.getElementById('chk-crosshair').checked) {
-    ctx.strokeStyle = 'rgba(56, 189, 248, 0.35)';
+    ctx.strokeStyle = 'rgba(56, 189, 248, 0.4)';
     ctx.lineWidth = 1;
     ctx.setLineDash([4, 4]);
     ctx.beginPath();
@@ -2318,9 +2693,14 @@ function updateCanvasFrame() {
 
   // Draw Sequence Bounds if checked
   if (document.getElementById('chk-bounds').checked) {
-    ctx.strokeStyle = 'rgba(245, 158, 11, 0.45)';
+    ctx.strokeStyle = 'rgba(245, 158, 11, 0.75)';
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(compScreenX - 0.5, compScreenY - 0.5, compScreenW + 1, compScreenH + 1);
+  } else {
+    // Subtle outer frame
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
     ctx.lineWidth = 1;
-    ctx.strokeRect(ox + bounds.minX * zoom, oy + bounds.minY * zoom, bounds.width * zoom, bounds.height * zoom);
+    ctx.strokeRect(compScreenX - 0.5, compScreenY - 0.5, compScreenW + 1, compScreenH + 1);
   }
 
   // Draw all sprite layers for current subitem in REVERSE order
@@ -2330,17 +2710,15 @@ function updateCanvasFrame() {
     for (let i = curSub.frames.length - 1; i >= 0; i--) {
       const f = curSub.frames[i];
       const img = getSpriteImage(f.sprite_id);
-      const drawX = ox + f.dx * zoom;
-      const drawY = oy + f.dy * zoom;
-      const drawW = f.w * zoom;
-      const drawH = f.h * zoom;
+      const drawX = Math.round(ox + f.dx * zoom);
+      const drawY = Math.round(oy + f.dy * zoom);
+      const drawW = Math.round(f.w * zoom);
+      const drawH = Math.round(f.h * zoom);
 
       if (img.complete && img.naturalWidth !== 0) {
         ctx.drawImage(img, drawX, drawY, drawW, drawH);
       } else {
-        img.onload = () => {
-          updateCanvasFrame();
-        };
+        img.onload = () => updateCanvasFrame();
       }
     }
   }
@@ -2601,7 +2979,7 @@ document.getElementById('btn-clear-search').addEventListener('click', () => {
   applySearchFilter();
 });
 
-// Stage Controls
+// Stage Controls & Zoom Wiring
 document.getElementById('stage-bg-select').onchange = (e) => {
   const stage = document.getElementById('canvas-stage-element');
   stage.className = 'canvas-stage ' + e.target.value;
@@ -2611,9 +2989,24 @@ document.getElementById('stage-center-select').onchange = (e) => {
   updateCanvasFrame();
 };
 document.getElementById('zoom-select').onchange = (e) => {
-  currentZoom = parseFloat(e.target.value);
-  updateCanvasFrame();
+  if (e.target.value === 'fit') {
+    setZoomFit();
+  } else {
+    setZoomLevel(parseFloat(e.target.value), false);
+  }
 };
+document.getElementById('btn-zoom-out').onclick = () => zoomStep(1 / 1.25);
+document.getElementById('btn-zoom-in').onclick = () => zoomStep(1.25);
+document.getElementById('btn-zoom-fit').onclick = setZoomFit;
+document.getElementById('btn-zoom-100').onclick = () => setZoomLevel(1.0, true);
+document.getElementById('btn-reset-pan').onclick = resetPan;
+
+// On-Canvas HUD Buttons
+document.getElementById('hud-btn-out').onclick = () => zoomStep(1 / 1.25);
+document.getElementById('hud-btn-in').onclick = () => zoomStep(1.25);
+document.getElementById('hud-btn-fit').onclick = setZoomFit;
+document.getElementById('hud-btn-recenter').onclick = resetPan;
+
 document.getElementById('chk-crosshair').onchange = updateCanvasFrame;
 document.getElementById('chk-bounds').onchange = updateCanvasFrame;
 
@@ -2660,12 +3053,29 @@ document.getElementById('btn-sound-toggle').onclick = () => {
   showToast(soundEnabled ? 'Animation audio enabled' : 'Animation audio muted');
 };
 document.getElementById('btn-download-composite').onclick = () => {
-  const canvas = document.getElementById('anim-canvas');
   const anim = CATALOG_DATA.animations[activeAnimIndex];
-  const animName = anim ? anim.name : 'composite';
+  if (!anim) return;
+  const bounds = getAnimBounds(anim);
+  const offCanvas = document.createElement('canvas');
+  offCanvas.width = Math.max(1, bounds.width);
+  offCanvas.height = Math.max(1, bounds.height);
+  const offCtx = offCanvas.getContext('2d');
+  offCtx.imageSmoothingEnabled = false;
+
+  const curSub = anim.subitems[currentSubIndex % anim.subitems.length];
+  if (curSub) {
+    for (let i = curSub.frames.length - 1; i >= 0; i--) {
+      const f = curSub.frames[i];
+      const img = getSpriteImage(f.sprite_id);
+      if (img.complete && img.naturalWidth !== 0) {
+        offCtx.drawImage(img, f.dx - bounds.minX, f.dy - bounds.minY, f.w, f.h);
+      }
+    }
+  }
+  const animName = anim.name || 'composite';
   const link = document.createElement('a');
   link.download = `${animName}_step${currentSubIndex + 1}.png`;
-  link.href = canvas.toDataURL('image/png');
+  link.href = offCanvas.toDataURL('image/png');
   link.click();
 };
 
@@ -2700,6 +3110,18 @@ window.addEventListener('keydown', (e) => {
   } else if (e.key === 'ArrowRight') {
     e.preventDefault();
     if (currentTab === 'anims') document.getElementById('btn-step-next').click();
+  } else if (e.key === '+' || e.key === '=') {
+    e.preventDefault();
+    if (currentTab === 'anims') zoomStep(1.25);
+  } else if (e.key === '-' || e.key === '_') {
+    e.preventDefault();
+    if (currentTab === 'anims') zoomStep(1 / 1.25);
+  } else if (e.key === 'f' || e.key === 'F' || e.key === '0') {
+    e.preventDefault();
+    if (currentTab === 'anims') setZoomFit();
+  } else if (e.key === 'r' || e.key === 'R') {
+    e.preventDefault();
+    if (currentTab === 'anims') resetPan();
   } else if (e.key === 'Home') {
     e.preventDefault();
     if (currentTab === 'anims') {
@@ -2740,6 +3162,7 @@ window.addEventListener('DOMContentLoaded', () => {
   updateSpriteSortButtons();
   renderSounds(CATALOG_DATA.sounds);
   renderAnimsList(CATALOG_DATA.animations);
+  setupStagePanAndZoom();
   selectAnimation(0);
   renderSprites(CATALOG_DATA.sprites);
   setupAnimObserver();
