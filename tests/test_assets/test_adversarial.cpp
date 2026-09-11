@@ -577,6 +577,7 @@ void test_suite_4_header_fuzzing(const std::string& chd_path) {
 // SUITE 5: Table Deserializer Fuzzing & Mutation
 // ============================================================================
 void test_suite_5_table_fuzzing(const std::string& chd_path) {
+    (void)chd_path;
     TEST_SUITE("Suite 5: Table Deserializer Fuzzing & Mutation");
 
     TEST_CASE("5.1 Corrupted Table 1 Sprite Headers") {
@@ -816,7 +817,7 @@ void test_suite_8_concurrency(const std::string& chd_path) {
 
         for (int t = 0; t < NUM_THREADS; ++t) {
             workers.emplace_back([&, t]() {
-                std::mt19937 rng(1337 + t);
+                std::mt19937 rng(static_cast<uint32_t>(1337 + t));
                 std::uniform_int_distribution<uint32_t> spr_dist(0, 2793);
                 std::uniform_int_distribution<uint32_t> snd_dist(0, 90);
                 std::uniform_int_distribution<uint32_t> anim_dist(0, 1343);
