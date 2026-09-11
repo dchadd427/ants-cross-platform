@@ -245,6 +245,7 @@ public:
     bool is_match_start_modal_active() const noexcept { return show_match_start_modal_; }
     void start_match_modal() noexcept { show_match_start_modal_ = true; match_start_modal_ticks_ = 0; }
     void dismiss_match_start_modal() noexcept { show_match_start_modal_ = false; }
+    bool is_right_mouse_held() const noexcept { return right_mouse_held_; }
 
 private:
     void render_top_bar(IRenderer& renderer, const assets::AssetArchive& assets, const sim::WorldState& world);
@@ -258,6 +259,7 @@ private:
     void render_options_dialog(IRenderer& renderer, const assets::AssetArchive& assets);
     void render_match_start_modal(IRenderer& renderer, const assets::AssetArchive& assets);
     void render_marquee_box(IRenderer& renderer);
+    void render_pedestal_glow(IRenderer& renderer, const assets::AssetArchive& assets, int pedestal_idx);
 
     void update_action_buttons_state(const sim::WorldState& world);
 
@@ -271,6 +273,7 @@ private:
 
     // Marquee drag selection
     bool is_dragging_{false};
+    bool right_mouse_held_{false};
     int32_t drag_start_x_{0};
     int32_t drag_start_y_{0};
     int32_t drag_curr_x_{0};

@@ -193,7 +193,7 @@ void run_suite_3_damage() {
         sim.execute_melee_attack(combat, victim);
         ASSERT_GE(sim.get_unit(victim).pos.x, 15);
         ASSERT_LE(sim.get_unit(victim).pos.x, 16);
-        ASSERT_EQ(sim.get_unit(victim).stun_ticks_remaining, 12u);
+        ASSERT_EQ(sim.get_unit(victim).stun_ticks_remaining, AntUnit::STUN_TICKS);
         ASSERT_TRUE(sim.has_audio_event(70)); // Sound 70 stun.wav
     } TEST_END();
 

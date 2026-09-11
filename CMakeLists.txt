@@ -90,3 +90,8 @@ if(BUILD_TESTS AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tests")
     add_subdirectory(tests/test_app)
 endif()
 
+# Copy default game maps to binary directory
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/Original-Ants/Maps")
+    file(COPY "${CMAKE_CURRENT_SOURCE_DIR}/Original-Ants/Maps" DESTINATION "${CMAKE_BINARY_DIR}")
+endif()
+

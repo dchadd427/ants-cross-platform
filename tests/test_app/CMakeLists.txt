@@ -46,6 +46,11 @@ if(WIN32)
             COMMAND ${CMAKE_COMMAND} -E copy_if_different "${SDL2_TTF_DLL}" "$<TARGET_FILE_DIR:test_app_integration>"
         )
     endif()
+    if(EXISTS "${CMAKE_SOURCE_DIR}/Original-Ants/Maps")
+        add_custom_command(TARGET test_app_integration POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_directory "${CMAKE_SOURCE_DIR}/Original-Ants/Maps" "$<TARGET_FILE_DIR:test_app_integration>/Maps"
+        )
+    endif()
 endif()
 
 target_compile_definitions(test_app_integration PRIVATE

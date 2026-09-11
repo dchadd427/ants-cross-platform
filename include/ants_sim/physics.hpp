@@ -50,7 +50,7 @@ public:
     static constexpr int32_t BOMB_BLAST_MIN_TILES   = 4;
     static constexpr int32_t BOMB_BLAST_MAX_TILES   = 4;
 
-    static constexpr uint16_t STUN_RECOVERY_TICKS   = 12;
+    static constexpr uint16_t STUN_RECOVERY_TICKS   = 50;
 
 public:
     PhysicsEngine() = default;

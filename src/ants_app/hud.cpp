@@ -412,6 +412,9 @@ void HUD::render(IRenderer& renderer, const assets::AssetArchive& assets,
             renderer.draw_named_sprite(ped1_down ? "buttrna5.bmp" : "buttrna1.bmp", 476, 158);
             renderer.draw_named_sprite(ped1_down ? "trnamov4.bmp" : "trnamov1.bmp", 480, 163);
             renderer.draw_named_sprite("labmov.bmp", 484, 140);
+            if (current_cursor_ == CursorType::Move || current_cursor_ == CursorType::Food) {
+                render_pedestal_glow(renderer, assets, 1);
+            }
 
             // Pedestal 2: Class-Specific Ability Pedestal (Authentic 537, 158)
             if (sel_ant && sel_ant->player_id == local_player_id_) {
@@ -440,6 +443,9 @@ void HUD::render(IRenderer& renderer, const assets::AssetArchive& assets,
                     renderer.draw_named_sprite(ped2_down ? "buttrna5.bmp" : "buttrna1.bmp", 537, 158);
                     renderer.draw_named_sprite(ped2_down ? "trnastl4.bmp" : "trnastl1.bmp", 541, 163);
                     renderer.draw_named_sprite("labthf.bmp", 546, 140);
+                }
+                if (right_mouse_held_ || active_order_mode_ != sim::OrderType::None || current_cursor_ == CursorType::Target) {
+                    render_pedestal_glow(renderer, assets, 2);
                 }
             }
 
@@ -971,51 +977,48 @@ void HUD::render_quit_dialog(IRenderer& renderer, const assets::AssetArchive& as
     renderer.draw_named_sprite(no_spr, no_button_.x, no_button_.y);
 }
 
-void HUD::render_match_start_modal(IRenderer& renderer, const assets::AssetArchive&) {
+void HUD::render_match_start_modal(IRenderer& renderer, const assets::AssetArchive& assets) {
     using assets::ColorRGBA;
 
     // Centered in playfield (PLAYFIELD_X = 17, PLAYFIELD_Y = 22, PLAYFIELD_WIDTH = 441, PLAYFIELD_HEIGHT = 439)
-    const int32_t mw = 300;
-    const int32_t mh = 220;
+    // std_dialg (Animation 67) is 320x224 composite dialog
+    const int32_t mw = 320;
+    const int32_t mh = 224;
     const int32_t mx = PLAYFIELD_X + (PLAYFIELD_WIDTH - mw) / 2;
     const int32_t my = PLAYFIELD_Y + (PLAYFIELD_HEIGHT - mh) / 2;
 
-    // Authentic dialog background fill (#DB4B13) and borders
-    renderer.fill_rect(mx, my, mw, mh, ColorRGBA{219, 75, 19, 255});
+    const auto* seq = assets.find_animation("std_dialg");
+    if (seq && !seq->subitems.empty()) {
+        for (const auto& fr : seq->subitems[0].frames) {
+            renderer.draw_sprite(fr.sprite_index, mx + fr.dx, my + fr.dy);
+        }
+    } else {
+        renderer.fill_rect(mx, my, mw, mh, ColorRGBA{219, 75, 19, 255});
+        renderer.draw_rect(mx, my, mw, mh, ColorRGBA{36, 82, 77, 255});
+    }
 
-    // Outer dark outline
-    renderer.draw_rect(mx, my, mw, mh, ColorRGBA{36, 82, 77, 255});
-
-    // 2px top & left light highlight
-    renderer.fill_rect(mx + 1, my + 1, mw - 2, 2, ColorRGBA{193, 207, 192, 255});
-    renderer.fill_rect(mx + 1, my + 1, 2, mh - 2, ColorRGBA{193, 207, 192, 255});
-
-    // 2px bottom & right dark shadow
-    renderer.fill_rect(mx + 1, my + mh - 3, mw - 2, 2, ColorRGBA{30, 60, 50, 255});
-    renderer.fill_rect(mx + mw - 3, my + 1, 2, mh - 2, ColorRGBA{30, 60, 50, 255});
-
-    // Authentic dark text color
-    const ColorRGBA text_color{27, 41, 30, 255};
+    // Authentic dark slate text color #1F1733 matching Ants.exe 0x1015b65 (0x33171f BGR)
+    const ColorRGBA text_color{31, 23, 51, 255};
 
     // Header 1: "Get ready to play!"
     const std::string h1 = "Get ready to play!";
     int32_t w1 = renderer.get_text_width(h1, FontSize::Large);
-    renderer.draw_text(h1, mx + (mw - w1) / 2, my + 18, text_color, FontSize::Large);
+    renderer.draw_text(h1, mx + (mw - w1) / 2, my + 24, text_color, FontSize::Large);
 
     // Header 2: "You are the [Color]"
     static const char* TEAM_NAMES[4] = {"Green", "Red", "Blue", "Black"};
     std::string h2 = "You are the " + std::string(TEAM_NAMES[local_player_id_ % 4]);
     int32_t w2 = renderer.get_text_width(h2, FontSize::Large);
-    renderer.draw_text(h2, mx + (mw - w2) / 2, my + 44, text_color, FontSize::Large);
+    renderer.draw_text(h2, mx + (mw - w2) / 2, my + 54, text_color, FontSize::Large);
 
     // Header 3: "Ants."
     const std::string h3 = "Ants.";
     int32_t w3 = renderer.get_text_width(h3, FontSize::Large);
-    renderer.draw_text(h3, mx + (mw - w3) / 2, my + 70, text_color, FontSize::Large);
+    renderer.draw_text(h3, mx + (mw - w3) / 2, my + 84, text_color, FontSize::Large);
 
     // Centered Local Team Worker Ant Sprite facing South
     int32_t ax = mx + (mw - 32) / 2;
-    int32_t ay = my + 104;
+    int32_t ay = my + 118;
     renderer.set_hud_team(local_player_id_);
     renderer.draw_named_sprite("agst301.bmp", ax, ay);
     renderer.set_hud_team(0);
@@ -1023,7 +1026,7 @@ void HUD::render_match_start_modal(IRenderer& renderer, const assets::AssetArchi
     // Footer: "Waiting for others..."
     const std::string footer = "Waiting for others...";
     int32_t wf = renderer.get_text_width(footer, FontSize::Medium);
-    renderer.draw_text(footer, mx + (mw - wf) / 2, my + 172, text_color, FontSize::Medium);
+    renderer.draw_text(footer, mx + (mw - wf) / 2, my + 176, text_color, FontSize::Medium);
 }
 
 void HUD::render_quick_help(IRenderer& renderer, const assets::AssetArchive&) {
@@ -1131,7 +1134,28 @@ void HUD::render_marquee_box(IRenderer& renderer) {
     int32_t w = x2 - x1;
     int32_t h = y2 - y1;
 
-    renderer.draw_rect(x1, y1, w, h, {255, 255, 255, 255});
+    renderer.draw_rect(x1, y1, w, h, {220, 0, 0, 255});
+}
+
+void HUD::render_pedestal_glow(IRenderer& renderer, const assets::AssetArchive& assets, int pedestal_idx) {
+    const char* anim_name = (pedestal_idx == 1) ? "butdefl" : "butdefr";
+    const auto* seq = assets.find_animation(anim_name);
+    if (!seq || seq->subitems.empty()) return;
+
+    // 4-step cycle: 150ms + 120ms + 120ms + 120ms = 510ms total (Ants.exe.c FUN_010285f0)
+    uint32_t now_ms = SDL_GetTicks();
+    uint32_t cycle_ms = now_ms % 510;
+    size_t sub_idx = 0;
+    if (cycle_ms < 150) sub_idx = 0;
+    else if (cycle_ms < 270) sub_idx = 1;
+    else if (cycle_ms < 390) sub_idx = 2;
+    else sub_idx = 3;
+
+    if (sub_idx >= seq->subitems.size()) sub_idx = 0;
+    const auto& sub = seq->subitems[sub_idx];
+    for (const auto& fr : sub.frames) {
+        renderer.draw_sprite(fr.sprite_index, fr.dx, fr.dy);
+    }
 }
 
 // =========================================================================
@@ -1268,6 +1292,9 @@ void HUD::select_ants_in_rect(int32_t x1, int32_t y1, int32_t x2, int32_t y2, co
 bool HUD::handle_mouse_down(int32_t x, int32_t y, uint8_t button,
                             sim::SimulationEngine& sim, ViewportCamera& camera, uint16_t mod) {
     if (button != SDL_BUTTON_LEFT && button != SDL_BUTTON_RIGHT) return false;
+    if (button == SDL_BUTTON_RIGHT) {
+        right_mouse_held_ = true;
+    }
 
     // 0. Overlays and Modals intercept clicks first
     if (show_quick_help_) {
@@ -1722,6 +1749,9 @@ bool HUD::handle_mouse_down(int32_t x, int32_t y, uint8_t button,
 
 bool HUD::handle_mouse_up(int32_t x, int32_t y, uint8_t button,
                           sim::SimulationEngine& sim, ViewportCamera& camera, uint16_t mod) {
+    if (button == SDL_BUTTON_RIGHT) {
+        right_mouse_held_ = false;
+    }
     help_button_.is_pressed = false;
     options_button_.is_pressed = false;
     quit_button_.is_pressed = false;
@@ -2898,7 +2928,8 @@ void HUD::dispatch_smart_special_ability(int32_t world_x, int32_t world_y, sim::
                                grid.get_cell({target_tile_x, target_tile_y}).can_place_bomb()) {
                         order.type = sim::OrderType::PlantBomb;
                     } else {
-                        order.type = sim::OrderType::Move;
+                        play_sfx(sim::SoundID::CantGo);
+                        order.type = sim::OrderType::None;
                     }
                     break;
                 case sim::AntType::Fire:
@@ -2965,6 +2996,10 @@ void HUD::dispatch_smart_special_ability(int32_t world_x, int32_t world_y, sim::
                     }
                     break;
             }
+        }
+
+        if (order.type == sim::OrderType::None) {
+            continue;
         }
 
         bool is_swimmer = (sel->type == sim::AntType::Swimmer);
@@ -3117,6 +3152,30 @@ CursorType HUD::evaluate_cursor(int32_t screen_x, int32_t screen_y,
     int32_t tx = world_x / 32;
     int32_t ty = world_y / 32;
 
+    // While a selected bomber is actively placing a bomb, cursor remains locked to Target reticle (c_targ1)
+    for (uint32_t aid : selected_ant_ids_) {
+        for (const auto& a : world.ants) {
+            if (a.id == aid && a.player_id == local_player_id_ && a.type == sim::AntType::Bomber) {
+                if (a.state == sim::UnitState::PlantingBomb || a.anim_state == static_cast<uint16_t>(sim::UnitState::PlantingBomb)) {
+                    current_cursor_ = CursorType::Target;
+                    return current_cursor_;
+                }
+                break;
+            }
+        }
+    }
+    if (selected_ant_id_ != 0) {
+        for (const auto& a : world.ants) {
+            if (a.id == selected_ant_id_ && a.player_id == local_player_id_ && a.type == sim::AntType::Bomber) {
+                if (a.state == sim::UnitState::PlantingBomb || a.anim_state == static_cast<uint16_t>(sim::UnitState::PlantingBomb)) {
+                    current_cursor_ = CursorType::Target;
+                    return current_cursor_;
+                }
+                break;
+            }
+        }
+    }
+
     bool tile_revealed = world.is_tile_revealed(tx, ty);
     bool has_friendly = has_friendly_selected(world);
 
@@ -3227,7 +3286,7 @@ CursorType HUD::evaluate_cursor(int32_t screen_x, int32_t screen_y,
             if (grid.in_bounds(tx, ty)) {
                 const auto& cell = grid.get_cell(static_cast<uint32_t>(tx), static_cast<uint32_t>(ty));
                 if (cell.can_place_bomb() && cell.terrain_type != sim::TERRAIN_OBSTACLE && !cell.is_obstacle_overlay && cell.terrain_type != sim::TERRAIN_WATER) {
-                    current_cursor_ = CursorType::Move;
+                    current_cursor_ = CursorType::Target;
                     return current_cursor_;
                 }
             }
@@ -3243,6 +3302,43 @@ CursorType HUD::evaluate_cursor(int32_t screen_x, int32_t screen_y,
                 }
             }
             current_cursor_ = CursorType::Normal;
+            return current_cursor_;
+        }
+    }
+
+    // Check if selected ant is a Bomber or is actively planting a bomb
+    bool has_bomber = false;
+    bool is_planting_bomb = false;
+    for (uint32_t aid : selected_ant_ids_) {
+        for (const auto& a : world.ants) {
+            if (a.id == aid && a.player_id == local_player_id_ && a.type == sim::AntType::Bomber) {
+                has_bomber = true;
+                if (a.anim_state == static_cast<uint16_t>(sim::UnitState::PlantingBomb)) {
+                    is_planting_bomb = true;
+                }
+                break;
+            }
+        }
+        if (has_bomber) break;
+    }
+
+    // While a bomber is placing a bomb, cursor remains locked to Target reticle
+    if (is_planting_bomb) {
+        current_cursor_ = CursorType::Target;
+        return current_cursor_;
+    }
+
+    // If hovering over a bomb on the grid, display Target reticle (c_targ1)
+    if (grid.in_bounds(tx, ty) && grid.has_bomb_at({tx, ty})) {
+        current_cursor_ = CursorType::Target;
+        return current_cursor_;
+    }
+
+    // If right mouse is held and a bomber is selected, show Target reticle over valid bomb placement tiles
+    if (right_mouse_held_ && has_bomber && grid.in_bounds(tx, ty)) {
+        const auto& cell = grid.get_cell(static_cast<uint32_t>(tx), static_cast<uint32_t>(ty));
+        if (cell.can_place_bomb() && cell.terrain_type != sim::TERRAIN_OBSTACLE && !cell.is_obstacle_overlay && cell.terrain_type != sim::TERRAIN_WATER) {
+            current_cursor_ = CursorType::Target;
             return current_cursor_;
         }
     }

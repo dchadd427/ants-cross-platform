@@ -50,6 +50,7 @@ enum class CursorType : uint8_t {
     Select = 1,      // Mode 2: c_select (Anim 42)
     Move = 2,        // Mode 3: c_mov1 (Anim 44)
     ThiefTarget = 3, // Mode 4: c_targ1 (Anim 43)
+    Target = 3,      // Universal Mode 4 alias: c_targ1 (Anim 43)
     Attack = 4,      // Mode 5: c_attack (Anim 33)
     ScrollN = 5,     // Mode 6 dir 0: CUR_N (Anim 51)
     ScrollNE = 6,    // Mode 6 dir 1: CUR_NE (Anim 46)

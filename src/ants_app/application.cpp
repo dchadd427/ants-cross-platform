@@ -272,7 +272,12 @@ bool Application::init(const ApplicationConfig& config) {
             scorecard_.show(mr, 0);
         }
     } else {
-        state_ = AppState::MapSelect;
+        if (!config_.skip_intro && !config_.headless) {
+            state_ = AppState::Loading;
+            intro_ticks_ = 0;
+        } else {
+            state_ = AppState::MapSelect;
+        }
         audio_mixer_.play_music("Original-Ants/INTRO.mp3", true);
         if (config_.headless) {
             midi_player_.play(true); // Loop INTRO exclusively during map selection
@@ -565,6 +570,39 @@ void Application::handle_events() {
             }
         }
 
+        if (state_ == AppState::Loading) {
+            if (event.type == SDL_KEYDOWN || event.type == SDL_MOUSEBUTTONDOWN) {
+                state_ = AppState::QuickHelp;
+            }
+            continue;
+        }
+
+        if (state_ == AppState::QuickHelp) {
+            if (event.type == SDL_MOUSEMOTION) {
+                mouse_screen_x_ = event.motion.x;
+                mouse_screen_y_ = event.motion.y;
+                mouse_has_moved_ = true;
+                leave_help_hovered_ = (event.motion.x >= 530 && event.motion.x <= 635 && event.motion.y >= 8 && event.motion.y <= 38);
+            } else if (event.type == SDL_MOUSEBUTTONDOWN) {
+                mouse_screen_x_ = event.button.x;
+                mouse_screen_y_ = event.button.y;
+                mouse_has_moved_ = true;
+                if (event.button.x >= 530 && event.button.x <= 635 && event.button.y >= 8 && event.button.y <= 38) {
+                    leave_help_pressed_ = true;
+                } else {
+                    state_ = AppState::MapSelect;
+                }
+            } else if (event.type == SDL_MOUSEBUTTONUP) {
+                if (leave_help_pressed_) {
+                    leave_help_pressed_ = false;
+                    state_ = AppState::MapSelect;
+                }
+            } else if (event.type == SDL_KEYDOWN) {
+                state_ = AppState::MapSelect;
+            }
+            continue;
+        }
+
         if (state_ == AppState::MapSelect) {
             switch (event.type) {
                 case SDL_KEYDOWN:
@@ -837,6 +875,22 @@ void Application::handle_mouse_button(const SDL_MouseButtonEvent& button) {
 }
 
 void Application::update_simulation(float dt) {
+    if (state_ == AppState::Loading) {
+        tick_accumulator_ += dt;
+        while (tick_accumulator_ >= 0.050f) {
+            intro_ticks_++;
+            tick_accumulator_ -= 0.050f;
+            if (intro_ticks_ >= 30) {
+                state_ = AppState::QuickHelp;
+                break;
+            }
+        }
+        return;
+    }
+    if (state_ == AppState::QuickHelp) {
+        return;
+    }
+
     if (state_ == AppState::MapSelect || is_paused_) {
         if (state_ == AppState::MapSelect) {
             midi_player_.update(dt);
@@ -888,7 +942,11 @@ void Application::update_simulation(float dt) {
 void Application::render_frame() {
     renderer_->begin_frame();
 
-    if (state_ == AppState::MapSelect) {
+    if (state_ == AppState::Loading) {
+        render_loading_screen();
+    } else if (state_ == AppState::QuickHelp) {
+        render_quick_help_screen();
+    } else if (state_ == AppState::MapSelect) {
         map_select_.render(*renderer_, assets_);
     } else if (scorecard_.is_open()) {
         scorecard_.render(*renderer_, assets_);
@@ -994,6 +1052,31 @@ void Application::play_next_ingame_music() {
     if (config_.headless) {
         midi_player_.play(false);
     }
+}
+
+void Application::render_loading_screen() {
+    const auto* seq = assets_.find_animation("antslogo");
+    if (seq && !seq->subitems.empty()) {
+        for (const auto& fr : seq->subitems[0].frames) {
+            renderer_->draw_sprite(fr.sprite_index, fr.dx, fr.dy);
+        }
+    }
+    // Loading progress bar in credits.bmp indicator slot at (228, 445)
+    int32_t fill_w = std::min(184, static_cast<int32_t>((intro_ticks_ * 184) / 25));
+    if (fill_w > 0) {
+        renderer_->fill_rect(228, 445, fill_w, 12, ants::assets::ColorRGBA{40, 180, 80, 255});
+    }
+}
+
+void Application::render_quick_help_screen() {
+    const auto* seq = assets_.find_animation("qh_screen");
+    if (seq && !seq->subitems.empty()) {
+        for (const auto& fr : seq->subitems[0].frames) {
+            renderer_->draw_sprite(fr.sprite_index, fr.dx, fr.dy);
+        }
+    }
+    std::string btn = leave_help_pressed_ ? "bleavhelp3.bmp" : (leave_help_hovered_ ? "bleavhelp2.bmp" : "bleavhelp1.bmp");
+    renderer_->draw_named_sprite(btn, 542, 12);
 }
 
 void Application::play_startup_sound() {
