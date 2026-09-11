@@ -10,7 +10,7 @@ services:
     networks:
       - proxy-network
     labels:
-      - "org.playants.version=0.0.8"
+      - "org.playants.version=0.0.9"
 
 networks:
   proxy-network:

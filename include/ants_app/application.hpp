@@ -75,7 +75,7 @@ public:
     void shutdown();
 
     bool is_running() const noexcept { return is_running_; }
-    void quit() noexcept { is_running_ = false; }
+    void quit();
 
     bool is_unit_health_visible() const noexcept { return show_unit_health_; }
     void set_unit_health_visible(bool visible) noexcept { show_unit_health_ = visible; }

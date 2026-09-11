@@ -235,8 +235,14 @@ void AntUnit::tick_timers() noexcept {
 
     if (stun_ticks_remaining > 0) {
         stun_ticks_remaining--;
+        if (state == UnitState::Stunned) {
+            anim_tick++;
+            anim_subitem = anim_tick;
+        }
         if (stun_ticks_remaining == 0 && state == UnitState::Stunned) {
             state = (type == AntType::Combat) ? UnitState::GuardIdle : UnitState::Idle;
+            anim_tick = 0;
+            anim_subitem = 0;
             if (type == AntType::Combat) {
                 guard_anchor = pos;
             }
@@ -245,8 +251,13 @@ void AntUnit::tick_timers() noexcept {
 
     if (state_timer > 0) {
         state_timer--;
-        if (state_timer == 0 && (state == UnitState::Flinch || state == UnitState::Bounce || state == UnitState::Attacking || state == UnitState::Burn)) {
-            state = (type == AntType::Combat) ? UnitState::GuardIdle : UnitState::Idle;
+        if (state_timer == 0) {
+            if (state == UnitState::Burn) {
+                // Dud scorch sequence complete: recover into dazed stun (a*sd301)
+                start_stun(STUN_TICKS);
+            } else if (state == UnitState::Flinch || state == UnitState::Bounce || state == UnitState::Attacking) {
+                state = (type == AntType::Combat) ? UnitState::GuardIdle : UnitState::Idle;
+            }
         }
     }
 
