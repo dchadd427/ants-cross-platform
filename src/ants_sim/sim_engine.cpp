@@ -186,6 +186,20 @@ public:
         return false;
     }
 
+    bool has_other_living_ant_at(TileCoord target, uint32_t ignore_ant_id) const noexcept {
+        for (const auto& ant : ants_) {
+            if (ant && ant->is_alive() && !ant->underground && ant->id != ignore_ant_id) {
+                if (ant->pos == target) return true;
+                TileCoord cur_tile{
+                    (ant->pixel_x >= 0) ? (ant->pixel_x / 32) : ((ant->pixel_x - 31) / 32),
+                    (ant->pixel_y >= 0) ? (ant->pixel_y / 32) : ((ant->pixel_y - 31) / 32)
+                };
+                if (cur_tile == target) return true;
+            }
+        }
+        return false;
+    }
+
     bool is_tile_blocked_for_ant(const AntUnit& unit, TileCoord target_tile) const noexcept {
         if (!grid_.in_bounds(target_tile)) return true;
 
@@ -708,56 +722,7 @@ void SimulationEngine::tick() {
             bool is_friendly = (bomb_owner == ant_ptr->player_id ||
                                 impl_->stats_.are_allies(bomb_owner, ant_ptr->player_id));
             if (!is_friendly || ant_ptr->allow_friendly_bomb) {
-                ant_ptr->allow_friendly_bomb = false;
-                impl_->grid_.clear_bomb(static_cast<uint32_t>(ant_ptr->pos.x), static_cast<uint32_t>(ant_ptr->pos.y));
-                if (is_ant_in_base_queue(ant_ptr->id)) {
-                    leave_base_queue(ant_ptr->id);
-                }
-
-                // Authentic 1998 Ground Truth: 20% probability of dud (Ants.exe rand() % 100 < 0x14)
-                // Both branches deal exactly 2 HP damage (unconditional double call to FUN_01021627)
-                bool is_dud = ((impl_->prng_.rand() % 100) < 20);
-
-                bool lethal = ant_ptr->take_damage(2, DamageSource::BombBlast, bomb_owner);
-                if (lethal) {
-                    impl_->stats_.get_player_stats_mut(ant_ptr->player_id).friendly_lost++;
-                    if (bomb_owner < MAX_PLAYERS && !is_friendly) {
-                        impl_->stats_.get_player_stats_mut(bomb_owner).enemy_killed++;
-                    }
-                    impl_->spawn_death_effect(ant_ptr->pixel_x, ant_ptr->pixel_y);
-                }
-
-                if (!lethal) {
-                    if (is_dud) {
-                        // DUD BRANCH: Remains in place on bomb tile, plays smoke puff scorch (a*bu)
-                        // for 11 ticks with Sound 64 (flythumpa.wav) and Sound 65 (flythumpb.wav)
-                        impl_->audio_queue_.push_back(AudioEvent{SoundID::FlingThumpA, ant_ptr->pixel_x, ant_ptr->pixel_y, 2, 255});
-                        ant_ptr->clear_path();
-                        ant_ptr->state = UnitState::Burn;
-                        ant_ptr->state_timer = 11;
-                        ant_ptr->anim_tick = 0;
-                        ant_ptr->anim_subitem = 0;
-                    } else {
-                        // FULL DETONATION: Spawns bombex effect, plays bombexp.wav, launches ant 4 tiles airborne
-                        impl_->active_effects_.push_back(VisualEffect{"bombex", ant_ptr->pixel_x, ant_ptr->pixel_y, 0, 10});
-                        impl_->audio_queue_.push_back(AudioEvent{SoundID::BombDetonate, ant_ptr->pixel_x, ant_ptr->pixel_y, 2, 255});
-
-                        static constexpr int32_t DIR_DX[8] = { 0,  1, 1, 1, 0, -1, -1, -1 };
-                        static constexpr int32_t DIR_DY[8] = {-1, -1, 0, 1, 1,  1,  0, -1 };
-                        size_t dir_idx = static_cast<size_t>(ant_ptr->facing) & 7;
-                        int32_t facing_dx = DIR_DX[dir_idx];
-                        int32_t facing_dy = DIR_DY[dir_idx];
-                        if (facing_dx == 0 && facing_dy == 0) {
-                            facing_dx = 1;
-                        }
-                        int32_t from_px = ant_ptr->pixel_x + facing_dx * 32;
-                        int32_t from_py = ant_ptr->pixel_y + facing_dy * 32;
-                        impl_->physics_.apply_knockback(*ant_ptr, from_px, from_py,
-                                                        PhysicsEngine::BOMB_BLAST_MIN_TILES,
-                                                        PhysicsEngine::BOMB_BLAST_MAX_TILES,
-                                                        DamageSource::BombBlast, impl_->audio_queue_, impl_->prng_.rand());
-                    }
-                }
+                trigger_bomb_detonation(ant_ptr->id, ant_ptr->pos);
             }
         }
     }
@@ -1280,7 +1245,12 @@ void SimulationEngine::tick() {
                 int32_t best_dist = 999999;
                 for (const auto& off : offsets) {
                     TileCoord cand{ant_ptr->ability_target.x + off[0], ant_ptr->ability_target.y + off[1]};
-                    if (can_unit_traverse(ant_ptr->type, cand) && !impl_->has_living_ant_at(cand)) {
+                    if (can_unit_traverse(ant_ptr->type, cand) && !impl_->has_other_living_ant_at(cand, ant_ptr->id)) {
+                        if (cand == ant_ptr->pos) {
+                            best_dist = 0;
+                            best_cand = cand;
+                            break;
+                        }
                         auto path = PathFinder::find_path(impl_->grid_, ant_ptr->pos, cand, ant_ptr->type == AntType::Swimmer, ant_ptr->type == AntType::Fire);
                         if (!path.empty() && path.back() == cand) {
                             int32_t d = static_cast<int32_t>(path.size());
@@ -1805,12 +1775,10 @@ void SimulationEngine::tick() {
                 if (cell.has_fire()) {
                     impl_->physics_.resolve_fire_contact(*ant_ptr, impl_->grid_, impl_->audio_queue_, impl_->prng_, 0, 0);
                 }
-                // Bomb landing: Detonate bomb
+                // Bomb landing: Trigger chain bomb detonation
                 if (impl_->grid_.has_bomb_at(ant_ptr->pos)) {
-                    impl_->grid_.clear_bomb(static_cast<uint32_t>(ant_ptr->pos.x), static_cast<uint32_t>(ant_ptr->pos.y));
-                    impl_->active_effects_.push_back(VisualEffect{"bombex", ant_ptr->pixel_x, ant_ptr->pixel_y, 0, 10});
-                    impl_->audio_queue_.push_back(AudioEvent{SoundID::BombDetonate, ant_ptr->pixel_x, ant_ptr->pixel_y, 2, 255});
-                    ant_ptr->take_damage(2, DamageSource::BombBlast, cell.interactive_owner);
+                    trigger_bomb_detonation(ant_ptr->id, ant_ptr->pos);
+                    continue;
                 }
             }
         }
@@ -2207,7 +2175,10 @@ void SimulationEngine::tick() {
     }
 
     // 6. Step Ballistic Physics
-    impl_->physics_.tick(ptrs, impl_->grid_, impl_->audio_queue_, impl_->prng_);
+    impl_->physics_.tick(ptrs, impl_->grid_, impl_->audio_queue_, impl_->prng_,
+                         [this](AntUnit& u, TileCoord bpos) {
+                             trigger_bomb_detonation(u.id, bpos);
+                         });
 
     // 7. Update Daisy Plant Power-Up Droppers
     for (auto& fd : impl_->flower_droppers_) {
@@ -2245,8 +2216,14 @@ void SimulationEngine::tick() {
                 fd.timer_ticks--;
             }
             if (fd.timer_ticks == 0) {
-                // In Ants 1998, the dropper triggers continuously on its interval cooldown,
-                // dropping and replacing any power-up currently on the target tile (Disasm 0x101e3d7, 0x101e342).
+                // If anything occupies the drop tile (ant, bomb, or fire wall), hold drop readiness without dropping
+                bool occupied = impl_->has_living_ant_at(fd.drop_pos) ||
+                                impl_->grid_.has_bomb_at(fd.drop_pos) ||
+                                impl_->grid_.has_fire_at(fd.drop_pos);
+                if (occupied) {
+                    continue; // Keep fd.timer_ticks = 0, do not drop until tile becomes clear
+                }
+
                 fd.is_dropping = true;
                 fd.drop_tick = 0;
 
@@ -2436,7 +2413,12 @@ void SimulationEngine::issue_order(const AntOrder& order) {
                 int32_t best_dist = 999999;
                 for (const auto& off : offsets) {
                     TileCoord cand{target.x + off[0], target.y + off[1]};
-                    if (can_unit_traverse(unit->type, cand) && !impl_->has_living_ant_at(cand)) {
+                    if (can_unit_traverse(unit->type, cand) && !impl_->has_other_living_ant_at(cand, unit->id)) {
+                        if (cand == unit->pos) {
+                            best_dist = 0;
+                            best_cand = cand;
+                            break;
+                        }
                         auto path = PathFinder::find_path(impl_->grid_, unit->pos, cand, unit->type == AntType::Swimmer, unit->type == AntType::Fire);
                         if (!path.empty() && path.back() == cand) {
                             int32_t d = static_cast<int32_t>(path.size());
@@ -2450,7 +2432,7 @@ void SimulationEngine::issue_order(const AntOrder& order) {
                 if (best_cand.x < 0) {
                     for (const auto& off : offsets) {
                         TileCoord cand{target.x + off[0], target.y + off[1]};
-                        if (can_unit_traverse(unit->type, cand)) {
+                        if (can_unit_traverse(unit->type, cand) && !impl_->has_other_living_ant_at(cand, unit->id)) {
                             int32_t d = std::abs(cand.x - unit->pos.x) + std::abs(cand.y - unit->pos.y);
                             if (d < best_dist) {
                                 best_dist = d;
@@ -4213,5 +4195,64 @@ bool SimulationEngine::interrupt_transformation(uint32_t ant_id) {
     return true;
 }
 
+bool SimulationEngine::has_other_living_ant_at(TileCoord pos, uint32_t ignore_ant_id) const {
+    return impl_->has_other_living_ant_at(pos, ignore_ant_id);
+}
+
+void SimulationEngine::trigger_bomb_detonation(uint32_t ant_id, TileCoord bomb_pos) {
+    AntUnit* ant_ptr = impl_->find_unit(ant_id);
+    if (!ant_ptr || !ant_ptr->is_alive()) return;
+
+    if (!impl_->grid_.in_bounds(bomb_pos)) return;
+    const auto& cell = impl_->grid_.get_cell(static_cast<uint32_t>(bomb_pos.x), static_cast<uint32_t>(bomb_pos.y));
+    uint8_t bomb_owner = cell.interactive_owner;
+    bool is_friendly = (bomb_owner == ant_ptr->player_id ||
+                        impl_->stats_.are_allies(bomb_owner, ant_ptr->player_id));
+
+    ant_ptr->allow_friendly_bomb = false;
+    impl_->grid_.clear_bomb(static_cast<uint32_t>(bomb_pos.x), static_cast<uint32_t>(bomb_pos.y));
+    if (is_ant_in_base_queue(ant_ptr->id)) {
+        leave_base_queue(ant_ptr->id);
+    }
+
+    // Authentic 1998 Ground Truth: 20% probability of dud (Ants.exe rand() % 100 < 0x14)
+    // Both branches deal exactly 2 HP damage (unconditional double call to FUN_01021627)
+    bool is_dud = ((impl_->prng_.rand() % 100) < 20);
+
+    bool lethal = ant_ptr->take_damage(2, DamageSource::BombBlast, bomb_owner);
+    if (lethal) {
+        impl_->stats_.get_player_stats_mut(ant_ptr->player_id).friendly_lost++;
+        if (bomb_owner < MAX_PLAYERS && !is_friendly) {
+            impl_->stats_.get_player_stats_mut(bomb_owner).enemy_killed++;
+        }
+        impl_->spawn_death_effect(ant_ptr->pixel_x, ant_ptr->pixel_y);
+    }
+
+    if (!lethal) {
+        if (is_dud) {
+            // DUD BRANCH: Remains in place on bomb tile, plays smoke puff scorch (a*bu)
+            // for 11 ticks with Sound 64 (flythumpa.wav) and Sound 65 (flythumpb.wav)
+            impl_->audio_queue_.push_back(AudioEvent{SoundID::FlingThumpA, ant_ptr->pixel_x, ant_ptr->pixel_y, 2, 255});
+            ant_ptr->clear_path();
+            ant_ptr->state = UnitState::Burn;
+            ant_ptr->state_timer = 11;
+            ant_ptr->anim_tick = 0;
+            ant_ptr->anim_subitem = 0;
+        } else {
+            // FULL DETONATION: Spawns bombex effect centered on bomb tile, plays bombexp.wav, launches ant airborne
+            int32_t bomb_center_x = bomb_pos.x * 32 + 16;
+            int32_t bomb_center_y = bomb_pos.y * 32 + 16;
+            impl_->active_effects_.push_back(VisualEffect{"bombex", bomb_center_x, bomb_center_y, 0, 10});
+            impl_->audio_queue_.push_back(AudioEvent{SoundID::BombDetonate, bomb_center_x, bomb_center_y, 2, 255});
+
+            // Launch ant from bomb center with 8-direction clearance check
+            impl_->physics_.apply_knockback(*ant_ptr, bomb_center_x, bomb_center_y,
+                                            PhysicsEngine::BOMB_BLAST_MIN_TILES,
+                                            PhysicsEngine::BOMB_BLAST_MAX_TILES,
+                                            DamageSource::BombBlast, impl_->audio_queue_, impl_->prng_.rand(),
+                                            &impl_->grid_);
+        }
+    }
+}
 
 } // namespace ants::sim

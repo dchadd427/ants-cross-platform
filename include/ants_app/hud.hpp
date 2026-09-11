@@ -246,6 +246,8 @@ public:
     void start_match_modal() noexcept { show_match_start_modal_ = true; match_start_modal_ticks_ = 0; }
     void dismiss_match_start_modal() noexcept { show_match_start_modal_ = false; }
     bool is_right_mouse_held() const noexcept { return right_mouse_held_; }
+    bool is_shift_held() const noexcept;
+    void set_shift_held(bool held) noexcept { shift_held_ = held; }
 
 private:
     void render_top_bar(IRenderer& renderer, const assets::AssetArchive& assets, const sim::WorldState& world);
@@ -274,6 +276,7 @@ private:
     // Marquee drag selection
     bool is_dragging_{false};
     bool right_mouse_held_{false};
+    bool shift_held_{false};
     int32_t drag_start_x_{0};
     int32_t drag_start_y_{0};
     int32_t drag_curr_x_{0};

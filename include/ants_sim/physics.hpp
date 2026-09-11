@@ -6,6 +6,8 @@
 #include "ants_sim/ant_unit.hpp"
 #include "ants_sim/prng.hpp"
 
+#include <functional>
+
 namespace ants::sim {
 
 class Grid;
@@ -62,19 +64,22 @@ public:
                          int32_t max_tiles,
                          DamageSource source,
                          std::vector<AudioEvent>& audio_out,
-                         uint16_t random_val);
+                         uint16_t random_val,
+                         const Grid* grid = nullptr);
 
     void tick(std::vector<AntUnit*>& all_units,
               Grid& grid,
               std::vector<AudioEvent>& audio_out,
-              PRNG& prng);
+              PRNG& prng,
+              std::function<void(AntUnit&, TileCoord)> on_bomb_land = nullptr);
 
     void resolve_landing(AntUnit& unit,
                          Grid& grid,
                          std::vector<AudioEvent>& audio_out,
                          PRNG& prng,
                          int32_t incoming_dx = 0,
-                         int32_t incoming_dy = 0);
+                         int32_t incoming_dy = 0,
+                         std::function<void(AntUnit&, TileCoord)> on_bomb_land = nullptr);
 
     void resolve_water_entry(AntUnit& unit,
                              std::vector<AudioEvent>& audio_out);
