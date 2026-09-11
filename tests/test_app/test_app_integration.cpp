@@ -6877,10 +6877,10 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
 
     TEST_CASE("12.108: Version Invariant & Fog of War Cursor Concealment Parity") {
         // 1. Verify semantic versioning components
-        ASSERT_EQ(ants::VERSION_STRING, "v0.0.11");
+        ASSERT_EQ(ants::VERSION_STRING, "v0.0.12");
         ASSERT_EQ(ants::VERSION_MAJOR, 0);
         ASSERT_EQ(ants::VERSION_MINOR, 0);
-        ASSERT_EQ(ants::VERSION_PATCH, 11);
+        ASSERT_EQ(ants::VERSION_PATCH, 12);
 
         // 2. Setup simulation world with Fog of War enabled
         SimulationEngine sim;
@@ -7825,6 +7825,162 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         ASSERT_TRUE(strip_sp != nullptr);
         ASSERT_EQ(strip_sp->width, 478u);
         ASSERT_EQ(strip_sp->height, 31u);
+    } TEST_END();
+
+    TEST_CASE("12.126: Daisy Dropper Occupancy Preservation, Standing Fire Ability Pathing, Bomb Knockback Redirection, Chain Bombs & HUD Bomb Tile Parity") {
+        // 1. Daisy Flower Dropper Occupancy Preservation
+        SimulationEngine sim;
+        std::string path = std::string(ORIGINAL_ASSETS_DIR) + "/Maps/SMALL.LVL";
+        ants::assets::LevelData lvl;
+        ASSERT_TRUE(lvl.load_lvl(path));
+        sim.init(lvl, 42);
+
+        // Flower dropper 0 drops onto (2, 20)
+        TileCoord drop_pos{2, 20};
+        // Place bomb at (2, 20)
+        sim.grid_mut().place_bomb(2, 20, 0);
+        ASSERT_TRUE(sim.grid().has_bomb_at(drop_pos));
+
+        // Advance simulation: dropper ticks down 300 ticks (15s cooldown), but tile is occupied by bomb so it holds readiness without dropping
+        for (int t = 0; t < 300; ++t) {
+            sim.tick();
+        }
+        ASSERT_TRUE(sim.grid().has_bomb_at(drop_pos));
+        ASSERT_FALSE(sim.grid().has_powerup_at(drop_pos));
+
+        // Now remove the bomb
+        sim.grid_mut().clear_bomb(2, 20);
+        // On next ticks, dropper triggers immediately and completes 16-tick drop animation
+        for (int t = 0; t < 20; ++t) {
+            sim.tick();
+            if (sim.grid().has_powerup_at(drop_pos)) break;
+        }
+        ASSERT_TRUE(sim.grid().has_powerup_at(drop_pos));
+
+        // 2. Fire Ant Standing On Fire Ability Pathing: does not detour around terrain
+        SimulationEngine sim2;
+        sim2.init_test_world(60, 60, 42, 60000);
+        sim2.set_fire_at({15, 15}, 3600);
+        uint32_t fire_ant_id = sim2.spawn_unit(0, AntType::Fire, {15, 15});
+        // Issue IgniteFire order at adjacent tile (14, 15)
+        AntOrder fire_order{};
+        fire_order.ant_id = fire_ant_id;
+        fire_order.type = OrderType::IgniteFire;
+        fire_order.target_x = 14;
+        fire_order.target_y = 15;
+        sim2.issue_order(fire_order);
+        // Ant is already adjacent on (15, 15), so it should NOT path away to North; it stays on (15, 15)
+        const auto& fire_ant = sim2.get_unit(fire_ant_id);
+        ASSERT_EQ(fire_ant.pos.x, 15);
+        ASSERT_EQ(fire_ant.pos.y, 15);
+
+        // 3. Bomb Knockback 8-Way Redirection Around Power-Ups (FUN_0101df5d)
+        // Bomb at (20, 20), worker approaches from (21, 20) walking West
+        // Recoil starts East towards (24, 20).
+        // If (24, 20) has a power-up, recoil MUST rotate clockwise away from (24, 20)
+        sim2.grid_mut().place_powerup(24, 20, 1);
+        sim2.grid_mut().place_bomb(20, 20, 1);
+        uint32_t w1 = sim2.spawn_unit(0, AntType::Worker, {21, 20});
+        AntOrder w1_order{};
+        w1_order.ant_id = w1;
+        w1_order.type = OrderType::Move;
+        w1_order.target_x = 20;
+        w1_order.target_y = 20;
+        sim2.issue_order(w1_order);
+        for (int t = 0; t < 100; ++t) {
+            sim2.tick();
+            if (!sim2.grid().has_bomb_at({20, 20})) break;
+        }
+        for (int t = 0; t < 15; ++t) {
+            sim2.tick();
+            if (sim2.get_unit(w1).state != UnitState::Knockback) break;
+        }
+        const auto& landed_w1 = sim2.get_unit(w1);
+        // Did not land on (24, 20) because of powerup redirection!
+        ASSERT_FALSE(landed_w1.pos.x == 24 && landed_w1.pos.y == 20);
+        // Powerup at (24, 20) was preserved
+        ASSERT_TRUE(sim2.grid().has_powerup_at({24, 20}));
+
+        // 4. Bomb Knockback Landing on Fire Wall Allowed
+        sim2.set_fire_at({34, 30}, 3600);
+        sim2.grid_mut().place_bomb(30, 30, 1);
+        uint32_t w2 = sim2.spawn_unit(0, AntType::Worker, {31, 30});
+        AntOrder w2_order{};
+        w2_order.ant_id = w2;
+        w2_order.type = OrderType::Move;
+        w2_order.target_x = 30;
+        w2_order.target_y = 30;
+        sim2.issue_order(w2_order);
+        for (int t = 0; t < 100; ++t) {
+            sim2.tick();
+            if (!sim2.grid().has_bomb_at({30, 30})) break;
+        }
+        for (int t = 0; t < 15; ++t) {
+            sim2.tick();
+            if (sim2.get_unit(w2).state != UnitState::Knockback) break;
+        }
+        // Took bomb blast damage (2 HP) + fire damage (1 HP) = 3 HP damage (10 - 3 = 7 HP)
+        ASSERT_EQ(sim2.get_unit(w2).hp, 7);
+
+        // 5. Chain Bomb Detonation
+        // Bomb at (40, 40) recoils East to (44, 40). Place another bomb at (44, 40).
+        // Using seed 1 guarantees deterministic non-dud rolls (call 0: 41% >= 20%, call 2: 34% >= 20%).
+        SimulationEngine sim_chain;
+        sim_chain.init_test_world(60, 60, 1, 60000);
+        sim_chain.grid_mut().place_bomb(40, 40, 1);
+        sim_chain.grid_mut().place_bomb(44, 40, 1);
+        uint32_t w3 = sim_chain.spawn_unit(0, AntType::Worker, {41, 40});
+        AntOrder w3_order{};
+        w3_order.ant_id = w3;
+        w3_order.type = OrderType::Move;
+        w3_order.target_x = 40;
+        w3_order.target_y = 40;
+        sim_chain.issue_order(w3_order);
+        for (int t = 0; t < 100; ++t) {
+            sim_chain.tick();
+            if (!sim_chain.grid().has_bomb_at({40, 40})) break;
+        }
+        for (int t = 0; t < 30; ++t) {
+            sim_chain.tick();
+        }
+        // Chain bomb at (44, 40) was triggered and cleared!
+        ASSERT_FALSE(sim_chain.grid().has_bomb_at({44, 40}));
+
+        // 6. HUD Bomb Cursor & Shift Rules
+        HUD hud;
+        hud.init(0);
+        sim2.grid_mut().place_bomb(50, 50, 1);
+        uint32_t bomber_id = sim2.spawn_unit(0, AntType::Bomber, {48, 50});
+        uint32_t worker_id2 = sim2.spawn_unit(0, AntType::Worker, {48, 51});
+
+        ViewportCamera cam;
+        cam.center_on(50 * 32 + 16, 50 * 32 + 16);
+        int32_t screen_bx = 0;
+        int32_t screen_by = 0;
+        cam.world_to_screen(50 * 32 + 16, 50 * 32 + 16, screen_bx, screen_by);
+
+        // (a) Bomber selected, shift NOT held -> Target reticle
+        hud.select_ant(bomber_id, false);
+        hud.set_shift_held(false);
+        CursorType c1 = hud.evaluate_cursor(screen_bx, screen_by, sim2.get_world_state(), sim2.grid(), cam);
+        ASSERT_EQ(c1, CursorType::Target);
+
+        // (b) Bomber selected, shift HELD -> regular Move cursor
+        hud.set_shift_held(true);
+        CursorType c2 = hud.evaluate_cursor(screen_bx, screen_by, sim2.get_world_state(), sim2.grid(), cam);
+        ASSERT_EQ(c2, CursorType::Move);
+
+        // (c) Worker selected (non-bomber) -> regular Move cursor
+        hud.select_ant(worker_id2, false);
+        hud.set_shift_held(false);
+        CursorType c3 = hud.evaluate_cursor(screen_bx, screen_by, sim2.get_world_state(), sim2.grid(), cam);
+        ASSERT_EQ(c3, CursorType::Move);
+
+        // (d) Multi-select -> regular Move cursor
+        hud.select_ant(bomber_id, false);
+        hud.select_ant(worker_id2, true); // multi-select
+        CursorType c4 = hud.evaluate_cursor(screen_bx, screen_by, sim2.get_world_state(), sim2.grid(), cam);
+        ASSERT_EQ(c4, CursorType::Move);
     } TEST_END();
 }
 

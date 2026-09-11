@@ -417,7 +417,9 @@ void HUD::render(IRenderer& renderer, const assets::AssetArchive& assets,
             }
 
             // Pedestal 2: Class-Specific Ability Pedestal (Authentic 537, 158)
-            if (sel_ant && sel_ant->player_id == local_player_id_) {
+            // Authentic 1998 parity: Hide ability/bomb pedestal when Shift is held or multi-selected
+            bool hide_pedestal_2 = is_shift_held() || is_multi_select() || selected_ant_ids_.size() > 1;
+            if (sel_ant && sel_ant->player_id == local_player_id_ && !hide_pedestal_2) {
                 if (sel_ant->type == sim::AntType::Swimmer) {
                     bool ped2_down = ability_pedestal_button_.is_pressed || (active_order_mode_ == sim::OrderType::BuildBridge);
                     renderer.draw_named_sprite(ped2_down ? "buttrna5.bmp" : "buttrna1.bmp", 537, 158);
@@ -1191,6 +1193,10 @@ bool HUD::is_ant_selected(uint32_t id) const noexcept {
     return std::find(selected_ant_ids_.begin(), selected_ant_ids_.end(), id) != selected_ant_ids_.end();
 }
 
+bool HUD::is_shift_held() const noexcept {
+    return shift_held_ || ((static_cast<uint16_t>(SDL_GetModState()) & KMOD_SHIFT) != 0);
+}
+
 bool HUD::has_friendly_selected(const sim::WorldState& world) const noexcept {
     for (uint32_t aid : selected_ant_ids_) {
         for (const auto& a : world.ants) {
@@ -1494,7 +1500,8 @@ bool HUD::handle_mouse_down(int32_t x, int32_t y, uint8_t button,
         }
 
         // 1b. Check Authentic Secondary Action Pedestal (Class-Specific Ability) click
-        if (ability_pedestal_button_.contains(x, y) && !selected_ant_ids_.empty()) {
+        bool hide_pedestal_2 = is_shift_held() || is_multi_select() || selected_ant_ids_.size() > 1;
+        if (!hide_pedestal_2 && ability_pedestal_button_.contains(x, y) && !selected_ant_ids_.empty()) {
             ability_pedestal_button_.is_pressed = true;
             play_sfx(sim::SoundID::NavButtonClick);
             const auto& sel_u = sim.get_unit(selected_ant_ids_[0]);
@@ -3328,10 +3335,15 @@ CursorType HUD::evaluate_cursor(int32_t screen_x, int32_t screen_y,
         return current_cursor_;
     }
 
-    // If hovering over a bomb on the grid, display Target reticle (c_targ1)
+    // If hovering over a bomb on the grid:
+    // Authentic 1998 parity: Only a single selected unshifted Bomber capable of defusing
+    // displays the Target reticle. Non-bombers, multi-select, or shift-held display the regular Move cursor.
     if (grid.in_bounds(tx, ty) && grid.has_bomb_at({tx, ty})) {
-        current_cursor_ = CursorType::Target;
-        return current_cursor_;
+        bool can_defuse_bomb = has_bomber && !is_shift_held() && !is_multi_select() && selected_ant_ids_.size() == 1;
+        if (can_defuse_bomb) {
+            current_cursor_ = CursorType::Target;
+            return current_cursor_;
+        }
     }
 
     // If right mouse is held and a bomber is selected, show Target reticle over valid bomb placement tiles

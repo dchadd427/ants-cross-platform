@@ -1665,3 +1665,24 @@ To deliver authentic 1:1 gameplay inside standard web browsers with zero install
     - Clicking the START! button (or pressing Enter/Space/Escape) emits `SoundID::NavButtonClick` audio feedback and transitions directly to `AppState::MapSelect`.
   - **Overall Flow Sequence**: `Loading` -> `QuickHelp` -> `MapSelect` -> `Playing`.
 
+#### 7. Daisy Flower Dropper Occupancy, Standing Fire Ability Pathing, Bomb Redirection & Chain Detonations, and Shift/HUD Bomb Tile Rules (`FUN_0101df5d`, `0x1021627`, `0x1015c70`)
+- **Daisy Flower Dropper Occupancy Preservation (`SMALL.LVL`, `GAUNTLET.LVL`, `ISLANDS.LVL`)**:
+  - In `Ants.exe`, if an ant, placed bomb, or active fire wall occupies the dropper's target tile `(drop_x, drop_y)` when the 300-tick (15s) cooldown completes, the dropper preserves readiness (`timer_ticks == 0`) and holds the powerup rather than dropping onto or clearing the occupant. Once the tile is cleared, it drops immediately.
+- **Fire Ant Ability Placement Pathing Through Fire**:
+  - When standing on fire and placing a fire wall adjacent, and then placing another further away, the Fire Ant treats fire tiles as passable staging neighbors and prioritizes current tile `cand == unit->pos` (distance 0) without self-blocking or detouring north around terrain.
+- **Bomb 8-Way Knockback Redirection (`FUN_0101df5d`)**:
+  - Recoil starts at 4 tiles opposite approach vector: `(facing + 4) % 8`.
+  - Landing eligibility in `FUN_0101df5d`: power-up items, solid obstacle rocks, and anthill base tiles cannot be landed on; when blocked by any of these, the landing trajectory rotates clockwise `(dir + 1) % 8` through all 8 compass directions.
+  - Water IS an eligible landing location (swimmers swim, non-swimmers drown).
+  - Fire walls ARE valid landing locations (ant lands, takes fire damage, and ricochets/burns).
+- **Chain Bomb Detonations & Dud Rolls**:
+  - When an airborne ant lands on a bomb tile from flight, it detonates the bomb immediately.
+  - Both standard and chain bomb detonations evaluate the authentic 20% dud probability (`prng.rand() % 100 < 20`). On a dud, the ant takes 2 HP damage and plays the scorch burn animation in place (`a*bu`). On full detonation, it takes 2 HP damage and launches into another airborne flight trajectory.
+- **Bomb Placement Smoothness & 0px Alignment**:
+  - Aligned static ground bomb destination rectangle `bomb_dst` to `{ sx + 10, sy + 0, 12, 24 }` to match Table 4 `absb` (Anim 1317) release frame `sy + 0` (`dx = 10, dy = 0` relative to target tile).
+- **HUD Right-Side Bomb Tile & Hover Cursor Rules**:
+  - Single unshifted Bomber Ant hovering over a bomb shows `CursorType::Target` (disarm).
+  - Holding Shift with a Bomber selected shows regular `CursorType::Move` and issues a `Move` order with `allow_friendly_bomb = true` (to force-move and hit the bomb).
+  - Non-bomber hovering over a bomb shows regular `CursorType::Move`.
+  - Pedestal 2 (bomb tile / ability button at 537, 158) is hidden and its click handling is disabled whenever Shift is held or multiple units are selected.
+

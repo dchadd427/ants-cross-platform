@@ -939,7 +939,7 @@ void Renderer::render_terrain_layer2_structures(const ants::sim::Grid& grid, con
                 size_t b_frame = ((SDL_GetTicks() / 100u) + phase) % 2u;
                 SDL_Texture* tex = texture_cache_->get_named_sprite_texture(bomb_frames[owner][b_frame]);
                 if (tex) {
-                    SDL_Rect bomb_dst = { sx + 10, sy + 4, 12, 24 };
+                    SDL_Rect bomb_dst = { sx + 10, sy + 0, 12, 24 };
                     SDL_RenderCopy(renderer_, tex, nullptr, &bomb_dst);
                 }
                 continue;
