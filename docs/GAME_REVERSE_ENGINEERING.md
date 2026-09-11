@@ -22,7 +22,7 @@ Players control colonies of ants in a top-down tile-based grid environment (typi
 - **Anthills & Hatching:**
   - Ants hatch from eggs at the colony anthill.
   - Hatching costs **200 points** from the team's current score.
-  - Ants can die from combat damage, bomb blasts, and drowning.
+  - Ants can die from combat damage, bomb blasts, fire damage, and drowning.
   - If a team runs out of eggs or points, hatching is prohibited.
   - There is **no queen ant**; production is handled by the colony anthill.
 - **Ant Classes & Power-Ups:**
@@ -1614,4 +1614,40 @@ To deliver authentic 1:1 gameplay inside standard web browsers with zero install
 - Shifting Red down 14px aligns the bottlecap thief hole squarely onto grid row 36 (`(24, 36)`).
 - Thief ant infiltration is strictly checked on the 4 right-flank tiles `X = base_min_x + 3, Y in [base_min_y, base_min_y + 3]`.
 - The column to the right `X = base_min_x + 4, Y in [base_min_y, base_min_y + 3]` comprises open land tiles where Fire Ants can place up to 3 firewalls and Bomber Ants can place landmines.
+
+#### 6. HUD Pedestal Yellow Glow Animations (`butdefl`, `butdefr`), Bomb Targeting Cursor (`c_targ1`), and Dialog Parity (`std_dialg`, `0x1026aa3`, `0x1015b65`)
+- **HUD Pedestal Animated Yellow Glow (`Ants.exe.c` lines 29201, 29206, 29571–29595)**:
+  - In the 1998 engine, the bottom action buttons on the right-hand sidebar feature contextual highlighting via animated pulsing yellow glow overlays:
+    - **Move Pedestal (Left Pedestal at `(477, 163)`)**:
+      - Trigger condition `0x5510`: Set when cursor mode is 3 (`c_mov1`, hovering over passable land) or 7 (`c_food`, hovering over food/lunchbox).
+      - Graphic: Animation 1190 (`butdefl`), cycling 4 frames using sprites 2591–2599 across a 510ms duration.
+      - Sprite pixels contain authentic yellow border glow (`RGB(211, 183, 0)` / `#D3B700`).
+    - **Special Ability Pedestal (Right Pedestal at `(538, 163)`)**:
+      - Trigger condition `0x5514`: Set when holding right-click to use a special ability, active special ability placement mode, or hovering over a bomb / ability target (`c_targ1`).
+      - Graphic: Animation 1222 (`butdefr`), cycling 4 frames using sprites 2591–2599 across a 510ms duration.
+- **Bomber Bomb Targeting Cursor Mode 4 (`c_targ1`, Anim 43)**:
+  - When hovering over any planted bomb on the map (`grid.has_bomb_at({tx, ty})`), the cursor dynamically switches to the Mode 4 target reticle (`c_targ1`, Anim 43).
+  - While a Bomber Ant is actively placing a bomb (`UnitState::PlantingBomb`, playing `absb301`), the cursor remains locked to Mode 4 target reticle across the playfield.
+  - When right-clicking with a Bomber Ant selected over valid bomb placement ground, the cursor displays the Mode 4 target reticle.
+- **Seamless Bomb Placement Timing (`absb301`, 28 Ticks / 1.4s)**:
+  - Table 4 animation `absb301` has 9 subitems: `[100, 160, 160, 200, 180, 200, 200, 100, 100]ms` totaling 1,400ms (exactly 28 simulation ticks @ 20Hz).
+  - Subitem 0–4 depicts the bomber crouching and taking the bomb out of its backpack.
+  - Subitem 5 (`absb501`) sets down the bomb in the ant's sprite.
+  - At tick 28 (when `PlantingBomb` completes and transitions to `Idle`), the map entity bomb is placed onto Layer 2, providing a seamless visual transition with zero double-bomb artifacts.
+  - Placing a bomb triggers Sound 90 (`bombpick.wav`) at tick 14 (`flag = 4`).
+- **Ability Cardinal Placement Pathing Around Intervening Units**:
+  - Special ability placement candidate tiles evaluate orthogonal neighbors ($dx = 0, |dy| = 1$ or $dy = 0, |dx| = 1$).
+  - If a neighbor tile is occupied by an ant (`has_living_ant_at`), the placement algorithm filters it out and routes the unit smoothly around the obstacle to an unblocked cardinal tile.
+- **Water Bomb Order Rejection**:
+  - Right-clicking or issuing a bomb order onto water immediately rejects the order with `SoundID::CantGo` audio feedback and ant refusal.
+- **Knockback Ballistic Orientation Parity (`Ants.exe` `0x1002b40` / `Ants.exe.c` lines 16785–16824, 24010–24070)**:
+  - In `Ants.exe`, an ant struck by a melee attack or blast wave faces toward the attacker/epicenter prior to impact.
+  - Ballistic flight does not reverse the ant's orientation 180°; the ant remains facing the blast origin throughout flight until landing and entering `a*sd301` dizzy stun.
+- **Authentic Match Start Modal & Selection Marquee**:
+  - Ready modal: Authentic composite `std_dialg` (Animation 67, 320×224) background with dark purple/charcoal text `#1F1733` (`ColorRGBA{31, 23, 51, 255}`).
+  - Unit selection drag marquee tool: Authentic bright red border `RGB(220, 0, 0)` (`ColorRGBA{220, 0, 0, 255}`).
+- **Loading & Quick Help Screen Flow**:
+  - Loading Screen: `antslogo` (Anim 57: `logo.bmp` 162, `credits.bmp` 161, `strip.bmp` 160) with progress bar at `(228, 445)`.
+  - Quick Help: `qh_screen` (Anim 101: `qh1.bmp` 232, `qh2.bmp` 231, and "Leave Help" button `bleavhelp` 335 at `(542, 12)`).
+  - Sequence: `Loading` -> `QuickHelp` -> `MapSelect` -> `Playing`.
 

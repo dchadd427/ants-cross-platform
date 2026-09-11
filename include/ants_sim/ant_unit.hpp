@@ -145,7 +145,7 @@ public:
     static constexpr int32_t DIAG_SCALE_FX     = 46341;  // 1 / sqrt(2) in 16.16
 
     static constexpr uint16_t FLINCH_TICKS     = 14;
-    static constexpr uint16_t STUN_TICKS       = 12;
+    static constexpr uint16_t STUN_TICKS       = 50; // Authentic 2.5s (50 ticks @ 20Hz, 3-4 star rotations)
 
     // Entity Public State Fields (directly inspectable & testable)
     uint32_t    id{0};

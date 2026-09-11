@@ -1273,6 +1273,34 @@ void SimulationEngine::tick() {
                     default:
                         break;
                 }
+            } else if (is_at_dest && !is_cardinal_adj) {
+                // Stopped before reaching cardinal adjacency: re-evaluate open cardinal neighbors
+                static const int offsets[4][2] = { {0, -1}, {0, 1}, {-1, 0}, {1, 0} };
+                TileCoord best_cand{-1, -1};
+                int32_t best_dist = 999999;
+                for (const auto& off : offsets) {
+                    TileCoord cand{ant_ptr->ability_target.x + off[0], ant_ptr->ability_target.y + off[1]};
+                    if (can_unit_traverse(ant_ptr->type, cand) && !impl_->has_living_ant_at(cand)) {
+                        auto path = PathFinder::find_path(impl_->grid_, ant_ptr->pos, cand, ant_ptr->type == AntType::Swimmer, ant_ptr->type == AntType::Fire);
+                        if (!path.empty() && path.back() == cand) {
+                            int32_t d = static_cast<int32_t>(path.size());
+                            if (d < best_dist) {
+                                best_dist = d;
+                                best_cand = cand;
+                            }
+                        }
+                    }
+                }
+                if (best_cand.x >= 0 && (best_cand.x != ant_ptr->pos.x || best_cand.y != ant_ptr->pos.y)) {
+                    issue_move_order(ant_ptr->id, best_cand);
+                } else {
+                    ant_ptr->pending_ability = OrderType::None;
+                    ant_ptr->ability_target = TileCoord{-1, -1};
+                    ant_ptr->state = UnitState::CantGo;
+                    ant_ptr->anim_tick = 0;
+                    ant_ptr->anim_subitem = 0;
+                    impl_->audio_queue_.push_back(AudioEvent{SoundID::CantGo, ant_ptr->pixel_x, ant_ptr->pixel_y, 1, ant_ptr->player_id});
+                }
             }
         }
 
@@ -1641,15 +1669,13 @@ void SimulationEngine::tick() {
         if (ant_ptr->anim_tick == 14) {
             impl_->audio_queue_.push_back(AudioEvent{SoundID::BombPick, ant_ptr->pixel_x, ant_ptr->pixel_y, 1, 255});
         }
-        if (ant_ptr->anim_tick == 18) {
+        if (ant_ptr->anim_tick >= 28) {
             if (ant_ptr->ability_target.x >= 0 && impl_->grid_.in_bounds(ant_ptr->ability_target)) {
                 impl_->grid_.place_bomb(static_cast<uint32_t>(ant_ptr->ability_target.x),
                                         static_cast<uint32_t>(ant_ptr->ability_target.y),
                                         ant_ptr->player_id);
                 impl_->stats_.get_player_stats_mut(ant_ptr->player_id).bombs_planted++;
             }
-        }
-        if (ant_ptr->anim_tick >= 28) {
             ant_ptr->state = UnitState::Idle;
             ant_ptr->anim_tick = 0;
             ant_ptr->anim_subitem = 0;
@@ -2370,10 +2396,18 @@ void SimulationEngine::issue_order(const AntOrder& order) {
             TileCoord target{order.target_x, order.target_y};
             if (order.type == OrderType::PlantBomb) {
                 if (!impl_->grid_.in_bounds(target) || !impl_->grid_.get_cell(target).can_place_bomb() || impl_->grid_.is_anthill_reserved_spot(target) || impl_->has_living_ant_at(target)) {
+                    unit->state = UnitState::CantGo;
+                    unit->anim_tick = 0;
+                    unit->anim_subitem = 0;
+                    impl_->audio_queue_.push_back(AudioEvent{SoundID::CantGo, unit->pixel_x, unit->pixel_y, 1, unit->player_id});
                     break;
                 }
             } else if (order.type == OrderType::IgniteFire) {
                 if (!impl_->grid_.in_bounds(target) || !impl_->grid_.get_cell(target).can_place_fire() || impl_->grid_.is_anthill_reserved_spot(target) || impl_->has_living_ant_at(target)) {
+                    unit->state = UnitState::CantGo;
+                    unit->anim_tick = 0;
+                    unit->anim_subitem = 0;
+                    impl_->audio_queue_.push_back(AudioEvent{SoundID::CantGo, unit->pixel_x, unit->pixel_y, 1, unit->player_id});
                     break;
                 }
             }
@@ -2402,11 +2436,26 @@ void SimulationEngine::issue_order(const AntOrder& order) {
                 int32_t best_dist = 999999;
                 for (const auto& off : offsets) {
                     TileCoord cand{target.x + off[0], target.y + off[1]};
-                    if (can_unit_traverse(unit->type, cand)) {
-                        int32_t d = std::abs(cand.x - unit->pos.x) + std::abs(cand.y - unit->pos.y);
-                        if (d < best_dist) {
-                            best_dist = d;
-                            best_cand = cand;
+                    if (can_unit_traverse(unit->type, cand) && !impl_->has_living_ant_at(cand)) {
+                        auto path = PathFinder::find_path(impl_->grid_, unit->pos, cand, unit->type == AntType::Swimmer, unit->type == AntType::Fire);
+                        if (!path.empty() && path.back() == cand) {
+                            int32_t d = static_cast<int32_t>(path.size());
+                            if (d < best_dist) {
+                                best_dist = d;
+                                best_cand = cand;
+                            }
+                        }
+                    }
+                }
+                if (best_cand.x < 0) {
+                    for (const auto& off : offsets) {
+                        TileCoord cand{target.x + off[0], target.y + off[1]};
+                        if (can_unit_traverse(unit->type, cand)) {
+                            int32_t d = std::abs(cand.x - unit->pos.x) + std::abs(cand.y - unit->pos.y);
+                            if (d < best_dist) {
+                                best_dist = d;
+                                best_cand = cand;
+                            }
                         }
                     }
                 }
@@ -2419,6 +2468,10 @@ void SimulationEngine::issue_order(const AntOrder& order) {
                     unit->ability_target = target;
                     issue_move_order(order.ant_id, target);
                 } else {
+                    unit->state = UnitState::CantGo;
+                    unit->anim_tick = 0;
+                    unit->anim_subitem = 0;
+                    impl_->audio_queue_.push_back(AudioEvent{SoundID::CantGo, unit->pixel_x, unit->pixel_y, 1, unit->player_id});
                     if (unit->is_transforming()) {
                         interrupt_transformation(order.ant_id);
                     }
@@ -3151,6 +3204,30 @@ void SimulationEngine::issue_move_order(uint32_t ant_id, TileCoord dest, bool al
     }
     unit->is_food_order = (is_food_order || dest_has_food);
 
+    // If ant is ordered to food, verify whether a path exists back to base (Ants.exe 0x102151a / Ants.exe.c line 24190)
+    // On maps like Islands where food is isolated by water and no bridge exists, ant cannot bring food home
+    if (unit->is_food_order && unit->player_id < MAX_PLAYERS) {
+        const auto* friendly_base = impl_->grid_.find_anthill(unit->player_id);
+        if (friendly_base) {
+            TileCoord hole{friendly_base->x + 1, friendly_base->y + 1};
+            bool is_swimmer = (unit->type == AntType::Swimmer);
+            bool is_fire_ant = (unit->type == AntType::Fire);
+            auto path_to_base = PathFinder::find_path(impl_->grid_, dest, hole, is_swimmer, is_fire_ant);
+            if (path_to_base.empty()) {
+                unit->clear_path();
+                unit->set_tile_pos(unit->pos.x, unit->pos.y);
+                unit->final_dest = unit->pos;
+                unit->state = UnitState::CantGo;
+                unit->anim_tick = 0;
+                unit->anim_subitem = 0;
+                unit->facing = Direction::South;
+                unit->is_food_order = false;
+                impl_->audio_queue_.push_back(AudioEvent{SoundID::CantGo, unit->pixel_x, unit->pixel_y, 1, unit->player_id});
+                return;
+            }
+        }
+    }
+
     // Special abilities (Fire and Bomb placement, Bridge construction) cannot be interrupted and trigger "Can't Go"
     if (unit->state == UnitState::PlacingFire || unit->state == UnitState::PlantingBomb ||
         unit->state == UnitState::BuildingBridge || unit->state == UnitState::DemolishingBridge) {
@@ -3432,9 +3509,10 @@ bool SimulationEngine::plant_bomb(uint32_t ant_id, TileCoord target, bool instan
         ant->anim_tick = 0;
         ant->anim_subitem = 0;
         ant->ability_target = target;
-        ant->ability_cooldown_ticks = 60; // Authentic 3.0s cooldown starts at order issuance (Ants.exe 0x101bdd1)
+        ant->ability_cooldown_ticks = 28; // Authentic 1.4s cooldown starts at order issuance (absb301, Ants.exe 0x100f9cb)
     }
 
+    impl_->world_state_dirty_ = true;
     return true;
 }
 
@@ -3467,6 +3545,7 @@ bool SimulationEngine::defuse_bomb(uint32_t ant_id, TileCoord target, bool insta
         ant->anim_subitem = 0;
         ant->ability_target = target;
     }
+    impl_->world_state_dirty_ = true;
     return true;
 }
 
@@ -3502,6 +3581,7 @@ bool SimulationEngine::ignite_fire(uint32_t ant_id, TileCoord target, bool insta
         ant->ability_cooldown_ticks = 40; // Authentic 2.0s cooldown starts at order issuance (Ants.exe 0x101ba24)
     }
 
+    impl_->world_state_dirty_ = true;
     return true;
 }
 
@@ -3532,6 +3612,7 @@ bool SimulationEngine::extinguish_fire(uint32_t ant_id, TileCoord target, bool i
         ant->anim_subitem = 0;
         ant->ability_target = target;
     }
+    impl_->world_state_dirty_ = true;
     return true;
 }
 
@@ -3567,6 +3648,7 @@ bool SimulationEngine::build_bridge_step(uint32_t ant_id, TileCoord target) {
             ant->anim_subitem = 0;
         }
     }
+    impl_->world_state_dirty_ = true;
     return true;
 }
 
@@ -3592,6 +3674,7 @@ bool SimulationEngine::demolish_bridge_step(uint32_t ant_id, TileCoord target) {
         ant->anim_tick = 0;
         ant->anim_subitem = 0;
     }
+    impl_->world_state_dirty_ = true;
     return true;
 }
 
@@ -3795,6 +3878,16 @@ void SimulationEngine::send_ant_straight_into_base(uint32_t ant_id) {
         unit->set_path(std::move(waypoints));
         unit->final_dest = hole;
         unit->state = UnitState::Walking;
+    } else {
+        unit->clear_path();
+        unit->set_tile_pos(unit->pos.x, unit->pos.y);
+        unit->final_dest = unit->pos;
+        unit->state = UnitState::CantGo;
+        unit->anim_tick = 0;
+        unit->anim_subitem = 0;
+        unit->facing = Direction::South;
+        impl_->base_queues_[unit->player_id].active_depositing_ant_id = 0;
+        impl_->audio_queue_.push_back(AudioEvent{SoundID::CantGo, unit->pixel_x, unit->pixel_y, 1, unit->player_id});
     }
 }
 

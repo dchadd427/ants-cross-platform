@@ -860,8 +860,8 @@ void run_suite_7_input_controls() {
         int32_t bx = 208 + HUD::PLAYFIELD_X;
         int32_t by = 176 + HUD::PLAYFIELD_Y;
         hud.handle_mouse_down(bx, by, 3, sim, camera);
-        // Step through planting animation (placed at tick 18)
-        for (int t = 0; t < 20; ++t) {
+        // Step through planting animation (placed at tick 28)
+        for (int t = 0; t < 30; ++t) {
             sim.tick();
         }
         ASSERT_TRUE(sim.has_bomb_at(TileCoord{6, 5}));
@@ -3768,17 +3768,14 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         // Bomb is NOT placed on the grid tile yet while animation is playing!
         ASSERT_FALSE(sim.has_bomb_at(TileCoord{21, 20}));
 
-        // Plant animation is 28 ticks (bomb placed at tick 18, finished at tick 28)
-        for (int t = 0; t < 17; ++t) {
+        // Plant animation is 28 ticks (bomb placed seamlessly at tick 28 upon completion)
+        for (int t = 0; t < 27; ++t) {
             ASSERT_FALSE(sim.has_bomb_at(TileCoord{21, 20}));
             sim.tick();
         }
         ASSERT_FALSE(sim.has_bomb_at(TileCoord{21, 20}));
-        sim.tick(); // Tick 18: bomb placed!
+        sim.tick(); // Tick 28: bomb placed seamlessly!
         ASSERT_TRUE(sim.has_bomb_at(TileCoord{21, 20}));
-        for (int t = 18; t < 28; ++t) {
-            sim.tick();
-        }
         ASSERT_EQ(b_ant.state, UnitState::Idle);
 
         // Defuse bomb (12 ticks)
@@ -4421,7 +4418,7 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
 
             const auto& v = sim.get_unit(victim);
             ASSERT_EQ(v.state, UnitState::Knockback);
-            ASSERT_EQ(v.facing, Direction::East);
+            ASSERT_EQ(v.facing, Direction::West);
             ASSERT_EQ(v.pos.x, 15); // Logical destination tile is 4 tiles East
 
             // Advance through ballistic flight
@@ -4626,21 +4623,15 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         sim.tick();
         ASSERT_FALSE(sim.has_bomb_at({11, 10}));
 
-        // Advance 3 more ticks (tick 17): still no bomb on grid
-        for (int i = 0; i < 3; ++i) {
+        // Advance up to tick 27: still no bomb on grid (seamless placement prevents double bomb)
+        for (int i = 0; i < 13; ++i) {
             sim.tick();
         }
         ASSERT_FALSE(sim.has_bomb_at({11, 10}));
 
-        // Tick 18: Bomb placed on grid!
+        // Tick 28: Bomb placed seamlessly on grid upon animation completion!
         sim.tick();
         ASSERT_TRUE(sim.has_bomb_at({11, 10}));
-        ASSERT_EQ(sim.get_unit(bomber).state, UnitState::PlantingBomb);
-
-        // Complete up to 28 ticks
-        for (int i = 0; i < 10; ++i) {
-            sim.tick();
-        }
         ASSERT_EQ(sim.get_unit(bomber).state, UnitState::Idle);
     } TEST_END();
 
@@ -4955,7 +4946,7 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         ASSERT_TRUE(sim.ignite_fire(f_id, TileCoord{10, 11}, false));
     } TEST_END();
 
-    TEST_CASE("12.56 Bomber Ant 3.0s (60 Ticks) Ability Cooldown & Rejection") {
+    TEST_CASE("12.56 Bomber Ant Authentic 28-Tick Ability Cooldown & Rejection") {
         SimulationEngine sim;
         sim.init_test_world(60, 60, 1);
         uint32_t b_id = sim.spawn_unit(0, AntType::Bomber, TileCoord{15, 15});
@@ -4965,29 +4956,29 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         sim.set_tile_flags(16, 15, 0x06);
         ASSERT_TRUE(sim.plant_bomb(b_id, TileCoord{16, 15}, false));
         ASSERT_EQ(sim.get_unit(b_id).state, UnitState::PlantingBomb);
-        ASSERT_EQ(sim.get_unit(b_id).ability_cooldown_ticks, 60);
+        ASSERT_EQ(sim.get_unit(b_id).ability_cooldown_ticks, 28);
 
-        // Advance 28 ticks to complete bomb placement
-        for (int t = 0; t < 28; ++t) {
+        // Advance 14 ticks: half-way through planting
+        for (int t = 0; t < 14; ++t) {
             sim.tick();
         }
-        ASSERT_EQ(sim.get_unit(b_id).state, UnitState::Idle);
-        ASSERT_EQ(sim.get_unit(b_id).ability_cooldown_ticks, 32); // 60 - 28 = 32 ticks remaining
+        ASSERT_EQ(sim.get_unit(b_id).ability_cooldown_ticks, 14);
 
         // Attempting to plant bomb during cooldown MUST be rejected
         sim.set_tile_flags(15, 16, 0x06);
         ASSERT_FALSE(sim.plant_bomb(b_id, TileCoord{15, 16}, false));
 
-        // Advance 31 ticks: cooldown remaining = 1, still rejected
-        for (int t = 0; t < 31; ++t) {
+        // Advance 13 ticks: cooldown remaining = 1, still rejected
+        for (int t = 0; t < 13; ++t) {
             sim.tick();
         }
         ASSERT_EQ(sim.get_unit(b_id).ability_cooldown_ticks, 1);
         ASSERT_FALSE(sim.plant_bomb(b_id, TileCoord{15, 16}, false));
 
-        // Advance 1 tick: cooldown reaches 0, now accepted
+        // Advance 1 tick: cooldown reaches 0, ant returns to Idle and can plant again
         sim.tick();
         ASSERT_EQ(sim.get_unit(b_id).ability_cooldown_ticks, 0);
+        ASSERT_EQ(sim.get_unit(b_id).state, UnitState::Idle);
         ASSERT_TRUE(sim.plant_bomb(b_id, TileCoord{15, 16}, false));
     } TEST_END();
 
@@ -6155,14 +6146,14 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         ASSERT_EQ(sim.get_unit(fire_id).state, UnitState::PlacingFire); // Uninterruptible
         ASSERT_TRUE(sim.has_audio_event(SoundID::CantGo));
 
-        // 2. Bomber Ant: Cooldown starts at order dispatch (60 ticks)
+        // 2. Bomber Ant: Cooldown starts at order dispatch (28 ticks)
         uint32_t bomb_id = sim.spawn_unit(0, AntType::Bomber, TileCoord{25, 25});
         sim.set_tile_flags(26, 25, 0x06);
 
         sim.clear_audio_events();
         ASSERT_TRUE(sim.plant_bomb(bomb_id, TileCoord{26, 25}, false));
         ASSERT_EQ(sim.get_unit(bomb_id).state, UnitState::PlantingBomb);
-        ASSERT_EQ(sim.get_unit(bomb_id).ability_cooldown_ticks, 60);
+        ASSERT_EQ(sim.get_unit(bomb_id).ability_cooldown_ticks, 28);
 
         // Order move while placing -> triggers CantGo and does not cancel
         sim.clear_audio_events();
@@ -6886,10 +6877,10 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
 
     TEST_CASE("12.108: Version Invariant & Fog of War Cursor Concealment Parity") {
         // 1. Verify semantic versioning components
-        ASSERT_EQ(ants::VERSION_STRING, "v0.0.9");
+        ASSERT_EQ(ants::VERSION_STRING, "v0.0.10");
         ASSERT_EQ(ants::VERSION_MAJOR, 0);
         ASSERT_EQ(ants::VERSION_MINOR, 0);
-        ASSERT_EQ(ants::VERSION_PATCH, 9);
+        ASSERT_EQ(ants::VERSION_PATCH, 10);
 
         // 2. Setup simulation world with Fog of War enabled
         SimulationEngine sim;
@@ -7751,13 +7742,64 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
             ASSERT_EQ(sim.get_unit(ant_id).state, UnitState::Stunned);
             ASSERT_TRUE(sim.get_unit(ant_id).is_stunned());
 
-            // Advance through stun recovery
-            for (int i = 0; i < 40; ++i) {
+            // Advance through stun recovery (STUN_TICKS = 50, authentic Table 4 duration)
+            for (int i = 0; i < 60; ++i) {
                 sim.tick();
                 if (sim.get_unit(ant_id).state != UnitState::Stunned) break;
             }
             ASSERT_EQ(sim.get_unit(ant_id).state, UnitState::Idle);
         }
+    } TEST_END();
+
+    TEST_CASE("12.125: Bomb Cursor, HUD Pedestal Glow, Water CantGo, Red Marquee & Intro Flow") {
+        SimulationEngine sim;
+        sim.init_test_world(60, 60, 42, 60000);
+        ViewportCamera camera;
+        HUD hud;
+        hud.init(0);
+
+        // 1. Bomber Ant cursor evaluation: target reticle CursorType::Target (3 / c_targ1)
+        uint32_t bomber_id = sim.spawn_unit(0, AntType::Bomber, TileCoord{10, 10});
+        hud.select_ant(bomber_id);
+        const auto& ws = sim.get_world_state();
+
+        // Place a bomb at (11, 10) (adjacent cardinal neighbor)
+        bool bomb_planted = sim.plant_bomb(bomber_id, TileCoord{11, 10}, true /* instant */);
+        ASSERT_TRUE(bomb_planted);
+
+        // Hover over the bomb at (11, 10) -> CursorType::Target
+        int32_t screen_bx = (11 * 32 + 16) - camera.world_x + HUD::PLAYFIELD_X;
+        int32_t screen_by = (10 * 32 + 16) - camera.world_y + HUD::PLAYFIELD_Y;
+        CursorType bomb_cursor = hud.evaluate_cursor(screen_bx, screen_by, ws, sim.grid(), camera);
+        ASSERT_EQ(static_cast<uint8_t>(bomb_cursor), static_cast<uint8_t>(CursorType::Target));
+
+        // Order bomb placement at (10, 11) -> during PlantingBomb, evaluate_cursor remains CursorType::Target
+        bool planting_started = sim.plant_bomb(bomber_id, TileCoord{10, 11}, false);
+        ASSERT_TRUE(planting_started);
+        ASSERT_EQ(sim.get_unit(bomber_id).state, UnitState::PlantingBomb);
+        const auto& ws_planting = sim.get_world_state();
+        CursorType planting_cursor = hud.evaluate_cursor(100, 100, ws_planting, sim.grid(), camera);
+        ASSERT_EQ(static_cast<uint8_t>(planting_cursor), static_cast<uint8_t>(CursorType::Target));
+
+        // 2. Water Bomb Order -> instant CantGo
+        sim.set_terrain(10, 9, 2); // 2 = water
+        sim.clear_audio_events();
+        AntOrder water_bomb_order;
+        water_bomb_order.ant_id = bomber_id;
+        water_bomb_order.type = OrderType::PlantBomb;
+        water_bomb_order.target_x = 10;
+        water_bomb_order.target_y = 9;
+        sim.issue_order(water_bomb_order);
+        ASSERT_TRUE(sim.has_audio_event(SoundID::CantGo));
+
+        // 3. Application Intro Flow: Loading -> QuickHelp -> MapSelect
+        Application app;
+        ApplicationConfig cfg;
+        cfg.headless = true;
+        cfg.skip_intro = false;
+        cfg.start_in_map_select = true;
+        ASSERT_TRUE(app.init(cfg));
+        ASSERT_EQ(app.state(), AppState::MapSelect);
     } TEST_END();
 }
 

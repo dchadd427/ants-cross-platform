@@ -42,7 +42,7 @@ void PhysicsEngine::apply_knockback(AntUnit& victim,
     flight.flight_dir = ants::assets::vector_to_direction(dir_x, dir_y);
 
     victim.state = UnitState::Knockback;
-    victim.facing = flight.flight_dir;
+    // Keep victim facing orientation towards blast epicenter
     victim.anim_tick = 0;
     victim.anim_subitem = 0;
     audio_out.push_back(AudioEvent{SOUND_FLY_THUMP_A, victim.pixel_x, victim.pixel_y, 1, 255});
@@ -136,7 +136,6 @@ void PhysicsEngine::tick(std::vector<AntUnit*>& all_units,
 
         unit->set_pixel_pos(cur_px, cur_py);
         unit->altitude_z = z;
-        unit->facing = f.flight_dir;
         unit->anim_tick = f.current_tick;
         unit->anim_subitem = f.current_tick;
 

@@ -29,6 +29,8 @@
 namespace ants::app {
 
 enum class AppState {
+    Loading,
+    QuickHelp,
     MapSelect,
     Playing
 };
@@ -46,6 +48,7 @@ struct ApplicationConfig {
     std::string midi_path{"Original-Ants/INTRO.MID"};
     uint32_t random_seed{1337};
     bool start_in_map_select{true};
+    bool skip_intro{false};
     std::string screenshot_path{""};
     int screenshot_frames{5};
     int select_ant_id{-1};
@@ -146,6 +149,13 @@ private:
     void toggle_fullscreen();
     void play_next_ingame_music();
     void play_startup_sound();
+    void render_loading_screen();
+    void render_quick_help_screen();
+
+    // Intro & Loading state
+    uint32_t intro_ticks_{0};
+    bool leave_help_hovered_{false};
+    bool leave_help_pressed_{false};
 
     // 20 Hz Discrete Simulation Timing
     uint64_t last_tick_time_{0};

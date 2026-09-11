@@ -2,6 +2,10 @@
 #include "ants_assets/lvl_parser.hpp"
 #include <iostream>
 #include <algorithm>
+#include <filesystem>
+#include <unordered_set>
+
+namespace fs = std::filesystem;
 
 namespace ants::app {
 
@@ -9,6 +13,7 @@ MapSelectScreen::MapSelectScreen() = default;
 
 void MapSelectScreen::init(const std::string& maps_dir) {
     maps_.clear();
+    std::unordered_set<std::string> seen_files;
 
     // Standard authentic Ants maps in canonical order (Ants.exe VA 0x10139e2)
     struct DefaultMap {
@@ -33,6 +38,13 @@ void MapSelectScreen::init(const std::string& maps_dir) {
         MapSelectEntry entry;
         entry.filename = d.file;
         entry.full_path = maps_dir + "/" + d.file;
+        if (!fs::exists(entry.full_path)) {
+            if (fs::exists(std::string("Maps/") + d.file)) {
+                entry.full_path = std::string("Maps/") + d.file;
+            } else if (fs::exists(std::string("Original-Ants/Maps/") + d.file)) {
+                entry.full_path = std::string("Original-Ants/Maps/") + d.file;
+            }
+        }
         entry.display_name = d.title;
         entry.description = d.desc;
         entry.width = d.w;
@@ -62,7 +74,57 @@ void MapSelectScreen::init(const std::string& maps_dir) {
             }
         }
 
+        seen_files.insert(d.file);
+        std::string upper_f = d.file;
+        std::transform(upper_f.begin(), upper_f.end(), upper_f.begin(), [](unsigned char c) { return static_cast<char>(std::toupper(c)); });
+        seen_files.insert(upper_f);
         maps_.push_back(std::move(entry));
+    }
+
+    // Dynamic scanning of maps_dir for any additional .lvl / .LVL files
+    std::error_code ec;
+    if (!maps_dir.empty() && fs::exists(maps_dir, ec) && fs::is_directory(maps_dir, ec)) {
+        for (const auto& dir_entry : fs::directory_iterator(maps_dir, ec)) {
+            if (dir_entry.is_regular_file(ec)) {
+                std::string fname = dir_entry.path().filename().string();
+                std::string ext = dir_entry.path().extension().string();
+                std::transform(ext.begin(), ext.end(), ext.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+                if (ext == ".lvl") {
+                    std::string upper_f = fname;
+                    std::transform(upper_f.begin(), upper_f.end(), upper_f.begin(), [](unsigned char c) { return static_cast<char>(std::toupper(c)); });
+                    if (seen_files.find(upper_f) == seen_files.end()) {
+                        seen_files.insert(upper_f);
+                        MapSelectEntry extra;
+                        extra.filename = fname;
+                        extra.full_path = dir_entry.path().string();
+                        extra.display_name = dir_entry.path().stem().string();
+                        extra.description = "Custom map";
+                        extra.width = 60;
+                        extra.height = 60;
+                        extra.anthills_count = 4;
+                        extra.minutes = 10;
+
+                        ants::assets::LevelData lvl;
+                        if (lvl.load_from_file(extra.full_path)) {
+                            if (lvl.default_minutes > 0) extra.minutes = lvl.default_minutes;
+                            if (lvl.width > 0 && lvl.height > 0) {
+                                extra.width = lvl.width;
+                                extra.height = lvl.height;
+                            }
+                            if (!lvl.description.empty()) extra.description = lvl.description;
+                            if (!lvl.anthill_spawns.empty()) {
+                                uint32_t count = 0;
+                                for (const auto& sp : lvl.anthill_spawns) {
+                                    if (sp.team_id < 4) ++count;
+                                }
+                                if (count > 0) extra.anthills_count = count;
+                            }
+                        }
+                        maps_.push_back(std::move(extra));
+                    }
+                }
+            }
+        }
     }
 
     selected_index_ = 0;

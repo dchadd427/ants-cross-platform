@@ -98,6 +98,12 @@ if(WIN32 AND DEFINED SDL2_TTF_DLL)
     )
 endif()
 
+if(EXISTS "${CMAKE_SOURCE_DIR}/Original-Ants/Maps")
+    add_custom_command(TARGET ants POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_directory "${CMAKE_SOURCE_DIR}/Original-Ants/Maps" "$<TARGET_FILE_DIR:ants>/Maps"
+    )
+endif()
+
 if(EMSCRIPTEN)
     target_compile_definitions(ants_app PUBLIC ANTS_ENABLE_SDL_TTF=1)
     target_compile_options(ants_app PUBLIC "-sUSE_SDL=2" "-sUSE_SDL_TTF=2")
