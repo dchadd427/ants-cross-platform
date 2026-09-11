@@ -6877,10 +6877,10 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
 
     TEST_CASE("12.108: Version Invariant & Fog of War Cursor Concealment Parity") {
         // 1. Verify semantic versioning components
-        ASSERT_EQ(ants::VERSION_STRING, "v0.0.10");
+        ASSERT_EQ(ants::VERSION_STRING, "v0.0.11");
         ASSERT_EQ(ants::VERSION_MAJOR, 0);
         ASSERT_EQ(ants::VERSION_MINOR, 0);
-        ASSERT_EQ(ants::VERSION_PATCH, 10);
+        ASSERT_EQ(ants::VERSION_PATCH, 11);
 
         // 2. Setup simulation world with Fog of War enabled
         SimulationEngine sim;
@@ -7800,6 +7800,31 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         cfg.start_in_map_select = true;
         ASSERT_TRUE(app.init(cfg));
         ASSERT_EQ(app.state(), AppState::MapSelect);
+
+        // 4. Quick Help START! button (Anim 1335 / Sprite 289 at 529, 437)
+        const auto* qh_start = app.assets().find_animation("qh_start1");
+        ASSERT_TRUE(qh_start != nullptr);
+        ASSERT_FALSE(qh_start->subitems.empty());
+        ASSERT_FALSE(qh_start->subitems[0].frames.empty());
+        ASSERT_EQ(qh_start->subitems[0].frames[0].sprite_index, 289u);
+        ASSERT_EQ(qh_start->subitems[0].frames[0].dx, 529);
+        ASSERT_EQ(qh_start->subitems[0].frames[0].dy, 437);
+
+        // 5. Loading screen logo, credits, and masking strip sprites
+        const auto* logo_sp = app.assets().find_sprite("logo.bmp");
+        ASSERT_TRUE(logo_sp != nullptr);
+        ASSERT_EQ(logo_sp->width, 593u);
+        ASSERT_EQ(logo_sp->height, 270u);
+
+        const auto* cred_sp = app.assets().find_sprite("credits.bmp");
+        ASSERT_TRUE(cred_sp != nullptr);
+        ASSERT_EQ(cred_sp->width, 573u);
+        ASSERT_EQ(cred_sp->height, 172u);
+
+        const auto* strip_sp = app.assets().find_sprite("strip.bmp");
+        ASSERT_TRUE(strip_sp != nullptr);
+        ASSERT_EQ(strip_sp->width, 478u);
+        ASSERT_EQ(strip_sp->height, 31u);
     } TEST_END();
 }
 

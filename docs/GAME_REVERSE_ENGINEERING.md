@@ -1647,7 +1647,21 @@ To deliver authentic 1:1 gameplay inside standard web browsers with zero install
   - Ready modal: Authentic composite `std_dialg` (Animation 67, 320×224) background with dark purple/charcoal text `#1F1733` (`ColorRGBA{31, 23, 51, 255}`).
   - Unit selection drag marquee tool: Authentic bright red border `RGB(220, 0, 0)` (`ColorRGBA{220, 0, 0, 255}`).
 - **Loading & Quick Help Screen Flow**:
-  - Loading Screen: `antslogo` (Anim 57: `logo.bmp` 162, `credits.bmp` 161, `strip.bmp` 160) with progress bar at `(228, 445)`.
-  - Quick Help: `qh_screen` (Anim 101: `qh1.bmp` 232, `qh2.bmp` 231, and "Leave Help" button `bleavhelp` 335 at `(542, 12)`).
-  - Sequence: `Loading` -> `QuickHelp` -> `MapSelect` -> `Playing`.
+  - **Loading Screen Composite & Layer Ordering**:
+    - Canvas background filled with solid orange `#DB4B13` (`RGB(219, 75, 19)` / `ColorRGBA{219, 75, 19, 255}`).
+    - Outer green window frame tiles rendered along 640×480 screen edges (`dfram*` border sprites from Anim 57).
+    - `logo.bmp` (Sprite 162) rendered at `(25, 23)`.
+    - `credits.bmp` (Sprite 161) rendered at `(32, 299)`.
+    - `strip.bmp` (Sprite 160, 478×31 orange masking plate) rendered at `(40, 315)` directly over `credits.bmp`, cleanly masking the subtitle line and leaving only "An Internet Multi Player Game." centered underneath the main title logo.
+    - Dialog clay tiles (`dclay48`, `dclay96`) are strictly excluded so neither the title logo nor credit text is occluded.
+    - Progress bar rendered inside the designated indicator slot at `x = 229, y = 448, w = 234, h = 8` with authentic dark purple/charcoal `#1F1733` (`ColorRGBA{31, 23, 51, 255}`).
+  - **Quick Help Screen & START! Navigation**:
+    - Main help plate rendered from `qh_screen` (Anim 101: `qh1.bmp` 232, `qh2.bmp` 231, and perimeter border frames).
+    - Top-right corner contains no button (empty border).
+    - Bottom-right corner renders the authentic green "START!" button from Table 4 Animation 1335 `qh_start1` at `(529, 437)`:
+      - Normal: `bstart1.bmp` (Sprite 289, 98×27) at `(529, 437)`.
+      - Hovered: `bstart2.bmp` (Sprite 290, 98×27) at `(529, 437)`.
+      - Pressed: `bstart3.bmp` (Sprite 291, 97×24) at `(528, 438)`.
+    - Clicking the START! button (or pressing Enter/Space/Escape) emits `SoundID::NavButtonClick` audio feedback and transitions directly to `AppState::MapSelect`.
+  - **Overall Flow Sequence**: `Loading` -> `QuickHelp` -> `MapSelect` -> `Playing`.
 
