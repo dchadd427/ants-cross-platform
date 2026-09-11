@@ -1337,8 +1337,11 @@ void run_suite_9_gameplay_mechanics_and_options() {
         // Order worker to harvest food at {fx, fy}
         sim_engine.issue_move_order(ant_id, TileCoord{fx, fy});
 
-        // Tick simulation to execute harvest
-        sim_engine.tick();
+        // Tick simulation through 8-tick harvesting sequence
+        for (int t = 0; t < 9; ++t) {
+            sim_engine.tick();
+            if (ant.is_holding()) break;
+        }
 
         // Verify bites decremented, ant is holding food, and harvest_origin recorded
         ASSERT_TRUE(sched->remaining_bites < initial_bites);
@@ -2393,12 +2396,18 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         // Right-click on the food clump (pixel 20 * 32 + 16, 20 * 32 + 16)
         hud.dispatch_smart_special_ability(20 * 32 + 16, 20 * 32 + 16, sim);
 
-        // Advance simulation for 50 ticks
+        // Advance simulation until all 4 ants have gathered food (up to 120 ticks)
         int harvest_sound_count = 0;
-        for (int t = 0; t < 50; ++t) {
+        for (int t = 0; t < 120; ++t) {
             sim.tick();
             if (sim.has_audio_event(SoundID::FoodHarvest)) {
                 harvest_sound_count++;
+            }
+            if ((sim.get_unit(w1).is_holding() || sim.get_unit(w1).state == UnitState::EnteringBase) &&
+                (sim.get_unit(w2).is_holding() || sim.get_unit(w2).state == UnitState::EnteringBase) &&
+                (sim.get_unit(w3).is_holding() || sim.get_unit(w3).state == UnitState::EnteringBase) &&
+                (sim.get_unit(w4).is_holding() || sim.get_unit(w4).state == UnitState::EnteringBase)) {
+                break;
             }
         }
 
@@ -2652,7 +2661,7 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
 
     TEST_CASE("12.12 Enemy Bomb Proximity Detonation & 4-Space Knockback") {
         SimulationEngine sim;
-        sim.init_test_world(60, 60, 100, 60000);
+        sim.init_test_world(60, 60, 101, 60000);
 
         // Place Team 0 bomb at (20, 20)
         sim.grid_mut().place_bomb(20, 20, 0);
@@ -2826,7 +2835,7 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
 
     TEST_CASE("12.16 Non-Bomber Moves Directly Onto Friendly Bomb, Explodes & 4-Space Knockback") {
         SimulationEngine sim;
-        sim.init_test_world(60, 60, 100, 60000);
+        sim.init_test_world(60, 60, 101, 60000);
         ViewportCamera cam;
         cam.world_x = 20 * 32 - 100;
         cam.world_y = 20 * 32 - 100;
@@ -4024,7 +4033,7 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
 
     TEST_CASE("12.36 Knockback Flies Over Intermediate Rock Obstacle into Water (Drowning)") {
         SimulationEngine sim;
-        sim.init_test_world(60, 60, 100, 60000);
+        sim.init_test_world(60, 60, 101, 60000);
 
         // Intermediate rock at (22, 20), water at landing tile (24, 20)
         sim.grid_mut().set_terrain(22, 20, TERRAIN_OBSTACLE);
@@ -4564,22 +4573,23 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
 
         ASSERT_EQ(sim.get_unit(worker).state, UnitState::HarvestingFood);
         ASSERT_EQ(sim.get_unit(worker).facing, Direction::East);
-        ASSERT_TRUE(sim.get_unit(worker).is_holding());
-        ASSERT_FALSE(sim.grid().get_cell({14, 10}).has_food());
+        ASSERT_FALSE(sim.get_unit(worker).is_holding());
+        ASSERT_TRUE(sim.grid().get_cell({14, 10}).has_food());
 
-        // Harvesting animation runs 6 ticks facing food before returning to idle/base queue
-        for (int i = 0; i < 5; ++i) {
+        // Harvesting animation runs 8 ticks facing food before returning to idle/base queue
+        for (int i = 0; i < 7; ++i) {
             sim.tick();
             ASSERT_EQ(sim.get_unit(worker).state, UnitState::HarvestingFood);
-            ASSERT_TRUE(sim.get_unit(worker).is_holding());
+            ASSERT_FALSE(sim.get_unit(worker).is_holding());
         }
 
-        // 6th tick completes harvesting animation sequence
+        // 8th tick completes harvesting animation sequence
         sim.tick();
         const auto& w = sim.get_unit(worker);
         ASSERT_TRUE(w.is_holding());
         ASSERT_EQ(w.carried_food, 1);
         ASSERT_EQ(w.state, UnitState::Idle);
+        ASSERT_FALSE(sim.grid().get_cell({14, 10}).has_food());
     } TEST_END();
 
     TEST_CASE("12.48 Bomber Carrying Food Placing Bomb Uses absb and Does Not Disappear") {
@@ -6258,8 +6268,8 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
             sim.tick();
         }
 
-        // After 11 ticks, state returns to Idle
-        ASSERT_EQ(unit.state, UnitState::Idle);
+        // After 11 ticks, state recovers into Stunned (spinning stars)
+        ASSERT_EQ(unit.state, UnitState::Stunned);
     } TEST_END();
 
     TEST_CASE("12.100: 8-Directional Diagonal Attack Adjacency & Approach Routing") {
@@ -6876,10 +6886,10 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
 
     TEST_CASE("12.108: Version Invariant & Fog of War Cursor Concealment Parity") {
         // 1. Verify semantic versioning components
-        ASSERT_EQ(ants::VERSION_STRING, "v0.0.8");
+        ASSERT_EQ(ants::VERSION_STRING, "v0.0.9");
         ASSERT_EQ(ants::VERSION_MAJOR, 0);
         ASSERT_EQ(ants::VERSION_MINOR, 0);
-        ASSERT_EQ(ants::VERSION_PATCH, 8);
+        ASSERT_EQ(ants::VERSION_PATCH, 9);
 
         // 2. Setup simulation world with Fog of War enabled
         SimulationEngine sim;
@@ -7343,7 +7353,7 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         sim.issue_order(infil_order);
 
         // Step simulation until thief arrives and enters Infiltrating state
-        for (int t = 0; t < 20; ++t) {
+        for (int t = 0; t < 50; ++t) {
             sim.tick();
             if (sim.get_unit(thief_id).state == UnitState::Infiltrating) break;
         }
@@ -7528,6 +7538,226 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
 
         // Once idle, Ant 1 with 1 HP automatically joins base queue and heads home to heal!
         ASSERT_TRUE(sim.is_ant_in_base_queue(f1));
+    } TEST_END();
+
+    // ------------------------------------------------------------------------
+    // 12.120: Multi-Ant Food Harvesting & 1998 Duplication Exploit
+    // ------------------------------------------------------------------------
+    TEST_CASE("12.120 Multi-Ant Food Harvesting & 1998 Duplication Exploit") {
+        SimulationEngine sim;
+        sim.init_test_world(60, 60, 100, 60000);
+
+        ActiveFoodSchedule afs{};
+        afs.x = 20;
+        afs.y = 20;
+        afs.active = true;
+        afs.remaining_bites = 1;
+        afs.footprint = { {20, 20} };
+        afs.variants.push_back({239, 1});
+        afs.current_tile_id = 239;
+        sim.grid_mut().food_schedules_mut().push_back(afs);
+        sim.grid_mut().get_cell_mut(20, 20).interactive_id = 239;
+        sim.grid_mut().get_cell_mut(20, 20).is_food = true;
+
+        // Two worker ants adjacent at (19, 20) and (21, 20)
+        uint32_t w1 = sim.spawn_unit(0, AntType::Worker, TileCoord{19, 20});
+        uint32_t w2 = sim.spawn_unit(0, AntType::Worker, TileCoord{21, 20});
+
+        // Direct both ants to eat the food
+        sim.issue_move_order(w1, TileCoord{20, 20}, true);
+        sim.issue_move_order(w2, TileCoord{20, 20}, true);
+
+        sim.tick();
+        // Both ants enter UnitState::HarvestingFood simultaneously
+        ASSERT_EQ(sim.get_unit(w1).state, UnitState::HarvestingFood);
+        ASSERT_EQ(sim.get_unit(w2).state, UnitState::HarvestingFood);
+
+        // Neither ant holds food yet at start of bite
+        ASSERT_FALSE(sim.get_unit(w1).is_holding());
+        ASSERT_FALSE(sim.get_unit(w2).is_holding());
+
+        // Advance 8 more ticks (total 8 ticks for complete bite)
+        for (int i = 0; i < 8; ++i) {
+            sim.tick();
+        }
+
+        // At tick 8, BOTH concurrent biting ants receive 1 morsel / 25 points (duplication exploit!)
+        const auto& u1 = sim.get_unit(w1);
+        const auto& u2 = sim.get_unit(w2);
+        ASSERT_TRUE(u1.is_holding());
+        ASSERT_EQ(u1.carried_food, 1);
+        ASSERT_EQ(u1.carried_points, 25u);
+
+        ASSERT_TRUE(u2.is_holding());
+        ASSERT_EQ(u2.carried_food, 1);
+        ASSERT_EQ(u2.carried_points, 25u);
+    } TEST_END();
+
+    // ------------------------------------------------------------------------
+    // 12.121: Ground Lunchbox Multi-Ant Collection and Duplication Exploit
+    // ------------------------------------------------------------------------
+    TEST_CASE("12.121 Ground Lunchbox Multi-Ant Collection and Duplication Exploit") {
+        SimulationEngine sim;
+        sim.init_test_world(60, 60, 100, 60000);
+
+        // Place a dropped lunchbox at (15, 15) with 50 points
+        sim.grid_mut().drop_lunchbox(15, 15, 50);
+        ASSERT_TRUE(sim.has_lunchbox_at(TileCoord{15, 15}));
+
+        // Two worker ants at (14, 15) and (16, 15)
+        uint32_t w1 = sim.spawn_unit(0, AntType::Worker, TileCoord{14, 15});
+        uint32_t w2 = sim.spawn_unit(0, AntType::Worker, TileCoord{16, 15});
+
+        // Move both to the dropped lunchbox
+        sim.issue_move_order(w1, TileCoord{15, 15});
+        sim.issue_move_order(w2, TileCoord{15, 15});
+
+        // Step simulation until arrival on the collection tick
+        for (int t = 0; t < 20; ++t) {
+            sim.tick();
+            if (sim.get_unit(w1).is_holding() || sim.get_unit(w2).is_holding()) break;
+        }
+
+        const auto& u1 = sim.get_unit(w1);
+        const auto& u2 = sim.get_unit(w2);
+
+        // Both ants received 50 points before lunchbox is cleared
+        ASSERT_TRUE(u1.is_holding());
+        ASSERT_EQ(u1.carried_points, 50u);
+        ASSERT_TRUE(u2.is_holding());
+        ASSERT_EQ(u2.carried_points, 50u);
+
+        // Lunchbox is cleared
+        ASSERT_FALSE(sim.has_lunchbox_at(TileCoord{15, 15}));
+    } TEST_END();
+
+    // ------------------------------------------------------------------------
+    // 12.122: Combat Ant AI Smooth Locomotion, Cooldown Enforcement & Physics Knockback
+    // ------------------------------------------------------------------------
+    TEST_CASE("12.122 Combat Ant AI Smooth Locomotion, Cooldown Enforcement & Physics Knockback") {
+        SimulationEngine sim;
+        sim.init_test_world(60, 60, 100, 60000);
+
+        // Friendly Combat Ant stationed at guard post (20, 20)
+        uint32_t combat = sim.spawn_unit(0, AntType::Combat, TileCoord{20, 20});
+        auto* c_unit = const_cast<AntUnit*>(&sim.get_unit(combat));
+        c_unit->guard_anchor = {20, 20};
+        c_unit->state = UnitState::GuardIdle;
+
+        // Enemy Worker invades guard zone at (22, 20)
+        uint32_t intruder = sim.spawn_unit(1, AntType::Worker, TileCoord{22, 20});
+
+        // Tick simulation: Combat AI detects intruder, intercepts
+        sim.tick();
+        ASSERT_TRUE(sim.get_unit(combat).state == UnitState::Intercepting || sim.get_unit(combat).state == UnitState::Walking);
+
+        // Advance simulation until Combat Ant strikes
+        for (int i = 0; i < 20; ++i) {
+            sim.tick();
+            if (sim.get_unit(combat).state == UnitState::ReturningToPost || sim.get_unit(intruder).hp < 10) break;
+        }
+
+        // Combat Ant delivers heavy punch
+        ASSERT_TRUE(sim.get_unit(combat).state == UnitState::Attacking || sim.get_unit(combat).state == UnitState::ReturningToPost);
+        // Intruder took 2 HP damage (HP drops from 10 to 8) and is stunned/knocked back
+        ASSERT_EQ(sim.get_unit(intruder).hp, 8);
+        ASSERT_TRUE(sim.get_unit(intruder).state == UnitState::Knockback || sim.get_unit(intruder).state == UnitState::Stunned);
+
+        // 12-tick attack cooldown enforced: Combat Ant will not aggro or pursue
+        ASSERT_GT(sim.get_unit(combat).attack_cooldown_ticks, 0);
+    } TEST_END();
+
+    // ------------------------------------------------------------------------
+    // 12.123: Anthill Right-Side Flank Thief Infiltration (4 Tiles) and Corridor Defense
+    // ------------------------------------------------------------------------
+    TEST_CASE("12.123 Anthill Right-Side Flank Thief Infiltration (4 Tiles) and Corridor Defense") {
+        SimulationEngine sim;
+        sim.init_test_world(60, 60, 100, 60000);
+
+        // Setup base 1 at (20, 20)
+        sim.set_anthill(1, {20, 20});
+        sim.grid_mut().configure_anthill_cells(TileCoord{20, 20});
+
+        // Verify corridor tile (24, 21) allows firewall and bomb placement
+        const auto& corridor_cell = sim.grid().get_cell(TileCoord{24, 21});
+        ASSERT_TRUE(corridor_cell.is_passable());
+        ASSERT_TRUE(corridor_cell.can_place_fire());
+        ASSERT_TRUE(corridor_cell.can_place_bomb());
+
+        // Spawn a Thief ant for team 0
+        uint32_t thief = sim.spawn_unit(0, AntType::Thief, TileCoord{18, 21});
+
+        // 1. Non-flank approach: Thief standing on left side does not infiltrate
+        sim.tick();
+        ASSERT_NE(sim.get_unit(thief).state, UnitState::Infiltrating);
+
+        // 2. Flank approach: Move thief onto right-flank entrance tile (23, 21)
+        sim.issue_move_order(thief, TileCoord{23, 21});
+        for (int i = 0; i < 50; ++i) {
+            sim.tick();
+            if (sim.get_unit(thief).state == UnitState::Infiltrating) break;
+        }
+
+        // Thief entering from the 4 right flank tiles infiltrates successfully!
+        ASSERT_EQ(sim.get_unit(thief).state, UnitState::Infiltrating);
+    } TEST_END();
+
+    // ------------------------------------------------------------------------
+    // 12.124: Bomb Explosion bombex, Bomb Dud a*bu Scorch & Landing Stun a*sd Recovery
+    // ------------------------------------------------------------------------
+    TEST_CASE("12.124 Bomb Explosion bombex, Bomb Dud a*bu Scorch & Landing Stun a*sd Recovery") {
+        // A. Full explosion branch
+        {
+            SimulationEngine sim;
+            sim.init_test_world(60, 60, 100, 60000);
+
+            // Plant bomb at (15, 15)
+            sim.grid_mut().place_bomb(15, 15, 1);
+            uint32_t victim = sim.spawn_unit(0, AntType::Worker, TileCoord{15, 15});
+
+            sim.tick();
+            const auto& u = sim.get_unit(victim);
+            // Both dud and full blast deal 2 damage: HP drops from 10 to 8
+            ASSERT_EQ(u.hp, 8);
+            ASSERT_TRUE(u.state == UnitState::Knockback || u.state == UnitState::Burn);
+
+            // Advance simulation: if knockback, lands in Stunned; if burn, transitions to Stunned
+            for (int i = 0; i < 25; ++i) {
+                sim.tick();
+                if (sim.get_unit(victim).state == UnitState::Stunned) break;
+            }
+            ASSERT_EQ(sim.get_unit(victim).state, UnitState::Stunned);
+        }
+
+        // B. Dud specific sequence verification: Burn for 11 ticks, then Stunned
+        {
+            SimulationEngine sim;
+            sim.init_test_world(60, 60, 100, 60000);
+
+            uint32_t ant_id = sim.spawn_unit(0, AntType::Worker, TileCoord{20, 20});
+            auto* ant = const_cast<AntUnit*>(&sim.get_unit(ant_id));
+            ant->take_damage(2, DamageSource::BombBlast, 1);
+            ant->state = UnitState::Burn;
+            ant->state_timer = 11;
+
+            // Burn state advances anim_tick and anim_subitem
+            for (int i = 0; i < 10; ++i) {
+                sim.tick();
+                ASSERT_EQ(sim.get_unit(ant_id).state, UnitState::Burn);
+            }
+
+            // 11th tick completes dud burn and transitions to Stunned (a*sd301)
+            sim.tick();
+            ASSERT_EQ(sim.get_unit(ant_id).state, UnitState::Stunned);
+            ASSERT_TRUE(sim.get_unit(ant_id).is_stunned());
+
+            // Advance through stun recovery
+            for (int i = 0; i < 40; ++i) {
+                sim.tick();
+                if (sim.get_unit(ant_id).state != UnitState::Stunned) break;
+            }
+            ASSERT_EQ(sim.get_unit(ant_id).state, UnitState::Idle);
+        }
     } TEST_END();
 }
 

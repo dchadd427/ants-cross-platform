@@ -220,7 +220,8 @@ bool Grid::init_from_level(const ants::assets::LevelData& level) {
 }
 
 void Grid::configure_anthill_cells(TileCoord pos) {
-    // Ensure 4x4 mound cells are obstacles EXCEPT entrance mouth (bx + 1, by) and entrance hole (bx + 1, by + 1)
+    // Ensure 4x4 mound cells are obstacles EXCEPT entrance mouth (bx + 1, by), entrance hole (bx + 1, by + 1),
+    // and right flank approach tiles (bx + 3, by + 0..3) where thieves enter
     for (int dy = 0; dy < 4; ++dy) {
         for (int dx = 0; dx < 4; ++dx) {
             int32_t mx = static_cast<int32_t>(pos.x) + dx;
@@ -228,6 +229,11 @@ void Grid::configure_anthill_cells(TileCoord pos) {
             if (in_bounds(mx, my)) {
                 auto& mcell = get_cell_mut(static_cast<uint32_t>(mx), static_cast<uint32_t>(my));
                 if (dx == 1 && (dy == 0 || dy == 1)) {
+                    mcell.terrain_type = TERRAIN_WALKABLE;
+                    mcell.is_obstacle_overlay = false;
+                    mcell.flags &= ~(FLAG_CAN_PLACE_BOMB | FLAG_CAN_PLACE_FIRE);
+                } else if (dx == 3) {
+                    // Right flank 4 tiles (dx == 3, dy = 0..3): walkable for thief infiltration
                     mcell.terrain_type = TERRAIN_WALKABLE;
                     mcell.is_obstacle_overlay = false;
                     mcell.flags &= ~(FLAG_CAN_PLACE_BOMB | FLAG_CAN_PLACE_FIRE);
@@ -260,6 +266,18 @@ void Grid::configure_anthill_cells(TileCoord pos) {
             rcell.terrain_type = TERRAIN_WALKABLE;
             rcell.is_obstacle_overlay = false;
             rcell.flags &= ~(FLAG_CAN_PLACE_BOMB | FLAG_CAN_PLACE_FIRE);
+        }
+    }
+    // Ensure right approach corridor (bx + 4, by + dy for dy = 0..3) is passable,
+    // allowing firewalls (up to 3) and bombs to trap thieves or defend the base
+    for (int dy = 0; dy < 4; ++dy) {
+        int32_t cx = static_cast<int32_t>(pos.x) + 4;
+        int32_t cy = static_cast<int32_t>(pos.y) + dy;
+        if (in_bounds(cx, cy)) {
+            auto& ccell = get_cell_mut(static_cast<uint32_t>(cx), static_cast<uint32_t>(cy));
+            ccell.terrain_type = TERRAIN_WALKABLE;
+            ccell.is_obstacle_overlay = false;
+            ccell.flags |= (FLAG_CAN_PLACE_FIRE | FLAG_CAN_PLACE_BOMB);
         }
     }
     // Ensure idle spot (pos.x + 3, pos.y + 3) is passable

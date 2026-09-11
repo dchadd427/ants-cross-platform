@@ -750,7 +750,7 @@ void run_suite_5_bombs() {
 
     TEST_CASE("5.2 Proximity Detonation: 2 HP Damage, Sound 4 & Knockback") {
         SimulationEngine sim;
-        sim.init_test_world(60, 60, 100);
+        sim.init_test_world(60, 60, 101);
         uint32_t bomber = sim.spawn_unit(0, AntType::Bomber, {20, 20});
         sim.set_tile_flags(21, 20, 0x02);
         sim.plant_bomb(bomber, {21, 20});

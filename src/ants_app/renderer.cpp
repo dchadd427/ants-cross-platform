@@ -749,17 +749,18 @@ void Renderer::render_world(const ants::sim::WorldState& world,
     // 3.5 Anthill Selection Brackets (if a base is selected)
     if (selected_base_team_id >= 0) {
         int32_t base_sx = -1000, base_sy = -1000;
+        static const int32_t hill_offset_dy[4] = { 7, 14, 12, 8 };
         if (has_anthill_bases_ && selected_base_team_id < 4) {
             size_t b_idx = static_cast<size_t>(selected_base_team_id);
             if (anthill_bases_[b_idx].x >= 0 && anthill_bases_[b_idx].y >= 0) {
                 camera_.world_to_screen(anthill_bases_[b_idx].x * TILE_SIZE,
-                                        anthill_bases_[b_idx].y * TILE_SIZE, base_sx, base_sy);
+                                        anthill_bases_[b_idx].y * TILE_SIZE + hill_offset_dy[b_idx], base_sx, base_sy);
             }
         } else {
             for (const auto& a : grid.anthills()) {
                 if (static_cast<int32_t>(a.team_id) == selected_base_team_id) {
                     camera_.world_to_screen((static_cast<int32_t>(a.x) - 1) * TILE_SIZE,
-                                            (static_cast<int32_t>(a.y) - 1) * TILE_SIZE, base_sx, base_sy);
+                                            (static_cast<int32_t>(a.y) - 1) * TILE_SIZE + hill_offset_dy[a.team_id % 4], base_sx, base_sy);
                     break;
                 }
             }
@@ -769,12 +770,12 @@ void Renderer::render_world(const ants::sim::WorldState& world,
         }
     }
 
-    // 4. Ant Units (Depth-Sorted)
-    render_ant_units(world, selected_unit_id, selected_unit_ids, show_all_health_bars);
-
-    // 4.2 Visual Effects (e.g. bomb explosion bombex)
+    // 3.8 Visual Effects (e.g. bomb explosion bombex - rendered between Layer 2 bombs and ant units)
     render_visual_effects(world);
     render_transient_effects();
+
+    // 4. Ant Units (Depth-Sorted)
+    render_ant_units(world, selected_unit_id, selected_unit_ids, show_all_health_bars);
 
     // 4.5 Layer 3 Canopy Overhang (rendered after ants so ants walk beneath foliage)
     render_terrain_layer3_canopy();
@@ -1054,6 +1055,7 @@ void Renderer::render_terrain_layer2_structures(const ants::sim::Grid& grid, con
 
     // Anthill Bases (Authentic 128x128 4x4 bases: ghill, rhill, blhill, bkhill)
     static const char* hill_sprites[4] = { "ghill.bmp", "rhill.bmp", "blhill.bmp", "bkhill.bmp" };
+    static const int32_t hill_offset_dy[4] = { 7, 14, 12, 8 };
     if (has_anthill_bases_) {
         for (size_t t = 0; t < 4; ++t) {
             if (anthill_bases_[t].x >= 0 && anthill_bases_[t].y >= 0) {
@@ -1062,7 +1064,7 @@ void Renderer::render_terrain_layer2_structures(const ants::sim::Grid& grid, con
                     continue; // Enemy base shrouded under fog of war
                 }
                 int32_t sx = 0, sy = 0;
-                camera_.world_to_screen(anthill_bases_[t].x * TILE_SIZE, anthill_bases_[t].y * TILE_SIZE, sx, sy);
+                camera_.world_to_screen(anthill_bases_[t].x * TILE_SIZE, anthill_bases_[t].y * TILE_SIZE + hill_offset_dy[t], sx, sy);
                 SDL_Rect dst = { sx, sy, 128, 128 };
                 SDL_Texture* tex = texture_cache_->get_named_sprite_texture(hill_sprites[t]);
                 if (tex) {
@@ -1079,7 +1081,7 @@ void Renderer::render_terrain_layer2_structures(const ants::sim::Grid& grid, con
             }
             int32_t sx = 0, sy = 0;
             camera_.world_to_screen((static_cast<int32_t>(a.x) - 1) * TILE_SIZE,
-                                    (static_cast<int32_t>(a.y) - 1) * TILE_SIZE, sx, sy);
+                                    (static_cast<int32_t>(a.y) - 1) * TILE_SIZE + hill_offset_dy[a.team_id % 4], sx, sy);
             SDL_Rect dst = { sx, sy, 128, 128 };
             SDL_Texture* tex = texture_cache_->get_named_sprite_texture(hill_sprites[a.team_id % 4]);
             if (tex) {
@@ -1401,22 +1403,26 @@ void Renderer::draw_single_ant(const ants::sim::AntSnapshot& ant, bool is_select
     int32_t sx = 0, sy = 0;
     if (is_infiltrating) {
         int32_t hill_tx = -1, hill_ty = -1;
+        uint8_t target_t = 0;
         if (ant.target_team_id < 4 && has_anthill_bases_ && anthill_bases_[ant.target_team_id].x >= 0) {
             hill_tx = anthill_bases_[ant.target_team_id].x;
             hill_ty = anthill_bases_[ant.target_team_id].y;
+            target_t = ant.target_team_id;
         } else if (has_anthill_bases_) {
             for (size_t b = 0; b < 4; ++b) {
                 if (b != ant.player_id && anthill_bases_[b].x >= 0) {
                     hill_tx = anthill_bases_[b].x;
                     hill_ty = anthill_bases_[b].y;
+                    target_t = static_cast<uint8_t>(b);
                     break;
                 }
             }
         }
         if (hill_tx >= 0) {
-            // Authentic Table 4 Anthill bottlecap anchor: (hill_tx * 32 + 107, hill_ty * 32 + 58)
+            static const int32_t hill_offset_dy[4] = { 7, 14, 12, 8 };
+            // Authentic Table 4 Anthill bottlecap anchor: (hill_tx * 32 + 107, hill_ty * 32 + 58 + offset)
             int32_t anchor_world_x = hill_tx * 32 + 107;
-            int32_t anchor_world_y = hill_ty * 32 + 58;
+            int32_t anchor_world_y = hill_ty * 32 + 58 + hill_offset_dy[target_t % 4];
             if (!camera_.world_to_screen(anchor_world_x, anchor_world_y, sx, sy)) return;
         } else {
             if (!camera_.world_to_screen(ant.px, ant.py, sx, sy)) return;
@@ -1538,6 +1544,8 @@ void Renderer::draw_single_ant(const ants::sim::AntSnapshot& ant, bool is_select
         action = "sf";
     } else if (ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::ExtinguishingFire)) {
         action = "xf";
+    } else if (ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::Stunned)) {
+        action = "sd";
     } else if (ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::CantGo)) {
         action = "cg";
     } else if (ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::QueuingBase)) {
@@ -1549,13 +1557,14 @@ void Renderer::draw_single_ant(const ants::sim::AntSnapshot& ant, bool is_select
     if (action == "gf" || action == "gb" || action == "gh" || action == "bu" || action == "dr" ||
         action == "sb" || action == "db" || action == "sf" || action == "xf" ||
         action == "bbl" || action == "bbw" || action == "dbl" || action == "dbw" ||
-        action == "di" || action == "go") {
+        action == "di" || action == "go" || action == "sd") {
         prefix = normal_prefixes[static_cast<size_t>(ant.type) % 6];
     }
 
     ants::assets::Direction dir = static_cast<ants::assets::Direction>(ant.facing & 7);
     if (ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::Drowning) ||
         ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::Burn) ||
+        ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::Stunned) ||
         ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::CantGo)) {
         dir = ants::assets::Direction::South;
     } else if (ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::BuildingBridge) ||
@@ -1599,11 +1608,20 @@ void Renderer::draw_single_ant(const ants::sim::AntSnapshot& ant, bool is_select
                     sub_idx = seq->subitems.size() - 1;
                 }
             } else if (action == "gf") {
-                // Food harvesting bite sequence lasts 6 ticks (300ms); map across sequence frames
-                sub_idx = (ant.anim_frame * seq->subitems.size()) / 6;
+                // Food harvesting bite sequence lasts 8 ticks (420ms); map across sequence frames
+                sub_idx = (ant.anim_frame * seq->subitems.size()) / 8;
                 if (sub_idx >= seq->subitems.size()) {
                     sub_idx = seq->subitems.size() - 1;
                 }
+            } else if (action == "bu") {
+                // Bomb dud burn scorch lasts 11 ticks
+                sub_idx = (ant.anim_frame * seq->subitems.size()) / 11;
+                if (sub_idx >= seq->subitems.size()) {
+                    sub_idx = seq->subitems.size() - 1;
+                }
+            } else if (action == "sd") {
+                // Stunned dizzy stars loop smoothly across sequence subitems
+                sub_idx = ant.anim_frame % seq->subitems.size();
             } else if (action == "gh") {
                 // Flinch reaction lasts 14 ticks (700ms); map across the 9 sequence frames
                 sub_idx = (ant.anim_frame * seq->subitems.size()) / 14;
@@ -1978,6 +1996,35 @@ void Renderer::render_tile_grid(const ants::sim::Grid& grid, int32_t mouse_x, in
 
     std::string badge_text = "X: " + std::to_string(hover_tx) + "  Y: " + std::to_string(hover_ty);
     draw_text(badge_text, badge_x + 6, badge_y + 4, ants::assets::ColorRGBA{255, 255, 255, 255});
+
+    // 4. Food remaining bites badge when tile grid is active
+    for (const auto& afs : grid.food_schedules()) {
+        if (!afs.active || afs.remaining_bites == 0) continue;
+        int32_t fx = -1, fy = -1;
+        if (!afs.footprint.empty()) {
+            fx = afs.footprint[0].x;
+            fy = afs.footprint[0].y;
+            for (const auto& pt : afs.footprint) {
+                if (pt.x > fx) fx = pt.x;
+                if (pt.y < fy) fy = pt.y;
+            }
+        } else {
+            continue;
+        }
+        int32_t fsx = 0, fsy = 0;
+        camera_.world_to_screen(fx * TILE_SIZE, fy * TILE_SIZE, fsx, fsy);
+        if (fsx < -64 || fsx > PLAYFIELD_W + 64 || fsy < -64 || fsy > PLAYFIELD_H + 64) continue;
+
+        std::string food_badge = std::to_string(afs.remaining_bites);
+        int32_t f_bw = static_cast<int32_t>(food_badge.length()) * 8 + 8;
+        int32_t f_bh = 14;
+        int32_t f_bx = fsx + TILE_SIZE - f_bw;
+        int32_t f_by = fsy + 2;
+
+        fill_rect(f_bx, f_by, f_bw, f_bh, ants::assets::ColorRGBA{0, 0, 0, 200});
+        draw_rect(f_bx, f_by, f_bw, f_bh, ants::assets::ColorRGBA{255, 215, 0, 255});
+        draw_text(food_badge, f_bx + 4, f_by + 2, ants::assets::ColorRGBA{255, 255, 100, 255});
+    }
 }
 
 

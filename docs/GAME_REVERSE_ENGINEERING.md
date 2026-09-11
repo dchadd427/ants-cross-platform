@@ -1537,3 +1537,81 @@ To deliver authentic 1:1 gameplay inside standard web browsers with zero install
   - **Hit Recoil Non-Interruptibility**: In `FUN_01021664` line 24256 and `FUN_0101b8cb` line 19883, states 10 (`Flinch` / `*gh*`), 14 (`Knockback` / `*gf*`), and 19 (`Bounce` / `*gb*`) are non-interruptible states. All retreat transitions and move orders are strictly blocked while the ant is displaced, sliding, or tumbling.
   - **Mutual Bounce Preservation**: A 2 HP ant struck into another ant drops to 1 HP, completes its full push slide in `Flinch`/`Knockback`, collides with the other ant, triggers mutual bounce into separate tiles, and plays the bounce recovery animation. The retreat command NEVER prematurely cancels the slide or bounce.
   - **Idle Transition Trigger**: In `FUN_0101ee84` line 22579 and `FUN_0101ad02` line 19478, only when `Flinch` (14 simulation ticks / 700ms) or `Bounce` finishes and the unit transitions into `Idle` (state 0) does `FUN_0102151a` -> `FUN_0101dded` evaluate `hp == 1` and pathfind the ant back to base to heal.
+
+### 5.21 Ground Truth Reverse Engineering: Bomb Detonation, Z-Ordering, Dud (`a*bu`), Landing Stun (`a*sd`), Food Duplication & Combat Locomotion
+
+#### 1. Bomb Z-Ordering & Visual Hierarchy (`Ants.exe` `0x1009d49`, `0x1008089`, `0x10088e7`, `0x10089bd`, `0x1010008`)
+- **Viewport Frame Rendering Pipeline (`FUN_01009d49`)**:
+  ```c
+  FUN_01008089(*(void **)((int)this + 0x4c), piVar1, 1); // 1. Layer 1 Terrain
+  FUN_01008089(*(void **)((int)this + 0x4c), piVar1, 2); // 2. Layer 2 Structures & Ground Bombs
+  FUN_010088e7(*(void **)((int)this + 0x4c), piVar1);    // 3. Dynamic Display List (Entities, Units, Effects)
+  FUN_01008607(*(void **)((int)this + 0x4c), piVar1);    // 4. Layer 3 Canopy Overhang
+  ```
+- **Ground Bomb Sprite (Layer 2)**: Landmines placed by Bomber Ants are written into Layer 2 grid memory with tile IDs `0x81` (Red), `0x82` (Green), `0x83` (Blue), `0x84` (Black). They render on Layer 2 underneath all dynamic entities.
+- **Detonation Trigger (`0x101e6b3` / `FUN_01010008`)**:
+  - Stepping on a bomb clears the tile on Layer 2 (`FUN_01007352` sets tile to `0x7ffe`).
+  - Spawns transient explosion effect `bombex` (Anim ID 133 in Table 4, 10 subitems: `durs=[60, 60, 80, 100, 80, 60, 60, 60, 60, 60]`, total duration 680ms) via `piVar2 = FUN_0101a169()` and registers it into the world's dynamic display list via `FUN_01008829`.
+  - In the dynamic display list (`FUN_010088e7`), entities are depth-sorted by `sort_y` (`*(short *)(iVar2 + 0x3a)`).
+  - An ant triggered by the blast is launched airborne (`altitude_z > 0`). In 2.5D top-down perspective, the airborne ant sprite is offset upward above the ground explosion plane.
+  - Rendering `render_visual_effects(world)` directly **between Layer 2 structures and ant units** places `bombex` in authentic Z-order: `Layer 2 bomb tile` -> `bombex explosion cloud` -> `ant unit animation`.
+
+##### 2. Bomb Dud Scorch (`a*bu301`, Table `0x1004518`) & Landing Stun (`a*sd301`, Table `0x10045d8`)
+- **Exact Ground Truth Dud Logic (`Ants.exe` `0x101c208`, `0x102313f`, `0x101df09`, `Ants.exe.c` lines 20931–20961 & 24440–24472)**:
+  - When an ant steps onto an active bomb tile (`case 0xa`, lines 20931–20961), the engine executes an authentic PRNG roll:
+    ```c
+    uVar8 = FUN_010345c0(); // rand() (MSVC LCG: seed * 0x343fd + 0x269ec3)
+    if ((int)uVar8 % 100 < 0x14) { // Exactly 20% probability (0x14 == 20)
+        // DUD / IN-PLACE SCORCH:
+        dest_x = current_x;
+        dest_y = current_y; // 0-tile displacement, remains on bomb tile
+    } else {
+        // FULL DETONATION (80% probability):
+        FUN_0101df5d(this, &current_pos, &dest_pos, 4, 0, 0, 0); // Knockback 4 tiles away
+    }
+    ```
+  - **Bomb Damage Invariant (`FUN_01021a6f` at `0x1021ae3` & `0x1021aeb`)**:
+    - Stepping on a bomb invokes `FUN_01021a6f`. The function executes `call 0x1021627` **twice unconditionally** before the position comparison:
+      ```x86
+      0x1021ae0: push ebx
+      0x1021ae1: mov ecx, esi
+      0x1021ae3: call 0x1021627   ; Damage 1 (HP -= 1)
+      0x1021ae8: push ebx
+      0x1021ae9: mov ecx, esi
+      0x1021aeb: call 0x1021627   ; Damage 2 (HP -= 1)
+      ```
+    - Therefore, **both dud and full explosion deal exactly 2 HP damage**.
+  - **Dud Branch (20% Roll)**:
+    - Target destination equals current position (`dest == current_pos`). Flag `this[0x2d] = 1`.
+    - In `0x102313f` / `0x101df09`, flag `1` selects reaction type **4**, which transitions the unit into **Action 19 (`0x13`)**: **`a*bu` (Burn / Scorch Dud animation)**.
+    - Animation `a*bu301` (`agbu301`, `abbu301`, `afbu301`, `acbu301`, `asbu301`, `atbu301` from Table `0x1004518`) plays in place for 11 ticks (~550ms) with smoke puff sprites (`*bu301..303`), firing **Sound 64 (`flythumpa.wav`)** at subitem 0 and **Sound 65 (`flythumpb.wav`)** at subitem 5.
+    - The bomb tile on Layer 2 is cleared (`0x7ffe`).
+    - Upon finishing the 11-tick burn sequence (line 22569: `case 0x13:`), the ant recovers into the dazed stun state (`a*sd301`).
+  - **Full Detonation Branch (80% Roll)**:
+    - Target destination is 4 tiles away (`dest != current_pos`). Flag `this[0x2d] = 0`.
+    - Flag `0` selects reaction type **1**, transitioning the unit into **Action 14 (`0xe`)**: **`a*gb` (Ballistic Knockback & Airborne flight)**.
+    - Spawns `bombex` (Anim 133) with `bombexp.wav`. Ant flies 4 tiles along parabolic altitude trajectory (`altitude_z > 0`).
+    - Upon landing on the ground, the ant enters `UnitState::Stunned` and plays `a*sd301` (dazed spinning stars with Sound 70 `stun.wav`).
+
+#### 3. Multi-Ant Food Access & 1998 Duplication Exploit (`0x102151a`, `0x101fc50`, Action 3 `aggf`, Anim 356 `lunchbox`)
+- In `FUN_0102151a` and `FUN_0101fc50`, when an ant is commanded to eat food (`is_food_order`), friendly ants occupying target cells are not treated as pathfinding obstacles.
+- Multiple ants can walk onto or stand around the food node (Chebyshev distance $\le 1$) and enter Action 3 (`aggf`, 7-frame bite cycle over 8 ticks / 420ms).
+- When the 8-tick bite completes, each biting ant receives a morsel into its lunchbox. Because remaining bites are checked at the start of a bite rather than each frame, all concurrent biters receive their food morsels even if the food node's counter reaches 0 mid-bite (1998 Food Duplication Exploit).
+- Ground dropped lunchboxes (Table 4 Anim 356) award points to all concurrent ants reaching the lunchbox on the collection tick before removal.
+
+#### 4. Combat Ant AI Locomotion & Melee Punch Mechanics (`0x101ace3`, `0x1021494`, `0x1021627`)
+- The Combat Ant never teleports. In `Ants.exe`, it paths smoothly along waypoints at standard speed with `acwk`.
+- When within distance $\le 1$, it executes `acat` (Table 4 Anim IDs 901–905: `acat201`, `acat301`, `acat701`, `acat801`, `acat901` across 6 subitems: `[80, 100, 60, 80, 100, 120]ms`, total 540ms / 11 simulation ticks).
+- Subitem 2 connects with `flag = 4`, dealing 2 HP damage and launching the target with ballistic parabolic trajectory.
+- Enforces an authentic **12-tick attack cooldown** (`attack_cooldown_ticks = 12`) with zero aggro or pursuit during cooldown.
+
+#### 5. Anthill Mound Anchor Offsets & Thief Infiltration Corridor (`0x100ee03`, `Ants.exe.c` lines 9656–9690)
+- The base mound graphic uses Table 4 offsets from anchor tile `(min_x + 1, min_y + 1)`:
+  - Red (`REDHILL`, Anim 247): `dx: -32, dy: -18` (`+14px` vertical shift relative to `min_y * 32`).
+  - Green (`GRNHILL`): `dx: -32, dy: -25` (`+7px` shift).
+  - Blue (`BLUHILL`): `dx: -32, dy: -20` (`+12px` shift).
+  - Black (`BLKHILL`): `dx: -32, dy: -24` (`+8px` shift).
+- Shifting Red down 14px aligns the bottlecap thief hole squarely onto grid row 36 (`(24, 36)`).
+- Thief ant infiltration is strictly checked on the 4 right-flank tiles `X = base_min_x + 3, Y in [base_min_y, base_min_y + 3]`.
+- The column to the right `X = base_min_x + 4, Y in [base_min_y, base_min_y + 3]` comprises open land tiles where Fire Ants can place up to 3 firewalls and Bomber Ants can place landmines.
+

@@ -380,6 +380,18 @@ bool Application::start_game(const std::string& map_path) {
     return true;
 }
 
+void Application::quit() {
+#if defined(__EMSCRIPTEN__)
+    if (state_ == AppState::Playing || scorecard_.is_open()) {
+        return_to_map_select();
+    } else {
+        emscripten_run_script("window.location.reload();");
+    }
+#else
+    is_running_ = false;
+#endif
+}
+
 void Application::return_to_map_select() {
     state_ = AppState::MapSelect;
     scorecard_.hide();
