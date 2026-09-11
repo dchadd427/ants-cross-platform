@@ -1660,6 +1660,12 @@ void Renderer::draw_single_ant(const ants::sim::AntSnapshot& ant, bool is_select
                 if (sub_idx >= seq->subitems.size()) {
                     sub_idx = seq->subitems.size() - 1;
                 }
+            } else if (action == "xf") {
+                // Extinguishing fire subitems are 100ms each (2 sim ticks per subitem)
+                sub_idx = static_cast<size_t>(ant.anim_frame / 2);
+                if (sub_idx >= seq->subitems.size()) {
+                    sub_idx = seq->subitems.size() - 1;
+                }
             } else {
                 sub_idx = ant.anim_frame % seq->subitems.size();
             }

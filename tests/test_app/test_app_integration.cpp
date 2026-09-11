@@ -3814,7 +3814,7 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         }
         ASSERT_EQ(f_ant.state, UnitState::Idle);
 
-        // Extinguish fire (12 ticks)
+        // Extinguish fire: fire cleared at tick 8, full 24 ticks (South) to finish animation per Ants.exe.c
         sim.extinguish_fire(f_id, TileCoord{25, 26}, false);
         ASSERT_EQ(f_ant.state, UnitState::ExtinguishingFire);
         ASSERT_EQ(f_ant.facing, Direction::South);
@@ -3823,6 +3823,9 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
             sim.tick();
         }
         ASSERT_FALSE(sim.grid().get_cell(TileCoord{25, 26}).has_fire());
+        for (int t = 12; t < 24; ++t) {
+            sim.tick();
+        }
         ASSERT_EQ(f_ant.state, UnitState::Idle);
 
         // 4. Drowning sequence progression (22 ticks)
@@ -6259,8 +6262,8 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
             sim.tick();
         }
 
-        // After 11 ticks, state recovers into Stunned (spinning stars)
-        ASSERT_EQ(unit.state, UnitState::Stunned);
+        // After 11 ticks, state recovers directly into Idle (0 post-animation stun ticks per Ants.exe.c)
+        ASSERT_EQ(unit.state, UnitState::Idle);
     } TEST_END();
 
     TEST_CASE("12.100: 8-Directional Diagonal Attack Adjacency & Approach Routing") {
@@ -6877,10 +6880,10 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
 
     TEST_CASE("12.108: Version Invariant & Fog of War Cursor Concealment Parity") {
         // 1. Verify semantic versioning components
-        ASSERT_EQ(ants::VERSION_STRING, "v0.0.12");
+        ASSERT_EQ(ants::VERSION_STRING, "v0.0.13");
         ASSERT_EQ(ants::VERSION_MAJOR, 0);
         ASSERT_EQ(ants::VERSION_MINOR, 0);
-        ASSERT_EQ(ants::VERSION_PATCH, 12);
+        ASSERT_EQ(ants::VERSION_PATCH, 13);
 
         // 2. Setup simulation world with Fog of War enabled
         SimulationEngine sim;
@@ -7712,15 +7715,15 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
             ASSERT_EQ(u.hp, 8);
             ASSERT_TRUE(u.state == UnitState::Knockback || u.state == UnitState::Burn);
 
-            // Advance simulation: if knockback, lands in Stunned; if burn, transitions to Stunned
+            // Advance simulation: if knockback, lands in Idle; if burn, transitions directly to Idle (authentic 1998 0-stun)
             for (int i = 0; i < 25; ++i) {
                 sim.tick();
-                if (sim.get_unit(victim).state == UnitState::Stunned) break;
+                if (sim.get_unit(victim).state == UnitState::Idle) break;
             }
-            ASSERT_EQ(sim.get_unit(victim).state, UnitState::Stunned);
+            ASSERT_EQ(sim.get_unit(victim).state, UnitState::Idle);
         }
 
-        // B. Dud specific sequence verification: Burn for 11 ticks, then Stunned
+        // B. Dud specific sequence verification: Burn for 11 ticks, then directly Idle (0 stun ticks)
         {
             SimulationEngine sim;
             sim.init_test_world(60, 60, 100, 60000);
@@ -7737,17 +7740,10 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
                 ASSERT_EQ(sim.get_unit(ant_id).state, UnitState::Burn);
             }
 
-            // 11th tick completes dud burn and transitions to Stunned (a*sd301)
+            // 11th tick completes dud burn and transitions directly to Idle (0 stun ticks)
             sim.tick();
-            ASSERT_EQ(sim.get_unit(ant_id).state, UnitState::Stunned);
-            ASSERT_TRUE(sim.get_unit(ant_id).is_stunned());
-
-            // Advance through stun recovery (STUN_TICKS = 50, authentic Table 4 duration)
-            for (int i = 0; i < 60; ++i) {
-                sim.tick();
-                if (sim.get_unit(ant_id).state != UnitState::Stunned) break;
-            }
             ASSERT_EQ(sim.get_unit(ant_id).state, UnitState::Idle);
+            ASSERT_FALSE(sim.get_unit(ant_id).is_stunned());
         }
     } TEST_END();
 
@@ -7981,6 +7977,149 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         hud.select_ant(worker_id2, true); // multi-select
         CursorType c4 = hud.evaluate_cursor(screen_bx, screen_by, sim2.get_world_state(), sim2.grid(), cam);
         ASSERT_EQ(c4, CursorType::Move);
+    } TEST_END();
+
+    // ------------------------------------------------------------------------
+    // 12.127: Fire Extinguish Timing & Sputter, Multi-Direction Placement Queueing, and Bomb Parity
+    // ------------------------------------------------------------------------
+    TEST_CASE("12.127 Fire Extinguish Timing, Multi-Direction Placement, and Bomb Parity") {
+        // A. Fire Extinguish Timing: 24 ticks (South) or 26 ticks (North/East/West), sputter at tick 8
+        {
+            SimulationEngine sim;
+            sim.init_test_world(60, 60, 100, 60000);
+
+            // Place firewall at (20, 21)
+            sim.set_fire_at({20, 21}, 3600);
+            ASSERT_TRUE(sim.has_fire_at({20, 21}));
+
+            // Fire Ant at (20, 20) facing Down (South) to extinguish
+            uint32_t ant_id = sim.spawn_unit(0, AntType::Fire, TileCoord{20, 20});
+            AntOrder o;
+            o.type = OrderType::ExtinguishFire;
+            o.ant_id = ant_id;
+            o.target_x = 20;
+            o.target_y = 21;
+            sim.issue_order(o);
+
+            // Ant enters ExtinguishingFire
+            ASSERT_EQ(sim.get_unit(ant_id).state, UnitState::ExtinguishingFire);
+
+            // Advance 7 ticks: firewall still present
+            for (int i = 0; i < 7; ++i) {
+                sim.tick();
+                ASSERT_EQ(sim.get_unit(ant_id).state, UnitState::ExtinguishingFire);
+                ASSERT_TRUE(sim.has_fire_at({20, 21}));
+            }
+
+            // Tick 8: fire extinguished and sputter effect created
+            sim.tick();
+            ASSERT_FALSE(sim.has_fire_at({20, 21}));
+            bool found_sputter = false;
+            for (const auto& fx : sim.get_world_state().effects) {
+                if (fx.anim_name == "sputter" && fx.px == 20 * 32 + 16 && fx.py == 21 * 32 + 16) {
+                    found_sputter = true;
+                    break;
+                }
+            }
+            ASSERT_TRUE(found_sputter);
+
+            // Remains in ExtinguishingFire until tick 24 (total 24 ticks for South)
+            for (int i = 0; i < 15; ++i) { // ticks 9..23
+                sim.tick();
+                ASSERT_EQ(sim.get_unit(ant_id).state, UnitState::ExtinguishingFire);
+            }
+
+            // 24th tick transitions to Idle
+            sim.tick();
+            ASSERT_EQ(sim.get_unit(ant_id).state, UnitState::Idle);
+        }
+
+        // B. Multi-Directional Firewall Placement Queueing (North -> East)
+        {
+            SimulationEngine sim;
+            sim.init_test_world(60, 60, 100, 60000);
+
+            // Fire ant at (25, 25)
+            uint32_t ant_id = sim.spawn_unit(0, AntType::Fire, TileCoord{25, 25});
+
+            // Order 1: Ignite Fire North (25, 24)
+            AntOrder o1;
+            o1.type = OrderType::IgniteFire;
+            o1.ant_id = ant_id;
+            o1.target_x = 25;
+            o1.target_y = 24;
+            sim.issue_order(o1);
+
+            ASSERT_EQ(sim.get_unit(ant_id).state, UnitState::PlacingFire);
+            ASSERT_EQ(sim.get_unit(ant_id).facing, ants::assets::Direction::North);
+
+            // While placing North, player immediately issues Order 2: Ignite Fire East (26, 25)
+            AntOrder o2;
+            o2.type = OrderType::IgniteFire;
+            o2.ant_id = ant_id;
+            o2.target_x = 26;
+            o2.target_y = 25;
+            sim.issue_order(o2);
+
+            // The ant should NOT immediately snap facing to East or drop the order;
+            // it must queue order 2 as pending_ability while continuing to place North!
+            ASSERT_EQ(sim.get_unit(ant_id).state, UnitState::PlacingFire);
+            ASSERT_EQ(sim.get_unit(ant_id).facing, ants::assets::Direction::North);
+            ASSERT_EQ(sim.get_unit(ant_id).ability_target.x, 25);
+            ASSERT_EQ(sim.get_unit(ant_id).ability_target.y, 24);
+            ASSERT_EQ(sim.get_unit(ant_id).pending_ability, OrderType::IgniteFire);
+            ASSERT_EQ(sim.get_unit(ant_id).pending_ability_target.x, 26);
+            ASSERT_EQ(sim.get_unit(ant_id).pending_ability_target.y, 25);
+
+            // Let the North placement finish (35 ticks)
+            for (int i = 0; i < 36; ++i) {
+                sim.tick();
+            }
+
+            // First firewall at (25, 24) must exist!
+            ASSERT_TRUE(sim.has_fire_at({25, 24}));
+
+            // Wait for ability cooldown to expire and East placement to begin automatically
+            for (int i = 0; i < 40; ++i) {
+                sim.tick();
+                if (sim.get_unit(ant_id).state == UnitState::PlacingFire &&
+                    sim.get_unit(ant_id).facing == ants::assets::Direction::East) {
+                    break;
+                }
+            }
+
+            ASSERT_EQ(sim.get_unit(ant_id).state, UnitState::PlacingFire);
+            ASSERT_EQ(sim.get_unit(ant_id).facing, ants::assets::Direction::East);
+
+            // Finish East placement
+            for (int i = 0; i < 36; ++i) {
+                sim.tick();
+            }
+            ASSERT_TRUE(sim.has_fire_at({26, 25}));
+        }
+
+        // C. Bomb Dud & Knockback Stun Parity: is_stunned() is true during Burn/Knockback, 0 stun afterwards
+        {
+            SimulationEngine sim;
+            sim.init_test_world(60, 60, 100, 60000);
+
+            uint32_t ant_id = sim.spawn_unit(0, AntType::Worker, TileCoord{10, 10});
+            auto* ant = const_cast<AntUnit*>(&sim.get_unit(ant_id));
+            ant->state = UnitState::Burn;
+            ant->state_timer = 5;
+
+            // In flight or burn, ant is considered stunned (rejects orders)
+            ASSERT_TRUE(ant->is_stunned());
+
+            for (int i = 0; i < 5; ++i) {
+                sim.tick();
+            }
+
+            // After dud completes, unit is Idle with 0 stun ticks remaining
+            ASSERT_EQ(sim.get_unit(ant_id).state, UnitState::Idle);
+            ASSERT_FALSE(sim.get_unit(ant_id).is_stunned());
+            ASSERT_EQ(sim.get_unit(ant_id).stun_ticks_remaining, 0);
+        }
     } TEST_END();
 }
 

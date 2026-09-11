@@ -79,7 +79,8 @@ public:
                          PRNG& prng,
                          int32_t incoming_dx = 0,
                          int32_t incoming_dy = 0,
-                         std::function<void(AntUnit&, TileCoord)> on_bomb_land = nullptr);
+                         std::function<void(AntUnit&, TileCoord)> on_bomb_land = nullptr,
+                         DamageSource source = DamageSource::CombatPunch);
 
     void resolve_water_entry(AntUnit& unit,
                              std::vector<AudioEvent>& audio_out);
@@ -89,7 +90,8 @@ public:
                               std::vector<AudioEvent>& audio_out,
                               PRNG& prng,
                               int32_t incoming_dx = 0,
-                              int32_t incoming_dy = 0);
+                              int32_t incoming_dy = 0,
+                              DamageSource source = DamageSource::CombatPunch);
 
     const BallisticFlight* get_active_flight(uint32_t unit_id) const noexcept;
     void cancel_flight(uint32_t unit_id) noexcept;

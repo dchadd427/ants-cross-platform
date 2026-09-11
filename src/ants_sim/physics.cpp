@@ -192,7 +192,7 @@ void PhysicsEngine::tick(std::vector<AntUnit*>& all_units,
         // Safety check for exiting map bounds
         if (!grid.in_bounds(unit->pos.x, unit->pos.y)) {
             unit->altitude_z = 0;
-            resolve_landing(*unit, grid, audio_out, prng, inc_dx, inc_dy, on_bomb_land);
+            resolve_landing(*unit, grid, audio_out, prng, inc_dx, inc_dy, on_bomb_land, f.origin_source);
             it = active_flights_.erase(it);
             continue;
         }
@@ -200,7 +200,7 @@ void PhysicsEngine::tick(std::vector<AntUnit*>& all_units,
         if (f.current_tick >= f.total_ticks) {
             unit->set_pixel_pos(f.target_px, f.target_py);
             unit->altitude_z = 0;
-            resolve_landing(*unit, grid, audio_out, prng, inc_dx, inc_dy, on_bomb_land);
+            resolve_landing(*unit, grid, audio_out, prng, inc_dx, inc_dy, on_bomb_land, f.origin_source);
             it = active_flights_.erase(it);
             continue;
         }
@@ -215,7 +215,8 @@ void PhysicsEngine::resolve_landing(AntUnit& unit,
                                     PRNG& prng,
                                     int32_t incoming_dx,
                                     int32_t incoming_dy,
-                                    std::function<void(AntUnit&, TileCoord)> on_bomb_land) {
+                                    std::function<void(AntUnit&, TileCoord)> on_bomb_land,
+                                    DamageSource source) {
     unit.altitude_z = 0;
     if (!grid.in_bounds(unit.pos.x, unit.pos.y)) {
         if (unit.hp == 0) unit.state = UnitState::Dead;
@@ -240,7 +241,7 @@ void PhysicsEngine::resolve_landing(AntUnit& unit,
 
     // 3. Fire Landing: Ant lands directly on fire wall, takes fire damage, remains on fire tile!
     if (cell.has_fire()) {
-        resolve_fire_contact(unit, grid, audio_out, prng, incoming_dx, incoming_dy);
+        resolve_fire_contact(unit, grid, audio_out, prng, incoming_dx, incoming_dy, source);
         return;
     }
 
@@ -251,7 +252,17 @@ void PhysicsEngine::resolve_landing(AntUnit& unit,
         unit.anim_tick = 0;
         unit.anim_subitem = 0;
         audio_out.push_back(AudioEvent{SOUND_FLY_THUMP_B, unit.pixel_x, unit.pixel_y, 0, 255});
+    } else if (source == DamageSource::BombBlast) {
+        // Authentic 1998 Ants.exe case 0xe (Knockback completion):
+        // Knockback sequence (a*gb, 12 ticks) concludes with the ant landing slide.
+        // Upon landing completion, the ant transitions directly to Idle (0 additional stun).
+        audio_out.push_back(AudioEvent{SOUND_FLY_THUMP_B, unit.pixel_x, unit.pixel_y, 0, 255});
+        unit.state = (unit.type == AntType::Combat) ? UnitState::GuardIdle : UnitState::Idle;
+        unit.anim_tick = 0;
+        unit.anim_subitem = 0;
+        unit.stun_ticks_remaining = 0;
     } else {
+        // Melee / Combat punch knockback landing
         audio_out.push_back(AudioEvent{SOUND_FLY_THUMP_B, unit.pixel_x, unit.pixel_y, 0, 255});
         audio_out.push_back(AudioEvent{SOUND_STUN, unit.pixel_x, unit.pixel_y, 0, 255});
         unit.start_stun(STUN_RECOVERY_TICKS);
@@ -280,9 +291,10 @@ void PhysicsEngine::resolve_water_entry(AntUnit& unit,
 void PhysicsEngine::resolve_fire_contact(AntUnit& unit,
                                          Grid& grid,
                                          std::vector<AudioEvent>& audio_out,
-                                         [[maybe_unused]] PRNG& prng,
+                                         PRNG& /*prng*/,
                                          int32_t incoming_dx,
-                                         int32_t incoming_dy) {
+                                         int32_t incoming_dy,
+                                         DamageSource source) {
     if (unit.type == AntType::Fire) {
         return;
     }
@@ -337,8 +349,15 @@ void PhysicsEngine::resolve_fire_contact(AntUnit& unit,
     }
 
     audio_out.push_back(AudioEvent{SOUND_FLY_THUMP_A, unit.pixel_x, unit.pixel_y, 1, 255});
-    audio_out.push_back(AudioEvent{SOUND_STUN, unit.pixel_x, unit.pixel_y, 0, 255});
-    unit.start_stun(STUN_RECOVERY_TICKS);
+    if (source == DamageSource::BombBlast) {
+        unit.state = (unit.type == AntType::Combat) ? UnitState::GuardIdle : UnitState::Idle;
+        unit.anim_tick = 0;
+        unit.anim_subitem = 0;
+        unit.stun_ticks_remaining = 0;
+    } else {
+        audio_out.push_back(AudioEvent{SOUND_STUN, unit.pixel_x, unit.pixel_y, 0, 255});
+        unit.start_stun(STUN_RECOVERY_TICKS);
+    }
 }
 
 const BallisticFlight* PhysicsEngine::get_active_flight(uint32_t unit_id) const noexcept {

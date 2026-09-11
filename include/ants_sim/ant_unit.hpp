@@ -205,6 +205,7 @@ public:
     bool        underground_visited{false};
     bool        is_newborn{false};
     OrderType   pending_ability{static_cast<OrderType>(0)};
+    TileCoord   pending_ability_target{-1, -1};
     TileCoord   ability_target{-1, -1};
     uint16_t    attack_cooldown_ticks{0};
     uint16_t    ability_cooldown_ticks{0};
@@ -224,7 +225,7 @@ public:
         return hp > 0 && death_status == DeathStatus::Alive;
     }
     bool is_stunned() const noexcept {
-        return state == UnitState::Stunned || stun_ticks_remaining > 0;
+        return state == UnitState::Stunned || state == UnitState::Knockback || state == UnitState::Burn || stun_ticks_remaining > 0;
     }
     bool is_holding() const noexcept {
         return holding != 0;

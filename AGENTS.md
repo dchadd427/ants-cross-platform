@@ -52,5 +52,8 @@ Native C++17 macOS port and remake of the 1998 classic RTS game *Ants*, featurin
 - **Log in Implementation Plan**: Whenever the user provides tasks, features, or bug reports, thoroughly document all findings, reverse engineering references, planned code modifications, and test verifications into `implementation_plan.md`.
 - **Wait for Explicit Approval**: Always present the plan and explicitly ask the user for permission to proceed. STOP and WAIT for the user to say to proceed, go, or continue before making changes or executing execution steps.
 
+### 10. Open Source Information Security & Leak Prevention Invariant
+- **Zero Information Leakage to GitHub**: This repository is a public open-source project. Strictly NEVER write, commit, or leak any private credentials, API keys, personal access tokens, secret URLs, personal identifiable information (PII), proprietary source code, internal hostnames, or local system paths to GitHub in any code, comments, commit messages, or documentation.
+
 
 

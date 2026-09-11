@@ -1203,15 +1203,21 @@ void SimulationEngine::tick() {
         }
 
         // Autonomous Pending Ability Execution (Bomb, Fire, Bridge, etc.)
-        if (ant_ptr->is_alive() && ant_ptr->pending_ability != OrderType::None && ant_ptr->ability_target.x >= 0) {
-            bool is_cardinal_adj = validate_cardinal_placement(ant_ptr->pos, ant_ptr->ability_target);
+        if (ant_ptr->is_alive() && ant_ptr->pending_ability != OrderType::None && ant_ptr->pending_ability_target.x >= 0) {
+            bool is_cardinal_adj = validate_cardinal_placement(ant_ptr->pos, ant_ptr->pending_ability_target);
             bool is_at_dest = (ant_ptr->waypoints.empty() || ant_ptr->state == UnitState::Idle ||
                                ant_ptr->state == UnitState::Swimming || ant_ptr->state == UnitState::GuardIdle);
-            if (is_at_dest && is_cardinal_adj) {
+            bool is_ready_state = (ant_ptr->waypoints.empty() &&
+                                  (ant_ptr->state == UnitState::Idle || ant_ptr->state == UnitState::Swimming || ant_ptr->state == UnitState::GuardIdle));
+            if (is_cardinal_adj && is_ready_state) {
+                if (ant_ptr->ability_cooldown_ticks > 0) {
+                    // Still waiting on ability cooldown between successive casts: wait without dropping order
+                    continue;
+                }
                 OrderType ability = ant_ptr->pending_ability;
-                TileCoord target = ant_ptr->ability_target;
+                TileCoord target = ant_ptr->pending_ability_target;
                 ant_ptr->pending_ability = OrderType::None;
-                ant_ptr->ability_target = TileCoord{-1, -1};
+                ant_ptr->pending_ability_target = TileCoord{-1, -1};
                 ant_ptr->clear_path();
                 ant_ptr->set_tile_pos(ant_ptr->pos.x, ant_ptr->pos.y);
                 ant_ptr->facing = ants::assets::vector_to_direction(target.x - ant_ptr->pos.x, target.y - ant_ptr->pos.y);
@@ -1221,13 +1227,13 @@ void SimulationEngine::tick() {
                         plant_bomb(ant_ptr->id, target, false);
                         break;
                     case OrderType::DefuseBomb:
-                        defuse_bomb(ant_ptr->id, target);
+                        defuse_bomb(ant_ptr->id, target, false);
                         break;
                     case OrderType::IgniteFire:
                         ignite_fire(ant_ptr->id, target, false);
                         break;
                     case OrderType::ExtinguishFire:
-                        extinguish_fire(ant_ptr->id, target);
+                        extinguish_fire(ant_ptr->id, target, false);
                         break;
                     case OrderType::BuildBridge:
                         build_bridge_step(ant_ptr->id, target);
@@ -1244,7 +1250,7 @@ void SimulationEngine::tick() {
                 TileCoord best_cand{-1, -1};
                 int32_t best_dist = 999999;
                 for (const auto& off : offsets) {
-                    TileCoord cand{ant_ptr->ability_target.x + off[0], ant_ptr->ability_target.y + off[1]};
+                    TileCoord cand{ant_ptr->pending_ability_target.x + off[0], ant_ptr->pending_ability_target.y + off[1]};
                     if (can_unit_traverse(ant_ptr->type, cand) && !impl_->has_other_living_ant_at(cand, ant_ptr->id)) {
                         if (cand == ant_ptr->pos) {
                             best_dist = 0;
@@ -1265,7 +1271,7 @@ void SimulationEngine::tick() {
                     issue_move_order(ant_ptr->id, best_cand);
                 } else {
                     ant_ptr->pending_ability = OrderType::None;
-                    ant_ptr->ability_target = TileCoord{-1, -1};
+                    ant_ptr->pending_ability_target = TileCoord{-1, -1};
                     ant_ptr->state = UnitState::CantGo;
                     ant_ptr->anim_tick = 0;
                     ant_ptr->anim_subitem = 0;
@@ -1702,18 +1708,23 @@ void SimulationEngine::tick() {
         continue;
     }
 
-    // Extinguishing Fire progression (afxf, 12 ticks)
+    // Extinguishing Fire progression (afxf: South=24 ticks, North/East/West=26 ticks)
     if (ant_ptr->state == UnitState::ExtinguishingFire) {
         ant_ptr->anim_tick++;
         ant_ptr->anim_subitem = ant_ptr->anim_tick;
-        if (ant_ptr->anim_tick == 4) {
+        if (ant_ptr->anim_tick == 8) {
             impl_->audio_queue_.push_back(AudioEvent{SoundID::FireExtinguish, ant_ptr->pixel_x, ant_ptr->pixel_y, 1, 255});
             if (ant_ptr->ability_target.x >= 0 && impl_->grid_.in_bounds(ant_ptr->ability_target)) {
                 impl_->grid_.clear_firewall(static_cast<uint32_t>(ant_ptr->ability_target.x), static_cast<uint32_t>(ant_ptr->ability_target.y));
+                // Authentic sputter smoke visual effect (Anim 135, 10 frames @ 60ms)
+                int32_t fx = ant_ptr->ability_target.x * 32 + 16;
+                int32_t fy = ant_ptr->ability_target.y * 32 + 16;
+                impl_->active_effects_.push_back(VisualEffect{"sputter", fx, fy, 0, 10});
             }
         }
-        if (ant_ptr->anim_tick >= 12) {
-            ant_ptr->state = UnitState::Idle;
+        int total_extinguish_ticks = (ant_ptr->facing == ants::assets::Direction::South) ? 24 : 26;
+        if (ant_ptr->anim_tick >= total_extinguish_ticks) {
+            ant_ptr->state = (ant_ptr->type == AntType::Combat) ? UnitState::GuardIdle : UnitState::Idle;
             ant_ptr->anim_tick = 0;
             ant_ptr->anim_subitem = 0;
             ant_ptr->ability_target = TileCoord{-1, -1};
@@ -2272,11 +2283,14 @@ void SimulationEngine::issue_order(const AntOrder& order) {
     AntUnit* unit = impl_->find_unit(order.ant_id);
     if (!unit || !unit->is_alive() || unit->is_stunned()) return;
 
-    // Special abilities (Fire and Bomb placement, Bridge construction) cannot be interrupted and trigger "Can't Go"
-    if (unit->state == UnitState::PlacingFire || unit->state == UnitState::PlantingBomb ||
-        unit->state == UnitState::BuildingBridge || unit->state == UnitState::DemolishingBridge) {
-        impl_->audio_queue_.push_back(AudioEvent{SoundID::CantGo, unit->pixel_x, unit->pixel_y, 1, 255});
-        return;
+    // Move or Attack commands cannot interrupt special abilities and trigger "Can't Go"
+    if (order.type == OrderType::Move || order.type == OrderType::Attack || order.type == OrderType::ReturnToBase) {
+        if (unit->state == UnitState::PlacingFire || unit->state == UnitState::ExtinguishingFire ||
+            unit->state == UnitState::PlantingBomb || unit->state == UnitState::DefusingBomb ||
+            unit->state == UnitState::BuildingBridge || unit->state == UnitState::DemolishingBridge) {
+            impl_->audio_queue_.push_back(AudioEvent{SoundID::CantGo, unit->pixel_x, unit->pixel_y, 1, 255});
+            return;
+        }
     }
 
     if (unit->type == AntType::Combat) {
@@ -2295,17 +2309,20 @@ void SimulationEngine::issue_order(const AntOrder& order) {
     switch (order.type) {
         case OrderType::Move:
             unit->pending_ability = OrderType::None;
+            unit->pending_ability_target = TileCoord{-1, -1};
             unit->ability_target = TileCoord{-1, -1};
             issue_move_order(order.ant_id, TileCoord{order.target_x, order.target_y}, order.allow_friendly_bomb, order.is_food_order);
             break;
         case OrderType::ReturnToBase: {
             unit->pending_ability = OrderType::None;
+            unit->pending_ability_target = TileCoord{-1, -1};
             unit->ability_target = TileCoord{-1, -1};
             join_base_queue(order.ant_id);
             break;
         }
         case OrderType::Attack:
             unit->pending_ability = OrderType::None;
+            unit->pending_ability_target = TileCoord{-1, -1};
             unit->ability_target = TileCoord{-1, -1};
             if (order.target_entity_id >= 0) {
                 uint32_t target_id = static_cast<uint32_t>(order.target_entity_id);
@@ -2388,10 +2405,13 @@ void SimulationEngine::issue_order(const AntOrder& order) {
                     break;
                 }
             }
-            bool is_at_dest = (unit->waypoints.empty() || unit->state == UnitState::Idle ||
-                               unit->state == UnitState::Swimming || unit->state == UnitState::GuardIdle);
-            if (is_at_dest && validate_cardinal_placement(unit->pos, target)) {
+            bool is_ready_state = (unit->waypoints.empty() &&
+                                  (unit->state == UnitState::Idle || unit->state == UnitState::Swimming || unit->state == UnitState::GuardIdle));
+            bool is_adj = validate_cardinal_placement(unit->pos, target);
+
+            if (is_ready_state && is_adj && unit->ability_cooldown_ticks == 0) {
                 unit->pending_ability = OrderType::None;
+                unit->pending_ability_target = TileCoord{-1, -1};
                 unit->ability_target = TileCoord{-1, -1};
                 unit->clear_path();
                 unit->set_tile_pos(unit->pos.x, unit->pos.y);
@@ -2406,6 +2426,14 @@ void SimulationEngine::issue_order(const AntOrder& order) {
                 if (!ok && unit->is_transforming()) {
                     interrupt_transformation(order.ant_id);
                 }
+            } else if (is_adj && (unit->ability_cooldown_ticks > 0 || unit->state == UnitState::PlacingFire ||
+                                  unit->state == UnitState::ExtinguishingFire || unit->state == UnitState::PlantingBomb ||
+                                  unit->state == UnitState::DefusingBomb || unit->state == UnitState::BuildingBridge ||
+                                  unit->state == UnitState::DemolishingBridge)) {
+                // Currently busy or waiting on ability cooldown: queue pending ability without modifying facing yet
+                unit->pending_ability = order.type;
+                unit->pending_ability_target = target;
+                unit->clear_path();
             } else {
                 // Find closest traversable cardinal neighbor to target
                 static const int offsets[4][2] = { {0, -1}, {0, 1}, {-1, 0}, {1, 0} };
@@ -2443,10 +2471,12 @@ void SimulationEngine::issue_order(const AntOrder& order) {
                 }
                 if (best_cand.x >= 0) {
                     unit->pending_ability = order.type;
+                    unit->pending_ability_target = target;
                     unit->ability_target = target;
                     issue_move_order(order.ant_id, best_cand);
                 } else if (can_unit_traverse(unit->type, target)) {
                     unit->pending_ability = order.type;
+                    unit->pending_ability_target = target;
                     unit->ability_target = target;
                     issue_move_order(order.ant_id, target);
                 } else {
@@ -2512,6 +2542,7 @@ void SimulationEngine::issue_order(const AntOrder& order) {
         }
         case OrderType::Cancel:
             unit->pending_ability = OrderType::None;
+            unit->pending_ability_target = TileCoord{-1, -1};
             unit->ability_target = TileCoord{-1, -1};
             if (unit->is_transforming() || unit->on_powerup ||
                 (impl_->grid_.in_bounds(unit->pos) && impl_->grid_.has_powerup_at(unit->pos))) {
