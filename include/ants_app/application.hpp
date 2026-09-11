@@ -154,8 +154,8 @@ private:
 
     // Intro & Loading state
     uint32_t intro_ticks_{0};
-    bool leave_help_hovered_{false};
-    bool leave_help_pressed_{false};
+    bool quick_help_start_hovered_{false};
+    bool quick_help_start_pressed_{false};
 
     // 20 Hz Discrete Simulation Timing
     uint64_t last_tick_time_{0};

@@ -582,23 +582,27 @@ void Application::handle_events() {
                 mouse_screen_x_ = event.motion.x;
                 mouse_screen_y_ = event.motion.y;
                 mouse_has_moved_ = true;
-                leave_help_hovered_ = (event.motion.x >= 530 && event.motion.x <= 635 && event.motion.y >= 8 && event.motion.y <= 38);
+                quick_help_start_hovered_ = (event.motion.x >= 528 && event.motion.x <= 528 + 98 && event.motion.y >= 437 && event.motion.y <= 437 + 27);
             } else if (event.type == SDL_MOUSEBUTTONDOWN) {
                 mouse_screen_x_ = event.button.x;
                 mouse_screen_y_ = event.button.y;
                 mouse_has_moved_ = true;
-                if (event.button.x >= 530 && event.button.x <= 635 && event.button.y >= 8 && event.button.y <= 38) {
-                    leave_help_pressed_ = true;
-                } else {
-                    state_ = AppState::MapSelect;
+                if (event.button.x >= 528 && event.button.x <= 528 + 98 && event.button.y >= 437 && event.button.y <= 437 + 27) {
+                    quick_help_start_pressed_ = true;
                 }
             } else if (event.type == SDL_MOUSEBUTTONUP) {
-                if (leave_help_pressed_) {
-                    leave_help_pressed_ = false;
-                    state_ = AppState::MapSelect;
+                if (quick_help_start_pressed_) {
+                    quick_help_start_pressed_ = false;
+                    if (event.button.x >= 528 && event.button.x <= 528 + 98 && event.button.y >= 437 && event.button.y <= 437 + 27) {
+                        state_ = AppState::MapSelect;
+                        audio_mixer_.play_sfx(sim::SoundID::NavButtonClick, 1.0f, 255);
+                    }
                 }
             } else if (event.type == SDL_KEYDOWN) {
-                state_ = AppState::MapSelect;
+                if (event.key.keysym.sym == SDLK_RETURN || event.key.keysym.sym == SDLK_SPACE || event.key.keysym.sym == SDLK_ESCAPE) {
+                    state_ = AppState::MapSelect;
+                    audio_mixer_.play_sfx(sim::SoundID::NavButtonClick, 1.0f, 255);
+                }
             }
             continue;
         }
@@ -1055,16 +1059,34 @@ void Application::play_next_ingame_music() {
 }
 
 void Application::render_loading_screen() {
+    // 1. Fill entire 640x480 canvas with authentic solid orange #DB4B13
+    renderer_->fill_rect(0, 0, 640, 480, ants::assets::ColorRGBA{219, 75, 19, 255});
+
+    // 2. Draw outer border frame tiles from antslogo sequence (excluding dclay tiles and content bitmaps)
     const auto* seq = assets_.find_animation("antslogo");
     if (seq && !seq->subitems.empty()) {
         for (const auto& fr : seq->subitems[0].frames) {
-            renderer_->draw_sprite(fr.sprite_index, fr.dx, fr.dy);
+            // Exclude dclay48 (0), dclay96 (2), strip (160), credits (161), logo (162)
+            if (fr.sprite_index != 0 && fr.sprite_index != 2 &&
+                fr.sprite_index != 160 && fr.sprite_index != 161 && fr.sprite_index != 162) {
+                renderer_->draw_sprite(fr.sprite_index, fr.dx, fr.dy);
+            }
         }
     }
-    // Loading progress bar in credits.bmp indicator slot at (228, 445)
-    int32_t fill_w = std::min(184, static_cast<int32_t>((intro_ticks_ * 184) / 25));
+
+    // 3. Draw authentic logo.bmp at (25, 23)
+    renderer_->draw_named_sprite("logo.bmp", 25, 23);
+
+    // 4. Draw credits.bmp at (32, 299)
+    renderer_->draw_named_sprite("credits.bmp", 32, 299);
+
+    // 5. Draw strip.bmp at (40, 315) on top of credits to authentically mask the subtitle line
+    renderer_->draw_named_sprite("strip.bmp", 40, 315);
+
+    // 6. Loading progress bar inside designated indicator slot at x=229, y=448, w=234, h=8 in authentic #1F1733
+    int32_t fill_w = std::min(234, static_cast<int32_t>((intro_ticks_ * 234) / 25));
     if (fill_w > 0) {
-        renderer_->fill_rect(228, 445, fill_w, 12, ants::assets::ColorRGBA{40, 180, 80, 255});
+        renderer_->fill_rect(229, 448, fill_w, 8, ants::assets::ColorRGBA{31, 23, 51, 255});
     }
 }
 
@@ -1075,8 +1097,11 @@ void Application::render_quick_help_screen() {
             renderer_->draw_sprite(fr.sprite_index, fr.dx, fr.dy);
         }
     }
-    std::string btn = leave_help_pressed_ ? "bleavhelp3.bmp" : (leave_help_hovered_ ? "bleavhelp2.bmp" : "bleavhelp1.bmp");
-    renderer_->draw_named_sprite(btn, 542, 12);
+    // Authentic START! button at bottom-right (dx=529, dy=437 from Table 4 Anim 1335 qh_start1)
+    std::string btn = quick_help_start_pressed_ ? "bstart3.bmp" : (quick_help_start_hovered_ ? "bstart2.bmp" : "bstart1.bmp");
+    int32_t btn_x = quick_help_start_pressed_ ? 528 : 529;
+    int32_t btn_y = quick_help_start_pressed_ ? 438 : 437;
+    renderer_->draw_named_sprite(btn, btn_x, btn_y);
 }
 
 void Application::play_startup_sound() {
