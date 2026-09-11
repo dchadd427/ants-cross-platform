@@ -252,10 +252,7 @@ void AntUnit::tick_timers() noexcept {
     if (state_timer > 0) {
         state_timer--;
         if (state_timer == 0) {
-            if (state == UnitState::Burn) {
-                // Dud scorch sequence complete: recover into dazed stun (a*sd301)
-                start_stun(STUN_TICKS);
-            } else if (state == UnitState::Flinch || state == UnitState::Bounce || state == UnitState::Attacking) {
+            if (state == UnitState::Burn || state == UnitState::Flinch || state == UnitState::Bounce || state == UnitState::Attacking) {
                 state = (type == AntType::Combat) ? UnitState::GuardIdle : UnitState::Idle;
             }
         }

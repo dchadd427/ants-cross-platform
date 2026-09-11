@@ -166,10 +166,10 @@ struct TileCell {
     constexpr bool has_lunchbox() const noexcept { return interactive_id == TILE_LUNCHBOX; }
 
     constexpr bool can_place_bomb() const noexcept {
-        return !is_mud && surface_type != SurfaceType::Mud && (flags & FLAG_CAN_PLACE_BOMB) != 0 && is_empty_overlay();
+        return terrain_type == TERRAIN_WALKABLE && !is_obstacle_overlay && !is_mud && surface_type != SurfaceType::Mud && (flags & FLAG_CAN_PLACE_BOMB) != 0 && is_empty_overlay();
     }
     constexpr bool can_place_fire() const noexcept {
-        return (flags & FLAG_CAN_PLACE_FIRE) != 0 && is_empty_overlay();
+        return terrain_type == TERRAIN_WALKABLE && !is_obstacle_overlay && (flags & FLAG_CAN_PLACE_FIRE) != 0 && is_empty_overlay();
     }
 
     /**
