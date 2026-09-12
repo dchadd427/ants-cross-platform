@@ -1229,7 +1229,21 @@ void Renderer::render_visual_effects(const ants::sim::WorldState& world) {
                 size_t cycle_frames = anim->subitems.size() * 2;
                 sub_idx = ((static_cast<size_t>(eff.frame) * cycle_frames) / std::max<size_t>(1, eff.total_frames)) % anim->subitems.size();
             } else {
-                sub_idx = eff.frame % anim->subitems.size();
+                uint32_t elapsed_ms = eff.frame * 50;
+                uint32_t accum_ms = 0;
+                bool found = false;
+                for (size_t i = 0; i < anim->subitems.size(); ++i) {
+                    uint32_t sub_dur = (anim->subitems[i].val3 > 0) ? anim->subitems[i].val3 : 60;
+                    if (elapsed_ms < accum_ms + sub_dur) {
+                        sub_idx = i;
+                        found = true;
+                        break;
+                    }
+                    accum_ms += sub_dur;
+                }
+                if (!found) {
+                    sub_idx = anim->subitems.empty() ? 0 : anim->subitems.size() - 1;
+                }
             }
             const auto& sub = anim->subitems[sub_idx];
             for (const auto& f : sub.frames) {

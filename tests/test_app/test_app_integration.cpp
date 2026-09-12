@@ -2820,6 +2820,10 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
             if (!sim.has_bomb_at(TileCoord{20, 20})) break;
         }
         ASSERT_FALSE(sim.has_bomb_at(TileCoord{20, 20}));
+        while (sim.get_unit(b_id).state == UnitState::DefusingBomb) {
+            sim.tick();
+        }
+        ASSERT_EQ(sim.get_unit(b_id).state, UnitState::Idle);
 
         // 2. Right-click also defuses
         sim.grid_mut().place_bomb(20, 20, 0);
@@ -3108,15 +3112,12 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
     // ------------------------------------------------------------------------
     // 12.22: Power-Up Transformation Interruption via Impossible Order
     // ------------------------------------------------------------------------
-    TEST_CASE("12.22 Power-Up Transformation Interruption & Standing on Power-Up") {
+    TEST_CASE("12.22 Uninterruptible Power-Up Transformation Parity") {
         SimulationEngine sim;
         sim.init_test_world(60, 60, 100, 60000);
 
         // Place powerup at (10, 10) (Type 4 = Combat)
         sim.grid_mut().place_powerup(10, 10, 4);
-
-        // Set tile (10, 11) to water (impassable for non-swimmer)
-        sim.grid_mut().set_terrain(10, 11, TERRAIN_WATER);
 
         // Worker ant at (10, 10)
         uint32_t ant_id = sim.spawn_unit(0, AntType::Worker, TileCoord{10, 10});
@@ -3127,73 +3128,37 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         ASSERT_TRUE(ant.is_transforming());
         ASSERT_FALSE(sim.grid().has_powerup_at(TileCoord{10, 10}));
 
-        // Issue an impossible move instruction: move into water tile (10, 11)
-        sim.issue_move_order(ant_id, TileCoord{10, 11});
+        // While transforming, player attempts to move the ant away to (11, 10)
+        AntOrder move_order;
+        move_order.ant_id = ant_id;
+        move_order.type = OrderType::Move;
+        move_order.target_x = 11;
+        move_order.target_y = 10;
+        sim.issue_order(move_order);
 
-        // Interruption should take effect immediately:
-        // 1. Transformation halted
-        ASSERT_FALSE(ant.is_transforming());
-        // 2. Reverts to previous type (Worker)
-        ASSERT_EQ(ant.type, AntType::Worker);
-        // 3. Power-up remains on the ground at (10, 10)
-        ASSERT_TRUE(sim.grid().has_powerup_at(TileCoord{10, 10}));
-        // 4. Stands on top of power-up and flagged interrupted
-        ASSERT_TRUE(ant.on_powerup);
-        ASSERT_TRUE(ant.transformation_interrupted);
+        // Order is silently ignored: ant remains transforming into Combat Ant
+        ASSERT_TRUE(ant.is_transforming());
+        ASSERT_EQ(ant.pos, (TileCoord{10, 10}));
 
-        // In subsequent ticks, standing on top of power-up does NOT re-trigger transformation
-        for (int t = 0; t < 20; ++t) {
+        // Advance through the remaining getpow animation ticks (11 ticks total)
+        for (int t = 0; t < 12; ++t) {
             sim.tick();
-            ASSERT_FALSE(ant.is_transforming());
-            ASSERT_TRUE(ant.on_powerup);
-            ASSERT_TRUE(sim.grid().has_powerup_at(TileCoord{10, 10}));
         }
 
-        // Cancel order / Stop order also safely keeps unit on power-up
-        AntOrder cancel_order;
-        cancel_order.ant_id = ant_id;
-        cancel_order.type = OrderType::Cancel;
-        sim.issue_order(cancel_order);
+        // Ant has completed transformation and emerged as Combat Ant
         ASSERT_FALSE(ant.is_transforming());
-        ASSERT_TRUE(ant.on_powerup);
+        ASSERT_EQ(ant.type, AntType::Combat);
+        ASSERT_EQ(ant.pos, (TileCoord{10, 10}));
 
-        // Move interrupted worker off the power-up to adjacent tile (11, 10)
-        sim.clear_audio_events();
-        sim.issue_move_order(ant_id, TileCoord{11, 10});
+        // Once transformed, issuing move order allows the unit to walk normally
+        sim.issue_order(move_order);
         ASSERT_EQ(ant.state, UnitState::Walking);
-        ASSERT_FALSE(sim.has_audio_event(static_cast<uint32_t>(SoundID::AntStop)));
 
         for (int t = 0; t < 50; ++t) {
             sim.tick();
             if (ant.pos == TileCoord{11, 10} && ant.state != UnitState::Walking) break;
         }
         ASSERT_EQ(ant.pos, (TileCoord{11, 10}));
-        ASSERT_FALSE(ant.on_powerup);
-        ASSERT_FALSE(ant.transformation_interrupted);
-        ASSERT_TRUE(sim.grid().has_powerup_at(TileCoord{10, 10}));
-
-        // Bomber ant standing on power-up at (10, 10)
-        uint32_t bomber_id = sim.spawn_unit(0, AntType::Bomber, TileCoord{10, 10});
-        auto& bomber = sim.get_unit(bomber_id);
-        bomber.transformation_interrupted = true;
-        bomber.on_powerup = true;
-        sim.tick();
-        ASSERT_TRUE(bomber.on_powerup);
-        ASSERT_FALSE(bomber.is_transforming());
-
-        // Issue move order to (12, 10): Bomber ant walks off power-up cleanly
-        sim.clear_audio_events();
-        sim.issue_move_order(bomber_id, TileCoord{12, 10});
-        ASSERT_EQ(bomber.state, UnitState::Walking);
-        ASSERT_FALSE(sim.has_audio_event(static_cast<uint32_t>(SoundID::AntStop)));
-
-        for (int t = 0; t < 50; ++t) {
-            sim.tick();
-            if (bomber.pos == TileCoord{12, 10} && bomber.state != UnitState::Walking) break;
-        }
-        ASSERT_EQ(bomber.pos, (TileCoord{12, 10}));
-        ASSERT_FALSE(bomber.on_powerup);
-        ASSERT_TRUE(sim.grid().has_powerup_at(TileCoord{10, 10}));
     } TEST_END();
 
     // ------------------------------------------------------------------------
@@ -3684,7 +3649,7 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
             ASSERT_FALSE(sim.grid().has_powerup_at(TileCoord{20 + off.x, 20 + off.y}));
         }
 
-        // 5. Interrupted transformation cleans up dropped powerup and restores original ant
+        // 5. Uninterruptible transformation ignores move order and completes
         uint32_t a3 = sim.spawn_unit(0, AntType::Thief, TileCoord{30, 30});
         sim.grid_mut().place_powerup(30, 30, 1); // Bomber powerup
         sim.grid_mut().set_terrain(30, 31, TERRAIN_WATER); // S: Water (for impossible order)
@@ -3697,14 +3662,17 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         ASSERT_TRUE(sim.grid().has_powerup_at(dropped_tile));
         ASSERT_EQ(sim.grid().get_powerup_type(dropped_tile), 3);
 
-        // Issue impossible move order into water at (30, 31)
+        // Move order issued during active transformation is silently ignored per Ants.exe
         sim.issue_move_order(a3, TileCoord{30, 31});
+        ASSERT_TRUE(ant3.is_transforming());
+
+        // Completes transformation into Bomber
+        for (int t = 0; t < 12; ++t) {
+            sim.tick();
+        }
         ASSERT_FALSE(ant3.is_transforming());
-        ASSERT_EQ(ant3.type, AntType::Thief); // Reverted to Thief
-        ASSERT_TRUE(ant3.on_powerup);
-        ASSERT_TRUE(sim.grid().has_powerup_at(TileCoord{30, 30})); // Bomber restored
-        // Dropped powerup at dropped_tile must be cleaned up to prevent duplication!
-        ASSERT_FALSE(sim.grid().has_powerup_at(dropped_tile));
+        ASSERT_EQ(ant3.type, AntType::Bomber);
+        ASSERT_TRUE(sim.grid().has_powerup_at(dropped_tile));
 
         // 6. Multi-direction randomized landing verification:
         // Over multiple transformations with all 8 directions free, verify that the
@@ -3814,7 +3782,7 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         }
         ASSERT_EQ(f_ant.state, UnitState::Idle);
 
-        // Extinguish fire: fire cleared at tick 8, full 24 ticks (South) to finish animation per Ants.exe.c
+        // Extinguish fire: fire cleared at animation end (tick 24 South) per Ants.exe.c
         sim.extinguish_fire(f_id, TileCoord{25, 26}, false);
         ASSERT_EQ(f_ant.state, UnitState::ExtinguishingFire);
         ASSERT_EQ(f_ant.facing, Direction::South);
@@ -3822,10 +3790,11 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         for (int t = 0; t < 12; ++t) {
             sim.tick();
         }
-        ASSERT_FALSE(sim.grid().get_cell(TileCoord{25, 26}).has_fire());
+        ASSERT_TRUE(sim.grid().get_cell(TileCoord{25, 26}).has_fire());
         for (int t = 12; t < 24; ++t) {
             sim.tick();
         }
+        ASSERT_FALSE(sim.grid().get_cell(TileCoord{25, 26}).has_fire());
         ASSERT_EQ(f_ant.state, UnitState::Idle);
 
         // 4. Drowning sequence progression (22 ticks)
@@ -4903,16 +4872,17 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         ASSERT_EQ(hud.get_chat_scroll_offset(), 0);
     } TEST_END();
 
-    TEST_CASE("12.55 Fire Ant 2.0s (40 Ticks) Ability Cooldown & Placement Timing") {
+    TEST_CASE("12.55 Fire Ant 35-Tick Placement Timing & Immediate Zero-Cooldown Re-Cast") {
         SimulationEngine sim;
         sim.init_test_world(60, 60, 1);
         uint32_t f_id = sim.spawn_unit(0, AntType::Fire, TileCoord{10, 10});
         ASSERT_EQ(sim.get_unit(f_id).ability_cooldown_ticks, 0);
 
-        // Step 1: Initiate fire placement (non-instant)
+        // Step 1: Initiate fire placement (non-instant, 35 ticks afsf)
         sim.set_tile_flags(11, 10, 0x06);
         ASSERT_TRUE(sim.ignite_fire(f_id, TileCoord{11, 10}, false));
         ASSERT_EQ(sim.get_unit(f_id).state, UnitState::PlacingFire);
+        ASSERT_EQ(sim.get_unit(f_id).ability_cooldown_ticks, 35);
 
         // Advance through ticks 0..26: no fire placed on grid yet
         for (int t = 0; t < 26; ++t) {
@@ -4928,25 +4898,14 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         for (int t = 27; t < 34; ++t) {
             sim.tick();
         }
-        sim.tick(); // Tick 35: returns to Idle with remaining 5-tick cooldown (40 initiated - 35 elapsed)
+        sim.tick(); // Tick 35: returns to Idle with 0 cooldown per Ants.exe parity
         ASSERT_EQ(sim.get_unit(f_id).state, UnitState::Idle);
-        ASSERT_EQ(sim.get_unit(f_id).ability_cooldown_ticks, 5);
-
-        // Attempting to ignite fire again during cooldown MUST be rejected
-        sim.set_tile_flags(10, 11, 0x06);
-        ASSERT_FALSE(sim.ignite_fire(f_id, TileCoord{10, 11}, false));
-
-        // Advance 4 ticks: cooldown remaining = 1, still rejected
-        for (int t = 0; t < 4; ++t) {
-            sim.tick();
-        }
-        ASSERT_EQ(sim.get_unit(f_id).ability_cooldown_ticks, 1);
-        ASSERT_FALSE(sim.ignite_fire(f_id, TileCoord{10, 11}, false));
-
-        // Advance 1 tick: cooldown reaches 0, now accepted
-        sim.tick();
         ASSERT_EQ(sim.get_unit(f_id).ability_cooldown_ticks, 0);
+
+        // Immediate subsequent fire placement succeeds with zero post-animation cooldown
+        sim.set_tile_flags(10, 11, 0x06);
         ASSERT_TRUE(sim.ignite_fire(f_id, TileCoord{10, 11}, false));
+        ASSERT_EQ(sim.get_unit(f_id).state, UnitState::PlacingFire);
     } TEST_END();
 
     TEST_CASE("12.56 Bomber Ant Authentic 28-Tick Ability Cooldown & Rejection") {
@@ -6134,22 +6093,22 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         SimulationEngine sim;
         sim.init_test_world(60, 60, 1);
 
-        // 1. Fire Ant: Cooldown starts at order dispatch (40 ticks)
+        // 1. Fire Ant: Cooldown starts at order dispatch (35 ticks afsf)
         uint32_t fire_id = sim.spawn_unit(0, AntType::Fire, TileCoord{20, 20});
         sim.set_tile_flags(21, 20, 0x06);
 
         sim.clear_audio_events();
         ASSERT_TRUE(sim.ignite_fire(fire_id, TileCoord{21, 20}, false));
         ASSERT_EQ(sim.get_unit(fire_id).state, UnitState::PlacingFire);
-        ASSERT_EQ(sim.get_unit(fire_id).ability_cooldown_ticks, 40);
+        ASSERT_EQ(sim.get_unit(fire_id).ability_cooldown_ticks, 35);
 
-        // Order move while placing -> triggers CantGo and does not cancel placement
+        // Order move while placing -> silently ignored without CantGo per Ants.exe (uninterruptible)
         sim.clear_audio_events();
         sim.issue_move_order(fire_id, TileCoord{22, 20});
         ASSERT_EQ(sim.get_unit(fire_id).state, UnitState::PlacingFire); // Uninterruptible
-        ASSERT_TRUE(sim.has_audio_event(SoundID::CantGo));
+        ASSERT_FALSE(sim.has_audio_event(SoundID::CantGo));
 
-        // 2. Bomber Ant: Cooldown starts at order dispatch (28 ticks)
+        // 2. Bomber Ant: Cooldown starts at order dispatch (28 ticks absb)
         uint32_t bomb_id = sim.spawn_unit(0, AntType::Bomber, TileCoord{25, 25});
         sim.set_tile_flags(26, 25, 0x06);
 
@@ -6158,11 +6117,11 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         ASSERT_EQ(sim.get_unit(bomb_id).state, UnitState::PlantingBomb);
         ASSERT_EQ(sim.get_unit(bomb_id).ability_cooldown_ticks, 28);
 
-        // Order move while placing -> triggers CantGo and does not cancel
+        // Order move while placing -> silently ignored without CantGo per Ants.exe (uninterruptible)
         sim.clear_audio_events();
         sim.issue_move_order(bomb_id, TileCoord{27, 25});
         ASSERT_EQ(sim.get_unit(bomb_id).state, UnitState::PlantingBomb); // Uninterruptible
-        ASSERT_TRUE(sim.has_audio_event(SoundID::CantGo));
+        ASSERT_FALSE(sim.has_audio_event(SoundID::CantGo));
 
         // 3. Enemy attack does not knock back placing unit
         uint32_t enemy_id = sim.spawn_unit(1, AntType::Worker, TileCoord{24, 25});
@@ -6880,10 +6839,10 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
 
     TEST_CASE("12.108: Version Invariant & Fog of War Cursor Concealment Parity") {
         // 1. Verify semantic versioning components
-        ASSERT_EQ(ants::VERSION_STRING, "v0.0.13");
+        ASSERT_EQ(ants::VERSION_STRING, "v0.0.14");
         ASSERT_EQ(ants::VERSION_MAJOR, 0);
         ASSERT_EQ(ants::VERSION_MINOR, 0);
-        ASSERT_EQ(ants::VERSION_PATCH, 13);
+        ASSERT_EQ(ants::VERSION_PATCH, 14);
 
         // 2. Setup simulation world with Fog of War enabled
         SimulationEngine sim;
@@ -7777,6 +7736,12 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         CursorType planting_cursor = hud.evaluate_cursor(100, 100, ws_planting, sim.grid(), camera);
         ASSERT_EQ(static_cast<uint8_t>(planting_cursor), static_cast<uint8_t>(CursorType::Target));
 
+        // Wait for planting to complete so bomber returns to Idle
+        while (sim.get_unit(bomber_id).state == UnitState::PlantingBomb) {
+            sim.tick();
+        }
+        ASSERT_EQ(sim.get_unit(bomber_id).state, UnitState::Idle);
+
         // 2. Water Bomb Order -> instant CantGo
         sim.set_terrain(10, 9, 2); // 2 = water
         sim.clear_audio_events();
@@ -7982,8 +7947,8 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
     // ------------------------------------------------------------------------
     // 12.127: Fire Extinguish Timing & Sputter, Multi-Direction Placement Queueing, and Bomb Parity
     // ------------------------------------------------------------------------
-    TEST_CASE("12.127 Fire Extinguish Timing, Multi-Direction Placement, and Bomb Parity") {
-        // A. Fire Extinguish Timing: 24 ticks (South) or 26 ticks (North/East/West), sputter at tick 8
+    TEST_CASE("12.127 Fire Extinguish Timing, Silent Casting Rejection, Zero Cooldown, and Bomb Dud Parity") {
+        // A. Fire Extinguish Timing: 24 ticks (South) or 26 ticks (North/East/West), sound 69 at tick 8, sputter at tick 24
         {
             SimulationEngine sim;
             sim.init_test_world(60, 60, 100, 60000);
@@ -8011,30 +7976,35 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
                 ASSERT_TRUE(sim.has_fire_at({20, 21}));
             }
 
-            // Tick 8: fire extinguished and sputter effect created
+            // Tick 8: fire extinguisher sound 69 triggers, fire remains active during spray
+            sim.clear_audio_events();
             sim.tick();
+            ASSERT_TRUE(sim.has_audio_event(static_cast<uint32_t>(SoundID::FireExtinguish)));
+            ASSERT_TRUE(sim.has_fire_at({20, 21}));
+            ASSERT_EQ(sim.get_unit(ant_id).state, UnitState::ExtinguishingFire);
+
+            // Remains in ExtinguishingFire while spraying fire until tick 24 (total 24 ticks for South)
+            for (int i = 0; i < 15; ++i) { // ticks 9..23
+                sim.tick();
+                ASSERT_EQ(sim.get_unit(ant_id).state, UnitState::ExtinguishingFire);
+                ASSERT_TRUE(sim.has_fire_at({20, 21}));
+            }
+
+            // 24th tick: fire cleared and sputter effect spawned at top-left anchor (20 * 32, 21 * 32)
+            sim.tick();
+            ASSERT_EQ(sim.get_unit(ant_id).state, UnitState::Idle);
             ASSERT_FALSE(sim.has_fire_at({20, 21}));
             bool found_sputter = false;
             for (const auto& fx : sim.get_world_state().effects) {
-                if (fx.anim_name == "sputter" && fx.px == 20 * 32 + 16 && fx.py == 21 * 32 + 16) {
+                if (fx.anim_name == "sputter" && fx.px == 20 * 32 && fx.py == 21 * 32 && fx.total_frames == 17) {
                     found_sputter = true;
                     break;
                 }
             }
             ASSERT_TRUE(found_sputter);
-
-            // Remains in ExtinguishingFire until tick 24 (total 24 ticks for South)
-            for (int i = 0; i < 15; ++i) { // ticks 9..23
-                sim.tick();
-                ASSERT_EQ(sim.get_unit(ant_id).state, UnitState::ExtinguishingFire);
-            }
-
-            // 24th tick transitions to Idle
-            sim.tick();
-            ASSERT_EQ(sim.get_unit(ant_id).state, UnitState::Idle);
         }
 
-        // B. Multi-Directional Firewall Placement Queueing (North -> East)
+        // B. Silent Order Rejection During Active Action & Zero Post-Animation Cooldown
         {
             SimulationEngine sim;
             sim.init_test_world(60, 60, 100, 60000);
@@ -8053,7 +8023,8 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
             ASSERT_EQ(sim.get_unit(ant_id).state, UnitState::PlacingFire);
             ASSERT_EQ(sim.get_unit(ant_id).facing, ants::assets::Direction::North);
 
-            // While placing North, player immediately issues Order 2: Ignite Fire East (26, 25)
+            // While placing North, player tries to issue another order (East 26, 25)
+            sim.clear_audio_events();
             AntOrder o2;
             o2.type = OrderType::IgniteFire;
             o2.ant_id = ant_id;
@@ -8061,41 +8032,33 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
             o2.target_y = 25;
             sim.issue_order(o2);
 
-            // The ant should NOT immediately snap facing to East or drop the order;
-            // it must queue order 2 as pending_ability while continuing to place North!
+            // Order is SILENTLY IGNORED: no CantGo sound, placement continues uninterrupted
+            ASSERT_FALSE(sim.has_audio_event(static_cast<uint32_t>(SoundID::CantGo)));
             ASSERT_EQ(sim.get_unit(ant_id).state, UnitState::PlacingFire);
             ASSERT_EQ(sim.get_unit(ant_id).facing, ants::assets::Direction::North);
             ASSERT_EQ(sim.get_unit(ant_id).ability_target.x, 25);
             ASSERT_EQ(sim.get_unit(ant_id).ability_target.y, 24);
-            ASSERT_EQ(sim.get_unit(ant_id).pending_ability, OrderType::IgniteFire);
-            ASSERT_EQ(sim.get_unit(ant_id).pending_ability_target.x, 26);
-            ASSERT_EQ(sim.get_unit(ant_id).pending_ability_target.y, 25);
 
             // Let the North placement finish (35 ticks)
-            for (int i = 0; i < 36; ++i) {
+            for (int i = 0; i < 35; ++i) {
                 sim.tick();
             }
 
-            // First firewall at (25, 24) must exist!
+            // First firewall at (25, 24) exists and ant is back in Idle
             ASSERT_TRUE(sim.has_fire_at({25, 24}));
+            ASSERT_EQ(sim.get_unit(ant_id).state, UnitState::Idle);
 
-            // Wait for ability cooldown to expire and East placement to begin automatically
-            for (int i = 0; i < 40; ++i) {
-                sim.tick();
-                if (sim.get_unit(ant_id).state == UnitState::PlacingFire &&
-                    sim.get_unit(ant_id).facing == ants::assets::Direction::East) {
-                    break;
-                }
-            }
-
+            // Immediately upon Idle, issuing East placement succeeds with ZERO cooldown delay!
+            sim.issue_order(o2);
             ASSERT_EQ(sim.get_unit(ant_id).state, UnitState::PlacingFire);
             ASSERT_EQ(sim.get_unit(ant_id).facing, ants::assets::Direction::East);
 
-            // Finish East placement
-            for (int i = 0; i < 36; ++i) {
+            // Finish East placement (35 ticks)
+            for (int i = 0; i < 35; ++i) {
                 sim.tick();
             }
             ASSERT_TRUE(sim.has_fire_at({26, 25}));
+            ASSERT_EQ(sim.get_unit(ant_id).state, UnitState::Idle);
         }
 
         // C. Bomb Dud & Knockback Stun Parity: is_stunned() is true during Burn/Knockback, 0 stun afterwards
@@ -8120,6 +8083,53 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
             ASSERT_FALSE(sim.get_unit(ant_id).is_stunned());
             ASSERT_EQ(sim.get_unit(ant_id).stun_ticks_remaining, 0);
         }
+    } TEST_END();
+
+    // ------------------------------------------------------------------------
+    // 12.128: Bomber Pathing Around Intervening Friendly Bombs
+    // ------------------------------------------------------------------------
+    TEST_CASE("12.128 Bomber Pathing Around Intervening Friendly Bombs") {
+        SimulationEngine sim;
+        sim.init_test_world(60, 60, 100, 60000);
+
+        // Place a friendly bomb at (11, 10) owned by Player 0
+        sim.grid_mut().place_bomb(11, 10, 0);
+        ASSERT_TRUE(sim.has_bomb_at({11, 10}));
+
+        // Bomber Ant at (10, 10)
+        uint32_t bomber_id = sim.spawn_unit(0, AntType::Bomber, TileCoord{10, 10});
+        auto& bomber = sim.get_unit(bomber_id);
+        ASSERT_EQ(bomber.pos, (TileCoord{10, 10}));
+
+        // Issue order to plant a bomb at (12, 10)
+        // (11, 10) already has a friendly bomb between the ant and target
+        AntOrder o;
+        o.type = OrderType::PlantBomb;
+        o.ant_id = bomber_id;
+        o.target_x = 12;
+        o.target_y = 10;
+        sim.issue_order(o);
+
+        // The Bomber must NOT stall or pick (11, 10) as its candidate standing spot.
+        // It must route around (11, 10) (e.g. via y=9 or y=11) to an open cardinal neighbor of (12, 10).
+        ASSERT_TRUE(bomber.state == UnitState::Walking || bomber.state == UnitState::PlantingBomb);
+
+        // Step simulation up to 100 ticks to allow navigation and bomb placement
+        bool planted = false;
+        for (int t = 0; t < 100; ++t) {
+            sim.tick();
+            if (sim.has_bomb_at({12, 10})) {
+                planted = true;
+                break;
+            }
+        }
+
+        // Successfully placed the new bomb at (12, 10)!
+        ASSERT_TRUE(planted);
+        ASSERT_TRUE(sim.has_bomb_at({12, 10}));
+
+        // The original friendly bomb at (11, 10) was never detonated or stepped on!
+        ASSERT_TRUE(sim.has_bomb_at({11, 10}));
     } TEST_END();
 }
 

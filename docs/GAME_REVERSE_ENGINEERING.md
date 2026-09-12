@@ -1686,19 +1686,26 @@ To deliver authentic 1:1 gameplay inside standard web browsers with zero install
   - Non-bomber hovering over a bomb shows regular `CursorType::Move`.
   - Pedestal 2 (bomb tile / ability button at 537, 158) is hidden and its click handling is disabled whenever Shift is held or multiple units are selected.
 
-#### 8. Fire Extinguish Animation Timing (`afxf`), Multi-Direction Ability Queueing, and Bomb Dud/Knockback Zero-Stun Pipeline (`Ants.exe.c:20944-20947`, `Ants.exe.c:22568-22580`)
-- **Fire Extinguish Subitem Timings (`afxf` in Table 4)**:
-  - `afxf301` (South / Down): 12 subitems @ 100ms each = 1,200ms = 24 simulation ticks @ 20Hz.
-  - `afxf701` (North / Up): 13 subitems @ 100ms each = 1,300ms = 26 simulation ticks @ 20Hz.
-  - `afxf901` (East / Right & West / Left): 13 subitems @ 100ms each = 1,300ms = 26 simulation ticks @ 20Hz.
-  - Subitem 4 (`def_sp = 69`): Sound ID 69 (`fireput.wav`) plays at 400ms (tick 8).
-  - Firewall clearance and visual effect occur at tick 8: the firewall tile is removed and Anim 135 `sputter` (10 subitems @ 60ms = 600ms smoke puff effect) is spawned at the target tile center `(x * 32 + 16, y * 32 + 16)`.
-  - Renderer maps `action == "xf"` to `sub_idx = ant.anim_frame / 2;` (2 sim ticks per subitem).
-  - Extinguishing from a distance: when walking to cardinal adjacency, `extinguish_fire(id, target, false)` is called with `instant = false`, authentically playing the full extinguish animation and audio instead of instantly erasing the firewall.
-- **Multi-Direction Ability Queueing (e.g. North -> East Firewall Placement)**:
-  - In `issue_order`: when an ant is already performing an ability (e.g. `UnitState::PlacingFire`) or on ability cooldown (`ability_cooldown_ticks > 0`), issuing an adjacent ability order (such as placing a firewall in another cardinal direction) queues it as `unit->pending_ability` and `unit->ability_target` without modifying `unit->facing` or dropping the order.
-  - In `tick()` autonomous pending ability execution: the simulation engine waits for `ant_ptr->ability_cooldown_ticks == 0` before consuming `pending_ability`, snapping facing, and initiating the subsequent placement.
-- **Bomb Dud & Knockback Zero-Stun Pipeline (`Ants.exe.c` lines 20944, 20947, 22568-22580)**:
+#### 8. Fire Extinguish Timing (`afxf`), Silent Active Action Order Rejection, Zero Ability Cooldown, and Bomber Pathing Around Friendly Bombs (`Ants.exe.c:22938-23085`, `Ants.exe.c:19435`, `Ants.exe.c:10693-10694`)
+- **Silent Order Rejection in Active Action States (`Ants.exe.c:22938`, `23077-23080` / `FUN_0101ff5a`)**:
+  - `FUN_0101ff5a` inspects `param_1[0x39]` (unit state). If the unit is not in state 0 (`Idle`), state 1 (`Walking`), or state 3 (`Swimming`), it returns 0.
+  - In `Ants.exe.c:22938`, when `FUN_0101ff5a` returns 0, execution jumps to `LAB_0101fef5`, which **silently returns 0** without playing `SoundID::CantGo` or triggering a CantGo animation.
+  - While a unit is in an active action state (`PlacingFire`, `PlantingBomb`, `BuildingBridge`, `DemolishingBridge`, `ExtinguishingFire`, `DefusingBomb`, or `is_transforming()`), all incoming player orders are completely and silently ignored, allowing the action to finish uninterrupted.
+- **Zero Post-Animation Cooldown**:
+  - The animation duration itself is the sole pacing mechanism for abilities (e.g. 35 ticks for fire, 28 ticks for bomb, 16 ticks for bridge, 24/26 ticks for extinguish).
+  - The instant the placement animation completes and the unit transitions back to `Idle` (state 0), `FUN_0101ff5a` immediately accepts new orders. There is zero artificial cooldown delay blocking subsequent orders once the unit is idle.
+- **Uninterruptible `getpow` Transformation (`Ants.exe.c:23694` / `FUN_01020cdb`)**:
+  - Once the 11-tick `getpow` transformation sequence begins, the ant commits to the new unit class.
+  - The transformation cannot be aborted by player orders; any order issued while transforming is silently ignored. The ant completes the full transformation and emerges as the new unit. To prevent an ant from taking a power-up, it must be redirected *prior* to `getpow` starting.
+- **Bomber Pathing Around Intervening Friendly Bombs (`Ants.exe.c:23167-23245` / `FUN_01020128`)**:
+  - When ordering a Bomber to plant a bomb at a target tile, candidate cardinal standing spots (`cand`) strictly reject tiles that already contain a bomb (`!grid.has_bomb_at(cand)`).
+  - Pathfinding treats friendly/allied bombs as impassable obstacles, enabling the Bomber to navigate *around* intervening friendly mines to reach an open cardinal tile and plant the bomb, instead of stalling in place. Enemy bombs are not treated as pathfinding obstacles.
+- **Fire Extinguish Sequence & Sputter Anchor (`Ants.exe.c:19435` -> `FUN_0101e97b`, `10693-10694` / `FUN_010100ab`)**:
+  - In `afxf`, the Fire Ant sprays its fire extinguisher canister at tick 8, triggering `SoundID::FireExtinguish` (sound 69, `fireextinguish.wav`).
+  - The firewall remains active while being sprayed until animation completion (24 ticks for South `afxf301`, 26 ticks for North/East/West `afxf701`/`afxf901`).
+  - At animation completion (`FUN_0101ad02:19435` -> `FUN_0101e97b`), the firewall tile is removed (`0x7ffe`), and `VisualEffect{"sputter", tx * 32, ty * 32, 0, 17}` is spawned.
+  - Tile effect positions in `FUN_010100ab` are anchored at `(tx * 32, ty * 32)` (top-left). Table 4 Anim 135 `sputter` frame offsets (`dx: 3, dy: 6`, etc.) are pre-centered within the 32x32 tile. Total duration is 830ms across 10 subitems = 17 simulation ticks @ 20Hz.
+- **Bomb Dud & Knockback Zero-Stun Pipeline (`Ants.exe.c:20944-20947`, `22568-22580`)**:
   - **In-Flight & Dud Order Invariant**: During flight (`UnitState::Knockback`) and dud burn (`UnitState::Burn`), `is_stunned()` evaluates to `true`, preventing order inputs and path updates as enforced by `Ants.exe` `FUN_0101b8cb`.
   - **Zero Post-Flight / Post-Dud Stun**: Upon completion of dud burn (`UnitState::Burn`, 11 ticks of `a*bu` scorch), the ant transitions directly to `UnitState::Idle` (`FUN_0101ace3(this, 0)`). No artificial 50-tick stun is applied.
   - Upon landing from bomb knockback (`DamageSource::BombBlast`), the ant lands directly into `UnitState::Idle` with `stun_ticks_remaining = 0`, playing `SOUND_FLY_THUMP_B` (sound 71) without `SOUND_STUN` (sound 66) or 50-tick stun.
