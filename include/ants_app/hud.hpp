@@ -203,6 +203,10 @@ public:
     uint8_t get_local_player_id() const noexcept { return local_player_id_; }
     void set_local_player_id(uint8_t id) noexcept { local_player_id_ = id; }
 
+    // Pedestal Action Buttons
+    const UIButton& get_move_pedestal_button() const noexcept { return move_pedestal_button_; }
+    const UIButton& get_ability_pedestal_button() const noexcept { return ability_pedestal_button_; }
+
     // Dialog and Modal overlays
     void open_quit_dialog() noexcept {
         cancel_order_mode();

@@ -20,7 +20,7 @@ AntUnit::AntUnit(uint32_t unit_id, TeamId team_in, AntType type_in, int32_t star
 }
 
 bool AntUnit::take_damage(uint16_t amount, DamageSource source, [[maybe_unused]] uint32_t attacker_id) noexcept {
-    if (death_status != DeathStatus::Alive || hp == 0 || is_invulnerable()) {
+    if (death_status != DeathStatus::Alive || hp == 0 || is_invulnerable() || underground) {
         return false;
     }
 
@@ -267,7 +267,7 @@ void AntUnit::tick_timers() noexcept {
     if (state == UnitState::Attacking || state == UnitState::Flinch || state == UnitState::Burn) {
         anim_tick++;
         anim_subitem = anim_tick;
-        if ((state == UnitState::Flinch || state == UnitState::Burn) && push_tick_current < push_ticks_total) {
+        if (state == UnitState::Flinch && push_tick_current < push_ticks_total) {
             push_tick_current++;
             int32_t interp_x = push_start_px + ((push_dest_px - push_start_px) * static_cast<int32_t>(push_tick_current)) / static_cast<int32_t>(push_ticks_total);
             int32_t interp_y = push_start_py + ((push_dest_py - push_start_py) * static_cast<int32_t>(push_tick_current)) / static_cast<int32_t>(push_ticks_total);

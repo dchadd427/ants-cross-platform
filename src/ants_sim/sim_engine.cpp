@@ -242,11 +242,7 @@ public:
                 if (other->state == UnitState::Walking &&
                     other->current_waypoint_idx < other->waypoints.size() &&
                     other->waypoints[other->current_waypoint_idx] != target_tile) {
-                    int32_t dx = std::abs(other->pixel_x - (target_tile.x * 32 + 16));
-                    int32_t dy = std::abs(other->pixel_y - (target_tile.y * 32 + 16));
-                    if (dx >= 16 || dy >= 16) {
-                        continue;
-                    }
+                    continue;
                 }
                 return true;
             }
@@ -1507,8 +1503,8 @@ void SimulationEngine::tick() {
                     ant_ptr->underground = true;
                     const auto* enemy_base = impl_->grid_.find_anthill(victim);
                     if (enemy_base) {
-                        ant_ptr->pos = TileCoord{enemy_base->x + 1, enemy_base->y + 1};
-                        ant_ptr->set_pixel_pos(enemy_base->x * 32 + 107, enemy_base->y * 32 + 58);
+                        ant_ptr->pos = TileCoord{enemy_base->x + 3, enemy_base->y + 2};
+                        ant_ptr->set_pixel_pos(enemy_base->x * 32 + 107, enemy_base->y * 32 + 90);
                     }
                 }
             }
@@ -1875,31 +1871,6 @@ void SimulationEngine::tick() {
         if (ant_ptr->anim_tick == 11) {
             impl_->audio_queue_.push_back(AudioEvent{SoundID::FlingThumpB, ant_ptr->pixel_x, ant_ptr->pixel_y, 1, 255});
         }
-        if (ant_ptr->push_tick_current == ant_ptr->push_ticks_total && ant_ptr->push_ticks_total > 0) {
-            int32_t b_dx = ant_ptr->push_dest_px - ant_ptr->push_start_px;
-            int32_t b_dy = ant_ptr->push_dest_py - ant_ptr->push_start_py;
-            int32_t inc_dx = (b_dx > 0) ? 1 : ((b_dx < 0) ? -1 : 0);
-            int32_t inc_dy = (b_dy > 0) ? 1 : ((b_dy < 0) ? -1 : 0);
-            ant_ptr->push_ticks_total = 0;
-            if (impl_->grid_.in_bounds(ant_ptr->pos)) {
-                const auto& cell = impl_->grid_.get_cell(static_cast<uint32_t>(ant_ptr->pos.x), static_cast<uint32_t>(ant_ptr->pos.y));
-                if (cell.terrain_type == TERRAIN_WATER && !cell.has_completed_bridge()) {
-                    if (ant_ptr->type == AntType::Swimmer) {
-                        ant_ptr->state = UnitState::Swimming;
-                        ant_ptr->in_water = true;
-                    } else {
-                        ant_ptr->start_drowning();
-                        impl_->audio_queue_.push_back(AudioEvent{SoundID::AntDrown, ant_ptr->pixel_x, ant_ptr->pixel_y, 0, 255});
-                        impl_->audio_queue_.push_back(AudioEvent{SoundID::WaterSplash, ant_ptr->pixel_x, ant_ptr->pixel_y, 0, 255});
-                        continue;
-                    }
-                }
-                if (impl_->grid_.has_bomb_at(ant_ptr->pos)) {
-                    trigger_bomb_detonation(ant_ptr->id, ant_ptr->pos, inc_dx, inc_dy);
-                    continue;
-                }
-            }
-        }
 
         if (ant_ptr->state_timer == 0 || ant_ptr->anim_tick >= 22) {
             if (ant_ptr->hp == 0) {
@@ -2056,8 +2027,35 @@ void SimulationEngine::tick() {
 
                 if (!near_food_or_lb && !a1->is_in_scuffle && !a2->is_in_scuffle &&
                     a1->state != UnitState::Bounce && a2->state != UnitState::Bounce &&
-                    a1->state != UnitState::Knockback && a2->state != UnitState::Knockback) {
-                    if (a1_moving && !a2_moving) {
+                    a1->state != UnitState::Knockback && a2->state != UnitState::Knockback &&
+                    a1->state != UnitState::Burn && a2->state != UnitState::Burn) {
+                    if (a1_moving && a2_moving) {
+                        // Two moving ants colliding head-on or intersecting same tile:
+                        // Authentic 1998 Ants.exe (Ants.exe.c:20280–20309): both bounce away into adjacent available tiles!
+                        static constexpr int32_t DIR_DX[8] = { 0,  1, 1, 1, 0, -1, -1, -1 };
+                        static constexpr int32_t DIR_DY[8] = {-1, -1, 0, 1, 1,  1,  0, -1 };
+                        int32_t f1 = static_cast<int32_t>(a1->facing) & 7;
+                        int32_t f2 = static_cast<int32_t>(a2->facing) & 7;
+                        int32_t v1_x = DIR_DX[f1]; int32_t v1_y = DIR_DY[f1];
+                        int32_t v2_x = DIR_DX[f2]; int32_t v2_y = DIR_DY[f2];
+                        int32_t r_x = a2->pixel_x - a1->pixel_x;
+                        int32_t r_y = a2->pixel_y - a1->pixel_y;
+                        int32_t dot1 = v1_x * r_x + v1_y * r_y;
+                        int32_t dot2 = v2_x * (-r_x) + v2_y * (-r_y);
+                        int32_t dot_dirs = v1_x * v2_x + v1_y * v2_y;
+                        bool in_base_queue = (is_ant_in_base_queue(a1->id) || is_ant_in_base_queue(a2->id));
+                        bool on_anthill_reserved = (impl_->grid_.is_anthill_reserved_spot(a1->pos) || impl_->grid_.is_anthill_reserved_spot(a2->pos));
+                        bool head_on = (!in_base_queue && !on_anthill_reserved &&
+                                        dot_dirs < 0 && dot1 > 0 && dot2 > 0 && a1->final_dest != a2->final_dest);
+                        if (head_on) {
+                            int32_t col_x = a1->pos.x;
+                            int32_t col_y = a1->pos.y;
+                            bounce_unit_cascade(*impl_, *a1, a2->pos.x, a2->pos.y, false);
+                            bounce_unit_cascade(*impl_, *a2, col_x, col_y, false);
+                            impl_->audio_queue_.push_back(AudioEvent{SoundID::Bump, a1->pixel_x, a1->pixel_y, 1, 255});
+                            impl_->active_effects_.push_back(VisualEffect{"bump", (a1->pixel_x + a2->pixel_x) / 2, (a1->pixel_y + a2->pixel_y) / 2, 0, 10});
+                        }
+                    } else if (a1_moving && !a2_moving) {
                         // a1 is moving, a2 is stationary friendly:
                         // a2 stands still and MUST NOT be pushed! a1 is pushed away from a2:
                         int32_t push_x = static_cast<int32_t>(nx * overlap + (nx >= 0 ? 0.5f : -0.5f));
@@ -2284,7 +2282,7 @@ void SimulationEngine::tick() {
     // Discrete tile center guarantee: Ants must NEVER settle halfway between tiles
     for (auto& u : impl_->ants_) {
         if (!u || !u->is_alive() || u->underground) continue;
-        if (u->state == UnitState::Bounce && u->push_tick_current < u->push_ticks_total && u->pixel_x != u->push_dest_px) continue;
+        if (u->state == UnitState::Bounce && u->push_tick_current < u->push_ticks_total) continue;
         if (u->state == UnitState::Idle || u->state == UnitState::GuardIdle ||
             u->state == UnitState::Bounce || u->state == UnitState::QueuingBase ||
             u->state == UnitState::CantGo) {
@@ -2420,6 +2418,21 @@ void SimulationEngine::issue_order(const AntOrder& order) {
             unit->pending_ability = OrderType::None;
             unit->pending_ability_target = TileCoord{-1, -1};
             unit->ability_target = TileCoord{-1, -1};
+            if (unit->type == AntType::Thief) {
+                for (uint8_t p = 0; p < MAX_PLAYERS; ++p) {
+                    if (p != unit->player_id && !impl_->stats_.are_allies(unit->player_id, p)) {
+                        const auto* ah = impl_->grid_.find_anthill(p);
+                        if (ah && order.target_x >= ah->x && order.target_x < ah->x + 4 &&
+                                  order.target_y >= ah->y && order.target_y < ah->y + 4) {
+                            AntOrder inf_order = order;
+                            inf_order.type = OrderType::InfiltrateAnthill;
+                            inf_order.target_entity_id = p;
+                            issue_order(inf_order);
+                            return;
+                        }
+                    }
+                }
+            }
             issue_move_order(order.ant_id, TileCoord{order.target_x, order.target_y}, order.allow_friendly_bomb, order.is_food_order);
             break;
         case OrderType::ReturnToBase: {
@@ -4139,16 +4152,17 @@ TileCoord SimulationEngine::get_base_queue_slot(uint8_t player_id, size_t index)
     int32_t bx = base->x;
     int32_t by = base->y;
 
+    // Authentic 1998 Ants.exe (Ants.exe.c:9678–9684 & 22781–22792):
     // Queue slots line up strictly to the left of the base:
-    // Slot 0: (bx - 1, by + 3)
-    // Slot 1: (bx - 1, by + 2)
-    // Slot 2: (bx - 1, by + 1)
-    // Slot 3: (bx - 1, by)
-    // Slot 4: (bx - 2, by + 3), etc.
+    // Slot 0: (bx - 1, by)
+    // Slot 1: (bx - 1, by + 1)
+    // Slot 2: (bx - 1, by + 2)
+    // Slot 3: (bx - 1, by + 3)
+    // Slot 4: (bx - 2, by), etc.
     size_t col = index / 4;
     size_t row = index % 4;
     int32_t qx = bx - 1 - static_cast<int32_t>(col);
-    int32_t qy = by + 3 - static_cast<int32_t>(row);
+    int32_t qy = by + static_cast<int32_t>(row);
 
     if (impl_->grid_.in_bounds(qx, qy) && impl_->grid_.get_cell(TileCoord{qx, qy}).is_passable(false, false)) {
         return TileCoord{qx, qy};
@@ -4159,7 +4173,7 @@ TileCoord SimulationEngine::get_base_queue_slot(uint8_t player_id, size_t index)
         for (int32_t dy = -r; dy <= r; ++dy) {
             for (int32_t dx = -r; dx <= r; ++dx) {
                 int32_t cx = (bx - 1) + dx;
-                int32_t cy = (by + 3) + dy;
+                int32_t cy = by + dy;
                 if (cx < bx && impl_->grid_.in_bounds(cx, cy) &&
                     impl_->grid_.get_cell(TileCoord{cx, cy}).is_passable(false, false)) {
                     return TileCoord{cx, cy};
@@ -4168,7 +4182,7 @@ TileCoord SimulationEngine::get_base_queue_slot(uint8_t player_id, size_t index)
         }
     }
 
-    return TileCoord{std::max(0, bx - 1), by + 3};
+    return TileCoord{std::max(0, bx - 1), by};
 }
 
 void SimulationEngine::step_base_entry_animation(uint32_t ant_id, uint16_t target_frame) {
@@ -4380,6 +4394,14 @@ void SimulationEngine::trigger_bomb_detonation(uint32_t ant_id, TileCoord bomb_p
             ant_ptr->state_timer = 22;
             ant_ptr->anim_tick = 0;
             ant_ptr->anim_subitem = 0;
+            ant_ptr->push_ticks_total = 0;
+            ant_ptr->push_tick_current = 0;
+            ant_ptr->set_tile_pos(bomb_pos.x, bomb_pos.y);
+            ant_ptr->set_pixel_pos(bomb_pos.x * 32 + 16, bomb_pos.y * 32 + 16);
+            ant_ptr->push_start_px = ant_ptr->pixel_x;
+            ant_ptr->push_start_py = ant_ptr->pixel_y;
+            ant_ptr->push_dest_px = ant_ptr->pixel_x;
+            ant_ptr->push_dest_py = ant_ptr->pixel_y;
         } else {
             // FULL DETONATION: Spawns bombex effect centered on bomb tile, plays bombexp.wav, launches ant airborne
             int32_t bomb_center_x = bomb_pos.x * 32 + 16;

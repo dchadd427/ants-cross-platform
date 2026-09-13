@@ -94,9 +94,20 @@ void PhysicsEngine::apply_knockback(AntUnit& victim,
         flight.destination_resolved = (grid != nullptr);
     }
 
+    flight.total_ticks = 10;
     victim.state = UnitState::Knockback;
     victim.anim_tick = 0;
     victim.anim_subitem = 0;
+
+    // Authentic 1998 Ants.exe (Ants.exe.c:24460):
+    // The ant's logical coordinates are immediately anchored at the destination tile:
+    // this_00[0x2c] = *(int *)puVar4;
+    int32_t dest_tx = (flight.target_px >= 0) ? (flight.target_px / 32) : ((flight.target_px - 31) / 32);
+    int32_t dest_ty = (flight.target_py >= 0) ? (flight.target_py / 32) : ((flight.target_py - 31) / 32);
+    victim.set_tile_pos(dest_tx, dest_ty);
+    victim.set_pixel_pos(flight.target_px, flight.target_py);
+    victim.altitude_z = 0;
+
     audio_out.push_back(AudioEvent{SOUND_FLY_THUMP_A, victim.pixel_x, victim.pixel_y, 1, 255});
 
     cancel_flight(victim.id);
@@ -192,13 +203,8 @@ void PhysicsEngine::tick(std::vector<AntUnit*>& all_units,
         f.current_tick++;
         if (f.total_ticks == 0) f.total_ticks = 1;
 
-        int32_t cur_px = f.start_px + ((f.target_px - f.start_px) * f.current_tick) / f.total_ticks;
-        int32_t cur_py = f.start_py + ((f.target_py - f.start_py) * f.current_tick) / f.total_ticks;
-        int32_t z = (4 * f.apex_height_px * f.current_tick * (f.total_ticks - f.current_tick)) /
-                    (f.total_ticks * f.total_ticks);
-
-        unit->set_pixel_pos(cur_px, cur_py);
-        unit->altitude_z = z;
+        unit->set_pixel_pos(f.target_px, f.target_py);
+        unit->altitude_z = 0;
         unit->anim_tick = f.current_tick;
         unit->anim_subitem = f.current_tick;
 
@@ -402,8 +408,8 @@ void PhysicsEngine::resolve_fire_contact(AntUnit& unit,
         unit.fx_x = start_px << 16;
         unit.fx_y = start_py << 16;
 
-        unit.state = UnitState::Burn;
-        unit.state_timer = 22;
+        unit.state = UnitState::Bounce;
+        unit.state_timer = 10;
         unit.anim_tick = 0;
         unit.anim_subitem = 0;
         unit.post_bounce_stun = false;

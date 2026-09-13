@@ -69,11 +69,11 @@ void HUD::init(uint8_t local_player_id) {
     options_button_ = {525, 7, 52, 23, 0, 0, 0, false, true, false};
     quit_button_ = {579, 7, 46, 23, 0, 0, 0, false, true, false};
 
-    // Configure Authentic Primary Action Pedestal (Move) at (476, 158, 50, 67)
-    move_pedestal_button_ = {476, 158, 50, 67, 0, 0, 0, false, true, false};
+    // Configure Authentic Primary Action Pedestal (Move) at (476, 156, 55, 75)
+    move_pedestal_button_ = {476, 156, 55, 75, 0, 0, 0, false, true, false};
 
-    // Configure Authentic Secondary Ability Pedestal at (537, 158, 50, 67)
-    ability_pedestal_button_ = {537, 158, 50, 67, 0, 0, 0, false, true, false};
+    // Configure Authentic Secondary Ability Pedestal at (537, 156, 55, 75)
+    ability_pedestal_button_ = {537, 156, 55, 75, 0, 0, 0, false, true, false};
 
     // Configure Authentic Stop Button at (602, 176, 34, 50)
     stop_button_ = {602, 176, 34, 50, 0, 0, 0, false, true, false};
@@ -407,44 +407,74 @@ void HUD::render(IRenderer& renderer, const assets::AssetArchive& assets,
         }
 
         if (move_pedestal_state_ == PedestalAnimState::Raised && has_friendly_ants) {
-            // Pedestal 1: Move (Authentic 476, 158)
+            // Pedestal 1: Move (Authentic Table 4 butmovu / butmovd with molded drop shadow)
             bool ped1_down = move_pedestal_button_.is_pressed || (active_order_mode_ == sim::OrderType::Move);
-            renderer.draw_named_sprite(ped1_down ? "buttrna5.bmp" : "buttrna1.bmp", 476, 158);
-            renderer.draw_named_sprite(ped1_down ? "trnamov4.bmp" : "trnamov1.bmp", 480, 163);
-            renderer.draw_named_sprite("labmov.bmp", 484, 140);
+            if (ped1_down) {
+                renderer.draw_named_sprite("butdown.bmp", 476, 156);
+                renderer.draw_named_sprite("butmovd.bmp", 490, 165);
+            } else {
+                renderer.draw_named_sprite("butup.bmp", 477, 157);
+                renderer.draw_named_sprite("butmovu.bmp", 490, 162);
+            }
+            renderer.draw_named_sprite("labmov.bmp", 483, 141);
             if (current_cursor_ == CursorType::Move || current_cursor_ == CursorType::Food) {
                 render_pedestal_glow(renderer, assets, 1);
             }
 
-            // Pedestal 2: Class-Specific Ability Pedestal (Authentic 537, 158)
+            // Pedestal 2: Class-Specific Ability Pedestal (Authentic Table 4 but*u / but*d)
             // Authentic 1998 parity: Hide ability/bomb pedestal when Shift is held or multi-selected
             bool hide_pedestal_2 = is_shift_held() || is_multi_select() || selected_ant_ids_.size() > 1;
             if (sel_ant && sel_ant->player_id == local_player_id_ && !hide_pedestal_2) {
                 if (sel_ant->type == sim::AntType::Swimmer) {
                     bool ped2_down = ability_pedestal_button_.is_pressed || (active_order_mode_ == sim::OrderType::BuildBridge);
-                    renderer.draw_named_sprite(ped2_down ? "buttrna5.bmp" : "buttrna1.bmp", 537, 158);
-                    renderer.draw_named_sprite(ped2_down ? "trnaswm4.bmp" : "trnaswm1.bmp", 543, 167);
-                    renderer.draw_named_sprite("labswim.bmp", 543, 140);
+                    if (ped2_down) {
+                        renderer.draw_named_sprite("butdown.bmp", 537, 156);
+                        renderer.draw_named_sprite("swimd.bmp", 549, 168);
+                    } else {
+                        renderer.draw_named_sprite("butup.bmp", 538, 157);
+                        renderer.draw_named_sprite("swimup.bmp", 548, 165);
+                    }
+                    renderer.draw_named_sprite("labswim.bmp", 542, 141);
                 } else if (sel_ant->type == sim::AntType::Fire) {
                     bool ped2_down = ability_pedestal_button_.is_pressed || (active_order_mode_ == sim::OrderType::IgniteFire);
-                    renderer.draw_named_sprite(ped2_down ? "buttrna5.bmp" : "buttrna1.bmp", 537, 158);
-                    renderer.draw_named_sprite("butfireu.bmp", 548, ped2_down ? 165 : 164);
-                    renderer.draw_named_sprite("labfire.bmp", 538, 140);
+                    if (ped2_down) {
+                        renderer.draw_named_sprite("butdown.bmp", 537, 156);
+                        renderer.draw_named_sprite("butfireu.bmp", 549, 166);
+                    } else {
+                        renderer.draw_named_sprite("butup.bmp", 538, 157);
+                        renderer.draw_named_sprite("butfireu.bmp", 548, 162);
+                    }
+                    renderer.draw_named_sprite("labfire.bmp", 539, 141);
                 } else if (sel_ant->type == sim::AntType::Combat) {
                     bool ped2_down = ability_pedestal_button_.is_pressed || (active_order_mode_ == sim::OrderType::Attack);
-                    renderer.draw_named_sprite(ped2_down ? "buttrna5.bmp" : "buttrna1.bmp", 537, 158);
-                    renderer.draw_named_sprite(ped2_down ? "trnaatk4.bmp" : "trnaatk1.bmp", 541, 163);
-                    renderer.draw_named_sprite("labatt.bmp", 542, 140);
+                    if (ped2_down) {
+                        renderer.draw_named_sprite("butdown.bmp", 537, 156);
+                        renderer.draw_named_sprite("butattd.bmp", 547, 172);
+                    } else {
+                        renderer.draw_named_sprite("butup.bmp", 538, 157);
+                        renderer.draw_named_sprite("butattu.bmp", 546, 169);
+                    }
+                    renderer.draw_named_sprite("labatt.bmp", 542, 141);
                 } else if (sel_ant->type == sim::AntType::Bomber) {
                     bool ped2_down = ability_pedestal_button_.is_pressed || (active_order_mode_ == sim::OrderType::PlantBomb);
-                    renderer.draw_named_sprite(ped2_down ? "buttrna5.bmp" : "buttrna1.bmp", 537, 158);
-                    renderer.draw_named_sprite(ped2_down ? "trnabmb4.bmp" : "trnabmb1.bmp", 542, 164);
-                    renderer.draw_named_sprite("labbom.bmp", 545, 140);
+                    if (ped2_down) {
+                        renderer.draw_named_sprite("butdown.bmp", 537, 156);
+                        renderer.draw_named_sprite("butbomd.bmp", 549, 166);
+                    } else {
+                        renderer.draw_named_sprite("butup.bmp", 538, 157);
+                        renderer.draw_named_sprite("butbomu.bmp", 549, 162);
+                    }
+                    renderer.draw_named_sprite("labbom.bmp", 544, 140);
                 } else if (sel_ant->type == sim::AntType::Thief) {
                     bool ped2_down = ability_pedestal_button_.is_pressed || (active_order_mode_ == sim::OrderType::InfiltrateAnthill);
-                    renderer.draw_named_sprite(ped2_down ? "buttrna5.bmp" : "buttrna1.bmp", 537, 158);
-                    renderer.draw_named_sprite(ped2_down ? "trnastl4.bmp" : "trnastl1.bmp", 541, 163);
-                    renderer.draw_named_sprite("labthf.bmp", 546, 140);
+                    if (ped2_down) {
+                        renderer.draw_named_sprite("butdown.bmp", 537, 156);
+                        renderer.draw_named_sprite("butthfd.bmp", 549, 169);
+                    } else {
+                        renderer.draw_named_sprite("butup.bmp", 538, 157);
+                        renderer.draw_named_sprite("butthfu.bmp", 548, 165);
+                    }
+                    renderer.draw_named_sprite("labthf.bmp", 546, 141);
                 }
                 if (right_mouse_held_ || active_order_mode_ != sim::OrderType::None || current_cursor_ == CursorType::Target) {
                     render_pedestal_glow(renderer, assets, 2);
