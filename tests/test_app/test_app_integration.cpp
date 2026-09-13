@@ -6847,10 +6847,10 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
 
     TEST_CASE("12.108: Version Invariant & Fog of War Cursor Concealment Parity") {
         // 1. Verify semantic versioning components
-        ASSERT_EQ(ants::VERSION_STRING, "v0.0.15");
+        ASSERT_EQ(ants::VERSION_STRING, "v0.0.16");
         ASSERT_EQ(ants::VERSION_MAJOR, 0);
         ASSERT_EQ(ants::VERSION_MINOR, 0);
-        ASSERT_EQ(ants::VERSION_PATCH, 15);
+        ASSERT_EQ(ants::VERSION_PATCH, 16);
 
         // 2. Setup simulation world with Fog of War enabled
         SimulationEngine sim;
@@ -8326,6 +8326,192 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         move_defuser.target_y = 10;
         sim_defuse.issue_order(move_defuser);
         ASSERT_EQ(b_unit.state, UnitState::Walking);
+    } TEST_END();
+
+    TEST_CASE("12.130 Airborne Trajectory Clearance Over Ground Ants & Fire Ricochet Bounce / State Transitions") {
+        // -------------------------------------------------------------------------
+        // Part 1: Airborne Ballistic Trajectory Clearance Over Intermediate Ants
+        // An ant hits a bomb at (20, 20) while facing West. Blast recoil throws it
+        // East towards (24, 20) (4 tiles displacement, 5 tiles total).
+        // Station friendly and enemy ants along the flight path at (21, 20),
+        // (22, 20), and (23, 20). The airborne ant must fly completely OVER them
+        // without colliding, bouncing, scuffling, or aborting flight early.
+        // -------------------------------------------------------------------------
+        {
+            SimulationEngine sim;
+            sim.init_test_world(60, 60, 1, 60000);
+            sim.grid_mut().place_bomb(20, 20, 1);
+
+            // Ground ants stationed along trajectory
+            uint32_t standing_friendly1 = sim.spawn_unit(0, AntType::Worker, {21, 20});
+            uint32_t standing_enemy     = sim.spawn_unit(1, AntType::Worker, {22, 20});
+            uint32_t standing_friendly2 = sim.spawn_unit(0, AntType::Worker, {23, 20});
+
+            // Ant spawned directly at bomb tile facing West -> blast recoils East across tiles 21, 22, 23
+            uint32_t flying_ant = sim.spawn_unit(0, AntType::Worker, {20, 20});
+            sim.get_unit(flying_ant).facing = Direction::West;
+
+            // Step until bomb detonates
+            for (int t = 0; t < 100; ++t) {
+                sim.tick();
+                if (!sim.grid().has_bomb_at({20, 20})) break;
+            }
+            ASSERT_FALSE(sim.grid().has_bomb_at({20, 20}));
+
+            // Step through airborne flight
+            for (int t = 0; t < 30; ++t) {
+                sim.tick();
+            }
+
+            // Intermediate ants must remain completely undisturbed at their coordinates!
+            const auto& sf1 = sim.get_unit(standing_friendly1);
+            ASSERT_EQ(sf1.pos.x, 21);
+            ASSERT_EQ(sf1.pos.y, 20);
+            ASSERT_EQ(sf1.hp, 10);
+            ASSERT_EQ(sf1.state, UnitState::Idle);
+
+            const auto& se = sim.get_unit(standing_enemy);
+            ASSERT_EQ(se.pos.x, 22);
+            ASSERT_EQ(se.pos.y, 20);
+            ASSERT_EQ(se.hp, 10);
+            ASSERT_EQ(se.state, UnitState::Idle);
+
+            const auto& sf2 = sim.get_unit(standing_friendly2);
+            ASSERT_EQ(sf2.pos.x, 23);
+            ASSERT_EQ(sf2.pos.y, 20);
+            ASSERT_EQ(sf2.hp, 10);
+            ASSERT_EQ(sf2.state, UnitState::Idle);
+
+            // Flying ant has flown cleanly over all 3 ants and landed on tile 4 (24, 20)!
+            const auto& fa = sim.get_unit(flying_ant);
+            ASSERT_TRUE(fa.is_alive());
+            ASSERT_EQ(fa.pos.x, 24);
+            ASSERT_EQ(fa.pos.y, 20);
+            ASSERT_EQ(fa.state, UnitState::Idle);
+            ASSERT_FALSE(fa.is_stunned());
+
+            // Can immediately walk
+            AntOrder move_after_flight{};
+            move_after_flight.ant_id = flying_ant;
+            move_after_flight.type = OrderType::Move;
+            move_after_flight.target_x = 25;
+            move_after_flight.target_y = 20;
+            sim.issue_order(move_after_flight);
+            ASSERT_EQ(fa.state, UnitState::Walking);
+        }
+
+        // -------------------------------------------------------------------------
+        // Part 2: Bomb Blast Knockback Landing on Fire Wall
+        // Non-fire ant takes contact fire damage, ricochets away with bounce
+        // animation (UnitState::Bounce), and transitions to UnitState::Idle.
+        // -------------------------------------------------------------------------
+        {
+            SimulationEngine sim;
+            sim.init_test_world(60, 60, 1, 60000);
+            sim.grid_mut().place_bomb(10, 10, 1);
+            sim.grid_mut().place_firewall(14, 10, 0);
+
+            uint32_t w_id = sim.spawn_unit(0, AntType::Worker, {11, 10});
+            AntOrder o{};
+            o.ant_id = w_id;
+            o.type = OrderType::Move;
+            o.target_x = 10;
+            o.target_y = 10;
+            sim.issue_order(o);
+
+            for (int t = 0; t < 100; ++t) {
+                sim.tick();
+                if (!sim.grid().has_bomb_at({10, 10})) break;
+            }
+            ASSERT_FALSE(sim.grid().has_bomb_at({10, 10}));
+
+            // Step through flight (10-12 ticks) and landing resolution
+            for (int t = 0; t < 25; ++t) {
+                sim.tick();
+            }
+
+            const auto& u_landed = sim.get_unit(w_id);
+            ASSERT_TRUE(u_landed.is_alive());
+            // 10 HP - 2 blast - 1 fire = 7 HP
+            ASSERT_EQ(u_landed.hp, 7);
+            // Ricocheted away from fire at (14, 10) to (13, 10)
+            ASSERT_EQ(u_landed.pos.x, 13);
+            ASSERT_EQ(u_landed.pos.y, 10);
+            // Must transition to Idle upon completing bomb knockback into fire (NOT stunned!)
+            ASSERT_EQ(u_landed.state, UnitState::Idle);
+            ASSERT_FALSE(u_landed.is_stunned());
+
+            // Can immediately walk
+            AntOrder move_after{};
+            move_after.ant_id = w_id;
+            move_after.type = OrderType::Move;
+            move_after.target_x = u_landed.pos.x - 1;
+            move_after.target_y = u_landed.pos.y;
+            sim.issue_order(move_after);
+            ASSERT_EQ(u_landed.state, UnitState::Walking);
+        }
+
+        // -------------------------------------------------------------------------
+        // Part 3: Combat Ant Punch Knockback Landing on Fire Wall
+        // Non-fire ant takes contact fire damage, ricochets away, and transitions to
+        // UnitState::Stunned upon punch knockback!
+        // -------------------------------------------------------------------------
+        {
+            SimulationEngine sim;
+            sim.init_test_world(60, 60, 1, 60000);
+            sim.grid_mut().place_firewall(34, 30, 0);
+
+            // Puncher at (29, 30), Target at (30, 30), Firewall at (34, 30) (4 tiles distance)
+            uint32_t combat_ant = sim.spawn_unit(0, AntType::Combat, {29, 30});
+            uint32_t enemy_ant  = sim.spawn_unit(1, AntType::Worker, {30, 30});
+
+            // Combat ant attacks enemy ant
+            sim.execute_melee_attack(combat_ant, enemy_ant);
+
+            // Step through punch flight into firewall and landing resolution
+            for (int t = 0; t < 25; ++t) {
+                sim.tick();
+            }
+
+            const auto& u_stunned = sim.get_unit(enemy_ant);
+            ASSERT_TRUE(u_stunned.is_alive());
+            // 10 HP - 2 punch - 1 fire = 7 HP
+            ASSERT_EQ(u_stunned.hp, 7);
+            // Ricocheted away from fire at (34, 30) to (33, 30)
+            ASSERT_EQ(u_stunned.pos.x, 33);
+            ASSERT_EQ(u_stunned.pos.y, 30);
+            // Must transition to Stunned state upon completing punch knockback into fire!
+            ASSERT_EQ(u_stunned.state, UnitState::Stunned);
+            ASSERT_TRUE(u_stunned.is_stunned());
+        }
+
+        // -------------------------------------------------------------------------
+        // Part 4: General Fire Contact (Stepping on Fire)
+        // Non-fire ant takes 1 fire damage and ricochets away with bounce animation
+        // -------------------------------------------------------------------------
+        {
+            SimulationEngine sim;
+            sim.init_test_world(60, 60, 1, 60000);
+            sim.grid_mut().place_firewall(15, 15, 0);
+
+            // Non-fire ant spawns on fire
+            uint32_t ant_id = sim.spawn_unit(0, AntType::Worker, {15, 15});
+            sim.tick();
+
+            const auto& ant_bouncing = sim.get_unit(ant_id);
+            // Takes 1 fire damage (10 - 1 = 9 HP)
+            ASSERT_EQ(ant_bouncing.hp, 9);
+            ASSERT_EQ(ant_bouncing.state, UnitState::Bounce);
+
+            // Advance through bounce completion
+            for (int t = 0; t < 15; ++t) {
+                sim.tick();
+            }
+
+            const auto& ant_settled = sim.get_unit(ant_id);
+            ASSERT_EQ(ant_settled.state, UnitState::Idle);
+            ASSERT_FALSE(sim.grid().has_fire_at(ant_settled.pos));
+        }
     } TEST_END();
 }
 

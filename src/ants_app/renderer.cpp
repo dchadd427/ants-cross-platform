@@ -1543,7 +1543,7 @@ void Renderer::draw_single_ant(const ants::sim::AntSnapshot& ant, bool is_select
     } else if (ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::Knockback)) {
         action = "gb"; // Ground Bounce tumbling flight (aggb301, abgb301, afgb201, acgb201, asgb201, atgb201)
     } else if (ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::Bounce)) {
-        action = "gh";
+        action = "gb"; // Ground Bounce tumbling slide
     } else if (ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::Flinch)) {
         action = "gh";
     } else if (ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::Burn)) {
