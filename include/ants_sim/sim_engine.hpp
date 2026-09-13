@@ -374,13 +374,13 @@ public:
     bool demolish_bridge_step(uint32_t ant_id, TileCoord target);
     bool interrupt_transformation(uint32_t ant_id);
 
-    bool can_unit_traverse(AntType type, TileCoord pos) const;
+    bool can_unit_traverse(AntType type, TileCoord pos, uint8_t ant_team = 255, bool is_entering_or_leaving = false) const;
 
     bool has_bomb_at(TileCoord pos) const;
     bool has_fire_at(TileCoord pos) const;
     bool has_living_ant_at(TileCoord pos) const;
     bool has_other_living_ant_at(TileCoord pos, uint32_t ignore_ant_id) const;
-    void trigger_bomb_detonation(uint32_t ant_id, TileCoord bomb_pos);
+    void trigger_bomb_detonation(uint32_t ant_id, TileCoord bomb_pos, int32_t incoming_dx = 0, int32_t incoming_dy = 0);
     uint32_t get_fire_timer(TileCoord pos) const;
     void set_fire_at(TileCoord pos, uint32_t timer_ticks);
 

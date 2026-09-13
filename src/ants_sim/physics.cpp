@@ -3,6 +3,7 @@
 #include "ants_sim/sim_engine.hpp"
 #include <algorithm>
 #include <cmath>
+#include <iostream>
 
 namespace ants::sim {
 
@@ -14,7 +15,9 @@ void PhysicsEngine::apply_knockback(AntUnit& victim,
                                     DamageSource source,
                                     std::vector<AudioEvent>& audio_out,
                                     uint16_t random_val,
-                                    const Grid* grid) {
+                                    const Grid* grid,
+                                    int32_t incoming_dx,
+                                    int32_t incoming_dy) {
     BallisticFlight flight{};
     flight.unit_id = victim.id;
     flight.start_px = (source == DamageSource::BombBlast) ? from_px : victim.pixel_x;
@@ -37,8 +40,13 @@ void PhysicsEngine::apply_knockback(AntUnit& victim,
 
     uint32_t initial_dir = 0;
     if (source == DamageSource::BombBlast) {
-        // Authentic 1998 Ants.exe FUN_0101df5d: recoil direction is opposite approach vector: (facing + 4) % 8
-        initial_dir = (static_cast<uint32_t>(victim.facing) + 4) % 8;
+        if (incoming_dx != 0 || incoming_dy != 0) {
+            // Continuation vector: send in same direction as the bounce approach
+            initial_dir = static_cast<uint32_t>(ants::assets::vector_to_direction(incoming_dx, incoming_dy)) % 8;
+        } else {
+            // Authentic 1998 Ants.exe FUN_0101df5d: recoil direction is opposite approach vector: (facing + 4) % 8
+            initial_dir = (static_cast<uint32_t>(victim.facing) + 4) % 8;
+        }
     } else {
         // Combat Ant punch: recoil away from attacker
         int32_t dx = victim.pixel_x - from_px;
@@ -99,7 +107,7 @@ void PhysicsEngine::tick(std::vector<AntUnit*>& all_units,
                          Grid& grid,
                          std::vector<AudioEvent>& audio_out,
                          PRNG& prng,
-                         std::function<void(AntUnit&, TileCoord)> on_bomb_land) {
+                         std::function<void(AntUnit&, TileCoord, int32_t, int32_t)> on_bomb_land) {
     static constexpr int32_t DIR_DX[8] = { 0,  1, 1, 1, 0, -1, -1, -1 };
     static constexpr int32_t DIR_DY[8] = {-1, -1, 0, 1, 1,  1,  0, -1 };
 
@@ -229,7 +237,7 @@ void PhysicsEngine::resolve_landing(AntUnit& unit,
                                     PRNG& prng,
                                     int32_t incoming_dx,
                                     int32_t incoming_dy,
-                                    std::function<void(AntUnit&, TileCoord)> on_bomb_land,
+                                    std::function<void(AntUnit&, TileCoord, int32_t, int32_t)> on_bomb_land,
                                     DamageSource source) {
     unit.altitude_z = 0;
     if (!grid.in_bounds(unit.pos.x, unit.pos.y)) {
@@ -240,7 +248,7 @@ void PhysicsEngine::resolve_landing(AntUnit& unit,
     // 1. Bomb Landing (Authentic 1998 Chain Detonation with Dud Roll!)
     if (unit.is_alive() && grid.has_bomb_at(unit.pos)) {
         if (on_bomb_land) {
-            on_bomb_land(unit, unit.pos);
+            on_bomb_land(unit, unit.pos, incoming_dx, incoming_dy);
             return;
         }
     }
@@ -305,7 +313,7 @@ void PhysicsEngine::resolve_water_entry(AntUnit& unit,
 void PhysicsEngine::resolve_fire_contact(AntUnit& unit,
                                          Grid& grid,
                                          std::vector<AudioEvent>& audio_out,
-                                         PRNG& /*prng*/,
+                                         PRNG& prng,
                                          int32_t incoming_dx,
                                          int32_t incoming_dy,
                                          DamageSource source) {
@@ -318,6 +326,9 @@ void PhysicsEngine::resolve_fire_contact(AntUnit& unit,
         unit.set_tile_pos(unit.pos.x, unit.pos.y);
         return;
     }
+
+    static constexpr int32_t DIR_DX[8] = { 0,  1, 1, 1, 0, -1, -1, -1 };
+    static constexpr int32_t DIR_DY[8] = {-1, -1, 0, 1, 1,  1,  0, -1 };
 
     int32_t start_px = unit.pixel_x;
     int32_t start_py = unit.pixel_y;
@@ -337,43 +348,33 @@ void PhysicsEngine::resolve_fire_contact(AntUnit& unit,
             return;
         }
 
-        // Reflection trajectory: bounce back opposite of incoming movement
-        int32_t b_dx = -incoming_dx;
-        int32_t b_dy = -incoming_dy;
-        if (b_dx == 0 && b_dy == 0) {
-            b_dx = -1;
+        bool found_cand = false;
+        uint32_t start_dir = 0;
+        if (incoming_dx != 0 || incoming_dy != 0) {
+            if (source == DamageSource::CombatPunch) {
+                start_dir = static_cast<uint32_t>(ants::assets::vector_to_direction(-incoming_dx, -incoming_dy)) % 8;
+            } else {
+                start_dir = static_cast<uint32_t>(ants::assets::vector_to_direction(incoming_dx, incoming_dy)) % 8;
+            }
+        } else {
+            start_dir = prng.rand() % 8;
+        }
+        for (uint32_t i = 0; i < 8; ++i) {
+            uint32_t dir = (start_dir + i) % 8;
+            int32_t nx = dest_tx + DIR_DX[dir];
+            int32_t ny = dest_ty + DIR_DY[dir];
+            if (grid.is_occupiable_non_wall(nx, ny)) {
+                dest_tx = nx;
+                dest_ty = ny;
+                incoming_dx = DIR_DX[dir];
+                incoming_dy = DIR_DY[dir];
+                found_cand = true;
+                break;
+            }
         }
 
-        int32_t nx = dest_tx + b_dx;
-        int32_t ny = dest_ty + b_dy;
-        // If backward bounce is valid, not solid, and not another fire, bounce there
-        if (grid.in_bounds(nx, ny) && !grid.is_solid_obstacle(nx, ny) && !grid.get_cell(TileCoord{nx, ny}).has_fire()) {
-            dest_tx = nx;
-            dest_ty = ny;
-            incoming_dx = b_dx;
-            incoming_dy = b_dy;
-        } else {
-            // Deflect forward / away from fire
-            int32_t def_x = dest_tx - b_dx;
-            int32_t def_y = dest_ty - b_dy;
-            if (grid.in_bounds(def_x, def_y) && !grid.is_solid_obstacle(def_x, def_y)) {
-                dest_tx = def_x;
-                dest_ty = def_y;
-                incoming_dx = -b_dx;
-                incoming_dy = -b_dy;
-            } else {
-                // Try perpendicular deflection escape
-                int32_t perp_x = dest_tx + b_dy;
-                int32_t perp_y = dest_ty + b_dx;
-                if (grid.in_bounds(perp_x, perp_y) && !grid.is_solid_obstacle(perp_x, perp_y)) {
-                    dest_tx = perp_x;
-                    dest_ty = perp_y;
-                    incoming_dx = b_dy;
-                    incoming_dy = b_dx;
-                } else {
-                    break;
-                }
-            }
+        if (!found_cand) {
+            break;
         }
     }
 
@@ -381,16 +382,15 @@ void PhysicsEngine::resolve_fire_contact(AntUnit& unit,
     unit.altitude_z = 0;
     unit.set_tile_pos(dest_tx, dest_ty);
 
-    if (source == DamageSource::BombBlast) {
+    if (source == DamageSource::CombatPunch) {
+        audio_out.push_back(AudioEvent{SOUND_STUN, unit.pixel_x, unit.pixel_y, 0, 255});
+        unit.start_stun(STUN_RECOVERY_TICKS);
+    } else if (source == DamageSource::BombBlast) {
         unit.state = (unit.type == AntType::Combat) ? UnitState::GuardIdle : UnitState::Idle;
         unit.anim_tick = 0;
         unit.anim_subitem = 0;
         unit.stun_ticks_remaining = 0;
-    } else if (source == DamageSource::CombatPunch) {
-        audio_out.push_back(AudioEvent{SOUND_STUN, unit.pixel_x, unit.pixel_y, 0, 255});
-        unit.start_stun(STUN_RECOVERY_TICKS);
     } else {
-        // Direct hazard contact (stepping or spawned on fire): animate bounce slide away from fire
         unit.push_start_px = start_px;
         unit.push_start_py = start_py;
         unit.push_dest_px = dest_tx * 32 + 16;
@@ -402,7 +402,8 @@ void PhysicsEngine::resolve_fire_contact(AntUnit& unit,
         unit.fx_x = start_px << 16;
         unit.fx_y = start_py << 16;
 
-        unit.state = UnitState::Bounce;
+        unit.state = UnitState::Burn;
+        unit.state_timer = 22;
         unit.anim_tick = 0;
         unit.anim_subitem = 0;
         unit.post_bounce_stun = false;

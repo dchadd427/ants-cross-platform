@@ -141,8 +141,16 @@ struct TileCell {
     uint8_t  powerup_type{0};                // 1=Bomber, 2=Fire, 3=Thief, 4=Combat, 5=Swimmer
     bool     is_obstacle_overlay{false};     // True if Layer 2 item is a solid obstacle (rock, grass clump, etc.)
 
+    bool     is_thief_only{false};           // Only enemy thief ant can occupy (bottlecap bx + 3, by + 2)
+    bool     is_corridor_team_locked{false}; // Top approach corridor locked to base_owner_team (bx + 0..2, by - 1)
+    bool     is_base_hole{false};            // Ramp (bx + 1, by + 0) and hole (bx + 1, by + 1)
+    uint8_t  base_owner_team{255};           // Team ID (0..3) of anthill owner (255 = none)
+
     int32_t  occupant_ant_id{-1};            // Ant occupying this cell (-1 = none)
 
+    constexpr bool is_obstacle() const noexcept {
+        return terrain_type == TERRAIN_OBSTACLE || is_obstacle_overlay;
+    }
     constexpr bool is_empty_overlay() const noexcept {
         return interactive_id == TILE_EMPTY || interactive_id == 0xFFFF || interactive_id == 0x7FFE;
     }
@@ -175,7 +183,31 @@ struct TileCell {
     /**
      * @brief Passability check for pathfinding and locomotion.
      */
-    constexpr bool is_passable(bool is_swimmer = false, bool is_fire_ant = false) const noexcept {
+    constexpr bool is_passable(bool is_swimmer = false,
+                               bool is_fire_ant = false,
+                               bool is_thief = false,
+                               uint8_t ant_team = 255,
+                               bool is_entering_or_leaving_base = false) const noexcept {
+        // 1. Thief-only bottlecap (bx + 3, by + 2):
+        // Exclusively occupiable by enemy thief ant
+        if (is_thief_only) {
+            return is_thief && ant_team != 255 && base_owner_team != 255 && ant_team != base_owner_team;
+        }
+
+        // 2. Base entrance ramp (bx + 1, by + 0) and hole (bx + 1, by + 1):
+        // Only occupiable by friendly ant entering or leaving base
+        if (is_base_hole) {
+            return is_entering_or_leaving_base && (ant_team == 255 || base_owner_team == 255 || ant_team == base_owner_team);
+        }
+
+        // 3. Top approach corridor (bx + 0..2, by - 1):
+        // Team-locked: only ants belonging to base_owner_team can traverse
+        if (is_corridor_team_locked) {
+            if (ant_team != 255 && base_owner_team != 255 && ant_team != base_owner_team) {
+                return false;
+            }
+        }
+
         if (terrain_type == TERRAIN_OBSTACLE || is_obstacle_overlay) return false;
 
         if (terrain_type == TERRAIN_WATER) {
@@ -253,6 +285,12 @@ public:
         return cell.terrain_type == TERRAIN_OBSTACLE || cell.is_obstacle_overlay || cell.terrain_type == TERRAIN_WATER;
     }
 
+    bool is_occupiable_non_wall(int32_t x, int32_t y) const noexcept {
+        if (!in_bounds(x, y)) return false;
+        const auto& cell = get_cell(static_cast<uint32_t>(x), static_cast<uint32_t>(y));
+        return cell.terrain_type != TERRAIN_OBSTACLE && !cell.is_obstacle_overlay && !cell.is_thief_only;
+    }
+
     const TileCell& get_cell(uint32_t x, uint32_t y) const noexcept {
         return cells_[y * width_ + x];
     }
@@ -282,7 +320,7 @@ public:
         return nullptr;
     }
 
-    void configure_anthill_cells(TileCoord pos);
+    void configure_anthill_cells(TileCoord pos, uint8_t team_id = 255);
     bool is_anthill_reserved_spot(TileCoord pos) const noexcept;
     void set_anthill(uint8_t team_id, TileCoord pos);
     void place_firewall(uint32_t x, uint32_t y, uint8_t owner_player) noexcept;

@@ -171,13 +171,13 @@ bool Grid::init_from_level(const ants::assets::LevelData& level) {
             sp.x = static_cast<uint16_t>(hill_origins[t].x);
             sp.y = static_cast<uint16_t>(hill_origins[t].y);
             anthills_.push_back(sp);
-            configure_anthill_cells(TileCoord{static_cast<int32_t>(sp.x), static_cast<int32_t>(sp.y)});
+            configure_anthill_cells(TileCoord{static_cast<int32_t>(sp.x), static_cast<int32_t>(sp.y)}, sp.team_id);
         }
     }
     if (anthills_.empty()) {
         anthills_ = level.anthill_spawns;
         for (const auto& sp : anthills_) {
-            configure_anthill_cells(TileCoord{static_cast<int32_t>(sp.x), static_cast<int32_t>(sp.y)});
+            configure_anthill_cells(TileCoord{static_cast<int32_t>(sp.x), static_cast<int32_t>(sp.y)}, sp.team_id);
         }
     }
 
@@ -219,29 +219,33 @@ bool Grid::init_from_level(const ants::assets::LevelData& level) {
     return true;
 }
 
-void Grid::configure_anthill_cells(TileCoord pos) {
+void Grid::configure_anthill_cells(TileCoord pos, uint8_t team_id) {
     // Ensure 4x4 mound cells are obstacles EXCEPT entrance mouth (bx + 1, by), entrance hole (bx + 1, by + 1),
-    // and right flank approach tiles (bx + 3, by + 0..3) where thieves enter
+    // and bottlecap (bx + 3, by + 2) exclusively occupiable by enemy thief ants.
+    // All 13 other mound cells are solid impassable obstacles for all ants.
     for (int dy = 0; dy < 4; ++dy) {
         for (int dx = 0; dx < 4; ++dx) {
             int32_t mx = static_cast<int32_t>(pos.x) + dx;
             int32_t my = static_cast<int32_t>(pos.y) + dy;
             if (in_bounds(mx, my)) {
                 auto& mcell = get_cell_mut(static_cast<uint32_t>(mx), static_cast<uint32_t>(my));
+                mcell.flags &= ~(FLAG_CAN_PLACE_BOMB | FLAG_CAN_PLACE_FIRE);
+                mcell.base_owner_team = team_id;
                 if (dx == 1 && (dy == 0 || dy == 1)) {
-                    mcell.terrain_type = TERRAIN_WALKABLE;
+                    mcell.is_base_hole = true;
+                    mcell.is_thief_only = false;
+                    mcell.terrain_type = TERRAIN_OBSTACLE;
                     mcell.is_obstacle_overlay = false;
-                    mcell.flags &= ~(FLAG_CAN_PLACE_BOMB | FLAG_CAN_PLACE_FIRE);
-                } else if (dx == 3) {
-                    // Right flank 4 tiles (dx == 3, dy = 0..3): walkable for thief infiltration
-                    mcell.terrain_type = TERRAIN_WALKABLE;
+                } else if (dx == 3 && dy == 2) {
+                    mcell.is_thief_only = true;
+                    mcell.is_base_hole = false;
+                    mcell.terrain_type = TERRAIN_OBSTACLE;
                     mcell.is_obstacle_overlay = false;
-                    mcell.flags &= ~(FLAG_CAN_PLACE_BOMB | FLAG_CAN_PLACE_FIRE);
                 } else {
+                    mcell.is_thief_only = false;
+                    mcell.is_base_hole = false;
+                    mcell.terrain_type = TERRAIN_OBSTACLE;
                     mcell.is_obstacle_overlay = true;
-                    if (dx == 2 && (dy >= 0 && dy <= 2)) {
-                        mcell.flags |= FLAG_CAN_PLACE_FIRE;
-                    }
                 }
             }
         }
@@ -256,8 +260,8 @@ void Grid::configure_anthill_cells(TileCoord pos) {
             qcell.is_obstacle_overlay = false;
         }
     }
-    // Ensure top approach corridor (bx + dx, by - 1) for dx = 0..2 is passable,
-    // but strictly blocked from placing fire or bombs on
+    // Ensure top approach corridor (bx + dx, by - 1) for dx = 0..2 is team-locked
+    // to the base owner's team and strictly blocked from placing fire or bombs on
     for (int dx = 0; dx <= 2; ++dx) {
         int32_t rx = static_cast<int32_t>(pos.x) + dx;
         int32_t ry = static_cast<int32_t>(pos.y) - 1;
@@ -265,6 +269,8 @@ void Grid::configure_anthill_cells(TileCoord pos) {
             auto& rcell = get_cell_mut(static_cast<uint32_t>(rx), static_cast<uint32_t>(ry));
             rcell.terrain_type = TERRAIN_WALKABLE;
             rcell.is_obstacle_overlay = false;
+            rcell.is_corridor_team_locked = true;
+            rcell.base_owner_team = team_id;
             rcell.flags &= ~(FLAG_CAN_PLACE_BOMB | FLAG_CAN_PLACE_FIRE);
         }
     }
@@ -280,15 +286,13 @@ void Grid::configure_anthill_cells(TileCoord pos) {
             ccell.flags |= (FLAG_CAN_PLACE_FIRE | FLAG_CAN_PLACE_BOMB);
         }
     }
-    // Ensure idle spot (pos.x + 3, pos.y + 3) is passable
-    for (int delta : {3, 4}) {
-        int32_t ix = static_cast<int32_t>(pos.x) + delta;
-        int32_t iy = static_cast<int32_t>(pos.y) + delta;
-        if (in_bounds(ix, iy)) {
-            auto& icell = get_cell_mut(static_cast<uint32_t>(ix), static_cast<uint32_t>(iy));
-            icell.terrain_type = TERRAIN_WALKABLE;
-            icell.is_obstacle_overlay = false;
-        }
+    // Ensure idle spot outside base (pos.x + 4, pos.y + 4) is passable
+    int32_t ix = static_cast<int32_t>(pos.x) + 4;
+    int32_t iy = static_cast<int32_t>(pos.y) + 4;
+    if (in_bounds(ix, iy)) {
+        auto& icell = get_cell_mut(static_cast<uint32_t>(ix), static_cast<uint32_t>(iy));
+        icell.terrain_type = TERRAIN_WALKABLE;
+        icell.is_obstacle_overlay = false;
     }
 }
 
@@ -312,7 +316,7 @@ void Grid::set_anthill(uint8_t team_id, TileCoord pos) {
         if (a.team_id == team_id) {
             a.x = static_cast<uint16_t>(pos.x);
             a.y = static_cast<uint16_t>(pos.y);
-            configure_anthill_cells(pos);
+            configure_anthill_cells(pos, team_id);
             return;
         }
     }
@@ -321,7 +325,7 @@ void Grid::set_anthill(uint8_t team_id, TileCoord pos) {
     s.x = static_cast<uint16_t>(pos.x);
     s.y = static_cast<uint16_t>(pos.y);
     anthills_.push_back(s);
-    configure_anthill_cells(pos);
+    configure_anthill_cells(pos, team_id);
 }
 
 void Grid::place_firewall(uint32_t x, uint32_t y, uint8_t owner_player) noexcept {

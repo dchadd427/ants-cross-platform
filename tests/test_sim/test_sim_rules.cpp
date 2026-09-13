@@ -929,8 +929,8 @@ static void run_suite_13_authentic_fidelity() {
         // Mound tile is impassable
         ASSERT_FALSE(sim.grid().get_cell(20, 20).is_passable());
         ASSERT_FALSE(sim.grid().get_cell(22, 22).is_passable());
-        // Entrance and queue staging spot (to the left of base: 19, 23) are passable
-        ASSERT_TRUE(sim.grid().get_cell(21, 21).is_passable());
+        // Entrance (when entering base) and queue staging spot (to the left of base: 19, 23) are passable
+        ASSERT_TRUE(sim.grid().get_cell(21, 21).is_passable(false, false, false, 0, true));
         ASSERT_TRUE(sim.grid().get_cell(19, 23).is_passable());
 
         // First worker gets priority immediately and routes straight in to base entrance (21, 21)

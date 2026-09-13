@@ -14,6 +14,7 @@
 #include "ants_assets/lvl_parser.hpp"
 #include "ants_sim/sim_engine.hpp"
 #include "ants_sim/pathfinding.hpp"
+#include "ants_sim/physics.hpp"
 #include "ants_app/audio_mixer.hpp"
 #include "ants_app/midi_player.hpp"
 #include "ants_app/renderer.hpp"
@@ -6847,10 +6848,10 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
 
     TEST_CASE("12.108: Version Invariant & Fog of War Cursor Concealment Parity") {
         // 1. Verify semantic versioning components
-        ASSERT_EQ(ants::VERSION_STRING, "v0.0.16");
+        ASSERT_EQ(ants::VERSION_STRING, "v0.0.17");
         ASSERT_EQ(ants::VERSION_MAJOR, 0);
         ASSERT_EQ(ants::VERSION_MINOR, 0);
-        ASSERT_EQ(ants::VERSION_PATCH, 16);
+        ASSERT_EQ(ants::VERSION_PATCH, 17);
 
         // 2. Setup simulation world with Fog of War enabled
         SimulationEngine sim;
@@ -7161,10 +7162,10 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         ASSERT_FALSE(sim.get_unit(baby).take_damage(2, DamageSource::CombatPunch, enemy));
         ASSERT_EQ(sim.get_unit(baby).hp, baby_hp);
 
-        // Tick until baby emerges completely to Idle
+        // Tick until baby emerges completely to Idle or Walking to idle spot
         for (int t = 0; t < 30; ++t) {
             sim.tick();
-            if (sim.get_unit(baby).state == UnitState::Idle) break;
+            if (sim.get_unit(baby).state == UnitState::Idle || sim.get_unit(baby).state == UnitState::Walking) break;
         }
         ASSERT_TRUE(sim.get_unit(baby).is_invulnerable());
 
@@ -7299,7 +7300,7 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         sim.grid_mut().set_anthill(1, TileCoord{20, 20});
 
         // Team 0 has Thief, Team 1 (victim) has Anthill at (20, 20) with 0 food points
-        uint32_t thief_id = sim.spawn_unit(0, AntType::Thief, TileCoord{18, 20});
+        uint32_t thief_id = sim.spawn_unit(0, AntType::Thief, TileCoord{24, 22});
         const auto* enemy_base = sim.grid().find_anthill(1);
         ASSERT_TRUE(enemy_base != nullptr);
         ASSERT_EQ(sim.get_player_score(1), 0);
@@ -7629,15 +7630,14 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
     } TEST_END();
 
     // ------------------------------------------------------------------------
-    // 12.123: Anthill Right-Side Flank Thief Infiltration (4 Tiles) and Corridor Defense
+    // 12.123: Anthill Bottlecap Thief Infiltration and Mound Passability
     // ------------------------------------------------------------------------
-    TEST_CASE("12.123 Anthill Right-Side Flank Thief Infiltration (4 Tiles) and Corridor Defense") {
+    TEST_CASE("12.123 Anthill Bottlecap Thief Infiltration and Mound Passability") {
         SimulationEngine sim;
         sim.init_test_world(60, 60, 100, 60000);
 
         // Setup base 1 at (20, 20)
         sim.set_anthill(1, {20, 20});
-        sim.grid_mut().configure_anthill_cells(TileCoord{20, 20});
 
         // Verify corridor tile (24, 21) allows firewall and bomb placement
         const auto& corridor_cell = sim.grid().get_cell(TileCoord{24, 21});
@@ -7646,20 +7646,20 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         ASSERT_TRUE(corridor_cell.can_place_bomb());
 
         // Spawn a Thief ant for team 0
-        uint32_t thief = sim.spawn_unit(0, AntType::Thief, TileCoord{18, 21});
+        uint32_t thief = sim.spawn_unit(0, AntType::Thief, TileCoord{18, 22});
 
         // 1. Non-flank approach: Thief standing on left side does not infiltrate
         sim.tick();
         ASSERT_NE(sim.get_unit(thief).state, UnitState::Infiltrating);
 
-        // 2. Flank approach: Move thief onto right-flank entrance tile (23, 21)
-        sim.issue_move_order(thief, TileCoord{23, 21});
-        for (int i = 0; i < 50; ++i) {
+        // 2. Bottlecap approach: Move thief onto bottlecap entrance tile (23, 22)
+        sim.issue_move_order(thief, TileCoord{23, 22});
+        for (int i = 0; i < 200; ++i) {
             sim.tick();
             if (sim.get_unit(thief).state == UnitState::Infiltrating) break;
         }
 
-        // Thief entering from the 4 right flank tiles infiltrates successfully!
+        // Thief entering from bottlecap tile (23, 22) infiltrates successfully!
         ASSERT_EQ(sim.get_unit(thief).state, UnitState::Infiltrating);
     } TEST_END();
 
@@ -8213,8 +8213,8 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         }
         ASSERT_FALSE(sim_fire.grid().has_bomb_at({30, 30}));
 
-        // Advance through flight and fire bounce resolution
-        for (int t = 0; t < 30; ++t) {
+        // Advance through flight and fire bounce resolution (10 ticks flight + 22 ticks burn)
+        for (int t = 0; t < 40; ++t) {
             sim_fire.tick();
         }
         auto& fire_hit_ant = sim_fire.get_unit(w_fire);
@@ -8229,8 +8229,8 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         AntOrder move_after_fire{};
         move_after_fire.ant_id = w_fire;
         move_after_fire.type = OrderType::Move;
-        move_after_fire.target_x = fire_hit_ant.pos.x - 1;
-        move_after_fire.target_y = fire_hit_ant.pos.y;
+        move_after_fire.target_x = 25;
+        move_after_fire.target_y = 30;
         sim_fire.issue_order(move_after_fire);
         ASSERT_EQ(fire_hit_ant.state, UnitState::Walking);
 
@@ -8425,8 +8425,8 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
             }
             ASSERT_FALSE(sim.grid().has_bomb_at({10, 10}));
 
-            // Step through flight (10-12 ticks) and landing resolution
-            for (int t = 0; t < 25; ++t) {
+            // Step through flight (10-12 ticks) and landing resolution (22 burn ticks)
+            for (int t = 0; t < 35; ++t) {
                 sim.tick();
             }
 
@@ -8434,9 +8434,9 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
             ASSERT_TRUE(u_landed.is_alive());
             // 10 HP - 2 blast - 1 fire = 7 HP
             ASSERT_EQ(u_landed.hp, 7);
-            // Ricocheted away from fire at (14, 10) to (13, 10)
-            ASSERT_EQ(u_landed.pos.x, 13);
-            ASSERT_EQ(u_landed.pos.y, 10);
+            // Ricocheted away from fire at (14, 10) to an adjacent tile
+            ASSERT_TRUE(std::abs(u_landed.pos.x - 14) <= 1 && std::abs(u_landed.pos.y - 10) <= 1);
+            ASSERT_FALSE(u_landed.pos.x == 14 && u_landed.pos.y == 10);
             // Must transition to Idle upon completing bomb knockback into fire (NOT stunned!)
             ASSERT_EQ(u_landed.state, UnitState::Idle);
             ASSERT_FALSE(u_landed.is_stunned());
@@ -8445,8 +8445,8 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
             AntOrder move_after{};
             move_after.ant_id = w_id;
             move_after.type = OrderType::Move;
-            move_after.target_x = u_landed.pos.x - 1;
-            move_after.target_y = u_landed.pos.y;
+            move_after.target_x = 5;
+            move_after.target_y = 5;
             sim.issue_order(move_after);
             ASSERT_EQ(u_landed.state, UnitState::Walking);
         }
@@ -8468,8 +8468,8 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
             // Combat ant attacks enemy ant
             sim.execute_melee_attack(combat_ant, enemy_ant);
 
-            // Step through punch flight into firewall and landing resolution
-            for (int t = 0; t < 25; ++t) {
+            // Step through punch flight into firewall and landing resolution (22 burn ticks)
+            for (int t = 0; t < 35; ++t) {
                 sim.tick();
             }
 
@@ -8477,9 +8477,9 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
             ASSERT_TRUE(u_stunned.is_alive());
             // 10 HP - 2 punch - 1 fire = 7 HP
             ASSERT_EQ(u_stunned.hp, 7);
-            // Ricocheted away from fire at (34, 30) to (33, 30)
-            ASSERT_EQ(u_stunned.pos.x, 33);
-            ASSERT_EQ(u_stunned.pos.y, 30);
+            // Ricocheted away from fire at (34, 30) to an adjacent tile
+            ASSERT_TRUE(std::abs(u_stunned.pos.x - 34) <= 1 && std::abs(u_stunned.pos.y - 30) <= 1);
+            ASSERT_FALSE(u_stunned.pos.x == 34 && u_stunned.pos.y == 30);
             // Must transition to Stunned state upon completing punch knockback into fire!
             ASSERT_EQ(u_stunned.state, UnitState::Stunned);
             ASSERT_TRUE(u_stunned.is_stunned());
@@ -8487,7 +8487,7 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
 
         // -------------------------------------------------------------------------
         // Part 4: General Fire Contact (Stepping on Fire)
-        // Non-fire ant takes 1 fire damage and ricochets away with bounce animation
+        // Non-fire ant takes 1 fire damage and ricochets away with burn animation
         // -------------------------------------------------------------------------
         {
             SimulationEngine sim;
@@ -8501,16 +8501,181 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
             const auto& ant_bouncing = sim.get_unit(ant_id);
             // Takes 1 fire damage (10 - 1 = 9 HP)
             ASSERT_EQ(ant_bouncing.hp, 9);
-            ASSERT_EQ(ant_bouncing.state, UnitState::Bounce);
+            ASSERT_EQ(ant_bouncing.state, UnitState::Burn);
 
-            // Advance through bounce completion
-            for (int t = 0; t < 15; ++t) {
+            // Advance through burn animation completion (22 ticks)
+            for (int t = 0; t < 25; ++t) {
                 sim.tick();
             }
 
             const auto& ant_settled = sim.get_unit(ant_id);
             ASSERT_EQ(ant_settled.state, UnitState::Idle);
             ASSERT_FALSE(sim.grid().has_fire_at(ant_settled.pos));
+        }
+    } TEST_END();
+
+    // ------------------------------------------------------------------------
+    // 12.131: Anthill Mound Bounds & Access Invariants, 22-Tick Fire Burn & 8-Dir Random Bounces
+    // ------------------------------------------------------------------------
+    TEST_CASE("12.131 Anthill Mound Bounds & Access Invariants, 22-Tick Fire Burn & 8-Dir Random Bounces") {
+        // Part 1: Anthill Mound Bounds & Access (4x4 Mound + Top Corridor)
+        {
+            SimulationEngine sim;
+            sim.init_test_world(60, 60, 100, 60000);
+            // Setup Team 1 base at (36, 20) matching user screenshot
+            sim.set_anthill(1, {36, 20});
+            const auto& grid = sim.grid();
+
+            // 1. Top approach corridor (36, 19), (37, 19), (38, 19)
+            // Blocked from bombs and firewalls
+            for (int32_t x = 36; x <= 38; ++x) {
+                const auto& cell = grid.get_cell(TileCoord{x, 19});
+                ASSERT_FALSE(cell.can_place_bomb());
+                ASSERT_FALSE(cell.can_place_fire());
+                // Team 1 ants can pass
+                ASSERT_TRUE(cell.is_passable(false, false, false, 1, false));
+                // Enemy ants (Team 0) cannot pass (solid obstacle)
+                ASSERT_FALSE(cell.is_passable(false, false, false, 0, false));
+            }
+
+            // 2. Bottlecap tile (39, 22) (bx + 3, by + 2)
+            const auto& bcap = grid.get_cell(TileCoord{39, 22});
+            // Enemy thief (Team 0) can occupy
+            ASSERT_TRUE(bcap.is_passable(false, false, true, 0, false));
+            // Friendly thief (Team 1) cannot occupy
+            ASSERT_FALSE(bcap.is_passable(false, false, true, 1, false));
+            // Non-thief enemy (Team 0) cannot occupy
+            ASSERT_FALSE(bcap.is_passable(false, false, false, 0, false));
+            // Friendly non-thief (Team 1) cannot occupy
+            ASSERT_FALSE(bcap.is_passable(false, false, false, 1, false));
+
+            // 3. Ramp (37, 20) and Hole (37, 21)
+            // Blocked from bombs and firewalls
+            ASSERT_FALSE(grid.get_cell(TileCoord{37, 20}).can_place_bomb());
+            ASSERT_FALSE(grid.get_cell(TileCoord{37, 20}).can_place_fire());
+            ASSERT_FALSE(grid.get_cell(TileCoord{37, 21}).can_place_bomb());
+            ASSERT_FALSE(grid.get_cell(TileCoord{37, 21}).can_place_fire());
+            // Only passable when entering or leaving base
+            ASSERT_FALSE(grid.get_cell(TileCoord{37, 20}).is_passable(false, false, false, 1, false));
+            ASSERT_TRUE(grid.get_cell(TileCoord{37, 20}).is_passable(false, false, false, 1, true));
+            ASSERT_FALSE(grid.get_cell(TileCoord{37, 21}).is_passable(false, false, false, 1, false));
+            ASSERT_TRUE(grid.get_cell(TileCoord{37, 21}).is_passable(false, false, false, 1, true));
+
+            // 4. Remaining 13 mound tiles must be impassable for all
+            for (int32_t dy = 0; dy < 4; ++dy) {
+                for (int32_t dx = 0; dx < 4; ++dx) {
+                    if ((dx == 1 && dy == 0) || (dx == 1 && dy == 1) || (dx == 3 && dy == 2)) {
+                        continue;
+                    }
+                    const auto& cell = grid.get_cell(TileCoord{36 + dx, 20 + dy});
+                    ASSERT_FALSE(cell.is_passable(false, false, false, 1, false));
+                    ASSERT_FALSE(cell.is_passable(false, false, true, 0, false));
+                    ASSERT_TRUE(cell.is_obstacle());
+                }
+            }
+        }
+
+        // Part 2: 22-Tick Fire Burn Animation, 6-Tick Push Slide, and Sounds 64/65
+        {
+            SimulationEngine sim;
+            sim.init_test_world(60, 60, 100, 60000);
+            sim.grid_mut().place_firewall(10, 10, 0);
+
+            uint32_t ant = sim.spawn_unit(0, AntType::Worker, TileCoord{10, 10});
+            sim.tick(); // Triggers fire contact
+
+            const auto& u0 = sim.get_unit(ant);
+            ASSERT_EQ(u0.state, UnitState::Burn);
+            ASSERT_EQ(u0.hp, 9);
+            // Verify sound 64 was emitted
+            ASSERT_TRUE(sim.has_audio_event(PhysicsEngine::SOUND_FLY_THUMP_A));
+
+            // Step through slide (6 ticks)
+            for (int t = 0; t < 6; ++t) {
+                sim.tick();
+                ASSERT_EQ(sim.get_unit(ant).state, UnitState::Burn);
+            }
+            // Slide completed, unit reaches destination pixel position
+            const auto& u6 = sim.get_unit(ant);
+            ASSERT_EQ(u6.pixel_x, u6.push_dest_px);
+            ASSERT_EQ(u6.pixel_y, u6.push_dest_py);
+
+            // Step to tick 11 to verify Sound 65
+            bool heard_sound65 = false;
+            for (int t = 7; t <= 12; ++t) {
+                sim.tick();
+                if (sim.has_audio_event(PhysicsEngine::SOUND_FLY_THUMP_B)) heard_sound65 = true;
+            }
+            ASSERT_TRUE(heard_sound65);
+
+            // Advance through remaining ticks to tick 22
+            for (int t = 13; t <= 23; ++t) {
+                sim.tick();
+            }
+            const auto& u_done = sim.get_unit(ant);
+            ASSERT_EQ(u_done.state, UnitState::Idle);
+        }
+
+        // Part 3: 8-Directional Random Bounces Across Trials
+        {
+            std::set<std::pair<int32_t, int32_t>> distinct_landing_tiles;
+            for (int trial = 0; trial < 40; ++trial) {
+                SimulationEngine sim;
+                sim.init_test_world(60, 60, 100 + static_cast<uint32_t>(trial * 31), 60000);
+                sim.grid_mut().place_firewall(30, 30, 0);
+                uint32_t ant = sim.spawn_unit(0, AntType::Worker, TileCoord{30, 30});
+                sim.tick();
+                const auto& u = sim.get_unit(ant);
+                distinct_landing_tiles.insert({u.pos.x, u.pos.y});
+            }
+            // Over 40 randomized trials, the ant must bounce in multiple directions, not just 1 fixed tile
+            ASSERT_TRUE(distinct_landing_tiles.size() >= 4);
+        }
+
+        // Part 4: Bomb Landing Preserves Bounce Momentum Vector
+        // If an ant hits a firewall southwest of a bomb and bounces into it,
+        // the bomb knockback sends the ant northeast in the same direction!
+        {
+            SimulationEngine sim;
+            sim.init_test_world(60, 60, 1, 60000);
+            TileCoord bomb_pos{25, 25};
+            TileCoord fire_pos{24, 26}; // Southwest of bomb (dx = -1, dy = +1)
+            sim.grid_mut().place_bomb(bomb_pos.x, bomb_pos.y, 1);
+            sim.grid_mut().place_firewall(fire_pos.x, fire_pos.y, 0);
+
+            // Block all other neighbors of fire_pos except bomb_pos so fire bounce is forced towards bomb (northeast)
+            for (int dx = -1; dx <= 1; ++dx) {
+                for (int dy = -1; dy <= 1; ++dy) {
+                    if (dx == 0 && dy == 0) continue;
+                    TileCoord cand{fire_pos.x + dx, fire_pos.y + dy};
+                    if (cand != bomb_pos) {
+                        sim.grid_mut().set_terrain(cand.x, cand.y, TERRAIN_OBSTACLE);
+                    }
+                }
+            }
+
+            uint32_t ant = sim.spawn_unit(0, AntType::Worker, fire_pos);
+            // Ant hits fire at (24, 26), forced to bounce northeast to (25, 25) where bomb is placed
+            sim.tick(); // Tick 1: fire contact resolved, slide begins towards (25, 25)
+            ASSERT_EQ(sim.get_unit(ant).state, UnitState::Burn);
+
+            // Advance through the 6-tick push slide to reach the bomb
+            for (int t = 0; t < 6; ++t) {
+                sim.tick();
+            }
+
+            // Bomb has detonated upon arrival
+            ASSERT_FALSE(sim.grid().has_bomb_at(bomb_pos));
+
+            // Advance simulation through ballistic flight
+            for (int t = 0; t < 25; ++t) {
+                sim.tick();
+            }
+
+            const auto& u_landed = sim.get_unit(ant);
+            // Knockback must send the ant northeast: x > 25 and y < 25!
+            ASSERT_TRUE(u_landed.pos.x > bomb_pos.x);
+            ASSERT_TRUE(u_landed.pos.y < bomb_pos.y);
         }
     } TEST_END();
 }

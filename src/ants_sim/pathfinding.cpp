@@ -35,7 +35,10 @@ TileCoord PathFinder::find_nearest_passable(
     TileCoord impassable_target,
     bool is_swimmer,
     bool is_fire_ant,
-    const std::vector<TileCoord>& hard_obstacles)
+    const std::vector<TileCoord>& hard_obstacles,
+    bool is_thief,
+    uint8_t ant_team,
+    bool is_entering_or_leaving_base)
 {
     auto is_hard_obstacle = [&](TileCoord c) {
         for (const auto& h : hard_obstacles) {
@@ -45,7 +48,7 @@ TileCoord PathFinder::find_nearest_passable(
     };
 
     if (grid.in_bounds(impassable_target) &&
-        grid.get_cell(impassable_target).is_passable(is_swimmer, is_fire_ant) &&
+        grid.get_cell(impassable_target).is_passable(is_swimmer, is_fire_ant, is_thief, ant_team, is_entering_or_leaving_base) &&
         !is_hard_obstacle(impassable_target)) {
         return impassable_target;
     }
@@ -60,7 +63,7 @@ TileCoord PathFinder::find_nearest_passable(
                 if (std::max(std::abs(dx), std::abs(dy)) != r) continue;
                 TileCoord candidate{impassable_target.x + dx, impassable_target.y + dy};
                 if (!grid.in_bounds(candidate)) continue;
-                if (!grid.get_cell(candidate).is_passable(is_swimmer, is_fire_ant)) continue;
+                if (!grid.get_cell(candidate).is_passable(is_swimmer, is_fire_ant, is_thief, ant_team, is_entering_or_leaving_base)) continue;
                 if (is_hard_obstacle(candidate)) continue;
 
                 int32_t cd = std::max(std::abs(candidate.x - origin.x), std::abs(candidate.y - origin.y));
@@ -76,7 +79,7 @@ TileCoord PathFinder::find_nearest_passable(
         if (best.x >= 0) return best;
     }
 
-    return (grid.in_bounds(origin) && grid.get_cell(origin).is_passable(is_swimmer, is_fire_ant) && !is_hard_obstacle(origin))
+    return (grid.in_bounds(origin) && grid.get_cell(origin).is_passable(is_swimmer, is_fire_ant, is_thief, ant_team, is_entering_or_leaving_base) && !is_hard_obstacle(origin))
                ? origin
                : impassable_target;
 }
@@ -89,7 +92,10 @@ std::vector<TileCoord> PathFinder::find_path(
     bool is_fire_ant,
     size_t max_nodes,
     const std::vector<TileCoord>& obstacles,
-    const std::vector<TileCoord>& hard_obstacles)
+    const std::vector<TileCoord>& hard_obstacles,
+    bool is_thief,
+    uint8_t ant_team,
+    bool is_entering_or_leaving_base)
 {
     if (!grid.in_bounds(start)) return {};
     if (start == target) return {start};
@@ -112,7 +118,7 @@ std::vector<TileCoord> PathFinder::find_path(
     }
 
     bool goal_is_valid_dest = grid.in_bounds(goal) &&
-                              grid.get_cell(goal).is_passable(is_swimmer, is_fire_ant) &&
+                              grid.get_cell(goal).is_passable(is_swimmer, is_fire_ant, is_thief, ant_team, is_entering_or_leaving_base) &&
                               !is_hard_obstacle(goal);
 
     size_t total_cells = static_cast<size_t>(w) * h;
@@ -167,7 +173,7 @@ std::vector<TileCoord> PathFinder::find_path(
             TileCoord neighbor{nx, ny};
 
             if (!grid.in_bounds(neighbor)) continue;
-            if (!grid.get_cell(neighbor).is_passable(is_swimmer, is_fire_ant)) continue;
+            if (!grid.get_cell(neighbor).is_passable(is_swimmer, is_fire_ant, is_thief, ant_team, is_entering_or_leaving_base)) continue;
             if (is_hard_obstacle(neighbor)) continue;
 
             // Intermediate food items act as obstacles for units on normal movement orders,
