@@ -1738,4 +1738,22 @@ To deliver authentic 1:1 gameplay inside standard web browsers with zero install
     - Combat punch knockback ricochet: Transitions to `UnitState::Stunned` (50 ticks) with `SoundID::StunRecover` (sound 70, `stun.wav`).
     - Standard contact ricochet: Transitions to `UnitState::Idle`.
 
-
+#### 9. Anthill Mound Bounds, Team-Locked Approach Corridor, Enemy-Thief Bottlecap, Universal Random Bounces & Bomb Knockback Momentum Preservation (`Ants.exe.c:9670–9690`, `21193–21250`, `21612–21685`, `22787–22895`)
+- **Anthill 4x4 Mound Tile Layout & Access Rules**:
+  - **Enemy-Thief-Only Bottlecap `(bx + 3, by + 2)`**: Exclusively occupiable by an enemy Thief ant (`AntType::Thief && ant.team != base.team`). Solid impassable obstacle for all friendly ants and enemy non-thief ants. Stepping onto `(bx + 3, by + 2)` triggers the infiltration sequence dive (`FUN_0101fc24` / `FUN_0101ace3`).
+  - **Top Approach Corridor `(bx + 0..2, by - 1)`**: Registered at team struct offsets `0x36, 0x3a, 0x3e` (`0x100eda5–0x100ee25`). Strictly blocked from placing bombs or firewalls (`FUN_0101d822`). Team-locked (`FUN_010200ab`): only ants of the base owner's team can traverse and occupy these 3 corridor tiles.
+  - **Base Entrance Ramp `(bx + 1, by + 0)` and Hole `(bx + 1, by + 1)`**: Blocked from bombs and firewalls. Passable strictly to friendly ants entering or leaving the base hole (`UnitState::EnteringBase`, `UnitState::ExitingBase`, depositing food, healing, emergence). Normal movement treats them as solid obstacles.
+  - **Remaining 13 Mound Tiles**: Impassable solid obstacles for all units.
+- **Universal 8-Directional Random Bounces (`FUN_0101df5d` / `0x10345c0` `rand() % 8`)**:
+  - In `Ants.exe`, `FUN_0101df5d` rolls `rand() % 8` to select a candidate direction out of 8 neighbors, checking only that the destination tile is within bounds and not an impassable wall/solid obstacle (`terrain_type != TERRAIN_OBSTACLE && !is_obstacle_overlay`).
+  - **Occupiable Landing Tiles**: An ant bouncing off fire, from ant-ant collision scuffle, or cascading domino collision can land on:
+    - **Another fire tile**: Takes additional 1 fire contact damage and ricochets again.
+    - **Water**: Swimmer ant swims safely; non-swimmer begins drowning with splash sound.
+    - **Bomb**: Lands on bomb tile and triggers bomb detonation.
+    - **Another ant**: Triggers a cascade domino bounce on the standing ant.
+    - **Open ground**: Normal ground landing.
+- **Bomb Knockback Momentum Preservation**:
+  - When an ant bounces or slides into a bomb (e.g. fire ricochet pushes Northeast into a bomb), the bomb detonation preserves the incoming momentum vector (`incoming_dx, incoming_dy`).
+  - The bomb blast launches the ant airborne along the continuation vector in the same direction it was traveling/bounced from (e.g. Southwest into bomb throws Northeast).
+- **Fire Burn Timing (`*bu301`, 22 Ticks @ 20Hz)**:
+  - Authentic Table 4 `a*bu301` timing (1,150ms @ 20Hz, 22 ticks) with smooth 6-tick push slide to destination tile, Sound 64 (`flythumpa.wav`) on tick 0, Sound 65 (`flythumpb.wav`) on tick 11, and transition to `Idle` at tick 22.

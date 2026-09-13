@@ -1628,8 +1628,8 @@ void Renderer::draw_single_ant(const ants::sim::AntSnapshot& ant, bool is_select
                     sub_idx = seq->subitems.size() - 1;
                 }
             } else if (action == "bu") {
-                // Bomb dud burn scorch lasts 11 ticks
-                sub_idx = (ant.anim_frame * seq->subitems.size()) / 11;
+                // Fire burn / bomb dud scorch lasts 22 ticks (Table 4 duration 1,150ms @ 20Hz)
+                sub_idx = (ant.anim_frame * seq->subitems.size()) / 22;
                 if (sub_idx >= seq->subitems.size()) {
                     sub_idx = seq->subitems.size() - 1;
                 }

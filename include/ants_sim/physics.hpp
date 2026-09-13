@@ -65,13 +65,15 @@ public:
                          DamageSource source,
                          std::vector<AudioEvent>& audio_out,
                          uint16_t random_val,
-                         const Grid* grid = nullptr);
+                         const Grid* grid = nullptr,
+                         int32_t incoming_dx = 0,
+                         int32_t incoming_dy = 0);
 
     void tick(std::vector<AntUnit*>& all_units,
               Grid& grid,
               std::vector<AudioEvent>& audio_out,
               PRNG& prng,
-              std::function<void(AntUnit&, TileCoord)> on_bomb_land = nullptr);
+              std::function<void(AntUnit&, TileCoord, int32_t, int32_t)> on_bomb_land = nullptr);
 
     void resolve_landing(AntUnit& unit,
                          Grid& grid,
@@ -79,7 +81,7 @@ public:
                          PRNG& prng,
                          int32_t incoming_dx = 0,
                          int32_t incoming_dy = 0,
-                         std::function<void(AntUnit&, TileCoord)> on_bomb_land = nullptr,
+                         std::function<void(AntUnit&, TileCoord, int32_t, int32_t)> on_bomb_land = nullptr,
                          DamageSource source = DamageSource::CombatPunch);
 
     void resolve_water_entry(AntUnit& unit,
@@ -91,7 +93,7 @@ public:
                               PRNG& prng,
                               int32_t incoming_dx = 0,
                               int32_t incoming_dy = 0,
-                              DamageSource source = DamageSource::CombatPunch);
+                              DamageSource source = DamageSource::FireBurn);
 
     const BallisticFlight* get_active_flight(uint32_t unit_id) const noexcept;
     void cancel_flight(uint32_t unit_id) noexcept;

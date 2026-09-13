@@ -45,6 +45,7 @@ bool CombatAIController::is_valid_target(const AntUnit& candidate,
     if (candidate.is_in_scuffle || candidate.state == UnitState::Bounce) return false;
     if (candidate.on_powerup) return false;
     if (candidate.type == AntType::Swimmer && candidate.in_water) return false;
+    if (candidate.is_invulnerable()) return false;
 
     return true;
 }
@@ -227,37 +228,40 @@ void CombatAIController::update_striking(const std::vector<AntUnit*>& all_units,
             }
             owner_.attack_cooldown_ticks = 12;
             audio_out.push_back(AudioEvent{SoundID::HeavyPunch, owner_.pixel_x, owner_.pixel_y, 1, 255});
-            target->take_damage(2, DamageSource::CombatPunch, owner_.id);
+            if (!target->is_invulnerable()) {
+                target->take_damage(2, DamageSource::CombatPunch, owner_.id);
+                if (target->is_alive()) {
+                    int32_t kdx = target->pos.x - owner_.pos.x;
+                    int32_t kdy = target->pos.y - owner_.pos.y;
+                    if (kdx == 0 && kdy == 0) {
+                        kdx = 1;
+                    }
+                    int32_t step_x = (kdx > 0) ? 1 : ((kdx < 0) ? -1 : 0);
+                    int32_t step_y = (kdy > 0) ? 1 : ((kdy < 0) ? -1 : 0);
+                    if (step_x == 0 && step_y == 0) {
+                        step_x = 1;
+                    }
 
-            int32_t kdx = target->pos.x - owner_.pos.x;
-            int32_t kdy = target->pos.y - owner_.pos.y;
-            if (kdx == 0 && kdy == 0) {
-                kdx = 1;
-            }
-            int32_t step_x = (kdx > 0) ? 1 : ((kdx < 0) ? -1 : 0);
-            int32_t step_y = (kdy > 0) ? 1 : ((kdy < 0) ? -1 : 0);
-            if (step_x == 0 && step_y == 0) {
-                step_x = 1;
-            }
+                    int32_t dist_tiles = 4 + (static_cast<int32_t>(random_seed) & 1);
+                    TileCoord land_pos = target->pos;
+                    for (int32_t s = 1; s <= dist_tiles; ++s) {
+                        TileCoord next{target->pos.x + step_x * s, target->pos.y + step_y * s};
+                        if (!grid.in_bounds(next) || grid.is_solid_obstacle(next.x, next.y)) {
+                            break;
+                        }
+                        land_pos = next;
+                    }
 
-            int32_t dist_tiles = 4 + (static_cast<int32_t>(random_seed) & 1);
-            TileCoord land_pos = target->pos;
-            for (int32_t s = 1; s <= dist_tiles; ++s) {
-                TileCoord next{target->pos.x + step_x * s, target->pos.y + step_y * s};
-                if (!grid.in_bounds(next) || grid.is_solid_obstacle(next.x, next.y)) {
-                    break;
+                    int32_t max_x = (grid.width() > 0) ? static_cast<int32_t>(grid.width() - 1) : 0;
+                    int32_t max_y = (grid.height() > 0) ? static_cast<int32_t>(grid.height() - 1) : 0;
+                    int32_t clamped_x = std::clamp(land_pos.x, 0, max_x);
+                    int32_t clamped_y = std::clamp(land_pos.y, 0, max_y);
+
+                    target->set_tile_pos(clamped_x, clamped_y);
+                    target->start_stun(AntUnit::STUN_TICKS);
+                    audio_out.push_back(AudioEvent{SoundID::StunRecover, target->pixel_x, target->pixel_y, 0, 255});
                 }
-                land_pos = next;
             }
-
-            int32_t max_x = (grid.width() > 0) ? static_cast<int32_t>(grid.width() - 1) : 0;
-            int32_t max_y = (grid.height() > 0) ? static_cast<int32_t>(grid.height() - 1) : 0;
-            int32_t clamped_x = std::clamp(land_pos.x, 0, max_x);
-            int32_t clamped_y = std::clamp(land_pos.y, 0, max_y);
-
-            target->set_tile_pos(clamped_x, clamped_y);
-            target->start_stun(AntUnit::STUN_TICKS);
-            audio_out.push_back(AudioEvent{SoundID::StunRecover, target->pixel_x, target->pixel_y, 0, 255});
         }
     }
 

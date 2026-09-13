@@ -252,7 +252,13 @@ void AntUnit::tick_timers() noexcept {
     if (state_timer > 0) {
         state_timer--;
         if (state_timer == 0) {
-            if (state == UnitState::Burn || state == UnitState::Flinch || state == UnitState::Bounce || state == UnitState::Attacking) {
+            if (state == UnitState::Burn) {
+                if (post_bounce_stun) {
+                    start_stun(50);
+                } else {
+                    state = (type == AntType::Combat) ? UnitState::GuardIdle : UnitState::Idle;
+                }
+            } else if (state == UnitState::Flinch || state == UnitState::Bounce || state == UnitState::Attacking) {
                 state = (type == AntType::Combat) ? UnitState::GuardIdle : UnitState::Idle;
             }
         }
@@ -261,7 +267,7 @@ void AntUnit::tick_timers() noexcept {
     if (state == UnitState::Attacking || state == UnitState::Flinch || state == UnitState::Burn) {
         anim_tick++;
         anim_subitem = anim_tick;
-        if (state == UnitState::Flinch && push_tick_current < push_ticks_total) {
+        if ((state == UnitState::Flinch || state == UnitState::Burn) && push_tick_current < push_ticks_total) {
             push_tick_current++;
             int32_t interp_x = push_start_px + ((push_dest_px - push_start_px) * static_cast<int32_t>(push_tick_current)) / static_cast<int32_t>(push_ticks_total);
             int32_t interp_y = push_start_py + ((push_dest_py - push_start_py) * static_cast<int32_t>(push_tick_current)) / static_cast<int32_t>(push_ticks_total);

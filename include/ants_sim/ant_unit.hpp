@@ -190,7 +190,7 @@ public:
     int32_t     push_start_py{0};
     int32_t     push_dest_px{0};
     int32_t     push_dest_py{0};
-    uint8_t     push_ticks_total{4};
+    uint8_t     push_ticks_total{0};
     uint8_t     push_tick_current{0};
     bool        is_in_scuffle{false};
     uint16_t    scuffle_ticks{0};
@@ -256,6 +256,10 @@ public:
         fx_y = pixel_y << 16;
         push_start_px = pixel_x;
         push_start_py = pixel_y;
+        push_dest_px = pixel_x;
+        push_dest_py = pixel_y;
+        push_ticks_total = 0;
+        push_tick_current = 0;
     }
 
     void set_pixel_pos(int32_t px, int32_t py) noexcept {

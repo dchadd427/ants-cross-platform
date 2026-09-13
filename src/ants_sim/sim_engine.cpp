@@ -330,14 +330,6 @@ void bounce_unit_cascade(SimulationEngineImpl& impl,
     unit.push_start_px = collision_px;
     unit.push_start_py = collision_py;
 
-    // Authentic bounce direction: fly backwards away from the collision tile back along approach vector
-    int32_t bdx = (approach_dx > 0) ? -1 : ((approach_dx < 0) ? 1 : 0);
-    int32_t bdy = (approach_dy > 0) ? -1 : ((approach_dy < 0) ? 1 : 0);
-    if (bdx == 0 && bdy == 0) {
-        bdx = (unit.id % 2 == 0) ? 1 : -1;
-        bdy = (unit.id % 3 == 0) ? 1 : -1;
-    }
-
     static const int base_adj[8][2] = {
         {1, 0}, {0, 1}, {-1, 0}, {0, -1},
         {1, 1}, {-1, 1}, {1, -1}, {-1, -1}
@@ -348,21 +340,19 @@ void bounce_unit_cascade(SimulationEngineImpl& impl,
         candidates.push_back({from_x + off[0], from_y + off[1]});
     }
 
-    // Sort candidates by alignment with (bdx, bdy) away from collision center
-    std::sort(candidates.begin(), candidates.end(), [&](const std::pair<int32_t, int32_t>& c1, const std::pair<int32_t, int32_t>& c2) {
-        int32_t dot1 = (c1.first - from_x) * bdx + (c1.second - from_y) * bdy;
-        int32_t dot2 = (c2.first - from_x) * bdx + (c2.second - from_y) * bdy;
-        return dot1 > dot2;
-    });
+    // Authentic random 8-directional bounce (Ants.exe FUN_0101df5d / FUN_010345c0)
+    uint32_t start_dir = impl.prng_.rand() % 8;
+    std::rotate(candidates.begin(), candidates.begin() + static_cast<ptrdiff_t>(start_dir % candidates.size()), candidates.end());
 
     // Authentic Ants.exe (0x1020de7): Candidates query terrain bounds and non-solid obstacles
     // Prefer unoccupied passable tile first; if crowded, fall back to cascade bouncing into occupied ants
     TileCoord chosen{-1, -1};
     for (const auto& cand : candidates) {
-        if (!impl.grid_.in_bounds(cand.first, cand.second)) continue;
-        const auto& cell = impl.grid_.get_cell(static_cast<uint32_t>(cand.first), static_cast<uint32_t>(cand.second));
-        if (cell.terrain_type == TERRAIN_OBSTACLE || cell.is_obstacle_overlay) continue;
-        if (unit.type != AntType::Swimmer && cell.terrain_type == TERRAIN_WATER && !cell.has_completed_bridge()) continue;
+        if (!impl.grid_.is_occupiable_non_wall(cand.first, cand.second)) continue;
+        if (unit.type != AntType::Swimmer && impl.grid_.get_cell(static_cast<uint32_t>(cand.first), static_cast<uint32_t>(cand.second)).terrain_type == TERRAIN_WATER &&
+            !impl.grid_.get_cell(static_cast<uint32_t>(cand.first), static_cast<uint32_t>(cand.second)).has_completed_bridge()) {
+            continue; // Non-swimmers prefer dry ground over water if available
+        }
         bool has_ant = false;
         for (const auto& other : impl.ants_) {
             if (other && other->is_alive() && !other->underground && other->id != unit.id) {
@@ -379,9 +369,7 @@ void bounce_unit_cascade(SimulationEngineImpl& impl,
     }
     if (chosen.x < 0) {
         for (const auto& cand : candidates) {
-            if (!impl.grid_.in_bounds(cand.first, cand.second)) continue;
-            const auto& cell = impl.grid_.get_cell(static_cast<uint32_t>(cand.first), static_cast<uint32_t>(cand.second));
-            if (cell.terrain_type == TERRAIN_OBSTACLE || cell.is_obstacle_overlay) continue;
+            if (!impl.grid_.is_occupiable_non_wall(cand.first, cand.second)) continue;
             chosen = TileCoord{cand.first, cand.second};
             break;
         }
@@ -448,10 +436,19 @@ void bounce_unit_cascade(SimulationEngineImpl& impl,
         } else if (land_cell.has_fire()) {
             impl.physics_.resolve_fire_contact(unit, impl.grid_, impl.audio_queue_, impl.prng_, 0, 0);
         } else if (impl.grid_.has_bomb_at(chosen)) {
+            int32_t b_dx = chosen.x - from_x;
+            int32_t b_dy = chosen.y - from_y;
+            int32_t inc_dx = (b_dx > 0) ? 1 : ((b_dx < 0) ? -1 : 0);
+            int32_t inc_dy = (b_dy > 0) ? 1 : ((b_dy < 0) ? -1 : 0);
             impl.grid_.clear_bomb(static_cast<uint32_t>(chosen.x), static_cast<uint32_t>(chosen.y));
             impl.active_effects_.push_back(VisualEffect{"bombex", unit.pixel_x, unit.pixel_y, 0, 10});
             impl.audio_queue_.push_back(AudioEvent{SoundID::BombDetonate, unit.pixel_x, unit.pixel_y, 2, 255});
             unit.take_damage(2, DamageSource::BombBlast, land_cell.interactive_owner);
+            impl.physics_.apply_knockback(unit, unit.pixel_x, unit.pixel_y,
+                                          PhysicsEngine::BOMB_BLAST_MIN_TILES,
+                                          PhysicsEngine::BOMB_BLAST_MAX_TILES,
+                                          DamageSource::BombBlast, impl.audio_queue_, impl.prng_.rand(),
+                                          &impl.grid_, inc_dx, inc_dy);
         }
     }
 }
@@ -716,13 +713,27 @@ void SimulationEngine::tick() {
     // 3. Step Bomb Proximity Detonation
     for (auto& ant_ptr : impl_->ants_) {
         if (!ant_ptr || !ant_ptr->is_alive()) continue;
+        if (ant_ptr->state == UnitState::Knockback) continue;
+        if ((ant_ptr->state == UnitState::Burn || ant_ptr->state == UnitState::Bounce || ant_ptr->state == UnitState::Flinch) &&
+            ant_ptr->push_tick_current < ant_ptr->push_ticks_total) continue;
         if (impl_->grid_.has_bomb_at(ant_ptr->pos)) {
             const auto& cell = impl_->grid_.get_cell(ant_ptr->pos);
             uint8_t bomb_owner = cell.interactive_owner;
             bool is_friendly = (bomb_owner == ant_ptr->player_id ||
                                 impl_->stats_.are_allies(bomb_owner, ant_ptr->player_id));
             if (!is_friendly || ant_ptr->allow_friendly_bomb) {
-                trigger_bomb_detonation(ant_ptr->id, ant_ptr->pos);
+                int32_t inc_dx = 0;
+                int32_t inc_dy = 0;
+                if ((ant_ptr->state == UnitState::Burn || ant_ptr->state == UnitState::Bounce || ant_ptr->state == UnitState::Flinch) &&
+                    (ant_ptr->push_dest_px != ant_ptr->push_start_px || ant_ptr->push_dest_py != ant_ptr->push_start_py)) {
+                    int32_t pdx = ant_ptr->push_dest_px - ant_ptr->push_start_px;
+                    int32_t pdy = ant_ptr->push_dest_py - ant_ptr->push_start_py;
+                    if (pdx != 0 || pdy != 0) {
+                        inc_dx = (pdx > 0) ? 1 : ((pdx < 0) ? -1 : 0);
+                        inc_dy = (pdy > 0) ? 1 : ((pdy < 0) ? -1 : 0);
+                    }
+                }
+                trigger_bomb_detonation(ant_ptr->id, ant_ptr->pos, inc_dx, inc_dy);
             }
         }
     }
@@ -890,8 +901,20 @@ void SimulationEngine::tick() {
 
             bool is_swimmer = (ant_ptr->type == AntType::Swimmer);
             bool is_fire_ant = (ant_ptr->type == AntType::Fire);
+            bool is_thief = (ant_ptr->type == AntType::Thief);
+            uint8_t ant_team = ant_ptr->player_id;
+            bool on_friendly_base_hole = impl_->grid_.in_bounds(ant_ptr->pos) &&
+                                         impl_->grid_.get_cell(ant_ptr->pos).is_base_hole &&
+                                         (impl_->grid_.get_cell(ant_ptr->pos).base_owner_team == 255 ||
+                                          impl_->grid_.get_cell(ant_ptr->pos).base_owner_team == ant_ptr->player_id);
+            bool next_friendly_base_hole = impl_->grid_.in_bounds(next_wp) &&
+                                           impl_->grid_.get_cell(next_wp).is_base_hole &&
+                                           (impl_->grid_.get_cell(next_wp).base_owner_team == 255 ||
+                                            impl_->grid_.get_cell(next_wp).base_owner_team == ant_ptr->player_id);
+            bool is_entering_or_leaving = (ant_ptr->state == UnitState::EnteringBase || is_ant_in_base_queue(ant_ptr->id) ||
+                                           on_friendly_base_hole || next_friendly_base_hole);
             bool next_passable = impl_->grid_.in_bounds(next_wp) &&
-                                 impl_->grid_.get_cell(next_wp).is_passable(is_swimmer, is_fire_ant);
+                                 impl_->grid_.get_cell(next_wp).is_passable(is_swimmer, is_fire_ant, is_thief, ant_team, is_entering_or_leaving);
 
             if (at_tile_center && (!next_passable || impl_->is_tile_blocked_for_ant(*ant_ptr, next_wp))) {
                 ant_ptr->blocked_ticks++;
@@ -1425,6 +1448,8 @@ void SimulationEngine::tick() {
                 ant_ptr->base_dwell_ticks = 0;
                 ant_ptr->underground_visited = false;
                 ant_ptr->completed_base_deposit = true;
+                bool was_newborn = ant_ptr->is_newborn;
+                ant_ptr->is_newborn = false;
                 ant_ptr->invulnerable_ticks = 40;
                 ant_ptr->state = (ant_ptr->type == AntType::Combat) ? UnitState::GuardIdle : UnitState::Idle;
                 const auto* friendly_base = impl_->grid_.find_anthill(ant_ptr->player_id);
@@ -1432,12 +1457,12 @@ void SimulationEngine::tick() {
                     int32_t idle_x = friendly_base->x + 4;
                     int32_t idle_y = friendly_base->y + 4;
 
-                    if (!ant_ptr->is_newborn && ant_ptr->had_food_at_base_entry && !ant_ptr->is_thief_steal &&
+                    if (!was_newborn && ant_ptr->had_food_at_base_entry && !ant_ptr->is_thief_steal &&
                         ant_ptr->harvest_origin.x >= 0 && ant_ptr->harvest_origin.y >= 0) {
                         // Route back to origin food harvest location
                         issue_move_order(ant_ptr->id, ant_ptr->harvest_origin);
                     } else {
-                        // Newborn ant, had no food, or was thief ant: route to IDLE spot
+                        // Returning ant or newborn: route to IDLE spot
                         TileCoord raw_idle{idle_x, idle_y};
                         TileCoord target_idle = raw_idle;
                         if (!impl_->grid_.in_bounds(raw_idle) || !impl_->grid_.get_cell(raw_idle).is_passable()) {
@@ -1448,7 +1473,6 @@ void SimulationEngine::tick() {
                         issue_move_order(ant_ptr->id, target_idle);
                     }
                 }
-                ant_ptr->is_newborn = false;
                 ant_ptr->had_food_at_base_entry = false;
             }
             continue;
@@ -1797,6 +1821,10 @@ void SimulationEngine::tick() {
 
         // Check if just landed (push flight completed)
         if (ant_ptr->push_tick_current == ant_ptr->push_ticks_total && ant_ptr->push_ticks_total > 0) {
+            int32_t b_dx = ant_ptr->push_dest_px - ant_ptr->push_start_px;
+            int32_t b_dy = ant_ptr->push_dest_py - ant_ptr->push_start_py;
+            int32_t inc_dx = (b_dx > 0) ? 1 : ((b_dx < 0) ? -1 : 0);
+            int32_t inc_dy = (b_dy > 0) ? 1 : ((b_dy < 0) ? -1 : 0);
             ant_ptr->push_ticks_total = 0; // Trigger once upon landing
             impl_->audio_queue_.push_back(AudioEvent{SoundID::FlingThumpB, ant_ptr->pixel_x, ant_ptr->pixel_y, 1, 255});
             if (impl_->grid_.in_bounds(ant_ptr->pos)) {
@@ -1817,15 +1845,63 @@ void SimulationEngine::tick() {
                 if (cell.has_fire()) {
                     impl_->physics_.resolve_fire_contact(*ant_ptr, impl_->grid_, impl_->audio_queue_, impl_->prng_, 0, 0);
                 }
-                // Bomb landing: Trigger chain bomb detonation
+                // Bomb landing: Trigger chain bomb detonation with momentum
                 if (impl_->grid_.has_bomb_at(ant_ptr->pos)) {
-                    trigger_bomb_detonation(ant_ptr->id, ant_ptr->pos);
+                    trigger_bomb_detonation(ant_ptr->id, ant_ptr->pos, inc_dx, inc_dy);
                     continue;
                 }
             }
         }
 
         if (ant_ptr->anim_tick >= 10) {
+            if (ant_ptr->hp == 0) {
+                ant_ptr->state = UnitState::Dead;
+                impl_->spawn_death_effect(ant_ptr->pixel_x, ant_ptr->pixel_y);
+            } else if (ant_ptr->post_bounce_stun) {
+                ant_ptr->post_bounce_stun = false;
+                ant_ptr->start_stun(AntUnit::STUN_TICKS);
+                impl_->audio_queue_.push_back(AudioEvent{SoundID::StunRecover, ant_ptr->pixel_x, ant_ptr->pixel_y, 0, 255});
+            } else {
+                ant_ptr->state = (ant_ptr->type == AntType::Combat) ? UnitState::GuardIdle : UnitState::Idle;
+            }
+            ant_ptr->anim_tick = 0;
+            ant_ptr->anim_subitem = 0;
+        }
+        continue;
+    }
+
+    // Burn progression (*bu301, 22 ticks)
+    if (ant_ptr->state == UnitState::Burn) {
+        if (ant_ptr->anim_tick == 11) {
+            impl_->audio_queue_.push_back(AudioEvent{SoundID::FlingThumpB, ant_ptr->pixel_x, ant_ptr->pixel_y, 1, 255});
+        }
+        if (ant_ptr->push_tick_current == ant_ptr->push_ticks_total && ant_ptr->push_ticks_total > 0) {
+            int32_t b_dx = ant_ptr->push_dest_px - ant_ptr->push_start_px;
+            int32_t b_dy = ant_ptr->push_dest_py - ant_ptr->push_start_py;
+            int32_t inc_dx = (b_dx > 0) ? 1 : ((b_dx < 0) ? -1 : 0);
+            int32_t inc_dy = (b_dy > 0) ? 1 : ((b_dy < 0) ? -1 : 0);
+            ant_ptr->push_ticks_total = 0;
+            if (impl_->grid_.in_bounds(ant_ptr->pos)) {
+                const auto& cell = impl_->grid_.get_cell(static_cast<uint32_t>(ant_ptr->pos.x), static_cast<uint32_t>(ant_ptr->pos.y));
+                if (cell.terrain_type == TERRAIN_WATER && !cell.has_completed_bridge()) {
+                    if (ant_ptr->type == AntType::Swimmer) {
+                        ant_ptr->state = UnitState::Swimming;
+                        ant_ptr->in_water = true;
+                    } else {
+                        ant_ptr->start_drowning();
+                        impl_->audio_queue_.push_back(AudioEvent{SoundID::AntDrown, ant_ptr->pixel_x, ant_ptr->pixel_y, 0, 255});
+                        impl_->audio_queue_.push_back(AudioEvent{SoundID::WaterSplash, ant_ptr->pixel_x, ant_ptr->pixel_y, 0, 255});
+                        continue;
+                    }
+                }
+                if (impl_->grid_.has_bomb_at(ant_ptr->pos)) {
+                    trigger_bomb_detonation(ant_ptr->id, ant_ptr->pos, inc_dx, inc_dy);
+                    continue;
+                }
+            }
+        }
+
+        if (ant_ptr->state_timer == 0 || ant_ptr->anim_tick >= 22) {
             if (ant_ptr->hp == 0) {
                 ant_ptr->state = UnitState::Dead;
                 impl_->spawn_death_effect(ant_ptr->pixel_x, ant_ptr->pixel_y);
@@ -1888,10 +1964,8 @@ void SimulationEngine::tick() {
                 if (p != ant_ptr->player_id && !impl_->stats_.are_allies(ant_ptr->player_id, p)) {
                     const auto* enemy_base = impl_->grid_.find_anthill(p);
                     if (enemy_base) {
-                        // Authentic 1998 Infiltration: Entry ONLY from the 4 right-flank tiles
-                        // X = base_min_x + 3, Y in [base_min_y, base_min_y + 3]
-                        if (ant_ptr->pos.x == enemy_base->x + 3 &&
-                            ant_ptr->pos.y >= enemy_base->y && ant_ptr->pos.y < enemy_base->y + 4) {
+                        // Authentic 1998 Infiltration: Entry ONLY from the bottlecap tile (bx + 3, by + 2)
+                        if (ant_ptr->pos.x == enemy_base->x + 3 && ant_ptr->pos.y == enemy_base->y + 2) {
                             ant_ptr->target_team_id = p;
                             ant_ptr->state = UnitState::Infiltrating;
                             ant_ptr->anim_subitem = 0;
@@ -2222,8 +2296,8 @@ void SimulationEngine::tick() {
 
     // 6. Step Ballistic Physics
     impl_->physics_.tick(ptrs, impl_->grid_, impl_->audio_queue_, impl_->prng_,
-                         [this](AntUnit& u, TileCoord bpos) {
-                             trigger_bomb_detonation(u.id, bpos);
+                         [this](AntUnit& u, TileCoord bpos, int32_t inc_dx, int32_t inc_dy) {
+                             trigger_bomb_detonation(u.id, bpos, inc_dx, inc_dy);
                          });
 
     // 7. Update Daisy Plant Power-Up Droppers
@@ -2541,9 +2615,7 @@ void SimulationEngine::issue_order(const AntOrder& order) {
                         target_team = p;
                         if (unit->type == AntType::Thief) {
                             tx = ah->x + 3;
-                            int32_t cur_y = static_cast<int32_t>(ty);
-                            int32_t base_y = static_cast<int32_t>(ah->y);
-                            ty = static_cast<uint16_t>(std::clamp(cur_y, base_y, base_y + 3));
+                            ty = ah->y + 2;
                         } else {
                             tx = ah->x + 1;
                             ty = ah->y + 1;
@@ -2555,15 +2627,12 @@ void SimulationEngine::issue_order(const AntOrder& order) {
                 const auto* ah = impl_->grid_.find_anthill(target_team);
                 if (ah) {
                     tx = ah->x + 3;
-                    int32_t cur_y = static_cast<int32_t>(ty);
-                    int32_t base_y = static_cast<int32_t>(ah->y);
-                    ty = static_cast<uint16_t>(std::clamp(cur_y, base_y, base_y + 3));
+                    ty = ah->y + 2;
                 }
             }
             unit->target_team_id = target_team;
             const auto* target_ah = impl_->grid_.find_anthill(target_team);
-            bool at_enemy_base = (target_ah && unit->pos.x == target_ah->x + 3 &&
-                                  unit->pos.y >= target_ah->y && unit->pos.y < target_ah->y + 4);
+            bool at_enemy_base = (target_ah && unit->pos.x == target_ah->x + 3 && unit->pos.y == target_ah->y + 2);
             if (at_enemy_base || (unit->pos.x == tx && unit->pos.y == ty)) {
                 start_thief_infiltration(order.ant_id, target_team);
             } else {
@@ -3052,8 +3121,7 @@ void SimulationEngine::execute_melee_attack(uint32_t attacker_id, uint32_t targe
             target->stun_ticks_remaining = AntUnit::STUN_TICKS;
             target->state = UnitState::Knockback;
 
-            // Fire collision check on landing / contact
-            if (impl_->grid_.has_fire_at(target->pos)) {
+            if (impl_->grid_.in_bounds(land_pos) && impl_->grid_.get_cell(static_cast<uint32_t>(land_pos.x), static_cast<uint32_t>(land_pos.y)).has_fire()) {
                 impl_->physics_.resolve_fire_contact(*target, impl_->grid_, impl_->audio_queue_, impl_->prng_, dir_x, dir_y, DamageSource::CombatPunch);
             }
         }
@@ -3260,7 +3328,7 @@ void SimulationEngine::issue_move_order(uint32_t ant_id, TileCoord dest, bool al
             TileCoord hole{friendly_base->x + 1, friendly_base->y + 1};
             bool is_swimmer = (unit->type == AntType::Swimmer);
             bool is_fire_ant = (unit->type == AntType::Fire);
-            auto path_to_base = PathFinder::find_path(impl_->grid_, dest, hole, is_swimmer, is_fire_ant);
+            auto path_to_base = PathFinder::find_path(impl_->grid_, dest, hole, is_swimmer, is_fire_ant, 4000, {}, {}, false, unit->player_id, true);
             if (path_to_base.empty()) {
                 unit->clear_path();
                 unit->set_tile_pos(unit->pos.x, unit->pos.y);
@@ -3490,9 +3558,22 @@ void SimulationEngine::issue_move_order(uint32_t ant_id, TileCoord dest, bool al
         }
     }
 
-    auto path = PathFinder::find_path(impl_->grid_, unit->pos, dest, is_swimmer, is_fire_ant, 4000, dynamic_obstacles, hard_obstacles);
+    bool is_thief = (unit->type == AntType::Thief);
+    uint8_t ant_team = unit->player_id;
+    bool on_friendly_base_hole = impl_->grid_.in_bounds(unit->pos) &&
+                                 impl_->grid_.get_cell(unit->pos).is_base_hole &&
+                                 (impl_->grid_.get_cell(unit->pos).base_owner_team == 255 ||
+                                  impl_->grid_.get_cell(unit->pos).base_owner_team == unit->player_id);
+    bool dest_friendly_base_hole = impl_->grid_.in_bounds(dest) &&
+                                   impl_->grid_.get_cell(dest).is_base_hole &&
+                                   (impl_->grid_.get_cell(dest).base_owner_team == 255 ||
+                                    impl_->grid_.get_cell(dest).base_owner_team == unit->player_id);
+    bool is_entering_or_leaving = (unit->state == UnitState::EnteringBase || is_ant_in_base_queue(unit->id) ||
+                                   on_friendly_base_hole || dest_friendly_base_hole);
+
+    auto path = PathFinder::find_path(impl_->grid_, unit->pos, dest, is_swimmer, is_fire_ant, 4000, dynamic_obstacles, hard_obstacles, is_thief, ant_team, is_entering_or_leaving);
     if (path.empty() && !dynamic_obstacles.empty()) {
-        path = PathFinder::find_path(impl_->grid_, unit->pos, dest, is_swimmer, is_fire_ant, 4000, {}, hard_obstacles);
+        path = PathFinder::find_path(impl_->grid_, unit->pos, dest, is_swimmer, is_fire_ant, 4000, {}, hard_obstacles, is_thief, ant_team, is_entering_or_leaving);
     }
     if (!path.empty()) {
         unit->final_dest = path.back();
@@ -3721,10 +3802,10 @@ bool SimulationEngine::demolish_bridge_step(uint32_t ant_id, TileCoord target) {
     return true;
 }
 
-bool SimulationEngine::can_unit_traverse(AntType type, TileCoord pos) const {
+bool SimulationEngine::can_unit_traverse(AntType type, TileCoord pos, uint8_t ant_team, bool is_entering_or_leaving) const {
     if (!impl_->grid_.in_bounds(pos)) return false;
     const auto& cell = impl_->grid_.get_cell(pos);
-    return cell.is_passable(type == AntType::Swimmer, type == AntType::Fire);
+    return cell.is_passable(type == AntType::Swimmer, type == AntType::Fire, type == AntType::Thief, ant_team, is_entering_or_leaving);
 }
 
 bool SimulationEngine::has_bomb_at(TileCoord pos) const {
@@ -3912,9 +3993,9 @@ void SimulationEngine::send_ant_straight_into_base(uint32_t ant_id) {
         }
     }
 
-    auto waypoints = PathFinder::find_path(impl_->grid_, unit->pos, hole, is_swimmer, is_fire_ant, 4000, dynamic_obstacles, hard_obstacles);
+    auto waypoints = PathFinder::find_path(impl_->grid_, unit->pos, hole, is_swimmer, is_fire_ant, 4000, dynamic_obstacles, hard_obstacles, false, unit->player_id, true);
     if (waypoints.empty() && !dynamic_obstacles.empty()) {
-        waypoints = PathFinder::find_path(impl_->grid_, unit->pos, hole, is_swimmer, is_fire_ant, 4000, {}, hard_obstacles);
+        waypoints = PathFinder::find_path(impl_->grid_, unit->pos, hole, is_swimmer, is_fire_ant, 4000, {}, hard_obstacles, false, unit->player_id, true);
     }
 
     if (!waypoints.empty()) {
@@ -4260,7 +4341,7 @@ bool SimulationEngine::has_other_living_ant_at(TileCoord pos, uint32_t ignore_an
     return impl_->has_other_living_ant_at(pos, ignore_ant_id);
 }
 
-void SimulationEngine::trigger_bomb_detonation(uint32_t ant_id, TileCoord bomb_pos) {
+void SimulationEngine::trigger_bomb_detonation(uint32_t ant_id, TileCoord bomb_pos, int32_t incoming_dx, int32_t incoming_dy) {
     AntUnit* ant_ptr = impl_->find_unit(ant_id);
     if (!ant_ptr || !ant_ptr->is_alive()) return;
 
@@ -4292,11 +4373,11 @@ void SimulationEngine::trigger_bomb_detonation(uint32_t ant_id, TileCoord bomb_p
     if (!lethal) {
         if (is_dud) {
             // DUD BRANCH: Remains in place on bomb tile, plays smoke puff scorch (a*bu)
-            // for 11 ticks with Sound 64 (flythumpa.wav) and Sound 65 (flythumpb.wav)
+            // for 22 ticks with Sound 64 (flythumpa.wav) and Sound 65 (flythumpb.wav)
             impl_->audio_queue_.push_back(AudioEvent{SoundID::FlingThumpA, ant_ptr->pixel_x, ant_ptr->pixel_y, 2, 255});
             ant_ptr->clear_path();
             ant_ptr->state = UnitState::Burn;
-            ant_ptr->state_timer = 11;
+            ant_ptr->state_timer = 22;
             ant_ptr->anim_tick = 0;
             ant_ptr->anim_subitem = 0;
         } else {
@@ -4306,12 +4387,24 @@ void SimulationEngine::trigger_bomb_detonation(uint32_t ant_id, TileCoord bomb_p
             impl_->active_effects_.push_back(VisualEffect{"bombex", bomb_center_x, bomb_center_y, 0, 10});
             impl_->audio_queue_.push_back(AudioEvent{SoundID::BombDetonate, bomb_center_x, bomb_center_y, 2, 255});
 
+            if (incoming_dx == 0 && incoming_dy == 0) {
+                if ((ant_ptr->state == UnitState::Burn || ant_ptr->state == UnitState::Bounce || ant_ptr->state == UnitState::Flinch) &&
+                    ant_ptr->push_ticks_total > 0) {
+                    int32_t pdx = ant_ptr->push_dest_px - ant_ptr->push_start_px;
+                    int32_t pdy = ant_ptr->push_dest_py - ant_ptr->push_start_py;
+                    if (pdx != 0 || pdy != 0) {
+                        incoming_dx = (pdx > 0) ? 1 : ((pdx < 0) ? -1 : 0);
+                        incoming_dy = (pdy > 0) ? 1 : ((pdy < 0) ? -1 : 0);
+                    }
+                }
+            }
+
             // Launch ant from bomb center with 8-direction clearance check
             impl_->physics_.apply_knockback(*ant_ptr, bomb_center_x, bomb_center_y,
                                             PhysicsEngine::BOMB_BLAST_MIN_TILES,
                                             PhysicsEngine::BOMB_BLAST_MAX_TILES,
                                             DamageSource::BombBlast, impl_->audio_queue_, impl_->prng_.rand(),
-                                            &impl_->grid_);
+                                            &impl_->grid_, incoming_dx, incoming_dy);
         }
     }
 }

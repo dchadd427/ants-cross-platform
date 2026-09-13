@@ -23,7 +23,10 @@ public:
         bool is_fire_ant = false,
         size_t max_nodes = 4000,
         const std::vector<TileCoord>& obstacles = {},
-        const std::vector<TileCoord>& hard_obstacles = {}
+        const std::vector<TileCoord>& hard_obstacles = {},
+        bool is_thief = false,
+        uint8_t ant_team = 255,
+        bool is_entering_or_leaving_base = false
     );
 
     /**
@@ -35,7 +38,10 @@ public:
         TileCoord impassable_target,
         bool is_swimmer = false,
         bool is_fire_ant = false,
-        const std::vector<TileCoord>& hard_obstacles = {}
+        const std::vector<TileCoord>& hard_obstacles = {},
+        bool is_thief = false,
+        uint8_t ant_team = 255,
+        bool is_entering_or_leaving_base = false
     );
 };
 
