@@ -872,6 +872,14 @@ void SimulationEngine::tick() {
             if (!ant_ptr->on_powerup && ant_ptr->transformation_interrupted) {
                 ant_ptr->transformation_interrupted = false;
             }
+            // Hazard check: Fire contact outside of flight/bounce
+            if (cell.has_fire() && ant_ptr->type != AntType::Fire &&
+                ant_ptr->state != UnitState::Bounce && ant_ptr->state != UnitState::Knockback &&
+                ant_ptr->state != UnitState::Drowning && ant_ptr->state != UnitState::Dead) {
+                impl_->active_effects_.push_back(VisualEffect{"bump", ant_ptr->pixel_x, ant_ptr->pixel_y, 0, 10});
+                impl_->physics_.resolve_fire_contact(*ant_ptr, impl_->grid_, impl_->audio_queue_, impl_->prng_, 0, 0, DamageSource::FireBurn);
+                continue;
+            }
         }
         if (ant_ptr->state == UnitState::Walking && ant_ptr->current_waypoint_idx < ant_ptr->waypoints.size()) {
             TileCoord next_wp = ant_ptr->waypoints[ant_ptr->current_waypoint_idx];
@@ -1821,6 +1829,10 @@ void SimulationEngine::tick() {
             if (ant_ptr->hp == 0) {
                 ant_ptr->state = UnitState::Dead;
                 impl_->spawn_death_effect(ant_ptr->pixel_x, ant_ptr->pixel_y);
+            } else if (ant_ptr->post_bounce_stun) {
+                ant_ptr->post_bounce_stun = false;
+                ant_ptr->start_stun(AntUnit::STUN_TICKS);
+                impl_->audio_queue_.push_back(AudioEvent{SoundID::StunRecover, ant_ptr->pixel_x, ant_ptr->pixel_y, 0, 255});
             } else {
                 ant_ptr->state = (ant_ptr->type == AntType::Combat) ? UnitState::GuardIdle : UnitState::Idle;
             }
@@ -1909,10 +1921,10 @@ void SimulationEngine::tick() {
     // 5.5 Step Ant-Ant Elastic Collision & Tile Occupancy Separation
     for (size_t i = 0; i < impl_->ants_.size(); ++i) {
         auto& a1 = impl_->ants_[i];
-        if (!a1 || !a1->is_alive() || a1->underground || a1->state == UnitState::EnteringBase || a1->state == UnitState::Infiltrating || a1->state == UnitState::QueuingBase) continue;
+        if (!a1 || !a1->is_alive() || a1->underground || a1->state == UnitState::EnteringBase || a1->state == UnitState::Infiltrating || a1->state == UnitState::QueuingBase || a1->state == UnitState::Knockback || a1->altitude_z > 0) continue;
         for (size_t j = i + 1; j < impl_->ants_.size(); ++j) {
             auto& a2 = impl_->ants_[j];
-            if (!a2 || !a2->is_alive() || a2->underground || a2->state == UnitState::EnteringBase || a2->state == UnitState::Infiltrating || a2->state == UnitState::QueuingBase) continue;
+            if (!a2 || !a2->is_alive() || a2->underground || a2->state == UnitState::EnteringBase || a2->state == UnitState::Infiltrating || a2->state == UnitState::QueuingBase || a2->state == UnitState::Knockback || a2->altitude_z > 0) continue;
 
             int32_t dx = a1->pixel_x - a2->pixel_x;
             int32_t dy = a1->pixel_y - a2->pixel_y;
@@ -3042,7 +3054,7 @@ void SimulationEngine::execute_melee_attack(uint32_t attacker_id, uint32_t targe
 
             // Fire collision check on landing / contact
             if (impl_->grid_.has_fire_at(target->pos)) {
-                impl_->physics_.resolve_fire_contact(*target, impl_->grid_, impl_->audio_queue_, impl_->prng_, dir_x, dir_y);
+                impl_->physics_.resolve_fire_contact(*target, impl_->grid_, impl_->audio_queue_, impl_->prng_, dir_x, dir_y, DamageSource::CombatPunch);
             }
         }
     } else {

@@ -1725,5 +1725,17 @@ To deliver authentic 1:1 gameplay inside standard web browsers with zero install
   - When an ant lands on a firewall from knockback (`resolve_fire_contact`), `unit.altitude_z` is reset to 0 and its flight state is cleanly resolved.
   - Fire Ants (`AntType::Fire`) take 0 fire damage and immediately transition out of `UnitState::Knockback` into `UnitState::Idle` (or `GuardIdle`) with `stun_ticks_remaining = 0`, completely preventing flight freezing.
   - Non-fire ants take contact fire damage, ricochet away from fire according to reflection physics, and transition to `UnitState::Idle` upon completing bomb knockback or stunned state upon punch knockback.
+- **Airborne Ballistic Flight Clearance Over Ground Units (`Ants.exe.c:20947`, `21612` / `FUN_0101df5d`)**:
+  - In `Ants.exe`, bomb blast knockback creates a 4-tile displacement arc (`param_3 = 4`, spanning 5 tiles total including origin).
+  - Units in ballistic flight (`UnitState::Knockback`, `altitude_z > 0`) fly above the 2D ground collision grid. Ground-plane mutual elastic separation and same-tile occupancy resolution (Section 5.5) strictly exempt airborne units (`a1->state == Knockback || a1->altitude_z > 0`).
+  - Airborne units fly smoothly *over* intermediate ground units (friendly or enemy) without colliding, bouncing, scuffling, or interrupting flight. Ground occupancy separation only resolves on the landing tile after flight completes.
+- **Animated Fire Contact Ricochet & Bounce Pacing (`Ants.exe.c:20193` / `FUN_0101c221`, Table 4 `aggb301` / `agbu301`)**:
+  - When a non-fire ant hits fire (via knockback landing, placement, or traversal), it takes 1 contact fire damage and ricochets away along reflection vectors.
+  - Instead of instantaneous coordinate teleportation, the ant enters `UnitState::Bounce` (`action == "gb"` tumble animation) with a 6-tick push slide (`push_ticks_total = 6`) and 10-tick total recovery.
+  - Impact triggers `SoundID::FlingThumpA` (sound 64, `flythumpa.wav`), spawns a `"bump"` impact visual effect, and plays `SoundID::FlingThumpB` (sound 65, `flythumpb.wav`) upon completing the bounce landing at tick 6.
+  - State resolution upon completing bounce (tick 10):
+    - Bomb knockback ricochet: Transitions to `UnitState::Idle` (or `GuardIdle`) and accepts orders immediately.
+    - Combat punch knockback ricochet: Transitions to `UnitState::Stunned` (50 ticks) with `SoundID::StunRecover` (sound 70, `stun.wav`).
+    - Standard contact ricochet: Transitions to `UnitState::Idle`.
 
 

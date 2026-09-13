@@ -194,6 +194,7 @@ public:
     uint8_t     push_tick_current{0};
     bool        is_in_scuffle{false};
     uint16_t    scuffle_ticks{0};
+    bool        post_bounce_stun{false};
 
     std::vector<TileCoord> waypoints;
     size_t      current_waypoint_idx{0};

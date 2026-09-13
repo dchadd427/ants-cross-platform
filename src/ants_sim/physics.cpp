@@ -319,9 +319,14 @@ void PhysicsEngine::resolve_fire_contact(AntUnit& unit,
         return;
     }
 
+    int32_t start_px = unit.pixel_x;
+    int32_t start_py = unit.pixel_y;
+    int32_t dest_tx = unit.pos.x;
+    int32_t dest_ty = unit.pos.y;
     int loop_guard = 0;
-    while (grid.in_bounds(unit.pos.x, unit.pos.y) &&
-           grid.get_cell(unit.pos).has_fire() &&
+
+    while (grid.in_bounds(dest_tx, dest_ty) &&
+           grid.get_cell(TileCoord{dest_tx, dest_ty}).has_fire() &&
            unit.is_alive() && loop_guard < 10) {
         loop_guard++;
 
@@ -339,27 +344,30 @@ void PhysicsEngine::resolve_fire_contact(AntUnit& unit,
             b_dx = -1;
         }
 
-        int32_t nx = unit.pos.x + b_dx;
-        int32_t ny = unit.pos.y + b_dy;
+        int32_t nx = dest_tx + b_dx;
+        int32_t ny = dest_ty + b_dy;
         // If backward bounce is valid, not solid, and not another fire, bounce there
         if (grid.in_bounds(nx, ny) && !grid.is_solid_obstacle(nx, ny) && !grid.get_cell(TileCoord{nx, ny}).has_fire()) {
-            unit.set_tile_pos(nx, ny);
+            dest_tx = nx;
+            dest_ty = ny;
             incoming_dx = b_dx;
             incoming_dy = b_dy;
         } else {
             // Deflect forward / away from fire
-            int32_t def_x = unit.pos.x - b_dx;
-            int32_t def_y = unit.pos.y - b_dy;
+            int32_t def_x = dest_tx - b_dx;
+            int32_t def_y = dest_ty - b_dy;
             if (grid.in_bounds(def_x, def_y) && !grid.is_solid_obstacle(def_x, def_y)) {
-                unit.set_tile_pos(def_x, def_y);
+                dest_tx = def_x;
+                dest_ty = def_y;
                 incoming_dx = -b_dx;
                 incoming_dy = -b_dy;
             } else {
                 // Try perpendicular deflection escape
-                int32_t perp_x = unit.pos.x + b_dy;
-                int32_t perp_y = unit.pos.y + b_dx;
+                int32_t perp_x = dest_tx + b_dy;
+                int32_t perp_y = dest_ty + b_dx;
                 if (grid.in_bounds(perp_x, perp_y) && !grid.is_solid_obstacle(perp_x, perp_y)) {
-                    unit.set_tile_pos(perp_x, perp_y);
+                    dest_tx = perp_x;
+                    dest_ty = perp_y;
                     incoming_dx = b_dy;
                     incoming_dy = b_dx;
                 } else {
@@ -369,16 +377,36 @@ void PhysicsEngine::resolve_fire_contact(AntUnit& unit,
         }
     }
 
-    audio_out.push_back(AudioEvent{SOUND_FLY_THUMP_A, unit.pixel_x, unit.pixel_y, 1, 255});
+    audio_out.push_back(AudioEvent{SOUND_FLY_THUMP_A, start_px, start_py, 1, 255});
     unit.altitude_z = 0;
+    unit.set_tile_pos(dest_tx, dest_ty);
+
     if (source == DamageSource::BombBlast) {
         unit.state = (unit.type == AntType::Combat) ? UnitState::GuardIdle : UnitState::Idle;
         unit.anim_tick = 0;
         unit.anim_subitem = 0;
         unit.stun_ticks_remaining = 0;
-    } else {
+    } else if (source == DamageSource::CombatPunch) {
         audio_out.push_back(AudioEvent{SOUND_STUN, unit.pixel_x, unit.pixel_y, 0, 255});
         unit.start_stun(STUN_RECOVERY_TICKS);
+    } else {
+        // Direct hazard contact (stepping or spawned on fire): animate bounce slide away from fire
+        unit.push_start_px = start_px;
+        unit.push_start_py = start_py;
+        unit.push_dest_px = dest_tx * 32 + 16;
+        unit.push_dest_py = dest_ty * 32 + 16;
+        unit.push_ticks_total = 6;
+        unit.push_tick_current = 0;
+        unit.pixel_x = start_px;
+        unit.pixel_y = start_py;
+        unit.fx_x = start_px << 16;
+        unit.fx_y = start_py << 16;
+
+        unit.state = UnitState::Bounce;
+        unit.anim_tick = 0;
+        unit.anim_subitem = 0;
+        unit.post_bounce_stun = false;
+        unit.stun_ticks_remaining = 0;
     }
 }
 
