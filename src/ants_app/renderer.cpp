@@ -1680,6 +1680,39 @@ void Renderer::draw_single_ant(const ants::sim::AntSnapshot& ant, bool is_select
                 if (sub_idx >= seq->subitems.size()) {
                     sub_idx = seq->subitems.size() - 1;
                 }
+            } else if (action == "db") {
+                // Defusing bomb lasts 22 ticks (1,100ms); authentically mapped across 12 subitems:
+                // Subitem 0: tick 0 (50ms)
+                // Subitem 1: tick 1 (50ms)
+                // Subitem 2: ticks 2..3 (100ms)
+                // Subitem 3: ticks 4..7 (200ms, sound 73 at tick 5)
+                // Subitem 4: tick 8 (50ms)
+                // Subitem 5: tick 9 (50ms)
+                // Subitem 6: ticks 10..11 (100ms)
+                // Subitem 7: ticks 12..13 (100ms, sound 74 + bomb clear at tick 13)
+                // Subitem 8: ticks 14..15 (100ms)
+                // Subitem 9: ticks 16..17 (100ms)
+                // Subitem 10: ticks 18..19 (100ms)
+                // Subitem 11: ticks 20..21 (100ms)
+                if (seq->subitems.size() == 12) {
+                    if (ant.anim_frame <= 0) sub_idx = 0;
+                    else if (ant.anim_frame == 1) sub_idx = 1;
+                    else if (ant.anim_frame < 4) sub_idx = 2;
+                    else if (ant.anim_frame < 8) sub_idx = 3;
+                    else if (ant.anim_frame == 8) sub_idx = 4;
+                    else if (ant.anim_frame == 9) sub_idx = 5;
+                    else if (ant.anim_frame < 12) sub_idx = 6;
+                    else if (ant.anim_frame < 14) sub_idx = 7;
+                    else if (ant.anim_frame < 16) sub_idx = 8;
+                    else if (ant.anim_frame < 18) sub_idx = 9;
+                    else if (ant.anim_frame < 20) sub_idx = 10;
+                    else sub_idx = 11;
+                } else {
+                    sub_idx = (ant.anim_frame * seq->subitems.size()) / 22;
+                }
+                if (sub_idx >= seq->subitems.size()) {
+                    sub_idx = seq->subitems.size() - 1;
+                }
             } else {
                 sub_idx = ant.anim_frame % seq->subitems.size();
             }

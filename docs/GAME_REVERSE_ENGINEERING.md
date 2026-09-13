@@ -1342,10 +1342,10 @@ To deliver authentic 1:1 gameplay inside standard web browsers with zero install
   - Waiting ants queued along the anthill queue slots `(bx - 1, by + 3 - k)` remain stationary in `UnitState::QueuingBase` facing East toward the mound.
   - The waiting ant must NEVER advance toward the anthill entrance while the preceding ant is depositing or emerging.
   - The preceding ant only releases the queue lock and allows the next ant to advance when it has completely finished underground dwell, completed emergence (`anim_subitem >= 16`), and stepped off the entrance hole tile (`pos != hole`).
-- **Bomber Bomb Defusal (`abdb`, 12 Ticks / 1,100ms)**:
-  - Subitem 3: Sound 73 (`bombdrop.wav` / `BombDefuseGrab`) fires as the Bomber grabs the bomb.
-  - Subitem 6: Sound 74 (`bombmuffle.wav` / `BombBodySquash`) fires and the bomb object is removed from the grid.
-  - Subitem 12: Bomber returns to Idle.
+- **Bomber Bomb Defusal (`abdb`, 22 Ticks / 1,100ms)**:
+  - Subitem 3 (Tick 5 / 250ms): Sound 73 (`bombdrop.wav` / `BombDefuseGrab`) fires as the Bomber grabs the bomb.
+  - Subitem 6 (Tick 13 / 650ms): Sound 74 (`bombmuffle.wav` / `BombBodySquash`) fires, the ant squashes the bomb with its body, composited with `9difuse1..3.bmp` smoke puff frames, and the bomb object is removed from the grid.
+  - Subitems 9..11 (Ticks 14..22): Bomber rises back upright; at Tick 22 returns to `Idle` with zero post-animation cooldown.
 - **Fire Ant Fire Extinguishing (`afxf`, 12 Ticks / 1,200ms)**:
   - Subitem 4: Sound 69 (`fireextinguish.wav` / `FireExtinguish`) fires and the firewall object is extinguished from the grid.
   - Subitem 12: Fire Ant returns to Idle.
@@ -1709,4 +1709,21 @@ To deliver authentic 1:1 gameplay inside standard web browsers with zero install
   - **In-Flight & Dud Order Invariant**: During flight (`UnitState::Knockback`) and dud burn (`UnitState::Burn`), `is_stunned()` evaluates to `true`, preventing order inputs and path updates as enforced by `Ants.exe` `FUN_0101b8cb`.
   - **Zero Post-Flight / Post-Dud Stun**: Upon completion of dud burn (`UnitState::Burn`, 11 ticks of `a*bu` scorch), the ant transitions directly to `UnitState::Idle` (`FUN_0101ace3(this, 0)`). No artificial 50-tick stun is applied.
   - Upon landing from bomb knockback (`DamageSource::BombBlast`), the ant lands directly into `UnitState::Idle` with `stun_ticks_remaining = 0`, playing `SOUND_FLY_THUMP_B` (sound 71) without `SOUND_STUN` (sound 66) or 50-tick stun.
+- **Chain Bomb Landing Decoupling & Secondary Knockback Pipeline (`Ants.exe.c:20941-20949`, `22568-22580`)**:
+  - In `PhysicsEngine::tick()`, flight stepping is strictly decoupled from landing resolution. Completed flights are popped from `active_flights_` *prior* to calling `resolve_landing()`.
+  - When an ant lands on a second bomb, `on_bomb_land` triggers `trigger_bomb_detonation()`. If the second bomb is a full detonation, `apply_knockback()` safely registers the secondary ballistic flight in `active_flights_` without double-erasure or iterator invalidation.
+  - The ant seamlessly continues into its second flight trajectory, lands on its final destination tile, and cleanly transitions to `Idle` (or recovers from dud scorch), preventing any mid-animation freezing or lost units.
+- **Bomber Bomb Defusal 22-Tick Subitem Pacing & Smoke Compositing (Table 4 `abdb301` / `abdb701` / `abdb901`)**:
+  - In Table 4, bomb defusal has 12 subitems spanning exactly 1,100ms (22 simulation ticks):
+    - Subitems 0..2 (Ticks 0..4): Ant approaches and reaches forward over the bomb.
+    - Subitem 3 (Ticks 5..8, 200ms duration): Ant grabs the bomb detonator, playing Sound 73 (`bombdrop.wav` / `BombDefuseGrab`) at Tick 5.
+    - Subitems 4..5 (Ticks 9..12): Ant rears up over the mine.
+    - Subitem 6 (Ticks 13..14, 100ms duration): Ant drops its body onto the mine, triggering Sound 74 (`bombmuffle.wav` / `BombBodySquash`), clearing the bomb from the grid, and compositing with `9difuse1.bmp` smoke puff.
+    - Subitems 7..8 (Ticks 15..18): Ant stays squashed on the ground as the diffuse smoke puff expands (`9difuse2.bmp`, `9difuse3.bmp`).
+    - Subitems 9..11 (Ticks 19..22): Ant rises back upright, returning to `Idle` at Tick 22 with zero cooldown.
+- **Firewall Landing & Flight Recovery Invariant (`Ants.exe.c:20950-20960`)**:
+  - When an ant lands on a firewall from knockback (`resolve_fire_contact`), `unit.altitude_z` is reset to 0 and its flight state is cleanly resolved.
+  - Fire Ants (`AntType::Fire`) take 0 fire damage and immediately transition out of `UnitState::Knockback` into `UnitState::Idle` (or `GuardIdle`) with `stun_ticks_remaining = 0`, completely preventing flight freezing.
+  - Non-fire ants take contact fire damage, ricochet away from fire according to reflection physics, and transition to `UnitState::Idle` upon completing bomb knockback or stunned state upon punch knockback.
+
 

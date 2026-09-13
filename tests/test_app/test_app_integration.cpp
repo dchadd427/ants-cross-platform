@@ -3746,15 +3746,23 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         ASSERT_TRUE(sim.has_bomb_at(TileCoord{21, 20}));
         ASSERT_EQ(b_ant.state, UnitState::Idle);
 
-        // Defuse bomb (12 ticks)
+        // Defuse bomb (22 ticks / 1,100ms matching Ants.exe & Table 4 abdb)
         sim.defuse_bomb(b_id, TileCoord{21, 20}, false);
         ASSERT_EQ(b_ant.state, UnitState::DefusingBomb);
         ASSERT_EQ(b_ant.facing, Direction::East);
 
+        // Advance ticks 0..11: bomb is still active
         for (int t = 0; t < 12; ++t) {
             sim.tick();
         }
+        ASSERT_TRUE(sim.has_bomb_at(TileCoord{21, 20}));
+        sim.tick(); // Tick 13: bomb is defused and cleared from grid
         ASSERT_FALSE(sim.has_bomb_at(TileCoord{21, 20}));
+
+        // Completes remaining ticks (14..22) recovering to Idle
+        for (int t = 13; t < 22; ++t) {
+            sim.tick();
+        }
         ASSERT_EQ(b_ant.state, UnitState::Idle);
 
         // 3. Fire Ant Ability Animations (PlacingFire and ExtinguishingFire)
@@ -6839,10 +6847,10 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
 
     TEST_CASE("12.108: Version Invariant & Fog of War Cursor Concealment Parity") {
         // 1. Verify semantic versioning components
-        ASSERT_EQ(ants::VERSION_STRING, "v0.0.14");
+        ASSERT_EQ(ants::VERSION_STRING, "v0.0.15");
         ASSERT_EQ(ants::VERSION_MAJOR, 0);
         ASSERT_EQ(ants::VERSION_MINOR, 0);
-        ASSERT_EQ(ants::VERSION_PATCH, 14);
+        ASSERT_EQ(ants::VERSION_PATCH, 15);
 
         // 2. Setup simulation world with Fog of War enabled
         SimulationEngine sim;
@@ -8130,6 +8138,194 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
 
         // The original friendly bomb at (11, 10) was never detonated or stepped on!
         ASSERT_TRUE(sim.has_bomb_at({11, 10}));
+    } TEST_END();
+
+    TEST_CASE("12.129 Chain Bomb Detonation Flight Decoupling, Firewall Knockback Landing & 22-Tick Defusal Parity") {
+        // -------------------------------------------------------------------------
+        // Part 1: Chain Bomb Knockback Secondary Flight Decoupling
+        // An ant detonates Bomb 1 at (40, 40) and is launched into Bomb 2 at (44, 40).
+        // Bomb 2 detonates, triggering a secondary ballistic flight that must NOT be
+        // double-erased or leave the ant frozen in UnitState::Knockback.
+        // -------------------------------------------------------------------------
+        SimulationEngine sim_chain;
+        sim_chain.init_test_world(60, 60, 1, 60000);
+        sim_chain.grid_mut().place_bomb(40, 40, 1);
+        sim_chain.grid_mut().place_bomb(44, 40, 1);
+
+        uint32_t w_chain = sim_chain.spawn_unit(0, AntType::Worker, {41, 40});
+        AntOrder move_to_bomb1{};
+        move_to_bomb1.ant_id = w_chain;
+        move_to_bomb1.type = OrderType::Move;
+        move_to_bomb1.target_x = 40;
+        move_to_bomb1.target_y = 40;
+        sim_chain.issue_order(move_to_bomb1);
+
+        // Step until Bomb 1 detonates
+        for (int t = 0; t < 100; ++t) {
+            sim_chain.tick();
+            if (!sim_chain.grid().has_bomb_at({40, 40})) break;
+        }
+        ASSERT_FALSE(sim_chain.grid().has_bomb_at({40, 40}));
+
+        // Advance simulation for chain detonation and secondary flight completion
+        for (int t = 0; t < 40; ++t) {
+            sim_chain.tick();
+        }
+        // Both bombs cleared!
+        ASSERT_FALSE(sim_chain.grid().has_bomb_at({44, 40}));
+        auto& chain_ant = sim_chain.get_unit(w_chain);
+        // Ant survived (took 2 + 2 = 4 damage out of 10 HP = 6 HP remaining)
+        ASSERT_TRUE(chain_ant.is_alive());
+        ASSERT_EQ(chain_ant.hp, 6);
+        // Ant successfully completed both flights and returned to Idle (NOT frozen in Knockback!)
+        ASSERT_EQ(chain_ant.state, UnitState::Idle);
+        ASSERT_FALSE(chain_ant.is_stunned());
+
+        // Ant can immediately accept new move orders
+        AntOrder move_after_chain{};
+        move_after_chain.ant_id = w_chain;
+        move_after_chain.type = OrderType::Move;
+        move_after_chain.target_x = 45;
+        move_after_chain.target_y = 40;
+        sim_chain.issue_order(move_after_chain);
+        ASSERT_EQ(chain_ant.state, UnitState::Walking);
+
+        // -------------------------------------------------------------------------
+        // Part 2: Bomb Knockback into Firewall (Non-Fire Ant & Fire Ant)
+        // -------------------------------------------------------------------------
+        SimulationEngine sim_fire;
+        sim_fire.init_test_world(60, 60, 1, 60000);
+        // Place bomb at (30, 30) and firewall at (34, 30)
+        sim_fire.grid_mut().place_bomb(30, 30, 1);
+        sim_fire.grid_mut().place_firewall(34, 30, 0);
+
+        uint32_t w_fire = sim_fire.spawn_unit(0, AntType::Worker, {31, 30});
+        AntOrder move_to_bomb_fire{};
+        move_to_bomb_fire.ant_id = w_fire;
+        move_to_bomb_fire.type = OrderType::Move;
+        move_to_bomb_fire.target_x = 30;
+        move_to_bomb_fire.target_y = 30;
+        sim_fire.issue_order(move_to_bomb_fire);
+
+        for (int t = 0; t < 100; ++t) {
+            sim_fire.tick();
+            if (!sim_fire.grid().has_bomb_at({30, 30})) break;
+        }
+        ASSERT_FALSE(sim_fire.grid().has_bomb_at({30, 30}));
+
+        // Advance through flight and fire bounce resolution
+        for (int t = 0; t < 30; ++t) {
+            sim_fire.tick();
+        }
+        auto& fire_hit_ant = sim_fire.get_unit(w_fire);
+        ASSERT_TRUE(fire_hit_ant.is_alive());
+        // Worker took 2 blast + 1 fire burn damage = 7 HP remaining
+        ASSERT_EQ(fire_hit_ant.hp, 7);
+        // Ant returned to Idle (NOT frozen in Knockback!)
+        ASSERT_EQ(fire_hit_ant.state, UnitState::Idle);
+        ASSERT_FALSE(fire_hit_ant.is_stunned());
+
+        // Worker can receive move orders (order to move away from firewall to safe ground)
+        AntOrder move_after_fire{};
+        move_after_fire.ant_id = w_fire;
+        move_after_fire.type = OrderType::Move;
+        move_after_fire.target_x = fire_hit_ant.pos.x - 1;
+        move_after_fire.target_y = fire_hit_ant.pos.y;
+        sim_fire.issue_order(move_after_fire);
+        ASSERT_EQ(fire_hit_ant.state, UnitState::Walking);
+
+        // Fire Ant landing on fire wall from bomb knockback: takes 0 fire damage, does not freeze
+        SimulationEngine sim_fire_ant;
+        sim_fire_ant.init_test_world(60, 60, 1, 60000);
+        sim_fire_ant.grid_mut().place_bomb(20, 20, 1);
+        sim_fire_ant.grid_mut().place_firewall(24, 20, 0);
+
+        uint32_t f_id = sim_fire_ant.spawn_unit(0, AntType::Fire, {21, 20});
+        AntOrder move_fire_ant{};
+        move_fire_ant.ant_id = f_id;
+        move_fire_ant.type = OrderType::Move;
+        move_fire_ant.target_x = 20;
+        move_fire_ant.target_y = 20;
+        sim_fire_ant.issue_order(move_fire_ant);
+
+        for (int t = 0; t < 100; ++t) {
+            sim_fire_ant.tick();
+            if (!sim_fire_ant.grid().has_bomb_at({20, 20})) break;
+        }
+        ASSERT_FALSE(sim_fire_ant.grid().has_bomb_at({20, 20}));
+
+        for (int t = 0; t < 30; ++t) {
+            sim_fire_ant.tick();
+        }
+        auto& f_unit = sim_fire_ant.get_unit(f_id);
+        ASSERT_TRUE(f_unit.is_alive());
+        // Fire Ant took only bomb damage (2 HP), immune to fire: 10 - 2 = 8 HP
+        ASSERT_EQ(f_unit.hp, 8);
+        ASSERT_EQ(f_unit.state, UnitState::Idle);
+        ASSERT_FALSE(f_unit.is_stunned());
+
+        // Fire Ant can immediately move after landing on fire
+        AntOrder move_after_fire_ant{};
+        move_after_fire_ant.ant_id = f_id;
+        move_after_fire_ant.type = OrderType::Move;
+        move_after_fire_ant.target_x = 25;
+        move_after_fire_ant.target_y = 20;
+        sim_fire_ant.issue_order(move_after_fire_ant);
+        ASSERT_EQ(f_unit.state, UnitState::Walking);
+
+        // -------------------------------------------------------------------------
+        // Part 3: Bomb Defusal Authentic 22-Tick Animation Pacing & Timing
+        // -------------------------------------------------------------------------
+        SimulationEngine sim_defuse;
+        sim_defuse.init_test_world(60, 60, 1, 60000);
+        sim_defuse.grid_mut().place_bomb(11, 10, 1); // Enemy bomb
+        uint32_t b_defuser = sim_defuse.spawn_unit(0, AntType::Bomber, {10, 10});
+        auto& b_unit = sim_defuse.get_unit(b_defuser);
+
+        sim_defuse.clear_audio_events();
+        ASSERT_TRUE(sim_defuse.defuse_bomb(b_defuser, {11, 10}, false));
+        ASSERT_EQ(b_unit.state, UnitState::DefusingBomb);
+        ASSERT_EQ(b_unit.facing, Direction::East);
+
+        // Advance ticks 1..4: Bomb remains active, no audio yet
+        for (int t = 0; t < 4; ++t) {
+            sim_defuse.tick();
+            ASSERT_TRUE(sim_defuse.grid().has_bomb_at({11, 10}));
+        }
+        // Tick 5: Sound 73 (BombDefuseGrab / bombdrop.wav) triggered!
+        sim_defuse.tick();
+        ASSERT_TRUE(sim_defuse.has_audio_event(SoundID::BombDefuseGrab));
+        ASSERT_TRUE(sim_defuse.grid().has_bomb_at({11, 10}));
+
+        // Advance ticks 6..12: Bomb remains active until squash
+        for (int t = 5; t < 12; ++t) {
+            sim_defuse.tick();
+            ASSERT_TRUE(sim_defuse.grid().has_bomb_at({11, 10}));
+        }
+        // Tick 13: Sound 74 (BombBodySquash / bombmuffle.wav) triggered and bomb cleared!
+        sim_defuse.tick();
+        ASSERT_TRUE(sim_defuse.has_audio_event(SoundID::BombBodySquash));
+        ASSERT_FALSE(sim_defuse.grid().has_bomb_at({11, 10}));
+        ASSERT_EQ(sim_defuse.get_player_stats(0).bombs_defused, 1u);
+
+        // Advance ticks 14..21: Ant stays in DefusingBomb recovering upright
+        for (int t = 13; t < 21; ++t) {
+            sim_defuse.tick();
+            ASSERT_EQ(b_unit.state, UnitState::DefusingBomb);
+        }
+        // Tick 22: Returns to Idle!
+        sim_defuse.tick();
+        ASSERT_EQ(b_unit.state, UnitState::Idle);
+        ASSERT_EQ(b_unit.ability_cooldown_ticks, 0);
+
+        // Immediately order move without cooldown delay
+        AntOrder move_defuser{};
+        move_defuser.ant_id = b_defuser;
+        move_defuser.type = OrderType::Move;
+        move_defuser.target_x = 11;
+        move_defuser.target_y = 10;
+        sim_defuse.issue_order(move_defuser);
+        ASSERT_EQ(b_unit.state, UnitState::Walking);
     } TEST_END();
 }
 

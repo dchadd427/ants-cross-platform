@@ -103,6 +103,14 @@ void PhysicsEngine::tick(std::vector<AntUnit*>& all_units,
     static constexpr int32_t DIR_DX[8] = { 0,  1, 1, 1, 0, -1, -1, -1 };
     static constexpr int32_t DIR_DY[8] = {-1, -1, 0, 1, 1,  1,  0, -1 };
 
+    struct CompletedLanding {
+        AntUnit* unit;
+        int32_t inc_dx;
+        int32_t inc_dy;
+        DamageSource origin_source;
+    };
+    std::vector<CompletedLanding> completed_landings;
+
     for (auto it = active_flights_.begin(); it != active_flights_.end();) {
         BallisticFlight& f = *it;
         AntUnit* unit = nullptr;
@@ -192,7 +200,7 @@ void PhysicsEngine::tick(std::vector<AntUnit*>& all_units,
         // Safety check for exiting map bounds
         if (!grid.in_bounds(unit->pos.x, unit->pos.y)) {
             unit->altitude_z = 0;
-            resolve_landing(*unit, grid, audio_out, prng, inc_dx, inc_dy, on_bomb_land, f.origin_source);
+            completed_landings.push_back({unit, inc_dx, inc_dy, f.origin_source});
             it = active_flights_.erase(it);
             continue;
         }
@@ -200,12 +208,18 @@ void PhysicsEngine::tick(std::vector<AntUnit*>& all_units,
         if (f.current_tick >= f.total_ticks) {
             unit->set_pixel_pos(f.target_px, f.target_py);
             unit->altitude_z = 0;
-            resolve_landing(*unit, grid, audio_out, prng, inc_dx, inc_dy, on_bomb_land, f.origin_source);
+            completed_landings.push_back({unit, inc_dx, inc_dy, f.origin_source});
             it = active_flights_.erase(it);
             continue;
         }
 
         ++it;
+    }
+
+    // Resolve completed landings outside active_flights_ iteration loop
+    for (const auto& landing : completed_landings) {
+        if (!landing.unit) continue;
+        resolve_landing(*landing.unit, grid, audio_out, prng, landing.inc_dx, landing.inc_dy, on_bomb_land, landing.origin_source);
     }
 }
 
@@ -224,7 +238,7 @@ void PhysicsEngine::resolve_landing(AntUnit& unit,
     }
 
     // 1. Bomb Landing (Authentic 1998 Chain Detonation with Dud Roll!)
-    if (grid.has_bomb_at(unit.pos)) {
+    if (unit.is_alive() && grid.has_bomb_at(unit.pos)) {
         if (on_bomb_land) {
             on_bomb_land(unit, unit.pos);
             return;
@@ -296,6 +310,12 @@ void PhysicsEngine::resolve_fire_contact(AntUnit& unit,
                                          int32_t incoming_dy,
                                          DamageSource source) {
     if (unit.type == AntType::Fire) {
+        unit.altitude_z = 0;
+        unit.state = (unit.type == AntType::Combat) ? UnitState::GuardIdle : UnitState::Idle;
+        unit.anim_tick = 0;
+        unit.anim_subitem = 0;
+        unit.stun_ticks_remaining = 0;
+        unit.set_tile_pos(unit.pos.x, unit.pos.y);
         return;
     }
 
@@ -308,6 +328,7 @@ void PhysicsEngine::resolve_fire_contact(AntUnit& unit,
         // Contact damage (+1 fire damage)
         unit.take_damage(1, DamageSource::FireBurn, 0);
         if (!unit.is_alive()) {
+            unit.altitude_z = 0;
             return;
         }
 
@@ -349,6 +370,7 @@ void PhysicsEngine::resolve_fire_contact(AntUnit& unit,
     }
 
     audio_out.push_back(AudioEvent{SOUND_FLY_THUMP_A, unit.pixel_x, unit.pixel_y, 1, 255});
+    unit.altitude_z = 0;
     if (source == DamageSource::BombBlast) {
         unit.state = (unit.type == AntType::Combat) ? UnitState::GuardIdle : UnitState::Idle;
         unit.anim_tick = 0;

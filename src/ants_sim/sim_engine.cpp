@@ -1679,21 +1679,21 @@ void SimulationEngine::tick() {
         continue;
     }
 
-    // Defusing Bomb progression (abdb, 12 ticks)
+    // Defusing Bomb progression (abdb, 22 ticks / 1,100ms matching Ants.exe & Table 4)
     if (ant_ptr->state == UnitState::DefusingBomb) {
         ant_ptr->anim_tick++;
         ant_ptr->anim_subitem = ant_ptr->anim_tick;
-        if (ant_ptr->anim_tick == 3) {
+        if (ant_ptr->anim_tick == 5) {
             impl_->audio_queue_.push_back(AudioEvent{SoundID::BombDefuseGrab, ant_ptr->pixel_x, ant_ptr->pixel_y, 1, 255});
         }
-        if (ant_ptr->anim_tick == 6) {
+        if (ant_ptr->anim_tick == 13) {
             impl_->audio_queue_.push_back(AudioEvent{SoundID::BombBodySquash, ant_ptr->pixel_x, ant_ptr->pixel_y, 1, 255});
             if (ant_ptr->ability_target.x >= 0 && impl_->grid_.in_bounds(ant_ptr->ability_target)) {
                 impl_->grid_.clear_bomb(static_cast<uint32_t>(ant_ptr->ability_target.x), static_cast<uint32_t>(ant_ptr->ability_target.y));
                 impl_->stats_.get_player_stats_mut(ant_ptr->player_id).bombs_defused++;
             }
         }
-        if (ant_ptr->anim_tick >= 12) {
+        if (ant_ptr->anim_tick >= 22) {
             ant_ptr->state = UnitState::Idle;
             ant_ptr->anim_tick = 0;
             ant_ptr->anim_subitem = 0;
@@ -3574,6 +3574,7 @@ bool SimulationEngine::defuse_bomb(uint32_t ant_id, TileCoord target, bool insta
         ant->anim_tick = 0;
         ant->anim_subitem = 0;
         ant->ability_target = target;
+        ant->ability_cooldown_ticks = 22;
     }
     impl_->world_state_dirty_ = true;
     return true;
