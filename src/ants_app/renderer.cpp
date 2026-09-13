@@ -1447,7 +1447,7 @@ void Renderer::draw_single_ant(const ants::sim::AntSnapshot& ant, bool is_select
 
     // 1. Calculate Parabolic Elevation (Knockback Altitude)
     int32_t altitude_z = 0;
-    if (ant.is_airborne) {
+    if (ant.is_airborne && ant.anim_state != static_cast<uint16_t>(ants::sim::UnitState::Knockback)) {
         int32_t t = static_cast<int32_t>(ant.anim_frame % 11);
         altitude_z = (4 * 36 * t * (10 - t)) / 100;
         draw_ant_shadow(sx, sy, altitude_z);
@@ -2116,6 +2116,14 @@ void Renderer::draw_sprite(uint32_t sprite_id, int32_t x, int32_t y, bool mirror
     if (!tex) return;
 
     const auto& sp = mirrored ? archive_->get_mirrored_sprite(sprite_id) : archive_->get_sprite(sprite_id);
+    if (sprite_id == 2599 && y == 160) {
+        // Sprite 2599 (butdef3a.bmp): 3 padding rows of HUD green background index 11.
+        // Clip top 3 rows and align at y = 163 to perfectly match butdef1a/2a without vertical jump or flash.
+        SDL_Rect src = { 0, 3, static_cast<int>(sp.width), static_cast<int>(sp.height) - 3 };
+        SDL_Rect dst = { x, 163, static_cast<int>(sp.width), static_cast<int>(sp.height) - 3 };
+        SDL_RenderCopy(renderer_, tex, &src, &dst);
+        return;
+    }
     SDL_Rect dst = { x, y, static_cast<int>(sp.width), static_cast<int>(sp.height) };
     SDL_RenderCopy(renderer_, tex, nullptr, &dst);
 }

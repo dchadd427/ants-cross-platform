@@ -1750,6 +1750,200 @@ To deliver authentic 1:1 gameplay inside standard web browsers with zero install
     - **Another fire tile**: Takes additional 1 fire contact damage and ricochets again.
     - **Water**: Swimmer ant swims safely; non-swimmer begins drowning with splash sound.
     - **Bomb**: Lands on bomb tile and triggers bomb detonation.
+##### 2. Bomb Dud Scorch (`a*bu301`, Table `0x1004518`) & Landing Stun (`a*sd301`, Table `0x10045d8`)
+- **Exact Ground Truth Dud Logic (`Ants.exe` `0x101c208`, `0x102313f`, `0x101df09`, `Ants.exe.c` lines 20931–20961 & 24440–24472)**:
+  - When an ant steps onto an active bomb tile (`case 0xa`, lines 20931–20961), the engine executes an authentic PRNG roll:
+    ```c
+    uVar8 = FUN_010345c0(); // rand() (MSVC LCG: seed * 0x343fd + 0x269ec3)
+    if ((int)uVar8 % 100 < 0x14) { // Exactly 20% probability (0x14 == 20)
+        // DUD / IN-PLACE SCORCH:
+        dest_x = current_x;
+        dest_y = current_y; // 0-tile displacement, remains on bomb tile
+    } else {
+        // FULL DETONATION (80% probability):
+        FUN_0101df5d(this, &current_pos, &dest_pos, 4, 0, 0, 0); // Knockback 4 tiles away
+    }
+    ```
+  - **Bomb Damage Invariant (`FUN_01021a6f` at `0x1021ae3` & `0x1021aeb`)**:
+    - Stepping on a bomb invokes `FUN_01021a6f`. The function executes `call 0x1021627` **twice unconditionally** before the position comparison:
+      ```x86
+      0x1021ae0: push ebx
+      0x1021ae1: mov ecx, esi
+      0x1021ae3: call 0x1021627   ; Damage 1 (HP -= 1)
+      0x1021ae8: push ebx
+      0x1021ae9: mov ecx, esi
+      0x1021aeb: call 0x1021627   ; Damage 2 (HP -= 1)
+      ```
+    - Therefore, **both dud and full explosion deal exactly 2 HP damage**.
+  - **Dud Branch (20% Roll)**:
+    - Target destination equals current position (`dest == current_pos`). Flag `this[0x2d] = 1`.
+    - In `0x102313f` / `0x101df09`, flag `1` selects reaction type **4**, which transitions the unit into **Action 19 (`0x13`)**: **`a*bu` (Burn / Scorch Dud animation)**.
+    - Animation `a*bu301` (`agbu301`, `abbu301`, `afbu301`, `acbu301`, `asbu301`, `atbu301` from Table `0x1004518`) plays in place for 11 ticks (~550ms) with smoke puff sprites (`*bu301..303`), firing **Sound 64 (`flythumpa.wav`)** at subitem 0 and **Sound 65 (`flythumpb.wav`)** at subitem 5.
+    - The bomb tile on Layer 2 is cleared (`0x7ffe`).
+    - Upon finishing the 11-tick burn sequence (line 22569: `case 0x13:`), the ant recovers into the dazed stun state (`a*sd301`).
+  - **Full Detonation Branch (80% Roll)**:
+    - Target destination is 4 tiles away (`dest != current_pos`). Flag `this[0x2d] = 0`.
+    - Flag `0` selects reaction type **1**, transitioning the unit into **Action 14 (`0xe`)**: **`a*gb` (Ballistic Knockback & Airborne flight)**.
+    - Spawns `bombex` (Anim 133) with `bombexp.wav`. Ant flies 4 tiles along parabolic altitude trajectory (`altitude_z > 0`).
+    - Upon landing on the ground, the ant enters `UnitState::Stunned` and plays `a*sd301` (dazed spinning stars with Sound 70 `stun.wav`).
+
+#### 3. Multi-Ant Food Access & 1998 Duplication Exploit (`0x102151a`, `0x101fc50`, Action 3 `aggf`, Anim 356 `lunchbox`)
+- In `FUN_0102151a` and `FUN_0101fc50`, when an ant is commanded to eat food (`is_food_order`), friendly ants occupying target cells are not treated as pathfinding obstacles.
+- Multiple ants can walk onto or stand around the food node (Chebyshev distance $\le 1$) and enter Action 3 (`aggf`, 7-frame bite cycle over 8 ticks / 420ms).
+- When the 8-tick bite completes, each biting ant receives a morsel into its lunchbox. Because remaining bites are checked at the start of a bite rather than each frame, all concurrent biters receive their food morsels even if the food node's counter reaches 0 mid-bite (1998 Food Duplication Exploit).
+- Ground dropped lunchboxes (Table 4 Anim 356) award points to all concurrent ants reaching the lunchbox on the collection tick before removal.
+
+#### 4. Combat Ant AI Locomotion & Melee Punch Mechanics (`0x101ace3`, `0x1021494`, `0x1021627`)
+- The Combat Ant never teleports. In `Ants.exe`, it paths smoothly along waypoints at standard speed with `acwk`.
+- When within distance $\le 1$, it executes `acat` (Table 4 Anim IDs 901–905: `acat201`, `acat301`, `acat701`, `acat801`, `acat901` across 6 subitems: `[80, 100, 60, 80, 100, 120]ms`, total 540ms / 11 simulation ticks).
+- Subitem 2 connects with `flag = 4`, dealing 2 HP damage and launching the target with ballistic parabolic trajectory.
+- Enforces an authentic **12-tick attack cooldown** (`attack_cooldown_ticks = 12`) with zero aggro or pursuit during cooldown.
+
+#### 5. Anthill Mound Anchor Offsets & Thief Infiltration Corridor (`0x100ee03`, `Ants.exe.c` lines 9656–9690)
+- The base mound graphic uses Table 4 offsets from anchor tile `(min_x + 1, min_y + 1)`:
+  - Red (`REDHILL`, Anim 247): `dx: -32, dy: -18` (`+14px` vertical shift relative to `min_y * 32`).
+  - Green (`GRNHILL`): `dx: -32, dy: -25` (`+7px` shift).
+  - Blue (`BLUHILL`): `dx: -32, dy: -20` (`+12px` shift).
+  - Black (`BLKHILL`): `dx: -32, dy: -24` (`+8px` shift).
+- Shifting Red down 14px aligns the bottlecap thief hole squarely onto grid row 36 (`(24, 36)`).
+- Thief ant infiltration is strictly checked on the 4 right-flank tiles `X = base_min_x + 3, Y in [base_min_y, base_min_y + 3]`.
+- The column to the right `X = base_min_x + 4, Y in [base_min_y, base_min_y + 3]` comprises open land tiles where Fire Ants can place up to 3 firewalls and Bomber Ants can place landmines.
+
+#### 6. HUD Pedestal Yellow Glow Animations (`butdefl`, `butdefr`), Bomb Targeting Cursor (`c_targ1`), and Dialog Parity (`std_dialg`, `0x1026aa3`, `0x1015b65`)
+- **HUD Pedestal Animated Yellow Glow (`Ants.exe.c` lines 29201, 29206, 29571–29595)**:
+  - In the 1998 engine, the bottom action buttons on the right-hand sidebar feature contextual highlighting via animated pulsing yellow glow overlays:
+    - **Move Pedestal (Left Pedestal at `(477, 163)`)**:
+      - Trigger condition `0x5510`: Set when cursor mode is 3 (`c_mov1`, hovering over passable land) or 7 (`c_food`, hovering over food/lunchbox).
+      - Graphic: Animation 1190 (`butdefl`), cycling 4 frames using sprites 2591–2599 across a 510ms duration.
+      - Sprite pixels contain authentic yellow border glow (`RGB(211, 183, 0)` / `#D3B700`).
+    - **Special Ability Pedestal (Right Pedestal at `(538, 163)`)**:
+      - Trigger condition `0x5514`: Set when holding right-click to use a special ability, active special ability placement mode, or hovering over a bomb / ability target (`c_targ1`).
+      - Graphic: Animation 1222 (`butdefr`), cycling 4 frames using sprites 2591–2599 across a 510ms duration.
+- **Bomber Bomb Targeting Cursor Mode 4 (`c_targ1`, Anim 43)**:
+  - When hovering over any planted bomb on the map (`grid.has_bomb_at({tx, ty})`), the cursor dynamically switches to the Mode 4 target reticle (`c_targ1`, Anim 43).
+  - While a Bomber Ant is actively placing a bomb (`UnitState::PlantingBomb`, playing `absb301`), the cursor remains locked to Mode 4 target reticle across the playfield.
+  - When right-clicking with a Bomber Ant selected over valid bomb placement ground, the cursor displays the Mode 4 target reticle.
+- **Seamless Bomb Placement Timing (`absb301`, 28 Ticks / 1.4s)**:
+  - Table 4 animation `absb301` has 9 subitems: `[100, 160, 160, 200, 180, 200, 200, 100, 100]ms` totaling 1,400ms (exactly 28 simulation ticks @ 20Hz).
+  - Subitem 0–4 depicts the bomber crouching and taking the bomb out of its backpack.
+  - Subitem 5 (`absb501`) sets down the bomb in the ant's sprite.
+  - At tick 28 (when `PlantingBomb` completes and transitions to `Idle`), the map entity bomb is placed onto Layer 2, providing a seamless visual transition with zero double-bomb artifacts.
+  - Placing a bomb triggers Sound 90 (`bombpick.wav`) at tick 14 (`flag = 4`).
+- **Ability Cardinal Placement Pathing Around Intervening Units**:
+  - Special ability placement candidate tiles evaluate orthogonal neighbors ($dx = 0, |dy| = 1$ or $dy = 0, |dx| = 1$).
+  - If a neighbor tile is occupied by an ant (`has_living_ant_at`), the placement algorithm filters it out and routes the unit smoothly around the obstacle to an unblocked cardinal tile.
+- **Water Bomb Order Rejection**:
+  - Right-clicking or issuing a bomb order onto water immediately rejects the order with `SoundID::CantGo` audio feedback and ant refusal.
+- **Knockback Ballistic Orientation Parity (`Ants.exe` `0x1002b40` / `Ants.exe.c` lines 16785–16824, 24010–24070)**:
+  - In `Ants.exe`, an ant struck by a melee attack or blast wave faces toward the attacker/epicenter prior to impact.
+  - Ballistic flight does not reverse the ant's orientation 180°; the ant remains facing the blast origin throughout flight until landing and entering `a*sd301` dizzy stun.
+- **Authentic Match Start Modal & Selection Marquee**:
+  - Ready modal: Authentic composite `std_dialg` (Animation 67, 320×224) background with dark purple/charcoal text `#1F1733` (`ColorRGBA{31, 23, 51, 255}`).
+  - Unit selection drag marquee tool: Authentic bright red border `RGB(220, 0, 0)` (`ColorRGBA{220, 0, 0, 255}`).
+- **Loading & Quick Help Screen Flow**:
+  - **Loading Screen Composite & Layer Ordering**:
+    - Canvas background filled with solid orange `#DB4B13` (`RGB(219, 75, 19)` / `ColorRGBA{219, 75, 19, 255}`).
+    - Outer green window frame tiles rendered along 640×480 screen edges (`dfram*` border sprites from Anim 57).
+    - `logo.bmp` (Sprite 162) rendered at `(25, 23)`.
+    - `credits.bmp` (Sprite 161) rendered at `(32, 299)`.
+    - `strip.bmp` (Sprite 160, 478×31 orange masking plate) rendered at `(40, 315)` directly over `credits.bmp`, cleanly masking the subtitle line and leaving only "An Internet Multi Player Game." centered underneath the main title logo.
+    - Dialog clay tiles (`dclay48`, `dclay96`) are strictly excluded so neither the title logo nor credit text is occluded.
+    - Progress bar rendered inside the designated indicator slot at `x = 229, y = 448, w = 234, h = 8` with authentic dark purple/charcoal `#1F1733` (`ColorRGBA{31, 23, 51, 255}`).
+  - **Quick Help Screen & START! Navigation**:
+    - Main help plate rendered from `qh_screen` (Anim 101: `qh1.bmp` 232, `qh2.bmp` 231, and perimeter border frames).
+    - Top-right corner contains no button (empty border).
+    - Bottom-right corner renders the authentic green "START!" button from Table 4 Animation 1335 `qh_start1` at `(529, 437)`:
+      - Normal: `bstart1.bmp` (Sprite 289, 98×27) at `(529, 437)`.
+      - Hovered: `bstart2.bmp` (Sprite 290, 98×27) at `(529, 437)`.
+      - Pressed: `bstart3.bmp` (Sprite 291, 97×24) at `(528, 438)`.
+    - Clicking the START! button (or pressing Enter/Space/Escape) emits `SoundID::NavButtonClick` audio feedback and transitions directly to `AppState::MapSelect`.
+  - **Overall Flow Sequence**: `Loading` -> `QuickHelp` -> `MapSelect` -> `Playing`.
+
+#### 7. Daisy Flower Dropper Occupancy, Standing Fire Ability Pathing, Bomb Redirection & Chain Detonations, and Shift/HUD Bomb Tile Rules (`FUN_0101df5d`, `0x1021627`, `0x1015c70`)
+- **Daisy Flower Dropper Occupancy Preservation (`SMALL.LVL`, `GAUNTLET.LVL`, `ISLANDS.LVL`)**:
+  - In `Ants.exe`, if an ant, placed bomb, or active fire wall occupies the dropper's target tile `(drop_x, drop_y)` when the 300-tick (15s) cooldown completes, the dropper preserves readiness (`timer_ticks == 0`) and holds the powerup rather than dropping onto or clearing the occupant. Once the tile is cleared, it drops immediately.
+- **Fire Ant Ability Placement Pathing Through Fire**:
+  - When standing on fire and placing a fire wall adjacent, and then placing another further away, the Fire Ant treats fire tiles as passable staging neighbors and prioritizes current tile `cand == unit->pos` (distance 0) without self-blocking or detouring north around terrain.
+- **Bomb 8-Way Knockback Redirection (`FUN_0101df5d`)**:
+  - Recoil starts at 4 tiles opposite approach vector: `(facing + 4) % 8`.
+  - Landing eligibility in `FUN_0101df5d`: power-up items, solid obstacle rocks, and anthill base tiles cannot be landed on; when blocked by any of these, the landing trajectory rotates clockwise `(dir + 1) % 8` through all 8 compass directions.
+  - Water IS an eligible landing location (swimmers swim, non-swimmers drown).
+  - Fire walls ARE valid landing locations (ant lands, takes fire damage, and ricochets/burns).
+- **Chain Bomb Detonations & Dud Rolls**:
+  - When an airborne ant lands on a bomb tile from flight, it detonates the bomb immediately.
+  - Both standard and chain bomb detonations evaluate the authentic 20% dud probability (`prng.rand() % 100 < 20`). On a dud, the ant takes 2 HP damage and plays the scorch burn animation in place (`a*bu`). On full detonation, it takes 2 HP damage and launches into another airborne flight trajectory.
+- **Bomb Placement Smoothness & 0px Alignment**:
+  - Aligned static ground bomb destination rectangle `bomb_dst` to `{ sx + 10, sy + 0, 12, 24 }` to match Table 4 `absb` (Anim 1317) release frame `sy + 0` (`dx = 10, dy = 0` relative to target tile).
+- **HUD Right-Side Bomb Tile & Hover Cursor Rules**:
+  - Single unshifted Bomber Ant hovering over a bomb shows `CursorType::Target` (disarm).
+  - Holding Shift with a Bomber selected shows regular `CursorType::Move` and issues a `Move` order with `allow_friendly_bomb = true` (to force-move and hit the bomb).
+  - Non-bomber hovering over a bomb shows regular `CursorType::Move`.
+  - Pedestal 2 (bomb tile / ability button at 537, 158) is hidden and its click handling is disabled whenever Shift is held or multiple units are selected.
+
+#### 8. Fire Extinguish Timing (`afxf`), Silent Active Action Order Rejection, Zero Ability Cooldown, and Bomber Pathing Around Friendly Bombs (`Ants.exe.c:22938-23085`, `Ants.exe.c:19435`, `Ants.exe.c:10693-10694`)
+- **Silent Order Rejection in Active Action States (`Ants.exe.c:22938`, `23077-23080` / `FUN_0101ff5a`)**:
+  - `FUN_0101ff5a` inspects `param_1[0x39]` (unit state). If the unit is not in state 0 (`Idle`), state 1 (`Walking`), or state 3 (`Swimming`), it returns 0.
+  - In `Ants.exe.c:22938`, when `FUN_0101ff5a` returns 0, execution jumps to `LAB_0101fef5`, which **silently returns 0** without playing `SoundID::CantGo` or triggering a CantGo animation.
+  - While a unit is in an active action state (`PlacingFire`, `PlantingBomb`, `BuildingBridge`, `DemolishingBridge`, `ExtinguishingFire`, `DefusingBomb`, or `is_transforming()`), all incoming player orders are completely and silently ignored, allowing the action to finish uninterrupted.
+- **Zero Post-Animation Cooldown**:
+  - The animation duration itself is the sole pacing mechanism for abilities (e.g. 35 ticks for fire, 28 ticks for bomb, 16 ticks for bridge, 24/26 ticks for extinguish).
+  - The instant the placement animation completes and the unit transitions back to `Idle` (state 0), `FUN_0101ff5a` immediately accepts new orders. There is zero artificial cooldown delay blocking subsequent orders once the unit is idle.
+- **Uninterruptible `getpow` Transformation (`Ants.exe.c:23694` / `FUN_01020cdb`)**:
+  - Once the 11-tick `getpow` transformation sequence begins, the ant commits to the new unit class.
+  - The transformation cannot be aborted by player orders; any order issued while transforming is silently ignored. The ant completes the full transformation and emerges as the new unit. To prevent an ant from taking a power-up, it must be redirected *prior* to `getpow` starting.
+- **Bomber Pathing Around Intervening Friendly Bombs (`Ants.exe.c:23167-23245` / `FUN_01020128`)**:
+  - When ordering a Bomber to plant a bomb at a target tile, candidate cardinal standing spots (`cand`) strictly reject tiles that already contain a bomb (`!grid.has_bomb_at(cand)`).
+  - Pathfinding treats friendly/allied bombs as impassable obstacles, enabling the Bomber to navigate *around* intervening friendly mines to reach an open cardinal tile and plant the bomb, instead of stalling in place. Enemy bombs are not treated as pathfinding obstacles.
+- **Fire Extinguish Sequence & Sputter Anchor (`Ants.exe.c:19435` -> `FUN_0101e97b`, `10693-10694` / `FUN_010100ab`)**:
+  - In `afxf`, the Fire Ant sprays its fire extinguisher canister at tick 8, triggering `SoundID::FireExtinguish` (sound 69, `fireextinguish.wav`).
+  - The firewall remains active while being sprayed until animation completion (24 ticks for South `afxf301`, 26 ticks for North/East/West `afxf701`/`afxf901`).
+  - At animation completion (`FUN_0101ad02:19435` -> `FUN_0101e97b`), the firewall tile is removed (`0x7ffe`), and `VisualEffect{"sputter", tx * 32, ty * 32, 0, 17}` is spawned.
+  - Tile effect positions in `FUN_010100ab` are anchored at `(tx * 32, ty * 32)` (top-left). Table 4 Anim 135 `sputter` frame offsets (`dx: 3, dy: 6`, etc.) are pre-centered within the 32x32 tile. Total duration is 830ms across 10 subitems = 17 simulation ticks @ 20Hz.
+- **Bomb Dud & Knockback Zero-Stun Pipeline (`Ants.exe.c:20944-20947`, `22568-22580`)**:
+  - **In-Flight & Dud Order Invariant**: During flight (`UnitState::Knockback`) and dud burn (`UnitState::Burn`), `is_stunned()` evaluates to `true`, preventing order inputs and path updates as enforced by `Ants.exe` `FUN_0101b8cb`.
+  - **Zero Post-Flight / Post-Dud Stun**: Upon completion of dud burn (`UnitState::Burn`, 11 ticks of `a*bu` scorch), the ant transitions directly to `UnitState::Idle` (`FUN_0101ace3(this, 0)`). No artificial 50-tick stun is applied.
+  - Upon landing from bomb knockback (`DamageSource::BombBlast`), the ant lands directly into `UnitState::Idle` with `stun_ticks_remaining = 0`, playing `SOUND_FLY_THUMP_B` (sound 71) without `SOUND_STUN` (sound 66) or 50-tick stun.
+- **Chain Bomb Landing Decoupling & Secondary Knockback Pipeline (`Ants.exe.c:20941-20949`, `22568-22580`)**:
+  - In `PhysicsEngine::tick()`, flight stepping is strictly decoupled from landing resolution. Completed flights are popped from `active_flights_` *prior* to calling `resolve_landing()`.
+  - When an ant lands on a second bomb, `on_bomb_land` triggers `trigger_bomb_detonation()`. If the second bomb is a full detonation, `apply_knockback()` safely registers the secondary ballistic flight in `active_flights_` without double-erasure or iterator invalidation.
+  - The ant seamlessly continues into its second flight trajectory, lands on its final destination tile, and cleanly transitions to `Idle` (or recovers from dud scorch), preventing any mid-animation freezing or lost units.
+- **Bomber Bomb Defusal 22-Tick Subitem Pacing & Smoke Compositing (Table 4 `abdb301` / `abdb701` / `abdb901`)**:
+  - In Table 4, bomb defusal has 12 subitems spanning exactly 1,100ms (22 simulation ticks):
+    - Subitems 0..2 (Ticks 0..4): Ant approaches and reaches forward over the bomb.
+    - Subitem 3 (Ticks 5..8, 200ms duration): Ant grabs the bomb detonator, playing Sound 73 (`bombdrop.wav` / `BombDefuseGrab`) at Tick 5.
+    - Subitems 4..5 (Ticks 9..12): Ant rears up over the mine.
+    - Subitem 6 (Ticks 13..14, 100ms duration): Ant drops its body onto the mine, triggering Sound 74 (`bombmuffle.wav` / `BombBodySquash`), clearing the bomb from the grid, and compositing with `9difuse1.bmp` smoke puff.
+    - Subitems 7..8 (Ticks 15..18): Ant stays squashed on the ground as the diffuse smoke puff expands (`9difuse2.bmp`, `9difuse3.bmp`).
+    - Subitems 9..11 (Ticks 19..22): Ant rises back upright, returning to `Idle` at Tick 22 with zero cooldown.
+- **Firewall Landing & Flight Recovery Invariant (`Ants.exe.c:20950-20960`)**:
+  - When an ant lands on a firewall from knockback (`resolve_fire_contact`), `unit.altitude_z` is reset to 0 and its flight state is cleanly resolved.
+  - Fire Ants (`AntType::Fire`) take 0 fire damage and immediately transition out of `UnitState::Knockback` into `UnitState::Idle` (or `GuardIdle`) with `stun_ticks_remaining = 0`, completely preventing flight freezing.
+  - Non-fire ants take contact fire damage, ricochet away from fire according to reflection physics, and transition to `UnitState::Idle` upon completing bomb knockback or stunned state upon punch knockback.
+- **Airborne Ballistic Flight Clearance Over Ground Units (`Ants.exe.c:20947`, `21612` / `FUN_0101df5d`)**:
+  - In `Ants.exe`, bomb blast knockback creates a 4-tile displacement arc (`param_3 = 4`, spanning 5 tiles total including origin).
+  - Units in ballistic flight (`UnitState::Knockback`, `altitude_z > 0`) fly above the 2D ground collision grid. Ground-plane mutual elastic separation and same-tile occupancy resolution (Section 5.5) strictly exempt airborne units (`a1->state == Knockback || a1->altitude_z > 0`).
+  - Airborne units fly smoothly *over* intermediate ground units (friendly or enemy) without colliding, bouncing, scuffling, or interrupting flight. Ground occupancy separation only resolves on the landing tile after flight completes.
+- **Animated Fire Contact Ricochet & Bounce Pacing (`Ants.exe.c:20193` / `FUN_0101c221`, Table 4 `aggb301` / `agbu301`)**:
+  - When a non-fire ant hits fire (via knockback landing, placement, or traversal), it takes 1 contact fire damage and ricochets away along reflection vectors.
+  - Instead of instantaneous coordinate teleportation, the ant enters `UnitState::Bounce` (`action == "gb"` tumble animation) with a 6-tick push slide (`push_ticks_total = 6`) and 10-tick total recovery.
+  - Impact triggers `SoundID::FlingThumpA` (sound 64, `flythumpa.wav`), spawns a `"bump"` impact visual effect, and plays `SoundID::FlingThumpB` (sound 65, `flythumpb.wav`) upon completing the bounce landing at tick 6.
+  - State resolution upon completing bounce (tick 10):
+    - Bomb knockback ricochet: Transitions to `UnitState::Idle` (or `GuardIdle`) and accepts orders immediately.
+    - Combat punch knockback ricochet: Transitions to `UnitState::Stunned` (50 ticks) with `SoundID::StunRecover` (sound 70, `stun.wav`).
+    - Standard contact ricochet: Transitions to `UnitState::Idle`.
+
+#### 9. Anthill Mound Bounds, Team-Locked Approach Corridor, Enemy-Thief Bottlecap, Universal Random Bounces & Bomb Knockback Momentum Preservation (`Ants.exe.c:9670–9690`, `21193–21250`, `21612–21685`, `22787–22895`)
+- **Anthill 4x4 Mound Tile Layout & Access Rules**:
+  - **Enemy-Thief-Only Bottlecap `(bx + 3, by + 2)`**: Exclusively occupiable by an enemy Thief ant (`AntType::Thief && ant.team != base.team`). Solid impassable obstacle for all friendly ants and enemy non-thief ants. Stepping onto `(bx + 3, by + 2)` triggers the infiltration sequence dive (`FUN_0101fc24` / `FUN_0101ace3`).
+  - **Top Approach Corridor `(bx + 0..2, by - 1)`**: Registered at team struct offsets `0x36, 0x3a, 0x3e` (`0x100eda5–0x100ee25`). Strictly blocked from placing bombs or firewalls (`FUN_0101d822`). Team-locked (`FUN_010200ab`): only ants of the base owner's team can traverse and occupy these 3 corridor tiles.
+  - **Base Entrance Ramp `(bx + 1, by + 0)` and Hole `(bx + 1, by + 1)`**: Blocked from bombs and firewalls. Passable strictly to friendly ants entering or leaving the base hole (`UnitState::EnteringBase`, `UnitState::ExitingBase`, depositing food, healing, emergence). Normal movement treats them as solid obstacles.
+  - **Remaining 13 Mound Tiles**: Impassable solid obstacles for all units.
+- **Universal 8-Directional Random Bounces (`FUN_0101df5d` / `0x10345c0` `rand() % 8`)**:
+  - In `Ants.exe`, `FUN_0101df5d` rolls `rand() % 8` to select a candidate direction out of 8 neighbors, checking only that the destination tile is within bounds and not an impassable wall/solid obstacle (`terrain_type != TERRAIN_OBSTACLE && !is_obstacle_overlay`).
+  - **Occupiable Landing Tiles**: An ant bouncing off fire, from ant-ant collision scuffle, or cascading domino collision can land on:
+    - **Another fire tile**: Takes additional 1 fire contact damage and ricochets again.
+    - **Water**: Swimmer ant swims safely; non-swimmer begins drowning with splash sound.
+    - **Bomb**: Lands on bomb tile and triggers bomb detonation.
     - **Another ant**: Triggers a cascade domino bounce on the standing ant.
     - **Open ground**: Normal ground landing.
 - **Bomb Knockback Momentum Preservation**:
@@ -1757,3 +1951,47 @@ To deliver authentic 1:1 gameplay inside standard web browsers with zero install
   - The bomb blast launches the ant airborne along the continuation vector in the same direction it was traveling/bounced from (e.g. Southwest into bomb throws Northeast).
 - **Fire Burn Timing (`*bu301`, 22 Ticks @ 20Hz)**:
   - Authentic Table 4 `a*bu301` timing (1,150ms @ 20Hz, 22 ticks) with smooth 6-tick push slide to destination tile, Sound 64 (`flythumpa.wav`) on tick 0, Sound 65 (`flythumpb.wav`) on tick 11, and transition to `Idle` at tick 22.
+
+#### 20. Authentic 1998 Bomb Blast Flyback, Sidebar Action Buttons, Glow Glitch Fix, Thief Bottlecap Invariants, Dud Stability, Mutual Collision Bouncing, and Base Staging Spots (`Ants.exe.c:9678–9684`, `20280–20309`, `20941–20949`, `24460`, `Table 4`)
+- **100% Authentic 1998 Bomb Blast Knockback Start Position & Trajectory (`Ants.exe.c:24460` & `Original-Ants/ants.chd`)**:
+  - In 1998 `Ants.exe.c:24460`, upon bomb detonation the ant's logical tile position is anchored immediately at the destination tile: `this_00[0x2c] = *(int *)puVar4;` (4 tiles away along recoil heading `(facing + 4) % 8`).
+  - Table 4's 30 `*gb*` animations (`aggb*`, `abgb*`, `afgb*`, etc.) natively embed the entire flight and tumble trajectory relative to this destination tile:
+    - Frame 0 (Blast impact): `dy = -17px`
+    - Frame 1 (Airborne launch): `dy = -128px` $\rightarrow$ precisely 4 tiles (128 pixels) away, anchoring the visual start frame directly on the bomb tile!
+    - Frames 2..4 (Ballistic arc): smoothly ascending and descending through the air.
+    - Frame 5 (Ground landing): `dy = -19px` $\rightarrow$ landed on destination tile.
+    - Frames 6..11 (Recovery roll): tumbling on destination tile before returning to idle.
+  - The ant's logical coordinates are set immediately to `(dest_tx, dest_ty)` with `altitude_z = 0`, keeping the ant's original facing so Table 4 native frame offsets smoothly fly the ant from the bomb to the destination tile without redundant physics displacement.
+- **Table 4 Sidebar Action Pedestal Buttons & Drop Shadows (`docs/chd_table4_animations.json`)**:
+  - Table 4 defines action pedestal buttons using `butup.bmp` (53×71 @ 477, 157 / 538, 157) and `butdown.bmp` (55×75 @ 476, 156 / 537, 156), featuring authentic molded 3D beveled borders and native drop shadows.
+  - Class-specific icons and labels:
+    - Move: `butmovu` (ID 1178) / `butmovd` (ID 1184) with `butmov*.bmp` and `labmov.bmp`.
+    - Bomb: `butbomu` (ID 1182) / `butbomd` (ID 1188) with `butbom*.bmp` and `labbom.bmp`.
+    - Attack: `butattu` (ID 1181) / `butattd` (ID 1187) with `butatt*.bmp` and `labatt.bmp`.
+    - Thief: `butthfu` (ID 1180) / `butthfd` (ID 1186) with `butthf*.bmp` and `labthf.bmp`.
+    - Fire: `butfiru` (ID 1183) / `butfird` (ID 1189) with `butfireu.bmp` and `labfire.bmp`.
+    - Swim: `butswmup` (ID 1223) / `butswmd` (ID 1224) with `swimup.bmp` / `swimd.bmp` and `labswim.bmp`.
+  - Hitbox dimensions are standardized to 55×75 at `(476, 156)` and `(537, 156)`.
+- **Top Glow Artifact Fix (`butdefr` / `butdefl` Sprite 2599)**:
+  - Subitem 2 uses `butdef3a.bmp` (sprite 2599, height 62 @ dy = 160), whereas Subitems 0, 1, and 3 use `butdef1a.bmp`/`butdef2a.bmp` (height 58 @ dy = 163).
+  - Rows 0..2 of `butdef3a.bmp` contain green background padding pixels (`43, 107, 95`), and the yellow glow begins at row 5 (`160 + 5 = 165`), matching row 2 of `butdef1a` (`163 + 2 = 165`).
+  - Clipping the top 3 rows and rendering at `dy = 163` produces a stable, non-jumping glow border across all 4 animation frames.
+- **Thief Infiltration Alignment & Bottlecap Mechanics (`Ants.exe.c:21193–21250`)**:
+  - Unsuccessful steal leaves the thief resting on the bottlecap at `(bx + 3, by + 2)` (`by * 32 + 90`).
+  - While on the bottlecap with `underground = true`:
+    - The thief is 100% damage immune (`take_damage` returns `false`) and untargetable by combat AI.
+    - Ordering the thief to move to the enemy base/bottlecap re-triggers infiltration in-place.
+    - Walking away from the bottlecap resets `underground = false` (vulnerable again). Returning to `(bx + 3, by + 2)` triggers a fresh steal attempt.
+- **Fire Bounce Animation Defect Fix**:
+  - Non-fire ants contacting fire enter `UnitState::Bounce` (tumbling ground slide `*gb*`) rather than `UnitState::Burn` (stationary smoke puff).
+- **Bomb Dud Stationary Position Lock (`Ants.exe.c:20941–20949`, `24461–24468`)**:
+  - On a 20% dud roll, the ant stays stationary on the bomb tile (`dest == src`), push ticks are zeroed, and `UnitState::Burn` is excluded from push slide and elastic collisions.
+- **Mutual Ant-Ant Collision Bouncing & Base Queue Protection (`Ants.exe.c:20280–20309`)**:
+  - When two moving ants collide head-on in the open field, both bounce away into adjacent available tiles (`UnitState::Bounce`) with `SoundID::Bump`. Swarms moving in the same direction do not bounce.
+  - Ants actively in the base queue or occupying anthill reserved spots (`is_anthill_reserved_spot`) are exempt from head-on bouncing to ensure uninterrupted food delivery and base exit flow.
+- **Anthill Base Queuing Staging Spots (`Ants.exe.c:9678–9684`)**:
+  - Queue slots line up strictly to the left of the base at `qy = by + row`:
+    - Slot 0: `(bx - 1, by)`
+    - Slot 1: `(bx - 1, by + 1)`
+    - Slot 2: `(bx - 1, by + 2)`
+    - Slot 3: `(bx - 1, by + 3)`

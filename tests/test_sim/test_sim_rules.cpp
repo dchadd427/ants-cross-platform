@@ -946,7 +946,7 @@ static void run_suite_13_authentic_fidelity() {
         ASSERT_EQ(last_wp.x, 21);
         ASSERT_EQ(last_wp.y, 21);
 
-        // Second worker while worker 1 has priority routes to queue staging slot 1 (19, 22)
+        // Second worker while worker 1 has priority routes to queue staging slot 1 (19, 21)
         uint32_t worker2 = sim.spawn_unit(0, AntType::Worker, {10, 15});
         AntOrder ret2{};
         ret2.ant_id = worker2;
@@ -956,7 +956,7 @@ static void run_suite_13_authentic_fidelity() {
         ASSERT_FALSE(sim.get_unit(worker2).waypoints.empty());
         TileCoord last_wp2 = sim.get_unit(worker2).waypoints.back();
         ASSERT_EQ(last_wp2.x, 19);
-        ASSERT_EQ(last_wp2.y, 22);
+        ASSERT_EQ(last_wp2.y, 21);
     } TEST_END();
 
     TEST_CASE("13.5 Thief Cannot Steal From Base With 0 Food") {

@@ -30831,7 +30831,7 @@ const CATALOG_DATA = {
       { val3: 120, sound_id: -1, sound_name: "", frames: [
         { dx: 522, dy: 165, sprite_id: 2597, sprite_name: "butdef3c.bmp", w: 3, h: 57 },
         { dx: 480, dy: 220, sprite_id: 2598, sprite_name: "butdef3b.bmp", w: 42, h: 4 },
-        { dx: 477, dy: 160, sprite_id: 2599, sprite_name: "butdef3a.bmp", w: 3, h: 62 },
+        { dx: 477, dy: 163, sprite_id: 2599, sprite_name: "butdef3a.bmp", w: 3, h: 58 },
       ] },
       { val3: 120, sound_id: -1, sound_name: "", frames: [
         { dx: 522, dy: 164, sprite_id: 2594, sprite_name: "butdef2c.bmp", w: 3, h: 57 },
@@ -31548,7 +31548,7 @@ const CATALOG_DATA = {
       { val3: 120, sound_id: -1, sound_name: "", frames: [
         { dx: 583, dy: 165, sprite_id: 2597, sprite_name: "butdef3c.bmp", w: 3, h: 57 },
         { dx: 541, dy: 220, sprite_id: 2598, sprite_name: "butdef3b.bmp", w: 42, h: 4 },
-        { dx: 538, dy: 160, sprite_id: 2599, sprite_name: "butdef3a.bmp", w: 3, h: 62 },
+        { dx: 538, dy: 163, sprite_id: 2599, sprite_name: "butdef3a.bmp", w: 3, h: 58 },
       ] },
       { val3: 120, sound_id: -1, sound_name: "", frames: [
         { dx: 583, dy: 164, sprite_id: 2594, sprite_name: "butdef2c.bmp", w: 3, h: 57 },

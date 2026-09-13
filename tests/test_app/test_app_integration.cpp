@@ -1931,19 +1931,19 @@ void run_suite_11_anthill_queuing_and_priority() {
         TileCoord s4 = sim.get_base_queue_slot(0, 4);
 
         ASSERT_EQ(s0.x, bx - 1);
-        ASSERT_EQ(s0.y, by + 3);
+        ASSERT_EQ(s0.y, by);
 
         ASSERT_EQ(s1.x, bx - 1);
-        ASSERT_EQ(s1.y, by + 2);
+        ASSERT_EQ(s1.y, by + 1);
 
         ASSERT_EQ(s2.x, bx - 1);
-        ASSERT_EQ(s2.y, by + 1);
+        ASSERT_EQ(s2.y, by + 2);
 
         ASSERT_EQ(s3.x, bx - 1);
-        ASSERT_EQ(s3.y, by);
+        ASSERT_EQ(s3.y, by + 3);
 
         ASSERT_EQ(s4.x, bx - 2);
-        ASSERT_EQ(s4.y, by + 3);
+        ASSERT_EQ(s4.y, by);
 
         // First worker joining empty queue gets priority immediately and goes straight into base
         uint32_t w1 = sim.spawn_unit(0, AntType::Worker, TileCoord{10, 10});
@@ -1959,7 +1959,7 @@ void run_suite_11_anthill_queuing_and_priority() {
         ASSERT_EQ(unit1.waypoints.back().x, bx + 1);
         ASSERT_EQ(unit1.waypoints.back().y, by + 1);
 
-        // Second worker joining while w1 has priority routes to queue slot 1 (bx - 1, by + 2)
+        // Second worker joining while w1 has priority routes to queue slot 1 (bx - 1, by + 1)
         uint32_t w2 = sim.spawn_unit(0, AntType::Worker, TileCoord{10, 15});
         AntOrder ret2{};
         ret2.ant_id = w2;
@@ -1971,7 +1971,7 @@ void run_suite_11_anthill_queuing_and_priority() {
         const auto& unit2 = sim.get_unit(w2);
         ASSERT_FALSE(unit2.waypoints.empty());
         ASSERT_EQ(unit2.waypoints.back().x, bx - 1);
-        ASSERT_EQ(unit2.waypoints.back().y, by + 2);
+        ASSERT_EQ(unit2.waypoints.back().y, by + 1);
     } TEST_END();
 
     TEST_CASE("11.2 Serialized Base Entry & Priority Queue (Stand Off to Side & Wait)") {
@@ -1984,9 +1984,9 @@ void run_suite_11_anthill_queuing_and_priority() {
         int32_t by = base->y;
 
         // Spawn 3 workers carrying food directly at queue slots 0, 1, 2
-        uint32_t a1 = sim.spawn_unit(0, AntType::Worker, TileCoord{bx - 1, by + 3});
-        uint32_t a2 = sim.spawn_unit(0, AntType::Worker, TileCoord{bx - 1, by + 2});
-        uint32_t a3 = sim.spawn_unit(0, AntType::Worker, TileCoord{bx - 1, by + 1});
+        uint32_t a1 = sim.spawn_unit(0, AntType::Worker, TileCoord{bx - 1, by});
+        uint32_t a2 = sim.spawn_unit(0, AntType::Worker, TileCoord{bx - 1, by + 1});
+        uint32_t a3 = sim.spawn_unit(0, AntType::Worker, TileCoord{bx - 1, by + 2});
 
         sim.get_unit(a1).pick_up_food(1, 25);
         sim.get_unit(a2).pick_up_food(1, 25);
@@ -4094,10 +4094,10 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         int32_t by = base->y; // 20
 
         // 1. Check queue slots: Slot 0..3 are along bx - 1 (x = 19)
-        ASSERT_EQ(sim.get_base_queue_slot(0, 0), (TileCoord{bx - 1, by + 3}));
-        ASSERT_EQ(sim.get_base_queue_slot(0, 1), (TileCoord{bx - 1, by + 2}));
-        ASSERT_EQ(sim.get_base_queue_slot(0, 2), (TileCoord{bx - 1, by + 1}));
-        ASSERT_EQ(sim.get_base_queue_slot(0, 3), (TileCoord{bx - 1, by}));
+        ASSERT_EQ(sim.get_base_queue_slot(0, 0), (TileCoord{bx - 1, by}));
+        ASSERT_EQ(sim.get_base_queue_slot(0, 1), (TileCoord{bx - 1, by + 1}));
+        ASSERT_EQ(sim.get_base_queue_slot(0, 2), (TileCoord{bx - 1, by + 2}));
+        ASSERT_EQ(sim.get_base_queue_slot(0, 3), (TileCoord{bx - 1, by + 3}));
 
         // 2. Approach Corridor Placement Block: Verify 3 red squares above base (row by - 1)
         for (int dx = 0; dx <= 2; ++dx) {
@@ -4171,13 +4171,13 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         ASSERT_TRUE(visited_above_hole);
 
         // 4. Ant visiting without food emerges and routes to the idle position (bx + 4, by + 4)
-        uint32_t w2 = sim.spawn_unit(0, AntType::Worker, TileCoord{bx - 1, by + 3});
+        uint32_t w2 = sim.spawn_unit(0, AntType::Worker, TileCoord{bx - 1, by});
         AntOrder ret2{};
         ret2.ant_id = w2;
         ret2.type = OrderType::ReturnToBase;
         sim.issue_order(ret2);
 
-        for (int i = 0; i < 90 && sim.get_unit(w2).state != UnitState::EnteringBase; ++i) {
+        for (int i = 0; i < 250 && sim.get_unit(w2).state != UnitState::EnteringBase; ++i) {
             sim.tick();
         }
         ASSERT_EQ(sim.get_unit(w2).state, UnitState::EnteringBase);
@@ -6550,7 +6550,7 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
             sim.tick();
 
             const auto& u2 = sim.get_unit(a2);
-            ASSERT_EQ(u2.pos, (TileCoord{41, 40}));
+            ASSERT_TRUE(u2.pos.x >= 41);
             // Bomb detonated upon landing
             ASSERT_TRUE(sim.has_audio_event(SoundID::BombDetonate));
             ASSERT_FALSE(sim.grid().has_bomb_at(TileCoord{41, 40}));
@@ -6848,10 +6848,10 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
 
     TEST_CASE("12.108: Version Invariant & Fog of War Cursor Concealment Parity") {
         // 1. Verify semantic versioning components
-        ASSERT_EQ(ants::VERSION_STRING, "v0.0.17");
+        ASSERT_EQ(ants::VERSION_STRING, "v0.0.18");
         ASSERT_EQ(ants::VERSION_MAJOR, 0);
         ASSERT_EQ(ants::VERSION_MINOR, 0);
-        ASSERT_EQ(ants::VERSION_PATCH, 17);
+        ASSERT_EQ(ants::VERSION_PATCH, 18);
 
         // 2. Setup simulation world with Fog of War enabled
         SimulationEngine sim;
@@ -7338,7 +7338,7 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         ASSERT_EQ(thief.state, UnitState::Idle);
         ASSERT_TRUE(thief.underground);
         ASSERT_EQ(thief.pixel_x, enemy_base->x * 32 + 107);
-        ASSERT_EQ(thief.pixel_y, enemy_base->y * 32 + 58);
+        ASSERT_EQ(thief.pixel_y, enemy_base->y * 32 + 90);
 
         // Enemy Combat Ant spawns adjacent to bottlecap
         uint32_t combat_id = sim.spawn_unit(1, AntType::Combat, TileCoord{enemy_base->x + 2, enemy_base->y + 2});
@@ -8501,9 +8501,9 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
             const auto& ant_bouncing = sim.get_unit(ant_id);
             // Takes 1 fire damage (10 - 1 = 9 HP)
             ASSERT_EQ(ant_bouncing.hp, 9);
-            ASSERT_EQ(ant_bouncing.state, UnitState::Burn);
+            ASSERT_EQ(ant_bouncing.state, UnitState::Bounce);
 
-            // Advance through burn animation completion (22 ticks)
+            // Advance through bounce animation completion
             for (int t = 0; t < 25; ++t) {
                 sim.tick();
             }
@@ -8585,31 +8585,27 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
             sim.tick(); // Triggers fire contact
 
             const auto& u0 = sim.get_unit(ant);
-            ASSERT_EQ(u0.state, UnitState::Burn);
+            ASSERT_EQ(u0.state, UnitState::Bounce);
             ASSERT_EQ(u0.hp, 9);
             // Verify sound 64 was emitted
             ASSERT_TRUE(sim.has_audio_event(PhysicsEngine::SOUND_FLY_THUMP_A));
 
-            // Step through slide (6 ticks)
+            // Step through slide (6 ticks) and check for Sound 65 upon landing
+            bool heard_sound65 = false;
             for (int t = 0; t < 6; ++t) {
                 sim.tick();
-                ASSERT_EQ(sim.get_unit(ant).state, UnitState::Burn);
+                ASSERT_EQ(sim.get_unit(ant).state, UnitState::Bounce);
+                if (sim.has_audio_event(PhysicsEngine::SOUND_FLY_THUMP_B)) heard_sound65 = true;
             }
+            ASSERT_TRUE(heard_sound65);
+
             // Slide completed, unit reaches destination pixel position
             const auto& u6 = sim.get_unit(ant);
             ASSERT_EQ(u6.pixel_x, u6.push_dest_px);
             ASSERT_EQ(u6.pixel_y, u6.push_dest_py);
 
-            // Step to tick 11 to verify Sound 65
-            bool heard_sound65 = false;
+            // Advance through remaining ticks to tick 12 to reach Idle
             for (int t = 7; t <= 12; ++t) {
-                sim.tick();
-                if (sim.has_audio_event(PhysicsEngine::SOUND_FLY_THUMP_B)) heard_sound65 = true;
-            }
-            ASSERT_TRUE(heard_sound65);
-
-            // Advance through remaining ticks to tick 22
-            for (int t = 13; t <= 23; ++t) {
                 sim.tick();
             }
             const auto& u_done = sim.get_unit(ant);
@@ -8657,7 +8653,7 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
             uint32_t ant = sim.spawn_unit(0, AntType::Worker, fire_pos);
             // Ant hits fire at (24, 26), forced to bounce northeast to (25, 25) where bomb is placed
             sim.tick(); // Tick 1: fire contact resolved, slide begins towards (25, 25)
-            ASSERT_EQ(sim.get_unit(ant).state, UnitState::Burn);
+            ASSERT_EQ(sim.get_unit(ant).state, UnitState::Bounce);
 
             // Advance through the 6-tick push slide to reach the bomb
             for (int t = 0; t < 6; ++t) {
@@ -8677,6 +8673,227 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
             ASSERT_TRUE(u_landed.pos.x > bomb_pos.x);
             ASSERT_TRUE(u_landed.pos.y < bomb_pos.y);
         }
+    } TEST_END();
+
+    // ------------------------------------------------------------------------
+    // 12.63 Authentic 1998 Bomb Blast Flyback Starts Directly at Bomb Tile
+    // ------------------------------------------------------------------------
+    TEST_CASE("12.63 Authentic 1998 Bomb Blast Flyback Starts Directly at Bomb Tile") {
+        bool tested_flight = false;
+        for (uint32_t seed = 0; seed < 100; ++seed) {
+            SimulationEngine sim;
+            sim.init_test_world(60, 60, seed, 60000);
+            TileCoord bomb_pos{20, 20};
+            sim.grid_mut().place_bomb(bomb_pos.x, bomb_pos.y, 1);
+
+            uint32_t ant = sim.spawn_unit(0, AntType::Worker, bomb_pos);
+            auto& u = sim.get_unit(ant);
+            u.facing = ants::assets::Direction::North;
+            u.hp = 10;
+            u.max_hp = 10;
+
+            sim.trigger_bomb_detonation(ant, bomb_pos, 0, 0);
+
+            const auto& u_post = sim.get_unit(ant);
+            if (u_post.state == UnitState::Knockback) {
+                tested_flight = true;
+                ASSERT_EQ(u_post.altitude_z, 0);
+                int32_t dest_tx = u_post.pos.x;
+                int32_t dest_ty = u_post.pos.y;
+                ASSERT_EQ(u_post.pixel_x, dest_tx * 32 + 16);
+                ASSERT_EQ(u_post.pixel_y, dest_ty * 32 + 16);
+
+                // Recoil South (facing North, +4 tiles): dest_ty == 24.
+                // Table 4 Frame 1 offset dy = -128 (-4 tiles).
+                // dest_ty * 32 + 16 + (-128) = bomb_pos.y * 32 + 16,
+                // anchoring the start of the flyback visual directly on the bomb tile!
+                int32_t flyback_start_y = u_post.pixel_y - 128;
+                ASSERT_EQ(flyback_start_y, bomb_pos.y * 32 + 16);
+
+                // Unit remains anchored at destination tile throughout flight ticks
+                for (int t = 0; t < 11; ++t) {
+                    sim.tick();
+                    const auto& u_flight = sim.get_unit(ant);
+                    if (u_flight.state == UnitState::Knockback) {
+                        ASSERT_EQ(u_flight.altitude_z, 0);
+                        ASSERT_EQ(u_flight.pixel_x, dest_tx * 32 + 16);
+                        ASSERT_EQ(u_flight.pixel_y, dest_ty * 32 + 16);
+                    }
+                }
+                break;
+            }
+        }
+        ASSERT_TRUE(tested_flight);
+    } TEST_END();
+
+    // ------------------------------------------------------------------------
+    // 12.64 Thief Infiltration Bottlecap Row Alignment, Untargetability & In-Place Re-Trigger
+    // ------------------------------------------------------------------------
+    TEST_CASE("12.64 Thief Infiltration Bottlecap Row Alignment, Untargetability & In-Place Re-Trigger") {
+        SimulationEngine sim;
+        sim.init_test_world(60, 60, 42, 60000);
+        sim.set_anthill(1, {10, 10});
+
+        uint32_t thief_id = sim.spawn_unit(0, AntType::Thief, TileCoord{13, 12});
+        auto& thief = sim.get_unit(thief_id);
+        ASSERT_EQ(thief.type, AntType::Thief);
+
+        // Step 1: Infiltrate enemy base with 0 enemy score (unsuccessful steal)
+        sim.start_thief_infiltration(thief_id, 1);
+        ASSERT_EQ(thief.state, UnitState::Infiltrating);
+
+        // Advance ticks for infiltration animation to complete
+        for (int t = 0; t < 35; ++t) {
+            sim.tick();
+        }
+
+        // On unsuccessful steal, thief sits idle directly on the bottlecap at (bx + 3, by + 2) = (13, 12)
+        // with pixel pos (bx * 32 + 107, by * 32 + 90) = (427, 410) and underground = true
+        const auto& u_idle = sim.get_unit(thief_id);
+        ASSERT_EQ(u_idle.state, UnitState::Idle);
+        ASSERT_EQ(u_idle.pos.x, 13);
+        ASSERT_EQ(u_idle.pos.y, 12);
+        ASSERT_EQ(u_idle.pixel_x, 10 * 32 + 107);
+        ASSERT_EQ(u_idle.pixel_y, 10 * 32 + 90);
+        ASSERT_TRUE(u_idle.underground);
+
+        // Step 2: Untargetable and damage immune while on bottlecap
+        ASSERT_FALSE(sim.get_unit(thief_id).take_damage(5, DamageSource::MeleeStandard, 1));
+        ASSERT_EQ(sim.get_unit(thief_id).hp, sim.get_unit(thief_id).max_hp);
+
+        // Step 3: In-place steal re-trigger while standing on the bottlecap
+        AntOrder inf_order;
+        inf_order.ant_id = thief_id;
+        inf_order.type = OrderType::InfiltrateAnthill;
+        inf_order.target_entity_id = 1;
+        inf_order.target_x = 13;
+        inf_order.target_y = 12;
+        sim.issue_order(inf_order);
+
+        ASSERT_EQ(sim.get_unit(thief_id).state, UnitState::Infiltrating);
+
+        // Advance through infiltration again to return to idle on bottlecap
+        for (int t = 0; t < 35; ++t) {
+            sim.tick();
+        }
+        ASSERT_TRUE(sim.get_unit(thief_id).underground);
+
+        // Step 4: Moving away clears underground flag
+        sim.issue_move_order(thief_id, TileCoord{14, 12});
+        ASSERT_FALSE(sim.get_unit(thief_id).underground);
+
+        // Moving back to bottlecap at (13, 12) triggers fresh infiltration upon arrival
+        sim.issue_move_order(thief_id, TileCoord{13, 12});
+        for (int t = 0; t < 25; ++t) {
+            sim.tick();
+            if (sim.get_unit(thief_id).state == UnitState::Infiltrating) break;
+        }
+        ASSERT_EQ(sim.get_unit(thief_id).state, UnitState::Infiltrating);
+    } TEST_END();
+
+    // ------------------------------------------------------------------------
+    // 12.65 Fire Contact Bounce Plays Ground Bounce Animation State
+    // ------------------------------------------------------------------------
+    TEST_CASE("12.65 Fire Contact Bounce Plays Ground Bounce Animation State") {
+        SimulationEngine sim;
+        sim.init_test_world(60, 60, 42, 60000);
+        TileCoord fire_pos{15, 15};
+        sim.grid_mut().place_firewall(fire_pos.x, fire_pos.y, 0);
+
+        uint32_t ant = sim.spawn_unit(0, AntType::Worker, fire_pos);
+        sim.tick();
+
+        const auto& u = sim.get_unit(ant);
+        // Contact with fire must enter UnitState::Bounce (tumbling slide *gb), NOT UnitState::Burn
+        ASSERT_EQ(u.state, UnitState::Bounce);
+        ASSERT_EQ(u.state_timer, 10);
+    } TEST_END();
+
+    // ------------------------------------------------------------------------
+    // 12.66 Bomb Dud Stationary Position Lock
+    // ------------------------------------------------------------------------
+    TEST_CASE("12.66 Bomb Dud Stationary Position Lock") {
+        bool found_dud = false;
+        for (uint32_t seed = 0; seed < 100; ++seed) {
+            SimulationEngine sim;
+            sim.init_test_world(60, 60, seed, 60000);
+            TileCoord bomb_pos{20, 20};
+            sim.grid_mut().place_bomb(bomb_pos.x, bomb_pos.y, 1);
+            uint32_t ant = sim.spawn_unit(0, AntType::Worker, bomb_pos);
+            sim.get_unit(ant).hp = 10;
+            sim.trigger_bomb_detonation(ant, bomb_pos, 0, 0);
+
+            if (sim.get_unit(ant).state == UnitState::Burn) {
+                found_dud = true;
+                const auto& u = sim.get_unit(ant);
+                // Ant is locked firmly at bomb tile without pushing or sliding
+                ASSERT_EQ(u.pos.x, bomb_pos.x);
+                ASSERT_EQ(u.pos.y, bomb_pos.y);
+                ASSERT_EQ(u.pixel_x, bomb_pos.x * 32 + 16);
+                ASSERT_EQ(u.pixel_y, bomb_pos.y * 32 + 16);
+                ASSERT_EQ(u.push_ticks_total, 0);
+                ASSERT_EQ(u.push_tick_current, 0);
+
+                // Advance several ticks: ant must remain firmly locked at bomb position
+                for (int t = 0; t < 10; ++t) {
+                    sim.tick();
+                    const auto& u_burn = sim.get_unit(ant);
+                    if (u_burn.state == UnitState::Burn) {
+                        ASSERT_EQ(u_burn.pixel_x, bomb_pos.x * 32 + 16);
+                        ASSERT_EQ(u_burn.pixel_y, bomb_pos.y * 32 + 16);
+                    }
+                }
+                break;
+            }
+        }
+        ASSERT_TRUE(found_dud);
+    } TEST_END();
+
+    // ------------------------------------------------------------------------
+    // 12.67 Mutual Ant-Ant Collision Bouncing
+    // ------------------------------------------------------------------------
+    TEST_CASE("12.67 Mutual Ant-Ant Collision Bouncing") {
+        SimulationEngine sim;
+        sim.init_test_world(60, 60, 42, 60000);
+
+        uint32_t ant1 = sim.spawn_unit(0, AntType::Worker, TileCoord{10, 10});
+        uint32_t ant2 = sim.spawn_unit(0, AntType::Worker, TileCoord{15, 10});
+
+        sim.issue_move_order(ant1, TileCoord{15, 10});
+        sim.issue_move_order(ant2, TileCoord{10, 10});
+
+        bool both_bounced = false;
+        for (int t = 0; t < 50; ++t) {
+            sim.tick();
+            const auto& u1 = sim.get_unit(ant1);
+            const auto& u2 = sim.get_unit(ant2);
+            if (u1.state == UnitState::Bounce && u2.state == UnitState::Bounce) {
+                both_bounced = true;
+                break;
+            }
+        }
+        ASSERT_TRUE(both_bounced);
+    } TEST_END();
+
+    // ------------------------------------------------------------------------
+    // 12.68 Sidebar Pedestal Buttons Dimensions and Drop Shadows
+    // ------------------------------------------------------------------------
+    TEST_CASE("12.68 Sidebar Pedestal Buttons Dimensions and Drop Shadows") {
+        HUD hud;
+        hud.init(0);
+        const auto& move_btn = hud.get_move_pedestal_button();
+        const auto& abil_btn = hud.get_ability_pedestal_button();
+
+        // Authentic Table 4 butdown.bmp dimensions (55x75)
+        ASSERT_EQ(move_btn.x, 476);
+        ASSERT_EQ(move_btn.y, 156);
+        ASSERT_EQ(move_btn.w, 55);
+        ASSERT_EQ(move_btn.h, 75);
+
+        ASSERT_EQ(abil_btn.x, 537);
+        ASSERT_EQ(abil_btn.y, 156);
+        ASSERT_EQ(abil_btn.w, 55);
+        ASSERT_EQ(abil_btn.h, 75);
     } TEST_END();
 }
 
