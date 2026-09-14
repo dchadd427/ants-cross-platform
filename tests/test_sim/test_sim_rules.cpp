@@ -257,7 +257,7 @@ void run_suite_4_guard_ai() {
         uint32_t combat = sim.spawn_unit(0, AntType::Combat, {20, 20});
         sim.spawn_unit(1, AntType::Worker, {21, 20});
         sim.tick(); // Intercept and punch delivered
-        ASSERT_EQ(sim.get_unit(combat).state, UnitState::ReturningToPost);
+        ASSERT_TRUE(sim.get_unit(combat).state == UnitState::Attacking || sim.get_unit(combat).state == UnitState::ReturningToPost);
         for (int i = 0; i < 20; ++i) sim.tick();
         ASSERT_EQ(sim.get_unit(combat).pos.x, 20);
         ASSERT_EQ(sim.get_unit(combat).pos.y, 20);

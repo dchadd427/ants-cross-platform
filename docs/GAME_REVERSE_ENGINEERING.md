@@ -2020,4 +2020,23 @@ To deliver authentic 1:1 gameplay inside standard web browsers with zero install
   - Terrain tiles belonging to base mounds are rendered in team color, preventing dark green boundary artifacts.
 - **Single-Bomber Marquee Selection Mode**:
   - Dragging a selection marquee around 1 bomber without Shift maintains single-unit ability mode (Pedestal 2 active, right-click plants bombs). Multi-unit or Shift-marquee enters group move-only mode.
+- **Stun Animation Pacing Across Display Refresh Rates (Table 4 Subitem Timing)**:
+  - Table 4 defines discrete millisecond durations per subitem for stun stars/wobble (`*sd301`):
+    - Worker `agsd301`: 125ms per subitem (`val3 = 125`), 8 subitems = 1000ms loop.
+    - Bomber `absd301`: 105ms per subitem (`val3 = 105`), 10 subitems = 1050ms loop.
+    - Fire, Thief, Combat, Swimmer: 100ms per subitem (`val3 = 100`), 10 subitems = 1000ms loop.
+  - High refresh-rate monitors (120Hz, 144Hz, 240Hz, 360Hz) map elapsed display time via `elapsed_ms = ant.anim_frame * 50u + sub_tick_ms` with `get_anim_subitem_by_time` instead of advancing subitems every simulation tick, ensuring identical 8–10 FPS visual pacing across all platforms.
+  - Carried food prefix is preserved (`hgsd301`, `hbsd301`) so harvesting workers holding food render with food held while stunned.
+- **Bomb Blast Deflection Origin & 8-Direction Outward Sequence (`FUN_0101df5d`, `FUN_01021a6f`, `FUN_0101ad02`)**:
+  - Origin tile coordinates: Blast knockback originates strictly from the bomb tile center (`from_px / 32, from_py / 32`) rather than an empty adjacent tile.
+  - Outward deflection order: Evaluates all 8 angles `[initial_dir, +1, +7, +2, +6, +3, +5, +4] % 8`. If an obstruction (e.g. north rock wall) blocks the direct path, the ant deflects sideways outward from the bomb.
+  - Heading alignment: `victim.facing = static_cast<Direction>(chosen_dir)` synchronizes the tumble sprite (`aggb`) departing cleanly from the bomb center.
+- **Active Bomb Placement Walk-On Detonation & Pre-Placement Occupancy (`Ants.exe 0x1021c30`)**:
+  - Bombers cannot initiate bomb placement on a tile already occupied by a living ant.
+  - If another ant moves onto the target tile while the bomber is in the 28-tick placement animation, immediate proximity detonation is triggered at tick 28 upon bomb instantiation, eliminating repathing jitter and coordinate conflicts.
+- **Combat Ant AI Guard Locomotion, Heavy Punch, Knockback & Water Drowning Parity**:
+  - Smooth locomotion: Combat Ant AI uses standard pathfinding locomotion (`issue_move_order` at `SPEED_STANDARD_FX`), eliminating tile teleportation.
+  - Heavy Punch strike: Striking an adjacent intruder sets `UnitState::Attacking` with an 11-tick punch animation (`acat301`, Sound 78 `HeavyPunch`).
+  - Ballistic flight knockback: Victim is launched into 4-tile flight (`UnitState::Knockback`, tumble animation `aggb`, Sound 64 `FlyThumpA`, 12-tick stun `SoundID::StunRecover`).
+  - Instant water drowning: Knockback into deep water without a completed bridge calls `resolve_water_entry`, plunging non-swimmers into `UnitState::Drowning` (Sound 71 `WaterSplash`, Sound 72 `AntDrown`) for an authentic instant kill.
 

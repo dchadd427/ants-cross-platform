@@ -964,7 +964,8 @@ void Application::render_frame() {
         renderer_->render_world(world, sim_.grid(), static_cast<int32_t>(hud_.get_selected_ant_id()),
                                 hud_.get_selected_ant_ids(), show_unit_health_, show_tile_grid_,
                                 mouse_screen_x_, mouse_screen_y_,
-                                hud_.get_selected_base_team_id());
+                                hud_.get_selected_base_team_id(),
+                                tick_accumulator_);
         hud_.render(*renderer_, assets_, world, renderer_->camera());
     }
 
