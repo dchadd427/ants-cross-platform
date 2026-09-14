@@ -719,7 +719,7 @@ void Renderer::set_level(const ants::assets::LevelData& level) {
 
 void Renderer::begin_frame() {
     if (!renderer_) return;
-    anim_tick_++;
+    anim_tick_ = static_cast<uint32_t>((static_cast<uint64_t>(SDL_GetTicks()) * 60ULL) / 1000ULL);
     SDL_SetRenderDrawColor(renderer_, 0, 0, 0, 255); // Black letterbox / background
     SDL_RenderClear(renderer_);
 }
@@ -1415,28 +1415,44 @@ void Renderer::draw_single_ant(const ants::sim::AntSnapshot& ant, bool is_select
     bool is_entering_base = (ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::EnteringBase));
 
     int32_t sx = 0, sy = 0;
-    if (is_infiltrating) {
+    if (is_infiltrating || is_entering_base) {
         int32_t hill_tx = -1, hill_ty = -1;
-        uint8_t target_t = 0;
-        if (ant.target_team_id < 4 && has_anthill_bases_ && anthill_bases_[ant.target_team_id].x >= 0) {
-            hill_tx = anthill_bases_[ant.target_team_id].x;
-            hill_ty = anthill_bases_[ant.target_team_id].y;
-            target_t = ant.target_team_id;
-        } else if (has_anthill_bases_) {
-            for (size_t b = 0; b < 4; ++b) {
-                if (b != ant.player_id && anthill_bases_[b].x >= 0) {
-                    hill_tx = anthill_bases_[b].x;
-                    hill_ty = anthill_bases_[b].y;
-                    target_t = static_cast<uint8_t>(b);
-                    break;
+        uint8_t target_t = ant.player_id;
+        if (is_infiltrating) {
+            if (ant.target_team_id < 4 && has_anthill_bases_ && anthill_bases_[ant.target_team_id].x >= 0) {
+                hill_tx = anthill_bases_[ant.target_team_id].x;
+                hill_ty = anthill_bases_[ant.target_team_id].y;
+                target_t = ant.target_team_id;
+            } else if (has_anthill_bases_) {
+                for (size_t b = 0; b < 4; ++b) {
+                    if (b != ant.player_id && anthill_bases_[b].x >= 0) {
+                        hill_tx = anthill_bases_[b].x;
+                        hill_ty = anthill_bases_[b].y;
+                        target_t = static_cast<uint8_t>(b);
+                        break;
+                    }
                 }
+            }
+        } else { // is_entering_base
+            if (ant.player_id < 4 && has_anthill_bases_ && anthill_bases_[ant.player_id].x >= 0) {
+                hill_tx = anthill_bases_[ant.player_id].x;
+                hill_ty = anthill_bases_[ant.player_id].y;
+                target_t = ant.player_id;
             }
         }
         if (hill_tx >= 0) {
             static const int32_t hill_offset_dy[4] = { 7, 14, 12, 8 };
-            // Authentic Table 4 Anthill bottlecap anchor: (hill_tx * 32 + 107, hill_ty * 32 + 58 + offset)
-            int32_t anchor_world_x = hill_tx * 32 + 107;
-            int32_t anchor_world_y = hill_ty * 32 + 58 + hill_offset_dy[target_t % 4];
+            int32_t anchor_world_x = 0;
+            int32_t anchor_world_y = 0;
+            if (is_infiltrating) {
+                anchor_world_x = hill_tx * 32 + 107;
+                anchor_world_y = hill_ty * 32 + 58 + hill_offset_dy[target_t % 4];
+            } else {
+                // Base entry hole center alignment:
+                static const int32_t hill_hole_local_y[4] = { 48, 39, 44, 50 };
+                anchor_world_x = hill_tx * 32 + 44;
+                anchor_world_y = hill_ty * 32 + hill_offset_dy[target_t % 4] + hill_hole_local_y[target_t % 4];
+            }
             if (!camera_.world_to_screen(anchor_world_x, anchor_world_y, sx, sy)) return;
         } else {
             if (!camera_.world_to_screen(ant.px, ant.py, sx, sy)) return;
@@ -1543,7 +1559,7 @@ void Renderer::draw_single_ant(const ants::sim::AntSnapshot& ant, bool is_select
     } else if (ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::Knockback)) {
         action = "gb"; // Ground Bounce tumbling flight (aggb301, abgb301, afgb201, acgb201, asgb201, atgb201)
     } else if (ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::Bounce)) {
-        action = "gb"; // Ground Bounce tumbling slide
+        action = "st"; // Ground Bounce: upright normal standing/idle sprite, NO tumble (*gb*) or flinch (*gh*)
     } else if (ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::Flinch)) {
         action = "gh";
     } else if (ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::Burn)) {
@@ -1950,7 +1966,7 @@ void Renderer::render_ant_units(const ants::sim::WorldState& world,
             is_sel = (a.id == static_cast<uint32_t>(selected_unit_id));
         }
 
-        bool is_under_battle = a.is_in_scuffle || (a.anim_state == static_cast<uint16_t>(ants::sim::UnitState::Bounce));
+        bool is_under_battle = a.is_in_scuffle;
         if (!is_under_battle) {
             for (const auto& eff : world.effects) {
                 if (eff.anim_name == "battle") {

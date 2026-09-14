@@ -2347,7 +2347,7 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         const auto& a3 = sim.get_unit(a3_id);
 
         // Bounce sound was triggered
-        ASSERT_TRUE(sim.has_audio_event(SoundID::FlingThumpA));
+        ASSERT_TRUE(sim.has_audio_event(SoundID::Bump));
 
         // All 3 ants must occupy distinct discrete tiles
         ASSERT_FALSE(a1.pos == a2.pos);
@@ -4077,9 +4077,9 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
             if (worker.state != UnitState::Knockback) break;
         }
 
-        // Stops at last available tile before barrier: (21, 20)
-        ASSERT_EQ(worker.pos.x, 21);
-        ASSERT_EQ(worker.pos.y, 20);
+        // Authentic 1998 5-direction deflection: East is blocked by obstacle, deflects +45° South-East to (24, 24)
+        ASSERT_EQ(worker.pos.x, 24);
+        ASSERT_EQ(worker.pos.y, 24);
         ASSERT_EQ(worker.state, UnitState::Stunned);
         ASSERT_TRUE(sim.has_audio_event(64)); // SOUND_FLY_THUMP_A
     } TEST_END();
@@ -4957,22 +4957,45 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         SimulationEngine sim;
         sim.init_test_world(60, 60, 1);
 
-        // Create a completed bridge over water at {20, 20}
+        // Create completed bridges over water at {20, 20} and {22, 20}
         sim.set_terrain(20, 20, TERRAIN_WATER);
         sim.set_tile_flags(20, 20, 0x06);
         sim.grid_mut().set_bridge_at(TileCoord{20, 20}, 4, 3600);
         ASSERT_TRUE(sim.grid().get_cell(TileCoord{20, 20}).has_completed_bridge());
 
-        // Spawn a Worker ant and Swimmer ant on the bridge tile
+        sim.set_terrain(22, 20, TERRAIN_WATER);
+        sim.set_tile_flags(22, 20, 0x06);
+        sim.grid_mut().set_bridge_at(TileCoord{22, 20}, 4, 3600);
+        ASSERT_TRUE(sim.grid().get_cell(TileCoord{22, 20}).has_completed_bridge());
+
+        // Spawn a Worker ant on {20, 20} and Swimmer ant on {22, 20}
         uint32_t w_id = sim.spawn_unit(0, AntType::Worker, TileCoord{20, 20});
-        uint32_t s_id = sim.spawn_unit(0, AntType::Swimmer, TileCoord{20, 20});
+        uint32_t s_id = sim.spawn_unit(0, AntType::Swimmer, TileCoord{22, 20});
         ASSERT_NE(sim.get_unit(w_id).state, UnitState::Drowning);
+        ASSERT_NE(sim.get_unit(s_id).state, UnitState::Swimming);
 
-        // Demolish/regress the bridge so it's no longer completed
+        // Demolish/regress the bridges by 1 stage: units survive on decaying bridges
         sim.grid_mut().regress_bridge(20, 20);
+        sim.grid_mut().regress_bridge(22, 20);
         ASSERT_FALSE(sim.grid().get_cell(TileCoord{20, 20}).has_completed_bridge());
+        ASSERT_TRUE(sim.grid().get_cell(TileCoord{20, 20}).has_any_bridge());
+        ASSERT_FALSE(sim.grid().get_cell(TileCoord{22, 20}).has_completed_bridge());
+        ASSERT_TRUE(sim.grid().get_cell(TileCoord{22, 20}).has_any_bridge());
+        sim.tick();
+        ASSERT_NE(sim.get_unit(w_id).state, UnitState::Drowning);
+        ASSERT_NE(sim.get_unit(s_id).state, UnitState::Swimming);
 
-        // One tick of simulation: Worker MUST instantly start drowning, Swimmer starts swimming
+        // Fully demolish/regress bridges to water (all decay stages removed):
+        while (sim.grid().get_cell(TileCoord{20, 20}).has_any_bridge()) {
+            sim.grid_mut().regress_bridge(20, 20);
+        }
+        while (sim.grid().get_cell(TileCoord{22, 20}).has_any_bridge()) {
+            sim.grid_mut().regress_bridge(22, 20);
+        }
+        ASSERT_FALSE(sim.grid().get_cell(TileCoord{20, 20}).has_any_bridge());
+        ASSERT_FALSE(sim.grid().get_cell(TileCoord{22, 20}).has_any_bridge());
+
+        // Now Worker MUST start drowning, Swimmer starts swimming
         sim.tick();
         ASSERT_EQ(sim.get_unit(w_id).state, UnitState::Drowning);
         ASSERT_EQ(sim.get_unit(s_id).state, UnitState::Swimming);
@@ -6848,10 +6871,10 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
 
     TEST_CASE("12.108: Version Invariant & Fog of War Cursor Concealment Parity") {
         // 1. Verify semantic versioning components
-        ASSERT_EQ(ants::VERSION_STRING, "v0.0.18");
+        ASSERT_EQ(ants::VERSION_STRING, "v0.0.19");
         ASSERT_EQ(ants::VERSION_MAJOR, 0);
         ASSERT_EQ(ants::VERSION_MINOR, 0);
-        ASSERT_EQ(ants::VERSION_PATCH, 18);
+        ASSERT_EQ(ants::VERSION_PATCH, 19);
 
         // 2. Setup simulation world with Fog of War enabled
         SimulationEngine sim;
@@ -8387,10 +8410,10 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
             ASSERT_TRUE(fa.is_alive());
             ASSERT_EQ(fa.pos.x, 24);
             ASSERT_EQ(fa.pos.y, 20);
-            ASSERT_EQ(fa.state, UnitState::Idle);
-            ASSERT_FALSE(fa.is_stunned());
+            ASSERT_EQ(fa.state, UnitState::Stunned);
+            ASSERT_TRUE(fa.is_stunned());
 
-            // Can immediately walk
+            // Stunned ant can be ordered to walk immediately (Ants.exe FUN_01021494), cancelling stun
             AntOrder move_after_flight{};
             move_after_flight.ant_id = flying_ant;
             move_after_flight.type = OrderType::Move;
@@ -8398,6 +8421,7 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
             move_after_flight.target_y = 20;
             sim.issue_order(move_after_flight);
             ASSERT_EQ(fa.state, UnitState::Walking);
+            ASSERT_FALSE(fa.is_stunned());
         }
 
         // -------------------------------------------------------------------------

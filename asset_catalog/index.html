@@ -2704,22 +2704,70 @@ function renderSubitemsStrip(anim) {
   anim.subitems.forEach((sub, sIdx) => {
     const card = document.createElement('div');
     card.className = 'subitem-card' + (sIdx === currentSubIndex ? ' active' : '');
-    const firstSpriteId = sub.frames.length > 0 ? sub.frames[0].sprite_id : null;
-    const thumbSrc = firstSpriteId !== null ? `sprites/sprite_${String(firstSpriteId).padStart(4, '0')}.png` : '';
     
     const sndObj = sub.sound_id >= 0 ? CATALOG_DATA.sounds[sub.sound_id] : null;
     const sndFile = sndObj ? sndObj.file : '';
 
+    const badgeHtml = sub.sound_id >= 0 ? `
+      <span class="subitem-badge-snd" onclick="event.stopPropagation(); playAudioClip('${sndFile}')" title="Audio #${sub.sound_id}: ${sub.sound_name} (Click to play)">🔊 #${sub.sound_id}</span>
+    ` : '';
+
     card.innerHTML = `
-      ${sub.sound_id >= 0 ? `
-        <span class="subitem-badge-snd" onclick="event.stopPropagation(); playAudioClip('${sndFile}')" title="Audio #${sub.sound_id}: ${sub.sound_name} (Click to play)">🔊 #${sub.sound_id}</span>
-      ` : ''}
-      <div class="subitem-thumb">
-        ${thumbSrc ? `<img src="${thumbSrc}" alt="Step ${sIdx}">` : '<span style="color:var(--text-dim);font-size:0.7rem;">Empty</span>'}
-      </div>
+      ${badgeHtml}
+      <div class="subitem-thumb" id="subitem-thumb-${sIdx}"></div>
       <div style="font-size:0.75rem; font-weight:700;">Step #${sIdx}</div>
       <div style="font-size:0.68rem; color:var(--text-secondary);">${sub.frames.length} layer${sub.frames.length > 1 ? 's' : ''}</div>
     `;
+
+    const thumbContainer = card.querySelector('.subitem-thumb');
+    if (sub.frames.length === 0) {
+      thumbContainer.innerHTML = '<span style="color:var(--text-dim);font-size:0.7rem;">Empty</span>';
+    } else if (sub.frames.length === 1) {
+      const spId = sub.frames[0].sprite_id;
+      const thumbSrc = `sprites/sprite_${String(spId).padStart(4, '0')}.png`;
+      thumbContainer.innerHTML = `<img src="${thumbSrc}" alt="Step ${sIdx}">`;
+    } else {
+      // Multi-layer composite thumbnail canvas
+      const thumbCanvas = document.createElement('canvas');
+      thumbCanvas.width = 64;
+      thumbCanvas.height = 64;
+      thumbCanvas.style.width = '100%';
+      thumbCanvas.style.height = '100%';
+      thumbCanvas.style.objectFit = 'contain';
+      thumbCanvas.style.imageRendering = 'pixelated';
+      thumbContainer.appendChild(thumbCanvas);
+
+      const renderThumbnail = () => {
+        const ctx = thumbCanvas.getContext('2d');
+        ctx.imageSmoothingEnabled = false;
+        ctx.clearRect(0, 0, 64, 64);
+
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+        for (const f of sub.frames) {
+          minX = Math.min(minX, f.dx);
+          minY = Math.min(minY, f.dy);
+          maxX = Math.max(maxX, f.dx + f.w);
+          maxY = Math.max(maxY, f.dy + f.h);
+        }
+        const spanW = Math.max(1, maxX - minX);
+        const spanH = Math.max(1, maxY - minY);
+        const scale = Math.min(60 / spanW, 60 / spanH, 2.0);
+        const offX = Math.round((64 - spanW * scale) / 2 - minX * scale);
+        const offY = Math.round((64 - spanH * scale) / 2 - minY * scale);
+
+        const renderOrder = getRenderOrderedFrames(sub.frames);
+        for (const f of renderOrder) {
+          const img = getSpriteImage(f.sprite_id);
+          if (img.complete && img.naturalWidth !== 0) {
+            ctx.drawImage(img, Math.round(offX + f.dx * scale), Math.round(offY + f.dy * scale), Math.round(f.w * scale), Math.round(f.h * scale));
+          } else {
+            img.onload = renderThumbnail;
+          }
+        }
+      };
+      renderThumbnail();
+    }
+
     card.onclick = () => {
       currentSubIndex = sIdx;
       updateCanvasFrame();

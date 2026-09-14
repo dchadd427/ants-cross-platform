@@ -47,6 +47,7 @@ constexpr uint16_t BOMB_GREEN = 103u;
 
 // Structure Lifetime: 180 seconds @ 20 Hz = 3,600 ticks
 constexpr uint32_t LIFETIME_180S_TICKS = 3600u;
+constexpr uint32_t BRIDGE_COLLAPSE_STAGE_TICKS = 8u; // 400ms per decay stage
 
 /**
  * @brief Discrete 2D integer tile coordinate.
@@ -158,6 +159,9 @@ struct TileCell {
     constexpr bool has_completed_bridge() const noexcept {
         return interactive_id == TILE_BRIDGE4 || interactive_id == TILE_BRIDGE4B;
     }
+    constexpr bool has_any_bridge() const noexcept {
+        return (interactive_id >= TILE_BRIDGE1 && interactive_id <= TILE_BRIDGE4) || interactive_id == TILE_BRIDGE4B;
+    }
     constexpr bool has_partial_bridge() const noexcept {
         return interactive_id >= TILE_BRIDGE1 && interactive_id < TILE_BRIDGE4;
     }
@@ -165,8 +169,8 @@ struct TileCell {
         return interactive_id >= BOMB_BLACK && interactive_id <= BOMB_GREEN;
     }
     constexpr bool has_food() const noexcept {
-        return is_food && !is_empty_overlay() && !has_fire() && !has_completed_bridge() &&
-               !has_partial_bridge() && !has_bomb() && !has_lunchbox();
+        return is_food && !is_empty_overlay() && !has_fire() && !has_any_bridge() &&
+               !has_bomb() && !has_lunchbox();
     }
     constexpr bool has_powerup() const noexcept {
         return is_powerup && !is_empty_overlay();
@@ -282,7 +286,8 @@ public:
     bool is_solid_obstacle(int32_t x, int32_t y) const noexcept {
         if (!in_bounds(x, y)) return true;
         const auto& cell = get_cell(static_cast<uint32_t>(x), static_cast<uint32_t>(y));
-        return cell.terrain_type == TERRAIN_OBSTACLE || cell.is_obstacle_overlay || cell.terrain_type == TERRAIN_WATER;
+        return cell.terrain_type == TERRAIN_OBSTACLE || cell.is_obstacle_overlay ||
+               (cell.terrain_type == TERRAIN_WATER && !cell.has_any_bridge());
     }
 
     bool is_occupiable_non_wall(int32_t x, int32_t y) const noexcept {

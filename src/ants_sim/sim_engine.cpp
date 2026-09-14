@@ -286,6 +286,7 @@ void bounce_unit_cascade(SimulationEngineImpl& impl,
     }
 
     unit.state = UnitState::Bounce;
+    unit.is_friendly_bump = !is_enemy_scuffle;
     unit.state_timer = is_enemy_scuffle ? 20 : 10; // 10 ticks scuffle + 10 ticks bounce if scuffle, else 10 ticks
     unit.anim_tick = 0;
     unit.anim_subitem = 0;
@@ -296,7 +297,9 @@ void bounce_unit_cascade(SimulationEngineImpl& impl,
     unit.attack_cooldown_ticks = std::max(unit.attack_cooldown_ticks, static_cast<uint16_t>(20));
 
     impl.audio_queue_.push_back(AudioEvent{SoundID::Bump, unit.pixel_x, unit.pixel_y, 1, 255});
-    impl.audio_queue_.push_back(AudioEvent{SoundID::FlingThumpA, unit.pixel_x, unit.pixel_y, 1, 255});
+    if (is_enemy_scuffle) {
+        impl.audio_queue_.push_back(AudioEvent{SoundID::FlingThumpA, unit.pixel_x, unit.pixel_y, 1, 255});
+    }
 
     int32_t collision_px = from_x * 32 + 16;
     int32_t collision_py = from_y * 32 + 16;
@@ -346,7 +349,7 @@ void bounce_unit_cascade(SimulationEngineImpl& impl,
     for (const auto& cand : candidates) {
         if (!impl.grid_.is_occupiable_non_wall(cand.first, cand.second)) continue;
         if (unit.type != AntType::Swimmer && impl.grid_.get_cell(static_cast<uint32_t>(cand.first), static_cast<uint32_t>(cand.second)).terrain_type == TERRAIN_WATER &&
-            !impl.grid_.get_cell(static_cast<uint32_t>(cand.first), static_cast<uint32_t>(cand.second)).has_completed_bridge()) {
+            !impl.grid_.get_cell(static_cast<uint32_t>(cand.first), static_cast<uint32_t>(cand.second)).has_any_bridge()) {
             continue; // Non-swimmers prefer dry ground over water if available
         }
         bool has_ant = false;
@@ -399,7 +402,6 @@ void bounce_unit_cascade(SimulationEngineImpl& impl,
             impl.audio_queue_.push_back(AudioEvent{SoundID::CombatNetFairy, occupying->pixel_x, occupying->pixel_y, 1, 255});
         } else {
             impl.audio_queue_.push_back(AudioEvent{SoundID::Bump, occupying->pixel_x, occupying->pixel_y, 1, 255});
-            impl.audio_queue_.push_back(AudioEvent{SoundID::FlingThumpB, occupying->pixel_x, occupying->pixel_y, 1, 255});
         }
         // Cascade bounce the occupying ant away!
         bounce_unit_cascade(impl, *occupying, chosen.x, chosen.y, are_enemies, depth + 1);
@@ -420,7 +422,7 @@ void bounce_unit_cascade(SimulationEngineImpl& impl,
     // Check hazard on chosen tile:
     if (impl.grid_.in_bounds(chosen)) {
         const auto& land_cell = impl.grid_.get_cell(static_cast<uint32_t>(chosen.x), static_cast<uint32_t>(chosen.y));
-        if (land_cell.terrain_type == TERRAIN_WATER && !land_cell.has_completed_bridge()) {
+        if (land_cell.terrain_type == TERRAIN_WATER && !land_cell.has_any_bridge()) {
             if (unit.type == AntType::Swimmer) {
                 unit.state = UnitState::Swimming;
                 unit.in_water = true;
@@ -675,11 +677,11 @@ void SimulationEngine::tick() {
                     impl_->grid_.clear_firewall(x, y);
                     impl_->audio_queue_.push_back(AudioEvent{SoundID::FireBurnout, static_cast<int32_t>(x * 32 + 16), static_cast<int32_t>(y * 32 + 16), 1, 255});
                 }
-            } else if (cell.has_completed_bridge() && cell.timer_ticks > 0) {
+            } else if (cell.has_any_bridge() && cell.timer_ticks > 0) {
                 cell.timer_ticks--;
                 if (cell.timer_ticks == 0) {
                     impl_->grid_.collapse_bridge(x, y);
-                    // Occupancy Drowning Scan
+                    // Occupancy Drowning Scan when bridge collapses to water (Ants.exe 0x0100f8bf)
                     for (auto& ant_ptr : impl_->ants_) {
                         if (ant_ptr && ant_ptr->is_alive() && !ant_ptr->underground) {
                             int32_t atx = (ant_ptr->pixel_x + 16) / 32;
@@ -739,7 +741,7 @@ void SimulationEngine::tick() {
         if (!ant_ptr || !ant_ptr->is_alive() || ant_ptr->underground) continue;
         if (impl_->grid_.in_bounds(ant_ptr->pos)) {
             const auto& cell = impl_->grid_.get_cell(ant_ptr->pos);
-            if (cell.terrain_type == TERRAIN_WATER && !cell.has_completed_bridge()) {
+            if (cell.terrain_type == TERRAIN_WATER && !cell.has_any_bridge()) {
                 if (ant_ptr->type == AntType::Swimmer) {
                     ant_ptr->in_water = true;
                     if (ant_ptr->state == UnitState::Idle) {
@@ -871,10 +873,10 @@ void SimulationEngine::tick() {
         if (impl_->grid_.in_bounds(ant_ptr->pos)) {
             const auto& cell = impl_->grid_.get_cell(ant_ptr->pos);
             surf = cell.surface_type;
-            if (cell.has_completed_bridge()) {
+            if (cell.has_any_bridge()) {
                 surf = SurfaceType::Mud; // Walking speed across bridges matches mud tiles (~0.65x)
             }
-            in_water = (cell.terrain_type == TERRAIN_WATER && !cell.has_completed_bridge());
+            in_water = (cell.terrain_type == TERRAIN_WATER && !cell.has_any_bridge());
             ant_ptr->on_powerup = cell.has_powerup();
             if (!ant_ptr->on_powerup && ant_ptr->transformation_interrupted) {
                 ant_ptr->transformation_interrupted = false;
@@ -1569,7 +1571,7 @@ void SimulationEngine::tick() {
             impl_->audio_queue_.push_back(AudioEvent{sound_id, ant_ptr->pixel_x, ant_ptr->pixel_y, 1, 255});
             impl_->grid_.regress_bridge(static_cast<uint32_t>(target.x), static_cast<uint32_t>(target.y));
             const auto& target_cell = impl_->grid_.get_cell(target);
-            if (!target_cell.has_completed_bridge() && target_cell.terrain_type == TERRAIN_WATER) {
+            if (!target_cell.has_any_bridge() && target_cell.terrain_type == TERRAIN_WATER) {
                 for (auto& victim : impl_->ants_) {
                     if (victim && victim->is_alive() && !victim->underground) {
                         int32_t vtx = (victim->pixel_x + 16) / 32;
@@ -1822,7 +1824,10 @@ void SimulationEngine::tick() {
             int32_t inc_dx = (b_dx > 0) ? 1 : ((b_dx < 0) ? -1 : 0);
             int32_t inc_dy = (b_dy > 0) ? 1 : ((b_dy < 0) ? -1 : 0);
             ant_ptr->push_ticks_total = 0; // Trigger once upon landing
-            impl_->audio_queue_.push_back(AudioEvent{SoundID::FlingThumpB, ant_ptr->pixel_x, ant_ptr->pixel_y, 1, 255});
+            if (!ant_ptr->is_friendly_bump) {
+                impl_->audio_queue_.push_back(AudioEvent{SoundID::FlingThumpB, ant_ptr->pixel_x, ant_ptr->pixel_y, 1, 255});
+            }
+            ant_ptr->is_friendly_bump = false;
             if (impl_->grid_.in_bounds(ant_ptr->pos)) {
                 const auto& cell = impl_->grid_.get_cell(static_cast<uint32_t>(ant_ptr->pos.x), static_cast<uint32_t>(ant_ptr->pos.y));
                 // Water landing: Swimmer survives & swims, others drown
@@ -2388,7 +2393,11 @@ void SimulationEngine::tick() {
 
 void SimulationEngine::issue_order(const AntOrder& order) {
     AntUnit* unit = impl_->find_unit(order.ant_id);
-    if (!unit || !unit->is_alive() || unit->is_stunned()) return;
+    if (!unit || !unit->is_alive() || unit->state == UnitState::Knockback) return;
+    if (unit->state == UnitState::Stunned || unit->stun_ticks_remaining > 0) {
+        unit->stun_ticks_remaining = 0;
+        unit->state = UnitState::Idle;
+    }
 
     // Active action states (placing fire, planting bomb, building bridge, extinguishing, defusing, transforming)
     // strictly and silently disallow all incoming orders (Ants.exe 0x101ff5a / Ants.exe.c line 22938 -> LAB_0101fef5).
@@ -2981,7 +2990,7 @@ uint32_t SimulationEngine::spawn_unit(uint8_t player_id, AntType type, TileCoord
     AntUnit* unit_ptr = unit.get();
     if (impl_->grid_.in_bounds(pos)) {
         const auto& cell = impl_->grid_.get_cell(pos);
-        if (cell.terrain_type == TERRAIN_WATER && !cell.has_completed_bridge()) {
+        if (cell.terrain_type == TERRAIN_WATER && !cell.has_any_bridge()) {
             unit_ptr->in_water = true;
             unit_ptr->was_in_water = true;
             if (type == AntType::Swimmer) {
@@ -3129,7 +3138,8 @@ void SimulationEngine::execute_melee_attack(uint32_t attacker_id, uint32_t targe
             int32_t from_px = attacker->pixel_x;
             int32_t from_py = attacker->pixel_y;
             impl_->physics_.apply_knockback(*target, from_px, from_py, land_dist, land_dist,
-                                            DamageSource::CombatPunch, impl_->audio_queue_, impl_->prng_.rand());
+                                            DamageSource::CombatPunch, impl_->audio_queue_, impl_->prng_.rand(),
+                                            &impl_->grid_);
             target->pos = land_pos;
             target->stun_ticks_remaining = AntUnit::STUN_TICKS;
             target->state = UnitState::Knockback;
@@ -3268,7 +3278,7 @@ void SimulationEngine::execute_melee_attack(uint32_t attacker_id, uint32_t targe
 
             // Terrain check at target position:
             const auto& land_cell = impl_->grid_.get_cell(static_cast<uint32_t>(target->pos.x), static_cast<uint32_t>(target->pos.y));
-            bool in_water = (land_cell.terrain_type == TERRAIN_WATER && !land_cell.has_completed_bridge());
+            bool in_water = (land_cell.terrain_type == TERRAIN_WATER && !land_cell.has_any_bridge());
 
             if (in_water) {
                 if (target->type != AntType::Swimmer) {
@@ -4271,7 +4281,8 @@ void SimulationEngine::apply_knockback(uint32_t ant_id, int32_t from_px, int32_t
     AntUnit* u = impl_->find_unit(ant_id);
     if (!u) return;
     impl_->physics_.apply_knockback(*u, from_px, from_py, min_tiles, max_tiles,
-                                    DamageSource::CombatPunch, impl_->audio_queue_, impl_->prng_.rand());
+                                    DamageSource::CombatPunch, impl_->audio_queue_, impl_->prng_.rand(),
+                                    &impl_->grid_);
 }
 
 void SimulationEngine::resolve_fire_contact(uint32_t ant_id, int32_t incoming_dx, int32_t incoming_dy) {

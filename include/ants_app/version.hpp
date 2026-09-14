@@ -6,9 +6,9 @@ namespace ants {
 
 // Central application version string and semantic version components.
 // Starts at v0.0.1 for pre-release and is continuously incremented.
-inline constexpr std::string_view VERSION_STRING = "v0.0.18";
+inline constexpr std::string_view VERSION_STRING = "v0.0.19";
 inline constexpr int VERSION_MAJOR = 0;
 inline constexpr int VERSION_MINOR = 0;
-inline constexpr int VERSION_PATCH = 18;
+inline constexpr int VERSION_PATCH = 19;
 
 } // namespace ants
