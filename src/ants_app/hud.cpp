@@ -675,6 +675,10 @@ void HUD::render_radar(IRenderer& renderer, const assets::AssetArchive&,
                 assets::ColorRGBA col{155, 115, 108, 255}; // Walkable ground (authentic dirt tan)
                 if (world.fog_of_war_enabled && !world.is_tile_revealed(static_cast<int32_t>(tx), static_cast<int32_t>(ty))) {
                     col = {20, 20, 25, 255}; // Shrouded unrevealed fog tile
+                } else if (cell.base_owner_team < 4) {
+                    col = TEAM_COLORS[cell.base_owner_team]; // Base mound footprint in team color
+                } else if (cell.has_powerup() || cell.is_powerup) {
+                    col = {231, 147, 11, 255}; // Powerup: Amber dot (palette index 171)
                 } else if (cell.is_food) {
                     col = {226, 147, 27, 255}; // Food morsel: Golden orange matching reference
                 } else if (cell.terrain_type == sim::TERRAIN_WATER) {
@@ -697,12 +701,36 @@ void HUD::render_radar(IRenderer& renderer, const assets::AssetArchive&,
             !world.is_tile_revealed(base.x, base.y)) {
             continue; // Shrouded enemy base not revealed on radar
         }
-        int32_t bx = rx + static_cast<int32_t>(base.x * scale_x);
-        int32_t by = ry + static_cast<int32_t>(base.y * scale_y);
-        int32_t bw = std::max(4, static_cast<int32_t>(4.0f * scale_x));
-        int32_t bh = std::max(4, static_cast<int32_t>(4.0f * scale_y));
+        int32_t bx = rx + static_cast<int32_t>(static_cast<float>(base.x) * scale_x);
+        int32_t by = ry + static_cast<int32_t>(static_cast<float>(base.y) * scale_y);
+        int32_t bx2 = rx + static_cast<int32_t>(static_cast<float>(base.x + 4) * scale_x);
+        int32_t by2 = ry + static_cast<int32_t>(static_cast<float>(base.y + 4) * scale_y);
+        int32_t bw = std::max(4, bx2 - bx);
+        int32_t bh = std::max(4, by2 - by);
         assets::ColorRGBA c = (base.team_id < 4) ? TEAM_COLORS[base.team_id] : assets::ColorRGBA{200, 200, 200, 255};
         renderer.fill_rect(bx, by, bw, bh, c);
+    }
+
+    // Powerup indicator dots (palette index 171: {231, 147, 11, 255})
+    for (uint32_t ty = 0; ty < world.height; ++ty) {
+        for (uint32_t tx = 0; tx < world.width; ++tx) {
+            const auto& cell = world.cells[ty * world.width + tx];
+            if (cell.has_powerup() || cell.is_powerup) {
+                if (world.fog_of_war_enabled && !world.is_tile_revealed(static_cast<int32_t>(tx), static_cast<int32_t>(ty))) continue;
+                int32_t px = rx + static_cast<int32_t>(static_cast<float>(tx) * scale_x);
+                int32_t py = ry + static_cast<int32_t>(static_cast<float>(ty) * scale_y);
+                renderer.fill_rect(px, py, 2, 2, {231, 147, 11, 255});
+            }
+        }
+    }
+    for (const auto& fd : world.flower_droppers) {
+        if (!fd.is_dropping) continue;
+        int32_t f_tx = fd.drop_x / 32;
+        int32_t f_ty = fd.drop_y / 32;
+        if (world.fog_of_war_enabled && !world.is_tile_revealed(f_tx, f_ty)) continue;
+        int32_t fx = rx + static_cast<int32_t>(static_cast<float>(f_tx) * scale_x);
+        int32_t fy = ry + static_cast<int32_t>(static_cast<float>(f_ty) * scale_y);
+        renderer.fill_rect(fx, fy, 2, 2, {231, 147, 11, 255});
     }
 
     // Active live ants
@@ -1307,7 +1335,7 @@ void HUD::select_ants_in_rect(int32_t x1, int32_t y1, int32_t x2, int32_t y2, co
             }
         }
     }
-    is_multi_select_mode_ = true;
+    is_multi_select_mode_ = additive || (selected_ant_ids_.size() > 1);
     if (!selected_ant_ids_.empty()) {
         selected_ant_id_ = selected_ant_ids_.front();
         for (const auto& ant : world.ants) {
@@ -1374,22 +1402,22 @@ bool HUD::handle_mouse_down(int32_t x, int32_t y, uint8_t button,
                 play_sfx(sim::SoundID::NavButtonClick);
                 return true;
             }
-            // Sound FX slider (x 188..422, y 174..198)
-            if (x >= 188 && x <= 422 && y >= 174 && y <= 198) {
+            // Sound FX slider (x 180..430, y 170..205)
+            if (x >= 180 && x <= 430 && y >= 170 && y <= 205) {
                 active_slider_dragging_ = 0;
                 sfx_volume_ = std::clamp(static_cast<float>(x - 188) / 185.0f, 0.0f, 1.0f);
                 if (on_sfx_volume_) on_sfx_volume_(sfx_volume_);
                 return true;
             }
-            // Music slider (x 188..422, y 211..235)
-            if (x >= 188 && x <= 422 && y >= 211 && y <= 235) {
+            // Music slider (x 180..430, y 207..242)
+            if (x >= 180 && x <= 430 && y >= 207 && y <= 242) {
                 active_slider_dragging_ = 1;
                 music_volume_ = std::clamp(static_cast<float>(x - 188) / 185.0f, 0.0f, 1.0f);
                 if (on_music_volume_) on_music_volume_(music_volume_);
                 return true;
             }
-            // Scroll rate slider (x 188..422, y 248..272)
-            if (x >= 188 && x <= 422 && y >= 248 && y <= 272) {
+            // Scroll rate slider (x 180..430, y 244..285)
+            if (x >= 180 && x <= 430 && y >= 244 && y <= 285) {
                 active_slider_dragging_ = 2;
                 scroll_rate_ = std::clamp(static_cast<float>(x - 188) / 185.0f, 0.0f, 1.0f);
                 if (on_scroll_rate_) on_scroll_rate_(scroll_rate_);

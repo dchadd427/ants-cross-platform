@@ -195,6 +195,7 @@ public:
     bool        is_in_scuffle{false};
     uint16_t    scuffle_ticks{0};
     bool        post_bounce_stun{false};
+    bool        is_friendly_bump{false};
 
     std::vector<TileCoord> waypoints;
     size_t      current_waypoint_idx{0};
@@ -239,6 +240,10 @@ public:
     }
     bool is_invulnerable() const noexcept {
         return invulnerable_ticks > 0;
+    }
+    bool is_orderable() const noexcept {
+        return is_alive() && state != UnitState::Knockback && state != UnitState::Drowning &&
+               state != UnitState::EnteringBase && state != UnitState::Infiltrating && !is_transforming();
     }
 
     void heal_full() noexcept {

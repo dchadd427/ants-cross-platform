@@ -203,7 +203,7 @@ std::vector<TileCoord> PathFinder::find_path(
                 step_cost = (step_cost * 7) / 10; // Slate is fastest (~1.4x speed)
             } else if (n_cell.surface_type == SurfaceType::Gravel) {
                 step_cost = (step_cost * 8) / 10; // Gravel is fast (~1.2x speed)
-            } else if (n_cell.surface_type == SurfaceType::Mud || n_cell.is_mud || n_cell.has_completed_bridge()) {
+            } else if (n_cell.surface_type == SurfaceType::Mud || n_cell.is_mud || n_cell.has_any_bridge()) {
                 step_cost = (step_cost * 15) / 10; // Mud and bridges are slow (~0.65x speed)
             }
             int32_t tentative_g = current.g + step_cost;

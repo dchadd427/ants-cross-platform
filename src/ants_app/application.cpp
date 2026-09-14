@@ -198,9 +198,13 @@ bool Application::init(const ApplicationConfig& config) {
         midi_player_.set_volume(v);
     });
 
+    if (renderer_) {
+        renderer_->camera().scroll_speed = 240.0f + hud_.get_scroll_rate() * 480.0f;
+    }
+
     hud_.set_on_scroll_rate([this](float r) {
         if (renderer_) {
-            renderer_->camera().scroll_speed = 120.0f + r * 240.0f;
+            renderer_->camera().scroll_speed = 240.0f + r * 480.0f;
         }
     });
 
@@ -353,6 +357,7 @@ bool Application::start_game(const std::string& map_path) {
                                           spawn.y * TILE_SIZE + 2 * TILE_SIZE,
                                           current_level_.width, current_level_.height);
         }
+        renderer_->camera().scroll_speed = 240.0f + hud_.get_scroll_rate() * 480.0f;
     }
 
     // 5. Reset HUD & Scorecard

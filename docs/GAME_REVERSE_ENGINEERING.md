@@ -1995,3 +1995,29 @@ To deliver authentic 1:1 gameplay inside standard web browsers with zero install
     - Slot 1: `(bx - 1, by + 1)`
     - Slot 2: `(bx - 1, by + 2)`
     - Slot 3: `(bx - 1, by + 3)`
+- **Bomb Knockback 5-Direction Deflection & 5-Tile Flight Geometry (`FUN_0101d8ed` / `FUN_0101d9f7`)**:
+  - Distance geometry: `FUN_0101d9f7(ant_tile, d, 4)` adds 4 tiles to the ant's tile along direction `d`. Because the ant is 1 tile away from the detonating bomb, this results in a landing tile exactly 5 tiles from the bomb (counting the bomb itself).
+  - Authentic deflection: Table 4 `aggb301` has intrinsic displacement `[12 subitems, dx = -128px]`. Knockback trajectory always tests distance 5 from the bomb (4 tiles from the ant, 128px flight). Trajectory never shortens or wraps 180° through the bomb; it checks 5 candidate deflection angles `[primary, +45°, -45°, +90°, -90°]`. If all 5 directions are blocked by obstacles/food/map edges, the ant remains on its current tile in a dazed/stunned state without warping or shortening.
+  - Landing recovery: Landing from knockback enters `UnitState::Stunned` playing `*sd301` (orbiting stars + dazed wobble), accompanied by Sound 65 (`flythumpb.wav`) and Sound 70 (`stun.wav`).
+  - Stun cancellation: Per `FUN_01021494`, stunned ants are orderable; issuing a command cancels the daze immediately and begins walking.
+- **Ant Collision Bumping vs Knockback Parity (`Ants.exe 0x102184e`)**:
+  - Ant-to-ant collision triggers Action 11 (`0xb`), which plays Animation 220 (`bump`).
+  - Animation 220 contains sprite 155 (`empty.bmp`, 0×0) and Sound 47 (`bump.wav`).
+  - Ants do not play `*gb*` (tumble flight) or `*gh*` (recoil flinch); they remain upright in their normal walk/idle sprite, step back to their prior tile, and call `FUN_010214d9` to recalculate their path.
+  - Friendly collision cascades play Sound 47 (`bump.wav`) only and strictly do not play `FlingThumpB` (Sound 65).
+- **Bridge Demolition & Expiration Drowning Mechanics**:
+  - Non-swimming ants survive on bridges during demolition shovel hits across all intermediate decay stages (4 -> 3 -> 2 -> 1).
+  - Non-swimmers only drown when the bridge tile completely collapses to `TILE_EMPTY` (`!has_any_bridge()`).
+  - Upon full 180s timer expiration, the bridge collapses directly to water per `FUN_0100f8bf`, triggering catastrophic drowning for non-swimming occupants.
+- **Anthill Hole Base Entry Alignment**:
+  - Base entry animation `*en301` is anchored at `(hill_tx * 32 + 44, hill_ty * 32 + hill_offset_dy[t % 4] + hill_hole_local_y[t % 4])` with `hill_hole_local_y[4] = { 48, 39, 44, 50 }`, perfectly aligning the ant sprite entering the hole.
+- **Options Menu Map Scroll Speed Calibration**:
+  - Slider track thumb center travel spans 212..397 (185px). Rate is calculated as `std::clamp((static_cast<float>(x) - 212.0f) / 185.0f, 0.0f, 1.0f)`.
+  - Camera scroll speed is synchronized on application init and map start via `240.0f + hud_.get_scroll_rate() * 480.0f`.
+  - Panning remains strictly mouse-driven with zero keyboard WASD/arrow panning.
+- **Minimap Powerup & Base Marker Fidelity**:
+  - Powerup morsels and flower droppers are rendered as amber dots (palette index 171 `{231, 147, 11, 255}`).
+  - Terrain tiles belonging to base mounds are rendered in team color, preventing dark green boundary artifacts.
+- **Single-Bomber Marquee Selection Mode**:
+  - Dragging a selection marquee around 1 bomber without Shift maintains single-unit ability mode (Pedestal 2 active, right-click plants bombs). Multi-unit or Shift-marquee enters group move-only mode.
+
