@@ -9,21 +9,20 @@ namespace ants::sim {
 
 class Grid;
 class MatchStatsManager;
+class SimulationEngine;
 struct AudioEvent;
 
 enum class CombatGuardState : uint8_t {
     Idle         = 0, // Guarding anchor post; scanning 3-tile Chebyshev radius
     Intercepting = 1, // Autonomously pathfinding towards detected intruder
-    Striking     = 2, // Melee contact reached; delivering heavy punch
-    Returning    = 3  // Disengaged; pathfinding back to guard_anchor
+    Returning    = 2  // Disengaged or attack completed; pathfinding back to guard_anchor
 };
 
 class CombatAIController {
 public:
     static constexpr int32_t AGGRO_RADIUS_CHEBYSHEV   = 3; // 7x7 square scan perimeter
     static constexpr int32_t PURSUIT_DISENGAGE_RADIUS = 5;
-    static constexpr uint16_t ATTACK_ANIM_TICKS       = 6;
-    static constexpr uint16_t STRIKE_IMPACT_FRAME     = 2;
+    static constexpr uint16_t ATTACK_ANIM_TICKS       = 11; // Authentic Combat Ant heavy punch duration
 
     explicit CombatAIController(AntUnit& owner);
 
@@ -35,7 +34,8 @@ public:
     void commit_guard_anchor() noexcept;
     void set_guard_anchor(int32_t tx, int32_t ty) noexcept;
 
-    void update(const std::vector<AntUnit*>& all_units,
+    void update(SimulationEngine& engine,
+                const std::vector<AntUnit*>& all_units,
                 const Grid& grid,
                 const MatchStatsManager& stats,
                 std::vector<AudioEvent>& audio_out,
@@ -48,24 +48,26 @@ public:
     void on_user_command_issued() noexcept;
 
 private:
-    void update_guard_idle(const std::vector<AntUnit*>& all_units,
+    void update_guard_idle(SimulationEngine& engine,
+                           const std::vector<AntUnit*>& all_units,
                            const Grid& grid,
                            const MatchStatsManager& stats,
                            std::vector<AudioEvent>& audio_out,
                            uint32_t random_seed);
 
-    void update_intercepting(const std::vector<AntUnit*>& all_units,
+    void update_intercepting(SimulationEngine& engine,
+                             const std::vector<AntUnit*>& all_units,
                              const Grid& grid,
                              const MatchStatsManager& stats,
                              std::vector<AudioEvent>& audio_out,
                              uint32_t random_seed);
 
-    void update_striking(const std::vector<AntUnit*>& all_units,
-                         const Grid& grid,
-                         std::vector<AudioEvent>& audio_out,
-                         uint32_t random_seed);
-
-    void update_returning(const Grid& grid);
+    void update_returning(SimulationEngine& engine,
+                          const std::vector<AntUnit*>& all_units,
+                          const Grid& grid,
+                          const MatchStatsManager& stats,
+                          std::vector<AudioEvent>& audio_out,
+                          uint32_t random_seed);
 
     AntUnit* find_best_target(const std::vector<AntUnit*>& all_units,
                               const MatchStatsManager& stats) const;
@@ -78,7 +80,7 @@ private:
     int32_t                 anchor_ty_{0};
 
     std::optional<uint32_t> target_unit_id_{std::nullopt};
-    uint16_t                strike_timer_{0};
+    bool                    user_moving_{false};
 };
 
 } // namespace ants::sim

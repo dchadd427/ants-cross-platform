@@ -57,35 +57,44 @@ void PhysicsEngine::apply_knockback(AntUnit& victim,
         initial_dir = static_cast<uint32_t>(ants::assets::vector_to_direction(dir_x, dir_y)) % 8;
     }
 
-    // Authentic 1998 5-direction sequence (Ants.exe FUN_0101d8ed):
-    // 1. Primary vector away from bomb
+    // Outward deflection sequence around the blast/impact origin:
+    // 1. Primary vector away from source
     // 2. +45° adjacent
     // 3. -45° adjacent
     // 4. +90° perpendicular
     // 5. -90° perpendicular
-    // Strictly evaluates forward/perpendicular angles; NEVER wraps 180° through the bomb!
-    uint32_t cand_dirs[5] = {
+    // 6. +135° angle
+    // 7. -135° angle
+    // 8. 180° opposite (if all forward/perpendicular vectors obstructed)
+    uint32_t cand_dirs[8] = {
         initial_dir,
         (initial_dir + 1) % 8,
         (initial_dir + 7) % 8,
         (initial_dir + 2) % 8,
-        (initial_dir + 6) % 8
+        (initial_dir + 6) % 8,
+        (initial_dir + 3) % 8,
+        (initial_dir + 5) % 8,
+        (initial_dir + 4) % 8
     };
 
     int32_t ant_tx = (victim.pixel_x >= 0) ? (victim.pixel_x / 32) : ((victim.pixel_x - 31) / 32);
     int32_t ant_ty = (victim.pixel_y >= 0) ? (victim.pixel_y / 32) : ((victim.pixel_y - 31) / 32);
 
+    int32_t origin_tx = (source == DamageSource::BombBlast) ?
+        ((from_px >= 0) ? (from_px / 32) : ((from_px - 31) / 32)) : ant_tx;
+    int32_t origin_ty = (source == DamageSource::BombBlast) ?
+        ((from_py >= 0) ? (from_py / 32) : ((from_py - 31) / 32)) : ant_ty;
+
     bool dest_found = false;
     uint32_t chosen_dir = initial_dir;
-    int32_t chosen_tx = ant_tx;
-    int32_t chosen_ty = ant_ty;
+    int32_t chosen_tx = origin_tx;
+    int32_t chosen_ty = origin_ty;
+    int32_t dist_tiles = (source == DamageSource::BombBlast) ? 4 : std::max(1, max_tiles);
 
     if (grid != nullptr) {
         for (uint32_t d : cand_dirs) {
-            // In 1998 Ants.exe (FUN_0101d8ed & FUN_0101d9f7), flight projects 4 tiles from the ant,
-            // which is exactly 5 tiles from the bomb counting the bomb itself!
-            int32_t cand_tx = ant_tx + DIR_DX[d] * 4;
-            int32_t cand_ty = ant_ty + DIR_DY[d] * 4;
+            int32_t cand_tx = origin_tx + DIR_DX[d] * dist_tiles;
+            int32_t cand_ty = origin_ty + DIR_DY[d] * dist_tiles;
 
             if (!grid->in_bounds(cand_tx, cand_ty)) continue;
             const auto& cell = grid->get_cell(static_cast<uint32_t>(cand_tx), static_cast<uint32_t>(cand_ty));
@@ -101,32 +110,38 @@ void PhysicsEngine::apply_knockback(AntUnit& victim,
         }
     } else {
         chosen_dir = initial_dir;
-        chosen_tx = ant_tx + DIR_DX[initial_dir] * 4;
-        chosen_ty = ant_ty + DIR_DY[initial_dir] * 4;
+        chosen_tx = origin_tx + DIR_DX[initial_dir] * dist_tiles;
+        chosen_ty = origin_ty + DIR_DY[initial_dir] * dist_tiles;
         dest_found = true;
     }
 
     if (dest_found) {
-        flight.start_px = victim.pixel_x;
-        flight.start_py = victim.pixel_y;
+        flight.start_px = origin_tx * 32 + 16;
+        flight.start_py = origin_ty * 32 + 16;
         flight.target_px = chosen_tx * 32 + 16;
         flight.target_py = chosen_ty * 32 + 16;
-        flight.total_distance_px = 128; // Always full 4 tiles (128px) from ant = 5 tiles counting bomb
+        flight.total_distance_px = dist_tiles * 32;
         flight.flight_dir = static_cast<Direction>(chosen_dir);
         flight.destination_resolved = true;
         flight.total_ticks = 10;
         flight.apex_height_px = 36;
+        if (source == DamageSource::BombBlast) {
+            victim.facing = static_cast<Direction>(chosen_dir);
+        }
     } else {
-        // All 5 directions are blocked: the ant cannot fly, safely anchors in place on its tile in dazed state
-        flight.start_px = victim.pixel_x;
-        flight.start_py = victim.pixel_y;
-        flight.target_px = victim.pixel_x;
-        flight.target_py = victim.pixel_y;
+        // All directions blocked: ant remains anchored in place in dazed state
+        flight.start_px = origin_tx * 32 + 16;
+        flight.start_py = origin_ty * 32 + 16;
+        flight.target_px = origin_tx * 32 + 16;
+        flight.target_py = origin_ty * 32 + 16;
         flight.total_distance_px = 0;
         flight.flight_dir = static_cast<Direction>(initial_dir);
         flight.destination_resolved = true;
         flight.total_ticks = 1;
         flight.apex_height_px = 0;
+        if (source == DamageSource::BombBlast) {
+            victim.facing = static_cast<Direction>(initial_dir);
+        }
     }
 
     victim.state = UnitState::Knockback;

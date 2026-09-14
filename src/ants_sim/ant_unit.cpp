@@ -126,7 +126,8 @@ void AntUnit::tick_movement(bool is_swimming, SurfaceType surface) {
         }
     }
 
-    if (state != UnitState::Walking || waypoints.empty()) {
+    bool is_moving_state = (state == UnitState::Walking || state == UnitState::Intercepting || state == UnitState::ReturningToPost);
+    if (!is_moving_state || waypoints.empty()) {
         if (type == AntType::Swimmer && is_swimming && state == UnitState::Idle) {
             state = UnitState::Swimming;
             was_in_water = true;
@@ -138,6 +139,9 @@ void AntUnit::tick_movement(bool is_swimming, SurfaceType surface) {
         if (type == AntType::Swimmer && is_swimming) {
             state = UnitState::Swimming;
         } else {
+            if (type == AntType::Combat && state == UnitState::Walking) {
+                guard_anchor = pos;
+            }
             state = (type == AntType::Combat) ? UnitState::GuardIdle : UnitState::Idle;
         }
         waypoints.clear();
@@ -170,6 +174,9 @@ void AntUnit::tick_movement(bool is_swimming, SurfaceType surface) {
             if (type == AntType::Swimmer && is_swimming) {
                 state = UnitState::Swimming;
             } else {
+                if (type == AntType::Combat && state == UnitState::Walking) {
+                    guard_anchor = pos;
+                }
                 state = (type == AntType::Combat) ? UnitState::GuardIdle : UnitState::Idle;
             }
             waypoints.clear();

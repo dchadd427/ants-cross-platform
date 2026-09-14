@@ -326,6 +326,8 @@ public:
     void start_stun(uint16_t ticks = STUN_TICKS) noexcept {
         state = UnitState::Stunned;
         stun_ticks_remaining = ticks;
+        anim_tick = 0;
+        anim_subitem = 0;
     }
 
     void start_drowning() noexcept {

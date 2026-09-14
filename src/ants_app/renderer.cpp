@@ -732,8 +732,10 @@ void Renderer::render_world(const ants::sim::WorldState& world,
                             bool show_tile_grid,
                             int32_t mouse_x,
                             int32_t mouse_y,
-                            int32_t selected_base_team_id) {
+                            int32_t selected_base_team_id,
+                            float sub_tick_time) {
     if (!renderer_) return;
+    sub_tick_ms_ = static_cast<uint32_t>(std::clamp(sub_tick_time, 0.0f, 0.0499f) * 1000.0f);
     render_queue_.clear();
 
     // 1. Clip exclusively to playfield
@@ -1587,7 +1589,7 @@ void Renderer::draw_single_ant(const ants::sim::AntSnapshot& ant, bool is_select
     if (action == "gf" || action == "gb" || action == "gh" || action == "bu" || action == "dr" ||
         action == "sb" || action == "db" || action == "sf" || action == "xf" ||
         action == "bbl" || action == "bbw" || action == "dbl" || action == "dbw" ||
-        action == "di" || action == "go" || action == "sd") {
+        action == "di" || action == "go") {
         prefix = normal_prefixes[static_cast<size_t>(ant.type) % 6];
     }
 
@@ -1650,8 +1652,9 @@ void Renderer::draw_single_ant(const ants::sim::AntSnapshot& ant, bool is_select
                     sub_idx = seq->subitems.size() - 1;
                 }
             } else if (action == "sd") {
-                // Stunned dizzy stars loop smoothly across sequence subitems
-                sub_idx = ant.anim_frame % seq->subitems.size();
+                // Stunned dizzy stars (Table 4 duration: 125ms Worker, 105ms Bomber, 100ms others)
+                uint32_t elapsed_ms = static_cast<uint32_t>(ant.anim_frame) * 50u + sub_tick_ms_;
+                sub_idx = get_anim_subitem_by_time(*seq, elapsed_ms);
             } else if (action == "gh") {
                 // Flinch reaction lasts 14 ticks (700ms); map across the 9 sequence frames
                 sub_idx = (ant.anim_frame * seq->subitems.size()) / 14;

@@ -223,7 +223,8 @@ public:
                       bool show_tile_grid = false,
                       int32_t mouse_x = -1,
                       int32_t mouse_y = -1,
-                      int32_t selected_base_team_id = -1);
+                      int32_t selected_base_team_id = -1,
+                      float sub_tick_time = 0.0f);
     void end_frame();
 
     // IRenderer Implementation
@@ -326,6 +327,7 @@ private:
     bool is_fullscreen_{false};
     CursorType current_cursor_{CursorType::Normal};
     std::vector<TransientEffect> transient_effects_{};
+    uint32_t sub_tick_ms_{0};
 };
 
 } // namespace ants::app

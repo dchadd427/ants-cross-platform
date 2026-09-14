@@ -714,8 +714,15 @@ void SimulationEngine::tick() {
         if (ant_ptr->state == UnitState::Knockback) continue;
         if ((ant_ptr->state == UnitState::Burn || ant_ptr->state == UnitState::Bounce || ant_ptr->state == UnitState::Flinch) &&
             ant_ptr->push_tick_current < ant_ptr->push_ticks_total) continue;
-        if (impl_->grid_.has_bomb_at(ant_ptr->pos)) {
-            const auto& cell = impl_->grid_.get_cell(ant_ptr->pos);
+        TileCoord bomb_tile = ant_ptr->pos;
+        int32_t ox = (ant_ptr->pixel_x >= 0) ? (ant_ptr->pixel_x / 32) : ((ant_ptr->pixel_x - 31) / 32);
+        int32_t oy = (ant_ptr->pixel_y >= 0) ? (ant_ptr->pixel_y / 32) : ((ant_ptr->pixel_y - 31) / 32);
+        TileCoord pix_tile{ox, oy};
+        if (!impl_->grid_.has_bomb_at(bomb_tile) && impl_->grid_.has_bomb_at(pix_tile)) {
+            bomb_tile = pix_tile;
+        }
+        if (impl_->grid_.has_bomb_at(bomb_tile)) {
+            const auto& cell = impl_->grid_.get_cell(bomb_tile);
             uint8_t bomb_owner = cell.interactive_owner;
             bool is_friendly = (bomb_owner == ant_ptr->player_id ||
                                 impl_->stats_.are_allies(bomb_owner, ant_ptr->player_id));
@@ -730,8 +737,14 @@ void SimulationEngine::tick() {
                         inc_dx = (pdx > 0) ? 1 : ((pdx < 0) ? -1 : 0);
                         inc_dy = (pdy > 0) ? 1 : ((pdy < 0) ? -1 : 0);
                     }
+                } else if (ant_ptr->state == UnitState::Walking && !ant_ptr->waypoints.empty()) {
+                    int32_t f = static_cast<int32_t>(ant_ptr->facing) & 7;
+                    static constexpr int32_t K_DIR_DX[8] = { 0,  1, 1, 1, 0, -1, -1, -1 };
+                    static constexpr int32_t K_DIR_DY[8] = {-1, -1, 0, 1, 1,  1,  0, -1 };
+                    inc_dx = K_DIR_DX[f];
+                    inc_dy = K_DIR_DY[f];
                 }
-                trigger_bomb_detonation(ant_ptr->id, ant_ptr->pos, inc_dx, inc_dy);
+                trigger_bomb_detonation(ant_ptr->id, bomb_tile, inc_dx, inc_dy);
             }
         }
     }
@@ -768,7 +781,7 @@ void SimulationEngine::tick() {
         if (ant_ptr && ant_ptr->type == AntType::Combat && ant_ptr->is_alive()) {
             auto* ai = impl_->get_or_create_ai(*ant_ptr);
             if (ai) {
-                ai->update(ptrs, impl_->grid_, impl_->stats_, impl_->audio_queue_, impl_->prng_.rand());
+                ai->update(*this, ptrs, impl_->grid_, impl_->stats_, impl_->audio_queue_, impl_->prng_.rand());
             }
         }
     }
@@ -890,7 +903,10 @@ void SimulationEngine::tick() {
                 continue;
             }
         }
-        if (ant_ptr->state == UnitState::Walking && ant_ptr->current_waypoint_idx < ant_ptr->waypoints.size()) {
+        bool is_moving_unit = (ant_ptr->state == UnitState::Walking ||
+                               ant_ptr->state == UnitState::Intercepting ||
+                               ant_ptr->state == UnitState::ReturningToPost);
+        if (is_moving_unit && ant_ptr->current_waypoint_idx < ant_ptr->waypoints.size()) {
             TileCoord next_wp = ant_ptr->waypoints[ant_ptr->current_waypoint_idx];
             TileCoord goal = (ant_ptr->final_dest.x >= 0) ? ant_ptr->final_dest : ant_ptr->waypoints.back();
 
@@ -929,7 +945,11 @@ void SimulationEngine::tick() {
                             impl_->base_queues_[ant_ptr->player_id].active_depositing_ant_id == ant_ptr->id) {
                             send_ant_straight_into_base(ant_ptr->id);
                         } else {
+                            UnitState prev_st = ant_ptr->state;
                             issue_move_order(ant_ptr->id, goal, ant_ptr->allow_friendly_bomb, ant_ptr->is_food_order);
+                            if (prev_st == UnitState::Intercepting || prev_st == UnitState::ReturningToPost) {
+                                ant_ptr->state = prev_st;
+                            }
                         }
                         ant_ptr->blocked_ticks = 0;
                     }
@@ -1694,11 +1714,35 @@ void SimulationEngine::tick() {
             impl_->audio_queue_.push_back(AudioEvent{SoundID::BombPick, ant_ptr->pixel_x, ant_ptr->pixel_y, 1, 255});
         }
         if (ant_ptr->anim_tick >= 28) {
-            if (ant_ptr->ability_target.x >= 0 && impl_->grid_.in_bounds(ant_ptr->ability_target)) {
-                impl_->grid_.place_bomb(static_cast<uint32_t>(ant_ptr->ability_target.x),
-                                        static_cast<uint32_t>(ant_ptr->ability_target.y),
+            TileCoord bomb_target = ant_ptr->ability_target;
+            if (bomb_target.x >= 0 && impl_->grid_.in_bounds(bomb_target)) {
+                impl_->grid_.place_bomb(static_cast<uint32_t>(bomb_target.x),
+                                        static_cast<uint32_t>(bomb_target.y),
                                         ant_ptr->player_id);
                 impl_->stats_.get_player_stats_mut(ant_ptr->player_id).bombs_planted++;
+
+                // If another ant walked onto bomb_target during the 28-tick placement animation,
+                // detonate immediately upon placement completion:
+                for (auto& other_ant : impl_->ants_) {
+                    if (!other_ant || !other_ant->is_alive() || other_ant->id == ant_ptr->id) continue;
+                    if (other_ant->state == UnitState::Knockback || other_ant->underground) continue;
+                    int32_t ox = (other_ant->pixel_x >= 0) ? (other_ant->pixel_x / 32) : ((other_ant->pixel_x - 31) / 32);
+                    int32_t oy = (other_ant->pixel_y >= 0) ? (other_ant->pixel_y / 32) : ((other_ant->pixel_y - 31) / 32);
+                    if (other_ant->pos == bomb_target || (ox == bomb_target.x && oy == bomb_target.y)) {
+                        other_ant->set_tile_pos(bomb_target.x, bomb_target.y);
+                        int32_t inc_dx = 0;
+                        int32_t inc_dy = 0;
+                        if (other_ant->state == UnitState::Walking && !other_ant->waypoints.empty()) {
+                            int32_t f = static_cast<int32_t>(other_ant->facing) & 7;
+                            static constexpr int32_t K_DIR_DX[8] = { 0,  1, 1, 1, 0, -1, -1, -1 };
+                            static constexpr int32_t K_DIR_DY[8] = {-1, -1, 0, 1, 1,  1,  0, -1 };
+                            inc_dx = K_DIR_DX[f];
+                            inc_dy = K_DIR_DY[f];
+                        }
+                        trigger_bomb_detonation(other_ant->id, bomb_target, inc_dx, inc_dy);
+                        break;
+                    }
+                }
             }
             ant_ptr->state = UnitState::Idle;
             ant_ptr->anim_tick = 0;

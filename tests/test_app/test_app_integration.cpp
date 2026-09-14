@@ -6871,10 +6871,10 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
 
     TEST_CASE("12.108: Version Invariant & Fog of War Cursor Concealment Parity") {
         // 1. Verify semantic versioning components
-        ASSERT_EQ(ants::VERSION_STRING, "v0.0.19");
+        ASSERT_EQ(ants::VERSION_STRING, "v0.0.20");
         ASSERT_EQ(ants::VERSION_MAJOR, 0);
         ASSERT_EQ(ants::VERSION_MINOR, 0);
-        ASSERT_EQ(ants::VERSION_PATCH, 19);
+        ASSERT_EQ(ants::VERSION_PATCH, 20);
 
         // 2. Setup simulation world with Fog of War enabled
         SimulationEngine sim;
@@ -8918,6 +8918,130 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         ASSERT_EQ(abil_btn.y, 156);
         ASSERT_EQ(abil_btn.w, 55);
         ASSERT_EQ(abil_btn.h, 75);
+    } TEST_END();
+
+    // ------------------------------------------------------------------------
+    // 12.132 Authentic 1998 Parity Suite: Stun Pacing, Bomb Deflection Facing, Placement Detonation & Combat AI Punch/Knockback/Water Kill
+    // ------------------------------------------------------------------------
+    TEST_CASE("12.132 Authentic 1998 Parity: Stun Pacing, Bomb Deflection, Placement Detonation & Combat AI") {
+        SimulationEngine sim;
+        sim.init_test_world(60, 60, 42, 60000);
+
+        // 1. Bomb Placement Pre-Check & Mid-Animation Walk-On Detonation
+        uint32_t occupied_ant = sim.spawn_unit(1, AntType::Worker, TileCoord{12, 10});
+        uint32_t bomber1 = sim.spawn_unit(0, AntType::Bomber, TileCoord{11, 10});
+        // Bomber cannot initiate placement on a tile already occupied by an ant
+        ASSERT_FALSE(sim.plant_bomb(bomber1, TileCoord{12, 10}));
+
+        // Now initiate valid bomb placement on open tile (15, 15) with 28-tick animation (instant = false)
+        uint32_t bomber2 = sim.spawn_unit(0, AntType::Bomber, TileCoord{14, 15});
+        ASSERT_TRUE(sim.plant_bomb(bomber2, TileCoord{15, 15}, false));
+        ASSERT_EQ(sim.get_unit(bomber2).state, UnitState::PlantingBomb);
+
+        // Spawn walker traversing into (15, 15) while placement animation is in progress
+        uint32_t walker = sim.spawn_unit(1, AntType::Worker, TileCoord{15, 17});
+        sim.issue_move_order(walker, TileCoord{15, 15});
+
+        // Advance 28 ticks until bomb placement completes
+        for (int t = 0; t < 28; ++t) {
+            sim.tick();
+        }
+
+        // At tick 28, bomb is placed and walker on (15, 15) immediately detonates
+        const auto& w_ant = sim.get_unit(walker);
+        ASSERT_EQ(w_ant.hp, 8); // Took 2 HP bomb blast damage
+        ASSERT_EQ(w_ant.state, UnitState::Knockback);
+        ASSERT_TRUE(sim.has_audio_event(SoundID::BombDetonate));
+
+        // 2. Bomb Knockback Deflection Origin Parity and Facing Synchrony
+        bool tested_deflection = false;
+        for (uint32_t s = 1; s <= 20; ++s) {
+            sim.init_test_world(60, 60, s, 60000);
+            sim.grid_mut().place_bomb(20, 20, 0);
+            // Block North landing tile (20, 16) with an obstacle
+            sim.grid_mut().get_cell_mut(20, 16).terrain_type = ants::sim::TERRAIN_OBSTACLE;
+
+            // Ant at (20, 20) steps on bomb moving North
+            uint32_t bomb_victim = sim.spawn_unit(1, AntType::Worker, TileCoord{20, 20});
+            auto* bv_unit = const_cast<AntUnit*>(&sim.get_unit(bomb_victim));
+            bv_unit->facing = Direction::North;
+
+            // Trigger detonation
+            sim.trigger_bomb_detonation(bomb_victim, TileCoord{20, 20}, 0, -1);
+            const auto& bv_post = sim.get_unit(bomb_victim);
+            if (bv_post.state == UnitState::Knockback) {
+                tested_deflection = true;
+                // Deflected from North because (20, 16) is blocked; facing updated to match deflected direction
+                ASSERT_NE(bv_post.facing, Direction::North);
+                // Destination is 4 tiles from bomb
+                int32_t dist_from_bomb = std::max(std::abs(bv_post.pos.x - 20), std::abs(bv_post.pos.y - 20));
+                ASSERT_EQ(dist_from_bomb, 4);
+                ASSERT_NE(bv_post.pos, (TileCoord{20, 16})); // Blocked North was avoided
+                break;
+            }
+        }
+        ASSERT_TRUE(tested_deflection);
+
+        // 3. Table 4 Stun Animation Duration & Pacing
+        AssetArchive archive;
+        ASSERT_TRUE(archive.load_chd("Original-Ants/ants.chd"));
+        const auto* worker_sd = archive.find_animation("agsd301");
+        ASSERT_TRUE(worker_sd != nullptr);
+        ASSERT_EQ(worker_sd->subitems.size(), 25u);
+        ASSERT_EQ(worker_sd->subitems[0].val3, 125u); // Authentic 125ms per subitem (8 FPS)
+
+        const auto* bomber_sd = archive.find_animation("absd301");
+        ASSERT_TRUE(bomber_sd != nullptr);
+        ASSERT_EQ(bomber_sd->subitems[0].val3, 105u); // Authentic 105ms per subitem
+
+        const auto* carrying_sd = archive.find_animation("hgsd301");
+        ASSERT_TRUE(carrying_sd != nullptr);
+        ASSERT_EQ(carrying_sd->subitems[0].val3, 125u); // Preserves 125ms duration for carrying variant
+
+        // 4. Combat Ant AI Punch Animation, Knockback & Water Drowning
+        sim.init_test_world(60, 60, 42, 60000);
+        // Make tile (24, 20) water
+        sim.grid_mut().get_cell_mut(24, 20).terrain_type = ants::sim::TERRAIN_WATER;
+
+        uint32_t combat_id = sim.spawn_unit(0, AntType::Combat, TileCoord{19, 20});
+        auto* c_ptr = const_cast<AntUnit*>(&sim.get_unit(combat_id));
+        c_ptr->guard_anchor = {19, 20};
+        c_ptr->state = UnitState::GuardIdle;
+
+        // Enemy Worker at (20, 20)
+        uint32_t victim_id = sim.spawn_unit(1, AntType::Worker, TileCoord{20, 20});
+
+        // Tick simulation: Combat Ant adjacent to enemy strikes with HeavyPunch
+        sim.tick();
+        const auto& c_striking = sim.get_unit(combat_id);
+        ASSERT_EQ(c_striking.state, UnitState::Attacking);
+        ASSERT_EQ(c_striking.state_timer, 10);
+        ASSERT_EQ(c_striking.attack_cooldown_ticks, 11);
+        ASSERT_TRUE(sim.has_audio_event(SoundID::HeavyPunch));
+
+        const auto& v_flying = sim.get_unit(victim_id);
+        ASSERT_EQ(v_flying.state, UnitState::Knockback);
+        ASSERT_EQ(v_flying.hp, 8); // 2 HP punch damage
+
+        // Punch directly into water test: Worker on (23, 20) punched East into water (24..30, 20)
+        sim.init_test_world(60, 60, 42, 60000);
+        for (int tx = 24; tx <= 30; ++tx) {
+            sim.grid_mut().get_cell_mut(static_cast<uint32_t>(tx), 20).terrain_type = ants::sim::TERRAIN_WATER;
+        }
+        uint32_t puncher = sim.spawn_unit(0, AntType::Combat, TileCoord{22, 20});
+        uint32_t water_victim = sim.spawn_unit(1, AntType::Worker, TileCoord{23, 20});
+        sim.execute_melee_attack(puncher, water_victim);
+
+        // Advance through flight until water landing
+        for (int t = 0; t < 15; ++t) {
+            sim.tick();
+            if (sim.get_unit(water_victim).state == UnitState::Drowning) break;
+        }
+        const auto& wv_landed = sim.get_unit(water_victim);
+        ASSERT_EQ(wv_landed.state, UnitState::Drowning);
+        ASSERT_EQ(wv_landed.death_status, DeathStatus::Drowned);
+        ASSERT_TRUE(sim.has_audio_event(SoundID::WaterSplash));
+        ASSERT_TRUE(sim.has_audio_event(SoundID::AntDrown));
     } TEST_END();
 }
 
