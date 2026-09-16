@@ -269,7 +269,6 @@ void Grid::configure_anthill_cells(TileCoord pos, uint8_t team_id) {
             auto& rcell = get_cell_mut(static_cast<uint32_t>(rx), static_cast<uint32_t>(ry));
             rcell.terrain_type = TERRAIN_WALKABLE;
             rcell.is_obstacle_overlay = false;
-            rcell.is_corridor_team_locked = true;
             rcell.base_owner_team = team_id;
             rcell.flags &= ~(FLAG_CAN_PLACE_BOMB | FLAG_CAN_PLACE_FIRE);
         }

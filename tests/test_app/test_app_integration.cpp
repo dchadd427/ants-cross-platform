@@ -6871,10 +6871,10 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
 
     TEST_CASE("12.108: Version Invariant & Fog of War Cursor Concealment Parity") {
         // 1. Verify semantic versioning components
-        ASSERT_EQ(ants::VERSION_STRING, "v0.0.20");
+        ASSERT_EQ(ants::VERSION_STRING, "v0.0.22");
         ASSERT_EQ(ants::VERSION_MAJOR, 0);
         ASSERT_EQ(ants::VERSION_MINOR, 0);
-        ASSERT_EQ(ants::VERSION_PATCH, 20);
+        ASSERT_EQ(ants::VERSION_PATCH, 22);
 
         // 2. Setup simulation world with Fog of War enabled
         SimulationEngine sim;
@@ -8558,8 +8558,8 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
                 ASSERT_FALSE(cell.can_place_fire());
                 // Team 1 ants can pass
                 ASSERT_TRUE(cell.is_passable(false, false, false, 1, false));
-                // Enemy ants (Team 0) cannot pass (solid obstacle)
-                ASSERT_FALSE(cell.is_passable(false, false, false, 0, false));
+                // Enemy ants (Team 0) can pass freely (corridor team lock removed for authentic base perimeter walkability)
+                ASSERT_TRUE(cell.is_passable(false, false, false, 0, false));
             }
 
             // 2. Bottlecap tile (39, 22) (bx + 3, by + 2)
@@ -9042,6 +9042,294 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         ASSERT_EQ(wv_landed.death_status, DeathStatus::Drowned);
         ASSERT_TRUE(sim.has_audio_event(SoundID::WaterSplash));
         ASSERT_TRUE(sim.has_audio_event(SoundID::AntDrown));
+    } TEST_END();
+
+    TEST_CASE("12.133 Combat Ant Walk Animation Completion Before Attack") {
+        SimulationEngine sim;
+        sim.init_test_world(60, 60, 42, 60000);
+
+        // Combat Ant spawned at (15, 20), target enemy Worker at (18, 20)
+        uint32_t combat_id = sim.spawn_unit(0, AntType::Combat, TileCoord{15, 20});
+        auto* c_ptr = const_cast<AntUnit*>(&sim.get_unit(combat_id));
+        c_ptr->guard_anchor = {15, 20};
+        c_ptr->state = UnitState::GuardIdle;
+
+        uint32_t victim_id = sim.spawn_unit(1, AntType::Worker, TileCoord{18, 20});
+        uint32_t initial_vic_hp = sim.get_unit(victim_id).hp;
+
+        // Advance simulation: Combat Ant intercepts towards (17, 20)
+        bool hit_occurred = false;
+        for (int t = 0; t < 60; ++t) {
+            sim.tick();
+            const auto& c_u = sim.get_unit(combat_id);
+            if (c_u.state == UnitState::Walking || c_u.state == UnitState::Intercepting) {
+                // While walking mid-stride, no damage can be dealt
+                ASSERT_EQ(sim.get_unit(victim_id).hp, initial_vic_hp);
+            }
+            if (sim.get_unit(victim_id).hp < initial_vic_hp) {
+                hit_occurred = true;
+                // Attack connected: Combat Ant must have finished walking into adjacent tile (17, 20)
+                ASSERT_EQ(c_u.pos, (TileCoord{17, 20}));
+                ASSERT_EQ(c_u.pixel_x, 17 * 32 + 16);
+                ASSERT_EQ(c_u.pixel_y, 20 * 32 + 16);
+                break;
+            }
+        }
+        ASSERT_TRUE(hit_occurred);
+    } TEST_END();
+
+    TEST_CASE("12.134 Knockback Trajectory Origin & Smooth Multi-Tick Interpolation") {
+        SimulationEngine sim;
+        sim.init_test_world(60, 60, 42, 60000);
+
+        uint32_t combat_id = sim.spawn_unit(0, AntType::Combat, TileCoord{19, 20});
+        uint32_t victim_id = sim.spawn_unit(1, AntType::Worker, TileCoord{20, 20});
+
+        int32_t expected_start_px = 20 * 32 + 16; // 656
+        int32_t expected_start_py = 20 * 32 + 16; // 656
+        int32_t expected_target_px = 24 * 32 + 16; // 784
+
+        sim.execute_melee_attack(combat_id, victim_id);
+
+        const auto& vic_init = sim.get_unit(victim_id);
+        ASSERT_EQ(vic_init.state, UnitState::Knockback);
+        // Visual coordinates start immediately at the original tile
+        ASSERT_EQ(vic_init.pixel_x, expected_start_px);
+        ASSERT_EQ(vic_init.pixel_y, expected_start_py);
+        ASSERT_EQ(vic_init.altitude_z, 0);
+
+        // Tick 1: unit advances towards destination with positive altitude
+        sim.tick();
+        const auto& vic_t1 = sim.get_unit(victim_id);
+        ASSERT_EQ(vic_t1.state, UnitState::Knockback);
+        ASSERT_GT(vic_t1.pixel_x, expected_start_px);
+        ASSERT_LT(vic_t1.pixel_x, expected_target_px);
+        ASSERT_GT(vic_t1.altitude_z, 0); // Parabolic elevation in flight
+
+        // Advance through remaining ticks to landing
+        for (int t = 2; t <= 10; ++t) {
+            sim.tick();
+        }
+
+        const auto& vic_landed = sim.get_unit(victim_id);
+        ASSERT_EQ(vic_landed.pixel_x, expected_target_px);
+        ASSERT_EQ(vic_landed.altitude_z, 0);
+        ASSERT_TRUE(vic_landed.state == UnitState::Stunned || vic_landed.is_stunned());
+    } TEST_END();
+
+    TEST_CASE("12.135 Combat Ant Punches Ant Over Small Terrain Barrier to Open Ground") {
+        SimulationEngine sim;
+        sim.init_test_world(60, 60, 42, 60000);
+
+        // Create 1-tile rock obstacle at (21, 20)
+        sim.grid_mut().get_cell_mut(21, 20).terrain_type = ants::sim::TERRAIN_OBSTACLE;
+
+        uint32_t combat_id = sim.spawn_unit(0, AntType::Combat, TileCoord{19, 20});
+        uint32_t victim_id = sim.spawn_unit(1, AntType::Worker, TileCoord{20, 20});
+
+        sim.execute_melee_attack(combat_id, victim_id);
+
+        const auto& vic = sim.get_unit(victim_id);
+        ASSERT_EQ(vic.state, UnitState::Knockback);
+        // Flight destination cleared the rock at (21, 20) and anchored at (24, 20)
+        ASSERT_EQ(vic.pos, (TileCoord{24, 20}));
+
+        // Advance through flight until landing
+        for (int t = 0; t < 12; ++t) {
+            sim.tick();
+        }
+
+        const auto& vic_landed = sim.get_unit(victim_id);
+        ASSERT_EQ(vic_landed.pos, (TileCoord{24, 20}));
+        ASSERT_EQ(vic_landed.pixel_x, 24 * 32 + 16);
+        ASSERT_TRUE(vic_landed.is_stunned());
+    } TEST_END();
+
+    TEST_CASE("12.136 Combat Ant Punches Ant Over Small Terrain Barrier Into Water Drowning") {
+        SimulationEngine sim;
+        sim.init_test_world(60, 60, 42, 60000);
+
+        // Create 1-tile rock obstacle at (21, 20)
+        sim.grid_mut().get_cell_mut(21, 20).terrain_type = ants::sim::TERRAIN_OBSTACLE;
+        // Create water tiles on the other side at (22..30, 20)
+        for (int tx = 22; tx <= 30; ++tx) {
+            sim.grid_mut().get_cell_mut(static_cast<uint32_t>(tx), 20).terrain_type = ants::sim::TERRAIN_WATER;
+        }
+
+        uint32_t combat_id = sim.spawn_unit(0, AntType::Combat, TileCoord{19, 20});
+        uint32_t victim_id = sim.spawn_unit(1, AntType::Worker, TileCoord{20, 20});
+
+        sim.execute_melee_attack(combat_id, victim_id);
+
+        // Advance through flight until water landing
+        for (int t = 0; t < 15; ++t) {
+            sim.tick();
+            if (sim.get_unit(victim_id).state == UnitState::Drowning) break;
+        }
+
+        const auto& vic_drowned = sim.get_unit(victim_id);
+        ASSERT_EQ(vic_drowned.state, UnitState::Drowning);
+        ASSERT_EQ(vic_drowned.death_status, DeathStatus::Drowned);
+        ASSERT_TRUE(sim.has_audio_event(SoundID::WaterSplash));
+        ASSERT_TRUE(sim.has_audio_event(SoundID::AntDrown));
+    } TEST_END();
+
+    TEST_CASE("12.137 Non-Thief Friendly Unit Clicking Enemy Base Routes to Closest Available Perimeter Tile Without CantGo") {
+        SimulationEngine sim;
+        sim.init_test_world(60, 60, 42, 60000);
+        sim.set_anthill(0, TileCoord{2, 2});
+        sim.set_anthill(1, TileCoord{8, 8});
+
+        ViewportCamera camera{};
+        camera.world_x = 0; camera.world_y = 0;
+
+        HUD hud;
+        hud.init(0);
+
+        // Spawn friendly worker at (5, 8)
+        uint32_t worker = sim.spawn_unit(0, AntType::Worker, TileCoord{5, 8});
+
+        // Select worker
+        hud.select_ant(worker);
+        ASSERT_TRUE(hud.is_ant_selected(worker));
+
+        // Click on enemy base at (8, 8)
+        int32_t bx = (8 * 32 + 16) - camera.world_x + HUD::PLAYFIELD_X;
+        int32_t by = (8 * 32 + 16) - camera.world_y + HUD::PLAYFIELD_Y;
+        hud.handle_mouse_down(bx, by, 1, sim, camera);
+        hud.handle_mouse_up(bx, by, 1, sim, camera);
+
+        // Verify CantGo was NOT triggered
+        ASSERT_FALSE(sim.has_audio_event(SoundID::CantGo));
+
+        const auto& u = sim.get_unit(worker);
+        // Ant is walking towards closest available perimeter tile adjacent to enemy base
+        ASSERT_TRUE(u.state == UnitState::Walking || !u.waypoints.empty());
+        ASSERT_NE(u.state, UnitState::Infiltrating);
+
+        // Advance simulation ticks until ant completes movement
+        for (int t = 0; t < 100; ++t) {
+            sim.tick();
+            if (sim.get_unit(worker).state == UnitState::Idle) break;
+        }
+
+        const auto& u_done = sim.get_unit(worker);
+        ASSERT_EQ(u_done.state, UnitState::Idle);
+        // Arrived at the perimeter outside the 4x4 enemy base footprint (8..11, 8..11)
+        bool inside_enemy_base = (u_done.pos.x >= 8 && u_done.pos.x < 12 && u_done.pos.y >= 8 && u_done.pos.y < 12);
+        ASSERT_FALSE(inside_enemy_base);
+        ASSERT_TRUE(u_done.pos.chebyshev_dist(TileCoord{8, 8}) <= 2);
+    } TEST_END();
+
+    TEST_CASE("12.138 Clicking Base Queue Slots Issues Standard Move Without Auto-Queueing") {
+        SimulationEngine sim;
+        sim.init_test_world(60, 60, 42, 60000);
+        sim.set_anthill(0, TileCoord{5, 5});
+
+        ViewportCamera camera{};
+        camera.world_x = 0; camera.world_y = 0;
+
+        HUD hud;
+        hud.init(0);
+
+        // Spawn friendly worker with 2 HP (damaged, max 10) at (2, 5)
+        uint32_t worker = sim.spawn_unit(0, AntType::Worker, TileCoord{2, 5});
+        sim.get_unit(worker).hp = 2;
+
+        // Select worker
+        hud.select_ant(worker);
+        ASSERT_TRUE(hud.is_ant_selected(worker));
+
+        // Click directly on queue slot (bx - 1, by + 3) -> (4, 8)
+        int32_t qx = (4 * 32 + 16) - camera.world_x + HUD::PLAYFIELD_X;
+        int32_t qy = (8 * 32 + 16) - camera.world_y + HUD::PLAYFIELD_Y;
+        hud.handle_mouse_down(qx, qy, 1, sim, camera);
+        hud.handle_mouse_up(qx, qy, 1, sim, camera);
+
+        for (int t = 0; t < 100; ++t) {
+            sim.tick();
+            if (sim.get_unit(worker).state == UnitState::Idle && sim.get_unit(worker).pos == (TileCoord{4, 8})) break;
+        }
+
+        const auto& u = sim.get_unit(worker);
+        ASSERT_EQ(u.pos, (TileCoord{4, 8}));
+        ASSERT_EQ(u.state, UnitState::Idle);
+        // Must NOT be queued into base queue!
+        ASSERT_FALSE(sim.is_ant_in_base_queue(worker));
+        ASSERT_NE(u.state, UnitState::EnteringBase);
+    } TEST_END();
+
+    TEST_CASE("12.139 Combat Ant Knockback Near Base Never Lands Inside Base Footprint or Queue Locations") {
+        SimulationEngine sim;
+        sim.init_test_world(60, 60, 42, 60000);
+        sim.set_anthill(0, TileCoord{20, 20});
+
+        // Spawn Player 0 worker at (18, 21)
+        uint32_t worker = sim.spawn_unit(0, AntType::Worker, TileCoord{18, 21});
+        // Spawn Player 1 combat ant at (17, 21) facing east directly towards base
+        uint32_t combat = sim.spawn_unit(1, AntType::Combat, TileCoord{17, 21});
+
+        // Combat ant punches worker eastward towards anthill
+        sim.execute_melee_attack(combat, worker);
+
+        const auto& w_knocked = sim.get_unit(worker);
+        ASSERT_EQ(w_knocked.state, UnitState::Knockback);
+
+        // Landing pos must NOT be inside 4x4 base footprint or queue slots
+        int32_t lx = w_knocked.pos.x;
+        int32_t ly = w_knocked.pos.y;
+        bool in_base = (lx >= 20 && lx < 24 && ly >= 20 && ly < 24);
+        bool in_queue = (lx == 19 && ly >= 20 && ly <= 23);
+        ASSERT_FALSE(in_base);
+        ASSERT_FALSE(in_queue);
+
+        // Step through knockback flight
+        for (int t = 0; t < 20; ++t) {
+            sim.tick();
+            ASSERT_NE(sim.get_unit(worker).state, UnitState::EnteringBase);
+        }
+
+        const auto& w_landed = sim.get_unit(worker);
+        int32_t fx = w_landed.pos.x;
+        int32_t fy = w_landed.pos.y;
+        bool landed_in_base = (fx >= 20 && fx < 24 && fy >= 20 && fy < 24);
+        bool landed_in_queue = (fx == 19 && fy >= 20 && fy <= 23);
+        ASSERT_FALSE(landed_in_base);
+        ASSERT_FALSE(landed_in_queue);
+        ASSERT_NE(w_landed.state, UnitState::EnteringBase);
+    } TEST_END();
+
+    TEST_CASE("12.140 Automatic Base Queueing Restricted Strictly to 1 HP Retreat and Stolen Food Return") {
+        SimulationEngine sim;
+        sim.init_test_world(60, 60, 42, 60000);
+        sim.set_anthill(0, TileCoord{20, 20});
+        sim.set_anthill(1, TileCoord{40, 40});
+
+        // 1. Worker at 2 HP does NOT auto-queue when idle
+        uint32_t w1 = sim.spawn_unit(0, AntType::Worker, TileCoord{25, 25});
+        sim.get_unit(w1).hp = 2;
+        for (int t = 0; t < 10; ++t) sim.tick();
+        ASSERT_FALSE(sim.is_ant_in_base_queue(w1));
+        ASSERT_EQ(sim.get_unit(w1).state, UnitState::Idle);
+
+        // 2. Worker reduced to 1 HP DOES auto-queue when idle
+        sim.get_unit(w1).hp = 1;
+        sim.tick();
+        ASSERT_TRUE(sim.is_ant_in_base_queue(w1));
+
+        // 3. Thief returning from successful steal with food morsel auto-queues
+        uint32_t thief = sim.spawn_unit(0, AntType::Thief, TileCoord{43, 42});
+        sim.get_unit(thief).target_team_id = 1;
+        sim.get_unit(thief).state = UnitState::Infiltrating;
+        sim.get_unit(thief).anim_subitem = 32;
+
+        // Advance tick to trigger execute_thief_loot and queueing
+        sim.tick();
+        const auto& th = sim.get_unit(thief);
+        if (th.carried_points > 0) {
+            ASSERT_TRUE(th.is_thief_steal);
+            ASSERT_TRUE(sim.is_ant_in_base_queue(thief));
+        }
     } TEST_END();
 }
 
