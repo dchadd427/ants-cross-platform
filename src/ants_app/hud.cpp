@@ -1795,7 +1795,21 @@ bool HUD::handle_mouse_down(int32_t x, int32_t y, uint8_t button,
                     if (has_friendly_selected(world)) {
                         if (on_spawn_click_marker_) on_spawn_click_marker_(world_x, world_y);
                     }
-                    dispatch_smart_special_ability(world_x, world_y, sim, shift_held);
+                    bool has_thief = false;
+                    for (uint32_t aid : selected_ant_ids_) {
+                        for (const auto& a : world.ants) {
+                            if (a.id == aid && a.player_id == local_player_id_ && a.type == sim::AntType::Thief) {
+                                has_thief = true;
+                                break;
+                            }
+                        }
+                        if (has_thief) break;
+                    }
+                    if (has_thief) {
+                        dispatch_smart_special_ability(world_x, world_y, sim, shift_held);
+                    } else {
+                        dispatch_move_order(target_tile_x, target_tile_y, sim, false);
+                    }
                 }
                 return true;
             }
@@ -2020,20 +2034,7 @@ bool HUD::handle_mouse_up(int32_t x, int32_t y, uint8_t button,
                             play_sfx(sim::SoundID::ThiefGo);
                         } else if (first_friendly) {
                             if (on_spawn_click_marker_) on_spawn_click_marker_(world_x, world_y);
-                            for (uint32_t aid : selected_ant_ids_) {
-                                for (const auto& a : world.ants) {
-                                    if (a.id == aid && a.player_id == local_player_id_) {
-                                        sim::AntOrder order;
-                                        order.ant_id = aid;
-                                        order.type = sim::OrderType::Move;
-                                        order.target_x = target_tile_x;
-                                        order.target_y = target_tile_y;
-                                        sim.issue_order(order);
-                                        break;
-                                    }
-                                }
-                            }
-                            play_sfx(sim::get_move_voice_sound(first_friendly->type, voice_variant_++));
+                            dispatch_move_order(target_tile_x, target_tile_y, sim, false);
                         }
                     }
                 } else {

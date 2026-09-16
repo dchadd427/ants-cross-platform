@@ -1359,9 +1359,28 @@ void SimulationEngine::tick() {
                 ant_ptr->attack_target_id = 0;
             } else {
                 // If the ant is walking, allow it to complete its entire walking animation into the tile
-                if (ant_ptr->state != UnitState::Walking) {
+                bool is_moving = (ant_ptr->state == UnitState::Walking ||
+                                  ant_ptr->state == UnitState::Intercepting ||
+                                  ant_ptr->state == UnitState::ReturningToPost);
+                bool at_tile_center = (ant_ptr->pixel_x == ant_ptr->pos.x * 32 + 16 &&
+                                       ant_ptr->pixel_y == ant_ptr->pos.y * 32 + 16);
+                if (!is_moving || at_tile_center) {
                     int32_t dist = ant_ptr->pos.chebyshev_dist(target->pos);
-                    if (dist <= 1) {
+                    bool can_strike_over_terrain = false;
+                    if (ant_ptr->type == AntType::Combat && dist == 2) {
+                        int32_t dx = target->pos.x - ant_ptr->pos.x;
+                        int32_t dy = target->pos.y - ant_ptr->pos.y;
+                        if (dx == 0 || dy == 0) {
+                            TileCoord mid{ant_ptr->pos.x + dx / 2, ant_ptr->pos.y + dy / 2};
+                            if (impl_->grid_.in_bounds(mid)) {
+                                const auto& mcell = impl_->grid_.get_cell(mid);
+                                if (mcell.is_obstacle() || mcell.is_obstacle_overlay || mcell.terrain_type == TERRAIN_WATER) {
+                                    can_strike_over_terrain = true;
+                                }
+                            }
+                        }
+                    }
+                    if (dist <= 1 || can_strike_over_terrain) {
                         int32_t f_dx = target->pos.x - ant_ptr->pos.x;
                         int32_t f_dy = target->pos.y - ant_ptr->pos.y;
                         if (f_dx == 0 && f_dy == 0) {
@@ -1960,9 +1979,14 @@ void SimulationEngine::tick() {
 
             // If ant reached the top entrance hole, start entering base
             if (ant_ptr->pos.x == ent_x && ant_ptr->pos.y == ent_y) {
-                if (ant_ptr->is_holding() || ant_ptr->hp < ant_ptr->max_hp || ant_ptr->is_newborn ||
+                if (ant_ptr->is_holding() || ant_ptr->hp == 1 || ant_ptr->is_newborn ||
+                    (ant_ptr->type == AntType::Thief && ant_ptr->is_thief_steal && ant_ptr->is_holding()) ||
                     is_ant_in_base_queue(ant_ptr->id) || ant_ptr->final_dest == TileCoord{ent_x, ent_y}) {
-                    if (ant_ptr->state != UnitState::EnteringBase) {
+                    if (ant_ptr->state != UnitState::EnteringBase &&
+                        ant_ptr->state != UnitState::Knockback &&
+                        ant_ptr->state != UnitState::Stunned &&
+                        ant_ptr->state != UnitState::Bounce &&
+                        ant_ptr->state != UnitState::Flinch) {
                         ant_ptr->state = UnitState::EnteringBase;
                         ant_ptr->anim_subitem = 0;
                         ant_ptr->had_food_at_base_entry = ant_ptr->is_holding();
@@ -1970,16 +1994,13 @@ void SimulationEngine::tick() {
                         ant_ptr->clear_path();
                     }
                 }
-            } else if (ant_ptr->pos == TileCoord{bx - 1, by + 3} &&
-                       (ant_ptr->is_holding() || ant_ptr->hp < ant_ptr->max_hp)) {
-                if (!is_ant_in_base_queue(ant_ptr->id)) {
-                    join_base_queue(ant_ptr->id);
-                }
             }
         }
 
         // Check thief arrival at enemy anthill
-        if (ant_ptr->type == AntType::Thief && ant_ptr->state != UnitState::Infiltrating && !ant_ptr->underground) {
+        if (ant_ptr->type == AntType::Thief &&
+            (ant_ptr->state == UnitState::Walking || ant_ptr->state == UnitState::Idle) &&
+            !ant_ptr->underground) {
             for (uint8_t p = 0; p < MAX_PLAYERS; ++p) {
                 if (p != ant_ptr->player_id && !impl_->stats_.are_allies(ant_ptr->player_id, p)) {
                     const auto* enemy_base = impl_->grid_.find_anthill(p);
@@ -2471,21 +2492,6 @@ void SimulationEngine::issue_order(const AntOrder& order) {
             unit->pending_ability = OrderType::None;
             unit->pending_ability_target = TileCoord{-1, -1};
             unit->ability_target = TileCoord{-1, -1};
-            if (unit->type == AntType::Thief) {
-                for (uint8_t p = 0; p < MAX_PLAYERS; ++p) {
-                    if (p != unit->player_id && !impl_->stats_.are_allies(unit->player_id, p)) {
-                        const auto* ah = impl_->grid_.find_anthill(p);
-                        if (ah && order.target_x >= ah->x && order.target_x < ah->x + 4 &&
-                                  order.target_y >= ah->y && order.target_y < ah->y + 4) {
-                            AntOrder inf_order = order;
-                            inf_order.type = OrderType::InfiltrateAnthill;
-                            inf_order.target_entity_id = p;
-                            issue_order(inf_order);
-                            return;
-                        }
-                    }
-                }
-            }
             issue_move_order(order.ant_id, TileCoord{order.target_x, order.target_y}, order.allow_friendly_bomb, order.is_food_order);
             break;
         case OrderType::ReturnToBase: {
@@ -2512,7 +2518,26 @@ void SimulationEngine::issue_order(const AntOrder& order) {
                     }
                     unit->attack_target_id = target_id;
                     int32_t dist = unit->pos.chebyshev_dist(target->pos);
-                    if (dist <= 1 && unit->state != UnitState::Walking) {
+                    bool is_moving = (unit->state == UnitState::Walking ||
+                                      unit->state == UnitState::Intercepting ||
+                                      unit->state == UnitState::ReturningToPost);
+                    bool at_tile_center = (unit->pixel_x == unit->pos.x * 32 + 16 &&
+                                           unit->pixel_y == unit->pos.y * 32 + 16);
+                    bool can_strike_over_terrain = false;
+                    if (unit->type == AntType::Combat && dist == 2) {
+                        int32_t dx = target->pos.x - unit->pos.x;
+                        int32_t dy = target->pos.y - unit->pos.y;
+                        if (dx == 0 || dy == 0) {
+                            TileCoord mid{unit->pos.x + dx / 2, unit->pos.y + dy / 2};
+                            if (impl_->grid_.in_bounds(mid)) {
+                                const auto& mcell = impl_->grid_.get_cell(mid);
+                                if (mcell.is_obstacle() || mcell.is_obstacle_overlay || mcell.terrain_type == TERRAIN_WATER) {
+                                    can_strike_over_terrain = true;
+                                }
+                            }
+                        }
+                    }
+                    if ((dist <= 1 || can_strike_over_terrain) && !is_moving && at_tile_center) {
                         int32_t f_dx = target->pos.x - unit->pos.x;
                         int32_t f_dy = target->pos.y - unit->pos.y;
                         if (f_dx == 0 && f_dy == 0) {
@@ -3092,10 +3117,29 @@ void SimulationEngine::execute_melee_attack(uint32_t attacker_id, uint32_t targe
     if (attacker->in_water || target->in_water) return;
     if (target->type == AntType::Swimmer && target->in_water) return;
 
-    if (attacker->state == UnitState::Walking) return;
+    bool is_moving = (attacker->state == UnitState::Walking ||
+                      attacker->state == UnitState::Intercepting ||
+                      attacker->state == UnitState::ReturningToPost);
+    bool at_tile_center = (attacker->pixel_x == attacker->pos.x * 32 + 16 &&
+                           attacker->pixel_y == attacker->pos.y * 32 + 16);
+    if (is_moving && !at_tile_center) return;
 
     int32_t dist = attacker->pos.chebyshev_dist(target->pos);
-    if (dist > 1) return;
+    bool can_strike_over_terrain = false;
+    if (attacker->type == AntType::Combat && dist == 2) {
+        int32_t dx = target->pos.x - attacker->pos.x;
+        int32_t dy = target->pos.y - attacker->pos.y;
+        if (dx == 0 || dy == 0) {
+            TileCoord mid{attacker->pos.x + dx / 2, attacker->pos.y + dy / 2};
+            if (impl_->grid_.in_bounds(mid)) {
+                const auto& mcell = impl_->grid_.get_cell(mid);
+                if (mcell.is_obstacle() || mcell.is_obstacle_overlay || mcell.terrain_type == TERRAIN_WATER) {
+                    can_strike_over_terrain = true;
+                }
+            }
+        }
+    }
+    if (dist > 1 && !can_strike_over_terrain) return;
     if (attacker->attack_cooldown_ticks > 0) return;
 
     attacker->attack_cooldown_ticks = (attacker->type == AntType::Combat ? 12 : 10);
@@ -3154,26 +3198,17 @@ void SimulationEngine::execute_melee_attack(uint32_t attacker_id, uint32_t targe
             if (dx == 0 && dy == 0) dx = 1;
             int32_t dir_x = (dx > 0) ? 1 : ((dx < 0) ? -1 : 0);
             int32_t dir_y = (dy > 0) ? 1 : ((dy < 0) ? -1 : 0);
-            int32_t punch_dist = 4;
 
-            TileCoord land_pos = target->pos;
+            int32_t punch_dist = 4;
             for (int32_t s = 1; s <= punch_dist; ++s) {
                 TileCoord next_pos{target->pos.x + dir_x * s, target->pos.y + dir_y * s};
-                if (!impl_->grid_.in_bounds(next_pos)) {
+                if (!impl_->grid_.in_bounds(next_pos)) break;
+                const auto& cell = impl_->grid_.get_cell(static_cast<uint32_t>(next_pos.x), static_cast<uint32_t>(next_pos.y));
+                if (cell.has_fire()) {
+                    punch_dist = s;
                     break;
                 }
-                const auto& cell = impl_->grid_.get_cell(static_cast<uint32_t>(next_pos.x), static_cast<uint32_t>(next_pos.y));
-                if (cell.terrain_type == TERRAIN_OBSTACLE || cell.is_obstacle_overlay) {
-                    break; // Stop before solid rock obstacle
-                }
-                land_pos = next_pos;
-                if (cell.has_fire()) {
-                    break; // Flight interrupted by fire contact!
-                }
             }
-
-            int32_t land_dist = std::max(std::abs(land_pos.x - target->pos.x), std::abs(land_pos.y - target->pos.y));
-            if (land_dist <= 0) land_dist = 1;
 
             impl_->audio_queue_.push_back(AudioEvent{SoundID::HeavyPunch, attacker->pixel_x, attacker->pixel_y, 1, 255});
             impl_->audio_queue_.push_back(AudioEvent{SoundID::StunRecover, target->pixel_x, target->pixel_y, 0, 255});
@@ -3181,14 +3216,13 @@ void SimulationEngine::execute_melee_attack(uint32_t attacker_id, uint32_t targe
             target->clear_path();
             int32_t from_px = attacker->pixel_x;
             int32_t from_py = attacker->pixel_y;
-            impl_->physics_.apply_knockback(*target, from_px, from_py, land_dist, land_dist,
+            impl_->physics_.apply_knockback(*target, from_px, from_py, punch_dist, punch_dist,
                                             DamageSource::CombatPunch, impl_->audio_queue_, impl_->prng_.rand(),
                                             &impl_->grid_);
-            target->pos = land_pos;
             target->stun_ticks_remaining = AntUnit::STUN_TICKS;
             target->state = UnitState::Knockback;
 
-            if (impl_->grid_.in_bounds(land_pos) && impl_->grid_.get_cell(static_cast<uint32_t>(land_pos.x), static_cast<uint32_t>(land_pos.y)).has_fire()) {
+            if (impl_->grid_.in_bounds(target->pos) && impl_->grid_.get_cell(static_cast<uint32_t>(target->pos.x), static_cast<uint32_t>(target->pos.y)).has_fire()) {
                 impl_->physics_.resolve_fire_contact(*target, impl_->grid_, impl_->audio_queue_, impl_->prng_, dir_x, dir_y, DamageSource::CombatPunch);
             }
         }

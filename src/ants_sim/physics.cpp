@@ -92,21 +92,67 @@ void PhysicsEngine::apply_knockback(AntUnit& victim,
     int32_t dist_tiles = (source == DamageSource::BombBlast) ? 4 : std::max(1, max_tiles);
 
     if (grid != nullptr) {
-        for (uint32_t d : cand_dirs) {
-            int32_t cand_tx = origin_tx + DIR_DX[d] * dist_tiles;
-            int32_t cand_ty = origin_ty + DIR_DY[d] * dist_tiles;
+        for (int32_t try_dist = dist_tiles; try_dist >= 1 && !dest_found; --try_dist) {
+            for (uint32_t d : cand_dirs) {
+                int32_t cand_tx = origin_tx + DIR_DX[d] * try_dist;
+                int32_t cand_ty = origin_ty + DIR_DY[d] * try_dist;
 
-            if (!grid->in_bounds(cand_tx, cand_ty)) continue;
-            const auto& cell = grid->get_cell(static_cast<uint32_t>(cand_tx), static_cast<uint32_t>(cand_ty));
-            if (cell.is_obstacle() || cell.is_food || grid->has_food_at(TileCoord{cand_tx, cand_ty})) continue;
-            if (grid->is_anthill_reserved_spot(TileCoord{cand_tx, cand_ty})) continue;
-            if (grid->has_powerup_at(TileCoord{cand_tx, cand_ty})) continue;
+                if (!grid->in_bounds(cand_tx, cand_ty)) continue;
+                const auto& cell = grid->get_cell(static_cast<uint32_t>(cand_tx), static_cast<uint32_t>(cand_ty));
+                if (cell.is_obstacle() || cell.is_food || grid->has_food_at(TileCoord{cand_tx, cand_ty})) continue;
+                if (grid->is_anthill_reserved_spot(TileCoord{cand_tx, cand_ty})) continue;
+                if (grid->has_powerup_at(TileCoord{cand_tx, cand_ty})) continue;
 
-            chosen_dir = d;
-            chosen_tx = cand_tx;
-            chosen_ty = cand_ty;
+                // Never land inside any anthill footprint (4x4) or queue slots (bx - 1, by..by+3)
+                bool in_base_or_queue = false;
+                for (const auto& ah : grid->anthills()) {
+                    int32_t bx = static_cast<int32_t>(ah.x);
+                    int32_t by = static_cast<int32_t>(ah.y);
+                    if (cand_tx >= bx && cand_tx < bx + 4 && cand_ty >= by && cand_ty < by + 4) {
+                        in_base_or_queue = true;
+                        break;
+                    }
+                    if (cand_tx == bx - 1 && cand_ty >= by && cand_ty <= by + 3) {
+                        in_base_or_queue = true;
+                        break;
+                    }
+                }
+                if (in_base_or_queue) continue;
+
+                // Check intermediate obstacle clearance:
+                // Ballistic knockback clears small terrain barriers (obstacle count <= 2 tiles)
+                int32_t step_x = DIR_DX[d];
+                int32_t step_y = DIR_DY[d];
+                int32_t obst_count = 0;
+                bool obst_too_large = false;
+                for (int32_t s = 1; s < try_dist; ++s) {
+                    int32_t mx = origin_tx + step_x * s;
+                    int32_t my = origin_ty + step_y * s;
+                    if (!grid->in_bounds(mx, my)) { obst_too_large = true; break; }
+                    const auto& mcell = grid->get_cell(static_cast<uint32_t>(mx), static_cast<uint32_t>(my));
+                    if (mcell.is_obstacle() || mcell.is_obstacle_overlay) {
+                        obst_count++;
+                        if (obst_count > 2) {
+                            obst_too_large = true;
+                            break;
+                        }
+                    }
+                }
+                if (obst_too_large) continue;
+
+                chosen_dir = d;
+                chosen_tx = cand_tx;
+                chosen_ty = cand_ty;
+                dist_tiles = try_dist;
+                dest_found = true;
+                break;
+            }
+        }
+        if (!dest_found) {
+            chosen_tx = origin_tx;
+            chosen_ty = origin_ty;
+            dist_tiles = 0;
             dest_found = true;
-            break;
         }
     } else {
         chosen_dir = initial_dir;
@@ -116,8 +162,8 @@ void PhysicsEngine::apply_knockback(AntUnit& victim,
     }
 
     if (dest_found) {
-        flight.start_px = origin_tx * 32 + 16;
-        flight.start_py = origin_ty * 32 + 16;
+        flight.start_px = (victim.pixel_x != 0 || victim.pixel_y != 0) ? victim.pixel_x : (origin_tx * 32 + 16);
+        flight.start_py = (victim.pixel_x != 0 || victim.pixel_y != 0) ? victim.pixel_y : (origin_ty * 32 + 16);
         flight.target_px = chosen_tx * 32 + 16;
         flight.target_py = chosen_ty * 32 + 16;
         flight.total_distance_px = dist_tiles * 32;
@@ -149,10 +195,21 @@ void PhysicsEngine::apply_knockback(AntUnit& victim,
     victim.anim_tick = 0;
     victim.anim_subitem = 0;
 
-    // Authentic 1998 Ants.exe (Ants.exe.c:24460):
-    // The ant's logical coordinates are immediately anchored at the destination tile:
+    // Authentic 1998 Ants.exe (Ants.exe.c:24460 / FUN_01021a6f):
+    // The ant's logical coordinates are registered at the landing destination.
+    // Bomb blasts anchor pixel coordinates at destination because Table 4 aggb301
+    // possesses an intrinsic -128px displacement in its bytecode.
+    // Combat punches interpolate smoothly from the ant's starting tile while
+    // maintaining logical destination tile occupancy.
     victim.set_tile_pos(chosen_tx, chosen_ty);
-    victim.set_pixel_pos(flight.target_px, flight.target_py);
+    if (source == DamageSource::BombBlast) {
+        victim.set_pixel_pos(flight.target_px, flight.target_py);
+    } else {
+        victim.pixel_x = flight.start_px;
+        victim.pixel_y = flight.start_py;
+        victim.fx_x = flight.start_px << 16;
+        victim.fx_y = flight.start_py << 16;
+    }
     victim.altitude_z = 0;
 
     audio_out.push_back(AudioEvent{SOUND_FLY_THUMP_A, victim.pixel_x, victim.pixel_y, 1, 255});
@@ -197,8 +254,19 @@ void PhysicsEngine::tick(std::vector<AntUnit*>& all_units,
         f.current_tick++;
         if (f.total_ticks == 0) f.total_ticks = 1;
 
-        unit->set_pixel_pos(f.target_px, f.target_py);
-        unit->altitude_z = 0;
+        if (f.origin_source == DamageSource::BombBlast) {
+            unit->set_pixel_pos(f.target_px, f.target_py);
+            unit->altitude_z = 0;
+        } else {
+            int32_t curr_px = f.start_px + ((f.target_px - f.start_px) * f.current_tick) / f.total_ticks;
+            int32_t curr_py = f.start_py + ((f.target_py - f.start_py) * f.current_tick) / f.total_ticks;
+            unit->pixel_x = curr_px;
+            unit->pixel_y = curr_py;
+            unit->fx_x = curr_px << 16;
+            unit->fx_y = curr_py << 16;
+            int32_t t = f.current_tick;
+            unit->altitude_z = (4 * f.apex_height_px * t * (f.total_ticks - t)) / (f.total_ticks * f.total_ticks);
+        }
         unit->anim_tick = f.current_tick;
         unit->anim_subitem = f.current_tick;
 
@@ -207,6 +275,7 @@ void PhysicsEngine::tick(std::vector<AntUnit*>& all_units,
 
         // Safety check for exiting map bounds
         if (!grid.in_bounds(unit->pos.x, unit->pos.y)) {
+            unit->set_pixel_pos(f.target_px, f.target_py);
             unit->altitude_z = 0;
             completed_landings.push_back({unit, inc_dx, inc_dy, f.origin_source});
             it = active_flights_.erase(it);

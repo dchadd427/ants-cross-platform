@@ -1465,7 +1465,7 @@ void Renderer::draw_single_ant(const ants::sim::AntSnapshot& ant, bool is_select
 
     // 1. Calculate Parabolic Elevation (Knockback Altitude)
     int32_t altitude_z = 0;
-    if (ant.is_airborne && ant.anim_state != static_cast<uint16_t>(ants::sim::UnitState::Knockback)) {
+    if (ant.is_airborne) {
         int32_t t = static_cast<int32_t>(ant.anim_frame % 11);
         altitude_z = (4 * 36 * t * (10 - t)) / 100;
         draw_ant_shadow(sx, sy, altitude_z);

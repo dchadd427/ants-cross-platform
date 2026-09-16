@@ -163,7 +163,31 @@ void CombatAIController::update_intercepting(SimulationEngine& engine,
     }
 
     int32_t dist = owner_.pos.chebyshev_dist(target->pos);
-    if (dist <= 1) {
+    bool is_moving = (owner_.state == UnitState::Walking ||
+                      owner_.state == UnitState::Intercepting ||
+                      owner_.state == UnitState::ReturningToPost);
+    bool at_tile_center = (owner_.pixel_x == owner_.pos.x * 32 + 16 &&
+                           owner_.pixel_y == owner_.pos.y * 32 + 16);
+    bool can_strike_over_terrain = false;
+    if (dist == 2) {
+        int32_t dx = target->pos.x - owner_.pos.x;
+        int32_t dy = target->pos.y - owner_.pos.y;
+        if (dx == 0 || dy == 0) {
+            TileCoord mid{owner_.pos.x + dx / 2, owner_.pos.y + dy / 2};
+            if (grid.in_bounds(mid)) {
+                const auto& mcell = grid.get_cell(mid);
+                if (mcell.is_obstacle() || mcell.is_obstacle_overlay || mcell.terrain_type == TERRAIN_WATER) {
+                    can_strike_over_terrain = true;
+                }
+            }
+        }
+    }
+
+    if (dist <= 1 || can_strike_over_terrain) {
+        if (is_moving && !at_tile_center) {
+            // Must finish walk animation into tile before attacking!
+            return;
+        }
         if (owner_.attack_cooldown_ticks == 0) {
             owner_.clear_path();
             owner_.state = UnitState::GuardIdle;

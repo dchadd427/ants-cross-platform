@@ -205,12 +205,7 @@ struct TileCell {
         }
 
         // 3. Top approach corridor (bx + 0..2, by - 1):
-        // Team-locked: only ants belonging to base_owner_team can traverse
-        if (is_corridor_team_locked) {
-            if (ant_team != 255 && base_owner_team != 255 && ant_team != base_owner_team) {
-                return false;
-            }
-        }
+        // (Corridor team lock removed to permit free perimeter movement around base)
 
         if (terrain_type == TERRAIN_OBSTACLE || is_obstacle_overlay) return false;
 
