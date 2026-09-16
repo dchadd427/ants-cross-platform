@@ -890,7 +890,7 @@ void SimulationEngine::tick() {
                 surf = SurfaceType::Mud; // Walking speed across bridges matches mud tiles (~0.65x)
             }
             in_water = (cell.terrain_type == TERRAIN_WATER && !cell.has_any_bridge());
-            ant_ptr->on_powerup = cell.has_powerup();
+            ant_ptr->on_powerup = cell.has_powerup() || ant_ptr->is_transforming();
             if (!ant_ptr->on_powerup && ant_ptr->transformation_interrupted) {
                 ant_ptr->transformation_interrupted = false;
             }
@@ -987,6 +987,14 @@ void SimulationEngine::tick() {
         }
         ant_ptr->tick_movement(in_water, surf);
 
+        bool is_moving_now = (ant_ptr->state == UnitState::Walking ||
+                              ant_ptr->state == UnitState::Intercepting ||
+                              ant_ptr->state == UnitState::ReturningToPost);
+        bool just_arrived = (is_moving_unit && !is_moving_now && ant_ptr->waypoints.empty());
+        if (just_arrived && impl_->grid_.in_bounds(ant_ptr->pos) && impl_->grid_.has_powerup_at(ant_ptr->pos)) {
+            ant_ptr->powerup_dwell_timer = 6;
+        }
+
         // Water splash audio trigger on swimmer dive or exit
         if (ant_ptr->type == AntType::Swimmer) {
             if ((ant_ptr->state == UnitState::DivingInWater && ant_ptr->anim_tick == 1) ||
@@ -1047,15 +1055,29 @@ void SimulationEngine::tick() {
             ant_ptr->state != UnitState::Drowning && ant_ptr->state != UnitState::EnteringBase &&
             !ant_ptr->underground && !ant_ptr->is_transforming()) {
             if (impl_->grid_.in_bounds(ant_ptr->pos) && impl_->grid_.has_powerup_at(ant_ptr->pos)) {
-                bool specifically_instructed = (ant_ptr->final_dest == ant_ptr->pos || ant_ptr->final_dest.x < 0 || ant_ptr->state != UnitState::Walking);
-                if (specifically_instructed) {
-                    bool arrived = (ant_ptr->pixel_x == ant_ptr->pos.x * 32 + 16 &&
-                                    ant_ptr->pixel_y == ant_ptr->pos.y * 32 + 16) ||
-                                   (ant_ptr->state != UnitState::Walking);
-                    if (arrived) {
+                // If ant is forced into CantGo on a power-up, it stands on the power-up indefinitely without consuming it!
+                if (ant_ptr->state == UnitState::CantGo) {
+                    ant_ptr->cantgo_standing_on_powerup = true;
+                    ant_ptr->powerup_dwell_timer = 0;
+                } else if (ant_ptr->cantgo_standing_on_powerup) {
+                    // Standing on powerup via CantGo immunity: do not consume!
+                } else if (ant_ptr->state == UnitState::Idle || ant_ptr->state == UnitState::GuardIdle) {
+                    if (ant_ptr->powerup_dwell_timer > 0) {
+                        ant_ptr->powerup_dwell_timer--;
+                        if (ant_ptr->powerup_dwell_timer == 0) {
+                            // Dwell window elapsed without redirection: commit pickup!
+                            pu_target = ant_ptr->pos;
+                        }
+                    } else if (ant_ptr->final_dest.x < 0 && ant_ptr->waypoints.empty()) {
+                        // Power-up placed or dropped directly under stationary ant
                         pu_target = ant_ptr->pos;
                     }
+                } else {
+                    ant_ptr->powerup_dwell_timer = 0;
                 }
+            } else {
+                ant_ptr->powerup_dwell_timer = 0;
+                ant_ptr->cantgo_standing_on_powerup = false;
             }
         }
         if (pu_target.x >= 0) {
@@ -1096,13 +1118,18 @@ void SimulationEngine::tick() {
             ant_ptr->anim_tick = 0;
             ant_ptr->anim_subitem = 0;
 
-            // Transform ant (11-tick getpow cocoon animation)
+            // Transform ant (authentic 15-tick getpow cocoon animation, 750 ms ~ 770 ms)
             ant_ptr->type = new_type;
             if (new_type == AntType::Combat) ant_ptr->max_hp = 12;
             else ant_ptr->max_hp = 10;
             ant_ptr->hp = ant_ptr->max_hp;
-            ant_ptr->transform_timer = 11;
+            ant_ptr->transform_timer = 15;
+            ant_ptr->powerup_dwell_timer = 0;
             impl_->audio_queue_.push_back(AudioEvent{SoundID::PowerUpHeal, ant_ptr->pixel_x, ant_ptr->pixel_y, 1, ant_ptr->player_id});
+        }
+
+        // Sound 2: PowerUpChime at tick 8 (~420 ms, subitem 6 of Anim 55)
+        if (ant_ptr->transform_timer == 7 && ant_ptr->pending_powerup_type != 255) {
             impl_->audio_queue_.push_back(AudioEvent{SoundID::PowerUpChime, ant_ptr->pixel_x, ant_ptr->pixel_y, 2, ant_ptr->player_id});
         }
 
@@ -2464,6 +2491,8 @@ void SimulationEngine::issue_order(const AntOrder& order) {
         unit->state = UnitState::Idle;
     }
 
+    unit->powerup_dwell_timer = 0;
+
     // Active action states (placing fire, planting bomb, building bridge, extinguishing, defusing, transforming)
     // strictly and silently disallow all incoming orders (Ants.exe 0x101ff5a / Ants.exe.c line 22938 -> LAB_0101fef5).
     // The unit finishes its action uninterrupted without playing CantGo.
@@ -2895,7 +2924,7 @@ const WorldState& SimulationEngine::get_world_state() const {
             s.is_drowning = (a->state == UnitState::Drowning);
             s.is_on_mud = a->is_on_mud;
             s.is_transforming = a->is_transforming();
-            s.transform_anim_frame = (a->transform_timer > 0) ? static_cast<uint16_t>(11 - a->transform_timer) : 0;
+            s.transform_anim_frame = (a->transform_timer > 0) ? static_cast<uint16_t>((15 - a->transform_timer) * 11 / 15) : 0;
             s.on_powerup = a->on_powerup;
             s.ability_cooldown_ticks = a->ability_cooldown_ticks;
             s.is_in_scuffle = a->is_in_scuffle;
@@ -3067,6 +3096,9 @@ uint32_t SimulationEngine::spawn_unit(uint8_t player_id, AntType type, TileCoord
             } else {
                 unit_ptr->start_drowning();
             }
+        }
+        if (cell.has_powerup()) {
+            unit_ptr->powerup_dwell_timer = 1;
         }
     }
     impl_->ants_.push_back(std::move(unit));
@@ -3399,6 +3431,7 @@ void SimulationEngine::execute_melee_attack(uint32_t attacker_id, uint32_t targe
 void SimulationEngine::issue_move_order(uint32_t ant_id, TileCoord dest, bool allow_friendly_bomb, bool is_food_order) {
     AntUnit* unit = impl_->find_unit(ant_id);
     if (!unit || !unit->is_alive() || unit->is_stunned()) return;
+    unit->powerup_dwell_timer = 0;
 
     if (unit->type == AntType::Thief && unit->underground) {
         unit->underground = false;
@@ -3498,10 +3531,15 @@ void SimulationEngine::issue_move_order(uint32_t ant_id, TileCoord dest, bool al
         unit->clear_path();
         unit->state = (unit->type == AntType::Combat) ? UnitState::GuardIdle : UnitState::Idle;
         unit->final_dest = unit->pos;
+        if (impl_->grid_.in_bounds(unit->pos) && impl_->grid_.has_powerup_at(unit->pos)) {
+            unit->cantgo_standing_on_powerup = false;
+            unit->powerup_dwell_timer = 6;
+        }
         return;
     }
 
     unit->transformation_interrupted = false;
+    unit->cantgo_standing_on_powerup = false;
 
     if (unit->state == UnitState::EnteringBase) {
         unit->underground = false;

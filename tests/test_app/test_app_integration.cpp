@@ -3084,8 +3084,17 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
             sim.tick();
         }
 
-        // Unit has arrived and started transforming
+        // Unit has arrived: dwells for 6 ticks (~300 ms) before transformation commits
         ASSERT_EQ(ant.pos, (TileCoord{13, 10}));
+        ASSERT_GT(ant.powerup_dwell_timer, 0);
+        ASSERT_TRUE(sim.grid().has_powerup_at(TileCoord{13, 10}));
+
+        // Advance through dwell window to start transformation
+        while (ant.is_alive() && !ant.is_transforming()) {
+            sim.tick();
+        }
+
+        // Unit has completed dwell and started transforming
         ASSERT_TRUE(ant.is_transforming());
         ASSERT_FALSE(sim.grid().has_powerup_at(TileCoord{13, 10}));
 
@@ -3099,8 +3108,8 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         ASSERT_TRUE(snap->is_transforming);
         ASSERT_TRUE(snap->on_powerup);
 
-        // Step 12 ticks to complete transformation
-        for (int t = 0; t < 12; ++t) {
+        // Step 15 ticks to complete authentic 770 ms transformation
+        for (int t = 0; t < 15; ++t) {
             sim.tick();
         }
 
@@ -3141,8 +3150,8 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         ASSERT_TRUE(ant.is_transforming());
         ASSERT_EQ(ant.pos, (TileCoord{10, 10}));
 
-        // Advance through the remaining getpow animation ticks (11 ticks total)
-        for (int t = 0; t < 12; ++t) {
+        // Advance through the remaining getpow animation ticks (15 ticks total)
+        for (int t = 0; t < 15; ++t) {
             sim.tick();
         }
 
@@ -3667,8 +3676,8 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         sim.issue_move_order(a3, TileCoord{30, 31});
         ASSERT_TRUE(ant3.is_transforming());
 
-        // Completes transformation into Bomber
-        for (int t = 0; t < 12; ++t) {
+        // Completes transformation into Bomber (authentic 15 ticks)
+        for (int t = 0; t < 15; ++t) {
             sim.tick();
         }
         ASSERT_FALSE(ant3.is_transforming());
@@ -4766,8 +4775,7 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
             sim.issue_move_order(ant_id, TileCoord{15, 15});
 
             // Step simulation until arrival and transformation starts
-            while (sim.get_unit(ant_id).is_alive() && !sim.get_unit(ant_id).is_transforming() &&
-                   !sim.get_unit(ant_id).waypoints.empty()) {
+            while (sim.get_unit(ant_id).is_alive() && !sim.get_unit(ant_id).is_transforming()) {
                 sim.tick();
             }
 
@@ -4777,8 +4785,8 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
             ASSERT_EQ(unit_trans.pos.y, 15);
             ASSERT_EQ(static_cast<uint8_t>(unit_trans.facing), static_cast<uint8_t>(Direction::South));
 
-            // Verify 11-tick transformation sequence progression
-            for (int t = 0; t < 11; ++t) {
+            // Verify 15-tick transformation sequence progression
+            for (int t = 0; t < 15; ++t) {
                 const auto& ws = sim.get_world_state();
                 const AntSnapshot* snap = nullptr;
                 for (const auto& a : ws.ants) {
@@ -4786,7 +4794,7 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
                 }
                 ASSERT_TRUE(snap != nullptr);
                 ASSERT_TRUE(snap->is_transforming);
-                ASSERT_EQ(snap->transform_anim_frame, static_cast<uint16_t>(t));
+                ASSERT_EQ(snap->transform_anim_frame, static_cast<uint16_t>((t * 11) / 15));
                 sim.tick();
             }
 
@@ -6871,10 +6879,10 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
 
     TEST_CASE("12.108: Version Invariant & Fog of War Cursor Concealment Parity") {
         // 1. Verify semantic versioning components
-        ASSERT_EQ(ants::VERSION_STRING, "v0.0.22");
+        ASSERT_EQ(ants::VERSION_STRING, "v0.0.23");
         ASSERT_EQ(ants::VERSION_MAJOR, 0);
         ASSERT_EQ(ants::VERSION_MINOR, 0);
-        ASSERT_EQ(ants::VERSION_PATCH, 22);
+        ASSERT_EQ(ants::VERSION_PATCH, 23);
 
         // 2. Setup simulation world with Fog of War enabled
         SimulationEngine sim;
@@ -9330,6 +9338,60 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
             ASSERT_TRUE(th.is_thief_steal);
             ASSERT_TRUE(sim.is_ant_in_base_queue(thief));
         }
+    } TEST_END();
+
+    // ------------------------------------------------------------------------
+    // 12.141: ISLANDS.LVL Corner Power-Up Hats Skill-Based Walk-On / Walk-Off
+    // ------------------------------------------------------------------------
+    TEST_CASE("12.141: ISLANDS.LVL Corner Power-Up Hats Skill-Based Walk-On / Walk-Off") {
+        SimulationEngine sim;
+        sim.init_test_world(30, 30, 100, 60000);
+
+        // Place consecutive hats along corridor like in ISLANDS.LVL:
+        // (0, 4): Mason Hat (Type 2)
+        // (0, 3): Mason Hat (Type 2)
+        // (0, 2): Swimmer Hat (Type 5)
+        sim.grid_mut().place_powerup(0, 4, 2);
+        sim.grid_mut().place_powerup(0, 3, 2);
+        sim.grid_mut().place_powerup(0, 2, 5);
+
+        // Worker starts at (0, 5)
+        uint32_t ant = sim.spawn_unit(0, AntType::Worker, TileCoord{0, 5});
+
+        // Step 1: Order to (0, 4)
+        sim.issue_move_order(ant, {0, 4});
+        for (int t = 0; t < 8; ++t) sim.tick();
+        ASSERT_EQ(sim.get_unit(ant).pos, (TileCoord{0, 4}));
+        ASSERT_EQ(sim.get_unit(ant).state, UnitState::Idle);
+        ASSERT_GT(sim.get_unit(ant).powerup_dwell_timer, 0);
+        ASSERT_TRUE(sim.grid().has_powerup_at({0, 4}));
+
+        // Step 2: Quick click before dwell finishes! Redirect to (0, 3)
+        sim.issue_move_order(ant, {0, 3});
+        ASSERT_EQ(sim.get_unit(ant).powerup_dwell_timer, 0);
+        for (int t = 0; t < 8; ++t) sim.tick();
+        ASSERT_EQ(sim.get_unit(ant).pos, (TileCoord{0, 3}));
+        ASSERT_EQ(sim.get_unit(ant).type, AntType::Worker); // Still Worker!
+        ASSERT_TRUE(sim.grid().has_powerup_at({0, 4}));      // Hat at (0, 4) untouched!
+        ASSERT_GT(sim.get_unit(ant).powerup_dwell_timer, 0);
+
+        // Step 3: Quick click to (0, 2) (the target Swimmer hat)
+        sim.issue_move_order(ant, {0, 2});
+        ASSERT_EQ(sim.get_unit(ant).powerup_dwell_timer, 0);
+        for (int t = 0; t < 8; ++t) sim.tick();
+        ASSERT_EQ(sim.get_unit(ant).pos, (TileCoord{0, 2}));
+        ASSERT_EQ(sim.get_unit(ant).type, AntType::Worker);
+        ASSERT_TRUE(sim.grid().has_powerup_at({0, 3}));      // Hat at (0, 3) untouched!
+
+        // Step 4: Player now lets the ant dwell on (0, 2)
+        for (int t = 0; t < 6; ++t) sim.tick();
+        ASSERT_TRUE(sim.get_unit(ant).is_transforming());
+        ASSERT_FALSE(sim.grid().has_powerup_at({0, 2}));     // Hat at (0, 2) consumed!
+
+        // Advance 15 ticks to complete transformation
+        for (int t = 0; t < 15; ++t) sim.tick();
+        ASSERT_FALSE(sim.get_unit(ant).is_transforming());
+        ASSERT_EQ(sim.get_unit(ant).type, AntType::Swimmer); // Transformed into Swimmer!
     } TEST_END();
 }
 

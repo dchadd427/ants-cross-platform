@@ -218,6 +218,8 @@ public:
     AntType     previous_type{AntType::Worker};
     bool        transformation_interrupted{false};
     bool        on_powerup{false};
+    uint16_t    powerup_dwell_timer{0};
+    bool        cantgo_standing_on_powerup{false};
     TileCoord   dropped_powerup_pos{-1, -1};
     uint16_t    invulnerable_ticks{0};
 
