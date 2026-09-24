@@ -75,13 +75,13 @@
 
   // Camera presets
   const CAMERA_PRESETS = {
-    cover: { pos: [0.0, 0.4, 11.2], look: [0.0, 0.0, 0.0] },
-    combat: { pos: [-2.1, 1.8, 4.4], look: [-2.1, 1.4, -0.6] },
-    fire: { pos: [2.0, 2.0, 4.0], look: [2.0, 1.6, -1.0] },
-    thief: { pos: [2.2, -0.4, 4.8], look: [2.2, -0.5, 0.7] },
-    worker: { pos: [0.0, 0.5, 4.6], look: [0.0, 0.45, 0.15] },
-    bomber: { pos: [-0.35, -1.0, 5.5], look: [-0.35, -1.35, 1.7] },
-    swimmer: { pos: [-2.3, -0.1, 4.6], look: [-2.3, -0.2, 0.6] }
+    cover: { pos: [0.0, 4.2, 9.0], look: [0.0, 0.15, 0.0] },
+    combat: { pos: [-1.4, 2.2, 3.8], look: [-1.25, 1.05, -0.75] },
+    fire: { pos: [1.3, 2.1, 3.6], look: [1.20, 0.95, -0.70] },
+    swimmer: { pos: [-1.6, 1.4, 3.2], look: [-1.45, 0.35, 0.25] },
+    worker: { pos: [0.0, 1.4, 3.5], look: [0.0, 0.40, -0.10] },
+    thief: { pos: [1.4, 1.2, 3.0], look: [1.25, 0.05, 0.20] },
+    bomber: { pos: [-0.2, 1.6, 2.2], look: [-0.20, -0.35, 0.75] }
   };
 
   // --- Procedural Textures & Materials ---
@@ -951,9 +951,33 @@
   }
 
   // --- Squad Staging (Faithful to Title Cover Art) ---
+  let glbScene = null;
+
   function assembleSquad() {
     antsGroup = new THREE.Group();
     scene.add(antsGroup);
+
+    // Load authentic master Blender GLB scene
+    if (typeof THREE.GLTFLoader !== 'undefined') {
+      const loader = new THREE.GLTFLoader();
+      loader.load('ants_scene.glb', (gltf) => {
+        glbScene = gltf.scene;
+        glbScene.traverse(child => {
+          if (child.isMesh) {
+            child.castShadow = true;
+            child.receiveShadow = true;
+          }
+        });
+        scene.add(glbScene);
+        // Hide procedural fallback group once master GLB is loaded
+        antsGroup.visible = false;
+        if (backdropGroup) backdropGroup.visible = false;
+        if (logoGroup) logoGroup.visible = false;
+        console.log("Loaded authentic 3D Blender GLB scene successfully!");
+      }, undefined, (err) => {
+        console.warn("GLB load notice (using procedural fallback):", err);
+      });
+    }
 
     // 1. Combat Ant (Top-Left, elevated, muscular posture, X-sash)
     const combatAnt = createBaseAnt({ scale: 1.22, scowl: true });
@@ -1062,6 +1086,21 @@
     document.getElementById('btn-reset').addEventListener('click', () => {
       transitionToCamera('cover');
     });
+
+    const modal = document.getElementById('render-modal');
+    const btnMasterRender = document.getElementById('btn-master-render');
+    const btnCloseModal = document.getElementById('btn-close-modal');
+    if (btnMasterRender && modal) {
+      btnMasterRender.addEventListener('click', () => modal.classList.remove('hidden'));
+    }
+    if (btnCloseModal && modal) {
+      btnCloseModal.addEventListener('click', () => modal.classList.add('hidden'));
+    }
+    if (modal) {
+      modal.addEventListener('click', (e) => {
+        if (e.target === modal) modal.classList.add('hidden');
+      });
+    }
 
     document.getElementById('btn-screenshot').addEventListener('click', captureScreenshot);
 
