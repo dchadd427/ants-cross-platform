@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>Ants! 3D Title Scene - Realistic Stylized Engine</title>
+  <link rel="icon" type="image/png" href="../favicon.png">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <!-- Canvas WebGL Container -->
+  <div id="canvas-container"></div>
+
+  <!-- Loading Screen -->
+  <div id="loader">
+    <div class="spinner"></div>
+    <div class="loader-text">Loading Realistic 3D Ant Squad...</div>
+  </div>
+
+  <!-- UI Overlay -->
+  <div class="ui-overlay">
+    <!-- Header -->
+    <header class="header-bar">
+      <div class="brand-badge">
+        <h1>ANTS! 3D COVER</h1>
+        <span class="badge-tag">PBR Realism</span>
+      </div>
+      <div class="header-actions">
+        <button id="btn-reset" class="icon-btn" title="Reset to Cover Art View">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+          Cover Shot
+        </button>
+        <button id="btn-screenshot" class="icon-btn" title="Capture High-Res PNG">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+          Snapshot
+        </button>
+      </div>
+    </header>
+
+    <!-- Caste Navigator Sidebar -->
+    <nav class="caste-nav">
+      <div class="caste-nav-title">Inspect Castes</div>
+      <button class="caste-btn active" data-caste="cover">
+        <span class="dot" style="color: #ffaa33;"></span> Squad Overview
+      </button>
+      <button class="caste-btn" data-caste="combat">
+        <span class="dot" style="color: #e63946;"></span> Combat Ant (X-Sash)
+      </button>
+      <button class="caste-btn" data-caste="fire">
+        <span class="dot" style="color: #f39c12;"></span> Fire Ant (Helmet 'A')
+      </button>
+      <button class="caste-btn" data-caste="thief">
+        <span class="dot" style="color: #f1c40f;"></span> Thief Ant (Bandana)
+      </button>
+      <button class="caste-btn" data-caste="worker">
+        <span class="dot" style="color: #2ecc71;"></span> Worker Ant (Center)
+      </button>
+      <button class="caste-btn" data-caste="bomber">
+        <span class="dot" style="color: #e74c3c;"></span> Bomber Ant (Goggles)
+      </button>
+      <button class="caste-btn" data-caste="swimmer">
+        <span class="dot" style="color: #00d2d3;"></span> Swimmer Ant (Shovel)
+      </button>
+    </nav>
+
+    <!-- Bottom Controls Dock -->
+    <footer class="bottom-dock">
+      <div class="control-group">
+        <label for="select-lighting">Lighting:</label>
+        <select id="select-lighting" class="pill-select">
+          <option value="cover" selected>Cover Master (5-Point)</option>
+          <option value="sunset">Anthill Sunset</option>
+          <option value="neon">Cyber Neon Rim</option>
+          <option value="studio">Neutral Studio</option>
+        </select>
+      </div>
+
+      <div class="dock-divider"></div>
+
+      <button id="btn-animate" class="toggle-btn active" title="Toggle organic breathing & antenna movements">
+        Motion
+      </button>
+      <button id="btn-turntable" class="toggle-btn" title="Toggle 360 camera auto-orbit">
+        Turntable
+      </button>
+      <button id="btn-wireframe" class="toggle-btn" title="Toggle 3D mesh wireframe inspection">
+        Wireframe
+      </button>
+    </footer>
+
+    <!-- Info Detail Card -->
+    <div class="info-card">
+      <h3 id="card-title">Classic Squad Overview</h3>
+      <p id="card-desc">Faithful 3D recreation of the classic 1998 cover art featuring all 6 specialized ant castes staged in authentic formation.</p>
+      <div id="card-traits" class="caste-traits">
+        <!-- Dynamically injected traits -->
+      </div>
+    </div>
+  </div>
+
+  <!-- Scripts -->
+  <script src="libs/three.min.js"></script>
+  <script src="libs/OrbitControls.js"></script>
+  <script src="viewer.js"></script>
+</body>
+</html>

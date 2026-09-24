@@ -43,6 +43,7 @@ COPY web/favicon.* /usr/share/nginx/html/
 
 # Copy Asset Catalog & Viewer for reference on beta site
 COPY asset_catalog/ /usr/share/nginx/html/asset_catalog/
+COPY web/viewer3d/ /usr/share/nginx/html/viewer3d/
 
 # Copy custom Nginx configuration
 COPY docker/nginx.conf /etc/nginx/conf.d/default.conf
