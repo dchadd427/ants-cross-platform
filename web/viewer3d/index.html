@@ -3,9 +3,52 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <title>Ants! 3D Title Scene - Realistic Stylized Engine</title>
+  <title>Ants! 3D Character Studio - Worker Ant (Caste #1)</title>
   <link rel="icon" type="image/png" href="../favicon.png">
   <link rel="stylesheet" href="style.css">
+  <style>
+    .gallery-tabs {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+    .gallery-tab-btn {
+      padding: 6px 14px;
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 6px;
+      color: #ccc;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 500;
+      transition: all 0.2s ease;
+    }
+    .gallery-tab-btn.active, .gallery-tab-btn:hover {
+      background: #ffaa33;
+      color: #111;
+      border-color: #ffaa33;
+    }
+    .badge-review {
+      background: rgba(46, 204, 113, 0.2);
+      border: 1px solid #2ecc71;
+      color: #2ecc71;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .caste-btn.locked {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+    .caste-btn.locked .lock-icon {
+      margin-left: auto;
+      font-size: 10px;
+      color: #888;
+    }
+  </style>
 </head>
 <body>
   <!-- Canvas WebGL Container -->
@@ -14,7 +57,7 @@
   <!-- Loading Screen -->
   <div id="loader">
     <div class="spinner"></div>
-    <div class="loader-text">Loading Realistic 3D Ant Squad...</div>
+    <div class="loader-text">Loading 3D Worker Ant Studio...</div>
   </div>
 
   <!-- UI Overlay -->
@@ -22,17 +65,25 @@
     <!-- Header -->
     <header class="header-bar">
       <div class="brand-badge">
-        <h1>ANTS! 3D COVER</h1>
-        <span class="badge-tag">PBR Realism</span>
+        <h1>WORKER ANT (CASTE #1)</h1>
+        <span class="badge-review">In User Review</span>
       </div>
       <div class="header-actions">
-        <button id="btn-master-render" class="icon-btn highlight" title="View High-Res Raytraced Master Still">
+        <button id="btn-master-render" class="icon-btn highlight" title="View High-Res Raytraced Multi-Angle Stills">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
-          Master Render
+          Render Gallery
         </button>
-        <button id="btn-reset" class="icon-btn" title="Reset to Cover Art View">
+        <button id="btn-view-face" class="icon-btn" title="Focus on Face & Mandibles">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="9" cy="9" r="1.5"/><circle cx="15" cy="9" r="1.5"/><path d="M8 15s1.5 2 4 2 4-2 4-2"/></svg>
+          Face Zoom
+        </button>
+        <button id="btn-view-angle" class="icon-btn" title="3/4 Perspective Angle">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
+          3/4 Angle
+        </button>
+        <button id="btn-reset" class="icon-btn" title="Reset to Full Body Front View">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
-          Cover Shot
+          Full Stance
         </button>
         <button id="btn-screenshot" class="icon-btn" title="Capture High-Res PNG">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
@@ -41,29 +92,35 @@
       </div>
     </header>
 
-    <!-- Caste Navigator Sidebar -->
+    <!-- Caste Progress Sidebar -->
     <nav class="caste-nav">
-      <div class="caste-nav-title">Inspect Castes</div>
-      <button class="caste-btn active" data-caste="cover">
-        <span class="dot" style="color: #ffaa33;"></span> Squad Overview
+      <div class="caste-nav-title">Caste Pipeline</div>
+      <button class="caste-btn active" data-caste="worker">
+        <span class="dot" style="color: #2ecc71;"></span> 1. Worker (Under Review)
       </button>
-      <button class="caste-btn" data-caste="combat">
-        <span class="dot" style="color: #e63946;"></span> Combat Ant (X-Sash)
+      <button class="caste-btn locked" data-caste="combat" title="Locked until Worker Ant is approved">
+        <span class="dot" style="color: #e63946;"></span> 2. Combat Ant
+        <span class="lock-icon">🔒</span>
       </button>
-      <button class="caste-btn" data-caste="fire">
-        <span class="dot" style="color: #f39c12;"></span> Fire Ant (Helmet 'A')
+      <button class="caste-btn locked" data-caste="fire" title="Locked until previous ants are approved">
+        <span class="dot" style="color: #f39c12;"></span> 3. Fire Ant
+        <span class="lock-icon">🔒</span>
       </button>
-      <button class="caste-btn" data-caste="thief">
-        <span class="dot" style="color: #f1c40f;"></span> Thief Ant (Bandana)
+      <button class="caste-btn locked" data-caste="swimmer" title="Locked until previous ants are approved">
+        <span class="dot" style="color: #00d2d3;"></span> 4. Swimmer Ant
+        <span class="lock-icon">🔒</span>
       </button>
-      <button class="caste-btn" data-caste="worker">
-        <span class="dot" style="color: #2ecc71;"></span> Worker Ant (Center)
+      <button class="caste-btn locked" data-caste="bomber" title="Locked until previous ants are approved">
+        <span class="dot" style="color: #e74c3c;"></span> 5. Bomber Ant
+        <span class="lock-icon">🔒</span>
       </button>
-      <button class="caste-btn" data-caste="bomber">
-        <span class="dot" style="color: #e74c3c;"></span> Bomber Ant (Goggles)
+      <button class="caste-btn locked" data-caste="thief" title="Locked until previous ants are approved">
+        <span class="dot" style="color: #f1c40f;"></span> 6. Thief Ant
+        <span class="lock-icon">🔒</span>
       </button>
-      <button class="caste-btn" data-caste="swimmer">
-        <span class="dot" style="color: #00d2d3;"></span> Swimmer Ant (Shovel)
+      <button class="caste-btn locked" data-caste="cover" title="Locked until all 6 castes are approved">
+        <span class="dot" style="color: #ffaa33;"></span> Final Cover Squad
+        <span class="lock-icon">🔒</span>
       </button>
     </nav>
 
@@ -72,16 +129,16 @@
       <div class="control-group">
         <label for="select-lighting">Lighting:</label>
         <select id="select-lighting" class="pill-select">
-          <option value="cover" selected>Cover Master (5-Point)</option>
+          <option value="cover" selected>Studio 3-Point (Master)</option>
           <option value="sunset">Anthill Sunset</option>
-          <option value="neon">Cyber Neon Rim</option>
-          <option value="studio">Neutral Studio</option>
+          <option value="neon">Cyber Rim</option>
+          <option value="studio">Pure Neutral</option>
         </select>
       </div>
 
       <div class="dock-divider"></div>
 
-      <button id="btn-animate" class="toggle-btn active" title="Toggle organic breathing & antenna movements">
+      <button id="btn-animate" class="toggle-btn active" title="Toggle organic breathing & subtle antenna motion">
         Motion
       </button>
       <button id="btn-turntable" class="toggle-btn" title="Toggle 360 camera auto-orbit">
@@ -94,28 +151,37 @@
 
     <!-- Info Detail Card -->
     <div class="info-card">
-      <h3 id="card-title">Classic Squad Overview</h3>
-      <p id="card-desc">Faithful 3D recreation of the classic 1998 cover art featuring all 6 specialized ant castes staged in authentic formation.</p>
+      <h3 id="card-title">Worker Ant (Caste #1)</h3>
+      <p id="card-desc">The foundational base model for all 6 ant castes. Features huge innocent glossy compound eyes with white catchlights, clasping mandibles with pale lime-green tips, mottled emerald chitin, and 6 dark mahogany articulated insect legs.</p>
       <div id="card-traits" class="caste-traits">
-        <!-- Dynamically injected traits -->
+        <span class="trait-tag">Innocent Compound Eyes</span>
+        <span class="trait-tag">Clasping Mandibles</span>
+        <span class="trait-tag">Elbowed Antennae</span>
+        <span class="trait-tag">Articulated 6 Legs</span>
+        <span class="trait-tag">Mottled Emerald Chitin</span>
       </div>
     </div>
   </div>
 
-  <!-- Master Render Modal Overlay -->
+  <!-- Multi-Angle Render Modal Overlay -->
   <div id="render-modal" class="modal-overlay hidden">
     <div class="modal-content">
       <div class="modal-header">
-        <h2>Authentic 1998 Ants! Master Render (Cycles Raytraced)</h2>
+        <h2>Worker Ant (Caste #1) — Multi-Angle Renders</h2>
         <button id="btn-close-modal" class="close-btn">&times;</button>
       </div>
       <div class="modal-body">
+        <div class="gallery-tabs">
+          <button class="gallery-tab-btn active" data-img="worker_front.png">Front Beauty Stance</button>
+          <button class="gallery-tab-btn" data-img="worker_perspective.png">3/4 Depth Perspective</button>
+          <button class="gallery-tab-btn" data-img="worker_face_closeup.png">Face & Eyes Close-up</button>
+        </div>
         <div class="render-viewport">
-          <img src="authentic_ants_render.png" alt="Authentic 1998 Ants! Master Render" id="master-render-img">
+          <img src="worker_front.png?v=3001" alt="Worker Ant Front View" id="master-render-img">
         </div>
         <div class="render-info">
-          <p><strong>Offline Raytraced Master Still:</strong> Rendered with Blender 4.3.2 Apple Silicon Metal Cycles (128 samples, hardware denoised). Matches the 1998 original cover art composition, squircle cranium anatomy, dual lime-green mandible lobes, custom caste gear, contact shadows, and 3D 'ants!' logo.</p>
-          <a href="authentic_ants_render.png" download="authentic_ants_render.png" class="download-link">Download Full 1080p Master Render</a>
+          <p id="render-caption"><strong>Front Beauty Stance:</strong> Modeled with authentic quad topology and PBR shaders. Showcases the rounded horizontal bean head, huge innocent compound eyes with olive irises and catchlights, clasping mandibles with pale lime tips, segmented thorax, and 6 articulated mahogany legs.</p>
+          <a href="worker_front.png" download="worker_front.png" id="download-link" class="download-link">Download Full 1080p Render</a>
         </div>
       </div>
     </div>
@@ -125,6 +191,6 @@
   <script src="libs/three.min.js"></script>
   <script src="libs/OrbitControls.js"></script>
   <script src="libs/GLTFLoader.js"></script>
-  <script src="viewer.js"></script>
+  <script src="viewer.js?v=3001"></script>
 </body>
 </html>
