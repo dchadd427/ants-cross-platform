@@ -1,10 +1,6 @@
 """
 Generate ultra-fidelity PBR textures for Worker Ant (Caste #1)
-Matches reference artwork:
-- eye_pbr.png: Large expressive hazel-olive iris, dark pupil, warm cream sclera, crisp catchlights
-- chitin_pbr.png: Weathered sage green with warm russet/terracotta brow dusting and organic pebble pores
-- mandible_pbr.png: Gradient from sage green base to chartreuse/pale lime teeth
-- limbs_pbr.png: Deep mahogany/charcoal brown with warm terracotta joint accents
+Calibrated 1:1 to master reference artwork (worker_ant_master_1790372115097.jpg)
 """
 
 import math
@@ -16,131 +12,96 @@ random.seed(42)
 OUT_DIR = "/Users/dchadd/Desktop/Ants-Mac/web/viewer3d"
 
 # -----------------------------------------------------------------------------
-# 1. High-Fidelity Expressive Eye Texture (1024x1024)
+# 1. High-Fidelity Innocent Cartoon Eye Texture (1024x1024)
 # -----------------------------------------------------------------------------
 def generate_eye_texture():
     size = 1024
-    img = Image.new("RGBA", (size, size), (232, 236, 218, 255)) # Warm cream sclera
-    draw = ImageDraw.Draw(img)
-    cx, cy = size // 2, size // 2
+    img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+    cx, cy = size * 0.50, size * 0.50
+    # Centered innocent gaze (slight 1.5% medial shift for natural binocular focus)
+    iris_cx, iris_cy = size * 0.515, size * 0.50
 
-    # Spherical aspect factor: horizontal compression in equirectangular space
-    # so that on a 3D sphere, the iris and pupil appear circular!
-    # In equirectangular mapping, delta_u needs to be scaled by ~1.85 to appear circular.
-    u_scale = 1.85
+    r_outer = size * 0.48
+    r_iris = size * 0.285   # Large cute cartoon iris
+    r_pupil = size * 0.138  # Expressive dark pupil
 
-    # Radii in vertical pixels
-    r_limbal = 310   # Outer iris ring (limbal ring)
-    r_iris = 295     # Main iris body
-    r_inner_iris = 165 # Inner iris zone
-    r_pupil = 135    # Dark pupil
-    
-    # 1. Sclera shading: soft warm shadow towards edges
     for y in range(size):
+        ny = (y - cy) / (size * 0.5)
         for x in range(size):
-            dx = (x - cx) / u_scale
-            dy = (y - cy)
-            dist = math.sqrt(dx*dx + dy*dy)
-            if dist > r_limbal:
-                # Soft ambient occlusion towards the perimeter
-                edge_factor = min(1.0, (dist - r_limbal) / 220.0)
-                r = int(232 - 45 * edge_factor)
-                g = int(236 - 40 * edge_factor)
-                b = int(218 - 50 * edge_factor)
-                img.putpixel((x, y), (r, g, b, 255))
+            nx = (x - cx) / (size * 0.5)
+            d_sclera = math.sqrt(nx**2 + (ny / 1.06)**2)
+            
+            if d_sclera <= 0.97:
+                # Warm eggshell ivory sclera (#FAFBF2 in center, fading to #D8DFCA at rim)
+                t_edge = max(0.0, (d_sclera - 0.60) / 0.37)
+                r = int(250 - 40 * t_edge)
+                g = int(252 - 34 * t_edge)
+                b = int(242 - 46 * t_edge)
+                
+                # Check iris
+                d_iris = math.sqrt(((x - iris_cx) / r_iris)**2 + ((y - iris_cy) / (r_iris * 1.02))**2)
+                d_pupil = math.sqrt(((x - iris_cx) / r_pupil)**2 + ((y - iris_cy) / r_pupil)**2)
 
-    # 2. Limbal Ring (sharp dark olive-brown outer border)
-    x_min = max(0, int(cx - r_limbal * u_scale - 15))
-    x_max = min(size - 1, int(cx + r_limbal * u_scale + 15))
-    y_min = max(0, cy - r_limbal - 10)
-    y_max = min(size - 1, cy + r_limbal + 10)
-    for y in range(y_min, y_max + 1):
-        for x in range(x_min, x_max + 1):
-            dx = (x - cx) / u_scale
-            dy = (y - cy)
-            dist = math.sqrt(dx*dx + dy*dy)
-            if r_iris < dist <= r_limbal:
-                t = (dist - r_iris) / (r_limbal - r_iris)
-                # Blend from outer iris (green) to limbal (dark olive #3a481c)
-                lr = int(58 * (1-t) + 45 * t)
-                lg = int(72 * (1-t) + 55 * t)
-                lb = int(28 * (1-t) + 20 * t)
-                img.putpixel((x, y), (lr, lg, lb, 255))
+                if d_iris <= 1.0:
+                    angle = math.atan2(y - iris_cy, x - iris_cx)
+                    t_iris = (d_iris - (r_pupil / r_iris)) / (1.0 - (r_pupil / r_iris))
+                    t_iris = max(0.0, min(1.0, t_iris))
 
-    # 3. Main Iris: Olive-green with radial striations & golden-amber stipples
-    x_iris_min = max(0, int(cx - r_iris * u_scale))
-    x_iris_max = min(size - 1, int(cx + r_iris * u_scale))
-    y_iris_min = max(0, cy - r_iris)
-    y_iris_max = min(size - 1, cy + r_iris)
-    for y in range(y_iris_min, y_iris_max + 1):
-        for x in range(x_iris_min, x_iris_max + 1):
-            dx = (x - cx) / u_scale
-            dy = (y - cy)
-            dist = math.sqrt(dx*dx + dy*dy)
-            if r_pupil < dist <= r_iris:
-                angle = math.atan2(dy, dx)
-                t_rad = (dist - r_pupil) / (r_iris - r_pupil)
-                
-                # Radial striation pattern
-                striation = math.sin(angle * 72.0) * 0.15 + math.sin(angle * 144.0) * 0.08
-                # Golden-amber ring in middle
-                amber_ring = math.exp(-((t_rad - 0.45) ** 2) / 0.04) * 0.35
-                
-                base_r = 104 + striation * 25 + amber_ring * 55
-                base_g = 125 + striation * 20 + amber_ring * 45
-                base_b = 50 + striation * 15 + amber_ring * 25
-                
-                # Darken slightly near pupil margin
-                if t_rad < 0.15:
-                    darken = t_rad / 0.15
-                    base_r *= (0.6 + 0.4 * darken)
-                    base_g *= (0.6 + 0.4 * darken)
-                    base_b *= (0.6 + 0.4 * darken)
+                    # Fine radial striation fibers
+                    fibers = math.sin(angle * 72.0) * 0.08 + math.cos(angle * 144.0 + 0.8) * 0.05
+                    # Golden sunburst in middle iris zone
+                    amber_ring = math.exp(-((t_iris - 0.42)**2) / 0.045) * 0.55
                     
-                img.putpixel((x, y), (int(min(255, max(0, base_r))),
-                                      int(min(255, max(0, base_g))),
-                                      int(min(255, max(0, base_b))),
-                                      255))
+                    base_r = int(142 + amber_ring * 65 + fibers * 25)
+                    base_g = int(162 + amber_ring * 45 + fibers * 20)
+                    base_b = int(58  + amber_ring * 20 + fibers * 15)
+                    
+                    # Limbal ring: dark olive margin
+                    if t_iris > 0.82:
+                        t_limb = (t_iris - 0.82) / 0.18
+                        base_r = int(base_r * (1.0 - 0.65 * t_limb) + 40 * t_limb)
+                        base_g = int(base_g * (1.0 - 0.60 * t_limb) + 50 * t_limb)
+                        base_b = int(base_b * (1.0 - 0.60 * t_limb) + 22 * t_limb)
+                    
+                    r, g, b = base_r, base_g, base_b
 
-    # 4. Pupil: Deep velvety dark circle (#151815)
-    x_pupil_min = max(0, int(cx - r_pupil * u_scale))
-    x_pupil_max = min(size - 1, int(cx + r_pupil * u_scale))
-    y_pupil_min = max(0, cy - r_pupil)
-    y_pupil_max = min(size - 1, cy + r_pupil)
-    for y in range(y_pupil_min, y_pupil_max + 1):
-        for x in range(x_pupil_min, x_pupil_max + 1):
-            dx = (x - cx) / u_scale
-            dy = (y - cy)
-            dist = math.sqrt(dx*dx + dy*dy)
-            if dist <= r_pupil:
-                # Soft anti-aliased edge at pupil boundary
-                if dist > r_pupil - 2.5:
-                    aa = (r_pupil - dist) / 2.5
-                    pr = int(21 * (1 - aa) + 55 * aa)
-                    pg = int(24 * (1 - aa) + 65 * aa)
-                    pb = int(21 * (1 - aa) + 25 * aa)
-                    img.putpixel((x, y), (pr, pg, pb, 255))
-                else:
-                    img.putpixel((x, y), (21, 24, 21, 255))
+                if d_pupil <= 1.0:
+                    t_p = min(1.0, max(0.0, (1.0 - d_pupil) * 16.0))
+                    r = int(r * (1.0 - t_p) + 12 * t_p)
+                    g = int(g * (1.0 - t_p) + 12 * t_p)
+                    b = int(b * (1.0 - t_p) + 14 * t_p)
 
-    # 5. Crisp Specular Catchlights (Studio Lightbox reflection at 10 o'clock)
-    # Primary highlight: curved soft pill reflection
-    hl1_x = int(cx - 55 * u_scale)
-    hl1_y = cy - 55
-    draw.ellipse([hl1_x - int(24 * u_scale), hl1_y - 28,
-                  hl1_x + int(24 * u_scale), hl1_y + 28],
-                 fill=(255, 255, 255, 250))
-                 
-    # Secondary subtle catchlight dot at 8 o'clock
-    hl2_x = int(cx - 40 * u_scale)
-    hl2_y = cy - 10
-    draw.ellipse([hl2_x - int(7 * u_scale), hl2_y - 7,
-                  hl2_x + int(7 * u_scale), hl2_y + 7],
-                 fill=(245, 250, 240, 210))
+                alpha = 255
+                if d_sclera > 0.90:
+                    alpha = int(255 * (0.97 - d_sclera) / 0.07)
+                img.putpixel((x, y), (min(255, max(0, r)),
+                                      min(255, max(0, g)),
+                                      min(255, max(0, b)),
+                                      alpha))
 
-    # Gentle blur on highlights for natural optics
+    # Catchlights
+    overlay = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+    d_over = ImageDraw.Draw(overlay)
+
+    # Primary keylight softbox at 10:30
+    hl_cx = int(iris_cx - r_iris * 0.42)
+    hl_cy = int(iris_cy - r_iris * 0.46)
+    hl_r = int(r_pupil * 0.52)
+    d_over.ellipse([hl_cx - hl_r, hl_cy - hl_r, hl_cx + hl_r, hl_cy + hl_r],
+                   fill=(255, 255, 255, 245))
+    
+    # Secondary subtle reflection at 4:30
+    s_cx = int(iris_cx + r_iris * 0.48)
+    s_cy = int(iris_cy + r_iris * 0.42)
+    s_r = int(r_pupil * 0.26)
+    d_over.ellipse([s_cx - s_r, s_cy - s_r, s_cx + s_r, s_cy + s_r],
+                   fill=(240, 245, 255, 75))
+
+    overlay = overlay.filter(ImageFilter.GaussianBlur(radius=2.5))
+    img = Image.alpha_composite(img, overlay)
+
     out_path = f"{OUT_DIR}/eye_pbr.png"
-    img.save(out_path, "PNG")
+    img.save(out_path)
     print(f"Generated authentic eye texture: {out_path}")
 
 # -----------------------------------------------------------------------------
@@ -151,39 +112,27 @@ def generate_chitin_texture():
     img = Image.new("RGBA", (size, size))
     pixels = img.load()
 
-    # Perlin-like cellular noise synthesis
-    # Base: Sage green (#5c7b5a)
-    # Warm patches: Terracotta/burnt umber (#7c6448)
-    # Light accents: Pale sage highlight (#7e9e7a)
     for y in range(size):
         fy = y / size
         for x in range(size):
             fx = x / size
             
-            # Multi-octave organic pattern
-            n1 = math.sin(fx * 14.0) * math.cos(fy * 14.0)
-            n2 = math.sin(fx * 32.0 + fy * 16.0) * 0.5
-            n3 = math.sin(fx * 72.0 - fy * 36.0) * 0.25
-            val = (n1 + n2 + n3) / 1.75 # roughly [-1, 1]
+            n1 = math.sin(fx * 12.0) * math.cos(fy * 12.0)
+            n2 = math.sin(fx * 28.0 + fy * 14.0) * 0.5
+            n3 = math.sin(fx * 64.0 - fy * 32.0) * 0.25
+            val = (n1 + n2 + n3) / 1.75
             
-            # Terracotta warm gradient: prominent on upper forehead/crown (fy in [0.55, 0.95])
-            # and around brow margins
-            crown_mask = max(0.0, math.sin((fy - 0.35) * math.pi / 0.65)) if fy >= 0.35 else 0.0
-            warm_weight = crown_mask * 0.55 + max(0.0, val * 0.25)
-            warm_weight = min(1.0, max(0.0, warm_weight))
+            crown_mask = max(0.0, math.sin((fy - 0.28) * math.pi / 0.72)) if fy >= 0.28 else 0.0
+            warm_weight = min(1.0, max(0.0, crown_mask * 0.58 + val * 0.22))
             
-            # Base sage green: (92, 126, 92)
-            # Warm russet: (138, 108, 76)
-            # Light highlight: (130, 162, 126)
-            r = int(92 * (1 - warm_weight) + 138 * warm_weight + val * 10)
-            g = int(126 * (1 - warm_weight) + 108 * warm_weight + val * 8)
-            b = int(92 * (1 - warm_weight) + 76 * warm_weight + val * 6)
+            r = int(88 * (1 - warm_weight) + 142 * warm_weight + val * 12)
+            g = int(122 * (1 - warm_weight) + 104 * warm_weight + val * 8)
+            b = int(86 * (1 - warm_weight) + 78 * warm_weight + val * 6)
             
-            # Micro-pore stippling
-            noise_pore = (random.random() - 0.5) * 14
-            r = int(min(255, max(0, r + noise_pore)))
-            g = int(min(255, max(0, g + noise_pore)))
-            b = int(min(255, max(0, b + noise_pore)))
+            pore = (random.random() - 0.5) * 12
+            r = int(min(255, max(0, r + pore)))
+            g = int(min(255, max(0, g + pore)))
+            b = int(min(255, max(0, b + pore)))
             
             pixels[x, y] = (r, g, b, 255)
 
@@ -199,31 +148,24 @@ def generate_mandible_texture():
     img = Image.new("RGBA", (size, size))
     pixels = img.load()
 
-    # Vertical gradient:
-    # Top (y < 200): Sage green cheek chitin (#668260)
-    # Middle (200-360): Vibrant chartreuse transition (#a6cc68)
-    # Bottom / tooth edge (y > 360): Translucent pale lime-cream (#d8f0a0)
     for y in range(size):
         t = y / size
         for x in range(size):
-            noise = (random.random() - 0.5) * 8
-            if t < 0.40:
-                # Green chitin
-                r = int(102 + noise)
-                g = int(130 + noise)
-                b = int(96 + noise)
-            elif t < 0.70:
-                # Transition zone
-                blend = (t - 0.40) / 0.30
-                r = int(102 * (1 - blend) + 175 * blend + noise)
-                g = int(130 * (1 - blend) + 208 * blend + noise)
-                b = int(96 * (1 - blend) + 110 * blend + noise)
+            noise = (random.random() - 0.5) * 6
+            if t < 0.35:
+                r = int(92 + noise)
+                g = int(126 + noise)
+                b = int(88 + noise)
+            elif t < 0.68:
+                blend = (t - 0.35) / 0.33
+                r = int(92 * (1 - blend) + 168 * blend + noise)
+                g = int(126 * (1 - blend) + 204 * blend + noise)
+                b = int(88 * (1 - blend) + 100 * blend + noise)
             else:
-                # Pale tooth enamel
-                blend = (t - 0.70) / 0.30
-                r = int(175 * (1 - blend) + 218 * blend + noise)
-                g = int(208 * (1 - blend) + 242 * blend + noise)
-                b = int(110 * (1 - blend) + 165 * blend + noise)
+                blend = (t - 0.68) / 0.32
+                r = int(168 * (1 - blend) + 220 * blend + noise)
+                g = int(204 * (1 - blend) + 244 * blend + noise)
+                b = int(100 * (1 - blend) + 156 * blend + noise)
                 
             pixels[x, y] = (min(255, max(0, r)), min(255, max(0, g)), min(255, max(0, b)), 255)
 
@@ -239,20 +181,23 @@ def generate_limbs_texture():
     img = Image.new("RGBA", (size, size))
     pixels = img.load()
 
-    # Deep mahogany / charcoal brown with warm terracotta joint undertones
     for y in range(size):
         fy = y / size
         for x in range(size):
-            # Longitudinal chitin grain
-            grain = math.sin((x / size) * 80.0) * 8
+            fx = x / size
+            grain = math.sin(fx * 48.0) * 8 + math.cos(fy * 24.0) * 6
             pore = (random.random() - 0.5) * 10
             
-            # Subtle joint warmth
-            joint_warm = max(0.0, math.sin(fy * math.pi * 3.0)) * 25
+            green_mottle = max(0.0, math.sin(fx * 16.0 + fy * 18.0) * 0.5 + math.sin(fx * 32.0 - fy * 12.0) * 0.25)
+            joint_warm = max(0.0, math.sin(fy * math.pi * 4.0)) * 22
             
-            r = int(54 + joint_warm * 0.7 + grain + pore)
-            g = int(40 + joint_warm * 0.4 + grain + pore)
-            b = int(34 + joint_warm * 0.2 + grain + pore)
+            base_r = 92 + joint_warm * 0.8 + grain + pore
+            base_g = 62 + joint_warm * 0.5 + grain * 0.5 + pore
+            base_b = 50 + joint_warm * 0.3 + grain * 0.3 + pore
+            
+            r = int(base_r * (1 - green_mottle) + 72 * green_mottle)
+            g = int(base_g * (1 - green_mottle) + 94 * green_mottle)
+            b = int(base_b * (1 - green_mottle) + 64 * green_mottle)
             
             pixels[x, y] = (min(255, max(0, r)), min(255, max(0, g)), min(255, max(0, b)), 255)
 
@@ -265,4 +210,4 @@ if __name__ == "__main__":
     generate_chitin_texture()
     generate_mandible_texture()
     generate_limbs_texture()
-    print("All authentic Worker Ant textures generated successfully!")
+    print("All authentic textures updated successfully!")

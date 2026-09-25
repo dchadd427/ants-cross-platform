@@ -7,6 +7,163 @@
   <link rel="icon" type="image/png" href="../favicon.png">
   <link rel="stylesheet" href="style.css">
   <style>
+    /* View Mode Tabs */
+    .view-modes-bar {
+      display: flex;
+      background: rgba(18, 22, 32, 0.88);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border: 1px solid rgba(255, 255, 255, 0.16);
+      border-radius: 24px;
+      padding: 4px;
+      gap: 4px;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+    }
+    .view-mode-btn {
+      padding: 7px 16px;
+      border: none;
+      background: transparent;
+      color: #9aa4b2;
+      border-radius: 20px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
+    }
+    .view-mode-btn:hover {
+      color: #f0f3f8;
+      background: rgba(255, 255, 255, 0.08);
+    }
+    .view-mode-btn.active {
+      background: #ffaa33;
+      color: #0a0c10;
+      box-shadow: 0 2px 10px rgba(255, 170, 51, 0.4);
+    }
+
+    /* 360 Turntable Viewport */
+    #turntable-container {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 2;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: radial-gradient(circle at center, #121620 0%, #05070a 100%);
+      cursor: grab;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    #turntable-container:active {
+      cursor: grabbing;
+    }
+    #turntable-img {
+      max-width: 90vh;
+      max-height: 90vh;
+      width: 800px;
+      height: 800px;
+      object-fit: contain;
+      pointer-events: none;
+      filter: drop-shadow(0 20px 40px rgba(0, 0, 0, 0.6));
+    }
+    .turntable-badge {
+      position: absolute;
+      bottom: 100px;
+      background: rgba(18, 22, 32, 0.75);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      padding: 6px 14px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 600;
+      color: #ffaa33;
+      letter-spacing: 0.5px;
+      pointer-events: none;
+    }
+
+    /* Compare Side-by-Side */
+    #compare-container {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 3;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      background: #05070a;
+      padding: 80px 40px 100px 40px;
+      gap: 32px;
+    }
+    .compare-card {
+      flex: 1;
+      max-width: 600px;
+      height: 100%;
+      max-height: 75vh;
+      background: rgba(18, 22, 32, 0.85);
+      backdrop-filter: blur(16px);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 16px;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      box-shadow: 0 16px 40px rgba(0, 0, 0, 0.6);
+    }
+    .compare-card-header {
+      padding: 12px 18px;
+      background: rgba(255, 255, 255, 0.04);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .compare-card-title {
+      font-size: 14px;
+      font-weight: 700;
+      color: #fff;
+    }
+    .compare-card-img-wrap {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+      background: #000;
+    }
+    .compare-card-img-wrap img {
+      max-width: 100%;
+      max-height: 100%;
+      object-fit: contain;
+    }
+
+    /* Native App Launch Pill */
+    .native-launch-pill {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      padding: 5px 12px;
+      border-radius: 14px;
+      color: #cbd5e1;
+      font-size: 12px;
+      font-weight: 500;
+      text-decoration: none;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    .native-launch-pill:hover {
+      background: rgba(255, 255, 255, 0.12);
+      color: #fff;
+      border-color: #ffaa33;
+    }
+
     .gallery-tabs {
       display: flex;
       gap: 8px;
@@ -51,8 +208,36 @@
   </style>
 </head>
 <body>
-  <!-- Canvas WebGL Container -->
+  <!-- 1. Real-Time WebGL Three.js Container -->
   <div id="canvas-container"></div>
+
+  <!-- 2. Interactive 360° Ray-Traced Cycles Turntable (Primary High-Fidelity Mode) -->
+  <div id="turntable-container">
+    <img id="turntable-img" src="turntable/frame_00.png" alt="360 Ray-Traced Worker Ant Turntable">
+    <div class="turntable-badge" id="turntable-angle-label">0° Front (Drag Left/Right to Orbit 360°)</div>
+  </div>
+
+  <!-- 3. Side-by-Side Reference Comparison View -->
+  <div id="compare-container">
+    <div class="compare-card">
+      <div class="compare-card-header">
+        <span class="compare-card-title">Master Preview Artwork (Target Reference)</span>
+        <span class="badge-tag" style="background: rgba(255, 170, 51, 0.2); color: #ffaa33; border-color: #ffaa33;">Ground Truth</span>
+      </div>
+      <div class="compare-card-img-wrap">
+        <img src="reference_master.jpg" alt="Master Reference Artwork">
+      </div>
+    </div>
+    <div class="compare-card">
+      <div class="compare-card-header">
+        <span class="compare-card-title">Polygonal 3D Character Model (Cycles Metal GPU)</span>
+        <span class="badge-review">Authentic 3D</span>
+      </div>
+      <div class="compare-card-img-wrap">
+        <img id="compare-3d-img" src="worker_front.png?v=3010" alt="3D Model Render">
+      </div>
+    </div>
+  </div>
 
   <!-- Loading Screen -->
   <div id="loader">
@@ -68,26 +253,32 @@
         <h1>WORKER ANT (CASTE #1)</h1>
         <span class="badge-review">In User Review</span>
       </div>
+
+      <!-- View Mode Selector -->
+      <div class="view-modes-bar">
+        <button id="mode-turntable" class="view-mode-btn active" title="Interactive 360° Path-Traced Cycles View (Full Quality)">
+          ✨ 360° Ray-Traced (Cycles)
+        </button>
+        <button id="mode-compare" class="view-mode-btn" title="Side-by-side comparison with original master artwork">
+          ⚖️ Compare Reference
+        </button>
+        <button id="mode-webgl" class="view-mode-btn" title="Interactive real-time 3D polygonal mesh">
+          🎮 Real-Time 3D (WebGL)
+        </button>
+      </div>
+
       <div class="header-actions">
+        <!-- Native Mac Viewers -->
+        <a href="worker_ant.usdz" download class="native-launch-pill" title="Inspect natively in Apple macOS QuickLook (RealityKit Metal PBR)">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+          QuickLook (USDZ)
+        </a>
+        <button id="btn-open-blender" class="native-launch-pill" title="Show command to open in Blender 4.3">
+          🖥️ Open in Blender
+        </button>
         <button id="btn-master-render" class="icon-btn highlight" title="View High-Res Raytraced Multi-Angle Stills">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
-          Render Gallery
-        </button>
-        <button id="btn-view-face" class="icon-btn" title="Focus on Face & Mandibles">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="9" cy="9" r="1.5"/><circle cx="15" cy="9" r="1.5"/><path d="M8 15s1.5 2 4 2 4-2 4-2"/></svg>
-          Face Zoom
-        </button>
-        <button id="btn-view-angle" class="icon-btn" title="3/4 Perspective Angle">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
-          3/4 Angle
-        </button>
-        <button id="btn-reset" class="icon-btn" title="Reset to Full Body Front View">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
-          Full Stance
-        </button>
-        <button id="btn-screenshot" class="icon-btn" title="Capture High-Res PNG">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
-          Snapshot
+          Gallery
         </button>
       </div>
     </header>
@@ -126,39 +317,59 @@
 
     <!-- Bottom Controls Dock -->
     <footer class="bottom-dock">
-      <div class="control-group">
-        <label for="select-lighting">Lighting:</label>
-        <select id="select-lighting" class="pill-select">
-          <option value="cover" selected>Studio 3-Point (Master)</option>
-          <option value="sunset">Anthill Sunset</option>
-          <option value="neon">Cyber Rim</option>
-          <option value="studio">Pure Neutral</option>
-        </select>
+      <!-- Turntable Controls -->
+      <div id="turntable-dock-controls" style="display: flex; align-items: center; gap: 8px;">
+        <button id="btn-spin-auto" class="toggle-btn active" title="Toggle automatic 360° spin">
+          Auto Spin
+        </button>
+        <button id="btn-front-snap" class="toggle-btn" title="Snap to front angle">
+          Front (0°)
+        </button>
+        <button id="btn-angle-snap" class="toggle-btn" title="Snap to 3/4 perspective">
+          3/4 Angle (40°)
+        </button>
+        <button id="btn-side-snap" class="toggle-btn" title="Snap to side profile">
+          Profile (90°)
+        </button>
+        <button id="btn-back-snap" class="toggle-btn" title="Snap to rear view">
+          Rear (180°)
+        </button>
       </div>
 
-      <div class="dock-divider"></div>
-
-      <button id="btn-animate" class="toggle-btn active" title="Toggle organic breathing & subtle antenna motion">
-        Motion
-      </button>
-      <button id="btn-turntable" class="toggle-btn" title="Toggle 360 camera auto-orbit">
-        Turntable
-      </button>
-      <button id="btn-wireframe" class="toggle-btn" title="Toggle 3D mesh wireframe inspection">
-        Wireframe
-      </button>
+      <!-- WebGL Specific Controls (Shown when WebGL mode is active) -->
+      <div id="webgl-dock-controls" style="display: none; align-items: center; gap: 8px;">
+        <div class="control-group">
+          <label for="select-lighting">Lighting:</label>
+          <select id="select-lighting" class="pill-select">
+            <option value="cover" selected>Studio 3-Point (Master)</option>
+            <option value="sunset">Anthill Sunset</option>
+            <option value="neon">Cyber Rim</option>
+            <option value="studio">Pure Neutral</option>
+          </select>
+        </div>
+        <div class="dock-divider"></div>
+        <button id="btn-animate" class="toggle-btn active" title="Toggle organic breathing & subtle antenna motion">
+          Motion
+        </button>
+        <button id="btn-turntable" class="toggle-btn" title="Toggle 360 camera auto-orbit">
+          Orbit
+        </button>
+        <button id="btn-wireframe" class="toggle-btn" title="Toggle 3D mesh wireframe inspection">
+          Wireframe
+        </button>
+      </div>
     </footer>
 
     <!-- Info Detail Card -->
     <div class="info-card">
       <h3 id="card-title">Worker Ant (Caste #1)</h3>
-      <p id="card-desc">The foundational base model for all 6 ant castes. Features huge innocent glossy compound eyes with white catchlights, clasping mandibles with pale lime-green tips, mottled emerald chitin, and 6 dark mahogany articulated insect legs.</p>
+      <p id="card-desc">Foundational 3D model for all ant castes. Features huge innocent cartoon eyes, prominent bulldog pincer mandibles with interlocking fangs, curved antennae, tall heroic posture, and mottled terracotta chitin.</p>
       <div id="card-traits" class="caste-traits">
         <span class="trait-tag">Innocent Compound Eyes</span>
-        <span class="trait-tag">Clasping Mandibles</span>
-        <span class="trait-tag">Elbowed Antennae</span>
-        <span class="trait-tag">Articulated 6 Legs</span>
-        <span class="trait-tag">Mottled Emerald Chitin</span>
+        <span class="trait-tag">Bulldog Mandibles</span>
+        <span class="trait-tag">Curved Antennae</span>
+        <span class="trait-tag">Heroic Stature</span>
+        <span class="trait-tag">Mottled Terracotta Chitin</span>
       </div>
     </div>
   </div>
@@ -167,22 +378,39 @@
   <div id="render-modal" class="modal-overlay hidden">
     <div class="modal-content">
       <div class="modal-header">
-        <h2>Worker Ant (Caste #1) — Multi-Angle Renders</h2>
+        <h2>Worker Ant (Caste #1) — Multi-Angle Stills</h2>
         <button id="btn-close-modal" class="close-btn">&times;</button>
       </div>
       <div class="modal-body">
         <div class="gallery-tabs">
-          <button class="gallery-tab-btn active" data-img="worker_front.png">Front Beauty Stance</button>
+          <button class="gallery-tab-btn active" data-img="worker_front.png">Front Heroic Stance</button>
           <button class="gallery-tab-btn" data-img="worker_perspective.png">3/4 Depth Perspective</button>
-          <button class="gallery-tab-btn" data-img="worker_face_closeup.png">Face & Eyes Close-up</button>
+          <button class="gallery-tab-btn" data-img="worker_face_closeup.png">Face & Muzzle Macro Close-up</button>
         </div>
         <div class="render-viewport">
-          <img src="worker_front.png?v=3001" alt="Worker Ant Front View" id="master-render-img">
+          <img src="worker_front.png?v=3010" alt="Worker Ant Front View" id="master-render-img">
         </div>
         <div class="render-info">
-          <p id="render-caption"><strong>Front Beauty Stance:</strong> Modeled with authentic quad topology and PBR shaders. Showcases the rounded horizontal bean head, huge innocent compound eyes with olive irises and catchlights, clasping mandibles with pale lime tips, segmented thorax, and 6 articulated mahogany legs.</p>
+          <p id="render-caption"><strong>Front Heroic Stance:</strong> High-resolution 1080p Cycles path-traced beauty render with Metal GPU. Showcases the heart-shaped cranium, huge innocent cartoon eyes with golden sunburst, bulbous bulldog mandibles, and articulated mahogany legs.</p>
           <a href="worker_front.png" download="worker_front.png" id="download-link" class="download-link">Download Full 1080p Render</a>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Blender Instructions Modal -->
+  <div id="blender-modal" class="modal-overlay hidden">
+    <div class="modal-content" style="max-width: 580px;">
+      <div class="modal-header">
+        <h2>🖥️ Open Native Blender Scene</h2>
+        <button id="btn-close-blender-modal" class="close-btn">&times;</button>
+      </div>
+      <div class="modal-body" style="padding: 24px; color: #cbd5e1; line-height: 1.6;">
+        <p>You can inspect and orbit around the authentic 3D model with real-time Cycles GPU ray tracing directly in <strong>Blender 4.3</strong> on your Mac!</p>
+        <div style="background: rgba(0,0,0,0.5); border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; padding: 12px; font-family: monospace; color: #ffaa33; margin: 16px 0; font-size: 13px;">
+          open tools/blender/worker_ant_authentic.blend
+        </div>
+        <p style="font-size: 13px; color: #94a3b8;">In Blender, press <kbd style="background: #334155; padding: 2px 6px; border-radius: 4px; color: #fff;">Z</kbd> and select <strong>Rendered</strong> to view full ray-traced lighting, materials, and subsurface scattering in real time.</p>
       </div>
     </div>
   </div>
@@ -191,6 +419,6 @@
   <script src="libs/three.min.js"></script>
   <script src="libs/OrbitControls.js"></script>
   <script src="libs/GLTFLoader.js"></script>
-  <script src="viewer.js?v=3001"></script>
+  <script src="viewer.js?v=3010"></script>
 </body>
 </html>
