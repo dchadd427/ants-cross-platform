@@ -2,38 +2,55 @@
 
 ## 1. Project Invariants & Workflow
 - **Iterative Single-Ant Process**: Model each ant caste one-by-one from scratch. Under no circumstances move onto Caste #2 (Combat Ant) until Caste #1 (Worker Ant) is reviewed, refined, and explicitly approved by the user.
+- **Visual Appearance First**: Complete and perfect the visual appearance in Blender (matching master reference artwork) before importing into Unity.
 - **True 3D Geometry**: Deliver an authentic, fully volumetric 360° polygonal 3D model (GLB) viewable in the interactive WebGL inspection studio at `http://localhost:8089/viewer3d/`.
 - **Publisher Rule**: Strictly NEVER write or mention the forbidden term ("M-i-c-r-o-s-o-f-t").
 - **Quality & Verification**: Maintain 100% pass rate across all 160 native integration tests.
 
 ---
 
-## 2. Completed Phase 1: True 3D Worker Ant Polygonal Model
+## 2. Phase 2: Master Reference Aesthetic Fidelity Overhaul
 
-### A. Anatomy & 3D Geometry Modeled (`tools/blender/build_worker_ant_v2.py`)
-- **Head & Cranium**: Pure all-quad sphere topology (Catmull-Clark level 2) mathematically sculpted with a broad cranial dome, forehead brow ridge, tapered triangular clypeus/snout, and smooth recessed eye socket cavities. Seam-free front UV mapping (`atan2(x, -y)` placing seams strictly at the rear of the skull).
-- **Compound Eyes**: Dual ovoid globes seated within anatomical orbits, angled with convergent gaze (+8° inward) for character appeal. UV-mapped with spherical aspect ratio correction (factor 2.0 on $\Delta u$) eliminating pole pinching and rendering round, expressive pupils.
-- **Clasping Mandibles**: Volumetric curved pincer meshes with modeled thickness, arching forward and curling inward, equipped with 2 sharp triangular fangs on each inner grasping edge. Shaded with a PBR gradient transitioning from emerald chitin at the cheek joints to pale lime-green (#d4f285) at the biting tips.
-- **Forehead Sockets & Antennae**: Chitinous forehead sockets spawning 4-segment elbowed antennae (scape, pedicel elbow, and whip flagellum).
-- **Segmented Body**: Neck collar cylinder, 3-segment arched mesosoma (prothorax, mesothorax, metathorax), narrow waist pedicel (petiole), and downward-angled teardrop gaster (abdomen).
-- **6 Articulated Legs**: Symmetrically articulated insect legs featuring coxa hip joints, muscular femurs, knee hinge knobs, slender tibias, and tarsus foot pads firmly planted on the ground plane ($Z = 0$).
-
-### B. High-Resolution PBR Texture Generation (`tools/blender/generate_worker_textures.py`)
-- `eye_pbr.png` (1024x1024): Creamy ivory sclera, olive-amber striated iris, deep charcoal pupil, dark limbal ring, and dual specular studio catchlights.
-- `mandible_pbr.png` (1024x1024): Emerald-to-lime PBR gradient with teeth highlight edges.
-- `chitin_pbr.png` (1024x1024): Multi-scale organic cellular noise representing authentic mottled emerald carapace chitin.
-
-### C. 3D Inspection Studio & Verification (`web/viewer3d/`)
-- `worker_ant.glb`: Full 360° binary GLTF model loaded via `THREE.GLTFLoader` in `web/viewer3d/viewer.js`.
-- Feet placed flush on the dark studio pedestal (`y = -1.17`).
-- Camera presets configured: Full Stance (`PRESETS.full`), Face Zoom (`PRESETS.face`), 3/4 Angle (`PRESETS.angle`), Profile (`PRESETS.profile`).
-- Wireframe toggle exposes genuine quad and cylinder mesh topology.
-- Render Gallery showcases high-res Cycles raytraced beauty stills (`worker_front.png`, `worker_perspective.png`, `worker_face_closeup.png`).
-- Automated verification: 160/160 integration tests passing.
+### Discrepancy Analysis vs. Master Reference (`worker_ant_master_1790372115097.jpg`):
+1. **Head Geometry & Eye Sockets**:
+   - *Previous*: Separate floating torus "goggles" created an artificial toy appearance.
+   - *Master Art*: Unified organic head mesh with a rounded cushion crown, central vertical furrow, arched brow ridge, and deeply recessed orbital cavities that naturally cradle the eye globes.
+2. **Eye Texturing & Proportions**:
+   - *Previous*: Under-scaled iris and distorted equirectangular mapping produced a shocked, frog-like appearance with giant sclera.
+   - *Master Art*: Large, warm, expressive eyes where the olive-amber striated iris fills ~55% of the visible sphere, with a velvety dark pupil, sharp limbal ring, warm cream sclera, and crisp specular catchlights.
+3. **Mandibles**:
+   - *Previous*: Overly thick, pale sausage shapes resembling a marshmallow mustache.
+   - *Master Art*: Smooth green chitin cheek lobes curving forward and inward into cupped pincers, tipped with luminous chartreuse/pale lime biting edges and sculpted serrated teeth with subsurface scattering.
+4. **Antennae**:
+   - *Previous*: Disconnected segments floating or hidden.
+   - *Master Art*: Crown-emerging stalks with seamless root collars, sweeping upward then looping in a graceful hairpin curve backward and downward with clubbed rounded tips.
+5. **Limbs & Pose**:
+   - *Previous*: Generic stick legs with round sphere joints.
+   - *Master Art*: Distinct front arms with wrist collars and articulated 2-fingered hands hovering alertly in front of the chest; 4 muscular rear walking legs firmly planted on the ground plane ($Z = 0$).
+6. **Carapace Texturing**:
+   - *Previous*: Monochromatic flat green texture.
+   - *Master Art*: Weathered sage green chitin with warm terracotta/burnt umber dusting across the crown, brow, and cheek margins, complemented by fine organic micro-pore bump mapping.
 
 ---
 
-## 3. Current Status & User Review Gate
-- Worker Ant 3D model is LIVE in the inspection studio: `http://localhost:8089/viewer3d/`.
-- STOPPED for user review and explicit feedback.
-- Awaiting user approval before proceeding to any subsequent tasks or models.
+## 3. Implementation Steps:
+1. **Authentic PBR Textures**:
+   - Regenerate `eye_pbr.png` with spherical equirectangular metric scaling ($2\times \Delta U$ compensation) so the iris and pupil appear perfectly circular on a 3D sphere.
+   - Generate `chitin_pbr.png` featuring weathered sage green, warm terracotta/russet mottling, and organic cellular pores.
+   - Generate `mandible_pbr.png` with smooth green-to-chartreuse gradient.
+   - Generate `limbs_pbr.png` with deep mahogany/charcoal brown and warm joint accents.
+2. **Dedicated Master Sculpt Script (`tools/blender/build_master_worker_ant.py`)**:
+   - Construct unified organic head with seamless orbital sockets and brow arches.
+   - Embed spherical eye globes with the updated eye texture.
+   - Model curved mandibles with sharp triangular biting teeth.
+   - Model crown-rooted hairpin antennae.
+   - Model 3-segment articulated thorax with physical step seams and petiole waist.
+   - Model teardrop gaster with 4 tergal segments.
+   - Model 2 expressive front arms with articulated hands and 4 muscular walking legs planted at $Z=0$.
+   - Setup studio 3-point lighting rig and render multi-angle stills (`worker_front.png`, `worker_perspective.png`, `worker_face_closeup.png`).
+   - Export binary `.glb` to `web/viewer3d/worker_ant.glb`.
+3. **Verification**:
+   - Visually verify multi-angle beauty stills against reference art.
+   - Verify 3D model in WebGL inspection studio (`http://localhost:8089/viewer3d/`).
+   - Run native integration test suite (160/160 pass).
+   - Git commit and push to tracking branch.
