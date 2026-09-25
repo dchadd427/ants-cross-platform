@@ -28,10 +28,10 @@
 
   // Camera presets for Worker Ant inspection
   const PRESETS = {
-    full: { pos: [0.0, 0.2, 4.4], look: [0.0, 0.1, 0.0] },
-    face: { pos: [0.0, 0.75, 2.1], look: [0.0, 0.72, 0.0] },
-    angle: { pos: [-2.5, 0.5, 3.2], look: [0.0, 0.15, 0.0] },
-    profile: { pos: [-3.8, 0.2, 0.0], look: [0.0, 0.1, 0.0] }
+    full: { pos: [0.0, 0.1, 4.2], look: [0.0, -0.1, 0.0] },
+    face: { pos: [0.0, 0.28, 1.9], look: [0.0, 0.20, 0.0] },
+    angle: { pos: [-2.6, 0.35, 3.0], look: [0.0, -0.1, 0.0] },
+    profile: { pos: [-3.8, 0.1, 0.0], look: [0.0, -0.1, 0.0] }
   };
 
   // --- Texture Loader ---
@@ -201,35 +201,41 @@
     stageGroup.add(shadowPlane);
   }
 
-  // --- Worker Ant Character Assembler ---
+  // --- Worker Ant Character Assembler (Full 3D Polygonal Model) ---
   function setupWorkerAnt() {
     antGroup = new THREE.Group();
     scene.add(antGroup);
 
-    // Load authentic master render textures for 1:1 character fidelity
-    const frontTex = textureLoader.load('worker_front.png?v=3001');
-    frontTex.encoding = THREE.sRGBEncoding;
+    const gltfLoader = new THREE.GLTFLoader();
+    gltfLoader.load(
+      'worker_ant.glb?v=' + Date.now(),
+      function (gltf) {
+        const model = gltf.scene;
+        model.traverse(function (child) {
+          if (child.isMesh) {
+            child.castShadow = true;
+            child.receiveShadow = true;
+            if (child.material) {
+              child.material.wireframe = isWireframe;
+              child.material.side = THREE.DoubleSide;
+              if (child.material.roughness !== undefined) {
+                child.material.roughness = Math.max(0.18, child.material.roughness);
+              }
+            }
+          }
+        });
 
-    const angleTex = textureLoader.load('worker_perspective.png?v=3001');
-    angleTex.encoding = THREE.sRGBEncoding;
-
-    // Multi-plane layered display
-    // Plane 1: Front Master Character Display (elevated, crisp silhouette)
-    const charGeo = new THREE.PlaneGeometry(2.4, 2.4);
-    const charMat = new THREE.MeshStandardMaterial({
-      map: frontTex,
-      transparent: true,
-      alphaTest: 0.02,
-      roughness: 0.35,
-      metalness: 0.08,
-      side: THREE.DoubleSide
-    });
-
-    const frontPlane = new THREE.Mesh(charGeo, charMat);
-    frontPlane.position.set(0, 0.08, 0);
-    frontPlane.castShadow = true;
-    frontPlane.receiveShadow = true;
-    antGroup.add(frontPlane);
+        // Center on top of pedestal (feet planted on pedestal top)
+        model.position.set(0, -1.17, 0);
+        model.scale.set(1.0, 1.0, 1.0);
+        antGroup.add(model);
+        console.log('Worker Ant 3D GLB successfully loaded into scene!');
+      },
+      undefined,
+      function (error) {
+        console.error('Error loading worker_ant.glb:', error);
+      }
+    );
   }
 
   // --- Smooth Camera Transition ---
