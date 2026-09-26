@@ -22,9 +22,9 @@ def generate_eye_texture():
     iris_cx, iris_cy = size * 0.512, size * 0.50
 
     r_outer = size * 0.48
-    # Authentic Pixar/reference proportions: Iris is ~29% of eye, leaving ~42% for wide bright white sclera!
-    r_iris = size * 0.29   # Hazel iris framed by large white sclera
-    r_pupil = size * 0.14  # Expressive dark pupil
+    # Authentic Pixar/reference proportions: Iris is ~22% of eye, leaving ~56% for wide bright white sclera!
+    r_iris = size * 0.22   # Hazel iris framed by large bright white sclera
+    r_pupil = size * 0.11  # Expressive dark pupil
 
     for y in range(size):
         ny = (y - cy) / (size * 0.5)
@@ -32,53 +32,49 @@ def generate_eye_texture():
             nx = (x - cx) / (size * 0.5)
             d_sclera = math.sqrt(nx**2 + (ny / 1.05)**2)
             
-            if d_sclera <= 0.98:
-                # Bright warm ivory-white sclera (#FCFDF8 center, soft warm cream at perimeter)
-                t_edge = max(0.0, (d_sclera - 0.70) / 0.28)
-                r = int(252 - 18 * t_edge)
-                g = int(253 - 16 * t_edge)
-                b = int(247 - 22 * t_edge)
+            # Bright warm ivory-white sclera (#FCFDF8 center, soft warm cream at perimeter)
+            t_edge = max(0.0, min(1.0, (d_sclera - 0.70) / 0.28))
+            r = int(252 - 14 * t_edge)
+            g = int(253 - 12 * t_edge)
+            b = int(247 - 18 * t_edge)
+            
+            # Check iris
+            d_iris = math.sqrt(((x - iris_cx) / r_iris)**2 + ((y - iris_cy) / (r_iris * 1.02))**2)
+            d_pupil = math.sqrt(((x - iris_cx) / r_pupil)**2 + ((y - iris_cy) / r_pupil)**2)
+
+            if d_iris <= 1.0:
+                angle = math.atan2(y - iris_cy, x - iris_cx)
+                t_iris = (d_iris - (r_pupil / r_iris)) / (1.0 - (r_pupil / r_iris))
+                t_iris = max(0.0, min(1.0, t_iris))
+
+                # Fine radial striation fibers
+                fibers = math.sin(angle * 64.0) * 0.08 + math.cos(angle * 128.0 + 0.8) * 0.05
+                # Warm golden-amber sunburst in middle iris zone
+                amber_ring = math.exp(-((t_iris - 0.42)**2) / 0.06) * 0.65
                 
-                # Check iris
-                d_iris = math.sqrt(((x - iris_cx) / r_iris)**2 + ((y - iris_cy) / (r_iris * 1.02))**2)
-                d_pupil = math.sqrt(((x - iris_cx) / r_pupil)**2 + ((y - iris_cy) / r_pupil)**2)
+                base_r = int(122 + amber_ring * 65 + fibers * 22)
+                base_g = int(145 + amber_ring * 42 + fibers * 18)
+                base_b = int(52  + amber_ring * 18 + fibers * 12)
+                
+                # Limbal ring: dark olive-brown margin framing the iris against the white sclera
+                if t_iris > 0.82:
+                    t_limb = (t_iris - 0.82) / 0.18
+                    base_r = int(base_r * (1.0 - 0.65 * t_limb) + 32 * t_limb)
+                    base_g = int(base_g * (1.0 - 0.60 * t_limb) + 38 * t_limb)
+                    base_b = int(base_b * (1.0 - 0.60 * t_limb) + 16 * t_limb)
+                
+                r, g, b = base_r, base_g, base_b
 
-                if d_iris <= 1.0:
-                    angle = math.atan2(y - iris_cy, x - iris_cx)
-                    t_iris = (d_iris - (r_pupil / r_iris)) / (1.0 - (r_pupil / r_iris))
-                    t_iris = max(0.0, min(1.0, t_iris))
+            if d_pupil <= 1.0:
+                t_p = min(1.0, max(0.0, (1.0 - d_pupil) * 16.0))
+                r = int(r * (1.0 - t_p) + 10 * t_p)
+                g = int(g * (1.0 - t_p) + 10 * t_p)
+                b = int(b * (1.0 - t_p) + 12 * t_p)
 
-                    # Fine radial striation fibers
-                    fibers = math.sin(angle * 64.0) * 0.08 + math.cos(angle * 128.0 + 0.8) * 0.05
-                    # Warm golden-amber sunburst in middle iris zone
-                    amber_ring = math.exp(-((t_iris - 0.42)**2) / 0.06) * 0.65
-                    
-                    base_r = int(122 + amber_ring * 65 + fibers * 22)
-                    base_g = int(145 + amber_ring * 42 + fibers * 18)
-                    base_b = int(52  + amber_ring * 18 + fibers * 12)
-                    
-                    # Limbal ring: dark olive-brown margin framing the iris against the white sclera
-                    if t_iris > 0.82:
-                        t_limb = (t_iris - 0.82) / 0.18
-                        base_r = int(base_r * (1.0 - 0.65 * t_limb) + 32 * t_limb)
-                        base_g = int(base_g * (1.0 - 0.60 * t_limb) + 38 * t_limb)
-                        base_b = int(base_b * (1.0 - 0.60 * t_limb) + 16 * t_limb)
-                    
-                    r, g, b = base_r, base_g, base_b
-
-                if d_pupil <= 1.0:
-                    t_p = min(1.0, max(0.0, (1.0 - d_pupil) * 16.0))
-                    r = int(r * (1.0 - t_p) + 10 * t_p)
-                    g = int(g * (1.0 - t_p) + 10 * t_p)
-                    b = int(b * (1.0 - t_p) + 12 * t_p)
-
-                alpha = 255
-                if d_sclera > 0.92:
-                    alpha = int(255 * (0.98 - d_sclera) / 0.06)
-                img.putpixel((x, y), (min(255, max(0, r)),
-                                      min(255, max(0, g)),
-                                      min(255, max(0, b)),
-                                      alpha))
+            img.putpixel((x, y), (min(255, max(0, r)),
+                                  min(255, max(0, g)),
+                                  min(255, max(0, b)),
+                                  255))
 
     # Catchlights
     overlay = Image.new("RGBA", (size, size), (0, 0, 0, 0))

@@ -156,20 +156,18 @@ def create_materials():
     links_l.new(tex_limb.outputs['Color'], bsdf_l.inputs['Base Color'])
     bsdf_l.inputs['Base Color'].default_value = (0.48, 0.22, 0.16, 1.0)
 
-    # Cuticle longitudinal groove bump
+    # Organic cuticle pore micro-bump (eliminating artificial zebra striations)
     tc_l = nodes_l.new('ShaderNodeTexCoord')
-    wave_l = nodes_l.new('ShaderNodeTexWave')
-    wave_l.wave_type = 'BANDS'
-    wave_l.bands_direction = 'Z'
-    wave_l.inputs['Scale'].default_value = 24.0
-    wave_l.inputs['Distortion'].default_value = 1.2
-    wave_l.inputs['Detail'].default_value = 3.0
-    links_l.new(tc_l.outputs['Object'], wave_l.inputs['Vector'])
+    noise_l = nodes_l.new('ShaderNodeTexNoise')
+    noise_l.inputs['Scale'].default_value = 75.0
+    noise_l.inputs['Detail'].default_value = 4.0
+    noise_l.inputs['Roughness'].default_value = 0.52
+    links_l.new(tc_l.outputs['Object'], noise_l.inputs['Vector'])
 
     bump_l = nodes_l.new('ShaderNodeBump')
-    bump_l.inputs['Strength'].default_value = 0.18
-    bump_l.inputs['Distance'].default_value = 0.003
-    links_l.new(wave_l.outputs['Color'], bump_l.inputs['Height'])
+    bump_l.inputs['Strength'].default_value = 0.12
+    bump_l.inputs['Distance'].default_value = 0.002
+    links_l.new(noise_l.outputs['Fac'], bump_l.inputs['Height'])
     links_l.new(bump_l.outputs['Normal'], bsdf_l.inputs['Normal'])
 
     bsdf_l.inputs['Roughness'].default_value = 0.44
@@ -231,11 +229,11 @@ bmesh.ops.create_cube(bm_head, size=1.0)
 bmesh.ops.subdivide_edges(bm_head, edges=bm_head.edges, cuts=8, use_grid_fill=True)
 
 # Head origin at (0, -0.04, 1.58)
-# Character scale matching master reference: wide rounded trapezoid/pillow helmet
-rx_head, ry_head, rz_head = 0.36, 0.25, 0.31
+# Character scale matching master reference: tall rounded pear/dome cranium
+rx_head, ry_head, rz_head = 0.31, 0.25, 0.37
 
 for v in bm_head.verts:
-    # Superellipsoid formulation (p = 3.2): creates a wide pillow with rounded corners,
+    # Superellipsoid formulation (p = 3.2): creates a pillowy dome with rounded corners,
     # preventing the skull from tapering to an egg point at the crown!
     vx, vy, vz = v.co.x, v.co.y, v.co.z
     p_exp = 3.2
@@ -249,50 +247,58 @@ for v in bm_head.verts:
     y = ny * ry_head
     z = nz * rz_head
 
-    # 1. Crown lobes & cleft (Z > 0.05): two distinct pillowy lobes with dip in middle
-    if z > 0.05:
-        cleft = 1.0 - 0.14 * math.exp(-((x / 0.09) ** 2))
+    # 1. Crown lobes & cleft (Z > 0.06): two distinct pillowy lobes with dip in middle
+    if z > 0.06:
+        cleft = 1.0 - 0.13 * math.exp(-((x / 0.08) ** 2))
         z *= cleft
-        # Wide upper crown flare
-        x *= (1.0 + 0.08 * (z / rz_head))
+        # Upper crown gentle flare
+        x *= (1.0 + 0.06 * (z / rz_head))
 
-    # 2. Forehead dome & brow overhang (Z in [0.03, 0.22], Y < 0)
-    if 0.03 < z < 0.22 and y < 0:
-        brow_t = math.sin((z - 0.03) / 0.19 * math.pi)
-        y -= 0.038 * brow_t
+    # 2. Forehead dome & brow overhang (Z in [0.03, 0.24], Y < 0)
+    if 0.03 < z < 0.24 and y < 0:
+        brow_t = math.sin((z - 0.03) / 0.21 * math.pi)
+        y -= 0.035 * brow_t
 
-    # 3. Deep Orbital Sockets (Center at X = +/-0.165, Y = -0.15, Z = 0.015)
+    # 3. Deep Orbital Sockets (Center at X = +/-0.145, Y = -0.15, Z = 0.025)
     for sign in [-1.0, 1.0]:
-        sx, sy, sz = sign * 0.165, -0.15, 0.015
+        sx, sy, sz = sign * 0.145, -0.15, 0.025
         d = math.sqrt((x - sx)**2 + (y - sy)**2 + (z - sz)**2)
-        r_orb = 0.185
+        r_orb = 0.170
 
         if d < r_orb and y < 0:
             falloff = (1.0 - (d / r_orb)**2)**1.3
-            y += 0.13 * falloff
+            y += 0.12 * falloff
 
     # 4. Solid Green Nose Bridge (Vertical ridge between eyes, keeping eyes cleanly separated)
-    if abs(x) < 0.060 and -0.09 < z < 0.13 and y < 0:
-        bridge = math.cos(abs(x) / 0.060 * (math.pi / 2.0))
-        y -= 0.048 * bridge
+    if abs(x) < 0.055 and -0.09 < z < 0.14 and y < 0:
+        bridge = math.cos(abs(x) / 0.055 * (math.pi / 2.0))
+        y -= 0.045 * bridge
 
-    # 5. Clypeus / Snout (Tapers smoothly down below eyes, Z in [-0.26, -0.04])
-    if -0.26 < z < -0.04 and abs(x) < 0.12 and y < 0:
-        clyp = math.cos(abs(x) / 0.12 * (math.pi / 2.0))
-        t_z = math.sin((z - (-0.26)) / 0.22 * math.pi)
-        y -= 0.050 * clyp * t_z
+    # 5. Prominent Teardrop Clypeus / Snout Flap (Matching ref_mouth_crop.png)
+    if -0.27 < z < -0.02 and abs(x) < 0.11 and y < 0:
+        clyp_profile = math.cos(abs(x) / 0.11 * (math.pi / 2.0))**0.75
+        t_z = math.sin((z - (-0.27)) / 0.25 * math.pi)
+        # Central vertical dimple down the snout
+        dimple = 1.0 - 0.15 * math.exp(-((x / 0.024)**2))
+        y -= 0.100 * clyp_profile * t_z * dimple
 
     # 6. Temples & Cheeks flanking the eyes cleanly
-    if abs(x) > 0.24 and -0.18 < z < 0.18:
-        x *= 1.06
+    if abs(x) > 0.22 and -0.18 < z < 0.18:
+        x *= 1.05
 
-    # 7. Oral Cavity (Behind mandibles, Z < -0.18)
-    if z < -0.18 and abs(x) < 0.16 and y < -0.02:
-        y += 0.045 * (1.0 - abs(x) / 0.16)
+    # 7. Recessed Oral Cavity (Behind mandibles, under clypeus: Z in [-0.30, -0.17])
+    if -0.30 < z < -0.17 and abs(x) < 0.13 and y < -0.02:
+        cavity = math.cos(abs(x) / 0.13 * (math.pi / 2.0))
+        y += 0.065 * cavity
 
-    # 8. Lower jaw taper (narrowing toward neck)
+    # 8. Labium / Lower Chin Lip (Beneath oral cavity: Z in [-0.32, -0.25])
+    if -0.32 < z < -0.25 and abs(x) < 0.08 and y < 0:
+        lip = math.cos(abs(x) / 0.08 * (math.pi / 2.0))
+        y -= 0.035 * lip
+
+    # 9. Lower jaw taper (narrowing toward neck)
     if z < -0.10:
-        t_neck = min(1.0, (-0.10 - z) / 0.21)
+        t_neck = min(1.0, (-0.10 - z) / 0.22)
         x *= (1.0 - 0.20 * t_neck)
 
     v.co = Vector((x, y, z))
@@ -325,13 +331,13 @@ reg(head_obj)
 # -----------------------------------------------------------------------------
 def make_bulging_eye(name, is_left=True):
     sign = -1.0 if is_left else 1.0
-    eye_pos = Vector((sign * 0.165, -0.180, 1.600))
+    eye_pos = Vector((sign * 0.145, -0.170, 1.610))
 
     bm_eye = bmesh.new()
     bmesh.ops.create_uvsphere(bm_eye, u_segments=40, v_segments=28, radius=1.0)
 
-    # Proportional cartoon dimensions: rx = 0.135, ry = 0.120, rz = 0.168
-    rx, ry, rz = 0.135, 0.120, 0.168
+    # Proportional cartoon dimensions: rx = 0.126, ry = 0.116, rz = 0.158
+    rx, ry, rz = 0.126, 0.116, 0.158
     for v in bm_eye.verts:
         v.co.x *= rx
         v.co.y *= ry
@@ -345,12 +351,13 @@ def make_bulging_eye(name, is_left=True):
             vz = loop.vert.co.z
 
             # Medial and slight downward shift for endearing cartoon focus
-            u = 0.50 - (sign * vx) / (2.0 * rx * 1.08) - (0.015 * sign)
-            v = 0.50 + vz / (2.0 * rz * 1.08) + 0.020
+            u = 0.50 - (sign * vx) / (2.0 * rx * 1.15) - (0.015 * sign)
+            v = 0.50 + vz / (2.0 * rz * 1.15) + 0.020
 
-            if vy > 0.02:
-                u = 0.05
-                v = 0.05
+            # Entire back hemisphere maps to solid white sclera margin
+            if vy > 0.03:
+                u = 0.50
+                v = 0.95
 
             loop[uv_l].uv = (min(1.0, max(0.0, u)), min(1.0, max(0.0, v)))
 
@@ -378,27 +385,27 @@ make_bulging_eye("Eye_L", True)
 make_bulging_eye("Eye_R", False)
 
 # -----------------------------------------------------------------------------
-# 5. Horizontal Curved Pincer Mandibles with Sharp Medial Teeth
+# 5. Horizontal Curved Pincer Mandibles with Authentic Scooped Blades
 # -----------------------------------------------------------------------------
 def make_clean_mandible(name, is_left=True):
     sign = -1.0 if is_left else 1.0
     bm = bmesh.new()
 
-    # Articulating from lower jaw corners, curving forward and horizontally inward
+    # Articulating from lower jaw corners, bulging forward into a plump boxing-glove cheek, curving inward
     stations = [
         # 0. Jaw hinge socket under cheek
-        (Vector((sign * 0.18, -0.10, 1.36)), Vector((sign * 0.20, -0.95, -0.10)).normalized(), 0.065, 0.055),
-        # 1. Lateral pincer curve
-        (Vector((sign * 0.20, -0.21, 1.35)), Vector((sign * 0.10, -0.98, -0.05)).normalized(), 0.092, 0.064),
-        # 2. Anterior turn
-        (Vector((sign * 0.15, -0.27, 1.36)), Vector((sign * -0.65, -0.72, 0.0)).normalized(), 0.088, 0.060),
-        # 3. Medial inward sweep
-        (Vector((sign * 0.09, -0.28, 1.37)), Vector((sign * -0.95, -0.25, 0.0)).normalized(), 0.072, 0.050),
-        # 4. Pointed pincer tip
-        (Vector((sign * 0.03, -0.26, 1.38)), Vector((sign * -1.0, 0.0, 0.0)).normalized(), 0.038, 0.032)
+        (Vector((sign * 0.16, -0.10, 1.36)), Vector((sign * 0.20, -0.95, -0.10)).normalized(), 0.070, 0.060),
+        # 1. Bulbous convex outer cheek lobe (matching ref_mouth_crop.png)
+        (Vector((sign * 0.18, -0.21, 1.34)), Vector((sign * 0.10, -0.98, -0.05)).normalized(), 0.096, 0.072),
+        # 2. Anterior turn with deep medial scoop & tooth notch
+        (Vector((sign * 0.13, -0.27, 1.33)), Vector((sign * -0.65, -0.72, 0.0)).normalized(), 0.082, 0.062),
+        # 3. Medial inward sweep curving under clypeus
+        (Vector((sign * 0.07, -0.275, 1.335)), Vector((sign * -0.92, -0.35, 0.0)).normalized(), 0.064, 0.048),
+        # 4. Pointed curved pincer fang tip meeting near midline
+        (Vector((sign * 0.022, -0.250, 1.340)), Vector((sign * -0.98, 0.15, -0.10)).normalized(), 0.030, 0.024)
     ]
 
-    num_pts = 10
+    num_pts = 14
     rings = []
 
     for i, (center, normal, rx, rz) in enumerate(stations):
@@ -412,13 +419,21 @@ def make_clean_mandible(name, is_left=True):
             cos_t = math.cos(th)
             sin_t = math.sin(th)
 
-            rx_eff = rx * (1.18 if (cos_t * sign > 0) else 0.88)
-            rz_eff = rz * (0.90 if sin_t < 0 else 1.10)
+            # Plump convex outer cheek (cos_t * sign > 0) vs scooped blade (cos_t * sign < 0)
+            is_outer = (cos_t * sign > 0)
+            rx_eff = rx * (1.35 if is_outer else 0.78)
+            rz_eff = rz * (0.85 if sin_t < 0 else 1.10)
+
+            # Carve sharp tooth notch in inner blade for station 2 & 3
+            if not is_outer and (i in [2, 3]) and abs(sin_t) < 0.4:
+                rx_eff *= 1.25
 
             p_local = (right * (cos_t * rx_eff)) + (up * (sin_t * rz_eff))
             world_p = center + p_local
             c_ring.append(bm.verts.new(world_p))
         rings.append(c_ring)
+
+    uv_layer = bm.loops.layers.uv.new("UVMap")
 
     for i in range(len(stations) - 1):
         r0 = rings[i]
@@ -426,9 +441,30 @@ def make_clean_mandible(name, is_left=True):
         for j in range(num_pts):
             jn = (j + 1) % num_pts
             if is_left:
-                bm.faces.new([r0[j], r0[jn], r1[jn], r1[j]])
+                f = bm.faces.new([r0[j], r0[jn], r1[jn], r1[j]])
             else:
-                bm.faces.new([r0[jn], r0[j], r1[j], r1[jn]])
+                f = bm.faces.new([r0[jn], r0[j], r1[j], r1[jn]])
+
+            # Map outer cheek to green chitin (V in [0.05, 0.30]) and inner scoop/fang to chartreuse (V in [0.70, 0.95])
+            th0 = 2.0 * math.pi * j / num_pts
+            th1 = 2.0 * math.pi * jn / num_pts
+            outer0 = math.cos(th0) * sign > 0
+            outer1 = math.cos(th1) * sign > 0
+            v0 = 0.15 if outer0 else 0.85
+            v1 = 0.15 if outer1 else 0.85
+            u0 = i / (len(stations) - 1)
+            u1 = (i + 1) / (len(stations) - 1)
+
+            if is_left:
+                f.loops[0][uv_layer].uv = (u0, v0)
+                f.loops[1][uv_layer].uv = (u0, v1)
+                f.loops[2][uv_layer].uv = (u1, v1)
+                f.loops[3][uv_layer].uv = (u1, v0)
+            else:
+                f.loops[0][uv_layer].uv = (u0, v1)
+                f.loops[1][uv_layer].uv = (u0, v0)
+                f.loops[2][uv_layer].uv = (u1, v0)
+                f.loops[3][uv_layer].uv = (u1, v1)
 
     if is_left:
         bm.faces.new(rings[0][::-1])
@@ -450,26 +486,7 @@ def make_clean_mandible(name, is_left=True):
     sub.levels = 2
     for p in mesh.polygons:
         p.use_smooth = True
-    reg(obj)
-
-    # Add sharp bone-white tooth cones on inner edge pointing horizontally inward
-    teeth_locs = [
-        (Vector((sign * 0.045, -0.265, 1.375)), 0.026, 0.045), # Main sharp fang
-        (Vector((sign * 0.105, -0.275, 1.365)), 0.020, 0.032)  # Secondary tooth
-    ]
-    for idx, (t_pos, t_rad, t_len) in enumerate(teeth_locs):
-        bpy.ops.mesh.primitive_cone_add(
-            vertices=12, radius1=t_rad, depth=t_len,
-            location=t_pos,
-            rotation=(0, math.radians(-90 if is_left else 90), 0)
-        )
-        tooth_obj = bpy.context.active_object
-        tooth_obj.name = f"{name}_Tooth_{idx}"
-        tooth_obj.data.materials.append(mat_teeth)
-        bpy.ops.object.shade_smooth()
-        reg(tooth_obj)
-
-    return obj
+    return reg(obj)
 
 make_clean_mandible("Mandible_L", True)
 make_clean_mandible("Mandible_R", False)
@@ -548,9 +565,9 @@ reg(neck)
 
 # Slimmed Thorax: Authentic lean insect armor plates matching master reference artwork
 thorax_plates = [
-    ("Thorax_Pronotum",  Vector((0, 0.01, 1.25)), Vector((0.17, 0.16, 0.14))),
-    ("Thorax_Mesonotum", Vector((0, 0.08, 1.11)), Vector((0.16, 0.15, 0.13))),
-    ("Thorax_Metanotum", Vector((0, 0.15, 0.98)), Vector((0.14, 0.14, 0.12)))
+    ("Thorax_Pronotum",  Vector((0, -0.01, 1.25)), Vector((0.16, 0.15, 0.13))),
+    ("Thorax_Mesonotum", Vector((0, 0.03, 1.10)),  Vector((0.15, 0.14, 0.12))),
+    ("Thorax_Metanotum", Vector((0, 0.07, 0.96)),  Vector((0.13, 0.13, 0.11)))
 ]
 for name, loc, scale in thorax_plates:
     bpy.ops.mesh.primitive_uv_sphere_add(segments=32, ring_count=20, radius=1.0, location=loc)
@@ -563,10 +580,10 @@ for name, loc, scale in thorax_plates:
     bpy.ops.object.shade_smooth()
     reg(p_obj)
 
-# Slender Petiole Waist
+# Slender Petiole Waist (Bridging rear propodeum cleanly to anterior gaster)
 bpy.ops.mesh.primitive_cylinder_add(
-    vertices=16, radius=0.060, depth=0.13,
-    location=(0, 0.22, 0.88), rotation=(math.radians(35), 0, 0)
+    vertices=20, radius=0.046, depth=0.18,
+    location=(0, 0.165, 0.865), rotation=(math.radians(45), 0, 0)
 )
 petiole = bpy.context.active_object
 petiole.name = "Petiole"
@@ -575,32 +592,36 @@ bpy.ops.object.shade_smooth()
 reg(petiole)
 
 # -----------------------------------------------------------------------------
-# 8. Gaster: Suspended Plump Egg Abdomen at 32° with Sternite Grooves
+# 8. Gaster: Suspended Plump Egg Abdomen at 26° (Zero overlap with Thorax)
 # -----------------------------------------------------------------------------
 bpy.ops.mesh.primitive_uv_sphere_add(
     segments=36, ring_count=24, radius=1.0,
-    location=(0, 0.30, 0.98),
-    rotation=(math.radians(16), 0, 0)
+    location=(0, 0.46, 0.66),
+    rotation=(math.radians(26), 0, 0)
 )
 gaster_obj = bpy.context.active_object
 gaster_obj.name = "Gaster"
 
 for v in gaster_obj.data.vertices:
-    x = v.co.x * 0.25
-    y = v.co.y * 0.38
-    z = v.co.z * 0.26
+    x = v.co.x * 0.24
+    y = v.co.y * 0.33
+    z = v.co.z * 0.24
 
     if y > 0:
-        taper = 1.0 - 0.40 * (y / 0.38)
+        # Posterior gentle taper towards sting tip
+        taper = 1.0 - 0.36 * (y / 0.33)
         x *= taper
         z *= (taper * 0.92)
     else:
-        x *= 1.06
-        z *= 1.04
+        # Anterior conical neck tapering into petiole socket
+        t_ant = min(1.0, (-y) / 0.33)
+        x *= (1.0 - 0.45 * t_ant)
+        z *= (1.0 - 0.45 * t_ant)
 
-    groove = math.sin((y + 0.38) * 16.0) * 0.008
-    x += groove * (x / 0.25)
-    z += groove * (z / 0.26)
+    # Subtle sternite banding grooves
+    groove = math.sin((y + 0.33) * 18.0) * 0.006
+    x += groove * (x / 0.24)
+    z += groove * (z / 0.24)
 
     v.co = Vector((x, y, z))
 
@@ -627,13 +648,13 @@ def make_chitin_segment(name, p0, p1, r_start, r_mid, r_end, is_sleeve=False):
 
     num_pts = 16
     rings = []
-    # 5 profile stations with authentic arthropod taper and articulated joint collars
+    # 5 profile stations with authentic arthropod taper and sleeve overlap into joint condyles
     stations = [
-        (p0, r_start * 1.15, 1.25, 0.88),                  # Flared joint socket sleeve
-        (p0 + vec * 0.18, r_start * 0.94, 1.20, 0.84),     # Narrow neck taper
-        (p0 + vec * 0.45, r_mid * 1.14, 1.32, 0.80),       # Muscular lateral flattening & ridge bulge
-        (p0 + vec * 0.80, r_end * 0.90, 1.18, 0.82),       # Distal shaft taper
-        (p1, r_end * (1.30 if is_sleeve else 1.05), 1.22, 0.88) # Articulated condyle sleeve
+        (p0 - vec * 0.04, r_start * 1.18, 1.25, 0.88),         # Flared sleeve overlapping into proximal joint
+        (p0 + vec * 0.18, r_start * 0.94, 1.20, 0.84),         # Narrow neck taper
+        (p0 + vec * 0.45, r_mid * 1.14, 1.32, 0.80),           # Muscular lateral flattening & ridge bulge
+        (p0 + vec * 0.80, r_end * 0.90, 1.18, 0.82),           # Distal shaft taper
+        (p1 + vec * 0.04, r_end * (1.32 if is_sleeve else 1.08), 1.22, 0.88) # Sleeve overlapping into distal joint
     ]
     for pos, rad, sx, sy in stations:
         c_ring = []
@@ -677,6 +698,18 @@ def make_chitin_segment(name, p0, p1, r_start, r_mid, r_end, is_sleeve=False):
         p.use_smooth = True
     return reg(obj)
 
+def make_joint_socket(name, location, radius, scale=(1.0, 1.0, 1.0), material=mat_limbs):
+    bpy.ops.mesh.primitive_uv_sphere_add(
+        segments=20, ring_count=16, radius=1.0,
+        location=location
+    )
+    obj = bpy.context.active_object
+    obj.name = name
+    obj.scale = (radius * scale[0], radius * scale[1], radius * scale[2])
+    obj.data.materials.append(material)
+    bpy.ops.object.shade_smooth()
+    return reg(obj)
+
 def make_foot_toe_pad(name, p_toe, radius):
     bpy.ops.mesh.primitive_uv_sphere_add(
         segments=16, ring_count=12, radius=1.0,
@@ -700,8 +733,11 @@ for is_left in [True, False]:
     p_finger1  = Vector((sign * 0.16, -0.25, 0.58)) # Curved hand claw
     p_finger2  = Vector((sign * 0.20, -0.22, 0.56))
 
+    make_joint_socket(f"Arm_Shoulder_{suf}", p_shoulder, 0.044, scale=(1.1, 1.1, 1.1))
     make_chitin_segment(f"Arm_Upper_{suf}", p_shoulder, p_elbow, 0.038, 0.044, 0.032, is_sleeve=True)
+    make_joint_socket(f"Arm_Elbow_{suf}", p_elbow, 0.035, scale=(1.15, 1.25, 1.15))
     make_chitin_segment(f"Arm_Forearm_{suf}", p_elbow, p_wrist, 0.032, 0.034, 0.022, is_sleeve=True)
+    make_joint_socket(f"Arm_Wrist_{suf}", p_wrist, 0.027, scale=(1.1, 1.1, 1.2))
     make_chitin_segment(f"Arm_Finger1_{suf}", p_wrist, p_finger1, 0.016, 0.016, 0.010)
     make_chitin_segment(f"Arm_Finger2_{suf}", p_wrist, p_finger2, 0.014, 0.014, 0.008)
 
@@ -710,14 +746,17 @@ for is_left in [True, False]:
     sign = -1.0 if is_left else 1.0
     suf = "L" if is_left else "R"
 
-    p_hip   = Vector((sign * 0.14, 0.06, 1.08))
+    p_hip   = Vector((sign * 0.14, 0.03, 1.06))
     p_knee  = Vector((sign * 0.44, 0.00, 0.68)) # Lateral knee reaching OUT to side!
     p_ankle = Vector((sign * 0.36, -0.08, 0.08))
     p_toe1  = Vector((sign * 0.34, -0.16, 0.02))
     p_toe2  = Vector((sign * 0.38, -0.14, 0.02))
 
+    make_joint_socket(f"Leg_Mid_Coxa_{suf}", p_hip, 0.048, scale=(1.1, 1.2, 1.1))
     make_chitin_segment(f"Leg_Mid_Femur_{suf}", p_hip, p_knee, 0.044, 0.050, 0.036, is_sleeve=True)
+    make_joint_socket(f"Leg_Mid_Knee_{suf}", p_knee, 0.042, scale=(1.2, 1.1, 1.2))
     make_chitin_segment(f"Leg_Mid_Tibia_{suf}", p_knee, p_ankle, 0.036, 0.032, 0.022, is_sleeve=True)
+    make_joint_socket(f"Leg_Mid_Ankle_{suf}", p_ankle, 0.026, scale=(1.1, 1.1, 1.1))
     make_chitin_segment(f"Leg_Mid_Foot_{suf}", p_ankle, p_toe1, 0.022, 0.020, 0.015)
     make_foot_toe_pad(f"Leg_Mid_Toe1_{suf}", p_toe1, 0.022)
     make_foot_toe_pad(f"Leg_Mid_Toe2_{suf}", p_toe2, 0.018)
@@ -727,14 +766,17 @@ for is_left in [True, False]:
     sign = -1.0 if is_left else 1.0
     suf = "L" if is_left else "R"
 
-    p_hip   = Vector((sign * 0.12, 0.16, 0.98))
+    p_hip   = Vector((sign * 0.12, 0.07, 0.96))
     p_knee  = Vector((sign * 0.64, 0.28, 0.88)) # High lateral knee reaching BACK and WIDE!
     p_ankle = Vector((sign * 0.56, 0.14, 0.08))
     p_toe1  = Vector((sign * 0.58, 0.06, 0.02))
     p_toe2  = Vector((sign * 0.62, 0.18, 0.02))
 
+    make_joint_socket(f"Leg_Hind_Coxa_{suf}", p_hip, 0.052, scale=(1.1, 1.2, 1.1))
     make_chitin_segment(f"Leg_Hind_Femur_{suf}", p_hip, p_knee, 0.048, 0.054, 0.038, is_sleeve=True)
+    make_joint_socket(f"Leg_Hind_Knee_{suf}", p_knee, 0.046, scale=(1.2, 1.2, 1.1))
     make_chitin_segment(f"Leg_Hind_Tibia_{suf}", p_knee, p_ankle, 0.038, 0.034, 0.024, is_sleeve=True)
+    make_joint_socket(f"Leg_Hind_Ankle_{suf}", p_ankle, 0.028, scale=(1.1, 1.1, 1.1))
     make_chitin_segment(f"Leg_Hind_Foot_{suf}", p_ankle, p_toe1, 0.024, 0.022, 0.016)
     make_foot_toe_pad(f"Leg_Hind_Toe1_{suf}", p_toe1, 0.024)
     make_foot_toe_pad(f"Leg_Hind_Toe2_{suf}", p_toe2, 0.020)
@@ -789,7 +831,273 @@ rim_top.visible_glossy = False
 # Subtle side rim light
 add_area_light("Rim_Light_Side", 40.0, (0.95, 1.0, 0.9), (-3.0, 1.2, 1.8), 1.6)
 
-scene.view_settings.look = 'AgX - Medium High Contrast'
+# -----------------------------------------------------------------------------
+# 11.5. Skeletal Armature Rigging & Tripod Gait Walk Animation
+# -----------------------------------------------------------------------------
+amt = bpy.data.armatures.new("Worker_Armature")
+rig = bpy.data.objects.new("Worker_Rig", amt)
+worker_col.objects.link(rig)
+bpy.context.view_layer.objects.active = rig
+bpy.ops.object.mode_set(mode='EDIT')
+
+# 1. Torso Spine Bones
+b_root = amt.edit_bones.new("Root")
+b_root.head = Vector((0, 0, 0))
+b_root.tail = Vector((0, 0, 0.40))
+
+b_thorax = amt.edit_bones.new("Thorax")
+b_thorax.head = Vector((0, 0.03, 0.95))
+b_thorax.tail = Vector((0, -0.01, 1.28))
+b_thorax.parent = b_root
+
+b_neck = amt.edit_bones.new("Neck")
+b_neck.head = Vector((0, -0.02, 1.37))
+b_neck.tail = Vector((0, -0.04, 1.58))
+b_neck.parent = b_thorax
+
+b_head = amt.edit_bones.new("Head")
+b_head.head = Vector((0, -0.04, 1.58))
+b_head.tail = Vector((0, -0.04, 1.95))
+b_head.parent = b_neck
+
+b_gaster = amt.edit_bones.new("Gaster")
+b_gaster.head = Vector((0, 0.10, 0.93))
+b_gaster.tail = Vector((0, 0.46, 0.66))
+b_gaster.parent = b_thorax
+
+# 2. Limb Bones
+for is_left in [True, False]:
+    sign = -1.0 if is_left else 1.0
+    suf = "L" if is_left else "R"
+
+    # Arms
+    p_shoulder = Vector((sign * 0.13, -0.04, 1.22))
+    p_elbow    = Vector((sign * 0.22, -0.16, 0.98))
+    p_wrist    = Vector((sign * 0.18, -0.22, 0.74))
+    p_hand     = Vector((sign * 0.18, -0.24, 0.57))
+
+    b_up = amt.edit_bones.new(f"Arm_Upper_{suf}")
+    b_up.head = p_shoulder
+    b_up.tail = p_elbow
+    b_up.parent = b_thorax
+
+    b_fa = amt.edit_bones.new(f"Arm_Forearm_{suf}")
+    b_fa.head = p_elbow
+    b_fa.tail = p_wrist
+    b_fa.parent = b_up
+
+    b_hd = amt.edit_bones.new(f"Arm_Hand_{suf}")
+    b_hd.head = p_wrist
+    b_hd.tail = p_hand
+    b_hd.parent = b_fa
+
+    # Middle Legs
+    p_hip_m   = Vector((sign * 0.14, 0.03, 1.06))
+    p_knee_m  = Vector((sign * 0.44, 0.00, 0.68))
+    p_ankle_m = Vector((sign * 0.36, -0.08, 0.08))
+    p_foot_m  = Vector((sign * 0.36, -0.15, 0.02))
+
+    b_fm = amt.edit_bones.new(f"Leg_Mid_Femur_{suf}")
+    b_fm.head = p_hip_m
+    b_fm.tail = p_knee_m
+    b_fm.parent = b_thorax
+
+    b_tm = amt.edit_bones.new(f"Leg_Mid_Tibia_{suf}")
+    b_tm.head = p_knee_m
+    b_tm.tail = p_ankle_m
+    b_tm.parent = b_fm
+
+    b_ftm = amt.edit_bones.new(f"Leg_Mid_Foot_{suf}")
+    b_ftm.head = p_ankle_m
+    b_ftm.tail = p_foot_m
+    b_ftm.parent = b_tm
+
+    # Hind Legs
+    p_hip_h   = Vector((sign * 0.12, 0.07, 0.96))
+    p_knee_h  = Vector((sign * 0.64, 0.28, 0.88))
+    p_ankle_h = Vector((sign * 0.56, 0.14, 0.08))
+    p_foot_h  = Vector((sign * 0.60, 0.12, 0.02))
+
+    b_fh = amt.edit_bones.new(f"Leg_Hind_Femur_{suf}")
+    b_fh.head = p_hip_h
+    b_fh.tail = p_knee_h
+    b_fh.parent = b_thorax
+
+    b_th = amt.edit_bones.new(f"Leg_Hind_Tibia_{suf}")
+    b_th.head = p_knee_h
+    b_th.tail = p_ankle_h
+    b_th.parent = b_fh
+
+    b_fth = amt.edit_bones.new(f"Leg_Hind_Foot_{suf}")
+    b_fth.head = p_ankle_h
+    b_fth.tail = p_foot_h
+    b_fth.parent = b_th
+
+bpy.ops.object.mode_set(mode='OBJECT')
+
+# Map mesh objects to respective bones
+bone_map = {
+    "Head": "Head",
+    "Eye_L": "Head", "Eye_R": "Head",
+    "Mandible_L": "Head", "Mandible_R": "Head",
+    "Antenna_L": "Head", "Antenna_L_Club": "Head",
+    "Antenna_R": "Head", "Antenna_R_Club": "Head",
+    "Neck": "Neck",
+    "Thorax_Pronotum": "Thorax",
+    "Thorax_Mesonotum": "Thorax",
+    "Thorax_Metanotum": "Thorax",
+    "Petiole": "Gaster",
+    "Gaster": "Gaster",
+}
+
+for is_left in [True, False]:
+    suf = "L" if is_left else "R"
+    bone_map[f"Arm_Shoulder_{suf}"] = "Thorax"
+    bone_map[f"Arm_Upper_{suf}"] = f"Arm_Upper_{suf}"
+    bone_map[f"Arm_Elbow_{suf}"] = f"Arm_Upper_{suf}"
+    bone_map[f"Arm_Forearm_{suf}"] = f"Arm_Forearm_{suf}"
+    bone_map[f"Arm_Wrist_{suf}"] = f"Arm_Hand_{suf}"
+    bone_map[f"Arm_Finger1_{suf}"] = f"Arm_Hand_{suf}"
+    bone_map[f"Arm_Finger2_{suf}"] = f"Arm_Hand_{suf}"
+
+    bone_map[f"Leg_Mid_Coxa_{suf}"] = "Thorax"
+    bone_map[f"Leg_Mid_Femur_{suf}"] = f"Leg_Mid_Femur_{suf}"
+    bone_map[f"Leg_Mid_Knee_{suf}"] = f"Leg_Mid_Femur_{suf}"
+    bone_map[f"Leg_Mid_Tibia_{suf}"] = f"Leg_Mid_Tibia_{suf}"
+    bone_map[f"Leg_Mid_Ankle_{suf}"] = f"Leg_Mid_Foot_{suf}"
+    bone_map[f"Leg_Mid_Foot_{suf}"] = f"Leg_Mid_Foot_{suf}"
+    bone_map[f"Leg_Mid_Toe1_{suf}"] = f"Leg_Mid_Foot_{suf}"
+    bone_map[f"Leg_Mid_Toe2_{suf}"] = f"Leg_Mid_Foot_{suf}"
+
+    bone_map[f"Leg_Hind_Coxa_{suf}"] = "Thorax"
+    bone_map[f"Leg_Hind_Femur_{suf}"] = f"Leg_Hind_Femur_{suf}"
+    bone_map[f"Leg_Hind_Knee_{suf}"] = f"Leg_Hind_Femur_{suf}"
+    bone_map[f"Leg_Hind_Tibia_{suf}"] = f"Leg_Hind_Tibia_{suf}"
+    bone_map[f"Leg_Hind_Ankle_{suf}"] = f"Leg_Hind_Foot_{suf}"
+    bone_map[f"Leg_Hind_Foot_{suf}"] = f"Leg_Hind_Foot_{suf}"
+    bone_map[f"Leg_Hind_Toe1_{suf}"] = f"Leg_Hind_Foot_{suf}"
+    bone_map[f"Leg_Hind_Toe2_{suf}"] = f"Leg_Hind_Foot_{suf}"
+
+for obj_name, b_name in bone_map.items():
+    o = bpy.data.objects.get(obj_name)
+    if o:
+        bpy.ops.object.select_all(action='DESELECT')
+        o.select_set(True)
+        rig.select_set(True)
+        bpy.context.view_layer.objects.active = rig
+        rig.data.bones.active = rig.data.bones[b_name]
+        bpy.ops.object.parent_set(type='BONE')
+
+# Keyframe 30-frame Alternating Tripod Walk Action
+bpy.context.view_layer.objects.active = rig
+bpy.ops.object.mode_set(mode='POSE')
+rig.animation_data_create()
+action = bpy.data.actions.new(name="Walk")
+rig.animation_data.action = action
+
+for pb in rig.pose.bones:
+    pb.rotation_mode = 'XYZ'
+
+pb_thorax = rig.pose.bones['Thorax']
+pb_head = rig.pose.bones['Head']
+pb_gaster = rig.pose.bones['Gaster']
+
+# Thorax vertical bounce and pelvic sway
+pb_thorax.location = Vector((0, 0, 0))
+pb_thorax.rotation_euler = Euler((0, 0, 0))
+pb_thorax.keyframe_insert('location', frame=1)
+pb_thorax.keyframe_insert('rotation_euler', frame=1)
+
+pb_thorax.location = Vector((0, 0, 0.024))
+pb_thorax.rotation_euler = Euler((math.radians(1.5), 0, math.radians(2.0)))
+pb_thorax.keyframe_insert('location', frame=8)
+pb_thorax.keyframe_insert('rotation_euler', frame=8)
+
+pb_thorax.location = Vector((0, 0, 0))
+pb_thorax.rotation_euler = Euler((0, 0, 0))
+pb_thorax.keyframe_insert('location', frame=15)
+pb_thorax.keyframe_insert('rotation_euler', frame=15)
+
+pb_thorax.location = Vector((0, 0, 0.024))
+pb_thorax.rotation_euler = Euler((math.radians(1.5), 0, math.radians(-2.0)))
+pb_thorax.keyframe_insert('location', frame=23)
+pb_thorax.keyframe_insert('rotation_euler', frame=23)
+
+pb_thorax.location = Vector((0, 0, 0))
+pb_thorax.rotation_euler = Euler((0, 0, 0))
+pb_thorax.keyframe_insert('location', frame=30)
+pb_thorax.keyframe_insert('rotation_euler', frame=30)
+
+# Head inquisitive nod
+pb_head.rotation_euler = Euler((0, 0, 0))
+pb_head.keyframe_insert('rotation_euler', frame=1)
+pb_head.rotation_euler = Euler((math.radians(2.5), 0, 0))
+pb_head.keyframe_insert('rotation_euler', frame=8)
+pb_head.rotation_euler = Euler((0, 0, 0))
+pb_head.keyframe_insert('rotation_euler', frame=15)
+pb_head.rotation_euler = Euler((math.radians(2.5), 0, 0))
+pb_head.keyframe_insert('rotation_euler', frame=23)
+pb_head.rotation_euler = Euler((0, 0, 0))
+pb_head.keyframe_insert('rotation_euler', frame=30)
+
+# Gaster counter-sway
+pb_gaster.rotation_euler = Euler((0, 0, 0))
+pb_gaster.keyframe_insert('rotation_euler', frame=1)
+pb_gaster.rotation_euler = Euler((0, math.radians(-2.5), math.radians(-2.0)))
+pb_gaster.keyframe_insert('rotation_euler', frame=8)
+pb_gaster.rotation_euler = Euler((0, 0, 0))
+pb_gaster.keyframe_insert('rotation_euler', frame=15)
+pb_gaster.rotation_euler = Euler((0, math.radians(2.5), math.radians(2.0)))
+pb_gaster.keyframe_insert('rotation_euler', frame=23)
+pb_gaster.rotation_euler = Euler((0, 0, 0))
+pb_gaster.keyframe_insert('rotation_euler', frame=30)
+
+# Tripod alternating leg kinematics
+def keyframe_leg(femur_name, tibia_name, is_group_a):
+    pb_f = rig.pose.bones.get(femur_name)
+    pb_t = rig.pose.bones.get(tibia_name)
+    if not pb_f or not pb_t:
+        return
+    phases = [
+        (1,  -15.0 if is_group_a else 15.0,   0.0 if is_group_a else 0.0),
+        (8,    0.0 if is_group_a else 18.0,   0.0 if is_group_a else 24.0),
+        (15,  15.0 if is_group_a else -15.0,  0.0 if is_group_a else 0.0),
+        (23,  18.0 if is_group_a else 0.0,   24.0 if is_group_a else 0.0),
+        (30, -15.0 if is_group_a else 15.0,   0.0 if is_group_a else 0.0)
+    ]
+    for frame, f_pitch, t_flex in phases:
+        pb_f.rotation_euler = Euler((math.radians(f_pitch), 0, 0))
+        pb_f.keyframe_insert('rotation_euler', frame=frame)
+        pb_t.rotation_euler = Euler((math.radians(t_flex), 0, 0))
+        pb_t.keyframe_insert('rotation_euler', frame=frame)
+
+keyframe_leg("Leg_Mid_Femur_L", "Leg_Mid_Tibia_L", True)
+keyframe_leg("Leg_Hind_Femur_R", "Leg_Hind_Tibia_R", True)
+
+keyframe_leg("Leg_Mid_Femur_R", "Leg_Mid_Tibia_R", False)
+keyframe_leg("Leg_Hind_Femur_L", "Leg_Hind_Tibia_L", False)
+
+# Front Arm swings (rhythmic arm pump)
+def keyframe_arm(arm_name, is_group_a):
+    pb_a = rig.pose.bones.get(arm_name)
+    if not pb_a:
+        return
+    phases = [
+        (1,   16.0 if is_group_a else -16.0),
+        (8,    0.0 if is_group_a else   0.0),
+        (15, -16.0 if is_group_a else  16.0),
+        (23,   0.0 if is_group_a else   0.0),
+        (30,  16.0 if is_group_a else -16.0)
+    ]
+    for frame, pitch in phases:
+        pb_a.rotation_euler = Euler((math.radians(pitch), 0, 0))
+        pb_a.keyframe_insert('rotation_euler', frame=frame)
+
+keyframe_arm("Arm_Upper_R", True)
+keyframe_arm("Arm_Upper_L", False)
+
+bpy.ops.object.mode_set(mode='OBJECT')
+bpy.context.scene.frame_set(1)
 
 # -----------------------------------------------------------------------------
 # 12. Multi-Angle Cameras & Render Stills (Including RTS Gameplay Angle)
@@ -864,7 +1172,8 @@ bpy.ops.export_scene.gltf(
     filepath=glb_path,
     export_format='GLB',
     use_selection=True,
-    export_apply=True
+    export_apply=False,
+    export_animations=True
 )
 print("Worker Ant Authentic 3D GLB export complete!")
 

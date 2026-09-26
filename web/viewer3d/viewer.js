@@ -172,6 +172,9 @@
   let isAnimating = true;
   let isTurntable = false;
   let isWireframe = false;
+  let isWalking = true;
+  let mixer = null;
+  let walkAction = null;
   let clock = new THREE.Clock();
 
   function initThree() {
@@ -205,27 +208,79 @@
     animate();
   }
 
+  let ambientLight, keyLight, fillLight, rimLight;
+
   function setupLighting() {
     lightsGroup = new THREE.Group();
     scene.add(lightsGroup);
 
-    const ambient = new THREE.AmbientLight(0x222833, 0.8);
-    lightsGroup.add(ambient);
+    ambientLight = new THREE.AmbientLight(0x222833, 0.8);
+    lightsGroup.add(ambientLight);
 
-    const keyLight = new THREE.DirectionalLight(0xfffaec, 2.5);
+    keyLight = new THREE.DirectionalLight(0xfffaec, 2.5);
     keyLight.position.set(-3.5, 4.5, 4.0);
     keyLight.castShadow = true;
     keyLight.shadow.mapSize.width = 2048;
     keyLight.shadow.mapSize.height = 2048;
     lightsGroup.add(keyLight);
 
-    const fillLight = new THREE.DirectionalLight(0xb0d2f8, 1.0);
+    fillLight = new THREE.DirectionalLight(0xb0d2f8, 1.0);
     fillLight.position.set(3.5, 2.5, 2.5);
     lightsGroup.add(fillLight);
 
-    const rimLight = new THREE.DirectionalLight(0xffffff, 2.2);
+    rimLight = new THREE.DirectionalLight(0xffffff, 2.2);
     rimLight.position.set(0.0, 4.5, -3.5);
     lightsGroup.add(rimLight);
+  }
+
+  function setLightingMode(mode) {
+    if (!ambientLight || !keyLight || !fillLight || !rimLight) return;
+
+    if (mode === 'sunset') {
+      ambientLight.color.setHex(0x331822);
+      ambientLight.intensity = 0.9;
+      keyLight.color.setHex(0xff6622);
+      keyLight.intensity = 3.2;
+      keyLight.position.set(-4.5, 2.2, 3.5);
+      fillLight.color.setHex(0x442266);
+      fillLight.intensity = 1.4;
+      rimLight.color.setHex(0xffbb44);
+      rimLight.intensity = 2.8;
+      if (scene) scene.background = new THREE.Color(0x160810);
+    } else if (mode === 'neon') {
+      ambientLight.color.setHex(0x080e18);
+      ambientLight.intensity = 0.7;
+      keyLight.color.setHex(0x00ffcc);
+      keyLight.intensity = 2.8;
+      keyLight.position.set(-3.5, 4.0, 3.5);
+      fillLight.color.setHex(0xff0077);
+      fillLight.intensity = 2.2;
+      rimLight.color.setHex(0xaa22ff);
+      rimLight.intensity = 3.0;
+      if (scene) scene.background = new THREE.Color(0x050512);
+    } else if (mode === 'studio') {
+      ambientLight.color.setHex(0x2a2a2e);
+      ambientLight.intensity = 0.9;
+      keyLight.color.setHex(0xffffff);
+      keyLight.intensity = 2.4;
+      keyLight.position.set(-3.0, 4.5, 4.0);
+      fillLight.color.setHex(0xf0f0f5);
+      fillLight.intensity = 1.2;
+      rimLight.color.setHex(0xffffff);
+      rimLight.intensity = 2.0;
+      if (scene) scene.background = new THREE.Color(0x08090b);
+    } else { // 'cover' / master studio 3-point
+      ambientLight.color.setHex(0x222833);
+      ambientLight.intensity = 0.8;
+      keyLight.color.setHex(0xfffaec);
+      keyLight.intensity = 2.5;
+      keyLight.position.set(-3.5, 4.5, 4.0);
+      fillLight.color.setHex(0xb0d2f8);
+      fillLight.intensity = 1.0;
+      rimLight.color.setHex(0xffffff);
+      rimLight.intensity = 2.2;
+      if (scene) scene.background = new THREE.Color(0x05070a);
+    }
   }
 
   function setupStage() {
@@ -329,6 +384,19 @@
         model.position.set(0, -1.17, 0);
         model.scale.set(1.0, 1.0, 1.0);
         antGroup.add(model);
+
+        if (gltf.animations && gltf.animations.length > 0) {
+          mixer = new THREE.AnimationMixer(model);
+          walkAction = mixer.clipAction(gltf.animations[0]);
+          walkAction.setLoop(THREE.LoopRepeat);
+          walkAction.play();
+          isWalking = true;
+          const btnWalk = document.getElementById('btn-walk-anim');
+          if (btnWalk) {
+            btnWalk.classList.add('active');
+            btnWalk.textContent = '⏸ Pause Walk';
+          }
+        }
       },
       undefined,
       function (error) {
@@ -345,6 +413,9 @@
       controls.update();
       if (isTurntable && antGroup) {
         antGroup.rotation.y += delta * 0.5;
+      }
+      if (mixer && isWalking) {
+        mixer.update(delta);
       }
       renderer.render(scene, camera);
     }
@@ -451,6 +522,22 @@
     });
 
     // WebGL Controls
+    document.getElementById('select-lighting')?.addEventListener('change', (e) => {
+      setLightingMode(e.target.value);
+    });
+
+    document.getElementById('btn-walk-anim')?.addEventListener('click', (e) => {
+      isWalking = !isWalking;
+      e.target.classList.toggle('active', isWalking);
+      if (walkAction) {
+        if (isWalking) {
+          walkAction.play();
+        } else {
+          walkAction.stop();
+        }
+      }
+      e.target.textContent = isWalking ? '⏸ Pause Walk' : '🚶 Walk Animation';
+    });
     document.getElementById('btn-turntable')?.addEventListener('click', (e) => {
       isTurntable = !isTurntable;
       e.target.classList.toggle('active', isTurntable);
