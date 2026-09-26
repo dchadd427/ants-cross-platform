@@ -550,92 +550,9 @@ make_authentic_antenna("Antenna_L", True)
 make_authentic_antenna("Antenna_R", False)
 
 # -----------------------------------------------------------------------------
-# 7. Thorax: 3 Compact Arched Armor Plates (Matching ref_limbs_crop.png)
+# 6.5. Anatomical Segment & Articulated Joint Condyle Builders
 # -----------------------------------------------------------------------------
-# Short Rounded Neck
-bpy.ops.mesh.primitive_cylinder_add(
-    vertices=24, radius=0.085, depth=0.10,
-    location=(0, -0.02, 1.37), rotation=(math.radians(16), 0, 0)
-)
-neck = bpy.context.active_object
-neck.name = "Neck"
-neck.data.materials.append(mat_chitin)
-bpy.ops.object.shade_smooth()
-reg(neck)
-
-# Slimmed Thorax: Authentic lean insect armor plates matching master reference artwork
-thorax_plates = [
-    ("Thorax_Pronotum",  Vector((0, -0.01, 1.25)), Vector((0.16, 0.15, 0.13))),
-    ("Thorax_Mesonotum", Vector((0, 0.03, 1.10)),  Vector((0.15, 0.14, 0.12))),
-    ("Thorax_Metanotum", Vector((0, 0.07, 0.96)),  Vector((0.13, 0.13, 0.11)))
-]
-for name, loc, scale in thorax_plates:
-    bpy.ops.mesh.primitive_uv_sphere_add(segments=32, ring_count=20, radius=1.0, location=loc)
-    p_obj = bpy.context.active_object
-    p_obj.name = name
-    p_obj.scale = scale
-    p_obj.data.materials.append(mat_chitin)
-    sub = p_obj.modifiers.new("Subsurf", 'SUBSURF')
-    sub.levels = 1
-    bpy.ops.object.shade_smooth()
-    reg(p_obj)
-
-# Slender Petiole Waist (Bridging rear propodeum cleanly to anterior gaster)
-bpy.ops.mesh.primitive_cylinder_add(
-    vertices=20, radius=0.046, depth=0.18,
-    location=(0, 0.165, 0.865), rotation=(math.radians(45), 0, 0)
-)
-petiole = bpy.context.active_object
-petiole.name = "Petiole"
-petiole.data.materials.append(mat_chitin)
-bpy.ops.object.shade_smooth()
-reg(petiole)
-
-# -----------------------------------------------------------------------------
-# 8. Gaster: Suspended Plump Egg Abdomen at 26° (Zero overlap with Thorax)
-# -----------------------------------------------------------------------------
-bpy.ops.mesh.primitive_uv_sphere_add(
-    segments=36, ring_count=24, radius=1.0,
-    location=(0, 0.46, 0.66),
-    rotation=(math.radians(26), 0, 0)
-)
-gaster_obj = bpy.context.active_object
-gaster_obj.name = "Gaster"
-
-for v in gaster_obj.data.vertices:
-    x = v.co.x * 0.24
-    y = v.co.y * 0.33
-    z = v.co.z * 0.24
-
-    if y > 0:
-        # Posterior gentle taper towards sting tip
-        taper = 1.0 - 0.36 * (y / 0.33)
-        x *= taper
-        z *= (taper * 0.92)
-    else:
-        # Anterior conical neck tapering into petiole socket
-        t_ant = min(1.0, (-y) / 0.33)
-        x *= (1.0 - 0.45 * t_ant)
-        z *= (1.0 - 0.45 * t_ant)
-
-    # Subtle sternite banding grooves
-    groove = math.sin((y + 0.33) * 18.0) * 0.006
-    x += groove * (x / 0.24)
-    z += groove * (z / 0.24)
-
-    v.co = Vector((x, y, z))
-
-gaster_obj.data.update()
-gaster_obj.data.materials.append(mat_chitin)
-sub_g = gaster_obj.modifiers.new("Subsurf", 'SUBSURF')
-sub_g.levels = 2
-bpy.ops.object.shade_smooth()
-reg(gaster_obj)
-
-# -----------------------------------------------------------------------------
-# 9. Sculpted Insect Limbs: Longitudinal Cuticle Ridges & Articulated Collars
-# -----------------------------------------------------------------------------
-def make_chitin_segment(name, p0, p1, r_start, r_mid, r_end, is_sleeve=False):
+def make_chitin_segment(name, p0, p1, r_start, r_mid, r_end, is_sleeve=False, material=mat_limbs):
     bm = bmesh.new()
     vec = p1 - p0
     length = vec.length
@@ -691,7 +608,7 @@ def make_chitin_segment(name, p0, p1, r_start, r_mid, r_end, is_sleeve=False):
 
     obj = bpy.data.objects.new(name, mesh)
     bpy.context.scene.collection.objects.link(obj)
-    obj.data.materials.append(mat_limbs)
+    obj.data.materials.append(material)
     sub = obj.modifiers.new("Subsurf", 'SUBSURF')
     sub.levels = 1
     for p in mesh.polygons:
@@ -722,16 +639,100 @@ def make_foot_toe_pad(name, p_toe, radius):
     bpy.ops.object.shade_smooth()
     return reg(obj)
 
+# -----------------------------------------------------------------------------
+# 7. Thorax: 3 Compact Arched Armor Plates (Matching ref_limbs_crop.png)
+# -----------------------------------------------------------------------------
+# Short Rounded Neck
+bpy.ops.mesh.primitive_cylinder_add(
+    vertices=24, radius=0.085, depth=0.10,
+    location=(0, -0.02, 1.37), rotation=(math.radians(16), 0, 0)
+)
+neck = bpy.context.active_object
+neck.name = "Neck"
+neck.data.materials.append(mat_chitin)
+bpy.ops.object.shade_smooth()
+reg(neck)
+
+# Slimmed Thorax: Authentic lean insect armor plates matching master reference artwork
+thorax_plates = [
+    ("Thorax_Pronotum",  Vector((0, -0.01, 1.25)), Vector((0.16, 0.15, 0.13))),
+    ("Thorax_Mesonotum", Vector((0, 0.03, 1.10)),  Vector((0.15, 0.14, 0.12))),
+    ("Thorax_Metanotum", Vector((0, 0.07, 0.96)),  Vector((0.13, 0.13, 0.11)))
+]
+for name, loc, scale in thorax_plates:
+    bpy.ops.mesh.primitive_uv_sphere_add(segments=32, ring_count=20, radius=1.0, location=loc)
+    p_obj = bpy.context.active_object
+    p_obj.name = name
+    p_obj.scale = scale
+    p_obj.data.materials.append(mat_chitin)
+    sub = p_obj.modifiers.new("Subsurf", 'SUBSURF')
+    sub.levels = 1
+    bpy.ops.object.shade_smooth()
+    reg(p_obj)
+
+# -----------------------------------------------------------------------------
+# 8. Petiole & Gaster: Continuous, Fully Connected Waist & Suspended Abdomen
+# -----------------------------------------------------------------------------
+# Articulated Petiole Waist: Solid, gap-free bridge between rear Metanotum & Gaster
+p_pet_start = Vector((0, 0.08, 0.94))  # Anchored firmly inside Thorax_Metanotum
+p_pet_end   = Vector((0, 0.22, 0.78))  # Embedded deep inside anterior Gaster socket
+
+make_joint_socket("Petiole_Thorax_Socket", p_pet_start, 0.052, material=mat_chitin)
+make_chitin_segment("Petiole", p_pet_start, p_pet_end, 0.048, 0.044, 0.052, is_sleeve=True, material=mat_chitin)
+make_joint_socket("Petiole_Gaster_Socket", p_pet_end, 0.056, material=mat_chitin)
+
+# Gaster: Suspended Plump Egg Abdomen at 20° (Anterior pole encompasses p_pet_end)
+bpy.ops.mesh.primitive_uv_sphere_add(
+    segments=36, ring_count=24, radius=1.0,
+    location=(0, 0.38, 0.68),
+    rotation=(math.radians(20), 0, 0)
+)
+gaster_obj = bpy.context.active_object
+gaster_obj.name = "Gaster"
+
+for v in gaster_obj.data.vertices:
+    x = v.co.x * 0.24
+    y = v.co.y * 0.32
+    z = v.co.z * 0.24
+
+    if y > 0:
+        # Posterior gentle taper towards sting tip
+        taper = 1.0 - 0.36 * (y / 0.32)
+        x *= taper
+        z *= (taper * 0.92)
+    else:
+        # Anterior conical neck tapering into petiole socket
+        t_ant = min(1.0, (-y) / 0.32)
+        x *= (1.0 - 0.40 * t_ant)
+        z *= (1.0 - 0.40 * t_ant)
+
+    # Subtle sternite banding grooves
+    groove = math.sin((y + 0.32) * 18.0) * 0.006
+    x += groove * (x / 0.24)
+    z += groove * (z / 0.24)
+
+    v.co = Vector((x, y, z))
+
+gaster_obj.data.update()
+gaster_obj.data.materials.append(mat_chitin)
+sub_g = gaster_obj.modifiers.new("Subsurf", 'SUBSURF')
+sub_g.levels = 2
+bpy.ops.object.shade_smooth()
+reg(gaster_obj)
+
+# -----------------------------------------------------------------------------
+# 9. Sculpted Insect Limbs: Longitudinal Cuticle Ridges & Articulated Collars
+# -----------------------------------------------------------------------------
 # A. Front Expressive Arms (Bent dynamically at elbows framing chest)
 for is_left in [True, False]:
     sign = -1.0 if is_left else 1.0
     suf = "L" if is_left else "R"
 
     p_shoulder = Vector((sign * 0.13, -0.04, 1.22))
-    p_elbow    = Vector((sign * 0.22, -0.16, 0.98)) # Elbow bent outward and forward
-    p_wrist    = Vector((sign * 0.18, -0.22, 0.74)) # Forearm back inward
-    p_finger1  = Vector((sign * 0.16, -0.25, 0.58)) # Curved hand claw
-    p_finger2  = Vector((sign * 0.20, -0.22, 0.56))
+    p_elbow    = Vector((sign * 0.20, -0.16, 0.98)) # Elbow bent gently outward and forward
+    p_wrist    = Vector((sign * 0.16, -0.22, 0.74)) # Forearm back inward
+    p_finger1  = Vector((sign * 0.14, -0.25, 0.58)) # Curved hand claw
+    p_finger2  = Vector((sign * 0.18, -0.22, 0.56))
 
     make_joint_socket(f"Arm_Shoulder_{suf}", p_shoulder, 0.044, scale=(1.1, 1.1, 1.1))
     make_chitin_segment(f"Arm_Upper_{suf}", p_shoulder, p_elbow, 0.038, 0.044, 0.032, is_sleeve=True)
@@ -741,16 +742,16 @@ for is_left in [True, False]:
     make_chitin_segment(f"Arm_Finger1_{suf}", p_wrist, p_finger1, 0.016, 0.016, 0.010)
     make_chitin_segment(f"Arm_Finger2_{suf}", p_wrist, p_finger2, 0.014, 0.014, 0.008)
 
-# B. Middle Walking Legs (Reaching laterally to mid-width)
+# B. Middle Walking Legs (Narrowed stance matching master reference)
 for is_left in [True, False]:
     sign = -1.0 if is_left else 1.0
     suf = "L" if is_left else "R"
 
-    p_hip   = Vector((sign * 0.14, 0.03, 1.06))
-    p_knee  = Vector((sign * 0.44, 0.00, 0.68)) # Lateral knee reaching OUT to side!
-    p_ankle = Vector((sign * 0.36, -0.08, 0.08))
-    p_toe1  = Vector((sign * 0.34, -0.16, 0.02))
-    p_toe2  = Vector((sign * 0.38, -0.14, 0.02))
+    p_hip   = Vector((sign * 0.13, 0.03, 1.06))
+    p_knee  = Vector((sign * 0.28, -0.02, 0.68)) # Compact lateral knee bend framing torso
+    p_ankle = Vector((sign * 0.22, -0.08, 0.08))
+    p_toe1  = Vector((sign * 0.20, -0.16, 0.02))
+    p_toe2  = Vector((sign * 0.24, -0.14, 0.02))
 
     make_joint_socket(f"Leg_Mid_Coxa_{suf}", p_hip, 0.048, scale=(1.1, 1.2, 1.1))
     make_chitin_segment(f"Leg_Mid_Femur_{suf}", p_hip, p_knee, 0.044, 0.050, 0.036, is_sleeve=True)
@@ -761,16 +762,16 @@ for is_left in [True, False]:
     make_foot_toe_pad(f"Leg_Mid_Toe1_{suf}", p_toe1, 0.022)
     make_foot_toe_pad(f"Leg_Mid_Toe2_{suf}", p_toe2, 0.018)
 
-# C. Hind Walking Legs (Reaching backward & wide in authentic tripod stance)
+# C. Hind Walking Legs (Narrowed stance matching master reference)
 for is_left in [True, False]:
     sign = -1.0 if is_left else 1.0
     suf = "L" if is_left else "R"
 
-    p_hip   = Vector((sign * 0.12, 0.07, 0.96))
-    p_knee  = Vector((sign * 0.64, 0.28, 0.88)) # High lateral knee reaching BACK and WIDE!
-    p_ankle = Vector((sign * 0.56, 0.14, 0.08))
-    p_toe1  = Vector((sign * 0.58, 0.06, 0.02))
-    p_toe2  = Vector((sign * 0.62, 0.18, 0.02))
+    p_hip   = Vector((sign * 0.11, 0.07, 0.96))
+    p_knee  = Vector((sign * 0.42, 0.18, 0.82)) # Natural knee height and compact width
+    p_ankle = Vector((sign * 0.35, 0.10, 0.08)) # Feet planted closer to body
+    p_toe1  = Vector((sign * 0.36, 0.04, 0.02))
+    p_toe2  = Vector((sign * 0.40, 0.14, 0.02))
 
     make_joint_socket(f"Leg_Hind_Coxa_{suf}", p_hip, 0.052, scale=(1.1, 1.2, 1.1))
     make_chitin_segment(f"Leg_Hind_Femur_{suf}", p_hip, p_knee, 0.048, 0.054, 0.038, is_sleeve=True)
@@ -861,8 +862,8 @@ b_head.tail = Vector((0, -0.04, 1.95))
 b_head.parent = b_neck
 
 b_gaster = amt.edit_bones.new("Gaster")
-b_gaster.head = Vector((0, 0.10, 0.93))
-b_gaster.tail = Vector((0, 0.46, 0.66))
+b_gaster.head = Vector((0, 0.08, 0.94))
+b_gaster.tail = Vector((0, 0.38, 0.68))
 b_gaster.parent = b_thorax
 
 # 2. Limb Bones
@@ -872,9 +873,9 @@ for is_left in [True, False]:
 
     # Arms
     p_shoulder = Vector((sign * 0.13, -0.04, 1.22))
-    p_elbow    = Vector((sign * 0.22, -0.16, 0.98))
-    p_wrist    = Vector((sign * 0.18, -0.22, 0.74))
-    p_hand     = Vector((sign * 0.18, -0.24, 0.57))
+    p_elbow    = Vector((sign * 0.20, -0.16, 0.98))
+    p_wrist    = Vector((sign * 0.16, -0.22, 0.74))
+    p_hand     = Vector((sign * 0.14, -0.25, 0.58))
 
     b_up = amt.edit_bones.new(f"Arm_Upper_{suf}")
     b_up.head = p_shoulder
@@ -891,11 +892,11 @@ for is_left in [True, False]:
     b_hd.tail = p_hand
     b_hd.parent = b_fa
 
-    # Middle Legs
-    p_hip_m   = Vector((sign * 0.14, 0.03, 1.06))
-    p_knee_m  = Vector((sign * 0.44, 0.00, 0.68))
-    p_ankle_m = Vector((sign * 0.36, -0.08, 0.08))
-    p_foot_m  = Vector((sign * 0.36, -0.15, 0.02))
+    # Middle Legs (Narrowed stance matching master reference)
+    p_hip_m   = Vector((sign * 0.13, 0.03, 1.06))
+    p_knee_m  = Vector((sign * 0.28, -0.02, 0.68))
+    p_ankle_m = Vector((sign * 0.22, -0.08, 0.08))
+    p_foot_m  = Vector((sign * 0.22, -0.15, 0.02))
 
     b_fm = amt.edit_bones.new(f"Leg_Mid_Femur_{suf}")
     b_fm.head = p_hip_m
@@ -912,11 +913,11 @@ for is_left in [True, False]:
     b_ftm.tail = p_foot_m
     b_ftm.parent = b_tm
 
-    # Hind Legs
-    p_hip_h   = Vector((sign * 0.12, 0.07, 0.96))
-    p_knee_h  = Vector((sign * 0.64, 0.28, 0.88))
-    p_ankle_h = Vector((sign * 0.56, 0.14, 0.08))
-    p_foot_h  = Vector((sign * 0.60, 0.12, 0.02))
+    # Hind Legs (Narrowed stance matching master reference)
+    p_hip_h   = Vector((sign * 0.11, 0.07, 0.96))
+    p_knee_h  = Vector((sign * 0.42, 0.18, 0.82))
+    p_ankle_h = Vector((sign * 0.35, 0.10, 0.08))
+    p_foot_h  = Vector((sign * 0.38, 0.09, 0.02))
 
     b_fh = amt.edit_bones.new(f"Leg_Hind_Femur_{suf}")
     b_fh.head = p_hip_h
@@ -946,7 +947,9 @@ bone_map = {
     "Thorax_Pronotum": "Thorax",
     "Thorax_Mesonotum": "Thorax",
     "Thorax_Metanotum": "Thorax",
+    "Petiole_Thorax_Socket": "Gaster",
     "Petiole": "Gaster",
+    "Petiole_Gaster_Socket": "Gaster",
     "Gaster": "Gaster",
 }
 
