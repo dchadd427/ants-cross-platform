@@ -322,6 +322,13 @@
       stopAutoSpin();
       updateTurntableDisplay(18); // 180 degrees
     });
+    document.getElementById('btn-gameplay-snap')?.addEventListener('click', () => {
+      stopAutoSpin();
+      turntableImg.src = `worker_gameplay_angle.png?v=${Date.now()}`;
+      if (turntableAngleLabel) {
+        turntableAngleLabel.textContent = "🎮 Authentic 1998 RTS Angled Top-Down View (South Perspective)";
+      }
+    });
 
     // Blender Instructions Modal
     const blenderModal = document.getElementById('blender-modal');
@@ -370,6 +377,13 @@
         antGroup.traverse(c => {
           if (c.isMesh && c.material) c.material.wireframe = isWireframe;
         });
+      }
+    });
+    document.getElementById('btn-webgl-gameplay')?.addEventListener('click', () => {
+      if (camera && controls) {
+        camera.position.set(0.0, 3.8, 2.5);
+        controls.target.set(0.0, 0.0, 0.0);
+        controls.update();
       }
     });
 

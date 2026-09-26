@@ -22,8 +22,8 @@ def generate_eye_texture():
     iris_cx, iris_cy = size * 0.515, size * 0.50
 
     r_outer = size * 0.48
-    r_iris = size * 0.285   # Large cute cartoon iris
-    r_pupil = size * 0.138  # Expressive dark pupil
+    r_iris = size * 0.34   # Large cute cartoon iris matching master reference
+    r_pupil = size * 0.17  # Expressive dark pupil matching master reference
 
     for y in range(size):
         ny = (y - cy) / (size * 0.5)
