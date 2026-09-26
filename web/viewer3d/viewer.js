@@ -261,7 +261,7 @@
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     renderer.outputEncoding = THREE.sRGBEncoding;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.15;
+    renderer.toneMappingExposure = 1.0;
     container.appendChild(renderer.domElement);
 
     controls = new THREE.OrbitControls(camera, renderer.domElement);
@@ -274,29 +274,63 @@
 
     setupLighting();
     setupStage();
-    loadAntModel(currentCaste);
 
     animate();
   }
 
+  // --- Team Color Engine (Authentic 1998 Ants Palettes from ants.chd) ---
+  const TEAM_COLORS = {
+    green: { name: 'Green (Default)', hex: 0x57976f, factor: new THREE.Color(1.0, 1.0, 1.0) },
+    black: { name: 'Black Team', hex: 0x57475b, factor: new THREE.Color(0.58, 0.48, 0.60) },
+    red:   { name: 'Red Team',   hex: 0x933333, factor: new THREE.Color(0.95, 0.35, 0.35) },
+    blue:  { name: 'Blue Team',  hex: 0x374b7f, factor: new THREE.Color(0.38, 0.48, 0.85) },
+  };
+
+  let currentTeamColor = 'green';
+
+  function applyTeamColor(teamKey) {
+    currentTeamColor = teamKey;
+    const team = TEAM_COLORS[teamKey] || TEAM_COLORS.green;
+    const selectTeam = document.getElementById('select-team');
+    if (selectTeam && selectTeam.value !== teamKey) selectTeam.value = teamKey;
+
+    if (!antGroup) return;
+
+    antGroup.traverse(child => {
+      if (child.isMesh && child.material) {
+        const matName = child.material.name || '';
+        const isExoskeleton = matName.includes('Chitin') || matName.includes('Head') || 
+                              matName.includes('Limbs') || matName.includes('Antenna') || 
+                              matName.includes('Mandible');
+        if (isExoskeleton) {
+          if (teamKey === 'green') {
+            child.material.color.setRGB(1.0, 1.0, 1.0);
+          } else {
+            child.material.color.copy(team.factor);
+          }
+        }
+      }
+    });
+  }
+
   function setupLighting() {
-    ambientLight = new THREE.AmbientLight(0x222833, 0.8);
+    ambientLight = new THREE.AmbientLight(0x333b47, 0.6);
     scene.add(ambientLight);
 
-    keyLight = new THREE.DirectionalLight(0xfffaec, 2.5);
-    keyLight.position.set(-3.5, 4.5, 4.0);
+    keyLight = new THREE.DirectionalLight(0xfffaec, 1.4);
+    keyLight.position.set(-3.0, 4.0, 3.5);
     keyLight.castShadow = true;
     keyLight.shadow.mapSize.width = 2048;
     keyLight.shadow.mapSize.height = 2048;
     keyLight.shadow.bias = -0.0001;
     scene.add(keyLight);
 
-    fillLight = new THREE.DirectionalLight(0xb0d2f8, 1.0);
-    fillLight.position.set(3.5, 2.0, 3.0);
+    fillLight = new THREE.DirectionalLight(0xb0d2f8, 0.6);
+    fillLight.position.set(3.0, 2.0, 2.5);
     scene.add(fillLight);
 
-    rimLight = new THREE.DirectionalLight(0xffffff, 2.2);
-    rimLight.position.set(0, 4.0, -4.5);
+    rimLight = new THREE.DirectionalLight(0xffffff, 1.2);
+    rimLight.position.set(0, 3.5, -4.0);
     scene.add(rimLight);
   }
 
@@ -304,47 +338,47 @@
     if (!ambientLight || !keyLight) return;
     if (mode === 'sunset') {
       ambientLight.color.setHex(0x3a1a12);
-      ambientLight.intensity = 0.9;
+      ambientLight.intensity = 0.65;
       keyLight.color.setHex(0xff7733);
-      keyLight.intensity = 3.2;
+      keyLight.intensity = 1.8;
       keyLight.position.set(-4.0, 3.0, 3.0);
       fillLight.color.setHex(0x5522aa);
-      fillLight.intensity = 1.4;
+      fillLight.intensity = 0.8;
       rimLight.color.setHex(0xffddaa);
-      rimLight.intensity = 2.6;
+      rimLight.intensity = 1.4;
       if (scene) scene.background = new THREE.Color(0x0e0608);
     } else if (mode === 'neon') {
       ambientLight.color.setHex(0x080e18);
-      ambientLight.intensity = 0.7;
+      ambientLight.intensity = 0.5;
       keyLight.color.setHex(0x00ffcc);
-      keyLight.intensity = 2.8;
+      keyLight.intensity = 1.6;
       keyLight.position.set(-3.5, 4.0, 3.5);
       fillLight.color.setHex(0xff0077);
-      fillLight.intensity = 2.2;
+      fillLight.intensity = 1.2;
       rimLight.color.setHex(0xaa22ff);
-      rimLight.intensity = 3.0;
+      rimLight.intensity = 1.6;
       if (scene) scene.background = new THREE.Color(0x050512);
     } else if (mode === 'studio') {
       ambientLight.color.setHex(0x2a2a2e);
-      ambientLight.intensity = 0.9;
+      ambientLight.intensity = 0.65;
       keyLight.color.setHex(0xffffff);
-      keyLight.intensity = 2.4;
+      keyLight.intensity = 1.4;
       keyLight.position.set(-3.0, 4.5, 4.0);
       fillLight.color.setHex(0xf0f0f5);
-      fillLight.intensity = 1.2;
+      fillLight.intensity = 0.7;
       rimLight.color.setHex(0xffffff);
-      rimLight.intensity = 2.0;
+      rimLight.intensity = 1.1;
       if (scene) scene.background = new THREE.Color(0x08090b);
     } else { // 'cover' / master studio 3-point
-      ambientLight.color.setHex(0x222833);
-      ambientLight.intensity = 0.8;
+      ambientLight.color.setHex(0x333b47);
+      ambientLight.intensity = 0.6;
       keyLight.color.setHex(0xfffaec);
-      keyLight.intensity = 2.5;
-      keyLight.position.set(-3.5, 4.5, 4.0);
+      keyLight.intensity = 1.4;
+      keyLight.position.set(-3.0, 4.0, 3.5);
       fillLight.color.setHex(0xb0d2f8);
-      fillLight.intensity = 1.0;
+      fillLight.intensity = 0.6;
       rimLight.color.setHex(0xffffff);
-      rimLight.intensity = 2.2;
+      rimLight.intensity = 1.2;
       if (scene) scene.background = new THREE.Color(0x05070a);
     }
   }
@@ -372,7 +406,11 @@
     stageGroup.add(ring);
   }
 
+  let activeLoadId = 0;
+
   function loadAntModel(casteId) {
+    const thisLoadId = ++activeLoadId;
+
     if (!antGroup) {
       antGroup = new THREE.Group();
       scene.add(antGroup);
@@ -394,6 +432,17 @@
     gltfLoader.load(
       `${cfg.glb}?v=${Date.now()}`,
       function (gltf) {
+        if (thisLoadId !== activeLoadId) {
+          // Stale in-flight load from previous switch, discard!
+          return;
+        }
+
+        // Flush any remaining objects in antGroup to guarantee single model
+        while (antGroup.children.length > 0) {
+          const obj = antGroup.children[0];
+          antGroup.remove(obj);
+        }
+
         const model = gltf.scene;
         model.traverse(function (child) {
           if (child.isMesh) {
@@ -402,6 +451,11 @@
             if (child.material) {
               child.material.wireframe = isWireframe;
               child.material.side = THREE.DoubleSide;
+              const matName = child.material.name || '';
+              if (matName.includes('Chitin') || matName.includes('Head') || matName.includes('Mandible')) {
+                child.material.roughness = 0.58;
+                child.material.metalness = 0.0;
+              }
             }
           }
         });
@@ -409,6 +463,7 @@
         model.position.set(0, -1.17, 0);
         model.scale.set(1.0, 1.0, 1.0);
         antGroup.add(model);
+        applyTeamColor(currentTeamColor);
 
         if (gltf.animations && gltf.animations.length > 0) {
           mixer = new THREE.AnimationMixer(model);
@@ -685,6 +740,10 @@
     });
 
     // WebGL Controls
+    document.getElementById('select-team')?.addEventListener('change', (e) => {
+      applyTeamColor(e.target.value);
+    });
+
     document.getElementById('select-lighting')?.addEventListener('change', (e) => {
       setLightingMode(e.target.value);
     });
@@ -740,9 +799,22 @@
     if (loader) {
       setTimeout(() => {
         loader.style.opacity = '0';
-        setTimeout(() => loader.style.display = 'none', 300);
+        setTimeout(() => {
+          loader.style.display = 'none';
+        }, 300);
       }, 400);
     }
+
+    // Expose for inspection & test automation
+    window.__viewer = {
+      getScene: () => scene,
+      getAntGroup: () => antGroup,
+      getCurrentCaste: () => currentCaste,
+      getCurrentTeam: () => currentTeamColor,
+      applyTeamColor: (color) => applyTeamColor(color),
+      switchCaste: (caste) => switchCaste(caste),
+      setViewMode: (mode) => setViewMode(mode)
+    };
   });
 
 })();

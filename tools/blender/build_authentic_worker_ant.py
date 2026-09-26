@@ -208,9 +208,25 @@ def create_materials():
     bsdf_t.inputs['Coat Weight'].default_value = 0.40
     bsdf_t.inputs['Coat Roughness'].default_value = 0.15
 
-    return mat_chitin, mat_eye, mat_mandible, mat_limbs, mat_antenna, mat_teeth
+    # G. Recessed Oral Cavity Material (Velvety shadow void behind mandibles)
+    mat_oral = bpy.data.materials.new("M_Oral_Authentic")
+    mat_oral.use_nodes = True
+    nodes_o = mat_oral.node_tree.nodes
+    links_o = mat_oral.node_tree.links
+    nodes_o.clear()
 
-mat_chitin, mat_eye, mat_mandible, mat_limbs, mat_antenna, mat_teeth = create_materials()
+    out_o = nodes_o.new('ShaderNodeOutputMaterial')
+    bsdf_o = nodes_o.new('ShaderNodeBsdfPrincipled')
+    links_o.new(bsdf_o.outputs['BSDF'], out_o.inputs['Surface'])
+
+    bsdf_o.inputs['Base Color'].default_value = (0.015, 0.010, 0.012, 1.0)
+    bsdf_o.inputs['Roughness'].default_value = 0.90
+    if 'Specular IOR Level' in bsdf_o.inputs:
+        bsdf_o.inputs['Specular IOR Level'].default_value = 0.05
+
+    return mat_chitin, mat_eye, mat_mandible, mat_limbs, mat_antenna, mat_teeth, mat_oral
+
+mat_chitin, mat_eye, mat_mandible, mat_limbs, mat_antenna, mat_teeth, mat_oral = create_materials()
 
 worker_col = bpy.data.collections.new("Worker_Ant_Authentic")
 bpy.context.scene.collection.children.link(worker_col)
@@ -286,20 +302,16 @@ for v in bm_head.verts:
     if abs(x) > 0.22 and -0.18 < z < 0.18:
         x *= 1.05
 
-    # 7. Recessed Oral Cavity (Behind mandibles, under clypeus: Z in [-0.30, -0.17])
-    if -0.30 < z < -0.17 and abs(x) < 0.13 and y < -0.02:
-        cavity = math.cos(abs(x) / 0.13 * (math.pi / 2.0))
-        y += 0.065 * cavity
-
-    # 8. Labium / Lower Chin Lip (Beneath oral cavity: Z in [-0.32, -0.25])
-    if -0.32 < z < -0.25 and abs(x) < 0.08 and y < 0:
-        lip = math.cos(abs(x) / 0.08 * (math.pi / 2.0))
-        y -= 0.035 * lip
-
-    # 9. Lower jaw taper (narrowing toward neck)
-    if z < -0.10:
-        t_neck = min(1.0, (-0.10 - z) / 0.22)
-        x *= (1.0 - 0.20 * t_neck)
+    # 7. Carve away awkward lower chin below mouthparts so jaws form the true bottom of the head
+    if z < -0.05 and y < 0.05:
+        t_cut = min(1.0, (-z - 0.05) / 0.20)
+        y += 0.14 * t_cut
+        z += 0.08 * t_cut
+        x *= (1.0 - 0.25 * t_cut)
+    elif z < -0.12:
+        t_neck = min(1.0, (-z - 0.12) / 0.18)
+        x *= (1.0 - 0.40 * t_neck)
+        y *= (1.0 - 0.35 * t_neck)
 
     v.co = Vector((x, y, z))
 
@@ -385,27 +397,32 @@ make_bulging_eye("Eye_L", True)
 make_bulging_eye("Eye_R", False)
 
 # -----------------------------------------------------------------------------
-# 5. Horizontal Curved Pincer Mandibles with Authentic Scooped Blades
+# 5. Authentic 3D Caliper Pincer Claws & Recessed Oral Cavity
 # -----------------------------------------------------------------------------
-def make_clean_mandible(name, is_left=True):
+def make_authentic_pincer_claw(name, is_left=True):
     sign = -1.0 if is_left else 1.0
     bm = bmesh.new()
 
-    # Articulating from lower jaw corners, bulging forward into a plump boxing-glove cheek, curving inward
+    # True caliper pincer jaw path:
+    # 0. Cheek hinge condyle (world Z=1.45)
+    # 1. Broad lateral caliper bow flaring out as wide as cheek
+    # 2. Massive anterior bulbous muscle lobe (sweeping forward and down)
+    # 3. Anterior medial turn with deep inner bite notch
+    # 4. Inward-hooking caliper tip (leaving ~0.130 unit open central mouth gap)
     stations = [
-        # 0. Jaw hinge socket under cheek
-        (Vector((sign * 0.16, -0.10, 1.36)), Vector((sign * 0.20, -0.95, -0.10)).normalized(), 0.070, 0.060),
-        # 1. Bulbous convex outer cheek lobe (matching ref_mouth_crop.png)
-        (Vector((sign * 0.18, -0.21, 1.34)), Vector((sign * 0.10, -0.98, -0.05)).normalized(), 0.096, 0.072),
-        # 2. Anterior turn with deep medial scoop & tooth notch
-        (Vector((sign * 0.13, -0.27, 1.33)), Vector((sign * -0.65, -0.72, 0.0)).normalized(), 0.082, 0.062),
-        # 3. Medial inward sweep curving under clypeus
-        (Vector((sign * 0.07, -0.275, 1.335)), Vector((sign * -0.92, -0.35, 0.0)).normalized(), 0.064, 0.048),
-        # 4. Pointed curved pincer fang tip meeting near midline
-        (Vector((sign * 0.022, -0.250, 1.340)), Vector((sign * -0.98, 0.15, -0.10)).normalized(), 0.030, 0.024)
+        # 0. Cheek hinge condyle
+        (Vector((sign * 0.185, -0.160, 1.450)), Vector((sign * 0.25, -0.75, -0.60)).normalized(), 0.055, 0.050),
+        # 1. Broad lateral caliper bow
+        (Vector((sign * 0.235, -0.230, 1.400)), Vector((sign * 0.10, -0.90, -0.42)).normalized(), 0.070, 0.062),
+        # 2. Massive anterior bulbous muscle lobe (sweeping forward and down)
+        (Vector((sign * 0.190, -0.320, 1.350)), Vector((sign * -0.50, -0.80, -0.32)).normalized(), 0.076, 0.068),
+        # 3. Anterior medial turn with deep inner bite notch
+        (Vector((sign * 0.125, -0.325, 1.330)), Vector((sign * -0.88, -0.45, -0.15)).normalized(), 0.058, 0.052),
+        # 4. Inward-hooking caliper tip (leaving ~0.130 unit open central mouth gap)
+        (Vector((sign * 0.065, -0.290, 1.320)), Vector((sign * -0.96, -0.26, -0.05)).normalized(), 0.034, 0.030),
     ]
 
-    num_pts = 14
+    num_pts = 16
     rings = []
 
     for i, (center, normal, rx, rz) in enumerate(stations):
@@ -419,14 +436,15 @@ def make_clean_mandible(name, is_left=True):
             cos_t = math.cos(th)
             sin_t = math.sin(th)
 
-            # Plump convex outer cheek (cos_t * sign > 0) vs scooped blade (cos_t * sign < 0)
+            # Plump outer hull vs scooped inner concavity
             is_outer = (cos_t * sign > 0)
-            rx_eff = rx * (1.35 if is_outer else 0.78)
-            rz_eff = rz * (0.85 if sin_t < 0 else 1.10)
+            if i >= 2 and not is_outer:
+                # Deep C-shaped bite notch scooped into inner surface
+                rx_eff = rx * 0.48
+            else:
+                rx_eff = rx * (1.28 if is_outer else 0.82)
 
-            # Carve sharp tooth notch in inner blade for station 2 & 3
-            if not is_outer and (i in [2, 3]) and abs(sin_t) < 0.4:
-                rx_eff *= 1.25
+            rz_eff = rz * (0.85 if sin_t < 0 else 1.10)
 
             p_local = (right * (cos_t * rx_eff)) + (up * (sin_t * rz_eff))
             world_p = center + p_local
@@ -445,33 +463,43 @@ def make_clean_mandible(name, is_left=True):
             else:
                 f = bm.faces.new([r0[jn], r0[j], r1[j], r1[jn]])
 
-            # Map outer cheek to green chitin (V in [0.05, 0.30]) and inner scoop/fang to chartreuse (V in [0.70, 0.95])
-            th0 = 2.0 * math.pi * j / num_pts
-            th1 = 2.0 * math.pi * jn / num_pts
-            outer0 = math.cos(th0) * sign > 0
-            outer1 = math.cos(th1) * sign > 0
-            v0 = 0.15 if outer0 else 0.85
-            v1 = 0.15 if outer1 else 0.85
-            u0 = i / (len(stations) - 1)
-            u1 = (i + 1) / (len(stations) - 1)
+            # UV coordinate: V runs along length from base (0.0) to tip (1.0)
+            v0 = i / (len(stations) - 1)
+            v1 = (i + 1) / (len(stations) - 1)
+            u0 = j / num_pts
+            u1 = (j + 1) / num_pts
 
             if is_left:
                 f.loops[0][uv_layer].uv = (u0, v0)
-                f.loops[1][uv_layer].uv = (u0, v1)
+                f.loops[1][uv_layer].uv = (u1, v0)
                 f.loops[2][uv_layer].uv = (u1, v1)
-                f.loops[3][uv_layer].uv = (u1, v0)
+                f.loops[3][uv_layer].uv = (u0, v1)
             else:
-                f.loops[0][uv_layer].uv = (u0, v1)
+                f.loops[0][uv_layer].uv = (u1, v0)
                 f.loops[1][uv_layer].uv = (u0, v0)
-                f.loops[2][uv_layer].uv = (u1, v0)
+                f.loops[2][uv_layer].uv = (u0, v1)
                 f.loops[3][uv_layer].uv = (u1, v1)
 
     if is_left:
         bm.faces.new(rings[0][::-1])
-        bm.faces.new(rings[-1])
     else:
         bm.faces.new(rings[0])
-        bm.faces.new(rings[-1][::-1])
+
+    tip_center = stations[-1][0] + (stations[-1][1] * 0.015)
+    tip_v = bm.verts.new(tip_center)
+    last_ring = rings[-1]
+    for j in range(num_pts):
+        jn = (j + 1) % num_pts
+        if is_left:
+            f = bm.faces.new([last_ring[j], last_ring[jn], tip_v])
+            f.loops[0][uv_layer].uv = (j / num_pts, 0.95)
+            f.loops[1][uv_layer].uv = ((j + 1) / num_pts, 0.95)
+            f.loops[2][uv_layer].uv = (0.5, 1.0)
+        else:
+            f = bm.faces.new([last_ring[jn], last_ring[j], tip_v])
+            f.loops[0][uv_layer].uv = ((j + 1) / num_pts, 0.95)
+            f.loops[1][uv_layer].uv = (j / num_pts, 0.95)
+            f.loops[2][uv_layer].uv = (0.5, 1.0)
 
     bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
 
@@ -479,17 +507,68 @@ def make_clean_mandible(name, is_left=True):
     bm.to_mesh(mesh)
     bm.free()
 
-    obj = bpy.data.objects.new(name, mesh)
-    bpy.context.scene.collection.objects.link(obj)
-    obj.data.materials.append(mat_mandible)
-    sub = obj.modifiers.new("Subsurf", 'SUBSURF')
-    sub.levels = 2
     for p in mesh.polygons:
         p.use_smooth = True
-    return reg(obj)
 
-make_clean_mandible("Mandible_L", True)
-make_clean_mandible("Mandible_R", False)
+    mand_obj = bpy.data.objects.new(name, mesh)
+    bpy.context.scene.collection.objects.link(mand_obj)
+    mand_obj.data.materials.append(mat_mandible)
+    sub = mand_obj.modifiers.new("Subsurf", 'SUBSURF')
+    sub.levels = 2
+    reg(mand_obj)
+
+    # Sculpted sharp biting fangs inside the inner scoop
+    suf = "L" if is_left else "R"
+    # Upper primary fang
+    f1_loc = (sign * 0.100, -0.300, 1.365)
+    f1_rot = (math.radians(18), math.radians(sign * -28), math.radians(sign * -50))
+    bpy.ops.mesh.primitive_cone_add(vertices=14, radius1=0.016, radius2=0.001, depth=0.048, location=f1_loc, rotation=f1_rot)
+    tooth1 = bpy.context.active_object
+    tooth1.name = f"Tooth_{suf}1"
+    tooth1.data.materials.append(mat_teeth)
+    bpy.ops.object.shade_smooth()
+    reg(tooth1)
+
+    # Lower secondary fang
+    f2_loc = (sign * 0.075, -0.285, 1.335)
+    f2_rot = (math.radians(8), math.radians(sign * -22), math.radians(sign * -65))
+    bpy.ops.mesh.primitive_cone_add(vertices=12, radius1=0.013, radius2=0.001, depth=0.040, location=f2_loc, rotation=f2_rot)
+    tooth2 = bpy.context.active_object
+    tooth2.name = f"Tooth_{suf}2"
+    tooth2.data.materials.append(mat_teeth)
+    bpy.ops.object.shade_smooth()
+    reg(tooth2)
+
+    return mand_obj
+
+def make_oral_cavity(name):
+    # Recessed dark mouth interior cavity behind caliper pincer claws
+    bm_oral = bmesh.new()
+    bmesh.ops.create_uvsphere(bm_oral, u_segments=24, v_segments=16, radius=0.080)
+    for v in list(bm_oral.verts):
+        if v.co.y < 0.005:
+            bm_oral.verts.remove(v)
+    for v in bm_oral.verts:
+        v.co.x *= 1.20
+        v.co.y *= 1.40
+        v.co.z *= 0.90
+    bmesh.ops.recalc_face_normals(bm_oral, faces=bm_oral.faces)
+    for f in bm_oral.faces:
+        f.normal_flip()
+    mesh = bpy.data.meshes.new(name)
+    bm_oral.to_mesh(mesh)
+    bm_oral.free()
+    for p in mesh.polygons:
+        p.use_smooth = True
+    oral_obj = bpy.data.objects.new(name, mesh)
+    bpy.context.scene.collection.objects.link(oral_obj)
+    oral_obj.location = (0.0, -0.210, 1.350)
+    oral_obj.data.materials.append(mat_oral)
+    return reg(oral_obj)
+
+make_authentic_pincer_claw("Mandible_L", True)
+make_authentic_pincer_claw("Mandible_R", False)
+make_oral_cavity("Oral_Cavity")
 
 # -----------------------------------------------------------------------------
 # 6. Jointed Crown Antennae (Sprouting from Crown Cleft, Sweeping OUT past Temples)
@@ -941,6 +1020,9 @@ bone_map = {
     "Head": "Head",
     "Eye_L": "Head", "Eye_R": "Head",
     "Mandible_L": "Head", "Mandible_R": "Head",
+    "Tooth_L1": "Head", "Tooth_L2": "Head",
+    "Tooth_R1": "Head", "Tooth_R2": "Head",
+    "Oral_Cavity": "Head",
     "Antenna_L": "Head", "Antenna_L_Club": "Head",
     "Antenna_R": "Head", "Antenna_R_Club": "Head",
     "Neck": "Neck",

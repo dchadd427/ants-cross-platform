@@ -101,7 +101,7 @@ def generate_fire_eye_texture():
     print(f"Generated Fire Ant eye texture: {out_path}")
 
 # -----------------------------------------------------------------------------
-# 2. Fire Ant Chitin Texture: Charcoal-Plum & Burnt Sienna (1024x1024)
+# 2. Fire Ant Chitin Texture: Canonical Moss-Green (1024x1024)
 # -----------------------------------------------------------------------------
 def generate_fire_chitin_texture():
     size = 1024
@@ -113,21 +113,21 @@ def generate_fire_chitin_texture():
         for x in range(size):
             fx = x / size
             
-            n1 = math.sin(fx * 14.0) * math.cos(fy * 14.0)
-            n2 = math.sin(fx * 32.0 + fy * 16.0) * 0.5
-            n3 = math.sin(fx * 64.0 - fy * 32.0) * 0.25
+            n1 = math.sin(fx * 16.0) * math.cos(fy * 16.0)
+            n2 = math.sin(fx * 36.0 + fy * 20.0) * 0.5
+            n3 = math.sin(fx * 72.0 - fy * 36.0) * 0.25
             val = (n1 + n2 + n3) / 1.75
             
-            # Subtle gradient along carapace
             gradient = max(0.0, math.sin(fy * math.pi)) * 0.35 + val * 0.25
-            t_amber = max(0.0, min(1.0, 0.35 + gradient))
+            t_blend = max(0.0, min(1.0, 0.40 + gradient))
             
-            # Charcoal-plum base (#342B3A = 52, 43, 58) blending into rich burnt sienna (#823824 = 130, 56, 36)
-            r = int(52 * (1 - t_amber) + 130 * t_amber + val * 10)
-            g = int(43 * (1 - t_amber) + 56 * t_amber + val * 6)
-            b = int(58 * (1 - t_amber) + 36 * t_amber + val * 4)
+            # Canonical moss-green ant chitin palette (matching Worker):
+            # Base dark moss-green (#3B592D = 59, 89, 45) to rich olive-amber (#6B8E4E = 107, 142, 78)
+            r = int(59 * (1.0 - t_blend) + 107 * t_blend + val * 8)
+            g = int(89 * (1.0 - t_blend) + 142 * t_blend + val * 10)
+            b = int(45 * (1.0 - t_blend) + 78  * t_blend + val * 6)
             
-            pore = (random.random() - 0.5) * 10
+            pore = (random.random() - 0.5) * 6
             r = int(min(255, max(0, r + pore)))
             g = int(min(255, max(0, g + pore)))
             b = int(min(255, max(0, b + pore)))
@@ -136,7 +136,8 @@ def generate_fire_chitin_texture():
 
     out_path = f"{OUT_DIR}/fire_chitin_pbr.png"
     img.save(out_path, "PNG")
-    print(f"Generated Fire Ant chitin texture: {out_path}")
+    print(f"Generated Fire Ant canonical moss-green chitin texture: {out_path}")
+
 
 # -----------------------------------------------------------------------------
 # 3. Fire Chief Helmet Texture (1024x1024)
@@ -171,16 +172,12 @@ def generate_fire_helmet_texture():
 # -----------------------------------------------------------------------------
 def generate_fire_shield_texture():
     size = 1024
-    img = Image.new("RGBA", (size, size), (242, 196, 56, 255)) # Gold shield background
+    img = Image.new("RGBA", (size, size), (242, 196, 56, 255))
     draw = ImageDraw.Draw(img)
 
-    # Darker gold border / bevel around plaque
-    draw.rectangle([16, 16, size - 17, size - 17], outline=(190, 140, 25, 255), width=24)
-    draw.rectangle([40, 40, size - 41, size - 41], outline=(255, 225, 90, 255), width=12)
+    draw.rectangle([16, 16, size - 17, size - 17], outline=(180, 130, 20, 255), width=24)
+    draw.rectangle([40, 40, size - 41, size - 41], outline=(255, 230, 95, 255), width=12)
 
-    # Render bold red letter 'A'
-    # Try using system font or draw geometric polygonal letter 'A'
-    # Geometric high-precision serif letter 'A'
     cx = size // 2
     top_y = int(size * 0.18)
     bot_y = int(size * 0.82)
@@ -189,7 +186,6 @@ def generate_fire_shield_texture():
     bar_y1 = int(size * 0.52)
     bar_y2 = int(size * 0.64)
 
-    # Shadow for 3D embossed look
     shadow_offset = 12
     draw.polygon([
         (cx + shadow_offset, top_y + shadow_offset),
@@ -199,9 +195,8 @@ def generate_fire_shield_texture():
         (cx - 45 + shadow_offset, int(size * 0.44) + shadow_offset),
         (cx - outer_w + 90 + shadow_offset, bot_y + shadow_offset),
         (cx - outer_w + shadow_offset, bot_y + shadow_offset)
-    ], fill=(130, 20, 20, 255))
+    ], fill=(110, 15, 15, 255))
 
-    # Main bold scarlet/crimson Red 'A' (#D32F2F = 211, 47, 47)
     draw.polygon([
         (cx, top_y),
         (cx + outer_w, bot_y),
@@ -210,31 +205,23 @@ def generate_fire_shield_texture():
         (cx - 45, int(size * 0.44)),
         (cx - outer_w + 90, bot_y),
         (cx - outer_w, bot_y)
-    ], fill=(215, 35, 35, 255))
+    ], fill=(225, 25, 25, 255))
 
-    # Crossbar
-    draw.rectangle([cx - int(outer_w * 0.65), bar_y1, cx + int(outer_w * 0.65), bar_y2], fill=(215, 35, 35, 255))
+    draw.rectangle([cx - int(outer_w * 0.65), bar_y1, cx + int(outer_w * 0.65), bar_y2], fill=(225, 25, 25, 255))
 
-    # Inner cutout triangle
     draw.polygon([
         (cx, int(size * 0.28)),
         (cx + inner_w, int(size * 0.50)),
         (cx - inner_w, int(size * 0.50))
     ], fill=(242, 196, 56, 255))
 
-    # Subtle bevel highlights on letter 'A'
-    draw.line([(cx, top_y), (cx - outer_w, bot_y)], fill=(255, 110, 110, 255), width=8)
-    draw.line([(cx - int(outer_w * 0.65), bar_y1), (cx + int(outer_w * 0.65), bar_y1)], fill=(255, 110, 110, 255), width=6)
-
-    # Soften slightly with blur
     img = img.filter(ImageFilter.GaussianBlur(radius=1.2))
-
     out_path = f"{OUT_DIR}/fire_shield_pbr.png"
     img.save(out_path, "PNG")
-    print(f"Generated Fire Chief shield plaque texture: {out_path}")
+    print(f"Generated Fire Chief shield texture: {out_path}")
 
 # -----------------------------------------------------------------------------
-# 5. Fire Ant Mandible Texture (512x512)
+# 5. Fire Ant Pincer Claw Texture: Moss-Green with Luminous Chartreuse Tips (512x512)
 # -----------------------------------------------------------------------------
 def generate_fire_mandible_texture():
     size = 512
@@ -246,22 +233,22 @@ def generate_fire_mandible_texture():
         for x in range(size):
             noise = (random.random() - 0.5) * 6
             if t < 0.40:
-                # Charcoal-plum base
-                r = int(58 + noise)
-                g = int(46 + noise)
-                b = int(62 + noise)
-            elif t < 0.75:
-                # Burnt sienna transition
-                blend = (t - 0.40) / 0.35
-                r = int(58 * (1 - blend) + 140 * blend + noise)
-                g = int(46 * (1 - blend) + 70 * blend + noise)
-                b = int(62 * (1 - blend) + 45 * blend + noise)
+                # Deep moss-green basal hinge (#3B592D)
+                r = int(59 + noise)
+                g = int(89 + noise)
+                b = int(45 + noise)
+            elif t < 0.72:
+                # Luminous chartreuse muscle blade (#A8CC44)
+                blend = (t - 0.40) / 0.32
+                r = int(59 * (1 - blend) + 168 * blend + noise)
+                g = int(89 * (1 - blend) + 204 * blend + noise)
+                b = int(45 * (1 - blend) + 68  * blend + noise)
             else:
-                # Pale sharp ivory/amber biting tip
-                blend = (t - 0.75) / 0.25
-                r = int(140 * (1 - blend) + 210 * blend + noise)
-                g = int(70 * (1 - blend) + 170 * blend + noise)
-                b = int(45 * (1 - blend) + 110 * blend + noise)
+                # Bright bone-ivory biting edge / tip (#E8F0C8)
+                blend = (t - 0.72) / 0.28
+                r = int(168 * (1 - blend) + 232 * blend + noise)
+                g = int(204 * (1 - blend) + 242 * blend + noise)
+                b = int(68  * (1 - blend) + 195 * blend + noise)
                 
             pixels[x, y] = (min(255, max(0, r)), min(255, max(0, g)), min(255, max(0, b)), 255)
 
@@ -269,8 +256,9 @@ def generate_fire_mandible_texture():
     img.save(out_path, "PNG")
     print(f"Generated Fire Ant mandible texture: {out_path}")
 
+
 # -----------------------------------------------------------------------------
-# 6. Fire Ant Limbs Texture (1024x1024)
+# 6. Fire Ant Limbs Texture: Charcoal-Plum & Slate-Violet (1024x1024)
 # -----------------------------------------------------------------------------
 def generate_fire_limbs_texture():
     size = 1024
@@ -282,22 +270,58 @@ def generate_fire_limbs_texture():
         for x in range(size):
             fx = x / size
             ridge = math.sin(fx * 36.0 * math.pi) * 0.5 + math.sin(fx * 72.0 * math.pi) * 0.25
-            pore = (random.random() - 0.5) * 8.0
+            pore = (random.random() - 0.5) * 6.0
 
             mottle = math.sin(fx * 10.0 + fy * 14.0) * 0.5 + math.cos(fx * 20.0 - fy * 16.0) * 0.3
-            joint_t = max(0.0, math.sin(fy * math.pi * 4.0)) * 18.0
+            joint_t = max(0.0, math.sin(fy * math.pi * 4.0)) * 12.0
 
             blend_t = max(0.0, min(1.0, 0.40 + 0.35 * ridge + 0.25 * mottle))
-            # Deep charcoal-plum (#2C2430) with burnt-amber joint collars (#944222)
-            r = int(44 * (1.0 - blend_t) + 128 * blend_t + joint_t * 0.9 + pore)
-            g = int(32 * (1.0 - blend_t) + 56 * blend_t + joint_t * 0.5 + pore * 0.5)
-            b = int(40 * (1.0 - blend_t) + 38 * blend_t + joint_t * 0.3 + pore * 0.3)
+            # Deep charcoal-plum (#271733) with slate-violet striations (#473353) and dark joints
+            r = int(35 * (1.0 - blend_t) + 72 * blend_t + joint_t * 0.6 + pore)
+            g = int(22 * (1.0 - blend_t) + 52 * blend_t + joint_t * 0.4 + pore * 0.5)
+            b = int(46 * (1.0 - blend_t) + 84 * blend_t + joint_t * 0.7 + pore * 0.5)
 
             pixels[x, y] = (min(255, max(0, r)), min(255, max(0, g)), min(255, max(0, b)), 255)
 
     out_path = f"{OUT_DIR}/fire_limbs_pbr.png"
     img.save(out_path, "PNG")
     print(f"Generated Fire Ant limbs texture: {out_path}")
+
+# -----------------------------------------------------------------------------
+# 7. Fire Ant Head Texture: Authentic Deep Slate-Violet & Charcoal (1024x1024)
+# -----------------------------------------------------------------------------
+def generate_fire_head_texture():
+    size = 1024
+    img = Image.new("RGBA", (size, size))
+    pixels = img.load()
+
+    for y in range(size):
+        fy = y / size
+        for x in range(size):
+            fx = x / size
+            
+            # Subtle organic chitin flow
+            n1 = math.sin(fx * 12.0) * math.cos(fy * 14.0) * 0.5
+            n2 = math.sin(fx * 28.0 + fy * 18.0) * 0.3
+            n3 = math.sin(fx * 56.0 - fy * 32.0) * 0.2
+            val = (n1 + n2 + n3)
+            
+            # Face shading gradient: darker at bottom (snout/mandible base) and top (under helmet)
+            face_contour = max(0.0, math.sin(fy * math.pi)) * 0.4 + val * 0.2
+            t_blend = max(0.0, min(1.0, 0.35 + face_contour))
+            
+            # Authentic 1998 afst301 palette:
+            # Base deep charcoal-plum (#271733 = 39, 23, 51) to rich slate-violet (#473353 = 71, 51, 83 / #57475B = 87, 71, 91)
+            pore = (random.random() - 0.5) * 6
+            r = int(37 * (1.0 - t_blend) + 82 * t_blend + pore)
+            g = int(22 * (1.0 - t_blend) + 66 * t_blend + pore)
+            b = int(49 * (1.0 - t_blend) + 88 * t_blend + pore)
+            
+            pixels[x, y] = (min(255, max(0, r)), min(255, max(0, g)), min(255, max(0, b)), 255)
+
+    out_path = f"{OUT_DIR}/fire_head_pbr.png"
+    img.save(out_path, "PNG")
+    print(f"Generated Fire Ant head texture: {out_path}")
 
 if __name__ == "__main__":
     generate_fire_eye_texture()
@@ -306,4 +330,5 @@ if __name__ == "__main__":
     generate_fire_shield_texture()
     generate_fire_mandible_texture()
     generate_fire_limbs_texture()
+    generate_fire_head_texture()
     print("All Fire Ant PBR textures generated successfully!")

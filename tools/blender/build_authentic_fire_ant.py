@@ -61,7 +61,7 @@ bg_node.inputs['Strength'].default_value = 0.20
 # 2. Fire Ant PBR Materials
 # -----------------------------------------------------------------------------
 def create_materials():
-    # A. Body Chitin Material (Deep charcoal-plum with burnt-sienna & warm amber highlights)
+    # A. Body Chitin Material (Canonical Moss-Green Chitin)
     mat_chitin = bpy.data.materials.new("M_Fire_Chitin")
     mat_chitin.use_nodes = True
     nodes = mat_chitin.node_tree.nodes
@@ -73,31 +73,31 @@ def create_materials():
     links.new(bsdf.outputs['BSDF'], out.inputs['Surface'])
 
     tex_chitin = nodes.new('ShaderNodeTexImage')
-    tex_chitin.image = bpy.data.images.load(f"{tex_dir}/fire_chitin_pbr.png")
+    tex_chitin.image = bpy.data.images.load(f"{web_dir}/chitin_pbr.png")
     links.new(tex_chitin.outputs['Color'], bsdf.inputs['Base Color'])
-    bsdf.inputs['Base Color'].default_value = (0.22, 0.16, 0.22, 1.0)
+    bsdf.inputs['Base Color'].default_value = (0.24, 0.36, 0.16, 1.0)
 
     # Micro-bump
     tex_coord = nodes.new('ShaderNodeTexCoord')
     noise_bump = nodes.new('ShaderNodeTexNoise')
-    noise_bump.inputs['Scale'].default_value = 90.0
+    noise_bump.inputs['Scale'].default_value = 95.0
     noise_bump.inputs['Detail'].default_value = 5.0
     noise_bump.inputs['Roughness'].default_value = 0.55
     links.new(tex_coord.outputs['Object'], noise_bump.inputs['Vector'])
 
     bump = nodes.new('ShaderNodeBump')
-    bump.inputs['Strength'].default_value = 0.18
+    bump.inputs['Strength'].default_value = 0.22
     bump.inputs['Distance'].default_value = 0.003
     links.new(noise_bump.outputs['Fac'], bump.inputs['Height'])
     links.new(bump.outputs['Normal'], bsdf.inputs['Normal'])
 
-    bsdf.inputs['Roughness'].default_value = 0.46
-    bsdf.inputs['Coat Weight'].default_value = 0.32
-    bsdf.inputs['Coat Roughness'].default_value = 0.20
-    bsdf.inputs['Subsurface Weight'].default_value = 0.12
-    bsdf.inputs['Subsurface Radius'].default_value = (0.24, 0.10, 0.06)
+    bsdf.inputs['Roughness'].default_value = 0.50
+    bsdf.inputs['Coat Weight'].default_value = 0.24
+    bsdf.inputs['Coat Roughness'].default_value = 0.22
+    bsdf.inputs['Subsurface Weight'].default_value = 0.09
+    bsdf.inputs['Subsurface Radius'].default_value = (0.14, 0.18, 0.09)
 
-    # B. Slate-Violet Head Material (Iconic 1998 afst301 headwear contrast)
+    # B. Head Material (Canonical Moss-Green Chitin)
     mat_head = bpy.data.materials.new("M_Fire_Head")
     mat_head.use_nodes = True
     nodes_hd = mat_head.node_tree.nodes
@@ -108,33 +108,29 @@ def create_materials():
     bsdf_hd = nodes_hd.new('ShaderNodeBsdfPrincipled')
     links_hd.new(bsdf_hd.outputs['BSDF'], out_hd.inputs['Surface'])
 
-    # Organic chitin tone variation with micro-noise
+    tex_head = nodes_hd.new('ShaderNodeTexImage')
+    tex_head.image = bpy.data.images.load(f"{web_dir}/chitin_pbr.png")
+    links_hd.new(tex_head.outputs['Color'], bsdf_hd.inputs['Base Color'])
+    bsdf_hd.inputs['Base Color'].default_value = (0.24, 0.36, 0.16, 1.0)
+
     tc_hd = nodes_hd.new('ShaderNodeTexCoord')
     noise_hd = nodes_hd.new('ShaderNodeTexNoise')
-    noise_hd.inputs['Scale'].default_value = 55.0
-    noise_hd.inputs['Detail'].default_value = 4.0
-    noise_hd.inputs['Roughness'].default_value = 0.52
+    noise_hd.inputs['Scale'].default_value = 95.0
+    noise_hd.inputs['Detail'].default_value = 5.0
+    noise_hd.inputs['Roughness'].default_value = 0.55
     links_hd.new(tc_hd.outputs['Object'], noise_hd.inputs['Vector'])
 
-    cr_hd = nodes_hd.new('ShaderNodeValToRGB')
-    cr_hd.color_ramp.elements[0].position = 0.30
-    cr_hd.color_ramp.elements[0].color = (0.24, 0.20, 0.27, 1.0) # Deep slate-charcoal
-    cr_hd.color_ramp.elements[1].position = 0.75
-    cr_hd.color_ramp.elements[1].color = (0.33, 0.28, 0.37, 1.0) # Warm slate-violet highlight
-    links_hd.new(noise_hd.outputs['Fac'], cr_hd.inputs['Fac'])
-    links_hd.new(cr_hd.outputs['Color'], bsdf_hd.inputs['Base Color'])
-
     bump_hd = nodes_hd.new('ShaderNodeBump')
-    bump_hd.inputs['Strength'].default_value = 0.08
-    bump_hd.inputs['Distance'].default_value = 0.002
+    bump_hd.inputs['Strength'].default_value = 0.20
+    bump_hd.inputs['Distance'].default_value = 0.003
     links_hd.new(noise_hd.outputs['Fac'], bump_hd.inputs['Height'])
     links_hd.new(bump_hd.outputs['Normal'], bsdf_hd.inputs['Normal'])
 
-    bsdf_hd.inputs['Roughness'].default_value = 0.46
-    bsdf_hd.inputs['Coat Weight'].default_value = 0.28
-    bsdf_hd.inputs['Coat Roughness'].default_value = 0.20
+    bsdf_hd.inputs['Roughness'].default_value = 0.50
+    bsdf_hd.inputs['Coat Weight'].default_value = 0.24
+    bsdf_hd.inputs['Coat Roughness'].default_value = 0.22
     bsdf_hd.inputs['Subsurface Weight'].default_value = 0.09
-    bsdf_hd.inputs['Subsurface Radius'].default_value = (0.18, 0.12, 0.14)
+    bsdf_hd.inputs['Subsurface Radius'].default_value = (0.14, 0.18, 0.09)
 
     # C. Eye Material
     mat_eye = bpy.data.materials.new("M_Fire_Eye")
@@ -157,7 +153,7 @@ def create_materials():
     bsdf_e.inputs['Coat Roughness'].default_value = 0.02
     bsdf_e.inputs['IOR'].default_value = 1.48
 
-    # D. Mandible Material (Charcoal-plum blending to sharp bone/horn amber biting tips)
+    # D. Mandible Material (Moss green blending to chartreuse scoop)
     mat_mandible = bpy.data.materials.new("M_Fire_Mandible")
     mat_mandible.use_nodes = True
     nodes_m = mat_mandible.node_tree.nodes
@@ -169,17 +165,17 @@ def create_materials():
     links_m.new(bsdf_m.outputs['BSDF'], out_m.inputs['Surface'])
 
     tex_mandible = nodes_m.new('ShaderNodeTexImage')
-    tex_mandible.image = bpy.data.images.load(f"{tex_dir}/fire_mandible_pbr.png")
+    tex_mandible.image = bpy.data.images.load(f"{web_dir}/mandible_pbr.png")
     links_m.new(tex_mandible.outputs['Color'], bsdf_m.inputs['Base Color'])
-    bsdf_m.inputs['Base Color'].default_value = (0.28, 0.22, 0.26, 1.0)
+    bsdf_m.inputs['Base Color'].default_value = (0.38, 0.56, 0.20, 1.0)
 
-    bsdf_m.inputs['Roughness'].default_value = 0.36
-    bsdf_m.inputs['Coat Weight'].default_value = 0.35
-    bsdf_m.inputs['Coat Roughness'].default_value = 0.14
-    bsdf_m.inputs['Subsurface Weight'].default_value = 0.10
-    bsdf_m.inputs['Subsurface Radius'].default_value = (0.20, 0.12, 0.08)
+    bsdf_m.inputs['Roughness'].default_value = 0.38
+    bsdf_m.inputs['Coat Weight'].default_value = 0.30
+    bsdf_m.inputs['Coat Roughness'].default_value = 0.15
+    bsdf_m.inputs['Subsurface Weight'].default_value = 0.12
+    bsdf_m.inputs['Subsurface Radius'].default_value = (0.25, 0.40, 0.15)
 
-    # E. Limbs Material (Striated charcoal-plum with burnt-amber joint collars)
+    # E. Limbs Material (Weathered mahogany / amber chitin matching Worker)
     mat_limbs = bpy.data.materials.new("M_Fire_Limbs")
     mat_limbs.use_nodes = True
     nodes_l = mat_limbs.node_tree.nodes
@@ -191,9 +187,9 @@ def create_materials():
     links_l.new(bsdf_l.outputs['BSDF'], out_l.inputs['Surface'])
 
     tex_limb = nodes_l.new('ShaderNodeTexImage')
-    tex_limb.image = bpy.data.images.load(f"{tex_dir}/fire_limbs_pbr.png")
+    tex_limb.image = bpy.data.images.load(f"{web_dir}/limbs_pbr.png")
     links_l.new(tex_limb.outputs['Color'], bsdf_l.inputs['Base Color'])
-    bsdf_l.inputs['Base Color'].default_value = (0.28, 0.20, 0.24, 1.0)
+    bsdf_l.inputs['Base Color'].default_value = (0.48, 0.22, 0.16, 1.0)
 
     tc_l = nodes_l.new('ShaderNodeTexCoord')
     noise_l = nodes_l.new('ShaderNodeTexNoise')
@@ -203,16 +199,16 @@ def create_materials():
     links_l.new(tc_l.outputs['Object'], noise_l.inputs['Vector'])
 
     bump_l = nodes_l.new('ShaderNodeBump')
-    bump_l.inputs['Strength'].default_value = 0.14
+    bump_l.inputs['Strength'].default_value = 0.12
     bump_l.inputs['Distance'].default_value = 0.002
     links_l.new(noise_l.outputs['Fac'], bump_l.inputs['Height'])
     links_l.new(bump_l.outputs['Normal'], bsdf_l.inputs['Normal'])
 
     bsdf_l.inputs['Roughness'].default_value = 0.44
     bsdf_l.inputs['Coat Weight'].default_value = 0.35
-    bsdf_l.inputs['Coat Roughness'].default_value = 0.20
-    bsdf_l.inputs['Subsurface Weight'].default_value = 0.08
-    bsdf_l.inputs['Subsurface Radius'].default_value = (0.20, 0.08, 0.05)
+    bsdf_l.inputs['Coat Roughness'].default_value = 0.22
+    bsdf_l.inputs['Subsurface Weight'].default_value = 0.06
+    bsdf_l.inputs['Subsurface Radius'].default_value = (0.18, 0.08, 0.05)
 
     # F. Teeth Material (Sharp bone-ivory white)
     mat_teeth = bpy.data.materials.new("M_Fire_Teeth")
@@ -303,11 +299,27 @@ def create_materials():
     bsdf_tr.inputs['Roughness'].default_value = 0.42
     bsdf_tr.inputs['Coat Weight'].default_value = 0.30
 
+    # K. Recessed Oral Cavity Material (Velvety shadow void behind mandibles)
+    mat_oral = bpy.data.materials.new("M_Fire_Oral")
+    mat_oral.use_nodes = True
+    nodes_o = mat_oral.node_tree.nodes
+    links_o = mat_oral.node_tree.links
+    nodes_o.clear()
+
+    out_o = nodes_o.new('ShaderNodeOutputMaterial')
+    bsdf_o = nodes_o.new('ShaderNodeBsdfPrincipled')
+    links_o.new(bsdf_o.outputs['BSDF'], out_o.inputs['Surface'])
+
+    bsdf_o.inputs['Base Color'].default_value = (0.012, 0.008, 0.015, 1.0)
+    bsdf_o.inputs['Roughness'].default_value = 0.90
+    if 'Specular IOR Level' in bsdf_o.inputs:
+        bsdf_o.inputs['Specular IOR Level'].default_value = 0.05
+
     return (mat_chitin, mat_head, mat_eye, mat_mandible, mat_limbs, mat_teeth,
-            mat_helmet, mat_shield, mat_red_a, mat_trim)
+            mat_helmet, mat_shield, mat_red_a, mat_trim, mat_oral)
 
 (mat_chitin, mat_head, mat_eye, mat_mandible, mat_limbs, mat_teeth,
- mat_helmet, mat_shield, mat_red_a, mat_trim) = create_materials()
+ mat_helmet, mat_shield, mat_red_a, mat_trim, mat_oral) = create_materials()
 
 fire_col = bpy.data.collections.new("Fire_Ant_Authentic")
 bpy.context.scene.collection.children.link(fire_col)
@@ -393,10 +405,15 @@ for v in bm_head.verts:
         brow_t = math.sin((z - 0.03) / 0.21 * math.pi)
         y -= 0.035 * brow_t
 
+    # Central vertical median nose bridge between eyes down to clypeus
+    if abs(x) < 0.06 and -0.06 < z < 0.20:
+        ridge = math.exp(-((x / 0.05)**2)) * math.sin(max(0, (z + 0.06) / 0.26 * math.pi))
+        y -= 0.040 * ridge
+
     for sign_x in [-1.0, 1.0]:
-        e_ox = sign_x * 0.165
+        e_ox = sign_x * 0.160
         e_oy = -0.165
-        e_oz = 0.085
+        e_oz = 0.060
         d_orbit = math.sqrt(((x - e_ox) / 0.145)**2 + ((y - e_oy) / 0.12)**2 + ((z - e_oz) / 0.155)**2)
         if d_orbit < 1.0:
             cavit_t = (1.0 - d_orbit) ** 2
@@ -412,10 +429,16 @@ for v in bm_head.verts:
         else:
             y -= 0.048 * math.exp(-((x / 0.06)**2)) * math.exp(-((z + 0.08) / 0.12)**2)
 
-    if z < -0.12:
-        t_neck = min(1.0, (-z - 0.12) / 0.24)
-        x *= (1.0 - 0.38 * t_neck)
-        y *= (1.0 - 0.38 * t_neck)
+    # Carve away awkward lower chin below mouthparts so jaws form the true bottom of the head
+    if z < -0.05 and y < 0.05:
+        t_cut = min(1.0, (-z - 0.05) / 0.20)
+        y += 0.14 * t_cut
+        z += 0.08 * t_cut
+        x *= (1.0 - 0.25 * t_cut)
+    elif z < -0.12:
+        t_neck = min(1.0, (-z - 0.12) / 0.18)
+        x *= (1.0 - 0.40 * t_neck)
+        y *= (1.0 - 0.35 * t_neck)
 
     v.co = Vector((x, y, z))
 
@@ -438,12 +461,12 @@ reg(head_obj)
 # -----------------------------------------------------------------------------
 def make_bulging_eye(name, is_left=True):
     sign = -1.0 if is_left else 1.0
-    eye_pos = Vector((sign * 0.165, -0.21, 1.665))
+    eye_pos = Vector((sign * 0.160, -0.21, 1.635))
 
     bm_eye = bmesh.new()
     bmesh.ops.create_uvsphere(bm_eye, u_segments=40, v_segments=28, radius=1.0)
 
-    rx, ry, rz = 0.126, 0.116, 0.158
+    rx, ry, rz = 0.128, 0.118, 0.158
     for v in bm_eye.verts:
         v.co.x *= rx
         v.co.y *= ry
@@ -509,7 +532,7 @@ for is_left in [True, False]:
         p.use_smooth = True
 
     lid_obj = bpy.data.objects.new(f"Eyelid_{suf}", lid_mesh)
-    lid_obj.location = (sign_x * 0.165, -0.212, 1.670)
+    lid_obj.location = (sign_x * 0.160, -0.212, 1.640)
     lid_obj.rotation_euler = (math.radians(-4), math.radians(sign_x * 8), 0)
     lid_obj.data.materials.append(mat_head)
     lid_sub = lid_obj.modifiers.new("Subsurf", 'SUBSURF')
@@ -517,21 +540,32 @@ for is_left in [True, False]:
     reg(lid_obj)
 
 # -----------------------------------------------------------------------------
-# 6. Boxing-Glove Bulldog Cheeks & Interlocking Sharp Mandibles
+# 6. Authentic 3D Caliper Pincer Claws & Recessed Oral Cavity
 # -----------------------------------------------------------------------------
-def make_clean_mandible(name, is_left=True):
+def make_authentic_pincer_claw(name, is_left=True):
     sign = -1.0 if is_left else 1.0
     bm = bmesh.new()
 
+    # True caliper pincer jaw path:
+    # 0. Cheek hinge condyle (world Z=1.45)
+    # 1. Broad lateral caliper bow flaring out as wide as cheek
+    # 2. Massive anterior bulbous muscle lobe (sweeping forward and down)
+    # 3. Anterior medial turn with deep inner bite notch
+    # 4. Inward-hooking caliper tip (leaving ~0.130 unit open central mouth gap)
     stations = [
-        (Vector((sign * 0.16, -0.10, 1.36)), Vector((sign * 0.20, -0.95, -0.10)).normalized(), 0.070, 0.060),
-        (Vector((sign * 0.18, -0.21, 1.34)), Vector((sign * 0.10, -0.98, -0.05)).normalized(), 0.096, 0.072),
-        (Vector((sign * 0.13, -0.27, 1.33)), Vector((sign * -0.65, -0.72, 0.0)).normalized(), 0.082, 0.062),
-        (Vector((sign * 0.07, -0.275, 1.335)), Vector((sign * -0.92, -0.35, 0.0)).normalized(), 0.064, 0.048),
-        (Vector((sign * 0.022, -0.250, 1.340)), Vector((sign * -0.98, 0.15, -0.10)).normalized(), 0.030, 0.024)
+        # 0. Cheek hinge condyle
+        (Vector((sign * 0.185, -0.160, 1.450)), Vector((sign * 0.25, -0.75, -0.60)).normalized(), 0.055, 0.050),
+        # 1. Broad lateral caliper bow
+        (Vector((sign * 0.235, -0.230, 1.400)), Vector((sign * 0.10, -0.90, -0.42)).normalized(), 0.070, 0.062),
+        # 2. Massive anterior bulbous muscle lobe (sweeping forward and down)
+        (Vector((sign * 0.190, -0.320, 1.350)), Vector((sign * -0.50, -0.80, -0.32)).normalized(), 0.076, 0.068),
+        # 3. Anterior medial turn with deep inner bite notch
+        (Vector((sign * 0.125, -0.325, 1.330)), Vector((sign * -0.88, -0.45, -0.15)).normalized(), 0.058, 0.052),
+        # 4. Inward-hooking caliper tip (leaving ~0.130 unit open central mouth gap)
+        (Vector((sign * 0.065, -0.290, 1.320)), Vector((sign * -0.96, -0.26, -0.05)).normalized(), 0.034, 0.030),
     ]
 
-    num_pts = 14
+    num_pts = 16
     rings = []
 
     for i, (center, normal, rx, rz) in enumerate(stations):
@@ -545,12 +579,15 @@ def make_clean_mandible(name, is_left=True):
             cos_t = math.cos(th)
             sin_t = math.sin(th)
 
+            # Plump outer hull vs scooped inner concavity
             is_outer = (cos_t * sign > 0)
-            rx_eff = rx * (1.35 if is_outer else 0.78)
-            rz_eff = rz * (0.85 if sin_t < 0 else 1.10)
+            if i >= 2 and not is_outer:
+                # Deep C-shaped bite notch scooped into inner surface
+                rx_eff = rx * 0.48
+            else:
+                rx_eff = rx * (1.28 if is_outer else 0.82)
 
-            if not is_outer and (i in [2, 3]) and abs(sin_t) < 0.4:
-                rx_eff *= 1.25
+            rz_eff = rz * (0.85 if sin_t < 0 else 1.10)
 
             p_local = (right * (cos_t * rx_eff)) + (up * (sin_t * rz_eff))
             world_p = center + p_local
@@ -569,32 +606,43 @@ def make_clean_mandible(name, is_left=True):
             else:
                 f = bm.faces.new([r0[jn], r0[j], r1[j], r1[jn]])
 
-            th0 = 2.0 * math.pi * j / num_pts
-            th1 = 2.0 * math.pi * jn / num_pts
-            outer0 = math.cos(th0) * sign > 0
-            outer1 = math.cos(th1) * sign > 0
-            v0 = 0.15 if outer0 else 0.85
-            v1 = 0.15 if outer1 else 0.85
-            u0 = i / (len(stations) - 1)
-            u1 = (i + 1) / (len(stations) - 1)
+            # UV coordinate: V runs along length from base (0.0) to tip (1.0)
+            v0 = i / (len(stations) - 1)
+            v1 = (i + 1) / (len(stations) - 1)
+            u0 = j / num_pts
+            u1 = (j + 1) / num_pts
 
             if is_left:
                 f.loops[0][uv_layer].uv = (u0, v0)
-                f.loops[1][uv_layer].uv = (u0, v1)
+                f.loops[1][uv_layer].uv = (u1, v0)
                 f.loops[2][uv_layer].uv = (u1, v1)
-                f.loops[3][uv_layer].uv = (u1, v0)
+                f.loops[3][uv_layer].uv = (u0, v1)
             else:
-                f.loops[0][uv_layer].uv = (u0, v1)
+                f.loops[0][uv_layer].uv = (u1, v0)
                 f.loops[1][uv_layer].uv = (u0, v0)
-                f.loops[2][uv_layer].uv = (u1, v0)
+                f.loops[2][uv_layer].uv = (u0, v1)
                 f.loops[3][uv_layer].uv = (u1, v1)
 
     if is_left:
         bm.faces.new(rings[0][::-1])
-        bm.faces.new(rings[-1])
     else:
         bm.faces.new(rings[0])
-        bm.faces.new(rings[-1][::-1])
+
+    tip_center = stations[-1][0] + (stations[-1][1] * 0.015)
+    tip_v = bm.verts.new(tip_center)
+    last_ring = rings[-1]
+    for j in range(num_pts):
+        jn = (j + 1) % num_pts
+        if is_left:
+            f = bm.faces.new([last_ring[j], last_ring[jn], tip_v])
+            f.loops[0][uv_layer].uv = (j / num_pts, 0.95)
+            f.loops[1][uv_layer].uv = ((j + 1) / num_pts, 0.95)
+            f.loops[2][uv_layer].uv = (0.5, 1.0)
+        else:
+            f = bm.faces.new([last_ring[jn], last_ring[j], tip_v])
+            f.loops[0][uv_layer].uv = ((j + 1) / num_pts, 0.95)
+            f.loops[1][uv_layer].uv = (j / num_pts, 0.95)
+            f.loops[2][uv_layer].uv = (0.5, 1.0)
 
     bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
 
@@ -609,28 +657,59 @@ def make_clean_mandible(name, is_left=True):
     mand_obj.data.materials.append(mat_mandible)
     sub = mand_obj.modifiers.new("Subsurf", 'SUBSURF')
     sub.levels = 2
-    return reg(mand_obj)
+    reg(mand_obj)
 
-make_clean_mandible("Mandible_L", True)
-make_clean_mandible("Mandible_R", False)
-
-teeth_coords = [
-    ("Tooth_L1", (-0.055, -0.28, 1.35), (math.radians(20), math.radians(-10), math.radians(-35)), 0.022),
-    ("Tooth_L2", (-0.025, -0.29, 1.34), (math.radians(24), math.radians(-5), math.radians(-20)), 0.018),
-    ("Tooth_R1", ( 0.055, -0.28, 1.35), (math.radians(20), math.radians( 10), math.radians( 35)), 0.022),
-    ("Tooth_R2", ( 0.025, -0.29, 1.34), (math.radians(24), math.radians( 5), math.radians( 20)), 0.018),
-]
-
-for t_name, t_loc, t_rot, t_scale in teeth_coords:
-    bpy.ops.mesh.primitive_cone_add(
-        vertices=12, radius1=t_scale * 0.45, radius2=0.002, depth=t_scale * 1.8,
-        location=t_loc, rotation=t_rot
-    )
-    tooth = bpy.context.active_object
-    tooth.name = t_name
-    tooth.data.materials.append(mat_teeth)
+    # Sculpted sharp biting fangs inside the inner scoop
+    suf = "L" if is_left else "R"
+    # Upper primary fang
+    f1_loc = (sign * 0.100, -0.300, 1.365)
+    f1_rot = (math.radians(18), math.radians(sign * -28), math.radians(sign * -50))
+    bpy.ops.mesh.primitive_cone_add(vertices=14, radius1=0.016, radius2=0.001, depth=0.048, location=f1_loc, rotation=f1_rot)
+    tooth1 = bpy.context.active_object
+    tooth1.name = f"Tooth_{suf}1"
+    tooth1.data.materials.append(mat_teeth)
     bpy.ops.object.shade_smooth()
-    reg(tooth)
+    reg(tooth1)
+
+    # Lower secondary fang
+    f2_loc = (sign * 0.075, -0.285, 1.335)
+    f2_rot = (math.radians(8), math.radians(sign * -22), math.radians(sign * -65))
+    bpy.ops.mesh.primitive_cone_add(vertices=12, radius1=0.013, radius2=0.001, depth=0.040, location=f2_loc, rotation=f2_rot)
+    tooth2 = bpy.context.active_object
+    tooth2.name = f"Tooth_{suf}2"
+    tooth2.data.materials.append(mat_teeth)
+    bpy.ops.object.shade_smooth()
+    reg(tooth2)
+
+    return mand_obj
+
+def make_oral_cavity(name):
+    # Recessed dark mouth interior cavity behind caliper pincer claws
+    bm_oral = bmesh.new()
+    bmesh.ops.create_uvsphere(bm_oral, u_segments=24, v_segments=16, radius=0.080)
+    for v in list(bm_oral.verts):
+        if v.co.y < 0.005:
+            bm_oral.verts.remove(v)
+    for v in bm_oral.verts:
+        v.co.x *= 1.20
+        v.co.y *= 1.40
+        v.co.z *= 0.90
+    bmesh.ops.recalc_face_normals(bm_oral, faces=bm_oral.faces)
+    for f in bm_oral.faces:
+        f.normal_flip()
+    mesh = bpy.data.meshes.new(name)
+    bm_oral.to_mesh(mesh)
+    bm_oral.free()
+    for p in mesh.polygons:
+        p.use_smooth = True
+    oral_obj = bpy.data.objects.new(name, mesh)
+    oral_obj.location = (0.0, -0.210, 1.350)
+    oral_obj.data.materials.append(mat_oral)
+    return reg(oral_obj)
+
+make_authentic_pincer_claw("Mandible_L", True)
+make_authentic_pincer_claw("Mandible_R", False)
+make_oral_cavity("Oral_Cavity")
 
 # -----------------------------------------------------------------------------
 # 7. OVERSIZED FIRE CHIEF HELMET ("Child Wearing an Adult's Hat")
@@ -663,7 +742,7 @@ for p in crown_mesh.polygons:
     p.use_smooth = True
 
 crown_obj = bpy.data.objects.new("Helmet_Crown", crown_mesh)
-crown_obj.location = (0, -0.03, 1.72)
+crown_obj.location = (0, -0.03, 1.69)
 crown_obj.data.materials.append(mat_helmet)
 sub_cr = crown_obj.modifiers.new("Subsurf", 'SUBSURF')
 sub_cr.levels = 2
@@ -695,7 +774,7 @@ for p in comb_mesh.polygons:
     p.use_smooth = True
 
 comb_obj = bpy.data.objects.new("Helmet_Comb", comb_mesh)
-comb_obj.location = (0, -0.03, 1.72)
+comb_obj.location = (0, -0.03, 1.69)
 comb_obj.data.materials.append(mat_helmet)
 sub_cb = comb_obj.modifiers.new("Subsurf", 'SUBSURF')
 sub_cb.levels = 2
@@ -747,7 +826,7 @@ for p in brim_mesh.polygons:
     p.use_smooth = True
 
 brim_obj = bpy.data.objects.new("Helmet_Brim", brim_mesh)
-brim_obj.location = (0, -0.03, 1.72)
+brim_obj.location = (0, -0.03, 1.69)
 brim_obj.data.materials.append(mat_helmet)
 sol_br = brim_obj.modifiers.new("Solidify", 'SOLIDIFY')
 sol_br.thickness = 0.016
@@ -757,8 +836,8 @@ sub_br.levels = 2
 reg(brim_obj)
 
 # D. Front Shield Plaque Proudly Mounted on Front of Helmet
-# Placed on outer front slope of helmet crown: Y = -0.39, Z = 1.88, tilt = -16 deg
-shield_loc = Vector((0.0, -0.39, 1.88))
+# Placed on outer front slope of helmet crown: Y = -0.38, Z = 1.85, tilt = -16 deg
+shield_loc = Vector((0.0, -0.38, 1.85))
 shield_rot = Euler((math.radians(-16), 0, 0), 'XYZ')
 
 bm_shield = bmesh.new()
@@ -1205,6 +1284,7 @@ bone_map = {
     "Mandible_L": "Head", "Mandible_R": "Head",
     "Tooth_L1": "Head", "Tooth_L2": "Head",
     "Tooth_R1": "Head", "Tooth_R2": "Head",
+    "Oral_Cavity": "Head",
     "Helmet_Crown": "Head",
     "Helmet_Comb": "Head",
     "Helmet_Brim": "Head",
