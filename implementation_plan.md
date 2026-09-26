@@ -1,56 +1,77 @@
-# Implementation Plan & Progress: Worker Ant (Caste #1) 3D Model
+# Implementation Plan: Caste #2 — The Fire Ant (`af` / Mason)
 
-## 1. Project Invariants & Workflow
-- **Iterative Single-Ant Process**: Model each ant caste one-by-one from scratch. Under no circumstances move onto Caste #2 (Combat Ant) until Caste #1 (Worker Ant) is reviewed, refined, and explicitly approved by the user.
-- **Visual Appearance First**: Complete and perfect the visual appearance in Blender (matching master reference artwork) before importing into Unity.
-- **True 3D Geometry**: Deliver an authentic, fully volumetric 360° polygonal 3D model (GLB) viewable in the interactive WebGL inspection studio at `http://localhost:8089/viewer3d/`.
-- **Publisher Rule**: Strictly NEVER write or mention the forbidden term ("M-i-c-r-o-s-o-f-t").
-- **Quality & Verification**: Maintain 100% pass rate across all 160 native integration tests.
-
----
-
-## 2. Phase 2: Master Reference Aesthetic Fidelity Overhaul
-
-### Discrepancy Analysis vs. Master Reference (`worker_ant_master_1790372115097.jpg`):
-1. **Head Geometry & Eye Sockets**:
-   - *Previous*: Separate floating torus "goggles" created an artificial toy appearance.
-   - *Master Art*: Unified organic head mesh with a rounded cushion crown, central vertical furrow, arched brow ridge, and deeply recessed orbital cavities that naturally cradle the eye globes.
-2. **Eye Texturing & Proportions**:
-   - *Previous*: Under-scaled iris and distorted equirectangular mapping produced a shocked, frog-like appearance with giant sclera.
-   - *Master Art*: Large, warm, expressive eyes where the olive-amber striated iris fills ~55% of the visible sphere, with a velvety dark pupil, sharp limbal ring, warm cream sclera, and crisp specular catchlights.
-3. **Mandibles**:
-   - *Previous*: Overly thick, pale sausage shapes resembling a marshmallow mustache.
-   - *Master Art*: Smooth green chitin cheek lobes curving forward and inward into cupped pincers, tipped with luminous chartreuse/pale lime biting edges and sculpted serrated teeth with subsurface scattering.
-4. **Antennae**:
-   - *Previous*: Disconnected segments floating or hidden.
-   - *Master Art*: Crown-emerging stalks with seamless root collars, sweeping upward then looping in a graceful hairpin curve backward and downward with clubbed rounded tips.
-5. **Limbs & Pose**:
-   - *Previous*: Generic stick legs with round sphere joints.
-   - *Master Art*: Distinct front arms with wrist collars and articulated 2-fingered hands hovering alertly in front of the chest; 4 muscular rear walking legs firmly planted on the ground plane ($Z = 0$).
-6. **Carapace Texturing**:
-   - *Previous*: Monochromatic flat green texture.
-   - *Master Art*: Weathered sage green chitin with warm terracotta/burnt umber dusting across the crown, brow, and cheek margins, complemented by fine organic micro-pore bump mapping.
+## 1. Context & Completed Worker Ant Verification
+In the previous step, the two visual geometry issues on the Worker Ant were resolved:
+1. **Petiole Waist Seamless Connection**: Replaced disconnected cylindrical gap with an articulated, continuous sleeve spanning from `Thorax_Metanotum` ($Z = 0.94$) deep into the anterior socket of `Gaster` ($Z = 0.78$), completely eliminating any air gap from any 360° viewing angle.
+2. **Leg Stance Narrowing**: Brought middle knees inward from $X = \pm 0.44$ to $\pm 0.28$, hind knees from $\pm 0.64$ to $\pm 0.42$, and feet from $\pm 0.60$ to $\pm 0.38$, matching the compact stance of the master reference artwork.
+3. **Automated Verification**: Local CMake build passes with 0 warnings, all 160 native integration tests pass, and all 506 E2E tests pass (100% pass rate). Changes committed and pushed to `feature/realistic-3d-ants-viewer`.
 
 ---
 
-## 3. Implementation Steps:
-1. **Authentic PBR Textures**:
-   - Regenerate `eye_pbr.png` with spherical equirectangular metric scaling ($2\times \Delta U$ compensation) so the iris and pupil appear perfectly circular on a 3D sphere.
-   - Generate `chitin_pbr.png` featuring weathered sage green, warm terracotta/russet mottling, and organic cellular pores.
-   - Generate `mandible_pbr.png` with smooth green-to-chartreuse gradient.
-   - Generate `limbs_pbr.png` with deep mahogany/charcoal brown and warm joint accents.
-2. **Dedicated Master Sculpt Script (`tools/blender/build_master_worker_ant.py`)**:
-   - Construct unified organic head with seamless orbital sockets and brow arches.
-   - Embed spherical eye globes with the updated eye texture.
-   - Model curved mandibles with sharp triangular biting teeth.
-   - Model crown-rooted hairpin antennae.
-   - Model 3-segment articulated thorax with physical step seams and petiole waist.
-   - Model teardrop gaster with 4 tergal segments.
-   - Model 2 expressive front arms with articulated hands and 4 muscular walking legs planted at $Z=0$.
-   - Setup studio 3-point lighting rig and render multi-angle stills (`worker_front.png`, `worker_perspective.png`, `worker_face_closeup.png`).
-   - Export binary `.glb` to `web/viewer3d/worker_ant.glb`.
-3. **Verification**:
-   - Visually verify multi-angle beauty stills against reference art.
-   - Verify 3D model in WebGL inspection studio (`http://localhost:8089/viewer3d/`).
-   - Run native integration test suite (160/160 pass).
-   - Git commit and push to tracking branch.
+## 2. Caste #2 Reverse Engineering Findings (`Original-Ants/ants.chd`)
+Primary source inspection of extracted 1998 sprites (`afst301.bmp`, `afst401.bmp`, `afst701.bmp`, `afwa401.bmp`, `afsf301..304.bmp`, `pufire.bmp`) and `docs/GAME_REVERSE_ENGINEERING.md`:
+
+| Attribute | 1998 Original Asset / Behavior | 3D Remake Implementation |
+|---|---|---|
+| **Class Identifier** | `af` (Mason / Fire Ant), Tile 66, Powerup `pufire.bmp` (matchbook) | Caste #2 model in 3D studio viewer |
+| **Headwear** | Classic Firefighter Chief helmet (golden-yellow with front shield and 'A' badge) | Sculpted Cairns-style helmet: high domed crown, central comb ridge, flared duckbill neck-guard brim, front shield plaque |
+| **Helmet Badge** | Embossed 'A' in player team color palette (Indices 178–181 Red, 34–39 Blue, etc.) | High-relief embossed 'A' badge in crimson/red team color on gold shield |
+| **Facial Anatomy** | Slate-grey/violet head (#6B6575), large white-sclera eyes under brim, sharp mandibles | Organic sculpted head nestled under helmet, white cartoon sclera, dark irises, curved cheek lobes, biting mandibles |
+| **Body Chitin** | Deep charcoal-plum / burnt sienna (#2E2633) with warm amber/crimson specular sheen | High-resolution PBR procedural/painted chitin with organic micro-bump, warm russet undertones |
+| **Signature Accessory** | Handheld magnifying glass (`afsf301..304.bmp`) used to ignite firewalls (`wallup04`) | Volumetric magnifying glass: turned dark-wood handle, polished brass bezel collar, convex optical glass lens |
+| **Stance & Locomotion** | 6-legged insect tripod gait, expressive front arms holding tool | Armature with 2 expressive arms, 4 ground-walking legs ($Z = 0$), tool attachment bone |
+
+---
+
+## 3. Architecture & Implementation Steps
+
+### Phase 1: PBR Texture Generation (`tools/blender/generate_fire_ant_textures.py`)
+- `fire_chitin_pbr.png`: Deep charcoal-plum and burnt sienna carapace with subtle micro-cellular bump and amber subsurface tint.
+- `fire_helmet_pbr.png`: Classic fire chief golden-yellow lacquer with subtle surface scuffs, darker ochre ridges, and polished brass shield rivets.
+- `fire_accessory_pbr.png`: Turned mahogany wood grain handle, reflective brass bezel, and clear optical glass.
+- `fire_eye_pbr.png`: Crisp white sclera, dark charcoal limbal ring, and determined forward-focused pupil.
+
+### Phase 2: Blender Sculpting & Modeling (`tools/blender/build_authentic_fire_ant.py`)
+1. **Head & Fire Chief Helmet**:
+   - Sculpt high-domed helmet crown with longitudinal spine/comb.
+   - Extrude wide flared duckbill brim extending down over the neck at the back.
+   - Construct front shield plaque with embossed serif 'A' emblem in red team livery.
+   - Add leather chin strap and brass mounting hardware.
+   - Model underlying head nestled under the brim: large expressive eyes, curved mandibles, flexible antennae emerging from beneath the brim.
+2. **Thorax, Petiole & Gaster**:
+   - 3-segment articulated thorax (pronotum, mesonotum, metanotum).
+   - Solid, gap-free petiole waist condyle socket penetrating deep into both metanotum and gaster.
+   - Suspended egg-shaped gaster with sternite banding grooves and sting tip.
+3. **Limbs & Stance**:
+   - 2 front expressive arms with articulated wrists and clawed hands.
+   - 4 ground-planted walking legs ($Z = 0$) using the narrowed compact stance coordinates ($X \approx \pm 0.28$ middle, $\pm 0.42$ hind).
+4. **Magnifying Glass Tool**:
+   - Turned ergonomic wood handle.
+   - Cylindrical brass ferrule and circular magnifying lens rim.
+   - Convex refractive glass element parented to right hand claw.
+
+### Phase 3: Rigging, Walking & Ability Animation
+- Create `Fire_Ant_Rig` armature matching bone hierarchy with additional `Prop_Hand_R` bone for the magnifying glass.
+- Bind all body meshes with vertex groups or parent bones.
+- Create two animation tracks:
+  1. `Idle`: Subtle breathing bob, antennae twitch, helmet settle.
+  2. `Walk`: Authentic alternating tripod walking gait cycle.
+
+### Phase 4: Export & Web Viewer Integration
+- Export `web/viewer3d/fire_ant.glb` and `fire_ant.usdz`.
+- Render multi-angle stills (`fire_front.png`, `fire_perspective.png`, `fire_face_closeup.png`).
+- Render 360° 36-frame turntable sequence.
+- Update `web/viewer3d/index.html` and `viewer.js` with a caste switcher (toggle between **Worker Ant** and **Fire Ant**), dynamically reloading model, metadata, and animations.
+
+---
+
+## 4. Verification & Testing Plan
+1. **Automated Unit & Integration Tests**:
+   - Run `DEVELOPER_DIR=/Library/Developer/CommandLineTools cmake --build build -j8`.
+   - Run native integration test suite (`./build/tests/test_app/test_app_integration` -> 160/160 pass).
+   - Run E2E test runner (`./build_e2e/e2e_runner` -> 506/506 pass).
+2. **Visual Verification**:
+   - Inspect rendered beauty stills against extracted 1998 sprites (`afst301.bmp`, `afsf304.bmp`).
+   - Validate 3D model in browser at `http://localhost:8089/viewer3d/` with WebGL, lighting presets, and mobile view.
+3. **Commit & Push Policy**:
+   - Verify clean git status, stage, commit with clear message, and push to origin.
