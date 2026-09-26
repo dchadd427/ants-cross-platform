@@ -70,42 +70,44 @@ def create_materials():
     links.new(bsdf.outputs['BSDF'], out.inputs['Surface'])
 
     # Multi-band procedural organic color ramp
+    # Gentle organic color gradation matching master reference (rich solid moss-olive green)
     tex_coord = nodes.new('ShaderNodeTexCoord')
     noise_color = nodes.new('ShaderNodeTexNoise')
-    noise_color.inputs['Scale'].default_value = 16.0
-    noise_color.inputs['Detail'].default_value = 4.0
-    noise_color.inputs['Roughness'].default_value = 0.52
+    noise_color.inputs['Scale'].default_value = 3.5
+    noise_color.inputs['Detail'].default_value = 2.0
+    noise_color.inputs['Roughness'].default_value = 0.35
     links.new(tex_coord.outputs['Object'], noise_color.inputs['Vector'])
 
     color_ramp = nodes.new('ShaderNodeValToRGB')
-    color_ramp.color_ramp.elements[0].position = 0.15
-    color_ramp.color_ramp.elements[0].color = (0.16, 0.24, 0.11, 1.0) # Deep forest moss green
-    color_ramp.color_ramp.elements[1].position = 0.70
-    color_ramp.color_ramp.elements[1].color = (0.28, 0.38, 0.18, 1.0) # Saturated rich olive green
-    elem_warm = color_ramp.color_ramp.elements.new(0.42)
-    elem_warm.color = (0.34, 0.26, 0.16, 1.0) # Warm terracotta-tan accent
+    color_ramp.color_ramp.elements[0].position = 0.20
+    color_ramp.color_ramp.elements[0].color = (0.19, 0.29, 0.14, 1.0) # Rich deep forest olive
+    color_ramp.color_ramp.elements[1].position = 0.80
+    color_ramp.color_ramp.elements[1].color = (0.28, 0.40, 0.20, 1.0) # Vibrant emerald moss green
+    elem_warm = color_ramp.color_ramp.elements.new(0.50)
+    elem_warm.color = (0.23, 0.33, 0.16, 1.0) # Mid olive tone
 
     links.new(noise_color.outputs['Fac'], color_ramp.inputs['Fac'])
     links.new(color_ramp.outputs['Color'], bsdf.inputs['Base Color'])
 
-    # Micro bump (subtle organic orange peel)
+    # Micro bump (subtle organic leathery ant cuticle)
     noise_bump = nodes.new('ShaderNodeTexNoise')
     noise_bump.inputs['Scale'].default_value = 85.0
-    noise_bump.inputs['Detail'].default_value = 5.0
-    noise_bump.inputs['Roughness'].default_value = 0.55
+    noise_bump.inputs['Detail'].default_value = 4.0
+    noise_bump.inputs['Roughness'].default_value = 0.50
     links.new(tex_coord.outputs['Object'], noise_bump.inputs['Vector'])
 
     bump = nodes.new('ShaderNodeBump')
-    bump.inputs['Strength'].default_value = 0.10
-    bump.inputs['Distance'].default_value = 0.005
+    bump.inputs['Strength'].default_value = 0.08
+    bump.inputs['Distance'].default_value = 0.004
     links.new(noise_bump.outputs['Fac'], bump.inputs['Height'])
     links.new(bump.outputs['Normal'], bsdf.inputs['Normal'])
 
-    bsdf.inputs['Roughness'].default_value = 0.30
-    bsdf.inputs['Coat Weight'].default_value = 0.75
-    bsdf.inputs['Coat Roughness'].default_value = 0.12
-    bsdf.inputs['Subsurface Weight'].default_value = 0.06
-    bsdf.inputs['Subsurface Radius'].default_value = (0.08, 0.12, 0.05)
+    # Authentic satin organic ant cuticle (NOT shiny wet plastic!)
+    bsdf.inputs['Roughness'].default_value = 0.54
+    bsdf.inputs['Coat Weight'].default_value = 0.18
+    bsdf.inputs['Coat Roughness'].default_value = 0.28
+    bsdf.inputs['Subsurface Weight'].default_value = 0.08
+    bsdf.inputs['Subsurface Radius'].default_value = (0.12, 0.16, 0.08)
 
     # B. Eye Material
     mat_eye = bpy.data.materials.new("M_Eye_Authentic")
@@ -122,9 +124,9 @@ def create_materials():
     tex_eye.image = bpy.data.images.load(f"{web_dir}/eye_pbr.png")
     links_e.new(tex_eye.outputs['Color'], bsdf_e.inputs['Base Color'])
 
-    bsdf_e.inputs['Roughness'].default_value = 0.02
-    bsdf_e.inputs['Coat Weight'].default_value = 1.0
-    bsdf_e.inputs['Coat Roughness'].default_value = 0.01
+    bsdf_e.inputs['Roughness'].default_value = 0.10
+    bsdf_e.inputs['Coat Weight'].default_value = 0.90
+    bsdf_e.inputs['Coat Roughness'].default_value = 0.03
     bsdf_e.inputs['IOR'].default_value = 1.48
 
     # C. Mandible Material (Moss green blending to luminous chartreuse & bone white fangs)
@@ -144,20 +146,20 @@ def create_materials():
 
     ramp_m = nodes_m.new('ShaderNodeValToRGB')
     ramp_m.color_ramp.elements[0].position = 0.15
-    ramp_m.color_ramp.elements[0].color = (0.20, 0.28, 0.14, 1.0) # Base moss olive
+    ramp_m.color_ramp.elements[0].color = (0.18, 0.26, 0.12, 1.0) # Base moss olive
     ramp_m.color_ramp.elements[1].position = 0.70
-    ramp_m.color_ramp.elements[1].color = (0.64, 0.78, 0.28, 1.0) # Luminous chartreuse tip
+    ramp_m.color_ramp.elements[1].color = (0.58, 0.76, 0.25, 1.0) # Luminous chartreuse tip
     elem_fang = ramp_m.color_ramp.elements.new(0.88)
-    elem_fang.color = (0.90, 0.92, 0.84, 1.0) # Bone white teeth
+    elem_fang.color = (0.92, 0.94, 0.88, 1.0) # Bone white teeth
 
     links_m.new(sep_m.outputs['X'], ramp_m.inputs['Fac'])
     links_m.new(ramp_m.outputs['Color'], bsdf_m.inputs['Base Color'])
 
-    bsdf_m.inputs['Roughness'].default_value = 0.20
-    bsdf_m.inputs['Coat Weight'].default_value = 0.85
-    bsdf_m.inputs['Coat Roughness'].default_value = 0.07
-    bsdf_m.inputs['Subsurface Weight'].default_value = 0.15
-    bsdf_m.inputs['Subsurface Radius'].default_value = (0.35, 0.55, 0.20)
+    bsdf_m.inputs['Roughness'].default_value = 0.38
+    bsdf_m.inputs['Coat Weight'].default_value = 0.30
+    bsdf_m.inputs['Coat Roughness'].default_value = 0.15
+    bsdf_m.inputs['Subsurface Weight'].default_value = 0.12
+    bsdf_m.inputs['Subsurface Radius'].default_value = (0.25, 0.40, 0.15)
 
     # D. Limbs Material (Warm mottled terracotta/mahogany with worn amber highlights)
     mat_limbs = bpy.data.materials.new("M_Limbs_Authentic")
@@ -193,9 +195,9 @@ def create_materials():
     links_l.new(noise_limb.outputs['Fac'], bump_l.inputs['Height'])
     links_l.new(bump_l.outputs['Normal'], bsdf_l.inputs['Normal'])
 
-    bsdf_l.inputs['Roughness'].default_value = 0.34
-    bsdf_l.inputs['Coat Weight'].default_value = 0.50
-    bsdf_l.inputs['Coat Roughness'].default_value = 0.15
+    bsdf_l.inputs['Roughness'].default_value = 0.55
+    bsdf_l.inputs['Coat Weight'].default_value = 0.20
+    bsdf_l.inputs['Coat Roughness'].default_value = 0.25
     bsdf_l.inputs['Subsurface Weight'].default_value = 0.08
     bsdf_l.inputs['Subsurface Radius'].default_value = (0.20, 0.10, 0.06)
 
@@ -215,9 +217,25 @@ def create_materials():
     bsdf_a.inputs['Coat Weight'].default_value = 0.55
     bsdf_a.inputs['Coat Roughness'].default_value = 0.14
 
-    return mat_chitin, mat_eye, mat_mandible, mat_limbs, mat_antenna
+    # F. Teeth Material (Sharp bone-ivory white)
+    mat_teeth = bpy.data.materials.new("M_Teeth_Authentic")
+    mat_teeth.use_nodes = True
+    nodes_t = mat_teeth.node_tree.nodes
+    links_t = mat_teeth.node_tree.links
+    nodes_t.clear()
 
-mat_chitin, mat_eye, mat_mandible, mat_limbs, mat_antenna = create_materials()
+    out_t = nodes_t.new('ShaderNodeOutputMaterial')
+    bsdf_t = nodes_t.new('ShaderNodeBsdfPrincipled')
+    links_t.new(bsdf_t.outputs['BSDF'], out_t.inputs['Surface'])
+
+    bsdf_t.inputs['Base Color'].default_value = (0.94, 0.95, 0.88, 1.0) # Bone ivory white
+    bsdf_t.inputs['Roughness'].default_value = 0.25
+    bsdf_t.inputs['Coat Weight'].default_value = 0.40
+    bsdf_t.inputs['Coat Roughness'].default_value = 0.15
+
+    return mat_chitin, mat_eye, mat_mandible, mat_limbs, mat_antenna, mat_teeth
+
+mat_chitin, mat_eye, mat_mandible, mat_limbs, mat_antenna, mat_teeth = create_materials()
 
 worker_col = bpy.data.collections.new("Worker_Ant_Authentic")
 bpy.context.scene.collection.children.link(worker_col)
@@ -229,59 +247,76 @@ def reg(obj):
     return obj
 
 # -----------------------------------------------------------------------------
-# 3. Large Sculpted Cartoon Cranium with Deep Eye Orbits
+# 3. Authentic Cartoon Cranium with Wide Crown Lobes & Orbital Cavities
 # -----------------------------------------------------------------------------
 bm_head = bmesh.new()
 bmesh.ops.create_cube(bm_head, size=1.0)
-bmesh.ops.subdivide_edges(bm_head, edges=bm_head.edges, cuts=7, use_grid_fill=True)
+bmesh.ops.subdivide_edges(bm_head, edges=bm_head.edges, cuts=8, use_grid_fill=True)
 
-# Head origin at (0, -0.04, 1.62)
-# Dimensions: width 0.68, depth 0.52, height 0.52 (Heroic cartoon proportions)
-rx_head, ry_head, rz_head = 0.34, 0.26, 0.26
+# Head origin at (0, -0.04, 1.58)
+# Character scale matching master reference: wide rounded trapezoid/pillow helmet
+rx_head, ry_head, rz_head = 0.36, 0.25, 0.31
 
 for v in bm_head.verts:
-    norm = v.co.normalized()
-    x = norm.x * rx_head
-    y = norm.y * ry_head
-    z = norm.z * rz_head
+    # Superellipsoid formulation (p = 3.2): creates a wide pillow with rounded corners,
+    # preventing the skull from tapering to an egg point at the crown!
+    vx, vy, vz = v.co.x, v.co.y, v.co.z
+    p_exp = 3.2
+    r_super = (abs(vx)**p_exp + abs(vy)**p_exp + abs(vz)**p_exp)**(1.0 / p_exp)
+    if r_super > 1e-5:
+        nx, ny, nz = vx / r_super, vy / r_super, vz / r_super
+    else:
+        nx, ny, nz = 0.0, 0.0, 0.0
 
-    # 1. Crown lobes: rounded pillows with central dip between antennae
+    x = nx * rx_head
+    y = ny * ry_head
+    z = nz * rz_head
+
+    # 1. Crown lobes & cleft (Z > 0.05): two distinct pillowy lobes with dip in middle
     if z > 0.05:
-        cleft = 1.0 - 0.15 * math.exp(-((x / 0.11) ** 2))
+        cleft = 1.0 - 0.14 * math.exp(-((x / 0.09) ** 2))
         z *= cleft
-        x *= (1.0 + 0.10 * (z / rz_head))
+        # Wide upper crown flare
+        x *= (1.0 + 0.08 * (z / rz_head))
 
-    # 2. Deep Orbital Sockets (Center at X = +/-0.185, Y = -0.16, Z = 0.04)
+    # 2. Forehead dome & brow overhang (Z in [0.03, 0.22], Y < 0)
+    if 0.03 < z < 0.22 and y < 0:
+        brow_t = math.sin((z - 0.03) / 0.19 * math.pi)
+        y -= 0.038 * brow_t
+
+    # 3. Deep Orbital Sockets (Center at X = +/-0.165, Y = -0.15, Z = 0.015)
     for sign in [-1.0, 1.0]:
-        sx, sy, sz = sign * 0.185, -0.16, 0.04
+        sx, sy, sz = sign * 0.165, -0.15, 0.015
         d = math.sqrt((x - sx)**2 + (y - sy)**2 + (z - sz)**2)
-        r_orb = 0.22
+        r_orb = 0.185
 
-        if d < r_orb:
+        if d < r_orb and y < 0:
             falloff = (1.0 - (d / r_orb)**2)**1.3
-            y += 0.18 * falloff
+            y += 0.13 * falloff
 
-    # 3. Forehead Brow Bridge (Central vertical ridge between eyes)
-    if abs(x) < 0.09 and z > -0.06 and y < 0:
-        bridge = math.cos(abs(x) / 0.09 * (math.pi / 2.0))
-        y -= 0.040 * bridge
+    # 4. Solid Green Nose Bridge (Vertical ridge between eyes, keeping eyes cleanly separated)
+    if abs(x) < 0.060 and -0.09 < z < 0.13 and y < 0:
+        bridge = math.cos(abs(x) / 0.060 * (math.pi / 2.0))
+        y -= 0.048 * bridge
 
-    # 4. Clypeus / Snout (Bulldog nose bridge directly below eyes, Z < -0.04)
-    if z < -0.04:
-        ts = min(1.0, (-0.04 - z) / 0.22)
-        if abs(x) < 0.14:
-            snout_shape = (1.0 - abs(x) / 0.14)
-            if y < 0:
-                y -= 0.095 * snout_shape * ts
-            if z < -0.16 and abs(x) < 0.04:
-                y += 0.035 * (1.0 - abs(x) / 0.04)
+    # 5. Clypeus / Snout (Tapers smoothly down below eyes, Z in [-0.26, -0.04])
+    if -0.26 < z < -0.04 and abs(x) < 0.12 and y < 0:
+        clyp = math.cos(abs(x) / 0.12 * (math.pi / 2.0))
+        t_z = math.sin((z - (-0.26)) / 0.22 * math.pi)
+        y -= 0.050 * clyp * t_z
 
-    # 5. Rounded Cheeks flanking the lower jaw
-    if -0.24 < z < -0.06 and abs(x) > 0.16:
-        cheek = math.sin((z - (-0.24)) / 0.18 * math.pi)
-        x *= (1.0 + 0.14 * cheek)
-        if y < 0:
-            y -= 0.06 * cheek
+    # 6. Temples & Cheeks flanking the eyes cleanly
+    if abs(x) > 0.24 and -0.18 < z < 0.18:
+        x *= 1.06
+
+    # 7. Oral Cavity (Behind mandibles, Z < -0.18)
+    if z < -0.18 and abs(x) < 0.16 and y < -0.02:
+        y += 0.045 * (1.0 - abs(x) / 0.16)
+
+    # 8. Lower jaw taper (narrowing toward neck)
+    if z < -0.10:
+        t_neck = min(1.0, (-0.10 - z) / 0.21)
+        x *= (1.0 - 0.20 * t_neck)
 
     v.co = Vector((x, y, z))
 
@@ -296,7 +331,7 @@ for face in bm_head.faces:
 
 head_mesh = bpy.data.meshes.new("Head")
 head_obj = bpy.data.objects.new("Head", head_mesh)
-head_obj.location = Vector((0, -0.04, 1.62))
+head_obj.location = Vector((0, -0.04, 1.58))
 bpy.context.scene.collection.objects.link(head_obj)
 bm_head.to_mesh(head_mesh)
 bm_head.free()
@@ -309,16 +344,17 @@ for p in head_mesh.polygons:
 reg(head_obj)
 
 # -----------------------------------------------------------------------------
-# 4. Large Bulging 3D Spherical Eyes with Sculpted Upper Eyelid Hoods
+# 4. Large Expressive Oval Eyes with Eyelid Hoods (Matching Master Reference)
 # -----------------------------------------------------------------------------
 def make_bulging_eye(name, is_left=True):
     sign = -1.0 if is_left else 1.0
-    eye_pos = Vector((sign * 0.185, -0.22, 1.66))
+    eye_pos = Vector((sign * 0.165, -0.180, 1.600))
 
     bm_eye = bmesh.new()
     bmesh.ops.create_uvsphere(bm_eye, u_segments=40, v_segments=28, radius=1.0)
 
-    rx, ry, rz = 0.180, 0.175, 0.205
+    # Proportional cartoon dimensions: rx = 0.135, ry = 0.120, rz = 0.168
+    rx, ry, rz = 0.135, 0.120, 0.168
     for v in bm_eye.verts:
         v.co.x *= rx
         v.co.y *= ry
@@ -331,8 +367,9 @@ def make_bulging_eye(name, is_left=True):
             vy = loop.vert.co.y
             vz = loop.vert.co.z
 
-            u = 0.50 - (sign * vx) / (2.0 * rx * 1.10)
-            v = 0.50 + vz / (2.0 * rz * 1.10)
+            # Medial and slight downward shift for endearing cartoon focus
+            u = 0.50 - (sign * vx) / (2.0 * rx * 1.08) - (0.015 * sign)
+            v = 0.50 + vz / (2.0 * rz * 1.08) + 0.020
 
             if vy > 0.02:
                 u = 0.05
@@ -348,8 +385,9 @@ def make_bulging_eye(name, is_left=True):
     eye_obj.location = eye_pos
     bpy.context.scene.collection.objects.link(eye_obj)
 
-    tilt_z = sign * math.radians(11.0)
-    pitch_x = math.radians(5.0)
+    # Slight binocular convergence matching master reference
+    tilt_z = sign * math.radians(3.5)
+    pitch_x = math.radians(2.5)
     eye_obj.rotation_euler = Euler((pitch_x, 0.0, tilt_z), 'XYZ')
 
     eye_obj.data.materials.append(mat_eye)
@@ -363,19 +401,24 @@ make_bulging_eye("Eye_L", True)
 make_bulging_eye("Eye_R", False)
 
 # -----------------------------------------------------------------------------
-# 5. Plump Bulldog Jowl Mandibles (100% Manifold Quads with Interlocking Teeth)
+# 5. Horizontal Curved Pincer Mandibles with Sharp Medial Teeth
 # -----------------------------------------------------------------------------
 def make_clean_mandible(name, is_left=True):
     sign = -1.0 if is_left else 1.0
     bm = bmesh.new()
 
-    # Elevated snug under snout and eyes (Z = 1.40 to 1.50)
+    # Articulating from lower jaw corners, curving forward and horizontally inward
     stations = [
-        (Vector((sign * 0.18, -0.16, 1.50)), Vector((sign * 0.35, -0.90, -0.15)).normalized(), 0.110, 0.115),
-        (Vector((sign * 0.28, -0.24, 1.46)), Vector((sign * 0.15, -0.92, -0.22)).normalized(), 0.145, 0.135),
-        (Vector((sign * 0.23, -0.34, 1.42)), Vector((sign * -0.55, -0.70, -0.25)).normalized(), 0.135, 0.125),
-        (Vector((sign * 0.12, -0.33, 1.40)), Vector((sign * -0.88, -0.25, -0.18)).normalized(), 0.100, 0.095),
-        (Vector((sign * 0.04, -0.29, 1.39)), Vector((sign * -1.0, 0.0, 0.0)).normalized(), 0.040, 0.040)
+        # 0. Jaw hinge socket under cheek
+        (Vector((sign * 0.20, -0.10, 1.35)), Vector((sign * 0.20, -0.95, -0.15)).normalized(), 0.058, 0.046),
+        # 1. Lateral pincer curve
+        (Vector((sign * 0.21, -0.19, 1.34)), Vector((sign * 0.10, -0.98, -0.10)).normalized(), 0.082, 0.048),
+        # 2. Anterior turn
+        (Vector((sign * 0.16, -0.25, 1.34)), Vector((sign * -0.65, -0.72, 0.0)).normalized(), 0.076, 0.046),
+        # 3. Medial inward sweep
+        (Vector((sign * 0.10, -0.26, 1.35)), Vector((sign * -0.95, -0.25, 0.0)).normalized(), 0.060, 0.040),
+        # 4. Pointed pincer tip
+        (Vector((sign * 0.04, -0.24, 1.36)), Vector((sign * -1.0, 0.0, 0.0)).normalized(), 0.028, 0.026)
     ]
 
     num_pts = 10
@@ -392,16 +435,10 @@ def make_clean_mandible(name, is_left=True):
             cos_t = math.cos(th)
             sin_t = math.sin(th)
 
-            rx_eff = rx * (1.25 if (cos_t * sign > 0) else 0.85)
-            rz_eff = rz * (0.92 if sin_t < 0 else 1.08)
+            rx_eff = rx * (1.18 if (cos_t * sign > 0) else 0.88)
+            rz_eff = rz * (0.90 if sin_t < 0 else 1.10)
 
-            if i in [2, 3] and abs(j - num_pts // 2) <= 1:
-                tooth_reach = 0.045 if i == 2 else 0.035
-                z_tooth = 0.012 if is_left else -0.012
-                p_local = (right * (cos_t * rx_eff - sign * tooth_reach)) + (up * (sin_t * rz_eff + z_tooth))
-            else:
-                p_local = (right * (cos_t * rx_eff)) + (up * (sin_t * rz_eff))
-
+            p_local = (right * (cos_t * rx_eff)) + (up * (sin_t * rz_eff))
             world_p = center + p_local
             c_ring.append(bm.verts.new(world_p))
         rings.append(c_ring)
@@ -436,32 +473,57 @@ def make_clean_mandible(name, is_left=True):
     sub.levels = 2
     for p in mesh.polygons:
         p.use_smooth = True
-    return reg(obj)
+    reg(obj)
+
+    # Add sharp bone-white tooth cones on inner edge pointing horizontally inward
+    teeth_locs = [
+        (Vector((sign * 0.05, -0.245, 1.355)), 0.024, 0.040), # Main sharp fang
+        (Vector((sign * 0.11, -0.252, 1.348)), 0.018, 0.030)  # Secondary tooth
+    ]
+    for idx, (t_pos, t_rad, t_len) in enumerate(teeth_locs):
+        bpy.ops.mesh.primitive_cone_add(
+            vertices=12, radius1=t_rad, depth=t_len,
+            location=t_pos,
+            rotation=(0, math.radians(-90 if is_left else 90), 0)
+        )
+        tooth_obj = bpy.context.active_object
+        tooth_obj.name = f"{name}_Tooth_{idx}"
+        tooth_obj.data.materials.append(mat_teeth)
+        bpy.ops.object.shade_smooth()
+        reg(tooth_obj)
+
+    return obj
 
 make_clean_mandible("Mandible_L", True)
 make_clean_mandible("Mandible_R", False)
 
 # -----------------------------------------------------------------------------
-# 6. Smooth Curved Bézier Antennae (Sweeping Gracefully OUTWARD past temples)
+# 6. Jointed Crown Antennae (Sprouting from Crown Cleft, Sweeping OUT past Temples)
 # -----------------------------------------------------------------------------
 def make_authentic_antenna(name, is_left=True):
-    sign = -1.0 if is_left else 1.0
-
     curve_data = bpy.data.curves.new(name, 'CURVE')
     curve_data.dimensions = '3D'
-    curve_data.bevel_depth = 0.022
+    curve_data.bevel_depth = 0.018
     curve_data.bevel_resolution = 6
     curve_data.fill_mode = 'FULL'
 
     spline = curve_data.splines.new('BEZIER')
-    spline.bezier_points.add(2)
+    spline.bezier_points.add(3) # 4 points: root, scape, elbow, tip
 
-    # Trajectory: Sprouts from forehead brow, arches upward and OUTWARD past temples
-    p0 = Vector((sign * 0.075, -0.15, 1.82)) # Forehead brow socket
-    p1 = Vector((sign * 0.200, -0.15, 2.15)) # Mid stalk slanting outward
-    p2 = Vector((sign * 0.420, -0.06, 2.34)) # Tip sweeping boldly OUTWARD past temples
+    # Trajectory matching master reference:
+    # Sprouts from crown cleft, ascends, bends SHARPLY OUTWARD past temples (X = +/-0.35), curves back
+    if is_left:
+        p0 = Vector((-0.070, 0.02, 1.88)) # Crown cleft socket
+        p1 = Vector((-0.140, -0.01, 2.12)) # Ascending scape
+        p2 = Vector((-0.340, 0.01, 2.22))  # Elbow angled OUT past left temple!
+        p3 = Vector((-0.280, 0.08, 2.34))  # Flagellum tip curling back
+    else:
+        p0 = Vector((0.070, 0.02, 1.88))   # Crown cleft socket
+        p1 = Vector((0.150, -0.01, 2.15))  # Ascending scape
+        p2 = Vector((0.360, 0.01, 2.22))   # Elbow angled OUT past right temple!
+        p3 = Vector((0.260, 0.06, 2.38))   # Flagellum tip reaching high and back
 
-    pts = [p0, p1, p2]
+    pts = [p0, p1, p2, p3]
     for i, p in enumerate(pts):
         bp = spline.bezier_points[i]
         bp.co = p
@@ -477,10 +539,10 @@ def make_authentic_antenna(name, is_left=True):
     bpy.ops.object.convert(target='MESH')
     bpy.ops.object.shade_smooth()
 
-    # Rounded teardrop club tip at p2
+    # Rounded teardrop club tip at p3
     bpy.ops.mesh.primitive_uv_sphere_add(
-        segments=20, ring_count=16, radius=0.038,
-        location=p2
+        segments=18, ring_count=14, radius=0.030,
+        location=p3
     )
     club = bpy.context.active_object
     club.name = f"{name}_Club"
@@ -541,28 +603,28 @@ bm_gaster = bmesh.new()
 bmesh.ops.create_uvsphere(bm_gaster, u_segments=36, v_segments=24, radius=1.0)
 
 for v in bm_gaster.verts:
-    x = v.co.x * 0.36
-    y = v.co.y * 0.48
-    z = v.co.z * 0.40
+    x = v.co.x * 0.32
+    y = v.co.y * 0.46
+    z = v.co.z * 0.34
 
     if y > 0:
-        taper = 1.0 - 0.40 * (y / 0.48)
+        taper = 1.0 - 0.40 * (y / 0.46)
         x *= taper
         z *= (taper * 0.92)
     else:
-        x *= 1.08
-        z *= 1.05
+        x *= 1.06
+        z *= 1.04
 
-    groove = math.sin((y + 0.48) * 14.0) * 0.012
-    x += groove * (x / 0.36)
-    z += groove * (z / 0.40)
+    groove = math.sin((y + 0.46) * 14.0) * 0.010
+    x += groove * (x / 0.32)
+    z += groove * (z / 0.34)
 
     v.co = Vector((x, y, z))
 
 gaster_mesh = bpy.data.meshes.new("Gaster")
 gaster_obj = bpy.data.objects.new("Gaster", gaster_mesh)
-gaster_obj.location = Vector((0, 0.34, 0.66))
-gaster_obj.rotation_euler = Euler((math.radians(-40), 0, 0), 'XYZ')
+gaster_obj.location = Vector((0, 0.42, 0.78))
+gaster_obj.rotation_euler = Euler((math.radians(-38), 0, 0), 'XYZ')
 bpy.context.scene.collection.objects.link(gaster_obj)
 bm_gaster.to_mesh(gaster_mesh)
 bm_gaster.free()
@@ -649,7 +711,7 @@ for is_left in [True, False]:
     suf = "L" if is_left else "R"
 
     p_shoulder = Vector((sign * 0.18, -0.04, 1.18))
-    p_elbow    = Vector((sign * 0.36, -0.12, 0.90)) # Elbow bent outward!
+    p_elbow    = Vector((sign * 0.34, -0.12, 0.90)) # Elbow bent outward!
     p_wrist    = Vector((sign * 0.28, -0.18, 0.62)) # Forearm back inward
     p_finger1  = Vector((sign * 0.26, -0.22, 0.46))
     p_finger2  = Vector((sign * 0.30, -0.18, 0.44))
@@ -664,11 +726,11 @@ for is_left in [True, False]:
     sign = -1.0 if is_left else 1.0
     suf = "L" if is_left else "R"
 
-    p_hip   = Vector((sign * 0.18, 0.06, 1.02))
-    p_knee  = Vector((sign * 0.26, -0.08, 0.58))
-    p_ankle = Vector((sign * 0.22, -0.16, 0.08))
-    p_toe1  = Vector((sign * 0.20, -0.26, 0.02))
-    p_toe2  = Vector((sign * 0.24, -0.24, 0.02))
+    p_hip   = Vector((sign * 0.18, 0.04, 1.04))
+    p_knee  = Vector((sign * 0.38, -0.06, 0.60))
+    p_ankle = Vector((sign * 0.32, -0.16, 0.08))
+    p_toe1  = Vector((sign * 0.30, -0.24, 0.02))
+    p_toe2  = Vector((sign * 0.34, -0.22, 0.02))
 
     make_chitin_segment(f"Leg_Mid_Femur_{suf}", p_hip, p_knee, 0.050, 0.056, 0.040, is_sleeve=True)
     make_chitin_segment(f"Leg_Mid_Tibia_{suf}", p_knee, p_ankle, 0.040, 0.036, 0.024, is_sleeve=True)
@@ -676,16 +738,16 @@ for is_left in [True, False]:
     make_foot_toe_pad(f"Leg_Mid_Toe1_{suf}", p_toe1, 0.024)
     make_foot_toe_pad(f"Leg_Mid_Toe2_{suf}", p_toe2, 0.020)
 
-# C. Hind Walking Legs (High lateral knees X = +/-0.65, wide planted stance at Z = 0)
+# C. Hind Walking Legs (Reaching backward & wide in authentic tripod stance)
 for is_left in [True, False]:
     sign = -1.0 if is_left else 1.0
     suf = "L" if is_left else "R"
 
-    p_hip   = Vector((sign * 0.16, 0.18, 0.92))
-    p_knee  = Vector((sign * 0.65, 0.10, 0.82)) # High lateral knee reaching wide!
-    p_ankle = Vector((sign * 0.60, -0.02, 0.08))
-    p_toe1  = Vector((sign * 0.62, -0.10, 0.02))
-    p_toe2  = Vector((sign * 0.66, 0.04, 0.02))
+    p_hip   = Vector((sign * 0.16, 0.18, 0.94))
+    p_knee  = Vector((sign * 0.62, 0.32, 0.88)) # High lateral knee reaching BACK and WIDE!
+    p_ankle = Vector((sign * 0.54, 0.16, 0.08))
+    p_toe1  = Vector((sign * 0.56, 0.08, 0.02))
+    p_toe2  = Vector((sign * 0.60, 0.20, 0.02))
 
     make_chitin_segment(f"Leg_Hind_Femur_{suf}", p_hip, p_knee, 0.054, 0.060, 0.044, is_sleeve=True)
     make_chitin_segment(f"Leg_Hind_Tibia_{suf}", p_knee, p_ankle, 0.044, 0.040, 0.028, is_sleeve=True)

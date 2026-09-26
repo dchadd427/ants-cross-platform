@@ -22,8 +22,8 @@ def generate_eye_texture():
     iris_cx, iris_cy = size * 0.515, size * 0.50
 
     r_outer = size * 0.48
-    r_iris = size * 0.34   # Large cute cartoon iris matching master reference
-    r_pupil = size * 0.17  # Expressive dark pupil matching master reference
+    r_iris = size * 0.42   # Large cute cartoon iris matching master reference (covers ~85% of eye)
+    r_pupil = size * 0.21  # Expressive dark pupil matching master reference
 
     for y in range(size):
         ny = (y - cy) / (size * 0.5)
@@ -31,12 +31,12 @@ def generate_eye_texture():
             nx = (x - cx) / (size * 0.5)
             d_sclera = math.sqrt(nx**2 + (ny / 1.06)**2)
             
-            if d_sclera <= 0.97:
+            if d_sclera <= 0.98:
                 # Warm eggshell ivory sclera (#FAFBF2 in center, fading to #D8DFCA at rim)
-                t_edge = max(0.0, (d_sclera - 0.60) / 0.37)
-                r = int(250 - 40 * t_edge)
-                g = int(252 - 34 * t_edge)
-                b = int(242 - 46 * t_edge)
+                t_edge = max(0.0, (d_sclera - 0.65) / 0.33)
+                r = int(248 - 36 * t_edge)
+                g = int(250 - 30 * t_edge)
+                b = int(240 - 42 * t_edge)
                 
                 # Check iris
                 d_iris = math.sqrt(((x - iris_cx) / r_iris)**2 + ((y - iris_cy) / (r_iris * 1.02))**2)
@@ -49,19 +49,19 @@ def generate_eye_texture():
 
                     # Fine radial striation fibers
                     fibers = math.sin(angle * 72.0) * 0.08 + math.cos(angle * 144.0 + 0.8) * 0.05
-                    # Golden sunburst in middle iris zone
-                    amber_ring = math.exp(-((t_iris - 0.42)**2) / 0.045) * 0.55
+                    # Warm golden-amber sunburst in middle iris zone
+                    amber_ring = math.exp(-((t_iris - 0.45)**2) / 0.05) * 0.55
                     
-                    base_r = int(142 + amber_ring * 65 + fibers * 25)
-                    base_g = int(162 + amber_ring * 45 + fibers * 20)
-                    base_b = int(58  + amber_ring * 20 + fibers * 15)
+                    base_r = int(130 + amber_ring * 50 + fibers * 20)
+                    base_g = int(148 + amber_ring * 35 + fibers * 18)
+                    base_b = int(62  + amber_ring * 15 + fibers * 12)
                     
-                    # Limbal ring: dark olive margin
-                    if t_iris > 0.82:
-                        t_limb = (t_iris - 0.82) / 0.18
-                        base_r = int(base_r * (1.0 - 0.65 * t_limb) + 40 * t_limb)
-                        base_g = int(base_g * (1.0 - 0.60 * t_limb) + 50 * t_limb)
-                        base_b = int(base_b * (1.0 - 0.60 * t_limb) + 22 * t_limb)
+                    # Limbal ring: dark olive-brown margin
+                    if t_iris > 0.84:
+                        t_limb = (t_iris - 0.84) / 0.16
+                        base_r = int(base_r * (1.0 - 0.60 * t_limb) + 38 * t_limb)
+                        base_g = int(base_g * (1.0 - 0.55 * t_limb) + 44 * t_limb)
+                        base_b = int(base_b * (1.0 - 0.55 * t_limb) + 20 * t_limb)
                     
                     r, g, b = base_r, base_g, base_b
 
