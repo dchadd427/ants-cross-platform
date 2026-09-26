@@ -19,24 +19,25 @@ def generate_eye_texture():
     img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
     cx, cy = size * 0.50, size * 0.50
     # Centered innocent gaze (slight 1.5% medial shift for natural binocular focus)
-    iris_cx, iris_cy = size * 0.515, size * 0.50
+    iris_cx, iris_cy = size * 0.512, size * 0.50
 
     r_outer = size * 0.48
-    r_iris = size * 0.42   # Large cute cartoon iris matching master reference (covers ~85% of eye)
-    r_pupil = size * 0.21  # Expressive dark pupil matching master reference
+    # Authentic Pixar/reference proportions: Iris is ~29% of eye, leaving ~42% for wide bright white sclera!
+    r_iris = size * 0.29   # Hazel iris framed by large white sclera
+    r_pupil = size * 0.14  # Expressive dark pupil
 
     for y in range(size):
         ny = (y - cy) / (size * 0.5)
         for x in range(size):
             nx = (x - cx) / (size * 0.5)
-            d_sclera = math.sqrt(nx**2 + (ny / 1.06)**2)
+            d_sclera = math.sqrt(nx**2 + (ny / 1.05)**2)
             
             if d_sclera <= 0.98:
-                # Warm eggshell ivory sclera (#FAFBF2 in center, fading to #D8DFCA at rim)
-                t_edge = max(0.0, (d_sclera - 0.65) / 0.33)
-                r = int(248 - 36 * t_edge)
-                g = int(250 - 30 * t_edge)
-                b = int(240 - 42 * t_edge)
+                # Bright warm ivory-white sclera (#FCFDF8 center, soft warm cream at perimeter)
+                t_edge = max(0.0, (d_sclera - 0.70) / 0.28)
+                r = int(252 - 18 * t_edge)
+                g = int(253 - 16 * t_edge)
+                b = int(247 - 22 * t_edge)
                 
                 # Check iris
                 d_iris = math.sqrt(((x - iris_cx) / r_iris)**2 + ((y - iris_cy) / (r_iris * 1.02))**2)
@@ -48,32 +49,32 @@ def generate_eye_texture():
                     t_iris = max(0.0, min(1.0, t_iris))
 
                     # Fine radial striation fibers
-                    fibers = math.sin(angle * 72.0) * 0.08 + math.cos(angle * 144.0 + 0.8) * 0.05
+                    fibers = math.sin(angle * 64.0) * 0.08 + math.cos(angle * 128.0 + 0.8) * 0.05
                     # Warm golden-amber sunburst in middle iris zone
-                    amber_ring = math.exp(-((t_iris - 0.45)**2) / 0.05) * 0.55
+                    amber_ring = math.exp(-((t_iris - 0.42)**2) / 0.06) * 0.65
                     
-                    base_r = int(130 + amber_ring * 50 + fibers * 20)
-                    base_g = int(148 + amber_ring * 35 + fibers * 18)
-                    base_b = int(62  + amber_ring * 15 + fibers * 12)
+                    base_r = int(122 + amber_ring * 65 + fibers * 22)
+                    base_g = int(145 + amber_ring * 42 + fibers * 18)
+                    base_b = int(52  + amber_ring * 18 + fibers * 12)
                     
-                    # Limbal ring: dark olive-brown margin
-                    if t_iris > 0.84:
-                        t_limb = (t_iris - 0.84) / 0.16
-                        base_r = int(base_r * (1.0 - 0.60 * t_limb) + 38 * t_limb)
-                        base_g = int(base_g * (1.0 - 0.55 * t_limb) + 44 * t_limb)
-                        base_b = int(base_b * (1.0 - 0.55 * t_limb) + 20 * t_limb)
+                    # Limbal ring: dark olive-brown margin framing the iris against the white sclera
+                    if t_iris > 0.82:
+                        t_limb = (t_iris - 0.82) / 0.18
+                        base_r = int(base_r * (1.0 - 0.65 * t_limb) + 32 * t_limb)
+                        base_g = int(base_g * (1.0 - 0.60 * t_limb) + 38 * t_limb)
+                        base_b = int(base_b * (1.0 - 0.60 * t_limb) + 16 * t_limb)
                     
                     r, g, b = base_r, base_g, base_b
 
                 if d_pupil <= 1.0:
                     t_p = min(1.0, max(0.0, (1.0 - d_pupil) * 16.0))
-                    r = int(r * (1.0 - t_p) + 12 * t_p)
-                    g = int(g * (1.0 - t_p) + 12 * t_p)
-                    b = int(b * (1.0 - t_p) + 14 * t_p)
+                    r = int(r * (1.0 - t_p) + 10 * t_p)
+                    g = int(g * (1.0 - t_p) + 10 * t_p)
+                    b = int(b * (1.0 - t_p) + 12 * t_p)
 
                 alpha = 255
-                if d_sclera > 0.90:
-                    alpha = int(255 * (0.97 - d_sclera) / 0.07)
+                if d_sclera > 0.92:
+                    alpha = int(255 * (0.98 - d_sclera) / 0.06)
                 img.putpixel((x, y), (min(255, max(0, r)),
                                       min(255, max(0, g)),
                                       min(255, max(0, b)),
@@ -84,18 +85,18 @@ def generate_eye_texture():
     d_over = ImageDraw.Draw(overlay)
 
     # Primary keylight softbox at 10:30
-    hl_cx = int(iris_cx - r_iris * 0.42)
-    hl_cy = int(iris_cy - r_iris * 0.46)
-    hl_r = int(r_pupil * 0.52)
+    hl_cx = int(iris_cx - r_iris * 0.40)
+    hl_cy = int(iris_cy - r_iris * 0.45)
+    hl_r = int(r_pupil * 0.55)
     d_over.ellipse([hl_cx - hl_r, hl_cy - hl_r, hl_cx + hl_r, hl_cy + hl_r],
-                   fill=(255, 255, 255, 245))
+                   fill=(255, 255, 255, 248))
     
     # Secondary subtle reflection at 4:30
-    s_cx = int(iris_cx + r_iris * 0.48)
-    s_cy = int(iris_cy + r_iris * 0.42)
-    s_r = int(r_pupil * 0.26)
+    s_cx = int(iris_cx + r_iris * 0.45)
+    s_cy = int(iris_cy + r_iris * 0.40)
+    s_r = int(r_pupil * 0.28)
     d_over.ellipse([s_cx - s_r, s_cy - s_r, s_cx + s_r, s_cy + s_r],
-                   fill=(240, 245, 255, 75))
+                   fill=(245, 248, 255, 80))
 
     overlay = overlay.filter(ImageFilter.GaussianBlur(radius=2.5))
     img = Image.alpha_composite(img, overlay)
@@ -177,7 +178,7 @@ def generate_mandible_texture():
 # 4. Limbs / Antennae PBR Texture (512x512)
 # -----------------------------------------------------------------------------
 def generate_limbs_texture():
-    size = 512
+    size = 1024
     img = Image.new("RGBA", (size, size))
     pixels = img.load()
 
@@ -185,20 +186,25 @@ def generate_limbs_texture():
         fy = y / size
         for x in range(size):
             fx = x / size
-            grain = math.sin(fx * 48.0) * 8 + math.cos(fy * 24.0) * 6
-            pore = (random.random() - 0.5) * 10
-            
-            green_mottle = max(0.0, math.sin(fx * 16.0 + fy * 18.0) * 0.5 + math.sin(fx * 32.0 - fy * 12.0) * 0.25)
-            joint_warm = max(0.0, math.sin(fy * math.pi * 4.0)) * 22
-            
-            base_r = 92 + joint_warm * 0.8 + grain + pore
-            base_g = 62 + joint_warm * 0.5 + grain * 0.5 + pore
-            base_b = 50 + joint_warm * 0.3 + grain * 0.3 + pore
-            
-            r = int(base_r * (1 - green_mottle) + 72 * green_mottle)
-            g = int(base_g * (1 - green_mottle) + 94 * green_mottle)
-            b = int(base_b * (1 - green_mottle) + 64 * green_mottle)
-            
+            # Longitudinal chitin striation ridges running along the limb axis
+            ridge = math.sin(fx * 36.0 * math.pi) * 0.5 + math.sin(fx * 72.0 * math.pi) * 0.25
+            pore = (random.random() - 0.5) * 8.0
+
+            # Organic mottling: deep burgundy mahogany (#341510) and warm chestnut terracotta (#7A3822)
+            mottle = math.sin(fx * 10.0 + fy * 14.0) * 0.5 + math.cos(fx * 20.0 - fy * 16.0) * 0.3
+            joint_t = max(0.0, math.sin(fy * math.pi * 4.0)) * 18.0
+
+            blend_t = max(0.0, min(1.0, 0.40 + 0.35 * ridge + 0.25 * mottle))
+            r = int(54 * (1.0 - blend_t) + 122 * blend_t + joint_t * 0.9 + pore)
+            g = int(22 * (1.0 - blend_t) + 58 * blend_t + joint_t * 0.6 + pore * 0.6)
+            b = int(18 * (1.0 - blend_t) + 42 * blend_t + joint_t * 0.4 + pore * 0.4)
+
+            # Olive lichen/moss undertone patches tying limbs authentically to the body chitin
+            olive_fac = max(0.0, math.sin(fx * 7.0 - fy * 9.0) * 0.55)
+            r = int(r * (1.0 - 0.35 * olive_fac) + 54 * olive_fac)
+            g = int(g * (1.0 - 0.35 * olive_fac) + 72 * olive_fac)
+            b = int(b * (1.0 - 0.35 * olive_fac) + 46 * olive_fac)
+
             pixels[x, y] = (min(255, max(0, r)), min(255, max(0, g)), min(255, max(0, b)), 255)
 
     out_path = f"{OUT_DIR}/limbs_pbr.png"

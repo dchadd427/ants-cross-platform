@@ -69,45 +69,32 @@ def create_materials():
     bsdf = nodes.new('ShaderNodeBsdfPrincipled')
     links.new(bsdf.outputs['BSDF'], out.inputs['Surface'])
 
-    # Multi-band procedural organic color ramp
-    # Gentle organic color gradation matching master reference (rich solid moss-olive green)
+    # Load authentic high-resolution weathered moss-green chitin texture
+    tex_chitin = nodes.new('ShaderNodeTexImage')
+    tex_chitin.image = bpy.data.images.load(f"{web_dir}/chitin_pbr.png")
+    links.new(tex_chitin.outputs['Color'], bsdf.inputs['Base Color'])
+    bsdf.inputs['Base Color'].default_value = (0.24, 0.36, 0.16, 1.0)
+
+    # Leathery organic pore micro-bump matching master reference
     tex_coord = nodes.new('ShaderNodeTexCoord')
-    noise_color = nodes.new('ShaderNodeTexNoise')
-    noise_color.inputs['Scale'].default_value = 3.5
-    noise_color.inputs['Detail'].default_value = 2.0
-    noise_color.inputs['Roughness'].default_value = 0.35
-    links.new(tex_coord.outputs['Object'], noise_color.inputs['Vector'])
-
-    color_ramp = nodes.new('ShaderNodeValToRGB')
-    color_ramp.color_ramp.elements[0].position = 0.20
-    color_ramp.color_ramp.elements[0].color = (0.19, 0.29, 0.14, 1.0) # Rich deep forest olive
-    color_ramp.color_ramp.elements[1].position = 0.80
-    color_ramp.color_ramp.elements[1].color = (0.28, 0.40, 0.20, 1.0) # Vibrant emerald moss green
-    elem_warm = color_ramp.color_ramp.elements.new(0.50)
-    elem_warm.color = (0.23, 0.33, 0.16, 1.0) # Mid olive tone
-
-    links.new(noise_color.outputs['Fac'], color_ramp.inputs['Fac'])
-    links.new(color_ramp.outputs['Color'], bsdf.inputs['Base Color'])
-
-    # Micro bump (subtle organic leathery ant cuticle)
     noise_bump = nodes.new('ShaderNodeTexNoise')
-    noise_bump.inputs['Scale'].default_value = 85.0
-    noise_bump.inputs['Detail'].default_value = 4.0
-    noise_bump.inputs['Roughness'].default_value = 0.50
+    noise_bump.inputs['Scale'].default_value = 95.0
+    noise_bump.inputs['Detail'].default_value = 5.0
+    noise_bump.inputs['Roughness'].default_value = 0.55
     links.new(tex_coord.outputs['Object'], noise_bump.inputs['Vector'])
 
     bump = nodes.new('ShaderNodeBump')
-    bump.inputs['Strength'].default_value = 0.08
-    bump.inputs['Distance'].default_value = 0.004
+    bump.inputs['Strength'].default_value = 0.22
+    bump.inputs['Distance'].default_value = 0.003
     links.new(noise_bump.outputs['Fac'], bump.inputs['Height'])
     links.new(bump.outputs['Normal'], bsdf.inputs['Normal'])
 
-    # Authentic satin organic ant cuticle (NOT shiny wet plastic!)
-    bsdf.inputs['Roughness'].default_value = 0.54
-    bsdf.inputs['Coat Weight'].default_value = 0.18
-    bsdf.inputs['Coat Roughness'].default_value = 0.28
-    bsdf.inputs['Subsurface Weight'].default_value = 0.08
-    bsdf.inputs['Subsurface Radius'].default_value = (0.12, 0.16, 0.08)
+    # Authentic satin organic ant cuticle (subtle waxy sheen with leathery pores)
+    bsdf.inputs['Roughness'].default_value = 0.50
+    bsdf.inputs['Coat Weight'].default_value = 0.24
+    bsdf.inputs['Coat Roughness'].default_value = 0.22
+    bsdf.inputs['Subsurface Weight'].default_value = 0.09
+    bsdf.inputs['Subsurface Radius'].default_value = (0.14, 0.18, 0.09)
 
     # B. Eye Material
     mat_eye = bpy.data.materials.new("M_Eye_Authentic")
@@ -123,6 +110,7 @@ def create_materials():
     tex_eye = nodes_e.new('ShaderNodeTexImage')
     tex_eye.image = bpy.data.images.load(f"{web_dir}/eye_pbr.png")
     links_e.new(tex_eye.outputs['Color'], bsdf_e.inputs['Base Color'])
+    bsdf_e.inputs['Base Color'].default_value = (1.0, 1.0, 1.0, 1.0)
 
     bsdf_e.inputs['Roughness'].default_value = 0.10
     bsdf_e.inputs['Coat Weight'].default_value = 0.90
@@ -140,20 +128,10 @@ def create_materials():
     bsdf_m = nodes_m.new('ShaderNodeBsdfPrincipled')
     links_m.new(bsdf_m.outputs['BSDF'], out_m.inputs['Surface'])
 
-    tc_m = nodes_m.new('ShaderNodeTexCoord')
-    sep_m = nodes_m.new('ShaderNodeSeparateXYZ')
-    links_m.new(tc_m.outputs['Generated'], sep_m.inputs['Vector'])
-
-    ramp_m = nodes_m.new('ShaderNodeValToRGB')
-    ramp_m.color_ramp.elements[0].position = 0.15
-    ramp_m.color_ramp.elements[0].color = (0.18, 0.26, 0.12, 1.0) # Base moss olive
-    ramp_m.color_ramp.elements[1].position = 0.70
-    ramp_m.color_ramp.elements[1].color = (0.58, 0.76, 0.25, 1.0) # Luminous chartreuse tip
-    elem_fang = ramp_m.color_ramp.elements.new(0.88)
-    elem_fang.color = (0.92, 0.94, 0.88, 1.0) # Bone white teeth
-
-    links_m.new(sep_m.outputs['X'], ramp_m.inputs['Fac'])
-    links_m.new(ramp_m.outputs['Color'], bsdf_m.inputs['Base Color'])
+    tex_mandible = nodes_m.new('ShaderNodeTexImage')
+    tex_mandible.image = bpy.data.images.load(f"{web_dir}/mandible_pbr.png")
+    links_m.new(tex_mandible.outputs['Color'], bsdf_m.inputs['Base Color'])
+    bsdf_m.inputs['Base Color'].default_value = (0.38, 0.56, 0.20, 1.0)
 
     bsdf_m.inputs['Roughness'].default_value = 0.38
     bsdf_m.inputs['Coat Weight'].default_value = 0.30
@@ -161,7 +139,7 @@ def create_materials():
     bsdf_m.inputs['Subsurface Weight'].default_value = 0.12
     bsdf_m.inputs['Subsurface Radius'].default_value = (0.25, 0.40, 0.15)
 
-    # D. Limbs Material (Warm mottled terracotta/mahogany with worn amber highlights)
+    # D. Limbs Material (Weathered Mahogany with Longitudinal Ridges & Cuticle Bump)
     mat_limbs = bpy.data.materials.new("M_Limbs_Authentic")
     mat_limbs.use_nodes = True
     nodes_l = mat_limbs.node_tree.nodes
@@ -172,34 +150,33 @@ def create_materials():
     bsdf_l = nodes_l.new('ShaderNodeBsdfPrincipled')
     links_l.new(bsdf_l.outputs['BSDF'], out_l.inputs['Surface'])
 
+    # Load high-resolution striated cuticle texture
+    tex_limb = nodes_l.new('ShaderNodeTexImage')
+    tex_limb.image = bpy.data.images.load(f"{web_dir}/limbs_pbr.png")
+    links_l.new(tex_limb.outputs['Color'], bsdf_l.inputs['Base Color'])
+    bsdf_l.inputs['Base Color'].default_value = (0.48, 0.22, 0.16, 1.0)
+
+    # Cuticle longitudinal groove bump
     tc_l = nodes_l.new('ShaderNodeTexCoord')
-    noise_limb = nodes_l.new('ShaderNodeTexNoise')
-    noise_limb.inputs['Scale'].default_value = 24.0
-    noise_limb.inputs['Detail'].default_value = 4.0
-    links_l.new(tc_l.outputs['Object'], noise_limb.inputs['Vector'])
-
-    ramp_l = nodes_l.new('ShaderNodeValToRGB')
-    ramp_l.color_ramp.elements[0].position = 0.20
-    ramp_l.color_ramp.elements[0].color = (0.22, 0.11, 0.08, 1.0) # Deep mahogany
-    ramp_l.color_ramp.elements[1].position = 0.65
-    ramp_l.color_ramp.elements[1].color = (0.42, 0.19, 0.12, 1.0) # Warm terracotta
-    elem_edge = ramp_l.color_ramp.elements.new(0.85)
-    elem_edge.color = (0.52, 0.34, 0.22, 1.0) # Amber joint highlight
-
-    links_l.new(noise_limb.outputs['Fac'], ramp_l.inputs['Fac'])
-    links_l.new(ramp_l.outputs['Color'], bsdf_l.inputs['Base Color'])
+    wave_l = nodes_l.new('ShaderNodeTexWave')
+    wave_l.wave_type = 'BANDS'
+    wave_l.bands_direction = 'Z'
+    wave_l.inputs['Scale'].default_value = 24.0
+    wave_l.inputs['Distortion'].default_value = 1.2
+    wave_l.inputs['Detail'].default_value = 3.0
+    links_l.new(tc_l.outputs['Object'], wave_l.inputs['Vector'])
 
     bump_l = nodes_l.new('ShaderNodeBump')
-    bump_l.inputs['Strength'].default_value = 0.10
-    bump_l.inputs['Distance'].default_value = 0.005
-    links_l.new(noise_limb.outputs['Fac'], bump_l.inputs['Height'])
+    bump_l.inputs['Strength'].default_value = 0.18
+    bump_l.inputs['Distance'].default_value = 0.003
+    links_l.new(wave_l.outputs['Color'], bump_l.inputs['Height'])
     links_l.new(bump_l.outputs['Normal'], bsdf_l.inputs['Normal'])
 
-    bsdf_l.inputs['Roughness'].default_value = 0.55
-    bsdf_l.inputs['Coat Weight'].default_value = 0.20
-    bsdf_l.inputs['Coat Roughness'].default_value = 0.25
-    bsdf_l.inputs['Subsurface Weight'].default_value = 0.08
-    bsdf_l.inputs['Subsurface Radius'].default_value = (0.20, 0.10, 0.06)
+    bsdf_l.inputs['Roughness'].default_value = 0.44
+    bsdf_l.inputs['Coat Weight'].default_value = 0.35
+    bsdf_l.inputs['Coat Roughness'].default_value = 0.22
+    bsdf_l.inputs['Subsurface Weight'].default_value = 0.06
+    bsdf_l.inputs['Subsurface Radius'].default_value = (0.18, 0.08, 0.05)
 
     # E. Antenna Material
     mat_antenna = bpy.data.materials.new("M_Antenna_Authentic")
@@ -410,15 +387,15 @@ def make_clean_mandible(name, is_left=True):
     # Articulating from lower jaw corners, curving forward and horizontally inward
     stations = [
         # 0. Jaw hinge socket under cheek
-        (Vector((sign * 0.20, -0.10, 1.35)), Vector((sign * 0.20, -0.95, -0.15)).normalized(), 0.058, 0.046),
+        (Vector((sign * 0.18, -0.10, 1.36)), Vector((sign * 0.20, -0.95, -0.10)).normalized(), 0.065, 0.055),
         # 1. Lateral pincer curve
-        (Vector((sign * 0.21, -0.19, 1.34)), Vector((sign * 0.10, -0.98, -0.10)).normalized(), 0.082, 0.048),
+        (Vector((sign * 0.20, -0.21, 1.35)), Vector((sign * 0.10, -0.98, -0.05)).normalized(), 0.092, 0.064),
         # 2. Anterior turn
-        (Vector((sign * 0.16, -0.25, 1.34)), Vector((sign * -0.65, -0.72, 0.0)).normalized(), 0.076, 0.046),
+        (Vector((sign * 0.15, -0.27, 1.36)), Vector((sign * -0.65, -0.72, 0.0)).normalized(), 0.088, 0.060),
         # 3. Medial inward sweep
-        (Vector((sign * 0.10, -0.26, 1.35)), Vector((sign * -0.95, -0.25, 0.0)).normalized(), 0.060, 0.040),
+        (Vector((sign * 0.09, -0.28, 1.37)), Vector((sign * -0.95, -0.25, 0.0)).normalized(), 0.072, 0.050),
         # 4. Pointed pincer tip
-        (Vector((sign * 0.04, -0.24, 1.36)), Vector((sign * -1.0, 0.0, 0.0)).normalized(), 0.028, 0.026)
+        (Vector((sign * 0.03, -0.26, 1.38)), Vector((sign * -1.0, 0.0, 0.0)).normalized(), 0.038, 0.032)
     ]
 
     num_pts = 10
@@ -477,8 +454,8 @@ def make_clean_mandible(name, is_left=True):
 
     # Add sharp bone-white tooth cones on inner edge pointing horizontally inward
     teeth_locs = [
-        (Vector((sign * 0.05, -0.245, 1.355)), 0.024, 0.040), # Main sharp fang
-        (Vector((sign * 0.11, -0.252, 1.348)), 0.018, 0.030)  # Secondary tooth
+        (Vector((sign * 0.045, -0.265, 1.375)), 0.026, 0.045), # Main sharp fang
+        (Vector((sign * 0.105, -0.275, 1.365)), 0.020, 0.032)  # Secondary tooth
     ]
     for idx, (t_pos, t_rad, t_len) in enumerate(teeth_locs):
         bpy.ops.mesh.primitive_cone_add(
@@ -560,8 +537,8 @@ make_authentic_antenna("Antenna_R", False)
 # -----------------------------------------------------------------------------
 # Short Rounded Neck
 bpy.ops.mesh.primitive_cylinder_add(
-    vertices=24, radius=0.12, depth=0.10,
-    location=(0, -0.03, 1.36), rotation=(math.radians(16), 0, 0)
+    vertices=24, radius=0.085, depth=0.10,
+    location=(0, -0.02, 1.37), rotation=(math.radians(16), 0, 0)
 )
 neck = bpy.context.active_object
 neck.name = "Neck"
@@ -569,10 +546,11 @@ neck.data.materials.append(mat_chitin)
 bpy.ops.object.shade_smooth()
 reg(neck)
 
+# Slimmed Thorax: Authentic lean insect armor plates matching master reference artwork
 thorax_plates = [
-    ("Thorax_Pronotum",  Vector((0, 0.01, 1.22)), Vector((0.26, 0.23, 0.18))),
-    ("Thorax_Mesonotum", Vector((0, 0.09, 1.07)), Vector((0.27, 0.25, 0.19))),
-    ("Thorax_Metanotum", Vector((0, 0.19, 0.93)), Vector((0.24, 0.22, 0.17)))
+    ("Thorax_Pronotum",  Vector((0, 0.01, 1.25)), Vector((0.17, 0.16, 0.14))),
+    ("Thorax_Mesonotum", Vector((0, 0.08, 1.11)), Vector((0.16, 0.15, 0.13))),
+    ("Thorax_Metanotum", Vector((0, 0.15, 0.98)), Vector((0.14, 0.14, 0.12)))
 ]
 for name, loc, scale in thorax_plates:
     bpy.ops.mesh.primitive_uv_sphere_add(segments=32, ring_count=20, radius=1.0, location=loc)
@@ -587,8 +565,8 @@ for name, loc, scale in thorax_plates:
 
 # Slender Petiole Waist
 bpy.ops.mesh.primitive_cylinder_add(
-    vertices=16, radius=0.075, depth=0.14,
-    location=(0, 0.26, 0.82), rotation=(math.radians(35), 0, 0)
+    vertices=16, radius=0.060, depth=0.13,
+    location=(0, 0.22, 0.88), rotation=(math.radians(35), 0, 0)
 )
 petiole = bpy.context.active_object
 petiole.name = "Petiole"
@@ -597,47 +575,44 @@ bpy.ops.object.shade_smooth()
 reg(petiole)
 
 # -----------------------------------------------------------------------------
-# 8. Gaster: Suspended Plump Egg Abdomen at 40° with Sternite Grooves
+# 8. Gaster: Suspended Plump Egg Abdomen at 32° with Sternite Grooves
 # -----------------------------------------------------------------------------
-bm_gaster = bmesh.new()
-bmesh.ops.create_uvsphere(bm_gaster, u_segments=36, v_segments=24, radius=1.0)
+bpy.ops.mesh.primitive_uv_sphere_add(
+    segments=36, ring_count=24, radius=1.0,
+    location=(0, 0.30, 0.98),
+    rotation=(math.radians(16), 0, 0)
+)
+gaster_obj = bpy.context.active_object
+gaster_obj.name = "Gaster"
 
-for v in bm_gaster.verts:
-    x = v.co.x * 0.32
-    y = v.co.y * 0.46
-    z = v.co.z * 0.34
+for v in gaster_obj.data.vertices:
+    x = v.co.x * 0.25
+    y = v.co.y * 0.38
+    z = v.co.z * 0.26
 
     if y > 0:
-        taper = 1.0 - 0.40 * (y / 0.46)
+        taper = 1.0 - 0.40 * (y / 0.38)
         x *= taper
         z *= (taper * 0.92)
     else:
         x *= 1.06
         z *= 1.04
 
-    groove = math.sin((y + 0.46) * 14.0) * 0.010
-    x += groove * (x / 0.32)
-    z += groove * (z / 0.34)
+    groove = math.sin((y + 0.38) * 16.0) * 0.008
+    x += groove * (x / 0.25)
+    z += groove * (z / 0.26)
 
     v.co = Vector((x, y, z))
 
-gaster_mesh = bpy.data.meshes.new("Gaster")
-gaster_obj = bpy.data.objects.new("Gaster", gaster_mesh)
-gaster_obj.location = Vector((0, 0.42, 0.78))
-gaster_obj.rotation_euler = Euler((math.radians(-38), 0, 0), 'XYZ')
-bpy.context.scene.collection.objects.link(gaster_obj)
-bm_gaster.to_mesh(gaster_mesh)
-bm_gaster.free()
-
+gaster_obj.data.update()
 gaster_obj.data.materials.append(mat_chitin)
 sub_g = gaster_obj.modifiers.new("Subsurf", 'SUBSURF')
 sub_g.levels = 2
-for p in gaster_mesh.polygons:
-    p.use_smooth = True
+bpy.ops.object.shade_smooth()
 reg(gaster_obj)
 
 # -----------------------------------------------------------------------------
-# 9. Anatomical Insect Limbs & Character Stance (Matching ref_limbs_crop.png)
+# 9. Sculpted Insect Limbs: Longitudinal Cuticle Ridges & Articulated Collars
 # -----------------------------------------------------------------------------
 def make_chitin_segment(name, p0, p1, r_start, r_mid, r_end, is_sleeve=False):
     bm = bmesh.new()
@@ -650,28 +625,42 @@ def make_chitin_segment(name, p0, p1, r_start, r_mid, r_end, is_sleeve=False):
     rot_quat = Vector((0, 0, 1)).rotation_difference(vec)
     mat_rot = rot_quat.to_matrix().to_4x4()
 
-    num_pts = 12
+    num_pts = 16
     rings = []
+    # 5 profile stations with authentic arthropod taper and articulated joint collars
     stations = [
-        (p0, r_start, 1.0, 1.0),
-        (p0 + vec * 0.28, r_mid, 1.24, 0.88),
-        (p0 + vec * 0.72, r_end * 1.05, 1.10, 0.92),
-        (p1, r_end * (1.25 if is_sleeve else 1.0), 1.15, 0.95)
+        (p0, r_start * 1.15, 1.25, 0.88),                  # Flared joint socket sleeve
+        (p0 + vec * 0.18, r_start * 0.94, 1.20, 0.84),     # Narrow neck taper
+        (p0 + vec * 0.45, r_mid * 1.14, 1.32, 0.80),       # Muscular lateral flattening & ridge bulge
+        (p0 + vec * 0.80, r_end * 0.90, 1.18, 0.82),       # Distal shaft taper
+        (p1, r_end * (1.30 if is_sleeve else 1.05), 1.22, 0.88) # Articulated condyle sleeve
     ]
     for pos, rad, sx, sy in stations:
         c_ring = []
         for j in range(num_pts):
             th = 2.0 * math.pi * j / num_pts
-            local_p = Vector((rad * sx * math.cos(th), rad * sy * math.sin(th), 0.0))
+            # 4 distinct longitudinal cuticle crests / flutes (dorsal, ventral, lateral ridges)
+            ridge_mod = 1.0 + 0.10 * math.cos(th * 4.0) + 0.05 * math.cos(th * 2.0)
+            local_p = Vector((rad * sx * math.cos(th) * ridge_mod, rad * sy * math.sin(th) * ridge_mod, 0.0))
             world_p = pos + (mat_rot @ local_p)
             c_ring.append(bm.verts.new(world_p))
         rings.append(c_ring)
 
+    uv_layer = bm.loops.layers.uv.new("UVMap")
     for i in range(len(stations) - 1):
         r0, r1 = rings[i], rings[i+1]
+        v_coord0 = i / (len(stations) - 1)
+        v_coord1 = (i + 1) / (len(stations) - 1)
         for j in range(num_pts):
             jn = (j + 1) % num_pts
-            bm.faces.new([r0[j], r0[jn], r1[jn], r1[j]])
+            face = bm.faces.new([r0[j], r0[jn], r1[jn], r1[j]])
+            u0 = j / num_pts
+            u1 = (j + 1) / num_pts
+            face.loops[0][uv_layer].uv = (u0, v_coord0)
+            face.loops[1][uv_layer].uv = (u1, v_coord0)
+            face.loops[2][uv_layer].uv = (u1, v_coord1)
+            face.loops[3][uv_layer].uv = (u0, v_coord1)
+
     bm.faces.new(rings[0][::-1])
     bm.faces.new(rings[-1])
 
@@ -689,71 +678,66 @@ def make_chitin_segment(name, p0, p1, r_start, r_mid, r_end, is_sleeve=False):
     return reg(obj)
 
 def make_foot_toe_pad(name, p_toe, radius):
-    bm = bmesh.new()
-    bmesh.ops.create_uvsphere(bm, u_segments=16, v_segments=12, radius=1.0)
-    for v in bm.verts:
-        v.co.x *= radius * 1.2
-        v.co.y *= radius * 1.8
-        v.co.z *= radius * 0.75
-    mesh = bpy.data.meshes.new(name)
-    bm.to_mesh(mesh)
-    bm.free()
-    obj = bpy.data.objects.new(name, mesh)
-    obj.location = p_toe
-    bpy.context.scene.collection.objects.link(obj)
+    bpy.ops.mesh.primitive_uv_sphere_add(
+        segments=16, ring_count=12, radius=1.0,
+        location=p_toe
+    )
+    obj = bpy.context.active_object
+    obj.name = name
+    obj.scale = (radius * 1.2, radius * 1.8, radius * 0.75)
     obj.data.materials.append(mat_limbs)
     bpy.ops.object.shade_smooth()
     return reg(obj)
 
-# A. Front Expressive Arms (Bent dynamically at elbows matching ref_limbs_crop.png)
+# A. Front Expressive Arms (Bent dynamically at elbows framing chest)
 for is_left in [True, False]:
     sign = -1.0 if is_left else 1.0
     suf = "L" if is_left else "R"
 
-    p_shoulder = Vector((sign * 0.18, -0.04, 1.18))
-    p_elbow    = Vector((sign * 0.34, -0.12, 0.90)) # Elbow bent outward!
-    p_wrist    = Vector((sign * 0.28, -0.18, 0.62)) # Forearm back inward
-    p_finger1  = Vector((sign * 0.26, -0.22, 0.46))
-    p_finger2  = Vector((sign * 0.30, -0.18, 0.44))
+    p_shoulder = Vector((sign * 0.13, -0.04, 1.22))
+    p_elbow    = Vector((sign * 0.22, -0.16, 0.98)) # Elbow bent outward and forward
+    p_wrist    = Vector((sign * 0.18, -0.22, 0.74)) # Forearm back inward
+    p_finger1  = Vector((sign * 0.16, -0.25, 0.58)) # Curved hand claw
+    p_finger2  = Vector((sign * 0.20, -0.22, 0.56))
 
-    make_chitin_segment(f"Arm_Upper_{suf}", p_shoulder, p_elbow, 0.046, 0.052, 0.038, is_sleeve=True)
-    make_chitin_segment(f"Arm_Forearm_{suf}", p_elbow, p_wrist, 0.038, 0.040, 0.026, is_sleeve=True)
-    make_chitin_segment(f"Arm_Finger1_{suf}", p_wrist, p_finger1, 0.020, 0.020, 0.012)
-    make_chitin_segment(f"Arm_Finger2_{suf}", p_wrist, p_finger2, 0.018, 0.018, 0.010)
+    make_chitin_segment(f"Arm_Upper_{suf}", p_shoulder, p_elbow, 0.038, 0.044, 0.032, is_sleeve=True)
+    make_chitin_segment(f"Arm_Forearm_{suf}", p_elbow, p_wrist, 0.032, 0.034, 0.022, is_sleeve=True)
+    make_chitin_segment(f"Arm_Finger1_{suf}", p_wrist, p_finger1, 0.016, 0.016, 0.010)
+    make_chitin_segment(f"Arm_Finger2_{suf}", p_wrist, p_finger2, 0.014, 0.014, 0.008)
 
-# B. Middle Walking Legs (Planted forward on floor Z = 0)
+# B. Middle Walking Legs (Reaching laterally to mid-width)
 for is_left in [True, False]:
     sign = -1.0 if is_left else 1.0
     suf = "L" if is_left else "R"
 
-    p_hip   = Vector((sign * 0.18, 0.04, 1.04))
-    p_knee  = Vector((sign * 0.38, -0.06, 0.60))
-    p_ankle = Vector((sign * 0.32, -0.16, 0.08))
-    p_toe1  = Vector((sign * 0.30, -0.24, 0.02))
-    p_toe2  = Vector((sign * 0.34, -0.22, 0.02))
+    p_hip   = Vector((sign * 0.14, 0.06, 1.08))
+    p_knee  = Vector((sign * 0.44, 0.00, 0.68)) # Lateral knee reaching OUT to side!
+    p_ankle = Vector((sign * 0.36, -0.08, 0.08))
+    p_toe1  = Vector((sign * 0.34, -0.16, 0.02))
+    p_toe2  = Vector((sign * 0.38, -0.14, 0.02))
 
-    make_chitin_segment(f"Leg_Mid_Femur_{suf}", p_hip, p_knee, 0.050, 0.056, 0.040, is_sleeve=True)
-    make_chitin_segment(f"Leg_Mid_Tibia_{suf}", p_knee, p_ankle, 0.040, 0.036, 0.024, is_sleeve=True)
-    make_chitin_segment(f"Leg_Mid_Foot_{suf}", p_ankle, p_toe1, 0.024, 0.022, 0.016)
-    make_foot_toe_pad(f"Leg_Mid_Toe1_{suf}", p_toe1, 0.024)
-    make_foot_toe_pad(f"Leg_Mid_Toe2_{suf}", p_toe2, 0.020)
+    make_chitin_segment(f"Leg_Mid_Femur_{suf}", p_hip, p_knee, 0.044, 0.050, 0.036, is_sleeve=True)
+    make_chitin_segment(f"Leg_Mid_Tibia_{suf}", p_knee, p_ankle, 0.036, 0.032, 0.022, is_sleeve=True)
+    make_chitin_segment(f"Leg_Mid_Foot_{suf}", p_ankle, p_toe1, 0.022, 0.020, 0.015)
+    make_foot_toe_pad(f"Leg_Mid_Toe1_{suf}", p_toe1, 0.022)
+    make_foot_toe_pad(f"Leg_Mid_Toe2_{suf}", p_toe2, 0.018)
 
 # C. Hind Walking Legs (Reaching backward & wide in authentic tripod stance)
 for is_left in [True, False]:
     sign = -1.0 if is_left else 1.0
     suf = "L" if is_left else "R"
 
-    p_hip   = Vector((sign * 0.16, 0.18, 0.94))
-    p_knee  = Vector((sign * 0.62, 0.32, 0.88)) # High lateral knee reaching BACK and WIDE!
-    p_ankle = Vector((sign * 0.54, 0.16, 0.08))
-    p_toe1  = Vector((sign * 0.56, 0.08, 0.02))
-    p_toe2  = Vector((sign * 0.60, 0.20, 0.02))
+    p_hip   = Vector((sign * 0.12, 0.16, 0.98))
+    p_knee  = Vector((sign * 0.64, 0.28, 0.88)) # High lateral knee reaching BACK and WIDE!
+    p_ankle = Vector((sign * 0.56, 0.14, 0.08))
+    p_toe1  = Vector((sign * 0.58, 0.06, 0.02))
+    p_toe2  = Vector((sign * 0.62, 0.18, 0.02))
 
-    make_chitin_segment(f"Leg_Hind_Femur_{suf}", p_hip, p_knee, 0.054, 0.060, 0.044, is_sleeve=True)
-    make_chitin_segment(f"Leg_Hind_Tibia_{suf}", p_knee, p_ankle, 0.044, 0.040, 0.028, is_sleeve=True)
-    make_chitin_segment(f"Leg_Hind_Foot_{suf}", p_ankle, p_toe1, 0.028, 0.024, 0.018)
-    make_foot_toe_pad(f"Leg_Hind_Toe1_{suf}", p_toe1, 0.028)
-    make_foot_toe_pad(f"Leg_Hind_Toe2_{suf}", p_toe2, 0.024)
+    make_chitin_segment(f"Leg_Hind_Femur_{suf}", p_hip, p_knee, 0.048, 0.054, 0.038, is_sleeve=True)
+    make_chitin_segment(f"Leg_Hind_Tibia_{suf}", p_knee, p_ankle, 0.038, 0.034, 0.024, is_sleeve=True)
+    make_chitin_segment(f"Leg_Hind_Foot_{suf}", p_ankle, p_toe1, 0.024, 0.022, 0.016)
+    make_foot_toe_pad(f"Leg_Hind_Toe1_{suf}", p_toe1, 0.024)
+    make_foot_toe_pad(f"Leg_Hind_Toe2_{suf}", p_toe2, 0.020)
 
 # -----------------------------------------------------------------------------
 # 10. Studio Ground Plane (Large Dark Reflective Mirrored Floor)
@@ -819,9 +803,9 @@ scene.camera = cam_obj
 views = [
     (
         "worker_front.png",
-        Vector((0.0, -4.2, 1.15)),
+        Vector((0.0, -4.7, 1.25)),
         Euler((math.radians(88), 0, 0), 'XYZ'),
-        65.0,
+        52.0,
         "Front Authentic Heroic Character Stance"
     ),
     (
@@ -861,7 +845,16 @@ for filename, pos, rot, lens, desc in views:
 # 13. GLTF 2.0 Binary Export (worker_ant.glb)
 # -----------------------------------------------------------------------------
 glb_path = os.path.join(web_dir, "worker_ant.glb")
-print(f"Exporting Worker Ant Authentic 3D GLB to: {glb_path}...")
+# Ensure 100% of mesh objects in Worker_Ant_Authentic collection have valid UV maps
+for obj in worker_col.objects:
+    if obj.type == 'MESH' and len(obj.data.uv_layers) == 0:
+        bpy.context.view_layer.objects.active = obj
+        obj.select_set(True)
+        bpy.ops.object.mode_set(mode='EDIT')
+        bpy.ops.mesh.select_all(action='SELECT')
+        bpy.ops.uv.smart_project(angle_limit=66.0, island_margin=0.02)
+        bpy.ops.object.mode_set(mode='OBJECT')
+        obj.select_set(False)
 
 bpy.ops.object.select_all(action='DESELECT')
 for obj in worker_col.objects:

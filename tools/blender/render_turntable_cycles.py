@@ -37,14 +37,14 @@ scene.render.resolution_y = 800
 cam_obj = scene.camera
 if not cam_obj:
     cam_data = bpy.data.cameras.new("TurntableCam")
-    cam_data.lens = 65.0
     cam_obj = bpy.data.objects.new("TurntableCam", cam_data)
     bpy.context.scene.collection.objects.link(cam_obj)
     scene.camera = cam_obj
 
-cam_distance = 4.6
+# Always set camera lens to 52.0 mm (NOT the 85mm telephoto from stills!)
+cam_obj.data.lens = 52.0
+cam_distance = 4.7
 cam_height = 1.25
-cam_target_z = 1.10
 
 # 3. Create Turntable Empty to rotate ant collection
 ant_col = bpy.data.collections.get("Worker_Ant_Authentic")

@@ -3,9 +3,12 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
   <title>Ants! 3D Character Studio - Worker Ant (Caste #1)</title>
   <link rel="icon" type="image/png" href="../favicon.png">
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="style.css?v=3030">
   <style>
     /* View Mode Tabs */
     .view-modes-bar {
@@ -249,43 +252,52 @@
   <div class="ui-overlay">
     <!-- Header -->
     <header class="header-bar">
-      <div class="brand-badge">
-        <h1>WORKER ANT (CASTE #1)</h1>
-        <span class="badge-review">In User Review</span>
+      <div class="header-top-row">
+        <button id="btn-caste-toggle" class="icon-btn" aria-label="Toggle Caste Menu" title="Caste Pipeline">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
+        </button>
+        <div class="brand-badge">
+          <h1>WORKER ANT (CASTE #1)</h1>
+          <span class="badge-review">In User Review</span>
+        </div>
+
+        <div class="header-actions">
+          <!-- Native Mac Viewers -->
+          <a href="worker_ant.usdz" download class="native-launch-pill desktop-only" title="Inspect natively in Apple macOS QuickLook (RealityKit Metal PBR)">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+            QuickLook
+          </a>
+          <button id="btn-open-blender" class="native-launch-pill desktop-only" title="Show command to open in Blender 4.3">
+            🖥️ Blender
+          </button>
+          <button id="btn-master-render" class="icon-btn highlight" title="View High-Res Raytraced Multi-Angle Stills">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+            Gallery
+          </button>
+        </div>
       </div>
 
       <!-- View Mode Selector -->
       <div class="view-modes-bar">
-        <button id="mode-turntable" class="view-mode-btn active" title="Interactive 360° Path-Traced Cycles View (Full Quality)">
-          ✨ 360° Ray-Traced (Cycles)
+        <button id="mode-turntable" class="view-mode-btn active" title="Interactive 360° Path-Traced Cycles View">
+          ✨ 360° View
         </button>
         <button id="mode-compare" class="view-mode-btn" title="Side-by-side comparison with original master artwork">
-          ⚖️ Compare Reference
+          ⚖️ Compare
         </button>
         <button id="mode-webgl" class="view-mode-btn" title="Interactive real-time 3D polygonal mesh">
-          🎮 Real-Time 3D (WebGL)
-        </button>
-      </div>
-
-      <div class="header-actions">
-        <!-- Native Mac Viewers -->
-        <a href="worker_ant.usdz" download class="native-launch-pill" title="Inspect natively in Apple macOS QuickLook (RealityKit Metal PBR)">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
-          QuickLook (USDZ)
-        </a>
-        <button id="btn-open-blender" class="native-launch-pill" title="Show command to open in Blender 4.3">
-          🖥️ Open in Blender
-        </button>
-        <button id="btn-master-render" class="icon-btn highlight" title="View High-Res Raytraced Multi-Angle Stills">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
-          Gallery
+          🎮 3D WebGL
         </button>
       </div>
     </header>
 
-    <!-- Caste Progress Sidebar -->
-    <nav class="caste-nav">
-      <div class="caste-nav-title">Caste Pipeline</div>
+    <!-- Caste Progress Sidebar (Slide-out drawer on mobile) -->
+    <div id="caste-nav-backdrop" class="caste-nav-backdrop"></div>
+    <nav class="caste-nav" id="caste-nav">
+      <div class="caste-nav-close">
+        <span class="caste-nav-title" style="margin: 0; border: none; padding: 0;">Caste Pipeline</span>
+        <button id="btn-close-caste-nav" class="icon-btn" style="padding: 4px 8px; border: none; background: transparent; font-size: 16px; cursor: pointer;">✕</button>
+      </div>
       <button class="caste-btn active" data-caste="worker">
         <span class="dot" style="color: #2ecc71;"></span> 1. Worker (Under Review)
       </button>
@@ -426,6 +438,6 @@
   <script src="libs/three.min.js"></script>
   <script src="libs/OrbitControls.js"></script>
   <script src="libs/GLTFLoader.js"></script>
-  <script src="viewer.js?v=3010"></script>
+  <script src="viewer.js?v=3031"></script>
 </body>
 </html>

@@ -23,6 +23,7 @@
   let currentMode = 'turntable'; // 'turntable', 'compare', 'webgl'
 
   // --- 1. 360° Cycles Ray-Traced Turntable Controller ---
+  const BUILD_VERSION = Date.now();
   const TOTAL_FRAMES = 36;
   const frames = [];
   let currentFrame = 0;
@@ -33,11 +34,11 @@
   let autoSpinInterval = null;
 
   function initTurntable() {
-    // Preload all 36 ray-traced frames
+    // Preload all 36 ray-traced frames with cache-busting timestamp
     for (let i = 0; i < TOTAL_FRAMES; i++) {
       const img = new Image();
       const pad = i.toString().padStart(2, '0');
-      img.src = `turntable/frame_${pad}.png`;
+      img.src = `turntable/frame_${pad}.png?v=${BUILD_VERSION}`;
       frames.push(img);
     }
 
@@ -96,7 +97,11 @@
   function updateTurntableDisplay(frameIdx) {
     currentFrame = frameIdx;
     const pad = frameIdx.toString().padStart(2, '0');
-    turntableImg.src = `turntable/frame_${pad}.png`;
+    if (frames[frameIdx] && frames[frameIdx].src) {
+      turntableImg.src = frames[frameIdx].src;
+    } else {
+      turntableImg.src = `turntable/frame_${pad}.png?v=${BUILD_VERSION}`;
+    }
 
     const deg = Math.round(frameIdx * (360 / TOTAL_FRAMES));
     let label = `${deg}° Orbit`;
@@ -250,6 +255,24 @@
     antGroup = new THREE.Group();
     scene.add(antGroup);
 
+    // Explicitly load textures to guarantee WebGL PBR surface texturing
+    const textureLoader = new THREE.TextureLoader();
+    const chitinMap = textureLoader.load('chitin_pbr.png?v=' + Date.now());
+    chitinMap.flipY = false;
+    chitinMap.encoding = THREE.sRGBEncoding;
+
+    const eyeMap = textureLoader.load('eye_pbr.png?v=' + Date.now());
+    eyeMap.flipY = false;
+    eyeMap.encoding = THREE.sRGBEncoding;
+
+    const mandibleMap = textureLoader.load('mandible_pbr.png?v=' + Date.now());
+    mandibleMap.flipY = false;
+    mandibleMap.encoding = THREE.sRGBEncoding;
+
+    const limbsMap = textureLoader.load('limbs_pbr.png?v=' + Date.now());
+    limbsMap.flipY = false;
+    limbsMap.encoding = THREE.sRGBEncoding;
+
     const gltfLoader = new THREE.GLTFLoader();
     gltfLoader.load(
       'worker_ant.glb?v=' + Date.now(),
@@ -262,6 +285,43 @@
             if (child.material) {
               child.material.wireframe = isWireframe;
               child.material.side = THREE.DoubleSide;
+
+              const matName = child.material.name || '';
+              if (matName.includes('Chitin')) {
+                child.material.map = chitinMap;
+                child.material.color.setHex(0xffffff);
+                child.material.roughness = 0.50;
+                child.material.metalness = 0.05;
+                child.material.needsUpdate = true;
+              } else if (matName.includes('Eye')) {
+                child.material.map = eyeMap;
+                child.material.color.setHex(0xffffff);
+                child.material.roughness = 0.08;
+                child.material.metalness = 0.0;
+                child.material.needsUpdate = true;
+              } else if (matName.includes('Mandible')) {
+                child.material.map = mandibleMap;
+                child.material.color.setHex(0xffffff);
+                child.material.roughness = 0.38;
+                child.material.metalness = 0.0;
+                child.material.needsUpdate = true;
+              } else if (matName.includes('Limbs')) {
+                child.material.map = limbsMap;
+                child.material.color.setHex(0xffffff);
+                child.material.roughness = 0.44;
+                child.material.metalness = 0.05;
+                child.material.needsUpdate = true;
+              } else if (matName.includes('Antenna')) {
+                child.material.color.setRGB(0.18, 0.12, 0.09);
+                child.material.roughness = 0.38;
+                child.material.metalness = 0.05;
+                child.material.needsUpdate = true;
+              } else if (matName.includes('Teeth')) {
+                child.material.color.setRGB(0.94, 0.95, 0.88);
+                child.material.roughness = 0.25;
+                child.material.metalness = 0.0;
+                child.material.needsUpdate = true;
+              }
             }
           }
         });
@@ -338,6 +398,31 @@
     document.getElementById('btn-close-blender-modal')?.addEventListener('click', () => {
       blenderModal.classList.add('hidden');
     });
+
+    // Mobile Caste Drawer
+    const btnCasteToggle = document.getElementById('btn-caste-toggle');
+    const btnCloseCasteNav = document.getElementById('btn-close-caste-nav');
+    const casteNavBackdrop = document.getElementById('caste-nav-backdrop');
+    const casteNav = document.getElementById('caste-nav');
+
+    if (btnCasteToggle && casteNav) {
+      btnCasteToggle.addEventListener('click', () => {
+        casteNav.classList.add('open');
+        casteNavBackdrop?.classList.add('open');
+      });
+    }
+    if (btnCloseCasteNav && casteNav) {
+      btnCloseCasteNav.addEventListener('click', () => {
+        casteNav.classList.remove('open');
+        casteNavBackdrop?.classList.remove('open');
+      });
+    }
+    if (casteNavBackdrop && casteNav) {
+      casteNavBackdrop.addEventListener('click', () => {
+        casteNav.classList.remove('open');
+        casteNavBackdrop.classList.remove('open');
+      });
+    }
 
     // Render Gallery Modal
     const renderModal = document.getElementById('render-modal');
