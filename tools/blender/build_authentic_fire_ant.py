@@ -276,13 +276,13 @@ def create_materials():
     bsdf_ra = nodes_ra.new('ShaderNodeBsdfPrincipled')
     links_ra.new(bsdf_ra.outputs['BSDF'], out_ra.inputs['Surface'])
 
-    # Deep vibrant fire-engine scarlet red (controlled linear value to prevent AgX blowout)
-    bsdf_ra.inputs['Base Color'].default_value = (0.50, 0.005, 0.005, 1.0)
-    bsdf_ra.inputs['Roughness'].default_value = 0.42
-    bsdf_ra.inputs['Coat Weight'].default_value = 0.0
-    bsdf_ra.inputs['Coat Roughness'].default_value = 0.50
+    # Deep vibrant fire-engine scarlet red lacquer
+    bsdf_ra.inputs['Base Color'].default_value = (0.65, 0.015, 0.012, 1.0)
+    bsdf_ra.inputs['Roughness'].default_value = 0.32
+    bsdf_ra.inputs['Coat Weight'].default_value = 0.20
+    bsdf_ra.inputs['Coat Roughness'].default_value = 0.15
     if 'Specular IOR Level' in bsdf_ra.inputs:
-        bsdf_ra.inputs['Specular IOR Level'].default_value = 0.12
+        bsdf_ra.inputs['Specular IOR Level'].default_value = 0.50
 
     # J. Helmet Trim / Chin Strap Material (Black leather)
     mat_trim = bpy.data.materials.new("M_Fire_Trim")
@@ -441,6 +441,15 @@ for v in bm_head.verts:
         y *= (1.0 - 0.35 * t_neck)
 
     v.co = Vector((x, y, z))
+
+# UV Mapping for Cranium (Continuous spherical unwrapping to eliminate rectangular seams)
+uv_layer = bm_head.loops.layers.uv.new("UVMap")
+for face in bm_head.faces:
+    for loop in face.loops:
+        norm = loop.vert.co.normalized()
+        u = math.atan2(norm.x, -norm.y) / (2.0 * math.pi) + 0.5
+        v_coord = norm.z * 0.5 + 0.5
+        loop[uv_layer].uv = (u, v_coord)
 
 head_mesh = bpy.data.meshes.new("HeadMesh")
 bm_head.to_mesh(head_mesh)
@@ -878,18 +887,68 @@ sol_sh.thickness = 0.018
 reg(shield_obj)
 
 # E. Physical 3D Embossed Bold Red Letter 'A' Mounted on Shield Face
-# Authentic bold typography with beveled edges and deep saturated scarlet red
-font_curve = bpy.data.curves.new(name="Badge_Red_A_Curve", type='FONT')
-font_curve.body = "A"
-font_curve.offset = 0.010 # Chunky bold fire brigade lettering
-font_curve.extrude = 0.018
-font_curve.bevel_depth = 0.003
-font_curve.bevel_resolution = 3
-font_curve.align_x = 'CENTER'
-font_curve.align_y = 'CENTER'
-font_curve.size = 0.195
+# Authentic firefighter collegiate block typography with open triangular aperture and lower arch
+curve_data = bpy.data.curves.new(name="Badge_Red_A_Curve", type='CURVE')
+curve_data.dimensions = '2D'
+curve_data.fill_mode = 'BOTH'
+curve_data.extrude = 0.016
+curve_data.bevel_depth = 0.0025
+curve_data.bevel_resolution = 2
 
-a_obj = bpy.data.objects.new("Badge_Red_A", font_curve)
+# Outer contour points (Varsity/Firefighter athletic block 'A')
+# Symmetrical about X=0, scaled to ~0.195 height
+outer_pts = [
+    # Flat top apex
+    (-0.028,  0.098),
+    ( 0.028,  0.098),
+    # Right outer slant down to foot
+    ( 0.084, -0.068),
+    # Right foot outer spur
+    ( 0.094, -0.068),
+    # Right foot bottom-right corner
+    ( 0.094, -0.095),
+    # Right foot bottom-left corner
+    ( 0.044, -0.095),
+    # Right foot inner spur
+    ( 0.044, -0.068),
+    # Right inner slant up to bottom of crossbar
+    ( 0.025, -0.024),
+    # Bottom of crossbar
+    (-0.025, -0.024),
+    # Left inner slant down to left foot
+    (-0.044, -0.068),
+    # Left foot inner spur
+    (-0.044, -0.095),
+    # Left foot bottom-left corner
+    (-0.094, -0.095),
+    # Left foot outer spur
+    (-0.094, -0.068),
+    # Left outer slant up to top apex
+    (-0.084, -0.068),
+]
+
+# Inner triangular aperture (hole above the crossbar)
+inner_pts = [
+    ( 0.000,  0.066),  # Top inner apex
+    (-0.025,  0.008),  # Bottom-left corner of hole (top of crossbar)
+    ( 0.025,  0.008),  # Bottom-right corner of hole (top of crossbar)
+]
+
+# Add outer spline
+spline_outer = curve_data.splines.new('POLY')
+spline_outer.points.add(len(outer_pts) - 1)
+for i, pt in enumerate(outer_pts):
+    spline_outer.points[i].co = (pt[0], pt[1], 0.0, 1.0)
+spline_outer.use_cyclic_u = True
+
+# Add inner spline (hole)
+spline_inner = curve_data.splines.new('POLY')
+spline_inner.points.add(len(inner_pts) - 1)
+for i, pt in enumerate(inner_pts):
+    spline_inner.points[i].co = (pt[0], pt[1], 0.0, 1.0)
+spline_inner.use_cyclic_u = True
+
+a_obj = bpy.data.objects.new("Badge_Red_A", curve_data)
 a_obj.location = (0.0, -0.408, 1.882)
 a_obj.rotation_euler = Euler((math.radians(74), 0, 0), 'XYZ')
 bpy.context.scene.collection.objects.link(a_obj)
@@ -1077,16 +1136,17 @@ def make_foot_toe_pad(name, location, radius, material=None):
 # 10. Seamless Articulated Petiole Waist & Suspended Gaster Abdomen
 # -----------------------------------------------------------------------------
 p_pet_start = Vector((0, 0.08, 0.94))  # Anchored deep inside Thorax_Metanotum
-p_pet_end   = Vector((0, 0.22, 0.78))  # Embedded deep inside anterior Gaster socket
+p_pet_end   = Vector((0, 0.20, 0.80))  # Embedded deep inside anterior Gaster socket
 
-make_joint_socket("Petiole_Thorax_Socket", p_pet_start, 0.052, material=mat_chitin)
-make_chitin_segment("Petiole", p_pet_start, p_pet_end, 0.048, 0.044, 0.052, is_sleeve=True, material=mat_chitin)
-make_joint_socket("Petiole_Gaster_Socket", p_pet_end, 0.056, material=mat_chitin)
+# Substantially enlarged muscular petiole waist (>2.2x thicker)
+make_joint_socket("Petiole_Thorax_Socket", p_pet_start, 0.102, material=mat_chitin)
+make_chitin_segment("Petiole", p_pet_start, p_pet_end, 0.100, 0.096, 0.108, is_sleeve=True, material=mat_chitin)
+make_joint_socket("Petiole_Gaster_Socket", p_pet_end, 0.110, material=mat_chitin)
 
-# Gaster: Suspended Plump Egg Abdomen at 20°
+# Gaster: Suspended Plump Egg Abdomen at 20° positioned snugly against thorax
 bpy.ops.mesh.primitive_uv_sphere_add(
     segments=36, ring_count=24, radius=1.0,
-    location=(0, 0.38, 0.68),
+    location=(0, 0.30, 0.72),
     rotation=(math.radians(20), 0, 0)
 )
 gaster_obj = bpy.context.active_object
@@ -1102,9 +1162,10 @@ for v in gaster_obj.data.vertices:
         x *= taper
         z *= (taper * 0.92)
     else:
+        # Smooth gentle anterior taper eliminating pinched crease
         t_ant = min(1.0, (-y) / 0.32)
-        x *= (1.0 - 0.40 * t_ant)
-        z *= (1.0 - 0.40 * t_ant)
+        x *= (1.0 - 0.10 * t_ant)
+        z *= (1.0 - 0.10 * t_ant)
 
     groove = math.sin((y + 0.32) * 18.0) * 0.006
     x += groove * (x / 0.24)

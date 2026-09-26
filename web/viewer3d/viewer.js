@@ -65,10 +65,39 @@
         { id: 'closeup', name: 'Face & Helmet Macro Close-up', file: 'fire_face_closeup.png', desc: "Macro close-up of the crisp 3D beveled red letter 'A' badge, golden shield plaque, large amber cartoon eyes, and bulldog cheeks." },
         { id: 'gameplay', name: '🎮 1998 RTS Gameplay Angle', file: 'fire_gameplay_angle.png', desc: 'Authentic 1998 classic RTS top-down south-angled gameplay camera view with oversized golden helmet signature silhouette.' }
       ]
+    },
+    combat: {
+      id: 'combat',
+      name: 'Combat Ant (Caste #3)',
+      title: 'COMBAT ANT (CASTE #3)',
+      statusText: 'In User Review',
+      glb: 'combat_ant.glb',
+      usdz: 'combat_ant.usdz',
+      turntableDir: 'turntable_combat',
+      turntableAlt: '360 Ray-Traced Combat Ant Turntable',
+      compareRef: 'combat_ant_2d_reference_sheet.png',
+      compare3D: 'combat_front.png',
+      cardTitle: 'Combat Ant (Caste #3)',
+      cardDesc: "Caste #3: Heavyweight Melee Brawler. Features crossed golden ammunition bandolier harness over broad shoulders with 'X' cross on back, vibrant red warrior bandana on right bicep, brawler posture, thick muscular waist, and heavy caliper pincer jaws.",
+      traits: [
+        "Crossed Golden Cartridge Bandolier",
+        "Vibrant Red Warrior Bicep Bandana",
+        "Heavy Gorilla / Brawler Build",
+        "Heavy Caliper Pincer Claws",
+        "Substantially Thickened Petiole Waist",
+        "Canonical Moss-Green Cuticle"
+      ],
+      gameplayStill: 'combat_gameplay_angle.png',
+      stills: [
+        { id: 'front', name: 'Front Heroic Brawler Stance', file: 'combat_front.png', desc: "Front beauty render showcasing the crossed golden ammunition bandolier, red warrior bicep bandana, and broad shoulders." },
+        { id: 'perspective', name: '3/4 Depth Perspective', file: 'combat_perspective.png', desc: "Dynamic 3/4 perspective showing the ammunition shells, bicep knot tails, and heavy musculature." },
+        { id: 'side', name: 'Profile View', file: 'combat_side.png', desc: "Side profile view highlighting the solid petiole waist and snug abdomen bridge." },
+        { id: 'gameplay', name: '🎮 1998 RTS Gameplay Angle', file: 'combat_gameplay_angle.png', desc: "Authentic 1998 classic RTS top-down south-angled gameplay camera view." }
+      ]
     }
   };
 
-  let currentCaste = 'fire'; // Default to newest Fire Ant
+  let currentCaste = 'combat'; // Default to Combat Ant
 
   // --- DOM Elements ---
   const container = document.getElementById('canvas-container');
@@ -791,8 +820,8 @@
     setupUI();
     updateGalleryModal();
 
-    // Default to Fire Ant as active review subject
-    switchCaste('fire');
+    // Default to Combat Ant as active review subject
+    switchCaste('combat');
 
     // Hide loader
     const loader = document.getElementById('loader');

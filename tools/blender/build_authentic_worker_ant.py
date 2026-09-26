@@ -754,16 +754,17 @@ for name, loc, scale in thorax_plates:
 # -----------------------------------------------------------------------------
 # Articulated Petiole Waist: Solid, gap-free bridge between rear Metanotum & Gaster
 p_pet_start = Vector((0, 0.08, 0.94))  # Anchored firmly inside Thorax_Metanotum
-p_pet_end   = Vector((0, 0.22, 0.78))  # Embedded deep inside anterior Gaster socket
+p_pet_end   = Vector((0, 0.20, 0.80))  # Embedded deep inside anterior Gaster socket
 
-make_joint_socket("Petiole_Thorax_Socket", p_pet_start, 0.052, material=mat_chitin)
-make_chitin_segment("Petiole", p_pet_start, p_pet_end, 0.048, 0.044, 0.052, is_sleeve=True, material=mat_chitin)
-make_joint_socket("Petiole_Gaster_Socket", p_pet_end, 0.056, material=mat_chitin)
+# Substantially enlarged muscular petiole waist (>2.2x thicker)
+make_joint_socket("Petiole_Thorax_Socket", p_pet_start, 0.102, material=mat_chitin)
+make_chitin_segment("Petiole", p_pet_start, p_pet_end, 0.100, 0.096, 0.108, is_sleeve=True, material=mat_chitin)
+make_joint_socket("Petiole_Gaster_Socket", p_pet_end, 0.110, material=mat_chitin)
 
-# Gaster: Suspended Plump Egg Abdomen at 20° (Anterior pole encompasses p_pet_end)
+# Gaster: Suspended Plump Egg Abdomen at 20° positioned snugly against thorax
 bpy.ops.mesh.primitive_uv_sphere_add(
     segments=36, ring_count=24, radius=1.0,
-    location=(0, 0.38, 0.68),
+    location=(0, 0.30, 0.72),
     rotation=(math.radians(20), 0, 0)
 )
 gaster_obj = bpy.context.active_object
@@ -780,10 +781,10 @@ for v in gaster_obj.data.vertices:
         x *= taper
         z *= (taper * 0.92)
     else:
-        # Anterior conical neck tapering into petiole socket
+        # Smooth gentle anterior taper eliminating pinched crease
         t_ant = min(1.0, (-y) / 0.32)
-        x *= (1.0 - 0.40 * t_ant)
-        z *= (1.0 - 0.40 * t_ant)
+        x *= (1.0 - 0.10 * t_ant)
+        z *= (1.0 - 0.10 * t_ant)
 
     # Subtle sternite banding grooves
     groove = math.sin((y + 0.32) * 18.0) * 0.006

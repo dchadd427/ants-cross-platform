@@ -259,14 +259,15 @@
         <div class="brand-badge">
           <select id="caste-select" class="caste-dropdown-pill" aria-label="Select Character Caste">
             <option value="worker">Worker Ant (Caste #1)</option>
-            <option value="fire" selected>Fire Ant (Caste #2)</option>
+            <option value="fire">Fire Ant (Caste #2)</option>
+            <option value="combat" selected>Combat Ant (Caste #3)</option>
           </select>
           <span id="caste-status-badge" class="badge-review">In User Review</span>
         </div>
 
         <div class="header-actions">
           <!-- Native Mac Viewers -->
-          <a id="quicklook-link" href="fire_ant.usdz" download class="native-launch-pill desktop-only" title="Inspect natively in Apple macOS QuickLook (RealityKit Metal PBR)">
+          <a id="quicklook-link" href="combat_ant.usdz" download class="native-launch-pill desktop-only" title="Inspect natively in Apple macOS QuickLook (RealityKit Metal PBR)">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
             QuickLook
           </a>
@@ -304,12 +305,11 @@
       <button class="caste-btn" data-caste="worker">
         <span class="dot" style="color: #2ecc71;"></span> 1. Worker (Reference)
       </button>
-      <button class="caste-btn active" data-caste="fire">
-        <span class="dot" style="color: #ffaa33;"></span> 2. Fire Ant (Under Review)
+      <button class="caste-btn" data-caste="fire">
+        <span class="dot" style="color: #ffaa33;"></span> 2. Fire Ant (Approved)
       </button>
-      <button class="caste-btn locked" data-caste="combat" title="Locked until Fire Ant is approved">
-        <span class="dot" style="color: #e63946;"></span> 3. Combat Ant
-        <span class="lock-icon">🔒</span>
+      <button class="caste-btn active" data-caste="combat">
+        <span class="dot" style="color: #e63946;"></span> 3. Combat Ant (Under Review)
       </button>
       <button class="caste-btn locked" data-caste="swimmer" title="Locked until previous ants are approved">
         <span class="dot" style="color: #00d2d3;"></span> 4. Swimmer Ant
