@@ -38,6 +38,8 @@ cmake-build-*/
 !web/favicon.png
 !web/viewer3d/*.png
 !web/viewer3d/turntable/*.png
+!web/viewer3d/turntable_fire/*.png
+!web/viewer3d/textures_fire/*.png
 !asset_catalog/sprites/
 !asset_catalog/sprites/**
 *.blend1

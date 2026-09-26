@@ -6,7 +6,7 @@
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
-  <title>Ants! 3D Character Studio - Worker Ant (Caste #1)</title>
+  <title>Ants! 3D Character Studio - Worker Ant & Fire Ant (Caste #2)</title>
   <link rel="icon" type="image/png" href="../favicon.png">
   <link rel="stylesheet" href="style.css?v=3030">
   <style>
@@ -257,13 +257,16 @@
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
         </button>
         <div class="brand-badge">
-          <h1>WORKER ANT (CASTE #1)</h1>
-          <span class="badge-review">In User Review</span>
+          <select id="caste-select" class="caste-dropdown-pill" aria-label="Select Character Caste">
+            <option value="worker">Worker Ant (Caste #1)</option>
+            <option value="fire" selected>Fire Ant (Caste #2)</option>
+          </select>
+          <span id="caste-status-badge" class="badge-review">In User Review</span>
         </div>
 
         <div class="header-actions">
           <!-- Native Mac Viewers -->
-          <a href="worker_ant.usdz" download class="native-launch-pill desktop-only" title="Inspect natively in Apple macOS QuickLook (RealityKit Metal PBR)">
+          <a id="quicklook-link" href="fire_ant.usdz" download class="native-launch-pill desktop-only" title="Inspect natively in Apple macOS QuickLook (RealityKit Metal PBR)">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
             QuickLook
           </a>
@@ -298,15 +301,14 @@
         <span class="caste-nav-title" style="margin: 0; border: none; padding: 0;">Caste Pipeline</span>
         <button id="btn-close-caste-nav" class="icon-btn" style="padding: 4px 8px; border: none; background: transparent; font-size: 16px; cursor: pointer;">✕</button>
       </div>
-      <button class="caste-btn active" data-caste="worker">
-        <span class="dot" style="color: #2ecc71;"></span> 1. Worker (Under Review)
+      <button class="caste-btn" data-caste="worker">
+        <span class="dot" style="color: #2ecc71;"></span> 1. Worker (Reference)
       </button>
-      <button class="caste-btn locked" data-caste="combat" title="Locked until Worker Ant is approved">
-        <span class="dot" style="color: #e63946;"></span> 2. Combat Ant
-        <span class="lock-icon">🔒</span>
+      <button class="caste-btn active" data-caste="fire">
+        <span class="dot" style="color: #ffaa33;"></span> 2. Fire Ant (Under Review)
       </button>
-      <button class="caste-btn locked" data-caste="fire" title="Locked until previous ants are approved">
-        <span class="dot" style="color: #f39c12;"></span> 3. Fire Ant
+      <button class="caste-btn locked" data-caste="combat" title="Locked until Fire Ant is approved">
+        <span class="dot" style="color: #e63946;"></span> 3. Combat Ant
         <span class="lock-icon">🔒</span>
       </button>
       <button class="caste-btn locked" data-caste="swimmer" title="Locked until previous ants are approved">
@@ -362,10 +364,14 @@
             <option value="studio">Pure Neutral</option>
           </select>
         </div>
-        <div class="dock-divider"></div>
-        <button id="btn-walk-anim" class="toggle-btn active" style="border-color: #2ecc71; color: #2ecc71; font-weight: 600;" title="Toggle authentic insect tripod walk cycle animation">
-          🚶 Walk Animation
-        </button>
+        <div class="control-group">
+          <label for="select-anim">Anim:</label>
+          <select id="select-anim" class="pill-select">
+            <option value="Walk" selected>🚶 Walk Loop</option>
+            <option value="Idle">🧘 Idle Stance</option>
+            <option value="Pause">⏸️ Freeze Pose</option>
+          </select>
+        </div>
         <button id="btn-turntable" class="toggle-btn" title="Toggle 360 camera auto-orbit">
           Orbit
         </button>
@@ -427,6 +433,9 @@
       <div class="modal-body" style="padding: 24px; color: #cbd5e1; line-height: 1.6;">
         <p>You can inspect and orbit around the authentic 3D model with real-time Cycles GPU ray tracing directly in <strong>Blender 4.3</strong> on your Mac!</p>
         <div style="background: rgba(0,0,0,0.5); border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; padding: 12px; font-family: monospace; color: #ffaa33; margin: 16px 0; font-size: 13px;">
+          # Fire Ant (Caste #2):<br>
+          open tools/blender/fire_ant_authentic.blend<br><br>
+          # Worker Ant (Caste #1):<br>
           open tools/blender/worker_ant_authentic.blend
         </div>
         <p style="font-size: 13px; color: #94a3b8;">In Blender, press <kbd style="background: #334155; padding: 2px 6px; border-radius: 4px; color: #fff;">Z</kbd> and select <strong>Rendered</strong> to view full ray-traced lighting, materials, and subsurface scattering in real time.</p>

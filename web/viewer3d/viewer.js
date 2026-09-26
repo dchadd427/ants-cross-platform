@@ -1,12 +1,76 @@
 // ============================================================================
-// Ants! 3D Character Studio - Worker Ant (Caste #1)
+// Ants! 3D Character Studio - Multi-Caste Viewer (Worker Ant & Fire Ant)
 // Interactive 360° Cycles Ray-Traced Turntable, Compare Mode & WebGL Engine
 // ============================================================================
 
 (function () {
   'use strict';
 
-  // --- State & DOM Elements ---
+  // --- Caste Configurations ---
+  const CASTES = {
+    worker: {
+      id: 'worker',
+      name: 'Worker Ant (Caste #1)',
+      title: 'WORKER ANT (CASTE #1)',
+      statusText: 'Approved (Reference)',
+      glb: 'worker_ant.glb',
+      usdz: 'worker_ant.usdz',
+      turntableDir: 'turntable',
+      turntableAlt: '360 Ray-Traced Worker Ant Turntable',
+      compareRef: 'reference_master.jpg',
+      compare3D: 'worker_front.png',
+      cardTitle: 'Worker Ant (Caste #1)',
+      cardDesc: 'Foundational 3D model for all ant castes. Features huge innocent cartoon eyes with amber sunburst, prominent bulldog pincer mandibles with interlocking fangs, curved antennae, tall heroic posture, gap-free petiole waist, and mottled terracotta chitin.',
+      traits: [
+        'Innocent Compound Eyes',
+        'Bulldog Mandibles',
+        'Curved Antennae',
+        'Continuous Petiole Waist',
+        'Heroic Stature',
+        'Mottled Terracotta Chitin'
+      ],
+      gameplayStill: 'worker_gameplay_angle.png',
+      stills: [
+        { id: 'front', name: 'Front Heroic Stance', file: 'worker_front.png', desc: 'High-resolution Cycles path-traced beauty render showcasing the heart-shaped cranium, cartoon eyes, bulldog mandibles, and articulated legs.' },
+        { id: 'perspective', name: '3/4 Depth Perspective', file: 'worker_perspective.png', desc: 'Dynamic 3/4 angle showcasing leg articulation and depth proportions.' },
+        { id: 'closeup', name: 'Face & Muzzle Macro Close-up', file: 'worker_face_closeup.png', desc: 'Extreme macro close-up of the forward-facing binocular cartoon eyes and serrated teeth.' },
+        { id: 'gameplay', name: '🎮 1998 RTS Gameplay Angle', file: 'worker_gameplay_angle.png', desc: 'Authentic 1998 classic RTS top-down south-angled gameplay camera view.' }
+      ]
+    },
+    fire: {
+      id: 'fire',
+      name: 'Fire Ant (Caste #2)',
+      title: 'FIRE ANT (CASTE #2)',
+      statusText: 'In User Review',
+      glb: 'fire_ant.glb',
+      usdz: 'fire_ant.usdz',
+      turntableDir: 'turntable_fire',
+      turntableAlt: '360 Ray-Traced Fire Ant Turntable',
+      compareRef: 'fire_ant_master_reference.jpg',
+      compare3D: 'fire_front.png',
+      cardTitle: 'Fire Ant (Caste #2)',
+      cardDesc: "Caste #2: Fire Chief Mason. Wears an oversized Cairns-style golden helmet ('child wearing an adult's hat') with flared duckbill brim and central comb, mounted with a bold scarlet red 'A' shield badge. Features slate-violet organic cranium, alert empty hands framing the chest, continuous gap-free petiole waist, and compact insect stance.",
+      traits: [
+        "Oversized Cairns Fire Chief Helmet ('Child in Adult Hat')",
+        "Bold Scarlet Red 'A' Shield Badge",
+        "Zero Antennae Helmet Enclosure",
+        "Slate-Violet Organic Cranium",
+        "Alert Empty Hands Framing Chest",
+        "Continuous Gap-Free Petiole Waist"
+      ],
+      gameplayStill: 'fire_gameplay_angle.png',
+      stills: [
+        { id: 'front', name: 'Front Heroic Stance', file: 'fire_front.png', desc: "Front view showcasing the oversized Cairns helmet, bold scarlet red 'A' badge, slate-violet head, and alert empty hands framing the chest." },
+        { id: 'perspective', name: '3/4 Depth Perspective', file: 'fire_perspective.png', desc: 'Dynamic perspective showcasing the flared duckbill brim dipping low over the neck, 4-legged compact stance, and seamless petiole waist.' },
+        { id: 'closeup', name: 'Face & Helmet Macro Close-up', file: 'fire_face_closeup.png', desc: "Macro close-up of the crisp 3D beveled red letter 'A' badge, golden shield plaque, large amber cartoon eyes, and bulldog cheeks." },
+        { id: 'gameplay', name: '🎮 1998 RTS Gameplay Angle', file: 'fire_gameplay_angle.png', desc: 'Authentic 1998 classic RTS top-down south-angled gameplay camera view with oversized golden helmet signature silhouette.' }
+      ]
+    }
+  };
+
+  let currentCaste = 'fire'; // Default to newest Fire Ant
+
+  // --- DOM Elements ---
   const container = document.getElementById('canvas-container');
   const turntableContainer = document.getElementById('turntable-container');
   const turntableImg = document.getElementById('turntable-img');
@@ -23,9 +87,8 @@
   let currentMode = 'turntable'; // 'turntable', 'compare', 'webgl'
 
   // --- 1. 360° Cycles Ray-Traced Turntable Controller ---
-  const BUILD_VERSION = Date.now();
   const TOTAL_FRAMES = 36;
-  const frames = [];
+  let frames = [];
   let currentFrame = 0;
   let isDragging = false;
   let startX = 0;
@@ -33,17 +96,21 @@
   let isAutoSpinning = true;
   let autoSpinInterval = null;
 
-  function initTurntable() {
-    // Preload all 36 ray-traced frames with cache-busting timestamp
+  function loadTurntableFrames() {
+    frames = [];
+    const cfg = CASTES[currentCaste];
+    const timestamp = Date.now();
     for (let i = 0; i < TOTAL_FRAMES; i++) {
       const img = new Image();
       const pad = i.toString().padStart(2, '0');
-      img.src = `turntable/frame_${pad}.png?v=${BUILD_VERSION}`;
+      img.src = `${cfg.turntableDir}/frame_${pad}.png?v=${timestamp}`;
       frames.push(img);
     }
-
-    // Set initial frame
     updateTurntableDisplay(0);
+  }
+
+  function initTurntable() {
+    loadTurntableFrames();
 
     // Mouse drag interaction
     turntableContainer.addEventListener('mousedown', (e) => {
@@ -56,7 +123,6 @@
     window.addEventListener('mousemove', (e) => {
       if (!isDragging) return;
       const dx = e.clientX - startX;
-      // Sensitivity: 12 pixels per frame
       const frameDelta = Math.round(dx / 12);
       let next = (startFrame - frameDelta) % TOTAL_FRAMES;
       if (next < 0) next += TOTAL_FRAMES;
@@ -90,163 +156,163 @@
       isDragging = false;
     });
 
-    // Start auto-spin initially
     startAutoSpin();
   }
 
   function updateTurntableDisplay(frameIdx) {
     currentFrame = frameIdx;
     const pad = frameIdx.toString().padStart(2, '0');
+    const cfg = CASTES[currentCaste];
     if (frames[frameIdx] && frames[frameIdx].src) {
       turntableImg.src = frames[frameIdx].src;
     } else {
-      turntableImg.src = `turntable/frame_${pad}.png?v=${BUILD_VERSION}`;
+      turntableImg.src = `${cfg.turntableDir}/frame_${pad}.png?v=${Date.now()}`;
     }
 
-    const deg = Math.round(frameIdx * (360 / TOTAL_FRAMES));
-    let label = `${deg}° Orbit`;
-    if (deg === 0) label = "0° Front Heroic Stance";
-    else if (deg === 40) label = "40° 3/4 Depth Perspective";
-    else if (deg === 90) label = "90° Side Profile";
-    else if (deg === 180) label = "180° Rear Back View";
-    else if (deg === 270) label = "270° Opposite Profile";
-
+    const angleDeg = Math.round(frameIdx * (360 / TOTAL_FRAMES));
     if (turntableAngleLabel) {
-      turntableAngleLabel.textContent = `${label} (Drag to Orbit 360°)`;
+      let desc = `${angleDeg}°`;
+      if (angleDeg === 0) desc += ' (Front View)';
+      else if (angleDeg === 40 || angleDeg === 50) desc += ' (3/4 Angle)';
+      else if (angleDeg === 90) desc += ' (Side Profile)';
+      else if (angleDeg === 180) desc += ' (Rear View)';
+      else if (angleDeg === 270) desc += ' (Side Profile)';
+      turntableAngleLabel.textContent = `${desc} — Drag to Orbit 360°`;
     }
   }
 
   function startAutoSpin() {
-    if (autoSpinInterval) clearInterval(autoSpinInterval);
     isAutoSpinning = true;
-    const btn = document.getElementById('btn-spin-auto');
-    if (btn) btn.classList.add('active');
-
+    const btnAuto = document.getElementById('btn-spin-auto');
+    if (btnAuto) {
+      btnAuto.classList.add('active');
+      btnAuto.textContent = 'Auto Spin: ON';
+    }
+    clearInterval(autoSpinInterval);
     autoSpinInterval = setInterval(() => {
       let next = (currentFrame + 1) % TOTAL_FRAMES;
       updateTurntableDisplay(next);
-    }, 120); // ~8.3 fps smooth turntable orbit
+    }, 70); // ~14 fps smooth rotation
   }
 
   function stopAutoSpin() {
-    if (autoSpinInterval) {
-      clearInterval(autoSpinInterval);
-      autoSpinInterval = null;
-    }
     isAutoSpinning = false;
-    const btn = document.getElementById('btn-spin-auto');
-    if (btn) btn.classList.remove('active');
+    const btnAuto = document.getElementById('btn-spin-auto');
+    if (btnAuto) {
+      btnAuto.classList.remove('active');
+      btnAuto.textContent = 'Auto Spin: OFF';
+    }
+    clearInterval(autoSpinInterval);
   }
 
-  // --- 2. Mode Switching Logic ---
+  // --- 2. View Mode Selector ---
   function setViewMode(mode) {
     currentMode = mode;
-    [modeTurntableBtn, modeCompareBtn, modeWebglBtn].forEach(b => b.classList.remove('active'));
+    modeTurntableBtn.classList.toggle('active', mode === 'turntable');
+    modeCompareBtn.classList.toggle('active', mode === 'compare');
+    modeWebglBtn.classList.toggle('active', mode === 'webgl');
 
     if (mode === 'turntable') {
-      modeTurntableBtn.classList.add('active');
       turntableContainer.style.display = 'flex';
       compareContainer.style.display = 'none';
+      container.style.display = 'none';
       turntableDock.style.display = 'flex';
       webglDock.style.display = 'none';
+      startAutoSpin();
     } else if (mode === 'compare') {
-      modeCompareBtn.classList.add('active');
       turntableContainer.style.display = 'none';
       compareContainer.style.display = 'flex';
+      container.style.display = 'none';
       turntableDock.style.display = 'none';
       webglDock.style.display = 'none';
       stopAutoSpin();
     } else if (mode === 'webgl') {
-      modeWebglBtn.classList.add('active');
       turntableContainer.style.display = 'none';
       compareContainer.style.display = 'none';
+      container.style.display = 'block';
       turntableDock.style.display = 'none';
       webglDock.style.display = 'flex';
       stopAutoSpin();
+      if (controls) controls.update();
     }
   }
 
-  // --- 3. Three.js Real-Time Engine ---
+  // --- 3. WebGL Three.js Engine ---
   let scene, camera, renderer, controls;
-  let antGroup, stageGroup, lightsGroup;
-  let isAnimating = true;
+  let antGroup, stageGroup;
+  let ambientLight, keyLight, fillLight, rimLight;
+  let mixer, walkAction, idleAction;
+  let activeActionName = 'Walk';
   let isTurntable = false;
   let isWireframe = false;
-  let isWalking = true;
-  let mixer = null;
-  let walkAction = null;
   let clock = new THREE.Clock();
 
   function initThree() {
     scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x05070a);
+    scene.background = new THREE.Color(0x0a0c10);
 
     camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 100);
-    camera.position.set(0.0, 0.1, 4.4);
+    camera.position.set(0, 0.4, 4.8);
 
-    renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, preserveDrawingBuffer: true });
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: 'high-performance' });
     renderer.setSize(window.innerWidth, window.innerHeight);
-    renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.15;
-    renderer.outputEncoding = THREE.sRGBEncoding;
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.outputEncoding = THREE.sRGBEncoding;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.15;
     container.appendChild(renderer.domElement);
 
     controls = new THREE.OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
-    controls.dampingFactor = 0.08;
-    controls.target.set(0.0, -0.1, 0.0);
-    controls.minDistance = 1.2;
-    controls.maxDistance = 12.0;
+    controls.dampingFactor = 0.05;
     controls.maxPolarAngle = Math.PI / 2 + 0.1;
+    controls.minDistance = 1.2;
+    controls.maxDistance = 10;
+    controls.target.set(0, 0.1, 0);
 
     setupLighting();
     setupStage();
-    setupWorkerAnt();
+    loadAntModel(currentCaste);
+
     animate();
   }
 
-  let ambientLight, keyLight, fillLight, rimLight;
-
   function setupLighting() {
-    lightsGroup = new THREE.Group();
-    scene.add(lightsGroup);
-
     ambientLight = new THREE.AmbientLight(0x222833, 0.8);
-    lightsGroup.add(ambientLight);
+    scene.add(ambientLight);
 
     keyLight = new THREE.DirectionalLight(0xfffaec, 2.5);
     keyLight.position.set(-3.5, 4.5, 4.0);
     keyLight.castShadow = true;
     keyLight.shadow.mapSize.width = 2048;
     keyLight.shadow.mapSize.height = 2048;
-    lightsGroup.add(keyLight);
+    keyLight.shadow.bias = -0.0001;
+    scene.add(keyLight);
 
     fillLight = new THREE.DirectionalLight(0xb0d2f8, 1.0);
-    fillLight.position.set(3.5, 2.5, 2.5);
-    lightsGroup.add(fillLight);
+    fillLight.position.set(3.5, 2.0, 3.0);
+    scene.add(fillLight);
 
     rimLight = new THREE.DirectionalLight(0xffffff, 2.2);
-    rimLight.position.set(0.0, 4.5, -3.5);
-    lightsGroup.add(rimLight);
+    rimLight.position.set(0, 4.0, -4.5);
+    scene.add(rimLight);
   }
 
   function setLightingMode(mode) {
-    if (!ambientLight || !keyLight || !fillLight || !rimLight) return;
-
+    if (!ambientLight || !keyLight) return;
     if (mode === 'sunset') {
-      ambientLight.color.setHex(0x331822);
+      ambientLight.color.setHex(0x3a1a12);
       ambientLight.intensity = 0.9;
-      keyLight.color.setHex(0xff6622);
+      keyLight.color.setHex(0xff7733);
       keyLight.intensity = 3.2;
-      keyLight.position.set(-4.5, 2.2, 3.5);
-      fillLight.color.setHex(0x442266);
+      keyLight.position.set(-4.0, 3.0, 3.0);
+      fillLight.color.setHex(0x5522aa);
       fillLight.intensity = 1.4;
-      rimLight.color.setHex(0xffbb44);
-      rimLight.intensity = 2.8;
-      if (scene) scene.background = new THREE.Color(0x160810);
+      rimLight.color.setHex(0xffddaa);
+      rimLight.intensity = 2.6;
+      if (scene) scene.background = new THREE.Color(0x0e0608);
     } else if (mode === 'neon') {
       ambientLight.color.setHex(0x080e18);
       ambientLight.intensity = 0.7;
@@ -299,38 +365,34 @@
     stageGroup.add(disc);
 
     const ringGeo = new THREE.RingGeometry(2.35, 2.45, 64);
-    const ringMat = new THREE.MeshBasicMaterial({ color: 0x2ecc71, side: THREE.DoubleSide });
+    const ringMat = new THREE.MeshBasicMaterial({ color: 0xffaa33, side: THREE.DoubleSide });
     const ring = new THREE.Mesh(ringGeo, ringMat);
     ring.rotation.x = -Math.PI / 2;
     ring.position.y = -1.17;
     stageGroup.add(ring);
   }
 
-  function setupWorkerAnt() {
-    antGroup = new THREE.Group();
-    scene.add(antGroup);
+  function loadAntModel(casteId) {
+    if (!antGroup) {
+      antGroup = new THREE.Group();
+      scene.add(antGroup);
+    } else {
+      while (antGroup.children.length > 0) {
+        const obj = antGroup.children[0];
+        antGroup.remove(obj);
+      }
+    }
 
-    // Explicitly load textures to guarantee WebGL PBR surface texturing
-    const textureLoader = new THREE.TextureLoader();
-    const chitinMap = textureLoader.load('chitin_pbr.png?v=' + Date.now());
-    chitinMap.flipY = false;
-    chitinMap.encoding = THREE.sRGBEncoding;
+    if (mixer) {
+      mixer.stopAllAction();
+      mixer = null;
+    }
 
-    const eyeMap = textureLoader.load('eye_pbr.png?v=' + Date.now());
-    eyeMap.flipY = false;
-    eyeMap.encoding = THREE.sRGBEncoding;
-
-    const mandibleMap = textureLoader.load('mandible_pbr.png?v=' + Date.now());
-    mandibleMap.flipY = false;
-    mandibleMap.encoding = THREE.sRGBEncoding;
-
-    const limbsMap = textureLoader.load('limbs_pbr.png?v=' + Date.now());
-    limbsMap.flipY = false;
-    limbsMap.encoding = THREE.sRGBEncoding;
-
+    const cfg = CASTES[casteId];
     const gltfLoader = new THREE.GLTFLoader();
+
     gltfLoader.load(
-      'worker_ant.glb?v=' + Date.now(),
+      `${cfg.glb}?v=${Date.now()}`,
       function (gltf) {
         const model = gltf.scene;
         model.traverse(function (child) {
@@ -340,43 +402,6 @@
             if (child.material) {
               child.material.wireframe = isWireframe;
               child.material.side = THREE.DoubleSide;
-
-              const matName = child.material.name || '';
-              if (matName.includes('Chitin')) {
-                child.material.map = chitinMap;
-                child.material.color.setHex(0xffffff);
-                child.material.roughness = 0.50;
-                child.material.metalness = 0.05;
-                child.material.needsUpdate = true;
-              } else if (matName.includes('Eye')) {
-                child.material.map = eyeMap;
-                child.material.color.setHex(0xffffff);
-                child.material.roughness = 0.08;
-                child.material.metalness = 0.0;
-                child.material.needsUpdate = true;
-              } else if (matName.includes('Mandible')) {
-                child.material.map = mandibleMap;
-                child.material.color.setHex(0xffffff);
-                child.material.roughness = 0.38;
-                child.material.metalness = 0.0;
-                child.material.needsUpdate = true;
-              } else if (matName.includes('Limbs')) {
-                child.material.map = limbsMap;
-                child.material.color.setHex(0xffffff);
-                child.material.roughness = 0.44;
-                child.material.metalness = 0.05;
-                child.material.needsUpdate = true;
-              } else if (matName.includes('Antenna')) {
-                child.material.color.setRGB(0.18, 0.12, 0.09);
-                child.material.roughness = 0.38;
-                child.material.metalness = 0.05;
-                child.material.needsUpdate = true;
-              } else if (matName.includes('Teeth')) {
-                child.material.color.setRGB(0.94, 0.95, 0.88);
-                child.material.roughness = 0.25;
-                child.material.metalness = 0.0;
-                child.material.needsUpdate = true;
-              }
             }
           }
         });
@@ -387,22 +412,51 @@
 
         if (gltf.animations && gltf.animations.length > 0) {
           mixer = new THREE.AnimationMixer(model);
-          walkAction = mixer.clipAction(gltf.animations[0]);
-          walkAction.setLoop(THREE.LoopRepeat);
-          walkAction.play();
-          isWalking = true;
-          const btnWalk = document.getElementById('btn-walk-anim');
-          if (btnWalk) {
-            btnWalk.classList.add('active');
-            btnWalk.textContent = '⏸ Pause Walk';
+          walkAction = null;
+          idleAction = null;
+
+          gltf.animations.forEach((clip) => {
+            const nameLower = clip.name.toLowerCase();
+            if (nameLower.includes('walk')) {
+              walkAction = mixer.clipAction(clip);
+              walkAction.setLoop(THREE.LoopRepeat);
+            } else if (nameLower.includes('idle')) {
+              idleAction = mixer.clipAction(clip);
+              idleAction.setLoop(THREE.LoopRepeat);
+            }
+          });
+
+          // Fallback if specific clip name not tagged
+          if (!walkAction && gltf.animations[0]) {
+            walkAction = mixer.clipAction(gltf.animations[0]);
+            walkAction.setLoop(THREE.LoopRepeat);
           }
+
+          setAnimation(activeActionName);
         }
       },
       undefined,
       function (error) {
-        console.error('Error loading worker_ant.glb:', error);
+        console.error(`Error loading ${cfg.glb}:`, error);
       }
     );
+  }
+
+  function setAnimation(actionName) {
+    activeActionName = actionName;
+    if (!mixer) return;
+
+    if (walkAction) walkAction.stop();
+    if (idleAction) idleAction.stop();
+
+    if (actionName === 'Walk' && walkAction) {
+      walkAction.play();
+    } else if (actionName === 'Idle' && idleAction) {
+      idleAction.play();
+    } else if (actionName === 'Idle' && !idleAction && walkAction) {
+      // Fallback if no separate idle clip
+      walkAction.play();
+    }
   }
 
   function animate() {
@@ -414,16 +468,141 @@
       if (isTurntable && antGroup) {
         antGroup.rotation.y += delta * 0.5;
       }
-      if (mixer && isWalking) {
+      if (mixer && activeActionName !== 'Pause') {
         mixer.update(delta);
       }
       renderer.render(scene, camera);
     }
   }
 
-  // --- 4. Setup UI Interactions ---
+  // --- 4. Switch Caste Function ---
+  function switchCaste(casteId) {
+    if (!CASTES[casteId]) return;
+    currentCaste = casteId;
+    const cfg = CASTES[casteId];
+
+    // 1. Update Header Select and Badge
+    const casteSelect = document.getElementById('caste-select');
+    if (casteSelect) casteSelect.value = casteId;
+
+    const statusBadge = document.getElementById('caste-status-badge');
+    if (statusBadge) {
+      statusBadge.textContent = cfg.statusText;
+      statusBadge.className = cfg.statusClass;
+    }
+
+    // 2. Update QuickLook USDZ Link
+    const quickLookLink = document.getElementById('quicklook-link');
+    if (quickLookLink) {
+      quickLookLink.href = cfg.usdz;
+    }
+
+    // 3. Update Caste Drawer Navigation Buttons
+    const casteBtns = document.querySelectorAll('.caste-btn');
+    casteBtns.forEach(btn => {
+      const c = btn.getAttribute('data-caste');
+      btn.classList.toggle('active', c === casteId);
+    });
+
+    // 4. Update Turntable
+    loadTurntableFrames();
+
+    // 5. Update Compare View
+    const compareCardRefImg = document.querySelector('#compare-container .compare-card:first-child img');
+    if (compareCardRefImg) {
+      compareCardRefImg.src = `${cfg.compareRef}?v=${Date.now()}`;
+    }
+    const compareCard3DImg = document.getElementById('compare-3d-img');
+    if (compareCard3DImg) {
+      compareCard3DImg.src = `${cfg.compare3D}?v=${Date.now()}`;
+    }
+
+    // 6. Update Info Detail Card
+    const cardTitle = document.getElementById('card-title');
+    if (cardTitle) cardTitle.textContent = cfg.cardTitle;
+    const cardDesc = document.getElementById('card-desc');
+    if (cardDesc) cardDesc.textContent = cfg.cardDesc;
+    const cardTraits = document.getElementById('card-traits');
+    if (cardTraits) {
+      cardTraits.innerHTML = cfg.traits.map(t => `<span class="trait-tag">${t}</span>`).join('');
+    }
+
+    // 7. Update Gallery Modal Tabs
+    updateGalleryModal();
+
+    // 8. Update WebGL Model
+    loadAntModel(casteId);
+  }
+
+  function updateGalleryModal() {
+    const cfg = CASTES[currentCaste];
+    const modalTitle = document.querySelector('#render-modal .modal-header h2');
+    if (modalTitle) modalTitle.textContent = `${cfg.name} — Multi-Angle Stills`;
+
+    const galleryTabsWrap = document.querySelector('.gallery-tabs');
+    if (galleryTabsWrap) {
+      galleryTabsWrap.innerHTML = cfg.stills.map((s, idx) => `
+        <button class="gallery-tab-btn ${idx === 0 ? 'active' : ''}" data-img="${s.file}" data-desc="${s.desc}">
+          ${s.name}
+        </button>
+      `).join('');
+
+      // Rebind click events
+      const masterImg = document.getElementById('master-render-img');
+      const downloadLink = document.getElementById('download-link');
+      const renderCaption = document.getElementById('render-caption');
+
+      const tabs = galleryTabsWrap.querySelectorAll('.gallery-tab-btn');
+      tabs.forEach(tab => {
+        tab.addEventListener('click', () => {
+          tabs.forEach(t => t.classList.remove('active'));
+          tab.classList.add('active');
+          const imgName = tab.getAttribute('data-img');
+          const desc = tab.getAttribute('data-desc');
+          if (masterImg) masterImg.src = `${imgName}?v=${Date.now()}`;
+          if (downloadLink) {
+            downloadLink.href = imgName;
+            downloadLink.setAttribute('download', imgName);
+          }
+          if (renderCaption) {
+            renderCaption.innerHTML = `<strong>${tab.textContent.trim()}:</strong> ${desc}`;
+          }
+        });
+      });
+
+      // Default to first tab
+      if (tabs.length > 0) {
+        tabs[0].click();
+      }
+    }
+  }
+
+  // --- 5. Setup UI Event Listeners ---
   function setupUI() {
-    // Mode Switching
+    // Caste Dropdown Select
+    const casteSelect = document.getElementById('caste-select');
+    if (casteSelect) {
+      casteSelect.addEventListener('change', (e) => {
+        switchCaste(e.target.value);
+      });
+    }
+
+    // Caste Drawer Buttons
+    const casteBtns = document.querySelectorAll('.caste-btn:not(.locked)');
+    casteBtns.forEach(btn => {
+      btn.addEventListener('click', () => {
+        const c = btn.getAttribute('data-caste');
+        if (c && CASTES[c]) {
+          switchCaste(c);
+          const casteNav = document.getElementById('caste-nav');
+          const casteNavBackdrop = document.getElementById('caste-nav-backdrop');
+          casteNav?.classList.remove('open');
+          casteNavBackdrop?.classList.remove('open');
+        }
+      });
+    });
+
+    // View Mode Switching
     modeTurntableBtn.addEventListener('click', () => setViewMode('turntable'));
     modeCompareBtn.addEventListener('click', () => setViewMode('compare'));
     modeWebglBtn.addEventListener('click', () => setViewMode('webgl'));
@@ -455,7 +634,8 @@
     });
     document.getElementById('btn-gameplay-snap')?.addEventListener('click', () => {
       stopAutoSpin();
-      turntableImg.src = `worker_gameplay_angle.png?v=${Date.now()}`;
+      const cfg = CASTES[currentCaste];
+      turntableImg.src = `${cfg.gameplayStill}?v=${Date.now()}`;
       if (turntableAngleLabel) {
         turntableAngleLabel.textContent = "🎮 Authentic 1998 RTS Angled Top-Down View (South Perspective)";
       }
@@ -464,10 +644,10 @@
     // Blender Instructions Modal
     const blenderModal = document.getElementById('blender-modal');
     document.getElementById('btn-open-blender')?.addEventListener('click', () => {
-      blenderModal.classList.remove('hidden');
+      blenderModal?.classList.remove('hidden');
     });
     document.getElementById('btn-close-blender-modal')?.addEventListener('click', () => {
-      blenderModal.classList.add('hidden');
+      blenderModal?.classList.add('hidden');
     });
 
     // Mobile Caste Drawer
@@ -498,27 +678,10 @@
     // Render Gallery Modal
     const renderModal = document.getElementById('render-modal');
     document.getElementById('btn-master-render')?.addEventListener('click', () => {
-      renderModal.classList.remove('hidden');
+      renderModal?.classList.remove('hidden');
     });
     document.getElementById('btn-close-modal')?.addEventListener('click', () => {
-      renderModal.classList.add('hidden');
-    });
-
-    // Gallery Tabs
-    const galleryTabs = document.querySelectorAll('.gallery-tab-btn');
-    const masterImg = document.getElementById('master-render-img');
-    const downloadLink = document.getElementById('download-link');
-    galleryTabs.forEach(tab => {
-      tab.addEventListener('click', () => {
-        galleryTabs.forEach(t => t.classList.remove('active'));
-        tab.classList.add('active');
-        const imgName = tab.getAttribute('data-img');
-        if (masterImg) masterImg.src = `${imgName}?v=${Date.now()}`;
-        if (downloadLink) {
-          downloadLink.href = imgName;
-          downloadLink.setAttribute('download', imgName);
-        }
-      });
+      renderModal?.classList.add('hidden');
     });
 
     // WebGL Controls
@@ -526,22 +689,15 @@
       setLightingMode(e.target.value);
     });
 
-    document.getElementById('btn-walk-anim')?.addEventListener('click', (e) => {
-      isWalking = !isWalking;
-      e.target.classList.toggle('active', isWalking);
-      if (walkAction) {
-        if (isWalking) {
-          walkAction.play();
-        } else {
-          walkAction.stop();
-        }
-      }
-      e.target.textContent = isWalking ? '⏸ Pause Walk' : '🚶 Walk Animation';
+    document.getElementById('select-anim')?.addEventListener('change', (e) => {
+      setAnimation(e.target.value);
     });
+
     document.getElementById('btn-turntable')?.addEventListener('click', (e) => {
       isTurntable = !isTurntable;
       e.target.classList.toggle('active', isTurntable);
     });
+
     document.getElementById('btn-wireframe')?.addEventListener('click', (e) => {
       isWireframe = !isWireframe;
       e.target.classList.toggle('active', isWireframe);
@@ -551,6 +707,7 @@
         });
       }
     });
+
     document.getElementById('btn-webgl-gameplay')?.addEventListener('click', () => {
       if (camera && controls) {
         camera.position.set(0.0, 3.8, 2.5);
@@ -573,6 +730,10 @@
     initTurntable();
     initThree();
     setupUI();
+    updateGalleryModal();
+
+    // Default to Fire Ant as active review subject
+    switchCaste('fire');
 
     // Hide loader
     const loader = document.getElementById('loader');
