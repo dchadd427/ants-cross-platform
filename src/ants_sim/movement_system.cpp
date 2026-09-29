@@ -17,7 +17,8 @@ namespace {
 
 constexpr int32_t kTile = 32;
 constexpr uint32_t kBlockedCost = 8000;          // impassable edge / tile (FUN_01020951)
-constexpr uint32_t kPauseMs = 300;               // ANTPAUSE wait (FUN_0101cc1e -> FUN_0103057b(task, 0, 300))
+constexpr uint32_t kPauseMs = 300;
+constexpr uint32_t kAnthillqPeriodMs = 200;     // ANTHILLQ task period (0x100e556)               // ANTPAUSE wait (FUN_0101cc1e -> FUN_0103057b(task, 0, 300))
 
 // CanEnter flag bits (FUN_0101f780).
 constexpr uint32_t kFinalTile      = 0x001;
@@ -57,8 +58,7 @@ inline bool is_walking_label(UnitState s) noexcept {
 }
 
 inline bool is_idle_label(UnitState s) noexcept {
-    return s == UnitState::Idle || s == UnitState::GuardIdle || s == UnitState::Swimming ||
-           s == UnitState::QueuingBase;
+    return s == UnitState::Idle || s == UnitState::GuardIdle || s == UnitState::Swimming;
 }
 
 } // namespace
@@ -73,6 +73,8 @@ void SimulationEngineImpl::movement_reset() {
     occ_.assign(static_cast<size_t>(grid_.width()) * grid_.height(), OccCell{});
     for (auto& pm : path_managers_) pm.clear();
     path_request_serial_.clear();
+    anthillq_next_ms_ = 200;
+    hatch_ = {};
 }
 
 // ------------------------------------------------------------------------------------------------
@@ -146,7 +148,7 @@ void SimulationEngineImpl::occ_refresh() {
     for (auto& up : ants_) {
         if (!up) continue;
         AntUnit& a = *up;
-        if (!a.is_alive() || a.underground) {
+        if (!a.is_alive()) {
             if (a.occ_tile.x >= 0) occ_move(a, TileCoord{-1, -1});
         } else if (a.occ_tile != pixel_tile(a)) {
             occ_move(a, pixel_tile(a));
@@ -162,7 +164,7 @@ AntUnit* SimulationEngineImpl::occupant_at(TileCoord t) {
     if (c->multi) a = occ_scan(t, nullptr, nullptr);
     else if (c->ant >= 0) a = find_unit(static_cast<uint32_t>(c->ant));
     // Remake: ants that died or went underground since the last movement tick are unregistered lazily.
-    if (a && (!a->is_alive() || a->underground)) return nullptr;
+    if (a && (!a->is_alive())) return nullptr;
     return a;
 }
 
@@ -288,9 +290,10 @@ bool SimulationEngineImpl::has_pending_path(uint32_t ant_id) const noexcept {
 
 // FUN_0102c0db + FUN_0102c1fc: play a clip; ants are on the display list (running bit set), so the
 // start step runs immediately.
-void SimulationEngineImpl::loco_play(AntUnit& a, const movement::MotionClip& clip, uint8_t dir) {
+void SimulationEngineImpl::loco_play(AntUnit& a, const movement::MotionClip& clip, uint8_t dir, uint16_t evt5_ms) {
     a.loco.clip = clip;
     a.loco.dir = dir;
+    a.loco.evt5_ms = evt5_ms;
     a.loco.cursor = 0;
     a.loco.next_ms = now_ms_;
     ++a.loco.serial;
@@ -336,7 +339,8 @@ int SimulationEngineImpl::loco_step(AntUnit& a, uint32_t now) {
     set_position(a, a.pixel_x + e.dx, a.pixel_y + e.dy); // vtable+0x28 with x,y read after the callback
     p.cursor = next_cursor;
     const uint16_t cur = static_cast<uint16_t>(next_cursor - 1);
-    p.next_ms += p.clip.duration(cur);
+    // The enter clip's heal frame (event 5) lasts (10 - hp) * 200 ms instead of its native 40 ms (FUN_0101e20d)
+    p.next_ms += (p.evt5_ms != 0 && p.clip.event(cur) == 5) ? p.evt5_ms : p.clip.duration(cur);
     if (loco_trace_enabled_) trace_loco(LocoTraceEvent::Kind::Step, a, e.dx, e.dy);
     const int16_t snd = p.clip.sound(cur);               // FUN_0102bac8 (loco clips have no sound-once flag)
     if (snd >= 0) {
@@ -352,6 +356,13 @@ void SimulationEngineImpl::loco_on_step(AntUnit& a, StepEvt& e) {
         case AntUnit::kActionIdle:
         case AntUnit::kActionWalk:
             walk_step(a, e);
+            break;
+        case AntUnit::kActionEnter:                      // 0x101ef5c
+        case AntUnit::kActionHatch:
+            if (e.status == 2) enter_clip_end(a);
+            break;
+        case AntUnit::kActionRaid:                       // 0x101efbd
+            if (e.status == 2) raid_clip_end(a);
             break;
         case AntUnit::kActionCantGo:
             if (e.status == 2) {                         // end of the *cg animation (case 0xb)
@@ -384,6 +395,8 @@ void SimulationEngineImpl::loco_on_step(AntUnit& a, StepEvt& e) {
 // ------------------------------------------------------------------------------------------------
 
 void SimulationEngineImpl::set_action(AntUnit& a, uint8_t action, uint8_t dir, int16_t terr_a, int16_t terr_b, bool flag) {
+    // The old action is cleaned up first (Ants.exe 0x101ade0): its world effects happen here, whatever ends it.
+    if (a.loco_action != AntUnit::kActionNone) action_cleanup(a, a.loco_action, action);
     const bool same_action = (a.loco_action == action);
     const bool same_dir = (static_cast<uint8_t>(a.facing) == dir);
     a.facing = static_cast<Direction>(dir & 7);
@@ -431,6 +444,22 @@ void SimulationEngineImpl::set_action(AntUnit& a, uint8_t action, uint8_t dir, i
         case AntUnit::kActionCantGo:
             a.orig_order_tile = no_order_tile();
             loco_play(a, movement::cant_go_clip(type, carrying), dir);
+            return;
+        case AntUnit::kActionEnter: {                                // 0x101b1c1
+            // The clip is chosen by "holding" (+0xe8); the heal frame (event 5) is stretched to (10 - hp) * 200 ms
+            const uint16_t missing = (a.hp < AntUnit::MAX_HP) ? static_cast<uint16_t>(AntUnit::MAX_HP - a.hp) : uint16_t{0};
+            loco_play(a, movement::action_clip(movement::ActionClip::Enter, type, 0, carrying), dir,
+                      static_cast<uint16_t>(missing * 200u));
+            a.state = UnitState::EnteringBase;
+            return;
+        }
+        case AntUnit::kActionHatch:                                  // newborn: aghatch (the newborn is a worker)
+            loco_play(a, movement::action_clip(movement::ActionClip::Hatch, type, 0, false), dir);
+            a.state = UnitState::EnteringBase;
+            return;
+        case AntUnit::kActionRaid:                                   // atcr501
+            loco_play(a, movement::action_clip(movement::ActionClip::Infiltrate, type, 0, false), dir);
+            a.state = UnitState::Infiltrating;
             return;
         default:
             return;
@@ -563,8 +592,27 @@ void SimulationEngineImpl::arrive(AntUnit& a, StepEvt& e, TileCoord cur) {
 // every order therefore takes the "not handled" branch: stop at the tile (StopSync -> StopAt).
 void SimulationEngineImpl::path_complete(AntUnit& a, StepEvt& e) {
     const TileCoord old_target = a.orig_order_tile;
+    const uint8_t order = a.orig_order;
+    const bool was_home = (a.home_state == 1);                 // heading for the waiting ring in front of the hill
     a.orig_order_tile = no_order_tile();
     a.arrived_this_tick = true;
+    if (order == AntUnit::kOrderHome) {
+        // case 2 (0x101cdc5): message 7 makes the ant play the enter clip on the entrance tile; the step's snap delta
+        // stays (handled: no stop).
+        enter_hill(a);
+        return;
+    }
+    if (order == AntUnit::kOrderRaid) {
+        // case 0xb (0x101d51b): a thief that reached the raid tile starts the raid; refusals stop or send it home
+        const bool started = raid_arrive(a, e);
+        if (!started) { e.dx = 0; e.dy = 0; }
+        return;
+    }
+    if ((order == AntUnit::kOrderMove || order == AntUnit::kOrderPowerUp) && was_home) {
+        // cases 1 / 4 (0x101cd1d): arrival at the ring tile: queued, first come first served (click orders first)
+        a.home_state = 2;
+        a.home_time_ms = a.home_priority ? 0u : now_ms_;
+    }
     if (a.orig_order == AntUnit::kOrderBomb && grid_.has_bomb_at(old_target)) {
         // case 0xa: message 0x0f sets the bomb off at once (handled: no stop, the frame delta stays 0).
         // The blast itself is the remake's bomb/knock-back code; the ant flies in its walking direction.
@@ -662,6 +710,7 @@ void SimulationEngineImpl::pause_fire(AntUnit& a) {
 
 int SimulationEngineImpl::try_enter_tile(AntUnit& a, TileCoord nt) {
     const TileCoord own = pixel_tile(a);
+    const bool was_home = (a.home_state == 1);
     AntUnit* occ = occupant_at(nt);
 
     // A. contact with the attack target: melee resolution stays with the remake's combat code.
@@ -709,6 +758,7 @@ int SimulationEngineImpl::try_enter_tile(AntUnit& a, TileCoord nt) {
         is_final = false;
     }
     if (is_final) {
+        if (order == AntUnit::kOrderHome && was_home) a.home_state = 2;   // (+0x70 is not written on this path)
         stop_sync(a);
         return 0;
     }
@@ -799,6 +849,14 @@ bool SimulationEngineImpl::can_enter(const AntUnit& a, TileCoord t, uint32_t fla
 claims:
     // R6 tiles claimed by team-mates on move / home orders
     if (flags & kCheckClaims) {
+        // first come first served at the entrance: an ant that is not queued may not take it while another one waits
+        const TileCoord home = team_entrance(a.player_id);
+        if (home.x >= 0 && t == home && a.home_state != 2) {
+            for (const auto& up : ants_) {
+                const AntUnit* x = up.get();
+                if (x && x != &a && x->player_id == a.player_id && x->home_state == 2) return false;
+            }
+        }
         for (const auto& up : ants_) {
             const AntUnit* x = up.get();
             if (!x || x == &a || x->player_id != a.player_id) continue;
@@ -898,7 +956,7 @@ terrain: {
 
 // FUN_0101ff5a
 bool SimulationEngineImpl::can_take_user_order(const AntUnit& a) const noexcept {
-    if (!a.is_alive() || a.underground) return false;
+    if (!a.is_alive()) return false;
     const uint8_t act = orig_action_of(a);
     return act == 0 || act == 1 || act == 3;
 }
@@ -957,7 +1015,7 @@ bool SimulationEngineImpl::adjust_goal(AntUnit& a, TileCoord& t, bool user_cmd, 
     if (home.x >= 0 && t == home) {
         const TileCoord save = t;
         t = TileCoord{home.x - 2, home.y + 2};                // player +0x46: entrance + (2, -2)
-        if (adjust_goal(a, t, user_cmd, allow_goal_bomb)) return true;
+        if (adjust_goal(a, t, user_cmd, allow_goal_bomb)) return true;   // (+0x68 is set by the order, see go_to)
         t = save;
         return false;
     }
@@ -1018,8 +1076,18 @@ bool SimulationEngineImpl::go_to(AntUnit& a, TileCoord t, bool user_cmd, bool sp
     classify_order(a, t, special, user_cmd);
     bool ok = true;
     if (a.orig_order != AntUnit::kOrderRaid) {
+        // +0x68 keeps its old value during the goal check: the queued ant that ANTHILLQ sends in (+0x68 == 2) passes the
+        // first-come-first-served rule of the entrance
         ok = adjust_goal(a, t, user_cmd, allow_goal_bomb);
         if (t != requested) classify_order(a, t, false, user_cmd);
+    }
+    // 0x101fed2: the entrance replaced by the waiting tile sets +0x68 = 1 and +0x6c = player, anything else clears +0x68
+    const TileCoord own_entrance = team_entrance(a.player_id);
+    if (t != requested && own_entrance.x >= 0 && requested == own_entrance) {
+        a.home_state = 1;
+        a.home_priority = user_cmd ? 1 : 0;
+    } else {
+        a.home_state = 0;
     }
     if (!ok) {
         stop_sync(a);
@@ -1038,7 +1106,7 @@ bool SimulationEngineImpl::go_to(AntUnit& a, TileCoord t, bool user_cmd, bool sp
 // FUN_0100cba4 + message-6 handler (0x10229b7)
 void SimulationEngineImpl::deliver_path(uint32_t ant_id, const std::vector<TileCoord>& path) {
     AntUnit* a = find_unit(ant_id);
-    if (!a || !a->is_alive() || a->underground) return;
+    if (!a || !a->is_alive()) return;
     auto it = path_request_serial_.find(ant_id);
     const bool stale = (it == path_request_serial_.end() || it->second != a->move_serial);
     if (it != path_request_serial_.end()) path_request_serial_.erase(it);
@@ -1057,9 +1125,6 @@ void SimulationEngineImpl::deliver_path(uint32_t ant_id, const std::vector<TileC
         a->ability_target = TileCoord{-1, -1};
         a->harvest_origin = TileCoord{-1, -1};
         a->is_food_order = false;
-        if (a->player_id < MAX_PLAYERS && base_queues_[a->player_id].active_depositing_ant_id == a->id) {
-            base_queues_[a->player_id].active_depositing_ant_id = 0;
-        }
         return;
     }
     if (a->loco_action != AntUnit::kActionIdle || a->pause_active || pixel_tile(*a) != path.front()) {
@@ -1097,13 +1162,17 @@ void SimulationEngineImpl::trace_loco(LocoTraceEvent::Kind kind, const AntUnit& 
 // Reconcile remake-driven state changes with the locomotion model (lazy start of idle / can't-go clips,
 // occupancy registration after teleports, deactivation for states owned by other systems).
 void SimulationEngineImpl::loco_sync(AntUnit& a) {
-    if (!a.is_alive() || a.underground) {
+    if (!a.is_alive()) {
         if (a.occ_tile.x >= 0) occ_move(a, TileCoord{-1, -1});
         a.loco_action = AntUnit::kActionNone;
         a.pause_active = false;
         return;
     }
     if (a.occ_tile != pixel_tile(a)) occ_move(a, pixel_tile(a));
+    if (a.loco_action == AntUnit::kActionEnter || a.loco_action == AntUnit::kActionHatch ||
+        a.loco_action == AntUnit::kActionRaid) {
+        return;                                            // running action clips: owned by the action system
+    }
     const UnitState s = a.state;
     if (s == UnitState::CantGo) {
         if (a.loco_action != AntUnit::kActionCantGo) {
@@ -1161,6 +1230,7 @@ void SimulationEngineImpl::movement_tick(SimulationEngine& eng) {
         AntUnit* best = nullptr;
         uint32_t best_t = std::numeric_limits<uint32_t>::max();
         bool best_is_pause = false;
+        int task = 0;                                       // 1 ANTHILLQ, 2..5 HATCHTSK of team 0..3
         for (auto& up : ants_) {
             AntUnit* a = up.get();
             if (!a || a->loco_action == AntUnit::kActionNone) continue;
@@ -1176,10 +1246,30 @@ void SimulationEngineImpl::movement_tick(SimulationEngine& eng) {
                 best_is_pause = true;
             }
         }
-        if (!best) break;
+        if (anthillq_next_ms_ <= t_end && anthillq_next_ms_ < best_t) {
+            best = nullptr;
+            best_t = anthillq_next_ms_;
+            task = 1;
+        }
+        for (uint8_t team = 0; team < MAX_PLAYERS; ++team) {
+            if (hatch_[team].active && hatch_[team].due_ms <= t_end && hatch_[team].due_ms < best_t) {
+                best = nullptr;
+                best_t = hatch_[team].due_ms;
+                task = 2 + team;
+            }
+        }
+        if (!best && task == 0) break;
         now_ms_ = best_t;
-        if (best_is_pause) pause_fire(*best);
-        else loco_step(*best, now_ms_);
+        if (task == 1) {
+            anthillq_next_ms_ += kAnthillqPeriodMs;
+            anthillq_run();
+        } else if (task >= 2) {
+            hatch_run(static_cast<uint8_t>(task - 2));
+        } else if (best_is_pause) {
+            pause_fire(*best);
+        } else {
+            loco_step(*best, now_ms_);
+        }
     }
     now_ms_ = t_end;
     anim_clock_ms_ = t_end;

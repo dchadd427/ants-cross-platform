@@ -37,14 +37,15 @@ public:
 
     std::vector<AudioEvent> audio_queue_;
     std::vector<NewsEvent>  news_queue_;
-    std::vector<TileCoord>  reserved_queue_slots_;
     std::array<uint32_t, MAX_PLAYERS> invite_pending_ticks_{};
-    uint32_t hatch_delay_ticks_{60};
-    struct AnthillQueueState {
-        std::vector<uint32_t> queue;
-        uint32_t active_depositing_ant_id{0};
+    // Egg hatching (Ants.exe HATCHTSK): 8000 ms after the click the newborn worker appears at the hill entrance.
+    uint32_t hatch_delay_ticks_{160};
+    struct HatchState {
+        bool     active{false};        // player +0x0c "hatching"
+        uint32_t due_ms{0};            // animation-clock time of the next attempt
+        AntType  type{AntType::Worker};
     };
-    std::array<AnthillQueueState, MAX_PLAYERS> base_queues_{};
+    std::array<HatchState, MAX_PLAYERS> hatch_{};
     std::vector<VisualEffect> active_effects_;
     std::vector<ScoreBubble> score_bubbles_;
 
@@ -88,7 +89,7 @@ public:
 
         // Reveal friendly units (and allied units)
         for (const auto& ant : ants_) {
-            if (!ant || !ant->is_alive() || ant->underground) continue;
+            if (!ant || !ant->is_alive()) continue;
             if (ant->player_id == viewing_player_id_ || stats_.are_allies(viewing_player_id_, ant->player_id)) {
                 reveal_fog_box(ant->pos.x - 6, ant->pos.y - 6, ant->pos.x + 6, ant->pos.y + 6);
             }
@@ -198,7 +199,7 @@ public:
         }
 
         for (const auto& other : ants_) {
-            if (!other || !other->is_alive() || other->is_underground()) continue;
+            if (!other || !other->is_alive()) continue;
             if (other->pos == adj) return false;
             TileCoord other_tile{
                 (other->pixel_x >= 0) ? (other->pixel_x / 32) : ((other->pixel_x - 31) / 32),
@@ -212,7 +213,7 @@ public:
 
     bool has_living_ant_at(TileCoord target) const noexcept {
         for (const auto& ant : ants_) {
-            if (ant && ant->is_alive() && !ant->underground) {
+            if (ant && ant->is_alive()) {
                 if (ant->pos == target) return true;
                 TileCoord cur_tile{
                     (ant->pixel_x >= 0) ? (ant->pixel_x / 32) : ((ant->pixel_x - 31) / 32),
@@ -226,7 +227,7 @@ public:
 
     bool has_other_living_ant_at(TileCoord target, uint32_t ignore_ant_id) const noexcept {
         for (const auto& ant : ants_) {
-            if (ant && ant->is_alive() && !ant->underground && ant->id != ignore_ant_id) {
+            if (ant && ant->is_alive() && ant->id != ignore_ant_id) {
                 if (ant->pos == target) return true;
                 TileCoord cur_tile{
                     (ant->pixel_x >= 0) ? (ant->pixel_x / 32) : ((ant->pixel_x - 31) / 32),
@@ -276,7 +277,7 @@ public:
     bool tile_occupied(TileCoord t);
 
     // animation stepping (FUN_0102c0db / FUN_0102b95f / FUN_0102b997 / FUN_0101ee84)
-    void loco_play(AntUnit& a, const movement::MotionClip& clip, uint8_t dir);
+    void loco_play(AntUnit& a, const movement::MotionClip& clip, uint8_t dir, uint16_t evt5_ms = 0);
     void loco_update(AntUnit& a, uint32_t now);
     int  loco_step(AntUnit& a, uint32_t now);
     void loco_on_step(AntUnit& a, StepEvt& e);
@@ -308,6 +309,25 @@ public:
     bool can_take_user_order(const AntUnit& a) const noexcept;
     void deliver_path(uint32_t ant_id, const std::vector<TileCoord>& path);
     bool has_pending_path(uint32_t ant_id) const noexcept;
+
+    // hill, hatch and raid actions (action_system.cpp)
+    void action_cleanup(AntUnit& a, uint8_t old_action, uint8_t new_action);   // SetAction old-action cleanup (table 0x101b48f)
+    void enter_hill(AntUnit& a);                       // message 7 handler FUN_01021494
+    void enter_clip_end(AntUnit& a);                   // step callback, actions 2 / 0x14, last frame
+    void cleanup_enter(AntUnit& a);                    // FUN_0101e165: deposit and heal
+    bool raid_arrive(AntUnit& a, StepEvt& e);          // FUN_0101ccaf case 0xb (true: the raid started)
+    void start_raid(AntUnit& a, uint8_t victim, uint32_t amount);   // FUN_0102184e
+    void raid_clip_end(AntUnit& a);                    // step callback, actions 5 / 0xd, last frame
+    void cleanup_raid(AntUnit& a);                     // FUN_0101e27f: loot transfer
+    void retreat_home(AntUnit& a);                     // FUN_0101dded with flag 1: a 1 hp ant goes home
+    void yield_guard_ai(AntUnit& a);                   // the remake's combat guard stands down while the hill logic moves the ant
+    void anthillq_run();                               // ANTHILLQ task, every 200 ms
+    void hatch_run(uint8_t team);                      // HATCHTSK (0x1025072)
+    void add_score(uint8_t player, int32_t amount);    // FUN_01010cc9
+    void post_news(uint8_t player, const char* text, uint16_t string_id);
+    TileCoord team_tile42(uint8_t team) const noexcept;
+    TileCoord team_ring_tile(uint8_t team) const noexcept;
+    uint32_t anthillq_next_ms_{200};
 
     // helpers
     uint8_t  orig_action_of(const AntUnit& a) const noexcept;

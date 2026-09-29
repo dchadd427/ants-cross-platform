@@ -20,7 +20,7 @@ AntUnit::AntUnit(uint32_t unit_id, TeamId team_in, AntType type_in, int32_t star
 }
 
 bool AntUnit::take_damage(uint16_t amount, DamageSource source, [[maybe_unused]] uint32_t attacker_id) noexcept {
-    if (death_status != DeathStatus::Alive || hp == 0 || is_invulnerable() || underground) {
+    if (death_status != DeathStatus::Alive || hp == 0) {
         return false;
     }
 
@@ -53,6 +53,7 @@ bool AntUnit::take_damage(uint16_t amount, DamageSource source, [[maybe_unused]]
     }
 
     hp = static_cast<uint16_t>(hp - amount);
+    if (hp == 1) retreat_pending = true;
     bool uninterruptible = (state == UnitState::PlacingFire || state == UnitState::PlantingBomb ||
                             state == UnitState::BuildingBridge || state == UnitState::DemolishingBridge);
     if (!uninterruptible && state != UnitState::Knockback && state != UnitState::Stunned && state != UnitState::Drowning) {
@@ -62,10 +63,6 @@ bool AntUnit::take_damage(uint16_t amount, DamageSource source, [[maybe_unused]]
 }
 
 void AntUnit::tick_timers() noexcept {
-    if (invulnerable_ticks > 0) {
-        invulnerable_ticks--;
-    }
-
     if (transform_timer > 0) {
         transform_timer--;
     }
@@ -154,7 +151,7 @@ void AntUnit::tick_timers() noexcept {
     }
 
     // Continuous idle standing animation cycle
-    if (state == UnitState::Idle || state == UnitState::GuardIdle || state == UnitState::QueuingBase) {
+    if (state == UnitState::Idle || state == UnitState::GuardIdle) {
         anim_tick++;
         anim_subitem = (anim_tick / 4);
     }

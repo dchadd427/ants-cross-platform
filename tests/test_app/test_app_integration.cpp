@@ -1245,8 +1245,13 @@ void run_suite_8_unit_health_and_map_select() {
         ASSERT_TRUE(down_res);
         hud.handle_mouse_up(500, 165, SDL_BUTTON_LEFT, sim, cam);
 
+        // The click costs 200 points and one egg at once; the egg incubates for 8000 ms without any ant (HATCHTSK)
         ASSERT_EQ(sim.get_player_eggs(0), initial_eggs - 1);
         ASSERT_EQ(sim.get_player_score(0), 300);
+        ASSERT_EQ(sim.get_pending_hatch_count(0), 1u);
+        ASSERT_EQ(sim.get_world_state().ants.size(), initial_ants);
+        for (int t = 0; t < 165; ++t) sim.tick();
+        ASSERT_EQ(sim.get_pending_hatch_count(0), 0u);
         ASSERT_EQ(sim.get_world_state().ants.size(), initial_ants + 1);
 
         // 4. Click Stop button at (610, 195) to deselect base
@@ -1393,32 +1398,35 @@ void run_suite_9_gameplay_mechanics_and_options() {
         int32_t bx = base->x;
         int32_t by = base->y;
 
-        // Spawn damaged worker carrying food at base queue spot (bx - 1, by + 3)
+        // Spawn damaged worker carrying food on the waiting tile (bx - 1, by + 3)
         uint32_t ant_id = sim_engine.spawn_unit(0, AntType::Worker, TileCoord{bx - 1, by + 3});
         auto& ant = sim_engine.get_unit(ant_id);
-        ant.hp = 20; // Damaged
+        ant.hp = 4; // Damaged
         ant.pick_up_food(1, 25);
         ant.harvest_origin = TileCoord{15, 15};
 
-        // Issue move order to base hole (bx+1, by+1)
+        // An order onto the hill is the enter order (order 2): the ant walks to the entrance tile (bx+1, by+1)
         sim_engine.issue_move_order(ant_id, TileCoord{bx + 1, by + 1});
+        ASSERT_EQ(ant.orig_order, AntUnit::kOrderHome);
 
-        // Tick movement until entering hole
+        // Tick movement until the enter clip starts on the entrance tile
         for (int i = 0; i < 90 && ant.state != UnitState::EnteringBase; ++i) {
             sim_engine.tick();
         }
-
-        // Must enter EnteringBase state
         ASSERT_EQ(static_cast<uint16_t>(ant.state), static_cast<uint16_t>(UnitState::EnteringBase));
+        ASSERT_EQ(ant.pos, (TileCoord{bx + 1, by + 1}));
 
-        // Advance through entering hole animation to frame 8 (underground) and beyond
-        for (int i = 0; i < 25 && ant.state == UnitState::EnteringBase; ++i) {
+        // Food and health change only when the clip is cleaned up: still carrying and wounded inside the clip
+        ASSERT_TRUE(ant.is_holding());
+        ASSERT_EQ(ant.hp, 4u);
+
+        // The clip ends: the food scores, the ant is healed to full health and sets out for the food source
+        for (int i = 0; i < 200 && ant.state == UnitState::EnteringBase; ++i) {
             sim_engine.tick();
         }
-
-        // Food deposited and ant fully healed
         ASSERT_FALSE(ant.is_holding());
         ASSERT_EQ(ant.hp, ant.max_hp);
+        ASSERT_EQ(sim_engine.get_player_score(0), 25);
     } TEST_END();
 
     TEST_CASE("9.3 Friendly Ant Pathing Around Stationary Ant (No Pushing)") {
@@ -1725,6 +1733,7 @@ void run_suite_10_egg_economy_incubation_teamup_abilities() {
     TEST_CASE("10.2 Egg Consumption & Zero Egg Prohibits Hatching") {
         SimulationEngine sim;
         sim.init_test_world(60, 60, 42, 12 * 60 * 1000);
+        sim.grid_mut().set_anthill(0, TileCoord{10, 10});
         sim.set_player_score(0, 600);
         sim.set_player_eggs(0, 2);
 
@@ -1737,11 +1746,19 @@ void run_suite_10_egg_economy_incubation_teamup_abilities() {
         ASSERT_EQ(sim.get_player_score(0), 400);
         ASSERT_EQ(sim.get_player_eggs(0), 1u);
 
+        // Only one egg incubates at a time: a click while one hatches costs nothing ("An Ant is already hatching!")
+        ASSERT_FALSE(sim.hatch_ant(0, AntType::Worker));
+        ASSERT_EQ(sim.get_player_score(0), 400);
+        ASSERT_EQ(sim.get_player_eggs(0), 1u);
+        for (int t = 0; t < 170 && sim.get_pending_hatch_count(0) > 0; ++t) sim.tick();   // 8000 ms incubation
+        ASSERT_EQ(sim.get_pending_hatch_count(0), 0u);
+
         // 2nd Hatch: 400 -> 200 pts, 1 -> 0 eggs
         bool h2 = sim.hatch_ant(0, AntType::Worker);
         ASSERT_TRUE(h2);
         ASSERT_EQ(sim.get_player_score(0), 200);
         ASSERT_EQ(sim.get_player_eggs(0), 0u);
+        for (int t = 0; t < 170 && sim.get_pending_hatch_count(0) > 0; ++t) sim.tick();
 
         // 3rd Hatch: score is 200 (sufficient score), but 0 eggs available -> Must fail!
         bool h3 = sim.hatch_ant(0, AntType::Worker);
@@ -1773,33 +1790,31 @@ void run_suite_10_egg_economy_incubation_teamup_abilities() {
         bool hatched = sim.hatch_ant(0, AntType::Worker);
         ASSERT_TRUE(hatched);
 
-        // Newborn spawned underground at the anthill hole (bx+1, by+1)
+        // While the egg incubates there is no ant at all (the original creates the newborn when HATCHTSK runs)
         ASSERT_EQ(sim.get_pending_hatch_count(0), 1u);
-        const auto& ws0 = sim.get_world_state();
-        bool found_newborn = false;
-        uint32_t newborn_id = 0;
-        for (const auto& a : ws0.ants) {
-            if (a.player_id == 0 && a.is_underground) {
-                found_newborn = true;
-                newborn_id = a.id;
-                ASSERT_EQ(a.tile_x, bx + 1);
-                ASSERT_EQ(a.tile_y, by + 1);
-                break;
-            }
-        }
-        ASSERT_TRUE(found_newborn);
+        for (const auto& a : sim.get_world_state().ants) ASSERT_TRUE(a.player_id != 0);
 
-        // Tick 10 ticks: still incubating underground
+        // Tick 10 ticks: still incubating
         for (int i = 0; i < 10; ++i) sim.tick();
         ASSERT_EQ(sim.get_pending_hatch_count(0), 1u);
-        const auto& u_inc = sim.get_unit(newborn_id);
-        ASSERT_TRUE(u_inc.underground);
+        for (const auto& a : sim.get_world_state().ants) ASSERT_TRUE(a.player_id != 0);
 
-        // Tick 15 more ticks (total 25 ticks > 20 delay): emergence triggered
+        // Tick 15 more ticks (total 25 ticks > 20 delay): the newborn appears on the entrance tile (bx+1, by+1)
+        // playing the hatch clip
         for (int i = 0; i < 15; ++i) sim.tick();
         ASSERT_EQ(sim.get_pending_hatch_count(0), 0u);
+        uint32_t newborn_id = 0;
+        for (const auto& a : sim.get_world_state().ants) {
+            if (a.player_id == 0) newborn_id = a.id;
+        }
+        ASSERT_TRUE(newborn_id != 0);
+        const auto& u_new = sim.get_unit(newborn_id);
+        ASSERT_EQ(u_new.pos.x, bx + 1);
+        ASSERT_EQ(u_new.pos.y, by + 1);
+        ASSERT_EQ(u_new.state, UnitState::EnteringBase);
+        ASSERT_TRUE(sim.has_audio_event(SoundID::ExitHill));
 
-        // Advance simulation until ant completes emergence and walks to idle spot (bx+4, by+4)
+        // Advance simulation until the ant finishes the clip and walks to the idle spot tile42 (bx+4, by+4)
         for (int i = 0; i < 130; ++i) sim.tick();
 
         const auto& u_final = sim.get_unit(newborn_id);
@@ -1931,67 +1946,6 @@ void run_suite_10_egg_economy_incubation_teamup_abilities() {
 void run_suite_11_anthill_queuing_and_priority() {
     TEST_SUITE("Suite 11: Anthill Queuing & Priority Serialization");
 
-    TEST_CASE("11.1 Base Queuing Location Strictly To The Left of Base") {
-        SimulationEngine sim;
-        sim.init_test_world(60, 60, 42, 12 * 60 * 1000);
-        sim.grid_mut().set_anthill(0, TileCoord{20, 20});
-        const auto* base = sim.grid().find_anthill(0);
-        ASSERT_TRUE(base != nullptr);
-        int32_t bx = base->x;
-        int32_t by = base->y;
-
-        // Slot coordinates strictly to the left of the base mound [bx..bx+3, by..by+3]
-        TileCoord s0 = sim.get_base_queue_slot(0, 0);
-        TileCoord s1 = sim.get_base_queue_slot(0, 1);
-        TileCoord s2 = sim.get_base_queue_slot(0, 2);
-        TileCoord s3 = sim.get_base_queue_slot(0, 3);
-        TileCoord s4 = sim.get_base_queue_slot(0, 4);
-
-        ASSERT_EQ(s0.x, bx - 1);
-        ASSERT_EQ(s0.y, by);
-
-        ASSERT_EQ(s1.x, bx - 1);
-        ASSERT_EQ(s1.y, by + 1);
-
-        ASSERT_EQ(s2.x, bx - 1);
-        ASSERT_EQ(s2.y, by + 2);
-
-        ASSERT_EQ(s3.x, bx - 1);
-        ASSERT_EQ(s3.y, by + 3);
-
-        ASSERT_EQ(s4.x, bx - 2);
-        ASSERT_EQ(s4.y, by);
-
-        // First worker joining empty queue gets priority immediately and goes straight into base
-        uint32_t w1 = sim.spawn_unit(0, AntType::Worker, TileCoord{10, 10});
-        AntOrder ret1{};
-        ret1.ant_id = w1;
-        ret1.type = OrderType::ReturnToBase;
-        sim.issue_order(ret1);
-
-        ASSERT_TRUE(sim.is_ant_in_base_queue(w1));
-        ASSERT_EQ(sim.get_active_depositing_ant(0), w1);
-        tick_until_paths_delivered(sim, {w1});
-        const auto& unit1 = sim.get_unit(w1);
-        ASSERT_FALSE(unit1.waypoints.empty());
-        ASSERT_EQ(unit1.waypoints.back().x, bx + 1);
-        ASSERT_EQ(unit1.waypoints.back().y, by + 1);
-
-        // Second worker joining while w1 has priority routes to queue slot 1 (bx - 1, by + 1)
-        uint32_t w2 = sim.spawn_unit(0, AntType::Worker, TileCoord{10, 15});
-        AntOrder ret2{};
-        ret2.ant_id = w2;
-        ret2.type = OrderType::ReturnToBase;
-        sim.issue_order(ret2);
-
-        ASSERT_TRUE(sim.is_ant_in_base_queue(w2));
-        ASSERT_EQ(sim.get_active_depositing_ant(0), w1);
-        tick_until_paths_delivered(sim, {w2});
-        const auto& unit2 = sim.get_unit(w2);
-        ASSERT_FALSE(unit2.waypoints.empty());
-        ASSERT_EQ(unit2.waypoints.back().x, bx - 1);
-        ASSERT_EQ(unit2.waypoints.back().y, by + 1);
-    } TEST_END();
 
     TEST_CASE("11.2 Serialized Base Entry & Priority Queue (Stand Off to Side & Wait)") {
         SimulationEngine sim;
@@ -2002,7 +1956,7 @@ void run_suite_11_anthill_queuing_and_priority() {
         int32_t bx = base->x;
         int32_t by = base->y;
 
-        // Spawn 3 workers carrying food directly at queue slots 0, 1, 2
+        // Spawn 3 workers carrying food next to the hill
         uint32_t a1 = sim.spawn_unit(0, AntType::Worker, TileCoord{bx - 1, by});
         uint32_t a2 = sim.spawn_unit(0, AntType::Worker, TileCoord{bx - 1, by + 1});
         uint32_t a3 = sim.spawn_unit(0, AntType::Worker, TileCoord{bx - 1, by + 2});
@@ -2011,86 +1965,49 @@ void run_suite_11_anthill_queuing_and_priority() {
         sim.get_unit(a2).pick_up_food(1, 25);
         sim.get_unit(a3).pick_up_food(1, 25);
 
-        // Join base queue in order 1, 2, 3
+        // Order all three onto the hill in order 1, 2, 3
         sim.join_base_queue(a1);
         sim.join_base_queue(a2);
         sim.join_base_queue(a3);
 
-        ASSERT_EQ(sim.get_base_queue_size(0), 3u);
+        // The first ant may take the free entrance; the entrance is claimed by it, so the other two were sent to the
+        // waiting tiles in front of the hill (+0x68 = 1)
+        ASSERT_FALSE(sim.is_ant_in_base_queue(a1));
+        ASSERT_EQ(sim.get_unit(a1).orig_order, AntUnit::kOrderHome);
+        ASSERT_TRUE(sim.is_ant_in_base_queue(a2));
+        ASSERT_TRUE(sim.is_ant_in_base_queue(a3));
 
-        // Step simulation 1 tick
-        sim.tick();
-
-        // Ant 1 is at head slot, granted priority to enter!
-        ASSERT_EQ(sim.get_active_depositing_ant(0), a1);
-        ASSERT_EQ(sim.get_unit(a1).state, UnitState::Walking);
-
-        // Ant 2 and Ant 3 must stand off to the side in QueuingBase, facing East towards the base!
-        ASSERT_EQ(sim.get_unit(a2).state, UnitState::QueuingBase);
-        ASSERT_EQ(sim.get_unit(a2).facing, Direction::East);
-        ASSERT_TRUE(sim.get_unit(a2).waypoints.empty());
-
-        ASSERT_EQ(sim.get_unit(a3).state, UnitState::QueuingBase);
-        ASSERT_EQ(sim.get_unit(a3).facing, Direction::East);
-        ASSERT_TRUE(sim.get_unit(a3).waypoints.empty());
-
-        // Step simulation until Ant 1 reaches hole and deposits food
-        for (int i = 0; i < 250 && sim.get_unit(a1).is_holding(); ++i) {
+        // Run until all three deposited: the enter clips never overlap and the ants take the entrance one by one
+        std::vector<uint32_t> entry_order;
+        uint32_t last_active = 0;
+        bool a1_entering_with_two_waiting = false;
+        for (int i = 0; i < 1500 && sim.get_player_score(0) < 75; ++i) {
             sim.tick();
-            // During Ant 1's journey, Ant 2 and Ant 3 must remain waiting
-            if (sim.get_unit(a1).is_holding()) {
-                ASSERT_EQ(sim.get_unit(a2).state, UnitState::QueuingBase);
-                ASSERT_EQ(sim.get_unit(a3).state, UnitState::QueuingBase);
+            int entering = 0;
+            for (uint32_t id : {a1, a2, a3}) {
+                if (sim.get_unit(id).state == UnitState::EnteringBase) ++entering;
             }
-        }
-
-        // Ant 1 deposited food: score increased by 25, scoreup.wav (Sound 87) triggered
-        ASSERT_FALSE(sim.get_unit(a1).is_holding());
-        ASSERT_EQ(sim.get_player_score(0), 25);
-        ASSERT_TRUE(sim.has_audio_event(SoundID::BaseScoreUp));
-
-        // Ant 1 completes emergence and vacates the hole. Ant 2 and Ant 3 remain waiting in QueuingBase!
-        for (int i = 0; i < 250 && sim.get_active_depositing_ant(0) == a1; ++i) {
-            sim.tick();
-            if (sim.get_active_depositing_ant(0) == a1) {
-                ASSERT_EQ(sim.get_unit(a2).state, UnitState::QueuingBase);
-                ASSERT_EQ(sim.get_unit(a3).state, UnitState::QueuingBase);
+            ASSERT_TRUE(entering <= 1);
+            const uint32_t active = sim.get_active_depositing_ant(0);
+            if (active != 0 && active != last_active) {
+                entry_order.push_back(active);
+                if (entry_order.size() == 1 && sim.get_base_queue_size(0) == 2u) a1_entering_with_two_waiting = true;
             }
-        }
-        ASSERT_EQ(sim.get_active_depositing_ant(0), a2);
-        ASSERT_EQ(sim.get_unit(a2).state, UnitState::Walking);
-
-        // Step simulation until Ant 2 reaches hole and deposits food
-        for (int i = 0; i < 250 && sim.get_unit(a2).is_holding(); ++i) {
-            sim.tick();
-            if (sim.get_unit(a2).is_holding()) {
-                // Ant 3 advanced to slot 1 or is waiting in QueuingBase (or brief Idle on arrival frame)
-                ASSERT_TRUE(sim.get_unit(a3).state == UnitState::Walking || sim.get_unit(a3).state == UnitState::QueuingBase || sim.get_unit(a3).state == UnitState::Idle);
-            }
+            last_active = active;
         }
 
-        // Ant 2 deposited food: score increased to 50
-        ASSERT_FALSE(sim.get_unit(a2).is_holding());
-        ASSERT_EQ(sim.get_player_score(0), 50);
+        // The ant that had the free entrance went first while the other two stood queued on the waiting tiles
+        ASSERT_EQ(entry_order.size(), 3u);
+        ASSERT_EQ(entry_order[0], a1);
+        ASSERT_TRUE(a1_entering_with_two_waiting);
+        ASSERT_TRUE(entry_order[1] != entry_order[2] && entry_order[1] != a1 && entry_order[2] != a1);
 
-        // Ant 2 completes emergence and vacates the hole. Ant 3 remains waiting in QueuingBase!
-        for (int i = 0; i < 250 && sim.get_active_depositing_ant(0) == a2; ++i) {
-            sim.tick();
-            if (sim.get_active_depositing_ant(0) == a2) {
-                ASSERT_EQ(sim.get_unit(a3).state, UnitState::QueuingBase);
-            }
-        }
-        ASSERT_EQ(sim.get_active_depositing_ant(0), a3);
-        ASSERT_EQ(sim.get_unit(a3).state, UnitState::Walking);
-
-        // Step simulation until Ant 3 deposits food
-        for (int i = 0; i < 250 && sim.get_unit(a3).is_holding(); ++i) {
-            sim.tick();
-        }
-
-        // Ant 3 deposited food: total score 75
-        ASSERT_FALSE(sim.get_unit(a3).is_holding());
+        // Every ant scored its food when its clip ended: scoreup.wav (Sound 87) and a total of 75 points
         ASSERT_EQ(sim.get_player_score(0), 75);
+        ASSERT_TRUE(sim.has_audio_event(SoundID::BaseScoreUp));
+        ASSERT_FALSE(sim.get_unit(a1).is_holding());
+        ASSERT_FALSE(sim.get_unit(a2).is_holding());
+        ASSERT_FALSE(sim.get_unit(a3).is_holding());
     } TEST_END();
 
     TEST_CASE("11.3 Escape Key Quick Quit Menu Trigger") {
@@ -2164,78 +2081,6 @@ void run_suite_11_anthill_queuing_and_priority() {
         ASSERT_FALSE(app.is_running());
     } TEST_END();
 
-    TEST_CASE("11.4 Base Queue Priority Across Map & Interruption Release") {
-        SimulationEngine sim;
-        sim.init_test_world(60, 60, 42, 12 * 60 * 1000);
-        sim.grid_mut().set_anthill(0, TileCoord{20, 20});
-        sim.grid_mut().set_anthill(1, TileCoord{40, 40});
-        const auto* base = sim.grid().find_anthill(0);
-        ASSERT_TRUE(base != nullptr);
-        int32_t bx = base->x;
-        int32_t by = base->y;
-
-        // Ant 1 on the far side of the map (10, 10) picks up food and joins queue
-        uint32_t a1 = sim.spawn_unit(0, AntType::Worker, TileCoord{10, 10});
-        sim.get_unit(a1).pick_up_food(1, 25);
-        sim.join_base_queue(a1);
-
-        // Ant 1 gets priority immediately and heads straight into the base entrance
-        ASSERT_EQ(sim.get_active_depositing_ant(0), a1);
-        ASSERT_EQ(sim.get_unit(a1).final_dest, (TileCoord{bx + 1, by + 1}));
-        tick_until_paths_delivered(sim, {a1});
-        ASSERT_FALSE(sim.get_unit(a1).waypoints.empty());
-        ASSERT_EQ(sim.get_unit(a1).waypoints.back(), (TileCoord{bx + 1, by + 1}));
-
-        // Ant 2 at (10, 15) joins while Ant 1 has priority: Ant 2 routes to queue slot
-        uint32_t a2 = sim.spawn_unit(0, AntType::Worker, TileCoord{10, 15});
-        sim.get_unit(a2).pick_up_food(1, 25);
-        sim.join_base_queue(a2);
-
-        ASSERT_EQ(sim.get_active_depositing_ant(0), a1);
-        ASSERT_EQ(sim.get_unit(a2).final_dest, sim.get_base_queue_slot(0, 1));
-
-        // Interruption Case 1: User moves Ant 1 to a different location
-        AntOrder move_cmd{};
-        move_cmd.ant_id = a1;
-        move_cmd.type = OrderType::Move;
-        move_cmd.target_x = 5;
-        move_cmd.target_y = 5;
-        sim.issue_order(move_cmd);
-
-        // Ant 1 releases priority and is no longer in base queue
-        ASSERT_FALSE(sim.is_ant_in_base_queue(a1));
-        ASSERT_NE(sim.get_active_depositing_ant(0), a1);
-
-        // Ant 2 immediately claims priority and heads straight into the base!
-        ASSERT_EQ(sim.get_active_depositing_ant(0), a2);
-        ASSERT_EQ(sim.get_unit(a2).final_dest, (TileCoord{bx + 1, by + 1}));
-        tick_until_paths_delivered(sim, {a2});
-        ASSERT_FALSE(sim.get_unit(a2).waypoints.empty());
-        ASSERT_EQ(sim.get_unit(a2).waypoints.back(), (TileCoord{bx + 1, by + 1}));
-
-        // Spawn Ant 3 at (10, 20) and join queue
-        uint32_t a3 = sim.spawn_unit(0, AntType::Worker, TileCoord{10, 20});
-        sim.get_unit(a3).pick_up_food(1, 25);
-        sim.join_base_queue(a3);
-
-        ASSERT_EQ(sim.get_active_depositing_ant(0), a2);
-        ASSERT_EQ(sim.get_unit(a3).final_dest, sim.get_base_queue_slot(0, 1));
-
-        // Interruption Case 2: Ant 2 gets attacked by enemy
-        uint32_t enemy = sim.spawn_unit(1, AntType::Combat, TileCoord{sim.get_unit(a2).pos.x + 1, sim.get_unit(a2).pos.y});
-        sim.execute_melee_attack(enemy, a2);
-
-        // Ant 2 releases priority
-        ASSERT_FALSE(sim.is_ant_in_base_queue(a2));
-        ASSERT_NE(sim.get_active_depositing_ant(0), a2);
-
-        // Ant 3 immediately claims priority and heads straight into the base!
-        ASSERT_EQ(sim.get_active_depositing_ant(0), a3);
-        ASSERT_EQ(sim.get_unit(a3).final_dest, (TileCoord{bx + 1, by + 1}));
-        tick_until_paths_delivered(sim, {a3});
-        ASSERT_FALSE(sim.get_unit(a3).waypoints.empty());
-        ASSERT_EQ(sim.get_unit(a3).waypoints.back(), (TileCoord{bx + 1, by + 1}));
-    } TEST_END();
 }
 
 // ============================================================================
@@ -4112,119 +3957,6 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         ASSERT_TRUE(sim.has_audio_event(64)); // SOUND_FLY_THUMP_A
     } TEST_END();
 
-    TEST_CASE("12.38 Anthill Base Queuing, 9-Step Approach, Blocked Squares, and Idle Spot") {
-        SimulationEngine sim;
-        sim.init_test_world(60, 60, 42, 60000);
-        sim.grid_mut().set_anthill(0, TileCoord{20, 20});
-        const auto* base = sim.grid().find_anthill(0);
-        ASSERT_TRUE(base != nullptr);
-        int32_t bx = base->x; // 20
-        int32_t by = base->y; // 20
-
-        // 1. Check queue slots: Slot 0..3 are along bx - 1 (x = 19)
-        ASSERT_EQ(sim.get_base_queue_slot(0, 0), (TileCoord{bx - 1, by}));
-        ASSERT_EQ(sim.get_base_queue_slot(0, 1), (TileCoord{bx - 1, by + 1}));
-        ASSERT_EQ(sim.get_base_queue_slot(0, 2), (TileCoord{bx - 1, by + 2}));
-        ASSERT_EQ(sim.get_base_queue_slot(0, 3), (TileCoord{bx - 1, by + 3}));
-
-        // 2. Approach Corridor Placement Block: Verify 3 red squares above base (row by - 1)
-        for (int dx = 0; dx <= 2; ++dx) {
-            TileCoord red_sq{bx + dx, by - 1};
-            const auto& cell = sim.grid().get_cell(red_sq);
-            ASSERT_FALSE(cell.can_place_bomb());
-            ASSERT_FALSE(cell.can_place_fire());
-            ASSERT_TRUE(sim.grid().is_anthill_reserved_spot(red_sq));
-
-            // Verify direct grid placement is blocked
-            sim.grid_mut().place_bomb(static_cast<uint32_t>(red_sq.x), static_cast<uint32_t>(red_sq.y), 0);
-            ASSERT_FALSE(sim.grid().has_bomb_at(red_sq));
-
-            sim.grid_mut().place_firewall(static_cast<uint32_t>(red_sq.x), static_cast<uint32_t>(red_sq.y), 0);
-            ASSERT_FALSE(sim.grid().has_fire_at(red_sq));
-        }
-
-        // Verify ability order rejection on red squares
-        uint32_t bomber = sim.spawn_unit(0, AntType::Bomber, TileCoord{bx, by - 2});
-        ASSERT_FALSE(sim.plant_bomb(bomber, TileCoord{bx, by - 1}));
-        ASSERT_FALSE(sim.plant_bomb(bomber, TileCoord{bx, by - 1}, true));
-
-        uint32_t fire_ant = sim.spawn_unit(0, AntType::Fire, TileCoord{bx + 1, by - 2});
-        ASSERT_FALSE(sim.ignite_fire(fire_ant, TileCoord{bx + 1, by - 1}));
-        ASSERT_FALSE(sim.ignite_fire(fire_ant, TileCoord{bx + 1, by - 1}, true));
-
-        // 3. Spawn worker with food at (10, by + 3) and issue ReturnToBase
-        uint32_t w1 = sim.spawn_unit(0, AntType::Worker, TileCoord{10, by + 3});
-        auto& u1 = sim.get_unit(w1);
-        u1.pick_up_food(1, 25);
-        u1.harvest_origin = TileCoord{10, by + 3};
-
-        AntOrder ret1{};
-        ret1.ant_id = w1;
-        ret1.type = OrderType::ReturnToBase;
-        sim.issue_order(ret1);
-
-        // Track every tile visited by w1 on its journey into the base
-        std::vector<TileCoord> visited_coords;
-        TileCoord last_coord = u1.pos;
-        visited_coords.push_back(last_coord);
-
-        for (int i = 0; i < 150; ++i) {
-            sim.tick();
-            if (u1.pos != last_coord) {
-                last_coord = u1.pos;
-                visited_coords.push_back(last_coord);
-            }
-            if (u1.state == UnitState::EnteringBase) {
-                break;
-            }
-        }
-
-        ASSERT_EQ(u1.state, UnitState::EnteringBase);
-        ASSERT_EQ(u1.pos, (TileCoord{bx + 1, by + 1}));
-
-        // Verify ant never walked on top of the base mound [bx..bx+3, by..by+3] \ {(bx+1, by+1), (bx+1, by)}
-        for (const auto& pt : visited_coords) {
-            if (pt.x >= bx && pt.x <= bx + 3 && pt.y >= by && pt.y <= by + 3) {
-                if (!(pt.x == bx + 1 && (pt.y == by || pt.y == by + 1))) {
-                    ASSERT_TRUE(false); // Walked on mound!
-                }
-            }
-        }
-
-        // Verify the ant entered through the top mouth into the hole
-        bool visited_above_hole = false;
-        for (const auto& pt : visited_coords) {
-            if (pt.x == bx + 1 && pt.y == by) visited_above_hole = true;
-        }
-        ASSERT_TRUE(visited_above_hole);
-
-        // 4. Ant visiting without food emerges and routes to the idle position (bx + 4, by + 4)
-        uint32_t w2 = sim.spawn_unit(0, AntType::Worker, TileCoord{bx - 1, by});
-        AntOrder ret2{};
-        ret2.ant_id = w2;
-        ret2.type = OrderType::ReturnToBase;
-        sim.issue_order(ret2);
-
-        for (int i = 0; i < 250 && sim.get_unit(w2).state != UnitState::EnteringBase; ++i) {
-            sim.tick();
-        }
-        ASSERT_EQ(sim.get_unit(w2).state, UnitState::EnteringBase);
-
-        // Advance through base entry animation (16 ticks)
-        for (int i = 0; i < 20; ++i) {
-            sim.tick();
-        }
-
-        // Tick until ant emerges and finishes moving to idle spot
-        for (int i = 0; i < 140; ++i) {
-            sim.tick();
-            if (sim.get_unit(w2).state == UnitState::Idle && sim.get_unit(w2).pos != TileCoord{bx + 1, by + 1}) {
-                break;
-            }
-        }
-        ASSERT_EQ(sim.get_unit(w2).state, UnitState::Idle);
-        ASSERT_EQ(sim.get_unit(w2).pos, (TileCoord{bx + 4, by + 4}));
-    } TEST_END();
 
     TEST_CASE("12.39 Dynamic Base Deposit Path Avoids Queued Ants, Bombs and Fire Walls") {
         SimulationEngine sim;
@@ -4235,7 +3967,7 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         int32_t bx = base->x; // 20
         int32_t by = base->y; // 20
 
-        // Spawn 3 workers carrying food at queue slots 0, 1, 2
+        // Spawn 3 workers carrying food on the waiting column in front of the hill
         uint32_t a1 = sim.spawn_unit(0, AntType::Worker, TileCoord{bx - 1, by + 3});
         uint32_t a2 = sim.spawn_unit(0, AntType::Worker, TileCoord{bx - 1, by + 2});
         uint32_t a3 = sim.spawn_unit(0, AntType::Worker, TileCoord{bx - 1, by + 1});
@@ -4244,70 +3976,48 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         sim.get_unit(a2).pick_up_food(1, 25);
         sim.get_unit(a3).pick_up_food(1, 25);
 
-        // Join base queue
+        // Order all three onto the hill: the first takes the entrance, the others wait for their turn
         sim.join_base_queue(a1);
         sim.join_base_queue(a2);
         sim.join_base_queue(a3);
+        ASSERT_EQ(sim.get_unit(a1).orig_order, AntUnit::kOrderHome);
 
-        // Step 1 tick: Ant 1 has priority, Ant 2 & Ant 3 are waiting in QueuingBase
-        sim.tick();
-        ASSERT_EQ(sim.get_active_depositing_ant(0), a1);
-
-        // Ant 1 must NOT step on Ant 2's slot (bx-1, by+2) or Ant 3's slot (bx-1, by+1)
-        TileCoord a2_slot{bx - 1, by + 2};
-        TileCoord a3_slot{bx - 1, by + 1};
-
-        std::vector<TileCoord> a1_visited;
-        a1_visited.push_back(sim.get_unit(a1).pos);
-        TileCoord last_a1 = sim.get_unit(a1).pos;
-
+        // Ant 1 walks to the entrance and never steps on a tile another ant stands on
+        auto all_on_distinct_tiles = [&]() {
+            return sim.get_unit(a1).pos != sim.get_unit(a2).pos && sim.get_unit(a1).pos != sim.get_unit(a3).pos &&
+                   sim.get_unit(a2).pos != sim.get_unit(a3).pos;
+        };
+        ASSERT_TRUE(all_on_distinct_tiles());
         for (int i = 0; i < 300 && sim.get_unit(a1).state != UnitState::EnteringBase; ++i) {
             sim.tick();
-            if (sim.get_unit(a1).pos != last_a1) {
-                last_a1 = sim.get_unit(a1).pos;
-                a1_visited.push_back(last_a1);
-            }
+            ASSERT_TRUE(all_on_distinct_tiles());
         }
-
         ASSERT_EQ(sim.get_unit(a1).state, UnitState::EnteringBase);
         ASSERT_EQ(sim.get_unit(a1).pos, (TileCoord{bx + 1, by + 1}));
 
-        // Assert Ant 1 never stepped on Ant 2 or Ant 3's positions
-        for (const auto& pt : a1_visited) {
-            ASSERT_NE(pt, a2_slot);
-            ASSERT_NE(pt, a3_slot);
-        }
-
-        // Advance until Ant 1 finishes depositing food, emerges, vacates hole, and Ant 2 gains priority
-        for (int i = 0; i < 300 && sim.get_active_depositing_ant(0) != a2; ++i) {
+        // The ants that wait for their turn are sent in one by one (ANTHILLQ) and never share a tile with each other
+        std::set<uint32_t> entered{a1};
+        for (int i = 0; i < 1500 && sim.get_player_score(0) < 75; ++i) {
             sim.tick();
+            ASSERT_TRUE(all_on_distinct_tiles());
+            const uint32_t active = sim.get_active_depositing_ant(0);
+            if (active != 0) entered.insert(active);
         }
-        ASSERT_EQ(sim.get_active_depositing_ant(0), a2);
+        ASSERT_EQ(entered.size(), 3u);
+        ASSERT_EQ(sim.get_player_score(0), 75);
 
-        // Place a friendly bomb along column bx - 2 at (bx - 2, by)
-        sim.grid_mut().place_bomb(static_cast<uint32_t>(bx - 2), static_cast<uint32_t>(by), 0);
-        ASSERT_TRUE(sim.grid().has_bomb_at(TileCoord{bx - 2, by}));
-
-        // Ant 2 must path to base avoiding both Ant 3 at (bx - 1, by + 1) and the bomb at (bx - 2, by)
-        std::vector<TileCoord> a2_visited;
-        a2_visited.push_back(sim.get_unit(a2).pos);
-        TileCoord last_a2 = sim.get_unit(a2).pos;
-
-        for (int i = 0; i < 300 && sim.get_unit(a2).state != UnitState::EnteringBase; ++i) {
+        // A friendly bomb between a lone worker and the entrance is never stepped on: the worker re-plans
+        uint32_t lone = sim.spawn_unit(0, AntType::Worker, TileCoord{bx - 4, by + 1});
+        sim.get_unit(lone).pick_up_food(1, 25);
+        sim.grid_mut().place_bomb(static_cast<uint32_t>(bx - 3), static_cast<uint32_t>(by + 1), 0);
+        ASSERT_TRUE(sim.grid().has_bomb_at(TileCoord{bx - 3, by + 1}));
+        sim.join_base_queue(lone);
+        for (int i = 0; i < 400 && sim.get_unit(lone).state != UnitState::EnteringBase; ++i) {
             sim.tick();
-            if (sim.get_unit(a2).pos != last_a2) {
-                last_a2 = sim.get_unit(a2).pos;
-                a2_visited.push_back(last_a2);
-            }
+            ASSERT_TRUE(sim.get_unit(lone).pos != (TileCoord{bx - 3, by + 1}));
         }
-
-        ASSERT_EQ(sim.get_unit(a2).state, UnitState::EnteringBase);
-        ASSERT_EQ(sim.get_unit(a2).pos, (TileCoord{bx + 1, by + 1}));
-
-        for (const auto& pt : a2_visited) {
-            ASSERT_NE(pt, a3_slot);
-            ASSERT_NE(pt, (TileCoord{bx - 2, by}));
-        }
+        ASSERT_EQ(sim.get_unit(lone).state, UnitState::EnteringBase);
+        ASSERT_EQ(sim.get_unit(lone).pos, (TileCoord{bx + 1, by + 1}));
     } TEST_END();
 
     TEST_CASE("12.40 Ant Lunchbox Sprite Render Order Layering (Lunchbox in Back)") {
@@ -5406,8 +5116,10 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         ASSERT_TRUE(sim.grid().get_cell({20, 10}).has_food());
         ASSERT_EQ(w->carried_food, 1);
 
-        // Ant has joined base queue and is routing back to base at (5, 5)
-        ASSERT_TRUE(sim.is_ant_in_base_queue(worker));
+        // The ant does not eat: it heads for its own entrance (5 + 1, 5 + 1) with the enter order (order 2), and the
+        // original says "Can't - already have food." (string 17)
+        ASSERT_EQ(w->orig_order, AntUnit::kOrderHome);
+        ASSERT_TRUE(sim.has_news_event(0, 17));
     } TEST_END();
 
     TEST_CASE("12.64 Diagonal Melee Attack Pushes Diagonally Along Strike Vector") {
@@ -6808,58 +6520,14 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         }
     } TEST_END();
 
-    TEST_CASE("12.107: Authentic Proportional Base Healing Dwell, Lethal Food Drops & Grab Food Action Mapping") {
+    TEST_CASE("12.107: Lethal Food Drops & Grab Food Action Mapping") {
         SimulationEngine sim;
         sim.init_test_world(60, 60, 100, 60000);
         sim.grid_mut().set_anthill(0, TileCoord{20, 20});
-        const auto* base = sim.grid().find_anthill(0);
-        ASSERT_TRUE(base != nullptr);
-        int32_t bx = base->x;
-        int32_t by = base->y;
 
-        // 1. Proportional Base Healing Dwell:
-        // Wounded worker with 1 HP (missing 9 HP) arrives at base hole (bx+1, by+1)
-        uint32_t w1 = sim.spawn_unit(0, AntType::Worker, TileCoord{bx + 1, by + 1});
-        auto& u1 = sim.get_unit(w1);
-        u1.hp = 1; // 9 HP missing
-        u1.state = UnitState::EnteringBase;
-        u1.anim_subitem = 8;
-        u1.anim_tick = 0;
+        // (The healing time of the enter clip and the deposit at its end are golden-tested in test_hill_actions.)
 
-        // Tick once to enter underground at Frame 8
-        sim.tick();
-        ASSERT_TRUE(u1.underground);
-        // Missing 9 HP * 4 ticks/HP = 36 ticks dwell
-        // First tick consumed 1 dwell tick, so 35 dwell ticks remaining
-        ASSERT_EQ(u1.base_dwell_ticks, 35u);
-
-        // Advance 34 ticks underground: still eating/healing
-        for (int t = 0; t < 34; ++t) {
-            sim.tick();
-        }
-        ASSERT_TRUE(u1.underground);
-        ASSERT_EQ(u1.state, UnitState::EnteringBase);
-
-        // Final dwell tick: completes dwell and emerges
-        sim.tick();
-        ASSERT_FALSE(u1.underground);
-        ASSERT_EQ(u1.hp, 10u);
-
-        // 2. Unwounded food depositor: dwell is 4 ticks (200ms)
-        uint32_t w2 = sim.spawn_unit(0, AntType::Worker, TileCoord{bx + 1, by + 1});
-        auto& u2 = sim.get_unit(w2);
-        u2.hp = 10;
-        u2.pick_up_food(1, 25);
-        u2.state = UnitState::EnteringBase;
-        u2.anim_subitem = 8;
-        u2.anim_tick = 0;
-
-        sim.tick();
-        ASSERT_TRUE(u2.underground);
-        // 4 ticks total, 1 consumed on entry
-        ASSERT_EQ(u2.base_dwell_ticks, 3u);
-
-        // 3. Lethal Melee Damage Drops Carried Lunchbox:
+        // 1. Lethal Melee Damage Drops Carried Lunchbox:
         uint32_t attacker = sim.spawn_unit(0, AntType::Combat, TileCoord{30, 30});
         uint32_t victim = sim.spawn_unit(1, AntType::Worker, TileCoord{31, 30});
         auto& v = sim.get_unit(victim);
@@ -6875,7 +6543,7 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         ASSERT_TRUE(sim.grid().has_lunchbox_at(TileCoord{31, 30}));
         ASSERT_EQ(sim.grid().get_lunchbox_points(TileCoord{31, 30}), 50u);
 
-        // 4. Food Harvesting Sequence Action Verification
+        // 2. Food Harvesting Sequence Action Verification
         uint32_t harvester = sim.spawn_unit(0, AntType::Worker, TileCoord{40, 40});
         auto& h = sim.get_unit(harvester);
         h.state = UnitState::HarvestingFood;
@@ -6891,10 +6559,10 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
 
     TEST_CASE("12.108: Version Invariant & Fog of War Cursor Concealment Parity") {
         // 1. Verify semantic versioning components
-        ASSERT_EQ(ants::VERSION_STRING, "v0.0.31");
+        ASSERT_EQ(ants::VERSION_STRING, "v0.0.32");
         ASSERT_EQ(ants::VERSION_MAJOR, 0);
         ASSERT_EQ(ants::VERSION_MINOR, 0);
-        ASSERT_EQ(ants::VERSION_PATCH, 31);
+        ASSERT_EQ(ants::VERSION_PATCH, 32);
 
         // 2. Setup simulation world with Fog of War enabled
         SimulationEngine sim;
@@ -7147,87 +6815,47 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
     // ------------------------------------------------------------------------
     // 12.113: Base Queue Mound Ramp Concurrency Limit (Max 2 Ants)
     // ------------------------------------------------------------------------
-    TEST_CASE("12.113 Base Queue Mound Ramp Concurrency Limit (Max 2 Ants)") {
-        SimulationEngine sim;
-        sim.init_test_world(60, 60, 100, 60000);
-        sim.grid_mut().set_anthill(0, TileCoord{20, 20});
-        const auto* ah = sim.grid().find_anthill(0);
-        ASSERT_TRUE(ah != nullptr);
-        int32_t bx = ah->x;
-        int32_t by = ah->y;
-
-        // Place 2 friendly ants on mound ramp: (bx + 1, by) and (bx + 1, by + 1)
-        uint32_t ramp1 = sim.spawn_unit(0, AntType::Worker, TileCoord{bx + 1, by});
-        uint32_t ramp2 = sim.spawn_unit(0, AntType::Worker, TileCoord{bx + 1, by + 1});
-        (void)ramp1;
-        (void)ramp2;
-
-        // 3rd ant arrives with food and joins base queue
-        uint32_t q_ant = sim.spawn_unit(0, AntType::Worker, TileCoord{bx - 1, by + 3});
-        sim.get_unit(q_ant).pick_up_food(1, 25);
-        sim.join_base_queue(q_ant);
-
-        // Tick simulation: q_ant must NOT be dispatched onto ramp while 2 ants occupy mound
-        sim.tick();
-        ASSERT_EQ(sim.get_active_depositing_ant(0), 0u);
-
-        // Move one ramp ant away off the mound
-        sim.get_unit(ramp1).set_tile_pos(bx + 4, by + 4);
-        sim.tick();
-
-        // Now with < 2 ants on mound, queue dispatches next ant!
-        sim.dispatch_next_base_queue(0);
-        ASSERT_EQ(sim.get_active_depositing_ant(0), q_ant);
-    } TEST_END();
 
     // ------------------------------------------------------------------------
     // 12.114: Water Melee Combat Isolation and Emergence Invulnerability
     // ------------------------------------------------------------------------
-    TEST_CASE("12.114 Water Melee Combat Isolation and Emergence Invulnerability") {
+    TEST_CASE("12.114 Water Melee Combat Isolation and Hatch Clip Refusal") {
         SimulationEngine sim;
         sim.init_test_world(60, 60, 100, 60000);
 
-        // Part A: Emergence Invulnerability (40 ticks)
+        // Part A: an ant that plays the hatch clip cannot be attacked (the melee refusal list holds actions 2 and 0x14),
+        // but there is no invulnerability after the clip (the original has none)
         sim.grid_mut().set_anthill(0, TileCoord{20, 20});
-        uint32_t baby = sim.spawn_unit(0, AntType::Worker, TileCoord{21, 21});
-        sim.get_unit(baby).is_newborn = true;
-        sim.get_unit(baby).underground = true;
-        sim.get_unit(baby).state = UnitState::EnteringBase;
-        sim.get_unit(baby).state_timer = 1;
-
-        // Tick until newborn emerges onto surface
-        for (int t = 0; t < 5; ++t) {
+        sim.set_player_score(0, 500);
+        sim.set_player_eggs(0, 5);
+        sim.set_hatch_delay_ticks(2);
+        ASSERT_TRUE(sim.hatch_ant(0, AntType::Worker));
+        uint32_t baby = 0;
+        for (int t = 0; t < 10 && baby == 0; ++t) {
             sim.tick();
-            if (!sim.get_unit(baby).underground) break;
+            for (const auto& a : sim.get_world_state().ants) {
+                if (a.player_id == 0) baby = a.id;
+            }
         }
+        ASSERT_TRUE(baby != 0);
+        ASSERT_EQ(sim.get_unit(baby).state, UnitState::EnteringBase);
+        ASSERT_TRUE(sim.get_unit(baby).in_hill_action());
 
-        ASSERT_FALSE(sim.get_unit(baby).underground);
-        ASSERT_TRUE(sim.get_unit(baby).is_invulnerable());
-        ASSERT_EQ(sim.get_unit(baby).invulnerable_ticks, 40);
-
-        // Enemy Combat ant tries to attack newborn right after surfacing
+        // Enemy Combat ant tries to attack the newborn right after it appeared
         uint32_t enemy = sim.spawn_unit(1, AntType::Combat, TileCoord{21, 22});
         uint16_t baby_hp = sim.get_unit(baby).hp;
         sim.execute_melee_attack(enemy, baby);
         ASSERT_EQ(sim.get_unit(baby).hp, baby_hp);
 
-        // Direct damage also rejected while invulnerable
-        ASSERT_FALSE(sim.get_unit(baby).take_damage(2, DamageSource::CombatPunch, enemy));
-        ASSERT_EQ(sim.get_unit(baby).hp, baby_hp);
+        // Tick until the newborn has finished the clip
+        for (int t = 0; t < 40 && sim.get_unit(baby).state == UnitState::EnteringBase; ++t) sim.tick();
+        ASSERT_FALSE(sim.get_unit(baby).in_hill_action());
 
-        // Tick until baby emerges completely to Idle or Walking to idle spot
-        for (int t = 0; t < 30; ++t) {
-            sim.tick();
-            if (sim.get_unit(baby).state == UnitState::Idle || sim.get_unit(baby).state == UnitState::Walking) break;
-        }
-        ASSERT_TRUE(sim.get_unit(baby).is_invulnerable());
-
-        // Tick down the 40 ticks
-        for (int t = 0; t < 40; ++t) {
-            sim.tick();
-        }
-        ASSERT_FALSE(sim.get_unit(baby).is_invulnerable());
-        ASSERT_EQ(sim.get_unit(baby).invulnerable_ticks, 0);
+        // Right after the clip the ant can be hurt like any other
+        const TileCoord bp = sim.get_unit(baby).pos;
+        uint32_t enemy2 = sim.spawn_unit(1, AntType::Combat, TileCoord{bp.x + 1, bp.y});
+        sim.execute_melee_attack(enemy2, baby);
+        ASSERT_TRUE(sim.get_unit(baby).hp < baby_hp);
 
         // Part B: Water Melee Combat Isolation
         sim.grid_mut().set_terrain(10, 10, TERRAIN_WATER);
@@ -7247,7 +6875,7 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
     // ------------------------------------------------------------------------
     // 12.115: Blocked Base Emergence 20-Tick Postponement (Ants.exe 0x1025100)
     // ------------------------------------------------------------------------
-    TEST_CASE("12.115 Blocked Base Emergence 20-Tick Postponement (Ants.exe 0x1025100)") {
+    TEST_CASE("12.115 Blocked Base Emergence Waits For The Entrance (HATCHTSK re-runs every slot)") {
         SimulationEngine sim;
         sim.init_test_world(60, 60, 100, 60000);
         sim.grid_mut().set_anthill(0, TileCoord{20, 20});
@@ -7255,7 +6883,7 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         ASSERT_TRUE(ah != nullptr);
         TileCoord hole{ah->x + 1, ah->y + 1}; // (21, 21)
 
-        // 1. Place a stationary surface ant directly on the hole
+        // 1. Place a stationary own ant directly on the hole
         uint32_t blocker = sim.spawn_unit(0, AntType::Worker, hole);
         sim.tick();
         ASSERT_TRUE(sim.has_living_ant_at(hole));
@@ -7265,50 +6893,25 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         sim.set_player_eggs(0, 5);
         ASSERT_TRUE(sim.hatch_ant(0, AntType::Worker));
 
-        // Find the newborn ant
-        const auto& world = sim.get_world_state();
-        uint32_t baby_id = 0;
-        for (const auto& a : world.ants) {
-            if (a.id != blocker && a.player_id == 0) {
-                baby_id = a.id;
-                break;
-            }
+        // 3. Tick through the 8000 ms incubation and some more: the hole is occupied, so no newborn appears
+        for (int t = 0; t < 200; ++t) sim.tick();
+        ASSERT_EQ(sim.get_pending_hatch_count(0), 1u);
+        size_t own_ants = 0;
+        for (const auto& a : sim.get_world_state().ants) {
+            if (a.player_id == 0) ++own_ants;
         }
-        ASSERT_TRUE(baby_id != 0);
-        const auto& baby = sim.get_unit(baby_id);
-        ASSERT_TRUE(baby.is_underground());
+        ASSERT_EQ(own_ants, 1u);
 
-        // 3. Tick through the initial hatch delay (60 ticks)
-        for (int t = 0; t < 60; ++t) {
-            sim.tick();
-        }
-
-        // Because hole is occupied by blocker, newborn is postponed by 20 ticks (1000ms)
-        ASSERT_TRUE(sim.get_unit(baby_id).is_underground());
-        ASSERT_GT(sim.get_unit(baby_id).state_timer, 0);
-
-        // Advance 10 ticks (halfway through postponement)
-        for (int t = 0; t < 10; ++t) {
-            sim.tick();
-        }
-        ASSERT_TRUE(sim.get_unit(baby_id).is_underground());
-
-        // 4. Move the blocker away from the hole out into open ground
+        // 4. Move the blocker away from the hole: the newborn appears as soon as the entrance is free
         TileCoord target{ah->x - 5, ah->y + 3};
         sim.issue_move_order(blocker, target);
-        for (int t = 0; t < 40; ++t) {
-            sim.tick();
-            if (!sim.has_living_ant_at(hole)) break;
+        for (int t = 0; t < 60 && sim.get_pending_hatch_count(0) > 0; ++t) sim.tick();
+        ASSERT_EQ(sim.get_pending_hatch_count(0), 0u);
+        own_ants = 0;
+        for (const auto& a : sim.get_world_state().ants) {
+            if (a.player_id == 0) ++own_ants;
         }
-        ASSERT_FALSE(sim.has_living_ant_at(hole));
-
-        // Advance simulation ticks for newborn's postponement timer to count down and emerge
-        for (int t = 0; t < 25; ++t) {
-            sim.tick();
-            if (!sim.get_unit(baby_id).is_underground()) break;
-        }
-        ASSERT_FALSE(sim.get_unit(baby_id).is_underground());
-        ASSERT_TRUE(sim.get_unit(baby_id).is_invulnerable());
+        ASSERT_EQ(own_ants, 2u);
     } TEST_END();
 
     // ------------------------------------------------------------------------
@@ -7348,13 +6951,13 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         ASSERT_EQ(sim.get_unit(ant2).final_dest, (TileCoord{20, 10}));
     } TEST_END();
 
-    TEST_CASE("12.117 Thief Ant Zero-Food Sits Idle Underground on Bottlecap") {
+    TEST_CASE("12.117 Thief Raid On A Hill Without Food: Idle And Empty-Handed On The Raid Tile, Still Attackable") {
         SimulationEngine sim;
         sim.init_test_world(60, 60, 100, 60000);
         sim.grid_mut().set_anthill(0, TileCoord{5, 5});
         sim.grid_mut().set_anthill(1, TileCoord{20, 20});
 
-        // Team 0 has Thief, Team 1 (victim) has Anthill at (20, 20) with 0 food points
+        // Team 0 has a Thief next to the raid tile (bx + 3, by + 2) = (23, 22) of team 1's hill (0 food points)
         uint32_t thief_id = sim.spawn_unit(0, AntType::Thief, TileCoord{24, 22});
         const auto* enemy_base = sim.grid().find_anthill(1);
         ASSERT_TRUE(enemy_base != nullptr);
@@ -7369,51 +6972,39 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         infil_order.target_entity_id = 1;
         sim.issue_order(infil_order);
 
-        // Step simulation until thief arrives and enters Infiltrating state
+        // Step simulation until the thief arrives and plays the raid clip (atcr501) on the raid tile centre
         for (int t = 0; t < 50; ++t) {
             sim.tick();
             if (sim.get_unit(thief_id).state == UnitState::Infiltrating) break;
         }
         ASSERT_EQ(sim.get_unit(thief_id).state, UnitState::Infiltrating);
-        ASSERT_EQ(sim.get_unit(thief_id).pixel_x, enemy_base->x * 32 + 107);
-        ASSERT_EQ(sim.get_unit(thief_id).pixel_y, enemy_base->y * 32 + 58);
+        ASSERT_EQ(sim.get_unit(thief_id).pos, (TileCoord{enemy_base->x + 3, enemy_base->y + 2}));
+        // (the message handler puts the thief on the tile centre, then the last walk step's snap is still added)
+        ASSERT_TRUE(std::abs(sim.get_unit(thief_id).pixel_x - ((enemy_base->x + 3) * 32 + 16)) <= 8);
+        ASSERT_EQ(sim.get_unit(thief_id).pixel_y, (enemy_base->y + 2) * 32 + 16);
 
-        // Step through infiltration dive and rummage (34 ticks)
-        for (int t = 0; t < 35; ++t) {
+        // The clip lasts 3510 ms (71 ticks)
+        for (int t = 0; t < 75; ++t) {
             sim.tick();
         }
 
-        // Empty steal: victim had 0 food -> thief stole 0 points
+        // Empty steal: the victim had 0 food, so the thief got nothing (the loot flag is set nevertheless)
         const auto& thief = sim.get_unit(thief_id);
         ASSERT_EQ(thief.carried_points, 0);
-        ASSERT_FALSE(thief.is_thief_steal);
+        ASSERT_FALSE(thief.is_holding());
+        ASSERT_TRUE(thief.is_thief_steal);
 
-        // Authentic 1998 behavior: thief does NOT return to base;
-        // it sits idle on the bottlecap underground (unable to be attacked)
+        // Authentic 1998 behavior: with nothing to carry the thief does NOT return to base; it stands idle on the raid tile
         ASSERT_EQ(thief.state, UnitState::Idle);
-        ASSERT_TRUE(thief.underground);
-        ASSERT_EQ(thief.pixel_x, enemy_base->x * 32 + 107);
-        ASSERT_EQ(thief.pixel_y, enemy_base->y * 32 + 90);
+        ASSERT_EQ(thief.pixel_x, (enemy_base->x + 3) * 32 + 16);
+        ASSERT_EQ(thief.pixel_y, (enemy_base->y + 2) * 32 + 16);
 
-        // Enemy Combat Ant spawns adjacent to bottlecap
+        // There is no hiding place: an enemy Combat Ant next to the raid tile can attack the thief
         uint32_t combat_id = sim.spawn_unit(1, AntType::Combat, TileCoord{enemy_base->x + 2, enemy_base->y + 2});
         AntOrder atk_order;
         atk_order.ant_id = combat_id;
         atk_order.type = OrderType::Attack;
         atk_order.target_entity_id = static_cast<int32_t>(thief_id);
-        sim.issue_order(atk_order);
-        sim.tick();
-
-        // Combat Ant CANNOT attack underground thief on bottlecap!
-        ASSERT_NE(sim.get_unit(combat_id).state, UnitState::Attacking);
-        ASSERT_EQ(sim.get_unit(thief_id).hp, 10); // Untouched (starts at 10 HP)
-
-        // When issued a move order, underground thief emerges from hole and walks
-        sim.issue_move_order(thief_id, TileCoord{enemy_base->x - 2, enemy_base->y});
-        ASSERT_FALSE(sim.get_unit(thief_id).underground);
-        ASSERT_EQ(sim.get_unit(thief_id).state, UnitState::Walking);
-
-        // Now that the thief has emerged on the surface, enemy ants can attack it
         sim.issue_order(atk_order);
         sim.tick();
         ASSERT_EQ(sim.get_unit(combat_id).state, UnitState::Attacking);
@@ -7553,8 +7144,8 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
             sim.tick();
         }
 
-        // Once idle, Ant 1 with 1 HP automatically joins base queue and heads home to heal!
-        ASSERT_TRUE(sim.is_ant_in_base_queue(f1));
+        // Once the hit is over, Ant 1 with 1 HP is ordered home to heal (FUN_0101dded: the enter order)
+        ASSERT_EQ(sim.get_unit(f1).orig_order, AntUnit::kOrderHome);
     } TEST_END();
 
     // ------------------------------------------------------------------------
@@ -8785,7 +8376,7 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
     // ------------------------------------------------------------------------
     // 12.64 Thief Infiltration Bottlecap Row Alignment, Untargetability & In-Place Re-Trigger
     // ------------------------------------------------------------------------
-    TEST_CASE("12.64 Thief Infiltration Bottlecap Row Alignment, Untargetability & In-Place Re-Trigger") {
+    TEST_CASE("12.64 Thief Raid Clip Alignment, Re-Trigger By Order And Raid On Arrival") {
         SimulationEngine sim;
         sim.init_test_world(60, 60, 42, 60000);
         sim.set_anthill(1, {10, 10});
@@ -8798,26 +8389,20 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         sim.start_thief_infiltration(thief_id, 1);
         ASSERT_EQ(thief.state, UnitState::Infiltrating);
 
-        // Advance ticks for infiltration animation to complete
-        for (int t = 0; t < 35; ++t) {
+        // Advance ticks for the 3510 ms raid clip to complete
+        for (int t = 0; t < 75; ++t) {
             sim.tick();
         }
 
-        // On unsuccessful steal, thief sits idle directly on the bottlecap at (bx + 3, by + 2) = (13, 12)
-        // with pixel pos (bx * 32 + 107, by * 32 + 90) = (427, 410) and underground = true
+        // On an empty steal the thief stands idle on the raid tile (bx + 3, by + 2) = (13, 12) at its centre
         const auto& u_idle = sim.get_unit(thief_id);
         ASSERT_EQ(u_idle.state, UnitState::Idle);
         ASSERT_EQ(u_idle.pos.x, 13);
         ASSERT_EQ(u_idle.pos.y, 12);
-        ASSERT_EQ(u_idle.pixel_x, 10 * 32 + 107);
-        ASSERT_EQ(u_idle.pixel_y, 10 * 32 + 90);
-        ASSERT_TRUE(u_idle.underground);
+        ASSERT_EQ(u_idle.pixel_x, 13 * 32 + 16);
+        ASSERT_EQ(u_idle.pixel_y, 12 * 32 + 16);
 
-        // Step 2: Untargetable and damage immune while on bottlecap
-        ASSERT_FALSE(sim.get_unit(thief_id).take_damage(5, DamageSource::MeleeStandard, 1));
-        ASSERT_EQ(sim.get_unit(thief_id).hp, sim.get_unit(thief_id).max_hp);
-
-        // Step 3: In-place steal re-trigger while standing on the bottlecap
+        // Step 2: In-place steal re-trigger while standing on the raid tile
         AntOrder inf_order;
         inf_order.ant_id = thief_id;
         inf_order.type = OrderType::InfiltrateAnthill;
@@ -8825,22 +8410,22 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         inf_order.target_x = 13;
         inf_order.target_y = 12;
         sim.issue_order(inf_order);
-
         ASSERT_EQ(sim.get_unit(thief_id).state, UnitState::Infiltrating);
 
-        // Advance through infiltration again to return to idle on bottlecap
-        for (int t = 0; t < 35; ++t) {
+        // The raid clip refuses orders while it runs
+        sim.issue_move_order(thief_id, TileCoord{14, 12});
+        ASSERT_EQ(sim.get_unit(thief_id).state, UnitState::Infiltrating);
+        for (int t = 0; t < 75; ++t) {
             sim.tick();
         }
-        ASSERT_TRUE(sim.get_unit(thief_id).underground);
+        ASSERT_EQ(sim.get_unit(thief_id).state, UnitState::Idle);
 
-        // Step 4: Moving away clears underground flag
+        // Step 3: Moving away and back onto the enemy hill raids again upon arrival
         sim.issue_move_order(thief_id, TileCoord{14, 12});
-        ASSERT_FALSE(sim.get_unit(thief_id).underground);
-
-        // Moving back to bottlecap at (13, 12) triggers fresh infiltration upon arrival
+        for (int t = 0; t < 40 && sim.get_unit(thief_id).pos != (TileCoord{14, 12}); ++t) sim.tick();
+        ASSERT_EQ(sim.get_unit(thief_id).pos, (TileCoord{14, 12}));
         sim.issue_move_order(thief_id, TileCoord{13, 12});
-        for (int t = 0; t < 25; ++t) {
+        for (int t = 0; t < 40; ++t) {
             sim.tick();
             if (sim.get_unit(thief_id).state == UnitState::Infiltrating) break;
         }
@@ -9352,37 +8937,42 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         ASSERT_NE(w_landed.state, UnitState::EnteringBase);
     } TEST_END();
 
-    TEST_CASE("12.140 Automatic Base Queueing Restricted Strictly to 1 HP Retreat and Stolen Food Return") {
+    TEST_CASE("12.140 A 1 HP Survivor Of A Hit Goes Home, A Thief With Loot Goes Home, Nobody Else Does") {
         SimulationEngine sim;
         sim.init_test_world(60, 60, 42, 60000);
         sim.set_anthill(0, TileCoord{20, 20});
         sim.set_anthill(1, TileCoord{40, 40});
 
-        // 1. Worker at 2 HP does NOT auto-queue when idle
+        // 1. A worker at 2 HP just standing there does not go home
         uint32_t w1 = sim.spawn_unit(0, AntType::Worker, TileCoord{25, 25});
         sim.get_unit(w1).hp = 2;
         for (int t = 0; t < 10; ++t) sim.tick();
         ASSERT_FALSE(sim.is_ant_in_base_queue(w1));
-        ASSERT_EQ(sim.get_unit(w1).state, UnitState::Idle);
+        ASSERT_EQ(sim.get_unit(w1).orig_order, AntUnit::kOrderNone);
 
-        // 2. Worker reduced to 1 HP DOES auto-queue when idle
-        sim.get_unit(w1).hp = 1;
-        sim.tick();
-        ASSERT_TRUE(sim.is_ant_in_base_queue(w1));
-
-        // 3. Thief returning from successful steal with food morsel auto-queues
-        uint32_t thief = sim.spawn_unit(0, AntType::Thief, TileCoord{43, 42});
-        sim.get_unit(thief).target_team_id = 1;
-        sim.get_unit(thief).state = UnitState::Infiltrating;
-        sim.get_unit(thief).anim_subitem = 32;
-
-        // Advance tick to trigger execute_thief_loot and queueing
-        sim.tick();
-        const auto& th = sim.get_unit(thief);
-        if (th.carried_points > 0) {
-            ASSERT_TRUE(th.is_thief_steal);
-            ASSERT_TRUE(sim.is_ant_in_base_queue(thief));
+        // 2. Hit down to 1 HP it goes home once the hit is over (FUN_0101dded at the end of the hit recovery)
+        sim.get_unit(w1).take_damage(1, DamageSource::MeleeStandard, 0);
+        ASSERT_EQ(sim.get_unit(w1).hp, 1u);
+        bool ordered_home = false;
+        for (int t = 0; t < 80 && !ordered_home; ++t) {
+            sim.tick();
+            ordered_home = (sim.get_unit(w1).orig_order == AntUnit::kOrderHome);
         }
+        ASSERT_TRUE(ordered_home);
+
+        // 3. A thief that finished a raid with loot starts for its own entrance
+        sim.set_player_score(1, 100);
+        uint32_t thief = sim.spawn_unit(0, AntType::Thief, TileCoord{43, 42});
+        sim.start_thief_infiltration(thief, 1);
+        bool thief_home = false;
+        for (int t = 0; t < 100 && !thief_home; ++t) {
+            sim.tick();
+            // heading for the entrance, or for the waiting tile while the entrance is claimed by another ant
+            thief_home = (sim.get_unit(thief).orig_order == AntUnit::kOrderHome || sim.is_ant_in_base_queue(thief));
+        }
+        ASSERT_TRUE(thief_home);
+        ASSERT_TRUE(sim.get_unit(thief).is_thief_steal);
+        ASSERT_TRUE(sim.get_unit(thief).is_holding());
     } TEST_END();
 
     // ------------------------------------------------------------------------
@@ -9579,8 +9169,8 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         // Hatching costs 200 points: a "-200" bubble at the hill exit tile top-left and the scoredn cue
         sim.clear_audio_events();
         ASSERT_TRUE(sim.hatch_ant(0, AntType::Worker));
-        ASSERT_TRUE(sim.has_audio_event(SoundID::BaseScoreDn));
         sim.tick();
+        ASSERT_TRUE(sim.has_audio_event(SoundID::BaseScoreDn));
         const auto& bubbles = sim.get_world_state().score_bubbles;
         ASSERT_EQ(bubbles.size(), 1u);
         ASSERT_EQ(bubbles[0].amount, -200);
@@ -9588,23 +9178,23 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         ASSERT_EQ(bubbles[0].y, 21 * 32);
         ASSERT_EQ(bubbles[0].elapsed_ms, 0u);
 
-        // Theft: the victim's home tile shows "-stolen"
-        uint32_t thief = sim.spawn_unit(0, AntType::Thief, TileCoord{30, 30});
-        sim.execute_thief_loot(thief, 1);
-        sim.tick();
+        // Theft: the loot moves when the 3510 ms raid clip ends; the victim's home tile then shows "-stolen"
+        uint32_t thief = sim.spawn_unit(0, AntType::Thief, TileCoord{43, 42});
+        sim.start_thief_infiltration(thief, 1);
         bool found_theft = false;
-        for (const auto& b : sim.get_world_state().score_bubbles) {
-            if (b.amount == -MAX_THIEF_STEAL && b.x == 41 * 32 && b.y == 41 * 32) found_theft = true;
+        for (int t = 0; t < 90 && !found_theft; ++t) {
+            sim.tick();
+            for (const auto& b : sim.get_world_state().score_bubbles) {
+                if (b.amount == -MAX_THIEF_STEAL && b.x == 41 * 32 && b.y == 41 * 32) found_theft = true;
+            }
         }
         ASSERT_TRUE(found_theft);
 
-        // Bubbles live 400 ms (the hatch bubble is one tick older than the theft bubble)
-        for (int t = 0; t < 6; ++t) sim.tick();
-        ASSERT_EQ(sim.get_world_state().score_bubbles.size(), 2u);   // hatch 350 ms, theft 300 ms
+        // A bubble lives 400 ms: still shown 350 ms after it appeared, gone at 400 ms
+        for (int t = 0; t < 7; ++t) sim.tick();
+        ASSERT_EQ(sim.get_world_state().score_bubbles.size(), 1u);
         sim.tick();
-        ASSERT_EQ(sim.get_world_state().score_bubbles.size(), 1u);   // hatch bubble gone at 400 ms
-        sim.tick();
-        ASSERT_EQ(sim.get_world_state().score_bubbles.size(), 0u);   // theft bubble gone at 400 ms
+        ASSERT_EQ(sim.get_world_state().score_bubbles.size(), 0u);
     } TEST_END();
 
     TEST_CASE("12.118 Food Dropper Animation Timeline (9 Frames, 820 ms)") {

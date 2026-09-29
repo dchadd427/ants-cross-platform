@@ -25,20 +25,6 @@ enum class InputMode : uint8_t {
 };
 
 /**
- * @brief HUD Action command button descriptors.
- */
-enum class ActionButtonId : uint8_t {
-    Move = 0,
-    Attack,
-    Bomb,
-    Fire,
-    Bridge,
-    Thief,
-    Cancel,
-    Count
-};
-
-/**
  * @brief Item queued in the news flash alert banner.
  */
 struct NewsBannerItem {
@@ -268,8 +254,6 @@ private:
     void render_marquee_box(IRenderer& renderer);
     void render_pedestal_glow(IRenderer& renderer, const assets::AssetArchive& assets, int pedestal_idx);
 
-    void update_action_buttons_state(const sim::WorldState& world);
-
     uint8_t local_player_id_{0};
     uint32_t selected_ant_id_{0};
     std::vector<uint32_t> selected_ant_ids_{};
@@ -293,11 +277,8 @@ private:
 
     // Hatch & Incubation
     UIButton hatch_button_{};
-    uint32_t incubation_timer_ticks_{0};
-    bool is_incubating_{false};
 
     // Action buttons
-    std::array<UIButton, static_cast<size_t>(ActionButtonId::Count)> action_buttons_{};
     UIButton move_pedestal_button_{};
     UIButton ability_pedestal_button_{};
     UIButton stop_button_{};

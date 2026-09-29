@@ -90,7 +90,7 @@ void bounce_unit_cascade(SimulationEngineImpl& impl,
         }
         bool has_ant = false;
         for (const auto& other : impl.ants_) {
-            if (other && other->is_alive() && !other->underground && other->id != unit.id) {
+            if (other && other->is_alive() && other->id != unit.id) {
                 if (other->pos.x == cand.first && other->pos.y == cand.second) {
                     has_ant = true;
                     break;
@@ -123,7 +123,7 @@ void bounce_unit_cascade(SimulationEngineImpl& impl,
     // Check if another ant is on the chosen tile: cascade bounce it!
     AntUnit* occupying = nullptr;
     for (const auto& other : impl.ants_) {
-        if (other && other->is_alive() && !other->underground && other->id != unit.id) {
+        if (other && other->is_alive() && other->id != unit.id) {
             if (other->pos.x == chosen.x && other->pos.y == chosen.y) {
                 occupying = other.get();
                 break;
@@ -197,12 +197,6 @@ void route_move_order(SimulationEngineImpl& impl, AntUnit& unit, TileCoord dest,
     if (!unit.is_alive() || unit.is_stunned()) return;
     unit.powerup_dwell_timer = 0;
 
-    if (unit.type == AntType::Thief && unit.underground) {
-        unit.underground = false;
-        unit.is_thief_steal = false;
-        unit.target_team_id = 255;
-    }
-
     // Special abilities and transformations cannot be interrupted and silently ignore move orders
     if (unit.is_transforming() ||
         unit.state == UnitState::PlacingFire || unit.state == UnitState::ExtinguishingFire ||
@@ -245,12 +239,6 @@ void route_move_order(SimulationEngineImpl& impl, AntUnit& unit, TileCoord dest,
     }
     unit.is_food_order = (is_food_order || dest_has_food);
 
-    if (unit.state == UnitState::EnteringBase) {
-        unit.underground = false;
-        unit.anim_subitem = 0;
-        unit.state = UnitState::Idle;
-    }
-
     unit.transformation_interrupted = false;
     unit.cantgo_standing_on_powerup = false;
     unit.allow_friendly_bomb = (allow_friendly_bomb && impl.grid_.has_bomb_at(dest));
@@ -289,11 +277,6 @@ void SimulationEngine::init(const ants::assets::LevelData& level, uint32_t rando
     impl_->news_queue_.clear();
     impl_->next_ant_id_ = 1;
     impl_->world_state_dirty_ = true;
-    impl_->reserved_queue_slots_.clear();
-    for (auto& bq : impl_->base_queues_) {
-        bq.queue.clear();
-        bq.active_depositing_ant_id = 0;
-    }
     impl_->movement_reset();
 
     impl_->flower_droppers_.clear();
@@ -397,11 +380,6 @@ void SimulationEngine::init_test_world(uint32_t width, uint32_t height, uint32_t
     impl_->news_queue_.clear();
     impl_->next_ant_id_ = 1;
     impl_->world_state_dirty_ = true;
-    impl_->reserved_queue_slots_.clear();
-    for (auto& bq : impl_->base_queues_) {
-        bq.queue.clear();
-        bq.active_depositing_ant_id = 0;
-    }
     impl_->movement_reset();
 
     for (uint8_t p = 0; p < MAX_PLAYERS; ++p) {
@@ -425,11 +403,6 @@ void SimulationEngine::reset() {
     impl_->next_ant_id_ = 1;
     impl_->stats_.reset();
     impl_->world_state_dirty_ = true;
-    impl_->reserved_queue_slots_.clear();
-    for (auto& bq : impl_->base_queues_) {
-        bq.queue.clear();
-        bq.active_depositing_ant_id = 0;
-    }
     impl_->invite_pending_ticks_.fill(0);
     impl_->fog_revealed_.clear();
     impl_->movement_reset();
@@ -514,7 +487,7 @@ void SimulationEngine::tick() {
                     impl_->spawn_tile_effect("bsputter", static_cast<int32_t>(x), static_cast<int32_t>(y), effect_spec::kBsputterMs);
                     // Occupancy Drowning Scan when bridge collapses to water (Ants.exe 0x0100f8bf)
                     for (auto& ant_ptr : impl_->ants_) {
-                        if (ant_ptr && ant_ptr->is_alive() && !ant_ptr->underground) {
+                        if (ant_ptr && ant_ptr->is_alive()) {
                             int32_t atx = (ant_ptr->pixel_x + 16) / 32;
                             int32_t aty = (ant_ptr->pixel_y + 16) / 32;
                             if ((ant_ptr->pos.x == static_cast<int32_t>(x) && ant_ptr->pos.y == static_cast<int32_t>(y)) ||
@@ -586,7 +559,7 @@ void SimulationEngine::tick() {
 
     // 3.5 Step Water State & Swimmer Ant Idle Animation (Snorkel Bobbing & Movement)
     for (auto& ant_ptr : impl_->ants_) {
-        if (!ant_ptr || !ant_ptr->is_alive() || ant_ptr->underground) continue;
+        if (!ant_ptr || !ant_ptr->is_alive()) continue;
         if (impl_->grid_.in_bounds(ant_ptr->pos)) {
             const auto& cell = impl_->grid_.get_cell(ant_ptr->pos);
             if (cell.terrain_type == TERRAIN_WATER && !cell.has_any_bridge()) {
@@ -635,102 +608,6 @@ void SimulationEngine::tick() {
         }
     }
 
-    // 4.5 Process Anthill Queues & Priority Base Entry
-    for (uint8_t p = 0; p < MAX_PLAYERS; ++p) {
-        auto& bq = impl_->base_queues_[p];
-        const auto* base = impl_->grid_.find_anthill(p);
-        if (!base) continue;
-
-        // Clean up dead / invalid / re-assigned ants from queue
-        auto q_it = bq.queue.begin();
-        while (q_it != bq.queue.end()) {
-            AntUnit* u = impl_->find_unit(*q_it);
-            if (!u || !u->is_alive() || u->player_id != p) {
-                if (bq.active_depositing_ant_id == *q_it) {
-                    bq.active_depositing_ant_id = 0;
-                }
-                q_it = bq.queue.erase(q_it);
-            } else {
-                ++q_it;
-            }
-        }
-
-        // Check if active depositing ant has completed deposit or was interrupted
-        if (bq.active_depositing_ant_id != 0) {
-            AntUnit* dep_ant = impl_->find_unit(bq.active_depositing_ant_id);
-            bool interrupted = !dep_ant || !dep_ant->is_alive() || dep_ant->player_id != p ||
-                               dep_ant->is_stunned() || dep_ant->state == UnitState::Knockback ||
-                               dep_ant->state == UnitState::Flinch || dep_ant->state == UnitState::Drowning;
-            if (interrupted) {
-                uint32_t int_id = bq.active_depositing_ant_id;
-                leave_base_queue(int_id);
-            } else if (dep_ant->completed_base_deposit) {
-                TileCoord hole{base->x + 1, base->y + 1};
-                bool vacated = (dep_ant->pos != hole || dep_ant->state == UnitState::QueuingBase);
-                if (vacated || dep_ant->anim_tick > 20) {
-                    auto pos = std::find(bq.queue.begin(), bq.queue.end(), bq.active_depositing_ant_id);
-                    if (pos != bq.queue.end()) {
-                        bq.queue.erase(pos);
-                    }
-                    bq.active_depositing_ant_id = 0;
-                    dep_ant->completed_base_deposit = false;
-                    dispatch_next_base_queue(p);
-                }
-            }
-        }
-
-        // The active depositor is sent to the entrance again whenever it stands idle outside it: GoTo sends
-        // a home order to the hill's alternate tile (entrance + (-2, 2)) while the entrance is taken, and in
-        // the original the hill-queue task (ANTHILLQ) re-sends it from there.
-        if (bq.active_depositing_ant_id != 0) {
-            AntUnit* dep = impl_->find_unit(bq.active_depositing_ant_id);
-            TileCoord hole{base->x + 1, base->y + 1};
-            if (dep && dep->is_alive() && !dep->underground && !dep->completed_base_deposit &&
-                dep->pos != hole && dep->waypoints.empty() && !impl_->has_pending_path(dep->id) &&
-                (dep->state == UnitState::Idle || dep->state == UnitState::GuardIdle ||
-                 dep->state == UnitState::Swimming)) {
-                send_ant_straight_into_base(dep->id);
-            }
-        }
-
-        // If base entry path is free, grant priority to queue head across the map
-        if (bq.active_depositing_ant_id == 0 && !bq.queue.empty()) {
-            dispatch_next_base_queue(p);
-        }
-
-        // Update all other queued ants to stand off to the side in their assigned queue slots
-        for (size_t k = 0; k < bq.queue.size(); ++k) {
-            uint32_t q_id = bq.queue[k];
-            if (q_id == bq.active_depositing_ant_id) continue;
-            AntUnit* q_ant = impl_->find_unit(q_id);
-            if (!q_ant || !q_ant->is_alive()) continue;
-
-            TileCoord target_slot = get_base_queue_slot(p, k);
-            bool arrived_at_slot_center = (q_ant->pos == target_slot &&
-                                           std::abs(q_ant->pixel_x - target_slot.x * 32) <= 2 &&
-                                           std::abs(q_ant->pixel_y - target_slot.y * 32) <= 2);
-            // A queued ant standing next to its slot while another ant holds the slot waits where it is
-            // (walking round would only reshuffle the queue).
-            bool parked_next_to_taken_slot = (q_ant->state != UnitState::Walking && q_ant->waypoints.empty() &&
-                                              !impl_->has_pending_path(q_id) &&
-                                              q_ant->pos.chebyshev_dist(target_slot) == 1 &&
-                                              impl_->has_other_living_ant_at(target_slot, q_id));
-            if (arrived_at_slot_center || parked_next_to_taken_slot ||
-                (q_ant->pos == target_slot && q_ant->state != UnitState::Walking)) {
-                if (q_ant->state != UnitState::QueuingBase) {
-                    q_ant->clear_path();
-                    q_ant->state = UnitState::QueuingBase;
-                    q_ant->facing = Direction::East;
-                }
-            } else {
-                if (q_ant->state != UnitState::Walking || q_ant->final_dest != target_slot) {
-                    issue_internal_move_order(q_id, target_slot);
-                    q_ant->final_dest = target_slot;
-                }
-            }
-        }
-    }
-
     // 4.9 Original locomotion (Ants.exe): animation-driven walking, tile blocking with ANTPAUSE waits and
     // the PATHMGR path task, processed in exact millisecond order across all ants.
     impl_->movement_tick(*this);
@@ -768,7 +645,7 @@ void SimulationEngine::tick() {
         if (ant_ptr->is_alive() && !ant_ptr->is_holding() &&
             ant_ptr->state != UnitState::HarvestingFood && ant_ptr->state != UnitState::EnteringBase &&
             ant_ptr->state != UnitState::Knockback && ant_ptr->state != UnitState::Stunned &&
-            ant_ptr->state != UnitState::Drowning && !ant_ptr->underground) {
+            ant_ptr->state != UnitState::Drowning) {
             // A queued path request (PATHMGR) is still a walk in progress.
             bool arrived = (ant_ptr->waypoints.empty() || ant_ptr->state == UnitState::Idle) &&
                            !impl_->has_pending_path(ant_ptr->id);
@@ -794,7 +671,7 @@ void SimulationEngine::tick() {
                 if (other_ptr && other_ptr->id != ant_ptr->id && other_ptr->is_alive() && !other_ptr->is_holding() &&
                     other_ptr->state != UnitState::HarvestingFood && other_ptr->state != UnitState::EnteringBase &&
                     other_ptr->state != UnitState::Knockback && other_ptr->state != UnitState::Stunned &&
-                    other_ptr->state != UnitState::Drowning && !other_ptr->underground) {
+                    other_ptr->state != UnitState::Drowning) {
                     bool near_lb = (std::abs(other_ptr->pixel_x - (lb_target.x * 32 + 16)) <= 16 &&
                                     std::abs(other_ptr->pixel_y - (lb_target.y * 32 + 16)) <= 16);
                     if (other_ptr->pos == lb_target || near_lb ||
@@ -814,8 +691,7 @@ void SimulationEngine::tick() {
         // Power-up pickup, transformation & swap
         TileCoord pu_target{-1, -1};
         if (ant_ptr->is_alive() && !ant_ptr->transformation_interrupted &&
-            ant_ptr->state != UnitState::Drowning && ant_ptr->state != UnitState::EnteringBase &&
-            !ant_ptr->underground && !ant_ptr->is_transforming()) {
+            ant_ptr->state != UnitState::Drowning && ant_ptr->state != UnitState::EnteringBase && !ant_ptr->is_transforming()) {
             if (impl_->grid_.in_bounds(ant_ptr->pos) && impl_->grid_.has_powerup_at(ant_ptr->pos)) {
                 // If ant is forced into CantGo on a power-up, it stands on the power-up indefinitely without consuming it!
                 if (ant_ptr->state == UnitState::CantGo) {
@@ -909,7 +785,7 @@ void SimulationEngine::tick() {
         if (ant_ptr->is_alive() && impl_->grid_.in_bounds(ant_ptr->pos) &&
             ant_ptr->state != UnitState::HarvestingFood && ant_ptr->state != UnitState::EnteringBase &&
             ant_ptr->state != UnitState::Knockback && ant_ptr->state != UnitState::Stunned &&
-            ant_ptr->state != UnitState::Drowning && !ant_ptr->underground) {
+            ant_ptr->state != UnitState::Drowning) {
 
             bool dest_is_food = ant_ptr->is_food_order;
             const ActiveFoodSchedule* dest_fs = nullptr;
@@ -987,6 +863,8 @@ void SimulationEngine::tick() {
                         ant_ptr->final_dest = TileCoord{-1, -1};
                         ant_ptr->is_food_order = false;
                         ant_ptr->state = (ant_ptr->type == AntType::Combat) ? UnitState::GuardIdle : UnitState::Idle;
+                        // order 5 arrival of an ant that already carries food (0x101ce07): text 17, then home
+                        impl_->post_news(ant_ptr->player_id, "Can't - already have food.", 17);
                         join_base_queue(ant_ptr->id);
                         food_target = TileCoord{-1, -1};
                     }
@@ -1142,9 +1020,9 @@ void SimulationEngine::tick() {
         if (ant_ptr->is_alive() && ant_ptr->attack_target_id != 0 && ant_ptr->state != UnitState::Stunned &&
             ant_ptr->state != UnitState::Knockback && ant_ptr->state != UnitState::Drowning &&
             ant_ptr->state != UnitState::EnteringBase && ant_ptr->state != UnitState::CantGo &&
-            ant_ptr->state != UnitState::Bounce && !ant_ptr->is_in_scuffle && !ant_ptr->underground) {
+            ant_ptr->state != UnitState::Bounce && !ant_ptr->is_in_scuffle) {
             AntUnit* target = impl_->find_unit(ant_ptr->attack_target_id);
-            if (!target || !target->is_alive() || target->underground || target->state == UnitState::EnteringBase ||
+            if (!target || !target->is_alive() || target->state == UnitState::EnteringBase ||
                 target->state == UnitState::Infiltrating ||
                 target->on_powerup || (target->type == AntType::Swimmer && target->in_water)) {
                 ant_ptr->attack_target_id = 0;
@@ -1208,141 +1086,6 @@ void SimulationEngine::tick() {
             }
         }
 
-        // Autonomous Base Entry progression
-        if (ant_ptr->state == UnitState::EnteringBase) {
-            if (ant_ptr->is_newborn && ant_ptr->underground) {
-                if (ant_ptr->state_timer > 0) {
-                    ant_ptr->state_timer--;
-                    continue;
-                }
-                // Check if surface tile (bx+1, by+1) is occupied by any living ant (Ants.exe 0x10250fe-0x1025108)
-                // If occupied, postpone emergence by 20 ticks (1000ms / 1.0s)
-                if (impl_->has_living_ant_at(ant_ptr->pos)) {
-                    ant_ptr->state_timer = 20;
-                    continue;
-                }
-                // Incubation delay complete: emerge onto surface at the hole
-                ant_ptr->underground = false;
-                ant_ptr->anim_subitem = 8;
-                ant_ptr->underground_visited = true;
-                ant_ptr->facing = Direction::South;
-                ant_ptr->invulnerable_ticks = 40;
-                impl_->audio_queue_.push_back(AudioEvent{SoundID::ExitHill, ant_ptr->pixel_x, ant_ptr->pixel_y, 1, ant_ptr->player_id});
-                continue;
-            }
-
-            ant_ptr->anim_tick++;
-
-            // Deposit food at Frame 4 (authentic Sound 87 / scoreup.wav)
-            if (ant_ptr->anim_subitem == 4 && ant_ptr->is_holding()) {
-                auto [food, pts] = ant_ptr->deposit_food();
-                uint32_t deposit_pts = (pts > 0) ? pts : (food * 25);
-                impl_->stats_.add_score(ant_ptr->player_id, static_cast<int32_t>(deposit_pts));
-                impl_->audio_queue_.push_back(AudioEvent{SoundID::BaseScoreUp, ant_ptr->pixel_x, ant_ptr->pixel_y, 1, ant_ptr->player_id});
-                ant_ptr->had_food_at_base_entry = true;
-            }
-
-            // Underground chamber at Frame 8: eating and healing dwell
-            if (!ant_ptr->is_newborn && ant_ptr->anim_subitem == 8) {
-                ant_ptr->underground = true;
-                if (!ant_ptr->underground_visited) {
-                    uint16_t missing_hp = (ant_ptr->max_hp > ant_ptr->hp) ? static_cast<uint16_t>(ant_ptr->max_hp - ant_ptr->hp) : 0;
-                    ant_ptr->heal_full();
-                    // Authentic timing reverse-engineered from Ants.exe (0x101e221: imul eax, eax, 0xc8 = 200ms per HP)
-                    // Base eating/healing dwell: 4 ticks (200ms) per missing HP healed, minimum 4 ticks (200ms)
-                    ant_ptr->base_dwell_ticks = (missing_hp > 0) ? static_cast<uint16_t>(missing_hp * 4) : 4;
-                    ant_ptr->underground_visited = true;
-                }
-
-                if (ant_ptr->base_dwell_ticks > 0) {
-                    ant_ptr->base_dwell_ticks--;
-                    if (ant_ptr->base_dwell_ticks == 0) {
-                        // Eating complete! Ant starts emerging from the hole (*hatch animation)
-                        ant_ptr->underground = false;
-                    }
-                    continue; // Stay in underground chamber while eating
-                }
-            }
-
-            // Advance animation frame every 2 ticks (100ms per frame matching ~60-100ms authentic pacing)
-            if (ant_ptr->anim_tick % 2 == 0) {
-                ant_ptr->anim_subitem++;
-            }
-
-            if (ant_ptr->anim_subitem >= 16) {
-                // Emerge from base
-                ant_ptr->underground = false;
-                ant_ptr->anim_subitem = 0;
-                ant_ptr->base_dwell_ticks = 0;
-                ant_ptr->underground_visited = false;
-                ant_ptr->completed_base_deposit = true;
-                bool was_newborn = ant_ptr->is_newborn;
-                ant_ptr->is_newborn = false;
-                ant_ptr->invulnerable_ticks = 40;
-                ant_ptr->state = (ant_ptr->type == AntType::Combat) ? UnitState::GuardIdle : UnitState::Idle;
-                const auto* friendly_base = impl_->grid_.find_anthill(ant_ptr->player_id);
-                if (friendly_base) {
-                    int32_t idle_x = friendly_base->x + 4;
-                    int32_t idle_y = friendly_base->y + 4;
-
-                    if (!was_newborn && ant_ptr->had_food_at_base_entry && !ant_ptr->is_thief_steal &&
-                        ant_ptr->harvest_origin.x >= 0 && ant_ptr->harvest_origin.y >= 0) {
-                        // Route back to origin food harvest location
-                        issue_internal_move_order(ant_ptr->id, ant_ptr->harvest_origin);
-                    } else {
-                        // Returning ant or newborn: route to IDLE spot
-                        TileCoord raw_idle{idle_x, idle_y};
-                        TileCoord target_idle = raw_idle;
-                        if (!impl_->grid_.in_bounds(raw_idle) || !impl_->grid_.get_cell(raw_idle).is_passable()) {
-                            TileCoord ramp0{friendly_base->x - 1, friendly_base->y + 3};
-                            target_idle = PathFinder::find_nearest_passable(
-                                impl_->grid_, ramp0, raw_idle, false, false, {});
-                        }
-                        issue_internal_move_order(ant_ptr->id, target_idle);
-                    }
-                }
-                ant_ptr->had_food_at_base_entry = false;
-            }
-            continue;
-        }
-
-        // Autonomous Thief Infiltration progression
-        if (ant_ptr->state == UnitState::Infiltrating) {
-            ant_ptr->anim_subitem++;
-            uint8_t victim = (ant_ptr->target_team_id < MAX_PLAYERS) ? ant_ptr->target_team_id : ((ant_ptr->player_id == 0) ? 1 : 0);
-            if (ant_ptr->anim_subitem == 19) {
-                impl_->audio_queue_.push_back(AudioEvent{SoundID::BaseAlarmSiren, ant_ptr->pixel_x, ant_ptr->pixel_y, 2, victim});
-                impl_->audio_queue_.push_back(AudioEvent{SoundID::ThiefDive, ant_ptr->pixel_x, ant_ptr->pixel_y, 1, 255});
-                impl_->news_queue_.push_back(NewsEvent{victim, "A ThiefAnt is at your anthill!", impl_->match_time_remaining_ms_, StringID::ThiefAlarmWarning});
-            } else if (ant_ptr->anim_subitem == 26) {
-                impl_->audio_queue_.push_back(AudioEvent{SoundID::ThiefRummage, ant_ptr->pixel_x, ant_ptr->pixel_y, 1, 255});
-            } else if (ant_ptr->anim_subitem == 31) {
-                impl_->audio_queue_.push_back(AudioEvent{SoundID::ThiefEmerge, ant_ptr->pixel_x, ant_ptr->pixel_y, 1, 255});
-            } else if (ant_ptr->anim_subitem >= 33) {
-                execute_thief_loot(ant_ptr->id, victim);
-                ant_ptr->anim_subitem = 0;
-                if (ant_ptr->carried_points > 0) {
-                    ant_ptr->is_thief_steal = true;
-                    ant_ptr->state = UnitState::Idle;
-                    ant_ptr->underground = false;
-                    join_base_queue(ant_ptr->id);
-                } else {
-                    // Authentic 1998 behavior: If no food stolen, thief does not return to base.
-                    // It sits idle on the bottlecap (unable to be attacked / underground)
-                    // waiting for player instructions or another steal attempt.
-                    ant_ptr->is_thief_steal = false;
-                    ant_ptr->state = UnitState::Idle;
-                    ant_ptr->underground = true;
-                    const auto* enemy_base = impl_->grid_.find_anthill(victim);
-                    if (enemy_base) {
-                        ant_ptr->pos = TileCoord{enemy_base->x + 3, enemy_base->y + 2};
-                        ant_ptr->set_pixel_pos(enemy_base->x * 32 + 107, enemy_base->y * 32 + 90);
-                    }
-                }
-            }
-            continue;
-        }
-
     // Autonomous Swimmer Bridge Construction progression
     if (ant_ptr->state == UnitState::BuildingBridge) {
         TileCoord target = ant_ptr->ability_target;
@@ -1403,7 +1146,7 @@ void SimulationEngine::tick() {
             const auto& target_cell = impl_->grid_.get_cell(target);
             if (!target_cell.has_any_bridge() && target_cell.terrain_type == TERRAIN_WATER) {
                 for (auto& victim : impl_->ants_) {
-                    if (victim && victim->is_alive() && !victim->underground) {
+                    if (victim && victim->is_alive()) {
                         int32_t vtx = (victim->pixel_x + 16) / 32;
                         int32_t vty = (victim->pixel_y + 16) / 32;
                         if ((victim->pos.x == target.x && victim->pos.y == target.y) || (vtx == target.x && vty == target.y)) {
@@ -1535,7 +1278,7 @@ void SimulationEngine::tick() {
                 // detonate immediately upon placement completion:
                 for (auto& other_ant : impl_->ants_) {
                     if (!other_ant || !other_ant->is_alive() || other_ant->id == ant_ptr->id) continue;
-                    if (other_ant->state == UnitState::Knockback || other_ant->underground) continue;
+                    if (other_ant->state == UnitState::Knockback) continue;
                     int32_t ox = (other_ant->pixel_x >= 0) ? (other_ant->pixel_x / 32) : ((other_ant->pixel_x - 31) / 32);
                     int32_t oy = (other_ant->pixel_y >= 0) ? (other_ant->pixel_y / 32) : ((other_ant->pixel_y - 31) / 32);
                     if (other_ant->pos == bomb_target || (ox == bomb_target.x && oy == bomb_target.y)) {
@@ -1755,68 +1498,13 @@ void SimulationEngine::tick() {
         continue;
     }
 
-    // Check arrival at friendly anthill with food or needing healing
-        const auto* friendly_base = impl_->grid_.find_anthill(ant_ptr->player_id);
-        if (friendly_base) {
-            int32_t bx = friendly_base->x;
-            int32_t by = friendly_base->y;
-            int32_t ent_x = bx + 1;
-            int32_t ent_y = by + 1;
-
-            // If ant reached the top entrance hole, start entering base
-            if (ant_ptr->pos.x == ent_x && ant_ptr->pos.y == ent_y) {
-                if (ant_ptr->is_holding() || ant_ptr->hp == 1 || ant_ptr->is_newborn ||
-                    (ant_ptr->type == AntType::Thief && ant_ptr->is_thief_steal && ant_ptr->is_holding()) ||
-                    is_ant_in_base_queue(ant_ptr->id) || ant_ptr->final_dest == TileCoord{ent_x, ent_y}) {
-                    if (ant_ptr->state != UnitState::EnteringBase &&
-                        ant_ptr->state != UnitState::Knockback &&
-                        ant_ptr->state != UnitState::Stunned &&
-                        ant_ptr->state != UnitState::Bounce &&
-                        ant_ptr->state != UnitState::Flinch) {
-                        ant_ptr->state = UnitState::EnteringBase;
-                        ant_ptr->anim_subitem = 0;
-                        ant_ptr->had_food_at_base_entry = ant_ptr->is_holding();
-                        ant_ptr->completed_base_deposit = false;
-                        ant_ptr->clear_path();
-                    }
-                }
-            }
-        }
-
-        // Check thief arrival at enemy anthill
-        if (ant_ptr->type == AntType::Thief &&
-            (ant_ptr->state == UnitState::Walking || ant_ptr->state == UnitState::Idle) &&
-            !ant_ptr->underground) {
-            for (uint8_t p = 0; p < MAX_PLAYERS; ++p) {
-                if (p != ant_ptr->player_id && !impl_->stats_.are_allies(ant_ptr->player_id, p)) {
-                    const auto* enemy_base = impl_->grid_.find_anthill(p);
-                    if (enemy_base) {
-                        // Authentic 1998 Infiltration: Entry ONLY from the bottlecap tile (bx + 3, by + 2)
-                        if (ant_ptr->pos.x == enemy_base->x + 3 && ant_ptr->pos.y == enemy_base->y + 2) {
-                            ant_ptr->target_team_id = p;
-                            ant_ptr->state = UnitState::Infiltrating;
-                            ant_ptr->anim_subitem = 0;
-                            ant_ptr->clear_path();
-                            ant_ptr->pos = TileCoord{enemy_base->x + 1, enemy_base->y + 1};
-                            ant_ptr->set_pixel_pos(enemy_base->x * 32 + 107, enemy_base->y * 32 + 58);
-                            break;
-                        }
-                    }
-                }
-            }
-        }
-
-        // Authentic 1998 1 HP Automatic Return to Base to Heal (Ants.exe FUN_0101dded / FUN_0102151a)
-        // Initiates retreat ONLY once unit is idle and has fully settled from hit flinch, knockback, or bounce!
-        if (ant_ptr->is_alive() && ant_ptr->hp == 1 &&
-            (ant_ptr->state == UnitState::Idle || ant_ptr->state == UnitState::GuardIdle) &&
-            !ant_ptr->underground && ant_ptr->state != UnitState::EnteringBase &&
-            ant_ptr->state != UnitState::QueuingBase && !is_ant_in_base_queue(ant_ptr->id)) {
-            const auto* home = impl_->grid_.find_anthill(ant_ptr->player_id);
-            if (home) {
-                join_base_queue(ant_ptr->id);
-            }
-        }
+    // A 1 hp survivor of a hit goes home once it has settled (Ants.exe FUN_0101dded, flag 1, at the end of the hit
+    // recovery; the hit recovery itself is still the remake's flinch / knock-back code).
+    if (ant_ptr->retreat_pending && ant_ptr->is_alive() &&
+        (ant_ptr->state == UnitState::Idle || ant_ptr->state == UnitState::GuardIdle)) {
+        ant_ptr->retreat_pending = false;
+        if (ant_ptr->hp == 1) impl_->retreat_home(*ant_ptr);
+    }
     }
 
     // 5.5 Same-tile separation of stationary ants (landing pile-ups after knock-backs, spawns, teleports).
@@ -1831,11 +1519,11 @@ void SimulationEngine::tick() {
     };
     for (size_t i = 0; i < impl_->ants_.size(); ++i) {
         auto& a1 = impl_->ants_[i];
-        if (!a1 || !a1->is_alive() || a1->underground || a1->state == UnitState::EnteringBase || a1->state == UnitState::Infiltrating || a1->state == UnitState::QueuingBase || a1->state == UnitState::Knockback || a1->altitude_z > 0) continue;
+        if (!a1 || !a1->is_alive() || a1->state == UnitState::EnteringBase || a1->state == UnitState::Infiltrating || a1->state == UnitState::Knockback || a1->altitude_z > 0) continue;
         if (in_locomotion(*a1)) continue;
         for (size_t j = i + 1; j < impl_->ants_.size(); ++j) {
             auto& a2 = impl_->ants_[j];
-            if (!a2 || !a2->is_alive() || a2->underground || a2->state == UnitState::EnteringBase || a2->state == UnitState::Infiltrating || a2->state == UnitState::QueuingBase || a2->state == UnitState::Knockback || a2->altitude_z > 0) continue;
+            if (!a2 || !a2->is_alive() || a2->state == UnitState::EnteringBase || a2->state == UnitState::Infiltrating || a2->state == UnitState::Knockback || a2->altitude_z > 0) continue;
             if (in_locomotion(*a2)) continue;
             if (a1->pos.x != a2->pos.x || a1->pos.y != a2->pos.y) continue;
 
@@ -1951,11 +1639,10 @@ void SimulationEngine::tick() {
 
     // Discrete tile center guarantee: Ants must NEVER settle halfway between tiles
     for (auto& u : impl_->ants_) {
-        if (!u || !u->is_alive() || u->underground) continue;
+        if (!u || !u->is_alive()) continue;
         if (u->state == UnitState::Bounce && u->push_tick_current < u->push_ticks_total) continue;
         if (u->state == UnitState::Idle || u->state == UnitState::GuardIdle ||
-            u->state == UnitState::Bounce || u->state == UnitState::QueuingBase ||
-            u->state == UnitState::CantGo) {
+            u->state == UnitState::Bounce || u->state == UnitState::CantGo) {
             if (u->pixel_x != u->pos.x * 32 + 16 || u->pixel_y != u->pos.y * 32 + 16) {
                 u->set_tile_pos(u->pos.x, u->pos.y);
             }
@@ -2064,6 +1751,9 @@ void SimulationEngine::tick() {
         b.y = (static_cast<int32_t>(hill->y) + 1) * 32;
         b.amount = change.delta;
         impl_->score_bubbles_.push_back(b);
+        // scoreup / scoredn are shared cues heard by every player (Ants.exe FUN_01010560)
+        impl_->audio_queue_.push_back(AudioEvent{change.delta > 0 ? SoundID::BaseScoreUp : SoundID::BaseScoreDn,
+                                                 b.x, b.y, 1, 255});
     }
     impl_->world_state_dirty_ = true;
 }
@@ -2090,12 +1780,7 @@ void SimulationEngine::issue_order(const AntOrder& order) {
 
     // Player move orders pass the original accept predicate (FUN_0101ff5a) before anything else: an ant
     // that is attacking, harvesting, entering the hill or playing its "can't go" animation ignores them.
-    if (order.type == OrderType::Move) {
-        if (unit->type == AntType::Thief && unit->underground) {
-            unit->underground = false;
-            unit->is_thief_steal = false;
-            unit->target_team_id = 255;
-        }
+    if (order.type == OrderType::Move || order.type == OrderType::InfiltrateAnthill) {
         if (!impl_->can_take_user_order(*unit)) return;
     }
 
@@ -2138,7 +1823,7 @@ void SimulationEngine::issue_order(const AntOrder& order) {
                     if (target->player_id == unit->player_id || impl_->stats_.are_allies(unit->player_id, target->player_id)) {
                         break; // Ants cannot attack friendly teammates or allies
                     }
-                    if (target->underground || target->on_powerup || (target->type == AntType::Swimmer && target->in_water)) {
+                    if (target->in_hill_action() || target->on_powerup || (target->type == AntType::Swimmer && target->in_water)) {
                         unit->attack_target_id = 0;
                         break;
                     }
@@ -2353,10 +2038,6 @@ void SimulationEngine::issue_order(const AntOrder& order) {
             if (at_enemy_base || (unit->pos.x == tx && unit->pos.y == ty)) {
                 start_thief_infiltration(order.ant_id, target_team);
             } else {
-                if (unit->type == AntType::Thief && unit->underground) {
-                    unit->underground = false;
-                    unit->is_thief_steal = false;
-                }
                 issue_internal_move_order(order.ant_id, TileCoord{tx, ty});
             }
             break;
@@ -2382,59 +2063,49 @@ void SimulationEngine::issue_order(const AntOrder& order) {
     }
 }
 
-bool SimulationEngine::hatch_ant(uint8_t player_id, AntType type) {
-    if (is_match_over() || impl_->match_state_ == MatchState::GameOver) return false;
-    if (player_id >= MAX_PLAYERS) return false;
-    if (impl_->stats_.get_individual_score(player_id) < static_cast<int32_t>(HATCH_COST_POINTS)) return false;
-    if (impl_->stats_.get_egg_count(player_id) < 1) return false;
-
-    impl_->stats_.deduct_score(player_id, HATCH_COST_POINTS);
-    {
-        // Hatch cost is a score change like any other: "-200" bubble and the scoredn cue (Ants.exe FUN_01010560)
-        const auto* hill = impl_->grid_.find_anthill(player_id);
-        const int32_t sx = hill ? (static_cast<int32_t>(hill->x) + 1) * 32 + 16 : 0;
-        const int32_t sy = hill ? (static_cast<int32_t>(hill->y) + 1) * 32 + 16 : 0;
-        impl_->audio_queue_.push_back(AudioEvent{SoundID::BaseScoreDn, sx, sy, 1, player_id});
+// FUN_01010aca: the hatch pedestal. The checks come in the original's order; an accepted click costs
+// min(score, 200), uses one egg and starts an 8000 ms incubation during which no ant exists (only one at a time).
+SimulationEngine::HatchResult SimulationEngine::try_hatch(uint8_t player_id, AntType type, bool force) {
+    if (is_match_over() || impl_->match_state_ == MatchState::GameOver || player_id >= MAX_PLAYERS) {
+        return HatchResult::NotAvailable;
     }
+    if (impl_->stats_.get_egg_count(player_id) < 1) {
+        impl_->post_news(player_id, "No eggs to hatch!", 16);
+        return HatchResult::NoEggs;
+    }
+    if (impl_->hatch_[player_id].active) {
+        impl_->post_news(player_id, "An Ant is already hatching!", 14);
+        return HatchResult::AlreadyHatching;
+    }
+    const int32_t score = impl_->stats_.get_individual_score(player_id);
+    if (!force && score < static_cast<int32_t>(HATCH_COST_POINTS)) {
+        impl_->post_news(player_id, "You need 200 points to hatch!", 13);
+        const auto* hill = impl_->grid_.find_anthill(player_id);
+        const int32_t hx = hill ? (static_cast<int32_t>(hill->x) + 1) * 32 + 16 : 0;
+        const int32_t hy = hill ? (static_cast<int32_t>(hill->y) + 1) * 32 + 16 : 0;
+        impl_->audio_queue_.push_back(AudioEvent{SoundID::AntStop, hx, hy, 1, player_id});     // canthatch cue (61)
+        return HatchResult::NotEnoughPoints;
+    }
+    impl_->post_news(player_id, "Hatching a new Ant!", 15);
+    const int32_t cost = std::min<int32_t>(static_cast<int32_t>(HATCH_COST_POINTS), std::max<int32_t>(0, score));
+    impl_->add_score(player_id, -cost);                                                        // "-N" bubble and scoredn
     impl_->stats_.set_egg_count(player_id, impl_->stats_.get_egg_count(player_id) - 1);
     impl_->stats_.get_player_stats_mut(player_id).ants_hatched++;
     impl_->stats_.get_player_stats_mut(player_id).new_hatched++;
+    auto& h = impl_->hatch_[player_id];
+    h.active = true;
+    h.type = type;
+    h.due_ms = impl_->anim_clock_ms_ + impl_->hatch_delay_ticks_ * 50u;
+    impl_->world_state_dirty_ = true;
+    return HatchResult::Started;
+}
 
-    TileCoord spawn_pos{10, 10};
-    const auto* a = impl_->grid_.find_anthill(player_id);
-    if (a) {
-        spawn_pos = TileCoord{static_cast<int32_t>(a->x + 1), static_cast<int32_t>(a->y + 1)};
-    }
-
-    uint32_t uid = spawn_unit(player_id, type, spawn_pos);
-    AntUnit* unit = impl_->find_unit(uid);
-    if (unit) {
-        unit->state = UnitState::EnteringBase;
-        unit->is_newborn = true;
-        unit->had_food_at_base_entry = false;
-        unit->facing = Direction::South;
-        if (impl_->hatch_delay_ticks_ > 0) {
-            unit->underground = true;
-            unit->state_timer = static_cast<uint16_t>(impl_->hatch_delay_ticks_);
-            unit->anim_subitem = 0;
-        } else {
-            unit->underground = false;
-            unit->state_timer = 0;
-            unit->anim_subitem = 8;
-            impl_->audio_queue_.push_back(AudioEvent{SoundID::ExitHill, unit->pixel_x, unit->pixel_y, 1, unit->player_id});
-        }
-    }
-    return true;
+bool SimulationEngine::hatch_ant(uint8_t player_id, AntType type) {
+    return try_hatch(player_id, type, false) == HatchResult::Started;
 }
 
 size_t SimulationEngine::get_pending_hatch_count(uint8_t player_id) const {
-    size_t count = 0;
-    for (const auto& a : impl_->ants_) {
-        if (a && a->player_id == player_id && a->is_newborn && a->underground) {
-            count++;
-        }
-    }
-    return count;
+    return (player_id < MAX_PLAYERS && impl_->hatch_[player_id].active) ? 1u : 0u;
 }
 
 void SimulationEngine::set_hatch_delay_ticks(uint32_t ticks) {
@@ -2519,12 +2190,10 @@ const WorldState& SimulationEngine::get_world_state() const {
             s.anim_state = static_cast<uint16_t>(a->state);
             s.anim_frame = a->anim_subitem;
             s.is_holding = a->is_holding();
-            s.had_food_at_base_entry = a->had_food_at_base_entry;
             s.carried_points = a->carried_points;
             s.is_airborne = (a->state == UnitState::Knockback);
             s.is_stunned = a->is_stunned();
             s.is_swimming = (a->state == UnitState::Swimming || a->in_water);
-            s.is_underground = a->underground;
             s.is_drowning = (a->state == UnitState::Drowning);
             s.is_on_mud = a->is_on_mud;
             s.is_transforming = a->is_transforming();
@@ -2713,7 +2382,7 @@ uint32_t SimulationEngine::spawn_unit(uint8_t player_id, AntType type, TileCoord
         }
     }
     impl_->ants_.push_back(std::move(unit));
-    if (unit_ptr->is_alive() && !unit_ptr->underground) {
+    if (unit_ptr->is_alive()) {
         // Register on the occupancy grid at once (the original registers every ant it places).
         impl_->occ_refresh();
     }
@@ -2759,7 +2428,7 @@ void SimulationEngine::execute_melee_attack(uint32_t attacker_id, uint32_t targe
     AntUnit* target = impl_->find_unit(target_id);
     if (!attacker || !target || !attacker->is_alive() || !target->is_alive()) return;
     if (attacker->player_id == target->player_id || impl_->stats_.are_allies(attacker->player_id, target->player_id)) return;
-    if (target->is_invulnerable()) return;
+    if (target->in_hill_action()) return;
     if (target->on_powerup || (impl_->grid_.in_bounds(target->pos) && impl_->grid_.has_powerup_at(target->pos))) return;
     if (attacker->in_water || target->in_water) return;
     if (target->type == AntType::Swimmer && target->in_water) return;
@@ -3380,357 +3049,53 @@ void SimulationEngine::set_anthill(uint8_t team_id, TileCoord pos) {
     impl_->grid_.set_anthill(team_id, pos);
 }
 
-TileCoord SimulationEngine::assign_queue_slot(uint8_t team_id, TileCoord from_pos) {
-    const auto* a = impl_->grid_.find_anthill(team_id);
-    int32_t bx = a ? a->x : 30;
-    int32_t by = a ? a->y : 30;
-
-    for (int32_t r = 1; r <= 5; ++r) {
-        std::vector<TileCoord> candidates;
-        for (int32_t dy = -r; dy <= r; ++dy) {
-            for (int32_t dx = -r; dx <= r; ++dx) {
-                if (std::max(std::abs(dx), std::abs(dy)) != r) continue;
-                int32_t x = bx + dx;
-                int32_t y = by + dy;
-
-                if (!impl_->grid_.in_bounds(x, y)) continue;
-
-                const auto& cell = impl_->grid_.get_cell(static_cast<uint32_t>(x), static_cast<uint32_t>(y));
-                if (!cell.is_passable(false, false)) continue;
-
-                TileCoord cand{x, y};
-
-                bool is_reserved = std::any_of(
-                    impl_->reserved_queue_slots_.begin(),
-                    impl_->reserved_queue_slots_.end(),
-                    [&cand](const TileCoord& slot) { return slot == cand; }
-                );
-                if (is_reserved) continue;
-
-                bool is_ant_queued = false;
-                for (const auto& ant : impl_->ants_) {
-                    if (ant && ant->is_alive() &&
-                        (ant->state == UnitState::QueuingBase || ant->state == UnitState::EnteringBase) &&
-                        ant->pos == cand) {
-                        is_ant_queued = true;
-                        break;
-                    }
-                }
-                if (is_ant_queued) continue;
-
-                candidates.push_back(cand);
-            }
-        }
-
-        if (!candidates.empty()) {
-            auto best_it = std::min_element(
-                candidates.begin(),
-                candidates.end(),
-                [&from_pos](const TileCoord& c1, const TileCoord& c2) {
-                    int32_t m1 = c1.manhattan_dist(from_pos);
-                    int32_t m2 = c2.manhattan_dist(from_pos);
-                    if (m1 != m2) return m1 < m2;
-
-                    int64_t edx1 = c1.x - from_pos.x;
-                    int64_t edy1 = c1.y - from_pos.y;
-                    int64_t edx2 = c2.x - from_pos.x;
-                    int64_t edy2 = c2.y - from_pos.y;
-                    int64_t e1 = edx1 * edx1 + edy1 * edy1;
-                    int64_t e2 = edx2 * edx2 + edy2 * edy2;
-                    if (e1 != e2) return e1 < e2;
-
-                    if (c1.y != c2.y) return c1.y < c2.y;
-                    return c1.x < c2.x;
-                }
-            );
-
-            TileCoord best_slot = *best_it;
-            impl_->reserved_queue_slots_.push_back(best_slot);
-            return best_slot;
-        }
-    }
-
-    return TileCoord{bx + 1, by};
-}
-
-void SimulationEngine::release_queue_slot(TileCoord slot) {
-    auto it = std::find(impl_->reserved_queue_slots_.begin(), impl_->reserved_queue_slots_.end(), slot);
-    if (it != impl_->reserved_queue_slots_.end()) {
-        impl_->reserved_queue_slots_.erase(it);
-    }
-}
-
-void SimulationEngine::clear_reserved_queue_slots() {
-    impl_->reserved_queue_slots_.clear();
-}
-
-bool SimulationEngine::is_queue_slot_reserved(TileCoord slot) const {
-    return std::find(impl_->reserved_queue_slots_.begin(), impl_->reserved_queue_slots_.end(), slot) != impl_->reserved_queue_slots_.end();
-}
-
-void SimulationEngine::send_ant_straight_into_base(uint32_t ant_id) {
-    AntUnit* unit = impl_->find_unit(ant_id);
-    if (!unit || !unit->is_alive() || unit->player_id >= MAX_PLAYERS) return;
-
-    const auto* base = impl_->grid_.find_anthill(unit->player_id);
-    if (!base) return;
-
-    int32_t bx = base->x;
-    int32_t by = base->y;
-    TileCoord hole{bx + 1, by + 1};
-
-    if (unit->pos == hole) {
-        unit->clear_path();
-        unit->final_dest = hole;
-        return;
-    }
-
-    // Home order through the original GoTo: the own hill resolves to its entrance (order 2), and the path
-    // (planned asynchronously by PATHMGR) may cross the own mound only in that order.
-    if (!impl_->go_to(*unit, hole, false, false)) {
-        impl_->base_queues_[unit->player_id].active_depositing_ant_id = 0;
-    }
-}
-
-void SimulationEngine::dispatch_next_base_queue(uint8_t player_id) {
-    if (player_id >= MAX_PLAYERS) return;
-    auto& bq = impl_->base_queues_[player_id];
-
-    auto q_it = bq.queue.begin();
-    while (q_it != bq.queue.end()) {
-        AntUnit* u = impl_->find_unit(*q_it);
-        if (!u || !u->is_alive() || u->player_id != player_id) {
-            if (bq.active_depositing_ant_id == *q_it) {
-                bq.active_depositing_ant_id = 0;
-            }
-            q_it = bq.queue.erase(q_it);
-        } else {
-            ++q_it;
-        }
-    }
-
-    if (bq.active_depositing_ant_id == 0 && !bq.queue.empty()) {
-        const auto* friendly_base = impl_->grid_.find_anthill(player_id);
-        if (friendly_base) {
-            int32_t bx = static_cast<int32_t>(friendly_base->x);
-            int32_t by = static_cast<int32_t>(friendly_base->y);
-            int count_on_mound = 0;
-            for (const auto& a : impl_->ants_) {
-                if (a && a->is_alive() && a->player_id == player_id && !a->underground) {
-                    if (a->pos.x >= bx && a->pos.x <= bx + 2 && a->pos.y >= by && a->pos.y <= by + 2) {
-                        count_on_mound++;
-                    }
-                }
-            }
-            if (count_on_mound >= 2) {
-                return; // Mound ramp congested, wait for exiting ants to step off
-            }
-        }
-
-        uint32_t head_id = bq.queue.front();
-        bq.active_depositing_ant_id = head_id;
-        send_ant_straight_into_base(head_id);
-    }
-}
+// ------------------------------------------------------------------------------------------------
+// Hill waiting ring (ANTHILLQ, Ants.exe 0x10247f9). An ant that wants to enter is ordered to the entrance; when the
+// entrance is not free it waits on the ring tiles in front of the hill, one queued ant is sent in every 200 ms.
+// ------------------------------------------------------------------------------------------------
 
 void SimulationEngine::join_base_queue(uint32_t ant_id) {
     AntUnit* unit = impl_->find_unit(ant_id);
     if (!unit || !unit->is_alive() || unit->player_id >= MAX_PLAYERS) return;
-
     unit->attack_target_id = 0;
-
-    auto& bq = impl_->base_queues_[unit->player_id];
-    auto it = std::find(bq.queue.begin(), bq.queue.end(), ant_id);
-    if (it == bq.queue.end()) {
-        bq.queue.push_back(ant_id);
-    }
-
-    bool mound_congested = false;
-    const auto* friendly_base = impl_->grid_.find_anthill(unit->player_id);
-    if (friendly_base) {
-        int32_t bx = static_cast<int32_t>(friendly_base->x);
-        int32_t by = static_cast<int32_t>(friendly_base->y);
-        int count_on_mound = 0;
-        for (const auto& a : impl_->ants_) {
-            if (a && a->is_alive() && a->player_id == unit->player_id && !a->underground) {
-                if (a->pos.x >= bx && a->pos.x <= bx + 2 && a->pos.y >= by && a->pos.y <= by + 2) {
-                    count_on_mound++;
-                }
-            }
-        }
-        if (count_on_mound >= 2) {
-            mound_congested = true;
-        }
-    }
-
-    if (!mound_congested && (bq.active_depositing_ant_id == 0 || bq.active_depositing_ant_id == ant_id)) {
-        bq.active_depositing_ant_id = ant_id;
-        send_ant_straight_into_base(ant_id);
-    } else {
-        size_t idx = static_cast<size_t>(std::distance(bq.queue.begin(), std::find(bq.queue.begin(), bq.queue.end(), ant_id)));
-        TileCoord target_slot = get_base_queue_slot(unit->player_id, idx);
-        // Next to a slot another ant holds: wait there (the queue update parks the ant).
-        if (!(unit->pos.chebyshev_dist(target_slot) == 1 && impl_->has_other_living_ant_at(target_slot, ant_id))) {
-            issue_internal_move_order(ant_id, target_slot);
-        }
-        unit->final_dest = target_slot;
-    }
+    const TileCoord home = impl_->team_entrance(unit->player_id);
+    if (home.x < 0) return;
+    const uint8_t act = impl_->orig_action_of(*unit);
+    if (act != AntUnit::kActionIdle && act != AntUnit::kActionWalk && act != AntUnit::kActionStun) return;
+    impl_->yield_guard_ai(*unit);
+    impl_->go_to(*unit, home, false, false);                                  // Order(&home, 0, 0, 0)
 }
 
 void SimulationEngine::leave_base_queue(uint32_t ant_id) {
-    // An ant leaving the queue no longer claims the hill entrance (its home order ends here).
-    if (AntUnit* u = impl_->find_unit(ant_id)) {
-        if (u->orig_order == AntUnit::kOrderHome) {
-            u->orig_order = AntUnit::kOrderNone;
-            u->orig_order_tile = TileCoord{AntUnit::kNoOrderTileX, AntUnit::kNoOrderTileY};
-        }
-    }
-    for (uint8_t p = 0; p < MAX_PLAYERS; ++p) {
-        auto& bq = impl_->base_queues_[p];
-        bool was_active = (bq.active_depositing_ant_id == ant_id);
-        if (was_active) {
-            bq.active_depositing_ant_id = 0;
-        }
-        auto it = std::find(bq.queue.begin(), bq.queue.end(), ant_id);
-        if (it != bq.queue.end()) {
-            bq.queue.erase(it);
-        }
-        if (was_active) {
-            dispatch_next_base_queue(p);
-        }
-    }
+    if (AntUnit* u = impl_->find_unit(ant_id)) u->home_state = 0;
 }
 
 bool SimulationEngine::is_ant_in_base_queue(uint32_t ant_id) const {
-    for (uint8_t p = 0; p < MAX_PLAYERS; ++p) {
-        const auto& bq = impl_->base_queues_[p];
-        if (bq.active_depositing_ant_id == ant_id) return true;
-        if (std::find(bq.queue.begin(), bq.queue.end(), ant_id) != bq.queue.end()) return true;
-    }
-    return false;
+    const AntUnit* u = impl_->find_unit(ant_id);
+    return u && u->home_state != 0;
 }
 
 uint32_t SimulationEngine::get_active_depositing_ant(uint8_t player_id) const {
-    if (player_id >= MAX_PLAYERS) return 0;
-    return impl_->base_queues_[player_id].active_depositing_ant_id;
+    for (const auto& a : impl_->ants_) {
+        if (a && a->player_id == player_id && a->loco_action == AntUnit::kActionEnter) return a->id;
+    }
+    return 0;
 }
 
 size_t SimulationEngine::get_base_queue_size(uint8_t player_id) const {
-    if (player_id >= MAX_PLAYERS) return 0;
-    return impl_->base_queues_[player_id].queue.size();
+    size_t n = 0;
+    for (const auto& a : impl_->ants_) {
+        if (a && a->is_alive() && a->player_id == player_id && a->home_state == 2) ++n;
+    }
+    return n;
 }
 
-TileCoord SimulationEngine::get_base_queue_slot(uint8_t player_id, size_t index) const {
-    const auto* base = impl_->grid_.find_anthill(player_id);
-    if (!base) return TileCoord{0, 0};
-    int32_t bx = base->x;
-    int32_t by = base->y;
-
-    // Authentic 1998 Ants.exe (Ants.exe.c:9678–9684 & 22781–22792):
-    // Queue slots line up strictly to the left of the base:
-    // Slot 0: (bx - 1, by)
-    // Slot 1: (bx - 1, by + 1)
-    // Slot 2: (bx - 1, by + 2)
-    // Slot 3: (bx - 1, by + 3)
-    // Slot 4: (bx - 2, by), etc.
-    size_t col = index / 4;
-    size_t row = index % 4;
-    int32_t qx = bx - 1 - static_cast<int32_t>(col);
-    int32_t qy = by + static_cast<int32_t>(row);
-
-    if (impl_->grid_.in_bounds(qx, qy) && impl_->grid_.get_cell(TileCoord{qx, qy}).is_passable(false, false)) {
-        return TileCoord{qx, qy};
-    }
-
-    // Fallback: search adjacent passable cells strictly to the left of base mound
-    for (int32_t r = 1; r <= 4; ++r) {
-        for (int32_t dy = -r; dy <= r; ++dy) {
-            for (int32_t dx = -r; dx <= r; ++dx) {
-                int32_t cx = (bx - 1) + dx;
-                int32_t cy = by + dy;
-                if (cx < bx && impl_->grid_.in_bounds(cx, cy) &&
-                    impl_->grid_.get_cell(TileCoord{cx, cy}).is_passable(false, false)) {
-                    return TileCoord{cx, cy};
-                }
-            }
-        }
-    }
-
-    return TileCoord{std::max(0, bx - 1), by};
-}
-
-void SimulationEngine::step_base_entry_animation(uint32_t ant_id, uint16_t target_frame) {
-    AntUnit* u = impl_->find_unit(ant_id);
-    if (!u) return;
-    u->anim_subitem = target_frame;
-
-    if (target_frame >= 4 && u->is_holding()) {
-        auto [food, pts] = u->deposit_food();
-        uint32_t deposit_pts = (pts > 0) ? pts : (food * 25);
-        impl_->stats_.add_score(u->player_id, static_cast<int32_t>(deposit_pts));
-        impl_->audio_queue_.push_back(AudioEvent{SoundID::BaseScoreUp, u->pixel_x, u->pixel_y, 1, u->player_id});
-    }
-
-    if (target_frame == 8) {
-        u->heal_full();
-        impl_->audio_queue_.push_back(AudioEvent{SoundID::PowerUpHeal, u->pixel_x, u->pixel_y, 1, u->player_id});
-    }
-
-    if (target_frame >= 16) {
-        u->state = UnitState::Idle;
-        u->anim_subitem = 0;
-    }
-}
-
+// The raid starts now (test hook): the loot is min(victim score, 50), fixed at the start.
 void SimulationEngine::start_thief_infiltration(uint32_t ant_id, uint8_t target_team_id) {
     AntUnit* u = impl_->find_unit(ant_id);
-    if (!u) return;
-    u->state = UnitState::Infiltrating;
-    u->target_team_id = target_team_id;
-    u->anim_subitem = 0;
-    u->underground = false;
-    const auto* enemy_base = impl_->grid_.find_anthill(target_team_id);
-    if (enemy_base) {
-        u->pos = TileCoord{enemy_base->x + 1, enemy_base->y + 1};
-        u->set_pixel_pos(enemy_base->x * 32 + 107, enemy_base->y * 32 + 58);
-    }
-}
-
-void SimulationEngine::step_thief_animation(uint32_t ant_id, uint16_t target_frame) {
-    AntUnit* u = impl_->find_unit(ant_id);
-    if (!u) return;
-    u->anim_subitem = target_frame;
-
-    if (target_frame >= 19) {
-        uint8_t victim = u->target_team_id;
-        if (victim >= 4) {
-            for (const auto& a : impl_->grid_.anthills()) {
-                if (a.team_id != u->player_id && a.x == u->pos.x && a.y == u->pos.y) {
-                    victim = a.team_id;
-                    break;
-                }
-            }
-            if (victim >= 4) {
-                victim = (u->player_id == 0) ? 1 : 0;
-            }
-        }
-        impl_->audio_queue_.push_back(AudioEvent{SoundID::BaseAlarmSiren, u->pixel_x, u->pixel_y, 2, victim});
-        impl_->news_queue_.push_back(NewsEvent{victim, "A ThiefAnt is at your anthill!", impl_->match_time_remaining_ms_, StringID::ThiefAlarmWarning});
-    }
-}
-
-void SimulationEngine::execute_thief_loot(uint32_t ant_id, uint8_t target_team_id) {
-    AntUnit* u = impl_->find_unit(ant_id);
-    if (!u) return;
-
-    int32_t victim_score = impl_->stats_.get_individual_score(target_team_id);
-    if (victim_score <= 0) return;
-    int32_t stolen = std::min(MAX_THIEF_STEAL, victim_score);
-    impl_->stats_.deduct_score(target_team_id, stolen);
-    u->steal_points(static_cast<uint16_t>(stolen));
-
-    impl_->audio_queue_.push_back(AudioEvent{SoundID::BaseScoreDn, u->pixel_x, u->pixel_y, 1, target_team_id});
-    impl_->news_queue_.push_back(NewsEvent{target_team_id, "Food stolen...", impl_->match_time_remaining_ms_, StringID::FoodStolenStatus});
+    if (!u || !u->is_alive() || target_team_id >= MAX_PLAYERS) return;
+    const int32_t score = std::max<int32_t>(0, impl_->stats_.get_individual_score(target_team_id));
+    impl_->start_raid(*u, target_team_id, static_cast<uint32_t>(std::min<int32_t>(score, static_cast<int32_t>(MAX_THIEF_STEAL))));
 }
 
 bool SimulationEngine::has_lunchbox_at(TileCoord pos) const {

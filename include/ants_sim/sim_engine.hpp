@@ -227,14 +227,12 @@ struct AntSnapshot {
     uint16_t anim_frame{0};
 
     bool     is_holding{false};
-    bool     had_food_at_base_entry{false};
     uint16_t held_item_id{TILE_EMPTY};
     int32_t  carried_points{0};
 
     bool     is_airborne{false};
     bool     is_stunned{false};
     bool     is_swimming{false};
-    bool     is_underground{false};
     bool     is_drowning{false};
     bool     is_on_mud{false};
     bool     is_transforming{false};
@@ -360,9 +358,13 @@ public:
 
     void tick();
     void issue_order(const AntOrder& order);
+    /// Result of a click on the hatch pedestal (Ants.exe FUN_01010aca): the reason a click did nothing.
+    enum class HatchResult : uint8_t { Started, NoEggs, AlreadyHatching, NotEnoughPoints, NotAvailable };
+    /// Starts an 8000 ms incubation (cost min(score, 200), one egg); `force` skips the 200 point rule (auto-hatch).
+    HatchResult try_hatch(uint8_t player_id, AntType type = AntType::Worker, bool force = false);
     bool hatch_ant(uint8_t player_id, AntType type);
-    size_t get_pending_hatch_count(uint8_t player_id) const;
-    void set_hatch_delay_ticks(uint32_t ticks);
+    size_t get_pending_hatch_count(uint8_t player_id) const;   // 1 while an egg is incubating
+    void set_hatch_delay_ticks(uint32_t ticks);                // incubation in ticks (default 160 = 8000 ms)
 
     // Dynamic Alliances
     void propose_alliance(uint8_t from_player, uint8_t to_player);
@@ -460,25 +462,15 @@ public:
     void set_tile_flags(int32_t x, int32_t y, uint16_t flags);
     void set_anthill(uint8_t team_id, TileCoord pos);
 
-    TileCoord assign_queue_slot(uint8_t team_id, TileCoord from_pos);
-    void release_queue_slot(TileCoord slot);
-    void clear_reserved_queue_slots();
-    bool is_queue_slot_reserved(TileCoord slot) const;
-
+    /// Hill waiting ring (ANTHILLQ): Order(home). The ant walks to the entrance or waits on the ring tiles.
     void join_base_queue(uint32_t ant_id);
     void leave_base_queue(uint32_t ant_id);
-    bool is_ant_in_base_queue(uint32_t ant_id) const;
-    uint32_t get_active_depositing_ant(uint8_t player_id) const;
-    size_t get_base_queue_size(uint8_t player_id) const;
-    TileCoord get_base_queue_slot(uint8_t player_id, size_t index) const;
-    void send_ant_straight_into_base(uint32_t ant_id);
-    void dispatch_next_base_queue(uint8_t player_id);
+    bool is_ant_in_base_queue(uint32_t ant_id) const;              // heading for or waiting at the ring
+    uint32_t get_active_depositing_ant(uint8_t player_id) const;   // the ant of the team playing the enter clip, or 0
+    size_t get_base_queue_size(uint8_t player_id) const;           // ants waiting at the ring
 
-    void step_base_entry_animation(uint32_t ant_id, uint16_t target_frame);
-
+    /// The thief starts its raid now (test hook): atcr501 on the raid tile, loot = min(victim score, 50).
     void start_thief_infiltration(uint32_t ant_id, uint8_t target_team_id);
-    void step_thief_animation(uint32_t ant_id, uint16_t target_frame);
-    void execute_thief_loot(uint32_t ant_id, uint8_t target_team_id);
 
     bool has_lunchbox_at(TileCoord pos) const;
     uint32_t get_lunchbox_points(TileCoord pos) const;

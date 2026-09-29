@@ -110,8 +110,6 @@ void HUD::init(uint8_t local_player_id) {
     active_order_mode_ = sim::OrderType::None;
     is_dragging_ = false;
     is_radar_dragging_ = false;
-    incubation_timer_ticks_ = 0;
-    is_incubating_ = false;
     news_queue_.clear();
     chat_log_.clear();
     chat_scroll_offset_ = 0;
@@ -173,21 +171,6 @@ void HUD::init(uint8_t local_player_id) {
     team_up_button_.is_pressed = false;
     team_up_button_.is_active = false;
 
-    // Configure 7 Action Buttons at (484..636, 362..458)
-    // 1. Move
-    action_buttons_[0] = {490, 365, 45, 30, 2573, 2585, 2572, false, true, false}; // butmovu, butmovd, labmov
-    // 2. Attack
-    action_buttons_[1] = {540, 365, 45, 30, 2580, 2589, 2579, false, true, false}; // butattu, butattd, labatt
-    // 3. Bomb
-    action_buttons_[2] = {590, 365, 45, 30, 2581, 2590, 2582, false, false, false}; // butbomu, butbomd, labbom
-    // 4. Fire
-    action_buttons_[3] = {490, 400, 45, 30, 2584, 2584, 2583, false, false, false}; // butfireu, labfire
-    // 5. Bridge
-    action_buttons_[4] = {540, 400, 45, 30, 2576, 2587, 2575, false, false, false}; // butdipu, butdipd, labdib
-    // 6. Thief
-    action_buttons_[5] = {590, 400, 45, 30, 2577, 2588, 2578, false, false, false}; // butthfu, butthfd, labthf
-    // 7. Cancel
-    action_buttons_[6] = {540, 435, 45, 25, 2706, 2707, 2705, false, true, false}; // butcanu, butcand, labcan
 
     queue_news_message("Ants Remake", 200, false);
 }
@@ -198,20 +181,6 @@ void HUD::reset() {
 
 void HUD::set_active_order_mode(sim::OrderType mode) noexcept {
     active_order_mode_ = mode;
-    for (auto& btn : action_buttons_) {
-        btn.is_active = false;
-    }
-    switch (mode) {
-        case sim::OrderType::Move:              action_buttons_[0].is_active = true; break;
-        case sim::OrderType::Attack:            action_buttons_[1].is_active = true; break;
-        case sim::OrderType::PlantBomb:
-        case sim::OrderType::DefuseBomb:        action_buttons_[2].is_active = true; break;
-        case sim::OrderType::IgniteFire:
-        case sim::OrderType::ExtinguishFire:    action_buttons_[3].is_active = true; break;
-        case sim::OrderType::BuildBridge:       action_buttons_[4].is_active = true; break;
-        case sim::OrderType::InfiltrateAnthill: action_buttons_[5].is_active = true; break;
-        default: break;
-    }
 }
 
 void HUD::update(const sim::WorldState& world, uint32_t delta_ticks) {
@@ -235,20 +204,7 @@ void HUD::update(const sim::WorldState& world, uint32_t delta_ticks) {
     // 2. Alarm siren blinking
     alarm_blink_ticks_ += delta_ticks;
 
-    // 3. Incubation progress
-    if (is_incubating_) {
-        if (incubation_timer_ticks_ <= delta_ticks) {
-            incubation_timer_ticks_ = 0;
-            is_incubating_ = false;
-        } else {
-            incubation_timer_ticks_ -= delta_ticks;
-        }
-    }
-
-    // 4. Update button contextual enabled status
-    update_action_buttons_state(world);
-
-    // 5. Cursor blink ticks and alliance team status
+    // 3. Cursor blink ticks and alliance team status
     cursor_blink_ticks_ += delta_ticks;
     is_on_team_ = (local_player_id_ < world.player_alliances.size() &&
                    world.player_alliances[local_player_id_] < sim::MAX_PLAYERS &&
@@ -273,49 +229,6 @@ void HUD::queue_news_message(const std::string& msg, uint32_t duration_ticks, bo
     if (news_queue_.size() > 32) {
         news_queue_.pop_front();
     }
-}
-
-void HUD::update_action_buttons_state(const sim::WorldState& world) {
-    bool has_friendly = false;
-    bool has_bomber = false;
-    bool has_fire = false;
-    bool has_swimmer = false;
-    bool has_thief = false;
-
-    for (const auto& ant : world.ants) {
-        if (ant.hp == 0 || ant.is_drowning) continue;
-        if (ant.player_id == local_player_id_) {
-            if (is_ant_selected(ant.id) || ant.id == selected_ant_id_) {
-                has_friendly = true;
-                if (ant.type == sim::AntType::Bomber) has_bomber = true;
-                if (ant.type == sim::AntType::Fire) has_fire = true;
-                if (ant.type == sim::AntType::Swimmer) has_swimmer = true;
-                if (ant.type == sim::AntType::Thief) has_thief = true;
-            }
-        }
-    }
-
-    if (!has_friendly) {
-        // No friendly unit selected: disable all action buttons except Cancel
-        for (size_t i = 0; i < 6; ++i) action_buttons_[i].is_enabled = false;
-        action_buttons_[6].is_enabled = true; // Cancel
-    } else {
-        // Move & Attack are universally enabled for all friendly units
-        action_buttons_[0].is_enabled = true; // Move
-        action_buttons_[1].is_enabled = true; // Attack
-
-        // Class-specific abilities
-        action_buttons_[2].is_enabled = has_bomber;
-        action_buttons_[3].is_enabled = has_fire;
-        action_buttons_[4].is_enabled = has_swimmer;
-        action_buttons_[5].is_enabled = has_thief;
-        action_buttons_[6].is_enabled = true; // Cancel
-    }
-
-    // Hatch button check: cost 200 pts and > 0 eggs
-    int32_t score = (local_player_id_ < world.player_scores.size()) ? world.player_scores[local_player_id_] : 0;
-    uint32_t eggs = (local_player_id_ < world.player_eggs.size()) ? world.player_eggs[local_player_id_] : 0;
-    hatch_button_.is_enabled = (score >= 200 && eggs > 0);
 }
 
 // =========================================================================
@@ -490,7 +403,6 @@ void HUD::render(IRenderer& renderer, const assets::AssetArchive& assets,
         } else if (sel_ant) {
             if (sel_ant->player_id != local_player_id_) status_text = "Enemy ant.";
             else if (sel_ant->is_drowning) status_text = "Drowning!";
-            else if (sel_ant->is_underground) status_text = "In base.";
             else if (sel_ant->is_holding) status_text = "Holds pick up...";
             else if (sel_ant->anim_state == 1 || sel_ant->anim_state == 2) status_text = "On my way.";
             else if (sel_ant->anim_state == 3) status_text = "In combat!";
@@ -709,7 +621,7 @@ void HUD::render_radar(IRenderer& renderer, const assets::AssetArchive& archive,
         }
     }
     for (const auto& ant : world.ants) {
-        if (ant.hp == 0 || ant.is_drowning || ant.is_underground || ant.is_in_scuffle) continue;
+        if (ant.hp == 0 || ant.is_drowning || ant.is_in_scuffle) continue;
         if (world.fog_of_war_enabled && ant.player_id != local_player_id_ && !revealed(ant.tile_x, ant.tile_y)) continue;
         dot(ant.tile_x, ant.tile_y, kMinimapAntColours[ant.player_id % 4], 1);
     }
@@ -1282,15 +1194,8 @@ bool HUD::handle_mouse_down(int32_t x, int32_t y, uint8_t button,
                 if (hatch_button_.contains(x, y) || move_pedestal_button_.contains(x, y)) {
                     hatch_button_.is_pressed = true;
                     play_sfx(sim::SoundID::NavButtonClick);
-                    int32_t score = (local_player_id_ < sim.get_world_state().player_scores.size())
-                                        ? sim.get_world_state().player_scores[local_player_id_] : 0;
-                    uint32_t eggs = (local_player_id_ < sim.get_world_state().player_eggs.size())
-                                        ? sim.get_world_state().player_eggs[local_player_id_] : 0;
-                    if (score >= 200 && eggs > 0) {
-                        sim.hatch_ant(local_player_id_, sim::AntType::Worker);
-                        is_incubating_ = true;
-                        incubation_timer_ticks_ = 60;
-                    }
+                    // FUN_01010aca: every click is handled by the simulation, which answers a refusal with its text
+                    sim.try_hatch(local_player_id_, sim::AntType::Worker);
                     return true;
                 }
                 if (stop_button_.contains(x, y)) {
@@ -1403,13 +1308,9 @@ bool HUD::handle_mouse_down(int32_t x, int32_t y, uint8_t button,
 
         // 4. Check Hatch Button click
         if (hatch_button_.contains(x, y)) {
-            if (hatch_button_.is_enabled) {
-                hatch_button_.is_pressed = true;
-                play_sfx(sim::SoundID::NavButtonClick);
-                sim.hatch_ant(local_player_id_, sim::AntType::Worker);
-                is_incubating_ = true;
-                incubation_timer_ticks_ = 60; // 3 seconds @ 20 Hz
-            }
+            hatch_button_.is_pressed = true;
+            play_sfx(sim::SoundID::NavButtonClick);
+            sim.try_hatch(local_player_id_, sim::AntType::Worker);
             return true;
         }
 
@@ -1591,7 +1492,6 @@ bool HUD::handle_mouse_up(int32_t x, int32_t y, uint8_t button,
     team_button_.is_pressed = false;
     hatch_button_.is_pressed = false;
     team_up_button_.is_pressed = false;
-    for (auto& btn : action_buttons_) btn.is_pressed = false;
     is_radar_dragging_ = false;
     if (show_options_) {
         if (opt_ok_button_pressed_ || opt_return_button_pressed_) {
@@ -2083,15 +1983,8 @@ bool HUD::handle_key_down(int32_t key, sim::SimulationEngine& sim, ViewportCamer
                 return true;
             }
             case 'h': case 'H': {
-                if (selected_base_team_id_ == local_player_id_) {
-                    int32_t score = (local_player_id_ < world.player_scores.size()) ? world.player_scores[local_player_id_] : 0;
-                    uint32_t eggs = (local_player_id_ < world.player_eggs.size()) ? world.player_eggs[local_player_id_] : 0;
-                    if (score >= 200 && eggs > 0) {
-                        sim.hatch_ant(local_player_id_, sim::AntType::Worker);
-                        is_incubating_ = true;
-                        incubation_timer_ticks_ = 60;
-                    }
-                } else {
+                // The original has no hatch key (Ctrl+H only selects the home hill).
+                if (selected_base_team_id_ != local_player_id_) {
                     select_base(local_player_id_);
                     queue_news_message("Home Anthill Selected", 40, false);
                 }
@@ -2898,7 +2791,7 @@ CursorType HUD::evaluate_cursor(int32_t screen_x, int32_t screen_y,
     const sim::AntSnapshot* hover_ant = nullptr;
     int32_t best_dist_sq = INT32_MAX;
     for (const auto& ant : world.ants) {
-        if (ant.hp == 0 || ant.is_drowning || ant.is_underground || ant.is_in_scuffle) continue;
+        if (ant.hp == 0 || ant.is_drowning || ant.is_in_scuffle) continue;
         if (world.fog_of_war_enabled && ant.player_id != local_player_id_) {
             bool is_ally = (local_player_id_ < world.player_alliances.size() &&
                             ant.player_id < world.player_alliances.size() &&

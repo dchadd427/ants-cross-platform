@@ -1430,6 +1430,76 @@ receives the HUD's draw calls).
   (BTNPUSH task), screen text metrics (GDI Franklin Gothic, un-antialiased), the results-screen row layout, the status-line
   strings (event driven, colour (79,0,143), cleared after 5000 ms) and the time-warning cues.
 
+### 5.35 Hill Actions Ground Truth: Enter, Deposit, Heal, Waiting Ring, Hatch, Raid (Capstone-Verified; Supersedes Earlier Hill Notes)
+
+Addresses are virtual addresses in `Original-Ants/Ants.exe` (image base 0x01000000); every statement was read in the binary or
+in `ants.chd` (the original was never run, so timings come from the clip tables). Checked by
+`tests/test_sim/test_hill_actions.cpp` (golden tests) and the hill cases of `tests/test_app/test_app_integration.cpp`.
+
+* **Geometry** *(implemented)*. With `(bx, by)` the footprint origin of the 4x4 hill (the layer-2 hill cell with flags & 1 is
+  origin + (1, 1)): entrance `(bx+1, by+1)`, raid tile `(bx+3, by+2)`, tile42 `(bx+4, by+4)`, alternative waiting tile
+  (player +0x46) `(bx-1, by+3)`, queue tiles A1..A3 `(bx..bx+2, by-1)`. All tiles of the footprint belong to the hill: an order
+  onto any of them is the enter order (own hill, order 2) or, for a thief, the raid order (enemy hill, order 0xb); any other
+  ant type gets a silent stop on an enemy hill.
+* **Enter is one clip** *(implemented; message 7, `FUN_01021494`)*. Only the end of an order-2 path starts it: the ant plays
+  `?h0` (empty) or `h?h0` (carrying) on the entrance tile centre (action 2). There is no hp, food or type test, no hidden or
+  `underground` flag and no invulnerability afterwards: the ant keeps its tile, hit box, selection and minimap dot the whole
+  time, orders are refused (action 2 is not orderable) and the only protection is that melee cannot start against an ant in
+  action 2, 0x14, 0xa, 0xe, 0xf or 0xc (`FUN_0101cb0c`). The clip is 17 frames for worker and thief `[8 x 60, 40 (event 5),
+  8 x 60]` = 1000 ms, bomber 13 frames 1240, fire 9 frames 1240, combat 15 frames 1160, swimmer 15 frames 880; the
+  carrying clips have the same timing. The frame with event 5 (the hidden `empty.bmp` frame) lasts `(10 - hp) * 200` ms
+  instead of 40 ms when the ant is wounded (`FUN_0101e20d`, `imul 0xc8`); event 5 has no other handler. The first frame's
+  time is booked twice when a clip is started inside a step callback, so a clip that starts at a path end ends one first-frame
+  duration later than its table length.
+* **Deposit and heal happen at the END of the clip** *(implemented)*. The step callback of actions 2 and 0x14 at the last frame
+  (`0x101ef5c`) gives the ant a new order (`Order(food source +0xf4)` when it carries normal food, otherwise
+  `Order(tile42)`), and `SetAction` runs the cleanup of the OLD action first (table `0x101b48f`): `FUN_0101e165` scores the
+  carried amount (`AddScore`: bubble at the entrance tile top-left, cue 87 `scoreup`, text 61 "Score going up..." only when the
+  amount is not 0), clears the carrying state and heals `hp += 10 - hp`. Nothing changes and no sound plays before that.
+  Thieves with loot (+0xec) and newborns go to tile42, not to a food source.
+* **Waiting ring and ANTHILLQ** *(implemented)*. Ant flags `+0x68` (0 none, 1 heading to the ring, 2 queued), `+0x6c` priority
+  (1 = ordered by a click or a retreat), `+0x70` queue time. `Order` (`FUN_0101fc50`) first runs the goal check
+  (`FUN_010202e7`) with the old `+0x68` and only afterwards, at `0x101fed2`, writes `+0x68 = 1, +0x6c = player` when the entrance
+  was replaced by the waiting tile, `+0x68 = 0` otherwise; an entrance that is occupied, claimed by an own ant's order 1 / 2, or
+  wanted by an ant that is not queued while another own ant is queued (`+0x68 != 2` and some own ant has `+0x68 == 2`: the FIFO
+  rule) is replaced by the waiting tile and, if that is taken, by the first free tile of the rings r = 1..4 around it (left
+  column top to bottom, right column, top row, bottom row). Arrival at the waiting tile sets `+0x68 = 2` and `+0x70 = now`
+  (0 for priority ants). The task ANTHILLQ (`0x10247f9`, every 200 ms) does nothing while an own ant stands on the entrance
+  tile or has order 1 / 2 targeting it; otherwise it sends the queued ant with the smallest `+0x70` (first wins ties) with
+  `Order(home)`. The dispatched ant still has `+0x68 == 2` while its goal is checked, which is why it passes the FIFO rule.
+  There is no slot table, no "active depositor" and no 3x3 congestion rule; the throughput is one ant per ~2 s.
+* **Retreat at 1 hp** *(implemented; `FUN_0101dded` with flag 1)*. Once, at the end of the hit recovery, a local ant with hp 1
+  clears its path, writes action 0 and gets `Order(home)` with `+0x6c = 1`. It is not repeated for an idle 1 hp ant.
+* **Hatch** *(implemented; `FUN_01010aca` / `FUN_01010c14` / `HATCHTSK 0x1025072`)*. The pedestal click (Ctrl+H only
+  selects the hill) checks in this order: no eggs -> text 16, already hatching -> text 14, score < 200 (not forced) -> text 13
+  and cue 61 `antstop`; otherwise text 15, cost `min(200, score)` (bubble "-N", cue 88 `scoredn`), eggs - 1, hatched counter + 1,
+  `hatching = 1`, and the task HATCHTSK is armed for 8000 ms. No ant object exists during that time and only one egg can
+  incubate. When the task runs it re-runs every scheduler slot (~8 ms, the "1000" written to the task is a dead store) while an
+  own ant stands on the entrance tile; then own ants heading for the entrance (order 1 / 2 with target = entrance) are sent to
+  the waiting tile (`+0x68 = 1, +0x6c = 0`) and the newborn is created at the entrance tile centre: a worker (always type 0,
+  hp 10), direction `rand() % 7 + 1`, action 0x14 (`aghatch`, 9 frames `[40, 8 x 60]` = 520 ms), order 2, plus the positional cue
+  `exithill` (43) and text 63 "Ready!". At the clip end it goes to tile42. When the last local ant is removed and eggs remain the
+  game hatches for free (`force`, no 200 point rule, cost `min(200, score)`).
+* **Thief raid** *(implemented; order 0xb, action 0xd, messages 0x12)*. The path ends on the raid tile (an occupied raid tile
+  makes the last step wait). At the arrival (`0x101d51b`): an ally's hill -> stop; carrying food -> text 17 "Can't - already have
+  food." and `Order(home)`; otherwise `amount = min(victim score, 50)` (also 0), fixed now. `FUN_0102184e` starts action 0xd
+  (`atcr501`, 33 frames, 3510 ms, frame sounds 84 / 85 / 86 at 2050 / 2610 / 3370 ms), positions the thief at the raid tile centre
+  (`bx*32+112, by*32+80`; the message handler runs inside the last walk step, so that step's snap is still added afterwards and
+  the thief stands a few pixels beside the centre until the clip ends), hides its selection marker, and plays the `anthill`
+  cue (48) with text 53 "A ThiefAnt is at your anthill!" for the victim. At the clip end the thief is snapped to the tile
+  centre and the cleanup of action 0xd (`FUN_0101e27f`) moves the loot: the victim loses `amount` (bubble, cue 88), the thief
+  carries it (loot flag +0xec is set even for 0) with text 62 "Food stolen..." for the thief's owner, and a thief that got food
+  goes home; with nothing to steal it stays idle on the raid tile. A raiding thief can be attacked (action 0xd is not in the
+  refusal list). Depositing the loot at its own hill scores `amount` like food (cue 87, text 61).
+* **Remake mapping**. `src/ants_sim/action_system.cpp` (hill, hatch, raid), `movement_system.cpp` (SetAction cleanup, step
+  callbacks, path ends, ring goal check, fairness rule), `ant_unit.hpp` (`home_state`, `home_priority`, `home_time_ms`,
+  `raid_amount`, `retreat_pending`, action ids). The renderer draws the ordinary clip of the ant at its position: there are no
+  anchor tables, no hidden state and no shadow. Removed as invented: the underground flag, the 40-tick emergence
+  invulnerability, the queue vector with slots and an active depositor, the 3 s incubation with a unit created at once, the
+  hatch key, the auto-raid of any thief standing on the raid tile, the 20-tick postponement and the deposit at frame 4.
+* **Not yet ported**: the ally-raid confirmation dialog, the frame sounds of the enter clips (none exist), the ears re-creation
+  colour on heal (the selection marker restarts on every health change, see 5.33.9).
+
 ---
 
 ## 6. Target Multi-Platform Architecture

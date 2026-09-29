@@ -41,7 +41,7 @@ Play the remake instantly in any modern web browser (Chrome, Firefox, Safari, Ed
     - **Fire**: Ignite firewalls (40-tick cooldown); immune to flame; extinguish fire hazards.
     - **Swimmer**: Build and multi-stage demolish bridges; underwater immunity to melee damage; continuous bobbing/snorkeling animations.
     - **Thief**: Infiltrate enemy anthills, steal up to 50 score points, trigger alarm sirens (`underattack.wav`), and drop lunchboxes on defeat.
-  - **Anthill Base Emergence & Dwelling**: Units dwelling at base heal; exiting units and newborn ants play the authentic 9-frame `*hatch` emergence sequence with sound 43 (`exithill.wav`).
+  - **Anthill Enter, Heal, Hatch & Raid**: An ant that reaches its hill's entrance plays the original enter clip (`?h0` / `h?h0`); its food scores and its health is restored when the clip ends, wounded ants take `(10 - hp) * 200` ms longer, and ants wait on a ring in front of the hill until the waiting-queue task (ANTHILLQ, every 200 ms) admits them one by one. An egg hatches 8 s after the click into a worker that plays `aghatch` with sound 43 (`exithill.wav`); a thief raid plays `atcr501` for 3.5 s and moves up to 50 points when it ends.
   - **Enemy Ant Inspection**: Clicking enemy units when no friendly unit is selected shows selection brackets (`*ears`, coloured by health) without allowing friendly command dispatch.
   - **Match Audio Cues**: 1-minute alert (`onemin.wav`), 30-second warning (`thirtysec.wav`), 10-second countdown clicks (`countdown.wav`), defeat fanfare (`losers.wav`), and player drop-out (`playerout.wav`).
 
@@ -56,7 +56,7 @@ Play the remake instantly in any modern web browser (Chrome, Firefox, Safari, Ed
   - Standalone web inspector (`asset_catalog/index.html`) with responsive design, searching, filtering, and instant asset downloads (⬇ WAV audio, ⬇ PNG sprites, ⬇ composite canvas frames).
 
 - **Automated Verification & Zero-Warning Standard**:
-  - 100% pass rate across **125 integration tests (2,645 assertions)** and **506 opaque-box End-to-End (E2E) verification tests**.
+  - 100% pass rate across **184 integration tests (5,492 assertions)**, the hill-action golden tests and **506 opaque-box End-to-End (E2E) verification tests**.
   - Strict compilation under `-Wall -Wextra -Werror -Wsign-conversion`.
 
 ---

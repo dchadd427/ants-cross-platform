@@ -41,12 +41,11 @@ bool CombatAIController::is_valid_target(const AntUnit& candidate,
     if (!candidate.is_alive() || candidate.death_status != DeathStatus::Alive) return false;
     if (candidate.team == owner.team) return false;
     if (stats.are_allies(candidate.player_id, owner.player_id)) return false;
-    if (candidate.is_underground() || candidate.state == UnitState::EnteringBase || candidate.state == UnitState::Infiltrating) return false;
+    if (candidate.in_hill_action()) return false;
     if (candidate.state == UnitState::Knockback || candidate.state == UnitState::Drowning) return false;
     if (candidate.is_in_scuffle || candidate.state == UnitState::Bounce) return false;
     if (candidate.on_powerup) return false;
     if (candidate.type == AntType::Swimmer && candidate.in_water) return false;
-    if (candidate.is_invulnerable()) return false;
 
     return true;
 }
@@ -76,7 +75,8 @@ void CombatAIController::update(SimulationEngine& engine,
                                 uint32_t random_seed) {
     if (owner_.type != AntType::Combat || !owner_.is_alive()) return;
     if (owner_.is_stunned() || owner_.state == UnitState::Flinch || owner_.state == UnitState::Knockback ||
-        owner_.state == UnitState::Bounce || owner_.is_in_scuffle || owner_.state == UnitState::Attacking) return;
+        owner_.state == UnitState::Bounce || owner_.is_in_scuffle || owner_.state == UnitState::Attacking ||
+        owner_.in_hill_action()) return;
 
     if (owner_.state == UnitState::GuardIdle || owner_.state == UnitState::Idle) {
         if (user_moving_) {

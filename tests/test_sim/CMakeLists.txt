@@ -89,3 +89,18 @@ target_compile_definitions(test_movement_golden PRIVATE
 )
 
 add_test(NAME test_movement_golden COMMAND test_movement_golden)
+
+add_executable(test_hill_actions
+    test_hill_actions.cpp
+)
+
+target_link_libraries(test_hill_actions PRIVATE
+    ants_sim
+    ants_assets
+)
+
+target_include_directories(test_hill_actions PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../include
+)
+
+add_test(NAME test_hill_actions COMMAND test_hill_actions)

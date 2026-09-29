@@ -38,15 +38,14 @@ enum class UnitState : uint8_t {
     Knockback      = 5,  // Ballistic airborne flight (*gf*, Action 14)
     Bounce         = 6,  // Ground impact skid and roll (*gb*, Action 19)
     Stunned        = 7,  // Immobilized recovery state (Action 12, 12 ticks)
-    EnteringBase   = 8,  // 17-frame base entry sequence (hgen301 / Anim 867)
-    QueuingBase    = 9,  // Queued in Chebyshev ring around anthill
+    EnteringBase   = 8,  // Enter (action 2) or hatch (action 0x14) clip on the hill entrance (?h0 / ?hatch)
     Drowning       = 10, // 22-subitem drowning sequence (*dr301)
     Dead           = 11, // Unit eliminated
     GuardIdle      = 12, // Combat Ant idle at guard post
     Intercepting   = 13, // Combat Ant intercepting detected intruder
     ReturningToPost= 14, // Combat Ant returning to guard post
     Swimming       = 15, // Swimmer Ant actively swimming in water
-    Infiltrating   = 16, // Thief Ant diving into enemy base
+    Infiltrating   = 16, // Thief raid clip (action 0xD, atcr501) on the raid tile
     DivingInWater  = 17, // Swimmer Ant diving into water (asdi*, Sound 71)
     ExitingWater   = 18, // Swimmer Ant emerging from water onto land (asgo*, Sound 71)
     BuildingBridge = 19, // Swimmer Ant digging / building bridge (asbb*, Action 13)
@@ -146,7 +145,25 @@ public:
     // Original-engine "action" ids (CAntUnit +0xe4) for locomotion-managed states.
     static constexpr uint8_t kActionIdle   = 0x00;  // *st* idle animation
     static constexpr uint8_t kActionWalk   = 0x01;  // *w{g,s,m,d}* walk / assw swim / asdi dive / asgo climb
+    static constexpr uint8_t kActionEnter  = 0x02;  // ?h0 / h?h0: enter the own hill (deposit and heal at the end)
+    static constexpr uint8_t kActionStun   = 0x03;  // ?sd301 / h?sd301
+    static constexpr uint8_t kActionGetPow = 0x04;  // getpow: power-up pickup
+    static constexpr uint8_t kActionHarvest = 0x05; // ?gf: grab food
+    static constexpr uint8_t kActionIgnite = 0x06;  // afsf: fire ant places a fire wall
+    static constexpr uint8_t kActionExtinguish = 0x07; // afxf
+    static constexpr uint8_t kActionPlant  = 0x08;  // absb: bomber plants a bomb
+    static constexpr uint8_t kActionDefuse = 0x09;  // abdb
+    static constexpr uint8_t kActionBlast  = 0x0A;  // gb / burn overlay: bomb victim
     static constexpr uint8_t kActionCantGo = 0x0B;  // *cg301 "can't" animation (sound 63 on frame 0)
+    static constexpr uint8_t kActionDeath  = 0x0C;  // death1..4
+    static constexpr uint8_t kActionRaid   = 0x0D;  // atcr501: thief raids an enemy hill
+    static constexpr uint8_t kActionHit    = 0x0E;  // ?gh: get hit
+    static constexpr uint8_t kActionDrown  = 0x0F;  // ?dr301
+    static constexpr uint8_t kActionBridgeBuild = 0x10;    // ?bbl / ?bbw
+    static constexpr uint8_t kActionBridgeDemolish = 0x11; // ?dbl / ?dbw
+    static constexpr uint8_t kActionAttack = 0x12;  // ?at: melee attack
+    static constexpr uint8_t kActionBlown  = 0x13;  // ?gb: blown away by a punch
+    static constexpr uint8_t kActionHatch  = 0x14;  // ?hatch: newborn emerges
     static constexpr uint8_t kActionNone   = 0xFF;  // state driven by other remake systems (no locomotion clip)
 
     // Order codes (CAntUnit +0xa8) and the "no target" sentinel tile of +0xac (row 0x5a, col 0x78).
@@ -191,13 +208,11 @@ public:
     uint8_t     holding{0};
     uint16_t    carried_food{0};
     uint16_t    carried_points{0};
-    bool        underground{false};
 
     uint16_t    anim_subitem{0};
     uint16_t    anim_tick{0};
     uint16_t    state_timer{0};
     uint16_t    transform_timer{0};
-    uint16_t    base_dwell_ticks{0};
     bool        is_on_mud{false};
     bool        was_in_water{false};
     bool        in_water{false};
@@ -218,10 +233,6 @@ public:
     TileCoord   final_dest{-1, -1};
     TileCoord   harvest_origin{-1, -1};
     bool        is_thief_steal{false};
-    bool        had_food_at_base_entry{false};
-    bool        completed_base_deposit{false};
-    bool        underground_visited{false};
-    bool        is_newborn{false};
     OrderType   pending_ability{static_cast<OrderType>(0)};
     TileCoord   pending_ability_target{-1, -1};
     TileCoord   ability_target{-1, -1};
@@ -237,7 +248,7 @@ public:
     uint16_t    powerup_dwell_timer{0};
     bool        cantgo_standing_on_powerup{false};
     TileCoord   dropped_powerup_pos{-1, -1};
-    uint16_t    invulnerable_ticks{0};
+    bool        retreat_pending{false};      // hit down to 1 hp: goes home once the hit recovery is over
 
     // ---- Original-engine locomotion state (Ants.exe sprite animation + CAntUnit fields) ----
     // Waypoints follow the original convention: waypoints[0] is the start tile, waypoints.back() the
@@ -248,6 +259,7 @@ public:
         uint32_t next_ms{0};           // animation-clock time at which the current frame ends (+0x10)
         uint8_t  dir{4};               // direction the clip was chosen for (renderer uses it for mirroring)
         uint32_t serial{0};            // incremented on every play (detects a clip change inside a step callback)
+        uint16_t evt5_ms{0};           // stretched duration of the heal frame (event 5) of the enter clip, 0 = native
     };
     LocoPlayer  loco{};
     uint8_t     loco_action{kActionNone};   // CAntUnit +0xe4 while locomotion-managed
@@ -258,6 +270,10 @@ public:
     uint8_t     pause_saved_dir{0};
     uint8_t     orig_order{kOrderNone};     // +0xa8
     TileCoord   orig_order_tile{kNoOrderTileX, kNoOrderTileY}; // +0xac
+    uint8_t     home_state{0};              // +0x68: 0 none, 1 heading to the waiting ring, 2 queued at the ring
+    uint8_t     home_priority{0};           // +0x6c: 1 = ordered by a click or a retreat, queued first
+    uint32_t    home_time_ms{0};            // +0x70: arrival time at the ring tile (0 for priority ants)
+    uint32_t    raid_amount{0};             // +0xf8: loot fixed when a thief's raid starts
     uint8_t     orig_target_team{255};      // +0xb0 (attack order)
     uint32_t    orig_target_ant{0};         // +0xb2 (attack order)
     int32_t     orig_food_id{-1};           // +0xb0 (harvest order): food object identity
@@ -277,14 +293,12 @@ public:
     bool is_holding() const noexcept {
         return holding != 0;
     }
-    bool is_underground() const noexcept {
-        return underground;
-    }
     bool is_transforming() const noexcept {
         return transform_timer > 0;
     }
-    bool is_invulnerable() const noexcept {
-        return invulnerable_ticks > 0;
+    /// Playing the enter (2) or hatch (0x14) clip: melee cannot start against such an ant (its refusal list).
+    bool in_hill_action() const noexcept {
+        return loco_action == kActionEnter || loco_action == kActionHatch || state == UnitState::EnteringBase;
     }
     bool is_orderable() const noexcept {
         return is_alive() && state != UnitState::Knockback && state != UnitState::Drowning &&

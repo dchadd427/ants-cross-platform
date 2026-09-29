@@ -1231,60 +1231,12 @@ void Renderer::render_software_cursor(CursorType type, int32_t screen_x, int32_t
 }
 
 void Renderer::draw_single_ant(const ants::sim::AntSnapshot& ant) {
-    bool is_idle_thief_on_cap = (ant.type == ants::sim::AntType::Thief &&
-                                 ant.is_underground &&
-                                 ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::Idle));
-    if ((ant.is_underground && !is_idle_thief_on_cap) || ant.is_in_scuffle) return; // Underground or concealed inside scuffle ball, do not draw
+    if (ant.is_in_scuffle) return; // concealed inside the scuffle ball, do not draw
 
-    bool is_infiltrating = (ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::Infiltrating));
-    bool is_entering_base = (ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::EnteringBase));
-
+    // The hill actions (enter, hatch, raid) are ordinary clips played on the tile centre the simulation puts the ant
+    // on, so there is no special anchor: every ant is drawn where it stands.
     int32_t sx = 0, sy = 0;
-    if (is_infiltrating || is_entering_base) {
-        int32_t hill_tx = -1, hill_ty = -1;
-        uint8_t target_t = ant.player_id;
-        if (is_infiltrating) {
-            if (ant.target_team_id < 4 && has_anthill_bases_ && anthill_bases_[ant.target_team_id].x >= 0) {
-                hill_tx = anthill_bases_[ant.target_team_id].x;
-                hill_ty = anthill_bases_[ant.target_team_id].y;
-                target_t = ant.target_team_id;
-            } else if (has_anthill_bases_) {
-                for (size_t b = 0; b < 4; ++b) {
-                    if (b != ant.player_id && anthill_bases_[b].x >= 0) {
-                        hill_tx = anthill_bases_[b].x;
-                        hill_ty = anthill_bases_[b].y;
-                        target_t = static_cast<uint8_t>(b);
-                        break;
-                    }
-                }
-            }
-        } else { // is_entering_base
-            if (ant.player_id < 4 && has_anthill_bases_ && anthill_bases_[ant.player_id].x >= 0) {
-                hill_tx = anthill_bases_[ant.player_id].x;
-                hill_ty = anthill_bases_[ant.player_id].y;
-                target_t = ant.player_id;
-            }
-        }
-        if (hill_tx >= 0) {
-            static const int32_t hill_offset_dy[4] = { 7, 14, 12, 8 };
-            int32_t anchor_world_x = 0;
-            int32_t anchor_world_y = 0;
-            if (is_infiltrating) {
-                anchor_world_x = hill_tx * 32 + 107;
-                anchor_world_y = hill_ty * 32 + 58 + hill_offset_dy[target_t % 4];
-            } else {
-                // Base entry hole center alignment:
-                static const int32_t hill_hole_local_y[4] = { 48, 39, 44, 50 };
-                anchor_world_x = hill_tx * 32 + 44;
-                anchor_world_y = hill_ty * 32 + hill_offset_dy[target_t % 4] + hill_hole_local_y[target_t % 4];
-            }
-            if (!camera_.world_to_screen(anchor_world_x, anchor_world_y, sx, sy)) return;
-        } else {
-            if (!camera_.world_to_screen(ant.px, ant.py, sx, sy)) return;
-        }
-    } else {
-        if (!camera_.world_to_screen(ant.px, ant.py, sx, sy)) return;
-    }
+    if (!camera_.world_to_screen(ant.px, ant.py, sx, sy)) return;
 
     // The original has neither a shadow nor a hop: a flight is the displacement baked into the aggb / aggh clips.
     const int32_t render_y = sy;
@@ -1301,33 +1253,6 @@ void Renderer::draw_single_ant(const ants::sim::AntSnapshot& ant) {
     if (ant.type == ants::sim::AntType::Swimmer &&
         (ant.is_swimming || ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::Swimming))) {
         prefix = "as";
-    }
-
-    if (is_entering_base) {
-        // Base entry and emerge/hatch animations:
-        // Entering (frames 0..7): agen301 / aben301 / afen301 / aten301 / acen301 / asen301
-        // Emerging (frames 8..15): aghatch / abhatch / afhatch / athatch / achatch / ashatch
-        static const char* type_letters[6] = { "g", "b", "f", "t", "c", "s" };
-        char type_ch = type_letters[static_cast<size_t>(ant.type) % 6][0];
-        bool is_emerging = (ant.anim_frame >= 8);
-        bool carrying_food = (!is_emerging && (ant.is_holding || ant.had_food_at_base_entry));
-        std::string anim_name;
-        if (is_emerging) {
-            anim_name = std::string("a") + type_ch + "hatch";
-        } else {
-            anim_name = (carrying_food ? std::string("h") : std::string("a")) + type_ch + "en301";
-        }
-        const auto* base_seq = archive_->find_animation(anim_name);
-        if (!base_seq) {
-            base_seq = archive_->find_animation(is_emerging ? "aghatch" : "agen301");
-        }
-        if (base_seq && !base_seq->subitems.empty()) {
-            size_t frame_index = is_emerging ? static_cast<size_t>(ant.anim_frame - 8) : static_cast<size_t>(ant.anim_frame);
-            size_t sub_idx = std::min(frame_index, base_seq->subitems.size() - 1);
-            const auto& sub = base_seq->subitems[sub_idx];
-            draw_frame_parts(sub, sx, render_y, false, ant_colour(ant.player_id));
-        }
-        return;
     }
 
     if (ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::Walking) ||
@@ -1376,8 +1301,6 @@ void Renderer::draw_single_ant(const ants::sim::AntSnapshot& ant) {
         action = "sd";
     } else if (ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::CantGo)) {
         action = "cg";
-    } else if (ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::QueuingBase)) {
-        action = "st";
     } else {
         action = "st";
     }
@@ -1440,16 +1363,9 @@ void Renderer::draw_single_ant(const ants::sim::AntSnapshot& ant) {
 
     if (ant.is_transforming) {
         // Authentic fidelity: ant body disappears during transformation while getpow animation plays
-    } else if (!is_infiltrating && loco_seq && !loco_seq->subitems.empty()) {
+    } else if (loco_seq && !loco_seq->subitems.empty()) {
         const size_t sub_idx = std::min<size_t>(ant.loco_frame, loco_seq->subitems.size() - 1);
         draw_frame_sprites(loco_seq->subitems[sub_idx], ant.loco_mirrored);
-    } else if (is_infiltrating) {
-        const auto* infil_seq = archive_->find_animation("atcr501");
-        if (infil_seq && !infil_seq->subitems.empty()) {
-            size_t sub_idx = ant.anim_frame % infil_seq->subitems.size();
-            const auto& sub = infil_seq->subitems[sub_idx];
-            draw_frame_parts(sub, sx, render_y, false, ant_colour(ant.player_id));
-        }
     } else {
         const auto* seq = archive_->get_directional_animation(prefix + action, dir);
         if (seq && !seq->subitems.empty()) {
@@ -1649,10 +1565,7 @@ void Renderer::draw_anthill_selection_brackets(int32_t cx, int32_t cy, uint32_t 
 
 void Renderer::collect_ant_units(const ants::sim::WorldState& world) {
     for (const auto& a : world.ants) {
-        bool is_idle_thief_on_cap = (a.type == ants::sim::AntType::Thief &&
-                                     a.is_underground &&
-                                     a.anim_state == static_cast<uint16_t>(ants::sim::UnitState::Idle));
-        if ((a.is_underground && !is_idle_thief_on_cap) || a.is_in_scuffle) continue;
+        if (a.is_in_scuffle) continue;
         if (world.fog_of_war_enabled && a.player_id != hud_team_id_ &&
             !world.is_tile_revealed(a.tile_x, a.tile_y)) {
             continue; // Concealed enemy ant under fog of war

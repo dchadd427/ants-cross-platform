@@ -3,6 +3,7 @@ add_library(ants_sim STATIC
     ant_unit.cpp
     combat_ai.cpp
     movement_system.cpp
+    action_system.cpp
     movement_tables.cpp
     path_planner.cpp
     pathfinding.cpp

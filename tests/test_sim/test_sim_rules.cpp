@@ -572,52 +572,9 @@ void run_suite_8_bridges() {
 void run_suite_9_anthill() {
     TEST_SUITE("Suite 9: Anthill Queuing, 17-Frame Entry, 100% Heal & Egg Hatching");
 
-    TEST_CASE("9.1 Concentric Chebyshev Ring Queuing") {
-        SimulationEngine sim;
-        sim.init_test_world(60, 60, 1);
-        sim.set_anthill(0, {30, 30});
-        TileCoord q1 = sim.assign_queue_slot(0, {35, 30});
-        int r1 = std::max(std::abs(q1.x - 30), std::abs(q1.y - 30));
-        ASSERT_EQ(r1, 1);
-    } TEST_END();
 
-    TEST_CASE("9.2 Frame 4 Food Deposit (Sound 87 scoreup.wav)") {
-        SimulationEngine sim;
-        sim.init_test_world(60, 60, 1);
-        sim.set_anthill(0, {30, 30});
-        uint32_t u = sim.spawn_unit(0, AntType::Worker, {30, 30});
-        sim.get_unit(u).carried_points = 25;
-        sim.get_unit(u).holding = 1;
-        sim.clear_audio_events();
 
-        sim.step_base_entry_animation(u, 4);
-        ASSERT_EQ(sim.get_unit(u).carried_points, 0u);
-        ASSERT_EQ(sim.get_unit(u).holding, 0u);
-        ASSERT_EQ(sim.get_player_score(0), 25);
-        ASSERT_TRUE(sim.has_audio_event(87)); // Sound 87
-    } TEST_END();
 
-    TEST_CASE("9.3 Frame 8 Underground 100% Full Heal (Sound 1 powerupc.wav)") {
-        SimulationEngine sim;
-        sim.init_test_world(60, 60, 1);
-        sim.set_anthill(0, {30, 30});
-        uint32_t u = sim.spawn_unit(0, AntType::Worker, {30, 30});
-        sim.get_unit(u).hp = 1;
-        sim.clear_audio_events();
-
-        sim.step_base_entry_animation(u, 8);
-        ASSERT_EQ(sim.get_unit(u).hp, 10);
-        ASSERT_TRUE(sim.has_audio_event(SoundID::PowerUpHeal)); // Sound 1 powerupc.wav
-    } TEST_END();
-
-    TEST_CASE("9.4 Frame 16 Emergence Ready") {
-        SimulationEngine sim;
-        sim.init_test_world(60, 60, 1);
-        sim.set_anthill(0, {30, 30});
-        uint32_t u = sim.spawn_unit(0, AntType::Worker, {30, 30});
-        sim.step_base_entry_animation(u, 16);
-        ASSERT_EQ(sim.get_unit(u).state, UnitState::Idle);
-    } TEST_END();
 
     TEST_CASE("9.5 Egg Hatching (200 Pts Deducted, Egg Counter Decremented)") {
         SimulationEngine sim;
@@ -658,44 +615,8 @@ void run_suite_10_thief() {
         ASSERT_EQ(sim.get_unit(t).state, UnitState::Infiltrating);
     } TEST_END();
 
-    TEST_CASE("10.2 Sound 58 Alarm Siren & News Flash Dispatched to Victim") {
-        SimulationEngine sim;
-        sim.init_test_world(60, 60, 1);
-        sim.set_anthill(1, {40, 40});
-        uint32_t t = sim.spawn_unit(0, AntType::Thief, {40, 40});
-        sim.clear_audio_events();
-        sim.clear_news_events();
-        sim.step_thief_animation(t, 19);
 
-        ASSERT_TRUE(sim.has_targeted_audio_event(1, 58)); // Sound 58 on victim
-        ASSERT_TRUE(sim.has_news_event(1, 53));            // String 53 banner
-    } TEST_END();
 
-    TEST_CASE("10.3 50-Point Steal & Sound 88 Score Drain") {
-        SimulationEngine sim;
-        sim.init_test_world(60, 60, 1);
-        sim.set_anthill(1, {40, 40});
-        sim.set_player_score(1, 120);
-        uint32_t t = sim.spawn_unit(0, AntType::Thief, {40, 40});
-        sim.clear_audio_events();
-
-        sim.execute_thief_loot(t, 1);
-        ASSERT_EQ(sim.get_player_score(1), 70);
-        ASSERT_EQ(sim.get_unit(t).carried_points, 50u);
-        ASSERT_EQ(sim.get_unit(t).holding, 1u);
-        ASSERT_TRUE(sim.has_targeted_audio_event(1, 88)); // Sound 88 scoredn.wav
-    } TEST_END();
-
-    TEST_CASE("10.4 Steal Bound by Victim Score (min(50, score))") {
-        SimulationEngine sim;
-        sim.init_test_world(60, 60, 1);
-        sim.set_anthill(1, {40, 40});
-        sim.set_player_score(1, 20);
-        uint32_t t = sim.spawn_unit(0, AntType::Thief, {40, 40});
-        sim.execute_thief_loot(t, 1);
-        ASSERT_EQ(sim.get_player_score(1), 0);
-        ASSERT_EQ(sim.get_unit(t).carried_points, 20u);
-    } TEST_END();
 
     TEST_CASE("10.5 Carrier Death Drops Physical Lunchbox on Layer 2") {
         SimulationEngine sim;
@@ -959,14 +880,14 @@ static void run_suite_13_authentic_fidelity() {
         ret.type = OrderType::ReturnToBase;
         sim.issue_order(ret);
 
-        ASSERT_EQ(sim.get_active_depositing_ant(0), worker);
+        ASSERT_EQ(sim.get_unit(worker).orig_order, AntUnit::kOrderHome);   // Order(home): path to the entrance
         ASSERT_TRUE(tick_until(sim, [&]() { return !sim.has_pending_path(worker); }, 20));
         ASSERT_FALSE(sim.get_unit(worker).waypoints.empty());
         TileCoord last_wp = sim.get_unit(worker).waypoints.back();
         ASSERT_EQ(last_wp.x, 21);
         ASSERT_EQ(last_wp.y, 21);
 
-        // Second worker while worker 1 has priority routes to queue staging slot 1 (19, 21)
+        // Second worker: the entrance is claimed by worker 1, so it waits on the ring tile in front of the hill (19, 23)
         uint32_t worker2 = sim.spawn_unit(0, AntType::Worker, {10, 15});
         AntOrder ret2{};
         ret2.ant_id = worker2;
@@ -977,29 +898,9 @@ static void run_suite_13_authentic_fidelity() {
         ASSERT_FALSE(sim.get_unit(worker2).waypoints.empty());
         TileCoord last_wp2 = sim.get_unit(worker2).waypoints.back();
         ASSERT_EQ(last_wp2.x, 19);
-        ASSERT_EQ(last_wp2.y, 21);
+        ASSERT_EQ(last_wp2.y, 23);
     } TEST_END();
 
-    TEST_CASE("13.5 Thief Cannot Steal From Base With 0 Food") {
-        SimulationEngine sim;
-        sim.init_test_world(60, 60, 1);
-        sim.set_anthill(1, {30, 30});
-        uint32_t thief = sim.spawn_unit(0, AntType::Thief, {30, 30});
-        ASSERT_EQ(sim.get_player_score(1), 0);
-
-        AntOrder infil{};
-        infil.ant_id = thief;
-        infil.type = OrderType::InfiltrateAnthill;
-        infil.target_entity_id = 1;
-        sim.issue_order(infil);
-
-        // Cannot infiltrate 0-food anthill
-        ASSERT_NE(sim.get_unit(thief).state, UnitState::Infiltrating);
-
-        // Direct execute_thief_loot call is also a no-op
-        sim.execute_thief_loot(thief, 1);
-        ASSERT_EQ(sim.get_unit(thief).carried_points, 0);
-    } TEST_END();
 
     TEST_CASE("13.6 Power-Up Pickup Emits Sounds 1 & 2 and Starts 15-Tick Transformation") {
         SimulationEngine sim;

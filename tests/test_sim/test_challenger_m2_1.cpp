@@ -113,7 +113,7 @@ void run_suite_1_combat_guard_ai() {
         }
     } TEST_END();
 
-    TEST_CASE("1.3 Comprehensive Target Filtering (Friendly, Allied, Dead, Underground)") {
+    TEST_CASE("1.3 Comprehensive Target Filtering (Friendly, Allied, Dead, Entering Hill)") {
         SimulationEngine sim;
         sim.init_test_world(60, 60, 100);
         sim.form_alliance(0, 1);
@@ -136,7 +136,7 @@ void run_suite_1_combat_guard_ai() {
         sim.tick();
         ASSERT_EQ(sim.get_unit(combat).state, UnitState::GuardIdle);
 
-        // 4. Enemy unit entering base / underground at dist 2
+        // 4. Enemy unit playing the enter / hatch clip at dist 2 (melee cannot start against it)
         uint32_t entering_enemy = sim.spawn_unit(2, AntType::Worker, {30, 28});
         sim.get_unit(entering_enemy).state = UnitState::EnteringBase;
         sim.tick();
