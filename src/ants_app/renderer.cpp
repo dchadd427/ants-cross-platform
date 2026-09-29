@@ -432,6 +432,10 @@ void Renderer::shutdown() {
     }
 #endif
 
+    if (rgba_texture_) {
+        SDL_DestroyTexture(rgba_texture_);
+        rgba_texture_ = nullptr;
+    }
     if (texture_cache_) {
         texture_cache_->clear();
         texture_cache_.reset();
@@ -1993,6 +1997,20 @@ void Renderer::draw_sprite(uint32_t sprite_id, int32_t x, int32_t y, bool mirror
     }
     SDL_Rect dst = { x, y, static_cast<int>(sp.width), static_cast<int>(sp.height) };
     SDL_RenderCopy(renderer_, tex, nullptr, &dst);
+}
+
+void Renderer::draw_rgba_image(int32_t x, int32_t y, int32_t w, int32_t h, const uint8_t* rgba) {
+    if (!renderer_ || !rgba || w <= 0 || h <= 0) return;
+    if (!rgba_texture_ || rgba_texture_w_ != w || rgba_texture_h_ != h) {
+        if (rgba_texture_) SDL_DestroyTexture(rgba_texture_);
+        rgba_texture_ = SDL_CreateTexture(renderer_, SDL_PIXELFORMAT_RGBA32, SDL_TEXTUREACCESS_STREAMING, w, h);
+        rgba_texture_w_ = w;
+        rgba_texture_h_ = h;
+    }
+    if (!rgba_texture_) return;
+    SDL_UpdateTexture(rgba_texture_, nullptr, rgba, w * 4);
+    SDL_Rect dst = { x, y, w, h };
+    SDL_RenderCopy(renderer_, rgba_texture_, nullptr, &dst);
 }
 
 void Renderer::draw_named_sprite(const std::string& name, int32_t x, int32_t y, bool mirrored) {

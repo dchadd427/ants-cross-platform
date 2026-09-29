@@ -1,4 +1,5 @@
 #include "ants_app/hud.hpp"
+#include "ants_sim/prng.hpp"
 #include "ants_app/renderer.hpp"
 
 #include <cmath>
@@ -68,6 +69,41 @@ void draw_score_digits(IRenderer& renderer, const assets::AssetArchive& archive,
         }
         divisor /= 10;
         x += 9;
+    }
+}
+
+// Minimap ground truth (Ants.exe FUN_01009596): 119x91 image at (480,35), palette-index colours
+struct MinimapObject { uint16_t id; uint8_t colour; uint8_t size_flag; };
+#include "minimap_tables.inc"
+
+// Speckle table of the terrain classes (0x1001c28): 5 palette indices per class 0..5, picked with rand() % 5
+constexpr uint8_t kMinimapClassColours[6][5] = {
+    {251, 201, 249, 251, 251},   // 0 gravel
+    {235, 235, 235, 235, 235},   // 1 slate
+    { 37,  37,  37,  37,  37},   // 2 water
+    { 77,  77,  77,  77,  77},   // 3 mud
+    {231, 232, 233, 231, 231},   // 4 dirt
+    {  0,   0,   0,   0,   0}    // 5 (unused class)
+};
+// Colours of unexplored cells by class (0x1001c48)
+constexpr uint8_t kMinimapFogColours[8] = { 244, 237, 225, 245, 236, 0, 0, 0 };
+// Ant dot colours by remake player id (green, red, blue, black) = original colour {3,2,1,0} (FUN_0101aa65)
+constexpr uint8_t kMinimapAntColours[4] = { 47, 158, 211, 239 };
+
+const MinimapObject* find_minimap_object(uint16_t id) {
+    for (const auto& o : kMinimapObjects) if (o.id == id) return &o;
+    return nullptr;
+}
+
+// Terrain class of a snapshot cell (0 gravel, 1 slate, 2 water, 3 mud, 4 dirt)
+uint8_t minimap_class(const sim::TileCell& cell) {
+    if (cell.terrain_type == sim::TERRAIN_WATER) return 2;
+    switch (cell.surface_type) {
+        case sim::SurfaceType::Slate:  return 1;
+        case sim::SurfaceType::Water:  return 2;
+        case sim::SurfaceType::Mud:    return 3;
+        case sim::SurfaceType::Gravel: return 4;
+        default:                       return 0;
     }
 }
 
@@ -312,17 +348,15 @@ void HUD::render(IRenderer& renderer, const assets::AssetArchive& assets,
     };
     renderer.fill_rect(480, 22, 160, 458, hud_bg_colors[local_player_id_ % 4]);
 
-    // 1. Playfield Frame Borders
-    renderer.draw_named_sprite("x0y22.bmp", 0, 22);
-    renderer.draw_named_sprite("x458y35.bmp", 458, 35);
-    renderer.draw_named_sprite("x458y22.bmp", 458, 22);
+    // 1. The static HUD shell: animation uishell = 14 parts (frame borders, top bar, banner, card, chat boxes, status
+    //    box at (479,253)) drawn last part first, exactly as the original composes it. Nothing static is drawn twice.
+    draw_animation_frame0(renderer, assets, "uishell", 0, 0);
 
     // 2. Right Panel Modules (Authentic Ants reconstruction)
     // 2.1 Minimap Radar at (480, 35..126) and decorative bezel x599y35.bmp at (599, 35)
     render_radar(renderer, assets, world, camera);
 
     // 2.2 Card background x480y126.bmp at (480, 126..254) with embossed "Status"
-    renderer.draw_named_sprite("x480y126.bmp", 480, 126);
 
     // Resolve selected ant
     const sim::AntSnapshot* sel_ant = nullptr;
@@ -420,8 +454,7 @@ void HUD::render(IRenderer& renderer, const assets::AssetArchive& assets,
             }
             draw_animation_frame0(renderer, assets, stop_button_.is_pressed ? "butcand" : "butcanu", 0, 0);
 
-            // Recessed status box wstatus.bmp (143x14) at (480, 253)
-            renderer.draw_named_sprite("wstatus.bmp", 480, 253);
+            // (the recessed status box wstatus.bmp is part of the uishell composite)
             if (!news_queue_.empty()) {
                 ants::assets::ColorRGBA col = news_queue_.front().is_alarm ? ants::assets::ColorRGBA{180, 30, 30, 255} : ants::assets::ColorRGBA{16, 40, 24, 255};
                 renderer.draw_text(news_queue_.front().text, 486, 253, col);
@@ -430,7 +463,6 @@ void HUD::render(IRenderer& renderer, const assets::AssetArchive& assets,
             // Enemy base: status box only (the ally pedestal is the left slot)
             bool is_allied = (local_player_id_ < world.player_alliances.size()) &&
                              (world.player_alliances[local_player_id_] == selected_base_team_id_);
-            renderer.draw_named_sprite("wstatus.bmp", 480, 253);
             if (!news_queue_.empty()) {
                 ants::assets::ColorRGBA col = news_queue_.front().is_alarm ? ants::assets::ColorRGBA{180, 30, 30, 255} : ants::assets::ColorRGBA{16, 40, 24, 255};
                 renderer.draw_text(news_queue_.front().text, 486, 253, col);
@@ -443,14 +475,24 @@ void HUD::render(IRenderer& renderer, const assets::AssetArchive& assets,
             // Stop button (animation butcanu / butcand: label at (595,180), button at (595,198))
             draw_animation_frame0(renderer, assets, stop_button_.is_pressed ? "butcand" : "butcanu", 0, 0);
 
-            // Golden Lunchbox Indicator: Displayed above Stop button at (598, 133) ONLY when carrying food
-            if (sel_ant && sel_ant->is_holding) {
-                renderer.draw_named_sprite("lunchicon.bmp", 598, 133);
+            // Lunchbox indicator (animation UI_LBOX, sprite at (597,131)) only when every selected ant carries food
+            bool all_carry = false;
+            if (!selected_ant_ids_.empty()) {
+                all_carry = true;
+                for (uint32_t aid : selected_ant_ids_) {
+                    bool carries = false;
+                    for (const auto& a : world.ants) if (a.id == aid && a.is_holding) { carries = true; break; }
+                    if (!carries) { all_carry = false; break; }
+                }
+            } else if (sel_ant && sel_ant->is_holding) {
+                all_carry = true;
+            }
+            if (all_carry) {
+                draw_animation_frame0(renderer, assets, "UI_LBOX", 0, 0);
             }
         }
 
-        // Recessed status box wstatus.bmp (143x14) at (480, 253)
-        renderer.draw_named_sprite("wstatus.bmp", 480, 253);
+        // (the recessed status box wstatus.bmp is part of the uishell composite)
         std::string status_text = "Ready.";
         ants::assets::ColorRGBA status_color = {16, 40, 24, 255};
         if (!news_queue_.empty()) {
@@ -472,10 +514,8 @@ void HUD::render(IRenderer& renderer, const assets::AssetArchive& assets,
 
     // 2.3 Lower Panel: Always render Chat Section
     // Cursive embossed Chat header at (480, 266)
-    renderer.draw_named_sprite("x480y266.bmp", 480, 266);
 
     // White chat history log wchat.bmp (143x103) at (479, 298)
-    renderer.draw_named_sprite("wchat.bmp", 479, 298);
     int32_t cty = 301;
     constexpr int32_t VISIBLE_LINES = 7;
     int32_t total_lines = static_cast<int32_t>(chat_log_.size());
@@ -489,10 +529,8 @@ void HUD::render(IRenderer& renderer, const assets::AssetArchive& assets,
     }
 
     // Ant relief horizontal divider bar x480y400.bmp (141x24) at (480, 400)
-    renderer.draw_named_sprite("x480y400.bmp", 480, 400);
 
     // Chat text input box wtype.bmp (143x14) at (479, 423)
-    renderer.draw_named_sprite("wtype.bmp", 479, 423);
     std::string input_display = chat_input_;
     if (input_display.length() > 25) {
         input_display = input_display.substr(input_display.length() - 25);
@@ -507,9 +545,12 @@ void HUD::render(IRenderer& renderer, const assets::AssetArchive& assets,
         }
     }
     renderer.draw_text(input_display, 484, 423, {20, 50, 40, 255});
+    // Chat switched off in the options: chatcovr (three chcovr2 tiles at (478,421/436/445)) covers the input box
+    if (!chat_enabled_) {
+        draw_animation_frame0(renderer, assets, "chatcovr", 0, 0);
+    }
 
     // Bottom bar x480y466.bmp (160x25) at (480, 436) containing "Send to:" and [All] / [Team] buttons
-    renderer.draw_named_sprite("x480y466.bmp", 480, 436);
     if (!is_on_team_) {
         // In FFA or non-team mode, only [All] is active/shown
         const char* all_spr = send_to_button_.is_pressed ? "butalld.bmp"
@@ -528,7 +569,6 @@ void HUD::render(IRenderer& renderer, const assets::AssetArchive& assets,
     }
 
     // Vertical right border strip x521y254.bmp (19x182) placed at x=621, y=254 (seals right screen edge)
-    renderer.draw_named_sprite("x521y254.bmp", 621, 254);
 
     // 3. Top & Bottom Frames
     render_top_bar(renderer, assets, world);
@@ -553,7 +593,6 @@ void HUD::render(IRenderer& renderer, const assets::AssetArchive& assets,
 
 void HUD::render_top_bar(IRenderer& renderer, const assets::AssetArchive& archive, const sim::WorldState& world) {
     // Top border backdrop: x0y0.bmp (640x22)
-    renderer.draw_named_sprite("x0y0.bmp", 0, 0);
 
     // Match clock (Ants.exe FUN_01021e36): digit sprites at y = 6, tens of minutes at x = 70 (skipped when 0), minutes 80,
     // colon 90, tens of seconds 97, seconds 107, inside the pre-cut black box of x0y0.bmp.
@@ -600,107 +639,102 @@ void HUD::render_top_bar(IRenderer& renderer, const assets::AssetArchive& archiv
     }
 }
 
-void HUD::render_radar(IRenderer& renderer, const assets::AssetArchive&,
+void HUD::render_radar(IRenderer& renderer, const assets::AssetArchive& archive,
                        const sim::WorldState& world, const ViewportCamera& camera) {
-    // Minimap panel background at (599, 35)
-    renderer.draw_named_sprite("x599y35.bmp", 599, 35);
-
-    // Exact inner viewport bounds matching frame bezels
+    // The minimap frame (x599y35) is part of the uishell composite. The map image itself is 119x91 at (480,35).
     const int32_t rx = 480, ry = 35;
     const int32_t rw = 119, rh = 91;
 
-    // Fill radar dark base
-    renderer.fill_rect(rx, ry, rw, rh, {30, 25, 20, 255});
+    if (world.width == 0 || world.height == 0 || world.cells.size() != static_cast<size_t>(world.width) * world.height) {
+        renderer.fill_rect(rx, ry, rw, rh, {0, 0, 0, 255});
+        return;
+    }
 
-    if (world.width == 0 || world.height == 0) return;
+    // Terrain speckle: one random pick per pixel from the class colours, made once per map (the original paints it when
+    // cells are first drawn and keeps it until they are repainted)
+    if (radar_map_w_ != world.width || radar_map_h_ != world.height || radar_terrain_.size() != static_cast<size_t>(rw * rh)) {
+        radar_map_w_ = world.width;
+        radar_map_h_ = world.height;
+        radar_terrain_.assign(static_cast<size_t>(rw * rh), 0);
+        sim::PRNG rng(world.width * 1000u + world.height);
+        for (int32_t y = 0; y < rh; ++y) {
+            for (int32_t x = 0; x < rw; ++x) {
+                const int32_t cx = std::min<int32_t>(static_cast<int32_t>(world.width) - 1, x * static_cast<int32_t>(world.width) / rw);
+                const int32_t cy = std::min<int32_t>(static_cast<int32_t>(world.height) - 1, y * static_cast<int32_t>(world.height) / rh);
+                const uint8_t cls = minimap_class(world.cells[static_cast<size_t>(cy) * world.width + static_cast<size_t>(cx)]);
+                radar_terrain_[static_cast<size_t>(y * rw + x)] = kMinimapClassColours[cls < 6 ? cls : 5][rng.rand() % 5u];
+            }
+        }
+    }
 
-    float scale_x = static_cast<float>(rw) / static_cast<float>(world.width);
-    float scale_y = static_cast<float>(rh) / static_cast<float>(world.height);
+    const auto& palette = archive.get_palette();
+    std::vector<uint8_t> pixels(static_cast<size_t>(rw * rh), 0);   // palette indices
+    const float px_per_cell_x = static_cast<float>(rw) / static_cast<float>(world.width);
+    const float px_per_cell_y = static_cast<float>(rh) / static_cast<float>(world.height);
 
-    // Rasterize ground terrain tiles
-    if (world.cells.size() == world.width * world.height) {
-        for (uint32_t ty = 0; ty < world.height; ++ty) {
-            float fty = static_cast<float>(ty);
-            int32_t py = ry + static_cast<int32_t>(fty * scale_y);
-            int32_t ph = std::max(1, static_cast<int32_t>((fty + 1.0f) * scale_y) - static_cast<int32_t>(fty * scale_y));
-            for (uint32_t tx = 0; tx < world.width; ++tx) {
-                const auto& cell = world.cells[ty * world.width + tx];
-                float ftx = static_cast<float>(tx);
-                int32_t px = rx + static_cast<int32_t>(ftx * scale_x);
-                int32_t pw = std::max(1, static_cast<int32_t>((ftx + 1.0f) * scale_x) - static_cast<int32_t>(ftx * scale_x));
-                assets::ColorRGBA col{155, 115, 108, 255}; // Walkable ground (authentic dirt tan)
-                if (world.fog_of_war_enabled && !world.is_tile_revealed(static_cast<int32_t>(tx), static_cast<int32_t>(ty))) {
-                    col = {20, 20, 25, 255}; // Shrouded unrevealed fog tile
-                } else if (cell.base_owner_team < 4) {
-                    col = TEAM_COLORS[cell.base_owner_team]; // Base mound footprint in team color
-                } else if (cell.has_powerup() || cell.is_powerup) {
-                    col = {231, 147, 11, 255}; // Powerup: Amber dot (palette index 171)
-                } else if (cell.is_food) {
-                    col = {226, 147, 27, 255}; // Food morsel: Golden orange matching reference
-                } else if (cell.terrain_type == sim::TERRAIN_WATER) {
-                    col = {58, 67, 192, 255}; // Water: Vibrant blue
-                } else if (cell.terrain_type == sim::TERRAIN_OBSTACLE || cell.is_obstacle_overlay) {
-                    col = {47, 81, 48, 255}; // Obstacle / Grass (green)
-                } else if (cell.is_mud) {
-                    col = {95, 90, 85, 255}; // Mud path: Slate gray matching original
-                } else if (cell.has_completed_bridge() || cell.has_partial_bridge()) {
-                    col = {160, 110, 60, 255}; // Bridge
+    auto revealed = [&](int32_t tx, int32_t ty) { return world.is_tile_revealed(tx, ty); };
+
+    for (int32_t y = 0; y < rh; ++y) {
+        for (int32_t x = 0; x < rw; ++x) {
+            const int32_t cx = std::min<int32_t>(static_cast<int32_t>(world.width) - 1, x * static_cast<int32_t>(world.width) / rw);
+            const int32_t cy = std::min<int32_t>(static_cast<int32_t>(world.height) - 1, y * static_cast<int32_t>(world.height) / rh);
+            const auto& cell = world.cells[static_cast<size_t>(cy) * world.width + static_cast<size_t>(cx)];
+            uint8_t colour = radar_terrain_[static_cast<size_t>(y * rw + x)];
+            if (world.fog_of_war_enabled && !revealed(cx, cy)) {
+                const uint8_t cls = minimap_class(cell);
+                colour = kMinimapFogColours[cls < 8 ? cls : 0];
+            } else if (cell.interactive_id != sim::TILE_EMPTY && cell.interactive_id != 0xFFFF) {
+                // Bombs (129..132) and fire walls (134) show the terrain colour
+                const bool hidden = (cell.interactive_id >= 129 && cell.interactive_id <= 132) || cell.interactive_id == 134;
+                if (!hidden) {
+                    if (const auto* obj = find_minimap_object(cell.interactive_id)) colour = obj->colour;
                 }
-                renderer.fill_rect(px, py, pw, ph, col);
+            }
+            pixels[static_cast<size_t>(y * rw + x)] = colour;
+        }
+    }
+
+    // Square dots (object size flag 1 or 2 cells, ants 1 cell) centred on the cell centre
+    auto dot = [&](int32_t tile_x, int32_t tile_y, uint8_t colour, int32_t flag) {
+        const int32_t size_x = std::max(1, static_cast<int32_t>(std::lround(static_cast<float>(flag) * px_per_cell_x)));
+        const int32_t size_y = std::max(1, static_cast<int32_t>(std::lround(static_cast<float>(flag) * px_per_cell_y)));
+        const int32_t mx = static_cast<int32_t>((static_cast<float>(tile_x) + 0.5f) * px_per_cell_x);
+        const int32_t my = static_cast<int32_t>((static_cast<float>(tile_y) + 0.5f) * px_per_cell_y);
+        for (int32_t yy = my - size_y / 2; yy < my - size_y / 2 + size_y; ++yy) {
+            for (int32_t xx = mx - size_x / 2; xx < mx - size_x / 2 + size_x; ++xx) {
+                if (xx >= 0 && xx < rw && yy >= 0 && yy < rh) pixels[static_cast<size_t>(yy * rw + xx)] = colour;
+            }
+        }
+    };
+    for (int32_t ty = 0; ty < static_cast<int32_t>(world.height); ++ty) {
+        for (int32_t tx = 0; tx < static_cast<int32_t>(world.width); ++tx) {
+            const auto& cell = world.cells[static_cast<size_t>(ty) * world.width + static_cast<size_t>(tx)];
+            if (cell.interactive_id == sim::TILE_EMPTY || cell.interactive_id == 0xFFFF) continue;
+            if ((cell.interactive_id >= 129 && cell.interactive_id <= 132) || cell.interactive_id == 134) continue;
+            if (world.fog_of_war_enabled && !revealed(tx, ty)) continue;
+            if (const auto* obj = find_minimap_object(cell.interactive_id)) {
+                if (obj->size_flag > 0) dot(tx, ty, obj->colour, obj->size_flag);
             }
         }
     }
-
-    // Anthill base markers (4x4 footprint)
-    for (const auto& base : world.anthills) {
-        if (world.fog_of_war_enabled && base.team_id != local_player_id_ &&
-            !world.is_tile_revealed(base.x, base.y)) {
-            continue; // Shrouded enemy base not revealed on radar
-        }
-        int32_t bx = rx + static_cast<int32_t>(static_cast<float>(base.x) * scale_x);
-        int32_t by = ry + static_cast<int32_t>(static_cast<float>(base.y) * scale_y);
-        int32_t bx2 = rx + static_cast<int32_t>(static_cast<float>(base.x + 4) * scale_x);
-        int32_t by2 = ry + static_cast<int32_t>(static_cast<float>(base.y + 4) * scale_y);
-        int32_t bw = std::max(4, bx2 - bx);
-        int32_t bh = std::max(4, by2 - by);
-        assets::ColorRGBA c = (base.team_id < 4) ? TEAM_COLORS[base.team_id] : assets::ColorRGBA{200, 200, 200, 255};
-        renderer.fill_rect(bx, by, bw, bh, c);
-    }
-
-    // Powerup indicator dots (palette index 171: {231, 147, 11, 255})
-    for (uint32_t ty = 0; ty < world.height; ++ty) {
-        for (uint32_t tx = 0; tx < world.width; ++tx) {
-            const auto& cell = world.cells[ty * world.width + tx];
-            if (cell.has_powerup() || cell.is_powerup) {
-                if (world.fog_of_war_enabled && !world.is_tile_revealed(static_cast<int32_t>(tx), static_cast<int32_t>(ty))) continue;
-                int32_t px = rx + static_cast<int32_t>(static_cast<float>(tx) * scale_x);
-                int32_t py = ry + static_cast<int32_t>(static_cast<float>(ty) * scale_y);
-                renderer.fill_rect(px, py, 2, 2, {231, 147, 11, 255});
-            }
-        }
-    }
-    for (const auto& fd : world.flower_droppers) {
-        if (!fd.is_dropping) continue;
-        int32_t f_tx = fd.drop_x / 32;
-        int32_t f_ty = fd.drop_y / 32;
-        if (world.fog_of_war_enabled && !world.is_tile_revealed(f_tx, f_ty)) continue;
-        int32_t fx = rx + static_cast<int32_t>(static_cast<float>(f_tx) * scale_x);
-        int32_t fy = ry + static_cast<int32_t>(static_cast<float>(f_ty) * scale_y);
-        renderer.fill_rect(fx, fy, 2, 2, {231, 147, 11, 255});
-    }
-
-    // Active live ants
     for (const auto& ant : world.ants) {
         if (ant.hp == 0 || ant.is_drowning || ant.is_underground || ant.is_in_scuffle) continue;
-        if (world.fog_of_war_enabled && ant.player_id != local_player_id_ &&
-            !world.is_tile_revealed(ant.tile_x, ant.tile_y)) {
-            continue; // Shrouded enemy ant not visible on radar
-        }
-        int32_t ax = rx + static_cast<int32_t>(static_cast<float>(ant.tile_x) * scale_x);
-        int32_t ay = ry + static_cast<int32_t>(static_cast<float>(ant.tile_y) * scale_y);
-        assets::ColorRGBA c = (ant.player_id < 4) ? TEAM_COLORS[ant.player_id] : assets::ColorRGBA{255, 255, 255, 255};
-        renderer.fill_rect(ax, ay, 2, 2, c);
+        if (world.fog_of_war_enabled && ant.player_id != local_player_id_ && !revealed(ant.tile_x, ant.tile_y)) continue;
+        dot(ant.tile_x, ant.tile_y, kMinimapAntColours[ant.player_id % 4], 1);
     }
+
+    std::vector<uint8_t> rgba(static_cast<size_t>(rw * rh) * 4u, 255);
+    for (size_t i = 0; i < pixels.size(); ++i) {
+        const auto& c = palette[pixels[i]];
+        rgba[i * 4 + 0] = c.r;
+        rgba[i * 4 + 1] = c.g;
+        rgba[i * 4 + 2] = c.b;
+    }
+    renderer.draw_rgba_image(rx, ry, rw, rh, rgba.data());
+
+    // Scale used by the camera frame below
+    const float scale_x = px_per_cell_x;
+    const float scale_y = px_per_cell_y;
 
     // Camera frustum wireframe box
     float map_w_px = static_cast<float>(world.width * 32);
@@ -903,7 +937,6 @@ void HUD::render_action_buttons(IRenderer& renderer, const assets::AssetArchive&
 
 void HUD::render_news_banner(IRenderer& renderer, const assets::AssetArchive& assets, const sim::WorldState& world) {
     // Bottom banner background: x17y461.bmp (623x19)
-    renderer.draw_named_sprite("x17y461.bmp", BANNER_X, BANNER_Y);
 
     // Render other 3 players' scores and labels in the 3 pre-cut slots (Ants.exe VA 0x10021B8):
     // Slot 0: label [5..101], score [105..158], y = 464..477
@@ -3041,8 +3074,14 @@ CursorType HUD::evaluate_cursor(int32_t screen_x, int32_t screen_y,
         return current_cursor_;
     }
 
-    // 2. HUD Sidebar, Top Bar, Bottom News Banner: Normal pointer
-    if (screen_x >= 480 || screen_y < 22 || screen_y >= 461) {
+    // 2. Outside the map view rectangle (16,21)-(458,461) (Ants.exe 0x1026d6a): plain pointer
+    if (screen_x < 16 || screen_x >= 458 || screen_y < 21 || screen_y >= 461) {
+        current_cursor_ = CursorType::Normal;
+        return current_cursor_;
+    }
+
+    // 2.5 While a selection box wider or taller than 4 px is being dragged the pointer stays normal (0x1026d98)
+    if (is_dragging_ && (std::abs(drag_curr_x_ - drag_start_x_) > 4 || std::abs(drag_curr_y_ - drag_start_y_) > 4)) {
         current_cursor_ = CursorType::Normal;
         return current_cursor_;
     }

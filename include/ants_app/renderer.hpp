@@ -169,6 +169,16 @@ public:
         return 7;
     }
     virtual void set_hud_team(uint8_t team_id) = 0;
+    // Blits a tightly packed RGBA8 image of w x h pixels at (x, y) (used by the minimap). The default draws pixel by
+    // pixel; Renderer overrides it with a cached streaming texture.
+    virtual void draw_rgba_image(int32_t x, int32_t y, int32_t w, int32_t h, const uint8_t* rgba) {
+        for (int32_t j = 0; j < h; ++j) {
+            for (int32_t i = 0; i < w; ++i) {
+                const uint8_t* px = rgba + (static_cast<size_t>(j) * static_cast<size_t>(w) + static_cast<size_t>(i)) * 4u;
+                fill_rect(x + i, y + j, 1, 1, ants::assets::ColorRGBA{px[0], px[1], px[2], px[3]});
+            }
+        }
+    }
 };
 
 /**
@@ -293,6 +303,7 @@ public:
     int32_t get_text_width(const std::string& text, FontSize size = FontSize::Small) const override;
     int32_t get_text_height(FontSize size = FontSize::Small) const override;
     void set_hud_team(uint8_t team_id) override { hud_team_id_ = team_id; }
+    void draw_rgba_image(int32_t x, int32_t y, int32_t w, int32_t h, const uint8_t* rgba) override;
 
     // Camera Accessors
     ViewportCamera& camera() noexcept { return camera_; }
@@ -384,6 +395,9 @@ private:
 #endif
 
     SDL_Renderer* renderer_{nullptr};
+    SDL_Texture* rgba_texture_{nullptr};   // streaming texture for draw_rgba_image
+    int32_t rgba_texture_w_{0};
+    int32_t rgba_texture_h_{0};
     const ants::assets::AssetArchive* archive_{nullptr};
     std::unique_ptr<TextureCache> texture_cache_;
     ViewportCamera camera_;

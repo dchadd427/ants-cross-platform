@@ -307,6 +307,11 @@ private:
     bool is_on_team_{false};
 
     // Command panel pedestals: left slot (Move / Ally / Hatch) and right slot (ability), original transition chains
+    // Minimap terrain speckle (palette indices, 119x91), regenerated when the map size changes
+    std::vector<uint8_t> radar_terrain_;
+    uint32_t radar_map_w_{0};
+    uint32_t radar_map_h_{0};
+
     PedestalSlot left_pedestal_;
     PedestalSlot right_pedestal_;
     uint32_t (*ticks_fn_)(){nullptr}; // millisecond clock (SDL_GetTicks when null); tests inject a fixed clock

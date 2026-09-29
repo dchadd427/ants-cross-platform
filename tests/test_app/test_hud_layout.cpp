@@ -1,5 +1,6 @@
 // HUD layout tests: the real HUD drives a recording IRenderer, and the emitted draw calls are checked against the
 // coordinates and rules of the original (Ants.exe) - no pixels, no SDL video needed.
+#include <array>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -64,6 +65,9 @@ public:
         texts.push_back({text, x, y});
     }
     void set_hud_team(uint8_t team) override { hud_team = team; }
+    void draw_rgba_image(int32_t x, int32_t y, int32_t w, int32_t h, const uint8_t* rgba) override {
+        images.push_back({x, y, w, h, std::vector<uint8_t>(rgba, rgba + static_cast<size_t>(w) * static_cast<size_t>(h) * 4u)});
+    }
 
     // All sprites drawn with this image name (e.g. "dig1.bmp")
     std::vector<SpriteDraw> named(const std::string& name) const {
@@ -76,6 +80,8 @@ public:
         return false;
     }
 
+    struct Image { int32_t x, y, w, h; std::vector<uint8_t> rgba; };
+    std::vector<Image> images;
     struct Text { std::string text; int32_t x; int32_t y; };
     std::vector<SpriteDraw> sprites;
     std::vector<FillDraw> fills;
@@ -453,6 +459,206 @@ void test_pedestal_timeline(const assets::AssetArchive& arc) {
     }
 }
 
+// Minimap (Ants.exe FUN_01009596): a 119x91 image at (480,35) with the class speckle colours, the object table, the fog
+// table and square team dots for ants.
+void test_minimap(const assets::AssetArchive& arc) {
+    std::printf("[hud] minimap image\n");
+    const auto& pal = arc.get_palette();
+    auto rgb_of = [&](int idx) { return std::array<uint8_t, 3>{ pal[static_cast<size_t>(idx)].r, pal[static_cast<size_t>(idx)].g, pal[static_cast<size_t>(idx)].b }; };
+    auto pixel = [&](const RecordingRenderer::Image& im, int x, int y) {
+        const uint8_t* p = &im.rgba[(static_cast<size_t>(y) * static_cast<size_t>(im.w) + static_cast<size_t>(x)) * 4u];
+        return std::array<uint8_t, 3>{ p[0], p[1], p[2] };
+    };
+
+    sim::WorldState world;
+    world.width = 60; world.height = 60;
+    world.cells.assign(3600, sim::TileCell{});
+    // west third: water (class 2), middle: mud (class 3), east third: dirt (class 4); rest gravel (class 0)
+    for (uint32_t y = 0; y < 60; ++y) for (uint32_t x = 0; x < 60; ++x) {
+        auto& c = world.cells[y * 60 + x];
+        if (x < 10) { c.terrain_type = sim::TERRAIN_WATER; c.surface_type = sim::SurfaceType::Water; }
+        else if (x >= 20 && x < 30) { c.surface_type = sim::SurfaceType::Mud; c.is_mud = true; }
+        else if (x >= 40 && x < 50) { c.surface_type = sim::SurfaceType::Gravel; }
+    }
+    // an anthill tile of the black colony (animation 245, colour 239, size flag 2) and a bomb (id 129, hidden)
+    world.cells[30 * 60 + 15].interactive_id = 245;
+    world.cells[40 * 60 + 15].interactive_id = 129;
+    // a green ant (player 0) at tile (55, 5)
+    sim::AntSnapshot ant{};
+    ant.id = 1; ant.player_id = 0; ant.hp = 10; ant.tile_x = 55; ant.tile_y = 5;
+    world.ants.push_back(ant);
+
+    RecordingRenderer rr(arc);
+    HUD hud;
+    hud.init(0);
+    ViewportCamera camera;
+    hud.render(rr, arc, world, camera);
+    check(rr.images.size() == 1, "minimap drawn as one image");
+    if (rr.images.empty()) return;
+    const auto& im = rr.images[0];
+    check(im.x == 480 && im.y == 35 && im.w == 119 && im.h == 91, "minimap rect (480,35) 119x91");
+
+    auto in_set = [&](std::array<uint8_t, 3> c, std::initializer_list<int> idxs) {
+        for (int i : idxs) if (rgb_of(i) == c) return true;
+        return false;
+    };
+    // pixel (x,y) -> cell (x*60/119, y*60/91); sample interior pixels of each band
+    bool water_ok = true, gravel_ok = true, mud_ok = true, dirt_ok = true;
+    for (int y = 2; y < 30; ++y) {
+        for (int x = 2; x < 17; ++x) if (!in_set(pixel(im, x, y), {37})) water_ok = false;          // cells 1..8
+        for (int x = 22; x < 38; ++x) if (!in_set(pixel(im, x, y), {251, 201, 249})) gravel_ok = false; // cells 11..19
+        for (int x = 42; x < 58; ++x) if (!in_set(pixel(im, x, y), {77})) mud_ok = false;           // cells 21..29
+        for (int x = 82; x < 98; ++x) if (!in_set(pixel(im, x, y), {231, 232, 233})) dirt_ok = false; // cells 41..49
+    }
+    check(water_ok, "water cells use class colour 37");
+    check(gravel_ok, "gravel cells use the class-0 speckle colours 251/201/249");
+    check(mud_ok, "mud cells use class colour 77");
+    check(dirt_ok, "dirt cells use the class-4 speckle colours 231/232/233");
+
+    // hill dot (colour 239, 2 cells => 4x3 px) at the cell centre of tile (15,30): px = 15.5*119/60 = 30, py = 30.5*91/60 = 46
+    check(pixel(im, 30, 46) == rgb_of(239), "hill drawn with colour 239 at its cell");
+    // the bomb cell (15,40) shows the terrain colour, not an object colour
+    check(in_set(pixel(im, 30, 60), {251, 201, 249}), "bombs are not drawn on the minimap");
+    // green ant dot: colour 47 at tile (55,5): px = 55.5*119/60 = 110, py = 5.5*91/60 = 8
+    check(pixel(im, 110, 8) == rgb_of(47), "green ant dot colour 47");
+
+    // Fog: unexplored cells use the fog colours by class
+    world.fog_of_war_enabled = true;
+    world.fog_revealed.assign(3600, 0);
+    for (uint32_t y = 0; y < 60; ++y) for (uint32_t x = 20; x < 30; ++x) world.fog_revealed[y * 60 + x] = 1;   // reveal the mud band
+    RecordingRenderer rf(arc);
+    hud.render(rf, arc, world, camera);
+    const auto& fim = rf.images[0];
+    check(pixel(fim, 5, 20) == rgb_of(225), "unexplored water shows fog colour 225");
+    check(pixel(fim, 30, 20) == rgb_of(244), "unexplored gravel shows fog colour 244");
+    check(pixel(fim, 50, 20) == rgb_of(77), "explored mud keeps its colour");
+    check(pixel(fim, 90, 20) == rgb_of(236), "unexplored dirt (class 4) shows fog colour 236");
+}
+
+// The static HUD shell is the animation `uishell` (14 parts) drawn last part first, nothing static is drawn twice, the
+// chat cover appears only when chat is switched off, and the lunchbox indicator needs every selected ant to carry food.
+void test_static_shell(const assets::AssetArchive& arc) {
+    std::printf("[hud] static shell composite, chat cover and lunchbox indicator\n");
+    sim::WorldState world;
+    sim::AntSnapshot carrier{};
+    carrier.id = 7; carrier.player_id = 0; carrier.hp = 10; carrier.tile_x = 5; carrier.tile_y = 5;
+    carrier.px = 176; carrier.py = 176; carrier.is_holding = true;
+    sim::AntSnapshot empty_handed = carrier;
+    empty_handed.id = 8; empty_handed.tile_x = 6; empty_handed.px = 208; empty_handed.is_holding = false;
+    world.ants.push_back(carrier);
+    world.ants.push_back(empty_handed);
+
+    const auto* shell = arc.find_animation("uishell");
+    check(shell && !shell->subitems.empty() && shell->subitems[0].frames.size() == 14, "uishell has 14 parts");
+    if (!shell || shell->subitems.empty()) return;
+    {
+        HUD hud;
+        hud.init(0);
+        RecordingRenderer rr(arc);
+        render_settled(hud, arc, world, rr);
+        std::vector<size_t> draw_index;
+        for (const auto& part : shell->subitems[0].frames) {
+            const std::string name = arc.get_sprite(part.sprite_index).name;
+            size_t count = 0;
+            size_t at = SIZE_MAX;
+            for (size_t i = 0; i < rr.sprites.size(); ++i) {
+                if (rr.sprites[i].name != name) continue;
+                ++count;
+                if (rr.sprites[i].x == part.dx && rr.sprites[i].y == part.dy) at = i;
+            }
+            check(count == 1 && at != SIZE_MAX, "shell part " + name + " drawn once at (" + std::to_string(part.dx) + "," + std::to_string(part.dy) + ")");
+            draw_index.push_back(at);
+        }
+        bool last_first = true;
+        for (size_t k = 1; k < draw_index.size(); ++k) if (draw_index[k] >= draw_index[k - 1]) last_first = false;
+        check(last_first, "shell parts are drawn last part first");
+    }
+
+    // Chat cover: three tiles, only after chat is switched off in the options
+    const auto* cover = arc.find_animation("chatcovr");
+    check(cover && !cover->subitems.empty() && cover->subitems[0].frames.size() == 3, "chatcovr has 3 parts");
+    if (cover && !cover->subitems.empty()) {
+        const std::string tile = arc.get_sprite(cover->subitems[0].frames[0].sprite_index).name;
+        HUD hud;
+        hud.init(0);
+        RecordingRenderer with_chat(arc);
+        render_settled(hud, arc, world, with_chat);
+        check(with_chat.named(tile).empty(), "chat on: no chat cover");
+
+        sim::SimulationEngine sim;
+        sim.init_test_world(60, 60, 100, 60000);
+        ViewportCamera camera;
+        hud.open_options();
+        hud.handle_mouse_down(160, 300, 1, sim, camera);   // the options' Chat OFF button spans x 146..192, y 287..311
+        hud.close_options();
+        check(!hud.is_chat_enabled(), "options chat OFF button switches chat off");
+        RecordingRenderer no_chat(arc);
+        render_settled(hud, arc, world, no_chat);
+        check(no_chat.named(tile).size() == 3, "chat off: three cover tiles");
+        check(no_chat.has_sprite_at(tile, 478, 421) && no_chat.has_sprite_at(tile, 478, 436) && no_chat.has_sprite_at(tile, 478, 445),
+              "chat cover tiles at (478,421), (478,436), (478,445)");
+    }
+
+    // Lunchbox indicator UI_LBOX at (597,131)
+    const auto* lbox = arc.find_animation("UI_LBOX");
+    check(lbox && !lbox->subitems.empty() && !lbox->subitems[0].frames.empty(), "UI_LBOX exists");
+    if (lbox && !lbox->subitems.empty() && !lbox->subitems[0].frames.empty()) {
+        const std::string name = arc.get_sprite(lbox->subitems[0].frames[0].sprite_index).name;
+        auto lunchbox_drawn = [&](std::vector<uint32_t> selection) {
+            HUD hud;
+            hud.init(0);
+            hud.set_selected_ant_ids(std::move(selection));
+            RecordingRenderer rr(arc);
+            render_settled(hud, arc, world, rr);
+            return rr.has_sprite_at(name, 597, 131);
+        };
+        check(lunchbox_drawn({7}), "lunchbox shown while the only selected ant carries food");
+        check(!lunchbox_drawn({8}), "lunchbox hidden while the selected ant carries nothing");
+        check(!lunchbox_drawn({7, 8}), "lunchbox hidden unless every selected ant carries food");
+    }
+}
+
+// Cursor rules (Ants.exe 0x1026d6a, 0x1026d98): the map cursor only applies inside the map view (16,21)-(458,461) and
+// stays the plain arrow while a selection box larger than 4 px is dragged.
+void test_cursor_rules(const assets::AssetArchive&) {
+    std::printf("[hud] cursor view rectangle and drag rule\n");
+    sim::SimulationEngine sim;
+    sim.init_test_world(60, 60, 100, 60000);
+    sim::WorldState world;
+    world.width = 60;
+    world.height = 60;
+    sim::AntSnapshot enemy{};
+    enemy.id = 9; enemy.player_id = 1; enemy.hp = 10; enemy.tile_x = 5; enemy.tile_y = 5; enemy.px = 176; enemy.py = 176;
+    sim::AntSnapshot far_east = enemy;
+    far_east.id = 10; far_east.tile_x = 13; far_east.px = 443;
+    world.ants.push_back(enemy);
+    world.ants.push_back(far_east);
+
+    ViewportCamera camera;
+    camera.viewport_w = 441;
+    camera.viewport_h = 439;
+    camera.world_x = 0;
+    camera.world_y = 0;
+
+    HUD hud;
+    hud.init(0);
+    check(hud.evaluate_cursor(193, 198, world, sim.grid(), camera) == CursorType::Select, "an enemy ant under the pointer shows the select cursor");
+    check(hud.evaluate_cursor(460, 198, world, sim.grid(), camera) == CursorType::Normal, "no map cursor right of x = 458");
+
+    // Drag box of 10 px: the pointer stays normal
+    hud.handle_mouse_down(193, 198, 1, sim, camera);
+    hud.handle_mouse_motion(203, 208, sim, camera);
+    check(hud.evaluate_cursor(203, 208, world, sim.grid(), camera) == CursorType::Normal, "dragging a box wider than 4 px keeps the plain pointer");
+    hud.handle_mouse_up(203, 208, 1, sim, camera);
+
+    // Drag of 2 px: still the map cursor
+    HUD small;
+    small.init(0);
+    small.handle_mouse_down(193, 198, 1, sim, camera);
+    small.handle_mouse_motion(195, 199, sim, camera);
+    check(small.evaluate_cursor(195, 199, world, sim.grid(), camera) == CursorType::Select, "a drag of 4 px or less keeps the map cursor");
+}
+
 } // namespace
 
 int main() {
@@ -468,6 +674,9 @@ int main() {
     test_screens(arc);
     test_pedestal_chains(arc);
     test_pedestal_timeline(arc);
+    test_minimap(arc);
+    test_static_shell(arc);
+    test_cursor_rules(arc);
     std::printf("\nhud layout: %d checks, %d failures\n", g_checks, g_failures);
     return g_failures == 0 ? 0 : 1;
 }

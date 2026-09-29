@@ -1365,9 +1365,25 @@ receives the HUD's draw calls).
   (100,100) without dimming (yes (180,260), no (292,260), prompt rect (130,180) 260x160, colour (31,23,51)); match start modal
   (`0x1017127`) `std_dialg` at (100,100), label string 105 wrapped in (130,110) 240x160, footer string 104 in (130,290),
   animated worker portrait anchored at (245,250), closes 5.0 s after it opens.
-* **Not yet implemented**: minimap painter (`FUN_01009596`, 215-entry object table at `0x1001c50`, speckled class colours at
-  `0x1001c28`), hover/pressed states of the top bar, screen text metrics (GDI Franklin Gothic,
-  un-antialiased), setup/options/results control layouts, cursor hover region and drag rule.
+* **Static shell** *(implemented)*. The whole static HUD is one animation, `uishell` (14 parts: frame borders `x0y22`,
+  `x458y35`, `x458y22`, top bar `x0y0`, banner `x17y461`, card `x480y126`, chat header `x480y266`, chat box `wchat`,
+  divider `x480y400`, type box `wtype`, send-to bar `x480y466`, right strip `x521y254`, minimap bezel `x599y35`, status box
+  `wstatus` at (479,253)), drawn last part first. Nothing static is drawn a second time. Chat switched off in the options
+  covers the type box with `chatcovr` (three `chcovr2` tiles at (478,421), (478,436), (478,445)). The lunchbox indicator is the
+  animation `UI_LBOX` (sprite at (597,131)) and shows only while every selected ant carries food.
+* **Minimap** *(implemented; `FUN_01009596`)*. A 119x91 palette-index image at (480,35). Each map cell owns
+  `119/width` x `91/height` pixels. Terrain pixels are a per-pixel random pick (`rand() % 5`) from the class table at `0x1001c28`
+  (gravel 251/201/249/251/251, slate 235, water 37, mud 77, dirt 231/232/233/231/231); the speckle is made once when the map is
+  first painted and kept. Unexplored cells use the fog colour of their class (`0x1001c48`: 244, 237, 225, 245, 236). Objects
+  come from the 215-entry table at `0x1001c50` (id, colour, size flag): the object's colour replaces the cell's speckle and, when
+  the size flag is 1 or 2, a square dot of flag x pixels-per-cell is drawn on the cell centre. Bombs (129..132) and fire walls
+  (134) show the terrain colour, exactly as the original excludes them. Ants are one-cell dots with the colours
+  {47, 158, 211, 239} for the original colours {3, 2, 1, 0}. The camera frame is drawn over the image.
+* **Cursor rules** *(implemented; `0x1026d6a`, `0x1026d98`)*. The map cursor only changes inside the map view rectangle
+  (16,21)-(458,461); anywhere else the pointer is the plain arrow. While a selection box wider or taller than 4 px is being
+  dragged the pointer also stays the plain arrow.
+* **Not yet implemented**: hover/pressed states of the top bar, screen text metrics (GDI Franklin Gothic, un-antialiased),
+  setup/options/results control layouts, the click-flash of the buttons, the status-line strings and the time-warning cues.
 
 ---
 
