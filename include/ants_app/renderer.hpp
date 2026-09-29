@@ -318,7 +318,6 @@ public:
     // Software Cursor & Transient Effects
     void spawn_transient_effect(const std::string& anim_name, int32_t px, int32_t py, bool is_screen_space = false);
     void update_transient_effects(float dt);
-    void render_transient_effects();
     void render_software_cursor(CursorType type, int32_t screen_x, int32_t screen_y, uint32_t anim_tick = 0);
     void set_cursor(CursorType type) noexcept { current_cursor_ = type; }
     CursorType get_cursor() const noexcept { return current_cursor_; }
@@ -326,11 +325,16 @@ public:
 private:
     void render_terrain_layer1(const ants::sim::Grid& grid);
     void render_terrain_layer2_structures(const ants::sim::Grid& grid, const ants::sim::WorldState* world = nullptr);
-    void render_flower_droppers(const ants::sim::WorldState& world);
+    void collect_flower_droppers(const ants::sim::WorldState& world);
     void collect_object_list_sprites();
     void render_fog_of_war(const ants::sim::WorldState& world);
-    void render_visual_effects(const ants::sim::WorldState& world);
-    void render_ant_units(const ants::sim::WorldState& world, int32_t selected_unit_id, const std::vector<uint32_t>& selected_unit_ids = {}, bool show_all_health_bars = false);
+    void collect_visual_effects(const ants::sim::WorldState& world);
+    void collect_transient_sprites();
+    void collect_score_bubbles(const ants::sim::WorldState& world);
+    void draw_score_number(int32_t amount, int32_t world_x, int32_t world_y);
+    void collect_hill_brackets(const ants::sim::Grid& grid, int32_t selected_base_team_id);
+    void draw_sorted_queue();
+    void collect_ant_units(const ants::sim::WorldState& world, int32_t selected_unit_id, const std::vector<uint32_t>& selected_unit_ids = {});
     void render_tile_grid(const ants::sim::Grid& grid, int32_t mouse_x, int32_t mouse_y);
     void draw_ant_shadow(int32_t anchor_sx, int32_t anchor_sy, int32_t altitude_z);
     // Draws all parts of one animation frame, last stored part first (original order), at screen position (sx, sy).
@@ -342,8 +346,8 @@ private:
     void draw_template_world(int32_t anim_id, int32_t world_x, int32_t world_y, uint8_t colour = TEAM_NONE);
     const AnimBounds& anim_bounds(int32_t anim_id);
     void draw_static_object(const StaticMapObject& obj, const ants::sim::Grid& grid, const ants::sim::WorldState* world);
-    void draw_single_ant(const ants::sim::AntSnapshot& ant, bool is_selected, bool show_health_bar = false, bool is_under_battle = false);
-    void draw_anthill_selection_brackets(int32_t x, int32_t y, int32_t w = 128, int32_t h = 128);
+    void draw_single_ant(const ants::sim::AntSnapshot& ant, bool is_selected, bool is_under_battle = false);
+    void draw_anthill_selection_brackets(int32_t cx, int32_t cy);
 
 #ifdef ANTS_ENABLE_SDL_TTF
     struct CachedTextEntry {
@@ -396,6 +400,9 @@ private:
     uint32_t template_now_ms_{0};                    // ms since map_epoch_ms_ for this frame
     int64_t anim_clock_pin_ms_{-1};                  // >= 0: fixed template clock (tests / harness)
     bool level_set_{false};
+    int32_t anim_id_plus_{-1};
+    int32_t anim_id_minus_{-1};
+    int32_t anim_id_digit_[10]{-1, -1, -1, -1, -1, -1, -1, -1, -1, -1};
     int32_t anim_id_fire_{-1};
     int32_t anim_id_lunchbox_{-1};
     int32_t anim_id_bomb_[4]{-1, -1, -1, -1};        // green, red, blue, black (remake player ids 0..3)

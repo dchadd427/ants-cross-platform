@@ -762,13 +762,6 @@ void Application::handle_key_down(const SDL_KeyboardEvent& key) {
         return;
     }
 
-    // 6. Unit Health Display Toggle: strictly requires Ctrl or Cmd!
-    if (key.keysym.sym == SDLK_l && ctrl_or_gui) {
-        show_unit_health_ = !show_unit_health_;
-        hud_.queue_news_message(show_unit_health_ ? "Unit Health Display: ON" : "Unit Health Display: OFF", 60, false);
-        return;
-    }
-
     // 7. Hatch / Select Home Base: strictly requires Ctrl or Cmd!
     if (key.keysym.sym == SDLK_h && ctrl_or_gui) {
         if (hud_.get_selected_base_team_id() == local_player_id_) {
@@ -962,7 +955,7 @@ void Application::render_frame() {
     } else {
         const auto& world = sim_.get_world_state();
         renderer_->render_world(world, sim_.grid(), static_cast<int32_t>(hud_.get_selected_ant_id()),
-                                hud_.get_selected_ant_ids(), show_unit_health_, show_tile_grid_,
+                                hud_.get_selected_ant_ids(), false, show_tile_grid_,
                                 mouse_screen_x_, mouse_screen_y_,
                                 hud_.get_selected_base_team_id(),
                                 tick_accumulator_);

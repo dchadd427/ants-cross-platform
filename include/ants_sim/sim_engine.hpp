@@ -276,10 +276,25 @@ struct LocoTraceEvent {
 
 struct VisualEffect {
     std::string anim_name;
-    int32_t px{0};
+    int32_t px{0};              ///< anchor pixel (tile effects use the tile top-left, Ants.exe FUN_010100ab)
     int32_t py{0};
-    uint16_t frame{0};
-    uint16_t total_frames{0};
+    uint16_t frame{0};          ///< elapsed simulation ticks (elapsed_ms / 50)
+    uint16_t total_frames{0};   ///< lifetime in ticks (ceil(duration_ms / 50) when duration_ms is set)
+    uint32_t elapsed_ms{0};     ///< time since creation (50 ms per tick); the renderer adds the sub-tick fraction
+    uint32_t duration_ms{0};    ///< sum of the Table-4 frame durations (0: legacy effect living total_frames ticks)
+    int32_t  y_key{0};          ///< sort key in the y-sorted sprite list (row*32 for tile effects)
+    bool     fog_gated{false};  ///< hidden while the anchor tile is unexplored
+};
+
+/**
+ * @brief Floating score bubble ("+N" / "-N") shown at a player's home tile for 400 ms (Ants.exe FUN_01010560:
+ * a 20-step task, one step every 20 ms, each moving the sprite 5 px up for a gain or down for a loss).
+ */
+struct ScoreBubble {
+    int32_t  x{0};            ///< sprite position at creation: the player's home tile top-left
+    int32_t  y{0};
+    int32_t  amount{0};       ///< signed score change
+    uint32_t elapsed_ms{0};   ///< time since creation (50 ms per tick)
 };
 
 struct FlowerDropperSnapshot {
@@ -289,6 +304,7 @@ struct FlowerDropperSnapshot {
     int32_t drop_y{0};
     bool is_dropping{false};
     uint8_t drop_frame{0}; // 0..8
+    uint32_t drop_elapsed_ms{0}; // time since the drop animation started (50 ms per tick)
     uint8_t powerup_type{0}; // 0: Bomber, 1: Combat, 2: Thief, 3: Swimmer, 4: Fire
 };
 
@@ -303,6 +319,7 @@ struct WorldState {
     std::vector<TileCell>    cells;
     std::vector<AntSnapshot> ants;
     std::vector<VisualEffect> effects;
+    std::vector<ScoreBubble> score_bubbles;
     std::vector<FlowerDropperSnapshot> flower_droppers;
 
     std::array<PlayerMatchStats, MAX_PLAYERS> player_stats{};

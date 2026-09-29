@@ -13,6 +13,7 @@
 #include "ants_assets/asset_archive.hpp"
 #include "ants_assets/lvl_parser.hpp"
 #include "ants_sim/sim_engine.hpp"
+#include "ants_sim/effect_specs.hpp"
 #include "ants_sim/pathfinding.hpp"
 #include "ants_sim/physics.hpp"
 #include "ants_app/audio_mixer.hpp"
@@ -1065,33 +1066,10 @@ void run_suite_7_input_controls() {
 }
 
 // ============================================================================
-// SUITE 8: Unit Health Display & Map Selection Screen
+// SUITE 8: Map Selection Screen (the original has no in-world health bar)
 // ============================================================================
 void run_suite_8_unit_health_and_map_select() {
     TEST_SUITE("Suite 8: Unit Health Display & Map Selection Screen");
-
-    TEST_CASE("8.1 Unit Health Display Flag Toggling and Visibility State") {
-        Application app;
-        ApplicationConfig cfg;
-        cfg.headless = true;
-        cfg.start_in_map_select = false;
-        ASSERT_TRUE(app.init(cfg));
-
-        // Default: overhead health bars are OFF (only selected unit shows health)
-        ASSERT_FALSE(app.is_unit_health_visible());
-
-        // Toggle ON
-        app.toggle_unit_health_visibility();
-        ASSERT_TRUE(app.is_unit_health_visible());
-
-        // Toggle OFF
-        app.toggle_unit_health_visibility();
-        ASSERT_FALSE(app.is_unit_health_visible());
-
-        // Direct setter
-        app.set_unit_health_visible(true);
-        ASSERT_TRUE(app.is_unit_health_visible());
-    } TEST_END();
 
     TEST_CASE("8.2 Map Selection Screen Discovery & Navigation") {
         MapSelectScreen screen;
@@ -1589,14 +1567,8 @@ void run_suite_9_gameplay_mechanics_and_options() {
         ViewportCamera cam;
 
         // 1. Verify bare hotkeys do NOT trigger gameplay commands
-        // In Application: SDLK_l (without Ctrl) should not toggle health display
-        bool initial_health = app.is_unit_health_visible();
         SDL_KeyboardEvent key_ev{};
         key_ev.type = SDL_KEYDOWN;
-        key_ev.keysym.sym = SDLK_l;
-        key_ev.keysym.mod = 0; // No Ctrl!
-        app.handle_key_down(key_ev);
-        ASSERT_EQ(app.is_unit_health_visible(), initial_health);
 
         // Bare SDLK_t should not toggle tile grid
         bool initial_grid = app.is_tile_grid_visible();
@@ -1609,11 +1581,6 @@ void run_suite_9_gameplay_mechanics_and_options() {
         key_ev.keysym.mod = KMOD_LCTRL;
         app.handle_key_down(key_ev);
         ASSERT_NE(app.is_tile_grid_visible(), initial_grid);
-
-        // With Ctrl modifier, Ctrl+L DOES toggle unit health
-        key_ev.keysym.sym = SDLK_l;
-        app.handle_key_down(key_ev);
-        ASSERT_NE(app.is_unit_health_visible(), initial_health);
 
         // 2. Chat Focus and Input Handling
         ASSERT_FALSE(hud.is_chat_focused());
@@ -4743,7 +4710,7 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
             ASSERT_FALSE(effects.empty());
             bool has_death_anim = false;
             for (const auto& eff : effects) {
-                if (eff.anim_name == "death1" || eff.anim_name == "death2" || eff.anim_name == "death3") {
+                if (eff.anim_name == "death1" || eff.anim_name == "death2" || eff.anim_name == "death3" || eff.anim_name == "death4") {
                     has_death_anim = true;
                     break;
                 }
@@ -4767,7 +4734,7 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
             const auto& effects = sim.get_world_state().effects;
             bool has_death_anim = false;
             for (const auto& eff : effects) {
-                if (eff.anim_name == "death1" || eff.anim_name == "death2" || eff.anim_name == "death3") {
+                if (eff.anim_name == "death1" || eff.anim_name == "death2" || eff.anim_name == "death3" || eff.anim_name == "death4") {
                     has_death_anim = true;
                     break;
                 }
@@ -4795,7 +4762,7 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
             const auto& effects = sim.get_world_state().effects;
             bool has_death_anim = false;
             for (const auto& eff : effects) {
-                if (eff.anim_name == "death1" || eff.anim_name == "death2" || eff.anim_name == "death3") {
+                if (eff.anim_name == "death1" || eff.anim_name == "death2" || eff.anim_name == "death3" || eff.anim_name == "death4") {
                     has_death_anim = true;
                     break;
                 }
@@ -6939,10 +6906,10 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
 
     TEST_CASE("12.108: Version Invariant & Fog of War Cursor Concealment Parity") {
         // 1. Verify semantic versioning components
-        ASSERT_EQ(ants::VERSION_STRING, "v0.0.25");
+        ASSERT_EQ(ants::VERSION_STRING, "v0.0.26");
         ASSERT_EQ(ants::VERSION_MAJOR, 0);
         ASSERT_EQ(ants::VERSION_MINOR, 0);
-        ASSERT_EQ(ants::VERSION_PATCH, 25);
+        ASSERT_EQ(ants::VERSION_PATCH, 26);
 
         // 2. Setup simulation world with Fog of War enabled
         SimulationEngine sim;
@@ -9490,6 +9457,179 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         for (int t = 0; t < 15; ++t) sim.tick();
         ASSERT_FALSE(sim.get_unit(ant).is_transforming());
         ASSERT_EQ(sim.get_unit(ant).type, AntType::Swimmer); // Transformed into Swimmer!
+    } TEST_END();
+
+    // -------------------------------------------------------------------------
+    // Effects: original creators (Ants.exe FUN_01010008 call sites), anchors and lifetimes
+    // -------------------------------------------------------------------------
+    TEST_CASE("12.114 Bombex Explosion Sprite Exists For Every Detonation At The Bomb Tile Top-Left For 680 ms") {
+        int duds = 0, blasts = 0;
+        for (uint32_t seed = 1; seed <= 120; ++seed) {
+            SimulationEngine sim;
+            sim.init_test_world(60, 60, seed, 600000);
+            uint32_t victim = sim.spawn_unit(0, AntType::Worker, TileCoord{15, 15});
+            sim.grid_mut().place_bomb(15, 15, 1);
+            sim.tick(); // bomb detonates under the ant (20 % dud)
+
+            const auto& u = sim.get_unit(victim);
+            if (u.state == UnitState::Burn) ++duds; else ++blasts;
+
+            const VisualEffect* fx = nullptr;
+            const auto& effects = sim.get_world_state().effects;
+            for (const auto& e : effects) if (e.anim_name == "bombex") { fx = &e; break; }
+            ASSERT_TRUE(fx != nullptr);                       // dud and full blast alike
+            ASSERT_EQ(fx->px, 15 * 32);                       // tile top-left, not the tile centre
+            ASSERT_EQ(fx->py, 15 * 32);
+            ASSERT_EQ(fx->y_key, 15 * 32);                    // sorts with row*32
+            ASSERT_EQ(fx->duration_ms, 680u);                 // sum of the ten Table-4 frames
+            ASSERT_TRUE(fx->fog_gated);
+        }
+        ASSERT_TRUE(duds > 0);
+        ASSERT_TRUE(blasts > 0);
+
+        // Lethal hit: the sprite still exists and lives until its last frame ends (650 ms yes, 700 ms no)
+        SimulationEngine sim;
+        sim.init_test_world(60, 60, 100, 600000);
+        uint32_t victim = sim.spawn_unit(0, AntType::Worker, TileCoord{15, 15});
+        const_cast<AntUnit*>(&sim.get_unit(victim))->hp = 2;
+        sim.grid_mut().place_bomb(15, 15, 1);
+        sim.tick();
+        auto has_bombex = [&]() {
+            for (const auto& e : sim.get_world_state().effects) if (e.anim_name == "bombex") return true;
+            return false;
+        };
+        ASSERT_TRUE(has_bombex());
+        for (int t = 0; t < 13; ++t) sim.tick();
+        ASSERT_TRUE(has_bombex());   // 650 ms
+        sim.tick();
+        ASSERT_FALSE(has_bombex());  // 700 ms >= 680 ms
+    } TEST_END();
+
+    TEST_CASE("12.115 Fire Wall Burnout Puff And The 180 Second Lifetime Task Arming Rule") {
+        // Placed with 600 s left: the wall burns out after 180 s and leaves a sputter puff at the tile top-left
+        {
+            SimulationEngine sim;
+            sim.init_test_world(60, 60, 100, 600000);
+            uint32_t fire_ant = sim.spawn_unit(0, AntType::Fire, TileCoord{10, 10});
+            ASSERT_TRUE(sim.ignite_fire(fire_ant, TileCoord{10, 11}));
+            ASSERT_EQ(sim.grid().get_cell(10, 11).timer_ticks, 3600u);
+            int ticks = 0;
+            while (sim.has_fire_at(TileCoord{10, 11}) && ticks < 4000) { sim.tick(); ++ticks; }
+            ASSERT_EQ(ticks, 3600);
+            const VisualEffect* fx = nullptr;
+            const auto& effects = sim.get_world_state().effects;
+            for (const auto& e : effects) if (e.anim_name == "sputter") { fx = &e; break; }
+            ASSERT_TRUE(fx != nullptr);
+            ASSERT_EQ(fx->px, 10 * 32);
+            ASSERT_EQ(fx->py, 11 * 32);
+            ASSERT_EQ(fx->duration_ms, 830u);
+        }
+        // Placed with 180 s or less left: the lifetime task is never created, the wall does not burn out
+        {
+            SimulationEngine sim;
+            sim.init_test_world(60, 60, 100, 600000);
+            sim.set_match_time_remaining_ms(170000);
+            uint32_t fire_ant = sim.spawn_unit(0, AntType::Fire, TileCoord{10, 10});
+            ASSERT_TRUE(sim.ignite_fire(fire_ant, TileCoord{10, 11}));
+            ASSERT_EQ(sim.grid().get_cell(10, 11).timer_ticks, 0u);
+        }
+    } TEST_END();
+
+    TEST_CASE("12.116 Bridge Collapse Leaves A bsputter Puff And Swimmers Splash With dsplash At The Tile Top-Left") {
+        SimulationEngine sim;
+        sim.init_test_world(60, 60, 100, 600000);
+        sim.grid_mut().set_terrain(20, 20, TERRAIN_WATER);
+        sim.set_bridge_at(TileCoord{20, 20}, 4, 3);
+        uint32_t swimmer = sim.spawn_unit(0, AntType::Swimmer, TileCoord{20, 20});
+        (void)swimmer;
+        for (int t = 0; t < 3; ++t) sim.tick(); // timer expires
+        ASSERT_FALSE(sim.has_bridge_at(TileCoord{20, 20}));
+        const VisualEffect* puff = nullptr;
+        const VisualEffect* splash = nullptr;
+        const auto& effects = sim.get_world_state().effects;
+        for (const auto& e : effects) {
+            if (e.anim_name == "bsputter") puff = &e;
+            if (e.anim_name == "dsplash") splash = &e;
+        }
+        ASSERT_TRUE(puff != nullptr);
+        ASSERT_EQ(puff->px, 20 * 32);
+        ASSERT_EQ(puff->py, 20 * 32);
+        ASSERT_EQ(puff->duration_ms, 1220u);
+        ASSERT_TRUE(splash != nullptr);
+        ASSERT_EQ(splash->px, 20 * 32);
+        ASSERT_EQ(splash->py, 20 * 32);
+        ASSERT_EQ(splash->duration_ms, 460u);
+    } TEST_END();
+
+    TEST_CASE("12.117 Death Animation Is One Of death1..death4 With Its Full Original Duration") {
+        std::set<std::string> seen;
+        for (uint32_t seed = 1; seed <= 300; ++seed) {
+            SimulationEngine sim;
+            sim.init_test_world(60, 60, seed, 600000);
+            uint32_t attacker = sim.spawn_unit(0, AntType::Worker, TileCoord{10, 10});
+            uint32_t defender = sim.spawn_unit(1, AntType::Worker, TileCoord{11, 10});
+            auto* def = const_cast<AntUnit*>(&sim.get_unit(defender));
+            def->hp = 1;
+            sim.execute_melee_attack(attacker, defender);
+            for (const auto& e : sim.get_world_state().effects) {
+                if (e.anim_name.rfind("death", 0) != 0) continue;
+                seen.insert(e.anim_name);
+                const uint32_t expect = (e.anim_name == "death1") ? 920u : (e.anim_name == "death2") ? 1000u
+                                      : (e.anim_name == "death3") ? 980u : 600u;
+                ASSERT_EQ(e.duration_ms, expect);
+                ASSERT_EQ(e.y_key, e.py);
+            }
+        }
+        ASSERT_EQ(seen.size(), 4u); // rand() % 4 reaches every death animation
+    } TEST_END();
+
+    TEST_CASE("12.121 Score Change Bubbles At The Home Tile (Hatch Cost And Theft), 400 ms") {
+        SimulationEngine sim;
+        sim.init_test_world(60, 60, 100, 600000);
+        sim.grid_mut().set_anthill(0, TileCoord{20, 20});
+        sim.grid_mut().set_anthill(1, TileCoord{40, 40});
+        sim.set_player_score(0, 500);
+        sim.set_player_score(1, 300);
+
+        // Hatching costs 200 points: a "-200" bubble at the hill exit tile top-left and the scoredn cue
+        sim.clear_audio_events();
+        ASSERT_TRUE(sim.hatch_ant(0, AntType::Worker));
+        ASSERT_TRUE(sim.has_audio_event(SoundID::BaseScoreDn));
+        sim.tick();
+        const auto& bubbles = sim.get_world_state().score_bubbles;
+        ASSERT_EQ(bubbles.size(), 1u);
+        ASSERT_EQ(bubbles[0].amount, -200);
+        ASSERT_EQ(bubbles[0].x, 21 * 32);
+        ASSERT_EQ(bubbles[0].y, 21 * 32);
+        ASSERT_EQ(bubbles[0].elapsed_ms, 0u);
+
+        // Theft: the victim's home tile shows "-stolen"
+        uint32_t thief = sim.spawn_unit(0, AntType::Thief, TileCoord{30, 30});
+        sim.execute_thief_loot(thief, 1);
+        sim.tick();
+        bool found_theft = false;
+        for (const auto& b : sim.get_world_state().score_bubbles) {
+            if (b.amount == -MAX_THIEF_STEAL && b.x == 41 * 32 && b.y == 41 * 32) found_theft = true;
+        }
+        ASSERT_TRUE(found_theft);
+
+        // Bubbles live 400 ms (the hatch bubble is one tick older than the theft bubble)
+        for (int t = 0; t < 6; ++t) sim.tick();
+        ASSERT_EQ(sim.get_world_state().score_bubbles.size(), 2u);   // hatch 350 ms, theft 300 ms
+        sim.tick();
+        ASSERT_EQ(sim.get_world_state().score_bubbles.size(), 1u);   // hatch bubble gone at 400 ms
+        sim.tick();
+        ASSERT_EQ(sim.get_world_state().score_bubbles.size(), 0u);   // theft bubble gone at 400 ms
+    } TEST_END();
+
+    TEST_CASE("12.118 Food Dropper Animation Timeline (9 Frames, 820 ms)") {
+        static const uint8_t expected_by_tick[17] = { 0, 0, 1, 1, 2, 2, 2, 3, 4, 4, 5, 6, 6, 7, 7, 8, 8 };
+        for (uint32_t tick = 0; tick < 17; ++tick) {
+            ASSERT_EQ(effect_spec::dropper_frame_at(tick * 50u), expected_by_tick[tick]);
+        }
+        uint32_t total = 0;
+        for (uint32_t d : effect_spec::kDropperFrameMs) total += d;
+        ASSERT_EQ(total, effect_spec::kDropperMs);
     } TEST_END();
 }
 

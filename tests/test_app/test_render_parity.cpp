@@ -20,6 +20,7 @@
 #include "ants_app/renderer.hpp"
 #include "ants_assets/asset_archive.hpp"
 #include "ants_assets/lvl_parser.hpp"
+#include "ants_sim/effect_specs.hpp"
 #include "ants_sim/grid.hpp"
 
 using namespace ants;
@@ -474,6 +475,170 @@ void test_food_stages(Renderer& r, const assets::AssetArchive& arc) {
     r.unpin_animation_clock();
 }
 
+// Effect lifetimes hard-coded in the simulation must equal the Table-4 frame-duration sums.
+void test_effect_specs(const assets::AssetArchive& arc) {
+    std::printf("[effects] simulation effect lifetimes equal the Table-4 durations\n");
+    auto total = [&](const char* name) -> uint32_t {
+        const auto* seq = arc.find_animation(name);
+        if (!seq) { check(false, std::string("animation exists: ") + name); return 0; }
+        uint32_t t = 0;
+        for (const auto& s : seq->subitems) t += s.val3;
+        return t;
+    };
+    check(total("bombex") == sim::effect_spec::kBombexMs, "bombex lifetime");
+    check(total("sputter") == sim::effect_spec::kSputterMs, "sputter lifetime");
+    check(total("bsputter") == sim::effect_spec::kBsputterMs, "bsputter lifetime");
+    check(total("dsplash") == sim::effect_spec::kDsplashMs, "dsplash lifetime");
+    check(total("battle") == sim::effect_spec::kBattleMs, "battle cycle");
+    static const char* death[4] = { "death1", "death2", "death3", "death4" };
+    for (int i = 0; i < 4; ++i) check(total(death[i]) == sim::effect_spec::kDeathMs[i], std::string(death[i]) + " lifetime");
+    static const char* droppers[5] = { "FD_BOMB", "FD_COMB", "FD_THIEF", "FD_SWIM", "FD_FIRE" };
+    for (const char* name : droppers) {
+        check(total(name) == sim::effect_spec::kDropperMs, std::string(name) + " lifetime");
+        const auto* seq = arc.find_animation(name);
+        if (!seq || seq->subitems.size() != 9) { check(false, std::string(name) + " has 9 frames"); continue; }
+        for (size_t f = 0; f < 9; ++f) check(seq->subitems[f].val3 == sim::effect_spec::kDropperFrameMs[f], std::string(name) + " frame duration");
+    }
+}
+
+// Effect sprites: real-time frame selection (sim elapsed ms + sub-tick), part order, tile-top-left anchoring and the
+// end of the sprite at the end of its last frame. Reference = flat map + the model's frame at that instant.
+void test_effect_rendering(Renderer& r, const assets::AssetArchive& arc) {
+    std::printf("[effects] effect sprites are drawn at their real-time frame\n");
+    assets::LevelData level;
+    if (!level.load_from_file(std::string(ORIGINAL_ASSETS_DIR) + "/Maps/TINY.LVL")) { check(false, "load TINY"); return; }
+    const int32_t g = arc.find_animation_id("g01a");
+    if (level.tile_dictionary.size() <= static_cast<size_t>(g)) level.tile_dictionary.resize(static_cast<size_t>(g) + 1, ".");
+    level.tile_dictionary[static_cast<size_t>(g)] = "g01a";
+    for (auto& c : level.layer1_terrain) { c.tile_index = static_cast<uint16_t>(g); c.flags = 0; c.properties = 0; }
+    for (auto& c : level.layer2_interactive) { c.tile_index = assets::LVL_EMPTY_TILE; c.flags = 0; c.properties = 0; }
+    level.anthill_spawns.clear();
+    level.food_schedules.clear();
+    level.waypoints.clear();
+    sim::Grid grid;
+    grid.init_from_level(level);
+    r.set_level(level);
+    r.pin_animation_clock(0);
+    SDL_Renderer* sr = r.get_sdl_renderer();
+    const auto& pal = arc.get_palette();
+
+    struct Case { const char* name; uint32_t duration; };
+    static const Case cases[] = { {"bombex", 680}, {"sputter", 830}, {"bsputter", 1220}, {"dsplash", 460},
+                                  {"death1", 920}, {"death2", 1000}, {"death3", 980}, {"death4", 600} };
+    long bad = 0, compared = 0;
+    std::string first_bad;
+    for (const auto& c : cases) {
+        const auto* seq = arc.find_animation(c.name);
+        if (!seq) { check(false, std::string("animation exists: ") + c.name); continue; }
+        for (uint32_t elapsed = 0; elapsed <= c.duration + 50; elapsed += 50) {
+            for (float sub : { 0.0f, 0.030f }) {
+                sim::WorldState ws;
+                ws.width = level.width;
+                ws.height = level.height;
+                sim::VisualEffect fx;
+                fx.anim_name = c.name;
+                fx.px = 96; fx.py = 64;                       // a tile top-left, or a pixel for death
+                fx.duration_ms = c.duration;
+                fx.total_frames = static_cast<uint16_t>((c.duration + 49) / 50);
+                fx.elapsed_ms = elapsed;
+                fx.frame = static_cast<uint16_t>(elapsed / 50);
+                fx.y_key = fx.py;
+                ws.effects.push_back(fx);
+
+                r.camera().x = 0; r.camera().y = 0; r.camera().clamp_to_bounds(level.width, level.height);
+                SDL_SetRenderDrawColor(sr, 255, 0, 255, 255);
+                SDL_RenderClear(sr);
+                r.render_world(ws, grid, -1, {}, false, false, -1, -1, -1, sub);
+                const Image got = read_region(sr, PLAYFIELD_X, PLAYFIELD_Y, PLAYFIELD_W, PLAYFIELD_H);
+
+                Image full = model_map(arc, level, 0);
+                const uint32_t sub_ms = static_cast<uint32_t>(std::clamp(sub, 0.0f, 0.0499f) * 1000.0f);
+                const uint32_t t = elapsed + sub_ms;
+                if (t < c.duration) {
+                    uint32_t end = 0; size_t frame = seq->subitems.size() - 1;
+                    for (size_t i = 0; i < seq->subitems.size(); ++i) { end += seq->subitems[i].val3; if (t < end) { frame = i; break; } }
+                    model_draw_frame(full, arc, seq->subitems[frame], fx.px, fx.py, false, pal);
+                }
+                bool same = true;
+                for (int y = 0; y < PLAYFIELD_H && same; ++y)
+                    for (int x = 0; x < PLAYFIELD_W && same; ++x)
+                        same = std::memcmp(got.at(x, y), full.at(x, y), 3) == 0;
+                ++compared;
+                if (!same) { ++bad; if (first_bad.empty()) first_bad = std::string(c.name) + " t=" + std::to_string(t); }
+            }
+        }
+    }
+    check(compared > 100, "compared effect frames (" + std::to_string(compared) + ")");
+    check(bad == 0, "effect frames differing from the model: " + std::to_string(bad) + " (first: " + first_bad + ")");
+    r.unpin_animation_clock();
+}
+
+// Score bubbles: signed number layout of Ants.exe FUN_01010452 (6 slots of 9 px, leading zeros skipped but advancing,
+// the sign in the slot of the first significant digit, digits shifted one slot right) moving 5 px per 20 ms step.
+void test_score_bubbles(Renderer& r, const assets::AssetArchive& arc) {
+    std::printf("[score bubbles] signed numbers at the original layout\n");
+    assets::LevelData level;
+    if (!level.load_from_file(std::string(ORIGINAL_ASSETS_DIR) + "/Maps/TINY.LVL")) { check(false, "load TINY"); return; }
+    const int32_t g = arc.find_animation_id("g01a");
+    if (level.tile_dictionary.size() <= static_cast<size_t>(g)) level.tile_dictionary.resize(static_cast<size_t>(g) + 1, ".");
+    level.tile_dictionary[static_cast<size_t>(g)] = "g01a";
+    for (auto& c : level.layer1_terrain) { c.tile_index = static_cast<uint16_t>(g); c.flags = 0; c.properties = 0; }
+    for (auto& c : level.layer2_interactive) { c.tile_index = assets::LVL_EMPTY_TILE; c.flags = 0; c.properties = 0; }
+    level.anthill_spawns.clear(); level.food_schedules.clear(); level.waypoints.clear();
+    sim::Grid grid;
+    grid.init_from_level(level);
+    r.set_level(level);
+    r.pin_animation_clock(0);
+    SDL_Renderer* sr = r.get_sdl_renderer();
+    const auto& pal = arc.get_palette();
+
+    auto draw_id = [&](Image& im, const char* name, int x, int y) {
+        const auto* seq = arc.find_animation(name);
+        if (seq && !seq->subitems.empty()) model_draw_frame(im, arc, seq->subitems[0], x, y, false, pal);
+    };
+    long bad = 0, compared = 0;
+    std::string first_bad;
+    for (int amount : { 200, -200, 50, -50, 7, -1000, 123456 }) {
+        for (uint32_t elapsed : { 0u, 40u, 200u, 380u }) {
+            sim::WorldState ws;
+            ws.width = level.width; ws.height = level.height;
+            ws.score_bubbles.push_back(sim::ScoreBubble{96, 160, amount, elapsed});
+            r.camera().x = 0; r.camera().y = 0; r.camera().clamp_to_bounds(level.width, level.height);
+            SDL_SetRenderDrawColor(sr, 255, 0, 255, 255);
+            SDL_RenderClear(sr);
+            r.render_world(ws, grid, -1);
+            const Image got = read_region(sr, PLAYFIELD_X, PLAYFIELD_Y, PLAYFIELD_W, PLAYFIELD_H);
+
+            Image ref = model_map(arc, level, 0);
+            const int steps = std::min<int>(20, static_cast<int>(elapsed / 20) + 1);
+            const int y = 160 + (amount > 0 ? -5 : 5) * steps;
+            int value = std::abs(amount);
+            int divisor = 100000, x = 96;
+            bool leading = true, sign_pending = true;
+            while (divisor > 0) {
+                const int digit = value / divisor;
+                value %= divisor;
+                if (digit != 0 || divisor == 1) leading = false;
+                if (!leading) {
+                    if (sign_pending) { draw_id(ref, amount > 0 ? "plus" : "minus", x, y); x += 9; sign_pending = false; }
+                    draw_id(ref, (std::string("dig") + std::to_string(digit)).c_str(), x, y);
+                }
+                divisor /= 10;
+                x += 9;
+            }
+            bool same = true;
+            for (int py = 0; py < PLAYFIELD_H && same; ++py)
+                for (int px = 0; px < PLAYFIELD_W && same; ++px)
+                    same = std::memcmp(got.at(px, py), ref.at(px, py), 3) == 0;
+            ++compared;
+            if (!same) { ++bad; if (first_bad.empty()) first_bad = std::to_string(amount) + " at " + std::to_string(elapsed) + " ms"; }
+        }
+    }
+    check(compared == 28, "compared bubble renders");
+    check(bad == 0, "score bubble renders differing from the model: " + std::to_string(bad) + " (first: " + first_bad + ")");
+    r.unpin_animation_clock();
+}
+
 } // namespace
 
 int main() {
@@ -497,11 +662,14 @@ int main() {
     test_part_order_helper();
     test_mirrored_part_order(arc);
     test_template_clock(arc);
+    test_effect_specs(arc);
     test_ant_colour_rule(arc);
     test_part_order_all_frames(r, arc);
     test_ant_sprite_pixels(r, arc);
     test_map_layers(r, arc);
     test_dynamic_items(r, arc);
+    test_effect_rendering(r, arc);
+    test_score_bubbles(r, arc);
     test_food_stages(r, arc);
 
     r.shutdown();

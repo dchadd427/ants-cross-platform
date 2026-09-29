@@ -162,6 +162,7 @@ void bounce_unit_cascade(SimulationEngineImpl& impl,
             if (unit.type == AntType::Swimmer) {
                 unit.state = UnitState::Swimming;
                 unit.in_water = true;
+                impl.spawn_tile_effect("dsplash", chosen.x, chosen.y, effect_spec::kDsplashMs);
             } else {
                 unit.start_drowning();
                 impl.audio_queue_.push_back(AudioEvent{SoundID::AntDrown, unit.pixel_x, unit.pixel_y, 0, 255});
@@ -175,7 +176,7 @@ void bounce_unit_cascade(SimulationEngineImpl& impl,
             int32_t inc_dx = (b_dx > 0) ? 1 : ((b_dx < 0) ? -1 : 0);
             int32_t inc_dy = (b_dy > 0) ? 1 : ((b_dy < 0) ? -1 : 0);
             impl.grid_.clear_bomb(static_cast<uint32_t>(chosen.x), static_cast<uint32_t>(chosen.y));
-            impl.active_effects_.push_back(VisualEffect{"bombex", unit.pixel_x, unit.pixel_y, 0, 10});
+            impl.spawn_tile_effect("bombex", chosen.x, chosen.y, effect_spec::kBombexMs);
             impl.audio_queue_.push_back(AudioEvent{SoundID::BombDetonate, unit.pixel_x, unit.pixel_y, 2, 255});
             unit.take_damage(2, DamageSource::BombBlast, land_cell.interactive_owner);
             impl.physics_.apply_knockback(unit, unit.pixel_x, unit.pixel_y,
@@ -270,6 +271,9 @@ SimulationEngine& SimulationEngine::operator=(SimulationEngine&&) noexcept = def
 
 void SimulationEngine::init(const ants::assets::LevelData& level, uint32_t random_seed) {
     impl_->prng_.srand(random_seed);
+    impl_->cosmetic_prng_.srand(random_seed ^ 0x5EEDu);
+    impl_->active_effects_.clear();
+    impl_->score_bubbles_.clear();
     impl_->grid_.init_from_level(level);
     impl_->stats_.reset();
     uint32_t match_minutes = (level.default_minutes > 0) ? level.default_minutes : 12;
@@ -376,6 +380,9 @@ void SimulationEngine::init(const ants::assets::LevelData& level, uint32_t rando
 
 void SimulationEngine::init_test_world(uint32_t width, uint32_t height, uint32_t random_seed, uint32_t match_time_ms) {
     impl_->prng_.srand(random_seed);
+    impl_->cosmetic_prng_.srand(random_seed ^ 0x5EEDu);
+    impl_->active_effects_.clear();
+    impl_->score_bubbles_.clear();
     impl_->grid_.init_empty(width, height);
     impl_->stats_.reset();
     impl_->match_time_remaining_ms_ = match_time_ms;
@@ -470,12 +477,21 @@ void SimulationEngine::tick() {
 
     // Step Active Visual Effects (e.g. bomb explosion)
     for (auto it = impl_->active_effects_.begin(); it != impl_->active_effects_.end();) {
-        it->frame++;
-        if (it->frame >= it->total_frames) {
+        it->elapsed_ms += 50;
+        it->frame = static_cast<uint16_t>(it->elapsed_ms / 50);
+        const bool finished = (it->duration_ms > 0) ? (it->elapsed_ms >= it->duration_ms)
+                                                     : (it->frame >= it->total_frames);
+        if (finished) {
             it = impl_->active_effects_.erase(it);
         } else {
             ++it;
         }
+    }
+
+    // Step score bubbles (20 steps of 20 ms, gone after 400 ms)
+    for (auto it = impl_->score_bubbles_.begin(); it != impl_->score_bubbles_.end();) {
+        it->elapsed_ms += 50;
+        if (it->elapsed_ms >= 400) it = impl_->score_bubbles_.erase(it); else ++it;
     }
 
     // 2. Step Structure Timers (Firewall burnout & Bridge collapse)
@@ -487,11 +503,15 @@ void SimulationEngine::tick() {
                 if (cell.timer_ticks == 0) {
                     impl_->grid_.clear_firewall(x, y);
                     impl_->audio_queue_.push_back(AudioEvent{SoundID::FireBurnout, static_cast<int32_t>(x * 32 + 16), static_cast<int32_t>(y * 32 + 16), 1, 255});
+                    // Fire wall lifetime task (Ants.exe 0x1024de7): smoke puff at the tile top-left
+                    impl_->spawn_tile_effect("sputter", static_cast<int32_t>(x), static_cast<int32_t>(y), effect_spec::kSputterMs);
                 }
             } else if (cell.has_any_bridge() && cell.timer_ticks > 0) {
                 cell.timer_ticks--;
                 if (cell.timer_ticks == 0) {
                     impl_->grid_.collapse_bridge(x, y);
+                    // Bridge lifetime task (Ants.exe 0x1024e66): bsputter puff at the tile top-left after the destroy
+                    impl_->spawn_tile_effect("bsputter", static_cast<int32_t>(x), static_cast<int32_t>(y), effect_spec::kBsputterMs);
                     // Occupancy Drowning Scan when bridge collapses to water (Ants.exe 0x0100f8bf)
                     for (auto& ant_ptr : impl_->ants_) {
                         if (ant_ptr && ant_ptr->is_alive() && !ant_ptr->underground) {
@@ -503,6 +523,7 @@ void SimulationEngine::tick() {
                                     ant_ptr->state = UnitState::Swimming;
                                     ant_ptr->was_in_water = true;
                                     ant_ptr->in_water = true;
+                                    impl_->spawn_tile_effect("dsplash", static_cast<int32_t>(x), static_cast<int32_t>(y), effect_spec::kDsplashMs);
                                     impl_->audio_queue_.push_back(AudioEvent{SoundID::WaterSplash, ant_ptr->pixel_x, ant_ptr->pixel_y, 1, 255});
                                 } else if (ant_ptr->state != UnitState::Drowning && ant_ptr->state != UnitState::Knockback) {
                                     ant_ptr->start_drowning();
@@ -1579,6 +1600,7 @@ void SimulationEngine::tick() {
                 impl_->grid_.place_firewall(static_cast<uint32_t>(ant_ptr->ability_target.x),
                                             static_cast<uint32_t>(ant_ptr->ability_target.y),
                                             ant_ptr->player_id);
+                impl_->arm_structure_lifetime(ant_ptr->ability_target.x, ant_ptr->ability_target.y);
                 impl_->stats_.get_player_stats_mut(ant_ptr->player_id).fires_lit++;
             }
         }
@@ -1605,9 +1627,7 @@ void SimulationEngine::tick() {
                 impl_->grid_.clear_firewall(static_cast<uint32_t>(ant_ptr->ability_target.x), static_cast<uint32_t>(ant_ptr->ability_target.y));
                 // Authentic sputter smoke visual effect (Anim 135, 10 frames, total 830ms = 17 ticks @ 20Hz)
                 // Anchored at tile top-left (tx * 32, ty * 32), matching Ants.exe 0x10100ab
-                int32_t fx = ant_ptr->ability_target.x * 32;
-                int32_t fy = ant_ptr->ability_target.y * 32;
-                impl_->active_effects_.push_back(VisualEffect{"sputter", fx, fy, 0, 17});
+                impl_->spawn_tile_effect("sputter", ant_ptr->ability_target.x, ant_ptr->ability_target.y, effect_spec::kSputterMs);
             }
             ant_ptr->state = (ant_ptr->type == AntType::Combat) ? UnitState::GuardIdle : UnitState::Idle;
             ant_ptr->anim_tick = 0;
@@ -1662,6 +1682,8 @@ void SimulationEngine::tick() {
                     if (ant_ptr->type == AntType::Swimmer) {
                         ant_ptr->state = UnitState::Swimming;
                         ant_ptr->in_water = true;
+                        // Landing handler FUN_0101e6b3: swimmer splashes at the landing tile (dsplash, tile top-left)
+                        impl_->spawn_tile_effect("dsplash", ant_ptr->pos.x, ant_ptr->pos.y, effect_spec::kDsplashMs);
                     } else {
                         ant_ptr->start_drowning();
                         impl_->audio_queue_.push_back(AudioEvent{SoundID::AntDrown, ant_ptr->pixel_x, ant_ptr->pixel_y, 0, 255});
@@ -2031,6 +2053,18 @@ void SimulationEngine::tick() {
     if (impl_->fog_of_war_enabled_) {
         impl_->update_fog_of_war();
     }
+
+    // Score changes of this tick become floating bubbles at the players' home tiles (hill exit tile, the tile where
+    // hatched ants appear); every change is shown, for every player (Ants.exe FUN_01010cc9).
+    for (const ScoreChange& change : impl_->stats_.take_score_changes()) {
+        const auto* hill = impl_->grid_.find_anthill(change.player);
+        if (!hill) continue;
+        ScoreBubble b;
+        b.x = (static_cast<int32_t>(hill->x) + 1) * 32;
+        b.y = (static_cast<int32_t>(hill->y) + 1) * 32;
+        b.amount = change.delta;
+        impl_->score_bubbles_.push_back(b);
+    }
     impl_->world_state_dirty_ = true;
 }
 
@@ -2355,6 +2389,13 @@ bool SimulationEngine::hatch_ant(uint8_t player_id, AntType type) {
     if (impl_->stats_.get_egg_count(player_id) < 1) return false;
 
     impl_->stats_.deduct_score(player_id, HATCH_COST_POINTS);
+    {
+        // Hatch cost is a score change like any other: "-200" bubble and the scoredn cue (Ants.exe FUN_01010560)
+        const auto* hill = impl_->grid_.find_anthill(player_id);
+        const int32_t sx = hill ? (static_cast<int32_t>(hill->x) + 1) * 32 + 16 : 0;
+        const int32_t sy = hill ? (static_cast<int32_t>(hill->y) + 1) * 32 + 16 : 0;
+        impl_->audio_queue_.push_back(AudioEvent{SoundID::BaseScoreDn, sx, sy, 1, player_id});
+    }
     impl_->stats_.set_egg_count(player_id, impl_->stats_.get_egg_count(player_id) - 1);
     impl_->stats_.get_player_stats_mut(player_id).ants_hatched++;
     impl_->stats_.get_player_stats_mut(player_id).new_hatched++;
@@ -2502,6 +2543,7 @@ const WorldState& SimulationEngine::get_world_state() const {
         }
 
         impl_->world_state_cache_.effects = impl_->active_effects_;
+        impl_->world_state_cache_.score_bubbles = impl_->score_bubbles_;
 
         impl_->world_state_cache_.flower_droppers.clear();
         for (const auto& fd : impl_->flower_droppers_) {
@@ -2511,7 +2553,8 @@ const WorldState& SimulationEngine::get_world_state() const {
             s.drop_x = fd.drop_pos.x;
             s.drop_y = fd.drop_pos.y;
             s.is_dropping = fd.is_dropping;
-            s.drop_frame = static_cast<uint8_t>(std::min(8u, (fd.drop_tick * 9) / 16));
+            s.drop_elapsed_ms = fd.drop_tick * 50u;
+            s.drop_frame = effect_spec::dropper_frame_at(s.drop_elapsed_ms);
             s.powerup_type = fd.powerup_type;
             impl_->world_state_cache_.flower_droppers.push_back(s);
         }
@@ -3173,6 +3216,7 @@ bool SimulationEngine::ignite_fire(uint32_t ant_id, TileCoord target, bool insta
 
     if (instant) {
         impl_->grid_.place_firewall(static_cast<uint32_t>(target.x), static_cast<uint32_t>(target.y), ant->player_id);
+        impl_->arm_structure_lifetime(target.x, target.y);
         impl_->audio_queue_.push_back(AudioEvent{SoundID::FireBeam, ant->pixel_x, ant->pixel_y, 1, 255});
         impl_->audio_queue_.push_back(AudioEvent{SoundID::FireErupt, ant->pixel_x, ant->pixel_y, 1, 255});
         impl_->stats_.get_player_stats_mut(ant->player_id).fires_lit++;
@@ -3236,6 +3280,7 @@ bool SimulationEngine::build_bridge_step(uint32_t ant_id, TileCoord target) {
     ant->set_tile_pos(ant->pos.x, ant->pos.y);
 
     impl_->grid_.advance_bridge(static_cast<uint32_t>(target.x), static_cast<uint32_t>(target.y), ant->player_id);
+    impl_->arm_structure_lifetime(target.x, target.y);
     impl_->audio_queue_.push_back(AudioEvent{SoundID::ShovelWater, ant->pixel_x, ant->pixel_y, 1, 255});
 
     int32_t fdx = target.x - ant->pos.x;
@@ -3797,6 +3842,10 @@ void SimulationEngine::trigger_bomb_detonation(uint32_t ant_id, TileCoord bomb_p
 
     ant_ptr->allow_friendly_bomb = false;
     impl_->grid_.clear_bomb(static_cast<uint32_t>(bomb_pos.x), static_cast<uint32_t>(bomb_pos.y));
+    // The detonation command always creates the bombex sprite (duds, lethal hits and chains included), anchored at the
+    // bomb tile's top-left, with the explosion sound on its first frame (Ants.exe FUN_01021a6f 0x1021b8e).
+    impl_->spawn_tile_effect("bombex", bomb_pos.x, bomb_pos.y, effect_spec::kBombexMs);
+    impl_->audio_queue_.push_back(AudioEvent{SoundID::BombDetonate, bomb_pos.x * 32 + 16, bomb_pos.y * 32 + 16, 2, 255});
     if (is_ant_in_base_queue(ant_ptr->id)) {
         leave_base_queue(ant_ptr->id);
     }
@@ -3836,8 +3885,6 @@ void SimulationEngine::trigger_bomb_detonation(uint32_t ant_id, TileCoord bomb_p
             // FULL DETONATION: Spawns bombex effect centered on bomb tile, plays bombexp.wav, launches ant airborne
             int32_t bomb_center_x = bomb_pos.x * 32 + 16;
             int32_t bomb_center_y = bomb_pos.y * 32 + 16;
-            impl_->active_effects_.push_back(VisualEffect{"bombex", bomb_center_x, bomb_center_y, 0, 10});
-            impl_->audio_queue_.push_back(AudioEvent{SoundID::BombDetonate, bomb_center_x, bomb_center_y, 2, 255});
 
             if (incoming_dx == 0 && incoming_dy == 0) {
                 if ((ant_ptr->state == UnitState::Burn || ant_ptr->state == UnitState::Bounce || ant_ptr->state == UnitState::Flinch) &&

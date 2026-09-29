@@ -498,6 +498,11 @@ void Renderer::set_level(const ants::assets::LevelData& level) {
     }
 
     // Animations of runtime layer-2 items (all cells of an id share one template clock)
+    anim_id_plus_ = archive_->find_animation_id("plus");
+    anim_id_minus_ = archive_->find_animation_id("minus");
+    for (int d = 0; d < 10; ++d) {
+        anim_id_digit_[d] = archive_->find_animation_id("dig" + std::to_string(d));
+    }
     anim_id_fire_ = archive_->find_animation_id("wallup04");
     anim_id_lunchbox_ = archive_->find_animation_id("lunchbox");
     anim_id_bomb_[0] = archive_->find_animation_id("greenbomb");
@@ -646,7 +651,7 @@ void Renderer::render_world(const ants::sim::WorldState& world,
                             const ants::sim::Grid& grid,
                             int32_t selected_unit_id,
                             const std::vector<uint32_t>& selected_unit_ids,
-                            bool show_all_health_bars,
+                            bool /*show_all_health_bars: the original has no in-world health bar*/,
                             bool show_tile_grid,
                             int32_t mouse_x,
                             int32_t mouse_y,
@@ -666,41 +671,17 @@ void Renderer::render_world(const ants::sim::WorldState& world,
     // 3. Layer 2 Structures / Interactive Objects
     render_terrain_layer2_structures(grid, &world);
 
-    // 3.5 Anthill Selection Brackets (if a base is selected)
-    if (selected_base_team_id >= 0) {
-        int32_t base_sx = -1000, base_sy = -1000;
-        static const int32_t hill_offset_dy[4] = { 7, 14, 12, 8 };
-        if (has_anthill_bases_ && selected_base_team_id < 4) {
-            size_t b_idx = static_cast<size_t>(selected_base_team_id);
-            if (anthill_bases_[b_idx].x >= 0 && anthill_bases_[b_idx].y >= 0) {
-                camera_.world_to_screen(anthill_bases_[b_idx].x * TILE_SIZE,
-                                        anthill_bases_[b_idx].y * TILE_SIZE + hill_offset_dy[b_idx], base_sx, base_sy);
-            }
-        } else {
-            for (const auto& a : grid.anthills()) {
-                if (static_cast<int32_t>(a.team_id) == selected_base_team_id) {
-                    camera_.world_to_screen((static_cast<int32_t>(a.x) - 1) * TILE_SIZE,
-                                            (static_cast<int32_t>(a.y) - 1) * TILE_SIZE + hill_offset_dy[a.team_id % 4], base_sx, base_sy);
-                    break;
-                }
-            }
-        }
-        if (base_sx >= -128 && base_sx <= PLAYFIELD_W + 128 && base_sy >= -128 && base_sy <= PLAYFIELD_H + 128) {
-            draw_anthill_selection_brackets(base_sx, base_sy, 128, 128);
-        }
-    }
-
-    // 3.8 Visual Effects (e.g. bomb explosion bombex - rendered between Layer 2 bombs and ant units)
-    render_visual_effects(world);
-    render_transient_effects();
-
-    // 4. Depth-sorted sprite list: object-list plants (key row*32+16) and ants share one y-sorted queue, as in the
-    //    original sprite list (FUN_010088e7); ties keep insertion order (plants first, then ants)
+    // 4. One y-sorted sprite list (original FUN_010088e7, sort key = sprite y, ties keep insertion order):
+    //    object-list plants (key row*32+16), ants, effects (key row*32), food droppers, the hill selection brackets
+    //    and the click marker are all drawn from the same queue.
     collect_object_list_sprites();
-    render_ant_units(world, selected_unit_id, selected_unit_ids, show_all_health_bars);
-
-    // 4.6 Flower Droppers (Swaying daisy on cliffs & falling powerup droplets - rendered in front of plant canopy)
-    render_flower_droppers(world);
+    collect_ant_units(world, selected_unit_id, selected_unit_ids);
+    collect_visual_effects(world);
+    collect_score_bubbles(world);
+    collect_flower_droppers(world);
+    collect_transient_sprites();
+    collect_hill_brackets(grid, selected_base_team_id);
+    draw_sorted_queue();
 
     // 4.8 Authentic Fog of War autotiling overlay
     if (world.fog_of_war_enabled) {
@@ -985,30 +966,47 @@ void Renderer::collect_object_list_sprites() {
     }
 }
 
-void Renderer::render_flower_droppers(const ants::sim::WorldState& world) {
+// Non-looping frame of an animation `elapsed_ms` after it started (holds the last frame); -1 once it is over.
+static int32_t effect_frame_at(const ants::assets::AnimationSequence& seq, uint32_t elapsed_ms) {
+    uint32_t end = 0;
+    for (size_t i = 0; i < seq.subitems.size(); ++i) {
+        end += seq.subitems[i].val3;
+        if (elapsed_ms < end) return static_cast<int32_t>(i);
+    }
+    return -1;
+}
+
+void Renderer::collect_flower_droppers(const ants::sim::WorldState& world) {
     if (!archive_ || !texture_cache_) return;
 
     for (const auto& fd : world.flower_droppers) {
-        // Render falling powerup droplet if dropping (flower plant itself is an object-list sprite)
-        if (fd.is_dropping) {
-            int32_t drop_sx = 0, drop_sy = 0;
-            if (camera_.world_to_screen(fd.drop_x * TILE_SIZE, fd.drop_y * TILE_SIZE, drop_sx, drop_sy)) {
-                const char* anim_name = "FD_COMB";
-                switch (fd.powerup_type) {
-                    case 0: anim_name = "FD_BOMB"; break;
-                    case 1: anim_name = "FD_COMB"; break;
-                    case 2: anim_name = "FD_THIEF"; break;
-                    case 3: anim_name = "FD_SWIM"; break;
-                    case 4: anim_name = "FD_FIRE"; break;
-                    default: break;
-                }
-                const auto* drop_anim = archive_->find_animation(anim_name);
-                if (drop_anim && !drop_anim->subitems.empty()) {
-                    size_t frame_idx = std::min<size_t>(fd.drop_frame, drop_anim->subitems.size() - 1);
-                    draw_frame_parts(drop_anim->subitems[frame_idx], drop_sx, drop_sy);
-                }
-            }
+        // Falling power-up droplet (the flower itself is an object-list sprite). Effect sprite: anchored at the drop
+        // tile's top-left, sort key row*32, hidden while that tile is unexplored (Ants.exe FUN_0100fdd8).
+        if (!fd.is_dropping) continue;
+        if (world.fog_of_war_enabled && !world.is_tile_revealed(fd.drop_x, fd.drop_y)) continue;
+        const char* anim_name = "FD_COMB";
+        switch (fd.powerup_type) {
+            case 0: anim_name = "FD_BOMB"; break;
+            case 1: anim_name = "FD_COMB"; break;
+            case 2: anim_name = "FD_THIEF"; break;
+            case 3: anim_name = "FD_SWIM"; break;
+            case 4: anim_name = "FD_FIRE"; break;
+            default: break;
         }
+        const auto* drop_anim = archive_->find_animation(anim_name);
+        if (!drop_anim || drop_anim->subitems.empty()) continue;
+        int32_t frame = effect_frame_at(*drop_anim, fd.drop_elapsed_ms + sub_tick_ms_);
+        if (frame < 0) frame = static_cast<int32_t>(drop_anim->subitems.size()) - 1;
+        const int32_t wx = fd.drop_x * TILE_SIZE;
+        const int32_t wy = fd.drop_y * TILE_SIZE;
+        RenderItem item{};
+        item.sort_y = wy;
+        item.draw_func = [this, drop_anim, frame, wx, wy](SDL_Renderer*, TextureCache&) {
+            const int32_t sx = PLAYFIELD_X + (wx - static_cast<int32_t>(camera_.x));
+            const int32_t sy = PLAYFIELD_Y + (wy - static_cast<int32_t>(camera_.y));
+            this->draw_frame_parts(drop_anim->subitems[static_cast<size_t>(frame)], sx, sy);
+        };
+        render_queue_.push_back(std::move(item));
     }
 }
 
@@ -1078,47 +1076,53 @@ void Renderer::render_fog_of_war(const ants::sim::WorldState& world) {
     }
 }
 
-void Renderer::render_visual_effects(const ants::sim::WorldState& world) {
+void Renderer::collect_visual_effects(const ants::sim::WorldState& world) {
     if (!archive_ || !texture_cache_) return;
     for (const auto& eff : world.effects) {
-        int32_t sx = 0, sy = 0;
-        if (!camera_.world_to_screen(eff.px, eff.py, sx, sy)) continue;
+        // Effect sprites of the original are hidden while their anchor tile is unexplored (vtable +0x3c, 0x101a40f)
+        if (eff.fog_gated && world.fog_of_war_enabled && !world.is_tile_revealed(eff.px / TILE_SIZE, eff.py / TILE_SIZE)) continue;
         const auto* anim = archive_->find_animation(eff.anim_name);
         if (!anim && !eff.anim_name.empty()) {
             std::string low = eff.anim_name;
             for (char& c : low) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
             anim = archive_->find_animation(low);
         }
-        if (anim && !anim->subitems.empty()) {
-            size_t sub_idx = 0;
-            if (eff.anim_name == "battle" || eff.anim_name == "BATTLE") {
-                // Battle scuffle ball loops for 2 complete cycles across 10 simulation ticks
-                size_t cycle_frames = anim->subitems.size() * 2;
-                sub_idx = ((static_cast<size_t>(eff.frame) * cycle_frames) / std::max<size_t>(1, eff.total_frames)) % anim->subitems.size();
-            } else {
-                uint32_t elapsed_ms = eff.frame * 50;
-                uint32_t accum_ms = 0;
-                bool found = false;
-                for (size_t i = 0; i < anim->subitems.size(); ++i) {
-                    uint32_t sub_dur = (anim->subitems[i].val3 > 0) ? anim->subitems[i].val3 : 60;
-                    if (elapsed_ms < accum_ms + sub_dur) {
-                        sub_idx = i;
-                        found = true;
-                        break;
-                    }
-                    accum_ms += sub_dur;
-                }
-                if (!found) {
-                    sub_idx = anim->subitems.empty() ? 0 : anim->subitems.size() - 1;
-                }
-            }
-            const auto& sub = anim->subitems[sub_idx];
-            draw_frame_parts(sub, sx, sy);
+        if (!anim || anim->subitems.empty()) continue;
+
+        size_t sub_idx = 0;
+        if (eff.anim_name == "battle" || eff.anim_name == "BATTLE") {
+            // Battle scuffle ball loops for 2 complete cycles across 10 simulation ticks
+            size_t cycle_frames = anim->subitems.size() * 2;
+            sub_idx = ((static_cast<size_t>(eff.frame) * cycle_frames) / std::max<size_t>(1, eff.total_frames)) % anim->subitems.size();
+        } else {
+            // Table-4 frame durations in real time: sim elapsed time plus the fraction of the current 50 ms tick
+            const uint32_t elapsed_ms = eff.elapsed_ms + sub_tick_ms_;
+            const uint32_t lifetime_ms = eff.duration_ms > 0 ? eff.duration_ms : static_cast<uint32_t>(eff.total_frames) * 50u;
+            if (elapsed_ms >= lifetime_ms) continue; // the sprite ended at the end of its last frame
+            const int32_t f = effect_frame_at(*anim, elapsed_ms);
+            sub_idx = (f < 0) ? anim->subitems.size() - 1 : static_cast<size_t>(f);
         }
+        RenderItem item{};
+        item.sort_y = (eff.y_key != 0) ? eff.y_key : eff.py;
+        const int32_t px = eff.px, py = eff.py;
+        item.draw_func = [this, anim, sub_idx, px, py](SDL_Renderer*, TextureCache&) {
+            const int32_t sx = PLAYFIELD_X + (px - static_cast<int32_t>(camera_.x));
+            const int32_t sy = PLAYFIELD_Y + (py - static_cast<int32_t>(camera_.y));
+            if (sx < PLAYFIELD_X - 320 || sx > PLAYFIELD_X + PLAYFIELD_W + 320 ||
+                sy < PLAYFIELD_Y - 320 || sy > PLAYFIELD_Y + PLAYFIELD_H + 320) return;
+            this->draw_frame_parts(anim->subitems[sub_idx], sx, sy);
+        };
+        render_queue_.push_back(std::move(item));
     }
 }
 
 void Renderer::spawn_transient_effect(const std::string& anim_name, int32_t px, int32_t py, bool is_screen_space) {
+    if (anim_name == "xmarks") {
+        // The click marker is a single object: a new click stops the previous marker (Ants.exe FUN_01010627)
+        transient_effects_.erase(std::remove_if(transient_effects_.begin(), transient_effects_.end(),
+                                                [](const TransientEffect& e) { return e.anim_name == "xmarks"; }),
+                                 transient_effects_.end());
+    }
     TransientEffect eff;
     eff.anim_name = anim_name;
     eff.px = px;
@@ -1156,14 +1160,10 @@ void Renderer::update_transient_effects(float dt) {
     }
 }
 
-void Renderer::render_transient_effects() {
+void Renderer::collect_transient_sprites() {
     if (!archive_ || !texture_cache_) return;
     for (const auto& eff : transient_effects_) {
-        int32_t sx = eff.px;
-        int32_t sy = eff.py;
-        if (!eff.is_screen_space) {
-            if (!camera_.world_to_screen(eff.px, eff.py, sx, sy)) continue;
-        }
+        if (eff.is_screen_space) continue; // screen-space feedback is not part of the world sprite list
         const auto* anim = archive_->find_animation(eff.anim_name);
         if (!anim && !eff.anim_name.empty()) {
             std::string low = eff.anim_name;
@@ -1172,21 +1172,18 @@ void Renderer::render_transient_effects() {
         }
         if (!anim || anim->subitems.empty()) continue;
 
-        float accum = 0.0f;
-        size_t sub_idx = 0;
-        for (size_t i = 0; i < anim->subitems.size(); ++i) {
-            float sub_dur = (anim->subitems[i].val3 > 0) ? (static_cast<float>(anim->subitems[i].val3) / 1000.0f) : 0.060f;
-            if (eff.elapsed_sec < accum + sub_dur) {
-                sub_idx = i;
-                break;
-            }
-            accum += sub_dur;
-            if (i + 1 == anim->subitems.size()) {
-                sub_idx = i;
-            }
-        }
-        const auto& sub = anim->subitems[sub_idx];
-        draw_frame_parts(sub, sx, sy);
+        const uint32_t elapsed_ms = static_cast<uint32_t>(eff.elapsed_sec * 1000.0f);
+        const int32_t f = effect_frame_at(*anim, elapsed_ms);
+        const size_t sub_idx = (f < 0) ? anim->subitems.size() - 1 : static_cast<size_t>(f);
+        RenderItem item{};
+        item.sort_y = eff.py; // click marker sorts by the click position
+        const int32_t px = eff.px, py = eff.py;
+        item.draw_func = [this, anim, sub_idx, px, py](SDL_Renderer*, TextureCache&) {
+            const int32_t sx = PLAYFIELD_X + (px - static_cast<int32_t>(camera_.x));
+            const int32_t sy = PLAYFIELD_Y + (py - static_cast<int32_t>(camera_.y));
+            this->draw_frame_parts(anim->subitems[sub_idx], sx, sy);
+        };
+        render_queue_.push_back(std::move(item));
     }
 }
 
@@ -1254,7 +1251,7 @@ void Renderer::draw_ant_shadow(int32_t anchor_sx, int32_t anchor_sy, int32_t alt
     SDL_SetTextureAlphaMod(shadow_tex, 255);
 }
 
-void Renderer::draw_single_ant(const ants::sim::AntSnapshot& ant, bool is_selected, bool show_health_bar, bool is_under_battle) {
+void Renderer::draw_single_ant(const ants::sim::AntSnapshot& ant, bool is_selected, bool is_under_battle) {
     bool is_idle_thief_on_cap = (ant.type == ants::sim::AntType::Thief &&
                                  ant.is_underground &&
                                  ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::Idle));
@@ -1613,16 +1610,9 @@ void Renderer::draw_single_ant(const ants::sim::AntSnapshot& ant, bool is_select
     if (is_selected && !is_under_battle) {
         bool drawn_ears = false;
         if (archive_ && texture_cache_) {
-            uint32_t ears_id = 58;
-            if (ant.type == ants::sim::AntType::Combat) {
-                if (ant.hp > 6) ears_id = 149;       // c_dogears
-                else if (ant.hp > 3) ears_id = 150;  // c_yelears
-                else ears_id = 151;                  // c_redears
-            } else {
-                if (ant.hp > 6) ears_id = 58;        // dogears
-                else if (ant.hp > 3) ears_id = 60;   // yelears
-                else ears_id = 61;                   // redears
-            }
+            // Selection ears (Ants.exe FUN_01010373): hp >= 9 dogears (58), hp <= 2 redears (61), else yelears (60).
+            // The same three animations serve every ant type; they are refreshed after every damage or heal.
+            uint32_t ears_id = (ant.hp >= 9) ? 58u : (ant.hp <= 2) ? 61u : 60u;
             if (ears_id < archive_->animation_count()) {
                 const auto& ears_seq = archive_->get_animation(ears_id);
                 if (!ears_seq.subitems.empty()) {
@@ -1658,25 +1648,6 @@ void Renderer::draw_single_ant(const ants::sim::AntSnapshot& ant, bool is_select
             SDL_RenderDrawLine(renderer_, bx + bw, by + bh, bx + bw, by + bh - arm);
         }
     }
-
-    // 4. Overhead Unit Health Bar (Damaged ants < 10 HP or selected ants always show; full health hides unless show_health_bar / Ctrl+L is active)
-    bool should_show_health = !is_under_battle && (is_selected || show_health_bar || (ant.hp < 10)) && ant.hp > 0 && !ant.is_drowning;
-    if (should_show_health) {
-        SDL_Rect bar_border = { sx - 13, render_y - 36, 26, 6 };
-        SDL_SetRenderDrawColor(renderer_, 0, 0, 0, 255);
-        SDL_RenderDrawRect(renderer_, &bar_border);
-
-        SDL_Rect bar_bg = { sx - 12, render_y - 35, 24, 4 };
-        SDL_SetRenderDrawColor(renderer_, 40, 40, 40, 220);
-        SDL_RenderFillRect(renderer_, &bar_bg);
-
-        int hp_w = (ant.max_hp > 0) ? std::clamp((ant.hp * 24) / ant.max_hp, 0, 24) : 0;
-        SDL_Rect bar_fg = { sx - 12, render_y - 35, hp_w, 4 };
-        if (ant.hp > 6) SDL_SetRenderDrawColor(renderer_, 50, 220, 50, 255);
-        else if (ant.hp > 3) SDL_SetRenderDrawColor(renderer_, 230, 200, 30, 255);
-        else SDL_SetRenderDrawColor(renderer_, 230, 40, 40, 255);
-        SDL_RenderFillRect(renderer_, &bar_fg);
-    }
 }
 
 size_t Renderer::get_anim_subitem_by_time(const ants::assets::AnimationSequence& seq, uint32_t now_ms) {
@@ -1695,19 +1666,19 @@ size_t Renderer::get_anim_subitem_by_time(const ants::assets::AnimationSequence&
     return 0;
 }
 
-void Renderer::draw_anthill_selection_brackets(int32_t x, int32_t y, int32_t w, int32_t h) {
+void Renderer::draw_anthill_selection_brackets(int32_t cx, int32_t cy) {
     if (archive_ && texture_cache_ && 59 < archive_->animation_count()) {
         const auto& ears_seq = archive_->get_animation(59); // hillears
         if (!ears_seq.subitems.empty()) {
-            int32_t cx = x + (w / 2);
-            int32_t cy = y + (h / 2);
             size_t sub_idx = get_anim_subitem_by_time(ears_seq, SDL_GetTicks());
-            const auto& sub = ears_seq.subitems[sub_idx];
-            draw_frame_parts(sub, cx, cy);
+            draw_frame_parts(ears_seq.subitems[sub_idx], cx, cy);
             return;
         }
     }
 
+    // Fallback: draw geometry lines around the 128x128 footprint
+    const int32_t w = 128, h = 128;
+    const int32_t x = cx - w / 2, y = cy - h / 2;
     // Fallback: draw geometry lines
     SDL_SetRenderDrawColor(renderer_, 50, 220, 50, 255);
     int32_t arm = 20;
@@ -1746,10 +1717,9 @@ void Renderer::draw_anthill_selection_brackets(int32_t x, int32_t y, int32_t w, 
     SDL_RenderDrawLine(renderer_, x + w - 2, y + h - 2, x + w - 3, y + h - 1);
 }
 
-void Renderer::render_ant_units(const ants::sim::WorldState& world,
-                                int32_t selected_unit_id,
-                                const std::vector<uint32_t>& selected_unit_ids,
-                                bool show_all_health_bars) {
+void Renderer::collect_ant_units(const ants::sim::WorldState& world,
+                                 int32_t selected_unit_id,
+                                 const std::vector<uint32_t>& selected_unit_ids) {
     for (const auto& a : world.ants) {
         bool is_idle_thief_on_cap = (a.type == ants::sim::AntType::Thief &&
                                      a.is_underground &&
@@ -1788,17 +1758,92 @@ void Renderer::render_ant_units(const ants::sim::WorldState& world,
 
         RenderItem item{};
         item.sort_y = a.py;
-        item.draw_func = [this, a, is_sel, show_all_health_bars, is_under_battle](SDL_Renderer*, TextureCache&) {
-            this->draw_single_ant(a, is_sel, show_all_health_bars, is_under_battle);
+        item.draw_func = [this, a, is_sel, is_under_battle](SDL_Renderer*, TextureCache&) {
+            this->draw_single_ant(a, is_sel, is_under_battle);
         };
-        render_queue_.push_back(item);
+        render_queue_.push_back(std::move(item));
     }
+}
 
-    // Y-Sorting (Background to Foreground)
+// Signed score number as the original draws it (Ants.exe FUN_01010452 with the sign flag): a 6-slot field of 9 px
+// slots, leading zeros skipped but still advancing, the sign glyph in the slot of the first significant digit and
+// every digit from there on shifted one slot to the right.
+void Renderer::draw_score_number(int32_t amount, int32_t world_x, int32_t world_y) {
+    int32_t value = std::clamp(amount < 0 ? -amount : amount, 0, 999999);
+    int32_t divisor = 100000;
+    bool leading = true;
+    bool sign_pending = true;
+    int32_t x = world_x;
+    while (divisor > 0) {
+        const int32_t digit = value / divisor;
+        value %= divisor;
+        if (digit != 0 || divisor == 1) leading = false;
+        if (!leading) {
+            if (sign_pending) {
+                draw_template_world(amount > 0 ? anim_id_plus_ : anim_id_minus_, x, world_y);
+                x += 9;
+                sign_pending = false;
+            }
+            draw_template_world(anim_id_digit_[digit], x, world_y);
+        }
+        divisor /= 10;
+        x += 9;
+    }
+}
+
+void Renderer::collect_score_bubbles(const ants::sim::WorldState& world) {
+    if (!archive_ || !texture_cache_) return;
+    for (const auto& b : world.score_bubbles) {
+        // 20 steps, one every 20 ms, 5 px each: up for a gain, down for a loss; the sprite ends after 400 ms
+        const uint32_t t = b.elapsed_ms + sub_tick_ms_;
+        if (t >= 400 || b.amount == 0) continue;
+        const int32_t steps = static_cast<int32_t>(std::min<uint32_t>(20u, t / 20u + 1u));
+        const int32_t y = b.y + (b.amount > 0 ? -5 : 5) * steps;
+        RenderItem item{};
+        item.sort_y = y;
+        const int32_t amount = b.amount, x = b.x;
+        item.draw_func = [this, amount, x, y](SDL_Renderer*, TextureCache&) { this->draw_score_number(amount, x, y); };
+        render_queue_.push_back(std::move(item));
+    }
+}
+
+void Renderer::collect_hill_brackets(const ants::sim::Grid& grid, int32_t selected_base_team_id) {
+    if (selected_base_team_id < 0 || !archive_) return;
+    // The selection brackets ("hillears") sit at the top-left of tile (anchor row + 1, anchor col + 1), i.e. the centre
+    // of the 4x4 hill footprint (Ants.exe FUN_01028b4c); they are sprites of the sorted list with that y as key.
+    int32_t ax = -1, ay = -1;
+    if (has_anthill_bases_ && selected_base_team_id < 4 &&
+        anthill_bases_[static_cast<size_t>(selected_base_team_id)].x >= 0) {
+        ax = anthill_bases_[static_cast<size_t>(selected_base_team_id)].x * TILE_SIZE + 2 * TILE_SIZE;
+        ay = anthill_bases_[static_cast<size_t>(selected_base_team_id)].y * TILE_SIZE + 2 * TILE_SIZE;
+    } else {
+        for (const auto& a : grid.anthills()) {
+            if (static_cast<int32_t>(a.team_id) == selected_base_team_id) {
+                ax = static_cast<int32_t>(a.x) * TILE_SIZE + TILE_SIZE;
+                ay = static_cast<int32_t>(a.y) * TILE_SIZE + TILE_SIZE;
+                break;
+            }
+        }
+    }
+    if (ax < 0) return;
+    RenderItem item{};
+    item.sort_y = ay;
+    item.draw_func = [this, ax, ay](SDL_Renderer*, TextureCache&) {
+        const int32_t sx = PLAYFIELD_X + (ax - static_cast<int32_t>(camera_.x));
+        const int32_t sy = PLAYFIELD_Y + (ay - static_cast<int32_t>(camera_.y));
+        if (sx >= PLAYFIELD_X - 128 && sx <= PLAYFIELD_X + PLAYFIELD_W + 128 &&
+            sy >= PLAYFIELD_Y - 128 && sy <= PLAYFIELD_Y + PLAYFIELD_H + 128) {
+            this->draw_anthill_selection_brackets(sx, sy);
+        }
+    };
+    render_queue_.push_back(std::move(item));
+}
+
+void Renderer::draw_sorted_queue() {
+    // Stable sort: sprites with equal keys keep their insertion order (later added = drawn on top)
     std::stable_sort(render_queue_.begin(), render_queue_.end(), [](const RenderItem& a, const RenderItem& b) {
         return a.sort_y < b.sort_y;
     });
-
     for (auto& item : render_queue_) {
         item.draw_func(renderer_, *texture_cache_);
     }

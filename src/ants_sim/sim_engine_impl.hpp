@@ -7,6 +7,7 @@
 #include "ants_sim/pathfinding.hpp"
 #include "ants_sim/path_planner.hpp"
 #include "ants_sim/movement_tables.hpp"
+#include "ants_sim/effect_specs.hpp"
 #include <unordered_map>
 #include <memory>
 #include <algorithm>
@@ -18,6 +19,7 @@ namespace ants::sim {
 class SimulationEngineImpl {
 public:
     PRNG prng_{1u};
+    PRNG cosmetic_prng_{0x5EEDu}; // visual-only choices (death animation); never feeds gameplay
     Grid grid_;
     MatchStatsManager stats_;
     PhysicsEngine physics_;
@@ -44,6 +46,7 @@ public:
     };
     std::array<AnthillQueueState, MAX_PLAYERS> base_queues_{};
     std::vector<VisualEffect> active_effects_;
+    std::vector<ScoreBubble> score_bubbles_;
 
     // Fog of War State
     bool fog_of_war_enabled_{false};
@@ -106,12 +109,40 @@ public:
 
     mutable WorldState world_state_cache_;
     mutable bool       world_state_dirty_{true};
-    void spawn_death_effect(int32_t px, int32_t py) {
-        static const char* const death_anims[3] = { "death1", "death2", "death3" };
-        uint32_t pick = prng_.rand() % 3;
-        uint16_t max_frames = static_cast<uint16_t>(pick == 0 ? 11 : (pick == 1 ? 12 : 10));
-        active_effects_.push_back(VisualEffect{death_anims[pick], px, py, 0, max_frames});
+    // Effect sprite created at pixel (px, py); tile effects pass the tile top-left and y_key = row*32.
+    void spawn_effect(const char* name, int32_t px, int32_t py, uint32_t duration_ms, int32_t y_key, bool fog_gated) {
+        VisualEffect e;
+        e.anim_name = name;
+        e.px = px;
+        e.py = py;
+        e.duration_ms = duration_ms;
+        e.total_frames = static_cast<uint16_t>((duration_ms + 49u) / 50u);
+        e.y_key = y_key;
+        e.fog_gated = fog_gated;
+        active_effects_.push_back(std::move(e));
         world_state_dirty_ = true;
+    }
+
+    // Fire walls and bridges only get their 180 s lifetime task while more than 180 s of match time remain
+    // (Ants.exe 0x101e8e0 / 0x101ec84); later ones never burn out or collapse.
+    void arm_structure_lifetime(int32_t x, int32_t y) {
+        if (!grid_.in_bounds(x, y)) return;
+        if (match_time_remaining_ms_ <= effect_spec::kStructureLifetimeMs) {
+            grid_.get_cell_mut(static_cast<uint32_t>(x), static_cast<uint32_t>(y)).timer_ticks = 0;
+        }
+    }
+
+    // Tile effect (explosion, smoke, splash): anchored at the tile top-left, sorted by row*32.
+    void spawn_tile_effect(const char* name, int32_t col, int32_t row, uint32_t duration_ms) {
+        spawn_effect(name, col * 32, row * 32, duration_ms, row * 32, true);
+    }
+
+    // Death animation of an ant (Ants.exe FUN_0101ad02 case 0xc: rand() % 4 over death1..death4, played on the ant
+    // sprite at its position). The pick uses a cosmetic generator so the simulation's random stream is untouched.
+    void spawn_death_effect(int32_t px, int32_t py) {
+        static const char* const death_anims[4] = { "death1", "death2", "death3", "death4" };
+        const uint32_t pick = cosmetic_prng_.rand() % 4u;
+        spawn_effect(death_anims[pick], px, py, effect_spec::kDeathMs[pick], py, true);
     }
 
     SimulationEngineImpl() = default;

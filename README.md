@@ -42,7 +42,7 @@ Play the remake instantly in any modern web browser (Chrome, Firefox, Safari, Ed
     - **Swimmer**: Build and multi-stage demolish bridges; underwater immunity to melee damage; continuous bobbing/snorkeling animations.
     - **Thief**: Infiltrate enemy anthills, steal up to 50 score points, trigger alarm sirens (`underattack.wav`), and drop lunchboxes on defeat.
   - **Anthill Base Emergence & Dwelling**: Units dwelling at base heal; exiting units and newborn ants play the authentic 9-frame `*hatch` emergence sequence with sound 43 (`exithill.wav`).
-  - **Enemy Ant Inspection**: Clicking enemy units when no friendly unit is selected shows selection brackets (`*ears`) and their overhead health bar without allowing friendly command dispatch.
+  - **Enemy Ant Inspection**: Clicking enemy units when no friendly unit is selected shows selection brackets (`*ears`, coloured by health) without allowing friendly command dispatch.
   - **Match Audio Cues**: 1-minute alert (`onemin.wav`), 30-second warning (`thirtysec.wav`), 10-second countdown clicks (`countdown.wav`), defeat fanfare (`losers.wav`), and player drop-out (`playerout.wav`).
 
 - **Modern Audio & Presentation (`libants-app`)**:
@@ -50,7 +50,7 @@ Play the remake instantly in any modern web browser (Chrome, Firefox, Safari, Ed
   - Embedded TrueType font rendering (`Original-Ants/Arial.ttf`) for smooth ant names, news alerts, and chat messages.
   - 32-channel spatial sound mixer for positional sound effects (stereo panning and logarithmic distance attenuation).
   - Native AudioToolbox MIDI playback on macOS and HTML5 audio streaming on WebAssembly.
-  - Interactive HUD with minimap, selection cards, egg count, health bars, and recessed news status box (`wstatus.bmp`).
+  - Interactive HUD with minimap, selection cards, egg count, health-coloured selection ears, and recessed news status box (`wstatus.bmp`).
 
 - **Interactive Asset Catalog & Inspector**:
   - Standalone web inspector (`asset_catalog/index.html`) with responsive design, searching, filtering, and instant asset downloads (⬇ WAV audio, ⬇ PNG sprites, ⬇ composite canvas frames).
@@ -237,7 +237,6 @@ python3 -m http.server 8080 -d dist
 | **`Spacebar`** | Center camera on currently selected unit. |
 | **`H`** | Center camera on home anthill base. |
 | **`Esc`** | Open / close Quick Quit confirmation dialog; dismiss open modals. |
-| **`L`** or **`Ctrl + L`** | Toggle overhead unit health bars (ON / OFF). |
 | **`Ctrl + G`** | Toggle terrain tile grid display (ON / OFF). |
 | **`A`** or **`Ctrl + A`** | Select all friendly ants on the battlefield. |
 | **`N` / `P`** | Cycle selection to next / previous friendly ant. |

@@ -88,6 +88,15 @@ struct MatchResult {
 };
 
 /**
+ * @brief A change of a player's score (deposit, theft, hatch cost). The original shows every change as a floating
+ * "+N" / "-N" bubble at the player's home tile (Ants.exe FUN_01010cc9 -> FUN_01010560).
+ */
+struct ScoreChange {
+    uint8_t player{0};
+    int32_t delta{0};
+};
+
+/**
  * @brief Manager class encapsulating 4-player standings, alliances, and economy.
  */
 class MatchStatsManager {
@@ -97,6 +106,7 @@ public:
     }
 
     void reset() noexcept {
+        score_changes_.clear();
         for (size_t i = 0; i < MAX_PLAYERS; ++i) {
             stats_[i] = PlayerMatchStats{};
             eggs_[i] = 0;
@@ -165,6 +175,7 @@ public:
         if (player_id < MAX_PLAYERS) {
             stats_[player_id].score += points;
             if (stats_[player_id].score < 0) stats_[player_id].score = 0;
+            if (points != 0) score_changes_.push_back(ScoreChange{player_id, points});
         }
     }
 
@@ -172,7 +183,15 @@ public:
         if (player_id < MAX_PLAYERS) {
             stats_[player_id].score -= points;
             if (stats_[player_id].score < 0) stats_[player_id].score = 0;
+            if (points != 0) score_changes_.push_back(ScoreChange{player_id, -points});
         }
+    }
+
+    // Score changes since the last call (consumed by the simulation to spawn score bubbles)
+    std::vector<ScoreChange> take_score_changes() noexcept {
+        std::vector<ScoreChange> out;
+        out.swap(score_changes_);
+        return out;
     }
 
     // Alliance Relationships
@@ -267,6 +286,7 @@ public:
     }
 
 private:
+    std::vector<ScoreChange> score_changes_{};
     std::array<PlayerMatchStats, MAX_PLAYERS> stats_{};
     std::array<uint32_t, MAX_PLAYERS> eggs_{};
     std::array<uint8_t, MAX_PLAYERS> alliances_{};

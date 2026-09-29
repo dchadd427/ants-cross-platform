@@ -1297,7 +1297,7 @@ layout: 80..99 base ramp, 100..119 / 120..139 / 140..159 the other team ramps (e
 `FUN_0100ea6a` overwrites GLOBAL palette entries 1..31 with the local player's HUD table once per game (tables at
 `0x1002260/0x10022e0/0x1002360/0x10023e0`).
 
-**5.33.3 Map pipeline and depth sorting** *(implemented for plants; effects and droppers pending)*. Per frame `FUN_01009d49`
+**5.33.3 Map pipeline and depth sorting** *(implemented: plants, ants, effects, droppers, click marker, hill brackets, score bubbles share one stable y-sorted queue)*. Per frame `FUN_01009d49`
 draws layer 1 (`FUN_01008089` mode 1), layer 2 (mode 2), the sprite list (`FUN_010088e7`) and the fog pass
 (`FUN_01008607`). The sprite list is sorted by the sprite's y (`+0x3a`) with an incremental insertion sort
 (`FUN_010089bd`; ties keep insertion order). It holds ants (cell centre + frame displacements), object-list plants
@@ -1321,13 +1321,25 @@ bombs 129..132 (part offset (9,4)), fire wall 134 (`wallup04`), bridges 34..38, 
 (`FUN_01008bb7`) are hidden while their anchor is unexplored; a multi-cell object is drawn once any of its cells is
 explored; bridges, decor and hills are never hidden by fog logic (the black fog pass covers unexplored ground).
 
-**5.33.6 Effects (creators `FUN_01010008` x8 call sites, `FUN_010100e5` x3 invisible sound cues)**. Anchored at the tile
+**5.33.6 Effects (creators `FUN_01010008` x8 call sites, `FUN_010100e5` x3 invisible sound cues)** *(implemented in v0.0.26:
+bombex for every detonation, sputter/bsputter/dsplash, death1-4, dropper timing, ears, no health bar, single click marker,
+180 s arming; still open: battle cloud rules, flight/landing model and ant-owned clips)*. Anchored at the tile
 top-left (sort key row*32), one-shot, fog-gated by their anchor tile. `bombex` (680 ms) is spawned for every detonation
 (`FUN_01021a6f`: duds, lethal hits, chains); `sputter` (830 ms) on fire-wall expiry (`FUN_01024de7`, armed only if more than
 180 s of match time remain) and when a fire ant extinguishes; `bsputter` (1220 ms) and `dsplash` (460 ms) on bridge
 destruction (`FUN_0100f8bf`) and when a swimmer lands in water; food droppers `FD_*` (820 ms). Death (`rand()%4` of
 `death1..4`), `getpow`, drown, burn overlays and hatch are played by the ant sprite itself. There is no in-world health
 bar: HP is shown only by the selection "ears" (`FUN_01010373`: hp >= 9 `dogears`, hp <= 2 `redears`, else `yelears`).
+
+**5.33.7 Score bubbles** *(implemented)*. `FUN_01010cc9` (AddPoints) adds the delta to the player's score and, when it is
+not 0, calls `FUN_01010560(world, x = homeCol*32, y = homeRow*32, delta)` for EVERY player (home tile = the hill exit tile
+where hatched ants appear). A bubble sprite (vtable `0x1004d78`) is added to the sprite list together with a 20-step task
+(`0x10253b5`: counter 0x14; `AddTask(task, 0, 20 ms, 0)`): every 20 ms the sprite moves 5 px up for a gain or 5 px down for
+a loss (`0x1025479`), and the sprite ends after 400 ms. Its draw (`0x102219c`) calls `FUN_01010452`: |value| clamped to
+999999 in a 6-slot field of 9 px slots (divisors 100000..1), leading zeros skipped but advancing, the sign (`plus`
+sprite for value > 0, else `minus`) drawn in the slot of the first significant digit and every digit from there shifted one
+slot right. Glyphs are the `plus`, `minus` and `dig0..dig9` animations (parts carry their own offsets). Sounds: `scoreup`
+(87) for gains, `scoredn` (88) for losses.
 
 ---
 
