@@ -28,7 +28,7 @@ Players control colonies of ants in a top-down tile-based grid environment (typi
 - **Ant Classes & Power-Ups:**
   - **6 Ant Unit Types:**
   1. **Worker Ant (General Ant - `ag`):** Basic ant produced from incubation, attacks for 1 HP damage per hit. (Note: ALL 6 ant species can harvest and deliver food pieces; the Worker Ant is simply the default basic form with no specialized combat or terrain power-up).
-  2. **Thief Ant (`at`):** Fast scout. Infiltrates enemy anthills and steals 50 points of food at a time; attacks for 1 HP damage per hit.
+  2. **Thief Ant (`at`):** Scout (walks at the same pace as every other ant; see §5.32). Infiltrates enemy anthills and steals 50 points of food at a time; attacks for 1 HP damage per hit.
   3. **Fire Ant (`af`):** Immune to fire, creates fire walls with a magnifying glass (`wallup04`), extinguishes fires; attacks for 1 HP damage per hit.
   4. **Bomber Ant (`ab`):** Plants mines/bombs on the ground in team colors (bombs deal 2 HP explosive damage); direct melee strike attacks for 1 HP damage per hit. Can defuse enemy bombs.
   5. **Swimmer Ant (`as`):** Immune to drowning in water, swims, builds dirt bridges across water tiles with a shovel; attacks for 1 HP damage per hit.
@@ -1123,6 +1123,159 @@ Reverse engineering of `Original-Ants/ants.chd` Table 4 animations and binary ev
     - **Map Selection Setup Screen**: Arrow buttons (`Up`, `Down`), Map Box and Info Box click advance, Fog of War toggles (`On`, `Off`), Drop button, Player Ready slot toggles, `Start Game`, and `Quit / Leave Game`.
     - **Scorecard Modal**: Top-right `Leave Game` button.
 
+### 5.32 Movement Ground Truth (Capstone-Verified; Supersedes Earlier Movement Notes)
+
+Everything in this section was re-derived from the Capstone disassembly of `Original-Ants/Ants.exe` (image base
+`0x01000000`) and the `ants.chd` Table-4 frames, with `docs/legacy/Ants.exe.c` used only to find code, and then
+checked by an independent adversarial pass. The full reports (instruction addresses, pseudocode, verdicts) are in
+`docs/reverse_engineering/movement/`. The remake implements this section in `src/ants_sim/movement_system.cpp`,
+`src/ants_sim/path_planner.cpp` and the generated tables `src/ants_sim/movement_tables_data.inc`
+(`tools/extract_movement_tables.py`); `tools/movement_reference_model.py` reproduces every golden value of
+`tests/test_sim/test_movement_golden.cpp` straight from the original files.
+
+#### 1. Movement is animation-driven: there are no speed constants
+- Every animation frame in Table 4 carries `(dx, dy, duration_ms)`. An ant moves by the **current** frame's
+  `(dx, dy)` when that frame's duration expires (`FUN_0102b997`), on a `timeGetTime()` millisecond clock with a
+  catch-up loop (`FUN_0102b95f`). The walk *animation* therefore is the speed.
+- Playing a clip (`FUN_0102c0db` -> `FUN_0102c1fc`) sets the cursor to 0 and the frame deadline to "now" and runs an
+  immediate start step (no movement). A clip started from inside a step callback books its first frame's duration
+  twice (re-entrancy quirk), so the first walk step comes `2 x dur0` after the walk starts.
+- Frames with dx/dy are signed `int32` (`FUN_0102a977`); the remake's CHD parser used to read them unsigned and did
+  not negate dx in the mirrored copies (fixed).
+
+#### 2. Animation selection (`FUN_0101ad02` SetAction(action, dir, terrA, terrB, flag))
+- Directions: 0 N, 1 NE, 2 E, 3 SE, 4 S, 5 SW, 6 W, 7 NW (step direction table `0x1002b28` = `7,0,1,6,0,2,5,4,3`
+  indexed by `(drow+1)*3 + (dcol+1)`). Directions 5/6/7 are the 3/2/1 animations with every frame dx negated
+  (`FUN_01018b9f`). Types: 0 worker, 1 bomber, 2 fire, 3 thief, 4 combat, 5 swimmer.
+- Walk: `world[0x490 + d + 8*(terrain + 5*(type + 6*colour))]` (static table `0x1002fb8`), carrying `0x928`
+  (`0x1003738`); swimmer swim `0x1190` (`0x1004838`), dive `0x11b0` (`0x1004878`), climb `0x11d0` (`0x10048c0`);
+  idle `0x3d0` / carrying `0x868`; idle on water `astw301` (CHD 1006); can't-go (action `0xB`) `*cg301`.
+- Restart rule for the walk: restart if the action changed, or no terrain was passed, or the dive/climb flag was set,
+  or (flag ? direction changed : terrA != terrB). The animation terrain is `terrA` when `flag` is set (arrival at a
+  tile centre), otherwise `terrB` (crossing into a new tile). A swimmer whose next tile changes water-ness plays the
+  dive or climb clip (flag `+0x88`), which moves it one full tile. Non-swimmers on water use the mud walk.
+
+#### 3. Terrain classes and paces (tile-info pairs `0x1001360`, default class 0)
+
+| Class | Name | Orthogonal step | Diagonal step | Frame | Per tile (orth / diag) | Path weight |
+|---|---|---|---|---|---|---|
+| 0 | grass | 4 px | (3,3) | 50 ms | 400 / 500 ms | 20 |
+| 1 | sand | 4 px | (3,3) | 40 ms | 320 / 400 ms | 16 |
+| 2 | water | swim 3 px | swim (2,2) | 40 ms | 400 / 600 ms (swimmer) | 8000 (swimmer 21) |
+| 3 | mud | 2 px | (1,1),(2,2) alternating | 60 ms | 900 / 1200 ms | 48 |
+| 4 | dirt | 4 px | (3,3) | 60 ms | 480 / 600 ms | 24 |
+
+- A layer-2 bridge piece `0x22..0x25` (any build stage) makes its tile class 3 (`FUN_01008af7` / `FUN_01008b90`):
+  bridges walk exactly like mud.
+- **All six ant types walk at the same pace.** The thief is not faster (it only starts sooner because its idle frame
+  is shorter); combat, bomber and fire ants likewise differ only in the length of their first idle frame.
+- On the shipped maps the class table agrees with the tile names' first letter (w/s/d/m, else grass); the remake now
+  takes the classes from the table.
+
+#### 4. Walking (`FUN_0101b8cb`, called from `FUN_0101ee84` for actions 0/1/3)
+- New-tile detection uses `idiv` truncation of `pos + frame delta`; entering a tile that is not the current waypoint
+  nudges both axes by +-1. Crossing into a new tile goes through `TryEnterTile` (section 7). Within 2 px of the new
+  tile's centre (16-bit unsigned compare) the step lands exactly on the centre and runs ARRIVE.
+- ARRIVE: a bomb on the ant's tile turns the order into a bomb order and ends the path without the snap (the bomb
+  goes off in PathComplete case `0xA`); otherwise the next waypoint is started with SetAction(1, dir, T(cur),
+  T(next), flag=1), so a straight line keeps its animation cycle and a turn restarts it.
+- Path end: `PathComplete` (`FUN_0101ccaf`) -> `StopSync` (`FUN_010214d9`, message `0x13` handled synchronously)
+  -> `StopAt` (`FUN_01021664`): snap to the tile centre, idle animation, order 0. Orders with a handler (power-up,
+  harvest, home, attack, abilities, raid) dispatch their message instead.
+- Tile-boundary asymmetry: an orthogonal 4 px walk crosses into the next tile on the 4th step toward +x/+y and on the
+  5th toward -x/-y; diagonal 3 px walks cross on the 6th step.
+
+#### 5. Orders
+- Accept predicate `FUN_0101ff5a`: not frozen, `+0x84 == 0`, action 0 (idle), 1 (walk) or 3 (stunned). Ants that
+  attack, harvest, enter the hill, play "can't go", flinch, fly, etc. ignore player orders.
+- GoTo `FUN_0101fc50`: own hill -> its entrance, enemy hill -> the raid tile for a thief, any other ant on an enemy
+  hill stops (StopSync, no path). Then: idle, **snap to the centre of the tile under the ant**, cancel ANTPAUSE,
+  clear path and order, classify (`FUN_01020655`), resolve the goal (`FUN_010202e7`), queue the path request.
+  The snap is the authentic "mud humping" exploit: re-ordering just after an ant crossed into a new tile jumps it
+  up to 16 px forward.
+- Classification: hill -> home (2) / raid (0xB); ant on the tile -> move (1), or attack (3) for a player click on
+  an enemy; food -> harvest (5); power-up (player only) -> 4; bomb -> 0xA; else 1.
+- Goal resolution `FUN_010202e7`: the clicked tile if enterable (flags: final tile, team-mate claims, and for
+  player orders own bombs / power-ups / queue count); the hill entrance falls back to entrance + (-2, +2); otherwise
+  a fixed ring scan d = 1..4: west column top to bottom, east column, north row, south row - first enterable tile.
+  Water clicks therefore send ants to the first shore tile of that scan, never "can't go".
+- Group order `FUN_010287b5`: accepted ants not already on this very order, sorted by `16 x Chebyshev` distance with
+  a strict-`>` exchange sort (not stable: `[A:32, B:32, C:16]` -> `[C, B, A]`), each given the player GoTo to the
+  clicked tile; team-mate claims make the later ants take ring-scan tiles. Only the first ant acknowledges, and only
+  if its GoTo queued a path. The original's stack array holds 16 entries (the remake treats larger groups as
+  unbounded; 17+ selected ants are undefined behaviour in the original).
+
+#### 6. Path manager (`PATHMGR`, one task per player machine)
+- Runs every 50 ms; each run gives one queued request one slice of at most 1000 expansions; four pooled search grids;
+  a new request of the same ant replaces its queued one; one path is delivered per run.
+- Exact A*: 32-bit grid cells (g 14 bits, h 13 bits, parent direction, opened/closed bits), neighbour order N..NW,
+  heuristic `16 x Chebyshev`, 0-rooted binary heap reading f live with **no decrease-key** (stale order, occasional
+  non-optimal paths and even false "no path"), failure when a popped node has f >= 8000, path = start .. goal.
+- Step cost `FUN_01020951`: `(C(a)+C(b)) >> 1` orthogonally, `trunc((double)(C(a)+C(b)) * 1.4) >> 1` diagonally;
+  8000 for enemy or waiting / idle-without-order team-mates, other teams' hill tiles and queue tiles, solid objects
+  (except the order's own target), own and allied bombs. Walking team-mates are passable.
+- Delivery (`FUN_0100cba4` + message 6): count 0 -> stop, can't-go animation and "Can't go there." (string 0x3A);
+  otherwise dropped unless the ant is idle, not waiting and still on `path[0]`; the idle animation restarts and the
+  first pixel move follows `idle_dur0 + 2 x walk_dur0` later (250 ms for a grass worker).
+
+#### 7. Occupancy and blocking
+- Occupancy grid `world+0x553c`: one entry per tile (team, index, multi bit); an ant is registered on the tile that
+  holds its pixel position and switches at the 32-px boundary (`FUN_0100f17f`, `FUN_0100f2cd`).
+- CanEnter `FUN_0101f780` rules: R1 terrain (water only for swimmers), R2 occupant (team-mates and enemies block
+  unless it is the attack target), R3 hill cells, R4 solid objects (exceptions: the power-up of a power-up order, fire
+  walls for fire ants, the ordered food), R5 queue tiles of other teams and the "exactly two" rule, R6 team-mate
+  claims, R7 own and allied bombs.
+- Solid bit: bit 0 of the layer-1 map word = the LVL cell flag bit 0 stored verbatim by the level reader
+  (`FUN_010069d8`), plus every Block-4 entry (`FUN_01006f0e`) and all of row 0; the hill set-up clears the entrance
+  and the tile above it; placing / removing objects sets / clears their footprint. Example: `TINY.LVL` (18, 17)
+  (part of the `broken2` footprint) is solid, contrary to earlier notes.
+- TryEnterTile `FUN_0101c4f2`: contact with the attack target starts the attack; a blocked tile held by a **moving**
+  ant makes the walker wait 300 ms (ANTPAUSE, `FUN_0101cc1e`) short of the boundary, then retry; a blocked final
+  tile stops the ant where it is (no bump); otherwise the ant re-plans to its destination with GoTo and a "bump"
+  effect (CHD 0xDC, sound 47) appears on the blocked tile. **Walking ants never bounce off each other.**
+
+#### 8. Golden timings (path delivered at t = 0, ant idle facing south at tile (5, 5))
+
+| Case | First move | Arrival | Steps | Final pixel |
+|---|---|---|---|---|
+| Worker, grass, 1 tile E | 250 | 600 | 8 | (208,176) |
+| Worker, grass, 1 tile SE | 250 | 700 | 10 | (208,208) |
+| Worker, grass, 3 tiles E | 250 | 1400 | 24 | (272,176) |
+| Worker, sand, 3 tiles E | 230 | 1150 | 24 | (272,176) |
+| Worker, dirt, 3 tiles E | 270 | 1650 | 24 | (272,176) |
+| Worker, mud, 1 tile E | 270 | 1110 | 15 | (208,176) |
+| Thief / bomber / fire, grass, 3 tiles E | 200 | 1350 | 24 | (272,176) |
+| Combat, grass, 3 tiles E | 225 | 1375 | 24 | (272,176) |
+| Swimmer, water, 1 tile E | 120 | 480 | 10 | (208,176) |
+| Swimmer, grass to water (dive), 2 tiles E | 510 | 1690 | 14 | (240,176) |
+| Swimmer, water to grass (climb), 2 tiles E | 160 | 970 | 14 | (240,176) |
+
+#### 9. Remake mapping and remaining work
+- The original decides only for its own team's ants on each machine ("IsLocal") and broadcasts the results; the
+  remake has one authoritative simulation, so every ant follows the owner code paths, with one path manager per team.
+- Animation steps of all ants inside a 50 ms tick are processed in exact millisecond order (ties by ant id). Sprites
+  are drawn exactly at the frame the simulation shows (no interpolation).
+- Still remake systems (follow-up work, with verified findings in the reports): hit / flight / bounce displacement
+  (actions 0xA/0xE/0x13 are animation-driven too, and the original resumes the old path after landing), combat-ant
+  auto-engage (`FUN_0101c0d5` / `FUN_0101dbec`), the hill queue task `ANTHILLQ` with the exact queue tiles, and the
+  remaining PathComplete handlers (power-up pickup, harvest, abilities, raid). The remake's power-up dwell, harvest
+  trigger, hill queue and guard AI issue their moves through the original GoTo and path manager.
+
+#### 10. Superseded statements elsewhere in this document
+- "Thief Ant: fast scout", thief 1.4x speed, "slate 1.40x / gravel 1.20x / mud 0.65x" surface multipliers and a
+  fixed "4 px per tick" walk: wrong - see sections 1 and 3.
+- "Walk cycle Table 4 Anim 123-128": the walk animations are the per type / terrain / direction entries of the
+  static tables above; their frame durations are 40-60 ms, not one simulation tick.
+- "Mutual friendly bouncing" of walkers (citing `Ants.exe.c` 20280-20309): that code is the blast routine
+  `FUN_0101c34c`; walkers wait and re-plan (section 7).
+- "Closest passable water shoreline fallback" and "already adjacent -> stop": the goal is resolved by the fixed
+  ring scan (section 5).
+- "Can't go when ordered into water": only an unreachable destination (the path manager finds no path) or a failed
+  special-order check shows the can't-go animation.
+- "(18, 17) on TINY.LVL is walkable flat debris": it carries the solid bit (section 7).
+- Punch knock-back lands `range` tiles away (1, or 4 for combat ants) in the first free direction of d, d+1, d-1,
+  d+2, d-2, testing only the landing tile (`FUN_0101d8ed`); the flight passes over obstacles.
+
 ---
 
 ## 6. Target Multi-Platform Architecture
@@ -1240,7 +1393,7 @@ To deliver authentic 1:1 gameplay inside standard web browsers with zero install
 - **Layer 2 Floor Debris Passability (`TINY.LVL` Tile 18, 17)**:
   - In `Ants.exe` (`0x1020951`, `0x1008af7`), terrain passability queries tile descriptors in table `0x10049c8`.
   - Layer 2 tiles consisting of flat floor debris such as `broken1`, `broken2` (`cerbol3.bmp`, `cerbol4.bmp`), and `broken3` (`spoon.bmp`) are non-obstacle ground decor (`is_obstacle_overlay = false`).
-  - This preserves walkability on pathways such as slate tile `(18, 17)` on `TINY.LVL`.
+  - This preserves walkability on pathways such as slate tile `(18, 17)` on `TINY.LVL`. *(Superseded: in the original that tile carries the layer-1 solid bit and blocks ants; see §5.32.7.)*
 
 #### 11. Authentic Collision Scuffle Model Concealment, Chaotic Domino Cascade & Hazard Landings (`Ants.exe` `0x10215cb`, `0x1020f60`, `0x1020de7`)
 - **Collision Scuffle Anchor Ant Visibility & Displaced Unit Recoil (`0x102151a`, `0x10215cb`, State 3)**:
@@ -1414,7 +1567,7 @@ To deliver authentic 1:1 gameplay inside standard web browsers with zero install
   - When an ant navigates towards a destination that has become occupied by another ant, `0x101cae3` pushes `0xdc` (220 = Animation `bump`), calls `0x10100e5`, triggers `SoundID::Bump` (Sound 47, `bump.wav`), and clears waypoints.
   - The arriving ant stops cleanly on the adjacent available tile without displacing the occupant or becoming stuck in infinite pathing loops.
 - **Mud Animation Cancel / "Mud Humping" Locomotion**:
-  - Traversing mud naturally runs a struggle animation cycle at ~0.65× speed.
+  - Traversing mud naturally runs a struggle animation cycle at ~0.65× speed. *(Superseded: mud walks 2 px per 60 ms, i.e. 0.42x grass, and "humping" is the GoTo snap to the tile centre; see §5.32.)*
   - Rapid manual single-tile clicks across mud cancel the struggle animation cycle (`anim_tick = 0, anim_subitem = 0`) and grant an immediate 3.0 px forward micro-propulsion step (`3 << 16`) along the heading towards the destination, allowing experienced players to cross mud significantly faster.
 - **Power-Up Standing Immunity**:
   - When an ant stands on top of an uncollected or dropped power-up, it is 100% immune to incoming melee attacks (all melee attack orders against it are rejected, and `take_damage` with melee sources deals 0 damage).
@@ -1455,7 +1608,7 @@ To deliver authentic 1:1 gameplay inside standard web browsers with zero install
     - Frame 0: Sprite ID 513 (`3lb0001.bmp`), dimensions 11×16 pixels.
     - Render displacement offsets: `dx: 9, dy: 8`.
   - Previously, the HUD 34×40 icon (`lunchicon.bmp`) was mistakenly rendered on the map ground when an ant carrying food died. Rendering Sprite 513 at `sx + 9, sy + 8` restores authentic 1:1 visual fidelity with the 1998 executable.
-- **Walk Cycle Bytecode & Stride Synchronization (Table 4 Anim 123–128)**:
+- **Walk Cycle Bytecode & Stride Synchronization (Table 4 Anim 123–128)** *(superseded by §5.32: walk animations are the per type / terrain / direction table entries with 40–60 ms frames)*:
   - Table 4 walk animation entries for all ant species (`agwg301`, `abwg301`, `acwg301`, `afwg301`, `aswg301`, `atwg301`):
     - 12 subitems per walk cycle.
     - Each subitem specifies `duration_ms: 50` (exactly 1 simulation tick at 20Hz) and `dy: 4` (4 pixels displacement per subitem).

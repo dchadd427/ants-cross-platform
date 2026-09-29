@@ -125,7 +125,7 @@ void CombatAIController::update_intercepting(SimulationEngine& engine,
         guard_state_ = CombatGuardState::Returning;
         owner_.state = UnitState::ReturningToPost;
         if (owner_.pos != owner_.guard_anchor) {
-            engine.issue_move_order(owner_.id, owner_.guard_anchor);
+            engine.issue_internal_move_order(owner_.id, owner_.guard_anchor);
             owner_.state = UnitState::ReturningToPost;
         }
         return;
@@ -144,7 +144,7 @@ void CombatAIController::update_intercepting(SimulationEngine& engine,
         guard_state_ = CombatGuardState::Returning;
         owner_.state = UnitState::ReturningToPost;
         if (owner_.pos != owner_.guard_anchor) {
-            engine.issue_move_order(owner_.id, owner_.guard_anchor);
+            engine.issue_internal_move_order(owner_.id, owner_.guard_anchor);
             owner_.state = UnitState::ReturningToPost;
         }
         return;
@@ -156,7 +156,7 @@ void CombatAIController::update_intercepting(SimulationEngine& engine,
         guard_state_ = CombatGuardState::Returning;
         owner_.state = UnitState::ReturningToPost;
         if (owner_.pos != owner_.guard_anchor) {
-            engine.issue_move_order(owner_.id, owner_.guard_anchor);
+            engine.issue_internal_move_order(owner_.id, owner_.guard_anchor);
             owner_.state = UnitState::ReturningToPost;
         }
         return;
@@ -202,8 +202,10 @@ void CombatAIController::update_intercepting(SimulationEngine& engine,
         return;
     }
 
-    // dist > 1: pathfind to target adjacent neighbor
-    if ((owner_.state != UnitState::Walking && owner_.state != UnitState::Intercepting) || owner_.waypoints.empty() ||
+    // dist > 1: pathfind to target adjacent neighbor. A queued path request counts as a route: paths are
+    // delivered asynchronously by the path manager (PATHMGR), one per 50 ms.
+    const bool has_route = !owner_.waypoints.empty() || engine.has_pending_path(owner_.id);
+    if ((owner_.state != UnitState::Walking && owner_.state != UnitState::Intercepting) || !has_route ||
         owner_.final_dest.chebyshev_dist(target->pos) > 1) {
         TileCoord best_neighbor = target->pos;
         int32_t best_dist = 999999;
@@ -221,7 +223,7 @@ void CombatAIController::update_intercepting(SimulationEngine& engine,
             }
         }
         if (best_dist < 999999 && best_neighbor != target->pos) {
-            engine.issue_move_order(owner_.id, best_neighbor);
+            engine.issue_internal_move_order(owner_.id, best_neighbor);
             owner_.state = UnitState::Intercepting;
         }
     }
@@ -249,9 +251,10 @@ void CombatAIController::update_returning(SimulationEngine& engine,
         return;
     }
 
-    if ((owner_.state != UnitState::Walking && owner_.state != UnitState::ReturningToPost) || owner_.waypoints.empty()) {
+    const bool has_route = !owner_.waypoints.empty() || engine.has_pending_path(owner_.id);
+    if ((owner_.state != UnitState::Walking && owner_.state != UnitState::ReturningToPost) || !has_route) {
         if (owner_.pos != owner_.guard_anchor) {
-            engine.issue_move_order(owner_.id, owner_.guard_anchor);
+            engine.issue_internal_move_order(owner_.id, owner_.guard_anchor);
             owner_.state = UnitState::ReturningToPost;
         } else {
             guard_state_ = CombatGuardState::Idle;

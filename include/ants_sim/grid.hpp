@@ -8,6 +8,7 @@
 #include <cstdlib>
 
 #include "ants_assets/lvl_parser.hpp"
+#include "ants_sim/movement_tables.hpp"
 
 namespace ants::sim {
 
@@ -105,23 +106,17 @@ struct WorldCoord {
 };
 
 // Surface Types for terrain-dependent locomotion speeds
+// Surface of a tile = its original terrain class (Ants.exe tile-info table, see movement_tables.hpp).
+// Walking speed is not a per-surface multiplier: each class has its own walk animations whose frame
+// durations and displacements set the pace (grass 4 px / 50 ms, sand 4 px / 40 ms, dirt 4 px / 60 ms,
+// mud 2 px / 60 ms).
 enum class SurfaceType : uint8_t {
-    Grass  = 0, // Normal turf: 1.00x baseline
-    Mud    = 1, // Wet mud: ~0.65x (slower than gravel)
-    Gravel = 2, // Dirt / Gravel path: ~1.20x (faster than mud)
-    Slate  = 3, // Slate / flagstone: ~1.40x (faster than gravel)
-    Water  = 4  // Water surface
+    Grass  = 0, // terrain class 0 (grass)
+    Mud    = 1, // terrain class 3 (mud)
+    Gravel = 2, // terrain class 4 (dirt)
+    Slate  = 3, // terrain class 1 (sand)
+    Water  = 4  // terrain class 2 (water)
 };
-
-inline constexpr int32_t get_surface_speed_multiplier_fx(SurfaceType surf) noexcept {
-    switch (surf) {
-        case SurfaceType::Slate:  return 91750; // 1.40x in 16.16
-        case SurfaceType::Gravel: return 78643; // 1.20x in 16.16
-        case SurfaceType::Mud:    return 42598; // 0.65x in 16.16
-        case SurfaceType::Grass:
-        default:                  return 65536; // 1.00x in 16.16
-    }
-}
 
 /**
  * @brief Single grid cell representation combining Layer 1 terrain and Layer 2 interactive objects.
@@ -148,6 +143,10 @@ struct TileCell {
     uint8_t  base_owner_team{255};           // Team ID (0..3) of anthill owner (255 = none)
 
     int32_t  occupant_ant_id{-1};            // Ant occupying this cell (-1 = none)
+
+    // Original-engine layer-1 "solid object" bit (Ants.exe map word0 bit0): object footprints from the LVL
+    // file, Block-4 entries and row 0, minus removable objects, which are tracked dynamically.
+    bool     static_solid{false};
 
     constexpr bool is_obstacle() const noexcept {
         return terrain_type == TERRAIN_OBSTACLE || is_obstacle_overlay;
@@ -252,8 +251,10 @@ public:
         for (auto& cell : cells_) {
             cell.flags = FLAG_CAN_PLACE_BOMB | FLAG_CAN_PLACE_FIRE;
             cell.terrain_type = TERRAIN_WALKABLE;
-            cell.surface_type = SurfaceType::Gravel;
+            cell.surface_type = SurfaceType::Grass; // unlisted tiles are terrain class 0 (grass) in the original
+            cell.static_solid = false;
         }
+        exact_solid_bits_ = false;
         anthills_.clear();
         food_schedules_.clear();
         return true;
@@ -276,6 +277,39 @@ public:
 
     bool in_bounds(const TileCoord& c) const noexcept {
         return in_bounds(c.x, c.y);
+    }
+
+    /**
+     * @brief Terrain class used for locomotion and path costs (Ants.exe FUN_01008af7): 0 grass, 1 sand,
+     * 2 water, 3 mud, 4 dirt. A layer-2 bridge piece (0x22..0x25, any build stage) makes the tile mud.
+     *
+     * The level loader stores each layer-1 tile's class in the surface fields (exactly the original
+     * tile-info table; see movement::terrain_class_of_tile), so terrain edited at run time by tests or
+     * tools through those fields is honoured as well.
+     */
+    uint8_t terrain_class_at(TileCoord t) const noexcept {
+        if (!in_bounds(t)) return movement::kTerrainGrass;
+        const auto& c = get_cell(t);
+        if (movement::is_bridge_tile(c.interactive_id)) return movement::kTerrainMud;
+        if (c.terrain_type == TERRAIN_WATER || c.surface_type == SurfaceType::Water) return movement::kTerrainWater;
+        if (c.is_mud || c.surface_type == SurfaceType::Mud) return movement::kTerrainMud;
+        if (c.surface_type == SurfaceType::Slate) return movement::kTerrainSand;
+        if (c.surface_type == SurfaceType::Gravel) return movement::kTerrainDirt;
+        return movement::kTerrainGrass;
+    }
+
+    /**
+     * @brief Original layer-1 "solid object" bit (FUN_0100cf0f): object footprints (LVL cell flag bit0),
+     * Block-4 entries, row 0 and the removable objects (food, power-ups, lunchboxes, fire walls).
+     * Walls added at run time as TERRAIN_OBSTACLE count too; in worlds without LVL solid bits (test worlds)
+     * the remake's obstacle overlays stand in for them. Out-of-bounds tiles count as solid.
+     */
+    bool is_solid_object(TileCoord t) const noexcept {
+        if (!in_bounds(t)) return true;
+        const auto& c = get_cell(t);
+        if (c.static_solid || c.has_fire() || c.has_lunchbox() || c.has_powerup() || c.has_food()) return true;
+        if (c.is_base_hole) return false;
+        return c.terrain_type == TERRAIN_OBSTACLE || (!exact_solid_bits_ && c.is_obstacle_overlay);
     }
 
     bool is_solid_obstacle(int32_t x, int32_t y) const noexcept {
@@ -321,6 +355,7 @@ public:
     }
 
     void configure_anthill_cells(TileCoord pos, uint8_t team_id = 255);
+    void clear_anthill_entrance_solid(TileCoord base) noexcept;
     bool is_anthill_reserved_spot(TileCoord pos) const noexcept;
     void set_anthill(uint8_t team_id, TileCoord pos);
     void place_firewall(uint32_t x, uint32_t y, uint8_t owner_player) noexcept;
@@ -398,7 +433,30 @@ public:
 
     void set_terrain(int32_t x, int32_t y, uint8_t terrain_type) noexcept {
         if (!in_bounds(x, y)) return;
-        get_cell_mut(static_cast<uint32_t>(x), static_cast<uint32_t>(y)).terrain_type = terrain_type;
+        auto& cell = get_cell_mut(static_cast<uint32_t>(x), static_cast<uint32_t>(y));
+        cell.terrain_type = terrain_type;
+        // Keep the original-engine data consistent with the test/editor helper: water is terrain class 2,
+        // a wall is a solid layer-1 object and walkable ground clears the solid bit.
+        if (terrain_type == TERRAIN_WATER) {
+            cell.surface_type = SurfaceType::Water;
+            cell.is_mud = false;
+            cell.static_solid = false;
+        } else {
+            if (cell.surface_type == SurfaceType::Water) cell.surface_type = SurfaceType::Grass;
+            cell.static_solid = (terrain_type == TERRAIN_OBSTACLE);
+        }
+    }
+
+    /// Sets a tile's original terrain class (0 grass, 1 sand, 2 water, 3 mud, 4 dirt) through the remake fields.
+    void set_terrain_class(int32_t x, int32_t y, uint8_t terrain_class) noexcept {
+        if (!in_bounds(x, y)) return;
+        auto& cell = get_cell_mut(static_cast<uint32_t>(x), static_cast<uint32_t>(y));
+        cell.terrain_type = (terrain_class == movement::kTerrainWater) ? TERRAIN_WATER : TERRAIN_WALKABLE;
+        cell.surface_type = (terrain_class == movement::kTerrainMud) ? SurfaceType::Mud
+                          : (terrain_class == movement::kTerrainSand) ? SurfaceType::Slate
+                          : (terrain_class == movement::kTerrainDirt) ? SurfaceType::Gravel
+                          : (terrain_class == movement::kTerrainWater) ? SurfaceType::Water : SurfaceType::Grass;
+        cell.is_mud = (terrain_class == movement::kTerrainMud);
     }
 
     void set_tile_flags(int32_t x, int32_t y, uint16_t flags) noexcept {
@@ -421,6 +479,7 @@ public:
 
 private:
     uint8_t determine_terrain_type(uint16_t tile_index, uint16_t flags) const noexcept;
+    bool exact_solid_bits_{false};   // true once solid bits come from an LVL file (init_from_level)
 
     uint32_t width_{0};
     uint32_t height_{0};

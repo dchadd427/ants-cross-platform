@@ -54,3 +54,38 @@ target_compile_definitions(test_challenger_m2_1 PRIVATE
 )
 
 add_test(NAME test_challenger_m2_1 COMMAND test_challenger_m2_1)
+
+add_executable(test_path_planner
+    test_path_planner.cpp
+)
+
+target_link_libraries(test_path_planner PRIVATE
+    ants_sim
+    ants_assets
+)
+
+target_include_directories(test_path_planner PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../include
+)
+
+add_test(NAME test_path_planner COMMAND test_path_planner)
+
+# Frame-exact original movement: golden timings from the Ants.exe reference model, blocking, orders
+add_executable(test_movement_golden
+    test_movement_golden.cpp
+)
+
+target_link_libraries(test_movement_golden PRIVATE
+    ants_sim
+    ants_assets
+)
+
+target_include_directories(test_movement_golden PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../include
+)
+
+target_compile_definitions(test_movement_golden PRIVATE
+    ORIGINAL_ASSETS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../../Original-Ants"
+)
+
+add_test(NAME test_movement_golden COMMAND test_movement_golden)

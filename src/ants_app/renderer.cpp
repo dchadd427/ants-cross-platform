@@ -1613,8 +1613,61 @@ void Renderer::draw_single_ant(const ants::sim::AntSnapshot& ant, bool is_select
         }
     }
 
+    // Draws one animation frame's sprites at the ant (lunchbox behind the ant body, team bomb sprites).
+    auto draw_frame_sprites = [&](const ants::assets::AnimationSubItem& sub, bool mirrored) {
+        auto frames = sub.frames;
+        if (ant.is_holding && frames.size() > 1) {
+            // Ensure lunchbox is rendered in the back (first), ant body in front (second)
+            std::stable_sort(frames.begin(), frames.end(), [&](const auto& a, const auto& b) {
+                const auto& sp_a = archive_->get_sprite(a.sprite_index);
+                const auto& sp_b = archive_->get_sprite(b.sprite_index);
+                bool is_lb_a = (sp_a.name.find("lb") != std::string::npos);
+                bool is_lb_b = (sp_b.name.find("lb") != std::string::npos);
+                if (is_lb_a != is_lb_b) {
+                    return is_lb_a;
+                }
+                return false;
+            });
+        }
+        for (const auto& f : frames) {
+            uint32_t sp_idx = f.sprite_index;
+            if (ant.player_id < 4 && texture_cache_->is_base_bomb_sprite(sp_idx)) {
+                sp_idx = texture_cache_->get_team_bomb_sprite_index(static_cast<uint8_t>(ant.player_id));
+            }
+            SDL_Texture* tex = texture_cache_->get_sprite_texture(sp_idx, mirrored, static_cast<uint8_t>(ant.player_id));
+            if (!tex) continue;
+            const auto& sp = mirrored ? archive_->get_mirrored_sprite(sp_idx) : archive_->get_sprite(sp_idx);
+            SDL_Rect dst = { sx + f.dx, render_y + f.dy, static_cast<int>(sp.width), static_cast<int>(sp.height) };
+            SDL_RenderCopy(renderer_, tex, nullptr, &dst);
+        }
+    };
+
+    // Original locomotion animation (idle, walk on each terrain, swim, dive, climb, can't-go): the simulation
+    // plays the exact ants.chd clip and frame, so draw that frame. There is no interpolation: as in the 1998
+    // game, a sprite moves only when its animation frame ends. Mirrored clips (SW, W, NW) use the archive's
+    // mirrored copies of the stored SE, E and NE animations.
+    const ants::assets::AnimationSequence* loco_seq = nullptr;
+    if (ant.loco_clip != 0x7FFE && ant.loco_clip < archive_->animation_count()) {
+        const auto& stored = archive_->get_animation(ant.loco_clip);
+        loco_seq = &stored;
+        if (ant.loco_mirrored) {
+            loco_seq = nullptr;
+            if (stored.name.size() > 3) {
+                const char digit = stored.name[stored.name.size() - 3];
+                const int mirrored_dir = (digit == '2') ? 5 : (digit == '9') ? 6 : (digit == '8') ? 7 : -1;
+                if (mirrored_dir >= 0) {
+                    loco_seq = archive_->get_directional_animation(stored.name.substr(0, stored.name.size() - 3),
+                                                                   static_cast<ants::assets::Direction>(mirrored_dir));
+                }
+            }
+        }
+    }
+
     if (ant.is_transforming) {
         // Authentic fidelity: ant body disappears during transformation while getpow animation plays
+    } else if (!is_infiltrating && loco_seq && !loco_seq->subitems.empty()) {
+        const size_t sub_idx = std::min<size_t>(ant.loco_frame, loco_seq->subitems.size() - 1);
+        draw_frame_sprites(loco_seq->subitems[sub_idx], ant.loco_mirrored);
     } else if (is_infiltrating) {
         const auto* infil_seq = archive_->find_animation("atcr501");
         if (infil_seq && !infil_seq->subitems.empty()) {
@@ -1735,37 +1788,7 @@ void Renderer::draw_single_ant(const ants::sim::AntSnapshot& ant, bool is_select
             } else {
                 sub_idx = ant.anim_frame % seq->subitems.size();
             }
-            const auto& sub = seq->subitems[sub_idx];
-
-            auto frames = sub.frames;
-            if (ant.is_holding && frames.size() > 1) {
-                // Ensure lunchbox is rendered in the back (first), ant body in front (second)
-                std::stable_sort(frames.begin(), frames.end(), [&](const auto& a, const auto& b) {
-                    const auto& sp_a = archive_->get_sprite(a.sprite_index);
-                    const auto& sp_b = archive_->get_sprite(b.sprite_index);
-                    bool is_lb_a = (sp_a.name.find("lb") != std::string::npos);
-                    bool is_lb_b = (sp_b.name.find("lb") != std::string::npos);
-                    if (is_lb_a != is_lb_b) {
-                        return is_lb_a;
-                    }
-                    return false;
-                });
-            }
-
-            for (const auto& f : frames) {
-                uint32_t sp_idx = f.sprite_index;
-                if (ant.player_id < 4 && texture_cache_->is_base_bomb_sprite(sp_idx)) {
-                    sp_idx = texture_cache_->get_team_bomb_sprite_index(static_cast<uint8_t>(ant.player_id));
-                }
-                bool mirrored = ants::assets::get_direction_mapping(dir).mirrored;
-                SDL_Texture* tex = texture_cache_->get_sprite_texture(sp_idx, mirrored, static_cast<uint8_t>(ant.player_id));
-                if (!tex) continue;
-
-                const auto& sp = mirrored ? archive_->get_mirrored_sprite(sp_idx)
-                                          : archive_->get_sprite(sp_idx);
-                SDL_Rect dst = { sx + f.dx, render_y + f.dy, static_cast<int>(sp.width), static_cast<int>(sp.height) };
-                SDL_RenderCopy(renderer_, tex, nullptr, &dst);
-            }
+            draw_frame_sprites(seq->subitems[sub_idx], ants::assets::get_direction_mapping(dir).mirrored);
         } else {
             // Fallback: draw directional stand sprite
             std::string fallback_name = prefix + "st301.bmp";

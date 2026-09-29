@@ -59,6 +59,19 @@ inline void run_test_case(const std::string& name, const std::function<void()>& 
 #define ASSERT_GT(a, b) ASSERT_TRUE((a) > (b))
 #define ASSERT_GE(a, b) ASSERT_TRUE((a) >= (b))
 
+using namespace ants::sim;
+
+// Original 1998 movement (Ants.exe): orders queue an asynchronous path request (PATHMGR, one path per
+// 50 ms tick per team) and walking starts after the path arrives. Ticks until pred() holds (checked
+// before every tick); returns whether it held within max_ticks ticks.
+static bool tick_until(SimulationEngine& sim, const std::function<bool()>& pred, int max_ticks) {
+    for (int t = 0; t < max_ticks; ++t) {
+        if (pred()) return true;
+        sim.tick();
+    }
+    return pred();
+}
+
 // ============================================================================
 // SUITE 1: Simulation Clock, Monotonic Tick & Integer Math Purity
 // ============================================================================
@@ -881,7 +894,7 @@ static void run_suite_13_authentic_fidelity() {
         ASSERT_EQ(sim.get_unit(combat).state, UnitState::Walking);
     } TEST_END();
 
-    TEST_CASE("13.3 Mud Humping Animation Cancel Accelerates Movement") {
+    TEST_CASE("13.3 Re-Ordering Mid-Stride Snaps to the Tile Centre (Authentic Mud \"Humping\")") {
         SimulationEngine sim;
         sim.init_test_world(60, 60, 1);
         // Set path to mud surface
@@ -899,15 +912,21 @@ static void run_suite_13_authentic_fidelity() {
         move1.target_y = 15;
         sim.issue_order(move1);
 
-        sim.tick();
-        ASSERT_TRUE(sim.get_unit(ant).is_on_mud);
-        sim.get_unit(ant).anim_tick = 10;
+        // Walk until the ant has just crossed into the next tile, still short of that tile's centre
+        const AntUnit& u = sim.get_unit(ant);
+        ASSERT_TRUE(tick_until(sim, [&]() {
+            return u.loco_action == AntUnit::kActionWalk && u.pixel_y > 11 * 32 && (u.pixel_y % 32) < 16;
+        }, 200));
+        ASSERT_TRUE(u.is_on_mud);
 
-        // Reissue move order on mud ("humping")
-        int32_t prev_fx = sim.get_unit(ant).fx_y;
+        // Re-issuing the order snaps the ant to the centre of the tile under it (GoTo, FUN_0101fc50): on slow
+        // mud this forward jump is what makes rapid re-ordering ("humping") faster than walking.
+        int32_t prev_y = u.pixel_y;
         sim.issue_order(move1);
-        ASSERT_EQ(sim.get_unit(ant).anim_tick, 0); // Animation delay reset
-        ASSERT_GT(sim.get_unit(ant).fx_y, prev_fx); // Immediate pulse advance
+        ASSERT_GT(u.pixel_y, prev_y);
+        ASSERT_EQ(u.pixel_y, 11 * 32 + 16);
+        ASSERT_TRUE(u.waypoints.empty());               // idle until the new path arrives
+        ASSERT_TRUE(sim.has_pending_path(ant));
     } TEST_END();
 
     TEST_CASE("13.4 Anthill Mound Impassability & Queue Staging") {
@@ -941,6 +960,7 @@ static void run_suite_13_authentic_fidelity() {
         sim.issue_order(ret);
 
         ASSERT_EQ(sim.get_active_depositing_ant(0), worker);
+        ASSERT_TRUE(tick_until(sim, [&]() { return !sim.has_pending_path(worker); }, 20));
         ASSERT_FALSE(sim.get_unit(worker).waypoints.empty());
         TileCoord last_wp = sim.get_unit(worker).waypoints.back();
         ASSERT_EQ(last_wp.x, 21);
@@ -953,6 +973,7 @@ static void run_suite_13_authentic_fidelity() {
         ret2.type = OrderType::ReturnToBase;
         sim.issue_order(ret2);
 
+        ASSERT_TRUE(tick_until(sim, [&]() { return !sim.has_pending_path(worker2); }, 20));
         ASSERT_FALSE(sim.get_unit(worker2).waypoints.empty());
         TileCoord last_wp2 = sim.get_unit(worker2).waypoints.back();
         ASSERT_EQ(last_wp2.x, 19);
@@ -1014,11 +1035,13 @@ static void run_suite_13_authentic_fidelity() {
 
         // Order ant to walk onto powerup at (10, 10)
         sim.issue_move_order(ant, {10, 10});
+        auto arrived_at = [&](TileCoord t) {
+            const AntUnit& u = sim.get_unit(ant);
+            return u.pos == t && u.waypoints.empty() && !sim.has_pending_path(ant) && u.state == UnitState::Idle;
+        };
 
-        // Advance until ant reaches (10, 10) (8 ticks for 32 pixels at 4 px/tick)
-        for (int i = 0; i < 8; ++i) {
-            sim.tick();
-        }
+        // Advance until ant reaches (10, 10): path at the first 50 ms run, then 250 ms + 8 steps of 4 px / 50 ms
+        ASSERT_TRUE(tick_until(sim, [&]() { return arrived_at(TileCoord{10, 10}); }, 40));
         ASSERT_EQ(sim.get_unit(ant).pos, (TileCoord{10, 10}));
         ASSERT_EQ(sim.get_unit(ant).state, UnitState::Idle);
         // Ant has started dwell window (5 ticks remaining after arrival tick)
@@ -1030,10 +1053,8 @@ static void run_suite_13_authentic_fidelity() {
         sim.issue_move_order(ant, {11, 10});
         ASSERT_EQ(sim.get_unit(ant).powerup_dwell_timer, 0);
 
-        // Advance 8 ticks to walk to (11, 10)
-        for (int i = 0; i < 8; ++i) {
-            sim.tick();
-        }
+        // Advance until the ant has walked to (11, 10)
+        ASSERT_TRUE(tick_until(sim, [&]() { return arrived_at(TileCoord{11, 10}); }, 40));
         ASSERT_EQ(sim.get_unit(ant).pos, (TileCoord{11, 10}));
         ASSERT_EQ(sim.get_unit(ant).type, AntType::Worker); // Still Worker!
         ASSERT_FALSE(sim.get_unit(ant).is_transforming());
@@ -1049,16 +1070,23 @@ static void run_suite_13_authentic_fidelity() {
 
         // Order ant to walk onto powerup at (10, 10)
         sim.issue_move_order(ant, {10, 10});
-        for (int i = 0; i < 8; ++i) {
-            sim.tick();
-        }
+        ASSERT_TRUE(tick_until(sim, [&]() {
+            const AntUnit& u = sim.get_unit(ant);
+            return u.pos == TileCoord{10, 10} && u.waypoints.empty() && !sim.has_pending_path(ant) &&
+                   u.state == UnitState::Idle;
+        }, 40));
         ASSERT_EQ(sim.get_unit(ant).pos, (TileCoord{10, 10}));
 
-        // Force ant into CantGo while on powerup by ordering move into an impassable water tile
-        sim.grid_mut().get_cell_mut(10, 11).terrain_type = TERRAIN_WATER;
-        sim.issue_move_order(ant, {10, 11});
-
-        ASSERT_EQ(sim.get_unit(ant).state, UnitState::CantGo);
+        // Force ant into CantGo while on powerup: order it to an unreachable island (land at (20, 20) inside a
+        // ring of water), so the path manager reports "Can't go there." (clicking plain water would only send
+        // the ant to the nearest shore tile of the goal ring scan).
+        for (int32_t y = 19; y <= 21; ++y) {
+            for (int32_t x = 19; x <= 21; ++x) {
+                if (x != 20 || y != 20) sim.grid_mut().get_cell_mut(static_cast<uint32_t>(x), static_cast<uint32_t>(y)).terrain_type = TERRAIN_WATER;
+            }
+        }
+        sim.issue_move_order(ant, {20, 20});
+        ASSERT_TRUE(tick_until(sim, [&]() { return sim.get_unit(ant).state == UnitState::CantGo; }, 10));
         ASSERT_EQ(sim.get_unit(ant).powerup_dwell_timer, 0);
 
         // Advance through CantGo duration (12 ticks) and beyond
@@ -1072,14 +1100,15 @@ static void run_suite_13_authentic_fidelity() {
         ASSERT_FALSE(sim.get_unit(ant).is_transforming());
         ASSERT_TRUE(sim.grid().has_powerup_at({10, 10}));
 
-        // Now player specifically clicks on the powerup tile to consume it
+        // Now player specifically clicks on the powerup tile to consume it: GoTo gives the ant a one-tile path,
+        // and when that path completes on the power-up the 6-tick pickup dwell starts
         sim.issue_move_order(ant, {10, 10});
-        ASSERT_EQ(sim.get_unit(ant).powerup_dwell_timer, 6);
-
-        // Advance 6 ticks for dwell window to elapse
-        for (int i = 0; i < 6; ++i) {
-            sim.tick();
-        }
+        bool dwelled = false;
+        ASSERT_TRUE(tick_until(sim, [&]() {
+            if (sim.get_unit(ant).powerup_dwell_timer > 0) dwelled = true;
+            return sim.get_unit(ant).is_transforming();
+        }, 30));
+        ASSERT_TRUE(dwelled);
         // Now it consumed and started transformation!
         ASSERT_TRUE(sim.get_unit(ant).is_transforming());
         ASSERT_EQ(sim.get_unit(ant).type, AntType::Combat);

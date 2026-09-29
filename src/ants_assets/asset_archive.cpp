@@ -1,6 +1,7 @@
 #include "ants_assets/asset_archive.hpp"
 #include <fstream>
 #include <cstring>
+#include <limits>
 
 namespace ants::assets {
 
@@ -8,6 +9,13 @@ static const Sprite EMPTY_SPRITE{};
 static const SoundClip EMPTY_SOUND{};
 static const EventTag EMPTY_TAG{};
 static const AnimationSequence EMPTY_ANIM{};
+
+// Per-frame displacement dx of a mirrored (SW/W/NW) copy: the original negates every
+// frame's dx when it builds the mirrored animations (FUN_01018b9f); dy is unchanged.
+// INT32_MIN has no positive counterpart and is kept as is (two's-complement neg).
+static int32_t mirror_frame_dx(int32_t dx) noexcept {
+    return dx == std::numeric_limits<int32_t>::min() ? dx : -dx;
+}
 
 AssetArchive::AssetArchive() = default;
 AssetArchive::~AssetArchive() = default;
@@ -121,6 +129,7 @@ void AssetArchive::precompute_directional_animations() {
                     const auto& src_sub = anim.subitems[s];
                     auto& dst_sub = nw_anim.subitems[s];
                     dst_sub = src_sub;
+                    dst_sub.val1 = mirror_frame_dx(src_sub.val1);
 
                     mirror_bounding_box(src_sub.box_left, src_sub.box_right, dst_sub.box_left, dst_sub.box_right);
 
@@ -153,6 +162,7 @@ void AssetArchive::precompute_directional_animations() {
                     const auto& src_sub = anim.subitems[s];
                     auto& dst_sub = w_anim.subitems[s];
                     dst_sub = src_sub;
+                    dst_sub.val1 = mirror_frame_dx(src_sub.val1);
 
                     mirror_bounding_box(src_sub.box_left, src_sub.box_right, dst_sub.box_left, dst_sub.box_right);
 
@@ -185,6 +195,7 @@ void AssetArchive::precompute_directional_animations() {
                     const auto& src_sub = anim.subitems[s];
                     auto& dst_sub = sw_anim.subitems[s];
                     dst_sub = src_sub;
+                    dst_sub.val1 = mirror_frame_dx(src_sub.val1);
 
                     mirror_bounding_box(src_sub.box_left, src_sub.box_right, dst_sub.box_left, dst_sub.box_right);
 

@@ -155,7 +155,10 @@ fi
 # Disable exit-on-error to collect all test results for dashboard
 set +e
 ASSETS_STATUS=0
+MOVEMENT_TABLES_STATUS=0
 SIM_STATUS=0
+PATH_PLANNER_STATUS=0
+MOVEMENT_GOLDEN_STATUS=0
 CHALLENGER_M2_1_STATUS=0
 CHALLENGER_M2_2_STATUS=0
 APP_STATUS=0
@@ -170,6 +173,13 @@ if [ "$RUN_ASSETS" -eq 1 ]; then
     echo -e "${BOLD}${BLUE}======================================================================${RESET}"
     "./$BUILD_DIR/tests/test_assets/test_assets"
     ASSETS_STATUS=$?
+
+    echo ""
+    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
+    echo -e "${BOLD}${BLUE}>>> 1.1 RUNNING MOVEMENT TABLE PARITY (generated tables vs Ants.exe / ants.chd)...${RESET}"
+    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
+    "./$BUILD_DIR/tests/test_assets/test_movement_tables"
+    MOVEMENT_TABLES_STATUS=$?
 fi
 
 # 4. Execute Simulation Rules Tests
@@ -194,6 +204,20 @@ if [ "$RUN_SIM" -eq 1 ]; then
     echo -e "${BOLD}${BLUE}======================================================================${RESET}"
     "./$BUILD_DIR/tests/test_sim/test_challenger_m2_2"
     CHALLENGER_M2_2_STATUS=$?
+
+    echo ""
+    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
+    echo -e "${BOLD}${BLUE}>>> 2.3 RUNNING ORIGINAL PATH PLANNER (PATHMGR A*) SUITE...           ${RESET}"
+    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
+    "./$BUILD_DIR/tests/test_sim/test_path_planner"
+    PATH_PLANNER_STATUS=$?
+
+    echo ""
+    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
+    echo -e "${BOLD}${BLUE}>>> 2.4 RUNNING ORIGINAL MOVEMENT GOLDEN SUITE (frame-exact locomotion)...${RESET}"
+    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
+    "./$BUILD_DIR/tests/test_sim/test_movement_golden"
+    MOVEMENT_GOLDEN_STATUS=$?
 fi
 
 # 5. Execute Application Integration Tests
@@ -238,6 +262,13 @@ if [ "$RUN_ASSETS" -eq 1 ]; then
         echo -e " 1. Native Asset Decoder Tests (test_assets):       ${RED}FAILED (exit code ${ASSETS_STATUS})${RESET}"
         TOTAL_FAILED=$((TOTAL_FAILED + 1))
     fi
+
+    if [ "$MOVEMENT_TABLES_STATUS" -eq 0 ]; then
+        echo -e " 1.1 Movement Table Parity (test_movement_tables):   ${GREEN}PASSED${RESET}"
+    else
+        echo -e " 1.1 Movement Table Parity (test_movement_tables):   ${RED}FAILED (exit code ${MOVEMENT_TABLES_STATUS})${RESET}"
+        TOTAL_FAILED=$((TOTAL_FAILED + 1))
+    fi
 fi
 
 if [ "$RUN_SIM" -eq 1 ]; then
@@ -259,6 +290,20 @@ if [ "$RUN_SIM" -eq 1 ]; then
         echo -e " 2.2 Challenger M2_2 (test_challenger_m2_2):         ${GREEN}PASSED${RESET}"
     else
         echo -e " 2.2 Challenger M2_2 (test_challenger_m2_2):         ${RED}FAILED (exit code ${CHALLENGER_M2_2_STATUS})${RESET}"
+        TOTAL_FAILED=$((TOTAL_FAILED + 1))
+    fi
+
+    if [ "$PATH_PLANNER_STATUS" -eq 0 ]; then
+        echo -e " 2.3 Path Planner (test_path_planner):               ${GREEN}PASSED${RESET}"
+    else
+        echo -e " 2.3 Path Planner (test_path_planner):               ${RED}FAILED (exit code ${PATH_PLANNER_STATUS})${RESET}"
+        TOTAL_FAILED=$((TOTAL_FAILED + 1))
+    fi
+
+    if [ "$MOVEMENT_GOLDEN_STATUS" -eq 0 ]; then
+        echo -e " 2.4 Movement Golden (test_movement_golden):         ${GREEN}PASSED${RESET}"
+    else
+        echo -e " 2.4 Movement Golden (test_movement_golden):         ${RED}FAILED (exit code ${MOVEMENT_GOLDEN_STATUS})${RESET}"
         TOTAL_FAILED=$((TOTAL_FAILED + 1))
     fi
 fi

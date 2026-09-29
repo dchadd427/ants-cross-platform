@@ -244,6 +244,34 @@ struct AntSnapshot {
     bool     is_in_scuffle{false};
     UnitState state{UnitState::Idle};
     uint8_t  target_team_id{255};
+
+    // Original locomotion animation (idle / walk / swim / dive / climb / can't-go) currently shown, exactly
+    // as the 1998 engine plays it: the ants.chd Table-4 animation, its current frame, and whether it is a
+    // mirrored copy (directions SW, W, NW). loco_clip is 0x7FFE while another system animates the ant.
+    uint16_t loco_clip{0x7FFE};
+    uint16_t loco_frame{0};
+    bool     loco_mirrored{false};
+};
+
+/**
+ * @brief One locomotion event (verification trace, see SimulationEngine::set_locomotion_trace_enabled).
+ */
+struct LocoTraceEvent {
+    enum class Kind : uint8_t {
+        Step,           ///< an animation step ran (FUN_0102b997); dx/dy = displacement applied
+        PathDelivered,  ///< the path manager delivered a path to the ant
+        PathFailed,     ///< the path manager found no path ("Can't go there.")
+    };
+    Kind     kind{Kind::Step};
+    uint32_t time_ms{0};     ///< animation clock (50 ms per simulation tick)
+    uint32_t ant_id{0};
+    int32_t  px{0};          ///< position after the event
+    int32_t  py{0};
+    int32_t  dx{0};
+    int32_t  dy{0};
+    uint16_t clip{0x7FFE};   ///< ants.chd animation running after the step
+    uint16_t frame{0};       ///< its current frame
+    uint8_t  action{0xFF};   ///< original action id after the step (0 idle, 1 walk, 0xB can't go)
 };
 
 struct VisualEffect {
@@ -356,6 +384,10 @@ public:
     void clear_audio_events();
     void clear_news_events();
     void trigger_player_dropout(uint8_t player_id, const std::string& player_name = "");
+    /// Records every locomotion animation step and path delivery with its millisecond time (off by default).
+    void set_locomotion_trace_enabled(bool enabled);
+    const std::vector<LocoTraceEvent>& locomotion_trace() const;
+    void clear_locomotion_trace();
 
     uint32_t spawn_unit(uint8_t player_id, AntType type, TileCoord pos);
     AntUnit& get_unit(uint32_t ant_id);
@@ -363,7 +395,26 @@ public:
     void kill_unit(uint32_t ant_id);
 
     void execute_melee_attack(uint32_t attacker_id, uint32_t target_id);
+    /**
+     * @brief Player move order through the original GoTo (Ants.exe FUN_0101fc50, "player" flag set): the ant
+     * must be idle, walking or stunned (FUN_0101ff5a); it snaps to the centre of its tile, idles, and walks
+     * once the path manager has delivered its path. Clicking an enemy ant attacks it, clicking a power-up
+     * picks it up; an own bomb at the destination is walked onto (and set off) only with allow_friendly_bomb.
+     */
     void issue_move_order(uint32_t ant_id, TileCoord dest, bool allow_friendly_bomb = false, bool is_food_order = false);
+    /// Move order given by a remake system (guard AI, hill queue, ability approach): GoTo without the player flag.
+    void issue_internal_move_order(uint32_t ant_id, TileCoord dest);
+    /**
+     * @brief Player group move (Ants.exe FUN_010287b5). The ants that accept orders (FUN_0101ff5a) and are
+     * not already carrying out this very order are sorted by 16 x Chebyshev distance to the clicked tile
+     * (exchange sort, not stable) and each gets the player GoTo to that tile; team-mate claims and the goal
+     * ring scan spread them over free tiles.
+     * @return the ant that acknowledges the order (the closest one, if its GoTo queued a path), or 0.
+     */
+    uint32_t issue_group_move_order(const std::vector<uint32_t>& ant_ids, TileCoord target,
+                                    bool allow_friendly_bomb = false, bool is_food_order = false);
+    /// True while a path request of this ant is queued in the path manager (PATHMGR, one path per 50 ms).
+    bool has_pending_path(uint32_t ant_id) const;
 
     bool validate_cardinal_placement(TileCoord from, TileCoord to) const;
     bool plant_bomb(uint32_t ant_id, TileCoord target, bool instant = true);

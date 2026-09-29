@@ -78,6 +78,56 @@ inline void run_test_case(const std::string& name, const std::function<void()>& 
 #define ASSERT_GE(a, b) ASSERT_TRUE((a) >= (b))
 #define ASSERT_NEAR(a, b, eps) ASSERT_TRUE(std::abs((a) - (b)) <= (eps))
 
+// Original 1998 movement (Ants.exe): an order only snaps and idles the ant and queues a path request; the
+// path manager (PATHMGR) delivers one path per 50 ms tick per team, and walking starts after that.
+// Ticks until none of the given ants has a queued request (at most max_ticks ticks).
+static void tick_until_paths_delivered(SimulationEngine& sim, std::initializer_list<uint32_t> ids, int max_ticks = 20) {
+    for (int t = 0; t < max_ticks; ++t) {
+        bool pending = false;
+        for (uint32_t id : ids) pending = pending || sim.has_pending_path(id);
+        if (!pending) return;
+        sim.tick();
+    }
+}
+
+// Ticks until pred() holds (checked before every tick); returns whether it held within max_ticks ticks.
+static bool tick_until(SimulationEngine& sim, const std::function<bool()>& pred, int max_ticks) {
+    for (int t = 0; t < max_ticks; ++t) {
+        if (pred()) return true;
+        sim.tick();
+    }
+    return pred();
+}
+
+// Milliseconds from an ant's first path delivery to its last pixel move (the landing on the goal centre),
+// read from the locomotion trace (SimulationEngine::set_locomotion_trace_enabled); -1 without a path.
+static int32_t walk_duration_ms(const SimulationEngine& sim, uint32_t ant_id) {
+    bool delivered = false;
+    uint32_t t0 = 0;
+    int32_t lx = 0;
+    int32_t ly = 0;
+    int32_t last = -1;
+    for (const auto& ev : sim.locomotion_trace()) {
+        if (ev.ant_id != ant_id) continue;
+        if (ev.kind == LocoTraceEvent::Kind::PathDelivered) {
+            if (!delivered) {
+                delivered = true;
+                t0 = ev.time_ms;
+                lx = ev.px;
+                ly = ev.py;
+            }
+            continue;
+        }
+        if (!delivered || ev.kind != LocoTraceEvent::Kind::Step) continue;
+        if (ev.px != lx || ev.py != ly) {
+            last = static_cast<int32_t>(ev.time_ms - t0);
+            lx = ev.px;
+            ly = ev.py;
+        }
+    }
+    return delivered ? last : -1;
+}
+
 // ============================================================================
 // SUITE 1: 640x480 Software Surface & Compositing
 // ============================================================================
@@ -1954,6 +2004,7 @@ void run_suite_11_anthill_queuing_and_priority() {
 
         ASSERT_TRUE(sim.is_ant_in_base_queue(w1));
         ASSERT_EQ(sim.get_active_depositing_ant(0), w1);
+        tick_until_paths_delivered(sim, {w1});
         const auto& unit1 = sim.get_unit(w1);
         ASSERT_FALSE(unit1.waypoints.empty());
         ASSERT_EQ(unit1.waypoints.back().x, bx + 1);
@@ -1968,6 +2019,7 @@ void run_suite_11_anthill_queuing_and_priority() {
 
         ASSERT_TRUE(sim.is_ant_in_base_queue(w2));
         ASSERT_EQ(sim.get_active_depositing_ant(0), w1);
+        tick_until_paths_delivered(sim, {w2});
         const auto& unit2 = sim.get_unit(w2);
         ASSERT_FALSE(unit2.waypoints.empty());
         ASSERT_EQ(unit2.waypoints.back().x, bx - 1);
@@ -2016,7 +2068,7 @@ void run_suite_11_anthill_queuing_and_priority() {
         ASSERT_TRUE(sim.get_unit(a3).waypoints.empty());
 
         // Step simulation until Ant 1 reaches hole and deposits food
-        for (int i = 0; i < 80 && sim.get_unit(a1).is_holding(); ++i) {
+        for (int i = 0; i < 250 && sim.get_unit(a1).is_holding(); ++i) {
             sim.tick();
             // During Ant 1's journey, Ant 2 and Ant 3 must remain waiting
             if (sim.get_unit(a1).is_holding()) {
@@ -2031,7 +2083,7 @@ void run_suite_11_anthill_queuing_and_priority() {
         ASSERT_TRUE(sim.has_audio_event(SoundID::BaseScoreUp));
 
         // Ant 1 completes emergence and vacates the hole. Ant 2 and Ant 3 remain waiting in QueuingBase!
-        for (int i = 0; i < 80 && sim.get_active_depositing_ant(0) == a1; ++i) {
+        for (int i = 0; i < 250 && sim.get_active_depositing_ant(0) == a1; ++i) {
             sim.tick();
             if (sim.get_active_depositing_ant(0) == a1) {
                 ASSERT_EQ(sim.get_unit(a2).state, UnitState::QueuingBase);
@@ -2042,7 +2094,7 @@ void run_suite_11_anthill_queuing_and_priority() {
         ASSERT_EQ(sim.get_unit(a2).state, UnitState::Walking);
 
         // Step simulation until Ant 2 reaches hole and deposits food
-        for (int i = 0; i < 80 && sim.get_unit(a2).is_holding(); ++i) {
+        for (int i = 0; i < 250 && sim.get_unit(a2).is_holding(); ++i) {
             sim.tick();
             if (sim.get_unit(a2).is_holding()) {
                 // Ant 3 advanced to slot 1 or is waiting in QueuingBase (or brief Idle on arrival frame)
@@ -2055,7 +2107,7 @@ void run_suite_11_anthill_queuing_and_priority() {
         ASSERT_EQ(sim.get_player_score(0), 50);
 
         // Ant 2 completes emergence and vacates the hole. Ant 3 remains waiting in QueuingBase!
-        for (int i = 0; i < 80 && sim.get_active_depositing_ant(0) == a2; ++i) {
+        for (int i = 0; i < 250 && sim.get_active_depositing_ant(0) == a2; ++i) {
             sim.tick();
             if (sim.get_active_depositing_ant(0) == a2) {
                 ASSERT_EQ(sim.get_unit(a3).state, UnitState::QueuingBase);
@@ -2065,7 +2117,7 @@ void run_suite_11_anthill_queuing_and_priority() {
         ASSERT_EQ(sim.get_unit(a3).state, UnitState::Walking);
 
         // Step simulation until Ant 3 deposits food
-        for (int i = 0; i < 80 && sim.get_unit(a3).is_holding(); ++i) {
+        for (int i = 0; i < 250 && sim.get_unit(a3).is_holding(); ++i) {
             sim.tick();
         }
 
@@ -2163,6 +2215,7 @@ void run_suite_11_anthill_queuing_and_priority() {
         // Ant 1 gets priority immediately and heads straight into the base entrance
         ASSERT_EQ(sim.get_active_depositing_ant(0), a1);
         ASSERT_EQ(sim.get_unit(a1).final_dest, (TileCoord{bx + 1, by + 1}));
+        tick_until_paths_delivered(sim, {a1});
         ASSERT_FALSE(sim.get_unit(a1).waypoints.empty());
         ASSERT_EQ(sim.get_unit(a1).waypoints.back(), (TileCoord{bx + 1, by + 1}));
 
@@ -2189,6 +2242,7 @@ void run_suite_11_anthill_queuing_and_priority() {
         // Ant 2 immediately claims priority and heads straight into the base!
         ASSERT_EQ(sim.get_active_depositing_ant(0), a2);
         ASSERT_EQ(sim.get_unit(a2).final_dest, (TileCoord{bx + 1, by + 1}));
+        tick_until_paths_delivered(sim, {a2});
         ASSERT_FALSE(sim.get_unit(a2).waypoints.empty());
         ASSERT_EQ(sim.get_unit(a2).waypoints.back(), (TileCoord{bx + 1, by + 1}));
 
@@ -2211,6 +2265,7 @@ void run_suite_11_anthill_queuing_and_priority() {
         // Ant 3 immediately claims priority and heads straight into the base!
         ASSERT_EQ(sim.get_active_depositing_ant(0), a3);
         ASSERT_EQ(sim.get_unit(a3).final_dest, (TileCoord{bx + 1, by + 1}));
+        tick_until_paths_delivered(sim, {a3});
         ASSERT_FALSE(sim.get_unit(a3).waypoints.empty());
         ASSERT_EQ(sim.get_unit(a3).waypoints.back(), (TileCoord{bx + 1, by + 1}));
     } TEST_END();
@@ -2305,7 +2360,7 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         }
     } TEST_END();
 
-    TEST_CASE("12.3 Already-Adjacent Move Order Stops Immediately") {
+    TEST_CASE("12.3 Move Order Onto an Occupied Tile Picks the First Free Ring Tile (FUN_010202e7)") {
         SimulationEngine sim;
         sim.init_test_world(60, 60, 100, 60000);
 
@@ -2319,12 +2374,13 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         auto& adj_ant = sim.get_unit(adj_id);
         adj_ant.state = UnitState::Idle;
 
-        // Ordering adj_ant to move to (20, 20) stops immediately since it is already adjacent
+        // Original GoTo: the taken tile is replaced by the first enterable tile of the ring scan around it
+        // (distance 1: west column top to bottom, then east column, north row, south row) -> (19, 19).
         sim.issue_move_order(adj_id, TileCoord{20, 20});
-
-        ASSERT_EQ(adj_ant.state, UnitState::Idle);
-        ASSERT_TRUE(adj_ant.waypoints.empty());
-        ASSERT_EQ(adj_ant.pos, (TileCoord{20, 21}));
+        ASSERT_EQ(adj_ant.final_dest, (TileCoord{19, 19}));
+        ASSERT_TRUE(tick_until(sim, [&]() { return adj_ant.pos == TileCoord{19, 19} && adj_ant.waypoints.empty() &&
+                                                  adj_ant.state == UnitState::Idle; }, 60));
+        ASSERT_EQ(stat_ant.pos, (TileCoord{20, 20}));   // never pushed
         ASSERT_FALSE(sim.has_audio_event(SoundID::FlingThumpA));
     } TEST_END();
 
@@ -2632,8 +2688,10 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
 
         // Issue move order across bomb to (20, 22)
         sim.issue_move_order(friendly_id, TileCoord{20, 22});
+        tick_until_paths_delivered(sim, {friendly_id});
 
         const auto& unit = sim.get_unit(friendly_id);
+        ASSERT_FALSE(unit.waypoints.empty());
         // Verify pathfinder routed around (20, 20)
         for (const auto& wp : unit.waypoints) {
             ASSERT_FALSE((wp == TileCoord{20, 20}));
@@ -2989,6 +3047,7 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         // Worker on land at (19, 19) pathfinding diagonally across the bridge to (21, 21)
         uint32_t worker_id = sim.spawn_unit(0, AntType::Worker, TileCoord{19, 19});
         sim.issue_move_order(worker_id, TileCoord{21, 21});
+        tick_until_paths_delivered(sim, {worker_id});
 
         auto& worker = sim.get_unit(worker_id);
         ASSERT_FALSE(worker.waypoints.empty());
@@ -3270,19 +3329,17 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
     // ------------------------------------------------------------------------
     // 12.25: Bridge Locomotion Speed Matches Mud Speed
     // ------------------------------------------------------------------------
-    TEST_CASE("12.25 Bridge Locomotion Speed Matches Mud Speed (~0.65x)") {
+    TEST_CASE("12.25 Bridge Locomotion Speed Matches Mud Speed (bridges are terrain class 3)") {
         SimulationEngine sim;
         sim.init_test_world(60, 60, 100, 60000);
 
-        // Mud corridor on row 12 (rows 11 to 13)
-        for (int y = 11; y <= 13; ++y) {
-            for (int x = 10; x <= 16; ++x) {
-                sim.grid_mut().get_cell_mut(TileCoord{x, y}).surface_type = SurfaceType::Mud;
-            }
+        // Three walled corridors (rows 10, 12, 14) so that every path is a straight line east:
+        // row 10 grass, row 12 mud, row 14 completed bridges over water.
+        for (int x = 8; x <= 18; ++x) {
+            for (int y : {9, 11, 13, 15}) sim.grid_mut().set_terrain(x, y, TERRAIN_OBSTACLE);
         }
-
-        // Row 14: 6 tiles of Completed Bridge (10, 14) to (16, 14)
         for (int x = 10; x <= 16; ++x) {
+            sim.grid_mut().get_cell_mut(TileCoord{x, 12}).surface_type = SurfaceType::Mud;
             sim.grid_mut().set_terrain(x, 14, TERRAIN_WATER);
             uint32_t ux = static_cast<uint32_t>(x);
             for (int s = 0; s < 4; ++s) {
@@ -3290,47 +3347,29 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
             }
             ASSERT_TRUE(sim.grid().get_cell(ux, 14).has_completed_bridge());
         }
+        // A bridge piece makes its tile terrain class 3, mud (Ants.exe FUN_01008af7)
+        ASSERT_EQ(sim.grid().terrain_class_at(TileCoord{12, 14}), sim.grid().terrain_class_at(TileCoord{12, 12}));
 
-        // Verify pathfinder step cost for bridge matches mud (1.5x)
-        auto path_dirt = PathFinder::find_path(sim.grid(), TileCoord{10, 10}, TileCoord{15, 10}, false, false);
-        auto path_bridge = PathFinder::find_path(sim.grid(), TileCoord{10, 14}, TileCoord{15, 14}, false, false);
-        ASSERT_FALSE(path_bridge.empty());
-        ASSERT_EQ(path_dirt.size(), path_bridge.size());
-
-        // Spawn workers
-        uint32_t w_dirt = sim.spawn_unit(0, AntType::Worker, TileCoord{10, 10});
+        uint32_t w_grass = sim.spawn_unit(0, AntType::Worker, TileCoord{10, 10});
         uint32_t w_mud = sim.spawn_unit(0, AntType::Worker, TileCoord{10, 12});
         uint32_t w_bridge = sim.spawn_unit(0, AntType::Worker, TileCoord{10, 14});
+        sim.set_locomotion_trace_enabled(true);
 
-        sim.issue_move_order(w_dirt, TileCoord{15, 10});
+        sim.issue_move_order(w_grass, TileCoord{15, 10});
         sim.issue_move_order(w_mud, TileCoord{15, 12});
         sim.issue_move_order(w_bridge, TileCoord{15, 14});
-
-        int ticks_dirt = 0;
-        int ticks_mud = 0;
-        int ticks_bridge = 0;
-
         for (int t = 1; t <= 300; ++t) {
             sim.tick();
-            if (ticks_dirt == 0 && sim.get_unit(w_dirt).pos == TileCoord{15, 10} && sim.get_unit(w_dirt).state != UnitState::Walking) {
-                ticks_dirt = t;
-            }
-            if (ticks_mud == 0 && sim.get_unit(w_mud).pos == TileCoord{15, 12} && sim.get_unit(w_mud).state != UnitState::Walking) {
-                ticks_mud = t;
-            }
-            if (ticks_bridge == 0 && sim.get_unit(w_bridge).pos == TileCoord{15, 14} && sim.get_unit(w_bridge).state != UnitState::Walking) {
-                ticks_bridge = t;
-            }
-            if (ticks_dirt > 0 && ticks_mud > 0 && ticks_bridge > 0) break;
         }
+        ASSERT_EQ(sim.get_unit(w_grass).pos, (TileCoord{15, 10}));
+        ASSERT_EQ(sim.get_unit(w_mud).pos, (TileCoord{15, 12}));
+        ASSERT_EQ(sim.get_unit(w_bridge).pos, (TileCoord{15, 14}));
 
-        // Both Mud and Bridge take significantly more ticks than normal dirt
-        ASSERT_TRUE(ticks_dirt > 0);
-        ASSERT_TRUE(ticks_mud > ticks_dirt);
-        ASSERT_TRUE(ticks_bridge > ticks_dirt);
-
-        // Mud and Bridge tick times match exactly
-        ASSERT_EQ(ticks_bridge, ticks_mud);
+        // Walk times from path delivery to arrival (reference model of Ants.exe): 5 tiles of grass
+        // (4 px per 50 ms) take 2200 ms, 5 tiles of mud (2 px per 60 ms) 4710 ms; bridges walk like mud.
+        ASSERT_EQ(walk_duration_ms(sim, w_grass), 2200);
+        ASSERT_EQ(walk_duration_ms(sim, w_mud), 4710);
+        ASSERT_EQ(walk_duration_ms(sim, w_bridge), walk_duration_ms(sim, w_mud));
     } TEST_END();
 
     // ------------------------------------------------------------------------
@@ -3710,7 +3749,9 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         SimulationEngine sim;
         sim.init_test_world(60, 60, 100, 60000);
 
-        // 1. Can't Go Reaction on Impassable/Blocked Path (Ant at (10, 10) is at closest shoreline to (12, 10))
+        // 1. Can't Go reaction. Clicking water sends a worker to the first enterable tile of the ring scan
+        //    around the clicked tile (FUN_010202e7), without any can't-go; an unreachable land tile makes the
+        //    path manager report "Can't go there." and the can't-go animation (action 0xB) plays.
         for (int32_t wx = 11; wx <= 15; ++wx) {
             for (int32_t wy = 8; wy <= 12; ++wy) {
                 sim.grid_mut().set_terrain(wx, wy, TERRAIN_WATER);
@@ -3719,22 +3760,33 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         uint32_t w_id = sim.spawn_unit(0, AntType::Worker, TileCoord{10, 10});
         auto& w_ant = sim.get_unit(w_id);
 
-        // Issue move order directly to impassable water tile (Worker cannot swim)
+        // Order into the water at (12, 10): distance 2 of the ring scan, west column, top first -> (10, 8)
         sim.issue_move_order(w_id, TileCoord{12, 10});
+        ASSERT_NE(w_ant.state, UnitState::CantGo);
+        ASSERT_EQ(w_ant.final_dest, (TileCoord{10, 8}));
+        ASSERT_TRUE(tick_until(sim, [&]() { return w_ant.pos == TileCoord{10, 8} && w_ant.waypoints.empty() &&
+                                                  w_ant.state == UnitState::Idle; }, 60));
+        ASSERT_FALSE(sim.has_audio_event(SoundID::CantGo));
 
-        // Ant immediately enters CantGo, faces South, snaps to tile center, and plays CantGo sound
-        ASSERT_EQ(w_ant.state, UnitState::CantGo);
-        ASSERT_EQ(w_ant.facing, Direction::South);
+        // Island: land at (13, 10) in the middle of the water block cannot be reached
+        sim.grid_mut().set_terrain(13, 10, TERRAIN_WALKABLE);
+        sim.clear_audio_events();
+        sim.issue_move_order(w_id, TileCoord{13, 10});
+        ASSERT_TRUE(tick_until(sim, [&]() { return w_ant.state == UnitState::CantGo; }, 10));
         ASSERT_EQ(w_ant.pixel_x, 10 * 32 + 16);
-        ASSERT_EQ(w_ant.pixel_y, 10 * 32 + 16);
+        ASSERT_EQ(w_ant.pixel_y, 8 * 32 + 16);
         ASSERT_TRUE(w_ant.waypoints.empty());
-        ASSERT_TRUE(sim.has_audio_event(SoundID::CantGo));
+        ASSERT_TRUE(sim.has_audio_event(SoundID::CantGo));   // frame 0 of the can't-go animation (sound 63)
+        ASSERT_TRUE(sim.has_news_event(0, 0x3A));            // "Can't go there."
 
-        // Advance simulation through CantGo duration (6 ticks for Worker)
-        for (int t = 0; t < 6; ++t) {
+        // The worker's can't-go animation (agcg301) runs 6 frames x 60 ms = 360 ms, then the ant idles
+        int cant_go_ticks = 0;
+        while (w_ant.state == UnitState::CantGo && cant_go_ticks < 40) {
             sim.tick();
+            ++cant_go_ticks;
         }
         ASSERT_EQ(w_ant.state, UnitState::Idle);
+        ASSERT_EQ(cant_go_ticks, 8);
 
         // 2. Bomber Ability Animations (PlantingBomb and DefusingBomb)
         uint32_t b_id = sim.spawn_unit(0, AntType::Bomber, TileCoord{20, 20});
@@ -4242,7 +4294,7 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         a1_visited.push_back(sim.get_unit(a1).pos);
         TileCoord last_a1 = sim.get_unit(a1).pos;
 
-        for (int i = 0; i < 90 && sim.get_unit(a1).state != UnitState::EnteringBase; ++i) {
+        for (int i = 0; i < 300 && sim.get_unit(a1).state != UnitState::EnteringBase; ++i) {
             sim.tick();
             if (sim.get_unit(a1).pos != last_a1) {
                 last_a1 = sim.get_unit(a1).pos;
@@ -4260,7 +4312,7 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         }
 
         // Advance until Ant 1 finishes depositing food, emerges, vacates hole, and Ant 2 gains priority
-        for (int i = 0; i < 80 && sim.get_active_depositing_ant(0) != a2; ++i) {
+        for (int i = 0; i < 300 && sim.get_active_depositing_ant(0) != a2; ++i) {
             sim.tick();
         }
         ASSERT_EQ(sim.get_active_depositing_ant(0), a2);
@@ -4274,7 +4326,7 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         a2_visited.push_back(sim.get_unit(a2).pos);
         TileCoord last_a2 = sim.get_unit(a2).pos;
 
-        for (int i = 0; i < 90 && sim.get_unit(a2).state != UnitState::EnteringBase; ++i) {
+        for (int i = 0; i < 300 && sim.get_unit(a2).state != UnitState::EnteringBase; ++i) {
             sim.tick();
             if (sim.get_unit(a2).pos != last_a2) {
                 last_a2 = sim.get_unit(a2).pos;
@@ -5102,6 +5154,7 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         uint32_t w_id = sim.spawn_unit(0, AntType::Worker, TileCoord{20, 20});
         sim.issue_move_order(w_id, TileCoord{30, 20});
         ASSERT_EQ(sim.get_unit(w_id).state, UnitState::Walking);
+        tick_until_paths_delivered(sim, {w_id});
         ASSERT_FALSE(sim.get_unit(w_id).waypoints.empty());
 
         // Advance 5 ticks: ant moves towards bridge
@@ -5115,9 +5168,10 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         // Clear audio events
         sim.clear_audio_events();
 
-        // Advance simulation: ant approaches water edge, triggers CantGo ONCE and cancels movement
+        // Advance simulation: at the water edge the walk is blocked (TryEnterTile), the re-plan finds no way
+        // to the island ("Can't go there."), and the can't-go animation plays its sound ONCE.
         uint32_t cant_go_audio_count = 0;
-        for (int i = 0; i < 40; ++i) {
+        for (int i = 0; i < 60; ++i) {
             sim.tick();
             auto events = sim.poll_audio_events();
             for (const auto& ev : events) {
@@ -5287,28 +5341,26 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         uint32_t w_id = sim.spawn_unit(0, AntType::Worker, TileCoord{10, 10});
         auto& w_ant = sim.get_unit(w_id);
 
-        // Issue move order into middle of water at (16, 10)
+        // Issue move order into middle of water at (16, 10): GoTo replaces the unwalkable tile by the first
+        // enterable tile of its ring scan (FUN_010202e7; distance 4, west column x = 12, top first) -> (12, 6)
         sim.issue_move_order(w_id, TileCoord{16, 10});
-        // Non-swimmer ant does NOT immediately enter CantGo; it pathfinds to the water edge (12, 10)
         ASSERT_NE(w_ant.state, UnitState::CantGo);
-        ASSERT_EQ(w_ant.final_dest, (TileCoord{12, 10}));
+        ASSERT_EQ(w_ant.final_dest, (TileCoord{12, 6}));
 
-        // Advance simulation until ant reaches the shoreline at (12, 10)
-        for (int t = 0; t < 100 && w_ant.pos != (TileCoord{12, 10}); ++t) {
-            sim.tick();
-        }
-        ASSERT_EQ(w_ant.pos, (TileCoord{12, 10}));
+        // Advance simulation until ant reaches the shoreline at (12, 6)
+        ASSERT_TRUE(tick_until(sim, [&]() { return w_ant.pos == TileCoord{12, 6} && w_ant.waypoints.empty() &&
+                                                  w_ant.state == UnitState::Idle; }, 100));
 
-        // Now that the ant is already at the closest possible tile, issuing move into water triggers CantGo
+        // Ordering it into the lake again resolves to the tile it already stands on: a one-tile path, no can't-go
+        sim.clear_audio_events();
         sim.issue_move_order(w_id, TileCoord{16, 10});
-        ASSERT_EQ(w_ant.state, UnitState::CantGo);
-        ASSERT_TRUE(sim.has_audio_event(SoundID::CantGo));
-
-        // Advance simulation through CantGo duration (6 ticks for Worker)
-        for (int t = 0; t < 6; ++t) {
+        ASSERT_EQ(w_ant.final_dest, (TileCoord{12, 6}));
+        for (int t = 0; t < 20; ++t) {
             sim.tick();
         }
         ASSERT_EQ(w_ant.state, UnitState::Idle);
+        ASSERT_EQ(w_ant.pos, (TileCoord{12, 6}));
+        ASSERT_FALSE(sim.has_audio_event(SoundID::CantGo));
 
         // 2. Ally Walk-Over Movement & Cursors
         uint32_t ally_id = sim.spawn_unit(1, AntType::Worker, TileCoord{8, 8});
@@ -5373,6 +5425,7 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         ASSERT_EQ(w->final_dest, (TileCoord{20, 10}));
 
         // Advance simulation until ant reaches food
+        tick_until_paths_delivered(sim, {worker});
         while (!w->waypoints.empty() && w->pos != TileCoord{20, 10}) {
             sim.tick();
             // During transit, still carrying exactly 1 food
@@ -5694,6 +5747,7 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
             sim.get_unit(ant_id).state = UnitState::Idle;
 
             sim.issue_move_order(ant_id, target, false);
+            tick_until_paths_delivered(sim, {ant_id});
             const auto& ant = sim.get_unit(ant_id);
 
             // Unit must not reject with CantGo, and destination must reach the target tile
@@ -5713,6 +5767,7 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         // 2. Sequential traversal between all 9 tiles inside the enclosure
         for (const auto& target : targets) {
             sim.issue_move_order(ant_id, target, false);
+            tick_until_paths_delivered(sim, {ant_id});
             const auto& ant = sim.get_unit(ant_id);
 
             // Unit must not reject with CantGo, and destination must reach the target tile
@@ -6385,22 +6440,27 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         SimulationEngine sim;
         sim.init(lvl, 42);
 
-        // Tile (18, 17) must be completely passable (not blocked by broken2 overlay)
+        // The remake draws broken2 as flat debris (no obstacle overlay), but tile (18, 17) carries the layer-1
+        // solid bit in TINY.LVL (it is part of the footprint of the broken2 object anchored at (18, 15)), and
+        // the original's CanEnter / StepCost (FUN_0100cf0f) never let an ant onto it.
         ASSERT_TRUE(sim.grid().in_bounds(18, 17));
         const auto& cell = sim.grid().get_cell(18, 17);
         ASSERT_FALSE(cell.is_obstacle_overlay);
         ASSERT_TRUE(cell.is_passable());
+        ASSERT_TRUE(sim.grid().is_solid_object(TileCoord{18, 17}));
 
-        // Ant can walk directly onto tile (18, 17) from neighbor (18, 18)
+        // Ordering an ant onto it from neighbour (18, 18) sends it to the first enterable tile of the ring scan
         uint32_t ant = sim.spawn_unit(0, AntType::Worker, TileCoord{18, 18});
         ASSERT_TRUE(ant > 0);
         sim.issue_move_order(ant, TileCoord{18, 17});
-        ASSERT_EQ(sim.get_unit(ant).final_dest, (TileCoord{18, 17}));
-        for (int i = 0; i < 20; ++i) {
+        ASSERT_EQ(sim.get_unit(ant).final_dest, (TileCoord{17, 16}));
+        bool entered = false;
+        for (int i = 0; i < 60; ++i) {
             sim.tick();
-            if (sim.get_unit(ant).pos == TileCoord{18, 17}) break;
+            if (sim.get_unit(ant).pos == TileCoord{18, 17}) entered = true;
         }
-        ASSERT_EQ(sim.get_unit(ant).pos, (TileCoord{18, 17}));
+        ASSERT_FALSE(entered);
+        ASSERT_EQ(sim.get_unit(ant).pos, (TileCoord{17, 16}));
 
         // Part B: 10-Tick Bounce duration and VisualEffect{"battle"} 10 ticks
         SimulationEngine sim_bounce;
@@ -6879,10 +6939,10 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
 
     TEST_CASE("12.108: Version Invariant & Fog of War Cursor Concealment Parity") {
         // 1. Verify semantic versioning components
-        ASSERT_EQ(ants::VERSION_STRING, "v0.0.23");
+        ASSERT_EQ(ants::VERSION_STRING, "v0.0.24");
         ASSERT_EQ(ants::VERSION_MAJOR, 0);
         ASSERT_EQ(ants::VERSION_MINOR, 0);
-        ASSERT_EQ(ants::VERSION_PATCH, 23);
+        ASSERT_EQ(ants::VERSION_PATCH, 24);
 
         // 2. Setup simulation world with Fog of War enabled
         SimulationEngine sim;
@@ -6950,7 +7010,7 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
     // ------------------------------------------------------------------------
     // 12.109: Mud Animation Cancel ("Mud Humping") Speedup vs Passive Walking
     // ------------------------------------------------------------------------
-    TEST_CASE("12.109 Mud Animation Cancel (\"Mud Humping\") Speedup vs Passive Walking") {
+    TEST_CASE("12.109 Authentic Mud \"Humping\": Re-Ordering Just After Each Tile Boundary Beats Passive Walking") {
         SimulationEngine sim;
         sim.init_test_world(60, 60, 100, 60000);
 
@@ -6976,15 +7036,21 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
 
         int ticks_passive = 0;
         int ticks_cancel = 0;
+        int forward_snaps = 0;
 
-        for (int t = 1; t <= 300; ++t) {
-            // Player rapidly clicking ahead across the mud (anim cancelling and micro-stepping)
-            if (sim.get_unit(w_cancel).state == UnitState::Walking && t % 2 == 0) {
-                sim.issue_move_order(w_cancel, TileCoord{20, 14});
-                ASSERT_EQ(sim.get_unit(w_cancel).anim_tick, 0);
-            }
-
+        for (int t = 1; t <= 600; ++t) {
             sim.tick();
+
+            // The exploit: every order snaps the ant to the centre of the tile under it (GoTo, FUN_0101fc50).
+            // Right after crossing into the next tile the ant is still up to 16 px short of that tile's centre,
+            // so re-ordering then jumps it forward, which outweighs the restart of the walk on slow mud.
+            AntUnit& c = sim.get_unit(w_cancel);
+            if (ticks_cancel == 0 && c.loco_action == AntUnit::kActionWalk && (c.pixel_x % 32) < 16) {
+                const int32_t before = c.pixel_x;
+                sim.issue_move_order(w_cancel, TileCoord{20, 14});
+                ASSERT_GT(c.pixel_x, before);
+                ++forward_snaps;
+            }
 
             if (ticks_passive == 0 && sim.get_unit(w_passive).pos == TileCoord{20, 10} &&
                 sim.get_unit(w_passive).state != UnitState::Walking) {
@@ -7000,7 +7066,8 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
 
         ASSERT_TRUE(ticks_passive > 0);
         ASSERT_TRUE(ticks_cancel > 0);
-        // Mud humping completes significantly faster than passive walking across mud
+        ASSERT_TRUE(forward_snaps >= 5);
+        // Mud humping completes faster than passive walking across mud
         ASSERT_TRUE(ticks_cancel < ticks_passive);
     } TEST_END();
 
@@ -7048,13 +7115,14 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
     // ------------------------------------------------------------------------
     // 12.111: Occupied Destination Bumping (SoundID::Bump and Stopping Cleanly)
     // ------------------------------------------------------------------------
-    TEST_CASE("12.111 Occupied Destination Bumping (SoundID::Bump and Stopping Cleanly)") {
+    TEST_CASE("12.111 Destination Taken While Walking: Stop One Tile Short Without a Bump (TryEnterTile)") {
         SimulationEngine sim;
         sim.init_test_world(60, 60, 100, 60000);
 
         // Moving ant approaches towards destination (15, 15)
         uint32_t mover = sim.spawn_unit(0, AntType::Worker, TileCoord{12, 15});
         sim.issue_move_order(mover, TileCoord{15, 15});
+        tick_until_paths_delivered(sim, {mover});
 
         // Later, blocker occupies destination (15, 15)
         uint32_t blocker = sim.spawn_unit(0, AntType::Worker, TileCoord{15, 15});
@@ -7071,11 +7139,13 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
             }
         }
 
-        // Mover must stop at adjacent tile (distance 1 from occupied destination) and play Bump sound
-        ASSERT_TRUE(bumped);
+        // A taken final tile makes the walker stop where it is (StopSync at 0x101caf4); only a re-plan around
+        // an obstacle shows the bump effect. The mover waits on the tile next to its destination.
+        ASSERT_FALSE(bumped);
         ASSERT_EQ(sim.get_unit(mover).state, UnitState::Idle);
         ASSERT_TRUE(sim.get_unit(mover).pos.chebyshev_dist(TileCoord{15, 15}) == 1);
-        ASSERT_EQ(sim.get_unit(mover).final_dest, sim.get_unit(mover).pos);
+        ASSERT_TRUE(sim.get_unit(mover).waypoints.empty());
+        ASSERT_EQ(sim.get_unit(blocker).pos, (TileCoord{15, 15}));
     } TEST_END();
 
     // ------------------------------------------------------------------------
@@ -7316,8 +7386,10 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
 
         // Issue move order to ant 2 targeting (20, 10) ahead of ant 1
         sim.issue_move_order(ant2, TileCoord{20, 10});
+        tick_until_paths_delivered(sim, {ant2});
 
-        // Moving ally ant1 is NOT an impassable obstacle in A* routing (0x10209cd)
+        // Moving ally ant1 is NOT an impassable obstacle in A* routing (Ant::StepCost FUN_01020951: only a
+        // team-mate that is waiting, or idle without a path and without an order target, costs 8000).
         // Ant 2 must successfully find a path directly through the corridor!
         ASSERT_EQ(sim.get_unit(ant2).state, UnitState::Walking);
         ASSERT_FALSE(sim.get_unit(ant2).waypoints.empty());
@@ -8668,8 +8740,8 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
             sim.init_test_world(60, 60, 1, 60000);
             TileCoord bomb_pos{25, 25};
             TileCoord fire_pos{24, 26}; // Southwest of bomb (dx = -1, dy = +1)
-            sim.grid_mut().place_bomb(bomb_pos.x, bomb_pos.y, 1);
-            sim.grid_mut().place_firewall(fire_pos.x, fire_pos.y, 0);
+            sim.grid_mut().place_bomb(static_cast<uint32_t>(bomb_pos.x), static_cast<uint32_t>(bomb_pos.y), 1);
+            sim.grid_mut().place_firewall(static_cast<uint32_t>(fire_pos.x), static_cast<uint32_t>(fire_pos.y), 0);
 
             // Block all other neighbors of fire_pos except bomb_pos so fire bounce is forced towards bomb (northeast)
             for (int dx = -1; dx <= 1; ++dx) {
@@ -8716,7 +8788,7 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
             SimulationEngine sim;
             sim.init_test_world(60, 60, seed, 60000);
             TileCoord bomb_pos{20, 20};
-            sim.grid_mut().place_bomb(bomb_pos.x, bomb_pos.y, 1);
+            sim.grid_mut().place_bomb(static_cast<uint32_t>(bomb_pos.x), static_cast<uint32_t>(bomb_pos.y), 1);
 
             uint32_t ant = sim.spawn_unit(0, AntType::Worker, bomb_pos);
             auto& u = sim.get_unit(ant);
@@ -8830,7 +8902,7 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         SimulationEngine sim;
         sim.init_test_world(60, 60, 42, 60000);
         TileCoord fire_pos{15, 15};
-        sim.grid_mut().place_firewall(fire_pos.x, fire_pos.y, 0);
+        sim.grid_mut().place_firewall(static_cast<uint32_t>(fire_pos.x), static_cast<uint32_t>(fire_pos.y), 0);
 
         uint32_t ant = sim.spawn_unit(0, AntType::Worker, fire_pos);
         sim.tick();
@@ -8850,7 +8922,7 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
             SimulationEngine sim;
             sim.init_test_world(60, 60, seed, 60000);
             TileCoord bomb_pos{20, 20};
-            sim.grid_mut().place_bomb(bomb_pos.x, bomb_pos.y, 1);
+            sim.grid_mut().place_bomb(static_cast<uint32_t>(bomb_pos.x), static_cast<uint32_t>(bomb_pos.y), 1);
             uint32_t ant = sim.spawn_unit(0, AntType::Worker, bomb_pos);
             sim.get_unit(ant).hp = 10;
             sim.trigger_bomb_detonation(ant, bomb_pos, 0, 0);
@@ -8884,7 +8956,7 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
     // ------------------------------------------------------------------------
     // 12.67 Mutual Ant-Ant Collision Bouncing
     // ------------------------------------------------------------------------
-    TEST_CASE("12.67 Mutual Ant-Ant Collision Bouncing") {
+    TEST_CASE("12.67 Head-On Walkers Wait, Re-Plan and Pass Without Bouncing") {
         SimulationEngine sim;
         sim.init_test_world(60, 60, 42, 60000);
 
@@ -8893,18 +8965,38 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
 
         sim.issue_move_order(ant1, TileCoord{15, 10});
         sim.issue_move_order(ant2, TileCoord{10, 10});
+        // Each clicked tile holds the other ant, so GoTo takes the first free tile of the ring scan around it
+        // (west column first, top first): ant 1 heads for (14, 9), ant 2 for (9, 9).
+        ASSERT_EQ(sim.get_unit(ant1).final_dest, (TileCoord{14, 9}));
+        ASSERT_EQ(sim.get_unit(ant2).final_dest, (TileCoord{9, 9}));
 
-        bool both_bounced = false;
-        for (int t = 0; t < 50; ++t) {
+        // Walking ants never bounce off each other in the original: the occupancy grid stops them at the tile
+        // boundary, they wait (ANTPAUSE, 300 ms) while the other ant is moving, and re-plan around it (bump)
+        // once it stands still.
+        bool bounced = false;
+        bool shared_tile = false;
+        bool waited = false;
+        for (int t = 0; t < 200; ++t) {
             sim.tick();
             const auto& u1 = sim.get_unit(ant1);
             const auto& u2 = sim.get_unit(ant2);
-            if (u1.state == UnitState::Bounce && u2.state == UnitState::Bounce) {
-                both_bounced = true;
+            if (u1.state == UnitState::Bounce || u2.state == UnitState::Bounce ||
+                u1.state == UnitState::Knockback || u2.state == UnitState::Knockback) {
+                bounced = true;
+            }
+            if (u1.pause_active || u2.pause_active) waited = true;
+            if (u1.occ_tile == u2.occ_tile) shared_tile = true;
+            if (u1.pos == TileCoord{14, 9} && u2.pos == TileCoord{9, 9} &&
+                u1.waypoints.empty() && u2.waypoints.empty()) {
                 break;
             }
         }
-        ASSERT_TRUE(both_bounced);
+        ASSERT_FALSE(bounced);
+        ASSERT_FALSE(shared_tile);
+        ASSERT_TRUE(waited);
+        ASSERT_TRUE(sim.has_audio_event(SoundID::Bump));   // the re-plan around the waiting ant
+        ASSERT_EQ(sim.get_unit(ant1).pos, (TileCoord{14, 9}));
+        ASSERT_EQ(sim.get_unit(ant2).pos, (TileCoord{9, 9}));
     } TEST_END();
 
     // ------------------------------------------------------------------------
@@ -8938,6 +9030,7 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         // 1. Bomb Placement Pre-Check & Mid-Animation Walk-On Detonation
         uint32_t occupied_ant = sim.spawn_unit(1, AntType::Worker, TileCoord{12, 10});
         uint32_t bomber1 = sim.spawn_unit(0, AntType::Bomber, TileCoord{11, 10});
+        ASSERT_EQ(sim.get_unit(occupied_ant).pos, (TileCoord{12, 10}));
         // Bomber cannot initiate placement on a tile already occupied by an ant
         ASSERT_FALSE(sim.plant_bomb(bomber1, TileCoord{12, 10}));
 
@@ -9182,7 +9275,7 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         ASSERT_TRUE(sim.has_audio_event(SoundID::AntDrown));
     } TEST_END();
 
-    TEST_CASE("12.137 Non-Thief Friendly Unit Clicking Enemy Base Routes to Closest Available Perimeter Tile Without CantGo") {
+    TEST_CASE("12.137 Non-Thief Friendly Unit Clicking Enemy Base Stops Without CantGo (GoTo, FUN_0101fc50)") {
         SimulationEngine sim;
         sim.init_test_world(60, 60, 42, 60000);
         sim.set_anthill(0, TileCoord{2, 2});
@@ -9211,22 +9304,22 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         ASSERT_FALSE(sim.has_audio_event(SoundID::CantGo));
 
         const auto& u = sim.get_unit(worker);
-        // Ant is walking towards closest available perimeter tile adjacent to enemy base
-        ASSERT_TRUE(u.state == UnitState::Walking || !u.waypoints.empty());
+        // The original GoTo stops a non-thief that is ordered onto an enemy hill (StopSync) and requests no path
+        ASSERT_FALSE(sim.has_pending_path(worker));
+        ASSERT_TRUE(u.waypoints.empty());
         ASSERT_NE(u.state, UnitState::Infiltrating);
 
-        // Advance simulation ticks until ant completes movement
-        for (int t = 0; t < 100; ++t) {
+        for (int t = 0; t < 40; ++t) {
             sim.tick();
-            if (sim.get_unit(worker).state == UnitState::Idle) break;
         }
 
         const auto& u_done = sim.get_unit(worker);
         ASSERT_EQ(u_done.state, UnitState::Idle);
-        // Arrived at the perimeter outside the 4x4 enemy base footprint (8..11, 8..11)
+        ASSERT_EQ(u_done.pos, (TileCoord{5, 8}));
+        // Never inside the 4x4 enemy base footprint (8..11, 8..11)
         bool inside_enemy_base = (u_done.pos.x >= 8 && u_done.pos.x < 12 && u_done.pos.y >= 8 && u_done.pos.y < 12);
         ASSERT_FALSE(inside_enemy_base);
-        ASSERT_TRUE(u_done.pos.chebyshev_dist(TileCoord{8, 8}) <= 2);
+        ASSERT_FALSE(sim.has_audio_event(SoundID::CantGo));
     } TEST_END();
 
     TEST_CASE("12.138 Clicking Base Queue Slots Issues Standard Move Without Auto-Queueing") {
@@ -9358,9 +9451,14 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         // Worker starts at (0, 5)
         uint32_t ant = sim.spawn_unit(0, AntType::Worker, TileCoord{0, 5});
 
+        auto arrived_at = [&](TileCoord t) {
+            const auto& u = sim.get_unit(ant);
+            return u.pos == t && u.waypoints.empty() && !sim.has_pending_path(ant) && u.state == UnitState::Idle;
+        };
+
         // Step 1: Order to (0, 4)
         sim.issue_move_order(ant, {0, 4});
-        for (int t = 0; t < 8; ++t) sim.tick();
+        ASSERT_TRUE(tick_until(sim, [&]() { return arrived_at(TileCoord{0, 4}); }, 40));
         ASSERT_EQ(sim.get_unit(ant).pos, (TileCoord{0, 4}));
         ASSERT_EQ(sim.get_unit(ant).state, UnitState::Idle);
         ASSERT_GT(sim.get_unit(ant).powerup_dwell_timer, 0);
@@ -9369,7 +9467,7 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         // Step 2: Quick click before dwell finishes! Redirect to (0, 3)
         sim.issue_move_order(ant, {0, 3});
         ASSERT_EQ(sim.get_unit(ant).powerup_dwell_timer, 0);
-        for (int t = 0; t < 8; ++t) sim.tick();
+        ASSERT_TRUE(tick_until(sim, [&]() { return arrived_at(TileCoord{0, 3}); }, 40));
         ASSERT_EQ(sim.get_unit(ant).pos, (TileCoord{0, 3}));
         ASSERT_EQ(sim.get_unit(ant).type, AntType::Worker); // Still Worker!
         ASSERT_TRUE(sim.grid().has_powerup_at({0, 4}));      // Hat at (0, 4) untouched!
@@ -9378,7 +9476,7 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         // Step 3: Quick click to (0, 2) (the target Swimmer hat)
         sim.issue_move_order(ant, {0, 2});
         ASSERT_EQ(sim.get_unit(ant).powerup_dwell_timer, 0);
-        for (int t = 0; t < 8; ++t) sim.tick();
+        ASSERT_TRUE(tick_until(sim, [&]() { return arrived_at(TileCoord{0, 2}); }, 40));
         ASSERT_EQ(sim.get_unit(ant).pos, (TileCoord{0, 2}));
         ASSERT_EQ(sim.get_unit(ant).type, AntType::Worker);
         ASSERT_TRUE(sim.grid().has_powerup_at({0, 3}));      // Hat at (0, 3) untouched!

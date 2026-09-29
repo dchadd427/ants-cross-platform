@@ -157,11 +157,15 @@ struct AnimationFrame {
 };
 
 /**
- * @brief Animation subitem track.
+ * @brief Animation subitem track (one Table-4 animation frame).
+ *
+ * val1/val2 are the frame's signed locomotion displacement: the original engine moves the
+ * sprite by (val1, val2) pixels when the frame's duration val3 expires (FUN_0102a977 reads
+ * them as dx, dy, duration; walk animations carry e.g. dx = -4 for a step to the west).
  */
 struct AnimationSubItem {
-    uint32_t val1{0};
-    uint32_t val2{0};
+    int32_t  val1{0};            // Per-frame displacement dx (signed pixels)
+    int32_t  val2{0};            // Per-frame displacement dy (signed pixels)
     uint32_t val3{0};            // Duration / time delta (typically 1000)
     int32_t  box_left{0};        // Interaction bounding box Left
     int32_t  box_top{0};         // Interaction bounding box Top

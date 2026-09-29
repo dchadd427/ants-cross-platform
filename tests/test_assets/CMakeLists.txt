@@ -58,3 +58,19 @@ target_compile_definitions(test_challenger_m1_it2_2 PRIVATE
 
 add_test(NAME test_challenger_m1_it2_2 COMMAND test_challenger_m1_it2_2)
 
+# Movement ground-truth tables (generated src/ants_sim/movement_tables_data.inc) vs ants.chd / Ants.exe
+add_executable(test_movement_tables
+    test_movement_tables.cpp
+)
+
+target_link_libraries(test_movement_tables PRIVATE ants_sim ants_assets)
+
+target_include_directories(test_movement_tables PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../src/ants_sim
+)
+
+target_compile_definitions(test_movement_tables PRIVATE
+    ORIGINAL_ASSETS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../../Original-Ants"
+)
+
+add_test(NAME test_movement_tables COMMAND test_movement_tables)

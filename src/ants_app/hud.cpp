@@ -1,6 +1,5 @@
 #include "ants_app/hud.hpp"
 #include "ants_app/renderer.hpp"
-#include "ants_sim/pathfinding.hpp"
 
 #include <cmath>
 #include <algorithm>
@@ -2654,36 +2653,6 @@ void HUD::dispatch_move_order(int32_t target_tile_x, int32_t target_tile_y, sim:
     }
     if (targets.empty()) return;
 
-    // Play authentic Move / Go voice clip for the primary selected friendly unit (if destination is passable or edge-reachable)
-    bool dest_is_passable = sim.grid().in_bounds(target_tile_x, target_tile_y) &&
-                            sim.grid().get_cell(static_cast<uint32_t>(target_tile_x), static_cast<uint32_t>(target_tile_y)).is_passable();
-    if (!dest_is_passable) {
-        for (uint32_t aid : targets) {
-            const auto& u = sim.get_unit(aid);
-            if (u.id == aid) {
-                auto test_path = sim::PathFinder::find_path(sim.grid(), u.pos, {target_tile_x, target_tile_y},
-                                                            u.type == sim::AntType::Swimmer, u.type == sim::AntType::Fire, 500);
-                if (!test_path.empty()) {
-                    dest_is_passable = true;
-                    break;
-                }
-            }
-        }
-    }
-    if (dest_is_passable) {
-        for (uint32_t aid : targets) {
-            for (const auto& a : world.ants) {
-                if (a.id == aid && a.player_id == local_player_id_) {
-                    play_sfx(sim::get_move_voice_sound(a.type, voice_variant_++));
-                    goto move_voice_done;
-                }
-            }
-        }
-    } else {
-        play_sfx(sim::SoundID::CantGo);
-    }
-move_voice_done:
-
     bool target_is_food = sim.grid().has_food_at({target_tile_x, target_tile_y});
     if (!target_is_food) {
         for (const auto& afs : sim.grid().food_schedules()) {
@@ -2698,103 +2667,13 @@ move_voice_done:
         }
     }
 
-    if (targets.size() == 1) {
-        sim::AntOrder order;
-        order.ant_id = targets[0];
-        order.type = sim::OrderType::Move;
-        order.target_x = target_tile_x;
-        order.target_y = target_tile_y;
-        order.allow_friendly_bomb = allow_friendly_bomb;
-        order.is_food_order = target_is_food;
-        sim.issue_order(order);
-        return;
-    }
-
-    if (allow_friendly_bomb && sim.grid().has_bomb_at({target_tile_x, target_tile_y})) {
-        for (uint32_t aid : targets) {
-            sim::AntOrder order;
-            order.ant_id = aid;
-            order.type = sim::OrderType::Move;
-            order.target_x = target_tile_x;
-            order.target_y = target_tile_y;
-            order.allow_friendly_bomb = true;
-            order.is_food_order = target_is_food;
-            sim.issue_order(order);
-        }
-        return;
-    }
-
-    // Concentric Chebyshev ring distribution for authentic tidy group formations
-    const auto& grid = sim.grid();
-    std::vector<std::pair<int32_t, int32_t>> slots;
-    slots.reserve(targets.size());
-    std::unordered_set<uint64_t> visited;
-    auto add_slot = [&](int32_t x, int32_t y) {
-        uint64_t key = (static_cast<uint64_t>(x) << 32) | static_cast<uint32_t>(y);
-        if (visited.insert(key).second) {
-            if (grid.in_bounds(x, y) && grid.get_cell(static_cast<uint32_t>(x), static_cast<uint32_t>(y)).is_passable()) {
-                slots.push_back({x, y});
-            }
-        }
-    };
-
-    if (grid.has_food_at({target_tile_x, target_tile_y}) || grid.has_lunchbox_at({target_tile_x, target_tile_y})) {
-        const sim::ActiveFoodSchedule* matched_fs = nullptr;
-        for (const auto& afs : grid.food_schedules()) {
-            if (!afs.active) continue;
-            for (const auto& c : afs.footprint) {
-                if (c.x == target_tile_x && c.y == target_tile_y) {
-                    matched_fs = &afs;
-                    break;
-                }
-            }
-            if (matched_fs) break;
-        }
-        if (matched_fs) {
-            for (const auto& c : matched_fs->footprint) add_slot(c.x, c.y);
-            for (const auto& c : matched_fs->footprint) {
-                for (int32_t dy = -1; dy <= 1; ++dy) {
-                    for (int32_t dx = -1; dx <= 1; ++dx) {
-                        add_slot(c.x + dx, c.y + dy);
-                    }
-                }
-            }
-        } else {
-            add_slot(target_tile_x, target_tile_y);
-            for (int32_t dy = -1; dy <= 1; ++dy) {
-                for (int32_t dx = -1; dx <= 1; ++dx) {
-                    add_slot(target_tile_x + dx, target_tile_y + dy);
-                }
-            }
-        }
-    } else if (grid.in_bounds(target_tile_x, target_tile_y) &&
-               grid.get_cell(static_cast<uint32_t>(target_tile_x), static_cast<uint32_t>(target_tile_y)).is_passable()) {
-        add_slot(target_tile_x, target_tile_y);
-    }
-
-    for (int32_t r = 1; slots.size() < targets.size() && r < 20; ++r) {
-        for (int32_t dy = -r; dy <= r && slots.size() < targets.size(); ++dy) {
-            for (int32_t dx = -r; dx <= r && slots.size() < targets.size(); ++dx) {
-                if (std::max(std::abs(dx), std::abs(dy)) != r) continue;
-                add_slot(target_tile_x + dx, target_tile_y + dy);
-            }
-        }
-    }
-
-    for (size_t i = 0; i < targets.size(); ++i) {
-        sim::AntOrder order;
-        order.ant_id = targets[i];
-        order.type = sim::OrderType::Move;
-        order.allow_friendly_bomb = allow_friendly_bomb;
-        order.is_food_order = target_is_food;
-        if (i < slots.size()) {
-            order.target_x = slots[i].first;
-            order.target_y = slots[i].second;
-        } else {
-            order.target_x = target_tile_x;
-            order.target_y = target_tile_y;
-        }
-        sim.issue_order(order);
+    // Original group order (Ants.exe FUN_010287b5): every selected ant is sent to the clicked tile, closest
+    // first; team-mate claims and the goal ring scan spread the group over free tiles. Only the closest ant
+    // answers ("On my way." voice), and only when its order queued a path.
+    const uint32_t ack = sim.issue_group_move_order(targets, sim::TileCoord{target_tile_x, target_tile_y},
+                                                    allow_friendly_bomb, target_is_food);
+    if (ack != 0) {
+        play_sfx(sim::get_move_voice_sound(sim.get_unit(ack).type, voice_variant_++));
     }
 }
 

@@ -484,7 +484,7 @@ bool CHDParser::parse_table4_animations(const uint8_t* data, size_t size, size_t
                 AnimationSubItem& sub = anim.subitems[s];
                 uint32_t frame_count = 0;
 
-                if (!r.read_u32(sub.val1) || !r.read_u32(sub.val2) || !r.read_u32(sub.val3) ||
+                if (!r.read_i32(sub.val1) || !r.read_i32(sub.val2) || !r.read_u32(sub.val3) ||
                     !r.read_i32(sub.box_left) || !r.read_i32(sub.box_top) ||
                     !r.read_i32(sub.box_right) || !r.read_i32(sub.box_bottom) ||
                     !r.read_u32(sub.flags) || !r.read_u32(sub.default_sp) ||

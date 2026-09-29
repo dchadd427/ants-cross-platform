@@ -32,30 +32,41 @@ bool Grid::init_from_level(const ants::assets::LevelData& level) {
             cell.terrain_id = c1.tile_index;
             cell.flags = c1.flags;
             cell.terrain_type = determine_terrain_type(c1.tile_index, c1.flags);
+            // Original engine: the layer-1 solid bit is stored verbatim from the file's cell flags by the
+            // level reader (Ants.exe FUN_010069d8: word0 = (tile << 1) | (flags & 1)).
+            cell.static_solid = (c1.flags & 1u) != 0;
             cell.occupant_ant_id = -1;
             cell.lunchbox_points = 0;
             cell.is_mud = false;
             cell.surface_type = SurfaceType::Grass;
 
+            // Terrain class of the layer-1 tile from the original tile-info table (Ants.exe 0x1001360 pairs,
+            // FUN_0100724c; LVL tile indices are CHD Table-4 indices). On the shipped maps this agrees with
+            // the tile names' first letter (w water, s sand, d dirt, m mud, otherwise grass).
             const std::string& l1_name = level.get_tile_name(c1.tile_index);
             if (!l1_name.empty() && l1_name != ".") {
-                char ch = static_cast<char>(std::tolower(static_cast<unsigned char>(l1_name[0])));
-                if (ch == 'w') {
-                    cell.terrain_type = TERRAIN_WATER;
-                    cell.surface_type = SurfaceType::Water;
-                } else if (ch == 's') {
-                    cell.terrain_type = TERRAIN_WALKABLE;
-                    cell.surface_type = SurfaceType::Slate;
-                } else if (ch == 'd') {
-                    cell.terrain_type = TERRAIN_WALKABLE;
-                    cell.surface_type = SurfaceType::Gravel;
-                } else if (ch == 'm') {
-                    cell.terrain_type = TERRAIN_WALKABLE;
-                    cell.surface_type = SurfaceType::Mud;
-                    cell.is_mud = true;
-                } else {
-                    cell.terrain_type = TERRAIN_WALKABLE;
-                    cell.surface_type = SurfaceType::Grass;
+                switch (movement::terrain_class_of_tile(c1.tile_index)) {
+                    case movement::kTerrainWater:
+                        cell.terrain_type = TERRAIN_WATER;
+                        cell.surface_type = SurfaceType::Water;
+                        break;
+                    case movement::kTerrainSand:
+                        cell.terrain_type = TERRAIN_WALKABLE;
+                        cell.surface_type = SurfaceType::Slate;
+                        break;
+                    case movement::kTerrainDirt:
+                        cell.terrain_type = TERRAIN_WALKABLE;
+                        cell.surface_type = SurfaceType::Gravel;
+                        break;
+                    case movement::kTerrainMud:
+                        cell.terrain_type = TERRAIN_WALKABLE;
+                        cell.surface_type = SurfaceType::Mud;
+                        cell.is_mud = true;
+                        break;
+                    default:
+                        cell.terrain_type = TERRAIN_WALKABLE;
+                        cell.surface_type = SurfaceType::Grass;
+                        break;
                 }
             }
 
@@ -97,8 +108,8 @@ bool Grid::init_from_level(const ants::assets::LevelData& level) {
                         else if (lower_name == "pu_mason" || lower_name == "pu_fire") cell.powerup_type = 2; // Fire
                     } else if (lower_name.find("hill") != std::string::npos) {
                         if ((c2.flags & 1) != 0) {
+                            // The terrain class stays that of the layer-1 tile (Ants.exe FUN_01008af7).
                             cell.terrain_type = TERRAIN_WALKABLE;
-                            cell.surface_type = SurfaceType::Gravel;
                             cell.is_obstacle_overlay = false;
                         } else {
                             cell.is_obstacle_overlay = true;
@@ -216,7 +227,47 @@ bool Grid::init_from_level(const ants::assets::LevelData& level) {
         food_schedules_.push_back(afs);
     }
 
+    // Original-engine solid bits (layer-1 cell bit0) beyond the per-cell file flag:
+    //  * every Block-4 entry marks its tile solid (Ants.exe FUN_01006f0e -> FUN_0100660c(row, col, 1));
+    //    this is what makes daisy-flower stems block ants, including entries without a plant;
+    //  * row 0 is always solid (level loader loop at 0x1006592; FUN_0100660c never clears row 0).
+    for (const auto& wp : level.waypoints) {
+        if (in_bounds(static_cast<int32_t>(wp.x), static_cast<int32_t>(wp.y))) {
+            get_cell_mut(static_cast<uint32_t>(wp.x), static_cast<uint32_t>(wp.y)).static_solid = true;
+        }
+    }
+    for (uint32_t x = 0; x < width_; ++x) {
+        get_cell_mut(x, 0).static_solid = true;
+    }
+    // Removable objects (food, power-ups, lunchboxes, fire walls) are tracked dynamically by
+    // is_solid_object(), mirroring object placement/removal (FUN_01007a22 / FUN_0100744f).
+    for (uint32_t y = 1; y < height_; ++y) {
+        for (uint32_t x = 0; x < width_; ++x) {
+            auto& cell = get_cell_mut(x, y);
+            if (cell.is_food || cell.is_powerup || cell.has_lunchbox() || cell.has_fire()) {
+                cell.static_solid = false;
+            }
+        }
+    }
+    // The anthill set-up clears the entrance and the tile above it (FUN_0100ecdf -> FUN_0100660c(.., 0)).
+    for (const auto& ah : anthills_) {
+        clear_anthill_entrance_solid(TileCoord{static_cast<int32_t>(ah.x), static_cast<int32_t>(ah.y)});
+    }
+    exact_solid_bits_ = true;
+
     return true;
+}
+
+void Grid::clear_anthill_entrance_solid(TileCoord base) noexcept {
+    // Remake anthill origin (bx, by) is the top-left of the 4x4 mound; the original's hill entrance is
+    // (bx + 1, by + 1) and the tile above it (bx + 1, by). Row 0 can never be cleared.
+    for (int32_t dy = 0; dy <= 1; ++dy) {
+        int32_t ex = base.x + 1;
+        int32_t ey = base.y + dy;
+        if (ey > 0 && in_bounds(ex, ey)) {
+            get_cell_mut(static_cast<uint32_t>(ex), static_cast<uint32_t>(ey)).static_solid = false;
+        }
+    }
 }
 
 void Grid::configure_anthill_cells(TileCoord pos, uint8_t team_id) {
@@ -236,16 +287,19 @@ void Grid::configure_anthill_cells(TileCoord pos, uint8_t team_id) {
                     mcell.is_thief_only = false;
                     mcell.terrain_type = TERRAIN_OBSTACLE;
                     mcell.is_obstacle_overlay = false;
+                    mcell.static_solid = (my == 0); // entrance + tile above are cleared (row 0 stays solid)
                 } else if (dx == 3 && dy == 2) {
                     mcell.is_thief_only = true;
                     mcell.is_base_hole = false;
                     mcell.terrain_type = TERRAIN_OBSTACLE;
                     mcell.is_obstacle_overlay = false;
+                    mcell.static_solid = true; // hill footprint (the raid rule bypasses it for raiding thieves)
                 } else {
                     mcell.is_thief_only = false;
                     mcell.is_base_hole = false;
                     mcell.terrain_type = TERRAIN_OBSTACLE;
                     mcell.is_obstacle_overlay = true;
+                    mcell.static_solid = true; // hill footprint
                 }
             }
         }

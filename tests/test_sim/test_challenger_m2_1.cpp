@@ -858,12 +858,16 @@ void run_suite_6_adversarial_stress() {
         sim.tick();
         ASSERT_EQ(sim.get_unit(combat).state, UnitState::Intercepting);
 
-        // Step until melee punch delivered
-        for (int i = 0; i < 5; ++i) sim.tick();
+        // Step until melee punch delivered (the guard walks to the intruder at the original pace: its path
+        // comes from the path manager, then about 0.7 s for the diagonal tile)
+        for (int i = 0; i < 40 && sim.get_unit(enemy).hp == 10; ++i) sim.tick();
         ASSERT_EQ(sim.get_unit(enemy).hp, 8);
 
         // Combat Ant returns to (0, 0)
-        for (int i = 0; i < 20; ++i) sim.tick();
+        for (int i = 0; i < 80; ++i) {
+            if (sim.get_unit(combat).pos == TileCoord{0, 0} && sim.get_unit(combat).state == UnitState::GuardIdle) break;
+            sim.tick();
+        }
         ASSERT_EQ(sim.get_unit(combat).pos.x, 0);
         ASSERT_EQ(sim.get_unit(combat).pos.y, 0);
         ASSERT_EQ(sim.get_unit(combat).state, UnitState::GuardIdle);
@@ -879,13 +883,16 @@ void run_suite_6_adversarial_stress() {
 
         sim.execute_melee_attack(combat, worker);
 
-        // Target should be clamped at boundary (pos.x == 0), never negative!
+        // Never knocked off the map. The original punch (FUN_0101d8ed, combat range 4 tiles) tries the strike
+        // direction and then d+1, d-1, d+2, d-2 and tests only the landing tile: west, north-west and
+        // south-west land off the map, so the worker lands 4 tiles north at (1, 6).
         ASSERT_GE(sim.get_unit(worker).pos.x, 0);
-        ASSERT_EQ(sim.get_unit(worker).pos.y, 10);
+        ASSERT_EQ(sim.get_unit(worker).pos.x, 1);
+        ASSERT_EQ(sim.get_unit(worker).pos.y, 6);
         ASSERT_EQ(sim.get_unit(worker).hp, 8);
     } TEST_END();
 
-    TEST_CASE("6.3 Knockback Obstacle Raycasting Stops Flight at Obstacle Edge") {
+    TEST_CASE("6.3 Knockback Flies Over an Obstacle; Only the Landing Tile Is Tested (FUN_0101d8ed)") {
         SimulationEngine sim;
         sim.init_test_world(60, 60, 100);
         // Place solid obstacle rock at (14, 10)
@@ -896,8 +903,9 @@ void run_suite_6_adversarial_stress() {
 
         sim.execute_melee_attack(combat, worker);
 
-        // Flight stops before the obstacle at (13, 10)
-        ASSERT_EQ(sim.get_unit(worker).pos.x, 13);
+        // The punch flies the worker 4 tiles east over the rock at (14, 10): the original tests only the landing
+        // tile (in bounds, not solid, not a hill tile), so it lands at (15, 10)
+        ASSERT_EQ(sim.get_unit(worker).pos.x, 15);
         ASSERT_EQ(sim.get_unit(worker).pos.y, 10);
         ASSERT_TRUE(sim.get_unit(worker).is_stunned());
     } TEST_END();

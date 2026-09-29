@@ -8,6 +8,7 @@
 #include <optional>
 #include "ants_assets/mirroring.hpp"
 #include "ants_sim/grid.hpp"
+#include "ants_sim/movement_tables.hpp"
 
 namespace ants::sim {
 
@@ -138,11 +139,27 @@ public:
     static constexpr uint16_t STANDARD_DAMAGE = 1;
     static constexpr uint16_t COMBAT_DAMAGE   = 2;
 
-    // Movement Speeds (16.16 fixed-point pixels per tick at 20 Hz)
-    static constexpr int32_t SPEED_STANDARD_FX = 262144; // 4.0 px/tick (2.5 tiles/sec)
-    static constexpr int32_t SPEED_THIEF_FX    = 367001; // 5.6 px/tick (3.5 tiles/sec)
-    static constexpr int32_t SPEED_AQUATIC_FX  = 209715; // 3.2 px/tick (2.0 tiles/sec)
-    static constexpr int32_t DIAG_SCALE_FX     = 46341;  // 1 / sqrt(2) in 16.16
+    // Locomotion has no speed constants: in Ants.exe an ant moves only when a walk-animation frame
+    // ends, by that frame's dx/dy from ants.chd Table 4 (see movement_tables.hpp and
+    // docs/GAME_REVERSE_ENGINEERING.md, "Movement ground truth").
+
+    // Original-engine "action" ids (CAntUnit +0xe4) for locomotion-managed states.
+    static constexpr uint8_t kActionIdle   = 0x00;  // *st* idle animation
+    static constexpr uint8_t kActionWalk   = 0x01;  // *w{g,s,m,d}* walk / assw swim / asdi dive / asgo climb
+    static constexpr uint8_t kActionCantGo = 0x0B;  // *cg301 "can't" animation (sound 63 on frame 0)
+    static constexpr uint8_t kActionNone   = 0xFF;  // state driven by other remake systems (no locomotion clip)
+
+    // Order codes (CAntUnit +0xa8) and the "no target" sentinel tile of +0xac (row 0x5a, col 0x78).
+    static constexpr uint8_t kOrderNone    = 0x00;
+    static constexpr uint8_t kOrderMove    = 0x01;
+    static constexpr uint8_t kOrderHome    = 0x02;
+    static constexpr uint8_t kOrderAttack  = 0x03;
+    static constexpr uint8_t kOrderPowerUp = 0x04;
+    static constexpr uint8_t kOrderHarvest = 0x05;
+    static constexpr uint8_t kOrderBomb    = 0x0A;
+    static constexpr uint8_t kOrderRaid    = 0x0B;
+    static constexpr int32_t kNoOrderTileX = 0x78;
+    static constexpr int32_t kNoOrderTileY = 0x5A;
 
     static constexpr uint16_t FLINCH_TICKS     = 14;
     static constexpr uint16_t STUN_TICKS       = 50; // Authentic 2.5s (50 ticks @ 20Hz, 3-4 star rotations)
@@ -180,7 +197,6 @@ public:
     uint16_t    anim_tick{0};
     uint16_t    state_timer{0};
     uint16_t    transform_timer{0};
-    uint16_t    blocked_ticks{0};
     uint16_t    base_dwell_ticks{0};
     bool        is_on_mud{false};
     bool        was_in_water{false};
@@ -222,6 +238,33 @@ public:
     bool        cantgo_standing_on_powerup{false};
     TileCoord   dropped_powerup_pos{-1, -1};
     uint16_t    invulnerable_ticks{0};
+
+    // ---- Original-engine locomotion state (Ants.exe sprite animation + CAntUnit fields) ----
+    // Waypoints follow the original convention: waypoints[0] is the start tile, waypoints.back() the
+    // goal, and current_waypoint_idx starts at 0 (the first ARRIVE advances it to 1).
+    struct LocoPlayer {
+        movement::MotionClip clip{};   // running animation (frame list, sprite +0x28)
+        uint16_t cursor{0};            // 0 = start step pending; otherwise 1-based index of the current frame (+0x2c)
+        uint32_t next_ms{0};           // animation-clock time at which the current frame ends (+0x10)
+        uint8_t  dir{4};               // direction the clip was chosen for (renderer uses it for mirroring)
+        uint32_t serial{0};            // incremented on every play (detects a clip change inside a step callback)
+    };
+    LocoPlayer  loco{};
+    uint8_t     loco_action{kActionNone};   // CAntUnit +0xe4 while locomotion-managed
+    bool        dive_flag{false};           // +0x88: swimmer dive-in / climb-out animation running
+    bool        pause_active{false};        // +0x60: ANTPAUSE wait (blocked by a moving ant)
+    uint32_t    pause_fire_ms{0};
+    uint8_t     pause_saved_action{0};
+    uint8_t     pause_saved_dir{0};
+    uint8_t     orig_order{kOrderNone};     // +0xa8
+    TileCoord   orig_order_tile{kNoOrderTileX, kNoOrderTileY}; // +0xac
+    uint8_t     orig_target_team{255};      // +0xb0 (attack order)
+    uint32_t    orig_target_ant{0};         // +0xb2 (attack order)
+    int32_t     orig_food_id{-1};           // +0xb0 (harvest order): food object identity
+    TileCoord   orig_food_tile{-1, -1};     // +0xb4 (harvest order): food anchor tile
+    uint32_t    move_serial{0};             // bumped by clear_path() to invalidate pending path requests
+    TileCoord   occ_tile{-1, -1};           // +0x5a/+0x5c: tile this ant is registered on in the occupancy grid
+    bool        arrived_this_tick{false};   // set when the path completed during the current tick
 
     AntUnit(uint32_t unit_id, TeamId team_in, AntType type_in, int32_t start_tx, int32_t start_ty);
 
@@ -309,13 +352,20 @@ public:
         carried_food = 0;
         carried_points = 0;
     }
-    void set_path(std::vector<TileCoord> path);
+    // Ends the current walk and order like the original SetPath(0) (FUN_0101ab87): no waypoints, order 0,
+    // no target tile, and any path request still queued for the ant is dropped when it arrives.
     void clear_path() noexcept {
         waypoints.clear();
         final_dest = TileCoord{-1, -1};
         current_waypoint_idx = 0;
         anim_tick = 0;
         anim_subitem = 0;
+        orig_order = kOrderNone;
+        orig_order_tile = TileCoord{kNoOrderTileX, kNoOrderTileY};
+        ++move_serial;
+    }
+    bool has_order_tile() const noexcept {
+        return static_cast<uint16_t>(orig_order_tile.y) < static_cast<uint16_t>(kNoOrderTileY);
     }
 
     void start_flinch(uint16_t ticks = FLINCH_TICKS) noexcept {
@@ -341,7 +391,6 @@ public:
         anim_tick = 0;
     }
 
-    void tick_movement(bool is_swimming, SurfaceType surface = SurfaceType::Grass);
     void tick_timers() noexcept;
 };
 
