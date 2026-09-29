@@ -4,6 +4,7 @@
 #include <iostream>
 #include <cstring>
 #include <cstdio>
+#include <cctype>
 
 namespace ants::app {
 
@@ -162,61 +163,6 @@ bool ViewportCamera::screen_to_world(int32_t sx, int32_t sy, int32_t& wx, int32_
 // TextureCache Implementation
 // ============================================================================
 
-TextureCache::TextureCache(SDL_Renderer* renderer, const ants::assets::AssetArchive& archive)
-    : renderer_(renderer), archive_(archive) {
-    for (size_t i = 0; i < archive_.sprite_count(); ++i) {
-        const auto& name = archive_.get_sprite(static_cast<uint32_t>(i)).name;
-        if (name == "2bomb.bmp") base_bomb_sprite_id_ = static_cast<int32_t>(i);
-        else if (name == "2bombgrn.bmp") team_bomb_sprite_ids_[0] = static_cast<int32_t>(i);
-        else if (name == "2bombred.bmp") team_bomb_sprite_ids_[1] = static_cast<int32_t>(i);
-        else if (name == "2bombblu.bmp") team_bomb_sprite_ids_[2] = static_cast<int32_t>(i);
-        else if (name == "2bombblk.bmp") team_bomb_sprite_ids_[3] = static_cast<int32_t>(i);
-    }
-}
-
-TextureCache::~TextureCache() {
-    clear();
-}
-
-void TextureCache::clear() {
-    for (auto& pair : textures_) {
-        if (pair.second) {
-            SDL_DestroyTexture(pair.second);
-        }
-    }
-    textures_.clear();
-}
-
-bool TextureCache::is_base_bomb_sprite(uint32_t sprite_id) const noexcept {
-    return base_bomb_sprite_id_ >= 0 && sprite_id == static_cast<uint32_t>(base_bomb_sprite_id_);
-}
-
-uint32_t TextureCache::get_team_bomb_sprite_index(uint8_t team_id) const noexcept {
-    if (team_id < 4 && team_bomb_sprite_ids_[team_id] >= 0) {
-        return static_cast<uint32_t>(team_bomb_sprite_ids_[team_id]);
-    }
-    return base_bomb_sprite_id_ >= 0 ? static_cast<uint32_t>(base_bomb_sprite_id_) : 0;
-}
-
-SDL_Texture* TextureCache::get_sprite_texture(uint32_t sprite_id, bool mirrored, uint8_t team_id) {
-    uint32_t eff_sprite_id = sprite_id;
-    if (team_id < 4 && is_base_bomb_sprite(sprite_id)) {
-        eff_sprite_id = get_team_bomb_sprite_index(team_id);
-    }
-    if (!renderer_ || eff_sprite_id >= archive_.sprite_count()) return nullptr;
-
-    uint64_t key = (static_cast<uint64_t>(eff_sprite_id) << 4) |
-                   (static_cast<uint64_t>(team_id & 0x07) << 1) |
-                   (mirrored ? 1 : 0);
-    auto it = textures_.find(key);
-    if (it != textures_.end()) {
-        return it->second;
-    }
-
-    const auto& sp = mirrored ? archive_.get_mirrored_sprite(eff_sprite_id)
-                              : archive_.get_sprite(eff_sprite_id);
-    if (sp.width == 0 || sp.height == 0) return nullptr;
-
 // Authentic Ants HUD palette tables from Ants.exe (31 entries for indices 1..31, VA 0x100EA70)
 // Team 0 (Green in remake, Team 3 in Ants.exe VA 0x10023E0)
 static const ants::assets::ColorRGBA AUTHENTIC_GREEN_HUD[31] = {
@@ -266,38 +212,100 @@ static const ants::assets::ColorRGBA AUTHENTIC_BLACK_HUD[31] = {
     {151, 119,   0, 255}, {119,  87,   7, 255}, { 71,  63,   7, 255}
 };
 
-    // Convert 8-bit paletted sprite to 32-bit RGBA
-    auto pal = archive_.get_palette();
-    if (team_id < 4) {
-        // Authentic Ants sprite palette remap:
-        // Team 0 (Green): indices 80..99 -> base 140..159 (+60 shift)
-        // Team 1 (Red):   indices 80..99 -> base 120..139 (+40 shift)
-        // Team 2 (Blue):  indices 80..99 -> base 100..119 (+20 shift)
-        // Team 3 (Black): indices 80..99 -> base 80..99 (base black palette)
-        size_t offset = 0;
-        if (team_id == 0) offset = 60;
-        else if (team_id == 1) offset = 40;
-        else if (team_id == 2) offset = 20;
-        else if (team_id == 3) offset = 0;
-
-        if (offset > 0) {
-            const auto& base_pal = archive_.get_palette();
-            for (size_t i = 80; i <= 99; ++i) {
-                pal[i] = base_pal[i + offset];
+std::array<ants::assets::ColorRGBA, 256> TextureCache::compose_palette(const std::array<ants::assets::ColorRGBA, 256>& base,
+                                                                       const std::string& image_name,
+                                                                       uint8_t team_id) {
+    auto pal = base;
+    if (team_id >= ANT_COLOUR_BASE && team_id < ANT_COLOUR_BASE + 4) {
+        // Original ant blit (Ants.exe FUN_0102cfef, remap enabled by FUN_0101b802): the colour offset is added to
+        // every non-transparent pixel index; the callback at 0x101b7eb exempts image names starting with a digit.
+        // Offsets by remake player id 0..3 (green, red, blue, black) = {60, 40, 20, 0}.
+        static constexpr uint8_t kOffset[4] = { 60, 40, 20, 0 };
+        const bool exempt = !image_name.empty() && std::isdigit(static_cast<unsigned char>(image_name[0])) != 0;
+        const uint8_t offset = kOffset[team_id - ANT_COLOUR_BASE];
+        if (!exempt && offset != 0) {
+            for (size_t i = 0; i < 256; ++i) {
+                if (i == ants::assets::CHD_COLOR_KEY_INDEX) continue;
+                pal[i] = base[(i + offset) & 0xFF];
             }
         }
+        return pal;
+    }
+    if (team_id < 4) {
+        // Legacy HUD path. Ramp indices 80..99 map to the team ramp (Green +60, Red +40, Blue +20, Black +0).
+        static constexpr size_t kRampOffset[4] = { 60, 40, 20, 0 };
+        const size_t offset = kRampOffset[team_id];
+        if (offset > 0) {
+            for (size_t i = 80; i <= 99; ++i) pal[i] = base[i + offset];
+        }
+        // Authentic HUD palette remap for indices 1..31 (Ants.exe 0x100EA70):
+        const ants::assets::ColorRGBA* hud = (team_id == 0) ? AUTHENTIC_GREEN_HUD
+                                           : (team_id == 1) ? AUTHENTIC_RED_HUD
+                                           : (team_id == 2) ? AUTHENTIC_BLUE_HUD
+                                                            : AUTHENTIC_BLACK_HUD;
+        for (size_t i = 1; i <= 31; ++i) pal[i] = hud[i - 1];
+    }
+    return pal;
+}
+
+TextureCache::TextureCache(SDL_Renderer* renderer, const ants::assets::AssetArchive& archive)
+    : renderer_(renderer), archive_(archive) {
+    for (size_t i = 0; i < archive_.sprite_count(); ++i) {
+        const auto& name = archive_.get_sprite(static_cast<uint32_t>(i)).name;
+        if (name == "2bomb.bmp") base_bomb_sprite_id_ = static_cast<int32_t>(i);
+        else if (name == "2bombgrn.bmp") team_bomb_sprite_ids_[0] = static_cast<int32_t>(i);
+        else if (name == "2bombred.bmp") team_bomb_sprite_ids_[1] = static_cast<int32_t>(i);
+        else if (name == "2bombblu.bmp") team_bomb_sprite_ids_[2] = static_cast<int32_t>(i);
+        else if (name == "2bombblk.bmp") team_bomb_sprite_ids_[3] = static_cast<int32_t>(i);
+    }
+}
+
+TextureCache::~TextureCache() {
+    clear();
+}
+
+void TextureCache::clear() {
+    for (auto& pair : textures_) {
+        if (pair.second) {
+            SDL_DestroyTexture(pair.second);
+        }
+    }
+    textures_.clear();
+}
+
+bool TextureCache::is_base_bomb_sprite(uint32_t sprite_id) const noexcept {
+    return base_bomb_sprite_id_ >= 0 && sprite_id == static_cast<uint32_t>(base_bomb_sprite_id_);
+}
+
+uint32_t TextureCache::get_team_bomb_sprite_index(uint8_t team_id) const noexcept {
+    if (team_id < 4 && team_bomb_sprite_ids_[team_id] >= 0) {
+        return static_cast<uint32_t>(team_bomb_sprite_ids_[team_id]);
+    }
+    return base_bomb_sprite_id_ >= 0 ? static_cast<uint32_t>(base_bomb_sprite_id_) : 0;
+}
+
+SDL_Texture* TextureCache::get_sprite_texture(uint32_t sprite_id, bool mirrored, uint8_t team_id) {
+    uint32_t eff_sprite_id = sprite_id;
+    if (team_id < 4 && is_base_bomb_sprite(sprite_id)) {
+        eff_sprite_id = get_team_bomb_sprite_index(team_id);
+    }
+    if (!renderer_ || eff_sprite_id >= archive_.sprite_count()) return nullptr;
+
+    uint64_t key = (static_cast<uint64_t>(eff_sprite_id) << 9) |
+                   (static_cast<uint64_t>(team_id) << 1) |
+                   (mirrored ? 1 : 0);
+    auto it = textures_.find(key);
+    if (it != textures_.end()) {
+        return it->second;
     }
 
-    // Authentic HUD palette remap for indices 1..31 (Ants.exe 0x100EA70):
-    if (team_id == 0) {
-        for (size_t i = 1; i <= 31; ++i) pal[i] = AUTHENTIC_GREEN_HUD[i - 1];
-    } else if (team_id == 1) {
-        for (size_t i = 1; i <= 31; ++i) pal[i] = AUTHENTIC_RED_HUD[i - 1];
-    } else if (team_id == 2) {
-        for (size_t i = 1; i <= 31; ++i) pal[i] = AUTHENTIC_BLUE_HUD[i - 1];
-    } else if (team_id == 3) {
-        for (size_t i = 1; i <= 31; ++i) pal[i] = AUTHENTIC_BLACK_HUD[i - 1];
-    }
+    const auto& sp = mirrored ? archive_.get_mirrored_sprite(eff_sprite_id)
+                              : archive_.get_sprite(eff_sprite_id);
+    if (sp.width == 0 || sp.height == 0) return nullptr;
+
+
+    // Convert 8-bit paletted sprite to 32-bit RGBA under the requested colour mode
+    const auto pal = compose_palette(archive_.get_palette(), sp.name, team_id);
 
     std::vector<uint8_t> rgba = sp.to_rgba32(pal);
 
@@ -456,151 +464,100 @@ void Renderer::set_level(const ants::assets::LevelData& level) {
     map_height_ = level.height;
     camera_.clamp_to_bounds(map_width_, map_height_);
 
-    // Pre-resolve tile dictionary strings to sprite IDs and Table 4 (dx, dy) anchor offsets
-    tile_sprite_ids_.assign(level.tile_dictionary.size(), -1);
-    tile_offsets_.assign(level.tile_dictionary.size(), {0, 0});
-    tile_anim_frames_.assign(level.tile_dictionary.size(), {});
+    auto lower = [](std::string s) {
+        for (char& ch : s) ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+        return s;
+    };
 
+    // Per-animation caches (template clocks and culling bounds)
+    const size_t anim_count = archive_->animation_count();
+    anim_bounds_.assign(anim_count, AnimBounds{});
+    anim_frame_stamp_.assign(anim_count, 0xFFFFFFFFu);
+    anim_frame_cache_.assign(anim_count, 0u);
+
+    // The LVL tile dictionary is positional: entry i is "." or exactly the name of Table-4 animation i, and the
+    // original stores the animation id itself in every cell (Ants.exe FUN_0100674e, mode 0). A cell's tile value
+    // therefore indexes its animation directly; names are only checked as a safeguard for foreign maps.
+    tile_anim_id_.assign(level.tile_dictionary.size(), -1);
     for (size_t i = 0; i < level.tile_dictionary.size(); ++i) {
         const std::string& name = level.tile_dictionary[i];
         if (name.empty() || name == ".") continue;
 
-        // Suppress start marker tiles (editor markers with 'A')
-        if (name == "BSTART" || name == "USTART" || name == "RSTART" || name == "GSTART" ||
-            name == "bstart" || name == "ustart" || name == "rstart" || name == "gstart") {
-            tile_sprite_ids_[i] = -1;
-            continue;
-        }
+        // Editor start markers are never drawn in game
+        const std::string low = lower(name);
+        if (low == "bstart" || low == "ustart" || low == "rstart" || low == "gstart") continue;
 
-        // Map anthills to authentic 128x128 sprites
-        if (name == "BLACKHILL" || name == "blackhill") {
-            tile_sprite_ids_[i] = archive_->find_sprite_id("bkhill.bmp");
-            continue;
+        int32_t id = -1;
+        if (i < anim_count && lower(archive_->get_animation(static_cast<uint32_t>(i)).name) == low) {
+            id = static_cast<int32_t>(i);
+        } else {
+            id = archive_->find_animation_id(name);
+            if (id < 0) id = archive_->find_animation_id(low);
         }
-        if (name == "BLUEHILL" || name == "bluehill") {
-            tile_sprite_ids_[i] = archive_->find_sprite_id("blhill.bmp");
-            continue;
-        }
-        if (name == "REDHILL" || name == "redhill") {
-            tile_sprite_ids_[i] = archive_->find_sprite_id("rhill.bmp");
-            continue;
-        }
-        if (name == "GREENHILL" || name == "greenhill") {
-            tile_sprite_ids_[i] = archive_->find_sprite_id("ghill.bmp");
-            continue;
-        }
-
-        std::string lower_name = name;
-        for (char& ch : lower_name) ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
-
-        int32_t sid = -1;
-        int32_t off_x = 0, off_y = 0;
-
-        // 1. Table 4 animation resolution (handles grass1..4, grassmed1..4, rocks, food, center items)
-        const auto* anim = archive_->find_animation(name);
-        if (!anim) anim = archive_->find_animation(lower_name);
-        if (anim && !anim->subitems.empty() && !anim->subitems[0].frames.empty()) {
-            sid = static_cast<int32_t>(anim->subitems[0].frames[0].sprite_index);
-            off_x = anim->subitems[0].frames[0].dx;
-            off_y = anim->subitems[0].frames[0].dy;
-        }
-
-        // 2. Direct or .bmp lookup
-        if (sid < 0) sid = archive_->find_sprite_id(name);
-        if (sid < 0) sid = archive_->find_sprite_id(name + ".bmp");
-
-        // 3. Numerical variant resolution (e.g. M01b -> m01b2.bmp)
-        if (sid < 0) sid = archive_->find_sprite_id(lower_name + "2.bmp");
-        if (sid < 0) sid = archive_->find_sprite_id(lower_name + "2");
-
-        // 4. Strip suffix after underscore (e.g. m01d_a -> M01d2.bmp)
-        if (sid < 0 && lower_name.find('_') != std::string::npos) {
-            std::string prefix = lower_name.substr(0, lower_name.find('_'));
-            sid = archive_->find_sprite_id(prefix);
-            if (sid < 0) sid = archive_->find_sprite_id(prefix + ".bmp");
-            if (sid < 0) sid = archive_->find_sprite_id(prefix + "2.bmp");
-            if (sid < 0) sid = archive_->find_sprite_id(prefix + "2");
-        }
-
-        // 5. Base category fallback for mud, grass, water
-        if (sid < 0) {
-            if (lower_name.rfind("m01", 0) == 0 || lower_name.rfind("mw", 0) == 0 || lower_name.rfind("wm", 0) == 0) {
-                sid = archive_->find_sprite_id("M01a.bmp");
-            } else if (lower_name.rfind("g01", 0) == 0 || lower_name.rfind("gm", 0) == 0 || lower_name.rfind("mg", 0) == 0) {
-                sid = archive_->find_sprite_id("g01a.bmp");
-            } else if (lower_name.rfind("w01", 0) == 0) {
-                sid = archive_->find_sprite_id("w01a.bmp");
-            }
-        }
-        tile_sprite_ids_[i] = sid;
-        tile_offsets_[i] = {off_x, off_y};
-
-        // 6. Resolve animated frame sequences for water and mud
-        if (sid >= 0) {
-            std::vector<int32_t> frames;
-            frames.push_back(sid);
-            if (lower_name.rfind("w01", 0) == 0 || lower_name.rfind("wm", 0) == 0 || lower_name.rfind("mw", 0) == 0) {
-                // Water tiles cycle 4 animation frames (e.g. w01a, w01a2, w01a3, w01a4)
-                std::string base = (lower_name.find('.') != std::string::npos) ? lower_name.substr(0, lower_name.find('.')) : lower_name;
-                for (int f = 2; f <= 4; ++f) {
-                    int32_t fsid = archive_->find_sprite_id(base + std::to_string(f) + ".bmp");
-                    if (fsid >= 0) frames.push_back(fsid);
-                }
-            } else if (lower_name.rfind("m01b", 0) == 0 || lower_name.rfind("m01c", 0) == 0) {
-                // Mud bubbling sequence (2, 4, 6, 8, 10)
-                std::string base = lower_name.substr(0, 4);
-                static const int seq[] = { 2, 4, 6, 8, 10 };
-                for (int num : seq) {
-                    int32_t fsid = archive_->find_sprite_id(base + std::to_string(num) + ".bmp");
-                    if (fsid >= 0 && fsid != sid) frames.push_back(fsid);
-                }
-            } else if (lower_name.rfind("m01d", 0) == 0) {
-                // Mud bubbling sequence (2, 4, 6, 8, 10, 11, 12, 13)
-                static const int seq[] = { 2, 4, 6, 8, 10, 11, 12, 13 };
-                for (int num : seq) {
-                    int32_t fsid = archive_->find_sprite_id("m01d" + std::to_string(num) + ".bmp");
-                    if (fsid >= 0 && fsid != sid) frames.push_back(fsid);
-                }
-            }
-            if (frames.size() > 1) {
-                tile_anim_frames_[i] = std::move(frames);
-            }
-        }
+        tile_anim_id_[i] = id;
     }
 
-    // Identify 4x4 Anthill base bounding origins from Layer 2
+    // Animations of runtime layer-2 items (all cells of an id share one template clock)
+    anim_id_fire_ = archive_->find_animation_id("wallup04");
+    anim_id_lunchbox_ = archive_->find_animation_id("lunchbox");
+    anim_id_bomb_[0] = archive_->find_animation_id("greenbomb");
+    anim_id_bomb_[1] = archive_->find_animation_id("redbomb");
+    anim_id_bomb_[2] = archive_->find_animation_id("bluebomb");
+    anim_id_bomb_[3] = archive_->find_animation_id("blackbomb");
+    anim_id_powerup_[0] = -1;
+    anim_id_powerup_[1] = archive_->find_animation_id("pu_bomb");
+    anim_id_powerup_[2] = archive_->find_animation_id("pu_mason");
+    anim_id_powerup_[3] = archive_->find_animation_id("pu_thief");
+    anim_id_powerup_[4] = archive_->find_animation_id("pu_comb");
+    anim_id_powerup_[5] = archive_->find_animation_id("pu_swim");
+    anim_id_hill_[0] = archive_->find_animation_id("GREENHILL");
+    anim_id_hill_[1] = archive_->find_animation_id("REDHILL");
+    anim_id_hill_[2] = archive_->find_animation_id("BLUEHILL");
+    anim_id_hill_[3] = archive_->find_animation_id("BLACKHILL");
+
+    // Identify 4x4 anthill footprints and their layer-2 anchor cells
+    auto hill_team_of = [&](const std::string& tname) -> int {
+        const std::string low = lower(tname);
+        if (low == "greenhill") return 0;
+        if (low == "redhill") return 1;
+        if (low == "bluehill") return 2;
+        if (low == "blackhill") return 3;
+        return -1;
+    };
     for (size_t t = 0; t < 4; ++t) {
         anthill_bases_[t] = { -1, -1 };
+        hill_anchor_cell_[t] = { -1, -1 };
     }
     has_anthill_bases_ = false;
-
     for (uint32_t y = 0; y < level.height; ++y) {
         for (uint32_t x = 0; x < level.width; ++x) {
             const auto& c2 = level.get_cell_layer2(x, y);
-            if (c2.tile_index < level.tile_dictionary.size()) {
-                const std::string& tname = level.tile_dictionary[c2.tile_index];
-                int team = -1;
-                if (tname == "GREENHILL" || tname == "greenhill") team = 0;
-                else if (tname == "REDHILL" || tname == "redhill") team = 1;
-                else if (tname == "BLUEHILL" || tname == "bluehill") team = 2;
-                else if (tname == "BLACKHILL" || tname == "blackhill") team = 3;
-
-                if (team >= 0) {
-                    size_t st = static_cast<size_t>(team);
-                    if (anthill_bases_[st].x < 0 || static_cast<int32_t>(x) < anthill_bases_[st].x) {
-                        anthill_bases_[st].x = static_cast<int32_t>(x);
-                    }
-                    if (anthill_bases_[st].y < 0 || static_cast<int32_t>(y) < anthill_bases_[st].y) {
-                        anthill_bases_[st].y = static_cast<int32_t>(y);
-                    }
-                    has_anthill_bases_ = true;
-                }
+            if (c2.tile_index >= level.tile_dictionary.size()) continue;
+            const int team = hill_team_of(level.tile_dictionary[c2.tile_index]);
+            if (team < 0) continue;
+            const size_t st = static_cast<size_t>(team);
+            if (anthill_bases_[st].x < 0 || static_cast<int32_t>(x) < anthill_bases_[st].x) {
+                anthill_bases_[st].x = static_cast<int32_t>(x);
+            }
+            if (anthill_bases_[st].y < 0 || static_cast<int32_t>(y) < anthill_bases_[st].y) {
+                anthill_bases_[st].y = static_cast<int32_t>(y);
+            }
+            has_anthill_bases_ = true;
+            if ((c2.flags & 1) != 0) {
+                hill_anchor_cell_[st] = { static_cast<int>(x), static_cast<int>(y) };
             }
         }
     }
+    for (size_t t = 0; t < 4; ++t) {
+        // Custom maps without an anchor flag: the anchor is the second cell of the 4x4 footprint
+        if (anthill_bases_[t].x >= 0 && hill_anchor_cell_[t].x < 0) {
+            hill_anchor_cell_[t] = { anthill_bases_[t].x + 1, anthill_bases_[t].y + 1 };
+        }
+    }
 
-    // Instantiate all Layer 2 objects via authentic anchor flags ((flags & 1) != 0)
+    // Instantiate all layer-2 objects via their anchor flag ((flags & 1) != 0)
     static_decor_objects_.clear();
+    object_index_by_cell_.assign(static_cast<size_t>(level.width) * level.height, -1);
     for (uint32_t y = 0; y < level.height; ++y) {
         for (uint32_t x = 0; x < level.width; ++x) {
             const auto& c2 = level.get_cell_layer2(x, y);
@@ -610,10 +567,9 @@ void Renderer::set_level(const ants::assets::LevelData& level) {
             const std::string& tname = level.tile_dictionary[c2.tile_index];
             if (tname.empty() || tname == ".") continue;
 
-            std::string low = tname;
-            for (char& ch : low) ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+            const std::string low = lower(tname);
             if (low.find("hill") != std::string::npos || low.find("start") != std::string::npos) {
-                continue;
+                continue; // anthills are drawn from their own templates, start markers never
             }
             if (low.rfind("pu_", 0) == 0 || low.rfind("pu", 0) == 0) {
                 continue; // Dynamic powerups on ground: rendered exclusively via cell.has_powerup()
@@ -622,32 +578,22 @@ void Renderer::set_level(const ants::assets::LevelData& level) {
             // Only anchor tiles ((flags & 1) != 0) define object instances
             if ((c2.flags & 1) == 0) continue;
 
-            int32_t sid = (c2.tile_index < tile_sprite_ids_.size()) ? tile_sprite_ids_[c2.tile_index] : -1;
-            if (sid < 0) continue;
-            const auto& sp = archive_->get_sprite(static_cast<uint32_t>(sid));
-            if (sp.width == 0 || sp.height == 0) continue;
-            if (sp.width == 128 && sp.height == 128) continue; // Anthills handled separately
-
-            int32_t off_x = (c2.tile_index < tile_offsets_.size()) ? tile_offsets_[c2.tile_index].first : 0;
-            int32_t off_y = (c2.tile_index < tile_offsets_.size()) ? tile_offsets_[c2.tile_index].second : 0;
+            const int32_t anim_id = tile_anim_id_[c2.tile_index];
+            if (anim_id < 0) continue;
 
             StaticMapObject obj{};
-            obj.world_x = static_cast<int32_t>(x * TILE_SIZE) + off_x;
-            obj.world_y = static_cast<int32_t>(y * TILE_SIZE) + off_y;
-            obj.sprite_id = sid;
-            obj.width = static_cast<int32_t>(sp.width);
-            obj.height = static_cast<int32_t>(sp.height);
+            obj.anim_id = anim_id;
             obj.anchor_x = static_cast<uint16_t>(x);
             obj.anchor_y = static_cast<uint16_t>(y);
 
-            bool is_food = (low.rfind("fd", 0) == 0 || low.rfind("food", 0) == 0);
+            const bool is_food = (low.rfind("fd", 0) == 0 || low.rfind("food", 0) == 0);
             obj.is_food = is_food;
             if (is_food) {
                 // Find local cells belonging to this food clump (within radius 4 of anchor)
-                int32_t min_x = std::max(0, static_cast<int32_t>(x) - 4);
-                int32_t max_x = std::min(static_cast<int32_t>(level.width) - 1, static_cast<int32_t>(x) + 4);
-                int32_t min_y = std::max(0, static_cast<int32_t>(y) - 4);
-                int32_t max_y = std::min(static_cast<int32_t>(level.height) - 1, static_cast<int32_t>(y) + 4);
+                const int32_t min_x = std::max(0, static_cast<int32_t>(x) - 4);
+                const int32_t max_x = std::min(static_cast<int32_t>(level.width) - 1, static_cast<int32_t>(x) + 4);
+                const int32_t min_y = std::max(0, static_cast<int32_t>(y) - 4);
+                const int32_t max_y = std::min(static_cast<int32_t>(level.height) - 1, static_cast<int32_t>(y) + 4);
                 for (int32_t fy = min_y; fy <= max_y; ++fy) {
                     for (int32_t fx = min_x; fx <= max_x; ++fx) {
                         const auto& fc = level.get_cell_layer2(static_cast<uint32_t>(fx), static_cast<uint32_t>(fy));
@@ -661,65 +607,37 @@ void Renderer::set_level(const ants::assets::LevelData& level) {
                 }
             }
 
+            object_index_by_cell_[static_cast<size_t>(y) * level.width + x] = static_cast<int32_t>(static_decor_objects_.size());
             static_decor_objects_.push_back(std::move(obj));
         }
     }
 
-    // 3rd Layer Canopy Decor from LevelData Block 1 (items with team_id == 255: clovers, flowers, tree tops, etc.)
-    layer3_canopy_objects_.clear();
+    // Object-list sprites (Block 1 entries with team 255: clovers, flowers, tree tops ...). The original puts them in
+    // the y-sorted sprite list at the cell centre with sort key row*32+16 (Ants.exe 0x100e383..0x100e448).
+    object_list_sprites_.clear();
     for (const auto& sp_item : level.anthill_spawns) {
-        if (sp_item.team_id == 255 && sp_item.tile_id < level.tile_dictionary.size()) {
-            const std::string& tname = level.tile_dictionary[sp_item.tile_id];
-            const auto* anim = archive_->find_animation(tname);
-            if (!anim) {
-                std::string low = tname;
-                for (char& ch : low) ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
-                anim = archive_->find_animation(low);
-            }
-            if (anim && !anim->subitems.empty() && !anim->subitems[0].frames.empty()) {
-                // Table 4 composite animation frames are ordered front-to-back (Frame 0 foreground, Frame N background/shadow).
-                // Iterate in reverse order so background layers (shadow, stem) render beneath foreground layers (flower head).
-                const auto& frames = anim->subitems[0].frames;
-                for (int i = static_cast<int>(frames.size()) - 1; i >= 0; --i) {
-                    const auto& fr = frames[static_cast<size_t>(i)];
-                    const auto& sp = archive_->get_sprite(fr.sprite_index);
-                    if (sp.width > 0 && sp.height > 0) {
-                        StaticMapObject obj{};
-                        obj.world_x = static_cast<int32_t>(sp_item.x * TILE_SIZE + TILE_SIZE / 2) + fr.dx;
-                        obj.world_y = static_cast<int32_t>(sp_item.y * TILE_SIZE + TILE_SIZE / 2) + fr.dy;
-                        obj.sprite_id = static_cast<int32_t>(fr.sprite_index);
-                        obj.width = static_cast<int32_t>(sp.width);
-                        obj.height = static_cast<int32_t>(sp.height);
-                        obj.is_food = false;
-                        layer3_canopy_objects_.push_back(std::move(obj));
-                    }
-                }
-            } else {
-                int32_t sid = (sp_item.tile_id < tile_sprite_ids_.size()) ? tile_sprite_ids_[sp_item.tile_id] : -1;
-                if (sid >= 0) {
-                    const auto& sp = archive_->get_sprite(static_cast<uint32_t>(sid));
-                    if (sp.width > 0 && sp.height > 0) {
-                        int32_t off_x = (sp_item.tile_id < tile_offsets_.size()) ? tile_offsets_[sp_item.tile_id].first : 0;
-                        int32_t off_y = (sp_item.tile_id < tile_offsets_.size()) ? tile_offsets_[sp_item.tile_id].second : 0;
-
-                        StaticMapObject obj{};
-                        obj.world_x = static_cast<int32_t>(sp_item.x * TILE_SIZE + TILE_SIZE / 2) + off_x;
-                        obj.world_y = static_cast<int32_t>(sp_item.y * TILE_SIZE + TILE_SIZE / 2) + off_y;
-                        obj.sprite_id = sid;
-                        obj.width = static_cast<int32_t>(sp.width);
-                        obj.height = static_cast<int32_t>(sp.height);
-                        obj.is_food = false;
-                        layer3_canopy_objects_.push_back(std::move(obj));
-                    }
-                }
-            }
-        }
+        if (sp_item.team_id != 255 || sp_item.tile_id >= level.tile_dictionary.size()) continue;
+        const int32_t anim_id = tile_anim_id_[sp_item.tile_id];
+        if (anim_id < 0) continue;
+        ObjectListSprite spr{};
+        spr.anim_id = anim_id;
+        spr.px = static_cast<int32_t>(sp_item.x) * TILE_SIZE + TILE_SIZE / 2;
+        spr.py = static_cast<int32_t>(sp_item.y) * TILE_SIZE + TILE_SIZE / 2;
+        object_list_sprites_.push_back(spr);
     }
+    std::stable_sort(object_list_sprites_.begin(), object_list_sprites_.end(),
+                     [](const ObjectListSprite& a, const ObjectListSprite& b) { return a.py < b.py; });
+
+    level_set_ = true;
+    map_epoch_ms_ = SDL_GetTicks();
+    template_now_ms_ = 0;
 }
 
 void Renderer::begin_frame() {
     if (!renderer_) return;
-    anim_tick_ = static_cast<uint32_t>((static_cast<uint64_t>(SDL_GetTicks()) * 60ULL) / 1000ULL);
+    ++frame_counter_;
+    template_now_ms_ = (anim_clock_pin_ms_ >= 0) ? static_cast<uint32_t>(anim_clock_pin_ms_)
+                                                 : SDL_GetTicks() - map_epoch_ms_;
     SDL_SetRenderDrawColor(renderer_, 0, 0, 0, 255); // Black letterbox / background
     SDL_RenderClear(renderer_);
 }
@@ -776,11 +694,10 @@ void Renderer::render_world(const ants::sim::WorldState& world,
     render_visual_effects(world);
     render_transient_effects();
 
-    // 4. Ant Units (Depth-Sorted)
+    // 4. Depth-sorted sprite list: object-list plants (key row*32+16) and ants share one y-sorted queue, as in the
+    //    original sprite list (FUN_010088e7); ties keep insertion order (plants first, then ants)
+    collect_object_list_sprites();
     render_ant_units(world, selected_unit_id, selected_unit_ids, show_all_health_bars);
-
-    // 4.5 Layer 3 Canopy Overhang (rendered after ants so ants walk beneath foliage)
-    render_terrain_layer3_canopy();
 
     // 4.6 Flower Droppers (Swaying daisy on cliffs & falling powerup droplets - rendered in front of plant canopy)
     render_flower_droppers(world);
@@ -799,6 +716,92 @@ void Renderer::render_world(const ants::sim::WorldState& world,
     SDL_RenderSetClipRect(renderer_, nullptr);
 }
 
+// ============================================================================
+// Template animation helpers (terrain, layer-2 objects, object-list sprites)
+// ============================================================================
+
+void Renderer::draw_frame_parts(const ants::assets::AnimationSubItem& sub, int32_t sx, int32_t sy, bool mirrored,
+                                uint8_t colour, uint8_t bomb_team) {
+    if (!archive_ || !texture_cache_ || !renderer_) return;
+    // Original order (see frame_part_draw_order): the last stored part is drawn first, the first stored part on top.
+    for (size_t k = sub.frames.size(); k-- > 0;) {
+        const auto& f = sub.frames[k];
+        uint32_t sp_idx = f.sprite_index;
+        if (bomb_team < 4 && texture_cache_->is_base_bomb_sprite(sp_idx)) {
+            sp_idx = texture_cache_->get_team_bomb_sprite_index(bomb_team);
+        }
+        SDL_Texture* tex = texture_cache_->get_sprite_texture(sp_idx, mirrored, colour);
+        if (!tex) continue;
+        const auto& sp = mirrored ? archive_->get_mirrored_sprite(sp_idx) : archive_->get_sprite(sp_idx);
+        SDL_Rect dst = { sx + f.dx, sy + f.dy, static_cast<int>(sp.width), static_cast<int>(sp.height) };
+        SDL_RenderCopy(renderer_, tex, nullptr, &dst);
+    }
+}
+
+size_t Renderer::template_frame_index(int32_t anim_id) {
+    if (!archive_ || anim_id < 0 || static_cast<size_t>(anim_id) >= anim_frame_cache_.size()) return 0;
+    const size_t i = static_cast<size_t>(anim_id);
+    if (anim_frame_stamp_[i] != frame_counter_) {
+        const auto& seq = archive_->get_animation(static_cast<uint32_t>(anim_id));
+        anim_frame_cache_[i] = static_cast<uint16_t>(seq.subitems.size() > 1 ? get_anim_subitem_by_time(seq, template_now_ms_) : 0);
+        anim_frame_stamp_[i] = frame_counter_;
+    }
+    return anim_frame_cache_[i];
+}
+
+void Renderer::draw_template_screen(int32_t anim_id, int32_t sx, int32_t sy, uint8_t colour) {
+    if (!archive_ || anim_id < 0 || static_cast<size_t>(anim_id) >= archive_->animation_count()) return;
+    const auto& seq = archive_->get_animation(static_cast<uint32_t>(anim_id));
+    if (seq.subitems.empty()) return;
+    const size_t fi = std::min(template_frame_index(anim_id), seq.subitems.size() - 1);
+    draw_frame_parts(seq.subitems[fi], sx, sy, false, colour);
+}
+
+const AnimBounds& Renderer::anim_bounds(int32_t anim_id) {
+    static const AnimBounds kNone{};
+    if (!archive_ || anim_id < 0 || static_cast<size_t>(anim_id) >= anim_bounds_.size()) return kNone;
+    AnimBounds& b = anim_bounds_[static_cast<size_t>(anim_id)];
+    if (b.valid) return b;
+    const auto& seq = archive_->get_animation(static_cast<uint32_t>(anim_id));
+    bool any = false;
+    for (const auto& sub : seq.subitems) {
+        for (const auto& f : sub.frames) {
+            const auto& sp = archive_->get_sprite(f.sprite_index);
+            const int32_t x0 = f.dx, y0 = f.dy;
+            const int32_t x1 = f.dx + static_cast<int32_t>(sp.width), y1 = f.dy + static_cast<int32_t>(sp.height);
+            if (!any) { b.x0 = x0; b.y0 = y0; b.x1 = x1; b.y1 = y1; any = true; }
+            else { b.x0 = std::min(b.x0, x0); b.y0 = std::min(b.y0, y0); b.x1 = std::max(b.x1, x1); b.y1 = std::max(b.y1, y1); }
+        }
+    }
+    b.valid = any;
+    return b;
+}
+
+void Renderer::draw_template_world(int32_t anim_id, int32_t world_x, int32_t world_y, uint8_t colour) {
+    const AnimBounds& b = anim_bounds(anim_id);
+    if (!b.valid) return;
+    const int32_t cam_x = static_cast<int32_t>(camera_.x);
+    const int32_t cam_y = static_cast<int32_t>(camera_.y);
+    if (world_x + b.x1 <= cam_x || world_x + b.x0 >= cam_x + PLAYFIELD_W ||
+        world_y + b.y1 <= cam_y || world_y + b.y0 >= cam_y + PLAYFIELD_H) {
+        return;
+    }
+    draw_template_screen(anim_id, PLAYFIELD_X + (world_x - cam_x), PLAYFIELD_Y + (world_y - cam_y), colour);
+}
+
+// ============================================================================
+// Terrain layer 1
+// ============================================================================
+
+void Renderer::render_map_layers(const ants::sim::Grid& grid, const ants::sim::WorldState* world) {
+    if (!renderer_) return;
+    SDL_Rect clip_rect = { PLAYFIELD_X, PLAYFIELD_Y, PLAYFIELD_W, PLAYFIELD_H };
+    SDL_RenderSetClipRect(renderer_, &clip_rect);
+    render_terrain_layer1(grid);
+    render_terrain_layer2_structures(grid, world);
+    SDL_RenderSetClipRect(renderer_, nullptr);
+}
+
 void Renderer::render_terrain_layer1(const ants::sim::Grid& grid) {
     int32_t start_col = std::max(0, static_cast<int32_t>(camera_.x) / TILE_SIZE);
     int32_t end_col   = std::min(static_cast<int32_t>(grid.width()) - 1,
@@ -813,36 +816,17 @@ void Renderer::render_terrain_layer1(const ants::sim::Grid& grid) {
             int32_t sx = 0, sy = 0;
             camera_.world_to_screen(c * TILE_SIZE, r * TILE_SIZE, sx, sy);
 
+            if (level_set_) {
+                // The cell value is the id of the tile's Table-4 animation. Every id has ONE template started at map
+                // load, so all cells of an id show the same frame at the same time (Ants.exe FUN_0102c1fc /
+                // FUN_0102b997). Ids without a template draw nothing, as in the original.
+                const int32_t id = (cell.terrain_id < tile_anim_id_.size()) ? tile_anim_id_[cell.terrain_id] : -1;
+                if (id >= 0) draw_template_screen(id, sx, sy);
+                continue;
+            }
+
+            // Synthetic grids without a loaded level: flat colours per terrain category
             SDL_Rect dst = { sx, sy, TILE_SIZE, TILE_SIZE };
-            int32_t sid = (cell.terrain_id < tile_sprite_ids_.size()) ? tile_sprite_ids_[cell.terrain_id] : -1;
-            if (cell.terrain_id < tile_anim_frames_.size() && !tile_anim_frames_[cell.terrain_id].empty()) {
-                const auto& frames = tile_anim_frames_[cell.terrain_id];
-                if (cell.is_mud) {
-                    // Mud bubbles: idle on flat mud (frames[0]) for ~96 ticks (~1.6s @ 60Hz), then pop over 24 ticks (400ms)
-                    uint32_t phase = (static_cast<uint32_t>(c) * 17 + static_cast<uint32_t>(r) * 31);
-                    uint32_t local_tick = (anim_tick_ + phase) % 120;
-                    if (local_tick < 96 || frames.size() <= 1) {
-                        sid = frames[0];
-                    } else {
-                        size_t pop_idx = (local_tick - 96) * (frames.size() - 1) / 24;
-                        sid = frames[1 + std::min(pop_idx, frames.size() - 2)];
-                    }
-                } else {
-                    // Water ripples: cycle every 9 frames (150ms)
-                    size_t frame_idx = (anim_tick_ / 9) % frames.size();
-                    sid = frames[frame_idx];
-                }
-            }
-
-            if (sid >= 0) {
-                SDL_Texture* tex = texture_cache_->get_sprite_texture(static_cast<uint32_t>(sid));
-                if (tex) {
-                    SDL_RenderCopy(renderer_, tex, nullptr, &dst);
-                    continue;
-                }
-            }
-
-            // Fallback colors for terrain category
             if (cell.terrain_type == ants::sim::TERRAIN_WATER) {
                 SDL_SetRenderDrawColor(renderer_, 23, 71, 151, 255); // Navy Water
             } else if (cell.terrain_type == ants::sim::TERRAIN_OBSTACLE) {
@@ -857,258 +841,147 @@ void Renderer::render_terrain_layer1(const ants::sim::Grid& grid) {
     }
 }
 
+// ============================================================================
+// Terrain layer 2 (objects, food, bombs, fire walls, bridges, power-ups, anthills)
+// ============================================================================
+
+void Renderer::draw_static_object(const StaticMapObject& obj, const ants::sim::Grid& grid,
+                                  const ants::sim::WorldState* world) {
+    int32_t anim_id = obj.anim_id;
+    if (obj.is_food) {
+        // Food shows the template of its current stage tile at the same anchor (SetTile keeps the anchor).
+        bool has_any_food = false;
+        uint16_t cur_tile = ants::assets::LVL_EMPTY_TILE;
+        for (const auto& tile : obj.food_tiles) {
+            if (grid.in_bounds(tile.first, tile.second)) {
+                const auto& cell = grid.get_cell(tile.first, tile.second);
+                if (cell.has_food()) {
+                    has_any_food = true;
+                    cur_tile = cell.interactive_id;
+                    break;
+                }
+            }
+        }
+        if (!has_any_food) return; // All food in this item has been gathered
+
+        // Fog: an object is drawn once any cell of its footprint is explored (FUN_01008089 layer-2 path)
+        if (world && world->fog_of_war_enabled) {
+            bool any_explored = false;
+            for (const auto& tile : obj.food_tiles) {
+                if (world->is_tile_revealed(tile.first, tile.second)) { any_explored = true; break; }
+            }
+            if (!any_explored) return;
+        }
+
+        if (cur_tile != ants::assets::LVL_EMPTY_TILE) {
+            const int32_t stage = (cur_tile < tile_anim_id_.size() && tile_anim_id_[cur_tile] >= 0)
+                                      ? tile_anim_id_[cur_tile]
+                                      : (cur_tile < archive_->animation_count() ? static_cast<int32_t>(cur_tile) : -1);
+            if (stage >= 0) anim_id = stage;
+        }
+    }
+    if (anim_id < 0) return;
+    draw_template_world(anim_id, static_cast<int32_t>(obj.anchor_x) * TILE_SIZE, static_cast<int32_t>(obj.anchor_y) * TILE_SIZE);
+}
+
 void Renderer::render_terrain_layer2_structures(const ants::sim::Grid& grid, const ants::sim::WorldState* world) {
-    int32_t start_col = std::max(0, static_cast<int32_t>(camera_.x) / TILE_SIZE);
-    int32_t end_col   = std::min(static_cast<int32_t>(grid.width()) - 1,
-                                 (static_cast<int32_t>(camera_.x) + PLAYFIELD_W + 31) / TILE_SIZE);
-    int32_t start_row = std::max(0, static_cast<int32_t>(camera_.y) / TILE_SIZE);
-    int32_t end_row   = std::min(static_cast<int32_t>(grid.height()) - 1,
-                                 (static_cast<int32_t>(camera_.y) + PLAYFIELD_H + 31) / TILE_SIZE);
+    // One row-major pass over anchor cells (as FUN_01008089). Large sprites reach up to ~5 cells away from their
+    // anchor, so the scan margin is generous and each draw is rect-culled.
+    constexpr int32_t kMargin = 5;
+    const int32_t start_col = std::max(0, static_cast<int32_t>(camera_.x) / TILE_SIZE - kMargin);
+    const int32_t end_col   = std::min(static_cast<int32_t>(grid.width()) - 1,
+                                       (static_cast<int32_t>(camera_.x) + PLAYFIELD_W + 31) / TILE_SIZE + kMargin);
+    const int32_t start_row = std::max(0, static_cast<int32_t>(camera_.y) / TILE_SIZE - kMargin);
+    const int32_t end_row   = std::min(static_cast<int32_t>(grid.height()) - 1,
+                                       (static_cast<int32_t>(camera_.y) + PLAYFIELD_H + 31) / TILE_SIZE + kMargin);
+
+    const bool fog = world && world->fog_of_war_enabled;
+    auto explored = [&](int32_t c, int32_t r) { return !fog || world->is_tile_revealed(c, r); };
 
     for (int32_t r = start_row; r <= end_row; ++r) {
         for (int32_t c = start_col; c <= end_col; ++c) {
+            // 1. Static object anchored on this cell
+            if (level_set_ && !object_index_by_cell_.empty()) {
+                const size_t idx = static_cast<size_t>(r) * map_width_ + static_cast<size_t>(c);
+                if (idx < object_index_by_cell_.size() && object_index_by_cell_[idx] >= 0) {
+                    draw_static_object(static_decor_objects_[static_cast<size_t>(object_index_by_cell_[idx])], grid, world);
+                }
+            }
+
+            // 2. Anthills anchored on this cell (animated, always drawn: the fog pass covers unexplored ground)
+            if (has_anthill_bases_) {
+                for (size_t t = 0; t < 4; ++t) {
+                    if (hill_anchor_cell_[t].x == c && hill_anchor_cell_[t].y == r) {
+                        draw_template_world(anim_id_hill_[t], c * TILE_SIZE, r * TILE_SIZE);
+                    }
+                }
+            }
+
+            // 3. Runtime item on this cell
             const auto& cell = grid.get_cell(static_cast<uint32_t>(c), static_cast<uint32_t>(r));
             if (cell.is_empty_overlay()) continue;
-            if (world && world->fog_of_war_enabled && !world->is_tile_revealed(c, r)) continue;
+            const int32_t wx = c * TILE_SIZE;
+            const int32_t wy = r * TILE_SIZE;
 
-            int32_t sx = 0, sy = 0;
-            camera_.world_to_screen(c * TILE_SIZE, r * TILE_SIZE, sx, sy);
-
-            // 1. Bridges (Stages 1..4 and 4b, authentic Table 4 bounding boxes and sprite dimensions)
-            if ((cell.interactive_id >= ants::sim::TILE_BRIDGE1 &&
-                 cell.interactive_id <= ants::sim::TILE_BRIDGE4) ||
+            // Bridges: not part of the original's fog-hidden set
+            if ((cell.interactive_id >= ants::sim::TILE_BRIDGE1 && cell.interactive_id <= ants::sim::TILE_BRIDGE4) ||
                 cell.interactive_id == ants::sim::TILE_BRIDGE4B) {
-                const char* bname = "bridge4a.bmp";
-                int dx = 0, dy = 0, bw = 32, bh = 32;
-                switch (cell.interactive_id) {
-                    case ants::sim::TILE_BRIDGE1:
-                        bname = "bridge1.bmp"; dx = 8; dy = 9; bw = 16; bh = 16; break;
-                    case ants::sim::TILE_BRIDGE2:
-                        bname = "bridge2.bmp"; dx = 7; dy = 7; bw = 19; bh = 17; break;
-                    case ants::sim::TILE_BRIDGE3:
-                        bname = "bridge3.bmp"; dx = 3; dy = 5; bw = 27; bh = 24; break;
-                    case ants::sim::TILE_BRIDGE4:
-                        bname = "bridge4a.bmp"; dx = 0; dy = 0; bw = 32; bh = 32; break;
-                    case ants::sim::TILE_BRIDGE4B:
-                        bname = "bridge4b.bmp"; dx = 2; dy = 1; bw = 29; bh = 30; break;
-                    default: break;
-                }
-                SDL_Texture* tex = texture_cache_->get_named_sprite_texture(bname);
-                if (tex) {
-                    SDL_Rect bridge_dst = { sx + dx, sy + dy, bw, bh };
-                    SDL_RenderCopy(renderer_, tex, nullptr, &bridge_dst);
-                }
+                draw_template_world(cell.interactive_id, wx, wy);
                 continue;
             }
 
-            // 2. Fire Walls (Table 4 Anim 134 wallup04: 5 frames at 120ms each)
+            // Fire walls, bombs, food, power-ups are hidden while their anchor tile is unexplored
             if (cell.has_fire()) {
-                static const struct {
-                    const char* name;
-                    int dx;
-                    int dy;
-                    int w;
-                    int h;
-                } fire_frames[5] = {
-                    { "9fire01.bmp", 1, 0, 29, 33 },
-                    { "9fire02.bmp", 1, 2, 30, 31 },
-                    { "9fire03.bmp", 0, 1, 30, 32 },
-                    { "9fire04.bmp", 1, 2, 30, 31 },
-                    { "9fire05.bmp", 0, 1, 31, 32 }
-                };
-
-                uint32_t phase = static_cast<uint32_t>(c) * 2u + static_cast<uint32_t>(r) * 3u;
-                size_t frame_idx = ((SDL_GetTicks() / 120u) + phase) % 5u;
-                const auto& ff = fire_frames[frame_idx];
-                SDL_Texture* tex = texture_cache_->get_named_sprite_texture(ff.name);
-                if (tex) {
-                    SDL_Rect fire_dst = { sx + ff.dx, sy + ff.dy, ff.w, ff.h };
-                    SDL_RenderCopy(renderer_, tex, nullptr, &fire_dst);
-                }
+                if (explored(c, r)) draw_template_world(anim_id_fire_, wx, wy);
                 continue;
             }
-
-            // 3. Bombs (Table 4 Anim 129..132: 2 frames at 100ms each, team 0=Green, 1=Red, 2=Blue, 3=Black)
             if (cell.has_bomb()) {
-                static const char* const bomb_frames[4][2] = {
-                    { "1bombgrn.bmp", "2bombgrn.bmp" },
-                    { "1bombred.bmp", "2bombred.bmp" },
-                    { "1bombblu.bmp", "2bombblu.bmp" },
-                    { "1bombblk.bmp", "2bombblk.bmp" }
-                };
-                uint8_t owner = cell.interactive_owner % 4u;
-                uint32_t phase = static_cast<uint32_t>(c) * 3u + static_cast<uint32_t>(r) * 5u;
-                size_t b_frame = ((SDL_GetTicks() / 100u) + phase) % 2u;
-                SDL_Texture* tex = texture_cache_->get_named_sprite_texture(bomb_frames[owner][b_frame]);
-                if (tex) {
-                    SDL_Rect bomb_dst = { sx + 10, sy + 0, 12, 24 };
-                    SDL_RenderCopy(renderer_, tex, nullptr, &bomb_dst);
-                }
+                if (explored(c, r)) draw_template_world(anim_id_bomb_[cell.interactive_owner % 4u], wx, wy);
                 continue;
             }
-
-            // 4. Dropped Lunchbox (Table 4 Anim 356 "lunchbox", Sprite 513 "3lb0001.bmp", 11x16, dx: 9, dy: 8)
             if (cell.has_lunchbox()) {
-                SDL_Texture* tex = texture_cache_->get_sprite_texture(513);
-                if (!tex) {
-                    tex = texture_cache_->get_named_sprite_texture("3lb0001.bmp");
-                }
-                if (tex) {
-                    SDL_Rect lb_dst = { sx + 9, sy + 8, 11, 16 };
-                    SDL_RenderCopy(renderer_, tex, nullptr, &lb_dst);
-                }
+                if (explored(c, r)) draw_template_world(anim_id_lunchbox_, wx, wy);
                 continue;
             }
-
-            // 5. Power-up Potions on Ground
             if (cell.has_powerup()) {
-                const char* anim_name = nullptr;
-                const char* pu_name = nullptr;
-                switch (cell.powerup_type) {
-                    case 1: anim_name = "pu_bomb"; pu_name = "pubomb.bmp"; break;
-                    case 2: anim_name = "pu_mason"; pu_name = "pufire.bmp"; break;
-                    case 3: anim_name = "pu_thief"; pu_name = "puthief01.bmp"; break;
-                    case 4: anim_name = "pu_comb"; pu_name = "pucomb.bmp"; break;
-                    case 5: anim_name = "pu_swim"; pu_name = "puswim01.bmp"; break;
-                    default: break;
-                }
-                const auto* anim = anim_name ? archive_->find_animation(anim_name) : nullptr;
-                if (anim && !anim->subitems.empty() && !anim->subitems[0].frames.empty()) {
-                    const auto& f = anim->subitems[0].frames[0];
-                    SDL_Texture* tex = texture_cache_->get_sprite_texture(f.sprite_index);
-                    if (tex) {
-                        const auto& sp = archive_->get_sprite(f.sprite_index);
-                        SDL_Rect pu_dst = { sx + f.dx, sy + f.dy, static_cast<int>(sp.width), static_cast<int>(sp.height) };
-                        SDL_RenderCopy(renderer_, tex, nullptr, &pu_dst);
-                        continue;
-                    }
-                } else if (pu_name) {
-                    SDL_Texture* tex = texture_cache_->get_named_sprite_texture(pu_name);
-                    if (tex) {
-                        int pw = 24, ph = 24;
-                        SDL_QueryTexture(tex, nullptr, nullptr, &pw, &ph);
-                        SDL_Rect pu_dst = { sx + (32 - pw) / 2, sy + (32 - ph) / 2, pw, ph };
-                        SDL_RenderCopy(renderer_, tex, nullptr, &pu_dst);
-                        continue;
-                    }
+                if (explored(c, r) && cell.powerup_type >= 1 && cell.powerup_type <= 5) {
+                    draw_template_world(anim_id_powerup_[cell.powerup_type], wx, wy);
                 }
             }
         }
     }
 
-    // 5. Static Decorative Overlays & Multi-Tile Food Objects (Rendered once per unique anchor instance)
-    for (const auto& obj : static_decor_objects_) {
-        int32_t active_sid = obj.sprite_id;
-        int32_t obj_x = obj.world_x;
-        int32_t obj_y = obj.world_y;
-        int32_t obj_w = obj.width;
-        int32_t obj_h = obj.height;
-
-        // If it is food, check if any of its footprint cells still has food
-        if (obj.is_food) {
-            if (world && world->fog_of_war_enabled && !world->is_tile_revealed(obj.anchor_x, obj.anchor_y)) {
-                continue; // Shrouded food hidden under fog of war
-            }
-            bool has_any_food = false;
-            uint16_t cur_tile = ants::assets::LVL_EMPTY_TILE;
-            for (const auto& tile : obj.food_tiles) {
-                if (grid.in_bounds(tile.first, tile.second)) {
-                    const auto& cell = grid.get_cell(tile.first, tile.second);
-                    if (cell.has_food()) {
-                        has_any_food = true;
-                        cur_tile = cell.interactive_id;
-                        break;
-                    }
-                }
-            }
-            if (!has_any_food) continue; // All food in this item has been gathered
-
-            // If the food stage changed, dynamically update active sprite and offsets
-            if (cur_tile != ants::assets::LVL_EMPTY_TILE && cur_tile < tile_sprite_ids_.size()) {
-                int32_t sid = tile_sprite_ids_[cur_tile];
-                if (sid >= 0) {
-                    active_sid = sid;
-                    const auto& sp = archive_->get_sprite(static_cast<uint32_t>(sid));
-                    int32_t off_x = (cur_tile < tile_offsets_.size()) ? tile_offsets_[cur_tile].first : 0;
-                    int32_t off_y = (cur_tile < tile_offsets_.size()) ? tile_offsets_[cur_tile].second : 0;
-                    obj_x = static_cast<int32_t>(obj.anchor_x * TILE_SIZE) + off_x;
-                    obj_y = static_cast<int32_t>(obj.anchor_y * TILE_SIZE) + off_y;
-                    obj_w = static_cast<int32_t>(sp.width);
-                    obj_h = static_cast<int32_t>(sp.height);
-                }
-            }
-        }
-
-        int32_t right = obj_x + obj_w;
-        int32_t bottom = obj_y + obj_h;
-        if (right < camera_.world_x || obj_x > camera_.world_x + camera_.viewport_w ||
-            bottom < camera_.world_y || obj_y > camera_.world_y + camera_.viewport_h) {
-            continue;
-        }
-
-        int32_t sx = PLAYFIELD_X + (obj_x - camera_.world_x);
-        int32_t sy = PLAYFIELD_Y + (obj_y - camera_.world_y);
-        SDL_Texture* tex = texture_cache_->get_sprite_texture(static_cast<uint32_t>(active_sid));
-        if (tex) {
-            SDL_Rect decor_dst = { sx, sy, obj_w, obj_h };
-            SDL_RenderCopy(renderer_, tex, nullptr, &decor_dst);
-        }
-    }
-
-    // Anthill Bases (Authentic 128x128 4x4 bases: ghill, rhill, blhill, bkhill)
-    static const char* hill_sprites[4] = { "ghill.bmp", "rhill.bmp", "blhill.bmp", "bkhill.bmp" };
-    static const int32_t hill_offset_dy[4] = { 7, 14, 12, 8 };
-    if (has_anthill_bases_) {
-        for (size_t t = 0; t < 4; ++t) {
-            if (anthill_bases_[t].x >= 0 && anthill_bases_[t].y >= 0) {
-                if (world && world->fog_of_war_enabled && t != hud_team_id_ &&
-                    !world->is_tile_revealed(anthill_bases_[t].x, anthill_bases_[t].y)) {
-                    continue; // Enemy base shrouded under fog of war
-                }
-                int32_t sx = 0, sy = 0;
-                camera_.world_to_screen(anthill_bases_[t].x * TILE_SIZE, anthill_bases_[t].y * TILE_SIZE + hill_offset_dy[t], sx, sy);
-                SDL_Rect dst = { sx, sy, 128, 128 };
-                SDL_Texture* tex = texture_cache_->get_named_sprite_texture(hill_sprites[t]);
-                if (tex) {
-                    SDL_RenderCopy(renderer_, tex, nullptr, &dst);
-                }
-            }
-        }
-    } else {
-        // Fallback for custom test grids using grid.anthills()
+    // Fallback for custom test grids that only carry grid.anthills() (no layer-2 hill anchors)
+    if (!has_anthill_bases_) {
         for (const auto& a : grid.anthills()) {
-            if (world && world->fog_of_war_enabled && a.team_id != hud_team_id_ &&
+            if (fog && a.team_id != hud_team_id_ &&
                 !world->is_tile_revealed(static_cast<int32_t>(a.x), static_cast<int32_t>(a.y))) {
                 continue;
             }
-            int32_t sx = 0, sy = 0;
-            camera_.world_to_screen((static_cast<int32_t>(a.x) - 1) * TILE_SIZE,
-                                    (static_cast<int32_t>(a.y) - 1) * TILE_SIZE + hill_offset_dy[a.team_id % 4], sx, sy);
-            SDL_Rect dst = { sx, sy, 128, 128 };
-            SDL_Texture* tex = texture_cache_->get_named_sprite_texture(hill_sprites[a.team_id % 4]);
-            if (tex) {
-                SDL_RenderCopy(renderer_, tex, nullptr, &dst);
-            }
+            draw_template_world(anim_id_hill_[a.team_id % 4],
+                                static_cast<int32_t>(a.x) * TILE_SIZE, static_cast<int32_t>(a.y) * TILE_SIZE);
         }
     }
 }
 
-void Renderer::render_terrain_layer3_canopy() {
-    for (const auto& obj : layer3_canopy_objects_) {
-        int32_t right = obj.world_x + obj.width;
-        int32_t bottom = obj.world_y + obj.height;
-        if (right < camera_.world_x || obj.world_x > camera_.world_x + camera_.viewport_w ||
-            bottom < camera_.world_y || obj.world_y > camera_.world_y + camera_.viewport_h) {
+void Renderer::collect_object_list_sprites() {
+    if (!archive_ || !texture_cache_) return;
+    for (const auto& spr : object_list_sprites_) {
+        const AnimBounds& b = anim_bounds(spr.anim_id);
+        if (!b.valid) continue;
+        const int32_t cam_x = static_cast<int32_t>(camera_.x);
+        const int32_t cam_y = static_cast<int32_t>(camera_.y);
+        if (spr.px + b.x1 <= cam_x || spr.px + b.x0 >= cam_x + PLAYFIELD_W ||
+            spr.py + b.y1 <= cam_y || spr.py + b.y0 >= cam_y + PLAYFIELD_H) {
             continue;
         }
-
-        int32_t sx = PLAYFIELD_X + (obj.world_x - camera_.world_x);
-        int32_t sy = PLAYFIELD_Y + (obj.world_y - camera_.world_y);
-        SDL_Texture* tex = texture_cache_->get_sprite_texture(static_cast<uint32_t>(obj.sprite_id));
-        if (tex) {
-            SDL_Rect dst = { sx, sy, obj.width, obj.height };
-            SDL_RenderCopy(renderer_, tex, nullptr, &dst);
-        }
+        RenderItem item{};
+        item.sort_y = spr.py;   // original sort key = row*32+16 (cell centre)
+        const int32_t anim_id = spr.anim_id, px = spr.px, py = spr.py;
+        item.draw_func = [this, anim_id, px, py](SDL_Renderer*, TextureCache&) {
+            this->draw_template_world(anim_id, px, py);
+        };
+        render_queue_.push_back(std::move(item));
     }
 }
 
@@ -1116,7 +989,7 @@ void Renderer::render_flower_droppers(const ants::sim::WorldState& world) {
     if (!archive_ || !texture_cache_) return;
 
     for (const auto& fd : world.flower_droppers) {
-        // Render falling powerup droplet if dropping (flower plant itself is rendered as Layer 3 canopy decor)
+        // Render falling powerup droplet if dropping (flower plant itself is an object-list sprite)
         if (fd.is_dropping) {
             int32_t drop_sx = 0, drop_sy = 0;
             if (camera_.world_to_screen(fd.drop_x * TILE_SIZE, fd.drop_y * TILE_SIZE, drop_sx, drop_sy)) {
@@ -1132,15 +1005,7 @@ void Renderer::render_flower_droppers(const ants::sim::WorldState& world) {
                 const auto* drop_anim = archive_->find_animation(anim_name);
                 if (drop_anim && !drop_anim->subitems.empty()) {
                     size_t frame_idx = std::min<size_t>(fd.drop_frame, drop_anim->subitems.size() - 1);
-                    const auto& sub = drop_anim->subitems[frame_idx];
-                    for (int i = static_cast<int>(sub.frames.size()) - 1; i >= 0; --i) {
-                        const auto& f = sub.frames[static_cast<size_t>(i)];
-                        SDL_Texture* tex = texture_cache_->get_sprite_texture(f.sprite_index);
-                        if (!tex) continue;
-                        const auto& sp = archive_->get_sprite(f.sprite_index);
-                        SDL_Rect dst = { drop_sx + f.dx, drop_sy + f.dy, static_cast<int>(sp.width), static_cast<int>(sp.height) };
-                        SDL_RenderCopy(renderer_, tex, nullptr, &dst);
-                    }
+                    draw_frame_parts(drop_anim->subitems[frame_idx], drop_sx, drop_sy);
                 }
             }
         }
@@ -1248,13 +1113,7 @@ void Renderer::render_visual_effects(const ants::sim::WorldState& world) {
                 }
             }
             const auto& sub = anim->subitems[sub_idx];
-            for (const auto& f : sub.frames) {
-                SDL_Texture* tex = texture_cache_->get_sprite_texture(f.sprite_index);
-                if (!tex) continue;
-                const auto& sp = archive_->get_sprite(f.sprite_index);
-                SDL_Rect dst = { sx + f.dx, sy + f.dy, static_cast<int>(sp.width), static_cast<int>(sp.height) };
-                SDL_RenderCopy(renderer_, tex, nullptr, &dst);
-            }
+            draw_frame_parts(sub, sx, sy);
         }
     }
 }
@@ -1327,13 +1186,7 @@ void Renderer::render_transient_effects() {
             }
         }
         const auto& sub = anim->subitems[sub_idx];
-        for (const auto& f : sub.frames) {
-            SDL_Texture* tex = texture_cache_->get_sprite_texture(f.sprite_index);
-            if (!tex) continue;
-            const auto& sp = archive_->get_sprite(f.sprite_index);
-            SDL_Rect dst = { sx + f.dx, sy + f.dy, static_cast<int>(sp.width), static_cast<int>(sp.height) };
-            SDL_RenderCopy(renderer_, tex, nullptr, &dst);
-        }
+        draw_frame_parts(sub, sx, sy);
     }
 }
 
@@ -1387,13 +1240,7 @@ void Renderer::render_software_cursor(CursorType type, int32_t screen_x, int32_t
     }
 
     const auto& sub = anim.subitems[sub_idx];
-    for (const auto& f : sub.frames) {
-        SDL_Texture* tex = texture_cache_->get_sprite_texture(f.sprite_index);
-        if (!tex) continue;
-        const auto& sp = archive_->get_sprite(f.sprite_index);
-        SDL_Rect dst = { screen_x + f.dx, screen_y + f.dy, static_cast<int>(sp.width), static_cast<int>(sp.height) };
-        SDL_RenderCopy(renderer_, tex, nullptr, &dst);
-    }
+    draw_frame_parts(sub, screen_x, screen_y);
 }
 
 void Renderer::draw_ant_shadow(int32_t anchor_sx, int32_t anchor_sy, int32_t altitude_z) {
@@ -1509,27 +1356,7 @@ void Renderer::draw_single_ant(const ants::sim::AntSnapshot& ant, bool is_select
             size_t frame_index = is_emerging ? static_cast<size_t>(ant.anim_frame - 8) : static_cast<size_t>(ant.anim_frame);
             size_t sub_idx = std::min(frame_index, base_seq->subitems.size() - 1);
             const auto& sub = base_seq->subitems[sub_idx];
-            auto frames = sub.frames;
-            if (carrying_food && frames.size() > 1) {
-                // Ensure lunchbox is rendered in the back (first), ant body in front (second)
-                std::stable_sort(frames.begin(), frames.end(), [&](const auto& a, const auto& b) {
-                    const auto& sp_a = archive_->get_sprite(a.sprite_index);
-                    const auto& sp_b = archive_->get_sprite(b.sprite_index);
-                    bool is_lb_a = (sp_a.name.find("lb") != std::string::npos);
-                    bool is_lb_b = (sp_b.name.find("lb") != std::string::npos);
-                    if (is_lb_a != is_lb_b) {
-                        return is_lb_a;
-                    }
-                    return false;
-                });
-            }
-            for (const auto& f : frames) {
-                SDL_Texture* tex = texture_cache_->get_sprite_texture(f.sprite_index, false, static_cast<uint8_t>(ant.player_id));
-                if (!tex) continue;
-                const auto& sp = archive_->get_sprite(f.sprite_index);
-                SDL_Rect dst = { sx + f.dx, render_y + f.dy, static_cast<int>(sp.width), static_cast<int>(sp.height) };
-                SDL_RenderCopy(renderer_, tex, nullptr, &dst);
-            }
+            draw_frame_parts(sub, sx, render_y, false, ant_colour(ant.player_id));
         }
         return;
     }
@@ -1613,33 +1440,11 @@ void Renderer::draw_single_ant(const ants::sim::AntSnapshot& ant, bool is_select
         }
     }
 
-    // Draws one animation frame's sprites at the ant (lunchbox behind the ant body, team bomb sprites).
+    // Draws one animation frame's parts at the ant in the original order (last stored part first, so the first
+    // stored part - e.g. a carried lunchbox in front of the body - is on top) with the original ant colour rule.
     auto draw_frame_sprites = [&](const ants::assets::AnimationSubItem& sub, bool mirrored) {
-        auto frames = sub.frames;
-        if (ant.is_holding && frames.size() > 1) {
-            // Ensure lunchbox is rendered in the back (first), ant body in front (second)
-            std::stable_sort(frames.begin(), frames.end(), [&](const auto& a, const auto& b) {
-                const auto& sp_a = archive_->get_sprite(a.sprite_index);
-                const auto& sp_b = archive_->get_sprite(b.sprite_index);
-                bool is_lb_a = (sp_a.name.find("lb") != std::string::npos);
-                bool is_lb_b = (sp_b.name.find("lb") != std::string::npos);
-                if (is_lb_a != is_lb_b) {
-                    return is_lb_a;
-                }
-                return false;
-            });
-        }
-        for (const auto& f : frames) {
-            uint32_t sp_idx = f.sprite_index;
-            if (ant.player_id < 4 && texture_cache_->is_base_bomb_sprite(sp_idx)) {
-                sp_idx = texture_cache_->get_team_bomb_sprite_index(static_cast<uint8_t>(ant.player_id));
-            }
-            SDL_Texture* tex = texture_cache_->get_sprite_texture(sp_idx, mirrored, static_cast<uint8_t>(ant.player_id));
-            if (!tex) continue;
-            const auto& sp = mirrored ? archive_->get_mirrored_sprite(sp_idx) : archive_->get_sprite(sp_idx);
-            SDL_Rect dst = { sx + f.dx, render_y + f.dy, static_cast<int>(sp.width), static_cast<int>(sp.height) };
-            SDL_RenderCopy(renderer_, tex, nullptr, &dst);
-        }
+        draw_frame_parts(sub, sx, render_y, mirrored, ant_colour(ant.player_id),
+                         ant.player_id < 4 ? static_cast<uint8_t>(ant.player_id) : TEAM_NONE);
     };
 
     // Original locomotion animation (idle, walk on each terrain, swim, dive, climb, can't-go): the simulation
@@ -1673,13 +1478,7 @@ void Renderer::draw_single_ant(const ants::sim::AntSnapshot& ant, bool is_select
         if (infil_seq && !infil_seq->subitems.empty()) {
             size_t sub_idx = ant.anim_frame % infil_seq->subitems.size();
             const auto& sub = infil_seq->subitems[sub_idx];
-            for (const auto& f : sub.frames) {
-                SDL_Texture* tex = texture_cache_->get_sprite_texture(f.sprite_index, false, static_cast<uint8_t>(ant.player_id));
-                if (!tex) continue;
-                const auto& sp = archive_->get_sprite(f.sprite_index);
-                SDL_Rect dst = { sx + f.dx, render_y + f.dy, static_cast<int>(sp.width), static_cast<int>(sp.height) };
-                SDL_RenderCopy(renderer_, tex, nullptr, &dst);
-            }
+            draw_frame_parts(sub, sx, render_y, false, ant_colour(ant.player_id));
         }
     } else {
         const auto* seq = archive_->get_directional_animation(prefix + action, dir);
@@ -1792,7 +1591,7 @@ void Renderer::draw_single_ant(const ants::sim::AntSnapshot& ant, bool is_select
         } else {
             // Fallback: draw directional stand sprite
             std::string fallback_name = prefix + "st301.bmp";
-            SDL_Texture* tex = texture_cache_->get_named_sprite_texture(fallback_name, false, static_cast<uint8_t>(ant.player_id));
+            SDL_Texture* tex = texture_cache_->get_named_sprite_texture(fallback_name, false, ant_colour(ant.player_id));
             if (tex) {
                 SDL_Rect dst = { sx - 16, render_y - 16, 32, 32 };
                 SDL_RenderCopy(renderer_, tex, nullptr, &dst);
@@ -1806,14 +1605,7 @@ void Renderer::draw_single_ant(const ants::sim::AntSnapshot& ant, bool is_select
         if (pow_seq && !pow_seq->subitems.empty()) {
             size_t psub = ant.transform_anim_frame % pow_seq->subitems.size();
             const auto& sub = pow_seq->subitems[psub];
-            for (const auto& f : sub.frames) {
-                SDL_Texture* ptex = texture_cache_->get_sprite_texture(f.sprite_index, false, static_cast<uint8_t>(ant.player_id));
-                if (ptex) {
-                    const auto& sp = archive_->get_sprite(f.sprite_index);
-                    SDL_Rect pdst = { sx + f.dx, render_y + f.dy, static_cast<int>(sp.width), static_cast<int>(sp.height) };
-                    SDL_RenderCopy(renderer_, ptex, nullptr, &pdst);
-                }
-            }
+            draw_frame_parts(sub, sx, render_y, false, ant_colour(ant.player_id));
         }
     }
 
@@ -1836,13 +1628,7 @@ void Renderer::draw_single_ant(const ants::sim::AntSnapshot& ant, bool is_select
                 if (!ears_seq.subitems.empty()) {
                     size_t sub_idx = get_anim_subitem_by_time(ears_seq, SDL_GetTicks());
                     const auto& sub = ears_seq.subitems[sub_idx];
-                    for (const auto& f : sub.frames) {
-                        SDL_Texture* tex = texture_cache_->get_sprite_texture(f.sprite_index);
-                        if (!tex) continue;
-                        const auto& sp = archive_->get_sprite(f.sprite_index);
-                        SDL_Rect dst = { sx + f.dx, render_y + f.dy, static_cast<int>(sp.width), static_cast<int>(sp.height) };
-                        SDL_RenderCopy(renderer_, tex, nullptr, &dst);
-                    }
+                    draw_frame_parts(sub, sx, render_y);
                     drawn_ears = true;
                 }
             }
@@ -1917,13 +1703,7 @@ void Renderer::draw_anthill_selection_brackets(int32_t x, int32_t y, int32_t w, 
             int32_t cy = y + (h / 2);
             size_t sub_idx = get_anim_subitem_by_time(ears_seq, SDL_GetTicks());
             const auto& sub = ears_seq.subitems[sub_idx];
-            for (const auto& f : sub.frames) {
-                SDL_Texture* tex = texture_cache_->get_sprite_texture(f.sprite_index);
-                if (!tex) continue;
-                const auto& sp = archive_->get_sprite(f.sprite_index);
-                SDL_Rect dst = { cx + f.dx, cy + f.dy, static_cast<int>(sp.width), static_cast<int>(sp.height) };
-                SDL_RenderCopy(renderer_, tex, nullptr, &dst);
-            }
+            draw_frame_parts(sub, cx, cy);
             return;
         }
     }
@@ -2015,7 +1795,7 @@ void Renderer::render_ant_units(const ants::sim::WorldState& world,
     }
 
     // Y-Sorting (Background to Foreground)
-    std::sort(render_queue_.begin(), render_queue_.end(), [](const RenderItem& a, const RenderItem& b) {
+    std::stable_sort(render_queue_.begin(), render_queue_.end(), [](const RenderItem& a, const RenderItem& b) {
         return a.sort_y < b.sort_y;
     });
 

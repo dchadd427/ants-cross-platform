@@ -97,6 +97,31 @@ constexpr int CARD_H = 128;
 
 constexpr int TILE_SIZE = 32;
 
+// Colour modes accepted by TextureCache::get_sprite_texture (the `team_id` argument).
+//   0..3               legacy HUD path: per-team HUD table on palette indices 1..31 plus the +offset ramp shift
+//   TEAM_NONE          raw CHD palette. The original never remaps terrain, map objects, effects, plants or cursors.
+//   ant_colour(player) the original ant blit (Ants.exe FUN_0101b802 -> FUN_0102cfef): the colour offset
+//                      {0,20,40,60} is added to EVERY non-transparent pixel index, except for images whose name
+//                      starts with a digit (lunchboxes, snorkel head, death art), which are never recoloured.
+constexpr uint8_t TEAM_NONE = 0xFF;
+constexpr uint8_t ANT_COLOUR_BASE = 0x10;
+constexpr uint8_t ant_colour(uint8_t player_id) noexcept {
+    return static_cast<uint8_t>(ANT_COLOUR_BASE + (player_id & 3u));
+}
+
+/**
+ * @brief Order in which the original draws the parts of one animation frame.
+ *
+ * Ants.exe FUN_0102b8d7 (Sprite::DrawAt) walks the frame's part list newest-to-oldest, so the LAST part stored in
+ * ants.chd is drawn FIRST and the first stored part ends up on top (e.g. shadow.bmp is always the last part).
+ * Returns the part indices in drawing order.
+ */
+inline std::vector<size_t> frame_part_draw_order(size_t part_count) {
+    std::vector<size_t> order(part_count);
+    for (size_t i = 0; i < part_count; ++i) order[i] = part_count - 1 - i;
+    return order;
+}
+
 /**
  * @brief Viewport Camera tracking world position with smooth scrolling and bounds clamping.
  */
@@ -157,8 +182,14 @@ public:
     TextureCache(const TextureCache&) = delete;
     TextureCache& operator=(const TextureCache&) = delete;
 
-    SDL_Texture* get_sprite_texture(uint32_t sprite_id, bool mirrored = false, uint8_t team_id = 0);
-    SDL_Texture* get_named_sprite_texture(const std::string& name, bool mirrored = false, uint8_t team_id = 0);
+    SDL_Texture* get_sprite_texture(uint32_t sprite_id, bool mirrored = false, uint8_t team_id = TEAM_NONE);
+    SDL_Texture* get_named_sprite_texture(const std::string& name, bool mirrored = false, uint8_t team_id = TEAM_NONE);
+
+    // Pure palette selection for one image under a colour mode (see TEAM_NONE / ant_colour above). Public so tests
+    // can check the original's per-pixel colour rule without an SDL renderer.
+    static std::array<ants::assets::ColorRGBA, 256> compose_palette(const std::array<ants::assets::ColorRGBA, 256>& base,
+                                                                    const std::string& image_name,
+                                                                    uint8_t team_id);
     bool is_base_bomb_sprite(uint32_t sprite_id) const noexcept;
     uint32_t get_team_bomb_sprite_index(uint8_t team_id) const noexcept;
     void clear();
@@ -166,24 +197,40 @@ public:
 private:
     SDL_Renderer* renderer_{nullptr};
     const ants::assets::AssetArchive& archive_;
-    std::unordered_map<uint64_t, SDL_Texture*> textures_; // Key: (sprite_id << 4) | (team_id << 1) | (mirrored ? 1 : 0)
+    std::unordered_map<uint64_t, SDL_Texture*> textures_; // Key: (sprite_id << 9) | (team_id << 1) | (mirrored ? 1 : 0)
     int32_t base_bomb_sprite_id_{-1};
     int32_t team_bomb_sprite_ids_[4]{-1, -1, -1, -1};
 };
 
 /**
- * @brief Static map decoration or multi-tile structure instance (e.g. grass, bear, glasses).
+ * @brief Layer-2 object instance (rocks, grass, toys, food ...) anchored at one cell.
+ * It draws every part of its Table-4 template (the animation with the same id as the tile), so all instances of one
+ * id share one clock exactly like the original's shared template sprites.
  */
 struct StaticMapObject {
-    int32_t world_x{0};
-    int32_t world_y{0};
-    int32_t sprite_id{-1};
-    int32_t width{32};
-    int32_t height{32};
+    int32_t anim_id{-1};        // Table-4 animation id of the tile placed by the map (dictionary index)
+    uint16_t anchor_x{0};       // anchor cell column
+    uint16_t anchor_y{0};       // anchor cell row
     bool is_food{false};
-    uint16_t anchor_x{0};
-    uint16_t anchor_y{0};
-    std::vector<std::pair<uint16_t, uint16_t>> food_tiles{};
+    std::vector<std::pair<uint16_t, uint16_t>> food_tiles{}; // footprint cells that carry this food item
+};
+
+/**
+ * @brief Object-list sprite (Block 1 entries with team 255: plants, clover, flowers). The original keeps these in the
+ * y-sorted sprite list with sort key row*32+16 and its position at the cell centre.
+ */
+struct ObjectListSprite {
+    int32_t anim_id{-1};
+    int32_t px{0};              // cell centre x
+    int32_t py{0};              // cell centre y
+};
+
+/**
+ * @brief Union of the part rectangles of every frame of one animation, relative to its anchor (for culling).
+ */
+struct AnimBounds {
+    bool valid{false};
+    int32_t x0{0}, y0{0}, x1{0}, y1{0};
 };
 
 /**
@@ -227,6 +274,15 @@ public:
                       float sub_tick_time = 0.0f);
     void end_frame();
 
+    // Hooks used by the render-parity tests and offscreen harnesses
+    // Draws only the static map layers (terrain + layer-2 objects) into the playfield clip; no ants, effects or fog.
+    void render_map_layers(const ants::sim::Grid& grid, const ants::sim::WorldState* world = nullptr);
+    // Draws all parts of one animation frame at screen position (sx, sy) in the original part order.
+    void draw_animation_frame(const ants::assets::AnimationSubItem& sub, int32_t sx, int32_t sy,
+                              bool mirrored = false, uint8_t colour = TEAM_NONE) {
+        draw_frame_parts(sub, sx, sy, mirrored, colour);
+    }
+
     // IRenderer Implementation
     void draw_sprite(uint32_t sprite_id, int32_t x, int32_t y, bool mirrored = false) override;
     void draw_named_sprite(const std::string& name, int32_t x, int32_t y, bool mirrored = false) override;
@@ -250,6 +306,15 @@ public:
     bool save_screenshot(const std::string& path);
     static size_t get_anim_subitem_by_time(const ants::assets::AnimationSequence& seq, uint32_t now_ms);
 
+    // Template animation clock (terrain, objects). It starts at set_level(); tests can pin it to a fixed ms value.
+    void pin_animation_clock(uint32_t ms_since_map_load) noexcept {
+        anim_clock_pin_ms_ = static_cast<int64_t>(ms_since_map_load);
+        template_now_ms_ = ms_since_map_load;
+        ++frame_counter_;
+    }
+    void unpin_animation_clock() noexcept { anim_clock_pin_ms_ = -1; }
+    uint32_t animation_clock_ms() const noexcept { return template_now_ms_; }
+
     // Software Cursor & Transient Effects
     void spawn_transient_effect(const std::string& anim_name, int32_t px, int32_t py, bool is_screen_space = false);
     void update_transient_effects(float dt);
@@ -262,12 +327,21 @@ private:
     void render_terrain_layer1(const ants::sim::Grid& grid);
     void render_terrain_layer2_structures(const ants::sim::Grid& grid, const ants::sim::WorldState* world = nullptr);
     void render_flower_droppers(const ants::sim::WorldState& world);
-    void render_terrain_layer3_canopy();
+    void collect_object_list_sprites();
     void render_fog_of_war(const ants::sim::WorldState& world);
     void render_visual_effects(const ants::sim::WorldState& world);
     void render_ant_units(const ants::sim::WorldState& world, int32_t selected_unit_id, const std::vector<uint32_t>& selected_unit_ids = {}, bool show_all_health_bars = false);
     void render_tile_grid(const ants::sim::Grid& grid, int32_t mouse_x, int32_t mouse_y);
     void draw_ant_shadow(int32_t anchor_sx, int32_t anchor_sy, int32_t altitude_z);
+    // Draws all parts of one animation frame, last stored part first (original order), at screen position (sx, sy).
+    void draw_frame_parts(const ants::assets::AnimationSubItem& sub, int32_t sx, int32_t sy, bool mirrored = false,
+                          uint8_t colour = TEAM_NONE, uint8_t bomb_team = TEAM_NONE);
+    // Current frame of the shared template of Table-4 animation `anim_id` (all users of an id show the same frame).
+    size_t template_frame_index(int32_t anim_id);
+    void draw_template_screen(int32_t anim_id, int32_t sx, int32_t sy, uint8_t colour = TEAM_NONE);
+    void draw_template_world(int32_t anim_id, int32_t world_x, int32_t world_y, uint8_t colour = TEAM_NONE);
+    const AnimBounds& anim_bounds(int32_t anim_id);
+    void draw_static_object(const StaticMapObject& obj, const ants::sim::Grid& grid, const ants::sim::WorldState* world);
     void draw_single_ant(const ants::sim::AntSnapshot& ant, bool is_selected, bool show_health_bar = false, bool is_under_battle = false);
     void draw_anthill_selection_brackets(int32_t x, int32_t y, int32_t w = 128, int32_t h = 128);
 
@@ -312,14 +386,27 @@ private:
 
     uint32_t map_width_{0};
     uint32_t map_height_{0};
-    std::vector<int32_t> tile_sprite_ids_; // Pre-resolved tile dictionary to sprite ID cache
-    std::vector<std::pair<int32_t, int32_t>> tile_offsets_; // Pre-resolved Table 4 (dx, dy) anchor offsets
-    std::vector<std::vector<int32_t>> tile_anim_frames_; // Pre-resolved animated tile frames
-    uint32_t anim_tick_{0};
+    // Level tile dictionary index -> Table-4 animation id (the dictionary is positional: entry i is "." or animation i).
+    std::vector<int32_t> tile_anim_id_;
+    std::vector<AnimBounds> anim_bounds_;            // lazily filled, indexed by animation id
+    std::vector<uint32_t> anim_frame_stamp_;         // per-animation cache of the current template frame
+    std::vector<uint16_t> anim_frame_cache_;
+    uint32_t frame_counter_{0};
+    uint32_t map_epoch_ms_{0};                       // template clocks start when the map is loaded
+    uint32_t template_now_ms_{0};                    // ms since map_epoch_ms_ for this frame
+    int64_t anim_clock_pin_ms_{-1};                  // >= 0: fixed template clock (tests / harness)
+    bool level_set_{false};
+    int32_t anim_id_fire_{-1};
+    int32_t anim_id_lunchbox_{-1};
+    int32_t anim_id_bomb_[4]{-1, -1, -1, -1};        // green, red, blue, black (remake player ids 0..3)
+    int32_t anim_id_powerup_[6]{-1, -1, -1, -1, -1, -1}; // indexed by powerup_type 1..5
+    int32_t anim_id_hill_[4]{-1, -1, -1, -1};        // GREENHILL, REDHILL, BLUEHILL, BLACKHILL
+    std::array<SDL_Point, 4> hill_anchor_cell_{};    // layer-2 anchor cell of each hill (-1 if absent)
+    std::vector<int32_t> object_index_by_cell_;      // anchor cell -> index into static_decor_objects_ (-1)
     std::array<SDL_Point, 4> anthill_bases_{};
     bool has_anthill_bases_{false};
     std::vector<StaticMapObject> static_decor_objects_; // Layer 2 interactive objects
-    std::vector<StaticMapObject> layer3_canopy_objects_; // Layer 3 overhanging canopy decorations
+    std::vector<ObjectListSprite> object_list_sprites_;  // plants / clover / flowers from the map object list
     std::vector<RenderItem> render_queue_;
     std::string pending_screenshot_;
     uint8_t hud_team_id_{0};

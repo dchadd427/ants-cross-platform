@@ -228,6 +228,13 @@ if [ "$RUN_APP" -eq 1 ]; then
     echo -e "${BOLD}${BLUE}======================================================================${RESET}"
     "./$BUILD_DIR/tests/test_app/test_app_integration"
     APP_STATUS=$?
+
+    echo ""
+    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
+    echo -e "${BOLD}${BLUE}>>> 3.1 RUNNING RENDER PARITY SUITE (renderer vs original draw rules)...${RESET}"
+    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
+    "./$BUILD_DIR/tests/test_app/test_render_parity"
+    RENDER_PARITY_STATUS=$?
 fi
 
 # 6. Execute E2E Opaque-Box Tests
@@ -313,6 +320,13 @@ if [ "$RUN_APP" -eq 1 ]; then
         echo -e " 3. Application Integration Tests (test_app):       ${GREEN}PASSED${RESET}"
     else
         echo -e " 3. Application Integration Tests (test_app):       ${RED}FAILED (exit code ${APP_STATUS})${RESET}"
+        TOTAL_FAILED=$((TOTAL_FAILED + 1))
+    fi
+
+    if [ "$RENDER_PARITY_STATUS" -eq 0 ]; then
+        echo -e " 3.1 Render Parity (test_render_parity):             ${GREEN}PASSED${RESET}"
+    else
+        echo -e " 3.1 Render Parity (test_render_parity):             ${RED}FAILED (exit code ${RENDER_PARITY_STATUS})${RESET}"
         TOTAL_FAILED=$((TOTAL_FAILED + 1))
     fi
 fi

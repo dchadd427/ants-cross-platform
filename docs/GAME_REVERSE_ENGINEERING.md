@@ -1276,6 +1276,59 @@ checked by an independent adversarial pass. The full reports (instruction addres
 - Punch knock-back lands `range` tiles away (1, or 4 for combat ants) in the first free direction of d, d+1, d-1,
   d+2, d-2, testing only the landing tile (`FUN_0101d8ed`); the flight passes over obstacles.
 
+### 5.33 Sprite Drawing Ground Truth (Capstone-Verified; Supersedes Earlier Sprite and Animation Notes)
+
+Everything below was read in `Ants.exe` (VAs) or measured in `ants.chd` and the six original maps. Pixel parity of the
+rules marked *(implemented)* is enforced by `tests/test_app/test_render_parity.cpp`.
+
+**5.33.1 Part draw order** *(implemented)*. A frame's parts are a linked list built by `FUN_0102a977` with `Add`
+(`0x1029a5a`, the new node becomes the list's "first" pointer). `FUN_0102b8d7` (Sprite::DrawAt) walks it with
+`First` (`0x1029924`) / `Next` (`0x1029987`), i.e. newest to oldest: **the last part stored in the CHD is drawn first and
+the first stored part ends up on top**. The deep copy used for mirrored directions (`0x102c0db` -> `0x102ac4a` ->
+`0x10299ed`) preserves the order. Data check: `shadow.bmp` is always the last part of a frame. Of 2,733 multi-part frames
+2,478 composite differently in the opposite order (carry animations `h*`, fire/bomber/stun ants, food droppers, foods,
+flowers, anthills, `sputter`, button transitions).
+
+**5.33.2 Colour rule** *(implemented for ants and world sprites)*. `FUN_0101b802` (ant draw) enables the blit remap with the
+byte `{0,20,40,60}[colour]` (colour = `{3,2,1,0}[team]`) and callback `0x101b7eb` (`!isdigit(image_name[0])`); the part
+blitter `FUN_0102cfef` adds it to **every** non-transparent pixel index unless the image name starts with a digit
+(`3lb..7lb` lunchboxes, `3snork`, `9death`). Terrain, map objects, effects, plants and cursors are blitted raw. Palette
+layout: 80..99 base ramp, 100..119 / 120..139 / 140..159 the other team ramps (entries 94..99 are shared accents).
+`FUN_0100ea6a` overwrites GLOBAL palette entries 1..31 with the local player's HUD table once per game (tables at
+`0x1002260/0x10022e0/0x1002360/0x10023e0`).
+
+**5.33.3 Map pipeline and depth sorting** *(implemented for plants; effects and droppers pending)*. Per frame `FUN_01009d49`
+draws layer 1 (`FUN_01008089` mode 1), layer 2 (mode 2), the sprite list (`FUN_010088e7`) and the fog pass
+(`FUN_01008607`). The sprite list is sorted by the sprite's y (`+0x3a`) with an incremental insertion sort
+(`FUN_010089bd`; ties keep insertion order). It holds ants (cell centre + frame displacements), object-list plants
+(Block 1 entries with team 255; position = cell centre, key = row*32+16, `0x100e383..0x100e448`), effects (anchor = tile
+top-left, key = row*32), the scuffle cloud and the click marker.
+
+**5.33.4 Terrain (S slate, D dirt, M mud, G gravel, W water)** *(implemented)*. The LVL tile dictionary is positional: entry `i`
+is `.` or exactly the name of Table-4 animation `i`, and the cell value is the animation id (`FUN_0100674e`, mode 0).
+Terrain is ids 431..669 (239 animations, all 32x32, single part at (0,0); 208 static, 31 animated). Every id has ONE template
+started at map load (`FUN_0102c1fc`: `t0 = timeGetTime()`) and stepped by the Table-4 durations (`FUN_0102b997`), so all
+cells of an id show the same frame at the same time. Cycles: water/`MW*` 4x150 = 600 ms; `M01b` 1400 (idle 1000), `M01c`
+2400 (2000), `M01d` 2000 (1500), `m01d_a..e` 1550/2550/2800/3250/3650, `m01e` family 3400/1600/2100/4100/4700/4500 with
+100/100/100/50/50 ms pop frames. Ids without a template draw nothing.
+
+**5.33.5 Layer-2 objects** *(implemented)*. Cell word = `(tile << 1) | anchor`; anchors get `aux = (col << 8) | row`. An
+object is drawn once from its anchor cell (row-major pass, +-3 cell viewport margin) at the anchor top-left plus each
+part's offset, all parts, last first, from the shared template of its tile id (so foods such as `fdcola1..3`, `fdjelo1`,
+`fdpmeat1` and the four anthills animate, and `fdpmeat2..4` keep the can body). Runtime items are the same templates:
+bombs 129..132 (part offset (9,4)), fire wall 134 (`wallup04`), bridges 34..38, lunchbox, pick-ups. Fog decision table
+(`0x10081cb..0x1008343`): pick-ups (`FUN_01007202`), bombs (`FUN_01008bc6`), food (`FUN_010071dd`) and fire walls
+(`FUN_01008bb7`) are hidden while their anchor is unexplored; a multi-cell object is drawn once any of its cells is
+explored; bridges, decor and hills are never hidden by fog logic (the black fog pass covers unexplored ground).
+
+**5.33.6 Effects (creators `FUN_01010008` x8 call sites, `FUN_010100e5` x3 invisible sound cues)**. Anchored at the tile
+top-left (sort key row*32), one-shot, fog-gated by their anchor tile. `bombex` (680 ms) is spawned for every detonation
+(`FUN_01021a6f`: duds, lethal hits, chains); `sputter` (830 ms) on fire-wall expiry (`FUN_01024de7`, armed only if more than
+180 s of match time remain) and when a fire ant extinguishes; `bsputter` (1220 ms) and `dsplash` (460 ms) on bridge
+destruction (`FUN_0100f8bf`) and when a swimmer lands in water; food droppers `FD_*` (820 ms). Death (`rand()%4` of
+`death1..4`), `getpow`, drown, burn overlays and hatch are played by the ant sprite itself. There is no in-world health
+bar: HP is shown only by the selection "ears" (`FUN_01010373`: hp >= 9 `dogears`, hp <= 2 `redears`, else `yelears`).
+
 ---
 
 ## 6. Target Multi-Platform Architecture

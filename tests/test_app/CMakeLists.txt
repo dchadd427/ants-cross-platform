@@ -59,3 +59,39 @@ target_compile_definitions(test_app_integration PRIVATE
 
 add_test(NAME test_app_integration COMMAND test_app_integration)
 set_tests_properties(test_app_integration PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# Render parity: real Renderer (software, dummy video driver) vs an independent CPU model of the original's draw rules
+add_executable(test_render_parity
+    test_render_parity.cpp
+)
+
+target_include_directories(test_render_parity PRIVATE
+    ${CMAKE_SOURCE_DIR}/include
+    ${SDL2_INCLUDE_DIRS}
+)
+
+target_link_libraries(test_render_parity PRIVATE
+    ants_app
+    ants_sim
+    ants_assets
+    ${SDL2_LIBRARIES}
+)
+
+if(APPLE)
+    target_link_libraries(test_render_parity PRIVATE
+        "-framework AudioToolbox"
+        "-framework CoreFoundation"
+        "-framework CoreAudio"
+    )
+endif()
+
+if(WIN32)
+    target_link_libraries(test_render_parity PRIVATE ws2_32 winmm)
+endif()
+
+target_compile_definitions(test_render_parity PRIVATE
+    ORIGINAL_ASSETS_DIR="${CMAKE_SOURCE_DIR}/Original-Ants"
+)
+
+add_test(NAME test_render_parity COMMAND test_render_parity)
+set_tests_properties(test_render_parity PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
