@@ -75,6 +75,39 @@ CLIMB_VA = 0x10048C0        # uint16 [colour 4][dir 8]  swimmer leaving water
 IDLE_WATER_VA = 0x10048B8   # uint16 [colour 4]         idle on water (no direction)
 CANT_GO_VA = 0x1004548      # uint16 [colour 4][type 6] action 0xB "can't go"
 CARRY_CANT_GO_VA = 0x1004578
+# Action clips of FUN_0101ad02 (SetAction): every table has four colour blocks of the same shape; only the
+# colour-0 block holds real CHD indices (dirs 5..7 of a row are virtual ids of the mirrored copies).
+#   shape "type"      uint16 [type 6]
+#   shape "type_dir"  uint16 [type 6][dir 8]
+#   shape "dir"       uint16 [dir 8]  (cardinal-only clips: N, E, S stored, W = mirrored E, the rest empty)
+#   shape "single"    uint16 [1]
+# (key, C++ name, address, shape, CHD name template with {t} = ant type letter, {d} = direction digit, what)
+ACTION_TABLES = [
+    ("enter",        "kEnter",        0x1003EB8, "type",     "a{t}h0",       "action 2: enter the own hill"),
+    ("carry_enter",  "kCarryEnter",   0x1003EE8, "type",     "h{t}h0",       "action 2, carrying food"),
+    ("harvest",      "kHarvest",      0x1003F18, "type_dir", "a{t}gf{d}01",  "action 5: grab food"),
+    ("attack",       "kAttack",       0x1004098, "type_dir", "a{t}at{d}01",  "action 0x12: melee attack"),
+    ("hit",          "kHit",          0x1004218, "type_dir", "a{t}gh{d}01",  "action 0xE: get hit"),
+    ("blown",        "kBlown",        0x1004398, "type_dir", "a{t}gb{d}01",  "action 0x13: blown away"),
+    ("burn",         "kBurn",         0x1004518, "type",     "a{t}bu301",    "action 0xA: burn overlay"),
+    ("hatch",        "kHatch",        0x10045A8, "type",     "a{t}hatch",    "action 0x14: newborn emerges"),
+    ("stun",         "kStun",         0x10045D8, "type",     "a{t}sd301",    "action 3: stunned"),
+    ("carry_stun",   "kCarryStun",    0x1004608, "type",     "h{t}sd301",    "action 3, carrying food"),
+    ("ignite",       "kIgnite",       0x1004638, "dir",      "afsf{d}01",    "action 6: fire ant places a fire wall"),
+    ("extinguish",   "kExtinguish",   0x1004678, "dir",      "afxf{d}01",    "action 7: fire ant puts a fire out"),
+    ("bridge_build_water",    "kBridgeBuildWater",    0x10046B8, "dir", "asbbw{d}01", "action 0x10 on water"),
+    ("bridge_demolish_water", "kBridgeDemolishWater", 0x10046F8, "dir", "asdbw{d}01", "action 0x11 on water"),
+    ("bridge_build_land",     "kBridgeBuildLand",     0x1004738, "dir", "asbbl{d}01", "action 0x10 on land"),
+    ("bridge_demolish_land",  "kBridgeDemolishLand",  0x1004778, "dir", "asdbl{d}01", "action 0x11 on land"),
+    ("plant",        "kPlant",        0x10047B8, "dir",      "absb{d}01",    "action 8: bomber plants a bomb"),
+    ("defuse",       "kDefuse",       0x10047F8, "dir",      "abdb{d}01",    "action 9: bomber defuses a bomb"),
+    ("infiltrate",   "kInfiltrate",   0x1004900, "single",   "atcr501",      "action 0xD: thief raids an enemy hill"),
+    ("getpow",       "kGetPow",       0x1004908, "single",   "getpow",       "action 4: power-up pickup"),
+    ("drown",        "kDrown",        0x1004910, "type",     "a{t}dr301",    "action 0xF: drowning"),
+]
+# Rows whose CHD name deviates from the template (the original's own table holds the worker clip there)
+ACTION_NAME_EXCEPTIONS = {("drown", 5): "agdr301"}
+CARDINAL_DIRS = (0, 2, 4)   # N, E, S
 PASSABLE_VA = 0x10049B8     # uint16 [8]  destination walkable by terrain class (CanEnter R1)
 STEP_WEIGHT_VA = 0x10049C8  # uint32 [6]  path step-cost weight by terrain class
 DIR_TABLE_VA = 0x1002B28    # int16 [3][3] direction by [drow+1][dcol+1]
@@ -380,6 +413,42 @@ def extract(exe, chd):
         if not (-1 <= dr <= 1 and -1 <= dc <= 1) or t["dir_table"][(dr + 1) * 3 + (dc + 1)] != d:
             fail(f"neighbour {d} = {(dr, dc)} is inconsistent with the direction table")
 
+    # --- action clips (FUN_0101ad02): colour-0 block of each table -----------------------------------
+    t["actions"] = {}
+    for key, _cname, va, shape, template, _what in ACTION_TABLES:
+        if shape == "type":
+            raw = exe.u16s(va, 6)
+            rows = []
+            for ty in range(6):
+                exp = ACTION_NAME_EXCEPTIONS.get((key, ty), template.format(t=TYPE_LETTERS[ty], d=""))
+                expect_name(raw[ty], exp, f"{key} type {ty}")
+                rows.append(raw[ty])
+            t["actions"][key] = rows
+        elif shape == "type_dir":
+            raw = exe.u16s(va, 6 * 8)
+            rows = []
+            for ty in range(6):
+                row = raw[ty * 8: ty * 8 + 8]
+                for d in range(5):
+                    expect_name(row[d], template.format(t=TYPE_LETTERS[ty], d=DIR_DIGITS[d]), f"{key} type {ty} dir {d}")
+                check_mirror_ids(row, f"{key} type {ty}")
+                rows.append(row[:5])
+            t["actions"][key] = rows
+        elif shape == "dir":
+            row = exe.u16s(va, 8)
+            for d in range(5):
+                if d in CARDINAL_DIRS:
+                    expect_name(row[d], template.format(t="", d=DIR_DIGITS[d]), f"{key} dir {d}")
+                elif row[d] != NO_ANIM:
+                    fail(f"{key} dir {d}: expected no animation, got {row[d]}")
+            if row[5] != NO_ANIM or row[7] != NO_ANIM or not (row[6] >= TILE_COUNT):
+                fail(f"{key}: dirs 5..7 must be (none, mirrored E, none): {row[5:8]}")
+            t["actions"][key] = row[:5]
+        else:  # single
+            v = exe.u16s(va, 1)[0]
+            expect_name(v, template, key)
+            t["actions"][key] = v
+
     # --- frames of every referenced animation -----------------------------------------------------
     referenced = set()
     for key in ("walk", "carry_walk"):
@@ -392,6 +461,15 @@ def extract(exe, chd):
     for key in ("swim", "dive", "climb", "cant_go", "carry_cant_go"):
         referenced.update(t[key])
     referenced.update((t["idle_water"], t["bump"]))
+    for value in t["actions"].values():
+        if isinstance(value, int):
+            referenced.add(value)
+        else:
+            for item in value:
+                if isinstance(item, list):
+                    referenced.update(v for v in item if v != NO_ANIM)
+                elif item != NO_ANIM:
+                    referenced.add(item)
 
     frames = []
     clips = []
@@ -472,6 +550,9 @@ def render(t, chd, exe_bytes, chd_bytes):
     w(f"//   kSwimmerWaterWeight push imm8 at {SWIMMER_WEIGHT_VA + 7:#x} (FUN_010208e8, swimmer on class 2)")
     w(f"//   kDirTable         {DIR_TABLE_VA:#x} direction of a step, index (drow+1)*3+(dcol+1) (FUN_01017531)")
     w(f"//   kNeighbour        {NEIGHBOUR_VA:#x} {{drow, dcol}} per direction (FUN_01019d28)")
+    w("//")
+    for key, cname, va, shape, _template, what in ACTION_TABLES:
+        w(f"//   {cname:<24s} {va:#x} {{shape {shape}}} {what}")
     w("//")
     w("// Directions: 0 N, 1 NE, 2 E, 3 SE, 4 S. 5 SW, 6 W and 7 NW are not stored: they are the 3, 2")
     w("// and 1 animations mirrored with every frame dx negated (FUN_01018a7a / FUN_01018b9f).")
@@ -555,6 +636,26 @@ def render(t, chd, exe_bytes, chd_bytes):
     w("")
     w(f"inline constexpr uint16_t kBump = {t['bump']:#06x};  // {chd.name(t['bump'])}")
     w("")
+
+    # action clips
+    for key, cname, va, shape, _template, what in ACTION_TABLES:
+        value = t["actions"][key]
+        w(f"// {what} ({va:#x})")
+        if shape == "type":
+            w(f"// [type]  {names_of(value)}")
+            w(f"inline constexpr uint16_t {cname}[6] = {{{', '.join(fmt_anim(v) for v in value)}}};")
+        elif shape == "type_dir":
+            w(f"// [type][dir N, NE, E, SE, S]")
+            w(f"inline constexpr uint16_t {cname}[6][5] = {{")
+            for ty in range(6):
+                w(f"    {{{', '.join(fmt_anim(v) for v in value[ty])}}},  // {TYPE_NAMES[ty]:7s} {names_of(value[ty])}")
+            w("};")
+        elif shape == "dir":
+            w(f"// [dir N, NE, E, SE, S]  {names_of(value)}")
+            w(f"inline constexpr uint16_t {cname}[5] = {{{', '.join(fmt_anim(v) for v in value)}}};")
+        else:
+            w(f"inline constexpr uint16_t {cname} = {value};  // {chd.name(value)}")
+        w("")
 
     def byte_table(cname, values, what):
         w(f"// {what}")

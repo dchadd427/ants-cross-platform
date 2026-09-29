@@ -200,16 +200,12 @@ public:
     static std::array<ants::assets::ColorRGBA, 256> compose_palette(const std::array<ants::assets::ColorRGBA, 256>& base,
                                                                     const std::string& image_name,
                                                                     uint8_t team_id);
-    bool is_base_bomb_sprite(uint32_t sprite_id) const noexcept;
-    uint32_t get_team_bomb_sprite_index(uint8_t team_id) const noexcept;
     void clear();
 
 private:
     SDL_Renderer* renderer_{nullptr};
     const ants::assets::AssetArchive& archive_;
     std::unordered_map<uint64_t, SDL_Texture*> textures_; // Key: (sprite_id << 9) | (team_id << 1) | (mirrored ? 1 : 0)
-    int32_t base_bomb_sprite_id_{-1};
-    int32_t team_bomb_sprite_ids_[4]{-1, -1, -1, -1};
 };
 
 /**
@@ -249,6 +245,16 @@ struct AnimBounds {
 struct RenderItem {
     int32_t sort_y{0};
     std::function<void(SDL_Renderer*, TextureCache&)> draw_func;
+};
+
+/**
+ * @brief Overlay sprite drawn after the whole map sprite (fog of war included). In the original these are children of
+ * the view container (selection markers, the hill marker, the click marker, score bubbles): they are drawn in
+ * creation order, newest on top, and are not sorted by y.
+ */
+struct OverlayItem {
+    int64_t created_ms{0};
+    std::function<void()> draw;
 };
 
 /**
@@ -341,24 +347,27 @@ private:
     void render_fog_of_war(const ants::sim::WorldState& world);
     void collect_visual_effects(const ants::sim::WorldState& world);
     void collect_transient_sprites();
+    void collect_selection_markers(const ants::sim::WorldState& world, int32_t selected_unit_id,
+                                   const std::vector<uint32_t>& selected_unit_ids);
+    void draw_overlay_queue();
+    int64_t overlay_now_ms() const;
     void collect_score_bubbles(const ants::sim::WorldState& world);
     void draw_score_number(int32_t amount, int32_t world_x, int32_t world_y);
     void collect_hill_brackets(const ants::sim::Grid& grid, int32_t selected_base_team_id);
     void draw_sorted_queue();
-    void collect_ant_units(const ants::sim::WorldState& world, int32_t selected_unit_id, const std::vector<uint32_t>& selected_unit_ids = {});
+    void collect_ant_units(const ants::sim::WorldState& world);
     void render_tile_grid(const ants::sim::Grid& grid, int32_t mouse_x, int32_t mouse_y);
-    void draw_ant_shadow(int32_t anchor_sx, int32_t anchor_sy, int32_t altitude_z);
     // Draws all parts of one animation frame, last stored part first (original order), at screen position (sx, sy).
     void draw_frame_parts(const ants::assets::AnimationSubItem& sub, int32_t sx, int32_t sy, bool mirrored = false,
-                          uint8_t colour = TEAM_NONE, uint8_t bomb_team = TEAM_NONE);
+                          uint8_t colour = TEAM_NONE);
     // Current frame of the shared template of Table-4 animation `anim_id` (all users of an id show the same frame).
     size_t template_frame_index(int32_t anim_id);
     void draw_template_screen(int32_t anim_id, int32_t sx, int32_t sy, uint8_t colour = TEAM_NONE);
     void draw_template_world(int32_t anim_id, int32_t world_x, int32_t world_y, uint8_t colour = TEAM_NONE);
     const AnimBounds& anim_bounds(int32_t anim_id);
     void draw_static_object(const StaticMapObject& obj, const ants::sim::Grid& grid, const ants::sim::WorldState* world);
-    void draw_single_ant(const ants::sim::AntSnapshot& ant, bool is_selected, bool is_under_battle = false);
-    void draw_anthill_selection_brackets(int32_t cx, int32_t cy);
+    void draw_single_ant(const ants::sim::AntSnapshot& ant);
+    void draw_anthill_selection_brackets(int32_t cx, int32_t cy, uint32_t elapsed_ms = 0);
 
 #ifdef ANTS_ENABLE_SDL_TTF
     struct CachedTextEntry {
@@ -429,6 +438,13 @@ private:
     std::vector<StaticMapObject> static_decor_objects_; // Layer 2 interactive objects
     std::vector<ObjectListSprite> object_list_sprites_;  // plants / clover / flowers from the map object list
     std::vector<RenderItem> render_queue_;
+    std::vector<OverlayItem> overlay_queue_;
+    // Selection marker ("ears") of each selected ant: its own looping clock, restarted when it is created (selection)
+    // and whenever the ant's health changes (Ants.exe FUN_01010373 re-creates it after every damage and heal).
+    struct EarsState { uint16_t hp{0}; int64_t start_ms{0}; };
+    std::unordered_map<uint32_t, EarsState> ears_state_;
+    int32_t hill_marker_team_{-1};
+    int64_t hill_marker_start_ms_{0};
     std::string pending_screenshot_;
     uint8_t hud_team_id_{0};
     bool integer_scale_{true};

@@ -1297,7 +1297,7 @@ layout: 80..99 base ramp, 100..119 / 120..139 / 140..159 the other team ramps (e
 `FUN_0100ea6a` overwrites GLOBAL palette entries 1..31 with the local player's HUD table once per game (tables at
 `0x1002260/0x10022e0/0x1002360/0x10023e0`).
 
-**5.33.3 Map pipeline and depth sorting** *(implemented: plants, ants, effects, droppers, click marker, hill brackets, score bubbles share one stable y-sorted queue)*. Per frame `FUN_01009d49`
+**5.33.3 Map pipeline and depth sorting** *(implemented: plants, ants, effects and droppers share one stable y-sorted queue; the view-container children of 5.33.9 are drawn after the fog)*. Per frame `FUN_01009d49`
 draws layer 1 (`FUN_01008089` mode 1), layer 2 (mode 2), the sprite list (`FUN_010088e7`) and the fog pass
 (`FUN_01008607`). The sprite list is sorted by the sprite's y (`+0x3a`) with an incremental insertion sort
 (`FUN_010089bd`; ties keep insertion order). It holds ants (cell centre + frame displacements), object-list plants
@@ -1340,6 +1340,32 @@ a loss (`0x1025479`), and the sprite ends after 400 ms. Its draw (`0x102219c`) c
 sprite for value > 0, else `minus`) drawn in the slot of the first significant digit and every digit from there shifted one
 slot right. Glyphs are the `plus`, `minus` and `dig0..dig9` animations (parts carry their own offsets). Sounds: `scoreup`
 (87) for gains, `scoredn` (88) for losses.
+
+**5.33.8 Mirrored parts and held bomb art** *(implemented)*. Directions SW, W and NW are the SE, E and NE animations
+mirrored with every part offset `dx' = -dx - width` (`FUN_01018b9f`). The part blitter `FUN_0102cfef` writes a mirrored
+row starting at `dest + width` and running backwards (`0x102d12c..0x102d159`), so the columns are `dx'+1 .. dx'+width`: an
+exact reflection about the anchor column (c becomes -c); a plain flip inside `[dx', dx'+width-1]` would sit one pixel too far
+left. The bomb in a bomber's hands (`absb*` frames 10..16) is the neutral maroon `2bomb.bmp` for every team: the digit name
+exempts it from the colour shift. Only the planted bomb tiles have team art (`redbomb`, `greenbomb`, `blackbomb`, `bluebomb`).
+A food-carrying ant that attacks plays the plain `a?at` clip: the attack table (`0x1004098`) has no carry variant.
+There is no shadow under ants and no hop: a flight is the frame displacement baked into the `*gb` / `*gh` clips.
+
+**5.33.9 View-container children** *(implemented)*. The world is one map sprite (layers 1 and 2, the y-sorted list, then
+the fog pass) that is the FIRST child of the view container; the selection markers, the hill marker, the click marker
+(`xmarks`), the burn overlays and the score bubbles are later children (`View.AddChild` at `0x102f977`), so they are drawn
+AFTER the whole map sprite (over ants, foliage and fog), in creation order with the newest on top, not sorted by y. A selection
+marker (`FUN_01010373` -> `FUN_0101b52f`) is a copy of `dogears` (hp >= 9), `yelears` (hp 3..8) or `redears` (hp <= 2) at the
+ant's own position, with its own looping clock that starts at frame 0 when the marker is created and restarts every time it is
+re-created (selection, every damage tick, heal); it exists for any selected ant (own or inspected enemy) and is removed only
+while a thief raids a hill (action 0xd).
+
+**5.33.10 Action clip tables** *(generated data)*. The static tables of `SetAction` (`FUN_0101ad02`, colour-0 blocks) give
+the animation of every ant action; `tools/extract_movement_tables.py` reads them from `Ants.exe`, verifies every name in
+`ants.chd` and emits them with the frames (dx, dy, duration, event, sound): enter `0x1003eb8` / `0x1003ee8` (carry), harvest
+`0x1003f18`, attack `0x1004098`, hit `0x1004218`, blown `0x1004398`, burn `0x1004518`, hatch `0x10045a8`, stun `0x10045d8` /
+`0x1004608` (carry), ignite `0x1004638`, extinguish `0x1004678`, bridge water/land build/demolish `0x10046b8..0x1004778`, plant
+`0x10047b8`, defuse `0x10047f8`, infiltrate `0x1004900`, getpow `0x1004908`, drown `0x1004910`. `movement::action_clip()`
+returns them; `tests/test_assets/test_movement_tables.cpp` checks every entry against the CHD and the executable.
 
 ### 5.34 HUD and Screen Ground Truth (Capstone-Verified; Supersedes Earlier HUD Notes)
 

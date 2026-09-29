@@ -73,7 +73,30 @@ constexpr bool all_referenced_clips_present() noexcept {
             return false;
         }
     }
-    return find_clip(data::kIdleWater) < kClipCount && find_clip(data::kBump) < kClipCount;
+    for (uint8_t t = 0; t < kAntTypeCount; ++t) {
+        if (find_clip(data::kEnter[t]) == kClipCount || find_clip(data::kCarryEnter[t]) == kClipCount ||
+            find_clip(data::kBurn[t]) == kClipCount || find_clip(data::kHatch[t]) == kClipCount ||
+            find_clip(data::kStun[t]) == kClipCount || find_clip(data::kCarryStun[t]) == kClipCount ||
+            find_clip(data::kDrown[t]) == kClipCount) {
+            return false;
+        }
+        for (uint8_t d = 0; d < 5; ++d) {
+            if (find_clip(data::kHarvest[t][d]) == kClipCount || find_clip(data::kAttack[t][d]) == kClipCount ||
+                find_clip(data::kHit[t][d]) == kClipCount || find_clip(data::kBlown[t][d]) == kClipCount) {
+                return false;
+            }
+        }
+    }
+    for (uint8_t d = 0; d < 5; ++d) {
+        if (!present_or_none(data::kIgnite[d]) || !present_or_none(data::kExtinguish[d]) ||
+            !present_or_none(data::kBridgeBuildWater[d]) || !present_or_none(data::kBridgeDemolishWater[d]) ||
+            !present_or_none(data::kBridgeBuildLand[d]) || !present_or_none(data::kBridgeDemolishLand[d]) ||
+            !present_or_none(data::kPlant[d]) || !present_or_none(data::kDefuse[d])) {
+            return false;
+        }
+    }
+    return find_clip(data::kIdleWater) < kClipCount && find_clip(data::kBump) < kClipCount &&
+           find_clip(data::kInfiltrate) < kClipCount && find_clip(data::kGetPow) < kClipCount;
 }
 
 static_assert(std::size(data::kTileTerrain) == kTileIdCount, "one terrain class per CHD tile id");
@@ -163,6 +186,34 @@ MotionClip cant_go_clip(uint8_t ant_type, bool carrying) noexcept {
 }
 
 MotionClip bump_clip() noexcept { return clip_by_chd(data::kBump); }
+
+MotionClip action_clip(ActionClip kind, uint8_t ant_type, uint8_t dir, bool carrying) noexcept {
+    const bool typed = ant_type < kAntTypeCount;
+    switch (kind) {
+        case ActionClip::Enter:
+            return typed ? clip_by_chd(carrying ? data::kCarryEnter[ant_type] : data::kEnter[ant_type]) : MotionClip{};
+        case ActionClip::Harvest:  return typed ? directional(data::kHarvest[ant_type], dir) : MotionClip{};
+        case ActionClip::Attack:   return typed ? directional(data::kAttack[ant_type], dir) : MotionClip{};
+        case ActionClip::Hit:      return typed ? directional(data::kHit[ant_type], dir) : MotionClip{};
+        case ActionClip::Blown:    return typed ? directional(data::kBlown[ant_type], dir) : MotionClip{};
+        case ActionClip::Burn:     return typed ? clip_by_chd(data::kBurn[ant_type]) : MotionClip{};
+        case ActionClip::Hatch:    return typed ? clip_by_chd(data::kHatch[ant_type]) : MotionClip{};
+        case ActionClip::Stun:
+            return typed ? clip_by_chd(carrying ? data::kCarryStun[ant_type] : data::kStun[ant_type]) : MotionClip{};
+        case ActionClip::Drown:    return typed ? clip_by_chd(data::kDrown[ant_type]) : MotionClip{};
+        case ActionClip::Ignite:              return directional(data::kIgnite, dir);
+        case ActionClip::Extinguish:          return directional(data::kExtinguish, dir);
+        case ActionClip::BridgeBuildWater:    return directional(data::kBridgeBuildWater, dir);
+        case ActionClip::BridgeDemolishWater: return directional(data::kBridgeDemolishWater, dir);
+        case ActionClip::BridgeBuildLand:     return directional(data::kBridgeBuildLand, dir);
+        case ActionClip::BridgeDemolishLand:  return directional(data::kBridgeDemolishLand, dir);
+        case ActionClip::Plant:               return directional(data::kPlant, dir);
+        case ActionClip::Defuse:              return directional(data::kDefuse, dir);
+        case ActionClip::Infiltrate:          return clip_by_chd(data::kInfiltrate);
+        case ActionClip::GetPow:              return clip_by_chd(data::kGetPow);
+    }
+    return {};
+}
 
 std::size_t clip_count() noexcept { return kClipCount; }
 

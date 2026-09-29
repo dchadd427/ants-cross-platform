@@ -79,6 +79,35 @@ struct MotionClip {
     uint32_t total_duration_ms() const noexcept;   // one loop
 };
 
+/// Action clips of SetAction (FUN_0101ad02): the colour-0 rows of the original's static tables.
+enum class ActionClip : uint8_t {
+    Enter,                 // action 2: enter the own hill (carrying variant)
+    Harvest,               // action 5: grab food
+    Attack,                // action 0x12: melee attack
+    Hit,                   // action 0xE: get hit (flinch)
+    Blown,                 // action 0x13: blown away (128 px flight)
+    Burn,                  // action 0xA: burn overlay
+    Hatch,                 // action 0x14: newborn emerges
+    Stun,                  // action 3: stunned (carrying variant)
+    Drown,                 // action 0xF: drowning
+    Ignite,                // action 6: fire ant places a fire wall (cardinal directions)
+    Extinguish,            // action 7: fire ant puts a fire out
+    BridgeBuildWater,      // action 0x10 on water (swimmer)
+    BridgeDemolishWater,   // action 0x11 on water
+    BridgeBuildLand,       // action 0x10 on land
+    BridgeDemolishLand,    // action 0x11 on land
+    Plant,                 // action 8: bomber plants a bomb
+    Defuse,                // action 9: bomber defuses a bomb
+    Infiltrate,            // action 0xD: thief raids an enemy hill (atcr501)
+    GetPow,                // action 4: power-up pickup (getpow)
+};
+
+/// Clip of an action for an ant type and direction. The type is ignored by the single-type clips (ignite,
+/// extinguish, bridges, plant, defuse), the direction by the clips without directions (enter, burn, hatch, stun,
+/// drown, infiltrate, getpow), `carrying` selects the carry variant where the original has one (enter, stun).
+/// Cardinal-only clips (ignite ... defuse) have no NE, SE, SW or NW clip: they return an invalid clip there.
+MotionClip action_clip(ActionClip kind, uint8_t ant_type, uint8_t dir, bool carrying) noexcept;
+
 /// Any generated clip by CHD Table-4 index; invalid clip if it is not one of them.
 MotionClip clip_by_chd(uint16_t chd_index, bool mirrored = false) noexcept;
 

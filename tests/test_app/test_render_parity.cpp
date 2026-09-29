@@ -81,7 +81,8 @@ void model_draw_frame(Image& im, const assets::AssetArchive& arc, const assets::
             for (uint32_t x = 0; x < sp.width; ++x) {
                 const uint8_t v = sp.pixels[y * sp.pitch + x];
                 if (v == assets::CHD_COLOR_KEY_INDEX) continue;
-                const int px = ox + part.dx + static_cast<int>(x);
+                // A mirrored part is written one pixel right of its origin (Ants.exe 0x102d12c)
+                const int px = ox + part.dx + (mirrored ? 1 : 0) + static_cast<int>(x);
                 const int py = oy + part.dy + static_cast<int>(y);
                 if (px < 0 || py < 0 || px >= im.w || py >= im.h) continue;
                 uint8_t* d = im.at(px, py);
@@ -346,6 +347,188 @@ void test_ant_colour_rule(const assets::AssetArchive& arc) {
     check(p[assets::CHD_COLOR_KEY_INDEX].a == 0, "transparent key stays transparent");
     const auto d = TextureCache::compose_palette(base, "3lb0000.bmp", ant_colour(0));
     check(d[85] == base[85], "digit-named images are not recoloured");
+}
+
+// Mirrored directions (SW, W, NW) draw one pixel to the right of the plain flip: an exact reflection about the anchor.
+void test_mirrored_draw(Renderer& r, const assets::AssetArchive& arc) {
+    std::printf("[mirror] mirrored parts are an exact reflection about the anchor column\n");
+    SDL_Renderer* sr = r.get_sdl_renderer();
+    static const uint8_t offsets[4] = { 60, 40, 20, 0 };
+    long compared = 0, bad = 0;
+    for (const char* prefix : { "agst", "abwg", "hgst", "aggh", "abgb" }) {
+        for (int d : { 5, 6, 7 }) {
+            const auto* seq = arc.get_directional_animation(prefix, static_cast<assets::Direction>(d));
+            if (!seq || seq->subitems.empty()) continue;
+            // the unmirrored source direction: SE (2) for SW, E (9) for W, NE (8) for NW
+            const auto* src = arc.get_directional_animation(prefix, static_cast<assets::Direction>(8 - d));
+            const size_t frames = std::min<size_t>(seq->subitems.size(), 3);
+            for (size_t f = 0; f < frames; ++f) {
+                const uint8_t team = static_cast<uint8_t>(f % 4);
+                auto pal = arc.get_palette();
+                auto shifted = pal;
+                for (size_t i = 0; i < 256; ++i) if (i != assets::CHD_COLOR_KEY_INDEX) shifted[i] = pal[(i + offsets[team]) & 0xFF];
+                Image ref(200, 200);
+                for (size_t i = 0; i < ref.px.size(); i += 4) { ref.px[i] = 255; ref.px[i + 1] = 0; ref.px[i + 2] = 255; ref.px[i + 3] = 255; }
+                model_draw_frame(ref, arc, seq->subitems[f], 100, 100, true, shifted);
+                SDL_SetRenderDrawColor(sr, 255, 0, 255, 255);
+                SDL_RenderClear(sr);
+                r.draw_animation_frame(seq->subitems[f], 100, 100, true, ant_colour(team));
+                const Image got = read_region(sr, 0, 0, 200, 200);
+                bool same = true;
+                for (size_t i = 0; i < ref.px.size() && same; i += 4) same = std::memcmp(&got.px[i], &ref.px[i], 3) == 0;
+                ++compared;
+                if (!same) ++bad;
+                // reflection: column c of the unmirrored frame (relative to the anchor) lands on column -c
+                if (src && f < src->subitems.size() && src->subitems[f].frames.size() == 1) {
+                    const auto& sp = src->subitems[f].frames[0];
+                    const auto& base = arc.get_sprite(sp.sprite_index);
+                    const auto& mp = seq->subitems[f].frames[0];
+                    bool exact = true;
+                    for (uint32_t y = 0; y < base.height && exact; ++y) {
+                        for (uint32_t x = 0; x < base.width && exact; ++x) {
+                            const int col = sp.dx + static_cast<int>(x);                      // unmirrored column
+                            const int mcol = mp.dx + 1 + static_cast<int>(base.width - 1 - x);  // where it is drawn mirrored
+                            if (mcol != -col) exact = false;
+                        }
+                    }
+                    ++compared;
+                    if (!exact) ++bad;
+                }
+            }
+        }
+    }
+    check(compared > 20, "compared mirrored frames (" + std::to_string(compared) + ")");
+    check(bad == 0, "mirrored frames that differ from the reflection model: " + std::to_string(bad));
+}
+
+// A food-carrying ant that attacks plays the plain a?at clip (the original has no carry variant): it must not vanish.
+void test_holding_attack(Renderer& r, const assets::AssetArchive& arc) {
+    std::printf("[ants] a carrying ant that attacks is drawn with the plain attack clip\n");
+    assets::LevelData level;
+    if (!level.load_from_file(std::string(ORIGINAL_ASSETS_DIR) + "/Maps/TINY.LVL")) { check(false, "load TINY"); return; }
+    const int32_t g = arc.find_animation_id("g01a");
+    if (level.tile_dictionary.size() <= static_cast<size_t>(g)) level.tile_dictionary.resize(static_cast<size_t>(g) + 1, ".");
+    level.tile_dictionary[static_cast<size_t>(g)] = "g01a";
+    for (auto& c : level.layer1_terrain) { c.tile_index = static_cast<uint16_t>(g); c.flags = 0; c.properties = 0; }
+    for (auto& c : level.layer2_interactive) { c.tile_index = assets::LVL_EMPTY_TILE; c.flags = 0; c.properties = 0; }
+    level.anthill_spawns.clear();
+    level.food_schedules.clear();
+    level.waypoints.clear();
+    sim::Grid grid;
+    grid.init_from_level(level);
+    r.set_level(level);
+    r.pin_animation_clock(0);
+    SDL_Renderer* sr = r.get_sdl_renderer();
+    static const char* prefixes[6] = { "ag", "ab", "af", "at", "ac", "as" };
+    static const uint8_t offsets[4] = { 60, 40, 20, 0 };
+    for (uint8_t type = 0; type < 6; ++type) {
+        sim::WorldState ws;
+        ws.width = level.width;
+        ws.height = level.height;
+        sim::AntSnapshot ant{};
+        ant.id = 1; ant.player_id = 1; ant.type = static_cast<sim::AntType>(type);
+        ant.px = 176; ant.py = 176; ant.tile_x = 5; ant.tile_y = 5;
+        ant.facing = 2;                                   // east: clip digit 9
+        ant.hp = 10; ant.max_hp = 10;
+        ant.is_holding = true;
+        ant.anim_state = static_cast<uint16_t>(sim::UnitState::Attacking);
+        ant.state = sim::UnitState::Attacking;
+        ant.anim_frame = 0;
+        ws.ants.push_back(ant);
+        r.camera().x = 0; r.camera().y = 0; r.camera().clamp_to_bounds(level.width, level.height);
+        SDL_SetRenderDrawColor(sr, 255, 0, 255, 255);
+        SDL_RenderClear(sr);
+        r.render_world(ws, grid, -1, {}, false, false, -1, -1, -1, 0.0f);
+        const Image got = read_region(sr, PLAYFIELD_X, PLAYFIELD_Y, PLAYFIELD_W, PLAYFIELD_H);
+
+        Image full = model_map(arc, level, 0);
+        auto shifted = arc.get_palette();
+        for (size_t i = 0; i < 256; ++i) if (i != assets::CHD_COLOR_KEY_INDEX) shifted[i] = arc.get_palette()[(i + offsets[ant.player_id]) & 0xFF];
+        const auto* seq = arc.find_animation(std::string(prefixes[type]) + "at901");
+        check(seq != nullptr, std::string("clip exists: ") + prefixes[type] + "at901");
+        if (!seq) continue;
+        model_draw_frame(full, arc, seq->subitems[0], 176, 176, false, shifted);
+        bool same = true;
+        for (int y = 0; y < PLAYFIELD_H && same; ++y)
+            for (int x = 0; x < PLAYFIELD_W && same; ++x) same = std::memcmp(got.at(x, y), full.at(x, y), 3) == 0;
+        check(same, std::string("carrying ") + prefixes[type] + " attack frame 0 matches the plain clip");
+    }
+    r.unpin_animation_clock();
+}
+
+// Selection markers are children of the view container: drawn after the whole map (over lower ants), thresholds dogears
+// hp >= 9 / yelears / redears hp <= 2, each with its own clock that restarts when the health changes.
+void test_selection_markers(Renderer& r, const assets::AssetArchive& arc) {
+    std::printf("[ears] selection markers: view child order, hp thresholds, own restarting clock\n");
+    assets::LevelData level;
+    if (!level.load_from_file(std::string(ORIGINAL_ASSETS_DIR) + "/Maps/TINY.LVL")) { check(false, "load TINY"); return; }
+    const int32_t g = arc.find_animation_id("g01a");
+    if (level.tile_dictionary.size() <= static_cast<size_t>(g)) level.tile_dictionary.resize(static_cast<size_t>(g) + 1, ".");
+    level.tile_dictionary[static_cast<size_t>(g)] = "g01a";
+    for (auto& c : level.layer1_terrain) { c.tile_index = static_cast<uint16_t>(g); c.flags = 0; c.properties = 0; }
+    for (auto& c : level.layer2_interactive) { c.tile_index = assets::LVL_EMPTY_TILE; c.flags = 0; c.properties = 0; }
+    level.anthill_spawns.clear();
+    level.food_schedules.clear();
+    level.waypoints.clear();
+    sim::Grid grid;
+    grid.init_from_level(level);
+    r.set_level(level);
+    SDL_Renderer* sr = r.get_sdl_renderer();
+    const int32_t stand = arc.find_animation_id("agst301");
+    const auto* stand_seq = arc.find_animation("agst301");
+    if (stand < 0 || !stand_seq) { check(false, "agst301 exists"); return; }
+    static const uint8_t offsets[4] = { 60, 40, 20, 0 };
+    auto shifted_for = [&](uint8_t team) {
+        auto pal = arc.get_palette();
+        auto sh = pal;
+        for (size_t i = 0; i < 256; ++i) if (i != assets::CHD_COLOR_KEY_INDEX) sh[i] = pal[(i + offsets[team]) & 0xFF];
+        return sh;
+    };
+    auto make_ant = [&](uint32_t id, uint8_t player, int32_t py, uint16_t hp) {
+        sim::AntSnapshot a{};
+        a.id = id; a.player_id = player; a.type = sim::AntType::Worker; a.px = 176; a.py = py;
+        a.tile_x = 5; a.tile_y = py / 32; a.facing = 4; a.hp = hp; a.max_hp = 10;
+        a.loco_clip = static_cast<uint16_t>(stand); a.loco_frame = 0; a.loco_mirrored = false;
+        a.anim_state = static_cast<uint16_t>(sim::UnitState::Idle);
+        return a;
+    };
+    struct Step { uint32_t pin; uint16_t hp; uint32_t ears_id; uint32_t elapsed; };
+    const Step steps[] = {
+        {  0, 10, 58,   0 },    // created at selection: dogears frame 0
+        { 300, 10, 58, 300 },   // 300 ms later: frame 1 of 4 x 250 ms
+        { 600,  5, 60,   0 },   // health change: re-created, yelears restarts
+        { 700,  5, 60, 100 },   // 100 ms into yelears (60, 125, 125, 125): second frame
+        { 800,  2, 61,   0 },   // redears (hp <= 2) restarts
+        { 900,  9, 58,   0 },   // hp 9 is still green
+    };
+    long bad = 0;
+    std::string first_bad;
+    for (const auto& st : steps) {
+        r.pin_animation_clock(st.pin);
+        sim::WorldState ws;
+        ws.width = level.width;
+        ws.height = level.height;
+        ws.ants.push_back(make_ant(1, 0, 176, st.hp));
+        ws.ants.push_back(make_ant(2, 1, 196, 10));    // lower on screen: y-sorted after the selected ant
+        r.camera().x = 0; r.camera().y = 0; r.camera().clamp_to_bounds(level.width, level.height);
+        SDL_SetRenderDrawColor(sr, 255, 0, 255, 255);
+        SDL_RenderClear(sr);
+        r.render_world(ws, grid, -1, { 1 }, false, false, -1, -1, -1, 0.0f);
+        const Image got = read_region(sr, PLAYFIELD_X, PLAYFIELD_Y, PLAYFIELD_W, PLAYFIELD_H);
+
+        Image full = model_map(arc, level, 0);
+        model_draw_frame(full, arc, stand_seq->subitems[0], 176, 176, false, shifted_for(0));
+        model_draw_frame(full, arc, stand_seq->subitems[0], 176, 196, false, shifted_for(1));
+        const auto& ears = arc.get_animation(st.ears_id);
+        model_draw_frame(full, arc, ears.subitems[Renderer::get_anim_subitem_by_time(ears, st.elapsed)], 176, 176, false,
+                         arc.get_palette());
+        bool same = true;
+        for (int y = 0; y < PLAYFIELD_H && same; ++y)
+            for (int x = 0; x < PLAYFIELD_W && same; ++x) same = std::memcmp(got.at(x, y), full.at(x, y), 3) == 0;
+        if (!same) { ++bad; if (first_bad.empty()) first_bad = "t=" + std::to_string(st.pin) + " hp=" + std::to_string(st.hp); }
+    }
+    check(bad == 0, "selection marker frames differing from the model: " + std::to_string(bad) + " (first: " + first_bad + ")");
+    r.unpin_animation_clock();
 }
 
 void test_ant_sprite_pixels(Renderer& r, const assets::AssetArchive& arc) {
@@ -666,6 +849,9 @@ int main() {
     test_ant_colour_rule(arc);
     test_part_order_all_frames(r, arc);
     test_ant_sprite_pixels(r, arc);
+    test_mirrored_draw(r, arc);
+    test_holding_attack(r, arc);
+    test_selection_markers(r, arc);
     test_map_layers(r, arc);
     test_dynamic_items(r, arc);
     test_effect_rendering(r, arc);

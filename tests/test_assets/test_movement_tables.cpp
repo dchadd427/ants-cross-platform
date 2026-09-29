@@ -218,8 +218,8 @@ static void suite_chd_parity(const AssetArchive& archive) {
         }
         ASSERT_EQ(next, std::size(md::kFrames));
         ASSERT_EQ(mv::clip_count(), std::size(md::kClips));
-        ASSERT_EQ(std::size(md::kClips), size_t{329});
-        ASSERT_EQ(std::size(md::kFrames), size_t{3989});
+        ASSERT_EQ(std::size(md::kClips), size_t{516});
+        ASSERT_EQ(std::size(md::kFrames), size_t{6083});
     } TEST_END();
 
     TEST_CASE("1.2 Every frame (dx, dy, duration, event, sound) and clip flags equal the CHD") {
@@ -313,6 +313,99 @@ static void suite_chd_parity(const AssetArchive& archive) {
         ASSERT_EQ(md::kWalk[0][0][0], uint16_t{817});
         ASSERT_EQ(md::kWalk[0][0][4], uint16_t{816});
         ASSERT_EQ(md::kCarryIdle[4][3], uint16_t{939});
+    } TEST_END();
+
+    TEST_CASE("1.5 Action clip tables name the expected CHD animations") {
+        for (uint8_t t = 0; t < mv::kAntTypeCount; ++t) {
+            const std::string a = std::string("a") + kTypeLetters[t];
+            const std::string h = std::string("h") + kTypeLetters[t];
+            g_ctx = "type " + std::to_string(t);
+            ASSERT_STREQ(chd_name(archive, md::kEnter[t]), a + "h0");
+            ASSERT_STREQ(chd_name(archive, md::kCarryEnter[t]), h + "h0");
+            ASSERT_STREQ(chd_name(archive, md::kBurn[t]), a + "bu301");
+            ASSERT_STREQ(chd_name(archive, md::kHatch[t]), a + "hatch");
+            ASSERT_STREQ(chd_name(archive, md::kStun[t]), a + "sd301");
+            ASSERT_STREQ(chd_name(archive, md::kCarryStun[t]), h + "sd301");
+            // the swimmer's row of the drowning table holds the worker clip in the original
+            ASSERT_STREQ(chd_name(archive, md::kDrown[t]), (t == mv::kAntSwimmer ? std::string("ag") : a) + "dr301");
+            for (uint8_t d = 0; d < 5; ++d) {
+                g_ctx = "type " + std::to_string(t) + " dir " + std::to_string(d);
+                ASSERT_STREQ(chd_name(archive, md::kHarvest[t][d]), a + "gf" + kDirDigits[d] + "01");
+                ASSERT_STREQ(chd_name(archive, md::kAttack[t][d]), a + "at" + kDirDigits[d] + "01");
+                ASSERT_STREQ(chd_name(archive, md::kHit[t][d]), a + "gh" + kDirDigits[d] + "01");
+                ASSERT_STREQ(chd_name(archive, md::kBlown[t][d]), a + "gb" + kDirDigits[d] + "01");
+            }
+        }
+        for (int d : {0, 2, 4}) {
+            g_ctx = "dir " + std::to_string(d);
+            const std::string dd = std::string(1, kDirDigits[d]) + "01";
+            ASSERT_STREQ(chd_name(archive, md::kIgnite[d]), "afsf" + dd);
+            ASSERT_STREQ(chd_name(archive, md::kExtinguish[d]), "afxf" + dd);
+            ASSERT_STREQ(chd_name(archive, md::kBridgeBuildWater[d]), "asbbw" + dd);
+            ASSERT_STREQ(chd_name(archive, md::kBridgeDemolishWater[d]), "asdbw" + dd);
+            ASSERT_STREQ(chd_name(archive, md::kBridgeBuildLand[d]), "asbbl" + dd);
+            ASSERT_STREQ(chd_name(archive, md::kBridgeDemolishLand[d]), "asdbl" + dd);
+            ASSERT_STREQ(chd_name(archive, md::kPlant[d]), "absb" + dd);
+            ASSERT_STREQ(chd_name(archive, md::kDefuse[d]), "abdb" + dd);
+        }
+        for (int d : {1, 3}) {  // no NE / SE clip for the cardinal-only actions
+            ASSERT_EQ(md::kIgnite[d], mv::kNoAnimation);
+            ASSERT_EQ(md::kPlant[d], mv::kNoAnimation);
+            ASSERT_EQ(md::kBridgeBuildLand[d], mv::kNoAnimation);
+        }
+        ASSERT_STREQ(chd_name(archive, md::kInfiltrate), "atcr501");
+        ASSERT_STREQ(chd_name(archive, md::kGetPow), "getpow");
+    } TEST_END();
+
+    TEST_CASE("1.6 action_clip returns the clips with their original durations, events and sounds") {
+        using AC = mv::ActionClip;
+        // enter the hill (action 2): total ms at full health, the event-5 (heal) frame and the carry variant
+        struct Enter { uint8_t type; uint32_t total; uint16_t heal_frame; };
+        const Enter enters[6] = {{0, 1000, 8}, {1, 1240, 6}, {2, 1240, 5}, {3, 1000, 8}, {4, 1160, 7}, {5, 880, 7}};
+        for (const auto& e : enters) {
+            for (int carry = 0; carry < 2; ++carry) {
+                const mv::MotionClip c = mv::action_clip(AC::Enter, e.type, 4, carry != 0);
+                g_ctx = "enter type " + std::to_string(e.type) + (carry ? " carry" : "");
+                ASSERT_TRUE(c.valid());
+                ASSERT_EQ(c.total_duration_ms(), e.total);
+                ASSERT_EQ(c.event(e.heal_frame), uint16_t{5});
+                ASSERT_STREQ(chd_name(archive, c.chd_index).substr(0, 1), std::string(carry ? "h" : "a"));
+            }
+        }
+        // melee attack (action 0x12) facing S: durations, the event-4 (hit) frame and the first sound
+        struct Attack { uint8_t type; uint32_t total; uint16_t hit_frame; };
+        const Attack attacks[6] = {{0, 420, 3}, {1, 360, 3}, {2, 360, 4}, {3, 720, 6}, {4, 540, 2}, {5, 760, 7}};
+        for (const auto& a : attacks) {
+            const mv::MotionClip c = mv::action_clip(AC::Attack, a.type, 4, false);
+            g_ctx = "attack type " + std::to_string(a.type);
+            ASSERT_TRUE(c.valid());
+            ASSERT_EQ(c.total_duration_ms(), a.total);
+            ASSERT_EQ(c.event(a.hit_frame), uint16_t{4});
+        }
+        // mirrored directions reuse the stored clip with dx negated
+        const mv::MotionClip se = mv::action_clip(AC::Blown, 0, 3, false);
+        const mv::MotionClip sw = mv::action_clip(AC::Blown, 0, 5, false);
+        ASSERT_TRUE(se.valid() && sw.valid());
+        ASSERT_TRUE(!se.mirrored && sw.mirrored);
+        ASSERT_EQ(se.chd_index, sw.chd_index);
+        ASSERT_EQ(sw.dx(0), static_cast<int16_t>(-se.dx(0)));
+        // flight: the blown clip moves 128 px in one step when frame 0 ends
+        ASSERT_EQ(action_clip(AC::Blown, 0, 4, false).dy(0), int16_t{-128});
+        // other single clips
+        ASSERT_EQ(mv::action_clip(AC::GetPow, 0, 0, false).total_duration_ms(), 770u);
+        ASSERT_EQ(mv::action_clip(AC::Infiltrate, 3, 0, false).total_duration_ms(), 3510u);
+        ASSERT_EQ(mv::action_clip(AC::Drown, 0, 0, false).total_duration_ms(), 2370u);
+        ASSERT_EQ(mv::action_clip(AC::Stun, 1, 0, false).total_duration_ms(), 3835u);
+        ASSERT_EQ(mv::action_clip(AC::Burn, 1, 0, false).total_duration_ms(), 1610u);
+        ASSERT_EQ(mv::action_clip(AC::Hatch, 4, 0, false).total_duration_ms(), 640u);
+        ASSERT_EQ(mv::action_clip(AC::Plant, 1, 4, false).total_duration_ms(), 1360u);
+        ASSERT_EQ(mv::action_clip(AC::Defuse, 1, 4, false).total_duration_ms(), 1100u);
+        ASSERT_EQ(mv::action_clip(AC::Ignite, 2, 4, false).total_duration_ms(), 1760u);
+        ASSERT_EQ(mv::action_clip(AC::Extinguish, 2, 4, false).total_duration_ms(), 1200u);
+        // cardinal-only actions have no diagonal clip; unknown types are rejected
+        ASSERT_TRUE(!mv::action_clip(AC::Plant, 1, 3, false).valid());
+        ASSERT_TRUE(!mv::action_clip(AC::Attack, 9, 4, false).valid());
+        ASSERT_TRUE(mv::action_clip(AC::Plant, 1, 6, false).valid());
     } TEST_END();
 }
 
@@ -738,6 +831,40 @@ static void suite_exe_parity(const std::string& exe_path) {
         // push 0xdc in FUN_0101c4f2 (the blocked-walk "bump" effect)
         ASSERT_EQ(pe.u8(0x101CAE3), uint8_t{0x68});
         ASSERT_EQ(static_cast<uint32_t>(md::kBump), pe.u32(0x101CAE4));
+    } TEST_END();
+
+    TEST_CASE("5.2b Action clip tables (colour-0 blocks, dirs 0..4)") {
+        ASSERT_TRUE(pe.mapped(0x1003EB8, 0x1004918 - 0x1003EB8));
+        for (uint32_t t = 0; t < 6; ++t) {
+            g_ctx = "type " + std::to_string(t);
+            ASSERT_EQ(md::kEnter[t], pe.u16(0x1003EB8 + 2 * t));
+            ASSERT_EQ(md::kCarryEnter[t], pe.u16(0x1003EE8 + 2 * t));
+            ASSERT_EQ(md::kBurn[t], pe.u16(0x1004518 + 2 * t));
+            ASSERT_EQ(md::kHatch[t], pe.u16(0x10045A8 + 2 * t));
+            ASSERT_EQ(md::kStun[t], pe.u16(0x10045D8 + 2 * t));
+            ASSERT_EQ(md::kCarryStun[t], pe.u16(0x1004608 + 2 * t));
+            ASSERT_EQ(md::kDrown[t], pe.u16(0x1004910 + 2 * t));
+            for (uint32_t d = 0; d < 5; ++d) {
+                const uint32_t off = 2 * (t * 8 + d);
+                ASSERT_EQ(md::kHarvest[t][d], pe.u16(0x1003F18 + off));
+                ASSERT_EQ(md::kAttack[t][d], pe.u16(0x1004098 + off));
+                ASSERT_EQ(md::kHit[t][d], pe.u16(0x1004218 + off));
+                ASSERT_EQ(md::kBlown[t][d], pe.u16(0x1004398 + off));
+            }
+        }
+        for (uint32_t d = 0; d < 5; ++d) {
+            g_ctx = "dir " + std::to_string(d);
+            ASSERT_EQ(md::kIgnite[d], pe.u16(0x1004638 + 2 * d));
+            ASSERT_EQ(md::kExtinguish[d], pe.u16(0x1004678 + 2 * d));
+            ASSERT_EQ(md::kBridgeBuildWater[d], pe.u16(0x10046B8 + 2 * d));
+            ASSERT_EQ(md::kBridgeDemolishWater[d], pe.u16(0x10046F8 + 2 * d));
+            ASSERT_EQ(md::kBridgeBuildLand[d], pe.u16(0x1004738 + 2 * d));
+            ASSERT_EQ(md::kBridgeDemolishLand[d], pe.u16(0x1004778 + 2 * d));
+            ASSERT_EQ(md::kPlant[d], pe.u16(0x10047B8 + 2 * d));
+            ASSERT_EQ(md::kDefuse[d], pe.u16(0x10047F8 + 2 * d));
+        }
+        ASSERT_EQ(md::kInfiltrate, pe.u16(0x1004900));
+        ASSERT_EQ(md::kGetPow, pe.u16(0x1004908));
     } TEST_END();
 
     TEST_CASE("5.3 Terrain-class pairs and tile-flag lists (FUN_0100724c)") {
