@@ -2,6 +2,7 @@
 // coordinates and rules of the original (Ants.exe) - no pixels, no SDL video needed.
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 #include <string>
 #include <vector>
 
@@ -84,6 +85,20 @@ public:
 private:
     const assets::AssetArchive& archive_;
 };
+
+uint32_t g_now_ms = 0;
+uint32_t test_clock() { return g_now_ms; }
+
+// Renders the HUD twice, at t = 0 (pedestal chains start) and 10 s later (everything settled); returns the second frame
+void render_settled(HUD& hud, const assets::AssetArchive& arc, const sim::WorldState& world, RecordingRenderer& out) {
+    ViewportCamera camera;
+    hud.set_ticks_function(&test_clock);
+    g_now_ms = 0;
+    RecordingRenderer first(arc);
+    hud.render(first, arc, world, camera);
+    g_now_ms = 10000;
+    hud.render(out, arc, world, camera);
+}
 
 // Table-4 part offset of frame 0 of a glyph animation
 struct Off { int dx, dy; };
@@ -174,8 +189,7 @@ void test_home_panel(const assets::AssetArchive& arc) {
         HUD hud;
         hud.init(0);
         hud.select_base(0);
-        ViewportCamera camera;
-        hud.render(rr, arc, world, camera);
+        render_settled(hud, arc, world, rr);
 
         const uint32_t n = std::min<uint32_t>(eggs, 9u);
         if (n > 0) {
@@ -212,8 +226,7 @@ void test_ally_pedestal(const assets::AssetArchive& arc) {
     HUD hud;
     hud.init(0);
     hud.select_base(1);
-    ViewportCamera camera;
-    hud.render(rr, arc, world, camera);
+    render_settled(hud, arc, world, rr);
     check(rr.has_sprite_at("butup.bmp", 477, 157), "ally pedestal base at (477,157)");
     check(rr.has_sprite_at("butdipu.bmp", 485, 164), "ally icon at (485,164)");
     check(rr.has_sprite_at("labdib.bmp", 477, 142), "ally label at (477,142)");
@@ -292,6 +305,154 @@ void test_screens(const assets::AssetArchive& arc) {
     }
 }
 
+// Pedestal transition chains: every row of the original's transition table (Ants.exe FUN_01028491, table 0x1002b68)
+struct ChainRow { const char* cur; int cur_mode; const char* next; int next_mode; int remove; const char* chain; };
+const ChainRow kChainRows[] = {
+    {"hidden", 1, "move", 1, 0, "trnbmovu|butmovu"},
+    {"hidden", 1, "move", 2, 0, "trnbmovu|butmovu"},
+    {"hidden", 1, "bomb", 1, 0, "trnbbomu|butbomu"},
+    {"hidden", 1, "bomb", 2, 0, "trnbbomu|butbomu"},
+    {"hidden", 1, "thief", 1, 0, "trnbthfu|butthfu"},
+    {"hidden", 1, "thief", 2, 0, "trnbthfu|butthfu"},
+    {"hidden", 1, "egg", 1, 0, "trnbeggu|buteggu"},
+    {"hidden", 1, "egg", 2, 0, "trnbeggu|buteggu"},
+    {"move", 1, "hidden", 1, 1, "trnbmovd"},
+    {"move", 1, "hidden", 2, 1, "trnbmovd"},
+    {"move", 1, "move", 2, 0, "butmov2d|butmovd"},
+    {"move", 1, "bomb", 1, 0, "trnamovd|trnabomu|butbomu"},
+    {"move", 1, "thief", 1, 0, "trnamovd|trnathfu|butthfu"},
+    {"move", 1, "egg", 1, 0, "trnamovd|trnaeggu|buteggu"},
+    {"move", 2, "hidden", 1, 1, "trnbmovd"},
+    {"move", 2, "hidden", 2, 1, "trnbmovd"},
+    {"move", 2, "move", 1, 0, "butmovu"},
+    {"move", 2, "bomb", 1, 0, "trnamovd|trnabomu|butbomu"},
+    {"move", 2, "thief", 1, 0, "trnamovd|trnathfu|butthfu"},
+    {"move", 2, "egg", 1, 0, "trnamovd|trnaeggu|buteggu"},
+    {"bomb", 1, "hidden", 1, 1, "trnbbomd"},
+    {"bomb", 1, "hidden", 2, 1, "trnbbomd"},
+    {"bomb", 1, "move", 1, 0, "trnabomd|trnamovu|butmovu"},
+    {"bomb", 1, "bomb", 2, 0, "butbom2d|butbomd"},
+    {"bomb", 1, "thief", 1, 0, "trnabomd|trnathfu|butthfu"},
+    {"bomb", 1, "egg", 1, 0, "trnabomd|trnaeggu|buteggu"},
+    {"bomb", 2, "hidden", 1, 1, "trnbbomd"},
+    {"bomb", 2, "hidden", 2, 1, "trnbbomd"},
+    {"bomb", 2, "move", 1, 0, "trnabomd|trnamovu|butmovu"},
+    {"bomb", 2, "bomb", 1, 0, "butbomu"},
+    {"bomb", 2, "thief", 1, 0, "trnabomd|trnathfu|butthfu"},
+    {"bomb", 2, "egg", 1, 0, "trnabomd|trnaeggu|buteggu"},
+    {"thief", 1, "hidden", 1, 1, "trnbthfd"},
+    {"thief", 1, "hidden", 2, 1, "trnbthfd"},
+    {"thief", 1, "move", 1, 0, "trnathfd|trnamovu|butmovu"},
+    {"thief", 1, "bomb", 1, 0, "trnathfd|trnabomu|butbomu"},
+    {"thief", 1, "thief", 2, 0, "butthf2d|butthfd"},
+    {"thief", 1, "egg", 1, 0, "trnathfd|trnaeggu|buteggu"},
+    {"thief", 2, "hidden", 1, 1, "trnbthfd"},
+    {"thief", 2, "hidden", 2, 1, "trnbthfd"},
+    {"thief", 2, "move", 1, 0, "trnathfd|trnamovu|butmovu"},
+    {"thief", 2, "bomb", 1, 0, "trnathfd|trnabomu|butbomu"},
+    {"thief", 2, "thief", 1, 0, "butthfu"},
+    {"thief", 2, "egg", 1, 0, "trnathfd|trnaeggu|buteggu"},
+    {"egg", 1, "hidden", 1, 1, "trnbeggd"},
+    {"egg", 1, "hidden", 2, 1, "trnbeggd"},
+    {"egg", 1, "move", 1, 0, "trnaeggd|trnamovu|butmovu"},
+    {"egg", 1, "bomb", 1, 0, "trnaeggd|trnabomu|butbomu"},
+    {"egg", 1, "thief", 1, 0, "trnaeggd|trnathfu|butthfu"},
+    {"egg", 1, "egg", 2, 0, "butegg2d|buteggd"},
+    {"egg", 2, "hidden", 1, 1, "trnbeggd"},
+    {"egg", 2, "hidden", 2, 1, "trnbeggd"},
+    {"egg", 2, "move", 1, 0, "trnaeggd|trnamovu|butmovu"},
+    {"egg", 2, "bomb", 1, 0, "trnaeggd|trnabomu|butbomu"},
+    {"egg", 2, "thief", 1, 0, "trnaeggd|trnathfu|butthfu"},
+    {"egg", 2, "egg", 1, 0, "buteggu"},
+};
+
+PedestalKind kind_from_name(const std::string& n) {
+    if (n == "move") return PedestalKind::Move;
+    if (n == "bomb") return PedestalKind::Bomb;
+    if (n == "attack") return PedestalKind::Attack;
+    if (n == "fire") return PedestalKind::Fire;
+    if (n == "thief") return PedestalKind::Thief;
+    if (n == "ally") return PedestalKind::Ally;
+    if (n == "swim") return PedestalKind::Swim;
+    if (n == "egg") return PedestalKind::Egg;
+    return PedestalKind::Hidden;
+}
+
+void test_pedestal_chains(const assets::AssetArchive& arc) {
+    std::printf("[hud] pedestal transition chains equal the original's table\n");
+    for (const auto& row : kChainRows) {
+        const PedestalChain c = pedestal_chain(kind_from_name(row.cur), row.cur_mode, kind_from_name(row.next), row.next_mode);
+        std::string got;
+        for (size_t i = 0; i < c.animations.size(); ++i) got += (i ? "|" : "") + c.animations[i];
+        check(got == row.chain, std::string(row.cur) + "," + std::to_string(row.cur_mode) + " -> " + row.next + "," +
+                                std::to_string(row.next_mode) + ": " + got + " expected " + row.chain);
+        check(c.remove_after_last == (row.remove != 0), std::string(row.cur) + " -> " + row.next + " removal flag");
+        for (const auto& name : c.animations) check(arc.find_animation(name) != nullptr, "animation exists: " + name);
+    }
+    // Every kind has all seven animations
+    static const PedestalKind kinds[] = { PedestalKind::Move, PedestalKind::Bomb, PedestalKind::Attack, PedestalKind::Fire,
+                                          PedestalKind::Thief, PedestalKind::Ally, PedestalKind::Swim, PedestalKind::Egg };
+    for (PedestalKind k : kinds) {
+        for (const std::string& name : { pedestal_up_anim(k), pedestal_down_anim(k), pedestal_press_anim(k), pedestal_swap_out_anim(k),
+                                         pedestal_swap_in_anim(k), pedestal_sink_anim(k), pedestal_rise_anim(k) }) {
+            check(arc.find_animation(name) != nullptr, "pedestal animation exists: " + name);
+        }
+    }
+}
+
+// The hatch pedestal rises with trnbeggu (9 x 60 ms) and then rests on buteggu; deselecting sinks it with trnbeggd
+void test_pedestal_timeline(const assets::AssetArchive& arc) {
+    std::printf("[hud] pedestal rise and sink play in real time\n");
+    sim::WorldState world;
+    world.player_eggs[0] = 3;
+    HUD hud;
+    hud.init(0);
+    hud.select_base(0);
+    hud.set_ticks_function(&test_clock);
+    ViewportCamera camera;
+    const auto* rise = arc.find_animation("trnbeggu");
+    check(rise != nullptr && rise->subitems.size() == 9, "trnbeggu has 9 frames");
+    if (!rise) return;
+    for (uint32_t t : { 0u, 59u, 60u, 300u, 539u }) {
+        g_now_ms = t;
+        RecordingRenderer rr(arc);
+        hud.render(rr, arc, world, camera);
+        const size_t frame = std::min<size_t>(t / 60, 8);
+        for (const auto& part : rise->subitems[frame].frames) {
+            check(rr.has_sprite_at(arc.get_sprite(part.sprite_index).name, part.dx, part.dy),
+                  "rise frame " + std::to_string(frame) + " at t=" + std::to_string(t));
+        }
+        check(rr.named("buteggu.bmp").empty() && rr.named("buthatup.bmp").empty(), "resting art not shown while rising");
+    }
+    g_now_ms = 540;
+    {
+        RecordingRenderer rr(arc);
+        hud.render(rr, arc, world, camera);
+        check(rr.has_sprite_at("buthatup.bmp", 490, 165), "resting hatch pedestal at 540 ms");
+    }
+    // deselect: the pedestal sinks (trnbeggd, 9 x 60 ms) and then disappears
+    hud.select_base(-1);
+    g_now_ms = 1000;
+    {
+        RecordingRenderer rr(arc);
+        hud.render(rr, arc, world, camera);   // sink starts
+        const auto* sink = arc.find_animation("trnbeggd");
+        check(sink != nullptr, "trnbeggd exists");
+        if (sink) for (const auto& part : sink->subitems[0].frames)
+            check(rr.has_sprite_at(arc.get_sprite(part.sprite_index).name, part.dx, part.dy), "sink frame 0");
+        if (std::getenv("HUD_DEBUG")) {
+            for (const auto& sp : rr.sprites) if (sp.x >= 470 && sp.x < 600 && sp.y >= 130 && sp.y < 240) std::fprintf(stderr, "  drawn %s at %d,%d\n", sp.name.c_str(), sp.x, sp.y);
+            if (sink) for (const auto& part : sink->subitems[0].frames) std::fprintf(stderr, "  expect %s at %d,%d\n", arc.get_sprite(part.sprite_index).name.c_str(), part.dx, part.dy);
+        }
+    }
+    g_now_ms = 1000 + 540;
+    {
+        RecordingRenderer rr(arc);
+        hud.render(rr, arc, world, camera);
+        check(rr.named("buthatup.bmp").empty() && rr.named("butup.bmp").empty(), "pedestal gone after the sink");
+    }
+}
+
 } // namespace
 
 int main() {
@@ -305,6 +466,8 @@ int main() {
     test_home_panel(arc);
     test_ally_pedestal(arc);
     test_screens(arc);
+    test_pedestal_chains(arc);
+    test_pedestal_timeline(arc);
     std::printf("\nhud layout: %d checks, %d failures\n", g_checks, g_failures);
     return g_failures == 0 ? 0 : 1;
 }

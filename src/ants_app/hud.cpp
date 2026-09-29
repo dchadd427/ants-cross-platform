@@ -79,6 +79,8 @@ HUD::HUD() {
 
 void HUD::init(uint8_t local_player_id) {
     local_player_id_ = local_player_id;
+    left_pedestal_.reset();
+    right_pedestal_.reset();
     selected_ant_id_ = 0;
     selected_ant_ids_.clear();
     selected_base_team_id_ = -1;
@@ -333,46 +335,9 @@ void HUD::render(IRenderer& renderer, const assets::AssetArchive& assets,
         }
     }
 
-    if (selected_base_team_id_ >= 0) {
-        if (selected_base_team_id_ == local_player_id_) {
-            // Home anthill panel (Ants.exe FUN_01027f07, mode 2): the hatch pedestal (kind "egg") only exists while
-            // there are eggs, the egg tray plays egg<N> with N = min(eggs, 9), and the Stop button is always there.
-            // Every one of these is a Table-4 animation whose parts carry absolute screen coordinates.
-            uint32_t eggs = (local_player_id_ < world.player_eggs.size()) ? world.player_eggs[local_player_id_] : 0;
-            if (eggs > 0) {
-                const bool hatch_down = hatch_button_.is_pressed;
-                draw_animation_frame0(renderer, assets, hatch_down ? "buteggd" : "buteggu", 0, 0);
-                const std::string tray = "egg" + std::to_string(std::min<uint32_t>(eggs, 9u));
-                draw_animation_frame0(renderer, assets, tray.c_str(), 0, 0);
-            }
-            draw_animation_frame0(renderer, assets, stop_button_.is_pressed ? "butcand" : "butcanu", 0, 0);
-
-            // Recessed status box wstatus.bmp (143x14) at (480, 253)
-            renderer.draw_named_sprite("wstatus.bmp", 480, 253);
-            if (!news_queue_.empty()) {
-                ants::assets::ColorRGBA col = news_queue_.front().is_alarm ? ants::assets::ColorRGBA{180, 30, 30, 255} : ants::assets::ColorRGBA{16, 40, 24, 255};
-                renderer.draw_text(news_queue_.front().text, 486, 253, col);
-            }
-        } else {
-            // Authentic Enemy Base Selection Interface
-            bool is_allied = (local_player_id_ < world.player_alliances.size()) &&
-                             (world.player_alliances[local_player_id_] == selected_base_team_id_);
-
-            // Ally pedestal (animation butalyu / butalyd: label (477,142), icon (485,164), base (477,157))
-            bool team_down = team_up_button_.is_pressed;
-            draw_animation_frame0(renderer, assets, team_down ? "butalyd" : "butalyu", 0, 0);
-
-            // Recessed status box wstatus.bmp (143x14) at (480, 253)
-            renderer.draw_named_sprite("wstatus.bmp", 480, 253);
-            if (!news_queue_.empty()) {
-                ants::assets::ColorRGBA col = news_queue_.front().is_alarm ? ants::assets::ColorRGBA{180, 30, 30, 255} : ants::assets::ColorRGBA{16, 40, 24, 255};
-                renderer.draw_text(news_queue_.front().text, 486, 253, col);
-            } else if (is_allied) {
-                renderer.draw_text("Allied Colony", 486, 253, {100, 255, 100, 255});
-            }
-        }
-    } else {
-        bool has_friendly_ants = false;
+    // Selection state that drives the two pedestal slots
+    bool has_friendly_ants = false;
+    if (selected_base_team_id_ < 0) {
         for (uint32_t aid : selected_ant_ids_) {
             for (const auto& a : world.ants) {
                 if (a.id == aid && a.player_id == local_player_id_) {
@@ -385,123 +350,96 @@ void HUD::render(IRenderer& renderer, const assets::AssetArchive& assets,
         if (selected_ant_id_ != 0 && sel_ant && sel_ant->player_id == local_player_id_) {
             has_friendly_ants = true;
         }
+    }
 
-        if (has_friendly_ants) {
-            if (move_pedestal_state_ == PedestalAnimState::Hidden || move_pedestal_state_ == PedestalAnimState::Lowering) {
-                move_pedestal_state_ = PedestalAnimState::PoppingUp;
-                move_pedestal_anim_start_ms_ = SDL_GetTicks();
+    const uint32_t eggs_now = (local_player_id_ < world.player_eggs.size()) ? world.player_eggs[local_player_id_] : 0;
+    PedestalKind left_kind = PedestalKind::Hidden;
+    int left_mode = 1;
+    PedestalKind right_kind = PedestalKind::Hidden;
+    int right_mode = 1;
+    if (selected_base_team_id_ >= 0) {
+        if (selected_base_team_id_ == local_player_id_) {
+            // Home anthill (Ants.exe FUN_01027f07 mode 2): hatch pedestal ("egg" kind) only while eggs remain
+            if (eggs_now > 0) { left_kind = PedestalKind::Egg; left_mode = hatch_button_.is_pressed ? 2 : 1; }
+        } else {
+            left_kind = PedestalKind::Ally;
+            left_mode = team_up_button_.is_pressed ? 2 : 1;
+        }
+    } else if (has_friendly_ants) {
+        left_kind = PedestalKind::Move;
+        left_mode = (move_pedestal_button_.is_pressed || active_order_mode_ == sim::OrderType::Move) ? 2 : 1;
+        // Ability pedestal of the single selected ant (hidden with Shift held or a multi-selection)
+        const bool hide_ability = is_shift_held() || is_multi_select() || selected_ant_ids_.size() > 1;
+        if (sel_ant && sel_ant->player_id == local_player_id_ && !hide_ability) {
+            switch (sel_ant->type) {
+                case sim::AntType::Swimmer:
+                    right_kind = PedestalKind::Swim;
+                    right_mode = (ability_pedestal_button_.is_pressed || active_order_mode_ == sim::OrderType::BuildBridge) ? 2 : 1;
+                    break;
+                case sim::AntType::Fire:
+                    right_kind = PedestalKind::Fire;
+                    right_mode = (ability_pedestal_button_.is_pressed || active_order_mode_ == sim::OrderType::IgniteFire) ? 2 : 1;
+                    break;
+                case sim::AntType::Combat:
+                    right_kind = PedestalKind::Attack;
+                    right_mode = (ability_pedestal_button_.is_pressed || active_order_mode_ == sim::OrderType::Attack) ? 2 : 1;
+                    break;
+                case sim::AntType::Bomber:
+                    right_kind = PedestalKind::Bomb;
+                    right_mode = (ability_pedestal_button_.is_pressed || active_order_mode_ == sim::OrderType::PlantBomb) ? 2 : 1;
+                    break;
+                case sim::AntType::Thief:
+                    right_kind = PedestalKind::Thief;
+                    right_mode = (ability_pedestal_button_.is_pressed || active_order_mode_ == sim::OrderType::InfiltrateAnthill) ? 2 : 1;
+                    break;
+                default: break;
+            }
+        }
+    }
+    // Both slots play the original rise / sink / icon-swap / press chains in real time (FUN_01028360)
+    const uint32_t now_ms = ticks_fn_ ? ticks_fn_() : SDL_GetTicks();
+    left_pedestal_.request(assets, left_kind, left_mode, now_ms);
+    right_pedestal_.request(assets, right_kind, right_mode, now_ms);
+    left_pedestal_.draw(renderer, assets, now_ms);
+    right_pedestal_.draw(renderer, assets, now_ms);
+    if (left_pedestal_.is_settled_and_visible() && left_pedestal_.resting_kind() == PedestalKind::Move &&
+        (current_cursor_ == CursorType::Move || current_cursor_ == CursorType::Food)) {
+        render_pedestal_glow(renderer, assets, 1);
+    }
+    if (right_pedestal_.is_settled_and_visible() &&
+        (right_mouse_held_ || active_order_mode_ != sim::OrderType::None || current_cursor_ == CursorType::Target)) {
+        render_pedestal_glow(renderer, assets, 2);
+    }
+
+    if (selected_base_team_id_ >= 0) {
+        if (selected_base_team_id_ == local_player_id_) {
+            // Egg tray egg<N> (N = min(eggs, 9)) and the Stop button; both are animations with absolute part coordinates
+            if (eggs_now > 0) {
+                const std::string tray = "egg" + std::to_string(std::min<uint32_t>(eggs_now, 9u));
+                draw_animation_frame0(renderer, assets, tray.c_str(), 0, 0);
+            }
+            draw_animation_frame0(renderer, assets, stop_button_.is_pressed ? "butcand" : "butcanu", 0, 0);
+
+            // Recessed status box wstatus.bmp (143x14) at (480, 253)
+            renderer.draw_named_sprite("wstatus.bmp", 480, 253);
+            if (!news_queue_.empty()) {
+                ants::assets::ColorRGBA col = news_queue_.front().is_alarm ? ants::assets::ColorRGBA{180, 30, 30, 255} : ants::assets::ColorRGBA{16, 40, 24, 255};
+                renderer.draw_text(news_queue_.front().text, 486, 253, col);
             }
         } else {
-            if (move_pedestal_state_ == PedestalAnimState::Raised || move_pedestal_state_ == PedestalAnimState::PoppingUp) {
-                move_pedestal_state_ = PedestalAnimState::Lowering;
-                move_pedestal_anim_start_ms_ = SDL_GetTicks();
+            // Enemy base: status box only (the ally pedestal is the left slot)
+            bool is_allied = (local_player_id_ < world.player_alliances.size()) &&
+                             (world.player_alliances[local_player_id_] == selected_base_team_id_);
+            renderer.draw_named_sprite("wstatus.bmp", 480, 253);
+            if (!news_queue_.empty()) {
+                ants::assets::ColorRGBA col = news_queue_.front().is_alarm ? ants::assets::ColorRGBA{180, 30, 30, 255} : ants::assets::ColorRGBA{16, 40, 24, 255};
+                renderer.draw_text(news_queue_.front().text, 486, 253, col);
+            } else if (is_allied) {
+                renderer.draw_text("Allied Colony", 486, 253, {100, 255, 100, 255});
             }
         }
-
-        uint32_t now_ms = SDL_GetTicks();
-        uint32_t elapsed_ms = now_ms - move_pedestal_anim_start_ms_;
-
-        if (move_pedestal_state_ == PedestalAnimState::PoppingUp) {
-            if (elapsed_ms >= 540) {
-                move_pedestal_state_ = PedestalAnimState::Raised;
-            } else {
-                size_t frame = std::min(static_cast<size_t>(elapsed_ms / 60), static_cast<size_t>(8));
-                const auto* seq = assets.find_animation("trnbmovu");
-                if (seq && frame < seq->subitems.size() && !seq->subitems[frame].frames.empty()) {
-                    for (const auto& fr : seq->subitems[frame].frames) {
-                        renderer.draw_sprite(fr.sprite_index, fr.dx, fr.dy);
-                    }
-                }
-            }
-        } else if (move_pedestal_state_ == PedestalAnimState::Lowering) {
-            if (elapsed_ms >= 540) {
-                move_pedestal_state_ = PedestalAnimState::Hidden;
-            } else {
-                size_t frame = std::min(static_cast<size_t>(elapsed_ms / 60), static_cast<size_t>(8));
-                const auto* seq = assets.find_animation("trnbalyd");
-                if (seq && frame < seq->subitems.size() && !seq->subitems[frame].frames.empty()) {
-                    for (const auto& fr : seq->subitems[frame].frames) {
-                        renderer.draw_sprite(fr.sprite_index, fr.dx, fr.dy);
-                    }
-                }
-            }
-        }
-
-        if (move_pedestal_state_ == PedestalAnimState::Raised && has_friendly_ants) {
-            // Pedestal 1: Move (Authentic Table 4 butmovu / butmovd with molded drop shadow)
-            bool ped1_down = move_pedestal_button_.is_pressed || (active_order_mode_ == sim::OrderType::Move);
-            if (ped1_down) {
-                renderer.draw_named_sprite("butdown.bmp", 476, 156);
-                renderer.draw_named_sprite("butmovd.bmp", 490, 165);
-            } else {
-                renderer.draw_named_sprite("butup.bmp", 477, 157);
-                renderer.draw_named_sprite("butmovu.bmp", 490, 162);
-            }
-            renderer.draw_named_sprite("labmov.bmp", 483, 141);
-            if (current_cursor_ == CursorType::Move || current_cursor_ == CursorType::Food) {
-                render_pedestal_glow(renderer, assets, 1);
-            }
-
-            // Pedestal 2: Class-Specific Ability Pedestal (Authentic Table 4 but*u / but*d)
-            // Authentic 1998 parity: Hide ability/bomb pedestal when Shift is held or multi-selected
-            bool hide_pedestal_2 = is_shift_held() || is_multi_select() || selected_ant_ids_.size() > 1;
-            if (sel_ant && sel_ant->player_id == local_player_id_ && !hide_pedestal_2) {
-                if (sel_ant->type == sim::AntType::Swimmer) {
-                    bool ped2_down = ability_pedestal_button_.is_pressed || (active_order_mode_ == sim::OrderType::BuildBridge);
-                    if (ped2_down) {
-                        renderer.draw_named_sprite("butdown.bmp", 537, 156);
-                        renderer.draw_named_sprite("swimd.bmp", 549, 168);
-                    } else {
-                        renderer.draw_named_sprite("butup.bmp", 538, 157);
-                        renderer.draw_named_sprite("swimup.bmp", 548, 165);
-                    }
-                    renderer.draw_named_sprite("labswim.bmp", 542, 141);
-                } else if (sel_ant->type == sim::AntType::Fire) {
-                    bool ped2_down = ability_pedestal_button_.is_pressed || (active_order_mode_ == sim::OrderType::IgniteFire);
-                    if (ped2_down) {
-                        renderer.draw_named_sprite("butdown.bmp", 537, 156);
-                        renderer.draw_named_sprite("butfireu.bmp", 549, 166);
-                    } else {
-                        renderer.draw_named_sprite("butup.bmp", 538, 157);
-                        renderer.draw_named_sprite("butfireu.bmp", 548, 162);
-                    }
-                    renderer.draw_named_sprite("labfire.bmp", 539, 141);
-                } else if (sel_ant->type == sim::AntType::Combat) {
-                    bool ped2_down = ability_pedestal_button_.is_pressed || (active_order_mode_ == sim::OrderType::Attack);
-                    if (ped2_down) {
-                        renderer.draw_named_sprite("butdown.bmp", 537, 156);
-                        renderer.draw_named_sprite("butattd.bmp", 547, 172);
-                    } else {
-                        renderer.draw_named_sprite("butup.bmp", 538, 157);
-                        renderer.draw_named_sprite("butattu.bmp", 546, 169);
-                    }
-                    renderer.draw_named_sprite("labatt.bmp", 542, 141);
-                } else if (sel_ant->type == sim::AntType::Bomber) {
-                    bool ped2_down = ability_pedestal_button_.is_pressed || (active_order_mode_ == sim::OrderType::PlantBomb);
-                    if (ped2_down) {
-                        renderer.draw_named_sprite("butdown.bmp", 537, 156);
-                        renderer.draw_named_sprite("butbomd.bmp", 549, 166);
-                    } else {
-                        renderer.draw_named_sprite("butup.bmp", 538, 157);
-                        renderer.draw_named_sprite("butbomu.bmp", 549, 162);
-                    }
-                    renderer.draw_named_sprite("labbom.bmp", 544, 140);
-                } else if (sel_ant->type == sim::AntType::Thief) {
-                    bool ped2_down = ability_pedestal_button_.is_pressed || (active_order_mode_ == sim::OrderType::InfiltrateAnthill);
-                    if (ped2_down) {
-                        renderer.draw_named_sprite("butdown.bmp", 537, 156);
-                        renderer.draw_named_sprite("butthfd.bmp", 549, 169);
-                    } else {
-                        renderer.draw_named_sprite("butup.bmp", 538, 157);
-                        renderer.draw_named_sprite("butthfu.bmp", 548, 165);
-                    }
-                    renderer.draw_named_sprite("labthf.bmp", 546, 141);
-                }
-                if (right_mouse_held_ || active_order_mode_ != sim::OrderType::None || current_cursor_ == CursorType::Target) {
-                    render_pedestal_glow(renderer, assets, 2);
-                }
-            }
-
+    } else {
+        if (has_friendly_ants) {
             // Stop button (animation butcanu / butcand: label at (595,180), button at (595,198))
             draw_animation_frame0(renderer, assets, stop_button_.is_pressed ? "butcand" : "butcanu", 0, 0);
 

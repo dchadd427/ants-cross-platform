@@ -34,6 +34,7 @@ add_library(ants_app STATIC
     midi_player.cpp
     renderer.cpp
     hud.cpp
+    pedestal.cpp
     scorecard.cpp
     map_select.cpp
     application.cpp

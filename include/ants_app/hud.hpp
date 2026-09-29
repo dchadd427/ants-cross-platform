@@ -11,6 +11,7 @@
 #include "ants_assets/asset_archive.hpp"
 #include "ants_sim/sim_engine.hpp"
 #include "ants_app/renderer.hpp"
+#include "ants_app/pedestal.hpp"
 
 namespace ants::app {
 
@@ -109,6 +110,9 @@ public:
 
     HUD();
     ~HUD() = default;
+
+    // Test hook: replaces the millisecond clock used by the pedestal transitions
+    void set_ticks_function(uint32_t (*fn)()) noexcept { ticks_fn_ = fn; }
 
     void init(uint8_t local_player_id = 0);
     void reset();
@@ -302,9 +306,10 @@ private:
     bool send_to_all_{true};
     bool is_on_team_{false};
 
-    enum class PedestalAnimState { Hidden, PoppingUp, Raised, Lowering };
-    PedestalAnimState move_pedestal_state_{PedestalAnimState::Hidden};
-    uint32_t move_pedestal_anim_start_ms_{0};
+    // Command panel pedestals: left slot (Move / Ally / Hatch) and right slot (ability), original transition chains
+    PedestalSlot left_pedestal_;
+    PedestalSlot right_pedestal_;
+    uint32_t (*ticks_fn_)(){nullptr}; // millisecond clock (SDL_GetTicks when null); tests inject a fixed clock
 
     // Chat text input state
     std::string chat_input_{};
