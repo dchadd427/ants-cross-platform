@@ -101,8 +101,13 @@ bool SimulationEngineImpl::action_cleanup(AntUnit& a, uint8_t old_action, uint8_
                 break;                 // one flight replaces another without any ending
             }
             if (!flag) {
+                const size_t sound_mark = audio_queue_.size();
                 const bool r = stun_or_die(a);          // 0x101e68c -> FUN_0102151a(1)
                 if (r && a.hp == 0) return false;       // the death started inside: the new action is dropped
+                // The stun clip that this cleanup starts is replaced by the new action inside the same SetAction call, and
+                // every ant clip tracks its sounds (flag 3): SetAnimation stops them at once, so stun.wav (70) is never heard
+                // after a hit, a flight or a pile-up hop. Only a stun that stays (bomb flight, burn) is heard.
+                if (!r && audio_queue_.size() > sound_mark) audio_queue_.resize(sound_mark);
             }
             break;
         default:

@@ -83,6 +83,7 @@ void SimulationEngine::init(const ants::assets::LevelData& level, uint32_t rando
     impl_->prng_.srand(random_seed);
     impl_->cosmetic_prng_.srand(random_seed ^ 0x5EEDu);
     impl_->active_effects_.clear();
+    impl_->battle_clouds_.clear();
     impl_->score_bubbles_.clear();
     impl_->grid_.init_from_level(level);
     impl_->stats_.reset();
@@ -186,6 +187,7 @@ void SimulationEngine::init_test_world(uint32_t width, uint32_t height, uint32_t
     impl_->prng_.srand(random_seed);
     impl_->cosmetic_prng_.srand(random_seed ^ 0x5EEDu);
     impl_->active_effects_.clear();
+    impl_->battle_clouds_.clear();
     impl_->score_bubbles_.clear();
     impl_->grid_.init_empty(width, height);
     impl_->stats_.reset();
@@ -348,6 +350,7 @@ void SimulationEngine::tick() {
     // 4.9 Original locomotion (Ants.exe): animation-driven walking, tile blocking with ANTPAUSE waits and
     // the PATHMGR path task, processed in exact millisecond order across all ants.
     impl_->movement_tick(*this);
+    impl_->tick_battle_clouds();
 
     // 5. Step Unit Timers & Arrival Handling
     for (auto& ant_ptr : impl_->ants_) {
@@ -765,8 +768,12 @@ void SimulationEngine::issue_order(const AntOrder& order) {
         }
         case OrderType::Attack:
             unit->ability_target = TileCoord{-1, -1};
-            if (order.target_entity_id >= 0) {
-                AntUnit* target = impl_->find_unit(static_cast<uint32_t>(order.target_entity_id));
+            {
+                // The armed attack mode clicks a tile, not an ant: the occupant of the tile is the target (FUN_01020655 does
+                // the same for every click on a tile that another team's ant stands on).
+                AntUnit* target = (order.target_entity_id >= 0)
+                    ? impl_->find_unit(static_cast<uint32_t>(order.target_entity_id))
+                    : impl_->occupant_at(TileCoord{order.target_x, order.target_y});
                 if (target && !target->removed) {
                     if (target->player_id == unit->player_id || impl_->stats_.are_allies(unit->player_id, target->player_id)) {
                         break; // Ants cannot attack friendly teammates or allies (the original asks for a confirmation)
@@ -999,6 +1006,7 @@ const WorldState& SimulationEngine::get_world_state() const {
             s.is_drowning = (a->state == UnitState::Drowning);
             s.is_on_mud = a->is_on_mud;
             s.state = a->state;
+            s.frozen = a->frozen;
             if (a->burn_end_ms != 0) {                       // the dud burn overlay (?bu) that covers the frozen ant
                 const uint32_t total = movement::action_clip(movement::ActionClip::Burn, static_cast<uint8_t>(a->type), 0, false).total_duration_ms();
                 const uint32_t remaining = (a->burn_end_ms > impl_->anim_clock_ms_) ? a->burn_end_ms - impl_->anim_clock_ms_ : 0u;
@@ -1009,11 +1017,24 @@ const WorldState& SimulationEngine::get_world_state() const {
                 s.loco_clip = a->loco.clip.chd_index;
                 s.loco_frame = (a->loco.cursor > 0) ? static_cast<uint16_t>(a->loco.cursor - 1) : 0;
                 s.loco_mirrored = a->loco.clip.mirrored;
+                s.loco_left_ms = (a->loco.next_ms > impl_->anim_clock_ms_)
+                    ? static_cast<uint16_t>(std::min<uint32_t>(a->loco.next_ms - impl_->anim_clock_ms_, 0xFFFFu)) : uint16_t{0};
             }
             impl_->world_state_cache_.ants.push_back(s);
         }
 
         impl_->world_state_cache_.effects = impl_->active_effects_;
+        for (const auto& bc : impl_->battle_clouds_) {          // the dust balls of foreign pile-ups (looping "battle" clip)
+            VisualEffect e;
+            e.anim_name = "battle";
+            e.px = bc.tile.x * 32 + 16;
+            e.py = bc.tile.y * 32 + 16;
+            e.y_key = e.py;
+            e.elapsed_ms = impl_->anim_clock_ms_ - bc.created_ms;
+            e.fog_gated = true;
+            e.looping = true;
+            impl_->world_state_cache_.effects.push_back(std::move(e));
+        }
         impl_->world_state_cache_.score_bubbles = impl_->score_bubbles_;
 
         impl_->world_state_cache_.flower_droppers.clear();
@@ -1285,6 +1306,40 @@ uint32_t SimulationEngine::issue_group_move_order(const std::vector<uint32_t>& a
         order.is_food_order = is_food_order;
         issue_order(order);
         if (k == 0 && impl_->has_pending_path(e[k].id)) ack = e[k].id;   // acknowledgement: closest ant only
+    }
+    return ack;
+}
+
+// FUN_010287b5 with the attack flag: the skip rule is "already order 3 with +0xac == the clicked tile" (0x1028820, then 0x102887e);
+// orders 1, 4 and 5 are NOT skipped by an attack click. The target comes from the occupant of the clicked tile (FUN_01020655).
+uint32_t SimulationEngine::issue_group_attack_order(const std::vector<uint32_t>& ant_ids, TileCoord target) {
+    struct Entry {
+        uint32_t id;
+        uint32_t d;
+    };
+    std::vector<Entry> e;
+    for (uint32_t id : ant_ids) {
+        AntUnit* a = impl_->find_unit(id);
+        if (!a || !impl_->can_take_user_order(*a)) continue;
+        if (a->orig_order == AntUnit::kOrderAttack && a->orig_order_tile == target) continue;
+        const TileCoord at{a->pixel_x / 32, a->pixel_y / 32};
+        const int32_t dr = std::abs(at.y - target.y);
+        const int32_t dc = std::abs(at.x - target.x);
+        e.push_back(Entry{id, static_cast<uint32_t>(std::max(dr, dc)) << 4});   // FUN_01020911
+    }
+    for (size_t p = 0; p < e.size(); ++p) {                                    // exchange sort, strict '>' (0x102893e..0x1028994)
+        for (size_t j = p + 1; j < e.size(); ++j) {
+            if (e[p].d > e[j].d) std::swap(e[p], e[j]);
+        }
+    }
+    uint32_t ack = 0;
+    for (size_t k = 0; k < e.size(); ++k) {
+        AntUnit* a = impl_->find_unit(e[k].id);
+        if (!a) continue;
+        leave_base_queue(e[k].id);
+        a->ability_target = TileCoord{-1, -1};
+        route_move_order(*impl_, *a, target, false, false, true);
+        if (k == 0 && impl_->has_pending_path(e[k].id)) ack = e[k].id;         // acknowledgement: closest ant only
     }
     return ack;
 }

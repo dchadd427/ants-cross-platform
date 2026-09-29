@@ -387,7 +387,7 @@ static void run_suite_3_blocking() {
         for (int t = 0; t < 120; ++t) {
             sim.tick();
             for (const auto& ev : sim.poll_audio_events()) {
-                if (ev.sound_id == SoundID::Bump && ev.world_x == 7 * 32 + 16 && ev.world_y == 5 * 32 + 16) bumped = true;
+                if (ev.sound_id == SoundID::Bump && ev.world_x == 7 * 32 && ev.world_y == 5 * 32) bumped = true;   // effect anchor: the tile top-left (FUN_010100e5)
             }
             if (a.occ_tile == (TileCoord{7, 5})) entered_blocked_tile = true;
         }
@@ -396,6 +396,24 @@ static void run_suite_3_blocking() {
         ASSERT_TRUE(a.pos == (TileCoord{9, 5}));
         ASSERT_EQ(a.pixel_x, 9 * 32 + 16);
         ASSERT_TRUE(sim.get_unit(blocker).pos == (TileCoord{7, 5}));   // the idle ant is never pushed
+    } TEST_END();
+
+    TEST_CASE("3.1b The bump cue (sound 47) belongs to the viewer's own ants only: the re-path branch of the original runs for the local player") {
+        for (int viewer = 0; viewer < 2; ++viewer) {
+            SimulationEngine sim;
+            sim.init_test_world(20, 20, 7, 600000);
+            sim.set_viewing_player_id(static_cast<uint8_t>(viewer));
+            const uint32_t id = sim.spawn_unit(0, AntType::Worker, TileCoord{5, 5});
+            sim.issue_move_order(id, TileCoord{9, 5});
+            sim.tick();
+            sim.spawn_unit(0, AntType::Worker, TileCoord{7, 5});
+            bool bumped = false;
+            for (int t = 0; t < 120; ++t) {
+                sim.tick();
+                for (const auto& ev : sim.poll_audio_events()) if (ev.sound_id == SoundID::Bump) bumped = true;
+            }
+            ASSERT_EQ(bumped, viewer == 0);          // the walker is player 0's
+        }
     } TEST_END();
 
     TEST_CASE("3.2 Destination taken while walking: stop at the tile before it, no bump") {

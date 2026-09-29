@@ -187,6 +187,11 @@ public:
     void dispatch_move_order(int32_t target_tile_x, int32_t target_tile_y, sim::SimulationEngine& sim, bool allow_friendly_bomb = false);
     void dispatch_attack_order(uint32_t target_enemy_id, sim::SimulationEngine& sim);
     void dispatch_smart_special_ability(int32_t world_x, int32_t world_y, sim::SimulationEngine& sim, bool shift_held = false);
+    /// The ant under a click at a world position (Ants.exe FUN_01026904 with FUN_01026a39): the 3x3 tiles around the clicked
+    /// tile are scanned (rows outer, columns inner) and an ant registered on one of them is hit when the click lies in the
+    /// half-open rectangle around its sprite position (combat ant [x-32, x+26) x [y-46, y+16), every other type
+    /// [x-20, x+20) x [y-32, y+16)); the last hit wins. Ants in fog that are neither the player's nor allied are not pickable.
+    const sim::AntSnapshot* pick_ant_at(const sim::WorldState& world, int32_t world_x, int32_t world_y) const;
     void dispatch_move_to_unit_neighbor(int32_t target_tile_x, int32_t target_tile_y, sim::SimulationEngine& sim);
 
     // Local player identity

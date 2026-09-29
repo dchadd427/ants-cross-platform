@@ -74,7 +74,7 @@ The remake provides a complete, playable, standalone experience with authentic a
 | **WebAssembly & Cloud Beta** | ✅ Complete | Docker containerized deployment at `beta.playants.org`. |
 | **Unit Movement & Locomotion** | 🟡 Active Calibration | 8-directional pathfinding, corner traversal, and base queuing are implemented; ongoing tuning for crowded group steering, ant collision nudging, and diagonal slip feel. |
 | **Abilities: Bombs, Fire & Bridges** | 🟢 Original Action Model | Plant, defuse, ignite, extinguish, bridge build and demolish as the original's action clips: invisible solid placeholder, effects at the end of the clip, cancel by melee or stun, sounds from the clip frames. |
-| **Combat, Knockback & Collisions** | 🟢 Original Action Model | Ported from the 1998 binary: contact when a step crosses into the target tile, hit points lost at contact, strike frame, `gh` / `gb` flights with the original landing rules, pile-up dispersal, fire and water landings, bomb victims and duds, stun, deferred death and removal effects, and the combat ant auto-engage. |
+| **Combat, Knockback & Collisions** | 🟢 Original Action Model | Ported from the 1998 binary: contact when a step crosses into the target tile, hit points lost at contact, strike frame, `gh` / `gb` flights with the original landing rules, pile-up dispersal (with the dust cloud of other teams' pile-ups), fire and water landings, bomb victims and duds, stun, deferred death and removal effects, and the combat ant auto-engage; flights are drawn at the frame the original's real-time player shows. |
 | **Multiplayer Networking** | 📋 Planned | Deterministic lockstep protocol over WebSockets / UDP. |
 
 ---
@@ -211,7 +211,7 @@ python3 -m http.server 8080 -d dist
 | **Inspect Enemy Ant** | Left Click on Enemy Ant | When no friendly unit is selected, selects enemy ant to view health and selection brackets. |
 | **Move Order** | Left Click on Terrain | Issues move order to selected ant(s). Intermediate food tiles are avoided. |
 | **Harvest Order** | Left Click on Food Morsel | Instructs ant to harvest food item and return it to base. |
-| **Attack Order** | Left Click on Enemy Ant | Orders selected combat/melee ants to engage target. |
+| **Attack Order** | Left Click on Enemy Ant | Orders the selected ants to engage the target (the original's group order: ants that already attack that ant are skipped, the nearest one answers; the clickable area is the original's sprite box). |
 | **Marquee Selection** | Left Click & Drag ($>4\text{px}$) | Selects all friendly units within rectangular box. |
 | **Minimap Navigation** | Left Click on Minimap | Instantly centers camera on clicked map coordinate. |
 | **Special Ability** | Right Click on Field | Context-sensitive ability for active unit type: |

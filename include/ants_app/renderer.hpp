@@ -356,6 +356,16 @@ private:
     void collect_hill_brackets(const ants::sim::Grid& grid, int32_t selected_base_team_id);
     void draw_sorted_queue();
     void collect_ant_units(const ants::sim::WorldState& world);
+    /// The sub-tick prediction of an ant's action clip: the frame that the real-time player of the original would show
+    /// `sub_tick_ms_` after the last simulation tick, and the displacement of the frames that ended in between (positions change
+    /// when a frame ends). Only action clips with pure clip displacement (attack, hit, blown ...) are predicted.
+    struct AntClipPrediction {
+        size_t frame{0};
+        int32_t dx{0};
+        int32_t dy{0};
+    };
+    AntClipPrediction predict_ant_clip(const ants::sim::AntSnapshot& ant, const ants::assets::AnimationSequence* seq) const;
+    const ants::assets::AnimationSequence* ant_loco_sequence(const ants::sim::AntSnapshot& ant) const;
     void render_tile_grid(const ants::sim::Grid& grid, int32_t mouse_x, int32_t mouse_y);
     // Draws all parts of one animation frame, last stored part first (original order), at screen position (sx, sy).
     void draw_frame_parts(const ants::assets::AnimationSubItem& sub, int32_t sx, int32_t sy, bool mirrored = false,

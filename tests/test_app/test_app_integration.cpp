@@ -3345,9 +3345,11 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         HUD hud;
         hud.init(1); // Local player is Green (Player 1)
 
-        // 1. Green player clicks on Blue Ant 1 at (10, 10) -> pixel (10*32+16, 10*32+16) = (336, 336)
+        // 1. Green player clicks on Blue Ant 1 at (10, 10): the pick rectangle of the original (FUN_01026a39) is the sprite box
+        //    around the ant (combat ant [x-32, x+26) x [y-46, y+16)); the ant below it (10, 11) has the box [y-32, y+16) and the
+        //    last hit wins, so the click goes 12 px above the anchor (336, 324), where only b1's box is
         int32_t b1_click_x = 336 + HUD::PLAYFIELD_X;
-        int32_t b1_click_y = 336 + HUD::PLAYFIELD_Y;
+        int32_t b1_click_y = 324 + HUD::PLAYFIELD_Y;
         hud.handle_mouse_down(b1_click_x, b1_click_y, 1, sim, camera);
         hud.handle_mouse_up(b1_click_x, b1_click_y, 1, sim, camera);
 
@@ -5506,39 +5508,47 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         }
     } TEST_END();
 
-    TEST_CASE("12.74: Authentic 1998 Pile-Up Has No Scuffle Effect Or Sound: The Ants Are Thrown Apart With The gh Clip") {
-        SimulationEngine sim;
-        ants::assets::LevelData lvl;
-        std::string lvl_path = std::string(ORIGINAL_ASSETS_DIR) + "/Maps/SMALL.LVL";
-        ASSERT_TRUE(lvl.load_lvl(lvl_path));
-        sim.init(lvl, 42);
+    TEST_CASE("12.74: A Pile-Up Is Thrown Apart With The gh Clip; Only Ants That Are Not The Viewer's Show The Dust Cloud (battle) And Sound 3, Briefly") {
+        for (int viewer = 0; viewer < 2; ++viewer) {
+            SimulationEngine sim;
+            ants::assets::LevelData lvl;
+            std::string lvl_path = std::string(ORIGINAL_ASSETS_DIR) + "/Maps/SMALL.LVL";
+            ASSERT_TRUE(lvl.load_lvl(lvl_path));
+            sim.init(lvl, 42);
+            sim.set_viewing_player_id(static_cast<uint8_t>(viewer));
 
-        // The victim of a melee blow lands on a tile where an enemy ant stands (pile-up)
-        uint32_t a1_id = sim.spawn_unit(0, AntType::Worker, TileCoord{10, 15});
-        uint32_t a2_id = sim.spawn_unit(1, AntType::Worker, TileCoord{11, 15});
-        uint32_t a3_id = sim.spawn_unit(1, AntType::Combat, TileCoord{12, 15});
-        sim.execute_melee_attack(a1_id, a2_id);
+            // The victim of a melee blow lands on a tile where an enemy ant stands (pile-up)
+            uint32_t a1_id = sim.spawn_unit(0, AntType::Worker, TileCoord{10, 15});
+            uint32_t a2_id = sim.spawn_unit(1, AntType::Worker, TileCoord{11, 15});
+            uint32_t a3_id = sim.spawn_unit(1, AntType::Combat, TileCoord{12, 15});
+            sim.execute_melee_attack(a1_id, a2_id);
 
-        bool has_battle_effect = false;
-        bool got_landing_thump = false;
-        for (int t = 0; t < 60; ++t) {
-            sim.tick();
-            for (const auto& eff : sim.get_world_state().effects) {
-                if (eff.anim_name == "battle") has_battle_effect = true;
+            bool has_battle_effect = false;
+            bool got_landing_thump = false;
+            int battle_ticks = 0;
+            for (int t = 0; t < 60; ++t) {
+                sim.tick();
+                bool now = false;
+                for (const auto& eff : sim.get_world_state().effects) {
+                    if (eff.anim_name == "battle") { has_battle_effect = true; now = true; ASSERT_TRUE(eff.looping); }
+                }
+                if (now) ++battle_ticks;
+                if (sim.has_audio_event(SoundID::FlingThumpB)) got_landing_thump = true;
             }
-            if (sim.has_audio_event(SoundID::FlingThumpB)) got_landing_thump = true;
-        }
-        // The original has no scuffle: no battle effect and no CombatNetFairy sound
-        ASSERT_FALSE(has_battle_effect);
-        ASSERT_FALSE(sim.has_audio_event(SoundID::CombatNetFairy));
-        ASSERT_TRUE(sim.has_audio_event(SoundID::FlingThumpA));
-        ASSERT_TRUE(got_landing_thump);
+            // Blast puts the dust ball (Cloud54) on the tile of a pile-up of ants that are not the viewer's own (the viewer is
+            // player 1 in the second run, whose ants are the ones thrown apart: no cloud); it is gone within about a second
+            ASSERT_EQ(has_battle_effect, viewer == 0);
+            ASSERT_EQ(sim.has_audio_event(SoundID::CombatNetFairy), viewer == 0);
+            ASSERT_TRUE(battle_ticks < 30);
+            ASSERT_TRUE(sim.has_audio_event(SoundID::FlingThumpA));
+            ASSERT_TRUE(got_landing_thump);
 
-        // Ensure the ants ended on different discrete tiles
-        const auto& a2 = sim.get_unit(a2_id);
-        const auto& a3 = sim.get_unit(a3_id);
-        ASSERT_FALSE(a2.pos == a3.pos);
-        ASSERT_FALSE(a2.pos == sim.get_unit(a1_id).pos);
+            // Ensure the ants ended on different discrete tiles
+            const auto& a2 = sim.get_unit(a2_id);
+            const auto& a3 = sim.get_unit(a3_id);
+            ASSERT_FALSE(a2.pos == a3.pos);
+            ASSERT_FALSE(a2.pos == sim.get_unit(a1_id).pos);
+        }
     } TEST_END();
 
     TEST_CASE("12.75: Original Click Sounds: buttonclick (0) on Buttons, navbuttonclick (89) on Pedestals Only, Silent Toggles") {
@@ -6036,8 +6046,8 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         ASSERT_FALSE(entered);
         ASSERT_EQ(sim.get_unit(ant).pos, (TileCoord{17, 16}));
 
-        // Part B: There is no scuffle in the original: an ant that lands on an occupied tile causes a pile-up (Blast 0, 7):
-        // no "battle" effect, both ants are thrown to distinct free neighbours with the gh clip
+        // Part B: an ant that lands on an occupied tile causes a pile-up (Blast 0, 7): both ants are thrown to distinct free
+        // neighbours with the gh clip; the dust ball (Cloud54) shows for ants that are not the viewer's own (here player 1's)
         SimulationEngine sim_pile;
         sim_pile.init_test_world(60, 60, 100, 60000);
         uint32_t hitter = sim_pile.spawn_unit(0, AntType::Worker, TileCoord{10, 10});
@@ -6056,7 +6066,7 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
             const auto& u2 = sim_pile.get_unit(ant2);
             if (u1.state == UnitState::Flinch && u2.state == UnitState::Flinch && !(u1.pos == u2.pos)) dispersed = true;
         }
-        ASSERT_FALSE(found_battle);
+        ASSERT_TRUE(found_battle);
         ASSERT_TRUE(dispersed);
         ASSERT_FALSE(sim_pile.get_unit(ant1).pos == sim_pile.get_unit(ant2).pos);
     } TEST_END();
@@ -6382,10 +6392,10 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
 
     TEST_CASE("12.108: Version Invariant & Fog of War Cursor Concealment Parity") {
         // 1. Verify semantic versioning components
-        ASSERT_EQ(ants::VERSION_STRING, "v0.0.35");
+        ASSERT_EQ(ants::VERSION_STRING, "v0.0.36");
         ASSERT_EQ(ants::VERSION_MAJOR, 0);
         ASSERT_EQ(ants::VERSION_MINOR, 0);
-        ASSERT_EQ(ants::VERSION_PATCH, 35);
+        ASSERT_EQ(ants::VERSION_PATCH, 36);
 
         // 2. Setup simulation world with Fog of War enabled
         SimulationEngine sim;
@@ -8937,6 +8947,127 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         uint32_t total = 0;
         for (uint32_t d : effect_spec::kDropperFrameMs) total += d;
         ASSERT_EQ(total, effect_spec::kDropperMs);
+    } TEST_END();
+
+    // -------------------------------------------------------------------------
+    // Group attack order (Ants.exe FUN_010287b5 with the attack flag), armed attack mode, pick rectangles (FUN_01026904)
+    // -------------------------------------------------------------------------
+    TEST_CASE("12.142 A Repeated Attack Click Changes Nothing: Ants That Already Attack The Tile Are Skipped (contact time equals one click)") {
+        auto contact_ms = [&](int click_every_ms) -> int {
+            SimulationEngine sim;
+            sim.init_test_world(60, 60, 100, 60000);
+            uint32_t att = sim.spawn_unit(0, AntType::Worker, TileCoord{10, 20});
+            uint32_t vic = sim.spawn_unit(1, AntType::Worker, TileCoord{16, 20});
+            HUD hud;
+            hud.init(0);
+            hud.select_ant(att, false);
+            hud.dispatch_attack_order(vic, sim);
+            for (int t = 0; t < 400; ++t) {
+                if (click_every_ms > 0 && t > 0 && (t * 50) % click_every_ms == 0) hud.dispatch_attack_order(vic, sim);
+                sim.tick();
+                if (sim.get_unit(vic).hp < 10) return (t + 1) * 50;
+            }
+            return -1;
+        };
+        const int single = contact_ms(0);
+        ASSERT_TRUE(single > 1000 && single < 6000);
+        for (int every : {100, 300, 600}) {
+            const int spam = contact_ms(every);
+            ASSERT_TRUE(spam > 0);
+            ASSERT_TRUE(spam == single);   // the skipped clicks do not even touch the ant
+        }
+    } TEST_END();
+
+    TEST_CASE("12.143 Group Attack: Nearest Ant Answers (once), A Second Click Skips Every Ant That Already Attacks That Tile") {
+        SimulationEngine sim;
+        sim.init_test_world(60, 60, 100, 60000);
+        uint32_t far_ant = sim.spawn_unit(0, AntType::Worker, TileCoord{10, 20});
+        uint32_t near_ant = sim.spawn_unit(0, AntType::Worker, TileCoord{14, 20});
+        uint32_t mid_ant = sim.spawn_unit(0, AntType::Worker, TileCoord{12, 22});
+        uint32_t vic = sim.spawn_unit(1, AntType::Worker, TileCoord{18, 20});
+        const std::vector<uint32_t> ids = {far_ant, near_ant, mid_ant};
+        const uint32_t ack = sim.issue_group_attack_order(ids, TileCoord{18, 20});
+        ASSERT_EQ(ack, near_ant);                                       // 16 x Chebyshev: near 4, mid 6, far 8
+        for (uint32_t id : ids) {
+            ASSERT_EQ(sim.get_unit(id).orig_order, AntUnit::kOrderAttack);
+            ASSERT_EQ(sim.get_unit(id).orig_order_tile, (TileCoord{18, 20}));
+            ASSERT_EQ(sim.get_unit(id).orig_target_ant, vic);
+        }
+        const uint32_t serial_far = sim.get_unit(far_ant).move_serial;
+        run_ms(sim, 200);
+        ASSERT_EQ(sim.issue_group_attack_order(ids, TileCoord{18, 20}), 0u);   // all skipped: no order, no voice
+        ASSERT_EQ(sim.get_unit(far_ant).move_serial, serial_far);
+        // An ant that is not attacking that tile is not skipped: it gets the order and can acknowledge
+        uint32_t idle_ant = sim.spawn_unit(0, AntType::Worker, TileCoord{12, 18});
+        ASSERT_EQ(sim.issue_group_attack_order({idle_ant}, TileCoord{18, 20}), idle_ant);
+        // Move orders to the same tile are NOT skipped by an attack click (only order 3 is)
+        uint32_t mover = sim.spawn_unit(0, AntType::Worker, TileCoord{12, 26});
+        sim.issue_move_order(mover, TileCoord{18, 26});
+        ASSERT_EQ(sim.get_unit(mover).orig_order, AntUnit::kOrderMove);
+        ASSERT_EQ(sim.issue_group_attack_order({mover}, TileCoord{18, 26}), mover);
+    } TEST_END();
+
+    TEST_CASE("12.144 The Armed Attack Mode Attacks The Ant That Is Clicked (and Moves When Nothing Is There)") {
+        SimulationEngine sim;
+        sim.init_test_world(60, 60, 100, 60000);
+        uint32_t att = sim.spawn_unit(0, AntType::Combat, TileCoord{10, 20});
+        uint32_t vic = sim.spawn_unit(1, AntType::Worker, TileCoord{15, 20});
+        HUD hud;
+        hud.init(0);
+        hud.select_ant(att, false);
+        hud.set_active_order_mode(OrderType::Attack);
+        // click on the victim's body (12 px above its anchor)
+        hud.dispatch_targeted_order(15 * 32 + 16, 20 * 32 + 16 - 12, sim);
+        ASSERT_EQ(sim.get_unit(att).orig_order, AntUnit::kOrderAttack);
+        ASSERT_EQ(sim.get_unit(att).orig_target_ant, vic);
+        ASSERT_TRUE(wait_ms(sim, 8000, [&]() { return sim.get_unit(vic).hp < 10; }) >= 0);
+        // click on empty ground: an ordinary move
+        SimulationEngine sim2;
+        sim2.init_test_world(60, 60, 100, 60000);
+        uint32_t att2 = sim2.spawn_unit(0, AntType::Combat, TileCoord{10, 20});
+        HUD hud2;
+        hud2.init(0);
+        hud2.select_ant(att2, false);
+        hud2.set_active_order_mode(OrderType::Attack);
+        hud2.dispatch_targeted_order(20 * 32 + 16, 20 * 32 + 16, sim2);
+        ASSERT_EQ(sim2.get_unit(att2).orig_order, AntUnit::kOrderMove);
+    } TEST_END();
+
+    TEST_CASE("12.145 Ant Pick Rectangles Of The Original (FUN_01026a39): Worker [x-20, x+20) x [y-32, y+16), Combat [x-32, x+26) x [y-46, y+16), Last Hit Wins") {
+        SimulationEngine sim;
+        sim.init_test_world(60, 60, 100, 60000);
+        uint32_t w = sim.spawn_unit(0, AntType::Worker, TileCoord{10, 10});
+        uint32_t c = sim.spawn_unit(0, AntType::Combat, TileCoord{20, 10});
+        sim.tick();
+        HUD hud;
+        hud.init(0);
+        const auto& world = sim.get_world_state();
+        auto pick = [&](int32_t x, int32_t y) -> uint32_t {
+            const AntSnapshot* a = hud.pick_ant_at(world, x, y);
+            return a ? a->id : 0u;
+        };
+        const int32_t wx = 10 * 32 + 16, wy = 10 * 32 + 16;
+        ASSERT_EQ(pick(wx - 20, wy - 32), w);           // top-left corner: inside
+        ASSERT_EQ(pick(wx + 19, wy + 15), w);           // bottom-right corner: inside
+        ASSERT_EQ(pick(wx - 21, wy), 0u);
+        ASSERT_EQ(pick(wx + 20, wy), 0u);               // right edge is exclusive
+        ASSERT_EQ(pick(wx, wy - 33), 0u);
+        ASSERT_EQ(pick(wx, wy + 16), 0u);               // bottom edge is exclusive
+        const int32_t cx = 20 * 32 + 16, cy = 10 * 32 + 16;
+        ASSERT_EQ(pick(cx - 32, cy - 46), c);
+        ASSERT_EQ(pick(cx + 25, cy + 15), c);
+        ASSERT_EQ(pick(cx - 33, cy), 0u);
+        ASSERT_EQ(pick(cx + 26, cy), 0u);
+        ASSERT_EQ(pick(cx, cy - 47), 0u);
+        // a click on the head of a combat ant (37 px above the anchor) still hits it: 21.6 % of its pixels lay outside the old box
+        ASSERT_EQ(pick(cx, cy - 40), c);
+        // two ants one tile apart: the click inside both boxes goes to the last one scanned (the lower ant, drawn in front)
+        uint32_t w2 = sim.spawn_unit(0, AntType::Worker, TileCoord{10, 11});
+        sim.tick();
+        const auto& world2 = sim.get_world_state();
+        const AntSnapshot* both = hud.pick_ant_at(world2, wx, wy + 8 - 32 + 26);   // y = 346: inside both boxes ([304,352) and [336,384))
+        ASSERT_TRUE(both != nullptr);
+        ASSERT_EQ(both->id, w2);
     } TEST_END();
 }
 

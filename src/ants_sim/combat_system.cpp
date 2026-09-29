@@ -336,6 +336,9 @@ void SimulationEngineImpl::blast_hit(AntUnit& a, TileCoord at, TileCoord dest, u
 // neighbour in distinct directions; `dmg` hit points are lost by each (0 for a pile-up, 1 for a fire wall).
 void SimulationEngineImpl::blast(AntUnit& a, uint8_t dmg, uint8_t src) {
     const TileCoord at = a.occ_tile.x >= 0 ? a.occ_tile : pixel_tile(a);
+    // 0x101c449: a blast of an ant that is not the viewer's own (its owner's machine decides in the original) shows the dust
+    // ball; the remake's single simulation still disperses the ants at once.
+    if (a.player_id != viewing_player_id_) spawn_battle_cloud(at);
     bool excl[8] = {false, false, false, false, false, false, false, false};
     std::vector<AntUnit*> on_tile;
     for (auto& up : ants_) {
@@ -346,6 +349,49 @@ void SimulationEngineImpl::blast(AntUnit& a, uint8_t dmg, uint8_t src) {
         const TileCoord dest = pick_landing(a, pixel_tile(*x), 1, false, excl, true);
         blast_hit(*x, pixel_tile(*x), dest, dmg, src);
     }
+}
+
+// FUN_0101a2aa (Cloud54): the dust ball is created at the tile centre, its clock starts now; its clip loops and plays sound 3
+// (combatnetfairy) at every loop start.
+void SimulationEngineImpl::spawn_battle_cloud(TileCoord tile) {
+    BattleCloud c;
+    c.tile = tile;
+    c.created_ms = anim_clock_ms_;
+    c.next_sound_ms = anim_clock_ms_;
+    battle_clouds_.push_back(c);
+    world_state_dirty_ = true;
+}
+
+// The cloud's step callback (0x101a329): gone after 3000 ms, when the tile holds no ant, or when the crowd (the tile's "more
+// than one ant" bit) has been gone for more than 1000 ms; a returning crowd restarts that second.
+void SimulationEngineImpl::tick_battle_clouds() {
+    for (auto it = battle_clouds_.begin(); it != battle_clouds_.end();) {
+        BattleCloud& c = *it;
+        bool remove = (anim_clock_ms_ - c.created_ms) > effect_spec::kBattleCloudMaxMs;
+        if (!remove) {
+            const OccCell* oc = occ_cell(c.tile);
+            if (!oc || oc->ant < 0) {
+                remove = true;
+            } else if (oc->multi) {
+                c.clear_since_ms = 0;
+            } else if (c.clear_since_ms == 0) {
+                c.clear_since_ms = anim_clock_ms_;
+            } else if (anim_clock_ms_ - c.clear_since_ms > effect_spec::kBattleCloudClearMs) {
+                remove = true;
+            }
+        }
+        if (remove) {
+            it = battle_clouds_.erase(it);
+            world_state_dirty_ = true;
+            continue;
+        }
+        while (c.next_sound_ms <= anim_clock_ms_) {
+            audio_queue_.push_back(AudioEvent{effect_spec::kBattleCloudSound, centre_x(c.tile), centre_y(c.tile), 1, 255});
+            c.next_sound_ms += effect_spec::kBattleMs;
+        }
+        ++it;
+    }
+    if (!battle_clouds_.empty()) world_state_dirty_ = true;
 }
 
 // FUN_0101c2e2 Drown (message 0x15): the ant plays the drowning clip on the tile; its hit points do not change.

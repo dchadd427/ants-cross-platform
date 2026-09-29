@@ -1009,9 +1009,12 @@ int SimulationEngineImpl::try_enter_tile(AntUnit& a, TileCoord nt) {
             go_to(a, final_tile, false, false);
             break;
     }
-    // FUN_010100e5: positional "bump" effect (CHD anim 0xDC, sound 47) at the blocked tile
-    active_effects_.push_back(VisualEffect{"bump", centre_x(nt), centre_y(nt), 0, 10});
-    audio_queue_.push_back(AudioEvent{SoundID::Bump, centre_x(nt), centre_y(nt), 1, 255});
+    // FUN_010100e5: positional "bump" effect (CHD anim 0xDC: an empty sprite with sound 47) at the top-left of the blocked tile.
+    // The re-path branch (0x101cae3) only runs for the local player's own ants, so only the viewer hears his ants bump.
+    if (a.player_id == viewing_player_id_) {
+        active_effects_.push_back(VisualEffect{"bump", nt.x * kTile, nt.y * kTile, 0, 10});
+        audio_queue_.push_back(AudioEvent{SoundID::Bump, nt.x * kTile, nt.y * kTile, 1, 255});
+    }
     return 0;
 }
 

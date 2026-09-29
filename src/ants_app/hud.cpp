@@ -1352,34 +1352,13 @@ bool HUD::handle_mouse_down(int32_t x, int32_t y, uint8_t button,
 
             // 1. Check if clicked on an enemy ant
             const sim::AntSnapshot* enemy_target = nullptr;
-            int32_t best_enemy_dist_sq = INT32_MAX;
             const sim::AntSnapshot* ally_target = nullptr;
-            int32_t best_ally_dist_sq = INT32_MAX;
             const auto& world = sim.get_world_state();
-            for (const auto& ant : world.ants) {
-                if (ant.hp == 0 || ant.is_drowning) continue;
-                if (world.fog_of_war_enabled && ant.player_id != local_player_id_) {
-                    bool is_ally = sim.stats_manager().are_allies(local_player_id_, ant.player_id);
-                    if (!is_ally && !world.is_tile_revealed(ant.tile_x, ant.tile_y)) {
-                        continue; // Cannot right-click target an unseen enemy in fog
-                    }
-                }
-                bool in_bbox = (std::abs(ant.px - world_x) <= 18 &&
-                                world_y >= ant.py - 24 && world_y <= ant.py + 18);
-                bool on_tile = (ant.tile_x == target_tile_x && ant.tile_y == target_tile_y);
-                if (in_bbox || on_tile) {
-                    int32_t d_sq = (ant.px - world_x) * (ant.px - world_x) + (ant.py - world_y) * (ant.py - world_y);
-                    if (ant.player_id != local_player_id_ && !sim.stats_manager().are_allies(local_player_id_, ant.player_id)) {
-                        if (d_sq < best_enemy_dist_sq) {
-                            best_enemy_dist_sq = d_sq;
-                            enemy_target = &ant;
-                        }
-                    } else if (ant.player_id != local_player_id_ && sim.stats_manager().are_allies(local_player_id_, ant.player_id)) {
-                        if (d_sq < best_ally_dist_sq) {
-                            best_ally_dist_sq = d_sq;
-                            ally_target = &ant;
-                        }
-                    }
+            // The ant under the cursor is picked with the original's rectangles (FUN_01026904 / FUN_01026a39)
+            if (const sim::AntSnapshot* picked = pick_ant_at(world, world_x, world_y)) {
+                if (picked->player_id != local_player_id_) {
+                    if (sim.stats_manager().are_allies(local_player_id_, picked->player_id)) ally_target = picked;
+                    else enemy_target = picked;
                 }
             }
             if (enemy_target) {
@@ -1555,27 +1534,7 @@ bool HUD::handle_mouse_up(int32_t x, int32_t y, uint8_t button,
             int32_t target_tile_y = world_y / 32;
 
             // 1. Check if clicked directly on an ant (sprite bounding box OR tile match)
-            const sim::AntSnapshot* hit_ant = nullptr;
-            int32_t best_ant_dist_sq = INT32_MAX;
-            for (const auto& ant : world.ants) {
-                if (ant.hp == 0 || ant.is_drowning) continue;
-                if (world.fog_of_war_enabled && ant.player_id != local_player_id_) {
-                    bool is_ally = sim.stats_manager().are_allies(local_player_id_, ant.player_id);
-                    if (!is_ally && !world.is_tile_revealed(ant.tile_x, ant.tile_y)) {
-                        continue; // Cannot click-select or click-attack an enemy hidden in fog
-                    }
-                }
-                bool in_bbox = (std::abs(ant.px - world_x) <= 18 &&
-                                world_y >= ant.py - 24 && world_y <= ant.py + 18);
-                bool on_tile = (ant.tile_x == target_tile_x && ant.tile_y == target_tile_y);
-                if (in_bbox || on_tile) {
-                    int32_t d_sq = (ant.px - world_x) * (ant.px - world_x) + (ant.py - world_y) * (ant.py - world_y);
-                    if (d_sq < best_ant_dist_sq) {
-                        best_ant_dist_sq = d_sq;
-                        hit_ant = &ant;
-                    }
-                }
-            }
+            const sim::AntSnapshot* hit_ant = pick_ant_at(world, world_x, world_y);
 
             if (hit_ant) {
                 selected_base_team_id_ = -1;
@@ -2256,6 +2215,18 @@ void HUD::dispatch_targeted_order(int32_t world_x, int32_t world_y, sim::Simulat
         return;
     }
 
+    if (active_order_mode_ == sim::OrderType::Attack) {
+        // The armed attack mode clicks an ant (FUN_010287b5, attack flag, at the picked ant's tile); with no enemy under the
+        // cursor the click is an ordinary move.
+        const sim::AntSnapshot* enemy = pick_ant_at(world, world_x, world_y);
+        if (enemy && enemy->player_id != local_player_id_ && !sim.stats_manager().are_allies(local_player_id_, enemy->player_id)) {
+            dispatch_attack_order(enemy->id, sim);
+        } else {
+            dispatch_move_order(target_tile_x, target_tile_y, sim);
+        }
+        return;
+    }
+
     for (uint32_t aid : targets) {
         sim::AntOrder order;
         order.ant_id = aid;
@@ -2309,15 +2280,17 @@ void HUD::dispatch_move_order(int32_t target_tile_x, int32_t target_tile_y, sim:
 
 void HUD::dispatch_attack_order(uint32_t target_enemy_id, sim::SimulationEngine& sim) {
     const auto& world = sim.get_world_state();
+    const sim::AntSnapshot* enemy = nullptr;
     for (const auto& a : world.ants) {
         if (a.id == target_enemy_id) {
-            // Cannot attack friendly teammates or allies
-            if (a.player_id == local_player_id_ || sim.stats_manager().are_allies(local_player_id_, a.player_id)) {
-                play_sfx(sim::SoundID::AntStop);
-                return;
-            }
+            enemy = &a;
             break;
         }
+    }
+    // Cannot attack friendly teammates or allies
+    if (enemy && (enemy->player_id == local_player_id_ || sim.stats_manager().are_allies(local_player_id_, enemy->player_id))) {
+        play_sfx(sim::SoundID::AntStop);
+        return;
     }
 
     std::vector<uint32_t> raw_targets = selected_ant_ids_;
@@ -2335,49 +2308,43 @@ void HUD::dispatch_attack_order(uint32_t target_enemy_id, sim::SimulationEngine&
             }
         }
     }
-    if (targets.empty()) return;
+    if (targets.empty() || !enemy) return;
 
-    int32_t target_x = 0;
-    int32_t target_y = 0;
-    for (const auto& a : world.ants) {
-        if (a.id == target_enemy_id) {
-            target_x = a.tile_x;
-            target_y = a.tile_y;
-            break;
-        }
+    // Original group order (Ants.exe FUN_010287b5 with the attack flag): ants that already attack that tile are skipped, so a
+    // repeated click changes nothing; the others are sent closest first; only the closest one answers with its voice, and only
+    // when its order queued a path.
+    const uint32_t ack = sim.issue_group_attack_order(targets, sim::TileCoord{enemy->tile_x, enemy->tile_y});
+    if (ack != 0) {
+        play_sfx(sim::get_attack_voice_sound(sim.get_unit(ack).type, voice_variant_++));
     }
+}
 
-    for (uint32_t aid : targets) {
-        for (const auto& a : world.ants) {
-            if (a.id == aid && a.player_id == local_player_id_) {
-                if (a.state == sim::UnitState::BuildingBridge || a.state == sim::UnitState::DemolishingBridge) {
-                    continue;
+const sim::AntSnapshot* HUD::pick_ant_at(const sim::WorldState& world, int32_t world_x, int32_t world_y) const {
+    const int32_t tx = world_x / 32;
+    const int32_t ty = world_y / 32;
+    const sim::AntSnapshot* hit = nullptr;
+    for (int32_t dy = -1; dy <= 1; ++dy) {
+        for (int32_t dx = -1; dx <= 1; ++dx) {
+            for (const auto& ant : world.ants) {
+                if (ant.hp == 0 || ant.is_drowning) continue;
+                if (ant.tile_x != tx + dx || ant.tile_y != ty + dy) continue;     // the occupant registered on the scanned tile
+                if (world.fog_of_war_enabled && ant.player_id != local_player_id_) {
+                    const bool is_ally = (local_player_id_ < world.player_alliances.size() &&
+                                          ant.player_id < world.player_alliances.size() &&
+                                          world.player_alliances[local_player_id_] == ant.player_id &&
+                                          world.player_alliances[ant.player_id] == local_player_id_);
+                    if (!is_ally && !world.is_tile_revealed(ant.tile_x, ant.tile_y)) continue;
                 }
-                play_sfx(sim::get_attack_voice_sound(a.type, voice_variant_++));
-                goto attack_voice_done;
+                const bool combat = (ant.type == sim::AntType::Combat);
+                const int32_t left = ant.px - (combat ? 32 : 20);
+                const int32_t right = ant.px + (combat ? 26 : 20);
+                const int32_t top = ant.py - (combat ? 46 : 32);
+                const int32_t bottom = ant.py + 16;
+                if (world_x >= left && world_x < right && world_y >= top && world_y < bottom) hit = &ant;
             }
         }
     }
-attack_voice_done:
-
-    for (uint32_t aid : targets) {
-        bool skip = false;
-        for (const auto& a : world.ants) {
-            if (a.id == aid && (a.state == sim::UnitState::BuildingBridge || a.state == sim::UnitState::DemolishingBridge)) {
-                skip = true;
-                break;
-            }
-        }
-        if (skip) continue;
-
-        sim::AntOrder order;
-        order.ant_id = aid;
-        order.type = sim::OrderType::Attack;
-        order.target_x = target_x;
-        order.target_y = target_y;
-        order.target_entity_id = static_cast<int32_t>(target_enemy_id);
-        sim.issue_order(order);
-    }
+    return hit;
 }
 
 void HUD::dispatch_smart_special_ability(int32_t world_x, int32_t world_y, sim::SimulationEngine& sim, bool shift_held) {
@@ -2758,30 +2725,7 @@ CursorType HUD::evaluate_cursor(int32_t screen_x, int32_t screen_y,
     }
 
     // Check if hovering over any alive ant
-    const sim::AntSnapshot* hover_ant = nullptr;
-    int32_t best_dist_sq = INT32_MAX;
-    for (const auto& ant : world.ants) {
-        if (ant.hp == 0 || ant.is_drowning) continue;
-        if (world.fog_of_war_enabled && ant.player_id != local_player_id_) {
-            bool is_ally = (local_player_id_ < world.player_alliances.size() &&
-                            ant.player_id < world.player_alliances.size() &&
-                            world.player_alliances[local_player_id_] == ant.player_id &&
-                            world.player_alliances[ant.player_id] == local_player_id_);
-            if (!is_ally && !world.is_tile_revealed(ant.tile_x, ant.tile_y)) {
-                continue;
-            }
-        }
-        bool in_bbox = (std::abs(ant.px - world_x) <= 18 &&
-                        world_y >= ant.py - 24 && world_y <= ant.py + 18);
-        bool on_tile = (ant.tile_x == tx && ant.tile_y == ty);
-        if (in_bbox || on_tile) {
-            int32_t d_sq = (ant.px - world_x) * (ant.px - world_x) + (ant.py - world_y) * (ant.py - world_y);
-            if (d_sq < best_dist_sq) {
-                best_dist_sq = d_sq;
-                hover_ant = &ant;
-            }
-        }
-    }
+    const sim::AntSnapshot* hover_ant = pick_ant_at(world, world_x, world_y);
 
     // Check if hovering over an Anthill base
     const assets::AnthillSpawn* hover_base = nullptr;

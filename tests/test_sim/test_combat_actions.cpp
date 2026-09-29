@@ -589,6 +589,51 @@ int main() {
         }
     } TEST_END();
 
+    TEST_CASE("6.5 stun.wav (70) is never heard after a hit, a punch flight or a pile-up hop (the stun clip started by the cleanup is replaced inside the same SetAction); a bomb flight ends in an audible stun") {
+        auto heard70 = [&](SimulationEngine& sim, int ms) {
+            int n = 0;
+            for (int t = 0; t < ms / kTickMs; ++t) {
+                sim.tick();
+                for (const auto& e : sim.poll_audio_events()) if (e.sound_id == 70) ++n;
+            }
+            return n;
+        };
+        {   // a worker's blow: gh flight
+            SimulationEngine sim;
+            make_world(sim);
+            const uint32_t a = sim.spawn_unit(0, AntType::Worker, TileCoord{10, 10});
+            const uint32_t b = sim.spawn_unit(1, AntType::Worker, TileCoord{11, 10});
+            sim.execute_melee_attack(a, b);
+            ASSERT_EQ(heard70(sim, 5000), 0);
+            ASSERT_EQ(sim.get_unit(b).loco_action, AntUnit::kActionIdle);
+        }
+        {   // a combat ant's punch: gb flight
+            SimulationEngine sim;
+            make_world(sim);
+            const uint32_t a = sim.spawn_unit(0, AntType::Combat, TileCoord{10, 10});
+            const uint32_t b = sim.spawn_unit(1, AntType::Worker, TileCoord{11, 10});
+            sim.execute_melee_attack(a, b);
+            ASSERT_EQ(heard70(sim, 5000), 0);
+        }
+        {   // pile-up: the ants are thrown apart with the gh clip
+            SimulationEngine sim;
+            make_world(sim);
+            const uint32_t a = sim.spawn_unit(0, AntType::Worker, TileCoord{10, 10});
+            const uint32_t b = sim.spawn_unit(1, AntType::Worker, TileCoord{11, 10});
+            sim.spawn_unit(1, AntType::Worker, TileCoord{12, 10});
+            sim.execute_melee_attack(a, b);
+            ASSERT_EQ(heard70(sim, 5000), 0);
+        }
+        {   // a bomb: the victim is stunned after its flight (or after the dud's burn overlay) and that stun is heard
+            SimulationEngine sim;
+            make_world(sim);
+            const uint32_t v = sim.spawn_unit(0, AntType::Worker, TileCoord{15, 15});
+            sim.grid_mut().place_bomb(15, 15, 1);
+            sim.trigger_bomb_detonation(v, TileCoord{15, 15});
+            ASSERT_TRUE(heard70(sim, 8000) >= 1);
+        }
+    } TEST_END();
+
     std::cout << "\n=======================================================\n"
               << " Total Test Cases: " << g_test_count << "\n"
               << " Total Assertions: " << g_assert_count << "\n"

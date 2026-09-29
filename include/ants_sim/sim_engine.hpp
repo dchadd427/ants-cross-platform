@@ -234,6 +234,7 @@ struct AntSnapshot {
     bool     is_drowning{false};
     bool     is_on_mud{false};
     int32_t  burn_elapsed_ms{-1};       // dud burn overlay (?bu) time since it started, -1 = none
+    bool     frozen{false};             // +0xfc: the display loop skips a frozen ant (only its ?bu overlay is drawn)
     UnitState state{UnitState::Idle};
     uint8_t  target_team_id{255};
 
@@ -243,6 +244,9 @@ struct AntSnapshot {
     uint16_t loco_clip{0x7FFE};
     uint16_t loco_frame{0};
     bool     loco_mirrored{false};
+    // Milliseconds until the current clip frame ends (the sim state is at a 50 ms tick boundary; the original's player runs on
+    // the real clock, so the renderer predicts the frames and displacements that end before the next tick).
+    uint16_t loco_left_ms{0};
 };
 
 /**
@@ -276,6 +280,7 @@ struct VisualEffect {
     uint32_t duration_ms{0};    ///< sum of the Table-4 frame durations (0: legacy effect living total_frames ticks)
     int32_t  y_key{0};          ///< sort key in the y-sorted sprite list (row*32 for tile effects)
     bool     fog_gated{false};  ///< hidden while the anchor tile is unexplored
+    bool     looping{false};    ///< the clip repeats until the sim removes the effect (the battle cloud)
 };
 
 /**
@@ -430,6 +435,14 @@ public:
      */
     uint32_t issue_group_move_order(const std::vector<uint32_t>& ant_ids, TileCoord target,
                                     bool allow_friendly_bomb = false, bool is_food_order = false);
+    /**
+     * @brief Player group attack (Ants.exe FUN_010287b5 with the attack flag). Ants that accept orders and already carry out an
+     * attack order on this very tile are skipped (a repeated click changes nothing), the others are sorted by 16 x Chebyshev
+     * distance to the clicked tile (exchange sort, not stable) and each gets the player GoTo to the tile; the classification
+     * turns it into the attack order when another team's ant stands there.
+     * @return the ant that acknowledges the order ("Attack!" and its voice): the closest one, if its GoTo queued a path, or 0.
+     */
+    uint32_t issue_group_attack_order(const std::vector<uint32_t>& ant_ids, TileCoord target);
     /// True while a path request of this ant is queued in the path manager (PATHMGR, one path per 50 ms).
     bool has_pending_path(uint32_t ant_id) const;
 

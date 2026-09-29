@@ -46,6 +46,16 @@ public:
     std::array<HatchState, MAX_PLAYERS> hatch_{};
     std::vector<VisualEffect> active_effects_;
     std::vector<ScoreBubble> score_bubbles_;
+    // FUN_0101a2aa Cloud54: the looping dust ball ("battle") on the tile of a foreign pile-up; see effect_specs.hpp
+    struct BattleCloud {
+        TileCoord tile{0, 0};
+        uint32_t  created_ms{0};       // +0x50
+        uint32_t  clear_since_ms{0};   // +0x4c: 0 while the crowd is there, else the time it was first seen gone
+        uint32_t  next_sound_ms{0};    // the loop start that plays sound 3 next
+    };
+    std::vector<BattleCloud> battle_clouds_;
+    void spawn_battle_cloud(TileCoord tile);
+    void tick_battle_clouds();
 
     // Fog of War State
     bool fog_of_war_enabled_{false};

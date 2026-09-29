@@ -11,7 +11,12 @@ constexpr uint32_t kBombexMs   = 680;   // bombex   (Table 4 id 133), sound 4 on
 constexpr uint32_t kSputterMs  = 830;   // sputter  (135)
 constexpr uint32_t kBsputterMs = 1220;  // bsputter (1177)
 constexpr uint32_t kDsplashMs  = 460;   // dsplash  (40)
-constexpr uint32_t kBattleMs   = 270;   // battle   (56), one cycle
+constexpr uint32_t kBattleMs   = 270;   // battle   (56), one cycle (70 / 60 / 80 / 60 ms), sound 3 at every loop start
+// The dust ball that Blast (Ants.exe 0x101c449) puts on the tile of a pile-up of ants that are not the viewer's own: its step
+// callback (0x101a329) removes it after 3000 ms, when no ant stands on the tile, or when the crowd has been gone for more than 1000 ms.
+constexpr uint32_t kBattleCloudMaxMs   = 3000;
+constexpr uint32_t kBattleCloudClearMs = 1000;
+constexpr uint32_t kBattleCloudSound   = 3;   // combatnetfairy.wav
 constexpr uint32_t kDeathMs[4] = { 920, 1000, 980, 600 };   // death1..death4 (102..105)
 constexpr const char* kDeathNames[4] = { "death1", "death2", "death3", "death4" };
 constexpr uint32_t kDropperMs  = 820;   // FD_BOMB/COMB/THIEF/SWIM/FIRE (426, 422, 424, 423, 425)

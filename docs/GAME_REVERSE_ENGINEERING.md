@@ -1682,6 +1682,56 @@ Addresses are virtual addresses in `Original-Ants/Ants.exe` (image base 0x010000
 
 ---
 
+### 5.39 Attack Orders, Pick Rectangles and the Knock-Back Presentation (Capstone-Verified; Audit of Bouncing, Knock-Back Look and Attack Pathing)
+
+Addresses are virtual addresses in `Original-Ants/Ants.exe`. The simulation side of contact, knock-back and pile-ups (5.36) was found
+faithful; the differences were in the input, drawing and sound layers around it. Checked by `tests/test_app/test_app_integration.cpp` (12.142 -
+12.145, 12.74, 12.103), `tests/test_app/test_render_parity.cpp` (frozen ants, edge culling, sub-tick prediction), `tests/test_sim/test_combat_actions.cpp`
+(6.5) and `tests/test_sim/test_movement_golden.cpp` (3.1, 3.1b).
+
+* **Group attack** *(implemented: `SimulationEngine::issue_group_attack_order`; `FUN_010287b5` with the attack flag)*: every selected ant that accepts
+  player orders (`FUN_0101ff5a`) and does not already have order 3 with `+0xac` equal to the clicked tile (0x1028820, 0x102887e; orders 1, 4 and 5
+  are not skipped by an attack click) is sorted by 16 x Chebyshev distance to the tile (exchange sort, strict `>`, 0x102893e) and gets `GoTo(tile, player
+  flag 1)`; the classification (`FUN_01020655`) makes it the attack order when another team's ant stands on the tile. Only the first ant of the sorted
+  list acknowledges ("Attack!" text 0x43 and its voice, `FUN_0101b711`), and only when its GoTo queued a path. A repeated click therefore changes nothing:
+  before v0.0.36 every click restarted every ant (snap, idle, new path), so a click every 300 ms kept the attacker from ever arriving.
+* **The clicked ant** *(implemented: `HUD::pick_ant_at`; `FUN_01026904`, `FUN_01026a39`)*: the click position gives a tile; the 3 x 3 tiles around it
+  are scanned (rows outer, columns inner), the ant registered on each tile is tested against a half-open rectangle around its sprite position (a combat
+  ant [x-32, x+26) x [y-46, y+16), every other type [x-20, x+20) x [y-32, y+16)), the LAST hit wins, and the order tile is the picked ant's own pixel
+  tile. The old boxes (37 x 43 px) left 7-22 % of the sprite unclickable (a click on a combat ant's head was a move order). The armed attack mode
+  (the combat ant's pedestal) issues the same group attack at the picked ant's tile and a plain move when no enemy is under the cursor.
+* **Frames change when they end, not at ticks** *(implemented in the renderer: `predict_ant_clip`)*: the original's animation player runs on the real
+  clock (`FUN_0102b95f`, every idle message-loop pass) and changes a sprite's frame and position when the frame ends (0x102ba77); the simulation state is
+  only known at 50 ms ticks, so a 60 / 70 / 80 / 120 ms frame appeared as 50 or 100 ms and the 128 px jump of a blown ant at the end of `gb` frame 0
+  appeared up to 50 ms late. The snapshot carries the time left of the current frame (`loco_left_ms`); the renderer shows the frames of action clips (attack,
+  hit, blown, stun, pick-up, abilities, enter, raid, drown, can't) that end before the next tick and adds their displacement; the last frame stays until
+  the tick that replaces the clip. Walking and idle clips are not predicted (their step callback changes the displacement at tile crossings and arrivals).
+* **stun.wav after a hit is inaudible in the original** *(implemented)*: the cleanup of the old flight action starts the stun clip (sound 70 at its first
+  step) inside the same `SetAction` call that then installs the new action, and every ant clip tracks its sounds (flag 3), so `SetAnimation` stops them at
+  once. Only a stun that stays (bomb flight, burn overlay) is heard. Not modelled: the tail of other tracked sounds that a replaced clip cuts (an attack
+  sound of 366 ms is cut after 180 ms, the landing thump loses 35-75 ms).
+* **Culling** *(implemented)*: the original clips every sprite part against the target surface (`FUN_0102fb6d`), never by the ant's anchor; a blown ant's
+  anchor jumps 128 px while its art trails behind it (aggb901 frame 1 is 59-102 px from the jumped anchor) and a walking ant's head is 35 px above it, so the
+  renderer skips an ant only when its anchor is more than 160 px outside the playfield.
+* **Frozen ants are not drawn** *(implemented)*: the display loop (0x10088e7) calls sprite slot +0x40, which for ants is `+0xfc` (frozen), and skips the
+  draw; the dud bomb's `?bu` clip is a full-body overlay, so the idle ant beneath it would show as a ghost body.
+* **Dust cloud of a foreign pile-up** *(implemented: `spawn_battle_cloud`; `FUN_0101c34c` at 0x101c449, class `FUN_0101a2aa`, callback 0x101a329)*: Blast
+  of an ant that is not the local player's (its owner decides the dispersal in the original; the remake's single simulation disperses at once) creates a
+  looping `battle` clip (Table 4 id 56: 70 / 60 / 80 / 60 ms) at the tile centre with sound 3 (combatnetfairy) at every loop start; its step callback removes
+  it after 3000 ms, when no ant stands on the tile, or when the tile's crowd bit has been clear for more than 1000 ms (a returning crowd restarts that
+  second). Local ants show none.
+* **Bump cue** *(implemented)*: the re-path branch of `TryEnterTile` (0x101cae3) creates the invisible bump effect (anim 0xdc, sound 47) at the TOP-LEFT of
+  the blocked tile and only for the local player's ants; enemy bumps are neither seen nor heard.
+* **Allied ants** are always drawn, also in fog (0x101aa0d: the local player's and the allies'); other ants only on explored tiles.
+* **Nothing is called "bounce" in the original.** The mechanisms are: the blocked-tile handling of `TryEnterTile` (a moving blocker: `ANTPAUSE` 300 ms freeze in
+  place; a stationary blocker or any other obstacle: snap back to the tile centre, re-plan, bump cue), pile-up dispersal (`Blast`), knock and bomb flights and the
+  dust cloud above.
+* **Open** *(recorded, not ported)*: the acknowledgement text 0x43 "Attack!" and the other status texts (status-line stage), the tie order of equal-y sprites
+  and of animation steps due in the same frame (the original walks one array sorted by sprite y, north first; the remake orders by due time then ant id, which
+  only matters for simultaneous contests of one tile), tracked sounds cut when their clip is replaced.
+
+---
+
 ## 6. Target Multi-Platform Architecture
 
 To achieve clean, modern, high-performance execution across macOS, Linux, Windows, and the Web (WebAssembly):

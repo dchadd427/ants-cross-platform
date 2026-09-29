@@ -1080,10 +1080,13 @@ void Renderer::collect_visual_effects(const ants::sim::WorldState& world) {
         if (!anim || anim->subitems.empty()) continue;
 
         size_t sub_idx = 0;
-        if (eff.anim_name == "battle" || eff.anim_name == "BATTLE") {
-            // Battle scuffle ball loops for 2 complete cycles across 10 simulation ticks
-            size_t cycle_frames = anim->subitems.size() * 2;
-            sub_idx = ((static_cast<size_t>(eff.frame) * cycle_frames) / std::max<size_t>(1, eff.total_frames)) % anim->subitems.size();
+        if (eff.looping) {
+            // The clip repeats until the simulation removes the effect (the dust ball of a foreign pile-up, Cloud54)
+            uint32_t total = 0;
+            for (const auto& sub : anim->subitems) total += sub.val3;
+            const uint32_t t = (total > 0) ? (eff.elapsed_ms + sub_tick_ms_) % total : 0u;
+            const int32_t f = effect_frame_at(*anim, t);
+            sub_idx = (f < 0) ? anim->subitems.size() - 1 : static_cast<size_t>(f);
         } else {
             // Table-4 frame durations in real time: sim elapsed time plus the fraction of the current 50 ms tick
             const uint32_t elapsed_ms = eff.elapsed_ms + sub_tick_ms_;
@@ -1230,11 +1233,62 @@ void Renderer::render_software_cursor(CursorType type, int32_t screen_x, int32_t
     draw_frame_parts(sub, screen_x, screen_y);
 }
 
+// The stored (or mirrored) Table-4 animation of the clip the simulation plays on the ant; null while another system animates it.
+const ants::assets::AnimationSequence* Renderer::ant_loco_sequence(const ants::sim::AntSnapshot& ant) const {
+    if (!archive_ || ant.loco_clip == 0x7FFE || ant.loco_clip >= archive_->animation_count()) return nullptr;
+    const auto& stored = archive_->get_animation(ant.loco_clip);
+    if (!ant.loco_mirrored) return &stored;
+    // Mirrored clips (SW, W, NW) use the archive's mirrored copies of the stored SE, E and NE animations.
+    if (stored.name.size() > 3) {
+        const char digit = stored.name[stored.name.size() - 3];
+        const int mirrored_dir = (digit == '2') ? 5 : (digit == '9') ? 6 : (digit == '8') ? 7 : -1;
+        if (mirrored_dir >= 0) {
+            return archive_->get_directional_animation(stored.name.substr(0, stored.name.size() - 3),
+                                                       static_cast<ants::assets::Direction>(mirrored_dir));
+        }
+    }
+    return nullptr;
+}
+
+Renderer::AntClipPrediction Renderer::predict_ant_clip(const ants::sim::AntSnapshot& ant,
+                                                       const ants::assets::AnimationSequence* seq) const {
+    AntClipPrediction p;
+    if (!seq || seq->subitems.empty()) return p;
+    p.frame = std::min<size_t>(ant.loco_frame, seq->subitems.size() - 1);
+    using S = ants::sim::UnitState;
+    switch (ant.state) {   // action clips whose displacement is the clip's own (no step callback changes it)
+        case S::Attacking: case S::Flinch: case S::Knockback: case S::Stunned: case S::PoweringUp: case S::EnteringBase:
+        case S::Infiltrating: case S::Drowning: case S::PlantingBomb: case S::DefusingBomb: case S::PlacingFire:
+        case S::ExtinguishingFire: case S::BuildingBridge: case S::DemolishingBridge: case S::CantGo:
+            break;
+        default:
+            return p;
+    }
+    int32_t left = static_cast<int32_t>(ant.loco_left_ms);
+    int32_t t = static_cast<int32_t>(sub_tick_ms_);
+    // A frame's displacement applies when the frame ends; the last frame stays until the next tick (the simulation replaces the
+    // clip at its end)
+    while (t >= left && p.frame + 1 < seq->subitems.size()) {
+        t -= left;
+        p.dx += seq->subitems[p.frame].val1;
+        p.dy += seq->subitems[p.frame].val2;
+        ++p.frame;
+        left = static_cast<int32_t>(seq->subitems[p.frame].val3);
+    }
+    return p;
+}
+
 void Renderer::draw_single_ant(const ants::sim::AntSnapshot& ant) {
     // The hill actions (enter, hatch, raid) are ordinary clips played on the tile centre the simulation puts the ant
     // on, so there is no special anchor: every ant is drawn where it stands.
     int32_t sx = 0, sy = 0;
-    if (!camera_.world_to_screen(ant.px, ant.py, sx, sy)) return;
+    camera_.world_to_screen(ant.px, ant.py, sx, sy);
+    // The original clips per sprite part (FUN_0102fb6d), never by the ant's anchor: the art of a walking ant reaches 35 px above
+    // it and a blown ant's art (aggb / bomb flights) up to ~155 px away from the anchor that jumped 128 px. Only an ant whose art
+    // cannot reach the playfield is skipped.
+    constexpr int32_t kArtMargin = 160;
+    if (sx < PLAYFIELD_X - kArtMargin || sx > PLAYFIELD_X + PLAYFIELD_W + kArtMargin ||
+        sy < PLAYFIELD_Y - kArtMargin || sy > PLAYFIELD_Y + PLAYFIELD_H + kArtMargin) return;
 
     // The original has neither a shadow nor a hop: a flight is the displacement baked into the aggb / aggh clips.
     const int32_t render_y = sy;
@@ -1328,36 +1382,26 @@ void Renderer::draw_single_ant(const ants::sim::AntSnapshot& ant) {
         }
     }
 
+    const ants::assets::AnimationSequence* loco_seq = ant_loco_sequence(ant);
+    // The real-time player of the original changes frames and positions when a frame ends, not at 50 ms simulation ticks:
+    // the frames that end before the next tick are shown in advance (pure action clips only, see predict_ant_clip).
+    const AntClipPrediction pred = predict_ant_clip(ant, loco_seq);
+
     // Draws one animation frame's parts at the ant in the original order (last stored part first, so the first
     // stored part - e.g. a carried lunchbox in front of the body - is on top) with the original ant colour rule.
     auto draw_frame_sprites = [&](const ants::assets::AnimationSubItem& sub, bool mirrored) {
-        draw_frame_parts(sub, sx, render_y, mirrored, ant_colour(ant.player_id));
+        draw_frame_parts(sub, sx + pred.dx, render_y + pred.dy, mirrored, ant_colour(ant.player_id));
     };
 
     // Original locomotion animation (idle, walk on each terrain, swim, dive, climb, can't-go): the simulation
     // plays the exact ants.chd clip and frame, so draw that frame. There is no interpolation: as in the 1998
     // game, a sprite moves only when its animation frame ends. Mirrored clips (SW, W, NW) use the archive's
     // mirrored copies of the stored SE, E and NE animations.
-    const ants::assets::AnimationSequence* loco_seq = nullptr;
-    if (ant.loco_clip != 0x7FFE && ant.loco_clip < archive_->animation_count()) {
-        const auto& stored = archive_->get_animation(ant.loco_clip);
-        loco_seq = &stored;
-        if (ant.loco_mirrored) {
-            loco_seq = nullptr;
-            if (stored.name.size() > 3) {
-                const char digit = stored.name[stored.name.size() - 3];
-                const int mirrored_dir = (digit == '2') ? 5 : (digit == '9') ? 6 : (digit == '8') ? 7 : -1;
-                if (mirrored_dir >= 0) {
-                    loco_seq = archive_->get_directional_animation(stored.name.substr(0, stored.name.size() - 3),
-                                                                   static_cast<ants::assets::Direction>(mirrored_dir));
-                }
-            }
-        }
-    }
-
-    if (loco_seq && !loco_seq->subitems.empty()) {
-        const size_t sub_idx = std::min<size_t>(ant.loco_frame, loco_seq->subitems.size() - 1);
-        draw_frame_sprites(loco_seq->subitems[sub_idx], ant.loco_mirrored);
+    if (ant.frozen) {
+        // The display loop (0x10088e7) skips a frozen ant (sprite slot +0x40 is +0xfc): the dud bomb's ?bu clip is a full-body
+        // overlay, and drawing the idle ant beneath it would show a ghost body around the flames.
+    } else if (loco_seq && !loco_seq->subitems.empty()) {
+        draw_frame_sprites(loco_seq->subitems[pred.frame], ant.loco_mirrored);
     } else {
         const auto* seq = archive_->get_directional_animation(prefix + action, dir);
         if (seq && !seq->subitems.empty()) {
@@ -1483,7 +1527,7 @@ void Renderer::draw_single_ant(const ants::sim::AntSnapshot& ant) {
         const std::string bu_name = std::string("a") + type_letters[static_cast<size_t>(ant.type) % 6] + "bu301";
         const auto* bu_seq = archive_->find_animation(bu_name);
         if (bu_seq && !bu_seq->subitems.empty()) {
-            const size_t bsub = get_anim_subitem_by_time(*bu_seq, static_cast<uint32_t>(ant.burn_elapsed_ms));
+            const size_t bsub = get_anim_subitem_by_time(*bu_seq, static_cast<uint32_t>(ant.burn_elapsed_ms) + sub_tick_ms_);
             draw_frame_parts(bu_seq->subitems[bsub], sx, render_y, false, ant_colour(ant.player_id));
         }
     }
@@ -1558,7 +1602,10 @@ void Renderer::draw_anthill_selection_brackets(int32_t cx, int32_t cy, uint32_t 
 
 void Renderer::collect_ant_units(const ants::sim::WorldState& world) {
     for (const auto& a : world.ants) {
-        if (world.fog_of_war_enabled && a.player_id != hud_team_id_ &&
+        // The original shows the local player's and the allies' ants always (0x101aa0d); every other ant only on explored ground
+        const bool allied = hud_team_id_ < world.player_alliances.size() && a.player_id < world.player_alliances.size() &&
+                            world.player_alliances[hud_team_id_] == a.player_id && world.player_alliances[a.player_id] == hud_team_id_;
+        if (world.fog_of_war_enabled && a.player_id != hud_team_id_ && !allied &&
             !world.is_tile_revealed(a.tile_x, a.tile_y)) {
             continue; // Concealed enemy ant under fog of war
         }
@@ -1566,7 +1613,8 @@ void Renderer::collect_ant_units(const ants::sim::WorldState& world) {
         if (a.anim_state == static_cast<uint16_t>(ants::sim::UnitState::Dead)) continue;
 
         RenderItem item{};
-        item.sort_y = a.py;
+        // The sort key is the sprite's y: a thrown ant's key jumps with its position at the end of the first flight frame
+        item.sort_y = a.py + predict_ant_clip(a, ant_loco_sequence(a)).dy;
         item.draw_func = [this, a](SDL_Renderer*, TextureCache&) {
             this->draw_single_ant(a);
         };
@@ -1704,7 +1752,9 @@ void Renderer::collect_selection_markers(const ants::sim::WorldState& world, int
         const int64_t start = st.start_ms;
         item.draw = [this, &seq, px, py, start]() {
             int32_t sx = 0, sy = 0;
-            if (!camera_.world_to_screen(px, py, sx, sy)) return;
+            camera_.world_to_screen(px, py, sx, sy);
+            if (sx < PLAYFIELD_X - 160 || sx > PLAYFIELD_X + PLAYFIELD_W + 160 ||
+                sy < PLAYFIELD_Y - 160 || sy > PLAYFIELD_Y + PLAYFIELD_H + 160) return;
             const size_t f = get_anim_subitem_by_time(seq, static_cast<uint32_t>(std::max<int64_t>(0, overlay_now_ms() - start)));
             this->draw_frame_parts(seq.subitems[f], sx, sy);
         };

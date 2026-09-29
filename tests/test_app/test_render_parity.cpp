@@ -456,6 +456,189 @@ void test_holding_attack(Renderer& r, const assets::AssetArchive& arc) {
     r.unpin_animation_clock();
 }
 
+// A frozen ant (the dud bomb's ?bu overlay covers it) is not drawn at all: the display loop skips it (Ants.exe 0x10088e7),
+// only the overlay clip is.
+void test_frozen_ant(Renderer& r, const assets::AssetArchive& arc) {
+    std::printf("[ants] a frozen ant is not drawn, only its ?bu overlay\n");
+    assets::LevelData level;
+    if (!level.load_from_file(std::string(ORIGINAL_ASSETS_DIR) + "/Maps/TINY.LVL")) { check(false, "load TINY"); return; }
+    const int32_t g = arc.find_animation_id("g01a");
+    if (level.tile_dictionary.size() <= static_cast<size_t>(g)) level.tile_dictionary.resize(static_cast<size_t>(g) + 1, ".");
+    level.tile_dictionary[static_cast<size_t>(g)] = "g01a";
+    for (auto& c : level.layer1_terrain) { c.tile_index = static_cast<uint16_t>(g); c.flags = 0; c.properties = 0; }
+    for (auto& c : level.layer2_interactive) { c.tile_index = assets::LVL_EMPTY_TILE; c.flags = 0; c.properties = 0; }
+    level.anthill_spawns.clear();
+    level.food_schedules.clear();
+    level.waypoints.clear();
+    sim::Grid grid;
+    grid.init_from_level(level);
+    r.set_level(level);
+    r.pin_animation_clock(0);
+    SDL_Renderer* sr = r.get_sdl_renderer();
+    static const char letters[6] = { 'g', 'b', 'f', 't', 'c', 's' };
+    static const uint8_t offsets[4] = { 60, 40, 20, 0 };
+    for (uint8_t type = 0; type < 6; ++type) {
+        sim::WorldState ws;
+        ws.width = level.width;
+        ws.height = level.height;
+        sim::AntSnapshot ant{};
+        ant.id = 1; ant.player_id = 1; ant.type = static_cast<sim::AntType>(type);
+        ant.px = 176; ant.py = 176; ant.tile_x = 5; ant.tile_y = 5;
+        ant.facing = 4;
+        ant.hp = 10; ant.max_hp = 10;
+        ant.anim_state = static_cast<uint16_t>(sim::UnitState::Idle);
+        ant.state = sim::UnitState::Idle;
+        ant.frozen = true;
+        ant.burn_elapsed_ms = 0;
+        ws.ants.push_back(ant);
+        r.camera().x = 0; r.camera().y = 0; r.camera().clamp_to_bounds(level.width, level.height);
+        SDL_SetRenderDrawColor(sr, 255, 0, 255, 255);
+        SDL_RenderClear(sr);
+        r.render_world(ws, grid, -1, {}, false, false, -1, -1, -1, 0.0f);
+        const Image got = read_region(sr, PLAYFIELD_X, PLAYFIELD_Y, PLAYFIELD_W, PLAYFIELD_H);
+
+        Image full = model_map(arc, level, 0);
+        auto shifted = arc.get_palette();
+        for (size_t i = 0; i < 256; ++i) if (i != assets::CHD_COLOR_KEY_INDEX) shifted[i] = arc.get_palette()[(i + offsets[ant.player_id]) & 0xFF];
+        const auto* seq = arc.find_animation(std::string("a") + letters[type] + "bu301");
+        check(seq != nullptr, std::string("clip exists: a") + letters[type] + "bu301");
+        if (!seq) continue;
+        model_draw_frame(full, arc, seq->subitems[0], 176, 176, false, shifted);
+        bool same = true;
+        for (int y = 0; y < PLAYFIELD_H && same; ++y)
+            for (int x = 0; x < PLAYFIELD_W && same; ++x) same = std::memcmp(got.at(x, y), full.at(x, y), 3) == 0;
+        check(same, std::string("frozen ") + letters[type] + " ant: only the burn overlay frame 0 is drawn");
+    }
+    r.unpin_animation_clock();
+}
+
+// A blown ant is culled by its ART, not by its anchor: the anchor jumps 128 px at the end of frame 0 of the aggb flight while
+// the art trails behind it (aggb901 frame 1: 59..102 px from the anchor), so with the anchor just outside the right edge
+// the parts that lie inside the playfield must still be drawn.
+void test_blown_ant_edge(Renderer& r, const assets::AssetArchive& arc) {
+    std::printf("[ants] a blown ant whose anchor is past the playfield edge still draws the art that is inside it\n");
+    assets::LevelData level;
+    if (!level.load_from_file(std::string(ORIGINAL_ASSETS_DIR) + "/Maps/TINY.LVL")) { check(false, "load TINY"); return; }
+    const int32_t g = arc.find_animation_id("g01a");
+    if (level.tile_dictionary.size() <= static_cast<size_t>(g)) level.tile_dictionary.resize(static_cast<size_t>(g) + 1, ".");
+    level.tile_dictionary[static_cast<size_t>(g)] = "g01a";
+    for (auto& c : level.layer1_terrain) { c.tile_index = static_cast<uint16_t>(g); c.flags = 0; c.properties = 0; }
+    for (auto& c : level.layer2_interactive) { c.tile_index = assets::LVL_EMPTY_TILE; c.flags = 0; c.properties = 0; }
+    level.anthill_spawns.clear();
+    level.food_schedules.clear();
+    level.waypoints.clear();
+    sim::Grid grid;
+    grid.init_from_level(level);
+    r.set_level(level);
+    r.pin_animation_clock(0);
+    SDL_Renderer* sr = r.get_sdl_renderer();
+    const int32_t chd = arc.find_animation_id("aggb901");
+    check(chd >= 0, "clip exists: aggb901");
+    if (chd < 0) { r.unpin_animation_clock(); return; }
+    auto render = [&](bool with_ant, int anchor_dx) {
+        sim::WorldState ws;
+        ws.width = level.width;
+        ws.height = level.height;
+        if (with_ant) {
+            sim::AntSnapshot ant{};
+            ant.id = 1; ant.player_id = 1; ant.type = sim::AntType::Worker;
+            ant.px = static_cast<int32_t>(r.camera().x) + PLAYFIELD_W + anchor_dx;
+            ant.py = static_cast<int32_t>(r.camera().y) + 200;
+            ant.tile_x = ant.px / 32; ant.tile_y = ant.py / 32;
+            ant.facing = 2;
+            ant.hp = 10; ant.max_hp = 10;
+            ant.anim_state = static_cast<uint16_t>(sim::UnitState::Knockback);
+            ant.state = sim::UnitState::Knockback;
+            ant.loco_clip = static_cast<uint16_t>(chd);
+            ant.loco_mirrored = true;                     // thrown east: the art trails to the west of the jumped anchor
+            ant.loco_frame = 1;                           // aggb901 frame 1: parts at dx +59..+102 (mirrored: -102..-59)
+            ws.ants.push_back(ant);
+        }
+        SDL_SetRenderDrawColor(sr, 255, 0, 255, 255);
+        SDL_RenderClear(sr);
+        r.render_world(ws, grid, -1, {}, false, false, -1, -1, -1, 0.0f);
+        return read_region(sr, PLAYFIELD_X, PLAYFIELD_Y, PLAYFIELD_W, PLAYFIELD_H);
+    };
+    r.camera().x = 0; r.camera().y = 0; r.camera().clamp_to_bounds(level.width, level.height);
+    const Image bare = render(false, 0);
+    for (int dx : {5, 20, 60}) {
+        const Image got = render(true, dx);
+        long diff = 0;
+        for (int y = 0; y < PLAYFIELD_H; ++y)
+            for (int x = 0; x < PLAYFIELD_W; ++x) if (std::memcmp(got.at(x, y), bare.at(x, y), 3) != 0) ++diff;
+        check(diff > 0, "blown ant with its anchor " + std::to_string(dx) + " px past the right edge draws its art (" + std::to_string(diff) + " px)");
+    }
+    r.unpin_animation_clock();
+}
+
+// The real-time player of the original changes clip frames and positions when a frame ENDS; the simulation state is only
+// known at 50 ms ticks, so the renderer shows the frames that end before the next tick in advance (sub-tick prediction):
+// a thrown ant's 128 px jump at the end of frame 0 and the 60 / 80 / 120 ms frame lengths are not delayed to a tick.
+void test_subtick_prediction(Renderer& r, const assets::AssetArchive& arc) {
+    std::printf("[ants] sub-tick prediction of an action clip: the frames that end before the next tick are shown\n");
+    assets::LevelData level;
+    if (!level.load_from_file(std::string(ORIGINAL_ASSETS_DIR) + "/Maps/TINY.LVL")) { check(false, "load TINY"); return; }
+    const int32_t g = arc.find_animation_id("g01a");
+    if (level.tile_dictionary.size() <= static_cast<size_t>(g)) level.tile_dictionary.resize(static_cast<size_t>(g) + 1, ".");
+    level.tile_dictionary[static_cast<size_t>(g)] = "g01a";
+    for (auto& c : level.layer1_terrain) { c.tile_index = static_cast<uint16_t>(g); c.flags = 0; c.properties = 0; }
+    for (auto& c : level.layer2_interactive) { c.tile_index = assets::LVL_EMPTY_TILE; c.flags = 0; c.properties = 0; }
+    level.anthill_spawns.clear();
+    level.food_schedules.clear();
+    level.waypoints.clear();
+    sim::Grid grid;
+    grid.init_from_level(level);
+    r.set_level(level);
+    r.pin_animation_clock(0);
+    SDL_Renderer* sr = r.get_sdl_renderer();
+    const int32_t chd = arc.find_animation_id("aggb901");            // worker thrown west: frame 0 lasts 100 ms and jumps -128 px
+    check(chd >= 0, "clip exists: aggb901");
+    if (chd < 0) { r.unpin_animation_clock(); return; }
+    const auto& seq = arc.get_animation(static_cast<uint32_t>(chd));
+    static const uint8_t offsets[4] = { 60, 40, 20, 0 };
+    struct Case { uint16_t frame; uint16_t left_ms; float sub_s; size_t expect_frame; int expect_dx; };
+    const Case cases[] = {
+        {0, 30, 0.020f, 0, 0},          // the frame has not ended yet
+        {0, 30, 0.030f, 1, -128},       // it ends exactly now: the jump and the next frame
+        {0, 30, 0.049f, 1, -128},       // frame 1 (60 ms) is still on
+        {1, 20, 0.045f, 2, 0},          // the jump was applied before (px is the landed anchor): frame 2 shows, no displacement
+        {2, 10, 0.049f, 3, 0},          // 10 ms left, then frame 3 (60 ms)
+        {4, 55, 0.049f, 4, 0},          // a frame that outlasts the tick
+    };
+    for (const Case& c : cases) {
+        sim::WorldState ws;
+        ws.width = level.width;
+        ws.height = level.height;
+        sim::AntSnapshot ant{};
+        ant.id = 1; ant.player_id = 1; ant.type = sim::AntType::Worker;
+        ant.px = 300; ant.py = 200; ant.tile_x = 9; ant.tile_y = 6;
+        ant.facing = 2;
+        ant.hp = 10; ant.max_hp = 10;
+        ant.anim_state = static_cast<uint16_t>(sim::UnitState::Knockback);
+        ant.state = sim::UnitState::Knockback;
+        ant.loco_clip = static_cast<uint16_t>(chd);
+        ant.loco_frame = c.frame;
+        ant.loco_left_ms = c.left_ms;
+        ws.ants.push_back(ant);
+        r.camera().x = 0; r.camera().y = 0; r.camera().clamp_to_bounds(level.width, level.height);
+        SDL_SetRenderDrawColor(sr, 255, 0, 255, 255);
+        SDL_RenderClear(sr);
+        r.render_world(ws, grid, -1, {}, false, false, -1, -1, -1, c.sub_s);
+        const Image got = read_region(sr, PLAYFIELD_X, PLAYFIELD_Y, PLAYFIELD_W, PLAYFIELD_H);
+
+        Image full = model_map(arc, level, 0);
+        auto shifted = arc.get_palette();
+        for (size_t i = 0; i < 256; ++i) if (i != assets::CHD_COLOR_KEY_INDEX) shifted[i] = arc.get_palette()[(i + offsets[ant.player_id]) & 0xFF];
+        model_draw_frame(full, arc, seq.subitems[c.expect_frame], ant.px + c.expect_dx, ant.py, false, shifted);
+        bool same = true;
+        for (int y = 0; y < PLAYFIELD_H && same; ++y)
+            for (int x = 0; x < PLAYFIELD_W && same; ++x) same = std::memcmp(got.at(x, y), full.at(x, y), 3) == 0;
+        check(same, "frame " + std::to_string(c.frame) + " with " + std::to_string(c.left_ms) + " ms left, +" + std::to_string(c.sub_s * 1000.0f) +
+                    " ms: frame " + std::to_string(c.expect_frame) + " at dx " + std::to_string(c.expect_dx));
+    }
+    r.unpin_animation_clock();
+}
+
 // Selection markers are children of the view container: drawn after the whole map (over lower ants), thresholds dogears
 // hp >= 9 / yelears / redears hp <= 2, each with its own clock that restarts when the health changes.
 void test_selection_markers(Renderer& r, const assets::AssetArchive& arc) {
@@ -851,6 +1034,9 @@ int main() {
     test_ant_sprite_pixels(r, arc);
     test_mirrored_draw(r, arc);
     test_holding_attack(r, arc);
+    test_frozen_ant(r, arc);
+    test_blown_ant_edge(r, arc);
+    test_subtick_prediction(r, arc);
     test_selection_markers(r, arc);
     test_map_layers(r, arc);
     test_dynamic_items(r, arc);
