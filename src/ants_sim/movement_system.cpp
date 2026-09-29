@@ -183,8 +183,8 @@ bool SimulationEngineImpl::is_stationary_action(uint8_t action) noexcept {
 // The original "action" (+0xe4) of an ant whose state is driven by other remake systems.
 uint8_t SimulationEngineImpl::orig_action_of(const AntUnit& a) const noexcept {
     if (a.loco_action != AntUnit::kActionNone) return a.loco_action;
-    if (a.is_transforming()) return 0x04;                      // getpow
     switch (a.state) {
+        case UnitState::PoweringUp:         return 0x04;
         case UnitState::Attacking:          return 0x12;
         case UnitState::Flinch:             return 0x0E;
         case UnitState::Knockback:          return 0x13;
@@ -290,6 +290,7 @@ void SimulationEngineImpl::loco_play(AntUnit& a, const movement::MotionClip& cli
     a.loco.clip = clip;
     a.loco.dir = dir;
     a.loco.evt5_ms = evt5_ms;
+    a.loco.sound_mask = 0;
     a.loco.cursor = 0;
     a.loco.next_ms = now_ms_;
     ++a.loco.serial;
@@ -339,9 +340,17 @@ int SimulationEngineImpl::loco_step(AntUnit& a, uint32_t now) {
     // The enter clip's heal frame (event 5) lasts (10 - hp) * 200 ms instead of its native 40 ms (FUN_0101e20d)
     p.next_ms += (p.evt5_ms != 0 && p.clip.event(cur) == 5) ? p.evt5_ms : p.clip.duration(cur);
     if (loco_trace_enabled_) trace_loco(LocoTraceEvent::Kind::Step, a, e.dx, e.dy);
-    const int16_t snd = p.clip.sound(cur);               // FUN_0102bac8 (loco clips have no sound-once flag)
+    const int16_t snd = p.clip.sound(cur);               // FUN_0102bac8
     if (snd >= 0) {
-        audio_queue_.push_back(AudioEvent{static_cast<uint32_t>(snd), a.pixel_x, a.pixel_y, 1, 255});
+        // A clip with the once flag (getpow, defuse, drown ...) plays each frame's sound once per clip: the frame that a
+        // clip started inside a step callback shows twice (start step and the outer step) is heard only the first time.
+        bool play = true;
+        if (p.clip.flags & movement::kClipFlagSoundOnce) {
+            const uint32_t bit = 1u << (cur & 31u);
+            play = (p.sound_mask & bit) == 0;
+            p.sound_mask |= bit;
+        }
+        if (play) audio_queue_.push_back(AudioEvent{static_cast<uint32_t>(snd), a.pixel_x, a.pixel_y, 1, 255});
     }
     return (e.status != 0) ? 1 : 0;
 }
@@ -395,6 +404,9 @@ void SimulationEngineImpl::loco_on_step(AntUnit& a, StepEvt& e) {
         case AntUnit::kActionDeath:                      // 0x101f1c3: the end of the death (or drowning) clip
         case AntUnit::kActionDrown:
             if (e.status == 2) finish_death(a);
+            break;
+        case AntUnit::kActionGetPow:                     // 0x101f111: the end of the getpow clip, idle as the new type (tail 0x101f5a8)
+            if (e.status == 2) end_walk_to_idle(a);
             break;
         case AntUnit::kActionIgnite:                     // 0x101f237, 0x101f277, 0x101f52b, 0x101f568
         case AntUnit::kActionExtinguish:
@@ -504,6 +516,10 @@ void SimulationEngineImpl::set_action(AntUnit& a, uint8_t action, uint8_t dir, i
         case AntUnit::kActionCantGo:
             a.orig_order_tile = no_order_tile();
             loco_play(a, movement::cant_go_clip(type, carrying), dir);
+            return;
+        case AntUnit::kActionGetPow:                                 // getpow: the cocoon clip of a power-up pick-up
+            loco_play(a, movement::action_clip(movement::ActionClip::GetPow, type, 0, false), dir);
+            a.state = UnitState::PoweringUp;
             return;
         case AntUnit::kActionIgnite:                                 // afsf
             loco_play(a, movement::action_clip(movement::ActionClip::Ignite, type, dir, false), dir);
@@ -769,6 +785,7 @@ void SimulationEngineImpl::arrive(AntUnit& a, StepEvt& e, TileCoord cur) {
 // every order therefore takes the "not handled" branch: stop at the tile (StopSync -> StopAt).
 void SimulationEngineImpl::path_complete(AntUnit& a, StepEvt& e) {
     const uint8_t order = a.orig_order;
+    const TileCoord order_tile = a.orig_order_tile;            // +0xac, saved before it is cleared (0x101ccc4)
     const bool was_home = (a.home_state == 1);                 // heading for the waiting ring in front of the hill
     a.home_state = 0;                                          // 0x101cd04: +0x68 = 0
     a.orig_order_tile = no_order_tile();
@@ -789,6 +806,13 @@ void SimulationEngineImpl::path_complete(AntUnit& a, StepEvt& e) {
         // cases 1 / 4 (0x101cd1d): arrival at the ring tile: queued, first come first served (click orders first)
         a.home_state = 2;
         a.home_time_ms = a.home_priority ? 0u : now_ms_;
+    } else if ((order == AntUnit::kOrderMove || order == AntUnit::kOrderPowerUp) &&
+               grid_.in_bounds(order_tile) && grid_.has_powerup_at(order_tile)) {
+        // cases 1 / 4 (0x101cd60): the order tile holds a power-up: message 9 (FUN_01020cdb) makes the ant take it. Only an
+        // ant that ENDS its walk on the tile takes it: there is no pick-up from a distance, and an order that never
+        // arrives (a new order, "Can't go there.") leaves the power-up where it is. Handled: the step's snap delta stays.
+        powerup_pickup(a, order_tile);
+        return;
     }
     if (order == AntUnit::kOrderIgnite || order == AntUnit::kOrderExtinguish || order == AntUnit::kOrderPlant ||
         order == AntUnit::kOrderDefuse || order == AntUnit::kOrderBridgeBuild || order == AntUnit::kOrderBridgeDemolish) {

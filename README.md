@@ -34,7 +34,7 @@ Play the remake instantly in any modern web browser (Chrome, Firefox, Safari, Ed
   - **8-Connected Diagonal Pathfinding**: Evaluates all 8 directions with authentic diagonal cost scaling ($\sqrt{2} \approx 1.414$), navigating intentional diagonal map chokepoints.
   - **Intermediate Food Obstacle Pathfinding**: Food morsels act as impassable terrain during normal movement orders, preventing units from trampling or unintentionally consuming food. Units only harvest when explicitly commanded.
   - **Power-Up Lifecycle & Droppers**:
-    - Units walk onto power-ups, enter transformation cocoons (`getpow`), and emerge after 11 ticks.
+    - An ant takes a power-up only when its walk ends on the power-up's tile (never from a distance): the type changes at once, the 770 ms `getpow` clip (action 4) plays with sounds 1 and 2, hit points stay, and an old power-up is dropped on a free neighbour tile (West twice as likely). An order given while the ant is crossing into the tile cancels the pick-up: the ant stands on the power-up and cannot be attacked (power-ups are solid obstacles for paths, attacks and knock-backs).
     - Daisy flower droppers (`flower1`, Anim 421) on maps like `SMALL.LVL` and `GAUNTLET.LVL` drop power-ups via 9-frame falling droplet animations (`FD_*`) with sound 62 (`powerdrip.wav`) based on authentic Block 4 waypoint intervals (15s on Small, 30s on Gauntlet) and weighted class probabilities.
   - **Special Abilities**:
     - **Bomber**: Plant mines (28-tick sequence); defuse friendly mines on single-click; detonate friendly mines on multi/shift-select to launch units across water gaps.

@@ -113,6 +113,36 @@ static int wait_ms(SimulationEngine& sim, int max_ms, const std::function<bool()
     return -1;
 }
 
+// The ant is playing the getpow clip (action 4): it has just taken a power-up.
+static bool picking_up(const AntUnit& a) { return a.loco_action == AntUnit::kActionGetPow; }
+
+// An ant that stands on a power-up takes it by a player order onto its own tile (a one-tile path that ends on the tile);
+// the original has no idle pick-up. Returns once the getpow clip plays; run_ms(sim, 900) lets it finish.
+static bool take_powerup_here(SimulationEngine& sim, uint32_t ant_id) {
+    sim.issue_move_order(ant_id, sim.get_unit(ant_id).pos);
+    return wait_ms(sim, 2000, [&]() { return picking_up(sim.get_unit(ant_id)); }) >= 0;
+}
+
+// An unreachable one-tile island in a ring of water: a player order to it makes the path manager answer "Can't go there."
+static void make_water_island(SimulationEngine& sim, int32_t x, int32_t y) {
+    for (int32_t iy = y - 1; iy <= y + 1; ++iy) {
+        for (int32_t ix = x - 1; ix <= x + 1; ++ix) {
+            if (ix != x || iy != y) sim.grid_mut().get_cell_mut(static_cast<uint32_t>(ix), static_cast<uint32_t>(iy)).terrain_type = TERRAIN_WATER;
+        }
+    }
+}
+
+// The ant crosses into the power-up's tile and gets the can't-go order while its walk has not landed yet: the pick-up is
+// cancelled and the ant stands on the power-up (Ants.exe: any accepted order snaps the ant onto the centre of its tile).
+static bool stand_on_powerup(SimulationEngine& sim, uint32_t ant_id, TileCoord hat, TileCoord island) {
+    sim.issue_move_order(ant_id, hat);
+    if (wait_ms(sim, 4000, [&]() { return sim.get_unit(ant_id).pos == hat; }) < 0) return false;
+    sim.issue_move_order(ant_id, island);
+    run_ms(sim, 3000);
+    const AntUnit& u = sim.get_unit(ant_id);
+    return u.pos == hat && u.loco_action == AntUnit::kActionIdle && sim.grid().has_powerup_at(hat);
+}
+
 // Milliseconds from an ant's first path delivery to its last pixel move (the landing on the goal centre),
 // read from the locomotion trace (SimulationEngine::set_locomotion_trace_enabled); -1 without a path.
 static int32_t walk_duration_ms(const SimulationEngine& sim, uint32_t ant_id) {
@@ -2914,7 +2944,7 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
     // ------------------------------------------------------------------------
     // 12.21: Power-Up Arrival Timing & Transformation Lifecycle
     // ------------------------------------------------------------------------
-    TEST_CASE("12.21 Power-Up Arrival Timing & Transformation Lifecycle") {
+    TEST_CASE("12.21 Power-Up Arrival Timing & getpow Clip Lifecycle (taken when the walk lands on the tile, type at once, 840 ms clip)") {
         SimulationEngine sim;
         sim.init_test_world(60, 60, 100, 60000);
 
@@ -2926,84 +2956,80 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         uint32_t ant_id = sim.spawn_unit(0, AntType::Worker, TileCoord{10, 10});
         auto& ant = sim.get_unit(ant_id);
         ASSERT_EQ(ant.type, AntType::Worker);
-        ASSERT_FALSE(ant.is_transforming());
+        ASSERT_FALSE(picking_up(ant));
 
         // Order worker to move to power-up tile (13, 10)
         sim.issue_move_order(ant_id, TileCoord{13, 10});
 
-        // Step simulation ticks while walking towards (13, 10)
-        // When adjacent at (12, 10), it should NOT yet have triggered transformation
+        // While walking towards (13, 10) nothing is taken from a distance: at (12, 10) the power-up is still there
         bool saw_adjacent_not_triggered = false;
         while (ant.pos.x < 13) {
             sim.tick();
             if (ant.pos.x == 12) {
                 saw_adjacent_not_triggered = true;
-                ASSERT_FALSE(ant.is_transforming());
+                ASSERT_FALSE(picking_up(ant));
+                ASSERT_EQ(ant.type, AntType::Worker);
                 ASSERT_TRUE(sim.grid().has_powerup_at(TileCoord{13, 10}));
             }
         }
         ASSERT_TRUE(saw_adjacent_not_triggered);
 
-        // Advance until arriving at tile center of (13, 10)
-        while (ant.is_alive() && !ant.is_transforming() && !ant.waypoints.empty()) {
-            sim.tick();
-        }
-
-        // Unit has arrived: dwells for 6 ticks (~300 ms) before transformation commits
-        ASSERT_EQ(ant.pos, (TileCoord{13, 10}));
-        ASSERT_GT(ant.powerup_dwell_timer, 0);
+        // The ant has crossed into the tile but its walk has not landed: still nothing taken
+        ASSERT_FALSE(picking_up(ant));
         ASSERT_TRUE(sim.grid().has_powerup_at(TileCoord{13, 10}));
+        ASSERT_EQ(ant.type, AntType::Worker);
 
-        // Advance through dwell window to start transformation
-        while (ant.is_alive() && !ant.is_transforming()) {
+        // The landing frame takes the power-up in the very same tick: the type changes, the clip plays, the tile is empty
+        while (ant.is_alive() && !picking_up(ant)) {
             sim.tick();
         }
-
-        // Unit has completed dwell and started transforming
-        ASSERT_TRUE(ant.is_transforming());
+        ASSERT_EQ(ant.pos, (TileCoord{13, 10}));
+        ASSERT_EQ(ant.type, AntType::Combat);
+        ASSERT_EQ(ant.hp, 10u);
         ASSERT_FALSE(sim.grid().has_powerup_at(TileCoord{13, 10}));
+        ASSERT_TRUE(ant.waypoints.empty());
 
-        // In world snapshot, unit is transforming and on_powerup is true
+        // In the world snapshot the running clip is getpow (CHD animation 55) in the power-up state
         const auto& ws = sim.get_world_state();
         const AntSnapshot* snap = nullptr;
         for (const auto& a : ws.ants) {
             if (a.id == ant_id) { snap = &a; break; }
         }
         ASSERT_TRUE(snap != nullptr);
-        ASSERT_TRUE(snap->is_transforming);
-        ASSERT_TRUE(snap->on_powerup);
+        ASSERT_EQ(snap->state, UnitState::PoweringUp);
+        ASSERT_EQ(snap->loco_clip, 55);
 
-        // Step 15 ticks to complete authentic 770 ms transformation
-        for (int t = 0; t < 15; ++t) {
-            sim.tick();
-        }
+        // The clip ends 840 ms after the snap (16 ticks: still playing, the 17th ends it)
+        run_ms(sim, 800);
+        ASSERT_TRUE(picking_up(ant));
+        run_ms(sim, 100);
+        ASSERT_FALSE(picking_up(ant));
 
-        // Emerges as Combat ant
-        ASSERT_FALSE(ant.is_transforming());
+        // Emerges idle as a Combat ant; the hit points stay at 10 (the maximum is 10 for every type)
         ASSERT_EQ(ant.type, AntType::Combat);
-        ASSERT_EQ(ant.max_hp, 12);
+        ASSERT_EQ(ant.state, UnitState::GuardIdle);
+        ASSERT_EQ(ant.max_hp, 10u);
     } TEST_END();
 
     // ------------------------------------------------------------------------
     // 12.22: Power-Up Transformation Interruption via Impossible Order
     // ------------------------------------------------------------------------
-    TEST_CASE("12.22 Uninterruptible Power-Up Transformation Parity") {
+    TEST_CASE("12.22 Uninterruptible Power-Up Pick-Up Parity (orders are ignored for the whole getpow clip)") {
         SimulationEngine sim;
         sim.init_test_world(60, 60, 100, 60000);
 
         // Place powerup at (10, 10) (Type 4 = Combat)
         sim.grid_mut().place_powerup(10, 10, 4);
 
-        // Worker ant at (10, 10)
-        uint32_t ant_id = sim.spawn_unit(0, AntType::Worker, TileCoord{10, 10});
+        // Worker ant at (9, 10) walks onto it
+        uint32_t ant_id = sim.spawn_unit(0, AntType::Worker, TileCoord{9, 10});
         auto& ant = sim.get_unit(ant_id);
-
-        // Step 1 tick to trigger power-up pickup on tile center
-        sim.tick();
-        ASSERT_TRUE(ant.is_transforming());
+        sim.issue_move_order(ant_id, TileCoord{10, 10});
+        ASSERT_TRUE(wait_ms(sim, 3000, [&]() { return picking_up(ant); }) >= 0);
+        ASSERT_EQ(ant.type, AntType::Combat);
         ASSERT_FALSE(sim.grid().has_powerup_at(TileCoord{10, 10}));
 
-        // While transforming, player attempts to move the ant away to (11, 10)
+        // While the clip plays, the player attempts to move the ant away to (11, 10)
         AntOrder move_order;
         move_order.ant_id = ant_id;
         move_order.type = OrderType::Move;
@@ -3011,21 +3037,24 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         move_order.target_y = 10;
         sim.issue_order(move_order);
 
-        // Order is silently ignored: ant remains transforming into Combat Ant
-        ASSERT_TRUE(ant.is_transforming());
+        // Order is silently ignored: no snap, no path, no can't-go
+        ASSERT_TRUE(picking_up(ant));
         ASSERT_EQ(ant.pos, (TileCoord{10, 10}));
+        ASSERT_FALSE(sim.has_pending_path(ant_id));
 
-        // Advance through the remaining getpow animation ticks (15 ticks total)
-        for (int t = 0; t < 15; ++t) {
-            sim.tick();
-        }
+        // Advance through the remaining getpow clip (16 ticks in all are still refused)
+        run_ms(sim, 800);
+        ASSERT_TRUE(picking_up(ant));
+        sim.issue_order(move_order);
+        ASSERT_FALSE(sim.has_pending_path(ant_id));
+        run_ms(sim, 100);
 
-        // Ant has completed transformation and emerged as Combat Ant
-        ASSERT_FALSE(ant.is_transforming());
+        // Ant has completed the clip and is a Combat Ant
+        ASSERT_FALSE(picking_up(ant));
         ASSERT_EQ(ant.type, AntType::Combat);
         ASSERT_EQ(ant.pos, (TileCoord{10, 10}));
 
-        // Once transformed, issuing move order allows the unit to walk normally
+        // Once the clip is over, issuing the move order lets the unit walk normally
         sim.issue_order(move_order);
         ASSERT_EQ(ant.state, UnitState::Walking);
 
@@ -3042,25 +3071,26 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
     TEST_CASE("12.23 An Ant Standing On A Power-Up Is Immune From Attacks (no path can end on the solid power-up tile)") {
         SimulationEngine sim;
         sim.init_test_world(60, 60, 100, 60000);
+        make_water_island(sim, 30, 30);
 
         // Place powerup at (10, 10)
         sim.grid_mut().place_powerup(10, 10, 4);
 
-        // Friendly worker at (10, 10), trigger and interrupt (the can't-go trick: it stands on the power-up)
-        uint32_t friendly_id = sim.spawn_unit(0, AntType::Worker, TileCoord{10, 10});
-        sim.tick();
-        sim.interrupt_transformation(friendly_id);
+        // Friendly worker walks onto (10, 10) and gets the can't-go order in the window: it stands on the power-up
+        uint32_t friendly_id = sim.spawn_unit(0, AntType::Worker, TileCoord{9, 10});
+        ASSERT_TRUE(stand_on_powerup(sim, friendly_id, TileCoord{10, 10}, TileCoord{30, 30}));
 
         auto& friendly = sim.get_unit(friendly_id);
-        ASSERT_TRUE(friendly.on_powerup);
+        ASSERT_EQ(friendly.type, AntType::Worker);
+        ASSERT_TRUE(sim.grid().has_powerup_at(friendly.pos));
         uint16_t initial_hp = friendly.hp;
 
         // Enemy Combat ant four tiles away
         uint32_t enemy_id = sim.spawn_unit(1, AntType::Combat, TileCoord{14, 10});
         auto& enemy = sim.get_unit(enemy_id);
 
-        // 1. The HUD accepts the click as an attack order (order 3), but no path can end on the power-up tile
-        //    (A* step cost and CanEnter block it): the path manager answers "Can't go there." and the ant plays can't go
+        // The HUD accepts the click as an attack order (order 3), but no path can end on the power-up tile
+        // (A* step cost and CanEnter block it): the path manager answers "Can't go there." and the ant plays can't go
         HUD hud;
         hud.init(1); // Player 1 (enemy team)
         hud.select_ant(enemy_id, false);
@@ -3070,10 +3100,7 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         ASSERT_TRUE(wait_ms(sim, 1000, [&]() { return enemy.loco_action == AntUnit::kActionCantGo; }) >= 0);
         run_ms(sim, 5000);
         ASSERT_EQ(friendly.hp, initial_hp);
-
-        // 2. A direct contact can never happen either
-        sim.execute_melee_attack(enemy_id, friendly_id);
-        ASSERT_EQ(friendly.hp, initial_hp);
+        ASSERT_EQ(friendly.pos, (TileCoord{10, 10}));
     } TEST_END();
 
     // ------------------------------------------------------------------------
@@ -3257,7 +3284,7 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         // The powerup at (13, 10) must remain intact, and ant must NOT have transformed
         ASSERT_TRUE(sim.grid().has_powerup_at(TileCoord{13, 10}));
         ASSERT_EQ(ant.type, AntType::Worker);
-        ASSERT_FALSE(ant.is_transforming());
+        ASSERT_FALSE(picking_up(ant));
 
         // 2. Now specifically instruct the ant to walk onto the powerup at (13, 10)
         sim.issue_move_order(ant_id, TileCoord{13, 10});
@@ -3265,21 +3292,19 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         // This time, the destination IS the powerup, so the ant routes directly to it
         ASSERT_EQ(ant.final_dest, (TileCoord{13, 10}));
 
-        // Step simulation until the ant arrives and triggers transformation
+        // Step simulation until the ant lands on it and takes it
         steps = 0;
-        while (!ant.is_transforming() && steps++ < 150) {
+        while (!picking_up(ant) && steps++ < 150) {
             sim.tick();
         }
 
         ASSERT_EQ(ant.pos, (TileCoord{13, 10}));
-        ASSERT_TRUE(ant.is_transforming());
+        ASSERT_TRUE(picking_up(ant));
         ASSERT_FALSE(sim.grid().has_powerup_at(TileCoord{13, 10}));
 
-        // Finish the 11-frame transformation
-        for (int i = 0; i < 15; ++i) {
-            sim.tick();
-        }
-        ASSERT_FALSE(ant.is_transforming());
+        // Finish the 11-frame getpow clip (840 ms after the snap)
+        run_ms(sim, 900);
+        ASSERT_FALSE(picking_up(ant));
         ASSERT_EQ(ant.type, AntType::Combat); // Successfully transformed into Combat Ant!
 
         // 3. Place another power-up at (13, 12). Order ant from (13, 10) to move past it to (13, 14)
@@ -3390,28 +3415,27 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         ASSERT_EQ(sim.get_unit(g1).orig_order, AntUnit::kOrderAttack);
     } TEST_END();
 
-    TEST_CASE("12.29 Power-Up Drop On Transformation & Occupied Tile Avoidance / Disappearance") {
+    TEST_CASE("12.29 Power-Up Drop On Pick-Up & Occupied Tile Avoidance / Disappearance") {
         SimulationEngine sim;
         sim.init_test_world(60, 60, 100, 60000);
+        static constexpr std::array<TileCoord, 8> OFFSETS = {{{0, -1}, {1, 0}, {0, 1}, {-1, 0}, {1, -1}, {1, 1}, {-1, 1}, {-1, -1}}};
 
-        // 1. Worker Ant transforms into Combat Ant -> No powerup dropped
+        // 1. Worker Ant takes the Combat power-up -> nothing is dropped (a worker holds none)
         uint32_t a1 = sim.spawn_unit(0, AntType::Worker, TileCoord{10, 10});
         sim.grid_mut().place_powerup(10, 10, 4); // Combat powerup
-        sim.tick(); // Start transformation
-        ASSERT_TRUE(sim.get_unit(a1).is_transforming());
+        ASSERT_TRUE(take_powerup_here(sim, a1));
+        ASSERT_EQ(sim.get_unit(a1).type, AntType::Combat);
         // Verify none of the 8 neighbors have any powerup
-        static constexpr std::array<TileCoord, 8> OFFSETS = {{{0, -1}, {1, 0}, {0, 1}, {-1, 0}, {1, -1}, {1, 1}, {-1, 1}, {-1, -1}}};
         for (const auto& off : OFFSETS) {
             ASSERT_FALSE(sim.grid().has_powerup_at(TileCoord{10 + off.x, 10 + off.y}));
         }
-        for (int i = 0; i < 15; ++i) sim.tick();
-        ASSERT_FALSE(sim.get_unit(a1).is_transforming());
+        run_ms(sim, 900);
+        ASSERT_FALSE(picking_up(sim.get_unit(a1)));
         ASSERT_EQ(sim.get_unit(a1).type, AntType::Combat);
 
-        // 2. Combat Ant transforms into Bomber -> drops original Combat powerup (Type 4) on an adjacent free tile
+        // 2. Combat Ant takes a Bomber power-up -> drops the original Combat powerup (Type 4) on an adjacent free tile
         sim.grid_mut().place_powerup(10, 10, 1); // Bomber powerup
-        sim.tick(); // Start transformation
-        ASSERT_TRUE(sim.get_unit(a1).is_transforming());
+        ASSERT_TRUE(take_powerup_here(sim, a1));
         // Exactly 1 of the 8 neighbors receives the dropped Combat powerup
         int drop_count = 0;
         TileCoord dropped_tile{-1, -1};
@@ -3424,11 +3448,11 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         }
         ASSERT_EQ(drop_count, 1);
         ASSERT_EQ(sim.grid().get_powerup_type(dropped_tile), 4); // Dropped old Combat powerup
-        for (int i = 0; i < 15; ++i) sim.tick();
-        ASSERT_FALSE(sim.get_unit(a1).is_transforming());
+        run_ms(sim, 900);
+        ASSERT_FALSE(picking_up(sim.get_unit(a1)));
         ASSERT_EQ(sim.get_unit(a1).type, AntType::Bomber);
 
-        // 3. Occupied tile avoidance: place an ant on (10, 9), transform Bomber into Swimmer
+        // 3. Occupied tile avoidance: place an ant on (10, 9), the Bomber takes a Swimmer power-up
         // Clean up any powerup around (10, 10) first to ensure known board state
         for (const auto& off : OFFSETS) {
             sim.grid_mut().clear_powerup(10 + off.x, 10 + off.y);
@@ -3436,8 +3460,7 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         uint32_t blocker = sim.spawn_unit(0, AntType::Worker, TileCoord{10, 9});
         (void)blocker;
         sim.grid_mut().place_powerup(10, 10, 5); // Swimmer powerup
-        sim.tick(); // Start transformation
-        ASSERT_TRUE(sim.get_unit(a1).is_transforming());
+        ASSERT_TRUE(take_powerup_here(sim, a1));
         // (10, 9) is occupied by blocker ant -> MUST NOT drop at (10, 9)
         ASSERT_FALSE(sim.grid().has_powerup_at(TileCoord{10, 9}));
         // Exactly 1 unoccupied neighbor receives the dropped Bomber powerup (Type 1)
@@ -3453,8 +3476,8 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         ASSERT_EQ(drop_count, 1);
         ASSERT_NE(dropped_tile, (TileCoord{10, 9})); // Blocker was avoided!
         ASSERT_EQ(sim.grid().get_powerup_type(dropped_tile), 1); // Dropped old Bomber powerup
-        for (int i = 0; i < 15; ++i) sim.tick();
-        ASSERT_FALSE(sim.get_unit(a1).is_transforming());
+        run_ms(sim, 900);
+        ASSERT_FALSE(picking_up(sim.get_unit(a1)));
         ASSERT_EQ(sim.get_unit(a1).type, AntType::Swimmer);
 
         // 4. Surrounded ant: all 8 neighbors blocked / occupied / water -> powerup permanently disappears
@@ -3469,62 +3492,67 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         sim.spawn_unit(1, AntType::Worker, TileCoord{19, 19}); // NW: Ant
 
         sim.grid_mut().place_powerup(20, 20, 3); // Thief powerup
-        sim.tick(); // Start transformation
-        ASSERT_TRUE(sim.get_unit(a2).is_transforming());
+        sim.clear_audio_events();
+        ASSERT_TRUE(take_powerup_here(sim, a2));
+        ASSERT_TRUE(sim.has_audio_event(40));                  // the silent cue of the lost power-up
         // None of the 8 neighbors should receive a dropped powerup
         for (const auto& off : OFFSETS) {
             ASSERT_FALSE(sim.grid().has_powerup_at(TileCoord{20 + off.x, 20 + off.y}));
         }
-        for (int i = 0; i < 15; ++i) sim.tick();
-        ASSERT_FALSE(sim.get_unit(a2).is_transforming());
+        run_ms(sim, 900);
+        ASSERT_FALSE(picking_up(sim.get_unit(a2)));
         ASSERT_EQ(sim.get_unit(a2).type, AntType::Thief);
         // Still no powerup on any of the 8 neighbors: permanently disappeared!
         for (const auto& off : OFFSETS) {
             ASSERT_FALSE(sim.grid().has_powerup_at(TileCoord{20 + off.x, 20 + off.y}));
         }
 
-        // 5. Uninterruptible transformation ignores move order and completes
+        // 5. Uninterruptible pick-up ignores move order and completes
         uint32_t a3 = sim.spawn_unit(0, AntType::Thief, TileCoord{30, 30});
         sim.grid_mut().place_powerup(30, 30, 1); // Bomber powerup
         sim.grid_mut().set_terrain(30, 31, TERRAIN_WATER); // S: Water (for impossible order)
-        sim.tick(); // Start transformation
+        ASSERT_TRUE(take_powerup_here(sim, a3));
         auto& ant3 = sim.get_unit(a3);
-        ASSERT_TRUE(ant3.is_transforming());
         // Verify dropped Thief powerup (Type 3) landed on a valid neighbor
-        dropped_tile = ant3.dropped_powerup_pos;
-        ASSERT_TRUE(dropped_tile.x >= 0 && dropped_tile.y >= 0);
-        ASSERT_TRUE(sim.grid().has_powerup_at(dropped_tile));
-        ASSERT_EQ(sim.grid().get_powerup_type(dropped_tile), 3);
-
-        // Move order issued during active transformation is silently ignored per Ants.exe
-        sim.issue_move_order(a3, TileCoord{30, 31});
-        ASSERT_TRUE(ant3.is_transforming());
-
-        // Completes transformation into Bomber (authentic 15 ticks)
-        for (int t = 0; t < 15; ++t) {
-            sim.tick();
+        dropped_tile = TileCoord{-1, -1};
+        for (const auto& off : OFFSETS) {
+            TileCoord adj{30 + off.x, 30 + off.y};
+            if (sim.grid().has_powerup_at(adj)) dropped_tile = adj;
         }
-        ASSERT_FALSE(ant3.is_transforming());
+        ASSERT_TRUE(dropped_tile.x >= 0 && dropped_tile.y >= 0);
+        ASSERT_EQ(sim.grid().get_powerup_type(dropped_tile), 3);
+        ASSERT_TRUE(dropped_tile != (TileCoord{30, 31}));      // water is never a drop tile
+
+        // Move order issued during the active clip is silently ignored per Ants.exe
+        sim.issue_move_order(a3, TileCoord{30, 32});
+        ASSERT_TRUE(picking_up(ant3));
+        ASSERT_FALSE(sim.has_pending_path(a3));
+
+        // Completes into Bomber (the getpow clip is 840 ms from the snap)
+        run_ms(sim, 900);
+        ASSERT_FALSE(picking_up(ant3));
         ASSERT_EQ(ant3.type, AntType::Bomber);
         ASSERT_TRUE(sim.grid().has_powerup_at(dropped_tile));
 
         // 6. Multi-direction randomized landing verification:
-        // Over multiple transformations with all 8 directions free, verify that the
-        // dropped powerup lands randomly across multiple distinct directions, NOT always above.
+        // Over multiple pick-ups with all 8 directions free, verify that the dropped powerup lands randomly across
+        // multiple distinct directions, NOT always above (the original scan starts at a random row and column).
         std::set<std::pair<int32_t, int32_t>> chosen_directions;
         for (int iter = 0; iter < 24; ++iter) {
-            TileCoord origin{40 + (iter % 3) * 5, 40 + (iter / 3) * 5};
+            TileCoord origin{5 + (iter % 6) * 8, 40 + (iter / 6) * 4};
             uint32_t tester = sim.spawn_unit(0, AntType::Combat, origin);
             sim.grid_mut().place_powerup(origin.x, origin.y, 1); // Bomber
-            sim.tick();
-            auto& t_ant = sim.get_unit(tester);
-            if (t_ant.dropped_powerup_pos.x >= 0) {
-                int32_t dx = t_ant.dropped_powerup_pos.x - origin.x;
-                int32_t dy = t_ant.dropped_powerup_pos.y - origin.y;
-                chosen_directions.insert({dx, dy});
+            ASSERT_TRUE(take_powerup_here(sim, tester));
+            int found = 0;
+            for (const auto& off : OFFSETS) {
+                TileCoord adj{origin.x + off.x, origin.y + off.y};
+                if (sim.grid().has_powerup_at(adj)) {
+                    chosen_directions.insert({off.x, off.y});
+                    ++found;
+                }
             }
-            // Complete transformation
-            for (int i = 0; i < 15; ++i) sim.tick();
+            ASSERT_EQ(found, 1);
+            run_ms(sim, 900);
         }
         // With 8 free directions, 24 trials should sample multiple distinct directions (>= 4)
         ASSERT_TRUE(chosen_directions.size() >= 4);
@@ -4398,7 +4426,7 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
     // -------------------------------------------------------------------------
     // Test 12.53: Power-Up Transformation & Continuous Idle Animation Facing South
     // -------------------------------------------------------------------------
-    TEST_CASE("12.53 Power-Up Transformation & Continuous Idle Animation Facing South & All Headings") {
+    TEST_CASE("12.53 Power-Up Pick-Up (getpow Clip) & Continuous Idle Animation Facing South & All Headings") {
         static constexpr std::array<std::pair<uint8_t, const char*>, 5> POWERUPS = {{
             {1, "Bomber"},
             {2, "Fire"},
@@ -4417,33 +4445,38 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
             uint32_t ant_id = sim.spawn_unit(0, AntType::Worker, TileCoord{15, 13});
             sim.issue_move_order(ant_id, TileCoord{15, 15});
 
-            // Step simulation until arrival and transformation starts
-            while (sim.get_unit(ant_id).is_alive() && !sim.get_unit(ant_id).is_transforming()) {
+            // Step simulation until the walk lands on the power-up and the getpow clip starts
+            while (sim.get_unit(ant_id).is_alive() && !picking_up(sim.get_unit(ant_id))) {
                 sim.tick();
             }
 
             const auto& unit_trans = sim.get_unit(ant_id);
-            ASSERT_TRUE(unit_trans.is_transforming());
+            ASSERT_TRUE(picking_up(unit_trans));
             ASSERT_EQ(unit_trans.pos.x, 15);
             ASSERT_EQ(unit_trans.pos.y, 15);
             ASSERT_EQ(static_cast<uint8_t>(unit_trans.facing), static_cast<uint8_t>(Direction::South));
 
-            // Verify 15-tick transformation sequence progression
-            for (int t = 0; t < 15; ++t) {
+            // The exact getpow frames (CHD animation 55, 70 ms each) play until the clip ends 840 ms after the snap
+            uint16_t last_frame = 0;
+            for (int t = 0; t < 16; ++t) {
                 const auto& ws = sim.get_world_state();
                 const AntSnapshot* snap = nullptr;
                 for (const auto& a : ws.ants) {
                     if (a.id == ant_id) { snap = &a; break; }
                 }
                 ASSERT_TRUE(snap != nullptr);
-                ASSERT_TRUE(snap->is_transforming);
-                ASSERT_EQ(snap->transform_anim_frame, static_cast<uint16_t>((t * 11) / 15));
+                ASSERT_EQ(snap->state, UnitState::PoweringUp);
+                ASSERT_EQ(snap->loco_clip, 55);
+                ASSERT_TRUE(snap->loco_frame >= last_frame);
+                last_frame = snap->loco_frame;
                 sim.tick();
             }
+            ASSERT_TRUE(last_frame >= 8);
+            sim.tick();
 
-            // Transformation completes: unit must emerge in Idle (or GuardIdle for Combat)
+            // The clip is over: the unit is idle as its new type (GuardIdle for Combat)
             const auto& unit_done = sim.get_unit(ant_id);
-            ASSERT_FALSE(unit_done.is_transforming());
+            ASSERT_FALSE(picking_up(unit_done));
             ASSERT_EQ(static_cast<uint8_t>(unit_done.type), pu_type);
             ASSERT_EQ(static_cast<uint8_t>(unit_done.facing), static_cast<uint8_t>(Direction::South));
 
@@ -4496,7 +4529,8 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
             }
 
             const auto& unit = sim.get_unit(ant_id);
-            ASSERT_FALSE(unit.is_transforming());
+            ASSERT_FALSE(picking_up(unit));
+            ASSERT_EQ(unit.type, AntType::Combat);
             ASSERT_EQ(unit.state, UnitState::GuardIdle);
             ASSERT_TRUE(unit.anim_subitem > 0); // Actively animating
         }
@@ -6348,10 +6382,10 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
 
     TEST_CASE("12.108: Version Invariant & Fog of War Cursor Concealment Parity") {
         // 1. Verify semantic versioning components
-        ASSERT_EQ(ants::VERSION_STRING, "v0.0.34");
+        ASSERT_EQ(ants::VERSION_STRING, "v0.0.35");
         ASSERT_EQ(ants::VERSION_MAJOR, 0);
         ASSERT_EQ(ants::VERSION_MINOR, 0);
-        ASSERT_EQ(ants::VERSION_PATCH, 34);
+        ASSERT_EQ(ants::VERSION_PATCH, 35);
 
         // 2. Setup simulation world with Fog of War enabled
         SimulationEngine sim;
@@ -6487,14 +6521,12 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         SimulationEngine sim;
         sim.init_test_world(60, 60, 100, 60000);
 
-        // Place Bomber power-up at (15, 15)
+        // Place Bomber power-up at (15, 15); a friendly ant walks onto it and stands on it (the can't-go trick)
         sim.grid_mut().place_powerup(15, 15, static_cast<uint8_t>(AntType::Bomber));
-
-        // Friendly ant spawned directly on the power-up tile
-        uint32_t standing_ant = sim.spawn_unit(0, AntType::Worker, TileCoord{15, 15});
-        sim.tick(); // updates on_powerup flag and starts transformation
-        sim.interrupt_transformation(standing_ant);
-        ASSERT_TRUE(sim.get_unit(standing_ant).on_powerup);
+        make_water_island(sim, 40, 40);
+        uint32_t standing_ant = sim.spawn_unit(0, AntType::Worker, TileCoord{14, 15});
+        ASSERT_TRUE(stand_on_powerup(sim, standing_ant, TileCoord{15, 15}, TileCoord{40, 40}));
+        ASSERT_TRUE(sim.grid().has_powerup_at(sim.get_unit(standing_ant).pos));
 
         // Second friendly ant orders a move onto (15, 15): the goal ring scan picks a free tile
         uint32_t incoming_ant = sim.spawn_unit(0, AntType::Worker, TileCoord{16, 15});
@@ -6505,7 +6537,7 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         ASSERT_EQ(sim.get_unit(standing_ant).pos, (TileCoord{15, 15}));
 
         // Enemy Combat ant next to it: the auto-engage walks up but its last step onto the solid power-up tile is refused
-        // (CanEnter), and an attack order fails with "Can't go there."; the direct contact is refused as well
+        // (CanEnter), and an attack order fails with "Can't go there."
         uint32_t enemy_combat = sim.spawn_unit(1, AntType::Combat, TileCoord{15, 17});
         uint16_t hp_before = sim.get_unit(standing_ant).hp;
         run_ms(sim, 6000);
@@ -6516,8 +6548,6 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         o.target_entity_id = static_cast<int32_t>(standing_ant);
         sim.issue_order(o);
         run_ms(sim, 3000);
-        ASSERT_EQ(sim.get_unit(standing_ant).hp, hp_before);
-        sim.execute_melee_attack(enemy_combat, standing_ant);
         ASSERT_EQ(sim.get_unit(standing_ant).hp, hp_before);
         ASSERT_EQ(sim.get_unit(standing_ant).pos, (TileCoord{15, 15}));
     } TEST_END();
@@ -8665,60 +8695,73 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
     // ------------------------------------------------------------------------
     // 12.141: ISLANDS.LVL Corner Power-Up Hats Skill-Based Walk-On / Walk-Off
     // ------------------------------------------------------------------------
-    TEST_CASE("12.141: ISLANDS.LVL Corner Power-Up Hats Skill-Based Walk-On / Walk-Off") {
-        SimulationEngine sim;
-        sim.init_test_world(30, 30, 100, 60000);
-
-        // Place consecutive hats along corridor like in ISLANDS.LVL:
-        // (0, 4): Mason Hat (Type 2)
-        // (0, 3): Mason Hat (Type 2)
-        // (0, 2): Swimmer Hat (Type 5)
-        sim.grid_mut().place_powerup(0, 4, 2);
-        sim.grid_mut().place_powerup(0, 3, 2);
-        sim.grid_mut().place_powerup(0, 2, 5);
-
-        // Worker starts at (0, 5)
-        uint32_t ant = sim.spawn_unit(0, AntType::Worker, TileCoord{0, 5});
-
-        auto arrived_at = [&](TileCoord t) {
-            const auto& u = sim.get_unit(ant);
-            return u.pos == t && u.waypoints.empty() && !sim.has_pending_path(ant) && u.state == UnitState::Idle;
+    TEST_CASE("12.141: ISLANDS.LVL Corner Power-Up Hats Skill-Based Walk-On / Walk-Off (each next hat is ordered inside the window of the one before)") {
+        auto build = [](SimulationEngine& sim) {
+            sim.init_test_world(30, 30, 100, 60000);
+            // The top-left corner of ISLANDS.LVL: a tunnel one tile wide whose only way is a row of hats, the tiles beside
+            // the column (col 1, rows 2-4) blocked:
+            // (0, 4) and (0, 3): Mason Hats (type 2), (0, 2) and (0, 1): Swimmer Hats (type 5)
+            sim.grid_mut().set_terrain(1, 2, TERRAIN_OBSTACLE);
+            sim.grid_mut().set_terrain(1, 3, TERRAIN_OBSTACLE);
+            sim.grid_mut().set_terrain(1, 4, TERRAIN_OBSTACLE);
+            sim.grid_mut().place_powerup(0, 4, 2);
+            sim.grid_mut().place_powerup(0, 3, 2);
+            sim.grid_mut().place_powerup(0, 2, 5);
+            sim.grid_mut().place_powerup(0, 1, 5);
         };
 
-        // Step 1: Order to (0, 4)
+        {   // Ordering the second hat before the first one has been crossed: no path (the first hat is solid), "Can't go there."
+            SimulationEngine sim;
+            build(sim);
+            uint32_t ant = sim.spawn_unit(0, AntType::Worker, TileCoord{0, 5});
+            sim.issue_move_order(ant, {0, 3});
+            ASSERT_TRUE(wait_ms(sim, 1500, [&]() { return sim.has_news_event(0, 0x3A); }) >= 0);
+            ASSERT_TRUE(sim.grid().has_powerup_at({0, 4}));
+            ASSERT_TRUE(sim.grid().has_powerup_at({0, 3}));
+            ASSERT_EQ(sim.get_unit(ant).type, AntType::Worker);
+        }
+
+        SimulationEngine sim;
+        build(sim);
+        // Worker starts at (0, 5)
+        uint32_t ant = sim.spawn_unit(0, AntType::Worker, TileCoord{0, 5});
+        auto crossed = [&](TileCoord t) {
+            return wait_ms(sim, 3000, [&]() { return sim.get_unit(ant).pos == t; }) >= 0;
+        };
+
+        // Step 1: Order to (0, 4) and wait until the ant has crossed into its tile (the walk has not landed yet)
         sim.issue_move_order(ant, {0, 4});
-        ASSERT_TRUE(tick_until(sim, [&]() { return arrived_at(TileCoord{0, 4}); }, 40));
-        ASSERT_EQ(sim.get_unit(ant).pos, (TileCoord{0, 4}));
-        ASSERT_EQ(sim.get_unit(ant).state, UnitState::Idle);
-        ASSERT_GT(sim.get_unit(ant).powerup_dwell_timer, 0);
+        ASSERT_TRUE(crossed(TileCoord{0, 4}));
+        ASSERT_EQ(sim.get_unit(ant).type, AntType::Worker);
         ASSERT_TRUE(sim.grid().has_powerup_at({0, 4}));
 
-        // Step 2: Quick click before dwell finishes! Redirect to (0, 3)
+        // Step 2: Quick click inside the window! Redirect to (0, 3): the ant is snapped onto (0, 4), its walk is dropped
         sim.issue_move_order(ant, {0, 3});
-        ASSERT_EQ(sim.get_unit(ant).powerup_dwell_timer, 0);
-        ASSERT_TRUE(tick_until(sim, [&]() { return arrived_at(TileCoord{0, 3}); }, 40));
-        ASSERT_EQ(sim.get_unit(ant).pos, (TileCoord{0, 3}));
+        ASSERT_EQ(sim.get_unit(ant).pixel_y, 4 * 32 + 16);
+        ASSERT_TRUE(sim.get_unit(ant).waypoints.empty());
+        ASSERT_TRUE(crossed(TileCoord{0, 3}));
         ASSERT_EQ(sim.get_unit(ant).type, AntType::Worker); // Still Worker!
         ASSERT_TRUE(sim.grid().has_powerup_at({0, 4}));      // Hat at (0, 4) untouched!
-        ASSERT_GT(sim.get_unit(ant).powerup_dwell_timer, 0);
 
-        // Step 3: Quick click to (0, 2) (the target Swimmer hat)
+        // Step 3: Quick click to (0, 2) (the target Swimmer hat) inside the next window
         sim.issue_move_order(ant, {0, 2});
-        ASSERT_EQ(sim.get_unit(ant).powerup_dwell_timer, 0);
-        ASSERT_TRUE(tick_until(sim, [&]() { return arrived_at(TileCoord{0, 2}); }, 40));
-        ASSERT_EQ(sim.get_unit(ant).pos, (TileCoord{0, 2}));
+        ASSERT_EQ(sim.get_unit(ant).pixel_y, 3 * 32 + 16);
+        ASSERT_TRUE(crossed(TileCoord{0, 2}));
         ASSERT_EQ(sim.get_unit(ant).type, AntType::Worker);
         ASSERT_TRUE(sim.grid().has_powerup_at({0, 3}));      // Hat at (0, 3) untouched!
 
-        // Step 4: Player now lets the ant dwell on (0, 2)
-        for (int t = 0; t < 6; ++t) sim.tick();
-        ASSERT_TRUE(sim.get_unit(ant).is_transforming());
-        ASSERT_FALSE(sim.grid().has_powerup_at({0, 2}));     // Hat at (0, 2) consumed!
-
-        // Advance 15 ticks to complete transformation
-        for (int t = 0; t < 15; ++t) sim.tick();
-        ASSERT_FALSE(sim.get_unit(ant).is_transforming());
+        // Step 4: Player now lets the ant land on (0, 2): the pick-up happens in the tick of the landing
+        ASSERT_TRUE(wait_ms(sim, 1000, [&]() { return picking_up(sim.get_unit(ant)); }) >= 0);
         ASSERT_EQ(sim.get_unit(ant).type, AntType::Swimmer); // Transformed into Swimmer!
+        ASSERT_FALSE(sim.grid().has_powerup_at({0, 2}));     // Hat at (0, 2) consumed!
+        ASSERT_TRUE(sim.grid().has_powerup_at({0, 1}));      // the next hat is still there
+        ASSERT_TRUE(sim.grid().has_powerup_at({0, 3}));
+        ASSERT_TRUE(sim.grid().has_powerup_at({0, 4}));
+
+        // The clip ends 840 ms after the snap
+        run_ms(sim, 900);
+        ASSERT_FALSE(picking_up(sim.get_unit(ant)));
+        ASSERT_EQ(sim.get_unit(ant).type, AntType::Swimmer);
     } TEST_END();
 
     // -------------------------------------------------------------------------

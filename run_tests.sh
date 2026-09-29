@@ -162,6 +162,7 @@ MOVEMENT_GOLDEN_STATUS=0
 HILL_ACTIONS_STATUS=0
 COMBAT_ACTIONS_STATUS=0
 ABILITY_ACTIONS_STATUS=0
+POWERUP_ACTIONS_STATUS=0
 CHALLENGER_M2_1_STATUS=0
 CHALLENGER_M2_2_STATUS=0
 APP_STATUS=0
@@ -242,6 +243,13 @@ if [ "$RUN_SIM" -eq 1 ]; then
     echo -e "${BOLD}${BLUE}======================================================================${RESET}"
     "./$BUILD_DIR/tests/test_sim/test_ability_actions"
     ABILITY_ACTIONS_STATUS=$?
+
+    echo ""
+    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
+    echo -e "${BOLD}${BLUE}>>> 2.8 RUNNING ORIGINAL POWER-UP ACTIONS SUITE (pick-up, cancel window, immunity)...${RESET}"
+    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
+    "./$BUILD_DIR/tests/test_sim/test_powerup_actions"
+    POWERUP_ACTIONS_STATUS=$?
 fi
 
 # 5. Execute Application Integration Tests
@@ -363,6 +371,13 @@ if [ "$RUN_SIM" -eq 1 ]; then
         echo -e " 2.7 Ability Actions (test_ability_actions):         ${GREEN}PASSED${RESET}"
     else
         echo -e " 2.7 Ability Actions (test_ability_actions):         ${RED}FAILED (exit code ${ABILITY_ACTIONS_STATUS})${RESET}"
+        TOTAL_FAILED=$((TOTAL_FAILED + 1))
+    fi
+
+    if [ "$POWERUP_ACTIONS_STATUS" -eq 0 ]; then
+        echo -e " 2.8 Power-Up Actions (test_powerup_actions):        ${GREEN}PASSED${RESET}"
+    else
+        echo -e " 2.8 Power-Up Actions (test_powerup_actions):        ${RED}FAILED (exit code ${POWERUP_ACTIONS_STATUS})${RESET}"
         TOTAL_FAILED=$((TOTAL_FAILED + 1))
     fi
 fi

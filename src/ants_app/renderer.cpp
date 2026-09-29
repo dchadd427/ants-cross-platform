@@ -1355,9 +1355,7 @@ void Renderer::draw_single_ant(const ants::sim::AntSnapshot& ant) {
         }
     }
 
-    if (ant.is_transforming) {
-        // Authentic fidelity: ant body disappears during transformation while getpow animation plays
-    } else if (loco_seq && !loco_seq->subitems.empty()) {
+    if (loco_seq && !loco_seq->subitems.empty()) {
         const size_t sub_idx = std::min<size_t>(ant.loco_frame, loco_seq->subitems.size() - 1);
         draw_frame_sprites(loco_seq->subitems[sub_idx], ant.loco_mirrored);
     } else {
@@ -1487,16 +1485,6 @@ void Renderer::draw_single_ant(const ants::sim::AntSnapshot& ant) {
         if (bu_seq && !bu_seq->subitems.empty()) {
             const size_t bsub = get_anim_subitem_by_time(*bu_seq, static_cast<uint32_t>(ant.burn_elapsed_ms));
             draw_frame_parts(bu_seq->subitems[bsub], sx, render_y, false, ant_colour(ant.player_id));
-        }
-    }
-
-    // 2.5 Power-Up Transformation Animation (11 frames of getpow: pucov1..5.bmp)
-    if (ant.is_transforming) {
-        const auto* pow_seq = archive_->find_animation("getpow");
-        if (pow_seq && !pow_seq->subitems.empty()) {
-            size_t psub = ant.transform_anim_frame % pow_seq->subitems.size();
-            const auto& sub = pow_seq->subitems[psub];
-            draw_frame_parts(sub, sx, render_y, false, ant_colour(ant.player_id));
         }
     }
 }

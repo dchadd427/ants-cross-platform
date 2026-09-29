@@ -19,10 +19,6 @@ AntUnit::AntUnit(uint32_t unit_id, TeamId team_in, AntType type_in, int32_t star
 }
 
 void AntUnit::tick_timers() noexcept {
-    if (transform_timer > 0) {
-        transform_timer--;
-    }
-
     // Continuous idle standing animation cycle
     if (state == UnitState::Idle || state == UnitState::GuardIdle) {
         anim_tick++;

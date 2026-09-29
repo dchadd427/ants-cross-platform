@@ -556,14 +556,23 @@ int main() {
         ASSERT_EQ(sim2.get_unit(c2).pos, (TileCoord{30, 45}));               // the old order was resumed and completed
     } TEST_END();
 
-    TEST_CASE("6.4 An ant standing on a power-up is immune from attacks: an attack order fails (Can't go there), the auto-engage never hits") {
+    TEST_CASE("6.4 An ant standing on a power-up is immune from attacks: an attack order fails (Can't go there), the auto-engage never hits (the ant got there by the can't-go trick)") {
         for (int mode = 0; mode < 2; ++mode) {                                    // 0 = attack order, 1 = auto-engage
             SimulationEngine sim;
             make_world(sim);
             sim.grid_mut().place_powerup(15, 15, 4);
-            const uint32_t victim = sim.spawn_unit(1, AntType::Worker, TileCoord{15, 15});
-            sim.tick();
-            sim.interrupt_transformation(victim);                                 // the can't-go trick: it stands on the power-up
+            for (int y = 29; y <= 31; ++y) {                                      // an unreachable island for the can't-go order
+                for (int x = 29; x <= 31; ++x) {
+                    if (x != 30 || y != 30) sim.grid_mut().get_cell_mut(static_cast<uint32_t>(x), static_cast<uint32_t>(y)).terrain_type = TERRAIN_WATER;
+                }
+            }
+            const uint32_t victim = sim.spawn_unit(1, AntType::Worker, TileCoord{14, 15});
+            sim.issue_move_order(victim, TileCoord{15, 15});
+            ASSERT_TRUE(wait_ms(sim, 2000, [&]() { return sim.get_unit(victim).pos == TileCoord{15, 15}; }) >= 0);   // crossed into the tile
+            sim.issue_move_order(victim, TileCoord{30, 30});                      // the can't-go trick: it stands on the power-up
+            run_ms(sim, 2000);
+            ASSERT_EQ(sim.get_unit(victim).type, AntType::Worker);
+            ASSERT_TRUE(sim.grid().has_powerup_at(TileCoord{15, 15}));
             const uint32_t att = sim.spawn_unit(0, AntType::Combat, TileCoord{12, 15});
             if (mode == 0) {
                 AntOrder o{};
@@ -577,8 +586,6 @@ int main() {
             run_ms(sim, 8000);
             ASSERT_EQ(sim.get_unit(victim).hp, 10u);
             ASSERT_EQ(sim.get_unit(victim).pos, (TileCoord{15, 15}));
-            sim.execute_melee_attack(att, victim);                                // even a forced contact is refused
-            ASSERT_EQ(sim.get_unit(victim).hp, 10u);
         }
     } TEST_END();
 

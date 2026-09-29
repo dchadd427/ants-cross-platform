@@ -233,9 +233,6 @@ struct AntSnapshot {
     bool     is_swimming{false};
     bool     is_drowning{false};
     bool     is_on_mud{false};
-    bool     is_transforming{false};
-    uint16_t transform_anim_frame{0};
-    bool     on_powerup{false};
     int32_t  burn_elapsed_ms{-1};       // dud burn overlay (?bu) time since it started, -1 = none
     UnitState state{UnitState::Idle};
     uint8_t  target_team_id{255};
@@ -355,6 +352,10 @@ public:
 
     void tick();
     void issue_order(const AntOrder& order);
+    /// The Stop button for one selected ant (the loop body of Ants.exe FUN_01028a60): an ant that accepts player orders, is
+    /// not on the hill entrance or the tile above it and has a walk or a target is sent to its own tile as an ordinary move
+    /// (no player flag, so a power-up under it is an obstacle and not a pick-up). Returns true when the order was given.
+    bool stop_ant(uint32_t ant_id);
     /// Result of a click on the hatch pedestal (Ants.exe FUN_01010aca): the reason a click did nothing.
     enum class HatchResult : uint8_t { Started, NoEggs, AlreadyHatching, NotEnoughPoints, NotAvailable };
     /// Starts an 8000 ms incubation (cost min(score, 200), one egg); `force` skips the 200 point rule (auto-hatch).
@@ -439,7 +440,6 @@ public:
     bool extinguish_fire(uint32_t ant_id, TileCoord target, bool instant = true);
     bool build_bridge_step(uint32_t ant_id, TileCoord target);
     bool demolish_bridge_step(uint32_t ant_id, TileCoord target);
-    bool interrupt_transformation(uint32_t ant_id);
 
     bool can_unit_traverse(AntType type, TileCoord pos, uint8_t ant_team = 255, bool is_entering_or_leaving = false) const;
 

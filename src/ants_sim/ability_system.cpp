@@ -1,5 +1,5 @@
-// Original ant abilities, part of the action system: the bomber's bombs, the fire ant's fire walls and the swimmer's
-// bridges. Exact ports of the Ants.exe routines named in the comments (addresses refer to Original-Ants/Ants.exe,
+// Original ant abilities, part of the action system: the bomber's bombs, the fire ant's fire walls, the swimmer's
+// bridges and the power-up pick-up (action 4). Exact ports of the Ants.exe routines named in the comments (addresses refer to Original-Ants/Ants.exe,
 // image base 0x01000000). Every ability is an action whose clip is played by the locomotion player
 // (movement_system.cpp); the world changes when the old action is cleaned up by the next SetAction, so an interrupted
 // ability has a different outcome than a finished one (the cflag of SetAction: a melee hit or a stun cancels, anything
@@ -83,6 +83,26 @@ void SimulationEngineImpl::ability_clip_end(AntUnit& a) {
     const TileCoord t = tile5a(a);
     set_position(a, centre_x(t), centre_y(t));
     end_walk_to_idle(a);
+}
+
+// ------------------------------------------------------------------------------------------------
+// Power-up pick-up
+// ------------------------------------------------------------------------------------------------
+
+// Message 9 handler FUN_01020cdb, sent by the arrival of a move or power-up order (FUN_0101ccaf cases 1 and 4) whose order
+// tile holds a power-up: the ant is put on the tile centre and plays the getpow clip (action 4, 770 ms: cue 1 at 0, cue 2
+// at 420 ms; orders are refused while it plays). The type changes at once: a typed ant first drops its old power-up on a
+// free neighbour tile (FUN_01020e6e, the one of the K stage), the tile becomes empty. The hit points stay as they are
+// (no heal), the clip's end (0x101f111) only idles the ant as the new type.
+void SimulationEngineImpl::powerup_pickup(AntUnit& a, TileCoord tile) {
+    set_position(a, centre_x(tile), centre_y(tile));                                     // SetPositionPt(TileCentre)
+    set_action(a, AntUnit::kActionGetPow, static_cast<uint8_t>(a.facing), -1, -1, false);   // SetActionDefault(4)
+    if (!grid_.has_powerup_at(tile)) return;                                            // the tile id's flag 4 (FUN_01007202)
+    const uint8_t new_type = grid_.get_powerup_type(tile);                              // FUN_01021087: 0x3e..0x42 -> 4, 3, 1, 5, 2
+    if (a.type != AntType::Worker) drop_powerup(a, tile, static_cast<uint8_t>(a.type)); // FUN_010210c1 + FUN_01020e6e
+    a.type = static_cast<AntType>(new_type);
+    grid_.clear_powerup(tile.x, tile.y);                                                // SetTile(2, tile, 0x7ffe)
+    world_state_dirty_ = true;
 }
 
 // ------------------------------------------------------------------------------------------------

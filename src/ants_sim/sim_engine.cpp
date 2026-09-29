@@ -18,10 +18,9 @@ namespace {
 void route_move_order(SimulationEngineImpl& impl, AntUnit& unit, TileCoord dest,
                       bool allow_friendly_bomb, bool is_food_order, bool user_cmd) {
     if (!unit.is_alive()) return;
-    unit.powerup_dwell_timer = 0;
 
-    // Special abilities and transformations cannot be interrupted and silently ignore move orders
-    if (unit.is_transforming() ||
+    // Special abilities and the power-up pick-up cannot be interrupted and silently ignore move orders
+    if (unit.state == UnitState::PoweringUp ||
         unit.state == UnitState::PlacingFire || unit.state == UnitState::ExtinguishingFire ||
         unit.state == UnitState::PlantingBomb || unit.state == UnitState::DefusingBomb ||
         unit.state == UnitState::BuildingBridge || unit.state == UnitState::DemolishingBridge) {
@@ -67,13 +66,8 @@ void route_move_order(SimulationEngineImpl& impl, AntUnit& unit, TileCoord dest,
     }
     unit.is_food_order = (is_food_order || dest_has_food);
 
-    unit.transformation_interrupted = false;
-    unit.cantgo_standing_on_powerup = false;
     unit.allow_friendly_bomb = (allow_friendly_bomb && impl.grid_.has_bomb_at(dest));
-
-    if (impl.go_to(unit, dest, user_cmd, false, unit.allow_friendly_bomb)) {
-        unit.on_powerup = false;
-    }
+    impl.go_to(unit, dest, user_cmd, false, unit.allow_friendly_bomb);
 }
 
 } // anonymous namespace
@@ -359,19 +353,6 @@ void SimulationEngine::tick() {
     for (auto& ant_ptr : impl_->ants_) {
         if (!ant_ptr || ant_ptr->removed) continue;
         ant_ptr->tick_timers();
-        if (impl_->grid_.in_bounds(ant_ptr->pos)) {
-            const auto& cell = impl_->grid_.get_cell(ant_ptr->pos);
-            ant_ptr->on_powerup = cell.has_powerup() || ant_ptr->is_transforming();
-            if (!ant_ptr->on_powerup && ant_ptr->transformation_interrupted) {
-                ant_ptr->transformation_interrupted = false;
-            }
-        }
-
-        // Walking, blocking and path completion already ran in movement_tick(). A path that completed
-        // during this tick arms the power-up pickup dwell.
-        if (ant_ptr->arrived_this_tick && impl_->grid_.in_bounds(ant_ptr->pos) && impl_->grid_.has_powerup_at(ant_ptr->pos)) {
-            ant_ptr->powerup_dwell_timer = 6;
-        }
 
         // Universal lunchbox pickup
         TileCoord lb_target{-1, -1};
@@ -419,95 +400,6 @@ void SimulationEngine::tick() {
             }
 
             impl_->grid_.clear_lunchbox(static_cast<uint32_t>(lb_target.x), static_cast<uint32_t>(lb_target.y));
-        }
-
-        // Power-up pickup, transformation & swap
-        TileCoord pu_target{-1, -1};
-        if (ant_ptr->is_alive() && !ant_ptr->transformation_interrupted &&
-            ant_ptr->state != UnitState::Drowning && ant_ptr->state != UnitState::EnteringBase && !ant_ptr->is_transforming()) {
-            if (impl_->grid_.in_bounds(ant_ptr->pos) && impl_->grid_.has_powerup_at(ant_ptr->pos)) {
-                // If ant is forced into CantGo on a power-up, it stands on the power-up indefinitely without consuming it!
-                if (ant_ptr->state == UnitState::CantGo) {
-                    ant_ptr->cantgo_standing_on_powerup = true;
-                    ant_ptr->powerup_dwell_timer = 0;
-                } else if (ant_ptr->cantgo_standing_on_powerup) {
-                    // Standing on powerup via CantGo immunity: do not consume!
-                } else if (ant_ptr->state == UnitState::Idle || ant_ptr->state == UnitState::GuardIdle) {
-                    if (ant_ptr->powerup_dwell_timer > 0) {
-                        ant_ptr->powerup_dwell_timer--;
-                        if (ant_ptr->powerup_dwell_timer == 0) {
-                            // Dwell window elapsed without redirection: commit pickup!
-                            pu_target = ant_ptr->pos;
-                        }
-                    } else if (ant_ptr->final_dest.x < 0 && ant_ptr->waypoints.empty()) {
-                        // Power-up placed or dropped directly under stationary ant
-                        pu_target = ant_ptr->pos;
-                    }
-                } else {
-                    ant_ptr->powerup_dwell_timer = 0;
-                }
-            } else {
-                ant_ptr->powerup_dwell_timer = 0;
-                ant_ptr->cantgo_standing_on_powerup = false;
-            }
-        }
-        if (pu_target.x >= 0) {
-            ant_ptr->set_tile_pos(ant_ptr->pos.x, ant_ptr->pos.y);
-            ant_ptr->clear_path();
-            ant_ptr->final_dest = TileCoord{-1, -1};
-
-            AntType old_type = ant_ptr->type;
-            uint8_t new_type_id = impl_->grid_.get_powerup_type(pu_target);
-            AntType new_type = static_cast<AntType>(new_type_id);
-            impl_->grid_.clear_powerup(pu_target.x, pu_target.y);
-
-            ant_ptr->previous_type = old_type;
-            ant_ptr->pending_powerup_type = new_type_id;
-            ant_ptr->dropped_powerup_pos = TileCoord{-1, -1};
-
-            // If ant already possessed a power-up, drop previous power-up onto an adjacent valid tile (chosen uniformly at random)
-            if (old_type != AntType::Worker) {
-                static constexpr std::array<TileCoord, 8> CANDIDATE_OFFSETS = {{{0, -1}, {1, 0}, {0, 1}, {-1, 0}, {1, -1}, {1, 1}, {-1, 1}, {-1, -1}}};
-                std::array<TileCoord, 8> valid_tiles{};
-                size_t valid_count = 0;
-                for (const auto& offset : CANDIDATE_OFFSETS) {
-                    TileCoord adj{ant_ptr->pos.x + offset.x, ant_ptr->pos.y + offset.y};
-                    if (impl_->is_valid_powerup_drop_tile(adj)) {
-                        valid_tiles[valid_count++] = adj;
-                    }
-                }
-                if (valid_count > 0) {
-                    size_t chosen_idx = static_cast<size_t>(impl_->prng_.rand() % static_cast<uint16_t>(valid_count));
-                    TileCoord chosen = valid_tiles[chosen_idx];
-                    impl_->grid_.place_powerup(chosen.x, chosen.y, static_cast<uint8_t>(old_type));
-                    ant_ptr->dropped_powerup_pos = chosen;
-                }
-                // If there are no valid tiles (valid_count == 0), it disappears and is no longer available for the rest of the game
-            }
-
-            ant_ptr->state = (new_type == AntType::Combat) ? UnitState::GuardIdle : UnitState::Idle;
-            ant_ptr->anim_tick = 0;
-            ant_ptr->anim_subitem = 0;
-
-            // Transform ant (authentic 15-tick getpow cocoon animation, 750 ms ~ 770 ms)
-            ant_ptr->type = new_type;
-            if (new_type == AntType::Combat) ant_ptr->max_hp = 12;
-            else ant_ptr->max_hp = 10;
-            ant_ptr->hp = ant_ptr->max_hp;
-            ant_ptr->transform_timer = 15;
-            ant_ptr->powerup_dwell_timer = 0;
-            impl_->audio_queue_.push_back(AudioEvent{SoundID::PowerUpHeal, ant_ptr->pixel_x, ant_ptr->pixel_y, 1, ant_ptr->player_id});
-        }
-
-        // Sound 2: PowerUpChime at tick 8 (~420 ms, subitem 6 of Anim 55)
-        if (ant_ptr->transform_timer == 7 && ant_ptr->pending_powerup_type != 255) {
-            impl_->audio_queue_.push_back(AudioEvent{SoundID::PowerUpChime, ant_ptr->pixel_x, ant_ptr->pixel_y, 2, ant_ptr->player_id});
-        }
-
-        if (ant_ptr->transform_timer == 0 && ant_ptr->pending_powerup_type != 255) {
-            ant_ptr->pending_powerup_type = 255;
-            ant_ptr->dropped_powerup_pos = TileCoord{-1, -1};
-            ant_ptr->state = (ant_ptr->type == AntType::Combat) ? UnitState::GuardIdle : UnitState::Idle;
         }
 
         // Multi-Stage & Schedule-Driven Food Harvest
@@ -840,12 +732,10 @@ void SimulationEngine::issue_order(const AntOrder& order) {
         if (order.type != OrderType::Cancel && !(act == 0 || act == 1 || act == 3)) return;
     }
 
-    unit->powerup_dwell_timer = 0;
-
-    // Active action states (placing fire, planting bomb, building bridge, extinguishing, defusing, transforming)
+    // Active action states (placing fire, planting bomb, building bridge, extinguishing, defusing, picking up a power-up)
     // strictly and silently disallow all incoming orders (Ants.exe 0x101ff5a / Ants.exe.c line 22938 -> LAB_0101fef5).
     // The unit finishes its action uninterrupted without playing CantGo.
-    if (unit->is_transforming() ||
+    if (unit->state == UnitState::PoweringUp ||
         unit->state == UnitState::PlacingFire || unit->state == UnitState::ExtinguishingFire ||
         unit->state == UnitState::PlantingBomb || unit->state == UnitState::DefusingBomb ||
         unit->state == UnitState::BuildingBridge || unit->state == UnitState::DemolishingBridge) {
@@ -884,8 +774,6 @@ void SimulationEngine::issue_order(const AntOrder& order) {
                     // FUN_010287b5: a click on an enemy ant is a move order onto its tile with the player flag; the
                     // classification (FUN_01020655) turns it into the attack order 3 and the path ends in contact.
                     route_move_order(*impl_, *unit, TileCoord{target->pixel_x / 32, target->pixel_y / 32}, false, false, true);
-                } else if (unit->is_transforming()) {
-                    interrupt_transformation(order.ant_id);
                 }
             }
             break;
@@ -942,21 +830,35 @@ void SimulationEngine::issue_order(const AntOrder& order) {
         }
         case OrderType::Cancel:
             unit->ability_target = TileCoord{-1, -1};
-            if (unit->is_transforming() || unit->on_powerup ||
-                (impl_->grid_.in_bounds(unit->pos) && impl_->grid_.has_powerup_at(unit->pos))) {
-                interrupt_transformation(order.ant_id);
+            unit->clear_path();
+            if (unit->type == AntType::Swimmer && unit->in_water) {
+                unit->state = UnitState::Swimming;
             } else {
-                unit->clear_path();
-                if (unit->type == AntType::Swimmer && unit->in_water) {
-                    unit->state = UnitState::Swimming;
-                } else {
-                    unit->state = (unit->type == AntType::Combat) ? UnitState::GuardIdle : UnitState::Idle;
-                }
+                unit->state = (unit->type == AntType::Combat) ? UnitState::GuardIdle : UnitState::Idle;
             }
             break;
         default:
             break;
     }
+}
+
+// Body of the Stop button loop (FUN_01028a60) for one selected ant. The ant must accept player orders (FUN_0101ff5a) and
+// not stand on the hill entrance or the tile above it; its +0x68 is cleared; an ant without a path is skipped while it is
+// idle or in one of the actions 3..9 and 0xb; only an ant that has a target tile is sent to its own tile with GoTo
+// (FUN_0101fc50, player flag 0).
+bool SimulationEngine::stop_ant(uint32_t ant_id) {
+    AntUnit* a = impl_->find_unit(ant_id);
+    if (!a || !a->is_alive() || !impl_->can_take_user_order(*a)) return false;
+    const TileCoord t{a->pixel_x / 32, a->pixel_y / 32};
+    const TileCoord entrance = impl_->team_entrance(a->player_id);
+    if (entrance.x >= 0 && (t == entrance || t == TileCoord{entrance.x, entrance.y - 1})) return false;
+    a->home_state = 0;
+    if (a->waypoints.empty()) {
+        const uint8_t act = impl_->orig_action_of(*a);
+        if (act == 0 || (act > 2 && act <= 9) || act == 0x0B) return false;
+    }
+    if (!a->has_order_tile()) return false;
+    return impl_->go_to(*a, t, false, false, false);
 }
 
 // FUN_01010aca: the hatch pedestal. The checks come in the original's order; an accepted click costs
@@ -1096,9 +998,6 @@ const WorldState& SimulationEngine::get_world_state() const {
             s.is_swimming = (a->state == UnitState::Swimming || a->in_water);
             s.is_drowning = (a->state == UnitState::Drowning);
             s.is_on_mud = a->is_on_mud;
-            s.is_transforming = a->is_transforming();
-            s.transform_anim_frame = (a->transform_timer > 0) ? static_cast<uint16_t>((15 - a->transform_timer) * 11 / 15) : 0;
-            s.on_powerup = a->on_powerup;
             s.state = a->state;
             if (a->burn_end_ms != 0) {                       // the dud burn overlay (?bu) that covers the frozen ant
                 const uint32_t total = movement::action_clip(movement::ActionClip::Burn, static_cast<uint8_t>(a->type), 0, false).total_duration_ms();
@@ -1278,9 +1177,6 @@ uint32_t SimulationEngine::spawn_unit(uint8_t player_id, AntType type, TileCoord
                 unit_ptr->state = UnitState::Swimming;
             }
         }
-        if (cell.has_powerup()) {
-            unit_ptr->powerup_dwell_timer = 1;
-        }
     }
     impl_->ants_.push_back(std::move(unit));
     if (unit_ptr->is_alive()) {
@@ -1324,11 +1220,8 @@ void SimulationEngine::execute_melee_attack(uint32_t attacker_id, uint32_t targe
     AntUnit* target = impl_->find_unit(target_id);
     if (!attacker || !target || attacker->removed || target->removed) return;
     if (attacker->player_id == target->player_id || impl_->stats_.are_allies(attacker->player_id, target->player_id)) return;
-    // No contact can ever happen against an ant that stands on a power-up: the contact is the attacker's step into the
-    // victim's tile, and neither the path step cost (FUN_01020951) nor CanEnter (FUN_0101f780) lets a path end on the
-    // solid tile of a power-up unless the order is the power-up order. The ant is therefore immune from attacks.
-    const TileCoord victim_tile = target->occ_tile.x >= 0 ? target->occ_tile : TileCoord{target->pixel_x / 32, target->pixel_y / 32};
-    if (impl_->grid_.in_bounds(victim_tile) && impl_->grid_.has_powerup_at(victim_tile)) return;
+    // Test hook: the contact itself never looks at the tile. An ant standing on a power-up is immune only because no path
+    // can end on the solid tile (FUN_01020951, FUN_0101f780), so no attacker ever makes the step that is the contact.
     impl_->melee_contact(*attacker, *target);
 }
 
@@ -1686,45 +1579,6 @@ uint8_t SimulationEngine::get_ally_id(uint8_t player_id) const {
 
 void SimulationEngine::record_player_stat(uint8_t player_id, StatType stat, uint32_t value) {
     impl_->stats_.record_stat(player_id, stat, value);
-}
-
-bool SimulationEngine::interrupt_transformation(uint32_t ant_id) {
-    AntUnit* ant = impl_->find_unit(ant_id);
-    if (!ant || !ant->is_alive()) return false;
-
-    bool was_transforming = ant->is_transforming();
-    bool on_pu = ant->on_powerup || (impl_->grid_.in_bounds(ant->pos) && impl_->grid_.has_powerup_at(ant->pos));
-
-    if (!was_transforming && !on_pu) {
-        return false;
-    }
-
-    if (was_transforming) {
-        ant->transform_timer = 0;
-        ant->type = ant->previous_type;
-        ant->max_hp = (ant->type == AntType::Combat ? 12 : 10);
-        if (ant->hp > ant->max_hp) ant->hp = ant->max_hp;
-        if (ant->pending_powerup_type != 255) {
-            impl_->grid_.place_powerup(ant->pos.x, ant->pos.y, ant->pending_powerup_type);
-            ant->pending_powerup_type = 255;
-        }
-        if (ant->dropped_powerup_pos.x >= 0) {
-            if (impl_->grid_.in_bounds(ant->dropped_powerup_pos) &&
-                impl_->grid_.has_powerup_at(ant->dropped_powerup_pos)) {
-                impl_->grid_.clear_powerup(ant->dropped_powerup_pos.x, ant->dropped_powerup_pos.y);
-            }
-            ant->dropped_powerup_pos = TileCoord{-1, -1};
-        }
-    }
-
-    ant->transformation_interrupted = true;
-    ant->on_powerup = true;
-    ant->clear_path();
-    ant->final_dest = ant->pos;
-    ant->state = (ant->type == AntType::Combat ? UnitState::GuardIdle : UnitState::Idle);
-    impl_->audio_queue_.push_back(AudioEvent{SoundID::AntStop, ant->pixel_x, ant->pixel_y, 1, 255});
-    impl_->world_state_dirty_ = true;
-    return true;
 }
 
 bool SimulationEngine::has_other_living_ant_at(TileCoord pos, uint32_t ignore_ant_id) const {

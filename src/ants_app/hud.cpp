@@ -1267,19 +1267,7 @@ bool HUD::handle_mouse_down(int32_t x, int32_t y, uint8_t button,
             for (uint32_t aid : selected_ant_ids_) {
                 const auto& u = sim.get_unit(aid);
                 if (u.player_id != local_player_id_) continue;
-                if (u.state == sim::UnitState::BuildingBridge || u.state == sim::UnitState::DemolishingBridge) {
-                    continue; // Swimmer cannot be interrupted while building/demolishing a bridge!
-                }
-                if (u.is_transforming() || u.on_powerup || (sim.grid().in_bounds(u.pos) && sim.grid().has_powerup_at(u.pos))) {
-                    sim.interrupt_transformation(aid);
-                } else {
-                    sim::AntOrder order;
-                    order.ant_id = aid;
-                    order.type = sim::OrderType::Move;
-                    order.target_x = u.pos.x;
-                    order.target_y = u.pos.y;
-                    sim.issue_order(order);
-                }
+                sim.stop_ant(aid);   // FUN_01028a60: accepted ants with a target go to their own tile
             }
             return true;
         }
@@ -2582,16 +2570,6 @@ void HUD::dispatch_smart_special_ability(int32_t world_x, int32_t world_y, sim::
         }
 
         if (order.type == sim::OrderType::None) {
-            continue;
-        }
-
-        bool is_swimmer = (sel->type == sim::AntType::Swimmer);
-        bool is_fire = (sel->type == sim::AntType::Fire);
-        bool dest_passable = grid.in_bounds(order.target_x, order.target_y) &&
-                             grid.get_cell(static_cast<uint32_t>(order.target_x), static_cast<uint32_t>(order.target_y)).is_passable(is_swimmer, is_fire);
-        if (order.type == sim::OrderType::Move && !dest_passable && sel->is_transforming) {
-            sim.interrupt_transformation(aid);
-            play_sfx(sim::SoundID::AntStop);
             continue;
         }
 

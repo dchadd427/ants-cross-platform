@@ -1260,8 +1260,8 @@ checked by an independent adversarial pass. The full reports (instruction addres
 - Still remake systems (follow-up work, with verified findings in the reports): hit / flight / bounce displacement
   (actions 0xA/0xE/0x13 are animation-driven too, and the original resumes the old path after landing), combat-ant
   auto-engage (`FUN_0101c0d5` / `FUN_0101dbec`), the hill queue task `ANTHILLQ` with the exact queue tiles, and the
-  remaining PathComplete handlers (power-up pickup, harvest, abilities, raid). The remake's power-up dwell, harvest
-  trigger, hill queue and guard AI issue their moves through the original GoTo and path manager.
+  remaining PathComplete handlers (harvest; the power-up pick-up, the abilities and the raid are ported: 5.35, 5.37, 5.38). The remake's
+  harvest trigger, hill queue and guard AI issue their moves through the original GoTo and path manager.
 
 #### 10. Superseded statements elsewhere in this document
 - "Thief Ant: fast scout", thief 1.4x speed, "slate 1.40x / gravel 1.20x / mud 0.65x" surface multipliers and a
@@ -1623,8 +1623,62 @@ Addresses are virtual addresses in `Original-Ants/Ants.exe` (image base 0x010000
   pending-ability approach code, the bomb detonation of an ant that stands on the target tile at the end of the plant (the tile is solid
   while the plant clip plays), fire walls on mud, bridge stages that stay when a build is interrupted, the partial bridge that can be
   continued, and the tile-flag test (`0x02`) for bombs.
-* **Not yet ported**: the power-up pick-up as action 4 (`FUN_01020cdb`), harvest as action 5, food points from the level file and the
-  lunchbox as a food object (stage B, remaining parts).
+* **Not yet ported**: harvest as action 5, food points from the level file and the lunchbox as a food object (stage B, remaining
+  parts); the power-up pick-up as action 4 is section 5.38.
+
+### 5.38 Power-Up Ground Truth: Pick-Up at the Landing, the Cancel Window, Standing on a Power-Up, Drop of the Old One (Capstone-Verified; Supersedes Earlier Power-Up, Dwell and Transformation Notes)
+
+Addresses are virtual addresses in `Original-Ants/Ants.exe` (image base 0x01000000). Implemented in `ability_system.cpp` (`powerup_pickup`),
+`movement_system.cpp` (`path_complete` cases 1 / 4, `set_action`, `loco_on_step`), checked by `tests/test_sim/test_powerup_actions.cpp`
+(golden cases) and the power-up cases of `tests/test_sim/test_sim_rules.cpp`, `test_combat_actions.cpp` and `tests/test_app/test_app_integration.cpp`.
+
+* **There is no dwell and no timer.** The pick-up is the arrival of a move or power-up order (`FUN_0101ccaf` cases 1 and 4, 0x101cd1d): when
+  the order tile (`+0xac`, saved before the path completes) still holds a power-up (`FUN_01007202`, tile flag 4), message 9 is built
+  (`FUN_01023166`) and sent with `FUN_0100d791`, whose local handler runs synchronously (0x100d965) inside the walk-step callback of the frame
+  that lands on the tile centre (`|n - centre| <= 2`, 0x101c01c). The path-complete function returns "handled", so the step's snap delta
+  (centre - position) stays: `FUN_0102b997` reads the sprite position after the callback and adds it (0x102ba77), which leaves the ant at
+  the tile centre plus the last snap delta (+4 px east for an east walk on grass). Nothing else takes a power-up: `FUN_01007202` has seven
+  callers and only one of them, the arrival, sends message 9; a power-up under an idle, placed or dropped-on ant is never taken.
+* **PickUp** *(`FUN_01020cdb`)*: `SetPositionPt(TileCentre)`, `SetActionDefault(4)` (the getpow clip: CHD animation 55, 11 frames of 70 ms,
+  cue 1 at the snap, cue 2 when frame 6 starts; the once flag stops the frame the nested start step and the outer step both show from playing
+  twice), then, when the tile id has flag 4: a typed ant first drops its old power-up (`FUN_010210c1` type -> id, `DropOld` `FUN_01020e6e`),
+  the type becomes the new one (`FUN_01021087`: 0x3e -> 4 combat, 0x3f -> 3 thief, 0x40 -> 1 bomber, 0x41 -> 5 swimmer, 0x42 -> 2 fire),
+  and the tile is emptied (`SetTile(2, tile, 0x7ffe)`). Hit points are not touched: the maximum is 10 for every type (the constructor sets 10
+  at 0x101a86a), there is no heal and no 12 HP for combat ants. The end of the clip (step callback case 4, 0x101f111, tail 0x101f5a8) idles the
+  ant as its new type and clears its path; the clip lasts 840 ms from the snap because the first frame is booked twice (nested start).
+  Orders are refused for all of it (`FUN_0101ff5a` accepts actions 0, 1 and 3 only), so the pick-up cannot be undone.
+* **DropOld** *(`FUN_01020e6e`, the same routine that a dying typed ant uses, 5.36)*: `A0 = rand() % 3`, `B0 = rand() % 3`; for A from A0
+  (three values, cyclic), for B from B0 (three values, cyclic, restarting for each A) the candidate is the tile shifted by (1 - A rows,
+  1 - B columns), the centre skipped; the first free one gets the power-up (`FUN_01020de7`: in bounds, no ant, not solid, not water, layer 2
+  empty, not a special hill tile); the West neighbour therefore has probability 2/9 and every other neighbour 1/9. Nothing free: the silent
+  cue 0xd5 (sound 40) and the old power-up is lost.
+* **The cancel window** *(the "stand on a power-up" trick)*: every accepted order (`FUN_0101fc50`) first snaps the ant to the centre of its
+  pixel tile, idles it and clears its path (0x101fcce - 0x101fd14), before anything is classified or searched. From the walk frame that moves
+  the ant's pixel position (and occupancy tile) into the power-up's tile up to the frame that lands on its centre, such an order therefore
+  puts the ant on the power-up's centre and no arrival can follow; before the crossing it puts the ant back on the previous tile. The
+  window on grass is 200 ms for E, S and the diagonals and 150 ms for W and N (sand 160 / 120, dirt 240 / 180, mud 420 / 360 / 540 ms;
+  entering a tile of another terrain restarts the clip and lengthens it). Any accepted order cancels, including a valid order to another
+  tile (the ISLANDS corners, where every tile of a one-wide tunnel is a power-up, are crossed by ordering the next power-up inside the
+  window of the one before), but the usual cancel is a "can't go" order: no valid tile within four rings of the click (silent stop,
+  `StopSync`), no route (the path manager answers status 58 "Can't go there.", the `?cg301` clip, cue 63), or a refused special order (48).
+  The Stop button (`FUN_01028a60`) is `Order(pixel tile, player flag 0)` for accepted ants that have a target and are not on the hill
+  entrance tiles; without the player flag a power-up is not a valid goal, so the ring scan moves the ant to a neighbour tile and never
+  picks it up; a standing ant has no target and is skipped. Ordering an ant that stands on a power-up to its own tile (player flag) is a
+  one-tile path whose arrival takes it, about 200 ms later.
+* **Immunity is a consequence, not a rule**: a power-up is a solid object (tile flags 1 | 4; the placement copies flag 1 into layer 1). Melee
+  needs the attacker's step into the victim's tile, and an attack order's path ends there: the path step cost accepts the power-up tile only
+  for `order == 4 && +0xac == to` (0x1020ad4), every other object tile costs 8000, so the path manager fails with "Can't go there."; the
+  auto-engage fails at `CanEnter`; bombs, fire walls and flight landings refuse solid tiles (5.36, 5.37). A power-up is therefore also an
+  obstacle for everything that has no power-up order onto it: paths route around it, nobody is thrown onto it. The remaining ways to hurt such
+  an ant are a contact already under way when a power-up appears under the victim (the melee step has no object test) and network hits.
+* **Not ported here**: the status text that the original posts to the selected ant's owner after the type changed (`FUN_0100cd40`,
+  `FUN_01027f07`: 6 "Ready!", 7 "BomberAnt selected.", 8 "Where to?", 9 "Thief here", 10 "Yessir!", 11 "SwimmerAnt selected.") belongs to the
+  status-line stage; the flower droppers keep their approximate timing (the original: 820 ms effect, power-up placed at its end without an
+  occupancy check).
+* **Removed as invented** (v0.0.35): the 6-tick pick-up dwell and the pick-up under any idle ant, `cantgo_standing_on_powerup`,
+  `transformation_interrupted`, `on_powerup`, `interrupt_transformation` and the HUD code that called it (Stop and move-to-blocked-tile),
+  the 15-tick 750 ms transformation with its own chime tick, the heal to full HP and 12 max HP for combat ants, the uniform drop tile and the
+  power-up under a spawned ant.
 
 ---
 
@@ -2548,11 +2602,6 @@ To deliver authentic 1:1 gameplay inside standard web browsers with zero install
   - Autonomous base queuing restrictions: Units only automatically join the anthill queue upon reaching exactly 1 HP (the authentic critical retreat threshold from `FUN_0101dded` / `FUN_0102151a`) or when a thief completes a successful food heist (`is_thief_steal && is_holding()`). Units with 2+ HP or units knocked near the base never enter the base or queue automatically.
   - Direct queue slot clicking: Directly left-clicking base queue coordinates (`bx - 1, by..by+3`) is treated as a pure ground move order rather than an anthill entry request, allowing free maneuvering around the anthill without involuntary base queuing.
   - Base perimeter walkability: Approach corridors surrounding anthills are passable by all units, restoring authentic 360-degree perimeter walkability while maintaining strict bomb and firewall placement blocks directly on the top corridor.
-- **Power-Up Obstacle Navigation, Skill-Based Pickup Dwell & CantGo Standing Mechanics (`FUN_0101ccaf`, `FUN_0101ee84`, `FUN_0101ff5a`, `ants.chd` Anim 55)**:
-  - **Power-Ups as Obstacles**: Power-ups on the map are treated as hard pathfinding obstacles unless directly targeted by a player command (`c != dest && c != unit->pos`). Units never route through power-up tiles en route to distal destinations.
-  - **Arrival Dwell Window (6 Ticks / ~300 ms)**: In original 1998 logic (`FUN_0101ccaf` lines 20727-20745), when an ant arrives at a power-up tile, it enters `Idle` and initiates a 6-tick dwell window (`powerup_dwell_timer = 6`) before committing to the transformation.
-  - **Skill-Based Walk-On / Walk-Off**: High-skill players can issue a rapid move order while the ant is dwelling on a power-up hat (e.g. in maps like `ISLANDS.LVL` where Mason hats at `(0, 4)` and `(0, 3)` precede the Swimmer hat at `(0, 2)`). The incoming order cancels `powerup_dwell_timer`, transitions the ant to `Walking`, and walks off the tile without consuming the power-up or triggering unwanted transformations.
-  - **Forced Standing via CantGo**: If an ant arrives at a power-up tile and executes an invalid command triggering `UnitState::CantGo` (or is forced into CantGo), `powerup_dwell_timer` is cancelled and `cantgo_standing_on_powerup` is set. The ant finishes its CantGo animation and remains standing in `Idle` directly on top of the power-up without consuming it. Clicking directly on the ant/tile (`dest == unit->pos`) re-arms the 6-tick dwell window to consume the power-up.
-  - **Authentic 770 ms `getpow` Cocoon Duration**: Animation 55 in `ants.chd` contains 11 subitems spanning authentic 770 ms duration (15 simulation ticks @ 20 Hz). Snapshot animation frame mapping uses `(15 - transform_timer) * 11 / 15`.
-  - **Two-Stage Audio Feedback**: Sound 1 (`PowerUpHeal` / `powerupc.wav`) plays at tick 0 (0 ms, subitem 0). Sound 2 (`PowerUpChime` / `powerupc2.wav`) plays at tick 8 (~420 ms, subitem 6 of Animation 55).
-  - **Zero Order Buffering**: While transforming (`transform_timer > 0`), incoming orders are silently ignored (`Ants.exe` `0x101ff5a`), preserving exact 1998 execution discipline without modern order queueing.
+- **Power-Up Obstacle Navigation, Skill-Based Pickup & CantGo Standing Mechanics**: the earlier text of this entry (an arrival dwell of
+  6 ticks, `cantgo_standing_on_powerup`, a 15-tick transformation, `(15 - transform_timer) * 11 / 15`, heal to full HP, 12 HP for combat ants)
+  was wrong and is superseded by section 5.38 (verified in `Ants.exe`, implemented in v0.0.35).

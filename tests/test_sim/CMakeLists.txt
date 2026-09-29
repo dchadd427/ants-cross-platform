@@ -134,3 +134,18 @@ target_include_directories(test_ability_actions PRIVATE
 )
 
 add_test(NAME test_ability_actions COMMAND test_ability_actions)
+
+add_executable(test_powerup_actions
+    test_powerup_actions.cpp
+)
+
+target_link_libraries(test_powerup_actions PRIVATE
+    ants_sim
+    ants_assets
+)
+
+target_include_directories(test_powerup_actions PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../include
+)
+
+add_test(NAME test_powerup_actions COMMAND test_powerup_actions)

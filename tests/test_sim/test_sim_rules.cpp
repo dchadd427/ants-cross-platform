@@ -923,33 +923,39 @@ static void run_suite_13_authentic_fidelity() {
     } TEST_END();
 
 
-    TEST_CASE("13.6 Power-Up Pickup Emits Sounds 1 & 2 and Starts 15-Tick Transformation") {
+    TEST_CASE("13.6 Power-Up Pickup At Arrival Emits Sounds 1 & 2 And Plays The 770 ms getpow Clip (action 4)") {
         SimulationEngine sim;
         sim.init_test_world(60, 60, 1);
         sim.grid_mut().place_powerup(10, 10, 4); // Combat power-up
-        uint32_t ant = sim.spawn_unit(0, AntType::Worker, {10, 10});
+        uint32_t ant = sim.spawn_unit(0, AntType::Worker, {9, 10});
+        sim.issue_move_order(ant, {10, 10});
 
+        // Nothing happens while the ant walks (no pick-up from a distance, no timer); the type changes in the tick of the arrival
         sim.clear_audio_events();
-        sim.tick();
-
+        ASSERT_TRUE(tick_until(sim, [&]() { return sim.get_unit(ant).loco_action == AntUnit::kActionGetPow; }, 40));
         ASSERT_EQ(sim.get_unit(ant).type, AntType::Combat);
-        ASSERT_EQ(sim.get_unit(ant).transform_timer, 15);
-        ASSERT_TRUE(sim.get_unit(ant).is_transforming());
-        ASSERT_TRUE(sim.has_audio_event(SoundID::PowerUpHeal)); // Sound 1 (tick 0)
-        ASSERT_FALSE(sim.has_audio_event(SoundID::PowerUpChime)); // Sound 2 fires at tick 8 (~420 ms)
+        ASSERT_EQ(sim.get_unit(ant).hp, 10u);
+        ASSERT_EQ(sim.get_unit(ant).state, UnitState::PoweringUp);
+        ASSERT_FALSE(sim.grid().has_powerup_at({10, 10}));
+        ASSERT_TRUE(sim.has_audio_event(SoundID::PowerUpHeal));   // Sound 1 at the snap
+        ASSERT_FALSE(sim.has_audio_event(SoundID::PowerUpChime)); // Sound 2 plays when frame 6 starts, 490 ms later
 
-        // Advance 8 ticks (transform_timer decrements each tick)
-        for (int i = 0; i < 8; ++i) {
-            sim.clear_audio_events();
+        // 10 more ticks (500 ms): the chime, then the clip ends 840 ms after the snap
+        bool chime = false;
+        for (int i = 0; i < 10; ++i) {
             sim.tick();
+            if (sim.has_audio_event(SoundID::PowerUpChime)) chime = true;
         }
-        ASSERT_TRUE(sim.has_audio_event(SoundID::PowerUpChime)); // Sound 2 triggered at tick 8
+        ASSERT_TRUE(chime);
+        ASSERT_EQ(sim.get_unit(ant).loco_action, AntUnit::kActionGetPow);
+        ASSERT_TRUE(tick_until(sim, [&]() { return sim.get_unit(ant).loco_action == AntUnit::kActionIdle; }, 20));
+        ASSERT_EQ(sim.get_unit(ant).state, UnitState::GuardIdle);
 
         const auto& ws = sim.get_world_state();
-        ASSERT_TRUE(ws.ants[0].is_transforming);
+        ASSERT_EQ(ws.ants[0].type, AntType::Combat);
     } TEST_END();
 
-    TEST_CASE("13.7 Walking Off Power-Up During Dwell Window Without Consuming It") {
+    TEST_CASE("13.7 Walking Off Power-Up After The Window Cancelled The Pick-Up (a valid order to another tile) Without Consuming It") {
         SimulationEngine sim;
         sim.init_test_world(60, 60, 1);
         sim.grid_mut().place_powerup(10, 10, 4); // Combat power-up at (10, 10)
@@ -957,82 +963,61 @@ static void run_suite_13_authentic_fidelity() {
 
         // Order ant to walk onto powerup at (10, 10)
         sim.issue_move_order(ant, {10, 10});
-        auto arrived_at = [&](TileCoord t) {
-            const AntUnit& u = sim.get_unit(ant);
-            return u.pos == t && u.waypoints.empty() && !sim.has_pending_path(ant) && u.state == UnitState::Idle;
-        };
-
-        // Advance until ant reaches (10, 10): path at the first 50 ms run, then 250 ms + 8 steps of 4 px / 50 ms
-        ASSERT_TRUE(tick_until(sim, [&]() { return arrived_at(TileCoord{10, 10}); }, 40));
-        ASSERT_EQ(sim.get_unit(ant).pos, (TileCoord{10, 10}));
-        ASSERT_EQ(sim.get_unit(ant).state, UnitState::Idle);
-        // Ant has started dwell window (5 ticks remaining after arrival tick)
-        ASSERT_GT(sim.get_unit(ant).powerup_dwell_timer, 0);
-        ASSERT_FALSE(sim.get_unit(ant).is_transforming());
+        // Advance until the ant's pixel position is inside the power-up's tile (the crossing frame): the walk has not ended yet
+        ASSERT_TRUE(tick_until(sim, [&]() { return sim.get_unit(ant).pixel_x >= 10 * 32; }, 40));
+        ASSERT_EQ(sim.get_unit(ant).type, AntType::Worker);
         ASSERT_TRUE(sim.grid().has_powerup_at({10, 10}));
 
-        // Quick redirection! Order ant to walk to (11, 10) before dwell finishes
-        sim.issue_move_order(ant, {11, 10});
-        ASSERT_EQ(sim.get_unit(ant).powerup_dwell_timer, 0);
+        // Quick redirection! Any accepted order snaps the ant onto the tile centre and drops the walk, so the arrival never comes
+        sim.issue_move_order(ant, {11, 12});
+        ASSERT_EQ(sim.get_unit(ant).pixel_x, 10 * 32 + 16);
+        ASSERT_TRUE(sim.get_unit(ant).waypoints.empty());
 
-        // Advance until the ant has walked to (11, 10)
-        ASSERT_TRUE(tick_until(sim, [&]() { return arrived_at(TileCoord{11, 10}); }, 40));
-        ASSERT_EQ(sim.get_unit(ant).pos, (TileCoord{11, 10}));
+        // Advance until the ant has walked to (11, 12)
+        ASSERT_TRUE(tick_until(sim, [&]() {
+            const AntUnit& u = sim.get_unit(ant);
+            return u.pos == TileCoord{11, 12} && u.waypoints.empty() && !sim.has_pending_path(ant) && u.state == UnitState::Idle;
+        }, 60));
         ASSERT_EQ(sim.get_unit(ant).type, AntType::Worker); // Still Worker!
-        ASSERT_FALSE(sim.get_unit(ant).is_transforming());
         // Power-up at (10, 10) remains on the ground unconsumed!
         ASSERT_TRUE(sim.grid().has_powerup_at({10, 10}));
     } TEST_END();
 
-    TEST_CASE("13.8 Forced CantGo Standing on Power-Up Without Consuming It") {
+    TEST_CASE("13.8 Forced CantGo Inside The Window Leaves The Ant Standing On The Power-Up; Clicking It Then Consumes It") {
         SimulationEngine sim;
         sim.init_test_world(60, 60, 1);
         sim.grid_mut().place_powerup(10, 10, 4); // Combat power-up at (10, 10)
         uint32_t ant = sim.spawn_unit(0, AntType::Worker, {9, 10});
 
-        // Order ant to walk onto powerup at (10, 10)
-        sim.issue_move_order(ant, {10, 10});
-        ASSERT_TRUE(tick_until(sim, [&]() {
-            const AntUnit& u = sim.get_unit(ant);
-            return u.pos == TileCoord{10, 10} && u.waypoints.empty() && !sim.has_pending_path(ant) &&
-                   u.state == UnitState::Idle;
-        }, 40));
-        ASSERT_EQ(sim.get_unit(ant).pos, (TileCoord{10, 10}));
-
-        // Force ant into CantGo while on powerup: order it to an unreachable island (land at (20, 20) inside a
-        // ring of water), so the path manager reports "Can't go there." (clicking plain water would only send
-        // the ant to the nearest shore tile of the goal ring scan).
+        // An unreachable island (land at (20, 20) inside a ring of water): the path manager reports "Can't go there."
+        // (clicking plain water would only send the ant to the nearest shore tile of the goal ring scan).
         for (int32_t y = 19; y <= 21; ++y) {
             for (int32_t x = 19; x <= 21; ++x) {
                 if (x != 20 || y != 20) sim.grid_mut().get_cell_mut(static_cast<uint32_t>(x), static_cast<uint32_t>(y)).terrain_type = TERRAIN_WATER;
             }
         }
-        sim.issue_move_order(ant, {20, 20});
-        ASSERT_TRUE(tick_until(sim, [&]() { return sim.get_unit(ant).state == UnitState::CantGo; }, 10));
-        ASSERT_EQ(sim.get_unit(ant).powerup_dwell_timer, 0);
 
-        // Advance through CantGo duration (12 ticks) and beyond
-        for (int i = 0; i < 20; ++i) {
+        // Order ant to walk onto powerup at (10, 10); the moment it crosses into the tile, force the can't-go order
+        sim.issue_move_order(ant, {10, 10});
+        ASSERT_TRUE(tick_until(sim, [&]() { return sim.get_unit(ant).pixel_x >= 10 * 32; }, 40));
+        sim.issue_move_order(ant, {20, 20});
+        ASSERT_EQ(sim.get_unit(ant).pixel_x, 10 * 32 + 16);
+        ASSERT_TRUE(tick_until(sim, [&]() { return sim.get_unit(ant).state == UnitState::CantGo; }, 20));
+
+        // Advance through CantGo duration and beyond
+        for (int i = 0; i < 40; ++i) {
             sim.tick();
         }
         // Ant returned to Idle, standing directly on powerup without consuming it!
         ASSERT_EQ(sim.get_unit(ant).pos, (TileCoord{10, 10}));
         ASSERT_EQ(sim.get_unit(ant).state, UnitState::Idle);
         ASSERT_EQ(sim.get_unit(ant).type, AntType::Worker);
-        ASSERT_FALSE(sim.get_unit(ant).is_transforming());
         ASSERT_TRUE(sim.grid().has_powerup_at({10, 10}));
 
         // Now player specifically clicks on the powerup tile to consume it: GoTo gives the ant a one-tile path,
-        // and when that path completes on the power-up the 6-tick pickup dwell starts
+        // and when that path completes on the power-up the pick-up happens at once
         sim.issue_move_order(ant, {10, 10});
-        bool dwelled = false;
-        ASSERT_TRUE(tick_until(sim, [&]() {
-            if (sim.get_unit(ant).powerup_dwell_timer > 0) dwelled = true;
-            return sim.get_unit(ant).is_transforming();
-        }, 30));
-        ASSERT_TRUE(dwelled);
-        // Now it consumed and started transformation!
-        ASSERT_TRUE(sim.get_unit(ant).is_transforming());
+        ASSERT_TRUE(tick_until(sim, [&]() { return sim.get_unit(ant).loco_action == AntUnit::kActionGetPow; }, 30));
         ASSERT_EQ(sim.get_unit(ant).type, AntType::Combat);
         ASSERT_FALSE(sim.grid().has_powerup_at({10, 10}));
     } TEST_END();

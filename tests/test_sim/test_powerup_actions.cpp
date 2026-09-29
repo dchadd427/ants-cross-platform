@@ -1,0 +1,672 @@
+// Golden tests of the power-ups of the original game (Ants.exe): the pick-up is the arrival of a move or power-up order on
+// the power-up's tile (FUN_0101ccaf cases 1 and 4 -> message 9 -> FUN_01020cdb, synchronous), plays the getpow clip as
+// action 4 and changes the ant's type and nothing else; an order given between the crossing into the power-up's tile and
+// the landing on its centre cancels the pick-up (the ant stands on the power-up); a power-up is a solid object, so an ant
+// standing on it cannot be reached, attacked or thrown onto (docs/GAME_REVERSE_ENGINEERING.md 5.38).
+#include "ants_sim/sim_engine.hpp"
+#include "ants_sim/movement_tables.hpp"
+
+#include <cstdint>
+#include <functional>
+#include <iomanip>
+#include <iostream>
+#include <string>
+#include <vector>
+
+using namespace ants::sim;
+
+static int g_test_count = 0;
+static int g_test_failures = 0;
+static int g_assert_count = 0;
+
+inline void run_test_case(const std::string& name, const std::function<void()>& fn) {
+    ++g_test_count;
+    std::cout << "  RUNNING: " << std::left << std::setw(92) << name << " ... " << std::flush;
+    const int prev = g_test_failures;
+    try {
+        fn();
+    } catch (const std::exception& e) {
+        std::cout << "FAILED! Exception: " << e.what() << "\n";
+        ++g_test_failures;
+        return;
+    }
+    if (g_test_failures == prev) std::cout << "PASS\n";
+}
+
+#define TEST_CASE(name) run_test_case(name, [&]()
+#define TEST_END() );
+#define ASSERT_TRUE(cond) \
+    do { \
+        ++g_assert_count; \
+        if (!(cond)) { \
+            std::cout << "FAILED!\n    Assertion failed: " #cond " at " << __FILE__ << ":" << __LINE__ << "\n"; \
+            ++g_test_failures; \
+            return; \
+        } \
+    } while (0)
+#define ASSERT_FALSE(cond) ASSERT_TRUE(!(cond))
+#define ASSERT_EQ(a, b) ASSERT_TRUE((a) == (b))
+#define ASSERT_NE(a, b) ASSERT_TRUE((a) != (b))
+
+namespace {
+
+constexpr int kTickMs = 50;
+constexpr uint16_t kNewsCantGoThere = 0x3A;   // status 58 "Can't go there."
+
+void make_world(SimulationEngine& sim, uint32_t seed = 1) {
+    sim.init_test_world(60, 60, seed, 720000);
+    sim.set_anthill(0, TileCoord{2, 2});
+    sim.set_anthill(1, TileCoord{50, 50});
+    sim.set_player_score(0, 0);
+    sim.set_player_score(1, 0);
+}
+
+// A one-tile island at (30, 30) inside a ring of water: an order to it fails in the path manager ("Can't go there.").
+void make_island(SimulationEngine& sim) {
+    for (int y = 29; y <= 31; ++y) {
+        for (int x = 29; x <= 31; ++x) {
+            if (x != 30 || y != 30) sim.grid_mut().get_cell_mut(static_cast<uint32_t>(x), static_cast<uint32_t>(y)).terrain_type = TERRAIN_WATER;
+        }
+    }
+}
+
+void set_surface(SimulationEngine& sim, TileCoord t, SurfaceType s) {
+    sim.grid_mut().get_cell_mut(static_cast<uint32_t>(t.x), static_cast<uint32_t>(t.y)).surface_type = s;
+}
+
+void run_ms(SimulationEngine& sim, int ms) {
+    for (int t = 0; t < ms / kTickMs; ++t) sim.tick();
+}
+
+// Ticks until `pred` holds or `max_ms` passed; returns the elapsed time in ms (-1 = never).
+int wait_ms(SimulationEngine& sim, int max_ms, const std::function<bool()>& pred) {
+    for (int t = 0; t <= max_ms / kTickMs; ++t) {
+        if (pred()) return t * kTickMs;
+        sim.tick();
+    }
+    return -1;
+}
+
+AntOrder order(uint32_t ant, OrderType type, TileCoord target) {
+    AntOrder o{};
+    o.ant_id = ant;
+    o.type = type;
+    o.target_x = target.x;
+    o.target_y = target.y;
+    return o;
+}
+
+TileCoord tile_of(const AntUnit& a) { return TileCoord{a.pixel_x / 32, a.pixel_y / 32}; }
+
+// Audio events of the tick that just ran, counted per sound id.
+int count_sound(std::vector<AudioEvent>& ev, uint32_t id) {
+    int n = 0;
+    for (const auto& e : ev) if (e.sound_id == id) ++n;
+    return n;
+}
+
+// Puts a worker on A, a power-up on B (adjacent, in direction `dir` from A) and gives the player move order at t = 0.
+struct Walk {
+    SimulationEngine sim;
+    uint32_t ant{0};
+    TileCoord a{10, 10};
+    TileCoord b{11, 10};
+    int now{0};                  // ms since the order
+    void tick() { sim.tick(); now += kTickMs; }
+    void run_to(int ms) { while (now < ms) tick(); }
+    const AntUnit& u() const { return const_cast<Walk*>(this)->sim.get_unit(ant); }
+};
+
+void start_walk(Walk& w, TileCoord a, TileCoord b, uint8_t hat = 4, AntType type = AntType::Worker) {
+    make_world(w.sim);
+    w.a = a;
+    w.b = b;
+    w.sim.grid_mut().place_powerup(b.x, b.y, hat);
+    w.ant = w.sim.spawn_unit(0, type, a);
+    w.sim.issue_move_order(w.ant, b);
+}
+
+} // namespace
+
+int main() {
+    std::cout << "=======================================================\n"
+              << " Ants power-ups: pick-up, cancel window, immunity\n"
+              << "=======================================================\n";
+
+    TEST_CASE("1.1 Pick-up: crossing into the tile at 450 ms, the walk ends at 650 ms and the type changes in that very tick (no dwell)") {
+        Walk w;
+        start_walk(w, TileCoord{10, 10}, TileCoord{11, 10});
+        w.sim.get_unit(w.ant).hp = 6;
+        w.run_to(400);
+        ASSERT_EQ(w.u().pixel_x, 348);
+        ASSERT_EQ(tile_of(w.u()), (TileCoord{10, 10}));
+        w.run_to(450);                                                       // the walk frame that crosses the tile edge
+        ASSERT_EQ(w.u().pixel_x, 352);
+        ASSERT_EQ(tile_of(w.u()), (TileCoord{11, 10}));
+        ASSERT_TRUE(w.sim.grid().has_powerup_at(TileCoord{11, 10}));
+        ASSERT_EQ(w.u().type, AntType::Worker);
+        w.run_to(600);
+        ASSERT_EQ(w.u().pixel_x, 364);
+        ASSERT_EQ(w.u().type, AntType::Worker);
+        ASSERT_TRUE(w.sim.grid().has_powerup_at(TileCoord{11, 10}));
+        w.sim.clear_audio_events();
+        w.tick();                                                            // t = 650: the arrival frame
+        ASSERT_EQ(w.u().type, AntType::Combat);
+        ASSERT_FALSE(w.sim.grid().has_powerup_at(TileCoord{11, 10}));
+        ASSERT_EQ(w.u().loco_action, AntUnit::kActionGetPow);
+        ASSERT_EQ(w.u().state, UnitState::PoweringUp);
+        ASSERT_EQ(w.u().hp, 6u);                                             // no heal
+        ASSERT_EQ(w.u().max_hp, 10u);                                        // 10 for every type
+        ASSERT_TRUE(w.u().waypoints.empty());
+        ASSERT_EQ(w.u().pixel_x, 372);                                       // tile centre + the arrival snap delta
+        ASSERT_EQ(w.u().pixel_y, 336);
+        auto ev = w.sim.poll_audio_events();
+        ASSERT_EQ(count_sound(ev, 1), 1);                                    // powerupc.wav exactly once (once flag)
+        ASSERT_EQ(count_sound(ev, 2), 0);
+        int chimes = 0;
+        for (int ms = 700; ms <= 1500; ms += kTickMs) {
+            w.tick();
+            auto e2 = w.sim.poll_audio_events();
+            chimes += count_sound(e2, 2);
+            if (ms < 1150) ASSERT_EQ(count_sound(e2, 2), 0);
+            if (ms == 1150) ASSERT_EQ(count_sound(e2, 2), 1);                // 490 ms after the snap
+            if (ms < 1500) ASSERT_EQ(w.u().loco_action, AntUnit::kActionGetPow);
+        }
+        ASSERT_EQ(chimes, 1);
+        ASSERT_EQ(w.u().loco_action, AntUnit::kActionIdle);                  // 840 ms after the snap: idle as the new type
+        ASSERT_EQ(w.u().state, UnitState::GuardIdle);
+        ASSERT_EQ(w.u().orig_order, AntUnit::kOrderNone);
+        ASSERT_EQ(w.u().pixel_x, 372);                                       // no later snap
+    } TEST_END();
+
+    TEST_CASE("1.2 Pick-up window per direction and terrain: crossing and arrival ticks, overshoot after the pick-up (audit matrix)") {
+        struct Row { const char* name; TileCoord a, b; SurfaceType sa, sb; int cross_ms, arrive_ms, dx, dy; };
+        // ms after the walk restart at 200 ms, from the walk clips of ants.chd (crossing frame, arrival frame)
+        const Row rows[] = {
+            {"grass E", {10, 10}, {11, 10}, SurfaceType::Grass, SurfaceType::Grass, 250, 450, 4, 0},
+            {"grass W", {11, 10}, {10, 10}, SurfaceType::Grass, SurfaceType::Grass, 300, 450, -4, 0},
+            {"grass S", {10, 10}, {10, 11}, SurfaceType::Grass, SurfaceType::Grass, 250, 450, 0, 4},
+            {"grass N", {10, 11}, {10, 10}, SurfaceType::Grass, SurfaceType::Grass, 300, 450, 0, -4},
+            {"grass SE", {10, 10}, {11, 11}, SurfaceType::Grass, SurfaceType::Grass, 350, 550, 5, 5},
+            {"grass NW", {11, 11}, {10, 10}, SurfaceType::Grass, SurfaceType::Grass, 350, 550, -5, -5},
+            {"sand E", {10, 10}, {11, 10}, SurfaceType::Slate, SurfaceType::Slate, 200, 360, 4, 0},
+            {"sand W", {11, 10}, {10, 10}, SurfaceType::Slate, SurfaceType::Slate, 240, 360, -4, 0},
+            {"dirt E", {10, 10}, {11, 10}, SurfaceType::Gravel, SurfaceType::Gravel, 300, 540, 4, 0},
+            {"dirt W", {11, 10}, {10, 10}, SurfaceType::Gravel, SurfaceType::Gravel, 360, 540, -4, 0},
+            {"mud E", {10, 10}, {11, 10}, SurfaceType::Mud, SurfaceType::Mud, 540, 960, 4, 0},
+            {"grass to dirt E", {10, 10}, {11, 10}, SurfaceType::Grass, SurfaceType::Gravel, 250, 550, 4, 0},
+            {"dirt to grass E", {10, 10}, {11, 10}, SurfaceType::Gravel, SurfaceType::Grass, 300, 550, 4, 0},
+            {"dirt to grass W", {11, 10}, {10, 10}, SurfaceType::Gravel, SurfaceType::Grass, 360, 560, -4, 0},
+            {"sand to grass E", {10, 10}, {11, 10}, SurfaceType::Slate, SurfaceType::Grass, 200, 450, 4, 0},
+        };
+        for (const Row& r : rows) {
+            Walk w;
+            make_world(w.sim);
+            set_surface(w.sim, r.a, r.sa);
+            set_surface(w.sim, r.b, r.sb);
+            w.sim.grid_mut().place_powerup(r.b.x, r.b.y, 4);
+            w.ant = w.sim.spawn_unit(0, AntType::Worker, r.a);
+            w.sim.issue_move_order(w.ant, r.b);
+            auto up = [](int ms) { return (ms + kTickMs - 1) / kTickMs * kTickMs; };
+            const int cross_tick = up(200 + r.cross_ms);
+            const int arrive_tick = up(200 + r.arrive_ms);
+            w.run_to(cross_tick - kTickMs);
+            if (w.u().type != AntType::Worker || tile_of(w.u()) == r.b) {
+                std::cout << "FAILED!\n    " << r.name << ": crossed before " << cross_tick << " ms\n";
+                ++g_test_failures;
+                return;
+            }
+            w.tick();
+            if (tile_of(w.u()) != r.b || w.u().type != AntType::Worker) {
+                std::cout << "FAILED!\n    " << r.name << ": not on the power-up tile at " << cross_tick << " ms\n";
+                ++g_test_failures;
+                return;
+            }
+            w.run_to(arrive_tick - kTickMs);
+            if (w.u().type != AntType::Worker || !w.sim.grid().has_powerup_at(r.b)) {
+                std::cout << "FAILED!\n    " << r.name << ": picked up before " << arrive_tick << " ms\n";
+                ++g_test_failures;
+                return;
+            }
+            w.tick();
+            const int cx = r.b.x * 32 + 16 + r.dx;
+            const int cy = r.b.y * 32 + 16 + r.dy;
+            if (w.u().type != AntType::Combat || w.sim.grid().has_powerup_at(r.b) || w.u().pixel_x != cx || w.u().pixel_y != cy) {
+                std::cout << "FAILED!\n    " << r.name << ": arrival at " << arrive_tick << " ms: type " << static_cast<int>(w.u().type)
+                          << " px (" << w.u().pixel_x << "," << w.u().pixel_y << ") expected (" << cx << "," << cy << ")\n";
+                ++g_test_failures;
+                return;
+            }
+            ++g_assert_count;
+        }
+    } TEST_END();
+
+    TEST_CASE("1.3 Cancel window: an order between the crossing (450) and the landing (650) snaps the ant onto the power-up tile and cancels the pick-up") {
+        for (int cancel_ms : {450, 500, 550, 600}) {
+            Walk w;
+            start_walk(w, TileCoord{10, 10}, TileCoord{11, 10});
+            make_island(w.sim);
+            w.run_to(cancel_ms);
+            ASSERT_EQ(tile_of(w.u()), (TileCoord{11, 10}));
+            w.sim.issue_move_order(w.ant, TileCoord{30, 30});               // "Can't go there." once the path manager has searched
+            ASSERT_EQ(w.u().pixel_x, 368);                                  // the centre of the power-up tile (no overshoot)
+            ASSERT_EQ(w.u().pixel_y, 336);
+            ASSERT_TRUE(w.u().waypoints.empty());
+            ASSERT_EQ(w.u().loco_action, AntUnit::kActionIdle);
+            w.sim.clear_audio_events();
+            ASSERT_TRUE(wait_ms(w.sim, 800, [&]() { return w.u().loco_action == AntUnit::kActionCantGo; }) >= 0);
+            ASSERT_TRUE(w.sim.has_news_event(0, kNewsCantGoThere));
+            ASSERT_TRUE(w.sim.has_audio_event(63));                         // the can't clip's cue
+            run_ms(w.sim, 3000);
+            ASSERT_EQ(w.u().type, AntType::Worker);
+            ASSERT_EQ(w.u().hp, 10u);
+            ASSERT_EQ(w.u().pixel_x, 368);
+            ASSERT_EQ(tile_of(w.u()), (TileCoord{11, 10}));
+            ASSERT_EQ(w.u().loco_action, AntUnit::kActionIdle);
+            ASSERT_TRUE(w.sim.grid().has_powerup_at(TileCoord{11, 10}));    // the ant stands on an intact power-up
+            ASSERT_EQ(w.sim.grid().get_powerup_type(TileCoord{11, 10}), 4);
+        }
+    } TEST_END();
+
+    TEST_CASE("1.4 Cancel window edges: before the crossing the ant is snapped back to the previous tile, after the landing the order is refused") {
+        {   // 400 ms: still on tile A (pixel 348): the snap puts it on the centre of A, the power-up is not reached
+            Walk w;
+            start_walk(w, TileCoord{10, 10}, TileCoord{11, 10});
+            make_island(w.sim);
+            w.run_to(400);
+            w.sim.issue_move_order(w.ant, TileCoord{30, 30});
+            ASSERT_EQ(w.u().pixel_x, 336);
+            ASSERT_EQ(tile_of(w.u()), (TileCoord{10, 10}));
+            run_ms(w.sim, 3000);
+            ASSERT_EQ(w.u().type, AntType::Worker);
+            ASSERT_EQ(tile_of(w.u()), (TileCoord{10, 10}));
+            ASSERT_TRUE(w.sim.grid().has_powerup_at(TileCoord{11, 10}));
+        }
+        {   // 650 ms: the pick-up has happened and orders are refused for the whole getpow clip
+            Walk w;
+            start_walk(w, TileCoord{10, 10}, TileCoord{11, 10});
+            make_island(w.sim);
+            w.run_to(650);
+            ASSERT_EQ(w.u().loco_action, AntUnit::kActionGetPow);
+            w.sim.issue_move_order(w.ant, TileCoord{30, 30});
+            w.sim.issue_move_order(w.ant, TileCoord{20, 20});
+            w.sim.issue_order(order(w.ant, OrderType::Move, TileCoord{20, 20}));
+            ASSERT_EQ(w.u().pixel_x, 372);                                  // no snap
+            ASSERT_EQ(w.u().loco_action, AntUnit::kActionGetPow);
+            ASSERT_FALSE(w.sim.has_pending_path(w.ant));
+            w.run_to(1450);
+            ASSERT_EQ(w.u().loco_action, AntUnit::kActionGetPow);           // refused until 840 ms after the snap
+            ASSERT_EQ(w.u().type, AntType::Combat);
+            ASSERT_FALSE(w.sim.has_news_event(0, kNewsCantGoThere));
+            run_ms(w.sim, 100);
+            ASSERT_EQ(w.u().loco_action, AntUnit::kActionIdle);
+        }
+    } TEST_END();
+
+    TEST_CASE("1.5 Cancel window to the west: crossing at 500 ms, landing at 650 ms (window 150 ms); a valid order to another tile leaves without picking up") {
+        for (int cancel_ms : {500, 550, 600}) {
+            Walk w;
+            start_walk(w, TileCoord{11, 10}, TileCoord{10, 10});
+            make_island(w.sim);
+            w.run_to(cancel_ms);
+            ASSERT_EQ(tile_of(w.u()), (TileCoord{10, 10}));
+            w.sim.issue_move_order(w.ant, TileCoord{30, 30});
+            ASSERT_EQ(w.u().pixel_x, 336);                                  // the centre of the power-up tile (10, 10)
+            ASSERT_TRUE(wait_ms(w.sim, 800, [&]() { return w.u().loco_action == AntUnit::kActionCantGo; }) >= 0);
+        }
+        {   // 450 ms: still on tile A = (11, 10) (pixel 372 - 4 = 368+..): snapped back to A
+            Walk w;
+            start_walk(w, TileCoord{11, 10}, TileCoord{10, 10});
+            make_island(w.sim);
+            w.run_to(450);
+            ASSERT_EQ(tile_of(w.u()), (TileCoord{11, 10}));
+            w.sim.issue_move_order(w.ant, TileCoord{30, 30});
+            ASSERT_EQ(w.u().pixel_x, 368);
+        }
+        {   // a valid order to a third tile: the ant walks away, the power-up stays
+            Walk w;
+            start_walk(w, TileCoord{10, 10}, TileCoord{11, 10});
+            w.run_to(500);
+            ASSERT_EQ(tile_of(w.u()), (TileCoord{11, 10}));
+            w.sim.issue_move_order(w.ant, TileCoord{11, 14});
+            ASSERT_EQ(w.u().pixel_x, 368);
+            ASSERT_TRUE(wait_ms(w.sim, 6000, [&]() { return tile_of(w.u()) == TileCoord{11, 14} && w.u().waypoints.empty(); }) >= 0);
+            ASSERT_EQ(w.u().type, AntType::Worker);
+            ASSERT_TRUE(w.sim.grid().has_powerup_at(TileCoord{11, 10}));
+        }
+    } TEST_END();
+
+    TEST_CASE("1.6 The silent can't-go: a goal with no valid tile within four rings stops the ant on the spot without text, sound or clip") {
+        Walk w;
+        start_walk(w, TileCoord{10, 10}, TileCoord{11, 10});
+        for (int y = 24; y <= 36; ++y) {                                    // a lake: every tile within 4 rings of (30, 30) is water
+            for (int x = 24; x <= 36; ++x) w.sim.grid_mut().get_cell_mut(static_cast<uint32_t>(x), static_cast<uint32_t>(y)).terrain_type = TERRAIN_WATER;
+        }
+        w.run_to(500);
+        ASSERT_EQ(tile_of(w.u()), (TileCoord{11, 10}));
+        w.sim.clear_audio_events();
+        w.sim.clear_news_events();
+        w.sim.issue_move_order(w.ant, TileCoord{30, 30});
+        ASSERT_EQ(w.u().pixel_x, 368);
+        ASSERT_EQ(w.u().loco_action, AntUnit::kActionIdle);
+        ASSERT_FALSE(w.sim.has_pending_path(w.ant));
+        run_ms(w.sim, 3000);
+        ASSERT_FALSE(w.sim.has_news_event(0, kNewsCantGoThere));
+        ASSERT_FALSE(w.sim.has_audio_event(63));
+        ASSERT_EQ(w.u().type, AntType::Worker);
+        ASSERT_TRUE(w.sim.grid().has_powerup_at(TileCoord{11, 10}));
+    } TEST_END();
+
+    TEST_CASE("1.7 Ordering an ant that stands on a power-up onto its own tile picks it up (a one-tile path completes on the next idle frame)") {
+        Walk w;
+        start_walk(w, TileCoord{10, 10}, TileCoord{11, 10}, 3);
+        make_island(w.sim);
+        w.run_to(500);
+        w.sim.issue_move_order(w.ant, TileCoord{30, 30});
+        run_ms(w.sim, 3000);
+        ASSERT_EQ(w.u().type, AntType::Worker);
+        ASSERT_TRUE(w.sim.grid().has_powerup_at(TileCoord{11, 10}));
+        w.sim.issue_move_order(w.ant, TileCoord{11, 10});
+        ASSERT_EQ(w.u().pixel_x, 368);
+        const int t = wait_ms(w.sim, 1000, [&]() { return w.u().type == AntType::Thief; });
+        ASSERT_TRUE(t >= 100 && t <= 300);                                  // PATHMGR run plus the first idle frame
+        ASSERT_EQ(w.u().loco_action, AntUnit::kActionGetPow);
+        ASSERT_EQ(w.u().pixel_x, 368);                                      // no snap delta on a one-tile path
+        ASSERT_FALSE(w.sim.grid().has_powerup_at(TileCoord{11, 10}));
+    } TEST_END();
+
+    TEST_CASE("1.8 No pick-up from a distance and none by an ant that does not end its walk on the tile (orders next to it, orders of the remake's own systems)") {
+        {   // an order to the tile next to the power-up
+            Walk w;
+            make_world(w.sim);
+            w.sim.grid_mut().place_powerup(15, 15, 4);
+            w.ant = w.sim.spawn_unit(0, AntType::Worker, TileCoord{10, 15});
+            w.sim.issue_move_order(w.ant, TileCoord{14, 15});
+            ASSERT_TRUE(wait_ms(w.sim, 8000, [&]() { return tile_of(w.u()) == TileCoord{14, 15} && w.u().waypoints.empty() && !w.sim.has_pending_path(w.ant); }) >= 0);
+            run_ms(w.sim, 3000);
+            ASSERT_EQ(w.u().type, AntType::Worker);
+            ASSERT_EQ(w.u().loco_action, AntUnit::kActionIdle);
+            ASSERT_TRUE(w.sim.grid().has_powerup_at(TileCoord{15, 15}));
+        }
+        {   // an order to a tile behind it: the path goes around the solid power-up
+            Walk w;
+            make_world(w.sim);
+            w.sim.grid_mut().place_powerup(15, 15, 4);
+            w.ant = w.sim.spawn_unit(0, AntType::Worker, TileCoord{13, 15});
+            w.sim.issue_move_order(w.ant, TileCoord{17, 15});
+            bool on_tile = false;
+            ASSERT_TRUE(wait_ms(w.sim, 8000, [&]() {
+                if (tile_of(w.u()) == TileCoord{15, 15}) on_tile = true;
+                return tile_of(w.u()) == TileCoord{17, 15} && w.u().waypoints.empty();
+            }) >= 0);
+            ASSERT_FALSE(on_tile);
+            ASSERT_EQ(w.u().type, AntType::Worker);
+            ASSERT_TRUE(w.sim.grid().has_powerup_at(TileCoord{15, 15}));
+        }
+        {   // an order without the player flag (guard AI, hill queue, ability approach) never takes it: the goal is not valid
+            Walk w;
+            make_world(w.sim);
+            w.sim.grid_mut().place_powerup(15, 15, 4);
+            w.ant = w.sim.spawn_unit(0, AntType::Worker, TileCoord{12, 15});
+            w.sim.issue_internal_move_order(w.ant, TileCoord{15, 15});
+            run_ms(w.sim, 6000);
+            ASSERT_EQ(w.u().type, AntType::Worker);
+            ASSERT_NE(tile_of(w.u()), (TileCoord{15, 15}));
+            ASSERT_TRUE(w.sim.grid().has_powerup_at(TileCoord{15, 15}));
+        }
+    } TEST_END();
+
+    TEST_CASE("1.9 A power-up under an idle or a placed ant is never taken: nothing but the arrival of an order takes it") {
+        SimulationEngine sim;
+        make_world(sim);
+        sim.grid_mut().place_powerup(15, 15, 4);
+        const uint32_t on = sim.spawn_unit(0, AntType::Worker, TileCoord{15, 15});
+        run_ms(sim, 60000);
+        ASSERT_EQ(sim.get_unit(on).type, AntType::Worker);
+        ASSERT_EQ(sim.get_unit(on).loco_action, AntUnit::kActionIdle);
+        ASSERT_TRUE(sim.grid().has_powerup_at(TileCoord{15, 15}));
+        // a power-up appearing under a walker (the flower dropper's landing) is not taken by the walker that passes over it
+        const uint32_t w2 = sim.spawn_unit(0, AntType::Worker, TileCoord{20, 20});
+        sim.issue_move_order(w2, TileCoord{24, 20});
+        run_ms(sim, 600);
+        const TileCoord under = tile_of(sim.get_unit(w2));
+        sim.grid_mut().place_powerup(under.x, under.y, 5);
+        run_ms(sim, 8000);
+        ASSERT_EQ(sim.get_unit(w2).type, AntType::Worker);
+        ASSERT_TRUE(sim.grid().has_powerup_at(under));
+    } TEST_END();
+
+    TEST_CASE("1.10 The type table: every power-up id gives its type, hit points stay, the maximum is 10 for all types") {
+        for (uint8_t hat = 1; hat <= 5; ++hat) {
+            Walk w;
+            start_walk(w, TileCoord{10, 10}, TileCoord{11, 10}, hat);
+            w.sim.get_unit(w.ant).hp = 3;
+            ASSERT_TRUE(wait_ms(w.sim, 3000, [&]() { return w.u().loco_action == AntUnit::kActionGetPow; }) >= 0);
+            ASSERT_EQ(static_cast<uint8_t>(w.u().type), hat);               // grid ids equal the AntType numbers 1 bomber .. 5 swimmer
+            ASSERT_EQ(w.u().hp, 3u);
+            ASSERT_EQ(w.u().max_hp, 10u);
+            run_ms(w.sim, 1500);
+            ASSERT_EQ(w.u().hp, 3u);
+            ASSERT_EQ(w.u().loco_action, AntUnit::kActionIdle);
+        }
+    } TEST_END();
+
+    TEST_CASE("1.11 A typed ant drops its old power-up on a free neighbour tile (West 2/9, every other tile 1/9); the picked one is gone") {
+        int hits[3][3] = {};
+        const int kSeeds = 900;
+        for (int seed = 1; seed <= kSeeds; ++seed) {
+            Walk w;
+            make_world(w.sim, static_cast<uint32_t>(seed));
+            w.sim.grid_mut().place_powerup(15, 15, 4);
+            w.ant = w.sim.spawn_unit(0, AntType::Bomber, TileCoord{12, 15});
+            w.sim.issue_move_order(w.ant, TileCoord{15, 15});
+            ASSERT_TRUE(wait_ms(w.sim, 3000, [&]() { return w.u().loco_action == AntUnit::kActionGetPow; }) >= 0);
+            ASSERT_EQ(w.u().type, AntType::Combat);
+            ASSERT_FALSE(w.sim.grid().has_powerup_at(TileCoord{15, 15}));
+            int found = 0;
+            for (int dy = -1; dy <= 1; ++dy) {
+                for (int dx = -1; dx <= 1; ++dx) {
+                    if ((dx || dy) && w.sim.grid().has_powerup_at(TileCoord{15 + dx, 15 + dy})) {
+                        ASSERT_EQ(w.sim.grid().get_powerup_type(TileCoord{15 + dx, 15 + dy}), 1);   // the bomber's power-up
+                        ++hits[dy + 1][dx + 1];
+                        ++found;
+                    }
+                }
+            }
+            ASSERT_EQ(found, 1);
+        }
+        ASSERT_EQ(hits[1][1], 0);
+        ASSERT_TRUE(hits[1][0] > 150 && hits[1][0] < 250);                  // West: 2/9 of 900 = 200
+        for (int dy = 0; dy < 3; ++dy) {
+            for (int dx = 0; dx < 3; ++dx) {
+                if ((dx == 1 && dy == 1) || (dx == 0 && dy == 1)) continue;
+                ASSERT_TRUE(hits[dy][dx] > 60 && hits[dy][dx] < 145);       // the others: 1/9 of 900 = 100
+            }
+        }
+    } TEST_END();
+
+    TEST_CASE("1.12 Nothing free around the tile: the old power-up is lost with the silent cue (sound 40); the own kind moves; a worker drops nothing") {
+        auto surround = [](SimulationEngine& sim, TileCoord centre, TileCoord keep_free) {
+            for (int dy = -1; dy <= 1; ++dy) {
+                for (int dx = -1; dx <= 1; ++dx) {
+                    const TileCoord t{centre.x + dx, centre.y + dy};
+                    if ((dx || dy) && t != keep_free) sim.grid_mut().place_powerup(t.x, t.y, 2);
+                }
+            }
+        };
+        {   // a swimmer climbs out of a water channel onto the power-up: the only open neighbour is water, which is never free
+            SimulationEngine sim;
+            make_world(sim);
+            sim.grid_mut().place_powerup(15, 15, 4);
+            surround(sim, TileCoord{15, 15}, TileCoord{14, 15});
+            for (int x = 11; x <= 14; ++x) sim.grid_mut().get_cell_mut(static_cast<uint32_t>(x), 15u).terrain_type = TERRAIN_WATER;
+            const uint32_t sw = sim.spawn_unit(0, AntType::Swimmer, TileCoord{11, 15});
+            sim.issue_move_order(sw, TileCoord{15, 15});
+            sim.clear_audio_events();
+            ASSERT_TRUE(wait_ms(sim, 8000, [&]() { return sim.get_unit(sw).loco_action == AntUnit::kActionGetPow; }) >= 0);
+            ASSERT_EQ(sim.get_unit(sw).type, AntType::Combat);
+            ASSERT_TRUE(sim.has_audio_event(40));
+            int swimmer_hats = 0, fire_hats = 0;
+            for (int y = 14; y <= 16; ++y) {
+                for (int x = 14; x <= 16; ++x) {
+                    if (!sim.grid().has_powerup_at(TileCoord{x, y})) continue;
+                    if (sim.grid().get_powerup_type(TileCoord{x, y}) == 5) ++swimmer_hats;
+                    if (sim.grid().get_powerup_type(TileCoord{x, y}) == 2) ++fire_hats;
+                }
+            }
+            ASSERT_EQ(swimmer_hats, 0);                                       // the swimmer's own power-up is lost
+            ASSERT_EQ(fire_hats, 7);
+        }
+        {   // a worker has nothing to drop: the cue does not play
+            SimulationEngine sim;
+            make_world(sim);
+            sim.grid_mut().place_powerup(15, 15, 4);
+            surround(sim, TileCoord{15, 15}, TileCoord{14, 15});
+            const uint32_t wk = sim.spawn_unit(0, AntType::Worker, TileCoord{11, 15});
+            sim.issue_move_order(wk, TileCoord{15, 15});
+            sim.clear_audio_events();
+            ASSERT_TRUE(wait_ms(sim, 6000, [&]() { return sim.get_unit(wk).loco_action == AntUnit::kActionGetPow; }) >= 0);
+            ASSERT_EQ(sim.get_unit(wk).type, AntType::Combat);
+            ASSERT_FALSE(sim.has_audio_event(40));
+        }
+        {   // a combat ant taking a combat power-up: the old one is dropped, the ant is a combat ant again
+            SimulationEngine sim;
+            make_world(sim);
+            sim.grid_mut().place_powerup(15, 15, 4);
+            const uint32_t c = sim.spawn_unit(0, AntType::Combat, TileCoord{12, 15});
+            sim.issue_move_order(c, TileCoord{15, 15});
+            ASSERT_TRUE(wait_ms(sim, 3000, [&]() { return sim.get_unit(c).loco_action == AntUnit::kActionGetPow; }) >= 0);
+            ASSERT_EQ(sim.get_unit(c).type, AntType::Combat);
+            int hats = 0;
+            for (int y = 14; y <= 16; ++y) for (int x = 14; x <= 16; ++x) if (sim.grid().has_powerup_at(TileCoord{x, y})) ++hats;
+            ASSERT_EQ(hats, 1);
+        }
+    } TEST_END();
+
+    TEST_CASE("1.13 The Stop button never picks up: an ant on a power-up (no target) is skipped, one inside the window is sent to a neighbour tile") {
+        {   // standing ant without a target
+            Walk w;
+            start_walk(w, TileCoord{10, 10}, TileCoord{11, 10});
+            make_island(w.sim);
+            w.run_to(500);
+            w.sim.issue_move_order(w.ant, TileCoord{30, 30});
+            run_ms(w.sim, 3000);
+            ASSERT_EQ(w.u().loco_action, AntUnit::kActionIdle);
+            ASSERT_FALSE(w.sim.stop_ant(w.ant));
+            run_ms(w.sim, 2000);
+            ASSERT_EQ(w.u().type, AntType::Worker);
+            ASSERT_EQ(tile_of(w.u()), (TileCoord{11, 10}));
+            ASSERT_TRUE(w.sim.grid().has_powerup_at(TileCoord{11, 10}));
+        }
+        {   // Stop inside the window: an ordinary move to the own tile, which is not a valid goal without the player flag
+            Walk w;
+            start_walk(w, TileCoord{10, 10}, TileCoord{11, 10});
+            w.run_to(500);
+            ASSERT_EQ(tile_of(w.u()), (TileCoord{11, 10}));
+            ASSERT_TRUE(w.sim.stop_ant(w.ant));
+            ASSERT_EQ(w.u().pixel_x, 368);
+            run_ms(w.sim, 4000);
+            ASSERT_EQ(w.u().type, AntType::Worker);
+            ASSERT_NE(tile_of(w.u()), (TileCoord{11, 10}));                  // it moved to a free neighbour tile
+            ASSERT_TRUE(w.u().waypoints.empty());
+            ASSERT_TRUE(w.sim.grid().has_powerup_at(TileCoord{11, 10}));
+        }
+        {   // Stop before the crossing: the ant stops on the tile it is on
+            Walk w;
+            start_walk(w, TileCoord{10, 10}, TileCoord{11, 10});
+            w.run_to(400);
+            ASSERT_TRUE(w.sim.stop_ant(w.ant));
+            run_ms(w.sim, 3000);
+            ASSERT_EQ(tile_of(w.u()), (TileCoord{10, 10}));
+            ASSERT_EQ(w.u().type, AntType::Worker);
+            ASSERT_TRUE(w.sim.grid().has_powerup_at(TileCoord{11, 10}));
+        }
+        {   // an idle ant that has no target is not touched at all
+            Walk w;
+            make_world(w.sim);
+            w.ant = w.sim.spawn_unit(0, AntType::Worker, TileCoord{10, 10});
+            ASSERT_FALSE(w.sim.stop_ant(w.ant));
+        }
+    } TEST_END();
+
+    TEST_CASE("1.14 The tunnel hop (ISLANDS corners): each next power-up is ordered inside the window of the one before, only the last one is taken") {
+        Walk w;
+        make_world(w.sim);
+        // a column of power-ups going north: (10, 9) bomber, (10, 8) thief, (10, 7) swimmer
+        w.sim.grid_mut().place_powerup(10, 9, 1);
+        w.sim.grid_mut().place_powerup(10, 8, 3);
+        w.sim.grid_mut().place_powerup(10, 7, 5);
+        w.ant = w.sim.spawn_unit(0, AntType::Worker, TileCoord{10, 10});
+        w.sim.issue_move_order(w.ant, TileCoord{10, 9});
+        auto wait_cross = [&](TileCoord t) {
+            return wait_ms(w.sim, 3000, [&]() { return tile_of(w.u()) == t; }) >= 0;
+        };
+        ASSERT_TRUE(wait_cross(TileCoord{10, 9}));
+        w.sim.issue_move_order(w.ant, TileCoord{10, 8});                    // inside the window of the first power-up
+        ASSERT_EQ(w.u().pixel_y, 9 * 32 + 16);                              // snapped onto the first power-up's tile
+        ASSERT_TRUE(wait_cross(TileCoord{10, 8}));
+        ASSERT_EQ(w.u().type, AntType::Worker);
+        w.sim.issue_move_order(w.ant, TileCoord{10, 7});                    // inside the window of the second one
+        ASSERT_EQ(w.u().pixel_y, 8 * 32 + 16);
+        ASSERT_TRUE(wait_ms(w.sim, 3000, [&]() { return w.u().loco_action == AntUnit::kActionGetPow; }) >= 0);
+        ASSERT_EQ(w.u().type, AntType::Swimmer);                            // only the last power-up was taken
+        ASSERT_TRUE(w.sim.grid().has_powerup_at(TileCoord{10, 9}));
+        ASSERT_TRUE(w.sim.grid().has_powerup_at(TileCoord{10, 8}));
+        ASSERT_FALSE(w.sim.grid().has_powerup_at(TileCoord{10, 7}));
+        ASSERT_EQ(w.sim.grid().get_powerup_type(TileCoord{10, 9}), 1);
+        ASSERT_EQ(w.sim.grid().get_powerup_type(TileCoord{10, 8}), 3);
+    } TEST_END();
+
+    TEST_CASE("1.15 Immunity: an attack order (single or group) on an ant standing on a power-up fails with \"Can't go there.\"; nobody is hurt") {
+        SimulationEngine sim;
+        make_world(sim);
+        make_island(sim);
+        sim.grid_mut().place_powerup(15, 15, 4);
+        const uint32_t victim = sim.spawn_unit(1, AntType::Worker, TileCoord{14, 15});
+        sim.issue_move_order(victim, TileCoord{15, 15});
+        ASSERT_TRUE(wait_ms(sim, 2000, [&]() { return tile_of(sim.get_unit(victim)) == TileCoord{15, 15}; }) >= 0);
+        sim.issue_move_order(victim, TileCoord{30, 30});                    // the can't-go trick inside the window
+        run_ms(sim, 3000);
+        ASSERT_EQ(sim.get_unit(victim).type, AntType::Worker);
+        ASSERT_TRUE(sim.grid().has_powerup_at(TileCoord{15, 15}));
+        std::vector<uint32_t> attackers;
+        for (int i = 0; i < 3; ++i) attackers.push_back(sim.spawn_unit(0, AntType::Combat, TileCoord{11, 14 + i}));
+        for (uint32_t a : attackers) {
+            AntOrder o = order(a, OrderType::Attack, TileCoord{15, 15});
+            o.target_entity_id = static_cast<int32_t>(victim);
+            sim.issue_order(o);
+        }
+        sim.clear_news_events();
+        ASSERT_TRUE(wait_ms(sim, 2000, [&]() { return sim.has_news_event(0, kNewsCantGoThere); }) >= 0);
+        run_ms(sim, 10000);
+        ASSERT_EQ(sim.get_unit(victim).hp, 10u);
+        ASSERT_EQ(sim.get_unit(victim).pos, (TileCoord{15, 15}));
+        for (uint32_t a : attackers) ASSERT_EQ(sim.get_unit(a).hp, 10u);
+    } TEST_END();
+
+    TEST_CASE("1.16 The exception of the original: a contact already under way still lands on an ant that a power-up appeared under") {
+        SimulationEngine sim;
+        make_world(sim);
+        const uint32_t victim = sim.spawn_unit(1, AntType::Worker, TileCoord{15, 15});
+        const uint32_t att = sim.spawn_unit(0, AntType::Combat, TileCoord{11, 15});
+        AntOrder o = order(att, OrderType::Attack, TileCoord{15, 15});
+        o.target_entity_id = static_cast<int32_t>(victim);
+        sim.issue_order(o);
+        ASSERT_TRUE(wait_ms(sim, 2000, [&]() { return sim.get_unit(att).waypoints.size() > 1; }) >= 0);   // the path is installed
+        sim.grid_mut().place_powerup(15, 15, 4);                             // the flower dropper lands under the victim
+        run_ms(sim, 6000);
+        ASSERT_TRUE(sim.get_unit(victim).hp < 10u);                          // the step into its tile is a contact, no object test
+    } TEST_END();
+
+    std::cout << "\n=======================================================\n"
+              << " Total Test Cases: " << g_test_count << "\n"
+              << " Total Assertions: " << g_assert_count << "\n"
+              << " Failures:         " << g_test_failures << "\n"
+              << "=======================================================\n";
+    if (g_test_failures == 0) {
+        std::cout << " >>> ALL POWER-UP ACTION TESTS PASSED CLEANLY <<<\n";
+        return 0;
+    }
+    std::cout << " >>> " << g_test_failures << " TEST(S) FAILED <<<\n";
+    return 1;
+}

@@ -53,7 +53,8 @@ enum class UnitState : uint8_t {
     ExtinguishingFire = 24, // Fire Ant extinguishing fire (*xf*, Action 7, 12 ticks)
     CantGo            = 25, // Blocked path / impossible order reaction (*cg*, Action 20, Sound 63)
     HarvestingFood    = 26, // Harvesting / grabbing food sequence (Sound 66, 6 ticks)
-    Burn              = 27  // Dud burn / bomb smoke blast stagger (*bu301, 11 subitems)
+    Burn              = 27, // Dud burn / bomb smoke blast stagger (*bu301, 11 subitems)
+    PoweringUp        = 28  // Power-up pick-up clip (action 4, getpow: the type has already changed)
 };
 
 /**
@@ -198,7 +199,6 @@ public:
 
     uint16_t    anim_subitem{0};
     uint16_t    anim_tick{0};
-    uint16_t    transform_timer{0};
     bool        is_on_mud{false};
     bool        was_in_water{false};
     bool        in_water{false};
@@ -212,13 +212,6 @@ public:
     TileCoord   ability_target{-1, -1};
     bool        allow_friendly_bomb{false};
     bool        is_food_order{false};
-    uint8_t     pending_powerup_type{255};
-    AntType     previous_type{AntType::Worker};
-    bool        transformation_interrupted{false};
-    bool        on_powerup{false};
-    uint16_t    powerup_dwell_timer{0};
-    bool        cantgo_standing_on_powerup{false};
-    TileCoord   dropped_powerup_pos{-1, -1};
 
     // ---- Combat state (Ants.exe CAntUnit) ----
     bool        engaged{false};              // +0x84: hit at contact, waits for the strike frame of the attacker's clip
@@ -250,6 +243,7 @@ public:
         uint8_t  dir{4};               // direction the clip was chosen for (renderer uses it for mirroring)
         uint32_t serial{0};            // incremented on every play (detects a clip change inside a step callback)
         uint16_t evt5_ms{0};           // stretched duration of the heal frame (event 5) of the enter clip, 0 = native
+        uint32_t sound_mask{0};        // +0x30: frames whose sound already played (only clips with the once flag use it)
     };
     LocoPlayer  loco{};
     uint8_t     loco_action{kActionNone};   // CAntUnit +0xe4 while locomotion-managed
@@ -286,16 +280,13 @@ public:
     bool is_holding() const noexcept {
         return holding != 0;
     }
-    bool is_transforming() const noexcept {
-        return transform_timer > 0;
-    }
     /// Playing the enter (2) or hatch (0x14) clip: melee cannot start against such an ant (its refusal list).
     bool in_hill_action() const noexcept {
         return loco_action == kActionEnter || loco_action == kActionHatch || state == UnitState::EnteringBase;
     }
     bool is_orderable() const noexcept {
         return is_alive() && state != UnitState::Knockback && state != UnitState::Drowning &&
-               state != UnitState::EnteringBase && state != UnitState::Infiltrating && !is_transforming();
+               state != UnitState::EnteringBase && state != UnitState::Infiltrating && state != UnitState::PoweringUp;
     }
 
     void heal_full() noexcept {

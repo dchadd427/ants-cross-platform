@@ -321,6 +321,7 @@ public:
     void end_bridge_demolish(AntUnit& a, bool cancel);                          // FUN_0101ecdf
     void ability_clip_end(AntUnit& a);                                          // step callback cases 6..9 at the last frame
     void end_walk_to_idle(AntUnit& a);                                          // SetActionDefault(0) + SetPath(0)
+    void powerup_pickup(AntUnit& a, TileCoord tile);                            // FUN_01020cdb (msg 9): action 4, type change
 
     // hill, hatch and raid actions (action_system.cpp)
     bool action_cleanup(AntUnit& a, uint8_t old_action, uint8_t new_action);   // SetAction old-action cleanup (table 0x101b48f)
