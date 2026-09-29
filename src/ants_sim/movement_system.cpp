@@ -53,8 +53,7 @@ inline uint8_t dir_between(TileCoord from, TileCoord to) noexcept {          // 
 }
 
 inline bool is_walking_label(UnitState s) noexcept {
-    return s == UnitState::Walking || s == UnitState::Intercepting || s == UnitState::ReturningToPost ||
-           s == UnitState::DivingInWater || s == UnitState::ExitingWater;
+    return s == UnitState::Walking || s == UnitState::DivingInWater || s == UnitState::ExitingWater;
 }
 
 inline bool is_idle_label(UnitState s) noexcept {
@@ -188,8 +187,7 @@ uint8_t SimulationEngineImpl::orig_action_of(const AntUnit& a) const noexcept {
     switch (a.state) {
         case UnitState::Attacking:          return 0x12;
         case UnitState::Flinch:             return 0x0E;
-        case UnitState::Knockback:
-        case UnitState::Bounce:             return 0x13;
+        case UnitState::Knockback:          return 0x13;
         case UnitState::Stunned:            return 0x03;
         case UnitState::Burn:               return 0x0A;
         case UnitState::EnteringBase:       return 0x02;
@@ -205,8 +203,6 @@ uint8_t SimulationEngineImpl::orig_action_of(const AntUnit& a) const noexcept {
         case UnitState::HarvestingFood:     return 0x05;
         case UnitState::CantGo:             return 0x0B;
         case UnitState::Walking:
-        case UnitState::Intercepting:
-        case UnitState::ReturningToPost:
         case UnitState::DivingInWater:
         case UnitState::ExitingWater:       return 0x01;
         default:                            return 0x00;
@@ -332,6 +328,7 @@ int SimulationEngineImpl::loco_step(AntUnit& a, uint32_t now) {
     }
     const uint32_t serial_before = p.serial;
     loco_on_step(a, e);                                 // ant vtable+0x38 (FUN_0101ee84)
+    if (a.removed) return 0;
     if (p.serial != serial_before) {
         if (!p.clip.valid()) return 0;
         next_cursor = (p.cursor != 0) ? p.cursor : static_cast<uint16_t>(1);
@@ -352,10 +349,18 @@ int SimulationEngineImpl::loco_step(AntUnit& a, uint32_t now) {
 // FUN_0101ee84 (locomotion actions).
 void SimulationEngineImpl::loco_on_step(AntUnit& a, StepEvt& e) {
     if (a.pause_active) return;                          // waiting: no processing, no tail
+    if (a.frozen) {                                      // 0x101eed1: a frozen ant (dud burn overlay) does nothing
+        e.dx = 0;
+        e.dy = 0;
+        return;
+    }
     switch (a.loco_action) {
         case AntUnit::kActionIdle:
         case AntUnit::kActionWalk:
             walk_step(a, e);
+            break;
+        case AntUnit::kActionStun:                       // 0x101f05c
+            if (e.status != 2) walk_step(a, e); else stun_end(a);
             break;
         case AntUnit::kActionEnter:                      // 0x101ef5c
         case AntUnit::kActionHatch:
@@ -363,6 +368,33 @@ void SimulationEngineImpl::loco_on_step(AntUnit& a, StepEvt& e) {
             break;
         case AntUnit::kActionRaid:                       // 0x101efbd
             if (e.status == 2) raid_clip_end(a);
+            break;
+        case AntUnit::kActionAttack:                     // 0x101ef04: the strike frame delivers the hit
+            if (e.event == 4 && a.pending_victim != 0) deliver_pending_hit(a);
+            if (e.status == 2) attack_clip_end(a);
+            break;
+        case AntUnit::kActionHit:                        // 0x101f5c1: a flight is walked by the clip's displacement
+        case AntUnit::kActionBlown:
+            if (e.status != 2) {
+                walk_step(a, e);
+            } else {                                     // the landing tile centre, then idle (the cleanup checks hp)
+                const TileCoord land = a.flight_tile;
+                set_position(a, centre_x(land), centre_y(land));
+                set_action(a, AntUnit::kActionIdle, static_cast<uint8_t>(a.facing), -1, -1, false);
+            }
+            break;
+        case AntUnit::kActionBlast:                      // 0x101f624: bomb flight, the end is stun (or death, or retreat)
+            if (e.status != 2) {
+                walk_step(a, e);
+            } else {
+                const TileCoord land = a.flight_tile;
+                set_position(a, centre_x(land), centre_y(land));
+                stun_or_die(a);
+            }
+            break;
+        case AntUnit::kActionDeath:                      // 0x101f1c3: the end of the death (or drowning) clip
+        case AntUnit::kActionDrown:
+            if (e.status == 2) finish_death(a);
             break;
         case AntUnit::kActionCantGo:
             if (e.status == 2) {                         // end of the *cg animation (case 0xb)
@@ -386,8 +418,23 @@ void SimulationEngineImpl::loco_on_step(AntUnit& a, StepEvt& e) {
         default:
             break;
     }
+    if (a.removed) return;                               // the ant finished dying inside the callback
     // tail: register on (pos + d) / 32
     occ_move(a, TileCoord{(a.pixel_x + e.dx) / kTile, (a.pixel_y + e.dy) / kTile});
+}
+
+// Step callback, action 0x12 at the last frame (0x101ef14): idle again; a combat ant resumes the order it had before
+// its auto-engage, every other ant ends its order (SetPath(0)).
+void SimulationEngineImpl::attack_clip_end(AntUnit& a) {
+    set_action(a, AntUnit::kActionIdle, static_cast<uint8_t>(a.facing), -1, -1, false);
+    if (a.type != AntType::Combat || !resume_after_auto_engage(a)) {
+        a.waypoints.clear();
+        a.current_waypoint_idx = 0;
+        ++a.move_serial;
+        a.orig_order = AntUnit::kOrderNone;
+        a.orig_order_tile = no_order_tile();
+        a.final_dest = TileCoord{-1, -1};
+    }
 }
 
 // ------------------------------------------------------------------------------------------------
@@ -396,7 +443,7 @@ void SimulationEngineImpl::loco_on_step(AntUnit& a, StepEvt& e) {
 
 void SimulationEngineImpl::set_action(AntUnit& a, uint8_t action, uint8_t dir, int16_t terr_a, int16_t terr_b, bool flag) {
     // The old action is cleaned up first (Ants.exe 0x101ade0): its world effects happen here, whatever ends it.
-    if (a.loco_action != AntUnit::kActionNone) action_cleanup(a, a.loco_action, action);
+    if (a.loco_action != AntUnit::kActionNone && !action_cleanup(a, a.loco_action, action)) return;
     const bool same_action = (a.loco_action == action);
     const bool same_dir = (static_cast<uint8_t>(a.facing) == dir);
     a.facing = static_cast<Direction>(dir & 7);
@@ -415,6 +462,7 @@ void SimulationEngineImpl::set_action(AntUnit& a, uint8_t action, uint8_t dir, i
                 ? movement::idle_water_clip() : movement::idle_clip(type, dir, carrying);
             a.dive_flag = false;
             loco_play(a, clip, dir);
+            if (!is_walking_label(a.state) && !is_idle_label(a.state)) set_idle_label(a);   // a finished hit, flight or stun
             return;
         }
         case AntUnit::kActionWalk: {
@@ -461,6 +509,44 @@ void SimulationEngineImpl::set_action(AntUnit& a, uint8_t action, uint8_t dir, i
             loco_play(a, movement::action_clip(movement::ActionClip::Infiltrate, type, 0, false), dir);
             a.state = UnitState::Infiltrating;
             return;
+        case AntUnit::kActionAttack:                                 // 0x101aff7: the target tile is cleared, clip ?at
+            a.orig_order_tile = no_order_tile();
+            loco_play(a, movement::action_clip(movement::ActionClip::Attack, type, dir, false), dir);
+            a.state = UnitState::Attacking;
+            return;
+        case AntUnit::kActionHit:                                    // ?gh: a one tile flight
+            loco_play(a, movement::action_clip(movement::ActionClip::Hit, type, dir, false), dir);
+            a.state = UnitState::Flinch;
+            return;
+        case AntUnit::kActionBlown:                                  // ?gb: the four tile flight of a punch
+            loco_play(a, movement::action_clip(movement::ActionClip::Blown, type, dir, false), dir);
+            a.state = UnitState::Knockback;
+            return;
+        case AntUnit::kActionBlast:                                  // 0x101af27: a bomb victim
+            if (a.knock_flag) {                                      // dud: the idle clip under the burn overlay
+                loco_play(a, movement::idle_clip(type, dir, carrying), dir);
+                a.state = UnitState::Burn;
+            } else {                                                 // else the gb flight
+                loco_play(a, movement::action_clip(movement::ActionClip::Blown, type, dir, false), dir);
+                a.state = UnitState::Knockback;
+            }
+            return;
+        case AntUnit::kActionStun:                                   // 0x101b39f: always facing south, carry variant
+            a.facing = Direction::South;
+            loco_play(a, movement::action_clip(movement::ActionClip::Stun, type, 0, carrying), 4);
+            a.state = UnitState::Stunned;
+            return;
+        case AntUnit::kActionDrown:                                  // 0x101b3db: ?dr301
+            loco_play(a, movement::action_clip(movement::ActionClip::Drown, type, 0, false), dir);
+            a.state = UnitState::Drowning;
+            return;
+        case AntUnit::kActionDeath: {                                // 0x101b3fd: death1..death4 (rand() % 4)
+            const uint8_t variant = static_cast<uint8_t>(cosmetic_prng_.rand() % 4u);
+            loco_play(a, movement::action_clip(movement::ActionClip::Death, 0, variant, false), dir);
+            a.state = UnitState::Dead;
+            spawn_effect(effect_spec::kDeathNames[variant], a.pixel_x, a.pixel_y, effect_spec::kDeathMs[variant], a.pixel_y, true);
+            return;
+        }
         default:
             return;
     }
@@ -488,9 +574,13 @@ void SimulationEngineImpl::walk_step(AntUnit& a, StepEvt& e) {
         arrive(a, e, cur);
         return;
     }
-    // B. end of an idle (or other stationary) animation loop without a path on a bomb tile: the bomb
-    //    order ends the (empty) path through ARRIVE, which sets the bomb off (0x101baef-0x101bb8d).
-    if (e.status == 2 && a.waypoints.empty() && is_stationary_action(a.loco_action) && grid_.has_bomb_at(cur)) {
+    // Landing and standing blocks (0x101baef-0x101bd4f), in this order. Event 3 is the landing frame of a flight.
+    const uint8_t act = a.loco_action;
+    const bool flight = (act == AntUnit::kActionBlast || act == AntUnit::kActionHit || act == AntUnit::kActionBlown);
+    const bool stationary_end = (e.status == 2 && a.waypoints.empty() && is_stationary_action(act));
+    // B. a bomb on the tile (any ant, own or enemy bomb): the bomb order ends the (empty) path through ARRIVE,
+    //    which sets the bomb off.
+    if ((e.event == 3 || stationary_end) && grid_.has_bomb_at(cur)) {
         a.orig_order = AntUnit::kOrderBomb;
         a.orig_order_tile = cur;
         e.dx = 0;
@@ -498,8 +588,50 @@ void SimulationEngineImpl::walk_step(AntUnit& a, StepEvt& e) {
         arrive(a, e, cur);
         return;
     }
-    if (a.loco_action != AntUnit::kActionIdle && a.loco_action != AntUnit::kActionWalk) return;
-    if (a.waypoints.empty()) return;
+    // C. pile-up: several ants landed on the tile, all of them (every team) are thrown apart without damage.
+    if (flight && e.event == 3) {
+        const OccCell* oc = occ_cell(cur);
+        if (oc && oc->multi) {
+            e.dx = 0;
+            e.dy = 0;
+            blast(a, 0, 7);
+            return;
+        }
+    }
+    // D. a fire wall on the tile: every ant on it loses 1 hp and is thrown one tile; a fire ant is immune while it
+    //    stands on it and is stunned when it lands or walks onto it.
+    if ((e.event == 3 || stationary_end) && grid_.has_fire_at(cur)) {
+        if (a.type != AntType::Fire) {
+            e.dx = 0;
+            e.dy = 0;
+            blast(a, 1, grid_.get_cell(cur).interactive_owner);
+            return;
+        }
+        if (!(a.waypoints.empty() && is_stationary_action(act))) {
+            e.dx = 0;
+            e.dy = 0;
+            stun_or_die(a);
+            const TileCoord t = pixel_tile(a);
+            set_position(a, centre_x(t), centre_y(t));
+            return;
+        }
+    }
+    // E. landing in water: a swimmer splashes and is stunned, every other ant drowns.
+    if (flight && e.event == 3 && grid_.terrain_class_at(cur) == movement::kTerrainWater) {
+        e.dx = 0;
+        e.dy = 0;
+        water_landing(a, pixel_tile(a));
+        return;
+    }
+    if (a.loco_action != AntUnit::kActionIdle && a.loco_action != AntUnit::kActionWalk &&
+        a.loco_action != AntUnit::kActionStun) {
+        return;
+    }
+    if (a.waypoints.empty()) {
+        // 0x101bd67: an idle ant without a path: a combat ant looks for an enemy within 3 tiles
+        auto_engage_check(a, 4, false);
+        return;
+    }
     if (a.loco_action == AntUnit::kActionIdle) {          // idle with a path: start walking
         arrive(a, e, cur);
         return;
@@ -563,12 +695,17 @@ void SimulationEngineImpl::arrive(AntUnit& a, StepEvt& e, TileCoord cur) {
     // the path without the centre snap. (The combat ant auto-engage test that follows in the original is
     // part of the combat-ant system, which stays with the remake's guard AI for now.)
     const TileCoord t5a = (a.occ_tile.x >= 0) ? a.occ_tile : pixel_tile(a);
-    if (grid_.has_bomb_at(t5a)) {
+    const bool on_bomb = grid_.has_bomb_at(t5a);
+    if (on_bomb) {
         a.orig_order = AntUnit::kOrderBomb;
         a.orig_order_tile = t5a;
         e.dx = 0;
         e.dy = 0;
         a.current_waypoint_idx = a.waypoints.size();
+    } else if (auto_engage_check(a, 3, true)) {           // 0x101b9a8: a combat ant sees an enemy within 2 tiles
+        e.dx = 0;
+        e.dy = 0;
+        return;
     }
     ++a.current_waypoint_idx;
     if (a.current_waypoint_idx >= a.waypoints.size()) {
@@ -591,9 +728,9 @@ void SimulationEngineImpl::arrive(AntUnit& a, StepEvt& e, TileCoord cur) {
 // base entry, raid, attack chase) stays with the existing remake systems, which trigger on arrival;
 // every order therefore takes the "not handled" branch: stop at the tile (StopSync -> StopAt).
 void SimulationEngineImpl::path_complete(AntUnit& a, StepEvt& e) {
-    const TileCoord old_target = a.orig_order_tile;
     const uint8_t order = a.orig_order;
     const bool was_home = (a.home_state == 1);                 // heading for the waiting ring in front of the hill
+    a.home_state = 0;                                          // 0x101cd04: +0x68 = 0
     a.orig_order_tile = no_order_tile();
     a.arrived_this_tick = true;
     if (order == AntUnit::kOrderHome) {
@@ -613,28 +750,54 @@ void SimulationEngineImpl::path_complete(AntUnit& a, StepEvt& e) {
         a.home_state = 2;
         a.home_time_ms = a.home_priority ? 0u : now_ms_;
     }
-    if (a.orig_order == AntUnit::kOrderBomb && grid_.has_bomb_at(old_target)) {
-        // case 0xa: message 0x0f sets the bomb off at once (handled: no stop, the frame delta stays 0).
-        // The blast itself is the remake's bomb/knock-back code; the ant flies in its walking direction.
-        static constexpr int32_t kDirDx[8] = { 0,  1, 1, 1, 0, -1, -1, -1 };
-        static constexpr int32_t kDirDy[8] = {-1, -1, 0, 1, 1,  1,  0, -1 };
-        const int32_t f = static_cast<int32_t>(a.facing) & 7;
-        const bool walked = (a.loco_action == AntUnit::kActionWalk);
-        a.orig_order = AntUnit::kOrderNone;
-        a.final_dest = TileCoord{-1, -1};
-        a.state = UnitState::Idle;   // hands the ant over to the blast code
-        loco_release(a);
-        if (engine_) {
-            engine_->trigger_bomb_detonation(a.id, old_target, walked ? kDirDx[f] : 0, walked ? kDirDy[f] : 0);
+    if (order == AntUnit::kOrderBomb) {
+        // case 0xa (0x101d44f): a bomb on the registered tile is set off at once (message 0xf, handled: the frame
+        // delta stays 0); without a bomb the ant just stops.
+        const TileCoord t5a = (a.occ_tile.x >= 0) ? a.occ_tile : pixel_tile(a);
+        if (grid_.has_bomb_at(t5a)) {
+            e.dx = 0;
+            e.dy = 0;
+            bomb_trigger(a, t5a);
+            return;
         }
-        if (a.is_alive() && (a.state == UnitState::Idle || a.state == UnitState::GuardIdle)) {
-            set_action(a, AntUnit::kActionIdle, static_cast<uint8_t>(a.facing), -1, -1, false);
-            set_idle_label(a);
+    }
+    if (order == 0x0F) {
+        // case 0xf (0x101cfcf): one step of a combat ant's auto-engage is done; snap, idle, take the next step
+        const TileCoord t5a = (a.occ_tile.x >= 0) ? a.occ_tile : pixel_tile(a);
+        set_position(a, centre_x(t5a), centre_y(t5a));
+        set_action(a, AntUnit::kActionIdle, static_cast<uint8_t>(a.facing), -1, -1, false);
+        a.waypoints.clear();
+        a.current_waypoint_idx = 0;
+        ++a.move_serial;
+        AntUnit* victim = find_unit(a.orig_target_ant);
+        if (victim && !victim->removed) {
+            attack_tile(a, pixel_tile(*victim));
+        } else {
+            stop_sync(a);
         }
+        e.dx = 0;
+        e.dy = 0;
         return;
     }
-    // Remake guard AI: a combat ant that finished a player move guards the tile it stopped on.
-    if (a.type == AntType::Combat && a.state == UnitState::Walking) a.guard_anchor = pixel_tile(a);
+    if (order == AntUnit::kOrderAttack) {
+        // case 3 (0x101cf13): the path ended on the tile the target has left; snap, idle, and chase it (Order with
+        // the player flag towards its new tile); when the target is gone the ant stops.
+        const TileCoord t5a = (a.occ_tile.x >= 0) ? a.occ_tile : pixel_tile(a);
+        set_position(a, centre_x(t5a), centre_y(t5a));
+        set_action(a, AntUnit::kActionIdle, static_cast<uint8_t>(a.facing), -1, -1, false);
+        a.waypoints.clear();
+        a.current_waypoint_idx = 0;
+        ++a.move_serial;
+        AntUnit* victim = find_unit(a.orig_target_ant);
+        if (victim && !victim->removed) {
+            go_to(a, pixel_tile(*victim), true, false);
+        } else {
+            stop_sync(a);
+        }
+        e.dx = 0;
+        e.dy = 0;
+        return;
+    }
     // Harvest orders (case 5) stop next to the food; the remake's harvest and lunchbox code picks the food up
     // from there and needs to know which food was ordered.
     const bool harvest = (a.orig_order == AntUnit::kOrderHarvest);
@@ -713,12 +876,10 @@ int SimulationEngineImpl::try_enter_tile(AntUnit& a, TileCoord nt) {
     const bool was_home = (a.home_state == 1);
     AntUnit* occ = occupant_at(nt);
 
-    // A. contact with the attack target: melee resolution stays with the remake's combat code.
+    // A. contact with the attack target: the melee starts (the walk step then snaps the attacker back to its tile).
     if ((a.orig_order == AntUnit::kOrderAttack || a.orig_order == 0x0F) && occ &&
         occ->player_id == a.orig_target_team && occ->id == a.orig_target_ant) {
-        const uint32_t target_id = occ->id;
-        stop_sync(a);
-        a.attack_target_id = target_id;
+        melee_contact(a, *occ);
         return 0;
     }
 
@@ -782,6 +943,11 @@ int SimulationEngineImpl::try_enter_tile(AntUnit& a, TileCoord nt) {
     active_effects_.push_back(VisualEffect{"bump", centre_x(nt), centre_y(nt), 0, 10});
     audio_queue_.push_back(AudioEvent{SoundID::Bump, centre_x(nt), centre_y(nt), 1, 255});
     return 0;
+}
+
+// CanEnter as AttackTile asks it (mask 0x40, and 0x140 for the step onto the target's own tile).
+bool SimulationEngineImpl::can_enter_attack_step(const AntUnit& a, TileCoord t, bool last) {
+    return can_enter(a, t, kIgnoreOccupant | (last ? kSkipQueueRules : 0u));
 }
 
 bool SimulationEngineImpl::can_enter(const AntUnit& a, TileCoord t, uint32_t flags) {
@@ -956,7 +1122,7 @@ terrain: {
 
 // FUN_0101ff5a
 bool SimulationEngineImpl::can_take_user_order(const AntUnit& a) const noexcept {
-    if (!a.is_alive()) return false;
+    if (!a.is_alive() || a.engaged || a.frozen) return false;
     const uint8_t act = orig_action_of(a);
     return act == 0 || act == 1 || act == 3;
 }
@@ -1072,6 +1238,8 @@ bool SimulationEngineImpl::go_to(AntUnit& a, TileCoord t, bool user_cmd, bool sp
     a.current_waypoint_idx = 0;
     a.orig_order = AntUnit::kOrderNone;
     a.orig_order_tile = no_order_tile();
+    cancel_combat_timer(a);                                                                 // FUN_0101c152
+    a.last_order_ms = now_ms_;                                                              // +0x98 = now
     const TileCoord requested = t;
     classify_order(a, t, special, user_cmd);
     bool ok = true;
@@ -1119,7 +1287,6 @@ void SimulationEngineImpl::deliver_path(uint32_t ant_id, const std::vector<TileC
         // Remake systems waiting for this walk give up with it (attack chase, ability approach, harvest
         // return, hill entry slot).
         a->final_dest = pixel_tile(*a);
-        a->attack_target_id = 0;
         a->pending_ability = OrderType::None;
         a->pending_ability_target = TileCoord{-1, -1};
         a->ability_target = TileCoord{-1, -1};
@@ -1131,13 +1298,19 @@ void SimulationEngineImpl::deliver_path(uint32_t ant_id, const std::vector<TileC
         if (is_walking_label(a->state) && a->waypoints.empty()) set_idle_label(*a);   // dropped: stale order
         return;
     }
-    cancel_pause(*a);
-    set_position(*a, centre_x(path.front()), centre_y(path.front()));
-    set_action(*a, a->loco_action, static_cast<uint8_t>(a->facing), -1, -1, false);  // idle restarts
-    a->waypoints = path;                                   // FUN_0101ab87: [start .. goal], index 0
-    a->current_waypoint_idx = 0;
-    a->orig_order_tile = path.back();
+    apply_path(*a, path);
     if (loco_trace_enabled_) trace_loco(LocoTraceEvent::Kind::PathDelivered, *a, 0, 0);
+}
+
+// The part of the message-6 handler that installs a path (FUN_0100cba4): the ant is put on the start tile, its idle clip
+// restarts and the path becomes its own ([start .. goal], index 0).
+void SimulationEngineImpl::apply_path(AntUnit& a, const std::vector<TileCoord>& path) {
+    cancel_pause(a);
+    set_position(a, centre_x(path.front()), centre_y(path.front()));
+    set_action(a, a.loco_action, static_cast<uint8_t>(a.facing), -1, -1, false);  // idle restarts
+    a.waypoints = path;                                   // FUN_0101ab87: [start .. goal], index 0
+    a.current_waypoint_idx = 0;
+    a.orig_order_tile = path.back();
 }
 
 void SimulationEngineImpl::trace_loco(LocoTraceEvent::Kind kind, const AntUnit& a, int32_t dx, int32_t dy) {
@@ -1170,7 +1343,10 @@ void SimulationEngineImpl::loco_sync(AntUnit& a) {
     }
     if (a.occ_tile != pixel_tile(a)) occ_move(a, pixel_tile(a));
     if (a.loco_action == AntUnit::kActionEnter || a.loco_action == AntUnit::kActionHatch ||
-        a.loco_action == AntUnit::kActionRaid) {
+        a.loco_action == AntUnit::kActionRaid || a.loco_action == AntUnit::kActionAttack ||
+        a.loco_action == AntUnit::kActionHit || a.loco_action == AntUnit::kActionBlown ||
+        a.loco_action == AntUnit::kActionBlast || a.loco_action == AntUnit::kActionStun ||
+        a.loco_action == AntUnit::kActionDeath || a.loco_action == AntUnit::kActionDrown) {
         return;                                            // running action clips: owned by the action system
     }
     const UnitState s = a.state;
@@ -1230,20 +1406,40 @@ void SimulationEngineImpl::movement_tick(SimulationEngine& eng) {
         AntUnit* best = nullptr;
         uint32_t best_t = std::numeric_limits<uint32_t>::max();
         bool best_is_pause = false;
+        bool best_is_burn = false;
+        bool best_is_combevt = false;
         int task = 0;                                       // 1 ANTHILLQ, 2..5 HATCHTSK of team 0..3
         for (auto& up : ants_) {
             AntUnit* a = up.get();
+            if (a && !a->removed && a->burn_end_ms != 0 && a->burn_end_ms <= t_end && a->burn_end_ms < best_t) {
+                best = a;
+                best_t = a->burn_end_ms;
+                best_is_pause = false;
+                best_is_burn = true;
+                best_is_combevt = false;
+            }
+            if (a && !a->removed && a->combevt_due_ms != 0 && a->combevt_due_ms <= t_end && a->combevt_due_ms < best_t) {
+                best = a;
+                best_t = a->combevt_due_ms;
+                best_is_pause = false;
+                best_is_burn = false;
+                best_is_combevt = true;
+            }
             if (!a || a->loco_action == AntUnit::kActionNone) continue;
             const auto& p = a->loco;
             if (p.clip.valid() && p.cursor != 0 && p.clip.count > 1 && p.next_ms <= t_end && p.next_ms < best_t) {
                 best = a;
                 best_t = p.next_ms;
                 best_is_pause = false;
+                best_is_burn = false;
+                best_is_combevt = false;
             }
             if (a->pause_active && a->pause_fire_ms <= t_end && a->pause_fire_ms < best_t) {
                 best = a;
                 best_t = a->pause_fire_ms;
                 best_is_pause = true;
+                best_is_burn = false;
+                best_is_combevt = false;
             }
         }
         if (anthillq_next_ms_ <= t_end && anthillq_next_ms_ < best_t) {
@@ -1265,6 +1461,11 @@ void SimulationEngineImpl::movement_tick(SimulationEngine& eng) {
             anthillq_run();
         } else if (task >= 2) {
             hatch_run(static_cast<uint8_t>(task - 2));
+        } else if (best_is_burn) {
+            burn_overlay_end(*best);
+        } else if (best_is_combevt) {                       // COMBEVT (0x1024c69): the auto-engage timed out
+            best->combevt_due_ms = 0;
+            resume_after_auto_engage(*best);
         } else if (best_is_pause) {
             pause_fire(*best);
         } else {

@@ -107,6 +107,9 @@ ACTION_TABLES = [
 ]
 # Rows whose CHD name deviates from the template (the original's own table holds the worker clip there)
 ACTION_NAME_EXCEPTIONS = {("drown", 5): "agdr301"}
+# Action 0xC (death): SetAction picks world[0x4850 + 4 * (rand() % 4)] = CHD animations 102..105 (death1..death4)
+DEATH_CHD = [102, 103, 104, 105]
+DEATH_TABLE_VA = 0x4850     # world-object offset of the four death animation pointers (0x101b3fd)
 CARDINAL_DIRS = (0, 2, 4)   # N, E, S
 PASSABLE_VA = 0x10049B8     # uint16 [8]  destination walkable by terrain class (CanEnter R1)
 STEP_WEIGHT_VA = 0x10049C8  # uint32 [6]  path step-cost weight by terrain class
@@ -449,8 +452,13 @@ def extract(exe, chd):
             expect_name(v, template, key)
             t["actions"][key] = v
 
+    # --- death clips (action 0xC): four plain animations, no direction, no type ----------------------
+    t["death"] = list(DEATH_CHD)
+    for n, idx in enumerate(DEATH_CHD):
+        expect_name(idx, f"death{n + 1}", f"death clip {n}")
+
     # --- frames of every referenced animation -----------------------------------------------------
-    referenced = set()
+    referenced = set(t["death"])
     for key in ("walk", "carry_walk"):
         for per_type in t[key]:
             for row in per_type:
@@ -553,6 +561,7 @@ def render(t, chd, exe_bytes, chd_bytes):
     w("//")
     for key, cname, va, shape, _template, what in ACTION_TABLES:
         w(f"//   {cname:<24s} {va:#x} {{shape {shape}}} {what}")
+    w(f"//   {'kDeath':<24s} world+{DEATH_TABLE_VA:#x} {{shape death}} action 0xC: death1..death4 (rand() % 4)")
     w("//")
     w("// Directions: 0 N, 1 NE, 2 E, 3 SE, 4 S. 5 SW, 6 W and 7 NW are not stored: they are the 3, 2")
     w("// and 1 animations mirrored with every frame dx negated (FUN_01018a7a / FUN_01018b9f).")
@@ -656,6 +665,10 @@ def render(t, chd, exe_bytes, chd_bytes):
         else:
             w(f"inline constexpr uint16_t {cname} = {value};  // {chd.name(value)}")
         w("")
+
+    w("// action 0xC: death animation by (rand() % 4)  " + " ".join(chd.name(v) for v in t["death"]))
+    w(f"inline constexpr uint16_t kDeath[4] = {{{', '.join(fmt_anim(v) for v in t['death'])}}};")
+    w("")
 
     def byte_table(cname, values, what):
         w(f"// {what}")

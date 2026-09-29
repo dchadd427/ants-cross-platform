@@ -1,8 +1,6 @@
 #include "ants_sim/sim_engine.hpp"
 #include "ants_sim/grid.hpp"
 #include "ants_sim/ant_unit.hpp"
-#include "ants_sim/combat_ai.hpp"
-#include "ants_sim/physics.hpp"
 #include "ants_sim/prng.hpp"
 #include "ants_sim/match_stats.hpp"
 
@@ -172,21 +170,24 @@ void run_suite_3_damage() {
         }
     } TEST_END();
 
-    TEST_CASE("3.2 Universal 1 HP Melee Strike Standard") {
-        SimulationEngine sim;
-        sim.init_test_world(60, 60, 1);
-        AntType standard_types[] = {AntType::Worker, AntType::Thief, AntType::Fire, AntType::Bomber, AntType::Swimmer};
-        for (auto type : standard_types) {
-            sim.clear_audio_events();
-            uint32_t attacker = sim.spawn_unit(0, type, {10, 10});
+    TEST_CASE("3.2 Universal 1 HP Melee Strike Standard (attack clip sound per ant type)") {
+        // The sound belongs to the attack clip of the attacker (worker attack_alt 75, bomber / fire attack 57, thief
+        // theifwhip 83, swimmer waterattack 79) and plays a few hundred ms into the clip, not at the contact.
+        struct Row { AntType type; uint32_t sound; };
+        const Row rows[5] = { {AntType::Worker, 75}, {AntType::Thief, 83}, {AntType::Fire, 57}, {AntType::Bomber, 57}, {AntType::Swimmer, 79} };
+        for (const Row& r : rows) {
+            SimulationEngine sim;
+            sim.init_test_world(60, 60, 1);
+            uint32_t attacker = sim.spawn_unit(0, r.type, {10, 10});
             uint32_t defender = sim.spawn_unit(1, AntType::Worker, {11, 10});
             sim.execute_melee_attack(attacker, defender);
             ASSERT_EQ(sim.get_unit(defender).hp, 9);
-            ASSERT_TRUE(sim.has_audio_event(57)); // Sound 57 attack.wav
+            for (int t = 0; t < 20; ++t) sim.tick();
+            ASSERT_TRUE(sim.has_audio_event(r.sound));
         }
     } TEST_END();
 
-    TEST_CASE("3.3 Combat Ant Heavy Punch (2 HP Damage + Sound 78)") {
+    TEST_CASE("3.3 Combat Ant Heavy Punch (2 HP Damage + Sound 78 on frame 2 of the attack clip)") {
         SimulationEngine sim;
         sim.init_test_world(60, 60, 1);
         sim.clear_audio_events();
@@ -194,30 +195,34 @@ void run_suite_3_damage() {
         uint32_t victim = sim.spawn_unit(1, AntType::Worker, {11, 10});
         sim.execute_melee_attack(combat, victim);
         ASSERT_EQ(sim.get_unit(victim).hp, 8);
+        ASSERT_FALSE(sim.has_audio_event(78));            // the clip has not reached its sound frame yet
+        for (int t = 0; t < 10; ++t) sim.tick();
         ASSERT_TRUE(sim.has_audio_event(78)); // Sound 78 attack2.wav
     } TEST_END();
 
-    TEST_CASE("3.4 Ballistic Knockback 4-5 Tiles & 12-Tick Stun") {
+    TEST_CASE("3.4 Ballistic Knockback: 4 Tiles, No Stun After A Melee Flight") {
         SimulationEngine sim;
         sim.init_test_world(60, 60, 1);
-        sim.clear_audio_events();
         uint32_t combat = sim.spawn_unit(0, AntType::Combat, {10, 10});
         uint32_t victim = sim.spawn_unit(1, AntType::Worker, {11, 10});
         sim.execute_melee_attack(combat, victim);
-        ASSERT_GE(sim.get_unit(victim).pos.x, 15);
-        ASSERT_LE(sim.get_unit(victim).pos.x, 16);
-        ASSERT_EQ(sim.get_unit(victim).stun_ticks_remaining, AntUnit::STUN_TICKS);
-        ASSERT_TRUE(sim.has_audio_event(70)); // Sound 70 stun.wav
+        ASSERT_TRUE(tick_until(sim, [&]() { return sim.get_unit(victim).pos.x == 15 &&
+                                                   sim.get_unit(victim).loco_action == AntUnit::kActionIdle; }, 60));
+        ASSERT_EQ(sim.get_unit(victim).pos.x, 15);
+        ASSERT_FALSE(sim.get_unit(victim).is_stunned());
+        ASSERT_FALSE(sim.get_unit(victim).is_stunned());
     } TEST_END();
 
-    TEST_CASE("3.5 Obstacle Raycast Terminates Knockback") {
+    TEST_CASE("3.5 A Knockback Flies Over Obstacles: Only The Landing Tile Is Tested") {
         SimulationEngine sim;
         sim.init_test_world(60, 60, 1);
-        sim.set_terrain(13, 10, TERRAIN_OBSTACLE); // Obstacle in flight path
+        sim.set_terrain(13, 10, TERRAIN_OBSTACLE); // Obstacle in the flight path (not the landing tile)
         uint32_t combat = sim.spawn_unit(0, AntType::Combat, {10, 10});
         uint32_t victim = sim.spawn_unit(1, AntType::Worker, {11, 10});
         sim.execute_melee_attack(combat, victim);
-        ASSERT_TRUE(sim.get_unit(victim).is_stunned());
+        ASSERT_TRUE(tick_until(sim, [&]() { return sim.get_unit(victim).pos.x == 15 &&
+                                                   sim.get_unit(victim).loco_action == AntUnit::kActionIdle; }, 60));
+        ASSERT_EQ(sim.get_unit(victim).pos.x, 15);
     } TEST_END();
 }
 
@@ -225,23 +230,25 @@ void run_suite_3_damage() {
 // SUITE 4: Combat Ant Autonomous Guard AI
 // ============================================================================
 void run_suite_4_guard_ai() {
-    TEST_SUITE("Suite 4: Combat Ant Autonomous Guard AI");
+    TEST_SUITE("Suite 4: Combat Ant Auto-Engage");
 
-    TEST_CASE("4.1 Guard Anchor Set on Idle") {
+    TEST_CASE("4.1 A Combat Ant Without An Enemy Stays Where It Stands (no guard post, no auto-engage)") {
         SimulationEngine sim;
         sim.init_test_world(60, 60, 1);
         uint32_t combat = sim.spawn_unit(0, AntType::Combat, {15, 15});
-        ASSERT_EQ(sim.get_unit(combat).guard_anchor.x, 15);
-        ASSERT_EQ(sim.get_unit(combat).guard_anchor.y, 15);
+        for (int i = 0; i < 100; ++i) sim.tick();
+        ASSERT_EQ(sim.get_unit(combat).pos.x, 15);
+        ASSERT_EQ(sim.get_unit(combat).pos.y, 15);
+        ASSERT_FALSE(sim.get_unit(combat).auto_engage);
     } TEST_END();
 
-    TEST_CASE("4.2 3-Tile Chebyshev Aggro Scan Triggers Intercept") {
+    TEST_CASE("4.2 3-Tile Chebyshev Scan Triggers The Auto-Engage") {
         SimulationEngine sim;
         sim.init_test_world(60, 60, 1);
         uint32_t combat = sim.spawn_unit(0, AntType::Combat, {20, 20});
         sim.spawn_unit(1, AntType::Worker, {23, 22}); // dist = max(3, 2) = 3
-        sim.tick();
-        ASSERT_EQ(sim.get_unit(combat).state, UnitState::Intercepting);
+        ASSERT_TRUE(tick_until(sim, [&]() { return sim.get_unit(combat).auto_engage; }, 60));
+        ASSERT_EQ(sim.get_unit(combat).ae_target, (TileCoord{20, 20}));   // the saved order: stay on this tile
     } TEST_END();
 
     TEST_CASE("4.3 Enemy Outside 3 Tiles Ignored") {
@@ -249,7 +256,8 @@ void run_suite_4_guard_ai() {
         sim.init_test_world(60, 60, 1);
         uint32_t combat = sim.spawn_unit(0, AntType::Combat, {20, 20});
         sim.spawn_unit(1, AntType::Worker, {24, 20}); // dist = 4 -> OUT
-        sim.tick();
+        for (int i = 0; i < 100; ++i) sim.tick();
+        ASSERT_FALSE(sim.get_unit(combat).auto_engage);
         ASSERT_EQ(sim.get_unit(combat).state, UnitState::GuardIdle);
     } TEST_END();
 
@@ -260,33 +268,33 @@ void run_suite_4_guard_ai() {
         uint32_t combat = sim.spawn_unit(0, AntType::Combat, {20, 20});
         sim.spawn_unit(0, AntType::Worker, {21, 20}); // friendly
         sim.spawn_unit(1, AntType::Worker, {20, 21}); // ally
-        sim.tick();
+        for (int i = 0; i < 100; ++i) sim.tick();
+        ASSERT_FALSE(sim.get_unit(combat).auto_engage);
         ASSERT_EQ(sim.get_unit(combat).state, UnitState::GuardIdle);
     } TEST_END();
 
-    TEST_CASE("4.5 Autonomous Return to Post After Punch") {
+    TEST_CASE("4.5 The Saved Order Is Given Again After The Punch (back on the same tile)") {
         SimulationEngine sim;
         sim.init_test_world(60, 60, 1);
         uint32_t combat = sim.spawn_unit(0, AntType::Combat, {20, 20});
-        sim.spawn_unit(1, AntType::Worker, {21, 20});
-        sim.tick(); // Intercept and punch delivered
-        ASSERT_TRUE(sim.get_unit(combat).state == UnitState::Attacking || sim.get_unit(combat).state == UnitState::ReturningToPost);
-        for (int i = 0; i < 20; ++i) sim.tick();
+        uint32_t enemy = sim.spawn_unit(1, AntType::Worker, {21, 20});
+        ASSERT_TRUE(tick_until(sim, [&]() { return sim.get_unit(enemy).hp < 10; }, 60));      // the punch
+        ASSERT_TRUE(tick_until(sim, [&]() { return sim.get_unit(combat).state == UnitState::GuardIdle &&
+                                                   !sim.get_unit(combat).auto_engage; }, 80));
         ASSERT_EQ(sim.get_unit(combat).pos.x, 20);
         ASSERT_EQ(sim.get_unit(combat).pos.y, 20);
-        ASSERT_EQ(sim.get_unit(combat).state, UnitState::GuardIdle);
     } TEST_END();
 
-    TEST_CASE("4.6 Target Despawn / Out of Range Disengagement") {
+    TEST_CASE("4.6 The Target Vanishes: The Combat Ant Ends Its Approach Where It Is") {
         SimulationEngine sim;
         sim.init_test_world(60, 60, 1);
         uint32_t combat = sim.spawn_unit(0, AntType::Combat, {20, 20});
         uint32_t enemy = sim.spawn_unit(1, AntType::Worker, {22, 20});
-        sim.tick();
-        ASSERT_EQ(sim.get_unit(combat).state, UnitState::Intercepting);
+        ASSERT_TRUE(tick_until(sim, [&]() { return sim.get_unit(combat).auto_engage; }, 60));
         sim.kill_unit(enemy); // Target eliminated
-        sim.tick();
-        ASSERT_EQ(sim.get_unit(combat).state, UnitState::ReturningToPost);
+        for (int i = 0; i < 80; ++i) sim.tick();
+        ASSERT_EQ(sim.get_unit(combat).loco_action, AntUnit::kActionIdle);
+        ASSERT_EQ(sim.get_unit(combat).orig_order, AntUnit::kOrderNone);
     } TEST_END();
 }
 
@@ -361,7 +369,7 @@ void run_suite_6_bombs() {
         ASSERT_TRUE(sim.has_bomb_at({11, 10}));
     } TEST_END();
 
-    TEST_CASE("6.2 Proximity Detonation (2 HP + 2-3 Knockback + Sound 4)") {
+    TEST_CASE("6.2 Proximity Detonation (2 HP + a 4-tile flight or a dud + Sound 4)") {
         SimulationEngine sim;
         sim.init_test_world(60, 60, 1);
         uint32_t b = sim.spawn_unit(0, AntType::Bomber, {10, 10});
@@ -370,7 +378,8 @@ void run_suite_6_bombs() {
         sim.clear_audio_events();
 
         uint32_t enemy = sim.spawn_unit(1, AntType::Worker, {11, 10});
-        sim.tick(); // Trigger detonation
+        // an ant standing on the bomb sets it off when its idle clip ends
+        ASSERT_TRUE(tick_until(sim, [&]() { return !sim.has_bomb_at({11, 10}); }, 100));
 
         ASSERT_EQ(sim.get_unit(enemy).hp, 8);
         ASSERT_TRUE(sim.has_audio_event(4)); // Sound 4 bombexp.wav
@@ -451,29 +460,30 @@ void run_suite_7_fire() {
         ASSERT_TRUE(sim.can_unit_traverse(AntType::Fire, {15, 15}));
     } TEST_END();
 
-    TEST_CASE("7.4 Involuntary Knockback into Fire (+1 Fire Damage & Bounce)") {
+    TEST_CASE("7.4 Involuntary Knockback into Fire (+1 Fire Damage And A New Flight)") {
         SimulationEngine sim;
         sim.init_test_world(60, 60, 1);
-        sim.set_fire_at({12, 10}, 3600);
+        sim.set_fire_at({15, 10}, 3600);           // the landing tile of a punch at (11, 10)
         uint32_t combat = sim.spawn_unit(0, AntType::Combat, {10, 10});
         uint32_t victim = sim.spawn_unit(1, AntType::Worker, {11, 10});
-        sim.execute_melee_attack(combat, victim); // 2 HP punch knocks toward fire
-        // 2 HP punch + 1 HP fire = 3 HP total damage
-        ASSERT_EQ(sim.get_unit(victim).hp, 7); // 10 - 3 = 7 HP
-        ASSERT_NE(sim.get_unit(victim).pos.x, 12); // Bounced off, not occupying fire
-        ASSERT_TRUE(sim.has_fire_at({12, 10})); // Fire NOT extinguished!
+        sim.execute_melee_attack(combat, victim);  // the 2 HP punch throws the ant onto the fire
+        ASSERT_TRUE(tick_until(sim, [&]() { return sim.get_unit(victim).hp == 7; }, 60));   // 10 - 2 (punch) - 1 (fire)
+        ASSERT_TRUE(tick_until(sim, [&]() { return sim.get_unit(victim).loco_action == AntUnit::kActionIdle; }, 80));
+        ASSERT_TRUE(sim.get_unit(victim).pos != (TileCoord{15, 10})); // thrown off the fire
+        ASSERT_TRUE(sim.has_fire_at({15, 10}));                       // Fire NOT extinguished!
     } TEST_END();
 
-    TEST_CASE("7.5 Multi-Fire Ricochet Chains Additional Damage") {
+    TEST_CASE("7.5 Fire Contact Costs 1 hp And Throws The Ant One Tile; Every Fire Wall Stays") {
         SimulationEngine sim;
         sim.init_test_world(60, 60, 1);
         sim.set_fire_at({12, 10}, 3600);
         sim.set_fire_at({13, 10}, 3600);
-        sim.set_terrain(11, 10, TERRAIN_OBSTACLE);
         uint32_t victim = sim.spawn_unit(1, AntType::Worker, {12, 10});
         sim.resolve_fire_contact(victim, 1, 0);
-        ASSERT_EQ(sim.get_unit(victim).hp, 8); // Took 2 fire damages
-        ASSERT_EQ(sim.get_unit(victim).pos.x, 14); // Ricocheted onto clear ground at (14, 10)
+        ASSERT_EQ(sim.get_unit(victim).hp, 9);
+        ASSERT_TRUE(tick_until(sim, [&]() { return sim.get_unit(victim).loco_action == AntUnit::kActionIdle &&
+                                                   !sim.has_fire_at(sim.get_unit(victim).pos); }, 200));
+        ASSERT_TRUE(sim.get_unit(victim).hp <= 9);
         ASSERT_TRUE(sim.has_fire_at({12, 10}));
         ASSERT_TRUE(sim.has_fire_at({13, 10}));
     } TEST_END();
@@ -526,7 +536,7 @@ void run_suite_8_bridges() {
         ASSERT_TRUE(sim.can_unit_traverse(AntType::Worker, {11, 10}));
     } TEST_END();
 
-    TEST_CASE("8.3 180s Collapse & Instant Non-Swimmer Drowning (Sounds 71+72, 0xF)") {
+    TEST_CASE("8.3 180s Collapse & Non-Swimmer Drowning (drowning clip: Sounds 71+72, action 0xF, hp unchanged)") {
         SimulationEngine sim;
         sim.init_test_world(60, 60, 1);
         sim.set_terrain(11, 10, TERRAIN_WATER);
@@ -536,10 +546,13 @@ void run_suite_8_bridges() {
         sim.tick();
 
         ASSERT_FALSE(sim.has_bridge_at({11, 10}));
-        ASSERT_EQ(sim.get_unit(enemy).hp, 0);
+        ASSERT_EQ(sim.get_unit(enemy).hp, 10);
+        ASSERT_EQ(sim.get_unit(enemy).loco_action, AntUnit::kActionDrown);
+        for (int i = 0; i < 4; ++i) sim.tick();
+        ASSERT_TRUE(sim.has_audio_event(71)); // Sound 71 splash.wav on the first frame of the clip
+        ASSERT_TRUE(sim.has_audio_event(72)); // Sound 72 antdrown.wav 100 ms later
+        ASSERT_TRUE(tick_until(sim, [&]() { return sim.get_unit(enemy).removed; }, 80));
         ASSERT_EQ(static_cast<uint8_t>(sim.get_unit(enemy).death_status), 0x0Fu);
-        ASSERT_TRUE(sim.has_audio_event(71)); // Sound 71 splash.wav
-        ASSERT_TRUE(sim.has_audio_event(72)); // Sound 72 antdrown.wav
     } TEST_END();
 
     TEST_CASE("8.4 Swimmer Ant Survives Bridge Collapse Unharmed") {

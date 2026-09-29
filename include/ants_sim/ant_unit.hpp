@@ -36,14 +36,11 @@ enum class UnitState : uint8_t {
     Ability        = 3,  // Executing unit ability
     Flinch         = 4,  // Hit reaction flinch (*gh*, Action 10)
     Knockback      = 5,  // Ballistic airborne flight (*gf*, Action 14)
-    Bounce         = 6,  // Ground impact skid and roll (*gb*, Action 19)
     Stunned        = 7,  // Immobilized recovery state (Action 12, 12 ticks)
     EnteringBase   = 8,  // Enter (action 2) or hatch (action 0x14) clip on the hill entrance (?h0 / ?hatch)
     Drowning       = 10, // 22-subitem drowning sequence (*dr301)
     Dead           = 11, // Unit eliminated
     GuardIdle      = 12, // Combat Ant idle at guard post
-    Intercepting   = 13, // Combat Ant intercepting detected intruder
-    ReturningToPost= 14, // Combat Ant returning to guard post
     Swimming       = 15, // Swimmer Ant actively swimming in water
     Infiltrating   = 16, // Thief raid clip (action 0xD, atcr501) on the raid tile
     DivingInWater  = 17, // Swimmer Ant diving into water (asdi*, Sound 71)
@@ -84,16 +81,6 @@ enum class DeathStatus : uint8_t {
     BombKilled   = 0x02,
     FireKilled   = 0x03,
     Drowned      = 0x0F  // Authentic code 0x0F from Ants.exe disassembly 0x101b86e
-};
-
-/**
- * @brief Damage event source identifier for damage matrix accounting.
- */
-enum class DamageSource : uint8_t {
-    MeleeStandard = 1, // Standard 1 HP attack
-    CombatPunch   = 2, // Combat Ant 2 HP heavy punch
-    BombBlast     = 3, // Landmine detonation (2 HP)
-    FireBurn      = 7  // Fire wall contact (+1 HP, Disasm 0x01021627)
 };
 
 /**
@@ -178,9 +165,6 @@ public:
     static constexpr int32_t kNoOrderTileX = 0x78;
     static constexpr int32_t kNoOrderTileY = 0x5A;
 
-    static constexpr uint16_t FLINCH_TICKS     = 14;
-    static constexpr uint16_t STUN_TICKS       = 50; // Authentic 2.5s (50 ticks @ 20Hz, 3-4 star rotations)
-
     // Entity Public State Fields (directly inspectable & testable)
     uint32_t    id{0};
     uint8_t     player_id{0};
@@ -194,12 +178,9 @@ public:
     uint16_t    max_hp{MAX_HP};
 
     TileCoord   pos{0, 0};
-    TileCoord   guard_anchor{0, 0};
-    uint32_t    stun_ticks_remaining{0};
 
     int32_t     pixel_x{0};
     int32_t     pixel_y{0};
-    int32_t     altitude_z{0};
     Direction   facing{Direction::South};
 
     int32_t     fx_x{0};
@@ -211,22 +192,11 @@ public:
 
     uint16_t    anim_subitem{0};
     uint16_t    anim_tick{0};
-    uint16_t    state_timer{0};
     uint16_t    transform_timer{0};
     bool        is_on_mud{false};
     bool        was_in_water{false};
     bool        in_water{false};
 
-    int32_t     push_start_px{0};
-    int32_t     push_start_py{0};
-    int32_t     push_dest_px{0};
-    int32_t     push_dest_py{0};
-    uint8_t     push_ticks_total{0};
-    uint8_t     push_tick_current{0};
-    bool        is_in_scuffle{false};
-    uint16_t    scuffle_ticks{0};
-    bool        post_bounce_stun{false};
-    bool        is_friendly_bump{false};
 
     std::vector<TileCoord> waypoints;
     size_t      current_waypoint_idx{0};
@@ -236,9 +206,7 @@ public:
     OrderType   pending_ability{static_cast<OrderType>(0)};
     TileCoord   pending_ability_target{-1, -1};
     TileCoord   ability_target{-1, -1};
-    uint16_t    attack_cooldown_ticks{0};
     uint16_t    ability_cooldown_ticks{0};
-    uint32_t    attack_target_id{0};
     bool        allow_friendly_bomb{false};
     bool        is_food_order{false};
     uint8_t     pending_powerup_type{255};
@@ -248,7 +216,26 @@ public:
     uint16_t    powerup_dwell_timer{0};
     bool        cantgo_standing_on_powerup{false};
     TileCoord   dropped_powerup_pos{-1, -1};
-    bool        retreat_pending{false};      // hit down to 1 hp: goes home once the hit recovery is over
+
+    // ---- Combat state (Ants.exe CAntUnit) ----
+    bool        engaged{false};              // +0x84: hit at contact, waits for the strike frame of the attacker's clip
+    bool        frozen{false};               // +0xfc: the step callback does nothing (dud burn overlay)
+    uint32_t    pending_victim{0};           // +0x8c: victim of the pending hit of an attack clip (ant id, 0 = none)
+    uint8_t     pending_range{1};            // +0x90: flight range in tiles (1, or 4 for a combat ant)
+    uint8_t     pending_dir{0};              // +0x92: flight direction (8 = cornered, no flight)
+    TileCoord   pending_tile{-1, -1};        // +0x94: contact tile of the victim
+    uint8_t     killer_team{7};              // +0x76: team of the last damage (7 = none)
+    uint32_t    last_order_ms{0xFFFF0000u};  // +0x98: time of the last Order (auto-engage waits 2 s; the original's clock is large)
+    bool        knock_flag{false};           // +0xb4: dud (bomb) or cornered (knock) flag of the flight order 0xA / 0xC
+    TileCoord   flight_tile{-1, -1};         // +0xb0 of a flight: the landing tile (the ant is put on its centre at the end)
+    bool        removed{false};              // the ant object is gone (RemoveAnt); the entry stays for its id
+    uint32_t    burn_end_ms{0};              // end time of the dud burn overlay that freezes the ant (0 = none)
+    // combat ant auto-engage (+0xbc, +0xc0, +0xc4, +0xc8, COMBEVT task +0x80)
+    bool        auto_engage{false};          // +0xbc
+    uint8_t     ae_order{0};                 // +0xc0: saved order
+    TileCoord   ae_target{-1, -1};           // +0xc4: saved target tile
+    uint8_t     ae_home_state{0};            // +0xc8: saved +0x68
+    uint32_t    combevt_due_ms{0};           // COMBEVT task fire time (0 = no task)
 
     // ---- Original-engine locomotion state (Ants.exe sprite animation + CAntUnit fields) ----
     // Waypoints follow the original convention: waypoints[0] is the start tile, waypoints.back() the
@@ -284,11 +271,12 @@ public:
 
     AntUnit(uint32_t unit_id, TeamId team_in, AntType type_in, int32_t start_tx, int32_t start_ty);
 
+    // An ant object exists until RemoveAnt: a victim that lost its last hp still flies and plays its death clip.
     bool is_alive() const noexcept {
-        return hp > 0 && death_status == DeathStatus::Alive;
+        return !removed;
     }
     bool is_stunned() const noexcept {
-        return state == UnitState::Stunned || state == UnitState::Knockback || state == UnitState::Burn || stun_ticks_remaining > 0;
+        return state == UnitState::Stunned || state == UnitState::Knockback || state == UnitState::Burn;
     }
     bool is_holding() const noexcept {
         return holding != 0;
@@ -309,8 +297,6 @@ public:
         hp = max_hp;
     }
 
-    bool take_damage(uint16_t amount, DamageSource source, uint32_t attacker_id) noexcept;
-
     void set_tile_pos(int32_t tx, int32_t ty) noexcept {
         pos.x = tx;
         pos.y = ty;
@@ -318,12 +304,6 @@ public:
         pixel_y = ty * 32 + 16;
         fx_x = pixel_x << 16;
         fx_y = pixel_y << 16;
-        push_start_px = pixel_x;
-        push_start_py = pixel_y;
-        push_dest_px = pixel_x;
-        push_dest_py = pixel_y;
-        push_ticks_total = 0;
-        push_tick_current = 0;
     }
 
     void set_pixel_pos(int32_t px, int32_t py) noexcept {
@@ -380,29 +360,6 @@ public:
     }
     bool has_order_tile() const noexcept {
         return static_cast<uint16_t>(orig_order_tile.y) < static_cast<uint16_t>(kNoOrderTileY);
-    }
-
-    void start_flinch(uint16_t ticks = FLINCH_TICKS) noexcept {
-        state = UnitState::Flinch;
-        state_timer = ticks;
-        anim_tick = 0;
-        anim_subitem = 0;
-    }
-
-    void start_stun(uint16_t ticks = STUN_TICKS) noexcept {
-        state = UnitState::Stunned;
-        stun_ticks_remaining = ticks;
-        anim_tick = 0;
-        anim_subitem = 0;
-    }
-
-    void start_drowning() noexcept {
-        state = UnitState::Drowning;
-        death_status = DeathStatus::Drowned;
-        facing = Direction::South;
-        hp = 0;
-        anim_subitem = 0;
-        anim_tick = 0;
     }
 
     void tick_timers() noexcept;

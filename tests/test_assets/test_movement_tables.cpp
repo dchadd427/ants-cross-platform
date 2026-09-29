@@ -218,8 +218,8 @@ static void suite_chd_parity(const AssetArchive& archive) {
         }
         ASSERT_EQ(next, std::size(md::kFrames));
         ASSERT_EQ(mv::clip_count(), std::size(md::kClips));
-        ASSERT_EQ(std::size(md::kClips), size_t{516});
-        ASSERT_EQ(std::size(md::kFrames), size_t{6083});
+        ASSERT_EQ(std::size(md::kClips), size_t{520});
+        ASSERT_EQ(std::size(md::kFrames), size_t{6123});
     } TEST_END();
 
     TEST_CASE("1.2 Every frame (dx, dy, duration, event, sound) and clip flags equal the CHD") {
@@ -402,6 +402,16 @@ static void suite_chd_parity(const AssetArchive& archive) {
         ASSERT_EQ(mv::action_clip(AC::Defuse, 1, 4, false).total_duration_ms(), 1100u);
         ASSERT_EQ(mv::action_clip(AC::Ignite, 2, 4, false).total_duration_ms(), 1760u);
         ASSERT_EQ(mv::action_clip(AC::Extinguish, 2, 4, false).total_duration_ms(), 1200u);
+        // death (action 0xC): the variant 0..3 is death1..death4 with their original lengths
+        const uint32_t death_ms[4] = {920, 1000, 980, 600};
+        for (uint8_t v = 0; v < 4; ++v) {
+            const mv::MotionClip c = mv::action_clip(AC::Death, 0, v, false);
+            g_ctx = "death " + std::to_string(v);
+            ASSERT_TRUE(c.valid());
+            ASSERT_EQ(c.total_duration_ms(), death_ms[v]);
+            ASSERT_STREQ(chd_name(archive, c.chd_index), "death" + std::to_string(v + 1));
+        }
+        ASSERT_TRUE(!mv::action_clip(AC::Death, 0, 4, false).valid());
         // cardinal-only actions have no diagonal clip; unknown types are rejected
         ASSERT_TRUE(!mv::action_clip(AC::Plant, 1, 3, false).valid());
         ASSERT_TRUE(!mv::action_clip(AC::Attack, 9, 4, false).valid());

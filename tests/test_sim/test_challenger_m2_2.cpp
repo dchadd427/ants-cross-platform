@@ -1,8 +1,6 @@
 #include "ants_sim/sim_engine.hpp"
 #include "ants_sim/grid.hpp"
 #include "ants_sim/ant_unit.hpp"
-#include "ants_sim/combat_ai.hpp"
-#include "ants_sim/physics.hpp"
 #include "ants_sim/prng.hpp"
 #include "ants_sim/match_stats.hpp"
 
@@ -231,7 +229,7 @@ void run_suite_3_thief_infiltration() {
         ASSERT_FALSE(sim.get_unit(enemy).is_holding());
     } TEST_END();
 
-    TEST_CASE("3.5 Lunchbox Dropped into Deep Water Remains Pickable by Swimmer") {
+    TEST_CASE("3.5 Carried Food Is Dropped Only On Land (RemoveAnt: terrain != water); Nothing Drops Into Water") {
         SimulationEngine sim;
         sim.init_test_world(60, 60, 605);
         sim.set_terrain(18, 18, TERRAIN_WATER);
@@ -240,13 +238,18 @@ void run_suite_3_thief_infiltration() {
         sim.get_unit(c).carried_points = 30;
         sim.get_unit(c).holding = 1;
         sim.kill_unit(c);
+        ASSERT_FALSE(sim.has_lunchbox_at({18, 18}));      // the original drops food only when the terrain is not water
 
-        ASSERT_TRUE(sim.has_lunchbox_at({18, 18}));
+        uint32_t d = sim.spawn_unit(0, AntType::Worker, {25, 25});
+        sim.get_unit(d).carried_points = 30;
+        sim.get_unit(d).holding = 1;
+        sim.kill_unit(d);
+        ASSERT_TRUE(sim.has_lunchbox_at({25, 25}));
 
-        uint32_t swimmer = sim.spawn_unit(2, AntType::Swimmer, {18, 18});
+        uint32_t picker = sim.spawn_unit(2, AntType::Worker, {25, 25});
         sim.tick();
-        ASSERT_TRUE(sim.get_unit(swimmer).is_holding());
-        ASSERT_EQ(sim.get_unit(swimmer).carried_points, 30u);
+        ASSERT_TRUE(sim.get_unit(picker).is_holding());
+        ASSERT_EQ(sim.get_unit(picker).carried_points, 30u);
     } TEST_END();
 }
 

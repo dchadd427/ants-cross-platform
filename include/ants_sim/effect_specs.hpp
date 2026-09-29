@@ -13,6 +13,7 @@ constexpr uint32_t kBsputterMs = 1220;  // bsputter (1177)
 constexpr uint32_t kDsplashMs  = 460;   // dsplash  (40)
 constexpr uint32_t kBattleMs   = 270;   // battle   (56), one cycle
 constexpr uint32_t kDeathMs[4] = { 920, 1000, 980, 600 };   // death1..death4 (102..105)
+constexpr const char* kDeathNames[4] = { "death1", "death2", "death3", "death4" };
 constexpr uint32_t kDropperMs  = 820;   // FD_BOMB/COMB/THIEF/SWIM/FIRE (426, 422, 424, 423, 425)
 constexpr uint32_t kDropperFrameMs[9] = { 100, 100, 120, 80, 60, 60, 100, 100, 100 };
 

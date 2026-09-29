@@ -1089,6 +1089,8 @@ The authentic match clock routine at `0x1024839` evaluates remaining match milli
 
 ### 5.31 Same-Tile Collision Scuffle Visual Effect (`battle`), `combatnetfairy.wav` & Bounce SFX (`flythumpb.wav`)
 
+> **Superseded by 5.36.** The scuffle, the bounce cascade and the ant hiding described below are not what the original does: walking ants never fight or bounce, a pile-up is a dispersal with the 1-tile `gh` clip, and the `battle` cloud only exists for ants of remote players. Kept for history.
+
 - **Collision State & Visual Scuffle Ball (`0x10215cb`, `0x102151a`):**
   - When two ants collide into the same tile (e.g., from an attack pushback, bomb blast, or simultaneous navigation collision), the engine resolves the conflict by playing a fighting "dust cloud / scuffle ball" effect before bouncing the displaced ant onto an adjacent passable tile.
   - In CHD Table 4, this visual effect is sequence ID 56 (`battle`), consisting of 4 sequential subitems:
@@ -1499,6 +1501,76 @@ in `ants.chd` (the original was never run, so timings come from the clip tables)
   hatch key, the auto-raid of any thief standing on the raid tile, the 20-tick postponement and the deposit at frame 4.
 * **Not yet ported**: the ally-raid confirmation dialog, the frame sounds of the enter clips (none exist), the ears re-creation
   colour on heal (the selection marker restarts on every health change, see 5.33.9).
+
+---
+
+### 5.36 Combat Ground Truth: Contact, Strike, Flights, Landings, Blast, Bomb Victim, Stun, Death, Auto-Engage (Capstone-Verified; Supersedes Earlier Combat, Knockback and Bounce Notes)
+
+Addresses are virtual addresses in `Original-Ants/Ants.exe` (image base 0x01000000); every statement was read in the binary or in
+`ants.chd` (the original was never run, so timings come from the clip tables). Implemented in `src/ants_sim/combat_system.cpp`
+(with `movement_system.cpp` / `action_system.cpp`); checked by `tests/test_sim/test_combat_actions.cpp` (golden timelines) and the
+combat cases of `tests/test_app/test_app_integration.cpp`. The original is a distributed simulation (only the owner's machine decides for
+its own ants, `IsLocal`); the remake has one authoritative simulation, so every ant follows the owner code path and the messages
+(8 melee, 0xF bomb, 0x11 drop power-up, 0x14 blast, 0x15 drown, 0x16 death, 0x25 drop food) are handled synchronously, as the local
+handler of `FUN_0100d791` does before it broadcasts.
+
+* **Contact** *(implemented)*. There is no attack range and no cooldown. The contact is `TryEnterTile` (`FUN_0101c4f2`) branch A
+  (`0x101c53f`): the attacker's pixel position crosses into the tile that holds the attack target (order 3, or 0xF of the auto-engage).
+  Refused with "Can't go there." (text 0x3a) when either tile is water, and with "Can't do that..." (0x30) when `CanBeAttackedFrom`
+  (`FUN_0101cb0c`) says no: the victim is engaged (`+0x84`) or frozen (`+0x78`), the tiles are not adjacent (Chebyshev 1), the victim
+  plays action 0x14, 2, 0xA, 0xE, 0xF or 0xC. The refusal plays the can't-go clip (action 0xB) and clears the path.
+* **Immunity that follows from the step rules** *(implemented, not a flag)*. `CanBeAttackedFrom` has no test for power-ups or the hill,
+  but a contact needs a path that ends on the victim's tile, and neither the path step cost (`FUN_01020951`) nor `CanEnter`
+  (`FUN_0101f780`) accepts a solid tile (power-up, lunchbox, fire wall, food) or a cell of a hill for an ant whose order is not the
+  matching one (power-up order 4 onto that very tile, harvest, raid, fire ant on fire). So an attack order against an ant that stands
+  on a power-up fails at once with "Can't go there." and the auto-engage never gets its last step: an ant standing on a power-up
+  cannot be attacked. Paths to the power-up tile itself from a distance are fine (order 4), which is how a power-up is collected. The
+  owner's click on the raid tile is classified as "go home", so a thief on the raid tile cannot be reached either.
+* **Damage at contact** *(implemented; msg 8 handler `FUN_01022ca1`)*. `TakeHit` (`FUN_01021627`) once, twice for a combat attacker
+  (`0x1022d33`, `0x1022d45`), remembering the attacker's team for the kill credit. Then `StartMelee` (`FUN_01010245`): the attacker
+  plays the attack clip facing the victim, the victim stands idle facing the attacker, engaged, path cleared (abilities are cancelled
+  without any change of the world), `OnAttacked` (`FUN_01010a03`): text 0x37 "Ouch!" for the victim's team and allies at every
+  contact, alarm cue 58 at most once per 10 s per team. Hit points are lost at contact; the reaction comes at the strike frame.
+* **Strike frame** *(implemented)*. Event 4 of the attack clip (`0x101ef0f`) delivers the pending hit (`FUN_0101c1e2` ->
+  `FUN_01010335`): the victim is put on the contact tile centre and flies: range 1, clip `gh` (32 px, action 0xE) for every attacker
+  except the combat ant, range 4, clip `gb` (128 px in ONE step when frame 0 ends, action 0x13). The direction tries dir, +1, -1,
+  +2, -2 (`FUN_0101d8ed`); only the landing tile is tested (in bounds, not solid unless a fire wall, not a hill special tile, not
+  an anthill cell), never the tiles in between and never water, ants or bombs; none fits = cornered (direction 8, stun at once). One
+  blow per order: the attacker idles and its order is cleared.
+* **Landing blocks** *(implemented; `WalkStep` `FUN_0101b8cb`, in this order, at event 3)*: bomb (sets it off); pile-up (all ants on
+  the tile, every team, are thrown to their own free neighbour in distinct directions with the 1-tile `gh` clip, no damage);
+  fire wall (`Blast(1)`: one hit point and a 1-tile `gh`; a fire ant that is not stationary is stunned instead); water (a non-swimmer
+  drowns, a swimmer splashes `dsplash` and is stunned). `BlastHit` (`FUN_0101c221`) replaces whatever the ant was doing.
+* **Stun, death, removal** *(implemented)*. The end of a `gh`/`gb` runs `FUN_0102151a`: a 1 hp survivor goes home ahead of the
+  queue, hp 0 starts the death clip (`death1..4`, 920/1000/980/600 ms), otherwise the ant is idle with no stun (a nested stun clip is
+  installed and at once overwritten; its start step runs synchronously in `FUN_0102c1fc`, so the stun cue 70 still plays after every
+  melee flight). The stun stays only after a bomb flight, the dud burn overlay, a cornered victim, a swimmer landing in water and a fire
+  ant on a fire wall (`worker 3125, bomber 3835, fire 3000, thief 2610, combat 3000, swimmer 2880 ms`, orderable, an order ends it).
+  Removal (`FUN_0100cd9f`) at the end of the death or drowning clip: text 0x33 "Ant dead." / 0x34 "Ant drowned." for everybody, the
+  scorecard counters, carried food dropped on the tile when it is not water, a typed ant drops its power-up on a free neighbour
+  tile (`FUN_01020e6e`), and the last ant of a team with eggs hatches a free egg (`min(score, 200)`). Drowning (`?dr301`, 2370 ms,
+  sounds 71 at 0 and 72 at 100 ms) never changes hit points.
+* **Bomb victim** *(implemented; `FUN_01021a6f`)*. The bomb is removed at once, two hits (credit: the bomb's owner), the ant is thrown
+  4 tiles opposite its facing (`FUN_0101df5d`, start direction (facing + 4) % 8) with `gb`, `bombex` plays; 20 % of the bombs are
+  duds: the ant stays frozen under the `?bu` overlay (worker 1150 ms) and is stunned when it ends. A landing on another bomb chains.
+* **Timeline, worker hits worker (contact = 0)**: 0 hit point lost, victim idle engaged; 100 sound 75; 200 strike frame (the sim
+  quantises the original's 180 ms to its 50 ms ticks), `gh` starts (sound 64); +24 px at 300, +8 px at 400; 500 landing event
+  (sound 65); about 1000 idle. Combat punch: sound 78 at the strike frame, +128 px at 300, gb ends at about 1050.
+* **Auto-engage, the original's only combat AI** *(implemented; replaces the remake's guard post AI)*. A combat ant that got no
+  order for 2 s (`now - t98 > 2000`) and is not stunned, dying, drowning, frozen or engaged looks for an enemy: at every arrival on a
+  tile within radius 3 (rings 1..2 by `FindEnemy`, `FUN_0101dbec`, first hit wins) and when idle without a path within radius 4
+  (rings 1..3); it saves its order and attacks one tile at a time (`AttackTile`, `FUN_0101da6f`, a two tile path, order 0xF) with a
+  2 s / 3 s COMBEVT timeout; after the fight (or the timeout) the saved order is given again (`FUN_0101dd6f`).
+* **Walking ants never bounce or fight** *(implemented in 5.32)*. A blocked walker waits 300 ms while the occupant moves, otherwise it
+  re-plans and shows the `bump` effect (anim 0xdc, sound 47). The `battle` cloud (anim 56) exists only as a cosmetic pile-up cloud for
+  ants of non-local teams and as the repair object of a desynchronised msg 8; nothing hides an ant.
+* **Bridge collapse** *(implemented; `FUN_0100f8bf`)*: every ant on a bridge tile that becomes water is checked: a non-swimmer
+  drowns, a swimmer only splashes.
+* **Removed as invented** (v0.0.33): the physics engine (ballistic lerp, arcs, obstacle counting, 8 candidate directions), the bounce
+  and scuffle states, the attack cooldown, the pursuit AI, the guard post AI (`combat_ai.cpp`), the 12-tick stun after flights, the
+  instant death and instant drowning, the flinch / stun tick timers, the melee immunity flags.
+* **Not yet ported**: the "attack your ally?" confirmation dialog, the pile-up cloud for remote teams (needs the network port), the
+  ability actions (plant, defuse, ignite, extinguish, bridge, harvest, power-up pick-up) as clips with effects at the clip end (stage B).
 
 ---
 

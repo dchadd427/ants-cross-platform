@@ -11,8 +11,6 @@
 #include "ants_sim/match_stats.hpp"
 #include "ants_sim/grid.hpp"
 #include "ants_sim/ant_unit.hpp"
-#include "ants_sim/combat_ai.hpp"
-#include "ants_sim/physics.hpp"
 
 namespace ants::sim {
 
@@ -239,7 +237,7 @@ struct AntSnapshot {
     uint16_t transform_anim_frame{0};
     bool     on_powerup{false};
     uint16_t ability_cooldown_ticks{0};
-    bool     is_in_scuffle{false};
+    int32_t  burn_elapsed_ms{-1};       // dud burn overlay (?bu) time since it started, -1 = none
     UnitState state{UnitState::Idle};
     uint8_t  target_team_id{255};
 
@@ -477,6 +475,8 @@ public:
 
     void apply_knockback(uint32_t ant_id, int32_t from_px, int32_t from_py, int32_t min_tiles, int32_t max_tiles);
     void resolve_fire_contact(uint32_t ant_id, int32_t incoming_dx, int32_t incoming_dy);
+    /// Test hook: Blast(0, 7) on the ants that stand on `tile` (the pile-up dispersal of WalkStep block C).
+    void blast_tile_for_test(TileCoord tile);
 
     int32_t get_display_score(uint8_t player_id) const;
     int32_t get_player_score(uint8_t player_id) const;

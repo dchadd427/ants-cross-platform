@@ -56,18 +56,14 @@ void SimulationEngineImpl::post_news(uint8_t player, const char* text, uint16_t 
     news_queue_.push_back(NewsEvent{player, text, match_time_remaining_ms_, string_id});
 }
 
-// The remake's combat guard AI stands down while the hill logic moves an ant (the original's combat handler only acts
-// on an idle ant); once the ant settles it guards the tile it stopped on.
-void SimulationEngineImpl::yield_guard_ai(AntUnit& a) {
-    if (a.type != AntType::Combat) return;
-    if (auto* ai = get_or_create_ai(a)) ai->on_user_command_issued();
-}
-
 // ------------------------------------------------------------------------------------------------
 // SetAction: cleanup of the OLD action (table 0x101b48f, dispatched at 0x101ade0)
 // ------------------------------------------------------------------------------------------------
 
-void SimulationEngineImpl::action_cleanup(AntUnit& a, uint8_t old_action, uint8_t /*new_action*/) {
+// Returns false when the new action must not be installed (the ant finished dying, 0x101b41c).
+bool SimulationEngineImpl::action_cleanup(AntUnit& a, uint8_t old_action, uint8_t new_action) {
+    // flag = (new == stun || engaged): an engaged ant cancels its abilities without any change of the world
+    const bool flag = (new_action == AntUnit::kActionStun) || a.engaged;
     switch (old_action) {
         case AntUnit::kActionEnter:
         case AntUnit::kActionHatch:
@@ -76,9 +72,37 @@ void SimulationEngineImpl::action_cleanup(AntUnit& a, uint8_t old_action, uint8_
         case AntUnit::kActionRaid:
             cleanup_raid(a);           // 0x101e27f
             break;
+        case AntUnit::kActionAttack: { // 0x101ecc4: a pending hit is delivered when its victim still waits for it
+            AntUnit* v = find_unit(a.pending_victim);
+            if (a.pending_victim != 0 && v && v->engaged) deliver_pending_hit(a);
+            break;
+        }
+        case AntUnit::kActionDeath:    // 0x101e120: leaving the death clip finishes the death at once
+            if (a.pending_victim != 0) deliver_pending_hit(a);
+            finish_death(a);
+            return false;
+        case AntUnit::kActionDrown:    // 0x101e0c2
+            if (new_action == AntUnit::kActionDrown) return false;
+            if (a.pending_victim != 0) deliver_pending_hit(a);
+            finish_death(a);
+            return false;
+        case AntUnit::kActionBlast:    // 0x101ade0: end of a flight or a hit
+        case AntUnit::kActionHit:
+        case AntUnit::kActionBlown:
+            if (new_action == AntUnit::kActionDeath || new_action == AntUnit::kActionDrown ||
+                new_action == AntUnit::kActionHit || new_action == AntUnit::kActionBlown ||
+                new_action == AntUnit::kActionBlast) {
+                break;                 // one flight replaces another without any ending
+            }
+            if (!flag) {
+                const bool r = stun_or_die(a);          // 0x101e68c -> FUN_0102151a(1)
+                if (r && a.hp == 0) return false;       // the death started inside: the new action is dropped
+            }
+            break;
         default:
             break;
     }
+    return true;
 }
 
 // ------------------------------------------------------------------------------------------------
@@ -110,7 +134,6 @@ void SimulationEngineImpl::enter_clip_end(AntUnit& a) {
         set_idle_label(a);
         return;
     }
-    yield_guard_ai(a);
     go_to(a, dst, false, false);
 }
 
@@ -161,7 +184,6 @@ void SimulationEngineImpl::anthillq_run() {
             }
         }
         if (!blocked && best) {
-            yield_guard_ai(*best);
             go_to(*best, home, false, false);                               // Order(best, &home, 0, 0, 0)
         }
     }
@@ -175,7 +197,6 @@ void SimulationEngineImpl::retreat_home(AntUnit& a) {
     a.loco_action = AntUnit::kActionIdle;                                   // raw write of action 0, no animation
     const TileCoord home = team_entrance(a.player_id);
     if (home.x < 0) return;
-    yield_guard_ai(a);
     go_to(a, home, false, false);
     if (a.home_state == 1) a.home_priority = 1;
 }

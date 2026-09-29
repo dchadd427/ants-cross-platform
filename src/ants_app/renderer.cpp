@@ -1231,8 +1231,6 @@ void Renderer::render_software_cursor(CursorType type, int32_t screen_x, int32_t
 }
 
 void Renderer::draw_single_ant(const ants::sim::AntSnapshot& ant) {
-    if (ant.is_in_scuffle) return; // concealed inside the scuffle ball, do not draw
-
     // The hill actions (enter, hatch, raid) are ordinary clips played on the tile centre the simulation puts the ant
     // on, so there is no special anchor: every ant is drawn where it stands.
     int32_t sx = 0, sy = 0;
@@ -1255,9 +1253,7 @@ void Renderer::draw_single_ant(const ants::sim::AntSnapshot& ant) {
         prefix = "as";
     }
 
-    if (ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::Walking) ||
-        ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::Intercepting) ||
-        ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::ReturningToPost)) {
+    if (ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::Walking)) {
         if (ant.is_swimming) {
             action = "sw";
         } else if (ant.is_on_mud) {
@@ -1281,8 +1277,6 @@ void Renderer::draw_single_ant(const ants::sim::AntSnapshot& ant) {
         action = "gf"; // Grab Food bite sequence (aggf301, abgf201, afgf201, acgf201, asgf301, atgf301)
     } else if (ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::Knockback)) {
         action = "gb"; // Ground Bounce tumbling flight (aggb301, abgb301, afgb201, acgb201, asgb201, atgb201)
-    } else if (ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::Bounce)) {
-        action = "st"; // Ground Bounce: upright normal standing/idle sprite, NO tumble (*gb*) or flinch (*gh*)
     } else if (ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::Flinch)) {
         action = "gh";
     } else if (ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::Burn)) {
@@ -1485,6 +1479,17 @@ void Renderer::draw_single_ant(const ants::sim::AntSnapshot& ant) {
         }
     }
 
+    // 2.4 Dud burn overlay (FUN_01021c68): the ?bu clip is a separate sprite on top of the frozen ant
+    if (ant.burn_elapsed_ms >= 0) {
+        static const char type_letters[6] = { 'g', 'b', 'f', 't', 'c', 's' };
+        const std::string bu_name = std::string("a") + type_letters[static_cast<size_t>(ant.type) % 6] + "bu301";
+        const auto* bu_seq = archive_->find_animation(bu_name);
+        if (bu_seq && !bu_seq->subitems.empty()) {
+            const size_t bsub = get_anim_subitem_by_time(*bu_seq, static_cast<uint32_t>(ant.burn_elapsed_ms));
+            draw_frame_parts(bu_seq->subitems[bsub], sx, render_y, false, ant_colour(ant.player_id));
+        }
+    }
+
     // 2.5 Power-Up Transformation Animation (11 frames of getpow: pucov1..5.bmp)
     if (ant.is_transforming) {
         const auto* pow_seq = archive_->find_animation("getpow");
@@ -1565,14 +1570,12 @@ void Renderer::draw_anthill_selection_brackets(int32_t cx, int32_t cy, uint32_t 
 
 void Renderer::collect_ant_units(const ants::sim::WorldState& world) {
     for (const auto& a : world.ants) {
-        if (a.is_in_scuffle) continue;
         if (world.fog_of_war_enabled && a.player_id != hud_team_id_ &&
             !world.is_tile_revealed(a.tile_x, a.tile_y)) {
             continue; // Concealed enemy ant under fog of war
         }
-        if (a.hp == 0 && !a.is_drowning &&
-            a.anim_state != static_cast<uint16_t>(ants::sim::UnitState::Knockback) &&
-            a.anim_state != static_cast<uint16_t>(ants::sim::UnitState::Bounce)) continue;
+        // A dying ant is replaced by its death clip effect (the ant object itself is only kept for the timing)
+        if (a.anim_state == static_cast<uint16_t>(ants::sim::UnitState::Dead)) continue;
 
         RenderItem item{};
         item.sort_y = a.py;

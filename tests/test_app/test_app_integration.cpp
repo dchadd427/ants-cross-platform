@@ -15,7 +15,6 @@
 #include "ants_sim/sim_engine.hpp"
 #include "ants_sim/effect_specs.hpp"
 #include "ants_sim/pathfinding.hpp"
-#include "ants_sim/physics.hpp"
 #include "ants_app/audio_mixer.hpp"
 #include "ants_app/midi_player.hpp"
 #include "ants_app/renderer.hpp"
@@ -98,6 +97,20 @@ static bool tick_until(SimulationEngine& sim, const std::function<bool()>& pred,
         sim.tick();
     }
     return pred();
+}
+
+// Runs the simulation for `ms` milliseconds (50 ms ticks).
+static void run_ms(SimulationEngine& sim, int ms) {
+    for (int t = 0; t < ms / 50; ++t) sim.tick();
+}
+
+// Ticks until pred() holds (checked before every tick); returns the elapsed milliseconds, -1 if it did not hold within max_ms.
+static int wait_ms(SimulationEngine& sim, int max_ms, const std::function<bool()>& pred) {
+    for (int t = 0; t <= max_ms / 50; ++t) {
+        if (pred()) return t * 50;
+        sim.tick();
+    }
+    return -1;
 }
 
 // Milliseconds from an ant's first path delivery to its last pixel move (the landing on the goal centre),
@@ -890,8 +903,12 @@ void run_suite_7_input_controls() {
         hud.handle_mouse_down(ex, ey, 1, sim, camera);
         hud.handle_mouse_up(ex, ey, 1, sim, camera);
 
-        // Enemy ant received damage from Combat Ant punch
-        ASSERT_LT(sim.get_unit(enemy).hp, 10u);
+        // The click is a move order onto the enemy's tile that the classification turns into the attack order 3;
+        // nothing is hit at the click, the punch lands when the step crosses the tile border
+        ASSERT_EQ(sim.get_unit(friendly).orig_order, AntUnit::kOrderAttack);
+        ASSERT_EQ(sim.get_unit(enemy).hp, 10u);
+        ASSERT_TRUE(wait_ms(sim, 3000, [&]() { return sim.get_unit(enemy).hp < 10u; }) >= 0);
+        ASSERT_EQ(sim.get_unit(enemy).hp, 8u);   // a combat ant punches for 2 hit points
     } TEST_END();
 
     TEST_CASE("7.4 Right Click Special Abilities (Bomber/Fire/Swimmer/Thief)") {
@@ -2196,33 +2213,31 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         ASSERT_FALSE(sim.has_audio_event(SoundID::FlingThumpA));
     } TEST_END();
 
-    TEST_CASE("12.4 Discrete Tile Bouncing & Cascade Resolution") {
+    TEST_CASE("12.4 Pile-Up Dispersal: Ants On One Tile Are Thrown Apart Without Damage And Rest On Tile Centres") {
         SimulationEngine sim;
         sim.init_test_world(60, 60, 100, 60000);
 
-        // Spawn ant 1 at (25, 25)
-        uint32_t a1_id = sim.spawn_unit(0, AntType::Combat, TileCoord{25, 25});
-        // Spawn ant 2 at (25, 25)
-        uint32_t a2_id = sim.spawn_unit(0, AntType::Worker, TileCoord{25, 25});
-        // Spawn ant 3 at adjacent (26, 25) to test cascade displacement
-        uint32_t a3_id = sim.spawn_unit(0, AntType::Worker, TileCoord{26, 25});
-
-        // Step 1 tick to trigger collision and bounce cascade
-        sim.tick();
+        // A pile-up in the original: an ant lands on a tile that another ant stands on (WalkStep block C, Blast 0, 7)
+        uint32_t a1_id = sim.spawn_unit(0, AntType::Worker, TileCoord{25, 25});
+        uint32_t a2_id = sim.spawn_unit(1, AntType::Worker, TileCoord{26, 25});   // is hit and thrown to (27, 25)
+        uint32_t a3_id = sim.spawn_unit(1, AntType::Worker, TileCoord{27, 25});   // stands on the landing tile
+        sim.execute_melee_attack(a1_id, a2_id);
 
         const auto& a1 = sim.get_unit(a1_id);
         const auto& a2 = sim.get_unit(a2_id);
         const auto& a3 = sim.get_unit(a3_id);
 
-        // Bounce sound was triggered
-        ASSERT_TRUE(sim.has_audio_event(SoundID::Bump));
+        // Everything is thrown apart and comes to rest
+        ASSERT_TRUE(wait_ms(sim, 4000, [&]() { return a2.loco_action == AntUnit::kActionIdle &&
+                                                       a3.loco_action == AntUnit::kActionIdle &&
+                                                       a2.pos != a3.pos && a2.pos != a1.pos && a3.pos != a1.pos &&
+                                                       a2.engaged == false; }) >= 0);
+        ASSERT_EQ(a2.hp, 9u);   // the one blow
+        ASSERT_EQ(a3.hp, 10u);  // the pile-up itself does no damage
+        ASSERT_EQ(a1.hp, 10u);
 
-        // All 3 ants must occupy distinct discrete tiles
-        ASSERT_FALSE(a1.pos == a2.pos);
-        ASSERT_FALSE(a1.pos == a3.pos);
-        ASSERT_FALSE(a2.pos == a3.pos);
-
-        // Discrete tile center guarantee: All 3 ants must be snapped to exact tile centers (NEVER halfway between tiles)
+        // All 3 ants rest exactly on tile centres (NEVER halfway between tiles)
+        run_ms(sim, 500);
         ASSERT_EQ(a1.pixel_x, a1.pos.x * 32 + 16);
         ASSERT_EQ(a1.pixel_y, a1.pos.y * 32 + 16);
         ASSERT_EQ(a2.pixel_x, a2.pos.x * 32 + 16);
@@ -2334,13 +2349,13 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         }
     } TEST_END();
 
-    TEST_CASE("12.7 Attack Cooldown & Adjacency Requirement") {
+    TEST_CASE("12.7 An Attack Order Walks Up To The Target: The Blow Comes When The Step Crosses The Border, One Blow Per Order") {
         SimulationEngine sim;
         sim.init_test_world(60, 60, 100, 60000);
 
         // Spawn Combat Ant at (10, 10) on Team 0
         uint32_t combat_id = sim.spawn_unit(0, AntType::Combat, TileCoord{10, 10});
-        // Spawn Enemy Worker at (15, 10) on Team 1 (Chebyshev dist = 5)
+        // Spawn Enemy Worker at (15, 10) on Team 1 (Chebyshev dist = 5: outside the auto-engage radius)
         uint32_t target_id = sim.spawn_unit(1, AntType::Worker, TileCoord{15, 10});
 
         auto& attacker = sim.get_unit(combat_id);
@@ -2358,24 +2373,17 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
 
         // Target must NOT have taken damage immediately (not adjacent)
         ASSERT_EQ(target.hp, init_hp);
-        ASSERT_EQ(attacker.attack_target_id, target_id);
+        ASSERT_EQ(attacker.orig_order, AntUnit::kOrderAttack);
 
-        // Step simulation while approaching: target takes no damage until attacker reaches adjacency
-        while (target.hp == init_hp) {
-            ASSERT_TRUE(attacker.pos.chebyshev_dist(target.pos) >= 1);
-            sim.tick();
-        }
+        // The target takes no damage until the attacker's step crosses into its tile
+        ASSERT_TRUE(wait_ms(sim, 8000, [&]() { return target.hp != init_hp; }) > 0);
+        ASSERT_EQ(attacker.pos, (TileCoord{14, 10}));
 
-        // On adjacency tick: attack struck! Target took 2 HP punch damage
+        // The contact takes 2 hit points (a combat ant), the blow is a single one: no further strike
         ASSERT_EQ(target.hp, init_hp - 2);
-        // Attacker must have entered Attacking state and set attack_cooldown_ticks == 12
-        ASSERT_TRUE(attacker.attack_cooldown_ticks > 0);
-
-        // On immediately subsequent tick, cannot attack again (cooldown in effect)
-        uint16_t prev_cooldown = attacker.attack_cooldown_ticks;
-        sim.tick();
-        ASSERT_EQ(target.hp, init_hp - 2); // No extra attack spammed
-        ASSERT_EQ(attacker.attack_cooldown_ticks, prev_cooldown - 1);
+        run_ms(sim, 5000);
+        ASSERT_EQ(target.hp, init_hp - 2);
+        ASSERT_EQ(attacker.orig_order, AntUnit::kOrderNone);
     } TEST_END();
 
     TEST_CASE("12.8 Bomber Ant Plant Bomb On Gravel") {
@@ -3045,14 +3053,14 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
     // ------------------------------------------------------------------------
     // 12.23: Unattackability While Standing on Power-Up
     // ------------------------------------------------------------------------
-    TEST_CASE("12.23 Unattackability While Standing on Power-Up") {
+    TEST_CASE("12.23 An Ant Standing On A Power-Up Is Immune From Attacks (no path can end on the solid power-up tile)") {
         SimulationEngine sim;
         sim.init_test_world(60, 60, 100, 60000);
 
         // Place powerup at (10, 10)
         sim.grid_mut().place_powerup(10, 10, 4);
 
-        // Friendly worker at (10, 10), trigger and interrupt
+        // Friendly worker at (10, 10), trigger and interrupt (the can't-go trick: it stands on the power-up)
         uint32_t friendly_id = sim.spawn_unit(0, AntType::Worker, TileCoord{10, 10});
         sim.tick();
         sim.interrupt_transformation(friendly_id);
@@ -3061,26 +3069,25 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         ASSERT_TRUE(friendly.on_powerup);
         uint16_t initial_hp = friendly.hp;
 
-        // Enemy Combat ant at (11, 10) (adjacent)
-        uint32_t enemy_id = sim.spawn_unit(1, AntType::Combat, TileCoord{11, 10});
+        // Enemy Combat ant four tiles away
+        uint32_t enemy_id = sim.spawn_unit(1, AntType::Combat, TileCoord{14, 10});
         auto& enemy = sim.get_unit(enemy_id);
 
-        // 1. Combat AI should NOT target friendly unit on powerup
-        CombatAIController controller(enemy);
-        ASSERT_FALSE(controller.is_valid_target(friendly, enemy, sim.stats_manager()));
-
-        // 2. Direct melee attack attempt deals 0 damage
-        sim.execute_melee_attack(enemy_id, friendly_id);
-        ASSERT_EQ(friendly.hp, initial_hp);
-
-        // 3. HUD attack order rejects attacking an enemy on a powerup
+        // 1. The HUD accepts the click as an attack order (order 3), but no path can end on the power-up tile
+        //    (A* step cost and CanEnter block it): the path manager answers "Can't go there." and the ant plays can't go
         HUD hud;
         hud.init(1); // Player 1 (enemy team)
         hud.select_ant(enemy_id, false);
         hud.dispatch_attack_order(friendly_id, sim);
+        ASSERT_EQ(enemy.orig_order, AntUnit::kOrderAttack);
+        ASSERT_TRUE(wait_ms(sim, 1000, [&]() { return sim.has_news_event(1, 0x3A); }) >= 0);   // "Can't go there."
+        ASSERT_TRUE(wait_ms(sim, 1000, [&]() { return enemy.loco_action == AntUnit::kActionCantGo; }) >= 0);
+        run_ms(sim, 5000);
+        ASSERT_EQ(friendly.hp, initial_hp);
 
-        // Enemy should NOT have attack order targeting friendly_id
-        ASSERT_NE(enemy.attack_target_id, friendly_id);
+        // 2. A direct contact can never happen either
+        sim.execute_melee_attack(enemy_id, friendly_id);
+        ASSERT_EQ(friendly.hp, initial_hp);
     } TEST_END();
 
     // ------------------------------------------------------------------------
@@ -3187,7 +3194,7 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
     // ------------------------------------------------------------------------
     // 12.26: Swimmers Immune From Being Attacked Underwater
     // ------------------------------------------------------------------------
-    TEST_CASE("12.26 Swimmers Immune From Being Attacked Underwater (Even by Other Swimmers)") {
+    TEST_CASE("12.26 An Ant In Water Cannot Be Attacked And Nothing Attacks From Water (CanBeAttackedFrom)") {
         SimulationEngine sim;
         sim.init_test_world(60, 60, 100, 60000);
 
@@ -3201,54 +3208,34 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         // Friendly swimmer in water at (20, 20)
         uint32_t friendly_id = sim.spawn_unit(0, AntType::Swimmer, TileCoord{20, 20});
         auto& friendly = sim.get_unit(friendly_id);
-        sim.tick();
-        ASSERT_TRUE(friendly.in_water);
         uint16_t initial_hp = friendly.hp;
 
-        // Enemy swimmer in water at (21, 20) (adjacent underwater)
+        // Enemy swimmer in water at (21, 20) (adjacent in the water)
         uint32_t enemy_swimmer_id = sim.spawn_unit(1, AntType::Swimmer, TileCoord{21, 20});
-        auto& enemy_swimmer = sim.get_unit(enemy_swimmer_id);
-        sim.tick();
-        ASSERT_TRUE(enemy_swimmer.in_water);
 
-        // Enemy Combat ant on land at (19, 20) (adjacent on bank)
+        // Enemy Combat ant on land at (19, 20) (adjacent on the bank)
         uint32_t enemy_combat_id = sim.spawn_unit(1, AntType::Combat, TileCoord{19, 20});
-        auto& enemy_combat = sim.get_unit(enemy_combat_id);
-        ASSERT_FALSE(enemy_combat.in_water);
 
-        // 1. Combat AI on land cannot target swimmer underwater
-        CombatAIController controller(enemy_combat);
-        ASSERT_FALSE(controller.is_valid_target(friendly, enemy_combat, sim.stats_manager()));
-
-        // 2. Direct melee attack from land combat ant deals 0 damage
+        // 1. A melee from the land against the swimmer in the water is refused ("Can't go there.")
         sim.execute_melee_attack(enemy_combat_id, friendly_id);
         ASSERT_EQ(friendly.hp, initial_hp);
+        ASSERT_EQ(sim.get_unit(enemy_combat_id).loco_action, AntUnit::kActionCantGo);
 
-        // 3. Direct melee attack from enemy swimmer underwater deals 0 damage
+        // 2. A melee between two ants in the water is refused as well
         sim.execute_melee_attack(enemy_swimmer_id, friendly_id);
         ASSERT_EQ(friendly.hp, initial_hp);
 
-        // 4. Autonomous pursuit ignores underwater swimmer
-        enemy_swimmer.attack_target_id = friendly_id;
-        sim.tick();
-        ASSERT_EQ(enemy_swimmer.attack_target_id, 0u);
+        // 3. The auto-engage of the combat ant ignores the swimmer in the water for a long time
+        for (int i = 0; i < 100; ++i) sim.tick();
+        ASSERT_EQ(friendly.hp, initial_hp);
 
-        // 5. HUD attack order rejects attacking an enemy swimmer in water
-        HUD hud;
-        hud.init(1); // Player 1 (enemy team)
-        hud.select_ant(enemy_swimmer_id, false);
-        hud.dispatch_attack_order(friendly_id, sim);
-        ASSERT_NE(enemy_swimmer.attack_target_id, friendly_id);
-
-        // 6. When swimmer exits water onto land, it can be attacked normally
-        friendly.pos = TileCoord{18, 20}; // Move friendly swimmer to land
-        friendly.in_water = false;
-        friendly.state = UnitState::Idle;
-        enemy_combat.pos = TileCoord{19, 20};
-
-        ASSERT_TRUE(controller.is_valid_target(friendly, enemy_combat, sim.stats_manager()));
-        sim.execute_melee_attack(enemy_combat_id, friendly_id);
-        ASSERT_LT(friendly.hp, initial_hp); // Takes damage on land!
+        // 4. When the swimmer stands on land it can be attacked normally
+        SimulationEngine sim2;
+        sim2.init_test_world(60, 60, 100, 60000);
+        uint32_t swimmer_land = sim2.spawn_unit(0, AntType::Swimmer, TileCoord{18, 20});
+        uint32_t combat_land = sim2.spawn_unit(1, AntType::Combat, TileCoord{19, 20});
+        sim2.execute_melee_attack(combat_land, swimmer_land);
+        ASSERT_EQ(sim2.get_unit(swimmer_land).hp, initial_hp - 2); // Takes damage on land!
     } TEST_END();
 
     TEST_CASE("12.27 Power-Up Obstacle Avoidance (Walks Around Power-Up Unless Directly Instructed)") {
@@ -3370,22 +3357,22 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         hud.handle_mouse_down(b2_click_x, b2_click_y, 1, sim, camera);
         hud.handle_mouse_up(b2_click_x, b2_click_y, 1, sim, camera);
 
-        // b2 is now selected for inspection, neither unit has friendly attack orders
+        // b2 is now selected for inspection, neither unit has an attack order
         ASSERT_TRUE(hud.is_ant_selected(b2));
         ASSERT_FALSE(hud.is_ant_selected(b1));
-        ASSERT_NE(sim.get_unit(b1).attack_target_id, b2);
-        ASSERT_NE(sim.get_unit(b2).attack_target_id, b1);
+        ASSERT_NE(sim.get_unit(b1).orig_order, AntUnit::kOrderAttack);
+        ASSERT_NE(sim.get_unit(b2).orig_order, AntUnit::kOrderAttack);
 
         // 3. Right-clicking b2 while nothing or enemy is selected does not issue attack orders
         hud.handle_mouse_down(b2_click_x, b2_click_y, 3, sim, camera);
-        ASSERT_NE(sim.get_unit(b1).attack_target_id, b2);
+        ASSERT_NE(sim.get_unit(b1).orig_order, AntUnit::kOrderAttack);
 
         // 4. Directly testing HUD attack order dispatch protection:
         // Even if an enemy ant ID were artificially injected into selected_ant_ids:
         hud.set_selected_ant_ids({b1});
         hud.dispatch_attack_order(b2, sim);
         // HUD must filter out non-friendly units so b1 NEVER targets b2!
-        ASSERT_NE(sim.get_unit(b1).attack_target_id, b2);
+        ASSERT_NE(sim.get_unit(b1).orig_order, AntUnit::kOrderAttack);
 
         // 5. SimulationEngine layer protection:
         // Even if a malformed AntOrder with b1 attacking b2 is fed to sim.issue_order:
@@ -3394,7 +3381,7 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         bad_order.type = OrderType::Attack;
         bad_order.target_entity_id = static_cast<int32_t>(b2);
         sim.issue_order(bad_order);
-        ASSERT_NE(sim.get_unit(b1).attack_target_id, b2);
+        ASSERT_NE(sim.get_unit(b1).orig_order, AntUnit::kOrderAttack);
 
         // 6. execute_melee_attack deals 0 damage to teammates:
         uint32_t b2_initial_hp = sim.get_unit(b2).hp;
@@ -3414,7 +3401,7 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         // Green ant g1 attacks enemy b1
         hud.handle_mouse_down(b1_click_x, b1_click_y, 1, sim, camera);
         hud.handle_mouse_up(b1_click_x, b1_click_y, 1, sim, camera);
-        ASSERT_EQ(sim.get_unit(g1).attack_target_id, b1);
+        ASSERT_EQ(sim.get_unit(g1).orig_order, AntUnit::kOrderAttack);
     } TEST_END();
 
     TEST_CASE("12.29 Power-Up Drop On Transformation & Occupied Tile Avoidance / Disappearance") {
@@ -3679,24 +3666,23 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         ASSERT_FALSE(sim.grid().get_cell(TileCoord{25, 26}).has_fire());
         ASSERT_EQ(f_ant.state, UnitState::Idle);
 
-        // 4. Drowning sequence progression (22 ticks)
+        // 4. Drowning: the ant plays the drowning clip (action 0xF, 2370 ms) on the tile centre and is removed at its end
         sim.grid_mut().set_terrain(30, 30, TERRAIN_WATER);
         uint32_t drown_id = sim.spawn_unit(0, AntType::Worker, TileCoord{30, 30});
         auto& drown_ant = sim.get_unit(drown_id);
 
-        // Unit enters Drowning state, faces South, snapped to center
+        // Unit enters Drowning state, snapped to the tile centre; the hit points do not change
         ASSERT_EQ(drown_ant.state, UnitState::Drowning);
-        ASSERT_EQ(drown_ant.facing, Direction::South);
         ASSERT_EQ(drown_ant.pixel_x, 30 * 32 + 16);
         ASSERT_EQ(drown_ant.pixel_y, 30 * 32 + 16);
+        ASSERT_EQ(drown_ant.hp, 10);
 
-        // Advance 22 ticks
-        for (int t = 0; t < 22; ++t) {
+        // The clip lasts 2370 ms (about 47 ticks); the ant is removed when it ends
+        for (int t = 0; t < 44; ++t) {
             ASSERT_EQ(drown_ant.state, UnitState::Drowning);
-            ASSERT_EQ(drown_ant.facing, Direction::South);
             sim.tick();
         }
-        // After 22 ticks, drowning completes and unit dies
+        ASSERT_TRUE(wait_ms(sim, 500, [&]() { return !drown_ant.is_alive(); }) >= 0);
         ASSERT_EQ(drown_ant.state, UnitState::Dead);
         ASSERT_FALSE(drown_ant.is_alive());
 
@@ -3832,7 +3818,7 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         SimulationEngine sim;
         sim.init_test_world(60, 60, 100, 60000);
 
-        // Place a solid obstacle rock at (22, 20)
+        // Place a solid obstacle rock at (22, 20): only the landing tile is tested, not the path of the flight
         sim.grid_mut().set_terrain(22, 20, TERRAIN_OBSTACLE);
 
         // Spawn worker at (20, 20) and apply 4-tile knockback East towards (24, 20)
@@ -3841,16 +3827,13 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
 
         sim.apply_knockback(worker_id, 19 * 32 + 16, 20 * 32 + 16, 4, 4);
         ASSERT_EQ(worker.state, UnitState::Knockback);
+        ASSERT_TRUE(wait_ms(sim, 3000, [&]() { return worker.state != UnitState::Knockback; }) >= 0);
 
-        for (int t = 0; t < 15; ++t) {
-            sim.tick();
-            if (worker.state != UnitState::Knockback) break;
-        }
-
-        // Flew over rock at (22, 20) and landed at ground tile (24, 20)
+        // Flew over rock at (22, 20) and landed at ground tile (24, 20); a melee flight leaves no stun
         ASSERT_EQ(worker.pos.x, 24);
         ASSERT_EQ(worker.pos.y, 20);
-        ASSERT_EQ(worker.state, UnitState::Stunned);
+        ASSERT_EQ(worker.state, UnitState::Idle);
+        ASSERT_FALSE(worker.is_stunned());
     } TEST_END();
 
     TEST_CASE("12.35 Knockback Flies Over Intermediate Water to Available Ground Tile") {
@@ -3868,70 +3851,64 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
 
         sim.apply_knockback(worker_id, 19 * 32 + 16, 20 * 32 + 16, 4, 4);
         ASSERT_EQ(worker.state, UnitState::Knockback);
-
-        for (int t = 0; t < 15; ++t) {
-            sim.tick();
-            if (worker.state != UnitState::Knockback) break;
-        }
+        ASSERT_TRUE(wait_ms(sim, 3000, [&]() { return worker.state != UnitState::Knockback; }) >= 0);
 
         // Airborne ant flew over water without drowning, landed safely on ground
         ASSERT_EQ(worker.pos.x, 24);
         ASSERT_EQ(worker.pos.y, 20);
-        ASSERT_EQ(worker.state, UnitState::Stunned);
+        ASSERT_EQ(worker.state, UnitState::Idle);
         ASSERT_FALSE(worker.in_water);
         ASSERT_EQ(worker.death_status, DeathStatus::Alive);
     } TEST_END();
 
     TEST_CASE("12.36 Knockback Flies Over Intermediate Rock Obstacle into Water (Drowning)") {
-        SimulationEngine sim;
-        sim.init_test_world(60, 60, 101, 60000);
+        // A bomb victim is thrown 4 tiles opposite its facing (a dud, 20 %, does not throw it: try seeds for a blast)
+        bool tested = false;
+        for (uint32_t seed = 101; seed < 160 && !tested; ++seed) {
+            SimulationEngine sim;
+            sim.init_test_world(60, 60, seed, 60000);
 
-        // Intermediate rock at (22, 20), water at landing tile (24, 20)
-        sim.grid_mut().set_terrain(22, 20, TERRAIN_OBSTACLE);
-        sim.grid_mut().set_terrain(24, 20, TERRAIN_WATER);
+            // Intermediate rock at (22, 20), water at landing tile (24, 20)
+            sim.grid_mut().set_terrain(22, 20, TERRAIN_OBSTACLE);
+            sim.grid_mut().set_terrain(24, 20, TERRAIN_WATER);
 
-        // Plant enemy bomb at (20, 20)
-        sim.grid_mut().place_bomb(20, 20, 1);
+            // Plant enemy bomb at (20, 20)
+            sim.grid_mut().place_bomb(20, 20, 1);
 
-        // Spawn worker at (21, 20) and order movement West onto bomb at (20, 20)
-        uint32_t worker_id = sim.spawn_unit(0, AntType::Worker, TileCoord{21, 20});
-        auto& worker = sim.get_unit(worker_id);
+            // Spawn worker at (21, 20) and order movement West onto bomb at (20, 20)
+            uint32_t worker_id = sim.spawn_unit(0, AntType::Worker, TileCoord{21, 20});
+            auto& worker = sim.get_unit(worker_id);
 
-        AntOrder move_order{};
-        move_order.ant_id = worker_id;
-        move_order.type = OrderType::Move;
-        move_order.target_x = 20;
-        move_order.target_y = 20;
-        sim.issue_order(move_order);
+            AntOrder move_order{};
+            move_order.ant_id = worker_id;
+            move_order.type = OrderType::Move;
+            move_order.target_x = 20;
+            move_order.target_y = 20;
+            sim.issue_order(move_order);
 
-        // Advance until detonation
-        bool detonated = false;
-        for (int t = 0; t < 100; ++t) {
-            sim.tick();
-            if (!sim.has_bomb_at(TileCoord{20, 20})) {
-                detonated = true;
-                break;
-            }
+            // Advance until detonation (the ant ends its path on the bomb tile)
+            ASSERT_TRUE(wait_ms(sim, 5000, [&]() { return !sim.has_bomb_at(TileCoord{20, 20}); }) >= 0);
+            if (worker.knock_flag) continue;   // a dud
+            tested = true;
+            ASSERT_EQ(worker.state, UnitState::Knockback);
+
+            // Step through the flight: it lands in the water and the ant drowns
+            ASSERT_TRUE(wait_ms(sim, 3000, [&]() { return worker.state == UnitState::Drowning; }) >= 0);
+
+            // Flew over rock at (22, 20), landed at (24, 20) in water
+            ASSERT_EQ(worker.pos.x, 24);
+            ASSERT_EQ(worker.pos.y, 20);
+            ASSERT_EQ(worker.hp, 8);   // the two hits of the bomb; the drowning takes none
+            run_ms(sim, 250);
+            ASSERT_TRUE(sim.has_audio_event(SoundID::WaterSplash));
+            ASSERT_TRUE(sim.has_audio_event(SoundID::AntDrown));
+            ASSERT_TRUE(wait_ms(sim, 4000, [&]() { return !worker.is_alive(); }) >= 0);
+            ASSERT_EQ(worker.death_status, DeathStatus::Drowned);
         }
-        ASSERT_TRUE(detonated);
-        ASSERT_EQ(worker.state, UnitState::Knockback);
-
-        // Step through knockback flight
-        for (int t = 0; t < 15; ++t) {
-            sim.tick();
-            if (worker.state != UnitState::Knockback) break;
-        }
-
-        // Flew over rock at (22, 20), landed at (24, 20) in water, and drowned
-        ASSERT_EQ(worker.pos.x, 24);
-        ASSERT_EQ(worker.pos.y, 20);
-        ASSERT_EQ(worker.state, UnitState::Drowning);
-        ASSERT_EQ(worker.death_status, DeathStatus::Drowned);
-        ASSERT_TRUE(sim.has_audio_event(SoundID::WaterSplash));
-        ASSERT_TRUE(sim.has_audio_event(SoundID::AntDrown));
+        ASSERT_TRUE(tested);
     } TEST_END();
 
-    TEST_CASE("12.37 Knockback Truncates Cleanly at Impassable Rock Barrier") {
+    TEST_CASE("12.37 Knockback Deflects To The Next Free Direction When The Landing Tile Is A Rock (dir, +1, -1, +2, -2)") {
         SimulationEngine sim;
         sim.init_test_world(60, 60, 100, 60000);
 
@@ -3944,16 +3921,12 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         auto& worker = sim.get_unit(worker_id);
 
         sim.apply_knockback(worker_id, 19 * 32 + 16, 20 * 32 + 16, 4, 4);
+        ASSERT_TRUE(wait_ms(sim, 3000, [&]() { return worker.state != UnitState::Knockback; }) >= 0);
 
-        for (int t = 0; t < 15; ++t) {
-            sim.tick();
-            if (worker.state != UnitState::Knockback) break;
-        }
-
-        // Authentic 1998 5-direction deflection: East is blocked by obstacle, deflects +45° South-East to (24, 24)
+        // KnockDir: East (24, 20) is a rock, the next direction (+1, South-East) lands on the free tile (24, 24)
         ASSERT_EQ(worker.pos.x, 24);
         ASSERT_EQ(worker.pos.y, 24);
-        ASSERT_EQ(worker.state, UnitState::Stunned);
+        ASSERT_EQ(worker.state, UnitState::Idle);
         ASSERT_TRUE(sim.has_audio_event(64)); // SOUND_FLY_THUMP_A
     } TEST_END();
 
@@ -4072,21 +4045,25 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         sim.execute_melee_attack(attacker, defender);
 
         const auto& def = sim.get_unit(defender);
+        // The hit point is lost at the contact and the victim turns to the attacker; it stays until the strike frame
         ASSERT_EQ(def.hp, 9);
-        // Pushed 1 tile East away from attacker at (10, 10)
-        ASSERT_EQ(def.pos.x, 12);
-        ASSERT_EQ(def.pos.y, 10);
-        ASSERT_EQ(def.state, UnitState::Flinch);
-        ASSERT_EQ(def.facing, Direction::West); // Victim forced to face attacker West
+        ASSERT_EQ(def.facing, Direction::West);
+        ASSERT_EQ(def.pos.x, 11);
+        ASSERT_TRUE(def.engaged);
 
-        // Advance 14 ticks for authentic flinch animation recovery
-        for (int i = 0; i < 14; ++i) {
-            sim.tick();
-        }
-        ASSERT_EQ(sim.get_unit(defender).state, UnitState::Idle);
+        // The strike frame of the attack clip (200 ms) throws it: the gh clip carries it one tile East
+        ASSERT_EQ(wait_ms(sim, 1000, [&]() { return def.state == UnitState::Flinch; }), 200);
+        ASSERT_EQ(def.facing, Direction::West); // Victim keeps facing the attacker West
+        ASSERT_TRUE(wait_ms(sim, 1000, [&]() { return def.pos.x == 12; }) >= 0);
+        ASSERT_EQ(def.pos.y, 10);
+
+        // The flinch clip (gh) lasts 790 ms for a worker; then the ant is idle again
+        ASSERT_TRUE(wait_ms(sim, 2000, [&]() { return def.state == UnitState::Idle; }) >= 0);
+        ASSERT_EQ(def.pos.x, 12);
+        ASSERT_FALSE(def.is_stunned());
     } TEST_END();
 
-    TEST_CASE("12.42 Standard Attack 1-Tile Pushback into Water (Instant Drowning & Death)") {
+    TEST_CASE("12.42 Standard Attack 1-Tile Pushback into Water (Drowning Clip At The Landing, Removal At Its End)") {
         SimulationEngine sim;
         sim.init_test_world(60, 60, 100, 60000);
 
@@ -4100,14 +4077,19 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         sim.execute_melee_attack(attacker, defender);
 
         const auto& def = sim.get_unit(defender);
+        // The landing event of the gh clip (500 ms) finds the water: a non-swimmer starts the drowning clip
+        ASSERT_TRUE(wait_ms(sim, 2000, [&]() { return def.state == UnitState::Drowning; }) >= 400);
         ASSERT_EQ(def.pos.x, 12);
         ASSERT_EQ(def.pos.y, 10);
-        // Non-swimmer worker pushed into water dies instantly!
-        ASSERT_EQ(def.hp, 0);
-        ASSERT_EQ(def.state, UnitState::Drowning);
-        ASSERT_EQ(def.death_status, DeathStatus::Drowned);
+        ASSERT_EQ(def.hp, 9);           // the drowning takes no hit points
         ASSERT_TRUE(sim.has_audio_event(SoundID::WaterSplash));
+        run_ms(sim, 250);
         ASSERT_TRUE(sim.has_audio_event(SoundID::AntDrown));
+        ASSERT_EQ(sim.stats_manager().get_player_stats(1).friendly_lost, 0u);
+
+        // The ant is removed when the drowning clip ends: the scorecard counts the loss and the kill
+        ASSERT_TRUE(wait_ms(sim, 4000, [&]() { return !def.is_alive(); }) >= 0);
+        ASSERT_EQ(def.death_status, DeathStatus::Drowned);
         ASSERT_EQ(sim.stats_manager().get_player_stats(1).friendly_lost, 1u);
         ASSERT_EQ(sim.stats_manager().get_player_stats(0).enemy_killed, 1u);
     } TEST_END();
@@ -4135,25 +4117,23 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
 
             sim.execute_melee_attack(combat, victim);
 
+            // At the contact the victim only turns to the attacker; the strike frame throws it
             const auto& v = sim.get_unit(victim);
-            ASSERT_EQ(v.state, UnitState::Knockback);
             ASSERT_EQ(v.facing, Direction::West);
-            ASSERT_EQ(v.pos.x, 15); // Logical destination tile is 4 tiles East
+            ASSERT_EQ(v.pos.x, 11);
+            ASSERT_TRUE(wait_ms(sim, 1000, [&]() { return v.state == UnitState::Knockback; }) >= 0);
+            ASSERT_EQ(v.facing, Direction::West);
 
-            // Advance through ballistic flight
-            for (int t = 0; t < 15; ++t) {
-                sim.tick();
-                if (sim.get_unit(victim).state != UnitState::Knockback) break;
-            }
-
-            // Landed 4 tiles East at x = 15
+            // The gb clip carries it 4 tiles East in one jump; no stun follows a melee flight
+            ASSERT_TRUE(wait_ms(sim, 3000, [&]() { return v.state != UnitState::Knockback; }) >= 0);
             const auto& landed = sim.get_unit(victim);
             ASSERT_EQ(landed.pos.x, 15);
-            ASSERT_EQ(landed.state, UnitState::Stunned);
+            ASSERT_NE(landed.state, UnitState::Stunned);
+            ASSERT_FALSE(landed.is_stunned());
         }
     } TEST_END();
 
-    TEST_CASE("12.44 Combat Ant 4-Tile Fling into Water (Instant Drowning & Death)") {
+    TEST_CASE("12.44 Combat Ant 4-Tile Fling into Water (Drowning Clip At The Landing, Removal At Its End)") {
         SimulationEngine sim;
         sim.init_test_world(60, 60, 100, 60000);
 
@@ -4164,24 +4144,21 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         uint32_t victim = sim.spawn_unit(1, AntType::Worker, TileCoord{11, 10});
 
         sim.execute_melee_attack(combat, victim);
-        ASSERT_EQ(sim.get_unit(victim).state, UnitState::Knockback);
-
-        // Advance until flight completes
-        for (int t = 0; t < 15; ++t) {
-            sim.tick();
-            if (sim.get_unit(victim).state != UnitState::Knockback) break;
-        }
-
         const auto& landed = sim.get_unit(victim);
+        ASSERT_TRUE(wait_ms(sim, 1000, [&]() { return landed.state == UnitState::Knockback; }) >= 0);
+
+        // Advance until the flight lands in the water: the drowning clip starts, hit points stay (10 - 2)
+        ASSERT_TRUE(wait_ms(sim, 3000, [&]() { return landed.state == UnitState::Drowning; }) >= 0);
         ASSERT_EQ(landed.pos.x, 15);
         ASSERT_EQ(landed.pos.y, 10);
-        // Landed in water: non-swimmer worker drowns and dies instantly!
-        ASSERT_EQ(landed.hp, 0);
-        ASSERT_EQ(landed.state, UnitState::Drowning);
+        ASSERT_EQ(landed.hp, 8);
+
+        // The drowning clip ends with the removal of the ant
+        ASSERT_TRUE(wait_ms(sim, 4000, [&]() { return !landed.is_alive(); }) >= 0);
         ASSERT_EQ(landed.death_status, DeathStatus::Drowned);
     } TEST_END();
 
-    TEST_CASE("12.45 Swimmer Ant Pushback and Fling into Water Survives Without Drowning") {
+    TEST_CASE("12.45 Swimmer Ant Pushback and Fling into Water Survives Without Drowning (splash, stun)") {
         SimulationEngine sim;
         sim.init_test_world(60, 60, 100, 60000);
 
@@ -4192,14 +4169,16 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
 
         sim.execute_melee_attack(attacker, swimmer);
 
+        // A swimmer that lands in water splashes (dsplash) and is stunned, it does not drown
         const auto& sw1 = sim.get_unit(swimmer);
+        ASSERT_TRUE(wait_ms(sim, 2000, [&]() { return sw1.state == UnitState::Stunned; }) >= 0);
         ASSERT_EQ(sw1.pos.x, 12);
         ASSERT_EQ(sw1.pos.y, 10);
-        // Swimmer survives in water!
         ASSERT_EQ(sw1.hp, 9);
-        ASSERT_EQ(sw1.state, UnitState::Swimming);
         ASSERT_TRUE(sw1.in_water);
         ASSERT_EQ(sw1.death_status, DeathStatus::Alive);
+        ASSERT_TRUE(wait_ms(sim, 6000, [&]() { return sw1.state == UnitState::Swimming; }) >= 0);
+        ASSERT_TRUE(sw1.is_alive());
 
         // 2. Combat Ant 4-tile fling into water
         sim.grid_mut().set_terrain(25, 20, TERRAIN_WATER);
@@ -4207,19 +4186,15 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         uint32_t swimmer2 = sim.spawn_unit(1, AntType::Swimmer, TileCoord{21, 20});
 
         sim.execute_melee_attack(combat, swimmer2);
-        for (int t = 0; t < 15; ++t) {
-            sim.tick();
-            if (sim.get_unit(swimmer2).state != UnitState::Knockback) break;
-        }
-
         const auto& sw2 = sim.get_unit(swimmer2);
+        ASSERT_TRUE(wait_ms(sim, 3000, [&]() { return sw2.state == UnitState::Stunned; }) >= 0);
         ASSERT_EQ(sw2.pos.x, 25);
         ASSERT_EQ(sw2.pos.y, 20);
         // Swimmer landed in water without drowning!
         ASSERT_EQ(sw2.hp, 8); // 10 - 2 punch damage
-        ASSERT_EQ(sw2.state, UnitState::Swimming);
         ASSERT_TRUE(sw2.in_water);
         ASSERT_EQ(sw2.death_status, DeathStatus::Alive);
+        ASSERT_TRUE(wait_ms(sim, 6000, [&]() { return sw2.state == UnitState::Swimming; }) >= 0);
     } TEST_END();
 
     TEST_CASE("12.46 Bomb Placement Disallowed on Mud Surface") {
@@ -4354,7 +4329,7 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         ASSERT_EQ(sim.get_unit(bomber).state, UnitState::Idle);
     } TEST_END();
 
-    TEST_CASE("12.50 Single Attack Order Executes One Strike, Stops and Enforces Cooldown") {
+    TEST_CASE("12.50 Single Attack Order Executes One Strike And Ends (no pursuit, no second blow)") {
         SimulationEngine sim;
         sim.init_test_world(60, 60, 100, 60000);
 
@@ -4366,24 +4341,22 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         order.ant_id = attacker;
         order.target_entity_id = static_cast<int32_t>(defender);
         sim.issue_order(order);
+        ASSERT_EQ(sim.get_unit(attacker).orig_order, AntUnit::kOrderAttack);
 
-        // Strike executed: defender damaged, knocked back to (12, 10)
-        sim.tick();
+        // The blow: the step into the defender's tile is the contact
         const auto& atk = sim.get_unit(attacker);
-        ASSERT_EQ(atk.attack_target_id, 0); // Attack target cleared after single order execution!
-        ASSERT_GT(atk.attack_cooldown_ticks, 0);
+        ASSERT_TRUE(wait_ms(sim, 3000, [&]() { return sim.get_unit(defender).hp < 10; }) >= 0);
+        ASSERT_EQ(atk.loco_action, AntUnit::kActionAttack);
+        ASSERT_EQ(sim.get_unit(defender).hp, 9);
 
-        // Advance past attack animation (6 ticks) and cooldown (10 ticks)
-        for (int i = 0; i < 15; ++i) {
-            sim.tick();
-        }
+        // The order ends with the blow: the attacker is idle, its order is cleared, and there is no second blow
+        run_ms(sim, 5000);
         ASSERT_EQ(sim.get_unit(attacker).state, UnitState::Idle);
-        ASSERT_EQ(sim.get_unit(attacker).attack_target_id, 0);
-        // Defender took only 1 damage (HP was 10, now 9) and was not attacked again
+        ASSERT_EQ(sim.get_unit(attacker).orig_order, AntUnit::kOrderNone);
         ASSERT_EQ(sim.get_unit(defender).hp, 9);
     } TEST_END();
 
-    TEST_CASE("12.51 Pushback Forces Victim to Face Attacker and Pushes Cardinal") {
+    TEST_CASE("12.51 The Victim Turns To The Attacker At The Contact And Is Pushed Along The Attack Vector") {
         SimulationEngine sim;
         sim.init_test_world(60, 60, 100, 60000);
 
@@ -4394,15 +4367,25 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         def_unit->facing = Direction::North;
 
         sim.execute_melee_attack(attacker, defender);
-        // Pushed East to (12, 10)
-        ASSERT_EQ(def_unit->pos.x, 12);
-        ASSERT_EQ(def_unit->pos.y, 10);
-        // Facing is forced towards attacker (West)
+        // Facing is forced towards attacker (West) at the contact
         ASSERT_EQ(def_unit->facing, Direction::West);
+        // Pushed East to (12, 10) by the flight after the strike frame
+        ASSERT_TRUE(wait_ms(sim, 2000, [&]() { return def_unit->pos.x == 12 && def_unit->state == UnitState::Idle; }) >= 0);
+        ASSERT_EQ(def_unit->pos.y, 10);
     } TEST_END();
 
     TEST_CASE("12.52 Lethal 0 HP Death Spawns Skull & Crossbones Effect While Water Drowning Exclusively Plays Drown Sequence") {
-        // 1. Lethal Melee Attack
+        auto has_death_effect = [](const SimulationEngine& s) {
+            for (const auto& eff : s.get_world_state().effects) {
+                if (eff.anim_name == "death1" || eff.anim_name == "death2" || eff.anim_name == "death3" || eff.anim_name == "death4") {
+                    return true;
+                }
+            }
+            return false;
+        };
+
+        // 1. Lethal Melee Attack: hp is 0 at the contact, the victim is still thrown; the death clip starts at the end
+        //    of the flight (LowHpCheck), the ant is removed when the clip ends
         {
             SimulationEngine sim;
             sim.init_test_world(60, 60, 100, 60000);
@@ -4414,42 +4397,30 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
 
             sim.execute_melee_attack(attacker, defender);
             ASSERT_EQ(def->hp, 0);
-            ASSERT_EQ(def->state, UnitState::Dead);
+            ASSERT_NE(def->state, UnitState::Dead);      // not dead yet: death is deferred
+            ASSERT_FALSE(has_death_effect(sim));
 
-            const auto& effects = sim.get_world_state().effects;
-            ASSERT_FALSE(effects.empty());
-            bool has_death_anim = false;
-            for (const auto& eff : effects) {
-                if (eff.anim_name == "death1" || eff.anim_name == "death2" || eff.anim_name == "death3" || eff.anim_name == "death4") {
-                    has_death_anim = true;
-                    break;
-                }
-            }
-            ASSERT_TRUE(has_death_anim);
+            ASSERT_TRUE(wait_ms(sim, 3000, [&]() { return def->state == UnitState::Dead; }) >= 0);
+            ASSERT_TRUE(def->is_alive());                // the death clip is playing
+            ASSERT_TRUE(has_death_effect(sim));
+            ASSERT_TRUE(wait_ms(sim, 3000, [&]() { return !def->is_alive(); }) >= 0);
         }
 
-        // 2. Lethal Bomb Blast
+        // 2. Lethal Bomb Blast (whether the bomb is a dud or throws the ant): the ant dies after the burn or the flight
         {
             SimulationEngine sim;
             sim.init_test_world(60, 60, 100, 60000);
 
             uint32_t victim = sim.spawn_unit(0, AntType::Worker, TileCoord{15, 15});
             auto* vic = const_cast<AntUnit*>(&sim.get_unit(victim));
-            vic->hp = 2; // lethal against 2 damage bomb blast
+            vic->hp = 2; // lethal against the 2 damage of a bomb blast
             sim.grid_mut().place_bomb(15, 15, 1); // Enemy team bomb
 
-            sim.tick(); // Detonates
+            sim.trigger_bomb_detonation(victim, TileCoord{15, 15});
             ASSERT_EQ(vic->hp, 0);
 
-            const auto& effects = sim.get_world_state().effects;
-            bool has_death_anim = false;
-            for (const auto& eff : effects) {
-                if (eff.anim_name == "death1" || eff.anim_name == "death2" || eff.anim_name == "death3" || eff.anim_name == "death4") {
-                    has_death_anim = true;
-                    break;
-                }
-            }
-            ASSERT_TRUE(has_death_anim);
+            ASSERT_TRUE(wait_ms(sim, 5000, [&]() { return vic->state == UnitState::Dead; }) >= 0);
+            ASSERT_TRUE(has_death_effect(sim));
         }
 
         // 3. Pushback into Water (Non-swimmer drowns, NO skull death animation)
@@ -4463,21 +4434,13 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
 
             sim.execute_melee_attack(attacker, victim);
             const auto& vic = sim.get_unit(victim);
+            ASSERT_TRUE(wait_ms(sim, 2000, [&]() { return vic.state == UnitState::Drowning; }) >= 0);
             ASSERT_EQ(vic.pos.x, 12);
             ASSERT_EQ(vic.pos.y, 10);
-            ASSERT_EQ(vic.state, UnitState::Drowning);
+            ASSERT_FALSE(has_death_effect(sim));      // no skull & crossbones effect for drowning
+            ASSERT_TRUE(wait_ms(sim, 4000, [&]() { return !vic.is_alive(); }) >= 0);
             ASSERT_EQ(vic.death_status, DeathStatus::Drowned);
-
-            // Verify no skull & crossbones effect was spawned for drowning
-            const auto& effects = sim.get_world_state().effects;
-            bool has_death_anim = false;
-            for (const auto& eff : effects) {
-                if (eff.anim_name == "death1" || eff.anim_name == "death2" || eff.anim_name == "death3" || eff.anim_name == "death4") {
-                    has_death_anim = true;
-                    break;
-                }
-            }
-            ASSERT_FALSE(has_death_anim);
+            ASSERT_FALSE(has_death_effect(sim));
         }
     } TEST_END();
 
@@ -4722,21 +4685,18 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         ASSERT_NE(sim.get_unit(w_id).state, UnitState::Drowning);
         ASSERT_NE(sim.get_unit(s_id).state, UnitState::Swimming);
 
-        // Fully demolish/regress bridges to water (all decay stages removed):
-        while (sim.grid().get_cell(TileCoord{20, 20}).has_any_bridge()) {
-            sim.grid_mut().regress_bridge(20, 20);
-        }
-        while (sim.grid().get_cell(TileCoord{22, 20}).has_any_bridge()) {
-            sim.grid_mut().regress_bridge(22, 20);
-        }
+        // The bridge lifetime task ends both bridges (BridgeTimeout -> DestroyBridgeAt): the tiles are water again
+        sim.set_bridge_at(TileCoord{20, 20}, 3, 1);
+        sim.set_bridge_at(TileCoord{22, 20}, 3, 1);
+        sim.tick();
         ASSERT_FALSE(sim.grid().get_cell(TileCoord{20, 20}).has_any_bridge());
         ASSERT_FALSE(sim.grid().get_cell(TileCoord{22, 20}).has_any_bridge());
 
-        // Now Worker MUST start drowning, Swimmer starts swimming
-        sim.tick();
+        // Now the Worker MUST start drowning (message 0x15), the Swimmer only splashes (dsplash) and swims on
         ASSERT_EQ(sim.get_unit(w_id).state, UnitState::Drowning);
         ASSERT_EQ(sim.get_unit(s_id).state, UnitState::Swimming);
         ASSERT_TRUE(sim.has_audio_event(SoundID::WaterSplash));
+        run_ms(sim, 250);
         ASSERT_TRUE(sim.has_audio_event(SoundID::AntDrown));
     } TEST_END();
 
@@ -5123,35 +5083,43 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
     } TEST_END();
 
     TEST_CASE("12.64 Diagonal Melee Attack Pushes Diagonally Along Strike Vector") {
-        SimulationEngine sim;
-        sim.init_test_world(60, 60, 100, 60000);
+        {
+            SimulationEngine sim;
+            sim.init_test_world(60, 60, 100, 60000);
 
-        uint32_t attacker = sim.spawn_unit(0, AntType::Worker, TileCoord{10, 10});
-        uint32_t defender = sim.spawn_unit(1, AntType::Worker, TileCoord{11, 11});
+            uint32_t attacker = sim.spawn_unit(0, AntType::Worker, TileCoord{10, 10});
+            uint32_t defender = sim.spawn_unit(1, AntType::Worker, TileCoord{11, 11});
 
-        auto* def = const_cast<AntUnit*>(&sim.get_unit(defender));
-        def->facing = Direction::South;
+            auto* def = const_cast<AntUnit*>(&sim.get_unit(defender));
+            def->facing = Direction::South;
 
-        sim.execute_melee_attack(attacker, defender);
+            sim.execute_melee_attack(attacker, defender);
 
-        // Defender was forced to face towards attacker at (10, 10) (North-West)
-        ASSERT_EQ(def->facing, Direction::NorthWest);
+            // Defender was forced to face towards attacker at (10, 10) (North-West)
+            ASSERT_EQ(def->facing, Direction::NorthWest);
 
-        // Pushback is along diagonal strike vector (p_dx = +1, p_dy = +1) to (12, 12)
-        ASSERT_EQ(def->pos, (TileCoord{12, 12}));
+            // Pushback is along diagonal strike vector (p_dx = +1, p_dy = +1) to (12, 12)
+            ASSERT_TRUE(wait_ms(sim, 2000, [&]() { return def->pos == TileCoord{12, 12} && def->state == UnitState::Idle; }) >= 0);
+        }
 
-        // If primary diagonal destination is obstructed by rock, deflect to cardinal flank
-        sim.grid_mut().set_terrain(12, 12, TERRAIN_OBSTACLE);
-        def->pos = TileCoord{11, 11};
-        def->pixel_x = 11 * 32 + 16;
-        def->pixel_y = 11 * 32 + 16;
-        const_cast<AntUnit*>(&sim.get_unit(attacker))->attack_cooldown_ticks = 0;
-        sim.execute_melee_attack(attacker, defender);
-        bool cardinal_flank = (def->pos == TileCoord{12, 11} || def->pos == TileCoord{11, 12});
-        ASSERT_TRUE(cardinal_flank);
+        // If the primary diagonal destination is obstructed by rock, KnockDir tries dir+1 (South) first
+        {
+            SimulationEngine sim;
+            sim.init_test_world(60, 60, 100, 60000);
+            sim.grid_mut().set_terrain(12, 12, TERRAIN_OBSTACLE);
+
+            uint32_t attacker = sim.spawn_unit(0, AntType::Worker, TileCoord{10, 10});
+            uint32_t defender = sim.spawn_unit(1, AntType::Worker, TileCoord{11, 11});
+            auto* def = const_cast<AntUnit*>(&sim.get_unit(defender));
+            sim.execute_melee_attack(attacker, defender);
+            ASSERT_TRUE(wait_ms(sim, 2000, [&]() { return def->pos != TileCoord{11, 11} && def->state == UnitState::Idle; }) >= 0);
+            bool cardinal_flank = (def->pos == TileCoord{12, 11} || def->pos == TileCoord{11, 12});
+            ASSERT_TRUE(cardinal_flank);
+            ASSERT_EQ(def->pos, (TileCoord{11, 12}));
+        }
     } TEST_END();
 
-    TEST_CASE("12.65 Melee Attack Pushback Deflects Sideways When Obstructed by Rock Wall") {
+    TEST_CASE("12.65 Melee Attack Pushback Deflects To The Next Direction When Obstructed by Rock Wall") {
         SimulationEngine sim;
         sim.init_test_world(60, 60, 100, 60000);
 
@@ -5168,9 +5136,9 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         // Victim forced to face attacker (West)
         ASSERT_EQ(def.facing, Direction::West);
 
-        // Because primary East (12, 10) is obstructed by wall, victim deflected sideways (North or South)
-        bool deflected_sideways = (def.pos == TileCoord{11, 9} || def.pos == TileCoord{11, 11});
-        ASSERT_TRUE(deflected_sideways);
+        // Because primary East (12, 10) is obstructed by the wall, KnockDir tries the direction +1 (South-East) next
+        ASSERT_TRUE(wait_ms(sim, 2000, [&]() { return def.pos != TileCoord{11, 10} && def.state == UnitState::Idle; }) >= 0);
+        ASSERT_EQ(def.pos, (TileCoord{12, 11}));
     } TEST_END();
 
     TEST_CASE("12.66 Selection Bracket (*ears) Table 4 Duration Millisecond Time Mapping") {
@@ -5341,21 +5309,23 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         ASSERT_EQ(SoundID::ExitHill, 43u);
     } TEST_END();
 
-    TEST_CASE("12.70 Two Ants Colliding on Single Tile Trigger bump.wav (Sound 47)") {
+    TEST_CASE("12.70 A Landing On An Occupied Tile Throws Both Ants Apart (Blast 0) With The Hit Clip Sounds") {
         SimulationEngine sim;
         sim.init_test_world(60, 60, 100, 60000);
 
-        uint32_t a1 = sim.spawn_unit(0, AntType::Combat, TileCoord{20, 20});
-        uint32_t a2 = sim.spawn_unit(0, AntType::Worker, TileCoord{20, 20});
+        uint32_t attacker = sim.spawn_unit(0, AntType::Worker, TileCoord{20, 20});
+        uint32_t a1 = sim.spawn_unit(1, AntType::Worker, TileCoord{21, 20});
+        uint32_t a2 = sim.spawn_unit(1, AntType::Combat, TileCoord{22, 20});   // stands on the landing tile
 
         sim.clear_audio_events();
-        sim.tick(); // Collision resolution on same tile
-
-        ASSERT_TRUE(sim.has_audio_event(SoundID::Bump));
-        ASSERT_EQ(SoundID::Bump, 47u);
-
-        // One ant was displaced to avoid occupying the same tile
+        sim.execute_melee_attack(attacker, a1);
+        ASSERT_TRUE(wait_ms(sim, 3000, [&]() { return sim.get_unit(a1).loco_action == AntUnit::kActionIdle &&
+                                                       sim.get_unit(a2).loco_action == AntUnit::kActionIdle &&
+                                                       sim.get_unit(a1).pos != sim.get_unit(a2).pos &&
+                                                       !sim.get_unit(a1).engaged; }) >= 0);
+        ASSERT_TRUE(sim.has_audio_event(64));      // frame 0 of the gh clip of every thrown ant
         ASSERT_FALSE(sim.get_unit(a1).pos == sim.get_unit(a2).pos);
+        ASSERT_EQ(sim.get_unit(a2).hp, 10);        // the pile-up does no damage
     } TEST_END();
 
     TEST_CASE("12.71 Authentic Map Duration & LVL Header Parsing") {
@@ -5574,49 +5544,39 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         }
     } TEST_END();
 
-    TEST_CASE("12.74: Authentic 1998 Same-Tile Collision Scuffle Visual Effect & SoundID::CombatNetFairy") {
+    TEST_CASE("12.74: Authentic 1998 Pile-Up Has No Scuffle Effect Or Sound: The Ants Are Thrown Apart With The gh Clip") {
         SimulationEngine sim;
         ants::assets::LevelData lvl;
         std::string lvl_path = std::string(ORIGINAL_ASSETS_DIR) + "/Maps/SMALL.LVL";
         ASSERT_TRUE(lvl.load_lvl(lvl_path));
         sim.init(lvl, 42);
 
-        uint32_t a1_id = sim.spawn_unit(0, AntType::Worker, TileCoord{15, 15});
-        uint32_t a2_id = sim.spawn_unit(1, AntType::Combat, TileCoord{15, 15});
+        // The victim of a melee blow lands on a tile where an enemy ant stands (pile-up)
+        uint32_t a1_id = sim.spawn_unit(0, AntType::Worker, TileCoord{10, 15});
+        uint32_t a2_id = sim.spawn_unit(1, AntType::Worker, TileCoord{11, 15});
+        uint32_t a3_id = sim.spawn_unit(1, AntType::Combat, TileCoord{12, 15});
+        sim.execute_melee_attack(a1_id, a2_id);
 
-        // Tick simulation once
-        sim.tick();
-
-        // Check that battle visual effect was spawned
-        const auto& ws = sim.get_world_state();
         bool has_battle_effect = false;
-        for (const auto& eff : ws.effects) {
-            if (eff.anim_name == "battle") {
-                has_battle_effect = true;
-                break;
-            }
-        }
-        ASSERT_TRUE(has_battle_effect);
-
-        // Check that SoundID::CombatNetFairy (ID 3) and FlingThumpA (Sound 64) were queued at scuffle start
-        ASSERT_TRUE(sim.has_audio_event(SoundID::CombatNetFairy));
-        ASSERT_TRUE(sim.has_audio_event(SoundID::FlingThumpA));
-
-        // Advance through scuffle (10 ticks) and bounce flight (6 ticks) until landing thump
         bool got_landing_thump = false;
-        for (int t = 0; t < 20; ++t) {
+        for (int t = 0; t < 60; ++t) {
             sim.tick();
-            if (sim.has_audio_event(SoundID::FlingThumpB)) {
-                got_landing_thump = true;
-                break;
+            for (const auto& eff : sim.get_world_state().effects) {
+                if (eff.anim_name == "battle") has_battle_effect = true;
             }
+            if (sim.has_audio_event(SoundID::FlingThumpB)) got_landing_thump = true;
         }
+        // The original has no scuffle: no battle effect and no CombatNetFairy sound
+        ASSERT_FALSE(has_battle_effect);
+        ASSERT_FALSE(sim.has_audio_event(SoundID::CombatNetFairy));
+        ASSERT_TRUE(sim.has_audio_event(SoundID::FlingThumpA));
         ASSERT_TRUE(got_landing_thump);
 
-        // Ensure ants bounced apart onto different discrete tiles
-        const auto& a1 = sim.get_unit(a1_id);
+        // Ensure the ants ended on different discrete tiles
         const auto& a2 = sim.get_unit(a2_id);
-        ASSERT_FALSE(a1.pos == a2.pos);
+        const auto& a3 = sim.get_unit(a3_id);
+        ASSERT_FALSE(a2.pos == a3.pos);
+        ASSERT_FALSE(a2.pos == sim.get_unit(a1_id).pos);
     } TEST_END();
 
     TEST_CASE("12.75: Original Click Sounds: buttonclick (0) on Buttons, navbuttonclick (89) on Pedestals Only, Silent Toggles") {
@@ -5882,18 +5842,18 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         ASSERT_EQ(sim.get_unit(bomb_id).state, UnitState::PlantingBomb); // Uninterruptible
         ASSERT_FALSE(sim.has_audio_event(SoundID::CantGo));
 
-        // 3. Enemy attack does not knock back placing unit
+        // 3. An enemy attack is not refused: the bomber loses its hit point at the contact, the placing is cancelled
+        //    without any change of the world (nothing is planted) and the bomber is thrown like any other victim
         uint32_t enemy_id = sim.spawn_unit(1, AntType::Worker, TileCoord{24, 25});
 
         int32_t hp_before = sim.get_unit(bomb_id).hp;
         int32_t x_before = sim.get_unit(bomb_id).pos.x;
-        int32_t y_before = sim.get_unit(bomb_id).pos.y;
 
         sim.execute_melee_attack(enemy_id, bomb_id);
         ASSERT_LT(sim.get_unit(bomb_id).hp, hp_before); // Took damage
-        ASSERT_EQ(sim.get_unit(bomb_id).pos.x, x_before); // Not displaced
-        ASSERT_EQ(sim.get_unit(bomb_id).pos.y, y_before);
-        ASSERT_EQ(sim.get_unit(bomb_id).state, UnitState::PlantingBomb); // Still placing
+        ASSERT_NE(sim.get_unit(bomb_id).state, UnitState::PlantingBomb); // The placing is cancelled
+        ASSERT_TRUE(wait_ms(sim, 3000, [&]() { return sim.get_unit(bomb_id).pos.x != x_before; }) >= 0); // and it is thrown
+        ASSERT_FALSE(sim.has_bomb_at(TileCoord{26, 25}));
     } TEST_END();
 
     TEST_CASE("12.79 Minimap Radar Firewall Exclusion & Targeted SFX Routing") {
@@ -5931,7 +5891,7 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         ASSERT_EQ(mixer.active_channel_count(), 1u);
     } TEST_END();
 
-    TEST_CASE("12.98: Attack Pursuit Straight-Line Engagement (No Diagonal Drift)") {
+    TEST_CASE("12.98: An Attack Order Ends After The One Blow: No Pursuit, The Attacker Stays In Its Row") {
         SimulationEngine sim;
         sim.init_test_world(60, 60, 100, 60000);
 
@@ -5944,44 +5904,48 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         atk_order.target_entity_id = static_cast<int32_t>(defender_id);
         sim.issue_order(atk_order);
 
-        // First strike triggers immediate 1-tile East pushback to (12, 10)
-        sim.tick();
+        // The blow throws the defender one tile East to (12, 10)
         const auto& def = sim.get_unit(defender_id);
-        ASSERT_EQ(def.pos.x, 12);
+        ASSERT_TRUE(wait_ms(sim, 3000, [&]() { return def.state == UnitState::Flinch; }) >= 0);
+        ASSERT_TRUE(wait_ms(sim, 3000, [&]() { return def.pos.x == 12; }) >= 0);
         ASSERT_EQ(def.pos.y, 10);
-        ASSERT_EQ(def.state, UnitState::Flinch);
 
-        // Advance ticks: Attacker pursues straight East to (11, 10) rather than drifting diagonally
-        for (int i = 0; i < 15; ++i) {
-            sim.tick();
-        }
+        // The attacker does not pursue: it stays on the same tile and in the same row
+        run_ms(sim, 3000);
         const auto& atk = sim.get_unit(attacker_id);
-        // Attacker must stay on the same horizontal line (y == 10) without diagonal deviation
         ASSERT_EQ(atk.pos.y, 10);
-        ASSERT_TRUE(atk.pos.x == 10 || atk.pos.x == 11);
+        ASSERT_EQ(atk.pos.x, 10);
+        ASSERT_EQ(def.hp, 9);
     } TEST_END();
 
-    TEST_CASE("12.99: Bomb Dud Burn Animation Cycle (*bu301 / Table 0x1004518)") {
-        SimulationEngine sim;
-        sim.init_test_world(60, 60, 100, 60000);
+    TEST_CASE("12.99: Bomb Dud Burn Animation Cycle (?bu overlay, 1150 ms for a worker, then the stun)") {
+        bool tested = false;
+        for (uint32_t seed = 1; seed < 100 && !tested; ++seed) {
+            SimulationEngine sim;
+            sim.init_test_world(60, 60, seed, 60000);
 
-        uint32_t worker_id = sim.spawn_unit(0, AntType::Worker, TileCoord{15, 15});
-        auto& unit = sim.get_unit(worker_id);
-        unit.state = UnitState::Burn;
-        unit.state_timer = 11;
-        unit.anim_subitem = 0;
-        unit.anim_tick = 0;
+            uint32_t worker_id = sim.spawn_unit(0, AntType::Worker, TileCoord{15, 15});
+            auto& unit = sim.get_unit(worker_id);
+            sim.grid_mut().place_bomb(15, 15, 1);
+            sim.trigger_bomb_detonation(worker_id, TileCoord{15, 15});
+            if (!unit.knock_flag) continue;   // a real blast
+            tested = true;
 
-        ASSERT_EQ(unit.state, UnitState::Burn);
+            // The dud freezes the ant under the burn overlay; the world snapshot tells the renderer how long it burns
+            ASSERT_TRUE(unit.frozen);
+            ASSERT_EQ(unit.hp, 8);
 
-        // Step through the 11 subitem frames
-        for (int i = 0; i < 11; ++i) {
-            ASSERT_EQ(unit.state, UnitState::Burn);
-            sim.tick();
+            // The overlay clip (11 frames, 1150 ms) plays; the ant is frozen all along
+            run_ms(sim, 1100);
+            ASSERT_TRUE(unit.frozen);
+            run_ms(sim, 100);
+
+            // The end of the burn frees the ant and stuns it (a3 stun clip)
+            ASSERT_FALSE(unit.frozen);
+            ASSERT_EQ(unit.state, UnitState::Stunned);
+            ASSERT_TRUE(wait_ms(sim, 6000, [&]() { return unit.state == UnitState::Idle; }) >= 0);
         }
-
-        // After 11 ticks, state recovers directly into Idle (0 post-animation stun ticks per Ants.exe.c)
-        ASSERT_EQ(unit.state, UnitState::Idle);
+        ASSERT_TRUE(tested);
     } TEST_END();
 
     TEST_CASE("12.100: 8-Directional Diagonal Attack Adjacency & Approach Routing") {
@@ -5998,26 +5962,33 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         atk_order.target_entity_id = static_cast<int32_t>(defender_id);
         sim.issue_order(atk_order);
 
-        // Attacker is adjacent; strikes IMMEDIATELY on issuance without walking detour
-        const auto& atk_init = sim.get_unit(attacker_id);
-        ASSERT_EQ(atk_init.state, UnitState::Attacking);
-        ASSERT_EQ(atk_init.facing, Direction::SouthEast);
+        // The attack order walks one step onto the defender's tile: the contact makes the attacker face it
+        const auto& atk = sim.get_unit(attacker_id);
+        ASSERT_TRUE(wait_ms(sim, 3000, [&]() { return atk.state == UnitState::Attacking; }) >= 0);
+        ASSERT_EQ(atk.facing, Direction::SouthEast);
+        ASSERT_EQ(atk.pos, (TileCoord{10, 10}));
+        ASSERT_EQ(sim.get_unit(defender_id).hp, 9);
 
-        // 2. Attacker commanded to attack from a distance (8, 8)
-        uint32_t distant_atk_id = sim.spawn_unit(0, AntType::Worker, TileCoord{8, 8});
+        // 2. Attacker commanded to attack from a distance (8, 8): it walks up to a neighbour tile first
+        SimulationEngine sim2;
+        sim2.init_test_world(60, 60, 100, 60000);
+        uint32_t defender2_id = sim2.spawn_unit(1, AntType::Worker, TileCoord{11, 11});
+        uint32_t distant_atk_id = sim2.spawn_unit(0, AntType::Worker, TileCoord{8, 8});
         AntOrder dist_order{};
         dist_order.ant_id = distant_atk_id;
         dist_order.type = OrderType::Attack;
-        dist_order.target_entity_id = static_cast<int32_t>(defender_id);
-        sim.issue_order(dist_order);
+        dist_order.target_entity_id = static_cast<int32_t>(defender2_id);
+        sim2.issue_order(dist_order);
 
-        const auto& dist_unit = sim.get_unit(distant_atk_id);
-        ASSERT_EQ(dist_unit.state, UnitState::Walking);
-        // Approach routes directly to closest 8-connected neighbor around (11, 11)
-        ASSERT_TRUE(dist_unit.final_dest.chebyshev_dist(TileCoord{11, 11}) <= 1);
+        const auto& dist_unit = sim2.get_unit(distant_atk_id);
+        ASSERT_TRUE(wait_ms(sim2, 3000, [&]() { return dist_unit.state == UnitState::Walking; }) >= 0);
+        ASSERT_EQ(sim2.get_unit(defender2_id).hp, 10);   // nothing is hit while it walks
+        ASSERT_TRUE(wait_ms(sim2, 6000, [&]() { return sim2.get_unit(defender2_id).hp < 10; }) >= 0);
+        // The blow came from a tile next to the defender (Chebyshev distance 1)
+        ASSERT_TRUE(dist_unit.pos.chebyshev_dist(TileCoord{11, 11}) == 1);
     } TEST_END();
 
-    TEST_CASE("12.101: Complete Attack Animation Playback Across Full Duration (*at*)") {
+    TEST_CASE("12.101: Complete Attack Animation Playback Across Full Duration (a?at clip, 6 frames)") {
         SimulationEngine sim;
         sim.init_test_world(60, 60, 100, 60000);
 
@@ -6028,21 +5999,23 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
 
         const auto& atk = sim.get_unit(attacker_id);
         ASSERT_EQ(atk.state, UnitState::Attacking);
-        ASSERT_EQ(atk.state_timer, 8); // 8 ticks for standard worker attack (agat301)
-        ASSERT_EQ(atk.anim_subitem, 0);
+        ASSERT_EQ(atk.loco_action, AntUnit::kActionAttack);
+        ASSERT_EQ(atk.facing, Direction::East);
 
-        // Advance through 8 ticks; verify anim_subitem increments smoothly
-        for (int i = 0; i < 8; ++i) {
-            ASSERT_EQ(sim.get_unit(attacker_id).state, UnitState::Attacking);
-            ASSERT_EQ(sim.get_unit(attacker_id).anim_subitem, static_cast<uint16_t>(i));
-            sim.tick();
-        }
+        // The attack clip of a worker (6 frames) plays; its length is the sum of the frame durations
+        const auto clip = movement::action_clip(movement::ActionClip::Attack, static_cast<uint8_t>(AntType::Worker), 2, false);
+        ASSERT_TRUE(clip.valid());
+        ASSERT_EQ(clip.count, 6u);
+        const int clip_ms = static_cast<int>(clip.total_duration_ms());
 
-        // After 8 ticks, attack completes and transitions cleanly to Idle
+        // The attacker stays in the attack action for the whole clip (the first frame is booked twice), then idles
+        const int done = wait_ms(sim, 3000, [&]() { return sim.get_unit(attacker_id).state != UnitState::Attacking; });
+        ASSERT_TRUE(done >= clip_ms - 100);
+        ASSERT_TRUE(done <= clip_ms + 150);
         ASSERT_EQ(sim.get_unit(attacker_id).state, UnitState::Idle);
     } TEST_END();
 
-    TEST_CASE("12.102: Smooth 1-Tile Pushback Slide Across First 6 Ticks (*gh*)") {
+    TEST_CASE("12.102: 1-Tile Pushback Slide Follows The gh Clip (24 px at 300 ms, 8 px at 400 ms after the contact)") {
         SimulationEngine sim;
         sim.init_test_world(60, 60, 100, 60000);
 
@@ -6052,47 +6025,24 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         sim.execute_melee_attack(attacker_id, defender_id);
 
         const auto& def = sim.get_unit(defender_id);
-        ASSERT_EQ(def.state, UnitState::Flinch);
-        ASSERT_EQ(def.state_timer, 14); // 14 ticks flinch duration
-        // Initial pixel position right upon impact
+        // At the contact the victim stands still on its tile facing the attacker
         ASSERT_EQ(def.pixel_x, 11 * 32 + 16); // 368
-        ASSERT_EQ(def.push_dest_px, 12 * 32 + 16); // 400
+        ASSERT_NE(def.state, UnitState::Flinch);
 
-        // Push flight across 6 ticks (~300ms, matching CHD Table 4 Subitem 3 at 320ms)
-        // Tick 1: 368 + (32 * 1) / 6 = 373
-        sim.tick();
-        ASSERT_EQ(sim.get_unit(defender_id).pixel_x, 373);
+        // Strike frame (attack clip event 4, 200 ms): the gh clip starts, the ant has not moved yet
+        for (int i = 0; i < 4; ++i) sim.tick();
+        ASSERT_EQ(def.state, UnitState::Flinch);
+        ASSERT_EQ(def.pixel_x, 368);
 
-        // Tick 2: 368 + (32 * 2) / 6 = 378
-        sim.tick();
-        ASSERT_EQ(sim.get_unit(defender_id).pixel_x, 378);
+        // The clip moves the ant in two steps (frame displacements of the table): 24 px at 300 ms, 8 px at 400 ms
+        sim.tick(); sim.tick();
+        ASSERT_EQ(def.pixel_x, 392);
+        sim.tick(); sim.tick();
+        ASSERT_EQ(def.pixel_x, 400); // 12 * 32 + 16, the landing tile centre
 
-        // Tick 3: 368 + (32 * 3) / 6 = 384
-        sim.tick();
-        ASSERT_EQ(sim.get_unit(defender_id).pixel_x, 384);
-
-        // Tick 4: 368 + (32 * 4) / 6 = 389
-        sim.tick();
-        ASSERT_EQ(sim.get_unit(defender_id).pixel_x, 389);
-
-        // Tick 5: 368 + (32 * 5) / 6 = 394
-        sim.tick();
-        ASSERT_EQ(sim.get_unit(defender_id).pixel_x, 394);
-
-        // Tick 6: reaches destination 400px (landing tick)
-        sim.tick();
-        ASSERT_EQ(sim.get_unit(defender_id).pixel_x, 400);
-
-        // Ticks 7..13: remains at 400px while playing remaining recovery frames
-        for (int i = 6; i < 13; ++i) {
-            sim.tick();
-            ASSERT_EQ(sim.get_unit(defender_id).pixel_x, 400);
-            ASSERT_EQ(sim.get_unit(defender_id).state, UnitState::Flinch);
-        }
-
-        // Tick 14: flinch finishes and returns to Idle
-        sim.tick();
-        ASSERT_EQ(sim.get_unit(defender_id).state, UnitState::Idle);
+        // The ant stays at 400 px while the remaining recovery frames play, then it is idle again
+        ASSERT_TRUE(wait_ms(sim, 3000, [&]() { return def.state == UnitState::Idle; }) >= 0);
+        ASSERT_EQ(def.pixel_x, 400);
     } TEST_END();
 
     TEST_CASE("12.103: TINY.LVL Tile (18, 17) Passability & 10-Tick Bounce Parity") {
@@ -6126,88 +6076,55 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         ASSERT_FALSE(entered);
         ASSERT_EQ(sim.get_unit(ant).pos, (TileCoord{17, 16}));
 
-        // Part B: 10-Tick Bounce duration and VisualEffect{"battle"} 10 ticks
-        SimulationEngine sim_bounce;
-        sim_bounce.init_test_world(60, 60, 100, 60000);
-        uint32_t ant1 = sim_bounce.spawn_unit(0, AntType::Worker, TileCoord{10, 10});
-        uint32_t ant2 = sim_bounce.spawn_unit(1, AntType::Worker, TileCoord{10, 10});
+        // Part B: There is no scuffle in the original: an ant that lands on an occupied tile causes a pile-up (Blast 0, 7):
+        // no "battle" effect, both ants are thrown to distinct free neighbours with the gh clip
+        SimulationEngine sim_pile;
+        sim_pile.init_test_world(60, 60, 100, 60000);
+        uint32_t hitter = sim_pile.spawn_unit(0, AntType::Worker, TileCoord{10, 10});
+        uint32_t ant1 = sim_pile.spawn_unit(1, AntType::Worker, TileCoord{11, 10});
+        uint32_t ant2 = sim_pile.spawn_unit(1, AntType::Worker, TileCoord{12, 10});
+        sim_pile.execute_melee_attack(hitter, ant1);
 
-        // Tick simulation to trigger same-tile collision resolution
-        sim_bounce.tick();
-
-        // Check that battle visual effect has total_frames = 10
         bool found_battle = false;
-        for (const auto& eff : sim_bounce.get_world_state().effects) {
-            if (eff.anim_name == "battle") {
-                found_battle = true;
-                ASSERT_EQ(eff.total_frames, 10);
+        bool dispersed = false;
+        for (int i = 0; i < 80; ++i) {
+            sim_pile.tick();
+            for (const auto& eff : sim_pile.get_world_state().effects) {
+                if (eff.anim_name == "battle") found_battle = true;
             }
+            const auto& u1 = sim_pile.get_unit(ant1);
+            const auto& u2 = sim_pile.get_unit(ant2);
+            if (u1.state == UnitState::Flinch && u2.state == UnitState::Flinch && !(u1.pos == u2.pos)) dispersed = true;
         }
-        ASSERT_TRUE(found_battle);
-
-        // Check that displaced ant has state == UnitState::Bounce and lasts 10 ticks
-        const auto& u1 = sim_bounce.get_unit(ant1);
-        const auto& u2 = sim_bounce.get_unit(ant2);
-        const AntUnit* bounced = (u1.state == UnitState::Bounce ? &u1 : (u2.state == UnitState::Bounce ? &u2 : nullptr));
-        ASSERT_TRUE(bounced != nullptr);
-        ASSERT_TRUE(bounced->state_timer > 0);
+        ASSERT_FALSE(found_battle);
+        ASSERT_TRUE(dispersed);
+        ASSERT_FALSE(sim_pile.get_unit(ant1).pos == sim_pile.get_unit(ant2).pos);
     } TEST_END();
 
-    TEST_CASE("12.104: Collision Scuffle Model Concealment, Domino Cascade & Hazard Landing Parity") {
-        // Part A: Model Concealment during 10-tick collision scuffle
+    TEST_CASE("12.104: Pile-Up Dispersal Never Hides An Ant; Hazard Landings Of The Thrown Ants (water, bomb)") {
+        // Part A: no ant is ever concealed (the original has no scuffle ball): all ants stay visible while thrown apart
         {
             SimulationEngine sim;
             sim.init_test_world(60, 60, 100, 60000);
-            uint32_t a1 = sim.spawn_unit(0, AntType::Worker, TileCoord{20, 20});
-            uint32_t a2 = sim.spawn_unit(1, AntType::Worker, TileCoord{20, 20});
+            uint32_t hitter = sim.spawn_unit(0, AntType::Worker, TileCoord{19, 20});
+            uint32_t a1 = sim.spawn_unit(1, AntType::Worker, TileCoord{20, 20});
+            uint32_t a2 = sim.spawn_unit(1, AntType::Worker, TileCoord{21, 20});
+            sim.execute_melee_attack(hitter, a1);
 
-            sim.tick(); // Collision scuffle triggers
-
-            const auto& u1 = sim.get_unit(a1);
-            const auto& u2 = sim.get_unit(a2);
-
-            const AntUnit* displaced = (u1.state == UnitState::Bounce ? &u1 : &u2);
-            const AntUnit* anchor = (displaced == &u1 ? &u2 : &u1);
-
-            // Displaced ant is in scuffle; anchor ant remains visible on field
-            ASSERT_TRUE(displaced->is_in_scuffle);
-            ASSERT_FALSE(anchor->is_in_scuffle);
-
-            // In world state snapshot, only displaced ant has is_in_scuffle active
-            const auto& ws = sim.get_world_state();
-            for (const auto& snap : ws.ants) {
-                if (snap.id == displaced->id) {
-                    ASSERT_TRUE(snap.is_in_scuffle);
-                } else if (snap.id == anchor->id) {
-                    ASSERT_FALSE(snap.is_in_scuffle);
-                }
-            }
-
-            // Visual effect "battle" active at collision center
-            bool battle_active = false;
-            for (const auto& eff : ws.effects) {
-                if (eff.anim_name == "battle" && eff.px == 20 * 32 + 16 && eff.py == 20 * 32 + 16) {
-                    battle_active = true;
-                }
-            }
-            ASSERT_TRUE(battle_active);
-
-            // Step through ticks 2 to 11 (10 scuffle ticks): ants remain concealed in scuffle
-            for (int t = 2; t <= 11; ++t) {
+            for (int t = 0; t < 80; ++t) {
                 sim.tick();
+                // no ant is ever hidden: every living ant of the pile-up stays in the world snapshot
+                const auto& ws = sim.get_world_state();
+                int visible = 0;
+                for (const auto& snap : ws.ants) {
+                    if (snap.id == hitter || snap.id == a1 || snap.id == a2) ++visible;
+                }
+                ASSERT_EQ(visible, 3);
             }
-
-            // After 10 ticks, scuffle ends and displaced ant begins fly-out animation
-            const auto& u1_after = sim.get_unit(a1);
-            const auto& u2_after = sim.get_unit(a2);
-            ASSERT_FALSE(u1_after.is_in_scuffle);
-            ASSERT_FALSE(u2_after.is_in_scuffle);
-            displaced = (u1_after.state == UnitState::Bounce ? &u1_after : &u2_after);
-            ASSERT_TRUE(displaced != nullptr);
-            ASSERT_EQ(displaced->state, UnitState::Bounce);
+            ASSERT_FALSE(sim.get_unit(a1).pos == sim.get_unit(a2).pos);
         }
 
-        // Part B: Water Landing - Non-Swimmer Instant Drowning vs Swimmer Safe Swimming
+        // Part B: Water Landing - the ant thrown by a pile-up into water: non-swimmer drowns, swimmer splashes
         {
             SimulationEngine sim;
             sim.init_test_world(60, 60, 100, 60000);
@@ -6218,35 +6135,27 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
                     if (dx == 0 && dy == 0) continue;
                     TileCoord c{30 + dx, 30 + dy};
                     if (dx == 0 && dy == -1) {
-                        auto& wc = sim.grid_mut().get_cell_mut(c);
-                        wc.terrain_type = TERRAIN_WATER;
-                        wc.surface_type = SurfaceType::Water;
+                        sim.grid_mut().set_terrain(c.x, c.y, TERRAIN_WATER);
                     } else {
-                        auto& oc = sim.grid_mut().get_cell_mut(c);
-                        oc.terrain_type = TERRAIN_OBSTACLE;
-                        oc.is_obstacle_overlay = true;
+                        sim.grid_mut().set_terrain(c.x, c.y, TERRAIN_OBSTACLE);
                     }
                 }
             }
 
-            // Collide two non-swimmer ants at (30, 30)
-            uint32_t a1 = sim.spawn_unit(0, AntType::Combat, TileCoord{30, 30});
-            uint32_t a2 = sim.spawn_unit(0, AntType::Worker, TileCoord{30, 30});
-            sim.tick();
+            // Two ants on (30, 30): the blast (Blast 0) throws each into the only free tile: the water north of them
+            uint32_t a1 = sim.spawn_unit(0, AntType::Worker, TileCoord{30, 30});
+            sim.blast_tile_for_test(TileCoord{30, 30});
 
-            // Displaced ant forced to bounce into north water tile (30, 29)
-            const auto& u1 = sim.get_unit(a1);
-            const auto& u2 = sim.get_unit(a2);
-            const AntUnit* displaced = (u1.state == UnitState::Drowning || u1.state == UnitState::Bounce ? &u1 : &u2);
-            ASSERT_EQ(displaced->pos, (TileCoord{30, 29}));
-            ASSERT_EQ(displaced->state, UnitState::Drowning);
-            ASSERT_EQ(displaced->hp, 0);
+            // The blast throws the ant onto its only free neighbour, the water tile north of it: the landing drowns it
+            ASSERT_TRUE(wait_ms(sim, 3000, [&]() { return sim.get_unit(a1).state == UnitState::Drowning; }) >= 0);
+            ASSERT_EQ(sim.get_unit(a1).pos, (TileCoord{30, 29}));
+            run_ms(sim, 250);
             ASSERT_TRUE(sim.has_audio_event(SoundID::AntDrown));
             ASSERT_TRUE(sim.has_audio_event(SoundID::WaterSplash));
         }
 
         {
-            // Swimmer ant bouncing into water safely transitions to Swimming
+            // A swimmer thrown into the water splashes and survives
             SimulationEngine sim;
             sim.init_test_world(60, 60, 100, 60000);
 
@@ -6255,31 +6164,23 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
                     if (dx == 0 && dy == 0) continue;
                     TileCoord c{30 + dx, 30 + dy};
                     if (dx == 0 && dy == -1) {
-                        auto& wc = sim.grid_mut().get_cell_mut(c);
-                        wc.terrain_type = TERRAIN_WATER;
-                        wc.surface_type = SurfaceType::Water;
+                        sim.grid_mut().set_terrain(c.x, c.y, TERRAIN_WATER);
                     } else {
-                        auto& oc = sim.grid_mut().get_cell_mut(c);
-                        oc.terrain_type = TERRAIN_OBSTACLE;
-                        oc.is_obstacle_overlay = true;
+                        sim.grid_mut().set_terrain(c.x, c.y, TERRAIN_OBSTACLE);
                     }
                 }
             }
 
-            // Spawn anchor ant 1 (lower id) and Swimmer ant 2 (higher id to be displaced)
-            uint32_t a1 = sim.spawn_unit(0, AntType::Combat, TileCoord{30, 30});
-            uint32_t a2 = sim.spawn_unit(0, AntType::Swimmer, TileCoord{30, 30});
+            uint32_t a1 = sim.spawn_unit(0, AntType::Swimmer, TileCoord{30, 30});
             (void)a1;
-            sim.tick();
-
-            const auto& swimmer = sim.get_unit(a2);
-            ASSERT_EQ(swimmer.pos, (TileCoord{30, 29}));
-            ASSERT_EQ(swimmer.state, UnitState::Swimming);
-            ASSERT_TRUE(swimmer.in_water);
-            ASSERT_TRUE(swimmer.hp > 0);
+            sim.blast_tile_for_test(TileCoord{30, 30});
+            ASSERT_TRUE(wait_ms(sim, 3000, [&]() { return sim.get_unit(a1).pos == TileCoord{30, 29} &&
+                                                          sim.get_unit(a1).state == UnitState::Stunned; }) >= 0);
+            ASSERT_TRUE(sim.get_unit(a1).in_water);
+            ASSERT_TRUE(sim.get_unit(a1).hp > 0);
         }
 
-        // Part C: Bomb Detonation & Fire Contact on Bounce Landing
+        // Part C: Bomb Detonation on the landing tile of a thrown ant
         {
             SimulationEngine sim;
             sim.init_test_world(60, 60, 100, 60000);
@@ -6292,30 +6193,25 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
                     if (dx == 1 && dy == 0) {
                         sim.grid_mut().place_bomb(static_cast<uint32_t>(c.x), static_cast<uint32_t>(c.y), 1);
                     } else {
-                        auto& oc = sim.grid_mut().get_cell_mut(c);
-                        oc.terrain_type = TERRAIN_OBSTACLE;
-                        oc.is_obstacle_overlay = true;
+                        sim.grid_mut().set_terrain(c.x, c.y, TERRAIN_OBSTACLE);
                     }
                 }
             }
 
             uint32_t a1 = sim.spawn_unit(0, AntType::Worker, TileCoord{40, 40});
-            uint32_t a2 = sim.spawn_unit(0, AntType::Worker, TileCoord{40, 40});
-            (void)a1;
-            sim.tick();
+            sim.blast_tile_for_test(TileCoord{40, 40});
 
-            const auto& u2 = sim.get_unit(a2);
-            ASSERT_TRUE(u2.pos.x >= 41);
-            // Bomb detonated upon landing
+            // The bomb goes off when the flight ends on it (the bomb block comes first at the landing)
+            ASSERT_TRUE(wait_ms(sim, 3000, [&]() { return !sim.grid().has_bomb_at(TileCoord{41, 40}); }) >= 0);
             ASSERT_TRUE(sim.has_audio_event(SoundID::BombDetonate));
-            ASSERT_FALSE(sim.grid().has_bomb_at(TileCoord{41, 40}));
-            // Displaced ant took 2 damage from blast
-            ASSERT_EQ(u2.hp, u2.max_hp - 2);
+            // The ant that landed on the bomb took the 2 hits of the blast
+            ASSERT_EQ(sim.get_unit(a1).hp, 8);
         }
     } TEST_END();
 
-    TEST_CASE("12.105: Authentic Attack Audio Sequencing, Sound 57/75/78/79/83 & Flinch FlyThump Events") {
-        // Part A: Worker Ant Melee Attack Sound Sequence (Sound 57, Sound 75, Sound 64 launch, Sound 65 landing)
+    TEST_CASE("12.105: Authentic Attack Audio Sequencing, Sound 75/78/79/83/57 From The Attack Clip & Flinch FlyThump Events") {
+        // Part A: Worker Ant Melee Attack Sound Sequence: the sound of the attack clip (75) plays at its frame 1,
+        // the victim's gh clip plays 64 when it starts (strike frame) and 65 at its landing frame
         {
             SimulationEngine sim;
             sim.init_test_world(60, 60, 100, 60000);
@@ -6325,30 +6221,24 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
             // Ensure target has enough HP to flinch and survive
             sim.get_unit(a2).hp = 4;
 
-            sim.execute_melee_attack(a1, a2); // Strike connects
+            sim.execute_melee_attack(a1, a2); // Contact
+            ASSERT_FALSE(sim.has_audio_event(SoundID::AttackAlt));   // the clip has not reached its sound frame
+            ASSERT_FALSE(sim.has_audio_event(SoundID::FlingThumpA));
 
-            // 1. Worker triggers both MeleeAttack (Sound 57) and AttackAlt (Sound 75)
-            ASSERT_TRUE(sim.has_audio_event(SoundID::MeleeAttack));
-            ASSERT_TRUE(sim.has_audio_event(SoundID::AttackAlt));
+            // 1. The attack clip plays AttackAlt (Sound 75) at its second frame
+            ASSERT_TRUE(wait_ms(sim, 1000, [&]() { return sim.has_audio_event(SoundID::AttackAlt); }) >= 0);
 
             // 2. Target enters Flinch and triggers FlingThumpA (Sound 64 / flythumpa.wav) at launch
             const auto& victim = sim.get_unit(a2);
-            ASSERT_EQ(victim.state, UnitState::Flinch);
+            ASSERT_TRUE(wait_ms(sim, 1000, [&]() { return victim.state == UnitState::Flinch; }) >= 0);
             ASSERT_TRUE(sim.has_audio_event(SoundID::FlingThumpA));
 
-            // 3. Target slides for 6 ticks. On tick 6 (landing on destination tile), triggers FlingThumpB (Sound 65 / flythumpb.wav)
-            bool got_landing_thump = false;
-            for (int t = 0; t < 7; ++t) {
-                sim.tick();
-                if (sim.has_audio_event(SoundID::FlingThumpB)) {
-                    got_landing_thump = true;
-                }
-            }
-            ASSERT_TRUE(got_landing_thump);
+            // 3. The clip triggers FlingThumpB (Sound 65 / flythumpb.wav) at its landing frame (500 ms after the contact)
+            ASSERT_TRUE(wait_ms(sim, 2000, [&]() { return sim.has_audio_event(SoundID::FlingThumpB); }) >= 0);
             ASSERT_EQ(sim.get_unit(a2).pos, (TileCoord{22, 20}));
         }
 
-        // Part B: Swimmer and Thief Type-Specific Attack Sound Verification
+        // Part B: Swimmer and Thief Type-Specific Attack Sound Verification (sound of the attacker's clip)
         {
             SimulationEngine sim;
             sim.init_test_world(60, 60, 100, 60000);
@@ -6357,20 +6247,16 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
             uint32_t target1 = sim.spawn_unit(1, AntType::Worker, TileCoord{11, 10});
             sim.get_unit(target1).hp = 4;
             sim.execute_melee_attack(swimmer, target1);
-
-            ASSERT_TRUE(sim.has_audio_event(SoundID::MeleeAttack));
-            ASSERT_TRUE(sim.has_audio_event(SoundID::WaterAttack)); // Sound 79 (waterattack.wav)
+            ASSERT_TRUE(wait_ms(sim, 1000, [&]() { return sim.has_audio_event(SoundID::WaterAttack); }) >= 0); // Sound 79 (waterattack.wav)
 
             uint32_t thief = sim.spawn_unit(0, AntType::Thief, TileCoord{15, 10});
             uint32_t target2 = sim.spawn_unit(1, AntType::Worker, TileCoord{16, 10});
             sim.get_unit(target2).hp = 4;
             sim.execute_melee_attack(thief, target2);
-
-            ASSERT_TRUE(sim.has_audio_event(SoundID::MeleeAttack));
-            ASSERT_TRUE(sim.has_audio_event(SoundID::ThiefWhip)); // Sound 83 (theifwhip.wav)
+            ASSERT_TRUE(wait_ms(sim, 1000, [&]() { return sim.has_audio_event(SoundID::ThiefWhip); }) >= 0); // Sound 83 (theifwhip.wav)
         }
 
-        // Part C: Combat Ant Heavy Punch Knockback & Stun Landing Sequencing
+        // Part C: Combat Ant Heavy Punch Knockback: 78 in the punch clip, 64 / 65 in the gb flight, no stun after it
         {
             SimulationEngine sim;
             sim.init_test_world(60, 60, 100, 60000);
@@ -6380,25 +6266,17 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
             sim.get_unit(victim).hp = 4;
 
             sim.execute_melee_attack(combat, victim); // Combat punch connects
+            ASSERT_TRUE(wait_ms(sim, 1000, [&]() { return sim.has_audio_event(SoundID::HeavyPunch) &&
+                                                          sim.has_audio_event(SoundID::FlingThumpA); }) >= 0);
 
-            // Queues HeavyPunch (78) and FlingThumpA (64)
-            ASSERT_TRUE(sim.has_audio_event(SoundID::HeavyPunch));
-            ASSERT_TRUE(sim.has_audio_event(SoundID::FlingThumpA));
-
-            // Flight advances until ground landing: triggers FlingThumpB (65) and Stun (70)
-            bool got_stun_landing = false;
-            for (int t = 0; t < 15; ++t) {
-                sim.tick();
-                if (sim.has_audio_event(SoundID::FlingThumpB) && sim.has_audio_event(SoundID::Stun)) {
-                    got_stun_landing = true;
-                }
-            }
-            ASSERT_TRUE(got_stun_landing);
-            ASSERT_EQ(sim.get_unit(victim).state, UnitState::Stunned);
+            // The flight lands: FlingThumpB (65); the ant is thrown 4 tiles East and stands up again (no stun state)
+            ASSERT_TRUE(wait_ms(sim, 3000, [&]() { return sim.has_audio_event(SoundID::FlingThumpB); }) >= 0);
+            ASSERT_TRUE(wait_ms(sim, 3000, [&]() { return sim.get_unit(victim).state == UnitState::Idle; }) >= 0);
+            ASSERT_EQ(sim.get_unit(victim).pos, (TileCoord{35, 30}));
         }
     } TEST_END();
 
-    TEST_CASE("12.106: Multi-Directional Attack Registration, Victim Facing & Bounce Loop Prevention") {
+    TEST_CASE("12.106: Multi-Directional Attack Registration, Victim Facing & No Re-Collision Loop After The Blow") {
         // 1. Attack registration from all 8 directions against victim facing away:
         // When attacked, regardless of which direction victim was facing, victim takes damage and turns to face attacker!
         struct AttackDirectionTest {
@@ -6442,7 +6320,7 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
             ASSERT_EQ(sim.get_unit(vic).facing, d.expected_victim_turned_facing);
         }
 
-        // 2. Autonomous pursuit attack from the side / rear without elastic repulsion locking:
+        // 2. Attack order from the side / rear: the attacker walks up, the contact comes with the step into the tile
         {
             SimulationEngine sim;
             sim.init_test_world(60, 60, 100, 60000);
@@ -6462,7 +6340,7 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
 
             uint32_t initial_vic_hp = sim.get_unit(vic).hp;
             bool hit_connected = false;
-            for (int t = 0; t < 50; ++t) {
+            for (int t = 0; t < 100; ++t) {
                 sim.tick();
                 const auto& att_u = sim.get_unit(att);
                 if (att_u.state == UnitState::Walking) {
@@ -6471,7 +6349,7 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
                 }
                 if (sim.get_unit(vic).hp < initial_vic_hp) {
                     hit_connected = true;
-                    // Strike connects only after completing walk into adjacent tile (19, 20)
+                    // Strike connects only after completing the walk into the adjacent tile (19, 20)
                     ASSERT_EQ(att_u.pos, (TileCoord{19, 20}));
                     break;
                 }
@@ -6481,42 +6359,23 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
             ASSERT_EQ(sim.get_unit(vic).facing, Direction::West);
         }
 
-        // 3. Collision bounce: displaced ant faces along bounce trajectory and avoids infinite loop
+        // 3. After a blow both ants settle: nothing collides again and no order stays behind
         {
             SimulationEngine sim;
             sim.init_test_world(60, 60, 100, 60000);
 
             uint32_t a1 = sim.spawn_unit(0, AntType::Worker, TileCoord{25, 25});
-            uint32_t a2 = sim.spawn_unit(1, AntType::Worker, TileCoord{25, 25});
+            uint32_t a2 = sim.spawn_unit(1, AntType::Worker, TileCoord{26, 25});
+            sim.execute_melee_attack(a1, a2);
 
-            sim.tick(); // Triggers same-tile collision resolution scuffle
-
-            // One ant is anchored, other is displaced
-            const auto& u1 = sim.get_unit(a1);
-            const auto& u2 = sim.get_unit(a2);
-
-            const AntUnit* displaced = (u1.state == UnitState::Bounce) ? &u1 : &u2;
-            ASSERT_EQ(displaced->state, UnitState::Bounce);
-
-            // Displaced ant recoils backwards out of scuffle and faces towards collision point (25, 25)
-            int32_t face_dx = 25 - displaced->pos.x;
-            int32_t face_dy = 25 - displaced->pos.y;
-            if (face_dx != 0 || face_dy != 0) {
-                Direction expected_facing = ants::assets::vector_to_direction(face_dx, face_dy);
-                ASSERT_EQ(displaced->facing, expected_facing);
-            }
-
-            // Both ants must settle within 30 ticks without infinite re-collision loops
-            for (int t = 0; t < 30; ++t) {
-                sim.tick();
-            }
-
-            ASSERT_NE(sim.get_unit(a1).state, UnitState::Bounce);
-            ASSERT_NE(sim.get_unit(a2).state, UnitState::Bounce);
-            ASSERT_FALSE(sim.get_unit(a1).is_in_scuffle);
-            ASSERT_FALSE(sim.get_unit(a2).is_in_scuffle);
-            ASSERT_EQ(sim.get_unit(a1).attack_target_id, 0u);
-            ASSERT_EQ(sim.get_unit(a2).attack_target_id, 0u);
+            // Both ants must settle within 4 s without any re-collision loop
+            run_ms(sim, 4000);
+            ASSERT_EQ(sim.get_unit(a1).state, UnitState::Idle);
+            ASSERT_EQ(sim.get_unit(a2).state, UnitState::Idle);
+            ASSERT_FALSE(sim.get_unit(a2).engaged);
+            ASSERT_EQ(sim.get_unit(a1).orig_order, AntUnit::kOrderNone);
+            ASSERT_EQ(sim.get_unit(a2).orig_order, AntUnit::kOrderNone);
+            ASSERT_EQ(sim.get_unit(a2).hp, 9);   // only the one blow
         }
     } TEST_END();
 
@@ -6527,7 +6386,7 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
 
         // (The healing time of the enter clip and the deposit at its end are golden-tested in test_hill_actions.)
 
-        // 1. Lethal Melee Damage Drops Carried Lunchbox:
+        // 1. Lethal Melee Damage Drops Carried Lunchbox (at the removal of the ant, after its death clip):
         uint32_t attacker = sim.spawn_unit(0, AntType::Combat, TileCoord{30, 30});
         uint32_t victim = sim.spawn_unit(1, AntType::Worker, TileCoord{31, 30});
         auto& v = sim.get_unit(victim);
@@ -6537,11 +6396,15 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         ASSERT_FALSE(sim.grid().has_lunchbox_at(TileCoord{31, 30}));
         sim.execute_melee_attack(attacker, victim);
 
+        // Death is deferred: hp is 0 at the contact, the victim is still thrown 4 tiles East and carries the food
         ASSERT_EQ(v.hp, 0u);
-        ASSERT_EQ(v.state, UnitState::Dead);
+        ASSERT_TRUE(v.is_holding());
+        ASSERT_TRUE(wait_ms(sim, 3000, [&]() { return v.state == UnitState::Dead; }) >= 0);
+        ASSERT_TRUE(v.is_holding());
+        ASSERT_TRUE(wait_ms(sim, 3000, [&]() { return !v.is_alive(); }) >= 0);
         ASSERT_FALSE(v.is_holding());
-        ASSERT_TRUE(sim.grid().has_lunchbox_at(TileCoord{31, 30}));
-        ASSERT_EQ(sim.grid().get_lunchbox_points(TileCoord{31, 30}), 50u);
+        ASSERT_TRUE(sim.grid().has_lunchbox_at(TileCoord{35, 30}));
+        ASSERT_EQ(sim.grid().get_lunchbox_points(TileCoord{35, 30}), 50u);
 
         // 2. Food Harvesting Sequence Action Verification
         uint32_t harvester = sim.spawn_unit(0, AntType::Worker, TileCoord{40, 40});
@@ -6559,10 +6422,10 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
 
     TEST_CASE("12.108: Version Invariant & Fog of War Cursor Concealment Parity") {
         // 1. Verify semantic versioning components
-        ASSERT_EQ(ants::VERSION_STRING, "v0.0.32");
+        ASSERT_EQ(ants::VERSION_STRING, "v0.0.33");
         ASSERT_EQ(ants::VERSION_MAJOR, 0);
         ASSERT_EQ(ants::VERSION_MINOR, 0);
-        ASSERT_EQ(ants::VERSION_PATCH, 32);
+        ASSERT_EQ(ants::VERSION_PATCH, 33);
 
         // 2. Setup simulation world with Fog of War enabled
         SimulationEngine sim;
@@ -6694,7 +6557,7 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
     // ------------------------------------------------------------------------
     // 12.110: Power-Up Standing Immunity to Bounce and Melee Attacks
     // ------------------------------------------------------------------------
-    TEST_CASE("12.110 Power-Up Standing Immunity to Bounce and Melee Attacks") {
+    TEST_CASE("12.110 Power-Up Standing Immunity: Not Displaced By A Friendly Ant, Immune To Attack Orders And Auto-Engage") {
         SimulationEngine sim;
         sim.init_test_world(60, 60, 100, 60000);
 
@@ -6707,29 +6570,30 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         sim.interrupt_transformation(standing_ant);
         ASSERT_TRUE(sim.get_unit(standing_ant).on_powerup);
 
-        // Second friendly ant moves into (15, 15) to trigger collision resolution
+        // Second friendly ant orders a move onto (15, 15): the goal ring scan picks a free tile
         uint32_t incoming_ant = sim.spawn_unit(0, AntType::Worker, TileCoord{16, 15});
         sim.issue_move_order(incoming_ant, TileCoord{15, 15});
+        run_ms(sim, 2000);
 
-        for (int t = 0; t < 25; ++t) {
-            sim.tick();
-        }
-
-        // Standing ant on power-up must NEVER be displaced or bounced off
+        // Standing ant on power-up must NEVER be displaced
         ASSERT_EQ(sim.get_unit(standing_ant).pos, (TileCoord{15, 15}));
-        ASSERT_NE(sim.get_unit(standing_ant).state, UnitState::Bounce);
 
-        // Enemy Combat ant attempts melee attack against ant on powerup
-        uint32_t enemy_combat = sim.spawn_unit(1, AntType::Combat, TileCoord{15, 16});
+        // Enemy Combat ant next to it: the auto-engage walks up but its last step onto the solid power-up tile is refused
+        // (CanEnter), and an attack order fails with "Can't go there."; the direct contact is refused as well
+        uint32_t enemy_combat = sim.spawn_unit(1, AntType::Combat, TileCoord{15, 17});
         uint16_t hp_before = sim.get_unit(standing_ant).hp;
+        run_ms(sim, 6000);
+        ASSERT_EQ(sim.get_unit(standing_ant).hp, hp_before);
+        AntOrder o{};
+        o.ant_id = enemy_combat;
+        o.type = OrderType::Attack;
+        o.target_entity_id = static_cast<int32_t>(standing_ant);
+        sim.issue_order(o);
+        run_ms(sim, 3000);
+        ASSERT_EQ(sim.get_unit(standing_ant).hp, hp_before);
         sim.execute_melee_attack(enemy_combat, standing_ant);
-        sim.tick();
-
-        // Standing ant is completely immune to melee attack
         ASSERT_EQ(sim.get_unit(standing_ant).hp, hp_before);
-        ASSERT_FALSE(sim.get_unit(standing_ant).take_damage(2, DamageSource::CombatPunch, enemy_combat));
-        ASSERT_FALSE(sim.get_unit(standing_ant).take_damage(1, DamageSource::MeleeStandard, enemy_combat));
-        ASSERT_EQ(sim.get_unit(standing_ant).hp, hp_before);
+        ASSERT_EQ(sim.get_unit(standing_ant).pos, (TileCoord{15, 15}));
     } TEST_END();
 
     // ------------------------------------------------------------------------
@@ -6999,17 +6863,17 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         ASSERT_EQ(thief.pixel_x, (enemy_base->x + 3) * 32 + 16);
         ASSERT_EQ(thief.pixel_y, (enemy_base->y + 2) * 32 + 16);
 
-        // There is no hiding place: an enemy Combat Ant next to the raid tile can attack the thief
-        uint32_t combat_id = sim.spawn_unit(1, AntType::Combat, TileCoord{enemy_base->x + 2, enemy_base->y + 2});
+        // The raid tile is a cell of the hill mound: A* step cost and CanEnter refuse every hill cell to all ants but the
+        // ones heading home, and the owner's click on it is classified as a "go home" order, so nobody can attack the thief
+        // there (it is not attackable by melee; the other rules like CanBeAttackedFrom are never reached)
+        uint32_t combat_id = sim.spawn_unit(1, AntType::Combat, TileCoord{enemy_base->x + 4, enemy_base->y + 2});
         AntOrder atk_order;
         atk_order.ant_id = combat_id;
         atk_order.type = OrderType::Attack;
         atk_order.target_entity_id = static_cast<int32_t>(thief_id);
         sim.issue_order(atk_order);
-        sim.tick();
-        ASSERT_EQ(sim.get_unit(combat_id).state, UnitState::Attacking);
-        ASSERT_EQ(sim.get_unit(thief_id).state, UnitState::Knockback);
-        ASSERT_EQ(sim.get_unit(thief_id).hp, 8);
+        run_ms(sim, 4000);
+        ASSERT_EQ(sim.get_unit(thief_id).hp, 10);
     } TEST_END();
 
     // ------------------------------------------------------------------------
@@ -7054,7 +6918,7 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
     // ------------------------------------------------------------------------
     // 12.119: Mutual Friendly Collision Bouncing (Neither Ant Static)
     // ------------------------------------------------------------------------
-    TEST_CASE("12.119 Mutual Friendly Collision Bouncing (Neither Ant Static)") {
+    TEST_CASE("12.119 A Friendly Ant Hit Into A Friendly Ant: Pile-Up Throws Both Apart (Neither Ant Static)") {
         SimulationEngine sim;
         sim.init_test_world(60, 60, 100, 60000);
 
@@ -7068,42 +6932,34 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         sim.execute_melee_attack(enemy, f1);
 
         const auto& u1 = sim.get_unit(f1);
-        ASSERT_EQ(u1.state, UnitState::Flinch);
+        const auto& u2 = sim.get_unit(f2);
+        ASSERT_EQ(u1.hp, 9);
 
-        // Advance until f1 lands on f2's tile (21, 20)
-        for (int i = 0; i < 7; ++i) {
-            sim.tick();
-        }
+        // The gh flight of f1 ends its landing event (500 ms) on f2's tile (21, 20): both are thrown (Blast 0, 7)
+        ASSERT_TRUE(wait_ms(sim, 3000, [&]() { return u1.state == UnitState::Flinch && u2.state == UnitState::Flinch &&
+                                                       u1.pos != u2.pos; }) >= 0);
 
-        const auto& u1_after = sim.get_unit(f1);
-        const auto& u2_after = sim.get_unit(f2);
+        // Neither ant stands static: BOTH ants are thrown onto distinct tiles, nobody loses hit points to the pile-up
+        ASSERT_EQ(u2.hp, 10);
+        ASSERT_TRUE(sim.has_audio_event(SoundID::FlingThumpA));
 
-        // Neither ant stands static: BOTH ants bounce away onto distinct tiles!
-        ASSERT_FALSE(u1_after.pos == u2_after.pos);
-        ASSERT_EQ(u1_after.state, UnitState::Bounce);
-        ASSERT_EQ(u2_after.state, UnitState::Bounce);
-
-        // Sound 47 (bump.wav) and FlingThump triggered
-        ASSERT_TRUE(sim.has_audio_event(SoundID::Bump));
-        ASSERT_TRUE(sim.has_audio_event(SoundID::FlingThumpA) || sim.has_audio_event(SoundID::FlingThumpB));
-
-        // ZERO battle dust cloud effects (no enemy scuffle)
-        const auto& ws = sim.get_world_state();
+        // ZERO battle dust cloud effects (no scuffle in the original)
         bool has_battle_cloud = false;
-        for (const auto& eff : ws.effects) {
-            if (eff.anim_name == "battle") {
-                has_battle_cloud = true;
-                break;
+        for (int t = 0; t < 60; ++t) {
+            sim.tick();
+            for (const auto& eff : sim.get_world_state().effects) {
+                if (eff.anim_name == "battle") has_battle_cloud = true;
             }
         }
         ASSERT_FALSE(has_battle_cloud);
+        ASSERT_FALSE(u1.pos == u2.pos);
 
         // No CombatNetFairy sound effect
         ASSERT_FALSE(sim.has_audio_event(SoundID::CombatNetFairy));
     } TEST_END();
 
     // 12.113: 2 HP Ant Struck into Friendly Ant Triggers Mutual Bounce Before 1 HP Retreat
-    TEST_CASE("12.113: 2 HP Ant Struck into Friendly Ant Triggers Mutual Bounce Before 1 HP Retreat") {
+    TEST_CASE("12.113: 2 HP Ant Struck into Friendly Ant: Both Are Thrown Apart, Then The 1 HP Ant Retreats Home") {
         SimulationEngine sim;
         sim.init_test_world(60, 60, 100, 60000);
         sim.set_anthill(0, {30, 30});
@@ -7121,31 +6977,19 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         sim.execute_melee_attack(enemy, f1);
 
         const auto& u1 = sim.get_unit(f1);
-        // Ant 1 took 1 damage: drops to 1 HP
+        const auto& u2 = sim.get_unit(f2);
+        // Ant 1 took 1 damage: drops to 1 HP, but it does not run away before the hit is over
         ASSERT_EQ(u1.hp, 1);
-        // Must be in Flinch for pushback slide, NOT immediately Walking
-        ASSERT_EQ(u1.state, UnitState::Flinch);
+        ASSERT_NE(u1.orig_order, AntUnit::kOrderHome);
 
-        // Advance 7 ticks until f1 slides onto f2's tile (21, 20)
-        for (int i = 0; i < 7; ++i) {
-            sim.tick();
-        }
-
-        const auto& u1_after = sim.get_unit(f1);
-        const auto& u2_after = sim.get_unit(f2);
-
-        // Mutual collision bounce occurred! Both ants entered Bounce state on distinct tiles
-        ASSERT_FALSE(u1_after.pos == u2_after.pos);
-        ASSERT_EQ(u1_after.state, UnitState::Bounce);
-        ASSERT_EQ(u2_after.state, UnitState::Bounce);
-
-        // Advance through bounce recovery (10 ticks) until ants settle into Idle
-        for (int i = 0; i < 11; ++i) {
-            sim.tick();
-        }
+        // Pile-up on f2's tile: both ants are thrown to distinct tiles
+        ASSERT_TRUE(wait_ms(sim, 3000, [&]() { return u1.state == UnitState::Flinch && u2.state == UnitState::Flinch &&
+                                                       u1.pos != u2.pos; }) >= 0);
+        ASSERT_FALSE(u1.pos == u2.pos);
+        ASSERT_NE(u1.orig_order, AntUnit::kOrderHome);
 
         // Once the hit is over, Ant 1 with 1 HP is ordered home to heal (FUN_0101dded: the enter order)
-        ASSERT_EQ(sim.get_unit(f1).orig_order, AntUnit::kOrderHome);
+        ASSERT_TRUE(wait_ms(sim, 4000, [&]() { return sim.get_unit(f1).orig_order == AntUnit::kOrderHome; }) >= 0);
     } TEST_END();
 
     // ------------------------------------------------------------------------
@@ -7242,37 +7086,36 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
     // ------------------------------------------------------------------------
     // 12.122: Combat Ant AI Smooth Locomotion, Cooldown Enforcement & Physics Knockback
     // ------------------------------------------------------------------------
-    TEST_CASE("12.122 Combat Ant AI Smooth Locomotion, Cooldown Enforcement & Physics Knockback") {
+    TEST_CASE("12.122 Combat Ant Auto-Engage: Approach, Punch, Knockback And Return To The Saved Tile") {
         SimulationEngine sim;
         sim.init_test_world(60, 60, 100, 60000);
 
-        // Friendly Combat Ant stationed at guard post (20, 20)
+        // Friendly Combat Ant standing on (20, 20); it got no order for a long time
         uint32_t combat = sim.spawn_unit(0, AntType::Combat, TileCoord{20, 20});
-        auto* c_unit = const_cast<AntUnit*>(&sim.get_unit(combat));
-        c_unit->guard_anchor = {20, 20};
-        c_unit->state = UnitState::GuardIdle;
 
-        // Enemy Worker invades guard zone at (22, 20)
+        // Enemy Worker invades the scan radius at (22, 20)
         uint32_t intruder = sim.spawn_unit(1, AntType::Worker, TileCoord{22, 20});
 
-        // Tick simulation: Combat AI detects intruder, intercepts
-        sim.tick();
-        ASSERT_TRUE(sim.get_unit(combat).state == UnitState::Intercepting || sim.get_unit(combat).state == UnitState::Walking);
-
-        // Advance simulation until Combat Ant strikes
-        for (int i = 0; i < 20; ++i) {
+        // The idle hook finds the intruder (auto-engage starts, the saved order is "stay on this tile")
+        bool engaged = false;
+        for (int i = 0; i < 60 && !engaged; ++i) {
             sim.tick();
-            if (sim.get_unit(combat).state == UnitState::ReturningToPost || sim.get_unit(intruder).hp < 10) break;
+            engaged = sim.get_unit(combat).auto_engage;
         }
+        ASSERT_TRUE(engaged);
+        ASSERT_EQ(sim.get_unit(combat).ae_target, (TileCoord{20, 20}));
 
-        // Combat Ant delivers heavy punch
-        ASSERT_TRUE(sim.get_unit(combat).state == UnitState::Attacking || sim.get_unit(combat).state == UnitState::ReturningToPost);
-        // Intruder took 2 HP damage (HP drops from 10 to 8) and is stunned/knocked back
+        // The combat ant walks up to the intruder and punches it: 2 hp (TakeHit twice)
+        for (int i = 0; i < 100 && sim.get_unit(intruder).hp == 10; ++i) sim.tick();
         ASSERT_EQ(sim.get_unit(intruder).hp, 8);
-        ASSERT_TRUE(sim.get_unit(intruder).state == UnitState::Knockback || sim.get_unit(intruder).state == UnitState::Stunned);
+        ASSERT_EQ(sim.get_unit(combat).loco_action, AntUnit::kActionAttack);
 
-        // 12-tick attack cooldown enforced: Combat Ant will not aggro or pursue
-        ASSERT_GT(sim.get_unit(combat).attack_cooldown_ticks, 0);
+        // Thrown four tiles away without any stun afterwards; the combat ant goes back to its saved tile
+        for (int i = 0; i < 200; ++i) sim.tick();
+        ASSERT_TRUE(sim.get_unit(intruder).pos.x >= 24);
+        ASSERT_FALSE(sim.get_unit(intruder).is_stunned());
+        ASSERT_FALSE(sim.get_unit(combat).auto_engage);
+        ASSERT_EQ(sim.get_unit(combat).pos, (TileCoord{20, 20}));
     } TEST_END();
 
     // ------------------------------------------------------------------------
@@ -7313,50 +7156,53 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
     // 12.124: Bomb Explosion bombex, Bomb Dud a*bu Scorch & Landing Stun a*sd Recovery
     // ------------------------------------------------------------------------
     TEST_CASE("12.124 Bomb Explosion bombex, Bomb Dud a*bu Scorch & Landing Stun a*sd Recovery") {
-        // A. Full explosion branch
-        {
+        // A. Full explosion branch and dud branch: 2 hit points either way, then the stun clip, then idle
+        for (uint32_t seed = 1; seed <= 40; ++seed) {
             SimulationEngine sim;
-            sim.init_test_world(60, 60, 100, 60000);
+            sim.init_test_world(60, 60, seed, 60000);
 
-            // Plant bomb at (15, 15)
+            // Plant bomb at (15, 15): the ant ends its path on it and sets it off
             sim.grid_mut().place_bomb(15, 15, 1);
             uint32_t victim = sim.spawn_unit(0, AntType::Worker, TileCoord{15, 15});
+            sim.trigger_bomb_detonation(victim, TileCoord{15, 15});
 
-            sim.tick();
             const auto& u = sim.get_unit(victim);
             // Both dud and full blast deal 2 damage: HP drops from 10 to 8
             ASSERT_EQ(u.hp, 8);
-            ASSERT_TRUE(u.state == UnitState::Knockback || u.state == UnitState::Burn);
+            ASSERT_TRUE(u.state == UnitState::Knockback || u.state == UnitState::Burn);   // the blast flight, or (dud) the frozen ant under ?bu
+            ASSERT_EQ(u.frozen, u.knock_flag);
 
-            // Advance simulation: if knockback, lands in Idle; if burn, transitions directly to Idle (authentic 1998 0-stun)
-            for (int i = 0; i < 25; ++i) {
-                sim.tick();
-                if (sim.get_unit(victim).state == UnitState::Idle) break;
-            }
-            ASSERT_EQ(sim.get_unit(victim).state, UnitState::Idle);
+            // The flight (or the burn) is followed by the stun clip; then the ant is idle
+            ASSERT_TRUE(wait_ms(sim, 4000, [&]() { return u.state == UnitState::Stunned; }) >= 0);
+            ASSERT_TRUE(u.is_stunned());
+            ASSERT_TRUE(wait_ms(sim, 8000, [&]() { return u.state == UnitState::Idle; }) >= 0);
+            ASSERT_FALSE(u.is_stunned());
         }
 
-        // B. Dud specific sequence verification: Burn for 11 ticks, then directly Idle (0 stun ticks)
+        // B. Dud specific sequence: frozen under the burn overlay for 1150 ms, stun clip afterwards, then idle
         {
-            SimulationEngine sim;
-            sim.init_test_world(60, 60, 100, 60000);
+            bool tested = false;
+            for (uint32_t seed = 1; seed < 100 && !tested; ++seed) {
+                SimulationEngine sim;
+                sim.init_test_world(60, 60, seed, 60000);
+                sim.grid_mut().place_bomb(20, 20, 1);
+                uint32_t ant_id = sim.spawn_unit(0, AntType::Worker, TileCoord{20, 20});
+                sim.trigger_bomb_detonation(ant_id, TileCoord{20, 20});
+                if (!sim.get_unit(ant_id).knock_flag) continue;
+                tested = true;
 
-            uint32_t ant_id = sim.spawn_unit(0, AntType::Worker, TileCoord{20, 20});
-            auto* ant = const_cast<AntUnit*>(&sim.get_unit(ant_id));
-            ant->take_damage(2, DamageSource::BombBlast, 1);
-            ant->state = UnitState::Burn;
-            ant->state_timer = 11;
-
-            // Burn state advances anim_tick and anim_subitem
-            for (int i = 0; i < 10; ++i) {
-                sim.tick();
-                ASSERT_EQ(sim.get_unit(ant_id).state, UnitState::Burn);
+                ASSERT_TRUE(sim.get_unit(ant_id).frozen);
+                for (int i = 0; i < 22; ++i) {
+                    sim.tick();
+                    ASSERT_TRUE(sim.get_unit(ant_id).frozen);      // 1100 ms
+                }
+                sim.tick(); sim.tick();                             // 1200 ms: the overlay has ended
+                ASSERT_FALSE(sim.get_unit(ant_id).frozen);
+                ASSERT_EQ(sim.get_unit(ant_id).state, UnitState::Stunned);
+                ASSERT_TRUE(wait_ms(sim, 8000, [&]() { return sim.get_unit(ant_id).state == UnitState::Idle; }) >= 0);
+                ASSERT_FALSE(sim.get_unit(ant_id).is_stunned());
             }
-
-            // 11th tick completes dud burn and transitions directly to Idle (0 stun ticks)
-            sim.tick();
-            ASSERT_EQ(sim.get_unit(ant_id).state, UnitState::Idle);
-            ASSERT_FALSE(sim.get_unit(ant_id).is_stunned());
+            ASSERT_TRUE(tested);
         }
     } TEST_END();
 
@@ -7715,27 +7561,25 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
             ASSERT_EQ(sim.get_unit(ant_id).state, UnitState::Idle);
         }
 
-        // C. Bomb Dud & Knockback Stun Parity: is_stunned() is true during Burn/Knockback, 0 stun afterwards
+        // C. Bomb Dud & Knockback Stun Parity: is_stunned() is true during the flight / burn and the stun clip, false afterwards
         {
             SimulationEngine sim;
-            sim.init_test_world(60, 60, 100, 60000);
+            sim.init_test_world(60, 60, 10, 60000);
 
+            sim.grid_mut().place_bomb(10, 10, 1);
             uint32_t ant_id = sim.spawn_unit(0, AntType::Worker, TileCoord{10, 10});
-            auto* ant = const_cast<AntUnit*>(&sim.get_unit(ant_id));
-            ant->state = UnitState::Burn;
-            ant->state_timer = 5;
+            const auto& ant = sim.get_unit(ant_id);
+            ASSERT_FALSE(ant.is_stunned());
+            sim.trigger_bomb_detonation(ant_id, TileCoord{10, 10});
 
             // In flight or burn, ant is considered stunned (rejects orders)
-            ASSERT_TRUE(ant->is_stunned());
+            ASSERT_TRUE(ant.is_stunned());
+            ASSERT_TRUE(wait_ms(sim, 8000, [&]() { return ant.state == UnitState::Stunned; }) >= 0);
+            ASSERT_TRUE(ant.is_stunned());
 
-            for (int i = 0; i < 5; ++i) {
-                sim.tick();
-            }
-
-            // After dud completes, unit is Idle with 0 stun ticks remaining
-            ASSERT_EQ(sim.get_unit(ant_id).state, UnitState::Idle);
-            ASSERT_FALSE(sim.get_unit(ant_id).is_stunned());
-            ASSERT_EQ(sim.get_unit(ant_id).stun_ticks_remaining, 0);
+            // After the stun clip the unit is Idle with 0 stun ticks remaining
+            ASSERT_TRUE(wait_ms(sim, 8000, [&]() { return ant.state == UnitState::Idle; }) >= 0);
+            ASSERT_FALSE(ant.is_stunned());
         }
     } TEST_END();
 
@@ -7823,8 +7667,8 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         // Ant survived (took 2 + 2 = 4 damage out of 10 HP = 6 HP remaining)
         ASSERT_TRUE(chain_ant.is_alive());
         ASSERT_EQ(chain_ant.hp, 6);
-        // Ant successfully completed both flights and returned to Idle (NOT frozen in Knockback!)
-        ASSERT_EQ(chain_ant.state, UnitState::Idle);
+        // Ant successfully completed both flights and, after the stun of the second one, is idle again (NOT frozen in Knockback!)
+        ASSERT_TRUE(wait_ms(sim_chain, 12000, [&]() { return chain_ant.state == UnitState::Idle; }) >= 0);
         ASSERT_FALSE(chain_ant.is_stunned());
 
         // Ant can immediately accept new move orders
@@ -7859,11 +7703,9 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         }
         ASSERT_FALSE(sim_fire.grid().has_bomb_at({30, 30}));
 
-        // Advance through flight and fire bounce resolution (10 ticks flight + 22 ticks burn)
-        for (int t = 0; t < 40; ++t) {
-            sim_fire.tick();
-        }
+        // Advance through the bomb flight, the landing on the fire wall (a second, one tile flight) and the recovery
         auto& fire_hit_ant = sim_fire.get_unit(w_fire);
+        ASSERT_TRUE(wait_ms(sim_fire, 12000, [&]() { return fire_hit_ant.hp == 7 && fire_hit_ant.state == UnitState::Idle; }) >= 0);
         ASSERT_TRUE(fire_hit_ant.is_alive());
         // Worker took 2 blast + 1 fire burn damage = 7 HP remaining
         ASSERT_EQ(fire_hit_ant.hp, 7);
@@ -7900,10 +7742,9 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         }
         ASSERT_FALSE(sim_fire_ant.grid().has_bomb_at({20, 20}));
 
-        for (int t = 0; t < 30; ++t) {
-            sim_fire_ant.tick();
-        }
+        // The fire ant lands on the wall without any damage from it (it is stunned like after any bomb flight)
         auto& f_unit = sim_fire_ant.get_unit(f_id);
+        ASSERT_TRUE(wait_ms(sim_fire_ant, 12000, [&]() { return f_unit.state == UnitState::Idle && f_unit.pos.x >= 24; }) >= 0);
         ASSERT_TRUE(f_unit.is_alive());
         // Fire Ant took only bomb damage (2 HP), immune to fire: 10 - 2 = 8 HP
         ASSERT_EQ(f_unit.hp, 8);
@@ -7974,134 +7815,130 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         ASSERT_EQ(b_unit.state, UnitState::Walking);
     } TEST_END();
 
-    TEST_CASE("12.130 Airborne Trajectory Clearance Over Ground Ants & Fire Ricochet Bounce / State Transitions") {
+    TEST_CASE("12.130 Airborne Trajectory Clearance Over Ground Ants & Fire Landing (Blast 1) / State Transitions") {
         // -------------------------------------------------------------------------
         // Part 1: Airborne Ballistic Trajectory Clearance Over Intermediate Ants
-        // An ant hits a bomb at (20, 20) while facing West. Blast recoil throws it
-        // East towards (24, 20) (4 tiles displacement, 5 tiles total).
-        // Station friendly and enemy ants along the flight path at (21, 20),
-        // (22, 20), and (23, 20). The airborne ant must fly completely OVER them
-        // without colliding, bouncing, scuffling, or aborting flight early.
+        // An ant sets off a bomb at (20, 20) while facing West. The blast throws it
+        // East towards (24, 20) (4 tiles). Station friendly and enemy ants along the
+        // flight path at (21, 20), (22, 20), and (23, 20). The airborne ant must fly
+        // completely OVER them without colliding: only the landing tile is tested.
         // -------------------------------------------------------------------------
         {
-            SimulationEngine sim;
-            sim.init_test_world(60, 60, 1, 60000);
-            sim.grid_mut().place_bomb(20, 20, 1);
+            bool tested = false;
+            for (uint32_t seed = 1; seed < 60 && !tested; ++seed) {
+                SimulationEngine sim;
+                sim.init_test_world(60, 60, seed, 60000);
+                sim.grid_mut().place_bomb(20, 20, 1);
 
-            // Ground ants stationed along trajectory
-            uint32_t standing_friendly1 = sim.spawn_unit(0, AntType::Worker, {21, 20});
-            uint32_t standing_enemy     = sim.spawn_unit(1, AntType::Worker, {22, 20});
-            uint32_t standing_friendly2 = sim.spawn_unit(0, AntType::Worker, {23, 20});
+                // Ground ants stationed along trajectory
+                uint32_t standing_friendly1 = sim.spawn_unit(0, AntType::Worker, {21, 20});
+                uint32_t standing_enemy     = sim.spawn_unit(1, AntType::Worker, {22, 20});
+                uint32_t standing_friendly2 = sim.spawn_unit(0, AntType::Worker, {23, 20});
 
-            // Ant spawned directly at bomb tile facing West -> blast recoils East across tiles 21, 22, 23
-            uint32_t flying_ant = sim.spawn_unit(0, AntType::Worker, {20, 20});
-            sim.get_unit(flying_ant).facing = Direction::West;
+                // Ant spawned directly at bomb tile facing West -> blast recoils East across tiles 21, 22, 23
+                uint32_t flying_ant = sim.spawn_unit(0, AntType::Worker, {20, 20});
+                sim.get_unit(flying_ant).facing = Direction::West;
 
-            // Step until bomb detonates
-            for (int t = 0; t < 100; ++t) {
-                sim.tick();
-                if (!sim.grid().has_bomb_at({20, 20})) break;
+                sim.trigger_bomb_detonation(flying_ant, {20, 20});
+                if (sim.get_unit(flying_ant).knock_flag) continue;   // a dud burns the ant on the spot
+                tested = true;
+                ASSERT_FALSE(sim.grid().has_bomb_at({20, 20}));
+
+                // Step through the airborne flight and into the stun that follows a bomb flight
+                const auto& fa = sim.get_unit(flying_ant);
+                ASSERT_TRUE(wait_ms(sim, 4000, [&]() { return fa.state == UnitState::Stunned; }) >= 0);
+
+                // Intermediate ants must remain completely undisturbed at their coordinates!
+                const auto& sf1 = sim.get_unit(standing_friendly1);
+                ASSERT_EQ(sf1.pos.x, 21);
+                ASSERT_EQ(sf1.pos.y, 20);
+                ASSERT_EQ(sf1.hp, 10);
+                ASSERT_EQ(sf1.state, UnitState::Idle);
+
+                const auto& se = sim.get_unit(standing_enemy);
+                ASSERT_EQ(se.pos.x, 22);
+                ASSERT_EQ(se.pos.y, 20);
+                ASSERT_EQ(se.hp, 10);
+                ASSERT_EQ(se.state, UnitState::Idle);
+
+                const auto& sf2 = sim.get_unit(standing_friendly2);
+                ASSERT_EQ(sf2.pos.x, 23);
+                ASSERT_EQ(sf2.pos.y, 20);
+                ASSERT_EQ(sf2.hp, 10);
+                ASSERT_EQ(sf2.state, UnitState::Idle);
+
+                // Flying ant has flown cleanly over all 3 ants and landed on tile 4 (24, 20)!
+                ASSERT_TRUE(fa.is_alive());
+                ASSERT_EQ(fa.pos.x, 24);
+                ASSERT_EQ(fa.pos.y, 20);
+                ASSERT_TRUE(fa.is_stunned());
+
+                // Stunned ant can be ordered to walk immediately (Ants.exe FUN_01021494), cancelling stun
+                AntOrder move_after_flight{};
+                move_after_flight.ant_id = flying_ant;
+                move_after_flight.type = OrderType::Move;
+                move_after_flight.target_x = 25;
+                move_after_flight.target_y = 20;
+                sim.issue_order(move_after_flight);
+                ASSERT_EQ(fa.state, UnitState::Walking);
+                ASSERT_FALSE(fa.is_stunned());
             }
-            ASSERT_FALSE(sim.grid().has_bomb_at({20, 20}));
-
-            // Step through airborne flight
-            for (int t = 0; t < 30; ++t) {
-                sim.tick();
-            }
-
-            // Intermediate ants must remain completely undisturbed at their coordinates!
-            const auto& sf1 = sim.get_unit(standing_friendly1);
-            ASSERT_EQ(sf1.pos.x, 21);
-            ASSERT_EQ(sf1.pos.y, 20);
-            ASSERT_EQ(sf1.hp, 10);
-            ASSERT_EQ(sf1.state, UnitState::Idle);
-
-            const auto& se = sim.get_unit(standing_enemy);
-            ASSERT_EQ(se.pos.x, 22);
-            ASSERT_EQ(se.pos.y, 20);
-            ASSERT_EQ(se.hp, 10);
-            ASSERT_EQ(se.state, UnitState::Idle);
-
-            const auto& sf2 = sim.get_unit(standing_friendly2);
-            ASSERT_EQ(sf2.pos.x, 23);
-            ASSERT_EQ(sf2.pos.y, 20);
-            ASSERT_EQ(sf2.hp, 10);
-            ASSERT_EQ(sf2.state, UnitState::Idle);
-
-            // Flying ant has flown cleanly over all 3 ants and landed on tile 4 (24, 20)!
-            const auto& fa = sim.get_unit(flying_ant);
-            ASSERT_TRUE(fa.is_alive());
-            ASSERT_EQ(fa.pos.x, 24);
-            ASSERT_EQ(fa.pos.y, 20);
-            ASSERT_EQ(fa.state, UnitState::Stunned);
-            ASSERT_TRUE(fa.is_stunned());
-
-            // Stunned ant can be ordered to walk immediately (Ants.exe FUN_01021494), cancelling stun
-            AntOrder move_after_flight{};
-            move_after_flight.ant_id = flying_ant;
-            move_after_flight.type = OrderType::Move;
-            move_after_flight.target_x = 25;
-            move_after_flight.target_y = 20;
-            sim.issue_order(move_after_flight);
-            ASSERT_EQ(fa.state, UnitState::Walking);
-            ASSERT_FALSE(fa.is_stunned());
+            ASSERT_TRUE(tested);
         }
 
         // -------------------------------------------------------------------------
         // Part 2: Bomb Blast Knockback Landing on Fire Wall
-        // Non-fire ant takes contact fire damage, ricochets away with bounce
-        // animation (UnitState::Bounce), and transitions to UnitState::Idle.
+        // The landing on a fire wall costs 1 hit point and throws the ant one tile away
+        // (Blast 1); the hit clip ends without a stun and the ant is idle.
         // -------------------------------------------------------------------------
         {
-            SimulationEngine sim;
-            sim.init_test_world(60, 60, 1, 60000);
-            sim.grid_mut().place_bomb(10, 10, 1);
-            sim.grid_mut().place_firewall(14, 10, 0);
+            bool tested = false;
+            for (uint32_t seed = 1; seed < 60 && !tested; ++seed) {
+                SimulationEngine sim;
+                sim.init_test_world(60, 60, seed, 60000);
+                sim.grid_mut().place_bomb(10, 10, 1);
+                sim.grid_mut().place_firewall(14, 10, 0);
 
-            uint32_t w_id = sim.spawn_unit(0, AntType::Worker, {11, 10});
-            AntOrder o{};
-            o.ant_id = w_id;
-            o.type = OrderType::Move;
-            o.target_x = 10;
-            o.target_y = 10;
-            sim.issue_order(o);
+                uint32_t w_id = sim.spawn_unit(0, AntType::Worker, {11, 10});
+                AntOrder o{};
+                o.ant_id = w_id;
+                o.type = OrderType::Move;
+                o.target_x = 10;
+                o.target_y = 10;
+                sim.issue_order(o);
 
-            for (int t = 0; t < 100; ++t) {
-                sim.tick();
-                if (!sim.grid().has_bomb_at({10, 10})) break;
+                ASSERT_TRUE(wait_ms(sim, 5000, [&]() { return !sim.grid().has_bomb_at({10, 10}); }) >= 0);
+                if (sim.get_unit(w_id).knock_flag) continue;   // a dud
+                tested = true;
+
+                // Step through the flight, the landing on the wall and the recovery
+                const auto& u_landed = sim.get_unit(w_id);
+                ASSERT_TRUE(wait_ms(sim, 12000, [&]() { return u_landed.hp == 7 && u_landed.state == UnitState::Idle; }) >= 0);
+                ASSERT_TRUE(u_landed.is_alive());
+                // 10 HP - 2 blast - 1 fire = 7 HP
+                ASSERT_EQ(u_landed.hp, 7);
+                // Ricocheted away from fire at (14, 10) to an adjacent tile
+                ASSERT_TRUE(std::abs(u_landed.pos.x - 14) <= 1 && std::abs(u_landed.pos.y - 10) <= 1);
+                ASSERT_FALSE(u_landed.pos.x == 14 && u_landed.pos.y == 10);
+                ASSERT_EQ(u_landed.state, UnitState::Idle);
+                ASSERT_FALSE(u_landed.is_stunned());
+
+                // Can immediately walk
+                AntOrder move_after{};
+                move_after.ant_id = w_id;
+                move_after.type = OrderType::Move;
+                move_after.target_x = 5;
+                move_after.target_y = 5;
+                sim.issue_order(move_after);
+                ASSERT_EQ(u_landed.state, UnitState::Walking);
             }
-            ASSERT_FALSE(sim.grid().has_bomb_at({10, 10}));
-
-            // Step through flight (10-12 ticks) and landing resolution (22 burn ticks)
-            for (int t = 0; t < 35; ++t) {
-                sim.tick();
-            }
-
-            const auto& u_landed = sim.get_unit(w_id);
-            ASSERT_TRUE(u_landed.is_alive());
-            // 10 HP - 2 blast - 1 fire = 7 HP
-            ASSERT_EQ(u_landed.hp, 7);
-            // Ricocheted away from fire at (14, 10) to an adjacent tile
-            ASSERT_TRUE(std::abs(u_landed.pos.x - 14) <= 1 && std::abs(u_landed.pos.y - 10) <= 1);
-            ASSERT_FALSE(u_landed.pos.x == 14 && u_landed.pos.y == 10);
-            // Must transition to Idle upon completing bomb knockback into fire (NOT stunned!)
-            ASSERT_EQ(u_landed.state, UnitState::Idle);
-            ASSERT_FALSE(u_landed.is_stunned());
-
-            // Can immediately walk
-            AntOrder move_after{};
-            move_after.ant_id = w_id;
-            move_after.type = OrderType::Move;
-            move_after.target_x = 5;
-            move_after.target_y = 5;
-            sim.issue_order(move_after);
-            ASSERT_EQ(u_landed.state, UnitState::Walking);
+            ASSERT_TRUE(tested);
         }
 
         // -------------------------------------------------------------------------
         // Part 3: Combat Ant Punch Knockback Landing on Fire Wall
-        // Non-fire ant takes contact fire damage, ricochets away, and transitions to
-        // UnitState::Stunned upon punch knockback!
+        // The victim takes the 2 hp of the punch and 1 hp from the wall, is thrown one tile away
+        // and ends idle (a hit clip is not followed by a stun).
         // -------------------------------------------------------------------------
         {
             SimulationEngine sim;
@@ -8115,49 +7952,39 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
             // Combat ant attacks enemy ant
             sim.execute_melee_attack(combat_ant, enemy_ant);
 
-            // Step through punch flight into firewall and landing resolution (22 burn ticks)
-            for (int t = 0; t < 35; ++t) {
-                sim.tick();
-            }
-
-            const auto& u_stunned = sim.get_unit(enemy_ant);
-            ASSERT_TRUE(u_stunned.is_alive());
+            // Step through the punch flight onto the firewall and the landing resolution
+            const auto& u_after = sim.get_unit(enemy_ant);
+            ASSERT_TRUE(wait_ms(sim, 8000, [&]() { return u_after.hp == 7 && u_after.state == UnitState::Idle; }) >= 0);
+            ASSERT_TRUE(u_after.is_alive());
             // 10 HP - 2 punch - 1 fire = 7 HP
-            ASSERT_EQ(u_stunned.hp, 7);
+            ASSERT_EQ(u_after.hp, 7);
             // Ricocheted away from fire at (34, 30) to an adjacent tile
-            ASSERT_TRUE(std::abs(u_stunned.pos.x - 34) <= 1 && std::abs(u_stunned.pos.y - 30) <= 1);
-            ASSERT_FALSE(u_stunned.pos.x == 34 && u_stunned.pos.y == 30);
-            // Must transition to Stunned state upon completing punch knockback into fire!
-            ASSERT_EQ(u_stunned.state, UnitState::Stunned);
-            ASSERT_TRUE(u_stunned.is_stunned());
+            ASSERT_TRUE(std::abs(u_after.pos.x - 34) <= 1 && std::abs(u_after.pos.y - 30) <= 1);
+            ASSERT_FALSE(u_after.pos.x == 34 && u_after.pos.y == 30);
+            ASSERT_FALSE(u_after.is_stunned());
         }
 
         // -------------------------------------------------------------------------
         // Part 4: General Fire Contact (Stepping on Fire)
-        // Non-fire ant takes 1 fire damage and ricochets away with burn animation
+        // Non-fire ant takes 1 fire damage and is thrown one tile away with the hit clip
         // -------------------------------------------------------------------------
         {
             SimulationEngine sim;
             sim.init_test_world(60, 60, 1, 60000);
             sim.grid_mut().place_firewall(15, 15, 0);
 
-            // Non-fire ant spawns on fire
+            // Non-fire ant on the fire tile
             uint32_t ant_id = sim.spawn_unit(0, AntType::Worker, {15, 15});
-            sim.tick();
+            sim.resolve_fire_contact(ant_id, 1, 0);
 
-            const auto& ant_bouncing = sim.get_unit(ant_id);
+            const auto& ant_flying = sim.get_unit(ant_id);
             // Takes 1 fire damage (10 - 1 = 9 HP)
-            ASSERT_EQ(ant_bouncing.hp, 9);
-            ASSERT_EQ(ant_bouncing.state, UnitState::Bounce);
+            ASSERT_EQ(ant_flying.hp, 9);
+            ASSERT_EQ(ant_flying.state, UnitState::Flinch);
 
-            // Advance through bounce animation completion
-            for (int t = 0; t < 25; ++t) {
-                sim.tick();
-            }
-
-            const auto& ant_settled = sim.get_unit(ant_id);
-            ASSERT_EQ(ant_settled.state, UnitState::Idle);
-            ASSERT_FALSE(sim.grid().has_fire_at(ant_settled.pos));
+            // Advance through the hit clip
+            ASSERT_TRUE(wait_ms(sim, 4000, [&]() { return ant_flying.state == UnitState::Idle; }) >= 0);
+            ASSERT_FALSE(sim.grid().has_fire_at(ant_flying.pos));
         }
     } TEST_END();
 
@@ -8222,44 +8049,33 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
             }
         }
 
-        // Part 2: 22-Tick Fire Burn Animation, 6-Tick Push Slide, and Sounds 64/65
+        // Part 2: Fire contact (Blast 1): 1 hp, the gh clip carries the ant one tile away, sounds 64 (frame 0) and 65
         {
             SimulationEngine sim;
             sim.init_test_world(60, 60, 100, 60000);
             sim.grid_mut().place_firewall(10, 10, 0);
 
             uint32_t ant = sim.spawn_unit(0, AntType::Worker, TileCoord{10, 10});
-            sim.tick(); // Triggers fire contact
+            sim.resolve_fire_contact(ant, 1, 0);
 
             const auto& u0 = sim.get_unit(ant);
-            ASSERT_EQ(u0.state, UnitState::Bounce);
+            ASSERT_EQ(u0.loco_action, AntUnit::kActionHit);
             ASSERT_EQ(u0.hp, 9);
-            // Verify sound 64 was emitted
-            ASSERT_TRUE(sim.has_audio_event(PhysicsEngine::SOUND_FLY_THUMP_A));
-
-            // Step through slide (6 ticks) and check for Sound 65 upon landing
+            ASSERT_TRUE(sim.has_audio_event(64));
             bool heard_sound65 = false;
-            for (int t = 0; t < 6; ++t) {
+            for (int t = 0; t < 60; ++t) {
                 sim.tick();
-                ASSERT_EQ(sim.get_unit(ant).state, UnitState::Bounce);
-                if (sim.has_audio_event(PhysicsEngine::SOUND_FLY_THUMP_B)) heard_sound65 = true;
+                if (sim.has_audio_event(65)) heard_sound65 = true;
             }
             ASSERT_TRUE(heard_sound65);
 
-            // Slide completed, unit reaches destination pixel position
-            const auto& u6 = sim.get_unit(ant);
-            ASSERT_EQ(u6.pixel_x, u6.push_dest_px);
-            ASSERT_EQ(u6.pixel_y, u6.push_dest_py);
-
-            // Advance through remaining ticks to tick 12 to reach Idle
-            for (int t = 7; t <= 12; ++t) {
-                sim.tick();
-            }
             const auto& u_done = sim.get_unit(ant);
-            ASSERT_EQ(u_done.state, UnitState::Idle);
+            ASSERT_EQ(u_done.loco_action, AntUnit::kActionIdle);
+            ASSERT_EQ(std::max(std::abs(u_done.pos.x - 10), std::abs(u_done.pos.y - 10)), 1);
+            ASSERT_TRUE(sim.grid().has_fire_at(TileCoord{10, 10}));   // the fire wall stays
         }
 
-        // Part 3: 8-Directional Random Bounces Across Trials
+        // Part 3: The thrown ant lands in a random one of the free directions across trials
         {
             std::set<std::pair<int32_t, int32_t>> distinct_landing_tiles;
             for (int trial = 0; trial < 40; ++trial) {
@@ -8267,17 +8083,16 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
                 sim.init_test_world(60, 60, 100 + static_cast<uint32_t>(trial * 31), 60000);
                 sim.grid_mut().place_firewall(30, 30, 0);
                 uint32_t ant = sim.spawn_unit(0, AntType::Worker, TileCoord{30, 30});
-                sim.tick();
+                sim.resolve_fire_contact(ant, 1, 0);
+                for (int t = 0; t < 60; ++t) sim.tick();
                 const auto& u = sim.get_unit(ant);
                 distinct_landing_tiles.insert({u.pos.x, u.pos.y});
             }
-            // Over 40 randomized trials, the ant must bounce in multiple directions, not just 1 fixed tile
+            // Over 40 randomized trials, the ant must be thrown in multiple directions, not just 1 fixed tile
             ASSERT_TRUE(distinct_landing_tiles.size() >= 4);
         }
 
-        // Part 4: Bomb Landing Preserves Bounce Momentum Vector
-        // If an ant hits a firewall southwest of a bomb and bounces into it,
-        // the bomb knockback sends the ant northeast in the same direction!
+        // Part 4: A landing on a bomb tile sets the bomb off (the flight of a hit ends on the bomb)
         {
             SimulationEngine sim;
             sim.init_test_world(60, 60, 1, 60000);
@@ -8286,7 +8101,7 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
             sim.grid_mut().place_bomb(static_cast<uint32_t>(bomb_pos.x), static_cast<uint32_t>(bomb_pos.y), 1);
             sim.grid_mut().place_firewall(static_cast<uint32_t>(fire_pos.x), static_cast<uint32_t>(fire_pos.y), 0);
 
-            // Block all other neighbors of fire_pos except bomb_pos so fire bounce is forced towards bomb (northeast)
+            // Block all other neighbors of fire_pos except bomb_pos so the throw is forced towards the bomb (northeast)
             for (int dx = -1; dx <= 1; ++dx) {
                 for (int dy = -1; dy <= 1; ++dy) {
                     if (dx == 0 && dy == 0) continue;
@@ -8298,27 +8113,13 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
             }
 
             uint32_t ant = sim.spawn_unit(0, AntType::Worker, fire_pos);
-            // Ant hits fire at (24, 26), forced to bounce northeast to (25, 25) where bomb is placed
-            sim.tick(); // Tick 1: fire contact resolved, slide begins towards (25, 25)
-            ASSERT_EQ(sim.get_unit(ant).state, UnitState::Bounce);
+            sim.resolve_fire_contact(ant, 1, 0);
+            ASSERT_EQ(sim.get_unit(ant).loco_action, AntUnit::kActionHit);
+            for (int t = 0; t < 120; ++t) sim.tick();
 
-            // Advance through the 6-tick push slide to reach the bomb
-            for (int t = 0; t < 6; ++t) {
-                sim.tick();
-            }
-
-            // Bomb has detonated upon arrival
+            // The bomb went off when the flight ended on it (the ant lost 2 more hp)
             ASSERT_FALSE(sim.grid().has_bomb_at(bomb_pos));
-
-            // Advance simulation through ballistic flight
-            for (int t = 0; t < 25; ++t) {
-                sim.tick();
-            }
-
-            const auto& u_landed = sim.get_unit(ant);
-            // Knockback must send the ant northeast: x > 25 and y < 25!
-            ASSERT_TRUE(u_landed.pos.x > bomb_pos.x);
-            ASSERT_TRUE(u_landed.pos.y < bomb_pos.y);
+            ASSERT_TRUE(sim.get_unit(ant).hp <= 7);
         }
     } TEST_END();
 
@@ -8327,7 +8128,7 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
     // ------------------------------------------------------------------------
     TEST_CASE("12.63 Authentic 1998 Bomb Blast Flyback Starts Directly at Bomb Tile") {
         bool tested_flight = false;
-        for (uint32_t seed = 0; seed < 100; ++seed) {
+        for (uint32_t seed = 0; seed < 100 && !tested_flight; ++seed) {
             SimulationEngine sim;
             sim.init_test_world(60, 60, seed, 60000);
             TileCoord bomb_pos{20, 20};
@@ -8342,32 +8143,25 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
             sim.trigger_bomb_detonation(ant, bomb_pos, 0, 0);
 
             const auto& u_post = sim.get_unit(ant);
-            if (u_post.state == UnitState::Knockback) {
-                tested_flight = true;
-                ASSERT_EQ(u_post.altitude_z, 0);
-                int32_t dest_tx = u_post.pos.x;
-                int32_t dest_ty = u_post.pos.y;
-                ASSERT_EQ(u_post.pixel_x, dest_tx * 32 + 16);
-                ASSERT_EQ(u_post.pixel_y, dest_ty * 32 + 16);
+            if (u_post.state != UnitState::Knockback || u_post.knock_flag) continue;   // a dud burns the ant on the spot
+            tested_flight = true;
 
-                // Recoil South (facing North, +4 tiles): dest_ty == 24.
-                // Table 4 Frame 1 offset dy = -128 (-4 tiles).
-                // dest_ty * 32 + 16 + (-128) = bomb_pos.y * 32 + 16,
-                // anchoring the start of the flyback visual directly on the bomb tile!
-                int32_t flyback_start_y = u_post.pixel_y - 128;
-                ASSERT_EQ(flyback_start_y, bomb_pos.y * 32 + 16);
+            // The gb clip starts ON the bomb tile centre (the blast puts the ant there) ...
+            ASSERT_EQ(u_post.pixel_x, bomb_pos.x * 32 + 16);
+            ASSERT_EQ(u_post.pixel_y, bomb_pos.y * 32 + 16);
 
-                // Unit remains anchored at destination tile throughout flight ticks
-                for (int t = 0; t < 11; ++t) {
-                    sim.tick();
-                    const auto& u_flight = sim.get_unit(ant);
-                    if (u_flight.state == UnitState::Knockback) {
-                        ASSERT_EQ(u_flight.altitude_z, 0);
-                        ASSERT_EQ(u_flight.pixel_x, dest_tx * 32 + 16);
-                        ASSERT_EQ(u_flight.pixel_y, dest_ty * 32 + 16);
-                    }
-                }
-                break;
+            // ... and carries it 4 tiles opposite its facing (facing North: recoil South, dest_ty == 24) in one
+            // 128 px jump of the clip (Table 4 frame 1 dy = +128) at about 300 ms
+            ASSERT_TRUE(wait_ms(sim, 2000, [&]() { return u_post.pixel_y != bomb_pos.y * 32 + 16; }) >= 0);
+            ASSERT_EQ(u_post.pixel_x, bomb_pos.x * 32 + 16);
+            ASSERT_EQ(u_post.pixel_y, (bomb_pos.y + 4) * 32 + 16);
+            ASSERT_EQ(u_post.pos, (TileCoord{bomb_pos.x, bomb_pos.y + 4}));
+
+            // The ant stays at the destination while the rest of the clip plays
+            for (int t = 0; t < 10; ++t) {
+                sim.tick();
+                ASSERT_EQ(u_post.pixel_x, bomb_pos.x * 32 + 16);
+                ASSERT_EQ(u_post.pixel_y, (bomb_pos.y + 4) * 32 + 16);
             }
         }
         ASSERT_TRUE(tested_flight);
@@ -8435,19 +8229,20 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
     // ------------------------------------------------------------------------
     // 12.65 Fire Contact Bounce Plays Ground Bounce Animation State
     // ------------------------------------------------------------------------
-    TEST_CASE("12.65 Fire Contact Bounce Plays Ground Bounce Animation State") {
+    TEST_CASE("12.65 Fire Contact Plays The Hit Clip (gh): One Hit Point, A One Tile Flight") {
         SimulationEngine sim;
         sim.init_test_world(60, 60, 42, 60000);
         TileCoord fire_pos{15, 15};
         sim.grid_mut().place_firewall(static_cast<uint32_t>(fire_pos.x), static_cast<uint32_t>(fire_pos.y), 0);
 
         uint32_t ant = sim.spawn_unit(0, AntType::Worker, fire_pos);
-        sim.tick();
+        sim.resolve_fire_contact(ant, 1, 0);
 
         const auto& u = sim.get_unit(ant);
-        // Contact with fire must enter UnitState::Bounce (tumbling slide *gb), NOT UnitState::Burn
-        ASSERT_EQ(u.state, UnitState::Bounce);
-        ASSERT_EQ(u.state_timer, 10);
+        // Contact with fire is Blast(1): the ant plays the gh clip (action 0xE) and loses one hit point
+        ASSERT_EQ(u.state, UnitState::Flinch);
+        ASSERT_EQ(u.loco_action, AntUnit::kActionHit);
+        ASSERT_EQ(u.hp, 9);
     } TEST_END();
 
     // ------------------------------------------------------------------------
@@ -8472,8 +8267,6 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
                 ASSERT_EQ(u.pos.y, bomb_pos.y);
                 ASSERT_EQ(u.pixel_x, bomb_pos.x * 32 + 16);
                 ASSERT_EQ(u.pixel_y, bomb_pos.y * 32 + 16);
-                ASSERT_EQ(u.push_ticks_total, 0);
-                ASSERT_EQ(u.push_tick_current, 0);
 
                 // Advance several ticks: ant must remain firmly locked at bomb position
                 for (int t = 0; t < 10; ++t) {
@@ -8517,8 +8310,8 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
             sim.tick();
             const auto& u1 = sim.get_unit(ant1);
             const auto& u2 = sim.get_unit(ant2);
-            if (u1.state == UnitState::Bounce || u2.state == UnitState::Bounce ||
-                u1.state == UnitState::Knockback || u2.state == UnitState::Knockback) {
+            if (u1.state == UnitState::Knockback || u2.state == UnitState::Knockback ||
+                u1.state == UnitState::Flinch || u2.state == UnitState::Flinch) {
                 bounced = true;
             }
             if (u1.pause_active || u2.pause_active) waited = true;
@@ -8591,15 +8384,16 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         ASSERT_EQ(w_ant.state, UnitState::Knockback);
         ASSERT_TRUE(sim.has_audio_event(SoundID::BombDetonate));
 
-        // 2. Bomb Knockback Deflection Origin Parity and Facing Synchrony
+        // 2. Bomb Knockback Deflection: the ant is thrown opposite its facing; a solid landing tile makes PickLanding
+        //    try the next direction (d + 1)
         bool tested_deflection = false;
-        for (uint32_t s = 1; s <= 20; ++s) {
+        for (uint32_t s = 1; s <= 40 && !tested_deflection; ++s) {
             sim.init_test_world(60, 60, s, 60000);
             sim.grid_mut().place_bomb(20, 20, 0);
-            // Block North landing tile (20, 16) with an obstacle
-            sim.grid_mut().get_cell_mut(20, 16).terrain_type = ants::sim::TERRAIN_OBSTACLE;
+            // Block the South landing tile (20, 24) with an obstacle
+            sim.grid_mut().get_cell_mut(20, 24).terrain_type = ants::sim::TERRAIN_OBSTACLE;
 
-            // Ant at (20, 20) steps on bomb moving North
+            // Ant at (20, 20) steps on the bomb moving North
             uint32_t bomb_victim = sim.spawn_unit(1, AntType::Worker, TileCoord{20, 20});
             auto* bv_unit = const_cast<AntUnit*>(&sim.get_unit(bomb_victim));
             bv_unit->facing = Direction::North;
@@ -8607,15 +8401,16 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
             // Trigger detonation
             sim.trigger_bomb_detonation(bomb_victim, TileCoord{20, 20}, 0, -1);
             const auto& bv_post = sim.get_unit(bomb_victim);
-            if (bv_post.state == UnitState::Knockback) {
+            if (bv_post.state == UnitState::Knockback && !bv_post.knock_flag) {
                 tested_deflection = true;
-                // Deflected from North because (20, 16) is blocked; facing updated to match deflected direction
+                // Deflected from South because (20, 24) is blocked; the clip faces the direction of the deflected throw
                 ASSERT_NE(bv_post.facing, Direction::North);
+                ASSERT_TRUE(wait_ms(sim, 3000, [&]() { return bv_post.pos != TileCoord{20, 20}; }) >= 0);
                 // Destination is 4 tiles from bomb
                 int32_t dist_from_bomb = std::max(std::abs(bv_post.pos.x - 20), std::abs(bv_post.pos.y - 20));
                 ASSERT_EQ(dist_from_bomb, 4);
-                ASSERT_NE(bv_post.pos, (TileCoord{20, 16})); // Blocked North was avoided
-                break;
+                ASSERT_NE(bv_post.pos, (TileCoord{20, 24})); // Blocked South was avoided
+                ASSERT_EQ(bv_post.pos, (TileCoord{16, 24})); // the next direction: South-West
             }
         }
         ASSERT_TRUE(tested_deflection);
@@ -8636,30 +8431,28 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         ASSERT_TRUE(carrying_sd != nullptr);
         ASSERT_EQ(carrying_sd->subitems[0].val3, 125u); // Preserves 125ms duration for carrying variant
 
-        // 4. Combat Ant AI Punch Animation, Knockback & Water Drowning
+        // 4. Combat ant auto-engage punch (2 hp), knockback into water drowns the victim
         sim.init_test_world(60, 60, 42, 60000);
         // Make tile (24, 20) water
         sim.grid_mut().get_cell_mut(24, 20).terrain_type = ants::sim::TERRAIN_WATER;
 
         uint32_t combat_id = sim.spawn_unit(0, AntType::Combat, TileCoord{19, 20});
-        auto* c_ptr = const_cast<AntUnit*>(&sim.get_unit(combat_id));
-        c_ptr->guard_anchor = {19, 20};
-        c_ptr->state = UnitState::GuardIdle;
 
         // Enemy Worker at (20, 20)
         uint32_t victim_id = sim.spawn_unit(1, AntType::Worker, TileCoord{20, 20});
 
-        // Tick simulation: Combat Ant adjacent to enemy strikes with HeavyPunch
-        sim.tick();
-        const auto& c_striking = sim.get_unit(combat_id);
-        ASSERT_EQ(c_striking.state, UnitState::Attacking);
-        ASSERT_EQ(c_striking.state_timer, 10);
-        ASSERT_EQ(c_striking.attack_cooldown_ticks, 11);
-        ASSERT_TRUE(sim.has_audio_event(SoundID::HeavyPunch));
-
-        const auto& v_flying = sim.get_unit(victim_id);
-        ASSERT_EQ(v_flying.state, UnitState::Knockback);
-        ASSERT_EQ(v_flying.hp, 8); // 2 HP punch damage
+        // The enemy is adjacent: the idle hook starts the attack at once; the punch sound is frame 2 of the clip
+        bool punch_sound = false;
+        for (int t = 0; t < 40 && sim.get_unit(victim_id).hp == 10; ++t) {
+            sim.tick();
+        }
+        for (int t = 0; t < 10; ++t) {
+            sim.tick();
+            if (sim.has_audio_event(SoundID::HeavyPunch)) punch_sound = true;
+        }
+        ASSERT_TRUE(punch_sound);
+        ASSERT_EQ(sim.get_unit(combat_id).loco_action, AntUnit::kActionAttack);
+        ASSERT_EQ(sim.get_unit(victim_id).hp, 8); // 2 HP punch damage
 
         // Punch directly into water test: Worker on (23, 20) punched East into water (24..30, 20)
         sim.init_test_world(60, 60, 42, 60000);
@@ -8670,37 +8463,36 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         uint32_t water_victim = sim.spawn_unit(1, AntType::Worker, TileCoord{23, 20});
         sim.execute_melee_attack(puncher, water_victim);
 
-        // Advance through flight until water landing
-        for (int t = 0; t < 15; ++t) {
+        // Advance through the flight until the water landing
+        for (int t = 0; t < 60; ++t) {
             sim.tick();
             if (sim.get_unit(water_victim).state == UnitState::Drowning) break;
         }
         const auto& wv_landed = sim.get_unit(water_victim);
         ASSERT_EQ(wv_landed.state, UnitState::Drowning);
-        ASSERT_EQ(wv_landed.death_status, DeathStatus::Drowned);
+        for (int t = 0; t < 5; ++t) sim.tick();   // the drowning sound is frame 1 of the clip (100 ms)
         ASSERT_TRUE(sim.has_audio_event(SoundID::WaterSplash));
         ASSERT_TRUE(sim.has_audio_event(SoundID::AntDrown));
+        for (int t = 0; t < 120 && !sim.get_unit(water_victim).removed; ++t) sim.tick();
+        ASSERT_TRUE(sim.get_unit(water_victim).removed);
+        ASSERT_EQ(sim.get_unit(water_victim).death_status, DeathStatus::Drowned);
     } TEST_END();
 
     TEST_CASE("12.133 Combat Ant Walk Animation Completion Before Attack") {
         SimulationEngine sim;
         sim.init_test_world(60, 60, 42, 60000);
 
-        // Combat Ant spawned at (15, 20), target enemy Worker at (18, 20)
+        // Combat Ant spawned at (15, 20), target enemy Worker at (18, 20): the scan finds it (ring 3)
         uint32_t combat_id = sim.spawn_unit(0, AntType::Combat, TileCoord{15, 20});
-        auto* c_ptr = const_cast<AntUnit*>(&sim.get_unit(combat_id));
-        c_ptr->guard_anchor = {15, 20};
-        c_ptr->state = UnitState::GuardIdle;
-
         uint32_t victim_id = sim.spawn_unit(1, AntType::Worker, TileCoord{18, 20});
         uint32_t initial_vic_hp = sim.get_unit(victim_id).hp;
 
-        // Advance simulation: Combat Ant intercepts towards (17, 20)
+        // Advance simulation: the combat ant walks towards (17, 20)
         bool hit_occurred = false;
-        for (int t = 0; t < 60; ++t) {
+        for (int t = 0; t < 120; ++t) {
             sim.tick();
             const auto& c_u = sim.get_unit(combat_id);
-            if (c_u.state == UnitState::Walking || c_u.state == UnitState::Intercepting) {
+            if (c_u.state == UnitState::Walking) {
                 // While walking mid-stride, no damage can be dealt
                 ASSERT_EQ(sim.get_unit(victim_id).hp, initial_vic_hp);
             }
@@ -8716,7 +8508,7 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         ASSERT_TRUE(hit_occurred);
     } TEST_END();
 
-    TEST_CASE("12.134 Knockback Trajectory Origin & Smooth Multi-Tick Interpolation") {
+    TEST_CASE("12.134 Knockback Trajectory Origin: The gb Clip Jumps 128 px In One Frame Step From The Contact Tile") {
         SimulationEngine sim;
         sim.init_test_world(60, 60, 42, 60000);
 
@@ -8729,30 +8521,27 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
 
         sim.execute_melee_attack(combat_id, victim_id);
 
-        const auto& vic_init = sim.get_unit(victim_id);
-        ASSERT_EQ(vic_init.state, UnitState::Knockback);
-        // Visual coordinates start immediately at the original tile
-        ASSERT_EQ(vic_init.pixel_x, expected_start_px);
-        ASSERT_EQ(vic_init.pixel_y, expected_start_py);
-        ASSERT_EQ(vic_init.altitude_z, 0);
+        // At the contact the victim stands on its tile until the strike frame
+        const auto& vic = sim.get_unit(victim_id);
+        ASSERT_EQ(vic.pixel_x, expected_start_px);
+        ASSERT_EQ(vic.pixel_y, expected_start_py);
+        ASSERT_NE(vic.state, UnitState::Knockback);
 
-        // Tick 1: unit advances towards destination with positive altitude
-        sim.tick();
-        const auto& vic_t1 = sim.get_unit(victim_id);
-        ASSERT_EQ(vic_t1.state, UnitState::Knockback);
-        ASSERT_GT(vic_t1.pixel_x, expected_start_px);
-        ASSERT_LT(vic_t1.pixel_x, expected_target_px);
-        ASSERT_GT(vic_t1.altitude_z, 0); // Parabolic elevation in flight
+        // Strike frame (200 ms): the flight clip starts on the original tile
+        ASSERT_EQ(wait_ms(sim, 1000, [&]() { return vic.state == UnitState::Knockback; }), 200);
+        ASSERT_EQ(vic.pixel_x, expected_start_px);
+        ASSERT_EQ(vic.pixel_y, expected_start_py);
 
-        // Advance through remaining ticks to landing
-        for (int t = 2; t <= 10; ++t) {
-            sim.tick();
-        }
+        // The clip then moves it by 128 px in one step (no smooth interpolation in the original)
+        ASSERT_TRUE(wait_ms(sim, 1000, [&]() { return vic.pixel_x != expected_start_px; }) >= 0);
+        ASSERT_EQ(vic.pixel_x, expected_target_px);
+        ASSERT_EQ(vic.pixel_y, expected_start_py);
+        ASSERT_EQ(vic.state, UnitState::Knockback);
 
-        const auto& vic_landed = sim.get_unit(victim_id);
-        ASSERT_EQ(vic_landed.pixel_x, expected_target_px);
-        ASSERT_EQ(vic_landed.altitude_z, 0);
-        ASSERT_TRUE(vic_landed.state == UnitState::Stunned || vic_landed.is_stunned());
+        // The rest of the clip plays on the landing tile; the flight ends without a stun
+        ASSERT_TRUE(wait_ms(sim, 3000, [&]() { return vic.state == UnitState::Idle; }) >= 0);
+        ASSERT_EQ(vic.pixel_x, expected_target_px);
+        ASSERT_FALSE(vic.is_stunned());
     } TEST_END();
 
     TEST_CASE("12.135 Combat Ant Punches Ant Over Small Terrain Barrier to Open Ground") {
@@ -8768,19 +8557,15 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         sim.execute_melee_attack(combat_id, victim_id);
 
         const auto& vic = sim.get_unit(victim_id);
-        ASSERT_EQ(vic.state, UnitState::Knockback);
+        ASSERT_TRUE(wait_ms(sim, 1000, [&]() { return vic.state == UnitState::Knockback; }) >= 0);
         // Flight destination cleared the rock at (21, 20) and anchored at (24, 20)
+        ASSERT_TRUE(wait_ms(sim, 1000, [&]() { return vic.pos == TileCoord{24, 20}; }) >= 0);
+
+        // Advance through the flight until the landing frames end
+        ASSERT_TRUE(wait_ms(sim, 3000, [&]() { return vic.state == UnitState::Idle; }) >= 0);
         ASSERT_EQ(vic.pos, (TileCoord{24, 20}));
-
-        // Advance through flight until landing
-        for (int t = 0; t < 12; ++t) {
-            sim.tick();
-        }
-
-        const auto& vic_landed = sim.get_unit(victim_id);
-        ASSERT_EQ(vic_landed.pos, (TileCoord{24, 20}));
-        ASSERT_EQ(vic_landed.pixel_x, 24 * 32 + 16);
-        ASSERT_TRUE(vic_landed.is_stunned());
+        ASSERT_EQ(vic.pixel_x, 24 * 32 + 16);
+        ASSERT_FALSE(vic.is_stunned());
     } TEST_END();
 
     TEST_CASE("12.136 Combat Ant Punches Ant Over Small Terrain Barrier Into Water Drowning") {
@@ -8799,17 +8584,15 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
 
         sim.execute_melee_attack(combat_id, victim_id);
 
-        // Advance through flight until water landing
-        for (int t = 0; t < 15; ++t) {
-            sim.tick();
-            if (sim.get_unit(victim_id).state == UnitState::Drowning) break;
-        }
-
+        // Advance through the flight until the water landing
         const auto& vic_drowned = sim.get_unit(victim_id);
-        ASSERT_EQ(vic_drowned.state, UnitState::Drowning);
-        ASSERT_EQ(vic_drowned.death_status, DeathStatus::Drowned);
+        ASSERT_TRUE(wait_ms(sim, 3000, [&]() { return vic_drowned.state == UnitState::Drowning; }) >= 0);
+        ASSERT_EQ(vic_drowned.pos, (TileCoord{24, 20}));
+        run_ms(sim, 250);
         ASSERT_TRUE(sim.has_audio_event(SoundID::WaterSplash));
         ASSERT_TRUE(sim.has_audio_event(SoundID::AntDrown));
+        ASSERT_TRUE(wait_ms(sim, 4000, [&]() { return !vic_drowned.is_alive(); }) >= 0);
+        ASSERT_EQ(vic_drowned.death_status, DeathStatus::Drowned);
     } TEST_END();
 
     TEST_CASE("12.137 Non-Thief Friendly Unit Clicking Enemy Base Stops Without CantGo (GoTo, FUN_0101fc50)") {
@@ -8911,7 +8694,8 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         sim.execute_melee_attack(combat, worker);
 
         const auto& w_knocked = sim.get_unit(worker);
-        ASSERT_EQ(w_knocked.state, UnitState::Knockback);
+        ASSERT_TRUE(wait_ms(sim, 1000, [&]() { return w_knocked.state == UnitState::Knockback; }) >= 0);
+        ASSERT_TRUE(wait_ms(sim, 1000, [&]() { return w_knocked.pos.x != 18 || w_knocked.pos.y != 21; }) >= 0);
 
         // Landing pos must NOT be inside 4x4 base footprint or queue slots
         int32_t lx = w_knocked.pos.x;
@@ -8922,7 +8706,7 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         ASSERT_FALSE(in_queue);
 
         // Step through knockback flight
-        for (int t = 0; t < 20; ++t) {
+        for (int t = 0; t < 60; ++t) {
             sim.tick();
             ASSERT_NE(sim.get_unit(worker).state, UnitState::EnteringBase);
         }
@@ -8950,9 +8734,11 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         ASSERT_FALSE(sim.is_ant_in_base_queue(w1));
         ASSERT_EQ(sim.get_unit(w1).orig_order, AntUnit::kOrderNone);
 
-        // 2. Hit down to 1 HP it goes home once the hit is over (FUN_0101dded at the end of the hit recovery)
-        sim.get_unit(w1).take_damage(1, DamageSource::MeleeStandard, 0);
+        // 2. Hit down to 1 HP it goes home once the hit is over (LowHpCheck FUN_0101dded at the end of the flight)
+        uint32_t enemy = sim.spawn_unit(1, AntType::Worker, TileCoord{26, 25});
+        sim.execute_melee_attack(enemy, w1);
         ASSERT_EQ(sim.get_unit(w1).hp, 1u);
+        ASSERT_NE(sim.get_unit(w1).orig_order, AntUnit::kOrderHome);      // not before the hit is over
         bool ordered_home = false;
         for (int t = 0; t < 80 && !ordered_home; ++t) {
             sim.tick();
@@ -9044,10 +8830,10 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
             sim.init_test_world(60, 60, seed, 600000);
             uint32_t victim = sim.spawn_unit(0, AntType::Worker, TileCoord{15, 15});
             sim.grid_mut().place_bomb(15, 15, 1);
-            sim.tick(); // bomb detonates under the ant (20 % dud)
+            sim.trigger_bomb_detonation(victim, TileCoord{15, 15}); // the ant sets the bomb off (20 % dud)
 
             const auto& u = sim.get_unit(victim);
-            if (u.state == UnitState::Burn) ++duds; else ++blasts;
+            if (u.knock_flag) ++duds; else ++blasts;
 
             const VisualEffect* fx = nullptr;
             const auto& effects = sim.get_world_state().effects;
@@ -9068,7 +8854,7 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         uint32_t victim = sim.spawn_unit(0, AntType::Worker, TileCoord{15, 15});
         const_cast<AntUnit*>(&sim.get_unit(victim))->hp = 2;
         sim.grid_mut().place_bomb(15, 15, 1);
-        sim.tick();
+        sim.trigger_bomb_detonation(victim, TileCoord{15, 15});
         auto has_bombex = [&]() {
             for (const auto& e : sim.get_world_state().effects) if (e.anim_name == "bombex") return true;
             return false;
@@ -9146,6 +8932,8 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
             auto* def = const_cast<AntUnit*>(&sim.get_unit(defender));
             def->hp = 1;
             sim.execute_melee_attack(attacker, defender);
+            // the death clip starts when the flight of the victim ends (deferred death), not at the contact
+            ASSERT_TRUE(wait_ms(sim, 3000, [&]() { return def->state == UnitState::Dead; }) >= 0);
             for (const auto& e : sim.get_world_state().effects) {
                 if (e.anim_name.rfind("death", 0) != 0) continue;
                 seen.insert(e.anim_name);

@@ -1,13 +1,12 @@
 add_library(ants_sim STATIC
     grid.cpp
     ant_unit.cpp
-    combat_ai.cpp
     movement_system.cpp
     action_system.cpp
+    combat_system.cpp
     movement_tables.cpp
     path_planner.cpp
     pathfinding.cpp
-    physics.cpp
     sim_engine.cpp
 )
 

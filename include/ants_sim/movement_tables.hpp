@@ -100,6 +100,7 @@ enum class ActionClip : uint8_t {
     Defuse,                // action 9: bomber defuses a bomb
     Infiltrate,            // action 0xD: thief raids an enemy hill (atcr501)
     GetPow,                // action 4: power-up pickup (getpow)
+    Death,                 // action 0xC: death1..death4, the direction argument is the variant 0..3 (rand() % 4)
 };
 
 /// Clip of an action for an ant type and direction. The type is ignored by the single-type clips (ignite,

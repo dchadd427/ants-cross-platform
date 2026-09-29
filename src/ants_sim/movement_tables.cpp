@@ -95,6 +95,9 @@ constexpr bool all_referenced_clips_present() noexcept {
             return false;
         }
     }
+    for (uint8_t v = 0; v < 4; ++v) {
+        if (find_clip(data::kDeath[v]) >= kClipCount) return false;
+    }
     return find_clip(data::kIdleWater) < kClipCount && find_clip(data::kBump) < kClipCount &&
            find_clip(data::kInfiltrate) < kClipCount && find_clip(data::kGetPow) < kClipCount;
 }
@@ -211,6 +214,7 @@ MotionClip action_clip(ActionClip kind, uint8_t ant_type, uint8_t dir, bool carr
         case ActionClip::Defuse:              return directional(data::kDefuse, dir);
         case ActionClip::Infiltrate:          return clip_by_chd(data::kInfiltrate);
         case ActionClip::GetPow:              return clip_by_chd(data::kGetPow);
+        case ActionClip::Death:               return dir < 4 ? clip_by_chd(data::kDeath[dir]) : MotionClip{};
     }
     return {};
 }

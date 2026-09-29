@@ -22,7 +22,6 @@ public:
     PRNG cosmetic_prng_{0x5EEDu}; // visual-only choices (death animation); never feeds gameplay
     Grid grid_;
     MatchStatsManager stats_;
-    PhysicsEngine physics_;
     MatchState match_state_{MatchState::NotStarted};
 
     uint64_t current_tick_{0};
@@ -32,7 +31,6 @@ public:
     uint32_t last_countdown_second_{0};
 
     std::vector<std::unique_ptr<AntUnit>> ants_;
-    std::unordered_map<uint32_t, std::unique_ptr<CombatAIController>> ai_controllers_;
     uint32_t next_ant_id_{1};
 
     std::vector<AudioEvent> audio_queue_;
@@ -171,18 +169,6 @@ public:
         return nullptr;
     }
 
-    CombatAIController* get_or_create_ai(AntUnit& unit) {
-        if (unit.type != AntType::Combat) return nullptr;
-        auto it = ai_controllers_.find(unit.id);
-        if (it != ai_controllers_.end()) {
-            return it->second.get();
-        }
-        auto controller = std::make_unique<CombatAIController>(unit);
-        CombatAIController* ptr = controller.get();
-        ai_controllers_[unit.id] = std::move(controller);
-        return ptr;
-    }
-
     bool is_valid_powerup_drop_tile(TileCoord adj) const noexcept {
         if (!grid_.in_bounds(adj)) return false;
         if (grid_.is_solid_obstacle(adj.x, adj.y)) return false;
@@ -293,11 +279,13 @@ public:
     void cancel_pause(AntUnit& a);
     void pause_fire(AntUnit& a);
     void enter_cant_go(AntUnit& a);
+    void attack_clip_end(AntUnit& a);
     void loco_release(AntUnit& a);
 
     // tile entry and passability (FUN_0101c4f2 / FUN_0101f780 / FUN_01020951)
     int  try_enter_tile(AntUnit& a, TileCoord nt);
     bool can_enter(const AntUnit& a, TileCoord t, uint32_t flags);
+    bool can_enter_attack_step(const AntUnit& a, TileCoord t, bool last);
     uint32_t step_cost(const AntUnit& a, TileCoord from, TileCoord to);
 
     // orders (FUN_0101fc50 / FUN_01020655 / FUN_010202e7 / FUN_0101ff5a / FUN_010287b5 / FUN_0100cba4)
@@ -311,7 +299,7 @@ public:
     bool has_pending_path(uint32_t ant_id) const noexcept;
 
     // hill, hatch and raid actions (action_system.cpp)
-    void action_cleanup(AntUnit& a, uint8_t old_action, uint8_t new_action);   // SetAction old-action cleanup (table 0x101b48f)
+    bool action_cleanup(AntUnit& a, uint8_t old_action, uint8_t new_action);   // SetAction old-action cleanup (table 0x101b48f)
     void enter_hill(AntUnit& a);                       // message 7 handler FUN_01021494
     void enter_clip_end(AntUnit& a);                   // step callback, actions 2 / 0x14, last frame
     void cleanup_enter(AntUnit& a);                    // FUN_0101e165: deposit and heal
@@ -320,14 +308,55 @@ public:
     void raid_clip_end(AntUnit& a);                    // step callback, actions 5 / 0xd, last frame
     void cleanup_raid(AntUnit& a);                     // FUN_0101e27f: loot transfer
     void retreat_home(AntUnit& a);                     // FUN_0101dded with flag 1: a 1 hp ant goes home
-    void yield_guard_ai(AntUnit& a);                   // the remake's combat guard stands down while the hill logic moves the ant
     void anthillq_run();                               // ANTHILLQ task, every 200 ms
     void hatch_run(uint8_t team);                      // HATCHTSK (0x1025072)
     void add_score(uint8_t player, int32_t amount);    // FUN_01010cc9
+    SimulationEngine::HatchResult hatch_request(uint8_t player, AntType type, bool force);   // FUN_01010aca
     void post_news(uint8_t player, const char* text, uint16_t string_id);
     TileCoord team_tile42(uint8_t team) const noexcept;
     TileCoord team_ring_tile(uint8_t team) const noexcept;
     uint32_t anthillq_next_ms_{200};
+
+    // combat, flights, bombs and death (combat_system.cpp)
+    static uint8_t dir_from_to(TileCoord from, TileCoord to) noexcept;         // FUN_01017531 / FUN_01017560
+    static TileCoord step_toward(TileCoord t, uint8_t dir, int32_t r) noexcept; // FUN_0101d9f7
+    bool landing_ok(TileCoord k) const;
+    uint8_t knock_dir(TileCoord target, TileCoord attacker, int32_t range) const;   // FUN_0101d8ed
+    TileCoord pick_landing(const AntUnit& self, TileCoord from, int32_t range, bool cardinal, bool* excl, bool use_rand);   // FUN_0101df5d
+    void take_hit(AntUnit& t, uint8_t source_team);                             // FUN_01021627
+    bool can_be_attacked_from(const AntUnit& t, TileCoord attacker_tile) const; // FUN_0101cb0c
+    void on_attacked(uint8_t team);                                             // FUN_01010a03
+    void start_engaged(AntUnit& t, uint8_t dir);                                // FUN_01020c70
+    void start_melee(AntUnit& t, AntUnit& a, TileCoord t_tile, uint8_t kdir, uint8_t range);   // FUN_01010245
+    void hit_frame(AntUnit& t, TileCoord tile, uint8_t kdir, uint8_t range);    // FUN_01010335
+    void deliver_pending_hit(AntUnit& a);                                       // FUN_0101c1e2
+    void start_knock_flight(AntUnit& t, uint8_t kdir, uint8_t range, TileCoord tile);   // FUN_0101de7e
+    void handle_melee_message(AntUnit& t, AntUnit& a, TileCoord t_tile, uint8_t kdir, bool combat);   // msg 8, FUN_01022ca1
+    bool melee_contact(AntUnit& a, AntUnit& t);                                 // TryEnterTile branch A
+    bool low_hp_check(AntUnit& a);                                              // FUN_0101dded (flag 1)
+    bool stun_or_die(AntUnit& a);                                               // FUN_0102151a (flag 1)
+    bool stun_end(AntUnit& a);                                                  // FUN_0102151a (flag 0)
+    void blast_hit(AntUnit& a, TileCoord at, TileCoord dest, uint8_t dmg, uint8_t src);   // FUN_0101c221
+    void blast(AntUnit& a, uint8_t dmg, uint8_t src);                           // FUN_0101c34c
+    void drown(AntUnit& a, TileCoord t);                                        // FUN_0101c2e2
+    void water_landing(AntUnit& a, TileCoord t);                                // FUN_0101e6b3
+    void bridge_gone_scan(TileCoord t);                                         // FUN_0100f8bf (after the bridge tile became water)
+    void bomb_trigger(AntUnit& a, TileCoord at);                                // path completion case 0xA
+    void bomb_victim(AntUnit& a, TileCoord at, TileCoord to);                   // FUN_01021a6f
+    void burn_overlay_start(AntUnit& a);                                        // FUN_01021c68
+    void burn_overlay_end(AntUnit& a);                                          // callback 0x1021dda
+    void finish_death(AntUnit& a);                                              // FUN_01020f89 / Kill 0x1020ff6
+    void drop_powerup(AntUnit& a, TileCoord tile, uint8_t type);                // FUN_01020e6e
+    void remove_ant(AntUnit& a);                                                // FUN_0100cd9f
+    void cancel_combat_timer(AntUnit& a);                                       // FUN_0101c152
+    void start_combat_timer(AntUnit& a, uint32_t ms);                           // FUN_0101c184
+    bool resume_after_auto_engage(AntUnit& a);                                  // FUN_0101dd6f
+    bool can_auto_engage(const AntUnit& a) const;                               // FUN_0101c0d5
+    bool find_enemy(const AntUnit& a, int32_t radius, TileCoord& tile);         // FUN_0101dbec (+ FUN_0101db55)
+    void attack_tile(AntUnit& a, TileCoord target);                             // FUN_0101da6f
+    bool auto_engage_check(AntUnit& a, int32_t radius, bool at_arrival);        // the hooks at 0x101b9a8 and 0x101bd67
+    void apply_path(AntUnit& a, const std::vector<TileCoord>& path);            // the part of message 6 that installs a path
+    std::array<int64_t, MAX_PLAYERS> last_attacked_ms_{{-1000000, -1000000, -1000000, -1000000}};   // player +0x4c
 
     // helpers
     uint8_t  orig_action_of(const AntUnit& a) const noexcept;

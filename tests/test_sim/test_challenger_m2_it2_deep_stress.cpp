@@ -1,8 +1,6 @@
 #include "ants_sim/sim_engine.hpp"
 #include "ants_sim/grid.hpp"
 #include "ants_sim/ant_unit.hpp"
-#include "ants_sim/combat_ai.hpp"
-#include "ants_sim/physics.hpp"
 #include "ants_sim/prng.hpp"
 #include "ants_sim/match_stats.hpp"
 

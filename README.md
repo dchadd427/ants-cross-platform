@@ -56,7 +56,7 @@ Play the remake instantly in any modern web browser (Chrome, Firefox, Safari, Ed
   - Standalone web inspector (`asset_catalog/index.html`) with responsive design, searching, filtering, and instant asset downloads (⬇ WAV audio, ⬇ PNG sprites, ⬇ composite canvas frames).
 
 - **Automated Verification & Zero-Warning Standard**:
-  - 100% pass rate across **184 integration tests (5,492 assertions)**, the hill-action golden tests and **506 opaque-box End-to-End (E2E) verification tests**.
+  - 100% pass rate across **184 integration tests (6,365 assertions)**, the hill-action and combat-action golden tests and **506 opaque-box End-to-End (E2E) verification tests**.
   - Strict compilation under `-Wall -Wextra -Werror -Wsign-conversion`.
 
 ---
@@ -73,7 +73,7 @@ The remake provides a complete, playable, standalone experience with authentic a
 | **HUD & Interface** | ✅ Complete | Recessed status news box, chat overlay, minimap, team switching. |
 | **WebAssembly & Cloud Beta** | ✅ Complete | Docker containerized deployment at `beta.playants.org`. |
 | **Unit Movement & Locomotion** | 🟡 Active Calibration | 8-directional pathfinding, corner traversal, and base queuing are implemented; ongoing tuning for crowded group steering, ant collision nudging, and diagonal slip feel. |
-| **Combat & Knockback Physics** | 🟡 Active Calibration | Basic attack cooldowns, Combat Ant 4-tile fling, pushback deflection against rock barriers, and water drowning are implemented; fine-tuning multi-unit melee target reacquisition and exact stun durations. |
+| **Combat, Knockback & Collisions** | 🟢 Original Action Model | Ported from the 1998 binary: contact when a step crosses into the target tile, hit points lost at contact, strike frame, `gh` / `gb` flights with the original landing rules, pile-up dispersal, fire and water landings, bomb victims and duds, stun, deferred death and removal effects, and the combat ant auto-engage. |
 | **Multiplayer Networking** | 📋 Planned | Deterministic lockstep protocol over WebSockets / UDP. |
 
 ---
@@ -94,7 +94,7 @@ Ants-Mac/
 │   └── BUILD_AND_RUN.md             # Native and Docker build/run instructions
 ├── include/                # Public C++ headers
 │   ├── ants_assets/        # Archive decoders, map loaders, sprite/sound structs
-│   ├── ants_sim/           # Simulation engine, grid topology, ant units, combat AI
+│   ├── ants_sim/           # Simulation engine, grid topology, ant units, action system (hill, combat)
 │   └── ants_app/           # SDL2 application, renderer, HUD, audio mixer, MIDI
 ├── Original-Ants/          # Authentic 1998 game data
 │   ├── ants.chd            # Packed binary sprites, audio, palettes, animations
@@ -103,7 +103,7 @@ Ants-Mac/
 │   └── Maps/               # Binary .LVL maps (Treasure, Small, Rivers, Islands, etc.)
 ├── src/                    # Implementation source code
 │   ├── ants_assets/        # Asset decompression, palette mapping, mirroring
-│   ├── ants_sim/           # Tick loop, pathfinding (A*), unit state machine, physics
+│   ├── ants_sim/           # Tick loop, pathfinding (A*), locomotion + action clips, combat system
 │   └── ants_app/           # Windowing, input handling, viewport camera, rendering
 ├── tests/                  # Automated verification test suites
 │   ├── e2e/                # Standalone 506-test opaque-box E2E test runner
@@ -319,7 +319,7 @@ flowchart TD
         MapData --> Grid["Tile Grid (20Hz Tick)"]
         Grid --> Path["8-Connected A* Pathfinding"]
         Grid --> Units["Ant Units (Worker, Combat, etc.)"]
-        Units --> CombatAI["Combat Guard AI & Knockback"]
+        Units --> CombatAI["Combat Actions: Contact, Flights & Auto-Engage"]
         Units --> Abilities["Abilities (Bombs, Bridges, Fire)"]
         Units --> Droppers["Daisy Flower Power-Up Droppers"]
     end

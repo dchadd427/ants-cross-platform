@@ -621,7 +621,7 @@ void HUD::render_radar(IRenderer& renderer, const assets::AssetArchive& archive,
         }
     }
     for (const auto& ant : world.ants) {
-        if (ant.hp == 0 || ant.is_drowning || ant.is_in_scuffle) continue;
+        if (ant.hp == 0 || ant.is_drowning) continue;
         if (world.fog_of_war_enabled && ant.player_id != local_player_id_ && !revealed(ant.tile_x, ant.tile_y)) continue;
         dot(ant.tile_x, ant.tile_y, kMinimapAntColours[ant.player_id % 4], 1);
     }
@@ -1399,10 +1399,6 @@ bool HUD::handle_mouse_down(int32_t x, int32_t y, uint8_t button,
                     play_sfx(sim::SoundID::AntStop);
                     return true;
                 }
-                if (enemy_target->on_powerup || (enemy_target->type == sim::AntType::Swimmer && enemy_target->is_swimming)) {
-                    play_sfx(sim::SoundID::AntStop);
-                    return true;
-                }
                 if (on_spawn_click_marker_) on_spawn_click_marker_(world_x, world_y);
                 dispatch_attack_order(enemy_target->id, sim);
                 return true;
@@ -1602,7 +1598,7 @@ bool HUD::handle_mouse_up(int32_t x, int32_t y, uint8_t button,
                 } else {
                     // Enemy or allied ant clicked
                     bool is_ally = sim.stats_manager().are_allies(local_player_id_, hit_ant->player_id);
-                    if (has_friendly_selected(world) && !is_ally && !hit_ant->on_powerup && !(hit_ant->type == sim::AntType::Swimmer && hit_ant->is_swimming)) {
+                    if (has_friendly_selected(world) && !is_ally) {
                         // Issue Attack order against target enemy for selected friendly ants
                         if (on_spawn_click_marker_) on_spawn_click_marker_(world_x, world_y);
                         dispatch_attack_order(hit_ant->id, sim);
@@ -2332,10 +2328,6 @@ void HUD::dispatch_attack_order(uint32_t target_enemy_id, sim::SimulationEngine&
                 play_sfx(sim::SoundID::AntStop);
                 return;
             }
-            if (a.on_powerup || (a.type == sim::AntType::Swimmer && a.is_swimming)) {
-                play_sfx(sim::SoundID::AntStop);
-                return;
-            }
             break;
         }
     }
@@ -2791,7 +2783,7 @@ CursorType HUD::evaluate_cursor(int32_t screen_x, int32_t screen_y,
     const sim::AntSnapshot* hover_ant = nullptr;
     int32_t best_dist_sq = INT32_MAX;
     for (const auto& ant : world.ants) {
-        if (ant.hp == 0 || ant.is_drowning || ant.is_in_scuffle) continue;
+        if (ant.hp == 0 || ant.is_drowning) continue;
         if (world.fog_of_war_enabled && ant.player_id != local_player_id_) {
             bool is_ally = (local_player_id_ < world.player_alliances.size() &&
                             ant.player_id < world.player_alliances.size() &&
