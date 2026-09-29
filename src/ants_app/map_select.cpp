@@ -1,5 +1,6 @@
 #include "ants_app/map_select.hpp"
 #include "ants_assets/lvl_parser.hpp"
+#include "ants_app/ui_anim.hpp"
 #include <iostream>
 #include <algorithm>
 #include <filesystem>
@@ -207,7 +208,7 @@ void MapSelectScreen::handle_mouse_down(int32_t screen_x, int32_t screen_y, uint
     if (screen_x >= BTN_UP_X && screen_x < BTN_UP_X + BTN_UP_W &&
         screen_y >= BTN_UP_Y && screen_y < BTN_UP_Y + BTN_UP_H) {
         btn_up_pressed_ = true;
-        play_sfx(sim::SoundID::NavButtonClick);
+        play_sfx(sim::SoundID::ButtonClick);   // up3 carries sound 0 (buttonclick.wav)
         set_selected_index(selected_index_ - 1);
         return;
     }
@@ -216,7 +217,7 @@ void MapSelectScreen::handle_mouse_down(int32_t screen_x, int32_t screen_y, uint
     if (screen_x >= BTN_DOWN_X && screen_x < BTN_DOWN_X + BTN_DOWN_W &&
         screen_y >= BTN_DOWN_Y && screen_y < BTN_DOWN_Y + BTN_DOWN_H) {
         btn_down_pressed_ = true;
-        play_sfx(sim::SoundID::NavButtonClick);
+        play_sfx(sim::SoundID::ButtonClick);
         set_selected_index(selected_index_ + 1);
         return;
     }
@@ -224,7 +225,6 @@ void MapSelectScreen::handle_mouse_down(int32_t screen_x, int32_t screen_y, uint
     // Clicking w_map box advances map
     if (screen_x >= W_MAP_X && screen_x < W_MAP_X + W_MAP_W &&
         screen_y >= W_MAP_Y && screen_y < W_MAP_Y + W_MAP_H) {
-        play_sfx(sim::SoundID::NavButtonClick);
         set_selected_index(selected_index_ + 1);
         return;
     }
@@ -232,7 +232,6 @@ void MapSelectScreen::handle_mouse_down(int32_t screen_x, int32_t screen_y, uint
     // Clicking map info box also advances map
     if (screen_x >= INFO_BOX_X && screen_x < INFO_BOX_X + INFO_BOX_W &&
         screen_y >= INFO_BOX_Y && screen_y < INFO_BOX_Y + INFO_BOX_H) {
-        play_sfx(sim::SoundID::NavButtonClick);
         set_selected_index(selected_index_ + 1);
         return;
     }
@@ -240,15 +239,13 @@ void MapSelectScreen::handle_mouse_down(int32_t screen_x, int32_t screen_y, uint
     // Fog of War "On" button
     if (screen_x >= BTN_FOW_ON_X && screen_x < BTN_FOW_ON_X + BTN_FOW_ON_W &&
         screen_y >= BTN_FOW_ON_Y && screen_y < BTN_FOW_ON_Y + BTN_FOW_ON_H) {
-        play_sfx(sim::SoundID::NavButtonClick);
-        set_fog_of_war_enabled(true);
+        set_fog_of_war_enabled(true);   // the Fog of War toggles are silent
         return;
     }
 
     // Fog of War "Off" button
     if (screen_x >= BTN_FOW_OFF_X && screen_x < BTN_FOW_OFF_X + BTN_FOW_OFF_W &&
         screen_y >= BTN_FOW_OFF_Y && screen_y < BTN_FOW_OFF_Y + BTN_FOW_OFF_H) {
-        play_sfx(sim::SoundID::NavButtonClick);
         set_fog_of_war_enabled(false);
         return;
     }
@@ -257,17 +254,16 @@ void MapSelectScreen::handle_mouse_down(int32_t screen_x, int32_t screen_y, uint
     if (screen_x >= BTN_DROP_X && screen_x < BTN_DROP_X + BTN_DROP_W &&
         screen_y >= BTN_DROP_Y && screen_y < BTN_DROP_Y + BTN_DROP_H) {
         btn_drop_pressed_ = true;
-        play_sfx(sim::SoundID::NavButtonClick);
+        play_sfx(sim::SoundID::ButtonClick);
         toggle_player_ready(2);
         return;
     }
 
     // Click on player thumbs inside players box (x in [535, 565])
-    if (screen_x >= 535 && screen_x < 565) {
+    if (screen_x >= PLAYER_THUMB_X - 5 && screen_x < PLAYER_THUMB_X + 25) {
         for (uint8_t i = 0; i < 3; ++i) {
-            int32_t ty = 97 + static_cast<int32_t>(i) * 50;
+            int32_t ty = PLAYER_THUMB_Y + static_cast<int32_t>(i) * PLAYER_ROW_PITCH;
             if (screen_y >= ty && screen_y < ty + 24) {
-                play_sfx(sim::SoundID::NavButtonClick);
                 toggle_player_ready(i);
                 return;
             }
@@ -278,7 +274,7 @@ void MapSelectScreen::handle_mouse_down(int32_t screen_x, int32_t screen_y, uint
     if (screen_x >= BTN_START_X && screen_x < BTN_START_X + BTN_START_W &&
         screen_y >= BTN_START_Y && screen_y < BTN_START_Y + BTN_START_H) {
         btn_start_pressed_ = true;
-        play_sfx(sim::SoundID::NavButtonClick);
+        play_sfx(sim::SoundID::ButtonClick);
         trigger_start();
         return;
     }
@@ -287,7 +283,7 @@ void MapSelectScreen::handle_mouse_down(int32_t screen_x, int32_t screen_y, uint
     if (screen_x >= BTN_QUIT_X && screen_x < BTN_QUIT_X + BTN_QUIT_W &&
         screen_y >= BTN_QUIT_Y && screen_y < BTN_QUIT_Y + BTN_QUIT_H) {
         btn_quit_pressed_ = true;
-        play_sfx(sim::SoundID::NavButtonClick);
+        play_sfx(sim::SoundID::ButtonClick);
         trigger_quit();
         return;
     }
@@ -342,9 +338,8 @@ void MapSelectScreen::render(IRenderer& renderer, const ants::assets::AssetArchi
         renderer.fill_rect(0, 0, 640, 480, ColorRGBA{219, 75, 19, 255});
     }
 
-    // 2. Top Header Leave Game Button at (525, 12)
-    const char* leave_spr = btn_quit_pressed_ ? "bleave3.bmp" : (btn_quit_hovered_ ? "bleave2.bmp" : "bleave1.bmp");
-    renderer.draw_named_sprite(leave_spr, BTN_QUIT_X, BTN_QUIT_Y);
+    // 2. Leave Game button: animations leave1 / leave2 (hover) / leave3 (pressed), absolute coordinates
+    draw_animation_frame0(renderer, archive, btn_quit_pressed_ ? "leave3" : (btn_quit_hovered_ ? "leave2" : "leave1"));
 
     int32_t th = renderer.get_text_height(FontSize::Small);
 
@@ -356,11 +351,9 @@ void MapSelectScreen::render(IRenderer& renderer, const ants::assets::AssetArchi
         renderer.draw_text(cur.display_name, 38, name_y, ColorRGBA{255, 255, 255, 255}, FontSize::Large);
     }
 
-    // Up/Down Stepper Buttons at (226, 303) and (226, 327)
-    const char* up_spr = btn_up_pressed_ ? "up3.bmp" : (btn_up_hovered_ ? "up2.bmp" : "up1.bmp");
-    const char* dn_spr = btn_down_pressed_ ? "down3.bmp" : (btn_down_hovered_ ? "down2.bmp" : "down1.bmp");
-    renderer.draw_named_sprite(up_spr, BTN_UP_X, BTN_UP_Y);
-    renderer.draw_named_sprite(dn_spr, BTN_DOWN_X, BTN_DOWN_Y);
+    // Up/Down stepper buttons: animations up1..3 and down1..3 (up / hover / pressed), absolute coordinates
+    draw_animation_frame0(renderer, archive, btn_up_pressed_ ? "up3" : (btn_up_hovered_ ? "up2" : "up1"));
+    draw_animation_frame0(renderer, archive, btn_down_pressed_ ? "down3" : (btn_down_hovered_ ? "down2" : "down1"));
 
     // 4. Map Info Description inside Map Info box (vertically centered in inner cavity y=377..405, h=29)
     if (selected_index_ >= 0 && selected_index_ < static_cast<int32_t>(maps_.size())) {
@@ -374,60 +367,31 @@ void MapSelectScreen::render(IRenderer& renderer, const ants::assets::AssetArchi
     int32_t stat_y = 445 + (19 - th) / 2;
     renderer.draw_text("Press START when all players' thumbs have appeared.", 38, stat_y, ColorRGBA{255, 255, 255, 255}, FontSize::Small);
 
-    // 6. Players' Status: Animated ant standing facing south (agst301) next to user name
+    // 6. Players' Status, slot 0: the portrait animation agst301 (12 frames, 1650 ms loop) has its origin at (395,115) and
+    // the thumbs-up sprite sits at (540,95); the sprite's own part offsets place the ant relative to that origin.
     std::string display_user = player_name_.empty() ? "Player" : player_name_;
-    const auto* anim_stand = archive.find_animation("agst301");
-    if (anim_stand && !anim_stand->subitems.empty()) {
-        uint32_t total_duration_ms = 0;
-        for (const auto& sub : anim_stand->subitems) {
-            total_duration_ms += (sub.val3 > 0 ? sub.val3 : 150);
-        }
-        if (total_duration_ms == 0) total_duration_ms = 1800;
-
-        uint32_t current_time_ms = SDL_GetTicks() % total_duration_ms;
-        uint32_t accum_ms = 0;
-        const assets::AnimationFrame* active_frame = nullptr;
-        for (const auto& sub : anim_stand->subitems) {
-            uint32_t dur = (sub.val3 > 0 ? sub.val3 : 150);
-            if (current_time_ms >= accum_ms && current_time_ms < accum_ms + dur) {
-                if (!sub.frames.empty()) {
-                    active_frame = &sub.frames[0];
-                }
-                break;
-            }
-            accum_ms += dur;
-        }
-        if (!active_frame && !anim_stand->subitems[0].frames.empty()) {
-            active_frame = &anim_stand->subitems[0].frames[0];
-        }
-
-        if (active_frame) {
+    if (const auto* anim_stand = archive.find_animation("agst301")) {
+        if (!anim_stand->subitems.empty()) {
+            const size_t frame = Renderer::get_anim_subitem_by_time(*anim_stand, SDL_GetTicks());
+            const auto& parts = anim_stand->subitems[frame].frames;
             renderer.set_hud_team(player_team_);
-            renderer.draw_sprite(active_frame->sprite_index, 396 + active_frame->dx, 124 + active_frame->dy);
+            for (size_t k = parts.size(); k-- > 0;) {
+                renderer.draw_sprite(parts[k].sprite_index, PLAYER_PORTRAIT_X + parts[k].dx, PLAYER_PORTRAIT_Y + parts[k].dy);
+            }
             renderer.set_hud_team(0);
         }
-    } else {
-        renderer.set_hud_team(player_team_);
-        renderer.draw_named_sprite("agst301.bmp", 385, 94);
-        renderer.set_hud_team(0);
     }
 
-    int32_t player_y = 101 + (24 - th) / 2;
+    int32_t player_y = PLAYER_THUMB_Y + (24 - th) / 2;
     renderer.draw_text(display_user, 415, player_y, ColorRGBA{255, 255, 255, 255}, FontSize::Small);
-    renderer.draw_named_sprite("thumb1.bmp", 540, 101);
+    renderer.draw_named_sprite("thumb1.bmp", PLAYER_THUMB_X, PLAYER_THUMB_Y);
 
-    // 7. Fog of War On/Off Buttons using authentic sprites
-    if (fog_of_war_) {
-        renderer.draw_named_sprite("optond.bmp", 520, 374);
-        renderer.draw_named_sprite("dbutoffu.bmp", 572, 376);
-    } else {
-        renderer.draw_named_sprite("dbutonu.bmp", 522, 376);
-        renderer.draw_named_sprite("optoffd.bmp", 570, 374);
-    }
+    // 7. Fog of War On / Off (animations d_on1..3, d_off1..3): the chosen one is shown down, the other one up or hover
+    draw_animation_frame0(renderer, archive, fog_of_war_ ? "d_on3" : (btn_fow_on_hovered_ ? "d_on2" : "d_on1"));
+    draw_animation_frame0(renderer, archive, !fog_of_war_ ? "d_off3" : (btn_fow_off_hovered_ ? "d_off2" : "d_off1"));
 
-    // 8. Action Button: START! at (526, 442)
-    const char* start_spr = btn_start_pressed_ ? "bstart3.bmp" : (btn_start_hovered_ ? "bstart2.bmp" : "bstart1.bmp");
-    renderer.draw_named_sprite(start_spr, BTN_START_X, BTN_START_Y);
+    // 8. START! button: animations start1 / start2 (hover) / start3 (pressed), absolute coordinates
+    draw_animation_frame0(renderer, archive, btn_start_pressed_ ? "start3" : (btn_start_hovered_ ? "start2" : "start1"));
 }
 
 } // namespace ants::app

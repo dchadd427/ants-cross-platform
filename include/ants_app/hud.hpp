@@ -260,9 +260,6 @@ public:
 private:
     void render_top_bar(IRenderer& renderer, const assets::AssetArchive& assets, const sim::WorldState& world);
     void render_radar(IRenderer& renderer, const assets::AssetArchive& assets, const sim::WorldState& world, const ViewportCamera& camera);
-    void render_selection_card(IRenderer& renderer, const assets::AssetArchive& assets, const sim::WorldState& world);
-    void render_hatch_panel(IRenderer& renderer, const assets::AssetArchive& assets, const sim::WorldState& world);
-    void render_action_buttons(IRenderer& renderer, const assets::AssetArchive& assets, const sim::WorldState& world);
     void render_news_banner(IRenderer& renderer, const assets::AssetArchive& assets, const sim::WorldState& world);
     void render_quit_dialog(IRenderer& renderer, const assets::AssetArchive& assets);
     void render_quick_help(IRenderer& renderer, const assets::AssetArchive& assets);
@@ -280,6 +277,10 @@ private:
     int32_t selected_base_team_id_{-1};
     std::deque<std::string> chat_log_{};
     sim::OrderType active_order_mode_{sim::OrderType::None};
+
+    // Last known pointer position (drives the hover art of the animation-based controls)
+    int32_t mouse_x_{-1};
+    int32_t mouse_y_{-1};
 
     // Marquee drag selection
     bool is_dragging_{false};
@@ -349,11 +350,12 @@ private:
     bool show_options_{false};
 
     // Options menu controls state
-    float sfx_volume_{0.8f};
-    float music_volume_{0.8f};
+    // Defaults of the original's option screen (Ants.exe 0x10148e6: sound 100, music 65, scroll 50, chat on, quick help on)
+    float sfx_volume_{1.0f};
+    float music_volume_{0.65f};
     float scroll_rate_{0.5f};
     bool chat_enabled_{true};
-    bool quick_help_enabled_{false};
+    bool quick_help_enabled_{true};
     bool opt_ok_button_pressed_{false};
     bool opt_return_button_pressed_{false};
     std::string quick_chat_keys_[4]{

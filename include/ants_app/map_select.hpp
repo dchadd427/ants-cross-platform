@@ -51,15 +51,17 @@ public:
     static constexpr int32_t W_MAP_W = 195;
     static constexpr int32_t W_MAP_H = 39;
 
-    static constexpr int32_t BTN_UP_X = 226;
-    static constexpr int32_t BTN_UP_Y = 303;
-    static constexpr int32_t BTN_UP_W = 46;
-    static constexpr int32_t BTN_UP_H = 22;
+    // Control rectangles are the union of the resting and pressed art of the original animations (their part offsets
+    // are absolute screen coordinates): up1/up3, down1/down3, start1/start3, leave1/leave3, d_on1/d_on3, d_off1/d_off3.
+    static constexpr int32_t BTN_UP_X = 224;
+    static constexpr int32_t BTN_UP_Y = 299;
+    static constexpr int32_t BTN_UP_W = 48;
+    static constexpr int32_t BTN_UP_H = 23;
 
-    static constexpr int32_t BTN_DOWN_X = 226;
-    static constexpr int32_t BTN_DOWN_Y = 327;
-    static constexpr int32_t BTN_DOWN_W = 47;
-    static constexpr int32_t BTN_DOWN_H = 20;
+    static constexpr int32_t BTN_DOWN_X = 225;
+    static constexpr int32_t BTN_DOWN_Y = 323;
+    static constexpr int32_t BTN_DOWN_W = 48;
+    static constexpr int32_t BTN_DOWN_H = 22;
 
     static constexpr int32_t MAPINFO_X = 29;
     static constexpr int32_t MAPINFO_Y = 352;
@@ -88,15 +90,15 @@ public:
     static constexpr int32_t FOW_HEADER_X = 367;
     static constexpr int32_t FOW_HEADER_Y = 376;
 
-    static constexpr int32_t BTN_FOW_ON_X = 520;
-    static constexpr int32_t BTN_FOW_ON_Y = 376;
-    static constexpr int32_t BTN_FOW_ON_W = 36;
-    static constexpr int32_t BTN_FOW_ON_H = 20;
+    static constexpr int32_t BTN_FOW_ON_X = 522;
+    static constexpr int32_t BTN_FOW_ON_Y = 372;
+    static constexpr int32_t BTN_FOW_ON_W = 49;
+    static constexpr int32_t BTN_FOW_ON_H = 24;
 
-    static constexpr int32_t BTN_FOW_OFF_X = 572;
-    static constexpr int32_t BTN_FOW_OFF_Y = 376;
-    static constexpr int32_t BTN_FOW_OFF_W = 46;
-    static constexpr int32_t BTN_FOW_OFF_H = 20;
+    static constexpr int32_t BTN_FOW_OFF_X = 574;
+    static constexpr int32_t BTN_FOW_OFF_Y = 372;
+    static constexpr int32_t BTN_FOW_OFF_W = 49;
+    static constexpr int32_t BTN_FOW_OFF_H = 24;
 
     static constexpr int32_t FOW_TEXT1_X = 368;
     static constexpr int32_t FOW_TEXT1_Y = 400;
@@ -105,14 +107,22 @@ public:
     static constexpr int32_t FOW_TEXT2_Y = 415;
 
     static constexpr int32_t BTN_START_X = 526;
-    static constexpr int32_t BTN_START_Y = 442;
+    static constexpr int32_t BTN_START_Y = 439;
     static constexpr int32_t BTN_START_W = 98;
-    static constexpr int32_t BTN_START_H = 27;
+    static constexpr int32_t BTN_START_H = 28;
 
-    static constexpr int32_t BTN_QUIT_X = 525;
+    static constexpr int32_t BTN_QUIT_X = 524;
     static constexpr int32_t BTN_QUIT_Y = 12;
-    static constexpr int32_t BTN_QUIT_W = 99;
+    static constexpr int32_t BTN_QUIT_W = 100;
     static constexpr int32_t BTN_QUIT_H = 22;
+
+    // The player rows of the Players' Status box: slot i has its portrait origin at (395, 115 + 50 i) and its thumb at
+    // (540, 95 + 50 i) (Ants.exe setup screen, SetPos of the AntSlot and thumb sprites)
+    static constexpr int32_t PLAYER_PORTRAIT_X = 395;
+    static constexpr int32_t PLAYER_PORTRAIT_Y = 115;
+    static constexpr int32_t PLAYER_THUMB_X = 540;
+    static constexpr int32_t PLAYER_THUMB_Y = 95;
+    static constexpr int32_t PLAYER_ROW_PITCH = 50;
 
     // Backward-compatibility aliases
     static constexpr int32_t CARD_X = W_MAP_X;

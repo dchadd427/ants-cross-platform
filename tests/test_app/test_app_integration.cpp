@@ -5907,11 +5907,15 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         ASSERT_FALSE(a1.pos == a2.pos);
     } TEST_END();
 
-    TEST_CASE("12.75: Authentic NavButtonClick Audio Feedback on HUD, MapSelect, and Scorecard") {
+    TEST_CASE("12.75: Original Click Sounds: buttonclick (0) on Buttons, navbuttonclick (89) on Pedestals Only, Silent Toggles") {
+        // The pressed-state animations of the original carry the click: sound 0 (buttonclick.wav) for the top bar, the
+        // send-to buttons, the quit dialog, the setup screen and the results screen; sound 89 (navbuttonclick.wav) only
+        // in the pedestal press animations; the option toggles, breturn3, qh_return3 and qh_start3 are silent; the stop
+        // button carries antstop (61) only.
         ASSERT_EQ(SoundID::NavButtonClick, 89u);
         ASSERT_EQ(SoundID::ButtonClick, 0u);
 
-        // 1. HUD Navigation Button SFX
+        // 1. HUD buttons
         {
             HUD hud;
             hud.init(0);
@@ -5926,118 +5930,100 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
             played_sounds.clear();
             hud.handle_mouse_down(485, 15, SDL_BUTTON_LEFT, sim, camera, 0);
             ASSERT_FALSE(played_sounds.empty());
-            ASSERT_EQ(played_sounds.back(), SoundID::NavButtonClick);
+            ASSERT_EQ(played_sounds.back(), SoundID::ButtonClick);
 
-            // Quick help overlay dismiss
+            // Quick help overlay dismiss: qh_return3 is silent
             played_sounds.clear();
             hud.handle_mouse_down(100, 100, SDL_BUTTON_LEFT, sim, camera, 0);
-            ASSERT_FALSE(played_sounds.empty());
-            ASSERT_EQ(played_sounds.back(), SoundID::NavButtonClick);
+            ASSERT_TRUE(played_sounds.empty());
 
             // Options button (525, 7, 52, 23)
             played_sounds.clear();
             hud.handle_mouse_down(540, 15, SDL_BUTTON_LEFT, sim, camera, 0);
             ASSERT_FALSE(played_sounds.empty());
-            ASSERT_EQ(played_sounds.back(), SoundID::NavButtonClick);
+            ASSERT_EQ(played_sounds.back(), SoundID::ButtonClick);
 
-            // Options dialog Return button (402..455, 425..455)
+            // Options screen: the Chat ON / OFF toggles and the Return button (breturn3) are silent
             played_sounds.clear();
-            hud.handle_mouse_down(420, 440, SDL_BUTTON_LEFT, sim, camera, 0);
-            ASSERT_FALSE(played_sounds.empty());
-            ASSERT_EQ(played_sounds.back(), SoundID::NavButtonClick);
-            hud.handle_mouse_up(420, 440, SDL_BUTTON_LEFT, sim, camera, 0);
+            hud.handle_mouse_down(126, 300, SDL_BUTTON_LEFT, sim, camera, 0);    // chat ON toggle
+            hud.handle_mouse_down(175, 300, SDL_BUTTON_LEFT, sim, camera, 0);    // chat OFF toggle
+            hud.handle_mouse_down(400, 440, SDL_BUTTON_LEFT, sim, camera, 0);    // Return button (351..449, 425..451)
+            ASSERT_TRUE(played_sounds.empty());
+            hud.handle_mouse_up(400, 440, SDL_BUTTON_LEFT, sim, camera, 0);
 
             // Quit button (579, 7, 46, 23) -> opens quit dialog
             played_sounds.clear();
             hud.handle_mouse_down(590, 15, SDL_BUTTON_LEFT, sim, camera, 0);
             ASSERT_FALSE(played_sounds.empty());
-            ASSERT_EQ(played_sounds.back(), SoundID::NavButtonClick);
+            ASSERT_EQ(played_sounds.back(), SoundID::ButtonClick);
             hud.handle_mouse_up(590, 15, SDL_BUTTON_LEFT, sim, camera, 0);
 
-            // Quit dialog "No" button (296, 264, 49, 24)
+            // Quit dialog "No" button (292, 260, 49, 24): no3 carries sound 0
             played_sounds.clear();
-            hud.handle_mouse_down(310, 275, SDL_BUTTON_LEFT, sim, camera, 0);
+            hud.handle_mouse_down(310, 270, SDL_BUTTON_LEFT, sim, camera, 0);
             ASSERT_FALSE(played_sounds.empty());
-            ASSERT_EQ(played_sounds.back(), SoundID::NavButtonClick);
-            hud.handle_mouse_up(310, 275, SDL_BUTTON_LEFT, sim, camera, 0);
+            ASSERT_EQ(played_sounds.back(), SoundID::ButtonClick);
+            hud.handle_mouse_up(310, 270, SDL_BUTTON_LEFT, sim, camera, 0);
 
             // Spawn and select friendly ant
             uint32_t a_id = sim.spawn_unit(0, AntType::Worker, TileCoord{10, 10});
             hud.select_ant(a_id, false);
 
-            // Move Pedestal (488, 140, 53, 86)
+            // Move Pedestal: the press animation butmov2d carries sound 89
             played_sounds.clear();
             hud.handle_mouse_down(500, 150, SDL_BUTTON_LEFT, sim, camera, 0);
             ASSERT_FALSE(played_sounds.empty());
             ASSERT_EQ(played_sounds.back(), SoundID::NavButtonClick);
 
-            // Stop button (602, 176, 34, 50)
+            // Stop button (595, 180, 32, 50): antstop (61) and no click
             played_sounds.clear();
             hud.handle_mouse_down(610, 190, SDL_BUTTON_LEFT, sim, camera, 0);
             ASSERT_FALSE(played_sounds.empty());
             bool saw_nav = false;
+            bool saw_stop = false;
             for (auto s : played_sounds) {
-                if (s == SoundID::NavButtonClick) saw_nav = true;
+                if (s == SoundID::NavButtonClick || s == SoundID::ButtonClick) saw_nav = true;
+                if (s == SoundID::AntStop) saw_stop = true;
             }
-            ASSERT_TRUE(saw_nav);
+            ASSERT_FALSE(saw_nav);
+            ASSERT_TRUE(saw_stop);
 
-            // Chat [All] button (532, 443, 44, 24)
+            // Chat [All] button (532, 443, 44, 24): butalld carries sound 0
             played_sounds.clear();
             hud.handle_mouse_down(545, 450, SDL_BUTTON_LEFT, sim, camera, 0);
             ASSERT_FALSE(played_sounds.empty());
-            ASSERT_EQ(played_sounds.back(), SoundID::NavButtonClick);
+            ASSERT_EQ(played_sounds.back(), SoundID::ButtonClick);
         }
 
-        // 2. MapSelectScreen Button SFX
+        // 2. MapSelectScreen buttons
         {
             MapSelectScreen screen;
             std::vector<uint32_t> played_sounds;
             screen.set_on_play_sfx([&](uint32_t s) { played_sounds.push_back(s); });
 
-            // Up button
-            played_sounds.clear();
-            screen.handle_mouse_down(MapSelectScreen::BTN_UP_X + 10, MapSelectScreen::BTN_UP_Y + 10, SDL_BUTTON_LEFT);
-            ASSERT_FALSE(played_sounds.empty());
-            ASSERT_EQ(played_sounds.back(), SoundID::NavButtonClick);
-
-            // Down button
-            played_sounds.clear();
-            screen.handle_mouse_down(MapSelectScreen::BTN_DOWN_X + 10, MapSelectScreen::BTN_DOWN_Y + 10, SDL_BUTTON_LEFT);
-            ASSERT_FALSE(played_sounds.empty());
-            ASSERT_EQ(played_sounds.back(), SoundID::NavButtonClick);
-
-            // FOW ON button
-            played_sounds.clear();
-            screen.handle_mouse_down(MapSelectScreen::BTN_FOW_ON_X + 5, MapSelectScreen::BTN_FOW_ON_Y + 5, SDL_BUTTON_LEFT);
-            ASSERT_FALSE(played_sounds.empty());
-            ASSERT_EQ(played_sounds.back(), SoundID::NavButtonClick);
-
-            // FOW OFF button
-            played_sounds.clear();
-            screen.handle_mouse_down(MapSelectScreen::BTN_FOW_OFF_X + 5, MapSelectScreen::BTN_FOW_OFF_Y + 5, SDL_BUTTON_LEFT);
-            ASSERT_FALSE(played_sounds.empty());
-            ASSERT_EQ(played_sounds.back(), SoundID::NavButtonClick);
-
-            // Drop button
-            played_sounds.clear();
-            screen.handle_mouse_down(MapSelectScreen::BTN_DROP_X + 10, MapSelectScreen::BTN_DROP_Y + 10, SDL_BUTTON_LEFT);
-            ASSERT_FALSE(played_sounds.empty());
-            ASSERT_EQ(played_sounds.back(), SoundID::NavButtonClick);
-
-            // Quit button
-            played_sounds.clear();
-            screen.handle_mouse_down(MapSelectScreen::BTN_QUIT_X + 10, MapSelectScreen::BTN_QUIT_Y + 10, SDL_BUTTON_LEFT);
-            ASSERT_FALSE(played_sounds.empty());
-            ASSERT_EQ(played_sounds.back(), SoundID::NavButtonClick);
-
-            // Start button
-            played_sounds.clear();
-            screen.handle_mouse_down(MapSelectScreen::BTN_START_X + 10, MapSelectScreen::BTN_START_Y + 10, SDL_BUTTON_LEFT);
-            ASSERT_FALSE(played_sounds.empty());
-            ASSERT_EQ(played_sounds.back(), SoundID::NavButtonClick);
+            struct Case { int32_t x; int32_t y; bool silent; };
+            const Case cases[] = {
+                { MapSelectScreen::BTN_UP_X + 10, MapSelectScreen::BTN_UP_Y + 10, false },
+                { MapSelectScreen::BTN_DOWN_X + 10, MapSelectScreen::BTN_DOWN_Y + 10, false },
+                { MapSelectScreen::BTN_FOW_ON_X + 5, MapSelectScreen::BTN_FOW_ON_Y + 5, true },
+                { MapSelectScreen::BTN_FOW_OFF_X + 5, MapSelectScreen::BTN_FOW_OFF_Y + 5, true },
+                { MapSelectScreen::BTN_DROP_X + 10, MapSelectScreen::BTN_DROP_Y + 10, false },
+                { MapSelectScreen::BTN_QUIT_X + 10, MapSelectScreen::BTN_QUIT_Y + 10, false },
+                { MapSelectScreen::BTN_START_X + 10, MapSelectScreen::BTN_START_Y + 10, false },
+            };
+            for (const auto& c : cases) {
+                played_sounds.clear();
+                screen.handle_mouse_down(c.x, c.y, SDL_BUTTON_LEFT);
+                if (c.silent) {
+                    ASSERT_TRUE(played_sounds.empty());
+                } else {
+                    ASSERT_FALSE(played_sounds.empty());
+                    ASSERT_EQ(played_sounds.back(), SoundID::ButtonClick);
+                }
+            }
         }
 
-        // 3. ScorecardModal Button SFX
+        // 3. ScorecardModal leave button: leave3 carries sound 0
         {
             ScorecardModal modal;
             MatchResult mr{};
@@ -6046,11 +6032,10 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
             std::vector<uint32_t> played_sounds;
             modal.set_on_play_sfx([&](uint32_t s) { played_sounds.push_back(s); });
 
-            // Leave game button (525..625, 12..44)
             played_sounds.clear();
             modal.handle_mouse_down(550, 20);
             ASSERT_FALSE(played_sounds.empty());
-            ASSERT_EQ(played_sounds.back(), SoundID::NavButtonClick);
+            ASSERT_EQ(played_sounds.back(), SoundID::ButtonClick);
         }
     } TEST_END();
 
@@ -6906,10 +6891,10 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
 
     TEST_CASE("12.108: Version Invariant & Fog of War Cursor Concealment Parity") {
         // 1. Verify semantic versioning components
-        ASSERT_EQ(ants::VERSION_STRING, "v0.0.29");
+        ASSERT_EQ(ants::VERSION_STRING, "v0.0.30");
         ASSERT_EQ(ants::VERSION_MAJOR, 0);
         ASSERT_EQ(ants::VERSION_MINOR, 0);
-        ASSERT_EQ(ants::VERSION_PATCH, 29);
+        ASSERT_EQ(ants::VERSION_PATCH, 30);
 
         // 2. Setup simulation world with Fog of War enabled
         SimulationEngine sim;

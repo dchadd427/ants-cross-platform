@@ -1,5 +1,6 @@
 #include "ants_app/scorecard.hpp"
 #include "ants_app/renderer.hpp"
+#include "ants_app/ui_anim.hpp"
 
 #include <algorithm>
 #include <iostream>
@@ -70,7 +71,7 @@ bool ScorecardModal::handle_mouse_down(int32_t x, int32_t y) {
     if (x >= QUIT_BTN_X && x < (QUIT_BTN_X + QUIT_BTN_W) &&
         y >= QUIT_BTN_Y && y < (QUIT_BTN_Y + QUIT_BTN_H)) {
         quit_pressed_ = true;
-        play_sfx(sim::SoundID::NavButtonClick);
+        play_sfx(sim::SoundID::ButtonClick);   // leave3 carries sound 0 (buttonclick.wav)
         return true;
     }
 
@@ -115,9 +116,8 @@ void ScorecardModal::render(IRenderer& renderer, const assets::AssetArchive& ass
         renderer.fill_rect(0, 0, 640, 480, assets::ColorRGBA{219, 75, 19, 255});
     }
 
-    // 2. Top-Right "Leave Game" button at (525, 12)
-    const char* leave_spr = quit_pressed_ ? "bleave3.bmp" : (quit_hovered_ ? "bleave2.bmp" : "bleave1.bmp");
-    renderer.draw_named_sprite(leave_spr, QUIT_BTN_X, QUIT_BTN_Y);
+    // 2. Top-right "Leave Game" button: animations leave1 / leave2 (hover) / leave3 (pressed), absolute coordinates
+    draw_animation_frame0(renderer, assets, quit_pressed_ ? "leave3" : (quit_hovered_ ? "leave2" : "leave1"));
 
     // 3. Winner Row (Inside Winner Box at y=222..275)
     int32_t th = renderer.get_text_height(FontSize::Small);

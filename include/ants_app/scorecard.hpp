@@ -45,10 +45,11 @@ public:
     static constexpr int32_t COL_HATCHED_X     = 579;
 
     // Interactive button positions: Leave Game button (bleave1.bmp at 525, 12)
-    static constexpr int32_t QUIT_BTN_X        = 525;
+    // Union of the resting (leave1 (525,12) 99x22) and the pressed (leave3 (524,14) 98x20) art
+    static constexpr int32_t QUIT_BTN_X        = 524;
     static constexpr int32_t QUIT_BTN_Y        = 12;
     static constexpr int32_t QUIT_BTN_W        = 100;
-    static constexpr int32_t QUIT_BTN_H        = 28;
+    static constexpr int32_t QUIT_BTN_H        = 22;
 
     ScorecardModal();
     ~ScorecardModal() = default;

@@ -1,6 +1,7 @@
 #include "ants_app/hud.hpp"
 #include "ants_sim/prng.hpp"
 #include "ants_app/renderer.hpp"
+#include "ants_app/ui_anim.hpp"
 
 #include <cmath>
 #include <algorithm>
@@ -13,14 +14,6 @@ namespace ants::app {
 
 namespace {
 
-// Authentic Team color RGB palettes
-constexpr assets::ColorRGBA TEAM_COLORS[4] = {
-    {83, 147, 43, 255},   // 0: Green
-    {251, 51, 91, 255},   // 1: Red
-    {119, 175, 239, 255}, // 2: Blue
-    {79, 87, 111, 255}    // 3: Black
-};
-
 // Authentic Team Score Box Background Colors from Ants.exe VA 0x100DA90..0x100DAD0:
 // Team 0 (Green in remake, Team 3 in Ants.exe): COLORREF 0x002F4307 -> RGB { 7, 67, 47 }
 // Team 1 (Red in remake, Team 2 in Ants.exe):   COLORREF 0x00000077 -> RGB { 119, 0, 0 }
@@ -32,26 +25,6 @@ constexpr assets::ColorRGBA SCORE_BG_COLORS[4] = {
     { 43,  39, 107, 255}, // 2: Blue
     { 39,  39,  59, 255}  // 3: Black
 };
-
-const char* ANT_TYPE_NAMES[] = {
-    "Worker Ant",
-    "Bomber Ant",
-    "Fire Ant",
-    "Thief Ant",
-    "Combat Ant",
-    "Swimmer Ant"
-};
-
-// Draws frame 0 of a Table-4 animation at (x, y): every part at its own offset, last stored part first (original
-// order). Used for glyph animations such as dig0..dig9 whose parts carry a (dx, dy) offset.
-void draw_animation_frame0(IRenderer& renderer, const assets::AssetArchive& archive, const char* name, int32_t x, int32_t y) {
-    const auto* seq = archive.find_animation(name);
-    if (!seq || seq->subitems.empty()) return;
-    const auto& sub = seq->subitems[0];
-    for (size_t k = sub.frames.size(); k-- > 0;) {
-        renderer.draw_sprite(sub.frames[k].sprite_index, x + sub.frames[k].dx, y + sub.frames[k].dy);
-    }
-}
 
 // Unsigned number as the original draws scores (Ants.exe FUN_01010452 without the sign flag): a 6-slot field of 9 px
 // digit slots starting at x, leading zeros skipped but still advancing (so the number is right-aligned in the field).
@@ -105,6 +78,20 @@ uint8_t minimap_class(const sim::TileCell& cell) {
         case sim::SurfaceType::Gravel: return 4;
         default:                       return 0;
     }
+}
+
+// Option-screen controls (absolute screen coordinates): each rectangle is the union of the resting and the pressed
+// art of the control's animations (breturn1/3, op_conu/op_cond, op_coffu/op_coffd, op_honu/op_hond, op_hoffu/op_hoffd)
+constexpr UIRect kOptReturn{351, 425, 98, 26};
+constexpr UIRect kOptChatOn{102, 289, 49, 24};
+constexpr UIRect kOptChatOff{151, 289, 49, 24};
+constexpr UIRect kOptHelpOn{355, 289, 49, 24};
+constexpr UIRect kOptHelpOff{404, 289, 49, 24};
+
+// Slider thumb (slidd.bmp): x = 188 + min(184, 185 * v / 99) for v = 0..100, on the track rows 178 / 215 / 252
+int32_t slider_thumb_x(float value) {
+    const int32_t v = static_cast<int32_t>(std::lround(std::clamp(value, 0.0f, 1.0f) * 100.0f));
+    return 188 + std::min<int32_t>(184, 185 * v / 99);
 }
 
 } // anonymous namespace
@@ -550,22 +537,19 @@ void HUD::render(IRenderer& renderer, const assets::AssetArchive& assets,
         draw_animation_frame0(renderer, assets, "chatcovr", 0, 0);
     }
 
-    // Bottom bar x480y466.bmp (160x25) at (480, 436) containing "Send to:" and [All] / [Team] buttons
+    // "Send to:" buttons (animations butall*, butals*): up / hover ("r" label over the up art) / pressed
+    auto send_button = [&](bool down, bool hovered, const char* up, const char* hover, const char* pressed) {
+        draw_animation_frame0(renderer, assets, down ? pressed : (hovered ? hover : up));
+    };
     if (!is_on_team_) {
         // In FFA or non-team mode, only [All] is active/shown
-        const char* all_spr = send_to_button_.is_pressed ? "butalld.bmp"
-                            : (send_to_button_.is_hovered ? "butallr.bmp" : "butallu.bmp");
-        renderer.draw_named_sprite(all_spr, 532, 443);
+        send_button(send_to_button_.is_pressed, send_to_button_.is_hovered, "butallu", "butallr", "butalld");
     } else {
-        // When on a team, display both [All] and [Team] with active state
-        const char* all_spr = (send_to_button_.is_pressed || (send_to_all_ && !team_button_.is_pressed))
-                            ? "butalld.bmp"
-                            : (send_to_button_.is_hovered ? "butallr.bmp" : "butallu.bmp");
-        const char* team_spr = (team_button_.is_pressed || (!send_to_all_ && !send_to_button_.is_pressed))
-                             ? "butteamd.bmp"
-                             : (team_button_.is_hovered ? "butteamr.bmp" : "butteamu.bmp");
-        renderer.draw_named_sprite(all_spr, 532, 443);
-        renderer.draw_named_sprite(team_spr, 579, 443);
+        // When on a team, the chosen destination is shown down
+        const bool all_down = send_to_button_.is_pressed || (send_to_all_ && !team_button_.is_pressed);
+        const bool team_down = team_button_.is_pressed || (!send_to_all_ && !send_to_button_.is_pressed);
+        send_button(all_down, send_to_button_.is_hovered, "butallu", "butallr", "butalld");
+        send_button(team_down, team_button_.is_hovered, "butalsu", "butalsr", "butalsd");
     }
 
     // Vertical right border strip x521y254.bmp (19x182) placed at x=621, y=254 (seals right screen edge)
@@ -626,16 +610,23 @@ void HUD::render_top_bar(IRenderer& renderer, const assets::AssetArchive& archiv
     int32_t label_y = 4 + (14 - label_h) / 2;
     renderer.draw_text(my_label, label_x, label_y, {255, 255, 255, 255}, FontSize::Small);
 
-    // Top Header Buttons feedback (Help at 476, 7; Options at 525, 7; Quit at 579, 7)
-    // Note: In unpressed state, Help/Options/Quit are already pre-rendered inside x0y0.bmp.
+    // Top-bar buttons (animations buthlp*, butopt*, butqit*; absolute coordinates): the resting art is already part of
+    // the top bar image, hovering draws the small "r" label over it and the pressed art replaces it. A button stays down
+    // while the screen it opened is showing.
     if (help_button_.is_pressed || show_quick_help_) {
-        renderer.draw_named_sprite("buthelpd.bmp", 476, 7);
+        draw_animation_frame0(renderer, archive, "buthlpd");
+    } else if (help_button_.is_hovered) {
+        draw_animation_frame0(renderer, archive, "buthlpr");
     }
     if (options_button_.is_pressed || show_options_) {
-        renderer.draw_named_sprite("butoptd.bmp", 525, 7);
+        draw_animation_frame0(renderer, archive, "butoptd");
+    } else if (options_button_.is_hovered) {
+        draw_animation_frame0(renderer, archive, "butoptr");
     }
     if (quit_button_.is_pressed || show_quit_dialog_) {
-        renderer.draw_named_sprite("butquitd.bmp", 579, 7);
+        draw_animation_frame0(renderer, archive, "butqitd");
+    } else if (quit_button_.is_hovered) {
+        draw_animation_frame0(renderer, archive, "butqitr");
     }
 }
 
@@ -764,177 +755,6 @@ void HUD::render_radar(IRenderer& renderer, const assets::AssetArchive& archive,
     }
 }
 
-void HUD::render_selection_card(IRenderer& renderer, const assets::AssetArchive&, const sim::WorldState& world) {
-    // Card panel background: x480y126.bmp (160x128)
-    renderer.draw_named_sprite("x480y126.bmp", CARD_X, CARD_Y);
-
-    const sim::AntSnapshot* sel = nullptr;
-    if (selected_ant_id_ != 0) {
-        for (const auto& a : world.ants) {
-            if (a.id == selected_ant_id_) { sel = &a; break; }
-        }
-    }
-
-    if (!sel) {
-        if (selected_base_team_id_ >= 0) {
-            // Anthill Base Selection Card
-            static const char* hill_sprites[4] = { "GHILL_s.bmp", "rhill_s.bmp", "blhill_s.bmp", "bkhill_s.bmp" };
-            static const char* hill_names[4] = { "Green Anthill", "Red Anthill", "Blue Anthill", "Black Anthill" };
-            uint8_t tid = static_cast<uint8_t>(selected_base_team_id_ % 4);
-
-            renderer.draw_named_sprite("wtype.bmp", 488, 130);
-            renderer.draw_text(hill_names[tid], 505, 133, TEAM_COLORS[tid]);
-
-            // Anthill Portrait
-            renderer.draw_named_sprite(hill_sprites[tid], 530, 145);
-
-            // Eggs & Score status
-            uint32_t eggs = (tid < world.player_eggs.size()) ? world.player_eggs[tid] : 0;
-            int32_t score = (tid < world.player_scores.size()) ? world.player_scores[tid] : 0;
-
-            renderer.draw_named_sprite("wstatus.bmp", 488, 206);
-            std::string base_status = (tid == local_player_id_) ? "Home Colony" : "Colony Base";
-            renderer.draw_text(base_status, 510, 206, {255, 255, 255, 255});
-            renderer.draw_text("Eggs: " + std::to_string(eggs) + "  Food: " + std::to_string(score), 496, 192, {255, 215, 0, 255});
-            return;
-        }
-
-        // No selection: Render authentic chat log / news box
-        renderer.draw_named_sprite("wchat.bmp", 488, 135);
-        int32_t ty = 140;
-        constexpr int32_t TOP_VISIBLE_LINES = 7;
-        int32_t total_l = static_cast<int32_t>(chat_log_.size());
-        int32_t max_top_scroll = std::max(0, total_l - TOP_VISIBLE_LINES);
-        int32_t top_scroll = std::clamp(chat_scroll_offset_, 0, max_top_scroll);
-        int32_t start_idx = (total_l > TOP_VISIBLE_LINES) ? (total_l - TOP_VISIBLE_LINES - top_scroll) : 0;
-        int32_t end_idx = std::min(total_l, start_idx + TOP_VISIBLE_LINES);
-        for (int32_t i = start_idx; i < end_idx; ++i) {
-            renderer.draw_text(chat_log_[static_cast<size_t>(i)], 494, ty, {20, 50, 40, 255});
-            ty += 13;
-        }
-        return;
-    }
-
-    // Title header: wtype.bmp at (488, 130)
-    renderer.draw_named_sprite("wtype.bmp", 488, 130);
-    if (selected_ant_ids_.size() > 1) {
-        std::string grp_text = "Group (" + std::to_string(selected_ant_ids_.size()) + ")";
-        renderer.draw_text(grp_text, 505, 133, {255, 255, 255, 255});
-    } else {
-        uint8_t type_idx = static_cast<uint8_t>(sel->type);
-        if (type_idx < 6) {
-            renderer.draw_text(ANT_TYPE_NAMES[type_idx], 505, 133, {255, 255, 255, 255});
-        }
-    }
-
-    // Portrait frame at (525, 145)
-    std::string portrait_name = "agst301.bmp";
-    switch (sel->type) {
-        case sim::AntType::Worker:  portrait_name = "agst301.bmp"; break;
-        case sim::AntType::Bomber:  portrait_name = "abst301.bmp"; break;
-        case sim::AntType::Fire:    portrait_name = "afst301.bmp"; break;
-        case sim::AntType::Combat:  portrait_name = "acst301.bmp"; break;
-        case sim::AntType::Swimmer: portrait_name = "asst301.bmp"; break;
-        case sim::AntType::Thief:   portrait_name = "atst301.bmp"; break;
-    }
-    renderer.draw_named_sprite(portrait_name, 525, 145);
-
-    // Lunchbox / Carrying icon
-    if (sel->is_holding || sel->carried_points > 0) {
-        renderer.draw_named_sprite("lunchicon.bmp", 592, 145);
-        if (sel->carried_points > 0) {
-            renderer.draw_text("+" + std::to_string(sel->carried_points), 592, 185, {255, 215, 0, 255});
-        }
-    }
-
-    // Health Bar at (496, 192)
-    renderer.fill_rect(496, 192, 128, 8, {40, 40, 40, 255});
-    float frac = std::clamp(static_cast<float>(sel->hp) / static_cast<float>(sel->max_hp > 0 ? sel->max_hp : 10), 0.0f, 1.0f);
-    int32_t fill_w = static_cast<int32_t>(frac * 128.0f);
-
-    assets::ColorRGBA hp_color = {0, 200, 0, 255}; // Green
-    if (sel->hp <= 3) hp_color = {220, 30, 30, 255}; // Red
-    else if (sel->hp <= 7) hp_color = {220, 200, 0, 255}; // Yellow
-
-    if (fill_w > 0) renderer.fill_rect(496, 192, fill_w, 8, hp_color);
-    renderer.draw_rect(496, 192, 128, 8, {100, 100, 100, 255});
-
-    // Action status: wstatus.bmp at (488, 206)
-    renderer.draw_named_sprite("wstatus.bmp", 488, 206);
-    std::string status_str = "Idle";
-    if (sel->is_drowning) status_str = "Drowning";
-    else if (sel->is_airborne) status_str = "Airborne";
-    else if (sel->is_stunned) status_str = "Stunned";
-    else if (sel->is_underground) status_str = "In Base";
-    else if (sel->is_swimming) status_str = "Swimming";
-    else if (sel->anim_state == 1 || sel->anim_state == 2) status_str = "Moving";
-    else if (sel->anim_state == 3) status_str = "Attacking";
-    else if (sel->is_holding) status_str = "Carrying Food";
-
-    renderer.draw_text(status_str, 510, 206, {16, 40, 24, 255});
-}
-
-void HUD::render_hatch_panel(IRenderer& renderer, const assets::AssetArchive&, const sim::WorldState& world) {
-    // Fill right panel backing with authentic HUD frame color
-    static const assets::ColorRGBA hud_bg_colors[4] = {
-        {43, 107, 95, 255},  // Green (Player 0)
-        {115, 35, 35, 255},  // Red (Player 1)
-        {35, 65, 115, 255},  // Blue (Player 2)
-        {48, 48, 52, 255}    // Black (Player 3)
-    };
-    renderer.fill_rect(480, 254, 160, 212, hud_bg_colors[local_player_id_ % 4]);
-
-    // Status label at (480, 253)
-    renderer.draw_named_sprite("wstatus.bmp", 480, 253);
-    renderer.draw_text("Home Colony.", 486, 253, {16, 40, 24, 255});
-
-    // Decorative relief column
-    renderer.draw_named_sprite("x521y254.bmp", 521, 275);
-
-    // Hatch label and button
-    std::string btn_name = hatch_button_.is_pressed ? "buthatd.bmp" : "buthatup.bmp";
-    renderer.draw_named_sprite("labhatch.bmp", 492, 282);
-    renderer.draw_named_sprite(btn_name, 532, 275);
-
-    // Cost text: 200 pts
-    assets::ColorRGBA cost_color = hatch_button_.is_enabled ? assets::ColorRGBA{255, 215, 0, 255} : assets::ColorRGBA{130, 130, 130, 255};
-    renderer.draw_text("200 pts", 562, 282, cost_color);
-
-    // Egg display: authentic egg.bmp (12x16)
-    uint32_t eggs = (local_player_id_ < world.player_eggs.size()) ? world.player_eggs[local_player_id_] : 0;
-    renderer.draw_named_sprite("egg.bmp", 495, 320);
-    renderer.draw_text("Eggs: " + std::to_string(eggs), 518, 322, {255, 255, 255, 255});
-
-    // Divider and bottom border
-    renderer.draw_named_sprite("x480y400.bmp", 480, 400);
-    renderer.draw_named_sprite("x480y466.bmp", 480, 436);
-    renderer.draw_named_sprite("x521y254.bmp", 621, 254);
-}
-
-void HUD::render_action_buttons(IRenderer& renderer, const assets::AssetArchive&, const sim::WorldState&) {
-    static const char* up_names[7] = {
-        "butmovu.bmp", "butattu.bmp", "butbomu.bmp", "butfireu.bmp", "butdipu.bmp", "butthfu.bmp", "butcanu.bmp"
-    };
-    static const char* dn_names[7] = {
-        "butmovd.bmp", "butattd.bmp", "butbomd.bmp", "butfireu.bmp", "butdipd.bmp", "butthfd.bmp", "butcand.bmp"
-    };
-    static const char* lab_names[7] = {
-        "labmov.bmp", "labatt.bmp", "labbom.bmp", "labfire.bmp", "labdib.bmp", "labthf.bmp", "labcan.bmp"
-    };
-
-    for (size_t i = 0; i < action_buttons_.size(); ++i) {
-        const auto& btn = action_buttons_[i];
-        const char* name = (btn.is_pressed || btn.is_active) ? dn_names[i] : up_names[i];
-        renderer.draw_named_sprite(name, btn.x, btn.y);
-        renderer.draw_named_sprite(lab_names[i], btn.x + 4, btn.y + 6);
-
-        // Active selection highlight border
-        if (btn.is_active) {
-            renderer.draw_rect(btn.x - 1, btn.y - 1, btn.w + 2, btn.h + 2, {255, 215, 0, 255});
-        }
-    }
-}
-
 void HUD::render_news_banner(IRenderer& renderer, const assets::AssetArchive& assets, const sim::WorldState& world) {
     // Bottom banner background: x17y461.bmp (623x19)
 
@@ -1009,12 +829,13 @@ void HUD::render_quit_dialog(IRenderer& renderer, const assets::AssetArchive& as
     renderer.draw_text(prompt, text_x, 180, ColorRGBA{31, 23, 51, 255}, FontSize::Large);
 
     // Yes button at (180, 260)
-    const char* yes_spr = yes_button_.is_pressed ? "yes3.bmp" : (yes_button_.is_active ? "yes2.bmp" : "yes1.bmp");
-    renderer.draw_named_sprite(yes_spr, yes_button_.x, yes_button_.y);
+    // yes1/2/3 and no1/2/3 are placed with SetPos, so their part offsets are relative to the button origin
+    draw_animation_frame0(renderer, assets, yes_button_.is_pressed ? "yes3" : (yes_button_.is_active ? "yes2" : "yes1"),
+                          yes_button_.x, yes_button_.y);
 
     // No button at (292, 260)
-    const char* no_spr = no_button_.is_pressed ? "no3.bmp" : (no_button_.is_active ? "no2.bmp" : "no1.bmp");
-    renderer.draw_named_sprite(no_spr, no_button_.x, no_button_.y);
+    draw_animation_frame0(renderer, assets, no_button_.is_pressed ? "no3" : (no_button_.is_active ? "no2" : "no1"),
+                          no_button_.x, no_button_.y);
 }
 
 void HUD::render_match_start_modal(IRenderer& renderer, const assets::AssetArchive& assets) {
@@ -1094,7 +915,8 @@ void HUD::render_quick_help(IRenderer& renderer, const assets::AssetArchive& ass
     // In-game quick help (Ants.exe 0x10145d2, qh_screen): a 32-part full-screen composite (frame pieces plus qh2 at
     // (267,10) and qh1 at (10,9)) drawn over the live game, and the Return button qh_return1 at (529,437).
     draw_animation_frame0(renderer, assets, "qh_screen", 0, 0);
-    draw_animation_frame0(renderer, assets, "qh_return1", 0, 0);
+    const bool over_return = UIRect{529, 437, 98, 26}.contains(mouse_x_, mouse_y_);
+    draw_animation_frame0(renderer, assets, over_return ? "qh_return2" : "qh_return1", 0, 0);
 }
 
 void HUD::render_options_dialog(IRenderer& renderer, const assets::AssetArchive& assets) {
@@ -1113,33 +935,20 @@ void HUD::render_options_dialog(IRenderer& renderer, const assets::AssetArchive&
         renderer.draw_named_sprite("optcap1.bmp", 44, 39);
     }
 
-    // 4. Sliders (Sound Volume, Music Volume, Map Scroll Rate)
-    // Track span: x = 188..373 (usable travel range 185px)
-    int32_t sfx_thumb_x = 188 + static_cast<int32_t>(std::clamp(sfx_volume_, 0.0f, 1.0f) * 185.0f);
-    int32_t music_thumb_x = 188 + static_cast<int32_t>(std::clamp(music_volume_, 0.0f, 1.0f) * 185.0f);
-    int32_t scroll_thumb_x = 188 + static_cast<int32_t>(std::clamp(scroll_rate_, 0.0f, 1.0f) * 185.0f);
+    // Sliders (Sound Volume, Music Volume, Map Scroll Rate): the thumb slidd.bmp sits on the track rows 178 / 215 / 252
+    renderer.draw_named_sprite("slidd.bmp", slider_thumb_x(sfx_volume_), 178);
+    renderer.draw_named_sprite("slidd.bmp", slider_thumb_x(music_volume_), 215);
+    renderer.draw_named_sprite("slidd.bmp", slider_thumb_x(scroll_rate_), 252);
 
-    renderer.draw_named_sprite("slidd.bmp", sfx_thumb_x, 179);
-    renderer.draw_named_sprite("slidd.bmp", music_thumb_x, 216);
-    renderer.draw_named_sprite("slidd.bmp", scroll_thumb_x, 253);
-
-    // 5. Chat Toggle Buttons (ON at 96, 287 / OFF at 146, 288)
-    if (chat_enabled_) {
-        renderer.draw_named_sprite("optond.bmp", 96, 287);
-        renderer.draw_named_sprite("dbutoffu.bmp", 146, 288);
-    } else {
-        renderer.draw_named_sprite("dbutonu.bmp", 96, 287);
-        renderer.draw_named_sprite("optoffd.bmp", 146, 288);
-    }
-
-    // 6. Quick Help Toggle Buttons (ON at 358, 287 / OFF at 408, 288)
-    if (quick_help_enabled_) {
-        renderer.draw_named_sprite("optond.bmp", 358, 287);
-        renderer.draw_named_sprite("dbutoffu.bmp", 408, 288);
-    } else {
-        renderer.draw_named_sprite("dbutonu.bmp", 358, 287);
-        renderer.draw_named_sprite("optoffd.bmp", 408, 288);
-    }
+    // Toggles: the chosen one is shown down (with its hover variant), the other one up (op_con*, op_coff*, op_hon*, op_hoff*)
+    const bool over_chat_on = kOptChatOn.contains(mouse_x_, mouse_y_);
+    const bool over_chat_off = kOptChatOff.contains(mouse_x_, mouse_y_);
+    const bool over_help_on = kOptHelpOn.contains(mouse_x_, mouse_y_);
+    const bool over_help_off = kOptHelpOff.contains(mouse_x_, mouse_y_);
+    draw_animation_frame0(renderer, assets, chat_enabled_ ? (over_chat_on ? "op_condr" : "op_cond") : (over_chat_on ? "op_conr" : "op_conu"));
+    draw_animation_frame0(renderer, assets, !chat_enabled_ ? (over_chat_off ? "op_coffdr" : "op_coffd") : (over_chat_off ? "op_coffr" : "op_coffu"));
+    draw_animation_frame0(renderer, assets, quick_help_enabled_ ? (over_help_on ? "optondr" : "op_hond") : (over_help_on ? "op_honr" : "op_honu"));
+    draw_animation_frame0(renderer, assets, !quick_help_enabled_ ? (over_help_off ? "op_hoffdr" : "op_hoffd") : (over_help_off ? "op_hoffr" : "op_hoffu"));
 
     // 7. Quick Chat Key Edit Fields Text
     for (size_t i = 0; i < 4; ++i) {
@@ -1154,12 +963,9 @@ void HUD::render_options_dialog(IRenderer& renderer, const assets::AssetArchive&
         renderer.draw_text(txt, qx, qy, ColorRGBA{255, 255, 255, 255});
     }
 
-    // 8. Return to Game Button (breturn1/2.bmp at 355, 427)
-    if (opt_return_button_pressed_) {
-        renderer.draw_named_sprite("breturn2.bmp", 355, 427);
-    } else {
-        renderer.draw_named_sprite("breturn1.bmp", 355, 427);
-    }
+    // Return to Game button: breturn1 (up), breturn2 (hover), breturn3 (pressed), absolute coordinates
+    draw_animation_frame0(renderer, assets, opt_return_button_pressed_ ? "breturn3"
+                          : (kOptReturn.contains(mouse_x_, mouse_y_) ? "breturn2" : "breturn1"));
 }
 
 void HUD::render_marquee_box(IRenderer& renderer) {
@@ -1351,45 +1157,23 @@ bool HUD::handle_mouse_down(int32_t x, int32_t y, uint8_t button,
     // 0. Overlays and Modals intercept clicks first
     if (show_quick_help_) {
         if (button == SDL_BUTTON_LEFT) {
-            play_sfx(sim::SoundID::NavButtonClick);
-            close_quick_help();
+            close_quick_help();   // qh_return3 carries no sound
         }
         return true;
     }
     if (show_options_) {
         if (button == SDL_BUTTON_LEFT) {
-            // Return to Game button (breturn1/2.bmp at 355, 427, size 98x26)
-            if ((x >= 345 && x <= 455 && y >= 423 && y <= 455) ||
-                (x >= 402 && x <= 455 && y >= 425 && y <= 455)) {
+            // Return to Game button: breturn1/2/3 at (351,425) 98x26; breturn3 (pressed) is silent
+            if (kOptReturn.contains(x, y)) {
                 opt_return_button_pressed_ = true;
                 opt_ok_button_pressed_ = true;
-                play_sfx(sim::SoundID::NavButtonClick);
                 return true;
             }
-            // Chat ON (96..142, 287..311)
-            if (x >= 96 && x <= 142 && y >= 287 && y <= 311) {
-                chat_enabled_ = true;
-                play_sfx(sim::SoundID::NavButtonClick);
-                return true;
-            }
-            // Chat OFF (146..192, 287..311)
-            if (x >= 146 && x <= 192 && y >= 287 && y <= 311) {
-                chat_enabled_ = false;
-                play_sfx(sim::SoundID::NavButtonClick);
-                return true;
-            }
-            // Quick Help ON (358..404, 287..311)
-            if (x >= 358 && x <= 404 && y >= 287 && y <= 311) {
-                quick_help_enabled_ = true;
-                play_sfx(sim::SoundID::NavButtonClick);
-                return true;
-            }
-            // Quick Help OFF (408..454, 287..311)
-            if (x >= 408 && x <= 454 && y >= 287 && y <= 311) {
-                quick_help_enabled_ = false;
-                play_sfx(sim::SoundID::NavButtonClick);
-                return true;
-            }
+            // Chat ON / OFF and Quick Help ON / OFF toggles (op_con*, op_coff*, op_hon*, op_hoff*): all silent
+            if (kOptChatOn.contains(x, y))  { chat_enabled_ = true;        return true; }
+            if (kOptChatOff.contains(x, y)) { chat_enabled_ = false;       return true; }
+            if (kOptHelpOn.contains(x, y))  { quick_help_enabled_ = true;  return true; }
+            if (kOptHelpOff.contains(x, y)) { quick_help_enabled_ = false; return true; }
             // Sound FX slider (x 180..430, y 170..205)
             if (x >= 180 && x <= 430 && y >= 170 && y <= 205) {
                 active_slider_dragging_ = 0;
@@ -1450,12 +1234,12 @@ bool HUD::handle_mouse_down(int32_t x, int32_t y, uint8_t button,
         if (button == SDL_BUTTON_LEFT) {
             if (yes_button_.contains(x, y)) {
                 yes_button_.is_pressed = true;
-                play_sfx(sim::SoundID::NavButtonClick);
+                play_sfx(sim::SoundID::ButtonClick);   // yes3 / no3 carry sound 0
                 return true;
             }
             if (no_button_.contains(x, y)) {
                 no_button_.is_pressed = true;
-                play_sfx(sim::SoundID::NavButtonClick);
+                play_sfx(sim::SoundID::ButtonClick);
                 return true;
             }
         }
@@ -1475,19 +1259,19 @@ bool HUD::handle_mouse_down(int32_t x, int32_t y, uint8_t button,
         // Top Header Buttons
         if (help_button_.contains(x, y)) {
             help_button_.is_pressed = true;
-            play_sfx(sim::SoundID::NavButtonClick);
+            play_sfx(sim::SoundID::ButtonClick);   // the pressed top-bar animations carry sound 0
             show_quick_help_ = !show_quick_help_;
             return true;
         }
         if (options_button_.contains(x, y)) {
             options_button_.is_pressed = true;
-            play_sfx(sim::SoundID::NavButtonClick);
+            play_sfx(sim::SoundID::ButtonClick);
             show_options_ = !show_options_;
             return true;
         }
         if (quit_button_.contains(x, y)) {
             quit_button_.is_pressed = true;
-            play_sfx(sim::SoundID::NavButtonClick);
+            play_sfx(sim::SoundID::ButtonClick);
             open_quit_dialog();
             return true;
         }
@@ -1574,8 +1358,7 @@ bool HUD::handle_mouse_down(int32_t x, int32_t y, uint8_t button,
         if (stop_button_.contains(x, y)) {
             stop_button_.is_pressed = true;
             cancel_order_mode();
-            play_sfx(sim::SoundID::NavButtonClick);
-            play_sfx(sim::SoundID::AntStop);
+            play_sfx(sim::SoundID::AntStop);   // butcand carries sound 61 (antstop.wav) and nothing else
             for (uint32_t aid : selected_ant_ids_) {
                 const auto& u = sim.get_unit(aid);
                 if (u.player_id != local_player_id_) continue;
@@ -1605,7 +1388,7 @@ bool HUD::handle_mouse_down(int32_t x, int32_t y, uint8_t button,
         // 4. Check Authentic [All] Button click (532, 443, 44x24)
         if (send_to_button_.contains(x, y)) {
             send_to_button_.is_pressed = true;
-            play_sfx(sim::SoundID::NavButtonClick);
+            play_sfx(sim::SoundID::ButtonClick);
             send_to_all_ = true;
             return true;
         }
@@ -1613,7 +1396,7 @@ bool HUD::handle_mouse_down(int32_t x, int32_t y, uint8_t button,
         // 5. Check Authentic [Team] Button click (579, 443, 46x24)
         if (is_on_team_ && team_button_.contains(x, y)) {
             team_button_.is_pressed = true;
-            play_sfx(sim::SoundID::NavButtonClick);
+            play_sfx(sim::SoundID::ButtonClick);
             send_to_all_ = false;
             return true;
         }
@@ -1628,27 +1411,6 @@ bool HUD::handle_mouse_down(int32_t x, int32_t y, uint8_t button,
                 incubation_timer_ticks_ = 60; // 3 seconds @ 20 Hz
             }
             return true;
-        }
-
-        // 5. Check Action Buttons (for compatibility)
-        for (size_t i = 0; i < action_buttons_.size(); ++i) {
-            if (action_buttons_[i].contains(x, y)) {
-                if (action_buttons_[i].is_enabled) {
-                    action_buttons_[i].is_pressed = true;
-                    play_sfx(sim::SoundID::NavButtonClick);
-                    switch (static_cast<ActionButtonId>(i)) {
-                        case ActionButtonId::Move:   set_active_order_mode(sim::OrderType::Move); break;
-                        case ActionButtonId::Attack: set_active_order_mode(sim::OrderType::Attack); break;
-                        case ActionButtonId::Bomb:   set_active_order_mode(sim::OrderType::PlantBomb); break;
-                        case ActionButtonId::Fire:   set_active_order_mode(sim::OrderType::IgniteFire); break;
-                        case ActionButtonId::Bridge: set_active_order_mode(sim::OrderType::BuildBridge); break;
-                        case ActionButtonId::Thief:  set_active_order_mode(sim::OrderType::InfiltrateAnthill); break;
-                        case ActionButtonId::Cancel: cancel_order_mode(); clear_selection(); break;
-                        default: break;
-                    }
-                }
-                return true;
-            }
         }
 
         // 3. Check Minimap Radar click
@@ -2080,6 +1842,8 @@ bool HUD::handle_mouse_up(int32_t x, int32_t y, uint8_t button,
 
 bool HUD::handle_mouse_motion(int32_t x, int32_t y,
                               sim::SimulationEngine& sim, ViewportCamera& camera) {
+    mouse_x_ = x;
+    mouse_y_ = y;
     send_to_button_.is_hovered = send_to_button_.contains(x, y);
     team_button_.is_hovered = is_on_team_ && team_button_.contains(x, y);
     help_button_.is_hovered = help_button_.contains(x, y);

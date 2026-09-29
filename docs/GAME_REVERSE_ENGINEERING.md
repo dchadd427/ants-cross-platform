@@ -1382,8 +1382,27 @@ receives the HUD's draw calls).
 * **Cursor rules** *(implemented; `0x1026d6a`, `0x1026d98`)*. The map cursor only changes inside the map view rectangle
   (16,21)-(458,461); anywhere else the pointer is the plain arrow. While a selection box wider or taller than 4 px is being
   dragged the pointer also stays the plain arrow.
-* **Not yet implemented**: hover/pressed states of the top bar, screen text metrics (GDI Franklin Gothic, un-antialiased),
-  setup/options/results control layouts, the click-flash of the buttons, the status-line strings and the time-warning cues.
+* **Buttons** *(implemented)*. Every button is a set of one-frame animations whose parts carry absolute screen
+  coordinates: up `...u`/`...1`, hover `...r`/`...2` (the small "r" label part drawn over the up art) and pressed `...d`/`...3`.
+  Top bar: `buthlpu/r/d` (476,7), `butoptu/r/d` (525,7), `butqitu/r/d` (579,7); send-to `butallu/r/d` (532,443) and `butalsu/r/d`
+  (579,443); quit dialog `yes1..3` / `no1..3` are placed with SetPos (180,260) / (292,260) and `yes3` / `no3` carry a (0,1)
+  / (1,1) part offset. The click is carried by the pressed animation's frame sound: sound 0 (`buttonclick.wav`) for the top
+  bar, send-to, quit dialog, setup screen (`start3`, `up3`, `down3`, `leave3`) and results screen; sound 89
+  (`navbuttonclick.wav`) only for the pedestal press chains; silent: the option toggles, `breturn3`, `qh_return3`,
+  `qh_start3`, the setup Fog of War toggles; the Stop button (`butcand`) carries sound 61 (`antstop.wav`) and nothing else.
+* **Option screen** *(implemented)*. `breturn1/2/3` (351,425) (pressed art at (353,427)); toggle pairs `op_con*`/`op_coff*` (chat)
+  and `op_hon*`/`op_hoff*` (quick help) at (103,290)/(151,290) and (356,290)/(404,290): the chosen one shows its down art
+  (`op_cond` (102,289) ...), the other one up or hover, each in a normal and a hover variant. Slider thumb `slidd.bmp` on the rows
+  178 / 215 / 252 at x = 188 + min(184, 185 * v / 99), v = 0..100. Defaults (constructor at `0x101487c`, values read with
+  `0x100c18f`): sound 100, music 65, scroll 50, chat on, quick help on; the quick-help option decides whether the help screen is
+  shown after the loading screen.
+* **Setup screen** *(implemented)*. Buttons from `start1..3` (526,439) / (527,443), `up1..3` (226,299) / (224,301), `down1..3`
+  (226,323) / (225,324), `leave1..3` (525,12) / (524,14), `d_on1..3` and `d_off1..3` (Fog of War, chosen one shown with the
+  `3` art at (522,372) / (574,372)); player slot i: portrait `agst301` (12 frames, 1650 ms loop) with its origin at
+  (395, 115 + 50 i) and thumb at (540, 95 + 50 i).
+* **Not yet implemented**: press-vs-release semantics (the original fires callbacks on release), the 125 ms button flash
+  (BTNPUSH task), screen text metrics (GDI Franklin Gothic, un-antialiased), the results-screen row layout, the status-line
+  strings (event driven, colour (79,0,143), cleared after 5000 ms) and the time-warning cues.
 
 ---
 

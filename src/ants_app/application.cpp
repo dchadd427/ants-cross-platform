@@ -1,4 +1,5 @@
 #include "ants_app/application.hpp"
+#include "ants_app/ui_anim.hpp"
 #include "ants_app/version.hpp"
 #include <iostream>
 #include <cstring>
@@ -577,7 +578,7 @@ void Application::handle_events() {
 
         if (state_ == AppState::Loading) {
             if (event.type == SDL_KEYDOWN || event.type == SDL_MOUSEBUTTONDOWN) {
-                state_ = AppState::QuickHelp;
+                state_ = hud_.is_quick_help_enabled() ? AppState::QuickHelp : AppState::MapSelect;
             }
             continue;
         }
@@ -599,14 +600,12 @@ void Application::handle_events() {
                 if (quick_help_start_pressed_) {
                     quick_help_start_pressed_ = false;
                     if (event.button.x >= 528 && event.button.x <= 528 + 98 && event.button.y >= 437 && event.button.y <= 437 + 27) {
-                        state_ = AppState::MapSelect;
-                        audio_mixer_.play_sfx(sim::SoundID::NavButtonClick, 1.0f, 255);
+                        state_ = AppState::MapSelect;   // qh_start3 carries no sound
                     }
                 }
             } else if (event.type == SDL_KEYDOWN) {
                 if (event.key.keysym.sym == SDLK_RETURN || event.key.keysym.sym == SDLK_SPACE || event.key.keysym.sym == SDLK_ESCAPE) {
                     state_ = AppState::MapSelect;
-                    audio_mixer_.play_sfx(sim::SoundID::NavButtonClick, 1.0f, 255);
                 }
             }
             continue;
@@ -883,7 +882,7 @@ void Application::update_simulation(float dt) {
             intro_ticks_++;
             tick_accumulator_ -= 0.050f;
             if (intro_ticks_ >= 30) {
-                state_ = AppState::QuickHelp;
+                state_ = hud_.is_quick_help_enabled() ? AppState::QuickHelp : AppState::MapSelect;
                 break;
             }
         }
@@ -1090,17 +1089,10 @@ void Application::render_loading_screen() {
 }
 
 void Application::render_quick_help_screen() {
-    const auto* seq = assets_.find_animation("qh_screen");
-    if (seq && !seq->subitems.empty()) {
-        for (const auto& fr : seq->subitems[0].frames) {
-            renderer_->draw_sprite(fr.sprite_index, fr.dx, fr.dy);
-        }
-    }
-    // Authentic START! button at bottom-right (dx=529, dy=437 from Table 4 Anim 1335 qh_start1)
-    std::string btn = quick_help_start_pressed_ ? "bstart3.bmp" : (quick_help_start_hovered_ ? "bstart2.bmp" : "bstart1.bmp");
-    int32_t btn_x = quick_help_start_pressed_ ? 528 : 529;
-    int32_t btn_y = quick_help_start_pressed_ ? 438 : 437;
-    renderer_->draw_named_sprite(btn, btn_x, btn_y);
+    // qh_screen composite (last part first) and the START button animations qh_start1 / qh_start2 (hover) / qh_start3
+    // (pressed) with absolute coordinates
+    draw_animation_frame0(*renderer_, assets_, "qh_screen");
+    draw_animation_frame0(*renderer_, assets_, quick_help_start_pressed_ ? "qh_start3" : (quick_help_start_hovered_ ? "qh_start2" : "qh_start1"));
 }
 
 void Application::play_startup_sound() {

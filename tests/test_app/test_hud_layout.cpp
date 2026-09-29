@@ -8,6 +8,8 @@
 #include <vector>
 
 #include "ants_app/hud.hpp"
+#include "ants_app/map_select.hpp"
+#include "ants_app/ui_anim.hpp"
 #include "ants_app/renderer.hpp"
 #include "ants_assets/asset_archive.hpp"
 #include "ants_sim/sim_engine.hpp"
@@ -659,6 +661,156 @@ void test_cursor_rules(const assets::AssetArchive&) {
     check(small.evaluate_cursor(195, 199, world, sim.grid(), camera) == CursorType::Select, "a drag of 4 px or less keeps the map cursor");
 }
 
+// Buttons are drawn from the original's three-state animations with absolute coordinates: up, hover (a small "r"
+// label over the up art) and pressed; the setup screen controls sit where those animations put them.
+void test_button_states(const assets::AssetArchive& arc) {
+    std::printf("[hud] button hover/pressed art, option controls, quit dialog and setup screen\n");
+    sim::SimulationEngine sim;
+    sim.init_test_world(60, 60, 100, 60000);
+    sim::WorldState world;
+    ViewportCamera camera;
+
+    // Top bar: hover draws buthelpr at (484,10) over buthelpu at (476,7); pressed draws buthelpd
+    {
+        HUD hud;
+        hud.init(0);
+        hud.handle_mouse_motion(490, 15, sim, camera);
+        RecordingRenderer rr(arc);
+        render_settled(hud, arc, world, rr);
+        check(rr.has_sprite_at("buthelpr.bmp", 484, 10) && rr.has_sprite_at("buthelpu.bmp", 476, 7), "help hover: r label at (484,10) over the up art");
+        check(rr.named("buthelpd.bmp").empty(), "help hover: no pressed art");
+        hud.handle_mouse_down(490, 15, 1, sim, camera);
+        RecordingRenderer down(arc);
+        render_settled(hud, arc, world, down);
+        check(down.has_sprite_at("buthelpd.bmp", 476, 7), "help pressed: buthelpd at (476,7)");
+        hud.handle_mouse_up(490, 15, 1, sim, camera);
+    }
+    {
+        HUD hud;
+        hud.init(0);
+        hud.handle_mouse_motion(600, 15, sim, camera);
+        RecordingRenderer rr(arc);
+        render_settled(hud, arc, world, rr);
+        check(rr.has_sprite_at("butquitr.bmp", 588, 10) && rr.has_sprite_at("butquitu.bmp", 579, 7), "quit hover: r label at (588,10)");
+        hud.handle_mouse_motion(540, 15, sim, camera);
+        RecordingRenderer opt(arc);
+        render_settled(hud, arc, world, opt);
+        check(opt.has_sprite_at("butoptr.bmp", 528, 10) && opt.has_sprite_at("butoptu.bmp", 525, 7), "options hover: r label at (528,10)");
+    }
+    // Send-to buttons: hover label of All at (543,447)
+    {
+        HUD hud;
+        hud.init(0);
+        hud.handle_mouse_motion(550, 450, sim, camera);
+        RecordingRenderer rr(arc);
+        render_settled(hud, arc, world, rr);
+        check(rr.has_sprite_at("butallr.bmp", 543, 447) && rr.has_sprite_at("butallu.bmp", 532, 443), "All hover: r label at (543,447) over the up art at (532,443)");
+    }
+
+    // Option screen controls (op_screen): toggles, Return, slider thumbs at the original's defaults 100 / 65 / 50
+    {
+        HUD hud;
+        hud.init(0);
+        hud.open_options();
+        RecordingRenderer rr(arc);
+        render_settled(hud, arc, world, rr);
+        check(hud.is_chat_enabled() && hud.is_quick_help_enabled(), "options default: chat on, quick help on");
+        check(hud.get_sfx_volume() == 1.0f && hud.get_music_volume() > 0.649f && hud.get_music_volume() < 0.651f && hud.get_scroll_rate() == 0.5f,
+              "options default: sound 100, music 65, scroll 50");
+        check(rr.has_sprite_at("optond.bmp", 102, 289) && rr.has_sprite_at("dbutoffu.bmp", 151, 290), "chat on: ON down at (102,289), OFF up at (151,290)");
+        check(rr.has_sprite_at("optond.bmp", 355, 289) && rr.has_sprite_at("dbutoffu.bmp", 404, 290), "quick help on: ON down at (355,289), OFF up at (404,290)");
+        check(rr.has_sprite_at("breturn1.bmp", 351, 425), "Return button up art at (351,425)");
+        check(rr.has_sprite_at("slidd.bmp", 372, 178) && rr.has_sprite_at("slidd.bmp", 309, 215) && rr.has_sprite_at("slidd.bmp", 281, 252),
+              "slider thumbs at x = 188 + min(184, 185 v / 99) on rows 178 / 215 / 252");
+        // hover over the OFF toggle of the chat pair shows its hover art (op_coffr: r label over the up art)
+        hud.handle_mouse_motion(170, 300, sim, camera);
+        RecordingRenderer hov(arc);
+        render_settled(hud, arc, world, hov);
+        check(hov.has_sprite_at("optoffr.bmp", 158, 292), "chat OFF hover: optoffr label at (158,292)");
+        // Return pressed: breturn3 at (353,427)
+        hud.handle_mouse_down(400, 440, 1, sim, camera);
+        RecordingRenderer down(arc);
+        render_settled(hud, arc, world, down);
+        check(down.has_sprite_at("breturn3.bmp", 353, 427), "Return pressed: breturn3 at (353,427)");
+        hud.handle_mouse_up(400, 440, 1, sim, camera);
+        check(!hud.is_options_open(), "releasing Return closes the options");
+        // Toggle hit rectangles are the union of the resting and pressed art
+        hud.open_options();
+        hud.handle_mouse_down(102, 289, 1, sim, camera);
+        hud.handle_mouse_down(150, 312, 1, sim, camera);
+        check(hud.is_chat_enabled(), "(150,312) is outside the chat OFF toggle");
+        hud.handle_mouse_down(151, 289, 1, sim, camera);
+        check(!hud.is_chat_enabled(), "(151,289) is inside the chat OFF toggle");
+        hud.handle_mouse_down(102, 289, 1, sim, camera);
+        check(hud.is_chat_enabled(), "(102,289) is inside the chat ON toggle");
+        hud.handle_mouse_down(404, 289, 1, sim, camera);
+        check(!hud.is_quick_help_enabled(), "(404,289) is inside the quick help OFF toggle (the startup help is skipped)");
+        hud.handle_mouse_down(355, 289, 1, sim, camera);
+        check(hud.is_quick_help_enabled(), "(355,289) is inside the quick help ON toggle");
+    }
+
+    // Quit dialog buttons: yes1 at (180,260); pressed yes3 has its part at (0,1) relative to the origin
+    {
+        HUD hud;
+        hud.init(0);
+        hud.open_quit_dialog();
+        RecordingRenderer rr(arc);
+        render_settled(hud, arc, world, rr);
+        check(rr.has_sprite_at("yes1.bmp", 180, 260) && rr.has_sprite_at("no1.bmp", 292, 260), "quit dialog: yes1 (180,260) and no1 (292,260)");
+        hud.handle_mouse_down(200, 270, 1, sim, camera);
+        RecordingRenderer down(arc);
+        render_settled(hud, arc, world, down);
+        check(down.has_sprite_at("yes3.bmp", 180, 261), "yes pressed: yes3 one pixel lower at (180,261)");
+        hud.handle_mouse_up(700, 700, 1, sim, camera);
+    }
+
+    // Setup screen: constants are the union of the resting and pressed art; art at the animation coordinates
+    {
+        auto union_of = [&](const char* a, const char* b) {
+            const UIRect ra = animation_bounds(arc, a);
+            const UIRect rb = animation_bounds(arc, b);
+            const int32_t x0 = std::min(ra.x, rb.x), y0 = std::min(ra.y, rb.y);
+            const int32_t x1 = std::max(ra.x + ra.w, rb.x + rb.w), y1 = std::max(ra.y + ra.h, rb.y + rb.h);
+            return UIRect{x0, y0, x1 - x0, y1 - y0};
+        };
+        auto same = [&](const UIRect& r, int32_t x, int32_t y, int32_t w, int32_t h) { return r.x == x && r.y == y && r.w == w && r.h == h; };
+        using MS = MapSelectScreen;
+        check(same(union_of("up1", "up3"), MS::BTN_UP_X, MS::BTN_UP_Y, MS::BTN_UP_W, MS::BTN_UP_H), "setup: up button rect = union of up1 / up3");
+        check(same(union_of("down1", "down3"), MS::BTN_DOWN_X, MS::BTN_DOWN_Y, MS::BTN_DOWN_W, MS::BTN_DOWN_H), "setup: down button rect");
+        check(same(union_of("start1", "start3"), MS::BTN_START_X, MS::BTN_START_Y, MS::BTN_START_W, MS::BTN_START_H), "setup: start button rect");
+        check(same(union_of("leave1", "leave3"), MS::BTN_QUIT_X, MS::BTN_QUIT_Y, MS::BTN_QUIT_W, MS::BTN_QUIT_H), "setup: leave button rect");
+        check(same(union_of("d_on1", "d_on3"), MS::BTN_FOW_ON_X, MS::BTN_FOW_ON_Y, MS::BTN_FOW_ON_W, MS::BTN_FOW_ON_H), "setup: Fog of War ON rect");
+        check(same(union_of("d_off1", "d_off3"), MS::BTN_FOW_OFF_X, MS::BTN_FOW_OFF_Y, MS::BTN_FOW_OFF_W, MS::BTN_FOW_OFF_H), "setup: Fog of War OFF rect");
+
+        MapSelectScreen screen;
+        screen.init();
+        RecordingRenderer rr(arc);
+        screen.render(rr, arc);
+        check(rr.has_sprite_at("bstart1.bmp", 526, 439), "setup: START up art at (526,439)");
+        check(rr.has_sprite_at("up1.bmp", 226, 299) && rr.has_sprite_at("down1.bmp", 226, 323), "setup: up (226,299) and down (226,323)");
+        check(rr.has_sprite_at("bleave1.bmp", 525, 12), "setup: leave at (525,12)");
+        check(rr.has_sprite_at("dbutonu.bmp", 524, 373) && rr.has_sprite_at("optoffd.bmp", 574, 372), "setup: Fog of War off shows ON up (524,373) and OFF down (574,372)");
+        check(rr.has_sprite_at("thumb1.bmp", 540, 95), "setup: thumbs-up at (540,95)");
+        bool portrait_ok = false;
+        for (const auto& sp : rr.sprites) {
+            if (sp.name.rfind("agst30", 0) == 0 && sp.x >= 383 && sp.x <= 385 && sp.y >= 85 && sp.y <= 87) portrait_ok = true;
+        }
+        check(portrait_ok, "setup: portrait agst30x drawn from its origin (395,115) with the part offset");
+        screen.handle_mouse_down(MS::BTN_FOW_ON_X + 2, MS::BTN_FOW_ON_Y + 2, 1);
+        RecordingRenderer on(arc);
+        screen.render(on, arc);
+        check(on.has_sprite_at("optond.bmp", 522, 372) && on.has_sprite_at("dbutoffu.bmp", 576, 373), "setup: Fog of War on shows ON down (522,372) and OFF up (576,373)");
+        screen.handle_mouse_motion(MS::BTN_START_X + 5, MS::BTN_START_Y + 5);
+        RecordingRenderer hov(arc);
+        screen.render(hov, arc);
+        check(hov.has_sprite_at("bstart2.bmp", 526, 439), "setup: START hover art");
+        screen.handle_mouse_down(MS::BTN_UP_X + 3, MS::BTN_UP_Y + 3, 1);
+        RecordingRenderer prs(arc);
+        screen.render(prs, arc);
+        check(prs.has_sprite_at("up3.bmp", 224, 301), "setup: up pressed art at (224,301)");
+    }
+}
+
 } // namespace
 
 int main() {
@@ -677,6 +829,7 @@ int main() {
     test_minimap(arc);
     test_static_shell(arc);
     test_cursor_rules(arc);
+    test_button_states(arc);
     std::printf("\nhud layout: %d checks, %d failures\n", g_checks, g_failures);
     return g_failures == 0 ? 0 : 1;
 }
