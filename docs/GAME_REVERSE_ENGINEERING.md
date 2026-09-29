@@ -1341,6 +1341,30 @@ sprite for value > 0, else `minus`) drawn in the slot of the first significant d
 slot right. Glyphs are the `plus`, `minus` and `dig0..dig9` animations (parts carry their own offsets). Sounds: `scoreup`
 (87) for gains, `scoredn` (88) for losses.
 
+### 5.34 HUD and Screen Ground Truth (Capstone-Verified; Supersedes Earlier HUD Notes)
+
+Coordinates are absolute 640x480 screen pixels. Checked by `tests/test_app/test_hud_layout.cpp` (a recording renderer
+receives the HUD's draw calls).
+
+* **Digits** *(implemented)*. Clock (`FUN_01021e36`): `dig0..dig9` / colon `digc` at y = 6, x = 70 (tens of minutes, skipped
+  when 0), 80, colon 90, 97, 107. Scores (`FUN_01010452`): a 6-slot field of 9 px slots at (box.left-1, box.top+2), leading
+  zeros skipped but advancing (right-aligned), boxes from table `0x10021b8` (local (402..455, 4..17), others y 464..477 at
+  x 105 / 254 / 402) filled with the team colour first. Glyph animations carry their own part offsets (`dig1` dx = 1).
+* **Panels are animations with absolute part coordinates** *(implemented for the home panel and ally pedestal)*. Home hill
+  (`FUN_01027f07` mode 2): hatch pedestal `buteggu` / `buteggd` (base (477,157), icon (490,165), label (483,140)) only while
+  eggs > 0, egg tray `egg1..egg9` (N = min(eggs, 9), parts at (535..567, 158..196)), Stop `butcanu` / `butcand` (label
+  (595,180), button (595,198)). Enemy hill: ally pedestal `butalyu` / `butalyd` (base (477,157)). Pedestal transitions are a chain
+  of animations per (current kind, new kind) pair (`FUN_01028360` -> `FUN_01028491`): rise `trnbXu`, sink `trnbXd`, icon swap
+  `trnaXd` + `trnaYu`, press `butXX2d` (2 x 100 ms, sound 89) then `butXXd`.
+* **Screens** *(implemented)*. Options `op_screen` (210 parts incl. its own 50 % dither) drawn over the live game with nothing
+  behind it; in-game quick help `qh_screen` (32 parts) plus `qh_return1` at (529,437); quit dialog `std_dialg` at origin
+  (100,100) without dimming (yes (180,260), no (292,260), prompt rect (130,180) 260x160, colour (31,23,51)); match start modal
+  (`0x1017127`) `std_dialg` at (100,100), label string 105 wrapped in (130,110) 240x160, footer string 104 in (130,290),
+  animated worker portrait anchored at (245,250), closes 5.0 s after it opens.
+* **Not yet implemented**: minimap painter (`FUN_01009596`, 215-entry object table at `0x1001c50`, speckled class colours at
+  `0x1001c28`), pedestal transition chains, hover/pressed states of the top bar, screen text metrics (GDI Franklin Gothic,
+  un-antialiased), setup/options/results control layouts, cursor hover region and drag rule.
+
 ---
 
 ## 6. Target Multi-Platform Architecture

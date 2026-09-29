@@ -41,6 +41,36 @@ const char* ANT_TYPE_NAMES[] = {
     "Swimmer Ant"
 };
 
+// Draws frame 0 of a Table-4 animation at (x, y): every part at its own offset, last stored part first (original
+// order). Used for glyph animations such as dig0..dig9 whose parts carry a (dx, dy) offset.
+void draw_animation_frame0(IRenderer& renderer, const assets::AssetArchive& archive, const char* name, int32_t x, int32_t y) {
+    const auto* seq = archive.find_animation(name);
+    if (!seq || seq->subitems.empty()) return;
+    const auto& sub = seq->subitems[0];
+    for (size_t k = sub.frames.size(); k-- > 0;) {
+        renderer.draw_sprite(sub.frames[k].sprite_index, x + sub.frames[k].dx, y + sub.frames[k].dy);
+    }
+}
+
+// Unsigned number as the original draws scores (Ants.exe FUN_01010452 without the sign flag): a 6-slot field of 9 px
+// digit slots starting at x, leading zeros skipped but still advancing (so the number is right-aligned in the field).
+void draw_score_digits(IRenderer& renderer, const assets::AssetArchive& archive, int32_t x, int32_t y, int32_t value) {
+    int32_t v = std::clamp(value, 0, 999999);
+    int32_t divisor = 100000;
+    bool leading = true;
+    while (divisor > 0) {
+        const int32_t digit = v / divisor;
+        v %= divisor;
+        if (digit != 0 || divisor == 1) leading = false;
+        if (!leading) {
+            const std::string name = "dig" + std::to_string(digit);
+            draw_animation_frame0(renderer, archive, name.c_str(), x, y);
+        }
+        divisor /= 10;
+        x += 9;
+    }
+}
+
 } // anonymous namespace
 
 HUD::HUD() {
@@ -75,7 +105,7 @@ void HUD::init(uint8_t local_player_id) {
     ability_pedestal_button_ = {537, 156, 55, 75, 0, 0, 0, false, true, false};
 
     // Configure Authentic Stop Button at (602, 176, 34, 50)
-    stop_button_ = {602, 176, 34, 50, 0, 0, 0, false, true, false};
+    stop_button_ = {595, 180, 32, 50, 0, 0, 0, false, true, false};
 
     // Configure Authentic Send-to Toggle Button at (532, 443, 44, 24)
     send_to_button_ = {532, 443, 44, 24, 0, 0, 0, false, true, false};
@@ -88,8 +118,8 @@ void HUD::init(uint8_t local_player_id) {
     cursor_blink_ticks_ = 0;
 
     // Configure Quit Confirmation Dialog Buttons
-    yes_button_ = {184, 264, 49, 24, 0, 0, 0, false, true, false};
-    no_button_  = {296, 264, 49, 24, 0, 0, 0, false, true, false};
+    yes_button_ = {180, 260, 49, 24, 0, 0, 0, false, true, false}; // dyn_byes1 part (80,160) + origin (100,100)
+    no_button_  = {292, 260, 49, 24, 0, 0, 0, false, true, false}; // dyn_bno1 part (192,160) + origin (100,100)
 
     show_match_start_modal_ = false;
     match_start_modal_ticks_ = 0;
@@ -98,18 +128,18 @@ void HUD::init(uint8_t local_player_id) {
     show_options_ = false;
 
     // Configure Hatch Button matching Primary Pedestal at (488, 140, 53, 86)
-    hatch_button_.x = 488;
+    hatch_button_.x = 477;   // buteggu: pedestal (477,157) 53x71, label (483,140), icon (490,165)
     hatch_button_.y = 140;
     hatch_button_.w = 53;
-    hatch_button_.h = 86;
+    hatch_button_.h = 88;
     hatch_button_.sprite_up = 2683;    // buthatup.bmp
     hatch_button_.sprite_down = 2684;  // buthatd.bmp
     hatch_button_.sprite_label = 2682; // labhatch.bmp
 
     // Configure Authentic Team Up Button matching Primary Pedestal on Enemy Base Card
-    team_up_button_.x = 488;
-    team_up_button_.y = 140;
-    team_up_button_.w = 53;
+    team_up_button_.x = 477;
+    team_up_button_.y = 142;
+    team_up_button_.w = 55;
     team_up_button_.h = 86;
     team_up_button_.sprite_up = 2576;    // butdipu.bmp
     team_up_button_.sprite_down = 2587;  // butdipd.bmp
@@ -160,7 +190,7 @@ void HUD::set_active_order_mode(sim::OrderType mode) noexcept {
 }
 
 void HUD::update(const sim::WorldState& world, uint32_t delta_ticks) {
-    // 0. Match Start Modal Countdown (6.0s / 120 ticks at 20Hz)
+    // 0. Match Start Modal Countdown (5.0 s / 100 ticks at 20 Hz: first timer tick of Ants.exe 0x1017127)
     if (show_match_start_modal_) {
         match_start_modal_ticks_ += delta_ticks;
         if (match_start_modal_ticks_ >= MATCH_START_MODAL_DURATION_TICKS) {
@@ -305,23 +335,17 @@ void HUD::render(IRenderer& renderer, const assets::AssetArchive& assets,
 
     if (selected_base_team_id_ >= 0) {
         if (selected_base_team_id_ == local_player_id_) {
-            // Authentic Home Anthill Hatch Interface (Replaces unit action buttons)
-            bool hatch_down = hatch_button_.is_pressed;
-            renderer.draw_named_sprite(hatch_down ? "butdown.bmp" : "butup.bmp", 488, 155);
-            renderer.draw_named_sprite(hatch_down ? "buthatd.bmp" : "buthatup.bmp", 503, hatch_down ? 166 : 164);
-            renderer.draw_named_sprite("labhatch.bmp", 497, 140);
-
-            // 3x3 Egg Grid in middle slot (authentic egg tray)
+            // Home anthill panel (Ants.exe FUN_01027f07, mode 2): the hatch pedestal (kind "egg") only exists while
+            // there are eggs, the egg tray plays egg<N> with N = min(eggs, 9), and the Stop button is always there.
+            // Every one of these is a Table-4 animation whose parts carry absolute screen coordinates.
             uint32_t eggs = (local_player_id_ < world.player_eggs.size()) ? world.player_eggs[local_player_id_] : 0;
-            for (uint32_t i = 0; i < std::min(eggs, 9u); ++i) {
-                int32_t ex = 553 + static_cast<int32_t>(i % 3) * 14;
-                int32_t ey = 164 + static_cast<int32_t>(i / 3) * 18;
-                renderer.draw_named_sprite("egg.bmp", ex, ey);
+            if (eggs > 0) {
+                const bool hatch_down = hatch_button_.is_pressed;
+                draw_animation_frame0(renderer, assets, hatch_down ? "buteggd" : "buteggu", 0, 0);
+                const std::string tray = "egg" + std::to_string(std::min<uint32_t>(eggs, 9u));
+                draw_animation_frame0(renderer, assets, tray.c_str(), 0, 0);
             }
-
-            // Authentic Stop Button on right
-            renderer.draw_named_sprite("labcan.bmp", 603, 176);
-            renderer.draw_named_sprite(stop_button_.is_pressed ? "butcand.bmp" : "butcanu.bmp", 602, 192);
+            draw_animation_frame0(renderer, assets, stop_button_.is_pressed ? "butcand" : "butcanu", 0, 0);
 
             // Recessed status box wstatus.bmp (143x14) at (480, 253)
             renderer.draw_named_sprite("wstatus.bmp", 480, 253);
@@ -334,11 +358,9 @@ void HUD::render(IRenderer& renderer, const assets::AssetArchive& assets,
             bool is_allied = (local_player_id_ < world.player_alliances.size()) &&
                              (world.player_alliances[local_player_id_] == selected_base_team_id_);
 
-            // Pedestal 1 (488, 155): TeamUp option
+            // Ally pedestal (animation butalyu / butalyd: label (477,142), icon (485,164), base (477,157))
             bool team_down = team_up_button_.is_pressed;
-            renderer.draw_named_sprite(team_down ? "butdown.bmp" : "butup.bmp", 488, 155);
-            renderer.draw_named_sprite(team_down ? "butdipd.bmp" : "butdipu.bmp", 503, team_down ? 166 : 164);
-            renderer.draw_named_sprite("labdib.bmp", 491, 140);
+            draw_animation_frame0(renderer, assets, team_down ? "butalyd" : "butalyu", 0, 0);
 
             // Recessed status box wstatus.bmp (143x14) at (480, 253)
             renderer.draw_named_sprite("wstatus.bmp", 480, 253);
@@ -480,9 +502,8 @@ void HUD::render(IRenderer& renderer, const assets::AssetArchive& assets,
                 }
             }
 
-            // Stop circular button at (602, 192) with "Stop" label at (603, 176)
-            renderer.draw_named_sprite("labcan.bmp", 603, 176);
-            renderer.draw_named_sprite(stop_button_.is_pressed ? "butcand.bmp" : "butcanu.bmp", 602, 192);
+            // Stop button (animation butcanu / butcand: label at (595,180), button at (595,198))
+            draw_animation_frame0(renderer, assets, stop_button_.is_pressed ? "butcand" : "butcanu", 0, 0);
 
             // Golden Lunchbox Indicator: Displayed above Stop button at (598, 133) ONLY when carrying food
             if (sel_ant && sel_ant->is_holding) {
@@ -592,32 +613,30 @@ void HUD::render(IRenderer& renderer, const assets::AssetArchive& assets,
     }
 }
 
-void HUD::render_top_bar(IRenderer& renderer, const assets::AssetArchive&, const sim::WorldState& world) {
+void HUD::render_top_bar(IRenderer& renderer, const assets::AssetArchive& archive, const sim::WorldState& world) {
     // Top border backdrop: x0y0.bmp (640x22)
     renderer.draw_named_sprite("x0y0.bmp", 0, 0);
 
-    // Box 1 (Top-Left): Match Clock countdown in pre-cut black box at (61..129, 4..17)
-    uint32_t ms = world.match_time_remaining_ms;
-    uint32_t mm = (ms / 1000) / 60;
-    uint32_t ss = (ms / 1000) % 60;
+    // Match clock (Ants.exe FUN_01021e36): digit sprites at y = 6, tens of minutes at x = 70 (skipped when 0), minutes 80,
+    // colon 90, tens of seconds 97, seconds 107, inside the pre-cut black box of x0y0.bmp.
+    const uint32_t ms = world.match_time_remaining_ms;
+    const uint32_t mm = (ms / 1000) / 60;
+    const uint32_t ss = (ms / 1000) % 60;
+    auto digit = [&](uint32_t d, int32_t x) {
+        const std::string name = "dig" + std::to_string(d % 10);
+        draw_animation_frame0(renderer, archive, name.c_str(), x, 6);
+    };
+    if (mm >= 10) digit(mm / 10, 70);
+    digit(mm % 10, 80);
+    draw_animation_frame0(renderer, archive, "digc", 90, 6);
+    digit(ss / 10, 97);
+    digit(ss % 10, 107);
 
-    std::string time_str = std::to_string(mm) + ":" + (ss < 10 ? "0" : "") + std::to_string(ss);
-    int32_t time_w = renderer.get_text_width(time_str, FontSize::Medium);
-    int32_t time_h = renderer.get_text_height(FontSize::Medium);
-    int32_t time_x = 61 + (68 - time_w) / 2;
-    int32_t time_y = 4 + (14 - time_h) / 2;
-    renderer.draw_text(time_str, time_x, time_y, {255, 255, 255, 255}, FontSize::Medium);
-
-    // Box 2 (Top-Right above Playfield): Local player's own score in box at (402..455, 4..17)
-    // Fill the box with authentic score background color (Ants.exe VA 0x100DA90)
+    // Box 2 (Top-Right above Playfield): Local player's own score in box at (402..455, 4..17), team background fill
+    // (Ants.exe VA 0x100DA90) and the score drawn with digit sprites at (box.left - 1, box.top + 2)
     renderer.fill_rect(402, 4, 54, 14, SCORE_BG_COLORS[local_player_id_ % 4]);
     int32_t my_score = (local_player_id_ < world.player_scores.size()) ? world.player_scores[local_player_id_] : 0;
-    std::string my_score_str = std::to_string(my_score);
-    int32_t score_text_w = renderer.get_text_width(my_score_str, FontSize::Small);
-    int32_t score_text_h = renderer.get_text_height(FontSize::Small);
-    int32_t score_text_x = 453 - score_text_w;
-    int32_t score_text_y = 4 + (14 - score_text_h) / 2;
-    renderer.draw_text(my_score_str, score_text_x, score_text_y, {255, 255, 255, 255}, FontSize::Small);
+    draw_score_digits(renderer, archive, 401, 6, my_score);
 
     // Player label to the left of the top score box in [312..399, 4..17] (Ants.exe VA 0x100E218)
     static const char* TEAM_NAMES[4] = {"Green", "Red", "Blue", "Black"};
@@ -944,7 +963,7 @@ void HUD::render_action_buttons(IRenderer& renderer, const assets::AssetArchive&
     }
 }
 
-void HUD::render_news_banner(IRenderer& renderer, const assets::AssetArchive&, const sim::WorldState& world) {
+void HUD::render_news_banner(IRenderer& renderer, const assets::AssetArchive& assets, const sim::WorldState& world) {
     // Bottom banner background: x17y461.bmp (623x19)
     renderer.draw_named_sprite("x17y461.bmp", BANNER_X, BANNER_Y);
 
@@ -987,25 +1006,18 @@ void HUD::render_news_banner(IRenderer& renderer, const assets::AssetArchive&, c
         // Score box fill with authentic background color
         renderer.fill_rect(slot.box_x, 464, 54, 14, SCORE_BG_COLORS[p % 4]);
 
-        // Player score inside box (right-justified)
+        // Player score inside box: digit sprites at (box.left - 1, box.top + 2), right-aligned in a 6-slot field
         int32_t s = (p < world.player_scores.size()) ? world.player_scores[p] : 0;
-        std::string s_str = std::to_string(s);
-        int32_t s_text_w = renderer.get_text_width(s_str, FontSize::Small);
-        int32_t s_text_h = renderer.get_text_height(FontSize::Small);
-        int32_t s_text_x = slot.box_x + 51 - s_text_w;
-        int32_t s_text_y = 464 + (14 - s_text_h) / 2;
-        renderer.draw_text(s_str, s_text_x, s_text_y, {255, 255, 255, 255}, FontSize::Small);
+        draw_score_digits(renderer, assets, slot.box_x - 1, 466, s);
     }
 }
 
 void HUD::render_quit_dialog(IRenderer& renderer, const assets::AssetArchive& assets) {
     using assets::ColorRGBA;
 
-    // Dim background overlay
-    renderer.fill_rect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, ColorRGBA{0, 0, 0, 160});
-
-    const int32_t dx = 104;
-    const int32_t dy = 104;
+    // Quit dialog (Ants.exe 0x10142cb): no dim layer, origin (100,100) (OffsetRect(100,100) on the dialog's children)
+    const int32_t dx = 100;
+    const int32_t dy = 100;
 
     // Authentic std_dialg composite dialog (20 frame elements from Table 4)
     const auto* anim = assets.find_animation("std_dialg");
@@ -1019,19 +1031,17 @@ void HUD::render_quit_dialog(IRenderer& renderer, const assets::AssetArchive& as
         renderer.fill_rect(dx, dy, 320, 224, ColorRGBA{219, 75, 19, 255});
     }
 
-    // Centered prompt text: "Do you really want to quit?"
+    // Prompt (string 99) centred in the rect (130,180) 260x160 at the top, colour (31,23,51)
     std::string prompt = "Do you really want to quit?";
-    int32_t text_w = renderer.get_text_width(prompt, FontSize::Small);
-    int32_t text_h = renderer.get_text_height(FontSize::Small);
-    int32_t text_x = dx + (320 - text_w) / 2;
-    int32_t text_y = dy + 88 + (10 - text_h) / 2;
-    renderer.draw_text(prompt, text_x, text_y, ColorRGBA{27, 41, 30, 255}, FontSize::Small);
+    int32_t text_w = renderer.get_text_width(prompt, FontSize::Large);
+    int32_t text_x = 130 + (260 - text_w) / 2;
+    renderer.draw_text(prompt, text_x, 180, ColorRGBA{31, 23, 51, 255}, FontSize::Large);
 
-    // Yes button at (184, 264)
+    // Yes button at (180, 260)
     const char* yes_spr = yes_button_.is_pressed ? "yes3.bmp" : (yes_button_.is_active ? "yes2.bmp" : "yes1.bmp");
     renderer.draw_named_sprite(yes_spr, yes_button_.x, yes_button_.y);
 
-    // No button at (296, 264)
+    // No button at (292, 260)
     const char* no_spr = no_button_.is_pressed ? "no3.bmp" : (no_button_.is_active ? "no2.bmp" : "no1.bmp");
     renderer.draw_named_sprite(no_spr, no_button_.x, no_button_.y);
 }
@@ -1039,80 +1049,88 @@ void HUD::render_quit_dialog(IRenderer& renderer, const assets::AssetArchive& as
 void HUD::render_match_start_modal(IRenderer& renderer, const assets::AssetArchive& assets) {
     using assets::ColorRGBA;
 
-    // Centered in playfield (PLAYFIELD_X = 17, PLAYFIELD_Y = 22, PLAYFIELD_WIDTH = 441, PLAYFIELD_HEIGHT = 439)
-    // std_dialg (Animation 67) is 320x224 composite dialog
-    const int32_t mw = 320;
-    const int32_t mh = 224;
-    const int32_t mx = PLAYFIELD_X + (PLAYFIELD_WIDTH - mw) / 2;
-    const int32_t my = PLAYFIELD_Y + (PLAYFIELD_HEIGHT - mh) / 2;
+    // Start modal (Ants.exe 0x1017127): std_dialg at origin (100,100), one wrapped centred label (string 105) in the
+    // rect (130,110) 240x160, footer (string 104) in (130,290) 240x20, animated worker portrait at (245,250).
+    const int32_t mx = 100;
+    const int32_t my = 100;
 
     const auto* seq = assets.find_animation("std_dialg");
     if (seq && !seq->subitems.empty()) {
-        for (const auto& fr : seq->subitems[0].frames) {
-            renderer.draw_sprite(fr.sprite_index, mx + fr.dx, my + fr.dy);
+        const auto& frames = seq->subitems[0].frames;
+        for (size_t i = frames.size(); i-- > 0; ) {
+            renderer.draw_sprite(frames[i].sprite_index, mx + frames[i].dx, my + frames[i].dy);
         }
     } else {
-        renderer.fill_rect(mx, my, mw, mh, ColorRGBA{219, 75, 19, 255});
-        renderer.draw_rect(mx, my, mw, mh, ColorRGBA{36, 82, 77, 255});
+        renderer.fill_rect(mx, my, 320, 224, ColorRGBA{219, 75, 19, 255});
+        renderer.draw_rect(mx, my, 320, 224, ColorRGBA{36, 82, 77, 255});
     }
 
-    // Authentic dark slate text color #1F1733 matching Ants.exe 0x1015b65 (0x33171f BGR)
+    // Dark slate text colour #1F1733 (COLORREF 0x33171F)
     const ColorRGBA text_color{31, 23, 51, 255};
 
-    // Header 1: "Get ready to play!"
-    const std::string h1 = "Get ready to play!";
-    int32_t w1 = renderer.get_text_width(h1, FontSize::Large);
-    renderer.draw_text(h1, mx + (mw - w1) / 2, my + 24, text_color, FontSize::Large);
-
-    // Header 2: "You are the [Color]"
+    // Label: "Get ready to play!  You are the <Colour> Ants." word-wrapped and centred in 240 px
     static const char* TEAM_NAMES[4] = {"Green", "Red", "Blue", "Black"};
-    std::string h2 = "You are the " + std::string(TEAM_NAMES[local_player_id_ % 4]);
-    int32_t w2 = renderer.get_text_width(h2, FontSize::Large);
-    renderer.draw_text(h2, mx + (mw - w2) / 2, my + 54, text_color, FontSize::Large);
+    const std::string label = std::string("Get ready to play!  You are the ") + TEAM_NAMES[local_player_id_ % 4] + " Ants.";
+    std::vector<std::string> lines;
+    {
+        std::string line, word;
+        auto flush_word = [&]() {
+            if (word.empty()) return;
+            const std::string trial = line.empty() ? word : line + " " + word;
+            if (!line.empty() && renderer.get_text_width(trial, FontSize::Large) > 240) {
+                lines.push_back(line);
+                line = word;
+            } else {
+                line = trial;
+            }
+            word.clear();
+        };
+        for (char ch : label) {
+            if (ch == ' ') flush_word(); else word.push_back(ch);
+        }
+        flush_word();
+        if (!line.empty()) lines.push_back(line);
+    }
+    int32_t ty = 110;
+    const int32_t line_h = renderer.get_text_height(FontSize::Large) + 2;
+    for (const auto& l : lines) {
+        const int32_t w = renderer.get_text_width(l, FontSize::Large);
+        renderer.draw_text(l, 130 + (240 - w) / 2, ty, text_color, FontSize::Large);
+        ty += line_h;
+    }
 
-    // Header 3: "Ants."
-    const std::string h3 = "Ants.";
-    int32_t w3 = renderer.get_text_width(h3, FontSize::Large);
-    renderer.draw_text(h3, mx + (mw - w3) / 2, my + 84, text_color, FontSize::Large);
-
-    // Centered Local Team Worker Ant Sprite facing South
-    int32_t ax = mx + (mw - 32) / 2;
-    int32_t ay = my + 118;
+    // Animated portrait of the local colour's worker ant (agst301: 12 frames, 1650 ms loop), anchor (245,250)
     renderer.set_hud_team(local_player_id_);
-    renderer.draw_named_sprite("agst301.bmp", ax, ay);
+    if (const auto* ant = assets.find_animation("agst301")) {
+        if (!ant->subitems.empty()) {
+            const uint32_t ms = match_start_modal_ticks_ * 50u;
+            const size_t frame = Renderer::get_anim_subitem_by_time(*ant, ms);
+            const auto& parts = ant->subitems[frame].frames;
+            for (size_t k = parts.size(); k-- > 0; ) {
+                renderer.draw_sprite(parts[k].sprite_index, 245 + parts[k].dx, 250 + parts[k].dy);
+            }
+        }
+    }
     renderer.set_hud_team(0);
 
     // Footer: "Waiting for others..."
     const std::string footer = "Waiting for others...";
     int32_t wf = renderer.get_text_width(footer, FontSize::Medium);
-    renderer.draw_text(footer, mx + (mw - wf) / 2, my + 176, text_color, FontSize::Medium);
+    renderer.draw_text(footer, 130 + (240 - wf) / 2, 290, text_color, FontSize::Medium);
 }
 
-void HUD::render_quick_help(IRenderer& renderer, const assets::AssetArchive&) {
-    using assets::ColorRGBA;
-
-    // Full screen Quick Help overlay
-    renderer.fill_rect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, ColorRGBA{0, 0, 0, 190});
-
-    // Authentic qh1.bmp (257x461) and qh2.bmp (362x463)
-    renderer.draw_named_sprite("qh1.bmp", 10, 9);
-    renderer.draw_named_sprite("qh2.bmp", 267, 9);
+void HUD::render_quick_help(IRenderer& renderer, const assets::AssetArchive& assets) {
+    // In-game quick help (Ants.exe 0x10145d2, qh_screen): a 32-part full-screen composite (frame pieces plus qh2 at
+    // (267,10) and qh1 at (10,9)) drawn over the live game, and the Return button qh_return1 at (529,437).
+    draw_animation_frame0(renderer, assets, "qh_screen", 0, 0);
+    draw_animation_frame0(renderer, assets, "qh_return1", 0, 0);
 }
 
 void HUD::render_options_dialog(IRenderer& renderer, const assets::AssetArchive& assets) {
     using assets::ColorRGBA;
 
-    // 1. Authentic crimson stipple dither background outside card
-    for (int32_t dy = 0; dy < SCREEN_HEIGHT; dy += 200) {
-        for (int32_t dx = 0; dx < SCREEN_WIDTH; dx += 200) {
-            renderer.draw_named_sprite("dith200.bmp", dx, dy);
-        }
-    }
-
-    // 2. Terracotta orange solid backing for card
-    renderer.fill_rect(18, 20, 442, 440, ColorRGBA{219, 75, 19, 255});
-
-    // 3. Authentic op_screen composite dialog (210 frame elements from Table 4)
+    // Authentic op_screen composite (210 parts, Ants.exe 0x101487c): it already contains the 25 dither tiles
+    // (a 50 % checker) around the opaque card, so nothing else is drawn behind it.
     const auto* anim = assets.find_animation("op_screen");
     if (anim && !anim->subitems.empty()) {
         const auto& frames = anim->subitems[0].frames;

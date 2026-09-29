@@ -95,3 +95,39 @@ target_compile_definitions(test_render_parity PRIVATE
 
 add_test(NAME test_render_parity COMMAND test_render_parity)
 set_tests_properties(test_render_parity PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# HUD layout: the real HUD drives a recording IRenderer; draw calls are checked against the original's coordinates
+add_executable(test_hud_layout
+    test_hud_layout.cpp
+)
+
+target_include_directories(test_hud_layout PRIVATE
+    ${CMAKE_SOURCE_DIR}/include
+    ${SDL2_INCLUDE_DIRS}
+)
+
+target_link_libraries(test_hud_layout PRIVATE
+    ants_app
+    ants_sim
+    ants_assets
+    ${SDL2_LIBRARIES}
+)
+
+if(APPLE)
+    target_link_libraries(test_hud_layout PRIVATE
+        "-framework AudioToolbox"
+        "-framework CoreFoundation"
+        "-framework CoreAudio"
+    )
+endif()
+
+if(WIN32)
+    target_link_libraries(test_hud_layout PRIVATE ws2_32 winmm)
+endif()
+
+target_compile_definitions(test_hud_layout PRIVATE
+    ORIGINAL_ASSETS_DIR="${CMAKE_SOURCE_DIR}/Original-Ants"
+)
+
+add_test(NAME test_hud_layout COMMAND test_hud_layout)
+set_tests_properties(test_hud_layout PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")

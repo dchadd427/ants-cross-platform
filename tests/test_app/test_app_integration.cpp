@@ -6906,10 +6906,10 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
 
     TEST_CASE("12.108: Version Invariant & Fog of War Cursor Concealment Parity") {
         // 1. Verify semantic versioning components
-        ASSERT_EQ(ants::VERSION_STRING, "v0.0.26");
+        ASSERT_EQ(ants::VERSION_STRING, "v0.0.27");
         ASSERT_EQ(ants::VERSION_MAJOR, 0);
         ASSERT_EQ(ants::VERSION_MINOR, 0);
-        ASSERT_EQ(ants::VERSION_PATCH, 26);
+        ASSERT_EQ(ants::VERSION_PATCH, 27);
 
         // 2. Setup simulation world with Fog of War enabled
         SimulationEngine sim;
@@ -7437,9 +7437,9 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
     } TEST_END();
 
     // ------------------------------------------------------------------------
-    // 12.118: 6.0-Second Non-Dismissable Match Start Ready Modal (Ants.exe 0x1015b65)
+    // 12.118: 5.0-Second Non-Dismissable Match Start Ready Modal (Ants.exe 0x1017127)
     // ------------------------------------------------------------------------
-    TEST_CASE("12.118 6.0-Second Non-Dismissable Match Start Ready Modal (Ants.exe 0x1015b65)") {
+    TEST_CASE("12.118 5.0-Second Non-Dismissable Match Start Ready Modal (Ants.exe 0x1017127)") {
         HUD hud;
         hud.init(0);
         SimulationEngine sim;
@@ -7463,14 +7463,14 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         ASSERT_TRUE(consumed_key);
         ASSERT_TRUE(hud.is_match_start_modal_active());
 
-        // Advance 119 ticks (5.95s @ 20Hz): modal remains active
+        // Advance 99 ticks (4.95s @ 20Hz): modal remains active
         WorldState dummy_world{};
-        for (uint32_t t = 1; t < 120; ++t) {
+        for (uint32_t t = 1; t < 100; ++t) {
             hud.update(dummy_world, 1);
             ASSERT_TRUE(hud.is_match_start_modal_active());
         }
 
-        // At tick 120 (exactly 6.0s elapsed), modal auto-dismisses
+        // At tick 100 (exactly 5.0s elapsed: the first tick of the original's timer task), modal auto-dismisses
         hud.update(dummy_world, 1);
         ASSERT_FALSE(hud.is_match_start_modal_active());
     } TEST_END();

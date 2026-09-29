@@ -328,7 +328,7 @@ private:
     // Dialog & Modal State
     bool show_match_start_modal_{false};
     uint32_t match_start_modal_ticks_{0};
-    static constexpr uint32_t MATCH_START_MODAL_DURATION_TICKS = 120; // 6.0s at 20Hz
+    static constexpr uint32_t MATCH_START_MODAL_DURATION_TICKS = 100; // 5.0 s at 20 Hz (first timer tick of Ants.exe 0x1017127)
 
     bool show_quit_dialog_{false};
     UIButton yes_button_{};
