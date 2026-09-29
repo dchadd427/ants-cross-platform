@@ -23,10 +23,6 @@ void AntUnit::tick_timers() noexcept {
         transform_timer--;
     }
 
-    if (ability_cooldown_ticks > 0) {
-        ability_cooldown_ticks--;
-    }
-
     // Continuous idle standing animation cycle
     if (state == UnitState::Idle || state == UnitState::GuardIdle) {
         anim_tick++;

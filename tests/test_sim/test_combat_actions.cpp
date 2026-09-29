@@ -297,6 +297,19 @@ int main() {
         ASSERT_TRUE(sim2.has_news_event(0, 48));                            // "Can't do that..."
     } TEST_END();
 
+    TEST_CASE("1.11 A flight never lands on a power-up (an obstacle for everything but the power-up order): the direction is deflected") {
+        SimulationEngine sim;
+        make_world(sim);
+        const uint32_t a = sim.spawn_unit(0, AntType::Worker, TileCoord{10, 10});
+        const uint32_t b = sim.spawn_unit(1, AntType::Worker, TileCoord{11, 10});
+        sim.grid_mut().place_powerup(12, 10, 4);                                // the nominal landing tile
+        sim.execute_melee_attack(a, b);
+        ASSERT_TRUE(wait_ms(sim, 3000, [&]() { return sim.get_unit(b).loco_action == AntUnit::kActionIdle &&
+                                                       !sim.get_unit(b).engaged && sim.get_unit(b).pos != TileCoord{11, 10}; }) >= 0);
+        ASSERT_EQ(sim.get_unit(b).pos, (TileCoord{12, 11}));                    // the next direction (+1, south-east)
+        ASSERT_TRUE(sim.grid().has_powerup_at(TileCoord{12, 10}));              // the power-up is untouched
+    } TEST_END();
+
     TEST_CASE("2.1 \"Ouch!\" for the victim's team and allies at every contact, the alarm cue at most once per 10 s") {
         SimulationEngine sim;
         make_world(sim);

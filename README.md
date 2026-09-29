@@ -56,7 +56,7 @@ Play the remake instantly in any modern web browser (Chrome, Firefox, Safari, Ed
   - Standalone web inspector (`asset_catalog/index.html`) with responsive design, searching, filtering, and instant asset downloads (⬇ WAV audio, ⬇ PNG sprites, ⬇ composite canvas frames).
 
 - **Automated Verification & Zero-Warning Standard**:
-  - 100% pass rate across **184 integration tests (6,365 assertions)**, the hill-action and combat-action golden tests and **506 opaque-box End-to-End (E2E) verification tests**.
+  - 100% pass rate across **184 integration tests (6,146 assertions)**, the hill-action, combat-action and ability-action golden tests and **506 opaque-box End-to-End (E2E) verification tests**.
   - Strict compilation under `-Wall -Wextra -Werror -Wsign-conversion`.
 
 ---
@@ -73,6 +73,7 @@ The remake provides a complete, playable, standalone experience with authentic a
 | **HUD & Interface** | ✅ Complete | Recessed status news box, chat overlay, minimap, team switching. |
 | **WebAssembly & Cloud Beta** | ✅ Complete | Docker containerized deployment at `beta.playants.org`. |
 | **Unit Movement & Locomotion** | 🟡 Active Calibration | 8-directional pathfinding, corner traversal, and base queuing are implemented; ongoing tuning for crowded group steering, ant collision nudging, and diagonal slip feel. |
+| **Abilities: Bombs, Fire & Bridges** | 🟢 Original Action Model | Plant, defuse, ignite, extinguish, bridge build and demolish as the original's action clips: invisible solid placeholder, effects at the end of the clip, cancel by melee or stun, sounds from the clip frames. |
 | **Combat, Knockback & Collisions** | 🟢 Original Action Model | Ported from the 1998 binary: contact when a step crosses into the target tile, hit points lost at contact, strike frame, `gh` / `gb` flights with the original landing rules, pile-up dispersal, fire and water landings, bomb victims and duds, stun, deferred death and removal effects, and the combat ant auto-engage. |
 | **Multiplayer Networking** | 📋 Planned | Deterministic lockstep protocol over WebSockets / UDP. |
 

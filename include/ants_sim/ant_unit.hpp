@@ -160,8 +160,14 @@ public:
     static constexpr uint8_t kOrderAttack  = 0x03;
     static constexpr uint8_t kOrderPowerUp = 0x04;
     static constexpr uint8_t kOrderHarvest = 0x05;
+    static constexpr uint8_t kOrderIgnite  = 0x06;   // fire ant: place a fire wall on the target tile
+    static constexpr uint8_t kOrderExtinguish = 0x07; // fire ant: put the fire wall on the target tile out
+    static constexpr uint8_t kOrderPlant   = 0x08;   // bomber: plant a bomb on the target tile
+    static constexpr uint8_t kOrderDefuse  = 0x09;   // bomber: defuse the bomb on the target tile
     static constexpr uint8_t kOrderBomb    = 0x0A;
     static constexpr uint8_t kOrderRaid    = 0x0B;
+    static constexpr uint8_t kOrderBridgeBuild = 0x0D;     // swimmer: build a bridge piece on the target water tile
+    static constexpr uint8_t kOrderBridgeDemolish = 0x0E;  // swimmer: demolish the bridge on the target tile
     static constexpr int32_t kNoOrderTileX = 0x78;
     static constexpr int32_t kNoOrderTileY = 0x5A;
 
@@ -203,10 +209,7 @@ public:
     TileCoord   final_dest{-1, -1};
     TileCoord   harvest_origin{-1, -1};
     bool        is_thief_steal{false};
-    OrderType   pending_ability{static_cast<OrderType>(0)};
-    TileCoord   pending_ability_target{-1, -1};
     TileCoord   ability_target{-1, -1};
-    uint16_t    ability_cooldown_ticks{0};
     bool        allow_friendly_bomb{false};
     bool        is_food_order{false};
     uint8_t     pending_powerup_type{255};
@@ -263,6 +266,8 @@ public:
     uint32_t    raid_amount{0};             // +0xf8: loot fixed when a thief's raid starts
     uint8_t     orig_target_team{255};      // +0xb0 (attack order)
     uint32_t    orig_target_ant{0};         // +0xb2 (attack order)
+    TileCoord   orig_special_tile{-1, -1};  // +0xb0 of the ability orders 6..9, 0xd, 0xe: the tile the ability works on
+    uint16_t    orig_b4{0};                 // +0xb4 of the bridge actions: the tile id (0x22..0x25) this ant expects to find
     int32_t     orig_food_id{-1};           // +0xb0 (harvest order): food object identity
     TileCoord   orig_food_tile{-1, -1};     // +0xb4 (harvest order): food anchor tile
     uint32_t    move_serial{0};             // bumped by clear_path() to invalidate pending path requests

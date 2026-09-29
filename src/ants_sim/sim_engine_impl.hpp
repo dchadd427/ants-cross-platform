@@ -298,6 +298,30 @@ public:
     void deliver_path(uint32_t ant_id, const std::vector<TileCoord>& path);
     bool has_pending_path(uint32_t ant_id) const noexcept;
 
+    // abilities: validators, approach tile and the action starts / ends (movement_system.cpp, ability_system.cpp)
+    bool valid_ground(TileCoord t, bool stationary_only);                       // FUN_0101d762
+    bool valid_water(TileCoord t, bool stationary_only);                        // FUN_0101d6d6
+    bool valid_bomb(TileCoord t) const;                                         // FUN_0101d7f9
+    bool approach_tile(const AntUnit& a, TileCoord& t);                         // FUN_01020128
+    bool occupied_stationary(TileCoord t);                                      // FUN_0100f3e8
+    bool ability_arrive(AntUnit& a, uint8_t order);                             // FUN_0101ccaf cases 6..9, 0xd, 0xe (true: started)
+    void start_plant(AntUnit& a, TileCoord target, TileCoord approach);         // FUN_01021915 (msg 0xd)
+    void end_plant(AntUnit& a, bool cancel);                                    // FUN_0101e433
+    void start_defuse(AntUnit& a, TileCoord target, TileCoord approach);        // FUN_010219e8 (msg 0xe)
+    void end_defuse(AntUnit& a, bool cancel);                                   // FUN_0101e599
+    void start_ignite(AntUnit& a, TileCoord target, TileCoord approach);        // FUN_010210fa (msg 0xb)
+    void end_ignite(AntUnit& a, bool cancel);                                   // FUN_0101e798
+    void start_extinguish(AntUnit& a, TileCoord target, TileCoord approach);    // FUN_010211f2 (msg 0xc)
+    void end_extinguish(AntUnit& a, bool cancel);                               // FUN_0101e97b
+    void start_bridge_build(AntUnit& a, TileCoord target, TileCoord approach);  // FUN_010212a3 (msg 0x19)
+    void bridge_build_pass_end(AntUnit& a);                                     // step callback case 0x10 (0x101f2b7)
+    void end_bridge_build(AntUnit& a, bool cancel);                             // FUN_0101eaec
+    void start_bridge_demolish(AntUnit& a, TileCoord target, TileCoord approach);   // FUN_0102137b (msg 0x1a)
+    void bridge_demolish_pass_end(AntUnit& a);                                  // step callback case 0x11 (0x101f401)
+    void end_bridge_demolish(AntUnit& a, bool cancel);                          // FUN_0101ecdf
+    void ability_clip_end(AntUnit& a);                                          // step callback cases 6..9 at the last frame
+    void end_walk_to_idle(AntUnit& a);                                          // SetActionDefault(0) + SetPath(0)
+
     // hill, hatch and raid actions (action_system.cpp)
     bool action_cleanup(AntUnit& a, uint8_t old_action, uint8_t new_action);   // SetAction old-action cleanup (table 0x101b48f)
     void enter_hill(AntUnit& a);                       // message 7 handler FUN_01021494

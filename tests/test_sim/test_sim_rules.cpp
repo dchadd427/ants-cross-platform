@@ -322,14 +322,17 @@ void run_suite_5_placement() {
         ASSERT_FALSE(sim.validate_cardinal_placement({10, 10}, {9, 11}));
     } TEST_END();
 
-    TEST_CASE("5.3 Ground Flag Bit 0x02 (CAN_PLACE_BOMB) Enforced") {
+    TEST_CASE("5.3 A Bomb Needs Grass, Sand Or Dirt: Mud And Water Are Refused, No Tile Flag Is Needed (FUN_0101d762)") {
         SimulationEngine sim;
         sim.init_test_world(60, 60, 1);
         uint32_t b = sim.spawn_unit(0, AntType::Bomber, {10, 10});
-        sim.set_tile_flags(11, 10, 0x02);
+        sim.set_tile_flags(11, 10, 0x00);                        // the tile flags play no role in the original
         ASSERT_TRUE(sim.plant_bomb(b, {11, 10}));
-        sim.set_tile_flags(10, 11, 0x00);
+        sim.grid_mut().get_cell_mut(10, 11).is_mud = true;       // mud
+        sim.grid_mut().get_cell_mut(10, 11).surface_type = SurfaceType::Mud;
         ASSERT_FALSE(sim.plant_bomb(b, {10, 11}));
+        sim.set_terrain(9, 10, TERRAIN_WATER);                   // water
+        ASSERT_FALSE(sim.plant_bomb(b, {9, 10}));
     } TEST_END();
 
     TEST_CASE("5.4 Ground Flag Bit 0x04 (CAN_PLACE_FIRE) Implies 0x02") {
@@ -515,16 +518,21 @@ void run_suite_7_fire() {
 void run_suite_8_bridges() {
     TEST_SUITE("Suite 8: Bridge Mechanics, Universal Traversal & Collapse Drowning");
 
-    TEST_CASE("8.1 4-Stage Construction on Water (Sound 82)") {
+    TEST_CASE("8.1 Bridge Build In Water: Stage 0x22 At Once, One Stage Per 500 ms Pass, Sound 82 In Every Pass") {
         SimulationEngine sim;
         sim.init_test_world(60, 60, 1);
+        sim.set_terrain(10, 10, TERRAIN_WATER);                  // the swimmer digs from the water (bbw, 500 ms passes)
         sim.set_terrain(11, 10, TERRAIN_WATER);
         uint32_t s = sim.spawn_unit(0, AntType::Swimmer, {10, 10});
-        for (int stage = 1; stage <= 4; ++stage) {
+        sim.clear_audio_events();
+        ASSERT_TRUE(sim.build_bridge_step(s, {11, 10}));
+        ASSERT_EQ(sim.get_bridge_stage({11, 10}), 1);
+        for (int stage = 2; stage <= 4; ++stage) {
             sim.clear_audio_events();
-            sim.build_bridge_step(s, {11, 10});
-            ASSERT_TRUE(sim.has_audio_event(82)); // Sound 82 shovelwater.wav
+            for (int t = 0; t < 40 && sim.get_bridge_stage({11, 10}) < stage; ++t) sim.tick();
             ASSERT_EQ(sim.get_bridge_stage({11, 10}), stage);
+            for (int t = 0; t < 6; ++t) sim.tick();
+            if (stage < 4) ASSERT_TRUE(sim.has_audio_event(82)); // Sound 82 shovelwater.wav in the next pass
         }
     } TEST_END();
 

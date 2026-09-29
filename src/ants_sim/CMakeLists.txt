@@ -4,6 +4,7 @@ add_library(ants_sim STATIC
     movement_system.cpp
     action_system.cpp
     combat_system.cpp
+    ability_system.cpp
     movement_tables.cpp
     path_planner.cpp
     pathfinding.cpp

@@ -161,6 +161,7 @@ PATH_PLANNER_STATUS=0
 MOVEMENT_GOLDEN_STATUS=0
 HILL_ACTIONS_STATUS=0
 COMBAT_ACTIONS_STATUS=0
+ABILITY_ACTIONS_STATUS=0
 CHALLENGER_M2_1_STATUS=0
 CHALLENGER_M2_2_STATUS=0
 APP_STATUS=0
@@ -234,6 +235,13 @@ if [ "$RUN_SIM" -eq 1 ]; then
     echo -e "${BOLD}${BLUE}======================================================================${RESET}"
     "./$BUILD_DIR/tests/test_sim/test_combat_actions"
     COMBAT_ACTIONS_STATUS=$?
+
+    echo ""
+    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
+    echo -e "${BOLD}${BLUE}>>> 2.7 RUNNING ORIGINAL ABILITY ACTIONS SUITE (bombs, fire walls, bridges)...${RESET}"
+    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
+    "./$BUILD_DIR/tests/test_sim/test_ability_actions"
+    ABILITY_ACTIONS_STATUS=$?
 fi
 
 # 5. Execute Application Integration Tests
@@ -348,6 +356,13 @@ if [ "$RUN_SIM" -eq 1 ]; then
         echo -e " 2.6 Combat Actions (test_combat_actions):           ${GREEN}PASSED${RESET}"
     else
         echo -e " 2.6 Combat Actions (test_combat_actions):           ${RED}FAILED (exit code ${COMBAT_ACTIONS_STATUS})${RESET}"
+        TOTAL_FAILED=$((TOTAL_FAILED + 1))
+    fi
+
+    if [ "$ABILITY_ACTIONS_STATUS" -eq 0 ]; then
+        echo -e " 2.7 Ability Actions (test_ability_actions):         ${GREEN}PASSED${RESET}"
+    else
+        echo -e " 2.7 Ability Actions (test_ability_actions):         ${RED}FAILED (exit code ${ABILITY_ACTIONS_STATUS})${RESET}"
         TOTAL_FAILED=$((TOTAL_FAILED + 1))
     fi
 fi

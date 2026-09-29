@@ -479,23 +479,28 @@ void run_suite_3_fire_ricochets() {
 void run_suite_4_bridges() {
     TEST_SUITE("Suite 4: Universal Bridges & 180s Expiration Collapse");
 
-    TEST_CASE("4.1 4-Stage Construction Progression with Sound 82") {
+    TEST_CASE("4.1 4-Stage Construction Progression: Three Passes From The Water, Sound 82, 180 s Timer At The End") {
         SimulationEngine sim;
         sim.init_test_world(60, 60, 100);
+        sim.set_terrain(14, 15, TERRAIN_WATER);
         sim.set_terrain(15, 15, TERRAIN_WATER);
 
         uint32_t s = sim.spawn_unit(0, AntType::Swimmer, {14, 15});
 
-        for (int stage = 1; stage <= 4; ++stage) {
-            sim.clear_audio_events();
-            ASSERT_TRUE(sim.build_bridge_step(s, {15, 15}));
-            ASSERT_TRUE(sim.has_audio_event(SoundID::ShovelWater)); // Sound 82
+        sim.clear_audio_events();
+        ASSERT_TRUE(sim.build_bridge_step(s, {15, 15}));
+        ASSERT_EQ(sim.get_bridge_stage({15, 15}), 1);
+        for (int stage = 2; stage <= 4; ++stage) {
+            for (int t = 0; t < 40 && sim.get_bridge_stage({15, 15}) < stage; ++t) sim.tick();
             ASSERT_EQ(sim.get_bridge_stage({15, 15}), stage);
         }
+        ASSERT_TRUE(sim.has_audio_event(SoundID::ShovelWater)); // Sound 82 played in the passes
 
         // Bridge complete: exactly 3600 ticks (180s)
         ASSERT_TRUE(sim.has_bridge_at({15, 15}));
         ASSERT_EQ(sim.get_bridge_stage({15, 15}), 4);
+        ASSERT_TRUE(sim.grid().get_cell({15, 15}).timer_ticks > LIFETIME_180S_TICKS - 60u);
+        ASSERT_TRUE(sim.grid().get_cell({15, 15}).timer_ticks <= LIFETIME_180S_TICKS);
     } TEST_END();
 
     TEST_CASE("4.2 Universal Traversal Across All Factions and Classes") {
@@ -598,33 +603,31 @@ void run_suite_4_bridges() {
 void run_suite_5_bombs() {
     TEST_SUITE("Suite 5: Bombs: Planting, Proximity Detonation, Defusal & Safety");
 
-    TEST_CASE("5.1 Cardinal-Only Planting Enforced (Sound 90 bombpick.wav)") {
+    TEST_CASE("5.1 Cardinal-Only Planting Enforced (Sound 90 comes from the plant clip, the bomb appears at its end)") {
         SimulationEngine sim;
         sim.init_test_world(60, 60, 100);
         uint32_t bomber = sim.spawn_unit(0, AntType::Bomber, {20, 20});
 
-        // Flag 0x02 on cardinal neighbor (21, 20)
-        sim.set_tile_flags(21, 20, 0x02);
         sim.clear_audio_events();
-        ASSERT_TRUE(sim.plant_bomb(bomber, {21, 20}));
+        ASSERT_TRUE(sim.plant_bomb(bomber, {21, 20}, false));
+        ASSERT_FALSE(sim.has_bomb_at({21, 20}));                 // only the invisible placeholder while the clip plays
+        for (int t = 0; t < 45 && !sim.has_bomb_at({21, 20}); ++t) sim.tick();
         ASSERT_TRUE(sim.has_audio_event(SoundID::BombPick)); // Sound 90
         ASSERT_TRUE(sim.has_bomb_at({21, 20}));
 
         // Diagonal neighbor (21, 21) rejected
-        sim.set_tile_flags(21, 21, 0x02);
         ASSERT_FALSE(sim.plant_bomb(bomber, {21, 21}));
 
         // Distance 2 (22, 20) rejected
-        sim.set_tile_flags(22, 20, 0x02);
         ASSERT_FALSE(sim.plant_bomb(bomber, {22, 20}));
 
-        // Missing flag 0x02 rejected
-        sim.set_tile_flags(19, 20, 0x00);
+        // Mud rejected
+        sim.grid_mut().get_cell_mut(19, 20).is_mud = true;
+        sim.grid_mut().get_cell_mut(19, 20).surface_type = SurfaceType::Mud;
         ASSERT_FALSE(sim.plant_bomb(bomber, {19, 20}));
 
         // Non-bomber unit rejected
         uint32_t worker = sim.spawn_unit(0, AntType::Worker, {20, 20});
-        sim.set_tile_flags(20, 21, 0x02);
         ASSERT_FALSE(sim.plant_bomb(worker, {20, 21}));
     } TEST_END();
 

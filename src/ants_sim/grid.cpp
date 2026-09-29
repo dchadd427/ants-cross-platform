@@ -465,6 +465,14 @@ void Grid::collapse_bridge(uint32_t x, uint32_t y) noexcept {
     cell.timer_ticks = 0;
 }
 
+void Grid::set_layer2(uint32_t x, uint32_t y, uint16_t id, uint8_t owner) noexcept {
+    if (!in_bounds(static_cast<int32_t>(x), static_cast<int32_t>(y))) return;
+    auto& cell = get_cell_mut(x, y);
+    cell.interactive_id = id;
+    cell.interactive_owner = (id == TILE_EMPTY) ? uint8_t{255} : owner;
+    cell.timer_ticks = 0;
+}
+
 void Grid::drop_lunchbox(uint32_t x, uint32_t y, uint32_t points) noexcept {
     if (!in_bounds(static_cast<int32_t>(x), static_cast<int32_t>(y))) return;
     auto& cell = get_cell_mut(x, y);

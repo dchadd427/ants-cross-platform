@@ -32,6 +32,7 @@ constexpr uint16_t TILE_BRIDGE3  = 36u;
 constexpr uint16_t TILE_BRIDGE4  = 37u;  // Completed bridge (bridge4a)
 constexpr uint16_t TILE_BRIDGE4B = 38u;  // Completed bridge (bridge4b)
 constexpr uint16_t TILE_LUNCHBOX = 356u; // Dropped food lunchbox (Anim 356, Sprite 513)
+constexpr uint16_t TILE_RESERVED = 160u; // 0xa0: invisible, solid placeholder while a bomb or fire wall is being placed
 
 // Power-Up Tile IDs (Disasm 0x1021087)
 constexpr uint16_t PU_COMBAT  = 62u;
@@ -175,6 +176,7 @@ struct TileCell {
         return is_powerup && !is_empty_overlay();
     }
     constexpr bool has_lunchbox() const noexcept { return interactive_id == TILE_LUNCHBOX; }
+    constexpr bool has_reserved() const noexcept { return interactive_id == TILE_RESERVED; }
 
     constexpr bool can_place_bomb() const noexcept {
         return terrain_type == TERRAIN_WALKABLE && !is_obstacle_overlay && !is_mud && surface_type != SurfaceType::Mud && (flags & FLAG_CAN_PLACE_BOMB) != 0 && is_empty_overlay();
@@ -307,7 +309,7 @@ public:
     bool is_solid_object(TileCoord t) const noexcept {
         if (!in_bounds(t)) return true;
         const auto& c = get_cell(t);
-        if (c.static_solid || c.has_fire() || c.has_lunchbox() || c.has_powerup() || c.has_food()) return true;
+        if (c.static_solid || c.has_fire() || c.has_lunchbox() || c.has_powerup() || c.has_food() || c.has_reserved()) return true;
         if (c.is_base_hole) return false;
         return c.terrain_type == TERRAIN_OBSTACLE || (!exact_solid_bits_ && c.is_obstacle_overlay);
     }
@@ -365,6 +367,8 @@ public:
     void advance_bridge(uint32_t x, uint32_t y, uint8_t owner_player) noexcept;
     void regress_bridge(uint32_t x, uint32_t y) noexcept;
     void collapse_bridge(uint32_t x, uint32_t y) noexcept;
+    /// FUN_01007352 SetTile(layer 2, tile, id) + owner: the raw write the abilities of the original use.
+    void set_layer2(uint32_t x, uint32_t y, uint16_t id, uint8_t owner) noexcept;
     void drop_lunchbox(uint32_t x, uint32_t y, uint32_t points = 0) noexcept;
     void clear_lunchbox(uint32_t x, uint32_t y) noexcept;
 

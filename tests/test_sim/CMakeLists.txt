@@ -119,3 +119,18 @@ target_include_directories(test_combat_actions PRIVATE
 )
 
 add_test(NAME test_combat_actions COMMAND test_combat_actions)
+
+add_executable(test_ability_actions
+    test_ability_actions.cpp
+)
+
+target_link_libraries(test_ability_actions PRIVATE
+    ants_sim
+    ants_assets
+)
+
+target_include_directories(test_ability_actions PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../include
+)
+
+add_test(NAME test_ability_actions COMMAND test_ability_actions)

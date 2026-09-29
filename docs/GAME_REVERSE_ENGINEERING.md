@@ -1574,6 +1574,60 @@ handler of `FUN_0100d791` does before it broadcasts.
 
 ---
 
+### 5.37 Ability Ground Truth: Plant, Defuse, Ignite, Extinguish, Bridge Build and Demolish (Capstone-Verified; Supersedes Earlier Ability, Bomb, Fire and Bridge Notes)
+
+Addresses are virtual addresses in `Original-Ants/Ants.exe` (image base 0x01000000); every statement was read in the binary or in
+`ants.chd`. Implemented in `src/ants_sim/ability_system.cpp` (starts, ends, bridge passes) with the order side in
+`movement_system.cpp` (`classify_order`, `go_to`, `path_complete`, validators, approach tile); checked by
+`tests/test_sim/test_ability_actions.cpp` (golden cases) and the ability cases of `tests/test_app/test_app_integration.cpp`.
+
+* **The order** *(implemented; `FUN_010287b5` with the special flag -> `FUN_0101fc50` -> `FUN_01020655`)*. The ant's type turns the
+  special click into an ability order: bomber 8 (plant), or 9 (defuse) when the tile cannot take a bomb but holds one; fire ant
+  6 (ignite), or 7 (extinguish) on a fire wall; swimmer 0xd (bridge), or 0xe (demolish) on a completed bridge (layer-2 id 0x25).
+  Worker, thief and combat ants keep order 0 and just walk. The tile must be valid now (`FUN_0101d762`: grass, sand or dirt,
+  never mud, water or a bridge; nothing on layer 2; not solid; not a special hill tile; no stationary ant on it - `FUN_0101d6d6`
+  for water, `FUN_0101d7f9` for a bomb of any team, layer 2 = 0x86 for a fire wall), and an approach tile must exist
+  (`FUN_01020128`: the first of N, S, W, E the ant may enter with the smallest 16 * Chebyshev distance from its own tile);
+  otherwise the ant plays the can't clip with "Can't do that..." (text 0x30). The path goes to the approach tile; `+0xb0` keeps the
+  target. There is no ability cooldown and no blast radius; orders are refused while an ability clip plays (`FUN_0101ff5a`).
+* **Arrival** *(implemented; `FUN_0101ccaf` cases 6..9, 0xd, 0xe)*. The target is validated again (now every ant on the tile
+  blocks); a valid target starts the action (messages 0xb, 0xc, 0xd, 0xe, 0x19, 0x1a: handler runs at once), otherwise the ant
+  stops. The starts put the ant on the approach tile centre (the walk step's snap delta is still added, so it stands a few pixels
+  off until the clip ends) and clear the path.
+* **Plant** *(implemented; `FUN_01021915` / `FUN_0101e433`)*: clip `absb` (1360 ms N / S, 1400 ms E / W, cue 90 at 880 / 920 ms),
+  the target tile holds the invisible SOLID placeholder tile 0xa0 (owner = team) from the start; at the end of the clip the
+  placeholder becomes the team's bomb ("Bomb dropped.", text 0x38). SetAction's cleanup flag decides the outcome: a melee hit
+  or a stun cancels (the placeholder disappears), a blast, a death or the clip's end complete it at that moment.
+* **Defuse** *(implemented; `FUN_010219e8` / `FUN_0101e599`)*: clip `abdb` (1140 ms N / E, 1100 ms S, cues 73 at 220 and 74 at 620 ms),
+  nothing changes until the clip ends: then the bomb is gone ("Bomb defused.", text 0x39), no explosion; an interrupted defuse leaves
+  it, a bomb that already went off leaves nothing to do.
+* **Ignite / extinguish** *(implemented; `FUN_010210fa` / `FUN_0101e798`, `FUN_010211f2` / `FUN_0101e97b`)*: ignite shows "Starting a fire..."
+  (0x41) at the start, uses the placeholder, clip `afsf` (1760 ms S, 1810 ms N / E, cues 67 at 500 and 68 at 1300 / 1350); the fire wall
+  (0x86, owner = team) appears when the clip ends and burns out 180 s later (only when more than 180 s of the match remain, checked on
+  a 2500 ms poll in the original: 180.0 - 182.5 s; the remake removes it after exactly 180 s). Extinguish: clip `afxf` (1200 ms S, 1300 ms
+  N / E, cue 69 at 400 ms); at the end the wall is removed with the sputter puff (830 ms, cue 5) and its timer is cancelled ("Fire put
+  out.", 0x40); an interrupted extinguish leaves the fire.
+* **Bridges** *(implemented; `FUN_010212a3`, step callback 0x101f2b7, `FUN_0101eaec`; `FUN_0102137b`, 0x101f401, `FUN_0101ecdf`)*: build starts the dig
+  clip (`bbw` 500 ms per pass when the ant's tile is water, `bbl` 480 ms on land, it loops; cue 82 in water, 81 on land in every pass) and
+  writes stage 0x22 (walkable, terrain class 3) on the target at once; at the end of each pass the tile grows one stage when it is still
+  the one the ant expects and belongs to its team; the third pass reaches 0x25, ends the action and arms the 180 s collapse timer
+  (only with more than 180 s left). A build that did not finish (a hit, a stun, an unexpected tile) removes the bridge again. Demolish
+  needs a completed bridge, gives the tile to the demolisher's team at once, removes one stage per pass (0x24, 0x23, 0x22) and destroys
+  the tile at the end of the fourth pass (1920 / 2000 ms); an interrupted demolish restores the completed bridge. Destroying a bridge
+  (demolish, or the timer `FUN_01024e66`) runs `FUN_0100f8bf`: every non-swimmer on the tile drowns, a swimmer only splashes (dsplash).
+* **Solid tiles and pick-ups** *(implemented)*: fire walls, power-ups, lunchboxes, food and the placeholder are solid for every ant that
+  does not carry the matching order (power-up order onto that very tile, harvest order onto that food, raid, a fire ant on a fire wall).
+  An ant can therefore not be thrown onto a power-up (the landing tests refuse solid tiles) and cannot be attacked while it stands on
+  one (5.36); a power-up is collected only by an ant that stands on its tile (the pick-up runs at the end of the walk, never from a distance).
+* **Removed as invented** (v0.0.34): the tick-driven ability states with fixed 28 / 35 / 22 / 8-tick timings, the ability cooldown, the
+  pending-ability approach code, the bomb detonation of an ant that stands on the target tile at the end of the plant (the tile is solid
+  while the plant clip plays), fire walls on mud, bridge stages that stay when a build is interrupted, the partial bridge that can be
+  continued, and the tile-flag test (`0x02`) for bombs.
+* **Not yet ported**: the power-up pick-up as action 4 (`FUN_01020cdb`), harvest as action 5, food points from the level file and the
+  lunchbox as a food object (stage B, remaining parts).
+
+---
+
 ## 6. Target Multi-Platform Architecture
 
 To achieve clean, modern, high-performance execution across macOS, Linux, Windows, and the Web (WebAssembly):

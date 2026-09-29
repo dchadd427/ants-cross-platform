@@ -72,6 +72,12 @@ bool SimulationEngineImpl::action_cleanup(AntUnit& a, uint8_t old_action, uint8_
         case AntUnit::kActionRaid:
             cleanup_raid(a);           // 0x101e27f
             break;
+        case AntUnit::kActionIgnite:         end_ignite(a, flag); break;          // 0x101e798
+        case AntUnit::kActionExtinguish:     end_extinguish(a, flag); break;      // 0x101e97b
+        case AntUnit::kActionPlant:          end_plant(a, flag); break;           // 0x101e433
+        case AntUnit::kActionDefuse:         end_defuse(a, flag); break;          // 0x101e599
+        case AntUnit::kActionBridgeBuild:    end_bridge_build(a, flag); break;    // 0x101eaec
+        case AntUnit::kActionBridgeDemolish: end_bridge_demolish(a, flag); break; // 0x101ecdf
         case AntUnit::kActionAttack: { // 0x101ecc4: a pending hit is delivered when its victim still waits for it
             AntUnit* v = find_unit(a.pending_victim);
             if (a.pending_victim != 0 && v && v->engaged) deliver_pending_hit(a);

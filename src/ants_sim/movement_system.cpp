@@ -396,6 +396,18 @@ void SimulationEngineImpl::loco_on_step(AntUnit& a, StepEvt& e) {
         case AntUnit::kActionDrown:
             if (e.status == 2) finish_death(a);
             break;
+        case AntUnit::kActionIgnite:                     // 0x101f237, 0x101f277, 0x101f52b, 0x101f568
+        case AntUnit::kActionExtinguish:
+        case AntUnit::kActionPlant:
+        case AntUnit::kActionDefuse:
+            if (e.status == 2) ability_clip_end(a);
+            break;
+        case AntUnit::kActionBridgeBuild:                // 0x101f2b7: a pass of the dig clip ended
+            if (e.status == 2) bridge_build_pass_end(a);
+            break;
+        case AntUnit::kActionBridgeDemolish:             // 0x101f401
+            if (e.status == 2) bridge_demolish_pass_end(a);
+            break;
         case AntUnit::kActionCantGo:
             if (e.status == 2) {                         // end of the *cg animation (case 0xb)
                 set_action(a, AntUnit::kActionIdle, static_cast<uint8_t>(a.facing), -1, -1, false);
@@ -492,6 +504,34 @@ void SimulationEngineImpl::set_action(AntUnit& a, uint8_t action, uint8_t dir, i
         case AntUnit::kActionCantGo:
             a.orig_order_tile = no_order_tile();
             loco_play(a, movement::cant_go_clip(type, carrying), dir);
+            return;
+        case AntUnit::kActionIgnite:                                 // afsf
+            loco_play(a, movement::action_clip(movement::ActionClip::Ignite, type, dir, false), dir);
+            a.state = UnitState::PlacingFire;
+            return;
+        case AntUnit::kActionExtinguish:                             // afxf
+            loco_play(a, movement::action_clip(movement::ActionClip::Extinguish, type, dir, false), dir);
+            a.state = UnitState::ExtinguishingFire;
+            return;
+        case AntUnit::kActionPlant:                                  // absb
+            loco_play(a, movement::action_clip(movement::ActionClip::Plant, type, dir, false), dir);
+            a.state = UnitState::PlantingBomb;
+            return;
+        case AntUnit::kActionDefuse:                                 // abdb
+            loco_play(a, movement::action_clip(movement::ActionClip::Defuse, type, dir, false), dir);
+            a.state = UnitState::DefusingBomb;
+            return;
+        case AntUnit::kActionBridgeBuild:                            // asbbw (the ant's tile is water) / asbbl
+            loco_play(a, movement::action_clip((terr_a == movement::kTerrainWater) ? movement::ActionClip::BridgeBuildWater
+                                                                                   : movement::ActionClip::BridgeBuildLand,
+                                               type, dir, false), dir);
+            a.state = UnitState::BuildingBridge;
+            return;
+        case AntUnit::kActionBridgeDemolish:                         // asdbw / asdbl
+            loco_play(a, movement::action_clip((terr_a == movement::kTerrainWater) ? movement::ActionClip::BridgeDemolishWater
+                                                                                   : movement::ActionClip::BridgeDemolishLand,
+                                               type, dir, false), dir);
+            a.state = UnitState::DemolishingBridge;
             return;
         case AntUnit::kActionEnter: {                                // 0x101b1c1
             // The clip is chosen by "holding" (+0xe8); the heal frame (event 5) is stretched to (10 - hp) * 200 ms
@@ -749,6 +789,12 @@ void SimulationEngineImpl::path_complete(AntUnit& a, StepEvt& e) {
         // cases 1 / 4 (0x101cd1d): arrival at the ring tile: queued, first come first served (click orders first)
         a.home_state = 2;
         a.home_time_ms = a.home_priority ? 0u : now_ms_;
+    }
+    if (order == AntUnit::kOrderIgnite || order == AntUnit::kOrderExtinguish || order == AntUnit::kOrderPlant ||
+        order == AntUnit::kOrderDefuse || order == AntUnit::kOrderBridgeBuild || order == AntUnit::kOrderBridgeDemolish) {
+        // cases 6..9, 0xd, 0xe (0x101cd..0x101d5xx): the ability starts when its target is still valid (handled: the frame's
+        // snap delta stays); otherwise the ant just stops
+        if (ability_arrive(a, order)) return;
     }
     if (order == AntUnit::kOrderBomb) {
         // case 0xa (0x101d44f): a bomb on the registered tile is set off at once (message 0xf, handled: the frame
@@ -1117,6 +1163,68 @@ terrain: {
 }
 
 // ------------------------------------------------------------------------------------------------
+// Ability targets (FUN_0101d762 / FUN_0101d6d6 / FUN_0101d7f9 / FUN_01020128)
+// ------------------------------------------------------------------------------------------------
+
+// FUN_0100f3e8: an ant stands on the tile and does not move (no path, a stationary action).
+bool SimulationEngineImpl::occupied_stationary(TileCoord t) {
+    AntUnit* o = occupant_at(t);
+    return o && o->waypoints.empty() && is_stationary_action(orig_action_of(*o));
+}
+
+// FUN_0101d762: a tile that can take a bomb or a fire wall: grass, sand or dirt (never mud, water or a bridge),
+// nothing on layer 2, not solid, not one of the hill's special tiles, and no ant (the order asks with `stationary_only`:
+// only an ant that stands still blocks it; the start at the target's neighbour asks with any ant).
+bool SimulationEngineImpl::valid_ground(TileCoord t, bool stationary_only) {
+    if (!grid_.in_bounds(t)) return false;
+    const uint8_t terr = grid_.terrain_class_at(t);
+    if (!(terr == movement::kTerrainGrass || terr == movement::kTerrainSand || terr == movement::kTerrainDirt)) return false;
+    if (!grid_.get_cell(t).is_empty_overlay()) return false;
+    if (grid_.is_solid_object(t)) return false;
+    if (is_special_base_tile(t) || grid_.is_anthill_reserved_spot(t)) return false;
+    for (const auto& ah : grid_.anthills()) {
+        if (t.x >= static_cast<int32_t>(ah.x) && t.x < static_cast<int32_t>(ah.x) + 4 &&
+            t.y >= static_cast<int32_t>(ah.y) && t.y < static_cast<int32_t>(ah.y) + 4) return false;
+    }
+    return stationary_only ? !occupied_stationary(t) : (occupant_at(t) == nullptr);
+}
+
+// FUN_0101d6d6: the same for a water tile (a swimmer's bridge).
+bool SimulationEngineImpl::valid_water(TileCoord t, bool stationary_only) {
+    if (!grid_.in_bounds(t)) return false;
+    if (grid_.terrain_class_at(t) != movement::kTerrainWater) return false;
+    if (!grid_.get_cell(t).is_empty_overlay()) return false;
+    if (grid_.is_solid_object(t)) return false;
+    if (is_special_base_tile(t)) return false;
+    return stationary_only ? !occupied_stationary(t) : (occupant_at(t) == nullptr);
+}
+
+// FUN_0101d7f9: a bomb of any team lies on the tile.
+bool SimulationEngineImpl::valid_bomb(TileCoord t) const {
+    return grid_.in_bounds(t) && grid_.get_cell(t).has_bomb();
+}
+
+// FUN_01020128: the neighbour of the target the ant works from: the first of N, S, W, E that the ant may enter (final
+// tile, moving team-mates tolerated) with the smallest 16 * Chebyshev distance from its own tile.
+bool SimulationEngineImpl::approach_tile(const AntUnit& a, TileCoord& t) {
+    const TileCoord cur = pixel_tile(a);
+    const TileCoord cand[4] = { TileCoord{t.x, t.y - 1}, TileCoord{t.x, t.y + 1}, TileCoord{t.x - 1, t.y}, TileCoord{t.x + 1, t.y} };
+    uint32_t cost[4];
+    for (int k = 0; k < 4; ++k) {
+        cost[k] = (grid_.in_bounds(cand[k]) && can_enter(a, cand[k], kFinalTile | kMovingMateOk))
+                      ? static_cast<uint32_t>(16 * cur.chebyshev_dist(cand[k])) : kBlockedCost;
+    }
+    int best = 0;
+    uint32_t bc = kBlockedCost;
+    for (int k = 0; k < 4; ++k) {
+        if (cost[k] < bc) { bc = cost[k]; best = k; }
+    }
+    if (bc == kBlockedCost) return false;
+    t = cand[best];
+    return true;
+}
+
+// ------------------------------------------------------------------------------------------------
 // Orders
 // ------------------------------------------------------------------------------------------------
 
@@ -1143,8 +1251,27 @@ void SimulationEngineImpl::classify_order(AntUnit& a, TileCoord t, bool special,
             a.orig_target_team = static_cast<uint8_t>(hill_team);
         }
     } else if (special) {
-        // Bomber/fire/swimmer special orders are driven by the remake's ability system; worker, thief
+        // The ability order of the ant's type (FUN_01020655 0x10206ad): bomber 8, or 9 on a tile that cannot take a bomb
+        // but holds one; fire ant 6, or 7 on a fire wall; swimmer 0xd, or 0xe on a completed bridge. Worker, thief
         // and combat ants keep order 0 (the original leaves +0xa8 unchanged after SetPath(0)).
+        switch (a.type) {
+            case AntType::Bomber:
+                a.orig_order = AntUnit::kOrderPlant;
+                if (!valid_ground(t, true) && valid_bomb(t)) a.orig_order = AntUnit::kOrderDefuse;
+                break;
+            case AntType::Fire:
+                a.orig_order = AntUnit::kOrderIgnite;
+                if (!valid_ground(t, true) && grid_.in_bounds(t) && grid_.get_cell(t).has_fire()) a.orig_order = AntUnit::kOrderExtinguish;
+                break;
+            case AntType::Swimmer:
+                a.orig_order = AntUnit::kOrderBridgeBuild;
+                if (!valid_water(t, true) && grid_.in_bounds(t) && grid_.get_cell(t).has_completed_bridge()) {
+                    a.orig_order = AntUnit::kOrderBridgeDemolish;
+                }
+                break;
+            default:
+                break;
+        }
     } else if (tile_occupied(t)) {
         AntUnit* occ = occupant_at(t);
         // An ally's ant opens the "attack your ally?" dialog in the original (FUN_0101ffab); the remake has
@@ -1243,7 +1370,33 @@ bool SimulationEngineImpl::go_to(AntUnit& a, TileCoord t, bool user_cmd, bool sp
     const TileCoord requested = t;
     classify_order(a, t, special, user_cmd);
     bool ok = true;
-    if (a.orig_order != AntUnit::kOrderRaid) {
+    const uint8_t sorder = a.orig_order;
+    if (sorder == AntUnit::kOrderIgnite || sorder == AntUnit::kOrderExtinguish || sorder == AntUnit::kOrderPlant ||
+        sorder == AntUnit::kOrderDefuse || sorder == AntUnit::kOrderBridgeBuild || sorder == AntUnit::kOrderBridgeDemolish) {
+        // ability orders (0x101fe07): the target must be valid now; the ant walks to the neighbour tile FUN_01020128 picks
+        bool valid = false;
+        switch (sorder) {
+            case AntUnit::kOrderIgnite:
+            case AntUnit::kOrderPlant:            valid = valid_ground(t, true); break;
+            case AntUnit::kOrderExtinguish:       valid = grid_.in_bounds(t) && grid_.get_cell(t).has_fire(); break;
+            case AntUnit::kOrderDefuse:           valid = valid_bomb(t); break;
+            case AntUnit::kOrderBridgeBuild:      valid = valid_water(t, true); break;
+            default:                              valid = grid_.in_bounds(t) && grid_.get_cell(t).has_completed_bridge(); break;
+        }
+        const TileCoord target = t;
+        if (valid && approach_tile(a, t)) {
+            a.orig_special_tile = target;                    // +0xb0 = the clicked tile
+        } else {
+            enter_cant_go(a);                                // SetActionDefault(0xb), SetPath(0), "Can't do that..."
+            a.waypoints.clear();
+            a.current_waypoint_idx = 0;
+            ++a.move_serial;
+            a.orig_order = AntUnit::kOrderNone;
+            a.orig_order_tile = no_order_tile();
+            post_news(a.player_id, "Can't do that...", 0x30);
+            ok = false;
+        }
+    } else if (a.orig_order != AntUnit::kOrderRaid) {
         // +0x68 keeps its old value during the goal check: the queued ant that ANTHILLQ sends in (+0x68 == 2) passes the
         // first-come-first-served rule of the entrance
         ok = adjust_goal(a, t, user_cmd, allow_goal_bomb);
@@ -1287,8 +1440,6 @@ void SimulationEngineImpl::deliver_path(uint32_t ant_id, const std::vector<TileC
         // Remake systems waiting for this walk give up with it (attack chase, ability approach, harvest
         // return, hill entry slot).
         a->final_dest = pixel_tile(*a);
-        a->pending_ability = OrderType::None;
-        a->pending_ability_target = TileCoord{-1, -1};
         a->ability_target = TileCoord{-1, -1};
         a->harvest_origin = TileCoord{-1, -1};
         a->is_food_order = false;
@@ -1346,7 +1497,11 @@ void SimulationEngineImpl::loco_sync(AntUnit& a) {
         a.loco_action == AntUnit::kActionRaid || a.loco_action == AntUnit::kActionAttack ||
         a.loco_action == AntUnit::kActionHit || a.loco_action == AntUnit::kActionBlown ||
         a.loco_action == AntUnit::kActionBlast || a.loco_action == AntUnit::kActionStun ||
-        a.loco_action == AntUnit::kActionDeath || a.loco_action == AntUnit::kActionDrown) {
+        a.loco_action == AntUnit::kActionDeath || a.loco_action == AntUnit::kActionDrown ||
+        a.loco_action == AntUnit::kActionGetPow || a.loco_action == AntUnit::kActionHarvest ||
+        a.loco_action == AntUnit::kActionIgnite || a.loco_action == AntUnit::kActionExtinguish ||
+        a.loco_action == AntUnit::kActionPlant || a.loco_action == AntUnit::kActionDefuse ||
+        a.loco_action == AntUnit::kActionBridgeBuild || a.loco_action == AntUnit::kActionBridgeDemolish) {
         return;                                            // running action clips: owned by the action system
     }
     const UnitState s = a.state;

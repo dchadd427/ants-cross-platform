@@ -236,7 +236,6 @@ struct AntSnapshot {
     bool     is_transforming{false};
     uint16_t transform_anim_frame{0};
     bool     on_powerup{false};
-    uint16_t ability_cooldown_ticks{0};
     int32_t  burn_elapsed_ms{-1};       // dud burn overlay (?bu) time since it started, -1 = none
     UnitState state{UnitState::Idle};
     uint8_t  target_team_id{255};
