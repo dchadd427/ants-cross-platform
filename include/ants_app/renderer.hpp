@@ -88,11 +88,13 @@ struct TransientEffect {
 constexpr int CANVAS_WIDTH  = 640;
 constexpr int CANVAS_HEIGHT = 480;
 
-// Authentic Playfield Viewport Bounds
-constexpr int PLAYFIELD_X = 17;
-constexpr int PLAYFIELD_Y = 22;
-constexpr int PLAYFIELD_W = 441;
-constexpr int PLAYFIELD_H = 439;
+// The map view of the original (Ants.exe: the view window's rectangle (16, 21) - (458, 461) set at 0x100a32b and given to the view at 0x100dcbf, docs 5.44): the world
+// pixel (camera.x, camera.y) is at the screen pixel (16, 21), the view is 442 x 440 (the camera's largest origin is the map's size less that). The UI shell drawn on top of it
+// has a black border at x = 16 / y = 21 and its hole starts at (17, 22), so the visible area is the same as before v0.0.67 (it used to be placed one pixel right and down).
+constexpr int PLAYFIELD_X = 16;
+constexpr int PLAYFIELD_Y = 21;
+constexpr int PLAYFIELD_W = 442;
+constexpr int PLAYFIELD_H = 440;
 
 
 constexpr int TILE_SIZE = 32;

@@ -73,6 +73,8 @@ public:
 
     // Listener / Spatial Positioning
     void set_listener_position(int32_t world_x, int32_t world_y);
+    int32_t listener_x() const noexcept { return listener_x_; }
+    int32_t listener_y() const noexcept { return listener_y_; }
     /// The gains of a source at a world position for the current listener and Sound Volume (the dB law below), times `base_vol`.
     void calculate_spatial_pan(int32_t world_x, int32_t world_y, float base_vol, float& out_vol_l, float& out_vol_r) const;
 

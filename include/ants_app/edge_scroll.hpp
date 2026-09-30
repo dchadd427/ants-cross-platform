@@ -113,4 +113,18 @@ inline EdgeScroll minimap_scroll_step(int32_t px, int32_t py, int32_t ox, int32_
     return out;
 }
 
+/// The view at the start of a match (the end of the HUD's constructor, Ants.exe 0x100e458 - 0x100e4b1 into FUN_01027197): the fresh view, whose origin is (0, 0), scrolls just far enough
+/// to show the square (ax - 160, ay - 160) - (ax + 192, ay + 192) around the pixel centre (ax, ay) = (32 tx + 16, 32 ty + 16) of the ANCHOR tile (tx, ty) of the local team's hill
+/// (the tile that the level's layer 2 flags as the hill object's anchor: one tile in from the corner of the 4 x 4 footprint), clipped to the map. It does not centre the hill: the
+/// view only moves right / down until the square's right / bottom edge is in view. Returns the origin.
+inline void start_view_origin(int32_t anchor_tx, int32_t anchor_ty, int32_t map_tiles_w, int32_t map_tiles_h, int32_t& ox, int32_t& oy) {
+    const int32_t ax = anchor_tx * 32 + 16;
+    const int32_t ay = anchor_ty * 32 + 16;
+    const int32_t l = std::max(ax - 160, 0);
+    const int32_t t = std::max(ay - 160, 0);
+    const int32_t r = std::min(ax + 192, map_tiles_w * 32);
+    const int32_t b = std::min(ay + 192, map_tiles_h * 32);
+    detail::scroll_to_show(l, t, r, b, 0, 0, ox, oy);
+}
+
 }  // namespace ants::app

@@ -39,6 +39,15 @@ Ground truth for every entry is in [`docs/GAME_REVERSE_ENGINEERING.md`](docs/GAM
   - **Found on the way, for the audit** (docs: implementation_plan.md section 18): `tests/test_sim/test_challenger_m2_it2_deep_stress.cpp` has not been part of the build since an early commit and no longer compiles
     (it uses the retired slot-queue API of the hill). (An earlier version of this line said that the death clips are no longer started by a separate effect: wrong, only the unused helper `spawn_death_effect` was removed; the effect path in `movement_system.cpp` is still in use, see the audit.)
 
+## v0.0.67 - 2026-09-30 - The view of the original
+
+Batch 5 part 1 (`docs/audit/ledger_input.md` I-06 and NEW-1; re-read in `Ants.exe`: `0x100a32b`, `0x100dcbf`, `0x1030249`, `0x100e458` - `0x100e4b1`, `0x1027197`, `0x100cd00`, `0x100ecdf`):
+
+- **The map view is at (16, 21) and 442 x 440**, as in the original: the remake put the world one pixel right and down (origin (17, 22), 441 x 439), so every click, every marker, the camera's limits (1479 / 1481 instead of 1478 / 1480 on a 60 x 60 map) and the listener of the sound law (origin + 220 / 219 instead of + 221 / 220) were a pixel off. What you see does not change: the UI shell covers the extra row and column with its black border.
+- **The start view is the original's**: the fresh view scrolls just far enough to show the square 160 px up and left and 192 px down and right of the centre of your hill's anchor tile (clipped to the map). It no longer centres the hill: on GAUNTLET green starts at (726, 24) (it was centred at (772, 69)), red at (0, 728), blue at (406, 120); on TINY nothing scrolls. The same view is set at every match start and when the local team is set.
+- Docs: `docs/GAME_REVERSE_ENGINEERING.md` 5.44 (the map view and the start view), README (counts), `docs/AUDIT_ONE_TO_ONE.md` (progress).
+- Tests: `test_input_model` `test_start_view` (golden origins), `test_pointer_model` (the pixels (16, 21) and (457, 460) are the camera's world pixel and 441 / 439 further), `test_hud_layout` (`static_assert` of the view rectangle), integration 2.4 (the listener). **Rewritten tests** (they encoded the old placement): integration 2.1, 2.2, 2.3 (the camera mapping and its limits), 7.6 (the viewport), 8.8 (the start views of the three teams), `test_pointer_model` (the marker pixels). Version assertions of 12.108.
+
 ## v0.0.66 - 2026-09-30 - The quick help and the chat input of the original
 
 Batch 4 part 3 (`docs/audit/ledger_screens.md` R4.2d and NEW-4, the chat input of NEW-9; each re-read in `Ants.exe`: `0x10145d2`, `0x10147c2`, `0x1014802`, `0x100dbe2`, `0x100a37c`, `0x10119a8`):

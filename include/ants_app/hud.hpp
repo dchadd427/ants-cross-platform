@@ -44,8 +44,8 @@ struct UIButton {
 class HUD {
 public:
     // Where the map view is drawn on the virtual 640x480 screen (docs 5.44: the original's view is (16, 21) - (458, 461), see MAP_LEFT .. below)
-    static constexpr int32_t PLAYFIELD_X       = 17;
-    static constexpr int32_t PLAYFIELD_Y       = 22;
+    static constexpr int32_t PLAYFIELD_X       = 16;
+    static constexpr int32_t PLAYFIELD_Y       = 21;
 
     // The map view rectangle of the original (0x1026d6a), half-open: pointers outside it are a plain arrow and pedestals fire on presses there
     static constexpr int32_t MAP_LEFT   = 16;

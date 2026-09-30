@@ -559,14 +559,24 @@ void test_click_or_drag() {
     f.hud.select_ant(s.mine);
     f.cam.world_x = 400;
     f.cam.world_y = 400;
-    // screen x = 17 + (wx - 400): the tile border 512 (tiles 15 | 16) is at x = 129; the row of y = 300 is tile 21
+    // screen x = 16 + (wx - 400) (the view's origin is (16, 21)): the tile border 512 (tiles 15 | 16) is at x = 128; the row of y = 300 is tile 21
     f.markers.clear();
     f.press(127, 300);
     f.hud.handle_mouse_motion(131, 304, f.sim, f.cam);
     f.release(131, 304);
     check(f.unit(s.mine).orig_order == sim::AntUnit::kOrderMove && f.unit(s.mine).orig_order_tile == (TileCoord{16, 21}),
           "4 px: a click, executed at the release point (tile 16, 21 - the press was in tile 15)");
-    check(f.markers.size() == 1 && f.markers[0].first == 400 + (131 - 17) && f.markers[0].second == 400 + (304 - 22), "the marker is at the release pixel");
+    check(f.markers.size() == 1 && f.markers[0].first == 400 + (131 - 16) && f.markers[0].second == 400 + (304 - 21), "the marker is at the release pixel");
+
+    // the view is 442 x 440 at the screen pixel (16, 21) (the view window's rectangle, Ants.exe 0x100a32b): its first pixel is the camera's own world pixel, its last
+    // (457, 460) is 441 / 439 further (the remake used to put it one pixel right and down)
+    f.hud.select_ant(s.mine);
+    f.markers.clear();
+    f.click(16, 21);
+    check(f.markers.size() == 1 && f.markers[0].first == 400 && f.markers[0].second == 400, "the screen pixel (16, 21) is the world pixel of the camera: (400, 400)");
+    f.markers.clear();
+    f.click(457, 460);
+    check(f.markers.size() == 1 && f.markers[0].first == 400 + 441 && f.markers[0].second == 400 + 439, "the last pixel of the view (457, 460) is 441 / 439 further");
 
     // 5 px: a drag; over empty ground it clears the selection and gives no order
     f.hud.select_ant(s.mine);
@@ -620,7 +630,7 @@ void test_click_or_drag() {
         g.hud.handle_mouse_motion(260, 330, g.sim, g.cam);
         g.release(260, 330);
         check(g.unit(t.mine).orig_order == sim::AntUnit::kOrderMove, "a long drag with a latched pedestal is one click");
-        check(g.unit(t.mine).orig_order_tile == (TileCoord{(400 + 260 - 17) / 32, (400 + 330 - 22) / 32}), "at the release point");
+        check(g.unit(t.mine).orig_order_tile == (TileCoord{(400 + 260 - 16) / 32, (400 + 330 - 21) / 32}), "at the release point");
         check(!g.hud.is_move_latched(), "the accepted order lets the latched pedestal up");
     }
 

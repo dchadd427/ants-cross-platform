@@ -1,4 +1,5 @@
 #include "ants_app/application.hpp"
+#include "ants_app/edge_scroll.hpp"
 #include "ants_app/ui_anim.hpp"
 #include "ants_app/version.hpp"
 #include <iostream>
@@ -206,18 +207,7 @@ bool Application::init(const ApplicationConfig& config) {
 
     renderer_->set_level(current_level_);
 
-    // Center camera on current player's base spawn (center of 4x4 anthill structure)
-    const auto* base = sim_.grid().find_anthill(local_player_id_);
-    if (base) {
-        renderer_->camera().center_on(base->x * TILE_SIZE + 2 * TILE_SIZE,
-                                      base->y * TILE_SIZE + 2 * TILE_SIZE,
-                                      current_level_.width, current_level_.height);
-    } else if (!current_level_.anthill_spawns.empty()) {
-        const auto& spawn = current_level_.anthill_spawns[0];
-        renderer_->camera().center_on(spawn.x * TILE_SIZE + 2 * TILE_SIZE,
-                                      spawn.y * TILE_SIZE + 2 * TILE_SIZE,
-                                      current_level_.width, current_level_.height);
-    }
+    show_start_view();
 
     // 8. Initialize HUD and Scorecard
     hud_.init(0);
@@ -435,17 +425,7 @@ bool Application::load_match(const std::string& map_path, uint32_t seed, uint8_t
 
     if (renderer_) {
         renderer_->set_level(current_level_);
-        const auto* base = sim_.grid().find_anthill(local_player_id_);
-        if (base) {
-            renderer_->camera().center_on(base->x * TILE_SIZE + 2 * TILE_SIZE,
-                                          base->y * TILE_SIZE + 2 * TILE_SIZE,
-                                          current_level_.width, current_level_.height);
-        } else if (!current_level_.anthill_spawns.empty()) {
-            const auto& spawn = current_level_.anthill_spawns[0];
-            renderer_->camera().center_on(spawn.x * TILE_SIZE + 2 * TILE_SIZE,
-                                          spawn.y * TILE_SIZE + 2 * TILE_SIZE,
-                                          current_level_.width, current_level_.height);
-        }
+        show_start_view();
     }
     uint8_t labelled = roster;                                                // the teams that get a score label
     if (!network_active() && !config_.label_unnamed_teams) {
@@ -1333,13 +1313,29 @@ void Application::set_local_player(uint8_t team_id) {
     hud_.clear_selection();
     if (renderer_) {
         renderer_->set_hud_team(local_player_id_);
-        const auto* base = sim_.grid().find_anthill(local_player_id_);
-        if (base) {
-            renderer_->camera().center_on(base->x * TILE_SIZE + 2 * TILE_SIZE,
-                                          base->y * TILE_SIZE + 2 * TILE_SIZE,
-                                          current_level_.width, current_level_.height);
-        }
+        show_start_view();
     }
+}
+
+// The view at the start (docs 5.44): from the map's corner just far enough to show the square around the anchor tile of the local team's hill (edge_scroll.hpp)
+void Application::show_start_view() {
+    if (!renderer_) return;
+    int32_t tx = 0;
+    int32_t ty = 0;
+    if (const auto* base = sim_.grid().find_anthill(local_player_id_)) {
+        tx = base->x + 1;                                    // the anchor is one tile in from the corner of the 4 x 4 footprint (every shipped map)
+        ty = base->y + 1;
+    } else if (!current_level_.anthill_spawns.empty()) {
+        tx = current_level_.anthill_spawns[0].x;
+        ty = current_level_.anthill_spawns[0].y;
+    }
+    int32_t ox = 0;
+    int32_t oy = 0;
+    start_view_origin(tx, ty, static_cast<int32_t>(current_level_.width), static_cast<int32_t>(current_level_.height), ox, oy);
+    ViewportCamera& camera = renderer_->camera();
+    camera.x = 0.0f;
+    camera.y = 0.0f;
+    camera.scroll_pixels(ox, oy, current_level_.width, current_level_.height);
 }
 
 } // namespace ants::app

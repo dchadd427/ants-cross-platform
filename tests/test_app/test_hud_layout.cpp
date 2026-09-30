@@ -340,6 +340,11 @@ void test_rubber_band(const assets::AssetArchive& arc) {
 // Full-screen HUD screens: composites drawn from the original animations, no invented dimming layers.
 void click(MapSelectScreen& screen, int32_t x, int32_t y);
 
+// The map view of the original: the rectangle (16, 21) - (458, 461) of the view window (Ants.exe 0x100a32b), 442 x 440; the camera's origin is the screen pixel (16, 21)
+static_assert(PLAYFIELD_X == 16 && PLAYFIELD_Y == 21 && PLAYFIELD_W == 442 && PLAYFIELD_H == 440, "the map view is 442 x 440 at (16, 21)");
+static_assert(HUD::PLAYFIELD_X == 16 && HUD::PLAYFIELD_Y == 21 && HUD::MAP_RIGHT - HUD::MAP_LEFT == PLAYFIELD_W && HUD::MAP_BOTTOM - HUD::MAP_TOP == PLAYFIELD_H,
+              "and the HUD's view rectangle is the same one");
+
 void test_screens(const assets::AssetArchive& arc) {
     std::printf("[hud] options, quit, quick help and start screens\n");
     // Options: op_screen composite only (its own dither), no extra dither grid or card fill

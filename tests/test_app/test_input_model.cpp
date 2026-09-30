@@ -225,9 +225,27 @@ void test_cursor_bands() {
     check(at(5, 5) == CursorType::ScrollNW || at(5, 5) == CursorType::ScrollN || at(5, 5) != CursorType::ScrollW, "a corner still shows its arrow while one axis can move");
 }
 
+void test_start_view() {
+    g_group = "start view";
+    std::printf("[view] the view at the start of a match: just far enough to show the square (-160, +192) around the hill's anchor tile (FUN_01027197)\n");
+    int32_t ox = -1;
+    int32_t oy = -1;
+    start_view_origin(30, 8, 60, 60, ox, oy);      // GAUNTLET, green: the anchor tile (30, 8)
+    check(ox == 726 && oy == 24, "GAUNTLET green: the view's origin is (726, 24), not the centred (772, 69)");
+    start_view_origin(37, 21, 60, 60, ox, oy);     // TREASURE, green
+    check(ox == 950 && oy == 440, "TREASURE green: (950, 440)");
+    start_view_origin(0, 0, 60, 60, ox, oy);
+    check(ox == 0 && oy == 0, "a hill in the corner: the view stays at the corner");
+    start_view_origin(59, 59, 60, 60, ox, oy);
+    check(ox == 60 * 32 - 442 && oy == 60 * 32 - 440, "the far corner: the square is clipped to the map, the view ends at its largest origin (1478, 1480)");
+    start_view_origin(5, 5, 31, 31, ox, oy);       // TINY, green: the whole square is inside the first 442 x 440 pixels
+    check(ox == 0 && oy == 0, "TINY green: nothing to scroll");
+}
+
 }  // namespace
 
 int main() {
+    test_start_view();
     test_golden_csv();
     test_report_table();
     test_strips_and_gates();

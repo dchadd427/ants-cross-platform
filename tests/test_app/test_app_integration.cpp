@@ -291,8 +291,8 @@ void run_suite_2_camera_transforms() {
 
         int32_t sx = 0, sy = 0;
         cam.world_to_screen(test_wx, test_wy, sx, sy);
-        ASSERT_EQ(sx, 17 + (350 - 200)); // 167
-        ASSERT_EQ(sy, 22 + (500 - 350)); // 172
+        ASSERT_EQ(sx, 16 + (350 - 200)); // 166: the view's origin is the screen pixel (16, 21) (Ants.exe 0x100a32b)
+        ASSERT_EQ(sy, 21 + (500 - 350)); // 171
 
         int32_t back_wx = 0, back_wy = 0;
         bool in_bounds = cam.screen_to_world(sx, sy, back_wx, back_wy);
@@ -314,15 +314,28 @@ void run_suite_2_camera_transforms() {
         cam.x = 2000.0f;
         cam.y = 2000.0f;
         cam.clamp_to_bounds(31, 31);
-        ASSERT_EQ(static_cast<int32_t>(cam.x), 31 * 32 - 441); // 992 - 441 = 551
-        ASSERT_EQ(static_cast<int32_t>(cam.y), 31 * 32 - 439); // 992 - 439 = 553
+        ASSERT_EQ(static_cast<int32_t>(cam.x), 31 * 32 - 442); // 992 - 442 = 550: the view is 442 x 440
+        ASSERT_EQ(static_cast<int32_t>(cam.y), 31 * 32 - 440); // 992 - 440 = 552
 
         // 60x60 Map (TREASURE.LVL) -> 1920 x 1920 pixels
         cam.x = 5000.0f;
         cam.y = 5000.0f;
         cam.clamp_to_bounds(60, 60);
-        ASSERT_EQ(static_cast<int32_t>(cam.x), 60 * 32 - 441); // 1920 - 441 = 1479
-        ASSERT_EQ(static_cast<int32_t>(cam.y), 60 * 32 - 439); // 1920 - 439 = 1481
+        ASSERT_EQ(static_cast<int32_t>(cam.x), 60 * 32 - 442); // 1920 - 442 = 1478
+        ASSERT_EQ(static_cast<int32_t>(cam.y), 60 * 32 - 440); // 1920 - 440 = 1480
+    } TEST_END();
+
+    TEST_CASE("2.4 The Audio Listener Is The Centre Of The 442 x 440 View (Ants.exe 0x1030249: origin + 221 / + 220)") {
+        Application app;
+        ApplicationConfig cfg;
+        cfg.headless = true;
+        cfg.start_in_map_select = false;
+        ASSERT_TRUE(app.init(cfg));
+        app.renderer().camera().world_x = 100;
+        app.renderer().camera().world_y = 200;
+        app.update_simulation(0.05f);
+        ASSERT_EQ(app.audio_mixer().listener_x(), 100 + 221);
+        ASSERT_EQ(app.audio_mixer().listener_y(), 200 + 220);
     } TEST_END();
 
     TEST_CASE("2.3 Centering Viewport on Simulation Entity") {
@@ -330,14 +343,14 @@ void run_suite_2_camera_transforms() {
 
         // Entity at tile (30, 30) -> center (30*32+16, 30*32+16) = (976, 976)
         cam.center_on(976, 976, 60, 60);
-        ASSERT_EQ(static_cast<int32_t>(cam.x), 976 - 441 / 2); // 976 - 220 = 756
-        ASSERT_EQ(static_cast<int32_t>(cam.y), 976 - 439 / 2); // 976 - 219 = 757
+        ASSERT_EQ(static_cast<int32_t>(cam.x), 976 - 442 / 2); // 976 - 221 = 755
+        ASSERT_EQ(static_cast<int32_t>(cam.y), 976 - 440 / 2); // 976 - 220 = 756
 
         int32_t sx = 0, sy = 0;
         cam.world_to_screen(976, 976, sx, sy);
         // Entity should project directly to center of playfield
-        ASSERT_EQ(sx, 17 + 441 / 2);
-        ASSERT_EQ(sy, 22 + 439 / 2);
+        ASSERT_EQ(sx, 16 + 442 / 2);
+        ASSERT_EQ(sy, 21 + 440 / 2);
     } TEST_END();
 }
 
@@ -1291,8 +1304,8 @@ void run_suite_7_input_controls() {
         camera.y = 100.0f;
         camera.world_x = 100;
         camera.world_y = 100;
-        camera.viewport_w = 441;
-        camera.viewport_h = 439;
+        camera.viewport_w = 442;
+        camera.viewport_h = 440;
 
         // The view moves in whole pixel steps (the original's 50 ms input task) and stays inside the map
         camera.scroll_pixels(24, 24, 60, 60);
@@ -1304,8 +1317,8 @@ void run_suite_7_input_controls() {
 
         // Center on tile (30, 30) -> world px (960, 960)
         camera.center_on(960, 960, 60, 60);
-        int32_t expected_x = 960 - 441 / 2;
-        int32_t expected_y = 960 - 439 / 2;
+        int32_t expected_x = 960 - 442 / 2;
+        int32_t expected_y = 960 - 440 / 2;
         ASSERT_EQ(camera.world_x, expected_x);
         ASSERT_EQ(camera.world_y, expected_y);
     } TEST_END();
@@ -1739,7 +1752,7 @@ void run_suite_8_unit_health_and_map_select() {
         ASSERT_EQ(hud.get_selected_base_team_id(), -1);
     } TEST_END();
 
-    TEST_CASE("8.8 Team Switching and Camera Base Centering") {
+    TEST_CASE("8.8 Team Switching and the Start View (Ants.exe 0x100e458 - 0x100e4b1: Just Far Enough To Show The Square Around The Hill's Anchor Tile)") {
         Application app;
         ApplicationConfig cfg;
         cfg.headless = true;
@@ -1749,14 +1762,18 @@ void run_suite_8_unit_health_and_map_select() {
         // Default starts as Player 0 (Green)
         ASSERT_EQ(app.local_player_id(), 0);
 
-        // Verify camera is centered on Team 0's base (accounting for 4x4 anthill center & viewport bounds clamping)
+        // The start view is the original's (HUD constructor 0x100e458 - 0x100e4b1): the fresh view scrolls just far enough to show the square (-160, +192) around the
+        // anchor tile of Team 0's hill, it does not centre it. A run without --map plays the first map of the list, GAUNTLET: green's anchor is (30, 8), so (726, 24)
+        // (a centred view would be (772, 69)).
         const auto* base0 = app.sim().grid().find_anthill(0);
         ASSERT_TRUE(base0 != nullptr);
+        ASSERT_EQ(base0->x + 1, 30);
+        ASSERT_EQ(base0->y + 1, 8);
         const auto& cam = app.renderer().camera();
-        int32_t expected_x = std::clamp(base0->x * 32 + 64 - cam.viewport_w / 2, 0, static_cast<int32_t>(app.sim().grid().width() * 32 - static_cast<uint32_t>(cam.viewport_w)));
-        int32_t expected_y = std::clamp(base0->y * 32 + 64 - cam.viewport_h / 2, 0, static_cast<int32_t>(app.sim().grid().height() * 32 - static_cast<uint32_t>(cam.viewport_h)));
-        ASSERT_EQ(cam.world_x, expected_x);
-        ASSERT_EQ(cam.world_y, expected_y);
+        ASSERT_EQ(cam.world_x, 726);
+        ASSERT_EQ(cam.world_y, 24);
+        int32_t expected_x = 726;
+        int32_t expected_y = 24;
 
         // Ctrl+2 does nothing: the original has no key that switches the controlled team
         SDL_KeyboardEvent key_event{};
@@ -1771,8 +1788,10 @@ void run_suite_8_unit_health_and_map_select() {
         ASSERT_EQ(app.local_player_id(), 1);
         const auto* base1 = app.sim().grid().find_anthill(1);
         ASSERT_TRUE(base1 != nullptr);
-        expected_x = std::clamp(base1->x * 32 + 64 - cam.viewport_w / 2, 0, static_cast<int32_t>(app.sim().grid().width() * 32 - static_cast<uint32_t>(cam.viewport_w)));
-        expected_y = std::clamp(base1->y * 32 + 64 - cam.viewport_h / 2, 0, static_cast<int32_t>(app.sim().grid().height() * 32 - static_cast<uint32_t>(cam.viewport_h)));
+        ASSERT_EQ(base1->x + 1, 7);                    // red's anchor tile on GAUNTLET is (7, 30): the square (80, 816) - (432, 1168) needs the view 728 px down, none right
+        ASSERT_EQ(base1->y + 1, 30);
+        expected_x = 0;
+        expected_y = 728;
         ASSERT_EQ(cam.world_x, expected_x);
         ASSERT_EQ(cam.world_y, expected_y);
 
@@ -1781,8 +1800,10 @@ void run_suite_8_unit_health_and_map_select() {
         ASSERT_EQ(app.local_player_id(), 2);
         const auto* base2 = app.sim().grid().find_anthill(2);
         ASSERT_TRUE(base2 != nullptr);
-        expected_x = std::clamp(base2->x * 32 + 64 - cam.viewport_w / 2, 0, static_cast<int32_t>(app.sim().grid().width() * 32 - static_cast<uint32_t>(cam.viewport_w)));
-        expected_y = std::clamp(base2->y * 32 + 64 - cam.viewport_h / 2, 0, static_cast<int32_t>(app.sim().grid().height() * 32 - static_cast<uint32_t>(cam.viewport_h)));
+        ASSERT_EQ(base2->x + 1, 20);                   // blue's anchor tile is (20, 11): the square (496, 208) - (848, 560): 406 right, 120 down
+        ASSERT_EQ(base2->y + 1, 11);
+        expected_x = 406;
+        expected_y = 120;
         ASSERT_EQ(cam.world_x, expected_x);
         ASSERT_EQ(cam.world_y, expected_y);
 
@@ -7206,10 +7227,10 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
 
     TEST_CASE("12.108: Version Invariant & Fog of War Cursor Concealment Parity") {
         // 1. Verify semantic versioning components
-        ASSERT_EQ(ants::VERSION_STRING, "v0.0.66");
+        ASSERT_EQ(ants::VERSION_STRING, "v0.0.67");
         ASSERT_EQ(ants::VERSION_MAJOR, 0);
         ASSERT_EQ(ants::VERSION_MINOR, 0);
-        ASSERT_EQ(ants::VERSION_PATCH, 66);
+        ASSERT_EQ(ants::VERSION_PATCH, 67);
 
         // 2. Setup simulation world with Fog of War enabled
         SimulationEngine sim;

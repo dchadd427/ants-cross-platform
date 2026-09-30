@@ -210,6 +210,7 @@ private:
     void render_net_overlay();
     void apply_team_names(const std::array<std::string, 4>& names, uint8_t roster);   // simulation texts, HUD labels, results rows
 
+    void show_start_view();                               // the view at the start of a match: scrolled just far enough to show the square around the hill's anchor tile
     void enter_map_select();                              // the setup screen is created (again): its labels stay empty until its refresh
 
     void play_next_ingame_music();
