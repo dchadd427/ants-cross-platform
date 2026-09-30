@@ -1045,6 +1045,16 @@ A *cue* is a global sprite with no owner: `FUN_0102bd7e` plays it in the global 
 The remake gives every sound a source: `AudioEvent::owner` (an ant id, or 0x40000000 and up for effect sprites, 0x80000001 for the pressed button) and a `stop` event that the simulation emits when `loco_play` replaces a clip of an ant that has started a sound, when the ant is removed, and when a
 `bombex` effect or a battle cloud ends; the mixer cuts the channels of the owner (`AudioMixer::stop_owner`).
 
+**5.24e The music (audit of 2026-09-30; implemented in v0.0.61).** The music is one MCI sequencer device, `open <file> type sequencer alias AntsMidi` and `play AntsMidi from 0 notify` (`0x100e627` .. `0x100e8cc`); four pieces: `intro.mid` (`0x1047098`) and a random one of `Ants2a.mid`, `Ants2b.mid`, `AntsFun3.mid` (table `0x10021a0`).
+- **The intro** starts when the asset load ends (`0x10179f6`, `FUN_010175ad`, about 3 s after the program starts) and plays ONCE (`play ... notify`, no repeat). Its end (`MM_MCINOTIFY`, success) runs `FUN_0100e8cc`: `close AntsMidi`, then `FUN_0100e6da`: a random in-game piece, **also on the setup screen**.
+  Every piece that ends starts the next random one the same way: the music never stops until something closes it.
+- **A random piece** (`FUN_0100e6da`): `rand() % 3`, and if it equals the stored previous index (`[W + 0x5360]`, which starts at 3: the first pick is uniform) the next one (2 -> 0): never the same piece twice in a row.
+- **A match start** starts a random piece (`0x100e4b8`; the running intro is closed first, `FUN_0100e627`). **Deactivating the program** (`WM_ACTIVATEAPP(false)`, `0x100e875` .. `0x100e898`) closes the device and remembers that it was open (`[W + 0x5588]`); **activating** it starts a NEW random piece (`0x100e8bc`).
+  **Releasing the music slider** sets the MIDI volume and, when music is open, closes it and starts a new random piece (`0x100e714` .. `0x100e795`).
+- **The end of a match** closes the device at once (`FUN_010226da`, `0x1022714`, unless the local team has dropped); no music plays while the results are open and nothing starts it again.
+- The remake plays MP3 renders of the four pieces through its mixer (the timbre of the 1998 General MIDI synthesiser cannot be reproduced); the AudioToolbox MIDI player runs only in the headless tests. Before v0.0.61 the intro looped forever, the focus was ignored, the volume was applied while dragging
+  and the music faded over a second at the match end.
+
 ---
 
 ### 5.25 Match Timer Warnings & Countdown Sequencing (`0x1024839`)

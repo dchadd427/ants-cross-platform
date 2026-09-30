@@ -1802,6 +1802,104 @@ void run_suite_9_gameplay_mechanics_and_options() {
         ASSERT_EQ(app.audio_mixer().active_channel_count(), before + 1);
     } TEST_END();
 
+    // ---- the music of the original: one MCI sequencer device (0x100e627 .. 0x100e8cc). The intro plays once; every piece that ends is followed by a random in-game piece (never the one
+    // before), also on the setup screen; a match start, the activation of the program and the release of the music slider start a random piece; the deactivation of the program and the
+    // end of a match close the device, and a closed device is not started by anything else ---------------------------------------------------------------------------------------
+    TEST_CASE("9.8 Music: The Intro Plays Once, Then Random In-Game Pieces Follow, Never The Same Twice In A Row, Also On The Setup Screen (MM_MCINOTIFY 0x100e8cc)") {
+        Application app;
+        ApplicationConfig cfg;
+        cfg.headless = true;
+        cfg.start_in_map_select = true;
+        ASSERT_TRUE(app.init(cfg));
+        auto ends_with = [](const std::string& s, const char* tail) { const std::string t(tail); return s.size() >= t.size() && s.compare(s.size() - t.size(), t.size(), t) == 0; };
+        auto& mixer = app.audio_mixer();
+        ASSERT_TRUE(mixer.is_music_playing());
+        ASSERT_TRUE(ends_with(mixer.music_filepath(), "INTRO.mp3"));
+        ASSERT_FALSE(mixer.music_loops());                                       // `play AntsMidi from 0 notify`: once
+        std::string previous;
+        for (int i = 0; i < 40; ++i) {
+            mixer.stop_music();                                                  // the piece ends (nothing advances a stream without an audio device)
+            app.midi_player().stop();
+            app.update_music(0.016f);
+            ASSERT_TRUE(mixer.is_music_playing());
+            const std::string now = mixer.music_filepath();
+            ASSERT_TRUE(ends_with(now, "ANTS2A.mp3") || ends_with(now, "ANTS2B.mp3") || ends_with(now, "ANTSFUN3.mp3"));
+            ASSERT_FALSE(mixer.music_loops());
+            if (!previous.empty()) ASSERT_TRUE(now != previous);
+            previous = now;
+        }
+        ASSERT_EQ(static_cast<int>(app.state()), static_cast<int>(AppState::MapSelect));   // the setup screen all the time
+    } TEST_END();
+
+    TEST_CASE("9.9 Music: Deactivating The Program Closes It, Activating It Starts A New Random Piece; A Closed Music Is Not Started By The Activation (0x100e875 .. 0x100e8bc)") {
+        Application app;
+        ApplicationConfig cfg;
+        cfg.headless = true;
+        cfg.start_in_map_select = true;
+        ASSERT_TRUE(app.init(cfg));
+        auto& mixer = app.audio_mixer();
+        ASSERT_TRUE(mixer.is_music_playing());
+        app.set_app_active(false);                                                // WM_ACTIVATEAPP(false): `close AntsMidi`
+        ASSERT_FALSE(mixer.is_music_playing());
+        app.update_music(0.016f);
+        ASSERT_FALSE(mixer.is_music_playing());                                   // the closed device does not play on
+        app.set_app_active(true);                                                 // a NEW random piece, not the intro again
+        ASSERT_TRUE(mixer.is_music_playing());
+        const std::string piece = mixer.music_filepath();
+        ASSERT_TRUE(piece.find("INTRO") == std::string::npos);
+        // a second deactivation / activation pair: again a new piece
+        app.set_app_active(false);
+        app.set_app_active(false);                                                // (a repeated event changes nothing)
+        ASSERT_FALSE(mixer.is_music_playing());
+        app.set_app_active(true);
+        app.set_app_active(true);
+        ASSERT_TRUE(mixer.is_music_playing());
+    } TEST_END();
+
+    TEST_CASE("9.10 Music: The Release Of The Music Slider Starts A New Random Piece (0x100e714, 0x100e795); The Sound Slider Does Not") {
+        Application app;
+        ApplicationConfig cfg;
+        cfg.headless = true;
+        cfg.start_in_map_select = true;
+        ASSERT_TRUE(app.init(cfg));
+        auto& mixer = app.audio_mixer();
+        ASSERT_TRUE(mixer.music_filepath().find("INTRO") != std::string::npos);
+        ViewportCamera cam;
+        app.hud().open_options();
+        app.hud().handle_mouse_down(300, 185, 1, app.sim(), cam);                 // the Sound slider
+        app.hud().handle_mouse_up(300, 185, 1, app.sim(), cam);
+        ASSERT_TRUE(mixer.music_filepath().find("INTRO") != std::string::npos);   // still the intro
+        app.hud().handle_mouse_down(300, 222, 1, app.sim(), cam);                 // the Music slider
+        app.hud().handle_mouse_motion(330, 222, app.sim(), cam);
+        ASSERT_TRUE(mixer.music_filepath().find("INTRO") != std::string::npos);   // dragging changes nothing
+        app.hud().handle_mouse_up(330, 222, 1, app.sim(), cam);
+        ASSERT_TRUE(mixer.is_music_playing());
+        ASSERT_TRUE(mixer.music_filepath().find("INTRO") == std::string::npos);   // the running piece was closed and a random in-game piece started
+        ASSERT_NEAR(mixer.get_music_volume(), (330.0f - 188.0f) / 185.0f, 0.01f);
+    } TEST_END();
+
+    TEST_CASE("9.11 Music: A Match Start Starts A Random Piece; The End Of The Match Closes The Music At Once And Nothing Starts It Again (0x1022714)") {
+        Application app;
+        ApplicationConfig cfg;
+        cfg.headless = true;
+        cfg.start_in_map_select = true;
+        ASSERT_TRUE(app.init(cfg));
+        auto& mixer = app.audio_mixer();
+        ASSERT_TRUE(mixer.music_filepath().find("INTRO") != std::string::npos);   // the setup screen plays the intro
+        ASSERT_TRUE(app.start_game("Original-Ants/Maps/TREASURE.LVL"));           // a match start: a random in-game piece replaces it
+        ASSERT_TRUE(mixer.is_music_playing());
+        ASSERT_TRUE(mixer.music_filepath().find("INTRO") == std::string::npos);
+        app.sim().init_test_world(60, 60, 5, 100);                                // a match of 100 ms
+        for (int i = 0; i < 12 && !app.sim().is_match_over(); ++i) app.update_simulation(0.05f);
+        ASSERT_TRUE(app.sim().is_match_over());
+        ASSERT_FALSE(mixer.is_music_playing());                                   // closed at once, not faded out over a second
+        app.update_music(0.016f);
+        ASSERT_FALSE(mixer.is_music_playing());                                   // nothing restarts it
+        app.set_app_active(false);
+        app.set_app_active(true);
+        ASSERT_FALSE(mixer.is_music_playing());                                   // nor does the activation of the program: the device was already closed
+    } TEST_END();
+
     TEST_CASE("9.7 The Chat Box Is Always Active; Enter, [All] And [Team] Send; Hotkey Modifier Isolation") {
         Application app;
         ApplicationConfig cfg;
@@ -6656,10 +6754,10 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
 
     TEST_CASE("12.108: Version Invariant & Fog of War Cursor Concealment Parity") {
         // 1. Verify semantic versioning components
-        ASSERT_EQ(ants::VERSION_STRING, "v0.0.60");
+        ASSERT_EQ(ants::VERSION_STRING, "v0.0.61");
         ASSERT_EQ(ants::VERSION_MAJOR, 0);
         ASSERT_EQ(ants::VERSION_MINOR, 0);
-        ASSERT_EQ(ants::VERSION_PATCH, 60);
+        ASSERT_EQ(ants::VERSION_PATCH, 61);
 
         // 2. Setup simulation world with Fog of War enabled
         SimulationEngine sim;

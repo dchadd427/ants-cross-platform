@@ -109,6 +109,9 @@ public:
     void set_music_volume(float volume);
     float get_music_volume() const noexcept;
     bool is_music_playing() const;
+    /// The file that the music stream was started with ("" when nothing was), and whether it loops (inspection)
+    std::string music_filepath() const;
+    bool music_loops() const;
     void fade_out_music(float duration_sec);
     void update_music(float dt);
 

@@ -126,6 +126,12 @@ public:
     void handle_mouse_button(const SDL_MouseButtonEvent& button);
     void handle_camera_panning(float dt = 0.020f);
     void update_simulation(float dt);
+    /// The music of the original is one sequencer device (docs 5.24e): the intro plays once, every piece that ends is followed by a random in-game piece, the match
+    /// start, the activation of the program and the release of the music slider start one, the deactivation of the program and the end of a match close the device.
+    /// `update_music` runs once per frame in every state (the tests call it directly).
+    void update_music(float dt);
+    /// WM_ACTIVATEAPP (0x100e875): the program loses / gets the input focus
+    void set_app_active(bool active);
 
     int32_t mouse_screen_x() const noexcept { return mouse_screen_x_; }
     int32_t mouse_screen_y() const noexcept { return mouse_screen_y_; }
@@ -183,6 +189,8 @@ private:
     void apply_team_names(const std::array<std::string, 4>& names, uint8_t roster);   // simulation texts, HUD labels, results rows
 
     void play_next_ingame_music();
+    void start_intro_music();
+    void close_music();
     void play_startup_sound();
     void render_loading_screen();
     void render_quick_help_screen();
@@ -199,6 +207,8 @@ private:
     float input_accumulator_{0.0f};     // the 50 ms input task (edge scrolling, minimap drag)
     float current_fps_{60.0f};
     int last_music_track_{-1};
+    bool music_open_{false};            // the sequencer device is open (the intro or a piece was started and not closed): its end starts the next random piece
+    bool music_resume_on_activate_{false};   // the device was open when the program was deactivated (0x5588)
 
     // Smoothed FPS Display and Frametime Sparkline
     static constexpr size_t SPARKLINE_SAMPLES = 36;

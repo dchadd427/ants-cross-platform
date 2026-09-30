@@ -4,7 +4,7 @@ A faithful, high-performance, deterministic C++17 native engine remake and port 
 
 The engine directly loads raw original binary assets (`ants.chd` and `Maps/*.LVL`) without pre-conversion, faithfully executing authentic gameplay mechanics, deterministic 20Hz simulation, 32-channel spatial audio, MIDI/MP3 score playback, TrueType font rendering, and an SDL2 hardware-accelerated 2D viewport.
 
-**Current version: v0.0.60** (shown on screen next to the FPS meter). Every release is listed in the **[changelog](CHANGELOG.md)**, which is also published at **[beta.playants.org/changelog.html](https://beta.playants.org/changelog.html)**. Since v0.0.24 every system is re-derived from the disassembly of the original `Ants.exe` (see [Reverse Engineering](#reverse-engineering--historical-preservation)); multiplayer over a network (host / join over TCP) works and is still being extended (see [Network Port](#network-port-in-progress)).
+**Current version: v0.0.61** (shown on screen next to the FPS meter). Every release is listed in the **[changelog](CHANGELOG.md)**, which is also published at **[beta.playants.org/changelog.html](https://beta.playants.org/changelog.html)**. Since v0.0.24 every system is re-derived from the disassembly of the original `Ants.exe` (see [Reverse Engineering](#reverse-engineering--historical-preservation)); multiplayer over a network (host / join over TCP) works and is still being extended (see [Network Port](#network-port-in-progress)).
 
 ---
 
@@ -65,7 +65,7 @@ Play the remake instantly in any modern web browser (Chrome, Firefox, Safari, Ed
   - Standalone web inspector (`asset_catalog/index.html`) with responsive design, searching, filtering, and instant asset downloads (⬇ WAV audio, ⬇ PNG sprites, ⬇ composite canvas frames).
 
 - **Automated Verification & Zero-Warning Standard**:
-  - 100% pass rate across **192 application integration tests (7,084 assertions)**, the simulation golden suites (movement, path planner, hill, combat, ability, power-up and food actions), the command-layer / state-hash suite, the lock-step network core, room and TCP transport suites, the render, HUD, status-message, input and pointer model suites and **506 opaque-box End-to-End (E2E) verification tests** (real counts in [Testing & Verification](#testing--verification)).
+  - 100% pass rate across **196 application integration tests (7,272 assertions)**, the simulation golden suites (movement, path planner, hill, combat, ability, power-up and food actions), the command-layer / state-hash suite, the lock-step network core, room and TCP transport suites, the render, HUD, status-message, input and pointer model suites and **506 opaque-box End-to-End (E2E) verification tests** (real counts in [Testing & Verification](#testing--verification)).
   - Zero warnings under `-Wall -Wextra -Wpedantic -Wconversion -Wshadow -Wnon-virtual-dtor`.
 
 ---
@@ -340,7 +340,7 @@ Limits of this release: raw TCP only (a LAN, a VPN or a forwarded port 4001; the
 
 ## Changelog & Versioning
 
-The version (`include/ants_app/version.hpp`, currently `v0.0.60`) is bumped with every release and shown on screen next to the FPS meter. [`CHANGELOG.md`](CHANGELOG.md) lists what changed in every version, newest first, from the first commit to the release in progress; it is published on the beta site at [`/changelog.html`](https://beta.playants.org/changelog.html) and linked from the game page.
+The version (`include/ants_app/version.hpp`, currently `v0.0.61`) is bumped with every release and shown on screen next to the FPS meter. [`CHANGELOG.md`](CHANGELOG.md) lists what changed in every version, newest first, from the first commit to the release in progress; it is published on the beta site at [`/changelog.html`](https://beta.playants.org/changelog.html) and linked from the game page.
 
 ---
 
@@ -365,7 +365,7 @@ To run all test suites in sequence:
 ./run_tests.sh --clean    # Remove the build directories and rebuild first
 ```
 
-### What the Suites Cover (v0.0.60, all passing)
+### What the Suites Cover (v0.0.61, all passing)
 | Suite | What it checks | Size |
 |---|---|---|
 | 1 Asset decoders | `ants.chd` header, palette, sprites, audio, event tags, Table 4 animations, `.LVL` maps, directional mirroring, fuzzing | 8 suites, 69,809 assertions |
@@ -380,7 +380,7 @@ To run all test suites in sequence:
 | 2.12 Room | Joining, roster, map and fog, the start barrier, the connection thumbs (round trip tiers 1200 / 1800 ms) | 9 tests, 55,050 assertions |
 | 2.13 TCP | Framing, hostile frames, a real-socket match | 6 tests, 60,122 assertions |
 | 2.14 NetGame | The room, thumbs, the start barrier, a match with commands and chat, a guest that leaves, host migration over real sockets (the host leaving a two-, three- and four-player match, the links between guests, strangers on a guest's port, no election after the match is over), refused joins, map mismatch | 14 tests, 534 assertions |
-| 3 Application integration | Whole-application behaviour through the HUD, renderer and simulation | 192 tests, 7,084 assertions |
+| 3 Application integration | Whole-application behaviour through the HUD, renderer and simulation | 196 tests, 7,272 assertions |
 | 3.1 - 3.5 Model suites | Render parity 303 checks (with the text sizes and the health-number font), HUD layout 658 (with the network room screen, the label sizes and wrapping and the three alliance dialogs), status messages 263, input model 70, pointer model 331 | 1,625 checks |
 | 3.6 Network application | The command line (names, `--host`, `--join`), a headless application as host and as guest of a room, start, a bit-identical match, chat, leaving, the host leaving (the guest takes over alone, or follows the new host and says so), the score labels of a local game, teaming over three machines (an offer arrives as the question, Accept, team chat reaches only the ally, refusal, Withdraw) | 10 tests, 180 assertions |
 | 4 E2E | Opaque-box scenarios in four tiers | 506 tests |

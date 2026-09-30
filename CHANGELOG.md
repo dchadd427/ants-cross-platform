@@ -39,6 +39,16 @@ Ground truth for every entry is in [`docs/GAME_REVERSE_ENGINEERING.md`](docs/GAM
   - **Found on the way, for the audit** (docs: implementation_plan.md section 18): `tests/test_sim/test_challenger_m2_it2_deep_stress.cpp` has not been part of the build since an early commit and no longer compiles
     (it uses the retired slot-queue API of the hill). (An earlier version of this line said that the death clips are no longer started by a separate effect: wrong, only the unused helper `spawn_death_effect` was removed; the effect path in `movement_system.cpp` is still in use, see the audit.)
 
+## v0.0.61 - 2026-09-30 - The music of the original
+
+Audio batch, part 4 (`docs/audit/ledger_sound_texts.md` NEW-8, `ledger_screens.md` NEW-2 / R2.1d), each re-read in `Ants.exe` first (`0x100e8cc`, `0x100e6da`, `0x100e875`, `0x100e714`, `0x1022714`):
+
+- **The intro plays once, then random pieces follow** - on the setup screen too: the original's intro ends after one play and starts a random in-game piece (`rand() % 3`, never the same piece twice in a row); every piece that ends starts the next one. The remake looped the intro until the match started.
+- **Leaving the window closes the music, coming back starts a new random piece** (`WM_ACTIVATEAPP`): it kept playing in the background. The end of a match closes the music at once (it faded over a second) and nothing starts it again.
+- **The music slider applies at the release and starts a new random piece** when music is playing (the Sound slider is unchanged: option and test voice, v0.0.59).
+- Docs: `docs/GAME_REVERSE_ENGINEERING.md` 5.24e (the music), README (test table), `docs/AUDIT_ONE_TO_ONE.md` (progress; batch 2 is done).
+- Tests: integration 9.8 (the intro plays once, the chain never repeats a piece, on the setup screen), 9.9 (deactivation / activation), 9.10 (slider release), 9.11 (match start, match end closes at once, nothing restarts). No existing test had to change. Version assertion of 12.108.
+
 ## v0.0.60 - 2026-09-30 - Tracked sounds are cut
 
 Audio batch, part 3 (`docs/audit/ledger_sound_texts.md` NEW-4, `ledger_combat.md` V-K4), each re-read in `Ants.exe` first (`FUN_0102c0db`, `FUN_0102bdab`, `FUN_0102c245`, `FUN_01008871`):

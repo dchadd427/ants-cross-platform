@@ -238,6 +238,7 @@ bool Application::init(const ApplicationConfig& config) {
     hud_.set_on_music_volume([this](float v) {
         audio_mixer_.set_music_volume(v);
         midi_player_.set_volume(v);
+        if (music_open_) play_next_ingame_music();              // 0x100e714: the option is applied at the release; a running piece is closed and a new random one starts
     });
 
     hud_.set_on_play_sfx([this](uint32_t sound_id) { play_ui_sound(sound_id); });
@@ -351,10 +352,7 @@ bool Application::init(const ApplicationConfig& config) {
         } else {
             state_ = AppState::MapSelect;
         }
-        audio_mixer_.play_music("Original-Ants/INTRO.mp3", true);
-        if (config_.headless) {
-            midi_player_.play(true); // Loop INTRO exclusively during map selection
-        }
+        start_intro_music();             // plays once, then the random in-game pieces follow (also on the setup screen)
     }
 
     is_running_ = true;
@@ -510,11 +508,7 @@ void Application::return_to_map_select() {
     mouse_screen_x_ = 320;
     mouse_screen_y_ = 240;
     mouse_has_moved_ = false;
-    midi_player_.load_file(config_.midi_path);
-    audio_mixer_.play_music("Original-Ants/INTRO.mp3", true);
-    if (config_.headless) {
-        midi_player_.play(true); // Resumes INTRO during map selection
-    }
+    start_intro_music();
 }
 
 void Application::run_frame_with_delta(float delta_time) {
@@ -549,6 +543,8 @@ void Application::run_frame_with_delta(float delta_time) {
     handle_camera_panning(delta_time);
 
     pump_network(delta_time);                   // a network match has no pause: it keeps running while the window is in the background
+
+    update_music(delta_time);                   // the music chain runs in every state (the intro ends on the loading, quick help or setup screen alike)
 
     if (!is_paused_) {
         update_simulation(delta_time);
@@ -641,6 +637,8 @@ void Application::handle_events() {
         if (event.type == SDL_MOUSEBUTTONUP) release_ui_sounds();                         // (the setup screen takes its mouse events in the loop below)
 
         if (event.type == SDL_WINDOWEVENT) {
+            if (event.window.event == SDL_WINDOWEVENT_FOCUS_LOST) set_app_active(false);
+            if (event.window.event == SDL_WINDOWEVENT_FOCUS_GAINED) set_app_active(true);
             if (event.window.event == SDL_WINDOWEVENT_MINIMIZED ||
                 event.window.event == SDL_WINDOWEVENT_HIDDEN) {
                 is_paused_ = true;
@@ -850,9 +848,6 @@ void Application::update_simulation(float dt) {
     }
 
     if (state_ == AppState::MapSelect || is_paused_) {
-        if (state_ == AppState::MapSelect) {
-            midi_player_.update(dt);
-        }
         return;
     }
 
@@ -878,11 +873,6 @@ void Application::update_simulation(float dt) {
         renderer_->update_transient_effects(dt);
     }
 
-    audio_mixer_.update_music(dt);
-    midi_player_.update(dt);
-    if (state_ == AppState::Playing && !audio_mixer_.is_music_playing() && !midi_player_.is_playing() && !sim_.is_match_over()) {
-        play_next_ingame_music();
-    }
 }
 
 // What one simulation tick shows: the HUD, the events of the tick, the sounds and, once, the end of the match.
@@ -902,8 +892,8 @@ void Application::post_tick() {
             audio_mixer_.play_sfx(sting_sound, 1.0f, 255);
             scorecard_.clear_audio_to_play();
         }
-        audio_mixer_.stop_music();                                   // FUN_010226da closes the music sequencer at once (0x1022714); nothing restarts it
-        midi_player_.stop();
+        close_music();                                               // FUN_010226da closes the music sequencer at once (0x1022714); nothing restarts it
+        music_resume_on_activate_ = false;
         if (net_) net_->freeze();                                    // the host stops sealing turns
     }
 }
@@ -1140,6 +1130,24 @@ void Application::render_frame() {
     renderer_->end_frame();
 }
 
+// FUN_0100e6ce: the intro (intro.mid, `play AntsMidi from 0 notify`) plays ONCE; its end (MM_MCINOTIFY) starts the random in-game pieces (update_music).
+void Application::start_intro_music() {
+    music_open_ = true;
+    midi_player_.load_file(config_.midi_path);
+    audio_mixer_.play_music("Original-Ants/INTRO.mp3", false);
+    if (config_.headless) {
+        midi_player_.play(false);
+    }
+}
+
+// `close AntsMidi`: the device is closed and stays closed until a match start, a piece's end is not waited for any more, the activation of the program or the music slider starts it again
+void Application::close_music() {
+    music_open_ = false;
+    audio_mixer_.stop_music();
+    midi_player_.stop();
+}
+
+// FUN_0100e6da: a random in-game piece: rand() % 3, never the one that played last (the first pick is uniform: the stored index starts at 3)
 void Application::play_next_ingame_music() {
     static const std::string IN_GAME_TRACKS[3] = {
         "ANTS2A",
@@ -1147,17 +1155,39 @@ void Application::play_next_ingame_music() {
         "ANTSFUN3"
     };
 
-    // Authentic shuffle sequence: rand() % 3, avoiding immediate repeat of previous track
     int track = std::rand() % 3;
     if (track == last_music_track_) {
         track = (track + 1) % 3;
     }
     last_music_track_ = track;
 
+    music_open_ = true;
     audio_mixer_.play_music("Original-Ants/" + IN_GAME_TRACKS[track] + ".mp3", false);
     midi_player_.load_file("Original-Ants/" + IN_GAME_TRACKS[track] + ".MID");
     if (config_.headless) {
         midi_player_.play(false);
+    }
+}
+
+// MM_MCINOTIFY (0x100e8cc): when the piece that plays has ended, the next random in-game piece starts, on the setup screen as well as in a match
+void Application::update_music(float dt) {
+    audio_mixer_.update_music(dt);
+    midi_player_.update(dt);
+    if (music_open_ && !audio_mixer_.is_music_playing() && !midi_player_.is_playing()) {
+        play_next_ingame_music();
+    }
+}
+
+// WM_ACTIVATEAPP: deactivating closes the music (and remembers that it was open), activating starts a NEW random piece
+void Application::set_app_active(bool active) {
+    if (!active) {
+        if (music_open_) {
+            music_resume_on_activate_ = true;
+            close_music();
+        }
+    } else if (music_resume_on_activate_) {
+        music_resume_on_activate_ = false;
+        play_next_ingame_music();
     }
 }
 

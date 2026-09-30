@@ -490,6 +490,16 @@ float AudioMixer::get_music_volume() const noexcept {
     return music_stream_ ? music_stream_->volume : 0.8f;
 }
 
+std::string AudioMixer::music_filepath() const {
+    std::lock_guard<std::mutex> lock(mixer_mutex_);
+    return music_stream_ ? music_stream_->filepath : std::string();
+}
+
+bool AudioMixer::music_loops() const {
+    std::lock_guard<std::mutex> lock(mixer_mutex_);
+    return music_stream_ && music_stream_->loop;
+}
+
 bool AudioMixer::is_music_playing() const {
     std::lock_guard<std::mutex> lock(mixer_mutex_);
     if (!music_stream_) return false;
