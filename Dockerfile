@@ -27,6 +27,11 @@ RUN cmake --build build_web -j$(nproc)
 RUN BUILD_TIME=$(date +%s) && \
     sed -i -E 's/(src=)("?)index\.js("?)/\1\2index.js?v='"${BUILD_TIME}"'\3/g' /src/build_web/src/ants_app/index.html
 
+# Build the changelog page (CHANGELOG.md -> changelog.html, no dependencies) after the compile layers so that editing the changelog does not rebuild the game
+COPY CHANGELOG.md /src/changelog/CHANGELOG.md
+COPY tools/changelog_to_html.py /src/changelog/changelog_to_html.py
+RUN python3 /src/changelog/changelog_to_html.py /src/changelog/CHANGELOG.md /src/changelog/changelog.html
+
 # =============================================================================
 # Stage 2: High-Performance Lightweight Nginx Web Server
 # =============================================================================
@@ -40,6 +45,9 @@ COPY --from=builder /src/build_web/src/ants_app/index.* /usr/share/nginx/html/
 
 # Copy favicon assets
 COPY web/favicon.* /usr/share/nginx/html/
+
+# The changelog page (built from CHANGELOG.md, linked from the page header)
+COPY --from=builder /src/changelog/changelog.html /usr/share/nginx/html/changelog.html
 
 # Copy Asset Catalog & Viewer for reference on beta site
 COPY asset_catalog/ /usr/share/nginx/html/asset_catalog/

@@ -10,8 +10,6 @@ if ! command -v emcmake &> /dev/null || ! command -v emcc &> /dev/null; then
         source "${EMSDK}/emsdk_env.sh" > /dev/null 2>&1
     elif [ -f "$HOME/emsdk/emsdk_env.sh" ]; then
         source "$HOME/emsdk/emsdk_env.sh" > /dev/null 2>&1
-    elif [ -f "/home/user/ants" ]; then
-        source "/home/user/ants" > /dev/null 2>&1
     fi
 fi
 

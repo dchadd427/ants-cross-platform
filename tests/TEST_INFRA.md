@@ -168,7 +168,7 @@ tests/e2e/
 
 #### Standard CMake Build & Run
 ```bash
-# From project root (/home/user/ants):
+# From the project root:
 cmake -S tests/e2e -B build_e2e
 cmake --build build_e2e --parallel
 

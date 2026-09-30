@@ -163,8 +163,7 @@ static std::string locate_assets_dir() {
         "Original-Ants",
         "../Original-Ants",
         "../../Original-Ants",
-        "../../../Original-Ants",
-        "/home/user/ants"
+        "../../../Original-Ants"
     };
     for (const auto& p : candidates) {
         if (fs::exists(p)) {

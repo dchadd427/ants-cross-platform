@@ -133,8 +133,7 @@ static std::string locate_assets_dir() {
         "Original-Ants",
         "../Original-Ants",
         "../../Original-Ants",
-        "../../../Original-Ants",
-        "/home/user/ants"
+        "../../../Original-Ants"
     };
 
     for (const auto& path : candidates) {

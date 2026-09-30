@@ -4,6 +4,8 @@ A faithful, high-performance, deterministic C++17 native engine remake and port 
 
 The engine directly loads raw original binary assets (`ants.chd` and `Maps/*.LVL`) without pre-conversion, faithfully executing authentic gameplay mechanics, deterministic 20Hz simulation, 32-channel spatial audio, MIDI/MP3 score playback, TrueType font rendering, and an SDL2 hardware-accelerated 2D viewport.
 
+**Current version: v0.0.45** (shown on screen next to the FPS meter). Every release is listed in the **[changelog](CHANGELOG.md)**, which is also published at **[beta.playants.org/changelog.html](https://beta.playants.org/changelog.html)**. Since v0.0.24 every system is re-derived from the disassembly of the original `Ants.exe` (see [Reverse Engineering](#reverse-engineering--historical-preservation)); multiplayer over the network is being ported (see [Network Port](#network-port-in-progress)).
+
 ---
 
 ## 🎮 Play in Browser (WebAssembly)
@@ -31,25 +33,26 @@ Play the remake instantly in any modern web browser (Chrome, Firefox, Safari, Ed
   - Discrete tick simulation matching authentic timing and movement rules (50 ms per tick).
   - Authentic unit types: **Worker**, **Combat**, **Fire**, **Bomber**, **Swimmer**, and **Thief** ants.
   - Authentic map duration parsing directly from `.LVL` binary headers (e.g. 6 min for `TINY`, 8 min for `SMALL`, 10 min for `MEDIUM`/`GAUNTLET`, 12 min for `ISLANDS`/`TREASURE`).
-  - **8-Connected Diagonal Pathfinding**: Evaluates all 8 directions with authentic diagonal cost scaling ($\sqrt{2} \approx 1.414$), navigating intentional diagonal map chokepoints.
+  - **Frame-Exact Movement & Pathfinding**: There are no speed constants: an ant moves by the displacement of its current walk frame when the frame ends, on a millisecond clock (grass 4 px / 50 ms, sand 4 px / 40 ms, dirt 4 px / 60 ms, mud 2 px / 60 ms, swimming 3 px / 40 ms; every ant type walks at the same pace). Paths come from a port of the original's asynchronous `PATHMGR` A* (one 1000-expansion slice per 50 ms per team, 8 directions), orders snap the ant to its tile centre like the original's `GoTo`, and walkers wait 300 ms behind a moving ant or re-plan around a standing one.
   - **Food Objects & Harvest**: A food pile is an object of the map (LVL Block 2: anchor, units, points per unit and a list of stage tiles whose 2 x 2 or 4 x 4 cells are solid for walkers, so paths avoid them). An ant only harvests when ordered onto the pile: it walks up to it, plays the `?gf` grab clip (action 5), and when the clip ends one unit is taken (the pile shows its next stage or disappears), the ant carries the points of one unit, "Got Food!" is posted and it heads for its hill; after the deposit it walks back to the pile. Two ants that begin on the last unit both get food, a lunchbox dropped by a dead carrier is a food object of one unit, and an ant that already carries food answers "Can't - already have food.".
   - **Power-Up Lifecycle & Droppers**:
     - An ant takes a power-up only when its walk ends on the power-up's tile (never from a distance): the type changes at once, the 770 ms `getpow` clip (action 4) plays with sounds 1 and 2, hit points stay, and an old power-up is dropped on a free neighbour tile (West twice as likely). An order given while the ant is crossing into the tile cancels the pick-up: the ant stands on the power-up and cannot be attacked (power-ups are solid obstacles for paths, attacks and knock-backs).
     - Daisy flower droppers (`flower1`, Anim 421) on maps like `SMALL.LVL` and `GAUNTLET.LVL` drop power-ups via 9-frame falling droplet animations (`FD_*`) with sound 62 (`powerdrip.wav`) based on authentic Block 4 waypoint intervals (15s on Small, 30s on Gauntlet) and weighted class probabilities.
-  - **Special Abilities**:
-    - **Bomber**: Plant mines (28-tick sequence); defuse friendly mines on single-click; detonate friendly mines on multi/shift-select to launch units across water gaps.
-    - **Fire**: Ignite firewalls (40-tick cooldown); immune to flame; extinguish fire hazards.
-    - **Swimmer**: Build and multi-stage demolish bridges; underwater immunity to melee damage; continuous bobbing/snorkeling animations.
-    - **Thief**: Infiltrate enemy anthills, steal up to 50 score points, trigger alarm sirens (`underattack.wav`), and drop lunchboxes on defeat.
+  - **Special Abilities** (the original's action clips, with their frame sounds; a melee hit or a stun cancels an ability, a refused order plays the can't clip with "Can't do that..."):
+    - **Bomber**: Plants a mine (an invisible solid placeholder until the clip ends) or defuses one; a bomb goes off when an ant walks onto it (several ants selected: the move click sends the first one onto a friendly bomb).
+    - **Fire**: Ignites fire walls on grass, sand or dirt (never mud; a wall lives 180 s while more than 180 s of match time remain) and extinguishes them.
+    - **Swimmer**: Builds a bridge in four passes on water and demolishes a finished one in four passes; drowning non-swimmers are caught by the shared bridge-collapse scan.
+    - **Thief**: Raids an enemy anthill (`atcr501`, 3.5 s), moves up to 50 points at the end of the clip, sounds the alarm (`underattack.wav`) and drops a lunchbox when killed.
+  - **Combat & Knock-back**: Contact is the attacker's step into the target tile (no range, no cooldown, one blow per order); hit points are lost at contact (1, a combat ant 2), the victim is thrown at the strike frame (`gh` one tile, combat ant `gb` four tiles), landings follow the original's block order (bomb, pile-up dispersal with the dust cloud, fire wall, water), death is deferred until the death clip ends, and the combat ant's only AI is the original's auto-engage (no guard post, no pursuit).
   - **Anthill Enter, Heal, Hatch & Raid**: An ant that reaches its hill's entrance plays the original enter clip (`?h0` / `h?h0`); its food scores and its health is restored when the clip ends, wounded ants take `(10 - hp) * 200` ms longer, and ants wait on a ring in front of the hill until the waiting-queue task (ANTHILLQ, every 200 ms) admits them one by one. An egg hatches 8 s after the click into a worker that plays `aghatch` with sound 43 (`exithill.wav`); a thief raid plays `atcr501` for 3.5 s and moves up to 50 points when it ends.
   - **Status Line & Messages**: The one-line status box under the unit card is a single slot (Ants.exe `PostStatus`): a new message replaces the old one, lives 5 s, and the six flashing ones (already carrying food, 1 minute / 30 seconds / 10 seconds left, a ThiefAnt at your anthill, a team made) flicker for 500 ms first. Selecting ants posts "Ready!", "BomberAnt selected.", "Where to?", "Thief here", "Yessir!" or "SwimmerAnt selected." (string 12 for a group), orders answer with the ant's voice and "On my way." / "Movin' out." / "Here I go..." / "Attack!" / "My pleasure..." / "Burn...", Stop posts "Stopping.", and nothing is shown while idle. The match clock is checked every 200 ms like the original's CHECKGO task: warnings at 1:00, 0:30 and eleven countdown steps from 0:10, and the match ends within 200 ms after 0:00.
   - **Alliance Texts & Chat Log**: Teaming up follows the original's protocol: the invitee gets the question and the allypro cue, the proposer reads "%s accepted teaming up" / "%s rejected teaming up" (or the invitee "%s withdrew offer to team up"), a team that is made flashes "A team has been made." and writes the News Flash "%s (%s) and %s (%s) are a team now!" into the chat log (breaking it writes "... are no longer a team!"), and a drop-out writes "%s dropped out of the game!". The chat log keeps the original's entries: a header in the sender's team colour ("Name:" or "Name (To Teammate):", "[m:ss] News Flash:" for news) and a body of up to 100 characters wrapped and indented; chat needs the "Participate In Chat" option, F9 - F12 chat the quick-chat texts to everybody, and a team message reaches only the sender and the sender's allies.
   - **Edge Scrolling & Minimap**: The view scrolls like the original's input task (every 50 ms): the eight 12 px edge strips show the scroll arrows, only the 5 px inner strips scroll, the step is `scroll rate + 10` px around the target point of the pointer (about 55 - 60 px per tick at the default rate, 120 - 200 px/s at the slowest and 2100 px/s at the fastest setting), a strip that cannot move shows no arrow, and dialogs or a captured button stop it. Holding the left button on the minimap centres the view on the point under the pointer; nothing scrolls with the keyboard or the wheel.
   - **Pointer & Commands**: The cursor mode decides what a click does, exactly as in the original: over an ant the ant is picked with the original's sprite boxes (a 3 x 3 tile scan, the last box wins, no filters), other players' ants - allies too - give the attack cursor, food the food cursor, your own hill and the fog the move cursor, and a valid special target (a bomb for a bomber, an enemy hill for a thief, or with the ability pedestal latched: plantable ground, a fire wall, water or a bridge) the target cursor. A left drag of at most 4 px is a click at the release point, a bigger one is the red 1 px rubber band that selects your ants by positive-area overlap (Shift adds to a selection of your ants); the right button gives its order at the release, at the tile of the press point. The Move and ability pedestals only latch (a visual state that removes the band or turns valid tiles into targets and pops up after an accepted order), Stop stops the ants, locks the mouse for 250 ms and then deselects, the hatch pedestal exists only while eggs remain and the ally pedestal only with more than two players.
-  - **Network Port (in progress, `docs/NETWORK_PORT.md`)**: multiplayer will be deterministic lock-step of player commands (turns of 100 ms, a state hash every 20 ticks to catch desyncs) with ICE / STUN / TURN NAT traversal over WebRTC data channels, natively and in the browser. Milestone 1 is in: every player action is a plain-data `Command` (group move / special / attack, Stop, hatch, alliance offers and answers) validated by `SimulationEngine::apply_command` (the issuer is stamped by the transport, a command only touches its issuer's ants, an answer needs its invitation), a byte-exact wire codec that rejects anything malformed, a canonical application order, and `SimulationEngine::state_hash()` over the whole gameplay state; two engines that get the same commands in different arrival orders stay bit-identical for hundreds of ticks. The transport-independent lock-step core is in as well (`src/ants_net`): a bounds-checked wire protocol, the host's turn sequencer (issuer stamped from the connection, canonical order, flood limit, flow control, hash comparison), the client runner (jitter buffer, 20 Hz ticks, stall and catch-up) and host / client sessions; a host and three clients over links with latency and jitter stay bit-identical for 90 seconds of play, a diverging client is named within a second, and hostile or dead peers cannot hurt the others. A room (`Hello` / `Welcome`, roster, map and fog, the `Start` / `Loaded` / `Begin` barrier with a map-file hash check) and a non-blocking framed TCP transport for LAN and development complete the groundwork; the game itself is not connected yet. The old auto-accepting "AI diplomacy" is removed (no bots).
+  - **Network Port (in progress)**: deterministic lock-step of player commands with the host as sequencer. The command layer, the state hash, the lock-step core, the room and a TCP transport are built and tested; the game itself is not connected yet. Details below in [Network Port](#network-port-in-progress).
   - **Keyboard, Buttons & Chat**: The keyboard is the original's: F1, F9 - F12, Enter, Esc = deselect, Ctrl+A / H / L / N / O / P / Q / S and nothing else (no Space, arrow or letter hotkeys); the chat box is always active and Enter / All / Team send its text; the top bar and chat buttons behave like the original's button class (a press captures, the click sound plays at the press, the action runs when the button is released while the pointer is still on it, leaving cancels it).
   - **Enemy Ant Inspection**: Clicking enemy units when no friendly unit is selected shows selection brackets (`*ears`, coloured by health) without allowing friendly command dispatch.
-  - **Match Audio Cues**: 1-minute alert (`onemin.wav`), 30-second warning (`thirtysec.wav`), 10-second countdown clicks (`countdown.wav`), defeat fanfare (`losers.wav`), and player drop-out (`playerout.wav`).
+  - **Match Audio Cues**: 1-minute alert (`1min.wav`), 30-second warning (`30sec.wav`), 10-second countdown (`countdwn.wav`), defeat fanfare (`losers.wav`), and player drop-out (`playerout.wav`).
 
 - **Modern Audio & Presentation (`libants-app`)**:
   - Hardware-accelerated SDL2 renderer with integer scaling, crisp pixel filtering, and authentic 4:3 viewport preservation.
@@ -62,8 +65,8 @@ Play the remake instantly in any modern web browser (Chrome, Firefox, Safari, Ed
   - Standalone web inspector (`asset_catalog/index.html`) with responsive design, searching, filtering, and instant asset downloads (⬇ WAV audio, ⬇ PNG sprites, ⬇ composite canvas frames).
 
 - **Automated Verification & Zero-Warning Standard**:
-  - 100% pass rate across **188 integration tests (6,529 assertions)**, the command-layer / state-hash suite (15 tests), the lock-step network core (17 tests), room (8) and TCP transport (6) suites,, the hill-action, combat-action and ability-action golden tests and **506 opaque-box End-to-End (E2E) verification tests**.
-  - Strict compilation under `-Wall -Wextra -Werror -Wsign-conversion`.
+  - 100% pass rate across **188 application integration tests (6,529 assertions)**, the simulation golden suites (movement, path planner, hill, combat, ability, power-up and food actions), the command-layer / state-hash suite, the lock-step network core, room and TCP transport suites, the render, HUD, status-message, input and pointer model suites and **506 opaque-box End-to-End (E2E) verification tests** (real counts in [Testing & Verification](#testing--verification)).
+  - Zero warnings under `-Wall -Wextra -Wpedantic -Wconversion -Wshadow -Wnon-virtual-dtor`.
 
 ---
 
@@ -74,14 +77,25 @@ The remake provides a complete, playable, standalone experience with authentic a
 | System / Area | Status | Notes & Active Focus |
 |---|---|---|
 | **Asset Decoding (`.chd`, `.lvl`)** | ✅ Complete | Full palette, sprite, animation, sound, and map parsing. |
-| **Audio Engine (SFX & Music)** | ✅ Complete | 32-channel spatial mixer, MIDI on macOS, HTML5 audio bridge on Web. |
-| **Renderer & Viewport** | ✅ Complete | SDL2 hardware renderer, 4:3 integer scaling, TrueType font rendering. |
-| **HUD & Interface** | ✅ Complete | Recessed status news box, chat overlay, minimap, team switching. |
-| **WebAssembly & Cloud Beta** | ✅ Complete | Docker containerized deployment at `beta.playants.org`. |
-| **Unit Movement & Locomotion** | 🟡 Active Calibration | 8-directional pathfinding, corner traversal, and base queuing are implemented; ongoing tuning for crowded group steering, ant collision nudging, and diagonal slip feel. |
-| **Abilities: Bombs, Fire & Bridges** | 🟢 Original Action Model | Plant, defuse, ignite, extinguish, bridge build and demolish as the original's action clips: invisible solid placeholder, effects at the end of the clip, cancel by melee or stun, sounds from the clip frames. |
-| **Combat, Knockback & Collisions** | 🟢 Original Action Model | Ported from the 1998 binary: contact when a step crosses into the target tile, hit points lost at contact, strike frame, `gh` / `gb` flights with the original landing rules, pile-up dispersal (with the dust cloud of other teams' pile-ups), fire and water landings, bomb victims and duds, stun, deferred death and removal effects, and the combat ant auto-engage; flights are drawn at the frame the original's real-time player shows. |
-| **Multiplayer Networking** | 📋 Planned | Deterministic lockstep protocol over WebSockets / UDP. |
+| **Audio Engine (SFX & Music)** | ✅ Complete | 32-channel spatial mixer, MIDI on macOS, in-engine MP3 soundtrack on the web. |
+| **Renderer & Viewport** | ✅ Complete | SDL2 hardware renderer, 4:3 integer scaling, TrueType font rendering, the original's sprite drawing rules. |
+| **HUD, Pointer & Keyboard** | 🟢 Original Model | The original's HUD composites, pedestals, status line, chat log, pointer model (cursor table, rubber band, right button at release), edge scrolling and keyboard. Open: view origin (16, 21) at 442 x 440, results screen, option-dialog internals, setup-screen buttons firing on release. |
+| **WebAssembly & Cloud Beta** | ✅ Complete | Docker containerized deployment at `beta.playants.org` (game, asset catalog, changelog page). |
+| **Unit Movement & Locomotion** | 🟢 Original Model | Frame-exact walking, `PATHMGR` A*, blocking and bumping ported from `Ants.exe`. |
+| **Hill, Food & Power-Ups** | 🟢 Original Action Model | Enter / heal / hatch / raid clips, the waiting ring, food objects with stages, pick-up at the landing and the standing-on-a-power-up rule. |
+| **Abilities: Bombs, Fire & Bridges** | 🟢 Original Action Model | Plant, defuse, ignite, extinguish, bridge build and demolish as the original's action clips. |
+| **Combat, Knockback & Collisions** | 🟢 Original Action Model | Contact, strike frame, `gh` / `gb` flights, landing blocks, pile-up dispersal, bomb victims, stun, deferred death and the combat ant auto-engage. |
+| **Multiplayer: lock-step core, room, TCP** | 🟡 In Progress | Built and tested (v0.0.43 - v0.0.45); host / join in the game and the drop-out flow come next (v0.0.46). |
+| **Multiplayer: NAT traversal (WebRTC, STUN / TURN)** | 📋 Planned | Data channels natively and in the browser, WebSocket signaling, coturn. Needs third-party libraries (asked first). |
+| **Bot AI** | 🚫 None by design | Every ant command comes from a human player; the original has no computer players. |
+| **Asset Viewer Overhaul** | 📋 Planned (last) | Verify the viewer's groups and that every animation loads and plays properly, then overhaul it; scheduled after everything else. |
+
+### Roadmap (in order)
+1. Network port: application integration (v0.0.46), WebRTC + signaling + TURN deployment, alliance dialogs, the original's elimination rules (CHECKGO).
+2. View origin (16, 21) at 442 x 440.
+3. Results screen, option-dialog internals, startup flow, setup-screen buttons firing on release, quick help.
+4. Removal of the remaining invented visuals and timings, and the last non-original tests.
+5. Asset viewer overhaul.
 
 ---
 
@@ -97,32 +111,45 @@ Ants-Mac/
 ├── docker/                 # Container deployment configuration
 │   └── nginx.conf          # Nginx server config with caching, CORS, and WASM headers
 ├── docs/                   # Reverse-engineering documentation and specifications
-│   ├── GAME_REVERSE_ENGINEERING.md  # Comprehensive technical mechanics reference
-│   └── BUILD_AND_RUN.md             # Native and Docker build/run instructions
+│   ├── GAME_REVERSE_ENGINEERING.md  # Comprehensive technical mechanics reference (ground truth per system)
+│   ├── NETWORK_PORT.md              # Network port design, wire format, milestones
+│   ├── BUILD_AND_RUN.md             # Native and Docker build/run instructions
+│   ├── ORIGINAL_BINARY_MAP.md       # Function map of Ants.exe (generated)
+│   ├── TABLE4_ANIMATION_REFERENCE.md# Animation table reference
+│   ├── legacy/Ants.exe.c            # Decompilation used only to navigate the binary
+│   └── reverse_engineering/         # Verified movement reports and tables
 ├── include/                # Public C++ headers
 │   ├── ants_assets/        # Archive decoders, map loaders, sprite/sound structs
-│   ├── ants_sim/           # Simulation engine, grid topology, ant units, action system (hill, combat)
-│   └── ants_app/           # SDL2 application, renderer, HUD, audio mixer, MIDI
+│   ├── ants_sim/           # Simulation engine, grid, ant units, command layer, state hash
+│   ├── ants_net/           # Lock-step protocol, sequencer, runner, sessions, room, TCP transport
+│   └── ants_app/           # SDL2 application, renderer, HUD, audio mixer, MIDI, version
 ├── Original-Ants/          # Authentic 1998 game data
 │   ├── ants.chd            # Packed binary sprites, audio, palettes, animations
-│   ├── Arial.ttf           # Authentic TrueType font
+│   ├── Arial.ttf           # TrueType font
 │   ├── *.mp3 / *.MID       # Soundtrack audio files
-│   └── Maps/               # Binary .LVL maps (Treasure, Small, Rivers, Islands, etc.)
+│   └── Maps/               # Binary .LVL maps (Treasure, Small, Medium, Tiny, Islands, Gauntlet)
 ├── src/                    # Implementation source code
 │   ├── ants_assets/        # Asset decompression, palette mapping, mirroring
-│   ├── ants_sim/           # Tick loop, pathfinding (A*), locomotion + action clips, combat system
-│   └── ants_app/           # Windowing, input handling, viewport camera, rendering
+│   ├── ants_sim/           # Tick loop, PATHMGR A*, locomotion and action clips, combat, commands, state hash
+│   ├── ants_net/           # Network core (no threads, no blocking calls) and TCP transport
+│   └── ants_app/           # Windowing, input handling, viewport camera, rendering, HUD, setup screen
 ├── tests/                  # Automated verification test suites
 │   ├── e2e/                # Standalone 506-test opaque-box E2E test runner
-│   ├── test_assets/        # Binary asset parsing unit tests
-│   ├── test_sim/           # Simulation rule validation and challenger tests
-│   └── test_app/           # Application integration tests (125 tests across 12 suites)
+│   ├── test_assets/        # Binary asset parsing and movement-table parity tests
+│   ├── test_sim/           # Simulation rules, golden action suites, command layer / state hash
+│   ├── test_net/           # Lock-step core, room and TCP transport suites
+│   ├── test_app/           # Application integration, render, HUD, status, input and pointer suites
+│   └── data/               # Golden sample data (edge scrolling)
+├── tools/                  # Reverse-engineering and generator scripts (Capstone analysis, table extraction, changelog page)
 ├── web/                    # WebAssembly shell, splash overlay, and web styles
+├── CHANGELOG.md            # Running list of changes for every version (also served at /changelog.html)
 ├── CMakeLists.txt          # Root CMake build configuration
 ├── docker-compose.yml      # Service definition for beta.playants.org
 ├── Dockerfile              # Multi-stage Emscripten + Nginx build
+├── build_web.sh            # Local WebAssembly build into dist/
 ├── run_tests.sh            # Master test suite runner script
-└── start_game.sh           # One-click build and launch script
+├── start_game.sh / .bat    # One-click build and launch scripts (macOS / Linux, Windows)
+└── AGENTS.md               # Project rules for contributors and coding agents
 ```
 
 ---
@@ -143,6 +170,9 @@ brew install cmake sdl2 sdl2_ttf
 ```bash
 sudo apt-get update && sudo apt-get install -y cmake g++ libsdl2-dev libsdl2-ttf-dev
 ```
+
+### Windows
+Visual Studio 2022 Build Tools (MSVC) and CMake; SDL2 and SDL2_ttf are downloaded automatically by CMake. Run `start_game.bat` to build and launch, or see [`docs/BUILD_AND_RUN.md`](docs/BUILD_AND_RUN.md) for the step-by-step commands.
 
 ---
 
@@ -179,6 +209,23 @@ cmake --build build_asan -j8
 ./build_asan/src/ants_app/ants
 ```
 
+### Command-Line Options
+`./start_game.sh` and the executable accept:
+
+| Option | Effect |
+|---|---|
+| `--map PATH` | Skip the setup screen and start a match on that `.LVL` file (for example `Original-Ants/Maps/SMALL.LVL`). |
+| `--map-select` | Start on the setup screen (the default). |
+| `--seed N` | Random seed of the match. |
+| `--player N` | The team you control (0 green, 1 red, 2 blue, 3 black). |
+| `--fullscreen` | Start in fullscreen. |
+| `--headless` | Hidden window with the dummy video driver (used by the tests). |
+| `--screenshot FILE` / `--frames N` | Save a screenshot after N frames (default 5) and exit. |
+| `--select-ant ID` / `--select-base TEAM` | Start with an ant or a hill selected (for screenshots). |
+| `--open-options`, `--show-grid`, `--scorecard` | Show the options screen, the tile grid, or a sample results screen. |
+
+Host and join options for network matches arrive with the application integration of the network port (v0.0.46).
+
 ---
 
 ## Self-Hosting with Docker (`beta.playants.org`)
@@ -194,6 +241,8 @@ docker build -t ants-beta .
 docker run -d -p 19980:80 --name ants-beta ants-beta
 ```
 
+The image serves the game at `/`, the asset catalog at `/asset_catalog/` and the changelog page at `/changelog.html` (built from `CHANGELOG.md` when the image is built).
+
 ### Building the Web Port Locally
 ```bash
 ./build_web.sh
@@ -205,10 +254,12 @@ python3 -m http.server 8080 -d dist
 
 ## Controls & Hotkeys
 
-### Battlefield Selection Screen
-- **Up / Down / Number Keys `1`–`6`**: Highlight map (Treasure, Small, Rivers, Islands, Large, Great Divide).
-- **Double Click / Enter / `START GAME` Button**: Launch match.
-- **Soundtrack**: Loops during map selection and stops or transitions when the match begins.
+### Setup Screen (map selection)
+- **Up / Left, Down / Right, number keys `1`–`6`, or the arrow buttons**: Highlight a map (Treasure, Small, Medium, Tiny, Islands, Gauntlet); clicking the map name or the info box advances to the next one.
+- **`F`** or the **Fog of War On / Off** buttons: Toggle Fog of War.
+- **`Enter` / `Space` / `START` button**: Launch the match. **`Esc` / Leave Game button**: leave.
+- **`D` or a click on a player thumb**: toggles that thumb (a placeholder until the room shows real players).
+- **Soundtrack**: `INTRO` loops on this screen; a match plays a shuffled in-game track (`ANTS2A`, `ANTS2B`, `ANTSFUN3`); `Ctrl + M` mutes the music.
 
 ### Mouse Controls
 | Action | Trigger | Description |
@@ -228,6 +279,8 @@ python3 -m http.server 8080 -d dist
 | **Bomb Hit (Jump)** | Click on a Friendly Bomb with Several Ants Selected | The move click sends the first ant onto the bomb, which sets it off (a single bomber defuses it instead). |
 
 ### Team Switching & Testing Shortcuts
+Not part of the original: with no computer players, these let one person drive any team of a local match for testing.
+
 | Key | Function |
 |---|---|
 | **`Ctrl + 1` / `⌘1`** | Switch to Team 0 (Green Ants). |
@@ -254,6 +307,30 @@ python3 -m http.server 8080 -d dist
 
 ---
 
+## Network Port (in progress)
+
+The original game runs a full TCP mesh (port 4001) in which every machine simulates only its own team and broadcasts the results; it has no host / join interface (an external lobby starts every machine with its roster on the command line). The remake runs **one deterministic simulation on every machine** and sends only the players' intent (lock-step of commands): this also makes web play and NAT traversal possible. Design, wire format and milestones are in [`docs/NETWORK_PORT.md`](docs/NETWORK_PORT.md); what the original does is recorded in section 5.46 of [`docs/GAME_REVERSE_ENGINEERING.md`](docs/GAME_REVERSE_ENGINEERING.md).
+
+| Piece | State |
+|---|---|
+| Command layer (`Command`, `SimulationEngine::apply_command`, canonical order, byte-exact codec) | ✅ v0.0.43 |
+| State hash (`state_hash()`, seven named parts) | ✅ v0.0.43 |
+| Lock-step core: wire protocol, host sequencer, client runner, sessions, simulated network | ✅ v0.0.44 |
+| Room (join, roster, map and fog, start barrier with a map-file hash check) and framed TCP transport | ✅ v0.0.45 |
+| Host / join in the game, roster, drop-out, predicted click feedback, waiting / desync display | 🟡 next (v0.0.46) |
+| NAT traversal: ICE / STUN / TURN over WebRTC data channels, WebSocket signaling, coturn | 📋 planned |
+| Alliance dialogs and the original's elimination rules | 📋 planned |
+
+How a match runs: a turn is 100 ms (two ticks). The host stamps every command with the sender's seat (a peer cannot speak for another player), seals a turn every 100 ms with the commands in canonical order and sends it to everybody; every machine executes the same turns after a two-turn jitter buffer, waits at a missing turn and runs faster to catch up. Every 20 ticks the machines compare a hash of the whole gameplay state: a mismatch names the peer and the subsystem and freezes the match. Malformed, flooding or host-only messages are counted and the peer is thrown out after eight strikes; the game waits for a peer that lags by up to 3 s. No bots: every ant command comes from a human player.
+
+---
+
+## Changelog & Versioning
+
+The version (`include/ants_app/version.hpp`, currently `v0.0.45`) is bumped with every release and shown on screen next to the FPS meter. [`CHANGELOG.md`](CHANGELOG.md) lists what changed in every version, newest first, from the first commit to the release in progress; it is published on the beta site at [`/changelog.html`](https://beta.playants.org/changelog.html) and linked from the game page.
+
+---
+
 ## Testing & Verification
 
 The project enforces strict regression guarantees with automated test suites spanning decoders, simulation rules, application integration, and opaque-box end-to-end scenarios.
@@ -267,12 +344,31 @@ To run all test suites in sequence:
 
 ### Running Specific Suites
 ```bash
-./run_tests.sh --assets   # Raw asset decoder unit tests (test_assets)
-./run_tests.sh --sim      # Simulation rules & challenger tests (test_sim_rules)
-./run_tests.sh --app      # Application integration tests (125 tests across 12 suites)
+./run_tests.sh --assets   # Asset decoders and movement-table parity with Ants.exe (suites 1, 1.1)
+./run_tests.sh --sim      # Simulation rules, golden action suites, command layer, lock-step network, room, TCP (suites 2.x)
+./run_tests.sh --app      # Application integration, render, HUD, status, input and pointer suites (suites 3.x)
 ./run_tests.sh --e2e      # Opaque-box E2E test runner (506 tests across 4 tiers)
 ./run_tests.sh --asan     # Rebuild and run with AddressSanitizer
+./run_tests.sh --clean    # Remove the build directories and rebuild first
 ```
+
+### What the Suites Cover (v0.0.45, all passing)
+| Suite | What it checks | Size |
+|---|---|---|
+| 1 Asset decoders | `ants.chd` header, palette, sprites, audio, event tags, Table 4 animations, `.LVL` maps, directional mirroring, fuzzing | 8 suites, 69,809 assertions |
+| 1.1 Movement tables | Generated locomotion tables and clips equal the static tables inside `Ants.exe` and `ants.chd` | 7 suites, 120,582 assertions |
+| 2 Simulation rules | Clock, PRNG, unit attributes, combat, placement, bombs, fire, bridges, hills, thieves, alliances, scoring, match end | 13 suites, 2,252 assertions |
+| 2.1 - 2.2 Challengers | Adversarial combat / hazard and lifecycle / economy / alliance scenarios | 288 and 205 assertions |
+| 2.3 Path planner | Port of the original `PATHMGR` A* | 228 assertions |
+| 2.4 Movement golden | 22 frame-exact timings from a reference model, blocking, bumping, terrain, solid bits | 17,710 assertions |
+| 2.5 - 2.9 Action suites | Hill actions, combat actions, abilities, power-ups, food (golden cases from the disassembly) | 321 / 168 / 168 / 4,776 / 641 assertions |
+| 2.10 Command layer | Codec fuzzing, validation, canonical order, engines fed permuted commands stay bit-identical, state-hash coverage field by field | 15 tests, 490,504 assertions |
+| 2.11 Lock-step core | Protocol fuzzing, sequencer, runner, host and three clients over links with latency and jitter play 90 s bit-identically, desync detection, hostile peers | 17 tests, 119,335 assertions |
+| 2.12 Room | Joining, roster, map and fog, the start barrier | 8 tests, 37,769 assertions |
+| 2.13 TCP | Framing, hostile frames, a real-socket match | 6 tests, 60,122 assertions |
+| 3 Application integration | Whole-application behaviour through the HUD, renderer and simulation | 188 tests, 6,529 assertions |
+| 3.1 - 3.5 Model suites | Render parity 237 checks, HUD layout 530, status messages 255, input model 70, pointer model 329 | 1,421 checks |
+| 4 E2E | Opaque-box scenarios in four tiers | 506 tests |
 
 ### Standalone E2E Test Runner
 The E2E test suite validates all 49 game features across 4 tiers:
@@ -333,6 +429,14 @@ flowchart TD
         Units --> Droppers["Daisy Flower Power-Up Droppers"]
     end
 
+    subgraph Net ["Network Layer (libants-net, in progress)"]
+        Cmd["Command (validated by apply_command)"] --> Seq["Host Sequencer: 100 ms turns"]
+        Seq --> Runner["Lock-Step Runner on every machine"]
+        Runner --> Hash["State Hash Check"]
+        Lobby["Room & Start Barrier"] --> Seq
+        Wire["Wire Protocol"] --> TCP["TCP Transport (WebRTC planned)"]
+    end
+
     subgraph App ["Application Layer (libants-app)"]
         Sprites --> Renderer["SDL2 Hardware Renderer"]
         Grid --> Renderer
@@ -343,6 +447,9 @@ flowchart TD
         Units --> HUD["HUD, Status Box & Minimap"]
         Input["Keyboard & Mouse Dispatch"] --> Sim
     end
+
+    Runner -. "same turns, same tick" .-> Grid
+    HUD -. "player commands" .-> Cmd
 ```
 
 ---
