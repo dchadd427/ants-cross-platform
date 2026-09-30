@@ -258,6 +258,13 @@ if [ "$RUN_SIM" -eq 1 ]; then
     echo -e "${BOLD}${BLUE}======================================================================${RESET}"
     "./$BUILD_DIR/tests/test_sim/test_food_actions"
     FOOD_ACTIONS_STATUS=$?
+
+    echo ""
+    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
+    echo -e "${BOLD}${BLUE}>>> 2.10 RUNNING COMMAND LAYER SUITE (commands, validation, lock-step state hash)...${RESET}"
+    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
+    "./$BUILD_DIR/tests/test_sim/test_commands"
+    COMMANDS_STATUS=$?
 fi
 
 # 5. Execute Application Integration Tests
@@ -414,6 +421,13 @@ if [ "$RUN_SIM" -eq 1 ]; then
         echo -e " 2.9 Food Actions (test_food_actions):               ${GREEN}PASSED${RESET}"
     else
         echo -e " 2.9 Food Actions (test_food_actions):               ${RED}FAILED (exit code ${FOOD_ACTIONS_STATUS})${RESET}"
+        TOTAL_FAILED=$((TOTAL_FAILED + 1))
+    fi
+
+    if [ "$COMMANDS_STATUS" -eq 0 ]; then
+        echo -e " 2.10 Commands + State Hash (test_commands):         ${GREEN}PASSED${RESET}"
+    else
+        echo -e " 2.10 Commands + State Hash (test_commands):         ${RED}FAILED (exit code ${COMMANDS_STATUS})${RESET}"
         TOTAL_FAILED=$((TOTAL_FAILED + 1))
     fi
 fi

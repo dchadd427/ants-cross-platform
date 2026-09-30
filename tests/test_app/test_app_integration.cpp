@@ -2053,8 +2053,21 @@ void run_suite_10_egg_economy_incubation_teamup_abilities() {
         hud.handle_mouse_up(495, 165, 1, sim, camera);
         ASSERT_TRUE(proposal_sound());
 
-        // AI accepts after ~30 ticks (1.5s)
+        // Nobody answers: there is no computer opponent that accepts the invitation, it stays open
         for (int i = 0; i < 35; ++i) sim.tick();
+        ASSERT_NE(sim.get_world_state().player_alliances[0], 1u);
+
+        // A command that answers an invitation nobody made is refused; player 1's own accept makes the team
+        Command bogus;
+        bogus.type = CommandType::AllianceAccept;
+        bogus.issuer = 2;
+        bogus.other_player = 0;
+        ASSERT_EQ(sim.apply_command(bogus).status, CommandResult::Status::RejectedNotAllowed);
+        Command accept;
+        accept.type = CommandType::AllianceAccept;
+        accept.issuer = 1;
+        accept.other_player = 0;
+        ASSERT_TRUE(sim.apply_command(accept).accepted());
         const auto& ws_allied = sim.get_world_state();
         ASSERT_EQ(ws_allied.player_alliances[0], 1u);
         ASSERT_EQ(ws_allied.player_alliances[1], 0u);
@@ -6489,10 +6502,10 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
 
     TEST_CASE("12.108: Version Invariant & Fog of War Cursor Concealment Parity") {
         // 1. Verify semantic versioning components
-        ASSERT_EQ(ants::VERSION_STRING, "v0.0.42");
+        ASSERT_EQ(ants::VERSION_STRING, "v0.0.43");
         ASSERT_EQ(ants::VERSION_MAJOR, 0);
         ASSERT_EQ(ants::VERSION_MINOR, 0);
-        ASSERT_EQ(ants::VERSION_PATCH, 42);
+        ASSERT_EQ(ants::VERSION_PATCH, 43);
 
         // 2. Setup simulation world with Fog of War enabled
         SimulationEngine sim;

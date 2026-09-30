@@ -8,6 +8,7 @@
 
 #include "ants_assets/lvl_parser.hpp"
 #include "ants_sim/prng.hpp"
+#include "ants_sim/command.hpp"
 #include "ants_sim/match_stats.hpp"
 #include "ants_sim/grid.hpp"
 #include "ants_sim/ant_unit.hpp"
@@ -352,6 +353,21 @@ struct WorldState {
 
 class SimulationEngineImpl;
 
+/// FNV-1a 64 over the deterministic gameplay state (see state_hash.cpp): `total` is what lock-step peers compare every 20 ticks, the parts
+/// name the subsystem that differs after a desync. Presentation (audio and news queues, visual effects, fog, player names) is not part of it.
+struct StateHash {
+    uint64_t total{0};
+    uint64_t engine{0};      // clocks, PRNGs, match state, hatching, CHECKGO
+    uint64_t players{0};     // scores, statistics, eggs, alliances, invitations
+    uint64_t grid{0};        // every cell, hills, the solid-bit mode
+    uint64_t food{0};        // food objects
+    uint64_t ants{0};        // every ant and the occupancy grid
+    uint64_t paths{0};       // path managers, request serials
+    uint64_t droppers{0};    // flower droppers
+    bool operator==(const StateHash& o) const noexcept { return total == o.total; }
+    bool operator!=(const StateHash& o) const noexcept { return total != o.total; }
+};
+
 class SimulationEngine {
 public:
     SimulationEngine();
@@ -368,6 +384,11 @@ public:
     void reset();
 
     void tick();
+    /// The one entry through which a player changes the simulation (command.hpp): validates the command (issuer, ownership, ranges) and applies
+    /// it. Every machine of a lock-step match applies the same commands at the same tick in canonical order.
+    CommandResult apply_command(const Command& command);
+    /// Hash of the deterministic gameplay state (see StateHash).
+    StateHash state_hash() const;
     void issue_order(const AntOrder& order);
     /// The Stop button for one selected ant (the loop body of Ants.exe FUN_01028a60): an ant that accepts player orders, is
     /// not on the hill entrance or the tile above it and has a walk or a target is sent to its own tile as an ordinary move

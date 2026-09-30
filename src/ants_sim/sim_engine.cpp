@@ -137,7 +137,6 @@ void SimulationEngine::init(const ants::assets::LevelData& level, uint32_t rando
         impl_->grid_.get_cell_mut(37, 19).is_obstacle_overlay = true;
     }
 
-    impl_->invite_pending_ticks_.fill(0);
     uint32_t starting_eggs = (level.boundary_param > 0) ? level.boundary_param : 10;
     for (uint8_t p = 0; p < MAX_PLAYERS; ++p) {
         impl_->stats_.set_egg_count(p, starting_eggs);
@@ -213,7 +212,6 @@ void SimulationEngine::reset() {
     impl_->next_ant_id_ = 1;
     impl_->stats_.reset();
     impl_->world_state_dirty_ = true;
-    impl_->invite_pending_ticks_.fill(0);
     impl_->fog_revealed_.clear();
     impl_->movement_reset();
 }
@@ -296,20 +294,6 @@ void SimulationEngine::tick() {
         if (ant_ptr->type == AntType::Swimmer && ant_ptr->state == UnitState::Swimming) {
             ant_ptr->anim_tick++;
             ant_ptr->anim_subitem = ant_ptr->anim_tick;
-        }
-    }
-
-    // AI Diplomacy: Process pending alliance invitations
-    for (uint8_t p = 0; p < MAX_PLAYERS; ++p) {
-        const auto& invite = impl_->stats_.get_pending_invite(p);
-        if (invite.active && invite.from_player < MAX_PLAYERS) {
-            impl_->invite_pending_ticks_[p]++;
-            if (impl_->invite_pending_ticks_[p] >= 30) {
-                accept_alliance(p, invite.from_player);
-                impl_->invite_pending_ticks_[p] = 0;
-            }
-        } else {
-            impl_->invite_pending_ticks_[p] = 0;
         }
     }
 

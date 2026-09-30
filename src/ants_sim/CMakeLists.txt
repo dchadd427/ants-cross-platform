@@ -9,6 +9,8 @@ add_library(ants_sim STATIC
     path_planner.cpp
     pathfinding.cpp
     sim_engine.cpp
+    command_system.cpp
+    state_hash.cpp
     game_strings.cpp
 )
 

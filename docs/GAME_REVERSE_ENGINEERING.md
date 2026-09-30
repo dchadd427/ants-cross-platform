@@ -1991,6 +1991,34 @@ Addresses are virtual addresses in `Original-Ants/Ants.exe`. Implemented in `HUD
 * **Open** *(recorded, not ported)*: the ally attack confirmation (string 4, `FUN_0101ffab`) and the invitation dialogs (strings 1 - 3) need a modal question dialog (network stage); the slot count of Ctrl+N / Ctrl+P
   is the number of own ants (the original counts table slots including empty ones); the setup and results screens and the option toggles still act on the press.
 
+### 5.46 The Original's Network Model (Capstone Audit N) and the Remake's Command Layer
+
+Addresses are virtual addresses in `Original-Ants/Ants.exe`. The remake's design, wire format and milestone status are in `docs/NETWORK_PORT.md`; this section records what the original does and how milestone 1
+(v0.0.43: `include/ants_sim/command.hpp`, `src/ants_sim/command_system.cpp`, `src/ants_sim/state_hash.cpp`, `tests/test_sim/test_commands.cpp`) maps it.
+
+* **Original**: there is no host / join user interface: an external lobby starts the exe with `-spike -N<team><name> -P<team><addr> -G<n> [-H<host>]`. Transport: WinSock 1.1, blocking TCP, a full mesh on port 4001
+  (two sockets per pair), one receive thread per socket, one accept thread, one send-queue thread; a peer's identity is its IPv4 address; the frame header is 16 bytes `{type, len, param, sendTime}`; 11 net types (HELLO,
+  PEERLIST, COUNT, START, PULSE, PING, DROP, KICK ...) and 40 game message types. **The game is not lock-step**: every machine simulates only its own team's ants (29 `IsLocal` branches) and broadcasts the results
+  (path, melee, blast, die, pick-up, take food, bomb ...); the randoms that decide something are chosen by the owner and sent; consistency is repaired by position snaps and a 5 s STOP re-broadcast; the match
+  clock follows the lowest live team. Lobby: the host picks the map and presses START once every peer's "thumb" (COUNT agreement, latency tiers 1.2 / 1.8 s) has appeared; ROSTER -> LOADED barrier -> map check ->
+  READY barrier -> local START, the "Get ready" modal for at least 5 s. A team drops out after 60 s of silence (PULSE every 8 s) or a TCP error and its ants die; quit, kick, alliances (invite / response / withdraw /
+  break), chat (100 characters, team-only filter) and the end-of-match scores are messages; no host migration, no late join, no pause. Defects that must not be ported: an unbounded 2 KB stack receive, unchecked
+  type / count / index fields, a format string built from player names, IP-only identity (no NAT), a fatal exception on an unknown name, peer-table races, blocking sockets.
+* **Remake** (milestone 1): one deterministic simulation on every machine; only the players' intent crosses the wire. `Command` is the plain-data form of what the HUD used to do by calling the engine: the group
+  order `FUN_010287b5` with its special and attack flags (`GroupMove / GroupSpecial / GroupAttack`), the Stop button `FUN_01028a60` (`Stop`), the hatch pedestal `FUN_01010aca` (`Hatch`) and the alliance protocol
+  (`AllianceInvite / Accept / Deny / Withdraw / Break`, `FUN_0100c7ac`, `FUN_0100c5fa`). `SimulationEngine::apply_command` validates: the issuer is stamped by the transport and must be a player; a group order
+  keeps only ants of its issuer (foreign, unknown, removed and repeated ids are dropped, the selection order is kept because the group order's exchange sort is not stable), the tile must be on the map, lists are
+  1 .. 32 ants; an answer to an invitation needs that invitation (nobody can accept for another player or force a team); nothing changes after the end of the match. The wire form is `u8 type, u8 issuer, u8 other,
+  i16 tile_x, i16 tile_y, u8 count, u32 ant id * count`; `decode` checks every field before use (fuzzed with 300000 buffers) and `canonical_order` (by issuer, stable) fixes the order in which a turn's commands
+  are applied whatever order they arrived in.
+* **State hash** (`SimulationEngine::state_hash`): FNV-1a 64 over the deterministic gameplay state, fed field by field in fixed width little endian (the same on every platform), in seven parts (engine, players,
+  grid, food, ants, paths, droppers) so that a mismatch names the subsystem: both PRNG states (the cosmetic generator picks the death clip and so decides when an ant leaves its tile), the clocks, CHECKGO, hatching,
+  every ant field, the occupancy grid, every map cell, the hills, food objects, scores and statistics, eggs, alliances, pending invitations, the path managers' queues and serials, the flower droppers. Audio and news
+  queues, visual effects, the per-viewer fog and the players' names are not part of it. `tests/test_sim/test_commands.cpp` proves the coverage field by field.
+* **Found and fixed on the way**: `Grid::init_from_level` resized instead of resetting the cells, so a second map inherited stale per-cell flags of the first (a fresh engine and a reused one differed in the grid);
+  commands had no issuer; the alliance auto-accept in `SimulationEngine::tick` (an invitation was accepted after 30 ticks by no player at all) violated the no-bot rule and is removed (an invitation now waits for
+  the invitee's `AllianceAccept` / `AllianceDeny` command).
+
 ---
 
 ## 6. Target Multi-Platform Architecture

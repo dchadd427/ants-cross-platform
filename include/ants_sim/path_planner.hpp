@@ -225,6 +225,12 @@ public:
     /** @brief True if a request of this ant is queued. */
     bool has_request_for(uint32_t ant_id) const noexcept;
 
+    /** @brief Calls fn(ant_id, start, goal, has_grid, finished) for every queued request in queue order (state hash, diagnostics). */
+    template <typename Fn>
+    void for_each_request(Fn&& fn) const {
+        for (const auto& r : queue_) fn(r->ant_id(), r->start(), r->goal(), r->has_grid(), r->finished());
+    }
+
 private:
     // Declared before the queue so that it is destroyed after the searches that reference it.
     std::unique_ptr<PathGridPool> pool_;

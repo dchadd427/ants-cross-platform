@@ -168,3 +168,22 @@ target_compile_definitions(test_food_actions PRIVATE
 )
 
 add_test(NAME test_food_actions COMMAND test_food_actions)
+
+add_executable(test_commands
+    test_commands.cpp
+)
+
+target_link_libraries(test_commands PRIVATE
+    ants_sim
+    ants_assets
+)
+
+target_include_directories(test_commands PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../include
+)
+
+target_compile_definitions(test_commands PRIVATE
+    ORIGINAL_ASSETS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../../Original-Ants"
+)
+
+add_test(NAME test_commands COMMAND test_commands)

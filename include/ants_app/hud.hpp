@@ -215,6 +215,9 @@ public:
     bool homogeneous_type(const sim::WorldState& world, sim::AntType& type) const;
     /// The simulation that answers the cursor's special-target question (FUN_01026f91); without it no tile is a special target.
     void set_sim_query(const sim::SimulationEngine* sim) noexcept { sim_query_ = sim; }
+    /// Where the HUD sends the player's commands (group orders, Stop, hatch, alliance offers): a single-player game applies them at once (null =
+    /// the engine itself), a network match hands them to the turn manager, which applies them at the agreed turn.
+    void set_command_sink(sim::CommandSink* sink) noexcept { command_sink_ = sink; }
 
     /// The two command pedestals are latched visually (slot modes [54f8] / [54fc] = 2): the move pedestal only suppresses the rubber band,
     /// the ability pedestal makes valid targets show the target cursor; an accepted order, the other pedestal, Stop or a deselect release them.
@@ -329,6 +332,10 @@ private:
     std::deque<uint8_t> chat_line_colour_{};   // parallel to chat_log_ (see get_chat_line_colour)
     std::deque<int32_t> chat_line_indent_{};
     const sim::SimulationEngine* sim_query_{nullptr};
+    sim::CommandSink* command_sink_{nullptr};
+    sim::CommandResult submit_command(sim::SimulationEngine& sim, const sim::Command& command) {
+        return command_sink_ != nullptr ? command_sink_->submit(command) : sim.apply_command(command);
+    }
     bool slot_latched_[2]{false, false};        // pedestal slots 1 and 2 latched
     uint32_t btnpush_until_ms_[3]{0, 0, 0};     // BTNPUSH (FUN_01028ffe): a pedestal shows pressed for 125 ms after an accepted order
     uint32_t input_lock_ticks_{0};              // after Stop (FUN_01028bdd): mouse input is ignored for 250 ms, then the selection is dropped

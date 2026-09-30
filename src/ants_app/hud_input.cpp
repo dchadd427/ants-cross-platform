@@ -239,16 +239,19 @@ uint32_t HUD::order_selected(sim::SimulationEngine& sim, sim::TileCoord tile, bo
     sim::AntType common = sim::AntType::Worker;
     slot2_attack_kind_ = homogeneous_type(world, common) && common == sim::AntType::Combat;
 
-    uint32_t ack = 0;
-    if (attack) {
-        ack = sim.issue_group_attack_order(targets, tile);
-        if (ack != 0) voice_attack(sim.get_unit(ack).type);
-    } else if (special) {
-        ack = sim.issue_group_special_order(targets, tile);
-        if (ack != 0) voice_special(sim.get_unit(ack).type, targets.size());
-    } else {
-        ack = sim.issue_group_move_order(targets, tile, sim.has_bomb_at(tile));
-        if (ack != 0) voice_go(sim.get_unit(ack).type);
+    // The group order of the original (FUN_010287b5) as the player's command: the engine keeps only the issuer's own ants, checks the tile and
+    // answers with the ant that acknowledges
+    sim::Command cmd;
+    cmd.type = attack ? sim::CommandType::GroupAttack : special ? sim::CommandType::GroupSpecial : sim::CommandType::GroupMove;
+    cmd.issuer = local_player_id_;
+    cmd.tile_x = static_cast<int16_t>(tile.x);
+    cmd.tile_y = static_cast<int16_t>(tile.y);
+    cmd.ants.assign(targets.begin(), targets.begin() + static_cast<std::ptrdiff_t>(std::min(targets.size(), sim::kMaxCommandAnts)));
+    const uint32_t ack = submit_command(sim, cmd).ack_ant;
+    if (ack != 0) {
+        if (attack) voice_attack(sim.get_unit(ack).type);
+        else if (special) voice_special(sim.get_unit(ack).type, targets.size());
+        else voice_go(sim.get_unit(ack).type);
     }
     if (ack != 0) order_feedback(special, attack);
     return ack;
@@ -269,12 +272,16 @@ void HUD::dispatch_attack_order(uint32_t target_enemy_id, sim::SimulationEngine&
 }
 
 void HUD::stop_selected(sim::SimulationEngine& sim) {
+    sim::Command cmd;                                                            // FUN_01028a60 for the selected ants
+    cmd.type = sim::CommandType::Stop;
+    cmd.issuer = local_player_id_;
     std::vector<uint32_t> ids = selected_ant_ids_;
     if (ids.empty() && selected_ant_id_ != 0) ids.push_back(selected_ant_id_);
     for (uint32_t aid : ids) {
-        if (sim.get_unit(aid).player_id != local_player_id_) continue;
-        sim.stop_ant(aid);                                                       // FUN_01028a60
+        if (cmd.ants.size() >= sim::kMaxCommandAnts) break;
+        if (sim.get_unit(aid).player_id == local_player_id_) cmd.ants.push_back(aid);
     }
+    if (!cmd.ants.empty()) submit_command(sim, cmd);
     post_status_id(sim::strings::kStopping);                                     // always posted (0x1028b43)
 }
 
@@ -419,7 +426,10 @@ bool HUD::pedestal_press(sim::SimulationEngine& sim, int32_t x, int32_t y) {
                 hatch_button_.is_pressed = true;
                 play_sfx(sim::SoundID::NavButtonClick);
                 flash_pedestal(0);
-                sim.try_hatch(local_player_id_, sim::AntType::Worker);           // FUN_01010aca answers a refusal with its text
+                sim::Command hatch;                                              // FUN_01010aca answers a refusal with its text
+                hatch.type = sim::CommandType::Hatch;
+                hatch.issuer = local_player_id_;
+                submit_command(sim, hatch);
                 return true;
             }
             if (in_slot(2, x, y)) {                                              // Stop on a hill: flash, lock 250 ms, deselect
@@ -438,7 +448,11 @@ bool HUD::pedestal_press(sim::SimulationEngine& sim, int32_t x, int32_t y) {
             team_up_button_.is_pressed = true;
             play_sfx(sim::SoundID::NavButtonClick);
             flash_pedestal(0);
-            sim.propose_alliance(local_player_id_, static_cast<uint8_t>(selected_base_team_id_));
+            sim::Command invite;
+            invite.type = sim::CommandType::AllianceInvite;
+            invite.issuer = local_player_id_;
+            invite.other_player = static_cast<uint8_t>(selected_base_team_id_);
+            submit_command(sim, invite);
             return true;
         }
         return false;

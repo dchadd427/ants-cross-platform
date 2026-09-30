@@ -22,7 +22,10 @@ bool Grid::init_from_level(const ants::assets::LevelData& level) {
     height_ = level.height;
     if (width_ == 0 || height_ == 0) return false;
 
-    cells_.resize(static_cast<size_t>(width_ * height_));
+    // A level load starts from empty cells: nothing of a previously loaded map may survive (an engine that plays a second map must equal a
+    // fresh engine, which the lock-step state hash relies on)
+    cells_.assign(static_cast<size_t>(width_ * height_), TileCell{});
+    exact_solid_bits_ = false;
 
     // Populate Layer 1
     for (uint32_t y = 0; y < height_; ++y) {

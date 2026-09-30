@@ -46,7 +46,6 @@ public:
 
     std::vector<AudioEvent> audio_queue_;
     std::vector<NewsEvent>  news_queue_;
-    std::array<uint32_t, MAX_PLAYERS> invite_pending_ticks_{};
     // Egg hatching (Ants.exe HATCHTSK): 8000 ms after the click the newborn worker appears at the hill entrance.
     uint32_t hatch_delay_ticks_{160};
     struct HatchState {

@@ -279,6 +279,9 @@ public:
      */
     bool init_from_level(const ants::assets::LevelData& level);
 
+    /// True once the solid bits come from an LVL file (init_from_level); part of the state hash
+    bool exact_solid_bits() const noexcept { return exact_solid_bits_; }
+
     uint32_t width() const noexcept { return width_; }
     uint32_t height() const noexcept { return height_; }
     int32_t  pixel_width() const noexcept { return static_cast<int32_t>(width_ * TILE_PIXELS); }
