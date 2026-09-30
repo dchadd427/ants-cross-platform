@@ -17,7 +17,7 @@ namespace {
 // user_cmd = order clicked by the player (FUN_0101fc50 arg "player" = 1); remake systems (guard AI, base
 // queue, ability approach, harvest return) issue internal orders with user_cmd = false.
 void route_move_order(SimulationEngineImpl& impl, AntUnit& unit, TileCoord dest,
-                      bool allow_friendly_bomb, bool user_cmd) {
+                      bool allow_friendly_bomb, bool user_cmd, bool special = false) {
     if (!unit.is_alive()) return;
 
     // Special abilities and the power-up pick-up cannot be interrupted and silently ignore move orders
@@ -53,7 +53,7 @@ void route_move_order(SimulationEngineImpl& impl, AntUnit& unit, TileCoord dest,
     }
 
     unit.allow_friendly_bomb = (allow_friendly_bomb && impl.grid_.has_bomb_at(dest));
-    impl.go_to(unit, dest, user_cmd, false, unit.allow_friendly_bomb);
+    impl.go_to(unit, dest, user_cmd, special, unit.allow_friendly_bomb);
 }
 
 } // anonymous namespace
@@ -497,7 +497,7 @@ void SimulationEngine::issue_order(const AntOrder& order) {
     switch (order.type) {
         case OrderType::Move:
             unit->ability_target = TileCoord{-1, -1};
-            route_move_order(*impl_, *unit, TileCoord{order.target_x, order.target_y}, order.allow_friendly_bomb, true);
+            route_move_order(*impl_, *unit, TileCoord{order.target_x, order.target_y}, order.allow_friendly_bomb, true, order.special);
             break;
         case OrderType::ReturnToBase: {
             unit->ability_target = TileCoord{-1, -1};
@@ -1052,6 +1052,14 @@ void SimulationEngine::issue_internal_move_order(uint32_t ant_id, TileCoord dest
 
 uint32_t SimulationEngine::issue_group_move_order(const std::vector<uint32_t>& ant_ids, TileCoord target,
                                                   bool allow_friendly_bomb) {
+    return group_order(ant_ids, target, allow_friendly_bomb, false);
+}
+
+uint32_t SimulationEngine::issue_group_special_order(const std::vector<uint32_t>& ant_ids, TileCoord target) {
+    return group_order(ant_ids, target, false, true);
+}
+
+uint32_t SimulationEngine::group_order(const std::vector<uint32_t>& ant_ids, TileCoord target, bool allow_friendly_bomb, bool special) {
     struct Entry {
         uint32_t id;
         uint32_t d;
@@ -1095,10 +1103,44 @@ uint32_t SimulationEngine::issue_group_move_order(const std::vector<uint32_t>& a
         order.target_x = target.x;
         order.target_y = target.y;
         order.allow_friendly_bomb = allow_friendly_bomb;
+        order.special = special;
         issue_order(order);
         if (k == 0 && impl_->has_pending_path(e[k].id)) ack = e[k].id;   // acknowledgement: closest ant only
     }
     return ack;
+}
+
+// FUN_01026f91 (the cursor's "special target" test), by the homogeneous type of the selection (FUN_010282e0):
+//  bomber  - a bomb tile (FUN_0101d7f9) for both flags; ground that takes a bomb (FUN_0101d762 with the strict occupancy rule) with the
+//            pedestal latched only;
+//  fire    - the pedestal latched only: a fire wall (layer 2 id 0x86) or plantable ground;
+//  thief   - any hill of another colour, both flags;
+//  swimmer - the pedestal latched only: a completed bridge (0x25) or water that takes a bridge (FUN_0101d6d6);
+//  worker, combat ant and mixed selections never.
+bool SimulationEngine::is_special_target_valid(AntType type, TileCoord tile, bool auto_flag, uint8_t own_team) const {
+    SimulationEngineImpl& impl = *impl_;
+    if (!impl.grid_.in_bounds(tile)) return false;
+    switch (type) {
+        case AntType::Bomber:
+            if (impl.valid_bomb(tile)) return true;
+            return !auto_flag && impl.valid_ground(tile, false);
+        case AntType::Fire:
+            if (auto_flag) return false;
+            return impl.grid_.get_cell(tile).has_fire() || impl.valid_ground(tile, false);
+        case AntType::Swimmer:
+            if (auto_flag) return false;
+            return impl.grid_.get_cell(tile).has_completed_bridge() || impl.valid_water(tile, false);
+        case AntType::Thief:
+            for (const auto& ah : impl.grid_.anthills()) {
+                if (tile.x >= static_cast<int32_t>(ah.x) && tile.x <= static_cast<int32_t>(ah.x) + 3 &&
+                    tile.y >= static_cast<int32_t>(ah.y) && tile.y <= static_cast<int32_t>(ah.y) + 3) {
+                    return ah.team_id != own_team;
+                }
+            }
+            return false;
+        default:
+            return false;
+    }
 }
 
 // FUN_010287b5 with the attack flag: the skip rule is "already order 3 with +0xac == the clicked tile" (0x1028820, then 0x102887e);

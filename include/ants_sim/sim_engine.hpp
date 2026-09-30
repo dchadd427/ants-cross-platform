@@ -190,6 +190,7 @@ struct AntOrder {
     int32_t   target_y{0};
     int32_t   target_entity_id{-1};
     bool      allow_friendly_bomb{false};
+    bool      special{false};             // FUN_010287b5's special flag: the classification gives the ant's ability order
 };
 
 struct PendingHatch {
@@ -452,6 +453,20 @@ public:
     uint32_t issue_group_move_order(const std::vector<uint32_t>& ant_ids, TileCoord target,
                                     bool allow_friendly_bomb = false);
     /**
+     * @brief Player group special order (FUN_010287b5 with the special flag, cursor mode 4 / the latched ability pedestal): the same group
+     * dispatch, but the classification (FUN_01020655) makes every ant carry out its ability at the tile: a bomber plants (defuses a bomb it
+     * finds), a fire ant lights (or puts out) a fire wall, a swimmer builds (or demolishes) a bridge, a thief raids an enemy hill; worker
+     * and combat ants just stop where they are.
+     * @return the ant that acknowledges the order (the closest one, if its GoTo queued a path), or 0.
+     */
+    uint32_t issue_group_special_order(const std::vector<uint32_t>& ant_ids, TileCoord target);
+    /// FUN_01026f91: whether a click on `tile` is a valid special order for a selection of the homogeneous type `type` of team `own_team`.
+    /// `auto_flag` = false: the ability pedestal is latched (bomb tile or plantable ground for a bomber; fire wall or plantable ground for
+    /// a fire ant; bridge or water for a swimmer; enemy hill for a thief); true: one ant is selected without the pedestal (only a bomb
+    /// tile for a bomber and an enemy hill for a thief). Worker and combat ants never have one.
+    bool is_special_target_valid(AntType type, TileCoord tile, bool auto_flag, uint8_t own_team) const;
+
+    /**
      * @brief Player group attack (Ants.exe FUN_010287b5 with the attack flag). Ants that accept orders and already carry out an
      * attack order on this very tile are skipped (a repeated click changes nothing), the others are sorted by 16 x Chebyshev
      * distance to the clicked tile (exchange sort, not stable) and each gets the player GoTo to the tile; the classification
@@ -519,6 +534,7 @@ public:
     void record_player_stat(uint8_t player_id, StatType stat, uint32_t value);
 
 private:
+    uint32_t group_order(const std::vector<uint32_t>& ant_ids, TileCoord target, bool allow_friendly_bomb, bool special);
     std::unique_ptr<SimulationEngineImpl> impl_;
 };
 

@@ -186,6 +186,7 @@ bool Application::init(const ApplicationConfig& config) {
         audio_mixer_.play_sfx(sound_id, 1.0f, 255);
     });
 
+    hud_.set_sim_query(&sim_);           // the cursor asks the simulation whether a tile is a valid special target
     hud_.set_on_quit([this]() {
         quit();
     });

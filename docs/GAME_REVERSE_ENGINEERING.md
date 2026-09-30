@@ -1899,6 +1899,64 @@ samples in `tests/data/edge_scroll_samples.csv`, produced by a bit-exact emulati
 * **Open** *(recorded, not ported)*: the view rect of the original is (16, 21) - (458, 461), 442 x 440; the remake still maps the world at (17, 22) with 441 x 439 (a one pixel shift in pointer-to-world and in the last
   scroll position; the step model above already uses 442 x 440), Ctrl+N / Ctrl+P (scroll to +-128 around the ant), and the 50 ms input latency of the faithful tick model for clicks.
 
+### 5.44 Pointer Model: Hit Boxes, Cursor Table, Clicks, the Rubber Band, the Right Button and the Pedestals (Capstone-Verified; Supersedes Earlier Click, Marquee, Armed-Order-Mode and Pedestal Notes)
+
+Addresses are virtual addresses in `Original-Ants/Ants.exe`. Implemented in `src/ants_app/hud_input.cpp` (the model) and `src/ants_app/hud.cpp` (event dispatch, drawing), with the group orders in
+`src/ants_sim/sim_engine.cpp` (`issue_group_special_order`, `is_special_target_valid`). Checked by `tests/test_app/test_pointer_model.cpp` (236 checks), the rubber band drawing in
+`tests/test_app/test_hud_layout.cpp`, and the click tests of `test_app_integration.cpp` (7.x, 8.7, 9.6, 10.4, 10.5, 12.15, 12.17, 12.20, 12.62, 12.68, 12.75, 12.125, 12.126, 12.144).
+
+* **Event gates** (`FUN_0102737e`, called for input ids 0xC left / 0xD right, value 0xFFFF press / 0 release): `FUN_0102653f` (hover, cursor, band) runs first with the pointer as it is; then a dialog takes the event, else
+  it is ignored unless `[4b18] == 2` (playing), the cursor mode is not 6 (a scroll arrow) and the input lock `[5518]` is 0. A press saves its point (`0x5524`, shared by both buttons) and captures the view under it
+  (`FUN_01028751`: dialogs, the minimap, the map view; `[5534]`); `FUN_010274be` runs the pedestal test only when the pointer is outside the map rectangle (16, 21) - (458, 461) (half open). `FUN_010296a5` (the
+  right press) is an empty stub. Opening a dialog removes a displayed band and releases the capture. The strip test of the cursor code is skipped while `[5534]` != 0.
+* **Ant hit box** (`FUN_01026a39`, from the sprite position +0x38 / +0x3a and the type +0x54): every type except 4 `[x - 20, x + 20) x [y - 32, y + 16)`, the combat ant (4) `[x - 32, x + 26) x [y - 46, y + 16)`. **The
+  ant under the pointer** (`FUN_01026904`, used by hover, click and attack): the pointer's world tile (`world = screen - (16, 21) + view origin`) and its 3 x 3 neighbourhood, rows outer, columns inner, one occupant per
+  tile from the grid (`FUN_0100f4ab`, mask 1); the last box that contains the pointer wins; the ant's registered tile is the out parameter. **No filter**: owner, hit points, action (dying, flying, drowning, hill
+  entry, scuffling) and frozen state are not looked at, and the fog is tested only on the tile under the pointer (`FUN_01009825`), so the ant scan is fog blind. Removed as invented: the 18 px / 24 px inclusive boxes,
+  the tile match, the closest-centre choice, the hp / drowning / underground / fog filters.
+* **Cursor decision table** (`FUN_01026aa3`; modes 1 normal, 2 select, 3 move, 4 target, 5 attack, 6 scroll arrow, 7 food; panel `[54ec]` 1 nothing, 2 a hill, 3 one own ant, 4 several own ants, 5 another player's
+  ant): 1. dialog open: nothing runs, the cursor stays; 2. an edge strip (5.43): mode 6; 3. pointer outside the map rectangle: 1; 4. a rubber band of more than 4 px (R - L or B - T): 1; 5. panels 1, 2 and 5: a fogged
+  pointer tile 1, an ant (any owner) or the hill flag 2, else 1; panels 3 and 4: fogged tile 3, the object flag (food, the lunchbox included; power-ups are not food) 7, an own hill 3 (beats an ant on the tile), an ant:
+  own 2, another player's with the hill flag 3, otherwise **5 (allies too: there is no alliance test)**, no ant: a valid special target 4, else the hill flag 2 (another player's hill), else 3. A special target is
+  `([54fc] == 2 && FUN_01026f91(tile, 0)) || (panel == 3 && FUN_01026f91(tile, 1))` for the common type T of the selection (`FUN_010282e0`): worker, mixed types and combat ant never; bomber: a bomb of any team with
+  either flag, plantable ground only with the latched ability pedestal (flag 0); fire ant: flag 0 only, a fire wall or plantable ground; thief: any hill of another colour, either flag; swimmer: flag 0 only, water or a
+  finished bridge. Shift, a planting bomber and the right button play no part. Removed as invented: the Target lock while a bomber plants, Target while the right button is held, the armed-order-mode block, Move over
+  allies, the Shift term of the bomb rule, hover filters, the base check before the ant check.
+* **Rubber band** (`FUN_0102653f` 0x1026699..0x1026883): it exists while the left button is held on the map view and all three pedestal slot modes are 1 (no latched pedestal). Each tick: p0 = the press point, p1 = the
+  pointer clamped to [17, 457] x [22, 460] (the view rect inset by 1); the band is their bounding box (`UnionRect`, R = the larger x, B = the larger y, no +1) clipped to the map, and a direction without extent is
+  widened by 1 px on both sides (`InflateRect`), so a stationary press is a 2 x 2 dot; drawn as a 1 px `FrameRect` in `CreateSolidBrush(0x0000FF)` = (255, 0, 0). The last update is the tick before the release
+  (the release does not update it). Old: {220, 0, 0}, clamped to the playfield, hidden below a 4 / 10 px threshold.
+* **Release of the left button** (`FUN_01027530`): a displayed band is removed and is the rectangle; without a band a release with the pointer inside the map rectangle is a 1 x 1 rectangle at the pointer, anywhere
+  else nothing happens (this also holds for a press that started on a pedestal or the panel). **Click iff R - L <= 4 and B - T <= 4**, executed at the release position (`FUN_010277f4` with the cursor mode found
+  there); otherwise a drag select: the local team's ants only (the player's own table), no state filter, an ant is picked when `IntersectRect(hit box, band)` is non-empty (`L < R and T < B`: positive area, box and band
+  both half open). Additive iff Shift is down and the panel is 3 or 4: nothing is cleared, the picked ants are added (panel 4, no voice, an empty pick changes nothing); otherwise `FUN_01028c44` clears first, even when
+  nothing is picked (dragging over empty ground deselects), then panel 1, 3 (one ant, plus the ready voice `FUN_0101b5f9`) or 4 (several, plus the voice of the first). Old: the click at the press point, a "small drag keeps
+  the selection" exception, `hit_sprite || hit_tile` with inclusive compares, additive on Shift alone.
+* **Click by cursor mode** (`FUN_010277f4`, tile = pointer / 32): mode 1: deselect all (no marker). Mode 2: an ant is hit: own (Shift in panel 3 or 4 toggles it in or out of the selection, quietly; otherwise it
+  replaces the selection: panel 3 plus the ready voice), another player's: panel 5; no ant but the hill flag on the tile: select that hill (panel 2, own, enemy or allied); nothing: deselect. Modes 3 and 7:
+  `FUN_010287b5(tile, special 0, attack 0)`. Mode 4: `(tile, 1, 0)`. Mode 5: `(tile of the ant found by FUN_01026904, 0, 1)`: the attack goes to the ant's registered tile, not the clicked one. Mode 6: ignored. Modes 3, 4, 5
+  and 7 always spawn the `xmarks` marker at the raw pixel, even when the order is refused. After an accepted order the pedestal feedback is: move: slot 1 pops up when latched, else BTNPUSH(1); special: slot 2 pops up
+  when latched, else BTNPUSH(kind of slot 2); attack: slot 1 pops up when latched, else slot 2 when latched and its kind is 3 (combat ant), a latched slot 2 of another kind stays and BTNPUSH(1) plays, unlatched:
+  BTNPUSH(3) for a combat ant, else BTNPUSH(1). Attacking an ally opens the confirmation dialog `FUN_0101ffab` in the original (not ported: the classification turns the order into a walk next to the ally).
+* **Right button** (`FUN_01027b51`, at the release, with the press point): capture minimap (panel 3 or 4 only): the point `W` of the minimap (`FUN_01009850`), panel 4 gives a move, panel 3 a special order when
+  `FUN_01026f91(tile, 0)` (slot 2 latched) or `(tile, 1)` holds, else a move; the click code runs with that mode, the cursor mode is reset to 1. Capture map view: the cursor mode of the release pointer: 1, 2 and 6
+  do nothing; 5: attack the ant under the release pointer (`FUN_01026904`); 3, 4 and 7: `FUN_010287b5(press tile, special, 0)` with `special = !(panel == 4 || T == 0 || T == 4)` (a move for several ants, mixed types,
+  workers and combat ants, otherwise the ability of the type); the marker at the press point is always spawned; the feedback is the one above. No capture: nothing. The old right press executed at once through an
+  autonomous "smart ability" that ignored the cursor mode, the panel and the marker rules.
+* **Pedestals** (`FUN_010274be` -> `FUN_01028d30` -> `FUN_01028ee0`, on the press, half-open rects, tested only for slots whose kind is not 9 = hidden): slot 1 (482, 152) - (525, 225), slot 2 (539, 152) - (582, 225),
+  slot 3 (597, 189) - (628, 227); the sound is `navbuttonclick` (89) except Stop (61, `antstop`). Panels 3 and 4: slot 1 (Move) acts only while raised: it latches and raises slot 2; slot 2 (ability of the common
+  type: bomber 2, fire ant 4, thief 5, combat ant 3, swimmer 7; none for worker or mixed) likewise latches and raises slot 1; a click on a latched pedestal does nothing. **The latch is visual**: slot 1 latched only
+  removes the band, slot 2 latched makes valid tiles the target cursor; an accepted order, the other pedestal, Stop or a deselect release it (pressing it again does not). **Stop** (slot 3): both pedestals up,
+  BTNPUSH(0), `FUN_01028a60` (only selected accepted ants that have a target, not on the hill entrance or the tile above it, each ordered to its own tile, status 0x36 always posted), then `FUN_01028bdd` locks the mouse
+  for 250 ms and `FUN_01028c44(0)` deselects everything. Own hill: slot 1 (hatch, present only while eggs > 0) BTNPUSH(8) + `FUN_01010aca` (its refusals are texts of the simulation), slot 3 Stop as above without the order.
+  Another player's hill: slot 1 (ally, only with more than two players and while not allied) BTNPUSH(6) + the proposal. BTNPUSH (`FUN_01028ffe`): the pedestal shows pressed for 125 ms. Ctrl+S is `FUN_01028a60` alone
+  (no flash, lock or deselect). The glow (`FUN_010285f0`) follows the cursor mode: 3 or 7 over slot 1, 4 over slot 2. Removed as invented: the armed order mode (a press armed the mode and the next left press gave the
+  order), cancelling by pressing an armed pedestal, hiding the ability pedestal while Shift is held, Stop clearing a base selection at once, Ctrl+M / B / F / T / C, the wrong pedestal rectangles ((476, 156, 55, 75),
+  (537, 156, 55, 75), (595, 180, 32, 50), hatch (477, 140, 53, 88), ally (477, 142, 55, 86)).
+* **Open** *(recorded, not ported)*: the top-bar buttons and All / Team still act on the press (the button class fires on the release while captured), Esc still opens the quit dialog (the original deselects), the keyboard
+  table (F1, Ctrl+O / Q / L, Enter sends to the team when allied, Ctrl+N / P by `ScrollToShow`), the ally attack confirmation dialog and the one-ally-at-a-time dialog of strings 1 - 4, and the 50 ms latency of the
+  polled band.
+
 ---
 
 ## 6. Target Multi-Platform Architecture

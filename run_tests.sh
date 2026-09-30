@@ -296,6 +296,13 @@ if [ "$RUN_APP" -eq 1 ]; then
     echo -e "${BOLD}${BLUE}======================================================================${RESET}"
     "./$BUILD_DIR/tests/test_app/test_input_model"
     INPUT_MODEL_STATUS=$?
+
+    echo ""
+    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
+    echo -e "${BOLD}${BLUE}>>> 3.5 RUNNING POINTER MODEL SUITE (cursor table, clicks, band, pedestals)...${RESET}"
+    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
+    "./$BUILD_DIR/tests/test_app/test_pointer_model"
+    POINTER_MODEL_STATUS=$?
 fi
 
 # 6. Execute E2E Opaque-Box Tests
@@ -444,6 +451,13 @@ if [ "$RUN_APP" -eq 1 ]; then
         echo -e " 3.4 Input Model (test_input_model):                 ${GREEN}PASSED${RESET}"
     else
         echo -e " 3.4 Input Model (test_input_model):                 ${RED}FAILED (exit code ${INPUT_MODEL_STATUS})${RESET}"
+        TOTAL_FAILED=$((TOTAL_FAILED + 1))
+    fi
+
+    if [ "$POINTER_MODEL_STATUS" -eq 0 ]; then
+        echo -e " 3.5 Pointer Model (test_pointer_model):             ${GREEN}PASSED${RESET}"
+    else
+        echo -e " 3.5 Pointer Model (test_pointer_model):             ${RED}FAILED (exit code ${POINTER_MODEL_STATUS})${RESET}"
         TOTAL_FAILED=$((TOTAL_FAILED + 1))
     fi
 fi

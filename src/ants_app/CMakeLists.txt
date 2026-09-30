@@ -34,6 +34,7 @@ add_library(ants_app STATIC
     midi_player.cpp
     renderer.cpp
     hud.cpp
+    hud_input.cpp
     pedestal.cpp
     ui_anim.cpp
     scorecard.cpp

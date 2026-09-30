@@ -990,6 +990,7 @@ void run_suite_7_input_controls() {
         int32_t bx = 208 + HUD::PLAYFIELD_X;
         int32_t by = 176 + HUD::PLAYFIELD_Y;
         hud.handle_mouse_down(bx, by, 3, sim, camera);
+        hud.handle_mouse_up(bx, by, 3, sim, camera);     // the right button gives its order at the release (FUN_01027b51)
         ASSERT_EQ(sim.get_unit(bomber).orig_order, AntUnit::kOrderPlant);
         // The plant clip plays (1360-1400 ms) and the bomb appears when it ends
         ASSERT_TRUE(wait_ms(sim, 4000, [&]() { return sim.has_bomb_at(TileCoord{6, 5}); }) >= 1000);
@@ -1000,6 +1001,7 @@ void run_suite_7_input_controls() {
         int32_t sx = 272 + HUD::PLAYFIELD_X;
         int32_t sy = 240 + HUD::PLAYFIELD_Y;
         hud.handle_mouse_down(sx, sy, 3, sim, camera);
+        hud.handle_mouse_up(sx, sy, 3, sim, camera);
         ASSERT_EQ(sim.get_unit(swimmer).orig_order, AntUnit::kOrderBridgeBuild);
         // stage 0x22 exists as soon as the swimmer starts to dig; three passes later the bridge is done
         ASSERT_TRUE(wait_ms(sim, 2000, [&]() { return sim.has_bridge_at(TileCoord{8, 7}); }) >= 0);
@@ -1043,10 +1045,9 @@ void run_suite_7_input_controls() {
         hud.handle_key_down('p', sim, camera, KMOD_CTRL); // Wrap around backwards
         ASSERT_EQ(hud.get_selected_ant_id(), a3);
 
-        // 'Ctrl+C' key clears selection
+        // 'Ctrl+C' does nothing: the original has no such key (FUN_0102609a)
         hud.handle_key_down('c', sim, camera, KMOD_CTRL);
-        ASSERT_EQ(hud.get_selected_ant_id(), 0u);
-        ASSERT_TRUE(hud.get_selected_ant_ids().empty());
+        ASSERT_EQ(hud.get_selected_ant_id(), a3);
 
         // 'Esc' toggles quit menu
         hud.handle_key_down(27, sim, camera);
@@ -1348,11 +1349,14 @@ void run_suite_8_unit_health_and_map_select() {
         ASSERT_EQ(sim.get_pending_hatch_count(0), 0u);
         ASSERT_EQ(sim.get_world_state().ants.size(), initial_ants + 1);
 
-        // 4. Click Stop button at (610, 195) to deselect base
+        // 4. Click the Stop pedestal at (610, 195): it flashes, the mouse input is locked for 250 ms (5 ticks), then the selection is dropped
         bool stop_down = hud.handle_mouse_down(610, 195, SDL_BUTTON_LEFT, sim, cam);
         ASSERT_TRUE(stop_down);
         hud.handle_mouse_up(610, 195, SDL_BUTTON_LEFT, sim, cam);
-
+        ASSERT_EQ(hud.get_selected_base_team_id(), 0);
+        hud.update(sim.get_world_state(), 4);
+        ASSERT_EQ(hud.get_selected_base_team_id(), 0);
+        hud.update(sim.get_world_state(), 1);
         ASSERT_EQ(hud.get_selected_base_team_id(), -1);
     } TEST_END();
 
@@ -1654,6 +1658,7 @@ void run_suite_9_gameplay_mechanics_and_options() {
         // Issue move order via right click on playfield
         ViewportCamera cam;
         hud.handle_mouse_down(100, 100, SDL_BUTTON_RIGHT, sim_engine, cam);
+        hud.handle_mouse_up(100, 100, SDL_BUTTON_RIGHT, sim_engine, cam);     // the order is given at the release
         ASSERT_TRUE(last_sfx == 17 || last_sfx == 15); // gantgo or gantcommand
     } TEST_END();
 
@@ -1938,6 +1943,7 @@ void run_suite_10_egg_economy_incubation_teamup_abilities() {
         int32_t bx = 272 + HUD::PLAYFIELD_X;
         int32_t by = 176 + HUD::PLAYFIELD_Y;
         hud.handle_mouse_down(bx, by, 3, sim, camera);
+        hud.handle_mouse_up(bx, by, 3, sim, camera);
 
         const auto& b_unit = sim.get_unit(bomber);
         ASSERT_EQ(b_unit.orig_order, AntUnit::kOrderPlant);
@@ -1954,6 +1960,7 @@ void run_suite_10_egg_economy_incubation_teamup_abilities() {
         int32_t sx = (10 * 32 + 16) + HUD::PLAYFIELD_X;
         int32_t sy = (8 * 32 + 16) + HUD::PLAYFIELD_Y;
         hud.handle_mouse_down(sx, sy, 3, sim, camera);
+        hud.handle_mouse_up(sx, sy, 3, sim, camera);
 
         const auto& s_unit = sim.get_unit(swimmer2);
         ASSERT_EQ(s_unit.orig_order, AntUnit::kOrderBridgeBuild);
@@ -1966,12 +1973,13 @@ void run_suite_10_egg_economy_incubation_teamup_abilities() {
         int32_t mx = (6 * 32 + 16) + HUD::PLAYFIELD_X;
         int32_t my = (6 * 32 + 16) + HUD::PLAYFIELD_Y;
         hud.handle_mouse_down(mx, my, 3, sim, camera);
+        hud.handle_mouse_up(mx, my, 3, sim, camera);
         const auto& s_unit2 = sim.get_unit(swimmer2);
         ASSERT_NE(s_unit2.orig_order, AntUnit::kOrderBridgeBuild);
         ASSERT_FALSE(sim.has_bridge_at(TileCoord{6, 6}));
     } TEST_END();
 
-    TEST_CASE("10.5 Enemy Base Click & Team-Up Option") {
+    TEST_CASE("10.5 Enemy Base Click & The Ally Pedestal (more than two players, not yet allied)") {
         SimulationEngine sim;
         sim.init_test_world(60, 60, 100, 60000);
         sim.grid_mut().set_anthill(0, TileCoord{2, 2});
@@ -2002,17 +2010,24 @@ void run_suite_10_egg_economy_incubation_teamup_abilities() {
         hud.handle_mouse_up(605, 195, 1, sim, camera);
         ASSERT_EQ(hud.get_selected_base_team_id(), 1);
 
-        // Click Team Up button (Pedestal 1 at x=495, y=165)
+        // With two players there is no ally pedestal (slot 1 of another player's hill exists only with more than two players)
+        auto proposal_sound = [&]() {
+            for (const auto& ev : sim.poll_audio_events()) {
+                if (ev.sound_id == SoundID::AlliancePro) return true;
+            }
+            return false;
+        };
         hud.handle_mouse_down(495, 165, 1, sim, camera);
         hud.handle_mouse_up(495, 165, 1, sim, camera);
+        ASSERT_FALSE(proposal_sound());
 
-        // Check proposal registered
-        auto audio = sim.poll_audio_events();
-        bool has_pro_sound = false;
-        for (const auto& ev : audio) {
-            if (ev.sound_id == SoundID::AlliancePro) has_pro_sound = true;
-        }
-        ASSERT_TRUE(has_pro_sound);
+        // A third player's hill makes the pedestal appear: the click proposes the alliance
+        sim.grid_mut().set_anthill(2, TileCoord{14, 14});
+        sim.tick();                                            // the world snapshot is rebuilt with the third hill
+        hud.select_base(1);
+        hud.handle_mouse_down(495, 165, 1, sim, camera);      // slot 1: (482, 152) - (525, 225)
+        hud.handle_mouse_up(495, 165, 1, sim, camera);
+        ASSERT_TRUE(proposal_sound());
 
         // AI accepts after ~30 ticks (1.5s)
         for (int i = 0; i < 35; ++i) sim.tick();
@@ -2020,18 +2035,13 @@ void run_suite_10_egg_economy_incubation_teamup_abilities() {
         ASSERT_EQ(ws_allied.player_alliances[0], 1u);
         ASSERT_EQ(ws_allied.player_alliances[1], 0u);
 
-        // Clicking Team Up again breaks alliance
+        // Allied with the owner: the pedestal is gone, its place does nothing (the alliance is left through the ally attack dialog)
+        hud.update(sim.get_world_state(), 1);
+        hud.select_base(1);
         hud.handle_mouse_down(495, 165, 1, sim, camera);
         hud.handle_mouse_up(495, 165, 1, sim, camera);
-
-        auto audio_break = sim.poll_audio_events();
-        bool has_break_sound = false;
-        for (const auto& ev : audio_break) {
-            if (ev.sound_id == SoundID::AllianceBreak) has_break_sound = true;
-        }
-        ASSERT_TRUE(has_break_sound);
-        const auto& ws_broken = sim.get_world_state();
-        ASSERT_NE(ws_broken.player_alliances[0], 1u);
+        ASSERT_FALSE(proposal_sound());
+        ASSERT_EQ(sim.get_world_state().player_alliances[0], 1u);
     } TEST_END();
 }
 
@@ -2151,12 +2161,9 @@ void run_suite_11_anthill_queuing_and_priority() {
         app.handle_key_down(esc_ev);
         ASSERT_FALSE(app.hud().is_quit_dialog_open());
 
-        // Press Escape with active order mode: cancels order mode and opens quit dialog
-        app.hud().set_active_order_mode(ants::sim::OrderType::BuildBridge);
-        ASSERT_EQ(app.hud().get_active_order_mode(), ants::sim::OrderType::BuildBridge);
+        // Press Escape a third time: opens the quit dialog again
         app.handle_key_down(esc_ev);
         ASSERT_TRUE(app.hud().is_quit_dialog_open());
-        ASSERT_EQ(app.hud().get_active_order_mode(), ants::sim::OrderType::None);
 
         // Pressing 'N' closes quit dialog
         SDL_KeyboardEvent n_ev{};
@@ -2343,8 +2350,8 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         hud.select_ant(w[0]);
         hud.set_selected_ant_ids({w[0], w[1], w[2], w[3]});
 
-        // Right-click on the pile (pixel of the anchor tile): the ordinary group order, no slots around the pile
-        hud.dispatch_smart_special_ability(21 * 32 + 16, 21 * 32 + 16, sim);
+        // A move click on the pile (cursor mode 7): the ordinary group order, no slots around the pile
+        hud.order_selected(sim, TileCoord{21, 21}, false, false);
         for (uint32_t id : w) {
             ASSERT_EQ(sim.get_unit(id).orig_order, AntUnit::kOrderHarvest);
             ASSERT_EQ(sim.get_unit(id).orig_order_tile, (TileCoord{21, 21}));
@@ -2467,8 +2474,8 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         hud.init(0);
         hud.select_ant(bomber_id);
 
-        // Right-click gravel tile (20, 20)
-        hud.dispatch_smart_special_ability(20 * 32 + 16, 20 * 32 + 16, sim);
+        // The special order (a latched bomb pedestal makes a plantable tile a valid target) on the gravel tile (20, 20)
+        hud.order_selected(sim, TileCoord{20, 20}, true, false);
 
         // Step simulation for 50 ticks until bomber approaches cardinal neighbor (20, 21) and drops bomb
         for (int t = 0; t < 50; ++t) {
@@ -2732,6 +2739,7 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         cam.world_y = 20 * 32 - 100;
         HUD hud;
         hud.init(0);
+        hud.set_sim_query(&sim);       // the cursor asks the simulation whether the tile is a valid special target
 
         // Place friendly bomb at (20, 20)
         sim.grid_mut().place_bomb(20, 20, 0);
@@ -2740,7 +2748,7 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         // Spawn friendly bomber at (20, 19)
         uint32_t b_id = sim.spawn_unit(0, AntType::Bomber, TileCoord{20, 19});
 
-        // 1. Single select bomber without shift
+        // 1. A single selected bomber (panel 3): a bomb tile is a valid special target (cursor 4), the left click is the special order
         hud.select_ant(b_id, false);
         ASSERT_EQ(hud.get_selected_ant_id(), b_id);
         ASSERT_FALSE(hud.is_multi_select());
@@ -2764,6 +2772,7 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         ASSERT_TRUE(sim.has_bomb_at(TileCoord{20, 20}));
 
         hud.handle_mouse_down(screen_x, screen_y, 3, sim, cam, 0);
+        hud.handle_mouse_up(screen_x, screen_y, 3, sim, cam, 0);      // the right button gives its order at the release
         ASSERT_TRUE(wait_ms(sim, 4000, [&]() { return !sim.has_bomb_at(TileCoord{20, 20}); }) >= 0);
     } TEST_END();
 
@@ -2815,7 +2824,7 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         ASSERT_EQ(worker.pos.y, 20);
     } TEST_END();
 
-    TEST_CASE("12.17 Shift-Selected Bomber and Multi-Selected Bomber Move Onto Bomb to Hit It") {
+    TEST_CASE("12.17 Several Selected Ants Move Onto A Friendly Bomb To Hit It (panel 4: cursor 3); The Order Of A Right Click Is A Move Too") {
         SimulationEngine sim;
         sim.init_test_world(60, 60, 100, 60000);
         ViewportCamera cam;
@@ -2823,16 +2832,18 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         cam.world_y = 20 * 32 - 100;
         HUD hud;
         hud.init(0);
+        hud.set_sim_query(&sim);
 
-        // Case A: Shift-selected Bomber hits the bomb
+        // Case A: a bomber and a worker selected (panel 4, mixed types): the bomb tile is a plain move target, the bomber hits the bomb
         sim.grid_mut().place_bomb(20, 20, 0);
         uint32_t b1 = sim.spawn_unit(0, AntType::Bomber, TileCoord{18, 20});
-        // Select with shift modifier
-        hud.select_ant(b1, true); // shift-selected
+        uint32_t w1 = sim.spawn_unit(0, AntType::Worker, TileCoord{16, 20});
+        hud.set_selected_ant_ids({b1, w1});
         ASSERT_TRUE(hud.is_multi_select());
 
         int32_t screen_x = HUD::PLAYFIELD_X + (20 * 32 + 16) - cam.world_x;
         int32_t screen_y = HUD::PLAYFIELD_Y + (20 * 32 + 16) - cam.world_y;
+        ASSERT_EQ(hud.evaluate_cursor(screen_x, screen_y, sim.get_world_state(), sim.grid(), cam), CursorType::Move);
 
         hud.handle_mouse_down(screen_x, screen_y, 1, sim, cam, 0);
         hud.handle_mouse_up(screen_x, screen_y, 1, sim, cam, 0);
@@ -2848,7 +2859,7 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         ASSERT_TRUE(detonated);
         ASSERT_EQ(sim.get_unit(b1).hp, 8);
 
-        // Case B: Multi-unit selection containing Bomber hits the bomb
+        // Case B: the same selection, a right click on a bomb: panel 4 gives a move, the bomber hits the bomb
         sim.grid_mut().place_bomb(30, 30, 0);
         uint32_t b2 = sim.spawn_unit(0, AntType::Bomber, TileCoord{28, 30});
         uint32_t w2 = sim.spawn_unit(0, AntType::Worker, TileCoord{28, 31});
@@ -2861,6 +2872,7 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         int32_t screen_y2 = HUD::PLAYFIELD_Y + (30 * 32 + 16) - cam.world_y;
 
         hud.handle_mouse_down(screen_x2, screen_y2, 3, sim, cam, 0); // Right click on bomb
+        hud.handle_mouse_up(screen_x2, screen_y2, 3, sim, cam, 0);
 
         bool detonated2 = false;
         for (int t = 0; t < 100; ++t) {
@@ -2959,6 +2971,7 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
 
         // Right-click on existing bridge dispatches DemolishBridge
         hud.handle_mouse_down(screen_x, screen_y, 3, sim, cam, 0);
+        hud.handle_mouse_up(screen_x, screen_y, 3, sim, cam, 0);
 
         // Step simulation while swimmer demolishes the bridge through stages 3, 2, 1 to 0 (water)
         for (int t = 0; t < 150; ++t) {
@@ -5010,11 +5023,12 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         ViewportCamera camera{0, 0};
         hud.select_ant(w_id, false);
 
-        // Hover over ally with friendly selected: cursor is Move (not Attack)
+        // Hover over an ally with an own ant selected: the cursor is the attack cursor (there is no alliance test in FUN_01026aa3); the
+        // original asks "attack your ally?" (FUN_0101ffab) when the order is given, the remake answers with a walk next to the ally
         int32_t ally_screen_x = PLAYFIELD_X + (8 * 32 + 16);
         int32_t ally_screen_y = PLAYFIELD_Y + (8 * 32 + 16);
         CursorType c_ally = hud.evaluate_cursor(ally_screen_x, ally_screen_y, sim.get_world_state(), sim.grid(), camera);
-        ASSERT_EQ(c_ally, CursorType::Move);
+        ASSERT_EQ(c_ally, CursorType::Attack);
 
         // Click ally ant: ant walks over to an adjacent neighbor of ally instead of attacking
         hud.handle_mouse_down(ally_screen_x, ally_screen_y, 1, sim, camera, 0);
@@ -5656,9 +5670,9 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
             uint32_t a_id = sim.spawn_unit(0, AntType::Worker, TileCoord{10, 10});
             hud.select_ant(a_id, false);
 
-            // Move Pedestal: the press animation butmov2d carries sound 89
+            // Move Pedestal (slot 1: (482, 152) - (525, 225)): the press animation butmov2d carries sound 89
             played_sounds.clear();
-            hud.handle_mouse_down(500, 150, SDL_BUTTON_LEFT, sim, camera, 0);
+            hud.handle_mouse_down(500, 170, SDL_BUTTON_LEFT, sim, camera, 0);
             ASSERT_FALSE(played_sounds.empty());
             ASSERT_EQ(played_sounds.back(), SoundID::NavButtonClick);
 
@@ -5674,6 +5688,10 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
             }
             ASSERT_FALSE(saw_nav);
             ASSERT_TRUE(saw_stop);
+
+            // The Stop pedestal locks the mouse for 250 ms (5 ticks, FUN_01028bdd); afterwards the buttons answer again
+            hud.handle_mouse_up(610, 190, SDL_BUTTON_LEFT, sim, camera, 0);
+            hud.update(sim.get_world_state(), 5);
 
             // Chat [All] button (532, 443, 44, 24): butalld carries sound 0
             played_sounds.clear();
@@ -6435,10 +6453,10 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
 
     TEST_CASE("12.108: Version Invariant & Fog of War Cursor Concealment Parity") {
         // 1. Verify semantic versioning components
-        ASSERT_EQ(ants::VERSION_STRING, "v0.0.40");
+        ASSERT_EQ(ants::VERSION_STRING, "v0.0.41");
         ASSERT_EQ(ants::VERSION_MAJOR, 0);
         ASSERT_EQ(ants::VERSION_MINOR, 0);
-        ASSERT_EQ(ants::VERSION_PATCH, 40);
+        ASSERT_EQ(ants::VERSION_PATCH, 41);
 
         // 2. Setup simulation world with Fog of War enabled
         SimulationEngine sim;
@@ -7207,6 +7225,7 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         ViewportCamera camera;
         HUD hud;
         hud.init(0);
+        hud.set_sim_query(&sim);
 
         // 1. Bomber Ant cursor evaluation: target reticle CursorType::Target (3 / c_targ1)
         uint32_t bomber_id = sim.spawn_unit(0, AntType::Bomber, TileCoord{10, 10});
@@ -7223,13 +7242,13 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         CursorType bomb_cursor = hud.evaluate_cursor(screen_bx, screen_by, ws, sim.grid(), camera);
         ASSERT_EQ(static_cast<uint8_t>(bomb_cursor), static_cast<uint8_t>(CursorType::Target));
 
-        // Order bomb placement at (10, 11) -> during PlantingBomb, evaluate_cursor remains CursorType::Target
+        // Order bomb placement at (10, 11) -> the cursor is not locked while the bomber plants: plain ground is the move cursor again
         bool planting_started = sim.plant_bomb(bomber_id, TileCoord{10, 11}, false);
         ASSERT_TRUE(planting_started);
         ASSERT_EQ(sim.get_unit(bomber_id).state, UnitState::PlantingBomb);
         const auto& ws_planting = sim.get_world_state();
         CursorType planting_cursor = hud.evaluate_cursor(100, 100, ws_planting, sim.grid(), camera);
-        ASSERT_EQ(static_cast<uint8_t>(planting_cursor), static_cast<uint8_t>(CursorType::Target));
+        ASSERT_EQ(static_cast<uint8_t>(planting_cursor), static_cast<uint8_t>(CursorType::Move));
 
         // Wait for planting to complete so bomber returns to Idle
         while (sim.get_unit(bomber_id).state == UnitState::PlantingBomb) {
@@ -7402,9 +7421,10 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         // Chain bomb at (44, 40) was triggered and cleared!
         ASSERT_FALSE(sim_chain.grid().has_bomb_at({44, 40}));
 
-        // 6. HUD Bomb Cursor & Shift Rules
+        // 6. HUD Bomb Cursor (FUN_01026f91: a bomb tile is a special target of a single selected bomber; Shift plays no part)
         HUD hud;
         hud.init(0);
+        hud.set_sim_query(&sim2);
         sim2.grid_mut().place_bomb(50, 50, 1);
         uint32_t bomber_id = sim2.spawn_unit(0, AntType::Bomber, {48, 50});
         uint32_t worker_id2 = sim2.spawn_unit(0, AntType::Worker, {48, 51});
@@ -7415,16 +7435,16 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         int32_t screen_by = 0;
         cam.world_to_screen(50 * 32 + 16, 50 * 32 + 16, screen_bx, screen_by);
 
-        // (a) Bomber selected, shift NOT held -> Target reticle
+        // (a) Bomber selected (panel 3), shift NOT held -> Target reticle
         hud.select_ant(bomber_id, false);
         hud.set_shift_held(false);
         CursorType c1 = hud.evaluate_cursor(screen_bx, screen_by, sim2.get_world_state(), sim2.grid(), cam);
         ASSERT_EQ(c1, CursorType::Target);
 
-        // (b) Bomber selected, shift HELD -> regular Move cursor
+        // (b) Bomber selected, shift HELD -> the same Target reticle (the original's cursor code never looks at Shift)
         hud.set_shift_held(true);
         CursorType c2 = hud.evaluate_cursor(screen_bx, screen_by, sim2.get_world_state(), sim2.grid(), cam);
-        ASSERT_EQ(c2, CursorType::Move);
+        ASSERT_EQ(c2, CursorType::Target);
 
         // (c) Worker selected (non-bomber) -> regular Move cursor
         hud.select_ant(worker_id2, false);
@@ -7432,9 +7452,8 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         CursorType c3 = hud.evaluate_cursor(screen_bx, screen_by, sim2.get_world_state(), sim2.grid(), cam);
         ASSERT_EQ(c3, CursorType::Move);
 
-        // (d) Multi-select -> regular Move cursor
-        hud.select_ant(bomber_id, false);
-        hud.select_ant(worker_id2, true); // multi-select
+        // (d) A bomber and a worker (panel 4, mixed types) -> regular Move cursor
+        hud.set_selected_ant_ids({bomber_id, worker_id2});
         CursorType c4 = hud.evaluate_cursor(screen_bx, screen_by, sim2.get_world_state(), sim2.grid(), cam);
         ASSERT_EQ(c4, CursorType::Move);
     } TEST_END();
@@ -8307,16 +8326,16 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         const auto& move_btn = hud.get_move_pedestal_button();
         const auto& abil_btn = hud.get_ability_pedestal_button();
 
-        // Authentic Table 4 butdown.bmp dimensions (55x75)
-        ASSERT_EQ(move_btn.x, 476);
-        ASSERT_EQ(move_btn.y, 156);
-        ASSERT_EQ(move_btn.w, 55);
-        ASSERT_EQ(move_btn.h, 75);
+        // The pedestal slots of FUN_01028d30 (half-open): slot 1 (482, 152) - (525, 225), slot 2 (539, 152) - (582, 225)
+        ASSERT_EQ(move_btn.x, 482);
+        ASSERT_EQ(move_btn.y, 152);
+        ASSERT_EQ(move_btn.w, 43);
+        ASSERT_EQ(move_btn.h, 73);
 
-        ASSERT_EQ(abil_btn.x, 537);
-        ASSERT_EQ(abil_btn.y, 156);
-        ASSERT_EQ(abil_btn.w, 55);
-        ASSERT_EQ(abil_btn.h, 75);
+        ASSERT_EQ(abil_btn.x, 539);
+        ASSERT_EQ(abil_btn.y, 152);
+        ASSERT_EQ(abil_btn.w, 43);
+        ASSERT_EQ(abil_btn.h, 73);
     } TEST_END();
 
     // ------------------------------------------------------------------------
@@ -9036,17 +9055,25 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         ASSERT_EQ(sim.issue_group_attack_order({mover}, TileCoord{18, 26}), mover);
     } TEST_END();
 
-    TEST_CASE("12.144 The Armed Attack Mode Attacks The Ant That Is Clicked (and Moves When Nothing Is There)") {
+    TEST_CASE("12.144 A Click On An Enemy Ant Attacks It With The Selected Ants (Cursor Mode 5) And Moves When Nothing Is There") {
         SimulationEngine sim;
         sim.init_test_world(60, 60, 100, 60000);
         uint32_t att = sim.spawn_unit(0, AntType::Combat, TileCoord{10, 20});
         uint32_t vic = sim.spawn_unit(1, AntType::Worker, TileCoord{15, 20});
+        sim.tick();
         HUD hud;
         hud.init(0);
+        hud.set_sim_query(&sim);
         hud.select_ant(att, false);
-        hud.set_active_order_mode(OrderType::Attack);
-        // click on the victim's body (12 px above its anchor)
-        hud.dispatch_targeted_order(15 * 32 + 16, 20 * 32 + 16 - 12, sim);
+        ViewportCamera camera;
+        camera.world_x = 400;
+        camera.world_y = 500;
+        // the victim's body (12 px above its anchor) is under the pointer: the cursor is the attack cursor
+        const int32_t vx = 15 * 32 + 16 - camera.world_x + HUD::PLAYFIELD_X;
+        const int32_t vy = 20 * 32 + 16 - 12 - camera.world_y + HUD::PLAYFIELD_Y;
+        ASSERT_EQ(hud.evaluate_cursor(vx, vy, sim.get_world_state(), sim.grid(), camera), CursorType::Attack);
+        hud.handle_mouse_down(vx, vy, SDL_BUTTON_LEFT, sim, camera);
+        hud.handle_mouse_up(vx, vy, SDL_BUTTON_LEFT, sim, camera);
         ASSERT_EQ(sim.get_unit(att).orig_order, AntUnit::kOrderAttack);
         ASSERT_EQ(sim.get_unit(att).orig_target_ant, vic);
         ASSERT_TRUE(wait_ms(sim, 8000, [&]() { return sim.get_unit(vic).hp < 10; }) >= 0);
@@ -9054,11 +9081,15 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         SimulationEngine sim2;
         sim2.init_test_world(60, 60, 100, 60000);
         uint32_t att2 = sim2.spawn_unit(0, AntType::Combat, TileCoord{10, 20});
+        sim2.tick();
         HUD hud2;
         hud2.init(0);
+        hud2.set_sim_query(&sim2);
         hud2.select_ant(att2, false);
-        hud2.set_active_order_mode(OrderType::Attack);
-        hud2.dispatch_targeted_order(20 * 32 + 16, 20 * 32 + 16, sim2);
+        const int32_t gx = 20 * 32 + 16 - camera.world_x + HUD::PLAYFIELD_X;
+        const int32_t gy = 20 * 32 + 16 - camera.world_y + HUD::PLAYFIELD_Y;
+        hud2.handle_mouse_down(gx, gy, SDL_BUTTON_LEFT, sim2, camera);
+        hud2.handle_mouse_up(gx, gy, SDL_BUTTON_LEFT, sim2, camera);
         ASSERT_EQ(sim2.get_unit(att2).orig_order, AntUnit::kOrderMove);
     } TEST_END();
 

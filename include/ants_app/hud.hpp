@@ -82,6 +82,15 @@ public:
     static constexpr int32_t ACTIONS_WIDTH     = 160;
     static constexpr int32_t ACTIONS_HEIGHT    = 101;
 
+    // The map view rectangle of the original (0x1026d6a), half-open: pointers outside it are a plain arrow and pedestals fire on presses there
+    static constexpr int32_t MAP_LEFT   = 16;
+    static constexpr int32_t MAP_TOP    = 21;
+    static constexpr int32_t MAP_RIGHT  = 458;
+    static constexpr int32_t MAP_BOTTOM = 461;
+    static constexpr bool in_map_rect(int32_t x, int32_t y) noexcept { return x >= MAP_LEFT && x < MAP_RIGHT && y >= MAP_TOP && y < MAP_BOTTOM; }
+    /// The minimap (480, 35) - (599, 126)
+    static constexpr bool in_minimap_rect(int32_t x, int32_t y) noexcept { return x >= 480 && x < 599 && y >= 35 && y < 126; }
+
     static constexpr int32_t BANNER_X          = 17;
     static constexpr int32_t BANNER_Y          = 461;
     static constexpr int32_t BANNER_WIDTH      = 623;
@@ -197,20 +206,49 @@ public:
     void clear_status() { status_line_.clear(); }
     const StatusLine& status_line() const noexcept { return status_line_; }
 
-    // Order mode & dispatch
-    sim::OrderType get_active_order_mode() const noexcept { return active_order_mode_; }
-    void set_active_order_mode(sim::OrderType mode) noexcept;
-    void cancel_order_mode() noexcept { set_active_order_mode(sim::OrderType::None); }
-    void dispatch_targeted_order(int32_t world_x, int32_t world_y, sim::SimulationEngine& sim);
+    // Pointer model (Ants.exe FUN_0102737e / FUN_01027530 / FUN_010277f4 / FUN_01027b51 / FUN_01026aa3): the cursor mode decides what a
+    // click does. Panel mode [54ec]: 1 nothing selected, 2 a hill, 3 one own ant, 4 several own ants, 5 another player's ant (inspect).
+    enum class PanelMode : uint8_t { None = 1, Base = 2, OneAnt = 3, Ants = 4, Other = 5 };
+    PanelMode panel_mode(const sim::WorldState& world) const;
+    /// FUN_010282e0: true and the type when all selected own ants have the same type (the ability pedestal and the special order need it).
+    bool homogeneous_type(const sim::WorldState& world, sim::AntType& type) const;
+    /// The simulation that answers the cursor's special-target question (FUN_01026f91); without it no tile is a special target.
+    void set_sim_query(const sim::SimulationEngine* sim) noexcept { sim_query_ = sim; }
+
+    /// The two command pedestals are latched visually (slot modes [54f8] / [54fc] = 2): the move pedestal only suppresses the rubber band,
+    /// the ability pedestal makes valid targets show the target cursor; an accepted order, the other pedestal, Stop or a deselect release them.
+    bool is_move_latched() const noexcept { return slot_latched_[0]; }
+    bool is_ability_latched() const noexcept { return slot_latched_[1]; }
+    /// BTNPUSH (FUN_01028ffe): the pedestal of slot 0 / 1 / 2 (move-hatch-ally / ability / stop) shows pressed for 125 ms after an order
+    bool is_pedestal_flashing(int slot) const noexcept {
+        if (slot < 0 || slot > 2) return false;
+        const uint32_t now = ticks_fn_ ? ticks_fn_() : SDL_GetTicks();
+        return now < btnpush_until_ms_[slot];
+    }
+    void unlatch_pedestals() noexcept { slot_latched_[0] = false; slot_latched_[1] = false; }
+
+    /// The group order of the original (FUN_010287b5) for the selected own ants: `special` and `attack` are its two flags. Returns the ant that
+    /// acknowledged (0 = none).
+    uint32_t order_selected(sim::SimulationEngine& sim, sim::TileCoord tile, bool special, bool attack);
+    /// A left click at the release point (FUN_010277f4): the cursor mode there decides.
+    void pointer_click(sim::SimulationEngine& sim, ViewportCamera& camera, int32_t x, int32_t y, bool shift);
+    /// A right release (FUN_01027b51): `capture` is what the press captured (0 nothing, 1 the map view, 2 the minimap); the order goes to the
+    /// tile of the press point, the cursor mode is the one of the release point.
+    void pointer_right_click(sim::SimulationEngine& sim, ViewportCamera& camera, int capture, int32_t press_x, int32_t press_y, int32_t x, int32_t y);
+    /// A left release (FUN_01027530): a rubber band of at most 4 px in both directions is a click at the release point, a bigger one selects.
+    void pointer_release(sim::SimulationEngine& sim, ViewportCamera& camera, int32_t x, int32_t y, bool shift);
+    /// The stop order of the selected own ants (FUN_01028a60) with its status text.
+    void stop_selected(sim::SimulationEngine& sim);
+    /// Convenience used by the tests and the pointer code: a plain group move order to a tile (special 0, attack 0).
     void dispatch_move_order(int32_t target_tile_x, int32_t target_tile_y, sim::SimulationEngine& sim, bool allow_friendly_bomb = false);
+    /// A group attack order at the tile of the given ant.
     void dispatch_attack_order(uint32_t target_enemy_id, sim::SimulationEngine& sim);
-    void dispatch_smart_special_ability(int32_t world_x, int32_t world_y, sim::SimulationEngine& sim, bool shift_held = false);
     /// The ant under a click at a world position (Ants.exe FUN_01026904 with FUN_01026a39): the 3x3 tiles around the clicked
     /// tile are scanned (rows outer, columns inner) and an ant registered on one of them is hit when the click lies in the
     /// half-open rectangle around its sprite position (combat ant [x-32, x+26) x [y-46, y+16), every other type
-    /// [x-20, x+20) x [y-32, y+16)); the last hit wins. Ants in fog that are neither the player's nor allied are not pickable.
+    /// [x-20, x+20) x [y-32, y+16)); the last hit wins. There is no filter: dying, flying, drowning, scuffling and underground ants
+    /// are hit as well, and fog is only looked at for the tile under the pointer.
     const sim::AntSnapshot* pick_ant_at(const sim::WorldState& world, int32_t world_x, int32_t world_y) const;
-    void dispatch_move_to_unit_neighbor(int32_t target_tile_x, int32_t target_tile_y, sim::SimulationEngine& sim);
 
     // Local player identity
     uint8_t get_local_player_id() const noexcept { return local_player_id_; }
@@ -222,18 +260,18 @@ public:
 
     // Dialog and Modal overlays
     void open_quit_dialog() noexcept {
-        cancel_order_mode();
+        release_capture();
         show_quit_dialog_ = true;
     }
     void close_quit_dialog() noexcept { show_quit_dialog_ = false; }
     bool is_quit_dialog_open() const noexcept { return show_quit_dialog_; }
     void set_on_quit(std::function<void()> cb) { on_quit_ = std::move(cb); }
 
-    void open_quick_help() noexcept { show_quick_help_ = true; }
+    void open_quick_help() noexcept { release_capture(); show_quick_help_ = true; }
     void close_quick_help() noexcept { show_quick_help_ = false; }
     bool is_quick_help_open() const noexcept { return show_quick_help_; }
 
-    void open_options() noexcept { show_options_ = true; }
+    void open_options() noexcept { release_capture(); show_options_ = true; }
     void close_options() noexcept { show_options_ = false; active_quick_chat_edit_ = -1; }
     bool is_options_open() const noexcept { return show_options_; }
 
@@ -260,7 +298,7 @@ public:
     void set_active_quick_chat_edit(int idx) noexcept { active_quick_chat_edit_ = idx; }
 
     bool is_match_start_modal_active() const noexcept { return show_match_start_modal_; }
-    void start_match_modal() noexcept { show_match_start_modal_ = true; match_start_modal_ticks_ = 0; }
+    void start_match_modal() noexcept { release_capture(); show_match_start_modal_ = true; match_start_modal_ticks_ = 0; }
     void dismiss_match_start_modal() noexcept { show_match_start_modal_ = false; }
     bool is_right_mouse_held() const noexcept { return right_mouse_held_; }
     bool is_shift_held() const noexcept;
@@ -285,7 +323,27 @@ private:
     std::deque<std::string> chat_log_{};
     std::deque<uint8_t> chat_line_colour_{};   // parallel to chat_log_ (see get_chat_line_colour)
     std::deque<int32_t> chat_line_indent_{};
-    sim::OrderType active_order_mode_{sim::OrderType::None};
+    const sim::SimulationEngine* sim_query_{nullptr};
+    bool slot_latched_[2]{false, false};        // pedestal slots 1 and 2 latched
+    uint32_t btnpush_until_ms_[3]{0, 0, 0};     // BTNPUSH (FUN_01028ffe): a pedestal shows pressed for 125 ms after an accepted order
+    uint32_t input_lock_ticks_{0};              // after Stop (FUN_01028bdd): mouse input is ignored for 250 ms, then the selection is dropped
+    bool pending_deselect_{false};
+    int32_t right_press_x_{0};
+    int32_t right_press_y_{0};
+    int right_capture_{0};                      // what the right press captured: 0 nothing, 1 the map view, 2 the minimap
+    bool slot2_attack_kind_{false};             // the selection's ability pedestal is the attack pedestal (a combat ant), set by order_selected
+    void flash_pedestal(int slot) noexcept;
+    bool pedestal_press(sim::SimulationEngine& sim, int32_t x, int32_t y);
+    /// Accepted-order feedback of FUN_010277f4 / FUN_01027b51: a latched pedestal pops up, otherwise the pedestal of the order flashes
+    void order_feedback(bool special, bool attack);
+    /// The rubber band (FUN_0102653f) in screen pixels: the bounding box of the press point and the pointer (kept 1 px inside the view), widened
+    /// by 1 px on both sides in a direction without extent. The rectangle is half-open, `right` / `bottom` are the largest coordinates.
+    struct BandRect { int32_t left, top, right, bottom; };
+    BandRect band_rect() const noexcept;
+    /// Opening a dialog removes a displayed rubber band and releases the captures
+    void release_capture() noexcept { is_dragging_ = false; is_radar_dragging_ = false; right_capture_ = 0; }
+    /// The cursor's special-target question (FUN_01026f91) for the selected ants' common type
+    bool special_target(const sim::SimulationEngine* query, const sim::WorldState& world, sim::TileCoord tile, PanelMode panel) const;
 
     // Last known pointer position (drives the hover art of the animation-based controls)
     int32_t mouse_x_{-1};

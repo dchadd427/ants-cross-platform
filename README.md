@@ -45,6 +45,7 @@ Play the remake instantly in any modern web browser (Chrome, Firefox, Safari, Ed
   - **Status Line & Messages**: The one-line status box under the unit card is a single slot (Ants.exe `PostStatus`): a new message replaces the old one, lives 5 s, and the six flashing ones (already carrying food, 1 minute / 30 seconds / 10 seconds left, a ThiefAnt at your anthill, a team made) flicker for 500 ms first. Selecting ants posts "Ready!", "BomberAnt selected.", "Where to?", "Thief here", "Yessir!" or "SwimmerAnt selected." (string 12 for a group), orders answer with the ant's voice and "On my way." / "Movin' out." / "Here I go..." / "Attack!" / "My pleasure..." / "Burn...", Stop posts "Stopping.", and nothing is shown while idle. The match clock is checked every 200 ms like the original's CHECKGO task: warnings at 1:00, 0:30 and eleven countdown steps from 0:10, and the match ends within 200 ms after 0:00.
   - **Alliance Texts & Chat Log**: Teaming up follows the original's protocol: the invitee gets the question and the allypro cue, the proposer reads "%s accepted teaming up" / "%s rejected teaming up" (or the invitee "%s withdrew offer to team up"), a team that is made flashes "A team has been made." and writes the News Flash "%s (%s) and %s (%s) are a team now!" into the chat log (breaking it writes "... are no longer a team!"), and a drop-out writes "%s dropped out of the game!". The chat log keeps the original's entries: a header in the sender's team colour ("Name:" or "Name (To Teammate):", "[m:ss] News Flash:" for news) and a body of up to 100 characters wrapped and indented; chat needs the "Participate In Chat" option, F9 - F12 chat the quick-chat texts to everybody, and a team message reaches only the sender and the sender's allies.
   - **Edge Scrolling & Minimap**: The view scrolls like the original's input task (every 50 ms): the eight 12 px edge strips show the scroll arrows, only the 5 px inner strips scroll, the step is `scroll rate + 10` px around the target point of the pointer (about 55 - 60 px per tick at the default rate, 120 - 200 px/s at the slowest and 2100 px/s at the fastest setting), a strip that cannot move shows no arrow, and dialogs or a captured button stop it. Holding the left button on the minimap centres the view on the point under the pointer; nothing scrolls with the keyboard or the wheel.
+  - **Pointer & Commands**: The cursor mode decides what a click does, exactly as in the original: over an ant the ant is picked with the original's sprite boxes (a 3 x 3 tile scan, the last box wins, no filters), other players' ants - allies too - give the attack cursor, food the food cursor, your own hill and the fog the move cursor, and a valid special target (a bomb for a bomber, an enemy hill for a thief, or with the ability pedestal latched: plantable ground, a fire wall, water or a bridge) the target cursor. A left drag of at most 4 px is a click at the release point, a bigger one is the red 1 px rubber band that selects your ants by positive-area overlap (Shift adds to a selection of your ants); the right button gives its order at the release, at the tile of the press point. The Move and ability pedestals only latch (a visual state that removes the band or turns valid tiles into targets and pops up after an accepted order), Stop stops the ants, locks the mouse for 250 ms and then deselects, the hatch pedestal exists only while eggs remain and the ally pedestal only with more than two players.
   - **Enemy Ant Inspection**: Clicking enemy units when no friendly unit is selected shows selection brackets (`*ears`, coloured by health) without allowing friendly command dispatch.
   - **Match Audio Cues**: 1-minute alert (`onemin.wav`), 30-second warning (`thirtysec.wav`), 10-second countdown clicks (`countdown.wav`), defeat fanfare (`losers.wav`), and player drop-out (`playerout.wav`).
 
@@ -59,7 +60,7 @@ Play the remake instantly in any modern web browser (Chrome, Firefox, Safari, Ed
   - Standalone web inspector (`asset_catalog/index.html`) with responsive design, searching, filtering, and instant asset downloads (⬇ WAV audio, ⬇ PNG sprites, ⬇ composite canvas frames).
 
 - **Automated Verification & Zero-Warning Standard**:
-  - 100% pass rate across **184 integration tests (6,146 assertions)**, the hill-action, combat-action and ability-action golden tests and **506 opaque-box End-to-End (E2E) verification tests**.
+  - 100% pass rate across **188 integration tests (6,516 assertions)**, the hill-action, combat-action and ability-action golden tests and **506 opaque-box End-to-End (E2E) verification tests**.
   - Strict compilation under `-Wall -Wextra -Werror -Wsign-conversion`.
 
 ---
@@ -210,19 +211,19 @@ python3 -m http.server 8080 -d dist
 ### Mouse Controls
 | Action | Trigger | Description |
 |---|---|---|
-| **Select Friendly Ant** | Left Click on Friendly Ant | Selects a single ant unit. |
-| **Inspect Enemy Ant** | Left Click on Enemy Ant | When no friendly unit is selected, selects enemy ant to view health and selection brackets. |
+| **Select Friendly Ant** | Left Click on Friendly Ant | Selects a single ant unit (Shift adds it to / removes it from a selection of your ants). |
+| **Inspect Enemy Ant** | Left Click on Enemy Ant | When no friendly unit is selected (or a hill or another ant is inspected), selects the ant to view its selection brackets. |
 | **Move Order** | Left Click on Terrain | Issues move order to selected ant(s). Intermediate food tiles are avoided. |
 | **Harvest Order** | Left Click on Food Morsel | Instructs ant to harvest food item and return it to base. |
-| **Attack Order** | Left Click on Enemy Ant | Orders the selected ants to engage the target (the original's group order: ants that already attack that ant are skipped, the nearest one answers; the clickable area is the original's sprite box). |
-| **Marquee Selection** | Left Click & Drag ($>4\text{px}$) | Selects all friendly units within rectangular box. |
-| **Minimap Navigation** | Left Click on Minimap | Instantly centers camera on clicked map coordinate. |
-| **Special Ability** | Right Click on Field | Context-sensitive ability for active unit type: |
+| **Attack Order** | Left Click on Another Player's Ant | With your ants selected: orders them to engage the ant (the original's group order: ants that already attack that ant are skipped, the nearest one answers; the clickable area is the original's sprite box; allies show the attack cursor too). |
+| **Marquee Selection** | Left Click & Drag ($>4\text{px}$ in either direction) | Selects your ants whose sprite box overlaps the red band (a shorter drag is a click at the release point; dragging over nothing deselects). |
+| **Minimap Navigation** | Hold Left Button on Minimap | The view follows the point under the pointer while the button is held (every 50 ms); a right click on the minimap orders the selected ants there. |
+| **Special Ability** | Right Click on Field (at the release) | A move for several ants, workers, combat ants and mixed groups, otherwise the ability of the single ant's type; or latch the ability pedestal and left-click a valid target: |
 | | | • **Bomber**: Plant mine / defuse existing friendly mine. |
 | | | • **Fire Ant**: Ignite firewall / extinguish blaze. |
 | | | • **Swimmer**: Dig bridge on water / demolish existing bridge. |
 | | | • **Thief**: Infiltrate enemy anthill. |
-| **Bomb Hit (Jump)** | Multi-Select / Shift + Click | Forces Bomber or non-bomber to walk onto friendly bomb to detonate it and jump water gaps. |
+| **Bomb Hit (Jump)** | Click on a Friendly Bomb with Several Ants Selected | The move click sends the first ant onto the bomb, which sets it off (a single bomber defuses it instead). |
 
 ### Team Switching & Testing Shortcuts
 | Key | Function |
@@ -236,8 +237,7 @@ python3 -m http.server 8080 -d dist
 ### Camera & Hotkeys
 | Key | Function |
 |---|---|
-| **Edge Pan Scrolling** | Move cursor within 24 pixels of window boundaries to pan camera smoothly. |
-| **Arrow Keys / WASD** | Pan camera freely in cardinal/diagonal directions. |
+| **Edge Scrolling** | Move the cursor to the edge: the arrow shows within 12 px, the view scrolls within the 5 px inner strip (every 50 ms; nothing scrolls with the keyboard or the wheel). |
 | **`Spacebar`** | Center camera on currently selected unit. |
 | **`H`** | Center camera on home anthill base. |
 | **`Esc`** | Open / close Quick Quit confirmation dialog; dismiss open modals. |
@@ -245,7 +245,7 @@ python3 -m http.server 8080 -d dist
 | **`A`** or **`Ctrl + A`** | Select all friendly ants on the battlefield. |
 | **`N` / `P`** | Cycle selection to next / previous friendly ant. |
 | **`M`** | Toggle background music soundtrack. |
-| **`C`** | Clear active selection / cancel armed order mode. |
+| **`Ctrl + S`** | Stop the selected ants (no flash, no lock, no deselect). |
 
 ---
 

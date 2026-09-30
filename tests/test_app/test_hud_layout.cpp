@@ -62,7 +62,9 @@ public:
     void fill_rect(int32_t x, int32_t y, int32_t w, int32_t h, assets::ColorRGBA color) override {
         fills.push_back({x, y, w, h, color});
     }
-    void draw_rect(int32_t, int32_t, int32_t, int32_t, assets::ColorRGBA) override {}
+    void draw_rect(int32_t x, int32_t y, int32_t w, int32_t h, assets::ColorRGBA color) override {
+        rects.push_back({x, y, w, h, color});
+    }
     void draw_text(const std::string& text, int32_t x, int32_t y, assets::ColorRGBA) override {
         texts.push_back({text, x, y});
     }
@@ -87,6 +89,7 @@ public:
     struct Text { std::string text; int32_t x; int32_t y; };
     std::vector<SpriteDraw> sprites;
     std::vector<FillDraw> fills;
+    std::vector<FillDraw> rects;         // frames (draw_rect)
     std::vector<Text> texts;
     uint8_t hud_team{0};
 
@@ -226,18 +229,85 @@ void test_home_panel(const assets::AssetArchive& arc) {
     }
 }
 
-// Ally pedestal of a selected enemy base: animation butalyu / butalyd at absolute coordinates.
+// Ally pedestal of a selected enemy base: animation butalyu / butalyd at absolute coordinates. Slot 1 of another player's hill holds it only
+// with more than two players and while its owner is not allied with the local player (FUN_01027f07 mode 2).
 void test_ally_pedestal(const assets::AssetArchive& arc) {
     std::printf("[hud] ally pedestal position\n");
-    RecordingRenderer rr(arc);
-    sim::WorldState world;
-    HUD hud;
-    hud.init(0);
-    hud.select_base(1);
-    render_settled(hud, arc, world, rr);
-    check(rr.has_sprite_at("butup.bmp", 477, 157), "ally pedestal base at (477,157)");
-    check(rr.has_sprite_at("butdipu.bmp", 485, 164), "ally icon at (485,164)");
-    check(rr.has_sprite_at("labdib.bmp", 477, 142), "ally label at (477,142)");
+    {
+        RecordingRenderer rr(arc);
+        sim::WorldState world;
+        world.anthills.resize(3);
+        for (size_t i = 0; i < 3; ++i) world.anthills[i].team_id = static_cast<uint8_t>(i);
+        HUD hud;
+        hud.init(0);
+        hud.select_base(1);
+        render_settled(hud, arc, world, rr);
+        check(rr.has_sprite_at("butup.bmp", 477, 157), "ally pedestal base at (477,157)");
+        check(rr.has_sprite_at("butdipu.bmp", 485, 164), "ally icon at (485,164)");
+        check(rr.has_sprite_at("labdib.bmp", 477, 142), "ally label at (477,142)");
+    }
+    {
+        RecordingRenderer rr(arc);
+        sim::WorldState world;
+        world.anthills.resize(2);                                  // two players: no ally pedestal
+        for (size_t i = 0; i < 2; ++i) world.anthills[i].team_id = static_cast<uint8_t>(i);
+        HUD hud;
+        hud.init(0);
+        hud.select_base(1);
+        render_settled(hud, arc, world, rr);
+        check(rr.named("butdipu.bmp").empty() && rr.named("labdib.bmp").empty(), "two players: no ally pedestal");
+    }
+}
+
+// The rubber band (FUN_0102653f): a 1 px frame in (255, 0, 0) around the press point and the pointer, the pointer kept 1 px inside the view
+// (x in [17, 457], y in [22, 460]), a direction without extent widened by 1 px on both sides, none while a pedestal is latched.
+void test_rubber_band(const assets::AssetArchive& arc) {
+    std::printf("[hud] rubber band\n");
+    sim::SimulationEngine sim;
+    sim.init_test_world(60, 60, 1, 60000);
+    const uint32_t ant = sim.spawn_unit(0, sim::AntType::Worker, sim::TileCoord{10, 10});
+    sim.tick();
+    ViewportCamera cam;
+    cam.world_x = 200;
+    cam.world_y = 200;
+    auto band = [&](HUD& hud, int32_t px, int32_t py, int32_t mx, int32_t my) {
+        hud.handle_mouse_down(px, py, SDL_BUTTON_LEFT, sim, cam);
+        hud.handle_mouse_motion(mx, my, sim, cam);
+        RecordingRenderer rr(arc);
+        hud.render(rr, arc, sim.get_world_state(), cam);
+        std::vector<FillDraw> red;
+        for (const auto& r : rr.rects) if (r.color.r == 255 && r.color.g == 0 && r.color.b == 0) red.push_back(r);
+        hud.handle_mouse_up(mx, my, SDL_BUTTON_LEFT, sim, cam);
+        return red;
+    };
+    {
+        HUD hud;
+        hud.init(0);
+        auto r = band(hud, 100, 100, 150, 140);
+        check(r.size() == 1 && r[0].x == 100 && r[0].y == 100 && r[0].w == 50 && r[0].h == 40, "the band is the bounding box of the press and the pointer");
+        r = band(hud, 150, 140, 100, 100);
+        check(r.size() == 1 && r[0].x == 100 && r[0].y == 100 && r[0].w == 50 && r[0].h == 40, "dragging up and to the left gives the same box");
+        r = band(hud, 100, 100, 100, 100);
+        check(r.size() == 1 && r[0].x == 99 && r[0].y == 99 && r[0].w == 2 && r[0].h == 2, "a stationary press is a 2 x 2 dot");
+        r = band(hud, 100, 100, 160, 100);
+        check(r.size() == 1 && r[0].x == 100 && r[0].y == 99 && r[0].w == 60 && r[0].h == 2, "a zero height is widened by 1 px on both sides");
+        r = band(hud, 300, 300, 500, 500);
+        check(r.size() == 1 && r[0].x == 300 && r[0].y == 300 && r[0].w == 157 && r[0].h == 160, "the pointer is kept inside the view: (457, 460)");
+        r = band(hud, 300, 300, 0, 0);
+        check(r.size() == 1 && r[0].x == 17 && r[0].y == 22 && r[0].w == 283 && r[0].h == 278, "and at the top left: (17, 22)");
+        check(r.size() == 1 && r[0].color.a == 255, "opaque");
+    }
+    {
+        HUD hud;
+        hud.init(0);
+        hud.select_ant(ant);
+        sim.tick();
+        hud.handle_mouse_down(500, 170, SDL_BUTTON_LEFT, sim, cam);     // the move pedestal: latched, so no band exists
+        hud.handle_mouse_up(500, 170, SDL_BUTTON_LEFT, sim, cam);
+        check(hud.is_move_latched(), "the move pedestal is latched");
+        auto r = band(hud, 100, 100, 150, 140);
+        check(r.empty(), "no band while a pedestal is latched");
+    }
 }
 
 // Full-screen HUD screens: composites drawn from the original animations, no invented dimming layers.
@@ -823,6 +893,7 @@ int main() {
     test_score_digits(arc);
     test_home_panel(arc);
     test_ally_pedestal(arc);
+    test_rubber_band(arc);
     test_screens(arc);
     test_pedestal_chains(arc);
     test_pedestal_timeline(arc);

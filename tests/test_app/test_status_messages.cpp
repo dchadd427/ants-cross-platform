@@ -407,7 +407,7 @@ void test_attack_and_special() {
         hud.select_ant(fire);
         run(hud, sim.get_world_state(), 1);
         sfx.ids.clear();
-        hud.dispatch_smart_special_ability(14 * 32 + 16, 10 * 32 + 16, sim);
+        hud.order_selected(sim, sim::TileCoord{14, 10}, true, false);
         check(status_after_render(hud, sim.get_world_state()) == "Burn...", "text 71");
         check(sfx.ids.size() == 1 && sfx.ids[0] == 25, "firedo.wav");
     }
@@ -425,7 +425,7 @@ void test_attack_and_special() {
         hud.select_ants_in_rect(10 * 32 - 10, 10 * 32 - 20, 11 * 32, 12 * 32 + 16, sim.get_world_state(), false);
         run(hud, sim.get_world_state(), 101);
         sfx.ids.clear();
-        hud.dispatch_smart_special_ability(14 * 32 + 16, 10 * 32 + 16, sim);
+        hud.order_selected(sim, sim::TileCoord{14, 10}, true, false);
         check(status_after_render(hud, sim.get_world_state()).empty(), "no text for a special order given to two ants");
         check(sfx.ids.empty(), "and no voice");
     }
@@ -441,7 +441,7 @@ void test_attack_and_special() {
         hud.select_ant(bomber);
         run(hud, sim.get_world_state(), 101);
         sfx.ids.clear();
-        hud.dispatch_smart_special_ability(14 * 32 + 16, 10 * 32 + 16, sim);
+        hud.order_selected(sim, sim::TileCoord{14, 10}, true, false);
         check(status_after_render(hud, sim.get_world_state()).empty(), "no text for the bomber's special order");
         check(sfx.ids.size() == 1 && sfx.ids[0] == 39, "bombdo.wav");
     }
@@ -457,7 +457,7 @@ void test_attack_and_special() {
         hud.select_ant(thief);
         run(hud, sim.get_world_state(), 101);
         sfx.ids.clear();
-        hud.dispatch_smart_special_ability(41 * 32 + 16, 41 * 32 + 16, sim);
+        hud.order_selected(sim, sim::TileCoord{41, 41}, true, false);
         check(status_after_render(hud, sim.get_world_state()) == "My pleasure...", "text 69");
         check(sfx.ids.size() == 1 && sfx.ids[0] == 21, "theifdo.wav");
     }
