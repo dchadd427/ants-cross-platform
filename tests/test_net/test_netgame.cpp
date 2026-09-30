@@ -1,0 +1,541 @@
+// Tests of NetGame, the network as the application sees it, over real sockets on the loopback interface: the room (joining, the map and fog the
+// host picks, a full room), the start barrier (every machine loads the same map file), a whole match of a host and two guests with commands and chat
+// (all simulations bit-identical at the end), a roster of two teams, a guest that leaves (its team is dropped at the same tick everywhere), a host that
+// leaves, a machine whose map differs, and joining after the match began.
+#include "ants_assets/lvl_parser.hpp"
+#include "ants_net/netgame.hpp"
+#include "ants_net/tcp.hpp"
+#include "ants_sim/game_strings.hpp"
+#include "ants_sim/sim_engine.hpp"
+
+#include <algorithm>
+#include <chrono>
+#include <cstdint>
+#include <functional>
+#include <iomanip>
+#include <iostream>
+#include <memory>
+#include <string>
+#include <thread>
+#include <vector>
+
+using namespace ants;
+using namespace ants::net;
+using ants::sim::Command;
+using ants::sim::CommandType;
+
+#ifndef ORIGINAL_ASSETS_DIR
+#define ORIGINAL_ASSETS_DIR "Original-Ants"
+#endif
+
+static int g_test_count = 0;
+static int g_test_failures = 0;
+static int g_assert_count = 0;
+
+inline void run_test_case(const std::string& name, const std::function<void()>& fn) {
+    ++g_test_count;
+    std::cout << "  RUNNING: " << std::left << std::setw(100) << name << " ... " << std::flush;
+    const int prev = g_test_failures;
+    try {
+        fn();
+    } catch (const std::exception& e) {
+        std::cout << "FAILED! Exception: " << e.what() << "\n";
+        ++g_test_failures;
+        return;
+    }
+    if (g_test_failures == prev) std::cout << "PASS\n";
+}
+
+#define TEST_CASE(name) run_test_case(name, [&]()
+#define TEST_END() );
+#define ASSERT_TRUE(cond) \
+    do { \
+        ++g_assert_count; \
+        if (!(cond)) { \
+            std::cout << "FAILED!\n    Assertion failed: " #cond " at " << __FILE__ << ":" << __LINE__ << "\n"; \
+            ++g_test_failures; \
+            return; \
+        } \
+    } while (0)
+#define ASSERT_FALSE(cond) ASSERT_TRUE(!(cond))
+#define ASSERT_EQ(a, b) ASSERT_TRUE((a) == (b))
+
+namespace {
+
+std::string maps_dir() { return std::string(ORIGINAL_ASSETS_DIR) + "/Maps/"; }
+
+// One machine: an engine, its NetGame and the little bit of "application" that the room needs (load the map, initialise the simulation, report)
+struct Machine {
+    sim::SimulationEngine sim;
+    NetGame net{sim};
+    std::string name;
+    bool corrupt_map{false};                // this machine cannot load the map (a different file)
+    std::vector<NetGame::Event> events;
+    std::vector<ChatMsg> chats;
+    std::vector<uint64_t> drop_ticks;       // the sim tick at which a Drop command was applied
+    uint64_t ticks{0};
+    uint32_t loads{0};
+
+    explicit Machine(std::string n) : name(std::move(n)) {}
+
+    void handle(const NetGame::Event& ev) {
+        events.push_back(ev);
+        if (ev.type == NetGame::Event::Type::StartRequested) {
+            const StartMsg& s = net.start_info();
+            ants::assets::LevelData level;
+            uint64_t hash = 0;
+            const bool ok = !corrupt_map && level.load_lvl(maps_dir() + s.map_name) && hash_file(maps_dir() + s.map_name, hash) && hash == s.map_hash;
+            if (ok) {
+                sim.set_fog_of_war_enabled(s.fog);
+                sim.init(level, s.seed, s.roster);
+                for (uint8_t p = 0; p < sim::MAX_PLAYERS; ++p) sim.set_player_name(p, s.names[p]);
+                ++loads;
+            }
+            net.report_loaded(ok);
+        }
+    }
+    bool saw(NetGame::Event::Type t) const {
+        for (const auto& e : events) {
+            if (e.type == t) return true;
+        }
+        return false;
+    }
+    size_t count(NetGame::Event::Type t) const {
+        size_t n = 0;
+        for (const auto& e : events) n += e.type == t;
+        return n;
+    }
+};
+
+struct Table {
+    std::vector<std::unique_ptr<Machine>> machines;
+    uint32_t now{1000};
+
+    Machine& add(const std::string& name) {
+        machines.push_back(std::make_unique<Machine>(name));
+        Machine& m = *machines.back();
+        m.net.set_on_chat([&m](const ChatMsg& c) { m.chats.push_back(c); });
+        m.net.set_on_tick([&m]() { ++m.ticks; });
+        m.net.set_on_command([&m](const Command& c, const sim::CommandResult&) {
+            if (c.type == CommandType::Drop) m.drop_ticks.push_back(m.sim.current_tick());
+        });
+        return m;
+    }
+    // 10 ms of game time per step with a moment of real time so that the kernel can deliver the loopback bytes
+    void run(uint32_t ms, const std::function<void(uint32_t)>& each = {}) {
+        const uint32_t end = now + ms;
+        while (now < end) {
+            now += 10;
+            for (auto& m : machines) {
+                m->net.update(now);
+                for (const auto& ev : m->net.take_events()) m->handle(ev);
+            }
+            if (each) each(now);
+            std::this_thread::sleep_for(std::chrono::microseconds(300));
+        }
+    }
+    bool run_until(const std::function<bool()>& cond, uint32_t max_ms) {
+        const uint32_t end = now + max_ms;
+        while (now < end) {
+            if (cond()) return true;
+            run(10);
+        }
+        return cond();
+    }
+};
+
+// A room with a host ("Alice") and `guests` guests, everybody in it
+bool make_room(Table& t, uint8_t guests) {
+    Machine& host = t.add("Alice");
+    if (!host.net.host(0, "Alice", true)) return false;
+    static const char* names[] = {"Bob", "Carol", "Dave"};
+    for (uint8_t i = 0; i < guests; ++i) {
+        Machine& g = t.add(names[i]);
+        if (!g.net.join("127.0.0.1", host.net.listen_port(), names[i])) return false;
+    }
+    // everybody is in the room and every player's thumb has appeared (the host measured every guest and told everybody)
+    return t.run_until(
+        [&]() {
+            for (auto& m : t.machines) {
+                if (m->net.phase() != NetGame::Phase::Room) return false;
+                for (uint8_t s = 0; s <= guests; ++s) {
+                    if (m->net.room().slots[s].state == SlotState::Empty || m->net.room().slots[s].rtt_ms == kRttUnknown) return false;
+                }
+            }
+            return host.net.room().slots[guests].state == SlotState::Client && host.net.can_start();
+        },
+        8000);
+}
+
+Command order(uint8_t issuer, uint32_t ant, int16_t x, int16_t y) {
+    Command c;
+    c.type = CommandType::GroupMove;
+    c.issuer = issuer;
+    c.tile_x = x;
+    c.tile_y = y;
+    c.ants = {ant};
+    return c;
+}
+
+// The first ant of a team in a machine's world
+uint32_t first_ant(Machine& m, uint8_t player) {
+    for (const auto& a : m.sim.get_world_state().ants) {
+        if (a.player_id == player) return a.id;
+    }
+    return 0;
+}
+
+bool everybody_playing(Table& t) {
+    for (auto& m : t.machines) {
+        if (m->net.phase() != NetGame::Phase::Playing) return false;
+    }
+    return true;
+}
+
+bool all_equal(Table& t, size_t skip = 99) {
+    const sim::StateHash h = t.machines[0]->sim.state_hash();
+    for (size_t i = 1; i < t.machines.size(); ++i) {
+        if (i != skip && t.machines[i]->sim.state_hash() != h) return false;
+    }
+    return true;
+}
+
+void run_room_tests() {
+    TEST_CASE("N3.1 Room: Guests Join And Get Seats In Arrival Order; The Host Picks The Map And The Fog And Every Guest Follows") {
+        Table t;
+        ASSERT_TRUE(make_room(t, 2));
+        Machine& host = *t.machines[0];
+        Machine& bob = *t.machines[1];
+        Machine& carol = *t.machines[2];
+        ASSERT_TRUE(host.net.is_host());
+        ASSERT_EQ(host.net.my_seat(), 0);
+        ASSERT_EQ(bob.net.my_seat(), 1);
+        ASSERT_EQ(carol.net.my_seat(), 2);
+        ASSERT_EQ(bob.net.room().slots[0].state, SlotState::Host);
+        ASSERT_EQ(bob.net.room().slots[0].name, "Alice");
+        ASSERT_EQ(carol.net.room().slots[1].name, "Bob");
+        ASSERT_EQ(carol.net.room().slots[3].state, SlotState::Empty);
+        ASSERT_TRUE(host.net.can_start());
+        ASSERT_FALSE(bob.net.can_start());                                  // only the host starts
+        host.net.set_map("SMALL.LVL");
+        host.net.set_fog(true);
+        bob.net.set_map("TINY.LVL");                                        // a guest's attempt changes nothing
+        bob.net.set_fog(false);
+        t.run(300);
+        for (Machine* g : {&bob, &carol}) {
+            ASSERT_EQ(g->net.room().map_name, "SMALL.LVL");
+            ASSERT_TRUE(g->net.room().fog);
+        }
+        ASSERT_FALSE(bob.net.start_match(1, 1));
+        // a guest that leaves frees its seat for everybody
+        carol.net.leave();
+        ASSERT_EQ(carol.net.phase(), NetGame::Phase::Off);
+        ASSERT_TRUE(t.run_until([&]() { return host.net.room().slots[2].state == SlotState::Empty && bob.net.room().slots[2].state == SlotState::Empty; }, 3000));
+    } TEST_END();
+
+    TEST_CASE("N3.2 Room: A Full Room Refuses The Fifth Player, A Host Alone Cannot Start, A Wrong Address Fails Cleanly") {
+        Table t;
+        ASSERT_TRUE(make_room(t, 3));
+        Machine& host = *t.machines[0];
+        Machine& fifth = t.add("Eve");
+        ASSERT_TRUE(fifth.net.join("127.0.0.1", host.net.listen_port(), "Eve"));
+        ASSERT_TRUE(t.run_until([&]() { return fifth.net.phase() == NetGame::Phase::Failed; }, 5000));
+        ASSERT_TRUE(fifth.saw(NetGame::Event::Type::Failed));
+        ASSERT_TRUE(fifth.net.status_text().find("full") != std::string::npos);
+        // nobody else noticed
+        for (size_t i = 0; i < 4; ++i) ASSERT_EQ(t.machines[i]->net.phase(), NetGame::Phase::Room);
+        Table solo;
+        Machine& lonely = solo.add("Alice");
+        ASSERT_TRUE(lonely.net.host(0, "Alice", true));
+        ASSERT_FALSE(lonely.net.can_start());
+        ASSERT_FALSE(lonely.net.start_match(1, 1));
+        // nobody listens on that port
+        Machine& lost = solo.add("Zed");
+        ASSERT_TRUE(lost.net.join("127.0.0.1", 1, "Zed"));
+        ASSERT_TRUE(solo.run_until([&]() { return lost.net.phase() == NetGame::Phase::Failed; }, 5000));
+        ASSERT_FALSE(lost.net.status_text().empty());
+        // host() twice and join() while hosting are refused
+        ASSERT_FALSE(lonely.net.host(0, "Alice", true));
+        ASSERT_FALSE(lonely.net.join("127.0.0.1", 5, "x"));
+    } TEST_END();
+}
+
+void run_thumb_tests() {
+    TEST_CASE("N3.9 Thumbs: Every Seat Shows Its Connection Quality; A Guest Who Never Answers Keeps The Question Mark And Holds Up START") {
+        Table t;
+        Machine& host = t.add("Alice");
+        ASSERT_TRUE(host.net.host(0, "Alice", true));
+        // the host alone: its own thumb is good, START needs a second player
+        t.run(200);
+        ASSERT_EQ(host.net.seat_quality(0), LinkQuality::Good);
+        ASSERT_EQ(host.net.seat_quality(1), LinkQuality::Unknown);          // an empty seat shows nothing
+        ASSERT_FALSE(host.net.can_start());
+        ASSERT_EQ(host.net.status_text(), std::string(sim::strings::text(sim::strings::kPressStart)));
+        // a real guest is measured within moments and everybody sees a green thumb
+        Machine& bob = t.add("Bob");
+        ASSERT_TRUE(bob.net.join("127.0.0.1", host.net.listen_port(), "Bob"));
+        ASSERT_TRUE(t.run_until([&]() { return host.net.can_start() && bob.net.room().slots[1].rtt_ms != kRttUnknown; }, 8000));
+        for (Machine* m : {&host, &bob}) {
+            ASSERT_EQ(m->net.seat_quality(0), LinkQuality::Good);
+            ASSERT_EQ(m->net.seat_quality(1), LinkQuality::Good);
+            ASSERT_TRUE(m->net.room().slots[1].rtt_ms < 1200);
+        }
+        ASSERT_EQ(bob.net.status_text(), std::string(sim::strings::text(sim::strings::kWaitingForHost)));
+        // a guest that says Hello but never answers a ping: its seat shows the question mark and the host cannot start with it
+        Table raw;
+        Machine& h2 = raw.add("Host");
+        ASSERT_TRUE(h2.net.host(0, "Host", true));
+        auto mute = TcpConnection::connect("127.0.0.1", h2.net.listen_port());
+        ASSERT_TRUE(mute != nullptr);
+        HelloMsg hello;
+        hello.name = "Mute";
+        bool sent = false;
+        raw.run_until(
+            [&]() {
+                std::vector<uint8_t> nothing;
+                mute->poll(nothing);
+                if (!sent && mute->is_open()) sent = mute->send(encode(hello));
+                return h2.net.room().slots[1].state == SlotState::Client;
+            },
+            5000);
+        ASSERT_TRUE(h2.net.room().slots[1].state == SlotState::Client);
+        raw.run(3000, [&](uint32_t) {
+            std::vector<uint8_t> msg;
+            while (mute->poll(msg)) {}                                      // reads the room and the pings, answers nothing
+        });
+        ASSERT_EQ(h2.net.seat_quality(1), LinkQuality::Unknown);            // no thumb: connected but not measured
+        ASSERT_FALSE(h2.net.can_start());                                   // "when all players' thumbs have appeared"
+        mute->close();
+        ASSERT_TRUE(raw.run_until([&]() { return h2.net.room().slots[1].state == SlotState::Empty; }, 5000));
+    } TEST_END();
+
+    TEST_CASE("N3.10 Thumbs: The Quality Tiers Are The Original's (below 1200 ms good, below 1800 ms ok, more bad, no answer yet unknown)") {
+        ASSERT_EQ(link_quality(0), LinkQuality::Good);
+        ASSERT_EQ(link_quality(1199), LinkQuality::Good);
+        ASSERT_EQ(link_quality(1200), LinkQuality::Ok);
+        ASSERT_EQ(link_quality(1799), LinkQuality::Ok);
+        ASSERT_EQ(link_quality(1800), LinkQuality::Bad);
+        ASSERT_EQ(link_quality(60000), LinkQuality::Bad);
+        ASSERT_EQ(link_quality(kRttUnknown), LinkQuality::Unknown);
+        // the strings of the original's setup screen, by id
+        ASSERT_EQ(std::string(sim::strings::text(sim::strings::kConnectingToHost)), "Trying to connect to the host...");
+        ASSERT_EQ(std::string(sim::strings::text(sim::strings::kTroubleConnecting)), "Having trouble connecting to host...");
+        ASSERT_EQ(std::string(sim::strings::text(sim::strings::kUnableToConnect)), "Unable to connect to host, recommend you quit...");
+        ASSERT_EQ(std::string(sim::strings::text(sim::strings::kWaitingForHost)), "Waiting for the host to start the game...");
+        ASSERT_EQ(std::string(sim::strings::text(sim::strings::kPressStart)), "Press START when all players' thumbs have appeared.");
+    } TEST_END();
+}
+
+void run_start_tests() {
+    TEST_CASE("N3.3 Start Barrier: Every Machine Loads The Same Map With The Same Seed And Roster, Then The Match Begins Everywhere") {
+        Table t;
+        ASSERT_TRUE(make_room(t, 2));
+        Machine& host = *t.machines[0];
+        host.net.set_map("TREASURE.LVL");
+        t.run(200);
+        uint64_t hash = 0;
+        ASSERT_TRUE(hash_file(maps_dir() + "TREASURE.LVL", hash));
+        ASSERT_TRUE(host.net.start_match(4242, hash));
+        ASSERT_EQ(host.net.phase(), NetGame::Phase::Loading);
+        ASSERT_TRUE(t.run_until([&]() { return everybody_playing(t); }, 5000));
+        for (auto& m : t.machines) {
+            ASSERT_EQ(m->loads, 1u);
+            ASSERT_EQ(m->net.start_info().seed, 4242u);
+            ASSERT_EQ(m->net.start_info().map_name, "TREASURE.LVL");
+            ASSERT_EQ(m->net.start_info().roster, 0x07);
+            ASSERT_EQ(m->sim.roster_mask(), 0x07);                          // seats 0, 1 and 2 play: the fourth team does not exist
+            ASSERT_TRUE(m->saw(NetGame::Event::Type::Begun));
+            ASSERT_EQ(m->net.start_info().names[m->net.my_seat()], m->name);
+        }
+        ASSERT_EQ(host.sim.grid().anthills().size(), 3u);
+        ASSERT_TRUE(all_equal(t));                                          // same start state before the first turn
+        // the door is closed: nobody joins a running match
+        Machine& late = t.add("Late");
+        ASSERT_TRUE(late.net.join("127.0.0.1", host.net.listen_port(), "Late"));
+        ASSERT_TRUE(t.run_until([&]() { return late.net.phase() == NetGame::Phase::Failed; }, 5000));
+    } TEST_END();
+
+    TEST_CASE("N3.4 Start Barrier: A Machine That Cannot Load The Map Cancels The Start For Everybody; The Room Works Again Afterwards") {
+        Table t;
+        ASSERT_TRUE(make_room(t, 2));
+        Machine& host = *t.machines[0];
+        Machine& carol = *t.machines[2];
+        host.net.set_map("SMALL.LVL");
+        uint64_t hash = 0;
+        ASSERT_TRUE(hash_file(maps_dir() + "SMALL.LVL", hash));
+        carol.corrupt_map = true;                                            // her file differs
+        ASSERT_TRUE(host.net.start_match(7, hash));
+        ASSERT_TRUE(t.run_until([&]() { return host.saw(NetGame::Event::Type::Cancelled); }, 5000));
+        ASSERT_TRUE(t.run_until([&]() {
+            for (auto& m : t.machines) {
+                if (m->net.phase() != NetGame::Phase::Room) return false;
+            }
+            return true;
+        }, 5000));
+        ASSERT_FALSE(host.net.status_text().empty());
+        carol.corrupt_map = false;                                           // fixed: the second try works
+        ASSERT_TRUE(host.net.start_match(8, hash));
+        ASSERT_TRUE(t.run_until([&]() { return everybody_playing(t); }, 5000));
+        ASSERT_TRUE(all_equal(t));
+    } TEST_END();
+}
+
+void run_match_tests() {
+    TEST_CASE("N3.5 Match: Three Machines Play 60 Seconds With Commands, Predicted Acknowledgements And Chat; All Simulations End Identical") {
+        Table t;
+        ASSERT_TRUE(make_room(t, 2));
+        Machine& host = *t.machines[0];
+        host.net.set_map("SMALL.LVL");
+        uint64_t hash = 0;
+        ASSERT_TRUE(hash_file(maps_dir() + "SMALL.LVL", hash));
+        ASSERT_TRUE(host.net.start_match(99, hash));
+        ASSERT_TRUE(t.run_until([&]() { return everybody_playing(t); }, 5000));
+        int predicted_acks = 0;
+        int orders = 0;
+        uint32_t next_order_ms = t.now + 500;
+        t.run(60000, [&](uint32_t now) {
+            if (now < next_order_ms) return;
+            next_order_ms = now + 700;
+            for (uint8_t seat = 0; seat < 3; ++seat) {
+                Machine& m = *t.machines[seat];
+                // an ant of the player's own team, sent somewhere on the 40 x 40 map
+                std::vector<uint32_t> mine;
+                for (const auto& a : m.sim.get_world_state().ants) {
+                    if (a.player_id == seat) mine.push_back(a.id);
+                }
+                if (mine.empty()) continue;
+                const uint32_t pick = mine[(now / 700 + seat) % mine.size()];
+                const sim::CommandResult r = m.net.submit(order(seat, pick, static_cast<int16_t>((now / 10 + seat * 7) % 40), static_cast<int16_t>((now / 30 + seat * 11) % 40)));
+                ASSERT_EQ(r.status, sim::CommandResult::Status::Applied);
+                ++orders;
+                predicted_acks += r.ack_ant != 0 ? 1 : 0;
+            }
+        });
+        ASSERT_TRUE(orders > 150);
+        ASSERT_TRUE(predicted_acks > orders / 2);                            // the click feedback is immediate for most orders
+        // chat: a guest's text comes back to everybody, the host's too, the sender is stamped by the connection
+        t.machines[1]->net.chat("hello from Bob", false);
+        host.net.chat("hello from Alice", true);
+        t.run(1000);
+        for (auto& m : t.machines) {
+            bool bob = false;
+            bool alice = false;
+            for (const auto& c : m->chats) {
+                if (c.text == "hello from Bob") bob = c.sender == 1 && !c.team;
+                if (c.text == "hello from Alice") alice = c.sender == 0 && c.team;
+            }
+            ASSERT_TRUE(bob && alice);
+        }
+        // every machine ran the same number of ticks at 20 Hz (60 s + 1 s = about 1200 - 1220) and the match is still identical
+        for (auto& m : t.machines) ASSERT_TRUE(m->ticks > 1150 && m->ticks < 1300);
+        host.net.freeze();
+        t.run(3000);
+        ASSERT_TRUE(all_equal(t));
+        for (auto& m : t.machines) ASSERT_FALSE(m->net.desynced());
+        ASSERT_EQ(t.machines[0]->sim.current_tick(), t.machines[1]->sim.current_tick());
+    } TEST_END();
+
+    TEST_CASE("N3.6 Match: A Guest Who Leaves Is Dropped At The Same Tick On Every Machine; The Others Play On, Identical") {
+        Table t;
+        ASSERT_TRUE(make_room(t, 2));
+        Machine& host = *t.machines[0];
+        host.net.set_map("SMALL.LVL");
+        uint64_t hash = 0;
+        ASSERT_TRUE(hash_file(maps_dir() + "SMALL.LVL", hash));
+        ASSERT_TRUE(host.net.start_match(5, hash));
+        ASSERT_TRUE(t.run_until([&]() { return everybody_playing(t); }, 5000));
+        t.run(5000);
+        t.machines[2]->net.leave();                                          // Carol quits
+        ASSERT_EQ(t.machines[2]->net.phase(), NetGame::Phase::Off);
+        t.run(5000);
+        for (size_t i = 0; i < 2; ++i) {
+            Machine& m = *t.machines[i];
+            ASSERT_EQ(m.count(NetGame::Event::Type::PlayerLeft), 1u);
+            ASSERT_TRUE(m.sim.is_player_dropped(2));
+            ASSERT_FALSE(m.sim.is_player_dropped(0));
+            ASSERT_FALSE(m.sim.is_player_dropped(1));
+            ASSERT_EQ(m.drop_ticks.size(), 1u);
+        }
+        ASSERT_EQ(host.drop_ticks[0], t.machines[1]->drop_ticks[0]);         // the same tick
+        ASSERT_TRUE(host.net.turns_executed() > 85);                         // the game went on (10 s = about 100 turns)
+        host.net.freeze();
+        t.run(2000);
+        ASSERT_TRUE(all_equal(t, 2));
+        size_t ants_of_carol = 0;
+        for (const auto& a : host.sim.get_world_state().ants) ants_of_carol += a.player_id == 2;
+        ASSERT_EQ(ants_of_carol, 0u);
+    } TEST_END();
+
+    TEST_CASE("N3.7 Match: When The Host Leaves The Guests Are Told (the match cannot go on without a sequencer yet)") {
+        Table t;
+        ASSERT_TRUE(make_room(t, 1));
+        Machine& host = *t.machines[0];
+        host.net.set_map("TINY.LVL");
+        uint64_t hash = 0;
+        ASSERT_TRUE(hash_file(maps_dir() + "TINY.LVL", hash));
+        ASSERT_TRUE(host.net.start_match(3, hash));
+        ASSERT_TRUE(t.run_until([&]() { return everybody_playing(t); }, 5000));
+        t.run(2000);
+        host.net.leave();
+        ASSERT_EQ(host.net.phase(), NetGame::Phase::Off);
+        Machine& bob = *t.machines[1];
+        ASSERT_TRUE(t.run_until([&]() { return bob.net.phase() == NetGame::Phase::Over; }, 15000));
+        ASSERT_TRUE(bob.saw(NetGame::Event::Type::HostLeft));
+        ASSERT_FALSE(bob.net.status_text().empty());
+        // commands after the end are ignored, not fatal
+        ASSERT_EQ(bob.net.submit(order(1, first_ant(bob, 1), 3, 3)).status, sim::CommandResult::Status::Ignored);
+    } TEST_END();
+
+    TEST_CASE("N3.8 Match: Two Players On A Four-Player Map Have Two Teams Only, And The Command Sink Refuses What It Must") {
+        Table t;
+        ASSERT_TRUE(make_room(t, 1));
+        Machine& host = *t.machines[0];
+        host.net.set_map("SMALL.LVL");
+        uint64_t hash = 0;
+        ASSERT_TRUE(hash_file(maps_dir() + "SMALL.LVL", hash));
+        // before the match nothing can be submitted
+        ASSERT_EQ(host.net.submit(order(0, 1, 5, 5)).status, sim::CommandResult::Status::Ignored);
+        ASSERT_TRUE(host.net.start_match(11, hash));
+        ASSERT_TRUE(t.run_until([&]() { return everybody_playing(t); }, 5000));
+        for (auto& m : t.machines) {
+            ASSERT_EQ(m->sim.roster_mask(), 0x03);
+            ASSERT_EQ(m->sim.grid().anthills().size(), 2u);
+            for (const auto& a : m->sim.get_world_state().ants) ASSERT_TRUE(a.player_id < 2);
+        }
+        // the system command cannot be submitted through the sink; a group order is stamped with the local seat whatever it says
+        Machine& bob = *t.machines[1];
+        Command drop;
+        drop.type = CommandType::Drop;
+        drop.issuer = 0;
+        ASSERT_EQ(bob.net.submit(drop).status, sim::CommandResult::Status::Ignored);
+        const uint32_t bobs_ant = first_ant(bob, 1);
+        const auto* bobs_hill = bob.sim.grid().find_anthill(1);
+        ASSERT_TRUE(bobs_hill != nullptr);
+        const int16_t goal_x = static_cast<int16_t>(bobs_hill->x + 4);      // the idle spot outside the hill: always open ground
+        const int16_t goal_y = static_cast<int16_t>(bobs_hill->y + 4);
+        Command forged = order(0, bobs_ant, goal_x, goal_y);                 // claims to be the host
+        const sim::CommandResult r = bob.net.submit(forged);
+        ASSERT_EQ(r.status, sim::CommandResult::Status::Applied);
+        ASSERT_EQ(r.ack_ant, bobs_ant);                                      // predicted for Bob's own ant
+        t.run(2000);
+        ASSERT_EQ(host.sim.get_unit(bobs_ant).orig_order, sim::AntUnit::kOrderMove);       // the order reached the host's simulation as Bob's
+        ASSERT_TRUE(host.sim.get_unit(bobs_ant).orig_order_tile == bob.sim.get_unit(bobs_ant).orig_order_tile);   // and is the same on both machines
+        host.net.freeze();
+        t.run(1500);
+        ASSERT_TRUE(all_equal(t));
+    } TEST_END();
+}
+
+}  // namespace
+
+int main() {
+    std::cout << "\n=======================================================\n [SUITE] Network port: NetGame (room, start barrier, match) over real sockets\n"
+                 "=======================================================\n";
+    run_room_tests();
+    run_thumb_tests();
+    run_start_tests();
+    run_match_tests();
+    std::cout << "\n=======================================================\n Total Test Cases: " << g_test_count << "\n Total Assertions: " << g_assert_count
+              << "\n Failed:           " << g_test_failures << "\n=======================================================\n";
+    return g_test_failures == 0 ? 0 : 1;
+}
