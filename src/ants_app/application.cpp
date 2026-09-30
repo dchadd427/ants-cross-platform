@@ -3,6 +3,8 @@
 #include "ants_app/ui_anim.hpp"
 #include "ants_app/version.hpp"
 #include <iostream>
+#include <fstream>
+#include <ctime>
 #include <cstring>
 #include <algorithm>
 #include <cstdlib>
@@ -210,6 +212,7 @@ bool Application::init(const ApplicationConfig& config) {
     show_start_view();
 
     // 8. Initialize HUD and Scorecard
+    hud_.set_text_metrics(renderer_.get());
     hud_.init(0);
     // The settings that the program remembers (the original reads its profile in the world's constructor, FUN_0100a2c9): loaded before anything is applied;
     // a headless run keeps them in memory only unless --settings names a file
@@ -326,6 +329,7 @@ bool Application::init(const ApplicationConfig& config) {
     // Determine initial AppState & audio lifecycle
     if (!config_.start_in_map_select) {
         state_ = AppState::Playing;
+        match_started_ = true;
         audio_mixer_.stop_music();
         midi_player_.stop();
         if (config_.select_ant_id > 0) {
@@ -384,14 +388,39 @@ bool Application::init(const ApplicationConfig& config) {
     return true;
 }
 
+// 0x10122d4: the stamp is the C runtime's `_strdate` ("mm/dd/yy") and `_strtime` ("hh:mm:ss") joined by " @ " (the format string "%s @ %s\n\n")
+std::string Application::transcript_stamp(std::time_t time) {
+    char date[16] = {0};
+    char clock[16] = {0};
+    if (const std::tm* local = std::localtime(&time)) {
+        std::strftime(date, sizeof(date), "%m/%d/%y", local);
+        std::strftime(clock, sizeof(clock), "%H:%M:%S", local);
+    }
+    return std::string(date) + " @ " + clock;
+}
+
+bool Application::write_chat_transcript(const std::string& path) const {
+    std::ofstream out(path, std::ios::binary | std::ios::trunc);
+    if (!out) return false;
+    out << hud_.chat_transcript(transcript_stamp(std::time(nullptr)));
+    return static_cast<bool>(out);
+}
+
 void Application::shutdown() {
     is_running_ = false;
+#if !defined(__EMSCRIPTEN__)
+    if (!config_.headless && match_started_) {
+        const std::string folder = ConfigStore::default_folder();
+        if (!folder.empty()) write_chat_transcript(folder + "chat.txt");      // FUN_01010210: "Exiting...", then the chat log goes to chat.txt
+    }
+#endif
     if (net_) net_->leave();                              // the others see a clean goodbye, not a dead connection
 
     midi_player_.shutdown();
     audio_mixer_.shutdown_sdl_audio();
 
     if (renderer_) {
+        hud_.set_text_metrics(nullptr);                       // the HUD measures its chat with the renderer that goes away here
         renderer_->shutdown();
         renderer_.reset();
     }
@@ -474,6 +503,7 @@ void Application::enter_match() {
     }
 
     state_ = AppState::Playing;
+    match_started_ = true;
 }
 
 // The names of the teams reach every place that shows one: the simulation's texts (alliances, drop-outs, the chat log), the HUD's score labels,
@@ -766,11 +796,6 @@ void Application::handle_events() {
             case SDL_MOUSEBUTTONDOWN:
             case SDL_MOUSEBUTTONUP:
                 handle_mouse_button(event.button);
-                break;
-            case SDL_MOUSEWHEEL:
-                if (state_ == AppState::Playing) {
-                    hud_.handle_mouse_wheel(mouse_screen_x_, mouse_screen_y_, event.wheel.y);
-                }
                 break;
             default:
                 break;

@@ -138,10 +138,16 @@ void HUD::init(uint8_t local_player_id) {
     is_radar_dragging_ = false;
     status_line_.clear();
     selection_status_pending_ = false;
+    chat_entries_.clear();
     chat_log_.clear();
     chat_line_colour_.clear();
-    chat_line_indent_.clear();
-    chat_scroll_offset_ = 0;
+    chat_content_end_ = 0;
+    chat_follow_pos_ = 0;
+    chat_follow_target_ = 0;
+    chat_follow_task_ = false;
+    chat_dragging_ = false;
+    chat_drag_offset_ = 0;
+    chat_scroll_task_ = false;
     post_status_id(sim::strings::kWelcome, "Ants");    // FUN_0100dbe2 0x100e173, once when the match screen is built
     add_news_flash(0, "Game started! Go get that food!");     // FUN_01022432: "[0:00] News Flash:", the start message
 
@@ -215,6 +221,9 @@ void HUD::update(const sim::WorldState& world, uint32_t delta_ticks) {
             unlatch_pedestals();
         }
     }
+
+    // The chat log's two tasks (CHATAPPD, CHATSCRL)
+    update_chat_tasks();
 
     // 1. The status line (CLEARSTAT and TXTFLASH tasks) and the text that a selection change decides
     status_line_.update(delta_ticks);
@@ -493,26 +502,8 @@ void HUD::render(IRenderer& renderer, const assets::AssetArchive& assets,
     // 2.3 Lower Panel: Always render Chat Section
     // Cursive embossed Chat header at (480, 266)
 
-    // White chat history log wchat.bmp (143x103) at (479, 298): the view (482, 299) - (620, 400) shows 12 px lines, headers in
-    // the colour of their team (news flashes (79, 0, 143)), bodies in (7, 11, 15) indented by 12 px
-    {
-        static const assets::ColorRGBA kChatColours[6] = {
-            {39, 39, 59, 255}, {43, 39, 107, 255}, {119, 0, 0, 255}, {7, 67, 47, 255}, {79, 0, 143, 255}, {7, 11, 15, 255}};
-        int32_t cty = 299;
-        const int32_t total_lines = static_cast<int32_t>(chat_log_.size());
-        const int32_t max_scroll = std::max(0, total_lines - kChatVisibleLines);
-        chat_scroll_offset_ = std::clamp(chat_scroll_offset_, 0, max_scroll);
-        const int32_t start_cidx = (total_lines > kChatVisibleLines) ? (total_lines - kChatVisibleLines - chat_scroll_offset_) : 0;
-        const int32_t end_cidx = std::min(total_lines, start_cidx + kChatVisibleLines);
-        for (int32_t i = start_cidx; i < end_cidx; ++i) {
-            const size_t li = static_cast<size_t>(i);
-            const int32_t indent = chat_line_indent_[li];
-            std::string text = chat_log_[li];
-            while (text.size() > 1 && renderer.get_text_width(text, FontSize::Px12) > 138 - indent) text.pop_back();   // clipped by its box
-            renderer.draw_text(text, 482 + indent, cty, kChatColours[std::min<size_t>(chat_line_colour_[li], 5)], FontSize::Px12);
-            cty += 12;
-        }
-    }
+    // White chat history log wchat.bmp (143x103) at (479, 298): the view (482, 299) - (620, 400), drawn by render_chat_log
+    render_chat_log(renderer);
 
     // Ant relief horizontal divider bar x480y400.bmp (141x24) at (480, 400)
 
@@ -1273,6 +1264,12 @@ bool HUD::handle_mouse_down(int32_t x, int32_t y, uint8_t button,
         return true;
     }
 
+    // The chat log window's own mouse handler (FUN_01012015, the left button): a press inside its view starts the drag
+    if (button == SDL_BUTTON_LEFT && in_chat_view(x, y)) {
+        start_chat_drag(x, y);
+        return true;
+    }
+
     if (button == SDL_BUTTON_RIGHT) {
         // The press saves its point and captures the view under it (FUN_01028751); the order is given at the release (FUN_01027b51)
         right_press_x_ = x;
@@ -1338,6 +1335,7 @@ bool HUD::handle_mouse_up(int32_t x, int32_t y, uint8_t button,
     mouse_x_ = x;
     mouse_y_ = y;
     const bool captured_before = is_input_captured();      // [5534] != 0 while the event is processed
+    if (button == SDL_BUTTON_LEFT) end_chat_drag();        // FUN_01012015: the release of the left button ends a drag of the chat log
     // The button class (FUN_01011206 / FUN_01011281): the callback runs at the release when the button is still captured, that is when the
     // pointer has not left it (leaving cancels the capture for good)
     const bool left_release = (button == SDL_BUTTON_LEFT);
@@ -1479,6 +1477,11 @@ bool HUD::handle_mouse_motion(int32_t x, int32_t y,
         return true;
     }
 
+    if (chat_dragging_) {                          // FUN_01012096
+        move_chat_drag(x, y);
+        return true;
+    }
+
     if (is_dragging_) {
         drag_curr_x_ = x;
         drag_curr_y_ = y;
@@ -1592,12 +1595,6 @@ bool HUD::handle_key_down(int32_t key, sim::SimulationEngine& sim, ViewportCamer
             clear_selection();
             unlatch_pedestals();
             return true;
-        case SDLK_PAGEUP:                                      // (not in the original: the chat log scrolls with a bar)
-            scroll_chat_up(4);
-            return true;
-        case SDLK_PAGEDOWN:
-            scroll_chat_down(4);
-            return true;
         default:
             break;
     }
@@ -1684,7 +1681,6 @@ void HUD::send_chat(bool to_team) {
     add_chat_entry(player_name_.empty() ? "Player" : player_name_, chat_input_, to_team && is_on_team_);
     if (on_chat_send_) on_chat_send_(chat_input_, to_team && is_on_team_);
     chat_input_.clear();
-    chat_scroll_offset_ = 0;
 }
 
 // The callbacks of the options screen (FUN_01015058 / FUN_01015092 / FUN_010150bc, FUN_01014f5a .. FUN_0101501f, FUN_0100bbf2): the profile is written first, then the
@@ -1715,25 +1711,24 @@ void HUD::trigger_quick_chat(size_t index) {
 
 namespace {
 
-// Wraps a text into lines of at most `max_chars` characters at spaces (a word longer than a line is cut).
-void wrap_chat_text(const std::string& text, size_t max_chars, std::vector<std::string>& out) {
-    size_t start = 0;
-    while (start < text.length()) {
-        if (text.length() - start <= max_chars) {
-            out.push_back(text.substr(start));
-            break;
-        }
-        size_t split = text.rfind(' ', start + max_chars);
-        if (split == std::string::npos || split <= start) split = start + max_chars;
-        out.push_back(text.substr(start, split - start));
-        start = split;
-        while (start < text.length() && text[start] == ' ') ++start;
-    }
-}
-
-constexpr size_t kChatBodyCharsPerLine = 21;    // the body's 126 px at 6 px per character
 constexpr size_t kChatBodyMaxChars = 100;
-constexpr size_t kChatLogMaxLines = 5000;       // the original never trims; only a safety bound against endless matches
+constexpr size_t kChatHeaderMaxChars = 50;      // the header text object holds 50 characters
+
+// What measures the text when no renderer was given (every character 6 px wide: the IRenderer defaults)
+class DefaultTextMetrics final : public IRenderer {
+public:
+    void draw_sprite(uint32_t, int32_t, int32_t, bool) override {}
+    void draw_named_sprite(const std::string&, int32_t, int32_t, bool) override {}
+    void fill_rect(int32_t, int32_t, int32_t, int32_t, assets::ColorRGBA) override {}
+    void draw_rect(int32_t, int32_t, int32_t, int32_t, assets::ColorRGBA) override {}
+    void draw_text(const std::string&, int32_t, int32_t, assets::ColorRGBA) override {}
+    void set_hud_team(uint8_t) override {}
+};
+
+const IRenderer& default_text_metrics() {
+    static const DefaultTextMetrics metrics;
+    return metrics;
+}
 
 }  // namespace
 
@@ -1742,22 +1737,67 @@ void HUD::add_chat_entry(const std::string& sender, const std::string& message, 
     push_chat_entry(sender + (team_only ? " (To Teammate):" : ":"), message, colour);
 }
 
-void HUD::push_chat_entry(std::string header, const std::string& message, uint8_t colour) {
-    if (header.size() > 50) header.resize(50);                       // the header text object holds 50 characters
-    chat_log_.push_back(header);
-    chat_line_colour_.push_back(colour);
-    chat_line_indent_.push_back(0);
-    std::vector<std::string> lines;
-    wrap_chat_text(message.substr(0, kChatBodyMaxChars), kChatBodyCharsPerLine, lines);
-    for (auto& line : lines) {
-        chat_log_.push_back(std::move(line));
+void HUD::set_text_metrics(const IRenderer* metrics) {
+    if (text_metrics_ == metrics) return;
+    text_metrics_ = metrics;
+    relayout_chat();
+}
+
+// The labels of an entry (FUN_010123e2): the header is one line (no wrap), the body wraps at 126 px; both are 12 px labels. The entry starts at `top`, the body under the header.
+void HUD::layout_chat_entry(ChatEntry& entry, int32_t top) const {
+    const IRenderer& metrics = text_metrics_ != nullptr ? *text_metrics_ : default_text_metrics();
+    const int32_t line = font_cell_height(FontSize::Px12);
+    entry.top = top;
+    entry.header_h = line;
+    entry.body_lines = wrap_label_text(metrics, entry.body, kChatBodyW, FontSize::Px12);
+    entry.body_h = static_cast<int32_t>(entry.body_lines.size()) * line;
+}
+
+void HUD::append_chat_display_lines(const ChatEntry& entry) {
+    chat_log_.push_back(entry.header);
+    chat_line_colour_.push_back(entry.colour);
+    for (const std::string& line : entry.body_lines) {
+        chat_log_.push_back(line);
         chat_line_colour_.push_back(5);
-        chat_line_indent_.push_back(12);
     }
-    while (chat_log_.size() > kChatLogMaxLines) {
-        chat_log_.pop_front();
-        chat_line_colour_.pop_front();
-        chat_line_indent_.pop_front();
+}
+
+// The measure changed: every label is measured again and the entries are restacked; the window's positions stay inside the new log
+void HUD::relayout_chat() {
+    chat_log_.clear();
+    chat_line_colour_.clear();
+    int32_t top = 0;
+    for (ChatEntry& entry : chat_entries_) {
+        layout_chat_entry(entry, top);
+        append_chat_display_lines(entry);
+        top = entry.bottom() + 1;
+    }
+    chat_content_end_ = top;
+    const int32_t limit = std::max(0, chat_content_end_ - kChatViewH);
+    chat_follow_pos_ = std::min(chat_follow_pos_, limit);
+    chat_follow_target_ = std::min(chat_follow_target_, limit);
+    chat_drag_offset_ = std::min(chat_drag_offset_, limit);
+}
+
+// AddLine (0x10120e9): the entry is made at the end of the log (`+0x2c`), the end moves to its bottom + 1, and when the end is now below the window the window's target is the
+// position that puts the new bottom on the window's last row; the follow task (CHATAPPD) is started unless it is running (the window is not at its target)
+void HUD::push_chat_entry(std::string header, const std::string& message, uint8_t colour) {
+    if (header.size() > kChatHeaderMaxChars) header.resize(kChatHeaderMaxChars);
+    ChatEntry entry;
+    entry.header = std::move(header);
+    entry.body = message.substr(0, kChatBodyMaxChars);
+    entry.colour = colour;
+    layout_chat_entry(entry, chat_content_end_);
+    append_chat_display_lines(entry);
+    const int32_t bottom = entry.bottom();
+    chat_content_end_ = bottom + 1;
+    chat_entries_.push_back(std::move(entry));
+    if (kChatViewH < chat_content_end_ - chat_follow_pos_) {
+        if (chat_follow_pos_ == chat_follow_target_) {
+            chat_follow_task_ = true;
+            chat_follow_due_ms_ = clock_ms();                   // AddTask(task, 0, 50 ms, 0): the first pass is the next one
+        }
+        chat_follow_target_ = bottom - kChatViewH;
     }
 }
 
@@ -1777,31 +1817,90 @@ void HUD::receive_chat_message(uint8_t sender, const std::string& name, const st
     add_chat_entry(name, text, to_team, 3 - (sender & 3));
 }
 
-void HUD::scroll_chat_up(int32_t lines) noexcept {
-    int32_t total_lines = static_cast<int32_t>(chat_log_.size());
-    int32_t max_scroll = std::max(0, total_lines - kChatVisibleLines);
-    chat_scroll_offset_ = std::clamp(chat_scroll_offset_ + lines, 0, max_scroll);
-}
-
-void HUD::scroll_chat_down(int32_t lines) noexcept {
-    int32_t total_lines = static_cast<int32_t>(chat_log_.size());
-    int32_t max_scroll = std::max(0, total_lines - kChatVisibleLines);
-    chat_scroll_offset_ = std::clamp(chat_scroll_offset_ - lines, 0, max_scroll);
-}
-
-void HUD::handle_mouse_wheel(int32_t screen_x, int32_t screen_y, int32_t wheel_y) {
-    if (wheel_y == 0) return;
-    bool in_lower_chat = (screen_x >= 475 && screen_x <= 635 && screen_y >= 265 && screen_y <= 445);
-    bool in_upper_chat = (selected_ant_ids_.empty() && selected_ant_id_ == 0 && selected_base_team_id_ < 0 &&
-                          screen_x >= 475 && screen_x <= 635 && screen_y >= 130 && screen_y <= 245);
-
-    if (in_lower_chat || in_upper_chat) {
-        if (wheel_y > 0) {
-            scroll_chat_up(wheel_y);
+// CHATAPPD (0x1025282, every 50 ms) and CHATSCRL (0x1025234, every 100 ms) run on the list scheduler, which runs a task at the next pass after it is due and
+// then a period later
+void HUD::update_chat_tasks() {
+    const uint32_t now = clock_ms();
+    if (chat_follow_task_ && static_cast<int32_t>(now - chat_follow_due_ms_) >= 0) {
+        if (chat_follow_pos_ == chat_follow_target_) {
+            chat_follow_task_ = false;                                  // the task returns 0 and is removed
         } else {
-            scroll_chat_down(-wheel_y);
+            // the position moves toward the target by at most 5 px per pass
+            const int32_t step = std::min(kChatFollowStep, std::abs(chat_follow_target_ - chat_follow_pos_));
+            chat_follow_pos_ += chat_follow_target_ > chat_follow_pos_ ? step : -step;
+            chat_follow_due_ms_ = now + kChatFollowPeriodMs;
         }
     }
+    if (chat_scroll_task_ && static_cast<int32_t>(now - chat_scroll_due_ms_) >= 0) {
+        // the pointer of the last press or drag event: outside the view the log scrolls 15 px per pass (up while it is above the view, down from below)
+        if (!in_chat_view(chat_drag_x_, chat_drag_y_)) chat_scroll_by(chat_drag_y_ >= kChatViewY ? -kChatScrollStep : kChatScrollStep);
+        chat_scroll_due_ms_ = now + kChatScrollPeriodMs;
+    }
+}
+
+// 0x101228a: the dragged position moves by `delta` inside the log (only when the log is at least as high as the view)
+void HUD::chat_scroll_by(int32_t delta) noexcept {
+    if (kChatViewH <= chat_content_end_) {
+        const int32_t room_below = (chat_content_end_ - kChatViewH) - chat_drag_offset_;
+        const int32_t room_above = -chat_drag_offset_;
+        const int32_t d = std::min(std::max(delta, room_above), room_below);
+        chat_drag_offset_ += d;
+    }
+}
+
+// 0x1012015, a left press: inside the view the drag starts from the window's current position and CHATSCRL is scheduled
+void HUD::start_chat_drag(int32_t x, int32_t y) {
+    chat_drag_x_ = x;
+    chat_drag_y_ = y;
+    chat_drag_offset_ = chat_follow_pos_;
+    chat_dragging_ = true;
+    if (!chat_scroll_task_) {
+        chat_scroll_task_ = true;
+        chat_scroll_due_ms_ = clock_ms();
+    }
+}
+
+// 0x1012096: while dragging, the pointer is remembered and a move inside the view scrolls the log by the distance the pointer went up
+void HUD::move_chat_drag(int32_t x, int32_t y) {
+    if (!chat_dragging_) return;
+    const int32_t delta = chat_drag_y_ - y;
+    chat_drag_x_ = x;
+    chat_drag_y_ = y;
+    if (in_chat_view(x, y)) chat_scroll_by(delta);
+}
+
+// 0x1012015, the release: the log shows the window that follows the newest entry again
+void HUD::end_chat_drag() noexcept {
+    chat_dragging_ = false;
+    chat_scroll_task_ = false;
+}
+
+// FUN_01012190: the entries that reach into the view are drawn at their place, the header at the left edge and the body 10 px right of it, clipped to the view
+void HUD::render_chat_log(IRenderer& renderer) {
+    static const assets::ColorRGBA kChatColours[6] = {
+        {39, 39, 59, 255}, {43, 39, 107, 255}, {119, 0, 0, 255}, {7, 67, 47, 255}, {79, 0, 143, 255}, {7, 11, 15, 255}};
+    const int32_t offset = chat_view_offset();
+    const int32_t line = font_cell_height(FontSize::Px12);
+    renderer.set_clip_rect(kChatViewX, kChatViewY, kChatViewW, kChatViewH);
+    for (const ChatEntry& entry : chat_entries_) {
+        if (entry.bottom() <= offset) continue;
+        if (entry.top >= offset + kChatViewH) break;
+        const int32_t y = kChatViewY + entry.top - offset;
+        draw_single_line_label(renderer, entry.header, kChatViewX, y, kChatViewW, true, kChatColours[std::min<size_t>(entry.colour, 5)], FontSize::Px12);
+        int32_t body_y = y + entry.header_h;
+        for (const std::string& body_line : entry.body_lines) {
+            renderer.draw_text(body_line, kChatViewX + kChatBodyX, body_y, kChatColours[5], FontSize::Px12);
+            body_y += line;
+        }
+    }
+    renderer.clear_clip_rect();
+}
+
+// What the original writes into chat.txt when the program ends (0x10122d4): "%s @ %s\n\n" with the date and the time, then "%s %s\n" for every entry
+std::string HUD::chat_transcript(const std::string& date_time) const {
+    std::string out = date_time + "\n\n";
+    for (const ChatEntry& entry : chat_entries_) out += entry.header + " " + entry.body + "\n";
+    return out;
 }
 
 } // namespace ants::app

@@ -81,6 +81,17 @@ public:
     void draw_rgba_image(int32_t x, int32_t y, int32_t w, int32_t h, const uint8_t* rgba) override {
         images.push_back({x, y, w, h, std::vector<uint8_t>(rgba, rgba + static_cast<size_t>(w) * static_cast<size_t>(h) * 4u)});
     }
+    void set_clip_rect(int32_t x, int32_t y, int32_t w, int32_t h) override {
+        clips.push_back({x, y, w, h});
+        clip_on = true;
+        // what is drawn while a clip is set is marked: texts[] entries from here on belong to this clip
+        clip_first_text.push_back(texts.size());
+    }
+    void clear_clip_rect() override {
+        clip_on = false;
+        ++clip_clears;
+        clip_last_text.push_back(texts.size());
+    }
 
     // All sprites drawn with this image name (e.g. "dig1.bmp")
     std::vector<SpriteDraw> named(const std::string& name) const {
@@ -100,6 +111,11 @@ public:
     std::vector<FillDraw> fills;
     std::vector<FillDraw> rects;         // frames (draw_rect)
     std::vector<Text> texts;
+    std::vector<std::array<int32_t, 4>> clips;    // set_clip_rect calls (x, y, w, h)
+    std::vector<size_t> clip_first_text;          // texts.size() when each clip was set ...
+    std::vector<size_t> clip_last_text;           // ... and when it was cleared
+    bool clip_on{false};
+    int clip_clears{0};
     uint8_t hud_team{0};
 
 private:
@@ -943,6 +959,206 @@ void test_minimap_dots(const assets::AssetArchive& arc) {
         hud.init(0);
         hud.render(rr, arc, world, camera);
         check(rr.rects.size() == 1 && rr.rects[0].w == 54 && rr.rects[0].h == 41, "on a 31x31 map the frame is 54x41");
+    }
+}
+
+// The chat log window (Ants.exe 0x1011e78 and its line class 0x10123e2, docs 5.56): entries of two labels stacked one pixel apart, the window that follows the newest entry
+// (CHATAPPD), the drag that shows earlier lines while the button is held (0x1012015 / 0x1012096 / 0x101228a) and its auto-repeat (CHATSCRL).
+namespace {
+uint32_t g_chat_clock = 0;
+uint32_t chat_clock() { return g_chat_clock; }
+
+// A renderer with proportional letters: 'i', 'l' and ' ' are 3 px wide, everything else 7 px
+class NarrowRenderer : public IRenderer {
+public:
+    void draw_sprite(uint32_t, int32_t, int32_t, bool) override {}
+    void draw_named_sprite(const std::string&, int32_t, int32_t, bool) override {}
+    void fill_rect(int32_t, int32_t, int32_t, int32_t, assets::ColorRGBA) override {}
+    void draw_rect(int32_t, int32_t, int32_t, int32_t, assets::ColorRGBA) override {}
+    void draw_text(const std::string&, int32_t, int32_t, assets::ColorRGBA) override {}
+    int32_t get_text_width(const std::string& text, FontSize = FontSize::Px12) const override {
+        int32_t w = 0;
+        for (char c : text) w += (c == 'i' || c == 'l' || c == ' ') ? 3 : 7;
+        return w;
+    }
+    void set_hud_team(uint8_t) override {}
+};
+}  // namespace
+
+void test_chat_log(const assets::AssetArchive& arc) {
+    std::printf("[chat] the log window: one pixel between entries, pixel wrapping, the follow task, the drag and its auto-repeat, the clip\n");
+    sim::SimulationEngine sim;
+    sim.init_test_world(60, 60, 1);
+    ViewportCamera camera;
+    auto text_at = [](const RecordingRenderer& rr, const std::string& text) -> const RecordingRenderer::Text* {
+        for (const auto& t : rr.texts) if (t.text == text) return &t;
+        return nullptr;
+    };
+
+    HUD hud;
+    hud.init(0);
+    hud.set_ticks_function(&chat_clock);
+    g_chat_clock = 1000;
+    // the start message: a 12 px header and a body of two 12 px lines (36 px); the log ends one pixel below
+    check(hud.chat_content_end() == 37 && hud.chat_follow_pos() == 0 && hud.chat_follow_target() == 0, "the start message fills 36 px and the log ends at 37");
+    hud.add_chat_entry("Ann", "hi", false, 2);                   // 24 px: top 37, bottom 61
+    check(hud.chat_content_end() == 62, "an entry starts one pixel below the one before: 37 + 24 + 1 = 62");
+    check(hud.chat_follow_target() == 0, "a log that fits in the 101 px view does not move the window");
+
+    // what is drawn: headers at the view's left edge, bodies 10 px right of it, the log from y = 299, inside a clip of the view's size
+    {
+        RecordingRenderer rr(arc);
+        hud.render(rr, arc, sim.get_world_state(), camera);
+        const auto* news = text_at(rr, "[0:00] News Flash:");
+        const auto* ann = text_at(rr, "Ann:");
+        const auto* hi = text_at(rr, "hi");
+        check(news && news->x == 482 && news->y == 299, "the first header is at (482, 299)");
+        check(ann && ann->x == 482 && ann->y == 299 + 37, "the next header is 37 px below it (a 36 px entry and one pixel)");
+        check(hi && hi->x == 492 && hi->y == 299 + 37 + 12, "a body is 10 px right of its header and one header line below it");
+        check(rr.clips.size() == 1 && rr.clips[0] == std::array<int32_t, 4>{482, 299, 138, 101} && rr.clip_clears == 1 && !rr.clip_on, "the log is clipped to its 138 x 101 view");
+    }
+
+    // the third entry ends at 112 - 0 > 101: the window has to follow. Its target puts the new bottom on the view's last row (bottom 111 - 101 = 10); the task is due at once
+    hud.add_chat_entry("Bob", "hello", false, 3);                // top 62, bottom 86, end 87
+    check(hud.chat_follow_target() == 0, "87 px still fit");
+    hud.add_chat_entry("Cy", "there", false, 1);                 // top 87, bottom 111, end 112
+    check(hud.chat_content_end() == 112 && hud.chat_follow_target() == 10 && hud.chat_follow_pos() == 0, "the log ends at 112: the window's target is bottom - 101 = 10");
+    hud.update(sim.get_world_state(), 1);                        // the task's first pass: 5 px
+    check(hud.chat_follow_pos() == 5, "the follow task moves the window 5 px at its first pass");
+    hud.update(sim.get_world_state(), 1);
+    check(hud.chat_follow_pos() == 5, "...and waits 50 ms for the next");
+    g_chat_clock += 49;
+    hud.update(sim.get_world_state(), 1);
+    check(hud.chat_follow_pos() == 5, "49 ms are not enough");
+    g_chat_clock += 1;
+    hud.update(sim.get_world_state(), 1);
+    check(hud.chat_follow_pos() == 10, "the next pass at 50 ms reaches the target 10");
+    g_chat_clock += 50;
+    hud.update(sim.get_world_state(), 1);                        // the pass that finds the target reached ends the task
+    g_chat_clock += 50;
+    hud.add_chat_entry("Di", "x", false, 0);                      // top 112, bottom 136, end 137: target 35; the task was gone, so this starts it again (window at its target)
+    check(hud.chat_follow_target() == 35 && hud.chat_follow_pos() == 10, "a new entry moves the target");
+    hud.add_chat_entry("Ed", "y", false, 0);                      // top 137, bottom 161, end 162: target 60; the task is running (the window is away from its target): only the target moves
+    check(hud.chat_follow_target() == 60, "the target follows the newest bottom");
+    for (int pass = 0; pass < 40; ++pass) { g_chat_clock += 50; hud.update(sim.get_world_state(), 1); }
+    check(hud.chat_follow_pos() == 60, "the window arrives at 60, 5 px per 50 ms pass and never beyond");
+
+    // the window is drawn from its position: the first entry is out of the view, the partly visible ones are drawn (the clip cuts them), Cy's body ends at the view's last row
+    {
+        RecordingRenderer rr(arc);
+        hud.render(rr, arc, sim.get_world_state(), camera);
+        check(text_at(rr, "[0:00] News Flash:") == nullptr, "an entry whose bottom is above the window is not drawn (36 <= 60)");
+        const auto* ann = text_at(rr, "Ann:");
+        check(ann && ann->y == 299 + 37 - 60, "Ann's header is drawn above the view, at y = 299 + 37 - 60 (only its last rows would show: entry bottom 61 > 60)");
+        const auto* ed = text_at(rr, "Ed:");
+        check(ed && ed->y == 299 + 137 - 60, "the newest header at 299 + 137 - 60 = 376");
+        const auto* y_body = text_at(rr, "y");
+        check(y_body && y_body->y == 299 + 137 - 60 + 12 && y_body->y + 12 == 299 + 101, "its body ends on the last row of the view (y + 12 = 400)");
+    }
+
+    // The drag (0x1012015): a left press inside the view starts it from the window's position; a press outside or with the right button does nothing
+    const int32_t follow = hud.chat_follow_pos();
+    hud.handle_mouse_down(470, 350, SDL_BUTTON_LEFT, sim, camera);
+    check(!hud.chat_dragging(), "a press left of the view starts nothing");
+    hud.handle_mouse_down(625, 350, SDL_BUTTON_LEFT, sim, camera);
+    check(!hud.chat_dragging(), "a press right of the view starts nothing");
+    hud.handle_mouse_down(500, 405, SDL_BUTTON_LEFT, sim, camera);
+    check(!hud.chat_dragging(), "a press below the view (the divider bar) starts nothing");
+    hud.handle_mouse_down(500, 350, SDL_BUTTON_RIGHT, sim, camera);
+    check(!hud.chat_dragging(), "the right button does not drag the log");
+    hud.handle_mouse_up(500, 350, SDL_BUTTON_RIGHT, sim, camera);
+    hud.handle_mouse_down(500, 350, SDL_BUTTON_LEFT, sim, camera);
+    check(hud.chat_dragging() && hud.chat_drag_offset() == follow && hud.chat_view_offset() == follow, "a press inside the view starts the drag at the window's position");
+    // a move inside the view scrolls by the distance that the pointer went UP; the window is clamped to [0, end - 101] = [0, 61]
+    hud.handle_mouse_motion(500, 380, sim, camera);                // 30 px down: earlier lines
+    check(hud.chat_drag_offset() == follow - 30, "30 px down shows 30 px earlier");
+    hud.handle_mouse_motion(500, 300, sim, camera);                // 80 px up
+    check(hud.chat_drag_offset() == 61, "80 px up is clamped at the end of the log minus the view (162 - 101 = 61)");
+    hud.handle_mouse_motion(500, 398, sim, camera);                // 98 px down
+    check(hud.chat_drag_offset() == 0, "and at 0 at the top");
+    {
+        RecordingRenderer rr(arc);
+        hud.render(rr, arc, sim.get_world_state(), camera);
+        const auto* news = text_at(rr, "[0:00] News Flash:");
+        check(news && news->y == 299, "while dragging the log is drawn from the dragged position (here the top)");
+    }
+    // outside the view a move scrolls nothing; CHATSCRL (100 ms) scrolls 15 px per pass, up while the pointer is below the view and down while it is above it
+    hud.handle_mouse_motion(500, 420, sim, camera);                // below the view
+    check(hud.chat_drag_offset() == 0, "a move outside the view does not scroll");
+    hud.handle_mouse_motion(500, 250, sim, camera);                // above the view
+    g_chat_clock += 100;
+    hud.update(sim.get_world_state(), 1);
+    check(hud.chat_drag_offset() == 15, "above the view: +15 at a pass of CHATSCRL");
+    hud.update(sim.get_world_state(), 1);
+    check(hud.chat_drag_offset() == 15, "the next pass is 100 ms later");
+    g_chat_clock += 100;
+    hud.update(sim.get_world_state(), 1);
+    check(hud.chat_drag_offset() == 30, "+15 again");
+    hud.handle_mouse_motion(500, 420, sim, camera);                // below the view
+    g_chat_clock += 100;
+    hud.update(sim.get_world_state(), 1);
+    check(hud.chat_drag_offset() == 15, "below the view: -15");
+    g_chat_clock += 100;
+    hud.update(sim.get_world_state(), 1);
+    g_chat_clock += 100;
+    hud.update(sim.get_world_state(), 1);
+    check(hud.chat_drag_offset() == 0, "...down to the top and not beyond");
+    // the release ends it: the log shows the window that follows the newest entry again, and nothing scrolls any more
+    hud.handle_mouse_motion(500, 250, sim, camera);
+    hud.handle_mouse_up(500, 250, SDL_BUTTON_LEFT, sim, camera);
+    check(!hud.chat_dragging() && hud.chat_view_offset() == hud.chat_follow_pos(), "the release snaps the log back to the newest entries");
+    g_chat_clock += 500;
+    hud.update(sim.get_world_state(), 1);
+    check(hud.chat_drag_offset() == 0 && hud.chat_view_offset() == hud.chat_follow_pos(), "no task scrolls after the release");
+
+    // the window keeps following while it is dragged: the dragged view is not touched
+    hud.handle_mouse_down(500, 350, SDL_BUTTON_LEFT, sim, camera);
+    const int32_t dragged = hud.chat_drag_offset();
+    hud.add_chat_entry("Flo", "z", false, 2);
+    check(hud.chat_drag_offset() == dragged && hud.chat_follow_target() == hud.chat_content_end() - 1 - 101, "a new entry moves the target, not the dragged position");
+    hud.handle_mouse_up(500, 350, SDL_BUTTON_LEFT, sim, camera);
+
+    // a dialog takes the press: with the options screen open the log is not dragged
+    hud.open_options();
+    hud.handle_mouse_down(500, 350, SDL_BUTTON_LEFT, sim, camera);
+    check(!hud.chat_dragging(), "a modal window takes every press");
+    hud.handle_mouse_up(500, 350, SDL_BUTTON_LEFT, sim, camera);
+    hud.close_options();
+
+    // a header that is wider than its 138 px shows its end (the label's tail flag): 6 px per character here, 23 characters fit
+    {
+        HUD h2;
+        h2.init(0);
+        h2.add_chat_entry(std::string(30, 'A'), "x", false, 3);
+        RecordingRenderer rr(arc);
+        h2.render(rr, arc, sim.get_world_state(), camera);
+        bool found = false;
+        for (const auto& t : rr.texts) if (t.text.size() == 23 && t.text.back() == ':' && t.text[0] == 'A') found = t.x == 482 + 138 - 23 * 6;
+        check(found, "a header wider than 138 px is drawn right aligned with its front cut off");
+    }
+
+    // the body wraps by PIXELS with the measure that the HUD was given (the original measures a label with GDI when it is made): 'i' is 3 px, so eight "iiii" words (117 px) fit
+    {
+        NarrowRenderer narrow;
+        HUD h3;
+        h3.init(0);
+        h3.set_text_metrics(&narrow);
+        const size_t before = h3.get_chat_log().size();
+        h3.add_chat_entry("Ann", "iiii iiii iiii iiii iiii iiii iiii iiii iiii iiii", false, 2);
+        const auto& log = h3.get_chat_log();
+        check(log.size() == before + 3 && log[before] == "Ann:" && log[before + 1] == "iiii iiii iiii iiii iiii iiii iiii iiii" && log[before + 2] == "iiii iiii",
+              "with proportional letters a line holds eight words (39 characters), not 20");
+        h3.set_text_metrics(nullptr);                           // the entries are measured again with 6 px per character
+        check(h3.get_chat_log().size() > before + 3, "a new measure lays every entry out again");
+    }
+
+    // the transcript the original writes to chat.txt at the end of the program (0x10122d4): "date @ time", a blank line, "header body" per entry. The start of the original's own file:
+    {
+        HUD h4;
+        h4.init(0);
+        check(h4.chat_transcript("04/17/98 @ 18:19:56") == "04/17/98 @ 18:19:56\n\n[0:00] News Flash: Game started! Go get that food!\n", "the transcript starts like the original's chat.txt");
+        h4.add_chat_entry("Ann", "hello there", true, 2);
+        check(h4.chat_transcript("d @ t") == "d @ t\n\n[0:00] News Flash: Game started! Go get that food!\nAnn (To Teammate): hello there\n", "every entry is one line: header, a space, the body");
     }
 }
 
@@ -2153,6 +2369,7 @@ int main() {
     test_pedestal_timeline(arc);
     test_minimap(arc);
     test_minimap_dots(arc);
+    test_chat_log(arc);
     test_static_shell(arc);
     test_cursor_rules(arc);
     test_button_states(arc);

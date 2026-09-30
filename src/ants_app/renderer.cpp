@@ -1958,6 +1958,17 @@ void Renderer::fill_rect(int32_t x, int32_t y, int32_t w, int32_t h, ants::asset
     }
 }
 
+void Renderer::set_clip_rect(int32_t x, int32_t y, int32_t w, int32_t h) {
+    if (!renderer_) return;
+    const SDL_Rect clip = { x, y, w, h };
+    SDL_RenderSetClipRect(renderer_, &clip);
+}
+
+void Renderer::clear_clip_rect() {
+    if (!renderer_) return;
+    SDL_RenderSetClipRect(renderer_, nullptr);
+}
+
 void Renderer::draw_rect(int32_t x, int32_t y, int32_t w, int32_t h, ants::assets::ColorRGBA color) {
     if (!renderer_) return;
     if (color.a < 255) {

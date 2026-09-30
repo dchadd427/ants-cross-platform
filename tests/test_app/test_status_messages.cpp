@@ -787,7 +787,7 @@ void test_chat_log_format() {
 
 void test_chat_rendering() {
     g_group = "chat";
-    std::printf("[chat] the log is drawn in a 12 px line grid from (482, 299): headers in team colours, bodies in (7, 11, 15) indented by 12 px\n");
+    std::printf("[chat] the log is drawn from (482, 299): headers in team colours, bodies in (7, 11, 15) 10 px to the right, one pixel between the entries\n");
     sim::SimulationEngine sim;
     make_world(sim);
     HUD hud;
@@ -799,19 +799,22 @@ void test_chat_rendering() {
     bool header = false, body = false, news = false;
     for (const auto& t : rr.texts) {
         if (t.text == "Ann:" && t.x == 482 && t.color.r == 119 && t.color.g == 0 && t.color.b == 0) header = true;
-        if (t.text == "hi" && t.x == 494 && t.color.r == 7 && t.color.g == 11 && t.color.b == 15) body = true;
+        if (t.text == "hi" && t.x == 492 && t.color.r == 7 && t.color.g == 11 && t.color.b == 15) body = true;
         if (t.text == "[0:00] News Flash:" && t.x == 482 && t.color.r == 79 && t.color.g == 0 && t.color.b == 143) news = true;
     }
     check(header, "header at x = 482 in the red team colour (119, 0, 0)");
-    check(body, "body at x = 482 + 12 in (7, 11, 15)");
+    check(body, "body at x = 482 + 10 in (7, 11, 15) (MoveTo(body, 10, y), 0x1012607)");
     check(news, "the news flash header in (79, 0, 143)");
-    // 12 px lines
-    int32_t y_news = -1, y_header = -1;
+    // The entries are stacked from y = 299: the news flash is a 12 px header and a body of two 12 px lines (36 px), the next entry starts one pixel below it (37 px)
+    int32_t y_news = -1, y_header = -1, y_body = -1;
     for (const auto& t : rr.texts) {
         if (t.text == "[0:00] News Flash:") y_news = t.y;
         if (t.text == "Ann:") y_header = t.y;
+        if (t.text == "hi") y_body = t.y;
     }
-    check(y_news >= 299 && y_header > y_news && (y_header - y_news) % 12 == 0, "lines are on a 12 px grid starting at y = 299");
+    check(y_news == 299, "the first header is at y = 299");
+    check(y_header == 299 + 37, "the next entry starts one pixel below the news flash (36 px + 1)");
+    check(y_body == y_header + 12, "the body is one header line below its header");
 }
 
 void test_chat_gate_and_filter() {

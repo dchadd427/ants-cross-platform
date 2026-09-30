@@ -31,4 +31,10 @@ int32_t draw_label(IRenderer& renderer, const std::string& text, int32_t x, int3
 void draw_edit_line(IRenderer& renderer, const std::string& text, int32_t x, int32_t y, int32_t width, bool tail_aligned, bool caret_visible, ants::assets::ColorRGBA color,
                     FontSize size);
 
+/// A one-line label that does not wrap (the original's label with the word-wrap flag clear, FUN_0102b36a): a text that fits is drawn from the left; one that does not is
+/// drawn right aligned when `tail_aligned` (the flag `+0x18`: its end shows, the front is clipped away) and cut at the right edge otherwise. Unlike an edit field's text
+/// there is no caret, so the whole `width` is used. Drawn at (x, y) in `size`.
+void draw_single_line_label(IRenderer& renderer, const std::string& text, int32_t x, int32_t y, int32_t width, bool tail_aligned, ants::assets::ColorRGBA color,
+                            FontSize size);
+
 }  // namespace ants::app

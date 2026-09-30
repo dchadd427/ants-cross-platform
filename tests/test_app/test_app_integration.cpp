@@ -3220,53 +3220,87 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         ASSERT_TRUE(sim.has_audio_event(SoundID::BombPick));
     } TEST_END();
 
-    TEST_CASE("12.9 Chat Scrolling & Initial Message Wrapping") {
+    TEST_CASE("12.9 The Chat Log: Initial Message, Pixel Wrapping, The Window Follows The Newest Entry; A Drag Peeks Back, The Wheel And PageUp Do Nothing") {
         HUD hud;
         hud.init(0);
+        SimulationEngine sim_engine;
+        sim_engine.init_test_world(60, 60, 1);
+        ViewportCamera cam;
 
-        // The start message is a News Flash entry: the header "[0:00] News Flash:" and its wrapped body (at most 21 characters per line)
+        // The start message is a News Flash entry: the header "[0:00] News Flash:" and its body, wrapped at 126 px (20 characters of 6 px here)
         const auto& log = hud.get_chat_log();
         ASSERT_TRUE(!log.empty());
-        for (const auto& line : log) {
-            ASSERT_TRUE(line.length() <= 23);
+        for (const auto& line : log) ASSERT_TRUE(line.length() <= 21);
+        ASSERT_EQ(hud.chat_follow_pos(), 0);
+
+        // Add 10 chat messages: the log outgrows the 101 px view and the window follows the newest entry (5 px per 50 ms pass)
+        static uint32_t clock_now;
+        clock_now = 1000;
+        hud.set_ticks_function([]() { return clock_now; });
+        for (int i = 0; i < 10; ++i) hud.add_chat_entry("Player", "Message number " + std::to_string(i));
+        ASSERT_TRUE(hud.get_chat_log().size() >= 20);            // ten entries of a header and a body line each, plus the news flash
+        ASSERT_TRUE(hud.chat_content_end() > HUD::kChatViewH);
+        ASSERT_EQ(hud.chat_follow_pos(), 0);                     // nothing has moved yet
+        ASSERT_EQ(hud.chat_follow_target(), hud.chat_content_end() - 1 - HUD::kChatViewH);
+
+        hud.add_chat_entry("Player", "one more");
+        const int32_t target = hud.chat_follow_target();
+        for (int pass = 0; pass < 200 && hud.chat_follow_pos() != target; ++pass) {
+            clock_now += 50;
+            hud.update(sim_engine.get_world_state(), 1);
         }
+        ASSERT_EQ(hud.chat_follow_pos(), target);
 
-        // Add 10 chat messages
-        for (int i = 0; i < 10; ++i) {
-            hud.add_chat_entry("Player", "Message number " + std::to_string(i));
-        }
+        // A drag inside the view: the log moves with the pointer (up = later lines) and snaps back at the release
+        const int32_t follow = hud.chat_follow_pos();
+        hud.handle_mouse_down(500, 350, SDL_BUTTON_LEFT, sim_engine, cam);
+        ASSERT_TRUE(hud.chat_dragging());
+        ASSERT_EQ(hud.chat_view_offset(), follow);
+        hud.handle_mouse_motion(500, 380, sim_engine, cam);      // 30 px down: the earlier lines come into view
+        ASSERT_EQ(hud.chat_view_offset(), follow - 30);
+        hud.handle_mouse_up(500, 380, SDL_BUTTON_LEFT, sim_engine, cam);
+        ASSERT_FALSE(hud.chat_dragging());
+        ASSERT_EQ(hud.chat_view_offset(), follow);
 
-        int32_t initial_lines = static_cast<int32_t>(hud.get_chat_log().size());
-        ASSERT_TRUE(initial_lines >= 20);   // ten entries of a header and a body line each, plus the news flash
-        ASSERT_EQ(hud.get_chat_scroll_offset(), 0);
+        // PageUp does nothing (the original has no key for the log)
+        hud.handle_key_down(SDLK_PAGEUP, sim_engine, cam, 0, false);
+        ASSERT_EQ(hud.chat_view_offset(), follow);
 
-        // Scroll up
-        hud.scroll_chat_up(2);
-        ASSERT_EQ(hud.get_chat_scroll_offset(), 2);
-
-        // Scroll up past max (8 visible lines)
-        hud.scroll_chat_up(100);
-        ASSERT_EQ(hud.get_chat_scroll_offset(), initial_lines - 8);
-
-        // Scroll down
-        hud.scroll_chat_down(3);
-        ASSERT_EQ(hud.get_chat_scroll_offset(), initial_lines - 11);
-
-        // Mouse wheel scrolling over lower chat box (x: 500, y: 350)
-        hud.handle_mouse_wheel(500, 350, 1); // Wheel up
-        ASSERT_EQ(hud.get_chat_scroll_offset(), initial_lines - 10);
-
-        hud.handle_mouse_wheel(500, 350, -1); // Wheel down
-        ASSERT_EQ(hud.get_chat_scroll_offset(), initial_lines - 11);
-
-        // Mouse wheel outside chat box does not scroll
-        hud.handle_mouse_wheel(100, 100, 1);
-        ASSERT_EQ(hud.get_chat_scroll_offset(), initial_lines - 11);
-
-        // Sending a chat message resets scroll offset to 0
+        // Sending a chat message adds an entry; the window is not reset (it follows)
         hud.set_chat_input("Hello Colony!");
         hud.send_chat_message();
-        ASSERT_EQ(hud.get_chat_scroll_offset(), 0);
+        ASSERT_EQ(hud.chat_follow_target(), hud.chat_content_end() - 1 - HUD::kChatViewH);
+    } TEST_END();
+
+    TEST_CASE("12.9b The Chat Transcript: The Program Writes The Chat Log To A Text File When It Ends (Ants.exe 0x10122d4: \"%s @ %s\\n\\n\" and \"%s %s\\n\" per entry)") {
+        // the stamp is the C runtime's _strdate and _strtime: the original's own chat.txt starts "04/17/98 @ 18:19:56"
+        std::tm when{};
+        when.tm_year = 98; when.tm_mon = 3; when.tm_mday = 17; when.tm_hour = 18; when.tm_min = 19; when.tm_sec = 56; when.tm_isdst = -1;
+        ASSERT_EQ(Application::transcript_stamp(std::mktime(&when)), "04/17/98 @ 18:19:56");
+
+        Application app;
+        ApplicationConfig cfg;
+        cfg.headless = true;
+        cfg.start_in_map_select = false;
+        ASSERT_TRUE(app.init(cfg));
+        app.hud().add_chat_entry("Ann", "Rush the base!", false, 2);
+        app.hud().add_chat_entry("Bob", "on my way", true, 3);
+        const std::filesystem::path dir = std::filesystem::temp_directory_path() / "ants_test_chat_transcript";
+        std::filesystem::create_directories(dir);
+        const std::filesystem::path file = dir / "chat.txt";
+        std::filesystem::remove(file);
+        ASSERT_TRUE(app.write_chat_transcript(file.string()));
+        std::ifstream in(file, std::ios::binary);
+        const std::string text((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+        // "date @ time", a blank line, then one line per entry: its header, a space, its body (the body is not wrapped in the file)
+        const size_t blank = text.find("\n\n");
+        ASSERT_TRUE(blank != std::string::npos && blank == 19 && text[2] == '/' && text[5] == '/' && text.substr(8, 3) == " @ ");
+        ASSERT_EQ(text.substr(blank + 2), "[0:00] News Flash: Game started! Go get that food!\nAnn: Rush the base!\nBob (To Teammate): on my way\n");
+        std::filesystem::remove(file);
+        std::filesystem::remove(dir);
+        // a headless run writes no file at its end (and neither does a run that never built a match screen)
+        app.shutdown();
+        ASSERT_FALSE(std::filesystem::exists(dir / "chat.txt"));
     } TEST_END();
 
     TEST_CASE("12.10 Bomb Size & Team Color Rendering") {
@@ -5340,13 +5374,8 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         hud.add_chat_entry("Player1", "Hello world!");
         hud.add_chat_entry("Player2", "that food!");
         ASSERT_EQ(hud.get_chat_log().size(), initial_lines + 4);   // a header line and a body line per entry
-        ASSERT_EQ(hud.get_chat_scroll_offset(), 0);
-
-        // Scroll limits
-        hud.scroll_chat_up(5);
-        ASSERT_EQ(hud.get_chat_scroll_offset(), 0); // Not enough lines to scroll
-        hud.scroll_chat_down(5);
-        ASSERT_EQ(hud.get_chat_scroll_offset(), 0);
+        ASSERT_EQ(hud.chat_follow_pos(), 0);                       // a log that is not higher than the view does not move
+        ASSERT_EQ(hud.chat_content_end(), 37 + 2 * 25);            // the news flash (12 + 2 x 12 px) and two entries (12 + 12 px each), one pixel after each
     } TEST_END();
 
     TEST_CASE("12.55 Fire Ant Ignite Clip Timing (Wall At The End Of The 1760 ms Clip) & Immediate Zero-Cooldown Re-Cast") {
@@ -7275,10 +7304,10 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
 
     TEST_CASE("12.108: Version Invariant & Fog of War Cursor Concealment Parity") {
         // 1. Verify semantic versioning components
-        ASSERT_EQ(ants::VERSION_STRING, "v0.0.71");
+        ASSERT_EQ(ants::VERSION_STRING, "v0.0.72");
         ASSERT_EQ(ants::VERSION_MAJOR, 0);
         ASSERT_EQ(ants::VERSION_MINOR, 0);
-        ASSERT_EQ(ants::VERSION_PATCH, 71);
+        ASSERT_EQ(ants::VERSION_PATCH, 72);
 
         // 2. Setup simulation world with Fog of War enabled
         SimulationEngine sim;

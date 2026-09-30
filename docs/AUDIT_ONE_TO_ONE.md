@@ -25,6 +25,7 @@ order in which it is proposed to be fixed. The owner decides (AGENTS.md rule 9).
 * v0.0.69: batch 6 part 1 (score boxes: slots by team index, scorcovr for absent and dropped teams, allied boxes split with the summed score; LU NEW-1, NEW-2). Still open in batch 6: minimap (fog objects, dots, ally exemption, blink, frame), chat scroll bar and wrapping, fog reveal.
 * v0.0.70: batch 6 part 2 (fog reveal only from ant position updates: no hill box, nothing when a team forms; layer-2 scan margin 3; LT NEW-1, NEW-1b, NEW-3).
 * v0.0.71: batch 6 part 3 (minimap: fog objects, no cell dots, ants at pixel position with every ant until removed and the ally exemption, flower / clover dots, unlisted tile ids, the frame; LU NEW-3 .. NEW-6, LT NEW-2, LK NEW-2, LH NEW-7, LI NEW-11; the hit flash stays open for the owner, section 4). Still open in batch 6: chat scroll bar and wrapping, partially explored objects (NEW-4).
+* v0.0.72: batch 6 part 4 (chat log: follow task 5 px / 50 ms, drag to scroll with the 15 px auto-repeat and the snap back, pixel wrapping, 1 px between entries, body at +10, clip, header tail, no wheel / PageUp; new finding: the original writes `chat.txt` at the end of the program; LX CHATSCRL / CHATAPPD, LU NEW-9). Still open in batch 6: partially explored objects (LT NEW-4), food footprint at its live stage.
 
 ## 1. What was audited and how
 

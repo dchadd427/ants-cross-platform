@@ -26,6 +26,8 @@ public:
     const std::string& location() const noexcept { return location_; }
     /// The platform's usual place: `settings.ini` in the per-user application folder, or the web storage key. Empty when there is none.
     static std::string default_location();
+    /// The per-user application folder with its trailing separator (the place of `settings.ini` and of the chat transcript); empty in the web build and when there is none
+    static std::string default_folder();
 
     /// Reads the stored settings (a missing file is an empty store). False when the file exists and cannot be read.
     bool load();

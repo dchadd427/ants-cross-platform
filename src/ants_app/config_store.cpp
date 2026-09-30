@@ -45,15 +45,24 @@ bool printable(char c) { return c >= 0x20 && c <= 0x7e; }
 
 }  // anonymous namespace
 
+std::string ConfigStore::default_folder() {
+#if defined(__EMSCRIPTEN__)
+    return {};
+#else
+    char* pref = SDL_GetPrefPath("Ants", "Ants");
+    if (pref == nullptr) return {};
+    std::string folder = pref;
+    SDL_free(pref);
+    return folder;
+#endif
+}
+
 std::string ConfigStore::default_location() {
 #if defined(__EMSCRIPTEN__)
     return kWebStorageKey;
 #else
-    char* pref = SDL_GetPrefPath("Ants", "Ants");
-    if (pref == nullptr) return {};
-    std::string path = std::string(pref) + "settings.ini";
-    SDL_free(pref);
-    return path;
+    const std::string folder = default_folder();
+    return folder.empty() ? std::string() : folder + "settings.ini";
 #endif
 }
 

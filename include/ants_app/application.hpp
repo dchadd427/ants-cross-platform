@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <ctime>
 #include <string>
 #include <memory>
 #include <array>
@@ -97,6 +98,13 @@ public:
     void run_frame_with_delta(float delta_time);
     void shutdown();
 
+    /// What the original does when the program ends with a match screen (FUN_01010210 -> FUN_010122d4, docs 5.56): the chat log is written to a text file,
+    /// "date @ time", a blank line and a line "header body" per entry. `shutdown` writes `chat.txt` into the per-user application folder (the original: the current
+    /// directory) unless the run is headless, the web build, or no match was started. False when the file cannot be written.
+    bool write_chat_transcript(const std::string& path) const;
+    /// "mm/dd/yy @ hh:mm:ss" of a time, as the original's `_strdate` and `_strtime` give it
+    static std::string transcript_stamp(std::time_t time);
+
     bool is_running() const noexcept { return is_running_; }
     void quit();
 
@@ -166,6 +174,7 @@ private:
     ApplicationConfig config_{};
     AppState state_{AppState::MapSelect};
     bool is_running_{false};
+    bool match_started_{false};                           // a match screen was built (the original writes the chat transcript only then)
     bool is_paused_{false};
     bool show_tile_grid_{false};
 

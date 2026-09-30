@@ -82,4 +82,19 @@ void draw_edit_line(IRenderer& renderer, const std::string& text, int32_t x, int
     if (caret_visible && caret_x < CANVAS_WIDTH) renderer.draw_text("_", caret_x, y, color, size);
 }
 
+void draw_single_line_label(IRenderer& renderer, const std::string& text, int32_t x, int32_t y, int32_t width, bool tail_aligned, ants::assets::ColorRGBA color,
+                            FontSize size) {
+    std::string shown = text;
+    int32_t text_x = x;
+    if (renderer.get_text_width(shown, size) > width) {
+        if (tail_aligned) {
+            while (!shown.empty() && renderer.get_text_width(shown, size) > width) shown.erase(0, 1);      // DT_RIGHT: the front is clipped away
+            text_x = x + width - renderer.get_text_width(shown, size);
+        } else {
+            while (!shown.empty() && renderer.get_text_width(shown, size) > width) shown.pop_back();       // left aligned: clipped at the right edge
+        }
+    }
+    if (!shown.empty()) renderer.draw_text(shown, text_x, y, color, size);
+}
+
 }  // namespace ants::app

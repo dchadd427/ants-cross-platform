@@ -108,9 +108,9 @@ public:
     void send_chat(bool to_team);
     /// A network match: called with the text and the team flag of every message the player sends (the entry is also added to the own log at once)
     void set_on_chat_send(std::function<void(const std::string&, bool)> fn) { on_chat_send_ = std::move(fn); }
-    /// AddLine (Ants.exe 0x10120e9): an entry is a header line ("Name:" or "Name (To Teammate):", in the colour of the sender's team,
-    /// `colour_index` 0 black, 1 blue, 2 red, 3 green; -1 = the local player's) and a body of at most 100 characters that wraps into
-    /// lines indented by 12 px in colour (7, 11, 15).
+    /// AddLine (Ants.exe 0x10120e9): an entry is a header ("Name:" or "Name (To Teammate):", in the colour of the sender's team, `colour_index` 0 black, 1 blue,
+    /// 2 red, 3 green; -1 = the local player's; a 138 px label that does not wrap) and a body of at most 100 characters (a 126 px label that wraps by pixels, 10 px
+    /// right of the header, colour (7, 11, 15)). The entries are stacked with one pixel between them and the log follows the newest (docs 5.56).
     void add_chat_entry(const std::string& sender, const std::string& message, bool team_only = false, int colour_index = -1);
     /// AddNewsFlash (0x100e9bb): the header "[m:ss] News Flash:" in colour (79, 0, 143) and the text as body.
     void add_news_flash(uint32_t elapsed_ms, const std::string& text);
@@ -118,16 +118,37 @@ public:
     /// message is shown only to its sender and to the players whose ally the sender is.
     void receive_chat_message(uint8_t sender, const std::string& name, const std::string& text, bool to_team, const sim::WorldState& world);
     void trigger_quick_chat(size_t index);
-    /// The display lines of the chat log (an entry's header line, then its body lines); the styles are in get_chat_line_colour / indent.
+    /// The display lines of the chat log (an entry's header line, then its body lines); the colour of a line is in get_chat_line_colour.
     const std::deque<std::string>& get_chat_log() const noexcept { return chat_log_; }
     /// Colour index of a display line: 0..3 header of that team colour, 4 news flash header, 5 body text.
     uint8_t get_chat_line_colour(size_t line) const noexcept { return line < chat_line_colour_.size() ? chat_line_colour_[line] : uint8_t{5}; }
     static constexpr size_t kChatInputMax = 100;         // the input box holds 100 characters (0x100dd85)
-    static constexpr int32_t kChatVisibleLines = 8;      // the log view (482, 299) - (620, 400) shows 12 px lines
-    void scroll_chat_up(int32_t lines = 1) noexcept;
-    void scroll_chat_down(int32_t lines = 1) noexcept;
-    void handle_mouse_wheel(int32_t screen_x, int32_t screen_y, int32_t wheel_y);
-    int32_t get_chat_scroll_offset() const noexcept { return chat_scroll_offset_; }
+
+    /// The text is measured with this renderer (the original measures a label with GDI when it is made); without one every character is 6 px wide. The entries are laid
+    /// out again when it changes. The pointer is not owned and must outlive its use.
+    void set_text_metrics(const IRenderer* metrics);
+
+    // The chat log window (object [W + 0x4acc], docs 5.56). The view is (482, 299) - (620, 400) = 138 x 101 px; an entry's header is at the view's left edge and its body
+    // 10 px to the right; entry k starts one pixel below entry k - 1.
+    static constexpr int32_t kChatViewX = 482, kChatViewY = 299, kChatViewW = 138, kChatViewH = 101;
+    static constexpr int32_t kChatBodyX = 10, kChatBodyW = 126;
+    static constexpr uint32_t kChatFollowPeriodMs = 50;   // CHATAPPD (0x1025282): the follow step of 5 px
+    static constexpr int32_t kChatFollowStep = 5;
+    static constexpr uint32_t kChatScrollPeriodMs = 100;  // CHATSCRL (0x1025234): 15 px while the pointer is held outside the view
+    static constexpr int32_t kChatScrollStep = 15;
+    /// The height of the whole log plus one (the `+0x2c` of the window)
+    int32_t chat_content_end() const noexcept { return chat_content_end_; }
+    /// The top of the window into the log that follows the newest entry (`+0x24`) and the one it moves to (`+0x28`)
+    int32_t chat_follow_pos() const noexcept { return chat_follow_pos_; }
+    int32_t chat_follow_target() const noexcept { return chat_follow_target_; }
+    /// True while the left button drags the log; then the log shows `chat_drag_offset()` instead of `chat_follow_pos()`
+    bool chat_dragging() const noexcept { return chat_dragging_; }
+    int32_t chat_drag_offset() const noexcept { return chat_drag_offset_; }
+    /// The top of the log as it is drawn now
+    int32_t chat_view_offset() const noexcept { return chat_dragging_ ? chat_drag_offset_ : chat_follow_pos_; }
+    bool in_chat_view(int32_t x, int32_t y) const noexcept { return x >= kChatViewX && x < kChatViewX + kChatViewW && y >= kChatViewY && y < kChatViewY + kChatViewH; }
+    /// The transcript the original writes to chat.txt when the program ends: "date @ time", a blank line, then "header body" per entry
+    std::string chat_transcript(const std::string& date_time) const;
 
     // Team state: the [Team] button and the team destination of Enter exist while the local player has an ally
     bool is_on_team() const noexcept { return is_on_team_; }
@@ -325,9 +346,32 @@ private:
     bool is_multi_select_mode_{false};
     int32_t selected_base_team_id_{-1};
     std::function<void(const std::string&, bool)> on_chat_send_;
-    std::deque<std::string> chat_log_{};
+    // The chat log (docs 5.56): the entries with their layout, the display lines that derive from them, and the state of the window
+    struct ChatEntry {
+        std::string header;                    // "Name:" ...
+        std::string body;                      // the message, at most 100 characters
+        uint8_t colour{5};                     // 0 .. 3 the team colours, 4 a news flash
+        int32_t top{0};                        // the top in the log: the bottom of the entry before plus one
+        int32_t header_h{0};                   // the header label's height (one line)
+        int32_t body_h{0};                     // the body label's height (its wrapped lines)
+        std::vector<std::string> body_lines;   // the body wrapped at 126 px
+        int32_t bottom() const noexcept { return top + header_h + body_h; }
+    };
+    std::vector<ChatEntry> chat_entries_{};
+    std::deque<std::string> chat_log_{};       // the display lines: a header line, then the body lines, of every entry
     std::deque<uint8_t> chat_line_colour_{};   // parallel to chat_log_ (see get_chat_line_colour)
-    std::deque<int32_t> chat_line_indent_{};
+    const IRenderer* text_metrics_{nullptr};
+    int32_t chat_content_end_{0};              // +0x2c
+    int32_t chat_follow_pos_{0};               // +0x24
+    int32_t chat_follow_target_{0};            // +0x28
+    bool chat_follow_task_{false};             // CHATAPPD is scheduled
+    uint32_t chat_follow_due_ms_{0};
+    bool chat_dragging_{false};                // +0x34
+    int32_t chat_drag_offset_{0};              // +0x48
+    int32_t chat_drag_x_{0};                   // +0x40, +0x44: the pointer of the last press or drag event
+    int32_t chat_drag_y_{0};
+    bool chat_scroll_task_{false};             // CHATSCRL is scheduled
+    uint32_t chat_scroll_due_ms_{0};
     const sim::SimulationEngine* sim_query_{nullptr};
     sim::CommandSink* command_sink_{nullptr};
     sim::CommandResult submit_command(sim::SimulationEngine& sim, const sim::Command& command) {
@@ -350,7 +394,7 @@ private:
     struct BandRect { int32_t left, top, right, bottom; };
     BandRect band_rect() const noexcept;
     /// Opening a dialog removes a displayed rubber band and releases the captures
-    void release_capture() noexcept { is_dragging_ = false; is_radar_dragging_ = false; right_capture_ = 0; }
+    void release_capture() noexcept { is_dragging_ = false; is_radar_dragging_ = false; right_capture_ = 0; end_chat_drag(); }
     /// The cursor's special-target question (FUN_01026f91) for the selected ants' common type
     bool special_target(const sim::SimulationEngine* query, const sim::WorldState& world, sim::TileCoord tile, PanelMode panel) const;
 
@@ -391,7 +435,6 @@ private:
 
     // Chat text input state
     std::string chat_input_{};
-    int32_t chat_scroll_offset_{0};
     uint32_t chat_focus_ms_{0};                   // when the chat edit control got the focus: the origin of its caret's blinking
     std::string player_name_{"Player"};
     std::array<std::string, 4> team_names_{};
@@ -417,6 +460,15 @@ private:
     void voice_special(sim::AntType type, size_t ants_ordered);        // special order: text only for exactly one thief or fire ant
     void render_status_line(IRenderer& renderer) const;
     void push_chat_entry(std::string header, const std::string& message, uint8_t header_colour);
+    void layout_chat_entry(ChatEntry& entry, int32_t top) const;
+    void append_chat_display_lines(const ChatEntry& entry);
+    void relayout_chat();
+    void update_chat_tasks();
+    void chat_scroll_by(int32_t delta) noexcept;
+    void start_chat_drag(int32_t x, int32_t y);
+    void move_chat_drag(int32_t x, int32_t y);
+    void end_chat_drag() noexcept;
+    void render_chat_log(IRenderer& renderer);
 
     // Minimap drag navigation state
     bool is_radar_dragging_{false};

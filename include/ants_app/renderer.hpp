@@ -173,6 +173,10 @@ public:
         return 7;
     }
     virtual void set_hud_team(uint8_t team_id) = 0;
+    /// Restricts everything that is drawn afterwards to a rectangle until clear_clip_rect(): the original draws a label into a surface of the label's own
+    /// size, so what sticks out of the box (the half line at the edge of the chat log) is not seen. A renderer without clipping draws it all.
+    virtual void set_clip_rect(int32_t x, int32_t y, int32_t w, int32_t h) { (void)x; (void)y; (void)w; (void)h; }
+    virtual void clear_clip_rect() {}
     // Blits a tightly packed RGBA8 image of w x h pixels at (x, y) (used by the minimap). The default draws pixel by
     // pixel; Renderer overrides it with a cached streaming texture.
     virtual void draw_rgba_image(int32_t x, int32_t y, int32_t w, int32_t h, const uint8_t* rgba) {
@@ -317,6 +321,8 @@ public:
     /// ascent + descent is `cell_ratio` em
     static int32_t ttf_point_size(int32_t cell_px, double cell_ratio) noexcept;
     void set_hud_team(uint8_t team_id) override { hud_team_id_ = team_id; }
+    void set_clip_rect(int32_t x, int32_t y, int32_t w, int32_t h) override;
+    void clear_clip_rect() override;
     /// Ctrl+L (Ants.exe 0x101b866): every ant is followed by its hit points as a white number at its sprite position. The original draws it with
     /// GDI TextOut and the stock SYSTEM_FIXED_FONT (the 8 x 15 raster "Fixedsys"), top left at the position, not antialiased.
     void set_show_hp(bool show) noexcept { show_hp_ = show; }
