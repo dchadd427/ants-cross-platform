@@ -197,6 +197,112 @@ void test_score_digits(const assets::AssetArchive& arc) {
     }
 }
 
+// The score boxes (Ants.exe FUN_0100dbe2 0x100e1f0 - 0x100e222 for the slots, FUN_01021e36 for the boxes; docs 5.53): the slot follows the team index, absent and dropped teams
+// are covered with scorcovr, an allied team's box is half its colour and half its ally's with the two scores added
+void test_score_boxes(const assets::AssetArchive& arc) {
+    std::printf("[hud] score boxes: slots by team index, scorcovr for absent and dropped teams, allied boxes split with the summed score\n");
+    const assets::ColorRGBA colour[4] = {{7, 67, 47, 255}, {119, 0, 0, 255}, {43, 39, 107, 255}, {39, 39, 59, 255}};
+    auto fill_at = [](const RecordingRenderer& rr, int32_t x, int32_t y, int32_t w, const assets::ColorRGBA& c) {
+        for (const auto& f : rr.fills) {
+            if (f.x == x && f.y == y && f.w == w && f.h == 14 && f.color.r == c.r && f.color.g == c.g && f.color.b == c.b) return true;
+        }
+        return false;
+    };
+    auto digits_at = [&](const RecordingRenderer& rr, int32_t x, int32_t y, int32_t value) {
+        const std::string text = std::to_string(value);
+        const int first_slot = 6 - static_cast<int>(text.size());
+        for (size_t i = 0; i < text.size(); ++i) {
+            const std::string name = std::string("dig") + text[i];
+            const Off o = glyph_offset(arc, name);
+            if (!rr.has_sprite_at(name + ".bmp", x + 9 * (first_slot + static_cast<int>(i)) + o.dx, y + o.dy)) return false;
+        }
+        return true;
+    };
+    auto render = [&](HUD& hud, const sim::WorldState& world, RecordingRenderer& rr) {
+        ViewportCamera camera;
+        hud.render(rr, arc, world, camera);
+    };
+    auto has_text = [](const RecordingRenderer& rr, const std::string& t) {
+        for (const auto& x : rr.texts) if (x.text == t) return true;
+        return false;
+    };
+
+    // four teams, no alliances, local team 0: the top bar's box and the three bottom slots in index order; nothing is covered
+    {
+        sim::WorldState world;
+        world.player_alliances = {255, 255, 255, 255};
+        world.player_scores = {10, 20, 30, 40};
+        HUD hud;
+        hud.init(0);
+        RecordingRenderer rr(arc);
+        render(hud, world, rr);
+        check(fill_at(rr, 402, 4, 54, colour[0]) && digits_at(rr, 401, 6, 10), "local team 0: its box in the top bar with its score");
+        check(fill_at(rr, 105, 464, 54, colour[1]) && digits_at(rr, 104, 466, 20), "team 1: bottom slot 0");
+        check(fill_at(rr, 254, 464, 54, colour[2]) && digits_at(rr, 253, 466, 30), "team 2: bottom slot 1");
+        check(fill_at(rr, 402, 464, 54, colour[3]) && digits_at(rr, 401, 466, 40), "team 3: bottom slot 2");
+        check(rr.named("scorcovr.bmp").empty(), "nothing is covered");
+    }
+    // the local team is 1: the others keep index order (0, 2, 3 in slots 0, 1, 2)
+    {
+        sim::WorldState world;
+        world.player_alliances = {255, 255, 255, 255};
+        world.player_scores = {10, 20, 30, 40};
+        HUD hud;
+        hud.init(1);
+        RecordingRenderer rr(arc);
+        render(hud, world, rr);
+        check(fill_at(rr, 402, 4, 54, colour[1]) && fill_at(rr, 105, 464, 54, colour[0]) && fill_at(rr, 254, 464, 54, colour[2]) && fill_at(rr, 402, 464, 54, colour[3]),
+              "local team 1: team 0, 2 and 3 in the bottom slots 0, 1, 2");
+    }
+    // teams 0 and 2 play: team 1's slot (slot 0) and team 3's (slot 2) are covered, team 2 keeps slot 1 (the slots do not close up)
+    {
+        sim::WorldState world;
+        world.player_alliances = {255, 255, 255, 255};
+        world.player_scores = {10, 20, 30, 40};
+        HUD hud;
+        hud.init(0);
+        hud.set_roster_mask(0x05);
+        RecordingRenderer rr(arc);
+        render(hud, world, rr);
+        check(rr.has_sprite_at("scorcovr.bmp", 103, 463), "team 1 is absent: its box (105, 464) is covered at (103, 463) by scorcovr");
+        check(fill_at(rr, 254, 464, 54, colour[2]) && digits_at(rr, 253, 466, 30), "team 2 is in slot 1 (254, 464), not in the first slot");
+        check(rr.has_sprite_at("scorcovr.bmp", 400, 463), "team 3 is absent: its box (402, 464) is covered at (400, 463)");
+        check(!fill_at(rr, 105, 464, 54, colour[2]) && !fill_at(rr, 105, 464, 54, colour[1]), "nothing is filled in the covered slots");
+        check(!has_text(rr, "Red:") && !has_text(rr, "Black:") && has_text(rr, "Blue:"), "only the teams that exist have a label");
+        const auto cover = arc.find_sprite("scorcovr.bmp");
+        check(cover != nullptr && cover->width == 58 && cover->height == 17, "scorcovr is 58 x 17");
+    }
+    // a team that drops out: its box is covered, its label stays
+    {
+        sim::WorldState world;
+        world.player_alliances = {255, 255, 255, 255};
+        world.player_scores = {10, 20, 30, 40};
+        world.dropped_mask = 0x02;
+        HUD hud;
+        hud.init(0);
+        RecordingRenderer rr(arc);
+        render(hud, world, rr);
+        check(rr.has_sprite_at("scorcovr.bmp", 103, 463) && !fill_at(rr, 105, 464, 54, colour[1]), "team 1 has dropped out: its box is covered, its score is gone");
+        check(has_text(rr, "Red:"), "its label stays");
+        check(fill_at(rr, 254, 464, 54, colour[2]), "the others keep their slots");
+    }
+    // teams 0 and 1 are allied: each box is half its colour and half its ally's (the right half from left + 26) and shows the two scores added
+    {
+        sim::WorldState world;
+        world.player_alliances = {1, 0, 255, 255};
+        world.player_scores = {300, 450, 30, 40};
+        HUD hud;
+        hud.init(0);
+        RecordingRenderer rr(arc);
+        render(hud, world, rr);
+        check(fill_at(rr, 402, 4, 54, colour[0]) && fill_at(rr, 428, 4, 28, colour[1]), "the local box: green, and red from x = 428");
+        check(digits_at(rr, 401, 6, 750), "it shows 300 + 450");
+        check(fill_at(rr, 105, 464, 54, colour[1]) && fill_at(rr, 131, 464, 28, colour[0]), "the ally's box: red, and green from x = 131");
+        check(digits_at(rr, 104, 466, 750), "it shows the same sum");
+        check(!fill_at(rr, 254, 464, 28, colour[0]) && !fill_at(rr, 254 + 26, 464, 28, colour[0]), "a team without an ally has a single colour");
+    }
+}
+
 // Home anthill panel: egg tray = animation egg<N> (N = min(eggs, 9)) with absolute part coordinates, hatch pedestal only
 // while eggs remain, Stop button from butcanu / butcand.
 void test_home_panel(const assets::AssetArchive& arc) {
@@ -1838,6 +1944,7 @@ int main() {
     }
     test_clock_digits(arc);
     test_score_digits(arc);
+    test_score_boxes(arc);
     test_home_panel(arc);
     test_ally_pedestal(arc);
     test_rubber_band(arc);

@@ -298,6 +298,10 @@ private:
     void render_top_bar(IRenderer& renderer, const assets::AssetArchive& assets, const sim::WorldState& world);
     void render_radar(IRenderer& renderer, const assets::AssetArchive& assets, const sim::WorldState& world, const ViewportCamera& camera);
     void render_news_banner(IRenderer& renderer, const assets::AssetArchive& assets, const sim::WorldState& world);
+    /// One team's label and score box (Ants.exe FUN_0100dbe2 labels, FUN_01021e36 boxes; docs 5.53): the slot follows the team index (the local team has the top bar's,
+    /// the others the three bottom slots in index order, absent teams leave theirs), a team that is absent or has dropped out has its box covered (scorcovr), an allied team's
+    /// box is half its colour and half its ally's and shows the two scores added
+    void render_score_team(IRenderer& renderer, const assets::AssetArchive& assets, const sim::WorldState& world, uint8_t team);
     void render_quit_dialog(IRenderer& renderer, const assets::AssetArchive& assets);
     void render_alliance_dialog(IRenderer& renderer, const assets::AssetArchive& assets);
     void update_alliance_dialog(const sim::WorldState& world);

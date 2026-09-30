@@ -546,24 +546,8 @@ void HUD::render_top_bar(IRenderer& renderer, const assets::AssetArchive& archiv
     digit(ss / 10, 97);
     digit(ss % 10, 107);
 
-    // Box 2 (Top-Right above Playfield): Local player's own score in box at (402..455, 4..17), team background fill
-    // (Ants.exe VA 0x100DA90) and the score drawn with digit sprites at (box.left - 1, box.top + 2)
-    renderer.fill_rect(402, 4, 54, 14, SCORE_BG_COLORS[local_player_id_ % 4]);
-    int32_t my_score = (local_player_id_ < world.player_scores.size()) ? world.player_scores[local_player_id_] : 0;
-    draw_score_digits(renderer, archive, 401, 6, my_score);
-
-    // Player label to the left of the top score box in [312..399, 4..17] (Ants.exe VA 0x100E218)
-    static const char* TEAM_NAMES[4] = {"Green", "Red", "Blue", "Black"};
-    std::string p_name = player_name_.empty() ? TEAM_NAMES[local_player_id_ % 4] : player_name_;
-    if (p_name.size() > 15) p_name = p_name.substr(0, 15);
-    std::string my_label = p_name + ":";
-    // a right aligned label of 14 px letters in its box [312, 399): what does not fit is cut off on the left (DT_RIGHT in a clipped box)
-    while (my_label.size() > 1 && renderer.get_text_width(my_label, FontSize::Px14) > 399 - 312) my_label.erase(0, 1);
-    int32_t label_w = renderer.get_text_width(my_label, FontSize::Px14);
-    int32_t label_h = renderer.get_text_height(FontSize::Px14);
-    int32_t label_x = 399 - label_w;
-    int32_t label_y = 4 + (14 - label_h) / 2;
-    renderer.draw_text(my_label, label_x, label_y, {255, 255, 255, 255}, FontSize::Px14);
+    // The local team's label and score box (402..455, 4..17) and label (312..399): FUN_0100dbe2 / FUN_01021e36, see render_score_team
+    render_score_team(renderer, archive, world, local_player_id_);
 
     // Top-bar buttons (animations buthlp*, butopt*, butqit*; absolute coordinates): the resting art is already part of
     // the top bar image, hovering draws the small "r" label over it and the pressed art replaces it. A button stays down
@@ -713,50 +697,63 @@ void HUD::render_radar(IRenderer& renderer, const assets::AssetArchive& archive,
 void HUD::render_news_banner(IRenderer& renderer, const assets::AssetArchive& assets, const sim::WorldState& world) {
     // Bottom banner background: x17y461.bmp (623x19)
 
-    // Render other 3 players' scores and labels in the 3 pre-cut slots (Ants.exe VA 0x10021B8):
-    // Slot 0: label [5..101], score [105..158], y = 464..477
-    // Slot 1: label [163..251], score [254..307], y = 464..477
-    // Slot 2: label [312..399], score [402..455], y = 464..477
-    std::vector<uint8_t> other_players;
+    // The other teams' labels and score boxes in the three pre-cut bottom slots (Ants.exe VA 0x10021B8): slot 0 label [5..101] score [105..158], slot 1 label [163..251] score
+    // [254..307], slot 2 label [312..399] score [402..455], y = 464..477. The slot of a team follows its index among the others.
     for (uint8_t p = 0; p < 4; ++p) {
-        if (p != local_player_id_ && ((roster_mask_ >> p) & 1u) != 0) other_players.push_back(p);       // a team without a player has no label
+        if (p != local_player_id_) render_score_team(renderer, assets, world, p);
     }
+}
 
-    struct ScoreSlot {
+// The slots (FUN_0100dbe2 0x100e1f0 - 0x100e222): the local team gets the top bar's rectangles (0x1002218), every other team k the next of the three bottom rectangles
+// (0x10021b8 + 32 slot, slot = the number of other teams with a lower index), whether the team exists or not
+void HUD::render_score_team(IRenderer& renderer, const assets::AssetArchive& assets, const sim::WorldState& world, uint8_t team) {
+    struct Slot {
         int32_t label_left;
         int32_t label_right;
-        int32_t box_x;
+        int32_t top;
+        int32_t box_left;
     };
-    const ScoreSlot slots[3] = {
-        {5, 101, 105},
-        {163, 251, 254},
-        {312, 399, 402}
-    };
-
-    static const char* TEAM_NAMES[4] = {"Green", "Red", "Blue", "Black"};
-
-    for (size_t i = 0; i < 3 && i < other_players.size(); ++i) {
-        uint8_t p = other_players[i];
-        const auto& slot = slots[i];
-
-        // Player/team label right-aligned before score box (Ants.exe VA 0x100E218)
-        std::string name = (p < 4) ? (team_names_[p].empty() ? std::string(TEAM_NAMES[p]) : team_names_[p]) : std::string("AI");
-        if (name.size() > 15) name = name.substr(0, 15);
-        std::string p_label = name + ":";
-        while (p_label.size() > 1 && renderer.get_text_width(p_label, FontSize::Px14) > slot.label_right - slot.label_left) p_label.erase(0, 1);
-        int32_t label_w = renderer.get_text_width(p_label, FontSize::Px14);
-        int32_t label_h = renderer.get_text_height(FontSize::Px14);
-        int32_t label_x = slot.label_right - label_w;
-        int32_t label_y = 464 + (14 - label_h) / 2;
-        renderer.draw_text(p_label, label_x, label_y, {255, 255, 255, 255}, FontSize::Px14);
-
-        // Score box fill with authentic background color
-        renderer.fill_rect(slot.box_x, 464, 54, 14, SCORE_BG_COLORS[p % 4]);
-
-        // Player score inside box: digit sprites at (box.left - 1, box.top + 2), right-aligned in a 6-slot field
-        int32_t s = (p < world.player_scores.size()) ? world.player_scores[p] : 0;
-        draw_score_digits(renderer, assets, slot.box_x - 1, 466, s);
+    static const Slot kBottom[3] = {{5, 101, 464, 105}, {163, 251, 464, 254}, {312, 399, 464, 402}};
+    static const Slot kLocal{312, 399, 4, 402};
+    Slot slot = kLocal;
+    if (team != local_player_id_) {
+        size_t index = 0;
+        for (uint8_t k = 0; k < team; ++k) {
+            if (k != local_player_id_) ++index;
+        }
+        slot = kBottom[std::min<size_t>(index, 2)];
     }
+    const bool exists = ((roster_mask_ >> team) & 1u) != 0;
+
+    // The label was made with the screen for a team that exists (and stays when the team drops out): "name:" (15 characters at most), right aligned in its box in 14 px white
+    if (exists) {
+        static const char* TEAM_NAMES[4] = {"Green", "Red", "Blue", "Black"};
+        std::string name = team == local_player_id_ ? (player_name_.empty() ? std::string(TEAM_NAMES[team % 4]) : player_name_)
+                                                    : (team_names_[team].empty() ? std::string(TEAM_NAMES[team % 4]) : team_names_[team]);
+        if (name.size() > 15) name = name.substr(0, 15);
+        std::string label = name + ":";
+        while (label.size() > 1 && renderer.get_text_width(label, FontSize::Px14) > slot.label_right - slot.label_left) label.erase(0, 1);
+        const int32_t label_w = renderer.get_text_width(label, FontSize::Px14);
+        const int32_t label_h = renderer.get_text_height(FontSize::Px14);
+        renderer.draw_text(label, slot.label_right - label_w, slot.top + (14 - label_h) / 2, {255, 255, 255, 255}, FontSize::Px14);
+    }
+
+    // The box (FUN_01021e36): a team that exists and has not dropped out is filled with its colour; with an ally the right half (from left + (right - left) / 2) takes the
+    // ally's colour and the score shown is the sum of the two; any other team's box is covered (scorcovr, 58 x 17 at (left - 2, top - 1))
+    const bool dropped = ((world.dropped_mask >> team) & 1u) != 0;
+    if (!exists || dropped) {
+        renderer.draw_named_sprite("scorcovr.bmp", slot.box_left - 2, slot.top - 1);
+        return;
+    }
+    renderer.fill_rect(slot.box_left, slot.top, 54, 14, SCORE_BG_COLORS[team % 4]);
+    int32_t score = team < world.player_scores.size() ? world.player_scores[team] : 0;
+    const uint8_t ally = team < world.player_alliances.size() ? world.player_alliances[team] : uint8_t{255};
+    if (ally < 4 && ally != team) {
+        const int32_t half = (455 - 402) / 2;                                                     // (right - left) / 2 of the 53-wide rectangle
+        renderer.fill_rect(slot.box_left + half, slot.top, 54 - half, 14, SCORE_BG_COLORS[ally]);
+        if (ally < world.player_scores.size()) score += world.player_scores[ally];
+    }
+    draw_score_digits(renderer, assets, slot.box_left - 1, slot.top + 2, score);
 }
 
 // The frame of the quit dialog and of the alliance dialogs: the 20 parts of Table-4 animation std_dialg, origin (100, 100), no dim layer

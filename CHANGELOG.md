@@ -39,6 +39,16 @@ Ground truth for every entry is in [`docs/GAME_REVERSE_ENGINEERING.md`](docs/GAM
   - **Found on the way, for the audit** (docs: implementation_plan.md section 18): `tests/test_sim/test_challenger_m2_it2_deep_stress.cpp` has not been part of the build since an early commit and no longer compiles
     (it uses the retired slot-queue API of the hill). (An earlier version of this line said that the death clips are no longer started by a separate effect: wrong, only the unused helper `spawn_death_effect` was removed; the effect path in `movement_system.cpp` is still in use, see the audit.)
 
+## v0.0.69 - 2026-09-30 - The score boxes of the original
+
+Batch 6 part 1 (`docs/audit/ledger_ui.md` NEW-1, NEW-2; re-read in `Ants.exe`: `0x100e1f0` - `0x100e222`, `0x1021e36` - `0x10220f4`, `0x101aa65`, the tables at `0x10021b8` and `0x1002218`):
+
+- **An allied team's score box is split**: the left half in its own colour, the right half (from 26 px in) in its ally's colour, and the number is the sum of both scores, in the local team's box and in the ally's box alike (it used to be one colour and one score, so allies could not see what their team scored).
+- **Teams that do not play, and teams that dropped out, have their box covered** with the original's `scorcovr` plate (it left an empty black box), and a dropped team's score is gone (the box used to keep it); its name label stays, as in the original.
+- **The slot of a team follows its index**: the local team has the top bar's box, the other teams the three bottom slots in index order, and a team that is absent leaves its slot (covered) instead of the later teams moving up (a game of the teams 0 and 2 showed team 2 in the first slot).
+- Docs: `docs/GAME_REVERSE_ENGINEERING.md` 5.53, README (counts), `docs/AUDIT_ONE_TO_ONE.md` (progress).
+- Tests: `test_hud_layout` `test_score_boxes` (20 checks: the slots for local team 0 and 1, absent teams covered at (left - 2, top - 1), a dropped team, the allied split and sum). Version assertions of 12.108.
+
 ## v0.0.68 - 2026-09-30 - The answers to orders and selections of the original
 
 Batch 5 part 2 (`docs/audit/ledger_input.md` NEW-12, NEW-2, NEW-8; re-read in `Ants.exe`: `0x10287b5` - `0x1028a0e`, `0x1027f07`, `0x1027aae`, `0x1027530`, `0x1027940` - `0x1027950`, `0x1011281`):
