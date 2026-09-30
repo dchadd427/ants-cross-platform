@@ -576,7 +576,8 @@ void test_mirrored_draw(Renderer& r, const assets::AssetArchive& arc) {
     check(bad == 0, "mirrored frames that differ from the reflection model: " + std::to_string(bad));
 }
 
-// A food-carrying ant that attacks plays the plain a?at clip (the original has no carry variant): it must not vanish.
+// A food-carrying ant that attacks plays the plain a?at clip (the original has no carry variant): the simulation picks that clip (movement::action_clip ignores the food for an
+// attack) and the renderer draws the clip that it is given, so the ant must not vanish.
 void test_holding_attack(Renderer& r, const assets::AssetArchive& arc) {
     std::printf("[ants] a carrying ant that attacks is drawn with the plain attack clip\n");
     assets::LevelData level;
@@ -609,6 +610,12 @@ void test_holding_attack(Renderer& r, const assets::AssetArchive& arc) {
         ant.anim_state = static_cast<uint16_t>(sim::UnitState::Attacking);
         ant.state = sim::UnitState::Attacking;
         ant.anim_frame = 0;
+        // the clip that the simulation plays for a carrying ant that attacks east
+        const sim::movement::MotionClip clip = sim::movement::action_clip(sim::movement::ActionClip::Attack, type, 2, true);
+        check(clip.valid() && arc.get_animation(clip.chd_index).name == std::string(prefixes[type]) + "at901", std::string("the simulation plays the plain ") + prefixes[type] + "at901 for a carrying ant");
+        ant.loco_clip = clip.chd_index;
+        ant.loco_frame = 0;
+        ant.loco_left_ms = static_cast<uint16_t>(clip.duration(0));
         ws.ants.push_back(ant);
         r.camera().x = 0; r.camera().y = 0; r.camera().clamp_to_bounds(level.width, level.height);
         SDL_SetRenderDrawColor(sr, 255, 0, 255, 255);
@@ -814,6 +821,189 @@ void test_subtick_prediction(Renderer& r, const assets::AssetArchive& arc) {
     r.unpin_animation_clock();
 }
 
+// The real-time player of the original steps a clip when a frame ends, not at 50 ms ticks (REFRESH redraws on every scheduler pass, AnimationStep 0x102b997 uses timeGetTime):
+// the renderer shows the frames that end before the next tick for EVERY locomotion clip, not only for action clips. A walking clip moves the ant by the displacement of each frame that
+// ended (its last frame stays: the step callback decides what comes next), an idle clip loops.
+void test_subtick_locomotion(Renderer& r, const assets::AssetArchive& arc) {
+    std::printf("[ants] sub-tick prediction of walking and idle clips: the frames that end before the next tick are shown\n");
+    assets::LevelData level;
+    if (!level.load_from_file(std::string(ORIGINAL_ASSETS_DIR) + "/Maps/TINY.LVL")) { check(false, "load TINY"); return; }
+    const int32_t g = arc.find_animation_id("g01a");
+    if (level.tile_dictionary.size() <= static_cast<size_t>(g)) level.tile_dictionary.resize(static_cast<size_t>(g) + 1, ".");
+    level.tile_dictionary[static_cast<size_t>(g)] = "g01a";
+    for (auto& c : level.layer1_terrain) { c.tile_index = static_cast<uint16_t>(g); c.flags = 0; c.properties = 0; }
+    for (auto& c : level.layer2_interactive) { c.tile_index = assets::LVL_EMPTY_TILE; c.flags = 0; c.properties = 0; }
+    level.anthill_spawns.clear();
+    level.food_schedules.clear();
+    level.waypoints.clear();
+    sim::Grid grid;
+    grid.init_from_level(level);
+    r.set_level(level);
+    r.pin_animation_clock(0);
+    SDL_Renderer* sr = r.get_sdl_renderer();
+    static const uint8_t offsets[4] = { 60, 40, 20, 0 };
+    struct Case { const char* clip; bool mirrored; sim::UnitState state; uint16_t frame; uint16_t left_ms; float sub_s; size_t expect_frame; int expect_dx; int expect_dy; };
+    const Case cases[] = {
+        // sand (agws301): 12 frames of 40 ms, 4 px south each
+        {"agws301", false, sim::UnitState::Walking, 0, 10, 0.020f, 1, 0, 4},      // frame 0 ended 10 ms into the wait: frame 1 shows and its 4 px are applied
+        {"agws301", false, sim::UnitState::Walking, 3, 5, 0.049f, 5, 0, 8},       // two frames end inside one tick
+        {"agws301", false, sim::UnitState::Walking, 3, 30, 0.049f, 4, 0, 4},
+        {"agws301", false, sim::UnitState::Walking, 3, 30, 0.020f, 3, 0, 0},      // nothing ends yet
+        {"agws301", false, sim::UnitState::Walking, 11, 10, 0.040f, 11, 0, 0},    // the last frame stays
+        // mud (agwm301: 60 ms, 2 px): a frame that outlasts the tick changes nothing
+        {"agwm301", false, sim::UnitState::Walking, 2, 55, 0.049f, 2, 0, 0},
+        {"agwm301", false, sim::UnitState::Walking, 2, 10, 0.049f, 3, 0, 2},
+        // grass (agwg301: 50 ms, 4 px): one frame per tick
+        {"agwg301", false, sim::UnitState::Walking, 5, 50, 0.049f, 5, 0, 0},
+        {"agwg301", false, sim::UnitState::Walking, 5, 1, 0.049f, 6, 0, 4},
+        // idle (agst301: 150 ms frames, frames 8 and 9 of 75 ms): the loop starts again after its last frame
+        {"agst301", false, sim::UnitState::Idle, 11, 20, 0.040f, 0, 0, 0},
+        {"agst301", false, sim::UnitState::Idle, 7, 10, 0.049f, 8, 0, 0},
+        {"agst301", false, sim::UnitState::Idle, 8, 30, 0.049f, 9, 0, 0},
+        // a mirrored clip (south-west is the stored south-east clip mirrored): the displacement is mirrored too
+        {"agwg201", true, sim::UnitState::Walking, 2, 10, 0.030f, 3, -3, 3},
+    };
+    for (const Case& c : cases) {
+        const int32_t chd = arc.find_animation_id(c.clip);
+        check(chd >= 0, std::string("clip exists: ") + c.clip);
+        if (chd < 0) continue;
+        sim::WorldState ws;
+        ws.width = level.width;
+        ws.height = level.height;
+        sim::AntSnapshot ant{};
+        ant.id = 1; ant.player_id = 1; ant.type = sim::AntType::Worker;
+        ant.px = 300; ant.py = 200; ant.tile_x = 9; ant.tile_y = 6;
+        ant.facing = 4;
+        ant.hp = 10; ant.max_hp = 10;
+        ant.anim_state = static_cast<uint16_t>(c.state);
+        ant.state = c.state;
+        ant.loco_clip = static_cast<uint16_t>(chd);
+        ant.loco_mirrored = c.mirrored;
+        ant.loco_frame = c.frame;
+        ant.loco_left_ms = c.left_ms;
+        ws.ants.push_back(ant);
+        r.camera().x = 0; r.camera().y = 0; r.camera().clamp_to_bounds(level.width, level.height);
+        SDL_SetRenderDrawColor(sr, 255, 0, 255, 255);
+        SDL_RenderClear(sr);
+        r.render_world(ws, grid, -1, {}, false, false, -1, -1, -1, c.sub_s);
+        const Image got = read_region(sr, PLAYFIELD_X, PLAYFIELD_Y, PLAYFIELD_W, PLAYFIELD_H);
+
+        // the model: the stored animation (or its mirrored copy) at the expected frame, displaced by the expected amount
+        const assets::AnimationSequence* model_seq = &arc.get_animation(static_cast<uint32_t>(chd));
+        if (c.mirrored) {
+            const std::string stored = model_seq->name;
+            const char digit = stored[stored.size() - 3];
+            const int mirrored_dir = (digit == '2') ? 5 : (digit == '9') ? 6 : 7;
+            model_seq = arc.get_directional_animation(stored.substr(0, stored.size() - 3), static_cast<assets::Direction>(mirrored_dir));
+        }
+        Image full = model_map(arc, level, 0);
+        auto shifted = arc.get_palette();
+        for (size_t i = 0; i < 256; ++i) if (i != assets::CHD_COLOR_KEY_INDEX) shifted[i] = arc.get_palette()[(i + offsets[ant.player_id]) & 0xFF];
+        model_draw_frame(full, arc, model_seq->subitems[c.expect_frame], ant.px + c.expect_dx, ant.py + c.expect_dy, c.mirrored, shifted);
+        bool same = true;
+        for (int y = 0; y < PLAYFIELD_H && same; ++y)
+            for (int x = 0; x < PLAYFIELD_W && same; ++x) same = std::memcmp(got.at(x, y), full.at(x, y), 3) == 0;
+        check(same, std::string(c.clip) + (c.mirrored ? " (mirrored)" : "") + " frame " + std::to_string(c.frame) + " with " + std::to_string(c.left_ms) + " ms left, +" +
+                    std::to_string(c.sub_s * 1000.0f) + " ms: frame " + std::to_string(c.expect_frame) + " at (" + std::to_string(c.expect_dx) + ", " + std::to_string(c.expect_dy) + ")");
+    }
+    r.unpin_animation_clock();
+}
+
+// The selection marker and the health number follow the sprite, which the real-time player moves when a frame ends: they use the predicted position as well (the audit's LA NEW-3
+// found them at the tick's position, 50 ms behind a thrown ant). The display loop skips a frozen ant, its number included (FUN_0101b802 is what draws both).
+void test_marker_and_digit_position(Renderer& r, const assets::AssetArchive& arc) {
+    std::printf("[ears] the marker and the health number of a walking ant follow its predicted position\n");
+    assets::LevelData level;
+    if (!level.load_from_file(std::string(ORIGINAL_ASSETS_DIR) + "/Maps/TINY.LVL")) { check(false, "load TINY"); return; }
+    const int32_t g = arc.find_animation_id("g01a");
+    if (level.tile_dictionary.size() <= static_cast<size_t>(g)) level.tile_dictionary.resize(static_cast<size_t>(g) + 1, ".");
+    level.tile_dictionary[static_cast<size_t>(g)] = "g01a";
+    for (auto& c : level.layer1_terrain) { c.tile_index = static_cast<uint16_t>(g); c.flags = 0; c.properties = 0; }
+    for (auto& c : level.layer2_interactive) { c.tile_index = assets::LVL_EMPTY_TILE; c.flags = 0; c.properties = 0; }
+    level.anthill_spawns.clear();
+    level.food_schedules.clear();
+    level.waypoints.clear();
+    sim::Grid grid;
+    grid.init_from_level(level);
+    r.set_level(level);
+    SDL_Renderer* sr = r.get_sdl_renderer();
+    const int32_t walk = arc.find_animation_id("agws301");          // sand: 40 ms frames, 4 px south each
+    const int32_t dogears = arc.find_animation_id("dogears");
+    check(walk >= 0 && dogears >= 0, "clips exist: agws301, dogears");
+    if (walk < 0 || dogears < 0) return;
+    const auto& walk_seq = arc.get_animation(static_cast<uint32_t>(walk));
+    const auto& ears_seq = arc.get_animation(static_cast<uint32_t>(dogears));
+    auto snapshot = [&](bool frozen) {
+        sim::AntSnapshot a{};
+        a.id = 1; a.player_id = 0; a.type = sim::AntType::Worker;
+        a.px = 300; a.py = 200; a.tile_x = 9; a.tile_y = 6; a.facing = 4; a.hp = 10; a.max_hp = 10;
+        a.anim_state = static_cast<uint16_t>(sim::UnitState::Walking);
+        a.state = sim::UnitState::Walking;
+        a.loco_clip = static_cast<uint16_t>(walk); a.loco_frame = 0; a.loco_left_ms = 10;
+        a.frozen = frozen;
+        return a;
+    };
+    auto render = [&](const sim::AntSnapshot& ant, const std::vector<uint32_t>& selected, bool show_hp, float sub_s) {
+        r.pin_animation_clock(0);
+        r.set_show_hp(show_hp);
+        sim::WorldState ws;
+        ws.width = level.width;
+        ws.height = level.height;
+        ws.ants.push_back(ant);
+        r.camera().x = 0; r.camera().y = 0; r.camera().clamp_to_bounds(level.width, level.height);
+        SDL_SetRenderDrawColor(sr, 255, 0, 255, 255);
+        SDL_RenderClear(sr);
+        r.render_world(ws, grid, -1, selected, false, false, -1, -1, -1, sub_s);
+        r.set_show_hp(false);
+        r.unpin_animation_clock();
+        return read_region(sr, PLAYFIELD_X, PLAYFIELD_Y, PLAYFIELD_W, PLAYFIELD_H);
+    };
+    static const uint8_t offsets[4] = { 60, 40, 20, 0 };
+    auto shifted = arc.get_palette();
+    for (size_t i = 0; i < 256; ++i) if (i != assets::CHD_COLOR_KEY_INDEX) shifted[i] = arc.get_palette()[(i + offsets[0]) & 0xFF];
+    auto same_image = [&](const Image& a, const Image& b) {
+        for (int y = 0; y < PLAYFIELD_H; ++y) for (int x = 0; x < PLAYFIELD_W; ++x) if (std::memcmp(a.at(x, y), b.at(x, y), 3) != 0) return false;
+        return true;
+    };
+    // the marker: frame 0 of dogears at the predicted position (the ant has moved 4 px south at 20 ms, its frame 1 shows)
+    {
+        const Image got = render(snapshot(false), {1}, false, 0.020f);
+        Image full = model_map(arc, level, 0);
+        model_draw_frame(full, arc, walk_seq.subitems[1], 300, 204, false, shifted);
+        model_draw_frame(full, arc, ears_seq.subitems[0], 300, 204, false, arc.get_palette());
+        check(same_image(got, full), "the ears are drawn at the ant's predicted position (300, 204), not at its tick position (300, 200)");
+    }
+    // the number: the white pixels that it adds are those of the fixed font at the predicted position
+    {
+        const Image plain = render(snapshot(false), {}, false, 0.020f);
+        const Image with = render(snapshot(false), {}, true, 0.020f);
+        SDL_SetRenderDrawColor(sr, 0, 0, 0, 255);
+        SDL_RenderClear(sr);
+        r.draw_fixed_text("10", PLAYFIELD_X + 300, PLAYFIELD_Y + 204, assets::ColorRGBA{255, 255, 255, 255});
+        const Image digits = read_region(sr, PLAYFIELD_X, PLAYFIELD_Y, PLAYFIELD_W, PLAYFIELD_H);
+        long added = 0, expected = 0, wrong = 0;
+        for (int y = 0; y < PLAYFIELD_H; ++y) {
+            for (int x = 0; x < PLAYFIELD_W; ++x) {
+                const bool is_new = std::memcmp(plain.at(x, y), with.at(x, y), 3) != 0;
+                const bool white = digits.at(x, y)[0] == 255 && digits.at(x, y)[1] == 255 && digits.at(x, y)[2] == 255;
+                if (is_new) ++added;
+                if (white) ++expected;
+                if (is_new != white) ++wrong;
+            }
+        }
+        check(added > 0 && expected > 0, "the health number adds pixels");
+        check(wrong == 0, "the health number is drawn at the predicted position (300, 204): " + std::to_string(wrong) + " pixels differ");
+    }
+    // a frozen ant is skipped by the display loop: no number either (only its burn overlay is drawn)
+    {
+        sim::AntSnapshot frozen = snapshot(true);
+        frozen.burn_elapsed_ms = 0;
+        const Image plain = render(frozen, {}, false, 0.0f);
+        const Image with = render(frozen, {}, true, 0.0f);
+        check(same_image(plain, with), "a frozen ant shows no health number");
+    }
+}
+
 // Selection markers are children of the view container: drawn after the whole map (over lower ants), thresholds dogears
 // hp >= 9 / yelears / redears hp <= 2, each with its own clock that restarts when the health changes.
 void test_selection_markers(Renderer& r, const assets::AssetArchive& arc) {
@@ -847,7 +1037,9 @@ void test_selection_markers(Renderer& r, const assets::AssetArchive& arc) {
         a.id = id; a.player_id = player; a.type = sim::AntType::Worker; a.px = 176; a.py = py;
         a.tile_x = 5; a.tile_y = py / 32; a.facing = 4; a.hp = hp; a.max_hp = 10;
         a.loco_clip = static_cast<uint16_t>(stand); a.loco_frame = 0; a.loco_mirrored = false;
+        a.loco_left_ms = 150;                                       // frame 0 of agst301 has just started (a snapshot never holds a frame whose end is due)
         a.anim_state = static_cast<uint16_t>(sim::UnitState::Idle);
+        a.state = sim::UnitState::Idle;
         return a;
     };
     struct Step { uint32_t pin; uint16_t hp; uint32_t ears_id; uint32_t elapsed; };
@@ -1310,7 +1502,9 @@ int main() {
     test_frozen_ant(r, arc);
     test_blown_ant_edge(r, arc);
     test_subtick_prediction(r, arc);
+    test_subtick_locomotion(r, arc);
     test_selection_markers(r, arc);
+    test_marker_and_digit_position(r, arc);
     test_map_layers(r, arc);
     test_fog_objects(r, arc);
     test_food_fog_footprint(r);

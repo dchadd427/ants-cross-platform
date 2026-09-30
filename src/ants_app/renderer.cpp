@@ -1269,24 +1269,27 @@ Renderer::AntClipPrediction Renderer::predict_ant_clip(const ants::sim::AntSnaps
     if (!seq || seq->subitems.empty()) return p;
     p.frame = std::min<size_t>(ant.loco_frame, seq->subitems.size() - 1);
     using S = ants::sim::UnitState;
-    switch (ant.state) {   // action clips whose displacement is the clip's own (no step callback changes it)
-        case S::Attacking: case S::Flinch: case S::Knockback: case S::Stunned: case S::PoweringUp: case S::EnteringBase:
-        case S::Infiltrating: case S::Drowning: case S::PlantingBomb: case S::DefusingBomb: case S::PlacingFire:
-        case S::ExtinguishingFire: case S::BuildingBridge: case S::DemolishingBridge: case S::CantGo:
-            break;
-        default:
-            return p;
-    }
+    // The real-time player of the original steps every clip when a frame ends (AnimationStep 0x102b997 with timeGetTime) and the screen is redrawn on every scheduler pass
+    // (REFRESH, period 0, 0x102c4d1), so whatever clip the ant plays, walk, idle, swim, dive, climb, harvest or an action, the frames that end before the next tick are shown
+    // in advance. A frame's displacement applies when the frame ends. The last frame of a clip stays until the next tick, where the simulation's step callback decides what
+    // comes next (the next tile, a snap to the tile centre, another clip); only an idle clip is known to loop.
+    if (ant.state == S::Dead || ant.state == S::Burn) return p;     // a dying ant and the frozen ant under its burn overlay are not stepped here
+    const bool loops = (ant.state == S::Idle || ant.state == S::GuardIdle);
     int32_t left = static_cast<int32_t>(ant.loco_left_ms);
     int32_t t = static_cast<int32_t>(sub_tick_ms_);
-    // A frame's displacement applies when the frame ends; the last frame stays until the next tick (the simulation replaces the
-    // clip at its end)
-    while (t >= left && p.frame + 1 < seq->subitems.size()) {
-        t -= left;
-        p.dx += seq->subitems[p.frame].val1;
-        p.dy += seq->subitems[p.frame].val2;
-        ++p.frame;
-        left = static_cast<int32_t>(seq->subitems[p.frame].val3);
+    for (int guard = 0; guard < 64 && t >= left; ++guard) {
+        if (p.frame + 1 < seq->subitems.size()) {
+            t -= left;
+            p.dx += seq->subitems[p.frame].val1;
+            p.dy += seq->subitems[p.frame].val2;
+            ++p.frame;
+        } else if (loops) {
+            t -= left;
+            p.frame = 0;
+        } else {
+            break;
+        }
+        left = std::max<int32_t>(1, static_cast<int32_t>(seq->subitems[p.frame].val3));
     }
     return p;
 }
@@ -1306,232 +1309,20 @@ void Renderer::draw_single_ant(const ants::sim::AntSnapshot& ant) {
     // The original has neither a shadow nor a hop: a flight is the displacement baked into the aggb / aggh clips.
     const int32_t render_y = sy;
 
-    // 2. Resolve Action Animation Prefix
-    static const char* normal_prefixes[6]  = { "ag", "ab", "af", "at", "ac", "as" };
-    static const char* holding_prefixes[6] = { "hg", "hb", "hf", "ht", "hc", "hs" };
-    std::string prefix = ant.is_holding ? holding_prefixes[static_cast<size_t>(ant.type) % 6]
-                                        : normal_prefixes[static_cast<size_t>(ant.type) % 6];
-    std::string action = "st"; // Default Idle
-
-    // Swimmer ant does not have carrying/holding animation while swimming in water;
-    // default back to normal swimming ("as")
-    if (ant.type == ants::sim::AntType::Swimmer &&
-        (ant.is_swimming || ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::Swimming))) {
-        prefix = "as";
-    }
-
-    if (ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::Walking)) {
-        if (ant.is_swimming) {
-            action = "sw";
-        } else if (ant.is_on_mud) {
-            action = "wm";
-        } else {
-            action = "wg";
-        }
-    } else if (ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::BuildingBridge)) {
-        action = ant.is_swimming ? "bbw" : "bbl";
-    } else if (ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::DemolishingBridge)) {
-        action = ant.is_swimming ? "dbw" : "dbl";
-    } else if (ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::DivingInWater)) {
-        action = "di";
-    } else if (ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::ExitingWater)) {
-        action = "go";
-    } else if (ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::Swimming)) {
-        action = "tw";
-    } else if (ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::Attacking)) {
-        action = "at";
-    } else if (ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::HarvestingFood)) {
-        action = "gf"; // Grab Food bite sequence (aggf301, abgf201, afgf201, acgf201, asgf301, atgf301)
-    } else if (ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::Knockback)) {
-        action = "gb"; // Ground Bounce tumbling flight (aggb301, abgb301, afgb201, acgb201, asgb201, atgb201)
-    } else if (ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::Flinch)) {
-        action = "gh";
-    } else if (ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::Burn)) {
-        action = "bu";
-    } else if (ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::Drowning)) {
-        action = "dr";
-    } else if (ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::PlantingBomb)) {
-        action = "sb";
-    } else if (ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::DefusingBomb)) {
-        action = "db";
-    } else if (ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::PlacingFire)) {
-        action = "sf";
-    } else if (ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::ExtinguishingFire)) {
-        action = "xf";
-    } else if (ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::Stunned)) {
-        action = "sd";
-    } else if (ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::CantGo)) {
-        action = "cg";
-    } else {
-        action = "st";
-    }
-
-    // Only idle, walk and can't-go / stun have carry variants (h*); every other action, the melee attack included
-    // (table 0x1004098), plays the plain clip and shows no lunchbox.
-    if (action == "gf" || action == "gb" || action == "gh" || action == "bu" || action == "dr" || action == "at" ||
-        action == "sb" || action == "db" || action == "sf" || action == "xf" ||
-        action == "bbl" || action == "bbw" || action == "dbl" || action == "dbw" ||
-        action == "di" || action == "go") {
-        prefix = normal_prefixes[static_cast<size_t>(ant.type) % 6];
-    }
-
-    ants::assets::Direction dir = static_cast<ants::assets::Direction>(ant.facing & 7);
-    if (ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::Drowning) ||
-        ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::Burn) ||
-        ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::Stunned) ||
-        ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::CantGo)) {
-        dir = ants::assets::Direction::South;
-    } else if (ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::BuildingBridge) ||
-               ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::DemolishingBridge) ||
-               ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::PlantingBomb) ||
-               ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::DefusingBomb) ||
-               ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::PlacingFire) ||
-               ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::ExtinguishingFire)) {
-        // These animations only exist for cardinal directions: North (7), South (3), East/West (9/5)
-        if (dir == ants::assets::Direction::NorthEast || dir == ants::assets::Direction::NorthWest) {
-            dir = ants::assets::Direction::North;
-        } else if (dir == ants::assets::Direction::SouthEast || dir == ants::assets::Direction::SouthWest) {
-            dir = ants::assets::Direction::South;
-        }
-    }
-
+    // The simulation plays the exact ants.chd clip on every ant (idle, walk on each terrain, swim, dive, climb, can't-go and all the actions), so the frame to draw is that
+    // clip's current frame. There is no interpolation: as in the 1998 game a sprite moves only when its animation frame ends; the real-time player of the original does that at
+    // the moment a frame ends, not at 50 ms simulation ticks, so the frames that end before the next tick are shown in advance (predict_ant_clip). Mirrored clips (SW, W, NW)
+    // use the archive's mirrored copies of the stored SE, E and NE animations.
     const ants::assets::AnimationSequence* loco_seq = ant_loco_sequence(ant);
-    // The real-time player of the original changes frames and positions when a frame ends, not at 50 ms simulation ticks:
-    // the frames that end before the next tick are shown in advance (pure action clips only, see predict_ant_clip).
     const AntClipPrediction pred = predict_ant_clip(ant, loco_seq);
 
-    // Draws one animation frame's parts at the ant in the original order (last stored part first, so the first
-    // stored part - e.g. a carried lunchbox in front of the body - is on top) with the original ant colour rule.
-    auto draw_frame_sprites = [&](const ants::assets::AnimationSubItem& sub, bool mirrored) {
-        draw_frame_parts(sub, sx + pred.dx, render_y + pred.dy, mirrored, ant_colour(ant.player_id));
-    };
-
-    // Original locomotion animation (idle, walk on each terrain, swim, dive, climb, can't-go): the simulation
-    // plays the exact ants.chd clip and frame, so draw that frame. There is no interpolation: as in the 1998
-    // game, a sprite moves only when its animation frame ends. Mirrored clips (SW, W, NW) use the archive's
-    // mirrored copies of the stored SE, E and NE animations.
     if (ant.frozen) {
         // The display loop (0x10088e7) skips a frozen ant (sprite slot +0x40 is +0xfc): the dud bomb's ?bu clip is a full-body
         // overlay, and drawing the idle ant beneath it would show a ghost body around the flames.
     } else if (loco_seq && !loco_seq->subitems.empty()) {
-        draw_frame_sprites(loco_seq->subitems[pred.frame], ant.loco_mirrored);
-    } else {
-        const auto* seq = archive_->get_directional_animation(prefix + action, dir);
-        if (seq && !seq->subitems.empty()) {
-            size_t sub_idx = 0;
-            if (action == "gb") {
-                // Ballistic knockback / bounce lasts 10-12 ticks; map across sequence frames
-                uint16_t total_ticks = (ant.anim_state == static_cast<uint16_t>(ants::sim::UnitState::Knockback)) ? 12 : 10;
-                sub_idx = (ant.anim_frame * seq->subitems.size()) / total_ticks;
-                if (sub_idx >= seq->subitems.size()) {
-                    sub_idx = seq->subitems.size() - 1;
-                }
-            } else if (action == "gf") {
-                // Food harvesting bite sequence lasts 8 ticks (420ms); map across sequence frames
-                sub_idx = (ant.anim_frame * seq->subitems.size()) / 8;
-                if (sub_idx >= seq->subitems.size()) {
-                    sub_idx = seq->subitems.size() - 1;
-                }
-            } else if (action == "bu") {
-                // Fire burn / bomb dud scorch lasts 22 ticks (Table 4 duration 1,150ms @ 20Hz)
-                sub_idx = (ant.anim_frame * seq->subitems.size()) / 22;
-                if (sub_idx >= seq->subitems.size()) {
-                    sub_idx = seq->subitems.size() - 1;
-                }
-            } else if (action == "sd") {
-                // Stunned dizzy stars (Table 4 duration: 125ms Worker, 105ms Bomber, 100ms others)
-                uint32_t elapsed_ms = static_cast<uint32_t>(ant.anim_frame) * 50u + sub_tick_ms_;
-                sub_idx = get_anim_subitem_by_time(*seq, elapsed_ms);
-            } else if (action == "gh") {
-                // Flinch reaction lasts 14 ticks (700ms); map across the 9 sequence frames
-                sub_idx = (ant.anim_frame * seq->subitems.size()) / 14;
-                if (sub_idx >= seq->subitems.size()) {
-                    sub_idx = seq->subitems.size() - 1;
-                }
-            } else if (action == "at") {
-                // Melee strike lasts 8 ticks (Combat Ant lasts 11 ticks)
-                uint16_t total_ticks = (ant.type == ants::sim::AntType::Combat) ? 11 : 8;
-                sub_idx = (ant.anim_frame * seq->subitems.size()) / total_ticks;
-                if (sub_idx >= seq->subitems.size()) {
-                    sub_idx = seq->subitems.size() - 1;
-                }
-            } else if (action == "sb") {
-                // Planting bomb lasts 28 ticks; map across the sequence frames
-                sub_idx = (ant.anim_frame * seq->subitems.size()) / 28;
-                if (sub_idx >= seq->subitems.size()) {
-                    sub_idx = seq->subitems.size() - 1;
-                }
-            } else if (action == "sf") {
-                // Placing fire lasts 35 ticks (1760ms); map ticks authentically across the 22 subitems
-                // Subitems 0..6 (aiming glass, 7 frames @ 100ms = 700ms -> ticks 0..13)
-                // Subitems 7..17 (spark/flash/erupt, 11 frames @ 60ms = 660ms -> ticks 14..26)
-                // Subitems 18..21 (put away glass, 4 frames @ 100ms = 400ms -> ticks 27..34)
-                if (seq->subitems.size() == 22) {
-                    if (ant.anim_frame < 14) {
-                        sub_idx = (ant.anim_frame * 7) / 14;
-                    } else if (ant.anim_frame < 27) {
-                        sub_idx = 7 + ((ant.anim_frame - 14) * 11) / 13;
-                    } else {
-                        sub_idx = 18 + ((ant.anim_frame - 27) * 4) / 8;
-                    }
-                } else {
-                    sub_idx = (ant.anim_frame * seq->subitems.size()) / 35;
-                }
-                if (sub_idx >= seq->subitems.size()) {
-                    sub_idx = seq->subitems.size() - 1;
-                }
-            } else if (action == "xf") {
-                // Extinguishing fire subitems are 100ms each (2 sim ticks per subitem)
-                sub_idx = static_cast<size_t>(ant.anim_frame / 2);
-                if (sub_idx >= seq->subitems.size()) {
-                    sub_idx = seq->subitems.size() - 1;
-                }
-            } else if (action == "db") {
-                // Defusing bomb lasts 22 ticks (1,100ms); authentically mapped across 12 subitems:
-                // Subitem 0: tick 0 (50ms)
-                // Subitem 1: tick 1 (50ms)
-                // Subitem 2: ticks 2..3 (100ms)
-                // Subitem 3: ticks 4..7 (200ms, sound 73 at tick 5)
-                // Subitem 4: tick 8 (50ms)
-                // Subitem 5: tick 9 (50ms)
-                // Subitem 6: ticks 10..11 (100ms)
-                // Subitem 7: ticks 12..13 (100ms, sound 74 + bomb clear at tick 13)
-                // Subitem 8: ticks 14..15 (100ms)
-                // Subitem 9: ticks 16..17 (100ms)
-                // Subitem 10: ticks 18..19 (100ms)
-                // Subitem 11: ticks 20..21 (100ms)
-                if (seq->subitems.size() == 12) {
-                    if (ant.anim_frame <= 0) sub_idx = 0;
-                    else if (ant.anim_frame == 1) sub_idx = 1;
-                    else if (ant.anim_frame < 4) sub_idx = 2;
-                    else if (ant.anim_frame < 8) sub_idx = 3;
-                    else if (ant.anim_frame == 8) sub_idx = 4;
-                    else if (ant.anim_frame == 9) sub_idx = 5;
-                    else if (ant.anim_frame < 12) sub_idx = 6;
-                    else if (ant.anim_frame < 14) sub_idx = 7;
-                    else if (ant.anim_frame < 16) sub_idx = 8;
-                    else if (ant.anim_frame < 18) sub_idx = 9;
-                    else if (ant.anim_frame < 20) sub_idx = 10;
-                    else sub_idx = 11;
-                } else {
-                    sub_idx = (ant.anim_frame * seq->subitems.size()) / 22;
-                }
-                if (sub_idx >= seq->subitems.size()) {
-                    sub_idx = seq->subitems.size() - 1;
-                }
-            } else {
-                sub_idx = ant.anim_frame % seq->subitems.size();
-            }
-            draw_frame_sprites(seq->subitems[sub_idx], ants::assets::get_direction_mapping(dir).mirrored);
-        } else {
-            // Fallback: draw directional stand sprite
-            std::string fallback_name = prefix + "st301.bmp";
-            SDL_Texture* tex = texture_cache_->get_named_sprite_texture(fallback_name, false, ant_colour(ant.player_id));
-            if (tex) {
-                SDL_Rect dst = { sx - 16, render_y - 16, 32, 32 };
-                SDL_RenderCopy(renderer_, tex, nullptr, &dst);
-            }
-        }
+        // Draws one animation frame's parts at the ant in the original order (last stored part first, so the first stored part - e.g. a carried lunchbox in front of the body -
+        // is on top) with the original ant colour rule.
+        draw_frame_parts(loco_seq->subitems[pred.frame], sx + pred.dx, render_y + pred.dy, ant.loco_mirrored, ant_colour(ant.player_id));
     }
 
     // 2.4 Dud burn overlay (FUN_01021c68): the ?bu clip is a separate sprite on top of the frozen ant
@@ -1627,12 +1418,15 @@ void Renderer::collect_ant_units(const ants::sim::WorldState& world) {
 
         RenderItem item{};
         // The sort key is the sprite's y: a thrown ant's key jumps with its position at the end of the first flight frame
-        item.sort_y = a.py + predict_ant_clip(a, ant_loco_sequence(a)).dy;
-        item.draw_func = [this, a](SDL_Renderer*, TextureCache&) {
+        const AntClipPrediction pred = predict_ant_clip(a, ant_loco_sequence(a));
+        item.sort_y = a.py + pred.dy;
+        item.draw_func = [this, a, pred](SDL_Renderer*, TextureCache&) {
             this->draw_single_ant(a);
-            if (show_hp_) {          // FUN_0101b802 with [4b14] != 0: sprintf("%d", hp), white, at the sprite position, in the fixed system font
-                this->draw_fixed_text(std::to_string(a.hp), PLAYFIELD_X + (a.px - static_cast<int32_t>(camera_.x)),
-                                      PLAYFIELD_Y + (a.py - static_cast<int32_t>(camera_.y)), ants::assets::ColorRGBA{255, 255, 255, 255});
+            // FUN_0101b802 (which the display loop skips for a frozen ant) with [4b14] != 0: sprintf("%d", hp), white, at the sprite position (the predicted one: the sprite
+            // moves when a frame ends), in the fixed system font
+            if (show_hp_ && !a.frozen) {
+                this->draw_fixed_text(std::to_string(a.hp), PLAYFIELD_X + (a.px + pred.dx - static_cast<int32_t>(camera_.x)),
+                                      PLAYFIELD_Y + (a.py + pred.dy - static_cast<int32_t>(camera_.y)), ants::assets::ColorRGBA{255, 255, 255, 255});
             }
         };
         render_queue_.push_back(std::move(item));
@@ -1765,7 +1559,8 @@ void Renderer::collect_selection_markers(const ants::sim::WorldState& world, int
         if (seq.subitems.empty()) continue;
         OverlayItem item{};
         item.created_ms = st.start_ms;
-        const int32_t px = ant->px, py = ant->py;
+        const AntClipPrediction pred = predict_ant_clip(*ant, ant_loco_sequence(*ant));     // the marker follows the sprite, which steps when a frame ends
+        const int32_t px = ant->px + pred.dx, py = ant->py + pred.dy;
         const int64_t start = st.start_ms;
         item.draw = [this, &seq, px, py, start]() {
             int32_t sx = 0, sy = 0;

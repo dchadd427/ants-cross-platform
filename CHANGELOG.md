@@ -39,6 +39,16 @@ Ground truth for every entry is in [`docs/GAME_REVERSE_ENGINEERING.md`](docs/GAM
   - **Found on the way, for the audit** (docs: implementation_plan.md section 18): `tests/test_sim/test_challenger_m2_it2_deep_stress.cpp` has not been part of the build since an early commit and no longer compiles
     (it uses the retired slot-queue API of the hill). (An earlier version of this line said that the death clips are no longer started by a separate effect: wrong, only the unused helper `spawn_death_effect` was removed; the effect path in `movement_system.cpp` is still in use, see the audit.)
 
+## v0.0.75 - 2026-09-30 - The ants' frames in real time
+
+Batch 7 part 2 (`docs/audit/ledger_ants.md` NEW-1, NEW-3, NEW-5, `ledger_combat.md` V-K1; re-read in `Ants.exe`: `0x102b997` (the animation step on `timeGetTime`), `0x102c4d1` (the REFRESH task), `0x101b802`, `0x10088e7`):
+
+- **Every clip steps at the moment a frame ends, as in the original**: the remake showed the frames of an action clip that end before the next 50 ms tick, but walking, idle, swimming, diving, climbing, harvesting and can't-go clips only at the tick, up to 50 ms late. On sand (40 ms frames) an ant took 1, 1, 1 and 2 frames per tick, on mud and dirt (60 ms) it showed a frame twice as long as the others and then a double step, and the idle animation changed on a 50 ms grid; all of that is smooth now (grass, whose frames last 50 ms, never had the problem). The last frame of a clip still waits for the next tick, where the simulation decides what comes next; an idle clip loops.
+- **The ears and the hit-point number follow the ant's sprite**: they were at the position of the last tick (a thrown ant's ears trailed its 128 px jump by up to 50 ms). **A frozen ant (a dud bomb's victim under its flames) shows no hit-point number any more**: the display loop skips such an ant, and its own draw function is what draws the number.
+- **Removed**: the legacy animation-by-name path of the ant renderer (a fallback by prefix, action and tick counter for an ant without a locomotion clip; no ant is ever without one) and about 200 lines of tables that mapped ticks to frames for it.
+- Docs: `docs/GAME_REVERSE_ENGINEERING.md` 5.59, README, `docs/AUDIT_ONE_TO_ONE.md` (progress).
+- Tests: `test_render_parity` `test_subtick_locomotion` (13 cases: sand, mud and grass walks, idle loops, a mirrored walk, the last frame, a frame that outlasts the tick), `test_marker_and_digit_position` (the ears and the number at the predicted position, no number for a frozen ant). Rewritten: `test_holding_attack` (it drove the removed name path; it now checks the clip that the simulation plays for a carrying ant and draws it), the idle snapshots of `test_selection_markers` (a realistic frame time). Version assertions of 12.108.
+
 ## v0.0.74 - 2026-09-30 - The dust ball of the original
 
 Batch 7 part 1 (`docs/audit/ledger_combat.md` NEW-1; re-read in `Ants.exe`: `0x101b8cb`, `0x101bb92` - `0x101bc98`, `0x101c34c`, `0x101c449`, `0x100cd7d`):
