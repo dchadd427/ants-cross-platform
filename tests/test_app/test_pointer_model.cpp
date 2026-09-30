@@ -1093,6 +1093,36 @@ void test_keyboard() {
             key(close_key);
             check(!f.hud.is_quick_help_open(), "the quick help closes with C, X, Enter and Esc");
         }
+        // the Return button (the button class): the press captures it, the release on the button closes the quick help, a click anywhere else does nothing
+        key(SDLK_F1);
+        f.press(300, 200);
+        f.release(300, 200);
+        check(f.hud.is_quick_help_open(), "a click on the screen does not close the quick help (FUN_010145d2: only the button and the keys)");
+        f.press(580, 450);
+        check(f.hud.is_quick_help_open() && f.hud.quick_help_return_button().pressed(), "a press on Return captures it; nothing closes yet");
+        f.release(580, 450);
+        check(!f.hud.is_quick_help_open(), "the release on Return closes it");
+        key(SDLK_F1);
+        f.press(580, 450);
+        f.hud.handle_mouse_motion(300, 200, f.sim, f.cam);
+        f.hud.handle_mouse_motion(580, 450, f.sim, f.cam);
+        f.release(580, 450);
+        check(f.hud.is_quick_help_open(), "leaving the button cancels the capture for good: coming back and releasing closes nothing");
+        f.press(580, 450);
+        f.release(300, 200);
+        check(f.hud.is_quick_help_open(), "a release away from the button does not close it");
+        f.press(527, 437);
+        f.release(527, 437);
+        check(!f.hud.is_quick_help_open(), "the button's rectangle is the union of its pictures (527, 437) - (627, 463)");
+        key(SDLK_F1);
+        f.press(626, 462);
+        f.release(626, 462);
+        check(!f.hud.is_quick_help_open(), "(626, 462) is inside it");
+        key(SDLK_F1);
+        f.press(627, 440);
+        f.release(627, 440);
+        check(f.hud.is_quick_help_open(), "(627, 440) is outside");
+        key(SDLK_RETURN);
         key('o', KMOD_CTRL);
         check(f.hud.is_options_open(), "Ctrl+O opens the options");
         key(SDLK_ESCAPE);

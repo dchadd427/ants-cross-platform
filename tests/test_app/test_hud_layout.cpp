@@ -985,6 +985,46 @@ void test_button_states(const assets::AssetArchive& arc) {
         hud.close_options();
     }
 
+    // The chat input box is the edit control of FUN_0100dbe2 (docs 5.51): the rectangle (481, 424) - (620, 436), 12 px letters in (7, 11, 15), a caret that toggles every
+    // 150 ms from the moment the screen was built, the end of a text that does not fit, nothing while the chat option is off
+    {
+        HUD hud;
+        hud.set_ticks_function(&test_clock);
+        g_now_ms = 5000;
+        hud.init(0);                                              // the control gets the focus now: the caret origin is 5000
+        ViewportCamera cam;
+        auto frame = [&](uint32_t now) {
+            g_now_ms = now;
+            RecordingRenderer rr(arc);
+            hud.render(rr, arc, world, cam);
+            return rr;
+        };
+        auto text_at = [&](const RecordingRenderer& rr, const std::string& text, int32_t x, int32_t y) {
+            for (const auto& t : rr.texts) {
+                if (t.text == text && t.x == x && t.y == y && t.size == FontSize::Px12 && t.colour.r == 7 && t.colour.g == 11 && t.colour.b == 15) return true;
+            }
+            return false;
+        };
+        check(text_at(frame(5000), "_", 481, 424) && text_at(frame(5149), "_", 481, 424), "empty box: the caret at its corner (481, 424), visible for the first 150 ms");
+        check(!text_at(frame(5150), "_", 481, 424) && !text_at(frame(5299), "_", 481, 424) && text_at(frame(5300), "_", 481, 424), "then gone for 150 ms, then visible again");
+        hud.set_chat_input("hello");
+        RecordingRenderer a = frame(5000);
+        check(text_at(a, "hello", 481, 424) && text_at(a, "_", 481 + 5 * 6, 424), "the text at (481, 424) in (7, 11, 15), the caret right behind it");
+        // a text wider than the box (139 px less the caret's 6 here: 22 characters of 6 px) shows its end, the caret at the right end of the box
+        hud.set_chat_input("0123456789abcdefghijklmnopqrstuvwxyz");
+        RecordingRenderer b = frame(5000);
+        check(text_at(b, "efghijklmnopqrstuvwxyz", 481 + 133 - 132, 424) && text_at(b, "_", 481 + 133, 424), "a text that does not fit shows its end; the caret at the right end");
+        // chat off: the box is hidden and covered
+        hud.open_options();
+        hud.handle_mouse_down(160, 300, 1, sim, cam);
+        hud.handle_mouse_up(160, 300, 1, sim, cam);
+        hud.close_options();
+        RecordingRenderer c = frame(5000);
+        bool any = false;
+        for (const auto& t : c.texts) if (t.colour.r == 7 && t.colour.g == 11 && t.colour.b == 15 && (t.text == "_" || t.text.rfind("0123", 0) == 0 || t.text.find("efgh") != std::string::npos)) any = true;
+        check(!any, "with the chat option off nothing of the input box is drawn");
+    }
+
     // Quit dialog buttons: yes1 at (180,260); pressed yes3 has its part at (0,1) relative to the origin
     {
         HUD hud;

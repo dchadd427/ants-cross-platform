@@ -533,8 +533,12 @@ void Application::enter_map_select() {
 
 // The loading screen ends: the quick help when the option asks for it, else the setup screen
 void Application::finish_loading() {
-    if (hud_.is_quick_help_enabled()) state_ = AppState::QuickHelp;
-    else enter_map_select();
+    if (hud_.is_quick_help_enabled()) {
+        state_ = AppState::QuickHelp;
+        quick_help_start_.reset();
+    } else {
+        enter_map_select();
+    }
 }
 
 void Application::return_to_map_select() {
@@ -721,25 +725,18 @@ void Application::handle_events() {
                 mouse_screen_x_ = event.motion.x;
                 mouse_screen_y_ = event.motion.y;
                 mouse_has_moved_ = true;
-                quick_help_start_hovered_ = (event.motion.x >= 528 && event.motion.x <= 528 + 98 && event.motion.y >= 437 && event.motion.y <= 437 + 27);
+                quick_help_move(event.motion.x, event.motion.y);
             } else if (event.type == SDL_MOUSEBUTTONDOWN) {
                 mouse_screen_x_ = event.button.x;
                 mouse_screen_y_ = event.button.y;
                 mouse_has_moved_ = true;
-                if (event.button.x >= 528 && event.button.x <= 528 + 98 && event.button.y >= 437 && event.button.y <= 437 + 27) {
-                    quick_help_start_pressed_ = true;
-                }
+                if (event.button.button == SDL_BUTTON_LEFT) quick_help_press(event.button.x, event.button.y);
             } else if (event.type == SDL_MOUSEBUTTONUP) {
-                if (quick_help_start_pressed_) {
-                    quick_help_start_pressed_ = false;
-                    if (event.button.x >= 528 && event.button.x <= 528 + 98 && event.button.y >= 437 && event.button.y <= 437 + 27) {
-                        enter_map_select();   // qh_start3 carries no sound
-                    }
-                }
+                mouse_screen_x_ = event.button.x;
+                mouse_screen_y_ = event.button.y;
+                if (event.button.button == SDL_BUTTON_LEFT) quick_help_release(event.button.x, event.button.y);
             } else if (event.type == SDL_KEYDOWN) {
-                if (event.key.keysym.sym == SDLK_RETURN || event.key.keysym.sym == SDLK_SPACE || event.key.keysym.sym == SDLK_ESCAPE) {
-                    enter_map_select();
-                }
+                quick_help_key(event.key.keysym.sym);
             }
             continue;
         }
@@ -1302,7 +1299,21 @@ void Application::render_quick_help_screen() {
     // qh_screen composite (last part first) and the START button animations qh_start1 / qh_start2 (hover) / qh_start3
     // (pressed) with absolute coordinates
     draw_animation_frame0(*renderer_, assets_, "qh_screen");
-    draw_animation_frame0(*renderer_, assets_, quick_help_start_pressed_ ? "qh_start3" : (quick_help_start_hovered_ ? "qh_start2" : "qh_start1"));
+    draw_animation_frame0(*renderer_, assets_, quick_help_start_.pressed() ? "qh_start3" : (quick_help_start_.hovered() ? "qh_start2" : "qh_start1"));
+}
+
+// The START! button of the quick help is the original's button class: the press captures it (qh_start3 carries no sound), the release runs the callback
+// (FUN_01014802: the window closes and the setup screen is created) while the capture is still there, leaving cancels it for good
+void Application::quick_help_move(int32_t x, int32_t y) { quick_help_start_.on_move(x, y); }
+void Application::quick_help_press(int32_t x, int32_t y) { quick_help_start_.on_press(x, y); }
+void Application::quick_help_release(int32_t x, int32_t y) {
+    if (quick_help_start_.on_release(x, y)) enter_map_select();
+}
+
+// FUN_010147c2: Enter (0x18), Esc (0x1a), C (0x43), X (0x58), c (0x63) and x (0x78) run the same callback; M and m open the More Help dialog (not built); no other key does anything
+void Application::quick_help_key(SDL_Keycode sym) {
+    if (state_ != AppState::QuickHelp) return;
+    if (sym == SDLK_RETURN || sym == SDLK_KP_ENTER || sym == SDLK_ESCAPE || sym == SDLK_c || sym == SDLK_x) enter_map_select();
 }
 
 void Application::play_startup_sound() {

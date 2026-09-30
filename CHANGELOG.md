@@ -39,6 +39,16 @@ Ground truth for every entry is in [`docs/GAME_REVERSE_ENGINEERING.md`](docs/GAM
   - **Found on the way, for the audit** (docs: implementation_plan.md section 18): `tests/test_sim/test_challenger_m2_it2_deep_stress.cpp` has not been part of the build since an early commit and no longer compiles
     (it uses the retired slot-queue API of the hill). (An earlier version of this line said that the death clips are no longer started by a separate effect: wrong, only the unused helper `spawn_death_effect` was removed; the effect path in `movement_system.cpp` is still in use, see the audit.)
 
+## v0.0.66 - 2026-09-30 - The quick help and the chat input of the original
+
+Batch 4 part 3 (`docs/audit/ledger_screens.md` R4.2d and NEW-4, the chat input of NEW-9; each re-read in `Ants.exe`: `0x10145d2`, `0x10147c2`, `0x1014802`, `0x100dbe2`, `0x100a37c`, `0x10119a8`):
+
+- **The quick help closes only by its button or its keys**: the F1 / Help version used to close on a click anywhere. Now its Return button is the original's button class (the press captures it, the release on the button closes it, leaving it cancels for good) and a click elsewhere does nothing; the keys Enter, Esc, C and X (either case) close it, as before. The quick help at the start of the program has the same rules: **START!** is the button class (press captures, release starts, leaving cancels), and the keys are Enter, Esc, C and X (**Space is gone**: it was an invention). The button rectangles are the unions of their pictures.
+- **The chat input box is the original's edit control**: text at (481, 424) in 12 px letters in the colour (7, 11, 15) (it was at (484, 423) in (20, 50, 40), cut to the last 25 characters), a caret that toggles every **150 ms** from the moment the screen is built (it was 750 ms), the end of a text that does not fit the box shows (box 139 px less the caret's width), and nothing is drawn while the chat option is off. It shares its drawing with the options' quick chat fields.
+- Not built, recorded in `docs/GAME_REVERSE_ENGINEERING.md` 5.52: the **More Help** button and dialog (`M` / `m`): the dialog's text offers a trip to a web page that no longer exists (an owner decision).
+- Docs: `docs/GAME_REVERSE_ENGINEERING.md` 5.52, README (counts), `docs/AUDIT_ONE_TO_ONE.md` (progress).
+- Tests: `test_pointer_model` (the Return button: capture, release, leaving, the union rectangle, a click elsewhere), integration 9.14 (the start-up quick help: button class, exact key set, the stored switch skips it), `test_hud_layout` (the chat input's text, colour, caret phases, tail and the hidden box). **Rewritten test**: the quick help block of `test_pointer_model` (a click no longer closes it). Version assertion of 12.108.
+
 ## v0.0.65 - 2026-09-30 - The options of the original
 
 Batch 4, part 2 (`docs/audit/ledger_screens.md` S3, each rule re-read in `Ants.exe` first: `0x101487c`, `0x1011397` - `0x1011656`, `0x1015058` - `0x10150bc`, `0x10119a8` - `0x1011d86`, `0x1014f12` - `0x1015122`, `0x100c18f`, `0x102950f`, `0x100bbf2`, `0x100e7c7`):

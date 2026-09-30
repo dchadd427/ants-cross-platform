@@ -25,4 +25,10 @@ std::string fit_text(const IRenderer& renderer, std::string text, int32_t width,
 int32_t draw_label(IRenderer& renderer, const std::string& text, int32_t x, int32_t y, int32_t width, ants::assets::ColorRGBA color, FontSize size,
                    bool center);
 
+/// The one line of an edit field as the original's label draws it (FUN_0102b36a with FUN_01011c25, docs 5.51): the text is one line in a box `width` wide of which one
+/// caret (the width of "_") is kept free on the right. A text that fits is drawn from the left; one that does not is drawn right aligned when `tail_aligned` (its end shows,
+/// and the caret sits at the right end of the box), otherwise cut at the right edge. The caret is an underscore right behind the text. Both are drawn at (x, y) in `size`.
+void draw_edit_line(IRenderer& renderer, const std::string& text, int32_t x, int32_t y, int32_t width, bool tail_aligned, bool caret_visible, ants::assets::ColorRGBA color,
+                    FontSize size);
+
 }  // namespace ants::app

@@ -128,7 +128,7 @@ void HUD::init(uint8_t local_player_id) {
     team_button_    = {579, 443, 46, 24, false, false};
     is_on_team_ = false;
     chat_input_.clear();
-    cursor_blink_ticks_ = 0;
+    chat_focus_ms_ = clock_ms();                         // the chat edit control is active from the moment the screen is built (FUN_0100dbe2)
 
     // Configure Quit Confirmation Dialog Buttons
     yes_button_ = {180, 260, 49, 24, false, false}; // dyn_byes1 part (80,160) + origin (100,100)
@@ -189,9 +189,9 @@ void HUD::update(const sim::WorldState& world, uint32_t delta_ticks) {
 
     // The INPUT task polls the pointer every 50 ms (FUN_0102653f dispatches the move to the top window): the pictures of the options' controls follow it
     if (options_.is_open()) options_.on_move(mouse_x_, mouse_y_);
+    if (show_quick_help_) quick_help_return_.on_move(mouse_x_, mouse_y_);
 
-    // 3. Cursor blink ticks and alliance team status
-    cursor_blink_ticks_ += delta_ticks;
+    // 3. Alliance team status
     is_on_team_ = (local_player_id_ < world.player_alliances.size() &&
                    world.player_alliances[local_player_id_] < sim::MAX_PLAYERS &&
                    world.player_alliances[local_player_id_] != local_player_id_);
@@ -486,15 +486,13 @@ void HUD::render(IRenderer& renderer, const assets::AssetArchive& assets,
 
     // Ant relief horizontal divider bar x480y400.bmp (141x24) at (480, 400)
 
-    // Chat text input box wtype.bmp (143x14) at (479, 423): the edit control is always active (caret blinks) while chat is on
-    std::string input_display = chat_input_;
-    if (input_display.length() > 25) {
-        input_display = input_display.substr(input_display.length() - 25);
+    // Chat text input box wtype.bmp (143x14) at (479, 423): the edit control of FUN_0100dbe2 (docs 5.51) in the rectangle (481, 424) - (620, 436): 12 px letters in
+    // (7, 11, 15), active from the moment the screen is built (its caret toggles every 150 ms from then on) and hidden while the chat option is off. A text that does
+    // not fit shows its end (the control always has the focus).
+    if (options_.state().chat) {
+        const bool caret = ((clock_ms() - chat_focus_ms_) / ScreenEdit::CARET_HALF_PERIOD_MS) % 2 == 0;
+        draw_edit_line(renderer, chat_input_, 481, 424, 139, true, caret, assets::ColorRGBA{7, 11, 15, 255}, FontSize::Px12);
     }
-    if ((cursor_blink_ticks_ / 15) % 2 == 0) {
-        input_display += "_";
-    }
-    renderer.draw_text(input_display, 484, 423, {20, 50, 40, 255});
     // Chat switched off in the options: chatcovr (three chcovr2 tiles at (478,421/436/445)) covers the input box
     if (!options_.state().chat) {
         draw_animation_frame0(renderer, assets, "chatcovr", 0, 0);
@@ -1038,8 +1036,7 @@ void HUD::render_quick_help(IRenderer& renderer, const assets::AssetArchive& ass
     // In-game quick help (Ants.exe 0x10145d2, qh_screen): a 32-part full-screen composite (frame pieces plus qh2 at
     // (267,10) and qh1 at (10,9)) drawn over the live game, and the Return button qh_return1 at (529,437).
     draw_animation_frame0(renderer, assets, "qh_screen", 0, 0);
-    const bool over_return = UIRect{529, 437, 98, 26}.contains(mouse_x_, mouse_y_);
-    draw_animation_frame0(renderer, assets, over_return ? "qh_return2" : "qh_return1", 0, 0);
+    draw_animation_frame0(renderer, assets, quick_help_return_.pressed() ? "qh_return3" : (quick_help_return_.hovered() ? "qh_return2" : "qh_return1"), 0, 0);
 }
 
 void HUD::render_marquee_box(IRenderer& renderer) {
@@ -1204,9 +1201,7 @@ bool HUD::handle_mouse_down(int32_t x, int32_t y, uint8_t button,
 
     // 0. Overlays and Modals intercept clicks first
     if (show_quick_help_) {
-        if (button == SDL_BUTTON_LEFT) {
-            close_quick_help();   // qh_return3 carries no sound
-        }
+        if (button == SDL_BUTTON_LEFT) quick_help_return_.on_press(x, y);     // the Return button captures (qh_return3 carries no sound); nothing else reacts
         return true;
     }
     if (options_.is_open()) {
@@ -1339,6 +1334,10 @@ bool HUD::handle_mouse_up(int32_t x, int32_t y, uint8_t button,
     hatch_button_.is_pressed = false;
     team_up_button_.is_pressed = false;
     is_radar_dragging_ = false;
+    if (show_quick_help_) {
+        if (button == SDL_BUTTON_LEFT && quick_help_return_.on_release(x, y)) close_quick_help();        // the callback runs at the release, on the button
+        return true;
+    }
     if (options_.is_open()) {
         // The callbacks run at the release: Return, the pairs of switches and the sliders' drags (FUN_010115ca, FUN_01011206)
         if (button == SDL_BUTTON_LEFT) options_.on_release(x, y);
@@ -1429,6 +1428,10 @@ bool HUD::handle_mouse_motion(int32_t x, int32_t y,
     options_button_.is_hovered = options_button_.contains(x, y);
     quit_button_.is_hovered = quit_button_.contains(x, y);
 
+    if (show_quick_help_) {
+        quick_help_return_.on_move(x, y);
+        return true;
+    }
     if (options_.is_open()) {
         options_.on_move(x, y);                   // hover pictures; a dragged thumb follows the pointer (only the thumb: the value is applied at the release)
         return true;

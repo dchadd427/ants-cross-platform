@@ -1,5 +1,6 @@
 #include "ants_app/options_screen.hpp"
 
+#include "ants_app/text_layout.hpp"
 #include "ants_app/ui_anim.hpp"
 #include "ants_sim/game_strings.hpp"
 
@@ -183,25 +184,8 @@ void OptionsScreen::on_text(const std::string& text) {
     }
 }
 
-// A text of an edit field as the original's label draws it (FUN_0102b36a): one line in a surface the size of the field, inside a rectangle that is one caret
-// wide shorter; a focused text that does not fit is right aligned (its end shows), otherwise it is left aligned and cut at the right edge. The caret is an
-// underscore right behind the text (behind the visible part when the text does not fit).
 void OptionsScreen::draw_edit(IRenderer& renderer, const ScreenEdit& edit, uint32_t now_ms) const {
-    const int32_t caret_w = renderer.get_text_width("_", kEditFont);
-    const int32_t visible = edit.w() - caret_w;
-    std::string shown = edit.text();
-    const int32_t full_w = renderer.get_text_width(shown, kEditFont);
-    int32_t x = edit.x();
-    int32_t caret_x = edit.x() + full_w;
-    if (full_w > visible && edit.tail_aligned()) {
-        while (!shown.empty() && renderer.get_text_width(shown, kEditFont) > visible) shown.erase(0, 1);
-        x = edit.x() + visible - renderer.get_text_width(shown, kEditFont);
-        caret_x = edit.x() + visible;
-    } else {
-        while (!shown.empty() && renderer.get_text_width(shown, kEditFont) > visible) shown.pop_back();
-    }
-    if (!shown.empty()) renderer.draw_text(shown, x, edit.y(), kEditColour, kEditFont);
-    if (edit.caret_visible(now_ms) && caret_x < CANVAS_WIDTH) renderer.draw_text("_", caret_x, edit.y(), kEditColour, kEditFont);
+    draw_edit_line(renderer, edit.text(), edit.x(), edit.y(), edit.w(), edit.tail_aligned(), edit.caret_visible(now_ms), kEditColour, kEditFont);
 }
 
 void OptionsScreen::render(IRenderer& renderer, const assets::AssetArchive& assets, uint32_t now_ms) {

@@ -22,6 +22,7 @@
 #include "ants_app/renderer.hpp"
 #include "ants_app/hud.hpp"
 #include "ants_app/scorecard.hpp"
+#include "ants_app/screen_button.hpp"
 #include "ants_app/audio_mixer.hpp"
 #include "ants_app/config_store.hpp"
 #include "ants_app/midi_player.hpp"
@@ -126,6 +127,16 @@ public:
     /// Advances the network by `dt` seconds of game time and handles what it reports (run once per frame; the tests call it directly)
     void pump_network(float dt);
 
+    /// The quick help at the start (Ants.exe FUN_010145d2(1), keys FUN_010147c2): the START! button is the button class (captured at the press, acts at the release, leaving
+    /// cancels); the keys Enter, Esc, C and X (either case) do the same; every other key and click does nothing (`M` would open the More Help dialog: not built).
+    /// The loading screen ends: the quick help when the stored option asks for it, else the setup screen (public for the tests: a headless run has no loading screen)
+    void finish_loading();
+    void quick_help_move(int32_t x, int32_t y);
+    void quick_help_press(int32_t x, int32_t y);
+    void quick_help_release(int32_t x, int32_t y);
+    void quick_help_key(SDL_Keycode sym);
+    const ScreenButton& quick_help_start_button() const noexcept { return quick_help_start_; }
+
     void handle_key_down(const SDL_KeyboardEvent& key);
     void handle_mouse_motion(const SDL_MouseMotionEvent& motion);
     void handle_mouse_button(const SDL_MouseButtonEvent& button);
@@ -200,7 +211,6 @@ private:
     void apply_team_names(const std::array<std::string, 4>& names, uint8_t roster);   // simulation texts, HUD labels, results rows
 
     void enter_map_select();                              // the setup screen is created (again): its labels stay empty until its refresh
-    void finish_loading();                                // the loading screen ends: the quick help or the setup screen
 
     void play_next_ingame_music();
     void start_intro_music();
@@ -211,8 +221,7 @@ private:
 
     // Intro & Loading state
     uint32_t intro_ticks_{0};
-    bool quick_help_start_hovered_{false};
-    bool quick_help_start_pressed_{false};
+    ScreenButton quick_help_start_{528, 437, 99, 27};       // START!: the union of qh_start1 / 2 (529, 437, 98 x 27) and qh_start3 (528, 438, 97 x 24)
 
     // 20 Hz Discrete Simulation Timing
     uint64_t last_frame_time_{0};

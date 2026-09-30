@@ -14,6 +14,7 @@
 #include "ants_app/config_store.hpp"
 #include "ants_app/edge_scroll.hpp"
 #include "ants_app/options_screen.hpp"
+#include "ants_app/screen_button.hpp"
 #include "ants_app/pedestal.hpp"
 #include "ants_app/status_line.hpp"
 
@@ -235,9 +236,12 @@ public:
     bool is_quit_dialog_open() const noexcept { return show_quit_dialog_; }
     void set_on_quit(std::function<void()> cb) { on_quit_ = std::move(cb); }
 
-    void open_quick_help() noexcept { release_capture(); show_quick_help_ = true; }
-    void close_quick_help() noexcept { show_quick_help_ = false; }
+    /// The quick help (F1, the Help button; Ants.exe FUN_010145d2): it closes only by its Return button (the button class: captured at the press, acts at the release)
+    /// or by the keys Enter, Esc, C and X (either case); a click anywhere else does nothing. (`M` would open the More Help dialog: not built, docs 5.52.)
+    void open_quick_help() noexcept { release_capture(); quick_help_return_.reset(); show_quick_help_ = true; }
+    void close_quick_help() noexcept { show_quick_help_ = false; quick_help_return_.reset(); }
     bool is_quick_help_open() const noexcept { return show_quick_help_; }
+    const ScreenButton& quick_help_return_button() const noexcept { return quick_help_return_; }
 
     /// The options screen (FUN_0101487c, docs 5.51): a window that takes every event while it is open. Its settings are `options()`; a setting that a callback of
     /// the screen changes is written to the config store (when there is one) and applied at once: the Sound Volume slider calls `set_on_sfx_volume` and plays the
@@ -384,7 +388,7 @@ private:
     // Chat text input state
     std::string chat_input_{};
     int32_t chat_scroll_offset_{0};
-    uint32_t cursor_blink_ticks_{0};
+    uint32_t chat_focus_ms_{0};                   // when the chat edit control got the focus: the origin of its caret's blinking
     std::string player_name_{"Player"};
     std::array<std::string, 4> team_names_{};
     uint8_t roster_mask_{0x0F};
@@ -449,6 +453,7 @@ private:
     uint32_t issue_group_order(sim::SimulationEngine& sim, sim::TileCoord tile, bool special, bool attack, const std::vector<uint32_t>& targets);
 
     bool show_quick_help_{false};
+    ScreenButton quick_help_return_{527, 437, 100, 26};      // the union of qh_return1 / 2 (529, 437, 98 x 26) and qh_return3 (527, 437, 97 x 24)
 
     // The options screen and what it changes
     OptionsScreen options_;

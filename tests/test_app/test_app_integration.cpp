@@ -2282,6 +2282,68 @@ void run_suite_9_gameplay_mechanics_and_options() {
         std::filesystem::remove_all(dir);
     } TEST_END();
 
+    TEST_CASE("9.14 Startup Quick Help: START! Is The Button Class, The Keys Are Enter Esc C X (FUN_010145d2, FUN_010147c2); The Stored Switch Skips It") {
+        Application app;
+        ApplicationConfig cfg;
+        cfg.headless = true;
+        cfg.start_in_map_select = true;
+        ASSERT_TRUE(app.init(cfg));
+        ASSERT_EQ(app.state(), AppState::MapSelect);
+        auto show = [&]() { app.finish_loading(); };
+
+        // the stored option is on: the loading screen leads to the quick help
+        show();
+        ASSERT_EQ(app.state(), AppState::QuickHelp);
+        // clicks elsewhere and the wrong keys do nothing
+        app.quick_help_press(300, 200);
+        app.quick_help_release(300, 200);
+        for (SDL_Keycode k : {SDLK_SPACE, SDLK_m, SDLK_q, SDLK_s, SDLK_a, SDLK_TAB, SDLK_F1}) {
+            app.quick_help_key(k);
+            ASSERT_EQ(app.state(), AppState::QuickHelp);
+        }
+        // the button: captured at the press, acts at the release, leaving cancels for good
+        app.quick_help_press(580, 450);
+        ASSERT_TRUE(app.quick_help_start_button().pressed());
+        ASSERT_EQ(app.state(), AppState::QuickHelp);
+        app.quick_help_release(580, 450);
+        ASSERT_EQ(app.state(), AppState::MapSelect);
+
+        show();
+        app.quick_help_press(580, 450);
+        app.quick_help_move(10, 10);
+        app.quick_help_move(580, 450);
+        app.quick_help_release(580, 450);
+        ASSERT_EQ(app.state(), AppState::QuickHelp);
+        app.quick_help_press(580, 450);
+        app.quick_help_release(300, 200);
+        ASSERT_EQ(app.state(), AppState::QuickHelp);
+        // the rectangle is the union of the pictures: (528, 437) - (627, 464)
+        app.quick_help_press(528, 437);
+        app.quick_help_release(528, 437);
+        ASSERT_EQ(app.state(), AppState::MapSelect);
+        show();
+        app.quick_help_press(626, 463);
+        app.quick_help_release(626, 463);
+        ASSERT_EQ(app.state(), AppState::MapSelect);
+        show();
+        app.quick_help_press(627, 450);
+        app.quick_help_release(627, 450);
+        ASSERT_EQ(app.state(), AppState::QuickHelp);
+
+        // the keys Enter, Esc, C and X (either case) are the same callback
+        for (SDL_Keycode k : {SDLK_RETURN, SDLK_KP_ENTER, SDLK_ESCAPE, SDLK_c, SDLK_x}) {
+            show();
+            ASSERT_EQ(app.state(), AppState::QuickHelp);
+            app.quick_help_key(k);
+            ASSERT_EQ(app.state(), AppState::MapSelect);
+        }
+
+        // the stored switch "Show Quick Help at Startup" = 0 skips the screen
+        app.hud().options().quick_help = false;
+        show();
+        ASSERT_EQ(app.state(), AppState::MapSelect);
+    } TEST_END();
+
     TEST_CASE("9.7 The Chat Box Is Always Active; Enter, [All] And [Team] Send; Hotkey Modifier Isolation") {
         Application app;
         ApplicationConfig cfg;
@@ -7144,10 +7206,10 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
 
     TEST_CASE("12.108: Version Invariant & Fog of War Cursor Concealment Parity") {
         // 1. Verify semantic versioning components
-        ASSERT_EQ(ants::VERSION_STRING, "v0.0.65");
+        ASSERT_EQ(ants::VERSION_STRING, "v0.0.66");
         ASSERT_EQ(ants::VERSION_MAJOR, 0);
         ASSERT_EQ(ants::VERSION_MINOR, 0);
-        ASSERT_EQ(ants::VERSION_PATCH, 65);
+        ASSERT_EQ(ants::VERSION_PATCH, 66);
 
         // 2. Setup simulation world with Fog of War enabled
         SimulationEngine sim;
