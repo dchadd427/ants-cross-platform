@@ -39,6 +39,19 @@ Ground truth for every entry is in [`docs/GAME_REVERSE_ENGINEERING.md`](docs/GAM
   - **Found on the way, for the audit** (docs: implementation_plan.md section 18): `tests/test_sim/test_challenger_m2_it2_deep_stress.cpp` has not been part of the build since an early commit and no longer compiles
     (it uses the retired slot-queue API of the hill). (An earlier version of this line said that the death clips are no longer started by a separate effect: wrong, only the unused helper `spawn_death_effect` was removed; the effect path in `movement_system.cpp` is still in use, see the audit.)
 
+## v0.0.63 - 2026-09-30 - The results screen of the original
+
+Match-end batch, part 2 (`docs/audit/ledger_screens.md` R1.1 - R1.4b, `docs/AUDIT_ONE_TO_ONE.md` batch 3), each re-read in `Ants.exe` first (`0x10153a1`, `0x10155ac`, `0x1015136`, `0x1015b17`, `0x1015b47`, `0x10245ff`, `0x1021ba4`, `0x1021c1f`):
+
+- **"Waiting for scores..." comes first**: the screen opens with the label (20 px, at (100, 350)) and nothing else: no rows, no portraits and **no Leave button**. After at least 250 ms (the original waits for the other machines' scores; here all numbers are known at once) the rows appear.
+- **One row per team or alliance, in the original's order and places**: an alliance is one row "Alice & Bob" with the four columns added up, sorted by score (the quitter's row last, an equal score puts the local team's row first only when the local team made its row); the top row's labels start at y = 235, the others at 50 i + 273; the name at x = 100, the four numbers **left aligned** at x = 485, 534, 555 and 576 (they were centred); every text in the original's colour (239, 231, 223). Rows with nothing to show are no longer hidden, and no team is called "Green Team" any more: names come from the room / command line, a team without a name shows its colour word.
+- **The ants are animated**: each row shows the standing-ant animation in the colour of its team (two ants for an alliance, at x = 45 and 75; one at x = 60), running from the moment the screen opened (they were one still picture per row).
+- **One winner / loser cue, when the rows appear** (250 ms after the screen opens, not at the moment the match ends): the winner cue when the local team or its ally is the first team of the top row.
+- **Keys**: **Enter, C, Q and X leave at any time** (even while it still waits); Esc does nothing (it sent the player back to the setup screen); every other key does nothing. The Leave button exists only once the rows do.
+- Kept on purpose (owner decisions / forced by the substitute font): on the web "Leave" returns to the setup screen (the original exits the program); the three counter columns (19 - 21 px wide) stay on one line - the bundled Libre Franklin digits are wider than the original font's, so copying the original label's wrap would break every two-digit number; a browser game lists only the teams that have a score label.
+- Docs: `docs/GAME_REVERSE_ENGINEERING.md` 5.49 (the whole screen), README, `docs/AUDIT_ONE_TO_ONE.md` (progress; batch 3 is done).
+- Tests: `test_hud_layout` `test_results_screen` (waiting phase, positions, colours, portraits and their animation, cue, Leave button, shown teams, dropped teams, names), integration 6.5 (keys) and 6.6 (the cue plays once, 250 ms after the screen opens). **Rewritten tests** (they showed the rows, the cue or the Leave button at the moment the screen opened): integration 6.1, 6.2, 6.3, 12.68, 12.75; `test_hud_layout`'s "every text of the screen is 18 px high". Version assertion of 12.108.
+
 ## v0.0.62 - 2026-09-30 - The match ends when it is decided
 
 Match-end batch, part 1 (`docs/audit/ledger_screens.md` R1.4c, `docs/AUDIT_ONE_TO_ONE.md` batch 3), each re-read in `Ants.exe` first (`0x1024839` CHECKGO, `0x100d03b` drop-out, `0x100c5b1`, `0x101453f`, `0x1015136`):

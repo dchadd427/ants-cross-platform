@@ -858,9 +858,12 @@ void run_suite_6_scorecard_and_audio_routing() {
         }
         ScorecardModal winner_screen;
         winner_screen.show(sim.get_world_state().match_result, 0);
+        ASSERT_EQ(winner_screen.get_audio_to_play(), 0u);                          // the cue plays when the rows are built, 250 ms after the screen opens
+        winner_screen.update(0.25f);
         ASSERT_EQ(winner_screen.get_audio_to_play(), SoundID::VictoryFanfare);     // Winner hears Sound 56
         ScorecardModal loser_screen;
         loser_screen.show(sim.get_world_state().match_result, 1);
+        loser_screen.update(0.25f);
         ASSERT_EQ(loser_screen.get_audio_to_play(), SoundID::PlayerDefeat);        // Loser hears Sound 42
     } TEST_END();
 
@@ -883,7 +886,15 @@ void run_suite_6_scorecard_and_audio_routing() {
         ScorecardModal modal;
         modal.show(sim.get_world_state().match_result, 0);
         ASSERT_TRUE(modal.is_open());
+        modal.update(0.25f);
+        ASSERT_FALSE(modal.is_waiting());
         ASSERT_EQ(modal.get_audio_to_play(), SoundID::VictoryFanfare);
+        ASSERT_EQ(modal.rows().size(), 4u);                                         // every team of the match has a row
+        ASSERT_EQ(modal.rows()[0].first, 0);                                        // team 0 scored 420
+        ASSERT_EQ(modal.rows()[0].numbers[0], "420");
+        ASSERT_EQ(modal.rows()[0].numbers[1], "5");
+        ASSERT_EQ(modal.rows()[0].numbers[2], "14");
+        ASSERT_EQ(modal.rows()[0].numbers[3], "22");
         modal.clear_audio_to_play();
         ASSERT_EQ(modal.get_audio_to_play(), 0u);
         modal.hide();
@@ -902,6 +913,14 @@ void run_suite_6_scorecard_and_audio_routing() {
         bool replay_called = false;
         modal.set_on_quit([&]() { quit_called = true; });
         modal.set_on_replay([&]() { replay_called = true; });
+
+        // The Leave button is created with the rows (FUN_010155ac): while the screen waits for the scores it is not there
+        modal.handle_mouse_motion(550, 20);
+        ASSERT_FALSE(modal.is_quit_hovered());
+        modal.handle_mouse_down(550, 20);
+        modal.handle_mouse_up(550, 20);
+        ASSERT_FALSE(quit_called);
+        modal.update(0.25f);
 
         // Hover over Leave Game button at (525, 12)
         modal.handle_mouse_motion(550, 20);
@@ -928,6 +947,7 @@ void run_suite_6_scorecard_and_audio_routing() {
         // Trigger scorecard to show
         app.scorecard().show(app.sim().get_world_state().match_result, 0);
         ASSERT_TRUE(app.scorecard().is_open());
+        app.scorecard().update(0.25f);                                      // the rows (and the Leave button) appear after 250 ms
 
         // Click Leave Game button via Application input handler
         SDL_MouseButtonEvent down_ev{};
@@ -980,7 +1000,75 @@ void run_suite_6_scorecard_and_audio_routing() {
         ASSERT_EQ(rows.size(), 2u);
         ASSERT_EQ(rows[0].first, 1);
         ASSERT_EQ(rows[1].first, 0);
-        ASSERT_EQ(app.scorecard().get_audio_to_play(), 0u);                  // the sting was played when the results opened
+        ASSERT_EQ(app.scorecard().get_audio_to_play(), 0u);                  // nothing is pending: the cue plays once, 250 ms after the results opened
+    } TEST_END();
+
+    TEST_CASE("6.5 Results Screen Keys (FUN_01015b17): Enter, C, Q And X Leave (Either Case) At Any Time, Even While It Waits; Esc And Every Other Key Do Nothing") {
+        const SDL_Keycode leaving[] = {SDLK_RETURN, SDLK_KP_ENTER, SDLK_c, SDLK_q, SDLK_x};
+        const SDL_Keycode staying[] = {SDLK_ESCAPE, SDLK_SPACE, SDLK_a, SDLK_y, SDLK_n, SDLK_l, SDLK_TAB, SDLK_F1, SDLK_BACKSPACE, SDLK_1, SDLK_UP};
+        for (int rows_built = 0; rows_built < 2; ++rows_built) {
+            for (SDL_Keycode sym : leaving) {
+                for (uint16_t mod : {static_cast<uint16_t>(KMOD_NONE), static_cast<uint16_t>(KMOD_LSHIFT), static_cast<uint16_t>(KMOD_LCTRL)}) {
+                    Application app;
+                    ApplicationConfig cfg;
+                    cfg.headless = true;
+                    cfg.start_in_map_select = false;
+                    ASSERT_TRUE(app.init(cfg));
+                    app.scorecard().show(app.sim().get_world_state().match_result, 0);
+                    if (rows_built != 0) app.scorecard().update(0.25f);
+                    ASSERT_EQ(app.scorecard().is_waiting(), rows_built == 0);
+                    SDL_KeyboardEvent key{};
+                    key.type = SDL_KEYDOWN;
+                    key.keysym.sym = sym;
+                    key.keysym.mod = mod;
+                    app.handle_key_down(key);
+                    ASSERT_FALSE(app.is_running());                               // Leave = quit()
+                }
+            }
+            for (SDL_Keycode sym : staying) {
+                Application app;
+                ApplicationConfig cfg;
+                cfg.headless = true;
+                cfg.start_in_map_select = false;
+                ASSERT_TRUE(app.init(cfg));
+                app.scorecard().show(app.sim().get_world_state().match_result, 0);
+                if (rows_built != 0) app.scorecard().update(0.25f);
+                SDL_KeyboardEvent key{};
+                key.type = SDL_KEYDOWN;
+                key.keysym.sym = sym;
+                app.handle_key_down(key);
+                ASSERT_TRUE(app.is_running());
+                ASSERT_TRUE(app.scorecard().is_open());
+                ASSERT_EQ(app.state(), AppState::Playing);                        // Esc does not send the player to the setup screen
+            }
+        }
+    } TEST_END();
+
+    TEST_CASE("6.6 The Results Cue Plays Once, 250 ms After The Screen Opens, When The Rows Appear (Not When The Match Ends)") {
+        Application app;
+        ApplicationConfig cfg;
+        cfg.headless = true;
+        cfg.start_in_map_select = false;
+        ASSERT_TRUE(app.init(cfg));
+        app.sim().drop_player(1);
+        app.sim().drop_player(2);
+        app.sim().drop_player(3);                                                // team 0 is alone: the drop-out decides the match
+        ASSERT_TRUE(app.sim().is_match_over());
+        app.audio_mixer().stop_all();
+        ASSERT_EQ(app.audio_mixer().active_channel_count(), 0u);
+        app.update_results(0.016f);                                              // the frame that notices the end opens the screen
+        ASSERT_TRUE(app.scorecard().is_open());
+        ASSERT_TRUE(app.scorecard().is_waiting());
+        ASSERT_EQ(app.audio_mixer().active_channel_count(), 0u);                 // no cue yet
+        for (int i = 0; i < 10; ++i) app.update_results(0.016f);                 // 176 ms in all
+        ASSERT_TRUE(app.scorecard().is_waiting());
+        ASSERT_EQ(app.audio_mixer().active_channel_count(), 0u);
+        for (int i = 0; i < 6; ++i) app.update_results(0.016f);                  // 272 ms
+        ASSERT_FALSE(app.scorecard().is_waiting());
+        ASSERT_EQ(app.audio_mixer().active_channel_count(), 1u);                 // one cue: winner.wav
+        for (int i = 0; i < 20; ++i) app.update_results(0.016f);
+        ASSERT_EQ(app.audio_mixer().active_channel_count(), 1u);                 // still one: nothing plays it again
+        ASSERT_EQ(app.scorecard().get_audio_to_play(), 0u);
     } TEST_END();
 }
 
@@ -5604,6 +5692,7 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         ASSERT_FALSE(sim.has_targeted_audio_event(1, SoundID::PlayerDefeat));
         ScorecardModal loser_screen;
         loser_screen.show(sim.get_world_state().match_result, 1);
+        loser_screen.update(0.25f);
         ASSERT_EQ(loser_screen.get_audio_to_play(), SoundID::PlayerDefeat);
         ASSERT_EQ(SoundID::PlayerDefeat, 42u);
 
@@ -6070,6 +6159,7 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
             MatchResult mr{};
             mr.is_over = true;
             modal.show(mr, 0);
+            modal.update(0.25f);                                            // the Leave button exists once the rows are built
             std::vector<uint32_t> played_sounds;
             modal.set_on_play_sfx([&](uint32_t s) { played_sounds.push_back(s); });
 
@@ -6789,10 +6879,10 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
 
     TEST_CASE("12.108: Version Invariant & Fog of War Cursor Concealment Parity") {
         // 1. Verify semantic versioning components
-        ASSERT_EQ(ants::VERSION_STRING, "v0.0.62");
+        ASSERT_EQ(ants::VERSION_STRING, "v0.0.63");
         ASSERT_EQ(ants::VERSION_MAJOR, 0);
         ASSERT_EQ(ants::VERSION_MINOR, 0);
-        ASSERT_EQ(ants::VERSION_PATCH, 62);
+        ASSERT_EQ(ants::VERSION_PATCH, 63);
 
         // 2. Setup simulation world with Fog of War enabled
         SimulationEngine sim;

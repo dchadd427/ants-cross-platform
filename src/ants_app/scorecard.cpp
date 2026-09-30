@@ -1,6 +1,8 @@
 #include "ants_app/scorecard.hpp"
 #include "ants_app/renderer.hpp"
+#include "ants_app/text_layout.hpp"
 #include "ants_app/ui_anim.hpp"
+#include "ants_sim/game_strings.hpp"
 
 #include <algorithm>
 
@@ -8,68 +10,71 @@ namespace ants::app {
 
 namespace {
 
-const char* PLAYER_NAMES[4] = {
-    "Green Team",
-    "Red Team",
-    "Blue Team",
-    "Black Team"
-};
+// Every label of the screen has the colour 0xdfe7ef (a COLORREF: R 239, G 231, B 223, FUN_01011821(label, 0xdfe7ef, -1, -1))
+const assets::ColorRGBA kLabelColour{239, 231, 223, 255};
+
+// The row of position i: Y(0) = 235, Y(i) = 50 i + 273 (0x10156a4 - 0x10156b9)
+int32_t row_y(size_t i) {
+    return i == 0 ? ScorecardModal::FIRST_ROW_Y : static_cast<int32_t>(i) * ScorecardModal::ROW_PITCH + ScorecardModal::OTHER_ROWS_Y;
+}
 
 } // anonymous namespace
 
 ScorecardModal::ScorecardModal() = default;
 
+// FUN_010153a1: the screen is created; its portraits exist but are not on the screen yet, the Leave button does not exist yet, a label says that it waits, and a
+// task that runs 250 ms later builds the rows as soon as every team's scores are in.
 void ScorecardModal::show(const sim::MatchResult& result, uint8_t local_player_id) {
     is_active_ = true;
+    phase_ = Phase::Waiting;
+    elapsed_ms_ = 0.0;
     local_player_id_ = local_player_id;
     quit_hovered_ = false;
     quit_pressed_ = false;
+    audio_to_play_ = 0;
+    rows_.clear();
+    result_ = result;
+    result_.present_mask = static_cast<uint8_t>(result.present_mask & shown_mask_);
+}
 
-    // Check if local player won
-    bool local_won = result.is_winner(local_player_id);
-    audio_to_play_ = local_won ? sim::SoundID::VictoryFanfare : sim::SoundID::PlayerDefeat;
+void ScorecardModal::update(float dt_seconds) {
+    if (!is_active_) return;
+    elapsed_ms_ += static_cast<double>(dt_seconds) * 1000.0;
+    if (phase_ == Phase::Waiting && elapsed_ms_ >= WAIT_MS) build_rows();
+}
 
-    // Find winner entry
-    uint8_t winner_id = result.winning_players.empty() ? 0 : result.winning_players[0];
-    winner_entry_.player_id = winner_id;
-    auto name_of = [&](uint8_t p) -> std::string {
-        if (!player_names_[p % 4].empty()) return player_names_[p % 4];
-        if (p == local_player_id && !local_player_name_.empty()) return local_player_name_;
-        return std::string(PLAYER_NAMES[p % 4]);
-    };
-    winner_entry_.name = name_of(winner_id);
-    winner_entry_.score = result.final_scores[winner_id % 4];
-    winner_entry_.friendly_lost = result.stats[winner_id % 4].friendly_lost;
-    winner_entry_.enemy_killed = result.stats[winner_id % 4].enemy_killed;
-    winner_entry_.new_hatched = result.stats[winner_id % 4].new_hatched;
-    winner_entry_.is_winner = true;
+std::string ScorecardModal::name_of(uint8_t team) const {
+    if (!player_names_[team % 4].empty()) return player_names_[team % 4];
+    if (team == local_player_id_ && !local_player_name_.empty()) return local_player_name_;
+    return sim::strings::colour_name(static_cast<uint8_t>(3u - (team & 3u)));        // strings 100 - 103
+}
 
-    // Assemble other player entries sorted by score descending
-    other_entries_.clear();
-    for (uint8_t p = 0; p < 4; ++p) {
-        if (p == winner_id) continue;
-        PlayerEntry pe;
-        pe.player_id = p;
-        pe.name = name_of(p);
-        pe.score = result.final_scores[p];
-        pe.friendly_lost = result.stats[p].friendly_lost;
-        pe.enemy_killed = result.stats[p].enemy_killed;
-        pe.new_hatched = result.stats[p].new_hatched;
-        pe.is_winner = false;
-        other_entries_.push_back(pe);
+// FUN_010155ac: the rows (FUN_01015136), the labels and the portraits of every row, the Leave button, and then the cue (0x1015a4a): the winner cue when the local
+// team or its ally is the first team of the top row, the loser cue otherwise.
+void ScorecardModal::build_rows() {
+    rows_.clear();
+    for (const sim::ResultRow& r : result_.rows(local_player_id_)) {
+        Row row;
+        row.first = r.first;
+        row.second = r.second;
+        row.name = name_of(r.first);
+        if (r.has_second()) row.name += " & " + name_of(r.second);
+        if (row.name.size() > NAME_MAX_CHARS) row.name.resize(NAME_MAX_CHARS);        // the label's buffer holds 35 characters
+        row.numbers = {std::to_string(r.score), std::to_string(r.friendly_lost), std::to_string(r.enemy_killed), std::to_string(r.new_hatched)};
+        rows_.push_back(std::move(row));
     }
+    audio_to_play_ = result_.is_winner(local_player_id_) ? sim::SoundID::VictoryFanfare : sim::SoundID::PlayerDefeat;
+    phase_ = Phase::Rows;
+}
 
-    std::sort(other_entries_.begin(), other_entries_.end(), [](const PlayerEntry& a, const PlayerEntry& b) {
-        return a.score > b.score;
-    });
+bool ScorecardModal::over_leave_button(int32_t x, int32_t y) const noexcept {
+    return x >= QUIT_BTN_X && x < (QUIT_BTN_X + QUIT_BTN_W) && y >= QUIT_BTN_Y && y < (QUIT_BTN_Y + QUIT_BTN_H);
 }
 
 bool ScorecardModal::handle_mouse_down(int32_t x, int32_t y) {
     if (!is_active_) return false;
 
-    // Test Leave Game button
-    if (x >= QUIT_BTN_X && x < (QUIT_BTN_X + QUIT_BTN_W) &&
-        y >= QUIT_BTN_Y && y < (QUIT_BTN_Y + QUIT_BTN_H)) {
+    if (phase_ == Phase::Rows && over_leave_button(x, y)) {
         quit_pressed_ = true;
         play_sfx(sim::SoundID::ButtonClick);   // leave3 carries sound 0 (buttonclick.wav)
         return true;
@@ -83,8 +88,7 @@ bool ScorecardModal::handle_mouse_up(int32_t x, int32_t y) {
 
     if (quit_pressed_) {
         quit_pressed_ = false;
-        if (x >= QUIT_BTN_X && x < (QUIT_BTN_X + QUIT_BTN_W) &&
-            y >= QUIT_BTN_Y && y < (QUIT_BTN_Y + QUIT_BTN_H)) {
+        if (over_leave_button(x, y)) {
             if (on_quit_) on_quit_();
             return true;
         }
@@ -95,8 +99,20 @@ bool ScorecardModal::handle_mouse_up(int32_t x, int32_t y) {
 
 void ScorecardModal::handle_mouse_motion(int32_t x, int32_t y) {
     if (!is_active_) return;
-    quit_hovered_ = (x >= QUIT_BTN_X && x < (QUIT_BTN_X + QUIT_BTN_W) &&
-                     y >= QUIT_BTN_Y && y < (QUIT_BTN_Y + QUIT_BTN_H));
+    quit_hovered_ = phase_ == Phase::Rows && over_leave_button(x, y);
+}
+
+// One AntSlot (FUN_01021ba4): the animation agst301 at (x, y) in the colour of the team, running since the screen was created
+void ScorecardModal::draw_portrait(IRenderer& renderer, const assets::AssetArchive& assets, uint8_t team, int32_t x, int32_t y) const {
+    const auto* anim = assets.find_animation("agst301");
+    if (anim == nullptr || anim->subitems.empty()) return;
+    const size_t frame = Renderer::get_anim_subitem_by_time(*anim, static_cast<uint32_t>(elapsed_ms_));
+    const auto& parts = anim->subitems[frame].frames;
+    renderer.set_hud_team(team);
+    for (size_t k = parts.size(); k-- > 0;) {
+        renderer.draw_sprite(parts[k].sprite_index, x + parts[k].dx, y + parts[k].dy);
+    }
+    renderer.set_hud_team(0);
 }
 
 void ScorecardModal::render(IRenderer& renderer, const assets::AssetArchive& assets) {
@@ -116,58 +132,34 @@ void ScorecardModal::render(IRenderer& renderer, const assets::AssetArchive& ass
         renderer.fill_rect(0, 0, 640, 480, assets::ColorRGBA{219, 75, 19, 255});
     }
 
-    // 2. Top-right "Leave Game" button: animations leave1 / leave2 (hover) / leave3 (pressed), absolute coordinates
-    draw_animation_frame0(renderer, assets, quit_pressed_ ? "leave3" : (quit_hovered_ ? "leave2" : "leave1"));
+    // 2. While the scores are awaited: the label (100, 350) 385 x 50, 20 px high lines; nothing else
+    if (phase_ == Phase::Waiting) {
+        draw_label(renderer, sim::strings::text(sim::strings::kWaitingForScores), WAITING_X, WAITING_Y, WAITING_W, kLabelColour, FontSize::Px20, false);
+        return;
+    }
 
-    // 3. Winner Row (Inside Winner Box at y=222..275); the results screen's labels are 18 px high (FUN_010155ac)
-    int32_t th = renderer.get_text_height(FontSize::Px18);
-    // Tinted ant portrait: agst301.bmp at (54, 227) (portrait height 40, center at 247)
-    int32_t wy = 227 + (40 - th) / 2;
-    renderer.set_hud_team(winner_entry_.player_id);
-    renderer.draw_named_sprite("agst301.bmp", 54, 227);
-    renderer.set_hud_team(0);
-
-    // Winner Name
-    renderer.draw_text(winner_entry_.name, 90, wy, {255, 255, 255, 255}, FontSize::Px18);
-
-    // 4 Columns aligned with column arrow tips
-    auto draw_centered_num = [&](int32_t val, int32_t col_x) {
-        std::string s = std::to_string(val);
-        int32_t tx = col_x - renderer.get_text_width(s, FontSize::Px18) / 2;
-        renderer.draw_text(s, tx, wy, {255, 255, 255, 255}, FontSize::Px18);
-    };
-
-    draw_centered_num(winner_entry_.score, COL_SCORE_X);
-    draw_centered_num(static_cast<int32_t>(winner_entry_.friendly_lost), COL_LOST_X);
-    draw_centered_num(static_cast<int32_t>(winner_entry_.enemy_killed), COL_KILLED_X);
-    draw_centered_num(static_cast<int32_t>(winner_entry_.new_hatched), COL_HATCHED_X);
-
-    // 4. Other Players Section (Inside other box at y=310..463)
-    // Only rendered if other human players are present (multiplayer)
-    if (!other_entries_.empty() && !local_player_name_.empty()) {
-        int32_t py = 320;
-        for (const auto& pe : other_entries_) {
-            if (pe.score == 0 && pe.friendly_lost == 0 && pe.enemy_killed == 0 && pe.new_hatched == 0) {
-                continue;
-            }
-            renderer.set_hud_team(pe.player_id);
-            renderer.draw_named_sprite("agst301.bmp", 54, py - 4);
-            renderer.set_hud_team(0);
-            int32_t row_y = (py - 4) + (40 - th) / 2;
-            renderer.draw_text(pe.name, 90, row_y, {220, 220, 220, 255}, FontSize::Px18);
-
-            std::string ps_score = std::to_string(pe.score);
-            renderer.draw_text(ps_score, COL_SCORE_X - renderer.get_text_width(ps_score, FontSize::Px18) / 2, row_y, {220, 220, 220, 255}, FontSize::Px18);
-            std::string ps_lost = std::to_string(pe.friendly_lost);
-            renderer.draw_text(ps_lost, COL_LOST_X - renderer.get_text_width(ps_lost, FontSize::Px18) / 2, row_y, {200, 200, 200, 255}, FontSize::Px18);
-            std::string ps_killed = std::to_string(pe.enemy_killed);
-            renderer.draw_text(ps_killed, COL_KILLED_X - renderer.get_text_width(ps_killed, FontSize::Px18) / 2, row_y, {200, 200, 200, 255}, FontSize::Px18);
-            std::string ps_hatched = std::to_string(pe.new_hatched);
-            renderer.draw_text(ps_hatched, COL_HATCHED_X - renderer.get_text_width(ps_hatched, FontSize::Px18) / 2, row_y, {200, 200, 200, 255}, FontSize::Px18);
-
-            py += 35;
+    // 3. The rows: name (100, Y) 385 wide, the four numbers left aligned at 485 / 534 / 555 / 576, the ant portraits at (60, Y + 20) or (45, Y + 20) and (75, Y + 20)
+    for (size_t i = 0; i < rows_.size(); ++i) {
+        const Row& row = rows_[i];
+        const int32_t y = row_y(i);
+        draw_label(renderer, row.name, NAME_X, y, NAME_W, kLabelColour, FontSize::Px18, false);
+        draw_label(renderer, row.numbers[0], COLUMN_X[0], y, COLUMN_W[0], kLabelColour, FontSize::Px18, false);
+        // The three counters' labels are 19 - 21 px wide: the original's font fits two digits there (inferred: nothing else explains the widths), its label
+        // wraps a third digit into a second line. The bundled substitute font is wider (two digits do not fit 19 px), so copying the wrap decision would break
+        // every two-digit number; the counters stay on one line.
+        for (size_t c = 1; c < 4; ++c) {
+            renderer.draw_text(row.numbers[c], COLUMN_X[c], y, kLabelColour, FontSize::Px18);
+        }
+        if (row.has_second()) {
+            draw_portrait(renderer, assets, row.first, PORTRAIT_X_PAIR[0], y + PORTRAIT_Y_OFFSET);
+            draw_portrait(renderer, assets, row.second, PORTRAIT_X_PAIR[1], y + PORTRAIT_Y_OFFSET);
+        } else {
+            draw_portrait(renderer, assets, row.first, PORTRAIT_X_ALONE, y + PORTRAIT_Y_OFFSET);
         }
     }
+
+    // 4. Top-right "Leave Game" button: animations leave1 / leave2 (hover) / leave3 (pressed), absolute coordinates
+    draw_animation_frame0(renderer, assets, quit_pressed_ ? "leave3" : (quit_hovered_ ? "leave2" : "leave1"));
 }
 
 } // namespace ants::app

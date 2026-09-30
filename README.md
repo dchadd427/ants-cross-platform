@@ -4,7 +4,7 @@ A faithful, high-performance, deterministic C++17 native engine remake and port 
 
 The engine directly loads raw original binary assets (`ants.chd` and `Maps/*.LVL`) without pre-conversion, faithfully executing authentic gameplay mechanics, deterministic 20Hz simulation, 32-channel spatial audio, MIDI/MP3 score playback, TrueType font rendering, and an SDL2 hardware-accelerated 2D viewport.
 
-**Current version: v0.0.62** (shown on screen next to the FPS meter). Every release is listed in the **[changelog](CHANGELOG.md)**, which is also published at **[beta.playants.org/changelog.html](https://beta.playants.org/changelog.html)**. Since v0.0.24 every system is re-derived from the disassembly of the original `Ants.exe` (see [Reverse Engineering](#reverse-engineering--historical-preservation)); multiplayer over a network (host / join over TCP) works and is still being extended (see [Network Port](#network-port-in-progress)).
+**Current version: v0.0.63** (shown on screen next to the FPS meter). Every release is listed in the **[changelog](CHANGELOG.md)**, which is also published at **[beta.playants.org/changelog.html](https://beta.playants.org/changelog.html)**. Since v0.0.24 every system is re-derived from the disassembly of the original `Ants.exe` (see [Reverse Engineering](#reverse-engineering--historical-preservation)); multiplayer over a network (host / join over TCP) works and is still being extended (see [Network Port](#network-port-in-progress)).
 
 ---
 
@@ -53,6 +53,7 @@ Play the remake instantly in any modern web browser (Chrome, Firefox, Safari, Ed
   - **Keyboard, Buttons & Chat**: The keyboard is the original's: F1, F9 - F12, Enter, Esc = deselect, Ctrl+A / H / L / N / O / P / Q / S and nothing else (no Space, arrow or letter hotkeys); the chat box is always active and Enter / All / Team send its text; the top bar and chat buttons behave like the original's button class (a press captures, the click sound plays at the press, the action runs when the button is released while the pointer is still on it, leaving cancels it).
   - **Enemy Ant Inspection**: Clicking enemy units when no friendly unit is selected shows selection brackets (`*ears`, coloured by health) without allowing friendly command dispatch.
   - **End of the Match**: the match ends when the clock runs out (checked every 200 ms, like the original's CHECKGO task), when no team has an egg, a hatch or an ant left, when the teams that still have something are one alliance whose combined score is strictly the best (a tie is never a win), when a drop-out leaves one team or an allied pair alone, and when a player quits while exactly one other side is left (the quitter's row goes last on the results); with more sides left a quit is a drop-out (`docs/GAME_REVERSE_ENGINEERING.md` 5.47).
+  - **Results Screen**: the original's (`docs/GAME_REVERSE_ENGINEERING.md` 5.49): "Waiting for scores..." for at least 250 ms, then one row per team or alliance ("Alice & Bob", the columns added up) in the original's order (score, the quitter last, the local team first on a tie it made) and positions (top row at y = 235, the others at 50 i + 273; numbers left aligned at x = 485 / 534 / 555 / 576), with the animated ant of each team; the winner or loser cue plays once when the rows appear; the Leave button appears with the rows; Enter, C, Q and X leave at any time, Esc does nothing.
   - **Match Audio Cues**: 1-minute alert (`1min.wav`), 30-second warning (`30sec.wav`), 10-second countdown (`countdwn.wav`), one winner or defeat sting per machine when the results open (`winner.wav` / `losers.wav`), and player drop-out (`playerout.wav`); "can't hatch" and the raid alarm are global cues, an accepted order clicks (`docs/GAME_REVERSE_ENGINEERING.md` 5.24b).
 
 - **Modern Audio & Presentation (`libants-app`)**:
@@ -66,7 +67,7 @@ Play the remake instantly in any modern web browser (Chrome, Firefox, Safari, Ed
   - Standalone web inspector (`asset_catalog/index.html`) with responsive design, searching, filtering, and instant asset downloads (⬇ WAV audio, ⬇ PNG sprites, ⬇ composite canvas frames).
 
 - **Automated Verification & Zero-Warning Standard**:
-  - 100% pass rate across **197 application integration tests (7,286 assertions)**, the simulation golden suites (movement, path planner, hill, combat, ability, power-up and food actions), the command-layer / state-hash suite, the lock-step network core, room and TCP transport suites, the render, HUD, status-message, input and pointer model suites and **506 opaque-box End-to-End (E2E) verification tests** (real counts in [Testing & Verification](#testing--verification)).
+  - 100% pass rate across **199 application integration tests (7,486 assertions)**, the simulation golden suites (movement, path planner, hill, combat, ability, power-up and food actions), the command-layer / state-hash suite, the lock-step network core, room and TCP transport suites, the render, HUD, status-message, input and pointer model suites and **506 opaque-box End-to-End (E2E) verification tests** (real counts in [Testing & Verification](#testing--verification)).
   - Zero warnings under `-Wall -Wextra -Wpedantic -Wconversion -Wshadow -Wnon-virtual-dtor`.
 
 ---
@@ -95,7 +96,7 @@ The remake provides a complete, playable, standalone experience with authentic a
 ### Roadmap (in order)
 1. Network port: WebRTC + signaling + TURN deployment. (Host migration shipped in v0.0.47, the alliance dialogs in v0.0.50, the original's end-of-match rules in v0.0.62.)
 2. View origin (16, 21) at 442 x 440.
-3. Results screen, option-dialog internals, startup flow, setup-screen buttons firing on release, quick help.
+3. Option-dialog internals, startup flow, setup-screen buttons firing on release, quick help. (The results screen shipped in v0.0.63.)
 4. Removal of the remaining invented visuals and timings, and the last non-original tests.
 5. Asset viewer overhaul.
 6. The comprehensive audit of the whole game against the original (visuals, animations, timing, sound, rules) has been done: results in [`docs/AUDIT_ONE_TO_ONE.md`](docs/AUDIT_ONE_TO_ONE.md) and [`docs/audit/`](docs/audit/); its ranked list of differences (hill queue defects, end-of-match rules, audio routing, the unbuilt results / options / start-up screens, view origin, minimap, fog reveal, chat, walking-frame cadence) replaces items 2 to 4 above as the work list, in eight proposed batches.
@@ -341,7 +342,7 @@ Limits of this release: raw TCP only (a LAN, a VPN or a forwarded port 4001; the
 
 ## Changelog & Versioning
 
-The version (`include/ants_app/version.hpp`, currently `v0.0.62`) is bumped with every release and shown on screen next to the FPS meter. [`CHANGELOG.md`](CHANGELOG.md) lists what changed in every version, newest first, from the first commit to the release in progress; it is published on the beta site at [`/changelog.html`](https://beta.playants.org/changelog.html) and linked from the game page.
+The version (`include/ants_app/version.hpp`, currently `v0.0.63`) is bumped with every release and shown on screen next to the FPS meter. [`CHANGELOG.md`](CHANGELOG.md) lists what changed in every version, newest first, from the first commit to the release in progress; it is published on the beta site at [`/changelog.html`](https://beta.playants.org/changelog.html) and linked from the game page.
 
 ---
 
@@ -366,7 +367,7 @@ To run all test suites in sequence:
 ./run_tests.sh --clean    # Remove the build directories and rebuild first
 ```
 
-### What the Suites Cover (v0.0.62, all passing)
+### What the Suites Cover (v0.0.63, all passing)
 | Suite | What it checks | Size |
 |---|---|---|
 | 1 Asset decoders | `ants.chd` header, palette, sprites, audio, event tags, Table 4 animations, `.LVL` maps, directional mirroring, fuzzing | 8 suites, 69,809 assertions |
@@ -381,8 +382,8 @@ To run all test suites in sequence:
 | 2.12 Room | Joining, roster, map and fog, the start barrier, the connection thumbs (round trip tiers 1200 / 1800 ms) | 9 tests, 55,050 assertions |
 | 2.13 TCP | Framing, hostile frames, a real-socket match | 6 tests, 60,122 assertions |
 | 2.14 NetGame | The room, thumbs, the start barrier, a match with commands and chat, a guest that leaves, host migration over real sockets (the host leaving a two-, three- and four-player match, the links between guests, strangers on a guest's port, no election after the match is over), refused joins, map mismatch | 14 tests, 533 assertions |
-| 3 Application integration | Whole-application behaviour through the HUD, renderer and simulation | 197 tests, 7,286 assertions |
-| 3.1 - 3.5 Model suites | Render parity 303 checks (with the text sizes and the health-number font), HUD layout 658 (with the network room screen, the label sizes and wrapping and the three alliance dialogs), status messages 263, input model 70, pointer model 331 | 1,625 checks |
+| 3 Application integration | Whole-application behaviour through the HUD, renderer and simulation | 199 tests, 7,486 assertions |
+| 3.1 - 3.5 Model suites | Render parity 303 checks (with the text sizes and the health-number font), HUD layout 690 (with the network room screen, the label sizes and wrapping, the three alliance dialogs and the results screen), status messages 263, input model 70, pointer model 331 | 1,657 checks |
 | 3.6 Network application | The command line (names, `--host`, `--join`), a headless application as host and as guest of a room, start, a bit-identical match, chat, leaving, the host leaving (a two-player match is decided at once, in a three-player match the guest follows the new host and says so), a guest that quits (the quit ends the match on both machines), the score labels of a local game, teaming over three machines (an offer arrives as the question, Accept, team chat reaches only the ally, refusal, Withdraw) | 11 tests, 202 assertions |
 | 4 E2E | Opaque-box scenarios in four tiers | 506 tests |
 

@@ -42,6 +42,7 @@ struct SpriteDraw {
     std::string name;
     int32_t x;
     int32_t y;
+    uint8_t team{0};          // the HUD team that was set when the sprite was drawn
 };
 
 struct FillDraw {
@@ -55,7 +56,7 @@ public:
     explicit RecordingRenderer(const assets::AssetArchive& archive) : archive_(archive) {}
 
     void draw_sprite(uint32_t sprite_id, int32_t x, int32_t y, bool) override {
-        sprites.push_back({sprite_id, archive_.get_sprite(sprite_id).name, x, y});
+        sprites.push_back({sprite_id, archive_.get_sprite(sprite_id).name, x, y, hud_team});
     }
     void draw_named_sprite(const std::string& name, int32_t x, int32_t y, bool mirrored) override {
         int32_t id = archive_.find_sprite_id(name);
@@ -68,11 +69,11 @@ public:
     void draw_rect(int32_t x, int32_t y, int32_t w, int32_t h, assets::ColorRGBA color) override {
         rects.push_back({x, y, w, h, color});
     }
-    void draw_text(const std::string& text, int32_t x, int32_t y, assets::ColorRGBA) override {
-        texts.push_back({text, x, y, FontSize::Px12});
+    void draw_text(const std::string& text, int32_t x, int32_t y, assets::ColorRGBA colour) override {
+        texts.push_back({text, x, y, FontSize::Px12, colour});
     }
-    void draw_text(const std::string& text, int32_t x, int32_t y, assets::ColorRGBA, FontSize size) override {
-        texts.push_back({text, x, y, size});
+    void draw_text(const std::string& text, int32_t x, int32_t y, assets::ColorRGBA colour, FontSize size) override {
+        texts.push_back({text, x, y, size, colour});
     }
     // the cell height is what the real renderer reports (the original's line distance); the width stays the interface's 6 px per character
     int32_t get_text_height(FontSize size = FontSize::Px12) const override { return font_cell_height(size); }
@@ -94,7 +95,7 @@ public:
 
     struct Image { int32_t x, y, w, h; std::vector<uint8_t> rgba; };
     std::vector<Image> images;
-    struct Text { std::string text; int32_t x; int32_t y; FontSize size; };
+    struct Text { std::string text; int32_t x; int32_t y; FontSize size; assets::ColorRGBA colour{}; };
     std::vector<SpriteDraw> sprites;
     std::vector<FillDraw> fills;
     std::vector<FillDraw> rects;         // frames (draw_rect)
@@ -1122,21 +1123,166 @@ void test_text_sizes(const assets::AssetArchive& arc) {
         const auto* player = find(rr, "Player");
         check(player != nullptr && player->size == FontSize::Px18 && player->x == 415 && player->y == 95, "setup: the player's name is 18 px high at (415, 95)");
     }
-    // the results screen: rows of 18 px letters
+    // the results screen: see test_results_screen
+}
+
+// The results screen (Ants.exe FUN_010153a1 constructor, FUN_010155ac rows and layout, FUN_01015136 row builder, docs 5.49)
+void test_results_screen(const assets::AssetArchive& arc) {
+    std::printf("[results] waiting phase, rows, positions, portraits, the cue, the Leave button\n");
+    sim::MatchResult result;
+    result.is_over = true;
+    result.present_mask = 0x0F;
+    result.ally = {1, 0, sim::ALLIANCE_NONE, sim::ALLIANCE_NONE};                 // teams 0 and 1 are allied
+    result.stats[0].score = 300; result.stats[0].friendly_lost = 1; result.stats[0].enemy_killed = 2; result.stats[0].new_hatched = 3;
+    result.stats[1].score = 200; result.stats[1].friendly_lost = 10; result.stats[1].enemy_killed = 20; result.stats[1].new_hatched = 30;
+    result.stats[2].score = 450; result.stats[2].friendly_lost = 4; result.stats[2].enemy_killed = 5; result.stats[2].new_hatched = 6;
+    result.stats[3].score = 100;
+
+    ScorecardModal card;
+    card.set_player_names({"Alice", "Bob", "Carol", "Dave"});
+    card.show(result, 2);
+    check(card.is_open() && card.is_waiting(), "results: the screen opens in its waiting phase");
+    check(card.get_audio_to_play() == 0, "results: no cue while it waits (one cue per machine, when the rows are built)");
     {
-        ScorecardModal card;
-        sim::MatchResult result;
-        result.is_over = true;
-        result.final_scores[0] = 500;
-        card.show(result, 0);
         RecordingRenderer rr(arc);
         card.render(rr, arc);
-        bool any = false, all18 = true;
-        for (const auto& t : rr.texts) {
-            any = true;
-            all18 = all18 && t.size == FontSize::Px18;
+        check(rr.texts.size() == 1 && rr.texts[0].text == "Waiting for scores..." && rr.texts[0].x == 100 && rr.texts[0].y == 350 && rr.texts[0].size == FontSize::Px20,
+              "results: the label \"Waiting for scores...\" is 20 px high at (100, 350)");
+        check(!rr.texts.empty() && rr.texts[0].colour.r == 239 && rr.texts[0].colour.g == 231 && rr.texts[0].colour.b == 223, "results: its colour is (239, 231, 223)");
+        bool leave = false, portrait = false;
+        for (const auto& sp : rr.sprites) {
+            leave = leave || sp.name.rfind("bleave", 0) == 0;
+            portrait = portrait || sp.name.rfind("agst30", 0) == 0;
         }
-        check(any && all18, "results: every text of the screen is 18 px high");
+        check(!leave, "results: there is no Leave button while it waits");
+        check(!portrait, "results: there are no portraits while it waits");
+        check(!card.handle_mouse_down(550, 20) || !card.is_quit_pressed(), "results: a press where the Leave button will be does nothing yet");
+    }
+    card.update(0.200f);
+    check(card.is_waiting() && card.get_audio_to_play() == 0, "results: 200 ms later it still waits");
+    card.update(0.049f);
+    check(card.is_waiting(), "results: 249 ms: still waiting");
+    card.update(0.001f);
+    check(!card.is_waiting(), "results: after 250 ms the rows are built");
+    check(card.get_audio_to_play() == sim::SoundID::PlayerDefeat, "results: the cue is chosen when the rows appear: team 2 is not in the top row (the loser cue)");
+    {
+        RecordingRenderer rr(arc);
+        card.render(rr, arc);
+        check(card.rows().size() == 3, "results: one row per alliance or single team: \"Alice & Bob\", Carol, Dave");
+        auto text_at = [&](const std::string& text, int32_t x, int32_t y) {
+            for (const auto& t : rr.texts) if (t.text == text && t.x == x && t.y == y && t.size == FontSize::Px18) return &t;
+            return static_cast<const RecordingRenderer::Text*>(nullptr);
+        };
+        // the top row stands at Y = 235, the others at 50 i + 273
+        const auto* n0 = text_at("Alice & Bob", 100, 235);
+        const auto* n1 = text_at("Carol", 100, 323);
+        const auto* n2 = text_at("Dave", 100, 373);
+        check(n0 != nullptr && n1 != nullptr && n2 != nullptr, "results: the names stand at x = 100, y = 235, 323, 373 (18 px)");
+        check(n0 != nullptr && n0->colour.r == 239 && n0->colour.g == 231 && n0->colour.b == 223, "results: the name colour is (239, 231, 223)");
+        // the numbers are left aligned at 485 / 534 / 555 / 576 and add up the two members of an alliance
+        check(text_at("500", 485, 235) != nullptr && text_at("11", 534, 235) != nullptr && text_at("22", 555, 235) != nullptr && text_at("33", 576, 235) != nullptr,
+              "results: the alliance row adds up its members and the numbers start at x = 485, 534, 555, 576");
+        check(text_at("450", 485, 323) != nullptr && text_at("4", 534, 323) != nullptr && text_at("5", 555, 323) != nullptr && text_at("6", 576, 323) != nullptr,
+              "results: the second row (Carol)");
+        check(text_at("100", 485, 373) != nullptr && text_at("0", 534, 373) != nullptr, "results: rows with nothing to show still have their numbers (no all-zero row is hidden)");
+        // the counters are drawn on one line whatever their width (the substitute font does not fit two digits into the 19 px label)
+        ScorecardModal wide;
+        sim::MatchResult big = result;
+        big.stats[2].friendly_lost = 1234;
+        wide.show(big, 2);
+        wide.update(0.3f);
+        RecordingRenderer rw(arc);
+        wide.render(rw, arc);
+        bool one_line = false;
+        for (const auto& t : rw.texts) one_line = one_line || (t.text == "1234" && t.x == 534 && t.y == 323 && t.size == FontSize::Px18);
+        check(one_line, "results: a counter that is wider than its label stays on one line");
+        // the ant portraits: one per team at (60, Y + 20), an alliance shows both at (45, Y + 20) and (75, Y + 20), each in its own colour, animated
+        const auto* anim = arc.find_animation("agst301");
+        check(anim != nullptr && !anim->subitems.empty(), "results: the portrait animation exists");
+        if (anim != nullptr && !anim->subitems.empty()) {
+            const auto& parts = anim->subitems[Renderer::get_anim_subitem_by_time(*anim, 250)].frames;
+            auto portrait_at = [&](int32_t x, int32_t y, uint8_t team) {
+                size_t found = 0;
+                for (const auto& part : parts) {
+                    for (const auto& sp : rr.sprites) {
+                        if (sp.id == part.sprite_index && sp.x == x + part.dx && sp.y == y + part.dy && sp.team == team) { ++found; break; }
+                    }
+                }
+                return found == parts.size();
+            };
+            check(portrait_at(45, 255, 0) && portrait_at(75, 255, 1), "results: the alliance row shows both ants at (45, 255) and (75, 255) in their colours");
+            check(portrait_at(60, 343, 2), "results: a single team's ant stands at (60, Y + 20) in its colour");
+            check(portrait_at(60, 393, 3), "results: the last row's ant");
+            // the portrait moves with the screen's clock: later the clip shows another frame
+            const size_t f_now = Renderer::get_anim_subitem_by_time(*anim, 250);
+            const size_t f_later = Renderer::get_anim_subitem_by_time(*anim, 850);
+            check(f_now != f_later, "results: frames 250 ms and 850 ms into the clip differ (a moving portrait is testable)");
+            card.update(0.600f);
+            RecordingRenderer later(arc);
+            card.render(later, arc);
+            const auto& parts_later = anim->subitems[f_later].frames;
+            size_t found = 0;
+            for (const auto& part : parts_later) {
+                for (const auto& sp : later.sprites) {
+                    if (sp.id == part.sprite_index && sp.x == 60 + part.dx && sp.y == 343 + part.dy && sp.team == 2) { ++found; break; }
+                }
+            }
+            check(found == parts_later.size(), "results: 600 ms later the portrait shows the next frame of its clip");
+        }
+        // the Leave button exists now
+        bool leave = false;
+        for (const auto& sp : rr.sprites) leave = leave || sp.name.rfind("bleave", 0) == 0;
+        check(leave, "results: the Leave button is there once the rows are");
+        bool left = false;
+        card.set_on_quit([&]() { left = true; });
+        card.handle_mouse_down(550, 20);
+        check(card.is_quit_pressed(), "results: a press on Leave presses it");
+        card.handle_mouse_up(550, 20);
+        check(left, "results: the release leaves");
+    }
+    // the cue for the other members: Bob's ally is the top row's first team (Alice), so Bob hears the winner cue
+    {
+        ScorecardModal bob;
+        bob.show(result, 1);
+        bob.update(0.3f);
+        check(bob.get_audio_to_play() == sim::SoundID::VictoryFanfare, "results: the winner cue for the ally of the top row's first team");
+        ScorecardModal alice;
+        alice.show(result, 0);
+        alice.update(0.3f);
+        check(alice.get_audio_to_play() == sim::SoundID::VictoryFanfare, "results: and for the first team itself");
+    }
+    // teams that are not shown (a browser game has no other players) have no row; a team that dropped has none either
+    {
+        ScorecardModal only;
+        only.set_shown_teams(0x05);
+        only.show(result, 2);
+        only.update(0.3f);
+        check(only.rows().size() == 2 && only.rows()[0].first == 2 && only.rows()[1].first == 0, "results: only the shown teams have rows (Alice's alliance partner is not shown: a single row)");
+        sim::MatchResult dropped = result;
+        dropped.present_mask = 0x0D;                                               // team 1 dropped out
+        ScorecardModal d;
+        d.set_player_names({"Alice", "Bob", "Carol", "Dave"});
+        d.show(dropped, 0);
+        d.update(0.3f);
+        check(d.rows().size() == 3 && d.rows()[0].name == "Carol" && d.rows()[1].name == "Alice" && d.rows()[2].name == "Dave", "results: a dropped team has no row");
+    }
+    // names: without a name the colour word; the local player's own name; at most 35 characters
+    {
+        ScorecardModal n;
+        n.set_local_player_name("Me");
+        n.show(result, 3);
+        n.update(0.3f);
+        bool me = false, word = false;
+        for (const auto& r : n.rows()) {
+            me = me || r.name == "Me";
+            word = word || r.name == "Red" || r.name == "Blue" || r.name.find("Red") != std::string::npos;
+        }
+        check(me && word, "results: the local player's own name, the colour words for unnamed teams");
+        ScorecardModal longname;
+        longname.set_player_names({std::string(30, 'a'), std::string(30, 'b'), "C", "D"});
+        longname.show(result, 0);
+        longname.update(0.3f);
+        check(longname.rows()[0].name.size() == 35, "results: a row name is at most 35 characters (the label's limit)");
     }
 }
 
@@ -1517,6 +1663,7 @@ int main() {
     test_cursor_rules(arc);
     test_button_states(arc);
     test_text_sizes(arc);
+    test_results_screen(arc);
     test_label_wrap();
     test_alliance_dialog_layout(arc);
     test_alliance_answers(arc);

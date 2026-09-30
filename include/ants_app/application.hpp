@@ -132,6 +132,9 @@ public:
     void update_music(float dt);
     /// WM_ACTIVATEAPP (0x100e875): the program loses / gets the input focus
     void set_app_active(bool active);
+    /// The results screen (docs 5.49): a match that has ended opens it, in its waiting phase; its clock builds the rows 250 ms later and the machine's one winner or loser
+    /// cue plays then. Once per frame in every state (the tests call it directly).
+    void update_results(float dt);
 
     int32_t mouse_screen_x() const noexcept { return mouse_screen_x_; }
     int32_t mouse_screen_y() const noexcept { return mouse_screen_y_; }
@@ -177,7 +180,7 @@ private:
     bool load_match(const std::string& map_path, uint32_t seed, uint8_t roster, bool fog);   // level, simulation, renderer (no HUD, no sound)
     void enter_match();                                   // music, start sound, camera, HUD reset, "Get ready", state Playing
     void post_tick();                                     // what every simulation tick shows: HUD, events, audio, the end of the match
-    void check_match_over();                              // the match is over and not yet shown: the results screen, its sting, the music closes
+    void check_match_over();                              // the match is over and not yet shown: the results screen opens (waiting), the music closes
     void confirm_quit();                                  // the quit dialog's Yes (FUN_0101453f): the quit ends the match while one other side is left, else the player leaves
 
     // Network play

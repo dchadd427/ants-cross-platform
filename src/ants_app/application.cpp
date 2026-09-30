@@ -335,15 +335,22 @@ bool Application::init(const ApplicationConfig& config) {
             hud_.open_options();
         }
         if (config_.show_scorecard) {
-            sim::MatchResult mr{};
+            sim::MatchResult mr{};                                   // a sample: four teams, the first two allied
             mr.is_over = true;
-            mr.winning_players = {0};
-            mr.final_scores = {1500, 850, 420, 100};
-            mr.stats[0] = {5, 18, 25};
-            mr.stats[1] = {12, 8, 15};
-            mr.stats[2] = {20, 4, 10};
-            mr.stats[3] = {25, 1, 5};
+            mr.ally = {1, 0, sim::ALLIANCE_NONE, sim::ALLIANCE_NONE};
+            const int32_t scores[4] = {900, 600, 420, 100};
+            const uint32_t lost[4] = {5, 12, 20, 25};
+            const uint32_t killed[4] = {18, 8, 4, 1};
+            const uint32_t hatched[4] = {25, 15, 10, 5};
+            for (size_t p = 0; p < 4; ++p) {
+                mr.stats[p].score = scores[p];
+                mr.stats[p].friendly_lost = lost[p];
+                mr.stats[p].enemy_killed = killed[p];
+                mr.stats[p].new_hatched = hatched[p];
+            }
+            mr.decide_winners();
             scorecard_.show(mr, 0);
+            scorecard_.update(0.25f);                                // the preview shows the rows, not the waiting label
         }
     } else {
         if (!config_.skip_intro && !config_.headless) {
@@ -428,6 +435,7 @@ bool Application::load_match(const std::string& map_path, uint32_t seed, uint8_t
         }
     }
     hud_.set_roster_mask(labelled);
+    scorecard_.set_shown_teams(labelled);                                     // the results list the same teams as the score labels
     return true;
 }
 
@@ -544,6 +552,7 @@ void Application::run_frame_with_delta(float delta_time) {
 
     pump_network(delta_time);                   // a network match has no pause: it keeps running while the window is in the background
 
+    update_results(delta_time);
     update_music(delta_time);                   // the music chain runs in every state (the intro ends on the loading, quick help or setup screen alike)
 
     if (!is_paused_) {
@@ -775,9 +784,9 @@ void Application::handle_camera_panning(float dt) {
 
 void Application::handle_key_down(const SDL_KeyboardEvent& key) {
     if (scorecard_.is_open()) {
-        if (key.keysym.sym == SDLK_ESCAPE) {
-            return_to_map_select();
-        }
+        // FUN_01015b17: Enter and the letters C, Q and X (either case, whatever the modifiers) leave, at any time; nothing else does anything (Esc included)
+        const SDL_Keycode sym = key.keysym.sym;
+        if (sym == SDLK_RETURN || sym == SDLK_KP_ENTER || sym == SDLK_c || sym == SDLK_q || sym == SDLK_x) scorecard_.leave();
         return;
     }
 
@@ -891,15 +900,23 @@ void Application::check_match_over() {
     if (!sim_.is_match_over() || match_over_handled_) return;
     match_over_handled_ = true;
     const auto& world = sim_.get_world_state();
-    scorecard_.show(world.match_result, local_player_id_);
-    uint32_t sting_sound = scorecard_.get_audio_to_play();
-    if (sting_sound > 0) {
-        audio_mixer_.play_sfx(sting_sound, 1.0f, 255);
-        scorecard_.clear_audio_to_play();
-    }
+    scorecard_.show(world.match_result, local_player_id_);       // "Waiting for scores..."; the cue plays when the rows appear (update_scorecard)
     close_music();                                               // FUN_010226da closes the music sequencer at once (0x1022714); nothing restarts it
     music_resume_on_activate_ = false;
     if (net_) net_->freeze();                                    // the host stops sealing turns
+}
+
+// Once per frame: a match that has ended without a tick of this application (a command, a drop-out) opens the results screen too; the screen's clock builds its
+// rows, and with them the one cue of the machine, 250 ms after it opened
+void Application::update_results(float dt) {
+    if (state_ == AppState::Playing) check_match_over();
+    if (!scorecard_.is_open()) return;
+    scorecard_.update(dt);
+    const uint32_t cue = scorecard_.get_audio_to_play();
+    if (cue > 0) {
+        audio_mixer_.play_sfx(cue, 1.0f, 255);
+        scorecard_.clear_audio_to_play();
+    }
 }
 
 // FUN_0101453f: the quit dialog's Yes. With exactly one other side left (FUN_0100c5b1) the quit is the end of the match: the game-over message names the
