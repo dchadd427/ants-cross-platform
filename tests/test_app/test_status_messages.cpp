@@ -340,6 +340,12 @@ struct Sfx {
     std::vector<uint32_t> ids;
     void attach(HUD& hud) { hud.set_on_play_sfx([this](uint32_t id) { ids.push_back(id); }); }
     bool has(uint32_t id) const { for (uint32_t x : ids) if (x == id) return true; return false; }
+    // The voices of an order: everything but the pedestal click (89) that follows an accepted order with an unlatched pedestal (BTNPUSH)
+    std::vector<uint32_t> voices() const {
+        std::vector<uint32_t> v;
+        for (uint32_t x : ids) if (x != sim::SoundID::NavButtonClick) v.push_back(x);
+        return v;
+    }
 };
 
 void test_move_acknowledgement() {
@@ -361,7 +367,8 @@ void test_move_acknowledgement() {
         sfx.ids.clear();
         hud.dispatch_move_order(20, 10, sim);
         check(status_after_render(hud, sim.get_world_state()) == text[i], std::string("move order of a ") + text[i]);
-        check(sfx.ids.size() == 1, "one voice");
+        check(sfx.voices().size() == 1, "one voice");
+        check(!sfx.ids.empty() && sfx.ids.back() == sim::SoundID::NavButtonClick, "and the click of the flashing move pedestal after it");
         uint32_t expect_lo = 0;
         uint32_t expect_hi = 0;
         switch (types[i]) {
@@ -372,7 +379,7 @@ void test_move_acknowledgement() {
             case sim::AntType::Combat:  expect_lo = 28; expect_hi = 29; break;   // combgo1 / combgo2
             case sim::AntType::Swimmer: expect_lo = expect_hi = 33; break;
         }
-        check(!sfx.ids.empty() && sfx.ids[0] >= expect_lo && sfx.ids[0] <= expect_hi, "the go voice of the type");
+        check(!sfx.ids.empty() && sfx.ids[0] >= expect_lo && sfx.ids[0] <= expect_hi, "the go voice of the type (first, the click follows)");
     }
 }
 
@@ -393,7 +400,7 @@ void test_attack_and_special() {
         sfx.ids.clear();
         hud.dispatch_attack_order(foe, sim);
         check(status_after_render(hud, sim.get_world_state()) == "Attack!", "text 67");
-        check(sfx.ids.size() == 1 && (sfx.ids[0] == 59 || sfx.ids[0] == 60), "the combat ant's attack voice (combat1 / combat2)");
+        check(sfx.voices().size() == 1 && (sfx.voices()[0] == 59 || sfx.voices()[0] == 60), "the combat ant's attack voice (combat1 / combat2)");
     }
     {
         // a single fire ant: click on the ground = ignite: "Burn..." and firedo
@@ -409,7 +416,7 @@ void test_attack_and_special() {
         sfx.ids.clear();
         hud.order_selected(sim, sim::TileCoord{14, 10}, true, false);
         check(status_after_render(hud, sim.get_world_state()) == "Burn...", "text 71");
-        check(sfx.ids.size() == 1 && sfx.ids[0] == 25, "firedo.wav");
+        check(sfx.voices().size() == 1 && sfx.voices()[0] == 25, "firedo.wav");
     }
     {
         // two fire ants: the same order is silent
@@ -427,7 +434,8 @@ void test_attack_and_special() {
         sfx.ids.clear();
         hud.order_selected(sim, sim::TileCoord{14, 10}, true, false);
         check(status_after_render(hud, sim.get_world_state()).empty(), "no text for a special order given to two ants");
-        check(sfx.ids.empty(), "and no voice");
+        check(sfx.voices().empty(), "and no voice (the pedestal still clicks: the order needed an ant)");
+        check(sfx.has(sim::SoundID::NavButtonClick), "the click of the flashing ability pedestal");
     }
     {
         // a single bomber: plants a bomb: bombdo.wav and no text
@@ -443,7 +451,7 @@ void test_attack_and_special() {
         sfx.ids.clear();
         hud.order_selected(sim, sim::TileCoord{14, 10}, true, false);
         check(status_after_render(hud, sim.get_world_state()).empty(), "no text for the bomber's special order");
-        check(sfx.ids.size() == 1 && sfx.ids[0] == 39, "bombdo.wav");
+        check(sfx.voices().size() == 1 && sfx.voices()[0] == 39, "bombdo.wav");
     }
     {
         // a single thief ordered onto an enemy hill: "My pleasure..." and theifdo
@@ -459,7 +467,7 @@ void test_attack_and_special() {
         sfx.ids.clear();
         hud.order_selected(sim, sim::TileCoord{41, 41}, true, false);
         check(status_after_render(hud, sim.get_world_state()) == "My pleasure...", "text 69");
-        check(sfx.ids.size() == 1 && sfx.ids[0] == 21, "theifdo.wav");
+        check(sfx.voices().size() == 1 && sfx.voices()[0] == 21, "theifdo.wav");
     }
 }
 

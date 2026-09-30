@@ -781,17 +781,20 @@ void run_suite_12_game_over() {
         ASSERT_EQ(sim.get_unit(u).pos.y, frozen_pos.y);
     } TEST_END();
 
-    TEST_CASE("12.2 Audio Split: Winner (Sound 56) vs Loser (Sound 42)") {
+    TEST_CASE("12.2 Match-End Stings (Sound 56 Winner / Sound 42 Loser): The Result Names Them, The Simulation Plays Nothing (The Results Screen Plays One Cue Per Machine)") {
         SimulationEngine sim;
         sim.init_test_world(60, 60, 1, 50);
         sim.set_player_score(0, 500); // Winner
         sim.set_player_score(1, 200); // Loser
         ASSERT_TRUE(run_until_over(sim) >= 0);
 
-        ASSERT_TRUE(sim.has_targeted_audio_event(0, 56));  // Winner Sound 56
-        ASSERT_FALSE(sim.has_targeted_audio_event(0, 42)); // Winner never hears 42
-        ASSERT_TRUE(sim.has_targeted_audio_event(1, 42));  // Loser Sound 42 (losers.wav)
-        ASSERT_FALSE(sim.has_targeted_audio_event(1, 56)); // Loser never hears 56
+        const MatchResult& result = sim.get_world_state().match_result;
+        ASSERT_TRUE(result.is_winner(0));                     // the screen plays Sound 56 for the top row (and its ally) ...
+        ASSERT_FALSE(result.is_winner(1));                    // ... and Sound 42 (losers.wav) for everybody else
+        for (uint8_t p = 0; p < 4; ++p) {
+            ASSERT_FALSE(sim.has_targeted_audio_event(p, 56)); // no sting from the simulation: it was heard twice
+            ASSERT_FALSE(sim.has_targeted_audio_event(p, 42));
+        }
     } TEST_END();
 
     TEST_CASE("12.3 4-Stat Scorecard Accuracy") {

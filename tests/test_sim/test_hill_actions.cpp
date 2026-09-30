@@ -365,6 +365,24 @@ int main() {
         ASSERT_NEAR(appeared * kTickMs, 9000, 100);                                     // the second run, 1000 ms after the first, although the entrance was free at about 8.6 s
     } TEST_END();
 
+    TEST_CASE("2.6 The can't-hatch cue (antstop, 61) is a global cue of the clicking player: plain volume, no position (0x1010b97)") {
+        SimulationEngine sim;
+        make_world(sim);
+        sim.set_player_eggs(0, 1);
+        sim.set_player_score(0, 100);
+        sim.clear_audio_events();
+        ASSERT_EQ(static_cast<int>(sim.try_hatch(0)), static_cast<int>(SimulationEngine::HatchResult::NotEnoughPoints));
+        int cues = 0;
+        for (const auto& e : sim.poll_audio_events()) {
+            if (e.sound_id != SoundID::AntStop) continue;
+            ++cues;
+            ASSERT_EQ(e.world_x, 0);                                                         // (0, 0) plays unattenuated wherever the view is; a hill position would be culled
+            ASSERT_EQ(e.world_y, 0);
+            ASSERT_EQ(e.target_player, 0);                                                   // only the clicking machine hears it
+        }
+        ASSERT_EQ(cues, 1);
+    } TEST_END();
+
     TEST_CASE("3.1 Raid: 3510 ms clip on the raid tile, loot min(score, 50) moves at the end, thief goes home") {
         SimulationEngine sim;
         make_world(sim);
@@ -393,6 +411,24 @@ int main() {
         ASSERT_TRUE(sim.get_unit(thief).is_thief_steal);
         ASSERT_TRUE(news_has(sim, 0, 62));                    // "Food stolen..." goes to the thief's owner
         ASSERT_EQ(sim.get_unit(thief).orig_order, AntUnit::kOrderHome);
+    } TEST_END();
+
+    TEST_CASE("3.1b The raid alarm (anthill, 48) is a global cue of the raided player: plain volume, no position (0x10218f2)") {
+        SimulationEngine sim;
+        make_world(sim);
+        sim.set_player_score(1, 120);
+        const uint32_t thief = sim.spawn_unit(0, AntType::Thief, TileCoord{43, 42});
+        sim.clear_audio_events();
+        sim.start_thief_infiltration(thief, 1);
+        int cues = 0;
+        for (const auto& e : sim.poll_audio_events()) {
+            if (e.sound_id != SoundID::Anthill) continue;
+            ++cues;
+            ASSERT_EQ(e.world_x, 0);
+            ASSERT_EQ(e.world_y, 0);
+            ASSERT_EQ(e.target_player, 1);                                                   // the raided player only
+        }
+        ASSERT_EQ(cues, 1);
     } TEST_END();
 
     TEST_CASE("3.2 Raid loot is min(victim score, 50); an empty victim leaves the thief idle and empty-handed") {

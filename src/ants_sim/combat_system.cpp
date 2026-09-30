@@ -511,7 +511,7 @@ void SimulationEngineImpl::finish_death(AntUnit& a) {
 }
 
 // FUN_01020e6e DropPowerup: the 8 neighbours (never the own tile) in a cyclic order from a random row and column
-// offset; the first free tile gets the power-up. Nothing free: only the silent cue.
+// offset; the first free tile gets the power-up. Nothing free: only the powerupd cue (sound 40, audible, the owner hears it).
 void SimulationEngineImpl::drop_powerup(AntUnit& a, TileCoord tile, uint8_t type) {
     int32_t r0 = static_cast<int32_t>(prng_.rand() % 3u);
     int32_t c0 = static_cast<int32_t>(prng_.rand() % 3u);
@@ -533,8 +533,8 @@ void SimulationEngineImpl::drop_powerup(AntUnit& a, TileCoord tile, uint8_t type
         }
         r = (r + 1) % 3;
     }
-    (void)a;
-    audio_queue_.push_back(AudioEvent{40, centre_x(tile), centre_y(tile), 1, 255});      // the silent cue (anim 0xd5)
+    // Nothing free: the powerupd effect (anim 0xd5, sound 40, audible) plays at the tile, but FUN_01020e6e runs on the owner's machine only (0x1020e7a)
+    audio_queue_.push_back(AudioEvent{40, centre_x(tile), centre_y(tile), 1, a.player_id});
 }
 
 // FUN_0100cd9f RemoveAnt: the text, the scorecard counters, the food drop, the release of the ant.

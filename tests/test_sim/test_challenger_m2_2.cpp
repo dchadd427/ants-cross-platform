@@ -444,7 +444,7 @@ void run_suite_5_game_over() {
         }
     } TEST_END();
 
-    TEST_CASE("5.2 Split Audio Routing: Winner (Sound 56) vs Losers (Sound 41)") {
+    TEST_CASE("5.2 Match-End Stings: The Result Names The Winner And The Losers; The Simulation Plays Nothing (The Results Screen Plays One Cue Per Machine, 0x1015a4a)") {
         SimulationEngine sim;
         sim.init_test_world(60, 60, 801, 50);
 
@@ -458,16 +458,16 @@ void run_suite_5_game_over() {
 
         ASSERT_TRUE(sim.is_match_over());
 
-        ASSERT_TRUE(sim.has_targeted_audio_event(0, SoundID::VictoryFanfare));
-        ASSERT_FALSE(sim.has_targeted_audio_event(0, SoundID::PlayerDefeat));
-
-        for (uint8_t p = 1; p <= 3; ++p) {
-            ASSERT_TRUE(sim.has_targeted_audio_event(p, SoundID::PlayerDefeat));
+        const MatchResult& result = sim.get_world_state().match_result;
+        ASSERT_TRUE(result.is_winner(0));                                   // the rule of the results screen: winner when the local team is the top row
+        for (uint8_t p = 1; p <= 3; ++p) ASSERT_FALSE(result.is_winner(p));
+        for (uint8_t p = 0; p <= 3; ++p) {                                  // the stings were played twice when the simulation also queued them
             ASSERT_FALSE(sim.has_targeted_audio_event(p, SoundID::VictoryFanfare));
+            ASSERT_FALSE(sim.has_targeted_audio_event(p, SoundID::PlayerDefeat));
         }
     } TEST_END();
 
-    TEST_CASE("5.3 Allied Victory Split Audio Routing") {
+    TEST_CASE("5.3 Allied Victory: Both Allies Are Winners For The Results Screen, No Sting From The Simulation") {
         SimulationEngine sim;
         sim.init_test_world(60, 60, 802, 50);
 
@@ -483,15 +483,15 @@ void run_suite_5_game_over() {
 
         ASSERT_TRUE(sim.is_match_over());
 
-        ASSERT_TRUE(sim.has_targeted_audio_event(0, SoundID::VictoryFanfare));
-        ASSERT_FALSE(sim.has_targeted_audio_event(0, SoundID::PlayerDefeat));
-        ASSERT_TRUE(sim.has_targeted_audio_event(1, SoundID::VictoryFanfare));
-        ASSERT_FALSE(sim.has_targeted_audio_event(1, SoundID::PlayerDefeat));
-
-        ASSERT_TRUE(sim.has_targeted_audio_event(2, SoundID::PlayerDefeat));
-        ASSERT_FALSE(sim.has_targeted_audio_event(2, SoundID::VictoryFanfare));
-        ASSERT_TRUE(sim.has_targeted_audio_event(3, SoundID::PlayerDefeat));
-        ASSERT_FALSE(sim.has_targeted_audio_event(3, SoundID::VictoryFanfare));
+        const MatchResult& result = sim.get_world_state().match_result;
+        ASSERT_TRUE(result.is_winner(0));
+        ASSERT_TRUE(result.is_winner(1));
+        ASSERT_FALSE(result.is_winner(2));
+        ASSERT_FALSE(result.is_winner(3));
+        for (uint8_t p = 0; p <= 3; ++p) {
+            ASSERT_FALSE(sim.has_targeted_audio_event(p, SoundID::VictoryFanfare));
+            ASSERT_FALSE(sim.has_targeted_audio_event(p, SoundID::PlayerDefeat));
+        }
     } TEST_END();
 
     TEST_CASE("5.4 4-Stat Scorecard Faithful Tracking (Score, Lost, Killed, Hatched)") {

@@ -39,6 +39,19 @@ Ground truth for every entry is in [`docs/GAME_REVERSE_ENGINEERING.md`](docs/GAM
   - **Found on the way, for the audit** (docs: implementation_plan.md section 18): `tests/test_sim/test_challenger_m2_it2_deep_stress.cpp` has not been part of the build since an early commit and no longer compiles
     (it uses the retired slot-queue API of the hill). (An earlier version of this line said that the death clips are no longer started by a separate effect: wrong, only the unused helper `spawn_death_effect` was removed; the effect path in `movement_system.cpp` is still in use, see the audit.)
 
+## v0.0.58 - 2026-09-30 - One sting, global cues, the click of an order
+
+Audio batch, part 1 (`docs/audit/ledger_sound_texts.md` NEW-1 / NEW-2 / NEW-3, `ledger_input.md` NEW-3, `ledger_effects_objects.md` C10, `ledger_food_economy.md` NEW-1 / NEW-2), each re-read in `Ants.exe` first:
+
+- **The winner / loser sting plays once** (`0x1015a4a`): the simulation queued it for every team at the end tick and the results screen played its own on top, so the sting was heard twice (+6 dB, it could clip). The original plays ONE cue per machine when
+  the results open: winner when the local team or its ally is the top row, else losers. The simulation no longer plays anything at the end of the match, and the music is closed at once (`0x1022714`) instead of fading over a second.
+- **"Can't hatch" and the raid alarm are global cues** (`0x1010b97`, `0x10218f2`): plain volume wherever the view is. They were queued at the hill / raid tile and the mixer dropped them when the view was more than 800 px away (hatch click with fewer
+  than 200 points while scrolled away: faint or silent; the raided player heard no alarm). `powerupd` (the sound of a power-up that finds no free tile) now reaches the owner's machine only, as in the original.
+- **An order clicks**: after every accepted order the original flashes the pedestal of the order, and the pressed picture carries the click sound (89); the remake flashed silently. The click follows the order's voice; a latched pedestal that pops up stays silent.
+- Docs: `docs/GAME_REVERSE_ENGINEERING.md` 5.24b (who hears what) and the results-screen audio notes, README (test table), `docs/AUDIT_ONE_TO_ONE.md` (progress).
+- Tests: `test_hill_actions` 2.6 (canthatch is global), 3.1b (raid alarm is global), `test_powerup_actions` 1.12 extended (powerupd owner-only), `test_pointer_model` (the click after the voice, silent pop-up), `test_status_messages` (voices counted apart from the click); the new checks
+  fail on v0.0.57. **Rewritten tests** (they pinned the simulation's stings): integration 6.1 and 12.68, `test_challenger_m2_2` 5.2 and 5.3 (the result names winners and losers, the simulation plays nothing; the results screen's rule picks the sting). Version assertion of 12.108.
+
 ## v0.0.57 - 2026-09-30 - Small rules: level-start facing, where a power-up may land, the order of two effects
 
 Audit batch 1, item 9 (the small items that could be verified; `docs/audit/ledger_hill.md` NEW-4, `ledger_abilities.md` NEW-5, `ledger_effects_objects.md` NEW-2), each re-read in `Ants.exe` first:

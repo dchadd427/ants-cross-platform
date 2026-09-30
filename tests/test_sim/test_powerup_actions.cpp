@@ -516,6 +516,16 @@ int main() {
             ASSERT_TRUE(wait_ms(sim, 8000, [&]() { return sim.get_unit(sw).loco_action == AntUnit::kActionGetPow; }) >= 0);
             ASSERT_EQ(sim.get_unit(sw).type, AntType::Combat);
             ASSERT_TRUE(sim.has_audio_event(40));
+            {   // the powerupd effect belongs to the owner's machine only (FUN_01020e6e tests IsLocal first, 0x1020e7a)
+                int cues = 0;
+                for (const auto& e : sim.poll_audio_events()) {
+                    if (e.sound_id != 40) continue;
+                    ++cues;
+                    ASSERT_EQ(e.target_player, 0);
+                    ASSERT_TRUE(e.world_x != 0 || e.world_y != 0);                // still positional: an effect of the map view
+                }
+                ASSERT_EQ(cues, 1);
+            }
             int swimmer_hats = 0, fire_hats = 0;
             for (int y = 14; y <= 16; ++y) {
                 for (int x = 14; x <= 16; ++x) {

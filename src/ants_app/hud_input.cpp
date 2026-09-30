@@ -202,20 +202,26 @@ void HUD::flash_pedestal(int slot) noexcept {
 // kind flashes. Move: slot 1 (kind 1). Special: slot 2 (its kind). Attack: slot 1 when latched; slot 2 when latched and it is the attack
 // pedestal (a combat ant), any other latched slot 2 stays and the move pedestal flashes; unlatched: the attack pedestal of a combat ant, else move.
 void HUD::order_feedback(bool special, bool attack) {
+    // A flash is BTNPUSH: the pedestal shows its pressed clip (butXXX2d), whose first frame carries the click (89); a latched pedestal that pops up
+    // is replaced by the up picture and stays silent (LI NEW-3). The click follows the voice of the order (the group order speaks first).
+    const auto flash_with_click = [this](int slot) {
+        play_sfx(sim::SoundID::NavButtonClick);
+        flash_pedestal(slot);
+    };
     if (!attack && special) {
-        if (slot_latched_[1]) slot_latched_[1] = false; else flash_pedestal(1);
+        if (slot_latched_[1]) slot_latched_[1] = false; else flash_with_click(1);
         return;
     }
     if (!attack) {
-        if (slot_latched_[0]) slot_latched_[0] = false; else flash_pedestal(0);
+        if (slot_latched_[0]) slot_latched_[0] = false; else flash_with_click(0);
         return;
     }
     const bool slot2_is_attack = slot2_attack_kind_;
     if (slot_latched_[0]) slot_latched_[0] = false;
     else if (slot_latched_[1]) {
-        if (slot2_is_attack) slot_latched_[1] = false; else flash_pedestal(0);
+        if (slot2_is_attack) slot_latched_[1] = false; else flash_with_click(0);
     } else {
-        flash_pedestal(slot2_is_attack ? 1 : 0);
+        flash_with_click(slot2_is_attack ? 1 : 0);
     }
 }
 

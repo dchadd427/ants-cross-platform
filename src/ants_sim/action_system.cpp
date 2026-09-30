@@ -317,7 +317,7 @@ void SimulationEngineImpl::start_raid(AntUnit& a, uint8_t victim, int32_t amount
     a.current_waypoint_idx = 0;
     a.final_dest = TileCoord{-1, -1};
     set_position(a, centre_x(tile), centre_y(tile));
-    audio_queue_.push_back(AudioEvent{SoundID::Anthill, centre_x(tile), centre_y(tile), 2, victim});
+    audio_queue_.push_back(AudioEvent{SoundID::Anthill, 0, 0, 2, victim});            // a global cue (0x10218f2): the raided player hears it wherever the view is
     post_news(victim, strings::kThiefAtHill);
 }
 

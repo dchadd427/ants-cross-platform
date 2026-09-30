@@ -413,17 +413,11 @@ public:
     bool is_special_base_tile(TileCoord t) const noexcept;
     bool team_dropped(uint8_t team) const noexcept { return team < MAX_PLAYERS && (dropped_mask_ & (1u << team)) != 0; }
 
+    // The end of the match. The winner / loser sting is not a simulation event: the original plays ONE cue per machine when the results rows are
+    // built (0x1015a4a: winner when the local team or its ally is the top row, else losers); the application plays it when the scorecard opens.
     void handle_game_over() {
         match_state_ = MatchState::GameOver;
         match_time_remaining_ms_ = 0;
-        MatchResult result = stats_.evaluate_victory();
-
-        for (uint8_t winner : result.winning_players) {
-            audio_queue_.push_back(AudioEvent{SoundID::VictoryFanfare, 0, 0, 2, winner});
-        }
-        for (uint8_t loser : result.losing_players) {
-            audio_queue_.push_back(AudioEvent{SoundID::PlayerDefeat, 0, 0, 2, loser});
-        }
     }
 };
 

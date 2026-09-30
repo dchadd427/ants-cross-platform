@@ -752,22 +752,19 @@ void run_suite_6_scorecard_and_audio_routing() {
         ASSERT_TRUE(sim.is_match_over());
         ASSERT_EQ(sim.get_match_time_remaining_ms(), 0u);
 
-        // Verify audio queue contains split win/loss stings
+        // The simulation queues no sting (it used to, and the results screen played its own on top: the sting was heard twice). The original plays ONE
+        // cue per machine when the results rows are built (0x1015a4a); the screen's rule picks it: winner when the local team is the top row
         auto audio_events = sim.poll_audio_events();
-        bool found_winner_fanfare = false;
-        bool found_loser_sting = false;
-
         for (const auto& ev : audio_events) {
-            if (ev.sound_id == SoundID::VictoryFanfare && ev.target_player == 0) {
-                found_winner_fanfare = true;
-            }
-            if (ev.sound_id == SoundID::PlayerDefeat && ev.target_player == 1) {
-                found_loser_sting = true;
-            }
+            ASSERT_TRUE(ev.sound_id != SoundID::VictoryFanfare);
+            ASSERT_TRUE(ev.sound_id != SoundID::PlayerDefeat);
         }
-
-        ASSERT_TRUE(found_winner_fanfare); // Winner received Sound 56
-        ASSERT_TRUE(found_loser_sting);    // Loser received Sound 41
+        ScorecardModal winner_screen;
+        winner_screen.show(sim.get_world_state().match_result, 0);
+        ASSERT_EQ(winner_screen.get_audio_to_play(), SoundID::VictoryFanfare);     // Winner hears Sound 56
+        ScorecardModal loser_screen;
+        loser_screen.show(sim.get_world_state().match_result, 1);
+        ASSERT_EQ(loser_screen.get_audio_to_play(), SoundID::PlayerDefeat);        // Loser hears Sound 42
     } TEST_END();
 
     TEST_CASE("6.2 Scorecard Modal 4 Discrete Tracked Statistics") {
@@ -1665,8 +1662,10 @@ void run_suite_9_gameplay_mechanics_and_options() {
         auto& sim_engine = app.sim();
 
         uint32_t last_sfx = 0;
+        uint32_t last_voice = 0;                                               // the last sound that is not the pedestal click (89)
         hud.set_on_play_sfx([&](uint32_t sid) {
             last_sfx = sid;
+            if (sid != SoundID::NavButtonClick) last_voice = sid;
         });
 
         // Select all friendly ants
@@ -1677,7 +1676,8 @@ void run_suite_9_gameplay_mechanics_and_options() {
         ViewportCamera cam;
         hud.handle_mouse_down(100, 100, SDL_BUTTON_RIGHT, sim_engine, cam);
         hud.handle_mouse_up(100, 100, SDL_BUTTON_RIGHT, sim_engine, cam);     // the order is given at the release
-        ASSERT_TRUE(last_sfx == 17 || last_sfx == 15); // gantgo or gantcommand
+        ASSERT_TRUE(last_voice == 17 || last_voice == 15); // gantgo or gantcommand
+        ASSERT_EQ(last_sfx, SoundID::NavButtonClick);                          // the flashing move pedestal clicks after the voice (BTNPUSH)
     } TEST_END();
 
     TEST_CASE("9.7 The Chat Box Is Always Active; Enter, [All] And [Team] Send; Hotkey Modifier Isolation") {
@@ -5344,10 +5344,12 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         ASSERT_TRUE(run_until_over(sim) >= 0); // Match game over (within 200 ms after 0:00)
 
         ASSERT_TRUE(sim.is_match_over());
-        // Winner gets Sound 56 (VictoryFanfare)
-        ASSERT_TRUE(sim.has_targeted_audio_event(0, SoundID::VictoryFanfare));
-        // Loser gets Sound 42 (PlayerDefeat / losers.wav)
-        ASSERT_TRUE(sim.has_targeted_audio_event(1, SoundID::PlayerDefeat));
+        // The stings are the results screen's (one per machine, Sound 56 for a winner, Sound 42 = losers.wav for a loser), not the simulation's
+        ASSERT_FALSE(sim.has_targeted_audio_event(0, SoundID::VictoryFanfare));
+        ASSERT_FALSE(sim.has_targeted_audio_event(1, SoundID::PlayerDefeat));
+        ScorecardModal loser_screen;
+        loser_screen.show(sim.get_world_state().match_result, 1);
+        ASSERT_EQ(loser_screen.get_audio_to_play(), SoundID::PlayerDefeat);
         ASSERT_EQ(SoundID::PlayerDefeat, 42u);
 
         // Player dropout (FUN_0100d03b): a News Flash line "%s dropped out of the game!" in the chat log, and playerout.wav
@@ -6519,10 +6521,10 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
 
     TEST_CASE("12.108: Version Invariant & Fog of War Cursor Concealment Parity") {
         // 1. Verify semantic versioning components
-        ASSERT_EQ(ants::VERSION_STRING, "v0.0.57");
+        ASSERT_EQ(ants::VERSION_STRING, "v0.0.58");
         ASSERT_EQ(ants::VERSION_MAJOR, 0);
         ASSERT_EQ(ants::VERSION_MINOR, 0);
-        ASSERT_EQ(ants::VERSION_PATCH, 57);
+        ASSERT_EQ(ants::VERSION_PATCH, 58);
 
         // 2. Setup simulation world with Fog of War enabled
         SimulationEngine sim;

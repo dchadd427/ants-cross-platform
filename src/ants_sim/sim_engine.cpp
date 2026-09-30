@@ -527,10 +527,8 @@ SimulationEngine::HatchResult SimulationEngineImpl::hatch_request(uint8_t player
     const int32_t score = stats_.get_individual_score(player_id);
     if (!force && score < static_cast<int32_t>(HATCH_COST_POINTS)) {
         post_news(player_id, strings::kNeed200Points);
-        const auto* hill = grid_.find_anthill(player_id);
-        const int32_t hx = hill ? (static_cast<int32_t>(hill->x) + 1) * 32 + 16 : 0;
-        const int32_t hy = hill ? (static_cast<int32_t>(hill->y) + 1) * 32 + 16 : 0;
-        audio_queue_.push_back(AudioEvent{SoundID::AntStop, hx, hy, 1, player_id});     // canthatch cue (61)
+        // canthatch (61, 0x1010b97) is a global cue of the clicking machine: plain volume, heard wherever the view is (not positional)
+        audio_queue_.push_back(AudioEvent{SoundID::AntStop, 0, 0, 1, player_id});
         return HatchResult::NotEnoughPoints;
     }
     post_news(player_id, strings::kHatching);

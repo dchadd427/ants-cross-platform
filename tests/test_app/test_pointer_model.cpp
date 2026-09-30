@@ -439,7 +439,9 @@ void test_click_modes() {
         check(f.unit(s.mine).orig_order == sim::AntUnit::kOrderMove, "mode 3: a move order");
         check(f.unit(s.mine).orig_order_tile == (TileCoord{20, 30}), "mode 3: to the clicked tile");
         check(f.markers.size() == 1 && f.markers[0].first == 20 * 32 + 16 + 5 && f.markers[0].second == 30 * 32 + 16 - 3, "the marker sits at the raw pixel");
-        check(!f.sounds.empty() && (f.sounds.back() == 17 || f.sounds.back() == 15), "the go voice of a worker");
+        check(f.sounds.size() >= 2 && (f.sounds[f.sounds.size() - 2] == 17 || f.sounds[f.sounds.size() - 2] == 15) &&
+                  f.sounds.back() == sim::SoundID::NavButtonClick,
+              "the go voice of a worker, then the click of the flashing move pedestal (BTNPUSH, 89)");
         check(f.selected(s.mine), "an order keeps the selection");
     }
     // mode 7: food is the ordinary group order too (the harvest classification)
@@ -854,8 +856,10 @@ void test_pedestals() {
     f.press(500, 170);
     check(f.hud.is_move_latched() && !f.hud.is_ability_latched(), "and back");
     // an accepted order with a latched move pedestal lets it up; with nothing latched the pedestal flashes for 125 ms
+    f.sounds.clear();
     f.click_tile(22, 30);
     check(!f.hud.is_move_latched(), "an accepted order lets the latched move pedestal up");
+    check(f.sounds.size() >= 1 && f.sounds.back() != sim::SoundID::NavButtonClick, "a latched pedestal that pops up is silent: only the voice of the order");
     check(!f.hud.is_pedestal_flashing(0), "a latched pedestal that pops up does not flash");
     f.click_tile(24, 30);
     check(f.hud.is_pedestal_flashing(0) && !f.hud.is_pedestal_flashing(1), "without a latch the move pedestal flashes (BTNPUSH)");

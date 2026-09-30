@@ -606,7 +606,8 @@ When the match timer reaches `0:00` (or round end condition is met), *Ants* imme
 1. **Simulation Freeze:** Ant movement, task execution queues, weapon cooldowns, and player click commands immediately halt.
 2. **End-Screen Audio Split (Winner vs. Loser):**
    - **Winner / Winning Team:** The game triggers **`winner.wav`** (Sound 56 in `ants.chd`, 22,050 Hz 8-bit mono, 4.67 seconds duration, triumphant fanfare).
-   - **Losing Players / Defeated Teams:** Defeated players do **NOT** hear `winner.wav`; their game client triggers **`playerout.wav`** (Sound 41 in `ants.chd`, 22,050 Hz 8-bit mono, 0.94 seconds duration, descending defeat sting).
+   - **Losing Players / Defeated Teams:** Defeated players do **NOT** hear `winner.wav`; their game client plays **`losers.wav`** (Sound 42, the `losers` cue, 1.94 s; `playerout.wav`, Sound 41, is the drop-out cue, see 5.26 - corrected in the audit of 2026-09-30).
+   - **ONE cue per machine** (`0x1015a4a`, re-read in the audit; before v0.0.58 the remake played it twice): when the results rows are built, the machine plays `winner` when the local team or its ally is the top row and `losers` otherwise; nothing else plays at the end of the match, and the music is closed at once (`0x1022714`).
 3. **Screen Composition:** Composites the 640×480 `re_screen` asset layout over the frame buffer.
 
 #### 2. Visual Layout & Sprite Coordinates (`re_screen`, 149 frames)
@@ -1015,6 +1016,15 @@ Disassembly of `Ants.exe` at `0x1018214` reveals a 57-entry lookup table mapping
 - **GameSound 42** $\rightarrow$ Anim 227 (`30sec`): Sound ID 54 (`30sec.wav`) — 30 seconds remaining warning.
 - **GameSound 43** $\rightarrow$ Anim 228 (`1min`): Sound ID 55 (`1min.wav`) — 1 minute remaining warning.
 - **GameSound 44** $\rightarrow$ Anim 229 (`winner`): Sound ID 56 (`winner.wav`) — Victory fanfare for winning team.
+
+**5.24b Who hears what (audit of 2026-09-30, re-read in `Ants.exe`; implemented in v0.0.58).** Sounds reach the DirectSound buffers through one primitive (`FUN_0102e955`, reached from the clip stepper `FUN_0102b997` and from the cue play `FUN_0102bd7e`).
+A *cue* is a global sprite with no owner: `FUN_0102bd7e` plays it in the global sound container (`[0x104b450] + 0xe98`), which has no listener, so it is heard at plain volume (100 %, pan 0) wherever the view is. Sprites and effects of the map view
+(ants, `bombex`, `battle`, `sputter`, `FD_*`, `bump`, `powerupd`, `exithill`) play in the map view's container and are positional. Consequences:
+- `canthatch` (61, `FUN_01010aca`, `0x1010b97`) and the raid alarm `anthill` (48, `FUN_0102184e`, `0x10218f2`) are cues: global, heard only by the clicking / raided player. The remake queued them at the hill / raid tile and they were culled by distance.
+- `powerupd` (40, the sound of a power-up that finds no free tile) is an effect, but `FUN_01020e6e` starts with the IsLocal test (`0x1020e7a`): only the machine of the ant's owner runs it, so only the owner hears it.
+- The winner / loser sting is one cue, played by the results screen (5.9, `0x1015a4a`), not by the match end.
+- After every accepted order the caller flashes the pedestal of the order (BTNPUSH `0x10285a4` -> `0x1028360`): the pressed clip `butXXX2d` (200 ms) carries sound 89 on its first frame, so the flash clicks (Stop: `butcand`, 61); a latched
+  pedestal that pops up is only replaced by the raised picture and is silent. The click follows the voice of the order (`FUN_010287b5` speaks first, its caller flashes).
 
 ---
 

@@ -895,8 +895,8 @@ void Application::post_tick() {
             audio_mixer_.play_sfx(sting_sound, 1.0f, 255);
             scorecard_.clear_audio_to_play();
         }
-        audio_mixer_.fade_out_music(1.0f);
-        midi_player_.fade_out(1.0f);
+        audio_mixer_.stop_music();                                   // FUN_010226da closes the music sequencer at once (0x1022714); nothing restarts it
+        midi_player_.stop();
         if (net_) net_->freeze();                                    // the host stops sealing turns
     }
 }
