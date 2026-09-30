@@ -1402,9 +1402,9 @@ void SimulationEngineImpl::classify_order(AntUnit& a, TileCoord t, bool special,
 }
 
 // FUN_010202e7(t, userCmd, 1, 1, 5)
-bool SimulationEngineImpl::adjust_goal(AntUnit& a, TileCoord& t, bool user_cmd, bool allow_goal_bomb) {
+bool SimulationEngineImpl::adjust_goal(AntUnit& a, TileCoord& t, bool user_cmd) {
     const TileCoord home = team_entrance(a.player_id);
-    uint32_t flags = (user_cmd ? ((allow_goal_bomb ? kIgnoreBombs : 0u) | kPowerUpOk | kQueueCount) : 0u) |
+    uint32_t flags = (user_cmd ? (kIgnoreBombs | kPowerUpOk | kQueueCount) : 0u) |
                      kFinalTile | kCheckClaims;
     if (t == home) flags |= kOwnHillOk;
     if (a.orig_order == AntUnit::kOrderAttack && a.orig_order_tile == t) flags |= kSkipQueueRules;
@@ -1412,7 +1412,7 @@ bool SimulationEngineImpl::adjust_goal(AntUnit& a, TileCoord& t, bool user_cmd, 
     if (home.x >= 0 && t == home) {
         const TileCoord save = t;
         t = TileCoord{home.x - 2, home.y + 2};                // player +0x46: entrance + (2, -2)
-        if (adjust_goal(a, t, user_cmd, allow_goal_bomb)) return true;   // (+0x68 is set by the order, see go_to)
+        if (adjust_goal(a, t, user_cmd)) return true;   // (+0x68 is set by the order, see go_to)
         t = save;
         return false;
     }
@@ -1443,7 +1443,7 @@ bool SimulationEngineImpl::adjust_goal(AntUnit& a, TileCoord& t, bool user_cmd, 
 }
 
 // FUN_0101fc50: snap, idle, classify, adjust the goal and queue an asynchronous path request.
-bool SimulationEngineImpl::go_to(AntUnit& a, TileCoord t, bool user_cmd, bool special, bool allow_goal_bomb) {
+bool SimulationEngineImpl::go_to(AntUnit& a, TileCoord t, bool user_cmd, bool special) {
     if (user_cmd && !can_take_user_order(a)) return false;
     occ_refresh();
     // Anthill clicked: own hill -> entrance; enemy hill -> raid tile for thieves, otherwise stop.
@@ -1503,7 +1503,7 @@ bool SimulationEngineImpl::go_to(AntUnit& a, TileCoord t, bool user_cmd, bool sp
     } else if (a.orig_order != AntUnit::kOrderRaid) {
         // +0x68 keeps its old value during the goal check: the queued ant that ANTHILLQ sends in (+0x68 == 2) passes the
         // first-come-first-served rule of the entrance
-        ok = adjust_goal(a, t, user_cmd, allow_goal_bomb);
+        ok = adjust_goal(a, t, user_cmd);
         if (t != requested) classify_order(a, t, false, user_cmd);
     }
     // 0x101fed2: the entrance replaced by the waiting tile sets +0x68 = 1 and +0x6c = player, anything else clears +0x68

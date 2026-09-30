@@ -349,7 +349,8 @@ void test_cursor_special_targets() {
     want("combat ant", bomb, true, probe(AntType::Combat, bomb, true), CursorType::Move);
     want("combat ant", plain, true, probe(AntType::Combat, plain, true), CursorType::Move);
 
-    // several ants: the auto flag needs exactly one ant (panel 3); the latched ability works for a homogeneous selection; mixed types never
+    // several ants: the auto flag needs exactly one ant (panel 3), and the ability pedestal exists in panel 3 only (SetPanelMode gives slot 2 the kind 9,
+    // hidden, in panel 4), so a group never has a special target, same type or not
     {
         const uint32_t b1 = f.spawn(0, AntType::Bomber, 8, 30);
         const uint32_t b2 = f.spawn(0, AntType::Bomber, 9, 30);
@@ -358,7 +359,8 @@ void test_cursor_special_targets() {
         f.hud.set_selected_ant_ids({b1, b2});
         expect_cursor("two bombers / bomb / auto (panel 4)", f.cursor_tile(bomb.x, bomb.y), CursorType::Move);
         f.latch_ability();
-        expect_cursor("two bombers / bomb / latched", f.cursor_tile(bomb.x, bomb.y), CursorType::Target);
+        check(!f.hud.is_ability_latched(), "two bombers: there is no ability pedestal to press");
+        expect_cursor("two bombers / bomb / pressed where the pedestal is not", f.cursor_tile(bomb.x, bomb.y), CursorType::Move);
         f.hud.unlatch_pedestals();
         f.hud.set_selected_ant_ids({b1, wk});
         expect_cursor("a bomber and a worker / bomb", f.cursor_tile(bomb.x, bomb.y), CursorType::Move);
@@ -716,6 +718,95 @@ void test_drag_select() {
     f.hud.select_ant(e);
     drag(323, 298, 335, 368, KMOD_LSHIFT);
     check(f.selected(a) && !f.selected(e), "shift with an enemy ant inspected replaces it");
+}
+
+// ---------------------------------------------------------------------------------------------------------------------------------
+// The stored panel: a shift add or a shift drag is panel 4 for any count (FUN_01027f07 gets the mode, never a count)
+// ---------------------------------------------------------------------------------------------------------------------------------
+
+void test_shift_group() {
+    g_group = "shift group";
+    std::printf("[pointer] the stored panel: a shift add or shift drag is panel 4 even for one ant, and the click on an own bomb is then a group move (ISLANDS)\n");
+    const TileCoord bomb{20, 20};
+    auto scene = [&](Fixture& f, uint32_t& bomber, uint32_t& worker) {
+        f.sim.grid_mut().place_bomb(bomb.x, bomb.y, 0);
+        bomber = f.spawn(0, AntType::Bomber, 16, 20);           // (528, 656): box [508, 548) x [624, 672)
+        worker = f.spawn(0, AntType::Worker, 16, 23);            // (528, 752)
+        f.settle();
+    };
+    auto drag = [&](Fixture& f, int32_t wx1, int32_t wy1, int32_t wx2, int32_t wy2, uint16_t mod) {
+        f.look_at(18, 21);
+        f.press(f.sx(wx1), f.sy(wy1), SDL_BUTTON_LEFT, mod);
+        f.hud.handle_mouse_motion(f.sx(wx2), f.sy(wy2), f.sim, f.cam);
+        f.release(f.sx(wx2), f.sy(wy2), SDL_BUTTON_LEFT, mod);
+    };
+    auto status = [&](Fixture& f) {
+        f.hud.update(f.world(), 1);
+        return f.hud.status_line().text();
+    };
+
+    {   // the control: one bomber selected by a plain click or a plain drag is panel 3, and the bomb is its target
+        Fixture f;
+        uint32_t bomber = 0, worker = 0;
+        scene(f, bomber, worker);
+        f.click_tile(16, 20);
+        check(f.selected(bomber) && f.hud.panel_mode(f.world()) == HUD::PanelMode::OneAnt, "a click selects the bomber: panel 3");
+        check(status(f) == "BomberAnt selected.", "and names its type");
+        expect_cursor("panel 3 / own bomb", f.cursor_tile(bomb.x, bomb.y), CursorType::Target);
+        f.click_tile(bomb.x, bomb.y);
+        check(f.unit(bomber).orig_order == sim::AntUnit::kOrderDefuse, "the click is the defuse");
+        f.hud.clear_selection();
+        drag(f, 500, 620, 560, 680, 0);
+        check(f.selected(bomber) && f.hud.panel_mode(f.world()) == HUD::PanelMode::OneAnt, "a plain drag around it: panel 3");
+        f.hud.clear_selection();
+        drag(f, 500, 620, 560, 680, KMOD_LSHIFT);
+        check(f.selected(bomber) && f.hud.panel_mode(f.world()) == HUD::PanelMode::OneAnt, "a shift drag in panel 1 is a plain drag: panel 3");
+    }
+    {   // shift drag around the lone selected bomber: one ant, panel 4, a group move onto the bomb
+        Fixture f;
+        uint32_t bomber = 0, worker = 0;
+        scene(f, bomber, worker);
+        f.click_tile(16, 20);
+        drag(f, 500, 620, 560, 680, KMOD_LSHIFT);
+        check(f.hud.get_selected_ant_ids().size() == 1 && f.selected(bomber), "still the one bomber");
+        check(f.hud.panel_mode(f.world()) == HUD::PanelMode::Ants, "but the panel is 4: a shift drag adds, whatever the count");
+        check(status(f) == "Ready!", "and says string 12 (\"Ready!\") like any group, not \"BomberAnt selected.\": " + status(f));
+        expect_cursor("panel 4 / own bomb: a move", f.cursor_tile(bomb.x, bomb.y), CursorType::Move);
+        f.latch_ability();
+        check(!f.hud.is_ability_latched(), "there is no ability pedestal in panel 4");
+        expect_cursor("panel 4 / own bomb / pedestal pressed", f.cursor_tile(bomb.x, bomb.y), CursorType::Move);
+        f.click_tile(bomb.x, bomb.y);
+        check(f.unit(bomber).orig_order == sim::AntUnit::kOrderBomb, "the click is a move onto the bomb, not the defuse");
+        check(f.unit(bomber).final_dest == bomb, "and the goal stays on the bomb tile");
+        for (int i = 0; i < 400 && f.sim.has_bomb_at(bomb); ++i) f.sim.tick();
+        check(!f.sim.has_bomb_at(bomb) && f.sim.get_player_stats(0).bombs_defused == 0, "the bomber walked into its own bomb and set it off");
+        // the next plain selection is panel 3 again
+        f.click_tile(f.unit(bomber).pos.x, f.unit(bomber).pos.y);
+    }
+    {   // the right button follows the panel as well
+        Fixture f;
+        uint32_t bomber = 0, worker = 0;
+        scene(f, bomber, worker);
+        f.click_tile(16, 20);
+        drag(f, 500, 620, 560, 680, KMOD_LSHIFT);
+        f.click_tile(bomb.x, bomb.y, SDL_BUTTON_RIGHT);
+        check(f.unit(bomber).orig_order == sim::AntUnit::kOrderBomb, "right button in panel 4: a move onto the bomb");
+    }
+    {   // shift click: joining is panel 4, leaving recounts (one left: panel 3, the automatic target cursor is back)
+        Fixture f;
+        uint32_t bomber = 0, worker = 0;
+        scene(f, bomber, worker);
+        f.click_tile(16, 20);
+        f.click_tile(16, 23, SDL_BUTTON_LEFT, KMOD_LSHIFT);
+        check(f.selected(bomber) && f.selected(worker) && f.hud.panel_mode(f.world()) == HUD::PanelMode::Ants, "shift click adds the worker: panel 4");
+        expect_cursor("a bomber and a worker / own bomb", f.cursor_tile(bomb.x, bomb.y), CursorType::Move);
+        f.click_tile(16, 23, SDL_BUTTON_LEFT, KMOD_LSHIFT);
+        check(f.selected(bomber) && !f.selected(worker) && f.hud.panel_mode(f.world()) == HUD::PanelMode::OneAnt, "shift click on it again removes it: one ant left, panel 3");
+        expect_cursor("the bomber alone again", f.cursor_tile(bomb.x, bomb.y), CursorType::Target);
+        // the bomber leaves from panel 3: nothing is left, panel 1
+        f.click_tile(16, 20, SDL_BUTTON_LEFT, KMOD_LSHIFT);
+        check(f.hud.get_selected_ant_ids().empty() && f.hud.panel_mode(f.world()) == HUD::PanelMode::None, "the last ant leaves: panel 1");
+    }
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------------
@@ -1304,6 +1395,7 @@ void test_buttons() {
 
 }  // namespace
 
+
 int main() {
     test_hit_boxes();
     test_cursor_without_own_ants();
@@ -1313,6 +1405,7 @@ int main() {
     test_click_modes();
     test_click_or_drag();
     test_drag_select();
+    test_shift_group();
     test_right_button();
     test_pedestals();
     test_keyboard();

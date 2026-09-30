@@ -595,7 +595,7 @@ int main() {
         SimulationEngine sim;
         make_world(sim);
         const uint32_t b = sim.spawn_unit(0, AntType::Bomber, TileCoord{10, 10});
-        ASSERT_EQ(sim.issue_group_move_order({b}, TileCoord{20, 10}, false), b);
+        ASSERT_EQ(sim.issue_group_move_order({b}, TileCoord{20, 10}), b);
         ASSERT_EQ(sim.get_unit(b).orig_order, AntUnit::kOrderMove);
         run_ms(sim, 300);
         ASSERT_EQ(sim.issue_group_special_order({b}, TileCoord{20, 10}), b);                     // accepted, acknowledged
@@ -608,11 +608,11 @@ int main() {
         SimulationEngine sim;
         make_world(sim);
         const uint32_t w = sim.spawn_unit(0, AntType::Worker, TileCoord{10, 30});
-        ASSERT_EQ(sim.issue_group_move_order({w}, TileCoord{20, 30}, false), w);
-        ASSERT_EQ(sim.issue_group_move_order({w}, TileCoord{20, 30}, false), 0u);                // the same walk again: skipped
+        ASSERT_EQ(sim.issue_group_move_order({w}, TileCoord{20, 30}), w);
+        ASSERT_EQ(sim.issue_group_move_order({w}, TileCoord{20, 30}), 0u);                // the same walk again: skipped
         const uint32_t b = sim.spawn_unit(0, AntType::Bomber, TileCoord{10, 10});
         ASSERT_EQ(sim.issue_group_special_order({b}, TileCoord{20, 10}), b);
-        ASSERT_EQ(sim.issue_group_move_order({b}, TileCoord{20, 10}, false), b);                 // a plain click on the plant target: a new order
+        ASSERT_EQ(sim.issue_group_move_order({b}, TileCoord{20, 10}), b);                 // a plain click on the plant target: a new order
         ASSERT_EQ(sim.get_unit(b).orig_order, AntUnit::kOrderMove);
     } TEST_END();
 
@@ -626,6 +626,39 @@ int main() {
         sim.drop_player(1);
         ASSERT_TRUE(sim.plant_bomb(b, TileCoord{50, 49}, false));
         ASSERT_TRUE(sim.ignite_fire(f, TileCoord{51, 49}, false));
+    } TEST_END();
+
+    TEST_CASE("4.9 A plain player move may end on an own bomb (FUN_010202e7 gets flag 0x20 for every player order): the ant walks onto it and sets it off (case 0xa, 0x101d44f)") {
+        // ISLANDS: the owner's way off the island is a bomber that hits a bomb of its own team. A single selected bomber gets the defuse
+        // (panel 3, target cursor); a group, even of bombers, gets this plain move (panel 4), and the goal tile keeps the bomb on it.
+        SimulationEngine sim;
+        make_world(sim);
+        sim.grid_mut().place_bomb(13, 10, 0);                                                    // the order's own team
+        const uint32_t b = sim.spawn_unit(0, AntType::Bomber, TileCoord{10, 10});
+        const uint32_t w = sim.spawn_unit(0, AntType::Worker, TileCoord{10, 13});
+        ASSERT_TRUE(sim.issue_group_move_order({b, w}, TileCoord{13, 10}) != 0);
+        ASSERT_EQ(sim.get_unit(b).orig_order, AntUnit::kOrderBomb);                              // not the defuse (0x0b) and not a walk beside it
+        ASSERT_EQ(sim.get_unit(b).final_dest, (TileCoord{13, 10}));
+        ASSERT_EQ(sim.get_unit(w).orig_order, AntUnit::kOrderBomb);
+        ASSERT_EQ(sim.get_unit(w).final_dest, (TileCoord{13, 10}));
+        sim.clear_audio_events();
+        ASSERT_TRUE(wait_ms(sim, 8000, [&]() { return !sim.has_bomb_at(TileCoord{13, 10}); }) >= 0);
+        ASSERT_TRUE(sim.has_audio_event(4));                                                     // bombexp.wav: it went off, it was not defused
+        ASSERT_EQ(sim.get_player_stats(0).bombs_defused, 0u);
+    } TEST_END();
+
+    TEST_CASE("4.10 The same for a lone ant of another type, and an enemy bomb needs no special rule either") {
+        SimulationEngine sim;
+        make_world(sim);
+        sim.grid_mut().place_bomb(13, 10, 0);
+        sim.grid_mut().place_bomb(13, 14, 1);
+        const uint32_t w = sim.spawn_unit(0, AntType::Worker, TileCoord{10, 10});
+        const uint32_t t = sim.spawn_unit(0, AntType::Thief, TileCoord{10, 14});
+        ASSERT_EQ(sim.issue_group_move_order({w}, TileCoord{13, 10}), w);
+        ASSERT_EQ(sim.issue_group_move_order({t}, TileCoord{13, 14}), t);
+        ASSERT_EQ(sim.get_unit(w).final_dest, (TileCoord{13, 10}));
+        ASSERT_EQ(sim.get_unit(t).final_dest, (TileCoord{13, 14}));
+        ASSERT_TRUE(wait_ms(sim, 8000, [&]() { return !sim.has_bomb_at(TileCoord{13, 10}) && !sim.has_bomb_at(TileCoord{13, 14}); }) >= 0);
     } TEST_END();
 
     std::cout << "\n=======================================================\n"

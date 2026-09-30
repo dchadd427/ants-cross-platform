@@ -513,7 +513,6 @@ void run_coverage_tests() {
             {"harvest_origin", [](AntUnit& a) { a.harvest_origin.x += 1; }},
             {"is_thief_steal", [](AntUnit& a) { a.is_thief_steal = !a.is_thief_steal; }},
             {"ability_target", [](AntUnit& a) { a.ability_target.x += 1; }},
-            {"allow_friendly_bomb", [](AntUnit& a) { a.allow_friendly_bomb = !a.allow_friendly_bomb; }},
             {"engaged", [](AntUnit& a) { a.engaged = !a.engaged; }},
             {"frozen", [](AntUnit& a) { a.frozen = !a.frozen; }},
             {"pending_victim", [](AntUnit& a) { a.pending_victim += 1; }},

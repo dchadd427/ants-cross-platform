@@ -310,7 +310,7 @@ void HUD::apply_selection_status(const sim::WorldState& world) {
     }
     if (own == 0) {
         status_line_.clear();
-    } else if (own > 1 || !only) {
+    } else if (own > 1 || !only || is_multi_select_mode_) {        // panel 4 says string 12 even for the one ant it holds
         post_status_id(sim::strings::kSelMany);
     } else {
         static const uint16_t kByType[6] = {sim::strings::kSelWorker, sim::strings::kSelBomber, sim::strings::kSelFire,
@@ -337,7 +337,7 @@ void HUD::check_selected_type_change(const sim::WorldState& world) {
     }
     selected_types_ = std::move(now);
     if (!changed) return;
-    if (selected_types_.size() == 1) {
+    if (selected_types_.size() == 1 && !is_multi_select_mode_) {      // FUN_0100cd40 keeps the panel: panel 3 names the type, panel 4 says string 12
         static const uint16_t kByType[6] = {sim::strings::kSelWorker, sim::strings::kSelBomber, sim::strings::kSelFire,
                                             sim::strings::kSelThief, sim::strings::kSelCombat, sim::strings::kSelSwimmer};
         const size_t t = static_cast<size_t>(selected_types_.front().second);
@@ -434,8 +434,9 @@ void HUD::render(IRenderer& renderer, const assets::AssetArchive& assets,
         left_kind = PedestalKind::Move;
         left_mode = (slot_latched_[0] || move_pedestal_button_.is_pressed || flashing(0)) ? 2 : 1;
         // The ability pedestal of the selected ants' common type (worker and mixed selections have none)
+        // (panel 3 only: for several ants SetPanelMode 4 gives slot 2 the kind 9, hidden)
         sim::AntType common = sim::AntType::Worker;
-        if (homogeneous_type(world, common)) {
+        if (panel_mode(world) == PanelMode::OneAnt && homogeneous_type(world, common)) {
             switch (common) {
                 case sim::AntType::Swimmer: right_kind = PedestalKind::Swim; break;
                 case sim::AntType::Fire:    right_kind = PedestalKind::Fire; break;
@@ -1180,7 +1181,8 @@ void HUD::select_ants_in_rect(int32_t x1, int32_t y1, int32_t x2, int32_t y2, co
         }
         selected_base_team_id_ = -1;
         selected_ant_id_ = selected_ant_ids_.front();
-        is_multi_select_mode_ = selected_ant_ids_.size() > 1;
+        is_multi_select_mode_ = true;                      // panel 4 whatever the count: 0x1027731 calls FUN_01027f07 with mode 4 for any non-empty pick, and the
+                                                           // group is then a group even when it holds the one bomber that was selected already
         selection_status_pending_ = true;                  // a shift-add rebuilds the panel and posts its text (FUN_01027f07 with its last argument 0, 0x1027950)
         unlatch_pedestals();
         return;

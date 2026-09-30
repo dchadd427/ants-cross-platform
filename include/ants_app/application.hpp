@@ -28,6 +28,7 @@
 #include "ants_app/config_store.hpp"
 #include "ants_app/midi_player.hpp"
 #include "ants_app/map_select.hpp"
+#include "ants_app/window_layout.hpp"
 
 namespace ants::app {
 
@@ -70,6 +71,22 @@ struct ApplicationConfig {
     uint16_t net_port{4001};                    // the original's port
     bool net_loopback_only{false};              // Host: accept only this machine (two copies on one computer, tests)
     uint16_t lan_port{net::kLanDiscoveryPort};  // the UDP port on which an open room announces itself to the local network (--lan-port N; 0 = not at all, --no-lan)
+    uint8_t net_seat{255};                      // Join: the seat asked for (--seat N, 0 .. 3: the colours green, red, blue, black); 255: any free seat
+    /// Where the window goes (native builds): an explicit position and size (--window-pos X,Y, --window-size W,H), or a cell of a grid over the display's usable
+    /// area (--grid CxR --cell N: the start scripts lay four games out as a 2 x 2 grid, each window the largest 4:3 rectangle of its cell); --display N picks the
+    /// display (default: the one the window opens on). --title sets the window's title.
+    bool has_window_pos{false};
+    int32_t window_x{0};
+    int32_t window_y{0};
+    bool has_window_size{false};
+    int32_t window_w{0};
+    int32_t window_h{0};
+    int32_t grid_cols{0};                       // 0: no grid
+    int32_t grid_rows{0};
+    int32_t grid_cell{0};
+    int32_t display_index{-1};
+    /// --audio-focus: a window that does not have the input focus is silent (four games on one machine: you hear the one you play)
+    bool audio_follows_focus{false};
     std::string player_name;                    // this player's name (--name); empty: the system user, or "Player" in a network game
     std::array<std::string, 4> team_names{};    // names of the teams of a local game (-N<team><name> as in the original, --team-name)
     /// false: a local game shows a score label only for the teams that have a name (and the local player's own). The browser build sets it: there are no
@@ -150,6 +167,13 @@ public:
     void handle_mouse_motion(const SDL_MouseMotionEvent& motion);
     void handle_mouse_button(const SDL_MouseButtonEvent& button);
     void handle_camera_panning(float dt = 0.020f);
+    /// What happens to the window (focus, the pointer entering and leaving, minimising, resizing); public for the tests
+    void handle_window_event(const SDL_WindowEvent& we);
+    /// The pointer is not over the window: the system cursor is shown (the game's own is not drawn) and the edge of the map does not scroll. Whatever the
+    /// pointer does in the window (a motion, a press, a release) ends it.
+    bool pointer_outside() const noexcept { return pointer_outside_; }
+    /// Where the window is now (client area, screen coordinates)
+    WindowRect window_rect() const;
     void update_simulation(float dt);
     /// The music of the original is one sequencer device (docs 5.24e): the intro plays once, every piece that ends is followed by a random in-game piece, the match
     /// start, the activation of the program and the release of the music slider start one, the deactivation of the program and the end of a match close the device.
@@ -202,6 +226,7 @@ private:
     int32_t mouse_screen_x_{320};
     int32_t mouse_screen_y_{240};
     bool mouse_has_moved_{false};
+    bool pointer_outside_{false};                          // the pointer is not over the window (the window has been left, see handle_window_event)
 
     // The match set-up shared by the local game and the network game
     bool load_match(const std::string& map_path, uint32_t seed, uint8_t roster, bool fog);   // level, simulation, renderer (no HUD, no sound)
@@ -220,6 +245,7 @@ private:
     void render_net_overlay();
     void apply_team_names(const std::array<std::string, 4>& names, uint8_t roster);   // simulation texts, HUD labels, results rows
 
+    void apply_window_layout();                           // --grid / --cell, --window-pos, --window-size (native builds)
     void show_start_view();                               // the view at the start of a match: scrolled just far enough to show the square around the hill's anchor tile
     void enter_map_select();                              // the setup screen is created (again): its labels stay empty until its refresh
 

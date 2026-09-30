@@ -140,11 +140,12 @@ bool NetGame::host(uint16_t port, const std::string& name, bool loopback_only) {
 #endif
 }
 
-bool NetGame::join(const std::string& address, uint16_t port, const std::string& name) {
+bool NetGame::join(const std::string& address, uint16_t port, const std::string& name, uint8_t want_seat) {
 #ifdef __EMSCRIPTEN__
     (void)address;
     (void)port;
     (void)name;
+    (void)want_seat;
     return false;
 #else
     if (role_ != Role::None) return false;
@@ -157,6 +158,7 @@ bool NetGame::join(const std::string& address, uint16_t port, const std::string&
     ClientLobby::Config cfg;
     cfg.name = name;
     cfg.listen_port = peer_port_;
+    cfg.want_seat = want_seat;
     client_lobby_ = std::make_unique<ClientLobby>(transport_->uplink.get(), cfg);
     role_ = Role::Client;
     phase_ = Phase::Connecting;

@@ -12,9 +12,10 @@ COPY src/ ./src/
 COPY web/ ./web/
 COPY Original-Ants/ ./Original-Ants/
 
-# Inject dynamic build timestamp into shell.html so JS, WASM and data bundles share lockstep versioning
+# Inject the build timestamp (JS, WASM and data bundles share lockstep versioning) and the game's version text into shell.html
 RUN BUILD_TIME=$(date +%s) && \
-    sed -i "s/@@BUILD_TIMESTAMP@@/${BUILD_TIME}/g" web/shell.html
+    GAME_VERSION=$(sed -n 's/.*VERSION_STRING = "\(v[0-9.]*\)".*/\1/p' include/ants_app/version.hpp) && \
+    sed -i "s/@@BUILD_TIMESTAMP@@/${BUILD_TIME}/g; s/@@GAME_VERSION@@/${GAME_VERSION}/g" web/shell.html
 
 # Configure and compile using default Makefiles
 RUN emcmake cmake -B build_web \

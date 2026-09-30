@@ -233,7 +233,7 @@ public:
     /// The stop order of the selected own ants (FUN_01028a60) with its status text.
     void stop_selected(sim::SimulationEngine& sim);
     /// Convenience used by the tests and the pointer code: a plain group move order to a tile (special 0, attack 0).
-    void dispatch_move_order(int32_t target_tile_x, int32_t target_tile_y, sim::SimulationEngine& sim, bool allow_friendly_bomb = false);
+    void dispatch_move_order(int32_t target_tile_x, int32_t target_tile_y, sim::SimulationEngine& sim);
     /// A group attack order at the tile of the given ant.
     void dispatch_attack_order(uint32_t target_enemy_id, sim::SimulationEngine& sim);
     /// The ant under a click at a world position (Ants.exe FUN_01026904 with FUN_01026a39): the 3x3 tiles around the clicked
@@ -343,6 +343,8 @@ private:
     uint8_t local_player_id_{0};
     uint32_t selected_ant_id_{0};
     std::vector<uint32_t> selected_ant_ids_{};
+    // The original's panel [54ec] is 4 ("several ants"). It is stored by the selection operations and never recounted: a shift add or shift drag sets it
+    // even when one ant is selected, which makes the next click a group move (no automatic target cursor, no ability pedestal).
     bool is_multi_select_mode_{false};
     int32_t selected_base_team_id_{-1};
     std::function<void(const std::string&, bool)> on_chat_send_;

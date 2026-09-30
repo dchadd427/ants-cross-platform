@@ -12,6 +12,7 @@
 #include "ants_app/edge_scroll.hpp"
 #include "ants_app/hud.hpp"
 #include "ants_app/renderer.hpp"
+#include "ants_app/window_layout.hpp"
 #include "ants_sim/sim_engine.hpp"
 
 using namespace ants::app;
@@ -242,9 +243,75 @@ void test_start_view() {
     check(ox == 0 && oy == 0, "TINY green: nothing to scroll");
 }
 
+void test_window_layout() {
+    g_group = "window layout";
+    std::printf("[window] the grid of the start scripts: four games on one screen, each the largest 4:3 window of its cell\n");
+    int32_t a = 0;
+    int32_t b = 0;
+    check(parse_grid("2x2", a, b) && a == 2 && b == 2, "2x2 is a grid");
+    check(parse_grid("3X1", a, b) && a == 3 && b == 1, "3X1 is a grid, the letter may be a capital");
+    check(parse_grid("1x4", a, b) && a == 1 && b == 4, "1x4 is a grid");
+    check(!parse_grid("", a, b) && !parse_grid("2", a, b) && !parse_grid("2x", a, b) && !parse_grid("x2", a, b) && !parse_grid("0x2", a, b) &&
+              !parse_grid("5x1", a, b) && !parse_grid("2x0", a, b) && !parse_grid("22x2", a, b) && !parse_grid("2*2", a, b) && !parse_grid("2x2 ", a, b),
+          "everything else is refused");
+    check(parse_pair("100,200", a, b) && a == 100 && b == 200, "a pair");
+    check(parse_pair("-1440,-20", a, b) && a == -1440 && b == -20, "a display left of the main one has negative coordinates");
+    check(!parse_pair("100", a, b) && !parse_pair("100,", a, b) && !parse_pair(",100", a, b) && !parse_pair("a,b", a, b) && !parse_pair("1,2,3", a, b) &&
+              !parse_pair("1, 2", a, b) && !parse_pair("999999,1", a, b),
+          "no pair, no number, stray characters, absurd numbers are refused");
+
+    // a 1920 x 1055 usable area (a 1080p screen without its task bar), a title bar of 28 px and a thin frame
+    const WindowRect screen{0, 0, 1920, 1055};
+    WindowRect cells[4];
+    for (int32_t i = 0; i < 4; ++i) cells[i] = grid_cell_window(screen, 2, 2, i, 28, 1, 1, 1);
+    for (int32_t i = 0; i < 4; ++i) {
+        const WindowRect& r = cells[i];
+        check(r.w * 3 == r.h * 4 || r.w * 3 == r.h * 4 + 1 || r.w * 3 == r.h * 4 + 2, "cell " + std::to_string(i) + ": 4:3");
+        check(r.w >= kMinWindowWidth && r.h >= kMinWindowHeight, "cell " + std::to_string(i) + ": not smaller than the minimum");
+        // the window with its decoration lies inside its cell
+        const int32_t cx = (i % 2) * 960;
+        const int32_t cy = (i / 2) * 527;
+        check(r.x - 1 >= cx && r.x + r.w + 1 <= cx + 960 && r.y - 28 >= cy && r.y + r.h + 1 <= cy + 527, "cell " + std::to_string(i) + ": with its frame inside its own quarter");
+    }
+    // no two windows, frames included, overlap
+    for (int32_t i = 0; i < 4; ++i) {
+        for (int32_t j = i + 1; j < 4; ++j) {
+            const WindowRect& p = cells[i];
+            const WindowRect& q = cells[j];
+            const bool apart = p.x + p.w + 1 <= q.x - 1 || q.x + q.w + 1 <= p.x - 1 || p.y + p.h + 1 <= q.y - 28 || q.y + q.h + 1 <= p.y - 28;
+            check(apart, "the windows of cells " + std::to_string(i) + " and " + std::to_string(j) + " do not overlap");
+        }
+    }
+    check(cells[0].y == cells[1].y && cells[2].y == cells[3].y && cells[0].x == cells[2].x && cells[1].x == cells[3].x, "the grid is a grid: rows and columns line up");
+    check(cells[0].x < cells[1].x && cells[0].y < cells[2].y, "cell 0 is the top left, 1 the top right, 2 the bottom left, 3 the bottom right");
+    // the height is what limits a 16:9 screen: the window is as tall as the cell allows
+    check(cells[0].h >= 527 - 28 - 1 - 4 && cells[0].h <= 527 - 28 - 1, "a wide screen: the window fills the height of its quarter");
+    // a display that does not start at (0, 0), with a menu bar on top (usable area (0, 25))
+    const WindowRect offset{-1440, 25, 1440, 875};
+    const WindowRect o3 = grid_cell_window(offset, 2, 2, 3, 28, 0, 0, 0);
+    check(o3.x >= -1440 + 720 && o3.x + o3.w <= 0 && o3.y >= 25 + 437 + 28 && o3.y + o3.h <= 25 + 875, "a display left of the main one: cell 3 is its bottom right quarter");
+    // a screen that is taller than wide: the width limits
+    const WindowRect tall{0, 0, 800, 1280};
+    const WindowRect t0 = grid_cell_window(tall, 2, 2, 0, 28, 0, 0, 0);
+    check(t0.w <= 400 && t0.w >= kMinWindowWidth && t0.w * 3 == t0.h * 4, "a tall screen: the width of the quarter limits the window");
+    // two games side by side, one game on the whole screen, a cell beyond the grid, a screen that is too small
+    const WindowRect two0 = grid_cell_window(screen, 2, 1, 0, 28, 1, 1, 1);
+    const WindowRect two1 = grid_cell_window(screen, 2, 1, 1, 28, 1, 1, 1);
+    check(two0.x < 960 && two1.x >= 960 && two0.y == two1.y, "two games: left and right");
+    const WindowRect one = grid_cell_window(screen, 1, 1, 0, 28, 1, 1, 1);
+    check(one.h <= 1055 - 28 - 1 && one.h >= 1055 - 28 - 1 - 4 && one.w * 3 == one.h * 4, "one game: the largest 4:3 window of the whole screen");
+    check(grid_cell_window(screen, 2, 2, 9, 28, 1, 1, 1) == cells[3] && grid_cell_window(screen, 2, 2, -5, 28, 1, 1, 1) == cells[0], "a cell beyond the grid is the last (or the first) one");
+    const WindowRect tiny = grid_cell_window(WindowRect{0, 0, 500, 400}, 2, 2, 1, 28, 1, 1, 1);
+    check(tiny.w == kMinWindowWidth && tiny.h == kMinWindowHeight, "a screen that is too small for four windows still gets windows of the minimum size");
+    // no decoration information (a platform that cannot tell): the cells are simply quarters
+    const WindowRect bare = grid_cell_window(screen, 2, 2, 1, 0, 0, 0, 0);
+    check(bare.x >= 960 && bare.x + bare.w <= 1920 && bare.y >= 0 && bare.y + bare.h <= 527, "no borders: the window fills its quarter");
+}
+
 }  // namespace
 
 int main() {
+    test_window_layout();
     test_start_view();
     test_golden_csv();
     test_report_table();

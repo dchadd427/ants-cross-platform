@@ -323,6 +323,42 @@ void run_command_line_tests() {
         ASSERT_EQ(c.lan_port, 0);
     } TEST_END();
 
+    TEST_CASE("N5.1b Command Line: --seat, --title, --window-pos, --window-size, --grid, --cell, --display, --audio-focus (and what is refused)") {
+        std::vector<std::string> args;
+        std::vector<char*> st;
+        ApplicationConfig c = Application::parse_arguments(0, nullptr);
+        ASSERT_EQ(c.net_seat, 255);                                                      // defaults: any seat, no layout, no grid, the display of the window, sound always
+        ASSERT_FALSE(c.has_window_pos || c.has_window_size || c.audio_follows_focus);
+        ASSERT_EQ(c.grid_cols, 0);
+        ASSERT_EQ(c.display_index, -1);
+        args = {"ants", "--join", "host", "--seat", "2", "--title", "Ants - Blue"};
+        c = Application::parse_arguments(static_cast<int>(args.size()), argv_of(args, st));
+        ASSERT_EQ(c.net_seat, 2);
+        ASSERT_EQ(c.title, "Ants - Blue");
+        args = {"ants", "--seat", "4"};                                                  // no fifth colour: ignored
+        c = Application::parse_arguments(static_cast<int>(args.size()), argv_of(args, st));
+        ASSERT_EQ(c.net_seat, 255);
+        args = {"ants", "--seat", "-1"};
+        c = Application::parse_arguments(static_cast<int>(args.size()), argv_of(args, st));
+        ASSERT_EQ(c.net_seat, 255);
+        args = {"ants", "--window-pos", "100,-20", "--window-size", "800,600"};
+        c = Application::parse_arguments(static_cast<int>(args.size()), argv_of(args, st));
+        ASSERT_TRUE(c.has_window_pos && c.window_x == 100 && c.window_y == -20);          // off the left / top of the main display is legal (other displays)
+        ASSERT_TRUE(c.has_window_size && c.window_w == 800 && c.window_h == 600);
+        args = {"ants", "--window-pos", "nonsense", "--window-size", "10x10"};           // garbage and a window smaller than the game's minimum: not taken
+        c = Application::parse_arguments(static_cast<int>(args.size()), argv_of(args, st));
+        ASSERT_FALSE(c.has_window_pos);
+        ASSERT_FALSE(c.has_window_size);
+        args = {"ants", "--grid", "2x2", "--cell", "3", "--display", "1", "--audio-focus"};
+        c = Application::parse_arguments(static_cast<int>(args.size()), argv_of(args, st));
+        ASSERT_TRUE(c.grid_cols == 2 && c.grid_rows == 2 && c.grid_cell == 3 && c.display_index == 1 && c.audio_follows_focus);
+        args = {"ants", "--grid", "0x2", "--cell", "-5", "--display", "-7"};
+        c = Application::parse_arguments(static_cast<int>(args.size()), argv_of(args, st));
+        ASSERT_TRUE(c.grid_cols == 0 && c.grid_rows == 0);                                // a grid needs at least one cell each way
+        ASSERT_EQ(c.grid_cell, 0);
+        ASSERT_EQ(c.display_index, -1);
+    } TEST_END();
+
     TEST_CASE("N5.0b --lan-list: what the local network offers is listed (host, address, map, players, version), a silent network says so") {
         uint16_t port = 0;
         {
@@ -824,12 +860,133 @@ void run_guest_tests() {
     } TEST_END();
 }
 
+void run_window_tests() {
+    TEST_CASE("N5.15 Window: --window-size and --window-pos put the window where they say") {
+        ApplicationConfig cfg = headless_config();
+        cfg.has_window_size = true;
+        cfg.window_w = 800;
+        cfg.window_h = 600;
+        cfg.has_window_pos = true;
+        cfg.window_x = 30;
+        cfg.window_y = 40;
+        Application app;
+        ASSERT_TRUE(app.init(cfg));
+        const WindowRect r = app.window_rect();
+        ASSERT_TRUE(r.w == 800 && r.h == 600 && r.x == 30 && r.y == 40);
+    } TEST_END();
+
+    TEST_CASE("N5.16 Window: --grid 2x2 gives four windows that lie inside the display and do not overlap, in reading order") {
+        WindowRect cells[4];
+        SDL_Rect area{0, 0, 0, 0};
+        for (int i = 0; i < 4; ++i) {
+            ApplicationConfig cfg = headless_config();
+            cfg.grid_cols = 2;
+            cfg.grid_rows = 2;
+            cfg.grid_cell = i;
+            Application app;
+            ASSERT_TRUE(app.init(cfg));
+            cells[i] = app.window_rect();
+            ASSERT_TRUE(cells[i].w >= kMinWindowWidth && cells[i].h >= kMinWindowHeight);
+            ASSERT_TRUE(std::abs(cells[i].w * 3 - cells[i].h * 4) <= 4);              // the game's own 4:3 (to a pixel of rounding)
+            if (i == 0) ASSERT_EQ(SDL_GetDisplayUsableBounds(0, &area), 0);
+            ASSERT_TRUE(cells[i].x >= area.x && cells[i].y >= area.y);
+            ASSERT_TRUE(cells[i].x + cells[i].w <= area.x + area.w && cells[i].y + cells[i].h <= area.y + area.h);
+        }
+        ASSERT_TRUE(cells[0].x + cells[0].w <= cells[1].x && cells[2].x + cells[2].w <= cells[3].x);       // left to right
+        ASSERT_TRUE(cells[0].y + cells[0].h <= cells[2].y && cells[1].y + cells[1].h <= cells[3].y);       // top to bottom
+        ASSERT_TRUE(cells[0].x == cells[2].x && cells[1].x == cells[3].x && cells[0].y == cells[1].y && cells[2].y == cells[3].y);
+    } TEST_END();
+
+    TEST_CASE("N5.17 Pointer: leaving the window stops the edge scroll and hides the game's cursor; any pointer event in the window ends it") {
+        ApplicationConfig cfg = headless_config();
+        Application app;
+        ASSERT_TRUE(app.init(cfg));
+        ASSERT_TRUE(app.start_game("Original-Ants/Maps/SMALL.LVL"));
+        app.hud().dismiss_match_start_modal();                                           // (the match start notice takes the mouse until it is gone)
+        SDL_WindowEvent leave{};
+        leave.type = SDL_WINDOWEVENT;
+        leave.event = SDL_WINDOWEVENT_LEAVE;
+        SDL_WindowEvent enter = leave;
+        enter.event = SDL_WINDOWEVENT_ENTER;
+        SDL_MouseMotionEvent motion{};
+        motion.type = SDL_MOUSEMOTION;
+        motion.x = 0;                                                                    // the left scroll strip
+        motion.y = 240;
+        auto scrolled = [&]() {
+            app.renderer().camera().world_x = 400;
+            app.renderer().camera().world_y = 400;
+            for (int i = 0; i < 6; ++i) app.handle_camera_panning(0.05f);
+            return app.renderer().camera().world_x != 400 || app.renderer().camera().world_y != 400;
+        };
+        ASSERT_FALSE(app.pointer_outside());
+        app.handle_mouse_motion(motion);
+        ASSERT_TRUE(scrolled());                                                         // the pointer rests on the edge: the view scrolls
+        app.handle_window_event(leave);
+        ASSERT_TRUE(app.pointer_outside());
+        ASSERT_FALSE(scrolled());                                                        // the window has been left: the last position must not keep scrolling
+        app.handle_window_event(enter);
+        ASSERT_FALSE(app.pointer_outside());
+        ASSERT_TRUE(scrolled());
+        app.handle_window_event(leave);
+        ASSERT_TRUE(app.pointer_outside());
+        motion.x = 320;
+        motion.y = 240;
+        app.handle_mouse_motion(motion);                                                 // a motion event can only come from a pointer inside the window
+        ASSERT_FALSE(app.pointer_outside());
+        app.handle_window_event(leave);
+        SDL_MouseButtonEvent press{};
+        press.type = SDL_MOUSEBUTTONDOWN;
+        press.button = SDL_BUTTON_LEFT;
+        press.x = 320;
+        press.y = 240;
+        app.handle_mouse_button(press);                                                  // ... and so can a button event
+        ASSERT_FALSE(app.pointer_outside());
+    } TEST_END();
+
+    TEST_CASE("N5.18 Sound follows the focus with --audio-focus only") {
+        for (int follow = 0; follow < 2; ++follow) {
+            ApplicationConfig cfg = headless_config();
+            cfg.audio_follows_focus = follow != 0;
+            Application app;
+            ASSERT_TRUE(app.init(cfg));
+            ASSERT_TRUE(app.start_game("Original-Ants/Maps/SMALL.LVL"));
+            const int volume = app.audio_mixer().sound_volume();
+            ASSERT_TRUE(volume > 0);
+            SDL_WindowEvent lost{};
+            lost.type = SDL_WINDOWEVENT;
+            lost.event = SDL_WINDOWEVENT_FOCUS_LOST;
+            app.handle_window_event(lost);
+            ASSERT_EQ(app.audio_mixer().sound_volume(), follow != 0 ? 0 : volume);            // a window without the focus is silent ...
+            SDL_WindowEvent gained = lost;
+            gained.event = SDL_WINDOWEVENT_FOCUS_GAINED;
+            app.handle_window_event(gained);
+            ASSERT_EQ(app.audio_mixer().sound_volume(), volume);                               // ... and the sound is back with the focus
+        }
+    } TEST_END();
+    TEST_CASE("N5.19 Guest: --seat N asks the host for that colour (the start script seats window i in colour i)") {
+        Peer host;
+        ASSERT_TRUE(host.net.host(0, "Alice", true));
+        ApplicationConfig cfg = headless_config();
+        cfg.net_role = ApplicationConfig::NetRole::Join;
+        cfg.net_address = "127.0.0.1";
+        cfg.net_port = host.net.listen_port();
+        cfg.player_name = "Dave";
+        cfg.net_seat = 3;                                                                // black, although seats 1 and 2 are free
+        Application app;
+        ASSERT_TRUE(app.init(cfg));
+        Duo duo{app, host};
+        ASSERT_TRUE(duo.until([&]() { return app.net()->phase() == net::NetGame::Phase::Room && app.net()->my_seat() == 3; }, 8000));
+        ASSERT_EQ(host.net.room().slots[3].name, "Dave");
+    } TEST_END();
+}
+
 }  // namespace
 
 int main() {
     std::cout << "\n=======================================================\n [SUITE] Network port: the application (names, room, thumbs, start, match)\n"
                  "=======================================================\n";
     run_command_line_tests();
+    run_window_tests();
     run_host_tests();
     run_guest_tests();
     std::cout << "\n=======================================================\n Total Test Cases: " << g_test_count << "\n Total Assertions: " << g_assert_count

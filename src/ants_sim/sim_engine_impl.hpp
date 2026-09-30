@@ -326,11 +326,10 @@ public:
     uint32_t step_cost(const AntUnit& a, TileCoord from, TileCoord to);
 
     // orders (FUN_0101fc50 / FUN_01020655 / FUN_010202e7 / FUN_0101ff5a / FUN_010287b5 / FUN_0100cba4)
-    // allow_goal_bomb: remake flag (AntOrder::allow_friendly_bomb) that lets a player order end on an own bomb
-    // (the original's player orders always may, FUN_010202e7 flag 0x20); default = the original behaviour.
-    bool go_to(AntUnit& a, TileCoord t, bool user_cmd, bool special, bool allow_goal_bomb = true);
+    // a player order ignores the bombs at its goal (FUN_010202e7 gets flag 0x20 when the order is the player's), so a move may end on an own bomb
+    bool go_to(AntUnit& a, TileCoord t, bool user_cmd, bool special);
     void classify_order(AntUnit& a, TileCoord t, bool special, bool user_cmd);
-    bool adjust_goal(AntUnit& a, TileCoord& t, bool user_cmd, bool allow_goal_bomb = true);
+    bool adjust_goal(AntUnit& a, TileCoord& t, bool user_cmd);
     bool can_take_user_order(const AntUnit& a) const noexcept;
     bool group_click_skips(const AntUnit& a, TileCoord target, bool special, bool attack) const noexcept;
     void deliver_path(uint32_t ant_id, const std::vector<TileCoord>& path);

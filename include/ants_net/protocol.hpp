@@ -18,7 +18,7 @@
 
 namespace ants::net {
 
-inline constexpr uint16_t kProtocolVersion = 4;         // 2: the Room message carries each seat's round trip (the thumbs); 3: host migration (mesh, election); 4: the Quit command (Drop moved from 11 to 12)
+inline constexpr uint16_t kProtocolVersion = 5;         // 2: the Room message carries each seat's round trip (the thumbs); 3: host migration (mesh, election); 4: the Quit command (Drop moved from 11 to 12); 5: Hello carries the seat that the guest asks for
 inline constexpr size_t kMaxMessageBytes = 64 * 1024;
 inline constexpr size_t kMaxTurnCommands = 512;
 inline constexpr size_t kMaxChatChars = 100;        // the original's chat entry
@@ -64,6 +64,7 @@ struct HelloMsg {
     uint16_t version{kProtocolVersion};
     std::string name;
     uint16_t listen_port{0};    // the port on which this guest accepts the other guests' connections during the match (0: none)
+    uint8_t want_seat{255};     // the seat (0 .. 3) this guest asks for, 255: any; a seat that is taken (or the host's own) gives the first free one (protocol 5)
 };
 struct WelcomeMsg {
     uint8_t player{255};        // the slot (0 .. 3) this client plays
@@ -209,6 +210,9 @@ std::vector<uint8_t> encode_ping(const PingMsg&);
 std::vector<uint8_t> encode_pong(const PingMsg&);
 
 bool decode(const uint8_t* data, size_t size, HelloMsg& out);
+/// Only the version and the name of a Hello (they lead every version's layout): a host answers "version mismatch" to a guest of another version instead of
+/// "bad request", although the rest of that guest's Hello has another layout. Fills `version` and `name` only.
+bool decode_hello_prefix(const uint8_t* data, size_t size, HelloMsg& out);
 bool decode(const uint8_t* data, size_t size, WelcomeMsg& out);
 bool decode(const uint8_t* data, size_t size, RejectMsg& out);
 bool decode(const uint8_t* data, size_t size, CommandMsg& out);

@@ -366,6 +366,13 @@ if [ "$RUN_APP" -eq 1 ]; then
     echo -e "${BOLD}${BLUE}======================================================================${RESET}"
     "./$BUILD_DIR/tests/test_app/test_options"
     OPTIONS_STATUS=$?
+
+    echo ""
+    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
+    echo -e "${BOLD}${BLUE}>>> 3.8 RUNNING START SCRIPT SUITE (start_game.sh --dry-run: seats, colours, grid)...${RESET}"
+    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
+    "./tests/scripts/test_start_game.sh"
+    START_SCRIPT_STATUS=$?
 fi
 
 # 6. Execute E2E Opaque-Box Tests
@@ -584,6 +591,13 @@ if [ "$RUN_APP" -eq 1 ]; then
         echo -e " 3.7 Options (test_options):                         ${GREEN}PASSED${RESET}"
     else
         echo -e " 3.7 Options (test_options):                         ${RED}FAILED (exit code ${OPTIONS_STATUS})${RESET}"
+        TOTAL_FAILED=$((TOTAL_FAILED + 1))
+    fi
+
+    if [ "$START_SCRIPT_STATUS" -eq 0 ]; then
+        echo -e " 3.8 Start Script (start_game.sh --dry-run):         ${GREEN}PASSED${RESET}"
+    else
+        echo -e " 3.8 Start Script (start_game.sh --dry-run):         ${RED}FAILED (exit code ${START_SCRIPT_STATUS})${RESET}"
         TOTAL_FAILED=$((TOTAL_FAILED + 1))
     fi
 fi

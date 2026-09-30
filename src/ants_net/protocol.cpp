@@ -89,6 +89,7 @@ std::vector<uint8_t> encode(const HelloMsg& m) {
     w.u16(m.version);
     w.str8(clip(m.name, kMaxNameChars));
     w.u16(m.listen_port);
+    w.u8(m.want_seat);
     return out;
 }
 bool decode(const uint8_t* data, size_t size, HelloMsg& out) {
@@ -99,7 +100,22 @@ bool decode(const uint8_t* data, size_t size, HelloMsg& out) {
     m.version = r->u16();
     m.name = r->str8();
     m.listen_port = r->u16();
+    m.want_seat = r->u8();
     if (!r->done() || m.name.size() > kMaxNameChars) return false;
+    for (char c : m.name) {
+        if (static_cast<unsigned char>(c) < 0x20 || static_cast<unsigned char>(c) > 0x7E) return false;
+    }
+    out = std::move(m);
+    return true;
+}
+bool decode_hello_prefix(const uint8_t* data, size_t size, HelloMsg& out) {
+    ByteReader storage(nullptr, 0);
+    ByteReader* r = nullptr;
+    if (!open(data, size, MsgType::Hello, r, storage)) return false;
+    HelloMsg m;
+    m.version = r->u16();
+    m.name = r->str8();
+    if (!r->ok() || m.name.size() > kMaxNameChars) return false;       // what follows is the layout of some version: not read
     for (char c : m.name) {
         if (static_cast<unsigned char>(c) < 0x20 || static_cast<unsigned char>(c) > 0x7E) return false;
     }

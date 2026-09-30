@@ -120,6 +120,7 @@ public:
         std::string name{"Player"};
         uint32_t welcome_timeout_ms{10000};
         uint16_t listen_port{0};             // where this guest accepts the other guests during the match, announced in Hello (0: nowhere)
+        uint8_t want_seat{255};              // the seat this guest asks for in Hello (0 .. 3; 255: any). Taken, or the host's: the first free seat
     };
     enum class Phase : uint8_t { Connecting, Joining, InRoom, Loading, Loaded, Begun, Rejected, Closed };
     struct Event {

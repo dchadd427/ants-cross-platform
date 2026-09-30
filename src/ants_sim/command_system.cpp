@@ -60,7 +60,7 @@ CommandResult SimulationEngine::apply_command(const Command& cmd) {
                 return res;
             }
             const TileCoord tile{cmd.tile_x, cmd.tile_y};
-            if (cmd.type == CommandType::GroupMove) res.ack_ant = issue_group_move_order(own, tile, impl_->grid_.has_bomb_at(tile), &res.needing_order);
+            if (cmd.type == CommandType::GroupMove) res.ack_ant = issue_group_move_order(own, tile, &res.needing_order);
             else if (cmd.type == CommandType::GroupSpecial) res.ack_ant = issue_group_special_order(own, tile, &res.needing_order);
             else res.ack_ant = issue_group_attack_order(own, tile, &res.needing_order);
             res.status = Status::Applied;

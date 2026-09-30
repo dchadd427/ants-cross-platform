@@ -42,7 +42,9 @@ HUD::PanelMode HUD::panel_mode(const sim::WorldState& world) const {
             if (a.id == id && a.player_id == local_player_id_) { ++own; break; }
         }
     }
-    if (own == 1) return PanelMode::OneAnt;
+    // [54ec] is stored, not counted: a shift add or a shift drag sets panel 4 even when the ant it adds is the one that was already selected, and only
+    // the next selection operation changes it (FUN_01027f07 is called with the mode, never with a count). Panel 4 beats the ant count of 1.
+    if (own == 1) return is_multi_select_mode_ ? PanelMode::Ants : PanelMode::OneAnt;
     if (own > 1) return PanelMode::Ants;
     if (selected_ant_id_ != 0) {                       // an ant of another player under inspection
         for (const auto& a : world.ants) {
@@ -242,7 +244,7 @@ uint32_t HUD::order_selected(sim::SimulationEngine& sim, sim::TileCoord tile, bo
 
     // The kind of the second pedestal decides part of the feedback: a combat ant's ability pedestal is the attack pedestal (kind 3)
     sim::AntType common = sim::AntType::Worker;
-    slot2_attack_kind_ = homogeneous_type(world, common) && common == sim::AntType::Combat;
+    slot2_attack_kind_ = panel_mode(world) == PanelMode::OneAnt && homogeneous_type(world, common) && common == sim::AntType::Combat;     // panel 4 has no slot 2
 
     // An attack on the ally's ant or hill is not carried out at once: the ant asks first (FUN_0101ffab, called from the attack order FUN_0101fc50):
     // "Doing this will break your team with ...". Yes ends the team and gives the order (FUN_01020076), No drops it. (The original keeps the order of
@@ -291,7 +293,7 @@ uint32_t HUD::issue_group_order(sim::SimulationEngine& sim, sim::TileCoord tile,
     return ack;
 }
 
-void HUD::dispatch_move_order(int32_t target_tile_x, int32_t target_tile_y, sim::SimulationEngine& sim, bool /*allow_friendly_bomb*/) {
+void HUD::dispatch_move_order(int32_t target_tile_x, int32_t target_tile_y, sim::SimulationEngine& sim) {
     order_selected(sim, sim::TileCoord{target_tile_x, target_tile_y}, false, false);
 }
 
@@ -343,11 +345,16 @@ void HUD::pointer_click(sim::SimulationEngine& sim, ViewportCamera& camera, int3
                     if (shift && (panel == PanelMode::OneAnt || panel == PanelMode::Ants)) {
                         // shift toggles an own ant in a selection of own ants: it leaves it (FUN_01027aae) or joins it (0x1027940), and the panel is rebuilt with its
                         // text: several ants give string 12, one remaining ant the text of its type, none clears the line (the last argument of FUN_01027f07 is 0)
+                        // leaving recounts (several left: panel 4, one left: panel 3, from panel 3 nothing is left: panel 1); joining always sets panel 4
                         auto it = std::find(selected_ant_ids_.begin(), selected_ant_ids_.end(), ant->id);
-                        if (it != selected_ant_ids_.end()) selected_ant_ids_.erase(it);
-                        else selected_ant_ids_.push_back(ant->id);
+                        if (it != selected_ant_ids_.end()) {
+                            selected_ant_ids_.erase(it);
+                            is_multi_select_mode_ = selected_ant_ids_.size() > 1;
+                        } else {
+                            selected_ant_ids_.push_back(ant->id);
+                            is_multi_select_mode_ = true;
+                        }
                         selected_ant_id_ = selected_ant_ids_.empty() ? 0 : selected_ant_ids_.front();
-                        is_multi_select_mode_ = selected_ant_ids_.size() > 1;
                         selection_status_pending_ = true;
                     } else {
                         select_ant(ant->id, false);
@@ -500,7 +507,8 @@ bool HUD::pedestal_press(sim::SimulationEngine& sim, int32_t x, int32_t y) {
         return true;
     }
     sim::AntType type = sim::AntType::Worker;
-    const bool has_ability = homogeneous_type(world, type) && type != sim::AntType::Worker;
+    // the ability pedestal exists in panel 3 only: SetPanelMode gives slot 2 the kind of the ant's type there (table 0x1004ef0) and kind 9 (hidden) in panel 4
+    const bool has_ability = panel == PanelMode::OneAnt && homogeneous_type(world, type) && type != sim::AntType::Worker;
     if (in_slot(1, x, y) && has_ability) {                                       // ability: acts only when raised
         if (!slot_latched_[1]) {
             ability_pedestal_button_.is_pressed = true;

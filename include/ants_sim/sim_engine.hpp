@@ -189,7 +189,6 @@ struct AntOrder {
     int32_t   target_x{0};
     int32_t   target_y{0};
     int32_t   target_entity_id{-1};
-    bool      allow_friendly_bomb{false};
     bool      special{false};             // FUN_010287b5's special flag: the classification gives the ant's ability order
 };
 
@@ -489,9 +488,9 @@ public:
      * @brief Player move order through the original GoTo (Ants.exe FUN_0101fc50, "player" flag set): the ant
      * must be idle, walking or stunned (FUN_0101ff5a); it snaps to the centre of its tile, idles, and walks
      * once the path manager has delivered its path. Clicking an enemy ant attacks it, clicking a power-up
-     * picks it up; an own bomb at the destination is walked onto (and set off) only with allow_friendly_bomb.
+     * picks it up; an own bomb at the destination is walked onto and set off (a player order ignores bombs at its goal, FUN_010202e7 flag 0x20).
      */
-    void issue_move_order(uint32_t ant_id, TileCoord dest, bool allow_friendly_bomb = false);
+    void issue_move_order(uint32_t ant_id, TileCoord dest);
     /// Move order given by a remake system (guard AI, hill queue, ability approach): GoTo without the player flag.
     void issue_internal_move_order(uint32_t ant_id, TileCoord dest);
     /**
@@ -501,8 +500,7 @@ public:
      * ring scan spread them over free tiles.
      * @return the ant that acknowledges the order (the closest one, if its GoTo queued a path), or 0.
      */
-    uint32_t issue_group_move_order(const std::vector<uint32_t>& ant_ids, TileCoord target,
-                                    bool allow_friendly_bomb = false, uint32_t* needed = nullptr);
+    uint32_t issue_group_move_order(const std::vector<uint32_t>& ant_ids, TileCoord target, uint32_t* needed = nullptr);
     /**
      * @brief Player group special order (FUN_010287b5 with the special flag, cursor mode 4 / the latched ability pedestal): the same group
      * dispatch, but the classification (FUN_01020655) makes every ant carry out its ability at the tile: a bomber plants (defuses a bomb it
@@ -584,7 +582,7 @@ public:
     void record_player_stat(uint8_t player_id, StatType stat, uint32_t value);
 
 private:
-    uint32_t group_order(const std::vector<uint32_t>& ant_ids, TileCoord target, bool allow_friendly_bomb, bool special, uint32_t* needed);
+    uint32_t group_order(const std::vector<uint32_t>& ant_ids, TileCoord target, bool special, uint32_t* needed);
     std::unique_ptr<SimulationEngineImpl> impl_;
 };
 

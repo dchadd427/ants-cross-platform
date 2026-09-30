@@ -170,26 +170,20 @@ void HostLobby::handle_hello(Pending& p, const std::vector<uint8_t>& msg, uint32
         p.conn->close();
         return;
     }
-    HelloMsg hello;
-    if (!decode(msg, hello)) {
-        p.conn->send(encode(RejectMsg{RejectReason::BadRequest}));
-        p.conn->close();
-        events_.push_back(Event{Event::Type::Rejected, 255});
-        return;
-    }
     auto reject = [&](RejectReason r) {
         p.conn->send(encode(RejectMsg{r}));
         p.conn->close();
         events_.push_back(Event{Event::Type::Rejected, 255});
     };
-    if (hello.version != kProtocolVersion) return reject(RejectReason::VersionMismatch);
+    HelloMsg hello;
+    if (!decode_hello_prefix(msg.data(), msg.size(), hello)) return reject(RejectReason::BadRequest);
+    if (hello.version != kProtocolVersion) return reject(RejectReason::VersionMismatch);      // the layout of another version is not read
+    if (!decode(msg, hello)) return reject(RejectReason::BadRequest);                        // this version's layout, in full
     if (phase_ != Phase::Room) return reject(RejectReason::MatchRunning);
     uint8_t seat = 255;
-    for (uint8_t s = 0; s < sim::MAX_PLAYERS; ++s) {
-        if (room_.slots[s].state == SlotState::Empty) {
-            seat = s;
-            break;
-        }
+    if (hello.want_seat < sim::MAX_PLAYERS && room_.slots[hello.want_seat].state == SlotState::Empty) seat = hello.want_seat;     // the seat it asked for, when it is free
+    for (uint8_t s = 0; seat == 255 && s < sim::MAX_PLAYERS; ++s) {
+        if (room_.slots[s].state == SlotState::Empty) seat = s;                        // else the first free one
     }
     if (seat == 255) return reject(RejectReason::Full);
     guests_[seat] = Guest{};
@@ -333,6 +327,7 @@ void ClientLobby::update(uint32_t now_ms) {
             HelloMsg h;
             h.name = printable(cfg_.name, kMaxNameChars);
             h.listen_port = cfg_.listen_port;
+            h.want_seat = cfg_.want_seat;
             conn_->send(encode(h));
             phase_ = Phase::Joining;
             joined_at_ms_ = now_ms;

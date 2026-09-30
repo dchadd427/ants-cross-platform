@@ -292,6 +292,105 @@ int main() {
         }
     } TEST_END();
 
+    TEST_CASE("N4.2b Seat Requests: A Guest Gets The Seat It Asks For When It Is Free, Otherwise The First Free One (Whatever The Order Of Arrival)") {
+        // a guest that asks for a seat (the room owns the vector of guests, which grows: the tests keep indices, not references)
+        const auto ask = [](Room& r, const std::string& name, uint8_t want) -> size_t {
+            auto ends = r.net.connect({10, 0});
+            r.guests.emplace_back();
+            Room::Guest& g = r.guests.back();
+            g.host_end = ends.first;
+            g.client_end = ends.second;
+            ClientLobby::Config cc;
+            cc.name = name;
+            cc.want_seat = want;
+            g.lobby = std::make_unique<ClientLobby>(ends.second, cc);
+            r.host.add_connection(ends.first, r.now);
+            return r.guests.size() - 1;
+        };
+        // the four ant colours sit where the guests asked: the last to arrive asked for the first guest seat
+        Room room;
+        const size_t blue = ask(room, "Blue", 2);
+        const size_t black = ask(room, "Black", 3);
+        const size_t red = ask(room, "Red", 1);
+        room.run(300);
+        ASSERT_EQ(room.guests[blue].lobby->my_seat(), 2);
+        ASSERT_EQ(room.guests[black].lobby->my_seat(), 3);
+        ASSERT_EQ(room.guests[red].lobby->my_seat(), 1);
+        ASSERT_EQ(room.host.room().slots[1].name, "Red");
+        ASSERT_EQ(room.host.room().slots[2].name, "Blue");
+        ASSERT_EQ(room.host.room().slots[3].name, "Black");
+        ASSERT_EQ(room.host.players(), 4u);
+        // a seat that is taken, the host's own seat and no request at all give the first free seat
+        Room room2;
+        const size_t first = ask(room2, "First", 255);                              // no request: seat 1
+        const size_t taken = ask(room2, "Taken", 1);                                // seat 1 is taken: seat 2
+        const size_t host_seat = ask(room2, "HostSeat", 0);                         // the host's seat: seat 3
+        room2.run(300);
+        ASSERT_EQ(room2.guests[first].lobby->my_seat(), 1);
+        ASSERT_EQ(room2.guests[taken].lobby->my_seat(), 2);
+        ASSERT_EQ(room2.guests[host_seat].lobby->my_seat(), 3);
+        // a seat that does not exist
+        Room room3;
+        const size_t absurd = ask(room3, "Absurd", 9);
+        room3.run(200);
+        ASSERT_EQ(room3.guests[absurd].lobby->my_seat(), 1);
+        // a seat that a guest left is free for a request again
+        room.guests[red].lobby->leave();                                            // Red (seat 1) leaves
+        room.run(300);
+        ASSERT_EQ(room.host.players(), 3u);
+        const size_t again = ask(room, "Again", 1);
+        room.run(300);
+        ASSERT_EQ(room.guests[again].lobby->my_seat(), 1);
+    } TEST_END();
+
+    TEST_CASE("N4.2c Hello: The Seat Request Travels With It; A Hello Of The Previous Layout Is Still Answered With 'Version Mismatch'") {
+        HelloMsg h;
+        h.name = "Queen Ant";
+        h.want_seat = 2;
+        HelloMsg h2;
+        ASSERT_TRUE(decode(encode(h), h2));
+        ASSERT_EQ(h2.want_seat, 2);
+        ASSERT_EQ(h2.version, kProtocolVersion);
+        HelloMsg any;
+        HelloMsg any2;
+        ASSERT_TRUE(decode(encode(any), any2));
+        ASSERT_EQ(any2.want_seat, 255);                                          // no request is 255
+        // the layout of protocol 4 (no seat byte) and a longer one of a later version are not this protocol's Hello (the strict decoder refuses them, which keeps
+        // decode -> encode exact), but their prefix (version, name) is read, so that the host can name the real problem
+        std::vector<uint8_t> v4 = {static_cast<uint8_t>(MsgType::Hello), 4, 0, 3, 'O', 'l', 'd', 0xA1, 0x0F};
+        HelloMsg old;
+        ASSERT_FALSE(decode(v4.data(), v4.size(), old));
+        ASSERT_TRUE(decode_hello_prefix(v4.data(), v4.size(), old));
+        ASSERT_EQ(old.version, 4);
+        ASSERT_EQ(old.name, "Old");
+        std::vector<uint8_t> future = {static_cast<uint8_t>(MsgType::Hello), static_cast<uint8_t>(kProtocolVersion + 1), 0, 3, 'N', 'e', 'w', 0xA1, 0x0F, 1, 2, 3, 4};
+        HelloMsg next;
+        ASSERT_FALSE(decode(future.data(), future.size(), next));
+        ASSERT_TRUE(decode_hello_prefix(future.data(), future.size(), next));
+        ASSERT_EQ(next.version, kProtocolVersion + 1);
+        std::vector<uint8_t> torn = {static_cast<uint8_t>(MsgType::Hello), 4, 0, 9, 'O', 'l'};      // a name that runs past the end is no Hello at all
+        ASSERT_FALSE(decode_hello_prefix(torn.data(), torn.size(), old));
+        std::vector<uint8_t> coded = {static_cast<uint8_t>(MsgType::Hello), 4, 0, 2, 'O', 0x07};    // nor is a name with a control character
+        ASSERT_FALSE(decode_hello_prefix(coded.data(), coded.size(), old));
+        // the current layout must be exact
+        std::vector<uint8_t> current = encode(h);
+        current.push_back(0);
+        ASSERT_FALSE(decode(current.data(), current.size(), h2));
+        std::vector<uint8_t> shorter = encode(h);
+        shorter.pop_back();
+        ASSERT_FALSE(decode(shorter.data(), shorter.size(), h2));                // (the version is the current one, so the seat byte is required)
+        // on the wire: an old client is refused with the reason, not with "bad request"
+        Room r;
+        auto ends = r.net.connect({10, 0});
+        r.host.add_connection(ends.first, 0);
+        ends.second->send(v4);
+        r.run(100);
+        std::vector<uint8_t> reply;
+        ASSERT_TRUE(ends.second->poll(reply));
+        RejectMsg rj;
+        ASSERT_TRUE(decode(reply, rj) && rj.reason == RejectReason::VersionMismatch);
+    } TEST_END();
+
     TEST_CASE("N4.3 Leaving: A Guest Who Leaves Frees Its Seat For The Next One, Everybody Is Told") {
         Room room;
         room.join("Bob");

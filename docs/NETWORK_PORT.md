@@ -41,7 +41,7 @@ and broadcasts the results (the game is not lock-step). Its lobby flow, texts an
 
 In the original the machine that picked the map can drop out while the others play on. The remake keeps that: the host is a role (the sequencer), not the place where the state lives, because every machine
 already runs the whole simulation and holds the same state. What moves is sealing turns, the reference hash, the chat relay and the drop decisions. Code: `include/ants_net/session.hpp` /
-`src/ants_net/session.cpp` (`ClientSession` election state machine, `HostSession::resume`, `promote_to_host`), `protocol.hpp` (version 4 since v0.0.62), `netgame.cpp` (the TCP mesh and the events).
+`src/ants_net/session.cpp` (`ClientSession` election state machine, `HostSession::resume`, `promote_to_host`), `protocol.hpp` (version 5 since v0.0.79), `netgame.cpp` (the TCP mesh and the events).
 
 1. **Peer links.** While the map loads every guest connects to the guests above its own seat (one link per pair; the ones below connect to it). A guest listens on an ephemeral port that it announces in
    `Hello.listen_port`; the host passes what it saw (the guest's address and that port) to everybody in `Start.endpoints`. An inbound link starts with `PeerHello{seat}` and is accepted only from a lower seat of the
@@ -103,7 +103,7 @@ name) and gets `Welcome` (its seat) or `Reject` (`Full`, `VersionMismatch`, `Mat
 receiver's own seat) on every change. `HostLobby::start` sends `Start` (seed, map file name and FNV-1a 64 hash of the file, fog, roster mask, names); every machine loads the map and answers `Loaded`
 (a machine whose file differs answers not-ok); when the host and every guest are loaded the host sends `Begin` and hands the connections (seat -> connection) to the `HostSession`. A load failure,
 a leaver, a host cancel or a 60 s load timeout sends `Cancel` and returns to the room; a guest that says nothing for 10 s, sends garbage first, or breaks the rules 8 times is closed. Map names travel
-only as plain names of the maps folder (letters, digits, `_`, `-`, `.`, ending in `.LVL`; no path separators, no `..`). Seats go to guests in the order their `Hello` reaches the host. No late join
+only as plain names of the maps folder (letters, digits, `_`, `-`, `.`, ending in `.LVL`; no path separators, no `..`). Seats go to guests in the order their `Hello` reaches the host, unless the guest asks for one: `Hello` carries `want_seat` (protocol 5, `--seat N`; 255 = any), a free seat that was asked for is given, a taken one (or the host's own) gives the first free seat. `decode` of a `Hello` is exact (this protocol's layout, so decode -> encode round-trips and the fuzz test holds); `decode_hello_prefix` reads only the version and the name, which lead every version's layout, so that a guest of another protocol gets `VersionMismatch` instead of `BadRequest`. No late join
 (as the original); the host leaving is handled by host migration (below).
 
 **Connection quality (v0.0.46, protocol version 2).** The host pings every seated guest once a second (`Ping` / `Pong` with the send time echoed, up to eight pings in flight, so a link slower than

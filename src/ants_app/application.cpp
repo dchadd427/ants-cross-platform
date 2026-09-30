@@ -132,6 +132,29 @@ ApplicationConfig Application::parse_arguments(int argc, char* argv[]) {
             cfg.lan_port = static_cast<uint16_t>(std::stoul(argv[++i]));
         } else if (std::strcmp(argv[i], "--no-lan") == 0) {
             cfg.lan_port = 0;                                                  // the room is not announced on the local network
+        } else if (std::strcmp(argv[i], "--seat") == 0 && i + 1 < argc) {
+            const int seat = std::atoi(argv[++i]);                             // the colour to sit in: 0 green, 1 red, 2 blue, 3 black
+            if (seat >= 0 && seat < 4) cfg.net_seat = static_cast<uint8_t>(seat);
+        } else if (std::strcmp(argv[i], "--title") == 0 && i + 1 < argc) {
+            cfg.title = argv[++i];
+        } else if (std::strcmp(argv[i], "--window-pos") == 0 && i + 1 < argc) {
+            cfg.has_window_pos = parse_pair(argv[++i], cfg.window_x, cfg.window_y);
+        } else if (std::strcmp(argv[i], "--window-size") == 0 && i + 1 < argc) {
+            int32_t w = 0;
+            int32_t h = 0;
+            if (parse_pair(argv[++i], w, h) && w >= kMinWindowWidth && h >= kMinWindowHeight) {
+                cfg.has_window_size = true;
+                cfg.window_w = w;
+                cfg.window_h = h;
+            }
+        } else if (std::strcmp(argv[i], "--grid") == 0 && i + 1 < argc) {
+            if (!parse_grid(argv[++i], cfg.grid_cols, cfg.grid_rows)) cfg.grid_cols = cfg.grid_rows = 0;
+        } else if (std::strcmp(argv[i], "--cell") == 0 && i + 1 < argc) {
+            cfg.grid_cell = std::max(0, std::atoi(argv[++i]));
+        } else if (std::strcmp(argv[i], "--display") == 0 && i + 1 < argc) {
+            cfg.display_index = std::max(-1, std::atoi(argv[++i]));
+        } else if (std::strcmp(argv[i], "--audio-focus") == 0) {
+            cfg.audio_follows_focus = true;
         }
     }
     return cfg;
@@ -146,6 +169,9 @@ bool Application::init(const ApplicationConfig& config) {
     if (config_.headless) {
         SDL_SetHint(SDL_HINT_VIDEODRIVER, "dummy");
     }
+
+    // Several games on one screen: the click that activates a window is also a click in it (the first click on a background window is not lost)
+    SDL_SetHint(SDL_HINT_MOUSE_FOCUS_CLICKTHROUGH, "1");
 
     if (SDL_Init(sdl_flags) != 0) {
         std::cerr << "[Application] SDL_Init Error: " << SDL_GetError() << std::endl;
@@ -199,9 +225,14 @@ bool Application::init(const ApplicationConfig& config) {
         return false;
     }
 
+    apply_window_layout();
     if (!config_.headless) {
         SDL_RaiseWindow(window_);
-        SDL_ShowCursor(SDL_DISABLE);
+        // the game draws its own cursor: the system cursor is hidden while the pointer is over the window and shown everywhere else (other windows,
+        // the desktop: nothing grabs or hides the pointer outside the game); SDL tells when it enters and leaves (handle_window_event)
+        SDL_PumpEvents();
+        pointer_outside_ = SDL_GetMouseFocus() != window_;
+        SDL_ShowCursor(pointer_outside_ ? SDL_ENABLE : SDL_DISABLE);
     }
 
     // 7. Initialize Renderer
@@ -311,7 +342,7 @@ bool Application::init(const ApplicationConfig& config) {
         net_->set_game_version(std::string(VERSION_STRING));
         const bool ok = config_.net_role == ApplicationConfig::NetRole::Host
                             ? net_->host(config_.net_port, player_name, config_.net_loopback_only)
-                            : net_->join(config_.net_address, config_.net_port, player_name);
+                            : net_->join(config_.net_address, config_.net_port, player_name, config_.net_seat);
         if (!ok) {
             std::cerr << "[Application] Could not " << (config_.net_role == ApplicationConfig::NetRole::Host ? "open a room on port " : "reach the host at ")
                       << (config_.net_role == ApplicationConfig::NetRole::Host ? std::to_string(config_.net_port) : config_.net_address + ":" + std::to_string(config_.net_port))
@@ -698,31 +729,7 @@ void Application::handle_events() {
         }
         if (event.type == SDL_MOUSEBUTTONUP) release_ui_sounds();                         // (the setup screen takes its mouse events in the loop below)
 
-        if (event.type == SDL_WINDOWEVENT) {
-            if (event.window.event == SDL_WINDOWEVENT_FOCUS_LOST) set_app_active(false);
-            if (event.window.event == SDL_WINDOWEVENT_FOCUS_GAINED) set_app_active(true);
-            if (event.window.event == SDL_WINDOWEVENT_MINIMIZED ||
-                event.window.event == SDL_WINDOWEVENT_HIDDEN) {
-                is_paused_ = true;
-                midi_player_.pause();
-            }
-            if (event.window.event == SDL_WINDOWEVENT_RESTORED ||
-                event.window.event == SDL_WINDOWEVENT_SHOWN) {
-                is_paused_ = false;
-                midi_player_.resume();
-            }
-            if (event.window.event == SDL_WINDOWEVENT_SIZE_CHANGED ||
-                event.window.event == SDL_WINDOWEVENT_RESIZED ||
-                event.window.event == SDL_WINDOWEVENT_MAXIMIZED ||
-                event.window.event == SDL_WINDOWEVENT_RESTORED) {
-                if (renderer_ && window_) {
-                    uint32_t flags = SDL_GetWindowFlags(window_);
-                    bool is_fs = (flags & (SDL_WINDOW_FULLSCREEN | SDL_WINDOW_FULLSCREEN_DESKTOP | SDL_WINDOW_MAXIMIZED)) != 0;
-                    config_.fullscreen = (flags & (SDL_WINDOW_FULLSCREEN | SDL_WINDOW_FULLSCREEN_DESKTOP)) != 0;
-                    renderer_->set_fullscreen(is_fs);
-                }
-            }
-        }
+        if (event.type == SDL_WINDOWEVENT) handle_window_event(event.window);
 
         // Bypass Print Screen key so OS handles screenshots unimpeded
         if (event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_PRINTSCREEN) {
@@ -741,11 +748,13 @@ void Application::handle_events() {
                 mouse_screen_x_ = event.motion.x;
                 mouse_screen_y_ = event.motion.y;
                 mouse_has_moved_ = true;
+                pointer_outside_ = false;
                 quick_help_move(event.motion.x, event.motion.y);
             } else if (event.type == SDL_MOUSEBUTTONDOWN) {
                 mouse_screen_x_ = event.button.x;
                 mouse_screen_y_ = event.button.y;
                 mouse_has_moved_ = true;
+                pointer_outside_ = false;
                 if (event.button.button == SDL_BUTTON_LEFT) quick_help_press(event.button.x, event.button.y);
             } else if (event.type == SDL_MOUSEBUTTONUP) {
                 mouse_screen_x_ = event.button.x;
@@ -766,18 +775,21 @@ void Application::handle_events() {
                     mouse_screen_x_ = event.motion.x;
                     mouse_screen_y_ = event.motion.y;
                     mouse_has_moved_ = true;
+                    pointer_outside_ = false;
                     map_select_.handle_mouse_motion(event.motion.x, event.motion.y);
                     break;
                 case SDL_MOUSEBUTTONDOWN:
                     mouse_screen_x_ = event.button.x;
                     mouse_screen_y_ = event.button.y;
                     mouse_has_moved_ = true;
+                    pointer_outside_ = false;
                     map_select_.handle_mouse_down(event.button.x, event.button.y, event.button.button);
                     break;
                 case SDL_MOUSEBUTTONUP:
                     mouse_screen_x_ = event.button.x;
                     mouse_screen_y_ = event.button.y;
                     mouse_has_moved_ = true;
+                    pointer_outside_ = false;
                     map_select_.handle_mouse_up(event.button.x, event.button.y, event.button.button);
                     break;
                 default:
@@ -810,6 +822,79 @@ void Application::handle_events() {
 
 }
 
+void Application::handle_window_event(const SDL_WindowEvent& we) {
+    if (we.event == SDL_WINDOWEVENT_FOCUS_LOST) {
+        set_app_active(false);
+        if (!config_.headless) SDL_ShowCursor(SDL_ENABLE);                     // not ours to hide while another window has the input
+    }
+    if (we.event == SDL_WINDOWEVENT_FOCUS_GAINED) {
+        set_app_active(true);
+        if (!config_.headless && !pointer_outside_) SDL_ShowCursor(SDL_DISABLE);
+    }
+    if (we.event == SDL_WINDOWEVENT_ENTER) {
+        pointer_outside_ = false;
+        if (!config_.headless) SDL_ShowCursor(SDL_DISABLE);                    // the game's own cursor takes over inside the window
+    }
+    if (we.event == SDL_WINDOWEVENT_LEAVE) {
+        pointer_outside_ = true;                                               // no more motion arrives: the last position must not keep the map scrolling
+        if (!config_.headless) SDL_ShowCursor(SDL_ENABLE);
+    }
+    if (we.event == SDL_WINDOWEVENT_MINIMIZED || we.event == SDL_WINDOWEVENT_HIDDEN) {
+        is_paused_ = true;
+        midi_player_.pause();
+    }
+    if (we.event == SDL_WINDOWEVENT_RESTORED || we.event == SDL_WINDOWEVENT_SHOWN) {
+        is_paused_ = false;
+        midi_player_.resume();
+    }
+    if (we.event == SDL_WINDOWEVENT_SIZE_CHANGED || we.event == SDL_WINDOWEVENT_RESIZED || we.event == SDL_WINDOWEVENT_MAXIMIZED ||
+        we.event == SDL_WINDOWEVENT_RESTORED) {
+        if (renderer_ && window_) {
+            uint32_t flags = SDL_GetWindowFlags(window_);
+            bool is_fs = (flags & (SDL_WINDOW_FULLSCREEN | SDL_WINDOW_FULLSCREEN_DESKTOP | SDL_WINDOW_MAXIMIZED)) != 0;
+            config_.fullscreen = (flags & (SDL_WINDOW_FULLSCREEN | SDL_WINDOW_FULLSCREEN_DESKTOP)) != 0;
+            renderer_->set_fullscreen(is_fs);
+        }
+    }
+}
+
+WindowRect Application::window_rect() const {
+    WindowRect r;
+    if (window_ != nullptr) {
+        SDL_GetWindowPosition(window_, &r.x, &r.y);
+        SDL_GetWindowSize(window_, &r.w, &r.h);
+    }
+    return r;
+}
+
+// --grid CxR --cell N puts the window into a cell of a grid over the usable part of the display (the start scripts: four games, one per quarter); --window-pos
+// and --window-size say it outright. The window's decoration (title bar, frame) is part of the cell.
+void Application::apply_window_layout() {
+#if !defined(__EMSCRIPTEN__)
+    if (window_ == nullptr) return;
+    if (config_.grid_cols > 0 && config_.grid_rows > 0) {
+        int display = config_.display_index >= 0 ? config_.display_index : SDL_GetWindowDisplayIndex(window_);
+        if (display < 0) display = 0;
+        SDL_Rect area{0, 0, 0, 0};
+        if (SDL_GetDisplayUsableBounds(display, &area) != 0 && SDL_GetDisplayBounds(display, &area) != 0) return;
+        int top = 0;
+        int left = 0;
+        int bottom = 0;
+        int right = 0;
+        if (SDL_GetWindowBordersSize(window_, &top, &left, &bottom, &right) != 0) {     // a platform that cannot tell: assume a typical title bar
+            top = 28;
+            left = bottom = right = 0;
+        }
+        const WindowRect r = grid_cell_window(WindowRect{area.x, area.y, area.w, area.h}, config_.grid_cols, config_.grid_rows, config_.grid_cell, top, left, bottom, right);
+        SDL_SetWindowSize(window_, r.w, r.h);
+        SDL_SetWindowPosition(window_, r.x, r.y);
+        return;
+    }
+    if (config_.has_window_size) SDL_SetWindowSize(window_, config_.window_w, config_.window_h);
+    if (config_.has_window_pos) SDL_SetWindowPosition(window_, config_.window_x, config_.window_y);
+#endif
+}
+
 // The INPUT task of the original runs every 50 ms (Ants.exe 0x100ae26): the edge strips and the minimap drag move the view in whole pixel
 // steps at that rate (edge_scroll.hpp). Panning is strictly mouse-driven; keyboard keys do not scroll.
 void Application::handle_camera_panning(float dt) {
@@ -817,7 +902,7 @@ void Application::handle_camera_panning(float dt) {
     input_accumulator_ += dt;
     while (input_accumulator_ >= 0.050f) {
         input_accumulator_ -= 0.050f;
-        if (state_ != AppState::Playing || !renderer_ || !mouse_has_moved_) continue;
+        if (state_ != AppState::Playing || !renderer_ || !mouse_has_moved_ || pointer_outside_) continue;
         if (mouse_screen_x_ < 0 || mouse_screen_x_ >= 640 || mouse_screen_y_ < 0 || mouse_screen_y_ >= 480) continue;
         hud_.input_tick(renderer_->camera(), current_level_.width, current_level_.height, mouse_screen_x_, mouse_screen_y_);
     }
@@ -848,6 +933,7 @@ void Application::handle_mouse_motion(const SDL_MouseMotionEvent& motion) {
     mouse_screen_x_ = motion.x;
     mouse_screen_y_ = motion.y;
     mouse_has_moved_ = true;
+    pointer_outside_ = false;
 
     if (scorecard_.is_open()) {
         scorecard_.handle_mouse_motion(motion.x, motion.y);
@@ -861,6 +947,7 @@ void Application::handle_mouse_button(const SDL_MouseButtonEvent& button) {
     mouse_screen_x_ = button.x;
     mouse_screen_y_ = button.y;
     mouse_has_moved_ = true;
+    pointer_outside_ = false;
     if (button.type == SDL_MOUSEBUTTONUP) release_ui_sounds();                          // before the handlers: what the release itself plays is not cut
 
     if (scorecard_.is_open()) {
@@ -1208,7 +1295,7 @@ void Application::render_frame() {
     if (state_ == AppState::Playing && !scorecard_.is_open()) {
         cur = hud_.evaluate_cursor(mouse_screen_x_, mouse_screen_y_, sim_.get_world_state(), sim_.grid(), renderer_->camera());
     }
-    renderer_->render_software_cursor(cur, mouse_screen_x_, mouse_screen_y_, static_cast<uint32_t>(sim_.current_tick()));
+    if (!pointer_outside_) renderer_->render_software_cursor(cur, mouse_screen_x_, mouse_screen_y_, static_cast<uint32_t>(sim_.current_tick()));
 
     renderer_->end_frame();
 }
@@ -1263,6 +1350,7 @@ void Application::update_music(float dt) {
 
 // WM_ACTIVATEAPP: deactivating closes the music (and remembers that it was open), activating starts a NEW random piece
 void Application::set_app_active(bool active) {
+    if (config_.audio_follows_focus) audio_mixer_.set_sound_volume(active ? hud_.get_sound_volume() : 0);      // every sound, playing or new, is silent without the focus
     if (!active) {
         if (music_open_) {
             music_resume_on_activate_ = true;

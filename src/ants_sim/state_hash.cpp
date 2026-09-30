@@ -114,7 +114,6 @@ void hash_ant(Fnv& h, const AntUnit& a) {
     h.tile(a.harvest_origin);
     h.boolean(a.is_thief_steal);
     h.tile(a.ability_target);
-    h.boolean(a.allow_friendly_bomb);
     // combat
     h.boolean(a.engaged);
     h.boolean(a.frozen);

@@ -14,8 +14,7 @@ namespace {
 // user_cmd = order clicked by the player (FUN_0101fc50 arg "player" = 1); remake systems (guard AI, base
 // queue, ability approach, harvest return) issue internal orders with user_cmd = false.
 // Returns what GoTo returns: true when the order was accepted and a path was requested (the group order acknowledges with it).
-bool route_move_order(SimulationEngineImpl& impl, AntUnit& unit, TileCoord dest,
-                      bool allow_friendly_bomb, bool user_cmd, bool special = false) {
+bool route_move_order(SimulationEngineImpl& impl, AntUnit& unit, TileCoord dest, bool user_cmd, bool special = false) {
     if (!unit.is_alive()) return false;
 
     // Special abilities and the power-up pick-up cannot be interrupted and silently ignore move orders
@@ -50,8 +49,7 @@ bool route_move_order(SimulationEngineImpl& impl, AntUnit& unit, TileCoord dest,
         return true;
     }
 
-    unit.allow_friendly_bomb = (allow_friendly_bomb && impl.grid_.has_bomb_at(dest));
-    return impl.go_to(unit, dest, user_cmd, special, unit.allow_friendly_bomb);
+    return impl.go_to(unit, dest, user_cmd, special);
 }
 
 } // anonymous namespace
@@ -479,7 +477,7 @@ bool SimulationEngine::issue_order(const AntOrder& order) {
     switch (order.type) {
         case OrderType::Move:
             unit->ability_target = TileCoord{-1, -1};
-            return route_move_order(*impl_, *unit, TileCoord{order.target_x, order.target_y}, order.allow_friendly_bomb, true, order.special);
+            return route_move_order(*impl_, *unit, TileCoord{order.target_x, order.target_y}, true, order.special);
         case OrderType::ReturnToBase: {
             unit->ability_target = TileCoord{-1, -1};
             join_base_queue(order.ant_id);
@@ -499,7 +497,7 @@ bool SimulationEngine::issue_order(const AntOrder& order) {
                     }
                     // FUN_010287b5: a click on an enemy ant is a move order onto its tile with the player flag; the
                     // classification (FUN_01020655) turns it into the attack order 3 and the path ends in contact.
-                    return route_move_order(*impl_, *unit, TileCoord{target->pixel_x / 32, target->pixel_y / 32}, false, true);
+                    return route_move_order(*impl_, *unit, TileCoord{target->pixel_x / 32, target->pixel_y / 32}, true);
                 }
             }
             return false;
@@ -511,7 +509,7 @@ bool SimulationEngine::issue_order(const AntOrder& order) {
         case OrderType::DemolishBridge: {
             // FUN_010287b5 with the special flag: the classification of the ant's type (plant / defuse, ignite / extinguish,
             // bridge build / demolish) and the neighbour tile it works from are decided by GoTo (FUN_0101fc50)
-            return impl_->go_to(*unit, TileCoord{order.target_x, order.target_y}, true, true, false);
+            return impl_->go_to(*unit, TileCoord{order.target_x, order.target_y}, true, true);
         }
         case OrderType::InfiltrateAnthill: {
             uint8_t target_team = (order.target_entity_id >= 0) ? static_cast<uint8_t>(order.target_entity_id) : 255;
@@ -583,7 +581,7 @@ bool SimulationEngine::stop_ant(uint32_t ant_id) {
         if (act == 0 || (act > 2 && act <= 9) || act == 0x0B) return false;
     }
     if (!a->has_order_tile()) return false;
-    return impl_->go_to(*a, t, false, false, false);
+    return impl_->go_to(*a, t, false, false);
 }
 
 // FUN_01010aca: the hatch pedestal. The checks come in the original's order; an accepted click costs
@@ -1015,28 +1013,27 @@ void SimulationEngine::execute_melee_attack(uint32_t attacker_id, uint32_t targe
     impl_->melee_contact(*attacker, *target);
 }
 
-void SimulationEngine::issue_move_order(uint32_t ant_id, TileCoord dest, bool allow_friendly_bomb) {
+void SimulationEngine::issue_move_order(uint32_t ant_id, TileCoord dest) {
     AntUnit* unit = impl_->find_unit(ant_id);
     if (!unit) return;
-    route_move_order(*impl_, *unit, dest, allow_friendly_bomb, true);
+    route_move_order(*impl_, *unit, dest, true);
 }
 
 void SimulationEngine::issue_internal_move_order(uint32_t ant_id, TileCoord dest) {
     AntUnit* unit = impl_->find_unit(ant_id);
     if (!unit) return;
-    route_move_order(*impl_, *unit, dest, false, false);
+    route_move_order(*impl_, *unit, dest, false);
 }
 
-uint32_t SimulationEngine::issue_group_move_order(const std::vector<uint32_t>& ant_ids, TileCoord target,
-                                                  bool allow_friendly_bomb, uint32_t* needed) {
-    return group_order(ant_ids, target, allow_friendly_bomb, false, needed);
+uint32_t SimulationEngine::issue_group_move_order(const std::vector<uint32_t>& ant_ids, TileCoord target, uint32_t* needed) {
+    return group_order(ant_ids, target, false, needed);
 }
 
 uint32_t SimulationEngine::issue_group_special_order(const std::vector<uint32_t>& ant_ids, TileCoord target, uint32_t* needed) {
-    return group_order(ant_ids, target, false, true, needed);
+    return group_order(ant_ids, target, true, needed);
 }
 
-uint32_t SimulationEngine::group_order(const std::vector<uint32_t>& ant_ids, TileCoord target, bool allow_friendly_bomb, bool special, uint32_t* needed) {
+uint32_t SimulationEngine::group_order(const std::vector<uint32_t>& ant_ids, TileCoord target, bool special, uint32_t* needed) {
     struct Entry {
         uint32_t id;
         uint32_t d;
@@ -1065,7 +1062,6 @@ uint32_t SimulationEngine::group_order(const std::vector<uint32_t>& ant_ids, Til
         order.type = OrderType::Move;
         order.target_x = target.x;
         order.target_y = target.y;
-        order.allow_friendly_bomb = allow_friendly_bomb;
         order.special = special;
         const bool accepted = issue_order(order);                          // GoTo (FUN_0101fc50) returned true
         if (k == 0 && accepted) ack = e[k].id;                             // acknowledgement: closest ant only (0x10289b7 .. 0x10289c0)
@@ -1136,7 +1132,7 @@ uint32_t SimulationEngine::issue_group_attack_order(const std::vector<uint32_t>&
         if (!a) continue;
         leave_base_queue(e[k].id);
         a->ability_target = TileCoord{-1, -1};
-        const bool accepted = route_move_order(*impl_, *a, target, false, true);
+        const bool accepted = route_move_order(*impl_, *a, target, true);
         if (k == 0 && accepted) ack = e[k].id;                                 // acknowledgement: closest ant only (GoTo returned true)
     }
     return ack;
@@ -1436,7 +1432,6 @@ void SimulationEngine::record_player_stat(uint8_t player_id, StatType stat, uint
 void SimulationEngine::trigger_bomb_detonation(uint32_t ant_id, TileCoord bomb_pos, int32_t /*incoming_dx*/, int32_t /*incoming_dy*/) {
     AntUnit* ant_ptr = impl_->find_unit(ant_id);
     if (!ant_ptr || ant_ptr->removed || !impl_->grid_.in_bounds(bomb_pos)) return;
-    ant_ptr->allow_friendly_bomb = false;
     impl_->bomb_trigger(*ant_ptr, bomb_pos);
 }
 

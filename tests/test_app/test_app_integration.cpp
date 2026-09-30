@@ -3363,14 +3363,16 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         ASSERT_TRUE((sim.get_unit(friendly_id).pos == TileCoord{20, 22}));
         ASSERT_TRUE(sim.has_bomb_at(TileCoord{20, 20})); // Friendly bomb remains unexploded
 
-        // Ordering move directly onto friendly bomb redirects destination to nearest passable neighbor
+        // A player's move order onto a bomb of its own team ends on it (FUN_010202e7 gets flag 0x20 for every player order; only the path finder goes around):
+        // the ant walks onto the bomb and sets it off, which is how a group gets off the island of ISLANDS
         sim.issue_move_order(friendly_id, TileCoord{20, 20});
-        ASSERT_FALSE((sim.get_unit(friendly_id).final_dest == TileCoord{20, 20}));
-        for (int t = 0; t < 50; ++t) {
+        ASSERT_TRUE((sim.get_unit(friendly_id).final_dest == TileCoord{20, 20}));
+        bool went_off = false;
+        for (int t = 0; t < 100 && !went_off; ++t) {
             sim.tick();
-            ASSERT_FALSE((sim.get_unit(friendly_id).pos == TileCoord{20, 20}));
+            went_off = !sim.has_bomb_at(TileCoord{20, 20});
         }
-        ASSERT_TRUE(sim.has_bomb_at(TileCoord{20, 20}));
+        ASSERT_TRUE(went_off);
     } TEST_END();
 
     TEST_CASE("12.12 Enemy Bomb Proximity Detonation & 4-Space Knockback") {
@@ -6207,7 +6209,7 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
             sim.get_unit(ant_id).clear_path();
             sim.get_unit(ant_id).state = UnitState::Idle;
 
-            sim.issue_move_order(ant_id, target, false);
+            sim.issue_move_order(ant_id, target);
             tick_until_paths_delivered(sim, {ant_id});
             const auto& ant = sim.get_unit(ant_id);
 
@@ -6227,7 +6229,7 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
 
         // 2. Sequential traversal between all 9 tiles inside the enclosure
         for (const auto& target : targets) {
-            sim.issue_move_order(ant_id, target, false);
+            sim.issue_move_order(ant_id, target);
             tick_until_paths_delivered(sim, {ant_id});
             const auto& ant = sim.get_unit(ant_id);
 
@@ -6325,7 +6327,7 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
             ASSERT_TRUE(sim.grid().get_cell(10, 10).has_food());
 
             uint32_t a1 = sim.spawn_unit(0, AntType::Worker, TileCoord{10, 9});
-            sim.issue_move_order(a1, TileCoord{10, 11}, false);
+            sim.issue_move_order(a1, TileCoord{10, 11});
             // Unit should route around (10, 10) instead of passing through it
             for (const auto& wp : sim.get_unit(a1).waypoints) {
                 ASSERT_FALSE(wp.x == 10 && wp.y == 10);
@@ -7357,10 +7359,10 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
 
     TEST_CASE("12.108: Version Invariant & Fog of War Cursor Concealment Parity") {
         // 1. Verify semantic versioning components
-        ASSERT_EQ(ants::VERSION_STRING, "v0.0.78");
+        ASSERT_EQ(ants::VERSION_STRING, "v0.0.79");
         ASSERT_EQ(ants::VERSION_MAJOR, 0);
         ASSERT_EQ(ants::VERSION_MINOR, 0);
-        ASSERT_EQ(ants::VERSION_PATCH, 78);
+        ASSERT_EQ(ants::VERSION_PATCH, 79);
 
         // 2. Setup simulation world with Fog of War enabled
         SimulationEngine sim;
@@ -9281,7 +9283,7 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         ASSERT_TRUE(sim.grid().has_bomb_at({15, 15}));
 
         // A walker ordered onto the finished bomb sets it off: two hit points, a bomb flight (or the dud burn)
-        sim.issue_move_order(walker, TileCoord{15, 15}, true);
+        sim.issue_move_order(walker, TileCoord{15, 15});
         ASSERT_TRUE(wait_ms(sim, 6000, [&]() { return !sim.grid().has_bomb_at({15, 15}); }) >= 0);
         ASSERT_EQ(w_ant.hp, 8);                                   // Took 2 HP bomb blast damage
         ASSERT_TRUE(w_ant.state == UnitState::Knockback || w_ant.state == UnitState::Burn);

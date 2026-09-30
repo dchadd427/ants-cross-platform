@@ -649,6 +649,43 @@ void run_lan_tests() {
     } TEST_END();
 }
 
+// The four colours of a match on one machine (the start scripts): every window asks for its own seat
+void run_seat_tests() {
+    TEST_CASE("N3.16 Seats: Four Machines Ask For Their Colour In A Scrambled Order And Sit Where They Asked; The Match Gives Them Their Names And Teams") {
+        Table t;
+        Machine& host = t.add("Alice");
+        ASSERT_TRUE(host.net.host(0, "Alice", true));
+        host.net.set_map("TINY.LVL");
+        Machine& dora = t.add("Dora");
+        Machine& bob = t.add("Bob");
+        Machine& carl = t.add("Carl");
+        ASSERT_TRUE(dora.net.join("127.0.0.1", host.net.listen_port(), "Dora", 3));          // black
+        ASSERT_TRUE(bob.net.join("127.0.0.1", host.net.listen_port(), "Bob", 1));            // red
+        ASSERT_TRUE(carl.net.join("127.0.0.1", host.net.listen_port(), "Carl", 2));          // blue
+        ASSERT_TRUE(t.run_until([&]() { return host.net.can_start(); }, 8000));
+        ASSERT_EQ(host.net.my_seat(), 0);
+        ASSERT_EQ(bob.net.my_seat(), 1);
+        ASSERT_EQ(carl.net.my_seat(), 2);
+        ASSERT_EQ(dora.net.my_seat(), 3);
+        const RoomMsg& room = host.net.room();
+        ASSERT_EQ(room.slots[0].name, "Alice");
+        ASSERT_EQ(room.slots[1].name, "Bob");
+        ASSERT_EQ(room.slots[2].name, "Carl");
+        ASSERT_EQ(room.slots[3].name, "Dora");
+        uint64_t hash = 0;
+        ASSERT_TRUE(hash_file(maps_dir() + "TINY.LVL", hash));
+        ASSERT_TRUE(host.net.start_match(11, hash));
+        ASSERT_TRUE(t.run_until([&]() { return everybody_playing(t); }, 8000));
+        for (auto& m : t.machines) {                                                          // every machine knows who plays which team
+            ASSERT_EQ(m->sim.get_player_name(0), "Alice");
+            ASSERT_EQ(m->sim.get_player_name(1), "Bob");
+            ASSERT_EQ(m->sim.get_player_name(2), "Carl");
+            ASSERT_EQ(m->sim.get_player_name(3), "Dora");
+        }
+        ASSERT_TRUE(all_equal(t));
+    } TEST_END();
+}
+
 void run_migration_tests() {
     TEST_CASE("N3.9 Host Migration: The Host Leaves A Three-Player Match; The Lowest Guest Takes Over, The Other Follows, Orders And Chat Go Through The New Host, Both Stay Identical") {
         Table t;
@@ -821,6 +858,7 @@ int main() {
     run_start_tests();
     run_match_tests();
     run_lan_tests();
+    run_seat_tests();
     run_migration_tests();
     std::cout << "\n=======================================================\n Total Test Cases: " << g_test_count << "\n Total Assertions: " << g_assert_count
               << "\n Failed:           " << g_test_failures << "\n=======================================================\n";

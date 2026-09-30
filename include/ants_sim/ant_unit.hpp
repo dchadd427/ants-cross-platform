@@ -173,7 +173,6 @@ public:
     TileCoord   harvest_origin{-1, -1};
     bool        is_thief_steal{false};
     TileCoord   ability_target{-1, -1};
-    bool        allow_friendly_bomb{false};
 
     // ---- Combat state (Ants.exe CAntUnit) ----
     bool        engaged{false};              // +0x84: hit at contact, waits for the strike frame of the attacker's clip
