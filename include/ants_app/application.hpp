@@ -69,6 +69,7 @@ struct ApplicationConfig {
     std::string net_address{"127.0.0.1"};       // Join: the host's address
     uint16_t net_port{4001};                    // the original's port
     bool net_loopback_only{false};              // Host: accept only this machine (two copies on one computer, tests)
+    uint16_t lan_port{net::kLanDiscoveryPort};  // the UDP port on which an open room announces itself to the local network (--lan-port N; 0 = not at all, --no-lan)
     std::string player_name;                    // this player's name (--name); empty: the system user, or "Player" in a network game
     std::array<std::string, 4> team_names{};    // names of the teams of a local game (-N<team><name> as in the original, --team-name)
     /// false: a local game shows a score label only for the teams that have a name (and the local player's own). The browser build sets it: there are no

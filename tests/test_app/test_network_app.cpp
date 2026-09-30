@@ -3,6 +3,8 @@
 // lock-step runner with commands and chat, a guest that leaves, a host that leaves. Real sockets on the loopback interface; one Application per test
 // (SDL is initialised once per process).
 #include "ants_app/application.hpp"
+#include "ants_app/lan_list.hpp"
+#include "ants_net/lan.hpp"
 #include "ants_net/netgame.hpp"
 #include "ants_net/protocol.hpp"
 #include "ants_sim/game_strings.hpp"
@@ -19,6 +21,7 @@
 #include <iomanip>
 #include <iostream>
 #include <memory>
+#include <sstream>
 #include <string>
 #include <thread>
 #include <vector>
@@ -78,6 +81,7 @@ struct Peer {
     bool check_hash{true};                  // false: this machine accepts the host's map file whatever its hash says
 
     Peer() {
+        net.set_discovery(0);                                              // the tests do not announce on the real network
         net.set_on_chat([this](const net::ChatMsg& c) { chats.push_back(c); });
     }
     void update() {
@@ -172,6 +176,7 @@ ApplicationConfig headless_config() {
     ApplicationConfig cfg;
     cfg.headless = true;
     cfg.start_in_map_select = true;
+    cfg.lan_port = 0;                                                      // the tests do not announce on the real network
     return cfg;
 }
 
@@ -307,6 +312,45 @@ void run_command_line_tests() {
         args = {"ants", "--join", "host", "--port", "7000"};
         c = Application::parse_arguments(static_cast<int>(args.size()), argv_of(args, st));
         ASSERT_TRUE(c.net_address == "host" && c.net_port == 7000);
+        args = {"ants", "--host"};                                                       // the room announces itself on the game's discovery port ...
+        c = Application::parse_arguments(static_cast<int>(args.size()), argv_of(args, st));
+        ASSERT_EQ(c.lan_port, net::kLanDiscoveryPort);
+        args = {"ants", "--host", "--lan-port", "4555"};                                 // ... or on another one ...
+        c = Application::parse_arguments(static_cast<int>(args.size()), argv_of(args, st));
+        ASSERT_EQ(c.lan_port, 4555);
+        args = {"ants", "--host", "--no-lan"};                                           // ... or on none
+        c = Application::parse_arguments(static_cast<int>(args.size()), argv_of(args, st));
+        ASSERT_EQ(c.lan_port, 0);
+    } TEST_END();
+
+    TEST_CASE("N5.0b --lan-list: what the local network offers is listed (host, address, map, players, version), a silent network says so") {
+        uint16_t port = 0;
+        {
+            auto probe = net::LanBrowser::open(0);                                       // a free UDP port for this test (the game's own port 4001 stays untouched)
+            ASSERT_TRUE(probe != nullptr);
+            port = probe->port();
+        }
+        std::ostringstream none;
+        ASSERT_EQ(list_lan_rooms(port, 300, none), 0);
+        ASSERT_TRUE(none.str().find("No games found.") != std::string::npos);
+        Peer host;
+        host.net.set_discovery(port, true);
+        host.net.set_game_version("v9.9.9");
+        ASSERT_TRUE(host.net.host(0, "Queen Anne", true));
+        host.net.set_map("TINY.LVL");
+        std::ostringstream out;
+        const int found = list_lan_rooms(port, 2500, out, [&](uint32_t now) {
+            host.now = 1000 + now;
+            host.update();
+        });
+        ASSERT_EQ(found, 1);
+        const std::string text = out.str();
+        ASSERT_TRUE(text.find("\"Queen Anne\"") != std::string::npos);
+        ASSERT_TRUE(text.find("TINY.LVL") != std::string::npos);
+        ASSERT_TRUE(text.find("1/4 players") != std::string::npos);
+        ASSERT_TRUE(text.find("v9.9.9") != std::string::npos);
+        ASSERT_TRUE(text.find("127.0.0.1:" + std::to_string(host.net.listen_port())) != std::string::npos);      // the address to connect to and the room's TCP port
+        ASSERT_TRUE(text.find("1 game found.") != std::string::npos);
     } TEST_END();
 
     TEST_CASE("N5.7 Local Game: The Score Labels Of Teams Without A Name Show Only When Asked For (the browser build has no other players, so no placeholders)") {

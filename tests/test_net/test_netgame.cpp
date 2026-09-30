@@ -78,7 +78,7 @@ struct Machine {
     uint64_t ticks{0};
     uint32_t loads{0};
 
-    explicit Machine(std::string n) : name(std::move(n)) {}
+    explicit Machine(std::string n) : name(std::move(n)) { net.set_discovery(0); }     // the tests do not announce their rooms on the real network (N3.13 and up ask for it)
 
     void handle(const NetGame::Event& ev) {
         events.push_back(ev);
@@ -571,6 +571,84 @@ void run_match_tests() {
 }
 
 
+// The open room on the local network (lan.hpp): the browser listens on a private port and the room announces itself to this machine only
+void run_lan_tests() {
+    TEST_CASE("N3.13 LAN: An open room announces its host, map and players, follows every change, and is gone when the match starts") {
+        auto browser = LanBrowser::open(0);
+        ASSERT_TRUE(browser != nullptr);
+        Table t;
+        Machine& host = t.add("Alice");
+        host.net.set_discovery(browser->port(), true);
+        host.net.set_game_version("v-test");
+        ASSERT_TRUE(host.net.host(0, "Alice", true));
+        host.net.set_map("TINY.LVL");
+        ASSERT_TRUE(t.run_until([&]() { browser->update(t.now); return browser->rooms().size() == 1; }, 5000));
+        const LanRoom room = browser->rooms()[0];
+        ASSERT_EQ(room.info.host_name, "Alice");
+        ASSERT_EQ(room.info.map_name, "TINY.LVL");
+        ASSERT_EQ(room.info.players, 1);
+        ASSERT_EQ(room.info.seats, 4);
+        ASSERT_EQ(room.info.tcp_port, host.net.listen_port());
+        ASSERT_EQ(room.info.version, "v-test");
+        ASSERT_EQ(room.info.protocol, kProtocolVersion);
+        ASSERT_TRUE(room.compatible);
+        ASSERT_TRUE(host.net.announcing());
+        // a guest joins at the address and port the list gave: the next announcement says two players
+        Machine& bob = t.add("Bob");
+        ASSERT_TRUE(bob.net.join(room.address, room.info.tcp_port, "Bob"));
+        ASSERT_TRUE(t.run_until([&]() { browser->update(t.now); return !browser->rooms().empty() && browser->rooms()[0].info.players == 2; }, 5000));
+        ASSERT_EQ(browser->rooms().size(), size_t{1});                       // the same room, updated in place
+        host.net.set_map("SMALL.LVL");                                       // the host picks another map
+        ASSERT_TRUE(t.run_until([&]() { browser->update(t.now); return !browser->rooms().empty() && browser->rooms()[0].info.map_name == "SMALL.LVL"; }, 5000));
+        uint64_t hash = 0;
+        ASSERT_TRUE(hash_file(maps_dir() + "SMALL.LVL", hash));
+        ASSERT_TRUE(t.run_until([&]() { browser->update(t.now); return host.net.can_start(); }, 5000));      // START waits for every player's thumb
+        ASSERT_TRUE(host.net.start_match(5, hash));                           // START: a running match is offered to nobody
+        ASSERT_TRUE(t.run_until([&]() { browser->update(t.now); return browser->rooms().empty(); }, 5000));
+        ASSERT_FALSE(host.net.announcing());
+        ASSERT_TRUE(t.run_until([&]() { return everybody_playing(t); }, 5000));
+        t.run(4000, [&](uint32_t now) { browser->update(now); });
+        ASSERT_TRUE(browser->rooms().empty());                                // and it stays away during the match
+        ASSERT_FALSE(host.net.announcing());
+        ASSERT_FALSE(bob.net.announcing());                                   // a guest never announces
+    } TEST_END();
+
+    TEST_CASE("N3.14 LAN: A start that fails puts the room back on the list; leaving removes it at once") {
+        auto browser = LanBrowser::open(0);
+        Table t;
+        Machine& host = t.add("Alice");
+        host.net.set_discovery(browser->port(), true);
+        ASSERT_TRUE(host.net.host(0, "Alice", true));
+        host.net.set_map("TINY.LVL");
+        Machine& bob = t.add("Bob");
+        ASSERT_TRUE(bob.net.join("127.0.0.1", host.net.listen_port(), "Bob"));
+        ASSERT_TRUE(t.run_until([&]() { browser->update(t.now); return !browser->rooms().empty() && browser->rooms()[0].info.players == 2; }, 5000));
+        bob.corrupt_map = true;                                               // his file differs: the start fails for everybody
+        uint64_t hash = 0;
+        ASSERT_TRUE(hash_file(maps_dir() + "TINY.LVL", hash));
+        ASSERT_TRUE(t.run_until([&]() { browser->update(t.now); return host.net.can_start(); }, 5000));
+        ASSERT_TRUE(host.net.start_match(1, hash));
+        ASSERT_TRUE(t.run_until([&]() { browser->update(t.now); return host.saw(NetGame::Event::Type::Cancelled); }, 5000));
+        ASSERT_TRUE(t.run_until([&]() { browser->update(t.now); return host.net.phase() == NetGame::Phase::Room && browser->rooms().size() == 1; }, 5000));
+        ASSERT_TRUE(host.net.announcing());                                   // back in the room: open again
+        host.net.leave();                                                     // the host closes the room: the goodbye goes out at once
+        ASSERT_TRUE(t.run_until([&]() { browser->update(t.now); return browser->rooms().empty(); }, 2000));
+    } TEST_END();
+
+    TEST_CASE("N3.15 LAN: A room with the discovery turned off is never announced") {
+        auto browser = LanBrowser::open(0);
+        Table t;
+        Machine& host = t.add("Alice");
+        host.net.set_discovery(0);
+        ASSERT_TRUE(host.net.host(0, "Alice", true));
+        host.net.set_map("TINY.LVL");
+        t.run(3000, [&](uint32_t now) { browser->update(now); });
+        ASSERT_TRUE(browser->rooms().empty());
+        ASSERT_FALSE(host.net.announcing());
+        ASSERT_EQ(host.net.phase(), NetGame::Phase::Room);                    // the room itself works
+    } TEST_END();
+}
+
 void run_migration_tests() {
     TEST_CASE("N3.9 Host Migration: The Host Leaves A Three-Player Match; The Lowest Guest Takes Over, The Other Follows, Orders And Chat Go Through The New Host, Both Stay Identical") {
         Table t;
@@ -742,6 +820,7 @@ int main() {
     run_thumb_tests();
     run_start_tests();
     run_match_tests();
+    run_lan_tests();
     run_migration_tests();
     std::cout << "\n=======================================================\n Total Test Cases: " << g_test_count << "\n Total Assertions: " << g_assert_count
               << "\n Failed:           " << g_test_failures << "\n=======================================================\n";

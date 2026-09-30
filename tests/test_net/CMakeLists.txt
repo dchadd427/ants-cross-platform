@@ -30,6 +30,22 @@ target_include_directories(test_tcp PRIVATE
 
 add_test(NAME test_tcp COMMAND test_tcp)
 
+add_executable(test_lan
+    test_lan.cpp
+)
+
+target_link_libraries(test_lan PRIVATE
+    ants_net
+    ants_sim
+    ants_assets
+)
+
+target_include_directories(test_lan PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../include
+)
+
+add_test(NAME test_lan COMMAND test_lan)
+
 add_executable(test_lobby
     test_lobby.cpp
 )

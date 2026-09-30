@@ -300,6 +300,13 @@ if [ "$RUN_SIM" -eq 1 ]; then
     echo -e "${BOLD}${BLUE}======================================================================${RESET}"
     "./$BUILD_DIR/tests/test_sim/test_movement_differential"
     MOVEMENT_DIFFERENTIAL_STATUS=$?
+
+    echo ""
+    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
+    echo -e "${BOLD}${BLUE}>>> 2.16 RUNNING LAN DISCOVERY SUITE (room announcements, browser, datagram codec)...${RESET}"
+    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
+    "./$BUILD_DIR/tests/test_net/test_lan"
+    LAN_STATUS=$?
 fi
 
 # 5. Execute Application Integration Tests
@@ -512,6 +519,13 @@ if [ "$RUN_SIM" -eq 1 ]; then
         echo -e " 2.15 Movement Differential (test_movement_differential): ${GREEN}PASSED${RESET}"
     else
         echo -e " 2.15 Movement Differential (test_movement_differential): ${RED}FAILED (exit code ${MOVEMENT_DIFFERENTIAL_STATUS})${RESET}"
+        TOTAL_FAILED=$((TOTAL_FAILED + 1))
+    fi
+
+    if [ "$LAN_STATUS" -eq 0 ]; then
+        echo -e " 2.16 LAN Discovery (test_lan):                      ${GREEN}PASSED${RESET}"
+    else
+        echo -e " 2.16 LAN Discovery (test_lan):                      ${RED}FAILED (exit code ${LAN_STATUS})${RESET}"
         TOTAL_FAILED=$((TOTAL_FAILED + 1))
     fi
 fi

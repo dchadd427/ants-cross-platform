@@ -1,8 +1,8 @@
 # Network Port
 
 Status: **the core, the room, a native TCP transport, the application integration and host migration are done and tested (v0.0.43 command layer and state hash, v0.0.44 protocol, sequencer, lock-step
-runner and sessions, v0.0.45 room and start barrier and framed TCP, v0.0.46 host / join in the game, v0.0.47 host migration).** Open: WebRTC / NAT traversal (raw TCP works on a LAN, a VPN or with a
-forwarded port); a single-player game applies its commands at once.
+runner and sessions, v0.0.45 room and start barrier and framed TCP, v0.0.46 host / join in the game, v0.0.47 host migration).** Open: NAT traversal is no longer planned inside the game (an external launcher or lobby provides the path between
+players and starts the game with the addresses on its command line; raw TCP works on a LAN, a VPN or with a forwarded port, and v0.0.78 adds the discovery of rooms on the local network); a single-player game applies its commands at once.
 
 ## What the original does
 
@@ -119,6 +119,18 @@ reads is cut off when its queue passes 512 KB, an orderly close still delivers w
 lobby and tests run unchanged on real sockets (`tests/test_net/test_tcp.cpp`: message boundaries and order for every size up to the limit, 20000 small messages, hostile length prefixes, truncated frames, dead
 ports, the never-reading peer, a 40 s match of a host and three clients over real sockets, and the room from `Hello` to `Begin`).
 
+## LAN discovery (`lan.hpp`, native builds, v0.0.78)
+
+A room on a local network announces itself so that nobody has to type an address. **Datagram** (UDP, port 4001 like the game's TCP, little endian, at most 99 bytes): `"ANTL"`, format 1, type (1 announce, 2 goodbye), protocol
+version u16, room id u32 (drawn at random when the room opens), the room's TCP port u16, players u8, seats u8, then three strings (u8 length + bytes): the game's version text, the host's name, the map file. The decoder is strict because it
+reads the open network: exact length, magic, known type, `1 <= players <= seats <= 8`, a port, printable ASCII only, every string within its limit; whatever does not fit is ignored (20,000 fuzzed datagrams in `test_lan`).
+**Announcer** (the host, only while the room is open in the room phase, never during a match: no late join): one datagram per destination each second and at once when the room changes, to the directed broadcast address of every IPv4
+interface that is up (`getifaddrs`, `SIO_GET_INTERFACE_LIST` on Windows), to the limited broadcast 255.255.255.255 and to this machine (a second copy of the game, tests); a goodbye (twice) when the match starts, the host leaves or the room
+closes; a host that vanishes says nothing and is dropped after 3.5 s. **Browser** (the guest's side, `LanBrowser`): binds UDP 4001 with address and port reuse (two copies on one machine share it), keeps at most 64 rooms, tells rooms apart by
+room id (a room heard on its LAN address and on its loopback is listed at the LAN address), marks rooms of another protocol version, sorts by host name. A guest connects over TCP to the address the datagram came from and the port it
+names; the usual join checks (protocol version, full room, map hash at the start) still decide. `NetGame::set_discovery(port)` (0 turns it off; `--lan-port N`, `--no-lan`), `ants --lan-list [seconds]` prints what is on offer.
+Firewalls: the host needs UDP and TCP 4001 open; macOS may ask once for permission to use the local network. An in-game screen for hosting and joining comes next (implementation plan, section 38).
+
 ## The application (`netgame.hpp`, `Application`, v0.0.46)
 
 * **`NetGame`** (`src/ants_net/netgame.cpp`, no SDL, no threads): owns the listener and the connections and runs the room and then the session behind one small interface: `host(port, name)` /
@@ -170,8 +182,10 @@ seeds and demands the same hash every tick, and demands that an engine that play
    turn stream, names on the command line: shipped (v0.0.46).** Still open from the original plan: native versus WebAssembly golden hashes.
 4b. **Host migration** (the match continues when the host leaves, as in the original): peer links between the guests (a TCP address directory for LAN), the turn log, election with epochs, resync, the sequencer
    role moving to a surviving machine, the events and messages in the game, tests with the host dying at many points, double failures and a partitioned old host: **shipped (v0.0.47).**
-5. WebRTC data channels with ICE / STUN / TURN (native via libdatachannel, browser via RTCPeerConnection) and the signaling service (it also brokers the mesh links).
-6. Docker / nginx / TURN deployment files (secrets from the environment).
-7. **Alliance dialogs (the ally attack confirmation, string 4; the invitation questions, strings 1 - 3): shipped (v0.0.50).** CHECKGO elimination rules (the match also ends when nobody is alive or one side leads alone): open.
+5. *(dropped on 2026-09-30)* WebRTC data channels with ICE / STUN / TURN (native via libdatachannel, browser via RTCPeerConnection) and the signaling service: internet play is provided from outside the game (a launcher / lobby with its own
+   NAT traversal); the game keeps the `Connection` seam, so a transport could still be added for a browser build.
+6. *(dropped with 5)* Docker / nginx / TURN deployment files.
+7. **Alliance dialogs (the ally attack confirmation, string 4; the invitation questions, strings 1 - 3): shipped (v0.0.50).** CHECKGO elimination rules (the match also ends when nobody is alive or one side leads alone): **shipped (v0.0.62).**
+8. **LAN discovery (UDP announcements of open rooms, the browser, `--lan-list`): shipped (v0.0.78).** Next: the in-game host / join screens and the launcher interface (command line, auto-start, the match API, replays).
 
 Open for milestone 3 and later: a float-determinism audit across native and WebAssembly (the flower dropper's type draw uses doubles), native versus wasm golden hashes.

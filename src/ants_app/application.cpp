@@ -128,6 +128,10 @@ ApplicationConfig Application::parse_arguments(int argc, char* argv[]) {
             cfg.net_port = static_cast<uint16_t>(std::stoul(argv[++i]));
         } else if (std::strcmp(argv[i], "--loopback") == 0) {
             cfg.net_loopback_only = true;
+        } else if (std::strcmp(argv[i], "--lan-port") == 0 && i + 1 < argc) {
+            cfg.lan_port = static_cast<uint16_t>(std::stoul(argv[++i]));
+        } else if (std::strcmp(argv[i], "--no-lan") == 0) {
+            cfg.lan_port = 0;                                                  // the room is not announced on the local network
         }
     }
     return cfg;
@@ -303,6 +307,8 @@ bool Application::init(const ApplicationConfig& config) {
     if (networked) {
         config_.start_in_map_select = true;
         net_ = std::make_unique<net::NetGame>(sim_);
+        net_->set_discovery(config_.lan_port);                                          // an open room announces itself to the local network (ants_net/lan.hpp)
+        net_->set_game_version(std::string(VERSION_STRING));
         const bool ok = config_.net_role == ApplicationConfig::NetRole::Host
                             ? net_->host(config_.net_port, player_name, config_.net_loopback_only)
                             : net_->join(config_.net_address, config_.net_port, player_name);

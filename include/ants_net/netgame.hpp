@@ -21,6 +21,7 @@
 #include <string>
 #include <vector>
 
+#include "ants_net/lan.hpp"
 #include "ants_net/lobby.hpp"
 #include "ants_net/protocol.hpp"
 #include "ants_net/session.hpp"
@@ -74,6 +75,15 @@ public:
     bool join(const std::string& address, uint16_t port, const std::string& name);
     /// Leaves for good: tells the others (a guest says Leave), closes every connection. The others see the host or the guest gone.
     void leave();
+
+    // ---- the room on the local network -------------------------------------------------------------------------------------------------------------
+    /// Before host(): the UDP port on which the open room announces itself to the games of the local network (see lan.hpp; 0 = not at all, the default is
+    /// kLanDiscoveryPort). `loopback_only` keeps the announcements on this machine (tests); a room opened with host(..., loopback_only = true) does that anyway.
+    void set_discovery(uint16_t udp_port, bool loopback_only = false);
+    /// The game's version text that the announcements carry for the list of games (the application sets it; empty: none)
+    void set_game_version(const std::string& text) { game_version_ = text; }
+    /// True while the room announces itself: the host, in the room, before the start (no late join), with a UDP socket
+    bool announcing() const noexcept;
 
     // ---- every frame -----------------------------------------------------------------------------------------------------------------------------
     void update(uint32_t now_ms);
@@ -152,6 +162,7 @@ private:
     void begin_match();
     void install_hooks();
     void shutdown_transport();
+    void announce_room();
     LockstepRunner* runner() const;
 
     sim::SimulationEngine& sim_;
@@ -173,6 +184,11 @@ private:
     uint16_t peer_port_{0};                 // guest: the port on which the other guests connect (announced in Hello)
     uint32_t stall_since_ms_{0};
     bool stall_active_{false};
+    uint16_t discovery_port_{kLanDiscoveryPort};   // 0: the room is not announced
+    bool discovery_loopback_only_{false};
+    [[maybe_unused]] bool room_loopback_only_{false};   // host(): the door accepts this machine only, so the announcements stay here too (native builds)
+    [[maybe_unused]] uint32_t room_id_{0};              // names the room in the announcements (native builds)
+    std::string game_version_;
 
     std::function<void(const ChatMsg&)> on_chat_;
     std::function<void()> on_tick_;

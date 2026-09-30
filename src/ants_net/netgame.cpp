@@ -1,10 +1,12 @@
 #include "ants_net/netgame.hpp"
 
 #include <fstream>
+#include <random>
 
 #include "ants_sim/game_strings.hpp"
 
 #ifndef __EMSCRIPTEN__
+#include "ants_net/lan.hpp"
 #include "ants_net/tcp.hpp"
 #endif
 
@@ -46,6 +48,7 @@ struct NetGame::Transport {
     std::unique_ptr<TcpListener> peer_listener;             // client: where the other guests connect (host migration)
     std::vector<PendingPeer> pending_peers;                 // client: links to the other guests that are being made
     std::vector<PeerLink> peers;                            // client: the links that are made (the session and, after a host change, the new HostSession borrow them)
+    std::unique_ptr<LanAnnouncer> announcer;                // host: tells the local network that the room is open (only while it is)
 #endif
 };
 
@@ -92,6 +95,7 @@ void NetGame::shutdown_transport() {
     client_lobby_.reset();
     if (transport_) {
 #ifndef __EMSCRIPTEN__
+        if (transport_->announcer) transport_->announcer->goodbye();        // the room is gone: the lists of the other machines drop it at once
         for (auto& c : transport_->guests) {
             if (c) c->close();
         }
@@ -121,6 +125,11 @@ bool NetGame::host(uint16_t port, const std::string& name, bool loopback_only) {
     host_lobby_ = std::make_unique<HostLobby>(cfg);
     role_ = Role::Host;
     phase_ = Phase::Room;
+    room_loopback_only_ = loopback_only;
+    {
+        std::random_device entropy;
+        room_id_ = (static_cast<uint32_t>(entropy()) ^ (static_cast<uint32_t>(entropy()) << 16)) | 1u;     // never 0
+    }
     seat_ = cfg.host_seat;
     room_ = host_lobby_->room();
     room_.you = seat_;
@@ -216,13 +225,62 @@ LinkQuality NetGame::seat_quality(uint8_t seat) const noexcept {
 
 void NetGame::update(uint32_t now_ms) {
     now_ = now_ms;
-    if (role_ == Role::Host) update_host();
-    else if (role_ == Role::Client) update_client();
+    if (role_ == Role::Host) {
+        update_host();
+        announce_room();
+    } else if (role_ == Role::Client) {
+        update_client();
+    }
     refresh_status();
     // how long the game has been waiting for the next turn
     const bool stalled_now = phase_ == Phase::Playing && stalled();
     if (stalled_now && !stall_active_) stall_since_ms_ = now_ms;
     stall_active_ = stalled_now;
+}
+
+void NetGame::set_discovery(uint16_t udp_port, bool loopback_only) {
+    discovery_port_ = udp_port;
+    discovery_loopback_only_ = loopback_only;
+}
+
+bool NetGame::announcing() const noexcept {
+#ifndef __EMSCRIPTEN__
+    return transport_ != nullptr && transport_->announcer != nullptr;
+#else
+    return false;
+#endif
+}
+
+// The open room tells the local network about itself (lan.hpp) while it waits for players; the start of the match, a host that left and a
+// closed room end it with a goodbye (no late join: a running match is not offered to anybody)
+void NetGame::announce_room() {
+#ifndef __EMSCRIPTEN__
+    if (!transport_) return;
+    const bool open = role_ == Role::Host && phase_ == Phase::Room && host_session_ == nullptr && discovery_port_ != 0;
+    if (!open) {
+        if (transport_->announcer) {
+            transport_->announcer->goodbye();
+            transport_->announcer.reset();
+        }
+        return;
+    }
+    if (!transport_->announcer) {
+        transport_->announcer = LanAnnouncer::open(discovery_port_, discovery_loopback_only_ || room_loopback_only_);
+        if (!transport_->announcer) return;                   // no UDP socket: the room works all the same, the guests type the address
+    }
+    LanRoomInfo info;
+    info.room_id = room_id_;
+    info.tcp_port = listen_port_;
+    info.version = game_version_;
+    info.seats = static_cast<uint8_t>(room_.slots.size());
+    uint8_t players = 0;
+    for (const auto& slot : room_.slots) players = static_cast<uint8_t>(players + (slot.state != SlotState::Empty ? 1 : 0));
+    info.players = players;
+    if (seat_ < room_.slots.size()) info.host_name = room_.slots[seat_].name;
+    info.map_name = room_.map_name;
+    transport_->announcer->set_room(info);
+    transport_->announcer->update(now_);
+#endif
 }
 
 void NetGame::update_host() {
