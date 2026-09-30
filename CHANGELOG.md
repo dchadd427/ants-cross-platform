@@ -39,6 +39,20 @@ Ground truth for every entry is in [`docs/GAME_REVERSE_ENGINEERING.md`](docs/GAM
   - **Found on the way, for the audit** (docs: implementation_plan.md section 18): `tests/test_sim/test_challenger_m2_it2_deep_stress.cpp` has not been part of the build since an early commit and no longer compiles
     (it uses the retired slot-queue API of the hill). (An earlier version of this line said that the death clips are no longer started by a separate effect: wrong, only the unused helper `spawn_death_effect` was removed; the effect path in `movement_system.cpp` is still in use, see the audit.)
 
+## v0.0.71 - 2026-09-30 - The minimap of the original
+
+Batch 6 part 3 (`docs/audit/ledger_ui.md` NEW-3 .. NEW-6, `ledger_terrain_fog.md` NEW-2, `ledger_combat.md` NEW-2, `ledger_hill.md` NEW-7, `ledger_input.md` NEW-11; re-read in `Ants.exe`: `0x1009056` - `0x1009b82` (the painter, the dot loop, the frame), `0x1009850`, `0x1009899`, `0x101a88c`, `0x101aa0d`, `0x100e380` - `0x100e436`, `0x1008bb7` - `0x1008bea`, `0x102ff4c`, `0x102ffae`):
+
+- **The objects of the ground keep their colour in the fog**: only power-ups, food and fire walls fall back to the fog colour while their cell is unexplored; rocks, toys, bridges, decoration and the hills of every colony (the enemy's too) show from the first moment. The remake painted every object in the fog colour.
+- **Fire walls show** (yellow, palette 250) on explored ground; bombs show the terrain (the remake's own planted bombs as well as the original's ids). A tile that the original's colour table has no record for shows palette colour 0 (for instance the placeholder of a bomb that is being planted).
+- **No more dots per object cell**: the colour of an object is painted per pixel only (the remake added a 1- or 2-cell square at every object cell, which blurred hills and food into blobs).
+- **The ants are dots at their pixel position**, not snapped to the tile centre: `max(trunc(32 / scale), 2)` pixels square (2 x 2 on a 60 x 60 map, 3 x 2 on 31 x 31), centred, drawn over the image and not clipped to it. **Every ant has its dot until it is removed** (an ant without hit points, a dying or a drowning one lost it). **In fog your own ants and your ally's always show**, other ants only on an explored cell (the remake showed only your own).
+- **Flowers and clovers are dots** (colour 51, 3 x 3 on a 60 x 60 map) at the centre of their cell, drawn before the ants, also in the fog.
+- **The view frame** is (251, 251, 255) (the remake: white), `trunc(442 / scale) + 1` by `trunc(440 / scale) + 1` pixels (28 x 21 on a 60 x 60 map) at the view's origin divided by the scale, shifted back inside the image when it would end beyond it (the remake: a frame of `max(4, ...)` pixels from unrounded positions).
+- **Not ported**: the flash of an own or allied ant hit in the last 5 seconds (read in the code, but not remembered by the owner: a screenshot of the original decides), the speckle that the original re-rolls when it repaints a cell.
+- Docs: `docs/GAME_REVERSE_ENGINEERING.md` 5.55, README (Minimap), `docs/AUDIT_ONE_TO_ONE.md` (progress).
+- Tests: `test_hud_layout` `test_minimap` (rewritten: the object pixels, bombs, unlisted ids, fire walls, dropped power-ups, the fog rules for hills / rocks / bridges / food / power-ups / fire walls) and the new `test_minimap_dots` (ant size and position on 60 x 60, 31 x 31 and 16 x 16 maps, dying and drowning ants, plants, the fog visibility of own / allied / enemy ants, the frame at the origin, in the middle, near and beyond the far corner, on a small map). Integration test 12.79 got a title that says what it tests (it never looked at the minimap). Version assertions of 12.108.
+
 ## v0.0.70 - 2026-09-30 - The fog of war of the original
 
 Batch 6 part 2 (`docs/audit/ledger_terrain_fog.md` NEW-1, NEW-1b, NEW-3; re-read in `Ants.exe`: `0x1006af4`, `0x101a93a` - `0x101a9f8`, `0x1008089` - `0x1008166`):

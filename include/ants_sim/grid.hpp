@@ -186,6 +186,15 @@ struct TileCell {
 };
 
 /**
+ * @brief A plant of LVL Block 1 (a flower or a clover): a world object at the centre of its cell (Ants.exe 0x100e3b0 - 0x100e436).
+ */
+struct MapPlant {
+    uint16_t tile_id{0};                   // the animation (tile) id of the plant, which the minimap's colour table is indexed by
+    uint16_t x{0};                         // the column of its cell
+    uint16_t y{0};                         // the row of its cell
+};
+
+/**
  * @brief A food pile or lunchbox (Ants.exe food object, class 0x10020d8, built from a LVL Block 2 entry or by FUN_01008ca0).
  *
  * The file's "delay" is the number of units (bites) of the pile and its "interval" the points every unit is worth (10..50);
@@ -231,6 +240,7 @@ public:
         }
         exact_solid_bits_ = false;
         anthills_.clear();
+        plants_.clear();
         food_objects_.clear();
         return true;
     }
@@ -313,6 +323,10 @@ public:
 
     const std::vector<ants::assets::AnthillSpawn>& anthills() const noexcept { return anthills_; }
     std::vector<ants::assets::AnthillSpawn>& anthills_mut() noexcept { return anthills_; }
+
+    /// The plants of Block 1: the records whose tile id has property bit 0x10 or 0x20 (flowers and clovers), each of which the original's match screen makes a
+    /// world object of (0x100e3b0 - 0x100e436), drawn at the centre of its cell. They stay for the whole match.
+    const std::vector<MapPlant>& plants() const noexcept { return plants_; }
 
     // ---- Food objects (Ants.exe FUN_01008c63 / FUN_010076b6 / FUN_01009f06 / FUN_01008ca0 / FUN_0100fdf8) ----
     const std::vector<FoodObject>& food_objects() const noexcept { return food_objects_; }
@@ -467,6 +481,7 @@ private:
     uint32_t height_{0};
     std::vector<TileCell> cells_;
     std::vector<ants::assets::AnthillSpawn> anthills_;
+    std::vector<MapPlant> plants_;
     std::vector<FoodObject> food_objects_;
 };
 

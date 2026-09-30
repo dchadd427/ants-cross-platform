@@ -335,6 +335,8 @@ struct WorldState {
     /// proposer's waiting dialog of the match screen follow from it (docs 5.42).
     std::array<uint8_t, MAX_PLAYERS>          pending_invite_from{255, 255, 255, 255};
     std::vector<ants::assets::AnthillSpawn> anthills;
+    /// The plants of the map (Block 1 flowers and clovers): world objects that the minimap shows as dots (Grid::plants)
+    std::vector<MapPlant> plants;
     /// bit p: team p dropped out of the match (team +0x64): the live players counted by FUN_0100c58a are the hills whose bit is clear
     uint8_t dropped_mask{0};
     MatchResult match_result;

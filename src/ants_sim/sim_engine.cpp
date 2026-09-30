@@ -834,6 +834,7 @@ const WorldState& SimulationEngine::get_world_state() const {
         }
 
         impl_->world_state_cache_.anthills = impl_->grid_.anthills();
+        impl_->world_state_cache_.plants = impl_->grid_.plants();
         impl_->world_state_cache_.dropped_mask = impl_->dropped_mask_;
         impl_->world_state_cache_.match_result = impl_->make_match_result();
         impl_->world_state_cache_.fog_of_war_enabled = impl_->fog_of_war_enabled_;

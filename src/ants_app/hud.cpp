@@ -1,11 +1,13 @@
 #include "ants_app/hud.hpp"
 #include <cstdio>
 #include "ants_sim/game_strings.hpp"
+#include "ants_sim/movement_tables.hpp"
 #include "ants_sim/prng.hpp"
 #include "ants_app/renderer.hpp"
 #include "ants_app/text_layout.hpp"
 #include "ants_app/ui_anim.hpp"
 
+#include <array>
 #include <cmath>
 #include <algorithm>
 #include <iomanip>
@@ -63,10 +65,43 @@ constexpr uint8_t kMinimapFogColours[8] = { 244, 237, 225, 245, 236, 0, 0, 0 };
 // Ant dot colours by remake player id (green, red, blue, black) = original colour {3,2,1,0} (FUN_0101aa65)
 constexpr uint8_t kMinimapAntColours[4] = { 47, 158, 211, 239 };
 
-const MinimapObject* find_minimap_object(uint16_t id) {
-    for (const auto& o : kMinimapObjects) if (o.id == id) return &o;
-    return nullptr;
+// The colour table of the original (0x1001c50 copied by the constructor FUN_01009056 into a table indexed by the tile id): entry = colour | size << 8. The table is
+// cleared first, so a tile id without a record has colour 0 and size 0
+constexpr size_t kMinimapTileIds = 1344;
+uint16_t minimap_object_entry(uint16_t id) {
+    static const std::array<uint16_t, kMinimapTileIds> table = [] {
+        std::array<uint16_t, kMinimapTileIds> t{};
+        for (const auto& o : kMinimapObjects) {
+            if (o.id < kMinimapTileIds) t[o.id] = static_cast<uint16_t>(o.colour | (o.size_flag << 8));
+        }
+        return t;
+    }();
+    return id < kMinimapTileIds ? table[id] : uint16_t{0};
 }
+
+// The layer-2 id of a snapshot cell as the original's painter reads it: the remake keeps a bomb it planted as 100 .. 103 and a dropped power-up as 0x8000 | type, the original
+// as 129 .. 132 and the power-up's own tile id
+constexpr uint16_t kMinimapNoObject = 0x7ffe;
+constexpr uint16_t kMinimapBomb = 129;
+uint16_t minimap_object_id(const sim::TileCell& cell) {
+    const uint16_t id = cell.interactive_id;
+    if (id == sim::TILE_EMPTY || id == 0xFFFFu) return kMinimapNoObject;
+    if (id >= sim::BOMB_BLACK && id <= sim::BOMB_GREEN) return kMinimapBomb;
+    if ((id & 0x8000u) != 0) {
+        switch (cell.powerup_type) {
+            case 1:  return sim::PU_BOMBER;
+            case 2:  return sim::PU_FIRE;
+            case 3:  return sim::PU_THIEF;
+            case 4:  return sim::PU_COMBAT;
+            case 5:  return sim::PU_SWIMMER;
+            default: return kMinimapNoObject;
+        }
+    }
+    return id;
+}
+
+// FUN_01008bc6: the four bomb ids 0x81 .. 0x84
+bool minimap_is_bomb(uint16_t id) { return id >= 129 && id <= 132; }
 
 // Terrain class of a snapshot cell (0 gravel, 1 slate, 2 water, 3 mud, 4 dirt)
 uint8_t minimap_class(const sim::TileCell& cell) {
@@ -579,6 +614,8 @@ void HUD::render_radar(IRenderer& renderer, const assets::AssetArchive& archive,
         renderer.fill_rect(rx, ry, rw, rh, {0, 0, 0, 255});
         return;
     }
+    const int32_t map_w = static_cast<int32_t>(world.width);
+    const int32_t map_h = static_cast<int32_t>(world.height);
 
     // Terrain speckle: one random pick per pixel from the class colours, made once per map (the original paints it when
     // cells are first drawn and keeps it until they are repainted)
@@ -589,8 +626,8 @@ void HUD::render_radar(IRenderer& renderer, const assets::AssetArchive& archive,
         sim::PRNG rng(world.width * 1000u + world.height);
         for (int32_t y = 0; y < rh; ++y) {
             for (int32_t x = 0; x < rw; ++x) {
-                const int32_t cx = std::min<int32_t>(static_cast<int32_t>(world.width) - 1, x * static_cast<int32_t>(world.width) / rw);
-                const int32_t cy = std::min<int32_t>(static_cast<int32_t>(world.height) - 1, y * static_cast<int32_t>(world.height) / rh);
+                const int32_t cx = std::min<int32_t>(map_w - 1, x * map_w / rw);
+                const int32_t cy = std::min<int32_t>(map_h - 1, y * map_h / rh);
                 const uint8_t cls = minimap_class(world.cells[static_cast<size_t>(cy) * world.width + static_cast<size_t>(cx)]);
                 radar_terrain_[static_cast<size_t>(y * rw + x)] = kMinimapClassColours[cls < 6 ? cls : 5][rng.rand() % 5u];
             }
@@ -598,59 +635,35 @@ void HUD::render_radar(IRenderer& renderer, const assets::AssetArchive& archive,
     }
 
     const auto& palette = archive.get_palette();
+    const bool fog = world.fog_of_war_enabled;
+
+    // FUN_01009596: every pixel takes the cell under it. An object shows its colour from the table (a tile id without a record: colour 0) unless the cell is empty or holds a bomb;
+    // then the terrain shows (speckle, or the fog colour of an unexplored cell). In fog the objects that are removed or given out (power-ups, food, fire walls) fall back to the
+    // terrain while their cell is unexplored; every other object, rocks, toys, bridges and the hills of every colony, keeps its colour in the fog
     std::vector<uint8_t> pixels(static_cast<size_t>(rw * rh), 0);   // palette indices
-    const float px_per_cell_x = static_cast<float>(rw) / static_cast<float>(world.width);
-    const float px_per_cell_y = static_cast<float>(rh) / static_cast<float>(world.height);
-
-    auto revealed = [&](int32_t tx, int32_t ty) { return world.is_tile_revealed(tx, ty); };
-
     for (int32_t y = 0; y < rh; ++y) {
+        const int32_t cy = std::min<int32_t>(map_h - 1, y * map_h / rh);
         for (int32_t x = 0; x < rw; ++x) {
-            const int32_t cx = std::min<int32_t>(static_cast<int32_t>(world.width) - 1, x * static_cast<int32_t>(world.width) / rw);
-            const int32_t cy = std::min<int32_t>(static_cast<int32_t>(world.height) - 1, y * static_cast<int32_t>(world.height) / rh);
+            const int32_t cx = std::min<int32_t>(map_w - 1, x * map_w / rw);
             const auto& cell = world.cells[static_cast<size_t>(cy) * world.width + static_cast<size_t>(cx)];
-            uint8_t colour = radar_terrain_[static_cast<size_t>(y * rw + x)];
-            if (world.fog_of_war_enabled && !revealed(cx, cy)) {
+            const bool explored = !fog || world.is_tile_revealed(cx, cy);
+            const uint16_t id = minimap_object_id(cell);
+            bool object = id != kMinimapNoObject && !minimap_is_bomb(id);
+            if (object && !explored) {
+                const uint8_t flags = sim::movement::tile_flags_of(id);
+                object = (flags & (sim::movement::kTileFlagFood | sim::movement::kTileFlagPowerUp)) == 0 && id != sim::TILE_FIREWALL;
+            }
+            uint8_t colour;
+            if (object) {
+                colour = static_cast<uint8_t>(minimap_object_entry(id) & 0xffu);
+            } else if (explored) {
+                colour = radar_terrain_[static_cast<size_t>(y * rw + x)];
+            } else {
                 const uint8_t cls = minimap_class(cell);
                 colour = kMinimapFogColours[cls < 8 ? cls : 0];
-            } else if (cell.interactive_id != sim::TILE_EMPTY && cell.interactive_id != 0xFFFF) {
-                // Bombs (129..132) and fire walls (134) show the terrain colour
-                const bool hidden = (cell.interactive_id >= 129 && cell.interactive_id <= 132) || cell.interactive_id == 134;
-                if (!hidden) {
-                    if (const auto* obj = find_minimap_object(cell.interactive_id)) colour = obj->colour;
-                }
             }
             pixels[static_cast<size_t>(y * rw + x)] = colour;
         }
-    }
-
-    // Square dots (object size flag 1 or 2 cells, ants 1 cell) centred on the cell centre
-    auto dot = [&](int32_t tile_x, int32_t tile_y, uint8_t colour, int32_t flag) {
-        const int32_t size_x = std::max(1, static_cast<int32_t>(std::lround(static_cast<float>(flag) * px_per_cell_x)));
-        const int32_t size_y = std::max(1, static_cast<int32_t>(std::lround(static_cast<float>(flag) * px_per_cell_y)));
-        const int32_t mx = static_cast<int32_t>((static_cast<float>(tile_x) + 0.5f) * px_per_cell_x);
-        const int32_t my = static_cast<int32_t>((static_cast<float>(tile_y) + 0.5f) * px_per_cell_y);
-        for (int32_t yy = my - size_y / 2; yy < my - size_y / 2 + size_y; ++yy) {
-            for (int32_t xx = mx - size_x / 2; xx < mx - size_x / 2 + size_x; ++xx) {
-                if (xx >= 0 && xx < rw && yy >= 0 && yy < rh) pixels[static_cast<size_t>(yy * rw + xx)] = colour;
-            }
-        }
-    };
-    for (int32_t ty = 0; ty < static_cast<int32_t>(world.height); ++ty) {
-        for (int32_t tx = 0; tx < static_cast<int32_t>(world.width); ++tx) {
-            const auto& cell = world.cells[static_cast<size_t>(ty) * world.width + static_cast<size_t>(tx)];
-            if (cell.interactive_id == sim::TILE_EMPTY || cell.interactive_id == 0xFFFF) continue;
-            if ((cell.interactive_id >= 129 && cell.interactive_id <= 132) || cell.interactive_id == 134) continue;
-            if (world.fog_of_war_enabled && !revealed(tx, ty)) continue;
-            if (const auto* obj = find_minimap_object(cell.interactive_id)) {
-                if (obj->size_flag > 0) dot(tx, ty, obj->colour, obj->size_flag);
-            }
-        }
-    }
-    for (const auto& ant : world.ants) {
-        if (ant.hp == 0 || ant.is_drowning) continue;
-        if (world.fog_of_war_enabled && ant.player_id != local_player_id_ && !revealed(ant.tile_x, ant.tile_y)) continue;
-        dot(ant.tile_x, ant.tile_y, kMinimapAntColours[ant.player_id % 4], 1);
     }
 
     std::vector<uint8_t> rgba(static_cast<size_t>(rw * rh) * 4u, 255);
@@ -662,36 +675,60 @@ void HUD::render_radar(IRenderer& renderer, const assets::AssetArchive& archive,
     }
     renderer.draw_rgba_image(rx, ry, rw, rh, rgba.data());
 
-    // Scale used by the camera frame below
-    const float scale_x = px_per_cell_x;
-    const float scale_y = px_per_cell_y;
+    // The scale of the image: world pixels per image pixel are (map * 32) / 119 across and / 91 down (FUN_0100925b). A world point or length divided by it is truncated
+    const int64_t world_w_px = static_cast<int64_t>(map_w) * 32;
+    const int64_t world_h_px = static_cast<int64_t>(map_h) * 32;
+    auto to_image_x = [&](int64_t world_px) { return static_cast<int32_t>(world_px * rw / world_w_px); };
+    auto to_image_y = [&](int64_t world_px) { return static_cast<int32_t>(world_px * rh / world_h_px); };
 
-    // Camera frustum wireframe box
-    float map_w_px = static_cast<float>(world.width * 32);
-    float map_h_px = static_cast<float>(world.height * 32);
-    if (map_w_px > 0.0f && map_h_px > 0.0f) {
-        float max_cam_x = std::max(0.0f, map_w_px - static_cast<float>(camera.viewport_w));
-        float max_cam_y = std::max(0.0f, map_h_px - static_cast<float>(camera.viewport_h));
-
-        float cam_tile_x = camera.x / 32.0f;
-        float cam_tile_y = camera.y / 32.0f;
-        float cam_tile_w = static_cast<float>(camera.viewport_w) / 32.0f;
-        float cam_tile_h = static_cast<float>(camera.viewport_h) / 32.0f;
-
-        int32_t fx1 = rx + static_cast<int32_t>(cam_tile_x * scale_x);
-        int32_t fy1 = ry + static_cast<int32_t>(cam_tile_y * scale_y);
-        int32_t fx2 = (max_cam_x > 0.0f && camera.x >= max_cam_x - 0.5f)
-                          ? (rx + rw)
-                          : (rx + static_cast<int32_t>((cam_tile_x + cam_tile_w) * scale_x));
-        int32_t fy2 = (max_cam_y > 0.0f && camera.y >= max_cam_y - 0.5f)
-                          ? (ry + rh)
-                          : (ry + static_cast<int32_t>((cam_tile_y + cam_tile_h) * scale_y));
-
-        int32_t fw = std::max(4, fx2 - fx1);
-        int32_t fh = std::max(4, fy2 - fy1);
-
-        renderer.draw_rect(fx1, fy1, fw, fh, {255, 255, 255, 255});
+    // FUN_01009988 paints the dots of the world's object list over the image, in list order and in screen coordinates (a dot is not clipped to the image): plants first (made with
+    // the match screen), then the ants in the order they were made. A dot is a filled rectangle centred on the object's position (FUN_01009899): the size flag of its record
+    // (one or two cells, 32 world pixels each) scaled down and truncated, at least `min_size`; the top edge is taken from half the WIDTH, as the original does
+    auto dot = [&](int32_t world_x, int32_t world_y, uint8_t colour, int32_t size_flag, int32_t min_size) {
+        const int32_t w = std::max<int32_t>(static_cast<int32_t>(static_cast<int64_t>(32) * size_flag * rw / world_w_px), min_size);
+        const int32_t h = std::max<int32_t>(static_cast<int32_t>(static_cast<int64_t>(32) * size_flag * rh / world_h_px), min_size);
+        const int32_t cx = to_image_x(world_x);
+        const int32_t cy = to_image_y(world_y);
+        int32_t left, top, right, bottom;
+        if (w > 1 && h > 1) {
+            left = cx - (w >> 1);
+            top = cy - (w >> 1);
+            right = cx + (w - (w >> 1));
+            bottom = cy + (h - (h >> 1));
+        } else {
+            left = std::min(cx, rw - 1);
+            top = std::min(cy, rh - 1);
+            right = left + w;
+            bottom = top + h;
+        }
+        if (right > left && bottom > top) {
+            const auto& c = palette[colour];
+            renderer.fill_rect(rx + left, ry + top, right - left, bottom - top, {c.r, c.g, c.b, 255});
+        }
+    };
+    for (const auto& plant : world.plants) {
+        const uint16_t entry = minimap_object_entry(plant.tile_id);
+        const int32_t size_flag = entry >> 8;
+        if (size_flag > 0) dot(plant.x * 32 + 16, plant.y * 32 + 16, static_cast<uint8_t>(entry & 0xffu), size_flag, 0);
     }
+    // In fog an ant shows when it is the viewer's own, an ally's, or stands on an explored cell (FUN_0101aa0d); all ants have size flag 1 and a minimum size of 2
+    const uint8_t ally = local_player_id_ < world.player_alliances.size() ? world.player_alliances[local_player_id_] : uint8_t{255};
+    for (const auto& ant : world.ants) {
+        if (fog && ant.player_id != local_player_id_ && ant.player_id != ally && !world.is_tile_revealed(ant.px / 32, ant.py / 32)) continue;
+        dot(ant.px, ant.py, kMinimapAntColours[ant.player_id % 4], 1, 2);
+    }
+
+    // The view frame (0x1009ae2 - 0x1009b6f, drawn last with GDI FrameRect in (251, 251, 255)): the size of the view scaled down plus one, at the view's origin scaled down, moved
+    // inside the image when it would end beyond its right or bottom edge
+    const int32_t frame_w = to_image_x(PLAYFIELD_W) + 1;
+    const int32_t frame_h = to_image_y(PLAYFIELD_H) + 1;
+    int32_t fl = rx + to_image_x(static_cast<int32_t>(camera.x));
+    int32_t ft = ry + to_image_y(static_cast<int32_t>(camera.y));
+    int32_t fr = fl + frame_w;
+    int32_t fb = ft + frame_h;
+    if (fr >= rx + rw) { fr = rx + rw; fl = fr - frame_w; }
+    if (fb >= ry + rh) { fb = ry + rh; ft = fb - frame_h; }
+    renderer.draw_rect(fl, ft, fr - fl, fb - ft, {251, 251, 255, 255});
 }
 
 void HUD::render_news_banner(IRenderer& renderer, const assets::AssetArchive& assets, const sim::WorldState& world) {

@@ -6709,7 +6709,7 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         ASSERT_FALSE(sim.has_bomb_at(TileCoord{26, 25}));
     } TEST_END();
 
-    TEST_CASE("12.79 Minimap Radar Firewall Exclusion & Targeted SFX Routing") {
+    TEST_CASE("12.79 A Fire Wall Stands On Its Tile; An Audio Event Addressed To One Player Reaches Only That Player") {
         SimulationEngine sim;
         sim.init_test_world(60, 60, 1);
 
@@ -7275,10 +7275,10 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
 
     TEST_CASE("12.108: Version Invariant & Fog of War Cursor Concealment Parity") {
         // 1. Verify semantic versioning components
-        ASSERT_EQ(ants::VERSION_STRING, "v0.0.70");
+        ASSERT_EQ(ants::VERSION_STRING, "v0.0.71");
         ASSERT_EQ(ants::VERSION_MAJOR, 0);
         ASSERT_EQ(ants::VERSION_MINOR, 0);
-        ASSERT_EQ(ants::VERSION_PATCH, 70);
+        ASSERT_EQ(ants::VERSION_PATCH, 71);
 
         // 2. Setup simulation world with Fog of War enabled
         SimulationEngine sim;

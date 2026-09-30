@@ -27,6 +27,12 @@ bool Grid::init_from_level(const ants::assets::LevelData& level) {
     cells_.assign(static_cast<size_t>(width_ * height_), TileCell{});
     exact_solid_bits_ = false;
 
+    // The plants of Block 1 (0x100e3b0 - 0x100e436): each record whose tile id carries property bit 0x10 or 0x20 becomes a world object at its cell
+    plants_.clear();
+    for (const auto& sp : level.anthill_spawns) {
+        if ((movement::tile_flags_of(sp.tile_id) & 0x30u) != 0) plants_.push_back(MapPlant{sp.tile_id, sp.x, sp.y});
+    }
+
     // Populate Layer 1
     for (uint32_t y = 0; y < height_; ++y) {
         for (uint32_t x = 0; x < width_; ++x) {

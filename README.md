@@ -4,7 +4,7 @@ A faithful, high-performance, deterministic C++17 native engine remake and port 
 
 The engine directly loads raw original binary assets (`ants.chd` and `Maps/*.LVL`) without pre-conversion, faithfully executing authentic gameplay mechanics, deterministic 20Hz simulation, 32-channel spatial audio, MIDI/MP3 score playback, TrueType font rendering, and an SDL2 hardware-accelerated 2D viewport.
 
-**Current version: v0.0.70** (shown on screen next to the FPS meter). Every release is listed in the **[changelog](CHANGELOG.md)**, which is also published at **[beta.playants.org/changelog.html](https://beta.playants.org/changelog.html)**. Since v0.0.24 every system is re-derived from the disassembly of the original `Ants.exe` (see [Reverse Engineering](#reverse-engineering--historical-preservation)); multiplayer over a network (host / join over TCP) works and is still being extended (see [Network Port](#network-port-in-progress)).
+**Current version: v0.0.71** (shown on screen next to the FPS meter). Every release is listed in the **[changelog](CHANGELOG.md)**, which is also published at **[beta.playants.org/changelog.html](https://beta.playants.org/changelog.html)**. Since v0.0.24 every system is re-derived from the disassembly of the original `Ants.exe` (see [Reverse Engineering](#reverse-engineering--historical-preservation)); multiplayer over a network (host / join over TCP) works and is still being extended (see [Network Port](#network-port-in-progress)).
 
 ---
 
@@ -57,6 +57,7 @@ Play the remake instantly in any modern web browser (Chrome, Firefox, Safari, Ed
   - **Options Screen & Settings**: the original's options window (`docs/GAME_REVERSE_ENGINEERING.md` 5.51): three sliders (Sound Volume, Music Volume, Map Scroll Rate) that work like the original's slider class (the thumb follows the pointer, the value is applied once at the release, whole numbers 0 - 99), two ON / OFF pairs (Participate In Chat, Show Quick Help at Startup) that act at the release, and the four Quick Chat edit fields (100 characters, F9 focused at the start, blinking caret, Enter closes, Esc does nothing). Every change is written at once and read back at the next start with the original's validity rule (see [Settings](#settings)).
   - **Fog of War**: the ground is uncovered the way the original does it (`docs/GAME_REVERSE_ENGINEERING.md` 5.54): a 13 x 13 square around an ant whenever the position of one of your ants or your teammate's is updated, nothing around a hill and nothing when a team forms; the ground's objects are drawn from three cells beyond the view.
   - **Score Boxes**: the four score boxes are the original's (`docs/GAME_REVERSE_ENGINEERING.md` 5.53): the local team's in the top bar and the others in three bottom slots in team-index order, an allied team's box is half its colour and half its ally's and shows the two scores added, and the box of a team that does not play or has dropped out is covered with the original's `scorcovr` plate.
+  - **Minimap**: the 119 x 91 image is painted the way the original's painter does it (`docs/GAME_REVERSE_ENGINEERING.md` 5.55): every pixel shows the object of the cell under it in the colour of the original's table (a tile that is not in the table: palette colour 0), bombs show the terrain, and in fog only power-ups, food and fire walls fall back to the fog colour while rocks, toys, bridges and every colony's hill keep theirs; fire walls show as yellow. There are no dots per object cell. The dots are rectangles on top of it: flowers and clovers (3 x 3 on a 60 x 60 map) and the ants, each at its pixel position (2 x 2 on a 60 x 60 map, 3 x 2 on 31 x 31), every ant until it is removed (dying and drowning ants too); in fog your own ants and your ally's show, enemies only on explored ground. The view frame is (251, 251, 255), `trunc(442 / scale) + 1` by `trunc(440 / scale) + 1` pixels, at the view's origin divided by the scale and kept inside the image. (The original's flash of an own or allied ant that was hit in the last 5 seconds is read but not ported until a screenshot of the original confirms it.)
   - **Match Audio Cues**: 1-minute alert (`1min.wav`), 30-second warning (`30sec.wav`), 10-second countdown (`countdwn.wav`), one winner or defeat sting per machine when the results open (`winner.wav` / `losers.wav`), and player drop-out (`playerout.wav`); "can't hatch" and the raid alarm are global cues, an accepted order clicks (`docs/GAME_REVERSE_ENGINEERING.md` 5.24b).
 
 - **Modern Audio & Presentation (`libants-app`)**:
@@ -355,7 +356,7 @@ Limits of this release: raw TCP only (a LAN, a VPN or a forwarded port 4001; the
 
 ## Changelog & Versioning
 
-The version (`include/ants_app/version.hpp`, currently `v0.0.70`) is bumped with every release and shown on screen next to the FPS meter. [`CHANGELOG.md`](CHANGELOG.md) lists what changed in every version, newest first, from the first commit to the release in progress; it is published on the beta site at [`/changelog.html`](https://beta.playants.org/changelog.html) and linked from the game page.
+The version (`include/ants_app/version.hpp`, currently `v0.0.71`) is bumped with every release and shown on screen next to the FPS meter. [`CHANGELOG.md`](CHANGELOG.md) lists what changed in every version, newest first, from the first commit to the release in progress; it is published on the beta site at [`/changelog.html`](https://beta.playants.org/changelog.html) and linked from the game page.
 
 ---
 
@@ -380,7 +381,7 @@ To run all test suites in sequence:
 ./run_tests.sh --clean    # Remove the build directories and rebuild first
 ```
 
-### What the Suites Cover (v0.0.70, all passing)
+### What the Suites Cover (v0.0.71, all passing)
 | Suite | What it checks | Size |
 |---|---|---|
 | 1 Asset decoders | `ants.chd` header, palette, sprites, audio, event tags, Table 4 animations, `.LVL` maps, directional mirroring, fuzzing | 9 suites, 70,065 assertions |
@@ -396,7 +397,7 @@ To run all test suites in sequence:
 | 2.13 TCP | Framing, hostile frames, a real-socket match | 6 tests, 60,122 assertions |
 | 2.14 NetGame | The room, thumbs, the start barrier, a match with commands and chat, a guest that leaves, host migration over real sockets (the host leaving a two-, three- and four-player match, the links between guests, strangers on a guest's port, no election after the match is over), refused joins, map mismatch | 14 tests, 533 assertions |
 | 3 Application integration | Whole-application behaviour through the HUD, renderer and simulation | 206 tests, 7,664 assertions |
-| 3.1 - 3.5 Model suites | Render parity 303 checks (with the text sizes and the health-number font), HUD layout 756 (with the network room screen, the label sizes and wrapping, the three alliance dialogs, the results screen, the options screen's pictures and fields, the chat input box and the score boxes), status messages 269, input model 75, pointer model 351 | 1,754 checks |
+| 3.1 - 3.5 Model suites | Render parity 303 checks (with the text sizes and the health-number font), HUD layout 789 (with the network room screen, the label sizes and wrapping, the three alliance dialogs, the results screen, the options screen's pictures and fields, the chat input box, the score boxes and the minimap), status messages 269, input model 75, pointer model 351 | 1,787 checks |
 | 3.6 Network application | The command line (names, `--host`, `--join`), a headless application as host and as guest of a room, start, a bit-identical match, chat, leaving, the host leaving (a two-player match is decided at once, in a three-player match the guest follows the new host and says so), a guest that quits (the quit ends the match on both machines), the score labels of a local game, teaming over three machines (an offer arrives as the question, Accept, team chat reaches only the ally, refusal, Withdraw) | 11 tests, 203 assertions |
 | 3.7 Options | The original's slider (every configured value placed and read back, every pointer x, hit edges), latching button (pictures, capture, latch), edit field (focus, 100 characters, caret phases), the settings store (the validity rule, files, texts) and the options screen end to end | 135 checks |
 | 4 E2E | Opaque-box scenarios in four tiers | 506 tests |

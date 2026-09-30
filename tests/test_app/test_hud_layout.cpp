@@ -671,8 +671,8 @@ void test_pedestal_timeline(const assets::AssetArchive& arc) {
     }
 }
 
-// Minimap (Ants.exe FUN_01009596): a 119x91 image at (480,35) with the class speckle colours, the object table, the fog
-// table and square team dots for ants.
+// Minimap (Ants.exe FUN_01009596): a 119x91 image at (480,35) with the class speckle colours, the object table and the fog table.
+// The dots of the ants and plants (FUN_01009988) and the view frame are drawn over it as rectangles (test_minimap_dots).
 void test_minimap(const assets::AssetArchive& arc) {
     std::printf("[hud] minimap image\n");
     const auto& pal = arc.get_palette();
@@ -692,13 +692,12 @@ void test_minimap(const assets::AssetArchive& arc) {
         else if (x >= 20 && x < 30) { c.surface_type = sim::SurfaceType::Mud; c.is_mud = true; }
         else if (x >= 40 && x < 50) { c.surface_type = sim::SurfaceType::Gravel; }
     }
-    // an anthill tile of the black colony (animation 245, colour 239, size flag 2) and a bomb (id 129, hidden)
+    // an anthill tile of the black colony (animation 245, colour 239), the original's bomb id 129 at (15,40), the remake's own planted bomb (id 100 + team) at (16,40), a
+    // rock (animation 293) at (12,20)
     world.cells[30 * 60 + 15].interactive_id = 245;
     world.cells[40 * 60 + 15].interactive_id = 129;
-    // a green ant (player 0) at tile (55, 5)
-    sim::AntSnapshot ant{};
-    ant.id = 1; ant.player_id = 0; ant.hp = 10; ant.tile_x = 55; ant.tile_y = 5;
-    world.ants.push_back(ant);
+    world.cells[40 * 60 + 16].interactive_id = sim::BOMB_GREEN;
+    world.cells[20 * 60 + 12].interactive_id = 293;
 
     RecordingRenderer rr(arc);
     HUD hud;
@@ -727,12 +726,28 @@ void test_minimap(const assets::AssetArchive& arc) {
     check(mud_ok, "mud cells use class colour 77");
     check(dirt_ok, "dirt cells use the class-4 speckle colours 231/232/233");
 
-    // hill dot (colour 239, 2 cells => 4x3 px) at the cell centre of tile (15,30): px = 15.5*119/60 = 30, py = 30.5*91/60 = 46
+    // the painter gives every pixel of a cell the colour of the object in it: the hill (pixel (30,46) is cell (15,30)) and the rock of tile (12,20) (pixels 24 .. 25 x 31)
     check(pixel(im, 30, 46) == rgb_of(239), "hill drawn with colour 239 at its cell");
-    // the bomb cell (15,40) shows the terrain colour, not an object colour
-    check(in_set(pixel(im, 30, 60), {251, 201, 249}), "bombs are not drawn on the minimap");
-    // green ant dot: colour 47 at tile (55,5): px = 55.5*119/60 = 110, py = 5.5*91/60 = 8
-    check(pixel(im, 110, 8) == rgb_of(47), "green ant dot colour 47");
+    check(pixel(im, 24, 31) == rgb_of(51) && pixel(im, 25, 31) == rgb_of(51), "a rock (animation 293) shows colour 51 on its cell");
+    // a bomb shows the terrain: the original's ids 129 .. 132 and the remake's own (100 .. 103) alike (pixels (30,61) and (32,61) are cells (15,40) and (16,40))
+    check(in_set(pixel(im, 30, 61), {251, 201, 249}), "the bomb of id 129 is not drawn on the minimap");
+    check(in_set(pixel(im, 32, 61), {251, 201, 249}), "a bomb planted by the remake is not drawn on the minimap");
+    // no dot per object cell any more: the hill's cell next to it (16,30) shows the terrain
+    check(in_set(pixel(im, 32, 46), {251, 201, 249}), "no dot around an object: the next cell shows the terrain");
+
+    // a tile id that the table has no record for has colour 0 (the table is cleared first); the placeholder of a bomb that is being planted (0xa0) is one
+    world.cells[5 * 60 + 40].interactive_id = sim::TILE_RESERVED;
+    // a fire wall (134, colour 250) and a power-up dropped by the remake (0x8000 | type 4, the pu_comb tile 62, colour 171)
+    world.cells[5 * 60 + 45].interactive_id = sim::TILE_FIREWALL;
+    world.cells[5 * 60 + 47].interactive_id = static_cast<uint16_t>(0x8000u | 4u);
+    world.cells[5 * 60 + 47].is_powerup = true;
+    world.cells[5 * 60 + 47].powerup_type = 4;
+    RecordingRenderer ro(arc);
+    hud.render(ro, arc, world, camera);
+    const auto& oim = ro.images[0];
+    check(pixel(oim, 80, 8) == rgb_of(0), "a tile id without a record in the colour table shows palette colour 0");
+    check(pixel(oim, 90, 8) == rgb_of(250), "a fire wall shows colour 250");
+    check(pixel(oim, 94, 8) == rgb_of(171), "a dropped power-up shows the colour of its tile (171)");
 
     // Fog: unexplored cells use the fog colours by class
     world.fog_of_war_enabled = true;
@@ -745,6 +760,190 @@ void test_minimap(const assets::AssetArchive& arc) {
     check(pixel(fim, 30, 20) == rgb_of(244), "unexplored gravel shows fog colour 244");
     check(pixel(fim, 50, 20) == rgb_of(77), "explored mud keeps its colour");
     check(pixel(fim, 90, 20) == rgb_of(236), "unexplored dirt (class 4) shows fog colour 236");
+    // in the fog only what gets removed or given out falls back to the terrain (power-ups, food, fire walls); every other object keeps its colour, the hills of the enemy too
+    check(pixel(fim, 30, 46) == rgb_of(239), "a hill keeps its colour in the fog");
+    check(pixel(fim, 24, 31) == rgb_of(51), "a rock keeps its colour in the fog");
+    check(pixel(fim, 80, 8) == rgb_of(0), "an unlisted tile id shows colour 0 in the fog as well");
+    check(pixel(fim, 90, 8) == rgb_of(236), "an unexplored fire wall shows the fog colour (of its class, dirt: 236)");
+    check(pixel(fim, 94, 8) == rgb_of(236), "an unexplored power-up shows the fog colour");
+    // food (animation 253, colour 171) in the fog: hidden while its cell is unexplored, shown once it is explored
+    world.cells[15 * 60 + 15].interactive_id = 253;
+    world.cells[15 * 60 + 25].interactive_id = 253;                       // in the revealed mud band
+    RecordingRenderer rfood(arc);
+    hud.render(rfood, arc, world, camera);
+    const auto& food = rfood.images[0];
+    check(pixel(food, 30, 23) == rgb_of(244), "unexplored food shows the fog colour (pixel (30,23) is cell (15,15))");
+    check(pixel(food, 50, 23) == rgb_of(171), "explored food shows its colour 171");
+    // a bridge is an object like the rock: it keeps its colour (77) in the fog
+    world.cells[15 * 60 + 35].interactive_id = sim::TILE_BRIDGE2;
+    RecordingRenderer rbridge(arc);
+    hud.render(rbridge, arc, world, camera);
+    check(pixel(rbridge.images[0], 70, 23) == rgb_of(77), "a bridge shows colour 77 in the fog");
+}
+
+// The dots and the frame (FUN_01009988, FUN_01009899, 0x1009ae2 - 0x1009b6f): drawn over the image in screen coordinates, in list order (plants, then ants).
+void test_minimap_dots(const assets::AssetArchive& arc) {
+    std::printf("[hud] minimap dots, plants and the view frame\n");
+    const auto& pal = arc.get_palette();
+    auto colour_of = [&](int idx) { return assets::ColorRGBA{ pal[static_cast<size_t>(idx)].r, pal[static_cast<size_t>(idx)].g, pal[static_cast<size_t>(idx)].b, 255 }; };
+    auto same = [](const assets::ColorRGBA& a, const assets::ColorRGBA& b) { return a.r == b.r && a.g == b.g && a.b == b.b; };
+    auto find_fill = [&](const RecordingRenderer& rr, int x, int y, int w, int h, int palette_index) {
+        for (const auto& f : rr.fills) if (f.x == x && f.y == y && f.w == w && f.h == h && same(f.color, colour_of(palette_index))) return true;
+        return false;
+    };
+    auto world_of = [](uint32_t w, uint32_t h) {
+        sim::WorldState world;
+        world.width = w; world.height = h;
+        world.cells.assign(static_cast<size_t>(w) * h, sim::TileCell{});
+        return world;
+    };
+    auto ant_at = [](uint32_t id, uint8_t team, int32_t px, int32_t py) {
+        sim::AntSnapshot a{};
+        a.id = id; a.player_id = team; a.hp = 10; a.px = px; a.py = py; a.tile_x = px / 32; a.tile_y = py / 32;
+        return a;
+    };
+    ViewportCamera camera;
+
+    // An ant is a rectangle at its PIXEL position, not snapped to its tile: size max(trunc(32 / scale), 2) = 2 x 2 on a 60 x 60 map, centred (left = x - 1, top = y - 1,
+    // right = x + 1, bottom = y + 1). Ant (990, 500): image (61, 23) -> screen (480 + 60, 35 + 22)
+    {
+        sim::WorldState world = world_of(60, 60);
+        world.ants.push_back(ant_at(1, 0, 990, 500));                      // image (990 * 119 / 1920, 500 * 91 / 1920) = (61, 23)
+        world.ants.push_back(ant_at(2, 3, 1000, 500));                     // ten world pixels further: still the same image pixel (61, 23)
+        RecordingRenderer rr(arc);
+        HUD hud;
+        hud.init(0);
+        hud.render(rr, arc, world, camera);
+        check(find_fill(rr, 540, 57, 2, 2, 47), "a green ant is a 2x2 dot of colour 47 at its pixel position");
+        check(find_fill(rr, 540, 57, 2, 2, 239), "the black ant's dot (colour 239) is drawn at the same place, over the green one");
+        // the dots come after the image and before the frame
+        check(rr.images.size() == 1 && rr.rects.size() == 1, "one image, one frame");
+    }
+    // a dying ant (no hit points left, or drowning) keeps its dot until it is removed
+    {
+        sim::WorldState world = world_of(60, 60);
+        sim::AntSnapshot dying = ant_at(1, 1, 640, 640);
+        dying.hp = 0;
+        sim::AntSnapshot drowning = ant_at(2, 2, 800, 640);
+        drowning.is_drowning = true;
+        world.ants.push_back(dying);
+        world.ants.push_back(drowning);
+        RecordingRenderer rr(arc);
+        HUD hud;
+        hud.init(0);
+        hud.render(rr, arc, world, camera);
+        // (640, 640) -> image (39, 30); (800, 640) -> (49, 30)
+        check(find_fill(rr, 480 + 38, 35 + 29, 2, 2, 158), "an ant without hit points keeps its dot (red, colour 158)");
+        check(find_fill(rr, 480 + 48, 35 + 29, 2, 2, 211), "a drowning ant keeps its dot (blue, colour 211)");
+    }
+    // The size grows with the scale: on a 31 x 31 map 32 px are trunc(119 / 31) = 3 wide and trunc(91 / 31) = 2 high; the top edge is taken from half of the WIDTH
+    // (y - 1, where half of the height would also give y - 1). Ant at the tile centre (15, 15) = (496, 496): image (496 * 119 / 992, 496 * 91 / 992) = (59, 45)
+    {
+        sim::WorldState world = world_of(31, 31);
+        world.ants.push_back(ant_at(1, 0, 496, 496));
+        RecordingRenderer rr(arc);
+        HUD hud;
+        hud.init(0);
+        hud.render(rr, arc, world, camera);
+        check(find_fill(rr, 480 + 58, 35 + 44, 3, 2, 47), "on a 31x31 map the dot is 3x2: left x - 1, top y - 1, right x + 2, bottom y + 1");
+    }
+    // the quirk of the top edge: a 16 x 16 map has 32 px = trunc(119 / 16) = 7 wide and trunc(91 / 16) = 5 high; the top edge is y - 3 (half of 7), the bottom y + 3 (5 - 2)
+    {
+        sim::WorldState world = world_of(16, 16);
+        world.ants.push_back(ant_at(1, 0, 256, 256));                      // image (256 * 119 / 512, 256 * 91 / 512) = (59, 45)
+        RecordingRenderer rr(arc);
+        HUD hud;
+        hud.init(0);
+        hud.render(rr, arc, world, camera);
+        check(find_fill(rr, 480 + 59 - 3, 35 + 45 - 3, 7, 6, 47), "on a 16x16 map the top edge is taken from half the width: a 7x6 rectangle (y - 3 .. y + 3)");
+    }
+
+    // Plants (Block 1 flowers and clovers, 0x100e3b0): a dot of the colour and size flag of the tile's record (flower1 421: colour 51, two cells) at the centre of the cell,
+    // 3 x 3 on a 60 x 60 map. Plant (20, 10): centre (656, 336) -> image (40, 15) -> left 39, top 14. Drawn before the ants, in the fog as well. A plant whose tile has no
+    // record, or a size flag of 0, has no dot.
+    {
+        sim::WorldState world = world_of(60, 60);
+        world.plants.push_back(sim::MapPlant{421, 20, 10});
+        world.plants.push_back(sim::MapPlant{422, 30, 30});               // no record: no dot
+        world.fog_of_war_enabled = true;
+        world.fog_revealed.assign(3600, 0);
+        RecordingRenderer rr(arc);
+        HUD hud;
+        hud.init(0);
+        hud.render(rr, arc, world, camera);
+        check(find_fill(rr, 480 + 39, 35 + 14, 3, 3, 51), "a flower plant is a 3x3 dot of colour 51 at the centre of its cell, even in the fog");
+        int plant_dots = 0;
+        for (const auto& f : rr.fills) if (f.w == 3 && f.h == 3 && f.x >= 480 && f.x < 599 && f.y >= 35 && f.y < 126) ++plant_dots;
+        check(plant_dots == 1, "only the plant with a record has a dot");
+    }
+
+    // Fog: an own ant and an ally's always show, any other ant only on an explored cell (under the ant's pixel position)
+    {
+        sim::WorldState world = world_of(60, 60);
+        world.fog_of_war_enabled = true;
+        world.fog_revealed.assign(3600, 0);
+        world.player_alliances[0] = 2;                                      // team 0 and team 2 are allies
+        world.player_alliances[2] = 0;
+        world.ants.push_back(ant_at(1, 0, 100, 100));                       // own, unexplored
+        world.ants.push_back(ant_at(2, 2, 300, 100));                       // ally, unexplored
+        world.ants.push_back(ant_at(3, 1, 500, 100));                       // enemy, unexplored
+        world.ants.push_back(ant_at(4, 3, 700, 100));                       // enemy, explored (tile (21, 3))
+        world.fog_revealed[3 * 60 + 21] = 1;
+        RecordingRenderer rr(arc);
+        HUD hud;
+        hud.init(0);
+        hud.render(rr, arc, world, camera);
+        // the dots: (100, 100) -> image (6, 4); (300, 100) -> (18, 4); (500, 100) -> (30, 4); (700, 100) -> (43, 4)
+        check(find_fill(rr, 480 + 5, 35 + 3, 2, 2, 47), "in fog the own ant shows");
+        check(find_fill(rr, 480 + 17, 35 + 3, 2, 2, 211), "in fog an ally's ant shows");
+        check(!find_fill(rr, 480 + 29, 35 + 3, 2, 2, 158), "in fog an enemy on an unexplored cell does not show");
+        check(find_fill(rr, 480 + 42, 35 + 3, 2, 2, 239), "in fog an enemy on an explored cell shows");
+        // seen from the ally's side, the first ant is the ally
+        RecordingRenderer rr2(arc);
+        HUD hud2;
+        hud2.init(2);
+        hud2.render(rr2, arc, world, camera);
+        check(find_fill(rr2, 480 + 5, 35 + 3, 2, 2, 47), "team 2 sees its ally's ant (team 0)");
+    }
+
+    // The view frame: size (trunc(442 / scale) + 1, trunc(440 / scale) + 1) = 28 x 21 on a 60 x 60 map, at the view's origin divided by the scale, in (251, 251, 255); moved
+    // inside the image when it would end beyond the right or bottom edge; it is the last thing drawn
+    {
+        sim::WorldState world = world_of(60, 60);
+        auto frame_of = [&](float cx, float cy) {
+            RecordingRenderer rr(arc);
+            HUD hud;
+            hud.init(0);
+            ViewportCamera cam;
+            cam.x = cx; cam.y = cy;
+            hud.render(rr, arc, world, cam);
+            struct R { int x, y, w, h; bool colour; size_t count; } r{0, 0, 0, 0, false, rr.rects.size()};
+            if (!rr.rects.empty()) {
+                const auto& f = rr.rects[0];
+                r = {f.x, f.y, f.w, f.h, f.color.r == 251 && f.color.g == 251 && f.color.b == 255, rr.rects.size()};
+            }
+            return r;
+        };
+        auto f0 = frame_of(0.0f, 0.0f);
+        check(f0.count == 1 && f0.x == 480 && f0.y == 35 && f0.w == 28 && f0.h == 21 && f0.colour, "frame at the origin: (480, 35) 28x21 in (251, 251, 255)");
+        auto mid = frame_of(960.0f, 960.0f);                                // (960 * 119 / 1920, 960 * 91 / 1920) = (59, 45)
+        check(mid.x == 480 + 59 && mid.y == 35 + 45 && mid.w == 28 && mid.h == 21, "the frame follows the view's origin, truncated");
+        auto some = frame_of(1400.0f, 100.0f);                              // x: 1400 * 119 / 1920 = 86 -> right edge 480 + 86 + 28 = 594 < 599: not moved
+        check(some.x == 480 + 86 && some.y == 35 + 4, "a frame that fits stays where it is");
+        auto far = frame_of(1478.0f, 1480.0f);                              // x: 91 -> 480 + 91 + 28 = 599 reaches the edge: right = 599, left = 571; y: 70 -> bottom 126 -> top 105
+        check(far.x == 571 && far.y == 105 && far.w == 28 && far.h == 21, "at the far corner the frame ends on the last pixel of the image (571, 105)");
+        auto beyond = frame_of(1600.0f, 1600.0f);                           // (an over-scrolled view is still moved inside the image)
+        check(beyond.x == 571 && beyond.y == 105 && beyond.w == 28 && beyond.h == 21, "a frame beyond the edge is moved inside the image");
+    }
+    // the frame of a small map: the view is larger than a 31 x 31 map's share: trunc(442 * 119 / 992) + 1 = 54 and trunc(440 * 91 / 992) + 1 = 41
+    {
+        sim::WorldState world = world_of(31, 31);
+        RecordingRenderer rr(arc);
+        HUD hud;
+        hud.init(0);
+        hud.render(rr, arc, world, camera);
+        check(rr.rects.size() == 1 && rr.rects[0].w == 54 && rr.rects[0].h == 41, "on a 31x31 map the frame is 54x41");
+    }
 }
 
 // The static HUD shell is the animation `uishell` (14 parts) drawn last part first, nothing static is drawn twice, the
@@ -1953,6 +2152,7 @@ int main() {
     test_pedestal_chains(arc);
     test_pedestal_timeline(arc);
     test_minimap(arc);
+    test_minimap_dots(arc);
     test_static_shell(arc);
     test_cursor_rules(arc);
     test_button_states(arc);
