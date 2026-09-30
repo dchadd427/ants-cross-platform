@@ -18,31 +18,43 @@
 
 #include "ants_assets/asset_archive.hpp"
 #include "ants_app/renderer.hpp"
+#include "ants_app/screen_button.hpp"
 
 namespace ants::app {
 
+/// One entry of the map list: the file name and what the file's header says (the original reads the header when the entry is chosen)
 struct MapSelectEntry {
     std::string filename;
     std::string full_path;
     std::string display_name;
     std::string description;
-    uint32_t width{60};
-    uint32_t height{60};
-    uint32_t minutes{15};
+    uint32_t width{0};
+    uint32_t height{0};
+    uint32_t minutes{0};
 };
 
 /**
- * @brief Map Selection Screen presented on initial application launch.
- * Plays INTRO.MID on a loop until a map is chosen and match starts.
+ * @brief The setup screen of the original (Ants.exe: base class FUN_01012ce0, host screen FUN_01013b36, refresh FUN_010133ef, map list FUN_01013de7, selection
+ * FUN_01013fc9, keys FUN_01014076, START FUN_010140c5; docs 5.50).
+ *
+ * The maps are every `*.lvl` of the Maps folder in the byte order of their file names. All labels, the portraits and the thumbs appear with the
+ * first run of the refresh task, 500 ms after the screen was created. The buttons are the original's button class (ScreenButton: the callback runs at the release);
+ * the keys are Up / Down (previous / next map, wrapping), Enter, S and s (START), Q, q, X and x (Leave); nothing else does anything. START locks the screen.
  */
 class MapSelectScreen {
 public:
+    static constexpr double REFRESH_MS = 500.0;    // the refresh task's delay (FUN_01031e92(task, 500, 0)): until then the labels are empty and nobody is listed
 
-
-    static constexpr int32_t W_MAP_X = 27;
-    static constexpr int32_t W_MAP_Y = 306;
-    static constexpr int32_t W_MAP_W = 195;
-    static constexpr int32_t W_MAP_H = 39;
+    // The labels of the screen (FUN_01012ce0): the map name (36, 312) 179 x 26, its description (36, 380) 293 x 26, the prompt (36, 447) 293 x 35 with 14 px lines,
+    // the players' names (415, 95 + 50 i) 120 x 20; every label has 18 px lines (the prompt 14) and the colour (239, 231, 223)
+    static constexpr int32_t LABEL_X = 36;
+    static constexpr int32_t NAME_Y = 312;
+    static constexpr int32_t NAME_W = 179;
+    static constexpr int32_t INFO_Y = 380;
+    static constexpr int32_t STATUS_Y = 447;
+    static constexpr int32_t STATUS_W = 293;
+    static constexpr int32_t PLAYER_NAME_X = 415;
+    static constexpr int32_t PLAYER_NAME_W = 120;
 
     // Control rectangles are the union of the resting and pressed art of the original animations (their part offsets
     // are absolute screen coordinates): up1/up3, down1/down3, start1/start3, leave1/leave3, d_on1/d_on3, d_off1/d_off3.
@@ -55,19 +67,6 @@ public:
     static constexpr int32_t BTN_DOWN_Y = 323;
     static constexpr int32_t BTN_DOWN_W = 48;
     static constexpr int32_t BTN_DOWN_H = 22;
-
-
-    static constexpr int32_t INFO_BOX_X = 27;
-    static constexpr int32_t INFO_BOX_Y = 376;
-    static constexpr int32_t INFO_BOX_W = 304;
-    static constexpr int32_t INFO_BOX_H = 36;
-
-
-    static constexpr int32_t BTN_DROP_X = 576;
-    static constexpr int32_t BTN_DROP_Y = 192;
-    static constexpr int32_t BTN_DROP_W = 47;
-    static constexpr int32_t BTN_DROP_H = 21;
-
 
     static constexpr int32_t BTN_FOW_ON_X = 522;
     static constexpr int32_t BTN_FOW_ON_Y = 372;
@@ -102,11 +101,22 @@ public:
     MapSelectScreen();
     ~MapSelectScreen() = default;
 
+    /// Reads the map list: every `*.lvl` of `maps_dir`, sorted by the byte order of the file names (no map is named in the program; an unreadable folder gives an empty list)
     void init(const std::string& maps_dir = "Original-Ants/Maps");
+    /// The screen is created (again): the labels are empty until the refresh, nothing is locked, no button is pressed
+    void enter();
+    /// The screen's clock: 500 ms after `enter` the refresh shows the labels, the portraits and the thumbs
+    void update(float dt_seconds);
+    bool refreshed() const noexcept { return elapsed_ms_ >= REFRESH_MS; }
+    /// START was accepted: up / down, the fog option and a second START do nothing any more (+0x130)
+    void lock() noexcept { started_ = true; }
+    bool is_locked() const noexcept { return started_; }
 
+    /// Left button only. The buttons capture on the press (their pressed picture and click sound) and act at the release (docs 5.45)
     void handle_mouse_down(int32_t screen_x, int32_t screen_y, uint8_t button);
     void handle_mouse_up(int32_t screen_x, int32_t screen_y, uint8_t button);
     void handle_mouse_motion(int32_t screen_x, int32_t screen_y);
+    /// FUN_01014076: Up / Down step the map list (wrapping), Enter, S and s start, Q, q, X and x leave, every other key does nothing (Esc included)
     void handle_key_down(SDL_Keycode key);
 
     void render(IRenderer& renderer, const ants::assets::AssetArchive& archive);
@@ -158,39 +168,30 @@ public:
     /// A guest shows the host's choice (no callbacks fire); false when the map is not in the list
     bool follow_host_choice(const std::string& filename, bool fog);
 
-    bool is_player_ready(uint8_t player_idx) const noexcept {
-        return (player_ready_mask_ & (1u << player_idx)) != 0;
-    }
-    void toggle_player_ready(uint8_t player_idx) noexcept {
-        player_ready_mask_ ^= (1u << player_idx);
-    }
-
     void set_player_name(std::string name) { player_name_ = std::move(name); }
     void set_player_team(uint8_t team) noexcept { player_team_ = team; }
 
 private:
     void trigger_start();
     void trigger_quit();
+    void step_map(int32_t delta);          // FUN_01013fc9
+    void start();                          // FUN_010140c5 (the application decides whether everybody is ready)
 
     std::vector<MapSelectEntry> maps_;
     int32_t selected_index_{0};
 
     int32_t mouse_x_{0};
     int32_t mouse_y_{0};
-    bool btn_start_hovered_{false};
-    bool btn_quit_hovered_{false};
-    bool btn_up_hovered_{false};
-    bool btn_down_hovered_{false};
-    bool btn_fow_on_hovered_{false};
-    bool btn_fow_off_hovered_{false};
-
-    bool btn_start_pressed_{false};
-    bool btn_quit_pressed_{false};
-    bool btn_up_pressed_{false};
-    bool btn_down_pressed_{false};
+    ScreenButton up_{BTN_UP_X, BTN_UP_Y, BTN_UP_W, BTN_UP_H};
+    ScreenButton down_{BTN_DOWN_X, BTN_DOWN_Y, BTN_DOWN_W, BTN_DOWN_H};
+    ScreenButton start_{BTN_START_X, BTN_START_Y, BTN_START_W, BTN_START_H};
+    ScreenButton quit_{BTN_QUIT_X, BTN_QUIT_Y, BTN_QUIT_W, BTN_QUIT_H};
+    ScreenButton fow_on_{BTN_FOW_ON_X, BTN_FOW_ON_Y, BTN_FOW_ON_W, BTN_FOW_ON_H};
+    ScreenButton fow_off_{BTN_FOW_OFF_X, BTN_FOW_OFF_Y, BTN_FOW_OFF_W, BTN_FOW_OFF_H};
 
     bool fog_of_war_{false};
-    uint8_t player_ready_mask_{0b0011}; // Player 0 & 1 ready, Player 2 unready (matching reference)
+    bool started_{false};                 // +0x130: START ran
+    double elapsed_ms_{0.0};              // since the screen was created
     std::string player_name_{};
     uint8_t player_team_{0};
 

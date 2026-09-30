@@ -164,6 +164,7 @@ ApplicationConfig headless_config() {
 
 bool start_three(Peer& host, Peer& bob, Application& app, const std::string& app_name) {
     if (!host.net.host(0, "Alice", true)) return false;
+    host.net.set_map("TINY.LVL");
     if (!bob.net.join("127.0.0.1", host.net.listen_port(), "Bob")) return false;
     for (int i = 0; i < 800 && bob.net.phase() != net::NetGame::Phase::Room; ++i) {          // Bob is seated first (seat 1), the application second
         host.now += 10;
@@ -377,10 +378,19 @@ void run_host_tests() {
         ASSERT_TRUE(room.seats[0].thumb == MapSelectScreen::Thumb::Good && room.seats[1].thumb == MapSelectScreen::Thumb::Good);
         ASSERT_EQ(bob.net.room().slots[0].name, "Alice");
         // the host picks the map and the fog through the setup screen's controls; the guest's room follows
-        app.map_select().set_selected_index(1);                                         // SMALL
-        app.map_select().handle_mouse_down(MapSelectScreen::BTN_FOW_ON_X + 2, MapSelectScreen::BTN_FOW_ON_Y + 2, 1);
+        int32_t small_index = -1;
+        for (size_t i = 0; i < app.map_select().get_maps().size(); ++i) {
+            if (app.map_select().get_maps()[i].filename == "SMALL.LVL") small_index = static_cast<int32_t>(i);
+        }
+        ASSERT_TRUE(small_index >= 0);
+        app.map_select().set_selected_index(small_index);
+        const int32_t fx = MapSelectScreen::BTN_FOW_ON_X + 2;
+        const int32_t fy = MapSelectScreen::BTN_FOW_ON_Y + 2;
+        app.map_select().handle_mouse_motion(fx, fy);                                   // the button acts at the release
+        app.map_select().handle_mouse_down(fx, fy, 1);
+        app.map_select().handle_mouse_up(fx, fy, 1);
         duo.step(200);
-        ASSERT_EQ(bob.net.room().map_name, app.map_select().get_maps()[1].filename);
+        ASSERT_EQ(bob.net.room().map_name, "SMALL.LVL");
         ASSERT_TRUE(bob.net.room().fog);
         // START
         app.map_select().handle_key_down(SDLK_RETURN);
@@ -443,6 +453,7 @@ void run_guest_tests() {
     TEST_CASE("N5.4 Guest: The Room Shows The Host's Choice And The Original's Waiting Text; Only Leave Works; Playing As Seat 1; Team Switching Is Off") {
         Peer host;
         ASSERT_TRUE(host.net.host(0, "Alice", true));
+        host.net.set_map("TINY.LVL");                                                    // the application chooses the first map of its list right away; a bare host does the same
         ApplicationConfig cfg = headless_config();
         cfg.net_role = ApplicationConfig::NetRole::Join;
         cfg.net_address = "127.0.0.1";
@@ -464,9 +475,12 @@ void run_guest_tests() {
         ASSERT_EQ(app.map_select().get_maps()[static_cast<size_t>(app.map_select().get_selected_index())].filename, "TINY.LVL");
         ASSERT_TRUE(app.map_select().is_fog_of_war_enabled());
         const int32_t idx = app.map_select().get_selected_index();
+        app.map_select().handle_mouse_motion(MapSelectScreen::BTN_DOWN_X + 3, MapSelectScreen::BTN_DOWN_Y + 3);
         app.map_select().handle_mouse_down(MapSelectScreen::BTN_DOWN_X + 3, MapSelectScreen::BTN_DOWN_Y + 3, 1);
+        app.map_select().handle_mouse_up(MapSelectScreen::BTN_DOWN_X + 3, MapSelectScreen::BTN_DOWN_Y + 3, 1);
+        app.map_select().handle_key_down(SDLK_DOWN);
         app.map_select().handle_key_down(SDLK_RETURN);
-        app.map_select().handle_key_down(SDLK_f);
+        app.map_select().handle_key_down(SDLK_s);
         ASSERT_EQ(app.map_select().get_selected_index(), idx);
         ASSERT_TRUE(app.map_select().is_fog_of_war_enabled());
         ASSERT_EQ(app.state(), AppState::MapSelect);
@@ -530,6 +544,7 @@ void run_guest_tests() {
         Peer host;
         host.check_hash = false;                                                          // the host loads its own file fine; only the guest disagrees
         ASSERT_TRUE(host.net.host(0, "Alice", true));
+        host.net.set_map("TINY.LVL");                                                    // the application chooses the first map of its list right away; a bare host does the same
         ApplicationConfig cfg = headless_config();
         cfg.net_role = ApplicationConfig::NetRole::Join;
         cfg.net_address = "127.0.0.1";
@@ -554,6 +569,7 @@ void run_guest_tests() {
     TEST_CASE("N5.6 Guest: When The Host Leaves A Three-Player Match The Application Follows The Lowest Other Seat, Says So, And Stays Identical To The New Host") {
         Peer host;
         ASSERT_TRUE(host.net.host(0, "Alice", true));
+        host.net.set_map("TINY.LVL");                                                    // the application chooses the first map of its list right away; a bare host does the same
         Peer bob;
         ASSERT_TRUE(bob.net.join("127.0.0.1", host.net.listen_port(), "Bob"));
         for (int i = 0; i < 800 && bob.net.phase() != net::NetGame::Phase::Room; ++i) {          // Bob is seated first (seat 1), the application second
@@ -612,6 +628,7 @@ void run_guest_tests() {
     TEST_CASE("N5.11 Quit Over The Network: The Guest Quits A Two-Player Match (Ctrl+Q, Y): The Quit Command Ends It On Both Machines With The Guest As Quitter, The Results Open, Both Stay Identical") {
         Peer host;
         ASSERT_TRUE(host.net.host(0, "Alice", true));
+        host.net.set_map("TINY.LVL");                                                    // the application chooses the first map of its list right away; a bare host does the same
         ApplicationConfig cfg = headless_config();
         cfg.net_role = ApplicationConfig::NetRole::Join;
         cfg.net_address = "127.0.0.1";

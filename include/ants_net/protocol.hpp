@@ -124,7 +124,7 @@ struct RoomMsg {
         uint16_t rtt_ms{kRttUnknown};   // the host's measured round trip to this seat (0 for the host's own seat), kRttUnknown before the first answer
     };
     std::array<Slot, sim::MAX_PLAYERS> slots{};
-    std::string map_name;         // e.g. "TREASURE.LVL"
+    std::string map_name;         // the file name of the host's map ("" until the host has chosen one)
     bool fog{false};
     uint8_t you{255};             // the receiver's own seat (set per recipient by the host)
 };

@@ -143,7 +143,13 @@ bool Application::init(const ApplicationConfig& config) {
         return false;
     }
 
-    // 3. Load Map Level
+    // 3. Load Map Level: the list is what the Maps folder holds; a game that starts without the setup screen plays --map, else the first map of the list
+    map_select_.init(config_.maps_dir);
+    if (config_.default_map_path.empty()) config_.default_map_path = map_select_.get_selected_map_path();
+    if (config_.default_map_path.empty()) {
+        std::cerr << "[Application] There is no map (*.lvl) in " << config_.maps_dir << std::endl;
+        return false;
+    }
     if (!current_level_.load_from_file(config_.default_map_path)) {
         std::cerr << "[Application] Failed to load Level: " << config_.default_map_path << std::endl;
         return false;
@@ -262,7 +268,6 @@ bool Application::init(const ApplicationConfig& config) {
                               : (!config_.team_names[my_team].empty() ? config_.team_names[my_team]
                                                                        : (networked ? std::string("Player") : get_system_username()));
     player_name_ = player_name;
-    map_select_.init("Original-Ants/Maps");
     map_select_.set_player_name(player_name);
     map_select_.set_player_team(config_.local_player_id);
     scorecard_.set_local_player_name(player_name);
@@ -357,7 +362,7 @@ bool Application::init(const ApplicationConfig& config) {
             state_ = AppState::Loading;
             intro_ticks_ = 0;
         } else {
-            state_ = AppState::MapSelect;
+            enter_map_select();
         }
         start_intro_music();             // plays once, then the random in-game pieces follow (also on the setup screen)
     }
@@ -505,10 +510,22 @@ void Application::quit() {
 #endif
 }
 
+// The setup screen is created (again): its labels stay empty until its refresh, 500 ms later
+void Application::enter_map_select() {
+    state_ = AppState::MapSelect;
+    map_select_.enter();
+}
+
+// The loading screen ends: the quick help when the option asks for it, else the setup screen
+void Application::finish_loading() {
+    if (hud_.is_quick_help_enabled()) state_ = AppState::QuickHelp;
+    else enter_map_select();
+}
+
 void Application::return_to_map_select() {
     if (network_active()) net_end_session(net_notice_);   // leaving a match leaves the room: the local setup screen follows
     net_notice_.clear();
-    state_ = AppState::MapSelect;
+    enter_map_select();
     scorecard_.hide();
     hud_.close_quit_dialog();
     hud_.close_quick_help();
@@ -552,6 +569,7 @@ void Application::run_frame_with_delta(float delta_time) {
 
     pump_network(delta_time);                   // a network match has no pause: it keeps running while the window is in the background
 
+    if (state_ == AppState::MapSelect) map_select_.update(delta_time);
     update_results(delta_time);
     update_music(delta_time);                   // the music chain runs in every state (the intro ends on the loading, quick help or setup screen alike)
 
@@ -678,7 +696,7 @@ void Application::handle_events() {
 
         if (state_ == AppState::Loading) {
             if (event.type == SDL_KEYDOWN || event.type == SDL_MOUSEBUTTONDOWN) {
-                state_ = hud_.is_quick_help_enabled() ? AppState::QuickHelp : AppState::MapSelect;
+                finish_loading();
             }
             continue;
         }
@@ -700,12 +718,12 @@ void Application::handle_events() {
                 if (quick_help_start_pressed_) {
                     quick_help_start_pressed_ = false;
                     if (event.button.x >= 528 && event.button.x <= 528 + 98 && event.button.y >= 437 && event.button.y <= 437 + 27) {
-                        state_ = AppState::MapSelect;   // qh_start3 carries no sound
+                        enter_map_select();   // qh_start3 carries no sound
                     }
                 }
             } else if (event.type == SDL_KEYDOWN) {
                 if (event.key.keysym.sym == SDLK_RETURN || event.key.keysym.sym == SDLK_SPACE || event.key.keysym.sym == SDLK_ESCAPE) {
-                    state_ = AppState::MapSelect;
+                    enter_map_select();
                 }
             }
             continue;
@@ -846,7 +864,7 @@ void Application::update_simulation(float dt) {
             intro_ticks_++;
             tick_accumulator_ -= 0.050f;
             if (intro_ticks_ >= 30) {
-                state_ = hud_.is_quick_help_enabled() ? AppState::QuickHelp : AppState::MapSelect;
+                finish_loading();
                 break;
             }
         }
@@ -988,7 +1006,9 @@ void Application::net_start_from_setup(const std::string& map_path) {
     std::random_device rd;
     if (!net_->start_match(static_cast<uint32_t>(rd()), hash)) {
         audio_mixer_.play_sfx(sim::SoundID::CantGo, 1.0f, 255);              // not enough players yet
+        return;
     }
+    map_select_.lock();                                                      // START ran: the map and the fog option are fixed (+0x130)
 }
 
 void Application::handle_net_events() {
@@ -1022,7 +1042,7 @@ void Application::net_load_match() {
     for (const auto& entry : map_select_.get_maps()) {
         if (entry.filename == start.map_name) path = entry.full_path;
     }
-    if (path.empty()) path = "Original-Ants/Maps/" + start.map_name;
+    if (path.empty()) path = config_.maps_dir + "/" + start.map_name;
     uint64_t hash = 0;
     local_player_id_ = net_->my_seat();
     bool ok = net::hash_file(path, hash) && hash == start.map_hash;

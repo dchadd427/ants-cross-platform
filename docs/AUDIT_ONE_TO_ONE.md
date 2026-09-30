@@ -17,6 +17,7 @@ order in which it is proposed to be fixed. The owner decides (AGENTS.md rule 9).
 * v0.0.61: batch 2 part 4 (music: the intro plays once and random pieces chain, focus loss closes it and focus gain starts a new piece, slider release restarts, match end closes at once: LS NEW-8, LR NEW-2). **Batch 2 is done.** Not done on purpose: the start-up jingle (vendor artwork, owner decision), the 32-channel limit (by necessity).
 * v0.0.62: batch 3 part 1 (the end rules: nobody left, a strictly best allied survivor, the drop-out win test, quitting as a forfeit with the quitter's row last; `Quit` command, protocol version 4: LR R1.4c, LS S-4.T3, LX #1). Next: the results screen rebuild.
 * v0.0.63: batch 3 part 2 (the results screen rebuilt: waiting label and 250 ms, rows per alliance with the original's sort and places, left-aligned numbers, animated portraits, one cue when the rows appear, Enter / C / Q / X leave, Esc does nothing: LR R1.1 - R1.4b, LF NEW-6, LU S-08 / S-14). **Batch 3 is done.** Not changed on purpose: the web "Leave" (owner decision), the counters' wrap (substitute font).
+* v0.0.64: batch 4 part 1 (the setup screen: searched map list instead of a built-in one, button class at the release, the exact key map, 500 ms refresh, invented click targets removed: LR R3.1 - R3.4, NEW-5; community maps: loader accepts trailing bytes, rows-first header, egg stock = final word). Still open in batch 4: options (sliders, quick-chat fields, persistence), the startup flow (owner decisions), the text pass.
 
 ## 1. What was audited and how
 

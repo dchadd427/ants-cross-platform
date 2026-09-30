@@ -192,8 +192,14 @@ bool LVLParser::load_from_memory(const uint8_t* data, size_t size, LevelData& ou
             out_level.tile_dictionary[i].assign(name_buf, nlen);
         }
 
-        // 3. Grid Dimensions (8 bytes)
-        if (!r.read_u32(out_level.width) || !r.read_u32(out_level.height)) return false;
+        // 3. Grid Dimensions (8 bytes): the FIRST dword is the number of ROWS, the second the number of COLUMNS. The loader (0x1006349 -> 0x10068de) stores them as the
+        // map's +0xd0 and +0xd2, every record addresses cells[y][x] with y below +0xd0 and x below +0xd2 (0x100660c, the waypoint reader), and the layers are read
+        // with the rows as the outer loop (0x10069d8). The six shipped maps are square, so the order never mattered until the community map OCEAN.LVL (81 rows of 100 columns).
+        uint32_t rows = 0;
+        uint32_t columns = 0;
+        if (!r.read_u32(rows) || !r.read_u32(columns)) return false;
+        out_level.height.val = rows;
+        out_level.width.val = columns;
         // Enforce upper sanity limit on map dimensions (Ants max is 60x60, allow up to 256x256)
         if (out_level.width == 0 || out_level.height == 0 ||
             out_level.width > 256 || out_level.height > 256) {
@@ -308,11 +314,10 @@ bool LVLParser::load_from_memory(const uint8_t* data, size_t size, LevelData& ou
             }
         }
 
-        // 10. Final Boundary Parameter
-        if (!r.read_u16(out_level.boundary_param)) return false;
-
-        // Strict 0 remaining bytes check
-        return (r.pos() == size);
+        // 10. Final parameter: the egg stock of every team (the loader at 0x1006349 reads it into the level's +0x6c, FUN_0100dc94 copies it to each team's +0x4a).
+        // The original's loader stops reading here and never looks at what follows: the maps of the community's map editor end with a template of filler after the
+        // real blocks (206 bytes of it, and a last word of 0x7FFE that the game takes as 32766 eggs), so bytes after the final parameter are no error.
+        return r.read_u16(out_level.boundary_param);
     } catch (...) {
         out_level = LevelData{};
         return false;

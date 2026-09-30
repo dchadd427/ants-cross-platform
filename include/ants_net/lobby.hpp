@@ -55,7 +55,7 @@ public:
     const RoomMsg& room() const noexcept { return room_; }
     size_t players() const noexcept;
     bool occupied(uint8_t seat) const noexcept { return seat < sim::MAX_PLAYERS && room_.slots[seat].state != SlotState::Empty; }
-    bool can_start() const noexcept { return phase_ == Phase::Room && players() >= 2; }
+    bool can_start() const noexcept { return phase_ == Phase::Room && players() >= 2 && !room_.map_name.empty(); }
     /// Removes the guest of a seat (Reject Kicked)
     void kick(uint8_t seat);
     /// The measured round trip to a guest (the host itself: 0); false while nothing has come back yet

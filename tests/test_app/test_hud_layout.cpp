@@ -338,6 +338,8 @@ void test_rubber_band(const assets::AssetArchive& arc) {
 }
 
 // Full-screen HUD screens: composites drawn from the original animations, no invented dimming layers.
+void click(MapSelectScreen& screen, int32_t x, int32_t y);
+
 void test_screens(const assets::AssetArchive& arc) {
     std::printf("[hud] options, quit, quick help and start screens\n");
     // Options: op_screen composite only (its own dither), no extra dither grid or card fill
@@ -908,6 +910,11 @@ void test_button_states(const assets::AssetArchive& arc) {
 
         MapSelectScreen screen;
         screen.init();
+        RecordingRenderer early(arc);
+        screen.render(early, arc);                                                  // before the refresh (500 ms): the buttons are there, nothing else
+        check(early.has_sprite_at("bstart1.bmp", 526, 439) && early.texts.empty() && early.named("thumb1.bmp").empty(),
+              "setup: before the first refresh (500 ms) the buttons show, the labels, the portrait and the thumb do not");
+        screen.update(0.5f);
         RecordingRenderer rr(arc);
         screen.render(rr, arc);
         check(rr.has_sprite_at("bstart1.bmp", 526, 439), "setup: START up art at (526,439)");
@@ -920,7 +927,7 @@ void test_button_states(const assets::AssetArchive& arc) {
             if (sp.name.rfind("agst30", 0) == 0 && sp.x >= 383 && sp.x <= 385 && sp.y >= 85 && sp.y <= 87) portrait_ok = true;
         }
         check(portrait_ok, "setup: portrait agst30x drawn from its origin (395,115) with the part offset");
-        screen.handle_mouse_down(MS::BTN_FOW_ON_X + 2, MS::BTN_FOW_ON_Y + 2, 1);
+        click(screen, MS::BTN_FOW_ON_X + 2, MS::BTN_FOW_ON_Y + 2);
         RecordingRenderer on(arc);
         screen.render(on, arc);
         check(on.has_sprite_at("optond.bmp", 522, 372) && on.has_sprite_at("dbutoffu.bmp", 576, 373), "setup: Fog of War on shows ON down (522,372) and OFF up (576,373)");
@@ -935,6 +942,13 @@ void test_button_states(const assets::AssetArchive& arc) {
     }
 }
 
+// A click of the original's button class on the setup screen: the pointer moves onto the button, the left button goes down and up
+void click(MapSelectScreen& screen, int32_t x, int32_t y) {
+    screen.handle_mouse_motion(x, y);
+    screen.handle_mouse_down(x, y, 1);
+    screen.handle_mouse_up(x, y, 1);
+}
+
 // The setup screen as a network room: a row per occupied seat (portrait, name, the thumb of the connection quality), the status line, and the
 // host-only controls (the map, the fog option and START belong to the host; every player can leave).
 void test_room_screen(const assets::AssetArchive& arc) {
@@ -942,6 +956,7 @@ void test_room_screen(const assets::AssetArchive& arc) {
     using MS = MapSelectScreen;
     MS screen;
     screen.init();
+    screen.update(0.5f);                                                            // the refresh has run: labels, portraits and thumbs are shown
     MS::RoomView view;
     view.networked = true;
     view.is_host = true;
@@ -967,7 +982,17 @@ void test_room_screen(const assets::AssetArchive& arc) {
     };
     check(text_at("Alice", 415) && text_at("Bob", 415), "room: the names are drawn at x = 415");
     check(text_at("A Very Long Pla", 415) || text_at("A Very Long Play", 415), "room: a long name is cut to fit before the thumb");
-    check(text_at("Press START when all players' thumbs have appeared.", 38), "room: the status line is the original's prompt");
+    {
+        // the prompt is the label (36, 447) 293 wide with 14 px lines: it wraps like every label (the recorder measures 6 px per character)
+        const auto lines = wrap_label_text(rr, "Press START when all players' thumbs have appeared.", MS::STATUS_W, FontSize::Px14);
+        bool ok = lines.size() == 2;
+        for (size_t i = 0; i < lines.size(); ++i) {
+            bool found = false;
+            for (const auto& tx : rr.texts) found = found || (tx.text == lines[i] && tx.x == 36 && tx.y == 447 + static_cast<int32_t>(i) * 14 && tx.size == FontSize::Px14);
+            ok = ok && found;
+        }
+        check(ok, "room: the status line is the original's prompt, wrapped in its label at (36, 447)");
+    }
     int portraits = 0;
     for (const auto& sp : rr.sprites) portraits += sp.name.rfind("agst30", 0) == 0 ? 1 : 0;
     check(portraits >= 3, "room: a portrait for each occupied seat");
@@ -993,15 +1018,15 @@ void test_room_screen(const assets::AssetArchive& arc) {
     screen.set_on_start([&](const std::string&) { ++started; });
     screen.set_on_quit([&]() { ++left; });
     const int32_t before = screen.get_selected_index();
-    screen.handle_mouse_down(MS::BTN_DOWN_X + 3, MS::BTN_DOWN_Y + 3, 1);
+    click(screen, MS::BTN_DOWN_X + 3, MS::BTN_DOWN_Y + 3);
     check(screen.get_selected_index() != before && maps_chosen.size() == 1, "room host: the down button changes the map and tells the room");
     check(maps_chosen[0] == screen.get_maps()[static_cast<size_t>(screen.get_selected_index())].filename, "room host: the room gets the file name of the map");
-    screen.handle_mouse_down(MS::BTN_FOW_ON_X + 2, MS::BTN_FOW_ON_Y + 2, 1);
-    screen.handle_mouse_down(MS::BTN_FOW_ON_X + 2, MS::BTN_FOW_ON_Y + 2, 1);           // the same choice again changes nothing
+    click(screen, MS::BTN_FOW_ON_X + 2, MS::BTN_FOW_ON_Y + 2);
+    click(screen, MS::BTN_FOW_ON_X + 2, MS::BTN_FOW_ON_Y + 2);                         // the same choice again changes nothing
     check(fog_chosen.size() == 1 && fog_chosen[0], "room host: the fog option is reported once per change");
-    screen.handle_mouse_down(MS::BTN_START_X + 5, MS::BTN_START_Y + 5, 1);
+    click(screen, MS::BTN_START_X + 5, MS::BTN_START_Y + 5);
     check(started == 1, "room host: START starts");
-    screen.handle_mouse_down(MS::BTN_QUIT_X + 5, MS::BTN_QUIT_Y + 5, 1);
+    click(screen, MS::BTN_QUIT_X + 5, MS::BTN_QUIT_Y + 5);
     check(left == 1, "room host: LEAVE quits");
 
     // a guest cannot change anything but can leave; it follows the host without any callback
@@ -1015,20 +1040,22 @@ void test_room_screen(const assets::AssetArchive& arc) {
     left = 0;
     const int32_t idx = screen.get_selected_index();
     const bool fog_before = screen.is_fog_of_war_enabled();
-    screen.handle_mouse_down(MS::BTN_DOWN_X + 3, MS::BTN_DOWN_Y + 3, 1);
-    screen.handle_mouse_down(MS::W_MAP_X + 5, MS::W_MAP_Y + 5, 1);
-    screen.handle_mouse_down(MS::BTN_FOW_OFF_X + 2, MS::BTN_FOW_OFF_Y + 2, 1);
-    screen.handle_mouse_down(MS::BTN_FOW_ON_X + 2, MS::BTN_FOW_ON_Y + 2, 1);
-    screen.handle_mouse_down(MS::BTN_START_X + 5, MS::BTN_START_Y + 5, 1);
+    click(screen, MS::BTN_DOWN_X + 3, MS::BTN_DOWN_Y + 3);
+    click(screen, MS::BTN_FOW_OFF_X + 2, MS::BTN_FOW_OFF_Y + 2);
+    click(screen, MS::BTN_FOW_ON_X + 2, MS::BTN_FOW_ON_Y + 2);
+    click(screen, MS::BTN_START_X + 5, MS::BTN_START_Y + 5);
     screen.handle_key_down(SDLK_DOWN);
-    screen.handle_key_down(SDLK_f);
+    screen.handle_key_down(SDLK_s);
     screen.handle_key_down(SDLK_RETURN);
     check(screen.get_selected_index() == idx && screen.is_fog_of_war_enabled() == fog_before, "room guest: the map and the fog option cannot be changed");
     check(started == 0 && maps_chosen.empty() && fog_chosen.empty(), "room guest: START does nothing and nothing is reported");
-    screen.handle_mouse_down(MS::BTN_QUIT_X + 5, MS::BTN_QUIT_Y + 5, 1);
+    click(screen, MS::BTN_QUIT_X + 5, MS::BTN_QUIT_Y + 5);
     check(left == 1, "room guest: LEAVE quits");
     screen.handle_key_down(SDLK_ESCAPE);
-    check(left == 2, "room guest: Esc leaves");
+    check(left == 1, "room guest: Esc does nothing");
+    screen.handle_key_down(SDLK_q);
+    screen.handle_key_down(SDLK_x);
+    check(left == 3, "room guest: Q and X leave");
     check(screen.follow_host_choice("SMALL.LVL", true) && screen.get_maps()[static_cast<size_t>(screen.get_selected_index())].filename == "SMALL.LVL" &&
               screen.is_fog_of_war_enabled() && maps_chosen.empty() && fog_chosen.empty(),
           "room guest: follows the host's map and fog without telling anybody");
@@ -1037,12 +1064,13 @@ void test_room_screen(const assets::AssetArchive& arc) {
     // not networked: the local screen keeps its single row and its placeholders
     MS local;
     local.init();
+    local.update(0.5f);
     RecordingRenderer lr(arc);
     local.render(lr, arc);
     check(lr.has_sprite_at("thumb1.bmp", 540, 95) && lr.named("thumb2.bmp").empty(), "local setup screen: one row with the good thumb");
     int local_maps = 0;
     local.set_on_map_changed([&](const std::string&) { ++local_maps; });
-    local.handle_mouse_down(MS::BTN_DOWN_X + 3, MS::BTN_DOWN_Y + 3, 1);
+    click(local, MS::BTN_DOWN_X + 3, MS::BTN_DOWN_Y + 3);
     check(local_maps == 0, "local setup screen: no room to tell about a map change");
 }
 
@@ -1106,20 +1134,24 @@ void test_text_sizes(const assets::AssetArchive& arc) {
         const auto* footer = find(rr, "Waiting for others...");
         check(footer != nullptr && footer->size == FontSize::Px24 && footer->y == 290 && footer->x == 130 + (240 - 21 * 6) / 2, "start dialog: the footer is 24 px high at y = 290");
     }
-    // the setup screen: map name and description 18 px (y 312 and 380), the prompt 14 px (y 447), the player's name 18 px at the row's top
+    // the setup screen (after its refresh): map name and description 18 px at x = 36 (y 312 and 380), the prompt 14 px in its label (36, 447), the player's name 18 px
+    // at the row's top; every label in (239, 231, 223)
     {
         MapSelectScreen screen;
         screen.init();
+        screen.update(0.5f);
         RecordingRenderer rr(arc);
         screen.render(rr, arc);
         const auto& maps = screen.get_maps();
         const auto& cur = maps[static_cast<size_t>(screen.get_selected_index())];
         const auto* name = find(rr, cur.display_name);
-        check(name != nullptr && name->size == FontSize::Px18 && name->y == 312, "setup: the map name is 18 px high at y = 312 (the original's label top)");
+        check(name != nullptr && name->size == FontSize::Px18 && name->x == 36 && name->y == 312, "setup: the map name is 18 px high at (36, 312) (the original's label top)");
+        check(name != nullptr && name->colour.r == 239 && name->colour.g == 231 && name->colour.b == 223, "setup: the labels' colour is (239, 231, 223)");
         const auto* info = find(rr, cur.description + " (" + std::to_string(cur.minutes) + " min)");
-        check(info != nullptr && info->size == FontSize::Px18 && info->y == 380, "setup: the map description is 18 px high at y = 380");
-        const auto* prompt = find(rr, "Press START when all players' thumbs have appeared.");
-        check(prompt != nullptr && prompt->size == FontSize::Px14 && prompt->y == 447, "setup: the prompt is 14 px high at y = 447");
+        check(info != nullptr && info->size == FontSize::Px18 && info->x == 36 && info->y == 380, "setup: the map description is 18 px high at (36, 380)");
+        const auto lines = wrap_label_text(rr, "Press START when all players' thumbs have appeared.", MapSelectScreen::STATUS_W, FontSize::Px14);
+        const auto* first = lines.empty() ? nullptr : find(rr, lines[0]);
+        check(first != nullptr && first->size == FontSize::Px14 && first->x == 36 && first->y == 447, "setup: the prompt is 14 px high in its label at (36, 447)");
         const auto* player = find(rr, "Player");
         check(player != nullptr && player->size == FontSize::Px18 && player->x == 415 && player->y == 95, "setup: the player's name is 18 px high at (415, 95)");
     }

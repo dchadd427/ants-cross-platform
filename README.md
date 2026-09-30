@@ -4,7 +4,7 @@ A faithful, high-performance, deterministic C++17 native engine remake and port 
 
 The engine directly loads raw original binary assets (`ants.chd` and `Maps/*.LVL`) without pre-conversion, faithfully executing authentic gameplay mechanics, deterministic 20Hz simulation, 32-channel spatial audio, MIDI/MP3 score playback, TrueType font rendering, and an SDL2 hardware-accelerated 2D viewport.
 
-**Current version: v0.0.63** (shown on screen next to the FPS meter). Every release is listed in the **[changelog](CHANGELOG.md)**, which is also published at **[beta.playants.org/changelog.html](https://beta.playants.org/changelog.html)**. Since v0.0.24 every system is re-derived from the disassembly of the original `Ants.exe` (see [Reverse Engineering](#reverse-engineering--historical-preservation)); multiplayer over a network (host / join over TCP) works and is still being extended (see [Network Port](#network-port-in-progress)).
+**Current version: v0.0.64** (shown on screen next to the FPS meter). Every release is listed in the **[changelog](CHANGELOG.md)**, which is also published at **[beta.playants.org/changelog.html](https://beta.playants.org/changelog.html)**. Since v0.0.24 every system is re-derived from the disassembly of the original `Ants.exe` (see [Reverse Engineering](#reverse-engineering--historical-preservation)); multiplayer over a network (host / join over TCP) works and is still being extended (see [Network Port](#network-port-in-progress)).
 
 ---
 
@@ -25,7 +25,7 @@ Play the remake instantly in any modern web browser (Chrome, Firefox, Safari, Ed
 
 - **Direct Binary Asset Pipeline (`libants-assets`)**:
   - Runtime parser for `Original-Ants/ants.chd` (header, 256-color palette, 2,794 raw paletted sprite bitmaps, 91 PCM audio clips, and 1,344 animation sequences).
-  - Runtime parser for `Original-Ants/Maps/*.LVL` (header duration, tile dictionaries, terrain layers, items, and player spawn coordinates).
+  - Runtime parser for `Original-Ants/Maps/*.LVL` (header duration, tile dictionaries, terrain layers, items, and player spawn coordinates). It reads a map the way the original's loader does, so the community's maps load too (checked with `POPcOrN`, `Bombz Away` and `OCEAN`, which is not square: 81 rows of 100 columns): the header lists the rows first, bytes after the final word are never read, and that final word is every team's egg stock as it stands (the community editor's template ends with 32766).
   - On-the-fly 5-to-8 directional sprite mirroring for $O(1)$ directional lookups.
   - Zero external conversion tools or pre-processing needed.
 
@@ -67,7 +67,7 @@ Play the remake instantly in any modern web browser (Chrome, Firefox, Safari, Ed
   - Standalone web inspector (`asset_catalog/index.html`) with responsive design, searching, filtering, and instant asset downloads (⬇ WAV audio, ⬇ PNG sprites, ⬇ composite canvas frames).
 
 - **Automated Verification & Zero-Warning Standard**:
-  - 100% pass rate across **199 application integration tests (7,486 assertions)**, the simulation golden suites (movement, path planner, hill, combat, ability, power-up and food actions), the command-layer / state-hash suite, the lock-step network core, room and TCP transport suites, the render, HUD, status-message, input and pointer model suites and **506 opaque-box End-to-End (E2E) verification tests** (real counts in [Testing & Verification](#testing--verification)).
+  - 100% pass rate across **201 application integration tests (7,565 assertions)**, the simulation golden suites (movement, path planner, hill, combat, ability, power-up and food actions), the command-layer / state-hash suite, the lock-step network core, room and TCP transport suites, the render, HUD, status-message, input and pointer model suites and **506 opaque-box End-to-End (E2E) verification tests** (real counts in [Testing & Verification](#testing--verification)).
   - Zero warnings under `-Wall -Wextra -Wpedantic -Wconversion -Wshadow -Wnon-virtual-dtor`.
 
 ---
@@ -131,7 +131,7 @@ Ants-Mac/
 │   ├── ants.chd            # Packed binary sprites, audio, palettes, animations
 │   ├── LibreFranklin-Medium.ttf  # Bundled text font (Libre Franklin, SIL Open Font License; licence: LibreFranklin-OFL.txt)
 │   ├── *.mp3 / *.MID       # Soundtrack audio files
-│   └── Maps/               # Binary .LVL maps (Treasure, Small, Medium, Tiny, Islands, Gauntlet)
+│   └── Maps/               # Binary .LVL maps: the six of the original; every .lvl in this folder is listed on the setup screen
 ├── src/                    # Implementation source code
 │   ├── ants_assets/        # Asset decompression, palette mapping, mirroring
 │   ├── ants_sim/           # Tick loop, PATHMGR A*, locomotion and action clips, combat, commands, state hash
@@ -218,7 +218,7 @@ cmake --build build_asan -j8
 
 | Option | Effect |
 |---|---|
-| `--map PATH` | Skip the setup screen and start a match on that `.LVL` file (for example `Original-Ants/Maps/SMALL.LVL`). |
+| `--map PATH` | Skip the setup screen and start a match on that `.LVL` file (for example `Original-Ants/Maps/SMALL.LVL`). Without `--map` a run that skips the setup screen plays the first map of the list. |
 | `--map-select` | Start on the setup screen (the default). |
 | `--seed N` | Random seed of the match. |
 | `--player N` | The team you control (0 green, 1 red, 2 blue, 3 black). |
@@ -271,12 +271,12 @@ python3 -m http.server 8080 -d dist
 ## Controls & Hotkeys
 
 ### Setup Screen (map selection)
-- **Up / Left, Down / Right, number keys `1`–`6`, or the arrow buttons**: Highlight a map (Treasure, Small, Medium, Tiny, Islands, Gauntlet); clicking the map name or the info box advances to the next one.
-- **`F`** or the **Fog of War On / Off** buttons: Toggle Fog of War.
-- **`Enter` / `Space` / `START` button**: Launch the match. **`Esc` / Leave Game button**: leave.
-- **`D` or a click on a player thumb**: toggles that thumb (a placeholder of the local screen; in a network room the thumbs show the real connection quality).
+- **The map list is searched, not built in**: every `.lvl` file of `Original-Ants/Maps/` is listed, sorted by the bytes of the file names (capitals before small letters), so a map that you drop into that folder - one of the community's maps, say - appears on the screen at once. The name, the description and the minutes come from the file's own header.
+- **`Up` / `Down`** (or the arrow buttons): the previous / next map, wrapping round. **`Enter` or `S`** (or the `START` button): start. **`Q` or `X`** (or the Leave Game button): leave. The original's setup screen knows no other key: `Esc`, digits, `Left` / `Right`, `Space`, `F` and `D` do nothing.
+- **The buttons are the original's button class**: a press captures the button (pressed picture, click sound) and the action happens at the release; moving off the button before the release cancels it for good. The **Fog of War On / Off** pair is silent and starts on Off. `START` locks the screen.
+- The labels, the ant portrait and the thumb appear 500 ms after the screen is created (the original's refresh task), in the original's colour.
 - **In a network room** the setup screen lists every player with a portrait in the player's colour, the name and a thumb: green thumbs up (round trip below 1.2 s), yellow sideways hand (below 1.8 s), red thumbs down (slower), orange question mark (not measured yet). Only the host changes the map and the fog and presses START (it needs a second player and every thumb); a guest sees the host's choice and can leave. The status line has the original's texts ("Press START when all players' thumbs have appeared.", "Waiting for the host to start the game...", "Trying to connect to the host...").
-- **Soundtrack**: `INTRO` loops on this screen; a match plays a shuffled in-game track (`ANTS2A`, `ANTS2B`, `ANTSFUN3`).
+- **Soundtrack**: `INTRO` plays once on this screen, then random in-game pieces (`ANTS2A`, `ANTS2B`, `ANTSFUN3`) follow one another (docs 5.24e).
 
 ### Mouse Controls
 | Action | Trigger | Description |
@@ -342,7 +342,7 @@ Limits of this release: raw TCP only (a LAN, a VPN or a forwarded port 4001; the
 
 ## Changelog & Versioning
 
-The version (`include/ants_app/version.hpp`, currently `v0.0.63`) is bumped with every release and shown on screen next to the FPS meter. [`CHANGELOG.md`](CHANGELOG.md) lists what changed in every version, newest first, from the first commit to the release in progress; it is published on the beta site at [`/changelog.html`](https://beta.playants.org/changelog.html) and linked from the game page.
+The version (`include/ants_app/version.hpp`, currently `v0.0.64`) is bumped with every release and shown on screen next to the FPS meter. [`CHANGELOG.md`](CHANGELOG.md) lists what changed in every version, newest first, from the first commit to the release in progress; it is published on the beta site at [`/changelog.html`](https://beta.playants.org/changelog.html) and linked from the game page.
 
 ---
 
@@ -367,12 +367,12 @@ To run all test suites in sequence:
 ./run_tests.sh --clean    # Remove the build directories and rebuild first
 ```
 
-### What the Suites Cover (v0.0.63, all passing)
+### What the Suites Cover (v0.0.64, all passing)
 | Suite | What it checks | Size |
 |---|---|---|
-| 1 Asset decoders | `ants.chd` header, palette, sprites, audio, event tags, Table 4 animations, `.LVL` maps, directional mirroring, fuzzing | 8 suites, 69,809 assertions |
+| 1 Asset decoders | `ants.chd` header, palette, sprites, audio, event tags, Table 4 animations, `.LVL` maps, directional mirroring, fuzzing | 9 suites, 70,065 assertions |
 | 1.1 Movement tables | Generated locomotion tables and clips equal the static tables inside `Ants.exe` and `ants.chd` | 7 suites, 120,582 assertions |
-| 2 Simulation rules | Clock, PRNG, unit attributes, combat, placement, bombs, fire, bridges, hills, thieves, alliances, scoring, match end, the end rules (elimination, allied survivors, the drop-out win test, quitting) and the result rows | 14 suites, 2,379 assertions |
+| 2 Simulation rules | Clock, PRNG, unit attributes, combat, placement, bombs, fire, bridges, hills, thieves, alliances, scoring, match end, the end rules (elimination, allied survivors, the drop-out win test, quitting) and the result rows | 14 suites, 2,398 assertions |
 | 2.1 - 2.2 Challengers | Adversarial combat / hazard and lifecycle / economy / alliance scenarios | 288 and 213 assertions |
 | 2.3 Path planner | Port of the original `PATHMGR` A* | 228 assertions |
 | 2.4 Movement golden | 22 frame-exact timings from a reference model, blocking, bumping, terrain, solid bits | 17,710 assertions |
@@ -382,9 +382,9 @@ To run all test suites in sequence:
 | 2.12 Room | Joining, roster, map and fog, the start barrier, the connection thumbs (round trip tiers 1200 / 1800 ms) | 9 tests, 55,050 assertions |
 | 2.13 TCP | Framing, hostile frames, a real-socket match | 6 tests, 60,122 assertions |
 | 2.14 NetGame | The room, thumbs, the start barrier, a match with commands and chat, a guest that leaves, host migration over real sockets (the host leaving a two-, three- and four-player match, the links between guests, strangers on a guest's port, no election after the match is over), refused joins, map mismatch | 14 tests, 533 assertions |
-| 3 Application integration | Whole-application behaviour through the HUD, renderer and simulation | 199 tests, 7,486 assertions |
-| 3.1 - 3.5 Model suites | Render parity 303 checks (with the text sizes and the health-number font), HUD layout 690 (with the network room screen, the label sizes and wrapping, the three alliance dialogs and the results screen), status messages 263, input model 70, pointer model 331 | 1,657 checks |
-| 3.6 Network application | The command line (names, `--host`, `--join`), a headless application as host and as guest of a room, start, a bit-identical match, chat, leaving, the host leaving (a two-player match is decided at once, in a three-player match the guest follows the new host and says so), a guest that quits (the quit ends the match on both machines), the score labels of a local game, teaming over three machines (an offer arrives as the question, Accept, team chat reaches only the ally, refusal, Withdraw) | 11 tests, 202 assertions |
+| 3 Application integration | Whole-application behaviour through the HUD, renderer and simulation | 201 tests, 7,565 assertions |
+| 3.1 - 3.5 Model suites | Render parity 303 checks (with the text sizes and the health-number font), HUD layout 693 (with the network room screen, the label sizes and wrapping, the three alliance dialogs and the results screen), status messages 263, input model 70, pointer model 331 | 1,660 checks |
+| 3.6 Network application | The command line (names, `--host`, `--join`), a headless application as host and as guest of a room, start, a bit-identical match, chat, leaving, the host leaving (a two-player match is decided at once, in a three-player match the guest follows the new host and says so), a guest that quits (the quit ends the match on both machines), the score labels of a local game, teaming over three machines (an offer arrives as the question, Accept, team chat reaches only the ally, refusal, Withdraw) | 11 tests, 203 assertions |
 | 4 E2E | Opaque-box scenarios in four tiers | 506 tests |
 
 ### Standalone E2E Test Runner

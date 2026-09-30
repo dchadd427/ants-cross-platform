@@ -1388,6 +1388,21 @@ void run_suite_14_match_end() {
         ASSERT_TRUE(r.is_winner(1));
     } TEST_END();
 
+    TEST_CASE("14.17 Every Team Starts With The Level's Final Word As Its Egg Stock, Whatever It Holds (FUN_0100dc94): 0, 4, And The 32766 That Community Maps Carry") {
+        ants::assets::LevelData lvl;
+        ASSERT_TRUE(load_test_map("TINY.LVL", lvl));
+        for (uint16_t eggs : {static_cast<uint16_t>(0), static_cast<uint16_t>(4), static_cast<uint16_t>(32766)}) {
+            lvl.boundary_param = eggs;
+            SimulationEngine sim;
+            sim.init(lvl, 1);
+            for (uint8_t p = 0; p < 4; ++p) ASSERT_EQ(sim.get_player_eggs(p), static_cast<uint32_t>(eggs));
+            SimulationEngine three;
+            three.init(lvl, 1, 0x07);                                               // a team outside the roster has none
+            ASSERT_EQ(three.get_player_eggs(0), static_cast<uint32_t>(eggs));
+            ASSERT_EQ(three.get_player_eggs(3), 0u);
+        }
+    } TEST_END();
+
     TEST_CASE("14.16 Result Rows: Equal Scores Put The Local Team's Row First Only When The Local Team Made The Row; The Quitter Never Moves Forward And Is Overtaken By Everybody") {
         MatchResult r;
         r.stats[0].score = 100;

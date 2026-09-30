@@ -78,7 +78,7 @@ struct Room {
     std::vector<Guest> guests;
     uint32_t now{0};
 
-    explicit Room(HostLobby::Config hc = {}) : host(hc) {}
+    explicit Room(HostLobby::Config hc = {}) : host(hc) { host.set_map("TINY.LVL"); }      // a room has a map once its host has chosen one
 
     Guest& join(const std::string& name, LoopbackNetwork::Link link = {10, 0}) {
         auto ends = net.connect(link);
@@ -145,7 +145,7 @@ int main() {
         ASSERT_EQ(peek_type(encode_begin()), MsgType::Begin);
         ASSERT_EQ(peek_type(encode_leave()), MsgType::Leave);
         // map names travel only as plain names of the maps folder
-        for (const char* bad : {"../secret.LVL", "a/b.LVL", "a\\b.LVL", ".hidden.LVL", "x.txt", "", "LVL", "MAP..LVL", "sp ace.LVL"}) {
+        for (const char* bad : {"../secret.LVL", "a/b.LVL", "a\\b.LVL", ".hidden.LVL", "x.txt", "LVL", "MAP..LVL", "sp ace.LVL"}) {
             ASSERT_FALSE(valid_map_name(bad));
             RoomMsg x = r;
             x.map_name = bad;
@@ -153,6 +153,18 @@ int main() {
             ASSERT_FALSE(decode(encode(x), y));
             StartMsg sx = s;
             sx.map_name = bad;
+            StartMsg sy;
+            ASSERT_FALSE(decode(encode(sx), sy));
+        }
+        // the empty name is the room's "no map chosen yet": a Room may carry it, a Start may not
+        ASSERT_FALSE(valid_map_name(""));
+        {
+            RoomMsg x = r;
+            x.map_name = "";
+            RoomMsg y;
+            ASSERT_TRUE(decode(encode(x), y) && y.map_name.empty());
+            StartMsg sx = s;
+            sx.map_name = "";
             StartMsg sy;
             ASSERT_FALSE(decode(encode(sx), sy));
         }

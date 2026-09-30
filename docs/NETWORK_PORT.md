@@ -131,6 +131,7 @@ ports, the never-reading peer, a 40 s match of a host and three clients over rea
   and its map and fog follow the host's), LEAVE for everybody.
 * **The match**: the ticks come from the `LockstepRunner` (`Application::pump_network` runs `NetGame::update`, every tick calls `Application::post_tick`: HUD, events, audio, the end of the match); the frame is
   drawn at the runner's sub-tick position; a machine that waits for a turn says so after one second (remake text) and a desync stops the match and says so. There is no pause and no team switching.
+* **The room's map**: no map is named in the network layer: a room's map name is empty until its host chooses one (the application chooses the first map of the setup screen's list at once), a Room message may carry the empty name, a Start may not, and START needs a chosen map (v0.0.64).
 * **Roster and drop-out**: `Start` carries the roster mask; a team without a player has no hill (`LevelData::for_roster` also removes its hill art for the renderer), no start markers and no eggs. A player that
   leaves, is thrown out or is silent for 60 s is dropped by a host-only `Drop` command in the next turn (`SimulationEngine::drop_player`, `FUN_0100d03b`), so every machine drops the team at the same tick.
   **The end of the match (v0.0.62, protocol version 4)**: a drop that leaves one team, or an allied pair, decides the match at once (the original's win test, 0x100d172); CHECKGO ends it when nobody has an egg,

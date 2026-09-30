@@ -317,7 +317,8 @@ bool decode(const uint8_t* data, size_t size, RoomMsg& out) {
     m.map_name = r->str8();
     const uint8_t fog = r->u8();
     m.you = r->u8();
-    if (!r->done() || fog > 1 || !valid_map_name(m.map_name) || (m.you != 255 && m.you >= sim::MAX_PLAYERS)) return false;
+    // an empty map name = the host has not chosen a map yet
+    if (!r->done() || fog > 1 || (!m.map_name.empty() && !valid_map_name(m.map_name)) || (m.you != 255 && m.you >= sim::MAX_PLAYERS)) return false;
     m.fog = fog == 1;
     out = std::move(m);
     return true;

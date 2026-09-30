@@ -715,20 +715,29 @@ void test_suite_6_lvl_fuzzing(const std::string& map_path) {
         ASSERT_FALSE(LVLParser::load_from_memory(bad_dim.data(), bad_dim.size(), lvl));
     } TEST_END();
 
-    TEST_CASE("6.4 Strict rem=0 Guarantee: Trailing Junk Byte Injection Rejection") {
-        // Valid map must parse with rem == 0
+    TEST_CASE("6.4 Bytes After The Final Parameter Are Ignored (The Original's Loader Stops Reading There; Community Maps End With Filler), A Truncated Final Parameter Is Rejected") {
         LevelData clean_lvl;
         ASSERT_TRUE(LVLParser::load_from_memory(valid_lvl.data(), valid_lvl.size(), clean_lvl));
 
-        // Appending 1 trailing byte (rem = 1) MUST cause parser to reject!
+        // Appending 1 trailing byte, then 16: the map loads and is the same map
         std::vector<uint8_t> junk_lvl = valid_lvl;
-        junk_lvl.push_back(0xAA); // Trailing junk byte
-        LevelData rejected_lvl;
-        ASSERT_FALSE(LVLParser::load_from_memory(junk_lvl.data(), junk_lvl.size(), rejected_lvl));
-
-        // Appending 16 trailing bytes (rem = 16)
+        junk_lvl.push_back(0xAA);
+        LevelData extended;
+        ASSERT_TRUE(LVLParser::load_from_memory(junk_lvl.data(), junk_lvl.size(), extended));
+        ASSERT_EQ(extended.boundary_param, clean_lvl.boundary_param);
+        ASSERT_EQ(static_cast<uint32_t>(extended.width), static_cast<uint32_t>(clean_lvl.width));
+        ASSERT_EQ(extended.anthill_spawns.size(), clean_lvl.anthill_spawns.size());
+        ASSERT_EQ(extended.food_schedules.size(), clean_lvl.food_schedules.size());
+        ASSERT_EQ(extended.waypoints.size(), clean_lvl.waypoints.size());
         junk_lvl.resize(valid_lvl.size() + 16, 0x00);
-        ASSERT_FALSE(LVLParser::load_from_memory(junk_lvl.data(), junk_lvl.size(), rejected_lvl));
+        LevelData extended16;
+        ASSERT_TRUE(LVLParser::load_from_memory(junk_lvl.data(), junk_lvl.size(), extended16));
+        ASSERT_EQ(extended16.boundary_param, clean_lvl.boundary_param);
+
+        // A file that ends inside the final parameter is cut short
+        std::vector<uint8_t> cut(valid_lvl.begin(), valid_lvl.end() - 1);
+        LevelData cut_lvl;
+        ASSERT_FALSE(LVLParser::load_from_memory(cut.data(), cut.size(), cut_lvl));
     } TEST_END();
 }
 

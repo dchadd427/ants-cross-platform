@@ -900,7 +900,7 @@ void challenge_suite_6_level_fuzzing(const std::string& map_dir) {
         }
     } CHALLENGE_END();
 
-    CHALLENGE_CASE("6.4 Strict 0-residual rejection: trailing garbage appended") {
+    CHALLENGE_CASE("6.4 Bytes after the final parameter are ignored (the original's loader never reads them): trailing garbage appended") {
         std::string tiny_path = map_dir + "/TINY.LVL";
         std::ifstream file(tiny_path, std::ios::binary | std::ios::ate);
         ASSERT_TRUE(file.is_open());
@@ -911,21 +911,31 @@ void challenge_suite_6_level_fuzzing(const std::string& map_dir) {
 
         LevelData lvl;
         ASSERT_TRUE(lvl.load_from_memory(base_data.data(), full_size));
+        const uint16_t eggs = lvl.boundary_param;
 
-        // Append single trailing byte (0x00) -> must reject
+        // 1, 4 and 100 trailing bytes: the same map loads
         auto data_plus_1 = base_data;
         data_plus_1.push_back(0x00);
-        ASSERT_FALSE(lvl.load_from_memory(data_plus_1.data(), data_plus_1.size()));
+        LevelData a;
+        ASSERT_TRUE(a.load_from_memory(data_plus_1.data(), data_plus_1.size()));
+        ASSERT_EQ(a.boundary_param, eggs);
 
-        // Append 4 trailing bytes -> must reject
         auto data_plus_4 = base_data;
         data_plus_4.insert(data_plus_4.end(), { 0xDE, 0xAD, 0xBE, 0xEF });
-        ASSERT_FALSE(lvl.load_from_memory(data_plus_4.data(), data_plus_4.size()));
+        LevelData b;
+        ASSERT_TRUE(b.load_from_memory(data_plus_4.data(), data_plus_4.size()));
+        ASSERT_EQ(b.boundary_param, eggs);
 
-        // Append 100 trailing bytes -> must reject
         auto data_plus_100 = base_data;
         data_plus_100.resize(full_size + 100, 0xAA);
-        ASSERT_FALSE(lvl.load_from_memory(data_plus_100.data(), data_plus_100.size()));
+        LevelData c;
+        ASSERT_TRUE(c.load_from_memory(data_plus_100.data(), data_plus_100.size()));
+        ASSERT_EQ(c.boundary_param, eggs);
+        ASSERT_EQ(c.waypoints.size(), lvl.waypoints.size());
+
+        // a file that ends before the final parameter is still refused
+        LevelData d;
+        ASSERT_FALSE(d.load_from_memory(base_data.data(), full_size - 1));
     } CHALLENGE_END();
 
     CHALLENGE_CASE("6.5 Corrupted dimensions memory exhaustion vulnerability test") {

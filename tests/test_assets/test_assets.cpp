@@ -616,6 +616,120 @@ void test_suite_6_maps(const std::string& map_dir) {
     }
 }
 
+// A small map built in memory: `rows` x `columns` cells whose fields say where they are (tile = (y * 16 + x) % 4, flags = y, properties = x), a hill marker, a food object,
+// a waypoint and a final word (eggs) at the corner (x = columns - 1, y = rows - 1), followed by `filler` bytes
+static std::vector<uint8_t> build_test_lvl(uint32_t rows, uint32_t columns, uint16_t eggs, size_t filler) {
+    std::vector<uint8_t> b;
+    auto u16 = [&](uint32_t v) { b.push_back(static_cast<uint8_t>(v & 0xFF)); b.push_back(static_cast<uint8_t>((v >> 8) & 0xFF)); };
+    auto u32 = [&](uint32_t v) { u16(v & 0xFFFF); u16(v >> 16); };
+    u32(8);                                   // version
+    u32(1);                                   // game mode
+    u16(7);                                   // minutes
+    const std::string desc = "Synthetic map";
+    for (size_t i = 0; i < 30; ++i) b.push_back(i < desc.size() ? static_cast<uint8_t>(desc[i]) : 0);
+    u16(3);                                   // tile dictionary: 4 names
+    for (int t = 0; t < 4; ++t) {
+        const std::string name = "tile" + std::to_string(t);
+        for (size_t i = 0; i < 11; ++i) b.push_back(i < name.size() ? static_cast<uint8_t>(name[i]) : 0);
+    }
+    u32(rows);                                // the FIRST dimension dword is the number of rows ...
+    u32(columns);                             // ... the second the number of columns
+    for (uint32_t y = 0; y < rows; ++y) {     // layer 1, rows outer
+        for (uint32_t x = 0; x < columns; ++x) {
+            u16((y * 16 + x) % 4);
+            u16(y);
+            u16(x);
+        }
+    }
+    for (uint32_t y = 0; y < rows; ++y) {     // layer 2: empty but for one cell
+        for (uint32_t x = 0; x < columns; ++x) {
+            const bool marked = (y == 2 && x == columns - 2);
+            u16(marked ? 1u : 0x7FFEu);
+            u16(0);
+            u16(0);
+        }
+    }
+    u16(1);                                   // block 1: one start marker (tile, y, x)
+    u16(2);
+    u16(rows - 1);
+    u16(columns - 1);
+    u16(1);                                   // block 2: one food object (y, x, units, points, stages)
+    u16(rows - 2);
+    u16(columns - 1);
+    u16(5);
+    u16(7);
+    u16(1);
+    u16(5);
+    u16(3);
+    u16(0);                                   // block 3: ambient flag, tile
+    u16(0x7FFE);
+    u16(1);                                   // block 4: one waypoint (y, x, flag 0)
+    u16(3);
+    u16(columns - 1);
+    u32(0);
+    u16(eggs);                                // the final word
+    for (size_t i = 0; i < filler; ++i) b.push_back(static_cast<uint8_t>(0x7F + (i % 3)));
+    return b;
+}
+
+void test_suite_6b_map_layout() {
+    TEST_SUITE("Suite 6b: Map Header Order (Rows First), Trailing Filler, Final Word");
+
+    TEST_CASE("6b.1 The First Dimension Dword Is The Number Of Rows, The Second The Number Of Columns (Non-Square Maps: OCEAN.LVL Has 81 Rows Of 100 Columns)") {
+        const uint32_t rows = 7;
+        const uint32_t columns = 10;
+        const std::vector<uint8_t> lvl_bytes = build_test_lvl(rows, columns, 4, 0);
+        LevelData map;
+        ASSERT_TRUE(map.load_from_memory(lvl_bytes.data(), lvl_bytes.size()));
+        ASSERT_EQ(map.width(), columns);
+        ASSERT_EQ(map.height(), rows);
+        ASSERT_EQ(map.layer1_terrain.size(), static_cast<size_t>(rows) * columns);
+        // every cell is where its own fields say: the rows are the outer loop of the file
+        for (uint32_t y = 0; y < rows; ++y) {
+            for (uint32_t x = 0; x < columns; ++x) {
+                const MapCell& c = map.get_cell_layer1(x, y);
+                ASSERT_EQ(c.tile_index, (y * 16 + x) % 4);
+                ASSERT_EQ(c.flags, y);
+                ASSERT_EQ(c.properties, x);
+            }
+        }
+        ASSERT_FALSE(map.get_cell_layer2(columns - 2, 2).is_empty());
+        ASSERT_TRUE(map.get_cell_layer2(2, columns - 2).is_empty());               // not transposed
+        // the records use (y, x) inside the map: a hill marker, a food object and a waypoint at the far corner
+        ASSERT_EQ(map.anthill_spawns.size(), 1u);
+        ASSERT_EQ(map.anthill_spawns[0].y, rows - 1);
+        ASSERT_EQ(map.anthill_spawns[0].x, columns - 1);
+        ASSERT_LT(map.anthill_spawns[0].y, map.height());
+        ASSERT_LT(map.anthill_spawns[0].x, map.width());
+        ASSERT_EQ(map.food_schedules.size(), 1u);
+        ASSERT_EQ(map.food_schedules[0].y, rows - 2);
+        ASSERT_EQ(map.food_schedules[0].x, columns - 1);
+        ASSERT_EQ(map.waypoints.size(), 1u);
+        ASSERT_EQ(map.waypoints[0].x, columns - 1);
+        ASSERT_EQ(map.boundary_param, 4u);
+    } TEST_END();
+
+    TEST_CASE("6b.2 The Final Word Is The Egg Stock Whatever It Holds; Filler After It Is Never Read (The Community Map Editor's Template Ends Its Maps With 206 Bytes Of It)") {
+        for (uint16_t eggs : {static_cast<uint16_t>(0), static_cast<uint16_t>(2), static_cast<uint16_t>(9), static_cast<uint16_t>(32766)}) {
+            const std::vector<uint8_t> plain = build_test_lvl(6, 6, eggs, 0);
+            const std::vector<uint8_t> filled = build_test_lvl(6, 6, eggs, 206);
+            LevelData a;
+            LevelData b;
+            ASSERT_TRUE(a.load_from_memory(plain.data(), plain.size()));
+            ASSERT_TRUE(b.load_from_memory(filled.data(), filled.size()));
+            ASSERT_EQ(a.boundary_param, eggs);
+            ASSERT_EQ(b.boundary_param, eggs);
+            ASSERT_EQ(b.waypoints.size(), a.waypoints.size());
+            ASSERT_EQ(b.layer1_terrain.size(), a.layer1_terrain.size());
+            ASSERT_EQ(b.description, std::string("Synthetic map"));
+        }
+        // a file that stops inside the final word is still a short file
+        const std::vector<uint8_t> whole = build_test_lvl(6, 6, 5, 0);
+        LevelData c;
+        ASSERT_FALSE(c.load_from_memory(whole.data(), whole.size() - 1));
+    } TEST_END();
+}
+
 // ============================================================================
 // SUITE 7: 5-to-8 Directional Mirroring Engine Validation
 // ============================================================================
@@ -908,6 +1022,7 @@ int main() {
     test_suite_4_event_tags(chd_path);
     test_suite_5_animations(chd_path);
     test_suite_6_maps(map_dir);
+    test_suite_6b_map_layout();
     test_suite_7_mirroring(chd_path);
     test_suite_8_fuzzing(chd_path, map_dir);
 

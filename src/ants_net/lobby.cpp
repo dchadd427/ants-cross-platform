@@ -27,7 +27,7 @@ HostLobby::HostLobby(Config config) : cfg_(std::move(config)) {
     room_.slots[cfg_.host_seat].state = SlotState::Host;
     room_.slots[cfg_.host_seat].name = printable(cfg_.host_name, kMaxNameChars);
     room_.slots[cfg_.host_seat].rtt_ms = 0;                    // the host's own thumb is always good
-    room_.map_name = "TREASURE.LVL";
+    // room_.map_name stays empty until the host chooses a map (the setup screen lists what the Maps folder holds; no map is named in the program)
 }
 
 void HostLobby::set_map(const std::string& map_name) {

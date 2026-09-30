@@ -12,121 +12,66 @@ namespace ants::app {
 
 MapSelectScreen::MapSelectScreen() = default;
 
+namespace {
+
+// One map of the list: the name without its extension, and what the header of the file says (description, size, minutes)
+MapSelectEntry make_entry(const std::string& file_name, const std::string& full_path) {
+    MapSelectEntry entry;
+    entry.filename = file_name;
+    entry.full_path = full_path;
+    entry.display_name = fs::path(file_name).stem().string();
+    entry.width = 0;
+    entry.height = 0;
+    entry.minutes = 0;
+    ants::assets::LevelData lvl;
+    if (lvl.load_from_file(full_path)) {
+        entry.minutes = lvl.default_minutes;
+        entry.width = lvl.width;
+        entry.height = lvl.height;
+        entry.description = lvl.description;
+    }
+    return entry;
+}
+
+}  // namespace
+
+// FUN_01013de7: FindFirstFile / FindNextFile over the Maps folder's `*.lvl`; every name is inserted into the list in front of the first entry that compares greater
+// (strcmp, the byte order of the names as the file system gives them), so the list is sorted. No map is named in the program: what is in the folder is what the
+// list shows, and what the header of a file says is what the labels show.
 void MapSelectScreen::init(const std::string& maps_dir) {
     maps_.clear();
-    std::unordered_set<std::string> seen_files;
 
-    // Standard authentic Ants maps in canonical order (Ants.exe VA 0x10139e2)
-    struct DefaultMap {
-        const char* file;
-        const char* title;
-        const char* desc;
-        uint32_t w;
-        uint32_t h;
-        uint32_t minutes;
-    };
-
-    static const DefaultMap defaults[] = {
-        { "TREASURE.LVL", "TREASURE", "One person's trash...",           60, 60, 12 },
-        { "SMALL.LVL",    "SMALL",    "Small map for fast game",         40, 40,  8 },
-        { "MEDIUM.LVL",   "MEDIUM",   "Intermediate map",                60, 60, 10 },
-        { "TINY.LVL",     "TINY",     "Tiny map with no PowerUps",       31, 31,  6 },
-        { "ISLANDS.LVL",  "ISLANDS",  "Island hopping, expert map",      60, 60, 12 },
-        { "GAUNTLET.LVL", "GAUNTLET", "Race for your life!",             60, 60, 10 }
-    };
-
-    for (const auto& d : defaults) {
-        MapSelectEntry entry;
-        entry.filename = d.file;
-        entry.full_path = maps_dir + "/" + d.file;
-        if (!fs::exists(entry.full_path)) {
-            if (fs::exists(std::string("Maps/") + d.file)) {
-                entry.full_path = std::string("Maps/") + d.file;
-            } else if (fs::exists(std::string("Original-Ants/Maps/") + d.file)) {
-                entry.full_path = std::string("Original-Ants/Maps/") + d.file;
-            }
-        }
-        entry.display_name = d.title;
-        entry.description = d.desc;
-        entry.width = d.w;
-        entry.height = d.h;
-        entry.minutes = d.minutes;
-
-        // Dynamically parse authentic .LVL header from file if present
-        ants::assets::LevelData lvl;
-        if (lvl.load_from_file(entry.full_path)) {
-            if (lvl.default_minutes > 0) {
-                entry.minutes = lvl.default_minutes;
-            }
-            if (lvl.width > 0 && lvl.height > 0) {
-                entry.width = lvl.width;
-                entry.height = lvl.height;
-            }
-            if (!lvl.description.empty()) {
-                entry.description = lvl.description;
-            }
-        }
-
-        seen_files.insert(d.file);
-        std::string upper_f = d.file;
-        std::transform(upper_f.begin(), upper_f.end(), upper_f.begin(), [](unsigned char c) { return static_cast<char>(std::toupper(c)); });
-        seen_files.insert(upper_f);
-        maps_.push_back(std::move(entry));
-    }
-
-    // Dynamic scanning of maps_dir for any additional .lvl / .LVL files
+    std::vector<std::pair<std::string, std::string>> found;      // file name, path
     std::error_code ec;
     if (!maps_dir.empty() && fs::exists(maps_dir, ec) && fs::is_directory(maps_dir, ec)) {
         for (const auto& dir_entry : fs::directory_iterator(maps_dir, ec)) {
-            if (dir_entry.is_regular_file(ec)) {
-                std::string fname = dir_entry.path().filename().string();
-                std::string ext = dir_entry.path().extension().string();
-                std::transform(ext.begin(), ext.end(), ext.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-                if (ext == ".lvl") {
-                    std::string upper_f = fname;
-                    std::transform(upper_f.begin(), upper_f.end(), upper_f.begin(), [](unsigned char c) { return static_cast<char>(std::toupper(c)); });
-                    if (seen_files.find(upper_f) == seen_files.end()) {
-                        seen_files.insert(upper_f);
-                        MapSelectEntry extra;
-                        extra.filename = fname;
-                        extra.full_path = dir_entry.path().string();
-                        extra.display_name = dir_entry.path().stem().string();
-                        extra.description = "Custom map";
-                        extra.width = 60;
-                        extra.height = 60;
-                                        extra.minutes = 10;
-
-                        ants::assets::LevelData lvl;
-                        if (lvl.load_from_file(extra.full_path)) {
-                            if (lvl.default_minutes > 0) extra.minutes = lvl.default_minutes;
-                            if (lvl.width > 0 && lvl.height > 0) {
-                                extra.width = lvl.width;
-                                extra.height = lvl.height;
-                            }
-                            if (!lvl.description.empty()) extra.description = lvl.description;
-                        }
-                        maps_.push_back(std::move(extra));
-                    }
-                }
-            }
+            if (!dir_entry.is_regular_file(ec)) continue;
+            std::string ext = dir_entry.path().extension().string();
+            std::transform(ext.begin(), ext.end(), ext.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+            if (ext == ".lvl") found.emplace_back(dir_entry.path().filename().string(), dir_entry.path().string());
         }
     }
+    std::sort(found.begin(), found.end(), [](const auto& a, const auto& b) { return a.first < b.first; });
+    for (const auto& f : found) maps_.push_back(make_entry(f.first, f.second));
 
     selected_index_ = 0;
     fog_of_war_ = false;
-    player_ready_mask_ = 0b0011; // Player 0 & 1 ready, Player 2 unready matching reference screenshot
+    enter();
+}
 
-    btn_start_hovered_ = false;
-    btn_quit_hovered_ = false;
-    btn_up_hovered_ = false;
-    btn_down_hovered_ = false;
-    btn_fow_on_hovered_ = false;
-    btn_fow_off_hovered_ = false;
+void MapSelectScreen::enter() {
+    elapsed_ms_ = 0.0;
+    started_ = false;
+    up_.reset();
+    down_.reset();
+    start_.reset();
+    quit_.reset();
+    fow_on_.reset();
+    fow_off_.reset();
+}
 
-    btn_start_pressed_ = false;
-    btn_quit_pressed_ = false;
-    btn_up_pressed_ = false;
-    btn_down_pressed_ = false;
+void MapSelectScreen::update(float dt_seconds) {
+    elapsed_ms_ += static_cast<double>(dt_seconds) * 1000.0;
 }
 
 void MapSelectScreen::set_selected_index(int32_t idx) noexcept {
@@ -180,153 +125,70 @@ void MapSelectScreen::trigger_quit() {
 void MapSelectScreen::handle_mouse_motion(int32_t screen_x, int32_t screen_y) {
     mouse_x_ = screen_x;
     mouse_y_ = screen_y;
-
-    btn_up_hovered_ = (screen_x >= BTN_UP_X && screen_x < BTN_UP_X + BTN_UP_W &&
-                       screen_y >= BTN_UP_Y && screen_y < BTN_UP_Y + BTN_UP_H);
-
-    btn_down_hovered_ = (screen_x >= BTN_DOWN_X && screen_x < BTN_DOWN_X + BTN_DOWN_W &&
-                         screen_y >= BTN_DOWN_Y && screen_y < BTN_DOWN_Y + BTN_DOWN_H);
-
-    btn_start_hovered_ = (screen_x >= BTN_START_X && screen_x < BTN_START_X + BTN_START_W &&
-                          screen_y >= BTN_START_Y && screen_y < BTN_START_Y + BTN_START_H);
-
-    btn_quit_hovered_ = (screen_x >= BTN_QUIT_X && screen_x < BTN_QUIT_X + BTN_QUIT_W &&
-                         screen_y >= BTN_QUIT_Y && screen_y < BTN_QUIT_Y + BTN_QUIT_H);
-
-    btn_fow_on_hovered_ = (screen_x >= BTN_FOW_ON_X && screen_x < BTN_FOW_ON_X + BTN_FOW_ON_W &&
-                           screen_y >= BTN_FOW_ON_Y && screen_y < BTN_FOW_ON_Y + BTN_FOW_ON_H);
-
-    btn_fow_off_hovered_ = (screen_x >= BTN_FOW_OFF_X && screen_x < BTN_FOW_OFF_X + BTN_FOW_OFF_W &&
-                            screen_y >= BTN_FOW_OFF_Y && screen_y < BTN_FOW_OFF_Y + BTN_FOW_OFF_H);
+    for (ScreenButton* b : {&up_, &down_, &start_, &quit_, &fow_on_, &fow_off_}) b->on_move(screen_x, screen_y);
 }
 
+// FUN_01013fc9: the previous / next entry of the list, wrapping round; nothing once START has run. (The map, the fog option and START belong to the host of a room.)
+void MapSelectScreen::step_map(int32_t delta) {
+    if (started_ || !can_change_setup()) return;
+    set_selected_index(selected_index_ + delta);
+}
+
+void MapSelectScreen::start() {
+    if (started_ || !can_change_setup()) return;
+    trigger_start();
+}
+
+// The press captures a button (FUN_01011206): its pressed animation shows and plays the sound that it carries (up3, down3, start3, leave3: Sound 0, the click;
+// d_on3 and d_off3 are silent); the action comes with the release
 void MapSelectScreen::handle_mouse_down(int32_t screen_x, int32_t screen_y, uint8_t button) {
     if (button != SDL_BUTTON_LEFT) return;
-
-    // Leave Game Button (every player of a room can leave)
-    if (!can_change_setup() && screen_x >= BTN_QUIT_X && screen_x < BTN_QUIT_X + BTN_QUIT_W &&
-        screen_y >= BTN_QUIT_Y && screen_y < BTN_QUIT_Y + BTN_QUIT_H) {
-        btn_quit_pressed_ = true;
-        play_sfx(sim::SoundID::ButtonClick);
-        trigger_quit();
-        return;
-    }
-    if (!can_change_setup()) return;      // the map, the fog option and START belong to the host
-
-    // Up Arrow Button
-    if (screen_x >= BTN_UP_X && screen_x < BTN_UP_X + BTN_UP_W &&
-        screen_y >= BTN_UP_Y && screen_y < BTN_UP_Y + BTN_UP_H) {
-        btn_up_pressed_ = true;
-        play_sfx(sim::SoundID::ButtonClick);   // up3 carries sound 0 (buttonclick.wav)
-        set_selected_index(selected_index_ - 1);
-        return;
-    }
-
-    // Down Arrow Button
-    if (screen_x >= BTN_DOWN_X && screen_x < BTN_DOWN_X + BTN_DOWN_W &&
-        screen_y >= BTN_DOWN_Y && screen_y < BTN_DOWN_Y + BTN_DOWN_H) {
-        btn_down_pressed_ = true;
-        play_sfx(sim::SoundID::ButtonClick);
-        set_selected_index(selected_index_ + 1);
-        return;
-    }
-
-    // Clicking w_map box advances map
-    if (screen_x >= W_MAP_X && screen_x < W_MAP_X + W_MAP_W &&
-        screen_y >= W_MAP_Y && screen_y < W_MAP_Y + W_MAP_H) {
-        set_selected_index(selected_index_ + 1);
-        return;
-    }
-
-    // Clicking map info box also advances map
-    if (screen_x >= INFO_BOX_X && screen_x < INFO_BOX_X + INFO_BOX_W &&
-        screen_y >= INFO_BOX_Y && screen_y < INFO_BOX_Y + INFO_BOX_H) {
-        set_selected_index(selected_index_ + 1);
-        return;
-    }
-
-    // Fog of War "On" button
-    if (screen_x >= BTN_FOW_ON_X && screen_x < BTN_FOW_ON_X + BTN_FOW_ON_W &&
-        screen_y >= BTN_FOW_ON_Y && screen_y < BTN_FOW_ON_Y + BTN_FOW_ON_H) {
-        change_fog(true);   // the Fog of War toggles are silent
-        return;
-    }
-
-    // Fog of War "Off" button
-    if (screen_x >= BTN_FOW_OFF_X && screen_x < BTN_FOW_OFF_X + BTN_FOW_OFF_W &&
-        screen_y >= BTN_FOW_OFF_Y && screen_y < BTN_FOW_OFF_Y + BTN_FOW_OFF_H) {
-        change_fog(false);
-        return;
-    }
-
-    // Drop Button: toggles Player 2 ready state (a placeholder of the local screen; a room shows the real players)
-    if (!room_.networked && screen_x >= BTN_DROP_X && screen_x < BTN_DROP_X + BTN_DROP_W &&
-        screen_y >= BTN_DROP_Y && screen_y < BTN_DROP_Y + BTN_DROP_H) {
-        play_sfx(sim::SoundID::ButtonClick);
-        toggle_player_ready(2);
-        return;
-    }
-
-    // Click on player thumbs inside players box (x in [535, 565])
-    if (!room_.networked && screen_x >= PLAYER_THUMB_X - 5 && screen_x < PLAYER_THUMB_X + 25) {
-        for (uint8_t i = 0; i < 3; ++i) {
-            int32_t ty = PLAYER_THUMB_Y + static_cast<int32_t>(i) * PLAYER_ROW_PITCH;
-            if (screen_y >= ty && screen_y < ty + 24) {
-                toggle_player_ready(i);
-                return;
-            }
-        }
-    }
-
-    // Start Button
-    if (screen_x >= BTN_START_X && screen_x < BTN_START_X + BTN_START_W &&
-        screen_y >= BTN_START_Y && screen_y < BTN_START_Y + BTN_START_H) {
-        btn_start_pressed_ = true;
-        play_sfx(sim::SoundID::ButtonClick);
-        trigger_start();
-        return;
-    }
-
-    // Leave Game Button
-    if (screen_x >= BTN_QUIT_X && screen_x < BTN_QUIT_X + BTN_QUIT_W &&
-        screen_y >= BTN_QUIT_Y && screen_y < BTN_QUIT_Y + BTN_QUIT_H) {
-        btn_quit_pressed_ = true;
-        play_sfx(sim::SoundID::ButtonClick);
-        trigger_quit();
-        return;
-    }
+    if (quit_.on_press(screen_x, screen_y)) play_sfx(sim::SoundID::ButtonClick);       // every player of a room can leave
+    if (!can_change_setup() || started_) return;
+    if (up_.on_press(screen_x, screen_y)) play_sfx(sim::SoundID::ButtonClick);
+    if (down_.on_press(screen_x, screen_y)) play_sfx(sim::SoundID::ButtonClick);
+    fow_on_.on_press(screen_x, screen_y);
+    fow_off_.on_press(screen_x, screen_y);
+    if (start_.on_press(screen_x, screen_y)) play_sfx(sim::SoundID::ButtonClick);
 }
 
-void MapSelectScreen::handle_mouse_up(int32_t, int32_t, uint8_t button) {
-    if (button == SDL_BUTTON_LEFT) {
-        btn_up_pressed_ = false;
-        btn_down_pressed_ = false;
-        btn_start_pressed_ = false;
-        btn_quit_pressed_ = false;
-    }
+// The release runs the callback of the button that is still captured
+void MapSelectScreen::handle_mouse_up(int32_t screen_x, int32_t screen_y, uint8_t button) {
+    if (button != SDL_BUTTON_LEFT) return;
+    const bool fire_up = up_.on_release(screen_x, screen_y);
+    const bool fire_down = down_.on_release(screen_x, screen_y);
+    const bool fire_start = start_.on_release(screen_x, screen_y);
+    const bool fire_quit = quit_.on_release(screen_x, screen_y);
+    const bool fire_on = fow_on_.on_release(screen_x, screen_y);
+    const bool fire_off = fow_off_.on_release(screen_x, screen_y);
+    if (fire_up) step_map(-1);
+    if (fire_down) step_map(1);
+    if (fire_on && !started_) change_fog(true);
+    if (fire_off && !started_) change_fog(false);
+    if (fire_start) start();
+    if (fire_quit) trigger_quit();
 }
 
+// FUN_01014076: the keys are Up (0xe) and Down (0xf), Enter (0x18), 'S' and 's' (start), 'Q', 'q', 'X' and 'x' (leave); nothing else does anything, Esc included
 void MapSelectScreen::handle_key_down(SDL_Keycode key) {
-    if (maps_.empty()) return;
-    if (!can_change_setup()) {            // a guest of a room can only leave
-        if (key == SDLK_ESCAPE) trigger_quit();
-        return;
-    }
-
-    if (key == SDLK_UP || key == SDLK_LEFT) {
-        set_selected_index(selected_index_ - 1);
-    } else if (key == SDLK_DOWN || key == SDLK_RIGHT) {
-        set_selected_index(selected_index_ + 1);
-    } else if (key >= SDLK_1 && key <= SDLK_6) {
-        set_selected_index(key - SDLK_1);
-    } else if (key == SDLK_RETURN || key == SDLK_KP_ENTER || key == SDLK_SPACE) {
-        trigger_start();
-    } else if (key == SDLK_ESCAPE) {
-        trigger_quit();
-    } else if (key == SDLK_f) {
-        change_fog(!fog_of_war_);
-    } else if (key == SDLK_d && !room_.networked) {
-        toggle_player_ready(2);
+    switch (key) {
+        case SDLK_UP:
+            step_map(-1);
+            break;
+        case SDLK_DOWN:
+            step_map(1);
+            break;
+        case SDLK_RETURN:
+        case SDLK_KP_ENTER:
+        case SDLK_s:
+            start();
+            break;
+        case SDLK_q:
+        case SDLK_x:
+            trigger_quit();
+            break;
+        default:
+            break;
     }
 }
 
@@ -348,83 +210,67 @@ void MapSelectScreen::render(IRenderer& renderer, const ants::assets::AssetArchi
     }
 
     // 2. Leave Game button: animations leave1 / leave2 (hover) / leave3 (pressed), absolute coordinates
-    draw_animation_frame0(renderer, archive, btn_quit_pressed_ ? "leave3" : (btn_quit_hovered_ ? "leave2" : "leave1"));
-
-    // The labels of this screen have the original's font heights (FUN_01012ce0): 18 px for the map name, its description and the players' names,
-    // 14 px for the status prompt
-    const int32_t th_prompt = renderer.get_text_height(FontSize::Px14);
-
-    // 3. Current Map Name inside Pick a Map box: the label (36, 312) 179 x 26 (vertically centered in inner cavity y=307..335, h=29)
-    if (selected_index_ >= 0 && selected_index_ < static_cast<int32_t>(maps_.size())) {
-        const auto& cur = maps_[static_cast<size_t>(selected_index_)];
-        int32_t th_map = renderer.get_text_height(FontSize::Px18);
-        int32_t name_y = 307 + (29 - th_map) / 2;
-        renderer.draw_text(fit_text(renderer, cur.display_name, 179, FontSize::Px18), 38, name_y, ColorRGBA{255, 255, 255, 255}, FontSize::Px18);
-    }
+    draw_animation_frame0(renderer, archive, quit_.pressed() ? "leave3" : (quit_.hovered() ? "leave2" : "leave1"));
 
     // Up/Down stepper buttons: animations up1..3 and down1..3 (up / hover / pressed), absolute coordinates
-    draw_animation_frame0(renderer, archive, btn_up_pressed_ ? "up3" : (btn_up_hovered_ ? "up2" : "up1"));
-    draw_animation_frame0(renderer, archive, btn_down_pressed_ ? "down3" : (btn_down_hovered_ ? "down2" : "down1"));
+    draw_animation_frame0(renderer, archive, up_.pressed() ? "up3" : (up_.hovered() ? "up2" : "up1"));
+    draw_animation_frame0(renderer, archive, down_.pressed() ? "down3" : (down_.hovered() ? "down2" : "down1"));
 
-    // 4. Map Info Description inside Map Info box: the label (36, 380) 293 x 26 (Ants.exe 0x101307c's neighbour, inner cavity y=377..405)
+    // 3. Fog of War On / Off (animations d_on1..3, d_off1..3): the chosen one is shown down (so is a button that is being pressed), the other one up or hover
+    draw_animation_frame0(renderer, archive, (fog_of_war_ || fow_on_.pressed()) ? "d_on3" : (fow_on_.hovered() ? "d_on2" : "d_on1"));
+    draw_animation_frame0(renderer, archive, (!fog_of_war_ || fow_off_.pressed()) ? "d_off3" : (fow_off_.hovered() ? "d_off2" : "d_off1"));
+
+    // 4. START! button: animations start1 / start2 (hover) / start3 (pressed), absolute coordinates
+    draw_animation_frame0(renderer, archive, start_.pressed() ? "start3" : (start_.hovered() ? "start2" : "start1"));
+
+    // The labels start empty: the refresh task's first run, 500 ms after the screen was created, fills them and puts the portraits and thumbs on the screen
+    if (!refreshed()) return;
+    const ColorRGBA label_colour{239, 231, 223, 255};                 // every label: 0xdfe7ef
+
+    // 5. The map name (36, 312) 179 x 26 and its description (36, 380) 293 x 26, 18 px lines
     if (selected_index_ >= 0 && selected_index_ < static_cast<int32_t>(maps_.size())) {
         const auto& cur = maps_[static_cast<size_t>(selected_index_)];
-        std::string info_text = cur.description + " (" + std::to_string(cur.minutes) + " min)";
-        renderer.draw_text(info_text, 38, 380, ColorRGBA{255, 255, 255, 255}, FontSize::Px18);
+        renderer.draw_text(fit_text(renderer, cur.display_name, NAME_W, FontSize::Px18), LABEL_X, NAME_Y, label_colour, FontSize::Px18);
+        std::string info_text = cur.description;
+        if (cur.minutes > 0) info_text += " (" + std::to_string(cur.minutes) + " min)";
+        renderer.draw_text(fit_text(renderer, info_text, STATUS_W, FontSize::Px18), LABEL_X, INFO_Y, label_colour, FontSize::Px18);
     }
 
-    // 5. Status line: authentic prompt text, the label (36, 447) 293 x 35 (vertically centered in statline box at y=445..464)
-    int32_t stat_y = 445 + (19 - th_prompt) / 2;
+    // 6. The prompt: the label (36, 447) 293 x 35 with 14 px lines, wrapped at its width
     const std::string prompt = !room_.status.empty() ? room_.status : std::string("Press START when all players' thumbs have appeared.");
-    renderer.draw_text(prompt, 38, stat_y, ColorRGBA{255, 255, 255, 255}, FontSize::Px14);
+    draw_label(renderer, prompt, LABEL_X, STATUS_Y, STATUS_W, label_colour, FontSize::Px14, false);
 
-    // 6. Players' Status, slot 0: the portrait animation agst301 (12 frames, 1650 ms loop) has its origin at (395,115) and
+    // 7. Players' Status, slot 0: the portrait animation agst301 (12 frames, 1650 ms loop, running since the screen was created) has its origin at (395,115) and
     // the thumbs-up sprite sits at (540,95); the sprite's own part offsets place the ant relative to that origin.
+    const auto* anim_stand = archive.find_animation("agst301");
+    auto draw_portrait = [&](uint8_t team, int32_t row) {
+        if (anim_stand == nullptr || anim_stand->subitems.empty()) return;
+        const size_t frame = Renderer::get_anim_subitem_by_time(*anim_stand, static_cast<uint32_t>(elapsed_ms_));
+        const auto& parts = anim_stand->subitems[frame].frames;
+        renderer.set_hud_team(team);
+        for (size_t k = parts.size(); k-- > 0;) {
+            renderer.draw_sprite(parts[k].sprite_index, PLAYER_PORTRAIT_X + parts[k].dx, PLAYER_PORTRAIT_Y + row + parts[k].dy);
+        }
+        renderer.set_hud_team(0);
+    };
     if (room_.networked) {
         // a room: one row per occupied seat (portrait in the seat's colour, the name, the thumb of a player who is here)
-        const auto* anim_stand = archive.find_animation("agst301");
         for (size_t seat = 0; seat < room_.seats.size(); ++seat) {
             if (!room_.seats[seat].occupied) continue;
             const int32_t row = static_cast<int32_t>(seat) * PLAYER_ROW_PITCH;
-            if (anim_stand != nullptr && !anim_stand->subitems.empty()) {
-                const size_t frame = Renderer::get_anim_subitem_by_time(*anim_stand, SDL_GetTicks());
-                const auto& parts = anim_stand->subitems[frame].frames;
-                renderer.set_hud_team(static_cast<uint8_t>(seat));
-                for (size_t k = parts.size(); k-- > 0;) {
-                    renderer.draw_sprite(parts[k].sprite_index, PLAYER_PORTRAIT_X + parts[k].dx, PLAYER_PORTRAIT_Y + row + parts[k].dy);
-                }
-                renderer.set_hud_team(0);
-            }
+            draw_portrait(static_cast<uint8_t>(seat), row);
             std::string name = room_.seats[seat].name.empty() ? std::string("Player") : room_.seats[seat].name;
             if (name.size() > 16) name.resize(16);
-            renderer.draw_text(fit_text(renderer, name, 120, FontSize::Px18), 415, PLAYER_THUMB_Y + row, ColorRGBA{255, 255, 255, 255}, FontSize::Px18);      // the label (415, 95 + 50 * seat) 120 x 20
+            renderer.draw_text(fit_text(renderer, name, PLAYER_NAME_W, FontSize::Px18), PLAYER_NAME_X, PLAYER_THUMB_Y + row, label_colour, FontSize::Px18);      // the label (415, 95 + 50 * seat) 120 x 20
             static const char* const kThumbs[4] = {"thumb1.bmp", "thumb2.bmp", "thumb3.bmp", "thumb4.bmp"};   // netgood, netok, netbad, netunk
             renderer.draw_named_sprite(kThumbs[static_cast<size_t>(room_.seats[seat].thumb) & 3u], PLAYER_THUMB_X, PLAYER_THUMB_Y + row);
         }
     } else {
-        std::string display_user = player_name_.empty() ? "Player" : player_name_;
-        if (const auto* anim_stand = archive.find_animation("agst301")) {
-            if (!anim_stand->subitems.empty()) {
-                const size_t frame = Renderer::get_anim_subitem_by_time(*anim_stand, SDL_GetTicks());
-                const auto& parts = anim_stand->subitems[frame].frames;
-                renderer.set_hud_team(player_team_);
-                for (size_t k = parts.size(); k-- > 0;) {
-                    renderer.draw_sprite(parts[k].sprite_index, PLAYER_PORTRAIT_X + parts[k].dx, PLAYER_PORTRAIT_Y + parts[k].dy);
-                }
-                renderer.set_hud_team(0);
-            }
-        }
-
-        renderer.draw_text(fit_text(renderer, display_user, 120, FontSize::Px18), 415, PLAYER_THUMB_Y, ColorRGBA{255, 255, 255, 255}, FontSize::Px18);
+        const std::string display_user = player_name_.empty() ? "Player" : player_name_;
+        draw_portrait(player_team_, 0);
+        renderer.draw_text(fit_text(renderer, display_user, PLAYER_NAME_W, FontSize::Px18), PLAYER_NAME_X, PLAYER_THUMB_Y, label_colour, FontSize::Px18);
         renderer.draw_named_sprite("thumb1.bmp", PLAYER_THUMB_X, PLAYER_THUMB_Y);
     }
-
-    // 7. Fog of War On / Off (animations d_on1..3, d_off1..3): the chosen one is shown down, the other one up or hover
-    draw_animation_frame0(renderer, archive, fog_of_war_ ? "d_on3" : (btn_fow_on_hovered_ ? "d_on2" : "d_on1"));
-    draw_animation_frame0(renderer, archive, !fog_of_war_ ? "d_off3" : (btn_fow_off_hovered_ ? "d_off2" : "d_off1"));
-
-    // 8. START! button: animations start1 / start2 (hover) / start3 (pressed), absolute coordinates
-    draw_animation_frame0(renderer, archive, btn_start_pressed_ ? "start3" : (btn_start_hovered_ ? "start2" : "start1"));
 }
 
 } // namespace ants::app

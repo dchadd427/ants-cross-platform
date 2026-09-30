@@ -151,7 +151,7 @@ void SimulationEngine::init(const ants::assets::LevelData& level_in, uint32_t ra
         impl_->grid_.get_cell_mut(37, 19).is_obstacle_overlay = true;
     }
 
-    uint32_t starting_eggs = (level.boundary_param > 0) ? level.boundary_param : 10;
+    uint32_t starting_eggs = level.boundary_param;                          // the level's last word, as the original copies it to every team (+0x4a, FUN_0100dc94)
     for (uint8_t p = 0; p < MAX_PLAYERS; ++p) {
         impl_->stats_.set_egg_count(p, (roster_mask & (1u << p)) != 0 ? starting_eggs : 0u);
     }

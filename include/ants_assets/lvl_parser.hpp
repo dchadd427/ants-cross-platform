@@ -86,8 +86,8 @@ public:
         constexpr uint32_t operator()() const noexcept { return val; }
     };
 
-    DimensionProp width{0};           // Grid width (31, 40, 60)
-    DimensionProp height{0};          // Grid height (31, 40, 60)
+    DimensionProp width{0};           // Grid width = number of columns (the file's SECOND dimension dword; 31, 40, 60 in the shipped maps, 100 in OCEAN.LVL)
+    DimensionProp height{0};          // Grid height = number of rows (the file's FIRST dimension dword; 31, 40, 60 in the shipped maps, 81 in OCEAN.LVL)
 
     // Grids (size = width * height)
     struct Layer1TerrainProp : public std::vector<MapCell> {

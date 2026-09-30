@@ -150,6 +150,7 @@ struct Table {
 bool make_room(Table& t, uint8_t guests) {
     Machine& host = t.add("Alice");
     if (!host.net.host(0, "Alice", true)) return false;
+    host.net.set_map("TINY.LVL");                                            // a room has a map once its host has chosen one (the setup screen lists the Maps folder)
     static const char* names[] = {"Bob", "Carol", "Dave"};
     for (uint8_t i = 0; i < guests; ++i) {
         Machine& g = t.add(names[i]);
@@ -289,6 +290,7 @@ void run_thumb_tests() {
         Table t;
         Machine& host = t.add("Alice");
         ASSERT_TRUE(host.net.host(0, "Alice", true));
+        host.net.set_map("TINY.LVL");
         // the host alone: its own thumb is good, START needs a second player
         t.run(200);
         ASSERT_EQ(host.net.seat_quality(0), LinkQuality::Good);
@@ -309,6 +311,7 @@ void run_thumb_tests() {
         Table raw;
         Machine& h2 = raw.add("Host");
         ASSERT_TRUE(h2.net.host(0, "Host", true));
+        h2.net.set_map("TINY.LVL");
         auto mute = TcpConnection::connect("127.0.0.1", h2.net.listen_port());
         ASSERT_TRUE(mute != nullptr);
         HelloMsg hello;

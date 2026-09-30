@@ -43,7 +43,8 @@ struct ApplicationConfig {
     bool integer_scaling{false};
     bool headless{false};
     std::string chd_path{"Original-Ants/ants.chd"};
-    std::string default_map_path{"Original-Ants/Maps/TREASURE.LVL"};
+    std::string maps_dir{"Original-Ants/Maps"};     // the folder whose `*.lvl` files are the map list (the original searches its Maps folder)
+    std::string default_map_path;                   // --map: the map of a game that starts without the setup screen; empty: the first map of the list
     std::string midi_path{"Original-Ants/INTRO.MID"};
     uint32_t random_seed{1337};
     bool start_in_map_select{true};
@@ -192,6 +193,9 @@ private:
     void sync_room_view();
     void render_net_overlay();
     void apply_team_names(const std::array<std::string, 4>& names, uint8_t roster);   // simulation texts, HUD labels, results rows
+
+    void enter_map_select();                              // the setup screen is created (again): its labels stay empty until its refresh
+    void finish_loading();                                // the loading screen ends: the quick help or the setup screen
 
     void play_next_ingame_music();
     void start_intro_music();

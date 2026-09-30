@@ -1,4 +1,5 @@
 #include <iostream>
+#include <filesystem>
 #include <iomanip>
 #include <vector>
 #include <string>
@@ -1394,108 +1395,250 @@ void run_suite_7_input_controls() {
 void run_suite_8_unit_health_and_map_select() {
     TEST_SUITE("Suite 8: Unit Health Display & Map Selection Screen");
 
-    TEST_CASE("8.2 Map Selection Screen Discovery & Navigation") {
+    TEST_CASE("8.2 Setup Screen: The List Is Every .lvl Of The Maps Folder In The Byte Order Of The File Names (GAUNTLET First); Up / Down Step And Wrap; Enter, S And s Start; Q, q, X And x Leave; Nothing Else Does Anything (FUN_01013de7, FUN_01014076)") {
         MapSelectScreen screen;
         screen.init("Original-Ants/Maps");
 
         const auto& maps = screen.get_maps();
-        ASSERT_GE(maps.size(), 6u);
-
-        // Verify canonical map entries
-        bool has_treasure = false, has_small = false, has_tiny = false;
+        ASSERT_EQ(maps.size(), 6u);
+        ASSERT_EQ(maps[0].filename, "GAUNTLET.LVL");                              // the first of the sorted names
+        for (size_t i = 1; i < maps.size(); ++i) ASSERT_TRUE(maps[i - 1].filename < maps[i].filename);
+        const char* order[] = {"GAUNTLET.LVL", "ISLANDS.LVL", "MEDIUM.LVL", "SMALL.LVL", "TINY.LVL", "TREASURE.LVL"};
+        for (size_t i = 0; i < maps.size(); ++i) ASSERT_EQ(maps[i].filename, order[i]);
         for (const auto& m : maps) {
             if (m.filename == "TREASURE.LVL") {
-                has_treasure = true;
                 ASSERT_EQ(m.width, 60u);
                 ASSERT_EQ(m.height, 60u);
             }
-            if (m.filename == "SMALL.LVL") has_small = true;
-            if (m.filename == "TINY.LVL") has_tiny = true;
         }
-        ASSERT_TRUE(has_treasure);
-        ASSERT_TRUE(has_small);
-        ASSERT_TRUE(has_tiny);
 
-        // Initial selection
+        // Initial selection: the first entry
         ASSERT_EQ(screen.get_selected_index(), 0);
         ASSERT_FALSE(screen.get_selected_map_path().empty());
 
-        // Key Down: Next map (Down Arrow)
+        // Down: next map, Up: previous map, both wrap round
         screen.handle_key_down(SDLK_DOWN);
         ASSERT_EQ(screen.get_selected_index(), 1);
-
-        // Key Down: Previous map (Up Arrow)
         screen.handle_key_down(SDLK_UP);
         ASSERT_EQ(screen.get_selected_index(), 0);
-
-        // Wrap-around backwards
         screen.handle_key_down(SDLK_UP);
         ASSERT_EQ(screen.get_selected_index(), static_cast<int32_t>(maps.size() - 1));
-
-        // Direct number hotkeys: '1' -> index 0, '4' -> index 3
-        screen.handle_key_down(SDLK_1);
+        screen.handle_key_down(SDLK_DOWN);
         ASSERT_EQ(screen.get_selected_index(), 0);
 
-        screen.handle_key_down(SDLK_4);
-        ASSERT_EQ(screen.get_selected_index(), 3);
+        std::string started_map;
+        int starts = 0;
+        int leaves = 0;
+        screen.set_on_start([&](const std::string& path) { started_map = path; ++starts; });
+        screen.set_on_quit([&]() { ++leaves; });
 
-        // Start callback trigger on Enter
-        std::string started_map = "";
-        screen.set_on_start([&](const std::string& path) {
-            started_map = path;
-        });
-
-        screen.handle_key_down(SDLK_RETURN);
-        ASSERT_FALSE(started_map.empty());
-        ASSERT_TRUE(started_map.find("TINY.LVL") != std::string::npos);
-    } TEST_END();
-
-    TEST_CASE("8.3 Map Select Mouse Interaction & Stepper Launch") {
-        MapSelectScreen screen;
-        screen.init("Original-Ants/Maps");
-
-        std::string launched_path = "";
-        screen.set_on_start([&](const std::string& path) {
-            launched_path = path;
-        });
-
-        // Click Down arrow button to advance to 2nd map (SMALL.LVL)
-        screen.handle_mouse_down(MapSelectScreen::BTN_DOWN_X + 10, MapSelectScreen::BTN_DOWN_Y + 10, SDL_BUTTON_LEFT);
-        ASSERT_EQ(screen.get_selected_index(), 1);
-        ASSERT_TRUE(launched_path.empty()); // Single click does not launch immediately
-
-        // Click START GAME button
-        screen.handle_mouse_down(MapSelectScreen::BTN_START_X + 20, MapSelectScreen::BTN_START_Y + 10, SDL_BUTTON_LEFT);
-        ASSERT_FALSE(launched_path.empty());
-        ASSERT_TRUE(launched_path.find("SMALL.LVL") != std::string::npos);
-    } TEST_END();
-
-    TEST_CASE("8.5 Fog of War Toggle and Player Drop Status Controls") {
-        MapSelectScreen screen;
-        screen.init("Original-Ants/Maps");
-
-        // Default: Fog of War disabled (authentic reference specification)
+        // The keys that the original's handler does not know do nothing: digits, Left / Right, Space, F, D, Esc, Tab, letters
+        const SDL_Keycode dead[] = {SDLK_1, SDLK_4, SDLK_6, SDLK_LEFT, SDLK_RIGHT, SDLK_SPACE, SDLK_f, SDLK_d, SDLK_ESCAPE, SDLK_TAB, SDLK_a, SDLK_y, SDLK_n, SDLK_F1, SDLK_BACKSPACE};
+        for (SDL_Keycode k : dead) screen.handle_key_down(k);
+        ASSERT_EQ(screen.get_selected_index(), 0);
+        ASSERT_EQ(starts, 0);
+        ASSERT_EQ(leaves, 0);
         ASSERT_FALSE(screen.is_fog_of_war_enabled());
 
-        // Click "On" button
-        screen.handle_mouse_down(MapSelectScreen::BTN_FOW_ON_X + 5, MapSelectScreen::BTN_FOW_ON_Y + 5, SDL_BUTTON_LEFT);
+        // START: Enter, the keypad's Enter, S and s
+        screen.handle_key_down(SDLK_DOWN);
+        screen.handle_key_down(SDLK_DOWN);
+        screen.handle_key_down(SDLK_DOWN);                                          // SMALL.LVL
+        for (SDL_Keycode k : {SDLK_RETURN, SDLK_KP_ENTER, SDLK_s}) {
+            started_map.clear();
+            screen.handle_key_down(k);
+            ASSERT_TRUE(started_map.find("SMALL.LVL") != std::string::npos);
+        }
+        ASSERT_EQ(starts, 3);
+        // LEAVE: Q, q, X and x (SDL reports the letter's lower case key whatever the shift state)
+        for (SDL_Keycode k : {SDLK_q, SDLK_x}) screen.handle_key_down(k);
+        ASSERT_EQ(leaves, 2);
+    } TEST_END();
+
+    TEST_CASE("8.3 Setup Screen Buttons Are The Original's Button Class: The Press Captures (Pressed Art, Click Sound), The Release Acts, Leaving The Button Cancels For Good") {
+        MapSelectScreen screen;
+        screen.init("Original-Ants/Maps");
+        std::vector<uint32_t> sounds;
+        screen.set_on_play_sfx([&](uint32_t s) { sounds.push_back(s); });
+
+        std::string launched_path;
+        screen.set_on_start([&](const std::string& path) { launched_path = path; });
+
+        const int32_t dx = MapSelectScreen::BTN_DOWN_X + 10;
+        const int32_t dy = MapSelectScreen::BTN_DOWN_Y + 10;
+        // the press alone changes nothing but plays the click of the pressed picture
+        screen.handle_mouse_motion(dx, dy);
+        screen.handle_mouse_down(dx, dy, SDL_BUTTON_LEFT);
+        ASSERT_EQ(screen.get_selected_index(), 0);
+        ASSERT_EQ(sounds.size(), 1u);
+        ASSERT_EQ(sounds.back(), SoundID::ButtonClick);
+        // the release inside runs the action: the second map
+        screen.handle_mouse_up(dx, dy, SDL_BUTTON_LEFT);
+        ASSERT_EQ(screen.get_selected_index(), 1);
+        ASSERT_TRUE(launched_path.empty());                                         // stepping does not start
+
+        // leaving the button while it is held cancels it for good: coming back before the release does not bring it back
+        screen.handle_mouse_down(dx, dy, SDL_BUTTON_LEFT);
+        screen.handle_mouse_motion(dx + 200, dy);
+        screen.handle_mouse_motion(dx, dy);
+        screen.handle_mouse_up(dx, dy, SDL_BUTTON_LEFT);
+        ASSERT_EQ(screen.get_selected_index(), 1);
+        // a release elsewhere does nothing either
+        screen.handle_mouse_down(dx, dy, SDL_BUTTON_LEFT);
+        screen.handle_mouse_up(dx + 200, dy, SDL_BUTTON_LEFT);
+        ASSERT_EQ(screen.get_selected_index(), 1);
+        // a press elsewhere and a release on the button: no capture, no action
+        screen.handle_mouse_down(dx + 200, dy, SDL_BUTTON_LEFT);
+        screen.handle_mouse_up(dx, dy, SDL_BUTTON_LEFT);
+        ASSERT_EQ(screen.get_selected_index(), 1);
+        // the right button does nothing
+        screen.handle_mouse_down(dx, dy, SDL_BUTTON_RIGHT);
+        screen.handle_mouse_up(dx, dy, SDL_BUTTON_RIGHT);
+        ASSERT_EQ(screen.get_selected_index(), 1);
+
+        // START: press and release on the button
+        const int32_t sx = MapSelectScreen::BTN_START_X + 20;
+        const int32_t sy = MapSelectScreen::BTN_START_Y + 10;
+        screen.handle_mouse_down(sx, sy, SDL_BUTTON_LEFT);
+        ASSERT_TRUE(launched_path.empty());
+        screen.handle_mouse_up(sx, sy, SDL_BUTTON_LEFT);
+        ASSERT_TRUE(launched_path.find("ISLANDS.LVL") != std::string::npos);          // the second entry of the sorted list
+
+        // the pressed art follows the state: hover, pressed, up again
+        ASSERT_FALSE(screen.is_locked());
+        screen.lock();                                                              // START ran in the application: the screen is locked (+0x130)
+        ASSERT_TRUE(screen.is_locked());
+        launched_path.clear();
+        screen.handle_mouse_down(dx, dy, SDL_BUTTON_LEFT);
+        screen.handle_mouse_up(dx, dy, SDL_BUTTON_LEFT);
+        screen.handle_key_down(SDLK_DOWN);
+        screen.handle_mouse_down(sx, sy, SDL_BUTTON_LEFT);
+        screen.handle_mouse_up(sx, sy, SDL_BUTTON_LEFT);
+        screen.handle_key_down(SDLK_RETURN);
+        ASSERT_EQ(screen.get_selected_index(), 1);                                  // nothing moves, nothing starts twice
+        ASSERT_TRUE(launched_path.empty());
+        screen.enter();                                                             // a new screen is unlocked
+        ASSERT_FALSE(screen.is_locked());
+    } TEST_END();
+
+    TEST_CASE("8.5 Setup Screen: The Fog Of War Pair Is Silent, Off By Default And Acts At The Release; There Are No Other Click Targets (Map Box, Description Box, Thumbs, Drop)") {
+        MapSelectScreen screen;
+        screen.init("Original-Ants/Maps");
+        std::vector<uint32_t> sounds;
+        screen.set_on_play_sfx([&](uint32_t s) { sounds.push_back(s); });
+        int starts = 0;
+        int leaves = 0;
+        screen.set_on_start([&](const std::string&) { ++starts; });
+        screen.set_on_quit([&]() { ++leaves; });
+
+        // Default: Fog of War disabled
+        ASSERT_FALSE(screen.is_fog_of_war_enabled());
+
+        // "On": the press does nothing (and plays nothing: d_on3 is silent), the release switches it on
+        const int32_t on_x = MapSelectScreen::BTN_FOW_ON_X + 5;
+        const int32_t on_y = MapSelectScreen::BTN_FOW_ON_Y + 5;
+        screen.handle_mouse_motion(on_x, on_y);
+        screen.handle_mouse_down(on_x, on_y, SDL_BUTTON_LEFT);
+        ASSERT_FALSE(screen.is_fog_of_war_enabled());
+        ASSERT_TRUE(sounds.empty());
+        screen.handle_mouse_up(on_x, on_y, SDL_BUTTON_LEFT);
         ASSERT_TRUE(screen.is_fog_of_war_enabled());
 
-        // Click "Off" button
-        screen.handle_mouse_down(MapSelectScreen::BTN_FOW_OFF_X + 5, MapSelectScreen::BTN_FOW_OFF_Y + 5, SDL_BUTTON_LEFT);
+        // "Off" likewise
+        const int32_t off_x = MapSelectScreen::BTN_FOW_OFF_X + 5;
+        const int32_t off_y = MapSelectScreen::BTN_FOW_OFF_Y + 5;
+        screen.handle_mouse_motion(off_x, off_y);
+        screen.handle_mouse_down(off_x, off_y, SDL_BUTTON_LEFT);
+        ASSERT_TRUE(screen.is_fog_of_war_enabled());
+        screen.handle_mouse_up(off_x, off_y, SDL_BUTTON_LEFT);
+        ASSERT_FALSE(screen.is_fog_of_war_enabled());
+        ASSERT_TRUE(sounds.empty());
+
+        // A press that leaves the button before the release changes nothing
+        screen.handle_mouse_down(on_x, on_y, SDL_BUTTON_LEFT);
+        screen.handle_mouse_motion(on_x, on_y + 100);
+        screen.handle_mouse_up(on_x, on_y + 100, SDL_BUTTON_LEFT);
         ASSERT_FALSE(screen.is_fog_of_war_enabled());
 
-        // Player 2 initial state is unready (thumbs down)
-        ASSERT_FALSE(screen.is_player_ready(2));
-        ASSERT_TRUE(screen.is_player_ready(0));
-        ASSERT_TRUE(screen.is_player_ready(1));
+        // The places that used to do something in the remake (the map name box, the description box, the thumbs, the Drop button) are not buttons of the original
+        const int32_t places[][2] = {{100, 325}, {100, 390}, {550, 105}, {550, 155}, {550, 205}, {590, 200}, {38, 380}};
+        for (const auto& pt : places) {
+            screen.handle_mouse_motion(pt[0], pt[1]);
+            screen.handle_mouse_down(pt[0], pt[1], SDL_BUTTON_LEFT);
+            screen.handle_mouse_up(pt[0], pt[1], SDL_BUTTON_LEFT);
+        }
+        ASSERT_EQ(screen.get_selected_index(), 0);
+        ASSERT_FALSE(screen.is_fog_of_war_enabled());
+        ASSERT_EQ(starts, 0);
+        ASSERT_EQ(leaves, 0);
+        ASSERT_TRUE(sounds.empty());
+    } TEST_END();
 
-        // Click Drop button -> toggles Player 2 ready state
-        screen.handle_mouse_down(MapSelectScreen::BTN_DROP_X + 10, MapSelectScreen::BTN_DROP_Y + 10, SDL_BUTTON_LEFT);
-        ASSERT_TRUE(screen.is_player_ready(2));
+    TEST_CASE("8.7 Setup Screen: Every Label, Portrait And Thumb Appears With The Refresh, 500 ms After The Screen Was Created (FUN_010133ef's first run)") {
+        MapSelectScreen screen;
+        screen.init("Original-Ants/Maps");
+        ASSERT_FALSE(screen.refreshed());
+        screen.update(0.499f);
+        ASSERT_FALSE(screen.refreshed());
+        screen.update(0.001f);
+        ASSERT_TRUE(screen.refreshed());
+        screen.enter();                                                             // a screen that is created again starts empty again
+        ASSERT_FALSE(screen.refreshed());
+        screen.update(0.5f);
+        ASSERT_TRUE(screen.refreshed());
+    } TEST_END();
 
-        screen.handle_mouse_down(MapSelectScreen::BTN_DROP_X + 10, MapSelectScreen::BTN_DROP_Y + 10, SDL_BUTTON_LEFT);
-        ASSERT_FALSE(screen.is_player_ready(2));
+    TEST_CASE("8.8 Setup Screen: The Map List Is Searched, Not Built In - Every .lvl / .LVL File Of The Folder (Spaces, Mixed Case), Nothing Else, In Byte Order; The Labels Come From The File's Header") {
+        namespace fs = std::filesystem;
+        struct TempDir {
+            fs::path path;
+            ~TempDir() { std::error_code ec; fs::remove_all(path, ec); }
+        } dir;
+        dir.path = fs::temp_directory_path() / ("ants_map_list_test_" + std::to_string(static_cast<long long>(SDL_GetTicks())));
+        std::error_code ec;
+        fs::create_directories(dir.path / "inner", ec);
+        const fs::path source = fs::path("Original-Ants/Maps/TINY.LVL");
+        ASSERT_TRUE(fs::exists(source));
+        for (const char* name : {"POPcOrN.lvl", "OCEAN.LVL", "Bombz Away.lvl", "zeta.Lvl", "Mid.LVL"}) {
+            fs::copy_file(source, dir.path / name, fs::copy_options::overwrite_existing, ec);
+            ASSERT_FALSE(static_cast<bool>(ec));
+        }
+        fs::copy_file(source, dir.path / "inner" / "Hidden.LVL", fs::copy_options::overwrite_existing, ec);     // a folder inside is not searched
+        std::ofstream(dir.path / "readme.txt") << "not a map";
+        std::ofstream(dir.path / "bad.lvl.bak") << "not a map either";
+
+        MapSelectScreen screen;
+        screen.init(dir.path.string());
+        const auto& maps = screen.get_maps();
+        const char* expected[] = {"Bombz Away.lvl", "Mid.LVL", "OCEAN.LVL", "POPcOrN.lvl", "zeta.Lvl"};        // the byte order of the names: capitals before small letters
+        ASSERT_EQ(maps.size(), 5u);
+        for (size_t i = 0; i < maps.size(); ++i) ASSERT_EQ(maps[i].filename, expected[i]);
+        ASSERT_EQ(maps[0].display_name, "Bombz Away");
+        ASSERT_EQ(maps[3].display_name, "POPcOrN");
+        for (const auto& m : maps) {                                                  // everything shown about a map is the file's own header (these are copies of TINY)
+            ASSERT_EQ(m.description, "Tiny map with no PowerUps");
+            ASSERT_EQ(m.minutes, 6u);
+            ASSERT_EQ(m.width, 31u);
+            ASSERT_EQ(m.height, 31u);
+            ASSERT_TRUE(fs::exists(m.full_path));
+        }
+        // Down steps through the list in that order and the start gets the chosen file
+        std::string started;
+        screen.set_on_start([&](const std::string& path) { started = path; });
+        screen.handle_key_down(SDLK_DOWN);
+        screen.handle_key_down(SDLK_DOWN);
+        screen.handle_key_down(SDLK_DOWN);
+        screen.handle_key_down(SDLK_RETURN);
+        ASSERT_TRUE(started.find("POPcOrN.lvl") != std::string::npos);
+        // a folder without maps has an empty list, and nothing starts
+        MapSelectScreen empty;
+        empty.init((dir.path / "inner" / "nothing").string());
+        ASSERT_TRUE(empty.get_maps().empty());
+        started.clear();
+        empty.set_on_start([&](const std::string& path) { started = path; });
+        empty.handle_key_down(SDLK_RETURN);
+        ASSERT_TRUE(started.empty());
+        ASSERT_TRUE(empty.get_selected_map_path().empty());
     } TEST_END();
 
     TEST_CASE("8.4 INTRO.MID Lifecycle & In-Game Music") {
@@ -6125,7 +6268,8 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
             ASSERT_EQ(played_sounds.back(), SoundID::ButtonClick);
         }
 
-        // 2. MapSelectScreen buttons
+        // 2. MapSelectScreen buttons: the click of a pressed picture plays at the PRESS (the action comes with the release); the fog pair is silent, and the places
+        // of the invented targets (the Drop button) are no buttons
         {
             MapSelectScreen screen;
             std::vector<uint32_t> played_sounds;
@@ -6137,12 +6281,13 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
                 { MapSelectScreen::BTN_DOWN_X + 10, MapSelectScreen::BTN_DOWN_Y + 10, false },
                 { MapSelectScreen::BTN_FOW_ON_X + 5, MapSelectScreen::BTN_FOW_ON_Y + 5, true },
                 { MapSelectScreen::BTN_FOW_OFF_X + 5, MapSelectScreen::BTN_FOW_OFF_Y + 5, true },
-                { MapSelectScreen::BTN_DROP_X + 10, MapSelectScreen::BTN_DROP_Y + 10, false },
+                { 576 + 10, 192 + 10, true },                                       // where the remake's invented Drop button was
                 { MapSelectScreen::BTN_QUIT_X + 10, MapSelectScreen::BTN_QUIT_Y + 10, false },
                 { MapSelectScreen::BTN_START_X + 10, MapSelectScreen::BTN_START_Y + 10, false },
             };
             for (const auto& c : cases) {
                 played_sounds.clear();
+                screen.handle_mouse_motion(c.x, c.y);
                 screen.handle_mouse_down(c.x, c.y, SDL_BUTTON_LEFT);
                 if (c.silent) {
                     ASSERT_TRUE(played_sounds.empty());
@@ -6150,6 +6295,7 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
                     ASSERT_FALSE(played_sounds.empty());
                     ASSERT_EQ(played_sounds.back(), SoundID::ButtonClick);
                 }
+                screen.handle_mouse_up(c.x, c.y, SDL_BUTTON_LEFT);
             }
         }
 
@@ -6879,10 +7025,10 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
 
     TEST_CASE("12.108: Version Invariant & Fog of War Cursor Concealment Parity") {
         // 1. Verify semantic versioning components
-        ASSERT_EQ(ants::VERSION_STRING, "v0.0.63");
+        ASSERT_EQ(ants::VERSION_STRING, "v0.0.64");
         ASSERT_EQ(ants::VERSION_MAJOR, 0);
         ASSERT_EQ(ants::VERSION_MINOR, 0);
-        ASSERT_EQ(ants::VERSION_PATCH, 63);
+        ASSERT_EQ(ants::VERSION_PATCH, 64);
 
         // 2. Setup simulation world with Fog of War enabled
         SimulationEngine sim;
