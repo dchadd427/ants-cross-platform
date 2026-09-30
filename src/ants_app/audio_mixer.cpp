@@ -17,14 +17,20 @@
 
 #include <fstream>
 
+// dr_mp3 is third-party code: its implementation is compiled without the warnings that the game's own code is held to. The pragmas are GCC / Clang
+// only (MSVC warns C4068 about a pragma it does not know; its /W4 set is configured in CMakeLists.txt).
+#if defined(__GNUC__) || defined(__clang__)
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wsign-conversion"
 #pragma GCC diagnostic ignored "-Wconversion"
 #pragma GCC diagnostic ignored "-Wunused-function"
 #pragma GCC diagnostic ignored "-Wunused-parameter"
+#endif
 #define DR_MP3_IMPLEMENTATION
 #include "ants_app/dr_mp3.h"
+#if defined(__GNUC__) || defined(__clang__)
 #pragma GCC diagnostic pop
+#endif
 
 namespace ants::app {
 

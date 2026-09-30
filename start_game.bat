@@ -124,7 +124,7 @@ if "%PLAYERS%"=="1" (
     echo [LAUNCHER] Starting Ants...
     echo.
     "%BIN%"!PASS!
-    exit /b %errorlevel%
+    exit /b !errorlevel!
 )
 
 rem four different names, drawn at random

@@ -13,6 +13,7 @@ Ground truth for every entry is in [`docs/GAME_REVERSE_ENGINEERING.md`](docs/GAM
 
 ## Unreleased
 
+- **Windows (MSVC) build: no more `C4068 unknown pragma 'GCC'`** (no version bump, no behaviour change). `audio_mixer.cpp` switched GCC's warnings off around the third-party `dr_mp3` implementation with `#pragma GCC diagnostic` lines that MSVC does not know (six warnings, reported from a Windows build); the lines are now compiled for GCC and Clang only (`dr_mp3.h`'s own pragmas were guarded already). Checked by preprocessing the file with `__GNUC__` and `__clang__` undefined: no GCC pragma is left; the macOS build, the 29 suites and the web image are unchanged. `start_game.bat` also hands the game's exit code on (`!errorlevel!`; `%errorlevel%` inside a block is read before the game runs).
 - **Audit of the whole game against the original (documents only, no behaviour change)**: [`docs/AUDIT_ONE_TO_ONE.md`](docs/AUDIT_ONE_TO_ONE.md) and one ledger per area in [`docs/audit/`](docs/audit/). Every finding of the
   earlier per-area audits was re-checked against today's code (13 independent passes with their own probes), plus two fresh audits (the original's scheduler tasks; food, economy and scoring). Result: the sprite, terrain,
   HUD, movement and path-finding layers are identical to the original in every pixel / step that could be compared; the differences are listed in the order in which they are proposed to be fixed (hill queue defects, the end-of-match
