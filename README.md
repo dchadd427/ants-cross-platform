@@ -97,7 +97,7 @@ The remake provides a complete, playable, standalone experience with authentic a
 3. Results screen, option-dialog internals, startup flow, setup-screen buttons firing on release, quick help.
 4. Removal of the remaining invented visuals and timings, and the last non-original tests.
 5. Asset viewer overhaul.
-6. A comprehensive audit of the whole game against the original (visuals, animations, timing, sound, rules, networking feel), whenever the list above runs out.
+6. The comprehensive audit of the whole game against the original (visuals, animations, timing, sound, rules) has been done: results in [`docs/AUDIT_ONE_TO_ONE.md`](docs/AUDIT_ONE_TO_ONE.md) and [`docs/audit/`](docs/audit/); its ranked list of differences (hill queue defects, end-of-match rules, audio routing, the unbuilt results / options / start-up screens, view origin, minimap, fog reveal, chat, walking-frame cadence) replaces items 2 to 4 above as the work list, in eight proposed batches.
 
 ---
 

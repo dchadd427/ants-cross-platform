@@ -13,6 +13,10 @@ Ground truth for every entry is in [`docs/GAME_REVERSE_ENGINEERING.md`](docs/GAM
 
 ## Unreleased
 
+- **Audit of the whole game against the original (documents only, no behaviour change)**: [`docs/AUDIT_ONE_TO_ONE.md`](docs/AUDIT_ONE_TO_ONE.md) and one ledger per area in [`docs/audit/`](docs/audit/). Every finding of the
+  earlier per-area audits was re-checked against today's code (13 independent passes with their own probes), plus two fresh audits (the original's scheduler tasks; food, economy and scoring). Result: the sprite, terrain,
+  HUD, movement and path-finding layers are identical to the original in every pixel / step that could be compared; the differences are listed in the order in which they are proposed to be fixed (hill queue defects, the end-of-match
+  rules, audio routing, the unbuilt results / options / start-up screens, the view origin, the minimap, fog reveal, chat, the walking-frame cadence). Nothing in that list has been changed yet.
 - **Cleanup pass (no behaviour change, no version bump)**: dead code found with the linker's dead-strip map of an unoptimised build of every binary (nothing in any game or test binary reaches it), with a clang AST
   scan of every declaration in `include/` and `src/` that no translation unit of the game, the tools or the tests uses, and with a scan for members that are written but never read. The full suite gives identical
   results (188 integration tests with 6,536 assertions, every golden result and state hash unchanged, 506 E2E tests), the build is warning-free, the web image builds.
@@ -33,7 +37,7 @@ Ground truth for every entry is in [`docs/GAME_REVERSE_ENGINEERING.md`](docs/GAM
     pins (`effect_spec::dropper_frame_at`, the `Direction8` overloads of the mirroring helpers), and `ScorecardModal::set_on_replay` (a test and the application still set it although nothing ever calls it: a question for
     the results-screen stage).
   - **Found on the way, for the audit** (docs: implementation_plan.md section 18): `tests/test_sim/test_challenger_m2_it2_deep_stress.cpp` has not been part of the build since an early commit and no longer compiles
-    (it uses the retired slot-queue API of the hill); the death clips `death1` .. `death4` are no longer started by a separate effect (`spawn_death_effect` was unused), so their visual path needs a parity check.
+    (it uses the retired slot-queue API of the hill). (An earlier version of this line said that the death clips are no longer started by a separate effect: wrong, only the unused helper `spawn_death_effect` was removed; the effect path in `movement_system.cpp` is still in use, see the audit.)
 
 ## v0.0.50 - 2026-09-29 - Teaming works: the three answer dialogs of the original
 
