@@ -26,6 +26,7 @@ HostLobby::HostLobby(Config config) : cfg_(std::move(config)) {
     if (cfg_.host_seat >= sim::MAX_PLAYERS) cfg_.host_seat = 0;
     room_.slots[cfg_.host_seat].state = SlotState::Host;
     room_.slots[cfg_.host_seat].name = printable(cfg_.host_name, kMaxNameChars);
+    room_.slots[cfg_.host_seat].rtt_ms = 0;                    // the host's own thumb is always good
     room_.map_name = "TREASURE.LVL";
 }
 
@@ -45,6 +46,22 @@ size_t HostLobby::players() const noexcept {
     size_t n = 0;
     for (const auto& s : room_.slots) n += s.state != SlotState::Empty ? 1u : 0u;
     return n;
+}
+
+bool HostLobby::measured(uint8_t seat) const noexcept {
+    if (seat >= sim::MAX_PLAYERS) return false;
+    return seat == cfg_.host_seat ? room_.slots[seat].state == SlotState::Host : guests_[seat].measured;
+}
+
+uint32_t HostLobby::rtt_ms(uint8_t seat) const noexcept {
+    return seat < sim::MAX_PLAYERS && seat != cfg_.host_seat ? guests_[seat].rtt_ms : 0u;
+}
+
+bool HostLobby::all_measured() const noexcept {
+    for (uint8_t s = 0; s < sim::MAX_PLAYERS; ++s) {
+        if (guests_[s].conn != nullptr && !guests_[s].measured) return false;
+    }
+    return true;
 }
 
 void HostLobby::add_connection(Connection* connection, uint32_t now_ms) {
@@ -192,6 +209,22 @@ void HostLobby::handle_guest_message(uint8_t seat, const std::vector<uint8_t>& m
             guests_[seat].conn->send(encode_pong(m));
             return;
         }
+        case MsgType::Pong: {
+            PingMsg m;
+            if (!decode_ping(msg.data(), msg.size(), m)) return violation(seat);
+            Guest& g = guests_[seat];
+            // an answer to one of the last eight pings (its send time must be the recorded one: a made-up time is not believed)
+            if (m.nonce == 0 || m.nonce > g.ping_nonce || g.ping_nonce - m.nonce >= 8u || g.ping_sent[m.nonce % 8u] != m.sent_ms ||
+                last_update_ms_ < m.sent_ms) {
+                return;
+            }
+            const LinkQuality before = g.measured ? link_quality(room_.slots[seat].rtt_ms) : LinkQuality::Unknown;
+            g.measured = true;
+            g.rtt_ms = last_update_ms_ - m.sent_ms;
+            room_.slots[seat].rtt_ms = static_cast<uint16_t>(std::min<uint32_t>(g.rtt_ms, 0xFFFEu));
+            if (link_quality(room_.slots[seat].rtt_ms) != before) broadcast_room();          // the thumb changed: everybody sees it
+            return;
+        }
         case MsgType::Loaded: {
             LoadedMsg m;
             if (phase_ != Phase::Loading || !decode(msg, m)) return violation(seat);
@@ -211,6 +244,7 @@ void HostLobby::handle_guest_message(uint8_t seat, const std::vector<uint8_t>& m
 
 void HostLobby::update(uint32_t now_ms) {
     if (phase_ == Phase::Begun) return;              // the match has taken the connections over
+    last_update_ms_ = now_ms;
     // connections that have not said Hello yet
     for (size_t i = 0; i < pending_.size();) {
         Pending& p = pending_[i];
@@ -230,6 +264,15 @@ void HostLobby::update(uint32_t now_ms) {
     // the seated guests
     for (uint8_t s = 0; s < sim::MAX_PLAYERS && phase_ != Phase::Begun; ++s) {
         if (guests_[s].conn == nullptr) continue;
+        Guest& g = guests_[s];
+        if (g.conn->is_open() && now_ms >= g.next_ping_ms) {        // measure the round trip: the thumb beside the name
+            PingMsg ping;
+            ping.nonce = ++g.ping_nonce;
+            ping.sent_ms = now_ms;
+            g.ping_sent[ping.nonce % 8u] = now_ms;
+            g.conn->send(encode_ping(ping));
+            g.next_ping_ms = now_ms + cfg_.ping_every_ms;
+        }
         std::vector<uint8_t> msg;
         int budget = 64;
         while (budget-- > 0 && guests_[s].conn != nullptr && guests_[s].conn->poll(msg)) {
@@ -344,6 +387,7 @@ void ClientLobby::update(uint32_t now_ms) {
                 CancelMsg c;
                 if ((phase_ == Phase::Loading || phase_ == Phase::Loaded) && decode(msg, c)) {
                     cancel_reason_ = c.reason;
+                    cancel_player_ = c.player;
                     phase_ = Phase::InRoom;
                     events_.push_back(Event{Event::Type::Cancelled});
                 }

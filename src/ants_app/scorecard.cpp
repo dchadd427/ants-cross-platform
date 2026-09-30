@@ -33,11 +33,12 @@ void ScorecardModal::show(const sim::MatchResult& result, uint8_t local_player_i
     // Find winner entry
     uint8_t winner_id = result.winning_players.empty() ? 0 : result.winning_players[0];
     winner_entry_.player_id = winner_id;
-    if (winner_id == local_player_id && !local_player_name_.empty()) {
-        winner_entry_.name = local_player_name_;
-    } else {
-        winner_entry_.name = std::string(PLAYER_NAMES[winner_id % 4]);
-    }
+    auto name_of = [&](uint8_t p) -> std::string {
+        if (!player_names_[p % 4].empty()) return player_names_[p % 4];
+        if (p == local_player_id && !local_player_name_.empty()) return local_player_name_;
+        return std::string(PLAYER_NAMES[p % 4]);
+    };
+    winner_entry_.name = name_of(winner_id);
     winner_entry_.score = result.final_scores[winner_id % 4];
     winner_entry_.friendly_lost = result.stats[winner_id % 4].friendly_lost;
     winner_entry_.enemy_killed = result.stats[winner_id % 4].enemy_killed;
@@ -50,7 +51,7 @@ void ScorecardModal::show(const sim::MatchResult& result, uint8_t local_player_i
         if (p == winner_id) continue;
         PlayerEntry pe;
         pe.player_id = p;
-        pe.name = PLAYER_NAMES[p];
+        pe.name = name_of(p);
         pe.score = result.final_scores[p];
         pe.friendly_lost = result.stats[p].friendly_lost;
         pe.enemy_killed = result.stats[p].enemy_killed;

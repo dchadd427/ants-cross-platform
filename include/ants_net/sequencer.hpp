@@ -34,6 +34,10 @@ public:
     /// A command of `player` for the next turn. The issuer is set to `player` whatever the payload says. False when the player is not active, the
     /// command is not one that a client may send, or the peer already sent max_commands_per_turn commands for this turn.
     bool submit(uint8_t player, sim::Command command);
+    /// A command that the sequencer itself creates: the drop-out of a peer that left or fell silent (`command.issuer` is that peer). It goes into
+    /// the next turn whatever the state of the peer, so that every machine drops the team at the same tick. Clients cannot send these (submit
+    /// refuses every type that is not is_client_command).
+    void submit_system(sim::Command command);
 
     /// The highest turn `player` has executed.
     void on_ack(uint8_t player, uint32_t turn);

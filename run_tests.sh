@@ -286,6 +286,13 @@ if [ "$RUN_SIM" -eq 1 ]; then
     echo -e "${BOLD}${BLUE}======================================================================${RESET}"
     "./$BUILD_DIR/tests/test_net/test_tcp"
     TCP_STATUS=$?
+
+    echo ""
+    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
+    echo -e "${BOLD}${BLUE}>>> 2.14 RUNNING NETGAME SUITE (room, start barrier, matches over real sockets)...${RESET}"
+    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
+    "./$BUILD_DIR/tests/test_net/test_netgame"
+    NETGAME_STATUS=$?
 fi
 
 # 5. Execute Application Integration Tests
@@ -331,6 +338,13 @@ if [ "$RUN_APP" -eq 1 ]; then
     echo -e "${BOLD}${BLUE}======================================================================${RESET}"
     "./$BUILD_DIR/tests/test_app/test_pointer_model"
     POINTER_MODEL_STATUS=$?
+
+    echo ""
+    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
+    echo -e "${BOLD}${BLUE}>>> 3.6 RUNNING NETWORK APPLICATION SUITE (names, room, thumbs, start, matches)...${RESET}"
+    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
+    "./$BUILD_DIR/tests/test_app/test_network_app"
+    NETWORK_APP_STATUS=$?
 fi
 
 # 6. Execute E2E Opaque-Box Tests
@@ -472,6 +486,13 @@ if [ "$RUN_SIM" -eq 1 ]; then
         echo -e " 2.13 TCP Transport (test_tcp):                      ${RED}FAILED (exit code ${TCP_STATUS})${RESET}"
         TOTAL_FAILED=$((TOTAL_FAILED + 1))
     fi
+
+    if [ "$NETGAME_STATUS" -eq 0 ]; then
+        echo -e " 2.14 NetGame (test_netgame):                        ${GREEN}PASSED${RESET}"
+    else
+        echo -e " 2.14 NetGame (test_netgame):                        ${RED}FAILED (exit code ${NETGAME_STATUS})${RESET}"
+        TOTAL_FAILED=$((TOTAL_FAILED + 1))
+    fi
 fi
 
 if [ "$RUN_APP" -eq 1 ]; then
@@ -514,6 +535,13 @@ if [ "$RUN_APP" -eq 1 ]; then
         echo -e " 3.5 Pointer Model (test_pointer_model):             ${GREEN}PASSED${RESET}"
     else
         echo -e " 3.5 Pointer Model (test_pointer_model):             ${RED}FAILED (exit code ${POINTER_MODEL_STATUS})${RESET}"
+        TOTAL_FAILED=$((TOTAL_FAILED + 1))
+    fi
+
+    if [ "$NETWORK_APP_STATUS" -eq 0 ]; then
+        echo -e " 3.6 Network Application (test_network_app):         ${GREEN}PASSED${RESET}"
+    else
+        echo -e " 3.6 Network Application (test_network_app):         ${RED}FAILED (exit code ${NETWORK_APP_STATUS})${RESET}"
         TOTAL_FAILED=$((TOTAL_FAILED + 1))
     fi
 fi

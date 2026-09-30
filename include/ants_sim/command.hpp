@@ -31,7 +31,9 @@ enum class CommandType : uint8_t {
     AllianceDeny = 8,       // the issuer refuses it
     AllianceWithdraw = 9,   // FUN_0100c5fa: the issuer takes its invitation to `other_player` back
     AllianceBreak = 10,     // the issuer leaves its team
-    Last = AllianceBreak
+    Drop = 11,              // FUN_0100d03b: the issuer's team drops out of the match. A SYSTEM command: only the sequencer creates it (a peer
+                            // that left or stopped answering); a client cannot send it (is_client_command)
+    Last = Drop
 };
 
 /// The most ants one command may name (the original's drag select holds 24; a team never has more than ten eggs' worth of ants).
@@ -59,6 +61,8 @@ inline bool is_group_order(CommandType t) noexcept {
     return t == CommandType::GroupMove || t == CommandType::GroupSpecial || t == CommandType::GroupAttack;
 }
 inline bool has_ant_list(CommandType t) noexcept { return is_group_order(t) || t == CommandType::Stop; }
+/// The commands a player may send: everything except the system command Drop.
+inline bool is_client_command(CommandType t) noexcept { return t != CommandType::None && t < CommandType::Drop; }
 
 inline size_t encoded_size(const Command& c) noexcept { return kCommandHeaderBytes + 4 * c.ants.size(); }
 

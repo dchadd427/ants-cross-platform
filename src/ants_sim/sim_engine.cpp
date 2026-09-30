@@ -16,30 +16,31 @@ namespace {
 // snaps the ant to the centre of its tile, idles it and queues an asynchronous PATHMGR path request.
 // user_cmd = order clicked by the player (FUN_0101fc50 arg "player" = 1); remake systems (guard AI, base
 // queue, ability approach, harvest return) issue internal orders with user_cmd = false.
-void route_move_order(SimulationEngineImpl& impl, AntUnit& unit, TileCoord dest,
+// Returns what GoTo returns: true when the order was accepted and a path was requested (the group order acknowledges with it).
+bool route_move_order(SimulationEngineImpl& impl, AntUnit& unit, TileCoord dest,
                       bool allow_friendly_bomb, bool user_cmd, bool special = false) {
-    if (!unit.is_alive()) return;
+    if (!unit.is_alive()) return false;
 
     // Special abilities and the power-up pick-up cannot be interrupted and silently ignore move orders
     if (unit.state == UnitState::PoweringUp ||
         unit.state == UnitState::PlacingFire || unit.state == UnitState::ExtinguishingFire ||
         unit.state == UnitState::PlantingBomb || unit.state == UnitState::DefusingBomb ||
         unit.state == UnitState::BuildingBridge || unit.state == UnitState::DemolishingBridge) {
-        return;
+        return false;
     }
 
     // Accept predicate for player orders (FUN_0101ff5a): action idle, walk or stunned only, not engaged, not frozen.
     // Orders of the remake's own systems need an idle, walking or stunned ant as well.
     if (user_cmd) {
-        if (!impl.can_take_user_order(unit)) return;
+        if (!impl.can_take_user_order(unit)) return false;
     } else {
         const uint8_t act = impl.orig_action_of(unit);
-        if (unit.engaged || unit.frozen || !(act == 0 || act == 1 || act == 3)) return;
+        if (unit.engaged || unit.frozen || !(act == 0 || act == 1 || act == 3)) return false;
     }
 
     // A remake system repeating the order it already gave (same destination, request still queued) keeps
     // the request's place in the PATHMGR queue instead of restarting the search.
-    if (!user_cmd && unit.final_dest == dest && impl.has_pending_path(unit.id)) return;
+    if (!user_cmd && unit.final_dest == dest && impl.has_pending_path(unit.id)) return true;
     // A remake system sending a standing ant to the tile it stands on (hill queue slot, guard post) just
     // leaves it there; player orders always go through GoTo (a one-tile path, as in the original).
     if (!user_cmd && unit.pos == dest && unit.waypoints.empty() && !impl.has_pending_path(unit.id) &&
@@ -49,11 +50,11 @@ void route_move_order(SimulationEngineImpl& impl, AntUnit& unit, TileCoord dest,
         if (unit.state == UnitState::Walking) {
             impl.set_idle_label(unit);
         }
-        return;
+        return true;
     }
 
     unit.allow_friendly_bomb = (allow_friendly_bomb && impl.grid_.has_bomb_at(dest));
-    impl.go_to(unit, dest, user_cmd, special, unit.allow_friendly_bomb);
+    return impl.go_to(unit, dest, user_cmd, special, unit.allow_friendly_bomb);
 }
 
 } // anonymous namespace
@@ -66,6 +67,22 @@ SimulationEngine::SimulationEngine(SimulationEngine&&) noexcept = default;
 SimulationEngine& SimulationEngine::operator=(SimulationEngine&&) noexcept = default;
 
 void SimulationEngine::init(const ants::assets::LevelData& level, uint32_t random_seed) {
+    init(level, random_seed, 0x0Fu);
+}
+
+uint8_t SimulationEngine::roster_mask() const noexcept {
+    return impl_->roster_mask_;
+}
+
+void SimulationEngine::init(const ants::assets::LevelData& level_in, uint32_t random_seed, uint8_t roster_mask) {
+    roster_mask &= 0x0Fu;
+    // A team without a player has no hill and no start markers (so no starting ants): the level is played without them
+    ants::assets::LevelData roster_level;
+    const bool everybody = roster_mask == 0x0Fu;
+    if (!everybody) roster_level = level_in.for_roster(roster_mask);
+    const ants::assets::LevelData& level = everybody ? level_in : roster_level;
+    impl_->roster_mask_ = roster_mask;
+    impl_->dropped_mask_ = 0;
     impl_->prng_.srand(random_seed);
     impl_->cosmetic_prng_.srand(random_seed ^ 0x5EEDu);
     impl_->active_effects_.clear();
@@ -139,7 +156,7 @@ void SimulationEngine::init(const ants::assets::LevelData& level, uint32_t rando
 
     uint32_t starting_eggs = (level.boundary_param > 0) ? level.boundary_param : 10;
     for (uint8_t p = 0; p < MAX_PLAYERS; ++p) {
-        impl_->stats_.set_egg_count(p, starting_eggs);
+        impl_->stats_.set_egg_count(p, (roster_mask & (1u << p)) != 0 ? starting_eggs : 0u);
     }
 
     for (const auto& a : level.anthill_spawns) {
@@ -169,6 +186,8 @@ void SimulationEngine::init(const ants::assets::LevelData& level, uint32_t rando
 }
 
 void SimulationEngine::init_test_world(uint32_t width, uint32_t height, uint32_t random_seed, uint32_t match_time_ms) {
+    impl_->roster_mask_ = 0x0Fu;
+    impl_->dropped_mask_ = 0;
     impl_->prng_.srand(random_seed);
     impl_->cosmetic_prng_.srand(random_seed ^ 0x5EEDu);
     impl_->active_effects_.clear();
@@ -200,6 +219,8 @@ void SimulationEngine::init_test_world(uint32_t width, uint32_t height, uint32_t
 }
 
 void SimulationEngine::reset() {
+    impl_->roster_mask_ = 0x0Fu;
+    impl_->dropped_mask_ = 0;
     impl_->match_state_ = MatchState::NotStarted;
     impl_->current_tick_ = 0;
     impl_->match_limit_ms_ = 0;
@@ -449,13 +470,13 @@ void SimulationEngineImpl::checkgo_poll() {
     if (remaining < 0) handle_game_over();
 }
 
-void SimulationEngine::issue_order(const AntOrder& order) {
+bool SimulationEngine::issue_order(const AntOrder& order) {
     AntUnit* unit = impl_->find_unit(order.ant_id);
-    if (!unit || !unit->is_alive() || unit->engaged || unit->frozen) return;
+    if (!unit || !unit->is_alive() || unit->engaged || unit->frozen) return false;
     {
         // Accept predicate of player orders (FUN_0101ff5a): idle, walking or stunned ants only.
         const uint8_t act = impl_->orig_action_of(*unit);
-        if (order.type != OrderType::Cancel && !(act == 0 || act == 1 || act == 3)) return;
+        if (order.type != OrderType::Cancel && !(act == 0 || act == 1 || act == 3)) return false;
     }
 
     // Active action states (placing fire, planting bomb, building bridge, extinguishing, defusing, picking up a power-up)
@@ -465,13 +486,13 @@ void SimulationEngine::issue_order(const AntOrder& order) {
         unit->state == UnitState::PlacingFire || unit->state == UnitState::ExtinguishingFire ||
         unit->state == UnitState::PlantingBomb || unit->state == UnitState::DefusingBomb ||
         unit->state == UnitState::BuildingBridge || unit->state == UnitState::DemolishingBridge) {
-        return;
+        return false;
     }
 
     // Player move orders pass the original accept predicate (FUN_0101ff5a) before anything else: an ant
     // that is attacking, harvesting, entering the hill or playing its "can't go" animation ignores them.
     if (order.type == OrderType::Move || order.type == OrderType::InfiltrateAnthill) {
-        if (!impl_->can_take_user_order(*unit)) return;
+        if (!impl_->can_take_user_order(*unit)) return false;
     }
 
     if (order.type != OrderType::ReturnToBase) {
@@ -481,12 +502,11 @@ void SimulationEngine::issue_order(const AntOrder& order) {
     switch (order.type) {
         case OrderType::Move:
             unit->ability_target = TileCoord{-1, -1};
-            route_move_order(*impl_, *unit, TileCoord{order.target_x, order.target_y}, order.allow_friendly_bomb, true, order.special);
-            break;
+            return route_move_order(*impl_, *unit, TileCoord{order.target_x, order.target_y}, order.allow_friendly_bomb, true, order.special);
         case OrderType::ReturnToBase: {
             unit->ability_target = TileCoord{-1, -1};
             join_base_queue(order.ant_id);
-            break;
+            return true;
         }
         case OrderType::Attack:
             unit->ability_target = TileCoord{-1, -1};
@@ -498,14 +518,14 @@ void SimulationEngine::issue_order(const AntOrder& order) {
                     : impl_->occupant_at(TileCoord{order.target_x, order.target_y});
                 if (target && !target->removed) {
                     if (target->player_id == unit->player_id || impl_->stats_.are_allies(unit->player_id, target->player_id)) {
-                        break; // Ants cannot attack friendly teammates or allies (the original asks for a confirmation)
+                        return false; // Ants cannot attack friendly teammates or allies (the original asks for a confirmation)
                     }
                     // FUN_010287b5: a click on an enemy ant is a move order onto its tile with the player flag; the
                     // classification (FUN_01020655) turns it into the attack order 3 and the path ends in contact.
-                    route_move_order(*impl_, *unit, TileCoord{target->pixel_x / 32, target->pixel_y / 32}, false, true);
+                    return route_move_order(*impl_, *unit, TileCoord{target->pixel_x / 32, target->pixel_y / 32}, false, true);
                 }
             }
-            break;
+            return false;
         case OrderType::PlantBomb:
         case OrderType::DefuseBomb:
         case OrderType::IgniteFire:
@@ -514,8 +534,7 @@ void SimulationEngine::issue_order(const AntOrder& order) {
         case OrderType::DemolishBridge: {
             // FUN_010287b5 with the special flag: the classification of the ant's type (plant / defuse, ignite / extinguish,
             // bridge build / demolish) and the neighbour tile it works from are decided by GoTo (FUN_0101fc50)
-            impl_->go_to(*unit, TileCoord{order.target_x, order.target_y}, true, true, false);
-            break;
+            return impl_->go_to(*unit, TileCoord{order.target_x, order.target_y}, true, true, false);
         }
         case OrderType::InfiltrateAnthill: {
             uint8_t target_team = (order.target_entity_id >= 0) ? static_cast<uint8_t>(order.target_entity_id) : 255;
@@ -555,7 +574,7 @@ void SimulationEngine::issue_order(const AntOrder& order) {
             } else {
                 issue_internal_move_order(order.ant_id, TileCoord{tx, ty});
             }
-            break;
+            return true;
         }
         case OrderType::Cancel:
             unit->ability_target = TileCoord{-1, -1};
@@ -565,9 +584,9 @@ void SimulationEngine::issue_order(const AntOrder& order) {
             } else {
                 unit->state = (unit->type == AntType::Combat) ? UnitState::GuardIdle : UnitState::Idle;
             }
-            break;
+            return true;
         default:
-            break;
+            return false;
     }
 }
 
@@ -594,7 +613,8 @@ bool SimulationEngine::stop_ant(uint32_t ant_id) {
 // min(score, 200), uses one egg and starts an 8000 ms incubation during which no ant exists (only one at a time).
 SimulationEngine::HatchResult SimulationEngineImpl::hatch_request(uint8_t player_id, AntType type, bool force) {
     using HatchResult = SimulationEngine::HatchResult;
-    if (match_state_ == MatchState::GameOver || match_time_remaining_ms_ == 0 || player_id >= MAX_PLAYERS) {
+    if (match_state_ == MatchState::GameOver || match_time_remaining_ms_ == 0 || player_id >= MAX_PLAYERS ||
+        (roster_mask_ & (1u << player_id)) == 0 || (dropped_mask_ & (1u << player_id)) != 0) {
         return HatchResult::NotAvailable;
     }
     if (stats_.get_egg_count(player_id) < 1) {
@@ -1088,8 +1108,8 @@ uint32_t SimulationEngine::group_order(const std::vector<uint32_t>& ant_ids, Til
         order.target_y = target.y;
         order.allow_friendly_bomb = allow_friendly_bomb;
         order.special = special;
-        issue_order(order);
-        if (k == 0 && impl_->has_pending_path(e[k].id)) ack = e[k].id;   // acknowledgement: closest ant only
+        const bool accepted = issue_order(order);                          // GoTo (FUN_0101fc50) returned true
+        if (k == 0 && accepted) ack = e[k].id;                             // acknowledgement: closest ant only (0x10289b7 .. 0x10289c0)
     }
     return ack;
 }
@@ -1155,8 +1175,8 @@ uint32_t SimulationEngine::issue_group_attack_order(const std::vector<uint32_t>&
         if (!a) continue;
         leave_base_queue(e[k].id);
         a->ability_target = TileCoord{-1, -1};
-        route_move_order(*impl_, *a, target, false, true);
-        if (k == 0 && impl_->has_pending_path(e[k].id)) ack = e[k].id;         // acknowledgement: closest ant only
+        const bool accepted = route_move_order(*impl_, *a, target, false, true);
+        if (k == 0 && accepted) ack = e[k].id;                                 // acknowledgement: closest ant only (GoTo returned true)
     }
     return ack;
 }

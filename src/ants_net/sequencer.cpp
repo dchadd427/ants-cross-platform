@@ -15,12 +15,17 @@ void Sequencer::set_active(uint8_t player, bool active) {
 
 bool Sequencer::submit(uint8_t player, sim::Command command) {
     if (player >= sim::MAX_PLAYERS || !active_[player]) return false;
-    if (command.type == sim::CommandType::None || command.type > sim::CommandType::Last) return false;
+    if (!sim::is_client_command(command.type)) return false;     // Drop and unknown types are not for clients
     if (queued_by_[player] >= cfg_.max_commands_per_turn) return false;
     command.issuer = player;                       // the connection decides who speaks, not the payload
     ++queued_by_[player];
     queue_.push_back(std::move(command));
     return true;
+}
+
+void Sequencer::submit_system(sim::Command command) {
+    if (command.type == sim::CommandType::None || command.type > sim::CommandType::Last || command.issuer >= sim::MAX_PLAYERS) return;
+    queue_.push_back(std::move(command));
 }
 
 void Sequencer::on_ack(uint8_t player, uint32_t turn) {

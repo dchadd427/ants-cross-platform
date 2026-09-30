@@ -5,6 +5,7 @@ add_library(ants_net STATIC
     loopback.cpp
     session.cpp
     lobby.cpp
+    netgame.cpp
 )
 
 # Raw sockets exist on native platforms only (a browser uses WebRTC / WebSocket)

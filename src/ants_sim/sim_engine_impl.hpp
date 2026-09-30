@@ -23,6 +23,8 @@ public:
     Grid grid_;
     MatchStatsManager stats_;
     MatchState match_state_{MatchState::NotStarted};
+    uint8_t roster_mask_{0x0F};             // bit p: team p takes part (a team without a player is NULL in the original's team table: no hill, ants or eggs)
+    uint8_t dropped_mask_{0};               // bit p: team p dropped out of the match (team +0x64, FUN_0100d03b)
 
     uint64_t current_tick_{0};
     uint32_t match_time_remaining_ms_{0};   // what the clock shows: max(0, match_clock_ms_)

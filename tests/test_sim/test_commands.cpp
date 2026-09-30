@@ -155,7 +155,7 @@ void run_codec_tests() {
         Lcg rng(42);
         for (int i = 0; i < 2000; ++i) {
             Command c;
-            c.type = static_cast<CommandType>(1 + rng.below(10));
+            c.type = static_cast<CommandType>(1 + rng.below(11));               // every type including the system command Drop
             c.issuer = static_cast<uint8_t>(rng.below(256));
             c.other_player = static_cast<uint8_t>(rng.below(256));
             c.tile_x = static_cast<int16_t>(static_cast<int32_t>(rng.below(65536)) - 32768);
@@ -669,6 +669,314 @@ void run_coverage_tests() {
 
 // ---------------------------------------------------------------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------------------------------------------------------------
+// Roster, drop-out and the predicted acknowledgement of the network integration
+// ---------------------------------------------------------------------------------------------------------------------------------
+
+int popcount4(uint8_t m) {
+    int n = 0;
+    for (int i = 0; i < 4; ++i) n += (m >> i) & 1;
+    return n;
+}
+
+bool load_map_file(const char* file, ants::assets::LevelData& lvl) {
+    return lvl.load_lvl(std::string(ORIGINAL_ASSETS_DIR) + "/Maps/" + file);
+}
+
+void run_roster_tests() {
+    TEST_CASE("N1.16 Roster: A Team Without A Player Has No Hill, No Start Markers (Ants) And No Eggs; It Cannot Command; The Roster Is Hashed") {
+        const char* maps[] = {"TREASURE.LVL", "SMALL.LVL", "TINY.LVL", "MEDIUM.LVL", "ISLANDS.LVL", "GAUNTLET.LVL"};
+        const uint8_t rosters[] = {0x03, 0x05, 0x09, 0x06, 0x0A, 0x0C, 0x07, 0x0D, 0x0E, 0x01, 0x02, 0x08};
+        for (const char* file : maps) {
+            ants::assets::LevelData lvl;
+            ASSERT_TRUE(load_map_file(file, lvl));
+            SimulationEngine full;
+            full.init(lvl, 5);
+            ASSERT_EQ(full.roster_mask(), 0x0F);
+            const size_t full_hills = full.grid().anthills().size();
+            const uint32_t full_eggs = full.get_world_state().player_eggs[0];
+            ASSERT_TRUE(full_eggs > 0);
+            StateHash previous = full.state_hash();
+            for (uint8_t roster : rosters) {
+                SimulationEngine sim;
+                sim.init(lvl, 5, roster);
+                ASSERT_EQ(sim.roster_mask(), roster);
+                const WorldState& world = sim.get_world_state();
+                for (const auto& hill : sim.grid().anthills()) ASSERT_TRUE((roster >> hill.team_id) & 1);
+                ASSERT_EQ(sim.grid().anthills().size(), full_hills >= 4 ? static_cast<size_t>(popcount4(roster)) : std::min<size_t>(full_hills, static_cast<size_t>(popcount4(roster))));
+                for (const auto& a : world.ants) ASSERT_TRUE((roster >> a.player_id) & 1);       // no ant of an absent team
+                bool any_ant[4] = {false, false, false, false};
+                for (const auto& a : world.ants) any_ant[a.player_id] = true;
+                for (uint8_t p = 0; p < MAX_PLAYERS; ++p) {
+                    const bool present = (roster >> p) & 1;
+                    ASSERT_EQ(any_ant[p], present);                                           // every present team starts with its ants
+                    ASSERT_EQ(world.player_eggs[p], present ? full_eggs : 0u);
+                    const uint8_t cmd_issuer = p;
+                    const Status st = sim.apply_command(make_command(CommandType::Hatch, cmd_issuer)).status;
+                    ASSERT_EQ(st, present ? Status::Applied : Status::RejectedIssuer);       // a team without a player has no voice
+                }
+                // the mound of an absent team is plain ground: no owner, no hole, no thief tile
+                for (const auto& hill : full.grid().anthills()) {
+                    if ((roster >> hill.team_id) & 1) continue;
+                    for (int dy = 0; dy < 4; ++dy) {
+                        for (int dx = 0; dx < 4; ++dx) {
+                            const TileCell& c = sim.grid().get_cell(TileCoord{hill.x + dx, hill.y + dy});
+                            ASSERT_EQ(c.base_owner_team, 255);
+                            ASSERT_FALSE(c.is_base_hole);
+                            ASSERT_FALSE(c.is_thief_only);
+                        }
+                    }
+                }
+                // the roster is part of the state, and equal rosters give equal states
+                SimulationEngine twin;
+                twin.init(lvl, 5, roster);
+                ASSERT_TRUE(twin.state_hash() == sim.state_hash());
+                ASSERT_TRUE(sim.state_hash() != full.state_hash());
+                ASSERT_TRUE(sim.state_hash() != previous);
+                previous = sim.state_hash();
+            }
+        }
+    } TEST_END();
+
+    TEST_CASE("N1.17 Roster: A Match With Three Teams Runs Deterministically And An Engine Reused After A Roster Match Equals A Fresh One") {
+        ants::assets::LevelData lvl;
+        ASSERT_TRUE(load_map_file("TREASURE.LVL", lvl));
+        SimulationEngine a;
+        SimulationEngine b;
+        a.init(lvl, 77, 0x0B);
+        b.init(lvl, 77, 0x0B);
+        for (int t = 0; t < 400; ++t) {
+            if (t % 20 == 3) {
+                for (uint8_t p : {uint8_t{0}, uint8_t{1}, uint8_t{3}}) {
+                    std::vector<uint32_t> mine;
+                    for (const auto& ant : a.get_world_state().ants) {
+                        if (ant.player_id == p) mine.push_back(ant.id);
+                    }
+                    if (mine.empty()) continue;
+                    Lcg rng(static_cast<uint32_t>(t) * 31u + p);
+                    const Command c = make_command(CommandType::GroupMove, p, 255, static_cast<int16_t>(rng.below(60)), static_cast<int16_t>(rng.below(60)), mine);
+                    a.apply_command(c);
+                    b.apply_command(c);
+                }
+            }
+            a.tick();
+            b.tick();
+            ASSERT_TRUE(a.state_hash() == b.state_hash());
+        }
+        // a reused engine: after a roster match the next full-roster init equals a fresh engine (mask, drops and eggs are reset)
+        SimulationEngine fresh;
+        fresh.init(lvl, 9);
+        a.drop_player(1);
+        a.init(lvl, 9);
+        ASSERT_EQ(a.roster_mask(), 0x0F);
+        ASSERT_FALSE(a.is_player_dropped(1));
+        ASSERT_TRUE(a.state_hash() == fresh.state_hash());
+    } TEST_END();
+}
+
+void run_drop_tests() {
+    TEST_CASE("N1.18 Drop: The Team Leaves (FUN_0100d03b): Text 46, The Cue, Its Ants Die, Its Alliance Ends, Its Egg Is Lost, Nothing Hatches") {
+        World w;
+        build_world(w, 3);
+        w.sim.set_player_name(1, "Redd");
+        w.sim.form_alliance(1, 2);
+        w.sim.set_player_score(1, 900);
+        ASSERT_EQ(w.sim.try_hatch(1), SimulationEngine::HatchResult::Started);
+        ASSERT_EQ(w.sim.get_pending_hatch_count(1), 1u);
+        const uint32_t eggs_before = w.sim.get_player_eggs(1);
+        w.sim.clear_audio_events();
+        w.sim.clear_news_events();
+        ASSERT_FALSE(w.sim.is_player_dropped(1));
+        const CommandResult r = w.sim.apply_command(make_command(CommandType::Drop, 1));
+        ASSERT_EQ(r.status, Status::Applied);
+        ASSERT_TRUE(w.sim.is_player_dropped(1));
+        ASSERT_FALSE(w.sim.is_player_dropped(0));
+        ASSERT_TRUE(w.sim.has_audio_event(SoundID::PlayerDropOut));                 // playerout.wav
+        ASSERT_TRUE(w.sim.has_news_event(0, 46));                                   // "%s dropped out of the game!"
+        bool named = false;
+        for (const NewsEvent& n : w.sim.poll_news_events()) named = named || n.message_text.find("Redd") != std::string::npos;
+        ASSERT_TRUE(named);
+        ASSERT_EQ(w.sim.get_ally_id(1), ALLIANCE_NONE);
+        ASSERT_EQ(w.sim.get_ally_id(2), ALLIANCE_NONE);
+        ASSERT_EQ(w.sim.get_pending_hatch_count(1), 0u);
+        const size_t others = [&]() { size_t n = 0; for (const auto& a : w.sim.get_world_state().ants) n += a.player_id != 1; return n; }();
+        for (int t = 0; t < 120; ++t) w.sim.tick();
+        size_t left_of_1 = 0;
+        size_t left_of_others = 0;
+        for (const auto& a : w.sim.get_world_state().ants) {
+            if (a.player_id == 1) ++left_of_1; else ++left_of_others;
+        }
+        ASSERT_EQ(left_of_1, 0u);                                                   // every ant of the team died through the death clip
+        ASSERT_EQ(left_of_others, others);                                          // and nobody else was touched
+        ASSERT_EQ(w.sim.get_pending_hatch_count(1), 0u);                            // CheckNoAnts does not hatch for a dropped team
+        ASSERT_EQ(w.sim.get_player_eggs(1), eggs_before);                           // the eggs stay unused
+        // the team no longer acts, and a second drop changes nothing
+        ASSERT_EQ(w.sim.apply_command(make_command(CommandType::GroupMove, 1, 255, 10, 10, {w.ants[1][0]})).status, Status::Ignored);
+        ASSERT_EQ(w.sim.apply_command(make_command(CommandType::Hatch, 1)).status, Status::Ignored);
+        ASSERT_EQ(w.sim.apply_command(make_command(CommandType::Drop, 1)).status, Status::Ignored);
+        const StateHash h = w.sim.state_hash();
+        w.sim.drop_player(1);
+        ASSERT_TRUE(h == w.sim.state_hash());
+        // the others still play
+        ASSERT_EQ(w.sim.apply_command(make_command(CommandType::Hatch, 0)).status, Status::Applied);
+    } TEST_END();
+
+    TEST_CASE("N1.19 Drop: Two Engines That Drop A Team In The Same Tick Stay Bit-Identical; A Drop Changes The State; Bad Drops Are Refused") {
+        World a;
+        World b;
+        World c;
+        build_world(a, 8);
+        build_world(b, 8);
+        build_world(c, 8);
+        for (int t = 0; t < 300; ++t) {
+            if (t == 60) {
+                ASSERT_EQ(a.sim.apply_command(make_command(CommandType::Drop, 2)).status, Status::Applied);
+                ASSERT_EQ(b.sim.apply_command(make_command(CommandType::Drop, 2)).status, Status::Applied);
+                ASSERT_TRUE(a.sim.state_hash() != c.sim.state_hash());
+            }
+            for (const Command& cmd : script_for_tick(a, 8, static_cast<uint32_t>(t))) {
+                a.sim.apply_command(cmd);
+                b.sim.apply_command(cmd);
+                c.sim.apply_command(cmd);
+            }
+            a.sim.tick();
+            b.sim.tick();
+            c.sim.tick();
+            ASSERT_TRUE(a.sim.state_hash() == b.sim.state_hash());
+        }
+        ASSERT_TRUE(a.sim.state_hash() != c.sim.state_hash());
+        // a drop of a player that does not exist or is not in the match
+        ASSERT_EQ(a.sim.apply_command(make_command(CommandType::Drop, 4)).status, Status::RejectedIssuer);
+        ants::assets::LevelData lvl;
+        ASSERT_TRUE(load_map_file("SMALL.LVL", lvl));
+        SimulationEngine three;
+        three.init(lvl, 1, 0x07);
+        ASSERT_EQ(three.apply_command(make_command(CommandType::Drop, 3)).status, Status::RejectedIssuer);
+        three.drop_player(3);                                                       // not in the match: nothing
+        ASSERT_FALSE(three.is_player_dropped(3));
+        // the system command is not a client command; every other command is
+        ASSERT_FALSE(is_client_command(CommandType::Drop));
+        ASSERT_FALSE(is_client_command(CommandType::None));
+        for (uint8_t t = 1; t <= 10; ++t) ASSERT_TRUE(is_client_command(static_cast<CommandType>(t)));
+        // the wire form of a drop has no ant list
+        std::vector<uint8_t> bytes;
+        encode(make_command(CommandType::Drop, 2), bytes);
+        Command back;
+        ASSERT_EQ(decode(bytes.data(), bytes.size(), back), DecodeError::None);
+        ASSERT_EQ(back.type, CommandType::Drop);
+        ASSERT_EQ(back.issuer, 2);
+    } TEST_END();
+}
+
+void run_prediction_tests() {
+    TEST_CASE("N1.20 predict_order_ack: The Closest Eligible Ant, The Skip Rules And The Refusals Of GoTo, Without Changing Anything") {
+        World w;
+        build_world(w, 1);
+        // three workers of player 0 at different distances from a tile
+        const uint32_t far_ant = w.sim.spawn_unit(0, AntType::Worker, TileCoord{10, 20});
+        const uint32_t near_ant = w.sim.spawn_unit(0, AntType::Worker, TileCoord{18, 20});
+        const uint32_t mid_ant = w.sim.spawn_unit(0, AntType::Worker, TileCoord{14, 20});
+        const StateHash before = w.sim.state_hash();
+        Command mv = make_command(CommandType::GroupMove, 0, 255, 22, 20, {far_ant, near_ant, mid_ant});
+        ASSERT_EQ(w.sim.predict_order_ack(mv), near_ant);
+        ASSERT_TRUE(w.sim.state_hash() == before);                                  // a prediction changes nothing
+        // two equally close ants: the first of the list (the exchange sort keeps it in front)
+        const uint32_t twin_a = w.sim.spawn_unit(0, AntType::Worker, TileCoord{18, 21});
+        mv.ants = {twin_a, near_ant};
+        ASSERT_EQ(w.sim.predict_order_ack(mv), twin_a);
+        mv.ants = {near_ant, twin_a};
+        ASSERT_EQ(w.sim.predict_order_ack(mv), near_ant);
+        // the prediction is what the engine then does
+        mv.ants = {far_ant, near_ant, mid_ant};
+        const uint32_t predicted = w.sim.predict_order_ack(mv);
+        ASSERT_EQ(w.sim.apply_command(mv).ack_ant, predicted);
+        // the same order again: whatever the engine answers is what was predicted (ants whose goal was moved by the ring scan are not skipped)
+        const uint32_t again = w.sim.predict_order_ack(mv);
+        ASSERT_EQ(w.sim.apply_command(mv).ack_ant, again);
+        // one ant, open ground: the ant carries the order out already, so the repeated click is skipped (nobody answers, predicted and real)
+        const Command solo = make_command(CommandType::GroupMove, 0, 255, 40, 40, {near_ant});
+        ASSERT_EQ(w.sim.predict_order_ack(solo), near_ant);
+        ASSERT_EQ(w.sim.apply_command(solo).ack_ant, near_ant);
+        ASSERT_EQ(w.sim.get_unit(near_ant).orig_order_tile, (TileCoord{40, 40}));
+        ASSERT_EQ(w.sim.predict_order_ack(solo), 0u);
+        ASSERT_EQ(w.sim.apply_command(solo).ack_ant, 0u);
+        // foreign, unknown and repeated ids are ignored like apply_command does
+        mv.ants = {w.ants[1][0], 99999, far_ant, far_ant};
+        Command other = mv;
+        other.tile_x = 23;
+        ASSERT_EQ(w.sim.predict_order_ack(other), far_ant);
+        ASSERT_EQ(w.sim.apply_command(other).ack_ant, far_ant);
+        // an enemy hill is no goal for a worker (GoTo stops the ant): no answer; a thief may raid it
+        const TileCoord enemy_hill = TileCoord{w.sim.grid().find_anthill(1)->x, w.sim.grid().find_anthill(1)->y};
+        const uint32_t thief = w.ants[0][3];
+        const uint32_t worker = w.ants[0][0];
+        Command onto_hill = make_command(CommandType::GroupMove, 0, 255, static_cast<int16_t>(enemy_hill.x + 1), static_cast<int16_t>(enemy_hill.y + 1), {worker});
+        ASSERT_EQ(w.sim.predict_order_ack(onto_hill), 0u);
+        ASSERT_EQ(w.sim.apply_command(onto_hill).ack_ant, 0u);
+        onto_hill.ants = {thief};
+        ASSERT_EQ(w.sim.predict_order_ack(onto_hill), thief);
+        ASSERT_EQ(w.sim.apply_command(onto_hill).ack_ant, thief);
+        // malformed, foreign issuers and finished matches predict nothing
+        ASSERT_EQ(w.sim.predict_order_ack(make_command(CommandType::Stop, 0, 255, 0, 0, {far_ant})), 0u);
+        ASSERT_EQ(w.sim.predict_order_ack(make_command(CommandType::GroupMove, 0, 255, -1, 5, {far_ant})), 0u);
+        ASSERT_EQ(w.sim.predict_order_ack(make_command(CommandType::GroupMove, 0, 255, 5, 500, {far_ant})), 0u);
+        ASSERT_EQ(w.sim.predict_order_ack(make_command(CommandType::GroupMove, 9, 255, 5, 5, {far_ant})), 0u);
+        ASSERT_EQ(w.sim.predict_order_ack(make_command(CommandType::GroupMove, 0, 255, 5, 5, {})), 0u);
+        // a special order needs a valid target for the ant's type: a bomber onto plain ground is fine (plant), onto water is not
+        const uint32_t bomber = w.ants[0][1];
+        ASSERT_EQ(w.sim.predict_order_ack(make_command(CommandType::GroupSpecial, 0, 255, 25, 25, {bomber})), bomber);   // the bomb tile
+        ASSERT_EQ(w.sim.predict_order_ack(make_command(CommandType::GroupSpecial, 0, 255, 30, 10, {bomber})), 0u);       // river water
+        // a dropped team's orders predict nothing
+        w.sim.drop_player(0);
+        ASSERT_EQ(w.sim.predict_order_ack(mv), 0u);
+    } TEST_END();
+
+    TEST_CASE("N1.21 predict_order_ack: Whenever The Engine Acknowledges An Order The Prediction Named The Same Ant (2000 random orders of a scripted match)") {
+        World w;
+        build_world(w, 21);
+        Lcg rng(12345);
+        int predicted_ack = 0;
+        int real_ack = 0;
+        int exact = 0;
+        for (int t = 0; t < 400; ++t) {
+            for (int k = 0; k < 5; ++k) {
+                const uint8_t p = static_cast<uint8_t>(rng.below(MAX_PLAYERS));
+                std::vector<uint32_t> pick;
+                for (uint32_t id : w.ants[p]) {
+                    if (rng.below(2) != 0) pick.push_back(id);
+                }
+                if (pick.empty()) pick.push_back(w.ants[p][rng.below(6)]);
+                const uint32_t kind = rng.below(6);
+                const CommandType type = kind < 3 ? CommandType::GroupMove : (kind < 5 ? CommandType::GroupAttack : CommandType::GroupSpecial);
+                const Command c = make_command(type, p, 255, static_cast<int16_t>(rng.below(60)), static_cast<int16_t>(rng.below(60)), pick);
+                const uint32_t predicted = w.sim.predict_order_ack(c);
+                const uint32_t real = w.sim.apply_command(c).ack_ant;
+                if (predicted != 0) {
+                    ++predicted_ack;
+                    bool mine = false;
+                    for (uint32_t id : pick) mine = mine || id == predicted;
+                    ASSERT_TRUE(mine);                                               // it names an ant of the command
+                }
+                if (real != 0) {
+                    ++real_ack;
+                    if (predicted != real) {
+                        std::cout << "\n    MISMATCH type " << static_cast<int>(type) << " tile (" << c.tile_x << "," << c.tile_y << ") predicted " << predicted << " real " << real
+                                  << " real type " << static_cast<int>(w.sim.get_unit(real).type) << " ants:";
+                        for (uint32_t id : pick) std::cout << " " << id << "(t" << static_cast<int>(w.sim.get_unit(id).type) << ")";
+                        std::cout << "\n";
+                    }
+                    ASSERT_EQ(predicted, real);                                      // the engine's ack is always the predicted one
+                }
+                if (predicted == real) ++exact;
+            }
+            w.sim.tick();
+        }
+        std::cout << "\n    predicted an ack for " << predicted_ack << " orders, the engine acked " << real_ack << ", identical answers " << exact << " of 2000\n    ";
+        ASSERT_TRUE(real_ack > 200);
+        ASSERT_TRUE(exact * 100 >= 2000 * 98);                                       // and it is rarely wrong the other way round (a goal that stays blocked)
+    } TEST_END();
+}
+
 bool load_map(const char* file, ants::assets::LevelData& lvl) {
     return lvl.load_lvl(std::string(ORIGINAL_ASSETS_DIR) + "/Maps/" + file);
 }
@@ -730,6 +1038,9 @@ int main() {
     run_lockstep_tests();
     run_coverage_tests();
     run_reset_tests();
+    run_roster_tests();
+    run_drop_tests();
+    run_prediction_tests();
     std::cout << "\n=======================================================\n Total Test Cases: " << g_test_count << "\n Total Assertions: " << g_assert_count
               << "\n Failed:           " << g_test_failures << "\n=======================================================\n";
     return g_test_failures == 0 ? 0 : 1;

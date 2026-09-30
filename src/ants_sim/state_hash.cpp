@@ -181,6 +181,8 @@ StateHash SimulationEngine::state_hash() const {
         h.u32(e.prng_.get_state());
         h.u32(e.cosmetic_prng_.get_state());
         h.u8(static_cast<uint8_t>(e.match_state_));
+        h.u8(e.roster_mask_);
+        h.u8(e.dropped_mask_);
         h.u64(e.current_tick_);
         h.u32(e.match_limit_ms_);
         h.i64(e.match_clock_ms_);

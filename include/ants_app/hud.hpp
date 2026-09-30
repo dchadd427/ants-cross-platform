@@ -144,6 +144,8 @@ public:
     void send_chat_message() { send_chat(is_on_team_); }
     /// The [All] / [Team] buttons and Enter: sends the text of the chat box (FUN_010103eb) and clears it; nothing when it is empty or chat is off.
     void send_chat(bool to_team);
+    /// A network match: called with the text and the team flag of every message the player sends (the entry is also added to the own log at once)
+    void set_on_chat_send(std::function<void(const std::string&, bool)> fn) { on_chat_send_ = std::move(fn); }
     /// AddLine (Ants.exe 0x10120e9): an entry is a header line ("Name:" or "Name (To Teammate):", in the colour of the sender's team,
     /// `colour_index` 0 black, 1 blue, 2 red, 3 green; -1 = the local player's) and a body of at most 100 characters that wraps into
     /// lines indented by 12 px in colour (7, 11, 15).
@@ -169,6 +171,11 @@ public:
     bool is_on_team() const noexcept { return is_on_team_; }
     void set_on_team(bool on_team) noexcept { is_on_team_ = on_team; }
     void set_player_name(std::string name) { player_name_ = std::move(name); }
+    /// The names of the four teams (the labels of the other players' scores); an empty name shows the colour word. The roster says which teams exist.
+    void set_team_names(const std::array<std::string, 4>& names) { team_names_ = names; }
+    void set_roster_mask(uint8_t mask) noexcept { roster_mask_ = static_cast<uint8_t>(mask & 0x0Fu); }
+    const std::array<std::string, 4>& team_names() const noexcept { return team_names_; }
+    uint8_t roster_mask() const noexcept { return roster_mask_; }
     const std::string& get_player_name() const noexcept { return player_name_; }
 
     // Selection controls
@@ -328,6 +335,7 @@ private:
     std::vector<uint32_t> selected_ant_ids_{};
     bool is_multi_select_mode_{false};
     int32_t selected_base_team_id_{-1};
+    std::function<void(const std::string&, bool)> on_chat_send_;
     std::deque<std::string> chat_log_{};
     std::deque<uint8_t> chat_line_colour_{};   // parallel to chat_log_ (see get_chat_line_colour)
     std::deque<int32_t> chat_line_indent_{};
@@ -398,6 +406,8 @@ private:
     int32_t chat_scroll_offset_{0};
     uint32_t cursor_blink_ticks_{0};
     std::string player_name_{"Player"};
+    std::array<std::string, 4> team_names_{};
+    uint8_t roster_mask_{0x0F};
 
     // News Flash FIFO queue
     StatusLine status_line_{};

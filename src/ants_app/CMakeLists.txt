@@ -56,6 +56,7 @@ endif()
 target_link_libraries(ants_app PUBLIC
     ants_sim
     ants_assets
+    ants_net
 )
 if(SDL2_LIBRARIES)
     target_link_libraries(ants_app PUBLIC ${SDL2_LIBRARIES})

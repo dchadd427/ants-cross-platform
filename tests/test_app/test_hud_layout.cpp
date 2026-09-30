@@ -881,6 +881,117 @@ void test_button_states(const assets::AssetArchive& arc) {
     }
 }
 
+// The setup screen as a network room: a row per occupied seat (portrait, name, the thumb of the connection quality), the status line, and the
+// host-only controls (the map, the fog option and START belong to the host; every player can leave).
+void test_room_screen(const assets::AssetArchive& arc) {
+    std::printf("[room] names with a thumb per seat (netgood / netok / netbad / netunk), the status line, host-only controls\n");
+    using MS = MapSelectScreen;
+    MS screen;
+    screen.init();
+    MS::RoomView view;
+    view.networked = true;
+    view.is_host = true;
+    view.my_seat = 0;
+    view.seats[0] = {true, "Alice", MS::Thumb::Good};
+    view.seats[1] = {true, "Bob", MS::Thumb::Ok};
+    view.seats[3] = {true, "A Very Long Player Name", MS::Thumb::Unknown};      // seat 2 is empty
+    view.status = "Press START when all players' thumbs have appeared.";
+    screen.set_room(view);
+    RecordingRenderer rr(arc);
+    screen.render(rr, arc);
+    check(rr.has_sprite_at("thumb1.bmp", 540, 95), "room: seat 0 shows the good thumb at (540,95)");
+    check(rr.has_sprite_at("thumb2.bmp", 540, 145), "room: seat 1 shows the ok thumb at (540,145)");
+    bool row2 = false;
+    for (const auto& sp : rr.sprites) row2 = row2 || (sp.x == 540 && sp.y == 195 && sp.name.rfind("thumb", 0) == 0);
+    check(!row2, "room: an empty seat shows no thumb");
+    check(rr.has_sprite_at("thumb4.bmp", 540, 245), "room: seat 3 shows the question mark at (540,245)");
+    auto text_at = [&](const std::string& t, int32_t x) {
+        for (const auto& tx : rr.texts) {
+            if (tx.text == t && tx.x == x) return true;
+        }
+        return false;
+    };
+    check(text_at("Alice", 415) && text_at("Bob", 415), "room: the names are drawn at x = 415");
+    check(text_at("A Very Long Pla", 415) || text_at("A Very Long Play", 415), "room: a long name is cut to fit before the thumb");
+    check(text_at("Press START when all players' thumbs have appeared.", 38), "room: the status line is the original's prompt");
+    int portraits = 0;
+    for (const auto& sp : rr.sprites) portraits += sp.name.rfind("agst30", 0) == 0 ? 1 : 0;
+    check(portraits >= 3, "room: a portrait for each occupied seat");
+    // every quality has its own thumb
+    for (const auto& [quality, name] : {std::pair{MS::Thumb::Good, "thumb1.bmp"}, std::pair{MS::Thumb::Ok, "thumb2.bmp"},
+                                         std::pair{MS::Thumb::Bad, "thumb3.bmp"}, std::pair{MS::Thumb::Unknown, "thumb4.bmp"}}) {
+        MS::RoomView v = view;
+        v.seats[1].thumb = quality;
+        screen.set_room(v);
+        RecordingRenderer r(arc);
+        screen.render(r, arc);
+        check(r.has_sprite_at(name, 540, 145), std::string("room: quality ") + name + " at (540,145)");
+    }
+
+    // host controls: the map and the fog option go to the room, START starts, LEAVE quits
+    screen.set_room(view);
+    std::vector<std::string> maps_chosen;
+    std::vector<bool> fog_chosen;
+    int started = 0;
+    int left = 0;
+    screen.set_on_map_changed([&](const std::string& f) { maps_chosen.push_back(f); });
+    screen.set_on_fog_changed([&](bool on) { fog_chosen.push_back(on); });
+    screen.set_on_start([&](const std::string&) { ++started; });
+    screen.set_on_quit([&]() { ++left; });
+    const int32_t before = screen.get_selected_index();
+    screen.handle_mouse_down(MS::BTN_DOWN_X + 3, MS::BTN_DOWN_Y + 3, 1);
+    check(screen.get_selected_index() != before && maps_chosen.size() == 1, "room host: the down button changes the map and tells the room");
+    check(maps_chosen[0] == screen.get_maps()[static_cast<size_t>(screen.get_selected_index())].filename, "room host: the room gets the file name of the map");
+    screen.handle_mouse_down(MS::BTN_FOW_ON_X + 2, MS::BTN_FOW_ON_Y + 2, 1);
+    screen.handle_mouse_down(MS::BTN_FOW_ON_X + 2, MS::BTN_FOW_ON_Y + 2, 1);           // the same choice again changes nothing
+    check(fog_chosen.size() == 1 && fog_chosen[0], "room host: the fog option is reported once per change");
+    screen.handle_mouse_down(MS::BTN_START_X + 5, MS::BTN_START_Y + 5, 1);
+    check(started == 1, "room host: START starts");
+    screen.handle_mouse_down(MS::BTN_QUIT_X + 5, MS::BTN_QUIT_Y + 5, 1);
+    check(left == 1, "room host: LEAVE quits");
+
+    // a guest cannot change anything but can leave; it follows the host without any callback
+    MS::RoomView guest = view;
+    guest.is_host = false;
+    guest.my_seat = 1;
+    screen.set_room(guest);
+    maps_chosen.clear();
+    fog_chosen.clear();
+    started = 0;
+    left = 0;
+    const int32_t idx = screen.get_selected_index();
+    const bool fog_before = screen.is_fog_of_war_enabled();
+    screen.handle_mouse_down(MS::BTN_DOWN_X + 3, MS::BTN_DOWN_Y + 3, 1);
+    screen.handle_mouse_down(MS::W_MAP_X + 5, MS::W_MAP_Y + 5, 1);
+    screen.handle_mouse_down(MS::BTN_FOW_OFF_X + 2, MS::BTN_FOW_OFF_Y + 2, 1);
+    screen.handle_mouse_down(MS::BTN_FOW_ON_X + 2, MS::BTN_FOW_ON_Y + 2, 1);
+    screen.handle_mouse_down(MS::BTN_START_X + 5, MS::BTN_START_Y + 5, 1);
+    screen.handle_key_down(SDLK_DOWN);
+    screen.handle_key_down(SDLK_f);
+    screen.handle_key_down(SDLK_RETURN);
+    check(screen.get_selected_index() == idx && screen.is_fog_of_war_enabled() == fog_before, "room guest: the map and the fog option cannot be changed");
+    check(started == 0 && maps_chosen.empty() && fog_chosen.empty(), "room guest: START does nothing and nothing is reported");
+    screen.handle_mouse_down(MS::BTN_QUIT_X + 5, MS::BTN_QUIT_Y + 5, 1);
+    check(left == 1, "room guest: LEAVE quits");
+    screen.handle_key_down(SDLK_ESCAPE);
+    check(left == 2, "room guest: Esc leaves");
+    check(screen.follow_host_choice("SMALL.LVL", true) && screen.get_maps()[static_cast<size_t>(screen.get_selected_index())].filename == "SMALL.LVL" &&
+              screen.is_fog_of_war_enabled() && maps_chosen.empty() && fog_chosen.empty(),
+          "room guest: follows the host's map and fog without telling anybody");
+    check(!screen.follow_host_choice("NOSUCH.LVL", false), "room guest: an unknown map name is refused");
+
+    // not networked: the local screen keeps its single row and its placeholders
+    MS local;
+    local.init();
+    RecordingRenderer lr(arc);
+    local.render(lr, arc);
+    check(lr.has_sprite_at("thumb1.bmp", 540, 95) && lr.named("thumb2.bmp").empty(), "local setup screen: one row with the good thumb");
+    int local_maps = 0;
+    local.set_on_map_changed([&](const std::string&) { ++local_maps; });
+    local.handle_mouse_down(MS::BTN_DOWN_X + 3, MS::BTN_DOWN_Y + 3, 1);
+    check(local_maps == 0, "local setup screen: no room to tell about a map change");
+}
+
 } // namespace
 
 int main() {
@@ -895,6 +1006,7 @@ int main() {
     test_ally_pedestal(arc);
     test_rubber_band(arc);
     test_screens(arc);
+    test_room_screen(arc);
     test_pedestal_chains(arc);
     test_pedestal_timeline(arc);
     test_minimap(arc);

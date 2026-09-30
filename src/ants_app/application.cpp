@@ -5,6 +5,7 @@
 #include <cstring>
 #include <algorithm>
 #include <cstdlib>
+#include <random>
 #if defined(_WIN32)
   #include <winsock2.h>
   #include <windows.h>
@@ -48,6 +49,10 @@ Application::~Application() {
 }
 
 bool Application::init(int argc, char* argv[]) {
+    return init(parse_arguments(argc, argv));
+}
+
+ApplicationConfig Application::parse_arguments(int argc, char* argv[]) {
     ApplicationConfig cfg{};
 
     for (int i = 1; i < argc; ++i) {
@@ -80,9 +85,38 @@ bool Application::init(int argc, char* argv[]) {
         } else if (std::strcmp(argv[i], "--scorecard") == 0) {
             cfg.show_scorecard = true;
             cfg.start_in_map_select = false;
+        } else if (std::strcmp(argv[i], "--name") == 0 && i + 1 < argc) {
+            cfg.player_name = argv[++i];                                       // this player's name: the room, the HUD, chat, the results
+        } else if (std::strcmp(argv[i], "--team-name") == 0 && i + 2 < argc) {   // --team-name <0-3> <name>, for a local game
+            const int team = std::atoi(argv[i + 1]);
+            if (team >= 0 && team < 4) cfg.team_names[static_cast<size_t>(team)] = argv[i + 2];
+            i += 2;
+        } else if (argv[i][0] == '-' && argv[i][1] == 'N' && argv[i][2] >= '0' && argv[i][2] <= '3') {
+            cfg.team_names[static_cast<size_t>(argv[i][2] - '0')] = argv[i] + 3;   // the original's -N<team><name>
+        } else if (std::strncmp(argv[i], "-pnum=", 6) == 0) {
+            const int team = std::atoi(argv[i] + 6);                           // the original's local team
+            if (team >= 0 && team < 4) cfg.local_player_id = static_cast<uint8_t>(team);
+        } else if (std::strcmp(argv[i], "--host") == 0) {
+            cfg.net_role = ApplicationConfig::NetRole::Host;
+            if (i + 1 < argc && argv[i + 1][0] >= '0' && argv[i + 1][0] <= '9') {   // an optional port
+                cfg.net_port = static_cast<uint16_t>(std::stoul(argv[++i]));
+            }
+        } else if (std::strcmp(argv[i], "--join") == 0 && i + 1 < argc) {
+            cfg.net_role = ApplicationConfig::NetRole::Join;
+            std::string target = argv[++i];                                    // host or host:port
+            const size_t colon = target.rfind(':');
+            if (colon != std::string::npos && target.find(':') == colon) {
+                cfg.net_port = static_cast<uint16_t>(std::stoul(target.substr(colon + 1)));
+                target.resize(colon);
+            }
+            cfg.net_address = target;
+        } else if (std::strcmp(argv[i], "--port") == 0 && i + 1 < argc) {
+            cfg.net_port = static_cast<uint16_t>(std::stoul(argv[++i]));
+        } else if (std::strcmp(argv[i], "--loopback") == 0) {
+            cfg.net_loopback_only = true;
         }
     }
-    return init(cfg);
+    return cfg;
 }
 
 bool Application::init(const ApplicationConfig& config) {
@@ -173,8 +207,13 @@ bool Application::init(const ApplicationConfig& config) {
     local_player_id_ = 0;
 
     scorecard_.set_on_replay([this]() {
+        if (network_active()) {                                       // a network match is not replayed here: back to the setup screen
+            return_to_map_select();
+            return;
+        }
         scorecard_.hide();
         sim_.init(current_level_, config_.random_seed + 1);
+        match_over_handled_ = false;
         hud_.reset();
         midi_player_.stop(); // In-game music stays silent
     });
@@ -215,7 +254,14 @@ bool Application::init(const ApplicationConfig& config) {
     midi_player_.set_volume(hud_.get_music_volume());
 
     // 9. Initialize Map Selection Screen
-    std::string player_name = get_system_username();
+    const bool networked = config_.net_role != ApplicationConfig::NetRole::None;
+    const size_t my_team = config_.local_player_id < 4 ? config_.local_player_id : 0u;
+    // The name of this player: --name, else the -N name of its team, else the system user (a network game never sends the user and machine name
+    // by default: it says "Player" unless --name is given)
+    std::string player_name = !config_.player_name.empty() ? config_.player_name
+                              : (!config_.team_names[my_team].empty() ? config_.team_names[my_team]
+                                                                       : (networked ? std::string("Player") : get_system_username()));
+    player_name_ = player_name;
     map_select_.init("Original-Ants/Maps");
     map_select_.set_player_name(player_name);
     map_select_.set_player_team(config_.local_player_id);
@@ -226,7 +272,14 @@ bool Application::init(const ApplicationConfig& config) {
     }
     SDL_StartTextInput();
     map_select_.set_on_start([this](const std::string& map_path) {
-        start_game(map_path);
+        if (network_active()) net_start_from_setup(map_path);
+        else start_game(map_path);
+    });
+    map_select_.set_on_map_changed([this](const std::string& filename) {
+        if (net_ && net_->is_host()) net_->set_map(filename);
+    });
+    map_select_.set_on_fog_changed([this](bool fog) {
+        if (net_ && net_->is_host()) net_->set_fog(fog);
     });
     map_select_.set_on_quit([this]() {
         quit();
@@ -234,6 +287,33 @@ bool Application::init(const ApplicationConfig& config) {
     map_select_.set_on_play_sfx([this](uint32_t sound_id) {
         audio_mixer_.play_sfx(sound_id, 1.0f, 255);
     });
+
+    // A network game: the room is the setup screen (host: pick the map and START; guest: follow the host's choice)
+    if (networked) {
+        config_.start_in_map_select = true;
+        net_ = std::make_unique<net::NetGame>(sim_);
+        const bool ok = config_.net_role == ApplicationConfig::NetRole::Host
+                            ? net_->host(config_.net_port, player_name, config_.net_loopback_only)
+                            : net_->join(config_.net_address, config_.net_port, player_name);
+        if (!ok) {
+            std::cerr << "[Application] Could not " << (config_.net_role == ApplicationConfig::NetRole::Host ? "open a room on port " : "reach the host at ")
+                      << (config_.net_role == ApplicationConfig::NetRole::Host ? std::to_string(config_.net_port) : config_.net_address + ":" + std::to_string(config_.net_port))
+                      << std::endl;
+            return false;
+        }
+        net_->set_on_tick([this]() { post_tick(); });
+        net_->set_on_chat([this](const net::ChatMsg& m) {
+            if (m.sender == local_player_id_ || m.sender >= 4) return;                // the own text is in the log already
+            hud_.receive_chat_message(m.sender, sim_.get_player_name(m.sender), m.text, m.team, sim_.get_world_state());
+        });
+        hud_.set_on_chat_send([this](const std::string& text, bool team) {
+            if (network_active()) net_->chat(text, team);
+        });
+        if (net_->is_host() && !map_select_.get_maps().empty()) net_->set_map(map_select_.get_maps()[static_cast<size_t>(map_select_.get_selected_index())].filename);
+        sync_room_view();
+    } else {
+        apply_team_names(config_.team_names, 0x0F);                                    // the names of a local game (the local player's own name too)
+    }
 
     // Determine initial AppState & audio lifecycle
     if (!config_.start_in_map_select) {
@@ -295,6 +375,7 @@ bool Application::init(const ApplicationConfig& config) {
 
 void Application::shutdown() {
     is_running_ = false;
+    if (net_) net_->leave();                              // the others see a clean goodbye, not a dead connection
 
     midi_player_.shutdown();
     audio_mixer_.shutdown_sdl_audio();
@@ -311,31 +392,26 @@ void Application::shutdown() {
 }
 
 bool Application::start_game(const std::string& map_path) {
-    // 1. In-Game Music: Shuffle between ANTS2A, ANTS2B, ANTSFUN3
-    if (!is_music_muted_) {
-        play_next_ingame_music();
-    } else {
-        audio_mixer_.stop_music();
-        midi_player_.stop();
-    }
+    if (!load_match(map_path, config_.random_seed, 0x0F, map_select_.is_fog_of_war_enabled())) return false;
+    apply_team_names(config_.team_names, 0x0F);
+    enter_match();
+    return true;
+}
 
-    // Play authentic random game startup sound (rndm1..6.wav / Sound IDs 7..12)
-    play_startup_sound();
-
-    // 2. Load the chosen map level
+// The level, the simulation and the renderer of a match (the map file, the seed, the teams that play and the Fog of War option are the whole
+// shared state: every machine of a network match calls this with the same values).
+bool Application::load_match(const std::string& map_path, uint32_t seed, uint8_t roster, bool fog) {
     if (!current_level_.load_from_file(map_path)) {
         std::cerr << "[Application] Failed to load level: " << map_path << std::endl;
         return false;
     }
-
     config_.default_map_path = map_path;
+    if ((roster & 0x0Fu) != 0x0Fu) current_level_ = current_level_.for_roster(roster);      // no hill art for a team without a player
 
-    // 3. Re-initialize simulation
-    sim_.set_fog_of_war_enabled(map_select_.is_fog_of_war_enabled());
+    sim_.set_fog_of_war_enabled(fog);
     sim_.set_viewing_player_id(local_player_id_);
-    sim_.init(current_level_, config_.random_seed);
+    sim_.init(current_level_, seed, roster);
 
-    // 4. Update renderer & camera centered on the base of the current player
     if (renderer_) {
         renderer_->set_level(current_level_);
         const auto* base = sim_.grid().find_anthill(local_player_id_);
@@ -350,12 +426,29 @@ bool Application::start_game(const std::string& map_path) {
                                           current_level_.width, current_level_.height);
         }
     }
+    hud_.set_roster_mask(roster);
+    return true;
+}
 
-    // 5. Reset HUD & Scorecard
+// The moment a match starts for the player: music and the start sound, the HUD, the "get ready" modal, the Playing state.
+void Application::enter_match() {
+    // In-Game Music: Shuffle between ANTS2A, ANTS2B, ANTSFUN3
+    if (!is_music_muted_) {
+        play_next_ingame_music();
+    } else {
+        audio_mixer_.stop_music();
+        midi_player_.stop();
+    }
+
+    // Play authentic random game startup sound (rndm1..6.wav / Sound IDs 7..12)
+    play_startup_sound();
+
+    // Reset HUD & Scorecard
     hud_.init(local_player_id_);
     hud_.reset();
     hud_.start_match_modal();
     scorecard_.hide();
+    match_over_handled_ = false;
 
     // Reset simulated cursor to middle of screen until actually seen moving
     mouse_screen_x_ = 320;
@@ -376,12 +469,27 @@ bool Application::start_game(const std::string& map_path) {
         hud_.select_base(config_.select_base_team);
     }
 
-    // 6. Transition to Playing state
     state_ = AppState::Playing;
-    return true;
+}
+
+// The names of the teams reach every place that shows one: the simulation's texts (alliances, drop-outs, the chat log), the HUD's score labels,
+// the results rows and the local player's own label. An empty name keeps the colour word.
+void Application::apply_team_names(const std::array<std::string, 4>& names, uint8_t roster) {
+    std::array<std::string, 4> all = names;
+    if (!network_active() && local_player_id_ < 4) all[local_player_id_] = player_name_;      // a local game: the own name (--name) belongs to the own team
+    for (uint8_t p = 0; p < 4; ++p) {
+        sim_.set_player_name(p, ((roster >> p) & 1u) != 0 ? all[p] : std::string());       // an empty name is the colour word again
+    }
+    hud_.set_team_names(all);
+    scorecard_.set_player_names(all);
+    if (local_player_id_ < 4 && !all[local_player_id_].empty()) {
+        hud_.set_player_name(all[local_player_id_]);
+        scorecard_.set_local_player_name(all[local_player_id_]);
+    }
 }
 
 void Application::quit() {
+    if (net_) net_->leave();
 #if defined(__EMSCRIPTEN__)
     if (state_ == AppState::Playing || scorecard_.is_open()) {
         return_to_map_select();
@@ -394,6 +502,8 @@ void Application::quit() {
 }
 
 void Application::return_to_map_select() {
+    if (network_active()) net_end_session(net_notice_);   // leaving a match leaves the room: the local setup screen follows
+    net_notice_.clear();
     state_ = AppState::MapSelect;
     scorecard_.hide();
     hud_.close_quit_dialog();
@@ -441,6 +551,8 @@ void Application::run_frame_with_delta(float delta_time) {
     handle_events();
 
     handle_camera_panning(delta_time);
+
+    pump_network(delta_time);                   // a network match has no pause: it keeps running while the window is in the background
 
     if (!is_paused_) {
         update_simulation(delta_time);
@@ -704,7 +816,7 @@ void Application::handle_key_down(const SDL_KeyboardEvent& key) {
         }
         return;
     }
-    if (ctrl_or_gui) {
+    if (ctrl_or_gui && !network_active()) {
         if (key.keysym.sym >= SDLK_1 && key.keysym.sym <= SDLK_4) {
             uint8_t target_team = static_cast<uint8_t>(key.keysym.sym - SDLK_1);
             set_local_player(target_team);
@@ -785,30 +897,18 @@ void Application::update_simulation(float dt) {
         return;
     }
 
-    tick_accumulator_ += dt;
-    while (tick_accumulator_ >= 0.050f) {
-        if (!sim_.is_match_over()) {
-            sim_.tick();
-
-            const auto& world = sim_.get_world_state();
-            hud_.update(world, 1);
-            hud_.poll_sim_events(sim_);
-
-            auto audio_events = sim_.poll_audio_events();
-            audio_mixer_.ingest_simulation_events(audio_events, local_player_id_);
-
-            if (sim_.is_match_over()) {
-                scorecard_.show(world.match_result, local_player_id_);
-                uint32_t sting_sound = scorecard_.get_audio_to_play();
-                if (sting_sound > 0) {
-                    audio_mixer_.play_sfx(sting_sound, 1.0f, 255);
-                    scorecard_.clear_audio_to_play();
-                }
-                audio_mixer_.fade_out_music(1.0f);
-                midi_player_.fade_out(1.0f);
+    if (network_active() && net_->phase() == net::NetGame::Phase::Playing) {
+        // The ticks come from the lock-step runner (pump_network); only what shows between two ticks is advanced here
+        tick_accumulator_ = static_cast<float>(net_->sub_tick_ms()) / 1000.0f;
+    } else {
+        tick_accumulator_ += dt;
+        while (tick_accumulator_ >= 0.050f) {
+            if (!sim_.is_match_over()) {
+                sim_.tick();
+                post_tick();
             }
+            tick_accumulator_ -= 0.050f;
         }
-        tick_accumulator_ -= 0.050f;
     }
 
     // Update spatial audio listener position
@@ -824,6 +924,170 @@ void Application::update_simulation(float dt) {
     if (state_ == AppState::Playing && !is_music_muted_ && !audio_mixer_.is_music_playing() && !midi_player_.is_playing() && !sim_.is_match_over()) {
         play_next_ingame_music();
     }
+}
+
+// What one simulation tick shows: the HUD, the events of the tick, the sounds and, once, the end of the match.
+void Application::post_tick() {
+    const auto& world = sim_.get_world_state();
+    hud_.update(world, 1);
+    hud_.poll_sim_events(sim_);
+
+    auto audio_events = sim_.poll_audio_events();
+    audio_mixer_.ingest_simulation_events(audio_events, local_player_id_);
+
+    if (sim_.is_match_over() && !match_over_handled_) {
+        match_over_handled_ = true;
+        scorecard_.show(world.match_result, local_player_id_);
+        uint32_t sting_sound = scorecard_.get_audio_to_play();
+        if (sting_sound > 0) {
+            audio_mixer_.play_sfx(sting_sound, 1.0f, 255);
+            scorecard_.clear_audio_to_play();
+        }
+        audio_mixer_.fade_out_music(1.0f);
+        midi_player_.fade_out(1.0f);
+        if (net_) net_->freeze();                                    // the host stops sealing turns
+    }
+}
+
+// ------------------------------------------------------------------------------------------------
+// Network play (docs/NETWORK_PORT.md): the setup screen is the room, the lock-step runner drives the ticks
+// ------------------------------------------------------------------------------------------------
+
+void Application::pump_network(float dt) {
+    if (!net_ || !net_->active()) return;
+    net_time_ms_ += static_cast<double>(dt) * 1000.0;
+    net_->update(static_cast<uint32_t>(net_time_ms_));
+    handle_net_events();
+    if (state_ == AppState::MapSelect && net_->active()) sync_room_view();
+}
+
+void Application::sync_room_view() {
+    if (!net_ || !net_->active()) return;
+    MapSelectScreen::RoomView view;
+    view.networked = true;
+    view.is_host = net_->is_host();
+    view.my_seat = net_->my_seat();
+    const net::RoomMsg& room = net_->room();
+    for (size_t i = 0; i < view.seats.size(); ++i) {
+        view.seats[i].occupied = room.slots[i].state != net::SlotState::Empty;
+        view.seats[i].name = room.slots[i].name;
+        view.seats[i].thumb = static_cast<MapSelectScreen::Thumb>(static_cast<uint8_t>(net_->seat_quality(static_cast<uint8_t>(i))));   // connection quality
+    }
+    // A guest that has not been welcomed yet has no seat: it shows itself alone until the room arrives
+    if (net_->phase() == net::NetGame::Phase::Connecting || net_->phase() == net::NetGame::Phase::Failed) {
+        for (auto& seat : view.seats) seat = MapSelectScreen::RoomSeat{};
+    }
+    view.status = net_->status_text();
+    map_select_.set_room(view);
+    if (!net_->is_host() && net_->phase() == net::NetGame::Phase::Room) {
+        map_select_.follow_host_choice(room.map_name, room.fog);
+    }
+}
+
+// START on the setup screen of a room (host only): the map file's hash goes with the Start message so that every machine checks its own copy.
+void Application::net_start_from_setup(const std::string& map_path) {
+    if (!net_ || !net_->is_host()) return;
+    std::string filename = map_path;
+    const size_t slash = filename.find_last_of("/\\");
+    if (slash != std::string::npos) filename = filename.substr(slash + 1);
+    uint64_t hash = 0;
+    if (!net::hash_file(map_path, hash)) {
+        std::cerr << "[Application] Cannot read the map file: " << map_path << std::endl;
+        return;
+    }
+    net_->set_map(filename);
+    std::random_device rd;
+    if (!net_->start_match(static_cast<uint32_t>(rd()), hash)) {
+        audio_mixer_.play_sfx(sim::SoundID::CantGo, 1.0f, 255);              // not enough players yet
+    }
+}
+
+void Application::handle_net_events() {
+    if (!net_) return;
+    for (const net::NetGame::Event& ev : net_->take_events()) {
+        switch (ev.type) {
+            case net::NetGame::Event::Type::StartRequested:
+                net_load_match();
+                break;
+            case net::NetGame::Event::Type::Begun:
+                net_begin_match();
+                break;
+            case net::NetGame::Event::Type::HostLeft:
+                net_notice_ = "The host left the game.";
+                if (state_ == AppState::Playing && !scorecard_.is_open()) return_to_map_select();
+                break;
+            case net::NetGame::Event::Type::Desync:
+                std::cerr << "[Application] The network match is out of sync (turn " << net_->turns_executed() << ")" << std::endl;
+                break;
+            default:
+                break;                                        // room changes are shown by sync_room_view, the rest by the overlay and the chat log
+        }
+    }
+}
+
+// Start was received: load the map exactly as named, check it is the same file as the host's, initialise the simulation with the shared seed,
+// roster and fog option, and report. Every machine does this on the setup screen; the match begins when everybody has reported.
+void Application::net_load_match() {
+    const net::StartMsg& start = net_->start_info();
+    std::string path;
+    for (const auto& entry : map_select_.get_maps()) {
+        if (entry.filename == start.map_name) path = entry.full_path;
+    }
+    if (path.empty()) path = "Original-Ants/Maps/" + start.map_name;
+    uint64_t hash = 0;
+    local_player_id_ = net_->my_seat();
+    bool ok = net::hash_file(path, hash) && hash == start.map_hash;
+    if (!ok) std::cerr << "[Application] The map " << start.map_name << " here is not the host's file" << std::endl;
+    ok = ok && load_match(path, start.seed, start.roster, start.fog);
+    if (ok) {
+        if (renderer_) renderer_->set_hud_team(local_player_id_);
+        apply_team_names(start.names, start.roster);
+    }
+    net_->report_loaded(ok);
+}
+
+// Everybody has loaded: the match runs here from now on.
+void Application::net_begin_match() {
+    local_player_id_ = net_->my_seat();
+    hud_.set_command_sink(net_.get());
+    enter_match();
+}
+
+// The session is over (the player left, the host left, a match ended and its results were closed): back to the local setup screen.
+void Application::net_end_session(const std::string& notice) {
+    if (net_) net_->leave();
+    hud_.set_command_sink(nullptr);
+    hud_.set_roster_mask(0x0F);
+    MapSelectScreen::RoomView local;
+    local.status = notice;                                    // a notice stays on the setup screen until the next action
+    map_select_.set_room(local);
+    apply_team_names(config_.team_names, 0x0F);
+}
+
+// The waiting and out-of-sync messages of a network match (remake UI: the original has no such text). A machine that waits for the next turn
+// says so after one second; a desync stops the match and says so.
+void Application::render_net_overlay() {
+    if (!network_active() || net_->phase() != net::NetGame::Phase::Playing) return;
+    std::string text;
+    ants::assets::ColorRGBA colour{255, 255, 255, 255};
+    if (net_->desynced()) {
+        text = "Out of sync: the match has stopped.";
+        colour = ants::assets::ColorRGBA{255, 90, 90, 255};
+    } else if (net_->stalled_ms() >= 1000) {
+        text = "Waiting for the other players...";
+        const uint8_t slow = net_->laggard();
+        if (slow < 4) {
+            const std::string name = sim_.get_player_name(slow);
+            if (!name.empty()) text = "Waiting for " + name + "...";
+        }
+    }
+    if (text.empty()) return;
+    const int32_t w = renderer_->get_text_width(text, FontSize::Small);
+    const int32_t h = renderer_->get_text_height(FontSize::Small);
+    const int32_t x = 17 + (441 - w) / 2;
+    const int32_t y = 26;
+    renderer_->fill_rect(x - 6, y - 3, w + 12, h + 6, ants::assets::ColorRGBA{0, 0, 0, 170});
+    renderer_->draw_text(text, x, y, colour, FontSize::Small);
 }
 
 void Application::render_frame() {
@@ -846,6 +1110,7 @@ void Application::render_frame() {
                                 hud_.get_selected_base_team_id(),
                                 tick_accumulator_);
         hud_.render(*renderer_, assets_, world, renderer_->camera());
+        render_net_overlay();
     }
 
     // Frame rate counter and frametime sparkline in the bottom right hand corner

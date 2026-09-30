@@ -45,3 +45,23 @@ target_include_directories(test_lobby PRIVATE
 )
 
 add_test(NAME test_lobby COMMAND test_lobby)
+
+add_executable(test_netgame
+    test_netgame.cpp
+)
+
+target_link_libraries(test_netgame PRIVATE
+    ants_net
+    ants_sim
+    ants_assets
+)
+
+target_include_directories(test_netgame PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../include
+)
+
+target_compile_definitions(test_netgame PRIVATE
+    ORIGINAL_ASSETS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../../Original-Ants"
+)
+
+add_test(NAME test_netgame COMMAND test_netgame)

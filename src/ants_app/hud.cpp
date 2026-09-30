@@ -736,7 +736,7 @@ void HUD::render_news_banner(IRenderer& renderer, const assets::AssetArchive& as
     // Slot 2: label [312..399], score [402..455], y = 464..477
     std::vector<uint8_t> other_players;
     for (uint8_t p = 0; p < 4; ++p) {
-        if (p != local_player_id_) other_players.push_back(p);
+        if (p != local_player_id_ && ((roster_mask_ >> p) & 1u) != 0) other_players.push_back(p);       // a team without a player has no label
     }
 
     struct ScoreSlot {
@@ -757,7 +757,7 @@ void HUD::render_news_banner(IRenderer& renderer, const assets::AssetArchive& as
         const auto& slot = slots[i];
 
         // Player/team label right-aligned before score box (Ants.exe VA 0x100E218)
-        std::string name = (p < 4) ? TEAM_NAMES[p] : "AI";
+        std::string name = (p < 4) ? (team_names_[p].empty() ? std::string(TEAM_NAMES[p]) : team_names_[p]) : std::string("AI");
         if (name.size() > 15) name = name.substr(0, 15);
         std::string p_label = name + ":";
         int32_t label_w = renderer.get_text_width(p_label, FontSize::Small);
@@ -1606,6 +1606,7 @@ void HUD::send_chat(bool to_team) {
         return;
     }
     add_chat_entry(player_name_.empty() ? "Player" : player_name_, chat_input_, to_team && is_on_team_);
+    if (on_chat_send_) on_chat_send_(chat_input_, to_team && is_on_team_);
     chat_input_.clear();
     chat_scroll_offset_ = 0;
 }
@@ -1614,6 +1615,7 @@ void HUD::trigger_quick_chat(size_t index) {
     if (index >= 4 || !chat_enabled_) return;
     if (quick_chat_keys_[index].empty()) return;
     add_chat_entry(player_name_.empty() ? "Player" : player_name_, quick_chat_keys_[index], false);   // F9 - F12 always go to all
+    if (on_chat_send_) on_chat_send_(quick_chat_keys_[index], false);
 }
 
 namespace {

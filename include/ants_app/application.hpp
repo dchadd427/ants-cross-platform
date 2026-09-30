@@ -18,6 +18,7 @@
 
 #include "ants_assets/asset_archive.hpp"
 #include "ants_assets/lvl_parser.hpp"
+#include "ants_net/netgame.hpp"
 #include "ants_sim/sim_engine.hpp"
 #include "ants_app/renderer.hpp"
 #include "ants_app/hud.hpp"
@@ -57,6 +58,14 @@ struct ApplicationConfig {
     bool show_tile_grid{false};
     bool show_scorecard{false};
     uint8_t local_player_id{0};
+    /// Network play: host a room, or join one (the room is the setup screen; see docs/NETWORK_PORT.md)
+    enum class NetRole : uint8_t { None, Host, Join };
+    NetRole net_role{NetRole::None};
+    std::string net_address{"127.0.0.1"};       // Join: the host's address
+    uint16_t net_port{4001};                    // the original's port
+    bool net_loopback_only{false};              // Host: accept only this machine (two copies on one computer, tests)
+    std::string player_name;                    // this player's name (--name); empty: the system user, or "Player" in a network game
+    std::array<std::string, 4> team_names{};    // names of the teams of a local game (-N<team><name> as in the original, --team-name)
 };
 
 /**
@@ -70,6 +79,9 @@ public:
     Application(const Application&) = delete;
     Application& operator=(const Application&) = delete;
 
+    /// The command line: --map, --seed, --player / -pnum=, --name, -N<team><name> / --team-name, --host [port], --join host[:port], --port, --loopback,
+    /// --headless, --fullscreen, --screenshot, ... (docs: README, Command-Line Options)
+    static ApplicationConfig parse_arguments(int argc, char* argv[]);
     bool init(int argc, char* argv[]);
     bool init(const ApplicationConfig& config);
     int run();
@@ -103,6 +115,13 @@ public:
     AudioMixer& audio_mixer() noexcept { return audio_mixer_; }
     MidiPlayer& midi_player() noexcept { return midi_player_; }
     const ants::assets::AssetArchive& assets() const noexcept { return assets_; }
+
+    /// The network of a room or a match (nullptr unless started with --host / --join)
+    net::NetGame* net() noexcept { return net_.get(); }
+    /// True while a room or a network match exists
+    bool network_active() const noexcept { return net_ && net_->active(); }
+    /// Advances the network by `dt` seconds of game time and handles what it reports (run once per frame; the tests call it directly)
+    void pump_network(float dt);
 
     void handle_key_down(const SDL_KeyboardEvent& key);
     void handle_mouse_motion(const SDL_MouseMotionEvent& motion);
@@ -138,9 +157,29 @@ private:
     MidiPlayer midi_player_;
 
     uint8_t local_player_id_{0};
+    std::unique_ptr<net::NetGame> net_;
+    double net_time_ms_{0.0};
+    bool match_over_handled_{false};
+    std::string net_notice_;
+    std::string player_name_;
     int32_t mouse_screen_x_{320};
     int32_t mouse_screen_y_{240};
     bool mouse_has_moved_{false};
+
+    // The match set-up shared by the local game and the network game
+    bool load_match(const std::string& map_path, uint32_t seed, uint8_t roster, bool fog);   // level, simulation, renderer (no HUD, no sound)
+    void enter_match();                                   // music, start sound, camera, HUD reset, "Get ready", state Playing
+    void post_tick();                                     // what every simulation tick shows: HUD, events, audio, the end of the match
+
+    // Network play
+    void handle_net_events();
+    void net_load_match();                                // the host said Start: load the map, initialise the simulation, report
+    void net_begin_match();                               // everybody loaded: the match runs on this machine
+    void net_end_session(const std::string& notice);      // leave the room / the match and return to the local setup screen
+    void net_start_from_setup(const std::string& map_path);
+    void sync_room_view();
+    void render_net_overlay();
+    void apply_team_names(const std::array<std::string, 4>& names, uint8_t roster);   // simulation texts, HUD labels, results rows
 
     void toggle_fullscreen();
     void play_next_ingame_music();

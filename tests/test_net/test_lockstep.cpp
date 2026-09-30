@@ -778,6 +778,145 @@ void run_failure_tests() {
     } TEST_END();
 }
 
+void run_dropout_tests() {
+    TEST_CASE("N2.18 Drop-Out Travels In The Turn Stream: Every Machine Drops The Team At The Same Tick, The Match Stays Identical") {
+        Match m(1, 4, {30, 5});
+        std::vector<uint8_t> left;
+        m.host->set_on_player_left([&](uint8_t p) { left.push_back(p); });
+        std::vector<uint64_t> host_ticks;
+        std::vector<uint64_t> client_ticks;
+        m.host->runner().set_on_command([&](const Command& c, const sim::CommandResult&) {
+            if (c.type == CommandType::Drop) host_ticks.push_back(m.sims[0]->current_tick());
+        });
+        m.clients[0]->runner().set_on_command([&](const Command& c, const sim::CommandResult&) {
+            if (c.type == CommandType::Drop) client_ticks.push_back(m.sims[1]->current_tick());
+        });
+        m.run(3000);
+        for (uint8_t p = 0; p < 4; ++p) ASSERT_FALSE(m.sims[0]->is_player_dropped(p));
+        m.net.cut(m.client_ends[3], true);                                  // player 3's machine dies
+        m.run(5000);
+        ASSERT_EQ(left.size(), 1u);
+        ASSERT_EQ(left[0], 3);
+        m.settle();
+        ASSERT_EQ(host_ticks.size(), 1u);                                   // one Drop, applied once ...
+        ASSERT_EQ(client_ticks.size(), 1u);
+        ASSERT_EQ(host_ticks[0], client_ticks[0]);                          // ... at the same tick on the host and on a client
+        for (size_t i = 0; i < 3; ++i) {                                    // the survivors all dropped team 3 and agree on everything
+            ASSERT_TRUE(m.sims[i]->is_player_dropped(3));
+            ASSERT_FALSE(m.sims[i]->is_player_dropped(0));
+            ASSERT_FALSE(m.sims[i]->is_player_dropped(1));
+            ASSERT_FALSE(m.sims[i]->is_player_dropped(2));
+            ASSERT_TRUE(m.sims[i]->state_hash() == m.sims[0]->state_hash());
+            size_t ants_of_3 = 0;
+            for (const auto& a : m.sims[i]->get_world_state().ants) ants_of_3 += a.player_id == 3;
+            ASSERT_EQ(ants_of_3, 0u);                                       // the team's ants died on every machine
+        }
+        ASSERT_TRUE(m.host->desyncs().empty() || m.host->desyncs()[0].player == 3);
+        ASSERT_TRUE(m.host->turns_sealed() > 70);
+    } TEST_END();
+
+    TEST_CASE("N2.19 Drop-Out: A Client Cannot Send The System Command (it is refused and counted as a violation, nobody is dropped)") {
+        Match m(1, 3, {20, 0});
+        m.run(1000);
+        ASSERT_EQ(m.host->violations(2), 0u);
+        m.client_ends[2]->send(encode(CommandMsg{cmd(CommandType::Drop, 2)}));       // its own drop
+        m.client_ends[2]->send(encode(CommandMsg{cmd(CommandType::Drop, 1)}));       // somebody else's
+        m.run(500, false);
+        ASSERT_EQ(m.host->violations(2), 2u);
+        ASSERT_TRUE(m.host->client_present(1));
+        ASSERT_TRUE(m.host->client_present(2));
+        m.settle();
+        for (size_t i = 0; i < m.sims.size(); ++i) {
+            for (uint8_t p = 0; p < 4; ++p) ASSERT_FALSE(m.sims[i]->is_player_dropped(p));
+        }
+        ASSERT_TRUE(m.all_equal());
+        // the sequencer refuses it for a client and accepts it as a system command
+        Sequencer seq;
+        seq.set_active(1, true);
+        ASSERT_FALSE(seq.submit(1, cmd(CommandType::Drop, 1)));
+        ASSERT_EQ(seq.queued(), 0u);
+        seq.submit_system(cmd(CommandType::Drop, 1));
+        ASSERT_EQ(seq.queued(), 1u);
+        seq.submit_system(cmd(CommandType::Drop, 9));                                // no such player
+        seq.submit_system(cmd(CommandType::None, 1));
+        ASSERT_EQ(seq.queued(), 1u);
+        const TurnMsg turn = seq.seal();
+        ASSERT_EQ(turn.commands.size(), 1u);
+        ASSERT_EQ(turn.commands[0].type, CommandType::Drop);
+        ASSERT_EQ(turn.commands[0].issuer, 1);
+    } TEST_END();
+
+    TEST_CASE("N2.20 Drop-Out: A Client That Falls Silent Holds The Match Up (flow control) And Is Dropped After The Silence Timeout") {
+        ASSERT_EQ(HostSession::Config{}.silence_timeout_ms, 60000u);                 // the original's 60 s
+        HostSession::Config hc;
+        hc.silence_timeout_ms = 8000;
+        Match m(1, 3, {20, 0}, hc);
+        std::vector<uint8_t> left;
+        m.host->set_on_player_left([&](uint8_t p) { left.push_back(p); });
+        auto run_without_client_2 = [&](uint32_t ms) {                                // client 2's process hangs: its connection stays open
+            const uint32_t end = m.now + ms;
+            while (m.now < end) {
+                m.now += 10;
+                m.net.set_time(m.now);
+                m.host->update(m.now);
+                m.clients[0]->update(m.now);
+            }
+        };
+        m.run(2000);
+        const uint32_t hang_at = m.now;
+        run_without_client_2(6000);                                                  // 6 s: past the 3 s flow control, before the timeout
+        ASSERT_TRUE(left.empty());
+        ASSERT_TRUE(m.host->waiting());
+        ASSERT_EQ(m.host->laggard(), 2);
+        const uint32_t sealed_while_waiting = m.host->turns_sealed();
+        run_without_client_2(1000);
+        ASSERT_EQ(m.host->turns_sealed(), sealed_while_waiting);                     // sealing is stalled
+        run_without_client_2(3000);                                                  // the 8 s of silence are over
+        ASSERT_TRUE(m.now - hang_at > 8000);
+        ASSERT_EQ(left.size(), 1u);
+        ASSERT_EQ(left[0], 2);
+        ASSERT_FALSE(m.host->client_present(2));
+        ASSERT_FALSE(m.host->waiting());
+        run_without_client_2(4000);
+        ASSERT_TRUE(m.host->turns_sealed() > sealed_while_waiting + 20);             // the game goes on for the others
+        m.host->freeze();
+        run_without_client_2(3000);
+        ASSERT_TRUE(m.sims[0]->is_player_dropped(2));
+        ASSERT_TRUE(m.sims[1]->is_player_dropped(2));
+        ASSERT_TRUE(m.sims[1]->state_hash() == m.sims[0]->state_hash());
+    } TEST_END();
+
+    TEST_CASE("N2.21 Runner Hooks: One Call Per Tick (two per turn) And One Per Command With The Engine's Verdict, In Order") {
+        sim::SimulationEngine sim;
+        const Ids ids = build_world(sim, 1);
+        LockstepRunner runner(sim);
+        std::vector<uint64_t> tick_times;
+        std::vector<std::pair<CommandType, sim::CommandResult::Status>> commands;
+        runner.set_on_tick([&]() { tick_times.push_back(sim.current_tick()); });
+        runner.set_on_command([&](const Command& c, const sim::CommandResult& r) { commands.emplace_back(c.type, r.status); });
+        auto turn = [](uint32_t n, std::vector<Command> cmds = {}) {
+            TurnMsg t;
+            t.turn = n;
+            t.commands = std::move(cmds);
+            return t;
+        };
+        runner.on_turn(turn(0, {cmd(CommandType::GroupMove, 0, 255, 20, 30, {ids.ants[0][0]}), cmd(CommandType::Hatch, 1),
+                                cmd(CommandType::GroupMove, 4, 255, 1, 1, {1})}));                 // the last has no such player
+        runner.on_turn(turn(1));
+        runner.on_turn(turn(2, {cmd(CommandType::Stop, 0, 255, 0, 0, {ids.ants[0][0]})}));
+        for (int i = 0; i < 40; ++i) runner.update(50);
+        ASSERT_EQ(runner.next_turn_to_execute(), 3u);
+        ASSERT_EQ(tick_times.size(), 6u);                                                           // two ticks per turn
+        for (size_t i = 0; i < tick_times.size(); ++i) ASSERT_EQ(tick_times[i], i + 1);             // the hook runs after the tick
+        ASSERT_EQ(commands.size(), 4u);
+        ASSERT_EQ(commands[0].first, CommandType::GroupMove);
+        ASSERT_EQ(commands[0].second, sim::CommandResult::Status::Applied);
+        ASSERT_EQ(commands[1].first, CommandType::Hatch);
+        ASSERT_EQ(commands[2].second, sim::CommandResult::Status::RejectedIssuer);
+        ASSERT_EQ(commands[3].first, CommandType::Stop);
+    } TEST_END();
+}
+
 }  // namespace
 
 int main() {
@@ -789,6 +928,7 @@ int main() {
     run_runner_tests();
     run_match_tests();
     run_failure_tests();
+    run_dropout_tests();
     std::cout << "\n=======================================================\n Total Test Cases: " << g_test_count << "\n Total Assertions: " << g_assert_count
               << "\n Failed:           " << g_test_failures << "\n=======================================================\n";
     return g_test_failures == 0 ? 0 : 1;

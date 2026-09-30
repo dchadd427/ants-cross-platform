@@ -4,7 +4,7 @@ A faithful, high-performance, deterministic C++17 native engine remake and port 
 
 The engine directly loads raw original binary assets (`ants.chd` and `Maps/*.LVL`) without pre-conversion, faithfully executing authentic gameplay mechanics, deterministic 20Hz simulation, 32-channel spatial audio, MIDI/MP3 score playback, TrueType font rendering, and an SDL2 hardware-accelerated 2D viewport.
 
-**Current version: v0.0.45** (shown on screen next to the FPS meter). Every release is listed in the **[changelog](CHANGELOG.md)**, which is also published at **[beta.playants.org/changelog.html](https://beta.playants.org/changelog.html)**. Since v0.0.24 every system is re-derived from the disassembly of the original `Ants.exe` (see [Reverse Engineering](#reverse-engineering--historical-preservation)); multiplayer over the network is being ported (see [Network Port](#network-port-in-progress)).
+**Current version: v0.0.46** (shown on screen next to the FPS meter). Every release is listed in the **[changelog](CHANGELOG.md)**, which is also published at **[beta.playants.org/changelog.html](https://beta.playants.org/changelog.html)**. Since v0.0.24 every system is re-derived from the disassembly of the original `Ants.exe` (see [Reverse Engineering](#reverse-engineering--historical-preservation)); multiplayer over a network (host / join over TCP) works and is still being extended (see [Network Port](#network-port-in-progress)).
 
 ---
 
@@ -49,7 +49,7 @@ Play the remake instantly in any modern web browser (Chrome, Firefox, Safari, Ed
   - **Alliance Texts & Chat Log**: Teaming up follows the original's protocol: the invitee gets the question and the allypro cue, the proposer reads "%s accepted teaming up" / "%s rejected teaming up" (or the invitee "%s withdrew offer to team up"), a team that is made flashes "A team has been made." and writes the News Flash "%s (%s) and %s (%s) are a team now!" into the chat log (breaking it writes "... are no longer a team!"), and a drop-out writes "%s dropped out of the game!". The chat log keeps the original's entries: a header in the sender's team colour ("Name:" or "Name (To Teammate):", "[m:ss] News Flash:" for news) and a body of up to 100 characters wrapped and indented; chat needs the "Participate In Chat" option, F9 - F12 chat the quick-chat texts to everybody, and a team message reaches only the sender and the sender's allies.
   - **Edge Scrolling & Minimap**: The view scrolls like the original's input task (every 50 ms): the eight 12 px edge strips show the scroll arrows, only the 5 px inner strips scroll, the step is `scroll rate + 10` px around the target point of the pointer (about 55 - 60 px per tick at the default rate, 120 - 200 px/s at the slowest and 2100 px/s at the fastest setting), a strip that cannot move shows no arrow, and dialogs or a captured button stop it. Holding the left button on the minimap centres the view on the point under the pointer; nothing scrolls with the keyboard or the wheel.
   - **Pointer & Commands**: The cursor mode decides what a click does, exactly as in the original: over an ant the ant is picked with the original's sprite boxes (a 3 x 3 tile scan, the last box wins, no filters), other players' ants - allies too - give the attack cursor, food the food cursor, your own hill and the fog the move cursor, and a valid special target (a bomb for a bomber, an enemy hill for a thief, or with the ability pedestal latched: plantable ground, a fire wall, water or a bridge) the target cursor. A left drag of at most 4 px is a click at the release point, a bigger one is the red 1 px rubber band that selects your ants by positive-area overlap (Shift adds to a selection of your ants); the right button gives its order at the release, at the tile of the press point. The Move and ability pedestals only latch (a visual state that removes the band or turns valid tiles into targets and pops up after an accepted order), Stop stops the ants, locks the mouse for 250 ms and then deselects, the hatch pedestal exists only while eggs remain and the ally pedestal only with more than two players.
-  - **Network Port (in progress)**: deterministic lock-step of player commands with the host as sequencer. The command layer, the state hash, the lock-step core, the room and a TCP transport are built and tested; the game itself is not connected yet. Details below in [Network Port](#network-port-in-progress).
+  - **Network Port (in progress)**: play with friends: one player hosts (`--host`), the others join (`--join host`). The setup screen becomes the room with every player's name and a thumb for the quality of the connection (green thumbs up, yellow sideways hand, red thumbs down, orange question mark), the host picks the map and the fog and presses START, everybody loads the same map file and the match begins for all at once. It is a deterministic lock-step of the players' commands (the host is the sequencer); a player who leaves drops out at the same moment everywhere. Raw TCP for a LAN or a forwarded port today; NAT traversal, host migration and the browser build follow. Details below in [Network Port](#network-port-in-progress).
   - **Keyboard, Buttons & Chat**: The keyboard is the original's: F1, F9 - F12, Enter, Esc = deselect, Ctrl+A / H / L / N / O / P / Q / S and nothing else (no Space, arrow or letter hotkeys); the chat box is always active and Enter / All / Team send its text; the top bar and chat buttons behave like the original's button class (a press captures, the click sound plays at the press, the action runs when the button is released while the pointer is still on it, leaving cancels it).
   - **Enemy Ant Inspection**: Clicking enemy units when no friendly unit is selected shows selection brackets (`*ears`, coloured by health) without allowing friendly command dispatch.
   - **Match Audio Cues**: 1-minute alert (`1min.wav`), 30-second warning (`30sec.wav`), 10-second countdown (`countdwn.wav`), defeat fanfare (`losers.wav`), and player drop-out (`playerout.wav`).
@@ -85,13 +85,14 @@ The remake provides a complete, playable, standalone experience with authentic a
 | **Hill, Food & Power-Ups** | 🟢 Original Action Model | Enter / heal / hatch / raid clips, the waiting ring, food objects with stages, pick-up at the landing and the standing-on-a-power-up rule. |
 | **Abilities: Bombs, Fire & Bridges** | 🟢 Original Action Model | Plant, defuse, ignite, extinguish, bridge build and demolish as the original's action clips. |
 | **Combat, Knockback & Collisions** | 🟢 Original Action Model | Contact, strike frame, `gh` / `gb` flights, landing blocks, pile-up dispersal, bomb victims, stun, deferred death and the combat ant auto-engage. |
-| **Multiplayer: lock-step core, room, TCP** | 🟡 In Progress | Built and tested (v0.0.43 - v0.0.45); host / join in the game and the drop-out flow come next (v0.0.46). |
+| **Multiplayer: host / join over TCP** | 🟢 Playable (v0.0.46) | Lock-step core, room with names and connection thumbs, start barrier, roster, drop-out, predicted click feedback, chat; LAN / forwarded port. |
+| **Multiplayer: host migration** | 📋 Planned (next) | The match must go on when the host leaves, as in the original: mesh links, election, resync of the turns. |
 | **Multiplayer: NAT traversal (WebRTC, STUN / TURN)** | 📋 Planned | Data channels natively and in the browser, WebSocket signaling, coturn. Needs third-party libraries (asked first). |
 | **Bot AI** | 🚫 None by design | Every ant command comes from a human player; the original has no computer players. |
 | **Asset Viewer Overhaul** | 📋 Planned (last) | Verify the viewer's groups and that every animation loads and plays properly, then overhaul it; scheduled after everything else. |
 
 ### Roadmap (in order)
-1. Network port: application integration (v0.0.46), WebRTC + signaling + TURN deployment, alliance dialogs, the original's elimination rules (CHECKGO).
+1. Network port: host migration (the host may leave and the match goes on), WebRTC + signaling + TURN deployment, alliance dialogs, the original's elimination rules (CHECKGO).
 2. View origin (16, 21) at 442 x 440.
 3. Results screen, option-dialog internals, startup flow, setup-screen buttons firing on release, quick help.
 4. Removal of the remaining invented visuals and timings, and the last non-original tests.
@@ -224,7 +225,19 @@ cmake --build build_asan -j8
 | `--select-ant ID` / `--select-base TEAM` | Start with an ant or a hill selected (for screenshots). |
 | `--open-options`, `--show-grid`, `--scorecard` | Show the options screen, the tile grid, or a sample results screen. |
 
-Host and join options for network matches arrive with the application integration of the network port (v0.0.46).
+Names and network play:
+
+| Option | Effect |
+|---|---|
+| `--name NAME` | Your name: the room, the HUD label, chat, the results rows and the simulation's texts. A network game says "Player" unless you give one (it never sends your user and machine name). |
+| `-N<team><name>` / `--team-name <team> <name>` | The name of a team (0 green, 1 red, 2 blue, 3 black) in a local game (`-N1Bob` is the original's spelling). |
+| `-pnum=<team>` | The original's spelling of `--player`. |
+| `--host [port]` | Open a room on this machine (TCP, port 4001 unless given). |
+| `--join host[:port]` | Join the room of a host (port 4001 unless given). |
+| `--port N` | The port for `--host` / `--join`. |
+| `--loopback` | With `--host`: accept only this machine (two copies on one computer). |
+
+Try it on one computer: `./start_game.sh --host --loopback --name Alice`, then in a second terminal `./start_game.sh --join 127.0.0.1 --name Bob`.
 
 ---
 
@@ -258,7 +271,8 @@ python3 -m http.server 8080 -d dist
 - **Up / Left, Down / Right, number keys `1`–`6`, or the arrow buttons**: Highlight a map (Treasure, Small, Medium, Tiny, Islands, Gauntlet); clicking the map name or the info box advances to the next one.
 - **`F`** or the **Fog of War On / Off** buttons: Toggle Fog of War.
 - **`Enter` / `Space` / `START` button**: Launch the match. **`Esc` / Leave Game button**: leave.
-- **`D` or a click on a player thumb**: toggles that thumb (a placeholder until the room shows real players).
+- **`D` or a click on a player thumb**: toggles that thumb (a placeholder of the local screen; in a network room the thumbs show the real connection quality).
+- **In a network room** the setup screen lists every player with a portrait in the player's colour, the name and a thumb: green thumbs up (round trip below 1.2 s), yellow sideways hand (below 1.8 s), red thumbs down (slower), orange question mark (not measured yet). Only the host changes the map and the fog and presses START (it needs a second player and every thumb); a guest sees the host's choice and can leave. The status line has the original's texts ("Press START when all players' thumbs have appeared.", "Waiting for the host to start the game...", "Trying to connect to the host...").
 - **Soundtrack**: `INTRO` loops on this screen; a match plays a shuffled in-game track (`ANTS2A`, `ANTS2B`, `ANTSFUN3`); `Ctrl + M` mutes the music.
 
 ### Mouse Controls
@@ -279,7 +293,7 @@ python3 -m http.server 8080 -d dist
 | **Bomb Hit (Jump)** | Click on a Friendly Bomb with Several Ants Selected | The move click sends the first ant onto the bomb, which sets it off (a single bomber defuses it instead). |
 
 ### Team Switching & Testing Shortcuts
-Not part of the original: with no computer players, these let one person drive any team of a local match for testing.
+Not part of the original: with no computer players, these let one person drive any team of a local match for testing. They are off in a network match (you are your seat).
 
 | Key | Function |
 |---|---|
@@ -309,7 +323,7 @@ Not part of the original: with no computer players, these let one person drive a
 
 ## Network Port (in progress)
 
-The original game runs a full TCP mesh (port 4001) in which every machine simulates only its own team and broadcasts the results; it has no host / join interface (an external lobby starts every machine with its roster on the command line). The remake runs **one deterministic simulation on every machine** and sends only the players' intent (lock-step of commands): this also makes web play and NAT traversal possible. Design, wire format and milestones are in [`docs/NETWORK_PORT.md`](docs/NETWORK_PORT.md); what the original does is recorded in section 5.46 of [`docs/GAME_REVERSE_ENGINEERING.md`](docs/GAME_REVERSE_ENGINEERING.md).
+The original game runs a full TCP mesh (port 4001) in which every machine simulates only its own team and broadcasts the results; it has no host / join interface (an external lobby starts every machine with its roster on the command line). The remake runs **one deterministic simulation on every machine** and sends only the players' intent (lock-step of commands): this also makes web play and NAT traversal possible. Design, wire format and milestones are in [`docs/NETWORK_PORT.md`](docs/NETWORK_PORT.md); what the original does is recorded in sections 5.46 - 5.48 of [`docs/GAME_REVERSE_ENGINEERING.md`](docs/GAME_REVERSE_ENGINEERING.md).
 
 | Piece | State |
 |---|---|
@@ -317,17 +331,20 @@ The original game runs a full TCP mesh (port 4001) in which every machine simula
 | State hash (`state_hash()`, seven named parts) | ✅ v0.0.43 |
 | Lock-step core: wire protocol, host sequencer, client runner, sessions, simulated network | ✅ v0.0.44 |
 | Room (join, roster, map and fog, start barrier with a map-file hash check) and framed TCP transport | ✅ v0.0.45 |
-| Host / join in the game, roster, drop-out, predicted click feedback, waiting / desync display | 🟡 next (v0.0.46) |
-| NAT traversal: ICE / STUN / TURN over WebRTC data channels, WebSocket signaling, coturn | 📋 planned |
+| Host / join in the game (`--host`, `--join`), the room with names and connection thumbs, roster (teams without a player do not exist), drop-out through the turn stream, predicted click feedback, chat, waiting / out-of-sync messages, names from the command line | ✅ v0.0.46 |
+| Host migration: the match goes on when the host leaves (as in the original) | 📋 next |
+| NAT traversal: ICE / STUN / TURN over WebRTC data channels, WebSocket signaling, coturn, the browser build | 📋 planned |
 | Alliance dialogs and the original's elimination rules | 📋 planned |
 
-How a match runs: a turn is 100 ms (two ticks). The host stamps every command with the sender's seat (a peer cannot speak for another player), seals a turn every 100 ms with the commands in canonical order and sends it to everybody; every machine executes the same turns after a two-turn jitter buffer, waits at a missing turn and runs faster to catch up. Every 20 ticks the machines compare a hash of the whole gameplay state: a mismatch names the peer and the subsystem and freezes the match. Malformed, flooding or host-only messages are counted and the peer is thrown out after eight strikes; the game waits for a peer that lags by up to 3 s. No bots: every ant command comes from a human player.
+How a match runs: a turn is 100 ms (two ticks). The host stamps every command with the sender's seat (a peer cannot speak for another player), seals a turn every 100 ms with the commands in canonical order and sends it to everybody; every machine executes the same turns after a two-turn jitter buffer, waits at a missing turn and runs faster to catch up. Every 20 ticks the machines compare a hash of the whole gameplay state: a mismatch names the peer and the subsystem and freezes the match. Malformed, flooding or host-only messages are counted and the peer is thrown out after eight strikes; the game waits for a peer that lags by up to 3 s and drops one that is silent for 60 s (the original's drop-out time). A player who leaves drops out at the same tick on every machine: its ants die, its alliance ends, "%s dropped out of the game!" is written into the chat log. No bots: every ant command comes from a human player.
+
+Limits of this release: the host leaving ends the match for the guests (host migration is the next step), raw TCP only (a LAN, a VPN or a forwarded port 4001; the browser build has no network yet), when a network match ends you return to the local setup screen, the alliance dialogs are not shown yet and a match ends by the clock only (the original's elimination rules are not ported yet). Names are ASCII.
 
 ---
 
 ## Changelog & Versioning
 
-The version (`include/ants_app/version.hpp`, currently `v0.0.45`) is bumped with every release and shown on screen next to the FPS meter. [`CHANGELOG.md`](CHANGELOG.md) lists what changed in every version, newest first, from the first commit to the release in progress; it is published on the beta site at [`/changelog.html`](https://beta.playants.org/changelog.html) and linked from the game page.
+The version (`include/ants_app/version.hpp`, currently `v0.0.46`) is bumped with every release and shown on screen next to the FPS meter. [`CHANGELOG.md`](CHANGELOG.md) lists what changed in every version, newest first, from the first commit to the release in progress; it is published on the beta site at [`/changelog.html`](https://beta.playants.org/changelog.html) and linked from the game page.
 
 ---
 
@@ -352,7 +369,7 @@ To run all test suites in sequence:
 ./run_tests.sh --clean    # Remove the build directories and rebuild first
 ```
 
-### What the Suites Cover (v0.0.45, all passing)
+### What the Suites Cover (v0.0.46, all passing)
 | Suite | What it checks | Size |
 |---|---|---|
 | 1 Asset decoders | `ants.chd` header, palette, sprites, audio, event tags, Table 4 animations, `.LVL` maps, directional mirroring, fuzzing | 8 suites, 69,809 assertions |
@@ -362,12 +379,14 @@ To run all test suites in sequence:
 | 2.3 Path planner | Port of the original `PATHMGR` A* | 228 assertions |
 | 2.4 Movement golden | 22 frame-exact timings from a reference model, blocking, bumping, terrain, solid bits | 17,710 assertions |
 | 2.5 - 2.9 Action suites | Hill actions, combat actions, abilities, power-ups, food (golden cases from the disassembly) | 321 / 168 / 168 / 4,776 / 641 assertions |
-| 2.10 Command layer | Codec fuzzing, validation, canonical order, engines fed permuted commands stay bit-identical, state-hash coverage field by field | 15 tests, 490,504 assertions |
-| 2.11 Lock-step core | Protocol fuzzing, sequencer, runner, host and three clients over links with latency and jitter play 90 s bit-identically, desync detection, hostile peers | 17 tests, 119,335 assertions |
-| 2.12 Room | Joining, roster, map and fog, the start barrier | 8 tests, 37,769 assertions |
+| 2.10 Command layer | Codec fuzzing, validation, canonical order, engines fed permuted commands stay bit-identical, state-hash coverage field by field, rosters, drop-out, the predicted acknowledgement | 21 tests, 504,300 assertions |
+| 2.11 Lock-step core | Protocol fuzzing, sequencer, runner, host and three clients over links with latency and jitter play 90 s bit-identically, desync detection, hostile peers, drop-out at the same tick, silent peers, runner hooks | 21 tests, 119,424 assertions |
+| 2.12 Room | Joining, roster, map and fog, the start barrier, the connection thumbs (round trip tiers 1200 / 1800 ms) | 9 tests, 49,000 assertions |
 | 2.13 TCP | Framing, hostile frames, a real-socket match | 6 tests, 60,122 assertions |
+| 2.14 NetGame | The room, thumbs, the start barrier, a match with commands and chat, a guest and a host that leave, refused joins, map mismatch, over real sockets | 10 tests, 441 assertions |
 | 3 Application integration | Whole-application behaviour through the HUD, renderer and simulation | 188 tests, 6,529 assertions |
-| 3.1 - 3.5 Model suites | Render parity 237 checks, HUD layout 530, status messages 255, input model 70, pointer model 329 | 1,421 checks |
+| 3.1 - 3.5 Model suites | Render parity 237 checks, HUD layout 555 (with the network room screen), status messages 255, input model 70, pointer model 329 | 1,446 checks |
+| 3.6 Network application | The command line (names, `--host`, `--join`), a headless application as host and as guest of a room, start, a bit-identical match, chat, leaving | 5 tests, 111 assertions |
 | 4 E2E | Opaque-box scenarios in four tiers | 506 tests |
 
 ### Standalone E2E Test Runner

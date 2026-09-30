@@ -1,4 +1,6 @@
 #include "ants_assets/lvl_parser.hpp"
+#include <algorithm>
+#include <cctype>
 #include <fstream>
 #include <cstring>
 
@@ -91,6 +93,34 @@ int32_t LevelData::find_tile_index(const std::string& name) const noexcept {
         }
     }
     return -1;
+}
+
+namespace {
+// The team whose hill a layer-2 tile is (GREENHILL 0, REDHILL 1, BLUEHILL 2, BLACKHILL 3), -1 for any other tile
+int hill_team_of_tile(const std::string& name) {
+    std::string low = name;
+    for (char& ch : low) ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+    if (low == "greenhill") return 0;
+    if (low == "redhill") return 1;
+    if (low == "bluehill") return 2;
+    if (low == "blackhill") return 3;
+    return -1;
+}
+}  // namespace
+
+LevelData LevelData::for_roster(uint8_t roster_mask) const {
+    LevelData out(*this);
+    if ((roster_mask & 0x0Fu) == 0x0Fu) return out;
+    for (MapCell& cell : out.layer2_interactive) {
+        if (cell.tile_index >= out.tile_dictionary.size()) continue;
+        const int team = hill_team_of_tile(out.tile_dictionary[cell.tile_index]);
+        if (team >= 0 && (roster_mask & (1u << team)) == 0) cell = MapCell{};
+    }
+    auto& spawns = out.anthill_spawns;
+    spawns.erase(std::remove_if(spawns.begin(), spawns.end(),
+                                [&](const AnthillSpawn& sp) { return sp.team_id < 4 && (roster_mask & (1u << sp.team_id)) == 0; }),
+                 spawns.end());
+    return out;
 }
 
 bool LevelData::load_from_file(const std::string& filepath) {

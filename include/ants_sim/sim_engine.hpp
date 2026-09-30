@@ -380,6 +380,10 @@ public:
 
     // Core Lifecycle
     void init(const ants::assets::LevelData& level, uint32_t random_seed);
+    /// Starts a match for the teams of `roster_mask` (bit p = team p takes part). A team without a player has no hill, no starting ants and no eggs:
+    /// the original keeps a NULL entry for it in its team table, which CHECKGO skips (Ants.exe 0x1024921). init(level, seed) plays with every team.
+    void init(const ants::assets::LevelData& level, uint32_t random_seed, uint8_t roster_mask);
+    uint8_t roster_mask() const noexcept;
     void init_test_world(uint32_t width, uint32_t height, uint32_t random_seed = 1, uint32_t match_time_ms = 720000);
     void reset();
 
@@ -389,7 +393,17 @@ public:
     CommandResult apply_command(const Command& command);
     /// Hash of the deterministic gameplay state (see StateHash).
     StateHash state_hash() const;
-    void issue_order(const AntOrder& order);
+    /// FUN_0100d03b (a team leaves the match: quit, kicked, 60 s without a sign of life): the team is marked dropped (+0x64), the cue and the News
+    /// Flash of string 46 are posted (the cue unless the match is over), every ant of the team starts its death clip, its alliance ends and its
+    /// egg in the incubator is lost. A team that is not in the roster or already dropped is left alone.
+    void drop_player(uint8_t player_id);
+    bool is_player_dropped(uint8_t player_id) const noexcept;
+    /// The ant that would acknowledge a group order given now (0 = none), computed like the engine picks it (the closest ant of the issuer that can
+    /// take the order and is not already carrying it out, provided its order would queue a path) but without changing anything. The lock-step
+    /// client uses it for the immediate feedback (voice, pedestal) of an order that only reaches the simulation a few turns later.
+    uint32_t predict_order_ack(const Command& command) const;
+    /// Returns whether the order was accepted (for a move, special or attack order: GoTo returned true and a path was requested).
+    bool issue_order(const AntOrder& order);
     /// The Stop button for one selected ant (the loop body of Ants.exe FUN_01028a60): an ant that accepts player orders, is
     /// not on the hill entrance or the tile above it and has a walk or a target is sent to its own tile as an ordinary move
     /// (no player flag, so a power-up under it is an obstacle and not a pick-up). Returns true when the order was given.

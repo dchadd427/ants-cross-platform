@@ -558,7 +558,7 @@ void SimulationEngineImpl::remove_ant(AntUnit& a) {
         for (const auto& up : ants_) {
             if (up && !up->removed && up->player_id == a.player_id) { any = true; break; }
         }
-        if (!any && stats_.get_egg_count(a.player_id) > 0 && !hatch_[a.player_id].active) {
+        if (!any && stats_.get_egg_count(a.player_id) > 0 && !hatch_[a.player_id].active && (dropped_mask_ & (1u << a.player_id)) == 0) {
             hatch_request(a.player_id, AntType::Worker, true);
         }
     }

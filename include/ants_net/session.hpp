@@ -32,6 +32,7 @@ public:
         Sequencer::Config sequencer{};
         LockstepRunner::Config runner{};
         uint32_t violation_limit{8};        // undecodable or forbidden messages before a client is thrown out
+        uint32_t silence_timeout_ms{60000}; // a client that sends nothing for this long is dropped (the original's 60 s drop-out)
     };
 
     HostSession(sim::SimulationEngine& sim, Config config);
@@ -54,7 +55,8 @@ public:
     void freeze() noexcept { frozen_ = true; }
     bool frozen() const noexcept { return frozen_; }
 
-    /// Called when a player leaves the match (its connection closed, it was thrown out): the game eliminates it (drop-out)
+    /// Called when a player leaves the match (its connection closed, it was thrown out, it fell silent). The drop-out itself travels in the turn
+    /// stream (a Drop command of the sequencer), so that every machine drops the team at the same tick; this callback is for the presentation.
     void set_on_player_left(std::function<void(uint8_t)> fn) { on_left_ = std::move(fn); }
     /// Called for every chat message the host receives from a client (already relayed) and for its own
     void set_on_chat(std::function<void(const ChatMsg&)> fn) { on_chat_ = std::move(fn); }
@@ -73,6 +75,7 @@ private:
         Connection* conn{nullptr};
         bool present{false};
         uint32_t violations{0};
+        uint32_t last_heard_ms{0};          // when the client last sent anything
     };
     void poll_clients();
     void handle_message(uint8_t player, const std::vector<uint8_t>& msg);
@@ -124,6 +127,8 @@ public:
     const DesyncMsg& desync() const noexcept { return desync_; }
     bool connected() const noexcept { return conn_ != nullptr && conn_->is_open(); }
     uint32_t rtt_ms() const noexcept { return rtt_ms_; }
+    /// When anything last arrived from the host (the application decides how long a silent host is tolerated)
+    uint32_t last_heard_ms() const noexcept { return last_heard_ms_; }
     LockstepRunner& runner() noexcept { return runner_; }
 
 private:
@@ -138,6 +143,7 @@ private:
     uint32_t next_ping_ms_{0};
     uint32_t ping_nonce_{0};
     uint32_t rtt_ms_{0};
+    uint32_t last_heard_ms_{0};
 };
 
 }  // namespace ants::net

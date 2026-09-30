@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <cstdint>
 #include <deque>
+#include <functional>
 #include <vector>
 
 #include "ants_net/protocol.hpp"
@@ -40,6 +41,11 @@ public:
     /// its second tick follows 50 ms later). Returns the turns that were completed, in order.
     std::vector<Executed> update(uint32_t dt_ms);
 
+    /// Called after every simulation tick (twice per turn), so that the application can present each tick (HUD, events, audio) as the local game does
+    void set_on_tick(std::function<void()> fn) { on_tick_ = std::move(fn); }
+    /// Called for every command a turn applies, with the engine's verdict (the application uses it to correct its predicted feedback)
+    void set_on_command(std::function<void(const sim::Command&, const sim::CommandResult&)> fn) { on_command_ = std::move(fn); }
+
     uint32_t next_turn_to_execute() const noexcept { return next_execute_; }
     uint32_t next_turn_expected() const noexcept { return next_receive_; }
     size_t queued() const noexcept { return queue_.size(); }
@@ -60,6 +66,8 @@ private:
     bool started_{false};
     uint32_t phase_{0};            // 0: at a turn boundary, 1: between the two ticks of `current_`
     uint32_t acc_ms_{0};
+    std::function<void()> on_tick_;
+    std::function<void(const sim::Command&, const sim::CommandResult&)> on_command_;
 };
 
 }  // namespace ants::net

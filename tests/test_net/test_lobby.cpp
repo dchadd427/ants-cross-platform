@@ -111,14 +111,18 @@ int main() {
 
     TEST_CASE("N4.1 Lobby Messages: Round Trip, Range Checks, Safe Map Names, 300000 Random And Mutated Messages") {
         RoomMsg r;
-        r.slots[0] = {SlotState::Host, "Queen"};
-        r.slots[1] = {SlotState::Client, "Bob"};
+        r.slots[0] = {SlotState::Host, "Queen", 0};
+        r.slots[1] = {SlotState::Client, "Bob", 250};
+        r.slots[2] = {SlotState::Client, "Carl"};                     // not measured yet: kRttUnknown
         r.map_name = "TREASURE.LVL";
         r.fog = true;
         r.you = 1;
         RoomMsg r2;
         ASSERT_TRUE(decode(encode(r), r2) && r2.map_name == "TREASURE.LVL" && r2.fog && r2.you == 1 && r2.slots[1].name == "Bob" &&
-                    r2.slots[1].state == SlotState::Client && r2.slots[2].state == SlotState::Empty);
+                    r2.slots[1].state == SlotState::Client && r2.slots[3].state == SlotState::Empty);
+        ASSERT_EQ(r2.slots[0].rtt_ms, 0);                                // the connection quality of every seat travels with the room
+        ASSERT_EQ(r2.slots[1].rtt_ms, 250);
+        ASSERT_EQ(r2.slots[2].rtt_ms, kRttUnknown);
         StartMsg s;
         s.seed = 4242;
         s.map_name = "SMALL.LVL";
@@ -425,6 +429,47 @@ int main() {
         room.run(100);
         ASSERT_EQ(room.host.map_name(), "ISLANDS.LVL");
         ASSERT_TRUE(room.host.fog());
+    } TEST_END();
+
+    TEST_CASE("N4.9 Thumbs: The Host Measures Every Guest's Round Trip And Tells Everybody; The Tiers Are The Original's 1200 / 1800 ms") {
+        Room room;
+        room.join("Fast", {10, 0});                                      // 20 ms round trip
+        room.join("Slow", {700, 0});                                     // 1400 ms: ok
+        room.join("Awful", {1000, 0});                                   // 2000 ms: bad
+        room.run(300);                                                   // the slow guests' Hello messages are still on their way
+        ASSERT_TRUE(room.host.measured(0));                              // the host itself
+        ASSERT_TRUE(room.host.measured(1));
+        ASSERT_FALSE(room.host.occupied(2));
+        ASSERT_TRUE(room.host.all_measured());
+        ASSERT_EQ(link_quality(room.host.room().slots[1].rtt_ms), LinkQuality::Good);
+        room.run(1200);                                                  // seated now, but no answer to the first ping yet: the question mark
+        ASSERT_TRUE(room.host.occupied(2) && room.host.occupied(3));
+        ASSERT_FALSE(room.host.measured(2));
+        ASSERT_FALSE(room.host.measured(3));
+        ASSERT_FALSE(room.host.all_measured());
+        ASSERT_EQ(link_quality(room.host.room().slots[2].rtt_ms), LinkQuality::Unknown);
+        room.run(2000);
+        ASSERT_TRUE(room.host.all_measured());
+        ASSERT_TRUE(room.host.rtt_ms(1) >= 20 && room.host.rtt_ms(1) <= 40);
+        ASSERT_TRUE(room.host.rtt_ms(2) >= 1400 && room.host.rtt_ms(2) <= 1430);
+        ASSERT_TRUE(room.host.rtt_ms(3) >= 2000 && room.host.rtt_ms(3) <= 2030);
+        ASSERT_EQ(link_quality(room.host.room().slots[0].rtt_ms), LinkQuality::Good);
+        ASSERT_EQ(link_quality(room.host.room().slots[1].rtt_ms), LinkQuality::Good);
+        ASSERT_EQ(link_quality(room.host.room().slots[2].rtt_ms), LinkQuality::Ok);
+        ASSERT_EQ(link_quality(room.host.room().slots[3].rtt_ms), LinkQuality::Bad);
+        // every guest sees the same thumbs (the host tells them when a tier changes; the slowest link needs a second to deliver the news)
+        room.run(1500);
+        for (auto& g : room.guests) {
+            ASSERT_EQ(link_quality(g.lobby->room().slots[0].rtt_ms), LinkQuality::Good);
+            ASSERT_EQ(link_quality(g.lobby->room().slots[1].rtt_ms), LinkQuality::Good);
+            ASSERT_EQ(link_quality(g.lobby->room().slots[2].rtt_ms), LinkQuality::Ok);
+            ASSERT_EQ(link_quality(g.lobby->room().slots[3].rtt_ms), LinkQuality::Bad);
+        }
+        // a guest that leaves takes its thumb with it; the next one starts unmeasured
+        room.guests[2].lobby->leave();
+        room.run(1500);
+        ASSERT_EQ(link_quality(room.host.room().slots[3].rtt_ms), LinkQuality::Unknown);
+        ASSERT_TRUE(room.host.all_measured());
     } TEST_END();
 
     TEST_CASE("N4.8 A Whole Match Started Through The Lobby: Host And Three Guests Load, Begin And Play 30 Seconds Bit-Identical") {

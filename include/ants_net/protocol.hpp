@@ -18,7 +18,7 @@
 
 namespace ants::net {
 
-inline constexpr uint16_t kProtocolVersion = 1;
+inline constexpr uint16_t kProtocolVersion = 2;         // 2: the Room message carries each seat's measured round trip (the thumbs)
 inline constexpr size_t kMaxMessageBytes = 64 * 1024;
 inline constexpr size_t kMaxTurnCommands = 512;
 inline constexpr size_t kMaxChatChars = 100;        // the original's chat entry
@@ -98,10 +98,24 @@ struct PingMsg {
 
 /// What a seat of the room holds
 enum class SlotState : uint8_t { Empty = 0, Host = 1, Client = 2 };
+
+/// The connection quality shown as a thumb beside a player's name on the setup screen (animations netgood, netok, netbad, netunk). The thresholds are
+/// the original's (Ants.exe 0x1013289): a measured latency below 1200 ms is good, below 1800 ms is ok, anything more is bad; a peer that is connected
+/// but not measured yet shows the question mark.
+enum class LinkQuality : uint8_t { Good = 0, Ok = 1, Bad = 2, Unknown = 3 };
+inline constexpr uint16_t kRttUnknown = 0xFFFF;
+inline constexpr uint32_t kQualityGoodBelowMs = 1200;
+inline constexpr uint32_t kQualityOkBelowMs = 1800;
+inline LinkQuality link_quality(uint16_t rtt_ms) noexcept {
+    if (rtt_ms == kRttUnknown) return LinkQuality::Unknown;
+    return rtt_ms < kQualityGoodBelowMs ? LinkQuality::Good : (rtt_ms < kQualityOkBelowMs ? LinkQuality::Ok : LinkQuality::Bad);
+}
+
 struct RoomMsg {
     struct Slot {
         SlotState state{SlotState::Empty};
         std::string name;
+        uint16_t rtt_ms{kRttUnknown};   // the host's measured round trip to this seat (0 for the host's own seat), kRttUnknown before the first answer
     };
     std::array<Slot, sim::MAX_PLAYERS> slots{};
     std::string map_name;         // e.g. "TREASURE.LVL"

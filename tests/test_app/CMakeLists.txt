@@ -21,6 +21,7 @@ target_include_directories(test_app_integration PRIVATE
 
 target_link_libraries(test_app_integration PRIVATE
     ants_app
+    ants_net
     ants_sim
     ants_assets
     ${SDL2_LIBRARIES}
@@ -72,6 +73,7 @@ target_include_directories(test_render_parity PRIVATE
 
 target_link_libraries(test_render_parity PRIVATE
     ants_app
+    ants_net
     ants_sim
     ants_assets
     ${SDL2_LIBRARIES}
@@ -108,6 +110,7 @@ target_include_directories(test_hud_layout PRIVATE
 
 target_link_libraries(test_hud_layout PRIVATE
     ants_app
+    ants_net
     ants_sim
     ants_assets
     ${SDL2_LIBRARIES}
@@ -144,6 +147,7 @@ target_include_directories(test_status_messages PRIVATE
 
 target_link_libraries(test_status_messages PRIVATE
     ants_app
+    ants_net
     ants_sim
     ants_assets
     ${SDL2_LIBRARIES}
@@ -180,6 +184,7 @@ target_include_directories(test_input_model PRIVATE
 
 target_link_libraries(test_input_model PRIVATE
     ants_app
+    ants_net
     ants_sim
     ants_assets
     ${SDL2_LIBRARIES}
@@ -216,6 +221,7 @@ target_include_directories(test_pointer_model PRIVATE
 
 target_link_libraries(test_pointer_model PRIVATE
     ants_app
+    ants_net
     ants_sim
     ants_assets
     ${SDL2_LIBRARIES}
@@ -235,3 +241,39 @@ endif()
 
 add_test(NAME test_pointer_model COMMAND test_pointer_model)
 set_tests_properties(test_pointer_model PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+add_executable(test_network_app
+    test_network_app.cpp
+)
+
+target_include_directories(test_network_app PRIVATE
+    ${CMAKE_SOURCE_DIR}/include
+    ${SDL2_INCLUDE_DIRS}
+)
+
+target_link_libraries(test_network_app PRIVATE
+    ants_app
+    ants_net
+    ants_sim
+    ants_assets
+    ${SDL2_LIBRARIES}
+)
+
+target_compile_definitions(test_network_app PRIVATE
+    ORIGINAL_ASSETS_DIR="${CMAKE_SOURCE_DIR}/Original-Ants"
+)
+
+if(APPLE)
+    target_link_libraries(test_network_app PRIVATE
+        "-framework AudioToolbox"
+        "-framework CoreFoundation"
+        "-framework CoreAudio"
+    )
+endif()
+
+if(WIN32)
+    target_link_libraries(test_network_app PRIVATE ws2_32 winmm)
+endif()
+
+add_test(NAME test_network_app COMMAND test_network_app)
+set_tests_properties(test_network_app PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")

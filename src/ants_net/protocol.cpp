@@ -282,6 +282,7 @@ std::vector<uint8_t> encode(const RoomMsg& m) {
     for (const auto& slot : m.slots) {
         w.u8(static_cast<uint8_t>(slot.state));
         w.str8(clip(slot.name, kMaxNameChars));
+        w.u16(slot.rtt_ms);
     }
     w.str8(m.map_name);
     w.u8(m.fog ? 1 : 0);
@@ -296,6 +297,7 @@ bool decode(const uint8_t* data, size_t size, RoomMsg& out) {
     for (auto& slot : m.slots) {
         const uint8_t st = r->u8();
         slot.name = r->str8();
+        slot.rtt_ms = r->u16();
         if (st > static_cast<uint8_t>(SlotState::Client) || !printable_name(slot.name, kMaxNameChars)) return false;
         slot.state = static_cast<SlotState>(st);
     }

@@ -27,11 +27,16 @@ std::vector<LockstepRunner::Executed> LockstepRunner::update(uint32_t dt_ms) {
             if (queue_.empty()) break;                          // the next turn is due but has not arrived: stall at the boundary
             current_ = std::move(queue_.front());
             queue_.pop_front();
-            for (const sim::Command& c : current_.commands) sim_.apply_command(c);
+            for (const sim::Command& c : current_.commands) {
+                const sim::CommandResult r = sim_.apply_command(c);
+                if (on_command_) on_command_(c, r);
+            }
             sim_.tick();                                        // first tick of the turn
+            if (on_tick_) on_tick_();
             phase_ = 1;
         } else {
             sim_.tick();                                        // second tick: the turn is complete
+            if (on_tick_) on_tick_();
             Executed e;
             e.turn = current_.turn;
             if ((current_.turn + 1) % kHashEveryTurns == 0) {

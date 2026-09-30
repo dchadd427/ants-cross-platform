@@ -55,6 +55,8 @@ public:
     ~ScorecardModal() = default;
 
     void set_local_player_name(std::string name) { local_player_name_ = std::move(name); }
+    /// The names of the four teams for the results rows (an empty name shows the colour word)
+    void set_player_names(const std::array<std::string, 4>& names) { player_names_ = names; }
     void show(const sim::MatchResult& result, uint8_t local_player_id);
     void hide() noexcept { is_active_ = false; }
     bool is_open() const noexcept { return is_active_; }
@@ -80,6 +82,7 @@ public:
 
 private:
     std::string local_player_name_{};
+    std::array<std::string, 4> player_names_{};
     struct PlayerEntry {
         uint8_t player_id{0};
         std::string name;

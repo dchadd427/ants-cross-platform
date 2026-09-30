@@ -26,7 +26,9 @@ void HostSession::start(uint32_t now_ms) {
     next_seal_ms_ = now_ms;
     sequencer_.set_active(cfg_.host_player, true);
     for (uint8_t p = 0; p < sim::MAX_PLAYERS; ++p) {
-        if (clients_[p].present) sequencer_.set_active(p, true);
+        if (!clients_[p].present) continue;
+        sequencer_.set_active(p, true);
+        clients_[p].last_heard_ms = now_ms;
     }
 }
 
@@ -56,6 +58,10 @@ void HostSession::drop(uint8_t player) {
     clients_[player].present = false;
     if (clients_[player].conn != nullptr && clients_[player].conn->is_open()) clients_[player].conn->close();
     sequencer_.set_active(player, false);
+    sim::Command gone;                               // FUN_0100d03b on every machine, in the same turn
+    gone.type = sim::CommandType::Drop;
+    gone.issuer = player;
+    sequencer_.submit_system(std::move(gone));
     if (on_left_) on_left_(player);
 }
 
@@ -121,6 +127,7 @@ void HostSession::poll_clients() {
         std::vector<uint8_t> msg;
         int budget = 256;                            // a chatty client cannot starve the rest
         while (budget-- > 0 && c.present && c.conn->poll(msg)) {
+            c.last_heard_ms = last_ms_;
             if (msg.size() > kMaxMessageBytes) {
                 violation(p);
                 continue;
@@ -143,6 +150,9 @@ void HostSession::update(uint32_t now_ms) {
     const uint32_t dt = now_ms - last_ms_;
     last_ms_ = now_ms;
     poll_clients();
+    for (uint8_t p = 0; p < sim::MAX_PLAYERS; ++p) {         // a peer that says nothing for a minute is gone (its ack and ping stop)
+        if (clients_[p].present && now_ms - clients_[p].last_heard_ms > cfg_.silence_timeout_ms) drop(p);
+    }
     // seal the turns that are due (a fixed 100 ms schedule; while a peer lags too far the game waits and the schedule slides)
     int sealed = 0;
     while (!frozen_ && now_ms >= next_seal_ms_ && sealed < 5) {
@@ -168,6 +178,7 @@ ClientSession::ClientSession(sim::SimulationEngine& sim, Config config) : cfg_(c
 void ClientSession::start(uint32_t now_ms) {
     started_ = true;
     last_ms_ = now_ms;
+    last_heard_ms_ = now_ms;
     next_ping_ms_ = now_ms;
 }
 
@@ -202,6 +213,7 @@ void ClientSession::update(uint32_t now_ms) {
     std::vector<uint8_t> msg;
     int budget = 512;
     while (budget-- > 0 && conn_->poll(msg)) {
+        last_heard_ms_ = now_ms;
         switch (peek_type(msg)) {
             case MsgType::Turn: {
                 TurnMsg t;

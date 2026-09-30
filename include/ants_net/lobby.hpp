@@ -29,6 +29,7 @@ public:
         uint32_t hello_timeout_ms{10000};    // a connection that does not say Hello in this time is closed
         uint32_t load_timeout_ms{60000};     // everybody must report Loaded in this time
         uint32_t violation_limit{8};
+        uint32_t ping_every_ms{1000};        // the round trip to every guest is measured this often (the thumbs of the setup screen)
     };
     enum class Phase : uint8_t { Room, Loading, Begun };
     struct Event {
@@ -56,6 +57,11 @@ public:
     bool can_start() const noexcept { return phase_ == Phase::Room && players() >= 2; }
     /// Removes the guest of a seat (Reject Kicked)
     void kick(uint8_t seat);
+    /// The measured round trip to a guest (the host itself: 0); false while nothing has come back yet
+    bool measured(uint8_t seat) const noexcept;
+    uint32_t rtt_ms(uint8_t seat) const noexcept;
+    /// Every seated guest has been measured: "all players' thumbs have appeared"
+    bool all_measured() const noexcept;
 
     /// Sends Start to everybody: the host loads the map itself too and reports host_loaded(). False unless can_start().
     bool start(uint32_t seed, uint64_t map_hash, uint32_t now_ms);
@@ -73,6 +79,11 @@ private:
         Connection* conn{nullptr};
         bool loaded{false};
         uint32_t violations{0};
+        uint32_t next_ping_ms{0};
+        uint32_t ping_nonce{0};                  // the last ping sent; its send time is ping_sent[nonce % 8] (a slow link has several in flight)
+        uint32_t ping_sent[8]{};
+        bool measured{false};
+        uint32_t rtt_ms{0};
     };
     struct Pending {
         Connection* conn;
@@ -90,6 +101,7 @@ private:
     Config cfg_;
     RoomMsg room_;
     StartMsg start_;
+    uint32_t last_update_ms_{0};      // the clock of the current update (the measurements use it)
     Phase phase_{Phase::Room};
     std::array<Guest, sim::MAX_PLAYERS> guests_{};
     bool host_loaded_{false};
@@ -120,6 +132,8 @@ public:
     const StartMsg& start_info() const noexcept { return start_; }
     RejectReason reject_reason() const noexcept { return reject_; }
     CancelMsg::Reason cancel_reason() const noexcept { return cancel_reason_; }
+    /// The seat that caused the cancel (a player who left, a machine that could not load the map), 255 when unknown
+    uint8_t cancel_player() const noexcept { return cancel_player_; }
 
     /// The map named by start_info() is loaded (ok) or cannot be (missing file, a different file)
     void report_loaded(bool ok);
@@ -135,6 +149,7 @@ private:
     uint8_t seat_{255};
     RejectReason reject_{RejectReason::BadRequest};
     CancelMsg::Reason cancel_reason_{CancelMsg::Reason::HostCancelled};
+    uint8_t cancel_player_{255};
     uint32_t joined_at_ms_{0};
     bool hello_sent_{false};
     std::vector<Event> events_;

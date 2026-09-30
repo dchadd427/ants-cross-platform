@@ -11,21 +11,35 @@ the original does not have; they were changed to the verified behaviour, never d
 Ground truth for every entry is in [`docs/GAME_REVERSE_ENGINEERING.md`](docs/GAME_REVERSE_ENGINEERING.md); the network port is described in
 [`docs/NETWORK_PORT.md`](docs/NETWORK_PORT.md).
 
-## Unreleased (v0.0.46, in progress) - the game meets the network
+## Unreleased
 
-- Changelog: this file is new. It was generated from the project history up to v0.0.45 and is kept up to date from now on.
-- Beta site: `changelog.html` is built from this file when the image is built (`tools/changelog_to_html.py`) and linked from the page
-  header and footer; `/changelog` redirects to it.
-- README: audited against the code and rewritten where it was out of date (movement, abilities, roadmap table, directory structure,
-  Windows prerequisites, command-line options, setup-screen keys, the real test suites with their counts, the network section).
-- Launchers: the control banners of `start_game.sh` / `start_game.bat` described controls the original does not have (WASD / arrow
-  panning, letter hotkeys, armed orders); they now show the real ones.
-- Docs: `docs/BUILD_AND_RUN.md` test results refreshed and a macOS / Linux section added; `docs/GAME_REVERSE_ENGINEERING.md` 5.47
-  records what the original does with teams that have no player, the drop-out and the elimination rules (decoded from `Ants.exe`).
-- Clean-up: hard-coded local paths removed from `build_web.sh`, four asset tests and the test infrastructure document.
-- Network port (in progress, not released yet): teams without a player will no longer be part of a match (no hill, no start markers,
-  no eggs; the original's team table holds NULL for them), and a player who drops out will leave through the turn stream so that every
-  machine applies it at the same tick.
+- (nothing yet)
+
+## v0.0.46 - 2026-09-29 - Network port: the game meets the network
+
+- **Host and join**: `--host [port]` opens a room (TCP, port 4001 like the original), `--join host[:port]` joins one, `--loopback` accepts only this machine. The setup screen is the room: a row per player with the
+  portrait in the player's colour, the name and a thumb for the connection quality (`netgood` green thumbs up below a 1200 ms round trip, `netok` yellow sideways hand below 1800 ms, `netbad` red thumbs down,
+  `netunk` orange question mark before the first measurement; the thresholds are the original's, `Ants.exe` 0x1013289). The host picks the map and the fog and presses START, which needs a second player and
+  every thumb ("Press START when all players' thumbs have appeared."); a guest sees the host's choice and can only leave. The status line uses the original's texts ("Waiting for the host to start the game...",
+  "Trying to connect to the host..." then "Having trouble connecting to host..." after 30 s and "Unable to connect to host, recommend you quit..." after 60 s, "Loading game...", "Waiting for others...").
+- **Names from the command line**: `--name`, the original's `-N<team><name>`, `--team-name <team> <name>` and `-pnum=` reach the room, the HUD's score labels for every player, the results rows, the chat headers
+  and the simulation's alliance and drop-out texts. A network game says "Player" unless `--name` is given (it never sends the user and machine name).
+- **Matches over the network**: every machine loads the same map file (hash checked) with the same seed, roster and fog; the ticks come from the lock-step runner (no wall-clock ticking), the frame is drawn at the
+  runner's sub-tick position; the HUD's orders go through `NetGame` with an immediate predicted acknowledgement (voice and pedestal feedback), chat goes through the host and back with the sender stamped by the
+  connection, a waiting / out-of-sync overlay (remake text), no pause, no team switching in a network match, chat and `Leave` work as before.
+- **Roster**: teams without a player do not exist (the original's team table holds NULL for them): no hill and no hill art, no start markers, no eggs, no score label, no voice (`SimulationEngine::init(level, seed,
+  roster_mask)`, `LevelData::for_roster`).
+- **Drop-out** (`FUN_0100d03b`): a player who leaves, is thrown out or is silent for 60 s is dropped by a host-only `Drop` command in the next turn, so every machine drops the team at the same tick: "%s dropped out
+  of the game!", the cue, every ant of the team starts its death clip, its alliance ends, its egg in the incubator is lost and nothing hatches for it.
+- **Fixed**: the ant that answers a group order is decided by GoTo's real result, as in the original; before, a refused order could still be answered because of a stale path request of the ant.
+- **Protocol version 2**: the `Room` message carries every seat's measured round trip (the host pings every guest each second; up to eight pings in flight so slow links are measured too).
+- **Build**: `ants_app` links `ants_net`; the test targets list the libraries in link order (no duplicate-library warnings).
+- **Docs**: `docs/GAME_REVERSE_ENGINEERING.md` 5.47 (team table, drop-out, CHECKGO end rules) and 5.48 (the thumbs and the setup screen's status texts, decoded from `Ants.exe`), `docs/NETWORK_PORT.md` (the
+  application, host migration design), README and the launcher banners, the changelog page on the beta site, hard-coded local paths removed.
+- **Limits**: the host leaving ends the match for the guests (host migration is next), raw TCP only (no NAT traversal, no browser build yet), the alliance dialogs are not shown, the match ends by the clock only.
+- Tests: `test_commands` N1.16 - N1.21 (rosters, drop-out, the predicted acknowledgement: 2000 of 2000 random orders identical), `test_lockstep` N2.18 - N2.21, `test_lobby` N4.9, new suite 2.14 `test_netgame` (10 tests,
+  real sockets), the room screen in `test_hud_layout` (555 checks), new suite 3.6 `test_network_app` (5 tests: command line, a headless application as host and as guest, bit-identical matches). No existing test
+  rewritten (only the version assertion of 12.108 and the Room codec assertions gained the round-trip values).
 
 ## v0.0.45 - 2026-09-29 - Network port: room / lobby protocol and framed TCP transport
 

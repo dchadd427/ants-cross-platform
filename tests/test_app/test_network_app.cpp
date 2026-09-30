@@ -1,0 +1,443 @@
+// Tests of the network in the application: the command line (names, --host, --join), a headless Application as the host of a room and as a guest of
+// one (the other side is a bare NetGame with its own simulation), the setup screen as the room with names and thumbs, the start, a match driven by the
+// lock-step runner with commands and chat, a guest that leaves, a host that leaves. Real sockets on the loopback interface; one Application per test
+// (SDL is initialised once per process).
+#include "ants_app/application.hpp"
+#include "ants_net/netgame.hpp"
+#include "ants_net/protocol.hpp"
+#include "ants_sim/game_strings.hpp"
+#include "ants_sim/sim_engine.hpp"
+
+#include <algorithm>
+#include <chrono>
+#include <cstdint>
+#include <cstring>
+#include <deque>
+#include <functional>
+#include <iomanip>
+#include <iostream>
+#include <memory>
+#include <string>
+#include <thread>
+#include <vector>
+
+using namespace ants;
+using namespace ants::app;
+using ants::sim::Command;
+using ants::sim::CommandType;
+
+#ifndef ORIGINAL_ASSETS_DIR
+#define ORIGINAL_ASSETS_DIR "Original-Ants"
+#endif
+
+static int g_test_count = 0;
+static int g_test_failures = 0;
+static int g_assert_count = 0;
+
+inline void run_test_case(const std::string& name, const std::function<void()>& fn) {
+    ++g_test_count;
+    std::cout << "  RUNNING: " << std::left << std::setw(100) << name << " ... " << std::flush;
+    const int prev = g_test_failures;
+    try {
+        fn();
+    } catch (const std::exception& e) {
+        std::cout << "FAILED! Exception: " << e.what() << "\n";
+        ++g_test_failures;
+        return;
+    }
+    if (g_test_failures == prev) std::cout << "PASS\n";
+}
+
+#define TEST_CASE(name) run_test_case(name, [&]()
+#define TEST_END() );
+#define ASSERT_TRUE(cond) \
+    do { \
+        ++g_assert_count; \
+        if (!(cond)) { \
+            std::cout << "FAILED!\n    Assertion failed: " #cond " at " << __FILE__ << ":" << __LINE__ << "\n"; \
+            ++g_test_failures; \
+            return; \
+        } \
+    } while (0)
+#define ASSERT_FALSE(cond) ASSERT_TRUE(!(cond))
+#define ASSERT_EQ(a, b) ASSERT_TRUE((a) == (b))
+
+namespace {
+
+std::string maps_dir() { return std::string(ORIGINAL_ASSETS_DIR) + "/Maps/"; }
+
+// The other machine of a test: a simulation and a NetGame, with the little that the application does for the room (load the map, report)
+struct Peer {
+    sim::SimulationEngine sim;
+    net::NetGame net{sim};
+    std::vector<net::ChatMsg> chats;
+    std::vector<net::NetGame::Event> events;
+    uint32_t now{1000};
+    bool check_hash{true};                  // false: this machine accepts the host's map file whatever its hash says
+
+    Peer() {
+        net.set_on_chat([this](const net::ChatMsg& c) { chats.push_back(c); });
+    }
+    void update() {
+        net.update(now);
+        for (const auto& ev : net.take_events()) {
+            events.push_back(ev);
+            if (ev.type == net::NetGame::Event::Type::StartRequested) {
+                const net::StartMsg& s = net.start_info();
+                ants::assets::LevelData level;
+                uint64_t hash = 0;
+                const bool ok = level.load_lvl(maps_dir() + s.map_name) && net::hash_file(maps_dir() + s.map_name, hash) && (!check_hash || hash == s.map_hash);
+                if (ok) {
+                    sim.set_fog_of_war_enabled(s.fog);
+                    sim.init(level, s.seed, s.roster);
+                }
+                net.report_loaded(ok);
+            }
+        }
+    }
+    bool saw(net::NetGame::Event::Type t) const {
+        for (const auto& e : events) {
+            if (e.type == t) return true;
+        }
+        return false;
+    }
+};
+
+// Steps the application and the peer together in 10 ms of game time
+struct Duo {
+    Application& app;
+    Peer& peer;
+    void step(uint32_t ms) {
+        for (uint32_t t = 0; t < ms; t += 10) {
+            app.pump_network(0.010f);
+            app.update_simulation(0.010f);
+            peer.now += 10;
+            peer.update();
+            std::this_thread::sleep_for(std::chrono::microseconds(300));
+        }
+    }
+    bool until(const std::function<bool()>& cond, uint32_t max_ms) {
+        for (uint32_t t = 0; t < max_ms; t += 10) {
+            if (cond()) return true;
+            step(10);
+        }
+        return cond();
+    }
+};
+
+ApplicationConfig headless_config() {
+    ApplicationConfig cfg;
+    cfg.headless = true;
+    cfg.start_in_map_select = true;
+    return cfg;
+}
+
+char** argv_of(std::vector<std::string>& args, std::vector<char*>& storage) {
+    storage.clear();
+    for (auto& a : args) storage.push_back(a.data());
+    storage.push_back(nullptr);
+    return storage.data();
+}
+
+bool log_has(const std::deque<std::string>& log, const std::string& needle) {
+    for (const auto& line : log) {
+        if (line.find(needle) != std::string::npos) return true;
+    }
+    return false;
+}
+
+Command order(uint8_t seat, uint32_t ant, int16_t x, int16_t y) {
+    Command c;
+    c.type = CommandType::GroupMove;
+    c.issuer = seat;
+    c.tile_x = x;
+    c.tile_y = y;
+    c.ants = {ant};
+    return c;
+}
+
+std::vector<uint32_t> ants_of(const sim::SimulationEngine& s, uint8_t player) {
+    std::vector<uint32_t> out;
+    for (const auto& a : s.get_world_state().ants) {
+        if (a.player_id == player) out.push_back(a.id);
+    }
+    return out;
+}
+
+void run_command_line_tests() {
+    TEST_CASE("N5.1 Command Line: --name, -N<team><name> (the original's), --team-name, -pnum=, --host [port], --join host[:port], --port, --loopback") {
+        std::vector<std::string> args;
+        std::vector<char*> st;
+        args = {"ants", "--name", "Alice Smith", "-N1Bob", "-N3Dave", "-pnum=2", "--team-name", "0", "Zed", "--headless"};
+        ApplicationConfig c = Application::parse_arguments(static_cast<int>(args.size()), argv_of(args, st));
+        ASSERT_EQ(c.player_name, "Alice Smith");
+        ASSERT_EQ(c.team_names[1], "Bob");
+        ASSERT_EQ(c.team_names[3], "Dave");
+        ASSERT_EQ(c.team_names[0], "Zed");
+        ASSERT_EQ(c.team_names[2], "");
+        ASSERT_EQ(c.local_player_id, 2);
+        ASSERT_TRUE(c.headless);
+        ASSERT_TRUE(c.net_role == ApplicationConfig::NetRole::None);
+        args = {"ants", "-N", "-N9x", "-N4y", "-N0"};                                   // nothing valid: no team 9, no team 4, an empty name
+        c = Application::parse_arguments(static_cast<int>(args.size()), argv_of(args, st));
+        ASSERT_EQ(c.team_names[0], "");
+        for (const auto& n : c.team_names) ASSERT_EQ(n, "");
+        args = {"ants", "--host"};
+        c = Application::parse_arguments(static_cast<int>(args.size()), argv_of(args, st));
+        ASSERT_TRUE(c.net_role == ApplicationConfig::NetRole::Host && c.net_port == 4001);       // the original's port
+        args = {"ants", "--host", "5555", "--name", "Queen", "--loopback"};
+        c = Application::parse_arguments(static_cast<int>(args.size()), argv_of(args, st));
+        ASSERT_TRUE(c.net_role == ApplicationConfig::NetRole::Host && c.net_port == 5555 && c.net_loopback_only && c.player_name == "Queen");
+        args = {"ants", "--host", "--name", "Queen"};                                    // no port: the next word is not a number
+        c = Application::parse_arguments(static_cast<int>(args.size()), argv_of(args, st));
+        ASSERT_TRUE(c.net_port == 4001 && c.player_name == "Queen");
+        args = {"ants", "--join", "10.0.0.5:4444", "--name", "Bob"};
+        c = Application::parse_arguments(static_cast<int>(args.size()), argv_of(args, st));
+        ASSERT_TRUE(c.net_role == ApplicationConfig::NetRole::Join && c.net_address == "10.0.0.5" && c.net_port == 4444 && c.player_name == "Bob");
+        args = {"ants", "--join", "example.org"};
+        c = Application::parse_arguments(static_cast<int>(args.size()), argv_of(args, st));
+        ASSERT_TRUE(c.net_address == "example.org" && c.net_port == 4001);
+        args = {"ants", "--join", "fe80::1"};                                            // several colons: an IPv6 address, no port
+        c = Application::parse_arguments(static_cast<int>(args.size()), argv_of(args, st));
+        ASSERT_TRUE(c.net_address == "fe80::1" && c.net_port == 4001);
+        args = {"ants", "--join", "host", "--port", "7000"};
+        c = Application::parse_arguments(static_cast<int>(args.size()), argv_of(args, st));
+        ASSERT_TRUE(c.net_address == "host" && c.net_port == 7000);
+    } TEST_END();
+
+    TEST_CASE("N5.2 Names Reach Every Place That Shows One (local game): the simulation's texts, the HUD's labels, the results rows, the own label") {
+        ApplicationConfig cfg = headless_config();
+        cfg.player_name = "Alice";
+        cfg.team_names[1] = "Bob";
+        cfg.team_names[2] = "Carol";
+        cfg.local_player_id = 0;
+        Application app;
+        ASSERT_TRUE(app.init(cfg));
+        ASSERT_FALSE(app.network_active());
+        ASSERT_TRUE(app.start_game("Original-Ants/Maps/SMALL.LVL"));
+        ASSERT_EQ(app.hud().get_player_name(), "Alice");
+        ASSERT_EQ(app.sim().get_player_name(0), "Alice");                                // the own name belongs to the own team
+        ASSERT_EQ(app.sim().get_player_name(1), "Bob");
+        ASSERT_EQ(app.sim().get_player_name(2), "Carol");
+        ASSERT_EQ(app.sim().get_player_name(3), sim::strings::colour_name(0));            // no name given: the colour word (black)
+        ASSERT_EQ(app.hud().team_names()[0], "Alice");
+        ASSERT_EQ(app.hud().team_names()[1], "Bob");
+        ASSERT_EQ(app.hud().team_names()[3], "");
+        // the texts of the simulation carry the names: an alliance, a drop-out
+        app.sim().apply_command([&]() { Command c; c.type = CommandType::Drop; c.issuer = 1; return c; }());
+        bool named = false;
+        for (const auto& n : app.sim().poll_news_events()) named = named || n.message_text.find("Bob dropped out of the game!") != std::string::npos;
+        ASSERT_TRUE(named);
+        // a network game never sends the user and machine name by default
+        ApplicationConfig none = headless_config();
+        ASSERT_TRUE(none.player_name.empty());
+    } TEST_END();
+}
+
+void run_host_tests() {
+    TEST_CASE("N5.3 Host: The Setup Screen Is The Room (names, thumbs, the original's prompt); START Loads Everywhere; The Match Runs On The Lock-Step Ticks") {
+        ApplicationConfig cfg = headless_config();
+        cfg.net_role = ApplicationConfig::NetRole::Host;
+        cfg.net_port = 0;
+        cfg.net_loopback_only = true;
+        cfg.player_name = "Alice";
+        Application app;
+        ASSERT_TRUE(app.init(cfg));
+        ASSERT_TRUE(app.network_active());
+        ASSERT_TRUE(app.net()->is_host());
+        ASSERT_EQ(app.state(), AppState::MapSelect);
+        ASSERT_TRUE(app.net()->listen_port() != 0);
+        // alone in the room: one row, the original's prompt, START refused with the can't-go cue (nobody to play with)
+        app.pump_network(0.01f);
+        ASSERT_TRUE(app.map_select().room().networked && app.map_select().room().is_host);
+        ASSERT_TRUE(app.map_select().room().seats[0].occupied && app.map_select().room().seats[0].name == "Alice");
+        ASSERT_FALSE(app.map_select().room().seats[1].occupied);
+        ASSERT_EQ(app.map_select().room().status, std::string(sim::strings::text(sim::strings::kPressStart)));
+        app.map_select().handle_key_down(SDLK_RETURN);
+        ASSERT_EQ(app.state(), AppState::MapSelect);
+        ASSERT_EQ(app.net()->phase(), net::NetGame::Phase::Room);
+
+        Peer bob;
+        ASSERT_TRUE(bob.net.join("127.0.0.1", app.net()->listen_port(), "Bob"));
+        Duo duo{app, bob};
+        ASSERT_TRUE(duo.until([&]() { return app.net()->can_start(); }, 8000));
+        const auto& room = app.map_select().room();
+        ASSERT_TRUE(room.seats[1].occupied && room.seats[1].name == "Bob");
+        ASSERT_TRUE(room.seats[0].thumb == MapSelectScreen::Thumb::Good && room.seats[1].thumb == MapSelectScreen::Thumb::Good);
+        ASSERT_EQ(bob.net.room().slots[0].name, "Alice");
+        // the host picks the map and the fog through the setup screen's controls; the guest's room follows
+        app.map_select().set_selected_index(1);                                         // SMALL
+        app.map_select().handle_mouse_down(MapSelectScreen::BTN_FOW_ON_X + 2, MapSelectScreen::BTN_FOW_ON_Y + 2, 1);
+        duo.step(200);
+        ASSERT_EQ(bob.net.room().map_name, app.map_select().get_maps()[1].filename);
+        ASSERT_TRUE(bob.net.room().fog);
+        // START
+        app.map_select().handle_key_down(SDLK_RETURN);
+        ASSERT_TRUE(duo.until([&]() { return app.state() == AppState::Playing && bob.net.phase() == net::NetGame::Phase::Playing; }, 8000));
+        ASSERT_EQ(app.local_player_id(), 0);
+        ASSERT_EQ(app.sim().roster_mask(), 0x03);
+        ASSERT_TRUE(app.sim().is_fog_of_war_enabled());
+        ASSERT_EQ(app.sim().grid().anthills().size(), 2u);
+        ASSERT_EQ(app.sim().get_player_name(0), "Alice");
+        ASSERT_EQ(app.sim().get_player_name(1), "Bob");
+        ASSERT_EQ(app.hud().team_names()[1], "Bob");
+        ASSERT_EQ(app.hud().roster_mask(), 0x03);
+        ASSERT_TRUE(app.hud().is_modal_open());                                          // "Get ready" for at least 5 s
+        ASSERT_TRUE(app.sim().state_hash() == bob.sim.state_hash());
+
+        // play: orders through the HUD's own sink, both ways, and chat
+        int predicted = 0;
+        int given = 0;
+        uint32_t next = 0;
+        for (uint32_t t = 0; t < 30000; t += 10) {
+            if (t >= next) {
+                next = t + 900;
+                const auto mine = ants_of(app.sim(), 0);
+                const auto theirs = ants_of(bob.sim, 1);
+                if (!mine.empty()) {
+                    const sim::CommandResult r = app.net()->submit(order(0, mine[(t / 900) % mine.size()], static_cast<int16_t>((t / 10) % 40), static_cast<int16_t>((t / 25) % 40)));
+                    ++given;
+                    predicted += r.ack_ant != 0 ? 1 : 0;
+                }
+                if (!theirs.empty()) bob.net.submit(order(1, theirs[(t / 900) % theirs.size()], static_cast<int16_t>((t / 15) % 40), static_cast<int16_t>((t / 30) % 40)));
+            }
+            duo.step(10);
+        }
+        ASSERT_TRUE(given > 20 && predicted > given / 2);
+        ASSERT_FALSE(app.hud().is_modal_open());                                         // the ticks reached the HUD (post_tick), the modal ended
+        ASSERT_TRUE(app.net()->turns_executed() > 250);
+        // chat both ways
+        app.hud().set_chat_input("hello Bob");
+        app.hud().send_chat(false);
+        bob.net.chat("hello Alice", false);
+        duo.step(1000);
+        bool host_text = false;
+        for (const auto& c : bob.chats) host_text = host_text || (c.text == "hello Bob" && c.sender == 0);
+        ASSERT_TRUE(host_text);
+        ASSERT_TRUE(log_has(app.hud().get_chat_log(), "Bob:") && log_has(app.hud().get_chat_log(), "hello Alice"));
+        // a frame renders with the network overlay code path
+        app.render_frame();
+        // the guest leaves: its team drops on the host at the same tick, the host plays on
+        bob.net.leave();
+        duo.step(3000);
+        ASSERT_TRUE(app.sim().is_player_dropped(1));
+        ASSERT_EQ(app.state(), AppState::Playing);
+        ASSERT_TRUE(log_has(app.hud().get_chat_log(), "dropped out of"));
+        app.quit();
+        ASSERT_FALSE(app.network_active());
+    } TEST_END();
+}
+
+void run_guest_tests() {
+    TEST_CASE("N5.4 Guest: The Room Shows The Host's Choice And The Original's Waiting Text; Only Leave Works; Playing As Seat 1; Team Switching Is Off") {
+        Peer host;
+        ASSERT_TRUE(host.net.host(0, "Alice", true));
+        ApplicationConfig cfg = headless_config();
+        cfg.net_role = ApplicationConfig::NetRole::Join;
+        cfg.net_address = "127.0.0.1";
+        cfg.net_port = host.net.listen_port();
+        Application app;                                                                  // no --name: the default in a network game is "Player"
+        ASSERT_TRUE(app.init(cfg));
+        ASSERT_TRUE(app.network_active());
+        ASSERT_FALSE(app.net()->is_host());
+        Duo duo{app, host};
+        ASSERT_TRUE(duo.until([&]() { return app.net()->phase() == net::NetGame::Phase::Room && host.net.can_start(); }, 8000));
+        const auto& room = app.map_select().room();
+        ASSERT_TRUE(room.networked && !room.is_host && room.my_seat == 1);
+        ASSERT_TRUE(room.seats[0].occupied && room.seats[0].name == "Alice" && room.seats[1].occupied && room.seats[1].name == "Player");
+        ASSERT_EQ(room.status, std::string(sim::strings::text(sim::strings::kWaitingForHost)));
+        // the host's choice arrives; the guest's controls do nothing
+        host.net.set_map("TINY.LVL");
+        host.net.set_fog(true);
+        duo.step(300);
+        ASSERT_EQ(app.map_select().get_maps()[static_cast<size_t>(app.map_select().get_selected_index())].filename, "TINY.LVL");
+        ASSERT_TRUE(app.map_select().is_fog_of_war_enabled());
+        const int32_t idx = app.map_select().get_selected_index();
+        app.map_select().handle_mouse_down(MapSelectScreen::BTN_DOWN_X + 3, MapSelectScreen::BTN_DOWN_Y + 3, 1);
+        app.map_select().handle_key_down(SDLK_RETURN);
+        app.map_select().handle_key_down(SDLK_f);
+        ASSERT_EQ(app.map_select().get_selected_index(), idx);
+        ASSERT_TRUE(app.map_select().is_fog_of_war_enabled());
+        ASSERT_EQ(app.state(), AppState::MapSelect);
+        // the host starts a two-player match on the 31 x 31 map
+        uint64_t hash = 0;
+        ASSERT_TRUE(net::hash_file(maps_dir() + "TINY.LVL", hash));
+        ASSERT_TRUE(host.net.start_match(31337, hash));
+        ASSERT_TRUE(duo.until([&]() { return app.state() == AppState::Playing && host.net.phase() == net::NetGame::Phase::Playing; }, 8000));
+        ASSERT_EQ(app.local_player_id(), 1);
+        ASSERT_EQ(app.sim().roster_mask(), 0x03);
+        ASSERT_EQ(app.sim().get_player_name(0), "Alice");
+        ASSERT_EQ(app.sim().get_player_name(1), "Player");
+        ASSERT_EQ(app.hud().get_player_name(), "Player");
+        ASSERT_TRUE(app.sim().state_hash() == host.sim.state_hash());
+        // Ctrl+1 would switch the controlled team in a local game; in a network game the player is its seat
+        SDL_KeyboardEvent key{};
+        key.type = SDL_KEYDOWN;
+        key.keysym.sym = SDLK_1;
+        key.keysym.mod = KMOD_CTRL;
+        app.handle_key_down(key);
+        ASSERT_EQ(app.local_player_id(), 1);
+        // play 20 s: the guest's orders go through the host and come back in the turns
+        uint32_t next = 0;
+        for (uint32_t t = 0; t < 20000; t += 10) {
+            if (t >= next) {
+                next = t + 700;
+                const auto mine = ants_of(app.sim(), 1);
+                if (!mine.empty()) app.net()->submit(order(1, mine[(t / 700) % mine.size()], static_cast<int16_t>((t / 10) % 31), static_cast<int16_t>((t / 20) % 31)));
+                const auto theirs = ants_of(host.sim, 0);
+                if (!theirs.empty()) host.net.submit(order(0, theirs[(t / 700) % theirs.size()], static_cast<int16_t>((t / 12) % 31), static_cast<int16_t>((t / 24) % 31)));
+            }
+            duo.step(10);
+        }
+        host.net.freeze();
+        duo.step(3000);
+        ASSERT_TRUE(app.sim().state_hash() == host.sim.state_hash());                    // the whole pipeline, bit-identical
+        ASSERT_FALSE(app.net()->desynced());
+        ASSERT_EQ(app.sim().current_tick(), host.sim.current_tick());
+        // the host leaves: the guest is told and returns to the local setup screen with the message
+        host.net.leave();
+        ASSERT_TRUE(duo.until([&]() { return !app.network_active(); }, 8000));
+        ASSERT_EQ(app.state(), AppState::MapSelect);
+        ASSERT_EQ(app.map_select().room().status, "The host left the game.");
+        ASSERT_FALSE(app.map_select().room().networked);
+        ASSERT_TRUE(app.map_select().can_change_setup());                                 // a local setup screen again
+    } TEST_END();
+
+    TEST_CASE("N5.5 Guest: A Machine That Cannot Load The Map Says So In The Original's Words And Cancels The Start For Everybody") {
+        Peer host;
+        host.check_hash = false;                                                          // the host loads its own file fine; only the guest disagrees
+        ASSERT_TRUE(host.net.host(0, "Alice", true));
+        ApplicationConfig cfg = headless_config();
+        cfg.net_role = ApplicationConfig::NetRole::Join;
+        cfg.net_address = "127.0.0.1";
+        cfg.net_port = host.net.listen_port();
+        cfg.player_name = "Bob";
+        Application app;
+        ASSERT_TRUE(app.init(cfg));
+        Duo duo{app, host};
+        ASSERT_TRUE(duo.until([&]() { return host.net.can_start(); }, 8000));
+        // a map that this machine's list does not know: the host asks for a file named like a map that is not there
+        const uint64_t bogus_hash = 0x1234;
+        host.net.set_map("SMALL.LVL");
+        duo.step(200);
+        ASSERT_TRUE(host.net.start_match(1, bogus_hash));                               // the guest's file has another hash
+        ASSERT_TRUE(duo.until([&]() { return host.saw(net::NetGame::Event::Type::Cancelled); }, 8000));
+        ASSERT_EQ(app.state(), AppState::MapSelect);
+        ASSERT_EQ(app.net()->phase(), net::NetGame::Phase::Room);
+        ASSERT_TRUE(app.map_select().room().status.find("SMALL.LVL") != std::string::npos);
+        ASSERT_TRUE(host.net.status_text().find("Bob") != std::string::npos);
+    } TEST_END();
+}
+
+}  // namespace
+
+int main() {
+    std::cout << "\n=======================================================\n [SUITE] Network port: the application (names, room, thumbs, start, match)\n"
+                 "=======================================================\n";
+    run_command_line_tests();
+    run_host_tests();
+    run_guest_tests();
+    std::cout << "\n=======================================================\n Total Test Cases: " << g_test_count << "\n Total Assertions: " << g_assert_count
+              << "\n Failed:           " << g_test_failures << "\n=======================================================\n";
+    return g_test_failures == 0 ? 0 : 1;
+}

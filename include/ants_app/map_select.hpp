@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -165,6 +166,32 @@ public:
     bool is_fog_of_war_enabled() const noexcept { return fog_of_war_; }
     void set_fog_of_war_enabled(bool enabled) noexcept { fog_of_war_ = enabled; }
 
+    /// The thumb beside a player's name (the original's netgood / netok / netbad / netunk animations: connection quality)
+    enum class Thumb : uint8_t { Good = 0, Ok = 1, Bad = 2, Unknown = 3 };
+    /// One seat of the Players' Status box
+    struct RoomSeat {
+        bool occupied{false};
+        std::string name;
+        Thumb thumb{Thumb::Good};
+    };
+    /// What a network room shows: the seats, who this machine is and whether it may change the setup. `networked` false = the local setup screen.
+    struct RoomView {
+        bool networked{false};
+        bool is_host{true};
+        uint8_t my_seat{0};
+        std::array<RoomSeat, 4> seats{};
+        std::string status;                    // replaces the prompt line while networked
+    };
+    void set_room(const RoomView& room) { room_ = room; }
+    const RoomView& room() const noexcept { return room_; }
+    /// The map, the fog option and START belong to the host of a room; a guest's clicks on them do nothing
+    bool can_change_setup() const noexcept { return !room_.networked || room_.is_host; }
+    /// The host changed the map (its file name) or the fog option through the controls
+    void set_on_map_changed(std::function<void(const std::string& filename)> cb) { on_map_changed_ = std::move(cb); }
+    void set_on_fog_changed(std::function<void(bool)> cb) { on_fog_changed_ = std::move(cb); }
+    /// A guest shows the host's choice (no callbacks fire); false when the map is not in the list
+    bool follow_host_choice(const std::string& filename, bool fog);
+
     bool is_player_ready(uint8_t player_idx) const noexcept {
         return (player_ready_mask_ & (1u << player_idx)) != 0;
     }
@@ -209,6 +236,10 @@ private:
     uint8_t player_team_{0};
 
     uint32_t connection_ticks_{0};
+    RoomView room_{};
+    std::function<void(const std::string& filename)> on_map_changed_{nullptr};
+    std::function<void(bool)> on_fog_changed_{nullptr};
+    void change_fog(bool on);
     std::function<void(const std::string& map_path)> on_start_{nullptr};
     std::function<void()> on_quit_{nullptr};
     std::function<void(uint32_t)> on_play_sfx_{nullptr};

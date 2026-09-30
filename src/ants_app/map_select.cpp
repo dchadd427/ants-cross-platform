@@ -149,9 +149,30 @@ void MapSelectScreen::init(const std::string& maps_dir) {
 }
 
 void MapSelectScreen::set_selected_index(int32_t idx) noexcept {
-    if (maps_.empty()) return;
-    int32_t count = static_cast<int32_t>(maps_.size());
+    if (maps_.empty() || !can_change_setup()) return;
+    const int32_t count = static_cast<int32_t>(maps_.size());
+    const int32_t before = selected_index_;
     selected_index_ = ((idx % count) + count) % count;
+    if (selected_index_ != before && room_.networked && on_map_changed_) {
+        on_map_changed_(maps_[static_cast<size_t>(selected_index_)].filename);
+    }
+}
+
+bool MapSelectScreen::follow_host_choice(const std::string& filename, bool fog) {
+    fog_of_war_ = fog;
+    for (size_t i = 0; i < maps_.size(); ++i) {
+        if (maps_[i].filename == filename) {
+            selected_index_ = static_cast<int32_t>(i);
+            return true;
+        }
+    }
+    return false;
+}
+
+void MapSelectScreen::change_fog(bool on) {
+    if (!can_change_setup() || fog_of_war_ == on) return;
+    fog_of_war_ = on;
+    if (room_.networked && on_fog_changed_) on_fog_changed_(on);
 }
 
 const std::string& MapSelectScreen::get_selected_map_path() const {
@@ -204,6 +225,16 @@ void MapSelectScreen::handle_mouse_motion(int32_t screen_x, int32_t screen_y) {
 void MapSelectScreen::handle_mouse_down(int32_t screen_x, int32_t screen_y, uint8_t button) {
     if (button != SDL_BUTTON_LEFT) return;
 
+    // Leave Game Button (every player of a room can leave)
+    if (!can_change_setup() && screen_x >= BTN_QUIT_X && screen_x < BTN_QUIT_X + BTN_QUIT_W &&
+        screen_y >= BTN_QUIT_Y && screen_y < BTN_QUIT_Y + BTN_QUIT_H) {
+        btn_quit_pressed_ = true;
+        play_sfx(sim::SoundID::ButtonClick);
+        trigger_quit();
+        return;
+    }
+    if (!can_change_setup()) return;      // the map, the fog option and START belong to the host
+
     // Up Arrow Button
     if (screen_x >= BTN_UP_X && screen_x < BTN_UP_X + BTN_UP_W &&
         screen_y >= BTN_UP_Y && screen_y < BTN_UP_Y + BTN_UP_H) {
@@ -239,19 +270,19 @@ void MapSelectScreen::handle_mouse_down(int32_t screen_x, int32_t screen_y, uint
     // Fog of War "On" button
     if (screen_x >= BTN_FOW_ON_X && screen_x < BTN_FOW_ON_X + BTN_FOW_ON_W &&
         screen_y >= BTN_FOW_ON_Y && screen_y < BTN_FOW_ON_Y + BTN_FOW_ON_H) {
-        set_fog_of_war_enabled(true);   // the Fog of War toggles are silent
+        change_fog(true);   // the Fog of War toggles are silent
         return;
     }
 
     // Fog of War "Off" button
     if (screen_x >= BTN_FOW_OFF_X && screen_x < BTN_FOW_OFF_X + BTN_FOW_OFF_W &&
         screen_y >= BTN_FOW_OFF_Y && screen_y < BTN_FOW_OFF_Y + BTN_FOW_OFF_H) {
-        set_fog_of_war_enabled(false);
+        change_fog(false);
         return;
     }
 
-    // Drop Button: toggles Player 2 ready state
-    if (screen_x >= BTN_DROP_X && screen_x < BTN_DROP_X + BTN_DROP_W &&
+    // Drop Button: toggles Player 2 ready state (a placeholder of the local screen; a room shows the real players)
+    if (!room_.networked && screen_x >= BTN_DROP_X && screen_x < BTN_DROP_X + BTN_DROP_W &&
         screen_y >= BTN_DROP_Y && screen_y < BTN_DROP_Y + BTN_DROP_H) {
         btn_drop_pressed_ = true;
         play_sfx(sim::SoundID::ButtonClick);
@@ -260,7 +291,7 @@ void MapSelectScreen::handle_mouse_down(int32_t screen_x, int32_t screen_y, uint
     }
 
     // Click on player thumbs inside players box (x in [535, 565])
-    if (screen_x >= PLAYER_THUMB_X - 5 && screen_x < PLAYER_THUMB_X + 25) {
+    if (!room_.networked && screen_x >= PLAYER_THUMB_X - 5 && screen_x < PLAYER_THUMB_X + 25) {
         for (uint8_t i = 0; i < 3; ++i) {
             int32_t ty = PLAYER_THUMB_Y + static_cast<int32_t>(i) * PLAYER_ROW_PITCH;
             if (screen_y >= ty && screen_y < ty + 24) {
@@ -301,6 +332,10 @@ void MapSelectScreen::handle_mouse_up(int32_t, int32_t, uint8_t button) {
 
 void MapSelectScreen::handle_key_down(SDL_Keycode key) {
     if (maps_.empty()) return;
+    if (!can_change_setup()) {            // a guest of a room can only leave
+        if (key == SDLK_ESCAPE) trigger_quit();
+        return;
+    }
 
     if (key == SDLK_UP || key == SDLK_LEFT) {
         set_selected_index(selected_index_ - 1);
@@ -313,8 +348,8 @@ void MapSelectScreen::handle_key_down(SDL_Keycode key) {
     } else if (key == SDLK_ESCAPE) {
         trigger_quit();
     } else if (key == SDLK_f) {
-        set_fog_of_war_enabled(!fog_of_war_);
-    } else if (key == SDLK_d) {
+        change_fog(!fog_of_war_);
+    } else if (key == SDLK_d && !room_.networked) {
         toggle_player_ready(2);
     }
 }
@@ -365,26 +400,50 @@ void MapSelectScreen::render(IRenderer& renderer, const ants::assets::AssetArchi
 
     // 5. Status line: authentic prompt text (vertically centered in statline box at y=445..464)
     int32_t stat_y = 445 + (19 - th) / 2;
-    renderer.draw_text("Press START when all players' thumbs have appeared.", 38, stat_y, ColorRGBA{255, 255, 255, 255}, FontSize::Small);
+    const std::string prompt = !room_.status.empty() ? room_.status : std::string("Press START when all players' thumbs have appeared.");
+    renderer.draw_text(prompt, 38, stat_y, ColorRGBA{255, 255, 255, 255}, FontSize::Small);
 
     // 6. Players' Status, slot 0: the portrait animation agst301 (12 frames, 1650 ms loop) has its origin at (395,115) and
     // the thumbs-up sprite sits at (540,95); the sprite's own part offsets place the ant relative to that origin.
-    std::string display_user = player_name_.empty() ? "Player" : player_name_;
-    if (const auto* anim_stand = archive.find_animation("agst301")) {
-        if (!anim_stand->subitems.empty()) {
-            const size_t frame = Renderer::get_anim_subitem_by_time(*anim_stand, SDL_GetTicks());
-            const auto& parts = anim_stand->subitems[frame].frames;
-            renderer.set_hud_team(player_team_);
-            for (size_t k = parts.size(); k-- > 0;) {
-                renderer.draw_sprite(parts[k].sprite_index, PLAYER_PORTRAIT_X + parts[k].dx, PLAYER_PORTRAIT_Y + parts[k].dy);
+    if (room_.networked) {
+        // a room: one row per occupied seat (portrait in the seat's colour, the name, the thumb of a player who is here)
+        const auto* anim_stand = archive.find_animation("agst301");
+        for (size_t seat = 0; seat < room_.seats.size(); ++seat) {
+            if (!room_.seats[seat].occupied) continue;
+            const int32_t row = static_cast<int32_t>(seat) * PLAYER_ROW_PITCH;
+            if (anim_stand != nullptr && !anim_stand->subitems.empty()) {
+                const size_t frame = Renderer::get_anim_subitem_by_time(*anim_stand, SDL_GetTicks());
+                const auto& parts = anim_stand->subitems[frame].frames;
+                renderer.set_hud_team(static_cast<uint8_t>(seat));
+                for (size_t k = parts.size(); k-- > 0;) {
+                    renderer.draw_sprite(parts[k].sprite_index, PLAYER_PORTRAIT_X + parts[k].dx, PLAYER_PORTRAIT_Y + row + parts[k].dy);
+                }
+                renderer.set_hud_team(0);
             }
-            renderer.set_hud_team(0);
+            std::string name = room_.seats[seat].name.empty() ? std::string("Player") : room_.seats[seat].name;
+            if (name.size() > 16) name.resize(16);
+            renderer.draw_text(name, 415, PLAYER_THUMB_Y + row + (24 - th) / 2, ColorRGBA{255, 255, 255, 255}, FontSize::Small);
+            static const char* const kThumbs[4] = {"thumb1.bmp", "thumb2.bmp", "thumb3.bmp", "thumb4.bmp"};   // netgood, netok, netbad, netunk
+            renderer.draw_named_sprite(kThumbs[static_cast<size_t>(room_.seats[seat].thumb) & 3u], PLAYER_THUMB_X, PLAYER_THUMB_Y + row);
         }
-    }
+    } else {
+        std::string display_user = player_name_.empty() ? "Player" : player_name_;
+        if (const auto* anim_stand = archive.find_animation("agst301")) {
+            if (!anim_stand->subitems.empty()) {
+                const size_t frame = Renderer::get_anim_subitem_by_time(*anim_stand, SDL_GetTicks());
+                const auto& parts = anim_stand->subitems[frame].frames;
+                renderer.set_hud_team(player_team_);
+                for (size_t k = parts.size(); k-- > 0;) {
+                    renderer.draw_sprite(parts[k].sprite_index, PLAYER_PORTRAIT_X + parts[k].dx, PLAYER_PORTRAIT_Y + parts[k].dy);
+                }
+                renderer.set_hud_team(0);
+            }
+        }
 
-    int32_t player_y = PLAYER_THUMB_Y + (24 - th) / 2;
-    renderer.draw_text(display_user, 415, player_y, ColorRGBA{255, 255, 255, 255}, FontSize::Small);
-    renderer.draw_named_sprite("thumb1.bmp", PLAYER_THUMB_X, PLAYER_THUMB_Y);
+        int32_t player_y = PLAYER_THUMB_Y + (24 - th) / 2;
+        renderer.draw_text(display_user, 415, player_y, ColorRGBA{255, 255, 255, 255}, FontSize::Small);
+        renderer.draw_named_sprite("thumb1.bmp", PLAYER_THUMB_X, PLAYER_THUMB_Y);
+    }
 
     // 7. Fog of War On / Off (animations d_on1..3, d_off1..3): the chosen one is shown down, the other one up or hover
     draw_animation_frame0(renderer, archive, fog_of_war_ ? "d_on3" : (btn_fow_on_hovered_ ? "d_on2" : "d_on1"));

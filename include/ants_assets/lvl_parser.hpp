@@ -201,6 +201,11 @@ public:
     const std::string& get_tile_name(uint16_t tile_index) const;
     int32_t find_tile_index(const std::string& name) const noexcept;
 
+    /// The level as it is played by the teams of `roster_mask` (bit t = team t takes part): a team without a player has no hill, no start marker
+    /// (so no starting ant) and no eggs. The original keeps a NULL entry in its team table for such a team (CHECKGO skips it), so nothing of it exists.
+    /// Team t is the colour of the hill tile GREENHILL (0), REDHILL (1), BLUEHILL (2), BLACKHILL (3) and of the start markers of the same id.
+    LevelData for_roster(uint8_t roster_mask) const;
+
     // Loading Convenience
     bool load_from_file(const std::string& filepath);
     bool load_from_memory(const uint8_t* data, size_t size);
