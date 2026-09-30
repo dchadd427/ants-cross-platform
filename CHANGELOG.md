@@ -15,6 +15,31 @@ Ground truth for every entry is in [`docs/GAME_REVERSE_ENGINEERING.md`](docs/GAM
 
 - (nothing yet)
 
+## v0.0.50 - 2026-09-29 - Teaming works: the three answer dialogs of the original
+
+- **The problem**: the simulation could make and break teams (and the news, cues and chat lines were right) but nothing in the game could *answer* an offer: the original's three modal dialogs did not exist, so an
+  invitation from another player could never be accepted, in a network match or with the local team switch, and "team chat" had nobody to talk to. Decoded from `Ants.exe` (`FUN_01015b65`, `FUN_010160e2`,
+  `FUN_01016438`, their button callbacks and key handlers) and ported as they are:
+  - **The invitation**: "Bob (Red) invites you to form a team.  Would you like to accept?" (or, when accepting ends your present team, "... This will remove you from the team you have with ...") with **Accept**
+    and **Decline** (keys `A`; `D` / `Esc`), the allypro cue on the arrival. Accepting with another ally first breaks that team, then makes the new one.
+  - **The waiting dialog** of the proposer: "Waiting for Bob (Red) to respond to your offer to team up." with **Withdraw** (keys `W` / `Esc`); it closes when the answer arrives ("Bob accepted teaming up" /
+    "Bob rejected teaming up") or the offer is taken back (the invitee reads "... withdrew offer to team up").
+  - **The confirmation** "Doing this will break your team with Bob (Red).  Continue?" with **Yes** / **No** (keys `Y`; `N` / `Esc`), which opens when a player who already has a team clicks the ally pedestal of
+    another hill, and when an attack order is given on an ant or the hill of the own ally (Yes breaks the team and gives the order, No drops it; before, the ant just walked next to the ally).
+  - The dialogs are the original's windows: the `std_dialg` art at (100, 100), the label at (30, 10) in 24 px, the buttons' three animation frames at their offsets; a dialog takes every key and click until it is
+    answered.
+- **Network**: the dialogs follow the shared simulation's state (`WorldState::pending_invite_from`), so every machine shows the same question at the same tick and it cannot be missed; the answers are
+  commands through the turns. A player that drops out takes its offers with it. Team messages reach only the sender and the players whose ally the sender is, written in the sender's team colour; with the
+  dialogs a team can now be formed and broken in a real match, so the chat rule is reachable (the audit of the chat colours, the team filter and the roster names found them matching the original: docs 5.42).
+- **The refusal cue**: the player who declines an offer now hears the refusal cue (allynot) as well, not only the proposer: the original's answer message runs on both machines and plays it on each (`0x1023c53`,
+  `0x100c4bc`).
+- **Docs**: `docs/GAME_REVERSE_ENGINEERING.md` 5.42 (the dialogs: geometry, buttons, keys, callbacks, what opens them), 5.44 and 5.45 (the open items), 5.11 (the early paraphrase corrected), README, `docs/NETWORK_PORT.md`.
+- **Known deviations** (recorded): one pending offer per invitee (the original queues several invitations); after the attack confirmation the whole selected group gets the order (the original re-issues the first ant's).
+- Tests: `test_hud_layout` `test_alliance_dialog_layout` and `test_alliance_answers` (every button, key and text of the three dialogs, the state-driven open and close, the commands that the answers issue),
+  `test_network_app` N5.9 (an offer from another machine reaches the application as the question, Accept makes the team on three machines, a team message reaches only the ally and in its colour) and N5.10
+  (the waiting dialog, a refusal, Withdraw). **Rewritten tests**: `12.62` of `test_app_integration` (the old test expected the walk next to the ally that the remake did instead of asking; it now checks the confirmation:
+  No keeps the team, Yes breaks it and the ant goes to attack). Version assertion of 12.108.
+
 ## v0.0.49 - 2026-09-29 - The Franklin Gothic look, and no placeholder labels in the browser build
 
 - **The text face**: the original's labels are set in "Franklin Gothic Medium", a commercial font that the game never shipped. The game now bundles **Libre Franklin Medium** (a free interpretation of the same Franklin

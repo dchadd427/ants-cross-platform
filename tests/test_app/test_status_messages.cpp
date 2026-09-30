@@ -706,6 +706,7 @@ void test_alliance_texts() {
     const sim::NewsEvent* den = find_news(c, 80, 2);
     check(den && den->message_text == "Black rejected teaming up", "80 to the proposer: " + (den ? den->message_text : std::string("none")));
     check(has_audio(c, sim::SoundID::AllianceNot, 2), "allynot.wav (52) for the proposer");
+    check(has_audio(c, sim::SoundID::AllianceNot, 3), "allynot.wav (52) for the decliner too (0x1023c53)");
 
     // an invitee that already has a team is told what accepting costs (string 2)
     sim.form_alliance(0, 1);

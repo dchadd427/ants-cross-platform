@@ -138,8 +138,15 @@ ports, the never-reading peer, a 40 s match of a host and three clients over rea
 * **Command line**: `--host [port]`, `--join host[:port]`, `--port`, `--name`, `-N<team><name>`, `--team-name <team> <name>`, `-pnum=<team>`, `--loopback` (accept only this machine); port 4001 by default (the original's).
 * **Group order acknowledgement**: the ant that answers a group order is now decided by GoTo's real result (`issue_order` returns it), as in the original (`0x10289b2 .. 0x10289c0`); before, a stale path request
   of a refused order could still make an ant answer.
-* **Limits of this release**: no NAT traversal (raw TCP: a LAN, a VPN or a forwarded port), a machine returns to the local setup screen when a network match ends, the alliance dialogs are not shown yet, and
-  the match ends by the clock only (the elimination rules are not ported yet). Since v0.0.47 the host may leave and the match goes on (see Host migration: `HostChanged` reports it, `HostLeft` only says that no
+* **Teaming (v0.0.50)**: the three modal dialogs of the original (the invitation question, the proposer's waiting dialog and the confirmation before a team is broken, `docs/GAME_REVERSE_ENGINEERING.md` 5.42)
+  are driven by the shared simulation's state, not by an event: `WorldState::pending_invite_from[invitee]` says who has an offer for whom, so every machine that holds the invitee or the proposer shows the dialog
+  at the same tick and a dialog cannot be missed. The answers are commands of the answering seat (`AllianceAccept / Deny / Withdraw / Break`, and `AllianceInvite` or the attack order after the confirmation) that
+  travel through the turns like every other order; while an answer is on its way the question does not come back. A team message (`Chat` with the team flag) goes to everybody through the host and every machine
+  shows it only when it is the sender or an ally of the sender by its own alliance table (`HUD::receive_chat_message`), in the sender's team colour. `drop_player` also clears the offers to and from the dropped team.
+  Tests: `N5.9` / `N5.10` of `test_network_app` (an offer from another machine reaches the application as the question, Accept makes the team on all three machines, a team message reaches only the ally, a
+  refusal closes the waiting dialog, Withdraw takes the offer back everywhere, equal state hashes at the end).
+* **Limits of this release**: no NAT traversal (raw TCP: a LAN, a VPN or a forwarded port), a machine returns to the local setup screen when a network match ends, a player has one pending team offer at a time
+  (the original queues several), and the match ends by the clock only (the elimination rules are not ported yet). Since v0.0.47 the host may leave and the match goes on (see Host migration: `HostChanged` reports it, `HostLeft` only says that no
   new host could be agreed).
 
 ## State hash (`SimulationEngine::state_hash`)
@@ -161,6 +168,6 @@ seeds and demands the same hash every tick, and demands that an engine that play
    role moving to a surviving machine, the events and messages in the game, tests with the host dying at many points, double failures and a partitioned old host: **shipped (v0.0.47).**
 5. WebRTC data channels with ICE / STUN / TURN (native via libdatachannel, browser via RTCPeerConnection) and the signaling service (it also brokers the mesh links).
 6. Docker / nginx / TURN deployment files (secrets from the environment).
-7. Alliance dialogs (the ally attack confirmation, string 4; the invitation questions, strings 1 - 3), CHECKGO elimination rules (the match also ends when nobody is alive or one side leads alone).
+7. **Alliance dialogs (the ally attack confirmation, string 4; the invitation questions, strings 1 - 3): shipped (v0.0.50).** CHECKGO elimination rules (the match also ends when nobody is alive or one side leads alone): open.
 
 Open for milestone 3 and later: a float-determinism audit across native and WebAssembly (the flower dropper's type draw uses doubles), native versus wasm golden hashes.

@@ -152,11 +152,42 @@ struct Trio {
     }
 };
 
+// A three-player match on SMALL.LVL: the host (Alice, seat 0) and Bob (seat 1) are bare machines, the application is seat 2 (named `app_name`)
+bool start_three(Peer& host, Peer& bob, Application& app, const std::string& app_name);
+
 ApplicationConfig headless_config() {
     ApplicationConfig cfg;
     cfg.headless = true;
     cfg.start_in_map_select = true;
     return cfg;
+}
+
+bool start_three(Peer& host, Peer& bob, Application& app, const std::string& app_name) {
+    if (!host.net.host(0, "Alice", true)) return false;
+    if (!bob.net.join("127.0.0.1", host.net.listen_port(), "Bob")) return false;
+    for (int i = 0; i < 800 && bob.net.phase() != net::NetGame::Phase::Room; ++i) {          // Bob is seated first (seat 1), the application second
+        host.now += 10;
+        host.update();
+        bob.now += 10;
+        bob.update();
+        std::this_thread::sleep_for(std::chrono::microseconds(300));
+    }
+    if (bob.net.phase() != net::NetGame::Phase::Room || bob.net.my_seat() != 1) return false;
+    ApplicationConfig cfg = headless_config();
+    cfg.net_role = ApplicationConfig::NetRole::Join;
+    cfg.net_address = "127.0.0.1";
+    cfg.net_port = host.net.listen_port();
+    cfg.player_name = app_name;
+    if (!app.init(cfg)) return false;
+    Trio trio{app, host, bob};
+    if (!trio.until([&]() { return app.net()->phase() == net::NetGame::Phase::Room && app.net()->my_seat() == 2 && host.net.can_start(); }, 8000)) return false;
+    host.net.set_map("SMALL.LVL");
+    trio.step(200);
+    uint64_t hash = 0;
+    if (!net::hash_file(maps_dir() + "SMALL.LVL", hash) || !host.net.start_match(99, hash)) return false;
+    return trio.until([&]() {
+        return app.state() == AppState::Playing && host.net.phase() == net::NetGame::Phase::Playing && bob.net.phase() == net::NetGame::Phase::Playing;
+    }, 8000);
 }
 
 char** argv_of(std::vector<std::string>& args, std::vector<char*>& storage) {
@@ -171,6 +202,16 @@ bool log_has(const std::deque<std::string>& log, const std::string& needle) {
         if (line.find(needle) != std::string::npos) return true;
     }
     return false;
+}
+
+// The chat box wraps a long text into several lines: the lines joined by one blank are the text again
+std::string log_joined(const std::deque<std::string>& log) {
+    std::string out;
+    for (const auto& line : log) {
+        if (!out.empty()) out += ' ';
+        out += line;
+    }
+    return out;
 }
 
 Command order(uint8_t seat, uint32_t ant, int16_t x, int16_t y) {
@@ -565,6 +606,101 @@ void run_guest_tests() {
         trio.step(3000);
         ASSERT_TRUE(app.sim().state_hash() == bob.sim.state_hash());
         ASSERT_FALSE(app.net()->desynced());
+    } TEST_END();
+
+    TEST_CASE("N5.9 Teaming Over The Network: An Offer Reaches The Application As A Question, Accept Makes The Team Everywhere, Team Chat Reaches Only Allies, In The Sender's Colour") {
+        Peer host;
+        Peer bob;
+        Application app;
+        ASSERT_TRUE(start_three(host, bob, app, "Carol"));
+        Trio trio{app, host, bob};
+        ViewportCamera& camera = app.renderer().camera();
+        trio.step(1000);
+        // a team message of Alice before there is any team: the application is not her ally and never sees it
+        host.net.chat("secret plan", true);
+        trio.step(600);
+        ASSERT_FALSE(log_has(app.hud().get_chat_log(), "secret plan"));
+        // Bob offers the application's team a team: the offer goes through the turns and arrives as the original's question
+        Command invite;
+        invite.type = CommandType::AllianceInvite;
+        invite.other_player = 2;
+        ASSERT_EQ(bob.net.submit(invite).status, sim::CommandResult::Status::Applied);
+        ASSERT_TRUE(trio.until([&]() { return app.hud().alliance_dialog() == HUD::AllianceDialog::Invitation; }, 5000));
+        ASSERT_EQ(app.hud().alliance_dialog_team(), 1);
+        ASSERT_EQ(app.hud().alliance_dialog_text(), "Bob (Red) invites you to form a team.  Would you like to accept?");
+        ASSERT_TRUE(app.hud().is_modal_open());
+        // Accept (A): the answer is a command of the application's seat; every machine makes the team at the same turn
+        app.hud().handle_key_down('a', app.sim(), camera);
+        ASSERT_EQ(app.hud().alliance_dialog(), HUD::AllianceDialog::None);
+        ASSERT_TRUE(trio.until([&]() {
+            return app.sim().stats_manager().are_allies(1, 2) && bob.sim.stats_manager().are_allies(1, 2) && host.sim.stats_manager().are_allies(1, 2);
+        }, 5000));
+        trio.step(300);
+        ASSERT_EQ(app.hud().alliance_dialog(), HUD::AllianceDialog::None);                // the question does not come back
+        ASSERT_TRUE(log_joined(app.hud().get_chat_log()).find("Bob (Red) and Carol (Blue) are a team now!") != std::string::npos);   // the news flash, wrapped by the chat box
+        // Bob's team message reaches his ally in his team's colour (red, index 2); Alice's, sent to her team, still does not
+        bob.net.chat("we are allies", true);
+        host.net.chat("secret plan two", true);
+        trio.step(800);
+        const auto& log = app.hud().get_chat_log();
+        size_t header = log.size();
+        for (size_t i = 0; i < log.size(); ++i) {
+            if (log[i] == "Bob (To Teammate):") header = i;
+        }
+        ASSERT_TRUE(header < log.size());
+        ASSERT_EQ(app.hud().get_chat_line_colour(header), 2);
+        ASSERT_TRUE(log_has(log, "we are allies"));
+        ASSERT_FALSE(log_has(log, "secret plan"));
+        // the application's own team message goes to everybody through the host and is marked as a team message
+        app.hud().set_chat_input("hi Bob");
+        app.hud().send_chat(true);
+        trio.step(800);
+        bool bob_got = false;
+        for (const auto& c : bob.chats) bob_got = bob_got || (c.text == "hi Bob" && c.team && c.sender == 2);
+        ASSERT_TRUE(bob_got);
+        host.net.freeze();
+        trio.step(3000);
+        ASSERT_TRUE(app.sim().state_hash() == bob.sim.state_hash() && app.sim().state_hash() == host.sim.state_hash());
+        ASSERT_FALSE(app.net()->desynced());
+    } TEST_END();
+
+    TEST_CASE("N5.10 Teaming Over The Network: The Application Asks And Waits; A Refusal Closes The Waiting Dialog, Withdraw (W) Takes The Offer Back Everywhere") {
+        Peer host;
+        Peer bob;
+        Application app;
+        ASSERT_TRUE(start_three(host, bob, app, "Carol"));
+        Trio trio{app, host, bob};
+        ViewportCamera& camera = app.renderer().camera();
+        trio.step(1000);
+        app.hud().request_team_up(app.sim(), 1);                                          // the ally pedestal of Bob's hill
+        ASSERT_TRUE(trio.until([&]() { return app.hud().alliance_dialog() == HUD::AllianceDialog::Waiting; }, 5000));
+        ASSERT_EQ(app.hud().alliance_dialog_team(), 1);
+        ASSERT_EQ(app.hud().alliance_dialog_text(), "Waiting for Bob (Red) to respond to your offer to team up.");
+        ASSERT_EQ(bob.sim.get_world_state().pending_invite_from[1], 2);                   // Bob's simulation holds the offer as well
+        // Bob refuses: the waiting dialog closes, the status line says so
+        Command deny;
+        deny.type = CommandType::AllianceDeny;
+        deny.other_player = 2;
+        ASSERT_EQ(bob.net.submit(deny).status, sim::CommandResult::Status::Applied);
+        ASSERT_TRUE(trio.until([&]() { return app.hud().alliance_dialog() == HUD::AllianceDialog::None; }, 5000));
+        trio.step(300);
+        ASSERT_EQ(app.hud().status_line().text(), "Bob rejected teaming up");
+        ASSERT_FALSE(app.sim().stats_manager().are_allies(1, 2));
+        ASSERT_EQ(app.hud().alliance_dialog(), HUD::AllianceDialog::None);
+        // again, and this time the application takes the offer back with W
+        app.hud().request_team_up(app.sim(), 1);
+        ASSERT_TRUE(trio.until([&]() { return app.hud().alliance_dialog() == HUD::AllianceDialog::Waiting; }, 5000));
+        app.hud().handle_key_down('w', app.sim(), camera);
+        ASSERT_EQ(app.hud().alliance_dialog(), HUD::AllianceDialog::None);
+        ASSERT_TRUE(trio.until([&]() {
+            return app.sim().get_world_state().pending_invite_from[1] == 255 && bob.sim.get_world_state().pending_invite_from[1] == 255 &&
+                   host.sim.get_world_state().pending_invite_from[1] == 255;
+        }, 5000));
+        trio.step(300);
+        ASSERT_EQ(app.hud().alliance_dialog(), HUD::AllianceDialog::None);
+        host.net.freeze();
+        trio.step(3000);
+        ASSERT_TRUE(app.sim().state_hash() == bob.sim.state_hash() && app.sim().state_hash() == host.sim.state_hash());
     } TEST_END();
 }
 

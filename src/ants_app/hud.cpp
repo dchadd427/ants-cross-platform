@@ -155,6 +155,10 @@ void HUD::init(uint8_t local_player_id) {
     show_quit_dialog_ = false;
     show_quick_help_ = false;
     show_options_ = false;
+    close_alliance_dialog();
+    pending_break_ = PendingBreak{};
+    suppressed_invite_from_ = 255;
+    suppressed_wait_for_ = 255;
 
     // The hatch and ally pedestals are slot 1 as well
     hatch_button_.x = 482;
@@ -189,6 +193,7 @@ void HUD::update(const sim::WorldState& world, uint32_t delta_ticks) {
             show_match_start_modal_ = false;
         }
     }
+    update_alliance_dialog(world);
 
     // The input lock after a Stop (FUN_01028bdd): 250 ms without mouse input, then everything is deselected (FUN_01028c44(0))
     if (input_lock_ticks_ > 0) {
@@ -543,6 +548,8 @@ void HUD::render(IRenderer& renderer, const assets::AssetArchive& assets,
         render_options_dialog(renderer, assets);
     } else if (show_quit_dialog_) {
         render_quit_dialog(renderer, assets);
+    } else if (alliance_dialog_ != AllianceDialog::None) {
+        render_alliance_dialog(renderer, assets);
     } else if (show_match_start_modal_) {
         render_match_start_modal(renderer, assets);
     }
@@ -779,14 +786,10 @@ void HUD::render_news_banner(IRenderer& renderer, const assets::AssetArchive& as
     }
 }
 
-void HUD::render_quit_dialog(IRenderer& renderer, const assets::AssetArchive& assets) {
-    using assets::ColorRGBA;
-
-    // Quit dialog (Ants.exe 0x10142cb): no dim layer, origin (100,100) (OffsetRect(100,100) on the dialog's children)
+// The frame of the quit dialog and of the alliance dialogs: the 20 parts of Table-4 animation std_dialg, origin (100, 100), no dim layer
+static void draw_std_dialog(IRenderer& renderer, const assets::AssetArchive& assets) {
     const int32_t dx = 100;
     const int32_t dy = 100;
-
-    // Authentic std_dialg composite dialog (20 frame elements from Table 4)
     const auto* anim = assets.find_animation("std_dialg");
     if (anim && !anim->subitems.empty()) {
         const auto& frames = anim->subitems[0].frames;
@@ -795,8 +798,15 @@ void HUD::render_quit_dialog(IRenderer& renderer, const assets::AssetArchive& as
             renderer.draw_sprite(fr.sprite_index, dx + fr.dx, dy + fr.dy);
         }
     } else {
-        renderer.fill_rect(dx, dy, 320, 224, ColorRGBA{219, 75, 19, 255});
+        renderer.fill_rect(dx, dy, 320, 224, assets::ColorRGBA{219, 75, 19, 255});
     }
+}
+
+void HUD::render_quit_dialog(IRenderer& renderer, const assets::AssetArchive& assets) {
+    using assets::ColorRGBA;
+
+    // Quit dialog (Ants.exe 0x10142cb): no dim layer, origin (100,100) (OffsetRect(100,100) on the dialog's children)
+    draw_std_dialog(renderer, assets);
 
     // Prompt (string 99): a wrapped, centred label of 24 px letters in the rect (130,180) 260x160, colour (31,23,51) (FUN_010142cb: label (30,80),
     // 260x160, height 24, centred, moved by (100,100) with the dialog)
@@ -810,6 +820,183 @@ void HUD::render_quit_dialog(IRenderer& renderer, const assets::AssetArchive& as
     // No button at (292, 260)
     draw_animation_frame0(renderer, assets, no_button_.is_pressed ? "no3" : (no_button_.is_active ? "no2" : "no1"),
                           no_button_.x, no_button_.y);
+}
+
+// ------------------------------------------------------------------------------------------------
+// Alliance dialogs (Ants.exe FUN_01015b65 invitation, FUN_010160e2 waiting, FUN_01016438 confirmation; docs 5.42)
+// ------------------------------------------------------------------------------------------------
+
+std::string HUD::alliance_colour_word(uint8_t team) const {
+    return sim::strings::colour_name(static_cast<uint8_t>(3u - (team & 3u)));      // strings 100 - 103: black, blue, red, green by colour index
+}
+
+std::string HUD::alliance_name(uint8_t team) const {
+    return team < team_names_.size() && !team_names_[team].empty() ? team_names_[team] : alliance_colour_word(team);
+}
+
+void HUD::open_alliance_dialog(AllianceDialog kind, uint8_t other, std::string text) {
+    release_capture();
+    alliance_dialog_ = kind;
+    alliance_other_ = other;
+    alliance_text_ = std::move(text);
+    // the buttons are the original's animations (dad_bacc / dad_bdec, dw_bwith, dyn_byes / dyn_bno) whose single part sits at these offsets from the
+    // dialog's origin (100, 100)
+    alliance_button_a_ = {};
+    alliance_button_b_ = {};
+    switch (kind) {
+        case AllianceDialog::Invitation:
+            alliance_button_a_ = {152, 260, 80, 24, 0, 0, 0, false, true, false};      // Accept  (accpt1.bmp at part offset (52, 160))
+            alliance_button_b_ = {284, 260, 80, 24, 0, 0, 0, false, true, false};      // Decline (decl1.bmp at (184, 160))
+            break;
+        case AllianceDialog::Waiting:
+            alliance_button_a_ = {220, 260, 80, 23, 0, 0, 0, false, true, false};      // Withdraw (withd1.bmp at (120, 160))
+            break;
+        case AllianceDialog::BreakConfirm:
+            alliance_button_a_ = {180, 260, 49, 24, 0, 0, 0, false, true, false};      // Yes (yes1.bmp at (80, 160))
+            alliance_button_b_ = {292, 260, 49, 24, 0, 0, 0, false, true, false};      // No  (no1.bmp at (192, 160))
+            break;
+        case AllianceDialog::None:
+            break;
+    }
+}
+
+void HUD::close_alliance_dialog() noexcept {
+    alliance_dialog_ = AllianceDialog::None;
+    alliance_other_ = 255;
+    alliance_text_.clear();
+    alliance_replaces_team_ = false;
+    alliance_button_a_ = {};
+    alliance_button_b_ = {};
+}
+
+// The dialogs follow the simulation's state, not an event, so that they are the same on every machine of a network match and a dialog cannot be missed.
+// An answer takes a few turns to reach the simulation in a network match: the question or the waiting dialog of an offer that was just answered does not
+// come back meanwhile (`suppressed_*`). The original closes the dialogs of a team that dropped out (FUN_0100c4ed); the simulation clears its offers then.
+void HUD::update_alliance_dialog(const sim::WorldState& world) {
+    const uint8_t me = local_player_id_;
+    if (me >= sim::MAX_PLAYERS) return;
+    if (suppressed_invite_from_ != 255 && world.pending_invite_from[me] != suppressed_invite_from_) suppressed_invite_from_ = 255;
+    if (suppressed_wait_for_ != 255 && world.pending_invite_from[suppressed_wait_for_] != me) suppressed_wait_for_ = 255;
+    switch (alliance_dialog_) {
+        case AllianceDialog::Invitation:
+            if (world.pending_invite_from[me] != alliance_other_) close_alliance_dialog();
+            break;
+        case AllianceDialog::Waiting:
+            if (alliance_other_ >= sim::MAX_PLAYERS || world.pending_invite_from[alliance_other_] != me) close_alliance_dialog();
+            break;
+        case AllianceDialog::BreakConfirm:
+            if (world.player_alliances[me] != alliance_other_) {                      // nothing left to break
+                close_alliance_dialog();
+                pending_break_ = PendingBreak{};
+            }
+            break;
+        case AllianceDialog::None:
+            break;
+    }
+    if (alliance_dialog_ != AllianceDialog::None || is_modal_open()) return;          // one dialog at a time, none over another
+    const uint8_t from = world.pending_invite_from[me];
+    if (from < sim::MAX_PLAYERS && from != suppressed_invite_from_) {
+        const uint8_t old_ally = world.player_alliances[me];
+        const bool replaces = old_ally < sim::MAX_PLAYERS && old_ally != from;       // string 2 when accepting ends the present team
+        open_alliance_dialog(AllianceDialog::Invitation, from,
+                             replaces ? sim::strings::format(sim::strings::kInviteBreakDialog, alliance_name(from), alliance_colour_word(from),
+                                                             alliance_name(old_ally), alliance_colour_word(old_ally))
+                                      : sim::strings::format(sim::strings::kInviteDialog, alliance_name(from), alliance_colour_word(from)));
+        alliance_replaces_team_ = replaces;
+        return;
+    }
+    for (uint8_t t = 0; t < sim::MAX_PLAYERS; ++t) {
+        if (t != me && world.pending_invite_from[t] == me && t != suppressed_wait_for_) {
+            open_alliance_dialog(AllianceDialog::Waiting, t, sim::strings::format(sim::strings::kWaitingForAnswer, alliance_name(t), alliance_colour_word(t)));
+            return;
+        }
+    }
+}
+
+void HUD::render_alliance_dialog(IRenderer& renderer, const assets::AssetArchive& assets) {
+    using assets::ColorRGBA;
+    draw_std_dialog(renderer, assets);
+    // the label (30, 10) of the dialog, 24 px, centred, colour (31, 23, 51); 270 px wide in the invitation, 240 px in the other two
+    draw_label(renderer, alliance_text_, 130, 110, alliance_dialog_ == AllianceDialog::Invitation ? 270 : 240, ColorRGBA{31, 23, 51, 255}, FontSize::Px24, true);
+    auto button = [&](const UIButton& b, const char* up, const char* hover, const char* down) {
+        if (b.w > 0) draw_animation_frame0(renderer, assets, b.is_pressed ? down : (b.is_active ? hover : up), 100, 100);
+    };
+    switch (alliance_dialog_) {
+        case AllianceDialog::Invitation:
+            button(alliance_button_a_, "dad_bacc1", "dad_bacc2", "dad_bacc3");
+            button(alliance_button_b_, "dad_bdec1", "dad_bdec2", "dad_bdec3");
+            break;
+        case AllianceDialog::Waiting:
+            button(alliance_button_a_, "dw_bwith1", "dw_bwith2", "dw_bwith3");
+            break;
+        case AllianceDialog::BreakConfirm:
+            button(alliance_button_a_, "dyn_byes1", "dyn_byes2", "dyn_byes3");
+            button(alliance_button_b_, "dyn_bno1", "dyn_bno2", "dyn_bno3");
+            break;
+        case AllianceDialog::None:
+            break;
+    }
+}
+
+void HUD::answer_alliance_dialog(sim::SimulationEngine& sim, bool yes) {
+    const uint8_t me = local_player_id_;
+    const uint8_t other = alliance_other_;
+    auto command = [&](sim::CommandType type, uint8_t target = 255) {
+        sim::Command c;
+        c.type = type;
+        c.issuer = me;
+        c.other_player = target;
+        submit_command(sim, c);
+    };
+    const AllianceDialog kind = alliance_dialog_;
+    const bool replaces = alliance_replaces_team_;
+    PendingBreak pending = std::move(pending_break_);
+    pending_break_ = PendingBreak{};
+    close_alliance_dialog();
+    switch (kind) {
+        case AllianceDialog::Invitation:                                              // FUN_01016081
+            suppressed_invite_from_ = other;
+            if (yes) {
+                if (replaces) command(sim::CommandType::AllianceBreak);              // the present team is broken first (FUN_01010d26)
+                command(sim::CommandType::AllianceAccept, other);
+            } else {
+                command(sim::CommandType::AllianceDeny, other);
+            }
+            break;
+        case AllianceDialog::Waiting:                                                 // callback 0x10163f1: the offer is taken back
+            suppressed_wait_for_ = other;
+            command(sim::CommandType::AllianceWithdraw, other);
+            break;
+        case AllianceDialog::BreakConfirm:                                            // callbacks FUN_0100c838 and FUN_01020076
+            if (!yes) break;
+            command(sim::CommandType::AllianceBreak);
+            if (pending.action == PendingBreak::Action::Invite) {
+                command(sim::CommandType::AllianceInvite, pending.target);
+            } else if (pending.action == PendingBreak::Action::Attack) {
+                issue_group_order(sim, pending.tile, false, true, pending.ants);
+            }
+            break;
+        case AllianceDialog::None:
+            break;
+    }
+}
+
+void HUD::request_team_up(sim::SimulationEngine& sim, uint8_t target) {
+    const uint8_t me = local_player_id_;
+    if (me >= sim::MAX_PLAYERS || target >= sim::MAX_PLAYERS || target == me) return;
+    const uint8_t ally = sim.get_world_state().player_alliances[me];
+    if (ally < sim::MAX_PLAYERS) {                                                    // FUN_0100c7ac: with an ally the confirmation comes first
+        if (is_modal_open()) return;
+        pending_break_ = PendingBreak{PendingBreak::Action::Invite, target, {}, {}};
+        open_alliance_dialog(AllianceDialog::BreakConfirm, ally,
+                             sim::strings::format(sim::strings::kBreakTeamConfirm, alliance_name(ally), alliance_colour_word(ally)));
+        return;
+    }
+    sim::Command invite;                                                              // FUN_0100c838(1): the offer goes out
+    invite.type = sim::CommandType::AllianceInvite;
+    invite.issuer = me;
+    invite.other_player = target;
+    submit_command(sim, invite);
 }
 
 void HUD::render_match_start_modal(IRenderer& renderer, const assets::AssetArchive& assets) {
@@ -1168,6 +1355,18 @@ bool HUD::handle_mouse_down(int32_t x, int32_t y, uint8_t button,
     if (show_match_start_modal_) {
         return true; // Consume all clicks while match start modal is open
     }
+    if (alliance_dialog_ != AllianceDialog::None) {
+        if (button == SDL_BUTTON_LEFT) {
+            for (UIButton* b : {&alliance_button_a_, &alliance_button_b_}) {
+                if (b->w > 0 && b->contains(x, y)) {
+                    b->is_pressed = true;
+                    play_sfx(sim::SoundID::ButtonClick);
+                    return true;
+                }
+            }
+        }
+        return true;                                           // a dialog gets every click
+    }
     if (show_quit_dialog_) {
         if (button == SDL_BUTTON_LEFT) {
             if (yes_button_.contains(x, y)) {
@@ -1292,6 +1491,16 @@ bool HUD::handle_mouse_up(int32_t x, int32_t y, uint8_t button,
         return true;
     }
 
+    if (alliance_dialog_ != AllianceDialog::None) {
+        for (UIButton* b : {&alliance_button_a_, &alliance_button_b_}) {
+            if (!b->is_pressed) continue;
+            b->is_pressed = false;
+            if (b->contains(x, y)) answer_alliance_dialog(sim, b == &alliance_button_a_);      // the action runs at the release, on the button
+            return true;
+        }
+        return true;
+    }
+
     if (show_quit_dialog_) {
         if (yes_button_.is_pressed) {
             yes_button_.is_pressed = false;
@@ -1375,6 +1584,12 @@ bool HUD::handle_mouse_motion(int32_t x, int32_t y,
         return true;
     }
 
+    if (alliance_dialog_ != AllianceDialog::None) {
+        alliance_button_a_.is_active = alliance_button_a_.w > 0 && alliance_button_a_.contains(x, y);
+        alliance_button_b_.is_active = alliance_button_b_.w > 0 && alliance_button_b_.contains(x, y);
+        return true;
+    }
+
     if (show_quit_dialog_) {
         yes_button_.is_active = yes_button_.contains(x, y);
         no_button_.is_active = no_button_.contains(x, y);
@@ -1417,6 +1632,26 @@ bool HUD::input_tick(ViewportCamera& camera, uint32_t map_w, uint32_t map_h, int
 bool HUD::handle_key_down(int32_t key, sim::SimulationEngine& sim, ViewportCamera& camera, uint16_t mod, bool repeat) {
     // FUN_0102609a. A dialog takes every key first.
     if (show_match_start_modal_) return true;
+
+    if (alliance_dialog_ != AllianceDialog::None) {            // the dialogs' own key handlers (0x1016015, 0x10163d5, 0x1016761): a dialog takes every key
+        const bool esc = key == SDLK_ESCAPE;
+        switch (alliance_dialog_) {
+            case AllianceDialog::Invitation:                   // A = Accept, D and Esc = Decline
+                if (key == 'a' || key == 'A') answer_alliance_dialog(sim, true);
+                else if (key == 'd' || key == 'D' || esc) answer_alliance_dialog(sim, false);
+                break;
+            case AllianceDialog::Waiting:                      // W and Esc = Withdraw
+                if (key == 'w' || key == 'W' || esc) answer_alliance_dialog(sim, true);
+                break;
+            case AllianceDialog::BreakConfirm:                 // Y = Yes, N and Esc = No
+                if (key == 'y' || key == 'Y') answer_alliance_dialog(sim, true);
+                else if (key == 'n' || key == 'N' || esc) answer_alliance_dialog(sim, false);
+                break;
+            case AllianceDialog::None:
+                break;
+        }
+        return true;
+    }
 
     if (show_quit_dialog_) {                                   // Y = Yes, N and Esc = No, Enter does nothing
         if (key == 'y' || key == 'Y') {

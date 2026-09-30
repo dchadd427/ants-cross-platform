@@ -336,6 +336,9 @@ struct WorldState {
     std::array<int32_t, MAX_PLAYERS>          player_scores{};
     std::array<uint32_t, MAX_PLAYERS>         player_eggs{};
     std::array<uint8_t, MAX_PLAYERS>          player_alliances{};
+    /// [invitee]: the player whose invitation to form a team is waiting for the invitee's answer, 255 = none. The invitee's question and the
+    /// proposer's waiting dialog of the match screen follow from it (docs 5.42).
+    std::array<uint8_t, MAX_PLAYERS>          pending_invite_from{255, 255, 255, 255};
     std::vector<ants::assets::AnthillSpawn> anthills;
     MatchResult match_result;
 

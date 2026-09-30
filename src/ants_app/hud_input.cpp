@@ -239,8 +239,32 @@ uint32_t HUD::order_selected(sim::SimulationEngine& sim, sim::TileCoord tile, bo
     sim::AntType common = sim::AntType::Worker;
     slot2_attack_kind_ = homogeneous_type(world, common) && common == sim::AntType::Combat;
 
-    // The group order of the original (FUN_010287b5) as the player's command: the engine keeps only the issuer's own ants, checks the tile and
-    // answers with the ant that acknowledges
+    // An attack on the ally's ant or hill is not carried out at once: the ant asks first (FUN_0101ffab, called from the attack order FUN_0101fc50):
+    // "Doing this will break your team with ...". Yes ends the team and gives the order (FUN_01020076), No drops it. (The original keeps the order of
+    // the first ant only; here the whole group's order waits for the answer.)
+    const uint8_t ally = local_player_id_ < world.player_alliances.size() ? world.player_alliances[local_player_id_] : uint8_t{255};
+    if (attack && ally < sim::MAX_PLAYERS) {
+        bool at_ally = false;
+        for (const auto& a : world.ants) at_ally = at_ally || (a.player_id == ally && a.tile_x == tile.x && a.tile_y == tile.y);
+        for (const auto& hill : world.anthills) {
+            at_ally = at_ally || (hill.team_id == ally && tile.x >= static_cast<int32_t>(hill.x) && tile.x <= static_cast<int32_t>(hill.x) + 3 &&
+                                  tile.y >= static_cast<int32_t>(hill.y) && tile.y <= static_cast<int32_t>(hill.y) + 3);
+        }
+        if (at_ally) {
+            if (!is_modal_open()) {
+                pending_break_ = PendingBreak{PendingBreak::Action::Attack, ally, tile, targets};
+                open_alliance_dialog(AllianceDialog::BreakConfirm, ally,
+                                     sim::strings::format(sim::strings::kBreakTeamConfirm, alliance_name(ally), alliance_colour_word(ally)));
+            }
+            return 0;
+        }
+    }
+    return issue_group_order(sim, tile, special, attack, targets);
+}
+
+// The group order of the original (FUN_010287b5) as the player's command: the engine keeps only the issuer's own ants, checks the tile and answers with
+// the ant that acknowledges
+uint32_t HUD::issue_group_order(sim::SimulationEngine& sim, sim::TileCoord tile, bool special, bool attack, const std::vector<uint32_t>& targets) {
     sim::Command cmd;
     cmd.type = attack ? sim::CommandType::GroupAttack : special ? sim::CommandType::GroupSpecial : sim::CommandType::GroupMove;
     cmd.issuer = local_player_id_;
@@ -448,11 +472,7 @@ bool HUD::pedestal_press(sim::SimulationEngine& sim, int32_t x, int32_t y) {
             team_up_button_.is_pressed = true;
             play_sfx(sim::SoundID::NavButtonClick);
             flash_pedestal(0);
-            sim::Command invite;
-            invite.type = sim::CommandType::AllianceInvite;
-            invite.issuer = local_player_id_;
-            invite.other_player = static_cast<uint8_t>(selected_base_team_id_);
-            submit_command(sim, invite);
+            request_team_up(sim, static_cast<uint8_t>(selected_base_team_id_));      // FUN_0100c7ac
             return true;
         }
         return false;

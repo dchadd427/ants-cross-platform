@@ -14,6 +14,7 @@
 #include "ants_app/scorecard.hpp"
 #include "ants_app/text_layout.hpp"
 #include "ants_assets/asset_archive.hpp"
+#include "ants_sim/game_strings.hpp"
 #include "ants_sim/sim_engine.hpp"
 
 using namespace ants;
@@ -1142,6 +1143,313 @@ void test_label_wrap() {
     check(mono.drawn.size() == 1 && mono.drawn[0].x == 40 && mono.drawn[0].y == 50 && mono.drawn[0].size == FontSize::Px18, "draw_label: a left aligned label starts at the box's left edge");
 }
 
+// ------------------------------------------------------------------------------------------------------------------------------------------
+// The alliance dialogs (Ants.exe FUN_01015b65 / FUN_010160e2 / FUN_01016438): what the original shows, where, and what each answer does
+// ------------------------------------------------------------------------------------------------------------------------------------------
+
+// Four teams with a hill each in a test world (the ally pedestal needs more than two hills), named Alice, Bob, Carol and Dave
+struct AllianceTable {
+    sim::SimulationEngine sim;
+    ViewportCamera camera{0, 0};
+    std::vector<uint32_t> sounds;
+    AllianceTable() {
+        sim.init_test_world(60, 60, 5, 600000);
+        const sim::TileCoord hills[4] = {{4, 4}, {50, 4}, {4, 50}, {50, 50}};
+        for (uint8_t p = 0; p < 4; ++p) sim.grid_mut().set_anthill(p, hills[p]);
+        const char* names[4] = {"Alice", "Bob", "Carol", "Dave"};
+        for (uint8_t p = 0; p < 4; ++p) sim.set_player_name(p, names[p]);
+    }
+    void prepare(HUD& hud, uint8_t local) {
+        hud.init(local);
+        hud.set_team_names({"Alice", "Bob", "Carol", "Dave"});
+        hud.set_on_play_sfx([this](uint32_t id) { sounds.push_back(id); });
+    }
+    void refresh(HUD& hud) { hud.update(sim.get_world_state(), 1); }
+    static sim::Command command(sim::CommandType type, uint8_t issuer, uint8_t other = 255) {
+        sim::Command c;
+        c.type = type;
+        c.issuer = issuer;
+        c.other_player = other;
+        return c;
+    }
+    bool news_has(const std::string& text) {
+        bool found = false;
+        for (const auto& n : sim.poll_news_events()) found = found || n.message_text.find(text) != std::string::npos;
+        return found;
+    }
+};
+
+// A sink that keeps the commands until they are applied, like the turn of a network match
+struct DelayedSink : sim::CommandSink {
+    std::vector<sim::Command> held;
+    sim::CommandResult submit(const sim::Command& c) override {
+        held.push_back(c);
+        sim::CommandResult r;
+        r.status = sim::CommandResult::Status::Applied;
+        return r;
+    }
+};
+
+void test_alliance_dialog_layout(const assets::AssetArchive& arc) {
+    std::printf("[alliance] the question, the waiting dialog and the confirmation: text, buttons, hover and pressed art\n");
+    using D = HUD::AllianceDialog;
+    AllianceTable t;
+    HUD hud;
+    t.prepare(hud, 1);
+    t.sim.apply_command(AllianceTable::command(sim::CommandType::AllianceInvite, 0, 1));          // Alice asks Bob
+    t.refresh(hud);
+    check(hud.alliance_dialog() == D::Invitation && hud.alliance_dialog_team() == 0 && hud.is_modal_open(), "question: the invitee sees the invitation of Alice");
+    check(hud.alliance_dialog_text() == sim::strings::format(sim::strings::kInviteDialog, "Alice", "Green"), "question: string 1 with the name and the colour word");
+    {
+        RecordingRenderer rr(arc);
+        sim::WorldState world = t.sim.get_world_state();
+        hud.render(rr, arc, world, t.camera);
+        check(rr.has_sprite_at("dfram1.bmp", 100, 100), "question: the dialog frame at the origin (100, 100)");
+        check(rr.has_sprite_at("accpt1.bmp", 152, 260) && rr.has_sprite_at("decl1.bmp", 284, 260), "question: Accept at (152, 260) and Decline at (284, 260)");
+        bool all24 = !rr.texts.empty();
+        int64_t first_y = -1;
+        int lines = 0;
+        for (const auto& tx : rr.texts) {
+            if (tx.size != FontSize::Px24) continue;
+            ++lines;
+            if (first_y < 0) first_y = tx.y;
+            all24 = all24 && tx.y == first_y + (lines - 1) * 24 && tx.x >= 130 && tx.x + static_cast<int32_t>(tx.text.size()) * 6 <= 130 + 270;
+        }
+        check(lines >= 2 && first_y == 110 && all24, "question: the text is 24 px high, from y = 110, one cell per line, inside the 270 px box");
+    }
+    // hover and pressed art, the click sound at the press, the answer at the release
+    hud.handle_mouse_motion(160, 270, t.sim, t.camera);
+    {
+        RecordingRenderer rr(arc);
+        hud.render(rr, arc, t.sim.get_world_state(), t.camera);
+        check(rr.has_sprite_at("accpt2.bmp", 152, 260), "question: the hovered Accept shows accpt2");
+    }
+    t.sounds.clear();
+    hud.handle_mouse_down(160, 270, 1, t.sim, t.camera);
+    {
+        RecordingRenderer rr(arc);
+        hud.render(rr, arc, t.sim.get_world_state(), t.camera);
+        check(rr.has_sprite_at("accpt3.bmp", 152, 261), "question: the pressed Accept shows accpt3, one pixel lower (part offset (52, 161))");
+        check(t.sounds.size() == 1 && t.sounds[0] == sim::SoundID::ButtonClick, "question: the click sound plays at the press");
+    }
+    hud.handle_mouse_up(400, 400, 1, t.sim, t.camera);                                            // released elsewhere: cancelled
+    check(hud.alliance_dialog() == D::Invitation && !t.sim.stats_manager().are_allies(0, 1), "question: a release off the button does not answer");
+
+    // the waiting dialog of the proposer
+    HUD proposer;
+    t.prepare(proposer, 0);
+    t.refresh(proposer);
+    check(proposer.alliance_dialog() == D::Waiting && proposer.alliance_dialog_team() == 1, "waiting: the proposer waits for Bob");
+    check(proposer.alliance_dialog_text() == sim::strings::format(sim::strings::kWaitingForAnswer, "Bob", "Red"), "waiting: string 3 with the name and the colour word");
+    {
+        RecordingRenderer rr(arc);
+        proposer.render(rr, arc, t.sim.get_world_state(), t.camera);
+        check(rr.has_sprite_at("withd1.bmp", 220, 260), "waiting: Withdraw at (220, 260)");
+        check(rr.named("accpt1.bmp").empty() && rr.named("decl1.bmp").empty(), "waiting: no Accept and Decline");
+    }
+
+    // the confirmation before a team is broken
+    AllianceTable u;
+    u.sim.form_alliance(0, 2);
+    HUD leader;
+    u.prepare(leader, 0);
+    leader.request_team_up(u.sim, 1);                                                             // Alice (allied with Carol) offers Bob a team
+    check(leader.alliance_dialog() == D::BreakConfirm && leader.alliance_dialog_team() == 2, "confirmation: asked about the team with Carol");
+    check(leader.alliance_dialog_text() == sim::strings::format(sim::strings::kBreakTeamConfirm, "Carol", "Blue"), "confirmation: string 4 with the ally's name and colour word");
+    {
+        RecordingRenderer rr(arc);
+        leader.render(rr, arc, u.sim.get_world_state(), u.camera);
+        check(rr.has_sprite_at("yes1.bmp", 180, 260) && rr.has_sprite_at("no1.bmp", 292, 260), "confirmation: Yes at (180, 260) and No at (292, 260)");
+        check(u.sim.get_world_state().pending_invite_from[1] == 255, "confirmation: nothing is offered before the answer");
+    }
+}
+
+void test_alliance_answers(const assets::AssetArchive&) {
+    std::printf("[alliance] every answer and what it sends: accept, decline, withdraw, confirm, the keys, dropped teams, dialogs over dialogs\n");
+    using D = HUD::AllianceDialog;
+    using CT = sim::CommandType;
+    // Accept (A): the team is made, the texts and cues of the original, both dialogs close
+    {
+        AllianceTable t;
+        HUD alice, bob;
+        t.prepare(alice, 0);
+        t.prepare(bob, 1);
+        t.sim.apply_command(AllianceTable::command(CT::AllianceInvite, 0, 1));
+        t.refresh(alice);
+        t.refresh(bob);
+        t.sim.clear_audio_events();
+        bob.handle_key_down('a', t.sim, t.camera);
+        check(bob.alliance_dialog() == D::None && t.sim.stats_manager().are_allies(0, 1), "accept: A answers yes, the team is made");
+        check(t.sim.get_world_state().pending_invite_from[1] == 255, "accept: the offer is gone");
+        check(t.news_has("Alice (Green) and Bob (Red) are a team now!"), "accept: the News Flash of string 39");
+        t.refresh(alice);
+        check(alice.alliance_dialog() == D::None, "accept: the proposer's waiting dialog closes");
+        t.refresh(bob);
+        check(bob.alliance_dialog() == D::None, "accept: the question does not come back");
+    }
+    // Decline: D, Esc and the button; the proposer hears "rejected"
+    for (int way = 0; way < 3; ++way) {
+        AllianceTable t;
+        HUD alice, bob;
+        t.prepare(alice, 0);
+        t.prepare(bob, 1);
+        t.sim.apply_command(AllianceTable::command(CT::AllianceInvite, 0, 1));
+        t.refresh(alice);
+        t.refresh(bob);
+        if (way == 0) bob.handle_key_down('d', t.sim, t.camera);
+        if (way == 1) bob.handle_key_down(SDLK_ESCAPE, t.sim, t.camera);
+        if (way == 2) {
+            bob.handle_mouse_down(300, 270, 1, t.sim, t.camera);
+            bob.handle_mouse_up(300, 270, 1, t.sim, t.camera);
+        }
+        check(bob.alliance_dialog() == D::None && !t.sim.stats_manager().are_allies(0, 1), "decline (" + std::to_string(way) + "): no team");
+        check(t.sim.get_world_state().pending_invite_from[1] == 255, "decline (" + std::to_string(way) + "): the offer is gone");
+        check(t.news_has("Bob rejected teaming up"), "decline (" + std::to_string(way) + "): the proposer reads string 80");
+        t.refresh(alice);
+        check(alice.alliance_dialog() == D::None, "decline (" + std::to_string(way) + "): the waiting dialog closes");
+    }
+    // Withdraw: W and Esc take the offer back; the invitee's question closes and it reads "withdrew"
+    for (int way = 0; way < 2; ++way) {
+        AllianceTable t;
+        HUD alice, bob;
+        t.prepare(alice, 0);
+        t.prepare(bob, 1);
+        t.sim.apply_command(AllianceTable::command(CT::AllianceInvite, 0, 1));
+        t.refresh(alice);
+        t.refresh(bob);
+        alice.handle_key_down(way == 0 ? 'w' : SDLK_ESCAPE, t.sim, t.camera);
+        check(alice.alliance_dialog() == D::None && t.sim.get_world_state().pending_invite_from[1] == 255, "withdraw (" + std::to_string(way) + "): the offer is taken back");
+        check(t.news_has("Alice withdrew offer to team up"), "withdraw (" + std::to_string(way) + "): the invitee reads string 82");
+        t.refresh(bob);
+        check(bob.alliance_dialog() == D::None, "withdraw (" + std::to_string(way) + "): the question closes");
+    }
+    // Keys that mean nothing change nothing, the dialog takes every key
+    {
+        AllianceTable t;
+        HUD bob;
+        t.prepare(bob, 1);
+        t.sim.apply_command(AllianceTable::command(CT::AllianceInvite, 0, 1));
+        t.refresh(bob);
+        bool taken = true;
+        for (int key : std::vector<int>{'x', 'y', 'n', 'w', static_cast<int>(SDLK_RETURN), static_cast<int>(SDLK_F1)}) taken = taken && bob.handle_key_down(key, t.sim, t.camera);
+        check(taken && bob.alliance_dialog() == D::Invitation, "keys: the question only answers to A, D and Esc, and takes every key");
+        bob.handle_key_down('q', t.sim, t.camera, KMOD_CTRL);                                    // not even Ctrl+Q opens the quit dialog over it
+        check(!bob.is_quit_dialog_open(), "keys: no quit dialog over the question");
+    }
+    // A team is replaced: the question is string 2, Accept breaks the present team first (News Flash of string 40), then makes the new one
+    {
+        AllianceTable t;
+        t.sim.form_alliance(0, 2);
+        HUD alice;
+        t.prepare(alice, 0);
+        t.sim.apply_command(AllianceTable::command(CT::AllianceInvite, 3, 0));                    // Dave asks Alice, who is allied with Carol
+        t.refresh(alice);
+        check(alice.alliance_dialog() == D::Invitation && alice.alliance_dialog_text() ==
+                  sim::strings::format(sim::strings::kInviteBreakDialog, "Dave", "Black", "Carol", "Blue"), "replace: the question says that the team with Carol ends");
+        t.sim.poll_news_events();
+        alice.handle_key_down('a', t.sim, t.camera);
+        check(t.sim.stats_manager().are_allies(0, 3) && !t.sim.stats_manager().are_allies(0, 2) && !t.sim.stats_manager().are_allies(2, 3), "replace: Alice and Dave are a team, Carol is free");
+        check(t.news_has("are no longer a team!"), "replace: the old team's break is announced (string 40)");
+    }
+    // The confirmation: Yes breaks the team and sends the offer, No changes nothing; both the keys and the buttons
+    for (int way = 0; way < 3; ++way) {
+        AllianceTable t;
+        t.sim.form_alliance(0, 2);
+        HUD alice;
+        t.prepare(alice, 0);
+        alice.request_team_up(t.sim, 1);
+        check(alice.alliance_dialog() == D::BreakConfirm, "confirmation (" + std::to_string(way) + "): asks first");
+        if (way == 0) alice.handle_key_down('y', t.sim, t.camera);
+        if (way == 1) alice.handle_key_down(SDLK_ESCAPE, t.sim, t.camera);
+        if (way == 2) {
+            alice.handle_mouse_down(190, 270, 1, t.sim, t.camera);
+            alice.handle_mouse_up(190, 270, 1, t.sim, t.camera);
+        }
+        const bool yes = way != 1;
+        check(alice.alliance_dialog() == D::None, "confirmation (" + std::to_string(way) + "): the dialog closes");
+        check(t.sim.stats_manager().are_allies(0, 2) == !yes, "confirmation (" + std::to_string(way) + "): the team with Carol " + (yes ? "ends" : "stays"));
+        check((t.sim.get_world_state().pending_invite_from[1] == 0) == yes, "confirmation (" + std::to_string(way) + "): the offer to Bob " + (yes ? "is out" : "is not sent"));
+    }
+    // Without an ally the offer goes out at once; the pedestal of an enemy hill does it (only with more than two players)
+    {
+        AllianceTable t;
+        HUD alice;
+        t.prepare(alice, 0);
+        alice.select_base(1);
+        alice.handle_mouse_down(500, 190, 1, t.sim, t.camera);
+        alice.handle_mouse_up(500, 190, 1, t.sim, t.camera);
+        check(t.sim.get_world_state().pending_invite_from[1] == 0, "pedestal: the ally pedestal of an enemy hill sends the offer at once");
+        t.refresh(alice);
+        check(alice.alliance_dialog() == D::Waiting, "pedestal: and the waiting dialog follows");
+    }
+    // A dropped team takes its offers and dialogs with it
+    {
+        AllianceTable t;
+        HUD bob, alice;
+        t.prepare(bob, 1);
+        t.prepare(alice, 0);
+        t.sim.apply_command(AllianceTable::command(CT::AllianceInvite, 0, 1));
+        t.refresh(bob);
+        t.refresh(alice);
+        check(bob.alliance_dialog() == D::Invitation && alice.alliance_dialog() == D::Waiting, "drop: both dialogs are open");
+        t.sim.apply_command(AllianceTable::command(CT::Drop, 0));
+        t.refresh(bob);
+        t.refresh(alice);
+        check(bob.alliance_dialog() == D::None && t.sim.get_world_state().pending_invite_from[1] == 255, "drop: the question of a team that dropped closes");
+    }
+    // One dialog at a time: the question waits while another dialog is open
+    {
+        AllianceTable t;
+        HUD bob;
+        t.prepare(bob, 1);
+        bob.open_quit_dialog();
+        t.sim.apply_command(AllianceTable::command(CT::AllianceInvite, 0, 1));
+        t.refresh(bob);
+        check(bob.alliance_dialog() == D::None && bob.is_quit_dialog_open(), "queue: no question over the quit dialog");
+        bob.close_quit_dialog();
+        t.refresh(bob);
+        check(bob.alliance_dialog() == D::Invitation, "queue: the question comes when the quit dialog is closed");
+    }
+    // In a network match the answer reaches the simulation a few turns later: the question does not come back meanwhile
+    {
+        AllianceTable t;
+        HUD bob;
+        t.prepare(bob, 1);
+        DelayedSink sink;
+        bob.set_command_sink(&sink);
+        t.sim.apply_command(AllianceTable::command(CT::AllianceInvite, 0, 1));
+        t.refresh(bob);
+        bob.handle_key_down('a', t.sim, t.camera);
+        t.refresh(bob);
+        check(bob.alliance_dialog() == D::None && sink.held.size() == 1 && sink.held[0].type == CT::AllianceAccept && sink.held[0].other_player == 0 &&
+                  sink.held[0].issuer == 1, "network: Accept is handed to the turn manager with the proposer, and the question stays away");
+        for (const auto& c : sink.held) t.sim.apply_command(c);                                   // the turn executes it
+        t.refresh(bob);
+        check(bob.alliance_dialog() == D::None && t.sim.stats_manager().are_allies(0, 1), "network: the team is made when the turn comes");
+        // a new offer from somebody else opens a new question
+        t.sim.apply_command(AllianceTable::command(CT::AllianceInvite, 2, 1));
+        t.refresh(bob);
+        check(bob.alliance_dialog() == D::Invitation && bob.alliance_dialog_team() == 2, "network: a later offer asks again");
+    }
+    // The commands of a confirmed attack on the ally: the team is broken first, then the order is given
+    {
+        AllianceTable t;
+        t.sim.form_alliance(0, 1);
+        const uint32_t mine = t.sim.spawn_unit(0, sim::AntType::Worker, sim::TileCoord{20, 20});
+        t.sim.spawn_unit(1, sim::AntType::Worker, sim::TileCoord{22, 20});
+        HUD alice;
+        t.prepare(alice, 0);
+        DelayedSink sink;
+        alice.set_command_sink(&sink);
+        alice.select_ant(mine, false);
+        alice.order_selected(t.sim, sim::TileCoord{22, 20}, false, true);
+        check(alice.alliance_dialog() == D::BreakConfirm && sink.held.empty(), "attack on the ally: the order waits for the answer");
+        alice.handle_key_down('y', t.sim, t.camera);
+        check(sink.held.size() == 2 && sink.held[0].type == CT::AllianceBreak && sink.held[1].type == CT::GroupAttack && sink.held[1].tile_x == 22,
+              "attack on the ally: Yes sends the break and then the attack");
+    }
+}
+
 } // namespace
 
 int main() {
@@ -1165,6 +1473,8 @@ int main() {
     test_button_states(arc);
     test_text_sizes(arc);
     test_label_wrap();
+    test_alliance_dialog_layout(arc);
+    test_alliance_answers(arc);
     std::printf("\nhud layout: %d checks, %d failures\n", g_checks, g_failures);
     return g_failures == 0 ? 0 : 1;
 }

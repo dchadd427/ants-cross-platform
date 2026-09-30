@@ -203,7 +203,9 @@ public:
     // are the map's size in tiles. Returns true when the view moved. Nothing happens while a dialog is open or the left button is captured.
     bool input_tick(ViewportCamera& camera, uint32_t map_w, uint32_t map_h, int32_t mouse_x, int32_t mouse_y);
     /// A dialog (options, quit, quick help, the "get ready" modal) is open: it gets all input, the hover and scroll logic does not run.
-    bool is_modal_open() const noexcept { return show_options_ || show_quit_dialog_ || show_quick_help_ || show_match_start_modal_; }
+    bool is_modal_open() const noexcept {
+        return show_options_ || show_quit_dialog_ || show_quick_help_ || show_match_start_modal_ || alliance_dialog_ != AllianceDialog::None;
+    }
     /// The left button is captured by the map (a rubber band), the minimap or a button (`[5534]` != 0): no edge scrolling then.
     bool is_input_captured() const noexcept;
 
@@ -312,6 +314,18 @@ public:
     bool is_show_hp() const noexcept { return show_hp_; }
     void set_show_hp(bool show) noexcept { show_hp_ = show; }
 
+    /// The alliance dialogs (Ants.exe FUN_01015b65 invitation, FUN_010160e2 waiting, FUN_01016438 confirmation; docs 5.42). They follow from the state of the
+    /// simulation, never from an event: the invitee sees the question while an offer to it is pending (Accept / Decline; keys A, D, Esc), the proposer sees the
+    /// waiting dialog while its offer is pending (Withdraw; keys W, Esc), and a team that is about to be broken (a new offer while allied, an attack on the
+    /// ally) asks first (Yes / No; keys Y, N, Esc). Only one dialog is open at a time and none opens while another dialog is.
+    enum class AllianceDialog : uint8_t { None, Invitation, Waiting, BreakConfirm };
+    AllianceDialog alliance_dialog() const noexcept { return alliance_dialog_; }
+    /// The other team of the open dialog: the proposer (Invitation), the invitee (Waiting), the ally that would be left (BreakConfirm)
+    uint8_t alliance_dialog_team() const noexcept { return alliance_other_; }
+    const std::string& alliance_dialog_text() const noexcept { return alliance_text_; }
+    /// The ally pedestal's click (FUN_0100c7ac): without an ally the offer goes out at once, with one the confirmation comes first
+    void request_team_up(sim::SimulationEngine& sim, uint8_t target);
+
     bool is_match_start_modal_active() const noexcept { return show_match_start_modal_; }
     void start_match_modal() noexcept { release_capture(); show_match_start_modal_ = true; match_start_modal_ticks_ = 0; }
     void dismiss_match_start_modal() noexcept { show_match_start_modal_ = false; }
@@ -324,6 +338,14 @@ private:
     void render_radar(IRenderer& renderer, const assets::AssetArchive& assets, const sim::WorldState& world, const ViewportCamera& camera);
     void render_news_banner(IRenderer& renderer, const assets::AssetArchive& assets, const sim::WorldState& world);
     void render_quit_dialog(IRenderer& renderer, const assets::AssetArchive& assets);
+    void render_alliance_dialog(IRenderer& renderer, const assets::AssetArchive& assets);
+    void update_alliance_dialog(const sim::WorldState& world);
+    void open_alliance_dialog(AllianceDialog kind, uint8_t other, std::string text);
+    void close_alliance_dialog() noexcept;
+    /// The answer of the open dialog: Accept / Withdraw / Yes (`yes` true) or Decline / No; sends the commands of the original's callbacks
+    void answer_alliance_dialog(sim::SimulationEngine& sim, bool yes);
+    std::string alliance_name(uint8_t team) const;
+    std::string alliance_colour_word(uint8_t team) const;
     void render_quick_help(IRenderer& renderer, const assets::AssetArchive& assets);
     void render_options_dialog(IRenderer& renderer, const assets::AssetArchive& assets);
     void render_match_start_modal(IRenderer& renderer, const assets::AssetArchive& assets);
@@ -448,6 +470,25 @@ private:
     UIButton yes_button_{};
     UIButton no_button_{};
     std::function<void()> on_quit_{nullptr};
+
+    AllianceDialog alliance_dialog_{AllianceDialog::None};
+    uint8_t alliance_other_{255};
+    bool alliance_replaces_team_{false};         // Invitation: accepting ends the invitee's present team (string 2): the team is broken first
+    std::string alliance_text_;
+    UIButton alliance_button_a_{};               // Accept / Withdraw / Yes
+    UIButton alliance_button_b_{};               // Decline / No
+    /// What a confirmed BreakConfirm goes on with (the callbacks FUN_0100c838 and FUN_01020076 of the original)
+    struct PendingBreak {
+        enum class Action : uint8_t { None, Invite, Attack };
+        Action action{Action::None};
+        uint8_t target{255};
+        sim::TileCoord tile{};
+        std::vector<uint32_t> ants;
+    };
+    PendingBreak pending_break_;
+    uint8_t suppressed_invite_from_{255};        // an offer that was just answered: its question does not come back until the simulation has cleared it
+    uint8_t suppressed_wait_for_{255};           // the same for the waiting dialog of an offer that was just withdrawn
+    uint32_t issue_group_order(sim::SimulationEngine& sim, sim::TileCoord tile, bool special, bool attack, const std::vector<uint32_t>& targets);
 
     bool show_quick_help_{false};
     bool show_options_{false};

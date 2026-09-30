@@ -149,6 +149,11 @@ void SimulationEngine::drop_player(uint8_t player_id) {
         impl_->set_action(*a, AntUnit::kActionDeath, static_cast<uint8_t>(a->facing), -1, -1, false);
     }
     impl_->stats_.break_alliance(player_id);
+    // an offer of the team or to the team is gone with it (the original closes the question and the waiting dialog of a dropped team, FUN_0100c4ed)
+    for (uint8_t p = 0; p < MAX_PLAYERS; ++p) {
+        const AllianceInvite& invite = impl_->stats_.get_pending_invite(p);
+        if (invite.active && (p == player_id || invite.from_player == player_id)) impl_->stats_.clear_pending_invite(p);
+    }
     impl_->hatch_[player_id].active = false;
     impl_->world_state_dirty_ = true;
 }

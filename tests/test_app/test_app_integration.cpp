@@ -5072,21 +5072,31 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         ViewportCamera camera{0, 0};
         hud.select_ant(w_id, false);
 
-        // Hover over an ally with an own ant selected: the cursor is the attack cursor (there is no alliance test in FUN_01026aa3); the
-        // original asks "attack your ally?" (FUN_0101ffab) when the order is given, the remake answers with a walk next to the ally
+        // Hover over an ally with an own ant selected: the cursor is the attack cursor (there is no alliance test in FUN_01026aa3); when the order is
+        // given the original asks (FUN_0101ffab): "Doing this will break your team with ...  Continue?"
         int32_t ally_screen_x = PLAYFIELD_X + (8 * 32 + 16);
         int32_t ally_screen_y = PLAYFIELD_Y + (8 * 32 + 16);
         CursorType c_ally = hud.evaluate_cursor(ally_screen_x, ally_screen_y, sim.get_world_state(), sim.grid(), camera);
         ASSERT_EQ(c_ally, CursorType::Attack);
 
-        // Click ally ant: ant walks over to an adjacent neighbor of ally instead of attacking
+        // Click the ally's ant: nothing moves, the confirmation opens; No (N) drops the order and keeps the team
         hud.handle_mouse_down(ally_screen_x, ally_screen_y, 1, sim, camera, 0);
         hud.handle_mouse_up(ally_screen_x, ally_screen_y, 1, sim, camera, 0);
-        ASSERT_EQ(w_ant.state, UnitState::Walking);
-        ASSERT_NE(w_ant.final_dest, (TileCoord{8, 8})); // Not directly on ally's tile
-        // Final destination must be an adjacent Chebyshev neighbor (Chebyshev dist == 1)
-        int32_t c_dist = std::max(std::abs(w_ant.final_dest.x - 8), std::abs(w_ant.final_dest.y - 8));
-        ASSERT_EQ(c_dist, 1);
+        ASSERT_EQ(w_ant.state, UnitState::Idle);
+        ASSERT_EQ(hud.alliance_dialog(), HUD::AllianceDialog::BreakConfirm);
+        ASSERT_TRUE(sim.stats_manager().are_allies(0, 1));
+        hud.handle_key_down('n', sim, camera);
+        ASSERT_EQ(hud.alliance_dialog(), HUD::AllianceDialog::None);
+        ASSERT_TRUE(sim.stats_manager().are_allies(0, 1));
+        ASSERT_EQ(w_ant.state, UnitState::Idle);
+        // Again, and Yes (Y): the team is broken and the attack order is carried out
+        hud.handle_mouse_down(ally_screen_x, ally_screen_y, 1, sim, camera, 0);
+        hud.handle_mouse_up(ally_screen_x, ally_screen_y, 1, sim, camera, 0);
+        ASSERT_EQ(hud.alliance_dialog(), HUD::AllianceDialog::BreakConfirm);
+        hud.handle_key_down('y', sim, camera);
+        ASSERT_EQ(hud.alliance_dialog(), HUD::AllianceDialog::None);
+        ASSERT_FALSE(sim.stats_manager().are_allies(0, 1));
+        ASSERT_EQ(w_ant.state, UnitState::Walking);                                       // on its way to attack
 
         // 3. Map Select Screen Vertical Centering Formula
         Renderer renderer;
@@ -6502,10 +6512,10 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
 
     TEST_CASE("12.108: Version Invariant & Fog of War Cursor Concealment Parity") {
         // 1. Verify semantic versioning components
-        ASSERT_EQ(ants::VERSION_STRING, "v0.0.49");
+        ASSERT_EQ(ants::VERSION_STRING, "v0.0.50");
         ASSERT_EQ(ants::VERSION_MAJOR, 0);
         ASSERT_EQ(ants::VERSION_MINOR, 0);
-        ASSERT_EQ(ants::VERSION_PATCH, 49);
+        ASSERT_EQ(ants::VERSION_PATCH, 50);
 
         // 2. Setup simulation world with Fog of War enabled
         SimulationEngine sim;

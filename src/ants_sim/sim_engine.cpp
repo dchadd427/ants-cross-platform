@@ -685,6 +685,7 @@ std::string SimulationEngine::get_player_name(uint8_t player_id) const {
 void SimulationEngine::propose_alliance(uint8_t from_player, uint8_t to_player) {
     if (from_player >= MAX_PLAYERS || to_player >= MAX_PLAYERS || from_player == to_player) return;
     impl_->stats_.set_pending_invite(to_player, from_player, static_cast<uint32_t>(impl_->current_tick_ + 200));
+    impl_->world_state_dirty_ = true;
     impl_->audio_queue_.push_back(AudioEvent{SoundID::AlliancePro, 0, 0, 1, to_player});
     const uint8_t old_ally = impl_->stats_.get_alliance(to_player);
     NewsEvent ev;
@@ -707,6 +708,7 @@ void SimulationEngine::withdraw_alliance_offer(uint8_t from_player, uint8_t to_p
     const auto& invite = impl_->stats_.get_pending_invite(to_player);
     if (!invite.active || invite.from_player != from_player) return;
     impl_->stats_.clear_pending_invite(to_player);
+    impl_->world_state_dirty_ = true;
     impl_->post_news(to_player, strings::kTeamWithdrawn, impl_->player_display_name(from_player));       // FUN_0100c5fa, 0x100c73a
 }
 
@@ -727,11 +729,14 @@ void SimulationEngine::accept_alliance(uint8_t responding_player, uint8_t propos
     impl_->post_news(255, strings::kTeamMade);
 }
 
-// FUN_0100c36b, the refusal: the proposer reads 80 "%s rejected teaming up" and hears allynot.
+// FUN_0100c36b, the refusal: the proposer reads 80 "%s rejected teaming up" and hears allynot (0x100c4bc); the decliner hears it as well (the answer
+// message 0x1c is executed on its machine too, 0x1023c53).
 void SimulationEngine::deny_alliance(uint8_t responding_player, uint8_t proposing_player) {
     if (responding_player >= MAX_PLAYERS || proposing_player >= MAX_PLAYERS) return;
     impl_->stats_.clear_pending_invite(responding_player);
+    impl_->world_state_dirty_ = true;
     impl_->audio_queue_.push_back(AudioEvent{SoundID::AllianceNot, 0, 0, 1, proposing_player});
+    impl_->audio_queue_.push_back(AudioEvent{SoundID::AllianceNot, 0, 0, 1, responding_player});           // 0x1023c53: the decliner's own machine plays the same cue
     impl_->post_news(proposing_player, strings::kTeamRejected, impl_->player_display_name(responding_player));
 }
 
@@ -853,6 +858,8 @@ const WorldState& SimulationEngine::get_world_state() const {
             impl_->world_state_cache_.player_scores[i] = impl_->stats_.get_display_score(i);
             impl_->world_state_cache_.player_eggs[i] = impl_->stats_.get_egg_count(i);
             impl_->world_state_cache_.player_alliances[i] = impl_->stats_.get_alliance(i);
+            const AllianceInvite& invite = impl_->stats_.get_pending_invite(i);
+            impl_->world_state_cache_.pending_invite_from[i] = invite.active && invite.from_player < MAX_PLAYERS ? invite.from_player : uint8_t{255};
         }
 
         impl_->world_state_cache_.anthills = impl_->grid_.anthills();

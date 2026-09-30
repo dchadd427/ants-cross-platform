@@ -647,6 +647,10 @@ Combat Ants (`ac`) are the **sole unit type in *Ants* equipped with autonomous A
 
 ### 5.11 Teaming Up & In-Game Alliances (`0x01023f9f`, `0x01028f04`)
 
+> **Corrected in v0.0.50** (the text below is the early, paraphrased version): the verified texts, dialogs, cues and keys are in 5.42 and 5.44. The real strings are 1 "%s (%s) invites you to form a team.  Would you like to
+> accept?", 39 "%s (%s) and %s (%s) are a team now!", 40 "%s (%s) and %s (%s) are no longer a team!", 80 "%s rejected teaming up" (there is no "declined" text); a team is proposed with the ally pedestal of the other team's
+> hill (not by clicking the hill), and a player who is already in a team is asked to confirm first (string 4).
+
 Matches in *Ants* commence in a default **Free-For-All (FFA)** configuration, where every player operates as an independent faction (`ally_id = 4`). During active gameplay, players can negotiate and establish in-game alliances dynamically through an interactive invite/response protocol.
 
 #### 1. Alliance Invitation Protocol & Audio Routing
@@ -768,7 +772,7 @@ for every text of the game, which is why the start dialog's text was a third of 
   | `FUN_01017127` | start dialog: "Get ready to play!  You are the %s Ants." (string 105), wrapped and centred | 30, 10, 240 x 160 | **35** |
   | same | "Waiting for others..." (string 104), centred | 30, 190, 240 x 20 | 24 |
   | `FUN_010142cb` | quit dialog: "Do you really want to quit?" (string 99), wrapped and centred | 30, 80, 260 x 160 | 24 |
-  | `FUN_01015b65` / `FUN_010160e2` / `FUN_01016438` | alliance dialogs: invitation (strings 1 / 2), waiting (3), third dialog; wrapped and centred | 30, 10, 270 / 240 x 160 | 24 |
+  | `FUN_01015b65` / `FUN_010160e2` / `FUN_01016438` | alliance dialogs: invitation (strings 1 / 2), waiting (3), break confirmation (4); wrapped and centred | 30, 10, 270 / 240 x 160 | 24 |
   | `FUN_01016dfc` | single player notice (string 76) | 30, 150, 580 x 160 | 24 |
   | `FUN_01016aa2` | home page dialog (string 95) | 20, 30, 290 x 100 | 18 |
   | `FUN_0101681b` | one line message | 10, 200, 600 x 20 | 18 |
@@ -824,7 +828,7 @@ Reverse engineering of `ants.chd` animation tables (Table 4) and HUD state handl
   - **Recessed Status Box (`wstatus.bmp` at `(480, 253)`):** The recessed status bar is rendered but left completely blank/empty when the selected enemy colony is not allied. When an alliance is active, it indicates `"Allied Colony"`.
 - **Interaction Logic:**
   - Clicking Pedestal 1 (`team_up_button_` at `(488, 140, 53, 86)`) sends an alliance proposal to the enemy team (`SoundID::AlliancePro`).
-  - Once allied, clicking Pedestal 1 dissolves the alliance (`SoundID::AllianceBreak`).
+  - Once allied with that team the pedestal is not offered (5.44: slot 1 only while not allied, with more than two players); a player who already has another ally is asked to confirm first (string 4, 5.42).
 
 ### 5.16 Authentic Team HUD Palettes, Frame Remapping & Score Background Geometry
 
@@ -1877,7 +1881,7 @@ Checked by `tests/test_app/test_status_messages.cpp` (alliance, chat log, chat r
   simulation posts every message with its channel (`NewsEvent::channel`: status, chat log, or a dialog for the invitation question), so the HUD needs no text of its own.
 * **The alliance protocol** *(strings 1 - 4 and 39, 40, 46, 75, 80 - 82, `FUN_0100c36b`, `FUN_0100c5fa`, message 0x1d `FUN_01023c87`)*: the invitee gets a modal question (string 1, or string 2 when accepting would end
   its present team) and the allypro cue (51); the proposer waits (string 3). The answer reaches the proposer as a status: 81 "%s accepted teaming up" (0x100c42b) or 80 "%s rejected teaming up" (0x100c494) with the
-  allynot cue (52, 0x100c4bc); a proposer that takes the offer back tells the invitee 82 "%s withdrew offer to team up" (0x100c73a). A team that is made is announced to every client by message 0x1d kind 1: the allyon cue (50),
+  allynot cue (52, 0x100c4bc; the decliner hears it too, 0x1023c53); a proposer that takes the offer back tells the invitee 82 "%s withdrew offer to team up" (0x100c73a). A team that is made is announced to every client by message 0x1d kind 1: the allyon cue (50),
   the News Flash of string 39 "%s (%s) and %s (%s) are a team now!" (proposer's name and colour, then the other's, 0x1023d5c) and the flashing status 75 "A team has been made." (0x1023dbb); the allyyes cue (53) is the answering
   player's own click sound. A team that is broken is announced by kind 2: the allyoff cue (49) always, and the News Flash of string 40 "%s (%s) and %s (%s) are no longer a team!" (the breaker and its old ally, 0x1023ea5)
   only when the breaker had an ally. Names are the players' names (`W+0x5220 + team * 0x3c`), the colour words are strings 100 - 103 (black, blue, red, green by colour index); the remake's players 0 - 3 are green, red, blue
@@ -1888,9 +1892,32 @@ Checked by `tests/test_app/test_status_messages.cpp` (alliance, chat log, chat r
   The input box holds 100 characters (0x100dd85); a message is sent through `FUN_010103eb(toTeam)` (message 0x23, executed locally so the sender sees his own line) only when the option "Participate In Chat" is on; F9 - F12 send
   the quick-chat texts (default strings 18 - 21) to all; the receive handler (0x102411a) drops everything when the option is off and shows a team message only to its sender and to the players whose ally the sender is. There is
   no chat sound (the cues chatsnd / chatsnda exist but nothing plays them).
+* **The three answer dialogs** *(v0.0.50; `FUN_01015b65` invitation, `FUN_010160e2` waiting, `FUN_01016438` confirmation; vtables 0x1002930 / 0x1002970 and the confirmation's, kind byte 1 / 2 / 3)*: every dialog is
+  modal (the window stack `W+0x4a94`: while one is open every key and mouse event goes to it), shows the art `std_dialg` at (100, 100) like the quit dialog, one label at (30, 10) of 24 px, centred, colour (31, 23, 51)
+  (`0x33171f`), and buttons of the button class `FUN_01010fcb` whose animations have three frames (up, hover, pressed) with one part each at a fixed offset from the dialog's origin.
+  - *Invitation* (kind 1): string 1, or string 2 ("... This will remove you from the team you have with %s (%s).  Would you like to accept?") when the invitee already has another ally (`[localteam+0x68] != 4`); the two
+    names are the proposer's and the ally's name and colour word; label 270 x 160. Accept (`dad_bacc1..3`, `accpt1.bmp`, part offset (52, 160), on screen (152, 260) 80 x 24) and Decline (`dad_bdec1..3`, `decl1.bmp`,
+    (184, 160), on screen (284, 260) 80 x 24). Key handler 0x1016015: **A** accepts, **D** and **Esc** decline. `FUN_01016081(answer)`: yes with string 2 first breaks the present team (`FUN_01010d26`), then the
+    answer message 0x1c is built (`FUN_01023bb9(proposer, invitee, answer)`) and dispatched (`FUN_0100d791`; its handler 0x1023bde runs on both machines: the proposer's calls `FUN_0100c36b`, which shows 81 / 80, makes the
+    team or plays allynot, and pops its waiting dialog off the window stack; the invitee's sets its ally, announces the team and plays allyyes, or plays allynot), and the button callback pops the dialog off the window
+    stack (`FUN_01012bd7`, callbacks 0x1016045 / 0x1016063).
+  - *Waiting* (kind 2), the proposer's: string 3, label 240 x 160; one button Withdraw (`dw_bwith1..3`, `withd1.bmp`, (120, 160), on screen (220, 260) 80 x 23; callback 0x10163f1 -> `FUN_0100c5fa`, the invitee reads
+    string 82). Keys (0x10163d5): **W** and **Esc**. It closes when the answer arrives (`FUN_0100c36b` pops it, 0x100c4d2, but only while the top window of the stack is this waiting dialog of the answering team: otherwise
+    the answer is dropped altogether) or when it is withdrawn.
+  - *Confirmation* (kind 3): string 4 ("Doing this will break your team with %s (%s).  Continue?", the ally's name and colour word), label 240 x 160; Yes (`dyn_byes1..3`, `yes1.bmp`, (80, 160), on screen (180, 260)
+    49 x 24; callback 0x10167d5) and No (`dyn_bno1..3`, `no1.bmp`, (192, 160), on screen (292, 260) 49 x 24; callback 0x101678f). Keys (0x1016761): **Y** = Yes, **N** and **Esc** = No. Two things open it: the
+    ally pedestal of another team's hill while the local team has an ally (`FUN_0100c7ac`; Yes breaks the team and sends the offer, `FUN_0100c838(1)`), and an attack order on a tile that holds an ant of the local
+    ally or the ally's hill (`FUN_0101ffab`, called from the attack order `FUN_0101fc50`; Yes breaks the team and gives the order, `FUN_01020076`; No drops the order).
+  - *Remake*: `HUD::update_alliance_dialog` opens the dialogs from the simulation's state (`WorldState::pending_invite_from`: who has an offer for whom), not from an event, so that a dialog cannot be missed and is the same
+    on every machine of a match; the answers are the commands `AllianceAccept / Deny / Withdraw / Break` (+ `AllianceInvite` or the attack order after the confirmation) through the lock-step layer. While an answer is on
+    its way through the turns the question does not come back. A player that drops out takes its offers with it (the original closes the dialogs of a dropped team, `FUN_0100c4ed`). Checked by `test_hud_layout`
+    (`test_alliance_dialog_layout`, `test_alliance_answers`), integration 12.62 and the three-machine tests N5.9 / N5.10 of `test_network_app`.
+  - *Deviations* *(recorded)*: the simulation keeps one pending offer per invitee (the original stacks several invitation windows and shows the top one); the remake shows one dialog at a time and none over
+    another dialog (a question that arrives while the waiting dialog is open appears when that one closes); after the attack confirmation the remake gives the order to the whole selected group (the original
+    re-issues the first ant's order only).
 * **Not ported here** *(recorded)*: the All / Team buttons as immediate send actions and Enter sending to the team when the local player has an ally (the remake keeps a toggle; input stage), the pixel scrolling of the log (5 px
   per 50 ms towards the bottom, drag scroll +-15 px per 100 ms; the remake follows in whole 12 px lines), the exact wrap width with the original's font (the remake wraps at 21 characters / 126 px at 6 px per character and
-  clips each line to its box), the answer dialogs themselves (network stage), and the AI-diplomacy auto-accept that the remake still runs (rule 8; to be removed with the network stage).
+  clips each line to its box). The AI-diplomacy auto-accept is gone (5.46): an offer waits for its invitee's answer.
 * **Removed as invented** (v0.0.39): the texts "Alliance proposed / formed! / declined / broken!", the drop-out as a status, the "(Team):" header, the 120-character input, the 50-line chat cap, the 27-character single-colour
   lines and the "System" chat entry.
 
@@ -1962,7 +1989,7 @@ Addresses are virtual addresses in `Original-Ants/Ants.exe`. Implemented in `src
   `FUN_010287b5(tile, special 0, attack 0)`. Mode 4: `(tile, 1, 0)`. Mode 5: `(tile of the ant found by FUN_01026904, 0, 1)`: the attack goes to the ant's registered tile, not the clicked one. Mode 6: ignored. Modes 3, 4, 5
   and 7 always spawn the `xmarks` marker at the raw pixel, even when the order is refused. After an accepted order the pedestal feedback is: move: slot 1 pops up when latched, else BTNPUSH(1); special: slot 2 pops up
   when latched, else BTNPUSH(kind of slot 2); attack: slot 1 pops up when latched, else slot 2 when latched and its kind is 3 (combat ant), a latched slot 2 of another kind stays and BTNPUSH(1) plays, unlatched:
-  BTNPUSH(3) for a combat ant, else BTNPUSH(1). Attacking an ally opens the confirmation dialog `FUN_0101ffab` in the original (not ported: the classification turns the order into a walk next to the ally).
+  BTNPUSH(3) for a combat ant, else BTNPUSH(1). Attacking an ally opens the confirmation dialog `FUN_0101ffab` first (ported in v0.0.50, see 5.42: Yes breaks the team and gives the order, No drops it).
 * **Right button** (`FUN_01027b51`, at the release, with the press point): capture minimap (panel 3 or 4 only): the point `W` of the minimap (`FUN_01009850`), panel 4 gives a move, panel 3 a special order when
   `FUN_01026f91(tile, 0)` (slot 2 latched) or `(tile, 1)` holds, else a move; the click code runs with that mode, the cursor mode is reset to 1. Capture map view: the cursor mode of the release pointer: 1, 2 and 6
   do nothing; 5: attack the ant under the release pointer (`FUN_01026904`); 3, 4 and 7: `FUN_010287b5(press tile, special, 0)` with `special = !(panel == 4 || T == 0 || T == 4)` (a move for several ants, mixed types,
@@ -1979,8 +2006,7 @@ Addresses are virtual addresses in `Original-Ants/Ants.exe`. Implemented in `src
   order), cancelling by pressing an armed pedestal, hiding the ability pedestal while Shift is held, Stop clearing a base selection at once, Ctrl+M / B / F / T / C, the wrong pedestal rectangles ((476, 156, 55, 75),
   (537, 156, 55, 75), (595, 180, 32, 50), hatch (477, 140, 53, 88), ally (477, 142, 55, 86)).
 * **Open** *(recorded, not ported)*: the top-bar buttons and All / Team still act on the press (the button class fires on the release while captured), Esc still opens the quit dialog (the original deselects), the keyboard
-  table (F1, Ctrl+O / Q / L, Enter sends to the team when allied, Ctrl+N / P by `ScrollToShow`), the ally attack confirmation dialog and the one-ally-at-a-time dialog of strings 1 - 4, and the 50 ms latency of the
-  polled band.
+  table (F1, Ctrl+O / Q / L, Enter sends to the team when allied, Ctrl+N / P by `ScrollToShow`) and the 50 ms latency of the polled band. (The ally attack confirmation and the dialogs of strings 1 - 4 are ported, 5.42.)
 
 ### 5.45 Keyboard, Button Class and Chat (Capstone-Verified; Supersedes Earlier Hotkey, Chat Focus and Button Notes)
 
@@ -2013,7 +2039,7 @@ Addresses are virtual addresses in `Original-Ants/Ants.exe`. Implemented in `HUD
   Space / H, options Esc / O, Ctrl+H hatching, Space centring, Ctrl+C clearing the selection, `H` / `A` / `N` / `P` and other letters acting as hotkeys, buttons that acted at the press, Ctrl+N / Ctrl+P centring
   through `center_on` in `world.ants` order. **Kept as developer shortcuts** (not in the original, each behind Ctrl / Cmd, Shift or a free function key): Ctrl+T / F3 tile grid, Ctrl+M music mute,
   Ctrl+1..4 / Ctrl+Tab / Ctrl+C team switch, Shift / Ctrl+F12 screenshot; PageUp / PageDown / the wheel still scroll the chat log (the original scrolls it with a bar).
-* **Open** *(recorded, not ported)*: the ally attack confirmation (string 4, `FUN_0101ffab`) and the invitation dialogs (strings 1 - 3) need a modal question dialog (network stage); the slot count of Ctrl+N / Ctrl+P
+* **Open** *(recorded, not ported)*: the slot count of Ctrl+N / Ctrl+P
   is the number of own ants (the original counts table slots including empty ones); the setup and results screens and the option toggles still act on the press.
 
 ### 5.46 The Original's Network Model (Capstone Audit N) and the Remake's Command Layer
@@ -2152,7 +2178,7 @@ To deliver authentic 1:1 gameplay inside standard web browsers with zero install
 #### 5. Diplomacy SFX Protocol (`Ants.exe` `0x1023f9f`, `0x1028f04`, GameSounds 38..41)
 - `allypro.wav` (Sound ID 51): Targeted exclusively to the recipient of an alliance proposal (`to_player`).
 - `allyon.wav` (Sound ID 50): Broadcast to all players when an alliance is accepted.
-- `allynot.wav` (Sound ID 52): Targeted exclusively to the proposing player when their invite is declined.
+- `allynot.wav` (Sound ID 52): played on the machine of the proposing player when the invite is declined (`FUN_0100c36b`, 0x100c4bc) and on the machine of the player who declined (the answer message 0x1c runs there too, 0x1023c53).
 - `allyoff.wav` (Sound ID 49): Broadcast when an alliance dissolves.
 
 #### 6. Plant Stem Obstacle Collisions & Flower Dropper Z-Order (`Ants.exe` `0x100e3b0`, `0x1020951`)
