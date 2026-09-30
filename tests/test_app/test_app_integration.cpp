@@ -5170,12 +5170,17 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         ASSERT_EQ(def_unit->pos.y, 10);
     } TEST_END();
 
-    TEST_CASE("12.52 Lethal 0 HP Death Spawns Skull & Crossbones Effect While Water Drowning Exclusively Plays Drown Sequence") {
+    TEST_CASE("12.52 Lethal 0 HP Death: The Dying Ant Plays death1..death4 On Its Own Sprite (No Separate Effect) While Water Drowning Plays The Drown Clip") {
+        // the ant's own clip is one of Table-4 animations 102 .. 105 (death1 .. death4); no effect of that name exists any more (the original plays the clip on the ant's sprite)
         auto has_death_effect = [](const SimulationEngine& s) {
+            for (const auto& a : s.get_world_state().ants) {
+                if (a.state == UnitState::Dead && a.loco_clip >= 102 && a.loco_clip <= 105) return true;
+            }
+            return false;
+        };
+        auto separate_effect = [](const SimulationEngine& s) {
             for (const auto& eff : s.get_world_state().effects) {
-                if (eff.anim_name == "death1" || eff.anim_name == "death2" || eff.anim_name == "death3" || eff.anim_name == "death4") {
-                    return true;
-                }
+                if (eff.anim_name.rfind("death", 0) == 0) return true;
             }
             return false;
         };
@@ -5199,6 +5204,7 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
             ASSERT_TRUE(wait_ms(sim, 3000, [&]() { return def->state == UnitState::Dead; }) >= 0);
             ASSERT_TRUE(def->is_alive());                // the death clip is playing
             ASSERT_TRUE(has_death_effect(sim));
+            ASSERT_FALSE(separate_effect(sim));
             ASSERT_TRUE(wait_ms(sim, 3000, [&]() { return !def->is_alive(); }) >= 0);
         }
 
@@ -5233,7 +5239,7 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
             ASSERT_TRUE(wait_ms(sim, 2000, [&]() { return vic.state == UnitState::Drowning; }) >= 0);
             ASSERT_EQ(vic.pos.x, 12);
             ASSERT_EQ(vic.pos.y, 10);
-            ASSERT_FALSE(has_death_effect(sim));      // no skull & crossbones effect for drowning
+            ASSERT_FALSE(has_death_effect(sim));      // no death clip for drowning (the ant plays the drown clip)
             ASSERT_TRUE(wait_ms(sim, 4000, [&]() { return !vic.is_alive(); }) >= 0);
             ASSERT_EQ(vic.death_status, DeathStatus::Drowned);
             ASSERT_FALSE(has_death_effect(sim));
@@ -7351,10 +7357,10 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
 
     TEST_CASE("12.108: Version Invariant & Fog of War Cursor Concealment Parity") {
         // 1. Verify semantic versioning components
-        ASSERT_EQ(ants::VERSION_STRING, "v0.0.75");
+        ASSERT_EQ(ants::VERSION_STRING, "v0.0.76");
         ASSERT_EQ(ants::VERSION_MAJOR, 0);
         ASSERT_EQ(ants::VERSION_MINOR, 0);
-        ASSERT_EQ(ants::VERSION_PATCH, 75);
+        ASSERT_EQ(ants::VERSION_PATCH, 76);
 
         // 2. Setup simulation world with Fog of War enabled
         SimulationEngine sim;
@@ -9832,8 +9838,11 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         ASSERT_EQ(splash->duration_ms, 460u);
     } TEST_END();
 
-    TEST_CASE("12.117 Death Animation Is One Of death1..death4 With Its Full Original Duration") {
-        std::set<std::string> seen;
+    TEST_CASE("12.117 Death Animation Is One Of death1..death4, Played On The Ant's Own Sprite For Its Full Original Duration (The First Frame Is Booked Twice)") {
+        std::set<uint16_t> seen;
+        // the clips' frame sums and first frames (ants.chd): death1 920 ms / 100, death2 1000 / 100, death3 980 / 100, death4 600 / 60
+        static const uint32_t kSum[4] = { 920, 1000, 980, 600 };
+        static const uint32_t kFirst[4] = { 100, 100, 100, 60 };
         for (uint32_t seed = 1; seed <= 300; ++seed) {
             SimulationEngine sim;
             sim.init_test_world(60, 60, seed, 600000);
@@ -9843,15 +9852,18 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
             def->hp = 1;
             sim.execute_melee_attack(attacker, defender);
             // the death clip starts when the flight of the victim ends (deferred death), not at the contact
-            ASSERT_TRUE(wait_ms(sim, 3000, [&]() { return def->state == UnitState::Dead; }) >= 0);
-            for (const auto& e : sim.get_world_state().effects) {
-                if (e.anim_name.rfind("death", 0) != 0) continue;
-                seen.insert(e.anim_name);
-                const uint32_t expect = (e.anim_name == "death1") ? 920u : (e.anim_name == "death2") ? 1000u
-                                      : (e.anim_name == "death3") ? 980u : 600u;
-                ASSERT_EQ(e.duration_ms, expect);
-                ASSERT_EQ(e.y_key, e.py);
-            }
+            const int dying = wait_ms(sim, 3000, [&]() { return def->state == UnitState::Dead; });
+            ASSERT_TRUE(dying >= 0);
+            uint16_t clip = 0;
+            for (const auto& a : sim.get_world_state().ants) if (a.id == defender) clip = a.loco_clip;
+            ASSERT_TRUE(clip >= 102 && clip <= 105);
+            seen.insert(clip);
+            for (const auto& e : sim.get_world_state().effects) ASSERT_TRUE(e.anim_name.rfind("death", 0) != 0);   // the clip is the ant's, there is no effect
+            // the ant stays (alive and drawn) until the clip has ended: the frame sum plus the doubled first frame, to the 50 ms tick
+            const int gone = wait_ms(sim, 2000, [&]() { return def->removed; });
+            ASSERT_TRUE(gone >= 0);
+            const uint32_t expect = kSum[clip - 102] + kFirst[clip - 102];
+            ASSERT_TRUE(static_cast<uint32_t>(gone) + 50u >= expect && static_cast<uint32_t>(gone) <= expect + 50u);
         }
         ASSERT_EQ(seen.size(), 4u); // rand() % 4 reaches every death animation
     } TEST_END();

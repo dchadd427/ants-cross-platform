@@ -609,9 +609,8 @@ void SimulationEngineImpl::set_action(AntUnit& a, uint8_t action, uint8_t dir, i
             return;
         case AntUnit::kActionDeath: {                                // 0x101b3fd: death1..death4 (rand() % 4)
             const uint8_t variant = static_cast<uint8_t>(cosmetic_prng_.rand() % 4u);
-            loco_play(a, movement::action_clip(movement::ActionClip::Death, 0, variant, false), dir);
+            loco_play(a, movement::action_clip(movement::ActionClip::Death, 0, variant, false), dir);   // the ant's own sprite plays it (docs 5.60)
             a.state = UnitState::Dead;
-            spawn_effect(effect_spec::kDeathNames[variant], a.pixel_x, a.pixel_y, effect_spec::kDeathMs[variant], a.pixel_y, true);
             return;
         }
         default:

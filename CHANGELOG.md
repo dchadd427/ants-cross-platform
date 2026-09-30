@@ -39,6 +39,15 @@ Ground truth for every entry is in [`docs/GAME_REVERSE_ENGINEERING.md`](docs/GAM
   - **Found on the way, for the audit** (docs: implementation_plan.md section 18): `tests/test_sim/test_challenger_m2_it2_deep_stress.cpp` has not been part of the build since an early commit and no longer compiles
     (it uses the retired slot-queue API of the hill). (An earlier version of this line said that the death clips are no longer started by a separate effect: wrong, only the unused helper `spawn_death_effect` was removed; the effect path in `movement_system.cpp` is still in use, see the audit.)
 
+## v0.0.76 - 2026-09-30 - Death and burning of the original
+
+Batch 7 part 3 (`docs/audit/ledger_combat.md` NEW-3, `docs/audit/ledger_ants.md` F14; re-read in `Ants.exe`: `0x101b3fd`, `0x101af27` - `0x101af66`, `0x1021c68` - `0x1021e31`, `0x101a40f`):
+
+- **A dying ant plays its death clip on its own sprite**, as in the original: the remake started the death animation as a separate effect beside the ant's own clip and did not draw the dying ant, so the effect began about 20 ms after the clip and vanished 80 to 100 ms before the ant was removed (a blink of nothing at the end of every death), and the ant's hit-point number (Ctrl+L) was missing while it died. The effect is gone; the ant is drawn, sorted and numbered like any ant until it is removed (the minimap dot stayed since v0.0.71).
+- **The dud bomb's flames are drawn over every ant**: the burn overlay is a child of the view container in the original, drawn after the whole sorted sprite list; the remake drew it inside the sorted pass, so an ant standing lower on the screen covered it. It is hidden only where its own ground is unexplored.
+- Docs: `docs/GAME_REVERSE_ENGINEERING.md` 5.60, README, `docs/AUDIT_ONE_TO_ONE.md` (progress).
+- Tests: `test_render_parity` `test_dying_ant` (the death clip's frames with the sub-tick stepping, the number of a dying ant) and `test_burn_overlay_layer` (over a lower ant; hidden in an unexplored cell). Rewritten: integration 12.52 and 12.117 (they pinned the separate `death1` .. `death4` effects; 12.117 now checks that the ant plays one of the four clips for its frame sum plus the doubled first frame). Version assertions of 12.108.
+
 ## v0.0.75 - 2026-09-30 - The ants' frames in real time
 
 Batch 7 part 2 (`docs/audit/ledger_ants.md` NEW-1, NEW-3, NEW-5, `ledger_combat.md` V-K1; re-read in `Ants.exe`: `0x102b997` (the animation step on `timeGetTime`), `0x102c4d1` (the REFRESH task), `0x101b802`, `0x10088e7`):

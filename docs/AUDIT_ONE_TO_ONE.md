@@ -29,6 +29,7 @@ order in which it is proposed to be fixed. The owner decides (AGENTS.md rule 9).
 * v0.0.73: batch 6 part 5 (the layer-2 pass under fog draws an object from every explored body cell whose anchor is unexplored, food hidden only while anchor and footprint are unexplored, footprint of the current stage; LT NEW-4, NEW-6). Batch 6 is done except the optional NEW-5 (1 px seams at fractional scales of the software renderer) and the owner decision on the minimap hit flash.
 * v0.0.74: batch 7 part 1 (the dust ball only for the pile-up block, LK NEW-1 / LE NEW-1; LA NEW-4 / LU NEW-10 (world palette) and LA NEW-6 (plain `L`) were checked in the binary and are **refuted**, see section 5).
 * v0.0.75: batch 7 part 2 (walking, idle, swim, dive, climb, harvest and can't-go clips predicted to the end of their last frame, ears and number at the predicted position, no number for a frozen ant, the legacy name path removed; LA NEW-1, NEW-3, NEW-5, LK V-K1). Kept on purpose: `AntUnit::tick_timers` and the counters `anim_tick` / `anim_subitem` (part of the state hash). Still open in batch 7: death clips on the ant's own sprite (LK NEW-3), the burn overlay over everything (LA F14), equal-y order (LA NEW-2).
+* v0.0.76: batch 7 part 3 (death clips on the ant's own sprite with its number, LK NEW-3; the burn overlay as a view child over every ant, hidden only in an unexplored cell, LA F14 / LE C17). Still open in batch 7: equal-y draw order (LA NEW-2, low: a persistent sprite array with the original's incremental sort, `0x10089bd`).
 
 ## 1. What was audited and how
 

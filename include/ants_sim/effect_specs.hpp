@@ -17,8 +17,7 @@ constexpr uint32_t kBattleMs   = 270;   // battle   (56), one cycle (70 / 60 / 8
 constexpr uint32_t kBattleCloudMaxMs   = 3000;
 constexpr uint32_t kBattleCloudClearMs = 1000;
 constexpr uint32_t kBattleCloudSound   = 3;   // combatnetfairy.wav
-constexpr uint32_t kDeathMs[4] = { 920, 1000, 980, 600 };   // death1..death4 (102..105)
-constexpr const char* kDeathNames[4] = { "death1", "death2", "death3", "death4" };
+constexpr uint32_t kDeathMs[4] = { 920, 1000, 980, 600 };   // death1..death4 (102..105): the frame sums of the clips that the dying ant's own sprite plays (docs 5.60; not an effect)
 constexpr uint32_t kDropperMs  = 820;   // FD_BOMB/COMB/THIEF/SWIM/FIRE (426, 422, 424, 423, 425)
 constexpr uint32_t kDropperFrameMs[9] = { 100, 100, 120, 80, 60, 60, 100, 100, 100 };
 

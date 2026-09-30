@@ -667,6 +667,7 @@ void Renderer::render_world(const ants::sim::WorldState& world,
 
     // 4.9 View-container children, drawn after the whole map sprite in creation order (newest on top): selection
     //     markers, the hill marker, the click marker and the score bubbles
+    collect_burn_overlays(world);
     collect_selection_markers(world, selected_unit_id, selected_unit_ids);
     collect_hill_brackets(grid, selected_base_team_id);
     collect_transient_sprites();
@@ -1273,7 +1274,7 @@ Renderer::AntClipPrediction Renderer::predict_ant_clip(const ants::sim::AntSnaps
     // (REFRESH, period 0, 0x102c4d1), so whatever clip the ant plays, walk, idle, swim, dive, climb, harvest or an action, the frames that end before the next tick are shown
     // in advance. A frame's displacement applies when the frame ends. The last frame of a clip stays until the next tick, where the simulation's step callback decides what
     // comes next (the next tile, a snap to the tile centre, another clip); only an idle clip is known to loop.
-    if (ant.state == S::Dead || ant.state == S::Burn) return p;     // a dying ant and the frozen ant under its burn overlay are not stepped here
+    if (ant.state == S::Burn) return p;                                // the frozen ant under its burn overlay is not drawn
     const bool loops = (ant.state == S::Idle || ant.state == S::GuardIdle);
     int32_t left = static_cast<int32_t>(ant.loco_left_ms);
     int32_t t = static_cast<int32_t>(sub_tick_ms_);
@@ -1325,16 +1326,6 @@ void Renderer::draw_single_ant(const ants::sim::AntSnapshot& ant) {
         draw_frame_parts(loco_seq->subitems[pred.frame], sx + pred.dx, render_y + pred.dy, ant.loco_mirrored, ant_colour(ant.player_id));
     }
 
-    // 2.4 Dud burn overlay (FUN_01021c68): the ?bu clip is a separate sprite on top of the frozen ant
-    if (ant.burn_elapsed_ms >= 0) {
-        static const char type_letters[6] = { 'g', 'b', 'f', 't', 'c', 's' };
-        const std::string bu_name = std::string("a") + type_letters[static_cast<size_t>(ant.type) % 6] + "bu301";
-        const auto* bu_seq = archive_->find_animation(bu_name);
-        if (bu_seq && !bu_seq->subitems.empty()) {
-            const size_t bsub = get_anim_subitem_by_time(*bu_seq, static_cast<uint32_t>(ant.burn_elapsed_ms) + sub_tick_ms_);
-            draw_frame_parts(bu_seq->subitems[bsub], sx, render_y, false, ant_colour(ant.player_id));
-        }
-    }
 }
 
 size_t Renderer::get_anim_subitem_by_time(const ants::assets::AnimationSequence& seq, uint32_t now_ms) {
@@ -1413,9 +1404,6 @@ void Renderer::collect_ant_units(const ants::sim::WorldState& world) {
             !world.is_tile_revealed(a.tile_x, a.tile_y)) {
             continue; // Concealed enemy ant under fog of war
         }
-        // A dying ant is replaced by its death clip effect (the ant object itself is only kept for the timing)
-        if (a.anim_state == static_cast<uint16_t>(ants::sim::UnitState::Dead)) continue;
-
         RenderItem item{};
         // The sort key is the sprite's y: a thrown ant's key jumps with its position at the end of the first flight frame
         const AntClipPrediction pred = predict_ant_clip(a, ant_loco_sequence(a));
@@ -1527,6 +1515,34 @@ void Renderer::draw_sorted_queue() {
 
 int64_t Renderer::overlay_now_ms() const {
     return anim_clock_pin_ms_ >= 0 ? static_cast<int64_t>(anim_clock_pin_ms_) : static_cast<int64_t>(SDL_GetTicks());
+}
+
+// The dud bomb's burn overlay (FUN_01021c68, created by SetAction 0xa at 0x101af27 - 0x101af66): the ?bu clip is a sprite of its own, a CHILD OF THE VIEW CONTAINER
+// (AddChild at 0x101af66), so it is drawn after the whole map sprite, over every ant, in creation order with the other children (docs 5.60); it sits on the cell centre of
+// its ant and its visibility test (vtable slot +0x3c, 0x101a40f) is the explored test of that cell. The ant underneath is frozen and not drawn.
+void Renderer::collect_burn_overlays(const ants::sim::WorldState& world) {
+    if (!archive_ || !texture_cache_) return;
+    static const char type_letters[6] = { 'g', 'b', 'f', 't', 'c', 's' };
+    const int64_t now = overlay_now_ms();
+    for (const auto& a : world.ants) {
+        if (a.burn_elapsed_ms < 0) continue;
+        if (world.fog_of_war_enabled && !world.is_tile_revealed(a.tile_x, a.tile_y)) continue;
+        const std::string bu_name = std::string("a") + type_letters[static_cast<size_t>(a.type) % 6] + "bu301";
+        const auto* bu_seq = archive_->find_animation(bu_name);
+        if (!bu_seq || bu_seq->subitems.empty()) continue;
+        OverlayItem item{};
+        item.created_ms = now - a.burn_elapsed_ms;
+        const int32_t px = a.px, py = a.py;
+        const uint32_t elapsed = static_cast<uint32_t>(a.burn_elapsed_ms) + sub_tick_ms_;
+        const uint8_t colour = ant_colour(a.player_id);
+        item.draw = [this, bu_seq, px, py, elapsed, colour]() {
+            int32_t sx = 0, sy = 0;
+            camera_.world_to_screen(px, py, sx, sy);
+            if (sx < PLAYFIELD_X - 160 || sx > PLAYFIELD_X + PLAYFIELD_W + 160 || sy < PLAYFIELD_Y - 160 || sy > PLAYFIELD_Y + PLAYFIELD_H + 160) return;
+            this->draw_frame_parts(bu_seq->subitems[get_anim_subitem_by_time(*bu_seq, elapsed)], sx, sy, false, colour);
+        };
+        overlay_queue_.push_back(std::move(item));
+    }
 }
 
 // Selection markers (Ants.exe FUN_01010373 -> FUN_0101b52f): one base sprite per selected ant (own or inspected enemy),

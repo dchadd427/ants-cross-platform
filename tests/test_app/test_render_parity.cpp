@@ -694,6 +694,94 @@ void test_frozen_ant(Renderer& r, const assets::AssetArchive& arc) {
     r.unpin_animation_clock();
 }
 
+// The burn overlay is a child of the view container (Ants.exe 0x101af66 AddChild, vtable slot +0x3c = the explored test of its cell): it is drawn after the whole sorted sprite list,
+// over every ant, also over one that stands lower on the screen (the remake drew it inside the y-sorted pass, under such an ant). In fog an unexplored cell hides it.
+void test_burn_overlay_layer(Renderer& r, const assets::AssetArchive& arc) {
+    std::printf("[ants] the burn overlay is drawn over every ant (a view child), and only where the ground is explored\n");
+    assets::LevelData level;
+    if (!level.load_from_file(std::string(ORIGINAL_ASSETS_DIR) + "/Maps/TINY.LVL")) { check(false, "load TINY"); return; }
+    const int32_t g = arc.find_animation_id("g01a");
+    if (level.tile_dictionary.size() <= static_cast<size_t>(g)) level.tile_dictionary.resize(static_cast<size_t>(g) + 1, ".");
+    level.tile_dictionary[static_cast<size_t>(g)] = "g01a";
+    for (auto& c : level.layer1_terrain) { c.tile_index = static_cast<uint16_t>(g); c.flags = 0; c.properties = 0; }
+    for (auto& c : level.layer2_interactive) { c.tile_index = assets::LVL_EMPTY_TILE; c.flags = 0; c.properties = 0; }
+    level.anthill_spawns.clear();
+    level.food_schedules.clear();
+    level.waypoints.clear();
+    sim::Grid grid;
+    grid.init_from_level(level);
+    r.set_level(level);
+    r.pin_animation_clock(0);
+    SDL_Renderer* sr = r.get_sdl_renderer();
+    const int32_t stand = arc.find_animation_id("agst301");
+    const auto* bu = arc.find_animation("agbu301");
+    const auto* stand_seq = arc.find_animation("agst301");
+    check(stand >= 0 && bu && stand_seq, "clips exist: agst301, agbu301");
+    if (stand < 0 || !bu || !stand_seq) { r.unpin_animation_clock(); return; }
+    static const uint8_t offsets[4] = { 60, 40, 20, 0 };
+    auto shifted_for = [&](uint8_t team) {
+        auto pal = arc.get_palette();
+        auto sh = pal;
+        for (size_t i = 0; i < 256; ++i) if (i != assets::CHD_COLOR_KEY_INDEX) sh[i] = pal[(i + offsets[team]) & 0xFF];
+        return sh;
+    };
+    auto render = [&](bool fog_unexplored, bool with_ants = true) {
+        sim::WorldState ws;
+        ws.width = level.width;
+        ws.height = level.height;
+        sim::AntSnapshot burning{};
+        burning.id = 1; burning.player_id = 0; burning.type = sim::AntType::Worker;
+        burning.px = 176; burning.py = 176; burning.tile_x = 5; burning.tile_y = 5; burning.facing = 4;
+        burning.hp = 10; burning.max_hp = 10;
+        burning.anim_state = static_cast<uint16_t>(sim::UnitState::Burn);
+        burning.state = sim::UnitState::Burn;
+        burning.frozen = true;
+        burning.burn_elapsed_ms = 0;
+        sim::AntSnapshot lower{};                                  // stands lower on the screen, so it is drawn after the burning ant in the sorted pass
+        lower.id = 2; lower.player_id = 3; lower.type = sim::AntType::Worker;
+        lower.px = 176; lower.py = 180; lower.tile_x = 5; lower.tile_y = 5; lower.facing = 4;
+        lower.hp = 10; lower.max_hp = 10;
+        lower.anim_state = static_cast<uint16_t>(sim::UnitState::Idle);
+        lower.state = sim::UnitState::Idle;
+        lower.loco_clip = static_cast<uint16_t>(stand); lower.loco_frame = 0; lower.loco_left_ms = 150;
+        if (with_ants) {
+            ws.ants.push_back(burning);
+            ws.ants.push_back(lower);
+        }
+        if (fog_unexplored) {
+            ws.fog_of_war_enabled = true;
+            ws.fog_revealed.assign(static_cast<size_t>(level.width) * level.height, 0);
+            ws.player_alliances[1] = 255;
+        }
+        r.camera().x = 0; r.camera().y = 0; r.camera().clamp_to_bounds(level.width, level.height);
+        SDL_SetRenderDrawColor(sr, 255, 0, 255, 255);
+        SDL_RenderClear(sr);
+        r.render_world(ws, grid, -1, {}, false, false, -1, -1, -1, 0.0f);
+        return read_region(sr, PLAYFIELD_X, PLAYFIELD_Y, PLAYFIELD_W, PLAYFIELD_H);
+    };
+    auto same_image = [&](const Image& a, const Image& b) {
+        for (int y = 0; y < PLAYFIELD_H; ++y) for (int x = 0; x < PLAYFIELD_W; ++x) if (std::memcmp(a.at(x, y), b.at(x, y), 3) != 0) return false;
+        return true;
+    };
+    // everything explored: the lower ant first, the burn overlay (player 0's colour) over it
+    {
+        const Image got = render(false);
+        Image full = model_map(arc, level, 0);
+        model_draw_frame(full, arc, stand_seq->subitems[0], 176, 180, false, shifted_for(3));
+        model_draw_frame(full, arc, bu->subitems[0], 176, 176, false, shifted_for(0));
+        check(same_image(got, full), "the burn overlay is drawn over the ant that stands lower");
+    }
+    // an unexplored cell: the overlay of the ant that is not the viewer's is not drawn (nor the ants themselves: the viewer is player 1 here)
+    {
+        r.set_hud_team(1);
+        const Image got = render(true);
+        const Image fog_only = render(true, false);
+        r.set_hud_team(0);
+        check(same_image(got, fog_only), "in an unexplored cell neither the burning ant's overlay nor the ants are drawn (only the fog)");
+    }
+    r.unpin_animation_clock();
+}
+
 // A blown ant is culled by its ART, not by its anchor: the anchor jumps 128 px at the end of frame 0 of the aggb flight while
 // the art trails behind it (aggb901 frame 1: 59..102 px from the anchor), so with the anchor just outside the right edge
 // the parts that lie inside the playfield must still be drawn.
@@ -1002,6 +1090,94 @@ void test_marker_and_digit_position(Renderer& r, const assets::AssetArchive& arc
         const Image with = render(frozen, {}, true, 0.0f);
         check(same_image(plain, with), "a frozen ant shows no health number");
     }
+}
+
+// A dying ant plays death1 .. death4 on its own sprite (Ants.exe 0x101b3fd SetAction(0xC)): the renderer draws the ant through that clip, with the same sub-tick stepping as any
+// other, and the ant keeps its hit-point number until it is removed (the number is drawn by the ant's own draw function). There is no separate effect any more.
+void test_dying_ant(Renderer& r, const assets::AssetArchive& arc) {
+    std::printf("[ants] a dying ant is drawn through its own death clip\n");
+    assets::LevelData level;
+    if (!level.load_from_file(std::string(ORIGINAL_ASSETS_DIR) + "/Maps/TINY.LVL")) { check(false, "load TINY"); return; }
+    const int32_t g = arc.find_animation_id("g01a");
+    if (level.tile_dictionary.size() <= static_cast<size_t>(g)) level.tile_dictionary.resize(static_cast<size_t>(g) + 1, ".");
+    level.tile_dictionary[static_cast<size_t>(g)] = "g01a";
+    for (auto& c : level.layer1_terrain) { c.tile_index = static_cast<uint16_t>(g); c.flags = 0; c.properties = 0; }
+    for (auto& c : level.layer2_interactive) { c.tile_index = assets::LVL_EMPTY_TILE; c.flags = 0; c.properties = 0; }
+    level.anthill_spawns.clear();
+    level.food_schedules.clear();
+    level.waypoints.clear();
+    sim::Grid grid;
+    grid.init_from_level(level);
+    r.set_level(level);
+    r.pin_animation_clock(0);
+    SDL_Renderer* sr = r.get_sdl_renderer();
+    struct Case { const char* clip; uint16_t frame; uint16_t left_ms; float sub_s; };
+    const Case cases[] = {
+        {"death1", 3, 80, 0.030f},          // frame 3 (200 ms) is still on
+        {"death1", 3, 20, 0.030f},          // it ends 20 ms into the wait: frame 4 shows
+        {"death1", 10, 10, 0.049f},         // the last frame stays until the tick, where the ant is removed
+        {"death4", 0, 60, 0.0f},
+        {"death4", 1, 5, 0.049f},           // frame 1 ends after 5 ms, frame 2 (80 ms) outlasts the tick
+    };
+    auto render = [&](const Case& c, int32_t clip, bool show_hp) {
+        r.set_show_hp(show_hp);
+        sim::WorldState ws;
+        ws.width = level.width;
+        ws.height = level.height;
+        sim::AntSnapshot ant{};
+        ant.id = 1; ant.player_id = 3; ant.type = sim::AntType::Worker;
+        ant.px = 300; ant.py = 200; ant.tile_x = 9; ant.tile_y = 6; ant.facing = 4;
+        ant.hp = 0; ant.max_hp = 10;
+        ant.anim_state = static_cast<uint16_t>(sim::UnitState::Dead);
+        ant.state = sim::UnitState::Dead;
+        ant.loco_clip = static_cast<uint16_t>(clip);
+        ant.loco_frame = c.frame;
+        ant.loco_left_ms = c.left_ms;
+        ws.ants.push_back(ant);
+        r.camera().x = 0; r.camera().y = 0; r.camera().clamp_to_bounds(level.width, level.height);
+        SDL_SetRenderDrawColor(sr, 255, 0, 255, 255);
+        SDL_RenderClear(sr);
+        r.render_world(ws, grid, -1, {}, false, false, -1, -1, -1, c.sub_s);
+        r.set_show_hp(false);
+        return read_region(sr, PLAYFIELD_X, PLAYFIELD_Y, PLAYFIELD_W, PLAYFIELD_H);
+    };
+    for (const Case& c : cases) {
+        const int32_t chd = arc.find_animation_id(c.clip);
+        check(chd >= 0, std::string("clip exists: ") + c.clip);
+        if (chd < 0) continue;
+        const auto& seq = arc.get_animation(static_cast<uint32_t>(chd));
+        // the frame that the real-time player shows, by an independent walk along the frame times
+        int32_t left = c.left_ms;
+        int32_t t = static_cast<int32_t>(c.sub_s * 1000.0f);
+        size_t frame = c.frame;
+        while (t >= left && frame + 1 < seq.subitems.size()) { t -= left; ++frame; left = static_cast<int32_t>(seq.subitems[frame].val3); }
+
+        const Image plain = render(c, chd, false);
+        Image full = model_map(arc, level, 0);
+        model_draw_frame(full, arc, seq.subitems[frame], 300, 200, false, arc.get_palette());
+        bool same = true;
+        for (int y = 0; y < PLAYFIELD_H && same; ++y)
+            for (int x = 0; x < PLAYFIELD_W && same; ++x) same = std::memcmp(plain.at(x, y), full.at(x, y), 3) == 0;
+        check(same, std::string(c.clip) + " frame " + std::to_string(c.frame) + " with " + std::to_string(c.left_ms) + " ms left, +" + std::to_string(c.sub_s * 1000.0f) + " ms: frame " + std::to_string(frame));
+
+        // a dying ant keeps its hit-point number ("0") until it is removed: the pixels that it adds are the fixed font's at the ant's position
+        const Image with = render(c, chd, true);
+        SDL_SetRenderDrawColor(sr, 0, 0, 0, 255);
+        SDL_RenderClear(sr);
+        r.draw_fixed_text("0", PLAYFIELD_X + 300, PLAYFIELD_Y + 200, assets::ColorRGBA{255, 255, 255, 255});
+        const Image digit = read_region(sr, PLAYFIELD_X, PLAYFIELD_Y, PLAYFIELD_W, PLAYFIELD_H);
+        long added = 0, wrong = 0;
+        for (int y = 0; y < PLAYFIELD_H; ++y) {
+            for (int x = 0; x < PLAYFIELD_W; ++x) {
+                const bool is_new = std::memcmp(plain.at(x, y), with.at(x, y), 3) != 0;
+                const bool white = digit.at(x, y)[0] == 255 && digit.at(x, y)[1] == 255 && digit.at(x, y)[2] == 255;
+                if (is_new) ++added;
+                if (is_new != white && !(white && std::memcmp(plain.at(x, y), digit.at(x, y), 3) == 0)) ++wrong;   // (a number pixel over a white pixel of the art changes nothing)
+            }
+        }
+        check(added > 0 && wrong == 0, std::string(c.clip) + ": a dying ant still shows its hit-point number (" + std::to_string(wrong) + " wrong pixels)");
+    }
+    r.unpin_animation_clock();
 }
 
 // Selection markers are children of the view container: drawn after the whole map (over lower ants), thresholds dogears
@@ -1500,11 +1676,13 @@ int main() {
     test_mirrored_draw(r, arc);
     test_holding_attack(r, arc);
     test_frozen_ant(r, arc);
+    test_burn_overlay_layer(r, arc);
     test_blown_ant_edge(r, arc);
     test_subtick_prediction(r, arc);
     test_subtick_locomotion(r, arc);
     test_selection_markers(r, arc);
     test_marker_and_digit_position(r, arc);
+    test_dying_ant(r, arc);
     test_map_layers(r, arc);
     test_fog_objects(r, arc);
     test_food_fog_footprint(r);

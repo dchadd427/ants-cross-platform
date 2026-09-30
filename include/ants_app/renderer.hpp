@@ -366,6 +366,7 @@ private:
     void draw_overlay_queue();
     int64_t overlay_now_ms() const;
     void collect_score_bubbles(const ants::sim::WorldState& world);
+    void collect_burn_overlays(const ants::sim::WorldState& world);
     void draw_score_number(int32_t amount, int32_t world_x, int32_t world_y);
     void collect_hill_brackets(const ants::sim::Grid& grid, int32_t selected_base_team_id);
     void draw_sorted_queue();
