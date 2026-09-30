@@ -23,9 +23,6 @@ Native C++17 macOS port and remake of the 1998 classic RTS game *Ants*, featurin
 - **Test Integrity**: Never break or disable existing tests. All 77 integration tests and 506 E2E tests must maintain a 100% pass rate.
 - **Documentation**: Maintain code comments and existing documentation.
 
-### 3. Forbidden Terms
-- Strictly **NEVER** write or mention the forbidden word ("M-i-c-r-o-s-o-f-t") anywhere in code, comments, commit messages, or documentation.
-
 ### 4. Mandatory Capstone Reverse Engineering & Original Logic Parity
 - **Dual Verification with Capstone & Ants.exe.c**: Always compare and verify our logic, timings, animation sequencing, sprite layering, and behavioral mechanics against the original 1998 executable (`Original-Ants/Ants.exe`), the complete C decompilation (`docs/legacy/Ants.exe.c`), and asset archive (`Original-Ants/ants.chd`).
 - **Synergy of Capstone Disassembly + Decompiled C**: Use Capstone disassembly (e.g. `tools/analyze_binary.py`) for exact assembly instruction sequences, opcode timings, register allocations, and jump tables, coupled with `docs/legacy/Ants.exe.c` for high-level C logic flow, variable naming, struct definitions, state machines, sound triggers, and exact numeric constants.
