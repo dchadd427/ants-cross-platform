@@ -31,6 +31,7 @@ endif()
 
 add_library(ants_app STATIC
     audio_mixer.cpp
+    config_store.cpp
     midi_player.cpp
     renderer.cpp
     hud.cpp
@@ -39,6 +40,7 @@ add_library(ants_app STATIC
     ui_anim.cpp
     scorecard.cpp
     map_select.cpp
+    options_screen.cpp
     text_layout.cpp
     application.cpp
 )

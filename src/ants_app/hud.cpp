@@ -80,23 +80,10 @@ uint8_t minimap_class(const sim::TileCell& cell) {
     }
 }
 
-// Option-screen controls (absolute screen coordinates): each rectangle is the union of the resting and the pressed
-// art of the control's animations (breturn1/3, op_conu/op_cond, op_coffu/op_coffd, op_honu/op_hond, op_hoffu/op_hoffd)
-constexpr UIRect kOptReturn{351, 425, 98, 26};
-constexpr UIRect kOptChatOn{102, 289, 49, 24};
-constexpr UIRect kOptChatOff{151, 289, 49, 24};
-constexpr UIRect kOptHelpOn{355, 289, 49, 24};
-constexpr UIRect kOptHelpOff{404, 289, 49, 24};
-
-// Slider thumb (slidd.bmp): x = 188 + min(184, 185 * v / 99) for v = 0..100, on the track rows 178 / 215 / 252
-int32_t slider_thumb_x(float value) {
-    const int32_t v = static_cast<int32_t>(std::lround(std::clamp(value, 0.0f, 1.0f) * 100.0f));
-    return 188 + std::min<int32_t>(184, 185 * v / 99);
-}
-
 } // anonymous namespace
 
 HUD::HUD() {
+    options_.set_on_change([this](OptionSetting setting) { apply_option(setting); });
     init(0);
 }
 
@@ -151,7 +138,7 @@ void HUD::init(uint8_t local_player_id) {
     match_start_modal_ticks_ = 0;
     show_quit_dialog_ = false;
     show_quick_help_ = false;
-    show_options_ = false;
+    options_.close();
     close_alliance_dialog();
     pending_break_ = PendingBreak{};
     suppressed_invite_from_ = 255;
@@ -199,6 +186,9 @@ void HUD::update(const sim::WorldState& world, uint32_t delta_ticks) {
     status_line_.update(delta_ticks);
     apply_selection_status(world);
     check_selected_type_change(world);
+
+    // The INPUT task polls the pointer every 50 ms (FUN_0102653f dispatches the move to the top window): the pictures of the options' controls follow it
+    if (options_.is_open()) options_.on_move(mouse_x_, mouse_y_);
 
     // 3. Cursor blink ticks and alliance team status
     cursor_blink_ticks_ += delta_ticks;
@@ -506,7 +496,7 @@ void HUD::render(IRenderer& renderer, const assets::AssetArchive& assets,
     }
     renderer.draw_text(input_display, 484, 423, {20, 50, 40, 255});
     // Chat switched off in the options: chatcovr (three chcovr2 tiles at (478,421/436/445)) covers the input box
-    if (!chat_enabled_) {
+    if (!options_.state().chat) {
         draw_animation_frame0(renderer, assets, "chatcovr", 0, 0);
     }
 
@@ -515,7 +505,7 @@ void HUD::render(IRenderer& renderer, const assets::AssetArchive& assets,
     auto send_button = [&](bool down, bool hovered, const char* up, const char* hover, const char* pressed) {
         draw_animation_frame0(renderer, assets, down ? pressed : (hovered ? hover : up));
     };
-    if (chat_enabled_) {
+    if (options_.state().chat) {
         send_button(send_to_button_.is_pressed, send_to_button_.is_hovered, "butallu", "butallr", "butalld");
         if (is_on_team_) send_button(team_button_.is_pressed, team_button_.is_hovered, "butalsu", "butalsr", "butalsd");
     }
@@ -534,8 +524,8 @@ void HUD::render(IRenderer& renderer, const assets::AssetArchive& assets,
     // 5. Overlays and Dialogs
     if (show_quick_help_) {
         render_quick_help(renderer, assets);
-    } else if (show_options_) {
-        render_options_dialog(renderer, assets);
+    } else if (options_.is_open()) {
+        options_.render(renderer, assets, clock_ms());
     } else if (show_quit_dialog_) {
         render_quit_dialog(renderer, assets);
     } else if (alliance_dialog_ != AllianceDialog::None) {
@@ -590,7 +580,7 @@ void HUD::render_top_bar(IRenderer& renderer, const assets::AssetArchive& archiv
     } else if (help_button_.is_hovered) {
         draw_animation_frame0(renderer, archive, "buthlpr");
     }
-    if (options_button_.is_pressed || show_options_) {
+    if (options_button_.is_pressed || options_.is_open()) {
         draw_animation_frame0(renderer, archive, "butoptd");
     } else if (options_button_.is_hovered) {
         draw_animation_frame0(renderer, archive, "butoptr");
@@ -1052,55 +1042,6 @@ void HUD::render_quick_help(IRenderer& renderer, const assets::AssetArchive& ass
     draw_animation_frame0(renderer, assets, over_return ? "qh_return2" : "qh_return1", 0, 0);
 }
 
-void HUD::render_options_dialog(IRenderer& renderer, const assets::AssetArchive& assets) {
-    using assets::ColorRGBA;
-
-    // Authentic op_screen composite (210 parts, Ants.exe 0x101487c): it already contains the 25 dither tiles
-    // (a 50 % checker) around the opaque card, so nothing else is drawn behind it.
-    const auto* anim = assets.find_animation("op_screen");
-    if (anim && !anim->subitems.empty()) {
-        const auto& frames = anim->subitems[0].frames;
-        for (size_t i = frames.size(); i-- > 0; ) {
-            const auto& fr = frames[i];
-            renderer.draw_sprite(fr.sprite_index, fr.dx, fr.dy);
-        }
-    } else {
-        renderer.draw_named_sprite("optcap1.bmp", 44, 39);
-    }
-
-    // Sliders (Sound Volume, Music Volume, Map Scroll Rate): the thumb slidd.bmp sits on the track rows 178 / 215 / 252
-    renderer.draw_named_sprite("slidd.bmp", slider_thumb_x(sfx_volume_), 178);
-    renderer.draw_named_sprite("slidd.bmp", slider_thumb_x(music_volume_), 215);
-    renderer.draw_named_sprite("slidd.bmp", slider_thumb_x(scroll_rate_), 252);
-
-    // Toggles: the chosen one is shown down (with its hover variant), the other one up (op_con*, op_coff*, op_hon*, op_hoff*)
-    const bool over_chat_on = kOptChatOn.contains(mouse_x_, mouse_y_);
-    const bool over_chat_off = kOptChatOff.contains(mouse_x_, mouse_y_);
-    const bool over_help_on = kOptHelpOn.contains(mouse_x_, mouse_y_);
-    const bool over_help_off = kOptHelpOff.contains(mouse_x_, mouse_y_);
-    draw_animation_frame0(renderer, assets, chat_enabled_ ? (over_chat_on ? "op_condr" : "op_cond") : (over_chat_on ? "op_conr" : "op_conu"));
-    draw_animation_frame0(renderer, assets, !chat_enabled_ ? (over_chat_off ? "op_coffdr" : "op_coffd") : (over_chat_off ? "op_coffr" : "op_coffu"));
-    draw_animation_frame0(renderer, assets, quick_help_enabled_ ? (over_help_on ? "optondr" : "op_hond") : (over_help_on ? "op_honr" : "op_honu"));
-    draw_animation_frame0(renderer, assets, !quick_help_enabled_ ? (over_help_off ? "op_hoffdr" : "op_hoffd") : (over_help_off ? "op_hoffr" : "op_hoffu"));
-
-    // 7. Quick Chat Key Edit Fields Text
-    for (size_t i = 0; i < 4; ++i) {
-        int32_t qx = (i == 0 || i == 1) ? 93 : 302;
-        int32_t qy = (i == 0 || i == 2) ? 371 : 402;
-        std::string txt = quick_chat_keys_[i];
-        if (active_quick_chat_edit_ == static_cast<int>(i)) {
-            if ((cursor_blink_ticks_ / 15) % 2 == 0) {
-                txt += "_";
-            }
-        }
-        renderer.draw_text(txt, qx, qy, ColorRGBA{255, 255, 255, 255});
-    }
-
-    // Return to Game button: breturn1 (up), breturn2 (hover), breturn3 (pressed), absolute coordinates
-    draw_animation_frame0(renderer, assets, opt_return_button_pressed_ ? "breturn3"
-                          : (kOptReturn.contains(mouse_x_, mouse_y_) ? "breturn2" : "breturn1"));
-}
-
 void HUD::render_marquee_box(IRenderer& renderer) {
     // FUN_0102653f (0x1026699..0x1026883): the band exists while the left button is held on the map and no pedestal is latched; it is drawn as a
     // 1 px frame in (255, 0, 0) (GDI FrameRect with the brush 0x0000FF)
@@ -1258,6 +1199,8 @@ void HUD::select_ants_in_rect(int32_t x1, int32_t y1, int32_t x2, int32_t y2, co
 bool HUD::handle_mouse_down(int32_t x, int32_t y, uint8_t button,
                             sim::SimulationEngine& sim, ViewportCamera& camera, [[maybe_unused]] uint16_t mod) {
     if (button != SDL_BUTTON_LEFT && button != SDL_BUTTON_RIGHT) return false;
+    mouse_x_ = x;                                       // the event carries the pointer: the polled position of the original
+    mouse_y_ = y;
 
     // 0. Overlays and Modals intercept clicks first
     if (show_quick_help_) {
@@ -1266,67 +1209,10 @@ bool HUD::handle_mouse_down(int32_t x, int32_t y, uint8_t button,
         }
         return true;
     }
-    if (show_options_) {
-        if (button == SDL_BUTTON_LEFT) {
-            // Return to Game button: breturn1/2/3 at (351,425) 98x26; breturn3 (pressed) is silent
-            if (kOptReturn.contains(x, y)) {
-                opt_return_button_pressed_ = true;
-                opt_ok_button_pressed_ = true;
-                return true;
-            }
-            // Chat ON / OFF and Quick Help ON / OFF toggles (op_con*, op_coff*, op_hon*, op_hoff*): all silent
-            if (kOptChatOn.contains(x, y))  { chat_enabled_ = true;        return true; }
-            if (kOptChatOff.contains(x, y)) { chat_enabled_ = false;       return true; }
-            if (kOptHelpOn.contains(x, y))  { quick_help_enabled_ = true;  return true; }
-            if (kOptHelpOff.contains(x, y)) { quick_help_enabled_ = false; return true; }
-            // Sound FX slider (x 180..430, y 170..205)
-            if (x >= 180 && x <= 430 && y >= 170 && y <= 205) {
-                active_slider_dragging_ = 0;
-                sfx_volume_ = std::clamp(static_cast<float>(x - 188) / 185.0f, 0.0f, 1.0f);   // the option is applied at the release (0x1015058)
-                return true;
-            }
-            // Music slider (x 180..430, y 207..242)
-            if (x >= 180 && x <= 430 && y >= 207 && y <= 242) {
-                active_slider_dragging_ = 1;
-                music_volume_ = std::clamp(static_cast<float>(x - 188) / 185.0f, 0.0f, 1.0f);
-                return true;
-            }
-            // Scroll rate slider (x 180..430, y 244..285)
-            if (x >= 180 && x <= 430 && y >= 244 && y <= 285) {
-                active_slider_dragging_ = 2;
-                scroll_rate_ = std::clamp(static_cast<float>(x - 188) / 185.0f, 0.0f, 1.0f);
-                return true;
-            }
-            // Quick Chat Key Edit Fields
-            // F9 (89..235, 368..387)
-            if (x >= 89 && x <= 235 && y >= 368 && y <= 387) {
-                active_quick_chat_edit_ = 0;
-                return true;
-            }
-            // F10 (89..235, 399..418)
-            if (x >= 89 && x <= 235 && y >= 399 && y <= 418) {
-                active_quick_chat_edit_ = 1;
-                return true;
-            }
-            // F11 (298..444, 368..387)
-            if (x >= 298 && x <= 444 && y >= 368 && y <= 387) {
-                active_quick_chat_edit_ = 2;
-                return true;
-            }
-            // F12 (298..444, 399..418)
-            if (x >= 298 && x <= 444 && y >= 399 && y <= 418) {
-                active_quick_chat_edit_ = 3;
-                return true;
-            }
-            // Clicking elsewhere inside dialog clears active quick chat edit field
-            active_quick_chat_edit_ = -1;
-
-            // Clicking outside dialog closes options
-            if (x < 18 || x > 465 || y < 20 || y > 465) {
-                close_options();
-                return true;
-            }
-        }
+    if (options_.is_open()) {
+        // The window takes every press; only the left button acts (the controls' mouse handlers test the left button message): the start of a slider
+        // drag, a captured button, the focus of an edit field. Nothing acts before the release, and a press outside the controls does nothing.
+        if (button == SDL_BUTTON_LEFT) options_.on_press(x, y, clock_ms());
         return true;
     }
     if (show_match_start_modal_) {
@@ -1399,14 +1285,14 @@ bool HUD::handle_mouse_down(int32_t x, int32_t y, uint8_t button,
     if (pedestal_press(sim, x, y)) return true;
 
     // [All] button (532, 443, 44x24): hidden while chat is off
-    if (chat_enabled_ && send_to_button_.contains(x, y)) {
+    if (options_.state().chat && send_to_button_.contains(x, y)) {
         send_to_button_.is_pressed = true;
         play_sfx(sim::SoundID::ButtonClick);
         return true;
     }
 
     // [Team] button (579, 443, 46x24): exists while the local player has an ally
-    if (chat_enabled_ && is_on_team_ && team_button_.contains(x, y)) {
+    if (options_.state().chat && is_on_team_ && team_button_.contains(x, y)) {
         team_button_.is_pressed = true;
         play_sfx(sim::SoundID::ButtonClick);
         return true;
@@ -1431,6 +1317,8 @@ bool HUD::handle_mouse_down(int32_t x, int32_t y, uint8_t button,
 
 bool HUD::handle_mouse_up(int32_t x, int32_t y, uint8_t button,
                           sim::SimulationEngine& sim, ViewportCamera& camera, uint16_t mod) {
+    mouse_x_ = x;
+    mouse_y_ = y;
     const bool captured_before = is_input_captured();      // [5534] != 0 while the event is processed
     // The button class (FUN_01011206 / FUN_01011281): the callback runs at the release when the button is still captured, that is when the
     // pointer has not left it (leaving cancels the capture for good)
@@ -1438,8 +1326,8 @@ bool HUD::handle_mouse_up(int32_t x, int32_t y, uint8_t button,
     const bool fire_help = left_release && help_button_.is_pressed && help_button_.contains(x, y);
     const bool fire_options = left_release && options_button_.is_pressed && options_button_.contains(x, y);
     const bool fire_quit = left_release && quit_button_.is_pressed && quit_button_.contains(x, y);
-    const bool fire_all = left_release && chat_enabled_ && send_to_button_.is_pressed && send_to_button_.contains(x, y);
-    const bool fire_team = left_release && chat_enabled_ && is_on_team_ && team_button_.is_pressed && team_button_.contains(x, y);
+    const bool fire_all = left_release && options_.state().chat && send_to_button_.is_pressed && send_to_button_.contains(x, y);
+    const bool fire_team = left_release && options_.state().chat && is_on_team_ && team_button_.is_pressed && team_button_.contains(x, y);
     help_button_.is_pressed = false;
     options_button_.is_pressed = false;
     quit_button_.is_pressed = false;
@@ -1451,21 +1339,9 @@ bool HUD::handle_mouse_up(int32_t x, int32_t y, uint8_t button,
     hatch_button_.is_pressed = false;
     team_up_button_.is_pressed = false;
     is_radar_dragging_ = false;
-    if (show_options_) {
-        if (opt_ok_button_pressed_ || opt_return_button_pressed_) {
-            opt_ok_button_pressed_ = false;
-            opt_return_button_pressed_ = false;
-            close_options();
-        }
-        // The slider callbacks run at the release (FUN_010115ca -> 0x1015058): the Sound slider sets the Sound Volume and then plays the test voice (gantrdy, 0x101508a),
-        // the Music slider sets the music volume
-        if (active_slider_dragging_ == 0) {
-            if (on_sfx_volume_) on_sfx_volume_(sfx_volume_);
-            play_sfx(sim::SoundID::GeneralReady);
-        } else if (active_slider_dragging_ == 1) {
-            if (on_music_volume_) on_music_volume_(music_volume_);
-        }
-        active_slider_dragging_ = -1;
+    if (options_.is_open()) {
+        // The callbacks run at the release: Return, the pairs of switches and the sliders' drags (FUN_010115ca, FUN_01011206)
+        if (button == SDL_BUTTON_LEFT) options_.on_release(x, y);
         return true;
     }
 
@@ -1553,14 +1429,8 @@ bool HUD::handle_mouse_motion(int32_t x, int32_t y,
     options_button_.is_hovered = options_button_.contains(x, y);
     quit_button_.is_hovered = quit_button_.contains(x, y);
 
-    if (show_options_) {
-        if (active_slider_dragging_ == 0) {
-            sfx_volume_ = std::clamp(static_cast<float>(x - 188) / 185.0f, 0.0f, 1.0f);       // only the thumb moves while dragging
-        } else if (active_slider_dragging_ == 1) {
-            music_volume_ = std::clamp(static_cast<float>(x - 188) / 185.0f, 0.0f, 1.0f);
-        } else if (active_slider_dragging_ == 2) {
-            scroll_rate_ = std::clamp(static_cast<float>(x - 188) / 185.0f, 0.0f, 1.0f);
-        }
+    if (options_.is_open()) {
+        options_.on_move(x, y);                   // hover pictures; a dragged thumb follows the pointer (only the thumb: the value is applied at the release)
         return true;
     }
 
@@ -1597,7 +1467,7 @@ bool HUD::is_input_captured() const noexcept {
 // is held on the minimap, FUN_01009850.
 bool HUD::input_tick(ViewportCamera& camera, uint32_t map_w, uint32_t map_h, int32_t mouse_x, int32_t mouse_y) {
     if (is_modal_open() || map_w == 0 || map_h == 0) return false;
-    const int32_t rate = std::min(99, static_cast<int32_t>(scroll_rate_ * 100.0f));
+    const int32_t rate = options_.state().scroll_speed;       // the profile's Scroll Speed 0 .. 99 (FUN_01027329: the half extent is rate + 10)
     EdgeScroll step;
     if (is_radar_dragging_) {
         step = minimap_scroll_step(mouse_x, mouse_y, camera.world_x, camera.world_y, static_cast<int32_t>(map_w), static_cast<int32_t>(map_h));
@@ -1650,21 +1520,12 @@ bool HUD::handle_key_down(int32_t key, sim::SimulationEngine& sim, ViewportCamer
         return true;
     }
 
-    if (show_options_) {
-        if (active_quick_chat_edit_ >= 0 && active_quick_chat_edit_ < 4) {
-            if (key == SDLK_ESCAPE || key == SDLK_RETURN || key == SDLK_KP_ENTER) {
-                active_quick_chat_edit_ = -1;
-                return true;
-            }
-            if (key == SDLK_BACKSPACE) {
-                if (!quick_chat_keys_[active_quick_chat_edit_].empty()) {
-                    quick_chat_keys_[active_quick_chat_edit_].pop_back();
-                }
-                return true;
-            }
-            return true;
-        }
-        if (key == SDLK_RETURN || key == SDLK_KP_ENTER) close_options();      // Enter closes it, Esc does not
+    if (options_.is_open()) {
+        // FUN_01014f12: Enter closes the window whatever has the focus; Backspace goes to the edit field that has it; Esc does nothing. Printable keys arrive
+        // as text input (SDL_TEXTINPUT), not as key events.
+        if (key == SDLK_RETURN || key == SDLK_KP_ENTER) options_.on_key(ScreenEdit::KEY_ENTER);
+        else if (key == SDLK_BACKSPACE) options_.on_key(ScreenEdit::KEY_BACKSPACE);
+        else if (key == SDLK_ESCAPE) options_.on_key(ScreenEdit::KEY_ESCAPE);
         return true;
     }
 
@@ -1672,7 +1533,7 @@ bool HUD::handle_key_down(int32_t key, sim::SimulationEngine& sim, ViewportCamer
     const auto& world = sim.get_world_state();
 
     // The chat edit control is always active while chat is on: it takes 0x20 - 0x7E and Backspace unless Ctrl is held
-    if (chat_enabled_ && !ctrl) {
+    if (options_.state().chat && !ctrl) {
         if (key >= 32 && key <= 126) {
             if (chat_input_.size() < kChatInputMax) chat_input_.push_back(static_cast<char>(key));
             return true;
@@ -1689,7 +1550,7 @@ bool HUD::handle_key_down(int32_t key, sim::SimulationEngine& sim, ViewportCamer
             open_quick_help();
             return true;
         case SDLK_F9: case SDLK_F10: case SDLK_F11: case SDLK_F12:
-            if (!repeat && chat_enabled_) trigger_quick_chat(static_cast<size_t>(key - SDLK_F9));
+            if (!repeat && options_.state().chat) trigger_quick_chat(static_cast<size_t>(key - SDLK_F9));
             return true;
         case SDLK_RETURN: case SDLK_KP_ENTER:                  // FUN_010103eb: the team when the player has an ally, else everybody
             send_chat_message();
@@ -1767,19 +1628,11 @@ bool HUD::handle_key_down(int32_t key, sim::SimulationEngine& sim, ViewportCamer
 
 void HUD::handle_text_input(const std::string& text) {
     if (text.empty()) return;
-    if (show_options_) {
-        if (active_quick_chat_edit_ >= 0 && active_quick_chat_edit_ < 4) {
-            for (char c : text) {
-                if (c >= 32 && c <= 126) {
-                    if (quick_chat_keys_[active_quick_chat_edit_].size() < 40) {
-                        quick_chat_keys_[active_quick_chat_edit_].push_back(c);
-                    }
-                }
-            }
-        }
+    if (options_.is_open()) {
+        options_.on_text(text);                   // the focused edit field takes the printable characters (at most 100)
         return;
     }
-    if (show_quit_dialog_ || show_quick_help_ || show_match_start_modal_ || !chat_enabled_) return;     // a dialog or the chat cover takes the keys
+    if (show_quit_dialog_ || show_quick_help_ || show_match_start_modal_ || !options_.state().chat) return;     // a dialog or the chat cover takes the keys
     for (char c : text) {
         if (c >= 32 && c <= 126) {
             if (chat_input_.size() < kChatInputMax) {
@@ -1791,7 +1644,7 @@ void HUD::handle_text_input(const std::string& text) {
 
 void HUD::send_chat(bool to_team) {
     if (chat_input_.empty()) return;
-    if (!chat_enabled_) {                     // "Participate In Chat" off: the box is covered and nothing is sent
+    if (!options_.state().chat) {                     // "Participate In Chat" off: the box is covered and nothing is sent
         chat_input_.clear();
         return;
     }
@@ -1801,11 +1654,30 @@ void HUD::send_chat(bool to_team) {
     chat_scroll_offset_ = 0;
 }
 
+// The callbacks of the options screen (FUN_01015058 / FUN_01015092 / FUN_010150bc, FUN_01014f5a .. FUN_0101501f, FUN_0100bbf2): the profile is written first, then the
+// setting is applied. The Sound Volume sets the volume and plays the test voice (gantrdy, 0x102bd7e), the Music Volume sets the music volume and restarts the
+// track (the owner's callback). The Scroll Speed is read by the input tick, the two switches and the quick chats by the chat box and the start of the program.
+void HUD::apply_option(OptionSetting setting) {
+    const OptionsState& state = options_.state();
+    if (config_store_ != nullptr) state.write(*config_store_, setting);
+    switch (setting) {
+        case OptionSetting::SoundVolume:
+            if (on_sfx_volume_) on_sfx_volume_(state.sound_volume);
+            play_sfx(sim::SoundID::GeneralReady);
+            break;
+        case OptionSetting::MusicVolume:
+            if (on_music_volume_) on_music_volume_(state.music_volume);
+            break;
+        default:
+            break;
+    }
+}
+
 void HUD::trigger_quick_chat(size_t index) {
-    if (index >= 4 || !chat_enabled_) return;
-    if (quick_chat_keys_[index].empty()) return;
-    add_chat_entry(player_name_.empty() ? "Player" : player_name_, quick_chat_keys_[index], false);   // F9 - F12 always go to all
-    if (on_chat_send_) on_chat_send_(quick_chat_keys_[index], false);
+    if (index >= 4 || !options_.state().chat) return;
+    if (options_.state().quick_chat[index].empty()) return;
+    add_chat_entry(player_name_.empty() ? "Player" : player_name_, options_.state().quick_chat[index], false);   // F9 - F12 always go to all
+    if (on_chat_send_) on_chat_send_(options_.state().quick_chat[index], false);
 }
 
 namespace {
@@ -1864,7 +1736,7 @@ void HUD::add_news_flash(uint32_t elapsed_ms, const std::string& text) {
 }
 
 void HUD::receive_chat_message(uint8_t sender, const std::string& name, const std::string& text, bool to_team, const sim::WorldState& world) {
-    if (!chat_enabled_) return;                                       // the receive handler drops it (0x102411a)
+    if (!options_.state().chat) return;                                       // the receive handler drops it (0x102411a)
     if (to_team && sender != local_player_id_) {
         const bool sender_ally_is_me = sender < world.player_alliances.size() && world.player_alliances[sender] == local_player_id_;
         if (!sender_ally_is_me) return;                               // team text: only the sender and the players whose ally the sender is

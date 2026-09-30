@@ -345,6 +345,13 @@ if [ "$RUN_APP" -eq 1 ]; then
     echo -e "${BOLD}${BLUE}======================================================================${RESET}"
     "./$BUILD_DIR/tests/test_app/test_network_app"
     NETWORK_APP_STATUS=$?
+
+    echo ""
+    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
+    echo -e "${BOLD}${BLUE}>>> 3.7 RUNNING OPTIONS SUITE (slider, switches, edit fields, settings)...${RESET}"
+    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
+    "./$BUILD_DIR/tests/test_app/test_options"
+    OPTIONS_STATUS=$?
 fi
 
 # 6. Execute E2E Opaque-Box Tests
@@ -542,6 +549,13 @@ if [ "$RUN_APP" -eq 1 ]; then
         echo -e " 3.6 Network Application (test_network_app):         ${GREEN}PASSED${RESET}"
     else
         echo -e " 3.6 Network Application (test_network_app):         ${RED}FAILED (exit code ${NETWORK_APP_STATUS})${RESET}"
+        TOTAL_FAILED=$((TOTAL_FAILED + 1))
+    fi
+
+    if [ "$OPTIONS_STATUS" -eq 0 ]; then
+        echo -e " 3.7 Options (test_options):                         ${GREEN}PASSED${RESET}"
+    else
+        echo -e " 3.7 Options (test_options):                         ${RED}FAILED (exit code ${OPTIONS_STATUS})${RESET}"
         TOTAL_FAILED=$((TOTAL_FAILED + 1))
     fi
 fi

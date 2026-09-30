@@ -690,7 +690,8 @@ void test_static_shell(const assets::AssetArchive& arc) {
         sim.init_test_world(60, 60, 100, 60000);
         ViewportCamera camera;
         hud.open_options();
-        hud.handle_mouse_down(160, 300, 1, sim, camera);   // the options' Chat OFF button spans x 146..192, y 287..311
+        hud.handle_mouse_down(160, 300, 1, sim, camera);   // the options' Chat OFF button spans x 151..200, y 289..313
+        hud.handle_mouse_up(160, 300, 1, sim, camera);     // a switch acts at the release
         hud.close_options();
         check(!hud.is_chat_enabled(), "options chat OFF button switches chat off");
         RecordingRenderer no_chat(arc);
@@ -806,31 +807,47 @@ void test_button_states(const assets::AssetArchive& arc) {
         check(rr.has_sprite_at("butallr.bmp", 543, 447) && rr.has_sprite_at("butallu.bmp", 532, 443), "All hover: r label at (543,447) over the up art at (532,443)");
     }
 
-    // The Sound slider applies the option at the RELEASE and then plays the test voice (gantrdy, 14); the Music slider applies at the release; dragging only moves the thumb (0x1015058)
+    // The Sound slider applies the option at the RELEASE and then plays the test voice (gantrdy, 14); the Music slider applies at the release; a press changes nothing and
+    // dragging only moves the thumb (FUN_010115ca, FUN_0101161b, callback 0x1015058); the applied value is what the thumb stands for: (pos - 211) 100 / 185
     {
         HUD hud;
         hud.init(0);
-        std::vector<float> applied_sfx;
-        std::vector<float> applied_music;
+        std::vector<int32_t> applied_sfx;
+        std::vector<int32_t> applied_music;
         std::vector<uint32_t> played;
-        hud.set_on_sfx_volume([&](float v) { applied_sfx.push_back(v); });
-        hud.set_on_music_volume([&](float v) { applied_music.push_back(v); });
+        hud.set_on_sfx_volume([&](int32_t v) { applied_sfx.push_back(v); });
+        hud.set_on_music_volume([&](int32_t v) { applied_music.push_back(v); });
         hud.set_on_play_sfx([&](uint32_t s) { played.push_back(s); });
         hud.open_options();
         hud.handle_mouse_down(300, 185, 1, sim, camera);                      // press on the Sound slider
+        check(hud.options_screen().slider(0).position() == 395 && hud.get_sound_volume() == 100, "sound slider: the press moves nothing");
         hud.handle_mouse_motion(330, 185, sim, camera);                       // drag
         hud.handle_mouse_motion(350, 185, sim, camera);
+        check(hud.options_screen().slider(0).thumb_left() == 327, "sound slider: the thumb follows the pointer (x 350 - 23)");
         check(applied_sfx.empty() && played.empty(), "sound slider: nothing is applied and no voice plays while the thumb is dragged");
         hud.handle_mouse_up(350, 185, 1, sim, camera);
-        check(applied_sfx.size() == 1 && applied_sfx[0] > 0.8f && applied_sfx[0] < 0.9f, "sound slider: the option is applied once, at the release");
+        check(applied_sfx.size() == 1 && applied_sfx[0] == 75, "sound slider: the option is applied once, at the release: (350 - 211) 100 / 185 = 75");
         check(played.size() == 1 && played[0] == sim::SoundID::GeneralReady, "sound slider: the test voice gantrdy (14) plays after it");
         played.clear();
         hud.handle_mouse_down(300, 222, 1, sim, camera);                      // the Music slider
         hud.handle_mouse_motion(260, 222, sim, camera);
         check(applied_music.empty(), "music slider: nothing is applied while dragging");
         hud.handle_mouse_up(260, 222, 1, sim, camera);
-        check(applied_music.size() == 1 && played.empty(), "music slider: applied once at the release, no voice");
+        check(applied_music.size() == 1 && applied_music[0] == 26 && played.empty(), "music slider: applied once at the release (26), no voice");
         check(applied_sfx.size() == 1, "and the sound option stays as it was");
+        // every event is preceded by the move (FUN_0102737e calls FUN_0102653f first): the release moves the thumb to the pointer even when no motion came between, so a
+        // plain click sets the value of the clicked position; the far end of the track is 99, the Sound Volume 100 of the start is out of reach
+        HUD other;
+        other.init(0);
+        std::vector<int32_t> again;
+        other.set_on_sfx_volume([&](int32_t v) { again.push_back(v); });
+        other.open_options();
+        other.handle_mouse_down(300, 185, 1, sim, camera);
+        other.handle_mouse_up(300, 185, 1, sim, camera);
+        check(again.size() == 1 && again[0] == 48, "a click on the Sound slider without a move sets the value of the clicked position: (300 - 211) 100 / 185 = 48");
+        other.handle_mouse_down(418, 190, 1, sim, camera);
+        other.handle_mouse_up(418, 190, 1, sim, camera);
+        check(again.size() == 2 && again[1] == 99, "a click at the far end: 99");
     }
 
     // Option screen controls (op_screen): toggles, Return, slider thumbs at the original's defaults 100 / 65 / 50
@@ -841,8 +858,7 @@ void test_button_states(const assets::AssetArchive& arc) {
         RecordingRenderer rr(arc);
         render_settled(hud, arc, world, rr);
         check(hud.is_chat_enabled() && hud.is_quick_help_enabled(), "options default: chat on, quick help on");
-        check(hud.get_sfx_volume() == 1.0f && hud.get_music_volume() > 0.649f && hud.get_music_volume() < 0.651f && hud.get_scroll_rate() == 0.5f,
-              "options default: sound 100, music 65, scroll 50");
+        check(hud.get_sound_volume() == 100 && hud.get_music_volume() == 65 && hud.get_scroll_speed() == 50, "options default: sound 100, music 65, scroll 50");
         check(rr.has_sprite_at("optond.bmp", 102, 289) && rr.has_sprite_at("dbutoffu.bmp", 151, 290), "chat on: ON down at (102,289), OFF up at (151,290)");
         check(rr.has_sprite_at("optond.bmp", 355, 289) && rr.has_sprite_at("dbutoffu.bmp", 404, 290), "quick help on: ON down at (355,289), OFF up at (404,290)");
         check(rr.has_sprite_at("breturn1.bmp", 351, 425), "Return button up art at (351,425)");
@@ -860,19 +876,113 @@ void test_button_states(const assets::AssetArchive& arc) {
         check(down.has_sprite_at("breturn3.bmp", 353, 427), "Return pressed: breturn3 at (353,427)");
         hud.handle_mouse_up(400, 440, 1, sim, camera);
         check(!hud.is_options_open(), "releasing Return closes the options");
-        // Toggle hit rectangles are the union of the resting and pressed art
+        // Toggle hit rectangles are the union of the resting and pressed art; a switch acts at the release
         hud.open_options();
-        hud.handle_mouse_down(102, 289, 1, sim, camera);
-        hud.handle_mouse_down(150, 312, 1, sim, camera);
+        auto click = [&](int32_t x, int32_t y) {
+            hud.handle_mouse_down(x, y, 1, sim, camera);
+            hud.handle_mouse_up(x, y, 1, sim, camera);
+        };
+        click(102, 289);
+        click(150, 312);
         check(hud.is_chat_enabled(), "(150,312) is outside the chat OFF toggle");
-        hud.handle_mouse_down(151, 289, 1, sim, camera);
+        click(151, 289);
         check(!hud.is_chat_enabled(), "(151,289) is inside the chat OFF toggle");
-        hud.handle_mouse_down(102, 289, 1, sim, camera);
+        click(102, 289);
         check(hud.is_chat_enabled(), "(102,289) is inside the chat ON toggle");
-        hud.handle_mouse_down(404, 289, 1, sim, camera);
+        click(404, 289);
         check(!hud.is_quick_help_enabled(), "(404,289) is inside the quick help OFF toggle (the startup help is skipped)");
-        hud.handle_mouse_down(355, 289, 1, sim, camera);
+        click(355, 289);
         check(hud.is_quick_help_enabled(), "(355,289) is inside the quick help ON toggle");
+        hud.handle_mouse_down(151, 289, 1, sim, camera);
+        check(hud.is_chat_enabled(), "a press on a switch changes nothing");
+        hud.handle_mouse_up(151, 289, 1, sim, camera);
+        hud.close_options();
+    }
+
+    // The options screen's controls in every state (FUN_01011281: up, hover, down, down + hover) and its edit fields (FUN_010119a8, label FUN_0102b36a): 12 px text in
+    // (239, 231, 223) at the field's corner, the caret "_" behind the text, blinking every 150 ms from the focus; a focused text that does not fit shows its end
+    {
+        auto drew = [&](const RecordingRenderer& rr, const char* anim) {
+            const auto* seq = arc.find_animation(anim);
+            if (!seq || seq->subitems.empty()) return false;
+            for (const auto& part : seq->subitems[0].frames) {
+                if (!rr.has_sprite_at(arc.get_sprite(part.sprite_index).name, part.dx, part.dy)) return false;
+            }
+            return true;
+        };
+        for (const char* name : {"op_conu", "op_conr", "op_cond", "op_condr", "op_coffu", "op_coffr", "op_coffd", "op_coffdr", "op_honu", "op_honr", "op_hond", "optondr", "op_hoffu",
+                                 "op_hoffr", "op_hoffd", "op_hoffdr", "breturn1", "breturn2", "breturn3", "op_screen"}) {
+            check(arc.find_animation(name) != nullptr, std::string("the options animation ") + name + " exists");
+        }
+        HUD hud;
+        hud.init(0);
+        hud.set_ticks_function(&test_clock);
+        g_now_ms = 1000;
+        hud.open_options();
+        ViewportCamera cam;
+        auto frame = [&](uint32_t now) {
+            g_now_ms = now;
+            RecordingRenderer rr(arc);
+            hud.render(rr, arc, world, cam);
+            return rr;
+        };
+        auto text_at = [&](const RecordingRenderer& rr, const std::string& text, int32_t x, int32_t y) {
+            for (const auto& t : rr.texts) {
+                if (t.text == text && t.x == x && t.y == y && t.size == FontSize::Px12 && t.colour.r == 239 && t.colour.g == 231 && t.colour.b == 223) return true;
+            }
+            return false;
+        };
+        RecordingRenderer f = frame(1000);
+        check(text_at(f, "Now you are in for it!", 92, 370) && text_at(f, "Let me be!", 92, 402) && text_at(f, "Attack!", 302, 370) && text_at(f, "Do you want to ally?", 302, 402),
+              "the four quick chats at the corners of their fields (92, 370), (92, 402), (302, 370), (302, 402) in 12 px (239, 231, 223)");
+        check(text_at(f, "_", 92 + 22 * 6, 370), "the F9 field has the focus: the caret right behind its text");
+        check(text_at(frame(1149), "_", 92 + 22 * 6, 370) && !text_at(frame(1150), "_", 92 + 22 * 6, 370) && !text_at(frame(1299), "_", 92 + 22 * 6, 370) &&
+                  text_at(frame(1300), "_", 92 + 22 * 6, 370),
+              "the caret shows 150 ms, is gone 150 ms, shows again (from the moment the screen opened)");
+        // a press on the F10 field moves the focus and the caret
+        hud.handle_mouse_down(150, 410, 1, sim, camera);
+        RecordingRenderer g = frame(1400);
+        check(text_at(g, "_", 92 + 10 * 6, 402) && !text_at(g, "_", 92 + 22 * 6, 370), "a press on F10: the caret is behind its text (the phase starts at the press: visible)");
+        // typed text appears at once
+        hud.handle_text_input(" ok");
+        check(text_at(frame(1400), "Let me be! ok", 92, 402) && hud.get_quick_chat_key(1) == "Let me be! ok", "typed text shows in the field and is the quick chat");
+        // a click on the window takes the focus: no caret at all
+        hud.handle_mouse_down(300, 330, 1, sim, camera);
+        RecordingRenderer h = frame(1400);
+        bool any_caret = false;
+        for (const auto& t : h.texts) if (t.text == "_" && t.colour.r == 239 && t.colour.g == 231 && t.colour.b == 223) any_caret = true;
+        check(!any_caret, "no field has the focus: no caret");
+        // a text that does not fit (135 px here: 22 characters of 6 px): focused it shows its end, unfocused its beginning
+        hud.options().quick_chat[0] = "0123456789abcdefghijklmnopqrstuvwxyz";
+        hud.close_options();
+        hud.open_options();
+        RecordingRenderer j = frame(2000);
+        check(text_at(j, "efghijklmnopqrstuvwxyz", 92 + 135 - 132, 370) && text_at(j, "_", 92 + 135, 370), "focused and too long: the end shows, right aligned before the caret's room");
+        hud.handle_mouse_down(300, 330, 1, sim, camera);
+        RecordingRenderer k = frame(2000);
+        check(text_at(k, "0123456789abcdefghijkl", 92, 370), "unfocused: the beginning shows, cut at the right edge of the field");
+        hud.close_options();
+
+        // the pictures of a switch in every state
+        hud.open_options();
+        hud.handle_mouse_motion(170, 300, sim, camera);                         // over Chat OFF (not latched)
+        RecordingRenderer a1 = frame(3000);
+        check(drew(a1, "op_coffr") && !drew(a1, "op_coffdr"), "hover over an unlatched switch: the hover picture");
+        hud.handle_mouse_down(170, 300, 1, sim, camera);
+        RecordingRenderer a2 = frame(3000);
+        check(drew(a2, "op_coffd"), "pressed: the down picture");
+        hud.handle_mouse_motion(172, 300, sim, camera);
+        RecordingRenderer a3 = frame(3000);
+        check(drew(a3, "op_coffdr"), "held down and moved inside: down + hover");
+        hud.handle_mouse_up(172, 300, 1, sim, camera);
+        hud.update(world, 1);                                                    // the 50 ms poll of the pointer
+        RecordingRenderer a4 = frame(3000);
+        check(drew(a4, "op_coffdr") && drew(a4, "op_conu"), "released: Chat OFF is latched (down + hover under the pointer), Chat ON is up");
+        hud.handle_mouse_motion(300, 330, sim, camera);
+        hud.update(world, 1);
+        RecordingRenderer a5 = frame(3000);
+        check(drew(a5, "op_coffd") && !drew(a5, "op_coffdr") && drew(a5, "op_conu"), "the pointer elsewhere: Chat OFF down, Chat ON up");
+        hud.close_options();
     }
 
     // Quit dialog buttons: yes1 at (180,260); pressed yes3 has its part at (0,1) relative to the origin

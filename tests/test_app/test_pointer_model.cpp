@@ -1152,7 +1152,8 @@ void test_keyboard() {
         check(f.hud.get_chat_input().empty() && f.hud.get_chat_log().size() > base + 5, "Enter sends and clears");
         // with the chat option off the box is covered: nothing is typed, F9 - F12 are silent, Enter sends nothing
         f.hud.open_options();
-        f.press(151, 289);                                        // the OFF toggle of the chat option
+        f.press(151, 289);                                        // the OFF toggle of the chat option (a switch acts at the release)
+        f.release(151, 289);
         f.hud.close_options();
         const size_t now = f.hud.get_chat_log().size();
         check(!key('a') && f.hud.get_chat_input().empty(), "chat off: nothing is typed");
@@ -1204,6 +1205,7 @@ void test_buttons() {
     check(f.hud.get_chat_log().size() == base + 2 && f.hud.get_chat_input().empty(), "the release sends and clears");
     f.hud.open_options();
     f.press(151, 289);
+    f.release(151, 289);
     f.hud.close_options();
     f.hud.set_chat_input("");
     f.sounds.clear();

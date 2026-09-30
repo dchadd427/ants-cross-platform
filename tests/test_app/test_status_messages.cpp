@@ -826,7 +826,8 @@ void test_chat_gate_and_filter() {
     // the option off: nothing is sent, nothing is received, quick chat is silent
     ViewportCamera camera;
     hud.open_options();
-    hud.handle_mouse_down(151, 289, SDL_BUTTON_LEFT, sim, camera);      // the OFF toggle of the chat option
+    hud.handle_mouse_down(151, 289, SDL_BUTTON_LEFT, sim, camera);      // the OFF toggle of the chat option (a switch acts at the release)
+    hud.handle_mouse_up(151, 289, SDL_BUTTON_LEFT, sim, camera);
     hud.close_options();
     check(!hud.is_chat_enabled(), "chat switched off");
     before = log.size();

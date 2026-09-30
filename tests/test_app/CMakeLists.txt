@@ -242,6 +242,39 @@ endif()
 add_test(NAME test_pointer_model COMMAND test_pointer_model)
 set_tests_properties(test_pointer_model PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
 
+# Options model: the slider, the latching button and the edit field of the original, the settings store and the options screen built from them (pure logic)
+add_executable(test_options
+    test_options.cpp
+)
+
+target_include_directories(test_options PRIVATE
+    ${CMAKE_SOURCE_DIR}/include
+    ${SDL2_INCLUDE_DIRS}
+)
+
+target_link_libraries(test_options PRIVATE
+    ants_app
+    ants_net
+    ants_sim
+    ants_assets
+    ${SDL2_LIBRARIES}
+)
+
+if(APPLE)
+    target_link_libraries(test_options PRIVATE
+        "-framework AudioToolbox"
+        "-framework CoreFoundation"
+        "-framework CoreAudio"
+    )
+endif()
+
+if(WIN32)
+    target_link_libraries(test_options PRIVATE ws2_32 winmm)
+endif()
+
+add_test(NAME test_options COMMAND test_options)
+set_tests_properties(test_options PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
 add_executable(test_network_app
     test_network_app.cpp
 )

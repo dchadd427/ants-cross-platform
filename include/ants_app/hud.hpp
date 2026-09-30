@@ -11,7 +11,9 @@
 #include "ants_sim/game_strings.hpp"
 #include "ants_sim/sim_engine.hpp"
 #include "ants_app/renderer.hpp"
+#include "ants_app/config_store.hpp"
 #include "ants_app/edge_scroll.hpp"
+#include "ants_app/options_screen.hpp"
 #include "ants_app/pedestal.hpp"
 #include "ants_app/status_line.hpp"
 
@@ -56,6 +58,8 @@ public:
 
     HUD();
     ~HUD() = default;
+    HUD(const HUD&) = delete;                     // the options screen calls back into its HUD
+    HUD& operator=(const HUD&) = delete;
 
     // Test hook: replaces the millisecond clock used by the pedestal transitions
     void set_ticks_function(uint32_t (*fn)()) noexcept { ticks_fn_ = fn; }
@@ -158,7 +162,7 @@ public:
     bool input_tick(ViewportCamera& camera, uint32_t map_w, uint32_t map_h, int32_t mouse_x, int32_t mouse_y);
     /// A dialog (options, quit, quick help, the "get ready" modal) is open: it gets all input, the hover and scroll logic does not run.
     bool is_modal_open() const noexcept {
-        return show_options_ || show_quit_dialog_ || show_quick_help_ || show_match_start_modal_ || alliance_dialog_ != AllianceDialog::None;
+        return options_.is_open() || show_quit_dialog_ || show_quick_help_ || show_match_start_modal_ || alliance_dialog_ != AllianceDialog::None;
     }
     /// The left button is captured by the map (a rubber band), the minimap or a button (`[5534]` != 0): no edge scrolling then.
     bool is_input_captured() const noexcept;
@@ -235,27 +239,34 @@ public:
     void close_quick_help() noexcept { show_quick_help_ = false; }
     bool is_quick_help_open() const noexcept { return show_quick_help_; }
 
-    void open_options() noexcept { release_capture(); show_options_ = true; }
-    void close_options() noexcept { show_options_ = false; active_quick_chat_edit_ = -1; }
-    bool is_options_open() const noexcept { return show_options_; }
+    /// The options screen (FUN_0101487c, docs 5.51): a window that takes every event while it is open. Its settings are `options()`; a setting that a callback of
+    /// the screen changes is written to the config store (when there is one) and applied at once: the Sound Volume slider calls `set_on_sfx_volume` and plays the
+    /// test voice, the Music Volume slider calls `set_on_music_volume`, the Scroll Speed is read by the input tick, the chat switch by the chat box.
+    void open_options() { release_capture(); options_.open(clock_ms()); }
+    void close_options() noexcept { options_.close(); }
+    bool is_options_open() const noexcept { return options_.is_open(); }
+    const OptionsScreen& options_screen() const noexcept { return options_; }
+    OptionsState& options() noexcept { return options_.state(); }
+    const OptionsState& options() const noexcept { return options_.state(); }
+    /// Where the profile is written (null: nowhere); the program's start loads `options()` from the same store
+    void set_config_store(ConfigStore* store) noexcept { config_store_ = store; }
 
-    void set_on_sfx_volume(std::function<void(float)> cb) { on_sfx_volume_ = std::move(cb); }
-    void set_on_music_volume(std::function<void(float)> cb) { on_music_volume_ = std::move(cb); }
+    /// The Sound Volume and Music Volume sliders' callbacks get the value 0 .. 100 (the integer of the original's profile)
+    void set_on_sfx_volume(std::function<void(int32_t)> cb) { on_sfx_volume_ = std::move(cb); }
+    void set_on_music_volume(std::function<void(int32_t)> cb) { on_music_volume_ = std::move(cb); }
     void set_on_play_sfx(std::function<void(uint32_t)> cb) { on_play_sfx_ = std::move(cb); }
     void play_sfx(uint32_t sound_id) { if (on_play_sfx_) on_play_sfx_(sound_id); }
 
-    float get_sfx_volume() const noexcept { return sfx_volume_; }
-    float get_music_volume() const noexcept { return music_volume_; }
-    float get_scroll_rate() const noexcept { return scroll_rate_; }
-    void set_scroll_rate(float rate) noexcept { scroll_rate_ = std::clamp(rate, 0.0f, 1.0f); }
-    bool is_chat_enabled() const noexcept { return chat_enabled_; }
-    bool is_quick_help_enabled() const noexcept { return quick_help_enabled_; }
-
+    int32_t get_sound_volume() const noexcept { return options_.state().sound_volume; }
+    int32_t get_music_volume() const noexcept { return options_.state().music_volume; }
+    /// The Scroll Speed 0 .. 99 that the edge scroll uses (its half extent is this + 10)
+    int32_t get_scroll_speed() const noexcept { return options_.state().scroll_speed; }
+    bool is_chat_enabled() const noexcept { return options_.state().chat; }
+    bool is_quick_help_enabled() const noexcept { return options_.state().quick_help; }
     const std::string& get_quick_chat_key(size_t index) const {
         static const std::string empty;
-        return (index < 4) ? quick_chat_keys_[index] : empty;
+        return (index < 4) ? options_.state().quick_chat[index] : empty;
     }
-    int get_active_quick_chat_edit() const noexcept { return active_quick_chat_edit_; }
 
     /// Ctrl+L (0x1026440): the ant draw prints the hit points of every ant as text at its sprite position. Owner's tweak of the original: ON by default
     /// (the original starts with it off); Ctrl+L toggles it as in the original.
@@ -296,7 +307,6 @@ private:
     /// clear) and the local team has not dropped out itself
     bool ally_pedestal_possible(const sim::WorldState& world) const;
     void render_quick_help(IRenderer& renderer, const assets::AssetArchive& assets);
-    void render_options_dialog(IRenderer& renderer, const assets::AssetArchive& assets);
     void render_match_start_modal(IRenderer& renderer, const assets::AssetArchive& assets);
     void render_marquee_box(IRenderer& renderer);
     void render_pedestal_glow(IRenderer& renderer, const assets::AssetArchive& assets, int pedestal_idx);
@@ -439,28 +449,15 @@ private:
     uint32_t issue_group_order(sim::SimulationEngine& sim, sim::TileCoord tile, bool special, bool attack, const std::vector<uint32_t>& targets);
 
     bool show_quick_help_{false};
-    bool show_options_{false};
 
-    // Options menu controls state
-    // Defaults of the original's option screen (Ants.exe 0x10148e6: sound 100, music 65, scroll 50, chat on, quick help on)
-    float sfx_volume_{1.0f};
-    float music_volume_{0.65f};
-    float scroll_rate_{0.5f};
-    bool chat_enabled_{true};
-    bool quick_help_enabled_{true};
-    bool opt_ok_button_pressed_{false};
-    bool opt_return_button_pressed_{false};
-    std::string quick_chat_keys_[4]{                      // the defaults of the original's options (strings 18 - 21)
-        sim::strings::text(sim::strings::kQuickChat1),
-        sim::strings::text(sim::strings::kQuickChat2),
-        sim::strings::text(sim::strings::kQuickChat3),
-        sim::strings::text(sim::strings::kQuickChat4)
-    };
-    int active_quick_chat_edit_{-1};
-    int active_slider_dragging_{-1}; // -1 none, 0 sfx, 1 music, 2 scroll
+    // The options screen and what it changes
+    OptionsScreen options_;
+    ConfigStore* config_store_{nullptr};
+    void apply_option(OptionSetting setting);
+    uint32_t clock_ms() const noexcept { return ticks_fn_ ? ticks_fn_() : SDL_GetTicks(); }
     uint32_t voice_seed_{0x2545F491u};      // the original's rand() for the choice of a voice; never feeds the simulation
-    std::function<void(float)> on_sfx_volume_{nullptr};
-    std::function<void(float)> on_music_volume_{nullptr};
+    std::function<void(int32_t)> on_sfx_volume_{nullptr};
+    std::function<void(int32_t)> on_music_volume_{nullptr};
     std::function<void(uint32_t)> on_play_sfx_{nullptr};
     std::function<void(int32_t, int32_t)> on_spawn_click_marker_{nullptr};
     mutable CursorType current_cursor_{CursorType::Normal};

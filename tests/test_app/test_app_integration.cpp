@@ -1956,14 +1956,15 @@ void run_suite_9_gameplay_mechanics_and_options() {
         hud.handle_mouse_down(280, 185, SDL_BUTTON_LEFT, sim_engine, cam);
         hud.handle_mouse_motion(320, 185, sim_engine, cam);
         hud.handle_mouse_up(320, 185, SDL_BUTTON_LEFT, sim_engine, cam);
-        ASSERT_TRUE(hud.get_sfx_volume() > 0.6f);
+        ASSERT_EQ(hud.get_sound_volume(), 58);                       // the thumb stands for (320 - 211) 100 / 185
+        ASSERT_EQ(app.audio_mixer().sound_volume(), 58);
 
         // Drag music volume slider (x=280, y=223)
         hud.handle_mouse_down(280, 223, SDL_BUTTON_LEFT, sim_engine, cam);
         hud.handle_mouse_motion(340, 223, sim_engine, cam);
         hud.handle_mouse_up(340, 223, SDL_BUTTON_LEFT, sim_engine, cam);
-        ASSERT_TRUE(hud.get_music_volume() > 0.7f);
-        ASSERT_NEAR(app.midi_player().get_volume(), hud.get_music_volume(), 0.01f);
+        ASSERT_EQ(hud.get_music_volume(), 69);                       // (340 - 211) 100 / 185
+        ASSERT_NEAR(app.midi_player().get_volume(), 0.69f, 0.001f);
 
         // Click Return to Game button at (355, 427, bounds 345..455, 423..455)
         hud.handle_mouse_down(380, 435, SDL_BUTTON_LEFT, sim_engine, cam);
@@ -2141,7 +2142,8 @@ void run_suite_9_gameplay_mechanics_and_options() {
         app.hud().handle_mouse_up(330, 222, 1, app.sim(), cam);
         ASSERT_TRUE(mixer.is_music_playing());
         ASSERT_TRUE(mixer.music_filepath().find("INTRO") == std::string::npos);   // the running piece was closed and a random in-game piece started
-        ASSERT_NEAR(mixer.get_music_volume(), (330.0f - 188.0f) / 185.0f, 0.01f);
+        ASSERT_EQ(app.hud().get_music_volume(), 64);                              // (330 - 211) 100 / 185
+        ASSERT_NEAR(mixer.get_music_volume(), 0.64f, 0.001f);
     } TEST_END();
 
     TEST_CASE("9.11 Music: A Match Start Starts A Random Piece; The End Of The Match Closes The Music At Once And Nothing Starts It Again (0x1022714)") {
@@ -2164,6 +2166,120 @@ void run_suite_9_gameplay_mechanics_and_options() {
         app.set_app_active(false);
         app.set_app_active(true);
         ASSERT_FALSE(mixer.is_music_playing());                                   // nor does the activation of the program: the device was already closed
+    } TEST_END();
+
+    TEST_CASE("9.12 Options: Every Setting Is Written When Its Callback Runs And The Next Start Reads It (FUN_0100c20c, FUN_0100a2c9)") {
+        const std::filesystem::path dir = std::filesystem::temp_directory_path() / "ants_test_settings";
+        std::filesystem::remove_all(dir);
+        std::filesystem::create_directories(dir);
+        const std::string file = (dir / "settings.ini").string();
+        ViewportCamera cam;
+        {
+            Application app;
+            ApplicationConfig cfg;
+            cfg.headless = true;
+            cfg.start_in_map_select = false;
+            cfg.settings_path = file;
+            ASSERT_TRUE(app.init(cfg));
+            auto& hud = app.hud();
+            ASSERT_EQ(hud.get_sound_volume(), 100);                   // nothing stored yet: the defaults
+            ASSERT_EQ(hud.get_music_volume(), 65);
+            ASSERT_EQ(hud.get_scroll_speed(), 50);
+            hud.open_options();
+            auto drag = [&](int32_t y, int32_t x_to) {
+                hud.handle_mouse_down(300, y, SDL_BUTTON_LEFT, app.sim(), cam);
+                hud.handle_mouse_motion(x_to, y, app.sim(), cam);
+                hud.handle_mouse_up(x_to, y, SDL_BUTTON_LEFT, app.sim(), cam);
+            };
+            drag(185, 260);                                           // Sound Volume: (260 - 211) 100 / 185 = 26
+            drag(222, 380);                                           // Music Volume: (380 - 211) 100 / 185 = 91
+            drag(260, 240);                                           // Scroll Speed: (240 - 211) 100 / 185 = 15
+            ASSERT_EQ(hud.get_sound_volume(), 26);
+            ASSERT_EQ(hud.get_music_volume(), 91);
+            ASSERT_EQ(hud.get_scroll_speed(), 15);
+            ASSERT_EQ(app.audio_mixer().sound_volume(), 26);
+            hud.handle_mouse_down(151, 289, SDL_BUTTON_LEFT, app.sim(), cam);            // Chat OFF
+            hud.handle_mouse_up(151, 289, SDL_BUTTON_LEFT, app.sim(), cam);
+            hud.handle_mouse_down(404, 289, SDL_BUTTON_LEFT, app.sim(), cam);            // Quick Help OFF
+            hud.handle_mouse_up(404, 289, SDL_BUTTON_LEFT, app.sim(), cam);
+            hud.handle_mouse_down(150, 410, SDL_BUTTON_LEFT, app.sim(), cam);            // the F10 field
+            hud.handle_mouse_up(150, 410, SDL_BUTTON_LEFT, app.sim(), cam);
+            hud.handle_text_input(" Now!");
+            ASSERT_EQ(hud.get_quick_chat_key(1), "Let me be! Now!");
+        }
+        {
+            std::ifstream in(file);
+            ASSERT_TRUE(in.good());
+            const std::string text((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+            ASSERT_TRUE(text.find("Sound Volume=26\n") != std::string::npos);
+            ASSERT_TRUE(text.find("Music Volume=91\n") != std::string::npos);
+            ASSERT_TRUE(text.find("Scroll Speed=15\n") != std::string::npos);
+            ASSERT_TRUE(text.find("Participate In Chat=0\n") != std::string::npos);
+            ASSERT_TRUE(text.find("Show Quick Help at Startup=0\n") != std::string::npos);
+            ASSERT_TRUE(text.find("Quick Chat F10=Let me be! Now!\n") != std::string::npos);
+            ASSERT_TRUE(text.find("Quick Chat F9") == std::string::npos);        // only what a callback wrote is stored
+        }
+        {
+            Application app;                                          // the next start
+            ApplicationConfig cfg;
+            cfg.headless = true;
+            cfg.start_in_map_select = false;
+            cfg.settings_path = file;
+            ASSERT_TRUE(app.init(cfg));
+            auto& hud = app.hud();
+            ASSERT_EQ(hud.get_sound_volume(), 26);
+            ASSERT_EQ(hud.get_music_volume(), 91);
+            ASSERT_EQ(hud.get_scroll_speed(), 15);
+            ASSERT_FALSE(hud.is_chat_enabled());
+            ASSERT_FALSE(hud.is_quick_help_enabled());
+            ASSERT_EQ(hud.get_quick_chat_key(0), "Now you are in for it!");      // not stored: the default
+            ASSERT_EQ(hud.get_quick_chat_key(1), "Let me be! Now!");
+            ASSERT_EQ(app.audio_mixer().sound_volume(), 26);                     // and applied at the start
+            ASSERT_NEAR(app.audio_mixer().get_music_volume(), 0.91f, 0.001f);
+            ASSERT_NEAR(app.midi_player().get_volume(), 0.91f, 0.001f);
+            hud.open_options();                                                  // the screen is built from the settings: pos = 211 + 185 v / 99, thumb at pos - 23
+            ASSERT_EQ(hud.options_screen().slider(0).thumb_left(), 236);
+            ASSERT_EQ(hud.options_screen().slider(1).thumb_left(), 358);
+            ASSERT_EQ(hud.options_screen().slider(2).thumb_left(), 216);
+            ASSERT_EQ(hud.options_screen().slider(0).value(), 25);               // the mapping is not its own inverse: 26 is placed where 25 is read back
+            ASSERT_TRUE(hud.options_screen().chat_off().latched() && hud.options_screen().help_off().latched());
+        }
+        std::filesystem::remove_all(dir);
+    } TEST_END();
+
+    TEST_CASE("9.13 Options: A Headless Run Keeps Its Settings In Memory; An Invalid Stored Value Is The Default (FUN_0102950f)") {
+        Application app;
+        ApplicationConfig cfg;
+        cfg.headless = true;
+        cfg.start_in_map_select = false;
+        ASSERT_TRUE(app.init(cfg));
+        ASSERT_TRUE(app.hud().options().quick_chat[2] == "Attack!");
+        app.hud().open_options();
+        app.hud().handle_key_down(SDLK_RETURN, app.sim(), app.renderer().camera());
+        ASSERT_FALSE(app.hud().is_options_open());
+        ASSERT_TRUE(ConfigStore::default_location().empty() || !std::filesystem::exists(std::filesystem::path(ConfigStore::default_location()).parent_path() / "headless_marker"));
+
+        const std::filesystem::path dir = std::filesystem::temp_directory_path() / "ants_test_settings2";
+        std::filesystem::remove_all(dir);
+        std::filesystem::create_directories(dir);
+        const std::string file = (dir / "settings.ini").string();
+        {
+            std::ofstream out(file);
+            out << "Sound Volume=100\nMusic Volume=abc\nScroll Speed=100\nParticipate In Chat=1\nShow Quick Help at Startup=\nQuick Chat F9=" << std::string(130, 'x') << "\n";
+        }
+        Application other;
+        ApplicationConfig cfg2;
+        cfg2.headless = true;
+        cfg2.start_in_map_select = false;
+        cfg2.settings_path = file;
+        ASSERT_TRUE(other.init(cfg2));
+        ASSERT_EQ(other.hud().get_sound_volume(), 100);      // 100 is not below the maximum 100
+        ASSERT_EQ(other.hud().get_music_volume(), 65);       // not a number
+        ASSERT_EQ(other.hud().get_scroll_speed(), 50);       // 100 again
+        ASSERT_TRUE(other.hud().is_chat_enabled());          // 1 is not the one valid value (0) of a switch
+        ASSERT_TRUE(other.hud().is_quick_help_enabled());    // empty
+        ASSERT_EQ(other.hud().get_quick_chat_key(0).size(), 100u);
+        std::filesystem::remove_all(dir);
     } TEST_END();
 
     TEST_CASE("9.7 The Chat Box Is Always Active; Enter, [All] And [Team] Send; Hotkey Modifier Isolation") {
@@ -5271,6 +5387,8 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         // Switched off in the options ("Participate In Chat"): the box is covered and takes nothing
         hud.open_options();
         hud.handle_mouse_down(151, 289, SDL_BUTTON_LEFT, sim, camera);      // the OFF toggle of the chat option
+        ASSERT_TRUE(hud.is_chat_enabled());                                 // a switch acts at the release
+        hud.handle_mouse_up(151, 289, SDL_BUTTON_LEFT, sim, camera);
         hud.close_options();
         ASSERT_FALSE(hud.is_chat_enabled());
         hud.handle_key_down('b', sim, camera, 0);
@@ -5291,14 +5409,16 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         ASSERT_EQ(hud.get_quick_chat_key(2), "Attack!");
         ASSERT_EQ(hud.get_quick_chat_key(3), "Do you want to ally?");
 
-        // Open options dialog
+        // Open options dialog: the F9 field has the focus (FUN_0101487c focuses the first edit field)
         hud.open_options();
         ASSERT_TRUE(hud.is_options_open());
-        ASSERT_EQ(hud.get_active_quick_chat_edit(), -1);
+        ASSERT_TRUE(hud.options_screen().edit(0).focused());
+        ASSERT_FALSE(hud.options_screen().edit(1).focused());
 
-        // Click F9 box (89..235, 368..387)
+        // A press on the F9 field (92..233, 370..385) keeps the focus there
         hud.handle_mouse_down(120, 375, SDL_BUTTON_LEFT, sim, camera);
-        ASSERT_EQ(hud.get_active_quick_chat_edit(), 0);
+        hud.handle_mouse_up(120, 375, SDL_BUTTON_LEFT, sim, camera);
+        ASSERT_TRUE(hud.options_screen().edit(0).focused());
 
         // Backspace to delete "!"
         hud.handle_key_down(SDLK_BACKSPACE, sim, camera);
@@ -5308,13 +5428,12 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         hud.handle_text_input(" all!");
         ASSERT_EQ(hud.get_quick_chat_key(0), "Now you are in for it all!");
 
-        // Press Return to finish editing
+        // Esc does nothing; Return closes the dialog whatever has the focus (FUN_01014f12) and the text stays
+        hud.handle_key_down(SDLK_ESCAPE, sim, camera);
+        ASSERT_TRUE(hud.is_options_open());
         hud.handle_key_down(SDLK_RETURN, sim, camera);
-        ASSERT_EQ(hud.get_active_quick_chat_edit(), -1);
-
-        // Close options
-        hud.close_options();
         ASSERT_FALSE(hud.is_options_open());
+        ASSERT_EQ(hud.get_quick_chat_key(0), "Now you are in for it all!");
 
         // Press F9 in gameplay: broadcasts quick chat 0
         size_t initial_log_size = hud.get_chat_log().size();
@@ -7025,10 +7144,10 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
 
     TEST_CASE("12.108: Version Invariant & Fog of War Cursor Concealment Parity") {
         // 1. Verify semantic versioning components
-        ASSERT_EQ(ants::VERSION_STRING, "v0.0.64");
+        ASSERT_EQ(ants::VERSION_STRING, "v0.0.65");
         ASSERT_EQ(ants::VERSION_MAJOR, 0);
         ASSERT_EQ(ants::VERSION_MINOR, 0);
-        ASSERT_EQ(ants::VERSION_PATCH, 64);
+        ASSERT_EQ(ants::VERSION_PATCH, 65);
 
         // 2. Setup simulation world with Fog of War enabled
         SimulationEngine sim;

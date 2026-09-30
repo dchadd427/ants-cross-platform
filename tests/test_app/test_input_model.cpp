@@ -157,18 +157,18 @@ void test_hud_input_tick() {
     check(want.dx > 0, "the model scrolls east at (639, 240)");
     check(hud.input_tick(cam, 60, 60, 639, 240) && cam.world_x == ox + want.dx && cam.world_y == oy, "one tick moves the view by the model's step");
 
-    // the slider: rate 0 -> v 0 (6-10 px), 1.0 -> v 99
+    // the slider: Scroll Speed 0 (6-10 px) .. 99
     cam.center_on(960, 960, 60, 60);
-    hud.set_scroll_rate(0.0f);
+    hud.options().scroll_speed = 0;
     hud.input_tick(cam, 60, 60, 639, 240);
     const int32_t slow = cam.world_x - ox;
     check(slow >= 6 && slow <= 10, "slider at 0: " + std::to_string(slow) + " px");
     cam.center_on(960, 960, 60, 60);
-    hud.set_scroll_rate(1.0f);
+    hud.options().scroll_speed = 99;
     hud.input_tick(cam, 60, 60, 639, 240);
     const int32_t fast = cam.world_x - ox;
     check(fast >= 104 && fast <= 109, "slider at the end: " + std::to_string(fast) + " px");
-    hud.set_scroll_rate(0.5f);
+    hud.options().scroll_speed = 50;
 
     // a dialog gets all input
     cam.center_on(960, 960, 60, 60);

@@ -40,6 +40,12 @@ std::string get_system_username() {
 #endif
 }
 
+// 0x100e714: the Music Volume v (0 .. 100) becomes the device's volume word v * 0xffff / 100 (integer division); as a fraction of the full scale
+float music_volume_of(int32_t v) {
+    const int32_t word = (std::clamp(v, 0, 100) * 0xffff) / 100;
+    return static_cast<float>(word) / 65535.0f;
+}
+
 } // anonymous namespace
 
 Application::Application() = default;
@@ -64,6 +70,8 @@ ApplicationConfig Application::parse_arguments(int argc, char* argv[]) {
         } else if (std::strcmp(argv[i], "--map") == 0 && i + 1 < argc) {
             cfg.default_map_path = argv[++i];
             cfg.start_in_map_select = false;
+        } else if (std::strcmp(argv[i], "--settings") == 0 && i + 1 < argc) {
+            cfg.settings_path = argv[++i];
         } else if (std::strcmp(argv[i], "--seed") == 0 && i + 1 < argc) {
             cfg.random_seed = static_cast<uint32_t>(std::stoul(argv[++i]));
         } else if (std::strcmp(argv[i], "--fullscreen") == 0) {
@@ -213,6 +221,12 @@ bool Application::init(const ApplicationConfig& config) {
 
     // 8. Initialize HUD and Scorecard
     hud_.init(0);
+    // The settings that the program remembers (the original reads its profile in the world's constructor, FUN_0100a2c9): loaded before anything is applied;
+    // a headless run keeps them in memory only unless --settings names a file
+    config_store_.set_location(!config_.settings_path.empty() ? config_.settings_path : (config_.headless ? std::string() : ConfigStore::default_location()));
+    config_store_.load();
+    hud_.options().load(config_store_);
+    hud_.set_config_store(&config_store_);
     local_player_id_ = 0;
 
     scorecard_.set_on_replay([this]() {
@@ -237,13 +251,14 @@ bool Application::init(const ApplicationConfig& config) {
         confirm_quit();
     });
 
-    hud_.set_on_sfx_volume([this](float v) {
-        audio_mixer_.set_sfx_volume(v);
+    hud_.set_on_sfx_volume([this](int32_t v) {
+        audio_mixer_.set_sound_volume(v);                       // 0x102d7cf: the Sound Volume 0 .. 100 enters every sound's law
     });
 
-    hud_.set_on_music_volume([this](float v) {
-        audio_mixer_.set_music_volume(v);
-        midi_player_.set_volume(v);
+    hud_.set_on_music_volume([this](int32_t v) {
+        const float volume = music_volume_of(v);
+        audio_mixer_.set_music_volume(volume);
+        midi_player_.set_volume(volume);
         if (music_open_) play_next_ingame_music();              // 0x100e714: the option is applied at the release; a running piece is closed and a new random one starts
     });
 
@@ -255,9 +270,9 @@ bool Application::init(const ApplicationConfig& config) {
         }
     });
 
-    audio_mixer_.set_sfx_volume(hud_.get_sfx_volume());
-    audio_mixer_.set_music_volume(hud_.get_music_volume());
-    midi_player_.set_volume(hud_.get_music_volume());
+    audio_mixer_.set_sound_volume(hud_.get_sound_volume());
+    audio_mixer_.set_music_volume(music_volume_of(hud_.get_music_volume()));
+    midi_player_.set_volume(music_volume_of(hud_.get_music_volume()));
 
     // 9. Initialize Map Selection Screen
     const bool networked = config_.net_role != ApplicationConfig::NetRole::None;

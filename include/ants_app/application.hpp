@@ -23,6 +23,7 @@
 #include "ants_app/hud.hpp"
 #include "ants_app/scorecard.hpp"
 #include "ants_app/audio_mixer.hpp"
+#include "ants_app/config_store.hpp"
 #include "ants_app/midi_player.hpp"
 #include "ants_app/map_select.hpp"
 
@@ -46,6 +47,9 @@ struct ApplicationConfig {
     std::string maps_dir{"Original-Ants/Maps"};     // the folder whose `*.lvl` files are the map list (the original searches its Maps folder)
     std::string default_map_path;                   // --map: the map of a game that starts without the setup screen; empty: the first map of the list
     std::string midi_path{"Original-Ants/INTRO.MID"};
+    /// --settings: where the options are remembered (a file; the original keeps them in the registry). Empty: the per-user application folder (the browser's local
+    /// storage in the web build), and nowhere in a headless run, which is what the tests use.
+    std::string settings_path;
     uint32_t random_seed{1337};
     bool start_in_map_select{true};
     bool skip_intro{false};
@@ -162,6 +166,7 @@ private:
     ants::sim::SimulationEngine sim_;
 
     MapSelectScreen map_select_;
+    ConfigStore config_store_;      // the options that the program remembers; the HUD writes to it (before hud_: the HUD is destroyed first)
     HUD hud_;
     ScorecardModal scorecard_;
     AudioMixer audio_mixer_;
