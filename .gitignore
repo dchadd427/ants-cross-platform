@@ -49,3 +49,7 @@ tests/artifacts/
 # Python cache
 __pycache__/
 *.pyc
+
+# A local copy of the original game's font (commercial: never commit or ship it; the renderer uses it when it finds it)
+Original-Ants/framd.ttf
+Original-Ants/Franklin Gothic Medium.ttf

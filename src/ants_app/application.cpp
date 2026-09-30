@@ -1086,12 +1086,12 @@ void Application::render_net_overlay() {
         text = net_->match_notice();                                    // "Bob is the host now." for a few seconds
     }
     if (text.empty()) return;
-    const int32_t w = renderer_->get_text_width(text, FontSize::Small);
-    const int32_t h = renderer_->get_text_height(FontSize::Small);
+    const int32_t w = renderer_->get_text_width(text, FontSize::Px14);
+    const int32_t h = renderer_->get_text_height(FontSize::Px14);
     const int32_t x = 17 + (441 - w) / 2;
     const int32_t y = 26;
     renderer_->fill_rect(x - 6, y - 3, w + 12, h + 6, ants::assets::ColorRGBA{0, 0, 0, 170});
-    renderer_->draw_text(text, x, y, colour, FontSize::Small);
+    renderer_->draw_text(text, x, y, colour, FontSize::Px14);
 }
 
 void Application::render_frame() {
@@ -1120,22 +1120,22 @@ void Application::render_frame() {
     // Frame rate counter and frametime sparkline in the bottom right hand corner
     int fps_val = std::max(1, static_cast<int>(std::round(fps_display_value_)));
     std::string fps_text = std::to_string(fps_val) + " FPS";
-    int32_t text_w = renderer_->get_text_width(fps_text, FontSize::Small);
-    int32_t text_h = renderer_->get_text_height(FontSize::Small);
+    int32_t text_w = renderer_->get_text_width(fps_text, FontSize::Px12);
+    int32_t text_h = renderer_->get_text_height(FontSize::Px12);
     int32_t text_x = 632 - text_w;
     constexpr int32_t spark_w = static_cast<int32_t>(SPARKLINE_SAMPLES);
     constexpr int32_t spark_h = 11;
     int32_t spark_x = text_x - spark_w - 6;
     int32_t spark_y = 465;
     int32_t text_y = spark_y + (spark_h - text_h) / 2;
-    renderer_->draw_text(fps_text, text_x, text_y, {255, 255, 255, 255}, FontSize::Small);
+    renderer_->draw_text(fps_text, text_x, text_y, {255, 255, 255, 255}, FontSize::Px12);
 
     // Version number display (bottom-right next to FPS sparkline)
     std::string ver_text(ants::VERSION_STRING);
-    int32_t ver_w = renderer_->get_text_width(ver_text, FontSize::Small);
+    int32_t ver_w = renderer_->get_text_width(ver_text, FontSize::Px12);
     int32_t ver_x = spark_x - ver_w - 6;
     int32_t ver_y = text_y;
-    renderer_->draw_text(ver_text, ver_x, ver_y, {180, 190, 200, 220}, FontSize::Small);
+    renderer_->draw_text(ver_text, ver_x, ver_y, {180, 190, 200, 220}, FontSize::Px12);
 
     // Dark translucent background plate + subtle border
     renderer_->fill_rect(spark_x - 1, spark_y - 1, spark_w + 2, spark_h + 2, ants::assets::ColorRGBA{0, 0, 0, 160});

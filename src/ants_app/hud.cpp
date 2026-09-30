@@ -3,6 +3,7 @@
 #include "ants_sim/game_strings.hpp"
 #include "ants_sim/prng.hpp"
 #include "ants_app/renderer.hpp"
+#include "ants_app/text_layout.hpp"
 #include "ants_app/ui_anim.hpp"
 
 #include <cmath>
@@ -327,8 +328,8 @@ void HUD::check_selected_type_change(const sim::WorldState& world) {
 void HUD::render_status_line(IRenderer& renderer) const {
     if (!status_line_.visible()) return;
     std::string text = status_line_.text();
-    while (text.size() > 1 && renderer.get_text_width(text, FontSize::Small) > 139) text.pop_back();
-    renderer.draw_text(text, 481, 254, ants::assets::ColorRGBA{79, 0, 143, 255}, FontSize::Small);
+    while (text.size() > 1 && renderer.get_text_width(text, FontSize::Px12) > 139) text.pop_back();
+    renderer.draw_text(text, 481, 254, ants::assets::ColorRGBA{79, 0, 143, 255}, FontSize::Px12);
 }
 
 // =========================================================================
@@ -492,8 +493,8 @@ void HUD::render(IRenderer& renderer, const assets::AssetArchive& assets,
             const size_t li = static_cast<size_t>(i);
             const int32_t indent = chat_line_indent_[li];
             std::string text = chat_log_[li];
-            while (text.size() > 1 && renderer.get_text_width(text, FontSize::Small) > 138 - indent) text.pop_back();   // clipped by its box
-            renderer.draw_text(text, 482 + indent, cty, kChatColours[std::min<size_t>(chat_line_colour_[li], 5)], FontSize::Small);
+            while (text.size() > 1 && renderer.get_text_width(text, FontSize::Px12) > 138 - indent) text.pop_back();   // clipped by its box
+            renderer.draw_text(text, 482 + indent, cty, kChatColours[std::min<size_t>(chat_line_colour_[li], 5)], FontSize::Px12);
             cty += 12;
         }
     }
@@ -576,11 +577,13 @@ void HUD::render_top_bar(IRenderer& renderer, const assets::AssetArchive& archiv
     std::string p_name = player_name_.empty() ? TEAM_NAMES[local_player_id_ % 4] : player_name_;
     if (p_name.size() > 15) p_name = p_name.substr(0, 15);
     std::string my_label = p_name + ":";
-    int32_t label_w = renderer.get_text_width(my_label, FontSize::Small);
-    int32_t label_h = renderer.get_text_height(FontSize::Small);
-    int32_t label_x = std::max(312, 399 - label_w);
+    // a right aligned label of 14 px letters in its box [312, 399): what does not fit is cut off on the left (DT_RIGHT in a clipped box)
+    while (my_label.size() > 1 && renderer.get_text_width(my_label, FontSize::Px14) > 399 - 312) my_label.erase(0, 1);
+    int32_t label_w = renderer.get_text_width(my_label, FontSize::Px14);
+    int32_t label_h = renderer.get_text_height(FontSize::Px14);
+    int32_t label_x = 399 - label_w;
     int32_t label_y = 4 + (14 - label_h) / 2;
-    renderer.draw_text(my_label, label_x, label_y, {255, 255, 255, 255}, FontSize::Small);
+    renderer.draw_text(my_label, label_x, label_y, {255, 255, 255, 255}, FontSize::Px14);
 
     // Top-bar buttons (animations buthlp*, butopt*, butqit*; absolute coordinates): the resting art is already part of
     // the top bar image, hovering draws the small "r" label over it and the pressed art replaces it. A button stays down
@@ -760,11 +763,12 @@ void HUD::render_news_banner(IRenderer& renderer, const assets::AssetArchive& as
         std::string name = (p < 4) ? (team_names_[p].empty() ? std::string(TEAM_NAMES[p]) : team_names_[p]) : std::string("AI");
         if (name.size() > 15) name = name.substr(0, 15);
         std::string p_label = name + ":";
-        int32_t label_w = renderer.get_text_width(p_label, FontSize::Small);
-        int32_t label_h = renderer.get_text_height(FontSize::Small);
-        int32_t label_x = std::max(slot.label_left, slot.label_right - label_w);
+        while (p_label.size() > 1 && renderer.get_text_width(p_label, FontSize::Px14) > slot.label_right - slot.label_left) p_label.erase(0, 1);
+        int32_t label_w = renderer.get_text_width(p_label, FontSize::Px14);
+        int32_t label_h = renderer.get_text_height(FontSize::Px14);
+        int32_t label_x = slot.label_right - label_w;
         int32_t label_y = 464 + (14 - label_h) / 2;
-        renderer.draw_text(p_label, label_x, label_y, {255, 255, 255, 255}, FontSize::Small);
+        renderer.draw_text(p_label, label_x, label_y, {255, 255, 255, 255}, FontSize::Px14);
 
         // Score box fill with authentic background color
         renderer.fill_rect(slot.box_x, 464, 54, 14, SCORE_BG_COLORS[p % 4]);
@@ -794,11 +798,9 @@ void HUD::render_quit_dialog(IRenderer& renderer, const assets::AssetArchive& as
         renderer.fill_rect(dx, dy, 320, 224, ColorRGBA{219, 75, 19, 255});
     }
 
-    // Prompt (string 99) centred in the rect (130,180) 260x160 at the top, colour (31,23,51)
-    std::string prompt = "Do you really want to quit?";
-    int32_t text_w = renderer.get_text_width(prompt, FontSize::Large);
-    int32_t text_x = 130 + (260 - text_w) / 2;
-    renderer.draw_text(prompt, text_x, 180, ColorRGBA{31, 23, 51, 255}, FontSize::Large);
+    // Prompt (string 99): a wrapped, centred label of 24 px letters in the rect (130,180) 260x160, colour (31,23,51) (FUN_010142cb: label (30,80),
+    // 260x160, height 24, centred, moved by (100,100) with the dialog)
+    draw_label(renderer, "Do you really want to quit?", 130, 180, 260, ColorRGBA{31, 23, 51, 255}, FontSize::Px24, true);
 
     // Yes button at (180, 260)
     // yes1/2/3 and no1/2/3 are placed with SetPos, so their part offsets are relative to the button origin
@@ -832,36 +834,11 @@ void HUD::render_match_start_modal(IRenderer& renderer, const assets::AssetArchi
     // Dark slate text colour #1F1733 (COLORREF 0x33171F)
     const ColorRGBA text_color{31, 23, 51, 255};
 
-    // Label: "Get ready to play!  You are the <Colour> Ants." word-wrapped and centred in 240 px
+    // Label: "Get ready to play!  You are the <Colour> Ants." (string 105): the original's wrapped, centred label of 35 px letters in the box
+    // (30, 10) 240 x 160 of the dialog (FUN_01017127: FUN_0102b0b5 wraps it, DrawTextA centres every line, the lines are one cell height apart)
     static const char* TEAM_NAMES[4] = {"Green", "Red", "Blue", "Black"};
     const std::string label = std::string("Get ready to play!  You are the ") + TEAM_NAMES[local_player_id_ % 4] + " Ants.";
-    std::vector<std::string> lines;
-    {
-        std::string line, word;
-        auto flush_word = [&]() {
-            if (word.empty()) return;
-            const std::string trial = line.empty() ? word : line + " " + word;
-            if (!line.empty() && renderer.get_text_width(trial, FontSize::Large) > 240) {
-                lines.push_back(line);
-                line = word;
-            } else {
-                line = trial;
-            }
-            word.clear();
-        };
-        for (char ch : label) {
-            if (ch == ' ') flush_word(); else word.push_back(ch);
-        }
-        flush_word();
-        if (!line.empty()) lines.push_back(line);
-    }
-    int32_t ty = 110;
-    const int32_t line_h = renderer.get_text_height(FontSize::Large) + 2;
-    for (const auto& l : lines) {
-        const int32_t w = renderer.get_text_width(l, FontSize::Large);
-        renderer.draw_text(l, 130 + (240 - w) / 2, ty, text_color, FontSize::Large);
-        ty += line_h;
-    }
+    draw_label(renderer, label, mx + 30, my + 10, 240, text_color, FontSize::Px35, true);
 
     // Animated portrait of the local colour's worker ant (agst301: 12 frames, 1650 ms loop), anchor (245,250)
     renderer.set_hud_team(local_player_id_);
@@ -877,10 +854,8 @@ void HUD::render_match_start_modal(IRenderer& renderer, const assets::AssetArchi
     }
     renderer.set_hud_team(0);
 
-    // Footer: "Waiting for others..."
-    const std::string footer = "Waiting for others...";
-    int32_t wf = renderer.get_text_width(footer, FontSize::Medium);
-    renderer.draw_text(footer, 130 + (240 - wf) / 2, 290, text_color, FontSize::Medium);
+    // Footer: "Waiting for others..." (string 104): a centred label of 24 px letters in the box (30, 190) 240 x 20
+    draw_label(renderer, "Waiting for others...", mx + 30, my + 190, 240, text_color, FontSize::Px24, true);
 }
 
 void HUD::render_quick_help(IRenderer& renderer, const assets::AssetArchive& assets) {

@@ -120,8 +120,8 @@ void ScorecardModal::render(IRenderer& renderer, const assets::AssetArchive& ass
     // 2. Top-right "Leave Game" button: animations leave1 / leave2 (hover) / leave3 (pressed), absolute coordinates
     draw_animation_frame0(renderer, assets, quit_pressed_ ? "leave3" : (quit_hovered_ ? "leave2" : "leave1"));
 
-    // 3. Winner Row (Inside Winner Box at y=222..275)
-    int32_t th = renderer.get_text_height(FontSize::Small);
+    // 3. Winner Row (Inside Winner Box at y=222..275); the results screen's labels are 18 px high (FUN_010155ac)
+    int32_t th = renderer.get_text_height(FontSize::Px18);
     // Tinted ant portrait: agst301.bmp at (54, 227) (portrait height 40, center at 247)
     int32_t wy = 227 + (40 - th) / 2;
     renderer.set_hud_team(winner_entry_.player_id);
@@ -129,13 +129,13 @@ void ScorecardModal::render(IRenderer& renderer, const assets::AssetArchive& ass
     renderer.set_hud_team(0);
 
     // Winner Name
-    renderer.draw_text(winner_entry_.name, 90, wy, {255, 255, 255, 255}, FontSize::Small);
+    renderer.draw_text(winner_entry_.name, 90, wy, {255, 255, 255, 255}, FontSize::Px18);
 
     // 4 Columns aligned with column arrow tips
     auto draw_centered_num = [&](int32_t val, int32_t col_x) {
         std::string s = std::to_string(val);
-        int32_t tx = col_x - renderer.get_text_width(s, FontSize::Small) / 2;
-        renderer.draw_text(s, tx, wy, {255, 255, 255, 255}, FontSize::Small);
+        int32_t tx = col_x - renderer.get_text_width(s, FontSize::Px18) / 2;
+        renderer.draw_text(s, tx, wy, {255, 255, 255, 255}, FontSize::Px18);
     };
 
     draw_centered_num(winner_entry_.score, COL_SCORE_X);
@@ -155,16 +155,16 @@ void ScorecardModal::render(IRenderer& renderer, const assets::AssetArchive& ass
             renderer.draw_named_sprite("agst301.bmp", 54, py - 4);
             renderer.set_hud_team(0);
             int32_t row_y = (py - 4) + (40 - th) / 2;
-            renderer.draw_text(pe.name, 90, row_y, {220, 220, 220, 255}, FontSize::Small);
+            renderer.draw_text(pe.name, 90, row_y, {220, 220, 220, 255}, FontSize::Px18);
 
             std::string ps_score = std::to_string(pe.score);
-            renderer.draw_text(ps_score, COL_SCORE_X - renderer.get_text_width(ps_score, FontSize::Small) / 2, row_y, {220, 220, 220, 255}, FontSize::Small);
+            renderer.draw_text(ps_score, COL_SCORE_X - renderer.get_text_width(ps_score, FontSize::Px18) / 2, row_y, {220, 220, 220, 255}, FontSize::Px18);
             std::string ps_lost = std::to_string(pe.friendly_lost);
-            renderer.draw_text(ps_lost, COL_LOST_X - renderer.get_text_width(ps_lost, FontSize::Small) / 2, row_y, {200, 200, 200, 255}, FontSize::Small);
+            renderer.draw_text(ps_lost, COL_LOST_X - renderer.get_text_width(ps_lost, FontSize::Px18) / 2, row_y, {200, 200, 200, 255}, FontSize::Px18);
             std::string ps_killed = std::to_string(pe.enemy_killed);
-            renderer.draw_text(ps_killed, COL_KILLED_X - renderer.get_text_width(ps_killed, FontSize::Small) / 2, row_y, {200, 200, 200, 255}, FontSize::Small);
+            renderer.draw_text(ps_killed, COL_KILLED_X - renderer.get_text_width(ps_killed, FontSize::Px18) / 2, row_y, {200, 200, 200, 255}, FontSize::Px18);
             std::string ps_hatched = std::to_string(pe.new_hatched);
-            renderer.draw_text(ps_hatched, COL_HATCHED_X - renderer.get_text_width(ps_hatched, FontSize::Small) / 2, row_y, {200, 200, 200, 255}, FontSize::Small);
+            renderer.draw_text(ps_hatched, COL_HATCHED_X - renderer.get_text_width(ps_hatched, FontSize::Px18) / 2, row_y, {200, 200, 200, 255}, FontSize::Px18);
 
             py += 35;
         }

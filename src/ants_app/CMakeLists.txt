@@ -39,6 +39,7 @@ add_library(ants_app STATIC
     ui_anim.cpp
     scorecard.cpp
     map_select.cpp
+    text_layout.cpp
     application.cpp
 )
 

@@ -15,6 +15,27 @@ Ground truth for every entry is in [`docs/GAME_REVERSE_ENGINEERING.md`](docs/GAM
 
 - (nothing yet)
 
+## v0.0.48 - 2026-09-29 - Text sizes and the health number as in the original
+
+- **Text sizes**: every text of the game now has the size that `Ants.exe` gives it. The original creates its labels with a GDI font whose cell height is set per label (`FUN_0102b05f`, the label
+  constructors `FUN_010116cb` / `FUN_01011856`): 12 px for the status line and the chat log, 14 px for the score bar labels and the setup screen's prompt, 18 px for the setup screen's names and map, the results
+  rows, 20 px for "Waiting for scores...", 24 px for the dialogs and 35 px for the start dialog's text. The remake used three tiers of 11 / 13 / 15 px for everything, so the start dialog's text was about a third of
+  the original's size. `FontSize` is now the cell height (`Px12` ... `Px35`); the renderer opens its font at the point size whose cell height is exactly that (measured from the font itself), and reports it as the
+  line distance.
+- **The original's word wrap and label drawing** (`FUN_0102b0b5`, `FUN_0102b36a`): the start dialog and the quit dialog are wrapped at the label's width with the original's greedy algorithm and drawn centred, line
+  by line, one cell height apart from the top of the label box. Labels that are too wide for their box (names) are cut at the box. The map description of the setup screen sits at the original's y = 380 and the
+  players' names at the original's (415, 95 + 50 per seat).
+- **The health number** (Ctrl+L) is drawn like the original's: white 8 x 15 pixel digits in a fixed cell (the stock fixed system font of Windows, `SYSTEM_FIXED_FONT`, drawn with `TextOut` at the ant's position), without
+  antialiasing. The ten glyphs and the minus sign are built in (hand drawn in the style of that font: the Windows raster font itself is not available); it used to be small proportional text.
+- **The face**: the original's font is "Franklin Gothic Medium" (a commercial font that the game never shipped). The renderer now prefers it when a copy is found next to the game (`Original-Ants/framd.ttf` or
+  `Original-Ants/Franklin Gothic Medium.ttf`, both ignored by git and by the web image) or in the Windows fonts folder, and falls back to Arial. Franklin Gothic Medium is narrower than Arial, so with Arial some
+  lines are wider than in the original.
+- **Docs**: `docs/GAME_REVERSE_ENGINEERING.md` 5.14 rewritten (every label constructor call site with its box and font height, the setters of the text object, the wrap algorithm, the health number), README.
+- Tests: `test_hud_layout` `test_text_sizes` and `test_label_wrap` (the size of every label of the HUD, the quit and start dialogs, the setup screen and the results screen; the wrap and draw algorithm on a
+  fixed-width renderer), `test_render_parity` `test_text_sizes` and `test_fixed_digits` (the real renderer: cell heights, the ink of the letters, the fixed glyphs pixel by pixel). **Rewritten tests**: `12.54` and
+  `12.62` of `test_app_integration` use the new size names (their Small / Large tiers no longer exist; 12.62 now uses the map name label's 18 px), the recording renderer of `test_hud_layout` reports the real cell
+  height. Version assertion of 12.108.
+
 ## v0.0.47 - 2026-09-29 - Network port: host migration (the match goes on when the host leaves)
 
 - **Host migration**: as in the original, where nobody is special once a match runs, the host may leave (or crash, or lose its network) and the others play on. Every machine already holds the whole simulation, so

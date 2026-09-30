@@ -1,4 +1,5 @@
 #include "ants_app/map_select.hpp"
+#include "ants_app/text_layout.hpp"
 #include "ants_assets/lvl_parser.hpp"
 #include "ants_app/ui_anim.hpp"
 #include <iostream>
@@ -376,32 +377,33 @@ void MapSelectScreen::render(IRenderer& renderer, const ants::assets::AssetArchi
     // 2. Leave Game button: animations leave1 / leave2 (hover) / leave3 (pressed), absolute coordinates
     draw_animation_frame0(renderer, archive, btn_quit_pressed_ ? "leave3" : (btn_quit_hovered_ ? "leave2" : "leave1"));
 
-    int32_t th = renderer.get_text_height(FontSize::Small);
+    // The labels of this screen have the original's font heights (FUN_01012ce0): 18 px for the map name, its description and the players' names,
+    // 14 px for the status prompt
+    const int32_t th_prompt = renderer.get_text_height(FontSize::Px14);
 
-    // 3. Current Map Name inside Pick a Map box (vertically centered in inner cavity y=307..335, h=29)
+    // 3. Current Map Name inside Pick a Map box: the label (36, 312) 179 x 26 (vertically centered in inner cavity y=307..335, h=29)
     if (selected_index_ >= 0 && selected_index_ < static_cast<int32_t>(maps_.size())) {
         const auto& cur = maps_[static_cast<size_t>(selected_index_)];
-        int32_t th_map = renderer.get_text_height(FontSize::Large);
+        int32_t th_map = renderer.get_text_height(FontSize::Px18);
         int32_t name_y = 307 + (29 - th_map) / 2;
-        renderer.draw_text(cur.display_name, 38, name_y, ColorRGBA{255, 255, 255, 255}, FontSize::Large);
+        renderer.draw_text(fit_text(renderer, cur.display_name, 179, FontSize::Px18), 38, name_y, ColorRGBA{255, 255, 255, 255}, FontSize::Px18);
     }
 
     // Up/Down stepper buttons: animations up1..3 and down1..3 (up / hover / pressed), absolute coordinates
     draw_animation_frame0(renderer, archive, btn_up_pressed_ ? "up3" : (btn_up_hovered_ ? "up2" : "up1"));
     draw_animation_frame0(renderer, archive, btn_down_pressed_ ? "down3" : (btn_down_hovered_ ? "down2" : "down1"));
 
-    // 4. Map Info Description inside Map Info box (vertically centered in inner cavity y=377..405, h=29)
+    // 4. Map Info Description inside Map Info box: the label (36, 380) 293 x 26 (Ants.exe 0x101307c's neighbour, inner cavity y=377..405)
     if (selected_index_ >= 0 && selected_index_ < static_cast<int32_t>(maps_.size())) {
         const auto& cur = maps_[static_cast<size_t>(selected_index_)];
         std::string info_text = cur.description + " (" + std::to_string(cur.minutes) + " min)";
-        int32_t info_y = 377 + (29 - th) / 2;
-        renderer.draw_text(info_text, 38, info_y, ColorRGBA{255, 255, 255, 255}, FontSize::Small);
+        renderer.draw_text(info_text, 38, 380, ColorRGBA{255, 255, 255, 255}, FontSize::Px18);
     }
 
-    // 5. Status line: authentic prompt text (vertically centered in statline box at y=445..464)
-    int32_t stat_y = 445 + (19 - th) / 2;
+    // 5. Status line: authentic prompt text, the label (36, 447) 293 x 35 (vertically centered in statline box at y=445..464)
+    int32_t stat_y = 445 + (19 - th_prompt) / 2;
     const std::string prompt = !room_.status.empty() ? room_.status : std::string("Press START when all players' thumbs have appeared.");
-    renderer.draw_text(prompt, 38, stat_y, ColorRGBA{255, 255, 255, 255}, FontSize::Small);
+    renderer.draw_text(prompt, 38, stat_y, ColorRGBA{255, 255, 255, 255}, FontSize::Px14);
 
     // 6. Players' Status, slot 0: the portrait animation agst301 (12 frames, 1650 ms loop) has its origin at (395,115) and
     // the thumbs-up sprite sits at (540,95); the sprite's own part offsets place the ant relative to that origin.
@@ -422,7 +424,7 @@ void MapSelectScreen::render(IRenderer& renderer, const ants::assets::AssetArchi
             }
             std::string name = room_.seats[seat].name.empty() ? std::string("Player") : room_.seats[seat].name;
             if (name.size() > 16) name.resize(16);
-            renderer.draw_text(name, 415, PLAYER_THUMB_Y + row + (24 - th) / 2, ColorRGBA{255, 255, 255, 255}, FontSize::Small);
+            renderer.draw_text(fit_text(renderer, name, 120, FontSize::Px18), 415, PLAYER_THUMB_Y + row, ColorRGBA{255, 255, 255, 255}, FontSize::Px18);      // the label (415, 95 + 50 * seat) 120 x 20
             static const char* const kThumbs[4] = {"thumb1.bmp", "thumb2.bmp", "thumb3.bmp", "thumb4.bmp"};   // netgood, netok, netbad, netunk
             renderer.draw_named_sprite(kThumbs[static_cast<size_t>(room_.seats[seat].thumb) & 3u], PLAYER_THUMB_X, PLAYER_THUMB_Y + row);
         }
@@ -440,8 +442,7 @@ void MapSelectScreen::render(IRenderer& renderer, const ants::assets::AssetArchi
             }
         }
 
-        int32_t player_y = PLAYER_THUMB_Y + (24 - th) / 2;
-        renderer.draw_text(display_user, 415, player_y, ColorRGBA{255, 255, 255, 255}, FontSize::Small);
+        renderer.draw_text(fit_text(renderer, display_user, 120, FontSize::Px18), 415, PLAYER_THUMB_Y, ColorRGBA{255, 255, 255, 255}, FontSize::Px18);
         renderer.draw_named_sprite("thumb1.bmp", PLAYER_THUMB_X, PLAYER_THUMB_Y);
     }
 

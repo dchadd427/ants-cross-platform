@@ -4634,12 +4634,12 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         ASSERT_EQ(renderer.get_text_width(""), 0);
 
         // Verify non-empty text width is positive
-        int32_t small_w = renderer.get_text_width("that food!", ants::app::FontSize::Small);
+        int32_t small_w = renderer.get_text_width("that food!", ants::app::FontSize::Px12);
         ASSERT_TRUE(small_w > 0);
-        ASSERT_TRUE(renderer.get_text_height(ants::app::FontSize::Small) > 0);
+        ASSERT_TRUE(renderer.get_text_height(ants::app::FontSize::Px12) > 0);
 
         // Verify proportional width scales monotonically with string length
-        int32_t longer_w = renderer.get_text_width("that food! And extra text for width check.", ants::app::FontSize::Small);
+        int32_t longer_w = renderer.get_text_width("that food! And extra text for width check.", ants::app::FontSize::Px12);
         ASSERT_TRUE(longer_w > small_w);
 
         // Verify HUD chat entry recording and scroll offset boundaries
@@ -5090,7 +5090,7 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
 
         // 3. Map Select Screen Vertical Centering Formula
         Renderer renderer;
-        int32_t th_large = renderer.get_text_height(FontSize::Large);
+        int32_t th_large = renderer.get_text_height(FontSize::Px18);      // the map name label is 18 px high (FUN_01012ce0)
         int32_t name_y = 307 + (29 - th_large) / 2;
         // Cavity top is 307, height is 29 (y=307..335). Text y must be strictly inside cavity with symmetric padding
         ASSERT_GE(name_y, 307);
@@ -6502,10 +6502,10 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
 
     TEST_CASE("12.108: Version Invariant & Fog of War Cursor Concealment Parity") {
         // 1. Verify semantic versioning components
-        ASSERT_EQ(ants::VERSION_STRING, "v0.0.47");
+        ASSERT_EQ(ants::VERSION_STRING, "v0.0.48");
         ASSERT_EQ(ants::VERSION_MAJOR, 0);
         ASSERT_EQ(ants::VERSION_MINOR, 0);
-        ASSERT_EQ(ants::VERSION_PATCH, 47);
+        ASSERT_EQ(ants::VERSION_PATCH, 48);
 
         // 2. Setup simulation world with Fog of War enabled
         SimulationEngine sim;

@@ -36,11 +36,21 @@
 
 namespace ants::app {
 
+/// The size of a text is the original's: a GDI font cell height in pixels. Ants.exe creates its "Franklin Gothic Medium" fonts with `lfHeight` = the
+/// height given to the label (FUN_0102b05f); a positive lfHeight is the cell height (ascent + descent), which is also the distance between the lines
+/// of a multi-line label. The renderer opens its TrueType font so that its cell height is exactly this number. Heights and where they are used:
+/// docs/GAME_REVERSE_ENGINEERING.md 5.14.
 enum class FontSize : uint8_t {
-    Small = 0,   // ~12px (authentic HUD chat, status labels, unit badges)
-    Medium = 1,  // ~14px (buttons, scorecard rows, dialogs)
-    Large = 2    // ~18px (screen titles, victory headers)
+    Px12 = 12,   // a label's default (FUN_0102ad16): the status line, the chat log
+    Px14 = 14,   // the score bars' player labels, the setup screen's prompt
+    Px18 = 18,   // the setup screen's names and map name, the results screen's rows
+    Px20 = 20,   // "Waiting for scores..."
+    Px24 = 24,   // dialog texts (quit, alliance, notices), "Waiting for others..."
+    Px35 = 35    // the start dialog's main text
 };
+
+/// The cell height of a font size in pixels (the enumerator's value)
+inline constexpr int32_t font_cell_height(FontSize size) noexcept { return static_cast<int32_t>(size); }
 
 /**
  * @brief Authentic 1998 cursor modes reverse-engineered from Ants.exe (0x1026c5c & 0x1027e65).
@@ -164,11 +174,11 @@ public:
         (void)size;
         draw_text(text, x, y, color);
     }
-    virtual int32_t get_text_width(const std::string& text, FontSize size = FontSize::Small) const {
+    virtual int32_t get_text_width(const std::string& text, FontSize size = FontSize::Px12) const {
         (void)size;
         return static_cast<int32_t>(text.size()) * 6;
     }
-    virtual int32_t get_text_height(FontSize size = FontSize::Small) const {
+    virtual int32_t get_text_height(FontSize size = FontSize::Px12) const {
         (void)size;
         return 7;
     }
@@ -310,11 +320,20 @@ public:
     void draw_rect(int32_t x, int32_t y, int32_t w, int32_t h, ants::assets::ColorRGBA color) override;
     void draw_text(const std::string& text, int32_t x, int32_t y, ants::assets::ColorRGBA color) override;
     void draw_text(const std::string& text, int32_t x, int32_t y, ants::assets::ColorRGBA color, FontSize size) override;
-    int32_t get_text_width(const std::string& text, FontSize size = FontSize::Small) const override;
-    int32_t get_text_height(FontSize size = FontSize::Small) const override;
+    int32_t get_text_width(const std::string& text, FontSize size = FontSize::Px12) const override;
+    /// The cell height of the size: exactly the original's (the line distance of a label), with or without a TrueType font
+    int32_t get_text_height(FontSize size = FontSize::Px12) const override;
+    /// The TrueType point size (at the 2x supersampling of draw_text) whose cell height in the 640 x 480 canvas is `cell_px`, for a font whose
+    /// ascent + descent is `cell_ratio` em
+    static int32_t ttf_point_size(int32_t cell_px, double cell_ratio) noexcept;
     void set_hud_team(uint8_t team_id) override { hud_team_id_ = team_id; }
-    /// Ctrl+L (Ants.exe 0x101b866): every ant is followed by its hit points as white text at its sprite position (GDI TextOut, top left)
+    /// Ctrl+L (Ants.exe 0x101b866): every ant is followed by its hit points as a white number at its sprite position. The original draws it with
+    /// GDI TextOut and the stock SYSTEM_FIXED_FONT (the 8 x 15 raster "Fixedsys"), top left at the position, not antialiased.
     void set_show_hp(bool show) noexcept { show_hp_ = show; }
+    /// The number in that fixed font: a cell is `kFixedCellW` x `kFixedCellH` pixels; only digits and '-' have glyphs (nothing else is drawn)
+    void draw_fixed_text(const std::string& text, int32_t x, int32_t y, ants::assets::ColorRGBA color);
+    static constexpr int32_t kFixedCellW = 8;
+    static constexpr int32_t kFixedCellH = 15;
     void draw_rgba_image(int32_t x, int32_t y, int32_t w, int32_t h, const uint8_t* rgba) override;
 
     // Camera Accessors
@@ -411,9 +430,10 @@ private:
         }
     };
 
-    TTF_Font* font_small_{nullptr};
-    TTF_Font* font_medium_{nullptr};
-    TTF_Font* font_large_{nullptr};
+    static constexpr size_t kFontSizes = 6;          // the enumerators of FontSize
+    static size_t font_index(FontSize size) noexcept;
+    TTF_Font* font_for(FontSize size) const noexcept { return fonts_[font_index(size)]; }
+    std::array<TTF_Font*, kFontSizes> fonts_{};
     bool ttf_initialized_{false};
     uint32_t text_frame_counter_{0};
     std::unordered_map<TextCacheKey, CachedTextEntry, TextCacheKeyHash> text_cache_;
@@ -421,6 +441,7 @@ private:
 
     SDL_Renderer* renderer_{nullptr};
     SDL_Texture* rgba_texture_{nullptr};   // streaming texture for draw_rgba_image
+    std::array<SDL_Texture*, 11> fixed_glyphs_{};   // draw_fixed_text: '0' .. '9' and '-', built on first use
     int32_t rgba_texture_w_{0};
     int32_t rgba_texture_h_{0};
     const ants::assets::AssetArchive* archive_{nullptr};

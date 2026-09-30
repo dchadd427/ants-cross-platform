@@ -1005,6 +1005,104 @@ void test_score_bubbles(Renderer& r, const assets::AssetArchive& arc) {
     r.unpin_animation_clock();
 }
 
+// Text sizes: the original's label fonts are GDI cell heights (12, 14, 18, 20, 24, 35, Ants.exe FUN_0102b05f); the renderer opens its font so that the cell
+// of every FontSize is that many pixels tall, and the letters really are that big (not the three fixed tiers of 9 / 11 / 13 px em that it used before).
+void test_text_sizes(Renderer& r) {
+    std::printf("[text] font sizes are the original's cell heights\n");
+    SDL_Renderer* sr = r.get_sdl_renderer();
+    const FontSize sizes[] = {FontSize::Px12, FontSize::Px14, FontSize::Px18, FontSize::Px20, FontSize::Px24, FontSize::Px35};
+    int32_t last_width = 0;
+    int32_t ink12 = 0;
+    for (FontSize s : sizes) {
+        const int32_t h = font_cell_height(s);
+        check(r.get_text_height(s) == h, "text height of size " + std::to_string(h));
+        const int32_t w = r.get_text_width("Waiting for others...", s);
+        check(w > last_width, "text width grows with size " + std::to_string(h));
+        last_width = w;
+        // the ink of a capital H is 55 - 72 % of the cell (the cap height of a text face is about 0.64 of its cell)
+        SDL_SetRenderDrawColor(sr, 0, 0, 0, 255);
+        SDL_RenderClear(sr);
+        r.draw_text("H", 20, 20, assets::ColorRGBA{255, 255, 255, 255}, s);
+        const Image im = read_region(sr, 0, 0, 100, 100);
+        int top = 1000, bottom = -1;
+        for (int y = 0; y < im.h; ++y) {
+            for (int x = 0; x < im.w; ++x) {
+                if (im.at(x, y)[0] > 128) {
+                    top = std::min(top, y);
+                    bottom = std::max(bottom, y);
+                }
+            }
+        }
+        const int ink = bottom - top + 1;
+        check(bottom >= 0 && ink * 100 >= h * 55 && ink * 100 <= h * 72 + 100, "a capital H of size " + std::to_string(h) + " is " + std::to_string(ink) + " px tall");
+        if (h == 12) ink12 = ink;
+        if (h == 35) check(ink * 12 >= ink12 * 35 * 90 / 100 && ink * 12 <= ink12 * 35 * 110 / 100, "the letters grow in proportion to the cell (12 -> 35)");
+    }
+    // the text of a multi-line string advances by the cell height
+    const int32_t line = font_cell_height(FontSize::Px24);
+    SDL_SetRenderDrawColor(sr, 0, 0, 0, 255);
+    SDL_RenderClear(sr);
+    r.draw_text("H\nH", 10, 10, assets::ColorRGBA{255, 255, 255, 255}, FontSize::Px24);
+    const Image two = read_region(sr, 0, 0, 60, 120);
+    int first_top = -1, second_top = -1;
+    for (int y = 0; y < two.h; ++y) {
+        bool row = false;
+        for (int x = 0; x < two.w; ++x) row = row || two.at(x, y)[0] > 128;
+        if (row && first_top < 0) first_top = y;
+        if (row && first_top >= 0 && y >= first_top + line - 2 && second_top < 0) second_top = y;
+    }
+    check(first_top >= 0 && second_top - first_top >= line - 2 && second_top - first_top <= line + 2, "two lines of size 24 are one 24 px cell apart");
+}
+
+// The health number: the fixed 8 x 15 system font, white, not antialiased, top left at the position (Ants.exe FUN_0101b802 -> TextOutA with SYSTEM_FIXED_FONT)
+void test_fixed_digits(Renderer& r) {
+    std::printf("[hp] the health number in the fixed 8 x 15 system font\n");
+    SDL_Renderer* sr = r.get_sdl_renderer();
+    const int ox = 30, oy = 30;
+    auto draw = [&](const std::string& text) {
+        SDL_SetRenderDrawColor(sr, 0, 0, 0, 255);
+        SDL_RenderClear(sr);
+        r.draw_fixed_text(text, ox, oy, assets::ColorRGBA{255, 255, 255, 255});
+        return read_region(sr, 0, 0, 120, 60);
+    };
+    auto lit = [&](const Image& im, int cell, int x_from, int x_to, int y_from, int y_to) {
+        int n = 0;
+        for (int y = y_from; y <= y_to; ++y) {
+            for (int x = x_from; x <= x_to; ++x) n += im.at(ox + cell * 8 + x, oy + y)[0] > 128 ? 1 : 0;
+        }
+        return n;
+    };
+    int lit_of[10] = {};
+    for (int d = 0; d < 10; ++d) {
+        const Image im = draw(std::string(1, static_cast<char>('0' + d)));
+        const int inside = lit(im, 0, 0, 6, 2, 11);
+        lit_of[d] = inside;
+        check(inside >= 9 && inside <= 45, "digit " + std::to_string(d) + " has " + std::to_string(inside) + " lit pixels in its 7 x 10 body");
+        check(lit(im, 0, 0, 7, 0, 1) == 0 && lit(im, 0, 0, 7, 12, 14) == 0 && lit(im, 0, 7, 7, 0, 14) == 0, "digit " + std::to_string(d) + " stays inside rows 2 - 11 and columns 0 - 6");
+        check(lit(im, 1, 0, 7, 0, 14) == 0 && lit(im, 2, 0, 7, 0, 14) == 0, "digit " + std::to_string(d) + " draws nothing in the next cells");
+        bool pure = true;                                        // no antialiasing: every pixel is black or white
+        for (int y = 0; y < im.h; ++y) {
+            for (int x = 0; x < im.w; ++x) {
+                const uint8_t* p = im.at(x, y);
+                pure = pure && ((p[0] == 0 && p[1] == 0 && p[2] == 0) || (p[0] == 255 && p[1] == 255 && p[2] == 255));
+            }
+        }
+        check(pure, "digit " + std::to_string(d) + " is drawn without antialiasing");
+    }
+    check(lit_of[8] > lit_of[1] && lit_of[0] > lit_of[1], "the glyphs differ (8 and 0 have more pixels than 1)");
+    // a number takes one 8 px cell per character
+    const Image hundred = draw("100");
+    check(lit(hundred, 0, 0, 7, 0, 14) > 0 && lit(hundred, 1, 0, 7, 0, 14) > 0 && lit(hundred, 2, 0, 7, 0, 14) > 0 && lit(hundred, 3, 0, 7, 0, 14) == 0,
+          "\"100\" fills three cells (24 px) and nothing beyond");
+    check(lit(hundred, 1, 0, 7, 0, 14) == lit(hundred, 2, 0, 7, 0, 14), "the two zeros of \"100\" are the same glyph");
+    // a minus sign is one row of pixels; a character without a glyph draws nothing but still takes its cell
+    const Image minus = draw("-");
+    check(lit(minus, 0, 0, 7, 0, 14) == 5, "the minus sign is five pixels wide");
+    const Image skipped = draw("a1");
+    check(lit(skipped, 0, 0, 7, 0, 14) == 0 && lit(skipped, 1, 0, 7, 0, 14) == lit_of[1], "a character without a glyph takes its cell and draws nothing");
+    check(Renderer::kFixedCellW == 8 && Renderer::kFixedCellH == 15, "the fixed font's cell is 8 x 15");
+}
+
 } // namespace
 
 int main() {
@@ -1043,6 +1141,8 @@ int main() {
     test_effect_rendering(r, arc);
     test_score_bubbles(r, arc);
     test_food_stages(r, arc);
+    test_text_sizes(r);
+    test_fixed_digits(r);
 
     r.shutdown();
     SDL_DestroyWindow(win);

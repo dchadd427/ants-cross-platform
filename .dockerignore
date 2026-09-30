@@ -8,6 +8,8 @@ docs
 Original-Ants/*.exe
 Original-Ants/*.dll
 Original-Ants/ddraw.ini
+Original-Ants/framd.ttf
+Original-Ants/Franklin Gothic Medium.ttf
 Original-Ants/cnc-ddraw config.exe
 *.md
 !CHANGELOG.md

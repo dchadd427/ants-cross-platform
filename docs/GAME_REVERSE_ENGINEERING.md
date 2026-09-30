@@ -738,40 +738,63 @@ When an ant perishes due to HP depletion (melee combat damage, bomb blast shockw
 
 ---
 
-### 5.14 In-Game Typography & Font Rasterization Architecture (`CreateFontIndirectA`, `DrawTextA`)
+### 5.14 In-Game Typography: Label Fonts, the Wrap Algorithm and the Health Number (Capstone-Verified; Supersedes the Earlier 12 / 14 / 18 Notes)
 
-Reverse engineering of `Original-Ants/Ants.exe` revealed that all in-game text (HUD chat, colony status labels, unit selection badges, score tallies, and dialog prompts) was originally rasterized via Windows GDI rather than hardcoded 1-bit dot-matrix bitmaps:
+Addresses are virtual addresses in `Original-Ants/Ants.exe`. Implemented in `include/ants_app/renderer.hpp` (`FontSize`, `font_cell_height`), `src/ants_app/renderer.cpp` (font loading,
+`Renderer::ttf_point_size`, `draw_text`, `draw_fixed_text`), `include/ants_app/text_layout.hpp` / `src/ants_app/text_layout.cpp` (`wrap_label_text`, `draw_label`, `fit_text`) and the text sites of
+`hud.cpp`, `map_select.cpp`, `scorecard.cpp`. Checked by `tests/test_app/test_hud_layout.cpp` (`test_text_sizes`, `test_label_wrap`) and `tests/test_app/test_render_parity.cpp` (`test_text_sizes`,
+`test_fixed_digits`). (The first version of this section listed three heights, 12 / 14 / 18, and the renderer did not even honour those: its three tiers were 9 / 11 / 13 px em, cell heights 11 / 13 / 15,
+for every text of the game, which is why the start dialog's text was a third of the original's size.)
 
-#### 1. Disassembly Traces & GDI Font Architecture
-- **Font Creation Routine (`0x0102b05f`):**
-  - Configures `LOGFONTA` structure on the stack (`[ebp - 0x3c]`).
-  - Font Height: read dynamically from `[ecx + 0x50]`.
-  - Font Weight: `0x190` (400 = `FW_NORMAL`).
-  - Precision / Quality: `OUT_STROKE_PRECIS` (3), `CLIP_STROKE_PRECIS` (2), `DEFAULT_QUALITY` (1).
-  - Pitch & Family: `VARIABLE_PITCH | FF_SWISS` (`0x22`).
-  - Font Face Name: Loaded directly from VA `0x0104756c` (`.data` section offset `0x4676c`): **`"Franklin Gothic Medium"`**.
-  - Invokes GDI `CreateFontIndirectA` at IAT VA `0x0100102c`.
-- **Text Rendering & Drawing Routine (`0x0102b5e0`):**
-  - Measures text string lengths via internal `strlen` (`0x01034a30`).
-  - Executes text bounding box layouts with GDI `DrawTextA` at IAT VA `0x01001254`.
-- **Text Widget / Label Constructor (`0x010116cb`):**
-  - Receives coordinates `(X, Y, W, H)` and font height parameter `[ebp + 0x18]`:
-    - Status widget at `(481, 254)`: Font Height = **12px** (`0xc`).
-    - Standard HUD labels: Font Height = **14px** (`0xe`).
-    - Scorecard & screen titles: Font Height = **18px** (`0x12`).
-  - Chat subsystem initializes scrollable text widgets `CHATSCRL` (`0x01011f2a`, vtable `0x01002690`) and `CHATAPPD` (`0x01011f5c`, vtable `0x01002680`).
+* **The text object** (vtable 0x1005050, constructor `FUN_0102ad16`, 0x102ad16): its properties are set by small setters: `FUN_0102af4b` border thickness (+0x38), **`FUN_0102af5c` font height (+0x50)**,
+  `FUN_0102af6d` (+0x18), `FUN_0102af7e` word wrap (+0x1c), `FUN_0102af8f` **centre** (+0x20), `FUN_0102afa0` right aligned (+0x24), `FUN_0102afb1` transparent background (+0x28), `FUN_0102afc2` colours (text +0x2c,
+  background +0x30, border +0x34). The constructor leaves the font height at **12**, no wrap, left aligned, opaque, text colour green; nothing else writes +0x50 (`FUN_0102af5c` has two call sites, the two label
+  constructors below).
+* **The font** (`FUN_0102b05f`, 0x102b05f): `CreateFontIndirectA` with `lfHeight = [text object + 0x50]`, weight 400, `lfQuality` DRAFT, `FF_SWISS | VARIABLE_PITCH` and the face name "Franklin Gothic Medium"
+  (string at 0x104756c). A positive `lfHeight` is the **cell height** (ascent + descent) in pixels; the distance between the lines of a multi-line label is that height (`FUN_0102b21e` adds the `cy` that
+  `GetTextExtentPoint32A` reports, which is the cell height), and the label grows to hold them.
+* **Label constructors**: `FUN_010116cb` (single line) and `FUN_01011856` (word wrap): stack arguments x, y, width, height, **font height**, border, transparent, text, ... Every call site, decoded with Capstone
+  from the pushes before each call (function, box (x, y, w, h), font height):
 
-#### 2. Native Modern Remake Architecture (`Renderer::draw_text`)
-- **TrueType Engine with Linear Antialiasing:**
-  - Integrated high-performance TrueType rasterization with 2x supersampling into the virtual 640×480 canvas.
-  - Multi-tier candidate search locates authentic fonts across host environments:
-    1. Local directory: `Original-Ants/Franklin Gothic Medium.ttf` or `framd.ttf`
-    2. macOS: `/System/Library/Fonts/Supplemental/Arial.ttf`, `Trebuchet MS.ttf`, `Geneva.ttf`
-    3. Windows: `C:\Windows\Fonts\framd.ttf`, `arial.ttf`
-    4. Linux: `/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf`, `DejaVuSans.ttf`
-  - LRU texture caching ensures zero texture allocations during active gameplay while preserving 60+ FPS lockstep.
-  - Precise proportional text metrics via `IRenderer::get_text_width(text, size)` for exact scorecard column centering.
-  - Built-in fallback to 5×7 ASCII bitmap font if operating in minimal headless environments without system fonts.
+  | Function | What | Box | Font height |
+  |---|---|---|---|
+  | `FUN_0100dbe2` @0x100e10d | HUD status line | 481, 254, 139 x 12 | 12 |
+  | same @0x100e28e | score bar labels of the players that exist (one per team, rects from the table at 0x10021b8, the local player's from 0x1002218) | [5..101], [163..251], [312..399], y 4 / 464 | 14 |
+  | `FUN_01012ce0` @0x1012f08 / 0x1012f70 | setup screen: map name, map description | 36, 312, 179 x 26 / 36, 380, 293 x 26 | 18 |
+  | same @0x1012fea | setup screen: player names (x 415, y 95 + 50 per seat) | 415, y, 120 x 20 | 18 |
+  | same @0x101307c | setup screen: status prompt | 36, 447, 293 x 35 | 14 |
+  | `FUN_010155ac` | results screen: name and four number columns (x 100 / 485 / 534 / 555 / 576) | per row, 50 high | 18 |
+  | `FUN_010153a1` | "Waiting for scores..." (string 111) | 100, 350, 385 x 50 | 20 |
+  | `FUN_01017127` | start dialog: "Get ready to play!  You are the %s Ants." (string 105), wrapped and centred | 30, 10, 240 x 160 | **35** |
+  | same | "Waiting for others..." (string 104), centred | 30, 190, 240 x 20 | 24 |
+  | `FUN_010142cb` | quit dialog: "Do you really want to quit?" (string 99), wrapped and centred | 30, 80, 260 x 160 | 24 |
+  | `FUN_01015b65` / `FUN_010160e2` / `FUN_01016438` | alliance dialogs: invitation (strings 1 / 2), waiting (3), third dialog; wrapped and centred | 30, 10, 270 / 240 x 160 | 24 |
+  | `FUN_01016dfc` | single player notice (string 76) | 30, 150, 580 x 160 | 24 |
+  | `FUN_01016aa2` | home page dialog (string 95) | 20, 30, 290 x 100 | 18 |
+  | `FUN_0101681b` | one line message | 10, 200, 600 x 20 | 18 |
+
+  The dialog labels call the centre setter (`FUN_0102af8f`) after construction (call sites 0x1014439, 0x1015eb0, 0x10162f5, 0x1016676, 0x1016c1d, 0x1016f4a, 0x1017318, 0x10173ca), the others do not: the
+  status line, the score labels (they are right aligned, `FUN_01011847`), the setup screen's labels and the results rows are left aligned. The chat log's text objects (`FUN_010119a8`) keep the default 12.
+* **Word wrap** (`FUN_0102b0b5`, 0x102b0b5; ported as `wrap_label_text`): from the start of a line (leading spaces skipped) the text is scanned character by character and `GetTextExtentPoint32A` measures the text so
+  far; the scan stops when the width reaches the box's width, and the line ends at the last word end seen before (a non-space followed by a space or the end); with no word end seen the line is cut one character
+  before the width was reached. Drawing (`FUN_0102b36a`, 0x102b36a): every line is one `DrawTextA` into the label's rect with `DT_NOPREFIX` and `DT_CENTER` when the centre flag is set (`DT_RIGHT` when the
+  right-aligned flag is set or a clipped single line is too wide), top aligned, the next line one cell height lower; the label surface is as wide as the box, so nothing is seen beyond it.
+* **The health number** (`FUN_0101b802`, 0x101b802; Ctrl+L = `[world+0x4b14]`): after an ant is drawn, `sprintf("%d", hp)` (format string at 0x1047304, hp = the word at ant+0x74) is drawn through `FUN_0102feda`
+  (the only call site of it and of `FUN_0102d193`) with `TextOutA`, colour white (0xFFFFFF), transparent background, at the ant's position (ant+0x38, ant+0x3a) through the view's conversion, and with
+  **`GetStockObject(0x10)` = `SYSTEM_FIXED_FONT`**, the raster "Fixedsys": a cell of 8 x 15 pixels per character (ascent 12), glyphs without antialiasing. It is the only text drawn with that font.
+
+#### Native remake
+
+* `FontSize` is the original's cell height (12, 14, 18, 20, 24, 35). `Renderer` opens one TrueType font per size at the point size whose cell height is exactly that (`ttf_point_size`: twice the cell over the
+  font's ascent + descent in em, measured from the font itself; the glyphs are rendered at 2x and halved into the 640 x 480 canvas, textures cached per string and size), so `get_text_height` is the original's
+  line distance and the letters have the original's size whichever face is loaded. Without a TrueType font the 5 x 7 bitmap font is scaled by `cell / 10`.
+* **The face**: the original's "Franklin Gothic Medium" is a commercial font that the game never shipped (it came with the operating system), so it cannot be part of this public repository or of the web
+  build. The renderer uses it when a copy is found (`Original-Ants/Franklin Gothic Medium.ttf`, `Original-Ants/framd.ttf`, the Windows fonts folder; both local names are in `.gitignore` and
+  `.dockerignore`), and Arial otherwise. Franklin Gothic Medium is narrower than Arial, so with Arial a line can be wider than in the original.
+* **The health number** is drawn by `Renderer::draw_fixed_text` with built-in glyphs for `0` - `9` and `-` in an 8 x 15 cell (7 x 10 pixel digits with one pixel strokes, top at row 2, drawn by hand in the style
+  of Fixedsys because the Windows raster font is not available), white, not antialiased, top left at the ant's position; a character without a glyph takes its cell and draws nothing.
+* **Not ported here** *(recorded)*: the left margins and exact glyph shapes of the original's face, the right-aligned clipping of a too wide single line (names are cut at the box instead), and the exact
+  positions of the results rows (stage R).
 
 ---
 

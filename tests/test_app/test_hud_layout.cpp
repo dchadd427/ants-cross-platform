@@ -11,6 +11,8 @@
 #include "ants_app/map_select.hpp"
 #include "ants_app/ui_anim.hpp"
 #include "ants_app/renderer.hpp"
+#include "ants_app/scorecard.hpp"
+#include "ants_app/text_layout.hpp"
 #include "ants_assets/asset_archive.hpp"
 #include "ants_sim/sim_engine.hpp"
 
@@ -66,8 +68,13 @@ public:
         rects.push_back({x, y, w, h, color});
     }
     void draw_text(const std::string& text, int32_t x, int32_t y, assets::ColorRGBA) override {
-        texts.push_back({text, x, y});
+        texts.push_back({text, x, y, FontSize::Px12});
     }
+    void draw_text(const std::string& text, int32_t x, int32_t y, assets::ColorRGBA, FontSize size) override {
+        texts.push_back({text, x, y, size});
+    }
+    // the cell height is what the real renderer reports (the original's line distance); the width stays the interface's 6 px per character
+    int32_t get_text_height(FontSize size = FontSize::Px12) const override { return font_cell_height(size); }
     void set_hud_team(uint8_t team) override { hud_team = team; }
     void draw_rgba_image(int32_t x, int32_t y, int32_t w, int32_t h, const uint8_t* rgba) override {
         images.push_back({x, y, w, h, std::vector<uint8_t>(rgba, rgba + static_cast<size_t>(w) * static_cast<size_t>(h) * 4u)});
@@ -86,7 +93,7 @@ public:
 
     struct Image { int32_t x, y, w, h; std::vector<uint8_t> rgba; };
     std::vector<Image> images;
-    struct Text { std::string text; int32_t x; int32_t y; };
+    struct Text { std::string text; int32_t x; int32_t y; FontSize size; };
     std::vector<SpriteDraw> sprites;
     std::vector<FillDraw> fills;
     std::vector<FillDraw> rects;         // frames (draw_rect)
@@ -992,6 +999,149 @@ void test_room_screen(const assets::AssetArchive& arc) {
     check(local_maps == 0, "local setup screen: no room to tell about a map change");
 }
 
+// The original's label fonts (Ants.exe label constructors 0x10116cb / 0x1011856, docs 5.14): every text uses its own cell height
+void test_text_sizes(const assets::AssetArchive& arc) {
+    std::printf("[text] every label uses the original's font height\n");
+    auto find = [](const RecordingRenderer& rr, const std::string& text) -> const RecordingRenderer::Text* {
+        for (const auto& t : rr.texts) {
+            if (t.text == text) return &t;
+        }
+        return nullptr;
+    };
+    // the HUD: status line and chat 12, the score bars' labels 14 (right aligned ending at x = 399 for the local player)
+    {
+        RecordingRenderer rr(arc);
+        sim::WorldState world;
+        HUD hud;
+        hud.init(0);
+        hud.post_status("Ready!");
+        hud.add_chat_entry("Bob", "Hello there");
+        ViewportCamera camera;
+        hud.render(rr, arc, world, camera);
+        const auto* status = find(rr, "Ready!");
+        check(status != nullptr && status->size == FontSize::Px12 && status->x == 481 && status->y == 254, "hud: the status line is 12 px high at (481, 254)");
+        const auto* chat = find(rr, "Hello there");
+        check(chat != nullptr && chat->size == FontSize::Px12, "hud: the chat log is 12 px high");
+        const auto* header = find(rr, "Bob:");
+        check(header != nullptr && header->size == FontSize::Px12 && chat != nullptr && chat->y == header->y + 12, "hud: chat lines are one 12 px cell apart");
+        const auto* mine = find(rr, "Player:");                      // the HUD's default player name
+        check(mine != nullptr && mine->size == FontSize::Px14 && mine->x + 7 * 6 == 399 && mine->y == 4, "hud: the own score label is 14 px high, right aligned to x = 399, at the top of its box");
+    }
+    // the quit dialog: one centred label of 24 px letters in (130, 180) 260 x 160
+    {
+        RecordingRenderer rr(arc);
+        sim::WorldState world;
+        HUD hud;
+        hud.init(0);
+        hud.open_quit_dialog();
+        ViewportCamera camera;
+        hud.render(rr, arc, world, camera);
+        const auto* prompt = find(rr, "Do you really want to quit?");
+        check(prompt != nullptr && prompt->size == FontSize::Px24 && prompt->y == 180 && prompt->x == 130 + (260 - 27 * 6) / 2,
+              "quit: the prompt is 24 px high, centred in its box, at y = 180");
+    }
+    // the start dialog: 35 px letters wrapped at 240 px, one cell (35 px) between the lines, "Waiting for others..." 24 px in (130, 290)
+    {
+        RecordingRenderer rr(arc);
+        sim::WorldState world;
+        HUD hud;
+        hud.init(0);
+        hud.start_match_modal();
+        ViewportCamera camera;
+        hud.render(rr, arc, world, camera);
+        // with 6 px per character a line of up to 39 characters fits in 240 px
+        const std::string line1 = "Get ready to play!  You are the Green";
+        const std::string line2 = "Ants.";
+        const auto* l1 = find(rr, line1);
+        const auto* l2 = find(rr, line2);
+        check(l1 != nullptr && l1->size == FontSize::Px35 && l1->y == 110 && l1->x == 130 + (240 - 37 * 6) / 2, "start dialog: the first line is 35 px high, centred, at y = 110");
+        check(l2 != nullptr && l2->size == FontSize::Px35 && l2->y == 110 + 35 && l2->x == 130 + (240 - 5 * 6) / 2, "start dialog: the second line follows one 35 px cell lower");
+        const auto* footer = find(rr, "Waiting for others...");
+        check(footer != nullptr && footer->size == FontSize::Px24 && footer->y == 290 && footer->x == 130 + (240 - 21 * 6) / 2, "start dialog: the footer is 24 px high at y = 290");
+    }
+    // the setup screen: map name and description 18 px (y 312 and 380), the prompt 14 px (y 447), the player's name 18 px at the row's top
+    {
+        MapSelectScreen screen;
+        screen.init();
+        RecordingRenderer rr(arc);
+        screen.render(rr, arc);
+        const auto& maps = screen.get_maps();
+        const auto& cur = maps[static_cast<size_t>(screen.get_selected_index())];
+        const auto* name = find(rr, cur.display_name);
+        check(name != nullptr && name->size == FontSize::Px18 && name->y == 312, "setup: the map name is 18 px high at y = 312 (the original's label top)");
+        const auto* info = find(rr, cur.description + " (" + std::to_string(cur.minutes) + " min)");
+        check(info != nullptr && info->size == FontSize::Px18 && info->y == 380, "setup: the map description is 18 px high at y = 380");
+        const auto* prompt = find(rr, "Press START when all players' thumbs have appeared.");
+        check(prompt != nullptr && prompt->size == FontSize::Px14 && prompt->y == 447, "setup: the prompt is 14 px high at y = 447");
+        const auto* player = find(rr, "Player");
+        check(player != nullptr && player->size == FontSize::Px18 && player->x == 415 && player->y == 95, "setup: the player's name is 18 px high at (415, 95)");
+    }
+    // the results screen: rows of 18 px letters
+    {
+        ScorecardModal card;
+        sim::MatchResult result;
+        result.is_over = true;
+        result.final_scores[0] = 500;
+        card.show(result, 0);
+        RecordingRenderer rr(arc);
+        card.render(rr, arc);
+        bool any = false, all18 = true;
+        for (const auto& t : rr.texts) {
+            any = true;
+            all18 = all18 && t.size == FontSize::Px18;
+        }
+        check(any && all18, "results: every text of the screen is 18 px high");
+    }
+}
+
+// The original's greedy word wrap (FUN_0102b0b5), checked on a renderer that measures 15 px per character
+class MonoRenderer : public IRenderer {
+public:
+    void draw_sprite(uint32_t, int32_t, int32_t, bool) override {}
+    void draw_named_sprite(const std::string&, int32_t, int32_t, bool) override {}
+    void fill_rect(int32_t, int32_t, int32_t, int32_t, assets::ColorRGBA) override {}
+    void draw_rect(int32_t, int32_t, int32_t, int32_t, assets::ColorRGBA) override {}
+    void draw_text(const std::string& text, int32_t x, int32_t y, assets::ColorRGBA) override { drawn.push_back({text, x, y, FontSize::Px12}); }
+    void draw_text(const std::string& text, int32_t x, int32_t y, assets::ColorRGBA, FontSize size) override { drawn.push_back({text, x, y, size}); }
+    int32_t get_text_width(const std::string& text, FontSize = FontSize::Px12) const override { return static_cast<int32_t>(text.size()) * 15; }
+    int32_t get_text_height(FontSize size = FontSize::Px12) const override { return font_cell_height(size); }
+    void set_hud_team(uint8_t) override {}
+    struct Drawn { std::string text; int32_t x; int32_t y; FontSize size; };
+    std::vector<Drawn> drawn;
+};
+
+void test_label_wrap() {
+    std::printf("[text] the original's label wrap and drawing\n");
+    MonoRenderer mono;
+    auto lines = wrap_label_text(mono, "Get ready to play!  You are the Green Ants.", 240, FontSize::Px35);
+    // 15 px per character: a prefix of 16 characters reaches 240 px; the line ends at the last word end before that
+    check(lines.size() == 3 && lines[0] == "Get ready to" && lines[1] == "play!  You are" && lines[2] == "the Green Ants.", "wrap: the start dialog's text at 240 px, 15 px per character");
+    // a word that is wider than the box is cut one character before the width is reached
+    lines = wrap_label_text(mono, "Supercalifragilistic", 100, FontSize::Px18);
+    check(lines.size() == 4 && lines[0] == "Superc" && lines[1] == "alifra" && lines[2] == "gilist" && lines[3] == "ic", "wrap: a long word is cut before the width");
+    // leading spaces of a line are skipped, empty text has no line, a box without width keeps the text in one line
+    lines = wrap_label_text(mono, "   hello", 300, FontSize::Px12);
+    check(lines.size() == 1 && lines[0] == "hello", "wrap: leading spaces are skipped");
+    check(wrap_label_text(mono, "", 300, FontSize::Px12).empty(), "wrap: no text, no line");
+    lines = wrap_label_text(mono, "no room at all", 0, FontSize::Px12);
+    check(lines.size() == 1 && lines[0] == "no room at all", "wrap: a box without width does not loop");
+    lines = wrap_label_text(mono, "one\ntwo words here", 300, FontSize::Px12);
+    check(lines.size() == 2 && lines[0] == "one" && lines[1] == "two words here", "wrap: a newline ends a line");
+    // fit_text: characters are dropped from the end until the text fits
+    check(fit_text(mono, "abcdefghij", 60, FontSize::Px12) == "abcd" && fit_text(mono, "abc", 60, FontSize::Px12) == "abc" && fit_text(mono, "x", 1, FontSize::Px12) == "x",
+          "fit_text: cut to the width, one character stays");
+    // draw_label: centred lines, one cell height apart, from the top of the box
+    mono.drawn.clear();
+    const int32_t h = draw_label(mono, "Get ready to play!  You are the Green Ants.", 130, 110, 240, assets::ColorRGBA{}, FontSize::Px35, true);
+    check(h == 3 * 35 && mono.drawn.size() == 3, "draw_label: three lines of 35 px");
+    check(mono.drawn.size() == 3 && mono.drawn[0].y == 110 && mono.drawn[1].y == 145 && mono.drawn[2].y == 180, "draw_label: the lines are 35 px apart from the top of the box");
+    check(mono.drawn.size() == 3 && mono.drawn[0].x == 130 + (240 - 12 * 15) / 2 && mono.drawn[1].x == 130 + (240 - 14 * 15) / 2 && mono.drawn[2].x == 130 + (240 - 15 * 15) / 2,
+          "draw_label: every line is centred in the box");
+    mono.drawn.clear();
+    draw_label(mono, "left text", 40, 50, 300, assets::ColorRGBA{}, FontSize::Px18, false);
+    check(mono.drawn.size() == 1 && mono.drawn[0].x == 40 && mono.drawn[0].y == 50 && mono.drawn[0].size == FontSize::Px18, "draw_label: a left aligned label starts at the box's left edge");
+}
+
 } // namespace
 
 int main() {
@@ -1013,6 +1163,8 @@ int main() {
     test_static_shell(arc);
     test_cursor_rules(arc);
     test_button_states(arc);
+    test_text_sizes(arc);
+    test_label_wrap();
     std::printf("\nhud layout: %d checks, %d failures\n", g_checks, g_failures);
     return g_failures == 0 ? 0 : 1;
 }

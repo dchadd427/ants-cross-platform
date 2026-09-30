@@ -353,16 +353,19 @@ bool Renderer::init(SDL_Window* window,
 #ifdef ANTS_ENABLE_SDL_TTF
     if (TTF_Init() == 0) {
         ttf_initialized_ = true;
+        // The original's labels use "Franklin Gothic Medium" (Ants.exe FUN_0102b05f). That font is commercial and was never part of the game (it came
+        // with the operating system), so it cannot be shipped here: it is used when a copy is found (next to the game, or in the Windows fonts folder),
+        // and Arial is the fallback. Every size is opened by its cell height (see below), so the layout is right with either.
         const std::vector<std::string> font_candidates = {
+            "Original-Ants/Franklin Gothic Medium.ttf",
+            "Original-Ants/framd.ttf",
+            "C:\\Windows\\Fonts\\framd.ttf",
             "Original-Ants/Arial.ttf",
             "Original-Ants/arial.ttf",
             "C:\\Windows\\Fonts\\arial.ttf",
             "C:\\Windows\\Fonts\\Arial.ttf",
             "/System/Library/Fonts/Supplemental/Arial.ttf",
             "/Library/Fonts/Arial.ttf",
-            "Original-Ants/Franklin Gothic Medium.ttf",
-            "Original-Ants/framd.ttf",
-            "C:\\Windows\\Fonts\\framd.ttf",
             "/System/Library/Fonts/Supplemental/Trebuchet MS.ttf",
             "/System/Library/Fonts/Geneva.ttf",
             "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
@@ -373,12 +376,25 @@ bool Renderer::init(SDL_Window* window,
             FILE* f = std::fopen(path.c_str(), "rb");
             if (f) {
                 std::fclose(f);
-                font_small_ = TTF_OpenFont(path.c_str(), 18);
-                font_medium_ = TTF_OpenFont(path.c_str(), 22);
-                font_large_ = TTF_OpenFont(path.c_str(), 26);
-                if (font_small_) {
+                // How tall is the font's cell (ascent + descent) in em? The original's labels are sized by that cell height (GDI lfHeight), so every
+                // FontSize is opened at the point size whose cell height, after the 2x supersampling, is the label's height.
+                TTF_Font* probe = TTF_OpenFont(path.c_str(), 200);
+                if (probe == nullptr) continue;
+                const double cell_ratio = static_cast<double>(TTF_FontAscent(probe) - TTF_FontDescent(probe)) / 200.0;
+                TTF_CloseFont(probe);
+                bool ok = cell_ratio > 0.5;
+                static constexpr FontSize kSizes[kFontSizes] = {FontSize::Px12, FontSize::Px14, FontSize::Px18, FontSize::Px20, FontSize::Px24, FontSize::Px35};
+                for (size_t i = 0; ok && i < kFontSizes; ++i) {
+                    fonts_[i] = TTF_OpenFont(path.c_str(), ttf_point_size(font_cell_height(kSizes[i]), cell_ratio));
+                    ok = fonts_[i] != nullptr;
+                }
+                if (ok) {
                     std::cout << "[Renderer] High-quality TrueType font loaded: " << path << std::endl;
                     break;
+                }
+                for (auto& font : fonts_) {
+                    if (font) TTF_CloseFont(font);
+                    font = nullptr;
                 }
             }
         }
@@ -396,9 +412,10 @@ void Renderer::shutdown() {
         }
     }
     text_cache_.clear();
-    if (font_small_) { TTF_CloseFont(font_small_); font_small_ = nullptr; }
-    if (font_medium_) { TTF_CloseFont(font_medium_); font_medium_ = nullptr; }
-    if (font_large_) { TTF_CloseFont(font_large_); font_large_ = nullptr; }
+    for (auto& font : fonts_) {
+        if (font) TTF_CloseFont(font);
+        font = nullptr;
+    }
     if (ttf_initialized_) {
         TTF_Quit();
         ttf_initialized_ = false;
@@ -408,6 +425,10 @@ void Renderer::shutdown() {
     if (rgba_texture_) {
         SDL_DestroyTexture(rgba_texture_);
         rgba_texture_ = nullptr;
+    }
+    for (auto& glyph : fixed_glyphs_) {
+        if (glyph) SDL_DestroyTexture(glyph);
+        glyph = nullptr;
     }
     if (texture_cache_) {
         texture_cache_->clear();
@@ -1611,9 +1632,9 @@ void Renderer::collect_ant_units(const ants::sim::WorldState& world) {
         item.sort_y = a.py + predict_ant_clip(a, ant_loco_sequence(a)).dy;
         item.draw_func = [this, a](SDL_Renderer*, TextureCache&) {
             this->draw_single_ant(a);
-            if (show_hp_) {          // FUN_0101b802 with [4b14] != 0: sprintf("%d", hp), white, at the sprite position
-                this->draw_text(std::to_string(a.hp), PLAYFIELD_X + (a.px - static_cast<int32_t>(camera_.x)),
-                                PLAYFIELD_Y + (a.py - static_cast<int32_t>(camera_.y)), ants::assets::ColorRGBA{255, 255, 255, 255}, FontSize::Small);
+            if (show_hp_) {          // FUN_0101b802 with [4b14] != 0: sprintf("%d", hp), white, at the sprite position, in the fixed system font
+                this->draw_fixed_text(std::to_string(a.hp), PLAYFIELD_X + (a.px - static_cast<int32_t>(camera_.x)),
+                                      PLAYFIELD_Y + (a.py - static_cast<int32_t>(camera_.y)), ants::assets::ColorRGBA{255, 255, 255, 255});
             }
         };
         render_queue_.push_back(std::move(item));
@@ -1951,16 +1972,34 @@ void Renderer::draw_rect(int32_t x, int32_t y, int32_t w, int32_t h, ants::asset
 }
 
 void Renderer::draw_text(const std::string& text, int32_t x, int32_t y, ants::assets::ColorRGBA color) {
-    draw_text(text, x, y, color, FontSize::Small);
+    draw_text(text, x, y, color, FontSize::Px12);
+}
+
+size_t Renderer::font_index(FontSize size) noexcept {
+    switch (size) {
+        case FontSize::Px12: return 0;
+        case FontSize::Px14: return 1;
+        case FontSize::Px18: return 2;
+        case FontSize::Px20: return 3;
+        case FontSize::Px24: return 4;
+        case FontSize::Px35: return 5;
+    }
+    return 0;
+}
+
+int32_t Renderer::ttf_point_size(int32_t cell_px, double cell_ratio) noexcept {
+    // the glyphs are rendered at twice the size and halved into the canvas: a cell of `cell_px` pixels is 2 * cell_px pixels of font, and one em is
+    // 1 / cell_ratio of the cell
+    return std::max(2, static_cast<int32_t>(std::lround(2.0 * static_cast<double>(cell_px) / cell_ratio)));
 }
 
 void Renderer::draw_text(const std::string& text, int32_t x, int32_t y, ants::assets::ColorRGBA color, FontSize size) {
     if (!renderer_ || text.empty()) return;
 
-    // Handle multi-line strings
+    // Handle multi-line strings: the lines are one cell height apart (what GetTextExtentPoint32A reports as cy in the original)
     if (text.find('\n') != std::string::npos) {
         int32_t cur_y = y;
-        int32_t line_height = (size == FontSize::Large) ? 20 : ((size == FontSize::Medium) ? 16 : 14);
+        const int32_t line_height = font_cell_height(size);
         size_t start = 0;
         while (start < text.length()) {
             size_t next = text.find('\n', start);
@@ -1976,12 +2015,7 @@ void Renderer::draw_text(const std::string& text, int32_t x, int32_t y, ants::as
     }
 
 #ifdef ANTS_ENABLE_SDL_TTF
-    TTF_Font* font = font_small_;
-    if (size == FontSize::Medium && font_medium_) {
-        font = font_medium_;
-    } else if (size == FontSize::Large && font_large_) {
-        font = font_large_;
-    }
+    TTF_Font* font = font_for(size);
 
     if (font) {
         uint32_t c_u32 = (static_cast<uint32_t>(color.r) << 24) |
@@ -2018,22 +2052,15 @@ void Renderer::draw_text(const std::string& text, int32_t x, int32_t y, ants::as
     }
 #endif
 
-    // Fallback: built-in 5x7 bitmap font
+    // Fallback: built-in 5x7 bitmap font, scaled up for the larger sizes
+    const int32_t scale = std::max(1, font_cell_height(size) / 10);
     if (color.a < 255) {
         SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
     }
     SDL_SetRenderDrawColor(renderer_, color.r, color.g, color.b, color.a);
 
     int32_t cur_x = x;
-    int32_t cur_y = y;
-
     for (char c : text) {
-        if (c == '\n') {
-            cur_x = x;
-            cur_y += 10;
-            continue;
-        }
-
         uint8_t glyph_idx = (c >= 32 && c <= 126) ? static_cast<uint8_t>(c - 32) : static_cast<uint8_t>('?' - 32);
         const auto& glyph = FONT_5X7[glyph_idx];
 
@@ -2041,11 +2068,16 @@ void Renderer::draw_text(const std::string& text, int32_t x, int32_t y, ants::as
             uint8_t row_bits = glyph.rows[row];
             for (int col = 0; col < glyph.width; ++col) {
                 if (row_bits & (0x80 >> col)) {
-                    SDL_RenderDrawPoint(renderer_, cur_x + col, cur_y + row);
+                    if (scale == 1) {
+                        SDL_RenderDrawPoint(renderer_, cur_x + col, y + row);
+                    } else {
+                        SDL_Rect dot{cur_x + col * scale, y + row * scale, scale, scale};
+                        SDL_RenderFillRect(renderer_, &dot);
+                    }
                 }
             }
         }
-        cur_x += glyph.width + 1;
+        cur_x += (glyph.width + 1) * scale;
     }
     if (color.a < 255) {
         SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_NONE);
@@ -2055,40 +2087,65 @@ void Renderer::draw_text(const std::string& text, int32_t x, int32_t y, ants::as
 int32_t Renderer::get_text_width(const std::string& text, FontSize size) const {
     if (text.empty()) return 0;
 #ifdef ANTS_ENABLE_SDL_TTF
-    TTF_Font* font = font_small_;
-    if (size == FontSize::Medium && font_medium_) {
-        font = font_medium_;
-    } else if (size == FontSize::Large && font_large_) {
-        font = font_large_;
-    }
+    TTF_Font* font = font_for(size);
     if (font) {
         int w = 0, h = 0;
         if (TTF_SizeUTF8(font, text.c_str(), &w, &h) == 0) {
             return (w + 1) / 2;
         }
     }
-#else
-    (void)size;
 #endif
-    return static_cast<int32_t>(text.size()) * 6;
+    return static_cast<int32_t>(text.size()) * 6 * std::max(1, font_cell_height(size) / 10);
 }
 
 int32_t Renderer::get_text_height(FontSize size) const {
-#ifdef ANTS_ENABLE_SDL_TTF
-    TTF_Font* font = font_small_;
-    if (size == FontSize::Medium && font_medium_) {
-        font = font_medium_;
-    } else if (size == FontSize::Large && font_large_) {
-        font = font_large_;
+    return font_cell_height(size);
+}
+
+// The original's health number: TextOutA with the stock SYSTEM_FIXED_FONT, the raster "Fixedsys": every character is a cell of 8 x 15 pixels, the
+// glyphs are not antialiased. The Windows font itself is not available here, so the digits are drawn by hand in its style: 7 x 10 pixels with strokes of
+// one pixel, top at row 2 of the cell (the font's ascent is 12).
+static const char* const kFixedGlyphs[11][10] = {
+    {"..XXX..", ".X...X.", "X.....X", "X.....X", "X.....X", "X.....X", "X.....X", "X.....X", ".X...X.", "..XXX.."},   // 0
+    {"...X...", "..XX...", ".X.X...", "...X...", "...X...", "...X...", "...X...", "...X...", "...X...", ".XXXXX."},   // 1
+    {".XXXXX.", "X.....X", "......X", "......X", ".....X.", "....X..", "...X...", "..X....", ".X.....", "XXXXXXX"},   // 2
+    {".XXXXX.", "X.....X", "......X", "......X", "..XXXX.", "......X", "......X", "......X", "X.....X", ".XXXXX."},   // 3
+    {"....XX.", "...X.X.", "..X..X.", ".X...X.", "X....X.", "XXXXXXX", ".....X.", ".....X.", ".....X.", ".....X."},   // 4
+    {"XXXXXXX", "X......", "X......", "X......", "XXXXXX.", "......X", "......X", "......X", "X.....X", ".XXXXX."},   // 5
+    {"..XXXX.", ".X.....", "X......", "X......", "XXXXXX.", "X.....X", "X.....X", "X.....X", "X.....X", ".XXXXX."},   // 6
+    {"XXXXXXX", "......X", ".....X.", ".....X.", "....X..", "....X..", "...X...", "...X...", "..X....", "..X...."},   // 7
+    {".XXXXX.", "X.....X", "X.....X", "X.....X", ".XXXXX.", "X.....X", "X.....X", "X.....X", "X.....X", ".XXXXX."},   // 8
+    {".XXXXX.", "X.....X", "X.....X", "X.....X", "X.....X", ".XXXXXX", "......X", "......X", ".....X.", ".XXXX.."},   // 9
+    {".......", ".......", ".......", ".......", ".......", ".XXXXX.", ".......", ".......", ".......", "......."},   // -
+};
+
+void Renderer::draw_fixed_text(const std::string& text, int32_t x, int32_t y, ants::assets::ColorRGBA color) {
+    if (!renderer_ || text.empty()) return;
+    for (size_t g = 0; g < fixed_glyphs_.size(); ++g) {
+        if (fixed_glyphs_[g] != nullptr) continue;
+        std::vector<uint32_t> pixels(static_cast<size_t>(kFixedCellW * kFixedCellH), 0u);
+        for (int32_t row = 0; row < 10; ++row) {
+            for (int32_t col = 0; col < 7; ++col) {
+                if (kFixedGlyphs[g][row][col] == 'X') pixels[static_cast<size_t>((row + 2) * kFixedCellW + col)] = 0xFFFFFFFFu;     // white, opaque
+            }
+        }
+        SDL_Texture* tex = SDL_CreateTexture(renderer_, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STATIC, kFixedCellW, kFixedCellH);
+        if (tex == nullptr) return;
+        SDL_UpdateTexture(tex, nullptr, pixels.data(), kFixedCellW * static_cast<int32_t>(sizeof(uint32_t)));
+        SDL_SetTextureBlendMode(tex, SDL_BLENDMODE_BLEND);
+        fixed_glyphs_[g] = tex;
     }
-    if (font) {
-        int h = TTF_FontHeight(font);
-        return (h + 1) / 2;
+    int32_t cur_x = x;
+    for (char c : text) {
+        const int32_t g = (c >= '0' && c <= '9') ? c - '0' : (c == '-' ? 10 : -1);
+        if (g >= 0 && fixed_glyphs_[static_cast<size_t>(g)] != nullptr) {
+            SDL_SetTextureColorMod(fixed_glyphs_[static_cast<size_t>(g)], color.r, color.g, color.b);
+            SDL_SetTextureAlphaMod(fixed_glyphs_[static_cast<size_t>(g)], color.a);
+            SDL_Rect dst{cur_x, y, kFixedCellW, kFixedCellH};
+            SDL_RenderCopy(renderer_, fixed_glyphs_[static_cast<size_t>(g)], nullptr, &dst);
+        }
+        cur_x += kFixedCellW;                                  // a fixed font: every character takes a cell, drawn or not
     }
-#else
-    (void)size;
-#endif
-    return 7;
 }
 
 bool Renderer::save_screenshot(const std::string& path) {
