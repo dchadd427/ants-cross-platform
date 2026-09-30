@@ -1528,7 +1528,8 @@ in `ants.chd` (the original was never run, so timings come from the clip tables)
   2026-09-30, v0.0.55: the body writes 1000 into `[task + 0x1c]` and answers "keep" at `0x1025100`; the default scheduler is the LIST scheduler, which
   reads that field as the task's interval, so it is not a dead store and not the 8 ms of the `-newtask` wheel); then own ants heading for the entrance (order 1 / 2 with target = entrance) are sent to
   the waiting tile (`+0x68 = 1, +0x6c = 0`) and the newborn is created at the entrance tile centre: a worker (always type 0,
-  hp 10), direction `rand() % 7 + 1`, action 0x14 (`aghatch`, 9 frames `[40, 8 x 60]` = 520 ms), order 2, plus the positional cue
+  hp 10), direction `rand() % 7 + 1` (SpawnAnt `0x100ef18` draws it so for EVERY ant it places, the ants a level starts with included: they never face North; the
+  remake drew `rand() % 8` for those until v0.0.57), action 0x14 (`aghatch`, 9 frames `[40, 8 x 60]` = 520 ms), order 2, plus the positional cue
   `exithill` (43) and text 63 "Ready!". At the clip end it goes to tile42. When the last local ant is removed and eggs remain the
   game hatches for free (`force`, no 200 point rule, cost `min(200, score)`).
 * **Thief raid** *(implemented; order 0xb, action 0xd, messages 0x12)*. The path ends on the raid tile (an occupied raid tile
@@ -1628,7 +1629,8 @@ handler of `FUN_0100d791` does before it broadcasts.
 * **Bridge collapse** *(implemented; `FUN_0100f8bf`)*: every ant on a bridge tile that becomes water is checked: a non-swimmer
   drowns, a swimmer only splashes: effect 0x28 (`dsplash`, five frames without a sound) at the tile, then `SetActionDefault(current action)` (`0x100f99f`), so that its
   current clip is chosen again for the water it now stands in (the water idle clip `astw301`, the swim gait); a swimmer whose current action is 0x12 (attack) first
-  loses its path (`0x101ab56`) and goes idle. Nothing is played: the remake's `splash.wav` (sound 71) at the collapse was invented and is gone (v0.0.54).
+  loses its path (`0x101ab56`) and goes idle. Nothing is played: the remake's `splash.wav` (sound 71) at the collapse was invented and is gone (v0.0.54). The timeout
+  (`0x1024e66`) calls `FUN_0100f8bf` first (the splash effect, `0x100f983`) and creates the `bsputter` puff afterwards (`0x1024eb2`), so the puff is drawn over the splash (v0.0.57).
 * **Removed as invented** (v0.0.33): the physics engine (ballistic lerp, arcs, obstacle counting, 8 candidate directions), the bounce
   and scuffle states, the attack cooldown, the pursuit AI, the guard post AI (`combat_ai.cpp`), the 12-tick stun after flights, the
   instant death and instant drowning, the flinch / stun tick timers, the melee immunity flags.

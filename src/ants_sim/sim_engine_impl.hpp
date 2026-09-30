@@ -189,8 +189,11 @@ public:
     }
 
 
+    // FUN_01020de7: inside the map, no ant, not the layer-1 solid bit (FUN_0100cf0f), not water, layer 2 empty, not one of a live hill's special tiles
     bool is_valid_powerup_drop_tile(TileCoord adj) const noexcept {
         if (!grid_.in_bounds(adj)) return false;
+        if (grid_.is_solid_object(adj)) return false;
+        if (is_special_base_tile(adj)) return false;
         if (grid_.is_solid_obstacle(adj.x, adj.y)) return false;
         const auto& cell = grid_.get_cell(adj);
         if (!cell.is_passable()) return false;

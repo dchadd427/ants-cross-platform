@@ -39,6 +39,19 @@ Ground truth for every entry is in [`docs/GAME_REVERSE_ENGINEERING.md`](docs/GAM
   - **Found on the way, for the audit** (docs: implementation_plan.md section 18): `tests/test_sim/test_challenger_m2_it2_deep_stress.cpp` has not been part of the build since an early commit and no longer compiles
     (it uses the retired slot-queue API of the hill). (An earlier version of this line said that the death clips are no longer started by a separate effect: wrong, only the unused helper `spawn_death_effect` was removed; the effect path in `movement_system.cpp` is still in use, see the audit.)
 
+## v0.0.57 - 2026-09-30 - Small rules: level-start facing, where a power-up may land, the order of two effects
+
+Audit batch 1, item 9 (the small items that could be verified; `docs/audit/ledger_hill.md` NEW-4, `ledger_abilities.md` NEW-5, `ledger_effects_objects.md` NEW-2), each re-read in `Ants.exe` first:
+
+- **The ants a level starts with never face North**: SpawnAnt (`0x100ef18`) draws the direction of every ant it places as `rand() % 7 + 1`; the remake drew `rand() % 8` for the start ants (5 of the 24 start ants of GAUNTLET looked north).
+- **A dying typed ant's power-up lands by the original's tile test** (`FUN_01020de7`): inside the map, no ant, not the layer-1 solid bit, not water, layer 2 empty, **not one of a live hill's special tiles** (the three tiles above the mound, the entrance, the raid tile).
+  The remake only refused the 4x4 mound itself and used a different solid test, so a power-up could land on the tiles above a hill or on a solid tile.
+- **When a bridge times out with a swimmer on it, the splash is created first and the `bsputter` puff afterwards** (`0x100f983`, `0x1024eb2`), so the puff is drawn on top (it was the other way round; 460 ms of the swimmer's splash).
+- Not done in this release, on purpose: a path request delivered to a stunned ant (LM NEW-M3: code-only finding, needs the flight/path ownership of stage B), the team order of the occupant scan (LM NEW-M6, LK NEW-8: the mapping of the original's team slots to the remake's
+  player numbers is not proven), the invented statistics counters (LB NEW-6, invisible, goes with the cleanup), and the burnout / bridge tasks as (tile, deadline) entries with the 2500 ms poll (LE NEW-4: a re-lit wall or rebuilt bridge keeps the old task, rare): all four stay on the list in `docs/AUDIT_ONE_TO_ONE.md`.
+- Docs: `docs/GAME_REVERSE_ENGINEERING.md` (SpawnAnt facing, bridge timeout effects), README (test table), `docs/AUDIT_ONE_TO_ONE.md` (progress and the remaining items).
+- Tests: integration 12.146 (level-start facing, 20 seeds of GAUNTLET), `test_powerup_actions` 1.17 (drop tile test), `test_ability_actions` 3.9 extended (effect order); all three fail on v0.0.56. No existing test had to change. Version assertion of 12.108.
+
 ## v0.0.56 - 2026-09-30 - The flower droppers run on the original's poll
 
 Audit batch 1, item 7 (`docs/audit/ledger_abilities.md` NEW-4, `ledger_effects_objects.md` R10, `ledger_scheduler.md` FDTASK), re-read in `Ants.exe` first (`0x100fc0d`, `0x1025063`, `0x100fdd8`, `0x100fe50`, `FUN_01009fd8`, `FUN_01008d2f`).

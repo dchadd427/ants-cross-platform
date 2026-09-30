@@ -171,7 +171,7 @@ void SimulationEngine::init(const ants::assets::LevelData& level_in, uint32_t ra
                     }
                 }
             }
-            spawn_unit(a.team_id, AntType::Worker, TileCoord{static_cast<uint16_t>(sx), static_cast<uint16_t>(sy)});
+            spawn_unit(a.team_id, AntType::Worker, TileCoord{static_cast<uint16_t>(sx), static_cast<uint16_t>(sy)}, true);
         }
     }
 
@@ -268,10 +268,10 @@ void SimulationEngine::tick() {
                 // BridgeTimeout (0x1024e66) acts only when the tile is the completed bridge 0x25 at that moment; the task is used up either way
                 if (cell.timer_ticks == 0 && cell.interactive_id == TILE_BRIDGE4) {
                     impl_->grid_.collapse_bridge(x, y);
-                    // Bridge lifetime task (Ants.exe 0x1024e66): bsputter puff at the tile top-left after the destroy
-                    impl_->spawn_tile_effect("bsputter", static_cast<int32_t>(x), static_cast<int32_t>(y), effect_spec::kBsputterMs);
-                    // Occupancy Drowning Scan when the bridge collapses to water (Ants.exe 0x0100f8bf)
+                    // Bridge lifetime task (Ants.exe 0x1024e66): DestroyBridgeAt first (0x100f8bf: the drowning scan, a swimmer's dsplash, 0x100f983) ...
                     impl_->bridge_gone_scan(TileCoord{static_cast<int32_t>(x), static_cast<int32_t>(y)});
+                    // ... then the bsputter puff at the tile top-left (0x1024eb2), so it is drawn over the splash
+                    impl_->spawn_tile_effect("bsputter", static_cast<int32_t>(x), static_cast<int32_t>(y), effect_spec::kBsputterMs);
                 }
             }
         }
@@ -879,11 +879,11 @@ void SimulationEngine::clear_news_events() {
     impl_->news_queue_.clear();
 }
 
-uint32_t SimulationEngine::spawn_unit(uint8_t player_id, AntType type, TileCoord pos) {
+uint32_t SimulationEngine::spawn_unit(uint8_t player_id, AntType type, TileCoord pos, bool level_start) {
     uint32_t id = impl_->next_ant_id_++;
     auto unit = std::make_unique<AntUnit>(id, static_cast<TeamId>(player_id % 4), type, pos.x, pos.y);
     unit->player_id = player_id;
-    unit->facing = static_cast<Direction>(impl_->prng_.rand() % 8);
+    unit->facing = static_cast<Direction>(level_start ? (impl_->prng_.rand() % 7 + 1) : (impl_->prng_.rand() % 8));
     AntUnit* unit_ptr = unit.get();
     if (impl_->grid_.in_bounds(pos)) {
         const auto& cell = impl_->grid_.get_cell(pos);

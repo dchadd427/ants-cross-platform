@@ -6519,10 +6519,10 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
 
     TEST_CASE("12.108: Version Invariant & Fog of War Cursor Concealment Parity") {
         // 1. Verify semantic versioning components
-        ASSERT_EQ(ants::VERSION_STRING, "v0.0.56");
+        ASSERT_EQ(ants::VERSION_STRING, "v0.0.57");
         ASSERT_EQ(ants::VERSION_MAJOR, 0);
         ASSERT_EQ(ants::VERSION_MINOR, 0);
-        ASSERT_EQ(ants::VERSION_PATCH, 56);
+        ASSERT_EQ(ants::VERSION_PATCH, 57);
 
         // 2. Setup simulation world with Fog of War enabled
         SimulationEngine sim;
@@ -9204,6 +9204,21 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         const AntSnapshot* both = hud.pick_ant_at(world2, wx, wy + 8 - 32 + 26);   // y = 346: inside both boxes ([304,352) and [336,384))
         ASSERT_TRUE(both != nullptr);
         ASSERT_EQ(both->id, w2);
+    } TEST_END();
+
+    TEST_CASE("12.146 The ants that a level starts with never face North: SpawnAnt draws the direction as rand() % 7 + 1 (0x100ef18)") {
+        ants::assets::LevelData lvl;
+        ASSERT_TRUE(lvl.load_lvl(std::string(ORIGINAL_ASSETS_DIR) + "/Maps/GAUNTLET.LVL"));
+        size_t ants_seen = 0;
+        for (uint32_t seed = 1; seed <= 20; ++seed) {
+            SimulationEngine sim;
+            sim.init(lvl, seed);
+            for (const auto& a : sim.get_world_state().ants) {
+                ++ants_seen;
+                ASSERT_TRUE(a.facing != 0);                                          // Direction::North
+            }
+        }
+        ASSERT_TRUE(ants_seen >= 20 * 4);                                            // every seed starts with at least one ant per team
     } TEST_END();
 }
 

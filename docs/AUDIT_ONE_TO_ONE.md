@@ -10,6 +10,7 @@ order in which it is proposed to be fixed. The owner decides (AGENTS.md rule 9).
 * v0.0.54: batch 1 items 4 and 5 (bridge timer kept through an interrupted demolish, timeout only on a completed bridge: LB NEW-1; swimmer re-enters its action when its bridge collapses, silent collapse: LB NEW-2, LE NEW-5, LS NEW-9; scores never clamped, signed loot: LF NEW-4).
 * v0.0.55: batch 1 items 6 and 8 (dropped teams: raid refused, special tiles ordinary, no power-ups, ally pedestal live count: LF NEW-5, LH NEW-5 / NEW-6, LU NEW-8, LK NEW-4; hatch retry 1000 ms: LX).
 * v0.0.56: batch 1 item 7 (flower droppers: 3 s poll, stamp at the posting, tile test, 820 ms effect, type formula: LB NEW-4, LE R10, LX FDTASK).
+* v0.0.57: batch 1 item 9, the small items that could be verified (level-start facing: LH NEW-4; power-up drop tile test: LB NEW-5; bsputter / dsplash order: LE NEW-2). **Left open on purpose**: stun and a queued path (LM NEW-M3), the `occ_scan` team order (LM NEW-M6 / LK NEW-8: needs proof of the slot-to-player mapping), the invented counters (LB NEW-6, goes with the cleanup), burnout / bridge tasks as (tile, deadline) entries with the 2500 ms poll (LE NEW-4).
 
 ## 1. What was audited and how
 

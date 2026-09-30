@@ -491,6 +491,13 @@ int main() {
         ASSERT_EQ(sim.get_unit(sw).state, UnitState::Swimming);
         ASSERT_TRUE(sim.get_unit(sw).is_alive());
         ASSERT_FALSE(sim.has_audio_event(71));                                                     // the effect (anim 0x28) has no sound
+        int splash_at = -1, sputter_at = -1, n = 0;                                                // the timeout destroys the bridge first (dsplash, 0x100f983), then puffs (bsputter, 0x1024eb2): drawn on top
+        for (const auto& fx : sim.get_world_state().effects) {
+            if (fx.anim_name == "dsplash") splash_at = n;
+            if (fx.anim_name == "bsputter") sputter_at = n;
+            ++n;
+        }
+        ASSERT_TRUE(splash_at >= 0 && sputter_at > splash_at);
     } TEST_END();
 
     TEST_CASE("4.1 Order classification: the ant's type turns the special click into plant/defuse, ignite/extinguish, build/demolish or a plain walk") {

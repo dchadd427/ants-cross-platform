@@ -459,7 +459,9 @@ public:
     void set_locomotion_trace_enabled(bool enabled);
     const std::vector<LocoTraceEvent>& locomotion_trace() const;
 
-    uint32_t spawn_unit(uint8_t player_id, AntType type, TileCoord pos);
+    /// SpawnAnt (0x100ef18): the ant appears at the tile. The facing is drawn as rand() % 8 for the test fixtures; the ants that a level starts with
+    /// (`level_start`) draw it as the original does, rand() % 7 + 1, which is never North.
+    uint32_t spawn_unit(uint8_t player_id, AntType type, TileCoord pos, bool level_start = false);
     AntUnit& get_unit(uint32_t ant_id);
     void kill_unit(uint32_t ant_id);
 

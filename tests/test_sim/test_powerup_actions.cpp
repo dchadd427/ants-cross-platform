@@ -668,6 +668,31 @@ int main() {
         ASSERT_TRUE(sim.get_unit(victim).hp < 10u);                          // the step into its tile is a contact, no object test
     } TEST_END();
 
+    TEST_CASE("1.17 DropPowerup's tile test (FUN_01020de7): never a tile with the solid bit, never one of a hill's special tiles (the three tiles above the mound, the entrance, the raid tile)") {
+        int above_hill = 0;
+        int dropped = 0;
+        for (uint32_t seed = 1; seed <= 40; ++seed) {
+            SimulationEngine sim;
+            sim.init_test_world(60, 60, seed, 720000);
+            sim.set_anthill(0, TileCoord{20, 20});
+            sim.set_anthill(1, TileCoord{50, 50});
+            const uint32_t b = sim.spawn_unit(1, AntType::Bomber, TileCoord{21, 18});            // the three tiles (20 .. 22, 19) above the mound are three of its eight neighbours
+            sim.grid_mut().get_cell_mut(20, 17).static_solid = true;                               // one more neighbour with the solid bit
+            sim.kill_unit(b);
+            for (int x = 20; x <= 22; ++x) {
+                if (sim.grid().has_powerup_at(TileCoord{x, 19})) ++above_hill;
+            }
+            if (sim.grid().has_powerup_at(TileCoord{20, 17})) ASSERT_TRUE(false);                   // never on the solid tile
+            for (int y = 17; y <= 19; ++y) {
+                for (int x = 20; x <= 22; ++x) {
+                    if (sim.grid().has_powerup_at(TileCoord{x, y})) ++dropped;
+                }
+            }
+        }
+        ASSERT_EQ(above_hill, 0);
+        ASSERT_EQ(dropped, 40);                                                                    // one power-up every time, on one of the four free neighbours
+    } TEST_END();
+
     // ---- the flower droppers: FDTASK (0x100fc0d) polls every 3000 ms (+ its run time), the first poll only stamps, a posting needs more than `interval` seconds
     // since the stamp, the stamp is renewed at the posting, the drop effect lasts 820 ms and its last frame sets the tile (0x100fe50) ---------------------------
     TEST_CASE("2.1 SMALL (interval 15 s): the first poll stamps, the drop is posted at the fifth poll (15005 ms), lands 820 ms later, and every 15005 ms after") {
