@@ -197,7 +197,7 @@ int AudioMixer::allocate_channel(uint8_t priority) {
     return -1; // Drop sound
 }
 
-int AudioMixer::play_sfx(uint32_t sound_id, float volume, uint8_t priority, bool loop) {
+int AudioMixer::play_sfx(uint32_t sound_id, float volume, uint8_t priority, bool loop, uint32_t owner) {
     if (!archive_ || sound_id >= archive_->sound_count()) return -1;
     const auto& clip = archive_->get_sound(sound_id);
     if (clip.pcm_data.empty()) return -1;
@@ -213,6 +213,7 @@ int AudioMixer::play_sfx(uint32_t sound_id, float volume, uint8_t priority, bool
     ch.cursor = 0.0;
     ch.rate_step = static_cast<double>(clip.format.samples_per_sec) / static_cast<double>(output_sample_rate_);
     ch.event_gain = std::clamp(volume, 0.0f, 1.0f);
+    ch.owner = owner;
     ch.priority = priority;
     ch.loop = loop;
     ch.spatial = false;                                // a cue or a UI sound: plain volume 100 %, pan 0 (FUN_0102e883), only the Sound Volume option applies
@@ -221,7 +222,7 @@ int AudioMixer::play_sfx(uint32_t sound_id, float volume, uint8_t priority, bool
     return ch_idx;
 }
 
-int AudioMixer::play_spatial(uint32_t sound_id, int32_t world_x, int32_t world_y, uint8_t priority, float volume, bool loop) {
+int AudioMixer::play_spatial(uint32_t sound_id, int32_t world_x, int32_t world_y, uint8_t priority, float volume, bool loop, uint32_t owner) {
     if (!archive_ || sound_id >= archive_->sound_count()) return -1;
     const auto& clip = archive_->get_sound(sound_id);
     if (clip.pcm_data.empty()) return -1;
@@ -239,6 +240,7 @@ int AudioMixer::play_spatial(uint32_t sound_id, int32_t world_x, int32_t world_y
     ch.cursor = 0.0;
     ch.rate_step = static_cast<double>(clip.format.samples_per_sec) / static_cast<double>(output_sample_rate_);
     ch.event_gain = std::clamp(volume, 0.0f, 1.0f);
+    ch.owner = owner;
     ch.priority = priority;
     ch.loop = loop;
     ch.spatial = true;
@@ -253,6 +255,14 @@ void AudioMixer::stop_all() {
     std::lock_guard<std::mutex> lock(mixer_mutex_);
     for (auto& ch : channels_) {
         ch.active = false;
+    }
+}
+
+void AudioMixer::stop_owner(uint32_t owner) {
+    if (owner == 0) return;
+    std::lock_guard<std::mutex> lock(mixer_mutex_);
+    for (auto& ch : channels_) {
+        if (ch.active && ch.owner == owner) ch.active = false;
     }
 }
 
@@ -369,14 +379,18 @@ void AudioMixer::ingest_simulation_events(const std::vector<ants::sim::AudioEven
         if (ev.target_player != 255 && ev.target_player != local_player_id) {
             continue;
         }
+        if (ev.stop) {                                   // the owner's clip was replaced or the owner is gone: what it started is cut
+            stop_owner(ev.owner);
+            continue;
+        }
 
         // Check if sound is non-spatial, broadcast, or player score notification
         if ((ev.world_x == 0 && ev.world_y == 0) ||
             ev.sound_id == ants::sim::SoundID::BaseScoreUp ||
             ev.sound_id == ants::sim::SoundID::BaseScoreDn) {
-            play_sfx(ev.sound_id, 1.0f, ev.priority);
+            play_sfx(ev.sound_id, 1.0f, ev.priority, false, ev.owner);
         } else {
-            play_spatial(ev.sound_id, ev.world_x, ev.world_y, ev.priority);
+            play_spatial(ev.sound_id, ev.world_x, ev.world_y, ev.priority, 1.0f, false, ev.owner);
         }
     }
 }

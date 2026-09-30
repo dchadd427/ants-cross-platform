@@ -224,9 +224,7 @@ bool Application::init(const ApplicationConfig& config) {
     scorecard_.set_on_quit([this]() {
         quit();
     });
-    scorecard_.set_on_play_sfx([this](uint32_t sound_id) {
-        audio_mixer_.play_sfx(sound_id, 1.0f, 255);
-    });
+    scorecard_.set_on_play_sfx([this](uint32_t sound_id) { play_ui_sound(sound_id); });
 
     hud_.set_sim_query(&sim_);           // the cursor asks the simulation whether a tile is a valid special target
     hud_.set_on_quit([this]() {
@@ -242,9 +240,7 @@ bool Application::init(const ApplicationConfig& config) {
         midi_player_.set_volume(v);
     });
 
-    hud_.set_on_play_sfx([this](uint32_t sound_id) {
-        audio_mixer_.play_sfx(sound_id, 1.0f, 255);
-    });
+    hud_.set_on_play_sfx([this](uint32_t sound_id) { play_ui_sound(sound_id); });
 
     hud_.set_on_spawn_click_marker([this](int32_t wx, int32_t wy) {
         if (renderer_) {
@@ -287,9 +283,7 @@ bool Application::init(const ApplicationConfig& config) {
     map_select_.set_on_quit([this]() {
         quit();
     });
-    map_select_.set_on_play_sfx([this](uint32_t sound_id) {
-        audio_mixer_.play_sfx(sound_id, 1.0f, 255);
-    });
+    map_select_.set_on_play_sfx([this](uint32_t sound_id) { play_ui_sound(sound_id); });
 
     // A network game: the room is the setup screen (host: pick the map and START; guest: follow the host's choice)
     if (networked) {
@@ -626,6 +620,17 @@ int Application::run() {
 #endif
 }
 
+// A UI sound. The click of a pressed button (buttonclick.wav, the first frame of its pressed clip) belongs to that button's sprite: it is cut when the button is
+// released and its clip is replaced by the raised one (FUN_0102c0db -> StopTracked), so a short click is cut short. The other UI sounds are not tied to a release.
+void Application::play_ui_sound(uint32_t sound_id) {
+    const uint32_t owner = (sound_id == sim::SoundID::ButtonClick) ? kUiPressOwner : 0u;
+    audio_mixer_.play_sfx(sound_id, 1.0f, 255, false, owner);
+}
+
+void Application::release_ui_sounds() {
+    audio_mixer_.stop_owner(kUiPressOwner);
+}
+
 void Application::handle_events() {
     SDL_Event event;
     while (SDL_PollEvent(&event)) {
@@ -633,6 +638,7 @@ void Application::handle_events() {
             quit();
             return;
         }
+        if (event.type == SDL_MOUSEBUTTONUP) release_ui_sounds();                         // (the setup screen takes its mouse events in the loop below)
 
         if (event.type == SDL_WINDOWEVENT) {
             if (event.window.event == SDL_WINDOWEVENT_MINIMIZED ||
@@ -807,6 +813,7 @@ void Application::handle_mouse_button(const SDL_MouseButtonEvent& button) {
     mouse_screen_x_ = button.x;
     mouse_screen_y_ = button.y;
     mouse_has_moved_ = true;
+    if (button.type == SDL_MOUSEBUTTONUP) release_ui_sounds();                          // before the handlers: what the release itself plays is not cut
 
     if (scorecard_.is_open()) {
         if (button.type == SDL_MOUSEBUTTONDOWN) {

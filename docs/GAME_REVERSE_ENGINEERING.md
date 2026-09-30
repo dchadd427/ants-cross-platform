@@ -1035,6 +1035,16 @@ A *cue* is a global sprite with no owner: `FUN_0102bd7e` plays it in the global 
 - **The option is applied at the release of the slider** (`0x1015058`): `SetSoundVolume` (`0x102d7cf`) re-attenuates every playing sound (`FUN_0102f777`), the value goes to the registry, then the test voice `gantrdy` (14) plays (`0x101508a`). The view's scrolling re-attenuates the playing positional sounds the same way.
 - Before v0.0.59 the remake used `1 - distance / 800` (silent beyond 800 px, Euclidean), an equal-power pan that hard-panned a source 221 px to one side, and a linear volume applied live while the slider was dragged. The law lives in `AudioMixer::distance_percent`, `pan_centibels`, `attenuation_centibels` and `gain_from_centibels`.
 
+**5.24d Tracked sounds (audit of 2026-09-30; implemented in v0.0.60).** Every sound-carrying animation of the archive has flags (once, dup, track) = (0 or 1, 1, 1) (1334 of 1344 have track). The sprite that starts a sound adds the buffer to its own list (`[sprite + 0x34]`,
+`FUN_0102e955` -> `0x102e9e1`); when the sprite's clip is replaced (`FUN_0102c0db`: the OLD flags' bit 5 is tested at `0x102c0f5`, `StopTracked` = `FUN_0102bdab`) or when the sprite is removed (`FUN_0102c245`; `Map::RemoveSprite`, `FUN_01008871`, when `[map + 0x68]` is set,
+`0x100def3`), every buffer of that list that still plays is stopped (`FUN_0102eb9a`) and the list is freed. A retrigger while a buffer still plays starts a duplicate in parallel (dup flag; there is no voice limit). Consequences, all audible:
+- The sounds of an ant's action clip stop when the action ends and the next clip replaces it: a fire ant's `attack.wav` (366 ms, from 240 ms) of a 360 ms clip plays 120 ms; the grabs `harvest` / `foodgrab` (429 ms) play 80 - 300 ms; `firestartb` (879 ms) 460 of 879; the swimmer's dive 420 of 993; `bombmuffle` 480 of 789; `shovelwater` 320 of 570; `stealc` 140 of 308 (109 frame sounds outlast their clip, `truncation.tsv` of the audit).
+- An effect's sounds stop when the effect sprite is removed at the end of its clip: `bombexp.wav` (1144 ms) is cut after the 680 ms of the `bombex` clip; the battle cloud's `combatnetfairy.wav` (622 ms, started at every 270 ms loop) stops with the cloud.
+- A pressed button's `buttonclick.wav` (277 ms, the first frame of its pressed clip) is cut when the button is released and the raised clip replaces it; the pedestal flash (BTNPUSH, 125 ms) cuts its 131 ms click 6 ms early.
+- Cues (the global sprites that play through `FUN_0102bd7e`) call the frame play directly, never `SetClip`: nothing cuts them.
+The remake gives every sound a source: `AudioEvent::owner` (an ant id, or 0x40000000 and up for effect sprites, 0x80000001 for the pressed button) and a `stop` event that the simulation emits when `loco_play` replaces a clip of an ant that has started a sound, when the ant is removed, and when a
+`bombex` effect or a battle cloud ends; the mixer cuts the channels of the owner (`AudioMixer::stop_owner`).
+
 ---
 
 ### 5.25 Match Timer Warnings & Countdown Sequencing (`0x1024839`)

@@ -382,12 +382,14 @@ void SimulationEngineImpl::tick_battle_clouds() {
             }
         }
         if (remove) {
+            stop_audio_owner(c.audio_owner);                                  // the cloud sprite is removed: the sounds of its loops stop with it
             it = battle_clouds_.erase(it);
             world_state_dirty_ = true;
             continue;
         }
         while (c.next_sound_ms <= anim_clock_ms_) {
-            audio_queue_.push_back(AudioEvent{effect_spec::kBattleCloudSound, centre_x(c.tile), centre_y(c.tile), 1, 255});
+            if (c.audio_owner == 0) c.audio_owner = new_audio_owner();
+            audio_queue_.push_back(AudioEvent{effect_spec::kBattleCloudSound, centre_x(c.tile), centre_y(c.tile), 1, 255, c.audio_owner});
             c.next_sound_ms += effect_spec::kBattleMs;
         }
         ++it;
@@ -478,8 +480,9 @@ void SimulationEngineImpl::bomb_victim(AntUnit& a, TileCoord at, TileCoord to) {
     a.knock_flag = (at == to);
     a.orig_order = AntUnit::kOrderBomb;
     set_action(a, AntUnit::kActionBlast, d, -1, -1, false);
-    spawn_tile_effect("bombex", at.x, at.y, effect_spec::kBombexMs);
-    audio_queue_.push_back(AudioEvent{SoundID::BombDetonate, centre_x(at), centre_y(at), 2, 255});
+    const uint32_t boom_owner = new_audio_owner();                            // the explosion sprite owns bombexp.wav (1144 ms) and is removed after 680 ms
+    spawn_tile_effect("bombex", at.x, at.y, effect_spec::kBombexMs, boom_owner);
+    audio_queue_.push_back(AudioEvent{SoundID::BombDetonate, centre_x(at), centre_y(at), 2, 255, boom_owner});
     if (a.knock_flag) burn_overlay_start(a);
 }
 
@@ -556,6 +559,10 @@ void SimulationEngineImpl::remove_ant(AntUnit& a) {
         }
     }
     a.clear_inventory();
+    if (a.audio_tracked) {                                    // Map::RemoveSprite with [map + 0x68] set: the sprite's tracked sounds stop
+        stop_audio_owner(a.id);
+        a.audio_tracked = false;
+    }
     if (a.pending_victim != 0) deliver_pending_hit(a);
     a.removed = true;
     a.hp = 0;

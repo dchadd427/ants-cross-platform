@@ -653,6 +653,77 @@ int main() {
         ASSERT_TRUE(sim.get_unit(live).is_alive());                                        // the other team is untouched (a live team's typed ants still drop: tests 1.5, 1.6)
     } TEST_END();
 
+    // ---- tracked sounds (clip flag 5): the buffers that a sprite started are stopped when its clip is replaced or the sprite is removed (FUN_0102c0db -> FUN_0102bdab, 0x102c245) ----
+    TEST_CASE("7.2 A fire ant's attack.wav (frame 4, 240 ms, 366 ms long) is cut when the 360 ms attack clip ends: the sound carries the ant as owner and a stop follows the clip change") {
+        SimulationEngine sim;
+        make_world(sim);
+        const uint32_t a = sim.spawn_unit(0, AntType::Fire, TileCoord{10, 10});
+        const uint32_t b = sim.spawn_unit(1, AntType::Worker, TileCoord{11, 10});
+        sim.clear_audio_events();
+        sim.execute_melee_attack(a, b);
+        int played_ms = -1, stopped_ms = -1;
+        for (int t = 0; t <= 40; ++t) {
+            for (const auto& e : sim.poll_audio_events()) {
+                if (!e.stop && e.sound_id == SoundID::MeleeAttack && e.owner == a && played_ms < 0) played_ms = t * 50;
+                if (e.stop && e.owner == a && played_ms >= 0 && stopped_ms < 0) stopped_ms = t * 50;
+            }
+            sim.tick();
+        }
+        ASSERT_TRUE(played_ms >= 200 && played_ms <= 300);                               // frame 4 of the clip
+        ASSERT_TRUE(stopped_ms >= played_ms + 50 && stopped_ms <= played_ms + 200);      // the clip ends 120 ms later; the wav would run 366 ms
+    } TEST_END();
+
+    TEST_CASE("7.3 A bomb explosion's sound (bombexp.wav, 1144 ms) belongs to the explosion sprite and is cut when its 680 ms effect ends") {
+        bool tested = false;
+        for (uint32_t seed = 1; seed < 40 && !tested; ++seed) {                          // the dud roll is random: find a real blast
+            SimulationEngine sim;
+            make_world(sim, seed);
+            const uint32_t v = sim.spawn_unit(1, AntType::Worker, TileCoord{20, 20});
+            sim.grid_mut().place_bomb(20, 20, 0);
+            sim.clear_audio_events();
+            sim.trigger_bomb_detonation(v, TileCoord{20, 20}, 0, 0);
+            if (sim.get_unit(v).knock_flag) continue;
+            tested = true;
+            uint32_t owner = 0;
+            int cut_ms = -1;
+            for (int t = 0; t <= 60 && cut_ms < 0; ++t) {
+                for (const auto& e : sim.poll_audio_events()) {
+                    if (!e.stop && e.sound_id == SoundID::BombDetonate) owner = e.owner;
+                    if (e.stop && owner != 0 && e.owner == owner && cut_ms < 0) cut_ms = t * 50;
+                }
+                sim.tick();
+            }
+            ASSERT_TRUE(owner != 0);                                                     // the effect sprite owns the sound
+            ASSERT_TRUE(cut_ms >= 600 && cut_ms <= 800);                                 // 680 ms: the last 464 ms of the wav are cut
+        }
+        ASSERT_TRUE(tested);
+    } TEST_END();
+
+    TEST_CASE("7.4 An ant that is removed takes the sounds it started with it (Map::RemoveSprite, 0x100def3)") {
+        SimulationEngine sim;
+        make_world(sim);
+        const uint32_t a = sim.spawn_unit(0, AntType::Fire, TileCoord{10, 10});
+        const uint32_t b = sim.spawn_unit(1, AntType::Worker, TileCoord{11, 10});
+        sim.clear_audio_events();
+        sim.execute_melee_attack(a, b);
+        bool playing = false, stopped_early = false;
+        for (int t = 0; t < 40 && !playing; ++t) {                                        // until attack.wav has started, before the clip (360 ms) ends
+            for (const auto& e : sim.poll_audio_events()) {
+                if (!e.stop && e.sound_id == SoundID::MeleeAttack && e.owner == a) playing = true;
+                if (e.stop && e.owner == a) stopped_early = true;
+            }
+            if (!playing) sim.tick();
+        }
+        ASSERT_TRUE(playing);
+        ASSERT_FALSE(stopped_early);
+        sim.kill_unit(a);
+        bool stop = false;
+        for (const auto& e : sim.poll_audio_events()) {
+            if (e.stop && e.owner == a) stop = true;
+        }
+        ASSERT_TRUE(stop);
+    } TEST_END();
+
     std::cout << "\n=======================================================\n"
               << " Total Test Cases: " << g_test_count << "\n"
               << " Total Assertions: " << g_assert_count << "\n"

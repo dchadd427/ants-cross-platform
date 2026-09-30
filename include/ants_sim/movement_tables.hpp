@@ -53,7 +53,7 @@ enum : uint8_t {
 enum : uint8_t {
     kClipFlagSoundOnce = 0x01,       // flag1: each frame's sound plays only on the first loop
     kClipFlagSoundDuplicate = 0x02,  // flag2: duplicate a sound that is still playing
-    kClipFlagSoundTrack = 0x04,      // flag3: stop the clip's sounds when it is replaced
+    kClipFlagSoundTrack = 0x04,      // flag3: stop the clip's sounds when it is replaced (the sprite's clip change or removal emits a stop event: AudioEvent::stop; v0.0.60)
 };
 
 /**

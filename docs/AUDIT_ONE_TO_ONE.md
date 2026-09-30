@@ -13,6 +13,7 @@ order in which it is proposed to be fixed. The owner decides (AGENTS.md rule 9).
 * v0.0.57: batch 1 item 9, the small items that could be verified (level-start facing: LH NEW-4; power-up drop tile test: LB NEW-5; bsputter / dsplash order: LE NEW-2). **Left open on purpose**: stun and a queued path (LM NEW-M3), the `occ_scan` team order (LM NEW-M6 / LK NEW-8: needs proof of the slot-to-player mapping), the invented counters (LB NEW-6, goes with the cleanup), burnout / bridge tasks as (tile, deadline) entries with the 2500 ms poll (LE NEW-4).
 * v0.0.58: batch 2 part 1 (one sting and the music cut at once: LS NEW-1, LR NEW-1/NEW-2 (music), LF NEW-2; global cues canthatch / anthill alarm and owner-only powerupd: LS NEW-2/NEW-3, LF NEW-1, LE C10; the click of an order: LI NEW-3).
 * v0.0.59: batch 2 part 2 (the sound law: radius 2500, Chebyshev, dB, far-channel pan, the Sound Volume option in every sound: LS NEW-6, LX; the Sound / Music sliders apply at the release, test voice: LS NEW-5, LR R2.1d).
+* v0.0.60: batch 2 part 3 (tracked sounds are cut when a clip is replaced or the sprite is removed: LS NEW-4, LK V-K4; a pressed button's click is cut at the release).
 
 ## 1. What was audited and how
 

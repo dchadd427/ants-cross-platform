@@ -239,6 +239,7 @@ void SimulationEngine::tick() {
         const bool finished = (it->duration_ms > 0) ? (it->elapsed_ms >= it->duration_ms)
                                                      : (it->frame >= it->total_frames);
         if (finished) {
+            impl_->stop_audio_owner(it->audio_owner);                     // the effect sprite is removed: its tracked sounds stop (Map::RemoveSprite)
             it = impl_->active_effects_.erase(it);
         } else {
             ++it;

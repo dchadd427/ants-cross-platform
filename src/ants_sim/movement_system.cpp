@@ -284,6 +284,10 @@ bool SimulationEngineImpl::has_pending_path(uint32_t ant_id) const noexcept {
 // FUN_0102c0db + FUN_0102c1fc: play a clip; ants are on the display list (running bit set), so the
 // start step runs immediately.
 void SimulationEngineImpl::loco_play(AntUnit& a, const movement::MotionClip& clip, uint8_t dir, uint16_t evt5_ms) {
+    if (a.audio_tracked) {                              // FUN_0102c0db: the clip that is replaced has the track flag (bit 5): StopTracked cuts what the sprite started
+        stop_audio_owner(a.id);
+        a.audio_tracked = false;
+    }
     a.loco.clip = clip;
     a.loco.dir = dir;
     a.loco.evt5_ms = evt5_ms;
@@ -347,7 +351,10 @@ int SimulationEngineImpl::loco_step(AntUnit& a, uint32_t now) {
             play = (p.sound_mask & bit) == 0;
             p.sound_mask |= bit;
         }
-        if (play) audio_queue_.push_back(AudioEvent{static_cast<uint32_t>(snd), a.pixel_x, a.pixel_y, 1, 255});
+        if (play) {
+            audio_queue_.push_back(AudioEvent{static_cast<uint32_t>(snd), a.pixel_x, a.pixel_y, 1, 255, a.id});
+            a.audio_tracked = true;
+        }
     }
     return (e.status != 0) ? 1 : 0;
 }

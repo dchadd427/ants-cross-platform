@@ -39,6 +39,19 @@ Ground truth for every entry is in [`docs/GAME_REVERSE_ENGINEERING.md`](docs/GAM
   - **Found on the way, for the audit** (docs: implementation_plan.md section 18): `tests/test_sim/test_challenger_m2_it2_deep_stress.cpp` has not been part of the build since an early commit and no longer compiles
     (it uses the retired slot-queue API of the hill). (An earlier version of this line said that the death clips are no longer started by a separate effect: wrong, only the unused helper `spawn_death_effect` was removed; the effect path in `movement_system.cpp` is still in use, see the audit.)
 
+## v0.0.60 - 2026-09-30 - Tracked sounds are cut
+
+Audio batch, part 3 (`docs/audit/ledger_sound_texts.md` NEW-4, `ledger_combat.md` V-K4), each re-read in `Ants.exe` first (`FUN_0102c0db`, `FUN_0102bdab`, `FUN_0102c245`, `FUN_01008871`):
+
+- **A sprite's sounds stop with its clip**: in the original every sound-carrying animation has the "track" flag; the sprite remembers the buffers it started, and when its clip is replaced or it is removed they are stopped. The remake let every sound play to its end, so the tails of 109 frame sounds
+  were heard that the original never plays: a bomb explosion (1144 ms) is cut after the 680 ms of its effect, a fire ant's attack (366 ms) after 120 ms, the grabs, the set-fire sound (460 of 879 ms), the swimmer's dive (420 of 993 ms), the defuse, the shovels, the thief's last sound.
+  The battle cloud's sounds stop with the cloud.
+- **A button's click is cut at its release**: the click of a pressed button belongs to the pressed picture, which the raised picture replaces at the release; a quick click now ends with the release instead of playing its full 277 ms.
+- How: every sound has an owner (an ant, an effect sprite, the pressed button); the simulation emits a *stop* event, in order with the sounds, when an ant's clip is replaced or the ant is removed and when a bomb explosion or a battle cloud ends; the mixer cuts what the owner started.
+- Docs: `docs/GAME_REVERSE_ENGINEERING.md` 5.24d (tracked sounds), README (test table), `docs/AUDIT_ONE_TO_ONE.md` (progress).
+- Tests: `test_combat_actions` 7.2 (fire ant: the sound has its ant as owner, a stop follows the clip change), 7.3 (explosion sound stops with its 680 ms effect), 7.4 (a removed ant's sounds stop); integration 12.74 extended (the cloud's sounds stop), 4.3c (the mixer cuts only the owner's sounds, in order with the plays),
+  9.6b (the button click is cut at the release; a cue is not). No existing test had to change. Version assertion of 12.108.
+
 ## v0.0.59 - 2026-09-30 - The original's sound law
 
 Audio batch, part 2 (`docs/audit/ledger_sound_texts.md` NEW-5 / NEW-6, `ledger_screens.md` R2.1d), each re-read in `Ants.exe` first (`0x102e8e4`, `0x102d803`, `0x102f777`, `0x1015058`):

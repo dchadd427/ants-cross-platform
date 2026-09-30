@@ -200,6 +200,11 @@ struct AudioEvent {
     int32_t  world_y{0};
     uint8_t  priority{0};
     uint8_t  target_player{255}; // 255 = Broadcast, 0..3 = Target player
+    /// The sprite that started the sound (clip flag 5, "track": the sprite remembers the buffers it started): an ant id, or the id of an effect sprite (0x40000000 and up);
+    /// 0 = nobody stops it (cues, UI). The sound is cut when the owner's clip is replaced or the owner is removed (FUN_0102c0db -> FUN_0102bdab, FUN_01008871).
+    uint32_t owner{0};
+    /// A stop request instead of a sound: every sound of `owner` that still plays is cut. It comes in order with the plays of the same tick.
+    bool     stop{false};
 };
 
 /// Where a message of the original appears: the one-line status box (PostStatus) or the chat log as a "News Flash" line.
@@ -286,6 +291,7 @@ struct VisualEffect {
     int32_t  y_key{0};          ///< sort key in the y-sorted sprite list (row*32 for tile effects)
     bool     fog_gated{false};  ///< hidden while the anchor tile is unexplored
     bool     looping{false};    ///< the clip repeats until the sim removes the effect (the battle cloud)
+    uint32_t audio_owner{0};    ///< the owner id of the sound this effect started (stopped when the effect ends); 0 = none
 };
 
 /**

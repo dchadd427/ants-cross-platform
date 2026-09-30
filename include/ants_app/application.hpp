@@ -111,6 +111,7 @@ public:
     HUD& hud() noexcept { return hud_; }
     ScorecardModal& scorecard() noexcept { return scorecard_; }
     MidiPlayer& midi_player() noexcept { return midi_player_; }
+    AudioMixer& audio_mixer() noexcept { return audio_mixer_; }
     const ants::assets::AssetArchive& assets() const noexcept { return assets_; }
 
     /// The network of a room or a match (nullptr unless started with --host / --join)
@@ -133,6 +134,9 @@ public:
 
 private:
     void handle_events();
+    void play_ui_sound(uint32_t sound_id);
+    void release_ui_sounds();
+    static constexpr uint32_t kUiPressOwner = 0x80000001u;      // the sound owner of the button that is being pressed (there is only one at a time)
 
     ApplicationConfig config_{};
     AppState state_{AppState::MapSelect};

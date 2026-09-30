@@ -183,6 +183,7 @@ public:
     bool        knock_flag{false};           // +0xb4: dud (bomb) or cornered (knock) flag of the flight order 0xA / 0xC
     TileCoord   flight_tile{-1, -1};         // +0xb0 of a flight: the landing tile (the ant is put on its centre at the end)
     bool        removed{false};              // the ant object is gone (RemoveAnt); the entry stays for its id
+    bool        audio_tracked{false};        // audio only (not hashed): the ant has started a clip sound that a clip change or the removal must stop (tracked sounds)
     uint32_t    burn_end_ms{0};              // end time of the dud burn overlay that freezes the ant (0 = none)
     // combat ant auto-engage (+0xbc, +0xc0, +0xc4, +0xc8, COMBEVT task +0x80)
     bool        auto_engage{false};          // +0xbc

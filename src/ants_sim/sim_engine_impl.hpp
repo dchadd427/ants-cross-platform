@@ -63,6 +63,7 @@ public:
         uint32_t  created_ms{0};       // +0x50
         uint32_t  clear_since_ms{0};   // +0x4c: 0 while the crowd is there, else the time it was first seen gone
         uint32_t  next_sound_ms{0};    // the loop start that plays sound 3 next
+        uint32_t  audio_owner{0};      // the cloud sprite owns its sounds: they stop with it
     };
     std::vector<BattleCloud> battle_clouds_;
     void spawn_battle_cloud(TileCoord tile);
@@ -140,8 +141,21 @@ public:
     mutable WorldState world_state_cache_;
     mutable bool       world_state_dirty_{true};
     // Effect sprite created at pixel (px, py); tile effects pass the tile top-left and y_key = row*32.
-    void spawn_effect(const char* name, int32_t px, int32_t py, uint32_t duration_ms, int32_t y_key, bool fog_gated) {
+    // Sound ownership (tracked sounds): effect sprites get an owner id from here (ants use their own id)
+    uint32_t next_audio_owner_{0x40000000u};
+    uint32_t new_audio_owner() noexcept { return next_audio_owner_++; }
+    void stop_audio_owner(uint32_t owner) {
+        if (owner == 0) return;
+        AudioEvent e;
+        e.sound_id = 0xFFFFFFFFu;                   // never matches a sound id
+        e.owner = owner;
+        e.stop = true;
+        audio_queue_.push_back(e);
+    }
+
+    void spawn_effect(const char* name, int32_t px, int32_t py, uint32_t duration_ms, int32_t y_key, bool fog_gated, uint32_t audio_owner = 0) {
         VisualEffect e;
+        e.audio_owner = audio_owner;
         e.anim_name = name;
         e.px = px;
         e.py = py;
@@ -173,8 +187,8 @@ public:
     }
 
     // Tile effect (explosion, smoke, splash): anchored at the tile top-left, sorted by row*32.
-    void spawn_tile_effect(const char* name, int32_t col, int32_t row, uint32_t duration_ms) {
-        spawn_effect(name, col * 32, row * 32, duration_ms, row * 32, true);
+    void spawn_tile_effect(const char* name, int32_t col, int32_t row, uint32_t duration_ms, uint32_t audio_owner = 0) {
+        spawn_effect(name, col * 32, row * 32, duration_ms, row * 32, true, audio_owner);
     }
 
 

@@ -29,6 +29,7 @@ struct MixerChannel {
     float vol_left{1.0f};     // 0.0 .. 1.0, the dB law of the original applied (see AudioMixer::apply_law)
     float vol_right{1.0f};    // 0.0 .. 1.0
     float event_gain{1.0f};   // the `volume` argument of play_sfx / play_spatial (1.0 for everything the game plays)
+    uint32_t owner{0};        // the sprite that started the sound (tracked sounds): stop_owner() cuts it; 0 = nobody
     uint8_t priority{0};      // 0..255 (255 = critical/uninterruptible)
     bool loop{false};
     bool spatial{false};
@@ -60,9 +61,11 @@ public:
     void shutdown_sdl_audio();
 
     // Playback Controls
-    int play_sfx(uint32_t sound_id, float volume = 1.0f, uint8_t priority = 128, bool loop = false);
-    int play_spatial(uint32_t sound_id, int32_t world_x, int32_t world_y, uint8_t priority = 128, float volume = 1.0f, bool loop = false);
+    int play_sfx(uint32_t sound_id, float volume = 1.0f, uint8_t priority = 128, bool loop = false, uint32_t owner = 0);
+    int play_spatial(uint32_t sound_id, int32_t world_x, int32_t world_y, uint8_t priority = 128, float volume = 1.0f, bool loop = false, uint32_t owner = 0);
     void stop_all();
+    /// StopTracked (FUN_0102bdab): every sound that `owner` started and that still plays is cut (the owner's clip was replaced, or the owner was removed)
+    void stop_owner(uint32_t owner);
 
     // Queries
     bool is_channel_active(int channel_id) const;

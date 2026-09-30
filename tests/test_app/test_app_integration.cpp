@@ -649,6 +649,41 @@ void run_suite_4_audio_mixer() {
         ASSERT_EQ(mixer.play_spatial(SoundID::BombDetonate, 721, 500, 10), -1);
     } TEST_END();
 
+    TEST_CASE("4.3c Tracked Sounds: A Stop Event Cuts The Sounds Of Its Owner And Only Those (FUN_0102bdab)") {
+        AudioMixer mixer;
+        mixer.set_headless_mode(true);
+        mixer.init(archive);
+        mixer.set_listener_position(400, 400);
+        AudioEvent a{SoundID::MeleeAttack, 400, 400, 1, 255};
+        a.owner = 7;
+        AudioEvent a2{SoundID::FoodHarvest, 400, 410, 1, 255};                   // a second sound of the same sprite (the duplicates of a clip are all tracked)
+        a2.owner = 7;
+        AudioEvent b{SoundID::MeleeAttack, 420, 400, 1, 255};
+        b.owner = 8;
+        AudioEvent cue{SoundID::AntStop, 0, 0, 1, 255};                          // a cue: nobody owns it
+        mixer.ingest_simulation_events({a, a2, b, cue}, 0);
+        ASSERT_EQ(mixer.active_channel_count(), 4u);
+
+        AudioEvent stop;
+        stop.sound_id = 0xFFFFFFFFu;
+        stop.owner = 7;
+        stop.stop = true;
+        mixer.ingest_simulation_events({stop}, 0);
+        ASSERT_EQ(mixer.active_channel_count(), 2u);                             // the sprite 7's two sounds are cut, the sprite 8's and the cue play on
+        mixer.ingest_simulation_events({stop}, 0);                               // nothing of it plays any more: nothing changes
+        ASSERT_EQ(mixer.active_channel_count(), 2u);
+        stop.owner = 0;
+        mixer.ingest_simulation_events({stop}, 0);                               // owner 0 is nobody
+        ASSERT_EQ(mixer.active_channel_count(), 2u);
+        // events in order: a sound that is started and stopped within one tick does not play; a sound after a stop does
+        AudioEvent again = a;
+        stop.owner = 7;
+        mixer.ingest_simulation_events({a, stop, again}, 0);
+        ASSERT_EQ(mixer.active_channel_count(), 3u);
+        mixer.stop_owner(8);
+        ASSERT_EQ(mixer.active_channel_count(), 2u);
+    } TEST_END();
+
     TEST_CASE("4.4 Ingestion of Simulation Audio Events & Targeted Filtering") {
         AudioMixer mixer;
         mixer.set_headless_mode(true);
@@ -1740,6 +1775,31 @@ void run_suite_9_gameplay_mechanics_and_options() {
         hud.handle_mouse_up(100, 100, SDL_BUTTON_RIGHT, sim_engine, cam);     // the order is given at the release
         ASSERT_TRUE(last_voice == 17 || last_voice == 15); // gantgo or gantcommand
         ASSERT_EQ(last_sfx, SoundID::NavButtonClick);                          // the flashing move pedestal clicks after the voice (BTNPUSH)
+    } TEST_END();
+
+    TEST_CASE("9.6b The Click Of A Pressed Button Is Cut At Its Release (the raised clip replaces the pressed one: StopTracked); A Cue Is Not") {
+        Application app;
+        ApplicationConfig cfg;
+        cfg.headless = true;
+        cfg.default_map_path = "Original-Ants/Maps/TREASURE.LVL";
+        cfg.start_in_map_select = false;
+        ASSERT_TRUE(app.init(cfg));
+        const size_t before = app.audio_mixer().active_channel_count();         // (the start voice of the match may be playing: nothing mixes without a device)
+        SDL_MouseButtonEvent down{};
+        down.type = SDL_MOUSEBUTTONDOWN;
+        down.button = SDL_BUTTON_LEFT;
+        down.x = 490;                                                            // the Help button of the top bar
+        down.y = 15;
+        app.handle_mouse_button(down);
+        ASSERT_EQ(app.audio_mixer().active_channel_count(), before + 1);        // buttonclick.wav (277 ms) of the pressed picture
+        SDL_MouseButtonEvent up = down;
+        up.type = SDL_MOUSEBUTTONUP;
+        app.handle_mouse_button(up);
+        ASSERT_EQ(app.audio_mixer().active_channel_count(), before);            // released after a moment: the click stops with the pressed picture
+        // the other UI sounds and the cues are not tied to a release
+        app.audio_mixer().play_sfx(SoundID::AntStop, 1.0f, 255);
+        app.handle_mouse_button(up);
+        ASSERT_EQ(app.audio_mixer().active_channel_count(), before + 1);
     } TEST_END();
 
     TEST_CASE("9.7 The Chat Box Is Always Active; Enter, [All] And [Team] Send; Hotkey Modifier Isolation") {
@@ -5729,6 +5789,19 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
             ASSERT_TRUE(battle_ticks < 30);
             ASSERT_TRUE(sim.has_audio_event(SoundID::FlingThumpA));
             ASSERT_TRUE(got_landing_thump);
+            if (viewer == 0) {                                                        // the cloud owns its sound (622 ms long, the clip loops every 270 ms) and takes it along when it is removed
+                uint32_t cloud_owner = 0;
+                std::vector<AudioEvent> timeline = sim.poll_audio_events();
+                for (const auto& e : timeline) {
+                    if (!e.stop && e.sound_id == SoundID::CombatNetFairy) cloud_owner = e.owner;
+                }
+                ASSERT_TRUE(cloud_owner != 0);
+                bool cloud_stop = false;
+                for (const auto& e : timeline) {
+                    if (e.stop && e.owner == cloud_owner) cloud_stop = true;
+                }
+                ASSERT_TRUE(cloud_stop);
+            }
 
             // Ensure the ants ended on different discrete tiles
             const auto& a2 = sim.get_unit(a2_id);
@@ -6583,10 +6656,10 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
 
     TEST_CASE("12.108: Version Invariant & Fog of War Cursor Concealment Parity") {
         // 1. Verify semantic versioning components
-        ASSERT_EQ(ants::VERSION_STRING, "v0.0.59");
+        ASSERT_EQ(ants::VERSION_STRING, "v0.0.60");
         ASSERT_EQ(ants::VERSION_MAJOR, 0);
         ASSERT_EQ(ants::VERSION_MINOR, 0);
-        ASSERT_EQ(ants::VERSION_PATCH, 59);
+        ASSERT_EQ(ants::VERSION_PATCH, 60);
 
         // 2. Setup simulation world with Fog of War enabled
         SimulationEngine sim;
