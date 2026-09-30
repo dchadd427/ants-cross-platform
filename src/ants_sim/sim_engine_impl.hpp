@@ -281,6 +281,7 @@ public:
     void classify_order(AntUnit& a, TileCoord t, bool special, bool user_cmd);
     bool adjust_goal(AntUnit& a, TileCoord& t, bool user_cmd, bool allow_goal_bomb = true);
     bool can_take_user_order(const AntUnit& a) const noexcept;
+    bool group_click_skips(const AntUnit& a, TileCoord target, bool special, bool attack) const noexcept;
     void deliver_path(uint32_t ant_id, const std::vector<TileCoord>& path);
     bool has_pending_path(uint32_t ant_id) const noexcept;
 

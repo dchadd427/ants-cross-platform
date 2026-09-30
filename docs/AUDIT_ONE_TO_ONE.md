@@ -6,6 +6,7 @@ order in which it is proposed to be fixed. The owner decides (AGENTS.md rule 9).
 ## 0. Progress (updated with every release)
 * v0.0.51: shortcuts that the original did not have removed (owner request), hit-point numbers on by default (owner tweak).
 * v0.0.52: batch 1 item 1 (hill queue: LH NEW-1, NEW-2, NEW-3), reported by the owner in play ("six ants sent to the base, three cancelled their queue").
+* v0.0.53: batch 1 items 2 and 3 (ability orders re-issued when the approach tile is taken: LM NEW-M1; group re-click rules: LM NEW-M2; the invented left-column rule next to the hill removed: LB NEW-3).
 
 ## 1. What was audited and how
 
@@ -83,7 +84,10 @@ release, Drop only with a bad ping), options (slider model with the exact hit re
 1. **View origin** (LI I-06, LE NEW-8, LU C-18): the original's map view is (16, 21) 442 x 440; the remake draws it 1 px right / down and 1 px smaller (also the audio listener centre
    and the minimap marker size). Tests to rewrite: `test_app_integration.cpp:316-339`, `test_hud_layout.cpp:718-719`, the render-parity reference model.
 2. **Start view** (LI NEW-1): the original scrolls the fresh view just far enough to show the square around the hill (ax - 160 .. ax + 192); the remake centres the hill (+46, +45 px off on most maps).
-3. **Pointer** (LI NEW-9, I-29): full-screen exclusive, pointer polled every loop; the remake is windowed, scroll gated by a "mouse has moved" flag and the cursor sits at the centre until the
+3. **Order feedback and voice** (LI NEW-12, verified in v0.0.53 work: `0x1027883`, `0x10289b7 .. 0x10289f6`): the pedestal pop / flash follows "at least one ant needed an order" (`FUN_010287b5` returns 1 then, even when every
+   `GoTo` refuses); the voice plays only when the closest ant's `GoTo` was accepted, and a special click speaks only for a group of exactly one ant that needed an order (none for more, not even the "go" voice). The remake ties both to
+   the closest ant and counts the selected ants instead of the ants that needed an order.
+4. **Pointer** (LI NEW-9, I-29): full-screen exclusive, pointer polled every loop; the remake is windowed, scroll gated by a "mouse has moved" flag and the cursor sits at the centre until the
    first motion. Developer keys that do nothing in the original (Ctrl+1..4, Ctrl+C, Ctrl+Tab, Ctrl+M, ...) run before the dialog gate (LI NEW-5); Shift-select texts (NEW-2), stacked ants (NEW-4).
 
 ### Batch 6 - minimap, score boxes, chat, fog (proposed v0.0.56)

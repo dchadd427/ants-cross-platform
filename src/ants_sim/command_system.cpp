@@ -190,13 +190,7 @@ uint32_t SimulationEngine::predict_order_ack(const Command& cmd) const {
         if (std::find(seen.begin(), seen.end(), id) != seen.end()) continue;
         seen.push_back(id);
         if (!impl_->can_take_user_order(*a)) continue;
-        const uint8_t o = a->orig_order;
-        if (cmd.type == CommandType::GroupAttack) {
-            if (o == AntUnit::kOrderAttack && a->orig_order_tile == target) continue;
-        } else {
-            if ((o == AntUnit::kOrderMove || o == AntUnit::kOrderPowerUp || o == AntUnit::kOrderHarvest) && a->orig_order_tile == target) continue;
-            if (o == AntUnit::kOrderHome && hill_team == a->player_id) continue;
-        }
+        if (impl_->group_click_skips(*a, target, cmd.type == CommandType::GroupSpecial, cmd.type == CommandType::GroupAttack)) continue;
         const int32_t dr = std::abs(a->pixel_y / 32 - target.y);
         const int32_t dc = std::abs(a->pixel_x / 32 - target.x);
         const uint32_t d = static_cast<uint32_t>(std::max(dr, dc)) << 4;

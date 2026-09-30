@@ -926,6 +926,31 @@ void run_prediction_tests() {
         const uint32_t bomber = w.ants[0][1];
         ASSERT_EQ(w.sim.predict_order_ack(make_command(CommandType::GroupSpecial, 0, 255, 25, 25, {bomber})), bomber);   // the bomb tile
         ASSERT_EQ(w.sim.predict_order_ack(make_command(CommandType::GroupSpecial, 0, 255, 30, 10, {bomber})), 0u);       // river water
+        // the skip rules follow the ant's order (0x1028874 / 0x10288b2): a special click on the tile of a plain walk is not skipped, a repeated
+        // special click on the target of the ability order is; predicted and real answers agree at every step
+        TileCoord free_ground{-1, -1};
+        for (int32_t y = 20; y < 50 && free_ground.x < 0; ++y) {
+            for (int32_t x = 20; x < 50; ++x) {
+                const TileCoord t{x, y};
+                if (w.sim.is_special_target_valid(AntType::Bomber, t, false, 0) && !w.sim.has_bomb_at(t) &&
+                    w.sim.grid().get_cell(t).is_empty_overlay() && !w.sim.has_living_ant_at(t)) {
+                    free_ground = t;
+                    break;
+                }
+            }
+        }
+        ASSERT_TRUE(free_ground.x >= 0);
+        const Command walk_there = make_command(CommandType::GroupMove, 0, 255, static_cast<int16_t>(free_ground.x), static_cast<int16_t>(free_ground.y), {bomber});
+        const Command plant_there = make_command(CommandType::GroupSpecial, 0, 255, static_cast<int16_t>(free_ground.x), static_cast<int16_t>(free_ground.y), {bomber});
+        ASSERT_EQ(w.sim.apply_command(walk_there).ack_ant, bomber);
+        ASSERT_EQ(w.sim.get_unit(bomber).orig_order, AntUnit::kOrderMove);
+        ASSERT_EQ(w.sim.predict_order_ack(walk_there), 0u);                          // the same plain click: skipped
+        ASSERT_EQ(w.sim.predict_order_ack(plant_there), bomber);                     // a special click on that tile: a new order
+        ASSERT_EQ(w.sim.apply_command(plant_there).ack_ant, bomber);
+        ASSERT_EQ(w.sim.get_unit(bomber).orig_order, AntUnit::kOrderPlant);
+        ASSERT_EQ(w.sim.predict_order_ack(plant_there), 0u);                         // the ant works on it now: skipped
+        ASSERT_EQ(w.sim.apply_command(plant_there).ack_ant, 0u);
+        ASSERT_EQ(w.sim.predict_order_ack(walk_there), bomber);                      // a plain click is not skipped by an ability order
         // a dropped team's orders predict nothing
         w.sim.drop_player(0);
         ASSERT_EQ(w.sim.predict_order_ack(mv), 0u);

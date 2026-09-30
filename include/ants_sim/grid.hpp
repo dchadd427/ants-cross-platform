@@ -339,7 +339,6 @@ public:
 
     void configure_anthill_cells(TileCoord pos, uint8_t team_id = 255);
     void clear_anthill_entrance_solid(TileCoord base) noexcept;
-    bool is_anthill_reserved_spot(TileCoord pos) const noexcept;
     void set_anthill(uint8_t team_id, TileCoord pos);
     void place_firewall(uint32_t x, uint32_t y, uint8_t owner_player) noexcept;
     void clear_firewall(uint32_t x, uint32_t y) noexcept;

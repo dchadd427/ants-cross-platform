@@ -6518,10 +6518,10 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
 
     TEST_CASE("12.108: Version Invariant & Fog of War Cursor Concealment Parity") {
         // 1. Verify semantic versioning components
-        ASSERT_EQ(ants::VERSION_STRING, "v0.0.52");
+        ASSERT_EQ(ants::VERSION_STRING, "v0.0.53");
         ASSERT_EQ(ants::VERSION_MAJOR, 0);
         ASSERT_EQ(ants::VERSION_MINOR, 0);
-        ASSERT_EQ(ants::VERSION_PATCH, 52);
+        ASSERT_EQ(ants::VERSION_PATCH, 53);
 
         // 2. Setup simulation world with Fog of War enabled
         SimulationEngine sim;
@@ -6735,10 +6735,10 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         int32_t bx = ah->x;
         int32_t by = ah->y;
 
-        // 1. The authentic 3 blocked mound tiles: (bx - 2, by - 1), (bx - 2, by), (bx - 2, by + 1)
-        for (int dy = -1; dy <= 1; ++dy) {
-            TileCoord blocked_tile{bx - 2, by + dy};
-            ASSERT_TRUE(sim.grid().is_anthill_reserved_spot(blocked_tile));
+        // 1. The original's three tiles that refuse bombs and fire walls next to a hill (HillSpecial, 0x101d858 / 0x101d8a4: the player's
+        //    tile pairs +0x36, +0x3a and +0x3e, stored as (row, col)): the three tiles ABOVE the mound, row by - 1, columns bx .. bx + 2
+        for (int dx = 0; dx <= 2; ++dx) {
+            TileCoord blocked_tile{bx + dx, by - 1};
 
             // Bomber ant adjacent to blocked tile cannot plant bomb on blocked tile
             uint32_t bomber = sim.spawn_unit(0, AntType::Bomber, TileCoord{blocked_tile.x - 1, blocked_tile.y});
@@ -6749,6 +6749,16 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
             uint32_t fire_ant = sim.spawn_unit(0, AntType::Fire, TileCoord{blocked_tile.x - 1, blocked_tile.y});
             ASSERT_FALSE(sim.ignite_fire(fire_ant, blocked_tile));
             ASSERT_FALSE(sim.ignite_fire(fire_ant, blocked_tile, false));
+        }
+
+        // The three tiles two columns to the left of the mound, (bx - 2, by - 1 .. by + 1), were refused by the remake until v0.0.53
+        // (the same data read with rows and columns swapped); the original has no such rule: they are ordinary ground
+        for (int dy = -1; dy <= 1; ++dy) {
+            TileCoord open_tile{bx - 2, by + dy};
+            uint32_t bomber = sim.spawn_unit(0, AntType::Bomber, TileCoord{open_tile.x - 1, open_tile.y});
+            ASSERT_TRUE(sim.plant_bomb(bomber, open_tile, false));
+            uint32_t fire_ant = sim.spawn_unit(0, AntType::Fire, TileCoord{open_tile.x - 1, open_tile.y + 3});
+            ASSERT_TRUE(sim.ignite_fire(fire_ant, TileCoord{open_tile.x, open_tile.y + 3}, false));
         }
 
         // 2. Tile occupied by any living ant cannot have a bomb or fire planted on it

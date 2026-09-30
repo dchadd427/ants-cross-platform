@@ -39,6 +39,28 @@ Ground truth for every entry is in [`docs/GAME_REVERSE_ENGINEERING.md`](docs/GAM
   - **Found on the way, for the audit** (docs: implementation_plan.md section 18): `tests/test_sim/test_challenger_m2_it2_deep_stress.cpp` has not been part of the build since an early commit and no longer compiles
     (it uses the retired slot-queue API of the hill). (An earlier version of this line said that the death clips are no longer started by a separate effect: wrong, only the unused helper `spawn_death_effect` was removed; the effect path in `movement_system.cpp` is still in use, see the audit.)
 
+## v0.0.53 - 2026-09-30 - Ability orders keep their identity, repeated clicks follow the original, no invented rule next to the hill
+
+Three rule differences found by the audit (batch 1, items 2 and 3; `docs/audit/ledger_movement.md` NEW-M1 / NEW-M2, `docs/audit/ledger_abilities.md` NEW-3), each re-read in `Ants.exe` first:
+
+- **A blocked approach tile no longer cancels the ability** (`FUN_0101c4f2` REPATH, `0x101ca65` / `0x101ca87` / `0x101caa9`): when another ant takes the tile a bomber, fire ant or swimmer was walking to (or stands on
+  the way), the original orders the same ability again on the same target, which picks another side of the target (or refuses with "Can't do that..."). The remake turned the order into a plain walk to the taken tile, so the
+  ant ended idle and planted, lit or built nothing. Groups sent to one target (they all pick the same side) benefit most.
+- **Repeated clicks follow the original's skip rules** (`FUN_010287b5`, `0x1028874` / `0x10288b2`): clicking the target an ability order already works on again now does nothing (before: the ants snapped back to their tile and
+  restarted their walk); a special click on the tile of a plain walk is an order (before: ignored, so "walk there, then plant there" did nothing); a plain click is not skipped by an ability order. The rules now live in one function that the order
+  and the network layer's click prediction (`predict_order_ack`) both use, so that the predicted acknowledgement of a multiplayer click always equals the real one (an attack click now also skips an ant that is on its way home to the
+  clicked own hill, as in the original).
+- **Bombs and fire walls next to a hill**: the original refuses the entrance, the raid tile and the three tiles directly above the mound (row `by - 1`, columns `bx .. bx + 2`); the remake refused a second column of three tiles two
+  tiles to the left of the mound (`bx - 2`, the same data read with rows and columns swapped). That extra rule is gone (and with it the duplicate `Grid::is_anthill_reserved_spot`); the three tiles above stay refused.
+  The hill's tile list in `docs/GAME_REVERSE_ENGINEERING.md` section 18 was wrong and is corrected (re-derived from `0x100edb4 .. 0x100ee25`).
+- Docs: `docs/GAME_REVERSE_ENGINEERING.md` (group-order skip rules, blocked approach tile, hill tiles), README (test table), `docs/AUDIT_ONE_TO_ONE.md` (progress).
+- Tests: `test_ability_actions` 4.3 (bomber re-orders around a taken approach tile and plants), 4.4 (the same for a fire ant and a swimmer), 4.5 (second special click on the same target is skipped: no snap, no acknowledgement),
+  4.6 (special click on a plain walk's tile is an order), 4.7 (plain click skip rules); 4.3 to 4.6 fail on v0.0.52 and pass now. `test_commands` N1.20 extended (prediction of the new skip rules).
+  **Rewritten tests**: integration 12.112 (it asserted the invented left-column rule; it now asserts the three tiles above the mound and that the former left column is ordinary ground); pointer model, pedestal case (its second special click
+  repeated the target the bomber already worked on and expected a flash; the original skips that click, so it now clicks a second bomb tile and checks that the repeated click gives no feedback). Version assertion of 12.108.
+- Found while reading the original: the pedestal feedback follows "at least one ant needed an order" (the return value of `FUN_010287b5`), while the voice follows the closest ant's order being accepted (`0x10289b7`), and a special click
+  speaks only for a group of exactly one ant; the remake ties both to the closest ant (audit LI NEW-12, now verified, small): listed for the input batch.
+
 ## v0.0.52 - 2026-09-30 - Hill queue: no ant is left behind on the waiting ring
 
 - **The bug** (owner report on v0.0.50: "I command six ants to go to the base; the first three that arrived queued up and went in, the other three cancelled their queue"): an ant that is sent to a crowded hill walks to the waiting ring in

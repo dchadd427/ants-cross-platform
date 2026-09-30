@@ -472,6 +472,85 @@ int main() {
         ASSERT_FALSE(cell_at(sim, {20, 11}).has_reserved());
     } TEST_END();
 
+    // --- The re-path of an ability order (FUN_0101c4f2 0x101ca65 / 0x101ca87 / 0x101caa9) and the group click rules (FUN_010287b5 0x1028874 / 0x10288b2) ---
+
+    TEST_CASE("4.3 A bomber whose approach tile is taken on the way orders the ability again (0x101caa9: Order(+0xb0, 0, 1)): another side, the bomb is planted") {
+        SimulationEngine sim;
+        make_world(sim);
+        const uint32_t b = sim.spawn_unit(0, AntType::Bomber, TileCoord{10, 10});
+        sim.issue_order(order(b, OrderType::PlantBomb, TileCoord{20, 10}));
+        ASSERT_EQ(sim.get_unit(b).final_dest, (TileCoord{19, 10}));                              // the west neighbour is the closest
+        run_ms(sim, 400);                                                                        // the path is delivered and walked
+        sim.spawn_unit(0, AntType::Worker, TileCoord{19, 10});                                   // a team-mate takes the tile and stands there
+        ASSERT_TRUE(wait_ms(sim, 14000, [&]() { return sim.has_bomb_at(TileCoord{20, 10}); }) >= 0);
+        ASSERT_EQ(sim.get_player_stats(0).bombs_planted, 1u);
+        ASSERT_EQ(sim.get_unit(b).orig_order, AntUnit::kOrderNone);
+        ASSERT_TRUE(sim.get_unit(b).pos != (TileCoord{19, 10}));                                 // it planted from another neighbour
+    } TEST_END();
+
+    TEST_CASE("4.4 The same for a fire ant (ignite) and a swimmer (bridge): the order is ordered again with its special flag, never turned into a walk") {
+        SimulationEngine sim;
+        make_world(sim);
+        const uint32_t f = sim.spawn_unit(0, AntType::Fire, TileCoord{10, 30});
+        sim.issue_order(order(f, OrderType::IgniteFire, TileCoord{20, 30}));
+        ASSERT_EQ(sim.get_unit(f).final_dest, (TileCoord{19, 30}));
+        run_ms(sim, 400);
+        sim.spawn_unit(0, AntType::Worker, TileCoord{19, 30});
+        ASSERT_TRUE(wait_ms(sim, 14000, [&]() { return cell_at(sim, {20, 30}).has_fire(); }) >= 0);
+        ASSERT_EQ(sim.get_unit(f).orig_order, AntUnit::kOrderNone);
+
+        for (int x = 14; x <= 26; ++x) for (int y = 44; y <= 48; ++y) sim.set_terrain(x, y, TERRAIN_WATER);
+        const uint32_t s = sim.spawn_unit(0, AntType::Swimmer, TileCoord{10, 46});
+        sim.issue_order(order(s, OrderType::BuildBridge, TileCoord{20, 46}));
+        ASSERT_EQ(sim.get_unit(s).orig_order, AntUnit::kOrderBridgeBuild);
+        ASSERT_EQ(sim.get_unit(s).final_dest, (TileCoord{19, 46}));
+        run_ms(sim, 400);
+        sim.spawn_unit(0, AntType::Swimmer, TileCoord{19, 46});                                  // a team-mate swimmer stands on the approach tile
+        ASSERT_TRUE(wait_ms(sim, 16000, [&]() { return cell_at(sim, {20, 46}).has_completed_bridge(); }) >= 0);
+        ASSERT_EQ(sim.get_unit(s).orig_special_tile, (TileCoord{20, 46}));
+    } TEST_END();
+
+    TEST_CASE("4.5 A second special click on the target the ant already works on is skipped (0x10288b2): nothing snaps, nothing restarts, no acknowledgement") {
+        SimulationEngine sim;
+        make_world(sim);
+        const uint32_t b = sim.spawn_unit(0, AntType::Bomber, TileCoord{10, 10});
+        ASSERT_EQ(sim.issue_group_special_order({b}, TileCoord{20, 10}), b);                     // accepted: the closest ant is acknowledged
+        run_ms(sim, 650);
+        const int32_t px = sim.get_unit(b).pixel_x;
+        const int32_t py = sim.get_unit(b).pixel_y;
+        ASSERT_TRUE(px % 32 != 16);                                                              // mid-tile: a new order would snap it to the centre
+        ASSERT_EQ(sim.issue_group_special_order({b}, TileCoord{20, 10}), 0u);                    // skipped: no ant needed an order
+        ASSERT_EQ(sim.get_unit(b).pixel_x, px);
+        ASSERT_EQ(sim.get_unit(b).pixel_y, py);
+        ASSERT_EQ(sim.get_unit(b).orig_order, AntUnit::kOrderPlant);
+        ASSERT_TRUE(wait_ms(sim, 14000, [&]() { return sim.has_bomb_at(TileCoord{20, 10}); }) >= 0);
+    } TEST_END();
+
+    TEST_CASE("4.6 A special click on the tile of a plain walk is NOT skipped (0x1028874 needs !special): the walk becomes the ability") {
+        SimulationEngine sim;
+        make_world(sim);
+        const uint32_t b = sim.spawn_unit(0, AntType::Bomber, TileCoord{10, 10});
+        ASSERT_EQ(sim.issue_group_move_order({b}, TileCoord{20, 10}, false), b);
+        ASSERT_EQ(sim.get_unit(b).orig_order, AntUnit::kOrderMove);
+        run_ms(sim, 300);
+        ASSERT_EQ(sim.issue_group_special_order({b}, TileCoord{20, 10}), b);                     // accepted, acknowledged
+        ASSERT_EQ(sim.get_unit(b).orig_order, AntUnit::kOrderPlant);
+        ASSERT_EQ(sim.get_unit(b).orig_special_tile, (TileCoord{20, 10}));
+        ASSERT_TRUE(wait_ms(sim, 14000, [&]() { return sim.has_bomb_at(TileCoord{20, 10}); }) >= 0);
+    } TEST_END();
+
+    TEST_CASE("4.7 A plain click is skipped by a plain walk to the same tile, but not by an ability order (its tile is +0xb0, read only for special clicks)") {
+        SimulationEngine sim;
+        make_world(sim);
+        const uint32_t w = sim.spawn_unit(0, AntType::Worker, TileCoord{10, 30});
+        ASSERT_EQ(sim.issue_group_move_order({w}, TileCoord{20, 30}, false), w);
+        ASSERT_EQ(sim.issue_group_move_order({w}, TileCoord{20, 30}, false), 0u);                // the same walk again: skipped
+        const uint32_t b = sim.spawn_unit(0, AntType::Bomber, TileCoord{10, 10});
+        ASSERT_EQ(sim.issue_group_special_order({b}, TileCoord{20, 10}), b);
+        ASSERT_EQ(sim.issue_group_move_order({b}, TileCoord{20, 10}, false), b);                 // a plain click on the plant target: a new order
+        ASSERT_EQ(sim.get_unit(b).orig_order, AntUnit::kOrderMove);
+    } TEST_END();
+
     std::cout << "\n=======================================================\n"
               << " Total Test Cases: " << g_test_count << "\n"
               << " Total Assertions: " << g_assert_count << "\n"

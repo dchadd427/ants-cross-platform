@@ -866,7 +866,11 @@ void test_pedestals() {
     f.click_tile(30, 12);
     check(!f.hud.is_ability_latched(), "a special order lets the latched ability pedestal up");
     f.latch_move();
-    f.click_tile(30, 12);                                                     // a bomb tile is a special target of a single bomber (auto)
+    f.click_tile(30, 12);                                                     // the same target again: the bomber already works on it, nobody needs an order (0x10288b2)
+    check(f.hud.is_move_latched() && !f.hud.is_pedestal_flashing(1), "a repeated special click is skipped: no feedback at all");
+    f.sim.grid_mut().place_bomb(32, 12, 1);
+    f.settle();
+    f.click_tile(32, 12);                                                     // another bomb tile is a special target of a single bomber (auto)
     check(f.hud.is_move_latched(), "a special order does not release the move pedestal");
     check(f.hud.is_pedestal_flashing(1), "the ability pedestal flashes instead");
     f.hud.unlatch_pedestals();

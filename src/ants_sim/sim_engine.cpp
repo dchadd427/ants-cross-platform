@@ -1040,26 +1040,11 @@ uint32_t SimulationEngine::group_order(const std::vector<uint32_t>& ant_ids, Til
         uint32_t id;
         uint32_t d;
     };
-    const auto* own_hill = [&]() -> const ants::assets::AnthillSpawn* {
-        for (const auto& ah : impl_->grid_.anthills()) {
-            if (target.x >= static_cast<int32_t>(ah.x) && target.x <= static_cast<int32_t>(ah.x) + 3 &&
-                target.y >= static_cast<int32_t>(ah.y) && target.y <= static_cast<int32_t>(ah.y) + 3) {
-                return &ah;
-            }
-        }
-        return nullptr;
-    }();
     std::vector<Entry> e;
     for (uint32_t id : ant_ids) {
         AntUnit* a = impl_->find_unit(id);
         if (!a || !impl_->can_take_user_order(*a)) continue;
-        // Skip an ant that already carries out this order (0x102881a..0x10288ff).
-        const uint8_t o = a->orig_order;
-        if ((o == AntUnit::kOrderMove || o == AntUnit::kOrderPowerUp || o == AntUnit::kOrderHarvest) &&
-            a->orig_order_tile == target) {
-            continue;
-        }
-        if (o == AntUnit::kOrderHome && own_hill && own_hill->team_id == a->player_id) continue;
+        if (impl_->group_click_skips(*a, target, special, false)) continue;           // already carries out this click (0x102881a..0x10288ff)
         const TileCoord at{a->pixel_x / 32, a->pixel_y / 32};
         const int32_t dr = std::abs(at.y - target.y);
         const int32_t dc = std::abs(at.x - target.x);
@@ -1120,7 +1105,8 @@ bool SimulationEngine::is_special_target_valid(AntType type, TileCoord tile, boo
 }
 
 // FUN_010287b5 with the attack flag: the skip rule is "already order 3 with +0xac == the clicked tile" (0x1028820, then 0x102887e);
-// orders 1, 4 and 5 are NOT skipped by an attack click. The target comes from the occupant of the clicked tile (FUN_01020655).
+// orders 1, 4 and 5 are NOT skipped by an attack click (see group_click_skips). The target comes from the occupant of the clicked
+// tile (FUN_01020655).
 uint32_t SimulationEngine::issue_group_attack_order(const std::vector<uint32_t>& ant_ids, TileCoord target) {
     struct Entry {
         uint32_t id;
@@ -1130,7 +1116,7 @@ uint32_t SimulationEngine::issue_group_attack_order(const std::vector<uint32_t>&
     for (uint32_t id : ant_ids) {
         AntUnit* a = impl_->find_unit(id);
         if (!a || !impl_->can_take_user_order(*a)) continue;
-        if (a->orig_order == AntUnit::kOrderAttack && a->orig_order_tile == target) continue;
+        if (impl_->group_click_skips(*a, target, false, true)) continue;
         const TileCoord at{a->pixel_x / 32, a->pixel_y / 32};
         const int32_t dr = std::abs(at.y - target.y);
         const int32_t dc = std::abs(at.x - target.x);

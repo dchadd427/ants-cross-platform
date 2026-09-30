@@ -1231,7 +1231,12 @@ checked by an independent adversarial pass. The full reports (instruction addres
   player orders own bombs / power-ups / queue count); the hill entrance falls back to entrance + (-2, +2); otherwise
   a fixed ring scan d = 1..4: west column top to bottom, east column, north row, south row - first enterable tile.
   Water clicks therefore send ants to the first shore tile of that scan, never "can't go".
-- Group order `FUN_010287b5`: accepted ants not already on this very order, sorted by `16 x Chebyshev` distance with
+- Group order `FUN_010287b5(tile, special, attack)`: accepted ants not already on this very order (the skip rules, re-read in the audit of
+  2026-09-30 and fixed in v0.0.53, `0x102881a .. 0x10288dc`: order 3 is skipped only by an attack click on its tile `+0xac`; orders 1, 4 and 5 only
+  by a PLAIN click - neither special nor attack - on their tile `+0xac` (`0x1028874` reads both flags); order 2 by a click on a hill of the ant's
+  own team whatever the flags (`0x1028847`); the ability orders 6..9, 0xd and 0xe only by a SPECIAL click on their target `+0xb0`, read through
+  `FUN_01028a11` (`0x10288b2`); so "walk there, then plant there" is an order, and clicking the same ability target twice does nothing),
+  sorted by `16 x Chebyshev` distance with
   a strict-`>` exchange sort (not stable: `[A:32, B:32, C:16]` -> `[C, B, A]`), each given the player GoTo to the
   clicked tile; team-mate claims make the later ants take ring-scan tiles. Only the first ant acknowledges, and only
   if its GoTo queued a path. The original's stack array holds 16 entries (the remake treats larger groups as
@@ -1624,6 +1629,13 @@ Addresses are virtual addresses in `Original-Ants/Ants.exe` (image base 0x010000
   (`FUN_01020128`: the first of N, S, W, E the ant may enter with the smallest 16 * Chebyshev distance from its own tile);
   otherwise the ant plays the can't clip with "Can't do that..." (text 0x30). The path goes to the approach tile; `+0xb0` keeps the
   target. There is no ability cooldown and no blast radius; orders are refused while an ability clip plays (`FUN_0101ff5a`).
+* **A blocked approach tile** *(implemented in v0.0.53; `FUN_0101c4f2` REPATH, `0x101ca65` / `0x101ca87` / `0x101caa9`)*. When a step of the walk to the
+  approach tile is blocked (an ant stands on the last tile, or on the way when it does not move away), the orders 6..9, 0xd and 0xe are not final
+  (`0x101c989` clears the final flag) and re-issue the ability: `GoTo(&+0xb0, 0, 1, 0)`, i.e. the special order on the same target, which tests the
+  target again and picks the approach tile anew (another side when the first one is taken) or refuses with "Can't do that...". Before v0.0.53 the
+  remake turned the order into a plain walk to the taken tile, so a bomber, fire ant or swimmer whose approach tile was taken ended idle and did
+  nothing. (The path finder itself never reaches an occupied goal: an ant standing on the approach tile when the order is given makes the
+  order fail with "Can't go there.", so the re-path only matters for ants that arrive after the path was found.)
 * **Arrival** *(implemented; `FUN_0101ccaf` cases 6..9, 0xd, 0xe)*. The target is validated again (now every ant on the tile
   blocks); a valid target starts the action (messages 0xb, 0xc, 0xd, 0xe, 0x19, 0x1a: handler runs at once), otherwise the ant
   stops. The starts put the ant on the approach tile centre (the walk step's snap delta is still added, so it stands a few pixels
@@ -2381,21 +2393,24 @@ To deliver authentic 1:1 gameplay inside standard web browsers with zero install
   - Teammate Chat Prefix: `%s (To Teammate):` (binary string at VA `0x1047428`).
 
 #### 18. Anthill 3 Blocked Tiles Forbidden Ability Geometry, Occupied Bumping, Mud Animation Cancel & Power-Up Immunity (`Ants.exe` `0x101d8a4`, `0x101d762`, `0x101cad6`, `0x100ee03`)
-- **Anthill 3 Blocked Mound Tiles Ability Block (`0x0101d8a4` / `FUN_0101d8a4`)**:
-  - In `Ants.exe.c` lines 21238–21251, `FUN_0101d8a4` explicitly checks whether a targeted grid cell matches any of the 3 blocked coordinates on the anthill mound:
-    - Top blocked tile: `(bx - 2, by - 1)` (`+0x36`, `+0x38`)
-    - Mid blocked tile: `(bx - 2, by)` (`+0x3a`, `+0x3c`)
-    - Bottom blocked tile: `(bx - 2, by + 1)` (`+0x3e`, `+0x40`)
-  - In `FUN_0101d762` lines 21160–21175, ability placement orders (Bomber planting landmines, Fire Ant placing firewall) invoke `FUN_0101d822` (calling `FUN_0101d858`), which rejects placement on these 3 blocked mound tiles, the base origin `(bx, by)`, and the entrance hole.
+- **The three tiles above a hill refuse bombs and fire walls (`0x0101d8a4` / `FUN_0101d8a4`; corrected in the audit of 2026-09-30, v0.0.53)**:
+  - `FUN_0101d858` (HillSpecial of a team, 0 for a dropped team: `[player + 0x64] != 0`) is true for the tile pairs `+0x2e/+0x30` (entrance), `+0x32/+0x34` (raid tile) and, through
+    `FUN_0101d8a4`, `+0x36/+0x38`, `+0x3a/+0x3c` and `+0x3e/+0x40`. They are filled at `0x100edb4 .. 0x100ee25` while the map is scanned (outer loop over the rows `edi`, inner loop over the columns
+    `ebx`; the pairs are stored as (row, col)); with the hill's anchor cell (row r, col c) = the entrance: raid `(r + 1, c + 2)`, the three others `(r - 2, c - 1)`, `(r - 2, c)`, `(r - 2, c + 1)`.
+    In the remake's coordinates (x, y) with the origin (bx, by) at the top-left of the 4x4 mound (entrance `(bx + 1, by + 1)`): the raid tile is `(bx + 3, by + 2)` and the three tiles are
+    `(bx, by - 1)`, `(bx + 1, by - 1)`, `(bx + 2, by - 1)`: the row directly ABOVE the mound. (Until v0.0.53 the remake also refused `(bx - 2, by - 1 .. by + 1)`: the same data read with the row and the column
+    swapped; the original has no rule for the left of the mound.)
+  - In `FUN_0101d762` lines 21160–21175, ability placement orders (Bomber planting landmines, Fire Ant placing firewall) invoke `FUN_0101d822` (calling `FUN_0101d858`), which rejects placement on these tiles: the entrance, the raid tile and the three tiles above. The other tests of `FUN_0101d762` are: terrain class 0, 1 or 4 (`0x1008af7`), layer 2 empty (`0x7ffe`), the cell's solid bit clear (`FUN_0100cf0f`), then HillSpecial, then the ant test (`FUN_0100f3e8` for an order, `FUN_0100f3ca` for the start). (The remake also refuses the 4x4 box of a hill explicitly; whether the original's mound cells pass the layer-2 test is not needed to decide any rule above.)
   - Additionally, `FUN_0101d762` line 21163 invokes `FUN_0100cf0f`, strictly rejecting bomb and fire placement on **any tile occupied by a living ant**.
 - **Anthill Coordinate Struct Layout (`Ants.exe.c` lines 9670–9690 / `0x0100ee03`–`0x0100ee25`)**:
-  - `+0x2e`, `+0x30`: Anthill base origin `(bx, by)`
-  - `+0x32`, `+0x34`: Anthill entrance hole `(bx + 1, by + 1)`
-  - `+0x36`, `+0x38`: Mound top blocked tile `(bx - 2, by - 1)`
-  - `+0x3a`, `+0x3c`: Mound mid blocked tile `(bx - 2, by)`
-  - `+0x3e`, `+0x40`: Mound bottom blocked tile `(bx - 2, by + 1)`
-  - `+0x42`, `+0x44`: Subterranean exit / idle anchor `(bx + 3, by + 3)` (emerging ants step off 4×4 mound onto ground at `bx + 4, by + 4`)
-  - `+0x46`, `+0x48`: Base queue approach anchor `(bx + 2, by - 2)`
+  (pairs are (row, col) in the original; below in the remake's (x, y) with the mound's top-left `(bx, by)`; re-derived from `0x100edb4 .. 0x100ee25` in the audit of 2026-09-30)
+  - `+0x2e`, `+0x30`: the entrance hole `(bx + 1, by + 1)`
+  - `+0x32`, `+0x34`: the raid tile `(bx + 3, by + 2)`
+  - `+0x36`, `+0x38`: first tile above the mound `(bx, by - 1)`
+  - `+0x3a`, `+0x3c`: second tile above the mound `(bx + 1, by - 1)`
+  - `+0x3e`, `+0x40`: third tile above the mound `(bx + 2, by - 1)`
+  - `+0x42`, `+0x44`: the tile diagonally below the mound `(bx + 4, by + 4)`
+  - `+0x46`, `+0x48`: the waiting-ring tile `(bx - 1, by + 3)` (entrance + (-2, +2), where a crowd queues)
 - **Occupied Destination Bump Reaction (`0x0101cad6`–`0x0101cb05`)**:
   - When an ant navigates towards a destination that has become occupied by another ant, `0x101cae3` pushes `0xdc` (220 = Animation `bump`), calls `0x10100e5`, triggers `SoundID::Bump` (Sound 47, `bump.wav`), and clears waypoints.
   - The arriving ant stops cleanly on the adjacent available tile without displacing the occupant or becoming stuck in infinite pathing loops.
@@ -2468,10 +2483,9 @@ To deliver authentic 1:1 gameplay inside standard web browsers with zero install
     - Subitem 31 (2,850ms): Thief emerges with `SoundID::ThiefEmerge` (`stealc.wav`, Sound 86).
     - Subitem 33 (3,510ms): Point deduction occurs. Crucially, `SoundID::BaseScoreDn` (`scoredn.wav`, Sound 88) is played ONLY if food points were actually stolen (`victim_score > 0`). If the victim base had 0 points, the thief still infiltrates and sits unattackable underground for the full duration, but emerges empty-handed without triggering `scoredn.wav`.
 - **Anthill Geometry & Defensive Firewall Placement (`0x101d8a4`, `0x100ee03`)**:
-  - The anthill mound sprite `9hill.bmp` spans 4×4 tiles, but the original collision map only reserves:
-    - 3 mound tiles on the left flank: `(bx - 2, by - 1)`, `(bx - 2, by)`, `(bx - 2, by + 1)`.
-    - Base center/origin `(bx, by)` and entrance hole `(bx + 1, by + 1)`.
-  - The 3 tiles directly to the right of the hole (`(bx + 2, by - 1)`, `(bx + 2, by)`, `(bx + 2, by + 1)`) are passable. Fire Ants can strategically place up to 3 firewalls (`wallup04`) in these tiles to trap infiltrating thieves or protect the base from theft.
+  - The anthill mound sprite `9hill.bmp` spans 4×4 tiles. Bombs and fire walls are refused on the entrance `(bx + 1, by + 1)`, the raid tile `(bx + 3, by + 2)` and the three tiles
+    directly above the mound (`(bx, by - 1)`, `(bx + 1, by - 1)`, `(bx + 2, by - 1)`); there is no rule for the left of the mound (corrected in v0.0.53, see above).
+  - Fire Ants can place firewalls (`wallup04`) on the other tiles around the mound, e.g. to trap infiltrating thieves or protect the base from theft.
 - **Action Pedestal Button Animations (Table 4 Anim 1215 `trnbalyd` & Anim 1216 `trnbmovu`)**:
   - Selection Pop-Up (`trnbmovu` / Table 4 Anim 1216): 9 subitems, 60ms each (540ms total), shifts pedestal up into position.
   - Deselection Retraction (`trnbalyd` / Table 4 Anim 1215): 9 subitems, 60ms each (540ms total), retracts pedestal into the base cavity.

@@ -1020,6 +1020,16 @@ int SimulationEngineImpl::try_enter_tile(AntUnit& a, TileCoord nt) {
             go_to(a, (tgt && tgt->is_alive()) ? pixel_tile(*tgt) : final_tile, true, false);
             break;
         }
+        case AntUnit::kOrderIgnite:
+        case AntUnit::kOrderExtinguish:
+        case AntUnit::kOrderPlant:
+        case AntUnit::kOrderDefuse:
+        case AntUnit::kOrderBridgeBuild:
+        case AntUnit::kOrderBridgeDemolish:
+            // 0x101ca65 / 0x101ca87 / 0x101caa9: Order(&+0xb0, 0, 1, 0): the ability is ordered again on its own target, so that another
+            // neighbour tile is chosen (and the target is tested again); it is not turned into a plain walk to the taken tile
+            go_to(a, a.orig_special_tile, false, true);
+            break;
         default:
             go_to(a, final_tile, false, false);
             break;
@@ -1224,7 +1234,7 @@ bool SimulationEngineImpl::valid_ground(TileCoord t, bool stationary_only) {
     if (!(terr == movement::kTerrainGrass || terr == movement::kTerrainSand || terr == movement::kTerrainDirt)) return false;
     if (!grid_.get_cell(t).is_empty_overlay()) return false;
     if (grid_.is_solid_object(t)) return false;
-    if (is_special_base_tile(t) || grid_.is_anthill_reserved_spot(t)) return false;
+    if (is_special_base_tile(t)) return false;
     for (const auto& ah : grid_.anthills()) {
         if (t.x >= static_cast<int32_t>(ah.x) && t.x < static_cast<int32_t>(ah.x) + 4 &&
             t.y >= static_cast<int32_t>(ah.y) && t.y < static_cast<int32_t>(ah.y) + 4) return false;
@@ -1276,6 +1286,40 @@ bool SimulationEngineImpl::can_take_user_order(const AntUnit& a) const noexcept 
     if (!a.is_alive() || a.engaged || a.frozen) return false;
     const uint8_t act = orig_action_of(a);
     return act == 0 || act == 1 || act == 3;
+}
+
+// The skip test of the group order (FUN_010287b5, 0x102881a .. 0x10288dc): an ant that already carries out the click is left alone (no new
+// order, no snap, no acknowledgement). By the ant's order (+0xa8):
+//   3           an attack click on its order tile (+0xac) only (0x1028820, then 0x102887e)
+//   1, 4, 5     a plain click (neither special nor attack) on its order tile only (0x1028874 reads both flags)
+//   2           a click on a hill of the ant's own team, whatever the flags (0x1028847)
+//   6..9, 0xd, 0xe   a special click on its target (+0xb0, read through FUN_01028a11) only (0x10288b2)
+bool SimulationEngineImpl::group_click_skips(const AntUnit& a, TileCoord target, bool special, bool attack) const noexcept {
+    switch (a.orig_order) {
+        case AntUnit::kOrderAttack:
+            return attack && a.orig_order_tile == target;
+        case AntUnit::kOrderMove:
+        case AntUnit::kOrderPowerUp:
+        case AntUnit::kOrderHarvest:
+            return !special && !attack && a.orig_order_tile == target;
+        case AntUnit::kOrderHome:
+            for (const auto& ah : grid_.anthills()) {
+                if (target.x >= static_cast<int32_t>(ah.x) && target.x <= static_cast<int32_t>(ah.x) + 3 &&
+                    target.y >= static_cast<int32_t>(ah.y) && target.y <= static_cast<int32_t>(ah.y) + 3) {
+                    return ah.team_id == a.player_id;
+                }
+            }
+            return false;
+        case AntUnit::kOrderIgnite:
+        case AntUnit::kOrderExtinguish:
+        case AntUnit::kOrderPlant:
+        case AntUnit::kOrderDefuse:
+        case AntUnit::kOrderBridgeBuild:
+        case AntUnit::kOrderBridgeDemolish:
+            return special && a.orig_special_tile == target;
+        default:
+            return false;
+    }
 }
 
 // FUN_01020655
@@ -1461,9 +1505,9 @@ bool SimulationEngineImpl::go_to(AntUnit& a, TileCoord t, bool user_cmd, bool sp
     path_managers_[a.player_id < MAX_PLAYERS ? a.player_id : 0].request(
         a.id, cur, t, static_cast<uint16_t>(grid_.height()), static_cast<uint16_t>(grid_.width()));
     path_request_serial_[a.id] = a.move_serial;
-    // Remake bookkeeping: player orders report the resolved destination; orders from remake systems keep the
-    // tile they asked for, so that repeating the same order is recognised as such.
-    a.final_dest = user_cmd ? t : requested;
+    // Remake bookkeeping: player orders (and the ability orders, which the re-path gives again) report the resolved destination;
+    // orders from remake systems keep the tile they asked for, so that repeating the same order is recognised as such.
+    a.final_dest = (user_cmd || special) ? t : requested;
     set_walking_label(a);
     return true;
 }
