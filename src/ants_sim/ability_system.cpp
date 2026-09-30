@@ -11,6 +11,7 @@
 // synchronously, as the local handler of FUN_0100d791 does before it broadcasts.
 
 #include "sim_engine_impl.hpp"
+#include "ants_sim/game_strings.hpp"
 
 namespace ants::sim {
 
@@ -139,7 +140,7 @@ void SimulationEngineImpl::end_plant(AntUnit& a, bool cancel) {
     }
     grid_.place_bomb(static_cast<uint32_t>(b0.x), static_cast<uint32_t>(b0.y), a.player_id);
     stats_.get_player_stats_mut(a.player_id).bombs_planted++;
-    post_news(a.player_id, "Bomb dropped.", 0x38);
+    post_news(a.player_id, strings::kBombDropped);
     world_state_dirty_ = true;
 }
 
@@ -165,7 +166,7 @@ void SimulationEngineImpl::end_defuse(AntUnit& a, bool cancel) {
     if (cancel) return;
     grid_.clear_bomb(static_cast<uint32_t>(b0.x), static_cast<uint32_t>(b0.y));
     stats_.get_player_stats_mut(a.player_id).bombs_defused++;
-    post_news(a.player_id, "Bomb defused.", 0x39);
+    post_news(a.player_id, strings::kBombDefused);
     world_state_dirty_ = true;
 }
 
@@ -181,7 +182,7 @@ void SimulationEngineImpl::start_ignite(AntUnit& a, TileCoord target, TileCoord 
     a.current_waypoint_idx = 0;
     ++a.move_serial;
     set_action(a, AntUnit::kActionIgnite, dir, -1, -1, false);
-    post_news(a.player_id, "Starting a fire...", 0x41);
+    post_news(a.player_id, strings::kStartingFire);
     set_position(a, centre_x(approach), centre_y(approach));
     a.orig_order = AntUnit::kOrderIgnite;
     a.orig_special_tile = target;
@@ -231,7 +232,7 @@ void SimulationEngineImpl::end_extinguish(AntUnit& a, bool cancel) {
     grid_.clear_firewall(static_cast<uint32_t>(b0.x), static_cast<uint32_t>(b0.y));
     spawn_tile_effect("sputter", b0.x, b0.y, effect_spec::kSputterMs);
     audio_queue_.push_back(AudioEvent{SoundID::FireBurnout, centre_x(b0), centre_y(b0), 1, 255});
-    post_news(a.player_id, "Fire put out.", 0x40);
+    post_news(a.player_id, strings::kFirePutOut);
     world_state_dirty_ = true;
 }
 

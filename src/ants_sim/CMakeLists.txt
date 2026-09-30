@@ -9,6 +9,7 @@ add_library(ants_sim STATIC
     path_planner.cpp
     pathfinding.cpp
     sim_engine.cpp
+    game_strings.cpp
 )
 
 target_include_directories(ants_sim PUBLIC

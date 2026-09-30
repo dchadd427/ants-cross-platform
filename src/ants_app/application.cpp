@@ -747,7 +747,7 @@ void Application::handle_key_down(const SDL_KeyboardEvent& key) {
     if (key.keysym.sym == SDLK_F12) {
         if ((key.keysym.mod & KMOD_SHIFT) || ctrl_or_gui) {
             renderer_->save_screenshot("screenshot.png");
-            hud_.queue_news_message("Screenshot saved to screenshot.png", 60, false);
+            std::cout << "[Application] Screenshot saved to screenshot.png" << std::endl;
         } else {
             hud_.trigger_quick_chat(3);
         }
@@ -757,7 +757,6 @@ void Application::handle_key_down(const SDL_KeyboardEvent& key) {
     // 4. Tile Grid Display Toggle: Ctrl+T, Cmd+T, or F3 (F3 is function key, T strictly requires Ctrl/Cmd!)
     if ((key.keysym.sym == SDLK_t && ctrl_or_gui) || key.keysym.sym == SDLK_F3) {
         show_tile_grid_ = !show_tile_grid_;
-        hud_.queue_news_message(show_tile_grid_ ? "Tile Grid: ON" : "Tile Grid: OFF", 60, false);
         return;
     }
 
@@ -767,7 +766,6 @@ void Application::handle_key_down(const SDL_KeyboardEvent& key) {
             sim_.hatch_ant(local_player_id_, sim::AntType::Worker);
         } else {
             hud_.select_base(local_player_id_);
-            hud_.queue_news_message("Home Anthill Selected", 40, false);
         }
         return;
     }
@@ -775,7 +773,6 @@ void Application::handle_key_down(const SDL_KeyboardEvent& key) {
     // 8. Select All Friendly Ants: strictly requires Ctrl or Cmd!
     if (key.keysym.sym == SDLK_a && ctrl_or_gui) {
         hud_.select_all_friendly(sim_.get_world_state());
-        hud_.queue_news_message("All Friendly Ants Selected", 40, false);
         return;
     }
 
@@ -785,7 +782,6 @@ void Application::handle_key_down(const SDL_KeyboardEvent& key) {
         if (is_music_muted_) {
             audio_mixer_.stop_music();
             midi_player_.stop();
-            hud_.queue_news_message("Music Muted", 40, false);
         } else {
             if (state_ == AppState::Playing) {
                 play_next_ingame_music();
@@ -793,7 +789,6 @@ void Application::handle_key_down(const SDL_KeyboardEvent& key) {
                 audio_mixer_.play_music("Original-Ants/INTRO.mp3", true);
                 if (config_.headless) midi_player_.play(true);
             }
-            hud_.queue_news_message("Music Enabled", 40, false);
         }
         return;
     }
@@ -1119,8 +1114,6 @@ void Application::set_local_player(uint8_t team_id) {
                                           current_level_.width, current_level_.height);
         }
     }
-    static const char* TEAM_NAMES[4] = {"Green", "Red", "Blue", "Black"};
-    hud_.queue_news_message("Switched to Team " + std::to_string(team_id) + " (" + TEAM_NAMES[team_id] + ")", 60, false);
 }
 
 } // namespace ants::app

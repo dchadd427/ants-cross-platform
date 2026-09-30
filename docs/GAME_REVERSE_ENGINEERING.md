@@ -1797,6 +1797,50 @@ Addresses are virtual addresses in `Original-Ants/Ants.exe`. Implemented in `inc
 * **Open** *(recorded, not ported)*: the cursor over food (the remake uses the classification's lookup; the cursor code is checked in the input stage), the status texts
   other than 0x3c and 0x11 (status-line stage), `FUN_0100cd7d` (text 0x3c is posted only for the local player; the remake posts to the owner).
 
+### 5.41 Status Line, Messages, Voices and the Time Warnings (Capstone-Verified; Supersedes Earlier News Banner, Alert and Countdown Notes)
+
+Addresses are virtual addresses in `Original-Ants/Ants.exe`. Implemented in `include/ants_app/status_line.hpp` (`StatusLine`), `src/ants_app/hud.cpp` (status posting, selection
+texts, voices), `include/ants_sim/game_strings.hpp` with `src/ants_sim/game_strings.cpp` (the string table), `src/ants_sim/sim_engine.cpp` (`checkgo_poll`, the match clock) and
+`include/ants_sim/sim_engine.hpp` (voice tables). Checked by `tests/test_app/test_status_messages.cpp` (214 checks), the CHECKGO grid test 12.67 of `test_app_integration.cpp` and
+the end-of-match cases of `test_sim_rules.cpp` (1.3, 12.1, 12.2) and `test_challenger_m2_2.cpp` (5.1 - 5.3, 6.4).
+
+* **One slot, no queue.** `PostStatus` (`FUN_0100e944`, 21 call sites; `PostStatusId` `FUN_0100e8f5` loads the string first) sets the text of the status label (`[W+0x4ac4]`, rect (481, 254) -
+  (620, 266), 139 x 12, Franklin Gothic Medium 12 px, colour (79, 0, 143), left aligned, transparent), ends any running flash, returns at once for an empty text (cleared, timer NOT re-armed),
+  otherwise starts a 500 ms flash when the flag is 1 and (re)starts the CLEARSTAT timer: `Schedule(0, 5000)` runs a no-op at once and `PostStatus("")` 5000 ms later. A new post replaces the
+  text (no priority, no de-duplication: the same text again restarts the life and the flash). The flash is the TXTFLASH task (`Add(task, 50, 50)`, `Run` 0x102b6a1 counts 500 ms down and toggles
+  the visibility every 50 ms): visible on the even 50 ms steps only, `#.#.#.#.#.##` over the first twelve. Idle is empty: there is no persistent state text ("Ready.", "Enemy ant.",
+  "Waiting for orders." and the like were invented and are gone; so are the FIFO of 32 items, the red alarm colour and the remake's own toggle messages).
+* **Texts by id** (`game_strings.hpp`, the original's string table; the title of string 5 is "Ants"): status ids 5 (once, when the match screen is built, 0x100e173), 6 - 12 (selection), 13 - 16
+  (hatch), 17 (flash), 48, 49 / 50 / 59 (flash), 51, 52, 53 (flash), 54 - 58, 60 - 71, 75 (flash), 80 - 82. Only 17, 49, 50, 53, 59 and 75 are posted with the flash flag (test
+  `world_message_flags`). The chat log gets its own lines (39, 40, 46 and the start line) as "News Flash" entries; they belong to the alliance and chat stage.
+* **Selection texts** *(`SetPanelMode` `FUN_01027f07`, posts only when its quiet flag is 0)*: exactly one own ant selected posts the text of its type (0x102811e worker 6 "Ready!", 7 "BomberAnt
+  selected.", 8 "Where to?" fire ant, 9 "Thief here", 10 "Yessir!" combat ant, 11 "SwimmerAnt selected."), more than one posts 12 "Ready!" (0x1027fca), and every deselect clears the line
+  (`FUN_01028c44` always calls `SetPanelMode(1, 4, 0, flag, 0)`): a click on an enemy ant, on the own hill or on empty ground posts nothing but wipes the old text. Quiet callers keep it: a shift-add
+  (0x1027950), the death of a selected ant, the alliance refresh. A selected own ant that takes a power-up (`FUN_01020cdb` calls `FUN_0100cd40`, which passes only for the local team's selected
+  ants) rebuilds the panel: the text of the new type for a single ant, 12 for a group. The HUD decides the text at its next update from the selection it finds (`apply_selection_status`).
+* **Voices and their texts** *(the four functions read the ant type through `FUN_0100f9cb` and pick a cue of the table at `[W+0x4860]`; `rand()` is the CRT's)*: ready `FUN_0101b5f9` (worker: cue
+  gantorders for `rand() % 3 == 0`, gantrdy otherwise; combat ant: combrdy1 / combrdy2 on `rand() % 2`; one cue for every other type; voice only), go `FUN_0101b67b` (worker gantgo / gantcommand on
+  `rand() % 2`, combat ant combgo2.wav / combgo1.wav, one cue for the others; text 66 "On my way." for worker, bomber, fire ant and swimmer, 68 "Movin' out." for the combat ant, 70 "Here I go..."
+  for the thief), attack `FUN_0101b711` (text 67 "Attack!" and the type's attack cue; the combat ant's are combat1.wav / combat2.wav, sounds 59 / 60, not combdo1 / combdo2, which are never played),
+  special `FUN_0101b78a` (bomber bombdo, swimmer brdgdo: voice only; thief theifdo with 69 "My pleasure...", fire ant firedo with 71 "Burn...": voice and text; worker and combat ant are silent). Only the
+  closest ant of a group order answers, and only when its order queued a path; a special order is announced only when exactly one ant received it. Stop (`FUN_01028a60`, 0x1028b43) always posts 54
+  "Stopping." for a selection of ants. The HUD chooses voices with its own small generator (`voice_rand`), never with the simulation's.
+* **CHECKGO: time warnings and the end of the match** *(vtable 0x1004e38, `Run` 0x1024839, `Add(task, 0, 200)`: it runs at once and then every 200 ms)*: `GetClock` (`FUN_0100fa50`: the limit
+  `word[map+0x6e] * 60000` minus the time played) is compared unsigned with the task's threshold (61000 at first): below it the next warning is given and the stage advances, one warning per run.
+  Stage 0: cue 1min (sound 55) and text 49 with the flash flag, threshold 31000; stage 1: cue 30sec (54) and text 50, threshold 11000; from stage 2 on: cue countdwn (44) and text 59, the threshold
+  falling by 1000 per step (eleven steps: clock 10800, 9800 ... 800 on the 200 ms grid). A 6 minute map therefore warns at 60800 and 30800 ms. There is no "time up" text; the same run ends the
+  match when the clock is below 0 (`remaining > limit` unsigned), i.e. 0 - 200 ms after the clock shows 0:00, and the results dialog follows (5.34). The clock digits floor to seconds and show 0 for a
+  negative clock. The remake keeps the clock as a signed value (`match_clock_ms_`), the shown value is `max(0, clock)`, and the warnings of a match shorter than a minute fire from the first run.
+  The elimination rules of the same task (a match with nobody left with an ant, an egg or a hatch, and the win test of the local team and its allies) are part of the network stage.
+* **Sim events, one string table**: every message of the simulation is posted with its original id (`post_news(player, id)`), carries the id's flash flag and the elapsed match time; "Ouch!" (55)
+  reaches the victim's team and its allies, the alarm cue plays at most every 10 s per team, "Ant dead." / "Ant drowned." (51 / 52) go to everybody, 53 goes to the raided hill's owner only, the
+  texts of the local player's own ants (60, 61, 62, 17, 56, 57, 64, 65, 48, 58, 63) go to their owner (the original's local player test is `FUN_0100cd7d`).
+* **Removed as invented** (v0.0.38): the FIFO news queue of 32 items, the persistent state texts, the red alarm colour, the texts of the remake's own keys ("Tile Grid: ON", "Music Muted", "Home Anthill
+  Selected", ...; the keys stay, silent), the status "Game started! Go get that food!" (the chat line stays until the chat stage), the 1-minute / 30-second warnings as one-shot crossings with 10
+  countdown sounds at ceil(sec) and the text once, the match end at "clock <= 50 ms".
+* **Open** *(recorded)*: the text clipping with the original's font (the box is clipped at 139 px; the remake truncates to that width), the alliance and chat texts and the News Flash chat lines (39,
+  40, 46, 75, 80 - 82: next stage), the elimination end rules, and the exact key codes of the original.
+
 ---
 
 ## 6. Target Multi-Platform Architecture

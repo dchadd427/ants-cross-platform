@@ -25,10 +25,18 @@ public:
     MatchState match_state_{MatchState::NotStarted};
 
     uint64_t current_tick_{0};
-    uint32_t match_time_remaining_ms_{0};
-    bool warned_one_minute_{false};
-    bool warned_thirty_seconds_{false};
-    uint32_t last_countdown_second_{0};
+    uint32_t match_time_remaining_ms_{0};   // what the clock shows: max(0, match_clock_ms_)
+    // The match clock and the CHECKGO task (Ants.exe 0x1024839, period 200 ms, first run at once): GetClock (FUN_0100fa50) is the
+    // limit minus the time played and goes below 0 when the limit is over; only CHECKGO ends the match, at its first run with a
+    // clock below 0 (0 - 200 ms after 0:00).
+    uint32_t match_limit_ms_{0};            // map byte +0x6e * 60000
+    int64_t  match_clock_ms_{0};
+    int64_t  checkgo_next_ms_{0};           // clock value at which CHECKGO runs next
+    uint32_t checkgo_stage_{0};             // task +0x2c: 0 one minute, 1 thirty seconds, then the 11 countdown steps
+    uint32_t checkgo_threshold_ms_{61000};  // task +0x30: the clock must be below it for the next warning
+    void checkgo_poll();
+    void set_match_clock(int64_t ms);          // jumps the clock (start, test hook): CHECKGO runs at its next tick
+    void set_match_clock_running(int64_t ms);  // the clock advances with the game
 
     std::vector<std::unique_ptr<AntUnit>> ants_;
     uint32_t next_ant_id_{1};
@@ -351,7 +359,13 @@ public:
     void hatch_run(uint8_t team);                      // HATCHTSK (0x1025072)
     void add_score(uint8_t player, int32_t amount);    // FUN_01010cc9
     SimulationEngine::HatchResult hatch_request(uint8_t player, AntType type, bool force);   // FUN_01010aca
-    void post_news(uint8_t player, const char* text, uint16_t string_id);
+    /// PostStatus of the original for one player (255 = everybody): the text of `string_id` with `%s` filled by a..d, the flash flag
+    /// of that id. The remake posts to the player that the original's "local player" test would pass.
+    void post_news(uint8_t player, uint16_t string_id, const std::string& a = {}, const std::string& b = {},
+                   const std::string& c = {}, const std::string& d = {});
+    /// A "News Flash" line of the chat log (AddNewsFlash 0x100e9bb).
+    void post_news_flash(uint16_t string_id, const std::string& a = {}, const std::string& b = {},
+                         const std::string& c = {}, const std::string& d = {});
     TileCoord team_tile42(uint8_t team) const noexcept;
     TileCoord team_ring_tile(uint8_t team) const noexcept;
     uint32_t anthillq_next_ms_{200};

@@ -401,10 +401,20 @@ void run_suite_4_dynamic_alliances() {
 // ============================================================================
 // SUITE 5: Match End Freeze, Audio Split & 4-Stat Scorecard
 // ============================================================================
+// The match ends at the first run of the CHECKGO task (every 200 ms) that finds the clock below 0 (Ants.exe 0x1024839): 0 - 200 ms
+// after the clock shows 0:00. Ticks until the match is over (at most max_ticks); returns the ticks used, -1 when it never ended.
+static int run_until_over(SimulationEngine& sim, int max_ticks = 12) {
+    for (int i = 0; i < max_ticks; ++i) {
+        if (sim.is_match_over()) return i;
+        sim.tick();
+    }
+    return sim.is_match_over() ? max_ticks : -1;
+}
+
 void run_suite_5_game_over() {
     TEST_SUITE("Suite 5: Match End Freeze, Audio Split & 4-Stat Scorecard");
 
-    TEST_CASE("5.1 Immediate Simulation Freeze at Exactly 0:00") {
+    TEST_CASE("5.1 Simulation Freeze Within 200 ms After 0:00") {
         SimulationEngine sim;
         sim.init_test_world(60, 60, 800, 100);
 
@@ -417,6 +427,8 @@ void run_suite_5_game_over() {
 
         sim.tick();
         ASSERT_EQ(sim.get_match_time_remaining_ms(), 0u);
+        ASSERT_FALSE(sim.is_match_over());                 // a clock of exactly 0 is not below 0
+        ASSERT_TRUE(run_until_over(sim, 8) >= 1);
         ASSERT_TRUE(sim.is_match_over());
 
         TileCoord frozen_pos = sim.get_unit(u).pos;
@@ -442,7 +454,7 @@ void run_suite_5_game_over() {
         sim.set_player_score(3, 80);
 
         sim.clear_audio_events();
-        sim.tick();
+        ASSERT_TRUE(run_until_over(sim) >= 0);
 
         ASSERT_TRUE(sim.is_match_over());
 
@@ -467,7 +479,7 @@ void run_suite_5_game_over() {
         sim.set_player_score(3, 100);
 
         sim.clear_audio_events();
-        sim.tick();
+        ASSERT_TRUE(run_until_over(sim) >= 0);
 
         ASSERT_TRUE(sim.is_match_over());
 
@@ -563,7 +575,7 @@ void run_suite_6_adversarial_challenges() {
         sim.set_player_score(0, 500);
         sim.set_player_eggs(0, 5);
 
-        sim.tick(); // Game ends: 0:00, match_state = GameOver
+        ASSERT_TRUE(run_until_over(sim) >= 0); // Game ends within 200 ms after 0:00, match_state = GameOver
         ASSERT_TRUE(sim.is_match_over());
 
         // Player attempts to hatch ant after game over

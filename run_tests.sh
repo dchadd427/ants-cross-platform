@@ -282,6 +282,13 @@ if [ "$RUN_APP" -eq 1 ]; then
     echo -e "${BOLD}${BLUE}======================================================================${RESET}"
     "./$BUILD_DIR/tests/test_app/test_hud_layout"
     HUD_LAYOUT_STATUS=$?
+
+    echo ""
+    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
+    echo -e "${BOLD}${BLUE}>>> 3.3 RUNNING STATUS MESSAGES SUITE (status line, selection / order texts)...${RESET}"
+    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
+    "./$BUILD_DIR/tests/test_app/test_status_messages"
+    STATUS_MESSAGES_STATUS=$?
 fi
 
 # 6. Execute E2E Opaque-Box Tests
@@ -416,6 +423,13 @@ if [ "$RUN_APP" -eq 1 ]; then
         echo -e " 3.2 HUD Layout (test_hud_layout):                   ${GREEN}PASSED${RESET}"
     else
         echo -e " 3.2 HUD Layout (test_hud_layout):                   ${RED}FAILED (exit code ${HUD_LAYOUT_STATUS})${RESET}"
+        TOTAL_FAILED=$((TOTAL_FAILED + 1))
+    fi
+
+    if [ "$STATUS_MESSAGES_STATUS" -eq 0 ]; then
+        echo -e " 3.3 Status Messages (test_status_messages):         ${GREEN}PASSED${RESET}"
+    else
+        echo -e " 3.3 Status Messages (test_status_messages):         ${RED}FAILED (exit code ${STATUS_MESSAGES_STATUS})${RESET}"
         TOTAL_FAILED=$((TOTAL_FAILED + 1))
     fi
 fi

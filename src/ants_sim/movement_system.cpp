@@ -7,6 +7,7 @@
 // simulation, so every ant follows the owner code paths and the "local team" is the ant's own team.
 
 #include "sim_engine_impl.hpp"
+#include "ants_sim/game_strings.hpp"
 
 #include <cstdlib>
 #include <limits>
@@ -832,7 +833,7 @@ void SimulationEngineImpl::path_complete(AntUnit& a, StepEvt& e) {
                 a.harvest_origin = TileCoord{static_cast<int32_t>(fo.col), static_cast<int32_t>(fo.row)};   // +0xf4
                 const TileCoord home = team_entrance(a.player_id);
                 if (home.x >= 0) go_to(a, home, false, false);
-                post_news(a.player_id, "Can't - already have food.", 17);
+                post_news(a.player_id, strings::kAlreadyHaveFood);
                 return;
             }
         }
@@ -1434,7 +1435,7 @@ bool SimulationEngineImpl::go_to(AntUnit& a, TileCoord t, bool user_cmd, bool sp
             ++a.move_serial;
             a.orig_order = AntUnit::kOrderNone;
             a.orig_order_tile = no_order_tile();
-            post_news(a.player_id, "Can't do that...", 0x30);
+            post_news(a.player_id, strings::kCantDoThat);
             ok = false;
         }
     } else if (a.orig_order != AntUnit::kOrderRaid) {
@@ -1477,7 +1478,7 @@ void SimulationEngineImpl::deliver_path(uint32_t ant_id, const std::vector<TileC
         if (loco_trace_enabled_) trace_loco(LocoTraceEvent::Kind::PathFailed, *a, 0, 0);
         stop_sync(*a);
         enter_cant_go(*a);
-        news_queue_.push_back(NewsEvent{a->player_id, "Can't go there.", 0, 0x3A});
+        post_news(a->player_id, strings::kCantGoThere);
         // Remake systems waiting for this walk give up with it (attack chase, ability approach, harvest
         // return, hill entry slot).
         a->final_dest = pixel_tile(*a);

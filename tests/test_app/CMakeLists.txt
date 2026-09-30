@@ -131,3 +131,39 @@ target_compile_definitions(test_hud_layout PRIVATE
 
 add_test(NAME test_hud_layout COMMAND test_hud_layout)
 set_tests_properties(test_hud_layout PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# Status messages: the one-slot status line, selection / order texts, flash flags and the drawing of the status box
+add_executable(test_status_messages
+    test_status_messages.cpp
+)
+
+target_include_directories(test_status_messages PRIVATE
+    ${CMAKE_SOURCE_DIR}/include
+    ${SDL2_INCLUDE_DIRS}
+)
+
+target_link_libraries(test_status_messages PRIVATE
+    ants_app
+    ants_sim
+    ants_assets
+    ${SDL2_LIBRARIES}
+)
+
+if(APPLE)
+    target_link_libraries(test_status_messages PRIVATE
+        "-framework AudioToolbox"
+        "-framework CoreFoundation"
+        "-framework CoreAudio"
+    )
+endif()
+
+if(WIN32)
+    target_link_libraries(test_status_messages PRIVATE ws2_32 winmm)
+endif()
+
+target_compile_definitions(test_status_messages PRIVATE
+    ORIGINAL_ASSETS_DIR="${CMAKE_SOURCE_DIR}/Original-Ants"
+)
+
+add_test(NAME test_status_messages COMMAND test_status_messages)
+set_tests_properties(test_status_messages PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")

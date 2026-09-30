@@ -1,4 +1,5 @@
 #include "ants_app/hud.hpp"
+#include "ants_sim/game_strings.hpp"
 #include "ants_sim/prng.hpp"
 #include "ants_app/renderer.hpp"
 #include "ants_app/ui_anim.hpp"
@@ -110,10 +111,12 @@ void HUD::init(uint8_t local_player_id) {
     active_order_mode_ = sim::OrderType::None;
     is_dragging_ = false;
     is_radar_dragging_ = false;
-    news_queue_.clear();
+    status_line_.clear();
+    selection_status_pending_ = false;
+    selection_status_quiet_ = false;
     chat_log_.clear();
     chat_scroll_offset_ = 0;
-    queue_news_message("Game started! Go get that food!", 120, false);
+    post_status_id(sim::strings::kWelcome, "Ants");    // FUN_0100dbe2 0x100e173, once when the match screen is built
     add_chat_entry("System", "Game started! Go get that food!");
 
     // Configure Top Header Buttons (x0y0.bmp)
@@ -170,9 +173,6 @@ void HUD::init(uint8_t local_player_id) {
     team_up_button_.is_enabled = true;
     team_up_button_.is_pressed = false;
     team_up_button_.is_active = false;
-
-
-    queue_news_message("Ants Remake", 200, false);
 }
 
 void HUD::reset() {
@@ -192,17 +192,10 @@ void HUD::update(const sim::WorldState& world, uint32_t delta_ticks) {
         }
     }
 
-    // 1. Update news banner FIFO queue
-    if (!news_queue_.empty()) {
-        if (news_queue_.front().remaining_ticks <= delta_ticks) {
-            news_queue_.pop_front();
-        } else {
-            news_queue_.front().remaining_ticks -= delta_ticks;
-        }
-    }
-
-    // 2. Alarm siren blinking
-    alarm_blink_ticks_ += delta_ticks;
+    // 1. The status line (CLEARSTAT and TXTFLASH tasks) and the text that a selection change decides
+    status_line_.update(delta_ticks);
+    apply_selection_status(world);
+    check_selected_type_change(world);
 
     // 3. Cursor blink ticks and alliance team status
     cursor_blink_ticks_ += delta_ticks;
@@ -217,18 +210,119 @@ void HUD::update(const sim::WorldState& world, uint32_t delta_ticks) {
 void HUD::poll_sim_events(sim::SimulationEngine& sim) {
     auto news = sim.poll_news_events();
     for (const auto& ev : news) {
-        if (ev.target_player == 255 || ev.target_player == local_player_id_) {
-            bool is_thief_alarm = (ev.string_id == sim::StringID::ThiefAlarmWarning);
-            queue_news_message(ev.message_text, 100, is_thief_alarm);
+        if (ev.target_player != 255 && ev.target_player != local_player_id_) continue;
+        if (ev.channel == sim::NewsChannel::ChatLog) {
+            add_chat_entry("News Flash", ev.message_text);
+        } else {
+            status_line_.post(ev.message_text, ev.blink);
         }
     }
 }
 
-void HUD::queue_news_message(const std::string& msg, uint32_t duration_ticks, bool is_alarm) {
-    news_queue_.push_back({msg, duration_ticks, is_alarm, 255});
-    if (news_queue_.size() > 32) {
-        news_queue_.pop_front();
+uint32_t HUD::voice_rand() noexcept {
+    voice_seed_ = voice_seed_ * 1103515245u + 12345u;
+    return (voice_seed_ >> 16) & 0x7FFFu;
+}
+
+void HUD::voice_ready(sim::AntType type) {
+    play_sfx(sim::get_ready_voice_sound(type, voice_rand()));
+}
+
+void HUD::voice_go(sim::AntType type) {
+    play_sfx(sim::get_move_voice_sound(type, voice_rand()));
+    post_status_id(type == sim::AntType::Combat ? sim::strings::kMovinOut
+                   : type == sim::AntType::Thief ? sim::strings::kHereIGo : sim::strings::kOnMyWay);
+}
+
+void HUD::voice_attack(sim::AntType type) {
+    play_sfx(sim::get_attack_voice_sound(type, voice_rand()));
+    post_status_id(sim::strings::kAttack);
+}
+
+// FUN_0101b78a: bomber and swimmer answer with their voice only, a thief (69) and a fire ant (71) also post a text, worker and
+// combat ant say nothing; a special order that goes to more than one ant is silent altogether.
+void HUD::voice_special(sim::AntType type, size_t ants_ordered) {
+    if (ants_ordered != 1) return;
+    const uint32_t sound = sim::get_ability_voice_sound(type);
+    if (sound == sim::NoVoice) return;
+    play_sfx(sound);
+    if (type == sim::AntType::Thief) post_status_id(sim::strings::kMyPleasure);
+    else if (type == sim::AntType::Fire) post_status_id(sim::strings::kBurn);
+}
+
+void HUD::post_status_id(uint16_t string_id, const std::string& arg) {
+    status_line_.post(sim::strings::format(string_id, arg), sim::strings::blinks(string_id));
+}
+
+// SetPanelMode (Ants.exe FUN_01027f07) posts its text when the selection is rebuilt: exactly one own ant gives the text of its type
+// (6 worker, 7 bomber, 8 fire ant, 9 thief, 10 combat ant, 11 swimmer), more than one gives 12, anything else (an enemy ant, the
+// own hill, empty ground) clears the line. Quiet changes keep the text.
+void HUD::apply_selection_status(const sim::WorldState& world) {
+    if (!selection_status_pending_) return;
+    selection_status_pending_ = false;
+    if (selection_status_quiet_) {
+        selection_status_quiet_ = false;
+        return;
     }
+    size_t own = 0;
+    const sim::AntSnapshot* only = nullptr;
+    if (selected_base_team_id_ < 0) {
+        for (uint32_t id : selected_ant_ids_) {
+            for (const auto& a : world.ants) {
+                if (a.id == id && a.player_id == local_player_id_ && a.hp > 0 && !a.is_drowning) {
+                    ++own;
+                    only = &a;
+                    break;
+                }
+            }
+        }
+    }
+    if (own == 0) {
+        status_line_.clear();
+    } else if (own > 1 || !only) {
+        post_status_id(sim::strings::kSelMany);
+    } else {
+        static const uint16_t kByType[6] = {sim::strings::kSelWorker, sim::strings::kSelBomber, sim::strings::kSelFire,
+                                            sim::strings::kSelThief, sim::strings::kSelCombat, sim::strings::kSelSwimmer};
+        const size_t t = static_cast<size_t>(only->type);
+        if (t < 6) post_status_id(kByType[t]); else status_line_.clear();
+    }
+}
+
+void HUD::check_selected_type_change(const sim::WorldState& world) {
+    std::vector<std::pair<uint32_t, sim::AntType>> now;
+    bool changed = false;
+    if (selected_base_team_id_ < 0) {
+        for (uint32_t id : selected_ant_ids_) {
+            for (const auto& a : world.ants) {
+                if (a.id != id || a.player_id != local_player_id_ || a.hp == 0 || a.is_drowning) continue;
+                now.emplace_back(id, a.type);
+                for (const auto& before : selected_types_) {
+                    if (before.first == id && before.second != a.type) changed = true;
+                }
+                break;
+            }
+        }
+    }
+    selected_types_ = std::move(now);
+    if (!changed) return;
+    if (selected_types_.size() == 1) {
+        static const uint16_t kByType[6] = {sim::strings::kSelWorker, sim::strings::kSelBomber, sim::strings::kSelFire,
+                                            sim::strings::kSelThief, sim::strings::kSelCombat, sim::strings::kSelSwimmer};
+        const size_t t = static_cast<size_t>(selected_types_.front().second);
+        if (t < 6) post_status_id(kByType[t]);
+    } else {
+        post_status_id(sim::strings::kSelMany);
+    }
+}
+
+// The status box (label rect (481, 254) - (620, 266)): steady colour (79, 0, 143), left aligned, clipped at 139 px, hidden on the
+// odd 50 ms steps while a flash runs.
+void HUD::render_status_line(IRenderer& renderer) const {
+    if (!status_line_.visible()) return;
+    std::string text = status_line_.text();
+    while (text.size() > 1 && renderer.get_text_width(text, FontSize::Small) > 139) text.pop_back();
+    renderer.draw_text(text, 481, 254, ants::assets::ColorRGBA{79, 0, 143, 255}, FontSize::Small);
 }
 
 // =========================================================================
@@ -353,23 +447,8 @@ void HUD::render(IRenderer& renderer, const assets::AssetArchive& assets,
                 draw_animation_frame0(renderer, assets, tray.c_str(), 0, 0);
             }
             draw_animation_frame0(renderer, assets, stop_button_.is_pressed ? "butcand" : "butcanu", 0, 0);
-
-            // (the recessed status box wstatus.bmp is part of the uishell composite)
-            if (!news_queue_.empty()) {
-                ants::assets::ColorRGBA col = news_queue_.front().is_alarm ? ants::assets::ColorRGBA{180, 30, 30, 255} : ants::assets::ColorRGBA{16, 40, 24, 255};
-                renderer.draw_text(news_queue_.front().text, 486, 253, col);
-            }
-        } else {
-            // Enemy base: status box only (the ally pedestal is the left slot)
-            bool is_allied = (local_player_id_ < world.player_alliances.size()) &&
-                             (world.player_alliances[local_player_id_] == selected_base_team_id_);
-            if (!news_queue_.empty()) {
-                ants::assets::ColorRGBA col = news_queue_.front().is_alarm ? ants::assets::ColorRGBA{180, 30, 30, 255} : ants::assets::ColorRGBA{16, 40, 24, 255};
-                renderer.draw_text(news_queue_.front().text, 486, 253, col);
-            } else if (is_allied) {
-                renderer.draw_text("Allied Colony", 486, 253, {100, 255, 100, 255});
-            }
         }
+        // (an enemy base shows the status box only: the ally pedestal is the left slot)
     } else {
         if (has_friendly_ants) {
             // Stop button (animation butcanu / butcand: label at (595,180), button at (595,198))
@@ -391,25 +470,10 @@ void HUD::render(IRenderer& renderer, const assets::AssetArchive& assets,
                 draw_animation_frame0(renderer, assets, "UI_LBOX", 0, 0);
             }
         }
-
-        // (the recessed status box wstatus.bmp is part of the uishell composite)
-        std::string status_text = "Ready.";
-        ants::assets::ColorRGBA status_color = {16, 40, 24, 255};
-        if (!news_queue_.empty()) {
-            status_text = news_queue_.front().text;
-            if (news_queue_.front().is_alarm) {
-                status_color = {180, 30, 30, 255};
-            }
-        } else if (sel_ant) {
-            if (sel_ant->player_id != local_player_id_) status_text = "Enemy ant.";
-            else if (sel_ant->is_drowning) status_text = "Drowning!";
-            else if (sel_ant->is_holding) status_text = "Holds pick up...";
-            else if (sel_ant->anim_state == 1 || sel_ant->anim_state == 2) status_text = "On my way.";
-            else if (sel_ant->anim_state == 3) status_text = "In combat!";
-            else status_text = "Waiting for orders.";
-        }
-        renderer.draw_text(status_text, 486, 253, status_color);
     }
+
+    // The one-line status box (the recessed box wstatus.bmp is part of the uishell composite)
+    render_status_line(renderer);
 
     // 2.3 Lower Panel: Always render Chat Section
     // Cursive embossed Chat header at (480, 266)
@@ -936,6 +1000,8 @@ void HUD::select_ant(uint32_t ant_id, bool is_multi) {
     if (ant_id != 0) {
         selected_ant_ids_.push_back(ant_id);
     }
+    selection_status_pending_ = true;
+    selection_status_quiet_ = false;
 }
 
 void HUD::select_base(int32_t team_id) noexcept {
@@ -943,6 +1009,8 @@ void HUD::select_base(int32_t team_id) noexcept {
     selected_ant_id_ = 0;
     selected_ant_ids_.clear();
     is_multi_select_mode_ = false;
+    selection_status_pending_ = true;
+    selection_status_quiet_ = false;
 }
 
 void HUD::clear_selection() noexcept {
@@ -950,6 +1018,8 @@ void HUD::clear_selection() noexcept {
     selected_ant_ids_.clear();
     selected_base_team_id_ = -1;
     is_multi_select_mode_ = false;
+    selection_status_pending_ = true;      // every deselect clears the status text (FUN_01028c44)
+    selection_status_quiet_ = false;
 }
 
 bool HUD::is_ant_selected(uint32_t id) const noexcept {
@@ -993,13 +1063,15 @@ void HUD::select_all_friendly(const sim::WorldState& world) {
         selected_ant_id_ = selected_ant_ids_.front();
         for (const auto& ant : world.ants) {
             if (ant.id == selected_ant_id_ && ant.player_id == local_player_id_) {
-                play_sfx(sim::get_ready_voice_sound(ant.type, voice_variant_++));
+                voice_ready(ant.type);
                 break;
             }
         }
     } else {
         selected_ant_id_ = 0;
     }
+    selection_status_pending_ = true;
+    selection_status_quiet_ = false;
 }
 
 void HUD::select_ants_in_rect(int32_t x1, int32_t y1, int32_t x2, int32_t y2, const sim::WorldState& world, bool additive) {
@@ -1046,13 +1118,15 @@ void HUD::select_ants_in_rect(int32_t x1, int32_t y1, int32_t x2, int32_t y2, co
         selected_ant_id_ = selected_ant_ids_.front();
         for (const auto& ant : world.ants) {
             if (ant.id == selected_ant_id_ && ant.player_id == local_player_id_) {
-                play_sfx(sim::get_ready_voice_sound(ant.type, voice_variant_++));
+                voice_ready(ant.type);
                 break;
             }
         }
     } else {
         selected_ant_id_ = 0;
     }
+    selection_status_pending_ = true;
+    selection_status_quiet_ = additive;    // shift-add (0x1027950) keeps the text
 }
 
 // =========================================================================
@@ -1269,6 +1343,7 @@ bool HUD::handle_mouse_down(int32_t x, int32_t y, uint8_t button,
                 if (u.player_id != local_player_id_) continue;
                 sim.stop_ant(aid);   // FUN_01028a60: accepted ants with a target go to their own tile
             }
+            post_status_id(sim::strings::kStopping);   // always posted (0x1028b43)
             return true;
         }
 
@@ -1392,7 +1467,6 @@ bool HUD::handle_mouse_down(int32_t x, int32_t y, uint8_t button,
                 if (target_base->team_id == local_player_id_) {
                     if (has_friendly_selected(world)) {
                         if (on_spawn_click_marker_) on_spawn_click_marker_(world_x, world_y);
-                        play_sfx(sim::SoundID::GeneralCommand);
                         for (uint32_t aid : selected_ant_ids_) {
                             for (const auto& a : world.ants) {
                                 if (a.id == aid && a.player_id == local_player_id_) {
@@ -1541,7 +1615,7 @@ bool HUD::handle_mouse_up(int32_t x, int32_t y, uint8_t button,
                 if (hit_ant->player_id == local_player_id_) {
                     // Friendly ant clicked: select single ant (shift_held enables multi-select mode)
                     select_ant(hit_ant->id, shift_held);
-                    play_sfx(sim::get_ready_voice_sound(hit_ant->type, voice_variant_++));
+                    voice_ready(hit_ant->type);
                 } else {
                     // Enemy or allied ant clicked
                     bool is_ally = sim.stats_manager().are_allies(local_player_id_, hit_ant->player_id);
@@ -1600,11 +1674,12 @@ bool HUD::handle_mouse_up(int32_t x, int32_t y, uint8_t button,
                             }
                         }
                         if (first_ant) {
-                            play_sfx(sim::get_move_voice_sound(first_ant->type, voice_variant_++));
+                            voice_go(first_ant->type);
                         }
                     } else {
                         // Enemy anthill clicked
                         bool has_thief = false;
+                        size_t thief_count = 0;
                         const sim::AntSnapshot* first_friendly = nullptr;
                         for (uint32_t aid : selected_ant_ids_) {
                             for (const auto& a : world.ants) {
@@ -1612,6 +1687,7 @@ bool HUD::handle_mouse_up(int32_t x, int32_t y, uint8_t button,
                                     if (!first_friendly) first_friendly = &a;
                                     if (a.type == sim::AntType::Thief) {
                                         has_thief = true;
+                                        ++thief_count;
                                         sim::AntOrder order;
                                         order.ant_id = aid;
                                         order.type = sim::OrderType::InfiltrateAnthill;
@@ -1624,7 +1700,7 @@ bool HUD::handle_mouse_up(int32_t x, int32_t y, uint8_t button,
                         }
                         if (has_thief) {
                             if (on_spawn_click_marker_) on_spawn_click_marker_(world_x, world_y);
-                            play_sfx(sim::SoundID::ThiefGo);
+                            voice_special(sim::AntType::Thief, thief_count);
                         } else if (first_friendly) {
                             if (on_spawn_click_marker_) on_spawn_click_marker_(world_x, world_y);
                             dispatch_move_order(target_tile_x, target_tile_y, sim, false);
@@ -1662,7 +1738,7 @@ bool HUD::handle_mouse_up(int32_t x, int32_t y, uint8_t button,
                             order.target_x = target_tile_x;
                             order.target_y = target_tile_y;
                             sim.issue_order(order);
-                            play_sfx(sim::get_ability_voice_sound(sim::AntType::Bomber));
+                            voice_special(sim::AntType::Bomber, 1);
                         } else {
                             dispatch_move_order(target_tile_x, target_tile_y, sim, true /* allow_friendly_bomb */);
                         }
@@ -1877,7 +1953,6 @@ bool HUD::handle_key_down(int32_t key, sim::SimulationEngine& sim, ViewportCamer
             case 't': case 'T': set_active_order_mode(sim::OrderType::InfiltrateAnthill); return true;
             case 'a': case 'A':
                 select_all_friendly(world);
-                queue_news_message("All Friendly Ants Selected", 40, false);
                 return true;
             case 'n': case 'N': { // Next friendly ant
                 std::vector<uint32_t> friendly;
@@ -1929,7 +2004,6 @@ bool HUD::handle_key_down(int32_t key, sim::SimulationEngine& sim, ViewportCamer
                 // The original has no hatch key (Ctrl+H only selects the home hill).
                 if (selected_base_team_id_ != local_player_id_) {
                     select_base(local_player_id_);
-                    queue_news_message("Home Anthill Selected", 40, false);
                 }
                 return true;
             }
@@ -2106,7 +2180,7 @@ void HUD::dispatch_targeted_order(int32_t world_x, int32_t world_y, sim::Simulat
                     order.target_x = target_tile_x;
                     order.target_y = target_tile_y;
                     sim.issue_order(order);
-                    play_sfx(sim::get_ability_voice_sound(sim::AntType::Bomber));
+                    voice_special(sim::AntType::Bomber, 1);
                     return;
                 }
             }
@@ -2129,7 +2203,7 @@ void HUD::dispatch_targeted_order(int32_t world_x, int32_t world_y, sim::Simulat
                     order.target_y = target_tile_y;
                     sim.issue_order(order);
                 }
-                play_sfx(sim::get_ability_voice_sound(sim::AntType::Swimmer));
+                voice_special(sim::AntType::Swimmer, targets.size());
                 return;
             } else if (cell.terrain_type == sim::TERRAIN_WATER || cell.surface_type == sim::SurfaceType::Water) {
                 for (uint32_t aid : targets) {
@@ -2140,7 +2214,7 @@ void HUD::dispatch_targeted_order(int32_t world_x, int32_t world_y, sim::Simulat
                     order.target_y = target_tile_y;
                     sim.issue_order(order);
                 }
-                play_sfx(sim::get_ability_voice_sound(sim::AntType::Swimmer));
+                voice_special(sim::AntType::Swimmer, targets.size());
                 return;
             }
         }
@@ -2161,7 +2235,7 @@ void HUD::dispatch_targeted_order(int32_t world_x, int32_t world_y, sim::Simulat
                     order.target_y = target_tile_y;
                     sim.issue_order(order);
                 }
-                play_sfx(sim::get_move_voice_sound(sim::AntType::Bomber, voice_variant_++));
+                voice_special(sim::AntType::Bomber, targets.size());
                 return;
             }
         }
@@ -2182,7 +2256,7 @@ void HUD::dispatch_targeted_order(int32_t world_x, int32_t world_y, sim::Simulat
                     order.target_y = target_tile_y;
                     sim.issue_order(order);
                 }
-                play_sfx(sim::get_ability_voice_sound(sim::AntType::Fire));
+                voice_special(sim::AntType::Fire, targets.size());
                 return;
             }
         }
@@ -2208,7 +2282,7 @@ void HUD::dispatch_targeted_order(int32_t world_x, int32_t world_y, sim::Simulat
                 order.target_y = target_tile_y;
                 sim.issue_order(order);
             }
-            play_sfx(sim::SoundID::ThiefGo);
+            voice_special(sim::AntType::Thief, targets.size());
             return;
         }
         play_sfx(sim::SoundID::CantGo);
@@ -2259,7 +2333,7 @@ void HUD::dispatch_move_order(int32_t target_tile_x, int32_t target_tile_y, sim:
     // answers ("On my way." voice), and only when its order queued a path.
     const uint32_t ack = sim.issue_group_move_order(targets, sim::TileCoord{target_tile_x, target_tile_y}, allow_friendly_bomb);
     if (ack != 0) {
-        play_sfx(sim::get_move_voice_sound(sim.get_unit(ack).type, voice_variant_++));
+        voice_go(sim.get_unit(ack).type);
     }
 }
 
@@ -2300,7 +2374,7 @@ void HUD::dispatch_attack_order(uint32_t target_enemy_id, sim::SimulationEngine&
     // when its order queued a path.
     const uint32_t ack = sim.issue_group_attack_order(targets, sim::TileCoord{enemy->tile_x, enemy->tile_y});
     if (ack != 0) {
-        play_sfx(sim::get_attack_voice_sound(sim.get_unit(ack).type, voice_variant_++));
+        voice_attack(sim.get_unit(ack).type);
     }
 }
 
@@ -2469,10 +2543,10 @@ void HUD::dispatch_smart_special_ability(int32_t world_x, int32_t world_y, sim::
 
         if (!played_voice) {
             played_voice = true;
-            if (order.type == sim::OrderType::Move || order.type == sim::OrderType::PlantBomb) {
-                play_sfx(sim::get_move_voice_sound(sel->type, voice_variant_++));
+            if (order.type == sim::OrderType::Move) {
+                voice_go(sel->type);
             } else {
-                play_sfx(sim::get_ability_voice_sound(sel->type));
+                voice_special(sel->type, targets.size());
             }
         }
 

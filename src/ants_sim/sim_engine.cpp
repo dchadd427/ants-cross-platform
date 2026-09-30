@@ -1,5 +1,6 @@
 #include "ants_sim/sim_engine.hpp"
 #include "sim_engine_impl.hpp"
+#include "ants_sim/game_strings.hpp"
 #include "ants_sim/pathfinding.hpp"
 #include <unordered_map>
 #include <memory>
@@ -73,10 +74,10 @@ void SimulationEngine::init(const ants::assets::LevelData& level, uint32_t rando
     impl_->grid_.init_from_level(level);
     impl_->stats_.reset();
     uint32_t match_minutes = (level.default_minutes > 0) ? level.default_minutes : 12;
-    impl_->match_time_remaining_ms_ = match_minutes * 60 * 1000;
-    impl_->warned_one_minute_ = false;
-    impl_->warned_thirty_seconds_ = false;
-    impl_->last_countdown_second_ = 0;
+    impl_->set_match_clock(static_cast<int64_t>(match_minutes) * 60 * 1000);
+    impl_->match_limit_ms_ = match_minutes * 60 * 1000;
+    impl_->checkgo_stage_ = 0;
+    impl_->checkgo_threshold_ms_ = 61000;
     impl_->match_state_ = MatchState::Running;
     impl_->current_tick_ = 0;
     impl_->ants_.clear();
@@ -176,10 +177,10 @@ void SimulationEngine::init_test_world(uint32_t width, uint32_t height, uint32_t
     impl_->score_bubbles_.clear();
     impl_->grid_.init_empty(width, height);
     impl_->stats_.reset();
-    impl_->match_time_remaining_ms_ = match_time_ms;
-    impl_->warned_one_minute_ = (match_time_ms <= 60000);
-    impl_->warned_thirty_seconds_ = (match_time_ms <= 30000);
-    impl_->last_countdown_second_ = (match_time_ms <= 10000) ? ((match_time_ms + 999) / 1000) : 0;
+    impl_->set_match_clock(static_cast<int64_t>(match_time_ms));
+    impl_->match_limit_ms_ = match_time_ms;
+    impl_->checkgo_stage_ = 0;
+    impl_->checkgo_threshold_ms_ = 61000;
     impl_->match_state_ = MatchState::Running;
     impl_->current_tick_ = 0;
     impl_->ants_.clear();
@@ -202,7 +203,10 @@ void SimulationEngine::init_test_world(uint32_t width, uint32_t height, uint32_t
 void SimulationEngine::reset() {
     impl_->match_state_ = MatchState::NotStarted;
     impl_->current_tick_ = 0;
-    impl_->match_time_remaining_ms_ = 0;
+    impl_->match_limit_ms_ = 0;
+    impl_->set_match_clock(0);
+    impl_->checkgo_stage_ = 0;
+    impl_->checkgo_threshold_ms_ = 61000;
     impl_->ants_.clear();
     impl_->audio_queue_.clear();
     impl_->news_queue_.clear();
@@ -219,40 +223,17 @@ void SimulationEngine::tick() {
         return;
     }
 
-    // 1. Step Match Timer
-    if (impl_->match_time_remaining_ms_ <= 50) {
-        impl_->handle_game_over();
-        return;
+    // 1. CHECKGO (Ants.exe 0x1024839, period 200 ms, first run at once): the time warnings and the end of the match
+    if (impl_->match_clock_ms_ <= impl_->checkgo_next_ms_) {
+        impl_->checkgo_poll();
+        impl_->checkgo_next_ms_ = impl_->match_clock_ms_ - 200;
+        if (impl_->match_state_ == MatchState::GameOver) return;
     }
-    uint32_t prev_time_ms = impl_->match_time_remaining_ms_;
-    impl_->match_time_remaining_ms_ -= 50;
+
+    // 2. The match clock runs on (GetClock: limit - time played); it may go below 0 until CHECKGO notices
+    impl_->set_match_clock_running(impl_->match_clock_ms_ - 50);
     impl_->current_tick_++;
     impl_->world_state_dirty_ = true;
-
-    // Timer warnings & countdown matching Ants.exe 0x1024839:
-    // 1 minute remaining warning (Sound 55: 1min.wav & String 49)
-    if (prev_time_ms > 60000 && impl_->match_time_remaining_ms_ <= 60000 && !impl_->warned_one_minute_) {
-        impl_->warned_one_minute_ = true;
-        impl_->audio_queue_.push_back(AudioEvent{SoundID::OneMinute, 0, 0, 1, 255});
-        impl_->news_queue_.push_back(NewsEvent{255, "1 minute left in the game.", impl_->match_time_remaining_ms_, StringID::OneMinuteRemaining});
-    }
-    // 30 seconds remaining warning (Sound 54: 30sec.wav & String 50)
-    if (prev_time_ms > 30000 && impl_->match_time_remaining_ms_ <= 30000 && !impl_->warned_thirty_seconds_) {
-        impl_->warned_thirty_seconds_ = true;
-        impl_->audio_queue_.push_back(AudioEvent{SoundID::ThirtySeconds, 0, 0, 1, 255});
-        impl_->news_queue_.push_back(NewsEvent{255, "30 seconds left in the game.", impl_->match_time_remaining_ms_, StringID::ThirtySecondsRemaining});
-    }
-    // 10-second countdown (Sound 44: countdwn.wav & String 59 at 10s)
-    if (impl_->match_time_remaining_ms_ <= 10000 && impl_->match_time_remaining_ms_ > 0) {
-        uint32_t current_sec = (impl_->match_time_remaining_ms_ + 999) / 1000;
-        if (current_sec >= 1 && current_sec <= 10 && current_sec != impl_->last_countdown_second_) {
-            impl_->last_countdown_second_ = current_sec;
-            impl_->audio_queue_.push_back(AudioEvent{SoundID::Countdown, 0, 0, 1, 255});
-            if (current_sec == 10) {
-                impl_->news_queue_.push_back(NewsEvent{255, "10 seconds and counting...", impl_->match_time_remaining_ms_, StringID::TenSecondsRemaining});
-            }
-        }
-    }
 
     // Step Active Visual Effects (e.g. bomb explosion)
     for (auto it = impl_->active_effects_.begin(); it != impl_->active_effects_.end();) {
@@ -447,6 +428,43 @@ void SimulationEngine::tick() {
     impl_->world_state_dirty_ = true;
 }
 
+void SimulationEngineImpl::set_match_clock(int64_t ms) {
+    match_clock_ms_ = ms;
+    match_time_remaining_ms_ = static_cast<uint32_t>(std::max<int64_t>(0, ms));
+    checkgo_next_ms_ = ms;
+}
+
+void SimulationEngineImpl::set_match_clock_running(int64_t ms) {
+    match_clock_ms_ = ms;
+    match_time_remaining_ms_ = static_cast<uint32_t>(std::max<int64_t>(0, ms));
+}
+
+// CHECKGO (vtable 0x1004e38, Run 0x1024839): when the clock is below the task's threshold (unsigned compare: a negative clock is
+// never below it) the next warning is given: stage 0 the one-minute cue and text 49 (threshold becomes 31000), stage 1 the
+// thirty-second cue and text 50 (11000), then eleven countdown steps (cue and text 59, the threshold falls by 1000 each time:
+// clock 10800, 9800 ... 800 on the 200 ms grid). Every text is posted with the flash flag. The match ends at the first run that
+// finds the clock below 0. (The elimination rules of the same task belong to the network stage.)
+void SimulationEngineImpl::checkgo_poll() {
+    const int64_t remaining = match_clock_ms_;
+    if (remaining >= 0 && remaining < static_cast<int64_t>(checkgo_threshold_ms_)) {
+        if (checkgo_stage_ == 0) {
+            audio_queue_.push_back(AudioEvent{SoundID::OneMinute, 0, 0, 1, 255});
+            post_news(255, strings::kOneMinute);
+            checkgo_threshold_ms_ = 31000;
+        } else if (checkgo_stage_ == 1) {
+            audio_queue_.push_back(AudioEvent{SoundID::ThirtySeconds, 0, 0, 1, 255});
+            post_news(255, strings::kThirtySeconds);
+            checkgo_threshold_ms_ = 11000;
+        } else {
+            audio_queue_.push_back(AudioEvent{SoundID::Countdown, 0, 0, 1, 255});
+            post_news(255, strings::kTenSeconds);
+            checkgo_threshold_ms_ = checkgo_threshold_ms_ >= 1000 ? checkgo_threshold_ms_ - 1000 : 0;
+        }
+        ++checkgo_stage_;
+    }
+    if (remaining < 0) handle_game_over();
+}
+
 void SimulationEngine::issue_order(const AntOrder& order) {
     AntUnit* unit = impl_->find_unit(order.ant_id);
     if (!unit || !unit->is_alive() || unit->engaged || unit->frozen) return;
@@ -596,23 +614,23 @@ SimulationEngine::HatchResult SimulationEngineImpl::hatch_request(uint8_t player
         return HatchResult::NotAvailable;
     }
     if (stats_.get_egg_count(player_id) < 1) {
-        post_news(player_id, "No eggs to hatch!", 16);
+        post_news(player_id, strings::kNoEggs);
         return HatchResult::NoEggs;
     }
     if (hatch_[player_id].active) {
-        post_news(player_id, "An Ant is already hatching!", 14);
+        post_news(player_id, strings::kAlreadyHatching);
         return HatchResult::AlreadyHatching;
     }
     const int32_t score = stats_.get_individual_score(player_id);
     if (!force && score < static_cast<int32_t>(HATCH_COST_POINTS)) {
-        post_news(player_id, "You need 200 points to hatch!", 13);
+        post_news(player_id, strings::kNeed200Points);
         const auto* hill = grid_.find_anthill(player_id);
         const int32_t hx = hill ? (static_cast<int32_t>(hill->x) + 1) * 32 + 16 : 0;
         const int32_t hy = hill ? (static_cast<int32_t>(hill->y) + 1) * 32 + 16 : 0;
         audio_queue_.push_back(AudioEvent{SoundID::AntStop, hx, hy, 1, player_id});     // canthatch cue (61)
         return HatchResult::NotEnoughPoints;
     }
-    post_news(player_id, "Hatching a new Ant!", 15);
+    post_news(player_id, strings::kHatching);
     const int32_t cost = std::min<int32_t>(static_cast<int32_t>(HATCH_COST_POINTS), std::max<int32_t>(0, score));
     add_score(player_id, -cost);                                                        // "-N" bubble and scoredn
     stats_.set_egg_count(player_id, stats_.get_egg_count(player_id) - 1);
@@ -792,13 +810,9 @@ uint32_t SimulationEngine::get_match_time_remaining_ms() const {
 }
 
 void SimulationEngine::set_match_time_remaining_ms(uint32_t ms) {
-    impl_->match_time_remaining_ms_ = ms;
-    if (ms > 60000) impl_->warned_one_minute_ = false;
-    if (ms > 30000) impl_->warned_thirty_seconds_ = false;
-    if (ms > 10000) impl_->last_countdown_second_ = 0;
-    if (ms == 0 && impl_->match_state_ == MatchState::Running) {
-        impl_->handle_game_over();
-    }
+    // Test hook: the clock jumps; CHECKGO looks at it at its next run (the stage and threshold of the warnings stay)
+    impl_->set_match_clock(static_cast<int64_t>(ms));
+    impl_->checkgo_next_ms_ = impl_->match_clock_ms_;
 }
 
 void SimulationEngine::set_fog_of_war_enabled(bool enabled) {
@@ -829,7 +843,7 @@ void SimulationEngine::trigger_player_dropout(uint8_t player_id, const std::stri
 }
 
 bool SimulationEngine::is_match_over() const {
-    return impl_->match_state_ == MatchState::GameOver || impl_->match_time_remaining_ms_ == 0;
+    return impl_->match_state_ == MatchState::GameOver;
 }
 
 PlayerMatchStats SimulationEngine::get_player_stats(uint8_t player_id) const {

@@ -12,6 +12,7 @@
 #include "ants_sim/sim_engine.hpp"
 #include "ants_app/renderer.hpp"
 #include "ants_app/pedestal.hpp"
+#include "ants_app/status_line.hpp"
 
 namespace ants::app {
 
@@ -22,16 +23,6 @@ enum class InputMode : uint8_t {
     Normal = 0,
     OrderTargeting,
     MarqueeSelecting
-};
-
-/**
- * @brief Item queued in the news flash alert banner.
- */
-struct NewsBannerItem {
-    std::string text;
-    uint32_t remaining_ticks{100}; // 5.0 seconds default
-    bool is_alarm{false};          // Blinks red for Thief infiltration
-    uint8_t alpha{255};
 };
 
 /**
@@ -176,8 +167,12 @@ public:
     void set_multi_select_mode(bool multi) noexcept { is_multi_select_mode_ = multi; }
     bool has_friendly_selected(const sim::WorldState& world) const noexcept;
 
-    // News banner
-    void queue_news_message(const std::string& msg, uint32_t duration_ticks = 100, bool is_alarm = false);
+    // Status line (Ants.exe PostStatus): one slot, 5 s life, flash flag; see status_line.hpp
+    void post_status(const std::string& text, bool flash = false) { status_line_.post(text, flash); }
+    /// Posts the original's text of a string id (flash flag from the table); `arg` fills its `%s`.
+    void post_status_id(uint16_t string_id, const std::string& arg = {});
+    void clear_status() { status_line_.clear(); }
+    const StatusLine& status_line() const noexcept { return status_line_; }
 
     // Order mode & dispatch
     sim::OrderType get_active_order_mode() const noexcept { return active_order_mode_; }
@@ -311,8 +306,25 @@ private:
     std::string player_name_{"Player"};
 
     // News Flash FIFO queue
-    std::deque<NewsBannerItem> news_queue_{};
-    uint32_t alarm_blink_ticks_{0};
+    StatusLine status_line_{};
+    // A selection change decides the status text at the next update(): 6..11 for exactly one own ant, 12 for several, otherwise
+    // the text is cleared (SetPanelMode, Ants.exe FUN_01027f07). Additions with shift, the death of a selected ant and the
+    // alliance refresh are quiet and keep the text.
+    bool selection_status_pending_{false};
+    bool selection_status_quiet_{false};
+    void apply_selection_status(const sim::WorldState& world);
+    // FUN_0100cd40 (called by the power-up pick-up): a selected own ant whose type changed rebuilds the panel, which posts the text of
+    // its new type when it is the only ant selected and string 12 otherwise
+    std::vector<std::pair<uint32_t, sim::AntType>> selected_types_;
+    void check_selected_type_change(const sim::WorldState& world);
+    // The voices of the ordering commands and the status text that goes with them (Ants.exe FUN_0101b5f9 / FUN_0101b67b /
+    // FUN_0101b711 / FUN_0101b78a)
+    uint32_t voice_rand() noexcept;
+    void voice_ready(sim::AntType type);                               // the ant that was selected answers
+    void voice_go(sim::AntType type);                                  // move order: "On my way." / "Movin' out." / "Here I go..."
+    void voice_attack(sim::AntType type);                              // attack order: "Attack!"
+    void voice_special(sim::AntType type, size_t ants_ordered);        // special order: text only for exactly one thief or fire ant
+    void render_status_line(IRenderer& renderer) const;
 
     // Minimap drag navigation state
     bool is_radar_dragging_{false};
@@ -352,7 +364,7 @@ private:
     };
     int active_quick_chat_edit_{-1};
     int active_slider_dragging_{-1}; // -1 none, 0 sfx, 1 music, 2 scroll
-    uint32_t voice_variant_{0};
+    uint32_t voice_seed_{0x2545F491u};      // the original's rand() for the choice of a voice; never feeds the simulation
     std::function<void(float)> on_sfx_volume_{nullptr};
     std::function<void(float)> on_music_volume_{nullptr};
     std::function<void(float)> on_scroll_rate_{nullptr};

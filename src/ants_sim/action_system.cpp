@@ -7,6 +7,7 @@
 // Every ant of the remake's single authoritative simulation follows the owner ("IsLocal") code path.
 
 #include "sim_engine_impl.hpp"
+#include "ants_sim/game_strings.hpp"
 
 #include <algorithm>
 
@@ -52,8 +53,27 @@ void SimulationEngineImpl::add_score(uint8_t player, int32_t amount) {
     stats_.add_score(player, amount);
 }
 
-void SimulationEngineImpl::post_news(uint8_t player, const char* text, uint16_t string_id) {
-    news_queue_.push_back(NewsEvent{player, text, match_time_remaining_ms_, string_id});
+void SimulationEngineImpl::post_news(uint8_t player, uint16_t string_id, const std::string& a, const std::string& b,
+                                     const std::string& c, const std::string& d) {
+    NewsEvent ev;
+    ev.target_player = player;
+    ev.message_text = strings::format(string_id, a, b, c, d);
+    ev.timestamp_ms = static_cast<uint32_t>(std::max<int64_t>(0, static_cast<int64_t>(match_limit_ms_) - match_clock_ms_));
+    ev.string_id = string_id;
+    ev.blink = strings::blinks(string_id);
+    ev.channel = NewsChannel::Status;
+    news_queue_.push_back(std::move(ev));
+}
+
+void SimulationEngineImpl::post_news_flash(uint16_t string_id, const std::string& a, const std::string& b,
+                                           const std::string& c, const std::string& d) {
+    NewsEvent ev;
+    ev.target_player = 255;
+    ev.message_text = strings::format(string_id, a, b, c, d);
+    ev.timestamp_ms = static_cast<uint32_t>(std::max<int64_t>(0, static_cast<int64_t>(match_limit_ms_) - match_clock_ms_));
+    ev.string_id = string_id;
+    ev.channel = NewsChannel::ChatLog;
+    news_queue_.push_back(std::move(ev));
 }
 
 // ------------------------------------------------------------------------------------------------
@@ -159,7 +179,7 @@ void SimulationEngineImpl::cleanup_enter(AntUnit& a) {
     if (amount == 0 && a.carried_food > 0) amount = static_cast<int32_t>(a.carried_food) * 25;
     if (amount > 0) {
         add_score(a.player_id, amount);
-        post_news(a.player_id, "Score going up...", 61);
+        post_news(a.player_id, strings::kScoreGoingUp);
     }
     a.clear_inventory();                                                    // SetCarrying(0, {0,0}): +0xe8, +0xec, +0xf0, +0xf4
     a.is_thief_steal = false;
@@ -261,7 +281,7 @@ void SimulationEngineImpl::hatch_run(uint8_t team) {
     n->orig_order_tile = ent;
     n->final_dest = TileCoord{-1, -1};
     audio_queue_.push_back(AudioEvent{SoundID::ExitHill, centre_x(ent), centre_y(ent), 1, team});
-    post_news(team, "Ready!", 63);
+    post_news(team, strings::kHatched);
     world_state_dirty_ = true;
 }
 
@@ -279,7 +299,7 @@ bool SimulationEngineImpl::raid_arrive(AntUnit& a, StepEvt& /*e*/) {
         return false;
     }
     if (a.is_holding()) {                                                   // "Can't - already have food."
-        post_news(a.player_id, "Can't - already have food.", 17);
+        post_news(a.player_id, strings::kAlreadyHaveFood);
         const TileCoord home = team_entrance(a.player_id);
         if (home.x >= 0) go_to(a, home, false, false); else stop_sync(a);
         return false;
@@ -306,7 +326,7 @@ void SimulationEngineImpl::start_raid(AntUnit& a, uint8_t victim, uint32_t amoun
     a.final_dest = TileCoord{-1, -1};
     set_position(a, centre_x(tile), centre_y(tile));
     audio_queue_.push_back(AudioEvent{SoundID::Anthill, centre_x(tile), centre_y(tile), 2, victim});
-    post_news(victim, "A ThiefAnt is at your anthill!", StringID::ThiefAlarmWarning);
+    post_news(victim, strings::kThiefAtHill);
 }
 
 // Step callback, actions 5 and 0xd at the last frame (0x101efbd): snap to the tile centre, go idle (the cleanup of
@@ -334,7 +354,7 @@ void SimulationEngineImpl::cleanup_raid(AntUnit& a) {
     if (amount > 0) a.steal_points(static_cast<uint16_t>(amount));
     a.is_thief_steal = true;                                                // +0xec = 1
     a.target_team_id = 255;
-    post_news(a.player_id, "Food stolen...", StringID::FoodStolenStatus);
+    post_news(a.player_id, strings::kFoodStolen);
 }
 
 // ------------------------------------------------------------------------------------------------
@@ -390,7 +410,7 @@ void SimulationEngineImpl::end_harvest(AntUnit& a) {
         amount = grid_.food_objects()[static_cast<size_t>(obj)].value;
     }
     set_holding(a, amount, a.orig_food_tile);
-    post_news(a.player_id, "Got Food!", 60);
+    post_news(a.player_id, strings::kGotFood);
     if (changed && obj >= 0 && static_cast<size_t>(obj) < grid_.food_objects().size()) {
         const FoodObject& fo = grid_.food_objects()[static_cast<size_t>(obj)];
         grid_.set_food_tile(TileCoord{static_cast<int32_t>(fo.col), static_cast<int32_t>(fo.row)}, fo.stage_tile());

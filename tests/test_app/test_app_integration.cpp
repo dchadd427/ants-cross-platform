@@ -105,6 +105,16 @@ static void run_ms(SimulationEngine& sim, int ms) {
     for (int t = 0; t < ms / 50; ++t) sim.tick();
 }
 
+// The match ends at the first run of the CHECKGO task (every 200 ms) that finds the clock below 0 (Ants.exe 0x1024839), 0 - 200 ms
+// after the clock shows 0:00. Ticks until the match is over (at most max_ticks); returns the ticks used, -1 when it never ended.
+static int run_until_over(SimulationEngine& sim, int max_ticks = 12) {
+    for (int i = 0; i < max_ticks; ++i) {
+        if (sim.is_match_over()) return i;
+        sim.tick();
+    }
+    return sim.is_match_over() ? max_ticks : -1;
+}
+
 // Ticks until pred() holds (checked before every tick); returns the elapsed milliseconds, -1 if it did not hold within max_ms.
 static int wait_ms(SimulationEngine& sim, int max_ms, const std::function<bool()>& pred) {
     for (int t = 0; t <= max_ms / 50; ++t) {
@@ -727,16 +737,18 @@ void run_suite_5_midi_player() {
 void run_suite_6_scorecard_and_audio_routing() {
     TEST_SUITE("Suite 6: Scorecard Modal & Win/Loss Audio Routing");
 
-    TEST_CASE("6.1 Match End 0:00 Simulation Freeze & Split Audio Routing") {
+    TEST_CASE("6.1 Match End After 0:00 Simulation Freeze & Split Audio Routing") {
         SimulationEngine sim;
-        sim.init_test_world(60, 60, 999, 100); // 100 ms match (2 ticks)
+        sim.init_test_world(60, 60, 999, 100); // 100 ms match (2 ticks to 0:00)
 
         sim.set_player_score(0, 350); // Winner
         sim.set_player_score(1, 150); // Loser
 
-        // Tick to expiration
+        // Tick to expiration: CHECKGO ends the match at its first run with a clock below 0 (within 200 ms after 0:00)
         sim.tick();
         sim.tick();
+        ASSERT_FALSE(sim.is_match_over());
+        ASSERT_TRUE(run_until_over(sim, 8) >= 1);
 
         ASSERT_TRUE(sim.is_match_over());
         ASSERT_EQ(sim.get_match_time_remaining_ms(), 0u);
@@ -1581,17 +1593,23 @@ void run_suite_9_gameplay_mechanics_and_options() {
         ASSERT_EQ(ants::sim::get_move_voice_sound(ants::sim::AntType::Worker, 1), 15); // gantcommand.wav
         ASSERT_EQ(ants::sim::get_move_voice_sound(ants::sim::AntType::Swimmer, 0), 33); // brdggo.wav
         ASSERT_EQ(ants::sim::get_move_voice_sound(ants::sim::AntType::Fire, 0), 23); // firego.wav
-        ASSERT_EQ(ants::sim::get_move_voice_sound(ants::sim::AntType::Combat, 0), 28); // combgo1.wav
-        ASSERT_EQ(ants::sim::get_move_voice_sound(ants::sim::AntType::Combat, 1), 29); // combgo2.wav
+        ASSERT_EQ(ants::sim::get_move_voice_sound(ants::sim::AntType::Combat, 0), 29); // combgo2.wav (cue index 20 of the original)
+        ASSERT_EQ(ants::sim::get_move_voice_sound(ants::sim::AntType::Combat, 1), 28); // combgo1.wav
         ASSERT_EQ(ants::sim::get_move_voice_sound(ants::sim::AntType::Bomber, 0), 37); // bombgo.wav
         ASSERT_EQ(ants::sim::get_move_voice_sound(ants::sim::AntType::Thief, 0), 19); // theifgo.wav
 
-        ASSERT_EQ(ants::sim::get_ready_voice_sound(ants::sim::AntType::Worker, 0), 14); // gantrdy.wav
-        ASSERT_EQ(ants::sim::get_ready_voice_sound(ants::sim::AntType::Worker, 1), 13); // gantorders.wav
+        ASSERT_EQ(ants::sim::get_ready_voice_sound(ants::sim::AntType::Worker, 0), 13); // gantorders.wav for rand() % 3 == 0 ...
+        ASSERT_EQ(ants::sim::get_ready_voice_sound(ants::sim::AntType::Worker, 1), 14); // ... gantrdy.wav for the two other values
+        ASSERT_EQ(ants::sim::get_ready_voice_sound(ants::sim::AntType::Worker, 2), 14);
+        ASSERT_EQ(ants::sim::get_ready_voice_sound(ants::sim::AntType::Worker, 3), 13);
         ASSERT_EQ(ants::sim::get_ready_voice_sound(ants::sim::AntType::Combat, 0), 27); // combrdy1.wav
         ASSERT_EQ(ants::sim::get_ready_voice_sound(ants::sim::AntType::Combat, 1), 26); // combrdy2.wav
 
         ASSERT_EQ(ants::sim::get_attack_voice_sound(ants::sim::AntType::Worker, 0), 16); // gantattack.wav
+        ASSERT_EQ(ants::sim::get_attack_voice_sound(ants::sim::AntType::Combat, 0), 59); // combat1.wav
+        ASSERT_EQ(ants::sim::get_attack_voice_sound(ants::sim::AntType::Combat, 1), 60); // combat2.wav
+        ASSERT_EQ(ants::sim::get_ability_voice_sound(ants::sim::AntType::Worker), ants::sim::NoVoice);   // no special voice
+        ASSERT_EQ(ants::sim::get_ability_voice_sound(ants::sim::AntType::Combat), ants::sim::NoVoice);
         ASSERT_EQ(ants::sim::get_ability_voice_sound(ants::sim::AntType::Bomber), 39); // bombdo.wav
         ASSERT_EQ(ants::sim::get_ability_voice_sound(ants::sim::AntType::Swimmer), 35); // brdgdo.wav
         ASSERT_EQ(ants::sim::get_ability_voice_sound(ants::sim::AntType::Fire), 25); // firedo.wav
@@ -3684,7 +3702,7 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
 
     TEST_CASE("12.31 Base Entry Without Food & Silent Health Visit") {
         SimulationEngine sim;
-        sim.init_test_world(60, 60, 100, 60000);
+        sim.init_test_world(60, 60, 100, 720000);   // a long match: sound 55 is also the "1 minute left" cue
         sim.grid_mut().set_anthill(0, TileCoord{20, 20});
         const auto* home = sim.grid().find_anthill(0);
         ASSERT_TRUE(home != nullptr);
@@ -5169,52 +5187,52 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         }
     } TEST_END();
 
-    TEST_CASE("12.67 Match Timer 1-Minute, 30-Second & 10-Second Countdown Audio Warnings") {
+    TEST_CASE("12.67 CHECKGO: The 200 ms Time-Warning Grid (1 Minute, 30 Seconds, 11 Countdown Steps) And The End Of The Match") {
+        // Ants.exe 0x1024839: every 200 ms the clock is compared with a threshold (61000, then 31000, then 11000 falling by 1000 per
+        // step); below it the next warning is given (cue and flashing text, stage by stage) and the match ends at the first run that
+        // finds the clock below 0. A 6 minute map: the warnings fall on remaining = 60800, 30800, 10800, 9800 ... 800.
         SimulationEngine sim;
-        sim.init_test_world(60, 60, 100, 70000); // 70 seconds
-
-        // Step from 70s down to 60.05s: no warning yet
-        sim.set_match_time_remaining_ms(60050);
-        sim.clear_audio_events();
-        sim.clear_news_events();
-        sim.tick(); // now 60,000 ms (1 minute remaining!)
-
-        ASSERT_TRUE(sim.has_audio_event(SoundID::OneMinute)); // Sound 55
-        ASSERT_TRUE(sim.has_news_event(255, StringID::OneMinuteRemaining)); // String 49
-
-        // Step to 30.05s
-        sim.set_match_time_remaining_ms(30050);
-        sim.clear_audio_events();
-        sim.clear_news_events();
-        sim.tick(); // now 30,000 ms (30 seconds remaining!)
-
-        ASSERT_TRUE(sim.has_audio_event(SoundID::ThirtySeconds)); // Sound 54
-        ASSERT_TRUE(sim.has_news_event(255, StringID::ThirtySecondsRemaining)); // String 50
-
-        // Step to 10.05s
-        sim.set_match_time_remaining_ms(10050);
-        sim.clear_audio_events();
-        sim.clear_news_events();
-        sim.tick(); // now 10,000 ms (10 seconds countdown!)
-
-        ASSERT_TRUE(sim.has_audio_event(SoundID::Countdown)); // Sound 44
-        ASSERT_TRUE(sim.has_news_event(255, StringID::TenSecondsRemaining)); // String 59
-
-        // Step 20 ticks (1000ms = 1 second, reaching 9,000 ms)
-        sim.clear_audio_events();
-        for (int i = 0; i < 20; ++i) {
+        const uint32_t limit = 360000;
+        sim.init_test_world(60, 60, 100, limit);
+        struct Warning { uint32_t remaining; uint32_t sound; uint16_t text; };
+        std::vector<Warning> got;
+        int32_t over_elapsed = -1;
+        for (uint32_t i = 0; i < 8000 && over_elapsed < 0; ++i) {
+            const uint32_t elapsed = i * 50;          // the poll of this tick sees the clock at limit - elapsed
             sim.tick();
-        }
-        ASSERT_TRUE(sim.has_audio_event(SoundID::Countdown)); // Sound 44 triggers again at 9s!
-
-        // Verify every remaining second from 8 down to 1 triggers Sound 44 (countdwn.wav)
-        for (int sec = 8; sec >= 1; --sec) {
-            sim.clear_audio_events();
-            for (int i = 0; i < 20; ++i) {
-                sim.tick();
+            uint32_t sound = 0;
+            uint16_t text = 0;
+            for (const auto& a : sim.poll_audio_events()) {
+                if (a.target_player == 255 && (a.sound_id == SoundID::OneMinute || a.sound_id == SoundID::ThirtySeconds || a.sound_id == SoundID::Countdown)) sound = a.sound_id;
             }
-            ASSERT_TRUE(sim.has_audio_event(SoundID::Countdown)); // Sound 44 every second!
+            for (const auto& n : sim.poll_news_events()) {
+                if (n.string_id == 49 || n.string_id == 50 || n.string_id == 59) {
+                    ASSERT_TRUE(n.blink);                        // all three are posted with the flash flag
+                    ASSERT_EQ(n.target_player, 255);
+                    text = n.string_id;
+                    if (n.string_id == 49) ASSERT_EQ(n.message_text, "1 minute left in the game.");
+                    if (n.string_id == 50) ASSERT_EQ(n.message_text, "30 seconds left in the game.");
+                    if (n.string_id == 59) ASSERT_EQ(n.message_text, "10 seconds and counting...");
+                }
+            }
+            if (sound != 0 || text != 0) got.push_back({limit - elapsed, sound, text});
+            if (sim.is_match_over()) over_elapsed = static_cast<int32_t>(elapsed);
         }
+        ASSERT_EQ(got.size(), size_t{13});
+        ASSERT_EQ(got[0].remaining, 60800u);
+        ASSERT_EQ(got[0].sound, SoundID::OneMinute);
+        ASSERT_EQ(got[0].text, 49);
+        ASSERT_EQ(got[1].remaining, 30800u);
+        ASSERT_EQ(got[1].sound, SoundID::ThirtySeconds);
+        ASSERT_EQ(got[1].text, 50);
+        for (uint32_t k = 0; k < 11; ++k) {
+            ASSERT_EQ(got[2 + k].remaining, 10800u - 1000u * k);
+            ASSERT_EQ(got[2 + k].sound, SoundID::Countdown);
+            ASSERT_EQ(got[2 + k].text, 59);
+        }
+        // the match ends at the first run with the clock below 0: 200 ms after 0:00 on this grid
+        ASSERT_EQ(over_elapsed, static_cast<int32_t>(limit + 200));
+        ASSERT_EQ(sim.get_match_time_remaining_ms(), 0u);
     } TEST_END();
 
     TEST_CASE("12.68 Match Defeat Triggers losers.wav (Sound 42) & Player Drop-Out Triggers playerout.wav (Sound 41)") {
@@ -5225,7 +5243,7 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         sim.set_player_score(1, 100);
 
         sim.clear_audio_events();
-        sim.tick(); // Match game over
+        ASSERT_TRUE(run_until_over(sim) >= 0); // Match game over (within 200 ms after 0:00)
 
         ASSERT_TRUE(sim.is_match_over());
         // Winner gets Sound 56 (VictoryFanfare)
@@ -6389,10 +6407,10 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
 
     TEST_CASE("12.108: Version Invariant & Fog of War Cursor Concealment Parity") {
         // 1. Verify semantic versioning components
-        ASSERT_EQ(ants::VERSION_STRING, "v0.0.37");
+        ASSERT_EQ(ants::VERSION_STRING, "v0.0.38");
         ASSERT_EQ(ants::VERSION_MAJOR, 0);
         ASSERT_EQ(ants::VERSION_MINOR, 0);
-        ASSERT_EQ(ants::VERSION_PATCH, 37);
+        ASSERT_EQ(ants::VERSION_PATCH, 38);
 
         // 2. Setup simulation world with Fog of War enabled
         SimulationEngine sim;

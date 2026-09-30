@@ -70,6 +70,8 @@ namespace SoundID {
     constexpr uint32_t VictoryFanfare = 56; // winner.wav (22kHz, 4.67s)
     constexpr uint32_t MeleeAttack    = 57; // attack.wav
     constexpr uint32_t BaseAlarmSiren = 58; // underattack.wav (2566 Hz alarm)
+    constexpr uint32_t CombatAttack1  = 59; // combat1.wav (the combat ant's attack voice)
+    constexpr uint32_t CombatAttack2  = 60; // combat2.wav
     constexpr uint32_t AntStop        = 61; // antstop.wav
     constexpr uint32_t PowerUpDrop    = 62; // powerdrip.wav
     constexpr uint32_t CantGo         = 63; // cantgo.wav
@@ -102,12 +104,17 @@ namespace SoundID {
     constexpr uint32_t BombPick       = 90; // bombpick.wav
 }
 
+// The voices of the ordering commands (Ants.exe FUN_0101b5f9 ready, FUN_0101b67b go, FUN_0101b711 attack, FUN_0101b78a special).
+// `variant` stands for the original's rand(): the worker's ready voice is gantorders for rand() % 3 == 0 and gantrdy otherwise,
+// its go voice gantgo for an even and gantcommand for an odd number, the combat ant's voices alternate on rand() % 2.
+constexpr uint32_t NoVoice = 0xFFFFu;   // the command plays no voice (worker and combat ant special orders)
+
 inline uint32_t get_move_voice_sound(AntType type, uint32_t variant = 0) {
     switch (type) {
         case AntType::Worker:  return (variant % 2 == 0) ? SoundID::GeneralGo : SoundID::GeneralCommand;
         case AntType::Swimmer: return SoundID::BridgeGo;
         case AntType::Fire:    return SoundID::FireGo;
-        case AntType::Combat:  return (variant % 2 == 0) ? SoundID::CombatGo1 : SoundID::CombatGo2;
+        case AntType::Combat:  return (variant % 2 == 0) ? SoundID::CombatGo2 : SoundID::CombatGo1;
         case AntType::Bomber:  return SoundID::BomberGo;
         case AntType::Thief:   return SoundID::ThiefGo;
         default:               return SoundID::GeneralGo;
@@ -116,7 +123,7 @@ inline uint32_t get_move_voice_sound(AntType type, uint32_t variant = 0) {
 
 inline uint32_t get_ready_voice_sound(AntType type, uint32_t variant = 0) {
     switch (type) {
-        case AntType::Worker:  return (variant % 2 == 0) ? SoundID::GeneralReady : SoundID::GeneralOrders;
+        case AntType::Worker:  return (variant % 3 == 0) ? SoundID::GeneralOrders : SoundID::GeneralReady;
         case AntType::Swimmer: return SoundID::BridgeReady;
         case AntType::Fire:    return SoundID::FireReady;
         case AntType::Combat:  return (variant % 2 == 0) ? SoundID::CombatReady1 : SoundID::CombatReady2;
@@ -131,7 +138,7 @@ inline uint32_t get_attack_voice_sound(AntType type, uint32_t variant = 0) {
         case AntType::Worker:  return SoundID::GeneralAttack;
         case AntType::Swimmer: return SoundID::BridgeAttack;
         case AntType::Fire:    return SoundID::FireAttack;
-        case AntType::Combat:  return (variant % 2 == 0) ? SoundID::CombatDo1 : SoundID::CombatDo2;
+        case AntType::Combat:  return (variant % 2 == 0) ? SoundID::CombatAttack1 : SoundID::CombatAttack2;
         case AntType::Bomber:  return SoundID::BomberAttack;
         case AntType::Thief:   return SoundID::ThiefAttack;
         default:               return SoundID::GeneralAttack;
@@ -142,10 +149,9 @@ inline uint32_t get_ability_voice_sound(AntType type) {
     switch (type) {
         case AntType::Swimmer: return SoundID::BridgeDo;
         case AntType::Fire:    return SoundID::FireDo;
-        case AntType::Combat:  return SoundID::CombatDo2;
         case AntType::Bomber:  return SoundID::BomberDo;
         case AntType::Thief:   return SoundID::ThiefDo;
-        default:               return SoundID::GeneralGo;
+        default:               return NoVoice;   // worker and combat ant special orders are silent
     }
 }
 
@@ -200,11 +206,16 @@ struct AudioEvent {
     uint8_t  target_player{255}; // 255 = Broadcast, 0..3 = Target player
 };
 
+/// Where a message of the original appears: the one-line status box (PostStatus) or the chat log as a "News Flash" line.
+enum class NewsChannel : uint8_t { Status = 0, ChatLog = 1 };
+
 struct NewsEvent {
-    uint8_t     target_player{255};
-    std::string message_text;
-    uint32_t    timestamp_ms{0};
-    uint16_t    string_id{0};
+    uint8_t     target_player{255};   // 255 = every player, else the one player that sees it
+    std::string message_text;         // the original's text with its arguments inserted
+    uint32_t    timestamp_ms{0};      // match time elapsed when it was posted (the "[m:ss]" of a News Flash)
+    uint16_t    string_id{0};         // id in the original's string table (game_strings.hpp)
+    bool        blink{false};         // status posted with the flash flag: a 500 ms flicker before the steady text
+    NewsChannel channel{NewsChannel::Status};
 };
 
 struct AntSnapshot {

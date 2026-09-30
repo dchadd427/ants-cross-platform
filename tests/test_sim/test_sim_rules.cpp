@@ -73,6 +73,16 @@ static bool tick_until(SimulationEngine& sim, const std::function<bool()>& pred,
 // ============================================================================
 // SUITE 1: Simulation Clock, Monotonic Tick & Integer Math Purity
 // ============================================================================
+// The match ends at the first run of the CHECKGO task (every 200 ms) that finds the clock below 0 (Ants.exe 0x1024839): 0 - 200 ms
+// after the clock shows 0:00. Ticks until the match is over (at most max_ticks); returns the ticks used, -1 when it never ended.
+static int run_until_over(SimulationEngine& sim, int max_ticks = 12) {
+    for (int i = 0; i < max_ticks; ++i) {
+        if (sim.is_match_over()) return i;
+        sim.tick();
+    }
+    return sim.is_match_over() ? max_ticks : -1;
+}
+
 void run_suite_1_clock() {
     TEST_SUITE("Suite 1: Simulation Clock, Monotonic Tick & Integer Math Purity");
 
@@ -97,7 +107,7 @@ void run_suite_1_clock() {
         }
     } TEST_END();
 
-    TEST_CASE("1.3 Match Freeze at 0:00") {
+    TEST_CASE("1.3 Match Freeze Within 200 ms After 0:00 (CHECKGO ends it at its first run with a clock below 0)") {
         SimulationEngine sim;
         sim.init_test_world(60, 60, 12345, 100);
         sim.tick();
@@ -105,9 +115,14 @@ void run_suite_1_clock() {
         ASSERT_FALSE(sim.is_match_over());
         sim.tick();
         ASSERT_EQ(sim.get_match_time_remaining_ms(), 0u);
-        ASSERT_TRUE(sim.is_match_over());
+        ASSERT_FALSE(sim.is_match_over());               // a clock of exactly 0 is not below 0: the match runs on
+        const int extra = run_until_over(sim, 8);
+        ASSERT_TRUE(extra >= 1 && extra <= 4);           // 0 - 200 ms after 0:00
+        ASSERT_EQ(sim.get_match_time_remaining_ms(), 0u);
+        const uint64_t frozen = sim.current_tick();
         sim.tick();
         ASSERT_EQ(sim.get_match_time_remaining_ms(), 0u);
+        ASSERT_EQ(sim.current_tick(), frozen);
     } TEST_END();
 
     TEST_CASE("1.4 Pure Integer Arithmetic (No FPU Drift)") {
@@ -752,8 +767,8 @@ void run_suite_12_game_over() {
         sim.init_test_world(60, 60, 1, 50);
         uint32_t u = sim.spawn_unit(0, AntType::Worker, {10, 10});
         sim.issue_move_order(u, {20, 20});
-        sim.tick();
 
+        ASSERT_TRUE(run_until_over(sim) >= 0);
         ASSERT_TRUE(sim.is_match_over());
         TileCoord frozen_pos = sim.get_unit(u).pos;
         sim.tick();
@@ -766,7 +781,7 @@ void run_suite_12_game_over() {
         sim.init_test_world(60, 60, 1, 50);
         sim.set_player_score(0, 500); // Winner
         sim.set_player_score(1, 200); // Loser
-        sim.tick();
+        ASSERT_TRUE(run_until_over(sim) >= 0);
 
         ASSERT_TRUE(sim.has_targeted_audio_event(0, 56));  // Winner Sound 56
         ASSERT_FALSE(sim.has_targeted_audio_event(0, 42)); // Winner never hears 42

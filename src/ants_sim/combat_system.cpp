@@ -9,6 +9,7 @@
 // handled synchronously, exactly as the original's local handler does before it broadcasts.
 
 #include "sim_engine_impl.hpp"
+#include "ants_sim/game_strings.hpp"
 
 #include <algorithm>
 
@@ -142,7 +143,7 @@ void SimulationEngineImpl::on_attacked(uint8_t team) {
         if (delta > static_cast<int64_t>(kAlarmCueGapMs)) {
             audio_queue_.push_back(AudioEvent{SoundID::BaseAlarmSiren, 0, 0, 1, p});
         }
-        post_news(p, "Ouch!", 55);
+        post_news(p, strings::kOuch);
     }
 }
 
@@ -245,7 +246,7 @@ bool SimulationEngineImpl::melee_contact(AntUnit& a, AntUnit& t) {
     if (water || !can_be_attacked_from(t, a_tile) || stats_.are_allies(a.player_id, t.player_id)) {
         stop_sync(a);
         enter_cant_go(a);
-        post_news(a.player_id, water ? "Can't go there." : "Can't do that...", water ? uint16_t{58} : uint16_t{48});
+        post_news(a.player_id, water ? strings::kCantGoThere : strings::kCantDoThat);
         a.waypoints.clear();
         a.current_waypoint_idx = 0;
         if (a.type == AntType::Combat) resume_after_auto_engage(a);
@@ -528,7 +529,7 @@ void SimulationEngineImpl::drop_powerup(AntUnit& a, TileCoord tile, uint8_t type
 void SimulationEngineImpl::remove_ant(AntUnit& a) {
     const uint8_t killer = (a.killer_team < 4) ? a.killer_team : kNoKiller;
     const bool drowned = (orig_action_of(a) == AntUnit::kActionDrown);
-    post_news(255, drowned ? "Ant drowned." : "Ant dead.", drowned ? uint16_t{52} : uint16_t{51});
+    post_news(255, drowned ? strings::kAntDrowned : strings::kAntDead);
     if (a.player_id < MAX_PLAYERS) {
         stats_.get_player_stats_mut(a.player_id).friendly_lost++;
         if (killer != kNoKiller && killer != a.player_id) stats_.get_player_stats_mut(killer).enemy_killed++;

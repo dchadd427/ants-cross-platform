@@ -1,0 +1,638 @@
+// Status line and message tests: the one-slot status box of Ants.exe (PostStatus FUN_0100e944 with the CLEARSTAT and TXTFLASH
+// tasks), the texts that selections and ordering commands post (FUN_01027f07, FUN_0101b67b / b711 / b78a, FUN_01028a60), the
+// flash flags of the world messages, and the drawing of the box (rect (481, 254) - (620, 266), colour (79, 0, 143)).
+// (docs/GAME_REVERSE_ENGINEERING.md 5.41)
+#include <cstdint>
+#include <cstdio>
+#include <functional>
+#include <string>
+#include <vector>
+
+#include "ants_app/hud.hpp"
+#include "ants_app/renderer.hpp"
+#include "ants_app/status_line.hpp"
+#include "ants_assets/asset_archive.hpp"
+#include "ants_sim/game_strings.hpp"
+#include "ants_sim/sim_engine.hpp"
+
+using namespace ants;
+using namespace ants::app;
+
+#ifndef ORIGINAL_ASSETS_DIR
+#define ORIGINAL_ASSETS_DIR "Original-Ants"
+#endif
+
+namespace {
+
+int g_checks = 0;
+int g_failures = 0;
+const char* g_group = "";
+
+void check(bool ok, const std::string& what) {
+    ++g_checks;
+    if (!ok) {
+        ++g_failures;
+        std::fprintf(stderr, "  FAIL [%s]: %s\n", g_group, what.c_str());
+    }
+}
+
+// Records the text draws of the HUD (with colour) and ignores everything else.
+class TextRenderer : public IRenderer {
+public:
+    void draw_sprite(uint32_t, int32_t, int32_t, bool) override {}
+    void draw_named_sprite(const std::string&, int32_t, int32_t, bool) override {}
+    void fill_rect(int32_t, int32_t, int32_t, int32_t, assets::ColorRGBA) override {}
+    void draw_rect(int32_t, int32_t, int32_t, int32_t, assets::ColorRGBA) override {}
+    void draw_text(const std::string& text, int32_t x, int32_t y, assets::ColorRGBA color) override {
+        texts.push_back({text, x, y, color});
+    }
+    void set_hud_team(uint8_t) override {}
+    struct Text { std::string text; int32_t x; int32_t y; assets::ColorRGBA color; };
+    std::vector<Text> texts;
+
+    // The text drawn in the status box (its top-left corner is (481, 254))
+    const Text* status() const {
+        for (const auto& t : texts) if (t.x == 481 && t.y == 254) return &t;
+        return nullptr;
+    }
+};
+
+const assets::AssetArchive* g_archive = nullptr;
+
+// Advances the HUD by `ticks` game ticks with the given world
+void run(HUD& hud, const sim::WorldState& world, uint32_t ticks) {
+    for (uint32_t t = 0; t < ticks; ++t) hud.update(world, 1);
+}
+
+std::string status_after_render(HUD& hud, const sim::WorldState& world) {
+    TextRenderer rr;
+    ViewportCamera camera;
+    hud.render(rr, *g_archive, world, camera);
+    const auto* s = rr.status();
+    return s ? s->text : std::string();
+}
+
+// A test world with a home tile for player 0 and one hill of player 1
+void make_world(sim::SimulationEngine& sim) {
+    sim.init_test_world(60, 60, 7, 720000);
+    sim.set_anthill(0, sim::TileCoord{2, 2});
+    sim.set_anthill(1, sim::TileCoord{40, 40});
+}
+
+// ------------------------------------------------------------------------------------------------
+// Part A: the status slot
+// ------------------------------------------------------------------------------------------------
+
+void test_slot_replace_and_expiry() {
+    g_group = "slot";
+    std::printf("[status] one slot: a post replaces the text, the text lives 5000 ms after the last non-empty post\n");
+    StatusLine s;
+    s.post("A");
+    s.update(60);                                   // 3000 ms
+    check(s.text() == "A", "A is still there after 3 s");
+    s.post("B");                                    // replaces at once, no queue
+    check(s.text() == "B", "B replaces A");
+    s.update(99);                                   // 4950 ms after B
+    check(s.text() == "B" && s.visible(), "B stays until 5000 ms (exclusive)");
+    s.update(1);                                    // 5000 ms
+    check(s.text().empty() && !s.visible(), "B is gone at 5000 ms after its post");
+    // the same text posted again restarts the life
+    s.post("C");
+    s.update(80);
+    s.post("C");
+    s.update(80);
+    check(s.text() == "C", "re-posting the same text restarts its 5 s");
+}
+
+void test_slot_empty_post() {
+    g_group = "slot";
+    std::printf("[status] an empty post clears at once and does not re-arm the timer\n");
+    StatusLine s;
+    s.post("A");
+    s.update(40);
+    s.post("");
+    check(s.text().empty(), "the empty post clears");
+    s.update(10);
+    check(s.text().empty(), "and it stays empty");
+    s.post("B");
+    s.update(99);
+    check(s.text() == "B", "a new post starts a fresh 5 s life");
+    s.update(1);
+    check(s.text().empty(), "which ends 5 s later");
+    // clear() is the same
+    s.post("D");
+    s.clear();
+    check(s.text().empty(), "clear() empties");
+}
+
+void test_slot_flash() {
+    g_group = "slot";
+    std::printf("[status] the flash flag flickers the text for 500 ms: visible steps '#.#.#.#.#.##' at 50 ms\n");
+    StatusLine s;
+    s.post("Can't - already have food.", true);
+    std::string pattern;
+    for (int step = 0; step < 12; ++step) {
+        pattern += s.visible() ? '#' : '.';
+        s.update(1);
+    }
+    check(pattern == "#.#.#.#.#.##", "flash pattern is " + pattern);
+    check(!s.flashing(), "the flash is over after 500 ms");
+    // a re-post restarts the flash
+    s.post("x", true);
+    s.update(1);
+    check(!s.visible(), "step 1 of a new flash is hidden");
+    s.post("x", true);
+    check(s.visible() && s.flashing(), "a re-post restarts the flash at its visible first step");
+    // a post without the flag ends a running flash
+    s.update(2);
+    s.post("plain", false);
+    std::string steady;
+    for (int step = 0; step < 6; ++step) { steady += s.visible() ? '#' : '.'; s.update(1); }
+    check(steady == "######", "a plain post is always visible");
+    // an empty post ends the flash too
+    s.post("y", true);
+    s.post("");
+    s.post("z", false);
+    check(s.visible() && !s.flashing(), "the flash of an earlier post does not carry over");
+}
+
+// ------------------------------------------------------------------------------------------------
+// Part B: the status box on screen
+// ------------------------------------------------------------------------------------------------
+
+void test_box_geometry() {
+    g_group = "box";
+    std::printf("[status] the text is drawn at (481, 254) in colour (79, 0, 143), nothing invented while it is empty\n");
+    sim::SimulationEngine sim;
+    make_world(sim);
+    HUD hud;
+    hud.init(0);
+    const sim::WorldState& world = sim.get_world_state();
+
+    // the match screen starts with "Welcome to Ants!" (string 5)
+    {
+        TextRenderer rr;
+        ViewportCamera camera;
+        hud.render(rr, *g_archive, world, camera);
+        const auto* s = rr.status();
+        check(s && s->text == "Welcome to Ants!", "the welcome text is posted when the match screen is built");
+        check(s && s->color.r == 79 && s->color.g == 0 && s->color.b == 143, "colour (79, 0, 143)");
+    }
+    run(hud, world, 100);                          // 5 s
+    check(status_after_render(hud, world).empty(), "nothing is drawn once the welcome has expired (no idle text)");
+
+    // a selected ant does not bring back "Ready." / "Waiting for orders." / "Enemy ant."
+    const uint32_t w = sim.spawn_unit(0, sim::AntType::Worker, sim::TileCoord{10, 10});
+    const uint32_t foe = sim.spawn_unit(1, sim::AntType::Worker, sim::TileCoord{12, 10});
+    hud.select_ant(w);
+    run(hud, sim.get_world_state(), 101);
+    check(status_after_render(hud, sim.get_world_state()).empty(), "no persistent text for a selected ant");
+    hud.select_ant(foe);
+    run(hud, sim.get_world_state(), 1);
+    check(status_after_render(hud, sim.get_world_state()).empty(), "no 'Enemy ant.' text");
+    hud.select_base(0);
+    run(hud, sim.get_world_state(), 1);
+    check(status_after_render(hud, sim.get_world_state()).empty(), "no text for the home hill either");
+}
+
+void test_box_clip_and_flash() {
+    g_group = "box";
+    std::printf("[status] the text is clipped at 139 px and hidden on the odd 50 ms steps of a flash\n");
+    sim::SimulationEngine sim;
+    make_world(sim);
+    HUD hud;
+    hud.init(0);
+    const sim::WorldState& world = sim.get_world_state();
+    hud.post_status("This message is much longer than the 139 pixel box of the status line can show");
+    const std::string shown = status_after_render(hud, world);
+    check(!shown.empty() && shown.size() * 6 <= 139, "the drawn text fits 139 px (6 px per character in this renderer): " + shown);
+    hud.post_status("Ouch!", true);
+    check(status_after_render(hud, world) == "Ouch!", "step 0 of a flash is visible");
+    run(hud, world, 1);
+    check(status_after_render(hud, world).empty(), "step 1 is hidden");
+    run(hud, world, 1);
+    check(status_after_render(hud, world) == "Ouch!", "step 2 is visible");
+}
+
+// ------------------------------------------------------------------------------------------------
+// Part C: selection texts
+// ------------------------------------------------------------------------------------------------
+
+void test_selection_texts() {
+    g_group = "select";
+    std::printf("[status] one own ant of each type posts 6..11, several ants 12, every deselect clears\n");
+    sim::SimulationEngine sim;
+    make_world(sim);
+    HUD hud;
+    hud.init(0);
+    const sim::AntType types[6] = {sim::AntType::Worker, sim::AntType::Bomber, sim::AntType::Fire,
+                                   sim::AntType::Thief, sim::AntType::Combat, sim::AntType::Swimmer};
+    const char* expect[6] = {"Ready!", "BomberAnt selected.", "Where to?", "Thief here", "Yessir!", "SwimmerAnt selected."};
+    uint32_t ids[6];
+    for (int i = 0; i < 6; ++i) ids[i] = sim.spawn_unit(0, types[i], sim::TileCoord{10 + 3 * i, 10});
+    const uint32_t foe = sim.spawn_unit(1, sim::AntType::Worker, sim::TileCoord{30, 10});
+    const sim::WorldState& world = sim.get_world_state();
+    for (int i = 0; i < 6; ++i) {
+        hud.select_ant(ids[i]);
+        run(hud, world, 1);
+        check(status_after_render(hud, world) == expect[i], std::string("selecting the ") + expect[i] + " ant");
+    }
+    // the text of a selection lives 5 s
+    run(hud, world, 99);
+    check(!status_after_render(hud, world).empty(), "still there 4950 ms after the selection");
+    run(hud, world, 1);
+    check(status_after_render(hud, world).empty(), "gone after 5000 ms");
+
+    // a marquee over two own ants: "Ready!" (string 12)
+    hud.clear_selection();
+    run(hud, world, 1);
+    hud.select_ants_in_rect(10 * 32, 10 * 32 - 20, 14 * 32, 10 * 32 + 16, world, false);
+    run(hud, world, 1);
+    check(hud.get_selected_ant_ids().size() >= 2, "the marquee took two ants");
+    check(status_after_render(hud, world) == "Ready!", "more than one ant: string 12");
+
+    // every deselect clears: empty ground, an enemy ant, the own hill
+    hud.post_status("old text");
+    hud.clear_selection();
+    run(hud, world, 1);
+    check(status_after_render(hud, world).empty(), "a click on empty ground clears the old text");
+    hud.select_ant(ids[0]);
+    run(hud, world, 1);
+    check(status_after_render(hud, world) == "Ready!", "worker selected");
+    hud.select_ant(foe);
+    run(hud, world, 1);
+    check(status_after_render(hud, world).empty(), "selecting an enemy ant clears the text and posts none");
+    hud.select_ant(ids[0]);
+    run(hud, world, 1);
+    hud.select_base(0);
+    run(hud, world, 1);
+    check(status_after_render(hud, world).empty(), "selecting the own hill clears the text");
+}
+
+void test_type_change_text() {
+    g_group = "select";
+    std::printf("[status] a selected ant that takes a power-up rebuilds the panel: the text of its new type (string 12 for a group)\n");
+    sim::SimulationEngine sim;
+    make_world(sim);
+    HUD hud;
+    hud.init(0);
+    const uint32_t w = sim.spawn_unit(0, sim::AntType::Worker, sim::TileCoord{10, 10});
+    sim.grid_mut().place_powerup(12, 10, 1);          // a bomber power-up
+    hud.select_ant(w);
+    run(hud, sim.get_world_state(), 101);
+    check(status_after_render(hud, sim.get_world_state()).empty(), "the selection text has expired");
+    sim.issue_move_order(w, sim::TileCoord{12, 10});
+    std::string seen;
+    for (int t = 0; t < 120 && seen.empty(); ++t) {
+        sim.tick();
+        hud.update(sim.get_world_state(), 1);
+        seen = hud.status_line().text();
+    }
+    check(seen == "BomberAnt selected.", "the type change posts the text of the new type: " + seen);
+
+    // a group: string 12
+    sim::SimulationEngine sim2;
+    make_world(sim2);
+    HUD hud2;
+    hud2.init(0);
+    const uint32_t a = sim2.spawn_unit(0, sim::AntType::Worker, sim::TileCoord{10, 10});
+    const uint32_t b = sim2.spawn_unit(0, sim::AntType::Worker, sim::TileCoord{10, 13});
+    sim2.grid_mut().place_powerup(12, 10, 2);         // a fire ant power-up
+    hud2.select_ants_in_rect(10 * 32 - 10, 10 * 32 - 20, 11 * 32, 13 * 32 + 16, sim2.get_world_state(), false);
+    (void)b;
+    run(hud2, sim2.get_world_state(), 101);
+    sim2.issue_move_order(a, sim::TileCoord{12, 10});
+    std::string seen2;
+    for (int t = 0; t < 120 && seen2.empty(); ++t) {
+        sim2.tick();
+        hud2.update(sim2.get_world_state(), 1);
+        seen2 = hud2.status_line().text();
+    }
+    check(seen2 == "Ready!", "a group's panel is rebuilt with string 12: " + seen2);
+}
+
+void test_quiet_paths() {
+    g_group = "select";
+    std::printf("[status] quiet paths keep the text: a shift marquee (0x1027950), the death of a selected ant\n");
+    sim::SimulationEngine sim;
+    make_world(sim);
+    HUD hud;
+    hud.init(0);
+    const uint32_t a = sim.spawn_unit(0, sim::AntType::Worker, sim::TileCoord{10, 10});
+    const uint32_t b = sim.spawn_unit(0, sim::AntType::Bomber, sim::TileCoord{12, 10});
+    const sim::WorldState& world = sim.get_world_state();
+    hud.select_ant(a);
+    run(hud, world, 1);
+    check(status_after_render(hud, world) == "Ready!", "first ant");
+    (void)b;
+    hud.post_status("Bomb dropped.");
+    // adding with shift keeps the text that is there
+    hud.select_ants_in_rect(12 * 32 - 10, 10 * 32 - 20, 12 * 32 + 10, 10 * 32 + 16, world, true);
+    run(hud, world, 1);
+    check(status_after_render(hud, world) == "Bomb dropped.", "a shift-add is quiet");
+}
+
+// ------------------------------------------------------------------------------------------------
+// Part D: ordering commands
+// ------------------------------------------------------------------------------------------------
+
+struct Sfx {
+    std::vector<uint32_t> ids;
+    void attach(HUD& hud) { hud.set_on_play_sfx([this](uint32_t id) { ids.push_back(id); }); }
+    bool has(uint32_t id) const { for (uint32_t x : ids) if (x == id) return true; return false; }
+};
+
+void test_move_acknowledgement() {
+    g_group = "orders";
+    std::printf("[status] a move order: the closest ant answers with its go voice and \"On my way.\" / \"Movin' out.\" / \"Here I go...\"\n");
+    const sim::AntType types[6] = {sim::AntType::Worker, sim::AntType::Bomber, sim::AntType::Fire,
+                                   sim::AntType::Thief, sim::AntType::Combat, sim::AntType::Swimmer};
+    const char* text[6] = {"On my way.", "On my way.", "On my way.", "Here I go...", "Movin' out.", "On my way."};
+    for (int i = 0; i < 6; ++i) {
+        sim::SimulationEngine sim;
+        make_world(sim);
+        HUD hud;
+        Sfx sfx;
+        hud.init(0);
+        sfx.attach(hud);
+        const uint32_t ant = sim.spawn_unit(0, types[i], sim::TileCoord{10, 10});
+        hud.select_ant(ant);
+        run(hud, sim.get_world_state(), 1);
+        sfx.ids.clear();
+        hud.dispatch_move_order(20, 10, sim);
+        check(status_after_render(hud, sim.get_world_state()) == text[i], std::string("move order of a ") + text[i]);
+        check(sfx.ids.size() == 1, "one voice");
+        uint32_t expect_lo = 0;
+        uint32_t expect_hi = 0;
+        switch (types[i]) {
+            case sim::AntType::Worker:  expect_lo = 15; expect_hi = 17; break;   // gantcommand / gantgo
+            case sim::AntType::Bomber:  expect_lo = expect_hi = 37; break;
+            case sim::AntType::Fire:    expect_lo = expect_hi = 23; break;
+            case sim::AntType::Thief:   expect_lo = expect_hi = 19; break;
+            case sim::AntType::Combat:  expect_lo = 28; expect_hi = 29; break;   // combgo1 / combgo2
+            case sim::AntType::Swimmer: expect_lo = expect_hi = 33; break;
+        }
+        check(!sfx.ids.empty() && sfx.ids[0] >= expect_lo && sfx.ids[0] <= expect_hi, "the go voice of the type");
+    }
+}
+
+void test_attack_and_special() {
+    g_group = "orders";
+    std::printf("[status] attack: \"Attack!\" with the attack voice; special orders: thief 69, fire ant 71, bomber voice only, several ants silent\n");
+    {
+        sim::SimulationEngine sim;
+        make_world(sim);
+        HUD hud;
+        Sfx sfx;
+        hud.init(0);
+        sfx.attach(hud);
+        const uint32_t combat = sim.spawn_unit(0, sim::AntType::Combat, sim::TileCoord{10, 10});
+        const uint32_t foe = sim.spawn_unit(1, sim::AntType::Worker, sim::TileCoord{16, 10});
+        hud.select_ant(combat);
+        run(hud, sim.get_world_state(), 1);
+        sfx.ids.clear();
+        hud.dispatch_attack_order(foe, sim);
+        check(status_after_render(hud, sim.get_world_state()) == "Attack!", "text 67");
+        check(sfx.ids.size() == 1 && (sfx.ids[0] == 59 || sfx.ids[0] == 60), "the combat ant's attack voice (combat1 / combat2)");
+    }
+    {
+        // a single fire ant: click on the ground = ignite: "Burn..." and firedo
+        sim::SimulationEngine sim;
+        make_world(sim);
+        HUD hud;
+        Sfx sfx;
+        hud.init(0);
+        sfx.attach(hud);
+        const uint32_t fire = sim.spawn_unit(0, sim::AntType::Fire, sim::TileCoord{10, 10});
+        hud.select_ant(fire);
+        run(hud, sim.get_world_state(), 1);
+        sfx.ids.clear();
+        hud.dispatch_smart_special_ability(14 * 32 + 16, 10 * 32 + 16, sim);
+        check(status_after_render(hud, sim.get_world_state()) == "Burn...", "text 71");
+        check(sfx.ids.size() == 1 && sfx.ids[0] == 25, "firedo.wav");
+    }
+    {
+        // two fire ants: the same order is silent
+        sim::SimulationEngine sim;
+        make_world(sim);
+        HUD hud;
+        Sfx sfx;
+        hud.init(0);
+        sfx.attach(hud);
+        const uint32_t f1 = sim.spawn_unit(0, sim::AntType::Fire, sim::TileCoord{10, 10});
+        const uint32_t f2 = sim.spawn_unit(0, sim::AntType::Fire, sim::TileCoord{10, 12});
+        hud.set_selected_ant_ids({f1, f2});
+        hud.select_ants_in_rect(10 * 32 - 10, 10 * 32 - 20, 11 * 32, 12 * 32 + 16, sim.get_world_state(), false);
+        run(hud, sim.get_world_state(), 101);
+        sfx.ids.clear();
+        hud.dispatch_smart_special_ability(14 * 32 + 16, 10 * 32 + 16, sim);
+        check(status_after_render(hud, sim.get_world_state()).empty(), "no text for a special order given to two ants");
+        check(sfx.ids.empty(), "and no voice");
+    }
+    {
+        // a single bomber: plants a bomb: bombdo.wav and no text
+        sim::SimulationEngine sim;
+        make_world(sim);
+        HUD hud;
+        Sfx sfx;
+        hud.init(0);
+        sfx.attach(hud);
+        const uint32_t bomber = sim.spawn_unit(0, sim::AntType::Bomber, sim::TileCoord{10, 10});
+        hud.select_ant(bomber);
+        run(hud, sim.get_world_state(), 101);
+        sfx.ids.clear();
+        hud.dispatch_smart_special_ability(14 * 32 + 16, 10 * 32 + 16, sim);
+        check(status_after_render(hud, sim.get_world_state()).empty(), "no text for the bomber's special order");
+        check(sfx.ids.size() == 1 && sfx.ids[0] == 39, "bombdo.wav");
+    }
+    {
+        // a single thief ordered onto an enemy hill: "My pleasure..." and theifdo
+        sim::SimulationEngine sim;
+        make_world(sim);
+        HUD hud;
+        Sfx sfx;
+        hud.init(0);
+        sfx.attach(hud);
+        const uint32_t thief = sim.spawn_unit(0, sim::AntType::Thief, sim::TileCoord{30, 30});
+        hud.select_ant(thief);
+        run(hud, sim.get_world_state(), 101);
+        sfx.ids.clear();
+        hud.dispatch_smart_special_ability(41 * 32 + 16, 41 * 32 + 16, sim);
+        check(status_after_render(hud, sim.get_world_state()) == "My pleasure...", "text 69");
+        check(sfx.ids.size() == 1 && sfx.ids[0] == 21, "theifdo.wav");
+    }
+}
+
+void test_stop() {
+    g_group = "orders";
+    std::printf("[status] the Stop button always posts \"Stopping.\"\n");
+    sim::SimulationEngine sim;
+    make_world(sim);
+    HUD hud;
+    Sfx sfx;
+    hud.init(0);
+    sfx.attach(hud);
+    const uint32_t ant = sim.spawn_unit(0, sim::AntType::Worker, sim::TileCoord{10, 10});
+    hud.select_ant(ant);
+    run(hud, sim.get_world_state(), 101);
+    ViewportCamera camera;
+    hud.handle_mouse_down(600, 200, SDL_BUTTON_LEFT, sim, camera);
+    check(status_after_render(hud, sim.get_world_state()) == "Stopping.", "text 54");
+}
+
+// ------------------------------------------------------------------------------------------------
+// Part E: world messages
+// ------------------------------------------------------------------------------------------------
+
+void test_world_message_flags() {
+    g_group = "world";
+    std::printf("[status] the flash flag belongs to 17, 49, 50, 53, 59 and 75; every other status is steady\n");
+    for (uint16_t id = 1; id < 120; ++id) {
+        const bool expect = (id == 17 || id == 49 || id == 50 || id == 53 || id == 59 || id == 75);
+        check(sim::strings::blinks(id) == expect, "flash flag of string " + std::to_string(id));
+    }
+    check(std::string(sim::strings::text(60)) == "Got Food!", "string 60");
+    check(std::string(sim::strings::text(53)) == "A ThiefAnt is at your anthill!", "string 53");
+    check(sim::strings::format(5, "Ants") == "Welcome to Ants!", "string 5 with the title");
+    check(sim::strings::format(39, "Ann", "Blue", "Bob", "Red") == "Ann (Blue) and Bob (Red) are a team now!", "string 39 with four arguments");
+    check(std::string(sim::strings::colour_name(0)) == "Black" && std::string(sim::strings::colour_name(3)) == "Green", "colour names");
+}
+
+void test_events_reach_the_status_line() {
+    g_group = "world";
+    std::printf("[status] a world message reaches the local player's status line with its flash flag, others' do not\n");
+    sim::SimulationEngine sim;
+    make_world(sim);
+    HUD hud;
+    hud.init(0);
+    run(hud, sim.get_world_state(), 101);
+    // a worker of player 0 carrying food is ordered onto food: "Can't - already have food." flashes
+    const uint32_t w0 = sim.spawn_unit(0, sim::AntType::Worker, sim::TileCoord{10, 10});
+    sim::AntUnit& a = sim.get_unit(w0);
+    a.holding = 1;
+    a.carried_food = 1;
+    a.carried_points = 25;
+    sim::FoodObject o;
+    o.row = 10;
+    o.col = 13;
+    o.units = 2;
+    o.value = 25;
+    o.remaining = 2;
+    o.thresholds = {2, 0};
+    o.stage_tiles = {372, 0x7FFE};
+    sim.grid_mut().add_food_object(std::move(o));
+    sim.clear_news_events();
+    sim.issue_move_order(w0, sim::TileCoord{13, 10});
+    bool seen = false;
+    for (int t = 0; t < 200 && !seen; ++t) {
+        sim.tick();
+        hud.poll_sim_events(sim);
+        hud.update(sim.get_world_state(), 1);
+        seen = hud.status_line().text() == "Can't - already have food.";
+    }
+    check(seen, "text 17 reached the status line");
+    check(hud.status_line().flashing() || hud.status_line().age_ticks() > 0, "posted with the flash flag");
+
+    // the same message of player 1's ant is not shown to player 0
+    HUD hud2;
+    hud2.init(0);
+    run(hud2, sim.get_world_state(), 101);
+    sim::SimulationEngine sim2;
+    make_world(sim2);
+    const uint32_t w1 = sim2.spawn_unit(1, sim::AntType::Worker, sim::TileCoord{10, 10});
+    sim::AntUnit& b = sim2.get_unit(w1);
+    b.holding = 1;
+    b.carried_food = 1;
+    b.carried_points = 25;
+    sim::FoodObject o2;
+    o2.row = 10;
+    o2.col = 13;
+    o2.units = 2;
+    o2.value = 25;
+    o2.remaining = 2;
+    o2.thresholds = {2, 0};
+    o2.stage_tiles = {372, 0x7FFE};
+    sim2.grid_mut().add_food_object(std::move(o2));
+    sim2.issue_move_order(w1, sim::TileCoord{13, 10});
+    for (int t = 0; t < 200; ++t) {
+        sim2.tick();
+        hud2.poll_sim_events(sim2);
+        hud2.update(sim2.get_world_state(), 1);
+    }
+    check(hud2.status_line().text().empty(), "player 1's message does not reach player 0");
+}
+
+
+void test_hatch_texts() {
+    g_group = "world";
+    std::printf("[status] hatching: 16 without eggs, 14 while one hatches, 13 (with the canthatch cue) below 200 points, 15 when accepted, 63 at the emergence\n");
+    sim::SimulationEngine sim;
+    make_world(sim);
+    sim.set_player_eggs(0, 0);
+    sim.set_player_score(0, 500);
+    auto texts = [&](std::vector<uint16_t>& ids) {
+        ids.clear();
+        for (const auto& n : sim.poll_news_events()) if (n.target_player == 0) ids.push_back(n.string_id);
+    };
+    std::vector<uint16_t> ids;
+    sim.clear_news_events();
+    check(sim.try_hatch(0, sim::AntType::Worker) == sim::SimulationEngine::HatchResult::NoEggs, "no eggs");
+    texts(ids);
+    check(ids.size() == 1 && ids[0] == 16, "text 16 \"No eggs to hatch!\" (checked first)");
+
+    sim.set_player_eggs(0, 3);
+    sim.set_player_score(0, 100);
+    sim.clear_audio_events();
+    check(sim.try_hatch(0, sim::AntType::Worker) == sim::SimulationEngine::HatchResult::NotEnoughPoints, "not enough points");
+    texts(ids);
+    check(ids.size() == 1 && ids[0] == 13, "text 13 \"You need 200 points to hatch!\"");
+    check(sim.has_targeted_audio_event(0, sim::SoundID::AntStop), "13 plays the canthatch cue (antstop.wav, 61)");
+
+    sim.set_player_score(0, 500);
+    check(sim.try_hatch(0, sim::AntType::Worker) == sim::SimulationEngine::HatchResult::Started, "accepted");
+    texts(ids);
+    check(ids.size() == 1 && ids[0] == 15, "text 15 \"Hatching a new Ant!\"");
+    check(sim.get_player_score(0) == 300, "the cost is 200 points");
+    check(sim.try_hatch(0, sim::AntType::Worker) == sim::SimulationEngine::HatchResult::AlreadyHatching, "one at a time");
+    texts(ids);
+    check(ids.size() == 1 && ids[0] == 14, "text 14 \"An Ant is already hatching!\"");
+
+    // the newborn appears 8000 ms after the click: text 63 and the exithill cue
+    sim.clear_audio_events();
+    bool ready = false;
+    int ms = 0;
+    for (; ms < 9000 && !ready; ms += 50) {
+        sim.tick();
+        for (const auto& n : sim.poll_news_events()) if (n.target_player == 0 && n.string_id == 63) ready = true;
+    }
+    check(ready, "text 63 \"Ready!\" when the ant emerges");
+    check(ms >= 8000 && ms <= 8200, "8000 ms after the click");
+    check(sim.has_audio_event(sim::SoundID::ExitHill), "exithill.wav");
+}
+
+}  // namespace
+
+int main() {
+    assets::AssetArchive arc;
+    if (!arc.load_chd(std::string(ORIGINAL_ASSETS_DIR) + "/ants.chd")) {
+        std::fprintf(stderr, "cannot load ants.chd\n");
+        return 2;
+    }
+    g_archive = &arc;
+    test_slot_replace_and_expiry();
+    test_slot_empty_post();
+    test_slot_flash();
+    test_box_geometry();
+    test_box_clip_and_flash();
+    test_selection_texts();
+    test_type_change_text();
+    test_quiet_paths();
+    test_move_acknowledgement();
+    test_attack_and_special();
+    test_stop();
+    test_world_message_flags();
+    test_events_reach_the_status_line();
+    test_hatch_texts();
+    std::printf("\nstatus messages: %d checks, %d failures\n", g_checks, g_failures);
+    return g_failures == 0 ? 0 : 1;
+}
