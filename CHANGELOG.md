@@ -39,6 +39,15 @@ Ground truth for every entry is in [`docs/GAME_REVERSE_ENGINEERING.md`](docs/GAM
   - **Found on the way, for the audit** (docs: implementation_plan.md section 18): `tests/test_sim/test_challenger_m2_it2_deep_stress.cpp` has not been part of the build since an early commit and no longer compiles
     (it uses the retired slot-queue API of the hill). (An earlier version of this line said that the death clips are no longer started by a separate effect: wrong, only the unused helper `spawn_death_effect` was removed; the effect path in `movement_system.cpp` is still in use, see the audit.)
 
+## v0.0.73 - 2026-09-30 - The objects of the ground in the fog of the original
+
+Batch 6 part 5 (`docs/audit/ledger_terrain_fog.md` NEW-4, NEW-6; re-read in `Ants.exe`: `0x1008089` - `0x100835e`, `0x10076b6`, `0x1007202`, `0x10071dd`, `0x1008bc6`, `0x1008bb7`, `0x1007352`):
+
+- **An object is also drawn from every explored cell of its footprint whose anchor is unexplored**: the original's layer-2 pass has a second path for cells that are not the anchor: when such a cell is explored and the anchor is not, the object is drawn at the anchor from that cell's turn in the row-major pass. Only the draw order changes (the same pixels are drawn again later), which shows where two objects overlap at the edge of the explored ground; the remake drew each object once, at its anchor's turn.
+- **Food is hidden only while its anchor is unexplored and none of its cells is**: a pile whose anchor is in the fog but one of whose cells is explored shows up; and its footprint is the one of its **current stage** (a cola can has 19, 13, 7 and 3 cells in its four stages) read from the live cells, not the cells that it had at the start of the match within 4 cells of its anchor (exploring a cell that dropped out of the footprint no longer reveals the pile).
+- Docs: `docs/GAME_REVERSE_ENGINEERING.md` 5.57, README, `docs/AUDIT_ONE_TO_ONE.md` (progress).
+- Tests: `test_render_parity` `test_fog_objects` (54 fog patterns on the six maps against an independent model of the original's pass, per view: 4 of the first 12 patterns differed before the change) and `test_food_fog_footprint` (a cola can eaten to its third stage). Version assertions of 12.108.
+
 ## v0.0.72 - 2026-09-30 - The chat log of the original
 
 Batch 6 part 4 (`docs/audit/ledger_scheduler.md` CHATSCRL / CHATAPPD, `docs/audit/ledger_ui.md` NEW-9, `ledger_sound_texts.md`; re-read in `Ants.exe`: `0x1011e78` - `0x1012190`, `0x1012015`, `0x1012096`, `0x101228a`, `0x10123e2`, `0x10125db`, `0x1025234`, `0x1025282`, `0x10122d4`, `0x1010210`):

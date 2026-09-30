@@ -225,8 +225,7 @@ struct StaticMapObject {
     int32_t anim_id{-1};        // Table-4 animation id of the tile placed by the map (dictionary index)
     uint16_t anchor_x{0};       // anchor cell column
     uint16_t anchor_y{0};       // anchor cell row
-    bool is_food{false};
-    std::vector<std::pair<uint16_t, uint16_t>> food_tiles{}; // footprint cells that carry this food item
+    bool is_food{false};        // a food pile: its stage and footprint are read from the live cells (anchor bytes of the current stage)
 };
 
 /**
@@ -391,6 +390,11 @@ private:
     void draw_template_world(int32_t anim_id, int32_t world_x, int32_t world_y, uint8_t colour = TEAM_NONE);
     const AnimBounds& anim_bounds(int32_t anim_id);
     void draw_static_object(const StaticMapObject& obj, const ants::sim::Grid& grid, const ants::sim::WorldState* world);
+    /// The second path of the layer-2 pass (FUN_01008089 0x10082a9 - 0x1008322): a cell of an object that is not its anchor, explored while its anchor is not, draws the
+    /// object at the anchor from this cell's turn in the row-major pass (docs 5.57)
+    void draw_object_from_body_cell(const ants::sim::Grid& grid, const ants::sim::WorldState& world, int32_t col, int32_t row);
+    /// The Table-4 animation of a food stage tile
+    int32_t food_stage_anim(uint16_t tile) const;
     void draw_single_ant(const ants::sim::AntSnapshot& ant);
     void draw_anthill_selection_brackets(int32_t cx, int32_t cy, uint32_t elapsed_ms = 0);
 

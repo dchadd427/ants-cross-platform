@@ -589,26 +589,7 @@ void Renderer::set_level(const ants::assets::LevelData& level) {
             obj.anchor_x = static_cast<uint16_t>(x);
             obj.anchor_y = static_cast<uint16_t>(y);
 
-            const bool is_food = (low.rfind("fd", 0) == 0 || low.rfind("food", 0) == 0);
-            obj.is_food = is_food;
-            if (is_food) {
-                // Find local cells belonging to this food clump (within radius 4 of anchor)
-                const int32_t min_x = std::max(0, static_cast<int32_t>(x) - 4);
-                const int32_t max_x = std::min(static_cast<int32_t>(level.width) - 1, static_cast<int32_t>(x) + 4);
-                const int32_t min_y = std::max(0, static_cast<int32_t>(y) - 4);
-                const int32_t max_y = std::min(static_cast<int32_t>(level.height) - 1, static_cast<int32_t>(y) + 4);
-                for (int32_t fy = min_y; fy <= max_y; ++fy) {
-                    for (int32_t fx = min_x; fx <= max_x; ++fx) {
-                        const auto& fc = level.get_cell_layer2(static_cast<uint32_t>(fx), static_cast<uint32_t>(fy));
-                        if (fc.tile_index == c2.tile_index && (c2.properties == 0 || fc.properties == c2.properties)) {
-                            obj.food_tiles.push_back({static_cast<uint16_t>(fx), static_cast<uint16_t>(fy)});
-                        }
-                    }
-                }
-                if (obj.food_tiles.empty()) {
-                    obj.food_tiles.push_back({static_cast<uint16_t>(x), static_cast<uint16_t>(y)});
-                }
-            }
+            obj.is_food = (low.rfind("fd", 0) == 0 || low.rfind("food", 0) == 0);
 
             object_index_by_cell_[static_cast<size_t>(y) * level.width + x] = static_cast<int32_t>(static_decor_objects_.size());
             static_decor_objects_.push_back(std::move(obj));
@@ -831,43 +812,57 @@ void Renderer::render_terrain_layer1(const ants::sim::Grid& grid) {
 // Terrain layer 2 (objects, food, bombs, fire walls, bridges, power-ups, anthills)
 // ============================================================================
 
+int32_t Renderer::food_stage_anim(uint16_t tile) const {
+    if (tile < tile_anim_id_.size() && tile_anim_id_[tile] >= 0) return tile_anim_id_[tile];
+    return (archive_ && tile < archive_->animation_count()) ? static_cast<int32_t>(tile) : -1;
+}
+
 void Renderer::draw_static_object(const StaticMapObject& obj, const ants::sim::Grid& grid,
                                   const ants::sim::WorldState* world) {
     int32_t anim_id = obj.anim_id;
     if (obj.is_food) {
-        // Food shows the template of its current stage tile at the same anchor (SetTile keeps the anchor).
-        bool has_any_food = false;
-        uint16_t cur_tile = ants::assets::LVL_EMPTY_TILE;
-        for (const auto& tile : obj.food_tiles) {
-            if (grid.in_bounds(tile.first, tile.second)) {
-                const auto& cell = grid.get_cell(tile.first, tile.second);
-                if (cell.has_food()) {
-                    has_any_food = true;
-                    cur_tile = cell.interactive_id;
-                    break;
-                }
-            }
-        }
-        if (!has_any_food) return; // All food in this item has been gathered
+        // Food shows the template of its current stage tile at the same anchor (SetTile keeps the anchor): the anchor cell holds it while any is left.
+        if (!grid.in_bounds(obj.anchor_x, obj.anchor_y)) return;
+        const auto& anchor = grid.get_cell(obj.anchor_x, obj.anchor_y);
+        if (!anchor.has_food()) return; // All food in this item has been gathered
 
-        // Fog: an object is drawn once any cell of its footprint is explored (FUN_01008089 layer-2 path)
-        if (world && world->fog_of_war_enabled) {
-            bool any_explored = false;
-            for (const auto& tile : obj.food_tiles) {
-                if (world->is_tile_revealed(tile.first, tile.second)) { any_explored = true; break; }
-            }
-            if (!any_explored) return;
-        }
+        // Fog: food is one of the four classes that an unexplored ANCHOR hides (FUN_01008089 0x10071dd); the explored cells of its footprint draw it from their own turn
+        if (world && world->fog_of_war_enabled && !world->is_tile_revealed(obj.anchor_x, obj.anchor_y)) return;
 
-        if (cur_tile != ants::assets::LVL_EMPTY_TILE) {
-            const int32_t stage = (cur_tile < tile_anim_id_.size() && tile_anim_id_[cur_tile] >= 0)
-                                      ? tile_anim_id_[cur_tile]
-                                      : (cur_tile < archive_->animation_count() ? static_cast<int32_t>(cur_tile) : -1);
-            if (stage >= 0) anim_id = stage;
-        }
+        const int32_t stage = food_stage_anim(anchor.interactive_id);
+        if (stage >= 0) anim_id = stage;
     }
     if (anim_id < 0) return;
     draw_template_world(anim_id, static_cast<int32_t>(obj.anchor_x) * TILE_SIZE, static_cast<int32_t>(obj.anchor_y) * TILE_SIZE);
+}
+
+void Renderer::draw_object_from_body_cell(const ants::sim::Grid& grid, const ants::sim::WorldState& world, int32_t col, int32_t row) {
+    const auto& cell = grid.get_cell(static_cast<uint32_t>(col), static_cast<uint32_t>(row));
+    if (cell.is_empty_overlay()) return;
+    const int32_t ax = cell.anchor_x, ay = cell.anchor_y;
+    if (ax < 0 || ay < 0 || !grid.in_bounds(ax, ay) || (ax == col && ay == row)) return;       // an anchor, or a cell without anchor bytes, draws itself
+    const size_t index = static_cast<size_t>(row) * map_width_ + static_cast<size_t>(col);
+    if (index < object_index_by_cell_.size() && object_index_by_cell_[index] >= 0) return;    // the anchor of a static object whose bytes do not name itself (the editor leaves 0, 0)
+    if (!world.is_tile_revealed(col, row) || world.is_tile_revealed(ax, ay)) return;
+    const size_t anchor_index = static_cast<size_t>(ay) * map_width_ + static_cast<size_t>(ax);
+    if (anchor_index < object_index_by_cell_.size() && object_index_by_cell_[anchor_index] >= 0) {
+        const StaticMapObject& obj = static_decor_objects_[static_cast<size_t>(object_index_by_cell_[anchor_index])];
+        int32_t anim_id = obj.anim_id;
+        if (obj.is_food) {                                                                       // the tile that this cell of the current stage shows
+            const int32_t stage = food_stage_anim(cell.interactive_id);
+            if (stage >= 0) anim_id = stage;
+        }
+        if (anim_id >= 0) draw_template_world(anim_id, ax * TILE_SIZE, ay * TILE_SIZE);
+        return;
+    }
+    if (has_anthill_bases_) {                                                                    // a hill: the colony whose anchor it is
+        for (size_t t = 0; t < 4; ++t) {
+            if (hill_anchor_cell_[t].x == ax && hill_anchor_cell_[t].y == ay) {
+                draw_template_world(anim_id_hill_[t], ax * TILE_SIZE, ay * TILE_SIZE);
+                return;
+            }
+        }
+    }
 }
 
 void Renderer::render_terrain_layer2_structures(const ants::sim::Grid& grid, const ants::sim::WorldState* world) {
@@ -902,6 +897,9 @@ void Renderer::render_terrain_layer2_structures(const ants::sim::Grid& grid, con
                     }
                 }
             }
+
+            // 2b. A cell of an object that is explored while the object's anchor is not: the object is drawn from here (FUN_01008089's second path)
+            if (fog && level_set_) draw_object_from_body_cell(grid, *world, c, r);
 
             // 3. Runtime item on this cell
             const auto& cell = grid.get_cell(static_cast<uint32_t>(c), static_cast<uint32_t>(r));

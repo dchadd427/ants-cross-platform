@@ -13,6 +13,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <functional>
 #include <algorithm>
 #include <string>
 #include <vector>
@@ -22,6 +23,7 @@
 #include "ants_assets/lvl_parser.hpp"
 #include "ants_sim/effect_specs.hpp"
 #include "ants_sim/grid.hpp"
+#include "ants_sim/movement_tables.hpp"
 
 using namespace ants;
 using namespace ants::app;
@@ -107,7 +109,7 @@ Image read_region(SDL_Renderer* sr, int x, int y, int w, int h) {
 }
 
 // Renders the static map layers of the whole map by tiling camera positions over the playfield.
-Image capture_map(Renderer& r, const sim::Grid& grid, uint32_t mw, uint32_t mh) {
+Image capture_map(Renderer& r, const sim::Grid& grid, uint32_t mw, uint32_t mh, const sim::WorldState* world = nullptr) {
     Image out(static_cast<int>(mw) * 32, static_cast<int>(mh) * 32);
     for (size_t i = 0; i < out.px.size(); i += 4) { out.px[i] = 255; out.px[i + 1] = 0; out.px[i + 2] = 255; out.px[i + 3] = 255; }
     std::vector<int> xs, ys;
@@ -121,7 +123,7 @@ Image capture_map(Renderer& r, const sim::Grid& grid, uint32_t mw, uint32_t mh) 
             r.camera().clamp_to_bounds(mw, mh);
             SDL_SetRenderDrawColor(sr, 255, 0, 255, 255);
             SDL_RenderClear(sr);
-            r.render_map_layers(grid);
+            r.render_map_layers(grid, world);
             const Image tile = read_region(sr, PLAYFIELD_X, PLAYFIELD_Y, PLAYFIELD_W, PLAYFIELD_H);
             const int camx = static_cast<int>(r.camera().x);
             const int camy = static_cast<int>(r.camera().y);
@@ -317,6 +319,179 @@ void test_map_layers(Renderer& r, const assets::AssetArchive& arc) {
         }
         r.unpin_animation_clock();
     }
+}
+
+// The layer-2 pass under fog (Ants.exe FUN_01008089 mode 2, docs 5.33.5 and 5.57), as a model of the original's rules. One view at a time (the original draws per view:
+// the rows from top / 32 - 3 to bottom / 32 + 3 + 1 and the columns likewise, clipped to the map), row-major over the cells of that range:
+//   * an anchor cell (layer-2 word bit 0) draws its object at its own cell, except that an unexplored anchor hides a power-up, a bomb, food and a fire wall (0x1007202,
+//     0x1008bc6, 0x10071dd, 0x1008bb7);
+//   * any other cell with an object draws it at its ANCHOR (the cell's id at the anchor's position, bytes 2 and 3 of the cell) when the cell is explored and the anchor is not.
+using Explored = std::function<bool(int, int)>;
+bool model_hidden_class(uint16_t id) {
+    return (sim::movement::tile_flags_of(id) & (sim::movement::kTileFlagFood | sim::movement::kTileFlagPowerUp)) != 0 || (id >= 129 && id <= 132) || id == 134;
+}
+Image model_map_fog(const assets::AssetArchive& arc, const assets::LevelData& level, uint64_t t_ms, const Explored& explored) {
+    const int W = static_cast<int>(level.width), H = static_cast<int>(level.height);
+    Image out(W * 32, H * 32);
+    for (size_t i = 0; i < out.px.size(); i += 4) { out.px[i] = 255; out.px[i + 1] = 0; out.px[i + 2] = 255; out.px[i + 3] = 255; }
+    const auto& pal = arc.get_palette();
+    std::vector<int> xs, ys;
+    for (int x = 0;; x += 384) { xs.push_back(std::min(x, out.w - PLAYFIELD_W)); if (x + PLAYFIELD_W >= out.w) break; }
+    for (int y = 0;; y += 384) { ys.push_back(std::min(y, out.h - PLAYFIELD_H)); if (y + PLAYFIELD_H >= out.h) break; }
+    for (int cam_y : ys) {
+        for (int cam_x : xs) {
+            Image im(out.w, out.h);
+            for (size_t i = 0; i < im.px.size(); i += 4) { im.px[i] = 255; im.px[i + 1] = 0; im.px[i + 2] = 255; im.px[i + 3] = 255; }
+            auto draw_id = [&](uint16_t id, int ox, int oy) {
+                if (id >= arc.animation_count()) return;
+                const auto& seq = arc.get_animation(id);
+                if (seq.subitems.empty()) return;
+                model_draw_frame(im, arc, seq.subitems[model_frame(seq, t_ms)], ox, oy, false, pal);
+            };
+            for (int y = std::max(0, cam_y / 32); y <= std::min(H - 1, (cam_y + PLAYFIELD_H) / 32); ++y) {
+                for (int x = std::max(0, cam_x / 32); x <= std::min(W - 1, (cam_x + PLAYFIELD_W) / 32); ++x) {
+                    draw_id(level.get_cell_layer1(static_cast<uint32_t>(x), static_cast<uint32_t>(y)).tile_index, x * 32, y * 32);
+                }
+            }
+            const int row_begin = std::max(0, cam_y / 32 - 3), row_end = std::min(H, (cam_y + PLAYFIELD_H) / 32 + 3 + 1);
+            const int col_begin = std::max(0, cam_x / 32 - 3), col_end = std::min(W, (cam_x + PLAYFIELD_W) / 32 + 3 + 1);
+            for (int r = row_begin; r < row_end; ++r) {
+                for (int c = col_begin; c < col_end; ++c) {
+                    const auto& c2 = level.get_cell_layer2(static_cast<uint32_t>(c), static_cast<uint32_t>(r));
+                    if (c2.is_empty() || c2.tile_index == 0xFFFF || c2.tile_index >= level.tile_dictionary.size()) continue;
+                    std::string low = level.tile_dictionary[c2.tile_index];
+                    for (char& ch : low) ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+                    if (low.empty() || low == "." || low.find("start") != std::string::npos) continue;
+                    if ((c2.flags & 1) != 0) {
+                        if (!explored(c, r) && model_hidden_class(c2.tile_index)) continue;
+                        draw_id(c2.tile_index, c * 32, r * 32);
+                    } else if (explored(c, r)) {
+                        const int ay = c2.properties & 0xff, ax = (c2.properties >> 8) & 0xff;
+                        if (!explored(ax, ay)) draw_id(c2.tile_index, ax * 32, ay * 32);
+                    }
+                }
+            }
+            for (int y = 0; y < PLAYFIELD_H; ++y) {
+                for (int x = 0; x < PLAYFIELD_W; ++x) {
+                    const int wx = cam_x + x, wy = cam_y + y;
+                    if (wx < 0 || wy < 0 || wx >= out.w || wy >= out.h) continue;
+                    std::memcpy(out.at(wx, wy), im.at(wx, wy), 4);
+                }
+            }
+        }
+    }
+    return out;
+}
+
+uint32_t fog_mix(uint32_t v) { v ^= v >> 16; v *= 0x7feb352dU; v ^= v >> 15; v *= 0x846ca68bU; v ^= v >> 16; return v; }
+
+void test_fog_objects(Renderer& r, const assets::AssetArchive& arc) {
+    std::printf("[fog objects] the layer-2 pass under fog: anchors hide food / power-ups / bombs / fire while unexplored, explored body cells redraw an object whose anchor is unexplored\n");
+    static const char* maps[] = { "TREASURE", "ISLANDS", "GAUNTLET", "MEDIUM", "SMALL", "TINY" };
+    for (const char* name : maps) {
+        assets::LevelData level;
+        const std::string path = std::string(ORIGINAL_ASSETS_DIR) + "/Maps/" + name + ".LVL";
+        if (!level.load_from_file(path)) { check(false, "load " + path); continue; }
+        sim::Grid grid;
+        grid.init_from_level(level);
+        r.set_level(level);
+        const int W = static_cast<int>(level.width), H = static_cast<int>(level.height);
+        for (int pattern = 0; pattern < 9; ++pattern) {
+            // patterns 0 .. 7: blocks of 2 x 2 cells explored by a hash (about half of them, the share growing with the pattern), pattern 8: the upper half of the map explored
+            auto is_explored = [&](int x, int y) {
+                if (x < 0 || y < 0 || x >= W || y >= H) return false;
+                if (pattern == 8) return y < H / 2;
+                return (fog_mix(static_cast<uint32_t>((x / 2) * 7919 + (y / 2) * 104729 + pattern * 31)) % 100u) < 30u + static_cast<uint32_t>(pattern) * 6u;
+            };
+            sim::WorldState world;
+            world.width = level.width;
+            world.height = level.height;
+            world.fog_of_war_enabled = true;
+            world.fog_revealed.assign(static_cast<size_t>(W) * static_cast<size_t>(H), 0);
+            for (int y = 0; y < H; ++y) for (int x = 0; x < W; ++x) world.fog_revealed[static_cast<size_t>(y) * static_cast<size_t>(W) + static_cast<size_t>(x)] = is_explored(x, y) ? 1 : 0;
+            r.pin_animation_clock(0);
+            const Image got = capture_map(r, grid, level.width, level.height, &world);
+            const Image ref = model_map_fog(arc, level, 0, is_explored);
+            const DiffStats st = diff_images(got, ref);
+            std::printf("[fog objects] %-9s pattern %d  differing cells %ld, pixels %ld\n", name, pattern, st.cells, st.pixels);
+            check(st.pixels == 0, std::string(name) + " fog pattern " + std::to_string(pattern) + ": " + std::to_string(st.cells) + " cells differ (first at " +
+                                      std::to_string(st.first_cx) + "," + std::to_string(st.first_cy) + ")");
+            r.unpin_animation_clock();
+        }
+    }
+}
+
+// A food pile under fog reads its footprint from the live cells (the anchor bytes of its CURRENT stage), not from the cells that it had at the start of the match
+// (docs 5.57): when its stage changes and cells drop out of the footprint, exploring such a cell no longer shows the food; exploring a cell of the new footprint does.
+void test_food_fog_footprint(Renderer& r) {
+    std::printf("[fog food] the footprint of a food pile under fog follows its stage\n");
+    assets::LevelData level;
+    if (!level.load_from_file(std::string(ORIGINAL_ASSETS_DIR) + "/Maps/TREASURE.LVL")) { check(false, "load TREASURE"); return; }
+    sim::Grid grid;
+    grid.init_from_level(level);
+    r.set_level(level);
+    const sim::TileCoord anchor{17, 16};                            // fdcola1 (19 cells), then 13, 7 and 3
+    const int32_t object = grid.food_object_first_at(anchor);
+    check(object >= 0, "TREASURE has the food pile fdcola at (17, 16)");
+    if (object < 0) return;
+    const uint16_t first_tile = grid.get_cell(anchor).interactive_id;
+    std::vector<sim::TileCoord> old_cells;
+    {
+        const auto span = sim::movement::food_footprint(first_tile);
+        for (size_t k = 0; k < span.count; ++k) old_cells.push_back(sim::TileCoord{anchor.x + span.cells[k].dcol, anchor.y + span.cells[k].drow});
+    }
+    // eat until the stage has changed twice: fdcola3 (7 cells)
+    int changes = 0;
+    for (int bite = 0; bite < 200 && changes < 2; ++bite) {
+        bool changed = false;
+        grid.take_food(object, 1, changed);
+        if (changed) {
+            ++changes;
+            grid.set_food_tile(anchor, grid.food_objects()[static_cast<size_t>(object)].stage_tile());
+        }
+    }
+    const uint16_t stage_tile = grid.get_cell(anchor).interactive_id;
+    check(changes == 2 && stage_tile != first_tile && stage_tile != 0x7FFE, "the pile reached its third stage");
+    std::vector<sim::TileCoord> live_cells, dropped_cells;
+    for (const auto& t : old_cells) {
+        const auto& cell = grid.get_cell(t);
+        (cell.interactive_id == stage_tile && cell.anchor_x == anchor.x && cell.anchor_y == anchor.y ? live_cells : dropped_cells).push_back(t);
+    }
+    // a body cell of the live footprint and a cell that dropped out
+    sim::TileCoord live_body{-1, -1}, dropped{-1, -1};
+    for (const auto& t : live_cells) if (!(t.x == anchor.x && t.y == anchor.y)) { live_body = t; break; }
+    if (!dropped_cells.empty()) dropped = dropped_cells.front();
+    check(live_body.x >= 0 && dropped.x >= 0, "the new stage keeps body cells and has dropped some of the old ones");
+    if (live_body.x < 0 || dropped.x < 0) return;
+
+    auto render_with = [&](const std::vector<sim::TileCoord>& explored_cells) {
+        sim::WorldState world;
+        world.width = level.width;
+        world.height = level.height;
+        world.fog_of_war_enabled = true;
+        world.fog_revealed.assign(static_cast<size_t>(level.width) * level.height, 0);
+        for (const auto& t : explored_cells) world.fog_revealed[static_cast<size_t>(t.y) * level.width + static_cast<size_t>(t.x)] = 1;
+        r.pin_animation_clock(0);
+        r.camera().x = static_cast<float>(anchor.x * 32 - 200);
+        r.camera().y = static_cast<float>(anchor.y * 32 - 200);
+        r.camera().clamp_to_bounds(level.width, level.height);
+        SDL_Renderer* sr = r.get_sdl_renderer();
+        SDL_SetRenderDrawColor(sr, 255, 0, 255, 255);
+        SDL_RenderClear(sr);
+        r.render_map_layers(grid, &world);
+        Image im = read_region(sr, PLAYFIELD_X, PLAYFIELD_Y, PLAYFIELD_W, PLAYFIELD_H);
+        r.unpin_animation_clock();
+        return im;
+    };
+    auto differ = [](const Image& a, const Image& b) { return std::memcmp(a.px.data(), b.px.data(), a.px.size()) != 0; };
+    const Image nothing = render_with({});
+    const Image body = render_with({live_body});
+    const Image gone = render_with({dropped});
+    const Image at_anchor = render_with({anchor});
+    check(differ(nothing, body), "a cell of the live footprint that is explored shows the pile (the anchor is not)");
+    check(!differ(nothing, gone), "a cell that dropped out of the footprint shows nothing");
+    check(differ(nothing, at_anchor), "an explored anchor shows the pile");
+    check(!differ(body, at_anchor), "from the body cell the pile looks as it does from its anchor");
 }
 
 void test_ant_colour_rule(const assets::AssetArchive& arc) {
@@ -1137,6 +1312,8 @@ int main() {
     test_subtick_prediction(r, arc);
     test_selection_markers(r, arc);
     test_map_layers(r, arc);
+    test_fog_objects(r, arc);
+    test_food_fog_footprint(r);
     test_dynamic_items(r, arc);
     test_effect_rendering(r, arc);
     test_score_bubbles(r, arc);
