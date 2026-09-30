@@ -81,7 +81,7 @@ AudioMixer::AudioMixer(AudioMixer&& other) noexcept {
     listener_x_ = other.listener_x_;
     listener_y_ = other.listener_y_;
     master_volume_ = other.master_volume_;
-    sfx_volume_ = other.sfx_volume_;
+    sound_volume_ = other.sound_volume_;
     headless_mode_ = other.headless_mode_;
     sdl_audio_device_ = other.sdl_audio_device_;
     music_stream_ = std::move(other.music_stream_);
@@ -100,7 +100,7 @@ AudioMixer& AudioMixer::operator=(AudioMixer&& other) noexcept {
         listener_x_ = other.listener_x_;
         listener_y_ = other.listener_y_;
         master_volume_ = other.master_volume_;
-        sfx_volume_ = other.sfx_volume_;
+        sound_volume_ = other.sound_volume_;
         headless_mode_ = other.headless_mode_;
         sdl_audio_device_ = other.sdl_audio_device_;
         music_stream_ = std::move(other.music_stream_);
@@ -212,11 +212,11 @@ int AudioMixer::play_sfx(uint32_t sound_id, float volume, uint8_t priority, bool
     ch.clip = &clip;
     ch.cursor = 0.0;
     ch.rate_step = static_cast<double>(clip.format.samples_per_sec) / static_cast<double>(output_sample_rate_);
-    ch.vol_left = std::clamp(volume, 0.0f, 1.0f);
-    ch.vol_right = std::clamp(volume, 0.0f, 1.0f);
+    ch.event_gain = std::clamp(volume, 0.0f, 1.0f);
     ch.priority = priority;
     ch.loop = loop;
-    ch.spatial = false;
+    ch.spatial = false;                                // a cue or a UI sound: plain volume 100 %, pan 0 (FUN_0102e883), only the Sound Volume option applies
+    apply_law(ch);
 
     return ch_idx;
 }
@@ -226,13 +226,9 @@ int AudioMixer::play_spatial(uint32_t sound_id, int32_t world_x, int32_t world_y
     const auto& clip = archive_->get_sound(sound_id);
     if (clip.pcm_data.empty()) return -1;
 
-    float vl = 1.0f, vr = 1.0f;
-    calculate_spatial_pan(world_x, world_y, volume, vl, vr);
-
-    // Cull sounds completely out of audible range
-    if (vl <= 0.0001f && vr <= 0.0001f) return -1;
-
     std::lock_guard<std::mutex> lock(mixer_mutex_);
+    if (sound_volume_ <= 0) return -1;                 // the option at 0 is -100 dB: nothing to hear, nothing to occupy a channel with
+
     int ch_idx = allocate_channel(priority);
     if (ch_idx < 0) return -1;
 
@@ -242,13 +238,13 @@ int AudioMixer::play_spatial(uint32_t sound_id, int32_t world_x, int32_t world_y
     ch.clip = &clip;
     ch.cursor = 0.0;
     ch.rate_step = static_cast<double>(clip.format.samples_per_sec) / static_cast<double>(output_sample_rate_);
-    ch.vol_left = vl;
-    ch.vol_right = vr;
+    ch.event_gain = std::clamp(volume, 0.0f, 1.0f);
     ch.priority = priority;
     ch.loop = loop;
     ch.spatial = true;
     ch.world_x = world_x;
     ch.world_y = world_y;
+    apply_law(ch);                                     // no culling: a sound on the far side of the map is faint (-10 dB at 1000 px), not gone
 
     return ch_idx;
 }
@@ -277,41 +273,94 @@ size_t AudioMixer::active_channel_count() const {
 
 void AudioMixer::set_listener_position(int32_t world_x, int32_t world_y) {
     std::lock_guard<std::mutex> lock(mixer_mutex_);
+    if (world_x == listener_x_ && world_y == listener_y_) return;
     listener_x_ = world_x;
     listener_y_ = world_y;
 
-    // Dynamically update volumes for active spatial sounds
+    // The playing positional sounds follow the moving view (FUN_0102f777 re-attenuates every playing sound)
     for (auto& ch : channels_) {
-        if (ch.active && ch.spatial) {
-            calculate_spatial_pan(ch.world_x, ch.world_y, 1.0f, ch.vol_left, ch.vol_right);
-        }
+        if (ch.active && ch.spatial) apply_law(ch);
     }
 }
 
+// ------------------------------------------------------------------------------------------------
+// The sound law of the original
+// ------------------------------------------------------------------------------------------------
 
-void AudioMixer::calculate_spatial_pan(int32_t world_x, int32_t world_y, float base_vol, float& out_vol_l, float& out_vol_r) const {
-    float dx = static_cast<float>(world_x - listener_x_);
-    float dy = static_cast<float>(world_y - listener_y_);
-    float dist = std::sqrt(dx * dx + dy * dy);
-
-    float atten = std::clamp(1.0f - (dist / AUDIO_MAX_AUDIBLE_DISTANCE), 0.0f, 1.0f);
-
-    constexpr float HALF_VIEWPORT_WIDTH = 441.0f * 0.5f;
-    float pan = std::clamp(dx / HALF_VIEWPORT_WIDTH, -1.0f, 1.0f);
-
-    // Equal-power stereo panning curve
-    float angle = (pan + 1.0f) * 0.25f * 3.14159265358979323846f;
-    float pan_l = std::cos(angle);
-    float pan_r = std::sin(angle);
-
-    out_vol_l = base_vol * atten * pan_l;
-    out_vol_r = base_vol * atten * pan_r;
+int32_t AudioMixer::distance_percent(int32_t dx, int32_t dy) noexcept {
+    const int32_t ax = dx < 0 ? -dx : dx;
+    const int32_t ay = dy < 0 ? -dy : dy;
+    const int32_t m = (ax <= ay) ? ay : ax;                       // 0x102e913: the larger of the two distances
+    const int32_t pct = 100 - (m * 100) / AUDIO_LISTENER_RADIUS;   // imul 100, idiv radius: truncating
+    return pct < 0 ? 0 : pct;                                     // (beyond the radius the binary hands DirectSound an invalid volume; no map is that large)
 }
 
+int32_t AudioMixer::pan_centibels(int32_t dx) noexcept {
+    const int32_t steps = (dx * 100) / AUDIO_LISTENER_RADIUS;      // trunc(dx / 25)
+    return (steps * 2500) / 100;                                  // imul 0x9c4, idiv 100: 25 per step, range +-2500
+}
+
+int32_t AudioMixer::attenuation_centibels(int32_t sound_volume, int32_t pct) noexcept {
+    if (sound_volume <= 0) return -10000;                         // SetSoundVolume(0): the sounds are muted (0x102d80c)
+    const int32_t sv = sound_volume > 100 ? 100 : sound_volume;
+    const int32_t p = pct < 0 ? 0 : (pct > 100 ? 100 : pct);
+    return ((sv * p) / 100 - 100) * 25;                           // 0x102d813: imul, div 100, sub 100, imul 2500, idiv 100
+}
+
+float AudioMixer::gain_from_centibels(int32_t centibels) noexcept {
+    if (centibels <= -10000) return 0.0f;
+    if (centibels >= 0) return 1.0f;
+    return static_cast<float>(std::pow(10.0, static_cast<double>(centibels) / 2000.0));
+}
+
+// The gains of a channel: DirectSound SetVolume(att) on both channels, SetPan(pan): a positive pan attenuates the left channel by `pan`, a negative one the right channel.
+void AudioMixer::apply_law(MixerChannel& ch) const {
+    int32_t pct = 100;
+    int32_t pan = 0;
+    if (ch.spatial) {
+        const int32_t dx = ch.world_x - listener_x_;
+        const int32_t dy = ch.world_y - listener_y_;
+        pct = distance_percent(dx, dy);
+        pan = pan_centibels(dx);
+    }
+    const float volume = gain_from_centibels(attenuation_centibels(sound_volume_, pct)) * ch.event_gain;
+    const float left = pan > 0 ? gain_from_centibels(-pan) : 1.0f;
+    const float right = pan < 0 ? gain_from_centibels(pan) : 1.0f;
+    ch.vol_left = volume * left;
+    ch.vol_right = volume * right;
+}
+
+void AudioMixer::calculate_spatial_pan(int32_t world_x, int32_t world_y, float base_vol, float& out_vol_l, float& out_vol_r) const {
+    MixerChannel probe;
+    probe.spatial = true;
+    probe.world_x = world_x;
+    probe.world_y = world_y;
+    probe.event_gain = base_vol;
+    apply_law(probe);
+    out_vol_l = probe.vol_left;
+    out_vol_r = probe.vol_right;
+}
+
+void AudioMixer::set_sound_volume(int32_t sound_volume) {
+    std::lock_guard<std::mutex> lock(mixer_mutex_);
+    sound_volume_ = std::clamp<int32_t>(sound_volume, 0, 100);
+    for (auto& ch : channels_) {
+        if (ch.active) apply_law(ch);
+    }
+}
 
 void AudioMixer::set_sfx_volume(float volume) {
+    set_sound_volume(static_cast<int32_t>(std::clamp(volume, 0.0f, 1.0f) * 100.0f + 0.5f));
+}
+
+bool AudioMixer::channel_volumes(int channel_id, float& left, float& right) const {
+    if (channel_id < 0 || channel_id >= static_cast<int>(AUDIO_MIXER_MAX_CHANNELS)) return false;
     std::lock_guard<std::mutex> lock(mixer_mutex_);
-    sfx_volume_ = std::clamp(volume, 0.0f, 1.0f);
+    const MixerChannel& ch = channels_[static_cast<size_t>(channel_id)];
+    if (!ch.active) return false;
+    left = ch.vol_left;
+    right = ch.vol_right;
+    return true;
 }
 
 void AudioMixer::ingest_simulation_events(const std::vector<ants::sim::AudioEvent>& events, uint8_t local_player_id) {
@@ -511,7 +560,7 @@ void AudioMixer::mix_samples_i16(int16_t* out_stereo, size_t num_frames) {
     }
 
     if (master_volume_ <= 0.0001f) return;
-    const float sfx_gain = master_volume_ * sfx_volume_;
+    const float sfx_gain = master_volume_;                 // the Sound Volume option is inside every channel's gain (apply_law)
 
     for (size_t f = 0; f < num_frames; ++f) {
         float mix_l = 0.0f;

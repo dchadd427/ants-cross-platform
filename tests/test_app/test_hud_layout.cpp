@@ -803,6 +803,33 @@ void test_button_states(const assets::AssetArchive& arc) {
         check(rr.has_sprite_at("butallr.bmp", 543, 447) && rr.has_sprite_at("butallu.bmp", 532, 443), "All hover: r label at (543,447) over the up art at (532,443)");
     }
 
+    // The Sound slider applies the option at the RELEASE and then plays the test voice (gantrdy, 14); the Music slider applies at the release; dragging only moves the thumb (0x1015058)
+    {
+        HUD hud;
+        hud.init(0);
+        std::vector<float> applied_sfx;
+        std::vector<float> applied_music;
+        std::vector<uint32_t> played;
+        hud.set_on_sfx_volume([&](float v) { applied_sfx.push_back(v); });
+        hud.set_on_music_volume([&](float v) { applied_music.push_back(v); });
+        hud.set_on_play_sfx([&](uint32_t s) { played.push_back(s); });
+        hud.open_options();
+        hud.handle_mouse_down(300, 185, 1, sim, camera);                      // press on the Sound slider
+        hud.handle_mouse_motion(330, 185, sim, camera);                       // drag
+        hud.handle_mouse_motion(350, 185, sim, camera);
+        check(applied_sfx.empty() && played.empty(), "sound slider: nothing is applied and no voice plays while the thumb is dragged");
+        hud.handle_mouse_up(350, 185, 1, sim, camera);
+        check(applied_sfx.size() == 1 && applied_sfx[0] > 0.8f && applied_sfx[0] < 0.9f, "sound slider: the option is applied once, at the release");
+        check(played.size() == 1 && played[0] == sim::SoundID::GeneralReady, "sound slider: the test voice gantrdy (14) plays after it");
+        played.clear();
+        hud.handle_mouse_down(300, 222, 1, sim, camera);                      // the Music slider
+        hud.handle_mouse_motion(260, 222, sim, camera);
+        check(applied_music.empty(), "music slider: nothing is applied while dragging");
+        hud.handle_mouse_up(260, 222, 1, sim, camera);
+        check(applied_music.size() == 1 && played.empty(), "music slider: applied once at the release, no voice");
+        check(applied_sfx.size() == 1, "and the sound option stays as it was");
+    }
+
     // Option screen controls (op_screen): toggles, Return, slider thumbs at the original's defaults 100 / 65 / 50
     {
         HUD hud;

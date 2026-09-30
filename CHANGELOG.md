@@ -39,6 +39,18 @@ Ground truth for every entry is in [`docs/GAME_REVERSE_ENGINEERING.md`](docs/GAM
   - **Found on the way, for the audit** (docs: implementation_plan.md section 18): `tests/test_sim/test_challenger_m2_it2_deep_stress.cpp` has not been part of the build since an early commit and no longer compiles
     (it uses the retired slot-queue API of the hill). (An earlier version of this line said that the death clips are no longer started by a separate effect: wrong, only the unused helper `spawn_death_effect` was removed; the effect path in `movement_system.cpp` is still in use, see the audit.)
 
+## v0.0.59 - 2026-09-30 - The original's sound law
+
+Audio batch, part 2 (`docs/audit/ledger_sound_texts.md` NEW-5 / NEW-6, `ledger_screens.md` R2.1d), each re-read in `Ants.exe` first (`0x102e8e4`, `0x102d803`, `0x102f777`, `0x1015058`):
+
+- **Distance, pan and volume follow the binary's integer law**: the listener is the centre of the view; the percent is `100 - trunc(max(|dx|, |dy|) * 100 / 2500)` (Chebyshev, radius 2500 px); the pan is `25 * trunc(dx * 100 / 2500)` hundredths of a dB applied to the far channel only;
+  the volume is `25 * ((SV * pct / 100) - 100)` hundredths of a dB and DirectSound's `10^(att / 2000)`. The remake used `1 - distance / 800` (silent beyond 800 px), an equal-power pan that was hard-panned 221 px to one side, and ignored the map size: a bomb 1000 px away was silent, in the original it is heard at -10 dB.
+- **The Sound Volume option is part of every sound**: -12.5 dB at 50 (x 0.237; the remake had x 0.5), cues and clicks included, and it follows the sounds that are already playing. A scrolling view re-attenuates the playing positional sounds as well.
+- **The options sliders apply at the release**: the Sound slider sets the option when it is released and plays the test voice (`gantrdy`), the Music slider sets the music volume at the release; dragging only moves the thumb (before, every mouse move changed the volume).
+- Docs: `docs/GAME_REVERSE_ENGINEERING.md` 5.24c (the law), README (test table), `docs/AUDIT_ONE_TO_ONE.md` (progress).
+- Tests: integration 4.3 (the integer law and golden gains: 221 px, 400 px, 800 px, 1000 px, the radius; mirrored sides), 4.3b (the option enters cues and positional sounds and follows playing sounds; a moving view; mute), `test_hud_layout` (slider applied once at the release, the voice after it, nothing while dragging).
+  **Rewritten test**: integration 4.3 (it pinned the 800 px / equal-power law). Version assertion of 12.108.
+
 ## v0.0.58 - 2026-09-30 - One sting, global cues, the click of an order
 
 Audio batch, part 1 (`docs/audit/ledger_sound_texts.md` NEW-1 / NEW-2 / NEW-3, `ledger_input.md` NEW-3, `ledger_effects_objects.md` C10, `ledger_food_economy.md` NEW-1 / NEW-2), each re-read in `Ants.exe` first:

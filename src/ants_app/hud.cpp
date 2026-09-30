@@ -1282,15 +1282,13 @@ bool HUD::handle_mouse_down(int32_t x, int32_t y, uint8_t button,
             // Sound FX slider (x 180..430, y 170..205)
             if (x >= 180 && x <= 430 && y >= 170 && y <= 205) {
                 active_slider_dragging_ = 0;
-                sfx_volume_ = std::clamp(static_cast<float>(x - 188) / 185.0f, 0.0f, 1.0f);
-                if (on_sfx_volume_) on_sfx_volume_(sfx_volume_);
+                sfx_volume_ = std::clamp(static_cast<float>(x - 188) / 185.0f, 0.0f, 1.0f);   // the option is applied at the release (0x1015058)
                 return true;
             }
             // Music slider (x 180..430, y 207..242)
             if (x >= 180 && x <= 430 && y >= 207 && y <= 242) {
                 active_slider_dragging_ = 1;
                 music_volume_ = std::clamp(static_cast<float>(x - 188) / 185.0f, 0.0f, 1.0f);
-                if (on_music_volume_) on_music_volume_(music_volume_);
                 return true;
             }
             // Scroll rate slider (x 180..430, y 244..285)
@@ -1459,6 +1457,14 @@ bool HUD::handle_mouse_up(int32_t x, int32_t y, uint8_t button,
             opt_return_button_pressed_ = false;
             close_options();
         }
+        // The slider callbacks run at the release (FUN_010115ca -> 0x1015058): the Sound slider sets the Sound Volume and then plays the test voice (gantrdy, 0x101508a),
+        // the Music slider sets the music volume
+        if (active_slider_dragging_ == 0) {
+            if (on_sfx_volume_) on_sfx_volume_(sfx_volume_);
+            play_sfx(sim::SoundID::GeneralReady);
+        } else if (active_slider_dragging_ == 1) {
+            if (on_music_volume_) on_music_volume_(music_volume_);
+        }
         active_slider_dragging_ = -1;
         return true;
     }
@@ -1549,11 +1555,9 @@ bool HUD::handle_mouse_motion(int32_t x, int32_t y,
 
     if (show_options_) {
         if (active_slider_dragging_ == 0) {
-            sfx_volume_ = std::clamp(static_cast<float>(x - 188) / 185.0f, 0.0f, 1.0f);
-            if (on_sfx_volume_) on_sfx_volume_(sfx_volume_);
+            sfx_volume_ = std::clamp(static_cast<float>(x - 188) / 185.0f, 0.0f, 1.0f);       // only the thumb moves while dragging
         } else if (active_slider_dragging_ == 1) {
             music_volume_ = std::clamp(static_cast<float>(x - 188) / 185.0f, 0.0f, 1.0f);
-            if (on_music_volume_) on_music_volume_(music_volume_);
         } else if (active_slider_dragging_ == 2) {
             scroll_rate_ = std::clamp(static_cast<float>(x - 188) / 185.0f, 0.0f, 1.0f);
         }

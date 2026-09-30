@@ -1026,6 +1026,15 @@ A *cue* is a global sprite with no owner: `FUN_0102bd7e` plays it in the global 
 - After every accepted order the caller flashes the pedestal of the order (BTNPUSH `0x10285a4` -> `0x1028360`): the pressed clip `butXXX2d` (200 ms) carries sound 89 on its first frame, so the flash clicks (Stop: `butcand`, 61); a latched
   pedestal that pops up is only replaced by the raised picture and is silent. The click follows the voice of the order (`FUN_010287b5` speaks first, its caller flashes).
 
+**5.24c The sound law (audit of 2026-09-30; implemented in v0.0.59).** Every sound is one DirectSound buffer started by `FUN_0102e955(owner, vol%, pan, loop, dup)`; the percent and the pan come from `FUN_0102e8e4`, the volume in hundredths of a dB from `FUN_0102d803`:
+- **Listener and radius**: the map view's container holds the listener at the centre of the view in world pixels (`FUN_01027197` -> `FUN_01030249`: origin + width / 2, origin + height / 2 of the 442 x 440 view) and the radius 2500 (`0x102f5cb`). A container without a listener (the global one of the cues and the UI) plays at plain 100 % with pan 0.
+- **Percent**: `pct = 100 - trunc(max(|dx|, |dy|) * 100 / 2500)` (Chebyshev, `0x102e913` .. `0x102e92f`): 92 at 221 px, 68 at 800 px, 60 at 1000 px, 0 at 2500 px. There is no culling: no map is larger than 1920 px, so every sound in the map is heard, faintly when far.
+- **Pan**: `pan = 25 * trunc(dx * 100 / 2500)` hundredths of a dB (`0x102e936` .. `0x102e94a`), +-2500 at most; DirectSound `SetPan`: a positive pan (source to the right) attenuates only the LEFT channel by `pan`, a negative one only the RIGHT channel: the far channel is quieter, the near one keeps the full volume.
+- **Volume**: `att = 25 * ((SV * pct / 100) - 100)` hundredths of a dB with `SV` the Sound Volume option 0 .. 100 (default 100, `[game + 0xeec]`), integer division (`0x102d813` .. `0x102d827`); `SV = 0` is -10000 (mute). DirectSound turns an attenuation into an amplitude of `10^(att / 2000)`: -2 dB = 0.794, -10 dB = 0.316, -25 dB = 0.056.
+  The option therefore enters EVERY sound, cues and UI clicks included (SV 50 = -12.5 dB = x 0.237, not x 0.5).
+- **The option is applied at the release of the slider** (`0x1015058`): `SetSoundVolume` (`0x102d7cf`) re-attenuates every playing sound (`FUN_0102f777`), the value goes to the registry, then the test voice `gantrdy` (14) plays (`0x101508a`). The view's scrolling re-attenuates the playing positional sounds the same way.
+- Before v0.0.59 the remake used `1 - distance / 800` (silent beyond 800 px, Euclidean), an equal-power pan that hard-panned a source 221 px to one side, and a linear volume applied live while the slider was dragged. The law lives in `AudioMixer::distance_percent`, `pan_centibels`, `attenuation_centibels` and `gain_from_centibels`.
+
 ---
 
 ### 5.25 Match Timer Warnings & Countdown Sequencing (`0x1024839`)

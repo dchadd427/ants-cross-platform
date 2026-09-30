@@ -556,35 +556,97 @@ void run_suite_4_audio_mixer() {
         ASSERT_TRUE(mixer.is_channel_active(preempted));
     } TEST_END();
 
-    TEST_CASE("4.3 Spatial Panning Left/Right/Center Attenuation") {
+    TEST_CASE("4.3 The Sound Law Of The Original: Chebyshev Percent Over 2500 px, Pan On The Far Channel Only, DirectSound Hundredths Of A dB (0x102e8e4, 0x102d803)") {
+        // the integer arithmetic of the binary
+        ASSERT_EQ(AudioMixer::distance_percent(0, 0), 100);
+        ASSERT_EQ(AudioMixer::distance_percent(50, 0), 98);
+        ASSERT_EQ(AudioMixer::distance_percent(221, 0), 92);                       // trunc(22100 / 2500) = 8
+        ASSERT_EQ(AudioMixer::distance_percent(300, 400), 84);                     // Chebyshev: the larger of the two distances
+        ASSERT_EQ(AudioMixer::distance_percent(0, -1000), 60);
+        ASSERT_EQ(AudioMixer::distance_percent(800, 0), 68);
+        ASSERT_EQ(AudioMixer::distance_percent(2500, 2500), 0);
+        ASSERT_EQ(AudioMixer::pan_centibels(0), 0);
+        ASSERT_EQ(AudioMixer::pan_centibels(50), 50);                              // 25 per step of 25 px
+        ASSERT_EQ(AudioMixer::pan_centibels(221), 200);
+        ASSERT_EQ(AudioMixer::pan_centibels(-221), -200);
+        ASSERT_EQ(AudioMixer::pan_centibels(2500), 2500);
+        ASSERT_EQ(AudioMixer::attenuation_centibels(100, 100), 0);
+        ASSERT_EQ(AudioMixer::attenuation_centibels(100, 92), -200);
+        ASSERT_EQ(AudioMixer::attenuation_centibels(100, 0), -2500);
+        ASSERT_EQ(AudioMixer::attenuation_centibels(50, 100), -1250);              // the option at 50: -12.5 dB for every sound, positional or not
+        ASSERT_EQ(AudioMixer::attenuation_centibels(75, 100), -625);
+        ASSERT_EQ(AudioMixer::attenuation_centibels(1, 100), -2475);
+        ASSERT_EQ(AudioMixer::attenuation_centibels(0, 100), -10000);              // muted
+        ASSERT_NEAR(AudioMixer::gain_from_centibels(-200), 0.7943f, 0.0005f);
+        ASSERT_NEAR(AudioMixer::gain_from_centibels(-2500), 0.0562f, 0.0005f);
+        ASSERT_EQ(AudioMixer::gain_from_centibels(-10000), 0.0f);
+
         AudioMixer mixer;
         mixer.set_headless_mode(true);
         mixer.init(archive);
         mixer.set_listener_position(500, 500);
-
         float vl = 0.0f, vr = 0.0f;
 
-        // Center sound: dx = 0
-        mixer.calculate_spatial_pan(500, 500, 1.0f, vl, vr);
-        ASSERT_NEAR(vl, vr, 0.01f);
-        ASSERT_GT(vl, 0.5f);
+        mixer.calculate_spatial_pan(500, 500, 1.0f, vl, vr);                       // centre: no attenuation, no pan
+        ASSERT_NEAR(vl, 1.0f, 0.001f);
+        ASSERT_NEAR(vr, 1.0f, 0.001f);
+        mixer.calculate_spatial_pan(721, 500, 1.0f, vl, vr);                       // 221 px to the right: -2 dB for both channels, the LEFT channel another -2 dB
+        ASSERT_NEAR(vr, 0.794f, 0.001f);
+        ASSERT_NEAR(vl, 0.631f, 0.001f);
+        mixer.calculate_spatial_pan(279, 500, 1.0f, vl, vr);                       // the mirror image: the RIGHT channel is the far one
+        ASSERT_NEAR(vl, 0.794f, 0.001f);
+        ASSERT_NEAR(vr, 0.631f, 0.001f);
+        mixer.calculate_spatial_pan(900, 500, 1.0f, vl, vr);                       // 400 px: -4 dB, far channel -8 dB
+        ASSERT_NEAR(vr, 0.631f, 0.001f);
+        ASSERT_NEAR(vl, 0.398f, 0.001f);
+        mixer.calculate_spatial_pan(500, 1500, 1.0f, vl, vr);                      // 1000 px straight below: -10 dB, no pan: nothing is culled inside the map
+        ASSERT_NEAR(vl, 0.316f, 0.001f);
+        ASSERT_NEAR(vr, 0.316f, 0.001f);
+        mixer.calculate_spatial_pan(1300, 500, 1.0f, vl, vr);                      // 800 px: -8 dB (the old law was silent here)
+        ASSERT_NEAR(vr, 0.398f, 0.001f);
+        ASSERT_NEAR(vl, 0.158f, 0.001f);
+        mixer.calculate_spatial_pan(2500 + 500, 500, 1.0f, vl, vr);                // the edge of the radius: -25 dB, far channel -50 dB
+        ASSERT_NEAR(vr, 0.0562f, 0.0005f);
+        ASSERT_NEAR(vl, 0.0032f, 0.0005f);
+    } TEST_END();
 
-        // Left sound: dx = -220
-        mixer.calculate_spatial_pan(280, 500, 1.0f, vl, vr);
-        ASSERT_GT(vl, vr);
-        ASSERT_GT(vl, 0.6f);
-        ASSERT_LT(vr, 0.1f);
+    TEST_CASE("4.3b The Sound Volume Option Enters Every Sound And Follows The Playing Ones; Positional Sounds Follow The Moving View (FUN_0102f777)") {
+        AudioMixer mixer;
+        mixer.set_headless_mode(true);
+        mixer.init(archive);
+        mixer.set_listener_position(500, 500);
+        ASSERT_EQ(mixer.sound_volume(), 100);
 
-        // Right sound: dx = +220
-        mixer.calculate_spatial_pan(720, 500, 1.0f, vl, vr);
-        ASSERT_GT(vr, vl);
-        ASSERT_GT(vr, 0.6f);
-        ASSERT_LT(vl, 0.1f);
+        const int cue = mixer.play_sfx(SoundID::AntStop, 1.0f, 10, false);         // a cue: plain volume, only the option applies
+        const int hit = mixer.play_spatial(SoundID::BombDetonate, 721, 500, 10);   // 221 px to the right of the view centre
+        ASSERT_GE(cue, 0);
+        ASSERT_GE(hit, 0);
+        float l = 0.0f, r = 0.0f;
+        ASSERT_TRUE(mixer.channel_volumes(cue, l, r));
+        ASSERT_NEAR(l, 1.0f, 0.001f);
+        ASSERT_NEAR(r, 1.0f, 0.001f);
+        ASSERT_TRUE(mixer.channel_volumes(hit, l, r));
+        ASSERT_NEAR(l, 0.631f, 0.001f);
+        ASSERT_NEAR(r, 0.794f, 0.001f);
 
-        // Distant sound (> 800px) -> attenuated to 0
-        mixer.calculate_spatial_pan(5000, 5000, 1.0f, vl, vr);
-        ASSERT_NEAR(vl, 0.0f, 0.001f);
-        ASSERT_NEAR(vr, 0.0f, 0.001f);
+        mixer.set_sfx_volume(0.5f);                                                // the slider at 50: -12.5 dB for everything that plays, now
+        ASSERT_EQ(mixer.sound_volume(), 50);
+        ASSERT_TRUE(mixer.channel_volumes(cue, l, r));
+        ASSERT_NEAR(l, 0.237f, 0.001f);
+        ASSERT_NEAR(r, 0.237f, 0.001f);
+        ASSERT_TRUE(mixer.channel_volumes(hit, l, r));                             // 25 * (50 * 92 / 100 - 100) = -1350: 0.211; the far channel another -2 dB
+        ASSERT_NEAR(r, 0.2113f, 0.001f);
+        ASSERT_NEAR(l, 0.1679f, 0.001f);
+
+        mixer.set_listener_position(721, 500);                                     // the view moves: the source is at its centre
+        ASSERT_TRUE(mixer.channel_volumes(hit, l, r));
+        ASSERT_NEAR(l, 0.237f, 0.001f);
+        ASSERT_NEAR(r, 0.237f, 0.001f);
+
+        mixer.set_sfx_volume(0.0f);                                                // 0: muted, and nothing new occupies a channel
+        ASSERT_TRUE(mixer.channel_volumes(cue, l, r));
+        ASSERT_EQ(l, 0.0f);
+        ASSERT_EQ(mixer.play_spatial(SoundID::BombDetonate, 721, 500, 10), -1);
     } TEST_END();
 
     TEST_CASE("4.4 Ingestion of Simulation Audio Events & Targeted Filtering") {
@@ -6521,10 +6583,10 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
 
     TEST_CASE("12.108: Version Invariant & Fog of War Cursor Concealment Parity") {
         // 1. Verify semantic versioning components
-        ASSERT_EQ(ants::VERSION_STRING, "v0.0.58");
+        ASSERT_EQ(ants::VERSION_STRING, "v0.0.59");
         ASSERT_EQ(ants::VERSION_MAJOR, 0);
         ASSERT_EQ(ants::VERSION_MINOR, 0);
-        ASSERT_EQ(ants::VERSION_PATCH, 58);
+        ASSERT_EQ(ants::VERSION_PATCH, 59);
 
         // 2. Setup simulation world with Fog of War enabled
         SimulationEngine sim;
