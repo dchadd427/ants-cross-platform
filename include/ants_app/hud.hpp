@@ -257,7 +257,8 @@ public:
     }
     int get_active_quick_chat_edit() const noexcept { return active_quick_chat_edit_; }
 
-    /// Ctrl+L (0x1026440): the ant draw prints the hit points of every ant as text at its sprite position
+    /// Ctrl+L (0x1026440): the ant draw prints the hit points of every ant as text at its sprite position. Owner's tweak of the original: ON by default
+    /// (the original starts with it off); Ctrl+L toggles it as in the original.
     bool is_show_hp() const noexcept { return show_hp_; }
 
     /// The alliance dialogs (Ants.exe FUN_01015b65 invitation, FUN_010160e2 waiting, FUN_01016438 confirmation; docs 5.42). They follow from the state of the
@@ -337,7 +338,7 @@ private:
     int32_t mouse_y_{-1};
 
     // Marquee drag selection
-    bool show_hp_{false};
+    bool show_hp_{true};                 // owner tweak: the original starts with the digits off
     bool is_dragging_{false};
     bool shift_held_{false};
     int32_t drag_start_x_{0};

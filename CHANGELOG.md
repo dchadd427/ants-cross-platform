@@ -39,6 +39,17 @@ Ground truth for every entry is in [`docs/GAME_REVERSE_ENGINEERING.md`](docs/GAM
   - **Found on the way, for the audit** (docs: implementation_plan.md section 18): `tests/test_sim/test_challenger_m2_it2_deep_stress.cpp` has not been part of the build since an early commit and no longer compiles
     (it uses the retired slot-queue API of the hill). (An earlier version of this line said that the death clips are no longer started by a separate effect: wrong, only the unused helper `spawn_death_effect` was removed; the effect path in `movement_system.cpp` is still in use, see the audit.)
 
+## v0.0.51 - 2026-09-30 - Only the original's keys
+
+- **Every shortcut that the original did not have is gone** (owner request: "as close to a one-to-one copy of the game that works cross-platform as possible"): `Ctrl` / `Cmd` + `1` .. `4`, `Ctrl + Tab` and `Ctrl + C` (switching the
+  controlled team), `Ctrl + T` / `F3` (tile grid), `Ctrl + M` (music mute), `Shift` / `Ctrl + F12` (screenshot), and the fullscreen keys (`F11`, `Alt + Enter`, `Cmd + F`). You play the team that `-pnum=` (or your network seat) gives you; in a
+  local game the other teams stand idle, as the original has no computer players. `--fullscreen` still starts the game in fullscreen and `--show-grid`, `--screenshot FILE` and the other command-line options of the tests remain. The
+  chat log's Page Up / Page Down / wheel scrolling stays until the original's scroll bar is built (audit batch 6).
+- **Owner tweak (a deliberate difference from the original): the hit-point numbers above every ant are on by default** (the original starts with them off); `Ctrl + L` still toggles them. `test_pointer_model` was rewritten for the new default.
+- Code removed with the shortcuts: `Application::toggle_fullscreen`, `toggle_tile_grid_visibility`, `set_tile_grid_visible`, the music-mute state.
+- Tests: **rewritten** `8.6` (the tile grid is a command-line option only; Ctrl+T, Cmd+T and F3 do nothing), `8.8` (Ctrl+2 and Ctrl+Tab do not switch the team; the setter still does), `9.5` (no runtime grid toggle), `9.7` (Ctrl+T does not toggle the
+  grid), comment of a `test_network_app` case. Version assertion of 12.108.
+
 ## v0.0.50 - 2026-09-29 - Teaming works: the three answer dialogs of the original
 
 - **The problem**: the simulation could make and break teams (and the news, cues and chat lines were right) but nothing in the game could *answer* an offer: the original's three modal dialogs did not exist, so an

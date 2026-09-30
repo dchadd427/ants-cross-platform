@@ -4,7 +4,7 @@ A faithful, high-performance, deterministic C++17 native engine remake and port 
 
 The engine directly loads raw original binary assets (`ants.chd` and `Maps/*.LVL`) without pre-conversion, faithfully executing authentic gameplay mechanics, deterministic 20Hz simulation, 32-channel spatial audio, MIDI/MP3 score playback, TrueType font rendering, and an SDL2 hardware-accelerated 2D viewport.
 
-**Current version: v0.0.50** (shown on screen next to the FPS meter). Every release is listed in the **[changelog](CHANGELOG.md)**, which is also published at **[beta.playants.org/changelog.html](https://beta.playants.org/changelog.html)**. Since v0.0.24 every system is re-derived from the disassembly of the original `Ants.exe` (see [Reverse Engineering](#reverse-engineering--historical-preservation)); multiplayer over a network (host / join over TCP) works and is still being extended (see [Network Port](#network-port-in-progress)).
+**Current version: v0.0.51** (shown on screen next to the FPS meter). Every release is listed in the **[changelog](CHANGELOG.md)**, which is also published at **[beta.playants.org/changelog.html](https://beta.playants.org/changelog.html)**. Since v0.0.24 every system is re-derived from the disassembly of the original `Ants.exe` (see [Reverse Engineering](#reverse-engineering--historical-preservation)); multiplayer over a network (host / join over TCP) works and is still being extended (see [Network Port](#network-port-in-progress)).
 
 ---
 
@@ -65,7 +65,7 @@ Play the remake instantly in any modern web browser (Chrome, Firefox, Safari, Ed
   - Standalone web inspector (`asset_catalog/index.html`) with responsive design, searching, filtering, and instant asset downloads (⬇ WAV audio, ⬇ PNG sprites, ⬇ composite canvas frames).
 
 - **Automated Verification & Zero-Warning Standard**:
-  - 100% pass rate across **188 application integration tests (6,536 assertions)**, the simulation golden suites (movement, path planner, hill, combat, ability, power-up and food actions), the command-layer / state-hash suite, the lock-step network core, room and TCP transport suites, the render, HUD, status-message, input and pointer model suites and **506 opaque-box End-to-End (E2E) verification tests** (real counts in [Testing & Verification](#testing--verification)).
+  - 100% pass rate across **188 application integration tests (6,535 assertions)**, the simulation golden suites (movement, path planner, hill, combat, ability, power-up and food actions), the command-layer / state-hash suite, the lock-step network core, room and TCP transport suites, the render, HUD, status-message, input and pointer model suites and **506 opaque-box End-to-End (E2E) verification tests** (real counts in [Testing & Verification](#testing--verification)).
   - Zero warnings under `-Wall -Wextra -Wpedantic -Wconversion -Wshadow -Wnon-virtual-dtor`.
 
 ---
@@ -274,7 +274,7 @@ python3 -m http.server 8080 -d dist
 - **`Enter` / `Space` / `START` button**: Launch the match. **`Esc` / Leave Game button**: leave.
 - **`D` or a click on a player thumb**: toggles that thumb (a placeholder of the local screen; in a network room the thumbs show the real connection quality).
 - **In a network room** the setup screen lists every player with a portrait in the player's colour, the name and a thumb: green thumbs up (round trip below 1.2 s), yellow sideways hand (below 1.8 s), red thumbs down (slower), orange question mark (not measured yet). Only the host changes the map and the fog and presses START (it needs a second player and every thumb); a guest sees the host's choice and can leave. The status line has the original's texts ("Press START when all players' thumbs have appeared.", "Waiting for the host to start the game...", "Trying to connect to the host...").
-- **Soundtrack**: `INTRO` loops on this screen; a match plays a shuffled in-game track (`ANTS2A`, `ANTS2B`, `ANTSFUN3`); `Ctrl + M` mutes the music.
+- **Soundtrack**: `INTRO` loops on this screen; a match plays a shuffled in-game track (`ANTS2A`, `ANTS2B`, `ANTSFUN3`).
 
 ### Mouse Controls
 | Action | Trigger | Description |
@@ -293,16 +293,8 @@ python3 -m http.server 8080 -d dist
 | | | • **Thief**: Infiltrate enemy anthill. |
 | **Bomb Hit (Jump)** | Click on a Friendly Bomb with Several Ants Selected | The move click sends the first ant onto the bomb, which sets it off (a single bomber defuses it instead). |
 
-### Team Switching & Testing Shortcuts
-Not part of the original: with no computer players, these let one person drive any team of a local match for testing. They are off in a network match (you are your seat).
-
-| Key | Function |
-|---|---|
-| **`Ctrl + 1` / `⌘1`** | Switch to Team 0 (Green Ants). |
-| **`Ctrl + 2` / `⌘2`** | Switch to Team 1 (Red Ants). |
-| **`Ctrl + 3` / `⌘3`** | Switch to Team 2 (Blue Ants). |
-| **`Ctrl + 4` / `⌘4`** | Switch to Team 3 (Black Ants). |
-| **`Ctrl + Tab` / `Ctrl + C`** | Cycle control to the next available team. |
+### No extra shortcuts
+The game has exactly the original's keys (next section). Since v0.0.51 there are no shortcuts that the original did not have: no team switching (you play the team `-pnum=` gives you, or your seat in a network match; in a local game the other teams stand idle because the original has no computer players), no tile grid or music mute key, no screenshot key, no fullscreen key (`--fullscreen` starts in fullscreen; the operating system's own window controls still work).
 
 ### Camera & Hotkeys (the original's keyboard, Ants.exe `FUN_0102609a`)
 | Key | Function |
@@ -317,9 +309,8 @@ Not part of the original: with no computer players, these let one person drive a
 | **`Ctrl + N` / `Ctrl + P`** | Select the next / previous ant (from the lowest selected one) and scroll just far enough to show it. |
 | **`Ctrl + S`** | Stop the selected ants (no flash, no lock, no deselect). |
 | **`Ctrl + O` / `Ctrl + Q`** | Options / quit dialog (quit dialog: `Y` yes, `N` or `Esc` no). |
-| **`Ctrl + L`** | Show every ant's hit points as white numbers. |
+| **`Ctrl + L`** | Show / hide every ant's hit points as white numbers. The numbers are **on by default** (an owner tweak: the original starts with them off). |
 | *In a team dialog* | The offer to team up: `A` accepts, `D` / `Esc` declines; while you wait for the answer: `W` / `Esc` withdraws the offer; "Doing this will break your team": `Y` yes, `N` / `Esc` no. A dialog takes every key and click until it is answered. |
-| *Developer shortcuts (not in the original)* | `Ctrl + T` / `F3` tile grid, `Ctrl + M` music mute, `Ctrl + 1..4` / `Ctrl + Tab` switch the controlled team, `Shift + F12` screenshot. |
 
 ---
 
@@ -349,7 +340,7 @@ Limits of this release: raw TCP only (a LAN, a VPN or a forwarded port 4001; the
 
 ## Changelog & Versioning
 
-The version (`include/ants_app/version.hpp`, currently `v0.0.50`) is bumped with every release and shown on screen next to the FPS meter. [`CHANGELOG.md`](CHANGELOG.md) lists what changed in every version, newest first, from the first commit to the release in progress; it is published on the beta site at [`/changelog.html`](https://beta.playants.org/changelog.html) and linked from the game page.
+The version (`include/ants_app/version.hpp`, currently `v0.0.51`) is bumped with every release and shown on screen next to the FPS meter. [`CHANGELOG.md`](CHANGELOG.md) lists what changed in every version, newest first, from the first commit to the release in progress; it is published on the beta site at [`/changelog.html`](https://beta.playants.org/changelog.html) and linked from the game page.
 
 ---
 
@@ -374,7 +365,7 @@ To run all test suites in sequence:
 ./run_tests.sh --clean    # Remove the build directories and rebuild first
 ```
 
-### What the Suites Cover (v0.0.50, all passing)
+### What the Suites Cover (v0.0.51, all passing)
 | Suite | What it checks | Size |
 |---|---|---|
 | 1 Asset decoders | `ants.chd` header, palette, sprites, audio, event tags, Table 4 animations, `.LVL` maps, directional mirroring, fuzzing | 8 suites, 69,809 assertions |
@@ -389,7 +380,7 @@ To run all test suites in sequence:
 | 2.12 Room | Joining, roster, map and fog, the start barrier, the connection thumbs (round trip tiers 1200 / 1800 ms) | 9 tests, 55,050 assertions |
 | 2.13 TCP | Framing, hostile frames, a real-socket match | 6 tests, 60,122 assertions |
 | 2.14 NetGame | The room, thumbs, the start barrier, a match with commands and chat, a guest that leaves, host migration over real sockets (the host leaving a two-, three- and four-player match, the links between guests, strangers on a guest's port, no election after the match is over), refused joins, map mismatch | 14 tests, 534 assertions |
-| 3 Application integration | Whole-application behaviour through the HUD, renderer and simulation | 188 tests, 6,536 assertions |
+| 3 Application integration | Whole-application behaviour through the HUD, renderer and simulation | 188 tests, 6,535 assertions |
 | 3.1 - 3.5 Model suites | Render parity 303 checks (with the text sizes and the health-number font), HUD layout 647 (with the network room screen, the label sizes and wrapping and the three alliance dialogs), status messages 256, input model 70, pointer model 329 | 1,605 checks |
 | 3.6 Network application | The command line (names, `--host`, `--join`), a headless application as host and as guest of a room, start, a bit-identical match, chat, leaving, the host leaving (the guest takes over alone, or follows the new host and says so), the score labels of a local game, teaming over three machines (an offer arrives as the question, Accept, team chat reaches only the ally, refusal, Withdraw) | 10 tests, 180 assertions |
 | 4 E2E | Opaque-box scenarios in four tiers | 506 tests |

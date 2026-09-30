@@ -96,8 +96,6 @@ public:
 
 
     bool is_tile_grid_visible() const noexcept { return show_tile_grid_; }
-    void set_tile_grid_visible(bool visible) noexcept { show_tile_grid_ = visible; }
-    void toggle_tile_grid_visibility() noexcept { show_tile_grid_ = !show_tile_grid_; }
 
     float get_current_fps() const noexcept { return current_fps_; }
 
@@ -180,7 +178,6 @@ private:
     void render_net_overlay();
     void apply_team_names(const std::array<std::string, 4>& names, uint8_t roster);   // simulation texts, HUD labels, results rows
 
-    void toggle_fullscreen();
     void play_next_ingame_music();
     void play_startup_sound();
     void render_loading_screen();
@@ -198,7 +195,6 @@ private:
     float input_accumulator_{0.0f};     // the 50 ms input task (edge scrolling, minimap drag)
     float current_fps_{60.0f};
     int last_music_track_{-1};
-    bool is_music_muted_{false};
 
     // Smoothed FPS Display and Frametime Sparkline
     static constexpr size_t SPARKLINE_SAMPLES = 36;

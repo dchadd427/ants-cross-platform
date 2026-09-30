@@ -481,7 +481,7 @@ void run_guest_tests() {
         ASSERT_EQ(app.sim().get_player_name(1), "Player");
         ASSERT_EQ(app.hud().get_player_name(), "Player");
         ASSERT_TRUE(app.sim().state_hash() == host.sim.state_hash());
-        // Ctrl+1 would switch the controlled team in a local game; in a network game the player is its seat
+        // Ctrl+1 does nothing (the original has no team switch key); in a network game the player is its seat in any case
         SDL_KeyboardEvent key{};
         key.type = SDL_KEYDOWN;
         key.keysym.sym = SDLK_1;

@@ -442,12 +442,7 @@ bool Application::load_match(const std::string& map_path, uint32_t seed, uint8_t
 // The moment a match starts for the player: music and the start sound, the HUD, the "get ready" modal, the Playing state.
 void Application::enter_match() {
     // In-Game Music: Shuffle between ANTS2A, ANTS2B, ANTSFUN3
-    if (!is_music_muted_) {
-        play_next_ingame_music();
-    } else {
-        audio_mixer_.stop_music();
-        midi_player_.stop();
-    }
+    play_next_ingame_music();
 
     // Play authentic random game startup sound (rndm1..6.wav / Sound IDs 7..12)
     play_startup_sound();
@@ -522,11 +517,9 @@ void Application::return_to_map_select() {
     mouse_screen_y_ = 240;
     mouse_has_moved_ = false;
     midi_player_.load_file(config_.midi_path);
-    if (!is_music_muted_) {
-        audio_mixer_.play_music("Original-Ants/INTRO.mp3", true);
-        if (config_.headless) {
-            midi_player_.play(true); // Resumes INTRO during map selection
-        }
+    audio_mixer_.play_music("Original-Ants/INTRO.mp3", true);
+    if (config_.headless) {
+        midi_player_.play(true); // Resumes INTRO during map selection
     }
 }
 
@@ -670,19 +663,6 @@ void Application::handle_events() {
             continue;
         }
 
-        // Global Fullscreen hotkeys: F11 (outside gameplay), Alt+Enter, or Cmd+F
-        if (event.type == SDL_KEYDOWN) {
-            bool is_f11 = (event.key.keysym.sym == SDLK_F11 && state_ != AppState::Playing);
-            bool is_alt_enter = ((event.key.keysym.mod & KMOD_ALT) != 0 &&
-                                 (event.key.keysym.sym == SDLK_RETURN || event.key.keysym.sym == SDLK_KP_ENTER));
-            bool is_cmd_f = ((event.key.keysym.mod & KMOD_GUI) != 0 &&
-                             (event.key.keysym.sym == SDLK_f));
-            if (is_f11 || is_alt_enter || is_cmd_f) {
-                toggle_fullscreen();
-                continue;
-            }
-        }
-
         if (state_ == AppState::Loading) {
             if (event.type == SDL_KEYDOWN || event.type == SDL_MOUSEBUTTONDOWN) {
                 state_ = hud_.is_quick_help_enabled() ? AppState::QuickHelp : AppState::MapSelect;
@@ -799,44 +779,7 @@ void Application::handle_key_down(const SDL_KeyboardEvent& key) {
 
     bool ctrl_or_gui = (key.keysym.mod & KMOD_CTRL) || (key.keysym.mod & KMOD_GUI);
 
-    // Developer and test shortcuts that are not part of the original (each needs Ctrl / Cmd, Shift or a function key that the original leaves
-    // free): screenshot, tile grid, music mute, team switch. The original's own keys live in HUD::handle_key_down (FUN_0102609a).
-    if (key.keysym.sym == SDLK_F12 && ((key.keysym.mod & KMOD_SHIFT) || ctrl_or_gui)) {
-        renderer_->save_screenshot("screenshot.png");
-        std::cout << "[Application] Screenshot saved to screenshot.png" << std::endl;
-        return;
-    }
-    if ((key.keysym.sym == SDLK_t && ctrl_or_gui) || key.keysym.sym == SDLK_F3) {
-        show_tile_grid_ = !show_tile_grid_;
-        return;
-    }
-    if (key.keysym.sym == SDLK_m && ctrl_or_gui) {
-        is_music_muted_ = !is_music_muted_;
-        if (is_music_muted_) {
-            audio_mixer_.stop_music();
-            midi_player_.stop();
-        } else {
-            if (state_ == AppState::Playing) {
-                play_next_ingame_music();
-            } else {
-                audio_mixer_.play_music("Original-Ants/INTRO.mp3", true);
-                if (config_.headless) midi_player_.play(true);
-            }
-        }
-        return;
-    }
-    if (ctrl_or_gui && !network_active()) {
-        if (key.keysym.sym >= SDLK_1 && key.keysym.sym <= SDLK_4) {
-            uint8_t target_team = static_cast<uint8_t>(key.keysym.sym - SDLK_1);
-            set_local_player(target_team);
-            return;
-        }
-        if (key.keysym.sym == SDLK_TAB || key.keysym.sym == SDLK_c) {
-            uint8_t next_team = static_cast<uint8_t>((local_player_id_ + 1) % 4);
-            set_local_player(next_team);
-            return;
-        }
-    }
+    // Only the original's keys exist (HUD::handle_key_down, FUN_0102609a): there are no screenshot, tile grid, mute, team switch or fullscreen keys.
 
     // Printable keys reach the always-active chat box as text input events (SDL_TEXTINPUT); the key event only carries the control keys. A dialog
     // reads the keys itself (Y / N of the quit dialog, C / X of the quick help).
@@ -930,7 +873,7 @@ void Application::update_simulation(float dt) {
 
     audio_mixer_.update_music(dt);
     midi_player_.update(dt);
-    if (state_ == AppState::Playing && !is_music_muted_ && !audio_mixer_.is_music_playing() && !midi_player_.is_playing() && !sim_.is_match_over()) {
+    if (state_ == AppState::Playing && !audio_mixer_.is_music_playing() && !midi_player_.is_playing() && !sim_.is_match_over()) {
         play_next_ingame_music();
     }
 }
@@ -1188,16 +1131,6 @@ void Application::render_frame() {
     renderer_->render_software_cursor(cur, mouse_screen_x_, mouse_screen_y_, static_cast<uint32_t>(sim_.current_tick()));
 
     renderer_->end_frame();
-}
-
-void Application::toggle_fullscreen() {
-    if (!window_) return;
-    config_.fullscreen = !config_.fullscreen;
-    uint32_t flags = config_.fullscreen ? SDL_WINDOW_FULLSCREEN_DESKTOP : 0;
-    SDL_SetWindowFullscreen(window_, flags);
-    if (renderer_) {
-        renderer_->set_fullscreen(config_.fullscreen);
-    }
 }
 
 void Application::play_next_ingame_music() {

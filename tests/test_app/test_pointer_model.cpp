@@ -1047,11 +1047,11 @@ void test_keyboard() {
         check(f.hud.is_move_latched(), "a pedestal is latched");
         check(key(SDLK_ESCAPE), "Esc is handled");
         check(f.hud.get_selected_ant_ids().empty() && !f.hud.is_move_latched() && !f.hud.is_quit_dialog_open(), "Esc deselects everything and lets the pedestals up, no dialog");
-        check(!f.hud.is_show_hp(), "hit point digits are off");
+        check(f.hud.is_show_hp(), "hit point digits are on (the owner's tweak: the original starts with them off)");
         key('l', KMOD_CTRL);
-        check(f.hud.is_show_hp(), "Ctrl+L switches them on");
+        check(!f.hud.is_show_hp(), "Ctrl+L switches them off");
         key('L', KMOD_CTRL);
-        check(!f.hud.is_show_hp(), "and off");
+        check(f.hud.is_show_hp(), "and on again");
         // Ctrl+S: the stop order without flash, lock or deselect, only for own ants
         f.hud.select_ant(s.mine);
         f.click_tile(30, 22);

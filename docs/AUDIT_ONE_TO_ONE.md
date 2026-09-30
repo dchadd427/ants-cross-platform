@@ -106,6 +106,10 @@ release, Drop only with a bad ping), options (slider model with the exact hit re
   still say wheel; AGENTS.md rule 8 still names a "Combat Ant guard post patrol" (the original only auto-engages); `tests/TEST_INFRA.md` and `TEST_READY.md` list the old melee model; `movement_tables.hpp` comment on sound flags.
 * The differential harnesses written for the movement audit (tables, walk model, A* model) are worth keeping as regression tests (LM NEW-M8).
 
+## 3b. Deliberate differences requested by the owner (tweaks)
+The goal is a one-to-one copy; the owner asks for tweaks on top of it, each recorded here and in the CHANGELOG so that they are not mistaken for deviations:
+* v0.0.51: the hit-point numbers above the ants (`Ctrl + L`) are **on by default** (the original starts with them off).
+
 ## 4. Decisions needed from the owner
 * Start-up: the 3 s publisher-logo splash and its jingle are the original's artwork (LR R4.2a, LS NEW-7); the Single / Multi choice screen that the original shows (LR R4.2c); the "More Help" dialog and its dead web address (LR R4.2d, LU NEW-11).
 * Web build: what "Leave" does on the results screen (the original exits the program).

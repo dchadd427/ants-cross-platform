@@ -1302,7 +1302,7 @@ void run_suite_8_unit_health_and_map_select() {
         ASSERT_TRUE(app.midi_player().is_playing());
     } TEST_END();
 
-    TEST_CASE("8.6 Ctrl+G Tile Grid Display Toggling and Visibility State") {
+    TEST_CASE("8.6 The Tile Grid Overlay Is A Command Line Option Only: No Key Toggles It (the original has no such key)") {
         Application app;
         ApplicationConfig cfg;
         cfg.headless = true;
@@ -1312,17 +1312,25 @@ void run_suite_8_unit_health_and_map_select() {
         // Default: Tile grid overlay is OFF
         ASSERT_FALSE(app.is_tile_grid_visible());
 
-        // Toggle ON
-        app.toggle_tile_grid_visibility();
-        ASSERT_TRUE(app.is_tile_grid_visible());
-
-        // Toggle OFF
-        app.toggle_tile_grid_visibility();
+        // Ctrl+T, Cmd+T and F3 do nothing
+        SDL_KeyboardEvent key{};
+        key.type = SDL_KEYDOWN;
+        key.keysym.sym = SDLK_t;
+        key.keysym.mod = KMOD_LCTRL;
+        app.handle_key_down(key);
+        key.keysym.mod = KMOD_LGUI;
+        app.handle_key_down(key);
+        key.keysym.sym = SDLK_F3;
+        key.keysym.mod = 0;
+        app.handle_key_down(key);
         ASSERT_FALSE(app.is_tile_grid_visible());
 
-        // Direct setter
-        app.set_tile_grid_visible(true);
-        ASSERT_TRUE(app.is_tile_grid_visible());
+        // --show-grid turns it on
+        Application with_grid;
+        ApplicationConfig grid_cfg = cfg;
+        grid_cfg.show_tile_grid = true;
+        ASSERT_TRUE(with_grid.init(grid_cfg));
+        ASSERT_TRUE(with_grid.is_tile_grid_visible());
     } TEST_END();
 
     TEST_CASE("8.7 Anthill Selection and Hatch Action") {
@@ -1390,13 +1398,16 @@ void run_suite_8_unit_health_and_map_select() {
         ASSERT_EQ(cam.world_x, expected_x);
         ASSERT_EQ(cam.world_y, expected_y);
 
-        // Switch to Team 1 (Red) via Ctrl+2 key event
+        // Ctrl+2 does nothing: the original has no key that switches the controlled team
         SDL_KeyboardEvent key_event{};
         key_event.type = SDL_KEYDOWN;
         key_event.keysym.sym = SDLK_2;
         key_event.keysym.mod = KMOD_LCTRL;
         app.handle_key_down(key_event);
+        ASSERT_EQ(app.local_player_id(), 0);
 
+        // Switch to Team 1 (Red) through the setter (what the command line's -pnum= does)
+        app.set_local_player(1);
         ASSERT_EQ(app.local_player_id(), 1);
         const auto* base1 = app.sim().grid().find_anthill(1);
         ASSERT_TRUE(base1 != nullptr);
@@ -1415,11 +1426,11 @@ void run_suite_8_unit_health_and_map_select() {
         ASSERT_EQ(cam.world_x, expected_x);
         ASSERT_EQ(cam.world_y, expected_y);
 
-        // Cycle to next team (Team 3) via Ctrl+Tab
+        // Ctrl+Tab does nothing either
         key_event.keysym.sym = SDLK_TAB;
         key_event.keysym.mod = KMOD_LCTRL;
         app.handle_key_down(key_event);
-        ASSERT_EQ(app.local_player_id(), 3);
+        ASSERT_EQ(app.local_player_id(), 2);
     } TEST_END();
 }
 
@@ -1610,11 +1621,7 @@ void run_suite_9_gameplay_mechanics_and_options() {
         // FPS getter returns non-negative
         ASSERT_TRUE(app.get_current_fps() >= 0.0f);
 
-        // Toggle tile grid
-        ASSERT_FALSE(app.is_tile_grid_visible());
-        app.toggle_tile_grid_visibility();
-        ASSERT_TRUE(app.is_tile_grid_visible());
-        app.toggle_tile_grid_visibility();
+        // The tile grid is off unless --show-grid asks for it (test 8.6): no runtime toggle exists
         ASSERT_FALSE(app.is_tile_grid_visible());
     } TEST_END();
 
@@ -1685,7 +1692,7 @@ void run_suite_9_gameplay_mechanics_and_options() {
         auto& sim_engine = app.sim();
         ViewportCamera cam;
 
-        // 1. Verify bare hotkeys do NOT trigger the developer shortcuts
+        // 1. Verify that neither bare nor Ctrl hotkeys trigger any developer shortcut (there are none)
         SDL_KeyboardEvent key_ev{};
         key_ev.type = SDL_KEYDOWN;
 
@@ -1696,10 +1703,10 @@ void run_suite_9_gameplay_mechanics_and_options() {
         app.handle_key_down(key_ev);
         ASSERT_EQ(app.is_tile_grid_visible(), initial_grid);
 
-        // With Ctrl modifier, Ctrl+T DOES toggle tile grid
+        // With Ctrl Ctrl+T does not either: there is no such key in the original
         key_ev.keysym.mod = KMOD_LCTRL;
         app.handle_key_down(key_ev);
-        ASSERT_NE(app.is_tile_grid_visible(), initial_grid);
+        ASSERT_EQ(app.is_tile_grid_visible(), initial_grid);
 
         // 2. The chat box is always active: the text of the keys (SDL_TEXTINPUT) lands in it without any focus
         ASSERT_TRUE(hud.get_chat_input().empty());
@@ -6511,10 +6518,10 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
 
     TEST_CASE("12.108: Version Invariant & Fog of War Cursor Concealment Parity") {
         // 1. Verify semantic versioning components
-        ASSERT_EQ(ants::VERSION_STRING, "v0.0.50");
+        ASSERT_EQ(ants::VERSION_STRING, "v0.0.51");
         ASSERT_EQ(ants::VERSION_MAJOR, 0);
         ASSERT_EQ(ants::VERSION_MINOR, 0);
-        ASSERT_EQ(ants::VERSION_PATCH, 50);
+        ASSERT_EQ(ants::VERSION_PATCH, 51);
 
         // 2. Setup simulation world with Fog of War enabled
         SimulationEngine sim;
