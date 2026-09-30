@@ -54,6 +54,17 @@ std::string clip(const std::string& s, size_t max_chars) {
 
 }  // namespace
 
+bool valid_map_name(const std::string& name) noexcept {
+    if (name.size() < 5 || name.size() > kMaxMapNameChars) return false;
+    for (char c : name) {
+        const bool ok = (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_' || c == '-' || c == '.';
+        if (!ok) return false;
+    }
+    if (name.find("..") != std::string::npos || name[0] == '.') return false;
+    const std::string tail = name.substr(name.size() - 4);
+    return tail == ".LVL" || tail == ".lvl";
+}
+
 MsgType peek_type(const uint8_t* data, size_t size) noexcept {
     if (data == nullptr || size == 0) return MsgType::None;
     const uint8_t t = data[0];
@@ -253,6 +264,107 @@ bool decode(const uint8_t* data, size_t size, ChatMsg& out) {
     out = std::move(m);
     return true;
 }
+
+namespace {
+bool printable_name(const std::string& s, size_t max) {
+    if (s.size() > max) return false;
+    for (char c : s) {
+        if (static_cast<unsigned char>(c) < 0x20 || static_cast<unsigned char>(c) > 0x7E) return false;
+    }
+    return true;
+}
+}  // namespace
+
+std::vector<uint8_t> encode(const RoomMsg& m) {
+    std::vector<uint8_t> out;
+    ByteWriter w(out);
+    w.u8(static_cast<uint8_t>(MsgType::Room));
+    for (const auto& slot : m.slots) {
+        w.u8(static_cast<uint8_t>(slot.state));
+        w.str8(clip(slot.name, kMaxNameChars));
+    }
+    w.str8(m.map_name);
+    w.u8(m.fog ? 1 : 0);
+    w.u8(m.you);
+    return out;
+}
+bool decode(const uint8_t* data, size_t size, RoomMsg& out) {
+    ByteReader storage(nullptr, 0);
+    ByteReader* r = nullptr;
+    if (!open(data, size, MsgType::Room, r, storage)) return false;
+    RoomMsg m;
+    for (auto& slot : m.slots) {
+        const uint8_t st = r->u8();
+        slot.name = r->str8();
+        if (st > static_cast<uint8_t>(SlotState::Client) || !printable_name(slot.name, kMaxNameChars)) return false;
+        slot.state = static_cast<SlotState>(st);
+    }
+    m.map_name = r->str8();
+    const uint8_t fog = r->u8();
+    m.you = r->u8();
+    if (!r->done() || fog > 1 || !valid_map_name(m.map_name) || (m.you != 255 && m.you >= sim::MAX_PLAYERS)) return false;
+    m.fog = fog == 1;
+    out = std::move(m);
+    return true;
+}
+
+std::vector<uint8_t> encode(const StartMsg& m) {
+    std::vector<uint8_t> out;
+    ByteWriter w(out);
+    w.u8(static_cast<uint8_t>(MsgType::Start));
+    w.u32(m.seed);
+    w.str8(m.map_name);
+    w.u64(m.map_hash);
+    w.u8(m.fog ? 1 : 0);
+    w.u8(m.roster);
+    for (const auto& n : m.names) w.str8(clip(n, kMaxNameChars));
+    return out;
+}
+bool decode(const uint8_t* data, size_t size, StartMsg& out) {
+    ByteReader storage(nullptr, 0);
+    ByteReader* r = nullptr;
+    if (!open(data, size, MsgType::Start, r, storage)) return false;
+    StartMsg m;
+    m.seed = r->u32();
+    m.map_name = r->str8();
+    m.map_hash = r->u64();
+    const uint8_t fog = r->u8();
+    m.roster = r->u8();
+    for (auto& n : m.names) {
+        n = r->str8();
+        if (!printable_name(n, kMaxNameChars)) return false;
+    }
+    int players = 0;
+    for (uint8_t p = 0; p < sim::MAX_PLAYERS; ++p) players += (m.roster >> p) & 1;
+    if (!r->done() || fog > 1 || !valid_map_name(m.map_name) || (m.roster & 0xF0) != 0 || players < 2) return false;
+    m.fog = fog == 1;
+    out = std::move(m);
+    return true;
+}
+
+std::vector<uint8_t> encode(const LoadedMsg& m) {
+    return {static_cast<uint8_t>(MsgType::Loaded), static_cast<uint8_t>(m.ok ? 1 : 0)};
+}
+bool decode(const uint8_t* data, size_t size, LoadedMsg& out) {
+    if (data == nullptr || size != 2 || data[0] != static_cast<uint8_t>(MsgType::Loaded) || data[1] > 1) return false;
+    out.ok = data[1] == 1;
+    return true;
+}
+
+std::vector<uint8_t> encode(const CancelMsg& m) {
+    return {static_cast<uint8_t>(MsgType::Cancel), static_cast<uint8_t>(m.reason), m.player};
+}
+bool decode(const uint8_t* data, size_t size, CancelMsg& out) {
+    if (data == nullptr || size != 3 || data[0] != static_cast<uint8_t>(MsgType::Cancel)) return false;
+    if (data[1] < static_cast<uint8_t>(CancelMsg::Reason::PlayerLeft) || data[1] > static_cast<uint8_t>(CancelMsg::Reason::HostCancelled)) return false;
+    if (data[2] != 255 && data[2] >= sim::MAX_PLAYERS) return false;
+    out.reason = static_cast<CancelMsg::Reason>(data[1]);
+    out.player = data[2];
+    return true;
+}
+
+std::vector<uint8_t> encode_begin() { return {static_cast<uint8_t>(MsgType::Begin)}; }
+std::vector<uint8_t> encode_leave() { return {static_cast<uint8_t>(MsgType::Leave)}; }
 
 static std::vector<uint8_t> encode_ping_type(MsgType t, const PingMsg& m) {
     std::vector<uint8_t> out;

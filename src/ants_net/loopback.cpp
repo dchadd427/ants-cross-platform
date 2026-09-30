@@ -9,7 +9,7 @@ public:
     Endpoint(LoopbackNetwork& net, Link link) : net_(net), link_(link) {}
 
     bool send(const std::vector<uint8_t>& message) override {
-        if (state_ != State::Open || peer_ == nullptr || peer_->state_ != State::Open) return false;
+        if (state_ != State::Open || peer_ == nullptr || peer_->state_ != State::Open || peer_closed_) return false;
         uint32_t delay = link_.latency_ms;
         if (link_.jitter_ms > 0) delay += net_.next_random() % (link_.jitter_ms + 1);
         // reliable and ordered: never delivered before an earlier message of this direction
@@ -20,21 +20,29 @@ public:
         return true;
     }
     bool poll(std::vector<uint8_t>& message) override {
+        if (state_ != State::Open && state_ != State::Closed) return false;            // a failed connection delivers nothing more
         if (inbox_.empty() || inbox_.front().deliver_at > net_.now_) return false;
         message = std::move(inbox_.front().data);
         inbox_.pop_front();
         return true;
     }
-    State state() const override { return state_; }
+    // Like a TCP connection: what the peer sent before it closed can still be read; only then does this end see the close
+    State state() const override {
+        if (state_ != State::Open) return state_;
+        if (peer_closed_ && inbox_.empty()) return State::Closed;
+        return State::Open;
+    }
     void close() override {
+        if (state_ != State::Open) return;
         state_ = State::Closed;
-        if (peer_ != nullptr && peer_->state_ == State::Open) peer_->state_ = State::Closed;
+        if (peer_ != nullptr) peer_->peer_closed_ = true;
     }
 
     LoopbackNetwork& net_;
     Link link_;
     Endpoint* peer_{nullptr};
-    State state_{State::Open};
+    State state_{State::Open};          // this end's own decision (Open, or closed by us, or cut)
+    bool peer_closed_{false};           // the other end closed in an orderly way
     uint32_t last_deliver_{0};
     std::deque<Pending> inbox_;
 };
@@ -56,8 +64,13 @@ std::pair<Connection*, Connection*> LoopbackNetwork::connect(Link link) {
 void LoopbackNetwork::cut(Connection* endpoint, bool fail) {
     for (auto& e : endpoints_) {
         if (e.get() != endpoint) continue;
-        e->state_ = fail ? Connection::State::Failed : Connection::State::Closed;
-        if (e->peer_ != nullptr) e->peer_->state_ = fail ? Connection::State::Failed : Connection::State::Closed;
+        const Connection::State st = fail ? Connection::State::Failed : Connection::State::Closed;
+        e->state_ = st;
+        e->inbox_.clear();                              // an abrupt cut loses what was in flight
+        if (e->peer_ != nullptr) {
+            e->peer_->state_ = st;
+            e->peer_->inbox_.clear();
+        }
         return;
     }
 }

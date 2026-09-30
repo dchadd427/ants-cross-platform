@@ -272,6 +272,20 @@ if [ "$RUN_SIM" -eq 1 ]; then
     echo -e "${BOLD}${BLUE}======================================================================${RESET}"
     "./$BUILD_DIR/tests/test_net/test_lockstep"
     LOCKSTEP_STATUS=$?
+
+    echo ""
+    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
+    echo -e "${BOLD}${BLUE}>>> 2.12 RUNNING ROOM SUITE (joining, roster, start barrier)...      ${RESET}"
+    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
+    "./$BUILD_DIR/tests/test_net/test_lobby"
+    LOBBY_STATUS=$?
+
+    echo ""
+    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
+    echo -e "${BOLD}${BLUE}>>> 2.13 RUNNING TCP TRANSPORT SUITE (framing, hostile frames, real-socket match)...${RESET}"
+    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
+    "./$BUILD_DIR/tests/test_net/test_tcp"
+    TCP_STATUS=$?
 fi
 
 # 5. Execute Application Integration Tests
@@ -442,6 +456,20 @@ if [ "$RUN_SIM" -eq 1 ]; then
         echo -e " 2.11 Lock-Step Network Core (test_lockstep):        ${GREEN}PASSED${RESET}"
     else
         echo -e " 2.11 Lock-Step Network Core (test_lockstep):        ${RED}FAILED (exit code ${LOCKSTEP_STATUS})${RESET}"
+        TOTAL_FAILED=$((TOTAL_FAILED + 1))
+    fi
+
+    if [ "$LOBBY_STATUS" -eq 0 ]; then
+        echo -e " 2.12 Room / Start Barrier (test_lobby):             ${GREEN}PASSED${RESET}"
+    else
+        echo -e " 2.12 Room / Start Barrier (test_lobby):             ${RED}FAILED (exit code ${LOBBY_STATUS})${RESET}"
+        TOTAL_FAILED=$((TOTAL_FAILED + 1))
+    fi
+
+    if [ "$TCP_STATUS" -eq 0 ]; then
+        echo -e " 2.13 TCP Transport (test_tcp):                      ${GREEN}PASSED${RESET}"
+    else
+        echo -e " 2.13 TCP Transport (test_tcp):                      ${RED}FAILED (exit code ${TCP_STATUS})${RESET}"
         TOTAL_FAILED=$((TOTAL_FAILED + 1))
     fi
 fi

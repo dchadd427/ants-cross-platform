@@ -7,6 +7,7 @@
 // Star topology: the room owner (host) is the sequencer. Clients send Command, TurnAck, Hash, Ping and Chat to it; it answers with Turn (the
 // sealed commands of one 100 ms turn, in canonical order, issuer stamped from the connection), Desync, Pong and Chat.
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <string>
@@ -39,8 +40,18 @@ enum class MsgType : uint8_t {
     Chat = 9,       // both ways (the host relays)
     Ping = 10,      // either way
     Pong = 11,      // the answer, echoing the nonce
-    Last = Pong
+    Room = 12,      // host -> everybody: who sits where, the map, the fog option (sent on every change)
+    Start = 13,     // host -> everybody: load this map with this seed now
+    Loaded = 14,    // client -> host: the map is loaded (or could not be)
+    Begin = 15,     // host -> everybody: everybody is loaded, the match begins
+    Cancel = 16,    // host -> everybody: the start failed, back to the room
+    Leave = 17,     // client -> host: I leave
+    Last = Leave
 };
+
+/// Longest map file name that travels (a plain name of the maps folder: letters, digits, '_', '-', '.', ending in ".LVL")
+inline constexpr size_t kMaxMapNameChars = 32;
+bool valid_map_name(const std::string& name) noexcept;
 
 enum class RejectReason : uint8_t { Full = 1, VersionMismatch = 2, MatchRunning = 3, Kicked = 4, BadRequest = 5 };
 
@@ -85,6 +96,35 @@ struct PingMsg {
     uint32_t sent_ms{0};
 };
 
+/// What a seat of the room holds
+enum class SlotState : uint8_t { Empty = 0, Host = 1, Client = 2 };
+struct RoomMsg {
+    struct Slot {
+        SlotState state{SlotState::Empty};
+        std::string name;
+    };
+    std::array<Slot, sim::MAX_PLAYERS> slots{};
+    std::string map_name;         // e.g. "TREASURE.LVL"
+    bool fog{false};
+    uint8_t you{255};             // the receiver's own seat (set per recipient by the host)
+};
+struct StartMsg {
+    uint32_t seed{1};
+    std::string map_name;
+    uint64_t map_hash{0};         // FNV-1a 64 of the map file: a client whose file differs cannot play
+    bool fog{false};
+    uint8_t roster{0};            // bit p: seat p takes part
+    std::array<std::string, sim::MAX_PLAYERS> names;
+};
+struct LoadedMsg {
+    bool ok{true};
+};
+struct CancelMsg {
+    enum class Reason : uint8_t { PlayerLeft = 1, LoadFailed = 2, HostCancelled = 3 };
+    Reason reason{Reason::HostCancelled};
+    uint8_t player{255};          // who caused it (PlayerLeft, LoadFailed)
+};
+
 /// The type byte of a message, MsgType::None when the message is empty or the type is unknown.
 MsgType peek_type(const uint8_t* data, size_t size) noexcept;
 inline MsgType peek_type(const std::vector<uint8_t>& m) noexcept { return peek_type(m.data(), m.size()); }
@@ -99,6 +139,12 @@ std::vector<uint8_t> encode(const AckMsg&);
 std::vector<uint8_t> encode(const HashMsg&);
 std::vector<uint8_t> encode(const DesyncMsg&);
 std::vector<uint8_t> encode(const ChatMsg&);
+std::vector<uint8_t> encode(const RoomMsg&);
+std::vector<uint8_t> encode(const StartMsg&);
+std::vector<uint8_t> encode(const LoadedMsg&);
+std::vector<uint8_t> encode(const CancelMsg&);
+std::vector<uint8_t> encode_begin();
+std::vector<uint8_t> encode_leave();
 std::vector<uint8_t> encode_ping(const PingMsg&);
 std::vector<uint8_t> encode_pong(const PingMsg&);
 
@@ -111,6 +157,10 @@ bool decode(const uint8_t* data, size_t size, AckMsg& out);
 bool decode(const uint8_t* data, size_t size, HashMsg& out);
 bool decode(const uint8_t* data, size_t size, DesyncMsg& out);
 bool decode(const uint8_t* data, size_t size, ChatMsg& out);
+bool decode(const uint8_t* data, size_t size, RoomMsg& out);
+bool decode(const uint8_t* data, size_t size, StartMsg& out);
+bool decode(const uint8_t* data, size_t size, LoadedMsg& out);
+bool decode(const uint8_t* data, size_t size, CancelMsg& out);
 /// Ping and Pong share the payload; the type byte tells them apart (peek_type).
 bool decode_ping(const uint8_t* data, size_t size, PingMsg& out);
 

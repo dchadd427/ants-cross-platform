@@ -319,7 +319,7 @@ void run_protocol_tests() {
         bytes[4] = 7;
         ASSERT_FALSE(decode(bytes, h));
         // unknown types
-        for (uint8_t type : std::vector<uint8_t>{0, 12, 100, 255}) {
+        for (uint8_t type : std::vector<uint8_t>{0, 18, 100, 255}) {
             const std::vector<uint8_t> m = {type, 0, 0, 0, 0};
             ASSERT_EQ(peek_type(m), MsgType::None);
         }

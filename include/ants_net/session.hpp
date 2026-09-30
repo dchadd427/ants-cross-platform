@@ -112,6 +112,8 @@ public:
     /// The player's command, sent to the host (which stamps the issuer)
     bool submit(sim::Command command);
     bool chat(const std::string& text, bool team);
+    /// The player quits the match
+    void leave();
 
     void update(uint32_t now_ms);
 

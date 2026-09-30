@@ -100,4 +100,13 @@ private:
     bool ok_{true};
 };
 
+/// FNV-1a 64 (used to compare map files between machines)
+inline uint64_t fnv1a64(const uint8_t* p, size_t n, uint64_t h = 0xcbf29ce484222325ULL) noexcept {
+    for (size_t i = 0; i < n; ++i) {
+        h ^= p[i];
+        h *= 0x100000001b3ULL;
+    }
+    return h;
+}
+
 }  // namespace ants::net

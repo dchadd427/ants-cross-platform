@@ -1,7 +1,7 @@
 # Network Port
 
-Status: **the transport-independent core is done (v0.0.43 command layer and state hash, v0.0.44 protocol, sequencer, lock-step runner and sessions, tested on a simulated network).** No real
-transport, lobby or game integration yet; a single-player game applies its commands at once.
+Status: **the core, the room and a native TCP transport are done and tested (v0.0.43 command layer and state hash, v0.0.44 protocol, sequencer, lock-step runner and sessions, v0.0.45 room and start
+barrier and framed TCP).** The application is not connected to them yet (no host / join interface, no WebRTC / NAT traversal); a single-player game applies its commands at once.
 
 ## What the original does
 
@@ -58,6 +58,23 @@ driven from the game's main loop with a monotonic millisecond clock: no threads,
   named within a second with the differing subsystem and the match freezes; a frozen peer stalls the game after 3 s and it goes on when the peer catches up; a cut connection reports the drop-out once; a
   hostile client is thrown out without anybody else noticing; chat is relayed with the sender stamped by the connection.
 
+## The room and the start barrier (`lobby.hpp`, v0.0.45)
+
+The original has no host / join interface (an external lobby starts every machine with its roster on the command line). Its rules are kept, the flow is new: a client sends `Hello` (protocol version,
+name) and gets `Welcome` (its seat) or `Reject` (`Full`, `VersionMismatch`, `MatchRunning`, `Kicked`, `BadRequest`); the host broadcasts `Room` (seats and names, map file name, fog option, and the
+receiver's own seat) on every change. `HostLobby::start` sends `Start` (seed, map file name and FNV-1a 64 hash of the file, fog, roster mask, names); every machine loads the map and answers `Loaded`
+(a machine whose file differs answers not-ok); when the host and every guest are loaded the host sends `Begin` and hands the connections (seat -> connection) to the `HostSession`. A load failure,
+a leaver, a host cancel or a 60 s load timeout sends `Cancel` and returns to the room; a guest that says nothing for 10 s, sends garbage first, or breaks the rules 8 times is closed. Map names travel
+only as plain names of the maps folder (letters, digits, `_`, `-`, `.`, ending in `.LVL`; no path separators, no `..`). Seats go to guests in the order their `Hello` reaches the host. No late join,
+no host migration (as the original).
+
+## TCP for LAN and development (`tcp.hpp`, native builds, v0.0.45)
+
+`TcpConnection` / `TcpListener`: non-blocking sockets (POSIX and Winsock), `u32` length + payload framing, a length above 64 KB fails the connection without allocating for it, a sender whose peer never
+reads is cut off when its queue passes 512 KB, an orderly close still delivers what was sent before it, `TCP_NODELAY`. It implements the same `Connection` interface as the in-memory link, so the sessions,
+lobby and tests run unchanged on real sockets (`tests/test_net/test_tcp.cpp`: message boundaries and order for every size up to the limit, 20000 small messages, hostile length prefixes, truncated frames, dead
+ports, the never-reading peer, a 40 s match of a host and three clients over real sockets, and the room from `Hello` to `Begin`).
+
 ## State hash (`SimulationEngine::state_hash`)
 
 FNV-1a 64 over the gameplay state in seven parts (engine, players, grid, food, ants, paths, droppers). Everything that can influence a later tick is in it (both PRNG states, clocks, every ant field, the
@@ -70,10 +87,11 @@ seeds and demands the same hash every tick, and demands that an engine that play
 1. **Command layer, issuer and ownership checks, `Stop` as a command, `init()` reset, state hash, removal of the alliance auto-accept, two-engine loopback test: shipped (v0.0.43).**
 2. **Lock-step core: protocol, sequencer, runner, host and client sessions, in-memory network: shipped (v0.0.44).** (The plan's order changed: the turn logic needs no third-party code, so it was built and tested
    first, over a simulated network with latency and jitter.)
-3. Real transports behind `Connection`: a framed TCP transport for LAN and development (native), then WebRTC data channels with ICE / STUN / TURN (native via libdatachannel, browser via
-   RTCPeerConnection) and the signaling service; the lobby handshake (`Hello` / `Welcome`, roster, map, seed, LOADED and READY barriers) and room screens; the application driven by the runner instead of the
-   wall-clock tick driver (`HUD::set_command_sink`), drop-out elimination stamped by the sequencer, native versus WebAssembly golden hashes.
-4. Docker / nginx / TURN deployment files (secrets from the environment).
-5. Alliance dialogs (the ally attack confirmation, string 4; the invitation questions, strings 1 - 3), CHECKGO elimination rules (the match also ends when nobody is alive or one side leads alone).
+3. **Framed TCP for LAN and development, the room handshake and the start barrier: shipped (v0.0.45).**
+4. The application: host / join interface, the runner instead of the wall-clock tick driver (`HUD::set_command_sink`, a predicted acknowledgement for the click feedback), "waiting for player" and desync
+   messages, drop-out elimination stamped by the sequencer, native versus WebAssembly golden hashes.
+5. WebRTC data channels with ICE / STUN / TURN (native via libdatachannel, browser via RTCPeerConnection) and the signaling service.
+6. Docker / nginx / TURN deployment files (secrets from the environment).
+7. Alliance dialogs (the ally attack confirmation, string 4; the invitation questions, strings 1 - 3), CHECKGO elimination rules (the match also ends when nobody is alive or one side leads alone).
 
 Open for milestone 3 and later: a float-determinism audit across native and WebAssembly (the flower dropper's type draw uses doubles), native versus wasm golden hashes.

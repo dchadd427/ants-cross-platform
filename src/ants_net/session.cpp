@@ -97,6 +97,10 @@ void HostSession::handle_message(uint8_t player, const std::vector<uint8_t>& msg
             if (clients_[player].conn != nullptr) clients_[player].conn->send(encode_pong(m));
             return;
         }
+        case MsgType::Leave:
+            if (msg.size() != 1) return violation(player);
+            drop(player);                            // a player who quits leaves like one whose connection dies
+            return;
         case MsgType::Chat: {
             ChatMsg m;
             if (!decode(msg, m)) return violation(player);
@@ -173,6 +177,13 @@ bool ClientSession::submit(sim::Command command) {
     CommandMsg m;
     m.command = std::move(command);
     return conn_->send(encode(m));
+}
+
+void ClientSession::leave() {
+    if (conn_ != nullptr && conn_->is_open()) {
+        conn_->send(encode_leave());
+        conn_->close();
+    }
 }
 
 bool ClientSession::chat(const std::string& text, bool team) {
