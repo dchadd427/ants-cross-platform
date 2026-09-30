@@ -502,10 +502,11 @@ void SimulationEngineImpl::burn_overlay_end(AntUnit& a) {
 // Death
 // ------------------------------------------------------------------------------------------------
 
-// FUN_01020f89 FinishDeath (message 0x16) -> Kill (0x1020ff6): a typed ant leaves its power-up on a free neighbour tile.
+// FUN_01020f89 FinishDeath (message 0x16) -> Kill (0x1020ff6): a typed ant leaves its power-up on a free neighbour tile, but only
+// on its owner's machine (IsLocal); the owner of a team that dropped out is gone, so nobody drops anything for it.
 void SimulationEngineImpl::finish_death(AntUnit& a) {
     if (a.removed) return;
-    if (a.type != AntType::Worker) drop_powerup(a, pixel_tile(a), powerup_type_of(a.type));
+    if (a.type != AntType::Worker && !team_dropped(a.player_id)) drop_powerup(a, pixel_tile(a), powerup_type_of(a.type));
     remove_ant(a);
 }
 

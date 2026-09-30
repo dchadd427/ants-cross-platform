@@ -396,7 +396,7 @@ void HUD::render(IRenderer& renderer, const assets::AssetArchive& assets,
         } else {
             // Another player's hill: the ally pedestal, only with more than two players and while not allied with its owner
             const bool allied = local_player_id_ < world.player_alliances.size() && world.player_alliances[local_player_id_] == selected_base_team_id_;
-            if (world.anthills.size() > 2 && !allied) {
+            if (ally_pedestal_possible(world) && !allied) {
                 left_kind = PedestalKind::Ally;
                 left_mode = (team_up_button_.is_pressed || flashing(0)) ? 2 : 1;
             }
@@ -818,6 +818,15 @@ void HUD::render_quit_dialog(IRenderer& renderer, const assets::AssetArchive& as
 
 std::string HUD::alliance_colour_word(uint8_t team) const {
     return sim::strings::colour_name(static_cast<uint8_t>(3u - (team & 3u)));      // strings 100 - 103: black, blue, red, green by colour index
+}
+
+bool HUD::ally_pedestal_possible(const sim::WorldState& world) const {
+    if (local_player_id_ < sim::MAX_PLAYERS && (world.dropped_mask & (1u << local_player_id_)) != 0) return false;
+    size_t live = 0;
+    for (const auto& hill : world.anthills) {
+        if (hill.team_id >= sim::MAX_PLAYERS || (world.dropped_mask & (1u << hill.team_id)) == 0) ++live;
+    }
+    return live > 2;
 }
 
 std::string HUD::alliance_name(uint8_t team) const {

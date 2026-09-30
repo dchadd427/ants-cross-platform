@@ -634,6 +634,25 @@ int main() {
         }
     } TEST_END();
 
+    TEST_CASE("7.1 Typed ants of a dropped team leave no power-ups: only the owner's machine drops them (Kill 0x1020ff6 tests IsLocal)") {
+        SimulationEngine sim;
+        make_world(sim);
+        const uint32_t bomber = sim.spawn_unit(1, AntType::Bomber, TileCoord{20, 20});
+        const uint32_t fire = sim.spawn_unit(1, AntType::Fire, TileCoord{30, 30});
+        const uint32_t live = sim.spawn_unit(0, AntType::Bomber, TileCoord{40, 10});
+        sim.drop_player(1);
+        run_ms(sim, 4000);
+        ASSERT_TRUE(sim.get_unit(bomber).removed && sim.get_unit(fire).removed);
+        int powerups = 0;
+        for (int y = 0; y < 60; ++y) {
+            for (int x = 0; x < 60; ++x) {
+                if (sim.grid().has_powerup_at(TileCoord{x, y})) ++powerups;
+            }
+        }
+        ASSERT_EQ(powerups, 0);
+        ASSERT_TRUE(sim.get_unit(live).is_alive());                                        // the other team is untouched (a live team's typed ants still drop: tests 1.5, 1.6)
+    } TEST_END();
+
     std::cout << "\n=======================================================\n"
               << " Total Test Cases: " << g_test_count << "\n"
               << " Total Assertions: " << g_assert_count << "\n"

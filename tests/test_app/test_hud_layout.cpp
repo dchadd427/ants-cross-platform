@@ -265,6 +265,24 @@ void test_ally_pedestal(const assets::AssetArchive& arc) {
         render_settled(hud, arc, world, rr);
         check(rr.named("butdipu.bmp").empty() && rr.named("labdib.bmp").empty(), "two players: no ally pedestal");
     }
+    // the players that dropped out do not count (FUN_0100c58a counts the teams whose +0x64 is clear) and a dropped local team has none (0x1028188)
+    const auto ally_icon_shown = [&](size_t hills, uint8_t dropped_mask) {
+        RecordingRenderer rr(arc);
+        sim::WorldState world;
+        world.anthills.resize(hills);
+        for (size_t i = 0; i < hills; ++i) world.anthills[i].team_id = static_cast<uint8_t>(i);
+        world.dropped_mask = dropped_mask;
+        HUD hud;
+        hud.init(0);
+        hud.select_base(1);
+        render_settled(hud, arc, world, rr);
+        return !rr.named("butdipu.bmp").empty();
+    };
+    check(ally_icon_shown(4, 0x00), "four live players: the ally pedestal");
+    check(ally_icon_shown(4, 0x08), "four hills, one team dropped: three live players, the ally pedestal");
+    check(!ally_icon_shown(4, 0x0C), "four hills, two teams dropped: two live players, no ally pedestal");
+    check(!ally_icon_shown(3, 0x04), "three hills, one team dropped: two live players, no ally pedestal");
+    check(!ally_icon_shown(4, 0x01), "the local team has dropped out itself: no ally pedestal");
 }
 
 // The rubber band (FUN_0102653f): a 1 px frame in (255, 0, 0) around the press point and the pointer, the pointer kept 1 px inside the view

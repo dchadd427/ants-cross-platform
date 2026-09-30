@@ -292,6 +292,9 @@ private:
     void answer_alliance_dialog(sim::SimulationEngine& sim, bool yes);
     std::string alliance_name(uint8_t team) const;
     std::string alliance_colour_word(uint8_t team) const;
+    /// The ally pedestal of another player's hill (FUN_01027f07 mode 2, 0x1028188): more than two live players (FUN_0100c58a counts the teams whose +0x64 is
+    /// clear) and the local team has not dropped out itself
+    bool ally_pedestal_possible(const sim::WorldState& world) const;
     void render_quick_help(IRenderer& renderer, const assets::AssetArchive& assets);
     void render_options_dialog(IRenderer& renderer, const assets::AssetArchive& assets);
     void render_match_start_modal(IRenderer& renderer, const assets::AssetArchive& assets);

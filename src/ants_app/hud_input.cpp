@@ -467,7 +467,7 @@ bool HUD::pedestal_press(sim::SimulationEngine& sim, int32_t x, int32_t y) {
         }
         const bool allied = local_player_id_ < world.player_alliances.size() &&
                             world.player_alliances[local_player_id_] == selected_base_team_id_;
-        if (in_slot(0, x, y) && world.anthills.size() > 2 && !allied) {           // the ally pedestal: more than two players, not allied
+        if (in_slot(0, x, y) && ally_pedestal_possible(world) && !allied) {       // the ally pedestal: more than two live players, not allied
             team_up_button_.is_pressed = true;
             play_sfx(sim::SoundID::NavButtonClick);
             flash_pedestal(0);

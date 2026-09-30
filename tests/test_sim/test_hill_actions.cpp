@@ -342,6 +342,29 @@ int main() {
         ASSERT_EQ(sim.get_pending_hatch_count(0), 0u);
     } TEST_END();
 
+    TEST_CASE("2.5 A blocked hatch looks again after 1000 ms, not at the next scheduler slot ([task+0x1c] = 1000, 0x1025100; the list scheduler is the default)") {
+        SimulationEngine sim;
+        make_world(sim);
+        sim.set_player_eggs(0, 1);
+        sim.set_player_score(0, 200);
+        const uint32_t blocker = sim.spawn_unit(0, AntType::Worker, TileCoord{21, 21});
+        ASSERT_EQ(static_cast<int>(sim.try_hatch(0)), static_cast<int>(SimulationEngine::HatchResult::Started));
+        for (int t = 0; t < 164; ++t) sim.tick();                                      // 8.2 s: the first run (8.0 s) found the entrance taken
+        AntOrder o{};
+        o.ant_id = blocker;
+        o.type = OrderType::Move;
+        o.target_x = 26;
+        o.target_y = 26;
+        sim.issue_order(o);
+        int appeared = -1;
+        for (int t = 164; t < 260 && appeared < 0; ++t) {
+            sim.tick();
+            if (sim.get_world_state().ants.size() == 2) appeared = t + 1;
+        }
+        ASSERT_TRUE(appeared >= 0);
+        ASSERT_NEAR(appeared * kTickMs, 9000, 100);                                     // the second run, 1000 ms after the first, although the entrance was free at about 8.6 s
+    } TEST_END();
+
     TEST_CASE("3.1 Raid: 3510 ms clip on the raid tile, loot min(score, 50) moves at the end, thief goes home") {
         SimulationEngine sim;
         make_world(sim);
@@ -557,6 +580,47 @@ int main() {
         sim.issue_move_order(e, TileCoord{30, 30});
         ASSERT_EQ(sim.get_unit(e).orig_order_tile.x, 30);                             // not shifted to (29, 29)
         ASSERT_EQ(sim.get_unit(e).orig_order_tile.y, 30);
+    } TEST_END();
+
+    // ---- a team that dropped out of the match (team +0x64, FUN_0100d03b): its hill loses its special tiles and cannot be raided -------
+    TEST_CASE("5.1 A raid on a dropped team's hill is refused: the thief stops and nothing is taken (0x101d577)") {
+        SimulationEngine sim;
+        make_world(sim);
+        sim.set_player_score(1, 120);
+        const uint32_t thief = sim.spawn_unit(0, AntType::Thief, TileCoord{43, 40});
+        sim.drop_player(1);
+        AntOrder o{};
+        o.ant_id = thief;
+        o.type = OrderType::InfiltrateAnthill;
+        o.target_x = 43;
+        o.target_y = 42;
+        sim.issue_order(o);
+        for (int t = 0; t < 160; ++t) sim.tick();
+        ASSERT_EQ(sim.get_player_score(1), 120);
+        ASSERT_FALSE(sim.get_unit(thief).state == UnitState::Infiltrating);
+        ASSERT_FALSE(sim.get_unit(thief).is_thief_steal);
+        ASSERT_FALSE(sim.get_unit(thief).is_holding());
+        ASSERT_EQ(sim.get_unit(thief).state, UnitState::Idle);                              // it just stands there (StopSync)
+    } TEST_END();
+
+    TEST_CASE("5.2 The three tiles above a dropped team's hill are ordinary ground for everybody (CanEnter skips teams with +0x64 set, 0x101f9a6)") {
+        SimulationEngine sim;
+        make_world(sim);
+        const uint32_t w = sim.spawn_unit(0, AntType::Worker, TileCoord{43, 30});
+        AntOrder o{};
+        o.ant_id = w;
+        o.type = OrderType::Move;
+        o.target_x = 41;
+        o.target_y = 39;                                                                   // the middle tile above the hill at (40, 40)
+        sim.issue_order(o);
+        ASSERT_TRUE(sim.get_unit(w).final_dest != (TileCoord{41, 39}));                     // a live team's queue tile: the goal is moved
+        sim.drop_player(1);
+        const uint32_t w2 = sim.spawn_unit(0, AntType::Worker, TileCoord{44, 30});
+        o.ant_id = w2;
+        sim.issue_order(o);
+        ASSERT_EQ(sim.get_unit(w2).final_dest, (TileCoord{41, 39}));                        // after the drop-out: the tile itself
+        for (int t = 0; t < 400; ++t) sim.tick();
+        ASSERT_EQ(sim.get_unit(w2).pos, (TileCoord{41, 39}));
     } TEST_END();
 
     std::cout << "\n=======================================================\n"

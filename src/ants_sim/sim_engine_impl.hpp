@@ -398,6 +398,7 @@ public:
     int32_t food_object_at(TileCoord t) const noexcept;
     TileCoord team_entrance(uint8_t team) const noexcept;
     bool is_special_base_tile(TileCoord t) const noexcept;
+    bool team_dropped(uint8_t team) const noexcept { return team < MAX_PLAYERS && (dropped_mask_ & (1u << team)) != 0; }
 
     void handle_game_over() {
         match_state_ = MatchState::GameOver;

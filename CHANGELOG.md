@@ -39,6 +39,22 @@ Ground truth for every entry is in [`docs/GAME_REVERSE_ENGINEERING.md`](docs/GAM
   - **Found on the way, for the audit** (docs: implementation_plan.md section 18): `tests/test_sim/test_challenger_m2_it2_deep_stress.cpp` has not been part of the build since an early commit and no longer compiles
     (it uses the retired slot-queue API of the hill). (An earlier version of this line said that the death clips are no longer started by a separate effect: wrong, only the unused helper `spawn_death_effect` was removed; the effect path in `movement_system.cpp` is still in use, see the audit.)
 
+## v0.0.55 - 2026-09-30 - Dropped teams follow the original; a blocked hatch looks again after a second
+
+Audit batch 1, items 6 and 8 (`docs/audit/ledger_food_economy.md` NEW-5, `ledger_hill.md` NEW-5 / NEW-6, `ledger_ui.md` NEW-8, `ledger_combat.md` NEW-4, `ledger_scheduler.md` HATCHTSK), each re-read in `Ants.exe` first.
+These only show after a player dropped out of a network match (quit, kicked, 60 s without a sign of life) or while a hatch waits for the entrance:
+
+- **A raid on a dropped team's hill is refused** (`0x101d577`): the thief just stops; before, it took up to 50 points from a team that no longer exists.
+- **The special tiles of a dropped team's hill are ordinary ground** (HillSpecial `FUN_0101d858` answers 0 for it, CanEnter skips it, `0x101f9a6`): bombs and fire walls may go on its entrance, raid tile and the three tiles above the mound, and ants
+  of the other teams may walk on the tiles above it.
+- **A dropped team's typed ants leave no power-ups** (Kill, `0x1020ff6`, drops only on the owner's machine): when a player with bomber, fire or swimmer ants left the match, all those ants used to litter the map with power-ups as they died.
+- **The ally pedestal counts live teams** (`FUN_0100c58a`, `0x1028188`): it needs more than two teams that have not dropped out, and a local team that has not dropped out itself (before, it counted the hills on the map).
+- **A blocked hatch looks again after 1000 ms** (HATCHTSK, `0x1025100`): when an own ant stands on the entrance the task writes 1000 into its interval and keeps running; the default (list) scheduler honours it. The remake re-checked every 8 ms
+  (the `-newtask` wheel), so the newborn appeared the moment the entrance was free instead of up to a second later. (The earlier audit and the docs called the 1000 a dead store: that was wrong.)
+- Docs: `docs/GAME_REVERSE_ENGINEERING.md` (hatch, dropped hill), README (test table), `docs/AUDIT_ONE_TO_ONE.md` (progress).
+- Tests: `test_hill_actions` 2.5 (hatch retry, 1000 ms), 5.1 (raid refused), 5.2 (queue tiles ordinary); `test_ability_actions` 4.8 (placement on a dropped hill's special tiles); `test_combat_actions` 7.1 (no power-ups of a dropped team);
+  `test_hud_layout` ally pedestal with live teams and with the local team dropped; all of them fail on v0.0.54. No existing test had to change. Version assertion of 12.108.
+
 ## v0.0.54 - 2026-09-30 - Bridges keep their timer, swimmers keep their footing, scores are never clamped
 
 Audit batch 1, items 4 and 5 (`docs/audit/ledger_abilities.md` NEW-1 / NEW-2, `ledger_effects_objects.md` NEW-5, `ledger_food_economy.md` NEW-4, `ledger_sound_texts.md` NEW-9), each re-read in `Ants.exe` first:

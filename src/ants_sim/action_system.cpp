@@ -16,7 +16,7 @@ namespace ants::sim {
 namespace {
 
 constexpr int32_t kTile = 32;
-constexpr uint32_t kHatchRetryMs = 8;      // the scheduler wheel granularity: a blocked HATCHTSK re-runs in the next slot
+constexpr uint32_t kHatchRetryMs = 1000;   // a blocked HATCHTSK sets its interval [task+0x1c] to 1000 and answers "keep" (0x1025100); the list scheduler, the default, honours it
 constexpr uint32_t kRaidLootMax = 50;      // a thief steals min(score of the victim, 50)
 
 inline TileCoord no_order_tile() noexcept {
@@ -226,7 +226,7 @@ void SimulationEngineImpl::anthillq_run() {
 // Hatching (FUN_01010aca / FUN_01010c14 / HATCHTSK 0x1025072)
 // ------------------------------------------------------------------------------------------------
 
-// HATCHTSK body, run 8000 ms after the click and then every scheduler slot while an own ant stands on the entrance
+// HATCHTSK body, run 8000 ms after the click and then every 1000 ms while an own ant stands on the entrance
 // tile: ants that are heading for the entrance are sent to the alternative waiting tile, and the newborn worker
 // appears on the entrance tile centre playing the hatch clip.
 void SimulationEngineImpl::hatch_run(uint8_t team) {
@@ -236,7 +236,7 @@ void SimulationEngineImpl::hatch_run(uint8_t team) {
     for (auto& up : ants_) {
         AntUnit* a = up.get();
         if (a && a->player_id == team && a->is_alive() && pixel_tile(*a) == ent) {
-            h.due_ms += kHatchRetryMs;                                      // [task+0x1c]=1000 is a dead store: next slot
+            h.due_ms += kHatchRetryMs;                                      // [task+0x1c] = 1000 (0x1025100): the next run is a second later
             return;
         }
     }
@@ -289,6 +289,10 @@ bool SimulationEngineImpl::raid_arrive(AntUnit& a, StepEvt& /*e*/) {
         post_news(a.player_id, strings::kAlreadyHaveFood);
         const TileCoord home = team_entrance(a.player_id);
         if (home.x >= 0) go_to(a, home, false, false); else stop_sync(a);
+        return false;
+    }
+    if (team_dropped(victim)) {                                             // 0x101d577: nothing to raid, the thief just stops (0x101d62d)
+        stop_sync(a);
         return false;
     }
     // loot = min(victim's individual score, 50) with a SIGNED compare (0x101d57f: cmp eax, 0x32; jl): a victim below zero gives a negative loot

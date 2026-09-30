@@ -1515,8 +1515,9 @@ in `ants.chd` (the original was never run, so timings come from the clip tables)
   selects the hill) checks in this order: no eggs -> text 16, already hatching -> text 14, score < 200 (not forced) -> text 13
   and cue 61 `antstop`; otherwise text 15, cost `min(200, score)` (bubble "-N", cue 88 `scoredn`), eggs - 1, hatched counter + 1,
   `hatching = 1`, and the task HATCHTSK is armed for 8000 ms. No ant object exists during that time and only one egg can
-  incubate. When the task runs it re-runs every scheduler slot (~8 ms, the "1000" written to the task is a dead store) while an
-  own ant stands on the entrance tile; then own ants heading for the entrance (order 1 / 2 with target = entrance) are sent to
+  incubate. When the task runs it re-runs every 1000 ms while an own ant stands on the entrance tile (corrected in the audit of
+  2026-09-30, v0.0.55: the body writes 1000 into `[task + 0x1c]` and answers "keep" at `0x1025100`; the default scheduler is the LIST scheduler, which
+  reads that field as the task's interval, so it is not a dead store and not the 8 ms of the `-newtask` wheel); then own ants heading for the entrance (order 1 / 2 with target = entrance) are sent to
   the waiting tile (`+0x68 = 1, +0x6c = 0`) and the newborn is created at the entrance tile centre: a worker (always type 0,
   hp 10), direction `rand() % 7 + 1`, action 0x14 (`aghatch`, 9 frames `[40, 8 x 60]` = 520 ms), order 2, plus the positional cue
   `exithill` (43) and text 63 "Ready!". At the clip end it goes to tile42. When the last local ant is removed and eggs remain the
@@ -1533,6 +1534,11 @@ in `ants.chd` (the original was never run, so timings come from the clip tables)
   carries it (loot flag +0xec is set even for 0) with text 62 "Food stolen..." for the thief's owner, and a thief that got food
   goes home; with nothing to steal it stays idle on the raid tile. A raiding thief can be attacked (action 0xd is not in the
   refusal list). Depositing the loot at its own hill scores `amount` like food (cue 87, text 61).
+  **A dropped team's hill** *(audit of 2026-09-30, fixed in v0.0.55)*: a raid on the hill of a team with `+0x64` set is refused (`0x101d577`; the thief stops, `0x101d62d`, after the
+  ally and "already holding food" refusals); HillSpecial (`FUN_0101d858`) answers 0 for such a team, so its entrance, raid tile and the three tiles above the mound are ordinary
+  ground for bombs and fire walls, and CanEnter skips it in the loop over the queue tiles (`0x101f9a6`); its typed ants leave no power-up when they die (Kill, `0x1020ff6`,
+  drops only when `IsLocal(ant)`: the owner's machine is gone); the ally pedestal needs more than two LIVE teams (`FUN_0100c58a` counts the teams whose `+0x64` is clear)
+  and a local team that has not dropped out itself (`0x1028188`).
   **Scores are never clamped** *(audit of 2026-09-30, fixed in v0.0.54)*: `AddScore` (`0x1010cc9`) just adds `delta` to `+0x54`; the loot is a signed word
   (`movsx word [ant + 0xf8]`), `FUN_0101e27f` does `AddScore(victim, -loot)` and `SetHolding(loot)` for every non-zero loot, and the deposit (`FUN_0101e165`) does
   `AddScore(carried)` for whatever is carried, with the "Score going up" text only when it is positive (`0x101e198`). Two thieves that raid a 60-point hill together both

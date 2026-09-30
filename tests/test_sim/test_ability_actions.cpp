@@ -609,6 +609,18 @@ int main() {
         ASSERT_EQ(sim.get_unit(b).orig_order, AntUnit::kOrderMove);
     } TEST_END();
 
+    TEST_CASE("4.8 The special tiles of a dropped team's hill are ordinary ground: bombs and fire walls are accepted there (HillSpecial is 0 for a dropped team, 0x101d858)") {
+        SimulationEngine sim;
+        make_world(sim);                                                                   // the hill of team 1 is at (50, 50)
+        const uint32_t b = sim.spawn_unit(0, AntType::Bomber, TileCoord{49, 49});
+        const uint32_t f = sim.spawn_unit(0, AntType::Fire, TileCoord{52, 49});
+        ASSERT_FALSE(sim.plant_bomb(b, TileCoord{50, 49}, false));                          // the first tile above a live hill
+        ASSERT_FALSE(sim.ignite_fire(f, TileCoord{51, 49}, false));
+        sim.drop_player(1);
+        ASSERT_TRUE(sim.plant_bomb(b, TileCoord{50, 49}, false));
+        ASSERT_TRUE(sim.ignite_fire(f, TileCoord{51, 49}, false));
+    } TEST_END();
+
     std::cout << "\n=======================================================\n"
               << " Total Test Cases: " << g_test_count << "\n"
               << " Total Assertions: " << g_assert_count << "\n"

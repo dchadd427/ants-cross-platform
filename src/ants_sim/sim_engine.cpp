@@ -839,6 +839,7 @@ const WorldState& SimulationEngine::get_world_state() const {
         }
 
         impl_->world_state_cache_.anthills = impl_->grid_.anthills();
+        impl_->world_state_cache_.dropped_mask = impl_->dropped_mask_;
         impl_->world_state_cache_.match_result = impl_->stats_.evaluate_victory();
         impl_->world_state_cache_.fog_of_war_enabled = impl_->fog_of_war_enabled_;
         impl_->world_state_cache_.fog_revealed = impl_->fog_revealed_;

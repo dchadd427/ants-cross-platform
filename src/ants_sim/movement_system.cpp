@@ -251,9 +251,11 @@ TileCoord SimulationEngineImpl::team_entrance(uint8_t team) const noexcept {
     return TileCoord{static_cast<int32_t>(ah->x) + 1, static_cast<int32_t>(ah->y) + 1};
 }
 
-// FUN_0101d822: raid tile (+0x32), queue tiles (+0x36/+0x3a/+0x3e) or entrance (+0x2e) of a live team.
+// FUN_0101d822: raid tile (+0x32), queue tiles (+0x36/+0x3a/+0x3e) or entrance (+0x2e) of a live team (FUN_0101d858 answers 0 for a
+// team with +0x64 set: the special tiles of a team that dropped out are ordinary ground).
 bool SimulationEngineImpl::is_special_base_tile(TileCoord t) const noexcept {
     for (const auto& ah : grid_.anthills()) {
+        if (team_dropped(ah.team_id)) continue;
         const int32_t bx = static_cast<int32_t>(ah.x);
         const int32_t by = static_cast<int32_t>(ah.y);
         if (t == TileCoord{bx + 3, by + 2} || t == TileCoord{bx + 1, by + 1}) return true;
@@ -1090,9 +1092,10 @@ bool SimulationEngineImpl::can_enter(const AntUnit& a, TileCoord t, uint32_t fla
         if (food >= 0 && a.orig_order == AntUnit::kOrderHarvest && a.orig_food_id == food) return true;
         return false;
     }
-    // R5 anthill queue tiles Q1..Q3 (bx..bx+2, by-1)
+    // R5 anthill queue tiles Q1..Q3 (bx..bx+2, by-1) of the teams that have not dropped out (0x101f9a6)
     if (!(flags & kSkipQueueRules)) {
         for (const auto& ah : grid_.anthills()) {
+            if (team_dropped(ah.team_id)) continue;
             const int32_t bx = static_cast<int32_t>(ah.x);
             const int32_t by = static_cast<int32_t>(ah.y);
             if (t.y != by - 1 || t.x < bx || t.x > bx + 2) continue;
@@ -1177,9 +1180,10 @@ uint32_t SimulationEngineImpl::step_cost(const AntUnit& a, TileCoord from, TileC
             if (a.orig_order != AntUnit::kOrderHome && from != team_entrance(a.player_id)) return kBlockedCost;
             (void)hill_entrance;
         }
-        // Special tiles: another team's queue tiles
+        // Special tiles: another (live) team's queue tiles
         if (!(a.orig_order == AntUnit::kOrderAttack && a.orig_order_tile == to)) {
             for (const auto& ah : grid_.anthills()) {
+                if (team_dropped(ah.team_id)) continue;
                 const int32_t bx = static_cast<int32_t>(ah.x);
                 const int32_t by = static_cast<int32_t>(ah.y);
                 if (to.y == by - 1 && to.x >= bx && to.x <= bx + 2) {
