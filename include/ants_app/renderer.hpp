@@ -313,6 +313,8 @@ public:
     int32_t get_text_width(const std::string& text, FontSize size = FontSize::Small) const override;
     int32_t get_text_height(FontSize size = FontSize::Small) const override;
     void set_hud_team(uint8_t team_id) override { hud_team_id_ = team_id; }
+    /// Ctrl+L (Ants.exe 0x101b866): every ant is followed by its hit points as white text at its sprite position (GDI TextOut, top left)
+    void set_show_hp(bool show) noexcept { show_hp_ = show; }
     void draw_rgba_image(int32_t x, int32_t y, int32_t w, int32_t h, const uint8_t* rgba) override;
 
     // Camera Accessors
@@ -461,6 +463,7 @@ private:
     int64_t hill_marker_start_ms_{0};
     std::string pending_screenshot_;
     uint8_t hud_team_id_{0};
+    bool show_hp_{false};
     bool integer_scale_{true};
     bool is_fullscreen_{false};
     CursorType current_cursor_{CursorType::Normal};

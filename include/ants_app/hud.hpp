@@ -120,7 +120,10 @@ public:
                          sim::SimulationEngine& sim, ViewportCamera& camera, uint16_t mod = 0);
     bool handle_mouse_motion(int32_t x, int32_t y,
                              sim::SimulationEngine& sim, ViewportCamera& camera);
-    bool handle_key_down(int32_t key, sim::SimulationEngine& sim, ViewportCamera& camera, uint16_t mod = 0);
+    /// The keyboard of the original (Ants.exe FUN_0102609a): a dialog takes every key; with chat on the always-active chat box takes printable keys
+    /// and Backspace unless Ctrl is held; F1 quick help, F9 - F12 quick messages (fresh presses only, `repeat` = key repeat), Enter sends the text,
+    /// Esc deselects; with Ctrl: A select all, H home hill, L hit point digits, N / P next / previous ant, O options, Q quit, S stop. Nothing else.
+    bool handle_key_down(int32_t key, sim::SimulationEngine& sim, ViewportCamera& camera, uint16_t mod = 0, bool repeat = false);
 
     // Cursor Evaluation & Ground Click Indicators
     CursorType evaluate_cursor(int32_t screen_x, int32_t screen_y,
@@ -133,14 +136,14 @@ public:
         if (on_spawn_click_marker_) on_spawn_click_marker_(world_x, world_y);
     }
 
-    // Chat System & Text Input
-    void focus_chat() noexcept { chat_input_focused_ = true; }
-    void unfocus_chat() noexcept { chat_input_focused_ = false; }
-    bool is_chat_focused() const noexcept { return chat_input_focused_; }
+    // Chat System & Text Input: the chat box is always active while the option "Participate In Chat" is on (there is no focus)
     const std::string& get_chat_input() const noexcept { return chat_input_; }
     void set_chat_input(const std::string& input) { chat_input_ = input; }
     void handle_text_input(const std::string& text);
-    void send_chat_message();
+    /// Enter (FUN_010103eb with hasAlly): sends the text to the team when the local player has an ally, else to everybody, and clears the box.
+    void send_chat_message() { send_chat(is_on_team_); }
+    /// The [All] / [Team] buttons and Enter: sends the text of the chat box (FUN_010103eb) and clears it; nothing when it is empty or chat is off.
+    void send_chat(bool to_team);
     /// AddLine (Ants.exe 0x10120e9): an entry is a header line ("Name:" or "Name (To Teammate):", in the colour of the sender's team,
     /// `colour_index` 0 black, 1 blue, 2 red, 3 green; -1 = the local player's) and a body of at most 100 characters that wraps into
     /// lines indented by 12 px in colour (7, 11, 15).
@@ -162,9 +165,7 @@ public:
     void handle_mouse_wheel(int32_t screen_x, int32_t screen_y, int32_t wheel_y);
     int32_t get_chat_scroll_offset() const noexcept { return chat_scroll_offset_; }
 
-    // Chat recipient & Team state
-    bool is_send_to_all() const noexcept { return send_to_all_; }
-    void set_send_to_all(bool send_to_all) noexcept { send_to_all_ = send_to_all; }
+    // Team state: the [Team] button and the team destination of Enter exist while the local player has an ally
     bool is_on_team() const noexcept { return is_on_team_; }
     void set_on_team(bool on_team) noexcept { is_on_team_ = on_team; }
     void set_player_name(std::string name) { player_name_ = std::move(name); }
@@ -297,6 +298,10 @@ public:
     int get_active_quick_chat_edit() const noexcept { return active_quick_chat_edit_; }
     void set_active_quick_chat_edit(int idx) noexcept { active_quick_chat_edit_ = idx; }
 
+    /// Ctrl+L (0x1026440): the ant draw prints the hit points of every ant as text at its sprite position
+    bool is_show_hp() const noexcept { return show_hp_; }
+    void set_show_hp(bool show) noexcept { show_hp_ = show; }
+
     bool is_match_start_modal_active() const noexcept { return show_match_start_modal_; }
     void start_match_modal() noexcept { release_capture(); show_match_start_modal_ = true; match_start_modal_ticks_ = 0; }
     void dismiss_match_start_modal() noexcept { show_match_start_modal_ = false; }
@@ -350,6 +355,7 @@ private:
     int32_t mouse_y_{-1};
 
     // Marquee drag selection
+    bool show_hp_{false};
     bool is_dragging_{false};
     bool right_mouse_held_{false};
     bool shift_held_{false};
@@ -368,7 +374,6 @@ private:
     UIButton send_to_button_{};
     UIButton team_button_{};
     UIButton team_up_button_{};
-    bool send_to_all_{true};
     bool is_on_team_{false};
 
     // Command panel pedestals: left slot (Move / Ally / Hatch) and right slot (ability), original transition chains
@@ -383,7 +388,6 @@ private:
 
     // Chat text input state
     std::string chat_input_{};
-    bool chat_input_focused_{false};
     int32_t chat_scroll_offset_{0};
     uint32_t cursor_blink_ticks_{0};
     std::string player_name_{"Player"};

@@ -751,8 +751,7 @@ void test_chat_log_format() {
     for (size_t i = b2 + 1; i < log.size(); ++i) chars += log[i].size();
     check(chars <= 100, "a body is cut at 100 characters");
 
-    // the input box holds 100 characters
-    hud.focus_chat();
+    // the input box holds 100 characters (the chat box is always active: no focus needed)
     hud.handle_text_input(std::string(130, 'b'));
     check(hud.get_chat_input().size() == 100, "the input box holds 100 characters");
 }

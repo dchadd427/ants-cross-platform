@@ -141,10 +141,8 @@ void HUD::init(uint8_t local_player_id) {
     send_to_button_ = {532, 443, 44, 24, 0, 0, 0, false, true, false};
     // Configure Authentic Team Toggle Button at (579, 443, 46, 24)
     team_button_    = {579, 443, 46, 24, 0, 0, 0, false, true, false};
-    send_to_all_ = true;
     is_on_team_ = false;
     chat_input_.clear();
-    chat_input_focused_ = false;
     cursor_blink_ticks_ = 0;
 
     // Configure Quit Confirmation Dialog Buttons
@@ -211,9 +209,6 @@ void HUD::update(const sim::WorldState& world, uint32_t delta_ticks) {
     is_on_team_ = (local_player_id_ < world.player_alliances.size() &&
                    world.player_alliances[local_player_id_] < sim::MAX_PLAYERS &&
                    world.player_alliances[local_player_id_] != local_player_id_);
-    if (!is_on_team_) {
-        send_to_all_ = true;
-    }
 }
 
 void HUD::poll_sim_events(sim::SimulationEngine& sim) {
@@ -505,19 +500,13 @@ void HUD::render(IRenderer& renderer, const assets::AssetArchive& assets,
 
     // Ant relief horizontal divider bar x480y400.bmp (141x24) at (480, 400)
 
-    // Chat text input box wtype.bmp (143x14) at (479, 423)
+    // Chat text input box wtype.bmp (143x14) at (479, 423): the edit control is always active (caret blinks) while chat is on
     std::string input_display = chat_input_;
     if (input_display.length() > 25) {
         input_display = input_display.substr(input_display.length() - 25);
     }
-    if (chat_input_focused_) {
-        if ((cursor_blink_ticks_ / 15) % 2 == 0) {
-            input_display += "_";
-        }
-    } else {
-        if (input_display.empty()) {
-            input_display = "_";
-        }
+    if ((cursor_blink_ticks_ / 15) % 2 == 0) {
+        input_display += "_";
     }
     renderer.draw_text(input_display, 484, 423, {20, 50, 40, 255});
     // Chat switched off in the options: chatcovr (three chcovr2 tiles at (478,421/436/445)) covers the input box
@@ -525,19 +514,14 @@ void HUD::render(IRenderer& renderer, const assets::AssetArchive& assets,
         draw_animation_frame0(renderer, assets, "chatcovr", 0, 0);
     }
 
-    // "Send to:" buttons (animations butall*, butals*): up / hover ("r" label over the up art) / pressed
+    // "Send to:" buttons (animations butall*, butals*): up / hover ("r" label over the up art) / pressed. [All] is hidden while chat is off,
+    // [Team] exists only while the local player has an ally.
     auto send_button = [&](bool down, bool hovered, const char* up, const char* hover, const char* pressed) {
         draw_animation_frame0(renderer, assets, down ? pressed : (hovered ? hover : up));
     };
-    if (!is_on_team_) {
-        // In FFA or non-team mode, only [All] is active/shown
+    if (chat_enabled_) {
         send_button(send_to_button_.is_pressed, send_to_button_.is_hovered, "butallu", "butallr", "butalld");
-    } else {
-        // When on a team, the chosen destination is shown down
-        const bool all_down = send_to_button_.is_pressed || (send_to_all_ && !team_button_.is_pressed);
-        const bool team_down = team_button_.is_pressed || (!send_to_all_ && !send_to_button_.is_pressed);
-        send_button(all_down, send_to_button_.is_hovered, "butallu", "butallr", "butalld");
-        send_button(team_down, team_button_.is_hovered, "butalsu", "butalsr", "butalsd");
+        if (is_on_team_) send_button(team_button_.is_pressed, team_button_.is_hovered, "butalsu", "butalsr", "butalsd");
     }
 
     // Vertical right border strip x521y254.bmp (19x182) placed at x=621, y=254 (seals right screen edge)
@@ -1047,19 +1031,19 @@ bool HUD::has_friendly_selected(const sim::WorldState& world) const noexcept {
 }
 
 void HUD::select_all_friendly(const sim::WorldState& world) {
+    // Ctrl+A (0x1026237): FUN_01028c44(0), then every ant of the player's own table is added (no state filter); panel 3 for one, 4 for several,
+    // and the ready voice of the first one
     selected_base_team_id_ = -1;
     selected_ant_ids_.clear();
     for (const auto& ant : world.ants) {
-        if (ant.hp == 0 || ant.is_drowning) continue;
-        if (ant.player_id == local_player_id_) {
-            selected_ant_ids_.push_back(ant.id);
-        }
+        if (ant.player_id == local_player_id_) selected_ant_ids_.push_back(ant.id);
     }
+    unlatch_pedestals();
     is_multi_select_mode_ = (selected_ant_ids_.size() > 1);
     if (!selected_ant_ids_.empty()) {
         selected_ant_id_ = selected_ant_ids_.front();
         for (const auto& ant : world.ants) {
-            if (ant.id == selected_ant_id_ && ant.player_id == local_player_id_) {
+            if (ant.id == selected_ant_id_) {
                 voice_ready(ant.type);
                 break;
             }
@@ -1242,53 +1226,38 @@ bool HUD::handle_mouse_down(int32_t x, int32_t y, uint8_t button,
         return right_capture_ != 0;
     }
 
-    // Unfocus chat input if clicking outside wtype.bmp (479..622, 423..437)
-    if (chat_input_focused_ && !(x >= 479 && x < (479 + 143) && y >= 423 && y < (423 + 14))) {
-        unfocus_chat();
-    }
-
-    // Top Header Buttons
+    // The buttons of the top bar and the chat (the button class FUN_01011206): a press inside captures the button (pressed art, the click sound of its
+    // animation); the callback runs at the release while the pointer is still on it (handle_mouse_up)
     if (help_button_.contains(x, y)) {
         help_button_.is_pressed = true;
         play_sfx(sim::SoundID::ButtonClick);   // the pressed top-bar animations carry sound 0
-        show_quick_help_ = !show_quick_help_;
         return true;
     }
     if (options_button_.contains(x, y)) {
         options_button_.is_pressed = true;
         play_sfx(sim::SoundID::ButtonClick);
-        show_options_ = !show_options_;
         return true;
     }
     if (quit_button_.contains(x, y)) {
         quit_button_.is_pressed = true;
         play_sfx(sim::SoundID::ButtonClick);
-        open_quit_dialog();
         return true;
     }
 
     // The command pedestals fire on the press outside the map rectangle (FUN_010274be)
     if (pedestal_press(sim, x, y)) return true;
 
-    // Chat text input box (wtype.bmp at 479, 423, 143x14)
-    if (x >= 479 && x < (479 + 143) && y >= 423 && y < (423 + 14)) {
-        focus_chat();
-        return true;
-    }
-
-    // [All] button (532, 443, 44x24)
-    if (send_to_button_.contains(x, y)) {
+    // [All] button (532, 443, 44x24): hidden while chat is off
+    if (chat_enabled_ && send_to_button_.contains(x, y)) {
         send_to_button_.is_pressed = true;
         play_sfx(sim::SoundID::ButtonClick);
-        send_to_all_ = true;
         return true;
     }
 
-    // [Team] button (579, 443, 46x24)
-    if (is_on_team_ && team_button_.contains(x, y)) {
+    // [Team] button (579, 443, 46x24): exists while the local player has an ally
+    if (chat_enabled_ && is_on_team_ && team_button_.contains(x, y)) {
         team_button_.is_pressed = true;
         play_sfx(sim::SoundID::ButtonClick);
-        send_to_all_ = false;
         return true;
     }
 
@@ -1312,6 +1281,14 @@ bool HUD::handle_mouse_down(int32_t x, int32_t y, uint8_t button,
 bool HUD::handle_mouse_up(int32_t x, int32_t y, uint8_t button,
                           sim::SimulationEngine& sim, ViewportCamera& camera, uint16_t mod) {
     const bool captured_before = is_input_captured();      // [5534] != 0 while the event is processed
+    // The button class (FUN_01011206 / FUN_01011281): the callback runs at the release when the button is still captured, that is when the
+    // pointer has not left it (leaving cancels the capture for good)
+    const bool left_release = (button == SDL_BUTTON_LEFT);
+    const bool fire_help = left_release && help_button_.is_pressed && help_button_.contains(x, y);
+    const bool fire_options = left_release && options_button_.is_pressed && options_button_.contains(x, y);
+    const bool fire_quit = left_release && quit_button_.is_pressed && quit_button_.contains(x, y);
+    const bool fire_all = left_release && chat_enabled_ && send_to_button_.is_pressed && send_to_button_.contains(x, y);
+    const bool fire_team = left_release && chat_enabled_ && is_on_team_ && team_button_.is_pressed && team_button_.contains(x, y);
     if (button == SDL_BUTTON_RIGHT) {
         right_mouse_held_ = false;
     }
@@ -1372,6 +1349,13 @@ bool HUD::handle_mouse_up(int32_t x, int32_t y, uint8_t button,
                          static_cast<int32_t>(sim.grid().height())).dir >= 0;
 
     if (button == SDL_BUTTON_LEFT) {
+        if (!in_strip) {
+            if (fire_help) open_quick_help();
+            else if (fire_options) open_options();
+            else if (fire_quit) open_quit_dialog();
+            else if (fire_all) send_chat(false);
+            else if (fire_team) send_chat(true);
+        }
         const bool was_dragging = is_dragging_;
         if (was_dragging) {                       // the band's last update is the release position (the original polls it every 50 ms)
             drag_curr_x_ = x;
@@ -1394,6 +1378,9 @@ bool HUD::handle_mouse_motion(int32_t x, int32_t y,
                               [[maybe_unused]] sim::SimulationEngine& sim, [[maybe_unused]] ViewportCamera& camera) {
     mouse_x_ = x;
     mouse_y_ = y;
+    for (UIButton* b : {&help_button_, &options_button_, &quit_button_, &send_to_button_, &team_button_}) {
+        if (b->is_pressed && !b->contains(x, y)) b->is_pressed = false;      // FUN_01011281: leaving cancels the capture for good
+    }
     send_to_button_.is_hovered = send_to_button_.contains(x, y);
     team_button_.is_hovered = is_on_team_ && team_button_.contains(x, y);
     help_button_.is_hovered = help_button_.contains(x, y);
@@ -1452,30 +1439,23 @@ bool HUD::input_tick(ViewportCamera& camera, uint32_t map_w, uint32_t map_h, int
     return true;
 }
 
-bool HUD::handle_key_down(int32_t key, sim::SimulationEngine& sim, ViewportCamera& camera, uint16_t mod) {
-    // 0. Match Start Modal captures/blocks all keyboard events
-    if (show_match_start_modal_) {
+bool HUD::handle_key_down(int32_t key, sim::SimulationEngine& sim, ViewportCamera& camera, uint16_t mod, bool repeat) {
+    // FUN_0102609a. A dialog takes every key first.
+    if (show_match_start_modal_) return true;
+
+    if (show_quit_dialog_) {                                   // Y = Yes, N and Esc = No, Enter does nothing
+        if (key == 'y' || key == 'Y') {
+            close_quit_dialog();
+            if (on_quit_) on_quit_();
+        } else if (key == 'n' || key == 'N' || key == SDLK_ESCAPE) {
+            close_quit_dialog();
+        }
         return true;
     }
 
-    // 1. Modals capture keyboard events
-    if (show_quit_dialog_) {
-        if (key == 'y' || key == 'Y' || key == SDLK_RETURN || key == SDLK_KP_ENTER) {
-            close_quit_dialog();
-            if (on_quit_) on_quit_();
-            return true;
-        }
-        if (key == 'n' || key == 'N' || key == SDLK_ESCAPE || key == 27) {
-            close_quit_dialog();
-            return true;
-        }
-        return true; // Modal blocks all other gameplay keys
-    }
-
-    if (show_quick_help_) {
-        if (key == SDLK_ESCAPE || key == 27 || key == SDLK_RETURN || key == SDLK_SPACE || key == 'h' || key == 'H') {
+    if (show_quick_help_) {                                    // C, X, Enter and Esc close it
+        if (key == 'c' || key == 'C' || key == 'x' || key == 'X' || key == SDLK_RETURN || key == SDLK_KP_ENTER || key == SDLK_ESCAPE) {
             close_quick_help();
-            return true;
         }
         return true;
     }
@@ -1492,195 +1472,107 @@ bool HUD::handle_key_down(int32_t key, sim::SimulationEngine& sim, ViewportCamer
                 }
                 return true;
             }
-        }
-        if (key == SDLK_ESCAPE || key == 27 || key == SDLK_RETURN || key == 'o' || key == 'O') {
-            close_options();
             return true;
         }
+        if (key == SDLK_RETURN || key == SDLK_KP_ENTER) close_options();      // Enter closes it, Esc does not
         return true;
     }
 
-    bool ctrl = (mod & KMOD_CTRL) || (mod & KMOD_GUI);
+    const bool ctrl = (mod & KMOD_CTRL) != 0 || (mod & KMOD_GUI) != 0;
+    const auto& world = sim.get_world_state();
 
-    // 2. Chat Input Active (Ctrl/Cmd modifier bypasses chat input to allow commands)
-    if (chat_input_focused_ && !ctrl) {
-        if (key == SDLK_RETURN || key == SDLK_KP_ENTER) {
-            send_chat_message();
-            chat_input_focused_ = false;
-            return true;
-        }
-        if (key == SDLK_ESCAPE) {
-            chat_input_.clear();
-            chat_input_focused_ = false;
+    // The chat edit control is always active while chat is on: it takes 0x20 - 0x7E and Backspace unless Ctrl is held
+    if (chat_enabled_ && !ctrl) {
+        if (key >= 32 && key <= 126) {
+            if (chat_input_.size() < kChatInputMax) chat_input_.push_back(static_cast<char>(key));
             return true;
         }
         if (key == SDLK_BACKSPACE) {
-            if (!chat_input_.empty()) {
-                chat_input_.pop_back();
-            }
+            if (!chat_input_.empty()) chat_input_.pop_back();
             return true;
         }
-        if (key == SDLK_PAGEUP) {
+    }
+
+    // Keys of any modifier state
+    switch (key) {
+        case SDLK_F1:                                          // quick help (page 0)
+            open_quick_help();
+            return true;
+        case SDLK_F9: case SDLK_F10: case SDLK_F11: case SDLK_F12:
+            if (!repeat && chat_enabled_) trigger_quick_chat(static_cast<size_t>(key - SDLK_F9));
+            return true;
+        case SDLK_RETURN: case SDLK_KP_ENTER:                  // FUN_010103eb: the team when the player has an ally, else everybody
+            send_chat_message();
+            return true;
+        case SDLK_ESCAPE:                                      // FUN_01028c44(0): deselect everything, no quit dialog
+            clear_selection();
+            unlatch_pedestals();
+            return true;
+        case SDLK_PAGEUP:                                      // (not in the original: the chat log scrolls with a bar)
             scroll_chat_up(4);
             return true;
-        }
-        if (key == SDLK_PAGEDOWN) {
+        case SDLK_PAGEDOWN:
             scroll_chat_down(4);
             return true;
-        }
-        if (key == SDLK_UP) {
-            scroll_chat_up(1);
-            return true;
-        }
-        if (key == SDLK_DOWN) {
-            scroll_chat_down(1);
-            return true;
-        }
-        // Printable ASCII typing fallback (for direct key events / unit tests)
-        if (key >= 32 && key <= 126) {
-            if (chat_input_.size() < kChatInputMax) {
-                chat_input_.push_back(static_cast<char>(key));
-            }
-            return true;
-        }
-        return true; // While chat is focused, swallow all other keys
+        default:
+            break;
     }
 
-    // Quick Chat Broadcast keys F9..F12 (only in gameplay)
-    if (!show_options_) {
-        if (key == SDLK_F9) {
-            trigger_quick_chat(0);
+    if (!ctrl) return false;
+    switch (key) {
+        case 'a': case 'A':                                    // select all own ants, panel 3 or 4, the voice of the first
+            select_all_friendly(world);
             return true;
-        }
-        if (key == SDLK_F10) {
-            trigger_quick_chat(1);
+        case 'h': case 'H':                                    // the home hill (panel 2); no hatch, no scrolling
+            clear_selection();
+            unlatch_pedestals();
+            select_base(local_player_id_);
             return true;
-        }
-        if (key == SDLK_F11) {
-            trigger_quick_chat(2);
+        case 'l': case 'L':                                    // hit point digits on every ant
+            show_hp_ = !show_hp_;
             return true;
-        }
-        if (key == SDLK_F12) {
-            trigger_quick_chat(3);
+        case 'o': case 'O':
+            open_options();
             return true;
-        }
-    }
-
-    if (key == SDLK_PAGEUP) {
-        scroll_chat_up(4);
-        return true;
-    }
-    if (key == SDLK_PAGEDOWN) {
-        scroll_chat_down(4);
-        return true;
-    }
-
-    // 3. Not focused: Enter focuses chat
-    if (key == SDLK_RETURN || key == SDLK_KP_ENTER) {
-        focus_chat();
-        return true;
-    }
-
-    // 4. Hotkeys requiring Control or Command modifier
-    const auto& world = sim.get_world_state();
-
-    if (ctrl) {
-        switch (key) {
-            case 's': case 'S': {                       // FUN_0102609a: the stop order, without flash, lock or deselect (panels 3 and 4)
-                const PanelMode panel = panel_mode(world);
-                if (panel == PanelMode::OneAnt || panel == PanelMode::Ants) stop_selected(sim);
-                return true;
-            }
-            case 'a': case 'A':
-                select_all_friendly(world);
-                return true;
-            case 'n': case 'N': { // Next friendly ant
-                std::vector<uint32_t> friendly;
-                for (const auto& a : world.ants) {
-                    if (a.player_id == local_player_id_ && a.hp > 0 && !a.is_drowning) {
-                        friendly.push_back(a.id);
-                    }
-                }
-                if (!friendly.empty()) {
-                    auto it = std::find(friendly.begin(), friendly.end(), selected_ant_id_);
-                    if (it == friendly.end() || ++it == friendly.end()) {
-                        select_ant(friendly.front());
-                    } else {
-                        select_ant(*it);
-                    }
-                    for (const auto& a : world.ants) {
-                        if (a.id == selected_ant_id_) {
-                            camera.center_on(a.px, a.py, world.width, world.height);
-                            break;
-                        }
-                    }
-                }
-                return true;
-            }
-            case 'p': case 'P': { // Previous friendly ant
-                std::vector<uint32_t> friendly;
-                for (const auto& a : world.ants) {
-                    if (a.player_id == local_player_id_ && a.hp > 0 && !a.is_drowning) {
-                        friendly.push_back(a.id);
-                    }
-                }
-                if (!friendly.empty()) {
-                    auto it = std::find(friendly.begin(), friendly.end(), selected_ant_id_);
-                    if (it == friendly.end() || it == friendly.begin()) {
-                        select_ant(friendly.back());
-                    } else {
-                        select_ant(*(--it));
-                    }
-                    for (const auto& a : world.ants) {
-                        if (a.id == selected_ant_id_) {
-                            camera.center_on(a.px, a.py, world.width, world.height);
-                            break;
-                        }
-                    }
-                }
-                return true;
-            }
-            case 'h': case 'H': {
-                // The original has no hatch key (Ctrl+H only selects the home hill).
-                if (selected_base_team_id_ != local_player_id_) {
-                    select_base(local_player_id_);
-                }
-                return true;
-            }
-            default: break;
-        }
-    }
-
-    if (key == 27 || key == SDLK_ESCAPE) {
-        if (show_quit_dialog_) {
-            close_quit_dialog();
-        } else if (show_options_) {
-            close_options();
-        } else if (show_quick_help_) {
-            close_quick_help();
-        } else {
+        case 'q': case 'Q':
             open_quit_dialog();
+            return true;
+        case 's': case 'S': {                                  // the stop order, without flash, lock or deselect (panels 3 and 4)
+            const PanelMode panel = panel_mode(world);
+            if (panel == PanelMode::OneAnt || panel == PanelMode::Ants) stop_selected(sim);
+            return true;
         }
-        return true;
-    }
-
-    if (key == ' ' || key == SDLK_SPACE) {
-        if (selected_ant_id_ != 0) {
+        case 'n': case 'N': case 'p': case 'P': {
+            // Next / previous own ant (FUN_0102609a 0x1026330): the search starts at the lowest selected slot (nothing selected: the last one), steps
+            // by one in the direction, the selection is replaced (panel 3, no voice) and the view scrolls just far enough to show the +-128 px square
+            std::vector<const sim::AntSnapshot*> mine;
             for (const auto& a : world.ants) {
-                if (a.id == selected_ant_id_) {
-                    camera.center_on(a.px, a.py, world.width, world.height);
-                    return true;
-                }
+                if (a.player_id == local_player_id_) mine.push_back(&a);
             }
+            if (mine.empty()) return true;
+            const int64_t count = static_cast<int64_t>(mine.size());
+            int64_t start = count - 1;
+            for (int64_t i = 0; i < count; ++i) {
+                if (is_ant_selected(mine[static_cast<size_t>(i)]->id)) { start = i; break; }
+            }
+            const int64_t dir = (key == 'n' || key == 'N') ? 1 : -1;
+            const sim::AntSnapshot* ant = mine[static_cast<size_t>((start + count + dir) % count)];
+            select_ant(ant->id, false);
+            unlatch_pedestals();
+            const int32_t map_w = static_cast<int32_t>(world.width) * 32;
+            const int32_t map_h = static_cast<int32_t>(world.height) * 32;
+            int32_t dx = 0;
+            int32_t dy = 0;
+            detail::scroll_to_show(std::max(ant->px - 128, 0), std::max(ant->py - 128, 0), std::min(ant->px + 128, map_w), std::min(ant->py + 128, map_h),
+                                   camera.world_x, camera.world_y, dx, dy);
+            camera.x = static_cast<float>(camera.world_x);          // (both fields describe the same origin)
+            camera.y = static_cast<float>(camera.world_y);
+            camera.scroll_pixels(dx, dy, world.width, world.height);
+            return true;
         }
-        const auto* base = sim.grid().find_anthill(local_player_id_);
-        if (base) {
-            camera.center_on(base->x * 32 + 64, base->y * 32 + 64, world.width, world.height);
-        }
-        return true;
+        default:
+            return false;                                      // Ctrl+B / C / F / M / T ... do nothing in the original
     }
-
-    return false;
 }
 
 void HUD::handle_text_input(const std::string& text) {
@@ -1697,9 +1589,7 @@ void HUD::handle_text_input(const std::string& text) {
         }
         return;
     }
-    if (!chat_input_focused_) {
-        chat_input_focused_ = true;
-    }
+    if (show_quit_dialog_ || show_quick_help_ || show_match_start_modal_ || !chat_enabled_) return;     // a dialog or the chat cover takes the keys
     for (char c : text) {
         if (c >= 32 && c <= 126) {
             if (chat_input_.size() < kChatInputMax) {
@@ -1709,13 +1599,13 @@ void HUD::handle_text_input(const std::string& text) {
     }
 }
 
-void HUD::send_chat_message() {
+void HUD::send_chat(bool to_team) {
     if (chat_input_.empty()) return;
-    if (!chat_enabled_) {                     // "Participate In Chat" off: the box is covered and nothing is sent (0x100dd..)
+    if (!chat_enabled_) {                     // "Participate In Chat" off: the box is covered and nothing is sent
         chat_input_.clear();
         return;
     }
-    add_chat_entry(player_name_.empty() ? "Player" : player_name_, chat_input_, is_on_team_ && !send_to_all_);
+    add_chat_entry(player_name_.empty() ? "Player" : player_name_, chat_input_, to_team && is_on_team_);
     chat_input_.clear();
     chat_scroll_offset_ = 0;
 }

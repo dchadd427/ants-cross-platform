@@ -1957,6 +1957,40 @@ Addresses are virtual addresses in `Original-Ants/Ants.exe`. Implemented in `src
   table (F1, Ctrl+O / Q / L, Enter sends to the team when allied, Ctrl+N / P by `ScrollToShow`), the ally attack confirmation dialog and the one-ally-at-a-time dialog of strings 1 - 4, and the 50 ms latency of the
   polled band.
 
+### 5.45 Keyboard, Button Class and Chat (Capstone-Verified; Supersedes Earlier Hotkey, Chat Focus and Button Notes)
+
+Addresses are virtual addresses in `Original-Ants/Ants.exe`. Implemented in `HUD::handle_key_down`, `HUD::handle_text_input`, `HUD::send_chat`, `HUD::handle_mouse_down / up / motion` (`src/ants_app/hud.cpp`) and
+`Application::handle_key_down` (`src/ants_app/application.cpp`, developer shortcuts and routing only). Checked by `tests/test_app/test_pointer_model.cpp` (`test_keyboard`, `test_buttons`) and the integration tests
+7.5, 9.7, 11.3, 12.58, 12.59, 12.75.
+
+* **Key ids** (`0x1031bbd`): Up 0xE, Down 0xF, Left 0x10, Right 0x11, F1 0x12, F9 - F12 0x13 - 0x16, Ctrl 0x17, Enter 0x18, Backspace 0x19, Esc 0x1a, Shift 0x1b, printable ASCII 0x20 - 0x7e (Ctrl is cleared before
+  `ToAscii`, so Ctrl+letter arrives as the letter). Events are posted at most once per 50 ms per key and carry the old state (`old != 0` = a repeat); key-up events are never posted.
+* **The key handler** (`FUN_0102609a`), in this order: (1) an open dialog takes the key (`FUN_01012c06`); (2) with chat on (`[4b0c]`), the chat edit control `[4a90]`, created active and never deactivated, takes
+  printable keys and Backspace unless Ctrl is held; (3) the switch: **F1** `FUN_0102908b` (quick help, page 0); **F9 - F12** `FUN_010103ad(n)` only for a fresh press (`old == 0`) with chat on: the quick text n
+  (`world+0x4b1c + 0x65 n`) is sent to everybody; **Enter** `FUN_010103eb(hasAlly)`: the text goes to the team when the player has an ally (`[player+0x68] != 4`), else to everybody, then the box is cleared;
+  **Esc** `FUN_01028c44(0)`: deselect everything (there is no quit dialog on Esc); (4) with Ctrl (either case of the letter): **A** deselect, add every ant of the player's own table (no state filter), panel 3
+  for one and 4 for several, the ready voice of the first; **H** deselect, select the home hill, panel 2 (no hatch, no scroll); **L** toggles `[4b14]`; **N / P** next / previous own ant: the search starts at
+  the lowest selected slot (none selected: slot count - 1), steps by +1 / -1 modulo the slot count, skips empty slots (at most 16 tries), replaces the selection (panel 3, no voice) and scrolls with
+  `FUN_01027197` to the +-128 px square around the ant's sprite position (ScrollToShow: it moves just far enough, it does not centre; repeats while the key is held); **O** `FUN_010290e9` options; **Q**
+  `FUN_01029145` the quit flow `FUN_0102648f` (the confirm dialog while playing); **S** `FUN_01028a60` the stop order when the panel is 3 or 4. Ctrl+Space / `.` / `>` need the command-line flag `[4ae4]` (debug
+  pause and step). **Everything else does nothing** (Space, arrows, Tab, digits, Home / End, PgUp / PgDn, Ctrl+B / C / F / M / T ...).
+* **Ctrl+L** (`FUN_0101b802`, the ant draw): with `[4b14] != 0` every ant is followed by `sprintf("%d", hp)` (the word at +0x74) drawn with `FUN_0102feda` -> `FUN_0102d193`: GDI `TextOut` of the default GUI
+  font at the ant's sprite position (+0x38, +0x3a) converted to the screen, colour 0xffffff, transparent background, top-left aligned.
+* **Dialog keys**: quit dialog Y = Yes, N and Esc = No, Enter does nothing; quick help C, X, Enter and Esc close it; options Enter closes it, Esc does not; the start ("get ready") dialog takes everything.
+* **Button class** (constructor `FUN_01010fcb`, vtable 0x10025a8; state `[+0x10]` 0 up, 1 hover, 2 pressed, 3 toggled, 4 hidden; captured flag `[+0x30]`; callback `[+0x2c]`): `OnMove` (`FUN_01011281`, called for
+  every button by `FUN_0102653f`, i.e. every 50 ms and before every button event): the pointer inside gives 1 (hover), or 2 when captured; outside gives 0 and clears the capture. `OnButton` (`FUN_01011206`, left
+  button only): a press inside captures and shows state 2 (the pressed animation carries the click sound: 0 = `buttonclick` for the top bar, the send buttons, the quit dialog and the screens); **the release runs
+  the callback when the button is still captured** (there is no position test of its own: the `OnMove` that precedes every event has already cancelled a button that the pointer left) and sets state 0; leaving
+  while held cancels for good (coming back only hovers). The pedestals are a different mechanism (5.44). Callbacks: Help `0x102908b`, Options `0x10290e9`, Quit `0x1029145` -> `FUN_0102648f`, **All**
+  `0x1029153` -> `FUN_010103eb(0)`, **Team** `0x1029163` -> `FUN_010103eb(1)`: both send the text of the chat box at once. The Team button exists only while the player has an ally, All is hidden while chat is off.
+  Button events are dispatched after the input gates of 5.44 (playing, cursor mode not 6, no input lock).
+* **Removed as invented** (v0.0.42): chat focus by click or Enter (the box is always active), the persistent "send to" flag (`send_to_all_`), Esc opening the quit dialog, the quit dialog's Enter = Yes, quick help
+  Space / H, options Esc / O, Ctrl+H hatching, Space centring, Ctrl+C clearing the selection, `H` / `A` / `N` / `P` and other letters acting as hotkeys, buttons that acted at the press, Ctrl+N / Ctrl+P centring
+  through `center_on` in `world.ants` order. **Kept as developer shortcuts** (not in the original, each behind Ctrl / Cmd, Shift or a free function key): Ctrl+T / F3 tile grid, Ctrl+M music mute,
+  Ctrl+1..4 / Ctrl+Tab / Ctrl+C team switch, Shift / Ctrl+F12 screenshot; PageUp / PageDown / the wheel still scroll the chat log (the original scrolls it with a bar).
+* **Open** *(recorded, not ported)*: the ally attack confirmation (string 4, `FUN_0101ffab`) and the invitation dialogs (strings 1 - 3) need a modal question dialog (network stage); the slot count of Ctrl+N / Ctrl+P
+  is the number of own ants (the original counts table slots including empty ones); the setup and results screens and the option toggles still act on the press.
+
 ---
 
 ## 6. Target Multi-Platform Architecture

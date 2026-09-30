@@ -1,5 +1,5 @@
 // Pointer model tests (stage I): the ant hit boxes, the cursor decision table, the click by cursor mode, the rubber band and the release of the
-// left button, the right button and the command pedestals as Ants.exe does them (FUN_01026904 / FUN_01026a39 / FUN_01026aa3 / FUN_01026f91 /
+// left button, the right button, the command pedestals, the keyboard table and the button class as Ants.exe does them (FUN_01026904 / FUN_01026a39 / FUN_01026aa3 / FUN_01026f91 /
 // FUN_01027530 / FUN_010277f4 / FUN_01027b51 / FUN_010287b5 / FUN_010274be / FUN_01028d30). docs/GAME_REVERSE_ENGINEERING.md 5.44
 #include <algorithm>
 #include <cstdint>
@@ -960,6 +960,250 @@ void test_pedestals() {
     }
 }
 
+// ---------------------------------------------------------------------------------------------------------------------------------
+// The keyboard (FUN_0102609a) and the button class (FUN_01011206 / FUN_01011281)
+// ---------------------------------------------------------------------------------------------------------------------------------
+
+void test_keyboard() {
+    g_group = "keyboard";
+    std::printf("[keys] the original's keyboard: F1, F9 - F12, Enter, Esc, Ctrl+A / H / L / N / O / P / Q / S, dialog keys, nothing else\n");
+    // Ctrl+N / Ctrl+P: from the lowest selected slot (nothing selected: the last), replacing the selection, no voice, scrolling just far enough
+    {
+        Fixture f;
+        const uint32_t a = f.spawn(0, AntType::Worker, 10, 10);
+        const uint32_t b = f.spawn(0, AntType::Worker, 12, 10);
+        const uint32_t c = f.spawn(0, AntType::Worker, 14, 10);
+        f.spawn(1, AntType::Worker, 20, 20);
+        f.settle();
+        auto key = [&](int32_t k, uint16_t mod = 0, bool repeat = false) { return f.hud.handle_key_down(k, f.sim, f.cam, mod, repeat); };
+        auto only = [&](uint32_t id) { return f.hud.get_selected_ant_ids().size() == 1 && f.selected(id); };
+        key('n', KMOD_CTRL);
+        check(only(a), "Ctrl+N with nothing selected starts at the first ant");
+        key('n', KMOD_CTRL);
+        check(only(b), "Ctrl+N: the next ant");
+        key('n', KMOD_CTRL);
+        check(only(c), "Ctrl+N: the next ant");
+        key('n', KMOD_CTRL);
+        check(only(a), "Ctrl+N wraps around");
+        key('p', KMOD_CTRL);
+        check(only(c), "Ctrl+P wraps around backwards");
+        key('p', KMOD_CTRL);
+        check(only(b), "Ctrl+P: the previous ant");
+        f.hud.clear_selection();
+        key('p', KMOD_CTRL);
+        check(only(b), "Ctrl+P with nothing selected steps back from the last slot: the second to last ant");
+        f.hud.set_selected_ant_ids({b, c});
+        f.sounds.clear();
+        key('n', KMOD_CTRL);
+        check(only(c), "several selected: the search starts at the lowest slot (b), the selection is replaced by the next ant (c)");
+        check(f.sounds.empty() && f.hud.panel_mode(f.world()) == HUD::PanelMode::OneAnt, "panel 3, no voice");
+        f.hud.set_selected_ant_ids({b, c});
+        key('p', KMOD_CTRL);
+        check(only(a), "and backwards from the lowest slot");
+        check(!key('n') || f.hud.get_chat_input() == "n", "without Ctrl 'n' is a typed letter");
+        f.hud.set_chat_input("");
+    }
+    {
+        Fixture f;
+        const uint32_t near_ant = f.spawn(0, AntType::Worker, 5, 5);
+        const uint32_t far_ant = f.spawn(0, AntType::Worker, 40, 40);
+        f.settle();
+        f.cam.x = 0.0f; f.cam.y = 0.0f; f.cam.world_x = 0; f.cam.world_y = 0;
+        f.hud.select_ant(near_ant);
+        f.hud.handle_key_down('n', f.sim, f.cam, KMOD_CTRL);
+        check(f.selected(far_ant), "the far ant is selected");
+        // ScrollToShow of the +-128 square around (1296, 1296): the right edge 1424 - 442 and the bottom edge 1424 - 440
+        check(f.cam.world_x == 982 && f.cam.world_y == 984, "the view moves just far enough to show the square (not centred): (" + std::to_string(f.cam.world_x) + ", " + std::to_string(f.cam.world_y) + ")");
+        f.hud.handle_key_down('p', f.sim, f.cam, KMOD_CTRL);
+        check(f.selected(near_ant) && f.cam.world_x == 48 && f.cam.world_y == 48, "and back: the left / top edge of the square (48, 48)");
+        f.hud.handle_key_down('p', f.sim, f.cam, KMOD_CTRL);
+        f.hud.handle_key_down('n', f.sim, f.cam, KMOD_CTRL);
+        check(f.cam.world_x == 48 + 0 || f.cam.world_x > 0, "the view is not touched when the square is already visible or moves again");
+    }
+    // Ctrl+A, Ctrl+H, Ctrl+L, Esc, Ctrl+S
+    {
+        Scene s = make_scene();
+        Fixture& f = *s.f;
+        auto key = [&](int32_t k, uint16_t mod = 0, bool repeat = false) { return f.hud.handle_key_down(k, f.sim, f.cam, mod, repeat); };
+        f.sounds.clear();
+        key('a', KMOD_CTRL);
+        check(f.hud.get_selected_ant_ids().size() == 3 && f.selected(s.mine) && f.selected(s.mine2) && f.selected(s.mine_on_hill), "Ctrl+A selects every own ant");
+        check(!f.selected(s.foe) && f.hud.panel_mode(f.world()) == HUD::PanelMode::Ants, "and none of the others; panel 4");
+        check(f.sounds.size() == 1, "the ready voice of the first ant");
+        key('a', KMOD_CTRL | KMOD_LSHIFT);
+        check(f.hud.get_selected_ant_ids().size() == 3, "Shift changes nothing");
+        f.sim.kill_unit(s.mine2);
+        f.sim.kill_unit(s.mine_on_hill);
+        f.settle();
+        key('a', KMOD_CTRL);
+        check(f.hud.get_selected_ant_ids().size() == 1 && f.hud.panel_mode(f.world()) == HUD::PanelMode::OneAnt, "one own ant: panel 3");
+        f.hud.select_base(1);
+        f.cam.world_x = 400; f.cam.world_y = 400;
+        key('h', KMOD_CTRL);
+        check(f.hud.get_selected_base_team_id() == 0 && f.hud.get_selected_ant_ids().empty(), "Ctrl+H selects the home hill (panel 2)");
+        check(f.cam.world_x == 400 && f.cam.world_y == 400, "without scrolling");
+        f.hud.select_ant(s.mine);
+        f.latch_move();
+        check(f.hud.is_move_latched(), "a pedestal is latched");
+        check(key(SDLK_ESCAPE), "Esc is handled");
+        check(f.hud.get_selected_ant_ids().empty() && !f.hud.is_move_latched() && !f.hud.is_quit_dialog_open(), "Esc deselects everything and lets the pedestals up, no dialog");
+        check(!f.hud.is_show_hp(), "hit point digits are off");
+        key('l', KMOD_CTRL);
+        check(f.hud.is_show_hp(), "Ctrl+L switches them on");
+        key('L', KMOD_CTRL);
+        check(!f.hud.is_show_hp(), "and off");
+        // Ctrl+S: the stop order without flash, lock or deselect, only for own ants
+        f.hud.select_ant(s.mine);
+        f.click_tile(30, 22);
+        check(f.unit(s.mine).orig_order == sim::AntUnit::kOrderMove, "the ant walks");
+        key('s', KMOD_CTRL);
+        check(f.hud.status_line().text() == "Stopping.", "Ctrl+S posts \"Stopping.\"");
+        check(f.selected(s.mine) && !f.hud.is_pedestal_flashing(2), "no flash, no lock: still selected");
+        f.click_tile(31, 22);                                     // the mouse is not locked
+        check(f.unit(s.mine).orig_order_tile == (TileCoord{31, 22}), "and the mouse still works");
+        f.hud.clear_selection();
+        f.hud.clear_status();
+        key('s', KMOD_CTRL);
+        check(f.hud.status_line().text().empty(), "nothing selected: Ctrl+S does nothing");
+        f.hud.select_base(0);
+        key('s', KMOD_CTRL);
+        check(f.hud.status_line().text().empty(), "a hill selected: Ctrl+S does nothing");
+    }
+    // F1, dialog keys, Ctrl+O, Ctrl+Q
+    {
+        Scene s = make_scene();
+        Fixture& f = *s.f;
+        auto key = [&](int32_t k, uint16_t mod = 0) { return f.hud.handle_key_down(k, f.sim, f.cam, mod, false); };
+        for (int32_t close_key : {static_cast<int32_t>('x'), static_cast<int32_t>('X'), static_cast<int32_t>('c'), static_cast<int32_t>('C'),
+                                  static_cast<int32_t>(SDLK_RETURN), static_cast<int32_t>(SDLK_ESCAPE)}) {
+            key(SDLK_F1);
+            check(f.hud.is_quick_help_open(), "F1 opens the quick help");
+            key('q');
+            key(' ');
+            check(f.hud.is_quick_help_open(), "other keys are taken by the dialog");
+            check(f.hud.get_chat_input().empty(), "and are not typed");
+            key(close_key);
+            check(!f.hud.is_quick_help_open(), "the quick help closes with C, X, Enter and Esc");
+        }
+        key('o', KMOD_CTRL);
+        check(f.hud.is_options_open(), "Ctrl+O opens the options");
+        key(SDLK_ESCAPE);
+        check(f.hud.is_options_open(), "Esc does not close the options");
+        key(SDLK_RETURN);
+        check(!f.hud.is_options_open(), "Enter does");
+        bool quit = false;
+        f.hud.set_on_quit([&]() { quit = true; });
+        key('q', KMOD_CTRL);
+        check(f.hud.is_quit_dialog_open(), "Ctrl+Q opens the quit dialog");
+        key(SDLK_RETURN);
+        check(f.hud.is_quit_dialog_open() && !quit, "Enter does nothing in it");
+        key('x');
+        check(f.hud.is_quit_dialog_open() && !quit, "neither does another key");
+        key('N');
+        check(!f.hud.is_quit_dialog_open() && !quit, "N answers No");
+        key('q', KMOD_CTRL);
+        key(SDLK_ESCAPE);
+        check(!f.hud.is_quit_dialog_open() && !quit, "Esc answers No");
+        key('q', KMOD_CTRL);
+        key('y');
+        check(!f.hud.is_quit_dialog_open() && quit, "Y answers Yes");
+        // the get-ready dialog takes everything
+        f.hud.select_ant(s.mine);
+        f.hud.start_match_modal();
+        key(SDLK_ESCAPE);
+        check(f.selected(s.mine), "the start dialog swallows Esc");
+        f.hud.dismiss_match_start_modal();
+    }
+    // chat keys: F9 - F12 fresh presses, Enter, Backspace, typed characters, nothing else does anything
+    {
+        Scene s = make_scene();
+        Fixture& f = *s.f;
+        auto key = [&](int32_t k, uint16_t mod = 0, bool repeat = false) { return f.hud.handle_key_down(k, f.sim, f.cam, mod, repeat); };
+        const size_t base = f.hud.get_chat_log().size();
+        key(SDLK_F9, 0, true);
+        check(f.hud.get_chat_log().size() == base, "a repeat of F9 sends nothing");
+        key(SDLK_F9, 0, false);
+        check(f.hud.get_chat_log().size() == base + 3, "a fresh F9 chats the first quick text (a header and two body lines)");
+        key(SDLK_F12);
+        check(f.hud.get_chat_log().size() == base + 5, "F12 the fourth (a header and one body line)");
+        key('h');
+        key('i');
+        check(f.hud.get_chat_input() == "hi", "printable keys are typed");
+        key('!', KMOD_LSHIFT);
+        check(f.hud.get_chat_input() == "hi!", "with Shift too");
+        key(SDLK_BACKSPACE);
+        check(f.hud.get_chat_input() == "hi", "Backspace deletes");
+        check(!key('b', KMOD_CTRL) && !key('c', KMOD_CTRL) && !key('f', KMOD_CTRL) && !key('m', KMOD_CTRL) && !key('t', KMOD_CTRL),
+              "Ctrl+B / C / F / M / T do nothing");
+        check(!key(SDLK_LEFT) && !key(SDLK_UP) && !key(SDLK_TAB) && !key(SDLK_HOME), "arrows, Tab and Home do nothing");
+        check(f.hud.get_chat_input() == "hi", "and nothing was typed");
+        f.cam.world_x = 100; f.cam.world_y = 100;
+        key(' ');
+        check(f.hud.get_chat_input() == "hi " && f.cam.world_x == 100 && f.cam.world_y == 100, "Space is a typed character, it does not centre the view");
+        key(SDLK_RETURN);
+        check(f.hud.get_chat_input().empty() && f.hud.get_chat_log().size() > base + 5, "Enter sends and clears");
+        // with the chat option off the box is covered: nothing is typed, F9 - F12 are silent, Enter sends nothing
+        f.hud.open_options();
+        f.press(151, 289);                                        // the OFF toggle of the chat option
+        f.hud.close_options();
+        const size_t now = f.hud.get_chat_log().size();
+        check(!key('a') && f.hud.get_chat_input().empty(), "chat off: nothing is typed");
+        key(SDLK_F10);
+        check(f.hud.get_chat_log().size() == now, "chat off: F10 is silent");
+    }
+}
+
+void test_buttons() {
+    g_group = "buttons";
+    std::printf("[buttons] the button class: a press captures, the callback runs at the release while the pointer is still on the button\n");
+    Scene s = make_scene();
+    Fixture& f = *s.f;
+    f.cam.world_x = 0; f.cam.world_y = 0; f.cam.x = 0.0f; f.cam.y = 0.0f;      // no scroll strip is active at the top left of the map
+    // Help (476, 7, 46, 23)
+    f.sounds.clear();
+    f.press(500, 15);
+    check(!f.sounds.empty() && f.sounds.back() == sim::SoundID::ButtonClick, "the click sound plays at the press");
+    check(f.hud.is_input_captured() && !f.hud.is_quick_help_open(), "the button is captured, its callback has not run");
+    f.release(500, 15);
+    check(f.hud.is_quick_help_open() && !f.hud.is_input_captured(), "the release on the button opens the quick help");
+    f.hud.close_quick_help();
+    // leaving the button cancels the capture for good
+    f.press(540, 15);                                                  // Options (525, 7, 52, 23)
+    f.hud.handle_mouse_motion(300, 300, f.sim, f.cam);
+    check(!f.hud.is_input_captured(), "leaving the button cancels the capture");
+    f.hud.handle_mouse_motion(540, 15, f.sim, f.cam);
+    check(!f.hud.is_input_captured(), "coming back only hovers");
+    f.release(540, 15);
+    check(!f.hud.is_options_open(), "and the release does nothing");
+    f.press(540, 15);
+    f.release(300, 300);
+    check(!f.hud.is_options_open(), "released elsewhere: nothing");
+    f.press(540, 15);
+    f.release(541, 16);
+    check(f.hud.is_options_open(), "released on the button: the options open");
+    f.hud.close_options();
+    // Quit (579, 7, 46, 23)
+    f.press(590, 15);
+    f.release(590, 15);
+    check(f.hud.is_quit_dialog_open(), "Quit opens the quit dialog");
+    f.hud.close_quit_dialog();
+    // [All] (532, 443, 44, 24): sends the text at the release; hidden while chat is off
+    f.hud.set_chat_input("to all");
+    const size_t base = f.hud.get_chat_log().size();
+    f.press(545, 450);
+    check(f.hud.get_chat_log().size() == base, "nothing is sent at the press");
+    f.release(545, 450);
+    check(f.hud.get_chat_log().size() == base + 2 && f.hud.get_chat_input().empty(), "the release sends and clears");
+    f.hud.open_options();
+    f.press(151, 289);
+    f.hud.close_options();
+    f.hud.set_chat_input("");
+    f.sounds.clear();
+    f.press(545, 450);
+    check(f.sounds.empty() && !f.hud.is_input_captured(), "chat off: [All] is hidden and does not react");
+    f.release(545, 450);
+}
+
 }  // namespace
 
 int main() {
@@ -973,6 +1217,8 @@ int main() {
     test_drag_select();
     test_right_button();
     test_pedestals();
+    test_keyboard();
+    test_buttons();
     std::printf("pointer model: %d checks, %d failures\n", g_checks, g_failures);
     return g_failures == 0 ? 0 : 1;
 }

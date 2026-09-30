@@ -1008,7 +1008,7 @@ void run_suite_7_input_controls() {
         ASSERT_TRUE(wait_ms(sim, 4000, [&]() { return sim.grid().get_cell(TileCoord{8, 7}).has_completed_bridge(); }) >= 0);
     } TEST_END();
 
-    TEST_CASE("7.5 Hotkeys: 'A' Select All, 'N'/'P' Cycle, 'H' Center Home") {
+    TEST_CASE("7.5 Hotkeys: Ctrl+A Select All, Ctrl+N / Ctrl+P Cycle, Ctrl+H Home Hill, Esc Deselects, Ctrl+Q Quit Dialog") {
         SimulationEngine sim;
         sim.init_test_world(60, 60, 100, 60000);
         uint32_t a1 = sim.spawn_unit(0, AntType::Worker, TileCoord{5, 5});
@@ -1049,8 +1049,20 @@ void run_suite_7_input_controls() {
         hud.handle_key_down('c', sim, camera, KMOD_CTRL);
         ASSERT_EQ(hud.get_selected_ant_id(), a3);
 
-        // 'Esc' toggles quit menu
+        // 'Esc' deselects everything (FUN_01028c44(0)); it does not open the quit dialog
         hud.handle_key_down(27, sim, camera);
+        ASSERT_EQ(hud.get_selected_ant_id(), 0u);
+        ASSERT_TRUE(hud.get_selected_ant_ids().empty());
+        ASSERT_FALSE(hud.is_quit_dialog_open());
+
+        // 'Ctrl+H' selects the home hill (no hatch, no scrolling)
+        hud.handle_key_down('h', sim, camera, KMOD_CTRL);
+        ASSERT_EQ(hud.get_selected_base_team_id(), 0);
+
+        // 'Ctrl+Q' starts the quit flow like the Quit button; in its dialog Enter does nothing, Esc answers No
+        hud.handle_key_down('q', sim, camera, KMOD_CTRL);
+        ASSERT_TRUE(hud.is_quit_dialog_open());
+        hud.handle_key_down(SDLK_RETURN, sim, camera);
         ASSERT_TRUE(hud.is_quit_dialog_open());
         hud.handle_key_down(27, sim, camera);
         ASSERT_FALSE(hud.is_quit_dialog_open());
@@ -1662,7 +1674,7 @@ void run_suite_9_gameplay_mechanics_and_options() {
         ASSERT_TRUE(last_sfx == 17 || last_sfx == 15); // gantgo or gantcommand
     } TEST_END();
 
-    TEST_CASE("9.7 Chat Input System, Team Chat Toggle & Hotkey Modifier Isolation") {
+    TEST_CASE("9.7 The Chat Box Is Always Active; Enter, [All] And [Team] Send; Hotkey Modifier Isolation") {
         Application app;
         ApplicationConfig cfg;
         cfg.headless = true;
@@ -1674,7 +1686,7 @@ void run_suite_9_gameplay_mechanics_and_options() {
         auto& sim_engine = app.sim();
         ViewportCamera cam;
 
-        // 1. Verify bare hotkeys do NOT trigger gameplay commands
+        // 1. Verify bare hotkeys do NOT trigger the developer shortcuts
         SDL_KeyboardEvent key_ev{};
         key_ev.type = SDL_KEYDOWN;
 
@@ -1690,21 +1702,19 @@ void run_suite_9_gameplay_mechanics_and_options() {
         app.handle_key_down(key_ev);
         ASSERT_NE(app.is_tile_grid_visible(), initial_grid);
 
-        // 2. Chat Focus and Input Handling
-        ASSERT_FALSE(hud.is_chat_focused());
-
-        // Pressing Enter (SDLK_RETURN) focuses chat
-        key_ev.keysym.sym = SDLK_RETURN;
-        key_ev.keysym.mod = 0;
-        app.handle_key_down(key_ev);
-        ASSERT_TRUE(hud.is_chat_focused());
-
-        // Typing characters via handle_text_input
+        // 2. The chat box is always active: the text of the keys (SDL_TEXTINPUT) lands in it without any focus
+        ASSERT_TRUE(hud.get_chat_input().empty());
         hud.handle_text_input("Rush the base!");
         ASSERT_EQ(hud.get_chat_input(), "Rush the base!");
 
-        // Backspace removes character
+        // Backspace removes a character
         key_ev.keysym.sym = SDLK_BACKSPACE;
+        key_ev.keysym.mod = 0;
+        app.handle_key_down(key_ev);
+        ASSERT_EQ(hud.get_chat_input(), "Rush the base");
+
+        // The key event of a printable key is not typed a second time (its text arrives as a text input event)
+        key_ev.keysym.sym = SDLK_x;
         app.handle_key_down(key_ev);
         ASSERT_EQ(hud.get_chat_input(), "Rush the base");
 
@@ -1714,10 +1724,9 @@ void run_suite_9_gameplay_mechanics_and_options() {
             played_sound = sid;
         });
 
-        // Sending message with Enter
+        // Enter sends the text (to everybody: the local player has no ally) and clears the box
         key_ev.keysym.sym = SDLK_RETURN;
         app.handle_key_down(key_ev);
-        ASSERT_FALSE(hud.is_chat_focused());
         ASSERT_TRUE(hud.get_chat_input().empty());
         ASSERT_EQ(played_sound, 0u); // Chat sound effect disabled per user request
 
@@ -1735,34 +1744,42 @@ void run_suite_9_gameplay_mechanics_and_options() {
 
         // 3. Word Wrapping Test for Long Chat Messages
         size_t log_size_before = log.size();
-        hud.focus_chat();
         hud.handle_text_input("This is a really long chat message that will exceed twenty-two characters per line");
         hud.send_chat_message();
         ASSERT_TRUE(hud.get_chat_input().empty());
         // Should have created multiple wrapped lines
         ASSERT_TRUE(log.size() >= log_size_before + 3);
 
-        // 4. Team Chat Button and Scoping
-        // In FFA, is_on_team is false, send_to_all is true
+        // 4. [All] and [Team] send the text at once; [Team] exists only while the local player has an ally
         ASSERT_FALSE(hud.is_on_team());
-        ASSERT_TRUE(hud.is_send_to_all());
+        hud.set_chat_input("Nobody hears this as a team message");
+        size_t lines_before = log.size();
+        hud.handle_mouse_down(590, 450, SDL_BUTTON_LEFT, sim_engine, cam);      // the Team button's place: no button without an ally
+        hud.handle_mouse_up(590, 450, SDL_BUTTON_LEFT, sim_engine, cam);
+        ASSERT_EQ(log.size(), lines_before);
+        ASSERT_EQ(hud.get_chat_input(), "Nobody hears this as a team message");
 
-        // Clicking Team button when not on team does nothing
-        hud.handle_mouse_down(590, 450, SDL_BUTTON_LEFT, sim_engine, cam);
-        ASSERT_TRUE(hud.is_send_to_all());
+        // [All] sends when it is released on the button (a press that leaves the button and is released elsewhere sends nothing)
+        hud.handle_mouse_down(545, 450, SDL_BUTTON_LEFT, sim_engine, cam);
+        hud.handle_mouse_motion(300, 300, sim_engine, cam);
+        hud.handle_mouse_up(300, 300, SDL_BUTTON_LEFT, sim_engine, cam);
+        ASSERT_EQ(log.size(), lines_before);
+        hud.handle_mouse_down(545, 450, SDL_BUTTON_LEFT, sim_engine, cam);
+        hud.handle_mouse_motion(546, 451, sim_engine, cam);
+        ASSERT_EQ(log.size(), lines_before);                                     // the callback runs at the release, not at the press
+        hud.handle_mouse_up(546, 451, SDL_BUTTON_LEFT, sim_engine, cam);
+        ASSERT_TRUE(log.size() > lines_before);
+        ASSERT_TRUE(hud.get_chat_input().empty());
 
         // Now set on team
         hud.set_on_team(true);
         ASSERT_TRUE(hud.is_on_team());
 
-        // Clicking Team button (579..625, 443..467) switches send_to_all to false
-        hud.handle_mouse_down(590, 450, SDL_BUTTON_LEFT, sim_engine, cam);
-        ASSERT_FALSE(hud.is_send_to_all());
-
-        // Send a team message
+        // [Team] (579..625, 443..467) sends to the team
         hud.set_player_name("QueenAnt");
         hud.set_chat_input("Teammates defend!");
-        hud.send_chat_message();
+        hud.handle_mouse_down(590, 450, SDL_BUTTON_LEFT, sim_engine, cam);
+        hud.handle_mouse_up(590, 450, SDL_BUTTON_LEFT, sim_engine, cam);
         bool found_team_msg = false;
         for (const auto& entry : log) {
             if (entry.find("QueenAnt (To Teammate):") != std::string::npos) {
@@ -1772,13 +1789,19 @@ void run_suite_9_gameplay_mechanics_and_options() {
         }
         ASSERT_TRUE(found_team_msg);
 
-        // Clicking All button (532..576, 443..467) switches back to All
-        hud.handle_mouse_down(545, 450, SDL_BUTTON_LEFT, sim_engine, cam);
-        ASSERT_TRUE(hud.is_send_to_all());
+        // Enter with an ally goes to the team as well
+        hud.set_chat_input("Enter is a team message too");
+        hud.handle_key_down(SDLK_RETURN, sim_engine, cam);
+        bool found_enter_team = false;
+        for (size_t li = 0; li + 1 < log.size(); ++li) {
+            if (log[li] == "QueenAnt (To Teammate):" && log[li + 1].find("Enter is a team") == 0) found_enter_team = true;
+        }
+        ASSERT_TRUE(found_enter_team);
 
-        // Send an all message
+        // [All] (532..576, 443..467) sends to everybody even with an ally
         hud.set_chat_input("GG everyone");
-        hud.send_chat_message();
+        hud.handle_mouse_down(545, 450, SDL_BUTTON_LEFT, sim_engine, cam);
+        hud.handle_mouse_up(545, 450, SDL_BUTTON_LEFT, sim_engine, cam);
         // an entry is a header line "QueenAnt:" (in the colour of the sender's team) and its body lines
         bool found_all_msg = false;
         for (size_t li = 0; li + 1 < log.size(); ++li) {
@@ -1791,13 +1814,14 @@ void run_suite_9_gameplay_mechanics_and_options() {
         }
         ASSERT_TRUE(found_all_msg);
 
-        // 5. Escape cancels chat input without sending
-        hud.focus_chat();
+        // 5. Escape is not a chat key: it deselects (FUN_01028c44) and leaves the typed text alone
         hud.set_chat_input("Unsent message");
+        hud.select_ant(sim_engine.get_world_state().ants.front().id, false);
         key_ev.keysym.sym = SDLK_ESCAPE;
         app.handle_key_down(key_ev);
-        ASSERT_FALSE(hud.is_chat_focused());
-        ASSERT_TRUE(hud.get_chat_input().empty());
+        ASSERT_EQ(hud.get_chat_input(), "Unsent message");
+        ASSERT_EQ(hud.get_selected_ant_id(), 0u);
+        ASSERT_FALSE(hud.is_quit_dialog_open());
     } TEST_END();
 }
 
@@ -2115,7 +2139,7 @@ void run_suite_11_anthill_queuing_and_priority() {
         ASSERT_FALSE(sim.get_unit(a3).is_holding());
     } TEST_END();
 
-    TEST_CASE("11.3 Escape Key Quick Quit Menu Trigger") {
+    TEST_CASE("11.3 Escape Deselects Without A Quit Dialog; Ctrl+Q Opens It; Esc / N Answer No, Enter Does Nothing, Y Quits") {
         SimulationEngine sim;
         sim.init_test_world(60, 60, 42, 60000);
         ViewportCamera camera;
@@ -2126,18 +2150,22 @@ void run_suite_11_anthill_queuing_and_priority() {
         ASSERT_FALSE(hud.get_selected_ant_ids().empty());
         ASSERT_FALSE(hud.is_quit_dialog_open());
 
-        // Press Escape key (27)
+        // Escape (27) deselects everything (FUN_01028c44(0)); there is no quit dialog on Esc
         hud.handle_key_down(27, sim, camera);
-        ASSERT_TRUE(hud.is_quit_dialog_open());
-
-        // Press Escape key again toggles closed
-        hud.handle_key_down(27, sim, camera);
+        ASSERT_TRUE(hud.get_selected_ant_ids().empty());
         ASSERT_FALSE(hud.is_quit_dialog_open());
 
-        // Press SDLK_ESCAPE directly
-        hud.handle_key_down(SDLK_ESCAPE, sim, camera);
+        // Ctrl+Q runs the quit flow of the Quit button
+        hud.handle_key_down('q', sim, camera, KMOD_CTRL);
+        ASSERT_TRUE(hud.is_quit_dialog_open());
+
+        // Enter does nothing in the quit dialog, Escape and N answer No
+        hud.handle_key_down(SDLK_RETURN, sim, camera);
         ASSERT_TRUE(hud.is_quit_dialog_open());
         hud.handle_key_down(SDLK_ESCAPE, sim, camera);
+        ASSERT_FALSE(hud.is_quit_dialog_open());
+        hud.handle_key_down('q', sim, camera, KMOD_CTRL);
+        hud.handle_key_down('n', sim, camera);
         ASSERT_FALSE(hud.is_quit_dialog_open());
 
         // Verify full Application::handle_key_down wiring
@@ -2153,27 +2181,27 @@ void run_suite_11_anthill_queuing_and_priority() {
         esc_ev.type = SDL_KEYDOWN;
         esc_ev.keysym.sym = SDLK_ESCAPE;
 
-        // Press Escape in-game opens quit dialog
-        app.handle_key_down(esc_ev);
-        ASSERT_TRUE(app.hud().is_quit_dialog_open());
-
-        // Press Escape again closes quit dialog
+        // Escape in-game opens nothing
         app.handle_key_down(esc_ev);
         ASSERT_FALSE(app.hud().is_quit_dialog_open());
 
-        // Press Escape a third time: opens the quit dialog again
-        app.handle_key_down(esc_ev);
+        // Ctrl+Q opens the quit dialog
+        SDL_KeyboardEvent q_ev{};
+        q_ev.type = SDL_KEYDOWN;
+        q_ev.keysym.sym = SDLK_q;
+        q_ev.keysym.mod = KMOD_LCTRL;
+        app.handle_key_down(q_ev);
         ASSERT_TRUE(app.hud().is_quit_dialog_open());
 
-        // Pressing 'N' closes quit dialog
+        // Pressing 'N' closes quit dialog (a printable key reaches the dialog although the chat box takes typed text)
         SDL_KeyboardEvent n_ev{};
         n_ev.type = SDL_KEYDOWN;
         n_ev.keysym.sym = SDLK_n;
         app.handle_key_down(n_ev);
         ASSERT_FALSE(app.hud().is_quit_dialog_open());
 
-        // Press Escape and then 'Y' quits the game
-        app.handle_key_down(esc_ev);
+        // Ctrl+Q and then 'Y' quits the game
+        app.handle_key_down(q_ev);
         ASSERT_TRUE(app.hud().is_quit_dialog_open());
         SDL_KeyboardEvent y_ev{};
         y_ev.type = SDL_KEYDOWN;
@@ -4713,28 +4741,36 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         ASSERT_TRUE(sim.has_audio_event(SoundID::AntDrown));
     } TEST_END();
 
-    TEST_CASE("12.58 Chat Focus Control Key Bypass & Outside Click Unfocusing") {
+    TEST_CASE("12.58 The Chat Box Is Always Active: Ctrl Keys Are Not Typed, Clicks Do Not Focus Or Unfocus, The Option Covers It") {
         HUD hud;
         hud.init(0);
         SimulationEngine sim;
         sim.init_test_world(60, 60, 1);
         ViewportCamera camera;
 
-        // Focus chat
-        hud.focus_chat();
-        ASSERT_TRUE(hud.is_chat_focused());
-
         // Control key (e.g. Ctrl+A) MUST NOT be appended to chat input
         hud.handle_key_down('a', sim, camera, KMOD_CTRL);
         ASSERT_TRUE(hud.get_chat_input().empty());
 
-        // Left click outside chat input box (e.g. playfield at 200, 200) unfocuses chat
-        hud.handle_mouse_down(200, 200, SDL_BUTTON_LEFT, sim, camera);
-        ASSERT_FALSE(hud.is_chat_focused());
+        // Without Ctrl a printable key is typed at once: there is no focus to gain (FUN_0102609a: the chat edit is always active)
+        hud.handle_key_down('a', sim, camera, 0);
+        ASSERT_EQ(hud.get_chat_input(), "a");
 
-        // Left click inside chat input box (479..622, 423..437) focuses chat
+        // Clicks on the field or anywhere else do not change the box
+        hud.handle_mouse_down(200, 200, SDL_BUTTON_LEFT, sim, camera);
+        hud.handle_mouse_up(200, 200, SDL_BUTTON_LEFT, sim, camera);
         hud.handle_mouse_down(500, 428, SDL_BUTTON_LEFT, sim, camera);
-        ASSERT_TRUE(hud.is_chat_focused());
+        hud.handle_mouse_up(500, 428, SDL_BUTTON_LEFT, sim, camera);
+        ASSERT_EQ(hud.get_chat_input(), "a");
+
+        // Switched off in the options ("Participate In Chat"): the box is covered and takes nothing
+        hud.open_options();
+        hud.handle_mouse_down(151, 289, SDL_BUTTON_LEFT, sim, camera);      // the OFF toggle of the chat option
+        hud.close_options();
+        ASSERT_FALSE(hud.is_chat_enabled());
+        hud.handle_key_down('b', sim, camera, 0);
+        hud.handle_text_input("c");
+        ASSERT_EQ(hud.get_chat_input(), "a");
     } TEST_END();
 
     TEST_CASE("12.59 Options Dialog F9-F12 Quick Chat Editing & In-Game Broadcast Keys") {
@@ -6453,10 +6489,10 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
 
     TEST_CASE("12.108: Version Invariant & Fog of War Cursor Concealment Parity") {
         // 1. Verify semantic versioning components
-        ASSERT_EQ(ants::VERSION_STRING, "v0.0.41");
+        ASSERT_EQ(ants::VERSION_STRING, "v0.0.42");
         ASSERT_EQ(ants::VERSION_MAJOR, 0);
         ASSERT_EQ(ants::VERSION_MINOR, 0);
-        ASSERT_EQ(ants::VERSION_PATCH, 41);
+        ASSERT_EQ(ants::VERSION_PATCH, 42);
 
         // 2. Setup simulation world with Fog of War enabled
         SimulationEngine sim;

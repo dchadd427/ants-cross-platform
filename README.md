@@ -46,6 +46,7 @@ Play the remake instantly in any modern web browser (Chrome, Firefox, Safari, Ed
   - **Alliance Texts & Chat Log**: Teaming up follows the original's protocol: the invitee gets the question and the allypro cue, the proposer reads "%s accepted teaming up" / "%s rejected teaming up" (or the invitee "%s withdrew offer to team up"), a team that is made flashes "A team has been made." and writes the News Flash "%s (%s) and %s (%s) are a team now!" into the chat log (breaking it writes "... are no longer a team!"), and a drop-out writes "%s dropped out of the game!". The chat log keeps the original's entries: a header in the sender's team colour ("Name:" or "Name (To Teammate):", "[m:ss] News Flash:" for news) and a body of up to 100 characters wrapped and indented; chat needs the "Participate In Chat" option, F9 - F12 chat the quick-chat texts to everybody, and a team message reaches only the sender and the sender's allies.
   - **Edge Scrolling & Minimap**: The view scrolls like the original's input task (every 50 ms): the eight 12 px edge strips show the scroll arrows, only the 5 px inner strips scroll, the step is `scroll rate + 10` px around the target point of the pointer (about 55 - 60 px per tick at the default rate, 120 - 200 px/s at the slowest and 2100 px/s at the fastest setting), a strip that cannot move shows no arrow, and dialogs or a captured button stop it. Holding the left button on the minimap centres the view on the point under the pointer; nothing scrolls with the keyboard or the wheel.
   - **Pointer & Commands**: The cursor mode decides what a click does, exactly as in the original: over an ant the ant is picked with the original's sprite boxes (a 3 x 3 tile scan, the last box wins, no filters), other players' ants - allies too - give the attack cursor, food the food cursor, your own hill and the fog the move cursor, and a valid special target (a bomb for a bomber, an enemy hill for a thief, or with the ability pedestal latched: plantable ground, a fire wall, water or a bridge) the target cursor. A left drag of at most 4 px is a click at the release point, a bigger one is the red 1 px rubber band that selects your ants by positive-area overlap (Shift adds to a selection of your ants); the right button gives its order at the release, at the tile of the press point. The Move and ability pedestals only latch (a visual state that removes the band or turns valid tiles into targets and pops up after an accepted order), Stop stops the ants, locks the mouse for 250 ms and then deselects, the hatch pedestal exists only while eggs remain and the ally pedestal only with more than two players.
+  - **Keyboard, Buttons & Chat**: The keyboard is the original's: F1, F9 - F12, Enter, Esc = deselect, Ctrl+A / H / L / N / O / P / Q / S and nothing else (no Space, arrow or letter hotkeys); the chat box is always active and Enter / All / Team send its text; the top bar and chat buttons behave like the original's button class (a press captures, the click sound plays at the press, the action runs when the button is released while the pointer is still on it, leaving cancels it).
   - **Enemy Ant Inspection**: Clicking enemy units when no friendly unit is selected shows selection brackets (`*ears`, coloured by health) without allowing friendly command dispatch.
   - **Match Audio Cues**: 1-minute alert (`onemin.wav`), 30-second warning (`thirtysec.wav`), 10-second countdown clicks (`countdown.wav`), defeat fanfare (`losers.wav`), and player drop-out (`playerout.wav`).
 
@@ -234,18 +235,21 @@ python3 -m http.server 8080 -d dist
 | **`Ctrl + 4` / `⌘4`** | Switch to Team 3 (Black Ants). |
 | **`Ctrl + Tab` / `Ctrl + C`** | Cycle control to the next available team. |
 
-### Camera & Hotkeys
+### Camera & Hotkeys (the original's keyboard, Ants.exe `FUN_0102609a`)
 | Key | Function |
 |---|---|
 | **Edge Scrolling** | Move the cursor to the edge: the arrow shows within 12 px, the view scrolls within the 5 px inner strip (every 50 ms; nothing scrolls with the keyboard or the wheel). |
-| **`Spacebar`** | Center camera on currently selected unit. |
-| **`H`** | Center camera on home anthill base. |
-| **`Esc`** | Open / close Quick Quit confirmation dialog; dismiss open modals. |
-| **`Ctrl + G`** | Toggle terrain tile grid display (ON / OFF). |
-| **`A`** or **`Ctrl + A`** | Select all friendly ants on the battlefield. |
-| **`N` / `P`** | Cycle selection to next / previous friendly ant. |
-| **`M`** | Toggle background music soundtrack. |
+| **Typing** | The chat box is always active (while "Participate In Chat" is on): printable keys and Backspace go into it, **`Enter`** sends the text (to your team when you have an ally, else to everybody); the **[All]** / **[Team]** buttons send it to everybody / your team. |
+| **`F9` – `F12`** | Send the four quick chat texts (fresh key presses only, chat on). |
+| **`F1`** | Quick help (`C`, `X`, `Enter` or `Esc` close it). |
+| **`Esc`** | Deselect everything (there is no quit dialog on Esc). |
+| **`Ctrl + A`** | Select all your ants (panel 3 for one, 4 for several, the voice of the first). |
+| **`Ctrl + H`** | Select your home anthill (no hatching, no scrolling). |
+| **`Ctrl + N` / `Ctrl + P`** | Select the next / previous ant (from the lowest selected one) and scroll just far enough to show it. |
 | **`Ctrl + S`** | Stop the selected ants (no flash, no lock, no deselect). |
+| **`Ctrl + O` / `Ctrl + Q`** | Options / quit dialog (quit dialog: `Y` yes, `N` or `Esc` no). |
+| **`Ctrl + L`** | Show every ant's hit points as white numbers. |
+| *Developer shortcuts (not in the original)* | `Ctrl + T` / `F3` tile grid, `Ctrl + M` music mute, `Ctrl + 1..4` / `Ctrl + Tab` switch the controlled team, `Shift + F12` screenshot. |
 
 ---
 

@@ -1611,6 +1611,10 @@ void Renderer::collect_ant_units(const ants::sim::WorldState& world) {
         item.sort_y = a.py + predict_ant_clip(a, ant_loco_sequence(a)).dy;
         item.draw_func = [this, a](SDL_Renderer*, TextureCache&) {
             this->draw_single_ant(a);
+            if (show_hp_) {          // FUN_0101b802 with [4b14] != 0: sprintf("%d", hp), white, at the sprite position
+                this->draw_text(std::to_string(a.hp), PLAYFIELD_X + (a.px - static_cast<int32_t>(camera_.x)),
+                                PLAYFIELD_Y + (a.py - static_cast<int32_t>(camera_.y)), ants::assets::ColorRGBA{255, 255, 255, 255}, FontSize::Small);
+            }
         };
         render_queue_.push_back(std::move(item));
     }

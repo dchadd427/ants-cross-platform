@@ -523,12 +523,8 @@ void Application::handle_events() {
         if (event.type == SDL_WINDOWEVENT) {
             if (event.window.event == SDL_WINDOWEVENT_MINIMIZED ||
                 event.window.event == SDL_WINDOWEVENT_HIDDEN) {
-                hud_.unfocus_chat();
                 is_paused_ = true;
                 midi_player_.pause();
-            }
-            if (event.window.event == SDL_WINDOWEVENT_FOCUS_LOST) {
-                hud_.unfocus_chat();
             }
             if (event.window.event == SDL_WINDOWEVENT_RESTORED ||
                 event.window.event == SDL_WINDOWEVENT_SHOWN) {
@@ -682,70 +678,17 @@ void Application::handle_key_down(const SDL_KeyboardEvent& key) {
 
     bool ctrl_or_gui = (key.keysym.mod & KMOD_CTRL) || (key.keysym.mod & KMOD_GUI);
 
-    // 1. If chat input is currently focused AND user is not holding Ctrl/Cmd:
-    // Route control keys to chat. If Ctrl or Cmd is held, user wants to issue a command!
-    if (!ctrl_or_gui && hud_.is_chat_focused()) {
-        if (key.keysym.sym == SDLK_RETURN || key.keysym.sym == SDLK_KP_ENTER ||
-            key.keysym.sym == SDLK_ESCAPE || key.keysym.sym == SDLK_BACKSPACE ||
-            key.keysym.sym == SDLK_PAGEUP || key.keysym.sym == SDLK_PAGEDOWN ||
-            key.keysym.sym == SDLK_UP || key.keysym.sym == SDLK_DOWN) {
-            hud_.handle_key_down(key.keysym.sym, sim_, renderer_->camera(), key.keysym.mod);
-        }
+    // Developer and test shortcuts that are not part of the original (each needs Ctrl / Cmd, Shift or a function key that the original leaves
+    // free): screenshot, tile grid, music mute, team switch. The original's own keys live in HUD::handle_key_down (FUN_0102609a).
+    if (key.keysym.sym == SDLK_F12 && ((key.keysym.mod & KMOD_SHIFT) || ctrl_or_gui)) {
+        renderer_->save_screenshot("screenshot.png");
+        std::cout << "[Application] Screenshot saved to screenshot.png" << std::endl;
         return;
     }
-
-    // 2. Return / Enter focuses chat!
-    if (key.keysym.sym == SDLK_RETURN || key.keysym.sym == SDLK_KP_ENTER) {
-        hud_.focus_chat();
-        return;
-    }
-
-    // 3. Quick Chat Broadcast keys F9..F12
-    if (key.keysym.sym == SDLK_F9) {
-        hud_.trigger_quick_chat(0);
-        return;
-    }
-    if (key.keysym.sym == SDLK_F10) {
-        hud_.trigger_quick_chat(1);
-        return;
-    }
-    if (key.keysym.sym == SDLK_F11) {
-        hud_.trigger_quick_chat(2);
-        return;
-    }
-    if (key.keysym.sym == SDLK_F12) {
-        if ((key.keysym.mod & KMOD_SHIFT) || ctrl_or_gui) {
-            renderer_->save_screenshot("screenshot.png");
-            std::cout << "[Application] Screenshot saved to screenshot.png" << std::endl;
-        } else {
-            hud_.trigger_quick_chat(3);
-        }
-        return;
-    }
-
-    // 4. Tile Grid Display Toggle: Ctrl+T, Cmd+T, or F3 (F3 is function key, T strictly requires Ctrl/Cmd!)
     if ((key.keysym.sym == SDLK_t && ctrl_or_gui) || key.keysym.sym == SDLK_F3) {
         show_tile_grid_ = !show_tile_grid_;
         return;
     }
-
-    // 7. Hatch / Select Home Base: strictly requires Ctrl or Cmd!
-    if (key.keysym.sym == SDLK_h && ctrl_or_gui) {
-        if (hud_.get_selected_base_team_id() == local_player_id_) {
-            sim_.hatch_ant(local_player_id_, sim::AntType::Worker);
-        } else {
-            hud_.select_base(local_player_id_);
-        }
-        return;
-    }
-
-    // 8. Select All Friendly Ants: strictly requires Ctrl or Cmd!
-    if (key.keysym.sym == SDLK_a && ctrl_or_gui) {
-        hud_.select_all_friendly(sim_.get_world_state());
-        return;
-    }
-
-    // 9. Music Mute Toggle: strictly requires Ctrl or Cmd!
     if (key.keysym.sym == SDLK_m && ctrl_or_gui) {
         is_music_muted_ = !is_music_muted_;
         if (is_music_muted_) {
@@ -761,8 +704,6 @@ void Application::handle_key_down(const SDL_KeyboardEvent& key) {
         }
         return;
     }
-
-    // 10. Change teams: Ctrl+1..4, Cmd+1..4, Ctrl+Tab, Cmd+Tab, Ctrl+C
     if (ctrl_or_gui) {
         if (key.keysym.sym >= SDLK_1 && key.keysym.sym <= SDLK_4) {
             uint8_t target_team = static_cast<uint8_t>(key.keysym.sym - SDLK_1);
@@ -776,26 +717,13 @@ void Application::handle_key_down(const SDL_KeyboardEvent& key) {
         }
     }
 
-    // 11. Space: Center on selected ant or base
-    if (key.keysym.sym == SDLK_SPACE) {
-        if (hud_.get_selected_ant_id() != 0) {
-            const auto& world = sim_.get_world_state();
-            for (const auto& a : world.ants) {
-                if (a.id == hud_.get_selected_ant_id()) {
-                    renderer_->camera().center_on(a.px, a.py, current_level_.width, current_level_.height);
-                    return;
-                }
-            }
-        }
-        const auto* base = sim_.grid().find_anthill(local_player_id_);
-        if (base) {
-            renderer_->camera().center_on(base->x * 32 + 64, base->y * 32 + 64, current_level_.width, current_level_.height);
-        }
+    // Printable keys reach the always-active chat box as text input events (SDL_TEXTINPUT); the key event only carries the control keys. A dialog
+    // reads the keys itself (Y / N of the quit dialog, C / X of the quick help).
+    if (!ctrl_or_gui && key.keysym.sym >= 32 && key.keysym.sym <= 126 && !hud_.is_modal_open()) {
         return;
     }
 
-    // 12. Forward other keys to HUD with modifier flags
-    hud_.handle_key_down(key.keysym.sym, sim_, renderer_->camera(), key.keysym.mod);
+    hud_.handle_key_down(key.keysym.sym, sim_, renderer_->camera(), key.keysym.mod, key.repeat != 0);
 }
 
 void Application::handle_mouse_motion(const SDL_MouseMotionEvent& motion) {
@@ -823,12 +751,6 @@ void Application::handle_mouse_button(const SDL_MouseButtonEvent& button) {
             scorecard_.handle_mouse_up(button.x, button.y);
         }
         return;
-    }
-
-    if (button.type == SDL_MOUSEBUTTONDOWN) {
-        if (hud_.is_chat_focused() && !(button.x >= 479 && button.x < (479 + 143) && button.y >= 423 && button.y < (423 + 14))) {
-            hud_.unfocus_chat();
-        }
     }
 
     uint16_t mod = static_cast<uint16_t>(SDL_GetModState());
@@ -917,6 +839,7 @@ void Application::render_frame() {
         scorecard_.render(*renderer_, assets_);
     } else {
         const auto& world = sim_.get_world_state();
+        renderer_->set_show_hp(hud_.is_show_hp());
         renderer_->render_world(world, sim_.grid(), static_cast<int32_t>(hud_.get_selected_ant_id()),
                                 hud_.get_selected_ant_ids(), false, show_tile_grid_,
                                 mouse_screen_x_, mouse_screen_y_,
