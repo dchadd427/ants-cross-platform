@@ -158,6 +158,16 @@ void SimulationEngine::drop_player(uint8_t player_id) {
     impl_->world_state_dirty_ = true;
 }
 
+uint8_t SimulationEngine::pick_dropper_powerup(const std::array<double, 5>& probabilities, uint32_t r) noexcept {
+    int32_t total = 0;
+    for (uint8_t i = 0; i < 5; ++i) {
+        if (probabilities[i] == 0.0) continue;                              // fcomp [0x1001fb8]: a zero entry is skipped
+        total += static_cast<int32_t>(probabilities[i] * 10000.0);          // fmul [0x1001fc0]; _ftol truncates
+        if (static_cast<int32_t>(r) < total) return i;
+    }
+    return 0xFF;
+}
+
 bool SimulationEngine::is_player_dropped(uint8_t player_id) const noexcept {
     return player_id < MAX_PLAYERS && (impl_->dropped_mask_ & (1u << player_id)) != 0;
 }

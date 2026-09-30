@@ -3,6 +3,7 @@
 // action 4 and changes the ant's type and nothing else; an order given between the crossing into the power-up's tile and
 // the landing on its centre cancels the pick-up (the ant stands on the power-up); a power-up is a solid object, so an ant
 // standing on it cannot be reached, attacked or thrown onto (docs/GAME_REVERSE_ENGINEERING.md 5.38).
+#include "ants_assets/lvl_parser.hpp"
 #include "ants_sim/sim_engine.hpp"
 #include "ants_sim/movement_tables.hpp"
 
@@ -49,6 +50,15 @@ inline void run_test_case(const std::string& name, const std::function<void()>& 
 #define ASSERT_NE(a, b) ASSERT_TRUE((a) != (b))
 
 namespace {
+
+// Index of the flower dropper whose stem stands in column x (the order of the droppers in the snapshot is the map's object order)
+size_t dropper_at_column(const SimulationEngine& sim, int32_t x) {
+    const auto& fds = sim.get_world_state().flower_droppers;
+    for (size_t i = 0; i < fds.size(); ++i) {
+        if (fds[i].x == x) return i;
+    }
+    return fds.size();
+}
 
 constexpr int kTickMs = 50;
 constexpr uint16_t kNewsCantGoThere = 0x3A;   // status 58 "Can't go there."
@@ -656,6 +666,132 @@ int main() {
         sim.grid_mut().place_powerup(15, 15, 4);                             // the flower dropper lands under the victim
         run_ms(sim, 6000);
         ASSERT_TRUE(sim.get_unit(victim).hp < 10u);                          // the step into its tile is a contact, no object test
+    } TEST_END();
+
+    // ---- the flower droppers: FDTASK (0x100fc0d) polls every 3000 ms (+ its run time), the first poll only stamps, a posting needs more than `interval` seconds
+    // since the stamp, the stamp is renewed at the posting, the drop effect lasts 820 ms and its last frame sets the tile (0x100fe50) ---------------------------
+    TEST_CASE("2.1 SMALL (interval 15 s): the first poll stamps, the drop is posted at the fifth poll (15005 ms), lands 820 ms later, and every 15005 ms after") {
+        SimulationEngine sim;
+        ants::assets::LevelData lvl;
+        ASSERT_TRUE(lvl.load_lvl(std::string(ORIGINAL_ASSETS_DIR) + "/Maps/SMALL.LVL"));
+        sim.init(lvl, 42);
+        ASSERT_EQ(sim.get_world_state().flower_droppers.size(), 2u);
+        const TileCoord drop{sim.get_world_state().flower_droppers[0].drop_x, sim.get_world_state().flower_droppers[0].drop_y};
+        int first = -1, second = -1, landed = -1;
+        for (int t = 1; t <= 620 && second < 0; ++t) {
+            sim.tick();
+            const bool dropping = sim.get_world_state().flower_droppers[0].is_dropping;
+            if (dropping && first < 0) first = t;
+            if (!dropping && first >= 0 && landed < 0) landed = t;
+            if (dropping && landed >= 0) second = t;
+        }
+        ASSERT_EQ(first, 301);                                                              // 15005 ms: poll 5 of 3001 ms, stamped at poll 0 (strict compare: 15005 > 15000)
+        ASSERT_EQ(landed, 317);                                                             // 15005 + 820 = 15825 ms
+        ASSERT_EQ(second, 601);                                                             // restamped at the posting: 15005 ms later, not 15 s after the landing
+        ASSERT_TRUE(sim.grid().has_powerup_at(drop));
+    } TEST_END();
+
+    TEST_CASE("2.2 MEDIUM (interval 8 s): the third poll (9003 ms) posts, then every third poll after 9003 ms: 9 s, not 8 s") {
+        SimulationEngine sim;
+        ants::assets::LevelData lvl;
+        ASSERT_TRUE(lvl.load_lvl(std::string(ORIGINAL_ASSETS_DIR) + "/Maps/MEDIUM.LVL"));
+        sim.init(lvl, 42);
+        ASSERT_EQ(sim.get_world_state().flower_droppers.size(), 1u);
+        int first = -1, second = -1;
+        for (int t = 1; t <= 400 && second < 0; ++t) {
+            sim.tick();
+            const bool dropping = sim.get_world_state().flower_droppers[0].is_dropping;
+            if (dropping && first < 0) first = t;
+            if (dropping && first >= 0 && t > first + 30) second = t;
+        }
+        ASSERT_EQ(first, 181);                                                              // 9003 ms
+        ASSERT_EQ(second, 361);                                                             // 18006 ms
+    } TEST_END();
+
+    TEST_CASE("2.3 The drop tile is tested at the poll: a bomb, a fire wall or an ant on it refuses the posting, the stamp stays, the next poll drops; a power-up there is replaced") {
+        SimulationEngine sim;
+        ants::assets::LevelData lvl;
+        ASSERT_TRUE(lvl.load_lvl(std::string(ORIGINAL_ASSETS_DIR) + "/Maps/SMALL.LVL"));
+        sim.init(lvl, 42);
+        const TileCoord drop{2, 20};
+        const size_t left = dropper_at_column(sim, 2);
+        ASSERT_TRUE(left < 2);
+        sim.grid_mut().place_bomb(2, 20, 0);
+        for (int t = 0; t < 320; ++t) sim.tick();                                            // 16 s: poll 5 (15005 ms) refused
+        ASSERT_FALSE(sim.get_world_state().flower_droppers[left].is_dropping);
+        ASSERT_FALSE(sim.grid().has_powerup_at(drop));
+        sim.grid_mut().clear_bomb(2, 20);
+        int posted = -1;
+        for (int t = 320; t < 500 && posted < 0; ++t) {
+            sim.tick();
+            if (sim.get_world_state().flower_droppers[left].is_dropping) posted = t + 1;
+        }
+        ASSERT_EQ(posted, 361);                                                             // the next poll (18006 ms): the stamp of 0 still counts, nothing waits another 15 s
+        for (int t = 0; t < 20; ++t) sim.tick();
+        ASSERT_TRUE(sim.grid().has_powerup_at(drop));                                        // landed and left uncollected
+        int again = -1;
+        for (int t = 381; t < 700 && again < 0; ++t) {
+            sim.tick();
+            if (sim.get_world_state().flower_droppers[left].is_dropping) again = t + 1;
+        }
+        ASSERT_EQ(again, 661);                                                              // poll 11 (33011 ms, 15005 ms after the stamp of 18006): a power-up on the tile does not refuse, the new one replaces it
+        ASSERT_TRUE(sim.grid().has_powerup_at(drop));
+        for (int t = 661; t < 680; ++t) sim.tick();                                          // landed (33831 ms)
+        // an ant on the tile refuses the next posting (poll 16, 48016 ms)
+        const uint32_t ant = sim.spawn_unit(0, AntType::Worker, drop);
+        bool posted_with_ant = false;
+        for (int t = 680; t < 975; ++t) {
+            sim.tick();
+            if (sim.get_world_state().flower_droppers[left].is_dropping) posted_with_ant = true;
+        }
+        ASSERT_FALSE(posted_with_ant);
+        ASSERT_TRUE(sim.get_unit(ant).is_alive());
+    } TEST_END();
+
+    TEST_CASE("2.4 The power-up type is drawn at the posting as FUN_01009fd8 does: the first type whose running total of trunc(p * 10000) exceeds rand() % 10000, else rand() % 5") {
+        const std::array<double, 5> small{0.45, 0.0, 0.0, 0.1, 0.45};                      // SMALL: bomber, -, -, swimmer, fire
+        ASSERT_EQ(SimulationEngine::pick_dropper_powerup(small, 0), 0);
+        ASSERT_EQ(SimulationEngine::pick_dropper_powerup(small, 4499), 0);
+        ASSERT_EQ(SimulationEngine::pick_dropper_powerup(small, 4500), 3);
+        ASSERT_EQ(SimulationEngine::pick_dropper_powerup(small, 5499), 3);
+        ASSERT_EQ(SimulationEngine::pick_dropper_powerup(small, 5500), 4);
+        ASSERT_EQ(SimulationEngine::pick_dropper_powerup(small, 9999), 4);
+        const std::array<double, 5> even{0.2, 0.2, 0.2, 0.2, 0.2};
+        ASSERT_EQ(SimulationEngine::pick_dropper_powerup(even, 1999), 0);
+        ASSERT_EQ(SimulationEngine::pick_dropper_powerup(even, 2000), 1);
+        ASSERT_EQ(SimulationEngine::pick_dropper_powerup(even, 9999), 4);
+        const std::array<double, 5> islands{0.05, 0.0, 0.2, 0.7, 0.05};
+        ASSERT_EQ(SimulationEngine::pick_dropper_powerup(islands, 499), 0);
+        ASSERT_EQ(SimulationEngine::pick_dropper_powerup(islands, 500), 2);
+        ASSERT_EQ(SimulationEngine::pick_dropper_powerup(islands, 9499), 3);
+        ASSERT_EQ(SimulationEngine::pick_dropper_powerup(islands, 9500), 4);
+        const std::array<double, 5> thin{0.1, 0.0, 0.0, 0.0, 0.0};                         // totals below 10000: no type, the caller draws rand() % 5
+        ASSERT_EQ(SimulationEngine::pick_dropper_powerup(thin, 999), 0);
+        ASSERT_EQ(SimulationEngine::pick_dropper_powerup(thin, 1000), 0xFF);
+        const std::array<double, 5> none{};
+        ASSERT_EQ(SimulationEngine::pick_dropper_powerup(none, 0), 0xFF);
+    } TEST_END();
+
+    TEST_CASE("2.5 The drop effect: cue 62 (powerdrip) 100 ms after the posting, the snapshot reports the effect time, the tile is set at 820 ms") {
+        SimulationEngine sim;
+        ants::assets::LevelData lvl;
+        ASSERT_TRUE(lvl.load_lvl(std::string(ORIGINAL_ASSETS_DIR) + "/Maps/SMALL.LVL"));
+        sim.init(lvl, 42);
+        const size_t left = dropper_at_column(sim, 2);
+        ASSERT_TRUE(left < 2);
+        for (int t = 0; t < 301; ++t) sim.tick();                                            // posted at 15005 ms
+        sim.clear_audio_events();
+        ASSERT_TRUE(sim.get_world_state().flower_droppers[left].is_dropping);
+        ASSERT_TRUE(sim.get_world_state().flower_droppers[left].drop_elapsed_ms < 100);
+        ASSERT_FALSE(sim.has_audio_event(62));
+        sim.tick();                                                                          // 15100 ms: the cue is due at 15105
+        ASSERT_FALSE(sim.has_audio_event(62));
+        sim.tick();                                                                          // 15150 ms
+        ASSERT_TRUE(sim.has_audio_event(62));
+        ASSERT_TRUE(sim.get_world_state().flower_droppers[left].drop_elapsed_ms >= 100);
+        ASSERT_FALSE(sim.grid().has_powerup_at(TileCoord{2, 20}));
+        for (int t = 0; t < 14; ++t) sim.tick();                                             // 15850 ms
+        ASSERT_TRUE(sim.grid().has_powerup_at(TileCoord{2, 20}));
     } TEST_END();
 
     std::cout << "\n=======================================================\n"

@@ -391,6 +391,11 @@ public:
     /// egg in the incubator is lost. A team that is not in the roster or already dropped is left alone.
     void drop_player(uint8_t player_id);
     bool is_player_dropped(uint8_t player_id) const noexcept;
+
+    /// FUN_01009fd8: the power-up type a flower dropper posts for the draw `r` (= rand() % 10000): the first type, in the order bomber, combat, thief,
+    /// swimmer, fire, whose running total of trunc(p * 10000) exceeds r (types with p == 0 are skipped); 0xFF when none does (the caller then
+    /// draws rand() % 5, 0x100a03f).
+    static uint8_t pick_dropper_powerup(const std::array<double, 5>& probabilities, uint32_t r) noexcept;
     /// The ant that would acknowledge a group order given now (0 = none), computed like the engine picks it (the closest ant of the issuer that can
     /// take the order and is not already carrying it out, provided its order would queue a path) but without changing anything. The lock-step
     /// client uses it for the immediate feedback (voice, pedestal) of an order that only reaches the simulation a few turns later.

@@ -425,4 +425,62 @@ void SimulationEngineImpl::harvest_clip_end(AntUnit& a) {
     }
 }
 
+// ------------------------------------------------------------------------------------------------
+// Flower droppers (FDTASK 0x100fc0d)
+// ------------------------------------------------------------------------------------------------
+
+// One poll of FDTASK: every dropper whose record is on. The first poll only stamps the record; a later one posts a drop when more than
+// `interval` seconds have passed since the stamp, the drop tile holds nothing on layer 2 (or a power-up, which the new one replaces) and no
+// ant stands on it; the stamp is renewed at the posting, not at the landing, and stays when the tile refuses.
+void SimulationEngineImpl::flower_dropper_poll() {
+    const uint32_t now = now_ms_;
+    for (auto& d : flower_droppers_) {
+        if (d.interval_s == 0) continue;
+        if (!d.stamped) {                                                   // 0x100fcd6: the first poll
+            d.stamped = true;
+            d.last_ms = now;
+            continue;
+        }
+        if (now - d.last_ms <= d.interval_s * 1000u) continue;              // 0x100fcf4: strict
+        if (!grid_.in_bounds(d.drop_pos)) continue;                         // 0x100fd22 .. 0x100fd4a
+        const TileCell& cell = grid_.get_cell(d.drop_pos);
+        if (!(cell.is_empty_overlay() || cell.has_powerup())) continue;     // 0x100fd65 .. 0x100fd7d
+        if (tile_occupied(d.drop_pos)) continue;                            // 0x100fd7f: the occupancy flag of FUN_0100f4ab
+        const uint8_t pick = SimulationEngine::pick_dropper_powerup(d.probabilities, prng_.rand() % 10000u);
+        d.powerup_type = (pick != 0xFF) ? pick : static_cast<uint8_t>(prng_.rand() % 5u);          // 0x100a03f: rand() % 5
+        d.is_dropping = true;                                               // the message 0x1024183 starts the drop effect (0x100fdd8)
+        d.sound_played = false;
+        d.drop_start_ms = now;
+        d.last_ms = now;                                                    // 0x100fdc1
+        world_state_dirty_ = true;
+    }
+}
+
+// The second frame of the drop effect carries cue 62 (powerdrip), positional at the drop tile.
+void SimulationEngineImpl::flower_dropper_sound(FlowerDropper& d) {
+    d.sound_played = true;
+    audio_queue_.push_back(AudioEvent{SoundID::PowerUpDrop, d.drop_pos.x * 32 + 16, d.drop_pos.y * 32 + 16, 1, 255});
+}
+
+// The last frame of the drop effect (callback 0x100fe50): SetTile(layer 2, tile, power-up of the type, 0) without looking at the tile again.
+void SimulationEngineImpl::flower_dropper_land(FlowerDropper& d) {
+    d.is_dropping = false;
+    world_state_dirty_ = true;
+    if (!grid_.in_bounds(d.drop_pos)) return;
+    auto& cell = grid_.get_cell_mut(d.drop_pos);
+    uint16_t tile_id = PU_COMBAT;
+    uint8_t p_type = 4;                                                     // Combat
+    switch (d.powerup_type) {
+        case 0: tile_id = PU_BOMBER;  p_type = 1; break;
+        case 1: tile_id = PU_COMBAT;  p_type = 4; break;
+        case 2: tile_id = PU_THIEF;   p_type = 3; break;
+        case 3: tile_id = PU_SWIMMER; p_type = 5; break;
+        case 4: tile_id = PU_FIRE;    p_type = 2; break;
+        default: break;
+    }
+    cell.interactive_id = tile_id;
+    cell.is_powerup = true;
+    cell.powerup_type = p_type;
+}
+
 } // namespace ants::sim

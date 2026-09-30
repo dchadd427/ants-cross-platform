@@ -199,6 +199,7 @@ StateHash SimulationEngine::state_hash() const {
         h.u32(e.anim_clock_ms_);
         h.u32(e.now_ms_);
         h.u32(e.anthillq_next_ms_);
+        h.u32(e.fdtask_next_ms_);
         for (int64_t t : e.last_attacked_ms_) h.i64(t);
         out.engine = h.value();
     }
@@ -317,10 +318,12 @@ StateHash SimulationEngine::state_hash() const {
         for (const auto& fd : e.flower_droppers_) {
             h.tile(fd.pos);
             h.tile(fd.drop_pos);
-            h.u32(fd.interval_ticks);
-            h.u32(fd.timer_ticks);
+            h.u32(fd.interval_s);
+            h.boolean(fd.stamped);
+            h.u32(fd.last_ms);
             h.boolean(fd.is_dropping);
-            h.u32(fd.drop_tick);
+            h.boolean(fd.sound_played);
+            h.u32(fd.drop_start_ms);
             h.u8(fd.powerup_type);
             for (double p : fd.probabilities) h.f64(p);
         }

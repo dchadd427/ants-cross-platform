@@ -1077,14 +1077,23 @@ The authentic match clock routine at `0x1024839` evaluates remaining match milli
   - This authentic correlation explains map differences:
     - On `TREASURE.LVL`, the center plant decor objects have matching waypoints, but their `flag == 0` (disabled/inert). Stray waypoints elsewhere have no plant object. Hence, `TREASURE.LVL` instantiates **0 droppers**, leaving the center corridor fully open.
     - On `GAUNTLET.LVL`, only 1 plant at `(3, 5)` matches a waypoint with `flag == 1`, resulting in exactly **1 dropper**.
-- **Continuous Periodic Dropping & Layer 2 Replacement (Disasm `0x101e3d7`, `0x101e342`, `0x101ac8c`):**
-  - In `Ants.exe`, flower droppers run continuously on an interval cooldown (`wp.param * 20` simulation ticks):
-    - `SMALL.LVL`: 15s interval (300 ticks).
-    - `GAUNTLET.LVL`: 30s interval (600 ticks).
-    - `ISLANDS.LVL`: 30s / 60s interval (600 / 1,200 ticks).
-    - `MEDIUM.LVL`: 8s / 30s interval (160 / 600 ticks).
+- **The FDTASK poll, the stamp and the landing (`0x100fc0d`, `0x1025063`, `0x100fdd8`, `0x100fe50`; rewritten in the audit of 2026-09-30, v0.0.56):**
+  - One task, FDTASK, added with (delay 0, interval 3000), runs on the machine that is the dropper authority (`game + 0x555c == game + 0xf2a`). Every run walks the map's object table (`FUN_01008d79` finds
+    the Block 4 record of each plant) and, for every record with `+0xc != 0` (the flag), reads `+0x10` = the interval in SECONDS and `+0x18` = a stamp (`timeGetTime`):
+    1. stamp `== 0` (the first poll): store `now` and go on (`0x100fcd6`);
+    2. `now - stamp <= interval * 1000` (unsigned, `jbe` at `0x100fcf4`): not yet;
+    3. the drop tile (object tile + the offsets of its id from the table at `0x1001af8`, `FUN_01008d2f`: ids 410 .. 416, 420, 421 one row down, 404 .. 408 and every other id 0) must be inside the map,
+       its layer 2 must be empty (`0x7ffe`) or a power-up (`FUN_01007202`), and no ant may stand on it (the occupancy flag of `FUN_0100f4ab`, `0x100fd7f`);
+    4. otherwise: draw the type (`FUN_01009fd8`: `rand() % 10000`, the first of the five types, in the order bomber, combat, thief, swimmer, fire, whose running total of `trunc(p * 10000)` exceeds it,
+       zero entries skipped; `rand() % 5` when none does), post the drop message (`FUN_01024183`, `FUN_0100d791`), and store the stamp AGAIN (`0x100fdbe`): the interval runs from the posting, not from the landing.
+  - The message handler starts the drop effect `FD_*` (anims 426, 422, 424, 423, 425 by type, 820 ms, cue 62 on its second frame at 100 ms, `0x100fdd8`); its last frame calls `0x100fe50`, which
+    sets the layer-2 tile of the type (64, 62, 63, 65, 66) on the tile under the effect without looking at it again (an ant that stepped there or a bomb placed meanwhile does not matter).
+  - A list scheduler task runs again INTERVAL + its run time + the pass latency after the last run, so the polls are a little more than 3 s apart. With the strict compare that decides a 15 s record:
+    polled at 3.001, 6.002, ... the fifth poll (15.005 s) posts, and again five polls later, every 15.005 s; an 8 s record posts at the third poll (9.003 s) and every third poll after it (9 s, not 8 s);
+    a record that is exactly a multiple of the period would wait one poll more if the period were exactly 3000 ms. The remake takes 3001 ms (`kFdtaskPeriodMs`); a stopwatch on the original would settle it.
+  - Data (`Ants.exe` reads the records above; the remake's names): `SMALL.LVL` 15 s x 2, `GAUNTLET.LVL` 30 s, `ISLANDS.LVL` 60 s x 2, `MEDIUM.LVL` 8 s (all of them the plant `flower1`, id 421, one row down).
   - **Landing Target Coordinates `(wp.x, wp.y + 1)`:** The flower canopy decor base roots at `(wp.x, wp.y)`, with its mouth overhanging forward. The droplet descends directly onto the open ground tile immediately in front of the plant base: `(wp.x, wp.y + 1)`. (Placing the item at `(wp.x, wp.y)` would incorrectly place the powerup behind the stem sprite `bottomstem2.bmp` and shadow, obscuring it).
-  - The dropper does not pause if an uncollected power-up already sits on the target tile; upon drop completion, the incoming power-up replaces whatever item is underneath and immediately resets `timer_ticks = interval_ticks`.
+  - An uncollected power-up on the target tile does not stop the dropper (the tile test accepts a power-up); the landing replaces it. Nothing resets at the landing (the stamp was renewed at the posting).
 - **Power-Up Probability Distribution & Map Filtering (`wp.probabilities[5]`):**
   - Each active waypoint stores 5 IEEE-754 64-bit doubles summing to 1.0, representing the drop probabilities for each power-up class:
     - Index 0: Bomber (`PU_BOMBER`, Tile 64, `FD_BOMB`, Anim 426)
@@ -1740,8 +1749,7 @@ Addresses are virtual addresses in `Original-Ants/Ants.exe` (image base 0x010000
   an ant are a contact already under way when a power-up appears under the victim (the melee step has no object test) and network hits.
 * **Not ported here**: the status text that the original posts to the selected ant's owner after the type changed (`FUN_0100cd40`,
   `FUN_01027f07`: 6 "Ready!", 7 "BomberAnt selected.", 8 "Where to?", 9 "Thief here", 10 "Yessir!", 11 "SwimmerAnt selected.") belongs to the
-  status-line stage; the flower droppers keep their approximate timing (the original: 820 ms effect, power-up placed at its end without an
-  occupancy check).
+  status-line stage; the flower droppers ran on an approximate timing until v0.0.56 (5.29 has the original's poll, stamp and landing).
 * **Removed as invented** (v0.0.35): the 6-tick pick-up dwell and the pick-up under any idle ant, `cantgo_standing_on_powerup`,
   `transformation_interrupted`, `on_powerup`, `interrupt_transformation` and the HUD code that called it (Stop and move-to-blocked-tile),
   the 15-tick 750 ms transformation with its own chime tick, the heal to full HP and 12 max HP for combat ants, the uniform drop tile and the
@@ -2688,7 +2696,7 @@ To deliver authentic 1:1 gameplay inside standard web browsers with zero install
 
 #### 7. Daisy Flower Dropper Occupancy, Standing Fire Ability Pathing, Bomb Redirection & Chain Detonations, and Shift/HUD Bomb Tile Rules (`FUN_0101df5d`, `0x1021627`, `0x1015c70`)
 - **Daisy Flower Dropper Occupancy Preservation (`SMALL.LVL`, `GAUNTLET.LVL`, `ISLANDS.LVL`)**:
-  - In `Ants.exe`, if an ant, placed bomb, or active fire wall occupies the dropper's target tile `(drop_x, drop_y)` when the 300-tick (15s) cooldown completes, the dropper preserves readiness (`timer_ticks == 0`) and holds the powerup rather than dropping onto or clearing the occupant. Once the tile is cleared, it drops immediately.
+  - In `Ants.exe`, if an ant or anything on layer 2 that is not a power-up (a bomb, a fire wall, a lunchbox, food ...) is on the dropper's target tile `(drop_x, drop_y)` when a poll finds the interval elapsed, nothing is posted and the stamp stays; the next poll (3 s later) posts as soon as the tile is free (see 5.29: the poll, the stamp and the landing).
 - **Fire Ant Ability Placement Pathing Through Fire**:
   - When standing on fire and placing a fire wall adjacent, and then placing another further away, the Fire Ant treats fire tiles as passable staging neighbors and prioritizes current tile `cand == unit->pos` (distance 0) without self-blocking or detouring north around terrain.
 - **Bomb 8-Way Knockback Redirection (`FUN_0101df5d`)**:
@@ -2882,7 +2890,7 @@ To deliver authentic 1:1 gameplay inside standard web browsers with zero install
 
 #### 7. Daisy Flower Dropper Occupancy, Standing Fire Ability Pathing, Bomb Redirection & Chain Detonations, and Shift/HUD Bomb Tile Rules (`FUN_0101df5d`, `0x1021627`, `0x1015c70`)
 - **Daisy Flower Dropper Occupancy Preservation (`SMALL.LVL`, `GAUNTLET.LVL`, `ISLANDS.LVL`)**:
-  - In `Ants.exe`, if an ant, placed bomb, or active fire wall occupies the dropper's target tile `(drop_x, drop_y)` when the 300-tick (15s) cooldown completes, the dropper preserves readiness (`timer_ticks == 0`) and holds the powerup rather than dropping onto or clearing the occupant. Once the tile is cleared, it drops immediately.
+  - In `Ants.exe`, if an ant or anything on layer 2 that is not a power-up (a bomb, a fire wall, a lunchbox, food ...) is on the dropper's target tile `(drop_x, drop_y)` when a poll finds the interval elapsed, nothing is posted and the stamp stays; the next poll (3 s later) posts as soon as the tile is free (see 5.29: the poll, the stamp and the landing).
 - **Fire Ant Ability Placement Pathing Through Fire**:
   - When standing on fire and placing a fire wall adjacent, and then placing another further away, the Fire Ant treats fire tiles as passable staging neighbors and prioritizes current tile `cand == unit->pos` (distance 0) without self-blocking or detouring north around terrain.
 - **Bomb 8-Way Knockback Redirection (`FUN_0101df5d`)**:

@@ -20,6 +20,11 @@ constexpr int32_t kTile = 32;
 constexpr uint32_t kBlockedCost = 8000;          // impassable edge / tile (FUN_01020951)
 constexpr uint32_t kPauseMs = 300;
 constexpr uint32_t kAnthillqPeriodMs = 200;     // ANTHILLQ task period (0x100e556)               // ANTPAUSE wait (FUN_0101cc1e -> FUN_0103057b(task, 0, 300))
+// FDTASK (0x1025063 -> 0x100fc0d) is added with (delay 0, interval 3000); a list scheduler task runs again INTERVAL + its run time + the pass
+// latency after the last run, never exactly INTERVAL: the poll period is taken as 3001 ms, which also decides the strict `now - stamp > interval`
+// compare of a dropper whose interval is a multiple of 3 s (15 s: the fifth poll, not the sixth). A stopwatch on the original would settle it.
+constexpr uint32_t kFdtaskPeriodMs = 3001;
+constexpr uint32_t kDropperSoundMs = 100;       // sound 62 (powerdrip) is on the second frame of the drop effect
 
 // CanEnter flag bits (FUN_0101f780).
 constexpr uint32_t kFinalTile      = 0x001;
@@ -74,6 +79,7 @@ void SimulationEngineImpl::movement_reset() {
     for (auto& pm : path_managers_) pm.clear();
     path_request_serial_.clear();
     anthillq_next_ms_ = 200;
+    fdtask_next_ms_ = 0;                                    // FDTASK (task, 0, 3000): its first run is at once
     hatch_ = {};
 }
 
@@ -1699,11 +1705,37 @@ void SimulationEngineImpl::movement_tick() {
                 task = 2 + team;
             }
         }
+        if (fdtask_next_ms_ <= t_end && fdtask_next_ms_ < best_t) {          // FDTASK
+            best = nullptr;
+            best_t = fdtask_next_ms_;
+            task = 6;
+        }
+        for (size_t i = 0; i < flower_droppers_.size() && i < 64; ++i) {      // the drop effect of a dropper: its cue at 100 ms, its last frame at 820 ms
+            const FlowerDropper& d = flower_droppers_[i];
+            if (!d.is_dropping) continue;
+            if (!d.sound_played && d.drop_start_ms + kDropperSoundMs <= t_end && d.drop_start_ms + kDropperSoundMs < best_t) {
+                best = nullptr;
+                best_t = d.drop_start_ms + kDropperSoundMs;
+                task = 100 + static_cast<int>(i);
+            }
+            if (d.drop_start_ms + effect_spec::kDropperMs <= t_end && d.drop_start_ms + effect_spec::kDropperMs < best_t) {
+                best = nullptr;
+                best_t = d.drop_start_ms + effect_spec::kDropperMs;
+                task = 200 + static_cast<int>(i);
+            }
+        }
         if (!best && task == 0) break;
         now_ms_ = best_t;
         if (task == 1) {
             anthillq_next_ms_ += kAnthillqPeriodMs;
             anthillq_run();
+        } else if (task == 6) {
+            fdtask_next_ms_ += kFdtaskPeriodMs;
+            flower_dropper_poll();
+        } else if (task >= 200) {
+            flower_dropper_land(flower_droppers_[static_cast<size_t>(task - 200)]);
+        } else if (task >= 100) {
+            flower_dropper_sound(flower_droppers_[static_cast<size_t>(task - 100)]);
         } else if (task >= 2) {
             hatch_run(static_cast<uint8_t>(task - 2));
         } else if (best_is_burn) {

@@ -5548,8 +5548,9 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
             ASSERT_TRUE(sim.grid().get_cell(2, 20).is_passable());
             ASSERT_TRUE(sim.grid().get_cell(37, 20).is_passable());
 
-            // Fast forward 300 ticks (15s @ 20Hz, as defined by wp.param == 15 in SMALL.LVL)
-            for (int i = 0; i < 300; ++i) {
+            // Fast forward 301 ticks: FDTASK polls every 3000 ms (+ its run time); the first poll stamps the record, the fifth one (5 x 3001 = 15005 ms) sees
+            // more than wp.param == 15 seconds and posts the drop (v0.0.56; before, the timer was a per-tick countdown of exactly 15 s)
+            for (int i = 0; i < 301; ++i) {
                 sim.tick();
             }
 
@@ -5573,9 +5574,9 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
             ASSERT_NE(cell.powerup_type, 4); // Not Combat
             ASSERT_NE(cell.powerup_type, 3); // Not Thief
 
-            // Advance another 300 ticks (second 15s interval) with powerup still uncollected:
-            // Verifies dropper triggers continuously on cooldown and replaces existing powerup
-            for (int i = 0; i < 300; ++i) {
+            // Advance to the second posting with the power-up still uncollected: the record is stamped again at the posting (15005 ms), so the next
+            // posting is five polls later (30010 ms), not 15 s after the landing; it replaces the power-up lying there
+            for (int i = 0; i < 285; ++i) {
                 sim.tick();
             }
             const auto& ws_dropping2 = sim.get_world_state();
@@ -6518,10 +6519,10 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
 
     TEST_CASE("12.108: Version Invariant & Fog of War Cursor Concealment Parity") {
         // 1. Verify semantic versioning components
-        ASSERT_EQ(ants::VERSION_STRING, "v0.0.55");
+        ASSERT_EQ(ants::VERSION_STRING, "v0.0.56");
         ASSERT_EQ(ants::VERSION_MAJOR, 0);
         ASSERT_EQ(ants::VERSION_MINOR, 0);
-        ASSERT_EQ(ants::VERSION_PATCH, 55);
+        ASSERT_EQ(ants::VERSION_PATCH, 56);
 
         // 2. Setup simulation world with Fog of War enabled
         SimulationEngine sim;
@@ -7391,7 +7392,7 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         sim.grid_mut().place_bomb(2, 20, 0);
         ASSERT_TRUE(sim.grid().has_bomb_at(drop_pos));
 
-        // Advance simulation: dropper ticks down 300 ticks (15s cooldown), but tile is occupied by bomb so it holds readiness without dropping
+        // Advance simulation 15 s: the polls find the tile occupied by the bomb (layer 2 must be empty or a power-up), so nothing is posted
         for (int t = 0; t < 300; ++t) {
             sim.tick();
         }
@@ -7400,8 +7401,8 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
 
         // Now remove the bomb
         sim.grid_mut().clear_bomb(2, 20);
-        // On next ticks, dropper triggers immediately and completes 16-tick drop animation
-        for (int t = 0; t < 20; ++t) {
+        // The stamp of the first poll is still the old one, so the next poll (every 3 s) posts and the drop lands 820 ms later
+        for (int t = 0; t < 100; ++t) {
             sim.tick();
             if (sim.grid().has_powerup_at(drop_pos)) break;
         }

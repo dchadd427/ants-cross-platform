@@ -148,6 +148,10 @@ target_include_directories(test_powerup_actions PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/../../include
 )
 
+target_compile_definitions(test_powerup_actions PRIVATE
+    ORIGINAL_ASSETS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../../Original-Ants"
+)
+
 add_test(NAME test_powerup_actions COMMAND test_powerup_actions)
 
 add_executable(test_food_actions

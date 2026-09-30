@@ -115,12 +115,13 @@ void SimulationEngine::init(const ants::assets::LevelData& level_in, uint32_t ra
                     if (wp.x == sp.x && wp.y == sp.y && wp.flag == 1) {
                         SimulationEngineImpl::FlowerDropper fd;
                         fd.pos = TileCoord{static_cast<int32_t>(wp.x), static_cast<int32_t>(wp.y)};
-                        // Authentic 1998 placement: power-up drops to open ground directly in front of plant base (y + 1)
-                        fd.drop_pos = TileCoord{fd.pos.x, fd.pos.y + 1};
-                        fd.interval_ticks = (wp.param > 0 ? wp.param : 30) * 20;
-                        fd.timer_ticks = fd.interval_ticks;
+                        // The drop tile: the object's tile plus the offset of its id (table 0x1001af8, FUN_01008d2f): the flowers 410 .. 416, 420 and 421
+                        // drop one row below the stem, the clovers 404 .. 408 and every other id on the tile itself
+                        const bool one_row_down = (sp.tile_id >= 410 && sp.tile_id <= 416) || sp.tile_id == 420 || sp.tile_id == 421;
+                        fd.drop_pos = TileCoord{fd.pos.x, fd.pos.y + (one_row_down ? 1 : 0)};
+                        fd.interval_s = wp.param;                           // +0x10, in seconds (a record without one does not drop: +0xc is tested, the interval is not defaulted)
+                        fd.stamped = false;
                         fd.is_dropping = false;
-                        fd.drop_tick = 0;
                         fd.powerup_type = 0;
                         fd.probabilities = wp.probabilities;
                         impl_->flower_droppers_.push_back(fd);
@@ -135,16 +136,14 @@ void SimulationEngine::init(const ants::assets::LevelData& level_in, uint32_t ra
         SimulationEngineImpl::FlowerDropper fd1;
         fd1.pos = TileCoord{2, 19};
         fd1.drop_pos = TileCoord{2, 20};
-        fd1.interval_ticks = 300;
-        fd1.timer_ticks = 300;
+        fd1.interval_s = 15;
         fd1.probabilities = {0.45, 0.0, 0.0, 0.1, 0.45};
         impl_->flower_droppers_.push_back(fd1);
 
         SimulationEngineImpl::FlowerDropper fd2;
         fd2.pos = TileCoord{37, 19};
         fd2.drop_pos = TileCoord{37, 20};
-        fd2.interval_ticks = 300;
-        fd2.timer_ticks = 300;
+        fd2.interval_s = 15;
         fd2.probabilities = {0.45, 0.0, 0.0, 0.1, 0.45};
         impl_->flower_droppers_.push_back(fd2);
         impl_->grid_.get_cell_mut(2, 19).is_obstacle_overlay = true;
@@ -310,87 +309,7 @@ void SimulationEngine::tick() {
 
     }
 
-    // 7. Update Daisy Plant Power-Up Droppers
-    for (auto& fd : impl_->flower_droppers_) {
-        if (fd.is_dropping) {
-            fd.drop_tick++;
-            impl_->world_state_dirty_ = true;
-            if (fd.drop_tick == 2) {
-                // Sound 62: powerdrip.wav
-                impl_->audio_queue_.push_back(AudioEvent{SoundID::PowerUpDrop, fd.drop_pos.x * 32 + 16, fd.drop_pos.y * 32 + 16, 1, 255});
-            }
-            if (fd.drop_tick >= 16) {
-                // 9-frame drop animation complete (~820ms): place powerup tile on Layer 2
-                fd.is_dropping = false;
-                fd.drop_tick = 0;
-                fd.timer_ticks = fd.interval_ticks;
-                if (impl_->grid_.in_bounds(fd.drop_pos)) {
-                    auto& cell = impl_->grid_.get_cell_mut(fd.drop_pos);
-                    uint16_t tile_id = PU_COMBAT;
-                    uint8_t p_type = 4; // Combat
-                    switch (fd.powerup_type) {
-                        case 0: tile_id = PU_BOMBER;  p_type = 1; break; // Bomber
-                        case 1: tile_id = PU_COMBAT;  p_type = 4; break; // Combat
-                        case 2: tile_id = PU_THIEF;   p_type = 3; break; // Thief
-                        case 3: tile_id = PU_SWIMMER; p_type = 5; break; // Swimmer
-                        case 4: tile_id = PU_FIRE;    p_type = 2; break; // Fire
-                        default: break;
-                    }
-                    cell.interactive_id = tile_id;
-                    cell.is_powerup = true;
-                    cell.powerup_type = p_type;
-                }
-            }
-        } else {
-            if (fd.timer_ticks > 0) {
-                fd.timer_ticks--;
-            }
-            if (fd.timer_ticks == 0) {
-                // If anything occupies the drop tile (ant, bomb, or fire wall), hold drop readiness without dropping
-                bool occupied = impl_->has_living_ant_at(fd.drop_pos) ||
-                                impl_->grid_.has_bomb_at(fd.drop_pos) ||
-                                impl_->grid_.has_fire_at(fd.drop_pos);
-                if (occupied) {
-                    continue; // Keep fd.timer_ticks = 0, do not drop until tile becomes clear
-                }
-
-                fd.is_dropping = true;
-                fd.drop_tick = 0;
-
-                // Sample powerup type using waypoint probabilities
-                double prob_sum = 0.0;
-                for (double p : fd.probabilities) {
-                    prob_sum += p;
-                }
-                if (prob_sum > 0.001) {
-                    double r = ((static_cast<double>(impl_->prng_.rand() % 10000) + 0.5) / 10000.0) * prob_sum;
-                    double cum = 0.0;
-                    uint8_t selected = 0;
-                    bool found = false;
-                    for (size_t i = 0; i < 5; ++i) {
-                        if (fd.probabilities[i] <= 0.0001) continue;
-                        cum += fd.probabilities[i];
-                        if (r <= cum && !found) {
-                            selected = static_cast<uint8_t>(i);
-                            found = true;
-                        }
-                    }
-                    if (!found) {
-                        for (size_t i = 0; i < 5; ++i) {
-                            if (fd.probabilities[i] > 0.0001) {
-                                selected = static_cast<uint8_t>(i);
-                                break;
-                            }
-                        }
-                    }
-                    fd.powerup_type = selected;
-                } else {
-                    fd.powerup_type = static_cast<uint8_t>(impl_->prng_.rand() % 5);
-                }
-                impl_->world_state_dirty_ = true;
-            }
-        }
-    }
+    // 7. The flower droppers (FDTASK poll, drop effect cue and landing) run in movement_tick() on the original's own clock.
 
     if (impl_->fog_of_war_enabled_) {
         impl_->update_fog_of_war();
@@ -824,7 +743,7 @@ const WorldState& SimulationEngine::get_world_state() const {
             s.drop_x = fd.drop_pos.x;
             s.drop_y = fd.drop_pos.y;
             s.is_dropping = fd.is_dropping;
-            s.drop_elapsed_ms = fd.drop_tick * 50u;
+            s.drop_elapsed_ms = fd.is_dropping ? std::min<uint32_t>(impl_->anim_clock_ms_ - fd.drop_start_ms, effect_spec::kDropperMs) : 0u;
             s.powerup_type = fd.powerup_type;
             impl_->world_state_cache_.flower_droppers.push_back(s);
         }

@@ -39,6 +39,25 @@ Ground truth for every entry is in [`docs/GAME_REVERSE_ENGINEERING.md`](docs/GAM
   - **Found on the way, for the audit** (docs: implementation_plan.md section 18): `tests/test_sim/test_challenger_m2_it2_deep_stress.cpp` has not been part of the build since an early commit and no longer compiles
     (it uses the retired slot-queue API of the hill). (An earlier version of this line said that the death clips are no longer started by a separate effect: wrong, only the unused helper `spawn_death_effect` was removed; the effect path in `movement_system.cpp` is still in use, see the audit.)
 
+## v0.0.56 - 2026-09-30 - The flower droppers run on the original's poll
+
+Audit batch 1, item 7 (`docs/audit/ledger_abilities.md` NEW-4, `ledger_effects_objects.md` R10, `ledger_scheduler.md` FDTASK), re-read in `Ants.exe` first (`0x100fc0d`, `0x1025063`, `0x100fdd8`, `0x100fe50`, `FUN_01009fd8`, `FUN_01008d2f`).
+On the six droppers of the shipped maps (SMALL 2, MEDIUM 1, ISLANDS 2, GAUNTLET 1):
+
+- **One poll, one stamp**: the original has a single task (FDTASK, every 3000 ms of the list scheduler) that visits every dropper. Its first visit only stamps the record; later visits post a drop when more than the record's interval
+  (seconds) has passed since the stamp, and the record is stamped again AT THE POSTING. The remake counted the interval down per tick and restarted it at the landing, so every cycle was 0.8 s too long
+  (SMALL 15.0 s then 30.8 s; MEDIUM 8.0 s then 16.8 s). Now SMALL posts at 15.005 s and every 15.005 s, MEDIUM at 9.003 s and every 9 s (a poll of 3001 ms: the period of a list scheduler task is never exactly its interval; an
+  interval that is a multiple of 3 s would otherwise wait one more poll; a stopwatch on the original would settle the last millisecond).
+- **The drop tile test** is the original's: nothing on layer 2 except a power-up (a bomb, a fire wall, a lunchbox or food refuse; an uncollected power-up is replaced) and no ant on the tile. A refusal keeps the stamp, so the next poll
+  (3 s later) drops as soon as the tile is free.
+- **The effect and the landing**: the drop effect runs 820 ms with its cue (powerdrip, 62) at 100 ms and the power-up tile is set at the very end without looking again, on the original's clock (before: 16 ticks = 800 ms and the cue at tick 2).
+- **The power-up type** is drawn at the posting with the original's formula (`rand() % 10000` against the running totals of `trunc(p * 10000)`, `rand() % 5` when no type is selected); the remake used a scaled floating-point compare with an
+  offset. The drop tile comes from the original's offset table by the plant's id (the flowers one row down, the clovers on the tile).
+- Docs: `docs/GAME_REVERSE_ENGINEERING.md` 5.29 and the two notes that called the timing approximate (the poll, the stamp and the landing replace the tick model), README (test table), `docs/AUDIT_ONE_TO_ONE.md` (progress).
+- Tests: `test_powerup_actions` 2.1 (SMALL cadence, landing), 2.2 (MEDIUM cadence), 2.3 (tile test, stamp kept, power-up replaced, ant refuses), 2.4 (the type formula), 2.5 (cue at 100 ms, landing at 820 ms); the state hash covers the new fields.
+  **Rewritten tests** (they encoded the tick model): integration 12.33 (first drop after 301 ticks instead of 300, second after 285 more instead of 300, with comments), 12.126 (the dropper part waits for the next poll after the bomb is gone).
+  Version assertion of 12.108.
+
 ## v0.0.55 - 2026-09-30 - Dropped teams follow the original; a blocked hatch looks again after a second
 
 Audit batch 1, items 6 and 8 (`docs/audit/ledger_food_economy.md` NEW-5, `ledger_hill.md` NEW-5 / NEW-6, `ledger_ui.md` NEW-8, `ledger_combat.md` NEW-4, `ledger_scheduler.md` HATCHTSK), each re-read in `Ants.exe` first.

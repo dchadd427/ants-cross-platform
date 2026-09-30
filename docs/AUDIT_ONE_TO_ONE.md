@@ -9,6 +9,7 @@ order in which it is proposed to be fixed. The owner decides (AGENTS.md rule 9).
 * v0.0.53: batch 1 items 2 and 3 (ability orders re-issued when the approach tile is taken: LM NEW-M1; group re-click rules: LM NEW-M2; the invented left-column rule next to the hill removed: LB NEW-3).
 * v0.0.54: batch 1 items 4 and 5 (bridge timer kept through an interrupted demolish, timeout only on a completed bridge: LB NEW-1; swimmer re-enters its action when its bridge collapses, silent collapse: LB NEW-2, LE NEW-5, LS NEW-9; scores never clamped, signed loot: LF NEW-4).
 * v0.0.55: batch 1 items 6 and 8 (dropped teams: raid refused, special tiles ordinary, no power-ups, ally pedestal live count: LF NEW-5, LH NEW-5 / NEW-6, LU NEW-8, LK NEW-4; hatch retry 1000 ms: LX).
+* v0.0.56: batch 1 item 7 (flower droppers: 3 s poll, stamp at the posting, tile test, 820 ms effect, type formula: LB NEW-4, LE R10, LX FDTASK).
 
 ## 1. What was audited and how
 

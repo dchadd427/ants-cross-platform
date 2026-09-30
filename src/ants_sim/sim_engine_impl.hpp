@@ -115,17 +115,27 @@ public:
         }
     }
 
+    // Flower droppers (FDTASK, Ants.exe 0x100fc0d): a task that polls all droppers every 3000 ms of the list scheduler. The first poll only stamps
+    // the record (+0x18); a later poll posts a drop when `now - stamp > interval * 1000` (strict, 0x100fcf4) and the drop tile holds nothing on
+    // layer 2 (or a power-up) and no ant; the record is stamped again at the posting, the power-up type is drawn then (FUN_01009fd8), the drop
+    // effect plays 820 ms (cue 62 at 100 ms) and its last frame sets the power-up tile without looking again (0x100fe50).
     struct FlowerDropper {
         TileCoord pos;
         TileCoord drop_pos;
-        uint32_t interval_ticks{300};
-        uint32_t timer_ticks{300};
+        uint32_t interval_s{30};        // +0x10: seconds (0: the record is off, +0xc)
+        bool stamped{false};            // +0x18 != 0
+        uint32_t last_ms{0};            // +0x18: the first poll, then the last posting
         bool is_dropping{false};
-        uint32_t drop_tick{0};
-        uint8_t powerup_type{0}; // 0: Bomber, 1: Combat, 2: Thief, 3: Swimmer, 4: Fire
+        bool sound_played{false};
+        uint32_t drop_start_ms{0};
+        uint8_t powerup_type{0};        // 0: Bomber, 1: Combat, 2: Thief, 3: Swimmer, 4: Fire
         std::array<double, 5> probabilities{0.2, 0.2, 0.2, 0.2, 0.2};
     };
     std::vector<FlowerDropper> flower_droppers_;
+    uint32_t fdtask_next_ms_{0};
+    void flower_dropper_poll();
+    void flower_dropper_sound(FlowerDropper& d);
+    void flower_dropper_land(FlowerDropper& d);
 
     mutable WorldState world_state_cache_;
     mutable bool       world_state_dirty_{true};
