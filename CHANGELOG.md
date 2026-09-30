@@ -39,6 +39,18 @@ Ground truth for every entry is in [`docs/GAME_REVERSE_ENGINEERING.md`](docs/GAM
   - **Found on the way, for the audit** (docs: implementation_plan.md section 18): `tests/test_sim/test_challenger_m2_it2_deep_stress.cpp` has not been part of the build since an early commit and no longer compiles
     (it uses the retired slot-queue API of the hill). (An earlier version of this line said that the death clips are no longer started by a separate effect: wrong, only the unused helper `spawn_death_effect` was removed; the effect path in `movement_system.cpp` is still in use, see the audit.)
 
+## v0.0.52 - 2026-09-30 - Hill queue: no ant is left behind on the waiting ring
+
+- **The bug** (owner report on v0.0.50: "I command six ants to go to the base; the first three that arrived queued up and went in, the other three cancelled their queue"): an ant that is sent to a crowded hill walks to the waiting ring in
+  front of the entrance and is queued there (`ANTHILLQ` lets one queued ant in at a time). The remake lost the queue flag of an ant whose walk was re-planned on the way, and never queued an ant that found its ring tile taken,
+  so a part of every crowd stood on the ring for ever (8 carriers: 4 deposited). The original (`FUN_0101c4f2`, `0x101c935` / `0x101cad1` / `0x101caf2`, re-read for the audit) remembers the flag, gives it back after the new order, and queues a blocked ant whatever its order.
+  Fixed to the original's logic; every carrier deposits now (verified with 6 and 8 carriers).
+- **Dead ants no longer act on the living**: a queued ant that died kept `FIFO`-blocking the entrance for everybody, and the stale move order of a dead ant shifted the goal of later ants (30,30 became 29,29). Removed ants are skipped by the claim scans
+  as in the original (`RemoveAnt` clears the slot).
+- Docs: `docs/GAME_REVERSE_ENGINEERING.md` 5.35 (the flag across a re-plan), README (test table). Found by the audit of 2026-09-30 (`docs/audit/ledger_hill.md`, LH NEW-1 .. NEW-3).
+- Tests: `test_hill_actions` 4.1 (re-planned ant keeps its flag and is queued), 4.2 (blocked ring tile queues the ant), 4.3 (6 and 8 carriers all deposit), 4.4 (a dead queued ant no longer blocks the entrance), 4.5 (a dead ant's order claims
+  no tile); all fail on v0.0.51 and pass now. No test was changed. Version assertion of 12.108.
+
 ## v0.0.51 - 2026-09-30 - Only the original's keys
 
 - **Every shortcut that the original did not have is gone** (owner request: "as close to a one-to-one copy of the game that works cross-platform as possible"): `Ctrl` / `Cmd` + `1` .. `4`, `Ctrl + Tab` and `Ctrl + C` (switching the

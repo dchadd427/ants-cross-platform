@@ -399,6 +399,113 @@ int main() {
         ASSERT_EQ(sim.get_unit(thief).state == UnitState::Infiltrating, false);
     } TEST_END();
 
+    // ---- the waiting ring of the hill: the queue flag (+0x68) of an ant that is re-routed or blocked ---------------------
+    // Ants.exe FUN_0101c4f2 REPATH: +0x68 is cleared and wasHome remembered (0x101c935), the Order is given again and the flag is restored to 1
+    // (0x101cad1); a blocked last tile stops the ant and sets +0x68 = 2 whatever its order (0x101caf2). Before v0.0.52 the flag was lost on a
+    // re-path and never set on a blocked ring tile, so a part of the ants of a crowd never deposited.
+    TEST_CASE("4.1 An ant that is re-routed on its way to the ring keeps its queue flag and is queued at the end") {
+        SimulationEngine sim;
+        make_world(sim);
+        sim.spawn_unit(0, AntType::Worker, TileCoord{21, 21});                       // sits on the entrance
+        const uint32_t b = sim.spawn_unit(0, AntType::Worker, TileCoord{19, 30});
+        sim.get_unit(b).pick_up_food(1, 25);
+        sim.join_base_queue(b);
+        ASSERT_EQ(sim.get_unit(b).home_state, 1);                                     // heading for the ring tile
+        bool blocked_put = false;
+        for (int t = 0; t < 400; ++t) {
+            sim.tick();
+            const auto& u = sim.get_unit(b);
+            if (!blocked_put && u.pos.y <= 28) {                                      // a stationary ant appears on its path: the walk is re-planned
+                sim.spawn_unit(0, AntType::Worker, TileCoord{19, 26});
+                blocked_put = true;
+            }
+            if (u.home_state == 0) ASSERT_TRUE(false);                                // never loses the flag on the way
+        }
+        ASSERT_TRUE(blocked_put);
+        ASSERT_EQ(sim.get_unit(b).home_state, 2);
+        ASSERT_TRUE(sim.is_ant_in_base_queue(b));
+    } TEST_END();
+
+    TEST_CASE("4.2 A ring tile that is blocked when the ant arrives queues the ant where it stands") {
+        SimulationEngine sim;
+        make_world(sim);
+        sim.spawn_unit(0, AntType::Worker, TileCoord{21, 21});                       // entrance taken
+        const uint32_t b = sim.spawn_unit(0, AntType::Worker, TileCoord{19, 28});
+        sim.get_unit(b).pick_up_food(1, 25);
+        sim.join_base_queue(b);
+        bool placed = false;
+        for (int t = 0; t < 400; ++t) {
+            sim.tick();
+            if (!placed && sim.get_unit(b).pos.y <= 26) {                             // an enemy ant steps onto the ring tile just before it
+                sim.spawn_unit(1, AntType::Worker, TileCoord{19, 23});
+                placed = true;
+            }
+        }
+        ASSERT_TRUE(placed);
+        ASSERT_EQ(sim.get_unit(b).home_state, 2);
+        ASSERT_TRUE(sim.is_ant_in_base_queue(b));
+    } TEST_END();
+
+    // The owner's report (v0.0.50): "I command six ants to go to the base, the first three queued up and went in, the other three cancelled their queue".
+    for (int carriers : {6, 8}) {
+        TEST_CASE(std::string("4.3 A click on the own hill sends ") + std::to_string(carriers) + " food carriers in: every one of them deposits") {
+            SimulationEngine sim;
+            make_world(sim);
+            std::vector<uint32_t> ids;
+            for (int i = 0; i < carriers; ++i) {
+                const uint32_t id = sim.spawn_unit(0, AntType::Worker, TileCoord{22 + (i % 4) * 2, 28 + (i / 4) * 2});
+                sim.get_unit(id).pick_up_food(1, 25);
+                sim.get_unit(id).harvest_origin = TileCoord{45, 10};
+                ids.push_back(id);
+            }
+            std::vector<uint32_t> group = ids;
+            sim.issue_group_move_order(group, TileCoord{21, 21});
+            std::vector<bool> entered(ids.size(), false);
+            for (int t = 0; t < 1600; ++t) {                                          // 80 s
+                sim.tick();
+                for (size_t i = 0; i < ids.size(); ++i) {
+                    if (sim.get_unit(ids[i]).state == UnitState::EnteringBase) entered[i] = true;
+                }
+            }
+            for (size_t i = 0; i < ids.size(); ++i) ASSERT_TRUE(entered[i]);          // nobody is left standing on the ring
+            ASSERT_EQ(sim.get_player_score(0), carriers * 25);
+            for (uint32_t id : ids) ASSERT_FALSE(sim.get_unit(id).is_holding());
+        } TEST_END();
+    }
+
+    TEST_CASE("4.4 A queued ant that dies no longer blocks the entrance: a fresh ant ordered home goes straight in") {
+        SimulationEngine sim;
+        make_world(sim);
+        const uint32_t blocker = sim.spawn_unit(0, AntType::Worker, TileCoord{21, 21});
+        const uint32_t q = sim.spawn_unit(0, AntType::Worker, TileCoord{19, 26});
+        sim.get_unit(q).pick_up_food(1, 25);
+        sim.join_base_queue(q);
+        for (int t = 0; t < 200 && sim.get_unit(q).home_state != 2; ++t) sim.tick();
+        ASSERT_EQ(sim.get_unit(q).home_state, 2);
+        sim.kill_unit(q);
+        sim.issue_move_order(blocker, TileCoord{30, 30});                             // the entrance is free now
+        for (int t = 0; t < 60; ++t) sim.tick();
+        const uint32_t w = sim.spawn_unit(0, AntType::Worker, TileCoord{24, 24});
+        sim.get_unit(w).pick_up_food(1, 25);
+        sim.issue_move_order(w, TileCoord{21, 21});
+        ASSERT_EQ(sim.get_unit(w).orig_order_tile.x, 21);                             // straight to the entrance, not to the ring
+        ASSERT_EQ(sim.get_unit(w).orig_order_tile.y, 21);
+        ASSERT_EQ(sim.get_unit(w).home_state, 0);
+    } TEST_END();
+
+    TEST_CASE("4.5 The stale move order of a dead ant claims no tile") {
+        SimulationEngine sim;
+        make_world(sim);
+        const uint32_t d = sim.spawn_unit(0, AntType::Worker, TileCoord{10, 10});
+        sim.issue_move_order(d, TileCoord{30, 30});
+        for (int t = 0; t < 10; ++t) sim.tick();
+        sim.kill_unit(d);
+        const uint32_t e = sim.spawn_unit(0, AntType::Worker, TileCoord{12, 12});
+        sim.issue_move_order(e, TileCoord{30, 30});
+        ASSERT_EQ(sim.get_unit(e).orig_order_tile.x, 30);                             // not shifted to (29, 29)
+        ASSERT_EQ(sim.get_unit(e).orig_order_tile.y, 30);
+    } TEST_END();
+
     std::cout << "\n=======================================================\n"
               << " Total Test Cases: " << g_test_count << "\n"
               << " Total Assertions: " << g_assert_count << "\n"

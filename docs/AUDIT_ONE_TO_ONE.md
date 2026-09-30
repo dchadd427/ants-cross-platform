@@ -3,6 +3,10 @@
 Status: commit 4aa985f (v0.0.50 plus the cleanup pass), audit of 2026-09-30. Nothing in this list has been changed yet: it is the list of what differs, in the
 order in which it is proposed to be fixed. The owner decides (AGENTS.md rule 9).
 
+## 0. Progress (updated with every release)
+* v0.0.51: shortcuts that the original did not have removed (owner request), hit-point numbers on by default (owner tweak).
+* v0.0.52: batch 1 item 1 (hill queue: LH NEW-1, NEW-2, NEW-3), reported by the owner in play ("six ants sent to the base, three cancelled their queue").
+
 ## 1. What was audited and how
 
 The request: make sure that the game is truly one-to-one with the original (improved networking aside), "check the visuals, the animations, the timing,

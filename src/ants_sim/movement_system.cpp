@@ -992,18 +992,19 @@ int SimulationEngineImpl::try_enter_tile(AntUnit& a, TileCoord nt) {
         set_action(a, AntUnit::kActionIdle, static_cast<uint8_t>(a.facing), -1, -1, false);
         return 1;
     }
-    // REPATH
+    // REPATH (0x101c90f): +0x68 is cleared first and wasHome remembered (0x101c935): the queue flag is given back after the new order (0x101cad1)
     set_action(a, AntUnit::kActionIdle, static_cast<uint8_t>(a.facing), -1, -1, false);
     a.waypoints.clear();
     a.current_waypoint_idx = 0;
     a.orig_order_tile = no_order_tile();
+    a.home_state = 0;
     const uint8_t order = a.orig_order;
     if (is_final && (order == 6 || order == 7 || order == 8 || order == 9 || order == 0x0D || order == 0x0E ||
                      order == AntUnit::kOrderAttack)) {
         is_final = false;
     }
     if (is_final) {
-        if (order == AntUnit::kOrderHome && was_home) a.home_state = 2;   // (+0x70 is not written on this path)
+        if (was_home) a.home_state = 2;   // 0x101caf2 .. 0x101cafe: Stop, then if (wasHome) +0x68 = 2 (+0x70 is not written on this path)
         stop_sync(a);
         return 0;
     }
@@ -1023,6 +1024,7 @@ int SimulationEngineImpl::try_enter_tile(AntUnit& a, TileCoord nt) {
             go_to(a, final_tile, false, false);
             break;
     }
+    if (was_home) a.home_state = 1;       // 0x101cad1 .. 0x101cad6: after the Order, if (wasHome) +0x68 = 1
     // FUN_010100e5: positional "bump" effect (CHD anim 0xDC: an empty sprite with sound 47) at the top-left of the blocked tile.
     // The re-path branch (0x101cae3) only runs for the local player's own ants, so only the viewer hears his ants bump.
     if (a.player_id == viewing_player_id_) {
@@ -1092,7 +1094,7 @@ bool SimulationEngineImpl::can_enter(const AntUnit& a, TileCoord t, uint32_t fla
                 if (tile_occupied(q)) ++sum;
                 for (const auto& up : ants_) {
                     const AntUnit* x = up.get();
-                    if (!x || x == &a || x->player_id != a.player_id || x->orig_order != AntUnit::kOrderMove) continue;
+                    if (!x || x->removed || x == &a || x->player_id != a.player_id || x->orig_order != AntUnit::kOrderMove) continue;
                     if (x->orig_order_tile == q) ++sum;
                 }
             }
@@ -1107,12 +1109,12 @@ claims:
         if (home.x >= 0 && t == home && a.home_state != 2) {
             for (const auto& up : ants_) {
                 const AntUnit* x = up.get();
-                if (x && x != &a && x->player_id == a.player_id && x->home_state == 2) return false;
+                if (x && !x->removed && x != &a && x->player_id == a.player_id && x->home_state == 2) return false;
             }
         }
         for (const auto& up : ants_) {
             const AntUnit* x = up.get();
-            if (!x || x == &a || x->player_id != a.player_id) continue;
+            if (!x || x->removed || x == &a || x->player_id != a.player_id) continue;
             if ((x->orig_order == AntUnit::kOrderMove || x->orig_order == AntUnit::kOrderHome) && x->orig_order_tile == t) {
                 return false;
             }

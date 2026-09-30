@@ -1500,6 +1500,10 @@ in `ants.chd` (the original was never run, so timings come from the clip tables)
   tile or has order 1 / 2 targeting it; otherwise it sends the queued ant with the smallest `+0x70` (first wins ties) with
   `Order(home)`. The dispatched ant still has `+0x68 == 2` while its goal is checked, which is why it passes the FIFO rule.
   There is no slot table, no "active depositor" and no 3x3 congestion rule; the throughput is one ant per ~2 s.
+  **The flag across a re-plan (`FUN_0101c4f2` REPATH, verified in the audit of 2026-09-30, fixed in v0.0.52)**: when a step is blocked, `0x101c935` remembers `wasHome = (+0x68 == 1)` and clears `+0x68`; the order is given
+  again (`Order`, `0x101cacc`) and `0x101cad1` sets `+0x68 = 1` again when `wasHome`; a blocked LAST tile (and every blocked step of a non-local ant) takes the Stop path at `0x101caf2`, which sets `+0x68 = 2` when `wasHome`
+  whatever the ant's order is. Removed ants take no part in the claim scans (`RemoveAnt` clears the slot, `FUN_0100cfb1` returns NULL). Before v0.0.52 the remake lost the flag on a re-plan and never queued an ant whose ring tile was blocked,
+  so in a crowd (six carriers sent home with one click) part of the ants stood on the ring for ever.
 * **Retreat at 1 hp** *(implemented; `FUN_0101dded` with flag 1)*. Once, at the end of the hit recovery, a local ant with hp 1
   clears its path, writes action 0 and gets `Order(home)` with `+0x6c = 1`. It is not repeated for an idle 1 hp ant.
 * **Hatch** *(implemented; `FUN_01010aca` / `FUN_01010c14` / `HATCHTSK 0x1025072`)*. The pedestal click (Ctrl+H only
