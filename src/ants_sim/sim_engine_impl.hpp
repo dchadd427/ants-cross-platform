@@ -409,7 +409,7 @@ public:
     bool stun_or_die(AntUnit& a);                                               // FUN_0102151a (flag 1)
     bool stun_end(AntUnit& a);                                                  // FUN_0102151a (flag 0)
     void blast_hit(AntUnit& a, TileCoord at, TileCoord dest, uint8_t dmg, uint8_t src);   // FUN_0101c221
-    void blast(AntUnit& a, uint8_t dmg, uint8_t src);                           // FUN_0101c34c
+    void blast(AntUnit& a, uint8_t dmg, uint8_t src, bool pile_up);             // FUN_0101c34c (the dust ball only for the walk step's pile-up block)
     void drown(AntUnit& a, TileCoord t);                                        // FUN_0101c2e2
     void water_landing(AntUnit& a, TileCoord t);                                // FUN_0101e6b3
     void bridge_gone_scan(TileCoord t);                                         // FUN_0100f8bf (after the bridge tile became water)

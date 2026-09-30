@@ -27,6 +27,7 @@ order in which it is proposed to be fixed. The owner decides (AGENTS.md rule 9).
 * v0.0.71: batch 6 part 3 (minimap: fog objects, no cell dots, ants at pixel position with every ant until removed and the ally exemption, flower / clover dots, unlisted tile ids, the frame; LU NEW-3 .. NEW-6, LT NEW-2, LK NEW-2, LH NEW-7, LI NEW-11; the hit flash stays open for the owner, section 4). Still open in batch 6: chat scroll bar and wrapping, partially explored objects (NEW-4).
 * v0.0.72: batch 6 part 4 (chat log: follow task 5 px / 50 ms, drag to scroll with the 15 px auto-repeat and the snap back, pixel wrapping, 1 px between entries, body at +10, clip, header tail, no wheel / PageUp; new finding: the original writes `chat.txt` at the end of the program; LX CHATSCRL / CHATAPPD, LU NEW-9). Still open in batch 6: partially explored objects (LT NEW-4), food footprint at its live stage.
 * v0.0.73: batch 6 part 5 (the layer-2 pass under fog draws an object from every explored body cell whose anchor is unexplored, food hidden only while anchor and footprint are unexplored, footprint of the current stage; LT NEW-4, NEW-6). Batch 6 is done except the optional NEW-5 (1 px seams at fractional scales of the software renderer) and the owner decision on the minimap hit flash.
+* v0.0.74: batch 7 part 1 (the dust ball only for the pile-up block, LK NEW-1 / LE NEW-1; LA NEW-4 / LU NEW-10 (world palette) and LA NEW-6 (plain `L`) were checked in the binary and are **refuted**, see section 5).
 
 ## 1. What was audited and how
 
@@ -153,6 +154,8 @@ The goal is a one-to-one copy; the owner asks for tweaks on top of it, each reco
 * Audit R's row "ally_confirm = string 4" is the More Help dialog (`0x1016c09`); the real confirmation is `0x1016438` (built in v0.0.50).
 * Audit B's golden timelines omit the doubled first frame of a clip started inside a callback (getpow is 840 ms, not 770); the remake already reproduces the doubling.
 * Audit T's claim "0 seams at 13 window sizes" holds for integer scales only.
+* LA NEW-4 / LU NEW-10 ("world sprites with palette indices 1..31 use the raw palette, the original tints them for the viewer"): the animations that draw in the world with pixels in that range (`dogears`, `hillears`, `yelears`, `redears`, `bombex`, `obstacle`) use only the indices 1 and 25, which are identical in all four HUD tables and in the raw palette; no world pixel changes with the viewer (docs 5.58).
+* LA NEW-6 ("the `L` digit toggle needs no Ctrl"): `FUN_0102609a` returns before the letter switch unless the state word of key 0x17 (Ctrl, `W + 0x3e`) is set; Ctrl+L is right (docs 5.45, 5.58).
 
 ## 6. What static analysis cannot settle (needs the real game)
 Screenshots of the original (cnc-ddraw in `Original-Ants/` saves the game's own 640 x 480 picture with the Print Screen key) would settle:

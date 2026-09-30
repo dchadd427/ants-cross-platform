@@ -1385,7 +1385,7 @@ void SimulationEngine::resolve_fire_contact(uint32_t ant_id, int32_t /*incoming_
     AntUnit* u = impl_->find_unit(ant_id);
     if (!u || u->removed) return;
     const TileCoord at{u->pixel_x / 32, u->pixel_y / 32};
-    impl_->blast(*u, 1, u->player_id < MAX_PLAYERS ? u->player_id : uint8_t{7});
+    impl_->blast(*u, 1, u->player_id < MAX_PLAYERS ? u->player_id : uint8_t{7}, false);
     (void)at;
 }
 
@@ -1393,7 +1393,7 @@ void SimulationEngine::blast_tile_for_test(TileCoord tile) {
     for (auto& up : impl_->ants_) {
         AntUnit* u = up.get();
         if (u && !u->removed && u->occ_tile == tile) {
-            impl_->blast(*u, 0, 7);
+            impl_->blast(*u, 0, 7, true);
             return;
         }
     }

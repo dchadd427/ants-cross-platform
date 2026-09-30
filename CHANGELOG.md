@@ -39,6 +39,15 @@ Ground truth for every entry is in [`docs/GAME_REVERSE_ENGINEERING.md`](docs/GAM
   - **Found on the way, for the audit** (docs: implementation_plan.md section 18): `tests/test_sim/test_challenger_m2_it2_deep_stress.cpp` has not been part of the build since an early commit and no longer compiles
     (it uses the retired slot-queue API of the hill). (An earlier version of this line said that the death clips are no longer started by a separate effect: wrong, only the unused helper `spawn_death_effect` was removed; the effect path in `movement_system.cpp` is still in use, see the audit.)
 
+## v0.0.74 - 2026-09-30 - The dust ball of the original
+
+Batch 7 part 1 (`docs/audit/ledger_combat.md` NEW-1; re-read in `Ants.exe`: `0x101b8cb`, `0x101bb92` - `0x101bc98`, `0x101c34c`, `0x101c449`, `0x100cd7d`):
+
+- **The dust ball and its sound belong to the pile-up alone**: a foreign ant that lands on a fire wall hops and loses its hit point, but the original makes no dust ball for it (the fire wall's block of the walk step runs only for the viewer's own ants, and only the pile-up block reaches the function that makes the ball). The remake made the ball for every blast of an ant that is not the viewer's, so the other players' fire-wall fights showed a ball and the sound of it for a second; now they do not.
+- **Two claims of the audit are refuted and nothing was changed** (`docs/GAME_REVERSE_ENGINEERING.md` 5.58): the world sprites that use the palette indices the original rewrites for the viewer (ears, hill brackets, the bomb explosion, `obstacle`) only use indices that are identical in every colour's table, so there is nothing to tint; and Ctrl is needed for `L`, as for the other hotkeys.
+- Docs: `docs/GAME_REVERSE_ENGINEERING.md` 5.58, `docs/AUDIT_ONE_TO_ONE.md` (progress and corrections).
+- Tests: integration 12.74b (a foreign and an own ant on a fire wall: no ball, no sound, 1 hp lost; the pile-up keeps its ball). Version assertions of 12.108.
+
 ## v0.0.73 - 2026-09-30 - The objects of the ground in the fog of the original
 
 Batch 6 part 5 (`docs/audit/ledger_terrain_fog.md` NEW-4, NEW-6; re-read in `Ants.exe`: `0x1008089` - `0x100835e`, `0x10076b6`, `0x1007202`, `0x10071dd`, `0x1008bc6`, `0x1008bb7`, `0x1007352`):

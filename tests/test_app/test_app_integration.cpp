@@ -6983,6 +6983,53 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         ASSERT_FALSE(sim_pile.get_unit(ant1).pos == sim_pile.get_unit(ant2).pos);
     } TEST_END();
 
+    TEST_CASE("12.74b: The Dust Ball Belongs To The Pile-Up Block Alone: A Foreign Ant Thrown Onto A Fire Wall Hops And Loses 1 hp Without It (Ants.exe 0x101bbdd - 0x101bbf4: the fire wall block runs for the viewer's own ants only)") {
+        auto battle_cloud_seen = [](SimulationEngine& sim, uint32_t ticks) {
+            bool seen = false;
+            for (uint32_t t = 0; t < ticks; ++t) {
+                sim.tick();
+                for (const auto& eff : sim.get_world_state().effects) if (eff.anim_name == "battle") seen = true;
+            }
+            return seen;
+        };
+        // a fire wall under player 1's ant, the viewer is player 0: Blast(1, owner) runs without the dust ball, the ant hops and loses 1 hp
+        {
+            SimulationEngine sim;
+            sim.init_test_world(60, 60, 1, 60000);
+            sim.set_viewing_player_id(0);
+            sim.grid_mut().place_firewall(15, 15, 1);
+            const uint32_t foreign = sim.spawn_unit(1, AntType::Worker, {15, 15});
+            sim.resolve_fire_contact(foreign, 1, 0);
+            ASSERT_EQ(sim.get_unit(foreign).hp, 9);
+            ASSERT_EQ(sim.get_unit(foreign).state, UnitState::Flinch);
+            ASSERT_FALSE(battle_cloud_seen(sim, 60));
+            ASSERT_FALSE(sim.has_audio_event(SoundID::CombatNetFairy));
+        }
+        // and the viewer's own ant makes none either
+        {
+            SimulationEngine sim;
+            sim.init_test_world(60, 60, 1, 60000);
+            sim.set_viewing_player_id(0);
+            sim.grid_mut().place_firewall(15, 15, 1);
+            const uint32_t own = sim.spawn_unit(0, AntType::Worker, {15, 15});
+            sim.resolve_fire_contact(own, 1, 0);
+            ASSERT_FALSE(battle_cloud_seen(sim, 60));
+        }
+        // the pile-up block keeps it for ants that are not the viewer's own
+        {
+            SimulationEngine sim;
+            sim.init_test_world(60, 60, 1, 60000);
+            sim.set_viewing_player_id(0);
+            const uint32_t a = sim.spawn_unit(1, AntType::Worker, {30, 30});
+            sim.spawn_unit(2, AntType::Worker, {30, 30});
+            (void)a;
+            sim.blast_tile_for_test(TileCoord{30, 30});
+            bool seen = false;
+            for (const auto& eff : sim.get_world_state().effects) if (eff.anim_name == "battle") seen = true;
+            ASSERT_TRUE(seen || battle_cloud_seen(sim, 5));
+        }
+    } TEST_END();
+
     TEST_CASE("12.104: Pile-Up Dispersal Never Hides An Ant; Hazard Landings Of The Thrown Ants (water, bomb)") {
         // Part A: no ant is ever concealed (the original has no scuffle ball): all ants stay visible while thrown apart
         {
@@ -7304,10 +7351,10 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
 
     TEST_CASE("12.108: Version Invariant & Fog of War Cursor Concealment Parity") {
         // 1. Verify semantic versioning components
-        ASSERT_EQ(ants::VERSION_STRING, "v0.0.73");
+        ASSERT_EQ(ants::VERSION_STRING, "v0.0.74");
         ASSERT_EQ(ants::VERSION_MAJOR, 0);
         ASSERT_EQ(ants::VERSION_MINOR, 0);
-        ASSERT_EQ(ants::VERSION_PATCH, 73);
+        ASSERT_EQ(ants::VERSION_PATCH, 74);
 
         // 2. Setup simulation world with Fog of War enabled
         SimulationEngine sim;

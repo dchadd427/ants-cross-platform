@@ -661,7 +661,7 @@ void SimulationEngineImpl::walk_step(AntUnit& a, StepEvt& e) {
         if (oc && oc->multi) {
             e.dx = 0;
             e.dy = 0;
-            blast(a, 0, 7);
+            blast(a, 0, 7, true);
             return;
         }
     }
@@ -671,7 +671,7 @@ void SimulationEngineImpl::walk_step(AntUnit& a, StepEvt& e) {
         if (a.type != AntType::Fire) {
             e.dx = 0;
             e.dy = 0;
-            blast(a, 1, grid_.get_cell(cur).interactive_owner);
+            blast(a, 1, grid_.get_cell(cur).interactive_owner, false);
             return;
         }
         if (!(a.waypoints.empty() && is_stationary_action(act))) {

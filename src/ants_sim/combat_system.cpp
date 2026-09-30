@@ -335,11 +335,12 @@ void SimulationEngineImpl::blast_hit(AntUnit& a, TileCoord at, TileCoord dest, u
 
 // FUN_0101c34c Blast: every ant on the tile (every team, the blasted ant included) is thrown to its own free
 // neighbour in distinct directions; `dmg` hit points are lost by each (0 for a pile-up, 1 for a fire wall).
-void SimulationEngineImpl::blast(AntUnit& a, uint8_t dmg, uint8_t src) {
+// `pile_up` is the walk step's block C, the only caller without the IsLocal gate (0x101bbdd - 0x101bbf4 guard the fire wall block D): a blast of an ant that
+// is not the viewer's own reaches Blast there and shows the dust ball (0x101c449); the owner's machine decides in the original, the remake's single
+// simulation still disperses the ants at once. A foreign ant on a fire wall never reaches Blast on the viewer's machine: it only hops (message 0x14).
+void SimulationEngineImpl::blast(AntUnit& a, uint8_t dmg, uint8_t src, bool pile_up) {
     const TileCoord at = a.occ_tile.x >= 0 ? a.occ_tile : pixel_tile(a);
-    // 0x101c449: a blast of an ant that is not the viewer's own (its owner's machine decides in the original) shows the dust
-    // ball; the remake's single simulation still disperses the ants at once.
-    if (a.player_id != viewing_player_id_) spawn_battle_cloud(at);
+    if (pile_up && a.player_id != viewing_player_id_) spawn_battle_cloud(at);
     bool excl[8] = {false, false, false, false, false, false, false, false};
     std::vector<AntUnit*> on_tile;
     for (auto& up : ants_) {
