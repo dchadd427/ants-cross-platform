@@ -46,6 +46,11 @@ public:
     /// Called for every command a turn applies, with the engine's verdict (the application uses it to correct its predicted feedback)
     void set_on_command(std::function<void(const sim::Command&, const sim::CommandResult&)> fn) { on_command_ = std::move(fn); }
 
+    /// The turns received last (up to kTurnLogTurns), kept so that a machine that becomes the host after the old one left can hand the turns that others
+    /// are missing to them (docs/NETWORK_PORT.md, host migration). Null when the turn is older than the log or not received yet.
+    const TurnMsg* logged_turn(uint32_t turn) const noexcept;
+    static constexpr size_t kTurnLogTurns = 300;               // 30 s of play
+
     uint32_t next_turn_to_execute() const noexcept { return next_execute_; }
     uint32_t next_turn_expected() const noexcept { return next_receive_; }
     size_t queued() const noexcept { return queue_.size(); }
@@ -60,6 +65,7 @@ private:
     sim::SimulationEngine& sim_;
     Config cfg_;
     std::deque<TurnMsg> queue_;
+    std::deque<TurnMsg> log_;      // the last kTurnLogTurns turns received, consecutive
     TurnMsg current_;              // the turn whose second tick is still to come (phase 1)
     uint32_t next_receive_{0};     // the turn number the queue expects next
     uint32_t next_execute_{0};

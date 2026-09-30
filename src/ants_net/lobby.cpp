@@ -64,8 +64,8 @@ bool HostLobby::all_measured() const noexcept {
     return true;
 }
 
-void HostLobby::add_connection(Connection* connection, uint32_t now_ms) {
-    if (connection != nullptr) pending_.push_back(Pending{connection, now_ms});
+void HostLobby::add_connection(Connection* connection, uint32_t now_ms, const std::string& address) {
+    if (connection != nullptr) pending_.push_back(Pending{connection, now_ms, address});
 }
 
 void HostLobby::broadcast(const std::vector<uint8_t>& msg) {
@@ -131,6 +131,9 @@ bool HostLobby::start(uint32_t seed, uint64_t map_hash, uint32_t now_ms) {
         if (room_.slots[s].state == SlotState::Empty) continue;
         start_.roster = static_cast<uint8_t>(start_.roster | (1u << s));
         start_.names[s] = room_.slots[s].name;
+        if (guests_[s].conn != nullptr && !guests_[s].address.empty() && guests_[s].listen_port != 0) {
+            start_.endpoints[s] = Endpoint{guests_[s].address, guests_[s].listen_port};      // how the other guests reach it
+        }
     }
     phase_ = Phase::Loading;
     host_loaded_ = false;
@@ -189,7 +192,10 @@ void HostLobby::handle_hello(Pending& p, const std::vector<uint8_t>& msg, uint32
         }
     }
     if (seat == 255) return reject(RejectReason::Full);
-    guests_[seat] = Guest{p.conn, false, 0};
+    guests_[seat] = Guest{};
+    guests_[seat].conn = p.conn;
+    guests_[seat].address = p.address;
+    guests_[seat].listen_port = hello.listen_port;
     room_.slots[seat].state = SlotState::Client;
     room_.slots[seat].name = printable(hello.name, kMaxNameChars);
     p.conn->send(encode(WelcomeMsg{seat, sim::MAX_PLAYERS}));
@@ -326,6 +332,7 @@ void ClientLobby::update(uint32_t now_ms) {
         if (conn_->is_open()) {
             HelloMsg h;
             h.name = printable(cfg_.name, kMaxNameChars);
+            h.listen_port = cfg_.listen_port;
             conn_->send(encode(h));
             phase_ = Phase::Joining;
             joined_at_ms_ = now_ms;

@@ -42,6 +42,11 @@ public:
     /// The highest turn `player` has executed.
     void on_ack(uint8_t player, uint32_t turn);
 
+    /// A machine that takes over as host (host migration): the next turn it seals is `next_turn`, whatever was queued or reported before is forgotten,
+    /// nobody is active any more (the survivors are activated again, one by one), and `set_acked` tells how far each has executed.
+    void resume(uint32_t next_turn);
+    void set_acked(uint8_t player, uint32_t next_to_execute);
+
     /// A state hash report of `player` after `turn`. Returns the desync found by comparing it with the host's report of the same turn (the host is
     /// `host_player`, reported through the same call), if any. Reports are kept until the turn is acknowledged by everybody.
     std::vector<DesyncMsg> on_hash(uint8_t player, uint32_t turn, const sim::StateHash& hash);

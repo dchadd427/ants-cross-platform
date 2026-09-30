@@ -195,6 +195,33 @@ struct Match {
 
 // ---------------------------------------------------------------------------------------------------------------------------------
 
+// True when any decoder of the protocol accepts the bytes
+bool any_decodes(const std::vector<uint8_t>& b) {
+    HelloMsg m1;
+    WelcomeMsg m2;
+    RejectMsg m3;
+    CommandMsg m4;
+    TurnMsg m5;
+    AckMsg m6;
+    HashMsg m7;
+    DesyncMsg m8;
+    ChatMsg m9;
+    RoomMsg m10;
+    StartMsg m11;
+    LoadedMsg m12;
+    CancelMsg m13;
+    ProposeMsg m14;
+    AcceptMsg m15;
+    RefuseMsg m16;
+    ResumeMsg m17;
+    RequestMsg m18;
+    PeerHelloMsg m19;
+    PingMsg m20;
+    return decode(b, m1) || decode(b, m2) || decode(b, m3) || decode(b, m4) || decode(b, m5) || decode(b, m6) || decode(b, m7) || decode(b, m8) ||
+           decode(b, m9) || decode(b, m10) || decode(b, m11) || decode(b, m12) || decode(b, m13) || decode(b, m14) || decode(b, m15) ||
+           decode(b, m16) || decode(b, m17) || decode(b, m18) || decode(b, m19) || decode_ping(b.data(), b.size(), m20);
+}
+
 void run_protocol_tests() {
     TEST_CASE("N2.1 Protocol: Every Message Round-Trips And Trailing Or Missing Bytes Are Rejected") {
         HelloMsg hello;
@@ -250,22 +277,63 @@ void run_protocol_tests() {
         PingMsg p2;
         ASSERT_TRUE(decode_ping(encode_ping(p).data(), 9, p2) && p2.nonce == 5 && p2.sent_ms == 1000);
         ASSERT_EQ(peek_type(encode_pong(p)), MsgType::Pong);
+        // the messages of host migration and the mesh
+        ProposeMsg pr;
+        pr.epoch = 3;
+        pr.candidate = 2;
+        ProposeMsg pr2;
+        ASSERT_TRUE(decode(encode(pr), pr2) && pr2.epoch == 3 && pr2.candidate == 2);
+        AcceptMsg ac;
+        ac.epoch = 1;
+        ac.next_receive = 500;
+        ac.next_execute = 498;
+        AcceptMsg ac2;
+        ASSERT_TRUE(decode(encode(ac), ac2) && ac2.epoch == 1 && ac2.next_receive == 500 && ac2.next_execute == 498);
+        RefuseMsg rf;
+        rf.epoch = 2;
+        rf.lowest = 1;
+        RefuseMsg rf2;
+        ASSERT_TRUE(decode(encode(rf), rf2) && rf2.epoch == 2 && rf2.lowest == 1);
+        ResumeMsg rs;
+        rs.epoch = 1;
+        rs.host = 2;
+        rs.resume_turn = 4242;
+        ResumeMsg rs2;
+        ASSERT_TRUE(decode(encode(rs), rs2) && rs2.epoch == 1 && rs2.host == 2 && rs2.resume_turn == 4242);
+        RequestMsg rq;
+        rq.from_turn = 77;
+        RequestMsg rq2;
+        ASSERT_TRUE(decode(encode(rq), rq2) && rq2.from_turn == 77);
+        PeerHelloMsg ph;
+        ph.seat = 3;
+        PeerHelloMsg ph2;
+        ASSERT_TRUE(decode(encode(ph), ph2) && ph2.seat == 3);
+        // the port a guest accepts the other guests on travels with its Hello; the host hands every guest the others' endpoints in Start
+        HelloMsg hello_port;
+        hello_port.name = "Ann";
+        hello_port.listen_port = 41234;
+        HelloMsg hello_port2;
+        ASSERT_TRUE(decode(encode(hello_port), hello_port2) && hello_port2.listen_port == 41234 && hello_port2.name == "Ann");
+        StartMsg start;
+        start.map_name = "TREASURE.LVL";
+        start.roster = 0x0D;
+        start.endpoints[2] = Endpoint{"192.0.2.22", 5001};
+        start.endpoints[3] = Endpoint{"fe80::1%en0", 5002};
+        StartMsg start2;
+        ASSERT_TRUE(decode(encode(start), start2) && start2.endpoints[2] == start.endpoints[2] && start2.endpoints[3] == start.endpoints[3] &&
+                    start2.endpoints[0].address.empty() && start2.endpoints[1].port == 0);
         // every valid message is rejected with a byte too many and with any byte missing
-        const std::vector<std::vector<uint8_t>> all = {encode(hello), encode(w), encode(r), encode(cm), encode(t), encode(a), encode(hm), encode(d), encode(c)};
+        const std::vector<std::vector<uint8_t>> all = {encode(hello), encode(w),  encode(r),  encode(cm), encode(t),  encode(a),  encode(hm),
+                                                       encode(d),     encode(c),  encode(pr), encode(ac), encode(rf), encode(rs), encode(rq),
+                                                       encode(ph),    encode(hello_port), encode(start)};
         for (const auto& m : all) {
             std::vector<uint8_t> longer = m;
             longer.push_back(0);
             for (size_t cut = 0; cut < m.size(); ++cut) {
                 std::vector<uint8_t> shorter(m.begin(), m.begin() + static_cast<std::ptrdiff_t>(cut));
-                HelloMsg x1; WelcomeMsg x2; RejectMsg x3; CommandMsg x4; TurnMsg x5; AckMsg x6; HashMsg x7; DesyncMsg x8; ChatMsg x9;
-                const bool any = decode(shorter, x1) || decode(shorter, x2) || decode(shorter, x3) || decode(shorter, x4) || decode(shorter, x5) ||
-                                 decode(shorter, x6) || decode(shorter, x7) || decode(shorter, x8) || decode(shorter, x9);
-                ASSERT_FALSE(any);
+                ASSERT_FALSE(any_decodes(shorter));
             }
-            HelloMsg x1; WelcomeMsg x2; RejectMsg x3; CommandMsg x4; TurnMsg x5; AckMsg x6; HashMsg x7; DesyncMsg x8; ChatMsg x9;
-            const bool any = decode(longer, x1) || decode(longer, x2) || decode(longer, x3) || decode(longer, x4) || decode(longer, x5) ||
-                             decode(longer, x6) || decode(longer, x7) || decode(longer, x8) || decode(longer, x9);
-            ASSERT_FALSE(any);
+            ASSERT_FALSE(any_decodes(longer));
         }
     } TEST_END();
 
@@ -318,8 +386,40 @@ void run_protocol_tests() {
         bytes = encode(HelloMsg{kProtocolVersion, "Bob"});
         bytes[4] = 7;
         ASSERT_FALSE(decode(bytes, h));
+        // host migration: seats out of range, an Accept that executed more than it received, endpoints that are no addresses
+        ProposeMsg pr;
+        bytes = encode(ProposeMsg{1, 2});
+        bytes[2] = 4;
+        ASSERT_FALSE(decode(bytes, pr));
+        RefuseMsg rf;
+        bytes = encode(RefuseMsg{1, 2});
+        bytes[2] = 4;
+        ASSERT_FALSE(decode(bytes, rf));
+        ResumeMsg rs;
+        bytes = encode(ResumeMsg{1, 2, 10});
+        bytes[2] = 4;
+        ASSERT_FALSE(decode(bytes, rs));
+        PeerHelloMsg ph;
+        bytes = encode(PeerHelloMsg{2});
+        bytes[1] = 4;
+        ASSERT_FALSE(decode(bytes, ph));
+        AcceptMsg ac;
+        AcceptMsg bad_accept;
+        bad_accept.next_receive = 10;
+        bad_accept.next_execute = 11;
+        ASSERT_FALSE(decode(encode(bad_accept), ac));
+        StartMsg start;
+        start.map_name = "TREASURE.LVL";
+        start.roster = 0x03;
+        StartMsg start_back;
+        start.endpoints[1].address = "bad address";
+        ASSERT_FALSE(decode(encode(start), start_back));
+        start.endpoints[1].address = std::string(65, '1');                    // too long to travel: the encoder sends none
+        ASSERT_TRUE(decode(encode(start), start_back) && start_back.endpoints[1].address.empty());
+        start.endpoints[1].address = "198.51.100.7";
+        ASSERT_TRUE(decode(encode(start), start_back) && start_back.endpoints[1].address == "198.51.100.7");
         // unknown types
-        for (uint8_t type : std::vector<uint8_t>{0, 18, 100, 255}) {
+        for (uint8_t type : std::vector<uint8_t>{0, 24, 100, 255}) {
             const std::vector<uint8_t> m = {type, 0, 0, 0, 0};
             ASSERT_EQ(peek_type(m), MsgType::None);
         }
@@ -335,14 +435,16 @@ void run_protocol_tests() {
         hash.turn = 10;
         hash.hash = {1, 2, 3, 4, 5, 6, 7, 8};
         const std::vector<std::vector<uint8_t>> seeds = {encode(turn), encode(hash), encode(CommandMsg{cmd(CommandType::GroupAttack, 2, 255, 5, 5, {1})}),
-                                                         encode(ChatMsg{1, true, "hello"}), encode(HelloMsg{1, "Ann"}), encode(WelcomeMsg{1, 4})};
+                                                         encode(ChatMsg{1, true, "hello"}), encode(HelloMsg{1, "Ann"}), encode(WelcomeMsg{1, 4}),
+                                                         encode(ProposeMsg{1, 2}), encode(AcceptMsg{1, 100, 98}), encode(RefuseMsg{1, 1}),
+                                                         encode(ResumeMsg{1, 2, 500}), encode(RequestMsg{40}), encode(PeerHelloMsg{3})};
         size_t accepted = 0;
         for (int i = 0; i < 400000; ++i) {
             std::vector<uint8_t> buf;
             if (i % 3 == 0) {
                 buf.resize(rng.below(80));
                 for (auto& x : buf) x = static_cast<uint8_t>(rng.below(256));
-                if (!buf.empty()) buf[0] = static_cast<uint8_t>(1 + rng.below(11));    // a plausible type byte
+                if (!buf.empty()) buf[0] = static_cast<uint8_t>(1 + rng.below(23));    // a plausible type byte
             } else {
                 buf = seeds[rng.below(static_cast<uint32_t>(seeds.size()))];
                 for (uint32_t m = 1 + rng.below(3); m > 0; --m) buf[rng.below(static_cast<uint32_t>(buf.size()))] = static_cast<uint8_t>(rng.below(256));
@@ -354,6 +456,12 @@ void run_protocol_tests() {
             ChatMsg ch;
             HelloMsg he;
             WelcomeMsg we;
+            ProposeMsg pr;
+            AcceptMsg ac;
+            RefuseMsg rf;
+            ResumeMsg rs;
+            RequestMsg rq;
+            PeerHelloMsg ph;
             if (decode(buf, t)) {
                 ++accepted;
                 ASSERT_TRUE(encode(t) == buf);
@@ -364,6 +472,12 @@ void run_protocol_tests() {
             if (decode(buf, ch)) { ++accepted; ASSERT_TRUE(encode(ch) == buf); }
             if (decode(buf, he)) { ++accepted; ASSERT_TRUE(encode(he) == buf); }
             if (decode(buf, we)) { ++accepted; ASSERT_TRUE(encode(we) == buf); }
+            if (decode(buf, pr)) { ++accepted; ASSERT_TRUE(encode(pr) == buf); }
+            if (decode(buf, ac)) { ++accepted; ASSERT_TRUE(encode(ac) == buf); }
+            if (decode(buf, rf)) { ++accepted; ASSERT_TRUE(encode(rf) == buf); }
+            if (decode(buf, rs)) { ++accepted; ASSERT_TRUE(encode(rs) == buf); }
+            if (decode(buf, rq)) { ++accepted; ASSERT_TRUE(encode(rq) == buf); }
+            if (decode(buf, ph)) { ++accepted; ASSERT_TRUE(encode(ph) == buf); }
         }
         ASSERT_TRUE(accepted > 5000);                  // the mutations of valid messages do get through
     } TEST_END();
@@ -917,6 +1031,600 @@ void run_dropout_tests() {
     } TEST_END();
 }
 
+
+// ---------------------------------------------------------------------------------------------------------------------------------
+// Host migration (docs/NETWORK_PORT.md): the guests are linked to each other as well, so the game outlives its host
+// ---------------------------------------------------------------------------------------------------------------------------------
+
+using LinkFn = std::function<LoopbackNetwork::Link(uint8_t, uint8_t)>;
+
+LinkFn same_link(LoopbackNetwork::Link link) {
+    return [link](uint8_t, uint8_t) { return link; };
+}
+
+// A match of `players` machines: seat 0 hosts, every guest is linked to the host and to every other guest
+struct Mesh {
+    LoopbackNetwork net;
+    std::vector<std::unique_ptr<sim::SimulationEngine>> sims;
+    Ids ids;
+    std::vector<std::unique_ptr<HostSession>> hosts;         // by seat: the first host, and every guest that took over
+    std::vector<std::unique_ptr<ClientSession>> clients;     // by seat; reset when the seat took over
+    std::vector<std::vector<Connection*>> link;              // link[a][b]: the endpoint that seat a holds of its link to seat b
+    std::vector<bool> alive;                                 // a machine that is not alive is no longer updated
+    std::vector<std::pair<uint8_t, uint8_t>> left;           // (host seat, player) of every drop-out a host announced
+    std::vector<std::vector<ChatMsg>> chats;                 // what each machine's chat callback saw
+    uint32_t now{0};
+    uint32_t seed{1};
+    uint8_t players{4};
+    int promotions{0};
+
+    Mesh(uint32_t seed_, uint8_t players_, const LinkFn& link_of, ClientSession::Config cc = {}) : net(seed_ * 17u), seed(seed_), players(players_) {
+        for (uint8_t p = 0; p < players; ++p) {
+            sims.push_back(std::make_unique<sim::SimulationEngine>());
+            ids = build_world(*sims.back(), seed);
+        }
+        hosts.resize(players);
+        clients.resize(players);
+        alive.assign(players, true);
+        chats.resize(players);
+        link.assign(players, std::vector<Connection*>(players, nullptr));
+        hosts[0] = std::make_unique<HostSession>(*sims[0], HostSession::Config{});
+        hosts[0]->set_on_player_left([this](uint8_t p) { left.emplace_back(0, p); });
+        hosts[0]->set_on_chat([this](const ChatMsg& c) { chats[0].push_back(c); });
+        for (uint8_t p = 1; p < players; ++p) {
+            ClientSession::Config c = cc;
+            c.player = p;
+            c.host = 0;
+            clients[p] = std::make_unique<ClientSession>(*sims[p], c);
+            clients[p]->set_on_chat([this, p](const ChatMsg& m) { chats[p].push_back(m); });
+            auto ends = net.connect(link_of(0, p));
+            link[0][p] = ends.first;
+            link[p][0] = ends.second;
+            hosts[0]->add_client(p, ends.first);
+            clients[p]->set_connection(ends.second);
+        }
+        for (uint8_t a = 1; a < players; ++a) {
+            for (uint8_t b = static_cast<uint8_t>(a + 1); b < players; ++b) {
+                auto ends = net.connect(link_of(a, b));
+                link[a][b] = ends.first;
+                link[b][a] = ends.second;
+                clients[a]->set_peer(b, ends.first);
+                clients[b]->set_peer(a, ends.second);
+            }
+        }
+        hosts[0]->start(0);
+        for (uint8_t p = 1; p < players; ++p) clients[p]->start(0);
+    }
+
+    // The machine of `seat` dies: its links are cut at once (abrupt), or it simply stops answering while its links stay open (a frozen process)
+    void kill(uint8_t seat, bool abrupt = true) {
+        alive[seat] = false;
+        if (abrupt) isolate(seat);
+    }
+    // Every link of the seat is cut, but the machine goes on (a partition)
+    void isolate(uint8_t seat) {
+        for (uint8_t o = 0; o < players; ++o) {
+            if (o != seat && link[seat][o] != nullptr) net.cut(link[seat][o]);
+        }
+    }
+    void cut_link(uint8_t a, uint8_t b) { net.cut(link[a][b]); }
+
+    void step_promotions() {
+        for (uint8_t s = 0; s < players; ++s) {
+            if (!alive[s] || !clients[s] || !clients[s]->promoted()) continue;
+            hosts[s] = promote_to_host(*clients[s], *sims[s], HostSession::Config{}, now, [this, s](HostSession& h) {
+                h.set_on_player_left([this, s](uint8_t p) { left.emplace_back(s, p); });
+                h.set_on_chat([this, s](const ChatMsg& c) { chats[s].push_back(c); });
+            });
+            clients[s].reset();
+            ++promotions;
+        }
+    }
+
+    // Advances virtual time by `ms` in 10 ms steps; every machine that plays issues its scripted commands when `scripted`
+    void run(uint32_t ms, bool scripted = true, const std::function<void(uint32_t)>& each_step = {}) {
+        const uint32_t end = now + ms;
+        while (now < end) {
+            now += 10;
+            net.set_time(now);
+            for (uint8_t s = 0; s < players; ++s) {
+                Command c;
+                if (!alive[s] || !scripted || !script(ids, seed, now, s, c)) continue;
+                if (hosts[s]) hosts[s]->submit_local(c);
+                else if (clients[s]) clients[s]->submit(c);
+            }
+            if (each_step) each_step(now);
+            for (uint8_t s = 0; s < players; ++s) {
+                if (!alive[s]) continue;
+                if (hosts[s]) hosts[s]->update(now);
+                else if (clients[s]) clients[s]->update(now);
+            }
+            step_promotions();
+        }
+    }
+    bool playing(uint8_t s) const { return alive[s] && (hosts[s] != nullptr || (clients[s] && !clients[s]->lost())); }
+    void settle(uint32_t ms = 3000) {
+        for (uint8_t s = 0; s < players; ++s) {
+            if (alive[s] && hosts[s]) hosts[s]->freeze();
+        }
+        run(ms, false);
+    }
+    // Every machine that still plays holds the same state (the hosts' desync detectors stayed silent as well)
+    bool survivors_equal(uint8_t except = 255) const {
+        const sim::StateHash* first = nullptr;
+        sim::StateHash hash;
+        for (uint8_t s = 0; s < players; ++s) {
+            if (!playing(s) || s == except) continue;
+            if (hosts[s] && !hosts[s]->desyncs().empty()) return false;
+            hash = sims[s]->state_hash();
+            if (first == nullptr) {
+                first = &hash;
+                continue;
+            }
+            if (hash != *first) return false;
+        }
+        return true;
+    }
+    uint32_t tick(uint8_t s) const { return static_cast<uint32_t>(sims[s]->current_tick()); }
+};
+
+void run_migration_tests() {
+    TEST_CASE("N2.22 Host Migration: The Host Dies, The Lowest Guest Takes Over, The Others Follow, Every Survivor Stays Identical And The Game Goes On") {
+        std::vector<sim::StateHash> finals;
+        for (int run = 0; run < 2; ++run) {                                  // twice: the whole thing is deterministic
+            Mesh m(1, 4, same_link({30, 5}));
+            std::vector<uint8_t> after;                                      // issuers of the commands seat 1's machine applies after the death
+            bool killed = false;
+            m.clients[1]->runner().set_on_command([&](const Command& c, const sim::CommandResult&) {
+                if (killed && c.type != CommandType::Drop) after.push_back(c.issuer);
+            });
+            m.run(6000);
+            ASSERT_EQ(m.promotions, 0);
+            ASSERT_TRUE(m.hosts[0]->turns_sealed() > 50);
+            const uint32_t kill_tick = m.tick(1);
+            killed = true;
+            m.kill(0);
+            m.run(8000);
+            ASSERT_EQ(m.promotions, 1);
+            ASSERT_TRUE(m.hosts[1] != nullptr);
+            ASSERT_TRUE(m.hosts[2] == nullptr && m.hosts[3] == nullptr);
+            ASSERT_EQ(m.hosts[1]->epoch(), 1);
+            ASSERT_EQ(m.hosts[1]->host_player(), 1);
+            for (uint8_t s = 2; s < 4; ++s) {
+                ASSERT_EQ(m.clients[s]->epoch(), 1);
+                ASSERT_EQ(m.clients[s]->host_seat(), 1);
+                ASSERT_EQ(m.clients[s]->mode(), ClientSession::Mode::Normal);
+            }
+            m.settle();
+            ASSERT_TRUE(m.survivors_equal());
+            for (uint8_t s = 1; s < 4; ++s) {
+                ASSERT_TRUE(m.sims[s]->is_player_dropped(0));
+                for (uint8_t p = 1; p < 4; ++p) ASSERT_FALSE(m.sims[s]->is_player_dropped(p));
+            }
+            ASSERT_TRUE(m.tick(1) > kill_tick + 150);                        // the game went on for several seconds after the host died
+            ASSERT_EQ(std::count(after.begin(), after.end(), 0), 0);         // nothing more from the dead host ...
+            for (uint8_t p = 1; p < 4; ++p) ASSERT_TRUE(std::count(after.begin(), after.end(), p) > 5);   // ... and everybody else still commands
+            ASSERT_EQ(m.left.size(), 1u);                                    // the new host announced the drop-out of the old one, once
+            ASSERT_TRUE(m.left[0].first == 1 && m.left[0].second == 0);
+            finals.push_back(m.sims[1]->state_hash());
+        }
+        ASSERT_TRUE(finals[0] == finals[1]);
+    } TEST_END();
+
+    TEST_CASE("N2.23 Host Migration: A Host That Only Falls Silent (links stay open) Is Given Up After Ten Seconds") {
+        Mesh m(2, 4, same_link({40, 10}));
+        m.run(4000);
+        m.kill(0, false);
+        m.run(9000);
+        ASSERT_EQ(m.promotions, 0);                                          // nine seconds are not enough
+        for (uint8_t s = 1; s < 4; ++s) ASSERT_EQ(m.clients[s]->mode(), ClientSession::Mode::Normal);
+        m.run(3000);
+        ASSERT_EQ(m.promotions, 1);
+        ASSERT_TRUE(m.hosts[1] != nullptr);
+        m.run(4000);
+        m.settle();
+        ASSERT_TRUE(m.survivors_equal());
+        for (uint8_t s = 1; s < 4; ++s) ASSERT_TRUE(m.sims[s]->is_player_dropped(0));
+    } TEST_END();
+
+    TEST_CASE("N2.24 Host Migration: Two Players Left (three in the match); Two Players Total: The Guest Goes On Alone") {
+        {
+            Mesh m(3, 3, same_link({25, 0}));
+            m.run(3000);
+            m.kill(0);
+            m.run(6000);
+            ASSERT_EQ(m.promotions, 1);
+            ASSERT_TRUE(m.hosts[1] != nullptr);
+            ASSERT_EQ(m.clients[2]->host_seat(), 1);
+            m.settle();
+            ASSERT_TRUE(m.survivors_equal());
+            ASSERT_TRUE(m.sims[1]->is_player_dropped(0));
+            ASSERT_TRUE(m.sims[2]->is_player_dropped(0));
+            ASSERT_TRUE(m.sims[1]->is_player_dropped(3));                    // the seat of the roster that nobody plays leaves with the old host
+        }
+        {
+            Mesh m(4, 2, same_link({25, 0}));
+            std::vector<uint8_t> after;
+            bool killed = false;
+            m.clients[1]->runner().set_on_command([&](const Command& c, const sim::CommandResult&) {
+                if (killed && c.type != CommandType::Drop) after.push_back(c.issuer);
+            });
+            m.run(3000);
+            const uint32_t kill_tick = m.tick(1);
+            killed = true;
+            m.kill(0);
+            m.run(6000);
+            ASSERT_EQ(m.promotions, 1);                                      // nobody to ask: the guest is the host at once
+            ASSERT_TRUE(m.hosts[1] != nullptr);
+            ASSERT_TRUE(m.tick(1) > kill_tick + 100);                        // the game goes on
+            ASSERT_TRUE(std::count(after.begin(), after.end(), 1) > 5);      // and the guest's own orders are still carried out
+            ASSERT_TRUE(m.sims[1]->is_player_dropped(0));
+            ASSERT_FALSE(m.sims[1]->is_player_dropped(1));
+        }
+    } TEST_END();
+
+    TEST_CASE("N2.25 Host Migration: The Host And The Next Seat Die Together; The Seats Above Them Elect Among Themselves") {
+        Mesh m(5, 4, same_link({30, 5}));
+        m.run(4000);
+        m.kill(0);
+        m.kill(1);
+        m.run(8000);
+        ASSERT_EQ(m.promotions, 1);
+        ASSERT_TRUE(m.hosts[2] != nullptr && m.hosts[1] == nullptr);
+        ASSERT_EQ(m.hosts[2]->epoch(), 1);
+        ASSERT_EQ(m.clients[3]->host_seat(), 2);
+        m.settle();
+        ASSERT_TRUE(m.survivors_equal());
+        for (uint8_t s = 2; s < 4; ++s) {
+            ASSERT_TRUE(m.sims[s]->is_player_dropped(0));
+            ASSERT_TRUE(m.sims[s]->is_player_dropped(1));
+            ASSERT_FALSE(m.sims[s]->is_player_dropped(2));
+            ASSERT_FALSE(m.sims[s]->is_player_dropped(3));
+        }
+    } TEST_END();
+
+    TEST_CASE("N2.26 Host Migration: The Successor Dies While It Is Being Accepted; The Next One Takes Over Within A Blink") {
+        Mesh m(6, 4, same_link({30, 0}));
+        m.run(4000);
+        m.kill(0);
+        bool cut = false;
+        m.run(6000, true, [&](uint32_t) {
+            if (!cut && m.clients[2] && m.clients[2]->mode() == ClientSession::Mode::Following) {
+                cut = true;                                                  // seat 2 has accepted seat 1: seat 1 dies before it can resume
+                m.kill(1);
+            }
+        });
+        ASSERT_TRUE(cut);
+        ASSERT_EQ(m.promotions, 1);
+        ASSERT_TRUE(m.hosts[2] != nullptr && m.hosts[1] == nullptr);
+        ASSERT_EQ(m.clients[3]->host_seat(), 2);
+        ASSERT_EQ(m.clients[3]->epoch(), 1);                                 // still the first host change: the election was only repeated
+        m.settle();
+        ASSERT_TRUE(m.survivors_equal());
+        ASSERT_TRUE(m.sims[2]->is_player_dropped(0) && m.sims[2]->is_player_dropped(1));
+        ASSERT_TRUE(m.sims[3]->is_player_dropped(0) && m.sims[3]->is_player_dropped(1));
+    } TEST_END();
+
+    TEST_CASE("N2.27 Host Migration: Guests That Are Behind Or Ahead Of The New Host Get Or Give The Missing Turns; Nobody Diverges") {
+        for (int variant = 0; variant < 2; ++variant) {
+            // variant 0: seat 1 (the successor) is on a slow link, so it is behind the others when the host dies: it fetches the turns from one of them
+            // variant 1: seats 2 and 3 are on slow links: they are behind the successor, which sends them what they miss
+            const LinkFn links = [variant](uint8_t a, uint8_t b) {
+                if (a == 0) {
+                    const bool slow = variant == 0 ? b == 1 : b >= 2;
+                    return LoopbackNetwork::Link{slow ? 400u : 30u, 0u};
+                }
+                return LoopbackNetwork::Link{30u, 0u};
+            };
+            Mesh m(7 + static_cast<uint32_t>(variant), 4, links);
+            m.run(5000);
+            const uint32_t behind_1 = m.clients[1]->runner().next_turn_expected();
+            const uint32_t at_2 = m.clients[2]->runner().next_turn_expected();
+            ASSERT_TRUE(variant == 0 ? behind_1 + 2 < at_2 : at_2 + 2 < behind_1);   // the links really make them differ
+            m.kill(0);
+            m.run(8000);
+            ASSERT_EQ(m.promotions, 1);
+            ASSERT_TRUE(m.hosts[1] != nullptr);
+            m.settle();
+            ASSERT_TRUE(m.survivors_equal());
+            for (uint8_t s = 1; s < 4; ++s) ASSERT_TRUE(m.sims[s]->is_player_dropped(0));
+            ASSERT_EQ(m.sims[1]->current_tick(), m.sims[2]->current_tick());
+            ASSERT_EQ(m.sims[1]->current_tick(), m.sims[3]->current_tick());
+        }
+    } TEST_END();
+
+    TEST_CASE("N2.28 Host Migration: The Guest That Holds The Turns Dies While They Are Being Fetched; The Rest Goes On Without Them") {
+        const LinkFn links = [](uint8_t a, uint8_t b) {
+            if (a == 0) return LoopbackNetwork::Link{b == 2 ? 30u : 400u, 0u};   // only seat 2 hears the host promptly
+            return LoopbackNetwork::Link{30u, 0u};
+        };
+        Mesh m(9, 4, links);
+        m.run(5000);
+        ASSERT_TRUE(m.clients[1]->runner().next_turn_expected() + 2 < m.clients[2]->runner().next_turn_expected());
+        m.kill(0);
+        bool cut = false;
+        m.run(9000, true, [&](uint32_t) {
+            if (!cut && m.clients[1] && m.clients[1]->mode() == ClientSession::Mode::Fetching) {
+                cut = true;                                                  // seat 1 asks seat 2 for the turns it lacks: seat 2 dies first
+                m.kill(2);
+            }
+        });
+        ASSERT_TRUE(cut);
+        ASSERT_EQ(m.promotions, 1);
+        ASSERT_TRUE(m.hosts[1] != nullptr);
+        ASSERT_EQ(m.clients[3]->host_seat(), 1);
+        m.settle();
+        ASSERT_TRUE(m.survivors_equal());
+        ASSERT_TRUE(m.sims[1]->is_player_dropped(0) && m.sims[1]->is_player_dropped(2));
+        ASSERT_FALSE(m.sims[1]->is_player_dropped(3));
+        ASSERT_TRUE(m.sims[3]->is_player_dropped(2));
+    } TEST_END();
+
+    TEST_CASE("N2.29 Host Migration: A Guest That Says Nothing Does Not Hold The Election Up; It Is Dropped With The Old Host") {
+        Mesh m(10, 4, same_link({30, 5}));
+        m.run(4000);
+        m.kill(0);
+        m.kill(3, false);                                                    // seat 3's machine freezes (its links stay open, it never answers)
+        m.run(3000);
+        ASSERT_EQ(m.promotions, 0);                                          // seat 1 waits three seconds for the answer of seat 3 ...
+        m.run(3000);
+        ASSERT_EQ(m.promotions, 1);                                          // ... and goes on without it
+        ASSERT_TRUE(m.hosts[1] != nullptr);
+        m.run(4000);
+        m.settle();
+        ASSERT_TRUE(m.survivors_equal());
+        ASSERT_TRUE(m.sims[1]->is_player_dropped(0) && m.sims[1]->is_player_dropped(3));
+        ASSERT_TRUE(m.sims[2]->is_player_dropped(3));
+        ASSERT_FALSE(m.sims[1]->is_player_dropped(2));
+    } TEST_END();
+
+    TEST_CASE("N2.30 Host Migration: A Host That Is Cut Off From Everybody Goes On Alone; The Guests Elect A New One And Ignore Its Past") {
+        Mesh m(11, 4, same_link({30, 5}));
+        m.run(4000);
+        m.isolate(0);                                                        // a partition: the old host's machine is fine but nobody reaches it
+        m.run(8000);
+        ASSERT_EQ(m.promotions, 1);
+        ASSERT_TRUE(m.hosts[1] != nullptr);
+        ASSERT_EQ(m.hosts[0]->epoch(), 0);
+        ASSERT_EQ(m.hosts[1]->epoch(), 1);
+        // the old host dropped everybody (its links were closed) and plays on by itself
+        for (uint8_t p = 1; p < 4; ++p) ASSERT_TRUE(m.sims[0]->is_player_dropped(p));
+        m.settle();
+        ASSERT_TRUE(m.survivors_equal(0));                                   // the guests agree with each other
+        ASSERT_TRUE(m.sims[1]->is_player_dropped(0));
+    } TEST_END();
+
+    TEST_CASE("N2.31 Host Migration: A Guest Whose Own Link To The Host Broke While The Host Lives For The Others Is Lost, Not A New Host") {
+        Mesh m(12, 4, same_link({30, 0}));
+        m.run(3000);
+        m.cut_link(0, 3);                                                    // only seat 3 loses the host
+        m.run(12000);
+        ASSERT_EQ(m.promotions, 0);                                          // nobody took over: the host is alive for seats 1 and 2
+        ASSERT_TRUE(m.clients[3]->lost());
+        ASSERT_EQ(m.clients[1]->mode(), ClientSession::Mode::Normal);
+        ASSERT_EQ(m.clients[2]->mode(), ClientSession::Mode::Normal);
+        ASSERT_EQ(m.clients[1]->host_seat(), 0);
+        m.settle();
+        ASSERT_TRUE(m.survivors_equal());
+        for (uint8_t s = 0; s < 3; ++s) ASSERT_TRUE(m.sims[s]->is_player_dropped(3));   // the host dropped the one it lost
+        ASSERT_FALSE(m.sims[0]->is_player_dropped(1) || m.sims[0]->is_player_dropped(2));
+    } TEST_END();
+
+    TEST_CASE("N2.32 Host Migration: Chat, Leaving And Commands All Work Through The New Host") {
+        Mesh m(13, 4, same_link({30, 5}));
+        m.run(3000);
+        m.kill(0);
+        m.run(4000);
+        ASSERT_EQ(m.promotions, 1);
+        ASSERT_TRUE(m.clients[3]->chat("still here", false));
+        m.hosts[1]->chat_local("the host of the rest", true);
+        m.run(1000);
+        for (uint8_t s = 1; s < 4; ++s) {
+            bool a = false, b = false;
+            for (const ChatMsg& c : m.chats[s]) {
+                if (c.text == "still here") a = c.sender == 3 && !c.team;
+                if (c.text == "the host of the rest") b = c.sender == 1 && c.team;
+            }
+            ASSERT_TRUE(a && b);
+        }
+        m.clients[2]->leave();                                               // seat 2 quits: the new host drops it
+        m.run(2000);
+        ASSERT_FALSE(m.hosts[1]->client_present(2));
+        ASSERT_TRUE(m.hosts[1]->client_present(3));
+        m.settle();
+        ASSERT_TRUE(m.sims[1]->is_player_dropped(2));
+        ASSERT_TRUE(m.sims[3]->is_player_dropped(2));
+        ASSERT_TRUE(m.sims[1]->state_hash() == m.sims[3]->state_hash());
+    } TEST_END();
+
+    TEST_CASE("N2.33 Host Migration: The Host Changes Three Times In A Row; The Last Guest Ends Up Alone And Identical To What It Saw") {
+        Mesh m(14, 4, same_link({30, 5}));
+        m.run(4000);
+        m.kill(0);
+        m.run(5000);
+        ASSERT_EQ(m.promotions, 1);
+        ASSERT_EQ(m.hosts[1]->epoch(), 1);
+        m.kill(1);
+        m.run(6000);
+        ASSERT_EQ(m.promotions, 2);
+        ASSERT_TRUE(m.hosts[2] != nullptr);
+        ASSERT_EQ(m.hosts[2]->epoch(), 2);
+        ASSERT_EQ(m.clients[3]->host_seat(), 2);
+        ASSERT_EQ(m.clients[3]->epoch(), 2);
+        m.run(1000);
+        m.settle();
+        ASSERT_TRUE(m.survivors_equal());                                    // seats 2 and 3, after two changes of host
+        for (uint8_t s = 2; s < 4; ++s) ASSERT_TRUE(m.sims[s]->is_player_dropped(0) && m.sims[s]->is_player_dropped(1));
+    } TEST_END();
+
+    TEST_CASE("N2.34 Host Migration: The Session Ignores Proposals That Are Stale, Forged, From The Wrong Election Or Made While Its Host Lives") {
+        LoopbackNetwork net(3);
+        sim::SimulationEngine sim;
+        build_world(sim, 1);
+        ClientSession::Config cfg;
+        cfg.player = 2;
+        cfg.host = 0;
+        ClientSession c(sim, cfg);
+        auto host_link = net.connect({5, 0});
+        auto peer1 = net.connect({5, 0});                                    // the link to seat 1
+        auto peer3 = net.connect({5, 0});                                    // the link to seat 3
+        c.set_connection(host_link.second);
+        c.set_peer(1, peer1.second);
+        c.set_peer(3, peer3.second);
+        c.start(0);
+        uint32_t now = 0;
+        bool host_talks = true;
+        auto step = [&](uint32_t ms) {
+            for (uint32_t i = 0; i < ms; i += 10) {
+                now += 10;
+                net.set_time(now);
+                if (host_talks && now % 500 == 0) host_link.first->send(encode_pong(PingMsg{1, 0}));   // a live host talks every half second
+                c.update(now);
+            }
+        };
+        auto drain = [](Connection* end) {
+            std::vector<std::vector<uint8_t>> out;
+            std::vector<uint8_t> m;
+            while (end->poll(m)) out.push_back(m);
+            return out;
+        };
+        auto only_pings = [](const std::vector<std::vector<uint8_t>>& msgs) {
+            for (const auto& m : msgs) {
+                if (peek_type(m) != MsgType::Ping) return false;
+            }
+            return true;
+        };
+        step(1000);
+        drain(peer1.first);
+        drain(peer3.first);
+        // a proposal of the right election while the host lives for us: refused, naming the host
+        peer1.first->send(encode(ProposeMsg{1, 1}));
+        step(100);
+        RefuseMsg refuse;
+        bool refused = false;
+        for (const auto& m : drain(peer1.first)) refused = refused || (peek_type(m) == MsgType::Refuse && decode(m, refuse));
+        ASSERT_TRUE(refused && refuse.epoch == 1 && refuse.lowest == 0);
+        ASSERT_EQ(c.mode(), ClientSession::Mode::Normal);
+        // a wrong election, a candidate that is not the seat of the link, a Resume although the host lives: no answer, nothing changes
+        peer1.first->send(encode(ProposeMsg{2, 1}));
+        peer1.first->send(encode(ProposeMsg{0, 1}));
+        peer1.first->send(encode(ProposeMsg{1, 3}));                         // seat 1's link claims to be seat 3 ...
+        peer3.first->send(encode(ProposeMsg{1, 1}));                         // ... and seat 3's link claims to be seat 1
+        peer1.first->send(encode(ResumeMsg{1, 1, 0}));
+        step(100);
+        ASSERT_TRUE(only_pings(drain(peer1.first)));
+        ASSERT_TRUE(only_pings(drain(peer3.first)));
+        ASSERT_EQ(c.mode(), ClientSession::Mode::Normal);
+        ASSERT_EQ(c.host_seat(), 0);
+        // the host falls silent (for longer than "alive", shorter than "gone"): the proposal of the lowest seat is accepted
+        host_talks = false;
+        step(2500);
+        ASSERT_EQ(c.mode(), ClientSession::Mode::Normal);
+        drain(peer1.first);
+        peer1.first->send(encode(ProposeMsg{1, 1}));
+        step(100);
+        AcceptMsg accept;
+        bool accepted = false;
+        for (const auto& m : drain(peer1.first)) accepted = accepted || (peek_type(m) == MsgType::Accept && decode(m, accept));
+        ASSERT_TRUE(accepted && accept.epoch == 1 && accept.next_receive == 0 && accept.next_execute == 0);
+        ASSERT_EQ(c.mode(), ClientSession::Mode::Following);
+        // one candidate per election: seat 3 is refused, naming the seat that has been accepted; its Resume does not count
+        drain(peer3.first);
+        peer3.first->send(encode(ProposeMsg{1, 3}));
+        peer3.first->send(encode(ResumeMsg{1, 3, 0}));
+        step(100);
+        refused = false;
+        for (const auto& m : drain(peer3.first)) refused = refused || (peek_type(m) == MsgType::Refuse && decode(m, refuse));
+        ASSERT_TRUE(refused && refuse.lowest == 1);
+        ASSERT_EQ(c.mode(), ClientSession::Mode::Following);
+        // the accepted candidate's Resume ends the election: its link is the host link from now on
+        peer1.first->send(encode(ResumeMsg{1, 1, 0}));
+        step(100);
+        ASSERT_EQ(c.mode(), ClientSession::Mode::Normal);
+        ASSERT_EQ(c.host_seat(), 1);
+        ASSERT_EQ(c.epoch(), 1);
+        drain(peer1.first);
+        ASSERT_TRUE(c.submit(cmd(CommandType::Hatch, 2)));
+        step(50);
+        bool command_seen = false;
+        for (const auto& m : drain(peer1.first)) command_seen = command_seen || peek_type(m) == MsgType::Command;
+        ASSERT_TRUE(command_seen);                                           // commands go to the new host now
+    } TEST_END();
+
+    TEST_CASE("N2.35 Host Migration: 20000 Garbage Messages On The Links Between Guests Change Nothing While The Host Lives") {
+        Mesh m(15, 4, same_link({25, 0}));
+        Lcg rng(4242);
+        m.run(2000);
+        for (int i = 0; i < 20000; ++i) {
+            std::vector<uint8_t> buf(rng.below(30));
+            for (auto& x : buf) x = static_cast<uint8_t>(rng.below(256));
+            if (!buf.empty() && rng.below(2) == 0) buf[0] = static_cast<uint8_t>(18 + rng.below(6));   // a migration message type
+            const uint8_t from = static_cast<uint8_t>(1 + rng.below(3));
+            uint8_t to = static_cast<uint8_t>(1 + rng.below(3));
+            if (to == from) to = static_cast<uint8_t>(from % 3 + 1);
+            m.link[from][to]->send(buf);
+            if (i % 200 == 0) m.run(100);
+        }
+        m.run(4000);
+        ASSERT_EQ(m.promotions, 0);
+        for (uint8_t s = 1; s < 4; ++s) ASSERT_EQ(m.clients[s]->mode(), ClientSession::Mode::Normal);
+        m.settle();
+        ASSERT_TRUE(m.survivors_equal());
+        for (uint8_t s = 0; s < 4; ++s) {
+            for (uint8_t p = 0; p < 4; ++p) ASSERT_FALSE(m.sims[s]->is_player_dropped(p));
+        }
+    } TEST_END();
+
+    TEST_CASE("N2.36 Turn Log: The Runner Remembers The Last 300 Turns, In Order; Older And Future Turns Are Not There; The Sequencer Resumes Where Told") {
+        sim::SimulationEngine sim;
+        build_world(sim, 1);
+        LockstepRunner runner(sim);
+        ASSERT_TRUE(runner.logged_turn(0) == nullptr);
+        for (uint32_t t = 0; t < 350; ++t) {
+            TurnMsg turn;
+            turn.turn = t;
+            turn.commands = {cmd(CommandType::Hatch, static_cast<uint8_t>(t % 4))};
+            ASSERT_TRUE(runner.on_turn(turn));
+        }
+        ASSERT_TRUE(runner.logged_turn(49) == nullptr);                      // 350 received, the log holds 300: turns 50 ..349
+        ASSERT_TRUE(runner.logged_turn(50) != nullptr && runner.logged_turn(50)->turn == 50);
+        ASSERT_TRUE(runner.logged_turn(349) != nullptr && runner.logged_turn(349)->turn == 349);
+        ASSERT_EQ(runner.logged_turn(349)->commands[0].issuer, 1);
+        ASSERT_TRUE(runner.logged_turn(350) == nullptr);
+        TurnMsg gap;
+        gap.turn = 352;
+        ASSERT_FALSE(runner.on_turn(gap));                                   // a gap is refused and not logged
+        ASSERT_TRUE(runner.logged_turn(352) == nullptr);
+        // the sequencer of a new host: continues at the turn it is told, forgets what was queued, knows how far the others got
+        Sequencer seq;
+        seq.set_active(0, true);
+        seq.set_active(1, true);
+        ASSERT_TRUE(seq.submit(1, cmd(CommandType::Hatch, 1)));
+        seq.seal();
+        seq.seal();
+        ASSERT_TRUE(seq.submit(1, cmd(CommandType::Hatch, 1)));
+        seq.on_hash(1, 9, sim::StateHash{1, 1, 1, 1, 1, 1, 1, 1});
+        seq.resume(500);
+        ASSERT_EQ(seq.next_turn(), 500u);
+        ASSERT_EQ(seq.queued(), 0u);
+        ASSERT_EQ(seq.acked(1), 0u);
+        ASSERT_FALSE(seq.is_active(0) || seq.is_active(1));                  // the survivors are activated again by the new host
+        seq.set_active(0, true);
+        seq.set_active(1, true);
+        ASSERT_EQ(seq.acked(1), 500u);                                       // level with the sequencer until told otherwise
+        seq.set_acked(1, 480);
+        ASSERT_EQ(seq.acked(1), 480u);
+        seq.set_acked(1, 900);                                               // never beyond what was sealed
+        ASSERT_EQ(seq.acked(1), 500u);
+        seq.set_acked(1, 480);
+        ASSERT_TRUE(seq.can_seal());                                         // 20 turns behind is within the flow-control bound ...
+        for (uint32_t i = 0; i < 11; ++i) seq.seal();
+        ASSERT_FALSE(seq.can_seal());                                        // ... 31 is beyond it: the peer is the laggard that holds the game up
+        ASSERT_EQ(seq.laggard(), 1);
+        ASSERT_EQ(seq.seal().turn, 511u);
+    } TEST_END();
+}
+
 }  // namespace
 
 int main() {
@@ -929,6 +1637,7 @@ int main() {
     run_match_tests();
     run_failure_tests();
     run_dropout_tests();
+    run_migration_tests();
     std::cout << "\n=======================================================\n Total Test Cases: " << g_test_count << "\n Total Assertions: " << g_assert_count
               << "\n Failed:           " << g_test_failures << "\n=======================================================\n";
     return g_test_failures == 0 ? 0 : 1;

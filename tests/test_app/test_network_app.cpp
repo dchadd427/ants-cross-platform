@@ -6,11 +6,13 @@
 #include "ants_net/netgame.hpp"
 #include "ants_net/protocol.hpp"
 #include "ants_sim/game_strings.hpp"
+#include "ants_sim/movement_tables.hpp"
 #include "ants_sim/sim_engine.hpp"
 
 #include <algorithm>
 #include <chrono>
 #include <cstdint>
+#include <cstdlib>
 #include <cstring>
 #include <deque>
 #include <functional>
@@ -125,6 +127,31 @@ struct Duo {
     }
 };
 
+// The application and two bare machines, stepped together in 10 ms of game time
+struct Trio {
+    Application& app;
+    Peer& first;
+    Peer& second;
+    void step(uint32_t ms) {
+        for (uint32_t t = 0; t < ms; t += 10) {
+            app.pump_network(0.010f);
+            app.update_simulation(0.010f);
+            first.now += 10;
+            first.update();
+            second.now += 10;
+            second.update();
+            std::this_thread::sleep_for(std::chrono::microseconds(300));
+        }
+    }
+    bool until(const std::function<bool()>& cond, uint32_t max_ms) {
+        for (uint32_t t = 0; t < max_ms; t += 10) {
+            if (cond()) return true;
+            step(10);
+        }
+        return cond();
+    }
+};
+
 ApplicationConfig headless_config() {
     ApplicationConfig cfg;
     cfg.headless = true;
@@ -154,6 +181,28 @@ Command order(uint8_t seat, uint32_t ant, int16_t x, int16_t y) {
     c.tile_y = y;
     c.ants = {ant};
     return c;
+}
+
+// An open ground tile near a team's hill: a goal that the path finder accepts
+bool open_goal_near_hill(const sim::SimulationEngine& sim, uint8_t team, int16_t& gx, int16_t& gy) {
+    const auto* hill = sim.grid().find_anthill(team);
+    if (hill == nullptr) return false;
+    for (int32_t d = 4; d <= 14; ++d) {
+        for (int32_t dy = -d; dy <= d; ++dy) {
+            for (int32_t dx = -d; dx <= d; ++dx) {
+                if (std::max(std::abs(dx), std::abs(dy)) != d) continue;
+                const sim::TileCoord t{static_cast<int32_t>(hill->x) + 2 + dx, static_cast<int32_t>(hill->y) + 2 + dy};
+                if (!sim.grid().in_bounds(t) || sim.grid().is_solid_obstacle(t.x, t.y) || sim.grid().is_solid_object(t) ||
+                    sim.grid().terrain_class_at(t) == sim::movement::kTerrainWater) {
+                    continue;
+                }
+                gx = static_cast<int16_t>(t.x);
+                gy = static_cast<int16_t>(t.y);
+                return true;
+            }
+        }
+    }
+    return false;
 }
 
 std::vector<uint32_t> ants_of(const sim::SimulationEngine& s, uint8_t player) {
@@ -394,11 +443,22 @@ void run_guest_tests() {
         ASSERT_TRUE(app.sim().state_hash() == host.sim.state_hash());                    // the whole pipeline, bit-identical
         ASSERT_FALSE(app.net()->desynced());
         ASSERT_EQ(app.sim().current_tick(), host.sim.current_tick());
-        // the host leaves: the guest is told and returns to the local setup screen with the message
+        // the host leaves: the only guest takes over and the match goes on (host migration), the old host's team drops out
+        const uint32_t before = app.net()->turns_executed();
         host.net.leave();
-        ASSERT_TRUE(duo.until([&]() { return !app.network_active(); }, 8000));
+        ASSERT_TRUE(duo.until([&]() { return app.net()->is_host(); }, 8000));
+        ASSERT_TRUE(app.network_active());
+        ASSERT_EQ(app.state(), AppState::Playing);
+        ASSERT_EQ(app.net()->match_notice(), "You are the host now.");
+        app.render_frame();                                                               // the overlay draws the notice
+        duo.step(3000);
+        ASSERT_TRUE(app.net()->turns_executed() > before + 20);
+        ASSERT_TRUE(app.sim().is_player_dropped(0));
+        ASSERT_FALSE(app.sim().is_player_dropped(1));
+        // the player leaves the match: back to the local setup screen
+        app.return_to_map_select();
+        ASSERT_FALSE(app.network_active());
         ASSERT_EQ(app.state(), AppState::MapSelect);
-        ASSERT_EQ(app.map_select().room().status, "The host left the game.");
         ASSERT_FALSE(app.map_select().room().networked);
         ASSERT_TRUE(app.map_select().can_change_setup());                                 // a local setup screen again
     } TEST_END();
@@ -426,6 +486,64 @@ void run_guest_tests() {
         ASSERT_EQ(app.net()->phase(), net::NetGame::Phase::Room);
         ASSERT_TRUE(app.map_select().room().status.find("SMALL.LVL") != std::string::npos);
         ASSERT_TRUE(host.net.status_text().find("Bob") != std::string::npos);
+    } TEST_END();
+
+    TEST_CASE("N5.6 Guest: When The Host Leaves A Three-Player Match The Application Follows The Lowest Other Seat, Says So, And Stays Identical To The New Host") {
+        Peer host;
+        ASSERT_TRUE(host.net.host(0, "Alice", true));
+        Peer bob;
+        ASSERT_TRUE(bob.net.join("127.0.0.1", host.net.listen_port(), "Bob"));
+        for (int i = 0; i < 800 && bob.net.phase() != net::NetGame::Phase::Room; ++i) {          // Bob is seated first (seat 1), the application second
+            host.now += 10;
+            host.update();
+            bob.now += 10;
+            bob.update();
+            std::this_thread::sleep_for(std::chrono::microseconds(300));
+        }
+        ASSERT_TRUE(bob.net.phase() == net::NetGame::Phase::Room && bob.net.my_seat() == 1);
+        ApplicationConfig cfg = headless_config();
+        cfg.net_role = ApplicationConfig::NetRole::Join;
+        cfg.net_address = "127.0.0.1";
+        cfg.net_port = host.net.listen_port();
+        cfg.player_name = "Carol";
+        Application app;
+        ASSERT_TRUE(app.init(cfg));
+        Trio trio{app, host, bob};
+        ASSERT_TRUE(trio.until([&]() { return app.net()->phase() == net::NetGame::Phase::Room && app.net()->my_seat() == 2 && host.net.can_start(); }, 8000));
+        host.net.set_map("SMALL.LVL");
+        trio.step(200);
+        uint64_t hash = 0;
+        ASSERT_TRUE(net::hash_file(maps_dir() + "SMALL.LVL", hash));
+        ASSERT_TRUE(host.net.start_match(77, hash));
+        ASSERT_TRUE(trio.until([&]() {
+            return app.state() == AppState::Playing && host.net.phase() == net::NetGame::Phase::Playing && bob.net.phase() == net::NetGame::Phase::Playing;
+        }, 8000));
+        ASSERT_EQ(app.local_player_id(), 2);
+        trio.step(3000);
+        host.net.leave();
+        ASSERT_TRUE(trio.until([&]() { return bob.net.is_host() && app.net()->host_seat() == 1; }, 10000));
+        ASSERT_EQ(app.state(), AppState::Playing);
+        ASSERT_TRUE(app.network_active());
+        ASSERT_FALSE(app.net()->is_host());
+        ASSERT_EQ(app.net()->match_notice(), "Bob is the host now.");
+        app.render_frame();                                                               // the overlay draws the notice
+        // the game goes on with the two of them: the old host is dropped everywhere, an order of the application reaches Bob's simulation
+        const uint32_t before = app.net()->turns_executed();
+        trio.step(2000);
+        ASSERT_TRUE(app.net()->turns_executed() > before + 10);
+        ASSERT_TRUE(app.sim().is_player_dropped(0) && bob.sim.is_player_dropped(0));
+        ASSERT_FALSE(app.sim().is_player_dropped(1) || app.sim().is_player_dropped(2));
+        const auto mine = ants_of(app.sim(), 2);
+        ASSERT_FALSE(mine.empty());
+        int16_t gx = 0, gy = 0;
+        ASSERT_TRUE(open_goal_near_hill(app.sim(), 2, gx, gy));
+        app.net()->submit(order(2, mine[0], gx, gy));
+        trio.step(2000);
+        ASSERT_EQ(bob.sim.get_unit(mine[0]).orig_order, sim::AntUnit::kOrderMove);
+        bob.net.freeze();
+        trio.step(3000);
+        ASSERT_TRUE(app.sim().state_hash() == bob.sim.state_hash());
+        ASSERT_FALSE(app.net()->desynced());
     } TEST_END();
 }
 

@@ -13,8 +13,36 @@ Ground truth for every entry is in [`docs/GAME_REVERSE_ENGINEERING.md`](docs/GAM
 
 ## Unreleased
 
-- Fixed: the setup screen's status line follows a state change at once. The notice of a map that could not be loaded appeared one frame late, which made a network test fail one time in six.
-- The v0.0.46 commit was missing `tests/test_net/test_netgame.cpp`; it was added in the next commit and the pushed tree was checked with a clean clone (configure, build, run the new suites).
+- (nothing yet)
+
+## v0.0.47 - 2026-09-29 - Network port: host migration (the match goes on when the host leaves)
+
+- **Host migration**: as in the original, where nobody is special once a match runs, the host may leave (or crash, or lose its network) and the others play on. Every machine already holds the whole simulation, so
+  only the role of sealing turns moves. While the map loads every guest connects to the guests above its seat (it announces a port in its `Hello`, the host passes the addresses on in `Start`, an inbound link says
+  `PeerHello{seat}` and is accepted only from a lower seat of the roster, once, from the address the host reported); every machine keeps the last 300 turns (30 s).
+- **Detection and election**: the host's connection closes (everything it sent before is read first) or it is silent for 10 s. The guests elect the lowest seat they still see alive: it proposes `epoch + 1`, every
+  guest accepts the lowest seat it sees alive (one candidate per election) or names the lower seat that lives, a guest that had not noticed yet that the host is gone is asked again after a second (three such
+  refusals mean that only this machine lost the host: it stops), a guest that does not answer within 3 s is given up, an election that lasts 30 s ends. A link speaks only for its own seat and messages of another
+  election are ignored.
+- **Resync**: the winner takes the highest position that the accepting guests report, fetches the turns it lacks from the one that has them (a source that dies is given up), becomes the host with the same runner
+  (`promote_to_host`), sends every follower the new host's `Resume` and the turns it lacks, and seals on from there. Its first turn drops the old host and every seat that did not follow, so all machines drop them at
+  the same tick. Orders given in the last ~300 ms before the host went are lost (`NetGame::submit` reports them as ignored while there is no host, so no acknowledgement sounds).
+- **In the game**: the overlay says "The host left. Choosing a new host..." while it happens and "Bob is the host now." (or "You are the host now.") for five seconds afterwards; the events `HostChanged` and
+  `PlayerLeft` report it, `HostLeft` now only means that no new host could be agreed (the match returns to the setup screen with "The connection to the other players was lost."); a match with one machine left goes
+  on for it alone; once the match is over (`freeze()`) a leaving host is no reason to elect anybody.
+- **Protocol version 3**: `Hello` carries the guest's listen port, `Start` carries the guests' endpoints, six new messages (`Propose`, `Accept`, `Refuse`, `Resume`, `Request`, `PeerHello`), every decoder checks its
+  ranges (seats, positions, addresses). `Sequencer::resume` starts a new host's sequencer at the resume turn with nobody active.
+- **Fixed**: the setup screen's status line follows a state change at once (the notice of a map that could not be loaded appeared one frame late, which made a network test fail one time in six). The v0.0.46 commit
+  was missing `tests/test_net/test_netgame.cpp`; it was added in the next commit and the pushed tree was checked with a clean clone.
+- **Docs**: `docs/NETWORK_PORT.md` (host migration as built: messages, timings, limits), README (network section, roadmap, test table with the real counts).
+- **Limits**: a host that dies in the first second of the match (before the links between guests exist) can split it; guests must reach each other on the addresses the host saw (a LAN, a VPN or forwarded ports;
+  the WebRTC transport will remove this); commands in flight are lost; two groups that cannot reach each other each play on for themselves.
+- Tests: `test_lockstep` N2.22 - N2.36 (the simulated network: the host dying abruptly and silently, two seats dying together, the successor or the only holder of the missing turns dying mid-election, guests behind or
+  ahead of the new host, a silent guest, a partitioned old host, a guest whose own link broke, chat / leave / commands through the new host, three host changes in a row, 20000 garbage messages, the turn log and
+  the sequencer's resume), `test_netgame` N3.9 - N3.12 (over real sockets: three- and four-player matches, no election after the match is over, strangers on a guest's port), `test_network_app` N5.6 (the application
+  follows the new host). **Rewritten tests** (the behaviour they pinned, "the host leaving ends the match for the guests", is gone by design): `test_netgame` N3.7 (now: the only guest takes over and plays on),
+  the last part of `test_network_app` N5.4 (same); extended: N2.1 - N2.3 (the new messages, unknown types start at 24, the fuzzer's type bytes cover them), the version assertion of 12.108; N4.6's forged `Start`
+  is built field by field (a compiler warning).
 
 ## v0.0.46 - 2026-09-29 - Network port: the game meets the network
 

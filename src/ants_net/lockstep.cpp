@@ -7,8 +7,16 @@ namespace ants::net {
 bool LockstepRunner::on_turn(TurnMsg turn) {
     if (turn.turn != next_receive_ || turn.commands.size() > kMaxTurnCommands) return false;
     ++next_receive_;
+    log_.push_back(turn);
+    if (log_.size() > kTurnLogTurns) log_.pop_front();
     queue_.push_back(std::move(turn));
     return true;
+}
+
+const TurnMsg* LockstepRunner::logged_turn(uint32_t turn) const noexcept {
+    if (log_.empty() || turn >= next_receive_) return nullptr;
+    const uint32_t first = next_receive_ - static_cast<uint32_t>(log_.size());
+    return turn >= first ? &log_[turn - first] : nullptr;
 }
 
 std::vector<LockstepRunner::Executed> LockstepRunner::update(uint32_t dt_ms) {

@@ -28,6 +28,20 @@ void Sequencer::submit_system(sim::Command command) {
     queue_.push_back(std::move(command));
 }
 
+void Sequencer::resume(uint32_t next_turn) {
+    next_turn_ = next_turn;
+    queue_.clear();
+    queued_by_.fill(0);
+    reports_.clear();
+    have_report_.clear();
+    acked_.fill(0);
+    active_.fill(false);                             // the new host activates the peers that follow it, one by one
+}
+
+void Sequencer::set_acked(uint8_t player, uint32_t next_to_execute) {
+    if (player < sim::MAX_PLAYERS) acked_[player] = std::min(next_to_execute, next_turn_);
+}
+
 void Sequencer::on_ack(uint8_t player, uint32_t turn) {
     if (player >= sim::MAX_PLAYERS) return;
     // "executed turn t" means that the next turn the peer needs is t + 1; acks only move forward and never past what was sealed

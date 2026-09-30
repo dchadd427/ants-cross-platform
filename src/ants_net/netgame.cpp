@@ -29,15 +29,44 @@ bool hash_file(const std::string& path, uint64_t& out) {
 
 struct NetGame::Transport {
 #ifndef __EMSCRIPTEN__
+    struct PendingPeer {
+        std::unique_ptr<TcpConnection> conn;
+        uint8_t seat{255};                                  // outbound: the seat we connect to; inbound: known after its PeerHello
+        bool inbound{true};
+        uint32_t since_ms{0};
+    };
+    struct PeerLink {
+        std::unique_ptr<TcpConnection> conn;
+        uint8_t seat{255};
+        bool attached{false};                               // handed to the ClientSession
+    };
     std::unique_ptr<TcpListener> listener;                  // host: the room's door (closed when the match begins: no late join)
     std::vector<std::unique_ptr<TcpConnection>> guests;     // host: every accepted connection (the lobby and the session borrow them)
     std::unique_ptr<TcpConnection> uplink;                  // client: the connection to the host
+    std::unique_ptr<TcpListener> peer_listener;             // client: where the other guests connect (host migration)
+    std::vector<PendingPeer> pending_peers;                 // client: links to the other guests that are being made
+    std::vector<PeerLink> peers;                            // client: the links that are made (the session and, after a host change, the new HostSession borrow them)
 #endif
 };
 
 namespace {
 
 namespace str = ants::sim::strings;
+
+constexpr uint32_t kPeerLinkTimeoutMs = 20000;             // a link between guests that is not made in this time is given up
+
+#ifndef __EMSCRIPTEN__
+// The address of "a.b.c.d:port" or "[v6]:port" without the port and the brackets
+std::string host_part(const std::string& peer) {
+    if (peer.empty()) return std::string();
+    if (peer[0] == '[') {
+        const size_t end = peer.find(']');
+        return end == std::string::npos ? std::string() : peer.substr(1, end - 1);
+    }
+    const size_t colon = peer.rfind(':');
+    return colon == std::string::npos ? peer : peer.substr(0, colon);
+}
+#endif
 
 // Why a join failed: the original's words where it has them (dropped from the game, unable to connect), the remake's for the rest
 std::string reject_text(RejectReason r) {
@@ -67,6 +96,7 @@ void NetGame::shutdown_transport() {
             if (c) c->close();
         }
         if (transport_->uplink) transport_->uplink->close();
+        close_peer_links();
 #endif
         transport_.reset();
     }
@@ -114,8 +144,11 @@ bool NetGame::join(const std::string& address, uint16_t port, const std::string&
     if (!conn) return false;
     transport_ = std::make_unique<Transport>();
     transport_->uplink = std::move(conn);
+    transport_->peer_listener = TcpListener::listen(0, false);          // where the other guests reach us during the match (host migration)
+    peer_port_ = transport_->peer_listener ? transport_->peer_listener->port() : uint16_t{0};
     ClientLobby::Config cfg;
     cfg.name = name;
+    cfg.listen_port = peer_port_;
     client_lobby_ = std::make_unique<ClientLobby>(transport_->uplink.get(), cfg);
     role_ = Role::Client;
     phase_ = Phase::Connecting;
@@ -198,7 +231,7 @@ void NetGame::update_host() {
 #ifndef __EMSCRIPTEN__
     if ((phase_ == Phase::Room || phase_ == Phase::Loading) && transport_ && transport_->listener) {
         while (auto conn = transport_->listener->accept()) {
-            host_lobby_->add_connection(conn.get(), now_);
+            host_lobby_->add_connection(conn.get(), now_, host_part(conn->peer()));
             transport_->guests.push_back(std::move(conn));
         }
     }
@@ -236,13 +269,15 @@ void NetGame::update_host() {
             if (phase_ == Phase::Playing) break;
         }
     }
-    if (phase_ == Phase::Playing && host_session_) {
-        host_session_->update(now_);
-        if (!desync_reported_ && !host_session_->desyncs().empty()) {
-            desync_reported_ = true;
-            status_ = "The game is out of sync.";
-            events_.push_back(Event{Event::Type::Desync, host_session_->desyncs()[0].player});
-        }
+    if (phase_ == Phase::Playing && host_session_) update_host_session();
+}
+
+void NetGame::update_host_session() {
+    host_session_->update(now_);
+    if (!desync_reported_ && !host_session_->desyncs().empty()) {
+        desync_reported_ = true;
+        status_ = "The game is out of sync.";
+        events_.push_back(Event{Event::Type::Desync, host_session_->desyncs()[0].player});
     }
 }
 
@@ -265,6 +300,7 @@ void NetGame::update_client() {
                     phase_since_ms_ = now_;
                     loaded_reported_ = false;
                     start_ = client_lobby_->start_info();
+                    begin_peer_links();                          // the links between guests are made while the map loads
                     events_.push_back(Event{Event::Type::StartRequested, 255});
                     break;
                 case ClientLobby::Event::Type::Begun:
@@ -274,6 +310,7 @@ void NetGame::update_client() {
                     phase_ = Phase::Room;
                     phase_since_ms_ = now_;
                     loaded_reported_ = false;
+                    close_peer_links();                          // a new Start makes new ones
                     const uint8_t who = client_lobby_->cancel_player();
                     if (client_lobby_->cancel_reason() == CancelMsg::Reason::LoadFailed && who < sim::MAX_PLAYERS) {
                         const std::string name = start_.names[who].empty() ? std::string("A player") : start_.names[who];
@@ -298,6 +335,7 @@ void NetGame::update_client() {
             if (phase_ == Phase::Playing || phase_ == Phase::Failed) break;
         }
     }
+    if (phase_ == Phase::Loading || phase_ == Phase::Playing) pump_peers();
     if (phase_ == Phase::Playing && client_session_) {
         client_session_->update(now_);
         if (!desync_reported_ && client_session_->desynced()) {
@@ -305,12 +343,141 @@ void NetGame::update_client() {
             status_ = "The game is out of sync.";
             events_.push_back(Event{Event::Type::Desync, client_session_->desync().player});
         }
-        if (!client_session_->connected()) {
+        if (client_session_->promoted()) {
+            promote();                                            // the host is gone and this machine is the lowest seat left
+        } else if (client_session_->lost()) {
             phase_ = Phase::Over;
-            status_ = "The host left the game.";
+            status_ = "The connection to the other players was lost.";
             events_.push_back(Event{Event::Type::HostLeft, 255});
+        } else if (client_session_->host_seat() != known_host_) {   // another guest took over and this one follows it
+            known_host_ = client_session_->host_seat();
+            const std::string& who = start_.names[known_host_];
+            set_notice((who.empty() ? std::string("Another player") : who) + " is the host now.");
+            events_.push_back(Event{Event::Type::HostChanged, known_host_});
         }
     }
+    if (phase_ == Phase::Playing && host_session_) update_host_session();    // a guest that took over
+}
+
+// This machine is the new host: the session keeps the runner (the simulation goes on where it stands), tells the guests that follow, and the old host
+// and the seats that did not follow are dropped by its first turn.
+void NetGame::promote() {
+    host_session_ = promote_to_host(*client_session_, sim_, HostSession::Config{}, now_, [this](HostSession& h) {
+        h.set_on_chat([this](const ChatMsg& m) {
+            if (on_chat_) on_chat_(m);
+        });
+    });
+    client_session_.reset();
+    if (!host_session_) {
+        phase_ = Phase::Over;
+        status_ = "The connection to the other players was lost.";
+        events_.push_back(Event{Event::Type::HostLeft, 255});
+        return;
+    }
+    known_host_ = seat_;
+#ifndef __EMSCRIPTEN__
+    if (transport_) {
+        transport_->peer_listener.reset();                       // nobody joins a match that runs
+        transport_->pending_peers.clear();
+    }
+#endif
+    set_notice("You are the host now.");
+    events_.push_back(Event{Event::Type::HostChanged, seat_});
+}
+
+// ---- the links between guests --------------------------------------------------------------------------------------------------------------------
+
+// A guest connects to every guest above its own seat (the ones below connect to it): one link per pair. The endpoints come with the roster.
+void NetGame::begin_peer_links() {
+#ifndef __EMSCRIPTEN__
+    if (!transport_) return;
+    close_peer_links();
+    uint8_t host = 0;
+    for (uint8_t s = 0; s < sim::MAX_PLAYERS; ++s) {
+        if (room_.slots[s].state == SlotState::Host) host = s;
+    }
+    for (uint8_t s = static_cast<uint8_t>(seat_ + 1); s < sim::MAX_PLAYERS; ++s) {
+        const Endpoint& e = start_.endpoints[s];
+        if (s == host || (start_.roster & (1u << s)) == 0 || e.address.empty() || e.port == 0) continue;
+        if (auto conn = TcpConnection::connect(e.address, e.port)) {
+            transport_->pending_peers.push_back(Transport::PendingPeer{std::move(conn), s, false, now_});
+        }
+    }
+#endif
+}
+
+void NetGame::close_peer_links() {
+#ifndef __EMSCRIPTEN__
+    if (!transport_) return;
+    for (auto& p : transport_->pending_peers) {
+        if (p.conn) p.conn->close();
+    }
+    for (auto& l : transport_->peers) {
+        if (l.conn) l.conn->close();
+    }
+    transport_->pending_peers.clear();
+    transport_->peers.clear();
+#endif
+}
+
+void NetGame::pump_peers() {
+#ifndef __EMSCRIPTEN__
+    if (!transport_) return;
+    Transport& t = *transport_;
+    if (t.peer_listener) {
+        while (auto conn = t.peer_listener->accept()) t.pending_peers.push_back(Transport::PendingPeer{std::move(conn), 255, true, now_});
+    }
+    const bool know_roster = phase_ == Phase::Loading || phase_ == Phase::Playing;      // an inbound link is judged by the roster, which arrives with Start
+    for (size_t i = 0; i < t.pending_peers.size();) {
+        Transport::PendingPeer& p = t.pending_peers[i];
+        bool done = false;
+        bool made = false;
+        if (p.inbound) {
+            std::vector<uint8_t> msg;
+            if (know_roster && p.conn->poll(msg)) {
+                PeerHelloMsg hello;
+                done = true;
+                if (decode(msg, hello)) {
+                    bool taken = false;
+                    for (const auto& l : t.peers) taken = taken || l.seat == hello.seat;
+                    // only the seats below ours connect to us, only a seat of the roster, only from the address the host reported for it
+                    made = !taken && hello.seat < seat_ && (start_.roster & (1u << hello.seat)) != 0 && start_.endpoints[hello.seat].port != 0 &&
+                           host_part(p.conn->peer()) == start_.endpoints[hello.seat].address;
+                    if (made) p.seat = hello.seat;
+                }
+                if (!made) p.conn->close();
+            } else if (!p.conn->is_open() && p.conn->state() != Connection::State::Connecting) {
+                done = true;
+            } else if (now_ - p.since_ms > kPeerLinkTimeoutMs) {
+                p.conn->close();
+                done = true;
+            }
+        } else {
+            std::vector<uint8_t> nothing;
+            p.conn->poll(nothing);                              // lets the connection that is being made progress
+            if (p.conn->is_open()) {
+                PeerHelloMsg hello;
+                hello.seat = seat_;
+                made = p.conn->send(encode(hello));
+                done = true;
+                if (!made) p.conn->close();
+            } else if (p.conn->state() != Connection::State::Connecting || now_ - p.since_ms > kPeerLinkTimeoutMs) {
+                p.conn->close();
+                done = true;
+            }
+        }
+        if (made) t.peers.push_back(Transport::PeerLink{std::move(p.conn), p.seat, false});
+        if (done) t.pending_peers.erase(t.pending_peers.begin() + static_cast<std::ptrdiff_t>(i));
+        else ++i;
+    }
+    if (client_session_) {                                      // links made before the match began are handed over once the session exists
+        for (auto& l : t.peers) {
+            if (l.attached) continue;
+            client_session_->set_peer(l.seat, l.conn.get());
+            l.attached = true;
+        }
+    }
+#endif
 }
 
 void NetGame::begin_match() {
@@ -323,15 +490,21 @@ void NetGame::begin_match() {
             if (Connection* c = host_lobby_->connection_of(s)) host_session_->add_client(s, c);
         }
         transport_->listener.reset();                       // no late join: the door closes when the match begins
+        known_host_ = seat_;
         install_hooks();
         host_session_->start(now_);
     } else {
         ClientSession::Config cc;
         cc.player = seat_;
+        for (uint8_t s = 0; s < sim::MAX_PLAYERS; ++s) {
+            if (room_.slots[s].state == SlotState::Host) cc.host = s;
+        }
+        known_host_ = cc.host;
         client_session_ = std::make_unique<ClientSession>(sim_, cc);
         client_session_->set_connection(transport_->uplink.get());
         install_hooks();
         client_session_->start(now_);
+        pump_peers();                                           // hands over the links that were made while the map loaded
     }
     phase_ = Phase::Playing;
     loaded_reported_ = false;
@@ -410,6 +583,7 @@ void NetGame::report_loaded(bool ok) {
         if (!ok) {                                                // a guest that cannot load is back in the room at once (the host cancels for everybody)
             phase_ = Phase::Room;
             phase_since_ms_ = now_;
+            close_peer_links();
             set_notice(str::format(str::kMapFileMissing, start_.map_name));
             events_.push_back(Event{Event::Type::Cancelled, seat_});
         }
@@ -426,8 +600,11 @@ sim::CommandResult NetGame::submit(const sim::Command& command) {
     c.issuer = seat_;
     result.ack_ant = sim_.predict_order_ack(c);                                                 // the immediate feedback of the click
     result.status = sim::CommandResult::Status::Applied;                                        // optimistic: the turn decides
-    if (host_session_) host_session_->submit_local(std::move(c));
-    else if (client_session_) client_session_->submit(std::move(c));
+    if (host_session_) {
+        host_session_->submit_local(std::move(c));
+    } else if (client_session_ && !client_session_->submit(std::move(c))) {
+        return sim::CommandResult{};                                                            // no host to send it to (a new one is being chosen): Ignored
+    }
     return result;
 }
 
@@ -440,6 +617,7 @@ void NetGame::chat(const std::string& text, bool team) {
 
 void NetGame::freeze() {
     if (host_session_) host_session_->freeze();
+    if (client_session_) client_session_->finish();              // the match is over: a host that leaves now is no loss
 }
 
 bool NetGame::stalled() const {
@@ -463,6 +641,10 @@ uint32_t NetGame::sub_tick_ms() const {
 }
 
 uint32_t NetGame::rtt_ms() const { return client_session_ ? client_session_->rtt_ms() : 0u; }
+
+bool NetGame::electing() const { return client_session_ && client_session_->electing(); }
+
+std::string NetGame::match_notice() const { return phase_ == Phase::Playing && now_ < notice_until_ms_ ? notice_ : std::string(); }
 
 uint32_t NetGame::turns_executed() const {
     const LockstepRunner* r = runner();

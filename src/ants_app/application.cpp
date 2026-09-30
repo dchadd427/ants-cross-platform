@@ -1012,8 +1012,8 @@ void Application::handle_net_events() {
             case net::NetGame::Event::Type::Begun:
                 net_begin_match();
                 break;
-            case net::NetGame::Event::Type::HostLeft:
-                net_notice_ = "The host left the game.";
+            case net::NetGame::Event::Type::HostLeft:                // the host is gone and no other machine could take over
+                net_notice_ = "The connection to the other players was lost.";
                 if (state_ == AppState::Playing && !scorecard_.is_open()) return_to_map_select();
                 break;
             case net::NetGame::Event::Type::Desync:
@@ -1073,6 +1073,8 @@ void Application::render_net_overlay() {
     if (net_->desynced()) {
         text = "Out of sync: the match has stopped.";
         colour = ants::assets::ColorRGBA{255, 90, 90, 255};
+    } else if (net_->electing()) {
+        text = "The host left. Choosing a new host...";                 // no turns arrive until the guests have agreed
     } else if (net_->stalled_ms() >= 1000) {
         text = "Waiting for the other players...";
         const uint8_t slow = net_->laggard();
@@ -1080,6 +1082,8 @@ void Application::render_net_overlay() {
             const std::string name = sim_.get_player_name(slow);
             if (!name.empty()) text = "Waiting for " + name + "...";
         }
+    } else {
+        text = net_->match_notice();                                    // "Bob is the host now." for a few seconds
     }
     if (text.empty()) return;
     const int32_t w = renderer_->get_text_width(text, FontSize::Small);

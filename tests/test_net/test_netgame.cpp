@@ -6,11 +6,13 @@
 #include "ants_net/netgame.hpp"
 #include "ants_net/tcp.hpp"
 #include "ants_sim/game_strings.hpp"
+#include "ants_sim/movement_tables.hpp"
 #include "ants_sim/sim_engine.hpp"
 
 #include <algorithm>
 #include <chrono>
 #include <cstdint>
+#include <cstdlib>
 #include <functional>
 #include <iomanip>
 #include <iostream>
@@ -183,6 +185,28 @@ uint32_t first_ant(Machine& m, uint8_t player) {
         if (a.player_id == player) return a.id;
     }
     return 0;
+}
+
+// An open ground tile near a team's hill: a goal that the path finder accepts (the tile just outside the hill is not open on every map)
+bool open_goal_near_hill(const sim::SimulationEngine& sim, uint8_t team, int16_t& gx, int16_t& gy) {
+    const auto* hill = sim.grid().find_anthill(team);
+    if (hill == nullptr) return false;
+    for (int32_t d = 4; d <= 14; ++d) {
+        for (int32_t dy = -d; dy <= d; ++dy) {
+            for (int32_t dx = -d; dx <= d; ++dx) {
+                if (std::max(std::abs(dx), std::abs(dy)) != d) continue;
+                const sim::TileCoord t{static_cast<int32_t>(hill->x) + 2 + dx, static_cast<int32_t>(hill->y) + 2 + dy};
+                if (!sim.grid().in_bounds(t) || sim.grid().is_solid_obstacle(t.x, t.y) || sim.grid().is_solid_object(t) ||
+                    sim.grid().terrain_class_at(t) == sim::movement::kTerrainWater) {
+                    continue;
+                }
+                gx = static_cast<int16_t>(t.x);
+                gy = static_cast<int16_t>(t.y);
+                return true;
+            }
+        }
+    }
+    return false;
 }
 
 bool everybody_playing(Table& t) {
@@ -466,7 +490,7 @@ void run_match_tests() {
         ASSERT_EQ(ants_of_carol, 0u);
     } TEST_END();
 
-    TEST_CASE("N3.7 Match: When The Host Leaves The Guests Are Told (the match cannot go on without a sequencer yet)") {
+    TEST_CASE("N3.7 Host Migration: When The Host Leaves A Two-Player Match The Guest Takes Over At Once And Plays On Alone") {
         Table t;
         ASSERT_TRUE(make_room(t, 1));
         Machine& host = *t.machines[0];
@@ -479,11 +503,25 @@ void run_match_tests() {
         host.net.leave();
         ASSERT_EQ(host.net.phase(), NetGame::Phase::Off);
         Machine& bob = *t.machines[1];
-        ASSERT_TRUE(t.run_until([&]() { return bob.net.phase() == NetGame::Phase::Over; }, 15000));
-        ASSERT_TRUE(bob.saw(NetGame::Event::Type::HostLeft));
-        ASSERT_FALSE(bob.net.status_text().empty());
-        // commands after the end are ignored, not fatal
-        ASSERT_EQ(bob.net.submit(order(1, first_ant(bob, 1), 3, 3)).status, sim::CommandResult::Status::Ignored);
+        ASSERT_TRUE(t.run_until([&]() { return bob.net.is_host(); }, 5000));         // nobody to ask: the guest is the host at once
+        ASSERT_EQ(bob.net.phase(), NetGame::Phase::Playing);
+        ASSERT_EQ(bob.net.host_seat(), 1);
+        ASSERT_EQ(bob.count(NetGame::Event::Type::HostChanged), 1u);
+        ASSERT_FALSE(bob.saw(NetGame::Event::Type::HostLeft));
+        ASSERT_TRUE(t.run_until([&]() { return bob.count(NetGame::Event::Type::PlayerLeft) == 1; }, 3000));      // the old host's team drops out
+        ASSERT_TRUE(bob.sim.is_player_dropped(0));
+        ASSERT_FALSE(bob.sim.is_player_dropped(1));
+        const uint32_t before = bob.net.turns_executed();
+        t.run(3000);
+        ASSERT_TRUE(bob.net.turns_executed() > before + 20);                        // the game goes on
+        // and the guest's own orders still reach its simulation
+        const uint32_t ant = first_ant(bob, 1);
+        const auto* hill = bob.sim.grid().find_anthill(1);
+        ASSERT_TRUE(hill != nullptr);
+        const sim::CommandResult r = bob.net.submit(order(1, ant, static_cast<int16_t>(hill->x + 4), static_cast<int16_t>(hill->y + 4)));
+        ASSERT_EQ(r.status, sim::CommandResult::Status::Applied);
+        t.run(1500);
+        ASSERT_EQ(bob.sim.get_unit(ant).orig_order, sim::AntUnit::kOrderMove);
     } TEST_END();
 
     TEST_CASE("N3.8 Match: Two Players On A Four-Player Map Have Two Teams Only, And The Command Sink Refuses What It Must") {
@@ -526,6 +564,169 @@ void run_match_tests() {
     } TEST_END();
 }
 
+
+void run_migration_tests() {
+    TEST_CASE("N3.9 Host Migration: The Host Leaves A Three-Player Match; The Lowest Guest Takes Over, The Other Follows, Orders And Chat Go Through The New Host, Both Stay Identical") {
+        Table t;
+        ASSERT_TRUE(make_room(t, 2));
+        Machine& host = *t.machines[0];
+        Machine& bob = *t.machines[1];
+        Machine& carol = *t.machines[2];
+        host.net.set_map("SMALL.LVL");
+        uint64_t hash = 0;
+        ASSERT_TRUE(hash_file(maps_dir() + "SMALL.LVL", hash));
+        // the guests know where to reach each other: the host passes on what the guests announced
+        ASSERT_TRUE(host.net.start_match(5, hash));
+        ASSERT_TRUE(host.net.start_info().endpoints[0].address.empty());
+        ASSERT_TRUE(host.net.start_info().endpoints[1].address == "127.0.0.1" && host.net.start_info().endpoints[1].port == bob.net.peer_port());
+        ASSERT_TRUE(host.net.start_info().endpoints[2].address == "127.0.0.1" && host.net.start_info().endpoints[2].port == carol.net.peer_port());
+        ASSERT_TRUE(bob.net.peer_port() != 0 && carol.net.peer_port() != 0 && bob.net.peer_port() != carol.net.peer_port());
+        ASSERT_TRUE(t.run_until([&]() { return everybody_playing(t); }, 5000));
+        t.run(4000);
+        bool electing_seen = false;
+        host.net.leave();
+        ASSERT_TRUE(t.run_until([&]() {
+            electing_seen = electing_seen || carol.net.electing();
+            return bob.net.is_host() && carol.net.host_seat() == 1;
+        }, 8000));
+        ASSERT_TRUE(electing_seen || carol.net.host_seat() == 1);                   // (the election may be over within a frame)
+        ASSERT_FALSE(carol.net.is_host());
+        ASSERT_EQ(carol.count(NetGame::Event::Type::HostChanged), 1u);
+        ASSERT_EQ(bob.count(NetGame::Event::Type::HostChanged), 1u);
+        for (const auto& e : carol.events) {
+            if (e.type == NetGame::Event::Type::HostChanged) ASSERT_EQ(e.seat, 1);
+        }
+        ASSERT_FALSE(carol.saw(NetGame::Event::Type::HostLeft));
+        // the old host drops out at the same tick on both machines
+        ASSERT_TRUE(t.run_until([&]() { return bob.count(NetGame::Event::Type::PlayerLeft) == 1 && carol.count(NetGame::Event::Type::PlayerLeft) == 1; }, 5000));
+        ASSERT_TRUE(bob.sim.is_player_dropped(0) && carol.sim.is_player_dropped(0));
+        ASSERT_EQ(bob.drop_ticks.size(), 1u);
+        ASSERT_EQ(bob.drop_ticks[0], carol.drop_ticks[0]);
+        // Carol's order goes through Bob and takes effect on both machines
+        const uint32_t ant = first_ant(carol, 2);
+        int16_t goal_x = 0, goal_y = 0;
+        ASSERT_TRUE(open_goal_near_hill(carol.sim, 2, goal_x, goal_y));
+        const sim::CommandResult r = carol.net.submit(order(2, ant, goal_x, goal_y));
+        ASSERT_EQ(r.status, sim::CommandResult::Status::Applied);
+        t.run(2000);
+        ASSERT_EQ(bob.sim.get_unit(ant).orig_order, sim::AntUnit::kOrderMove);
+        ASSERT_EQ(carol.sim.get_unit(ant).orig_order, sim::AntUnit::kOrderMove);
+        // chat both ways, the sender stamped by the connection
+        carol.net.chat("still here", false);
+        bob.net.chat("I host now", true);
+        t.run(1000);
+        for (Machine* m : {&bob, &carol}) {
+            bool a = false, b = false;
+            for (const ChatMsg& c : m->chats) {
+                if (c.text == "still here") a = c.sender == 2 && !c.team;
+                if (c.text == "I host now") b = c.sender == 1 && c.team;
+            }
+            ASSERT_TRUE(a && b);
+        }
+        bob.net.freeze();
+        t.run(3000);
+        ASSERT_TRUE(bob.sim.state_hash() == carol.sim.state_hash());
+        ASSERT_EQ(bob.sim.current_tick(), carol.sim.current_tick());
+        ASSERT_FALSE(bob.net.desynced() || carol.net.desynced());
+    } TEST_END();
+
+    TEST_CASE("N3.10 Host Migration: The Host And The Next Seat Leave Together; The Third Guest Takes Over And The Fourth Follows") {
+        Table t;
+        ASSERT_TRUE(make_room(t, 3));
+        Machine& host = *t.machines[0];
+        host.net.set_map("SMALL.LVL");
+        uint64_t hash = 0;
+        ASSERT_TRUE(hash_file(maps_dir() + "SMALL.LVL", hash));
+        ASSERT_TRUE(host.net.start_match(6, hash));
+        ASSERT_TRUE(t.run_until([&]() { return everybody_playing(t); }, 5000));
+        t.run(4000);
+        Machine& carol = *t.machines[2];
+        Machine& dave = *t.machines[3];
+        host.net.leave();
+        t.machines[1]->net.leave();
+        ASSERT_TRUE(t.run_until([&]() { return carol.net.is_host() && dave.net.host_seat() == 2; }, 10000));
+        ASSERT_TRUE(t.run_until([&]() { return carol.count(NetGame::Event::Type::PlayerLeft) == 2 && dave.count(NetGame::Event::Type::PlayerLeft) == 2; }, 5000));
+        for (Machine* m : {&carol, &dave}) {
+            ASSERT_TRUE(m->sim.is_player_dropped(0) && m->sim.is_player_dropped(1));
+            ASSERT_FALSE(m->sim.is_player_dropped(2) || m->sim.is_player_dropped(3));
+            ASSERT_EQ(m->count(NetGame::Event::Type::HostChanged), 1u);
+        }
+        ASSERT_EQ(carol.drop_ticks.size(), 2u);
+        ASSERT_TRUE(carol.drop_ticks == dave.drop_ticks);                           // both drops at the same ticks on both machines
+        const uint32_t before = dave.net.turns_executed();
+        t.run(3000);
+        ASSERT_TRUE(dave.net.turns_executed() > before + 20);
+        carol.net.freeze();
+        t.run(3000);
+        ASSERT_TRUE(carol.sim.state_hash() == dave.sim.state_hash());
+    } TEST_END();
+
+    TEST_CASE("N3.11 Host Migration: Once The Match Is Over A Host That Leaves Is No Reason To Look For A New One") {
+        Table t;
+        ASSERT_TRUE(make_room(t, 2));
+        Machine& host = *t.machines[0];
+        host.net.set_map("SMALL.LVL");
+        uint64_t hash = 0;
+        ASSERT_TRUE(hash_file(maps_dir() + "SMALL.LVL", hash));
+        ASSERT_TRUE(host.net.start_match(7, hash));
+        ASSERT_TRUE(t.run_until([&]() { return everybody_playing(t); }, 5000));
+        t.run(3000);
+        for (auto& m : t.machines) m->net.freeze();                                 // the application does this when the match is over
+        t.run(1000);
+        host.net.leave();
+        t.run(4000);
+        for (size_t i = 1; i < 3; ++i) {
+            ASSERT_FALSE(t.machines[i]->net.electing());
+            ASSERT_FALSE(t.machines[i]->net.is_host());
+            ASSERT_FALSE(t.machines[i]->saw(NetGame::Event::Type::HostChanged));
+            ASSERT_EQ(t.machines[i]->net.phase(), NetGame::Phase::Playing);
+        }
+    } TEST_END();
+
+    TEST_CASE("N3.12 Host Migration: A Stranger On A Guest's Port Cannot Take A Seat (wrong seat, taken seat, garbage); The Match Does Not Notice") {
+        Table t;
+        ASSERT_TRUE(make_room(t, 2));
+        Machine& host = *t.machines[0];
+        host.net.set_map("SMALL.LVL");
+        uint64_t hash = 0;
+        ASSERT_TRUE(hash_file(maps_dir() + "SMALL.LVL", hash));
+        ASSERT_TRUE(host.net.start_match(8, hash));
+        ASSERT_TRUE(t.run_until([&]() { return everybody_playing(t); }, 5000));
+        t.run(2000);
+        Machine& carol = *t.machines[2];                                            // seat 2: only seat 1 may connect to it
+        const std::vector<std::vector<uint8_t>> claims = {encode(PeerHelloMsg{3}),   // no such player
+                                                          encode(PeerHelloMsg{1}),   // seat 1 is linked already
+                                                          encode(PeerHelloMsg{2}),   // its own seat
+                                                          encode(PeerHelloMsg{0}),   // the host is no guest
+                                                          std::vector<uint8_t>{250, 1, 2, 3}};
+        for (const auto& claim : claims) {
+            auto stranger = TcpConnection::connect("127.0.0.1", carol.net.peer_port());
+            ASSERT_TRUE(stranger != nullptr);
+            bool sent = false;
+            ASSERT_TRUE(t.run_until([&]() {
+                std::vector<uint8_t> nothing;
+                stranger->poll(nothing);
+                if (stranger->is_open() && !sent) sent = stranger->send(claim);
+                return sent;
+            }, 3000));
+            ASSERT_TRUE(t.run_until([&]() {
+                std::vector<uint8_t> nothing;
+                stranger->poll(nothing);
+                return !stranger->is_open();
+            }, 3000));                                                                // thrown out
+        }
+        t.run(2000);
+        for (auto& m : t.machines) {
+            ASSERT_FALSE(m->net.electing());
+            ASSERT_FALSE(m->saw(NetGame::Event::Type::HostChanged));
+            ASSERT_FALSE(m->net.desynced());
+        }
+        host.net.freeze();
+        t.run(3000);
+        ASSERT_TRUE(all_equal(t));
+    } TEST_END();
+}
+
 }  // namespace
 
 int main() {
@@ -535,6 +736,7 @@ int main() {
     run_thumb_tests();
     run_start_tests();
     run_match_tests();
+    run_migration_tests();
     std::cout << "\n=======================================================\n Total Test Cases: " << g_test_count << "\n Total Assertions: " << g_assert_count
               << "\n Failed:           " << g_test_failures << "\n=======================================================\n";
     return g_test_failures == 0 ? 0 : 1;

@@ -46,8 +46,9 @@ public:
     const std::string& map_name() const noexcept { return room_.map_name; }
     bool fog() const noexcept { return room_.fog; }
 
-    /// A connection that the listener accepted; it becomes a seat when its Hello is accepted
-    void add_connection(Connection* connection, uint32_t now_ms);
+    /// A connection that the listener accepted; it becomes a seat when its Hello is accepted. `address` is where the connection came from (the host
+    /// part only): with the port the guest announces it tells the other guests where to reach it during the match (host migration).
+    void add_connection(Connection* connection, uint32_t now_ms, const std::string& address = std::string());
     void update(uint32_t now_ms);
 
     Phase phase() const noexcept { return phase_; }
@@ -84,10 +85,13 @@ private:
         uint32_t ping_sent[8]{};
         bool measured{false};
         uint32_t rtt_ms{0};
+        std::string address;                     // where the guest's connection came from
+        uint16_t listen_port{0};                 // the port on which it accepts the other guests during the match (0: none)
     };
     struct Pending {
         Connection* conn;
         uint32_t since_ms;
+        std::string address;
     };
     void broadcast_room();
     void broadcast(const std::vector<uint8_t>& msg);
@@ -115,6 +119,7 @@ public:
     struct Config {
         std::string name{"Player"};
         uint32_t welcome_timeout_ms{10000};
+        uint16_t listen_port{0};             // where this guest accepts the other guests during the match, announced in Hello (0: nowhere)
     };
     enum class Phase : uint8_t { Connecting, Joining, InRoom, Loading, Loaded, Begun, Rejected, Cancelled, Closed };
     struct Event {

@@ -8,6 +8,10 @@
 //           (StartRequested event, report_loaded) -> Begun -> the match runs -> freeze() at its end
 //   client: join(address, port, name) -> room (follows the host's map and fog) -> StartRequested -> load, report_loaded -> Begun -> the match runs
 //
+// During the match the guests are also linked to each other (each guest listens on a port that the host passes on with the roster; the links are made
+// while the map loads). When the host goes, the guests agree on the lowest living seat as the new host and the match goes on (see session.hpp); the
+// events HostChanged and PlayerLeft report it, HostLeft only when no new host could be found.
+//
 // Raw TCP (LAN and development) is the transport of native builds; a WebAssembly build has none yet (host() and join() return false there) until the
 // WebRTC transport of the network port arrives. The class does not care which Connection it talks to.
 
@@ -48,9 +52,10 @@ public:
             Begun,            // everybody is loaded: the match runs
             Cancelled,        // the start failed (a player left, a map did not load): back in the room
             PlayerLeft,       // during the match: `seat` dropped out
-            HostLeft,         // during the match (client): the connection to the host is gone
+            HostLeft,         // during the match (client): the host is gone and no new host could be agreed: the match cannot go on here
             Desync,           // two machines disagree: the match is frozen
-            Failed            // joining failed, see status_text()
+            Failed,           // joining failed, see status_text()
+            HostChanged       // during the match: the host left and `seat` is the new host (this machine when it is our own seat)
         };
         Type type{Type::RoomChanged};
         uint8_t seat{255};
@@ -77,10 +82,13 @@ public:
     // ---- state -----------------------------------------------------------------------------------------------------------------------------------
     Role role() const noexcept { return role_; }
     Phase phase() const noexcept { return phase_; }
-    bool is_host() const noexcept { return role_ == Role::Host; }
+    /// True for the room's owner, and for a guest that took over during the match
+    bool is_host() const noexcept { return role_ == Role::Host || host_session_ != nullptr; }
     bool active() const noexcept { return role_ != Role::None; }
     uint8_t my_seat() const noexcept { return seat_; }
     uint16_t listen_port() const noexcept { return listen_port_; }
+    /// A guest: the port on which the other guests connect to it during the match (0 when it has none)
+    uint16_t peer_port() const noexcept { return peer_port_; }
     /// The room as this machine sees it (the host's own copy, or the last one received)
     const RoomMsg& room() const noexcept { return room_; }
     /// One line for the screen, in the original's words: what the machine is waiting for ("Press START when all players' thumbs have appeared.",
@@ -126,10 +134,21 @@ public:
     uint32_t rtt_ms() const;
     /// The turn the local machine executes next
     uint32_t turns_executed() const;
+    /// The host is gone and the guests are agreeing on a new one: no turns arrive meanwhile (the game shows a message)
+    bool electing() const;
+    /// The seat that seals the turns now
+    uint8_t host_seat() const noexcept { return known_host_; }
+    /// What just happened in the match ("Bob is the host now."), for five seconds; empty otherwise
+    std::string match_notice() const;
 
 private:
     void update_host();
     void update_client();
+    void update_host_session();
+    void promote();
+    void pump_peers();
+    void begin_peer_links();
+    void close_peer_links();
     void refresh_status();
     void set_notice(std::string text);
     void begin_match();
@@ -153,6 +172,8 @@ private:
     StartMsg start_;
     std::vector<Event> events_;
     bool desync_reported_{false};
+    uint8_t known_host_{255};               // the seat of the host as far as this machine knows (changes with a host migration)
+    uint16_t peer_port_{0};                 // guest: the port on which the other guests connect (announced in Hello)
     uint32_t stall_since_ms_{0};
     bool stall_active_{false};
 

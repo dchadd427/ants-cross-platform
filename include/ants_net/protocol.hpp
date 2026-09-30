@@ -18,7 +18,7 @@
 
 namespace ants::net {
 
-inline constexpr uint16_t kProtocolVersion = 2;         // 2: the Room message carries each seat's measured round trip (the thumbs)
+inline constexpr uint16_t kProtocolVersion = 3;         // 2: the Room message carries each seat's round trip (the thumbs); 3: host migration (mesh, election)
 inline constexpr size_t kMaxMessageBytes = 64 * 1024;
 inline constexpr size_t kMaxTurnCommands = 512;
 inline constexpr size_t kMaxChatChars = 100;        // the original's chat entry
@@ -46,7 +46,13 @@ enum class MsgType : uint8_t {
     Begin = 15,     // host -> everybody: everybody is loaded, the match begins
     Cancel = 16,    // host -> everybody: the start failed, back to the room
     Leave = 17,     // client -> host: I leave
-    Last = Leave
+    Propose = 18,   // survivor -> peers: the host is gone, I take over as host (host migration)
+    Accept = 19,    // peer -> candidate: agreed, this is how far I have got
+    Refuse = 20,    // peer -> candidate: not you (a lower seat lives, or my host is alive)
+    Resume = 21,    // new host -> peers: I am the host from this turn on
+    Request = 22,   // peer -> peer: send me the turns from this one on
+    PeerHello = 23, // guest -> guest on a new link between guests: who I am
+    Last = PeerHello
 };
 
 /// Longest map file name that travels (a plain name of the maps folder: letters, digits, '_', '-', '.', ending in ".LVL")
@@ -58,6 +64,7 @@ enum class RejectReason : uint8_t { Full = 1, VersionMismatch = 2, MatchRunning 
 struct HelloMsg {
     uint16_t version{kProtocolVersion};
     std::string name;
+    uint16_t listen_port{0};    // the port on which this guest accepts the other guests' connections during the match (0: none)
 };
 struct WelcomeMsg {
     uint8_t player{255};        // the slot (0 .. 3) this client plays
@@ -122,6 +129,12 @@ struct RoomMsg {
     bool fog{false};
     uint8_t you{255};             // the receiver's own seat (set per recipient by the host)
 };
+/// Where a guest accepts connections from the other guests (the host fills it from the address it saw and the port the guest announced)
+struct Endpoint {
+    std::string address;
+    uint16_t port{0};
+    bool operator==(const Endpoint& o) const noexcept { return address == o.address && port == o.port; }
+};
 struct StartMsg {
     uint32_t seed{1};
     std::string map_name;
@@ -129,6 +142,7 @@ struct StartMsg {
     bool fog{false};
     uint8_t roster{0};            // bit p: seat p takes part
     std::array<std::string, sim::MAX_PLAYERS> names;
+    std::array<Endpoint, sim::MAX_PLAYERS> endpoints;   // guests: how the other guests reach this seat (host migration); the host's seat is empty
 };
 struct LoadedMsg {
     bool ok{true};
@@ -137,6 +151,33 @@ struct CancelMsg {
     enum class Reason : uint8_t { PlayerLeft = 1, LoadFailed = 2, HostCancelled = 3 };
     Reason reason{Reason::HostCancelled};
     uint8_t player{255};          // who caused it (PlayerLeft, LoadFailed)
+};
+
+// Host migration (docs/NETWORK_PORT.md): when the host is gone the survivors elect the lowest living seat, which resumes sealing turns where the
+// history stops. All of these travel on the links between guests.
+struct ProposeMsg {
+    uint8_t epoch{0};             // the election (1 for the first host change, 2 for the second, ...)
+    uint8_t candidate{255};       // the seat that offers to become the host
+};
+struct AcceptMsg {
+    uint8_t epoch{0};
+    uint32_t next_receive{0};     // the first turn the sender has not received yet
+    uint32_t next_execute{0};     // the first turn it has not executed yet
+};
+struct RefuseMsg {
+    uint8_t epoch{0};
+    uint8_t lowest{255};          // the lowest seat the sender sees alive, or its host when the host is alive
+};
+struct ResumeMsg {
+    uint8_t epoch{0};
+    uint8_t host{255};            // the new host
+    uint32_t resume_turn{0};      // it seals turn `resume_turn` next; the turns before it follow as ordinary Turn messages
+};
+struct RequestMsg {
+    uint32_t from_turn{0};
+};
+struct PeerHelloMsg {
+    uint8_t seat{255};
 };
 
 /// The type byte of a message, MsgType::None when the message is empty or the type is unknown.
@@ -157,6 +198,12 @@ std::vector<uint8_t> encode(const RoomMsg&);
 std::vector<uint8_t> encode(const StartMsg&);
 std::vector<uint8_t> encode(const LoadedMsg&);
 std::vector<uint8_t> encode(const CancelMsg&);
+std::vector<uint8_t> encode(const ProposeMsg&);
+std::vector<uint8_t> encode(const AcceptMsg&);
+std::vector<uint8_t> encode(const RefuseMsg&);
+std::vector<uint8_t> encode(const ResumeMsg&);
+std::vector<uint8_t> encode(const RequestMsg&);
+std::vector<uint8_t> encode(const PeerHelloMsg&);
 std::vector<uint8_t> encode_begin();
 std::vector<uint8_t> encode_leave();
 std::vector<uint8_t> encode_ping(const PingMsg&);
@@ -175,6 +222,12 @@ bool decode(const uint8_t* data, size_t size, RoomMsg& out);
 bool decode(const uint8_t* data, size_t size, StartMsg& out);
 bool decode(const uint8_t* data, size_t size, LoadedMsg& out);
 bool decode(const uint8_t* data, size_t size, CancelMsg& out);
+bool decode(const uint8_t* data, size_t size, ProposeMsg& out);
+bool decode(const uint8_t* data, size_t size, AcceptMsg& out);
+bool decode(const uint8_t* data, size_t size, RefuseMsg& out);
+bool decode(const uint8_t* data, size_t size, ResumeMsg& out);
+bool decode(const uint8_t* data, size_t size, RequestMsg& out);
+bool decode(const uint8_t* data, size_t size, PeerHelloMsg& out);
 /// Ping and Pong share the payload; the type byte tells them apart (peek_type).
 bool decode_ping(const uint8_t* data, size_t size, PingMsg& out);
 

@@ -52,6 +52,17 @@ std::string clip(const std::string& s, size_t max_chars) {
     return out;
 }
 
+// An address as text: an IPv4 / IPv6 literal or a host name (no spaces, no control characters), short
+bool valid_address(const std::string& a) {
+    if (a.size() > 64) return false;
+    for (char c : a) {
+        const bool ok = (c >= '0' && c <= '9') || (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || c == '.' || c == ':' || c == '-' || c == '_' ||
+                        c == '%' || c == '[' || c == ']';
+        if (!ok) return false;
+    }
+    return true;
+}
+
 }  // namespace
 
 bool valid_map_name(const std::string& name) noexcept {
@@ -77,6 +88,7 @@ std::vector<uint8_t> encode(const HelloMsg& m) {
     w.u8(static_cast<uint8_t>(MsgType::Hello));
     w.u16(m.version);
     w.str8(clip(m.name, kMaxNameChars));
+    w.u16(m.listen_port);
     return out;
 }
 bool decode(const uint8_t* data, size_t size, HelloMsg& out) {
@@ -86,6 +98,7 @@ bool decode(const uint8_t* data, size_t size, HelloMsg& out) {
     HelloMsg m;
     m.version = r->u16();
     m.name = r->str8();
+    m.listen_port = r->u16();
     if (!r->done() || m.name.size() > kMaxNameChars) return false;
     for (char c : m.name) {
         if (static_cast<unsigned char>(c) < 0x20 || static_cast<unsigned char>(c) > 0x7E) return false;
@@ -320,6 +333,10 @@ std::vector<uint8_t> encode(const StartMsg& m) {
     w.u8(m.fog ? 1 : 0);
     w.u8(m.roster);
     for (const auto& n : m.names) w.str8(clip(n, kMaxNameChars));
+    for (const auto& e : m.endpoints) {
+        w.str8(e.address.size() > 64 ? std::string() : e.address);
+        w.u16(e.port);
+    }
     return out;
 }
 bool decode(const uint8_t* data, size_t size, StartMsg& out) {
@@ -335,6 +352,11 @@ bool decode(const uint8_t* data, size_t size, StartMsg& out) {
     for (auto& n : m.names) {
         n = r->str8();
         if (!printable_name(n, kMaxNameChars)) return false;
+    }
+    for (auto& e : m.endpoints) {
+        e.address = r->str8();
+        e.port = r->u16();
+        if (!valid_address(e.address)) return false;
     }
     int players = 0;
     for (uint8_t p = 0; p < sim::MAX_PLAYERS; ++p) players += (m.roster >> p) & 1;
@@ -366,6 +388,112 @@ bool decode(const uint8_t* data, size_t size, CancelMsg& out) {
 }
 
 std::vector<uint8_t> encode_begin() { return {static_cast<uint8_t>(MsgType::Begin)}; }
+std::vector<uint8_t> encode(const ProposeMsg& m) {
+    return {static_cast<uint8_t>(MsgType::Propose), m.epoch, m.candidate};
+}
+bool decode(const uint8_t* data, size_t size, ProposeMsg& out) {
+    ByteReader storage(nullptr, 0);
+    ByteReader* r = nullptr;
+    if (!open(data, size, MsgType::Propose, r, storage)) return false;
+    ProposeMsg m;
+    m.epoch = r->u8();
+    m.candidate = r->u8();
+    if (!r->done() || m.candidate >= sim::MAX_PLAYERS) return false;
+    out = m;
+    return true;
+}
+
+std::vector<uint8_t> encode(const AcceptMsg& m) {
+    std::vector<uint8_t> out;
+    ByteWriter w(out);
+    w.u8(static_cast<uint8_t>(MsgType::Accept));
+    w.u8(m.epoch);
+    w.u32(m.next_receive);
+    w.u32(m.next_execute);
+    return out;
+}
+bool decode(const uint8_t* data, size_t size, AcceptMsg& out) {
+    ByteReader storage(nullptr, 0);
+    ByteReader* r = nullptr;
+    if (!open(data, size, MsgType::Accept, r, storage)) return false;
+    AcceptMsg m;
+    m.epoch = r->u8();
+    m.next_receive = r->u32();
+    m.next_execute = r->u32();
+    if (!r->done() || m.next_execute > m.next_receive) return false;         // nobody executes a turn it has not received
+    out = m;
+    return true;
+}
+
+std::vector<uint8_t> encode(const RefuseMsg& m) {
+    return {static_cast<uint8_t>(MsgType::Refuse), m.epoch, m.lowest};
+}
+bool decode(const uint8_t* data, size_t size, RefuseMsg& out) {
+    ByteReader storage(nullptr, 0);
+    ByteReader* r = nullptr;
+    if (!open(data, size, MsgType::Refuse, r, storage)) return false;
+    RefuseMsg m;
+    m.epoch = r->u8();
+    m.lowest = r->u8();
+    if (!r->done() || m.lowest >= sim::MAX_PLAYERS) return false;
+    out = m;
+    return true;
+}
+
+std::vector<uint8_t> encode(const ResumeMsg& m) {
+    std::vector<uint8_t> out;
+    ByteWriter w(out);
+    w.u8(static_cast<uint8_t>(MsgType::Resume));
+    w.u8(m.epoch);
+    w.u8(m.host);
+    w.u32(m.resume_turn);
+    return out;
+}
+bool decode(const uint8_t* data, size_t size, ResumeMsg& out) {
+    ByteReader storage(nullptr, 0);
+    ByteReader* r = nullptr;
+    if (!open(data, size, MsgType::Resume, r, storage)) return false;
+    ResumeMsg m;
+    m.epoch = r->u8();
+    m.host = r->u8();
+    m.resume_turn = r->u32();
+    if (!r->done() || m.host >= sim::MAX_PLAYERS) return false;
+    out = m;
+    return true;
+}
+
+std::vector<uint8_t> encode(const RequestMsg& m) {
+    std::vector<uint8_t> out;
+    ByteWriter w(out);
+    w.u8(static_cast<uint8_t>(MsgType::Request));
+    w.u32(m.from_turn);
+    return out;
+}
+bool decode(const uint8_t* data, size_t size, RequestMsg& out) {
+    ByteReader storage(nullptr, 0);
+    ByteReader* r = nullptr;
+    if (!open(data, size, MsgType::Request, r, storage)) return false;
+    RequestMsg m;
+    m.from_turn = r->u32();
+    if (!r->done()) return false;
+    out = m;
+    return true;
+}
+
+std::vector<uint8_t> encode(const PeerHelloMsg& m) {
+    return {static_cast<uint8_t>(MsgType::PeerHello), m.seat};
+}
+bool decode(const uint8_t* data, size_t size, PeerHelloMsg& out) {
+    ByteReader storage(nullptr, 0);
+    ByteReader* r = nullptr;
+    if (!open(data, size, MsgType::PeerHello, r, storage)) return false;
+    PeerHelloMsg m;
+    m.seat = r->u8();
+    if (!r->done() || m.seat >= sim::MAX_PLAYERS) return false;
+    out = m;
+    return true;
+}
+
 std::vector<uint8_t> encode_leave() { return {static_cast<uint8_t>(MsgType::Leave)}; }
 
 static std::vector<uint8_t> encode_ping_type(MsgType t, const PingMsg& m) {

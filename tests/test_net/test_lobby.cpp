@@ -402,7 +402,12 @@ int main() {
         // Evil sends what a guest must not: Start, Turn, Command, a second Hello, garbage
         Connection* evil = room.guests[1].client_end;
         for (int i = 0; i < 20; ++i) {
-            evil->send(encode(StartMsg{1, "SMALL.LVL", 1, false, 0x03, {"a", "b", "", ""}}));
+            StartMsg forged_start;
+            forged_start.map_name = "SMALL.LVL";
+            forged_start.map_hash = 1;
+            forged_start.roster = 0x03;
+            forged_start.names = {"a", "b", "", ""};
+            evil->send(encode(forged_start));
             evil->send(encode(TurnMsg{}));
             evil->send(encode(HelloMsg{}));
             evil->send({250, 1, 2});

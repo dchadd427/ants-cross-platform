@@ -1,7 +1,8 @@
 # Network Port
 
-Status: **the core, the room and a native TCP transport are done and tested (v0.0.43 command layer and state hash, v0.0.44 protocol, sequencer, lock-step runner and sessions, v0.0.45 room and start
-barrier and framed TCP).** The application is not connected to them yet (no host / join interface, no WebRTC / NAT traversal); a single-player game applies its commands at once.
+Status: **the core, the room, a native TCP transport, the application integration and host migration are done and tested (v0.0.43 command layer and state hash, v0.0.44 protocol, sequencer, lock-step
+runner and sessions, v0.0.45 room and start barrier and framed TCP, v0.0.46 host / join in the game, v0.0.47 host migration).** Open: WebRTC / NAT traversal (raw TCP works on a LAN, a VPN or with a
+forwarded port); a single-player game applies its commands at once.
 
 ## What the original does
 
@@ -36,24 +37,41 @@ and broadcasts the results (the game is not lock-step). Its lobby flow, texts an
   the original), kick, quit, alliances, chat (100 characters, team-only filter), no late join, no pause, no bots (the alliance auto-accept of the old simulation is removed), and **the match goes on when
   the host leaves**: the original is a mesh in which nobody is special once the match runs, so the remake moves the sequencer role to another machine (host migration, below).
 
-## Host migration (milestone 4b, planned)
+## Host migration (milestone 4b, shipped in v0.0.47)
 
 In the original the machine that picked the map can drop out while the others play on. The remake keeps that: the host is a role (the sequencer), not the place where the state lives, because every machine
-already runs the whole simulation and holds the same state. What moves is sealing turns, the reference hash, the chat relay and the drop decisions.
+already runs the whole simulation and holds the same state. What moves is sealing turns, the reference hash, the chat relay and the drop decisions. Code: `include/ants_net/session.hpp` /
+`src/ants_net/session.cpp` (`ClientSession` election state machine, `HostSession::resume`, `promote_to_host`), `protocol.hpp` (version 3), `netgame.cpp` (the TCP mesh and the events).
 
-1. **Peer links.** At the start every machine also has a `Connection` to every other one (a mesh: six links for four players), used for keep-alive only while the star works. LAN / TCP: every client listens and
-   the roster in `Begin` carries the addresses the host saw; WebRTC: the signaling service brokers the pairwise data channels. The core only needs a `Connection*` per seat.
-2. **Turn log.** Every machine keeps the last 300 turns (30 s) it received (the host those it sealed), commands included.
-3. **Trigger.** The host's connection closes or the host is silent for `host_silence_ms` (about 10 s; a silent host stalls everybody, so 60 s would be too long here).
-4. **Election (bully algorithm with epochs).** The candidate is the lowest seat that the survivor still sees alive on its mesh links and that has not dropped. It proposes epoch + 1; every survivor answers with its
-   receive position; a survivor that sees a lower live seat answers with that seat, which then takes over. Every message carries the epoch and a lower epoch is ignored, so an old host that was only unreachable
-   cannot split the match (it is dropped and told).
-5. **Resync.** The new host takes T = the highest receive position among the answers (fetching the turns it lacks from the peer that has them), sends every survivor the turns it lacks, and resumes sealing at T
-   with the drop of the old host (and of every peer that did not answer in time) as the first commands. Nobody can be ahead of T by construction, so nobody diverges.
-6. **What is lost.** Commands given in the last ~300 ms that were not yet in a sealed turn; the player gives the order again. The game stalls for about the detection time plus a round trip ("Waiting for the new
-   host...") and then continues; the old host's team is dropped like any other player who left. A second failure during the election is handled by the same rule.
-7. **Tests** (simulated network): the host dying at every moment of a broadcast (partial delivery of the last turns), the successor dying too, a partitioned old host that comes back, silent and closed
-   connections, the hashes of all survivors equal to the end.
+1. **Peer links.** While the map loads every guest connects to the guests above its own seat (one link per pair; the ones below connect to it). A guest listens on an ephemeral port that it announces in
+   `Hello.listen_port`; the host passes what it saw (the guest's address and that port) to everybody in `Start.endpoints`. An inbound link starts with `PeerHello{seat}` and is accepted only from a lower seat of the
+   roster, once per seat, and only from the address the host reported for that seat; everything else is closed. The links carry a ping every second (`peer_silence_ms` = 5 s tells "alive") and, when the host goes,
+   the election. The sessions only need a `Connection*` per seat (`ClientSession::set_peer`), so the WebRTC mesh will plug in the same way.
+2. **Turn log.** Every machine keeps the last 300 turns (30 s) it received (`LockstepRunner::logged_turn`; the host those it sealed), commands included.
+3. **Trigger.** The host link is closed (everything the host sent before is read first) or the host has been silent for `host_silence_ms` (10 s; the host answers a guest's ping every second and seals a turn
+   every 100 ms, so silence means gone). A guest that receives a proposal while it has not noticed yet re-reads its host link first, and believes "the host is alive" only if it heard the host within
+   `host_alive_ms` (2 s). After `NetGame::freeze()` (the match is over) a leaving host is no reason to elect anybody.
+4. **Election** (bully algorithm with epochs; `Propose`, `Accept`, `Refuse`, `Resume`, `Request`, `PeerHello`). The candidate is the lowest seat that a survivor still sees alive on its peer links; it proposes
+   `epoch + 1` to every live peer. A peer accepts the proposal of the lowest seat it sees alive and only one candidate per election (a second one is refused with the name of the first); a candidate that
+   receives "a lower seat lives" waits for that seat's proposal (and asks anyway after `elect_timeout_ms`); one that receives "the host lives" (the peer had not noticed the loss) asks again after a second and
+   gives up after three such refusals (`Lost`: it is this machine that lost the host); a peer that does not answer within `accept_timeout_ms` (3 s) is given up. Every message carries the epoch and one of
+   another election is ignored, a link speaks only for its own seat, and an election that takes longer than `election_limit_ms` (30 s) ends as `Lost`.
+5. **Resync.** A survivor stops reading its old host at the moment the election begins, so the receive position it reports in `Accept` (`next_receive`, `next_execute`) is the history it offers. The candidate takes
+   `resume_turn` = the highest position among the accepts and its own, fetching the turns it lacks from the peer that has them (`Request`; a source that dies is given up and the plan is made again without it),
+   becomes the host (`promote_to_host`: the same runner, so the log and the presentation hooks stay), sends every follower `Resume{epoch, host, resume_turn}` followed by the turns it lacks, and seals
+   `resume_turn` next. The first turn holds the `Drop` of the old host and of every seat of the roster that did not follow (a seat that already dropped stays as it is), so every machine drops them at the
+   same tick. Nobody can be ahead of `resume_turn` by construction, so nobody diverges; followers adopt the link to the new host as their host link (`Resume` is honoured only from the candidate they accepted).
+6. **What is lost.** Commands given in the last ~300 ms that were not yet in a sealed turn (the player gives the order again; while there is no host `NetGame::submit` reports the command as ignored, so no
+   acknowledgement sounds). The game stalls for the detection time plus a round trip (the overlay says "The host left. Choosing a new host..."), then goes on and says "Bob is the host now." for five seconds.
+   A second failure during the election is handled by the same rule; a match with one machine left goes on for it alone (as in the original, where the last team standing plays on).
+7. **Limits.** A host that dies in the first second of the match, before the links between guests are made, can split the match (each guest then plays on alone). Two guests that cannot reach each other while both
+   reach the host, or a network partition, split the match into groups that each play on consistently (as in the original's mesh). A guest that is on the same machine as the host is reachable for other guests
+   only under the address the host saw (127.0.0.1 in that case); NAT needs the WebRTC transport.
+8. **Tests** (`tests/test_net/test_lockstep.cpp` N2.22 - N2.36 on the simulated network, `test_netgame.cpp` N3.7 - N3.12 and `test_network_app.cpp` N5.4, N5.6 over real sockets): the host dying abruptly and
+   silently, the host and the next seat dying together, the successor dying while it is being accepted, guests that are behind or ahead of the new host, the only holder of the missing turns dying while they are
+   fetched, a silent guest, a partitioned old host that keeps playing alone, a guest whose own link broke while the host lives for the others (it is lost, nobody takes over), chat / leave / commands through the new
+   host, three host changes in a row, forged, stale and garbage messages between guests (20000 of them), strangers on a guest's port, the runner's turn log, the sequencer's resume; the states of all survivors are equal
+   to the end, twice with the same result.
 
 ## The lock-step core (`src/ants_net`, v0.0.44)
 
@@ -86,7 +104,7 @@ receiver's own seat) on every change. `HostLobby::start` sends `Start` (seed, ma
 (a machine whose file differs answers not-ok); when the host and every guest are loaded the host sends `Begin` and hands the connections (seat -> connection) to the `HostSession`. A load failure,
 a leaver, a host cancel or a 60 s load timeout sends `Cancel` and returns to the room; a guest that says nothing for 10 s, sends garbage first, or breaks the rules 8 times is closed. Map names travel
 only as plain names of the maps folder (letters, digits, `_`, `-`, `.`, ending in `.LVL`; no path separators, no `..`). Seats go to guests in the order their `Hello` reaches the host. No late join
-(as the original); the host leaving is handled by host migration (below, planned).
+(as the original); the host leaving is handled by host migration (below).
 
 **Connection quality (v0.0.46, protocol version 2).** The host pings every seated guest once a second (`Ping` / `Pong` with the send time echoed, up to eight pings in flight, so a link slower than
 the interval is still measured) and puts the measured round trip of every seat in the `Room` message (`RoomMsg::Slot::rtt_ms`, 0 for the host, `0xFFFF` before the first answer). `link_quality()` turns it
@@ -104,7 +122,7 @@ ports, the never-reading peer, a 40 s match of a host and three clients over rea
 ## The application (`netgame.hpp`, `Application`, v0.0.46)
 
 * **`NetGame`** (`src/ants_net/netgame.cpp`, no SDL, no threads): owns the listener and the connections and runs the room and then the session behind one small interface: `host(port, name)` /
-  `join(address, port, name)` / `leave()`, `update(now_ms)` every frame, `take_events()` (`RoomChanged`, `StartRequested`, `Begun`, `Cancelled`, `PlayerLeft`, `HostLeft`, `Desync`, `Failed`), the host's
+  `join(address, port, name)` / `leave()`, `update(now_ms)` every frame, `take_events()` (`RoomChanged`, `StartRequested`, `Begun`, `Cancelled`, `PlayerLeft`, `HostLeft`, `Desync`, `Failed`, `HostChanged`), the host's
   `set_map` / `set_fog` / `start_match(seed, map_hash)`, `report_loaded(ok)`, and in the match `submit()` (the HUD's `CommandSink`), `chat()`, `freeze()`, `stalled_ms()`, `laggard()`, `sub_tick_ms()`.
   `NetGame::status_text()` is the setup screen's status line, in the original's words (`docs/GAME_REVERSE_ENGINEERING.md` 5.48). A WebAssembly build has no TCP, so `host()` / `join()` return false there.
 * **Commands from the HUD**: `NetGame::submit` stamps the local seat, predicts the acknowledging ant with `SimulationEngine::predict_order_ack` (the click's voice and pedestal feedback are immediate although the
@@ -120,8 +138,9 @@ ports, the never-reading peer, a 40 s match of a host and three clients over rea
 * **Command line**: `--host [port]`, `--join host[:port]`, `--port`, `--name`, `-N<team><name>`, `--team-name <team> <name>`, `-pnum=<team>`, `--loopback` (accept only this machine); port 4001 by default (the original's).
 * **Group order acknowledgement**: the ant that answers a group order is now decided by GoTo's real result (`issue_order` returns it), as in the original (`0x10289b2 .. 0x10289c0`); before, a stale path request
   of a refused order could still make an ant answer.
-* **Limits of this release**: the host leaving ends the match for the guests (host migration is next), no NAT traversal (raw TCP: a LAN, a VPN or a forwarded port), a machine returns to the local setup screen when
-  a network match ends, the alliance dialogs are not shown yet, and the match ends by the clock only (the elimination rules are not ported yet).
+* **Limits of this release**: no NAT traversal (raw TCP: a LAN, a VPN or a forwarded port), a machine returns to the local setup screen when a network match ends, the alliance dialogs are not shown yet, and
+  the match ends by the clock only (the elimination rules are not ported yet). Since v0.0.47 the host may leave and the match goes on (see Host migration: `HostChanged` reports it, `HostLeft` only says that no
+  new host could be agreed).
 
 ## State hash (`SimulationEngine::state_hash`)
 
@@ -138,8 +157,8 @@ seeds and demands the same hash every tick, and demands that an engine that play
 3. **Framed TCP for LAN and development, the room handshake and the start barrier: shipped (v0.0.45).**
 4. **The application: host / join, the room with names and thumbs, the runner instead of the wall-clock tick driver, predicted click feedback, waiting and desync messages, roster and drop-out through the
    turn stream, names on the command line: shipped (v0.0.46).** Still open from the original plan: native versus WebAssembly golden hashes.
-4b. **Host migration** (the match continues when the host leaves, as in the original): mesh links between the clients (a TCP address directory for LAN), the turn log, election with epochs, resync, the
-   sequencer role moving to a surviving machine; tests with the host dying at every point of a broadcast, double failures and a partitioned old host.
+4b. **Host migration** (the match continues when the host leaves, as in the original): peer links between the guests (a TCP address directory for LAN), the turn log, election with epochs, resync, the sequencer
+   role moving to a surviving machine, the events and messages in the game, tests with the host dying at many points, double failures and a partitioned old host: **shipped (v0.0.47).**
 5. WebRTC data channels with ICE / STUN / TURN (native via libdatachannel, browser via RTCPeerConnection) and the signaling service (it also brokers the mesh links).
 6. Docker / nginx / TURN deployment files (secrets from the environment).
 7. Alliance dialogs (the ally attack confirmation, string 4; the invitation questions, strings 1 - 3), CHECKGO elimination rules (the match also ends when nobody is alive or one side leads alone).
