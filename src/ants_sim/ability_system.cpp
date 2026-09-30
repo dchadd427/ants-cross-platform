@@ -303,10 +303,7 @@ void SimulationEngineImpl::start_bridge_demolish(AntUnit& a, TileCoord target, T
     a.orig_order = AntUnit::kOrderBridgeDemolish;
     a.orig_special_tile = target;
     a.orig_b4 = TILE_BRIDGE4;
-    auto& cell = grid_.get_cell_mut(static_cast<uint32_t>(target.x), static_cast<uint32_t>(target.y));
-    const uint32_t timer = cell.timer_ticks;
-    grid_.set_layer2(static_cast<uint32_t>(target.x), static_cast<uint32_t>(target.y), TILE_BRIDGE4, a.player_id);
-    cell.timer_ticks = timer;                                  // the collapse timer keeps running until the tile is destroyed
+    set_bridge_stage(target.x, target.y, TILE_BRIDGE4, a.player_id);   // the collapse timer keeps running until the tile is destroyed
     world_state_dirty_ = true;
 }
 
@@ -317,7 +314,7 @@ void SimulationEngineImpl::bridge_demolish_pass_end(AntUnit& a) {
     const auto& cell = grid_.get_cell(b0);
     if (cell.interactive_id != TILE_BRIDGE1 && cell.interactive_id == a.orig_b4 && cell.interactive_owner == a.player_id) {
         const uint16_t next = static_cast<uint16_t>(cell.interactive_id - 1);
-        grid_.set_layer2(static_cast<uint32_t>(b0.x), static_cast<uint32_t>(b0.y), next, a.player_id);
+        set_bridge_stage(b0.x, b0.y, next, a.player_id);
         a.orig_b4 = next;
         world_state_dirty_ = true;
         return;                                                // the clip loops on
@@ -337,7 +334,7 @@ void SimulationEngineImpl::end_bridge_demolish(AntUnit& a, bool cancel) {
     const uint8_t owner = cell.interactive_owner;
     if (owner != a.player_id) return;
     if (cancel || id != TILE_BRIDGE1) {
-        grid_.set_layer2(static_cast<uint32_t>(b0.x), static_cast<uint32_t>(b0.y), TILE_BRIDGE4, owner);
+        set_bridge_stage(b0.x, b0.y, TILE_BRIDGE4, owner);      // 0x101ed58: SetTile(0x25), the timer task is not cancelled
         world_state_dirty_ = true;
         return;
     }

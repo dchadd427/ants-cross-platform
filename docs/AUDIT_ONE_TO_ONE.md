@@ -7,6 +7,7 @@ order in which it is proposed to be fixed. The owner decides (AGENTS.md rule 9).
 * v0.0.51: shortcuts that the original did not have removed (owner request), hit-point numbers on by default (owner tweak).
 * v0.0.52: batch 1 item 1 (hill queue: LH NEW-1, NEW-2, NEW-3), reported by the owner in play ("six ants sent to the base, three cancelled their queue").
 * v0.0.53: batch 1 items 2 and 3 (ability orders re-issued when the approach tile is taken: LM NEW-M1; group re-click rules: LM NEW-M2; the invented left-column rule next to the hill removed: LB NEW-3).
+* v0.0.54: batch 1 items 4 and 5 (bridge timer kept through an interrupted demolish, timeout only on a completed bridge: LB NEW-1; swimmer re-enters its action when its bridge collapses, silent collapse: LB NEW-2, LE NEW-5, LS NEW-9; scores never clamped, signed loot: LF NEW-4).
 
 ## 1. What was audited and how
 

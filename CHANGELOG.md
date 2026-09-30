@@ -39,6 +39,24 @@ Ground truth for every entry is in [`docs/GAME_REVERSE_ENGINEERING.md`](docs/GAM
   - **Found on the way, for the audit** (docs: implementation_plan.md section 18): `tests/test_sim/test_challenger_m2_it2_deep_stress.cpp` has not been part of the build since an early commit and no longer compiles
     (it uses the retired slot-queue API of the hill). (An earlier version of this line said that the death clips are no longer started by a separate effect: wrong, only the unused helper `spawn_death_effect` was removed; the effect path in `movement_system.cpp` is still in use, see the audit.)
 
+## v0.0.54 - 2026-09-30 - Bridges keep their timer, swimmers keep their footing, scores are never clamped
+
+Audit batch 1, items 4 and 5 (`docs/audit/ledger_abilities.md` NEW-1 / NEW-2, `ledger_effects_objects.md` NEW-5, `ledger_food_economy.md` NEW-4, `ledger_sound_texts.md` NEW-9), each re-read in `Ants.exe` first:
+
+- **An interrupted demolish no longer makes the bridge permanent** (`FUN_0101ecdf`, `0x101ed58`): the collapse timer of a bridge is a separate task in the original; stepping the stages of a demolish and restoring the
+  completed bridge never touch it (only a finished build arms it, only a finished demolish cancels it). The remake zeroed the timer with every stage change, so a swimmer that lost a demolish fight left a bridge that never collapsed.
+  The timeout (`BridgeTimeout`, `0x1024e66`) now acts only on a completed bridge (0x25) and is used up either way, as in the original.
+- **A swimmer on a bridge that collapses goes on with its current action on the water** (`FUN_0100f8bf`, `0x100f99f`): the original starts the swimmer's current action again (`SetActionDefault`), so an idle swimmer
+  shows the water idle clip and a walking one swims; before, it kept the land idle pose or the mud gait until its next action. An attacking swimmer loses its path and goes idle. The collapse is **silent**:
+  the `splash.wav` that the remake played there was invented (the effect `dsplash` has no sound).
+- **Scores are never clamped at zero** (`AddScore`, `0x1010cc9`; loot compare `0x101d57f`): two thieves that raid a 60-point hill together took 100 points from it and left it at 0 (points were created); the original leaves it at -40. The score box
+  still draws 0 for a negative score (`FUN_01010452`), the results show the real number. The loot is a signed minimum as in the original: a thief that raids a hill below zero takes a negative loot (the victim gets the points
+  back, the thief carries the debt home and its deposit lowers its team), and every non-zero carried amount is deposited.
+- Docs: `docs/GAME_REVERSE_ENGINEERING.md` (bridge timer, bridge collapse, raid loot and scores), README (test table), `docs/AUDIT_ONE_TO_ONE.md` (progress).
+- Tests: `test_ability_actions` 3.7 (the restored bridge collapses at its old deadline), 3.8 (a timeout on a half demolished bridge does nothing and is used up), 3.9 (swimmer on a collapsing bridge: water idle clip, no sound) and 3.5 extended
+  (timer kept); `test_hill_actions` 3.4 (two thieves, victim at -40), 3.5 (raid on a victim below zero), 3.6 (real value in the stats); 3.7 and 3.9 fail on v0.0.53. **Rewritten tests** (they encoded the old rules): `test_sim_rules` 8.4
+  (asserted the invented splash sound; now asserts the `dsplash` effect and silence), integration 12.57 (let a half built bridge time out; the original only collapses a completed one). Version assertion of 12.108.
+
 ## v0.0.53 - 2026-09-30 - Ability orders keep their identity, repeated clicks follow the original, no invented rule next to the hill
 
 Three rule differences found by the audit (batch 1, items 2 and 3; `docs/audit/ledger_movement.md` NEW-M1 / NEW-M2, `docs/audit/ledger_abilities.md` NEW-3), each re-read in `Ants.exe` first:

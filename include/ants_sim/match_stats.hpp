@@ -169,10 +169,11 @@ public:
         return stats_[player_id].score;
     }
 
+    // AddScore (Ants.exe 0x1010cc9) just adds: a score can go below zero (two thieves that raid a 60-point hill together take 100);
+    // the score box draws 0 for it (FUN_01010452), the results show the real number.
     void add_score(uint8_t player_id, int32_t points) noexcept {
         if (player_id < MAX_PLAYERS) {
             stats_[player_id].score += points;
-            if (stats_[player_id].score < 0) stats_[player_id].score = 0;
             if (points != 0) score_changes_.push_back(ScoreChange{player_id, points});
         }
     }

@@ -175,12 +175,10 @@ void SimulationEngineImpl::enter_clip_end(AntUnit& a) {
 // wounded ant is healed to full health.
 void SimulationEngineImpl::cleanup_enter(AntUnit& a) {
     const uint16_t missing = (a.hp < AntUnit::MAX_HP) ? static_cast<uint16_t>(AntUnit::MAX_HP - a.hp) : uint16_t{0};
-    int32_t amount = static_cast<int32_t>(a.carried_points);
+    int32_t amount = a.carried_signed();                                    // +0xf0, a thief's debt included
     if (amount == 0 && a.carried_food > 0) amount = static_cast<int32_t>(a.carried_food) * 25;
-    if (amount > 0) {
-        add_score(a.player_id, amount);
-        post_news(a.player_id, strings::kScoreGoingUp);
-    }
+    if (amount != 0) add_score(a.player_id, amount);                        // AddScore(+0xf0) adds whatever is carried
+    if (amount > 0) post_news(a.player_id, strings::kScoreGoingUp);         // "Score going up." only for a positive amount (0x101e198)
     a.clear_inventory();                                                    // SetCarrying(0, {0,0}): +0xe8, +0xec, +0xf0, +0xf4
     a.is_thief_steal = false;
     a.harvest_origin = TileCoord{-1, -1};
@@ -293,14 +291,15 @@ bool SimulationEngineImpl::raid_arrive(AntUnit& a, StepEvt& /*e*/) {
         if (home.x >= 0) go_to(a, home, false, false); else stop_sync(a);
         return false;
     }
-    const int32_t score = std::max<int32_t>(0, stats_.get_individual_score(victim));
-    start_raid(a, victim, static_cast<uint32_t>(std::min<int32_t>(score, static_cast<int32_t>(kRaidLootMax))));
+    // loot = min(victim's individual score, 50) with a SIGNED compare (0x101d57f: cmp eax, 0x32; jl): a victim below zero gives a negative loot
+    const int32_t score = stats_.get_individual_score(victim);
+    start_raid(a, victim, std::min<int32_t>(score, static_cast<int32_t>(kRaidLootMax)));
     return true;
 }
 
 // FUN_0102184e (message 0x12): the thief plays atcr501 on the raid tile centre; the loot is fixed now and moves at the
 // end of the clip. The owner of the raided hill hears the anthill cue and reads the blinking warning.
-void SimulationEngineImpl::start_raid(AntUnit& a, uint8_t victim, uint32_t amount) {
+void SimulationEngineImpl::start_raid(AntUnit& a, uint8_t victim, int32_t amount) {
     const auto* hill = grid_.find_anthill(victim);
     if (!hill) { stop_sync(a); return; }
     const TileCoord tile{static_cast<int32_t>(hill->x) + 3, static_cast<int32_t>(hill->y) + 2};
@@ -333,14 +332,15 @@ void SimulationEngineImpl::raid_clip_end(AntUnit& a) {
     }
 }
 
-// FUN_0101e27f: cleanup of action 0xd. The victim loses the loot, the thief carries it (the loot flag is set even for
-// an amount of 0, which leaves the thief empty-handed and idle on the raid tile).
+// FUN_0101e27f: cleanup of action 0xd. The victim loses the loot (AddScore(victim, -loot): a negative loot gives points back), the
+// thief carries it (SetHolding(loot): any non-zero loot, the loot flag is set even for an amount of 0, which leaves the thief
+// empty-handed and idle on the raid tile).
 void SimulationEngineImpl::cleanup_raid(AntUnit& a) {
     const uint8_t victim = a.orig_target_team;
-    const uint32_t amount = a.raid_amount;
-    if (victim < MAX_PLAYERS && amount > 0) add_score(victim, -static_cast<int32_t>(amount));
+    const int32_t amount = a.raid_amount;
+    if (victim < MAX_PLAYERS && amount != 0) add_score(victim, -amount);
     a.raid_amount = 0;
-    if (amount > 0) a.steal_points(static_cast<uint16_t>(amount));
+    if (amount != 0) a.steal_points(amount);
     a.is_thief_steal = true;                                                // +0xec = 1
     a.target_team_id = 255;
     post_news(a.player_id, strings::kFoodStolen);

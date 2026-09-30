@@ -4745,9 +4745,9 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         ASSERT_NE(sim.get_unit(w_id).state, UnitState::Drowning);
         ASSERT_NE(sim.get_unit(s_id).state, UnitState::Swimming);
 
-        // The bridge lifetime task ends both bridges (BridgeTimeout -> DestroyBridgeAt): the tiles are water again
-        sim.set_bridge_at(TileCoord{20, 20}, 3, 1);
-        sim.set_bridge_at(TileCoord{22, 20}, 3, 1);
+        // The bridge lifetime task ends both bridges (BridgeTimeout -> DestroyBridgeAt; it acts only on a completed bridge, 0x25): the tiles are water again
+        sim.set_bridge_at(TileCoord{20, 20}, 4, 1);
+        sim.set_bridge_at(TileCoord{22, 20}, 4, 1);
         sim.tick();
         ASSERT_FALSE(sim.grid().get_cell(TileCoord{20, 20}).has_any_bridge());
         ASSERT_FALSE(sim.grid().get_cell(TileCoord{22, 20}).has_any_bridge());
@@ -6518,10 +6518,10 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
 
     TEST_CASE("12.108: Version Invariant & Fog of War Cursor Concealment Parity") {
         // 1. Verify semantic versioning components
-        ASSERT_EQ(ants::VERSION_STRING, "v0.0.53");
+        ASSERT_EQ(ants::VERSION_STRING, "v0.0.54");
         ASSERT_EQ(ants::VERSION_MAJOR, 0);
         ASSERT_EQ(ants::VERSION_MINOR, 0);
-        ASSERT_EQ(ants::VERSION_PATCH, 53);
+        ASSERT_EQ(ants::VERSION_PATCH, 54);
 
         // 2. Setup simulation world with Fog of War enabled
         SimulationEngine sim;

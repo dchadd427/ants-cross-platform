@@ -143,6 +143,16 @@ public:
         world_state_dirty_ = true;
     }
 
+    // Steps or restores the stage of a bridge tile without touching its collapse timer: in the original the timer is a separate task
+    // entry (list at +0x4aec); the stage tiles change underneath it, only the completion of a build arms it (0x101ec84) and only the
+    // completion of a demolish cancels it (0x101edfe); an interrupted demolish restores the completed bridge with its timer still running.
+    void set_bridge_stage(int32_t x, int32_t y, uint16_t id, uint8_t owner) {
+        auto& cell = grid_.get_cell_mut(static_cast<uint32_t>(x), static_cast<uint32_t>(y));
+        const uint32_t timer = cell.timer_ticks;
+        grid_.set_layer2(static_cast<uint32_t>(x), static_cast<uint32_t>(y), id, owner);
+        cell.timer_ticks = timer;
+    }
+
     // Fire walls and bridges only get their 180 s lifetime task while more than 180 s of match time remain
     // (Ants.exe 0x101e8e0 / 0x101ec84); later ones never burn out or collapse.
     void arm_structure_lifetime(int32_t x, int32_t y) {
@@ -320,7 +330,7 @@ public:
     void enter_clip_end(AntUnit& a);                   // step callback, actions 2 / 0x14, last frame
     void cleanup_enter(AntUnit& a);                    // FUN_0101e165: deposit and heal
     bool raid_arrive(AntUnit& a, StepEvt& e);          // FUN_0101ccaf case 0xb (true: the raid started)
-    void start_raid(AntUnit& a, uint8_t victim, uint32_t amount);   // FUN_0102184e
+    void start_raid(AntUnit& a, uint8_t victim, int32_t amount);    // FUN_0102184e
     void raid_clip_end(AntUnit& a);                    // step callback, actions 5 / 0xd, last frame
     void cleanup_raid(AntUnit& a);                     // FUN_0101e27f: loot transfer
     void anthillq_run();                               // ANTHILLQ task, every 200 ms

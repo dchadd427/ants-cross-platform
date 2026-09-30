@@ -418,7 +418,9 @@ void SimulationEngineImpl::water_landing(AntUnit& a, TileCoord t) {
 }
 
 // FUN_0100f8bf DestroyBridgeAt (after the tile was set empty): every ant on the tile is checked. A non-swimmer drowns
-// (message 0x15), a swimmer only splashes (dsplash) and goes on with its current action, without any damage.
+// (message 0x15), a swimmer only splashes (effect 0x28 = dsplash, which has no sound) and its current action is started
+// again (SetActionDefault(current action), 0x100f99f) so that the clip is chosen for the water it now stands in: the water
+// idle clip, the swim gait; an attacking swimmer loses its path and goes idle (current action 0x12: SetPath(0), action 0).
 void SimulationEngineImpl::bridge_gone_scan(TileCoord t) {
     for (auto& up : ants_) {
         AntUnit* a = up.get();
@@ -428,9 +430,18 @@ void SimulationEngineImpl::bridge_gone_scan(TileCoord t) {
         if (a->type == AntType::Swimmer) {
             a->in_water = true;
             a->was_in_water = true;
-            if (orig_action_of(*a) == AntUnit::kActionIdle) set_idle_label(*a);
             spawn_tile_effect("dsplash", t.x, t.y, effect_spec::kDsplashMs);
-            audio_queue_.push_back(AudioEvent{SoundID::WaterSplash, a->pixel_x, a->pixel_y, 1, 255});
+            uint8_t act = orig_action_of(*a);
+            if (act == AntUnit::kActionAttack) {
+                a->clear_path();                                                    // 0x101ab56
+                act = AntUnit::kActionIdle;
+            }
+            // (A swimmer in its death or drowning clip is left alone: restarting those clips would start the death effect a second time,
+            // which the original's single clip does not do.)
+            if (act != AntUnit::kActionDeath && act != AntUnit::kActionDrown) {
+                set_action(*a, act, static_cast<uint8_t>(a->facing), -1, -1, false);     // 0x101ace3
+                if (act == AntUnit::kActionIdle) set_idle_label(*a);
+            }
         } else {
             const uint8_t act = orig_action_of(*a);
             if (act != AntUnit::kActionDrown && act != AntUnit::kActionDeath) drown(*a, t);
@@ -539,7 +550,8 @@ void SimulationEngineImpl::remove_ant(AntUnit& a) {
     if (a.is_holding() && grid_.in_bounds(tile)) {
         const auto& cell = grid_.get_cell(tile);
         if (cell.is_empty_overlay() && grid_.terrain_class_at(tile) != movement::kTerrainWater && !grid_.is_solid_object(tile)) {
-            grid_.drop_lunchbox(static_cast<uint32_t>(tile.x), static_cast<uint32_t>(tile.y), a.carried_points);
+            grid_.drop_lunchbox(static_cast<uint32_t>(tile.x), static_cast<uint32_t>(tile.y),
+                                static_cast<uint32_t>(std::max<int32_t>(0, a.carried_signed())));   // (a thief's debt drops an empty lunchbox: what the original's lunchbox does with a negative amount is not known)
         }
     }
     a.clear_inventory();

@@ -404,8 +404,11 @@ int main() {
         ASSERT_TRUE(wait_ms(sim, 2000, [&]() { return sim.get_unit(s).loco_action == AntUnit::kActionBridgeDemolish; }) >= 0);
         run_ms(sim, 1100);
         ASSERT_TRUE(sim.grid().get_bridge_stage(TileCoord{11, 10}) < 4);
+        const uint32_t timer_before = cell_at(sim, {11, 10}).timer_ticks;                          // the bridge's own 180 s timer is a separate task
+        ASSERT_TRUE(timer_before > 0 && timer_before < 3600);
         sim.execute_melee_attack(e, s);
         ASSERT_TRUE(cell_at(sim, {11, 10}).has_completed_bridge());                               // stage 0x25 again
+        ASSERT_EQ(cell_at(sim, {11, 10}).timer_ticks, timer_before);                              // ... and still running (0x101ed58 never cancels it)
     } TEST_END();
 
     TEST_CASE("3.6 Demolishing a bridge drowns the non-swimmers standing on it; a swimmer splashes (dsplash) and survives") {
@@ -433,6 +436,61 @@ int main() {
         ASSERT_TRUE(splash);
         ASSERT_TRUE(sim.get_unit(swimmer2).is_alive());
         ASSERT_EQ(sim.get_unit(swimmer2).hp, 10u);
+    } TEST_END();
+
+    TEST_CASE("3.7 The restored bridge still collapses at its old deadline (an interrupted demolish never cancels the timer task, 0x101ed58)") {
+        SimulationEngine sim;
+        make_world(sim);
+        sim.set_terrain(11, 10, TERRAIN_WATER);
+        sim.set_bridge_at(TileCoord{11, 10}, 4, 200);                                             // built now: collapses after 10 s
+        const uint32_t s = sim.spawn_unit(0, AntType::Swimmer, TileCoord{10, 10});
+        const uint32_t e = sim.spawn_unit(1, AntType::Worker, TileCoord{10, 11});
+        sim.issue_order(order(s, OrderType::BuildBridge, TileCoord{11, 10}));
+        const int to_start = wait_ms(sim, 2000, [&]() { return sim.get_unit(s).loco_action == AntUnit::kActionBridgeDemolish; });
+        ASSERT_TRUE(to_start >= 0);
+        run_ms(sim, 1100);
+        sim.execute_melee_attack(e, s);                                                            // interrupted: the completed bridge is back
+        ASSERT_TRUE(cell_at(sim, {11, 10}).has_completed_bridge());
+        const int to_collapse = wait_ms(sim, 12000, [&]() { return sim.grid().get_bridge_stage(TileCoord{11, 10}) == 0; });
+        ASSERT_TRUE(to_collapse >= 0);
+        ASSERT_NEAR(to_start + 1100 + to_collapse, 10000, 150);                                    // 200 ticks after it was built, not later
+        ASSERT_TRUE(cell_at(sim, {11, 10}).is_empty_overlay());
+    } TEST_END();
+
+    TEST_CASE("3.8 A collapse timer that runs out while the bridge is half demolished does nothing and is used up (BridgeTimeout acts only on 0x25, 0x1024e66)") {
+        SimulationEngine sim;
+        make_world(sim);
+        sim.set_terrain(11, 10, TERRAIN_WATER);
+        sim.set_bridge_at(TileCoord{11, 10}, 4, 3600);
+        const uint32_t s = sim.spawn_unit(0, AntType::Swimmer, TileCoord{10, 10});
+        const uint32_t e = sim.spawn_unit(1, AntType::Worker, TileCoord{10, 11});
+        sim.issue_order(order(s, OrderType::BuildBridge, TileCoord{11, 10}));
+        ASSERT_TRUE(wait_ms(sim, 2000, [&]() { return sim.get_unit(s).loco_action == AntUnit::kActionBridgeDemolish; }) >= 0);
+        sim.grid_mut().get_cell_mut(11, 10).timer_ticks = 14;                                      // runs out 700 ms into the demolish: between the first and the second pass
+        run_ms(sim, 800);
+        ASSERT_TRUE(cell_at(sim, {11, 10}).has_partial_bridge());                                  // the stage is not 0x25: the timeout did nothing
+        ASSERT_EQ(cell_at(sim, {11, 10}).timer_ticks, 0u);                                         // and the timer task is gone
+        sim.execute_melee_attack(e, s);                                                            // interrupted: the completed bridge is back, without a timer
+        ASSERT_TRUE(cell_at(sim, {11, 10}).has_completed_bridge());
+        run_ms(sim, 20000);
+        ASSERT_TRUE(cell_at(sim, {11, 10}).has_completed_bridge());                                // it stays
+    } TEST_END();
+
+    TEST_CASE("3.9 A swimmer on a bridge that collapses goes on with its current action on the new ground: the water idle clip (astw301); the original is silent") {
+        SimulationEngine sim;
+        make_world(sim);
+        sim.set_terrain(11, 10, TERRAIN_WATER);
+        sim.set_bridge_at(TileCoord{11, 10}, 4, 30);                                               // collapses after 1.5 s
+        const uint32_t sw = sim.spawn_unit(1, AntType::Swimmer, TileCoord{11, 10});
+        run_ms(sim, 100);
+        ASSERT_TRUE(sim.get_unit(sw).loco.clip.chd_index != movement::idle_water_clip().chd_index);   // on the bridge: a land idle clip
+        sim.clear_audio_events();
+        ASSERT_TRUE(wait_ms(sim, 3000, [&]() { return sim.grid().get_bridge_stage(TileCoord{11, 10}) == 0; }) >= 0);
+        sim.tick();
+        ASSERT_EQ(sim.get_unit(sw).loco.clip.chd_index, movement::idle_water_clip().chd_index);      // SetActionDefault(current action) chose the clip again
+        ASSERT_EQ(sim.get_unit(sw).state, UnitState::Swimming);
+        ASSERT_TRUE(sim.get_unit(sw).is_alive());
+        ASSERT_FALSE(sim.has_audio_event(71));                                                     // the effect (anim 0x28) has no sound
     } TEST_END();
 
     TEST_CASE("4.1 Order classification: the ant's type turns the special click into plant/defuse, ignite/extinguish, build/demolish or a plain walk") {

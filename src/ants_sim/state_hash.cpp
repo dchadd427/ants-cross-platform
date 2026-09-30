@@ -156,7 +156,7 @@ void hash_ant(Fnv& h, const AntUnit& a) {
     h.u8(a.home_state);
     h.u8(a.home_priority);
     h.u32(a.home_time_ms);
-    h.u32(a.raid_amount);
+    h.u32(static_cast<uint32_t>(a.raid_amount));
     h.u8(a.orig_target_team);
     h.u32(a.orig_target_ant);
     h.tile(a.orig_special_tile);

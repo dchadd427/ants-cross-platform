@@ -215,7 +215,7 @@ public:
     uint8_t     home_state{0};              // +0x68: 0 none, 1 heading to the waiting ring, 2 queued at the ring
     uint8_t     home_priority{0};           // +0x6c: 1 = ordered by a click or a retreat, queued first
     uint32_t    home_time_ms{0};            // +0x70: arrival time at the ring tile (0 for priority ants)
-    uint32_t    raid_amount{0};             // +0xf8: loot fixed when a thief's raid starts
+    int32_t     raid_amount{0};             // +0xf8: loot fixed when a thief's raid starts (signed: min(victim score, 50), below zero for a victim below zero)
     uint8_t     orig_target_team{255};      // +0xb0 (attack order)
     uint32_t    orig_target_ant{0};         // +0xb2 (attack order)
     TileCoord   orig_special_tile{-1, -1};  // +0xb0 of the ability orders 6..9, 0xd, 0xe: the tile the ability works on
@@ -270,10 +270,13 @@ public:
         carried_points += points;
     }
 
-    void steal_points(uint16_t points) noexcept {
+    // SetHolding of a thief's loot (0x101ac64): the loot word is sign-extended (movsx) into the carried amount, so a negative loot is a
+    // debt that the thief deposits; carried_points keeps the 16 bits, carried_signed() gives the value back.
+    void steal_points(int32_t points) noexcept {
         holding = 1;
-        carried_points = points;
+        carried_points = static_cast<uint16_t>(points);
     }
+    int32_t carried_signed() const noexcept { return static_cast<int16_t>(carried_points); }
 
 
     void clear_inventory() noexcept {

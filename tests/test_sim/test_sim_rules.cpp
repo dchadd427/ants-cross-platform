@@ -589,7 +589,12 @@ void run_suite_8_bridges() {
 
         ASSERT_EQ(sim.get_unit(swimmer).hp, 10);
         ASSERT_EQ(sim.get_unit(swimmer).state, UnitState::Swimming);
-        ASSERT_TRUE(sim.has_audio_event(71)); // Sound 71 splash.wav
+        bool splash_effect = false;
+        for (const auto& fx : sim.get_world_state().effects) {
+            if (fx.anim_name == "dsplash") splash_effect = true;
+        }
+        ASSERT_TRUE(splash_effect);            // effect 0x28 (dsplash) at the tile ...
+        ASSERT_FALSE(sim.has_audio_event(71)); // ... which has no sound: the original is silent (BridgeGone 0x100f96b; the old remake played splash.wav here)
         ASSERT_FALSE(sim.has_audio_event(72)); // NO antdrown.wav
     } TEST_END();
 

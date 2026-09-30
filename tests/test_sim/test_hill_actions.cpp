@@ -60,6 +60,15 @@ void make_world(SimulationEngine& sim, uint32_t seed = 11) {
     sim.set_player_score(1, 0);
 }
 
+// Ticks until the score of `player` equals `value` (true) or `max_ticks` passed (false).
+bool wait_until_score(SimulationEngine& sim, uint8_t player, int32_t value, int max_ticks) {
+    for (int t = 0; t < max_ticks; ++t) {
+        if (sim.get_player_score(player) == value) return true;
+        sim.tick();
+    }
+    return sim.get_player_score(player) == value;
+}
+
 bool news_has(SimulationEngine& sim, uint8_t player, uint16_t id) {
     return sim.has_news_event(player, id);
 }
@@ -397,6 +406,50 @@ int main() {
         ASSERT_TRUE(news_has(sim, 0, 17));                    // "Can't - already have food."
         ASSERT_EQ(sim.get_player_score(1), 100);
         ASSERT_EQ(sim.get_unit(thief).state == UnitState::Infiltrating, false);
+    } TEST_END();
+
+    // ---- scores are never clamped (AddScore 0x1010cc9 just adds; the loot compare at 0x101d57f is signed) ---------------------------
+    TEST_CASE("3.4 Two thieves raiding a 60-point victim together: each loot is 50, fixed at arrival; the victim ends at -40") {
+        SimulationEngine sim;
+        make_world(sim);
+        sim.set_player_score(1, 60);
+        const uint32_t t1 = sim.spawn_unit(0, AntType::Thief, TileCoord{43, 42});
+        const uint32_t t2 = sim.spawn_unit(0, AntType::Thief, TileCoord{43, 41});
+        sim.start_thief_infiltration(t1, 1);
+        sim.start_thief_infiltration(t2, 1);
+        for (int t = 0; t < 90; ++t) sim.tick();
+        ASSERT_EQ(sim.get_player_score(1), -40);                                        // the original keeps the real number
+        ASSERT_EQ(sim.get_unit(t1).carried_points, 50u);
+        ASSERT_EQ(sim.get_unit(t2).carried_points, 50u);                                // 100 points taken from a victim that had 60
+    } TEST_END();
+
+    TEST_CASE("3.5 A raid on a victim below zero takes a negative loot: the victim gets the points back, the thief carries the debt home") {
+        SimulationEngine sim;
+        make_world(sim);
+        sim.set_player_score(1, -40);
+        sim.set_player_score(0, 100);
+        const uint32_t thief = sim.spawn_unit(0, AntType::Thief, TileCoord{43, 42});
+        sim.start_thief_infiltration(thief, 1);                                         // loot = min(-40, 50) = -40 (signed compare)
+        for (int t = 0; t < 90; ++t) sim.tick();
+        ASSERT_EQ(sim.get_player_score(1), 0);                                          // AddScore(victim, -(-40))
+        ASSERT_TRUE(sim.get_unit(thief).is_holding());                                  // SetHolding of a non-zero loot
+        ASSERT_TRUE(sim.get_unit(thief).is_thief_steal);
+        ASSERT_TRUE(wait_until_score(sim, 0, 60, 900));                                 // the deposit adds the carried -40 to the thief's team
+        ASSERT_EQ(sim.get_player_score(1), 0);
+    } TEST_END();
+
+    TEST_CASE("3.6 A hill that sinks below zero shows 0 on the score box and its real value in the stats") {
+        SimulationEngine sim;
+        make_world(sim);
+        sim.set_player_score(1, 60);
+        sim.set_player_score(0, 0);
+        const uint32_t t1 = sim.spawn_unit(0, AntType::Thief, TileCoord{43, 42});
+        const uint32_t t2 = sim.spawn_unit(0, AntType::Thief, TileCoord{43, 41});
+        sim.start_thief_infiltration(t1, 1);
+        sim.start_thief_infiltration(t2, 1);
+        for (int t = 0; t < 90; ++t) sim.tick();
+        ASSERT_EQ(sim.get_player_stats(1).score, -40);
+        ASSERT_EQ(sim.get_world_state().player_scores[1], -40);                         // the snapshot carries the real number; only the digits are clamped (FUN_01010452)
     } TEST_END();
 
     // ---- the waiting ring of the hill: the queue flag (+0x68) of an ant that is re-routed or blocked ---------------------

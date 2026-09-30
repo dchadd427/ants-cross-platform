@@ -1523,7 +1523,8 @@ in `ants.chd` (the original was never run, so timings come from the clip tables)
   game hatches for free (`force`, no 200 point rule, cost `min(200, score)`).
 * **Thief raid** *(implemented; order 0xb, action 0xd, messages 0x12)*. The path ends on the raid tile (an occupied raid tile
   makes the last step wait). At the arrival (`0x101d51b`): an ally's hill -> stop; carrying food -> text 17 "Can't - already have
-  food." and `Order(home)`; otherwise `amount = min(victim score, 50)` (also 0), fixed now. `FUN_0102184e` starts action 0xd
+  food." and `Order(home)`; otherwise `amount = min(victim score, 50)` (also 0), fixed now (a SIGNED compare, `0x101d57f`: `cmp eax, 0x32; jl`;
+  a dropped team's hill is refused, `0x101d577`; a victim below zero gives a negative loot, see below). `FUN_0102184e` starts action 0xd
   (`atcr501`, 33 frames, 3510 ms, frame sounds 84 / 85 / 86 at 2050 / 2610 / 3370 ms), positions the thief at the raid tile centre
   (`bx*32+112, by*32+80`; the message handler runs inside the last walk step, so that step's snap is still added afterwards and
   the thief stands a few pixels beside the centre until the clip ends), hides its selection marker, and plays the `anthill`
@@ -1532,6 +1533,12 @@ in `ants.chd` (the original was never run, so timings come from the clip tables)
   carries it (loot flag +0xec is set even for 0) with text 62 "Food stolen..." for the thief's owner, and a thief that got food
   goes home; with nothing to steal it stays idle on the raid tile. A raiding thief can be attacked (action 0xd is not in the
   refusal list). Depositing the loot at its own hill scores `amount` like food (cue 87, text 61).
+  **Scores are never clamped** *(audit of 2026-09-30, fixed in v0.0.54)*: `AddScore` (`0x1010cc9`) just adds `delta` to `+0x54`; the loot is a signed word
+  (`movsx word [ant + 0xf8]`), `FUN_0101e27f` does `AddScore(victim, -loot)` and `SetHolding(loot)` for every non-zero loot, and the deposit (`FUN_0101e165`) does
+  `AddScore(carried)` for whatever is carried, with the "Score going up" text only when it is positive (`0x101e198`). Two thieves that raid a 60-point hill together both
+  read 60 at their arrival (loot 50 each) and leave it at -40; the score box draws 0 for it (`FUN_01010452` clamps to 0 .. 999999), the results show the real number.
+  A thief that raids a victim below zero takes a negative loot: the victim gets the points back and the thief carries the debt to its own hill, where the deposit lowers
+  its team's score. (What the original's lunchbox message does with a negative carried amount when such a thief dies is not known; the remake drops an empty one.)
 * **Remake mapping**. `src/ants_sim/action_system.cpp` (hill, hatch, raid), `movement_system.cpp` (SetAction cleanup, step
   callbacks, path ends, ring goal check, fairness rule), `ant_unit.hpp` (`home_state`, `home_priority`, `home_time_ms`,
   `raid_amount`, `retreat_pending`, action ids). The renderer draws the ordinary clip of the ant at its position: there are no
@@ -1604,7 +1611,9 @@ handler of `FUN_0100d791` does before it broadcasts.
   re-plans and shows the `bump` effect (anim 0xdc, sound 47). The `battle` cloud (anim 56) exists only as a cosmetic pile-up cloud for
   ants of non-local teams and as the repair object of a desynchronised msg 8; nothing hides an ant.
 * **Bridge collapse** *(implemented; `FUN_0100f8bf`)*: every ant on a bridge tile that becomes water is checked: a non-swimmer
-  drowns, a swimmer only splashes.
+  drowns, a swimmer only splashes: effect 0x28 (`dsplash`, five frames without a sound) at the tile, then `SetActionDefault(current action)` (`0x100f99f`), so that its
+  current clip is chosen again for the water it now stands in (the water idle clip `astw301`, the swim gait); a swimmer whose current action is 0x12 (attack) first
+  loses its path (`0x101ab56`) and goes idle. Nothing is played: the remake's `splash.wav` (sound 71) at the collapse was invented and is gone (v0.0.54).
 * **Removed as invented** (v0.0.33): the physics engine (ballistic lerp, arcs, obstacle counting, 8 candidate directions), the bounce
   and scuffle states, the attack cooldown, the pursuit AI, the guard post AI (`combat_ai.cpp`), the 12-tick stun after flights, the
   instant death and instant drowning, the flinch / stun tick timers, the melee immunity flags.
@@ -1661,6 +1670,12 @@ Addresses are virtual addresses in `Original-Ants/Ants.exe` (image base 0x010000
   needs a completed bridge, gives the tile to the demolisher's team at once, removes one stage per pass (0x24, 0x23, 0x22) and destroys
   the tile at the end of the fourth pass (1920 / 2000 ms); an interrupted demolish restores the completed bridge. Destroying a bridge
   (demolish, or the timer `FUN_01024e66`) runs `FUN_0100f8bf`: every non-swimmer on the tile drowns, a swimmer only splashes (dsplash).
+  **The collapse timer is a separate task entry** (list at `game + 0x4aec`, task object `FUN_01024d88`, polled every 2500 ms by the scheduler, `0x1024dd1`;
+  re-read in the audit of 2026-09-30, fixed in v0.0.54): the stage tiles change underneath it. Only the completion of a build arms it (`0x101ec84`) and only
+  the completion of a demolish cancels it (`FUN_0101edfe`, called at `0x101edbd`); the restore path of an interrupted demolish (`0x101ed58`, `SetTile(0x25)`) never
+  touches it, so the restored bridge still collapses at its old deadline. `BridgeTimeout` (`0x1024e66`) acts only when layer 2 holds exactly 0x25 at that moment
+  (`sub ax, 0x25`); the task is used up either way, so a timer that runs out while the bridge is half demolished does nothing and a bridge restored afterwards
+  stays for good. The remake keeps the timer in the cell (`timer_ticks`), steps and restores the stage with `set_bridge_stage` (timer untouched) and collapses only a 0x25 tile.
 * **Solid tiles and pick-ups** *(implemented)*: fire walls, power-ups, lunchboxes, food and the placeholder are solid for every ant that
   does not carry the matching order (power-up order onto that very tile, harvest order onto that food, raid, a fire ant on a fire wall).
   An ant can therefore not be thrown onto a power-up (the landing tests refuse solid tiles) and cannot be attacked while it stands on

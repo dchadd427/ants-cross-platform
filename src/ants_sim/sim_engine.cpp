@@ -266,7 +266,8 @@ void SimulationEngine::tick() {
                 }
             } else if (cell.has_any_bridge() && cell.timer_ticks > 0) {
                 cell.timer_ticks--;
-                if (cell.timer_ticks == 0) {
+                // BridgeTimeout (0x1024e66) acts only when the tile is the completed bridge 0x25 at that moment; the task is used up either way
+                if (cell.timer_ticks == 0 && cell.interactive_id == TILE_BRIDGE4) {
                     impl_->grid_.collapse_bridge(x, y);
                     // Bridge lifetime task (Ants.exe 0x1024e66): bsputter puff at the tile top-left after the destroy
                     impl_->spawn_tile_effect("bsputter", static_cast<int32_t>(x), static_cast<int32_t>(y), effect_spec::kBsputterMs);
@@ -778,7 +779,7 @@ const WorldState& SimulationEngine::get_world_state() const {
             s.anim_state = static_cast<uint16_t>(a->state);
             s.anim_frame = a->anim_subitem;
             s.is_holding = a->is_holding();
-            s.carried_points = a->carried_points;
+            s.carried_points = a->carried_signed();
             s.is_stunned = a->is_stunned();
             s.is_swimming = (a->state == UnitState::Swimming || a->in_water);
             s.is_drowning = (a->state == UnitState::Drowning);
@@ -1353,8 +1354,8 @@ size_t SimulationEngine::get_base_queue_size(uint8_t player_id) const {
 void SimulationEngine::start_thief_infiltration(uint32_t ant_id, uint8_t target_team_id) {
     AntUnit* u = impl_->find_unit(ant_id);
     if (!u || !u->is_alive() || target_team_id >= MAX_PLAYERS) return;
-    const int32_t score = std::max<int32_t>(0, impl_->stats_.get_individual_score(target_team_id));
-    impl_->start_raid(*u, target_team_id, static_cast<uint32_t>(std::min<int32_t>(score, static_cast<int32_t>(MAX_THIEF_STEAL))));
+    const int32_t score = impl_->stats_.get_individual_score(target_team_id);
+    impl_->start_raid(*u, target_team_id, std::min<int32_t>(score, static_cast<int32_t>(MAX_THIEF_STEAL)));
 }
 
 bool SimulationEngine::has_lunchbox_at(TileCoord pos) const {
