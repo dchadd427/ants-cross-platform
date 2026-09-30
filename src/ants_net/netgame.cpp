@@ -396,6 +396,7 @@ bool NetGame::start_match(uint32_t seed, uint64_t map_hash) {
     loaded_reported_ = false;
     start_ = host_lobby_->start_info();
     events_.push_back(Event{Event::Type::StartRequested, 255});
+    refresh_status();
     return true;
 }
 
@@ -413,6 +414,7 @@ void NetGame::report_loaded(bool ok) {
             events_.push_back(Event{Event::Type::Cancelled, seat_});
         }
     }
+    refresh_status();                                             // the status line follows at once, not with the next update
 }
 
 // ---- the match -----------------------------------------------------------------------------------------------------------------------------------

@@ -13,7 +13,8 @@ Ground truth for every entry is in [`docs/GAME_REVERSE_ENGINEERING.md`](docs/GAM
 
 ## Unreleased
 
-- (nothing yet)
+- Fixed: the setup screen's status line follows a state change at once. The notice of a map that could not be loaded appeared one frame late, which made a network test fail one time in six.
+- The v0.0.46 commit was missing `tests/test_net/test_netgame.cpp`; it was added in the next commit and the pushed tree was checked with a clean clone (configure, build, run the new suites).
 
 ## v0.0.46 - 2026-09-29 - Network port: the game meets the network
 
