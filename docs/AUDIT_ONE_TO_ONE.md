@@ -15,6 +15,7 @@ order in which it is proposed to be fixed. The owner decides (AGENTS.md rule 9).
 * v0.0.59: batch 2 part 2 (the sound law: radius 2500, Chebyshev, dB, far-channel pan, the Sound Volume option in every sound: LS NEW-6, LX; the Sound / Music sliders apply at the release, test voice: LS NEW-5, LR R2.1d).
 * v0.0.60: batch 2 part 3 (tracked sounds are cut when a clip is replaced or the sprite is removed: LS NEW-4, LK V-K4; a pressed button's click is cut at the release).
 * v0.0.61: batch 2 part 4 (music: the intro plays once and random pieces chain, focus loss closes it and focus gain starts a new piece, slider release restarts, match end closes at once: LS NEW-8, LR NEW-2). **Batch 2 is done.** Not done on purpose: the start-up jingle (vendor artwork, owner decision), the 32-channel limit (by necessity).
+* v0.0.62: batch 3 part 1 (the end rules: nobody left, a strictly best allied survivor, the drop-out win test, quitting as a forfeit with the quitter's row last; `Quit` command, protocol version 4: LR R1.4c, LS S-4.T3, LX #1). Next: the results screen rebuild.
 
 ## 1. What was audited and how
 

@@ -947,6 +947,41 @@ void run_suite_6_scorecard_and_audio_routing() {
         // Application must have received quit() and stopped running
         ASSERT_FALSE(app.is_running());
     } TEST_END();
+
+    TEST_CASE("6.4 Quit Dialog Yes With Exactly One Other Side Left Ends The Match (FUN_0101453f): No Exit, The Results Open With The Quitter Last") {
+        Application app;
+        ApplicationConfig cfg;
+        cfg.headless = true;
+        cfg.start_in_map_select = false;
+        ASSERT_TRUE(app.init(cfg));
+        ASSERT_EQ(app.local_player_id(), 0);
+        app.sim().drop_player(2);
+        app.sim().drop_player(3);
+        ASSERT_FALSE(app.sim().is_match_over());                             // two enemies are left: team 0 and team 1
+        ASSERT_EQ(app.sim().other_sides(0), 1u);
+        app.sim().set_player_score(0, 900);                                  // the quitter's score does not help: its row is the last
+        app.sim().set_player_score(1, 50);
+        SDL_KeyboardEvent q_ev{};
+        q_ev.type = SDL_KEYDOWN;
+        q_ev.keysym.sym = SDLK_q;
+        q_ev.keysym.mod = KMOD_LCTRL;
+        app.handle_key_down(q_ev);
+        ASSERT_TRUE(app.hud().is_quit_dialog_open());
+        SDL_KeyboardEvent y_ev{};
+        y_ev.type = SDL_KEYDOWN;
+        y_ev.keysym.sym = SDLK_y;
+        app.handle_key_down(y_ev);
+        ASSERT_FALSE(app.hud().is_quit_dialog_open());
+        ASSERT_TRUE(app.is_running());                                       // the quit is the end of the match: the results come first
+        ASSERT_TRUE(app.sim().is_match_over());
+        ASSERT_EQ(app.sim().quitter(), 0);
+        ASSERT_TRUE(app.scorecard().is_open());
+        const auto rows = app.sim().get_world_state().match_result.rows(0);
+        ASSERT_EQ(rows.size(), 2u);
+        ASSERT_EQ(rows[0].first, 1);
+        ASSERT_EQ(rows[1].first, 0);
+        ASSERT_EQ(app.scorecard().get_audio_to_play(), 0u);                  // the sting was played when the results opened
+    } TEST_END();
 }
 
 // ============================================================================
@@ -6754,10 +6789,10 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
 
     TEST_CASE("12.108: Version Invariant & Fog of War Cursor Concealment Parity") {
         // 1. Verify semantic versioning components
-        ASSERT_EQ(ants::VERSION_STRING, "v0.0.61");
+        ASSERT_EQ(ants::VERSION_STRING, "v0.0.62");
         ASSERT_EQ(ants::VERSION_MAJOR, 0);
         ASSERT_EQ(ants::VERSION_MINOR, 0);
-        ASSERT_EQ(ants::VERSION_PATCH, 61);
+        ASSERT_EQ(ants::VERSION_PATCH, 62);
 
         // 2. Setup simulation world with Fog of War enabled
         SimulationEngine sim;

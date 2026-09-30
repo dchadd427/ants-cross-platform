@@ -395,8 +395,18 @@ public:
     /// FUN_0100d03b (a team leaves the match: quit, kicked, 60 s without a sign of life): the team is marked dropped (+0x64), the cue and the News
     /// Flash of string 46 are posted (the cue unless the match is over), every ant of the team starts its death clip, its alliance ends and its
     /// egg in the incubator is lost. A team that is not in the roster or already dropped is left alone.
+    /// The drop-out also ends the match at once when it leaves a team and its ally alone (Ants.exe 0x100d172: the game-over message of the machine of
+    /// a team without a live enemy).
     void drop_player(uint8_t player_id);
     bool is_player_dropped(uint8_t player_id) const noexcept;
+    /// FUN_0101453f, the quit dialog's Yes: with exactly one other side left the match ends and `player_id` is the quitter (its row is the last of the
+    /// results); with more sides left (or none) the team drops out like a peer that left.
+    void quit_player(uint8_t player_id);
+    /// FUN_0100c5b1: the number of sides that remain when the team leaves (every other team that has not dropped, each alliance once, the team's own
+    /// ally counted). The quit dialog asks it: exactly 1 ends the match.
+    uint32_t other_sides(uint8_t player_id) const;
+    /// The team whose quit ended the match (the game-over message's word), NO_QUITTER when the clock or the rules ended it
+    uint16_t quitter() const noexcept;
 
     /// FUN_01009fd8: the power-up type a flower dropper posts for the draw `r` (= rand() % 10000): the first type, in the order bomber, combat, thief,
     /// swimmer, fire, whose running total of trunc(p * 10000) exceeds r (types with p == 0 are skipped); 0xFF when none does (the caller then

@@ -80,6 +80,7 @@ void SimulationEngine::init(const ants::assets::LevelData& level_in, uint32_t ra
     const ants::assets::LevelData& level = everybody ? level_in : roster_level;
     impl_->roster_mask_ = roster_mask;
     impl_->dropped_mask_ = 0;
+    impl_->quitter_ = NO_QUITTER;
     impl_->prng_.srand(random_seed);
     impl_->cosmetic_prng_.srand(random_seed ^ 0x5EEDu);
     impl_->active_effects_.clear();
@@ -184,6 +185,7 @@ void SimulationEngine::init(const ants::assets::LevelData& level_in, uint32_t ra
 void SimulationEngine::init_test_world(uint32_t width, uint32_t height, uint32_t random_seed, uint32_t match_time_ms) {
     impl_->roster_mask_ = 0x0Fu;
     impl_->dropped_mask_ = 0;
+    impl_->quitter_ = NO_QUITTER;
     impl_->prng_.srand(random_seed);
     impl_->cosmetic_prng_.srand(random_seed ^ 0x5EEDu);
     impl_->active_effects_.clear();
@@ -367,7 +369,82 @@ void SimulationEngineImpl::checkgo_poll() {
         }
         ++checkgo_stage_;
     }
-    if (remaining < 0) handle_game_over();
+    // The end: the clock is below 0 (the wrapped unsigned clock is above the limit), or the elimination rules hold for some team (0x10248de - 0x1024a8f)
+    if (remaining < 0 || checkgo_end_rules()) handle_game_over();
+}
+
+bool SimulationEngineImpl::team_alive(uint8_t team) const {
+    if (team >= MAX_PLAYERS) return false;
+    if (stats_.get_egg_count(team) > 0 || hatch_[team].active) return true;
+    for (const auto& a : ants_) {
+        if (a != nullptr && !a->removed && a->player_id == team) return true;
+    }
+    return false;
+}
+
+bool SimulationEngineImpl::checkgo_ends_for(uint8_t local) const {
+    bool any_alive = false;
+    bool all_allied = true;
+    uint32_t present = 0;
+    for (uint8_t k = 0; k < MAX_PLAYERS; ++k) {
+        if ((roster_mask_ & (1u << k)) == 0) continue;              // a team without a player is NULL in the table
+        ++present;
+        if (team_dropped(k) || !team_alive(k)) continue;
+        any_alive = true;
+        if (k != local && stats_.get_alliance(local) != k) all_allied = false;
+    }
+    if (!any_alive) return true;                                     // nobody has anything left
+    if (!all_allied || present <= 1) return false;                   // a live enemy, or the only team of the match (no score to compare)
+    // The best combined score over the teams that are not the local team's ally: equal scores keep the old best unless it is the local team,
+    // so a tie for the top is never a win for the local team; a score of 0 never becomes the best
+    int32_t best_score = 0;
+    int32_t best = -1;
+    for (uint8_t j = 0; j < MAX_PLAYERS; ++j) {
+        if ((roster_mask_ & (1u << j)) == 0 || stats_.get_alliance(local) == j) continue;
+        int32_t combined = stats_.get_individual_score(j);
+        const uint8_t ally = stats_.get_alliance(j);
+        if (ally != ALLIANCE_NONE && ally < MAX_PLAYERS) combined += stats_.get_individual_score(ally);
+        if (combined > best_score || (combined == best_score && best == static_cast<int32_t>(local))) {
+            best_score = combined;
+            best = j;
+        }
+    }
+    return best == static_cast<int32_t>(local);
+}
+
+bool SimulationEngineImpl::checkgo_end_rules() const {
+    for (uint8_t local = 0; local < MAX_PLAYERS; ++local) {
+        if ((roster_mask_ & (1u << local)) == 0 || team_dropped(local)) continue;     // a dropped team's machine is gone
+        if (checkgo_ends_for(local)) return true;
+    }
+    return false;
+}
+
+bool SimulationEngineImpl::drop_leaves_winner() const {
+    for (uint8_t local = 0; local < MAX_PLAYERS; ++local) {
+        if ((roster_mask_ & (1u << local)) == 0 || team_dropped(local)) continue;
+        bool enemy = false;
+        for (uint8_t k = 0; k < MAX_PLAYERS && !enemy; ++k) {
+            if ((roster_mask_ & (1u << k)) == 0 || team_dropped(k) || k == local) continue;
+            enemy = stats_.get_alliance(local) != k;
+        }
+        if (!enemy) return true;
+    }
+    return false;
+}
+
+uint32_t SimulationEngineImpl::other_sides(uint8_t team) const {
+    uint32_t count = 0;
+    for (uint8_t si = 0; si < MAX_PLAYERS; ++si) {
+        if ((roster_mask_ & (1u << si)) == 0 || team_dropped(si) || si == team) continue;
+        const uint8_t ally = stats_.get_alliance(si);
+        if (ally == ALLIANCE_NONE || ally == team || ally < si) ++count;
+    }
+    return count;
+}
+
+MatchResult SimulationEngineImpl::make_match_result() const {
+    return stats_.evaluate_victory(static_cast<uint8_t>(roster_mask_ & ~dropped_mask_ & 0x0Fu), quitter_);
 }
 
 bool SimulationEngine::issue_order(const AntOrder& order) {
@@ -758,7 +835,7 @@ const WorldState& SimulationEngine::get_world_state() const {
 
         impl_->world_state_cache_.anthills = impl_->grid_.anthills();
         impl_->world_state_cache_.dropped_mask = impl_->dropped_mask_;
-        impl_->world_state_cache_.match_result = impl_->stats_.evaluate_victory();
+        impl_->world_state_cache_.match_result = impl_->make_match_result();
         impl_->world_state_cache_.fog_of_war_enabled = impl_->fog_of_war_enabled_;
         impl_->world_state_cache_.fog_revealed = impl_->fog_revealed_;
         impl_->world_state_dirty_ = false;

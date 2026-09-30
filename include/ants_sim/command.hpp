@@ -31,7 +31,9 @@ enum class CommandType : uint8_t {
     AllianceDeny = 8,       // the issuer refuses it
     AllianceWithdraw = 9,   // FUN_0100c5fa: the issuer takes its invitation to `other_player` back
     AllianceBreak = 10,     // the issuer leaves its team
-    Drop = 11,              // FUN_0100d03b: the issuer's team drops out of the match. A SYSTEM command: only the sequencer creates it (a peer
+    Quit = 11,              // FUN_0101453f: the issuer confirms the quit dialog. With exactly one other side left (FUN_0100c5b1) the match ends and the
+                            // issuer's row goes last on every results screen; otherwise the issuer's team drops out
+    Drop = 12,              // FUN_0100d03b: the issuer's team drops out of the match. A SYSTEM command: only the sequencer creates it (a peer
                             // that left or stopped answering); a client cannot send it (is_client_command)
     Last = Drop
 };

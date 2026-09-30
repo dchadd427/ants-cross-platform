@@ -490,7 +490,7 @@ void run_match_tests() {
         ASSERT_EQ(ants_of_carol, 0u);
     } TEST_END();
 
-    TEST_CASE("N3.7 Host Migration: When The Host Leaves A Two-Player Match The Guest Takes Over At Once And Plays On Alone") {
+    TEST_CASE("N3.7 Host Migration: When The Host Leaves A Two-Player Match The Guest Takes Over At Once; The Drop Ends The Match, The Guest Has Won (0x100d172)") {
         Table t;
         ASSERT_TRUE(make_room(t, 1));
         Machine& host = *t.machines[0];
@@ -511,17 +511,9 @@ void run_match_tests() {
         ASSERT_TRUE(t.run_until([&]() { return bob.count(NetGame::Event::Type::PlayerLeft) == 1; }, 3000));      // the old host's team drops out
         ASSERT_TRUE(bob.sim.is_player_dropped(0));
         ASSERT_FALSE(bob.sim.is_player_dropped(1));
-        const uint32_t before = bob.net.turns_executed();
-        t.run(3000);
-        ASSERT_TRUE(bob.net.turns_executed() > before + 20);                        // the game goes on
-        // and the guest's own orders still reach its simulation
-        const uint32_t ant = first_ant(bob, 1);
-        const auto* hill = bob.sim.grid().find_anthill(1);
-        ASSERT_TRUE(hill != nullptr);
-        const sim::CommandResult r = bob.net.submit(order(1, ant, static_cast<int16_t>(hill->x + 4), static_cast<int16_t>(hill->y + 4)));
-        ASSERT_EQ(r.status, sim::CommandResult::Status::Applied);
-        t.run(1500);
-        ASSERT_EQ(bob.sim.get_unit(ant).orig_order, sim::AntUnit::kOrderMove);
+        ASSERT_TRUE(bob.sim.is_match_over());                                        // no team is left besides the guest: the drop-out decides the match
+        ASSERT_EQ(bob.sim.quitter(), sim::NO_QUITTER);
+        ASSERT_TRUE(bob.sim.get_world_state().match_result.is_winner(1));
     } TEST_END();
 
     TEST_CASE("N3.8 Match: Two Players On A Four-Player Map Have Two Teams Only, And The Command Sink Refuses What It Must") {

@@ -122,6 +122,10 @@ CommandResult SimulationEngine::apply_command(const Command& cmd) {
             break_alliance(cmd.issuer);
             res.status = Status::Applied;
             return res;
+        case CommandType::Quit:                                  // the issuer confirmed the quit dialog (FUN_0101453f)
+            quit_player(cmd.issuer);
+            res.status = Status::Applied;
+            return res;
         case CommandType::Drop:                                  // system command of the sequencer (a peer left or fell silent)
             drop_player(cmd.issuer);
             res.status = Status::Applied;
@@ -156,6 +160,29 @@ void SimulationEngine::drop_player(uint8_t player_id) {
     }
     impl_->hatch_[player_id].active = false;
     impl_->world_state_dirty_ = true;
+    // The win test of the drop-out (0x100d172): when no team that has not dropped is left besides a team and its ally, that team has won: message 0x12
+    // (FUN_010226c5(-1)), the match ends on every machine. Not while the match is already over (+0x4b18 == 3).
+    if (impl_->match_state_ != MatchState::GameOver && impl_->drop_leaves_winner()) impl_->handle_game_over();
+}
+
+// FUN_0101453f (the quit dialog's Yes, 0x1014544): with exactly one other side left (FUN_0100c5b1) the quitter ends the match with the game-over message
+// that names it (FUN_010226c5(own team)): it stays in the match and its row goes last on every results screen. With more sides left it sends the
+// drop message (FUN_010235db, handled as a drop-out by every machine) and leaves.
+void SimulationEngine::quit_player(uint8_t player_id) {
+    if (player_id >= MAX_PLAYERS || (impl_->roster_mask_ & (1u << player_id)) == 0 || is_player_dropped(player_id) ||
+        impl_->match_state_ == MatchState::GameOver) {
+        return;
+    }
+    if (impl_->other_sides(player_id) == 1) impl_->handle_game_over(player_id);
+    else drop_player(player_id);
+}
+
+uint32_t SimulationEngine::other_sides(uint8_t player_id) const {
+    return player_id < MAX_PLAYERS ? impl_->other_sides(player_id) : 0u;
+}
+
+uint16_t SimulationEngine::quitter() const noexcept {
+    return impl_->quitter_;
 }
 
 uint8_t SimulationEngine::pick_dropper_powerup(const std::array<double, 5>& probabilities, uint32_t r) noexcept {

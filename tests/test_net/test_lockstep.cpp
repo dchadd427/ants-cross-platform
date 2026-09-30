@@ -1227,7 +1227,7 @@ void run_migration_tests() {
         for (uint8_t s = 1; s < 4; ++s) ASSERT_TRUE(m.sims[s]->is_player_dropped(0));
     } TEST_END();
 
-    TEST_CASE("N2.24 Host Migration: Two Players Left (three in the match); Two Players Total: The Guest Goes On Alone") {
+    TEST_CASE("N2.24 Host Migration: Two Players Left (three in the match); Two Players Total: The Drop Of The Host Leaves The Guest Without A Live Enemy And Ends The Match At Once (0x100d172)") {
         {
             Mesh m(3, 3, same_link({25, 0}));
             m.run(3000);
@@ -1241,25 +1241,21 @@ void run_migration_tests() {
             ASSERT_TRUE(m.sims[1]->is_player_dropped(0));
             ASSERT_TRUE(m.sims[2]->is_player_dropped(0));
             ASSERT_TRUE(m.sims[1]->is_player_dropped(3));                    // the seat of the roster that nobody plays leaves with the old host
+            ASSERT_FALSE(m.sims[1]->is_match_over());                        // two enemies are left: the guests play on
+            ASSERT_FALSE(m.sims[2]->is_match_over());
         }
         {
             Mesh m(4, 2, same_link({25, 0}));
-            std::vector<uint8_t> after;
-            bool killed = false;
-            m.clients[1]->runner().set_on_command([&](const Command& c, const sim::CommandResult&) {
-                if (killed && c.type != CommandType::Drop) after.push_back(c.issuer);
-            });
             m.run(3000);
-            const uint32_t kill_tick = m.tick(1);
-            killed = true;
             m.kill(0);
             m.run(6000);
             ASSERT_EQ(m.promotions, 1);                                      // nobody to ask: the guest is the host at once
             ASSERT_TRUE(m.hosts[1] != nullptr);
-            ASSERT_TRUE(m.tick(1) > kill_tick + 100);                        // the game goes on
-            ASSERT_TRUE(std::count(after.begin(), after.end(), 1) > 5);      // and the guest's own orders are still carried out
             ASSERT_TRUE(m.sims[1]->is_player_dropped(0));
             ASSERT_FALSE(m.sims[1]->is_player_dropped(1));
+            ASSERT_TRUE(m.sims[1]->is_match_over());                         // the win test of the drop-out: no team is left besides the guest
+            ASSERT_EQ(m.sims[1]->quitter(), sim::NO_QUITTER);
+            ASSERT_TRUE(m.sims[1]->get_world_state().match_result.is_winner(1));
         }
     } TEST_END();
 

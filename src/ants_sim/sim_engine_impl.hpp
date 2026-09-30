@@ -24,6 +24,7 @@ public:
     MatchState match_state_{MatchState::NotStarted};
     uint8_t roster_mask_{0x0F};             // bit p: team p takes part (a team without a player is NULL in the original's team table: no hill, ants or eggs)
     uint8_t dropped_mask_{0};               // bit p: team p dropped out of the match (team +0x64, FUN_0100d03b)
+    uint16_t quitter_{NO_QUITTER};          // the team whose quit (FUN_0101453f, one other side left) ended the match: the word of the game-over message
 
     uint64_t current_tick_{0};
     uint32_t match_time_remaining_ms_{0};   // what the clock shows: max(0, match_clock_ms_)
@@ -36,6 +37,19 @@ public:
     uint32_t checkgo_stage_{0};             // task +0x2c: 0 one minute, 1 thirty seconds, then the 11 countdown steps
     uint32_t checkgo_threshold_ms_{61000};  // task +0x30: the clock must be below it for the next warning
     void checkgo_poll();
+    /// The elimination rules of CHECKGO as the machine of team `local` runs them (Ants.exe 0x1024921 - 0x1024a66, docs 5.47): nobody has anything
+    /// left, or every team that has is `local` or its ally and the alliance of `local` has the strictly best combined score.
+    bool checkgo_ends_for(uint8_t local) const;
+    /// Every machine of the original decides for its own team; the first that decides ends the match for all, so the shared simulation asks for each
+    /// team in the match that has not dropped out.
+    bool checkgo_end_rules() const;
+    /// A team is alive while it has an egg, a hatch running or an ant that is not yet removed (0x1024934 - 0x10249bb)
+    bool team_alive(uint8_t team) const;
+    /// The drop-out win test (0x100d172, docs 5.47): after a drop, the team `local` has no live enemy when every other team that has not dropped is its ally
+    bool drop_leaves_winner() const;
+    /// FUN_0100c5b1: how many sides remain when `team` leaves: every other team that has not dropped, an alliance counted once, the team's own ally counted
+    uint32_t other_sides(uint8_t team) const;
+    MatchResult make_match_result() const;
     std::array<std::string, MAX_PLAYERS> player_names_{};
     std::string player_display_name(uint8_t p) const;    // the set name, else the colour word
     std::string player_colour_name(uint8_t p) const;     // strings 100..103; the remake's player 0..3 are green, red, blue, black
@@ -429,9 +443,11 @@ public:
 
     // The end of the match. The winner / loser sting is not a simulation event: the original plays ONE cue per machine when the results rows are
     // built (0x1015a4a: winner when the local team or its ally is the top row, else losers); the application plays it when the scorecard opens.
-    void handle_game_over() {
+    void handle_game_over(uint16_t quitter = NO_QUITTER) {
         match_state_ = MatchState::GameOver;
         match_time_remaining_ms_ = 0;
+        quitter_ = quitter;
+        world_state_dirty_ = true;
     }
 };
 

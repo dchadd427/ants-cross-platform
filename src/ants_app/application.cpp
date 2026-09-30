@@ -228,7 +228,7 @@ bool Application::init(const ApplicationConfig& config) {
 
     hud_.set_sim_query(&sim_);           // the cursor asks the simulation whether a tile is a valid special target
     hud_.set_on_quit([this]() {
-        quit();
+        confirm_quit();
     });
 
     hud_.set_on_sfx_volume([this](float v) {
@@ -884,18 +884,41 @@ void Application::post_tick() {
     auto audio_events = sim_.poll_audio_events();
     audio_mixer_.ingest_simulation_events(audio_events, local_player_id_);
 
-    if (sim_.is_match_over() && !match_over_handled_) {
-        match_over_handled_ = true;
-        scorecard_.show(world.match_result, local_player_id_);
-        uint32_t sting_sound = scorecard_.get_audio_to_play();
-        if (sting_sound > 0) {
-            audio_mixer_.play_sfx(sting_sound, 1.0f, 255);
-            scorecard_.clear_audio_to_play();
-        }
-        close_music();                                               // FUN_010226da closes the music sequencer at once (0x1022714); nothing restarts it
-        music_resume_on_activate_ = false;
-        if (net_) net_->freeze();                                    // the host stops sealing turns
+    check_match_over();
+}
+
+void Application::check_match_over() {
+    if (!sim_.is_match_over() || match_over_handled_) return;
+    match_over_handled_ = true;
+    const auto& world = sim_.get_world_state();
+    scorecard_.show(world.match_result, local_player_id_);
+    uint32_t sting_sound = scorecard_.get_audio_to_play();
+    if (sting_sound > 0) {
+        audio_mixer_.play_sfx(sting_sound, 1.0f, 255);
+        scorecard_.clear_audio_to_play();
     }
+    close_music();                                               // FUN_010226da closes the music sequencer at once (0x1022714); nothing restarts it
+    music_resume_on_activate_ = false;
+    if (net_) net_->freeze();                                    // the host stops sealing turns
+}
+
+// FUN_0101453f: the quit dialog's Yes. With exactly one other side left (FUN_0100c5b1) the quit is the end of the match: the game-over message names the
+// quitter, whose row goes last on every results screen, and the results (with Leave) follow. With more sides left the original sends the drop message and
+// exits; here the player leaves the same way as before (the network announces the departure to the others).
+void Application::confirm_quit() {
+    if (state_ == AppState::Playing && !sim_.is_match_over() && sim_.other_sides(local_player_id_) == 1) {
+        sim::Command quit_command;
+        quit_command.type = sim::CommandType::Quit;
+        quit_command.issuer = local_player_id_;
+        if (network_active()) {
+            net_->submit(quit_command);                          // it reaches the simulation with the turn that carries it, on every machine alike
+        } else {
+            sim_.apply_command(quit_command);
+            check_match_over();
+        }
+        return;
+    }
+    quit();
 }
 
 // ------------------------------------------------------------------------------------------------

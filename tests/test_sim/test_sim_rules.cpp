@@ -3,6 +3,7 @@
 #include "ants_sim/ant_unit.hpp"
 #include "ants_sim/prng.hpp"
 #include "ants_sim/match_stats.hpp"
+#include "ants_assets/lvl_parser.hpp"
 
 #include <iostream>
 #include <iomanip>
@@ -1059,6 +1060,362 @@ static void run_suite_13_authentic_fidelity() {
     } TEST_END();
 }
 
+// ============================================================================
+// SUITE 14: The End Of The Match: CHECKGO's Elimination Rules (0x1024839), The Drop-Out Win Test (0x100d172), Quitting (0x101453f), The Rows Of The Results (0x1015136)
+// ============================================================================
+// The machine of every team runs CHECKGO for its own team (every 200 ms = every fourth tick, the first run at once) and the first to decide ends the match
+// for all; the shared simulation asks for each team in the match that has not dropped out.
+static void run_ticks(SimulationEngine& sim, int ticks) {
+    for (int i = 0; i < ticks; ++i) sim.tick();
+}
+
+// A world in which nobody has anything left (no eggs, no ants): the tests give single teams something back
+static void empty_world(SimulationEngine& sim) {
+    sim.init_test_world(60, 60, 1);
+    for (uint8_t p = 0; p < MAX_PLAYERS; ++p) sim.stats_manager_mut().set_egg_count(p, 0);
+}
+
+static Command make_cmd(CommandType type, uint8_t issuer) {
+    Command c;
+    c.type = type;
+    c.issuer = issuer;
+    return c;
+}
+
+static bool load_test_map(const char* file, ants::assets::LevelData& lvl) {
+    return lvl.load_lvl(std::string(ORIGINAL_ASSETS_DIR) + "/Maps/" + file);
+}
+
+void run_suite_14_match_end() {
+    TEST_SUITE("Suite 14: The End Of The Match (CHECKGO Elimination Rules, Drop-Out Win Test, Quitting, Results Rows)");
+
+    TEST_CASE("14.1 Nobody Has An Egg, A Hatch Or An Ant: The First Run Of CHECKGO Ends The Match (No Quitter)") {
+        SimulationEngine sim;
+        empty_world(sim);
+        ASSERT_FALSE(sim.is_match_over());
+        sim.tick();
+        ASSERT_TRUE(sim.is_match_over());
+        ASSERT_EQ(sim.quitter(), NO_QUITTER);
+    } TEST_END();
+
+    TEST_CASE("14.2 A Team Is Alive Through An Egg, A Hatch Or An Ant That Is Not Yet Removed: While One Is Alive And Nobody Is Strictly Ahead The Match Goes On") {
+        {
+            SimulationEngine sim;                                          // an egg
+            empty_world(sim);
+            sim.stats_manager_mut().set_egg_count(2, 1);
+            run_ticks(sim, 12);
+            ASSERT_FALSE(sim.is_match_over());                             // alive (and a score of 0 is never the best)
+        }
+        {
+            SimulationEngine sim;                                          // a hatch that is running
+            empty_world(sim);
+            sim.stats_manager_mut().set_egg_count(1, 1);
+            ASSERT_EQ(sim.try_hatch(1, AntType::Worker, true), SimulationEngine::HatchResult::Started);
+            ASSERT_EQ(sim.get_pending_hatch_count(1), 1u);
+            run_ticks(sim, 12);
+            ASSERT_FALSE(sim.is_match_over());
+        }
+        {
+            SimulationEngine sim;                                          // an ant: alive until it is removed, then nobody is left
+            empty_world(sim);
+            const uint32_t ant = sim.spawn_unit(3, AntType::Worker, {10, 10});
+            run_ticks(sim, 12);
+            ASSERT_FALSE(sim.is_match_over());
+            sim.kill_unit(ant);
+            bool gone = false;
+            for (int t = 0; t < 400 && !gone; ++t) {
+                sim.tick();
+                gone = true;
+                for (const auto& a : sim.get_world_state().ants) gone = gone && a.player_id != 3;
+                if (!gone) ASSERT_FALSE(sim.is_match_over());              // the dying ant still counts
+            }
+            ASSERT_TRUE(gone);
+            run_ticks(sim, 8);
+            ASSERT_TRUE(sim.is_match_over());
+        }
+    } TEST_END();
+
+    TEST_CASE("14.3 A Live Enemy Keeps The Match Going However The Scores Stand") {
+        SimulationEngine sim;
+        empty_world(sim);
+        sim.stats_manager_mut().set_egg_count(0, 1);
+        sim.stats_manager_mut().set_egg_count(1, 1);
+        sim.set_player_score(0, 1000);
+        run_ticks(sim, 60);
+        ASSERT_FALSE(sim.is_match_over());
+    } TEST_END();
+
+    TEST_CASE("14.4 The Last Team With Something Left Wins When Its Score Is Strictly The Best; A Tie Is Never A Win; Dead Teams' Scores Count") {
+        SimulationEngine sim;
+        empty_world(sim);
+        sim.stats_manager_mut().set_egg_count(0, 1);
+        sim.set_player_score(0, 100);
+        sim.set_player_score(1, 100);                                      // a dead team with the same score
+        run_ticks(sim, 12);
+        ASSERT_FALSE(sim.is_match_over());                                 // the old best stays unless it is the local team: a tie is no win
+        sim.set_player_score(0, 101);
+        run_ticks(sim, 8);
+        ASSERT_TRUE(sim.is_match_over());
+        ASSERT_TRUE(sim.get_world_state().match_result.is_winner(0));
+        ASSERT_FALSE(sim.get_world_state().match_result.is_winner(1));
+    } TEST_END();
+
+    TEST_CASE("14.5 Allied Survivors: The Alliance Needs The Strictly Best Combined Score (Seen From Both Machines)") {
+        SimulationEngine sim;
+        empty_world(sim);
+        sim.stats_manager_mut().set_egg_count(0, 1);
+        sim.stats_manager_mut().set_egg_count(1, 1);
+        sim.form_alliance(0, 1);
+        sim.set_player_score(0, 30);
+        sim.set_player_score(1, 30);
+        sim.set_player_score(2, 50);
+        sim.set_player_score(3, 60);                                       // dead, but its 60 equals the alliance's 60
+        run_ticks(sim, 12);
+        ASSERT_FALSE(sim.is_match_over());
+        sim.set_player_score(1, 31);                                       // 61 against 60
+        run_ticks(sim, 8);
+        ASSERT_TRUE(sim.is_match_over());
+        ASSERT_TRUE(sim.get_world_state().match_result.is_winner(0));
+        ASSERT_TRUE(sim.get_world_state().match_result.is_winner(1));
+        ASSERT_FALSE(sim.get_world_state().match_result.is_winner(3));
+    } TEST_END();
+
+    TEST_CASE("14.6 A Team That Has Dropped Is Not Alive, But Its Score Still Counts Against The Others") {
+        SimulationEngine sim;
+        empty_world(sim);
+        sim.stats_manager_mut().set_egg_count(0, 1);
+        sim.set_player_score(0, 90);
+        sim.set_player_score(2, 100);
+        sim.stats_manager_mut().set_egg_count(2, 10);                      // the team has eggs, but it dropped out: they do not count as life
+        sim.drop_player(2);
+        ASSERT_FALSE(sim.is_match_over());                                 // the drop left team 0 and the dead teams 1 and 3: enemies remain
+        run_ticks(sim, 12);
+        ASSERT_FALSE(sim.is_match_over());                                 // 100 beats 90
+        sim.set_player_score(0, 101);
+        run_ticks(sim, 8);
+        ASSERT_TRUE(sim.is_match_over());
+        const MatchResult& result = sim.get_world_state().match_result;
+        ASSERT_EQ(result.present_mask, 0x0B);                              // the dropped team has no row
+        ASSERT_TRUE(result.is_winner(0));
+    } TEST_END();
+
+    TEST_CASE("14.7 A Match With One Team Only: No Score Is Compared, The End Comes When Nothing Is Left") {
+        ants::assets::LevelData lvl;
+        ASSERT_TRUE(load_test_map("SMALL.LVL", lvl));
+        SimulationEngine sim;
+        sim.init(lvl, 1, 0x01);
+        sim.set_player_score(0, 500);
+        run_ticks(sim, 60);
+        ASSERT_FALSE(sim.is_match_over());
+        sim.stats_manager_mut().set_egg_count(0, 0);
+        for (const auto& a : sim.get_world_state().ants) sim.kill_unit(a.id);
+        bool over = false;
+        for (int t = 0; t < 600 && !over; ++t) {
+            sim.tick();
+            over = sim.is_match_over();
+        }
+        ASSERT_TRUE(over);
+    } TEST_END();
+
+    TEST_CASE("14.8 Drop-Out Win Test: When A Team Drops And Only One Team (Or An Allied Pair) Is Left, The Match Ends At Once") {
+        {
+            ants::assets::LevelData lvl;                                   // two teams: the drop of one leaves the other alone
+            ASSERT_TRUE(load_test_map("SMALL.LVL", lvl));
+            SimulationEngine sim;
+            sim.init(lvl, 1, 0x03);
+            ASSERT_FALSE(sim.is_match_over());
+            sim.drop_player(1);
+            ASSERT_TRUE(sim.is_match_over());
+            ASSERT_EQ(sim.quitter(), NO_QUITTER);
+            ASSERT_EQ(sim.get_world_state().match_result.present_mask, 0x01);
+            ASSERT_TRUE(sim.get_world_state().match_result.is_winner(0));
+        }
+        {
+            SimulationEngine sim;                                          // four teams: the last one left wins, whatever the order of the drops
+            sim.init_test_world(60, 60, 1);
+            sim.drop_player(1);
+            ASSERT_FALSE(sim.is_match_over());
+            sim.drop_player(2);
+            ASSERT_FALSE(sim.is_match_over());
+            sim.drop_player(3);
+            ASSERT_TRUE(sim.is_match_over());
+        }
+        {
+            SimulationEngine sim;                                          // an allied pair that is left alone has won, scores do not matter
+            sim.init_test_world(60, 60, 1);
+            sim.form_alliance(0, 1);
+            sim.drop_player(2);
+            ASSERT_FALSE(sim.is_match_over());
+            sim.drop_player(3);
+            ASSERT_TRUE(sim.is_match_over());
+            ASSERT_TRUE(sim.get_world_state().match_result.is_winner(0));
+            ASSERT_TRUE(sim.get_world_state().match_result.is_winner(1));
+        }
+        {
+            SimulationEngine sim;                                          // the drop of one ally ends the alliance: the survivors are enemies
+            sim.init_test_world(60, 60, 1);
+            sim.form_alliance(0, 1);
+            sim.drop_player(0);
+            ASSERT_EQ(sim.get_ally_id(1), ALLIANCE_NONE);
+            ASSERT_FALSE(sim.is_match_over());
+        }
+    } TEST_END();
+
+    TEST_CASE("14.9 The Drop Of A Team After The End Changes Nothing: The Quitter, The Result And The Stings Stay") {
+        SimulationEngine sim;
+        sim.init_test_world(60, 60, 1, 50);
+        sim.set_player_score(0, 10);
+        ASSERT_TRUE(run_until_over(sim) >= 0);
+        sim.drop_player(1);
+        ASSERT_TRUE(sim.is_match_over());
+        ASSERT_EQ(sim.quitter(), NO_QUITTER);
+    } TEST_END();
+
+    TEST_CASE("14.10 Sides Left When A Team Leaves (FUN_0100c5b1): Every Other Team That Has Not Dropped, An Alliance Once, The Leaver's Ally Counted") {
+        SimulationEngine sim;
+        sim.init_test_world(60, 60, 1);
+        ASSERT_EQ(sim.other_sides(0), 3u);
+        ASSERT_EQ(sim.other_sides(2), 3u);
+        sim.form_alliance(1, 2);
+        ASSERT_EQ(sim.other_sides(0), 2u);                                 // teams 1 and 2 are one side
+        ASSERT_EQ(sim.other_sides(3), 2u);
+        ASSERT_EQ(sim.other_sides(1), 3u);                                 // seen from team 1: team 0, its partner 2 and team 3
+        ASSERT_EQ(sim.other_sides(2), 3u);
+        sim.drop_player(3);
+        ASSERT_EQ(sim.other_sides(0), 1u);
+        ASSERT_EQ(sim.other_sides(1), 2u);
+        ASSERT_EQ(sim.other_sides(4), 0u);                                 // not a team
+    } TEST_END();
+
+    TEST_CASE("14.11 Quit With Exactly One Other Side Left Ends The Match: The Quitter Stays In The Match And Its Row Goes Last, Whatever Its Score") {
+        ants::assets::LevelData lvl;
+        ASSERT_TRUE(load_test_map("SMALL.LVL", lvl));
+        SimulationEngine sim;
+        sim.init(lvl, 1, 0x03);
+        sim.set_player_score(0, 10);
+        sim.set_player_score(1, 500);
+        ASSERT_EQ(sim.other_sides(1), 1u);
+        const CommandResult r = sim.apply_command(make_cmd(CommandType::Quit, 1));
+        ASSERT_EQ(r.status, CommandResult::Status::Applied);
+        ASSERT_TRUE(sim.is_match_over());
+        ASSERT_EQ(sim.quitter(), 1);
+        ASSERT_FALSE(sim.is_player_dropped(1));                            // nothing was dropped: the quitter has a row
+        const MatchResult& result = sim.get_world_state().match_result;
+        ASSERT_EQ(result.quitter, 1);
+        ASSERT_EQ(result.present_mask, 0x03);
+        for (uint8_t local = 0; local < 2; ++local) {
+            const std::vector<ResultRow> rows = result.rows(local);
+            ASSERT_EQ(rows.size(), 2u);
+            ASSERT_EQ(rows[0].first, 0);                                   // the quitter's 500 points do not help
+            ASSERT_EQ(rows[1].first, 1);
+        }
+        ASSERT_TRUE(result.is_winner(0));
+        ASSERT_FALSE(result.is_winner(1));
+        ASSERT_EQ(sim.apply_command(make_cmd(CommandType::Quit, 0)).status, CommandResult::Status::Ignored);      // nothing changes after the end
+    } TEST_END();
+
+    TEST_CASE("14.12 Quit With More Sides Left Is A Drop-Out; A Quit Of A Dropped Team Or Of A Team Outside The Match Is Refused") {
+        SimulationEngine sim;
+        sim.init_test_world(60, 60, 1);
+        ASSERT_EQ(sim.apply_command(make_cmd(CommandType::Quit, 2)).status, CommandResult::Status::Applied);
+        ASSERT_TRUE(sim.is_player_dropped(2));
+        ASSERT_FALSE(sim.is_match_over());
+        ASSERT_EQ(sim.quitter(), NO_QUITTER);
+        ASSERT_EQ(sim.apply_command(make_cmd(CommandType::Quit, 2)).status, CommandResult::Status::Ignored);
+        ASSERT_EQ(sim.apply_command(make_cmd(CommandType::Quit, 4)).status, CommandResult::Status::RejectedIssuer);
+        ants::assets::LevelData lvl;
+        ASSERT_TRUE(load_test_map("SMALL.LVL", lvl));
+        SimulationEngine two;
+        two.init(lvl, 1, 0x03);
+        ASSERT_EQ(two.apply_command(make_cmd(CommandType::Quit, 3)).status, CommandResult::Status::RejectedIssuer);
+        ASSERT_FALSE(two.is_match_over());
+    } TEST_END();
+
+    TEST_CASE("14.13 The Quit Of One Ally While The Other Is The Only Other Side Ends The Match (The Partner Counts As A Side)") {
+        ants::assets::LevelData lvl;
+        ASSERT_TRUE(load_test_map("SMALL.LVL", lvl));
+        SimulationEngine sim;
+        sim.init(lvl, 1, 0x03);
+        sim.form_alliance(0, 1);
+        ASSERT_EQ(sim.other_sides(0), 1u);
+        sim.quit_player(0);
+        ASSERT_TRUE(sim.is_match_over());
+        ASSERT_EQ(sim.quitter(), 0);
+        const std::vector<ResultRow> rows = sim.get_world_state().match_result.rows(1);
+        ASSERT_EQ(rows.size(), 1u);                                        // one alliance, one row: its first team is the quitter, nothing to sort
+        ASSERT_EQ(rows[0].first, 0);
+        ASSERT_EQ(rows[0].second, 1);
+    } TEST_END();
+
+    TEST_CASE("14.14 Result Rows: An Alliance Is One Row Made By The Lower Team With The Columns Added Up, Sorted By Score, Dropped And Absent Teams Have None") {
+        MatchResult r;
+        r.present_mask = 0x0F;
+        r.ally = {1, 0, ALLIANCE_NONE, ALLIANCE_NONE};
+        r.stats[0].score = 300; r.stats[0].friendly_lost = 1; r.stats[0].enemy_killed = 2; r.stats[0].new_hatched = 3;
+        r.stats[1].score = 200; r.stats[1].friendly_lost = 10; r.stats[1].enemy_killed = 20; r.stats[1].new_hatched = 30;
+        r.stats[2].score = 450;
+        r.stats[3].score = 100;
+        std::vector<ResultRow> rows = r.rows(2);
+        ASSERT_EQ(rows.size(), 3u);
+        ASSERT_EQ(rows[0].first, 0);
+        ASSERT_EQ(rows[0].second, 1);
+        ASSERT_EQ(rows[0].score, 500);
+        ASSERT_EQ(rows[0].friendly_lost, 11);
+        ASSERT_EQ(rows[0].enemy_killed, 22);
+        ASSERT_EQ(rows[0].new_hatched, 33);
+        ASSERT_EQ(rows[1].first, 2);
+        ASSERT_FALSE(rows[1].has_second());
+        ASSERT_EQ(rows[2].first, 3);
+        r.present_mask = 0x0D;                                             // team 1 dropped: no row for it, and team 0's alliance is not returned
+        r.ally = {ALLIANCE_NONE, ALLIANCE_NONE, ALLIANCE_NONE, ALLIANCE_NONE};
+        rows = r.rows(0);
+        ASSERT_EQ(rows.size(), 3u);
+        ASSERT_EQ(rows[0].first, 2);                                       // 450
+        ASSERT_EQ(rows[1].first, 0);                                       // 300
+        ASSERT_EQ(rows[2].first, 3);
+    } TEST_END();
+
+    TEST_CASE("14.15 Result Rows: An Alliance That The Other Side Does Not Return Is Cleared Before The Rows Are Built (FUN_010155ac)") {
+        MatchResult r;
+        r.ally = {1, ALLIANCE_NONE, ALLIANCE_NONE, ALLIANCE_NONE};         // team 0 names team 1, team 1 names nobody
+        r.stats[0].score = 10;
+        r.stats[1].score = 20;
+        const std::vector<ResultRow> rows = r.rows(0);
+        ASSERT_EQ(rows.size(), 4u);                                        // four single rows: no "0 & 1"
+        ASSERT_EQ(rows[0].first, 1);
+        ASSERT_EQ(rows[1].first, 0);
+        ASSERT_FALSE(r.is_winner(0));                                      // the local team's ally field was cleared too
+        ASSERT_TRUE(r.is_winner(1));
+    } TEST_END();
+
+    TEST_CASE("14.16 Result Rows: Equal Scores Put The Local Team's Row First Only When The Local Team Made The Row; The Quitter Never Moves Forward And Is Overtaken By Everybody") {
+        MatchResult r;
+        r.stats[0].score = 100;
+        r.stats[1].score = 100;
+        r.stats[2].score = 100;
+        r.stats[3].score = 100;
+        ASSERT_EQ(r.rows(255)[0].first, 0);                                // nobody is local: the first team stays on top
+        ASSERT_EQ(r.rows(2)[0].first, 2);                                  // the local team is put first
+        ASSERT_EQ(r.rows(3)[0].first, 3);
+        for (uint8_t local = 0; local < 4; ++local) ASSERT_TRUE(r.is_winner(local));      // every machine shows its own team on top of a four-way tie
+        r.quitter = 0;
+        const std::vector<ResultRow> rows = r.rows(255);
+        ASSERT_EQ(rows[3].first, 0);                                       // the quitter is last
+        r.stats[0].score = 9999;
+        ASSERT_EQ(r.rows(0)[3].first, 0);                                  // whatever it scored
+        // the local team is the second member of an alliance: the row is made by the lower team and the tie rule does not look at the second member
+        MatchResult a;
+        a.ally = {1, 0, ALLIANCE_NONE, ALLIANCE_NONE};
+        a.stats[0].score = 50;
+        a.stats[1].score = 50;                                             // 100 together
+        a.stats[2].score = 100;
+        ASSERT_EQ(a.rows(1)[0].first, 0);                                  // the alliance's row comes first: it was made first and team 1 is not its first member
+        ASSERT_EQ(a.rows(2)[0].first, 2);                                  // team 2 is local and made its row: it moves in front of the equal alliance
+        ASSERT_TRUE(a.is_winner(1));                                       // team 1 sees its ally's row on top
+        ASSERT_TRUE(a.is_winner(2));
+    } TEST_END();
+}
+
 int main() {
     std::cout << "\n=======================================================\n";
     std::cout << " ANTS - LIBANTS-SIM HEADLESS RULES TEST SUITE            \n";
@@ -1077,6 +1434,7 @@ int main() {
     run_suite_11_alliances();
     run_suite_12_game_over();
     run_suite_13_authentic_fidelity();
+    run_suite_14_match_end();
 
     std::cout << "\n=======================================================\n";
     std::cout << " TEST SUMMARY\n";
@@ -1087,7 +1445,7 @@ int main() {
     std::cout << "=======================================================\n";
 
     if (g_test_failures == 0) {
-        std::cout << " >>> ALL 13 TEST SUITES PASSED CLEANLY (100% PASS) <<<\n\n";
+        std::cout << " >>> ALL 14 TEST SUITES PASSED CLEANLY (100% PASS) <<<\n\n";
         return 0;
     } else {
         std::cout << " >>> " << g_test_failures << " TEST(S) FAILED <<<\n\n";

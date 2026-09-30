@@ -505,8 +505,8 @@ void run_guest_tests() {
         ASSERT_TRUE(app.sim().state_hash() == host.sim.state_hash());                    // the whole pipeline, bit-identical
         ASSERT_FALSE(app.net()->desynced());
         ASSERT_EQ(app.sim().current_tick(), host.sim.current_tick());
-        // the host leaves: the only guest takes over and the match goes on (host migration), the old host's team drops out
-        const uint32_t before = app.net()->turns_executed();
+        // the host leaves: the only guest takes over (host migration) and the old host's team drops out; no team is left besides the guest, so the drop-out
+        // decides the match at once (0x100d172) and the results screen opens
         host.net.leave();
         ASSERT_TRUE(duo.until([&]() { return app.net()->is_host(); }, 8000));
         ASSERT_TRUE(app.network_active());
@@ -514,9 +514,10 @@ void run_guest_tests() {
         ASSERT_EQ(app.net()->match_notice(), "You are the host now.");
         app.render_frame();                                                               // the overlay draws the notice
         duo.step(3000);
-        ASSERT_TRUE(app.net()->turns_executed() > before + 20);
         ASSERT_TRUE(app.sim().is_player_dropped(0));
         ASSERT_FALSE(app.sim().is_player_dropped(1));
+        ASSERT_TRUE(app.sim().is_match_over());
+        ASSERT_TRUE(app.scorecard().is_open());
         // the player leaves the match: back to the local setup screen
         app.return_to_map_select();
         ASSERT_FALSE(app.network_active());
@@ -605,6 +606,51 @@ void run_guest_tests() {
         bob.net.freeze();
         trio.step(3000);
         ASSERT_TRUE(app.sim().state_hash() == bob.sim.state_hash());
+        ASSERT_FALSE(app.net()->desynced());
+    } TEST_END();
+
+    TEST_CASE("N5.11 Quit Over The Network: The Guest Quits A Two-Player Match (Ctrl+Q, Y): The Quit Command Ends It On Both Machines With The Guest As Quitter, The Results Open, Both Stay Identical") {
+        Peer host;
+        ASSERT_TRUE(host.net.host(0, "Alice", true));
+        ApplicationConfig cfg = headless_config();
+        cfg.net_role = ApplicationConfig::NetRole::Join;
+        cfg.net_address = "127.0.0.1";
+        cfg.net_port = host.net.listen_port();
+        cfg.player_name = "Bob";
+        Application app;
+        ASSERT_TRUE(app.init(cfg));
+        Duo duo{app, host};
+        ASSERT_TRUE(duo.until([&]() { return app.net()->phase() == net::NetGame::Phase::Room && host.net.can_start(); }, 8000));
+        host.net.set_map("TINY.LVL");
+        duo.step(300);
+        uint64_t hash = 0;
+        ASSERT_TRUE(net::hash_file(maps_dir() + "TINY.LVL", hash));
+        ASSERT_TRUE(host.net.start_match(31337, hash));
+        ASSERT_TRUE(duo.until([&]() { return app.state() == AppState::Playing && host.net.phase() == net::NetGame::Phase::Playing; }, 8000));
+        ASSERT_EQ(app.local_player_id(), 1);
+        duo.step(6000);                                                                   // the "get ready" dialog takes every key for its five seconds
+        ASSERT_FALSE(app.hud().is_modal_open());
+        ASSERT_FALSE(app.sim().is_match_over());
+        ASSERT_EQ(app.sim().other_sides(1), 1u);                                          // two teams: the host is the one other side
+        SDL_KeyboardEvent q_ev{};
+        q_ev.type = SDL_KEYDOWN;
+        q_ev.keysym.sym = SDLK_q;
+        q_ev.keysym.mod = KMOD_LCTRL;
+        app.handle_key_down(q_ev);
+        ASSERT_TRUE(app.hud().is_quit_dialog_open());
+        SDL_KeyboardEvent y_ev{};
+        y_ev.type = SDL_KEYDOWN;
+        y_ev.keysym.sym = SDLK_y;
+        app.handle_key_down(y_ev);
+        ASSERT_TRUE(app.is_running());                                                    // the quit is the end of the match, the results follow
+        ASSERT_TRUE(duo.until([&]() { return app.sim().is_match_over() && host.sim.is_match_over(); }, 4000));
+        ASSERT_EQ(app.sim().quitter(), 1);
+        ASSERT_EQ(host.sim.quitter(), 1);
+        ASSERT_FALSE(app.sim().is_player_dropped(1));
+        ASSERT_TRUE(app.scorecard().is_open());
+        ASSERT_TRUE(app.sim().state_hash() == host.sim.state_hash());
+        ASSERT_TRUE(host.sim.get_world_state().match_result.is_winner(0));                // the host's screen plays the winner cue, the quitter's the other
+        ASSERT_FALSE(app.sim().get_world_state().match_result.is_winner(1));
         ASSERT_FALSE(app.net()->desynced());
     } TEST_END();
 

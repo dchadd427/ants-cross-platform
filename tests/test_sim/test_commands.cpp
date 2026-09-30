@@ -857,7 +857,10 @@ void run_drop_tests() {
         // the system command is not a client command; every other command is
         ASSERT_FALSE(is_client_command(CommandType::Drop));
         ASSERT_FALSE(is_client_command(CommandType::None));
-        for (uint8_t t = 1; t <= 10; ++t) ASSERT_TRUE(is_client_command(static_cast<CommandType>(t)));
+        for (uint8_t t = 1; t <= 11; ++t) ASSERT_TRUE(is_client_command(static_cast<CommandType>(t)));          // 11 = Quit: the quit dialog's Yes is a player's command
+        ASSERT_EQ(static_cast<uint8_t>(CommandType::Quit), 11);
+        ASSERT_EQ(static_cast<uint8_t>(CommandType::Drop), 12);
+        ASSERT_TRUE(CommandType::Last == CommandType::Drop);
         // the wire form of a drop has no ant list
         std::vector<uint8_t> bytes;
         encode(make_command(CommandType::Drop, 2), bytes);
@@ -865,6 +868,45 @@ void run_drop_tests() {
         ASSERT_EQ(decode(bytes.data(), bytes.size(), back), DecodeError::None);
         ASSERT_EQ(back.type, CommandType::Drop);
         ASSERT_EQ(back.issuer, 2);
+        // the wire form of a quit has no ant list either
+        bytes.clear();
+        encode(make_command(CommandType::Quit, 1), bytes);
+        ASSERT_EQ(bytes.size(), kCommandHeaderBytes);
+        ASSERT_EQ(decode(bytes.data(), bytes.size(), back), DecodeError::None);
+        ASSERT_EQ(back.type, CommandType::Quit);
+        ASSERT_EQ(back.issuer, 1);
+    } TEST_END();
+
+    TEST_CASE("N1.22 Quit: Two Engines That Apply The Same Quit Stay Bit-Identical; The Quitter Is Part Of The State; With Several Sides Left It Is A Drop") {
+        World a;
+        World b;
+        World c;
+        build_world(a, 9);
+        build_world(b, 9);
+        build_world(c, 9);
+        for (int t = 0; t < 40; ++t) { a.sim.tick(); b.sim.tick(); c.sim.tick(); }
+        ASSERT_TRUE(a.sim.state_hash() == c.sim.state_hash());
+        ASSERT_EQ(a.sim.other_sides(1), 3u);                                        // four teams: a quit is a drop-out, the match goes on
+        ASSERT_EQ(a.sim.apply_command(make_command(CommandType::Quit, 1)).status, Status::Applied);
+        ASSERT_EQ(b.sim.apply_command(make_command(CommandType::Quit, 1)).status, Status::Applied);
+        ASSERT_TRUE(a.sim.is_player_dropped(1));
+        ASSERT_FALSE(a.sim.is_match_over());
+        ASSERT_TRUE(a.sim.state_hash() == b.sim.state_hash());
+        ASSERT_TRUE(a.sim.state_hash() != c.sim.state_hash());
+        // the last other side: drop two more teams of one engine, the quit of the third ends the match and names the quitter
+        a.sim.drop_player(2);
+        b.sim.drop_player(2);
+        ASSERT_FALSE(a.sim.is_match_over());
+        ASSERT_EQ(a.sim.other_sides(0), 1u);
+        ASSERT_EQ(a.sim.apply_command(make_command(CommandType::Quit, 0)).status, Status::Applied);
+        ASSERT_TRUE(a.sim.is_match_over());
+        ASSERT_EQ(a.sim.quitter(), 0);
+        ASSERT_FALSE(a.sim.is_player_dropped(0));
+        ASSERT_TRUE(a.sim.state_hash() != b.sim.state_hash());                      // b has not had the quit yet
+        ASSERT_EQ(b.sim.apply_command(make_command(CommandType::Quit, 0)).status, Status::Applied);
+        ASSERT_TRUE(a.sim.state_hash() == b.sim.state_hash());
+        for (int t = 0; t < 10; ++t) { a.sim.tick(); b.sim.tick(); }                 // the match stays over and the engines stay equal
+        ASSERT_TRUE(a.sim.state_hash() == b.sim.state_hash());
     } TEST_END();
 }
 

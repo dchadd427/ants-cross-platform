@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <array>
+#include <utility>
 #include <vector>
 
 namespace ants::sim {
@@ -67,21 +68,102 @@ struct AllianceInvite {
     bool     active{false};
 };
 
+/// "No team quit": the game-over message of the original carries the word -1 (FUN_010226c5(-1)) when the clock or the rules ended the match
+constexpr uint16_t NO_QUITTER = 0xFFFF;
+
 /**
- * @brief Complete match outcome structure computed at clock 0:00.
+ * @brief One row of the results screen (Ants.exe FUN_01015136): a team alone, or two allied teams together with the columns added up.
+ */
+struct ResultRow {
+    uint8_t first{PLAYER_NEUTRAL};     // the team that made the row: the lower-numbered member of an alliance (the sort and the tie rule look at this one only)
+    uint8_t second{PLAYER_NEUTRAL};    // its ally; PLAYER_NEUTRAL (the original's word 0xFFFF) when the row is one team
+    int32_t score{0};                  // the teams' own scores added up (not the display score)
+    int32_t friendly_lost{0};
+    int32_t enemy_killed{0};
+    int32_t new_hatched{0};
+    bool has_second() const noexcept { return second != PLAYER_NEUTRAL; }
+};
+
+/**
+ * @brief Complete match outcome: what the results screen is built from (Ants.exe FUN_010155ac, FUN_01015136).
+ * The rows are not stored: every machine builds them for its own team (`rows(local)`), because a tie is broken in favour of the local team.
  */
 struct MatchResult {
     bool is_over{false};
-    std::vector<uint8_t> winning_players;
-    std::vector<uint8_t> losing_players;
-    std::array<int32_t, MAX_PLAYERS> final_scores{};
+    std::vector<uint8_t> winning_players;     // the present teams whose own results screen would play the winner cue (is_winner)
+    std::vector<uint8_t> losing_players;      // the other present teams
+    std::array<int32_t, MAX_PLAYERS> final_scores{};     // the display score of each team (own score plus its ally's)
     std::array<PlayerMatchStats, MAX_PLAYERS> stats{};
+    uint8_t present_mask{0x0F};               // the teams that have a row: in the match and not dropped (the builder skips NULL and dropped teams)
+    std::array<uint8_t, MAX_PLAYERS> ally{ALLIANCE_NONE, ALLIANCE_NONE, ALLIANCE_NONE, ALLIANCE_NONE};   // each team's ally field (team +0x68)
+    uint16_t quitter{NO_QUITTER};             // the team whose quit ended the match: its row goes last; NO_QUITTER when the clock or the rules ended it
 
-    bool is_winner(uint8_t player_id) const noexcept {
-        for (uint8_t p : winning_players) {
-            if (p == player_id) return true;
+    /// The alliances that both sides confirm: before the rows are built the screen clears every alliance that the other side does not return,
+    /// team by team (FUN_010155ac, 0x1015609 - 0x1015645)
+    std::array<uint8_t, MAX_PLAYERS> mutual_allies() const noexcept {
+        std::array<uint8_t, MAX_PLAYERS> al = ally;
+        for (uint8_t k = 0; k < MAX_PLAYERS; ++k) {
+            if (((present_mask >> k) & 1u) == 0) continue;
+            const uint8_t a = al[k];
+            if (a == ALLIANCE_NONE) continue;
+            if (a >= MAX_PLAYERS || al[a] != k) al[k] = ALLIANCE_NONE;
         }
-        return false;
+        return al;
+    }
+
+    /// The rows of the results screen of team `local` (FUN_01015136): one row per present team, an alliance (both sides confirmed) in one row that the
+    /// lower-numbered team makes; then the exchange sort of 0x1015316: a row moves in front of an earlier row when the earlier one belongs to the quitter,
+    /// or has a lower score, or an equal score while the moving row is made by the local team (a row the quitter made never moves forward).
+    std::vector<ResultRow> rows(uint8_t local) const {
+        const std::array<uint8_t, MAX_PLAYERS> al = mutual_allies();
+        std::vector<ResultRow> out;
+        for (uint8_t k = 0; k < MAX_PLAYERS; ++k) {
+            if (((present_mask >> k) & 1u) == 0) continue;
+            ResultRow* row = nullptr;
+            for (ResultRow& r : out) {
+                if (al[k] == r.first) { row = &r; break; }
+            }
+            if (row == nullptr) {
+                out.push_back(ResultRow{});
+                row = &out.back();
+                row->first = k;
+            } else {
+                row->second = k;
+            }
+            row->score += stats[k].score;
+            row->friendly_lost += static_cast<int32_t>(stats[k].friendly_lost);
+            row->enemy_killed += static_cast<int32_t>(stats[k].enemy_killed);
+            row->new_hatched += static_cast<int32_t>(stats[k].new_hatched);
+        }
+        for (size_t i = 0; i < out.size(); ++i) {
+            for (size_t j = 0; j < i; ++j) {
+                bool move_up;
+                if (out[i].first == quitter) move_up = false;
+                else if (out[j].first == quitter) move_up = true;
+                else if (out[i].score != out[j].score) move_up = out[i].score > out[j].score;
+                else move_up = out[i].first == local;
+                if (move_up) std::swap(out[i], out[j]);
+            }
+        }
+        return out;
+    }
+
+    /// The cue of team `player_id`'s results screen (0x1015a4a): the winner cue when its own team or its ally is the first team of the top row
+    bool is_winner(uint8_t player_id) const {
+        if (player_id >= MAX_PLAYERS) return false;
+        const std::vector<ResultRow> r = rows(player_id);
+        if (r.empty()) return false;
+        return r[0].first == player_id || mutual_allies()[player_id] == r[0].first;
+    }
+
+    /// Fills winning_players / losing_players: every present team sorted by the cue that its own screen plays
+    void decide_winners() {
+        winning_players.clear();
+        losing_players.clear();
+        for (uint8_t p = 0; p < MAX_PLAYERS; ++p) {
+            if (((present_mask >> p) & 1u) == 0) continue;
+            (is_winner(p) ? winning_players : losing_players).push_back(p);
+        }
     }
 };
 
@@ -251,28 +333,19 @@ public:
         }
     }
 
-    // Evaluation at Match Expiry
-    MatchResult evaluate_victory() const noexcept {
+    // Evaluation at the end of the match: the result holds what the rows are built from; `present_mask` is the set of teams that are in the match
+    // and have not dropped, `quitter` the team whose quit ended it.
+    MatchResult evaluate_victory(uint8_t present_mask = 0x0F, uint16_t quitter = NO_QUITTER) const {
         MatchResult result{};
         result.is_over = true;
-        int32_t best_score = -1;
-
+        result.present_mask = static_cast<uint8_t>(present_mask & 0x0Fu);
+        result.quitter = quitter;
         for (uint8_t i = 0; i < MAX_PLAYERS; ++i) {
             result.stats[i] = stats_[i];
             result.final_scores[i] = get_display_score(i);
-            if (result.final_scores[i] > best_score) {
-                best_score = result.final_scores[i];
-            }
+            result.ally[i] = alliances_[i];
         }
-
-        for (uint8_t i = 0; i < MAX_PLAYERS; ++i) {
-            if (result.final_scores[i] == best_score) {
-                result.winning_players.push_back(i);
-            } else {
-                result.losing_players.push_back(i);
-            }
-        }
-
+        result.decide_winners();
         return result;
     }
 

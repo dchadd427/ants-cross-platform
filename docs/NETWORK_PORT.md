@@ -41,7 +41,7 @@ and broadcasts the results (the game is not lock-step). Its lobby flow, texts an
 
 In the original the machine that picked the map can drop out while the others play on. The remake keeps that: the host is a role (the sequencer), not the place where the state lives, because every machine
 already runs the whole simulation and holds the same state. What moves is sealing turns, the reference hash, the chat relay and the drop decisions. Code: `include/ants_net/session.hpp` /
-`src/ants_net/session.cpp` (`ClientSession` election state machine, `HostSession::resume`, `promote_to_host`), `protocol.hpp` (version 3), `netgame.cpp` (the TCP mesh and the events).
+`src/ants_net/session.cpp` (`ClientSession` election state machine, `HostSession::resume`, `promote_to_host`), `protocol.hpp` (version 4 since v0.0.62), `netgame.cpp` (the TCP mesh and the events).
 
 1. **Peer links.** While the map loads every guest connects to the guests above its own seat (one link per pair; the ones below connect to it). A guest listens on an ephemeral port that it announces in
    `Hello.listen_port`; the host passes what it saw (the guest's address and that port) to everybody in `Start.endpoints`. An inbound link starts with `PeerHello{seat}` and is accepted only from a lower seat of the
@@ -133,6 +133,9 @@ ports, the never-reading peer, a 40 s match of a host and three clients over rea
   drawn at the runner's sub-tick position; a machine that waits for a turn says so after one second (remake text) and a desync stops the match and says so. There is no pause and no team switching.
 * **Roster and drop-out**: `Start` carries the roster mask; a team without a player has no hill (`LevelData::for_roster` also removes its hill art for the renderer), no start markers and no eggs. A player that
   leaves, is thrown out or is silent for 60 s is dropped by a host-only `Drop` command in the next turn (`SimulationEngine::drop_player`, `FUN_0100d03b`), so every machine drops the team at the same tick.
+  **The end of the match (v0.0.62, protocol version 4)**: a drop that leaves one team, or an allied pair, decides the match at once (the original's win test, 0x100d172); CHECKGO ends it when nobody has an egg,
+  a hatch or an ant left, or when the live teams are one alliance whose combined score is strictly the best. The quit dialog's Yes is the player command `Quit` (wire type 11, `Drop` is 12 now): with
+  exactly one other side left it ends the match for everybody and names the quitter (its row goes last on every results screen), otherwise it is a drop-out (`FUN_0101453f`, docs 5.47).
 * **Names**: `--name`, the original's `-N<team><name>` and `--team-name` reach the room (the `Hello`), the HUD's score labels, the results rows, the chat headers and the simulation's alliance and drop-out
   texts. A network game says "Player" unless `--name` is given: it never sends the user and machine name by default.
 * **Command line**: `--host [port]`, `--join host[:port]`, `--port`, `--name`, `-N<team><name>`, `--team-name <team> <name>`, `-pnum=<team>`, `--loopback` (accept only this machine); port 4001 by default (the original's).
