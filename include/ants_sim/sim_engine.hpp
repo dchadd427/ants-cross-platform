@@ -184,7 +184,6 @@ struct AntOrder {
     int32_t   target_y{0};
     int32_t   target_entity_id{-1};
     bool      allow_friendly_bomb{false};
-    bool      is_food_order{false};
 };
 
 struct PendingHatch {
@@ -423,7 +422,7 @@ public:
      * once the path manager has delivered its path. Clicking an enemy ant attacks it, clicking a power-up
      * picks it up; an own bomb at the destination is walked onto (and set off) only with allow_friendly_bomb.
      */
-    void issue_move_order(uint32_t ant_id, TileCoord dest, bool allow_friendly_bomb = false, bool is_food_order = false);
+    void issue_move_order(uint32_t ant_id, TileCoord dest, bool allow_friendly_bomb = false);
     /// Move order given by a remake system (guard AI, hill queue, ability approach): GoTo without the player flag.
     void issue_internal_move_order(uint32_t ant_id, TileCoord dest);
     /**
@@ -434,7 +433,7 @@ public:
      * @return the ant that acknowledges the order (the closest one, if its GoTo queued a path), or 0.
      */
     uint32_t issue_group_move_order(const std::vector<uint32_t>& ant_ids, TileCoord target,
-                                    bool allow_friendly_bomb = false, bool is_food_order = false);
+                                    bool allow_friendly_bomb = false);
     /**
      * @brief Player group attack (Ants.exe FUN_010287b5 with the attack flag). Ants that accept orders and already carry out an
      * attack order on this very tile are skipped (a repeated click changes nothing), the others are sorted by 16 x Chebyshev

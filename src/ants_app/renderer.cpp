@@ -1836,25 +1836,14 @@ void Renderer::render_tile_grid(const ants::sim::Grid& grid, int32_t mouse_x, in
     std::string badge_text = "X: " + std::to_string(hover_tx) + "  Y: " + std::to_string(hover_ty);
     draw_text(badge_text, badge_x + 6, badge_y + 4, ants::assets::ColorRGBA{255, 255, 255, 255});
 
-    // 4. Food remaining bites badge when tile grid is active
-    for (const auto& afs : grid.food_schedules()) {
-        if (!afs.active || afs.remaining_bites == 0) continue;
-        int32_t fx = -1, fy = -1;
-        if (!afs.footprint.empty()) {
-            fx = afs.footprint[0].x;
-            fy = afs.footprint[0].y;
-            for (const auto& pt : afs.footprint) {
-                if (pt.x > fx) fx = pt.x;
-                if (pt.y < fy) fy = pt.y;
-            }
-        } else {
-            continue;
-        }
+    // 4. Units left in each food object (debug grid only), at the top-right of the anchor tile
+    for (const auto& fo : grid.food_objects()) {
+        if (fo.remaining == 0) continue;
         int32_t fsx = 0, fsy = 0;
-        camera_.world_to_screen(fx * TILE_SIZE, fy * TILE_SIZE, fsx, fsy);
+        camera_.world_to_screen(static_cast<int32_t>(fo.col) * TILE_SIZE, static_cast<int32_t>(fo.row) * TILE_SIZE, fsx, fsy);
         if (fsx < -64 || fsx > PLAYFIELD_W + 64 || fsy < -64 || fsy > PLAYFIELD_H + 64) continue;
 
-        std::string food_badge = std::to_string(afs.remaining_bites);
+        std::string food_badge = std::to_string(fo.remaining);
         int32_t f_bw = static_cast<int32_t>(food_badge.length()) * 8 + 8;
         int32_t f_bh = 14;
         int32_t f_bx = fsx + TILE_SIZE - f_bw;

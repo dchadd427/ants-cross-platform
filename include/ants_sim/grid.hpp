@@ -131,7 +131,8 @@ struct TileCell {
     uint16_t interactive_id{TILE_EMPTY};     // Layer 2 overlay item (or 0x7FFE)
     uint8_t  interactive_owner{255};         // Player ID owner of bomb/structure (0..3, or 255)
     uint32_t timer_ticks{0};                 // Active ticks remaining for firewall / bridge (180s)
-    uint32_t lunchbox_points{0};             // Points carried if lunchbox
+    int16_t  anchor_x{-1};                   // Layer-2 object this cell belongs to: its anchor column (-1 = none), Ants.exe cell byte 3
+    int16_t  anchor_y{-1};                   // ... and its anchor row (cell byte 2)
     bool     is_food{false};                 // True only if genuine food item
     bool     is_mud{false};                  // True if terrain is mud / dirt path
     bool     is_powerup{false};              // True if cell contains a power-up
@@ -224,18 +225,29 @@ struct TileCell {
 };
 
 /**
- * @brief Dynamic food respawn tracker linked to LevelData Block 2.
+ * @brief A food pile or lunchbox (Ants.exe food object, class 0x10020d8, built from a LVL Block 2 entry or by FUN_01008ca0).
+ *
+ * The file's "delay" is the number of units (bites) of the pile and its "interval" the points every unit is worth (10..50);
+ * there is no respawn. The stage list is a set of (threshold, tile) pairs: the pile shows the tile of the LAST pair whose
+ * threshold is not below the remaining units (FUN_01009ed3), so the tile changes as bites are taken.
  */
-struct ActiveFoodSchedule {
-    uint16_t x{0};
-    uint16_t y{0};
-    uint32_t respawn_interval_ticks{0};
-    uint32_t countdown_ticks{0};
-    bool     active{true};
-    std::vector<ants::assets::FoodItemVariant> variants;
-    int32_t  remaining_bites{0};
-    uint16_t current_tile_id{0};
-    std::vector<TileCoord> footprint;
+struct FoodObject {
+    uint16_t row{0};                       // +0x08: anchor row
+    uint16_t col{0};                       // +0x0a: anchor column
+    uint16_t units{0};                     // +0x0c: units at the start
+    uint16_t value{0};                     // +0x0e: points per unit
+    uint16_t remaining{0};                 // +0x12: units left
+    std::vector<uint16_t> thresholds;      // +0x14, one per stage
+    std::vector<uint16_t> stage_tiles;     // +0x18, 0x7ffe = the pile is gone
+
+    /// FUN_01009ed3 StageTile: 0x7ffe when there is no stage
+    uint16_t stage_tile() const noexcept {
+        uint16_t tile = 0x7FFEu;
+        for (size_t i = 0; i < thresholds.size() && i < stage_tiles.size(); ++i) {
+            if (remaining <= thresholds[i]) tile = stage_tiles[i];
+        }
+        return tile;
+    }
 };
 
 /**
@@ -258,7 +270,7 @@ public:
         }
         exact_solid_bits_ = false;
         anthills_.clear();
-        food_schedules_.clear();
+        food_objects_.clear();
         return true;
     }
 
@@ -346,8 +358,21 @@ public:
     const std::vector<ants::assets::AnthillSpawn>& anthills() const noexcept { return anthills_; }
     std::vector<ants::assets::AnthillSpawn>& anthills_mut() noexcept { return anthills_; }
 
-    const std::vector<ActiveFoodSchedule>& food_schedules() const noexcept { return food_schedules_; }
-    std::vector<ActiveFoodSchedule>& food_schedules_mut() noexcept { return food_schedules_; }
+    // ---- Food objects (Ants.exe FUN_01008c63 / FUN_010076b6 / FUN_01009f06 / FUN_01008ca0 / FUN_0100fdf8) ----
+    const std::vector<FoodObject>& food_objects() const noexcept { return food_objects_; }
+    /// FUN_01008c63: the FIRST object (table order) whose anchor is `anchor`; -1 when there is none.
+    int32_t food_object_first_at(TileCoord anchor) const noexcept;
+    /// The object a cell belongs to (TileInfo mask 0x80): the cell's layer-2 tile must be a food tile; its anchor bytes give the
+    /// anchor; the LAST object (table order) with that anchor is the answer; -1 when there is none.
+    int32_t food_object_at_cell(TileCoord cell) const noexcept;
+    /// FUN_01009f06 TakeFood: takes min(units, remaining) units; `stage_changed` tells whether the pile's tile changed;
+    /// returns the points of the units taken.
+    uint32_t take_food(int32_t object, uint16_t units, bool& stage_changed) noexcept;
+    /// FUN_01008ca0 AddFoodObject: appends the object (the table never shrinks) and puts its stage tile on the map.
+    int32_t add_food_object(FoodObject object);
+    /// SetTile(2, anchor, tile) for a food object (FUN_01007352): the old tile's cells are cleared (FUN_0100744f) and the new
+    /// tile's cells are set (FUN_01007a22); the anchor cell always gets the tile.
+    void set_food_tile(TileCoord anchor, uint16_t tile) noexcept;
 
     const ants::assets::AnthillSpawn* find_anthill(uint8_t team_id) const noexcept {
         for (const auto& a : anthills_) {
@@ -369,8 +394,8 @@ public:
     void collapse_bridge(uint32_t x, uint32_t y) noexcept;
     /// FUN_01007352 SetTile(layer 2, tile, id) + owner: the raw write the abilities of the original use.
     void set_layer2(uint32_t x, uint32_t y, uint16_t id, uint8_t owner) noexcept;
+    /// FUN_0100fdf8: a lunchbox is a food object of one unit worth `points` with the stages {1 -> lunchbox, 0 -> gone}.
     void drop_lunchbox(uint32_t x, uint32_t y, uint32_t points = 0) noexcept;
-    void clear_lunchbox(uint32_t x, uint32_t y) noexcept;
 
     bool has_fire_at(TileCoord pos) const noexcept {
         if (!in_bounds(pos)) return false;
@@ -414,9 +439,11 @@ public:
         return cell.has_fire() ? cell.timer_ticks : 0;
     }
 
+    /// Points of the lunchbox on a tile (its food object's value), 0 without one.
     uint32_t get_lunchbox_points(TileCoord pos) const noexcept {
-        if (!in_bounds(pos)) return 0;
-        return get_cell(pos).lunchbox_points;
+        if (!in_bounds(pos) || !get_cell(pos).has_lunchbox()) return 0;
+        const int32_t o = food_object_at_cell(pos);
+        return o >= 0 ? food_objects_[static_cast<size_t>(o)].value : 0u;
     }
 
     void set_fire_at(TileCoord pos, uint32_t timer_ticks) noexcept {
@@ -489,7 +516,7 @@ private:
     uint32_t height_{0};
     std::vector<TileCell> cells_;
     std::vector<ants::assets::AnthillSpawn> anthills_;
-    std::vector<ActiveFoodSchedule> food_schedules_;
+    std::vector<FoodObject> food_objects_;
 };
 
 } // namespace ants::sim

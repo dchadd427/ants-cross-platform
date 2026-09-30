@@ -407,6 +407,7 @@ Both temporary field structures created by specialized ants have strictly revers
 - **Return Journey & Score Delivery:** The thief ant switches to the holding animation set (`hten301` / `htwg*`), visibly carrying the lunchbox in front, and must manually travel all the way back across the map to its home anthill. When entering its home anthill, points are added to the team's score (`0x0101e2b3`), playing **Sound 87 (`scoreup.wav`)**.
 
 ### 5.5 Food Harvesting, Lunchpail Visuals & Dropping on Death (`0x0100ce53`, `0x0101aefe`, `0x0101b688`)
+> **Superseded by 5.40 for the harvest, the pile stages and the lunchbox pick-up** (a food pile is an object with units and stages, the grab is action 5 and is ordered like any move; there is no adjacency rule and no pick-up by walking over a lunchbox).
 - **Food Harvesting Adjacency Requirement:**
   - Ants can only harvest food pieces or retrieve dropped lunchboxes when they are in an **adjacent tile** (`chebyshev_dist == 1`) or standing directly on the food tile itself (`pos == food_pos`).
   - Distant or mid-path pickup is strictly prohibited; the ant must navigate to an adjacent tile before initiating the harvest.
@@ -529,7 +530,7 @@ All ant classes share a unified, symmetrical combat and ballistic physical react
   - **Obstacle Sideways Deflection:** If the primary cardinal push destination is blocked by an obstacle (solid rock or map boundary), the victim is deflected sideways (along the perpendicular cardinal axis) rather than being pinned.
   - **Diagonal Attack Resolution:** When an attack occurs from a diagonal adjacency, the engine resolves pushback along an available cardinal axis away from the attacker rather than a diagonal vector. If both cardinal paths are blocked by an obstacle corner, the ant deflects along the diagonal.
 
-- **Food Harvesting & Base Return Invariants:**
+- **Food Harvesting & Base Return Invariants:** *(superseded by 5.40)*
   - **Adjacent Movement Isolation:** Walking on or resting on tiles adjacent to food morsels does NOT trigger food harvesting. Ants only harvest food when explicitly commanded to target/eat that food, or when positioned directly on the food cell.
   - **Carrying Food Deposit Reroute:** If an ant that is already carrying food is instructed to eat food again, it paths all the way across the map to the target food first. Upon arriving at the food, it detects that it already carries food (without taking a second bite or modifying food tile state) and automatically paths back to its anthill base to deposit.
 
@@ -1730,6 +1731,72 @@ faithful; the differences were in the input, drawing and sound layers around it.
   and of animation steps due in the same frame (the original walks one array sorted by sprite y, north first; the remake orders by due time then ant id, which
   only matters for simultaneous contests of one tile), tracked sounds cut when their clip is replaced.
 
+### 5.40 Food Ground Truth: Food Objects, the Grab, the Bite, Stages and the Lunchbox (Capstone-Verified; Supersedes Earlier Food, Harvest, Schedule and Lunchbox Notes)
+
+Addresses are virtual addresses in `Original-Ants/Ants.exe`. Implemented in `include/ants_sim/grid.hpp` and `src/ants_sim/grid.cpp` (`FoodObject`, `take_food`,
+`set_food_tile`, `drop_lunchbox`), `src/ants_sim/movement_tables.cpp` with the generated `src/ants_sim/food_footprints_data.inc` (`tools/gen_food_footprints.cpp`,
+`include/ants_assets/object_footprint.hpp`), `movement_system.cpp` (`classify_order`, `path_complete` case 5, `set_action`, `loco_on_step`) and `action_system.cpp`
+(`set_holding`, `start_harvest`, `end_harvest`, `harvest_clip_end`). Checked by `tests/test_sim/test_food_actions.cpp` (21 golden cases), `tests/test_assets/test_movement_tables.cpp`
+(7.1, 7.2) and the food cases of `tests/test_app/test_app_integration.cpp` (9.1, 12.5, 12.47, 12.61, 12.63, 12.107, 12.120, 12.121), `test_sim_rules.cpp` (10.6) and
+`test_challenger_m2_2.cpp` (3.4, 3.5).
+
+* **Food is an object table and nothing respawns.** LVL Block 2 (read at 0x1006d19, one call of `FUN_01008ca0` AddFoodObject per entry) holds, per entry, the
+  anchor (row, column), the number of units (the field the parser calls `initial_delay`), the points of one unit (`respawn_interval`) and a stage list of
+  (threshold, tile) pairs; the earlier reading as a respawn schedule (seconds) was wrong. The 28-byte record is: `+0x08` row, `+0x0a` column, `+0x0c` units at the
+  start, `+0x0e` points per unit, `+0x10` number of stages, `+0x12` units left, `+0x14` thresholds, `+0x18` tiles. AddFoodObject appends it to the map's object table
+  (count at `+0x44`; the table never shrinks, so an emptied pile keeps its record) and calls `SetTile(2, row, col, StageTile(obj))`. The stage list ends at its first
+  entry without a tile (0x7ffe): that stage and every later one become (0, gone). The six maps hold 53 objects (GAUNTLET 2, ISLANDS 10, MEDIUM 4, SMALL 5, TINY 14,
+  TREASURE 18); TREASURE puts three objects on (59, 2) and two on (2, 59).
+* **StageTile** *(`FUN_01009ed3`)*: the tile of the LAST stage whose threshold is >= the units left, 0x7ffe when there is none. A stage list may end with a tile at
+  threshold 0 (MEDIUM's corn keeps tile 365 at 0 units: an emptied pile that stays, solid and not harvestable) or with 0x7ffe (the pile is gone). **TakeFood**
+  *(`FUN_01009f06`, object, n, &changed)*: `n = min(n, units left)`, `units left -= n`, `changed = StageTile before != after`, returns `points * n`. Nothing checks
+  whether a unit was left: taking from an empty object gives 0 and changes nothing, but the ant that asked still gets its points (below).
+* **Two lookups.** `FUN_01008c63` returns the FIRST object of the table whose anchor equals a given tile (StartHarvest uses it). The lookup through a map cell
+  (`FUN_0100f4ab`, mask 0x80, used by the classification and by the walk step) needs a layer-2 tile with the food flag and returns the LAST object whose anchor is
+  the one stored in the cell. A layer-2 cell is four bytes: word 0 = tile << 1 | anchor bit, byte 2 = anchor row, byte 3 = anchor column (the LVL `properties` word is
+  row | column << 8). Duplicated anchors therefore behave in a quirky way (`test_food_actions` 4.1): the click on TREASURE (59, 2) classifies with the last of its three
+  objects (50 points per unit), StartHarvest re-reads the first one (30 points, another unit count) and takes the bite from it, and the ant carries the points of the
+  object it was classified with.
+* **Tiles of a pile** *(`FUN_01007352` SetTile, `FUN_0100744f` RemoveObject, `FUN_01007a22` PlaceObject)*: SetTile returns at once when the anchor already shows the new
+  tile (0x1007397: two objects with one tile on one anchor draw once, and the file's own cells stay); otherwise RemoveObject clears the cells of the old tile (layer-2
+  word, anchor bytes, object bit, the solid bit except in row 0) and PlaceObject writes the cells of the new tile and its anchor; the anchor cell always gets the tile.
+  The cells of a tile are the tiles under the first frame's box (`FUN_01007d59`) whose 32 x 32 area, cut with the box and with the image of the animation's first part,
+  holds at least one pixel that is not the colour key (`FUN_01007710`); `tools/gen_food_footprints.cpp` computes them from `ants.chd` (87 food tiles, 545 cells;
+  crackers 369..372: the 2 x 2 tiles up and left of the anchor, the burger 253/254: 4 x 4 around it, the lunchbox: 1) and test 7.1 keeps the committed table equal to
+  what the archive gives. They reproduce the cells of every pile of the six map files (the fdgumw4 at (30, 0) has its top row outside the map). A food cell is a solid
+  object for walkers.
+* **Order and arrival.** The click classification (`FUN_01020655`) makes a food cell under the click order 5 with `+0xb0` = the object, `+0xb4` = its anchor and
+  `+0xac` = the clicked tile. The walk needs no special goal: every ant gets the same path to the clicked tile. When the ant stands on a tile centre and the next
+  waypoint is a cell of its own object (0x101be8e: order 5, waypoint cell -> mask-0x80 object == `+0xb0`), the frame delta is zeroed and the path ends there; the step
+  cost lets an order-5 ant through cells of its object, every other object tile costs 8000. The arrival (`FUN_0101ccaf` case 5, 0x101ce07): an empty-handed ant and an
+  object with units left send message 0xa (StartHarvest); an ant that already carries food sets `+0xf4` to the anchor, posts text 0x11 "Can't - already have food.",
+  goes to its entrance and keeps its food; an empty object (units 0) is the ordinary stop.
+* **StartHarvest** *(message 0xa, `FUN_0102178a`: approach tile, food tile, points)*: `SetAction(5, direction from the ant's registered tile to the anchor)`, order 5,
+  `+0xac` = `+0xb4` = the anchor, `+0xb0` = `FUN_01008c63(anchor)`, `+0xb8` = the points, `ClearPath`, `SetPosition(centre of the approach tile)`. Action 5 plays the
+  `?gf` grab clip (every type; Worker 460 ms facing north with cue 77 on its fifth frame and 420 ms in the other directions with cue 77 on cardinal and 66 on diagonal
+  ones, Bomber 440 ms, Fire 400 ms, Thief 340 / 300 ms, Combat 360 ms, Swimmer 320 / 400 ms; `test_food_actions` 3.3); the first frame is booked twice, as with every
+  clip started by the walk step, so the bite lands one first-frame later (480 ms for a Worker facing east).
+* **EndHarvest** *(`FUN_0101e342`, the cleanup of action 5 that `SetAction` runs whenever action 5 is replaced, the flag is ignored: a hit in the middle of the clip
+  still gives the food, `test_food_actions` 3.8)*: `TakeFood(+0xb0, 1)` (skipped when `+0xb0` is null), points = `+0xb8` or, when that is 0, the object's own,
+  `SetHolding(points, +0xb4)` (`FUN_0101ac8c`: the ant carries `points`, the food's tile is remembered, the thief-loot flag `+0xec` is cleared), text 0x3c "Got Food!"
+  for the local player (`FUN_0100cd7d`), and, when the stage tile changed, `SetTile(2, anchor, StageTile)` so the pile shows its next stage or disappears. The bite
+  is decided when the clip starts and is not checked again: two ants that both begin on the last unit both get food (the 1998 duplication exploit). The step callback at
+  the last frame (0x101f06f) puts the ant on its tile centre, `SetActionDefault(0)` (which runs the cleanup above), clears its path and, when it now carries food,
+  orders it to its entrance. After the deposit (5.35) the ant walks back to the food it remembered (`+0xf4`); an object that is gone makes that an ordinary move to
+  the empty anchor (`test_food_actions` 3.9).
+* **Crowds.** There are no slots around a pile: the group order (`FUN_010287b5`, closest first, one acknowledgement) sends everybody to the clicked tile, every ant stops
+  on the last tile before the first cell of the pile on its path, and a follower whose approach tile is held by an ant that is still busy waits in the re-path loop of
+  `TryEnterTile` (5.32) until the holder leaves for its hill. (The HUD's per-ant slot spreading around food and power-ups was invented and is gone.)
+* **Lunchbox** *(`FUN_0100fdf8` -> `FUN_01008ca0`, called when an ant that carries food is removed on land, 5.36)*: a food object of one unit worth the points the dead ant
+  carried, stages {1 -> tile 356, 0 -> gone}, appended to the table. A lunchbox is picked up exactly like a pile, by any team's ant that is ordered onto it (there is no
+  pick-up by walking over it or standing on it), and two ants that start on it together both get its points.
+* **Removed as invented** (v0.0.37): the respawn reading of Block 2, the 8-tick bite with a per-pile bite counter and its variants list, the harvest at any adjacent or
+  standing position, the bite decided by a counter at the tick, `TileCell::lunchbox_points`, the lunchbox pick-up by any ant on the tile, the `is_food_order` flag of the
+  order API (the classification decides), the HUD's slots around food, and the claim that food orders ignore friendly ants in the path search (nothing in the step cost at
+  0x1020ad4 or in `FUN_0101fc50` does).
+* **Open** *(recorded, not ported)*: the cursor over food (the remake uses the classification's lookup; the cursor code is checked in the input stage), the status texts
+  other than 0x3c and 0x11 (status-line stage), `FUN_0100cd7d` (text 0x3c is posted only for the local player; the remake posts to the owner).
+
 ---
 
 ## 6. Target Multi-Platform Architecture
@@ -2201,7 +2268,7 @@ To deliver authentic 1:1 gameplay inside standard web browsers with zero install
     - Upon landing on the ground, the ant enters `UnitState::Stunned` and plays `a*sd301` (dazed spinning stars with Sound 70 `stun.wav`).
 
 #### 3. Multi-Ant Food Access & 1998 Duplication Exploit (`0x102151a`, `0x101fc50`, Action 3 `aggf`, Anim 356 `lunchbox`)
-- In `FUN_0102151a` and `FUN_0101fc50`, when an ant is commanded to eat food (`is_food_order`), friendly ants occupying target cells are not treated as pathfinding obstacles.
+- *(Superseded by 5.40: unverified and contradicted by the disassembly; the classification decides, there is no food flag and no exception for friendly ants.)* In `FUN_0102151a` and `FUN_0101fc50`, when an ant is commanded to eat food (`is_food_order`), friendly ants occupying target cells are not treated as pathfinding obstacles.
 - Multiple ants can walk onto or stand around the food node (Chebyshev distance $\le 1$) and enter Action 3 (`aggf`, 7-frame bite cycle over 8 ticks / 420ms).
 - When the 8-tick bite completes, each biting ant receives a morsel into its lunchbox. Because remaining bites are checked at the start of a bite rather than each frame, all concurrent biters receive their food morsels even if the food node's counter reaches 0 mid-bite (1998 Food Duplication Exploit).
 - Ground dropped lunchboxes (Table 4 Anim 356) award points to all concurrent ants reaching the lunchbox on the collection tick before removal.
@@ -2395,7 +2462,7 @@ To deliver authentic 1:1 gameplay inside standard web browsers with zero install
     - Upon landing on the ground, the ant enters `UnitState::Stunned` and plays `a*sd301` (dazed spinning stars with Sound 70 `stun.wav`).
 
 #### 3. Multi-Ant Food Access & 1998 Duplication Exploit (`0x102151a`, `0x101fc50`, Action 3 `aggf`, Anim 356 `lunchbox`)
-- In `FUN_0102151a` and `FUN_0101fc50`, when an ant is commanded to eat food (`is_food_order`), friendly ants occupying target cells are not treated as pathfinding obstacles.
+- *(Superseded by 5.40: unverified and contradicted by the disassembly; the classification decides, there is no food flag and no exception for friendly ants.)* In `FUN_0102151a` and `FUN_0101fc50`, when an ant is commanded to eat food (`is_food_order`), friendly ants occupying target cells are not treated as pathfinding obstacles.
 - Multiple ants can walk onto or stand around the food node (Chebyshev distance $\le 1$) and enter Action 3 (`aggf`, 7-frame bite cycle over 8 ticks / 420ms).
 - When the 8-tick bite completes, each biting ant receives a morsel into its lunchbox. Because remaining bites are checked at the start of a bite rather than each frame, all concurrent biters receive their food morsels even if the food node's counter reaches 0 mid-bite (1998 Food Duplication Exploit).
 - Ground dropped lunchboxes (Table 4 Anim 356) award points to all concurrent ants reaching the lunchbox on the collection tick before removal.

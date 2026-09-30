@@ -14,6 +14,7 @@
 #include "ants_assets/lvl_parser.hpp"
 #include "ants_sim/sim_engine.hpp"
 #include "ants_sim/effect_specs.hpp"
+#include "ants_sim/movement_tables.hpp"
 #include "ants_sim/pathfinding.hpp"
 #include "ants_app/audio_mixer.hpp"
 #include "ants_app/midi_player.hpp"
@@ -121,6 +122,24 @@ static bool picking_up(const AntUnit& a) { return a.loco_action == AntUnit::kAct
 static bool take_powerup_here(SimulationEngine& sim, uint32_t ant_id) {
     sim.issue_move_order(ant_id, sim.get_unit(ant_id).pos);
     return wait_ms(sim, 2000, [&]() { return picking_up(sim.get_unit(ant_id)); }) >= 0;
+}
+
+// A food object as a Block-2 entry of an LVL describes it (Ants.exe FUN_01008ca0): `units` units of `value` points each, and the
+// stage list {threshold, tile} (the pile shows the last stage whose threshold is >= the units left; {0, 0x7FFE} = gone).
+// The stage tiles come from the archive's food tiles (crackers 369..372 cover 2x2 cells around their anchor). Returns the index.
+static int32_t place_pile(SimulationEngine& sim, int32_t col, int32_t row, uint16_t units, uint16_t value,
+                          const std::vector<std::pair<uint16_t, uint16_t>>& stages) {
+    FoodObject o;
+    o.row = static_cast<uint16_t>(row);
+    o.col = static_cast<uint16_t>(col);
+    o.units = units;
+    o.value = value;
+    o.remaining = units;
+    for (const auto& st : stages) {
+        o.thresholds.push_back(st.first);
+        o.stage_tiles.push_back(st.second);
+    }
+    return sim.grid_mut().add_food_object(std::move(o));
 }
 
 // An unreachable one-tile island in a ring of water: a player order to it makes the path manager answer "Can't go there."
@@ -1369,7 +1388,7 @@ void run_suite_9_gameplay_mechanics_and_options() {
               << " [SUITE] Suite 9: Gameplay Mechanics, Hangman & Options\n"
               << "=======================================================\n";
 
-    TEST_CASE("9.1 Multi-Stage Food Harvesting & Schedule Depletion") {
+    TEST_CASE("9.1 Food Objects of TREASURE.LVL: Harvest Takes One Unit Worth The Object's Points") {
         Application app;
         ApplicationConfig cfg;
         cfg.headless = true;
@@ -1380,55 +1399,50 @@ void run_suite_9_gameplay_mechanics_and_options() {
         auto& sim_engine = app.sim();
         auto& grid = sim_engine.grid_mut();
 
-        // Verify active food schedules loaded from TREASURE.LVL
-        const auto& schedules = grid.food_schedules();
-        ASSERT_TRUE(!schedules.empty());
-
-        // Locate a food cell with schedule
-        int32_t fx = -1, fy = -1;
-        for (const auto& fs : schedules) {
-            if (fs.remaining_bites > 0 && !fs.footprint.empty()) {
-                fx = fs.footprint[0].x;
-                fy = fs.footprint[0].y;
-                break;
-            }
+        // Every Block 2 entry of the level is a food object that shows its first stage at its anchor
+        const auto& objs = grid.food_objects();
+        ASSERT_TRUE(!objs.empty());
+        for (const FoodObject& o : objs) {
+            ASSERT_EQ(o.remaining, o.units);
+            ASSERT_TRUE(o.units > 0);
         }
-        ASSERT_TRUE(fx >= 0 && fy >= 0);
 
-        // Find pointer to schedule in grid
-        ActiveFoodSchedule* sched = nullptr;
-        for (auto& fs : grid.food_schedules_mut()) {
-            for (const auto& c : fs.footprint) {
-                if (c.x == fx && c.y == fy) {
-                    sched = &fs;
-                    break;
+        // A pile with a free tile close to it (not a cell of any pile): a worker put there harvests it
+        int32_t obj = -1;
+        TileCoord start{-1, -1};
+        for (size_t i = 0; i < objs.size() && obj < 0; ++i) {
+            const TileCoord anchor{objs[i].col, objs[i].row};
+            int32_t best = 99;
+            for (int32_t dy = -3; dy <= 3; ++dy) {
+                for (int32_t dx = -3; dx <= 3; ++dx) {
+                    const TileCoord t{anchor.x + dx, anchor.y + dy};
+                    if (!grid.in_bounds(t) || grid.food_object_at_cell(t) >= 0) continue;
+                    if (!grid.get_cell(t).is_passable() || grid.get_cell(t).has_food()) continue;
+                    const int32_t d = std::max(std::abs(dx), std::abs(dy));
+                    if (d < best) { best = d; start = t; }
                 }
             }
-            if (sched) break;
+            if (best < 99) obj = static_cast<int32_t>(i);
         }
-        ASSERT_TRUE(sched != nullptr);
-        int32_t initial_bites = sched->remaining_bites;
-        ASSERT_TRUE(initial_bites > 0);
+        ASSERT_TRUE(obj >= 0);
+        const FoodObject& pile = grid.food_objects()[static_cast<size_t>(obj)];
+        const TileCoord anchor{pile.col, pile.row};
+        const uint16_t units = pile.units;
+        const uint16_t value = pile.value;
+        ASSERT_TRUE(grid.food_object_at_cell(anchor) >= 0);
 
-        // Spawn a worker directly on the food cell
-        uint32_t ant_id = sim_engine.spawn_unit(0, AntType::Worker, TileCoord{fx, fy});
-        auto& ant = sim_engine.get_unit(ant_id);
+        // Order the worker onto the pile; it walks to the pile, plays the grab clip and carries the object's points
+        uint32_t ant_id = sim_engine.spawn_unit(0, AntType::Worker, start);
+        const auto& ant = sim_engine.get_unit(ant_id);
         ASSERT_FALSE(ant.is_holding());
+        sim_engine.clear_news_events();
+        sim_engine.issue_move_order(ant_id, anchor);
+        ASSERT_TRUE(wait_ms(sim_engine, 20000, [&]() { return ant.is_holding(); }) >= 0);
 
-        // Order worker to harvest food at {fx, fy}
-        sim_engine.issue_move_order(ant_id, TileCoord{fx, fy});
-
-        // Tick simulation through 8-tick harvesting sequence
-        for (int t = 0; t < 9; ++t) {
-            sim_engine.tick();
-            if (ant.is_holding()) break;
-        }
-
-        // Verify bites decremented, ant is holding food, and harvest_origin recorded
-        ASSERT_TRUE(sched->remaining_bites < initial_bites);
-        ASSERT_TRUE(ant.is_holding());
-        ASSERT_EQ(ant.harvest_origin.x, fx);
-        ASSERT_EQ(ant.harvest_origin.y, fy);
+        ASSERT_EQ(grid.food_objects()[static_cast<size_t>(obj)].remaining, units - 1);
+        ASSERT_EQ(ant.carried_points, static_cast<uint32_t>(value));
+        ASSERT_EQ(ant.harvest_origin, anchor);
+        ASSERT_TRUE(sim_engine.has_news_event(0, 60));   // "Got Food!"
     } TEST_END();
 
     TEST_CASE("9.2 Anthill Hangman Pathing, Lifecycle & Sound 55") {
@@ -2273,65 +2287,49 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         ASSERT_EQ(a3.pixel_y, a3.pos.y * 32 + 16);
     } TEST_END();
 
-    TEST_CASE("12.5 Multi-Ant Food Harvesting & Perimeter Bite") {
+    TEST_CASE("12.5 Multi-Ant Food Harvesting: The Group Order Sends Every Ant To The Pile") {
         SimulationEngine sim;
         sim.init_test_world(60, 60, 100, 60000);
+        sim.grid_mut().set_anthill(0, TileCoord{30, 5});   // the ants with food walk home and free their tiles for the others
 
-        // Place a 2x2 cracker food schedule at (20, 20) with 8 bites
-        ActiveFoodSchedule afs{};
-        afs.x = 20;
-        afs.y = 20;
-        afs.active = true;
-        afs.remaining_bites = 8;
-        afs.footprint = { {20, 20}, {21, 20}, {20, 21}, {21, 21} };
-        afs.variants.push_back({301, 8});
-        afs.current_tile_id = 301;
-        sim.grid_mut().food_schedules_mut().push_back(afs);
-        for (const auto& c : afs.footprint) {
-            auto& cell = sim.grid_mut().get_cell_mut(c);
-            cell.is_food = true;
-            cell.interactive_id = 301;
-        }
+        // A pile of crackers (2x2 cells around its anchor (21, 21)): 8 units of 25 points
+        const int32_t pile = place_pile(sim, 21, 21, 8, 25, {{8, 369}, {6, 370}, {4, 371}, {2, 372}, {0, 0x7FFE}});
+        ASSERT_EQ(sim.grid().get_cell({20, 20}).interactive_id, 369u);
+        ASSERT_EQ(sim.grid().food_object_at_cell(TileCoord{20, 20}), pile);
 
         // Spawn 4 workers at (15, 20), (15, 21), (16, 20), (16, 21)
-        uint32_t w1 = sim.spawn_unit(0, AntType::Worker, TileCoord{15, 20});
-        uint32_t w2 = sim.spawn_unit(0, AntType::Worker, TileCoord{15, 21});
-        uint32_t w3 = sim.spawn_unit(0, AntType::Worker, TileCoord{16, 20});
-        uint32_t w4 = sim.spawn_unit(0, AntType::Worker, TileCoord{16, 21});
+        const uint32_t w[4] = {sim.spawn_unit(0, AntType::Worker, TileCoord{15, 20}), sim.spawn_unit(0, AntType::Worker, TileCoord{15, 21}),
+                               sim.spawn_unit(0, AntType::Worker, TileCoord{16, 20}), sim.spawn_unit(0, AntType::Worker, TileCoord{16, 21})};
 
         HUD hud;
         hud.init(0);
-        hud.select_ant(w1);
-        hud.set_selected_ant_ids({w1, w2, w3, w4});
+        hud.select_ant(w[0]);
+        hud.set_selected_ant_ids({w[0], w[1], w[2], w[3]});
 
-        // Right-click on the food clump (pixel 20 * 32 + 16, 20 * 32 + 16)
-        hud.dispatch_smart_special_ability(20 * 32 + 16, 20 * 32 + 16, sim);
-
-        // Advance simulation until all 4 ants have gathered food (up to 120 ticks)
-        int harvest_sound_count = 0;
-        for (int t = 0; t < 120; ++t) {
-            sim.tick();
-            if (sim.has_audio_event(SoundID::FoodHarvest)) {
-                harvest_sound_count++;
-            }
-            if ((sim.get_unit(w1).is_holding() || sim.get_unit(w1).state == UnitState::EnteringBase) &&
-                (sim.get_unit(w2).is_holding() || sim.get_unit(w2).state == UnitState::EnteringBase) &&
-                (sim.get_unit(w3).is_holding() || sim.get_unit(w3).state == UnitState::EnteringBase) &&
-                (sim.get_unit(w4).is_holding() || sim.get_unit(w4).state == UnitState::EnteringBase)) {
-                break;
-            }
+        // Right-click on the pile (pixel of the anchor tile): the ordinary group order, no slots around the pile
+        hud.dispatch_smart_special_ability(21 * 32 + 16, 21 * 32 + 16, sim);
+        for (uint32_t id : w) {
+            ASSERT_EQ(sim.get_unit(id).orig_order, AntUnit::kOrderHarvest);
+            ASSERT_EQ(sim.get_unit(id).orig_order_tile, (TileCoord{21, 21}));
         }
 
-        // All 4 ants successfully reached food and gathered food without freezing
-        const auto& u1 = sim.get_unit(w1);
-        const auto& u2 = sim.get_unit(w2);
-        const auto& u3 = sim.get_unit(w3);
-        const auto& u4 = sim.get_unit(w4);
-        ASSERT_TRUE(u1.is_holding() || u1.state == UnitState::EnteringBase);
-        ASSERT_TRUE(u2.is_holding() || u2.state == UnitState::EnteringBase);
-        ASSERT_TRUE(u3.is_holding() || u3.state == UnitState::EnteringBase);
-        ASSERT_TRUE(u4.is_holding() || u4.state == UnitState::EnteringBase);
-        ASSERT_TRUE(harvest_sound_count >= 4);
+        // Advance until every ant has carried food once: each ant plays its own grab clip and the cue of the clip
+        bool held[4] = {false, false, false, false};
+        int harvest_sound_count = 0;
+        for (int t = 0; t < 600; ++t) {
+            sim.tick();
+            for (const auto& e : sim.poll_audio_events()) {
+                if (e.sound_id == SoundID::FoodHarvest || e.sound_id == SoundID::FoodGrab) harvest_sound_count++;
+            }
+            for (size_t k = 0; k < 4; ++k) held[k] = held[k] || sim.get_unit(w[k]).is_holding();
+            if (held[0] && held[1] && held[2] && held[3]) break;
+        }
+        for (size_t k = 0; k < 4; ++k) ASSERT_TRUE(held[k]);
+
+        // Four bites were taken, one per ant, and the pile shows its 4-unit stage
+        ASSERT_EQ(harvest_sound_count, 4);
+        ASSERT_EQ(sim.grid().food_objects()[static_cast<size_t>(pile)].remaining, 4u);
+        ASSERT_EQ(sim.grid().get_cell({21, 21}).interactive_id, 371u);
     } TEST_END();
 
     TEST_CASE("12.6 Swarm Movement Non-Bouncing") {
@@ -4210,16 +4208,16 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         ASSERT_EQ(sim.get_unit(bomber).state, UnitState::PlantingBomb);
     } TEST_END();
 
-    TEST_CASE("12.47 Food Pickup Adjacency Requirement & 6-Tick Harvesting Sequence") {
+    TEST_CASE("12.47 Food Pickup Adjacency Requirement & The Grab Clip") {
         SimulationEngine sim;
         sim.init_test_world(60, 60, 100, 60000);
 
-        // Place food morsel at (14, 10)
-        sim.grid_mut().get_cell_mut({14, 10}).interactive_id = 239;
-        sim.grid_mut().get_cell_mut({14, 10}).is_food = true;
+        // A pile of one unit (2x2 crackers around its anchor (15, 10): the cells (14..15, 9..10)), 25 points
+        const int32_t pile = place_pile(sim, 15, 10, 1, 25, {{1, 372}, {0, 0x7FFE}});
+        ASSERT_EQ(sim.grid().food_object_at_cell(TileCoord{14, 10}), pile);
 
         uint32_t worker = sim.spawn_unit(0, AntType::Worker, TileCoord{10, 10});
-        // Move worker to (13, 10), adjacent to food
+        // Move worker to (13, 10), adjacent to the pile
         sim.issue_move_order(worker, TileCoord{13, 10});
 
         // Step simulation until arrival
@@ -4231,37 +4229,38 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
             }
         }
 
-        // Worker reached (13, 10), adjacent to food at (14, 10)
-        // Authentic fidelity: walking or standing on adjacent tiles must NOT automatically harvest food
+        // Worker reached (13, 10), adjacent to the pile: walking or standing on adjacent tiles must NOT harvest anything
         ASSERT_EQ(sim.get_unit(worker).pos.x, 13);
         ASSERT_EQ(sim.get_unit(worker).pos.y, 10);
         ASSERT_EQ(sim.get_unit(worker).state, UnitState::Idle);
         ASSERT_FALSE(sim.get_unit(worker).is_holding());
-        ASSERT_TRUE(sim.grid().get_cell({14, 10}).has_food());
+        ASSERT_EQ(sim.grid().food_objects()[static_cast<size_t>(pile)].remaining, 1u);
 
-        // Now explicitly instruct worker to eat the food at (14, 10)
-        sim.issue_move_order(worker, TileCoord{14, 10});
-        sim.tick();
-
+        // Now explicitly instruct worker to eat the food at (15, 10): it faces the food and plays the grab clip at once (the
+        // pile is the very next tile of its path)
+        sim.issue_move_order(worker, TileCoord{15, 10});
+        ASSERT_TRUE(wait_ms(sim, 500, [&]() { return sim.get_unit(worker).loco_action == AntUnit::kActionHarvest; }) >= 0);
         ASSERT_EQ(sim.get_unit(worker).state, UnitState::HarvestingFood);
         ASSERT_EQ(sim.get_unit(worker).facing, Direction::East);
         ASSERT_FALSE(sim.get_unit(worker).is_holding());
-        ASSERT_TRUE(sim.grid().get_cell({14, 10}).has_food());
+        ASSERT_EQ(sim.grid().food_objects()[static_cast<size_t>(pile)].remaining, 1u);
 
-        // Harvesting animation runs 8 ticks facing food before returning to idle/base queue
-        for (int i = 0; i < 7; ++i) {
-            sim.tick();
-            ASSERT_EQ(sim.get_unit(worker).state, UnitState::HarvestingFood);
-            ASSERT_FALSE(sim.get_unit(worker).is_holding());
-        }
-
-        // 8th tick completes harvesting animation sequence
-        sim.tick();
+        // The food is taken when the clip ends (the clip of the original lasts its frames' sum, here at most one tick more)
+        const uint32_t clip_ms = ants::sim::movement::action_clip(ants::sim::movement::ActionClip::Harvest, ants::sim::movement::kAntWorker,
+                                                                  static_cast<uint8_t>(Direction::East), false).total_duration_ms();
+        ASSERT_TRUE(clip_ms >= 300 && clip_ms <= 500);
+        const int took = wait_ms(sim, 2000, [&]() { return sim.get_unit(worker).is_holding(); });
+        ASSERT_TRUE(took >= 0);
+        ASSERT_TRUE(static_cast<uint32_t>(took) <= clip_ms + 100);
         const auto& w = sim.get_unit(worker);
-        ASSERT_TRUE(w.is_holding());
         ASSERT_EQ(w.carried_food, 1);
+        ASSERT_EQ(w.carried_points, 25u);
         ASSERT_EQ(w.state, UnitState::Idle);
-        ASSERT_FALSE(sim.grid().get_cell({14, 10}).has_food());
+
+        // The last unit is gone with its tiles
+        ASSERT_EQ(sim.grid().food_objects()[static_cast<size_t>(pile)].remaining, 0u);
+        ASSERT_EQ(sim.grid().food_object_at_cell(TileCoord{14, 10}), -1);
+        ASSERT_EQ(sim.grid().get_cell({15, 10}).interactive_id, TILE_EMPTY);
     } TEST_END();
 
     TEST_CASE("12.48 Bomber Carrying Food Placing Bomb Uses absb and Does Not Disappear") {
@@ -4885,8 +4884,8 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         // Enemy ant hover -> Attack!
         ASSERT_EQ(hud.evaluate_cursor(screen_tx18, screen_ty15, sim.get_world_state(), sim.grid(), camera), CursorType::Attack);
 
-        // Food tile hover -> Food
-        sim.grid_mut().get_cell_mut(16, 15).is_food = true;
+        // Food tile hover -> Food (a cell of a food object)
+        place_pile(sim, 16, 15, 1, 25, {{1, TILE_LUNCHBOX}, {0, 0x7FFE}});
         int32_t screen_tx16 = (16 * 32 + 16) - 320 + PLAYFIELD_X;
         ASSERT_EQ(hud.evaluate_cursor(screen_tx16, screen_ty15, sim.get_world_state(), sim.grid(), camera), CursorType::Food);
 
@@ -5008,9 +5007,9 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         // Place anthill at (5, 5)
         sim.grid_mut().set_anthill(0, TileCoord{5, 5});
 
-        // Place food morsel at (20, 10)
-        sim.grid_mut().get_cell_mut({20, 10}).interactive_id = 239;
-        sim.grid_mut().get_cell_mut({20, 10}).is_food = true;
+        // A morsel of one unit at (20, 10) (a single cell: the lunchbox art)
+        const int32_t morsel = place_pile(sim, 20, 10, 1, 25, {{1, TILE_LUNCHBOX}, {0, 0x7FFE}});
+        ASSERT_EQ(sim.grid().food_object_at_cell(TileCoord{20, 10}), morsel);
 
         uint32_t worker = sim.spawn_unit(0, AntType::Worker, TileCoord{10, 10});
         auto* w = const_cast<AntUnit*>(&sim.get_unit(worker));
@@ -5019,31 +5018,29 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         ASSERT_EQ(w->carried_food, 1);
 
         // Instruct ant with food to move to the food tile
-        sim.issue_move_order(worker, TileCoord{20, 10}, false, true);
+        sim.issue_move_order(worker, TileCoord{20, 10});
 
-        // Ant must walk towards food first (does NOT immediately return to base)
+        // Ant must walk towards food first (does NOT immediately return to base): the order is the harvest order (5)
         ASSERT_EQ(w->state, UnitState::Walking);
-        ASSERT_EQ(w->final_dest, (TileCoord{20, 10}));
+        ASSERT_EQ(w->orig_order, AntUnit::kOrderHarvest);
 
-        // Advance simulation until ant reaches food
+        // Advance simulation until ant reaches food; during transit it still carries exactly 1 food
         tick_until_paths_delivered(sim, {worker});
-        while (!w->waypoints.empty() && w->pos != TileCoord{20, 10}) {
+        while (!w->waypoints.empty() && w->orig_order == AntUnit::kOrderHarvest) {
             sim.tick();
-            // During transit, still carrying exactly 1 food
             ASSERT_EQ(w->carried_food, 1);
         }
 
-        // Tick once on arrival: ant realizes upon arrival that it already has food
-        sim.tick();
-
-        // Food was NOT consumed (still on map) and ant carried_food is still 1 (no double bite)
-        ASSERT_TRUE(sim.grid().get_cell({20, 10}).has_food());
+        // Food was NOT consumed (still on the map) and ant carried_food is still 1 (no double bite)
+        ASSERT_EQ(sim.grid().food_objects()[static_cast<size_t>(morsel)].remaining, 1u);
         ASSERT_EQ(w->carried_food, 1);
+        ASSERT_TRUE(sim.has_lunchbox_at(TileCoord{20, 10}));
 
         // The ant does not eat: it heads for its own entrance (5 + 1, 5 + 1) with the enter order (order 2), and the
-        // original says "Can't - already have food." (string 17)
+        // original says "Can't - already have food." (string 17); the food it carries is still the one it took at its origin
         ASSERT_EQ(w->orig_order, AntUnit::kOrderHome);
         ASSERT_TRUE(sim.has_news_event(0, 17));
+        ASSERT_EQ(w->harvest_origin, (TileCoord{20, 10}));
     } TEST_END();
 
     TEST_CASE("12.64 Diagonal Melee Attack Pushes Diagonally Along Strike Vector") {
@@ -6392,10 +6389,10 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
 
     TEST_CASE("12.108: Version Invariant & Fog of War Cursor Concealment Parity") {
         // 1. Verify semantic versioning components
-        ASSERT_EQ(ants::VERSION_STRING, "v0.0.36");
+        ASSERT_EQ(ants::VERSION_STRING, "v0.0.37");
         ASSERT_EQ(ants::VERSION_MAJOR, 0);
         ASSERT_EQ(ants::VERSION_MINOR, 0);
-        ASSERT_EQ(ants::VERSION_PATCH, 36);
+        ASSERT_EQ(ants::VERSION_PATCH, 37);
 
         // 2. Setup simulation world with Fog of War enabled
         SimulationEngine sim;
@@ -6409,8 +6406,7 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         uint32_t enemy_id = sim.spawn_unit(1, AntType::Worker, TileCoord{50, 50});
         (void)enemy_id;
         // Place food deep in fog at (52, 52)
-        sim.grid_mut().get_cell_mut(52, 52).is_food = true;
-        sim.grid_mut().get_cell_mut(52, 52).lunchbox_points = 100;
+        sim.grid_mut().drop_lunchbox(52, 52, 100);
 
         // Tick once to update fog reveals around (10, 10)
         sim.tick();
@@ -6965,50 +6961,40 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         SimulationEngine sim;
         sim.init_test_world(60, 60, 100, 60000);
 
-        ActiveFoodSchedule afs{};
-        afs.x = 20;
-        afs.y = 20;
-        afs.active = true;
-        afs.remaining_bites = 1;
-        afs.footprint = { {20, 20} };
-        afs.variants.push_back({239, 1});
-        afs.current_tile_id = 239;
-        sim.grid_mut().food_schedules_mut().push_back(afs);
-        sim.grid_mut().get_cell_mut(20, 20).interactive_id = 239;
-        sim.grid_mut().get_cell_mut(20, 20).is_food = true;
+        // The last unit of a pile: 1 unit of 25 points (the crackers' last stage), anchor (21, 21)
+        const int32_t pile = place_pile(sim, 21, 21, 1, 25, {{1, 372}, {0, 0x7FFE}});
 
-        // Two worker ants adjacent at (19, 20) and (21, 20)
+        // Two worker ants on opposite sides of the pile
         uint32_t w1 = sim.spawn_unit(0, AntType::Worker, TileCoord{19, 20});
-        uint32_t w2 = sim.spawn_unit(0, AntType::Worker, TileCoord{21, 20});
+        uint32_t w2 = sim.spawn_unit(0, AntType::Worker, TileCoord{22, 21});
 
         // Direct both ants to eat the food
-        sim.issue_move_order(w1, TileCoord{20, 20}, true);
-        sim.issue_move_order(w2, TileCoord{20, 20}, true);
+        sim.issue_move_order(w1, TileCoord{21, 21});
+        sim.issue_move_order(w2, TileCoord{21, 21});
 
-        sim.tick();
-        // Both ants enter UnitState::HarvestingFood simultaneously
-        ASSERT_EQ(sim.get_unit(w1).state, UnitState::HarvestingFood);
-        ASSERT_EQ(sim.get_unit(w2).state, UnitState::HarvestingFood);
-
-        // Neither ant holds food yet at start of bite
+        // Both ants play the grab clip at the same time: the arrival only looks whether a unit is left (one is)
+        ASSERT_TRUE(wait_ms(sim, 6000, [&]() {
+            return sim.get_unit(w1).loco_action == AntUnit::kActionHarvest && sim.get_unit(w2).loco_action == AntUnit::kActionHarvest;
+        }) >= 0);
         ASSERT_FALSE(sim.get_unit(w1).is_holding());
         ASSERT_FALSE(sim.get_unit(w2).is_holding());
+        ASSERT_EQ(sim.grid().food_objects()[static_cast<size_t>(pile)].remaining, 1u);
 
-        // Advance 8 more ticks (total 8 ticks for complete bite)
-        for (int i = 0; i < 8; ++i) {
-            sim.tick();
-        }
-
-        // At tick 8, BOTH concurrent biting ants receive 1 morsel / 25 points (duplication exploit!)
+        // At the end of the clips BOTH concurrent biting ants receive 25 points (duplication exploit!): the bite takes
+        // min(1, units left) and gives the object's value without a second check
+        ASSERT_TRUE(wait_ms(sim, 2000, [&]() { return sim.get_unit(w1).is_holding() && sim.get_unit(w2).is_holding(); }) >= 0);
         const auto& u1 = sim.get_unit(w1);
         const auto& u2 = sim.get_unit(w2);
-        ASSERT_TRUE(u1.is_holding());
         ASSERT_EQ(u1.carried_food, 1);
         ASSERT_EQ(u1.carried_points, 25u);
-
-        ASSERT_TRUE(u2.is_holding());
         ASSERT_EQ(u2.carried_food, 1);
         ASSERT_EQ(u2.carried_points, 25u);
+
+        // The pile is gone: no units, no tile on the map
+        ASSERT_EQ(sim.grid().food_objects()[static_cast<size_t>(pile)].remaining, 0u);
+        ASSERT_EQ(sim.grid().food_object_at_cell(TileCoord{21, 21}), -1);
+        ASSERT_EQ(sim.grid().get_cell({21, 21}).interactive_id, TILE_EMPTY);
+        ASSERT_EQ(sim.grid().get_cell({20, 20}).interactive_id, TILE_EMPTY);
     } TEST_END();
 
     // ------------------------------------------------------------------------
@@ -7030,11 +7016,8 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         sim.issue_move_order(w1, TileCoord{15, 15});
         sim.issue_move_order(w2, TileCoord{15, 15});
 
-        // Step simulation until arrival on the collection tick
-        for (int t = 0; t < 20; ++t) {
-            sim.tick();
-            if (sim.get_unit(w1).is_holding() || sim.get_unit(w2).is_holding()) break;
-        }
+        // Both ants play the grab clip (the lunchbox still has its unit at both arrivals) and take the 50 points each
+        ASSERT_TRUE(wait_ms(sim, 6000, [&]() { return sim.get_unit(w1).is_holding() && sim.get_unit(w2).is_holding(); }) >= 0);
 
         const auto& u1 = sim.get_unit(w1);
         const auto& u2 = sim.get_unit(w2);

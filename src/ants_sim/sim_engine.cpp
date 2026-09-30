@@ -16,7 +16,7 @@ namespace {
 // user_cmd = order clicked by the player (FUN_0101fc50 arg "player" = 1); remake systems (guard AI, base
 // queue, ability approach, harvest return) issue internal orders with user_cmd = false.
 void route_move_order(SimulationEngineImpl& impl, AntUnit& unit, TileCoord dest,
-                      bool allow_friendly_bomb, bool is_food_order, bool user_cmd) {
+                      bool allow_friendly_bomb, bool user_cmd) {
     if (!unit.is_alive()) return;
 
     // Special abilities and the power-up pick-up cannot be interrupted and silently ignore move orders
@@ -50,21 +50,6 @@ void route_move_order(SimulationEngineImpl& impl, AntUnit& unit, TileCoord dest,
         }
         return;
     }
-
-    bool dest_has_food = impl.grid_.in_bounds(dest) && impl.grid_.get_cell(dest).has_food();
-    if (!dest_has_food) {
-        for (const auto& afs : impl.grid_.food_schedules()) {
-            if (!afs.active) continue;
-            for (const auto& c : afs.footprint) {
-                if (c == dest) {
-                    dest_has_food = true;
-                    break;
-                }
-            }
-            if (dest_has_food) break;
-        }
-    }
-    unit.is_food_order = (is_food_order || dest_has_food);
 
     unit.allow_friendly_bomb = (allow_friendly_bomb && impl.grid_.has_bomb_at(dest));
     impl.go_to(unit, dest, user_cmd, false, unit.allow_friendly_bomb);
@@ -352,274 +337,10 @@ void SimulationEngine::tick() {
     impl_->movement_tick(*this);
     impl_->tick_battle_clouds();
 
-    // 5. Step Unit Timers & Arrival Handling
+    // 5. Step unit timers (food is harvested by the ants' own action 5 clip, see harvest_system in action_system.cpp)
     for (auto& ant_ptr : impl_->ants_) {
         if (!ant_ptr || ant_ptr->removed) continue;
         ant_ptr->tick_timers();
-
-        // Universal lunchbox pickup
-        TileCoord lb_target{-1, -1};
-        if (ant_ptr->is_alive() && !ant_ptr->is_holding() &&
-            ant_ptr->state != UnitState::HarvestingFood && ant_ptr->state != UnitState::EnteringBase &&
-            ant_ptr->state != UnitState::Knockback && ant_ptr->state != UnitState::Stunned &&
-            ant_ptr->state != UnitState::Drowning) {
-            // A queued path request (PATHMGR) is still a walk in progress.
-            bool arrived = (ant_ptr->waypoints.empty() || ant_ptr->state == UnitState::Idle) &&
-                           !impl_->has_pending_path(ant_ptr->id);
-            if (impl_->grid_.has_lunchbox_at(ant_ptr->pos)) {
-                lb_target = ant_ptr->pos;
-            } else if (arrived && impl_->grid_.in_bounds(ant_ptr->final_dest) &&
-                       impl_->grid_.has_lunchbox_at(ant_ptr->final_dest) &&
-                       ant_ptr->pos.chebyshev_dist(ant_ptr->final_dest) <= 1) {
-                lb_target = ant_ptr->final_dest;
-            }
-        }
-        if (lb_target.x >= 0) {
-            uint32_t pts = impl_->grid_.get_lunchbox_points(lb_target);
-            uint16_t carried_pts = static_cast<uint16_t>(pts > 0 ? pts : 25);
-            ant_ptr->pick_up_food(1, carried_pts);
-            ant_ptr->final_dest = TileCoord{-1, -1};
-            join_base_queue(ant_ptr->id);
-
-            // Ground Lunchbox Duplication (1998 Parity):
-            // When multiple ants reach a dropped lunchbox on the same collection tick,
-            // all reaching ants receive points before the lunchbox is removed.
-            for (auto& other_ptr : impl_->ants_) {
-                if (other_ptr && other_ptr->id != ant_ptr->id && other_ptr->is_alive() && !other_ptr->is_holding() &&
-                    other_ptr->state != UnitState::HarvestingFood && other_ptr->state != UnitState::EnteringBase &&
-                    other_ptr->state != UnitState::Knockback && other_ptr->state != UnitState::Stunned &&
-                    other_ptr->state != UnitState::Drowning) {
-                    bool near_lb = (std::abs(other_ptr->pixel_x - (lb_target.x * 32 + 16)) <= 16 &&
-                                    std::abs(other_ptr->pixel_y - (lb_target.y * 32 + 16)) <= 16);
-                    if (other_ptr->pos == lb_target || near_lb ||
-                        (other_ptr->pos.chebyshev_dist(lb_target) <= 1 && other_ptr->final_dest == lb_target)) {
-                        other_ptr->pick_up_food(1, carried_pts);
-                        other_ptr->final_dest = TileCoord{-1, -1};
-                        other_ptr->clear_path();
-                        other_ptr->state = (other_ptr->type == AntType::Combat) ? UnitState::GuardIdle : UnitState::Idle;
-                        join_base_queue(other_ptr->id);
-                    }
-                }
-            }
-
-            impl_->grid_.clear_lunchbox(static_cast<uint32_t>(lb_target.x), static_cast<uint32_t>(lb_target.y));
-        }
-
-        // Multi-Stage & Schedule-Driven Food Harvest
-        TileCoord food_target{-1, -1};
-        if (ant_ptr->is_alive() && impl_->grid_.in_bounds(ant_ptr->pos) &&
-            ant_ptr->state != UnitState::HarvestingFood && ant_ptr->state != UnitState::EnteringBase &&
-            ant_ptr->state != UnitState::Knockback && ant_ptr->state != UnitState::Stunned &&
-            ant_ptr->state != UnitState::Drowning) {
-
-            bool dest_is_food = ant_ptr->is_food_order;
-            const ActiveFoodSchedule* dest_fs = nullptr;
-            if (impl_->grid_.in_bounds(ant_ptr->final_dest)) {
-                if (impl_->grid_.get_cell(ant_ptr->final_dest).has_food()) {
-                    dest_is_food = true;
-                }
-                for (const auto& afs : impl_->grid_.food_schedules()) {
-                    if (!afs.active) continue;
-                    for (const auto& c : afs.footprint) {
-                        if (c.x == ant_ptr->final_dest.x && c.y == ant_ptr->final_dest.y) {
-                            dest_is_food = true;
-                            dest_fs = &afs;
-                            break;
-                        }
-                    }
-                    if (dest_fs) break;
-                }
-            }
-
-            if (!dest_fs && dest_is_food) {
-                for (const auto& afs : impl_->grid_.food_schedules()) {
-                    if (!afs.active) continue;
-                    for (const auto& c : afs.footprint) {
-                        if (ant_ptr->pos.chebyshev_dist(c) <= 1 && impl_->grid_.in_bounds(c) && impl_->grid_.get_cell(c).has_food()) {
-                            dest_fs = &afs;
-                            break;
-                        }
-                    }
-                    if (dest_fs) break;
-                }
-            }
-
-            if (dest_is_food) {
-                if (ant_ptr->is_holding()) {
-                    // Ant already has food: it must walk all the way over to the food first.
-                    // Upon arrival on top of the food or reaching destination, it realizes it has food and goes to base.
-                    bool at_food = false;
-                    if (dest_fs) {
-                        for (const auto& c : dest_fs->footprint) {
-                            if (ant_ptr->pos == c) {
-                                food_target = c;
-                                at_food = true;
-                                break;
-                            }
-                        }
-                    } else if (ant_ptr->pos == ant_ptr->final_dest &&
-                               impl_->grid_.in_bounds(ant_ptr->final_dest) &&
-                               impl_->grid_.get_cell(ant_ptr->final_dest).has_food()) {
-                        food_target = ant_ptr->final_dest;
-                        at_food = true;
-                    }
-
-                    bool arrived = (ant_ptr->waypoints.empty() || ant_ptr->state == UnitState::Idle) &&
-                                   !impl_->has_pending_path(ant_ptr->id);
-                    if (!at_food && arrived) {
-                        if (dest_fs) {
-                            for (const auto& c : dest_fs->footprint) {
-                                if (ant_ptr->pos.chebyshev_dist(c) <= 1 && impl_->grid_.in_bounds(c) && impl_->grid_.get_cell(c).has_food()) {
-                                    food_target = c;
-                                    at_food = true;
-                                    break;
-                                }
-                            }
-                        } else if (impl_->grid_.in_bounds(ant_ptr->final_dest) &&
-                                   impl_->grid_.get_cell(ant_ptr->final_dest).has_food() &&
-                                   ant_ptr->pos.chebyshev_dist(ant_ptr->final_dest) <= 1) {
-                            food_target = ant_ptr->final_dest;
-                            at_food = true;
-                        }
-                    }
-
-                    if (at_food) {
-                        ant_ptr->clear_path();
-                        ant_ptr->final_dest = TileCoord{-1, -1};
-                        ant_ptr->is_food_order = false;
-                        ant_ptr->state = (ant_ptr->type == AntType::Combat) ? UnitState::GuardIdle : UnitState::Idle;
-                        // order 5 arrival of an ant that already carries food (0x101ce07): text 17, then home
-                        impl_->post_news(ant_ptr->player_id, "Can't - already have food.", 17);
-                        join_base_queue(ant_ptr->id);
-                        food_target = TileCoord{-1, -1};
-                    }
-                } else {
-                    // Ant does NOT have food: bite as soon as reaching perimeter (chebyshev_dist <= 1)
-                    if (dest_fs) {
-                        for (const auto& c : dest_fs->footprint) {
-                            if (ant_ptr->pos.chebyshev_dist(c) <= 1 && impl_->grid_.in_bounds(c) && impl_->grid_.get_cell(c).has_food()) {
-                                food_target = c;
-                                break;
-                            }
-                        }
-                    } else if (ant_ptr->pos.chebyshev_dist(ant_ptr->final_dest) <= 1 &&
-                               impl_->grid_.in_bounds(ant_ptr->final_dest) &&
-                               impl_->grid_.get_cell(ant_ptr->final_dest).has_food()) {
-                        food_target = ant_ptr->final_dest;
-                    }
-
-                    if (food_target.x < 0) {
-                        if (impl_->grid_.get_cell(ant_ptr->pos).has_food()) {
-                            food_target = ant_ptr->pos;
-                        } else {
-                            // Surrounding Food Harvesting: Check any of the 8 neighbor tiles containing food
-                            for (int32_t dy = -1; dy <= 1; ++dy) {
-                                for (int32_t dx = -1; dx <= 1; ++dx) {
-                                    TileCoord neighbor{ant_ptr->pos.x + dx, ant_ptr->pos.y + dy};
-                                    if (impl_->grid_.in_bounds(neighbor) && impl_->grid_.get_cell(neighbor).has_food()) {
-                                        food_target = neighbor;
-                                        break;
-                                    }
-                                }
-                                if (food_target.x >= 0) break;
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        if (food_target.x >= 0) {
-            ant_ptr->state = UnitState::HarvestingFood;
-            ant_ptr->anim_tick = 0;
-            ant_ptr->anim_subitem = 0;
-            ant_ptr->ability_target = food_target;
-            ant_ptr->clear_path();
-            ant_ptr->final_dest = TileCoord{-1, -1};
-            ant_ptr->is_food_order = false;
-            if (food_target != ant_ptr->pos) {
-                ant_ptr->facing = ants::assets::vector_to_direction(food_target.x - ant_ptr->pos.x, food_target.y - ant_ptr->pos.y);
-            }
-            impl_->audio_queue_.push_back(AudioEvent{SoundID::FoodHarvest, ant_ptr->pixel_x, ant_ptr->pixel_y, 1, ant_ptr->player_id});
-            continue;
-        }
-
-    // Harvesting Food progression (aggf, 8 ticks / 7 subitem frames)
-    if (ant_ptr->state == UnitState::HarvestingFood) {
-        ant_ptr->anim_tick++;
-        ant_ptr->anim_subitem = (ant_ptr->anim_tick * 7) / 8;
-        if (ant_ptr->anim_tick == 4) {
-            impl_->audio_queue_.push_back(AudioEvent{SoundID::FoodGrab, ant_ptr->pixel_x, ant_ptr->pixel_y, 1, ant_ptr->player_id});
-        }
-        if (ant_ptr->anim_tick >= 8) {
-            ant_ptr->state = (ant_ptr->type == AntType::Combat) ? UnitState::GuardIdle : UnitState::Idle;
-            ant_ptr->anim_tick = 0;
-            ant_ptr->anim_subitem = 0;
-            TileCoord target_food = ant_ptr->ability_target;
-            ant_ptr->ability_target = TileCoord{-1, -1};
-
-            ant_ptr->pick_up_food(1, 25);
-            ant_ptr->harvest_origin = target_food;
-            ant_ptr->is_thief_steal = false;
-            join_base_queue(ant_ptr->id);
-
-            // Food Duplication Exploit Parity (1998):
-            // All biting ants completing their bite on this tick receive food morsels,
-            // even if remaining_bites drops to 0 or below during concurrent bites!
-            ActiveFoodSchedule* matched_fs = nullptr;
-            for (auto& afs : impl_->grid_.food_schedules_mut()) {
-                if (!afs.active) continue;
-                for (const auto& c : afs.footprint) {
-                    if (c.x == target_food.x && c.y == target_food.y) {
-                        matched_fs = &afs;
-                        break;
-                    }
-                }
-                if (matched_fs) break;
-            }
-
-            if (matched_fs) {
-                if (matched_fs->remaining_bites > 0) {
-                    matched_fs->remaining_bites--;
-                }
-                uint16_t next_tile = matched_fs->variants[0].tile_id;
-                for (size_t vi = 0; vi < matched_fs->variants.size(); ++vi) {
-                    if (matched_fs->remaining_bites <= matched_fs->variants[vi].weight) {
-                        next_tile = matched_fs->variants[vi].tile_id;
-                    }
-                }
-                if (next_tile == ants::assets::LVL_EMPTY_TILE || next_tile == 32766 || matched_fs->remaining_bites <= 0) {
-                    matched_fs->active = false;
-                    matched_fs->countdown_ticks = matched_fs->respawn_interval_ticks;
-                    for (const auto& c : matched_fs->footprint) {
-                        if (impl_->grid_.in_bounds(c)) {
-                            auto& fc = impl_->grid_.get_cell_mut(c);
-                            fc.interactive_id = TILE_EMPTY;
-                            fc.is_food = false;
-                        }
-                    }
-                } else {
-                    matched_fs->current_tile_id = next_tile;
-                    for (const auto& c : matched_fs->footprint) {
-                        if (impl_->grid_.in_bounds(c)) {
-                            auto& fc = impl_->grid_.get_cell_mut(c);
-                            fc.interactive_id = next_tile;
-                            fc.is_food = true;
-                        }
-                    }
-                }
-            } else if (target_food.x >= 0 && impl_->grid_.in_bounds(target_food)) {
-                auto& cell = impl_->grid_.get_cell_mut(target_food);
-                if (cell.interactive_id == 238) { // can1 opens into can2
-                    cell.interactive_id = 239;
-                    cell.is_food = true;
-                } else {
-                    cell.interactive_id = TILE_EMPTY;
-                    cell.is_food = false;
-                }
-            }
-        }
-        continue;
-    }
 
     }
 
@@ -758,8 +479,7 @@ void SimulationEngine::issue_order(const AntOrder& order) {
     switch (order.type) {
         case OrderType::Move:
             unit->ability_target = TileCoord{-1, -1};
-            route_move_order(*impl_, *unit, TileCoord{order.target_x, order.target_y}, order.allow_friendly_bomb,
-                             order.is_food_order, true);
+            route_move_order(*impl_, *unit, TileCoord{order.target_x, order.target_y}, order.allow_friendly_bomb, true);
             break;
         case OrderType::ReturnToBase: {
             unit->ability_target = TileCoord{-1, -1};
@@ -780,7 +500,7 @@ void SimulationEngine::issue_order(const AntOrder& order) {
                     }
                     // FUN_010287b5: a click on an enemy ant is a move order onto its tile with the player flag; the
                     // classification (FUN_01020655) turns it into the attack order 3 and the path ends in contact.
-                    route_move_order(*impl_, *unit, TileCoord{target->pixel_x / 32, target->pixel_y / 32}, false, false, true);
+                    route_move_order(*impl_, *unit, TileCoord{target->pixel_x / 32, target->pixel_y / 32}, false, true);
                 }
             }
             break;
@@ -1246,20 +966,20 @@ void SimulationEngine::execute_melee_attack(uint32_t attacker_id, uint32_t targe
     impl_->melee_contact(*attacker, *target);
 }
 
-void SimulationEngine::issue_move_order(uint32_t ant_id, TileCoord dest, bool allow_friendly_bomb, bool is_food_order) {
+void SimulationEngine::issue_move_order(uint32_t ant_id, TileCoord dest, bool allow_friendly_bomb) {
     AntUnit* unit = impl_->find_unit(ant_id);
     if (!unit) return;
-    route_move_order(*impl_, *unit, dest, allow_friendly_bomb, is_food_order, true);
+    route_move_order(*impl_, *unit, dest, allow_friendly_bomb, true);
 }
 
 void SimulationEngine::issue_internal_move_order(uint32_t ant_id, TileCoord dest) {
     AntUnit* unit = impl_->find_unit(ant_id);
     if (!unit) return;
-    route_move_order(*impl_, *unit, dest, false, false, false);
+    route_move_order(*impl_, *unit, dest, false, false);
 }
 
 uint32_t SimulationEngine::issue_group_move_order(const std::vector<uint32_t>& ant_ids, TileCoord target,
-                                                  bool allow_friendly_bomb, bool is_food_order) {
+                                                  bool allow_friendly_bomb) {
     struct Entry {
         uint32_t id;
         uint32_t d;
@@ -1303,7 +1023,6 @@ uint32_t SimulationEngine::issue_group_move_order(const std::vector<uint32_t>& a
         order.target_x = target.x;
         order.target_y = target.y;
         order.allow_friendly_bomb = allow_friendly_bomb;
-        order.is_food_order = is_food_order;
         issue_order(order);
         if (k == 0 && impl_->has_pending_path(e[k].id)) ack = e[k].id;   // acknowledgement: closest ant only
     }
@@ -1338,7 +1057,7 @@ uint32_t SimulationEngine::issue_group_attack_order(const std::vector<uint32_t>&
         if (!a) continue;
         leave_base_queue(e[k].id);
         a->ability_target = TileCoord{-1, -1};
-        route_move_order(*impl_, *a, target, false, false, true);
+        route_move_order(*impl_, *a, target, false, true);
         if (k == 0 && impl_->has_pending_path(e[k].id)) ack = e[k].id;         // acknowledgement: closest ant only
     }
     return ack;

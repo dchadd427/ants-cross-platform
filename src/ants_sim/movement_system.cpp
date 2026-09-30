@@ -236,22 +236,10 @@ void SimulationEngineImpl::set_walking_label(AntUnit& a) {
     }
 }
 
-// Food object identity for the harvest-order exceptions (+0xb0 compared with TileInfo +0x38).
+// Food object identity of a cell (TileInfo mask 0x80, +0x38): the object the cell's layer-2 anchor points at (the last object
+// of the table with that anchor); the harvest order stores it in +0xb0 and the passability rules compare it.
 int32_t SimulationEngineImpl::food_object_at(TileCoord t) const noexcept {
-    if (!grid_.in_bounds(t)) return -1;
-    const auto& cell = grid_.get_cell(t);
-    if (cell.has_lunchbox()) {
-        return 1000000 + t.y * static_cast<int32_t>(grid_.width()) + t.x;
-    }
-    if (!cell.has_food()) return -1;
-    const auto& fs = grid_.food_schedules();
-    for (size_t i = 0; i < fs.size(); ++i) {
-        if (!fs[i].active) continue;
-        for (const auto& c : fs[i].footprint) {
-            if (c == t) return static_cast<int32_t>(i);
-        }
-    }
-    return 2000000 + t.y * static_cast<int32_t>(grid_.width()) + t.x;
+    return grid_.food_object_at_cell(t);
 }
 
 // Player object +0x2e: the hill entrance. Remake anthill origin (bx, by) is the top-left of the 4x4
@@ -405,6 +393,9 @@ void SimulationEngineImpl::loco_on_step(AntUnit& a, StepEvt& e) {
         case AntUnit::kActionDrown:
             if (e.status == 2) finish_death(a);
             break;
+        case AntUnit::kActionHarvest:                    // 0x101f06f: the end of the grab clip
+            if (e.status == 2) harvest_clip_end(a);
+            break;
         case AntUnit::kActionGetPow:                     // 0x101f111: the end of the getpow clip, idle as the new type (tail 0x101f5a8)
             if (e.status == 2) end_walk_to_idle(a);
             break;
@@ -516,6 +507,10 @@ void SimulationEngineImpl::set_action(AntUnit& a, uint8_t action, uint8_t dir, i
         case AntUnit::kActionCantGo:
             a.orig_order_tile = no_order_tile();
             loco_play(a, movement::cant_go_clip(type, carrying), dir);
+            return;
+        case AntUnit::kActionHarvest:                                // ?gf: grab food
+            loco_play(a, movement::action_clip(movement::ActionClip::Harvest, type, dir, false), dir);
+            a.state = UnitState::HarvestingFood;
             return;
         case AntUnit::kActionGetPow:                                 // getpow: the cocoon clip of a power-up pick-up
             loco_play(a, movement::action_clip(movement::ActionClip::GetPow, type, 0, false), dir);
@@ -820,6 +815,28 @@ void SimulationEngineImpl::path_complete(AntUnit& a, StepEvt& e) {
         // snap delta stays); otherwise the ant just stops
         if (ability_arrive(a, order)) return;
     }
+    if (order == AntUnit::kOrderHarvest) {
+        // case 5 (0x101ce07): a food object with units left, an empty-handed ant: message 0xa starts the bite (handled: the
+        // step's snap delta stays); an ant that already carries food posts text 0x11 and goes home (also handled); a pile
+        // that is empty for an empty-handed ant is the ordinary stop.
+        const int32_t obj = a.orig_food_id;
+        if (obj >= 0 && static_cast<size_t>(obj) < grid_.food_objects().size()) {
+            const FoodObject& fo = grid_.food_objects()[static_cast<size_t>(obj)];
+            if (!a.is_holding()) {
+                if (fo.remaining > 0) {
+                    start_harvest(a, TileCoord{static_cast<int32_t>(fo.col), static_cast<int32_t>(fo.row)}, fo.value);
+                    return;
+                }
+            } else {
+                a.is_thief_steal = false;                                      // +0xec = 0
+                a.harvest_origin = TileCoord{static_cast<int32_t>(fo.col), static_cast<int32_t>(fo.row)};   // +0xf4
+                const TileCoord home = team_entrance(a.player_id);
+                if (home.x >= 0) go_to(a, home, false, false);
+                post_news(a.player_id, "Can't - already have food.", 17);
+                return;
+            }
+        }
+    }
     if (order == AntUnit::kOrderBomb) {
         // case 0xa (0x101d44f): a bomb on the registered tile is set off at once (message 0xf, handled: the frame
         // delta stays 0); without a bomb the ant just stops.
@@ -868,12 +885,8 @@ void SimulationEngineImpl::path_complete(AntUnit& a, StepEvt& e) {
         e.dy = 0;
         return;
     }
-    // Harvest orders (case 5) stop next to the food; the remake's harvest and lunchbox code picks the food up
-    // from there and needs to know which food was ordered.
-    const bool harvest = (a.orig_order == AntUnit::kOrderHarvest);
-    const TileCoord remake_dest = a.final_dest;
+    // Every other arrival: StopSync (the ordinary stop at the tile)
     stop_sync(a);
-    if (harvest) a.final_dest = remake_dest;
     e.dx = 0;
     e.dy = 0;
 }
@@ -1313,7 +1326,8 @@ void SimulationEngineImpl::classify_order(AntUnit& a, TileCoord t, bool special,
     } else if (food_object_at(t) >= 0) {
         a.orig_order = AntUnit::kOrderHarvest;
         a.orig_food_id = food_object_at(t);
-        a.orig_food_tile = t;
+        const FoodObject& fo = grid_.food_objects()[static_cast<size_t>(a.orig_food_id)];
+        a.orig_food_tile = TileCoord{static_cast<int32_t>(fo.col), static_cast<int32_t>(fo.row)};   // +0xb4: the object's anchor
     } else if (grid_.in_bounds(t) && grid_.get_cell(t).has_powerup() && user_cmd) {
         a.orig_order = AntUnit::kOrderPowerUp;
     } else if (grid_.has_bomb_at(t)) {
@@ -1469,7 +1483,6 @@ void SimulationEngineImpl::deliver_path(uint32_t ant_id, const std::vector<TileC
         a->final_dest = pixel_tile(*a);
         a->ability_target = TileCoord{-1, -1};
         a->harvest_origin = TileCoord{-1, -1};
-        a->is_food_order = false;
         return;
     }
     if (a->loco_action != AntUnit::kActionIdle || a->pause_active || pixel_tile(*a) != path.front()) {

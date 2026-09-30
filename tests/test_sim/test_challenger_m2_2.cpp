@@ -214,8 +214,11 @@ void run_suite_3_thief_infiltration() {
         sim.grid_mut().drop_lunchbox(25, 25, 45);
         ASSERT_TRUE(sim.has_lunchbox_at({25, 25}));
 
-        uint32_t enemy = sim.spawn_unit(1, AntType::Worker, {25, 25});
-        sim.tick();
+        // The lunchbox is a food object like any pile: the enemy ant is ordered onto it (a plain step on the tile takes nothing),
+        // plays the grab clip next to it and carries the 45 points
+        uint32_t enemy = sim.spawn_unit(1, AntType::Worker, {23, 25});
+        sim.issue_move_order(enemy, {25, 25});
+        for (int t = 0; t < 200 && !sim.get_unit(enemy).is_holding(); ++t) sim.tick();
 
         ASSERT_TRUE(sim.get_unit(enemy).is_holding());
         ASSERT_EQ(sim.get_unit(enemy).carried_points, 45u);
@@ -246,8 +249,9 @@ void run_suite_3_thief_infiltration() {
         sim.kill_unit(d);
         ASSERT_TRUE(sim.has_lunchbox_at({25, 25}));
 
-        uint32_t picker = sim.spawn_unit(2, AntType::Worker, {25, 25});
-        sim.tick();
+        uint32_t picker = sim.spawn_unit(2, AntType::Worker, {23, 25});
+        sim.issue_move_order(picker, {25, 25});
+        for (int t = 0; t < 200 && !sim.get_unit(picker).is_holding(); ++t) sim.tick();
         ASSERT_TRUE(sim.get_unit(picker).is_holding());
         ASSERT_EQ(sim.get_unit(picker).carried_points, 30u);
     } TEST_END();
@@ -598,6 +602,10 @@ int main() {
     std::cout << "  Failed Test Cases:    " << g_test_failures << "\n";
     std::cout << "=======================================================\n";
 
+    if (g_test_failures > 0) {
+        std::cout << " >>> " << g_test_failures << " TEST CASE(S) FAILED <<<\n\n";   // a failed baseline case must fail the run too
+        return 1;
+    }
     if (g_bugs_found > 0) {
         std::cout << " >>> EMPIRICAL CHALLENGE VERDICT: REQUEST_CHANGES <<<\n";
         std::cout << " >>> " << g_bugs_found << " LOGICAL DEFECT(S) CONFIRMED EMPIRICALLY! <<<\n\n";

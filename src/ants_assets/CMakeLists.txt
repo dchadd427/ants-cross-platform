@@ -3,6 +3,7 @@ add_library(ants_assets STATIC
     chd_parser.cpp
     lvl_parser.cpp
     asset_archive.cpp
+    object_footprint.cpp
 )
 
 target_include_directories(ants_assets PUBLIC

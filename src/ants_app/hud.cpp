@@ -2254,25 +2254,10 @@ void HUD::dispatch_move_order(int32_t target_tile_x, int32_t target_tile_y, sim:
     }
     if (targets.empty()) return;
 
-    bool target_is_food = sim.grid().has_food_at({target_tile_x, target_tile_y});
-    if (!target_is_food) {
-        for (const auto& afs : sim.grid().food_schedules()) {
-            if (!afs.active) continue;
-            for (const auto& c : afs.footprint) {
-                if (c.x == target_tile_x && c.y == target_tile_y) {
-                    target_is_food = true;
-                    break;
-                }
-            }
-            if (target_is_food) break;
-        }
-    }
-
     // Original group order (Ants.exe FUN_010287b5): every selected ant is sent to the clicked tile, closest
     // first; team-mate claims and the goal ring scan spread the group over free tiles. Only the closest ant
     // answers ("On my way." voice), and only when its order queued a path.
-    const uint32_t ack = sim.issue_group_move_order(targets, sim::TileCoord{target_tile_x, target_tile_y},
-                                                    allow_friendly_bomb, target_is_food);
+    const uint32_t ack = sim.issue_group_move_order(targets, sim::TileCoord{target_tile_x, target_tile_y}, allow_friendly_bomb);
     if (ack != 0) {
         play_sfx(sim::get_move_voice_sound(sim.get_unit(ack).type, voice_variant_++));
     }
@@ -2368,62 +2353,14 @@ void HUD::dispatch_smart_special_ability(int32_t world_x, int32_t world_y, sim::
     int32_t target_tile_y = world_y / 32;
 
     const auto& grid = sim.grid();
-    const sim::ActiveFoodSchedule* matched_fs = nullptr;
-    for (const auto& afs : grid.food_schedules()) {
-        if (!afs.active) continue;
-        for (const auto& c : afs.footprint) {
-            if (c.x == target_tile_x && c.y == target_tile_y) {
-                matched_fs = &afs;
-                break;
-            }
-        }
-        if (matched_fs) break;
-    }
+    const sim::TileCoord clicked{target_tile_x, target_tile_y};
 
-    bool is_target_food = grid.has_food_at({target_tile_x, target_tile_y}) || (matched_fs != nullptr);
-    bool is_food_or_pu = is_target_food ||
-                         grid.has_powerup_at({target_tile_x, target_tile_y}) ||
-                         grid.has_lunchbox_at({target_tile_x, target_tile_y});
-
-    std::vector<std::pair<int32_t, int32_t>> slots;
-    if (targets.size() > 1 && is_food_or_pu) {
-        slots.reserve(targets.size());
-        std::unordered_set<uint64_t> visited;
-        auto add_slot = [&](int32_t x, int32_t y) {
-            uint64_t key = (static_cast<uint64_t>(x) << 32) | static_cast<uint32_t>(y);
-            if (visited.insert(key).second) {
-                if (grid.in_bounds(x, y) && grid.get_cell(static_cast<uint32_t>(x), static_cast<uint32_t>(y)).is_passable()) {
-                    slots.push_back({x, y});
-                }
-            }
-        };
-
-        if (matched_fs) {
-            for (const auto& c : matched_fs->footprint) add_slot(c.x, c.y);
-            for (const auto& c : matched_fs->footprint) {
-                for (int32_t dy = -1; dy <= 1; ++dy) {
-                    for (int32_t dx = -1; dx <= 1; ++dx) {
-                        add_slot(c.x + dx, c.y + dy);
-                    }
-                }
-            }
-        } else {
-            add_slot(target_tile_x, target_tile_y);
-            for (int32_t dy = -1; dy <= 1; ++dy) {
-                for (int32_t dx = -1; dx <= 1; ++dx) {
-                    add_slot(target_tile_x + dx, target_tile_y + dy);
-                }
-            }
-        }
-
-        for (int32_t r = 2; slots.size() < targets.size() && r < 15; ++r) {
-            for (int32_t dy = -r; dy <= r && slots.size() < targets.size(); ++dy) {
-                for (int32_t dx = -r; dx <= r && slots.size() < targets.size(); ++dx) {
-                    if (std::max(std::abs(dx), std::abs(dy)) != r) continue;
-                    add_slot(target_tile_x + dx, target_tile_y + dy);
-                }
-            }
-        }
+    // A click on a food pile, a lunchbox or a power-up is the ordinary group order (FUN_010287b5): every ant is sent to the
+    // clicked tile, closest first, and the classification of the original (FUN_01020655) turns the order of each ant into a
+    // harvest or a pick-up. There are no per-ant slots around the object.
+    if (grid.food_object_at_cell(clicked) >= 0 || grid.has_powerup_at(clicked)) {
+        dispatch_move_order(target_tile_x, target_tile_y, sim, false);
+        return;
     }
 
     bool played_voice = false;
@@ -2439,101 +2376,91 @@ void HUD::dispatch_smart_special_ability(int32_t world_x, int32_t world_y, sim::
 
         sim::AntOrder order;
         order.ant_id = aid;
-        if (!slots.empty() && ti < slots.size()) {
-            order.target_x = slots[ti].first;
-            order.target_y = slots[ti].second;
-        } else {
-            order.target_x = target_tile_x;
-            order.target_y = target_tile_y;
-        }
+        order.target_x = target_tile_x;
+        order.target_y = target_tile_y;
 
-        if (is_food_or_pu) {
-            order.type = sim::OrderType::Move;
-            order.is_food_order = is_target_food;
-        } else {
-            switch (sel->type) {
-                case sim::AntType::Bomber:
-                    if (sim.has_bomb_at({target_tile_x, target_tile_y})) {
-                        if (is_multi_select() || shift_held) {
-                            order.type = sim::OrderType::Move;
-                            order.allow_friendly_bomb = true;
-                        } else {
-                            order.type = sim::OrderType::DefuseBomb;
-                        }
-                    } else if (active_order_mode_ == sim::OrderType::PlantBomb) {
-                        order.type = sim::OrderType::PlantBomb;
-                    } else if (grid.in_bounds({target_tile_x, target_tile_y}) &&
-                               grid.get_cell({target_tile_x, target_tile_y}).can_place_bomb()) {
-                        order.type = sim::OrderType::PlantBomb;
-                    } else {
-                        play_sfx(sim::SoundID::CantGo);
-                        order.type = sim::OrderType::None;
-                    }
-                    break;
-                case sim::AntType::Fire:
-                    if (sim.has_bomb_at({target_tile_x, target_tile_y})) {
-                        order.type = sim::OrderType::Move;
-                        order.allow_friendly_bomb = true;
-                    } else if (sim.has_fire_at({target_tile_x, target_tile_y})) {
-                        order.type = sim::OrderType::ExtinguishFire;
-                    } else {
-                        order.type = sim::OrderType::IgniteFire;
-                    }
-                    break;
-                case sim::AntType::Swimmer:
-                    if (sim.has_bomb_at({target_tile_x, target_tile_y})) {
-                        order.type = sim::OrderType::Move;
-                        order.allow_friendly_bomb = true;
-                    } else if (grid.in_bounds({target_tile_x, target_tile_y})) {
-                        const auto& cell = grid.get_cell({target_tile_x, target_tile_y});
-                        if (cell.has_completed_bridge() || cell.has_partial_bridge()) {
-                            order.type = sim::OrderType::DemolishBridge;
-                        } else if (cell.terrain_type == sim::TERRAIN_WATER ||
-                                   cell.surface_type == sim::SurfaceType::Water) {
-                            order.type = sim::OrderType::BuildBridge;
-                        } else {
-                            order.type = sim::OrderType::Move;
-                        }
-                    } else {
-                        order.type = sim::OrderType::Move;
-                    }
-                    break;
-                case sim::AntType::Thief: {
-                    if (sim.has_bomb_at({target_tile_x, target_tile_y})) {
+        switch (sel->type) {
+            case sim::AntType::Bomber:
+                if (sim.has_bomb_at({target_tile_x, target_tile_y})) {
+                    if (is_multi_select() || shift_held) {
                         order.type = sim::OrderType::Move;
                         order.allow_friendly_bomb = true;
                     } else {
-                        bool hit_enemy_base = false;
-                        for (const auto& base : world.anthills) {
-                            if (base.team_id != sel->player_id &&
-                                target_tile_x >= base.x && target_tile_x < base.x + 4 &&
-                                target_tile_y >= base.y && target_tile_y < base.y + 4) {
-                                hit_enemy_base = true;
-                                break;
-                            }
-                        }
-                        if (hit_enemy_base) {
-                            order.type = sim::OrderType::InfiltrateAnthill;
-                        } else {
-                            order.type = sim::OrderType::Move;
-                        }
+                        order.type = sim::OrderType::DefuseBomb;
                     }
-                    break;
+                } else if (active_order_mode_ == sim::OrderType::PlantBomb) {
+                    order.type = sim::OrderType::PlantBomb;
+                } else if (grid.in_bounds({target_tile_x, target_tile_y}) &&
+                           grid.get_cell({target_tile_x, target_tile_y}).can_place_bomb()) {
+                    order.type = sim::OrderType::PlantBomb;
+                } else {
+                    play_sfx(sim::SoundID::CantGo);
+                    order.type = sim::OrderType::None;
                 }
-                case sim::AntType::Combat:
+                break;
+            case sim::AntType::Fire:
+                if (sim.has_bomb_at({target_tile_x, target_tile_y})) {
                     order.type = sim::OrderType::Move;
-                    if (sim.has_bomb_at({target_tile_x, target_tile_y})) {
-                        order.allow_friendly_bomb = true;
-                    }
-                    break;
-                case sim::AntType::Worker:
-                default:
+                    order.allow_friendly_bomb = true;
+                } else if (sim.has_fire_at({target_tile_x, target_tile_y})) {
+                    order.type = sim::OrderType::ExtinguishFire;
+                } else {
+                    order.type = sim::OrderType::IgniteFire;
+                }
+                break;
+            case sim::AntType::Swimmer:
+                if (sim.has_bomb_at({target_tile_x, target_tile_y})) {
                     order.type = sim::OrderType::Move;
-                    if (sim.has_bomb_at({target_tile_x, target_tile_y})) {
-                        order.allow_friendly_bomb = true;
+                    order.allow_friendly_bomb = true;
+                } else if (grid.in_bounds({target_tile_x, target_tile_y})) {
+                    const auto& cell = grid.get_cell({target_tile_x, target_tile_y});
+                    if (cell.has_completed_bridge() || cell.has_partial_bridge()) {
+                        order.type = sim::OrderType::DemolishBridge;
+                    } else if (cell.terrain_type == sim::TERRAIN_WATER ||
+                               cell.surface_type == sim::SurfaceType::Water) {
+                        order.type = sim::OrderType::BuildBridge;
+                    } else {
+                        order.type = sim::OrderType::Move;
                     }
-                    break;
+                } else {
+                    order.type = sim::OrderType::Move;
+                }
+                break;
+            case sim::AntType::Thief: {
+                if (sim.has_bomb_at({target_tile_x, target_tile_y})) {
+                    order.type = sim::OrderType::Move;
+                    order.allow_friendly_bomb = true;
+                } else {
+                    bool hit_enemy_base = false;
+                    for (const auto& base : world.anthills) {
+                        if (base.team_id != sel->player_id &&
+                            target_tile_x >= base.x && target_tile_x < base.x + 4 &&
+                            target_tile_y >= base.y && target_tile_y < base.y + 4) {
+                            hit_enemy_base = true;
+                            break;
+                        }
+                    }
+                    if (hit_enemy_base) {
+                        order.type = sim::OrderType::InfiltrateAnthill;
+                    } else {
+                        order.type = sim::OrderType::Move;
+                    }
+                }
+                break;
             }
+            case sim::AntType::Combat:
+                order.type = sim::OrderType::Move;
+                if (sim.has_bomb_at({target_tile_x, target_tile_y})) {
+                    order.allow_friendly_bomb = true;
+                }
+                break;
+            case sim::AntType::Worker:
+            default:
+                order.type = sim::OrderType::Move;
+                if (sim.has_bomb_at({target_tile_x, target_tile_y})) {
+                    order.allow_friendly_bomb = true;
+                }
+                break;
         }
 
         if (order.type == sim::OrderType::None) {
@@ -2871,15 +2798,8 @@ CursorType HUD::evaluate_cursor(int32_t screen_x, int32_t screen_y,
         if (has_thief) break;
     }
 
-    // 1. Food Check: Food tile or harvestable object
-    bool is_food_tile = false;
-    if (grid.in_bounds(tx, ty)) {
-        const auto& cell = grid.get_cell(static_cast<uint32_t>(tx), static_cast<uint32_t>(ty));
-        if (cell.is_food || cell.lunchbox_points > 0) {
-            is_food_tile = true;
-        }
-    }
-    if (is_food_tile) {
+    // 1. Food Check: a cell of a food object (pile or lunchbox)
+    if (grid.food_object_at_cell(sim::TileCoord{tx, ty}) >= 0) {
         current_cursor_ = CursorType::Food;
         return current_cursor_;
     }

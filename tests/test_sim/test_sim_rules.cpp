@@ -656,8 +656,21 @@ void run_suite_10_thief() {
         sim.init_test_world(60, 60, 1);
         sim.grid_mut().drop_lunchbox(15, 15, 40);
 
-        uint32_t enemy = sim.spawn_unit(1, AntType::Worker, {15, 15});
-        sim.tick();
+        // A lunchbox is a food object like any pile: standing next to it takes nothing, an order onto it plays the grab clip and
+        // the ant of ANY team carries the 40 points afterwards
+        uint32_t enemy = sim.spawn_unit(1, AntType::Worker, {13, 15});
+        for (int i = 0; i < 40; ++i) sim.tick();
+        ASSERT_FALSE(sim.get_unit(enemy).is_holding());
+        ASSERT_TRUE(sim.has_lunchbox_at({15, 15}));
+
+        sim.issue_move_order(enemy, {15, 15});
+        bool grabbing = false;
+        for (int i = 0; i < 120 && !sim.get_unit(enemy).is_holding(); ++i) {
+            sim.tick();
+            grabbing = grabbing || sim.get_unit(enemy).loco_action == AntUnit::kActionHarvest;
+        }
+        ASSERT_TRUE(grabbing);
+        ASSERT_TRUE(sim.get_unit(enemy).is_holding());
         ASSERT_EQ(sim.get_unit(enemy).carried_points, 40u);
         ASSERT_FALSE(sim.has_lunchbox_at({15, 15}));
     } TEST_END();

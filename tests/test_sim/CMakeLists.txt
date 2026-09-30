@@ -149,3 +149,22 @@ target_include_directories(test_powerup_actions PRIVATE
 )
 
 add_test(NAME test_powerup_actions COMMAND test_powerup_actions)
+
+add_executable(test_food_actions
+    test_food_actions.cpp
+)
+
+target_link_libraries(test_food_actions PRIVATE
+    ants_sim
+    ants_assets
+)
+
+target_include_directories(test_food_actions PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../include
+)
+
+target_compile_definitions(test_food_actions PRIVATE
+    ORIGINAL_ASSETS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../../Original-Ants"
+)
+
+add_test(NAME test_food_actions COMMAND test_food_actions)

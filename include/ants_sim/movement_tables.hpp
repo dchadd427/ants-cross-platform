@@ -135,6 +135,19 @@ uint8_t terrain_class_of_tile(uint16_t tile_id) noexcept;
 uint8_t terrain_class_of_cell(uint16_t layer1_tile_id, uint16_t layer2_tile_id) noexcept;
 /// Tile flag bits of a CHD tile id (0 for ids >= 1344).
 uint8_t tile_flags_of(uint16_t tile_id) noexcept;
+
+/// A cell of an object footprint, in columns and rows from the object's anchor tile.
+struct FootprintCell {
+    int8_t dcol;
+    int8_t drow;
+};
+struct FootprintSpan {
+    const FootprintCell* cells{nullptr};
+    std::size_t count{0};
+};
+/// The cells a food tile occupies when it is placed (Ants.exe FUN_01007a22 / FUN_01007710, computed from ants.chd by
+/// tools/gen_food_footprints.cpp); empty for a tile that is not a food tile.
+FootprintSpan food_footprint(uint16_t tile_id) noexcept;
 /// Bridge tiles 0x22..0x25 (FUN_01008b90).
 bool is_bridge_tile(uint16_t tile_id) noexcept;
 

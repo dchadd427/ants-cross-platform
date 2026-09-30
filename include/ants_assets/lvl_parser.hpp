@@ -37,21 +37,24 @@ struct AnthillSpawn {
 };
 
 /**
- * @brief Weighted food/item variant inside a respawn pool.
+ * @brief One stage of a food object (Block 2): the pile shows `tile_id` while at most `weight` units are left (Ants.exe
+ * StageTile FUN_01009ed3 takes the LAST stage whose threshold is >= the units left); 0x7FFE = the pile is gone.
+ * (The field names are those of an earlier reading of the file, which took the entries for respawn pools.)
  */
 struct FoodItemVariant {
-    uint16_t weight{0};  // Relative probability weight
+    uint16_t weight{0};  // Threshold: units left
     uint16_t tile_id{LVL_EMPTY_TILE}; // Tile dictionary index (or 0x7FFE for null)
 };
 
 /**
- * @brief Dynamic food/item respawn schedule pool (Block 2).
+ * @brief Food object (Block 2; Ants.exe 0x1006d19 reads it into FUN_01008ca0): the anchor tile, the number of units, the
+ * points each unit is worth and the stage list. Nothing respawns: an object only loses units (docs 5.40).
  */
 struct FoodSchedule {
-    uint16_t y{0};                // Grid row coordinate
-    uint16_t x{0};                // Grid column coordinate
-    uint16_t initial_delay{0};    // Delay before initial spawn in seconds
-    uint16_t respawn_interval{0}; // Respawn interval after collection in seconds
+    uint16_t y{0};                // Anchor row
+    uint16_t x{0};                // Anchor column
+    uint16_t initial_delay{0};    // Number of units of the object
+    uint16_t respawn_interval{0}; // Points per unit
     std::vector<FoodItemVariant> variants;
 };
 

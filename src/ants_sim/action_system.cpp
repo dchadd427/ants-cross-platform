@@ -72,6 +72,9 @@ bool SimulationEngineImpl::action_cleanup(AntUnit& a, uint8_t old_action, uint8_
         case AntUnit::kActionRaid:
             cleanup_raid(a);           // 0x101e27f
             break;
+        case AntUnit::kActionHarvest:
+            end_harvest(a);            // 0x101e342: whatever ends the bite (a hit too), the ant has taken its food
+            break;
         case AntUnit::kActionIgnite:         end_ignite(a, flag); break;          // 0x101e798
         case AntUnit::kActionExtinguish:     end_extinguish(a, flag); break;      // 0x101e97b
         case AntUnit::kActionPlant:          end_plant(a, flag); break;           // 0x101e433
@@ -332,6 +335,81 @@ void SimulationEngineImpl::cleanup_raid(AntUnit& a) {
     a.is_thief_steal = true;                                                // +0xec = 1
     a.target_team_id = 255;
     post_news(a.player_id, "Food stolen...", StringID::FoodStolenStatus);
+}
+
+// ------------------------------------------------------------------------------------------------
+// Harvest (order 5, action 5)
+// ------------------------------------------------------------------------------------------------
+
+// FUN_0101ac8c SetHolding(amount, tile): the ant carries `amount` points taken at `tile` (or nothing for an amount of 0);
+// a thief's loot flag (+0xec) is cleared.
+void SimulationEngineImpl::set_holding(AntUnit& a, uint16_t amount, TileCoord tile) {
+    a.is_thief_steal = false;
+    if (amount != 0) {
+        a.holding = 1;
+        a.carried_food = 1;
+        a.carried_points = amount;
+        a.harvest_origin = tile;
+    } else {
+        a.holding = 0;
+        a.carried_food = 0;
+        a.carried_points = 0;
+        a.harvest_origin = TileCoord{-1, -1};
+    }
+}
+
+// Message 0xa handler FUN_0102178a: the ant, standing on its approach tile, faces the food's anchor and plays the grab clip
+// (?gf: 320-460 ms, cue 66 or 77 at 120-240 ms). The order tile and +0xb4 are the anchor, +0xb0 is the FIRST object of the
+// table with that anchor (FUN_01008c63; a later duplicate of the anchor is not the one that is harvested), +0xb8 the amount
+// the arrival read from the object it had found by the clicked cell.
+void SimulationEngineImpl::start_harvest(AntUnit& a, TileCoord food_tile, uint16_t amount) {
+    const TileCoord approach = (a.occ_tile.x >= 0) ? a.occ_tile : TileCoord{a.pixel_x / 32, a.pixel_y / 32};
+    const int32_t first = grid_.food_object_first_at(food_tile);
+    const uint8_t dir = dir_from_to(approach, food_tile);
+    set_action(a, AntUnit::kActionHarvest, dir, -1, -1, false);
+    a.orig_order_tile = food_tile;                                // +0xac
+    a.orig_food_tile = food_tile;                                 // +0xb4
+    a.orig_order = AntUnit::kOrderHarvest;                        // +0xa8 = 5
+    a.orig_food_id = first;                                       // +0xb0
+    a.harvest_amount = amount;                                    // +0xb8
+    a.waypoints.clear();                                          // FUN_0101ab56
+    a.current_waypoint_idx = 0;
+    set_position(a, approach.x * 32 + 16, approach.y * 32 + 16);
+}
+
+// FUN_0101e342, the cleanup of action 5 (every way out of the clip, the cflag is ignored: a hit in the middle of a bite still
+// gives the food): one unit is taken from the object (no re-check: two ants that bite the last unit both get food), the ant
+// carries the amount of the order (SetHolding), the owner reads "Got Food!" (text 0x3c), and a pile whose tile changed is
+// redrawn (SetTile on the anchor: the new stage's cells, or nothing at all for a pile that is gone).
+void SimulationEngineImpl::end_harvest(AntUnit& a) {
+    const int32_t obj = a.orig_food_id;
+    bool changed = false;
+    if (obj >= 0) grid_.take_food(obj, 1, changed);
+    uint16_t amount = a.harvest_amount;
+    if (amount == 0 && obj >= 0 && static_cast<size_t>(obj) < grid_.food_objects().size()) {
+        amount = grid_.food_objects()[static_cast<size_t>(obj)].value;
+    }
+    set_holding(a, amount, a.orig_food_tile);
+    post_news(a.player_id, "Got Food!", 60);
+    if (changed && obj >= 0 && static_cast<size_t>(obj) < grid_.food_objects().size()) {
+        const FoodObject& fo = grid_.food_objects()[static_cast<size_t>(obj)];
+        grid_.set_food_tile(TileCoord{static_cast<int32_t>(fo.col), static_cast<int32_t>(fo.row)}, fo.stage_tile());
+    }
+    world_state_dirty_ = true;
+}
+
+// Step callback, action 5 at the last frame (0x101f06f): the ant is put on its tile centre and idles (the cleanup above
+// gives it the food), its path is cleared, and an ant that now carries food goes home (Order to the entrance, no player flag).
+void SimulationEngineImpl::harvest_clip_end(AntUnit& a) {
+    const TileCoord t = (a.occ_tile.x >= 0) ? a.occ_tile : TileCoord{a.pixel_x / 32, a.pixel_y / 32};
+    set_position(a, t.x * 32 + 16, t.y * 32 + 16);
+    set_action(a, AntUnit::kActionIdle, static_cast<uint8_t>(a.facing), -1, -1, false);
+    a.waypoints.clear();
+    a.current_waypoint_idx = 0;
+    if (a.is_holding()) {
+        const TileCoord home = team_entrance(a.player_id);
+        if (home.x >= 0) go_to(a, home, false, false);
+    }
 }
 
 } // namespace ants::sim

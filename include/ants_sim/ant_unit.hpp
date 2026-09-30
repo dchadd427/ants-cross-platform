@@ -211,7 +211,6 @@ public:
     bool        is_thief_steal{false};
     TileCoord   ability_target{-1, -1};
     bool        allow_friendly_bomb{false};
-    bool        is_food_order{false};
 
     // ---- Combat state (Ants.exe CAntUnit) ----
     bool        engaged{false};              // +0x84: hit at contact, waits for the strike frame of the attacker's clip
@@ -262,8 +261,9 @@ public:
     uint32_t    orig_target_ant{0};         // +0xb2 (attack order)
     TileCoord   orig_special_tile{-1, -1};  // +0xb0 of the ability orders 6..9, 0xd, 0xe: the tile the ability works on
     uint16_t    orig_b4{0};                 // +0xb4 of the bridge actions: the tile id (0x22..0x25) this ant expects to find
-    int32_t     orig_food_id{-1};           // +0xb0 (harvest order): food object identity
+    int32_t     orig_food_id{-1};           // +0xb0 (harvest order): food object identity (index in the grid's object table)
     TileCoord   orig_food_tile{-1, -1};     // +0xb4 (harvest order): food anchor tile
+    uint16_t    harvest_amount{0};          // +0xb8 (harvest order): points of the bite, 0 = the object's value
     uint32_t    move_serial{0};             // bumped by clear_path() to invalidate pending path requests
     TileCoord   occ_tile{-1, -1};           // +0x5a/+0x5c: tile this ant is registered on in the occupancy grid
     bool        arrived_this_tick{false};   // set when the path completed during the current tick

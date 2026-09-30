@@ -11,6 +11,7 @@
 #include "ants_assets/asset_archive.hpp"
 #include "ants_assets/chd_parser.hpp"
 #include "ants_assets/mirroring.hpp"
+#include "ants_assets/object_footprint.hpp"
 
 #include <cctype>
 #include <cstdint>
@@ -979,6 +980,59 @@ static void suite_archive_signed_dx(const AssetArchive& archive) {
     } TEST_END();
 }
 
+// ============================================================================
+// Suite 7: food footprints (src/ants_sim/food_footprints_data.inc) vs ants.chd
+// ============================================================================
+
+static void suite_food_footprints(const AssetArchive& archive) {
+    TEST_SUITE("Suite 7: Food footprints (cells of a food tile around its anchor)");
+
+    TEST_CASE("7.1 The committed footprint table equals the cells computed from ants.chd, for every food tile") {
+        size_t food_tiles = 0;
+        size_t total_cells = 0;
+        for (uint32_t tile = 0; tile < mv::kTileIdCount; ++tile) {
+            const mv::FootprintSpan span = mv::food_footprint(static_cast<uint16_t>(tile));
+            const bool is_food = (mv::tile_flags_of(static_cast<uint16_t>(tile)) & mv::kTileFlagFood) != 0;
+            g_ctx = "tile " + std::to_string(tile);
+            if (!is_food) {
+                ASSERT_EQ(span.count, size_t{0});
+                continue;
+            }
+            ++food_tiles;
+            const auto cells = ants::assets::compute_object_footprint(archive, tile);
+            ASSERT_EQ(span.count, cells.size());
+            total_cells += cells.size();
+            for (size_t k = 0; k < cells.size(); ++k) {
+                ASSERT_EQ(span.cells[k].dcol, cells[k].dcol);
+                ASSERT_EQ(span.cells[k].drow, cells[k].drow);
+            }
+        }
+        g_ctx.clear();
+        ASSERT_EQ(food_tiles, size_t{87});
+        ASSERT_EQ(total_cells, size_t{545});
+    } TEST_END();
+
+    TEST_CASE("7.2 Sample footprints: lunchbox 1 cell, crackers 2x2 up-left of the anchor, burger 4x4 around it") {
+        const mv::FootprintSpan lunch = mv::food_footprint(356);
+        ASSERT_EQ(lunch.count, size_t{1});
+        ASSERT_EQ(lunch.cells[0].dcol, 0);
+        ASSERT_EQ(lunch.cells[0].drow, 0);
+        const mv::FootprintSpan crackers = mv::food_footprint(369);
+        ASSERT_EQ(crackers.count, size_t{4});
+        const int expect_cr[4][2] = {{-1, -1}, {0, -1}, {-1, 0}, {0, 0}};
+        for (size_t k = 0; k < 4; ++k) {
+            ASSERT_EQ(crackers.cells[k].dcol, expect_cr[k][0]);
+            ASSERT_EQ(crackers.cells[k].drow, expect_cr[k][1]);
+        }
+        const mv::FootprintSpan burger = mv::food_footprint(253);
+        ASSERT_EQ(burger.count, size_t{16});
+        ASSERT_EQ(burger.cells[0].dcol, -2);
+        ASSERT_EQ(burger.cells[0].drow, -2);
+        ASSERT_EQ(burger.cells[15].dcol, 1);
+        ASSERT_EQ(burger.cells[15].drow, 1);
+    } TEST_END();
+}
+
 int main() {
     std::cout << "=======================================================\n"
               << " Ants Movement Ground-Truth Table Test Suite\n"
@@ -1005,6 +1059,7 @@ int main() {
     suite_path_tables();
     suite_exe_parity(exe_path);
     suite_archive_signed_dx(archive);
+    suite_food_footprints(archive);
 
     std::cout << "\n=======================================================\n"
               << " TEST SUMMARY\n"

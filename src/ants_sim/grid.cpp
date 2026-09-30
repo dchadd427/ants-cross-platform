@@ -36,7 +36,6 @@ bool Grid::init_from_level(const ants::assets::LevelData& level) {
             // level reader (Ants.exe FUN_010069d8: word0 = (tile << 1) | (flags & 1)).
             cell.static_solid = (c1.flags & 1u) != 0;
             cell.occupant_ant_id = -1;
-            cell.lunchbox_points = 0;
             cell.is_mud = false;
             cell.surface_type = SurfaceType::Grass;
 
@@ -85,6 +84,10 @@ bool Grid::init_from_level(const ants::assets::LevelData& level) {
             const auto& c2 = level.get_cell_layer2(x, y);
             auto& cell = get_cell_mut(x, y);
             cell.interactive_id = c2.tile_index;
+            // Layer-2 cell bytes 2 and 3: the anchor row and column of the object the cell belongs to (FUN_010076b6)
+            const bool has_l2_tile = (c2.tile_index != TILE_EMPTY && c2.tile_index != 0xFFFF && c2.tile_index != 0x7FFE);
+            cell.anchor_y = has_l2_tile ? static_cast<int16_t>(c2.properties & 0xFFu) : int16_t{-1};
+            cell.anchor_x = has_l2_tile ? static_cast<int16_t>((c2.properties >> 8) & 0xFFu) : int16_t{-1};
             cell.interactive_owner = 255;
             cell.timer_ticks = 0;
             cell.is_food = false;
@@ -192,39 +195,34 @@ bool Grid::init_from_level(const ants::assets::LevelData& level) {
         }
     }
 
-    food_schedules_.clear();
+    // Food objects of LVL Block 2 (Ants.exe 0x1006d19): anchor (row, col), units ("delay"), points per unit ("interval") and
+    // the stage list. The first stage without a tile ends the list: its threshold and every later stage become (0, gone).
+    // Every object then puts its stage tile on its anchor (SetTile), in file order: an anchor that already shows that tile
+    // keeps the cells of the file, a later object at the same anchor replaces the earlier one's cells.
+    food_objects_.clear();
     for (const auto& fs : level.food_schedules) {
-        ActiveFoodSchedule afs{};
-        afs.x = fs.x;
-        afs.y = fs.y;
-        afs.respawn_interval_ticks = static_cast<uint32_t>(fs.respawn_interval) * 20u; // 20 Hz
-        afs.countdown_ticks = static_cast<uint32_t>(fs.initial_delay) * 20u;
-        afs.variants = fs.variants;
-        afs.active = true;
-        if (!afs.variants.empty()) {
-            afs.remaining_bites = static_cast<int32_t>(afs.variants[0].weight);
-            afs.current_tile_id = afs.variants[0].tile_id;
+        FoodObject o;
+        o.row = fs.y;
+        o.col = fs.x;
+        o.units = fs.initial_delay;
+        o.value = fs.respawn_interval;
+        o.remaining = o.units;
+        for (const auto& v : fs.variants) {
+            o.thresholds.push_back(v.weight);
+            o.stage_tiles.push_back(v.tile_id == ants::assets::LVL_EMPTY_TILE ? uint16_t{0x7FFEu} : v.tile_id);
         }
-        // Populate footprint of all connected cells matching this food item's layer2 tile
-        uint16_t anchor_tile = afs.current_tile_id;
-        if (anchor_tile != ants::assets::LVL_EMPTY_TILE && anchor_tile != 32766) {
-            for (int32_t dy = -4; dy <= 4; ++dy) {
-                for (int32_t dx = -4; dx <= 4; ++dx) {
-                    int32_t fx = static_cast<int32_t>(fs.x) + dx;
-                    int32_t fy = static_cast<int32_t>(fs.y) + dy;
-                    if (in_bounds(fx, fy)) {
-                        const auto& c2 = level.get_cell_layer2(static_cast<uint32_t>(fx), static_cast<uint32_t>(fy));
-                        if (c2.tile_index == anchor_tile) {
-                            afs.footprint.push_back(TileCoord{fx, fy});
-                        }
-                    }
-                }
+        bool ended = false;
+        for (size_t k = 0; k < o.stage_tiles.size(); ++k) {
+            if (ended) {
+                o.thresholds[k] = 0;
+                o.stage_tiles[k] = 0x7FFEu;
+            } else if (o.stage_tiles[k] == 0x7FFEu) {
+                o.thresholds[k] = 0;
+                ended = true;
             }
         }
-        if (afs.footprint.empty()) {
-            afs.footprint.push_back(TileCoord{static_cast<int32_t>(fs.x), static_cast<int32_t>(fs.y)});
-        }
-        food_schedules_.push_back(afs);
+        food_objects_.push_back(o);
+        set_food_tile(TileCoord{static_cast<int32_t>(o.col), static_cast<int32_t>(o.row)}, o.stage_tile());
     }
 
     // Original-engine solid bits (layer-1 cell bit0) beyond the per-cell file flag:
@@ -473,20 +471,97 @@ void Grid::set_layer2(uint32_t x, uint32_t y, uint16_t id, uint8_t owner) noexce
     cell.timer_ticks = 0;
 }
 
-void Grid::drop_lunchbox(uint32_t x, uint32_t y, uint32_t points) noexcept {
-    if (!in_bounds(static_cast<int32_t>(x), static_cast<int32_t>(y))) return;
-    auto& cell = get_cell_mut(x, y);
-    cell.interactive_id = TILE_LUNCHBOX;
-    cell.lunchbox_points = points;
+int32_t Grid::food_object_first_at(TileCoord anchor) const noexcept {
+    for (size_t i = 0; i < food_objects_.size(); ++i) {
+        if (food_objects_[i].row == anchor.y && food_objects_[i].col == anchor.x) return static_cast<int32_t>(i);
+    }
+    return -1;
 }
 
-void Grid::clear_lunchbox(uint32_t x, uint32_t y) noexcept {
-    if (!in_bounds(static_cast<int32_t>(x), static_cast<int32_t>(y))) return;
-    auto& cell = get_cell_mut(x, y);
-    if (cell.has_lunchbox()) {
-        cell.interactive_id = TILE_EMPTY;
-        cell.lunchbox_points = 0;
+int32_t Grid::food_object_at_cell(TileCoord cell) const noexcept {
+    if (!in_bounds(cell)) return -1;
+    const TileCell& c = get_cell(cell);
+    if (c.interactive_id == TILE_EMPTY || c.interactive_id == 0xFFFFu || c.interactive_id == 0x7FFEu) return -1;
+    if ((movement::tile_flags_of(c.interactive_id) & movement::kTileFlagFood) == 0) return -1;
+    const int32_t ax = (c.anchor_x >= 0) ? c.anchor_x : cell.x;       // a cell without anchor bytes is its own anchor
+    const int32_t ay = (c.anchor_y >= 0) ? c.anchor_y : cell.y;
+    int32_t found = -1;                                                // no break: the last object of the table wins
+    for (size_t i = 0; i < food_objects_.size(); ++i) {
+        if (food_objects_[i].row == ay && food_objects_[i].col == ax) found = static_cast<int32_t>(i);
     }
+    return found;
+}
+
+uint32_t Grid::take_food(int32_t object, uint16_t units, bool& stage_changed) noexcept {
+    stage_changed = false;
+    if (object < 0 || static_cast<size_t>(object) >= food_objects_.size()) return 0;
+    FoodObject& o = food_objects_[static_cast<size_t>(object)];
+    const uint16_t before = o.stage_tile();
+    const uint16_t taken = std::min(units, o.remaining);
+    o.remaining = static_cast<uint16_t>(o.remaining - taken);
+    stage_changed = (before != o.stage_tile());
+    return static_cast<uint32_t>(o.value) * taken;
+}
+
+int32_t Grid::add_food_object(FoodObject object) {
+    food_objects_.push_back(std::move(object));
+    const FoodObject& o = food_objects_.back();
+    set_food_tile(TileCoord{static_cast<int32_t>(o.col), static_cast<int32_t>(o.row)}, o.stage_tile());
+    return static_cast<int32_t>(food_objects_.size() - 1);
+}
+
+void Grid::set_food_tile(TileCoord anchor, uint16_t tile) noexcept {
+    if (!in_bounds(anchor)) return;
+    TileCell& a = get_cell_mut(static_cast<uint32_t>(anchor.x), static_cast<uint32_t>(anchor.y));
+    if (a.interactive_id == tile) return;                              // 0x1007397: nothing to do
+    auto clear_cell = [this](TileCoord t) {                            // FUN_0100744f: layer-2 word, anchor bytes, object bit
+        if (!in_bounds(t)) return;
+        TileCell& c = get_cell_mut(static_cast<uint32_t>(t.x), static_cast<uint32_t>(t.y));
+        c.interactive_id = TILE_EMPTY;
+        c.interactive_owner = 255;
+        c.timer_ticks = 0;
+        c.is_food = false;
+        c.is_obstacle_overlay = false;
+        c.anchor_x = -1;
+        c.anchor_y = -1;
+        if (t.y != 0) c.static_solid = false;                          // FUN_0100660c never clears row 0
+    };
+    auto set_cell = [this, tile, anchor](TileCoord t) {                // FUN_01007a22: tile, anchor bytes, object bit
+        if (!in_bounds(t)) return;
+        TileCell& c = get_cell_mut(static_cast<uint32_t>(t.x), static_cast<uint32_t>(t.y));
+        c.interactive_id = tile;
+        c.interactive_owner = 255;
+        c.timer_ticks = 0;
+        c.is_food = (tile != 0x7FFEu);
+        c.anchor_x = static_cast<int16_t>(anchor.x);
+        c.anchor_y = static_cast<int16_t>(anchor.y);
+    };
+    if (a.interactive_id != TILE_EMPTY && a.interactive_id != 0xFFFFu && a.interactive_id != 0x7FFEu) {
+        const movement::FootprintSpan old = movement::food_footprint(a.interactive_id);
+        for (size_t k = 0; k < old.count; ++k) {
+            clear_cell(TileCoord{anchor.x + old.cells[k].dcol, anchor.y + old.cells[k].drow});
+        }
+        clear_cell(anchor);
+    }
+    if (tile == 0x7FFEu || tile == TILE_EMPTY) return;
+    const movement::FootprintSpan span = movement::food_footprint(tile);
+    for (size_t k = 0; k < span.count; ++k) {
+        set_cell(TileCoord{anchor.x + span.cells[k].dcol, anchor.y + span.cells[k].drow});
+    }
+    set_cell(anchor);                                                  // the anchor cell always gets the tile
+}
+
+void Grid::drop_lunchbox(uint32_t x, uint32_t y, uint32_t points) noexcept {
+    if (!in_bounds(static_cast<int32_t>(x), static_cast<int32_t>(y))) return;
+    FoodObject o;
+    o.row = static_cast<uint16_t>(y);
+    o.col = static_cast<uint16_t>(x);
+    o.units = 1;
+    o.value = static_cast<uint16_t>(std::min<uint32_t>(points, 0xFFFFu));
+    o.remaining = 1;
+    o.thresholds = {1, 0};
+    o.stage_tiles = {TILE_LUNCHBOX, 0x7FFEu};
+    add_food_object(std::move(o));
 }
 
 void Grid::clear_powerup(int32_t x, int32_t y) noexcept {

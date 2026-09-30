@@ -77,6 +77,15 @@ add_subdirectory(src/ants_assets)
 add_subdirectory(src/ants_sim)
 add_subdirectory(src/ants_app)
 
+# Table generator (not part of the normal build): writes src/ants_sim/food_footprints_data.inc from Original-Ants/ants.chd
+#   cmake --build build --target gen_food_footprints && ./build/gen_food_footprints > src/ants_sim/food_footprints_data.inc
+if(NOT EMSCRIPTEN)
+    add_executable(gen_food_footprints EXCLUDE_FROM_ALL tools/gen_food_footprints.cpp)
+    target_link_libraries(gen_food_footprints PRIVATE ants_sim ants_assets)
+    target_compile_definitions(gen_food_footprints PRIVATE
+        ORIGINAL_ASSETS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/Original-Ants")
+endif()
+
 # Testing
 if(EMSCRIPTEN)
     option(BUILD_TESTS "Build test executables" OFF)

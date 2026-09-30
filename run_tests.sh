@@ -163,6 +163,7 @@ HILL_ACTIONS_STATUS=0
 COMBAT_ACTIONS_STATUS=0
 ABILITY_ACTIONS_STATUS=0
 POWERUP_ACTIONS_STATUS=0
+FOOD_ACTIONS_STATUS=0
 CHALLENGER_M2_1_STATUS=0
 CHALLENGER_M2_2_STATUS=0
 APP_STATUS=0
@@ -250,6 +251,13 @@ if [ "$RUN_SIM" -eq 1 ]; then
     echo -e "${BOLD}${BLUE}======================================================================${RESET}"
     "./$BUILD_DIR/tests/test_sim/test_powerup_actions"
     POWERUP_ACTIONS_STATUS=$?
+
+    echo ""
+    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
+    echo -e "${BOLD}${BLUE}>>> 2.9 RUNNING ORIGINAL FOOD ACTIONS SUITE (food objects, grab clip, bite, stages)...${RESET}"
+    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
+    "./$BUILD_DIR/tests/test_sim/test_food_actions"
+    FOOD_ACTIONS_STATUS=$?
 fi
 
 # 5. Execute Application Integration Tests
@@ -378,6 +386,13 @@ if [ "$RUN_SIM" -eq 1 ]; then
         echo -e " 2.8 Power-Up Actions (test_powerup_actions):        ${GREEN}PASSED${RESET}"
     else
         echo -e " 2.8 Power-Up Actions (test_powerup_actions):        ${RED}FAILED (exit code ${POWERUP_ACTIONS_STATUS})${RESET}"
+        TOTAL_FAILED=$((TOTAL_FAILED + 1))
+    fi
+
+    if [ "$FOOD_ACTIONS_STATUS" -eq 0 ]; then
+        echo -e " 2.9 Food Actions (test_food_actions):               ${GREEN}PASSED${RESET}"
+    else
+        echo -e " 2.9 Food Actions (test_food_actions):               ${RED}FAILED (exit code ${FOOD_ACTIONS_STATUS})${RESET}"
         TOTAL_FAILED=$((TOTAL_FAILED + 1))
     fi
 fi
