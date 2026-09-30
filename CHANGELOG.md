@@ -39,6 +39,16 @@ Ground truth for every entry is in [`docs/GAME_REVERSE_ENGINEERING.md`](docs/GAM
   - **Found on the way, for the audit** (docs: implementation_plan.md section 18): `tests/test_sim/test_challenger_m2_it2_deep_stress.cpp` has not been part of the build since an early commit and no longer compiles
     (it uses the retired slot-queue API of the hill). (An earlier version of this line said that the death clips are no longer started by a separate effect: wrong, only the unused helper `spawn_death_effect` was removed; the effect path in `movement_system.cpp` is still in use, see the audit.)
 
+## v0.0.68 - 2026-09-30 - The answers to orders and selections of the original
+
+Batch 5 part 2 (`docs/audit/ledger_input.md` NEW-12, NEW-2, NEW-8; re-read in `Ants.exe`: `0x10287b5` - `0x1028a0e`, `0x1027f07`, `0x1027aae`, `0x1027530`, `0x1027940` - `0x1027950`, `0x1011281`):
+
+- **Order feedback and voice follow the original's group order**: the pedestal click / pop-up happens whenever at least one selected ant needed the order (did not already carry out that very click), **even when every ant's path request is refused** (a worker sent onto an enemy hill: the pedestal flashes with its click, nobody answers, no text); nothing at all happens when every ant already carries it out. The voice comes only from the closest ant, and only when its order was accepted; a special order (bomb, fire, bridge, raid) speaks **only when exactly one ant needed it** (for several ants it is silent, not even the "go" voice), counting the ants that needed the order rather than the ants that were selected. The lock-step client's immediate feedback follows the same rules (`CommandResult::needing_order` is predicted exactly).
+- **Shift selections post their text**: adding an ant with Shift (click or drag), or taking one out with Shift, rebuilds the panel and posts its text as every other selection does: "Ready!" for a group, the ant's type text when one is left ("BomberAnt selected."), and the line is cleared when nothing is left. They used to keep the old text (the remake had read the original's last argument of the panel function the wrong way round).
+- **The quit dialog's and the team dialogs' buttons cancel for good when the pointer leaves them** (the button class): press, leave, come back and release no longer answers the question.
+- Docs: `docs/GAME_REVERSE_ENGINEERING.md` 5.42 / 5.44 (the group order's answers, the Shift texts), README (counts), `docs/AUDIT_ONE_TO_ONE.md` (progress).
+- Tests: `test_commands` N1.20b (the count of the ants that needed the order, predicted and real, in a 2000-order scripted match too), `test_pointer_model` (a refused order still flashes the pedestal, a special click for two ants is silent, for one ant it speaks; the dialog button cancel), `test_status_messages` (the Shift paths). **Rewritten test**: `test_status_messages` "quiet paths" (a shift-add kept the old text). Version assertions of 12.108.
+
 ## v0.0.67 - 2026-09-30 - The view of the original
 
 Batch 5 part 1 (`docs/audit/ledger_input.md` I-06 and NEW-1; re-read in `Ants.exe`: `0x100a32b`, `0x100dcbf`, `0x1030249`, `0x100e458` - `0x100e4b1`, `0x1027197`, `0x100cd00`, `0x100ecdf`):

@@ -888,6 +888,44 @@ void test_pedestals() {
     check(f.hud.is_move_latched(), "a special order does not release the move pedestal");
     check(f.hud.is_pedestal_flashing(1), "the ability pedestal flashes instead");
     f.hud.unlatch_pedestals();
+    // FUN_010287b5 returns 1 when any ant needed the order, whatever its GoTo answered (0x1028a07), and only the closest ant's GoTo decides the voice: a worker that is
+    // ordered onto the enemy hill is refused (no voice, no text) but the pedestal still flashes with its click; a special click that goes to several ants is silent altogether
+    {
+        Scene t = make_scene();
+        Fixture& g = *t.f;
+        g.hud.select_ant(t.mine);
+        g.sounds.clear();
+        g.hud.clear_status();
+        const uint32_t ack = g.hud.order_selected(g.sim, sim::TileCoord{41, 41}, false, false);
+        check(ack == 0, "a worker's GoTo onto an enemy hill is refused: nobody acknowledges");
+        check(g.hud.is_pedestal_flashing(0), "but the ant needed the order: the move pedestal flashes (the group order returned 1)");
+        check(g.sounds.size() == 1 && g.sounds[0] == sim::SoundID::NavButtonClick, "with its click (89) and no voice");
+        check(g.hud.status_line().text().empty(), "and no text");
+        // the same click again: the ant does not carry it out (it was refused), so it still needs it; a click it already carries out is skipped altogether
+        g.sounds.clear();
+        const uint32_t ok = g.hud.order_selected(g.sim, sim::TileCoord{20, 20}, false, false);
+        check(ok == t.mine && !g.sounds.empty() && g.sounds.front() != sim::SoundID::NavButtonClick, "an accepted move: the voice first, then the click");
+        g.sounds.clear();
+        const uint32_t again = g.hud.order_selected(g.sim, sim::TileCoord{20, 20}, false, false);
+        check(again == 0 && g.sounds.empty(), "every ant already carries it out: nothing at all");
+    }
+    {
+        Fixture g;
+        const uint32_t b1 = g.spawn(0, AntType::Bomber, 10, 10);
+        const uint32_t b2 = g.spawn(0, AntType::Bomber, 12, 10);
+        g.sim.grid_mut().place_bomb(30, 12, 1);
+        g.sim.grid_mut().place_bomb(32, 12, 1);
+        g.settle();
+        g.hud.set_selected_ant_ids({b1, b2});
+        g.sounds.clear();
+        g.hud.order_selected(g.sim, sim::TileCoord{30, 12}, true, false);
+        check(g.sounds.size() == 1 && g.sounds[0] == sim::SoundID::NavButtonClick, "a special click that goes to two ants: no voice at all, only the pedestal click");
+        g.hud.set_selected_ant_ids({b1});
+        g.sounds.clear();
+        g.hud.order_selected(g.sim, sim::TileCoord{32, 12}, true, false);
+        check(g.sounds.size() == 2 && g.sounds[0] != sim::SoundID::NavButtonClick && g.sounds[1] == sim::SoundID::NavButtonClick,
+              "and to exactly one ant that needs it: its voice, then the click");
+    }
     // worker: no ability pedestal, the press does nothing
     {
         Scene t = make_scene();
@@ -1235,7 +1273,17 @@ void test_buttons() {
     f.press(590, 15);
     f.release(590, 15);
     check(f.hud.is_quit_dialog_open(), "Quit opens the quit dialog");
-    f.hud.close_quit_dialog();
+    // the dialog's buttons are the button class as well: leaving a pressed button cancels its capture for good (FUN_01011281), coming back only hovers
+    bool quit_asked = false;
+    f.hud.set_on_quit([&]() { quit_asked = true; });
+    f.press(200, 270);                                                        // Yes (180, 260) 49 x 24
+    f.hud.handle_mouse_motion(400, 100, f.sim, f.cam);
+    f.hud.handle_mouse_motion(200, 270, f.sim, f.cam);
+    f.release(200, 270);
+    check(f.hud.is_quit_dialog_open() && !quit_asked, "Yes: pressed, left and entered again, the release does nothing");
+    f.press(200, 270);
+    f.release(200, 270);
+    check(!f.hud.is_quit_dialog_open() && quit_asked, "a plain press and release on Yes answers it");
     // [All] (532, 443, 44, 24): sends the text at the release; hidden while chat is off
     f.hud.set_chat_input("to all");
     const size_t base = f.hud.get_chat_log().size();

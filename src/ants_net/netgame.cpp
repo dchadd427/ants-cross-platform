@@ -596,7 +596,7 @@ sim::CommandResult NetGame::submit(const sim::Command& command) {
     if (phase_ != Phase::Playing || !sim::is_client_command(command.type)) return result;      // status Ignored
     sim::Command c = command;
     c.issuer = seat_;
-    result.ack_ant = sim_.predict_order_ack(c);                                                 // the immediate feedback of the click
+    result.ack_ant = sim_.predict_order_ack(c, &result.needing_order);                          // the immediate feedback of the click
     result.status = sim::CommandResult::Status::Applied;                                        // optimistic: the turn decides
     if (host_session_) {
         host_session_->submit_local(std::move(c));

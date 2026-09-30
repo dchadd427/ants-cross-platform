@@ -396,10 +396,9 @@ private:
     // News Flash FIFO queue
     StatusLine status_line_{};
     // A selection change decides the status text at the next update(): 6..11 for exactly one own ant, 12 for several, otherwise
-    // the text is cleared (SetPanelMode, Ants.exe FUN_01027f07). Additions with shift, the death of a selected ant and the
-    // alliance refresh are quiet and keep the text.
+    // the text is cleared (SetPanelMode, Ants.exe FUN_01027f07). Every selection change posts it, the additions and removals with
+    // shift included (they pass 0 as the last argument); the death of a selected ant and the alliance refresh keep the text.
     bool selection_status_pending_{false};
-    bool selection_status_quiet_{false};
     void apply_selection_status(const sim::WorldState& world);
     // FUN_0100cd40 (called by the power-up pick-up): a selected own ant whose type changed rebuilds the panel, which posts the text of
     // its new type when it is the only ant selected and string 12 otherwise

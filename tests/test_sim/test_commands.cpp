@@ -998,6 +998,47 @@ void run_prediction_tests() {
         ASSERT_EQ(w.sim.predict_order_ack(mv), 0u);
     } TEST_END();
 
+    TEST_CASE("N1.20b Group Orders: needing_order Counts The Ants That Needed The Click (FUN_010287b5 Returns 1 Even When Every GoTo Refuses, 0 When Every Ant Skipped); The Prediction Agrees") {
+        World w;
+        build_world(w, 1);
+        const uint32_t a1 = w.sim.spawn_unit(0, AntType::Worker, TileCoord{18, 20});
+        const uint32_t a2 = w.sim.spawn_unit(0, AntType::Worker, TileCoord{14, 20});
+        uint32_t needed = 99;
+        Command mv = make_command(CommandType::GroupMove, 0, 255, 40, 40, {a1, a2});
+        ASSERT_TRUE(w.sim.predict_order_ack(mv, &needed) != 0);
+        ASSERT_EQ(needed, 2u);
+        CommandResult r = w.sim.apply_command(mv);
+        ASSERT_EQ(r.needing_order, 2u);
+        ASSERT_TRUE(r.ack_ant != 0);
+        // an ant that already carries out this very click is skipped (a1, the closest, got the tile itself), the other one still needs it
+        const uint32_t a3 = w.sim.spawn_unit(0, AntType::Worker, TileCoord{16, 21});
+        ASSERT_EQ(w.sim.get_unit(a1).orig_order_tile, (TileCoord{40, 40}));
+        Command again = make_command(CommandType::GroupMove, 0, 255, 40, 40, {a1, a3});
+        w.sim.predict_order_ack(again, &needed);
+        ASSERT_EQ(needed, 1u);
+        ASSERT_EQ(w.sim.apply_command(again).needing_order, 1u);
+        // every ant skipped: nobody needs it (the original returns 0: no voice, no pedestal feedback)
+        const Command solo = make_command(CommandType::GroupMove, 0, 255, 40, 40, {a1});
+        w.sim.predict_order_ack(solo, &needed);
+        ASSERT_EQ(needed, 0u);
+        r = w.sim.apply_command(solo);
+        ASSERT_EQ(r.needing_order, 0u);
+        ASSERT_EQ(r.ack_ant, 0u);
+        // a worker ordered onto an enemy hill: its GoTo refuses (no acknowledgement) but it needed the order: the pedestal feedback still happens
+        const TileCoord enemy_hill = TileCoord{w.sim.grid().find_anthill(1)->x, w.sim.grid().find_anthill(1)->y};
+        const Command onto_hill = make_command(CommandType::GroupMove, 0, 255, static_cast<int16_t>(enemy_hill.x + 1), static_cast<int16_t>(enemy_hill.y + 1), {a3});
+        w.sim.predict_order_ack(onto_hill, &needed);
+        ASSERT_EQ(needed, 1u);
+        r = w.sim.apply_command(onto_hill);
+        ASSERT_EQ(r.ack_ant, 0u);
+        ASSERT_EQ(r.needing_order, 1u);
+        // a command that is not a group order or names no ant of the issuer predicts nothing
+        needed = 99;
+        w.sim.predict_order_ack(make_command(CommandType::Stop, 0, 255, 0, 0, {a1}), &needed);
+        ASSERT_EQ(needed, 0u);
+        ASSERT_EQ(w.sim.apply_command(make_command(CommandType::GroupMove, 0, 255, 5, 5, {w.ants[1][0]})).needing_order, 0u);       // a foreign ant
+    } TEST_END();
+
     TEST_CASE("N1.21 predict_order_ack: Whenever The Engine Acknowledges An Order The Prediction Named The Same Ant (2000 random orders of a scripted match)") {
         World w;
         build_world(w, 21);
@@ -1016,8 +1057,11 @@ void run_prediction_tests() {
                 const uint32_t kind = rng.below(6);
                 const CommandType type = kind < 3 ? CommandType::GroupMove : (kind < 5 ? CommandType::GroupAttack : CommandType::GroupSpecial);
                 const Command c = make_command(type, p, 255, static_cast<int16_t>(rng.below(60)), static_cast<int16_t>(rng.below(60)), pick);
-                const uint32_t predicted = w.sim.predict_order_ack(c);
-                const uint32_t real = w.sim.apply_command(c).ack_ant;
+                uint32_t predicted_needed = 77;
+                const uint32_t predicted = w.sim.predict_order_ack(c, &predicted_needed);
+                const CommandResult applied = w.sim.apply_command(c);
+                const uint32_t real = applied.ack_ant;
+                ASSERT_EQ(predicted_needed, applied.needing_order);                  // the count of the ants that needed the order is predicted exactly
                 if (predicted != 0) {
                     ++predicted_ack;
                     bool mine = false;

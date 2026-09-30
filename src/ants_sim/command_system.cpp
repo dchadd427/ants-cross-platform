@@ -60,9 +60,9 @@ CommandResult SimulationEngine::apply_command(const Command& cmd) {
                 return res;
             }
             const TileCoord tile{cmd.tile_x, cmd.tile_y};
-            if (cmd.type == CommandType::GroupMove) res.ack_ant = issue_group_move_order(own, tile, impl_->grid_.has_bomb_at(tile));
-            else if (cmd.type == CommandType::GroupSpecial) res.ack_ant = issue_group_special_order(own, tile);
-            else res.ack_ant = issue_group_attack_order(own, tile);
+            if (cmd.type == CommandType::GroupMove) res.ack_ant = issue_group_move_order(own, tile, impl_->grid_.has_bomb_at(tile), &res.needing_order);
+            else if (cmd.type == CommandType::GroupSpecial) res.ack_ant = issue_group_special_order(own, tile, &res.needing_order);
+            else res.ack_ant = issue_group_attack_order(own, tile, &res.needing_order);
             res.status = Status::Applied;
             return res;
         }
@@ -203,7 +203,8 @@ bool SimulationEngine::is_player_dropped(uint8_t player_id) const noexcept {
 // the order and are not already carrying it out, the closest first: the exchange sort keeps the first of several equally close ants at the
 // front) and only when its order would queue a path: an enemy hill is no goal for anything but a thief (GoTo stops the ant), and a special
 // order needs a valid target for the ant's type. Whatever else can refuse the goal later (a blocked tile) is not predicted.
-uint32_t SimulationEngine::predict_order_ack(const Command& cmd) const {
+uint32_t SimulationEngine::predict_order_ack(const Command& cmd, uint32_t* needed) const {
+    if (needed != nullptr) *needed = 0;
     if (!is_group_order(cmd.type) || cmd.issuer >= MAX_PLAYERS || cmd.ants.empty() || cmd.ants.size() > kMaxCommandAnts ||
         !impl_->grid_.in_bounds(cmd.tile_x, cmd.tile_y) || impl_->match_state_ == MatchState::GameOver ||
         (impl_->roster_mask_ & (1u << cmd.issuer)) == 0 || (impl_->dropped_mask_ & (1u << cmd.issuer)) != 0) {
@@ -228,6 +229,7 @@ uint32_t SimulationEngine::predict_order_ack(const Command& cmd) const {
         seen.push_back(id);
         if (!impl_->can_take_user_order(*a)) continue;
         if (impl_->group_click_skips(*a, target, cmd.type == CommandType::GroupSpecial, cmd.type == CommandType::GroupAttack)) continue;
+        if (needed != nullptr) ++*needed;                                   // this ant needs the order (whatever its GoTo will answer)
         const int32_t dr = std::abs(a->pixel_y / 32 - target.y);
         const int32_t dc = std::abs(a->pixel_x / 32 - target.x);
         const uint32_t d = static_cast<uint32_t>(std::max(dr, dc)) << 4;

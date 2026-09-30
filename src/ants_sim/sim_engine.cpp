@@ -1024,15 +1024,15 @@ void SimulationEngine::issue_internal_move_order(uint32_t ant_id, TileCoord dest
 }
 
 uint32_t SimulationEngine::issue_group_move_order(const std::vector<uint32_t>& ant_ids, TileCoord target,
-                                                  bool allow_friendly_bomb) {
-    return group_order(ant_ids, target, allow_friendly_bomb, false);
+                                                  bool allow_friendly_bomb, uint32_t* needed) {
+    return group_order(ant_ids, target, allow_friendly_bomb, false, needed);
 }
 
-uint32_t SimulationEngine::issue_group_special_order(const std::vector<uint32_t>& ant_ids, TileCoord target) {
-    return group_order(ant_ids, target, false, true);
+uint32_t SimulationEngine::issue_group_special_order(const std::vector<uint32_t>& ant_ids, TileCoord target, uint32_t* needed) {
+    return group_order(ant_ids, target, false, true, needed);
 }
 
-uint32_t SimulationEngine::group_order(const std::vector<uint32_t>& ant_ids, TileCoord target, bool allow_friendly_bomb, bool special) {
+uint32_t SimulationEngine::group_order(const std::vector<uint32_t>& ant_ids, TileCoord target, bool allow_friendly_bomb, bool special, uint32_t* needed) {
     struct Entry {
         uint32_t id;
         uint32_t d;
@@ -1047,6 +1047,7 @@ uint32_t SimulationEngine::group_order(const std::vector<uint32_t>& ant_ids, Til
         const int32_t dc = std::abs(at.x - target.x);
         e.push_back(Entry{id, static_cast<uint32_t>(std::max(dr, dc)) << 4});   // FUN_01020911
     }
+    if (needed != nullptr) *needed = static_cast<uint32_t>(e.size());         // FUN_010287b5 returns 1 when there is an entry, 0 (0x102892f) when every ant skipped
     // Exchange sort by distance, strict '>' swap (0x102893e..0x1028994).
     for (size_t p = 0; p < e.size(); ++p) {
         for (size_t j = p + 1; j < e.size(); ++j) {
@@ -1104,7 +1105,7 @@ bool SimulationEngine::is_special_target_valid(AntType type, TileCoord tile, boo
 // FUN_010287b5 with the attack flag: the skip rule is "already order 3 with +0xac == the clicked tile" (0x1028820, then 0x102887e);
 // orders 1, 4 and 5 are NOT skipped by an attack click (see group_click_skips). The target comes from the occupant of the clicked
 // tile (FUN_01020655).
-uint32_t SimulationEngine::issue_group_attack_order(const std::vector<uint32_t>& ant_ids, TileCoord target) {
+uint32_t SimulationEngine::issue_group_attack_order(const std::vector<uint32_t>& ant_ids, TileCoord target, uint32_t* needed) {
     struct Entry {
         uint32_t id;
         uint32_t d;
@@ -1119,6 +1120,7 @@ uint32_t SimulationEngine::issue_group_attack_order(const std::vector<uint32_t>&
         const int32_t dc = std::abs(at.x - target.x);
         e.push_back(Entry{id, static_cast<uint32_t>(std::max(dr, dc)) << 4});   // FUN_01020911
     }
+    if (needed != nullptr) *needed = static_cast<uint32_t>(e.size());
     for (size_t p = 0; p < e.size(); ++p) {                                    // exchange sort, strict '>' (0x102893e..0x1028994)
         for (size_t j = p + 1; j < e.size(); ++j) {
             if (e[p].d > e[j].d) std::swap(e[p], e[j]);

@@ -134,6 +134,8 @@ struct CommandResult {
     };
     Status status{Status::Ignored};
     uint32_t ack_ant{0};        // group orders: the ant that acknowledges (voice, text); 0 = none
+    uint32_t needing_order{0};  // group orders: the ants that needed an order (able to take it, not already carrying it out). FUN_010287b5 returns 1 when there is one, even when
+                                // every GoTo refused: that is when the pedestal feedback happens; the voice needs the closest ant to be accepted (ack_ant)
     uint32_t ants_ordered{0};   // group orders: ants of the issuer that were considered; Stop: ants that received the stop order
     uint8_t hatch_result{0};    // Hatch: SimulationEngine::HatchResult
     bool accepted() const noexcept { return status == Status::Applied; }

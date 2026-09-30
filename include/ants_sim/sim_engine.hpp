@@ -414,8 +414,9 @@ public:
     static uint8_t pick_dropper_powerup(const std::array<double, 5>& probabilities, uint32_t r) noexcept;
     /// The ant that would acknowledge a group order given now (0 = none), computed like the engine picks it (the closest ant of the issuer that can
     /// take the order and is not already carrying it out, provided its order would queue a path) but without changing anything. The lock-step
-    /// client uses it for the immediate feedback (voice, pedestal) of an order that only reaches the simulation a few turns later.
-    uint32_t predict_order_ack(const Command& command) const;
+    /// client uses it for the immediate feedback (voice, pedestal) of an order that only reaches the simulation a few turns later. `needed` (optional) gets the
+    /// number of ants that need the order (CommandResult::needing_order).
+    uint32_t predict_order_ack(const Command& command, uint32_t* needed = nullptr) const;
     /// Returns whether the order was accepted (for a move, special or attack order: GoTo returned true and a path was requested).
     bool issue_order(const AntOrder& order);
     /// The Stop button for one selected ant (the loop body of Ants.exe FUN_01028a60): an ant that accepts player orders, is
@@ -499,7 +500,7 @@ public:
      * @return the ant that acknowledges the order (the closest one, if its GoTo queued a path), or 0.
      */
     uint32_t issue_group_move_order(const std::vector<uint32_t>& ant_ids, TileCoord target,
-                                    bool allow_friendly_bomb = false);
+                                    bool allow_friendly_bomb = false, uint32_t* needed = nullptr);
     /**
      * @brief Player group special order (FUN_010287b5 with the special flag, cursor mode 4 / the latched ability pedestal): the same group
      * dispatch, but the classification (FUN_01020655) makes every ant carry out its ability at the tile: a bomber plants (defuses a bomb it
@@ -507,7 +508,7 @@ public:
      * and combat ants just stop where they are.
      * @return the ant that acknowledges the order (the closest one, if its GoTo queued a path), or 0.
      */
-    uint32_t issue_group_special_order(const std::vector<uint32_t>& ant_ids, TileCoord target);
+    uint32_t issue_group_special_order(const std::vector<uint32_t>& ant_ids, TileCoord target, uint32_t* needed = nullptr);
     /// FUN_01026f91: whether a click on `tile` is a valid special order for a selection of the homogeneous type `type` of team `own_team`.
     /// `auto_flag` = false: the ability pedestal is latched (bomb tile or plantable ground for a bomber; fire wall or plantable ground for
     /// a fire ant; bridge or water for a swimmer; enemy hill for a thief); true: one ant is selected without the pedestal (only a bomb
@@ -521,7 +522,7 @@ public:
      * turns it into the attack order when another team's ant stands there.
      * @return the ant that acknowledges the order ("Attack!" and its voice): the closest one, if its GoTo queued a path, or 0.
      */
-    uint32_t issue_group_attack_order(const std::vector<uint32_t>& ant_ids, TileCoord target);
+    uint32_t issue_group_attack_order(const std::vector<uint32_t>& ant_ids, TileCoord target, uint32_t* needed = nullptr);
     /// True while a path request of this ant is queued in the path manager (PATHMGR, one path per 50 ms).
     bool has_pending_path(uint32_t ant_id) const;
 
@@ -581,7 +582,7 @@ public:
     void record_player_stat(uint8_t player_id, StatType stat, uint32_t value);
 
 private:
-    uint32_t group_order(const std::vector<uint32_t>& ant_ids, TileCoord target, bool allow_friendly_bomb, bool special);
+    uint32_t group_order(const std::vector<uint32_t>& ant_ids, TileCoord target, bool allow_friendly_bomb, bool special, uint32_t* needed);
     std::unique_ptr<SimulationEngineImpl> impl_;
 };
 

@@ -276,13 +276,18 @@ uint32_t HUD::issue_group_order(sim::SimulationEngine& sim, sim::TileCoord tile,
     cmd.tile_x = static_cast<int16_t>(tile.x);
     cmd.tile_y = static_cast<int16_t>(tile.y);
     cmd.ants.assign(targets.begin(), targets.begin() + static_cast<std::ptrdiff_t>(std::min(targets.size(), sim::kMaxCommandAnts)));
-    const uint32_t ack = submit_command(sim, cmd).ack_ant;
+    const sim::CommandResult result = submit_command(sim, cmd);
+    const uint32_t ack = result.ack_ant;
+    // FUN_010287b5 (0x1028929 .. 0x1028a07): nothing happens when every ant already carries out this click; otherwise the closest ant's GoTo decides the voice (a refusal is
+    // silent, the others' answers do not count), a special order speaks only when exactly one ant needed it (none for more, not even the go voice), and the function returns 1
+    // whatever the GoTos answered, which is what the pedestal feedback follows
+    if (result.needing_order == 0) return 0;
     if (ack != 0) {
         if (attack) voice_attack(sim.get_unit(ack).type);
-        else if (special) voice_special(sim.get_unit(ack).type, targets.size());
+        else if (special) voice_special(sim.get_unit(ack).type, result.needing_order);
         else voice_go(sim.get_unit(ack).type);
     }
-    if (ack != 0) order_feedback(special, attack);
+    order_feedback(special, attack);
     return ack;
 }
 
@@ -336,14 +341,14 @@ void HUD::pointer_click(sim::SimulationEngine& sim, ViewportCamera& camera, int3
                 if (ant->player_id == local_player_id_) {
                     const PanelMode panel = panel_mode(world);
                     if (shift && (panel == PanelMode::OneAnt || panel == PanelMode::Ants)) {
-                        // shift toggles an own ant in a selection of own ants: it leaves it, or joins it (panel 4), quietly
+                        // shift toggles an own ant in a selection of own ants: it leaves it (FUN_01027aae) or joins it (0x1027940), and the panel is rebuilt with its
+                        // text: several ants give string 12, one remaining ant the text of its type, none clears the line (the last argument of FUN_01027f07 is 0)
                         auto it = std::find(selected_ant_ids_.begin(), selected_ant_ids_.end(), ant->id);
                         if (it != selected_ant_ids_.end()) selected_ant_ids_.erase(it);
                         else selected_ant_ids_.push_back(ant->id);
                         selected_ant_id_ = selected_ant_ids_.empty() ? 0 : selected_ant_ids_.front();
                         is_multi_select_mode_ = selected_ant_ids_.size() > 1;
                         selection_status_pending_ = true;
-                        selection_status_quiet_ = true;
                     } else {
                         select_ant(ant->id, false);
                         voice_ready(ant->type);

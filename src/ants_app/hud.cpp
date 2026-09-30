@@ -103,7 +103,6 @@ void HUD::init(uint8_t local_player_id) {
     is_radar_dragging_ = false;
     status_line_.clear();
     selection_status_pending_ = false;
-    selection_status_quiet_ = false;
     chat_log_.clear();
     chat_line_colour_.clear();
     chat_line_indent_.clear();
@@ -252,10 +251,6 @@ void HUD::post_status_id(uint16_t string_id, const std::string& arg) {
 void HUD::apply_selection_status(const sim::WorldState& world) {
     if (!selection_status_pending_) return;
     selection_status_pending_ = false;
-    if (selection_status_quiet_) {
-        selection_status_quiet_ = false;
-        return;
-    }
     size_t own = 0;
     const sim::AntSnapshot* only = nullptr;
     if (selected_base_team_id_ < 0) {
@@ -1081,7 +1076,6 @@ void HUD::select_ant(uint32_t ant_id, bool is_multi) {
         selected_ant_ids_.push_back(ant_id);
     }
     selection_status_pending_ = true;
-    selection_status_quiet_ = false;
 }
 
 void HUD::select_base(int32_t team_id) noexcept {
@@ -1090,7 +1084,6 @@ void HUD::select_base(int32_t team_id) noexcept {
     selected_ant_ids_.clear();
     is_multi_select_mode_ = false;
     selection_status_pending_ = true;
-    selection_status_quiet_ = false;
 }
 
 void HUD::clear_selection() noexcept {
@@ -1099,7 +1092,6 @@ void HUD::clear_selection() noexcept {
     selected_base_team_id_ = -1;
     is_multi_select_mode_ = false;
     selection_status_pending_ = true;      // every deselect clears the status text (FUN_01028c44)
-    selection_status_quiet_ = false;
 }
 
 bool HUD::is_ant_selected(uint32_t id) const noexcept {
@@ -1134,7 +1126,6 @@ void HUD::select_all_friendly(const sim::WorldState& world) {
         selected_ant_id_ = 0;
     }
     selection_status_pending_ = true;
-    selection_status_quiet_ = false;
 }
 
 void HUD::select_ants_in_rect(int32_t x1, int32_t y1, int32_t x2, int32_t y2, const sim::WorldState& world, bool additive) {
@@ -1165,8 +1156,7 @@ void HUD::select_ants_in_rect(int32_t x1, int32_t y1, int32_t x2, int32_t y2, co
         selected_base_team_id_ = -1;
         selected_ant_id_ = selected_ant_ids_.front();
         is_multi_select_mode_ = selected_ant_ids_.size() > 1;
-        selection_status_pending_ = true;
-        selection_status_quiet_ = true;                    // shift-add (0x1027950) keeps the text
+        selection_status_pending_ = true;                  // a shift-add rebuilds the panel and posts its text (FUN_01027f07 with its last argument 0, 0x1027950)
         unlatch_pedestals();
         return;
     }
@@ -1177,7 +1167,6 @@ void HUD::select_ants_in_rect(int32_t x1, int32_t y1, int32_t x2, int32_t y2, co
     selected_ant_id_ = selected_ant_ids_.empty() ? 0 : selected_ant_ids_.front();
     is_multi_select_mode_ = selected_ant_ids_.size() > 1;
     selection_status_pending_ = true;
-    selection_status_quiet_ = false;
     unlatch_pedestals();
     if (selected_ant_id_ != 0) {
         for (const auto& ant : world.ants) {
@@ -1437,13 +1426,20 @@ bool HUD::handle_mouse_motion(int32_t x, int32_t y,
         return true;
     }
 
+    // The dialogs' buttons are the button class too (FUN_01011281): leaving a pressed button cancels its capture for good, coming back only hovers
     if (alliance_dialog_ != AllianceDialog::None) {
+        for (UIButton* b : {&alliance_button_a_, &alliance_button_b_}) {
+            if (b->is_pressed && !b->contains(x, y)) b->is_pressed = false;
+        }
         alliance_button_a_.is_active = alliance_button_a_.w > 0 && alliance_button_a_.contains(x, y);
         alliance_button_b_.is_active = alliance_button_b_.w > 0 && alliance_button_b_.contains(x, y);
         return true;
     }
 
     if (show_quit_dialog_) {
+        for (UIButton* b : {&yes_button_, &no_button_}) {
+            if (b->is_pressed && !b->contains(x, y)) b->is_pressed = false;
+        }
         yes_button_.is_active = yes_button_.contains(x, y);
         no_button_.is_active = no_button_.contains(x, y);
         return true;

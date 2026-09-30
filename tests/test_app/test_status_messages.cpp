@@ -313,7 +313,7 @@ void test_type_change_text() {
 
 void test_quiet_paths() {
     g_group = "select";
-    std::printf("[status] quiet paths keep the text: a shift marquee (0x1027950), the death of a selected ant\n");
+    std::printf("[status] shift paths post the panel text (FUN_01027f07 gets 0 as its last argument at 0x1027950 / 0x1027aae / 0x1027746): group = string 12, one ant = its type, none clears\n");
     sim::SimulationEngine sim;
     make_world(sim);
     HUD hud;
@@ -324,12 +324,32 @@ void test_quiet_paths() {
     hud.select_ant(a);
     run(hud, world, 1);
     check(status_after_render(hud, world) == "Ready!", "first ant");
-    (void)b;
     hud.post_status("Bomb dropped.");
-    // adding with shift keeps the text that is there
+    // adding with shift rebuilds the panel: several ants give string 12 (the old line is replaced)
     hud.select_ants_in_rect(12 * 32 - 10, 10 * 32 - 20, 12 * 32 + 10, 10 * 32 + 16, world, true);
     run(hud, world, 1);
-    check(status_after_render(hud, world) == "Bomb dropped.", "a shift-add is quiet");
+    check(status_after_render(hud, world) == "Ready!" && hud.get_selected_ant_ids().size() == 2, "a shift marquee that adds an ant posts string 12");
+
+    // shift clicks toggle: an ant leaves the selection (FUN_01027aae), the panel is rebuilt from what is left
+    ViewportCamera camera;
+    camera.world_x = 0;
+    camera.world_y = 0;
+    auto click_ant = [&](uint32_t id) {
+        for (const auto& ant : world.ants) {
+            if (ant.id == id) hud.pointer_click(sim, camera, HUD::PLAYFIELD_X + ant.px, HUD::PLAYFIELD_Y + ant.py - 8, true);
+        }
+        run(hud, world, 1);
+    };
+    click_ant(a);                                                        // the worker leaves: the bomber is alone (panel 3), the text of its type
+    check(hud.get_selected_ant_ids().size() == 1 && hud.is_ant_selected(b), "shift on a selected ant removes it");
+    check(status_after_render(hud, world) == "BomberAnt selected.", "one ant left: the text of its type (it kept the old text before)");
+    click_ant(a);                                                        // joins again: two ants, string 12
+    check(hud.get_selected_ant_ids().size() == 2, "shift on an unselected own ant adds it");
+    check(status_after_render(hud, world) == "Ready!", "a shift click that adds posts string 12");
+    click_ant(a);
+    click_ant(b);                                                        // the last ant leaves: nothing selected, the line is cleared
+    check(hud.get_selected_ant_ids().empty(), "shift on the last selected ant leaves nothing selected");
+    check(status_after_render(hud, world).empty(), "nothing selected: the status line is cleared");
 }
 
 // ------------------------------------------------------------------------------------------------
