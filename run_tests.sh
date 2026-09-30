@@ -265,6 +265,13 @@ if [ "$RUN_SIM" -eq 1 ]; then
     echo -e "${BOLD}${BLUE}======================================================================${RESET}"
     "./$BUILD_DIR/tests/test_sim/test_commands"
     COMMANDS_STATUS=$?
+
+    echo ""
+    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
+    echo -e "${BOLD}${BLUE}>>> 2.11 RUNNING LOCK-STEP NETWORK CORE SUITE (protocol, sequencer, sessions, matches)...${RESET}"
+    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
+    "./$BUILD_DIR/tests/test_net/test_lockstep"
+    LOCKSTEP_STATUS=$?
 fi
 
 # 5. Execute Application Integration Tests
@@ -428,6 +435,13 @@ if [ "$RUN_SIM" -eq 1 ]; then
         echo -e " 2.10 Commands + State Hash (test_commands):         ${GREEN}PASSED${RESET}"
     else
         echo -e " 2.10 Commands + State Hash (test_commands):         ${RED}FAILED (exit code ${COMMANDS_STATUS})${RESET}"
+        TOTAL_FAILED=$((TOTAL_FAILED + 1))
+    fi
+
+    if [ "$LOCKSTEP_STATUS" -eq 0 ]; then
+        echo -e " 2.11 Lock-Step Network Core (test_lockstep):        ${GREEN}PASSED${RESET}"
+    else
+        echo -e " 2.11 Lock-Step Network Core (test_lockstep):        ${RED}FAILED (exit code ${LOCKSTEP_STATUS})${RESET}"
         TOTAL_FAILED=$((TOTAL_FAILED + 1))
     fi
 fi

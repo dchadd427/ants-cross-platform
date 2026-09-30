@@ -75,6 +75,7 @@ include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
 # Subdirectories
 add_subdirectory(src/ants_assets)
 add_subdirectory(src/ants_sim)
+add_subdirectory(src/ants_net)
 add_subdirectory(src/ants_app)
 
 # Table generator (not part of the normal build): writes src/ants_sim/food_footprints_data.inc from Original-Ants/ants.chd
@@ -96,6 +97,7 @@ if(BUILD_TESTS AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tests")
     enable_testing()
     add_subdirectory(tests/test_assets)
     add_subdirectory(tests/test_sim)
+    add_subdirectory(tests/test_net)
     add_subdirectory(tests/test_app)
 endif()
 
