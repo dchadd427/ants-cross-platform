@@ -503,7 +503,8 @@ Timing from path delivery to first pixel of motion (grass worker):
 idle restart at T -> idle first frame -> at T+first the walk anim is started from inside the
 step callback, so (lead claim C5) its first frame is booked twice: first 4-px move at
 T + 150 + 2*50 ms for a grass worker. Path delivery itself happens on a PATHMGR tick (<= 50 ms
-+ one 8-ms scheduler slot after the request) and only one ant's path completes per tick.
++ the latency of the scheduler passes that process the list head after the request; *(corrected: the default scheduler is the sorted list, not the 8 ms wheel of the
+non-default `newtask` mode, see C2 in the verification notes)*) and only one ant's path completes per tick.
 Idle first-frame durations (static tables 0x1002cb8 idle / 0x1002e38 carrying, [type*8+dir],
 dirs 0..4; CHD Table-4 names): worker agst*/hgst* 150; bomber abst* 100; fire afst* 100;
 thief atst* 100; combat acst* 150 except dir 4 (acst301/hcst301) 125; swimmer asst* 150.
@@ -624,7 +625,7 @@ Common: `tgt = +0xac; +0xac = SENTINEL; wasHome = (+0x68==1); +0x68 = 0; handled
   (+0x6c=1 -> +0x70=0) are admitted first.
 
 -----------------------------------------------------------------------------------------------
-## 18. Scheduler facts used above (world+0xe88, vtbl 0x1005248 timing wheel)
+## 18. Scheduler facts used above (world+0xe88; this section describes the NON-default `newtask` timing wheel, vtbl 0x1005248; the default is the sorted-list scheduler, vtbl 0x1005208, see section 12 and the verification notes)
 * FUN_01031e92(task, delay, interval, x) -> add @0x10312bd: task+0x18 = interval, insert with
   FUN_01031465(task, delay): slot = max(1, (timeGetTime() + delay - cursor) >> 3), 1024 slots of
   8 ms. Run @0x10313cb: while cursor < now, process slot: execute (vtbl+0xc); if it returns 1 the

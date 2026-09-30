@@ -6,6 +6,12 @@
 **Framework**: Opaque-box C++17 E2E Test Harness  
 **Pass Rate**: 100% (506 / 506 tests passing)
 
+> **Status note (v0.0.77).** The 506 tests run against the suite's own model (`tests/e2e/e2e_model.hpp`); `e2e_runner` links no engine code.
+> The model still carries the early combat rules (2 HP melee with a 4-5 tile knock-back, stun ticks, the Combat Ant guard post AI, bomb
+> knock-back, fire ricochet). Those rows say what the model does, not what the shipped engine does: the engine follows section 5.36 of
+> `docs/GAME_REVERSE_ENGINEERING.md` (Capstone-verified) and is checked by the golden and integration suites (`./run_tests.sh`).
+> Counts per file: tier1_app_hud 75, tier1_assets 30, tier1_simulation 140, tier2_boundaries 245, tier3_pairwise 10, tier4_scenarios 6.
+
 ---
 
 ## 1. Executive Summary
@@ -126,7 +132,7 @@ cmake --build build_e2e
 | Feat 25: Combat Unit Spawning & Allocation | Core Simulation | 5 | 5 | Scenarios 1, 3 |
 | Feat 26: Specialist Unit Spawning (Thief/Recruiter) | Core Simulation | 5 | 5 | Pairwise 7, 8 |
 | Feat 27: Combat Resolution & Melee Damage | Core Simulation | 5 | 5 | Scenarios 3, 6 |
-| Feat 28: Melee Knockback & Displacement | Core Simulation | 5 | 5 | Scenarios 3 |
+| Feat 28: Melee Knockback & Displacement *(model rules, superseded by 5.36)* | Core Simulation | 5 | 5 | Scenarios 3 |
 | Feat 29: Unit Elimination & Death States | Core Simulation | 5 | 5 | Scenarios 3, 6 |
 | Feat 30: Autonomous Targeting & Agro Radii | Core Simulation | 5 | 5 | Scenarios 3, 6 |
 | Feat 31: Bridge Building & Path Creation | Core Simulation | 5 | 5 | Scenario 2 |
@@ -157,7 +163,7 @@ cmake --build build_e2e
   - `Original-Ants/ants.chd` (8,411,866 bytes, 2,794 sprites, 91 PCM sounds, 1,344 anim scripts) successfully parsed.
   - All 6 original maps (`GARDEN.LVL`, `LAWN.LVL`, `PARK.LVL`, `PATIO.LVL`, `PICNIC.LVL`, `SANDPIT.LVL`) parsed, verifying tile dimension headers, terrain matrices, and anthill entity coordinates.
 - **Physics & Melee Mechanics**:
-  - Combat Ant knockback behavior verified: 2 HP melee attack displaces victim 4–5 tiles along the impact vector. Carried food dropped upon death is placed at the post-knockback landing tile.
+  - Combat Ant knockback behavior of the suite's model: 2 HP melee attack displaces victim 4–5 tiles along the impact vector *(model rule; the engine flings the victim 4 tiles with one `gb` step, see 5.36)*. Carried food dropped upon death is placed at the post-knockback landing tile.
   - Bridge collapse timing verified: bridges withstand exactly 3,600 simulation ticks (180 seconds) before structural failure.
   - Sub-tile fractional movement verified: units travel at specified fractional speeds (1.0, 1.25, 1.5, 2.0 tiles/sec) yielding exact discrete coordinate updates under 20Hz ticks.
 - **Escalations**: None. No blocking implementation bugs were discovered; oracle simulation models adhere precisely to reverse-engineered specifications.

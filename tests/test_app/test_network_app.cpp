@@ -123,6 +123,13 @@ struct Duo {
             if (cond()) return true;
             step(10);
         }
+        // the game clock is virtual but the sockets are real: on a busy machine the kernel can be late, so it gets up to two more seconds of real
+        // time with the game clock standing still (nothing times out meanwhile); a wait that succeeds never gets here
+        for (int i = 0; i < 2000 && !cond(); ++i) {
+            app.pump_network(0.0f);
+            peer.update();
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
         return cond();
     }
 };
@@ -147,6 +154,12 @@ struct Trio {
         for (uint32_t t = 0; t < max_ms; t += 10) {
             if (cond()) return true;
             step(10);
+        }
+        for (int i = 0; i < 2000 && !cond(); ++i) {       // real time for a late kernel, game clock standing still (see Duo)
+            app.pump_network(0.0f);
+            first.update();
+            second.update();
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
         }
         return cond();
     }

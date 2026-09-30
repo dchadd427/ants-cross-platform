@@ -123,15 +123,19 @@ struct Table {
         });
         return m;
     }
+    // One pass over every machine at the current game time (no game time passes)
+    void pump() {
+        for (auto& m : machines) {
+            m->net.update(now);
+            for (const auto& ev : m->net.take_events()) m->handle(ev);
+        }
+    }
     // 10 ms of game time per step with a moment of real time so that the kernel can deliver the loopback bytes
     void run(uint32_t ms, const std::function<void(uint32_t)>& each = {}) {
         const uint32_t end = now + ms;
         while (now < end) {
             now += 10;
-            for (auto& m : machines) {
-                m->net.update(now);
-                for (const auto& ev : m->net.take_events()) m->handle(ev);
-            }
+            pump();
             if (each) each(now);
             std::this_thread::sleep_for(std::chrono::microseconds(300));
         }
@@ -141,6 +145,13 @@ struct Table {
         while (now < end) {
             if (cond()) return true;
             run(10);
+        }
+        // The game clock is virtual but the sockets are real: on a busy machine the kernel can be late with a close or with bytes that were sent long ago
+        // in game time (the whole budget above can pass in a few hundred real milliseconds). It gets up to two more seconds of real time with the game
+        // clock standing still, so that nothing times out meanwhile; a wait that succeeds never gets here.
+        for (int i = 0; i < 2000 && !cond(); ++i) {
+            pump();
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
         }
         return cond();
     }

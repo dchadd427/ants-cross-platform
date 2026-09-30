@@ -53,9 +53,9 @@ namespace {
 
 namespace str = ants::sim::strings;
 
+#ifndef __EMSCRIPTEN__
 constexpr uint32_t kPeerLinkTimeoutMs = 20000;             // a link between guests that is not made in this time is given up
 
-#ifndef __EMSCRIPTEN__
 // The address of "a.b.c.d:port" or "[v6]:port" without the port and the brackets
 std::string host_part(const std::string& peer) {
     if (peer.empty()) return std::string();

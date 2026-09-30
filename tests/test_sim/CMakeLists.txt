@@ -90,6 +90,26 @@ target_compile_definitions(test_movement_golden PRIVATE
 
 add_test(NAME test_movement_golden COMMAND test_movement_golden)
 
+# Independent models of the original walk and of PathRequest::Step against the remake on random scenarios
+add_executable(test_movement_differential
+    test_movement_differential.cpp
+)
+
+target_link_libraries(test_movement_differential PRIVATE
+    ants_sim
+    ants_assets
+)
+
+target_include_directories(test_movement_differential PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../include
+)
+
+target_compile_definitions(test_movement_differential PRIVATE
+    ORIGINAL_ASSETS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../../Original-Ants"
+)
+
+add_test(NAME test_movement_differential COMMAND test_movement_differential)
+
 add_executable(test_hill_actions
     test_hill_actions.cpp
 )

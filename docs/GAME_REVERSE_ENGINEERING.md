@@ -287,6 +287,8 @@ The engine internal dispatch maps each ant class to an integer ID and correspond
 
 ### 5.1 Unit Damage Matrix & Combat Knockback Physics
 
+> **Superseded by 5.36** (Capstone-verified). The table and the bullets below are the early, paraphrased version and are wrong in several places: every attacker except the combat ant flings its victim one tile (`gh`, 32 px), the combat punch flings it four tiles (`gb`, 128 px, in one step, only the landing tile is tested), nothing is "4-5 tiles" and nothing is "0 tiles"; hit points are lost at contact, not at the strike frame; the combat ant's only AI is the auto-engage of 5.36, not a 3-tile aggro guard (the guard post AI was invented and is gone). Kept for history.
+
 Every ant type in *Ants* possesses a melee attack (`*at*`), triggered either manually or automatically when engaging enemy ants. Melee attack damage is strictly split into two tiers:
 
 | Ant Class | Class Code | Direct Melee Strike Damage | Special Ability Attack Damage | Knockback Distance | Autonomous AI Guard? |
@@ -497,6 +499,7 @@ Every special ability and combat interaction in *Ants* is governed by dedicated 
   - **Phase 5 (Subitems 9–11):** Rises back upright (`abdb310..312.bmp`); the crushed bomb is safely removed from Layer 2.
 
 #### 3. Combat Ant (`ac`): Wind-Up Punch & Ballistic Displacement
+> *(Corrected by 5.36: the 2 hit points are lost at contact, before the clip starts; event 4 of the clip (sound 78) only delivers the pending hit, which flings the victim four tiles with `gb`. The subitem list below is the clip layout.)*
 - **Heavy Punch Strike (`acat301`, `acat201`, `acat701`, `acat801`, `acat901` - 6 Subitems / 6 Frames):**
   - **Subitem 0 (`acat301.bmp`):** Combat Ant rears back with enlarged collision envelope `[-32..26, -46..16]`.
   - **Subitem 1 (`acat302.bmp`):** Winds up an oversized, muscular two-handed punch.
@@ -641,6 +644,8 @@ Every player row displays 4 exact statistics aligned directly under the `newstat
 ---
 
 ### 5.10 Combat Ant Autonomous AI Guard Mechanic
+
+> **Superseded by 5.36 ("Auto-engage, the original's only combat AI").** There is no `guard_tile`, no 3-tile aggro scan on every tick and no return to a post in `Ants.exe`: a combat ant that got no order for 2 s saves its order, attacks the first enemy found by `FindEnemy` (ring by ring, first hit wins; radius 3 on arrival at a tile, radius 4 when idle without a path), and gives the saved order again after the fight or after the 2 s / 3 s timeout. The remake's guard post AI (`combat_ai.cpp`) was removed in v0.0.33. The text below is kept for history only.
 
 Combat Ants (`ac`) are the **sole unit type in *Ants* equipped with autonomous AI behavior**. All other units remain idle until explicitly issued commands by the player.
 
@@ -1219,7 +1224,10 @@ checked by an independent adversarial pass. The full reports (instruction addres
 `docs/reverse_engineering/movement/`. The remake implements this section in `src/ants_sim/movement_system.cpp`,
 `src/ants_sim/path_planner.cpp` and the generated tables `src/ants_sim/movement_tables_data.inc`
 (`tools/extract_movement_tables.py`); `tools/movement_reference_model.py` reproduces every golden value of
-`tests/test_sim/test_movement_golden.cpp` straight from the original files.
+`tests/test_sim/test_movement_golden.cpp` straight from the original files. Beyond the golden cases, `tests/test_sim/test_movement_differential.cpp`
+(v0.0.77) compares two independent models, written from the disassembly and fed only with the raw tables of `Ants.exe` and the frames of `ants.chd`
+(the A* of `PathRequest::Step` and the walk of a delivered path), with `PathSearch` on 1,500 random maps and with the locomotion trace on 1,000
+random walks; the models and the remake agree on every path tile and on every position change with its time.
 
 #### 1. Movement is animation-driven: there are no speed constants
 - Every animation frame in Table 4 carries `(dx, dy, duration_ms)`. An ant moves by the **current** frame's

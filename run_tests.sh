@@ -293,6 +293,13 @@ if [ "$RUN_SIM" -eq 1 ]; then
     echo -e "${BOLD}${BLUE}======================================================================${RESET}"
     "./$BUILD_DIR/tests/test_net/test_netgame"
     NETGAME_STATUS=$?
+
+    echo ""
+    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
+    echo -e "${BOLD}${BLUE}>>> 2.15 RUNNING MOVEMENT DIFFERENTIAL SUITE (independent walk and A* models)...${RESET}"
+    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
+    "./$BUILD_DIR/tests/test_sim/test_movement_differential"
+    MOVEMENT_DIFFERENTIAL_STATUS=$?
 fi
 
 # 5. Execute Application Integration Tests
@@ -498,6 +505,13 @@ if [ "$RUN_SIM" -eq 1 ]; then
         echo -e " 2.14 NetGame (test_netgame):                        ${GREEN}PASSED${RESET}"
     else
         echo -e " 2.14 NetGame (test_netgame):                        ${RED}FAILED (exit code ${NETGAME_STATUS})${RESET}"
+        TOTAL_FAILED=$((TOTAL_FAILED + 1))
+    fi
+
+    if [ "$MOVEMENT_DIFFERENTIAL_STATUS" -eq 0 ]; then
+        echo -e " 2.15 Movement Differential (test_movement_differential): ${GREEN}PASSED${RESET}"
+    else
+        echo -e " 2.15 Movement Differential (test_movement_differential): ${RED}FAILED (exit code ${MOVEMENT_DIFFERENTIAL_STATUS})${RESET}"
         TOTAL_FAILED=$((TOTAL_FAILED + 1))
     fi
 fi

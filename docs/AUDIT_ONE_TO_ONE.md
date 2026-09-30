@@ -30,6 +30,7 @@ order in which it is proposed to be fixed. The owner decides (AGENTS.md rule 9).
 * v0.0.74: batch 7 part 1 (the dust ball only for the pile-up block, LK NEW-1 / LE NEW-1; LA NEW-4 / LU NEW-10 (world palette) and LA NEW-6 (plain `L`) were checked in the binary and are **refuted**, see section 5).
 * v0.0.75: batch 7 part 2 (walking, idle, swim, dive, climb, harvest and can't-go clips predicted to the end of their last frame, ears and number at the predicted position, no number for a frozen ant, the legacy name path removed; LA NEW-1, NEW-3, NEW-5, LK V-K1). Kept on purpose: `AntUnit::tick_timers` and the counters `anim_tick` / `anim_subitem` (part of the state hash). Still open in batch 7: death clips on the ant's own sprite (LK NEW-3), the burn overlay over everything (LA F14), equal-y order (LA NEW-2).
 * v0.0.76: batch 7 part 3 (death clips on the ant's own sprite with its number, LK NEW-3; the burn overlay as a view child over every ant, hidden only in an unexplored cell, LA F14 / LE C17). Still open in batch 7: equal-y draw order (LA NEW-2, low: a persistent sprite array with the original's incremental sort, `0x10089bd`).
+* v0.0.77: batch 8 (tests and documents: the differential models of the movement audit kept as `tests/test_sim/test_movement_differential.cpp`, LM NEW-M8; the E2E documents say that the suite runs against its own model with the early combat rules, LK NEW-5; sections 5.1, 5.7 and 5.10 of the RE doc marked as superseded by 5.36; the four places that called the 8 ms wheel the default scheduler corrected, LM NEW-M7). **Batch 8 is done except the owner decisions**: the re-derivation of the 506 E2E tests (or driving `SimulationEngine`), the dormant `test_challenger_m2_it2_deep_stress.cpp` (revive or remove), and AGENTS.md rule 8 / its test counts (the owner's file).
 
 ## 1. What was audited and how
 
@@ -131,11 +132,11 @@ release, Drop only with a bad ping), options (slider model with the exact hit re
    world sprites with palette 1..31 use the viewer's HUD table (LA NEW-4, LU NEW-10).
 
 ### Batch 8 - tests and documents
-* The 506 "E2E" tests exercise a private model with the old rules (4-tile knock-back, 12-tick stun, ...), not the engine (LK NEW-5); two e2e hill tests assert constants (LH NEW-8). Re-derive them or drive `SimulationEngine`.
+* The 506 "E2E" tests exercise a private model with the old rules (4-tile knock-back, 12-tick stun, ...), not the engine (LK NEW-5); two e2e hill tests assert constants (LH NEW-8). Re-derive them or drive `SimulationEngine`. **Not rewritten** (owner decision, see section 4): the suite is labelled instead (`tests/TEST_INFRA.md`, `TEST_READY.md`, README); the engine's rules are covered by the golden, integration and differential suites.
 * The dormant `tests/test_sim/test_challenger_m2_it2_deep_stress.cpp` has not been built since an early commit and no longer compiles (retired slot-queue API): revive or remove (owner).
 * Documents: the original's default scheduler is the **list scheduler**, not the 8 ms timing wheel (`[0x104b448]` = 0, `-newtask` selects the wheel): four places in `docs/reverse_engineering/movement/` and `GAME_REVERSE_ENGINEERING.md`
-  still say wheel; AGENTS.md rule 8 still names a "Combat Ant guard post patrol" (the original only auto-engages); `tests/TEST_INFRA.md` and `TEST_READY.md` list the old melee model; `movement_tables.hpp` comment on sound flags.
-* The differential harnesses written for the movement audit (tables, walk model, A* model) are worth keeping as regression tests (LM NEW-M8).
+  still say wheel; AGENTS.md rule 8 still names a "Combat Ant guard post patrol" (the original only auto-engages); `tests/TEST_INFRA.md` and `TEST_READY.md` list the old melee model; `movement_tables.hpp` comment on sound flags. **Done in v0.0.77** except AGENTS.md (the owner's file): the scheduler statements are corrected, the two test documents carry a status note and mark the rows of the old model, the sound-flag comment was already right, and sections 5.1, 5.7 and 5.10 of `docs/GAME_REVERSE_ENGINEERING.md` (the early melee, knock-back and guard post text) are marked as superseded by 5.36.
+* The differential harnesses written for the movement audit are worth keeping as regression tests (LM NEW-M8). **Done in v0.0.77**: the walk model and the A* model became `tests/test_sim/test_movement_differential.cpp` (1,500 maps, 1,000 walks, a self-check that breaks each rule of the walk model); the table comparison was not ported because `test_movement_tables` already compares every clip cell and every table with `Ants.exe` and `ants.chd`.
 
 ## 3b. Deliberate differences requested by the owner (tweaks)
 The goal is a one-to-one copy; the owner asks for tweaks on top of it, each recorded here and in the CHANGELOG so that they are not mistaken for deviations:
@@ -149,6 +150,7 @@ The goal is a one-to-one copy; the owner asks for tweaks on top of it, each reco
 * Input tick: queue mouse events to the original's 20 Hz input pass and read the pointer then (LI I-29), or keep event-time handling.
 * Minimise: the original never pauses; the remake pauses the local simulation (LR NEW-7, LX).
 * The minimap hit flash (see Batch 6): implement only if a screenshot of the real game confirms it.
+* Tests: the 506 E2E tests run against the suite's own model with the early combat rules; rewrite them to drive `SimulationEngine` (large), keep them as they are (now labelled), or retire them. The dormant `tests/test_sim/test_challenger_m2_it2_deep_stress.cpp` (does not compile, not in the build): revive against the current hill API or remove. AGENTS.md (your file): rule 8 still names a "Combat Ant guard post patrol" (the original only auto-engages; there is no guard post) and the counts in rule 2 (77 integration tests, 506 E2E tests) are old.
 
 ## 5. Corrections to statements made earlier in this project
 * "Hatch retry is about 8 ms" (audit H, docs) is wrong; the retry is 1000 ms (list scheduler).
