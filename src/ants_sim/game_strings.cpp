@@ -14,6 +14,10 @@ struct Entry {
 
 // Sorted by id. Every text is the original's (string_ids of Ants.exe); the title of string 5 is inserted by the caller.
 constexpr Entry kTable[] = {
+    {1, "%s (%s) invites you to form a team.  Would you like to accept?", false},
+    {2, "%s (%s) invites you to form a team.  This will remove you from the team you have with %s (%s).  Would you like to accept?", false},
+    {3, "Waiting for %s (%s) to respond to your offer to team up.", false},
+    {4, "Doing this will break your team with %s (%s).  Continue?", false},
     {5, "Welcome to %s!", false},
     {6, "Ready!", false},
     {7, "BomberAnt selected.", false},

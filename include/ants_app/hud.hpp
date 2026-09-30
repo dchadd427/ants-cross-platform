@@ -9,6 +9,7 @@
 #include <functional>
 
 #include "ants_assets/asset_archive.hpp"
+#include "ants_sim/game_strings.hpp"
 #include "ants_sim/sim_engine.hpp"
 #include "ants_app/renderer.hpp"
 #include "ants_app/pedestal.hpp"
@@ -130,9 +131,22 @@ public:
     void set_chat_input(const std::string& input) { chat_input_ = input; }
     void handle_text_input(const std::string& text);
     void send_chat_message();
-    void add_chat_entry(const std::string& sender, const std::string& message, bool team_only = false);
+    /// AddLine (Ants.exe 0x10120e9): an entry is a header line ("Name:" or "Name (To Teammate):", in the colour of the sender's team,
+    /// `colour_index` 0 black, 1 blue, 2 red, 3 green; -1 = the local player's) and a body of at most 100 characters that wraps into
+    /// lines indented by 12 px in colour (7, 11, 15).
+    void add_chat_entry(const std::string& sender, const std::string& message, bool team_only = false, int colour_index = -1);
+    /// AddNewsFlash (0x100e9bb): the header "[m:ss] News Flash:" in colour (79, 0, 143) and the text as body.
+    void add_news_flash(uint32_t elapsed_ms, const std::string& text);
+    /// A chat message that arrives from another player (0x102411a): dropped when the option "Participate In Chat" is off; a team
+    /// message is shown only to its sender and to the players whose ally the sender is.
+    void receive_chat_message(uint8_t sender, const std::string& name, const std::string& text, bool to_team, const sim::WorldState& world);
     void trigger_quick_chat(size_t index);
+    /// The display lines of the chat log (an entry's header line, then its body lines); the styles are in get_chat_line_colour / indent.
     const std::deque<std::string>& get_chat_log() const noexcept { return chat_log_; }
+    /// Colour index of a display line: 0..3 header of that team colour, 4 news flash header, 5 body text.
+    uint8_t get_chat_line_colour(size_t line) const noexcept { return line < chat_line_colour_.size() ? chat_line_colour_[line] : uint8_t{5}; }
+    static constexpr size_t kChatInputMax = 100;         // the input box holds 100 characters (0x100dd85)
+    static constexpr int32_t kChatVisibleLines = 8;      // the log view (482, 299) - (620, 400) shows 12 px lines
     void scroll_chat_up(int32_t lines = 1) noexcept;
     void scroll_chat_down(int32_t lines = 1) noexcept;
     void handle_mouse_wheel(int32_t screen_x, int32_t screen_y, int32_t wheel_y);
@@ -260,6 +274,8 @@ private:
     bool is_multi_select_mode_{false};
     int32_t selected_base_team_id_{-1};
     std::deque<std::string> chat_log_{};
+    std::deque<uint8_t> chat_line_colour_{};   // parallel to chat_log_ (see get_chat_line_colour)
+    std::deque<int32_t> chat_line_indent_{};
     sim::OrderType active_order_mode_{sim::OrderType::None};
 
     // Last known pointer position (drives the hover art of the animation-based controls)
@@ -325,6 +341,7 @@ private:
     void voice_attack(sim::AntType type);                              // attack order: "Attack!"
     void voice_special(sim::AntType type, size_t ants_ordered);        // special order: text only for exactly one thief or fire ant
     void render_status_line(IRenderer& renderer) const;
+    void push_chat_entry(std::string header, const std::string& message, uint8_t header_colour);
 
     // Minimap drag navigation state
     bool is_radar_dragging_{false};
@@ -356,11 +373,11 @@ private:
     bool quick_help_enabled_{true};
     bool opt_ok_button_pressed_{false};
     bool opt_return_button_pressed_{false};
-    std::string quick_chat_keys_[4]{
-        "Now you are in for it!",
-        "Let me be!",
-        "Attack!",
-        "Do you want to ally?"
+    std::string quick_chat_keys_[4]{                      // the defaults of the original's options (strings 18 - 21)
+        sim::strings::text(sim::strings::kQuickChat1),
+        sim::strings::text(sim::strings::kQuickChat2),
+        sim::strings::text(sim::strings::kQuickChat3),
+        sim::strings::text(sim::strings::kQuickChat4)
     };
     int active_quick_chat_edit_{-1};
     int active_slider_dragging_{-1}; // -1 none, 0 sfx, 1 music, 2 scroll

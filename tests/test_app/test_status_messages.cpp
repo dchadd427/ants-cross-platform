@@ -610,6 +610,225 @@ void test_hatch_texts() {
     check(sim.has_audio_event(sim::SoundID::ExitHill), "exithill.wav");
 }
 
+
+// ------------------------------------------------------------------------------------------------
+// Part F: alliance texts, News Flash lines and the chat log
+// ------------------------------------------------------------------------------------------------
+
+struct Collected {
+    std::vector<sim::NewsEvent> news;
+    std::vector<sim::AudioEvent> audio;
+};
+
+Collected drain(sim::SimulationEngine& sim) {
+    Collected c;
+    c.news = sim.poll_news_events();
+    c.audio = sim.poll_audio_events();
+    return c;
+}
+
+const sim::NewsEvent* find_news(const Collected& c, uint16_t id, uint8_t target = 255) {
+    for (const auto& n : c.news) if (n.string_id == id && n.target_player == target) return &n;
+    return nullptr;
+}
+
+bool has_audio(const Collected& c, uint32_t id, uint8_t target) {
+    for (const auto& a : c.audio) if (a.sound_id == id && a.target_player == target) return true;
+    return false;
+}
+
+void test_alliance_texts() {
+    g_group = "alliance";
+    std::printf("[chat] alliance: invitation dialog, 81 / 80 / 82 for the proposer and invitee, 75 flashing, News Flash lines 39 / 40 and the cues\n");
+    sim::SimulationEngine sim;
+    make_world(sim);
+    sim.set_player_name(0, "Ann");
+    sim.set_player_name(1, "Bob");
+    check(sim.get_player_name(2) == "Blue" && sim.get_player_name(3) == "Black", "unnamed players print their colour");
+
+    // propose: the invitee gets the modal question (string 1) and the allypro cue, nobody gets a status
+    sim.clear_news_events();
+    sim.clear_audio_events();
+    sim.propose_alliance(0, 1);
+    Collected c = drain(sim);
+    const sim::NewsEvent* q = find_news(c, 1, 1);
+    check(q && q->channel == sim::NewsChannel::Dialog, "the invitation is a dialog for the invitee");
+    check(q && q->message_text == "Ann (Green) and Bob (Red) are a team now!" ? false : true, "");
+    check(q && q->message_text == "Ann (Green) invites you to form a team.  Would you like to accept?", "text of string 1: " + (q ? q->message_text : std::string("none")));
+    check(has_audio(c, sim::SoundID::AlliancePro, 1), "allypro.wav (51) for the invitee");
+
+    // withdraw: the invitee reads string 82
+    sim.propose_alliance(0, 1);
+    sim.clear_news_events();
+    sim.withdraw_alliance_offer(0, 1);
+    c = drain(sim);
+    const sim::NewsEvent* w = find_news(c, 82, 1);
+    check(w && w->message_text == "Ann withdrew offer to team up" && !w->blink, "82 to the invitee: " + (w ? w->message_text : std::string("none")));
+
+    // accept: 81 to the proposer, cue allyon for everybody, News Flash 39 in the chat log, 75 flashing for everybody
+    sim.propose_alliance(0, 1);
+    sim.clear_news_events();
+    sim.clear_audio_events();
+    sim.accept_alliance(1, 0);
+    c = drain(sim);
+    const sim::NewsEvent* acc = find_news(c, 81, 0);
+    check(acc && acc->message_text == "Bob accepted teaming up" && acc->channel == sim::NewsChannel::Status, "81 to the proposer: " + (acc ? acc->message_text : std::string("none")));
+    const sim::NewsEvent* flash = find_news(c, 39);
+    check(flash && flash->channel == sim::NewsChannel::ChatLog && flash->message_text == "Ann (Green) and Bob (Red) are a team now!",
+          "News Flash 39: " + (flash ? flash->message_text : std::string("none")));
+    const sim::NewsEvent* made = find_news(c, 75);
+    check(made && made->message_text == "A team has been made." && made->blink && made->channel == sim::NewsChannel::Status, "75 flashes for everybody");
+    check(has_audio(c, sim::SoundID::AllianceOn, 255), "allyon.wav (50) for everybody");
+    check(has_audio(c, sim::SoundID::AllianceYes, 1), "allyyes.wav (53) is the answering player's own cue");
+
+    // break: allyoff always, the News Flash 40 with the breaker and its old ally
+    sim.clear_news_events();
+    sim.clear_audio_events();
+    sim.break_alliance(0);
+    c = drain(sim);
+    const sim::NewsEvent* off = find_news(c, 40);
+    check(off && off->channel == sim::NewsChannel::ChatLog && off->message_text == "Ann (Green) and Bob (Red) are no longer a team!",
+          "News Flash 40: " + (off ? off->message_text : std::string("none")));
+    check(has_audio(c, sim::SoundID::AllianceBreak, 255), "allyoff.wav (49)");
+    sim.clear_news_events();
+    sim.clear_audio_events();
+    sim.break_alliance(0);                                  // no ally any more: the cue plays, no line
+    c = drain(sim);
+    check(find_news(c, 40) == nullptr, "no line without an old ally");
+    check(has_audio(c, sim::SoundID::AllianceBreak, 255), "but the allyoff cue plays");
+
+    // deny: 80 to the proposer with allynot
+    sim.propose_alliance(2, 3);
+    sim.clear_news_events();
+    sim.clear_audio_events();
+    sim.deny_alliance(3, 2);
+    c = drain(sim);
+    const sim::NewsEvent* den = find_news(c, 80, 2);
+    check(den && den->message_text == "Black rejected teaming up", "80 to the proposer: " + (den ? den->message_text : std::string("none")));
+    check(has_audio(c, sim::SoundID::AllianceNot, 2), "allynot.wav (52) for the proposer");
+
+    // an invitee that already has a team is told what accepting costs (string 2)
+    sim.form_alliance(0, 1);
+    sim.clear_news_events();
+    sim.propose_alliance(2, 0);
+    c = drain(sim);
+    const sim::NewsEvent* q2 = find_news(c, 2, 0);
+    check(q2 && q2->message_text.find("This will remove you from the team you have with Bob (Red)") != std::string::npos, "string 2 names the team that would end");
+
+    // a drop-out is a News Flash line (the sound is covered by test 12.68)
+    sim.clear_news_events();
+    sim.trigger_player_dropout(2);
+    c = drain(sim);
+    const sim::NewsEvent* drop = find_news(c, 46);
+    check(drop && drop->channel == sim::NewsChannel::ChatLog && drop->message_text == "Blue dropped out of the game!", "46: " + (drop ? drop->message_text : std::string("none")));
+}
+
+void test_chat_log_format() {
+    g_group = "chat";
+    std::printf("[chat] the log: News Flash headers, team-coloured names, bodies wrapped and indented, limits\n");
+    HUD hud;
+    hud.init(0);
+    const auto& log = hud.get_chat_log();
+    check(log.size() >= 2 && log[0] == "[0:00] News Flash:", "the start message is a News Flash entry: header \"[0:00] News Flash:\"");
+    check(hud.get_chat_line_colour(0) == 4, "news flash header colour (79, 0, 143)");
+    check(log.size() >= 2 && log[1] == "Game started! Go get" && hud.get_chat_line_colour(1) == 5, "the body wraps at 21 characters: " + (log.size() > 1 ? log[1] : std::string()));
+
+    hud.add_news_flash(75000, "x");
+    check(log[log.size() - 2] == "[1:15] News Flash:", "header time is the match time played");
+
+    hud.set_player_name("Ann");
+    const size_t before = log.size();
+    hud.add_chat_entry("Ann", "hello there", false, 2);
+    check(log.size() == before + 2 && log[before] == "Ann:" && log[before + 1] == "hello there", "header line and body line");
+    check(hud.get_chat_line_colour(before) == 2 && hud.get_chat_line_colour(before + 1) == 5, "the header takes the team colour, the body (7, 11, 15)");
+    hud.add_chat_entry("Ann", "to my friend", true, 3);
+    check(log[log.size() - 2] == "Ann (To Teammate):", "team text: \"(To Teammate):\"");
+
+    // a body holds at most 100 characters
+    const size_t b2 = log.size();
+    hud.add_chat_entry("Ann", std::string(150, 'a') + " tail", false, 0);
+    size_t chars = 0;
+    for (size_t i = b2 + 1; i < log.size(); ++i) chars += log[i].size();
+    check(chars <= 100, "a body is cut at 100 characters");
+
+    // the input box holds 100 characters
+    hud.focus_chat();
+    hud.handle_text_input(std::string(130, 'b'));
+    check(hud.get_chat_input().size() == 100, "the input box holds 100 characters");
+}
+
+void test_chat_rendering() {
+    g_group = "chat";
+    std::printf("[chat] the log is drawn in a 12 px line grid from (482, 299): headers in team colours, bodies in (7, 11, 15) indented by 12 px\n");
+    sim::SimulationEngine sim;
+    make_world(sim);
+    HUD hud;
+    hud.init(0);
+    hud.add_chat_entry("Ann", "hi", false, 2);
+    TextRenderer rr;
+    ViewportCamera camera;
+    hud.render(rr, *g_archive, sim.get_world_state(), camera);
+    bool header = false, body = false, news = false;
+    for (const auto& t : rr.texts) {
+        if (t.text == "Ann:" && t.x == 482 && t.color.r == 119 && t.color.g == 0 && t.color.b == 0) header = true;
+        if (t.text == "hi" && t.x == 494 && t.color.r == 7 && t.color.g == 11 && t.color.b == 15) body = true;
+        if (t.text == "[0:00] News Flash:" && t.x == 482 && t.color.r == 79 && t.color.g == 0 && t.color.b == 143) news = true;
+    }
+    check(header, "header at x = 482 in the red team colour (119, 0, 0)");
+    check(body, "body at x = 482 + 12 in (7, 11, 15)");
+    check(news, "the news flash header in (79, 0, 143)");
+    // 12 px lines
+    int32_t y_news = -1, y_header = -1;
+    for (const auto& t : rr.texts) {
+        if (t.text == "[0:00] News Flash:") y_news = t.y;
+        if (t.text == "Ann:") y_header = t.y;
+    }
+    check(y_news >= 299 && y_header > y_news && (y_header - y_news) % 12 == 0, "lines are on a 12 px grid starting at y = 299");
+}
+
+void test_chat_gate_and_filter() {
+    g_group = "chat";
+    std::printf("[chat] the option \"Participate In Chat\" gates sending and receiving; team text reaches the sender and the sender's allies only; F9 - F12 go to all\n");
+    sim::SimulationEngine sim;
+    make_world(sim);
+    const sim::WorldState& world = sim.get_world_state();
+    HUD hud;
+    hud.init(0);
+    const auto& log = hud.get_chat_log();
+
+    check(std::string(hud.get_quick_chat_key(0)) == "Now you are in for it!" && std::string(hud.get_quick_chat_key(3)) == "Do you want to ally?", "the quick chat defaults are strings 18 - 21");
+    size_t before = log.size();
+    hud.trigger_quick_chat(2);
+    check(log.size() == before + 2 && log[before + 1] == "Attack!", "F11 chats the default text");
+    check(log[before].find("(To Teammate)") == std::string::npos, "quick chat always goes to all");
+
+    // receive: team text from a stranger is dropped, from an ally shown
+    before = log.size();
+    hud.receive_chat_message(1, "Bob", "psst", true, world);
+    check(log.size() == before, "a team message of a player who is not my ally is not shown");
+    hud.receive_chat_message(1, "Bob", "for everybody", false, world);
+    check(log.size() == before + 2 && log[before] == "Bob:", "text to all is shown");
+
+    sim.form_alliance(0, 1);
+    const sim::WorldState& world2 = sim.get_world_state();
+    hud.receive_chat_message(1, "Bob", "team plan", true, world2);
+    check(log[log.size() - 2] == "Bob (To Teammate):" && log[log.size() - 1] == "team plan", "my ally's team text is shown with \"(To Teammate):\"");
+    check(hud.get_chat_line_colour(log.size() - 2) == 2, "in the colour of Bob's team (red)");
+
+    // the option off: nothing is sent, nothing is received, quick chat is silent
+    ViewportCamera camera;
+    hud.open_options();
+    hud.handle_mouse_down(151, 289, SDL_BUTTON_LEFT, sim, camera);      // the OFF toggle of the chat option
+    hud.close_options();
+    check(!hud.is_chat_enabled(), "chat switched off");
+    before = log.size();
+    hud.set_chat_input("hello");
+    hud.send_chat_message();
+    hud.trigger_quick_chat(0);
+    hud.receive_chat_message(1, "Bob", "anyone?", false, world2);
+    check(log.size() == before && hud.get_chat_input().empty(), "with the option off nothing is sent or received");
+}
+
 }  // namespace
 
 int main() {
@@ -633,6 +852,10 @@ int main() {
     test_world_message_flags();
     test_events_reach_the_status_line();
     test_hatch_texts();
+    test_alliance_texts();
+    test_chat_log_format();
+    test_chat_rendering();
+    test_chat_gate_and_filter();
     std::printf("\nstatus messages: %d checks, %d failures\n", g_checks, g_failures);
     return g_failures == 0 ? 0 : 1;
 }

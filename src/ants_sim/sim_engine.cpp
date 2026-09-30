@@ -660,46 +660,101 @@ void SimulationEngine::set_hatch_delay_ticks(uint32_t ticks) {
     impl_->hatch_delay_ticks_ = ticks;
 }
 
+std::string SimulationEngineImpl::player_colour_name(uint8_t p) const {
+    return strings::colour_name(static_cast<uint8_t>(3u - (p & 3u)));
+}
+
+std::string SimulationEngineImpl::player_display_name(uint8_t p) const {
+    if (p < MAX_PLAYERS && !player_names_[p].empty()) return player_names_[p];
+    return player_colour_name(p);
+}
+
+void SimulationEngine::set_player_name(uint8_t player_id, const std::string& name) {
+    if (player_id < MAX_PLAYERS) impl_->player_names_[player_id] = name;
+}
+
+std::string SimulationEngine::get_player_name(uint8_t player_id) const {
+    return player_id < MAX_PLAYERS ? impl_->player_display_name(player_id) : std::string();
+}
+
+// The invitation reaches the invitee as a modal question (strings 1 / 2) with the allypro cue (51); the proposer waits (string 3).
 void SimulationEngine::propose_alliance(uint8_t from_player, uint8_t to_player) {
     if (from_player >= MAX_PLAYERS || to_player >= MAX_PLAYERS || from_player == to_player) return;
     impl_->stats_.set_pending_invite(to_player, from_player, static_cast<uint32_t>(impl_->current_tick_ + 200));
     impl_->audio_queue_.push_back(AudioEvent{SoundID::AlliancePro, 0, 0, 1, to_player});
-    impl_->news_queue_.push_back(NewsEvent{to_player, "Alliance proposed", impl_->match_time_remaining_ms_, StringID::AllianceInvitePrompt});
+    const uint8_t old_ally = impl_->stats_.get_alliance(to_player);
+    NewsEvent ev;
+    ev.target_player = to_player;
+    ev.channel = NewsChannel::Dialog;
+    ev.timestamp_ms = static_cast<uint32_t>(std::max<int64_t>(0, static_cast<int64_t>(impl_->match_limit_ms_) - impl_->match_clock_ms_));
+    if (old_ally < MAX_PLAYERS && old_ally != to_player) {
+        ev.string_id = strings::kInviteBreakDialog;
+        ev.message_text = strings::format(ev.string_id, impl_->player_display_name(from_player), impl_->player_colour_name(from_player),
+                                          impl_->player_display_name(old_ally), impl_->player_colour_name(old_ally));
+    } else {
+        ev.string_id = strings::kInviteDialog;
+        ev.message_text = strings::format(ev.string_id, impl_->player_display_name(from_player), impl_->player_colour_name(from_player));
+    }
+    impl_->news_queue_.push_back(std::move(ev));
 }
 
+void SimulationEngine::withdraw_alliance_offer(uint8_t from_player, uint8_t to_player) {
+    if (from_player >= MAX_PLAYERS || to_player >= MAX_PLAYERS) return;
+    const auto& invite = impl_->stats_.get_pending_invite(to_player);
+    if (!invite.active || invite.from_player != from_player) return;
+    impl_->stats_.clear_pending_invite(to_player);
+    impl_->post_news(to_player, strings::kTeamWithdrawn, impl_->player_display_name(from_player));       // FUN_0100c5fa, 0x100c73a
+}
 
+// FUN_0100c36b (the proposer hears the answer: 81 "%s accepted teaming up") and the team message 0x1d kind 1 (FUN_01023c87, every
+// client): the allyon cue, the News Flash of string 39 (proposer first) and the blinking status 75. The allyyes cue is the
+// answering player's own click sound.
 void SimulationEngine::accept_alliance(uint8_t responding_player, uint8_t proposing_player) {
     if (responding_player >= MAX_PLAYERS || proposing_player >= MAX_PLAYERS) return;
     impl_->stats_.set_alliance(responding_player, proposing_player);
     impl_->stats_.clear_pending_invite(responding_player);
     impl_->world_state_dirty_ = true;
 
-    impl_->audio_queue_.push_back(AudioEvent{SoundID::AllianceYes, 0, 0, 1, 255});
+    impl_->audio_queue_.push_back(AudioEvent{SoundID::AllianceYes, 0, 0, 1, responding_player});
+    impl_->post_news(proposing_player, strings::kTeamAccepted, impl_->player_display_name(responding_player));
     impl_->audio_queue_.push_back(AudioEvent{SoundID::AllianceOn, 0, 0, 1, 255});
-    impl_->news_queue_.push_back(NewsEvent{255, "Alliance formed!", impl_->match_time_remaining_ms_, StringID::AllianceFormedBroadcast});
+    impl_->post_news_flash(strings::kTeamNow, impl_->player_display_name(proposing_player), impl_->player_colour_name(proposing_player),
+                           impl_->player_display_name(responding_player), impl_->player_colour_name(responding_player));
+    impl_->post_news(255, strings::kTeamMade);
 }
 
+// FUN_0100c36b, the refusal: the proposer reads 80 "%s rejected teaming up" and hears allynot.
 void SimulationEngine::deny_alliance(uint8_t responding_player, uint8_t proposing_player) {
     if (responding_player >= MAX_PLAYERS || proposing_player >= MAX_PLAYERS) return;
     impl_->stats_.clear_pending_invite(responding_player);
     impl_->audio_queue_.push_back(AudioEvent{SoundID::AllianceNot, 0, 0, 1, proposing_player});
-    impl_->news_queue_.push_back(NewsEvent{proposing_player, "Alliance declined", impl_->match_time_remaining_ms_, StringID::AllianceDeclined});
+    impl_->post_news(proposing_player, strings::kTeamRejected, impl_->player_display_name(responding_player));
 }
 
+// Team message 0x1d kind 2 (FUN_01023c87, every client): the allyoff cue always plays, the News Flash of string 40 (the breaker and
+// its old ally) only when the breaker had an ally.
 void SimulationEngine::break_alliance(uint8_t player_id) {
     if (player_id >= MAX_PLAYERS) return;
+    const uint8_t old_ally = impl_->stats_.get_alliance(player_id);
     impl_->stats_.break_alliance(player_id);
     impl_->world_state_dirty_ = true;
     impl_->audio_queue_.push_back(AudioEvent{SoundID::AllianceBreak, 0, 0, 1, 255});
-    impl_->news_queue_.push_back(NewsEvent{255, "Alliance broken!", impl_->match_time_remaining_ms_, StringID::AllianceBrokenBroadcast});
+    if (old_ally < MAX_PLAYERS && old_ally != player_id) {
+        impl_->post_news_flash(strings::kTeamNoMore, impl_->player_display_name(player_id), impl_->player_colour_name(player_id),
+                               impl_->player_display_name(old_ally), impl_->player_colour_name(old_ally));
+    }
 }
 
 void SimulationEngine::break_alliance(uint8_t p1, uint8_t p2) {
     if (p1 >= MAX_PLAYERS || p2 >= MAX_PLAYERS) return;
+    const bool were_allied = impl_->stats_.are_allies(p1, p2) && p1 != p2;
     impl_->stats_.break_alliance(p1, p2);
     impl_->world_state_dirty_ = true;
     impl_->audio_queue_.push_back(AudioEvent{SoundID::AllianceBreak, 0, 0, 1, 255});
-    impl_->news_queue_.push_back(NewsEvent{255, "Alliance broken!", impl_->match_time_remaining_ms_, StringID::AllianceBrokenBroadcast});
+    if (were_allied) {
+        impl_->post_news_flash(strings::kTeamNoMore, impl_->player_display_name(p1), impl_->player_colour_name(p1),
+                               impl_->player_display_name(p2), impl_->player_colour_name(p2));
+    }
 }
 
 void SimulationEngine::form_alliance(uint8_t p1, uint8_t p2) {
@@ -835,11 +890,14 @@ void SimulationEngine::set_viewing_player_id(uint8_t player_id) {
     impl_->world_state_dirty_ = true;
 }
 
+// FUN_0100d03b: "%s dropped out of the game!" as a News Flash of the chat log, and playerout.wav unless the game is over.
 void SimulationEngine::trigger_player_dropout(uint8_t player_id, const std::string& player_name) {
-    impl_->audio_queue_.push_back(AudioEvent{SoundID::PlayerDropOut, 0, 0, 1, 255});
-    std::string name = player_name.empty() ? ("Player " + std::to_string(player_id)) : player_name;
-    std::string msg = name + " dropped out of the game!";
-    impl_->news_queue_.push_back(NewsEvent{255, msg, impl_->match_time_remaining_ms_, StringID::PlayerDropOut});
+    if (impl_->match_state_ != MatchState::GameOver) {
+        impl_->audio_queue_.push_back(AudioEvent{SoundID::PlayerDropOut, 0, 0, 1, 255});
+    }
+    const std::string name = !player_name.empty() ? player_name
+                             : (player_id < MAX_PLAYERS ? impl_->player_display_name(player_id) : ("Player " + std::to_string(player_id)));
+    impl_->post_news_flash(strings::kDroppedOut, name);
 }
 
 bool SimulationEngine::is_match_over() const {

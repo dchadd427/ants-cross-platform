@@ -1841,6 +1841,34 @@ the end-of-match cases of `test_sim_rules.cpp` (1.3, 12.1, 12.2) and `test_chall
 * **Open** *(recorded)*: the text clipping with the original's font (the box is clipped at 139 px; the remake truncates to that width), the alliance and chat texts and the News Flash chat lines (39,
   40, 46, 75, 80 - 82: next stage), the elimination end rules, and the exact key codes of the original.
 
+### 5.42 Alliance Texts, News Flash Lines and the Chat Log (Capstone-Verified; Supersedes Earlier Alliance Banner and Chat Notes)
+
+Addresses are virtual addresses in `Original-Ants/Ants.exe`. Implemented in `src/ants_sim/sim_engine.cpp` (`propose_alliance`, `accept_alliance`, `deny_alliance`, `withdraw_alliance_offer`,
+`break_alliance`, `trigger_player_dropout`, player names), `include/ants_sim/game_strings.hpp` and `src/ants_app/hud.cpp` (`add_chat_entry`, `add_news_flash`, `receive_chat_message`, the log drawing).
+Checked by `tests/test_app/test_status_messages.cpp` (alliance, chat log, chat rendering, gate and filter) and the alliance / drop-out cases of `test_challenger_m2_2.cpp` (4.2 - 4.5) and
+`test_app_integration.cpp` (9.7, 12.9, 12.54, 12.68).
+
+* **Where a message goes.** The status line (5.41) and the chat log are two channels: `PostStatus` for the short texts and `AddNewsFlash` (`FUN_0100e9bb`, 4 call sites) for a "News Flash" line of the chat log. The
+  simulation posts every message with its channel (`NewsEvent::channel`: status, chat log, or a dialog for the invitation question), so the HUD needs no text of its own.
+* **The alliance protocol** *(strings 1 - 4 and 39, 40, 46, 75, 80 - 82, `FUN_0100c36b`, `FUN_0100c5fa`, message 0x1d `FUN_01023c87`)*: the invitee gets a modal question (string 1, or string 2 when accepting would end
+  its present team) and the allypro cue (51); the proposer waits (string 3). The answer reaches the proposer as a status: 81 "%s accepted teaming up" (0x100c42b) or 80 "%s rejected teaming up" (0x100c494) with the
+  allynot cue (52, 0x100c4bc); a proposer that takes the offer back tells the invitee 82 "%s withdrew offer to team up" (0x100c73a). A team that is made is announced to every client by message 0x1d kind 1: the allyon cue (50),
+  the News Flash of string 39 "%s (%s) and %s (%s) are a team now!" (proposer's name and colour, then the other's, 0x1023d5c) and the flashing status 75 "A team has been made." (0x1023dbb); the allyyes cue (53) is the answering
+  player's own click sound. A team that is broken is announced by kind 2: the allyoff cue (49) always, and the News Flash of string 40 "%s (%s) and %s (%s) are no longer a team!" (the breaker and its old ally, 0x1023ea5)
+  only when the breaker had an ally. Names are the players' names (`W+0x5220 + team * 0x3c`), the colour words are strings 100 - 103 (black, blue, red, green by colour index); the remake's players 0 - 3 are green, red, blue
+  and black, and an unnamed player is printed as his colour. A drop-out is the News Flash of string 46 "%s dropped out of the game!" (0x100d0c3) with playerout.wav (41) unless the game is over.
+* **The chat log** *(object `[W+0x4acc]`, view (482, 299) - (620, 400); `AddLine` at 0x10120e9)*: an entry is two text objects of 12 px: the header (at most 50 characters, 138 px, "Name:" or "Name (To Teammate):", in the colour
+  of the sender's team: black (39, 39, 59), blue (43, 39, 107), red (119, 0, 0), green (7, 67, 47); news flashes (79, 0, 143) with the header "[m:ss] News Flash:", m:ss being the time played) and the body (at most 100
+  characters, wrapped into lines of 126 px indented by 12 px, colour (7, 11, 15)). The log never trims. The match starts with the News Flash line "[0:00] News Flash: Game started! Go get that food!" (0x10225da, no status).
+  The input box holds 100 characters (0x100dd85); a message is sent through `FUN_010103eb(toTeam)` (message 0x23, executed locally so the sender sees his own line) only when the option "Participate In Chat" is on; F9 - F12 send
+  the quick-chat texts (default strings 18 - 21) to all; the receive handler (0x102411a) drops everything when the option is off and shows a team message only to its sender and to the players whose ally the sender is. There is
+  no chat sound (the cues chatsnd / chatsnda exist but nothing plays them).
+* **Not ported here** *(recorded)*: the All / Team buttons as immediate send actions and Enter sending to the team when the local player has an ally (the remake keeps a toggle; input stage), the pixel scrolling of the log (5 px
+  per 50 ms towards the bottom, drag scroll +-15 px per 100 ms; the remake follows in whole 12 px lines), the exact wrap width with the original's font (the remake wraps at 21 characters / 126 px at 6 px per character and
+  clips each line to its box), the answer dialogs themselves (network stage), and the AI-diplomacy auto-accept that the remake still runs (rule 8; to be removed with the network stage).
+* **Removed as invented** (v0.0.39): the texts "Alliance proposed / formed! / declined / broken!", the drop-out as a status, the "(Team):" header, the 120-character input, the 50-line chat cap, the 27-character single-colour
+  lines and the "System" chat entry.
+
 ---
 
 ## 6. Target Multi-Platform Architecture

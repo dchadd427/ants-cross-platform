@@ -11,6 +11,12 @@
 
 namespace ants::sim::strings {
 
+// Dialog texts of the alliance protocol
+inline constexpr uint16_t kInviteDialog = 1;          // "%s (%s) invites you to form a team.  Would you like to accept?"
+inline constexpr uint16_t kInviteBreakDialog = 2;     // "... This will remove you from the team you have with %s (%s).  Would you like to accept?"
+inline constexpr uint16_t kWaitingForAnswer = 3;      // "Waiting for %s (%s) to respond to your offer to team up."
+inline constexpr uint16_t kBreakTeamConfirm = 4;      // "Doing this will break your team with %s (%s).  Continue?"
+
 // Status texts (PostStatus)
 inline constexpr uint16_t kWelcome = 5;               // "Welcome to %s!"
 inline constexpr uint16_t kSelWorker = 6;             // "Ready!"

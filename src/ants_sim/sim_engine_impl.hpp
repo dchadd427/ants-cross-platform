@@ -35,6 +35,9 @@ public:
     uint32_t checkgo_stage_{0};             // task +0x2c: 0 one minute, 1 thirty seconds, then the 11 countdown steps
     uint32_t checkgo_threshold_ms_{61000};  // task +0x30: the clock must be below it for the next warning
     void checkgo_poll();
+    std::array<std::string, MAX_PLAYERS> player_names_{};
+    std::string player_display_name(uint8_t p) const;    // the set name, else the colour word
+    std::string player_colour_name(uint8_t p) const;     // strings 100..103; the remake's player 0..3 are green, red, blue, black
     void set_match_clock(int64_t ms);          // jumps the clock (start, test hook): CHECKGO runs at its next tick
     void set_match_clock_running(int64_t ms);  // the clock advances with the game
 

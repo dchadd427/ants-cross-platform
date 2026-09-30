@@ -157,15 +157,15 @@ inline uint32_t get_ability_voice_sound(AntType type) {
 
 namespace StringID {
     constexpr uint16_t AllianceInvitePrompt       = 1;  // "%s (%s) invites you to form a team..."
-    constexpr uint16_t AllianceFormedBroadcast     = 39; // "%s and %s have formed an alliance!"
-    constexpr uint16_t AllianceBrokenBroadcast     = 40; // "%s broke their alliance with %s!"
+    constexpr uint16_t AllianceFormedBroadcast     = 39; // "%s (%s) and %s (%s) are a team now!" (chat log news flash)
+    constexpr uint16_t AllianceBrokenBroadcast     = 40; // "%s (%s) and %s (%s) are no longer a team!" (chat log news flash)
     constexpr uint16_t PlayerDropOut              = 46; // "%s dropped out of the game!"
     constexpr uint16_t OneMinuteRemaining         = 49; // "1 minute left in the game."
     constexpr uint16_t ThirtySecondsRemaining     = 50; // "30 seconds left in the game."
     constexpr uint16_t ThiefAlarmWarning          = 53; // "A ThiefAnt is at your anthill!"
     constexpr uint16_t TenSecondsRemaining        = 59; // "10 seconds and counting..."
     constexpr uint16_t FoodStolenStatus           = 62; // "Food stolen..."
-    constexpr uint16_t AllianceDeclined           = 80; // "%s declined the alliance invitation."
+    constexpr uint16_t AllianceDeclined           = 80; // "%s rejected teaming up" (status of the proposer)
 }
 
 enum class OrderType : uint8_t {
@@ -207,7 +207,8 @@ struct AudioEvent {
 };
 
 /// Where a message of the original appears: the one-line status box (PostStatus) or the chat log as a "News Flash" line.
-enum class NewsChannel : uint8_t { Status = 0, ChatLog = 1 };
+/// A Dialog event is the text of a modal question (the alliance invitation); the match screen has no dialog for it yet.
+enum class NewsChannel : uint8_t { Status = 0, ChatLog = 1, Dialog = 2 };
 
 struct NewsEvent {
     uint8_t     target_player{255};   // 255 = every player, else the one player that sees it
@@ -381,6 +382,11 @@ public:
 
     // Dynamic Alliances
     void propose_alliance(uint8_t from_player, uint8_t to_player);
+    /// The proposer takes the offer back (Ants.exe FUN_0100c5fa): the invitee reads "%s withdrew offer to team up".
+    void withdraw_alliance_offer(uint8_t from_player, uint8_t to_player);
+    /// Player names as the alliance texts print them (Ants.exe W+0x5220 + team * 0x3c); by default the colour of the team.
+    void set_player_name(uint8_t player_id, const std::string& name);
+    std::string get_player_name(uint8_t player_id) const;
     void accept_alliance(uint8_t responding_player, uint8_t proposing_player);
     void deny_alliance(uint8_t responding_player, uint8_t proposing_player);
     void break_alliance(uint8_t player_id);

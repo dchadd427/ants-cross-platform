@@ -1,4 +1,5 @@
 #include "ants_app/hud.hpp"
+#include <cstdio>
 #include "ants_sim/game_strings.hpp"
 #include "ants_sim/prng.hpp"
 #include "ants_app/renderer.hpp"
@@ -115,9 +116,11 @@ void HUD::init(uint8_t local_player_id) {
     selection_status_pending_ = false;
     selection_status_quiet_ = false;
     chat_log_.clear();
+    chat_line_colour_.clear();
+    chat_line_indent_.clear();
     chat_scroll_offset_ = 0;
     post_status_id(sim::strings::kWelcome, "Ants");    // FUN_0100dbe2 0x100e173, once when the match screen is built
-    add_chat_entry("System", "Game started! Go get that food!");
+    add_news_flash(0, "Game started! Go get that food!");     // FUN_01022432: "[0:00] News Flash:", the start message
 
     // Configure Top Header Buttons (x0y0.bmp)
     help_button_ = {476, 7, 46, 23, 0, 0, 0, false, true, false};
@@ -212,7 +215,9 @@ void HUD::poll_sim_events(sim::SimulationEngine& sim) {
     for (const auto& ev : news) {
         if (ev.target_player != 255 && ev.target_player != local_player_id_) continue;
         if (ev.channel == sim::NewsChannel::ChatLog) {
-            add_chat_entry("News Flash", ev.message_text);
+            add_news_flash(ev.timestamp_ms, ev.message_text);
+        } else if (ev.channel == sim::NewsChannel::Dialog) {
+            // the invitation dialog belongs to the network stage: the match screen has no window for it yet
         } else {
             status_line_.post(ev.message_text, ev.blink);
         }
@@ -478,17 +483,25 @@ void HUD::render(IRenderer& renderer, const assets::AssetArchive& assets,
     // 2.3 Lower Panel: Always render Chat Section
     // Cursive embossed Chat header at (480, 266)
 
-    // White chat history log wchat.bmp (143x103) at (479, 298)
-    int32_t cty = 301;
-    constexpr int32_t VISIBLE_LINES = 7;
-    int32_t total_lines = static_cast<int32_t>(chat_log_.size());
-    int32_t max_scroll = std::max(0, total_lines - VISIBLE_LINES);
-    chat_scroll_offset_ = std::clamp(chat_scroll_offset_, 0, max_scroll);
-    int32_t start_cidx = (total_lines > VISIBLE_LINES) ? (total_lines - VISIBLE_LINES - chat_scroll_offset_) : 0;
-    int32_t end_cidx = std::min(total_lines, start_cidx + VISIBLE_LINES);
-    for (int32_t i = start_cidx; i < end_cidx; ++i) {
-        renderer.draw_text(chat_log_[static_cast<size_t>(i)], 484, cty, {20, 50, 40, 255});
-        cty += 14;
+    // White chat history log wchat.bmp (143x103) at (479, 298): the view (482, 299) - (620, 400) shows 12 px lines, headers in
+    // the colour of their team (news flashes (79, 0, 143)), bodies in (7, 11, 15) indented by 12 px
+    {
+        static const assets::ColorRGBA kChatColours[6] = {
+            {39, 39, 59, 255}, {43, 39, 107, 255}, {119, 0, 0, 255}, {7, 67, 47, 255}, {79, 0, 143, 255}, {7, 11, 15, 255}};
+        int32_t cty = 299;
+        const int32_t total_lines = static_cast<int32_t>(chat_log_.size());
+        const int32_t max_scroll = std::max(0, total_lines - kChatVisibleLines);
+        chat_scroll_offset_ = std::clamp(chat_scroll_offset_, 0, max_scroll);
+        const int32_t start_cidx = (total_lines > kChatVisibleLines) ? (total_lines - kChatVisibleLines - chat_scroll_offset_) : 0;
+        const int32_t end_cidx = std::min(total_lines, start_cidx + kChatVisibleLines);
+        for (int32_t i = start_cidx; i < end_cidx; ++i) {
+            const size_t li = static_cast<size_t>(i);
+            const int32_t indent = chat_line_indent_[li];
+            std::string text = chat_log_[li];
+            while (text.size() > 1 && renderer.get_text_width(text, FontSize::Small) > 138 - indent) text.pop_back();   // clipped by its box
+            renderer.draw_text(text, 482 + indent, cty, kChatColours[std::min<size_t>(chat_line_colour_[li], 5)], FontSize::Small);
+            cty += 12;
+        }
     }
 
     // Ant relief horizontal divider bar x480y400.bmp (141x24) at (480, 400)
@@ -1898,7 +1911,7 @@ bool HUD::handle_key_down(int32_t key, sim::SimulationEngine& sim, ViewportCamer
         }
         // Printable ASCII typing fallback (for direct key events / unit tests)
         if (key >= 32 && key <= 126) {
-            if (chat_input_.size() < 120) {
+            if (chat_input_.size() < kChatInputMax) {
                 chat_input_.push_back(static_cast<char>(key));
             }
             return true;
@@ -2066,7 +2079,7 @@ void HUD::handle_text_input(const std::string& text) {
     }
     for (char c : text) {
         if (c >= 32 && c <= 126) {
-            if (chat_input_.size() < 120) {
+            if (chat_input_.size() < kChatInputMax) {
                 chat_input_.push_back(c);
             }
         }
@@ -2075,59 +2088,94 @@ void HUD::handle_text_input(const std::string& text) {
 
 void HUD::send_chat_message() {
     if (chat_input_.empty()) return;
-
-    std::string sender = player_name_.empty() ? "Player" : player_name_;
-    add_chat_entry(sender, chat_input_, is_on_team_ && !send_to_all_);
+    if (!chat_enabled_) {                     // "Participate In Chat" off: the box is covered and nothing is sent (0x100dd..)
+        chat_input_.clear();
+        return;
+    }
+    add_chat_entry(player_name_.empty() ? "Player" : player_name_, chat_input_, is_on_team_ && !send_to_all_);
     chat_input_.clear();
     chat_scroll_offset_ = 0;
 }
 
 void HUD::trigger_quick_chat(size_t index) {
-    if (index >= 4) return;
+    if (index >= 4 || !chat_enabled_) return;
     if (quick_chat_keys_[index].empty()) return;
-    std::string sender = player_name_.empty() ? "Player" : player_name_;
-    add_chat_entry(sender, quick_chat_keys_[index], is_on_team_ && !send_to_all_);
+    add_chat_entry(player_name_.empty() ? "Player" : player_name_, quick_chat_keys_[index], false);   // F9 - F12 always go to all
 }
 
-void HUD::add_chat_entry(const std::string& sender, const std::string& message, bool team_only) {
-    std::string prefix = sender + (team_only ? " (Team): " : ": ");
-    std::string full_msg = prefix + message;
+namespace {
 
-    // Word-wrap into lines of at most 27 characters to fit inside wchat.bmp (143px)
-    constexpr size_t MAX_CHARS_PER_LINE = 27;
+// Wraps a text into lines of at most `max_chars` characters at spaces (a word longer than a line is cut).
+void wrap_chat_text(const std::string& text, size_t max_chars, std::vector<std::string>& out) {
     size_t start = 0;
-    while (start < full_msg.length()) {
-        if (full_msg.length() - start <= MAX_CHARS_PER_LINE) {
-            chat_log_.push_back(full_msg.substr(start));
+    while (start < text.length()) {
+        if (text.length() - start <= max_chars) {
+            out.push_back(text.substr(start));
             break;
         }
-        size_t split = full_msg.rfind(' ', start + MAX_CHARS_PER_LINE);
-        if (split == std::string::npos || split <= start) {
-            split = start + MAX_CHARS_PER_LINE;
-        }
-        chat_log_.push_back(full_msg.substr(start, split - start));
+        size_t split = text.rfind(' ', start + max_chars);
+        if (split == std::string::npos || split <= start) split = start + max_chars;
+        out.push_back(text.substr(start, split - start));
         start = split;
-        while (start < full_msg.length() && full_msg[start] == ' ') {
-            ++start;
-        }
+        while (start < text.length() && text[start] == ' ') ++start;
     }
+}
 
-    while (chat_log_.size() > 50) {
-        chat_log_.pop_front();
+constexpr size_t kChatBodyCharsPerLine = 21;    // the body's 126 px at 6 px per character
+constexpr size_t kChatBodyMaxChars = 100;
+constexpr size_t kChatLogMaxLines = 5000;       // the original never trims; only a safety bound against endless matches
+
+}  // namespace
+
+void HUD::add_chat_entry(const std::string& sender, const std::string& message, bool team_only, int colour_index) {
+    const uint8_t colour = static_cast<uint8_t>(colour_index >= 0 && colour_index <= 3 ? colour_index : (3 - (local_player_id_ & 3)));
+    push_chat_entry(sender + (team_only ? " (To Teammate):" : ":"), message, colour);
+}
+
+void HUD::push_chat_entry(std::string header, const std::string& message, uint8_t colour) {
+    if (header.size() > 50) header.resize(50);                       // the header text object holds 50 characters
+    chat_log_.push_back(header);
+    chat_line_colour_.push_back(colour);
+    chat_line_indent_.push_back(0);
+    std::vector<std::string> lines;
+    wrap_chat_text(message.substr(0, kChatBodyMaxChars), kChatBodyCharsPerLine, lines);
+    for (auto& line : lines) {
+        chat_log_.push_back(std::move(line));
+        chat_line_colour_.push_back(5);
+        chat_line_indent_.push_back(12);
     }
+    while (chat_log_.size() > kChatLogMaxLines) {
+        chat_log_.pop_front();
+        chat_line_colour_.pop_front();
+        chat_line_indent_.pop_front();
+    }
+}
+
+void HUD::add_news_flash(uint32_t elapsed_ms, const std::string& text) {
+    const uint32_t secs = elapsed_ms / 1000;
+    char header[48];
+    std::snprintf(header, sizeof(header), "[%u:%02u] News Flash:", secs / 60, secs % 60);
+    push_chat_entry(header, text, 4);
+}
+
+void HUD::receive_chat_message(uint8_t sender, const std::string& name, const std::string& text, bool to_team, const sim::WorldState& world) {
+    if (!chat_enabled_) return;                                       // the receive handler drops it (0x102411a)
+    if (to_team && sender != local_player_id_) {
+        const bool sender_ally_is_me = sender < world.player_alliances.size() && world.player_alliances[sender] == local_player_id_;
+        if (!sender_ally_is_me) return;                               // team text: only the sender and the players whose ally the sender is
+    }
+    add_chat_entry(name, text, to_team, 3 - (sender & 3));
 }
 
 void HUD::scroll_chat_up(int32_t lines) noexcept {
-    constexpr int32_t VISIBLE_LINES = 7;
     int32_t total_lines = static_cast<int32_t>(chat_log_.size());
-    int32_t max_scroll = std::max(0, total_lines - VISIBLE_LINES);
+    int32_t max_scroll = std::max(0, total_lines - kChatVisibleLines);
     chat_scroll_offset_ = std::clamp(chat_scroll_offset_ + lines, 0, max_scroll);
 }
 
 void HUD::scroll_chat_down(int32_t lines) noexcept {
-    constexpr int32_t VISIBLE_LINES = 7;
     int32_t total_lines = static_cast<int32_t>(chat_log_.size());
-    int32_t max_scroll = std::max(0, total_lines - VISIBLE_LINES);
+    int32_t max_scroll = std::max(0, total_lines - kChatVisibleLines);
     chat_scroll_offset_ = std::clamp(chat_scroll_offset_ - lines, 0, max_scroll);
 }
 

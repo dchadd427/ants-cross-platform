@@ -1744,7 +1744,7 @@ void run_suite_9_gameplay_mechanics_and_options() {
         hud.send_chat_message();
         bool found_team_msg = false;
         for (const auto& entry : log) {
-            if (entry.find("QueenAnt (Team):") != std::string::npos) {
+            if (entry.find("QueenAnt (To Teammate):") != std::string::npos) {
                 found_team_msg = true;
                 break;
             }
@@ -1758,10 +1758,13 @@ void run_suite_9_gameplay_mechanics_and_options() {
         // Send an all message
         hud.set_chat_input("GG everyone");
         hud.send_chat_message();
+        // an entry is a header line "QueenAnt:" (in the colour of the sender's team) and its body lines
         bool found_all_msg = false;
-        for (const auto& entry : log) {
-            if (entry.find("QueenAnt: GG") != std::string::npos) {
+        for (size_t li = 0; li + 1 < log.size(); ++li) {
+            if (log[li] == "QueenAnt:" && log[li + 1] == "GG everyone") {
                 found_all_msg = true;
+                ASSERT_TRUE(hud.get_chat_line_colour(li) <= 3);      // a team colour
+                ASSERT_EQ(hud.get_chat_line_colour(li + 1), 5);      // the body colour (7, 11, 15)
                 break;
             }
         }
@@ -2466,11 +2469,11 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         HUD hud;
         hud.init(0);
 
-        // Verify initial news message was wrapped to <= 27 chars per line
+        // The start message is a News Flash entry: the header "[0:00] News Flash:" and its wrapped body (at most 21 characters per line)
         const auto& log = hud.get_chat_log();
         ASSERT_TRUE(!log.empty());
         for (const auto& line : log) {
-            ASSERT_TRUE(line.length() <= 27);
+            ASSERT_TRUE(line.length() <= 23);
         }
 
         // Add 10 chat messages
@@ -2479,31 +2482,31 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         }
 
         int32_t initial_lines = static_cast<int32_t>(hud.get_chat_log().size());
-        ASSERT_TRUE(initial_lines >= 12);
+        ASSERT_TRUE(initial_lines >= 20);   // ten entries of a header and a body line each, plus the news flash
         ASSERT_EQ(hud.get_chat_scroll_offset(), 0);
 
         // Scroll up
         hud.scroll_chat_up(2);
         ASSERT_EQ(hud.get_chat_scroll_offset(), 2);
 
-        // Scroll up past max (7 visible lines)
+        // Scroll up past max (8 visible lines)
         hud.scroll_chat_up(100);
-        ASSERT_EQ(hud.get_chat_scroll_offset(), initial_lines - 7);
+        ASSERT_EQ(hud.get_chat_scroll_offset(), initial_lines - 8);
 
         // Scroll down
         hud.scroll_chat_down(3);
-        ASSERT_EQ(hud.get_chat_scroll_offset(), initial_lines - 10);
+        ASSERT_EQ(hud.get_chat_scroll_offset(), initial_lines - 11);
 
         // Mouse wheel scrolling over lower chat box (x: 500, y: 350)
         hud.handle_mouse_wheel(500, 350, 1); // Wheel up
-        ASSERT_EQ(hud.get_chat_scroll_offset(), initial_lines - 9);
+        ASSERT_EQ(hud.get_chat_scroll_offset(), initial_lines - 10);
 
         hud.handle_mouse_wheel(500, 350, -1); // Wheel down
-        ASSERT_EQ(hud.get_chat_scroll_offset(), initial_lines - 10);
+        ASSERT_EQ(hud.get_chat_scroll_offset(), initial_lines - 11);
 
         // Mouse wheel outside chat box does not scroll
         hud.handle_mouse_wheel(100, 100, 1);
-        ASSERT_EQ(hud.get_chat_scroll_offset(), initial_lines - 10);
+        ASSERT_EQ(hud.get_chat_scroll_offset(), initial_lines - 11);
 
         // Sending a chat message resets scroll offset to 0
         hud.set_chat_input("Hello Colony!");
@@ -4575,7 +4578,7 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         size_t initial_lines = hud.get_chat_log().size();
         hud.add_chat_entry("Player1", "Hello world!");
         hud.add_chat_entry("Player2", "that food!");
-        ASSERT_EQ(hud.get_chat_log().size(), initial_lines + 2);
+        ASSERT_EQ(hud.get_chat_log().size(), initial_lines + 4);   // a header line and a body line per entry
         ASSERT_EQ(hud.get_chat_scroll_offset(), 0);
 
         // Scroll limits
@@ -5252,14 +5255,23 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         ASSERT_TRUE(sim.has_targeted_audio_event(1, SoundID::PlayerDefeat));
         ASSERT_EQ(SoundID::PlayerDefeat, 42u);
 
-        // Player dropout triggers Sound 41 (PlayerDropOut / playerout.wav)
+        // Player dropout (FUN_0100d03b): a News Flash line "%s dropped out of the game!" in the chat log, and playerout.wav
+        // (Sound 41) unless the game is over
         sim.clear_audio_events();
         sim.clear_news_events();
         sim.trigger_player_dropout(1, "Player 1");
-
-        ASSERT_TRUE(sim.has_audio_event(SoundID::PlayerDropOut));
-        ASSERT_EQ(SoundID::PlayerDropOut, 41u);
+        ASSERT_FALSE(sim.has_audio_event(SoundID::PlayerDropOut));         // the match is over: silent
         ASSERT_TRUE(sim.has_news_event(255, StringID::PlayerDropOut));
+        SimulationEngine live;
+        live.init_test_world(60, 60, 101, 720000);
+        live.trigger_player_dropout(1, "Player 1");
+        ASSERT_TRUE(live.has_audio_event(SoundID::PlayerDropOut));
+        ASSERT_EQ(SoundID::PlayerDropOut, 41u);
+        bool line = false;
+        for (const auto& n : live.poll_news_events()) {
+            if (n.string_id == StringID::PlayerDropOut && n.channel == NewsChannel::ChatLog && n.message_text == "Player 1 dropped out of the game!") line = true;
+        }
+        ASSERT_TRUE(line);
     } TEST_END();
 
     TEST_CASE("12.69 Hatched Ant Emergence Triggers exithill.wav (Sound 43)") {
@@ -6407,10 +6419,10 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
 
     TEST_CASE("12.108: Version Invariant & Fog of War Cursor Concealment Parity") {
         // 1. Verify semantic versioning components
-        ASSERT_EQ(ants::VERSION_STRING, "v0.0.38");
+        ASSERT_EQ(ants::VERSION_STRING, "v0.0.39");
         ASSERT_EQ(ants::VERSION_MAJOR, 0);
         ASSERT_EQ(ants::VERSION_MINOR, 0);
-        ASSERT_EQ(ants::VERSION_PATCH, 38);
+        ASSERT_EQ(ants::VERSION_PATCH, 39);
 
         // 2. Setup simulation world with Fog of War enabled
         SimulationEngine sim;
