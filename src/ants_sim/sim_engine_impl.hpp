@@ -113,19 +113,19 @@ public:
             world_state_dirty_ = true;
         }
 
-        // Reveal viewing player's base (and allied bases)
-        for (const auto& ah : grid_.anthills()) {
-            if (ah.team_id == viewing_player_id_ || stats_.are_allies(viewing_player_id_, ah.team_id)) {
-                reveal_fog_box(static_cast<int32_t>(ah.x) - 6, static_cast<int32_t>(ah.y) - 6,
-                               static_cast<int32_t>(ah.x) + 9, static_cast<int32_t>(ah.y) + 9);
-            }
-        }
-
-        // Reveal friendly units (and allied units)
+        // The original reveals only from an ant's position update (FUN_0101a93a calls FUN_01006af4 from SetPos, FUN_0101a9f8): a 13 x 13 square (+-6) around the ant's pixel
+        // tile, for the viewer's own ants and its teammate's (the ally at that moment), sticky; there is no reveal around a hill and nothing is revealed when an alliance forms
+        // (an allied ant reveals when it moves). Every ant remembers the tile of its last position update whoever it belongs to, so that an ant that has been standing
+        // reveals nothing new when its team becomes the viewer's ally.
         for (const auto& ant : ants_) {
             if (!ant || !ant->is_alive()) continue;
+            const int32_t tx = ant->pixel_x / 32;
+            const int32_t ty = ant->pixel_y / 32;
+            if (ant->fog_tile_x == tx && ant->fog_tile_y == ty) continue;
+            ant->fog_tile_x = tx;
+            ant->fog_tile_y = ty;
             if (ant->player_id == viewing_player_id_ || stats_.are_allies(viewing_player_id_, ant->player_id)) {
-                reveal_fog_box(ant->pos.x - 6, ant->pos.y - 6, ant->pos.x + 6, ant->pos.y + 6);
+                reveal_fog_box(tx - 6, ty - 6, tx + 6, ty + 6);
             }
         }
     }

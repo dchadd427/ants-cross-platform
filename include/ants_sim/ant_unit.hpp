@@ -147,6 +147,10 @@ public:
 
     int32_t     pixel_x{0};
     int32_t     pixel_y{0};
+    /// The pixel tile at which the fog of war last looked at this ant (the original reveals from an ant's position update, FUN_0101a93a -> FUN_01006af4); (-1, -1) = not yet.
+    /// A view-side memory: it is neither part of the simulation's state nor hashed.
+    int32_t     fog_tile_x{-1};
+    int32_t     fog_tile_y{-1};
     Direction   facing{Direction::South};
 
     int32_t     fx_x{0};

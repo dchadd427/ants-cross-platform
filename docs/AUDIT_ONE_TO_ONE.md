@@ -23,6 +23,7 @@ order in which it is proposed to be fixed. The owner decides (AGENTS.md rule 9).
 * v0.0.67: batch 5 part 1 (the map view at (16, 21), 442 x 440 and the original's start view: just far enough to show the square (-160, +192) around the hill's anchor tile; LI I-06, NEW-1). Still open in batch 5: the pointer (poll / grab, NEW-9, I-29 owner decision), order feedback vs voice (NEW-12), Shift-select texts (NEW-2), stacked ants (NEW-4), dialog stack / pressed states (NEW-6, NEW-8).
 * v0.0.68: batch 5 part 2 (order feedback follows "any ant needed the order", voice only from the closest accepted ant and, for special orders, only when exactly one ant needed it; Shift add / remove / drag post the panel text; dialog buttons cancel on leave; LI NEW-12, NEW-2, NEW-8). Still open in batch 5: the pointer poll / grab (NEW-9) and the 50 ms input tick (I-29), both owner decisions; stacked ants (NEW-4); dialog stack (NEW-6).
 * v0.0.69: batch 6 part 1 (score boxes: slots by team index, scorcovr for absent and dropped teams, allied boxes split with the summed score; LU NEW-1, NEW-2). Still open in batch 6: minimap (fog objects, dots, ally exemption, blink, frame), chat scroll bar and wrapping, fog reveal.
+* v0.0.70: batch 6 part 2 (fog reveal only from ant position updates: no hill box, nothing when a team forms; layer-2 scan margin 3; LT NEW-1, NEW-1b, NEW-3). Still open in batch 6: minimap (NEW-2: fog objects, dots, ally exemption, frame, hit flash), chat scroll bar and wrapping, partially explored objects (NEW-4).
 
 ## 1. What was audited and how
 

@@ -39,6 +39,15 @@ Ground truth for every entry is in [`docs/GAME_REVERSE_ENGINEERING.md`](docs/GAM
   - **Found on the way, for the audit** (docs: implementation_plan.md section 18): `tests/test_sim/test_challenger_m2_it2_deep_stress.cpp` has not been part of the build since an early commit and no longer compiles
     (it uses the retired slot-queue API of the hill). (An earlier version of this line said that the death clips are no longer started by a separate effect: wrong, only the unused helper `spawn_death_effect` was removed; the effect path in `movement_system.cpp` is still in use, see the audit.)
 
+## v0.0.70 - 2026-09-30 - The fog of war of the original
+
+Batch 6 part 2 (`docs/audit/ledger_terrain_fog.md` NEW-1, NEW-1b, NEW-3; re-read in `Ants.exe`: `0x1006af4`, `0x101a93a` - `0x101a9f8`, `0x1008089` - `0x1008166`):
+
+- **The fog is lifted only where an ant looks**: the original reveals a 13 x 13 square around an ant's tile whenever the position of one of your ants (or your teammate's) is updated, and nowhere else. The remake also uncovered a 16 x 16 box around your hill (and your ally's) all the time, so every fog game started with 9 to 43 % more explored ground than the original's, and the moment a team formed it uncovered everything around the ally's ants at once (210 to 531 cells); neither happens any more. An allied ant reveals when it next moves.
+- **The objects of the ground are drawn from three cells beyond the view**, not five: something anchored further out than that does not show its art at the edge of the view (the remake showed slivers of big grass, glasses and sticks up to 32 px wide before the original would).
+- Docs: `docs/GAME_REVERSE_ENGINEERING.md` 5.54, README (counts), `docs/AUDIT_ONE_TO_ONE.md` (progress).
+- Tests: integration 12.76b (no hill box; another team's ant reveals nothing; a team that forms reveals nothing until its ant moves; a walking ant reveals a new square at every tile; what was revealed stays). Version assertions of 12.108.
+
 ## v0.0.69 - 2026-09-30 - The score boxes of the original
 
 Batch 6 part 1 (`docs/audit/ledger_ui.md` NEW-1, NEW-2; re-read in `Ants.exe`: `0x100e1f0` - `0x100e222`, `0x1021e36` - `0x10220f4`, `0x101aa65`, the tables at `0x10021b8` and `0x1002218`):

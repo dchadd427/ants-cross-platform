@@ -867,6 +867,9 @@ bool SimulationEngine::is_fog_of_war_enabled() const {
 
 void SimulationEngine::set_viewing_player_id(uint8_t player_id) {
     impl_->viewing_player_id_ = player_id;
+    for (auto& ant : impl_->ants_) {                       // a new viewer looks at its ants afresh (as a program that starts as that team would)
+        if (ant) ant->fog_tile_x = ant->fog_tile_y = -1;
+    }
     if (impl_->fog_of_war_enabled_) {
         impl_->update_fog_of_war();
     }

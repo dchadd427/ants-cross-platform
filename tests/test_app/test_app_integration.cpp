@@ -6518,6 +6518,54 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         }
     } TEST_END();
 
+    TEST_CASE("12.76b Fog Of War Reveals Only From Ant Position Updates Of The Viewer And Its Teammate: No Hill Box, Nothing When A Team Forms (Ants.exe FUN_0101a93a -> FUN_01006af4)") {
+        SimulationEngine sim;
+        sim.init_test_world(60, 60, 1);
+        sim.grid_mut().set_anthill(0, TileCoord{20, 20});
+        sim.grid_mut().set_anthill(1, TileCoord{40, 40});
+        sim.set_fog_of_war_enabled(true);
+        sim.set_viewing_player_id(0);
+        const uint32_t mine = sim.spawn_unit(0, AntType::Worker, TileCoord{5, 5});
+        const uint32_t friend_ant = sim.spawn_unit(2, AntType::Worker, TileCoord{50, 10});
+        sim.spawn_unit(1, AntType::Worker, TileCoord{30, 45});
+        sim.tick();
+        {
+            const auto& w = sim.get_world_state();
+            // the own ant reveals its 13 x 13 square; the own hill at (20, 20) reveals nothing by itself (it used to reveal 16 x 16 tiles around it)
+            ASSERT_TRUE(w.is_tile_revealed(5, 5) && w.is_tile_revealed(11, 11) && w.is_tile_revealed(0, 0));
+            ASSERT_FALSE(w.is_tile_revealed(12, 5));
+            ASSERT_FALSE(w.is_tile_revealed(20, 20));
+            ASSERT_FALSE(w.is_tile_revealed(22, 22));
+            // another team's ant reveals nothing
+            ASSERT_FALSE(w.is_tile_revealed(50, 10));
+            ASSERT_FALSE(w.is_tile_revealed(30, 45));
+        }
+        // a team forms: the ally's ant stands where it stood, so nothing is revealed (the original reveals only when the ally's ant SetPos runs)
+        sim.form_alliance(0, 2);
+        sim.tick();
+        {
+            const auto& w = sim.get_world_state();
+            ASSERT_FALSE(w.is_tile_revealed(50, 10));
+            ASSERT_FALSE(w.is_tile_revealed(47, 10));
+        }
+        // it moves: its position update now reveals the square around its new tile (and only that one)
+        sim.issue_move_order(friend_ant, TileCoord{50, 12});
+        for (int i = 0; i < 60; ++i) sim.tick();
+        {
+            const auto& w = sim.get_world_state();
+            ASSERT_TRUE(w.is_tile_revealed(50, 12) && w.is_tile_revealed(56, 18) && w.is_tile_revealed(44, 6));
+            ASSERT_FALSE(w.is_tile_revealed(30, 45));
+        }
+        // the own ant walks: every tile change reveals a new square, what was revealed stays
+        sim.issue_move_order(mine, TileCoord{9, 5});
+        for (int i = 0; i < 80; ++i) sim.tick();
+        {
+            const auto& w = sim.get_world_state();
+            ASSERT_TRUE(w.is_tile_revealed(0, 0) && w.is_tile_revealed(15, 5));
+            ASSERT_FALSE(w.is_tile_revealed(17, 5));
+        }
+    } TEST_END();
+
     TEST_CASE("12.76 Authentic Fog of War Sight Radius 6 & Exploration Persistence") {
         SimulationEngine sim;
         sim.init_test_world(60, 60, 1);
@@ -7227,10 +7275,10 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
 
     TEST_CASE("12.108: Version Invariant & Fog of War Cursor Concealment Parity") {
         // 1. Verify semantic versioning components
-        ASSERT_EQ(ants::VERSION_STRING, "v0.0.69");
+        ASSERT_EQ(ants::VERSION_STRING, "v0.0.70");
         ASSERT_EQ(ants::VERSION_MAJOR, 0);
         ASSERT_EQ(ants::VERSION_MINOR, 0);
-        ASSERT_EQ(ants::VERSION_PATCH, 69);
+        ASSERT_EQ(ants::VERSION_PATCH, 70);
 
         // 2. Setup simulation world with Fog of War enabled
         SimulationEngine sim;

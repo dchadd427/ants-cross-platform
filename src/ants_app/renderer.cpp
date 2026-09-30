@@ -871,15 +871,15 @@ void Renderer::draw_static_object(const StaticMapObject& obj, const ants::sim::G
 }
 
 void Renderer::render_terrain_layer2_structures(const ants::sim::Grid& grid, const ants::sim::WorldState* world) {
-    // One row-major pass over anchor cells (as FUN_01008089). Large sprites reach up to ~5 cells away from their
-    // anchor, so the scan margin is generous and each draw is rect-culled.
-    constexpr int32_t kMargin = 5;
+    // One row-major pass over anchor cells (FUN_01008089 with mode 2): the rows from top / 32 - 3 up to (bottom / 32 + 3 + 1, exclusive) of the view rectangle, the columns
+    // likewise, clipped to the map. An object whose anchor lies further out is not drawn even when its art reaches into the view (docs 5.54); each draw is rect-culled.
+    constexpr int32_t kMargin = 3;
     const int32_t start_col = std::max(0, static_cast<int32_t>(camera_.x) / TILE_SIZE - kMargin);
     const int32_t end_col   = std::min(static_cast<int32_t>(grid.width()) - 1,
-                                       (static_cast<int32_t>(camera_.x) + PLAYFIELD_W + 31) / TILE_SIZE + kMargin);
+                                       (static_cast<int32_t>(camera_.x) + PLAYFIELD_W) / TILE_SIZE + kMargin);
     const int32_t start_row = std::max(0, static_cast<int32_t>(camera_.y) / TILE_SIZE - kMargin);
     const int32_t end_row   = std::min(static_cast<int32_t>(grid.height()) - 1,
-                                       (static_cast<int32_t>(camera_.y) + PLAYFIELD_H + 31) / TILE_SIZE + kMargin);
+                                       (static_cast<int32_t>(camera_.y) + PLAYFIELD_H) / TILE_SIZE + kMargin);
 
     const bool fog = world && world->fog_of_war_enabled;
     auto explored = [&](int32_t c, int32_t r) { return !fog || world->is_tile_revealed(c, r); };
