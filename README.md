@@ -4,7 +4,7 @@ A faithful, high-performance, deterministic C++17 native engine remake and port 
 
 The engine directly loads raw original binary assets (`ants.chd` and `Maps/*.LVL`) without pre-conversion, faithfully executing authentic gameplay mechanics, deterministic 20Hz simulation, 32-channel spatial audio, MIDI/MP3 score playback, TrueType font rendering, and an SDL2 hardware-accelerated 2D viewport.
 
-**Current version: v0.0.48** (shown on screen next to the FPS meter). Every release is listed in the **[changelog](CHANGELOG.md)**, which is also published at **[beta.playants.org/changelog.html](https://beta.playants.org/changelog.html)**. Since v0.0.24 every system is re-derived from the disassembly of the original `Ants.exe` (see [Reverse Engineering](#reverse-engineering--historical-preservation)); multiplayer over a network (host / join over TCP) works and is still being extended (see [Network Port](#network-port-in-progress)).
+**Current version: v0.0.49** (shown on screen next to the FPS meter). Every release is listed in the **[changelog](CHANGELOG.md)**, which is also published at **[beta.playants.org/changelog.html](https://beta.playants.org/changelog.html)**. Since v0.0.24 every system is re-derived from the disassembly of the original `Ants.exe` (see [Reverse Engineering](#reverse-engineering--historical-preservation)); multiplayer over a network (host / join over TCP) works and is still being extended (see [Network Port](#network-port-in-progress)).
 
 ---
 
@@ -56,7 +56,7 @@ Play the remake instantly in any modern web browser (Chrome, Firefox, Safari, Ed
 
 - **Modern Audio & Presentation (`libants-app`)**:
   - Hardware-accelerated SDL2 renderer with integer scaling, crisp pixel filtering, and authentic 4:3 viewport preservation.
-  - TrueType text at the original's label sizes: every text is drawn at the cell height that `Ants.exe` gives its label (12 px status line and chat, 14 px score labels, 18 px setup screen and results, 24 px dialogs, 35 px start dialog text; see section 5.14 of the reverse engineering notes), in the original's "Franklin Gothic Medium" when a copy of that font is found next to the game or in the Windows fonts folder, and in Arial otherwise; the health numbers (Ctrl+L) are white 8 x 15 pixel digits like the original's fixed system font.
+  - TrueType text at the original's label sizes: every text is drawn at the cell height that `Ants.exe` gives its label (12 px status line and chat, 14 px score labels, 18 px setup screen and results, 24 px dialogs, 35 px start dialog text; see section 5.14 of the reverse engineering notes), in the original's "Franklin Gothic Medium" when a copy of that font is found next to the game or in the Windows fonts folder, and in the bundled Libre Franklin Medium (a free interpretation of the same Franklin Gothic, SIL Open Font License) otherwise; the health numbers (Ctrl+L) are white 8 x 15 pixel digits like the original's fixed system font.
   - 32-channel spatial sound mixer for positional sound effects (stereo panning and logarithmic distance attenuation).
   - Native AudioToolbox MIDI playback on macOS and HTML5 audio streaming on WebAssembly.
   - Interactive HUD with minimap, selection cards, egg count, health-coloured selection ears, and recessed news status box (`wstatus.bmp`).
@@ -126,7 +126,7 @@ Ants-Mac/
 │   └── ants_app/           # SDL2 application, renderer, HUD, audio mixer, MIDI, version
 ├── Original-Ants/          # Authentic 1998 game data
 │   ├── ants.chd            # Packed binary sprites, audio, palettes, animations
-│   ├── Arial.ttf           # TrueType font
+│   ├── LibreFranklin-Medium.ttf  # Bundled text font (Libre Franklin, SIL Open Font License; licence: LibreFranklin-OFL.txt)
 │   ├── *.mp3 / *.MID       # Soundtrack audio files
 │   └── Maps/               # Binary .LVL maps (Treasure, Small, Medium, Tiny, Islands, Gauntlet)
 ├── src/                    # Implementation source code
@@ -346,7 +346,7 @@ Limits of this release: raw TCP only (a LAN, a VPN or a forwarded port 4001; the
 
 ## Changelog & Versioning
 
-The version (`include/ants_app/version.hpp`, currently `v0.0.48`) is bumped with every release and shown on screen next to the FPS meter. [`CHANGELOG.md`](CHANGELOG.md) lists what changed in every version, newest first, from the first commit to the release in progress; it is published on the beta site at [`/changelog.html`](https://beta.playants.org/changelog.html) and linked from the game page.
+The version (`include/ants_app/version.hpp`, currently `v0.0.49`) is bumped with every release and shown on screen next to the FPS meter. [`CHANGELOG.md`](CHANGELOG.md) lists what changed in every version, newest first, from the first commit to the release in progress; it is published on the beta site at [`/changelog.html`](https://beta.playants.org/changelog.html) and linked from the game page.
 
 ---
 
@@ -371,7 +371,7 @@ To run all test suites in sequence:
 ./run_tests.sh --clean    # Remove the build directories and rebuild first
 ```
 
-### What the Suites Cover (v0.0.48, all passing)
+### What the Suites Cover (v0.0.49, all passing)
 | Suite | What it checks | Size |
 |---|---|---|
 | 1 Asset decoders | `ants.chd` header, palette, sprites, audio, event tags, Table 4 animations, `.LVL` maps, directional mirroring, fuzzing | 8 suites, 69,809 assertions |
@@ -388,7 +388,7 @@ To run all test suites in sequence:
 | 2.14 NetGame | The room, thumbs, the start barrier, a match with commands and chat, a guest that leaves, host migration over real sockets (the host leaving a two-, three- and four-player match, the links between guests, strangers on a guest's port, no election after the match is over), refused joins, map mismatch | 14 tests, 534 assertions |
 | 3 Application integration | Whole-application behaviour through the HUD, renderer and simulation | 188 tests, 6,529 assertions |
 | 3.1 - 3.5 Model suites | Render parity 303 checks (with the text sizes and the health-number font), HUD layout 579 (with the network room screen and the label sizes and wrapping), status messages 255, input model 70, pointer model 329 | 1,536 checks |
-| 3.6 Network application | The command line (names, `--host`, `--join`), a headless application as host and as guest of a room, start, a bit-identical match, chat, leaving, the host leaving (the guest takes over alone, or follows the new host and says so) | 6 tests, 139 assertions |
+| 3.6 Network application | The command line (names, `--host`, `--join`), a headless application as host and as guest of a room, start, a bit-identical match, chat, leaving, the host leaving (the guest takes over alone, or follows the new host and says so), the score labels of a local game | 8 tests, 147 assertions |
 | 4 E2E | Opaque-box scenarios in four tiers | 506 tests |
 
 ### Standalone E2E Test Runner
@@ -479,4 +479,4 @@ flowchart TD
 
 This project is a clean-room educational remake and historical preservation effort. All mechanics, timings, and constants are reverse-engineered directly from the original 1998 binary executable (`Ants.exe`) using Capstone disassembly to achieve authentic 1:1 fidelity.
 
-Comprehensive disassembly addresses, opcode traces, and formulas are actively documented in **[`docs/GAME_REVERSE_ENGINEERING.md`](docs/GAME_REVERSE_ENGINEERING.md)**. All original game assets belong to their respective copyright holders.
+Comprehensive disassembly addresses, opcode traces, and formulas are actively documented in **[`docs/GAME_REVERSE_ENGINEERING.md`](docs/GAME_REVERSE_ENGINEERING.md)**. All original game assets belong to their respective copyright holders. The bundled text font, Libre Franklin Medium, is © The Libre Franklin Project Authors and licensed under the SIL Open Font License 1.1 (`Original-Ants/LibreFranklin-OFL.txt`).

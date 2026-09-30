@@ -66,6 +66,10 @@ struct ApplicationConfig {
     bool net_loopback_only{false};              // Host: accept only this machine (two copies on one computer, tests)
     std::string player_name;                    // this player's name (--name); empty: the system user, or "Player" in a network game
     std::array<std::string, 4> team_names{};    // names of the teams of a local game (-N<team><name> as in the original, --team-name)
+    /// false: a local game shows a score label only for the teams that have a name (and the local player's own). The browser build sets it: there are no
+    /// other players in it (no multiplayer yet), so the colour words "Red:", "Blue:", "Black:" would only be placeholders. The original draws a label only for
+    /// players that exist (docs 5.42).
+    bool label_unnamed_teams{true};
 };
 
 /**

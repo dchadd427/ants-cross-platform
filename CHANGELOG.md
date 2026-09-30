@@ -15,6 +15,20 @@ Ground truth for every entry is in [`docs/GAME_REVERSE_ENGINEERING.md`](docs/GAM
 
 - (nothing yet)
 
+## v0.0.49 - 2026-09-29 - The Franklin Gothic look, and no placeholder labels in the browser build
+
+- **The text face**: the original's labels are set in "Franklin Gothic Medium", a commercial font that the game never shipped. The game now bundles **Libre Franklin Medium** (a free interpretation of the same Franklin
+  Gothic; SIL Open Font License 1.1, `Original-Ants/LibreFranklin-Medium.ttf` with its licence in `Original-Ants/LibreFranklin-OFL.txt`, 142 KB) and uses it everywhere, in the native game and in the web build (the
+  bundle is packed from `Original-Ants/`). A real copy of the original font (`Original-Ants/framd.ttf` or the Windows fonts folder) still wins when it is found. The text sizes of v0.0.48 are unchanged (the cell height
+  is measured from whichever face is loaded); the letters are narrower than Arial's, so the setup screen's prompt fits its box again.
+- **Arial is no longer in the repository**: `Original-Ants/Arial.ttf` was committed here, which a commercial font must not be in a public repository; it is removed from the tree and from the web image (system
+  copies of Arial remain the last fallback when the bundled font is missing). The earlier commits still contain it.
+- **Score labels of a local game in the browser build**: the browser build has no multiplayer yet, so the labels "Red:", "Blue:", "Black:" next to the other teams' scores were only placeholders. A local game of
+  the browser build now labels the local player and the teams that have a name (`-N<team><name>` / `--team-name`); the native game keeps its four labels, and in a network match every player's real name is shown
+  (since v0.0.46). `ApplicationConfig::label_unnamed_teams` decides.
+- **Docs**: `docs/GAME_REVERSE_ENGINEERING.md` 5.14 (the face), README (credit and licence of the font).
+- Tests: `test_network_app` N5.7 and N5.8 (the label roster of a local game). Version assertion of 12.108.
+
 ## v0.0.48 - 2026-09-29 - Text sizes and the health number as in the original
 
 - **Text sizes**: every text of the game now has the size that `Ants.exe` gives it. The original creates its labels with a GDI font whose cell height is set per label (`FUN_0102b05f`, the label

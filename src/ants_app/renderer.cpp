@@ -354,14 +354,15 @@ bool Renderer::init(SDL_Window* window,
     if (TTF_Init() == 0) {
         ttf_initialized_ = true;
         // The original's labels use "Franklin Gothic Medium" (Ants.exe FUN_0102b05f). That font is commercial and was never part of the game (it came
-        // with the operating system), so it cannot be shipped here: it is used when a copy is found (next to the game, or in the Windows fonts folder),
-        // and Arial is the fallback. Every size is opened by its cell height (see below), so the layout is right with either.
+        // with the operating system), so it cannot be shipped here: it is used when a copy is found (next to the game, or in the Windows fonts
+        // folder). The bundled face is Libre Franklin Medium (SIL Open Font License, Original-Ants/LibreFranklin-OFL.txt), a free interpretation of
+        // the same Franklin Gothic; the rest are system fonts for a build without it. Every size is opened by its cell height (see below), so the
+        // layout is right with any of them.
         const std::vector<std::string> font_candidates = {
             "Original-Ants/Franklin Gothic Medium.ttf",
             "Original-Ants/framd.ttf",
             "C:\\Windows\\Fonts\\framd.ttf",
-            "Original-Ants/Arial.ttf",
-            "Original-Ants/arial.ttf",
+            "Original-Ants/LibreFranklin-Medium.ttf",
             "C:\\Windows\\Fonts\\arial.ttf",
             "C:\\Windows\\Fonts\\Arial.ttf",
             "/System/Library/Fonts/Supplemental/Arial.ttf",

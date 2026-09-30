@@ -54,6 +54,9 @@ bool Application::init(int argc, char* argv[]) {
 
 ApplicationConfig Application::parse_arguments(int argc, char* argv[]) {
     ApplicationConfig cfg{};
+#if defined(__EMSCRIPTEN__)
+    cfg.label_unnamed_teams = false;                                          // no other players in the browser build: no placeholder labels
+#endif
 
     for (int i = 1; i < argc; ++i) {
         if (std::strcmp(argv[i], "--headless") == 0) {
@@ -426,7 +429,14 @@ bool Application::load_match(const std::string& map_path, uint32_t seed, uint8_t
                                           current_level_.width, current_level_.height);
         }
     }
-    hud_.set_roster_mask(roster);
+    uint8_t labelled = roster;                                                // the teams that get a score label
+    if (!network_active() && !config_.label_unnamed_teams) {
+        labelled = 0;
+        for (uint8_t p = 0; p < 4; ++p) {
+            if (((roster >> p) & 1u) != 0 && (p == local_player_id_ || !config_.team_names[p].empty())) labelled = static_cast<uint8_t>(labelled | (1u << p));
+        }
+    }
+    hud_.set_roster_mask(labelled);
     return true;
 }
 

@@ -254,6 +254,27 @@ void run_command_line_tests() {
         ASSERT_TRUE(c.net_address == "host" && c.net_port == 7000);
     } TEST_END();
 
+    TEST_CASE("N5.7 Local Game: The Score Labels Of Teams Without A Name Show Only When Asked For (the browser build has no other players, so no placeholders)") {
+        ApplicationConfig cfg = headless_config();
+        cfg.player_name = "Alice";
+        cfg.team_names[2] = "Carol";
+        cfg.label_unnamed_teams = false;                                                  // what the browser build sets
+        Application app;
+        ASSERT_TRUE(app.init(cfg));
+        ASSERT_TRUE(app.start_game("Original-Ants/Maps/SMALL.LVL"));
+        ASSERT_EQ(app.hud().roster_mask(), 0x05);                                         // the own team (0) and the named team 2: no "Red:", no "Black:"
+        ASSERT_EQ(app.sim().roster_mask(), 0x0F);                                         // the four teams still exist in the game itself
+        ASSERT_TRUE(ApplicationConfig{}.label_unnamed_teams);                             // the native default keeps the four labels
+    } TEST_END();
+
+    TEST_CASE("N5.8 Local Game: By Default Every Team Has A Score Label (colour words for the unnamed ones)") {
+        ApplicationConfig cfg = headless_config();
+        Application app;
+        ASSERT_TRUE(app.init(cfg));
+        ASSERT_TRUE(app.start_game("Original-Ants/Maps/SMALL.LVL"));
+        ASSERT_EQ(app.hud().roster_mask(), 0x0F);
+    } TEST_END();
+
     TEST_CASE("N5.2 Names Reach Every Place That Shows One (local game): the simulation's texts, the HUD's labels, the results rows, the own label") {
         ApplicationConfig cfg = headless_config();
         cfg.player_name = "Alice";
