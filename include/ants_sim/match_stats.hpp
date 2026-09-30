@@ -54,7 +54,6 @@ struct PlayerMatchStats {
 enum class MatchState : uint8_t {
     NotStarted = 0,
     Running    = 1,
-    Paused     = 2,
     GameOver   = 3
 };
 
@@ -73,7 +72,6 @@ struct AllianceInvite {
  */
 struct MatchResult {
     bool is_over{false};
-    bool is_tie{false};
     std::vector<uint8_t> winning_players;
     std::vector<uint8_t> losing_players;
     std::array<int32_t, MAX_PLAYERS> final_scores{};
@@ -179,13 +177,6 @@ public:
         }
     }
 
-    void deduct_score(uint8_t player_id, int32_t points) noexcept {
-        if (player_id < MAX_PLAYERS) {
-            stats_[player_id].score -= points;
-            if (stats_[player_id].score < 0) stats_[player_id].score = 0;
-            if (points != 0) score_changes_.push_back(ScoreChange{player_id, -points});
-        }
-    }
 
     // Score changes since the last call (consumed by the simulation to spawn score bubbles)
     std::vector<ScoreChange> take_score_changes() noexcept {
@@ -281,7 +272,6 @@ public:
             }
         }
 
-        result.is_tie = (result.winning_players.size() > 1);
         return result;
     }
 

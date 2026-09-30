@@ -41,7 +41,6 @@ public:
     ByteReader(const uint8_t* data, size_t size) : p_(data), left_(size) {}
     explicit ByteReader(const std::vector<uint8_t>& v) : p_(v.data()), left_(v.size()) {}
     bool ok() const noexcept { return ok_; }
-    size_t remaining() const noexcept { return left_; }
     uint8_t u8() {
         if (!need(1)) return 0;
         const uint8_t v = *p_;
@@ -100,13 +99,5 @@ private:
     bool ok_{true};
 };
 
-/// FNV-1a 64 (used to compare map files between machines)
-inline uint64_t fnv1a64(const uint8_t* p, size_t n, uint64_t h = 0xcbf29ce484222325ULL) noexcept {
-    for (size_t i = 0; i < n; ++i) {
-        h ^= p[i];
-        h *= 0x100000001b3ULL;
-    }
-    return h;
-}
 
 }  // namespace ants::net

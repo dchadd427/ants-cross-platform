@@ -1,6 +1,4 @@
 #include "ants_sim/ant_unit.hpp"
-#include <cmath>
-#include <algorithm>
 
 namespace ants::sim {
 

@@ -28,10 +28,5 @@ UIRect animation_bounds(const assets::AssetArchive& archive, const char* name) {
     return {x0, y0, x1 - x0, y1 - y0};
 }
 
-int32_t animation_sound(const assets::AssetArchive& archive, const char* name) {
-    const auto* seq = archive.find_animation(name);
-    if (!seq || seq->subitems.empty() || !seq->subitems[0].has_sound_trigger()) return -1;
-    return static_cast<int32_t>(seq->subitems[0].default_sp);
-}
 
 } // namespace ants::app

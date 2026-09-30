@@ -58,7 +58,6 @@ public:
     bool stalled() const noexcept { return started_ && phase_ == 0 && queue_.empty() && acc_ms_ >= kTickMs; }
     /// Milliseconds into the current tick (0 .. 49), for smooth drawing between ticks
     uint32_t sub_tick_ms() const noexcept { return started_ ? std::min<uint32_t>(acc_ms_, kTickMs - 1) : 0u; }
-    bool started() const noexcept { return started_; }
     static constexpr uint32_t kTickMs = 50;
 
 private:

@@ -1586,8 +1586,7 @@ void SimulationEngineImpl::loco_sync(AntUnit& a) {
     }
 }
 
-void SimulationEngineImpl::movement_tick(SimulationEngine& eng) {
-    engine_ = &eng;
+void SimulationEngineImpl::movement_tick() {
     occ_refresh();
     const uint32_t t_begin = anim_clock_ms_;
     const uint32_t t_end = t_begin + TICK_MS;
@@ -1679,7 +1678,6 @@ void SimulationEngineImpl::movement_tick(SimulationEngine& eng) {
         });
         if (delivery) deliver_path(delivery->ant_id, delivery->path);
     }
-    engine_ = nullptr;
 }
 
 } // namespace ants::sim

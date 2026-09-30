@@ -121,7 +121,6 @@ bool NetGame::host(uint16_t port, const std::string& name, bool loopback_only) {
     host_lobby_ = std::make_unique<HostLobby>(cfg);
     role_ = Role::Host;
     phase_ = Phase::Room;
-    name_ = name;
     seat_ = cfg.host_seat;
     room_ = host_lobby_->room();
     room_.you = seat_;
@@ -152,7 +151,6 @@ bool NetGame::join(const std::string& address, uint16_t port, const std::string&
     client_lobby_ = std::make_unique<ClientLobby>(transport_->uplink.get(), cfg);
     role_ = Role::Client;
     phase_ = Phase::Connecting;
-    name_ = name;
     phase_since_ms_ = now_;
     refresh_status();
     desync_reported_ = false;
@@ -640,7 +638,6 @@ uint32_t NetGame::sub_tick_ms() const {
     return r != nullptr ? r->sub_tick_ms() : 0u;
 }
 
-uint32_t NetGame::rtt_ms() const { return client_session_ ? client_session_->rtt_ms() : 0u; }
 
 bool NetGame::electing() const { return client_session_ && client_session_->electing(); }
 

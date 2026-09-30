@@ -11,9 +11,7 @@ namespace ants::assets {
 
 // Header Constants
 constexpr uint32_t CHD_EXPECTED_VERSION = 9;
-constexpr uint32_t CHD_EXPECTED_TIMESTAMP = 0x378D661C;
 constexpr uint32_t CHD_PALETTE_BYTE_SIZE = 1024;
-constexpr uint32_t CHD_PALETTE_COLOR_COUNT = 256;
 constexpr uint8_t  CHD_COLOR_KEY_INDEX = 254; // 0xFE Pure Magenta RGB(255,0,255) -> Alpha = 0
 
 // Team Palette Index Ranges
@@ -34,13 +32,6 @@ struct ColorRGBA {
     uint8_t g{0};
     uint8_t b{0};
     uint8_t a{255};
-
-    constexpr uint32_t to_u32() const noexcept {
-        return (static_cast<uint32_t>(r)) |
-               (static_cast<uint32_t>(g) << 8) |
-               (static_cast<uint32_t>(b) << 16) |
-               (static_cast<uint32_t>(a) << 24);
-    }
 
 
     constexpr bool operator==(const ColorRGBA& o) const noexcept {
@@ -83,11 +74,6 @@ struct Sprite {
         return pixels[y * pitch + x];
     }
 
-    // Color Lookup
-    inline ColorRGBA get_color(uint32_t x, uint32_t y,
-                              const std::array<ColorRGBA, 256>& pal) const noexcept {
-        return pal[get_pixel(x, y)];
-    }
 
     // Direct conversion to 32-bit tightly-packed RGBA buffer (width * height * 4)
     std::vector<uint8_t> to_rgba32(const std::array<ColorRGBA, 256>& pal) const;
@@ -111,17 +97,8 @@ struct WaveFormat {
     uint16_t bits_per_sample{8}; // 8 bits per sample
     uint16_t extra_size{0};      // 0
 
-    // Compatibility getters matching Windows WAVEFORMATEX member names
-    uint16_t wFormatTag() const noexcept { return format_tag; }
-    uint16_t nChannels() const noexcept { return channels; }
-    uint32_t nSamplesPerSec() const noexcept { return samples_per_sec; }
-    uint32_t nAvgBytesPerSec() const noexcept { return avg_bytes_per_sec; }
-    uint16_t nBlockAlign() const noexcept { return block_align; }
-    uint16_t wBitsPerSample() const noexcept { return bits_per_sample; }
-    uint16_t cbSize() const noexcept { return extra_size; }
 };
 
-using WaveFormatEx = WaveFormat;
 
 /**
  * @brief Digitized audio sound clip from Table 2.
@@ -191,7 +168,6 @@ struct AnimationSequence {
     std::vector<AnimationSubItem> subitems;
 };
 
-using Animation = AnimationSequence;
 
 /**
  * @brief Low-level binary deserializers for ants.chd data blocks.

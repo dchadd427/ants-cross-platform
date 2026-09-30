@@ -28,7 +28,6 @@ struct MapSelectEntry {
     std::string description;
     uint32_t width{60};
     uint32_t height{60};
-    uint32_t anthills_count{4};
     uint32_t minutes{15};
 };
 
@@ -38,14 +37,7 @@ struct MapSelectEntry {
  */
 class MapSelectScreen {
 public:
-    static constexpr int32_t BANNER_X = 140;
-    static constexpr int32_t BANNER_Y = 1;
 
-    static constexpr int32_t LOGO_X = 42;
-    static constexpr int32_t LOGO_Y = 87;
-
-    static constexpr int32_t PICKMAP_X = 30;
-    static constexpr int32_t PICKMAP_Y = 281;
 
     static constexpr int32_t W_MAP_X = 27;
     static constexpr int32_t W_MAP_Y = 306;
@@ -64,32 +56,18 @@ public:
     static constexpr int32_t BTN_DOWN_W = 48;
     static constexpr int32_t BTN_DOWN_H = 22;
 
-    static constexpr int32_t MAPINFO_X = 29;
-    static constexpr int32_t MAPINFO_Y = 352;
 
     static constexpr int32_t INFO_BOX_X = 27;
     static constexpr int32_t INFO_BOX_Y = 376;
     static constexpr int32_t INFO_BOX_W = 304;
     static constexpr int32_t INFO_BOX_H = 36;
 
-    static constexpr int32_t STATLINE_X = 25;
-    static constexpr int32_t STATLINE_Y = 434;
-
-    static constexpr int32_t PLAYSTAT_X = 368;
-    static constexpr int32_t PLAYSTAT_Y = 56;
-
-    static constexpr int32_t PLAYERS_BOX_X = 366;
-    static constexpr int32_t PLAYERS_BOX_Y = 82;
-    static constexpr int32_t PLAYERS_BOX_W = 204;
-    static constexpr int32_t PLAYERS_BOX_H = 204;
 
     static constexpr int32_t BTN_DROP_X = 576;
     static constexpr int32_t BTN_DROP_Y = 192;
     static constexpr int32_t BTN_DROP_W = 47;
     static constexpr int32_t BTN_DROP_H = 21;
 
-    static constexpr int32_t FOW_HEADER_X = 367;
-    static constexpr int32_t FOW_HEADER_Y = 376;
 
     static constexpr int32_t BTN_FOW_ON_X = 522;
     static constexpr int32_t BTN_FOW_ON_Y = 372;
@@ -101,11 +79,6 @@ public:
     static constexpr int32_t BTN_FOW_OFF_W = 49;
     static constexpr int32_t BTN_FOW_OFF_H = 24;
 
-    static constexpr int32_t FOW_TEXT1_X = 368;
-    static constexpr int32_t FOW_TEXT1_Y = 400;
-
-    static constexpr int32_t FOW_TEXT2_X = 367;
-    static constexpr int32_t FOW_TEXT2_Y = 415;
 
     static constexpr int32_t BTN_START_X = 526;
     static constexpr int32_t BTN_START_Y = 439;
@@ -125,12 +98,6 @@ public:
     static constexpr int32_t PLAYER_THUMB_Y = 95;
     static constexpr int32_t PLAYER_ROW_PITCH = 50;
 
-    // Backward-compatibility aliases
-    static constexpr int32_t CARD_X = W_MAP_X;
-    static constexpr int32_t CARD_Y = W_MAP_Y;
-    static constexpr int32_t CARD_W = W_MAP_W;
-    static constexpr int32_t CARD_H = W_MAP_H;
-    static constexpr int32_t CARD_SPACING = 0;
 
     MapSelectScreen();
     ~MapSelectScreen() = default;
@@ -164,7 +131,6 @@ public:
     const std::vector<MapSelectEntry>& get_maps() const noexcept { return maps_; }
 
     bool is_fog_of_war_enabled() const noexcept { return fog_of_war_; }
-    void set_fog_of_war_enabled(bool enabled) noexcept { fog_of_war_ = enabled; }
 
     /// The thumb beside a player's name (the original's netgood / netok / netbad / netunk animations: connection quality)
     enum class Thumb : uint8_t { Good = 0, Ok = 1, Bad = 2, Unknown = 3 };
@@ -195,16 +161,11 @@ public:
     bool is_player_ready(uint8_t player_idx) const noexcept {
         return (player_ready_mask_ & (1u << player_idx)) != 0;
     }
-    void set_player_ready(uint8_t player_idx, bool ready) noexcept {
-        if (ready) player_ready_mask_ |= (1u << player_idx);
-        else player_ready_mask_ &= ~(1u << player_idx);
-    }
     void toggle_player_ready(uint8_t player_idx) noexcept {
         player_ready_mask_ ^= (1u << player_idx);
     }
 
     void set_player_name(std::string name) { player_name_ = std::move(name); }
-    uint8_t get_player_team() const noexcept { return player_team_; }
     void set_player_team(uint8_t team) noexcept { player_team_ = team; }
 
 private:
@@ -220,7 +181,6 @@ private:
     bool btn_quit_hovered_{false};
     bool btn_up_hovered_{false};
     bool btn_down_hovered_{false};
-    bool btn_drop_hovered_{false};
     bool btn_fow_on_hovered_{false};
     bool btn_fow_off_hovered_{false};
 
@@ -228,14 +188,12 @@ private:
     bool btn_quit_pressed_{false};
     bool btn_up_pressed_{false};
     bool btn_down_pressed_{false};
-    bool btn_drop_pressed_{false};
 
     bool fog_of_war_{false};
     uint8_t player_ready_mask_{0b0011}; // Player 0 & 1 ready, Player 2 unready (matching reference)
     std::string player_name_{};
     uint8_t player_team_{0};
 
-    uint32_t connection_ticks_{0};
     RoomView room_{};
     std::function<void(const std::string& filename)> on_map_changed_{nullptr};
     std::function<void(bool)> on_fog_changed_{nullptr};

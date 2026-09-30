@@ -15,7 +15,6 @@
 
 namespace ants::sim {
 
-constexpr uint32_t TICK_RATE_HZ = 20u;
 constexpr uint32_t TICK_MS      = 50u;
 
 namespace SoundID {
@@ -194,11 +193,6 @@ struct AntOrder {
     bool      special{false};             // FUN_010287b5's special flag: the classification gives the ant's ability order
 };
 
-struct PendingHatch {
-    uint8_t  player_id{0};
-    AntType  type{AntType::Worker};
-    uint32_t ticks_remaining{0};
-};
 
 struct AudioEvent {
     uint32_t sound_id{0};
@@ -238,10 +232,8 @@ struct AntSnapshot {
     uint16_t anim_frame{0};
 
     bool     is_holding{false};
-    uint16_t held_item_id{TILE_EMPTY};
     int32_t  carried_points{0};
 
-    bool     is_airborne{false};
     bool     is_stunned{false};
     bool     is_swimming{false};
     bool     is_drowning{false};
@@ -313,15 +305,12 @@ struct FlowerDropperSnapshot {
     int32_t drop_x{0};
     int32_t drop_y{0};
     bool is_dropping{false};
-    uint8_t drop_frame{0}; // 0..8
     uint32_t drop_elapsed_ms{0}; // time since the drop animation started (50 ms per tick)
     uint8_t powerup_type{0}; // 0: Bomber, 1: Combat, 2: Thief, 3: Swimmer, 4: Fire
 };
 
 struct WorldState {
-    uint64_t   tick_number{0};
     uint32_t   match_time_remaining_ms{0};
-    MatchState match_state{MatchState::NotStarted};
 
     uint32_t   width{0};
     uint32_t   height{0};
@@ -388,7 +377,6 @@ public:
     void init(const ants::assets::LevelData& level, uint32_t random_seed, uint8_t roster_mask);
     uint8_t roster_mask() const noexcept;
     void init_test_world(uint32_t width, uint32_t height, uint32_t random_seed = 1, uint32_t match_time_ms = 720000);
-    void reset();
 
     void tick();
     /// The one entry through which a player changes the simulation (command.hpp): validates the command (issuer, ownership, ranges) and applies
@@ -450,7 +438,6 @@ public:
     uint64_t current_tick() const noexcept;
     const Grid& grid() const;
     Grid& grid_mut();
-    const PRNG& prng() const;
     const MatchStatsManager& stats_manager() const;
     MatchStatsManager& stats_manager_mut();
 
@@ -464,11 +451,9 @@ public:
     /// Records every locomotion animation step and path delivery with its millisecond time (off by default).
     void set_locomotion_trace_enabled(bool enabled);
     const std::vector<LocoTraceEvent>& locomotion_trace() const;
-    void clear_locomotion_trace();
 
     uint32_t spawn_unit(uint8_t player_id, AntType type, TileCoord pos);
     AntUnit& get_unit(uint32_t ant_id);
-    const AntUnit& get_unit(uint32_t ant_id) const;
     void kill_unit(uint32_t ant_id);
 
     void execute_melee_attack(uint32_t attacker_id, uint32_t target_id);
@@ -528,7 +513,6 @@ public:
     bool has_bomb_at(TileCoord pos) const;
     bool has_fire_at(TileCoord pos) const;
     bool has_living_ant_at(TileCoord pos) const;
-    bool has_other_living_ant_at(TileCoord pos, uint32_t ignore_ant_id) const;
     void trigger_bomb_detonation(uint32_t ant_id, TileCoord bomb_pos, int32_t incoming_dx = 0, int32_t incoming_dy = 0);
     uint32_t get_fire_timer(TileCoord pos) const;
     void set_fire_at(TileCoord pos, uint32_t timer_ticks);

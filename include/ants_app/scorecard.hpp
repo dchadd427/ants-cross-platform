@@ -18,25 +18,6 @@ namespace ants::app {
  */
 class ScorecardModal {
 public:
-    // Layout coordinates from reverse engineered Animation 25
-    static constexpr int32_t BANNER_X          = 140;
-    static constexpr int32_t BANNER_Y          = 0;
-    static constexpr int32_t TITLE_X           = 41;
-    static constexpr int32_t TITLE_Y           = 55;
-    static constexpr int32_t STATS_X           = 342;
-    static constexpr int32_t STATS_Y           = 84;
-    static constexpr int32_t WINNER_HDR_X      = 40;
-    static constexpr int32_t WINNER_HDR_Y      = 195;
-    static constexpr int32_t WINNER_BOX_X      = 40;
-    static constexpr int32_t WINNER_BOX_Y      = 222;
-    static constexpr int32_t WINNER_BOX_W      = 558;
-    static constexpr int32_t WINNER_BOX_H      = 50;
-    static constexpr int32_t OTHER_HDR_X       = 40;
-    static constexpr int32_t OTHER_HDR_Y       = 280;
-    static constexpr int32_t OTHER_BOX_X       = 40;
-    static constexpr int32_t OTHER_BOX_Y       = 310;
-    static constexpr int32_t OTHER_BOX_W       = 558;
-    static constexpr int32_t OTHER_BOX_H       = 130;
 
     // 4 Statistic column X coordinates (aligned with re_screen arrow tips)
     static constexpr int32_t COL_SCORE_X       = 497;
@@ -91,7 +72,6 @@ private:
         uint32_t enemy_killed{0};
         uint32_t new_hatched{0};
         bool is_winner{false};
-        bool is_allied{false};
     };
 
     bool is_active_{false};

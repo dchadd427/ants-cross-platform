@@ -5,7 +5,6 @@
 // caller advances, so a whole match over a bad network runs deterministically in milliseconds.
 
 #include <cstdint>
-#include <deque>
 #include <memory>
 #include <utility>
 #include <vector>
@@ -19,7 +18,6 @@ public:
     struct Link {
         uint32_t latency_ms{20};      // one way
         uint32_t jitter_ms{0};        // each message takes latency + a pseudo-random 0 .. jitter (ordering is preserved)
-        bool operator==(const Link& o) const noexcept { return latency_ms == o.latency_ms && jitter_ms == o.jitter_ms; }
     };
 
     explicit LoopbackNetwork(uint32_t seed = 1);
@@ -31,11 +29,8 @@ public:
     std::pair<Connection*, Connection*> connect(Link link);
     /// The current time; messages become receivable when it reaches their delivery time
     void set_time(uint32_t now_ms) { now_ = now_ms; }
-    uint32_t now() const noexcept { return now_; }
     /// Cuts the link (both ends see Closed); with `fail` they see Failed instead
     void cut(Connection* endpoint, bool fail = false);
-    /// Total messages delivered and bytes carried (diagnostics)
-    uint64_t messages() const noexcept { return messages_; }
 
 private:
     class Endpoint;
@@ -51,7 +46,6 @@ private:
     std::vector<std::unique_ptr<Endpoint>> endpoints_;
     uint32_t now_{0};
     uint32_t rng_;
-    uint64_t messages_{0};
 };
 
 }  // namespace ants::net

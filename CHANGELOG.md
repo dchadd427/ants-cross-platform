@@ -13,7 +13,27 @@ Ground truth for every entry is in [`docs/GAME_REVERSE_ENGINEERING.md`](docs/GAM
 
 ## Unreleased
 
-- (nothing yet)
+- **Cleanup pass (no behaviour change, no version bump)**: dead code found with the linker's dead-strip map of an unoptimised build of every binary (nothing in any game or test binary reaches it), with a clang AST
+  scan of every declaration in `include/` and `src/` that no translation unit of the game, the tools or the tests uses, and with a scan for members that are written but never read. The full suite gives identical
+  results (188 integration tests with 6,536 assertions, every golden result and state hash unchanged, 506 E2E tests), the build is warning-free, the web image builds.
+  - **The old A\* path finder** (`pathfinding.hpp` / `pathfinding.cpp`, 294 lines, `PathFinder::find_path` and `find_nearest_passable`): unused since the `PATHMGR` port of v0.0.24.
+  - **Unused functions and accessors**: `SimulationEngine::reset`, `prng() const`, `get_unit() const`, `clear_locomotion_trace`, `has_other_living_ant_at` (and its twin in the implementation), the duplicate `retreat_home`
+    (the live 1 hp retreat is `low_hp_check`), `spawn_death_effect`, `get_unit_pointers`, `HUD::has_friendly_selected` and eleven more HUD accessors, `NetGame::role` / `rtt_ms`, `started()` of the lock-step runner and both
+    sessions, `last_heard_ms`, `LoopbackNetwork::now` / `messages`, `ByteReader::remaining`, `fnv1a64`, `PRNG::rand_range` / `roll_chance` / `set_state`, `MatchStatsManager::deduct_score`, `Grid::has_food_at` and seven more
+    grid and coordinate helpers, the audio mixer's and MIDI player's unused getters, `animation_sound`, the asset archive's whole-vector accessors and its unused `Direction8` wrappers, the `WaveFormat` compatibility getters, and
+    similar (about 90 in all).
+  - **Unused constants and types**: the old layout constants of the HUD, the setup screen, the results modal and the renderer (the art carries its own positions), `InputMode`, `WorldCoord`, `WaypointPoint`, `PendingHatch`,
+    `FixedPointMath`, `AntUnit::STANDARD_DAMAGE` / `COMBAT_DAMAGE`, `TICK_RATE_HZ`, `kTicksPerTurn`, the `Camera` / `Vec2i` / `LVLMap` / `WaveFormatEx` / `Animation` aliases, enumerators nothing names (`UnitState::Ability`,
+    `DeathStatus::BombKilled` / `FireKilled`, `MatchState::Paused`, `ClientLobby::Phase::Cancelled`).
+  - **State that was written but never read**: the setup screen's drop button hover / press flags and connection tick counter, the movement task's `engine_` pointer, the lobby's `hello_sent_`, the application's
+    `last_tick_time_`, the HUD's `right_mouse_held_`, `NetGame::name_`, the `UIButton` sprite ids and `is_enabled`, snapshot fields no consumer reads (`tick_number`, `match_state`, `held_item_id`, `is_airborne`,
+    `drop_frame`, `MatchResult::is_tie`, `PlayerEntry::is_allied`), `ApplicationConfig::vsync`, `MapSelectEntry::anthills_count` and the map scan that filled it, `LoopbackNetwork::messages_`.
+  - **24 standard includes** that their file does not use.
+  - **Kept on purpose**: the tables of the original's ids (`SoundID`, `StringID`, the game strings), the move constructors of the resource classes, `Application::run_frame` (the browser build's loop), helpers that a test
+    pins (`effect_spec::dropper_frame_at`, the `Direction8` overloads of the mirroring helpers), and `ScorecardModal::set_on_replay` (a test and the application still set it although nothing ever calls it: a question for
+    the results-screen stage).
+  - **Found on the way, for the audit** (docs: implementation_plan.md section 18): `tests/test_sim/test_challenger_m2_it2_deep_stress.cpp` has not been part of the build since an early commit and no longer compiles
+    (it uses the retired slot-queue API of the hill); the death clips `death1` .. `death4` are no longer started by a separate effect (`spawn_death_effect` was unused), so their visual path needs a parity check.
 
 ## v0.0.50 - 2026-09-29 - Teaming works: the three answer dialogs of the original
 

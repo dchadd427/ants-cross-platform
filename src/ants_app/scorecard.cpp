@@ -3,7 +3,6 @@
 #include "ants_app/ui_anim.hpp"
 
 #include <algorithm>
-#include <iostream>
 
 namespace ants::app {
 

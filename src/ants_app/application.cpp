@@ -364,7 +364,6 @@ bool Application::init(const ApplicationConfig& config) {
     }
 
     is_running_ = true;
-    last_tick_time_ = SDL_GetPerformanceCounter();
     frametime_history_.fill(16.666f);
     frametime_index_ = 0;
     fps_display_value_ = 60.0f;

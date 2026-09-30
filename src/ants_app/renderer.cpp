@@ -2,7 +2,6 @@
 #include <algorithm>
 #include <cmath>
 #include <iostream>
-#include <cstring>
 #include <cstdio>
 #include <cctype>
 

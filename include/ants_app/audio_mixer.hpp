@@ -65,7 +65,6 @@ public:
     // Queries
     bool is_channel_active(int channel_id) const;
     size_t active_channel_count() const;
-    const MixerChannel& get_channel(size_t index) const { return channels_[index]; }
 
     // Listener / Spatial Positioning
     void set_listener_position(int32_t world_x, int32_t world_y);
@@ -73,8 +72,6 @@ public:
 
     // Volume Controls (0.0f .. 1.0f)
     void set_sfx_volume(float volume);
-    float get_master_volume() const noexcept { return master_volume_; }
-    float get_sfx_volume() const noexcept { return sfx_volume_; }
 
     // Simulation Audio Ingestion
     void ingest_simulation_events(const std::vector<ants::sim::AudioEvent>& events, uint8_t local_player_id = 0);
@@ -96,7 +93,6 @@ public:
 
     // Headless / Mock Mode
     void set_headless_mode(bool headless) noexcept { headless_mode_ = headless; }
-    bool is_headless_mode() const noexcept { return headless_mode_; }
 
 private:
     int allocate_channel(uint8_t priority);

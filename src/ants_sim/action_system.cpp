@@ -223,17 +223,6 @@ void SimulationEngineImpl::anthillq_run() {
     }
 }
 
-// FUN_0101dded with flag 1 (after a hit sequence): a 1 hp ant of a local team goes home, ahead of the queue.
-void SimulationEngineImpl::retreat_home(AntUnit& a) {
-    if (a.hp != 1) return;
-    a.waypoints.clear();
-    a.current_waypoint_idx = 0;
-    a.loco_action = AntUnit::kActionIdle;                                   // raw write of action 0, no animation
-    const TileCoord home = team_entrance(a.player_id);
-    if (home.x < 0) return;
-    go_to(a, home, false, false);
-    if (a.home_state == 1) a.home_priority = 1;
-}
 
 // ------------------------------------------------------------------------------------------------
 // Hatching (FUN_01010aca / FUN_01010c14 / HATCHTSK 0x1025072)

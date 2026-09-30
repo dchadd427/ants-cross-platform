@@ -48,7 +48,6 @@ public:
     // Draws the current frame (parts last-first at their absolute coordinates). Returns true if anything was drawn.
     bool draw(IRenderer& renderer, const assets::AssetArchive& archive, uint32_t now_ms);
 
-    bool is_animating() const noexcept { return running_; }
     PedestalKind resting_kind() const noexcept { return kind_; }
     bool is_settled_and_visible() const noexcept { return !running_ && kind_ != PedestalKind::Hidden; }
     void reset() noexcept { *this = PedestalSlot{}; }

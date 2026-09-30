@@ -63,7 +63,6 @@ public:
     /// Continues a match in which the previous host left: the next turn sealed is `resume_turn`, every survivor is told (Resume) and gets the turns
     /// it misses, and the first turn drops the old host and every seat of the roster that did not follow. Instead of start().
     void resume(uint32_t now_ms, uint32_t resume_turn, uint8_t old_host, const std::vector<PeerState>& survivors);
-    bool started() const noexcept { return started_; }
 
     /// A command of the host's own player
     void submit_local(sim::Command command);
@@ -90,7 +89,6 @@ public:
     bool client_present(uint8_t player) const noexcept { return player < sim::MAX_PLAYERS && clients_[player].present; }
     uint32_t violations(uint8_t player) const noexcept { return player < sim::MAX_PLAYERS ? clients_[player].violations : 0; }
     LockstepRunner& runner() noexcept { return *runner_; }
-    const Sequencer& sequencer() const noexcept { return sequencer_; }
     uint8_t epoch() const noexcept { return cfg_.epoch; }
     uint8_t host_player() const noexcept { return cfg_.host_player; }
 
@@ -158,7 +156,6 @@ public:
     /// A link to another guest, for host migration; the connection outlives the session
     void set_peer(uint8_t seat, Connection* link);
     void start(uint32_t now_ms);
-    bool started() const noexcept { return started_; }
 
     /// The player's command, sent to the host (which stamps the issuer). False when there is no host (an election is going on).
     bool submit(sim::Command command);
@@ -177,8 +174,6 @@ public:
     const DesyncMsg& desync() const noexcept { return desync_; }
     bool connected() const noexcept { return conn_ != nullptr && conn_->is_open(); }
     uint32_t rtt_ms() const noexcept { return rtt_ms_; }
-    /// When anything last arrived from the host
-    uint32_t last_heard_ms() const noexcept { return last_heard_ms_; }
     LockstepRunner& runner() noexcept { return *runner_; }
 
     uint8_t player() const noexcept { return cfg_.player; }

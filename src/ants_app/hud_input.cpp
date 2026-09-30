@@ -5,7 +5,6 @@
 #include "ants_app/hud.hpp"
 
 #include <algorithm>
-#include <cstdlib>
 
 #include "ants_sim/game_strings.hpp"
 

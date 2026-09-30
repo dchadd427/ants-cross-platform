@@ -3,7 +3,6 @@
 #include <cstdint>
 #include <cstddef>
 #include <array>
-#include <string>
 #include <ostream>
 
 namespace ants::assets {

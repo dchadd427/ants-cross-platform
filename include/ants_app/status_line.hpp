@@ -47,7 +47,6 @@ public:
     }
 
     const std::string& text() const noexcept { return text_; }
-    bool empty() const noexcept { return text_.empty(); }
     bool flashing() const noexcept { return flashing_; }
     uint32_t age_ticks() const noexcept { return age_ticks_; }
 

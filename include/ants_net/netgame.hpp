@@ -80,7 +80,6 @@ public:
     std::vector<Event> take_events();
 
     // ---- state -----------------------------------------------------------------------------------------------------------------------------------
-    Role role() const noexcept { return role_; }
     Phase phase() const noexcept { return phase_; }
     /// True for the room's owner, and for a guest that took over during the match
     bool is_host() const noexcept { return role_ == Role::Host || host_session_ != nullptr; }
@@ -131,7 +130,6 @@ public:
     bool desynced() const;
     /// Milliseconds into the current tick, for smooth drawing between ticks
     uint32_t sub_tick_ms() const;
-    uint32_t rtt_ms() const;
     /// The turn the local machine executes next
     uint32_t turns_executed() const;
     /// The host is gone and the guests are agreeing on a new one: no turns arrive meanwhile (the game shows a message)
@@ -159,7 +157,6 @@ private:
     sim::SimulationEngine& sim_;
     Role role_{Role::None};
     Phase phase_{Phase::Off};
-    std::string name_;
     uint8_t seat_{255};
     uint16_t listen_port_{0};
     uint32_t now_{0};

@@ -4,7 +4,6 @@
 #include <string>
 #include <vector>
 #include <deque>
-#include <memory>
 #include <array>
 #include <functional>
 
@@ -18,14 +17,6 @@
 
 namespace ants::app {
 
-/**
- * @brief Active input modes for the playfield and HUD.
- */
-enum class InputMode : uint8_t {
-    Normal = 0,
-    OrderTargeting,
-    MarqueeSelecting
-};
 
 /**
  * @brief Interactive button state descriptor.
@@ -35,11 +26,7 @@ struct UIButton {
     int32_t y{0};
     int32_t w{0};
     int32_t h{0};
-    uint32_t sprite_up{0};
-    uint32_t sprite_down{0};
-    uint32_t sprite_label{0};
     bool is_pressed{false};
-    bool is_enabled{true};
     bool is_active{false}; // Highlighted when mode is armed
     bool is_hovered{false};
 
@@ -53,34 +40,9 @@ struct UIButton {
  */
 class HUD {
 public:
-    // Virtual 640x480 screen layout constants
-    static constexpr int32_t SCREEN_WIDTH      = 640;
-    static constexpr int32_t SCREEN_HEIGHT     = 480;
-
+    // Where the map view is drawn on the virtual 640x480 screen (docs 5.44: the original's view is (16, 21) - (458, 461), see MAP_LEFT .. below)
     static constexpr int32_t PLAYFIELD_X       = 17;
     static constexpr int32_t PLAYFIELD_Y       = 22;
-    static constexpr int32_t PLAYFIELD_WIDTH   = 441;
-    static constexpr int32_t PLAYFIELD_HEIGHT  = 439;
-
-    static constexpr int32_t RADAR_X           = 480;
-    static constexpr int32_t RADAR_Y           = 22;
-    static constexpr int32_t RADAR_WIDTH       = 160;
-    static constexpr int32_t RADAR_HEIGHT      = 104;
-
-    static constexpr int32_t CARD_X            = 480;
-    static constexpr int32_t CARD_Y            = 126;
-    static constexpr int32_t CARD_WIDTH        = 160;
-    static constexpr int32_t CARD_HEIGHT       = 128;
-
-    static constexpr int32_t HATCH_X           = 480;
-    static constexpr int32_t HATCH_Y           = 254;
-    static constexpr int32_t HATCH_WIDTH       = 160;
-    static constexpr int32_t HATCH_HEIGHT      = 106;
-
-    static constexpr int32_t ACTIONS_X         = 480;
-    static constexpr int32_t ACTIONS_Y         = 360;
-    static constexpr int32_t ACTIONS_WIDTH     = 160;
-    static constexpr int32_t ACTIONS_HEIGHT    = 101;
 
     // The map view rectangle of the original (0x1026d6a), half-open: pointers outside it are a plain arrow and pedestals fire on presses there
     static constexpr int32_t MAP_LEFT   = 16;
@@ -91,10 +53,6 @@ public:
     /// The minimap (480, 35) - (599, 126)
     static constexpr bool in_minimap_rect(int32_t x, int32_t y) noexcept { return x >= 480 && x < 599 && y >= 35 && y < 126; }
 
-    static constexpr int32_t BANNER_X          = 17;
-    static constexpr int32_t BANNER_Y          = 461;
-    static constexpr int32_t BANNER_WIDTH      = 623;
-    static constexpr int32_t BANNER_HEIGHT     = 19;
 
     HUD();
     ~HUD() = default;
@@ -130,7 +88,6 @@ public:
                                const sim::WorldState& world,
                                const sim::Grid& grid,
                                const ViewportCamera& camera) const;
-    CursorType get_current_cursor() const noexcept { return current_cursor_; }
     void set_on_spawn_click_marker(std::function<void(int32_t, int32_t)> cb) { on_spawn_click_marker_ = std::move(cb); }
     void spawn_click_marker(int32_t world_x, int32_t world_y) {
         if (on_spawn_click_marker_) on_spawn_click_marker_(world_x, world_y);
@@ -195,9 +152,6 @@ public:
     void select_all_friendly(const sim::WorldState& world);
     void select_ants_in_rect(int32_t x1, int32_t y1, int32_t x2, int32_t y2, const sim::WorldState& world, bool additive = false);
     bool is_multi_select() const noexcept { return is_multi_select_mode_ || selected_ant_ids_.size() > 1; }
-    bool is_multi_select_mode() const noexcept { return is_multi_select_mode_; }
-    void set_multi_select_mode(bool multi) noexcept { is_multi_select_mode_ = multi; }
-    bool has_friendly_selected(const sim::WorldState& world) const noexcept;
 
     // Input task (Ants.exe INPUT, every 50 ms): edge scrolling with the pointer and the minimap drag; see edge_scroll.hpp. `map_w` / `map_h`
     // are the map's size in tiles. Returns true when the view moved. Nothing happens while a dialog is open or the left button is captured.
@@ -263,9 +217,6 @@ public:
     /// are hit as well, and fog is only looked at for the tile under the pointer.
     const sim::AntSnapshot* pick_ant_at(const sim::WorldState& world, int32_t world_x, int32_t world_y) const;
 
-    // Local player identity
-    uint8_t get_local_player_id() const noexcept { return local_player_id_; }
-    void set_local_player_id(uint8_t id) noexcept { local_player_id_ = id; }
 
     // Pedestal Action Buttons
     const UIButton& get_move_pedestal_button() const noexcept { return move_pedestal_button_; }
@@ -304,15 +255,10 @@ public:
         static const std::string empty;
         return (index < 4) ? quick_chat_keys_[index] : empty;
     }
-    void set_quick_chat_key(size_t index, std::string text) {
-        if (index < 4) quick_chat_keys_[index] = std::move(text);
-    }
     int get_active_quick_chat_edit() const noexcept { return active_quick_chat_edit_; }
-    void set_active_quick_chat_edit(int idx) noexcept { active_quick_chat_edit_ = idx; }
 
     /// Ctrl+L (0x1026440): the ant draw prints the hit points of every ant as text at its sprite position
     bool is_show_hp() const noexcept { return show_hp_; }
-    void set_show_hp(bool show) noexcept { show_hp_ = show; }
 
     /// The alliance dialogs (Ants.exe FUN_01015b65 invitation, FUN_010160e2 waiting, FUN_01016438 confirmation; docs 5.42). They follow from the state of the
     /// simulation, never from an event: the invitee sees the question while an offer to it is pending (Accept / Decline; keys A, D, Esc), the proposer sees the
@@ -329,7 +275,6 @@ public:
     bool is_match_start_modal_active() const noexcept { return show_match_start_modal_; }
     void start_match_modal() noexcept { release_capture(); show_match_start_modal_ = true; match_start_modal_ticks_ = 0; }
     void dismiss_match_start_modal() noexcept { show_match_start_modal_ = false; }
-    bool is_right_mouse_held() const noexcept { return right_mouse_held_; }
     bool is_shift_held() const noexcept;
     void set_shift_held(bool held) noexcept { shift_held_ = held; }
 
@@ -394,7 +339,6 @@ private:
     // Marquee drag selection
     bool show_hp_{false};
     bool is_dragging_{false};
-    bool right_mouse_held_{false};
     bool shift_held_{false};
     int32_t drag_start_x_{0};
     int32_t drag_start_y_{0};

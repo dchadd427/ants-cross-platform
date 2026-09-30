@@ -1,6 +1,5 @@
 #include "ants_assets/asset_archive.hpp"
 #include <fstream>
-#include <cstring>
 #include <limits>
 
 namespace ants::assets {

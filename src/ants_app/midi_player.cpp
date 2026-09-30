@@ -427,8 +427,5 @@ void MidiPlayer::set_headless_mode(bool headless) noexcept {
     if (impl_) impl_->headless = headless;
 }
 
-bool MidiPlayer::is_headless_mode() const noexcept {
-    return impl_ ? impl_->headless : false;
-}
 
 } // namespace ants::app

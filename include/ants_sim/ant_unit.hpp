@@ -2,10 +2,7 @@
 
 #include <cstdint>
 #include <cstddef>
-#include <string>
 #include <vector>
-#include <array>
-#include <optional>
 #include "ants_assets/mirroring.hpp"
 #include "ants_sim/grid.hpp"
 #include "ants_sim/movement_tables.hpp"
@@ -33,7 +30,6 @@ enum class UnitState : uint8_t {
     Idle           = 0,  // Stationary, standing ready (*st*, Action 7)
     Walking        = 1,  // Traversing terrain towards waypoint (*wg* / *ws*, Action 2)
     Attacking      = 2,  // Melee attack wind-up and strike (*at*, Action 1)
-    Ability        = 3,  // Executing unit ability
     Flinch         = 4,  // Hit reaction flinch (*gh*, Action 10)
     Knockback      = 5,  // Ballistic airborne flight (*gf*, Action 14)
     Stunned        = 7,  // Immobilized recovery state (Action 12, 12 ticks)
@@ -57,20 +53,6 @@ enum class UnitState : uint8_t {
     PoweringUp        = 28  // Power-up pick-up clip (action 4, getpow: the type has already changed)
 };
 
-/**
- * @brief Returns the duration in simulation ticks of the *cg301 Can't Go animation.
- */
-inline constexpr uint16_t get_cant_go_duration(AntType type) noexcept {
-    switch (type) {
-        case AntType::Worker:  return 6;
-        case AntType::Bomber:  return 15;
-        case AntType::Fire:    return 9;
-        case AntType::Thief:   return 11;
-        case AntType::Combat:  return 6;
-        case AntType::Swimmer: return 12;
-    }
-    return 8;
-}
 
 /**
  * @brief Unit death classification status.
@@ -79,8 +61,6 @@ inline constexpr uint16_t get_cant_go_duration(AntType type) noexcept {
 enum class DeathStatus : uint8_t {
     Alive        = 0x00,
     CombatKilled = 0x01,
-    BombKilled   = 0x02,
-    FireKilled   = 0x03,
     Drowned      = 0x0F  // Authentic code 0x0F from Ants.exe disassembly 0x101b86e
 };
 
@@ -98,33 +78,12 @@ enum class TeamId : uint8_t {
 using Direction = ants::assets::Direction;
 
 /**
- * @brief Fixed-point arithmetic constants for 20 Hz movement determinism.
- * 16.16 fixed point: 16 bits integer, 16 bits fractional.
- */
-struct FixedPointMath {
-    static constexpr int32_t SHIFT = 16;
-    static constexpr int32_t ONE   = 1 << SHIFT;
-    static constexpr int32_t HALF  = ONE >> 1;
-
-    static constexpr int32_t from_int(int32_t v) noexcept { return v << SHIFT; }
-    static constexpr int32_t to_int(int32_t v)   noexcept { return v >> SHIFT; }
-    static constexpr int32_t mul(int32_t a, int32_t b) noexcept {
-        return static_cast<int32_t>((static_cast<int64_t>(a) * b) >> SHIFT);
-    }
-    static constexpr int32_t div(int32_t a, int32_t b) noexcept {
-        return static_cast<int32_t>((static_cast<int64_t>(a) << SHIFT) / b);
-    }
-};
-
-/**
  * @brief AntUnit entity representing an active unit on the game grid.
  */
 class AntUnit {
 public:
     static constexpr uint16_t MAX_HP          = 10;
     static constexpr uint16_t STARTING_HP     = 10;
-    static constexpr uint16_t STANDARD_DAMAGE = 1;
-    static constexpr uint16_t COMBAT_DAMAGE   = 2;
 
     // Locomotion has no speed constants: in Ants.exe an ant moves only when a walk-animation frame
     // ends, by that frame's dx/dy from ants.chd Table 4 (see movement_tables.hpp and
@@ -284,14 +243,7 @@ public:
     bool in_hill_action() const noexcept {
         return loco_action == kActionEnter || loco_action == kActionHatch || state == UnitState::EnteringBase;
     }
-    bool is_orderable() const noexcept {
-        return is_alive() && state != UnitState::Knockback && state != UnitState::Drowning &&
-               state != UnitState::EnteringBase && state != UnitState::Infiltrating && state != UnitState::PoweringUp;
-    }
 
-    void heal_full() noexcept {
-        hp = max_hp;
-    }
 
     void set_tile_pos(int32_t tx, int32_t ty) noexcept {
         pos.x = tx;
@@ -311,12 +263,6 @@ public:
         fx_y = py << 16;
     }
 
-    void sync_pixel_from_fx() noexcept {
-        pixel_x = fx_x >> 16;
-        pixel_y = fx_y >> 16;
-        pos.x = (pixel_x >= 0) ? (pixel_x / 32) : ((pixel_x - 31) / 32);
-        pos.y = (pixel_y >= 0) ? (pixel_y / 32) : ((pixel_y - 31) / 32);
-    }
 
     void pick_up_food(uint16_t units = 1, uint16_t points = 25) noexcept {
         holding = 1;
@@ -329,13 +275,6 @@ public:
         carried_points = points;
     }
 
-    std::pair<uint16_t, uint16_t> deposit_food() noexcept {
-        std::pair<uint16_t, uint16_t> res = {carried_food, carried_points};
-        holding = 0;
-        carried_food = 0;
-        carried_points = 0;
-        return res;
-    }
 
     void clear_inventory() noexcept {
         holding = 0;

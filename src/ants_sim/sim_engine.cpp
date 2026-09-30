@@ -1,12 +1,9 @@
 #include "ants_sim/sim_engine.hpp"
 #include "sim_engine_impl.hpp"
 #include "ants_sim/game_strings.hpp"
-#include "ants_sim/pathfinding.hpp"
-#include <unordered_map>
 #include <memory>
 #include <algorithm>
 #include <cmath>
-#include <iostream>
 
 namespace ants::sim {
 
@@ -218,24 +215,6 @@ void SimulationEngine::init_test_world(uint32_t width, uint32_t height, uint32_t
     }
 }
 
-void SimulationEngine::reset() {
-    impl_->roster_mask_ = 0x0Fu;
-    impl_->dropped_mask_ = 0;
-    impl_->match_state_ = MatchState::NotStarted;
-    impl_->current_tick_ = 0;
-    impl_->match_limit_ms_ = 0;
-    impl_->set_match_clock(0);
-    impl_->checkgo_stage_ = 0;
-    impl_->checkgo_threshold_ms_ = 61000;
-    impl_->ants_.clear();
-    impl_->audio_queue_.clear();
-    impl_->news_queue_.clear();
-    impl_->next_ant_id_ = 1;
-    impl_->stats_.reset();
-    impl_->world_state_dirty_ = true;
-    impl_->fog_revealed_.clear();
-    impl_->movement_reset();
-}
 
 void SimulationEngine::tick() {
     if (impl_->match_state_ == MatchState::GameOver) {
@@ -320,7 +299,7 @@ void SimulationEngine::tick() {
 
     // 4.9 Original locomotion (Ants.exe): animation-driven walking, tile blocking with ANTPAUSE waits and
     // the PATHMGR path task, processed in exact millisecond order across all ants.
-    impl_->movement_tick(*this);
+    impl_->movement_tick();
     impl_->tick_battle_clouds();
 
     // 5. Step unit timers (food is harvested by the ants' own action 5 clip, see harvest_system in action_system.cpp)
@@ -775,9 +754,7 @@ void SimulationEngine::form_alliance(uint8_t p1, uint8_t p2) {
 
 const WorldState& SimulationEngine::get_world_state() const {
     if (impl_->world_state_dirty_) {
-        impl_->world_state_cache_.tick_number = impl_->current_tick_;
         impl_->world_state_cache_.match_time_remaining_ms = impl_->match_time_remaining_ms_;
-        impl_->world_state_cache_.match_state = impl_->match_state_;
         impl_->world_state_cache_.width = impl_->grid_.width();
         impl_->world_state_cache_.height = impl_->grid_.height();
         impl_->world_state_cache_.cells = impl_->grid_.cells();
@@ -802,7 +779,6 @@ const WorldState& SimulationEngine::get_world_state() const {
             s.anim_frame = a->anim_subitem;
             s.is_holding = a->is_holding();
             s.carried_points = a->carried_points;
-            s.is_airborne = (a->state == UnitState::Knockback);
             s.is_stunned = a->is_stunned();
             s.is_swimming = (a->state == UnitState::Swimming || a->in_water);
             s.is_drowning = (a->state == UnitState::Drowning);
@@ -848,7 +824,6 @@ const WorldState& SimulationEngine::get_world_state() const {
             s.drop_y = fd.drop_pos.y;
             s.is_dropping = fd.is_dropping;
             s.drop_elapsed_ms = fd.drop_tick * 50u;
-            s.drop_frame = effect_spec::dropper_frame_at(s.drop_elapsed_ms);
             s.powerup_type = fd.powerup_type;
             impl_->world_state_cache_.flower_droppers.push_back(s);
         }
@@ -942,9 +917,6 @@ Grid& SimulationEngine::grid_mut() {
     return impl_->grid_;
 }
 
-const PRNG& SimulationEngine::prng() const {
-    return impl_->prng_;
-}
 
 const MatchStatsManager& SimulationEngine::stats_manager() const {
     return impl_->stats_;
@@ -1020,13 +992,6 @@ AntUnit& SimulationEngine::get_unit(uint32_t ant_id) {
     return *u;
 }
 
-const AntUnit& SimulationEngine::get_unit(uint32_t ant_id) const {
-    const AntUnit* u = impl_->find_unit(ant_id);
-    if (!u) {
-        throw std::runtime_error("Unit not found");
-    }
-    return *u;
-}
 
 // Test hook: the ant is removed at once (Kill 0x1020ff6 without the death clip).
 void SimulationEngine::kill_unit(uint32_t ant_id) {
@@ -1200,9 +1165,6 @@ const std::vector<LocoTraceEvent>& SimulationEngine::locomotion_trace() const {
     return impl_->loco_trace_;
 }
 
-void SimulationEngine::clear_locomotion_trace() {
-    impl_->loco_trace_.clear();
-}
 
 bool SimulationEngine::validate_cardinal_placement(TileCoord from, TileCoord to) const {
     int32_t dx = to.x - from.x;
@@ -1480,9 +1442,6 @@ void SimulationEngine::record_player_stat(uint8_t player_id, StatType stat, uint
     impl_->stats_.record_stat(player_id, stat, value);
 }
 
-bool SimulationEngine::has_other_living_ant_at(TileCoord pos, uint32_t ignore_ant_id) const {
-    return impl_->has_other_living_ant_at(pos, ignore_ant_id);
-}
 
 // Test hook: the ant sets off the bomb on `bomb_pos` (path completion case 0xA / message 0xF of the original).
 void SimulationEngine::trigger_bomb_detonation(uint32_t ant_id, TileCoord bomb_pos, int32_t /*incoming_dx*/, int32_t /*incoming_dy*/) {

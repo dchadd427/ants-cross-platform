@@ -121,7 +121,7 @@ public:
         uint32_t welcome_timeout_ms{10000};
         uint16_t listen_port{0};             // where this guest accepts the other guests during the match, announced in Hello (0: nowhere)
     };
-    enum class Phase : uint8_t { Connecting, Joining, InRoom, Loading, Loaded, Begun, Rejected, Cancelled, Closed };
+    enum class Phase : uint8_t { Connecting, Joining, InRoom, Loading, Loaded, Begun, Rejected, Closed };
     struct Event {
         enum class Type : uint8_t { RoomChanged, StartRequested, Begun, Cancelled, Rejected, Disconnected };
         Type type{Type::RoomChanged};
@@ -156,7 +156,6 @@ private:
     CancelMsg::Reason cancel_reason_{CancelMsg::Reason::HostCancelled};
     uint8_t cancel_player_{255};
     uint32_t joined_at_ms_{0};
-    bool hello_sent_{false};
     std::vector<Event> events_;
 };
 

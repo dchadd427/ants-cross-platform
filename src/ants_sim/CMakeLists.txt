@@ -7,7 +7,6 @@ add_library(ants_sim STATIC
     ability_system.cpp
     movement_tables.cpp
     path_planner.cpp
-    pathfinding.cpp
     sim_engine.cpp
     command_system.cpp
     state_hash.cpp

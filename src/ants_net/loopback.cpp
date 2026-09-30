@@ -1,6 +1,7 @@
 #include "ants_net/loopback.hpp"
 
 #include <algorithm>
+#include <deque>
 
 namespace ants::net {
 
@@ -16,7 +17,6 @@ public:
         const uint32_t at = std::max(net_.now_ + delay, last_deliver_);
         last_deliver_ = at;
         peer_->inbox_.push_back(Pending{at, message});
-        ++net_.messages_;
         return true;
     }
     bool poll(std::vector<uint8_t>& message) override {

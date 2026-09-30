@@ -8,10 +8,7 @@
 
 #include <cmath>
 #include <algorithm>
-#include <sstream>
 #include <iomanip>
-#include <iostream>
-#include <unordered_set>
 
 namespace ants::app {
 
@@ -128,27 +125,27 @@ void HUD::init(uint8_t local_player_id) {
     add_news_flash(0, "Game started! Go get that food!");     // FUN_01022432: "[0:00] News Flash:", the start message
 
     // Configure Top Header Buttons (x0y0.bmp)
-    help_button_ = {476, 7, 46, 23, 0, 0, 0, false, true, false};
-    options_button_ = {525, 7, 52, 23, 0, 0, 0, false, true, false};
-    quit_button_ = {579, 7, 46, 23, 0, 0, 0, false, true, false};
+    help_button_ = {476, 7, 46, 23, false, false};
+    options_button_ = {525, 7, 52, 23, false, false};
+    quit_button_ = {579, 7, 46, 23, false, false};
 
     // The three pedestal slots of the original (FUN_01028d30, half-open): slot 1 (Move / hatch / ally) (482, 152) - (525, 225),
     // slot 2 (ability) (539, 152) - (582, 225), slot 3 (Stop) (597, 189) - (628, 227)
-    move_pedestal_button_ = {482, 152, 43, 73, 0, 0, 0, false, true, false};
-    ability_pedestal_button_ = {539, 152, 43, 73, 0, 0, 0, false, true, false};
-    stop_button_ = {597, 189, 31, 38, 0, 0, 0, false, true, false};
+    move_pedestal_button_ = {482, 152, 43, 73, false, false};
+    ability_pedestal_button_ = {539, 152, 43, 73, false, false};
+    stop_button_ = {597, 189, 31, 38, false, false};
 
     // Configure Authentic Send-to Toggle Button at (532, 443, 44, 24)
-    send_to_button_ = {532, 443, 44, 24, 0, 0, 0, false, true, false};
+    send_to_button_ = {532, 443, 44, 24, false, false};
     // Configure Authentic Team Toggle Button at (579, 443, 46, 24)
-    team_button_    = {579, 443, 46, 24, 0, 0, 0, false, true, false};
+    team_button_    = {579, 443, 46, 24, false, false};
     is_on_team_ = false;
     chat_input_.clear();
     cursor_blink_ticks_ = 0;
 
     // Configure Quit Confirmation Dialog Buttons
-    yes_button_ = {180, 260, 49, 24, 0, 0, 0, false, true, false}; // dyn_byes1 part (80,160) + origin (100,100)
-    no_button_  = {292, 260, 49, 24, 0, 0, 0, false, true, false}; // dyn_bno1 part (192,160) + origin (100,100)
+    yes_button_ = {180, 260, 49, 24, false, false}; // dyn_byes1 part (80,160) + origin (100,100)
+    no_button_  = {292, 260, 49, 24, false, false}; // dyn_bno1 part (192,160) + origin (100,100)
 
     show_match_start_modal_ = false;
     match_start_modal_ticks_ = 0;
@@ -165,18 +162,11 @@ void HUD::init(uint8_t local_player_id) {
     hatch_button_.y = 152;
     hatch_button_.w = 43;
     hatch_button_.h = 73;
-    hatch_button_.sprite_up = 2683;    // buthatup.bmp
-    hatch_button_.sprite_down = 2684;  // buthatd.bmp
-    hatch_button_.sprite_label = 2682; // labhatch.bmp
 
     team_up_button_.x = 482;
     team_up_button_.y = 152;
     team_up_button_.w = 43;
     team_up_button_.h = 73;
-    team_up_button_.sprite_up = 2576;    // butdipu.bmp
-    team_up_button_.sprite_down = 2587;  // butdipd.bmp
-    team_up_button_.sprite_label = 2575; // labdib.bmp
-    team_up_button_.is_enabled = true;
     team_up_button_.is_pressed = false;
     team_up_button_.is_active = false;
 }
@@ -845,15 +835,15 @@ void HUD::open_alliance_dialog(AllianceDialog kind, uint8_t other, std::string t
     alliance_button_b_ = {};
     switch (kind) {
         case AllianceDialog::Invitation:
-            alliance_button_a_ = {152, 260, 80, 24, 0, 0, 0, false, true, false};      // Accept  (accpt1.bmp at part offset (52, 160))
-            alliance_button_b_ = {284, 260, 80, 24, 0, 0, 0, false, true, false};      // Decline (decl1.bmp at (184, 160))
+            alliance_button_a_ = {152, 260, 80, 24, false, false};      // Accept  (accpt1.bmp at part offset (52, 160))
+            alliance_button_b_ = {284, 260, 80, 24, false, false};      // Decline (decl1.bmp at (184, 160))
             break;
         case AllianceDialog::Waiting:
-            alliance_button_a_ = {220, 260, 80, 23, 0, 0, 0, false, true, false};      // Withdraw (withd1.bmp at (120, 160))
+            alliance_button_a_ = {220, 260, 80, 23, false, false};      // Withdraw (withd1.bmp at (120, 160))
             break;
         case AllianceDialog::BreakConfirm:
-            alliance_button_a_ = {180, 260, 49, 24, 0, 0, 0, false, true, false};      // Yes (yes1.bmp at (80, 160))
-            alliance_button_b_ = {292, 260, 49, 24, 0, 0, 0, false, true, false};      // No  (no1.bmp at (192, 160))
+            alliance_button_a_ = {180, 260, 49, 24, false, false};      // Yes (yes1.bmp at (80, 160))
+            alliance_button_b_ = {292, 260, 49, 24, false, false};      // No  (no1.bmp at (192, 160))
             break;
         case AllianceDialog::None:
             break;
@@ -1174,23 +1164,6 @@ bool HUD::is_shift_held() const noexcept {
     return shift_held_ || ((static_cast<uint16_t>(SDL_GetModState()) & KMOD_SHIFT) != 0);
 }
 
-bool HUD::has_friendly_selected(const sim::WorldState& world) const noexcept {
-    for (uint32_t aid : selected_ant_ids_) {
-        for (const auto& a : world.ants) {
-            if (a.id == aid && a.player_id == local_player_id_ && a.hp > 0 && !a.is_drowning) {
-                return true;
-            }
-        }
-    }
-    if (selected_ant_id_ != 0) {
-        for (const auto& a : world.ants) {
-            if (a.id == selected_ant_id_ && a.player_id == local_player_id_ && a.hp > 0 && !a.is_drowning) {
-                return true;
-            }
-        }
-    }
-    return false;
-}
 
 void HUD::select_all_friendly(const sim::WorldState& world) {
     // Ctrl+A (0x1026237): FUN_01028c44(0), then every ant of the player's own table is added (no state filter); panel 3 for one, 4 for several,
@@ -1276,9 +1249,6 @@ void HUD::select_ants_in_rect(int32_t x1, int32_t y1, int32_t x2, int32_t y2, co
 bool HUD::handle_mouse_down(int32_t x, int32_t y, uint8_t button,
                             sim::SimulationEngine& sim, ViewportCamera& camera, [[maybe_unused]] uint16_t mod) {
     if (button != SDL_BUTTON_LEFT && button != SDL_BUTTON_RIGHT) return false;
-    if (button == SDL_BUTTON_RIGHT) {
-        right_mouse_held_ = true;
-    }
 
     // 0. Overlays and Modals intercept clicks first
     if (show_quick_help_) {
@@ -1463,9 +1433,6 @@ bool HUD::handle_mouse_up(int32_t x, int32_t y, uint8_t button,
     const bool fire_quit = left_release && quit_button_.is_pressed && quit_button_.contains(x, y);
     const bool fire_all = left_release && chat_enabled_ && send_to_button_.is_pressed && send_to_button_.contains(x, y);
     const bool fire_team = left_release && chat_enabled_ && is_on_team_ && team_button_.is_pressed && team_button_.contains(x, y);
-    if (button == SDL_BUTTON_RIGHT) {
-        right_mouse_held_ = false;
-    }
     help_button_.is_pressed = false;
     options_button_.is_pressed = false;
     quit_button_.is_pressed = false;

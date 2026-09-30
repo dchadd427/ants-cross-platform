@@ -15,7 +15,6 @@
 #include "ants_sim/sim_engine.hpp"
 #include "ants_sim/effect_specs.hpp"
 #include "ants_sim/movement_tables.hpp"
-#include "ants_sim/pathfinding.hpp"
 #include "ants_app/audio_mixer.hpp"
 #include "ants_app/midi_player.hpp"
 #include "ants_app/renderer.hpp"

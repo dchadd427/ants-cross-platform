@@ -21,9 +21,6 @@ struct MapCell {
     uint16_t properties{0};              // Word 3 from file
 
     constexpr bool is_empty() const noexcept { return tile_index == LVL_EMPTY_TILE; }
-    constexpr uint16_t word1() const noexcept { return tile_index; }
-    constexpr uint16_t word2() const noexcept { return flags; }
-    constexpr uint16_t word3() const noexcept { return properties; }
 };
 
 /**
@@ -58,13 +55,6 @@ struct FoodSchedule {
     std::vector<FoodItemVariant> variants;
 };
 
-/**
- * @brief 2D coordinate point for patrol paths.
- */
-struct WaypointPoint {
-    uint32_t px{0};
-    uint32_t py{0};
-};
 
 /**
  * @brief Waypoint / patrol trigger (Block 4).
@@ -94,7 +84,6 @@ public:
         constexpr operator uint32_t() const noexcept { return val; }
         constexpr operator uint32_t&() noexcept { return val; }
         constexpr uint32_t operator()() const noexcept { return val; }
-        DimensionProp& operator=(uint32_t v) noexcept { val = v; return *this; }
     };
 
     DimensionProp width{0};           // Grid width (31, 40, 60)
@@ -106,10 +95,7 @@ public:
         uint16_t operator()(uint32_t x, uint32_t y) const noexcept;
     } layer1_terrain;                         // Base walkable/obstacle/water grid
 
-    struct Layer2InteractiveProp : public std::vector<MapCell> {
-        const std::vector<MapCell>& operator()() const noexcept { return *this; }
-        std::vector<MapCell>& operator()() noexcept { return *this; }
-    } layer2_interactive;                     // Interactive items/food/spawns/bridges
+    std::vector<MapCell> layer2_interactive;  // Interactive items/food/spawns/bridges
 
     // Trailing Configuration Blocks supporting both .block and .block()
     struct AnthillSpawnsProp : public std::vector<AnthillSpawn> {
@@ -192,9 +178,7 @@ public:
     // --- Grid Cell & Container Accessors ---
     const MapCell& get_cell_layer1(uint32_t x, uint32_t y) const;
     const MapCell& get_cell_layer2(uint32_t x, uint32_t y) const;
-    const std::vector<MapCell>& layer1_cells() const noexcept { return layer1_terrain; }
     std::vector<MapCell>& layer1_cells() noexcept { return layer1_terrain; }
-    const std::vector<MapCell>& layer2_cells() const noexcept { return layer2_interactive; }
     std::vector<MapCell>& layer2_cells() noexcept { return layer2_interactive; }
 
     // Dictionary Lookups
@@ -216,7 +200,6 @@ inline uint16_t LevelData::Layer1TerrainProp::operator()(uint32_t x, uint32_t y)
     return parent ? parent->get_cell_layer1(x, y).tile_index : LVL_EMPTY_TILE;
 }
 
-using LVLMap = LevelData;
 
 /**
  * @brief Deserializer for Maps/ *.LVL files.

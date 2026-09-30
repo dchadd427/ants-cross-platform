@@ -2,7 +2,6 @@
 #include "ants_app/text_layout.hpp"
 #include "ants_assets/lvl_parser.hpp"
 #include "ants_app/ui_anim.hpp"
-#include <iostream>
 #include <algorithm>
 #include <filesystem>
 #include <unordered_set>
@@ -51,7 +50,6 @@ void MapSelectScreen::init(const std::string& maps_dir) {
         entry.description = d.desc;
         entry.width = d.w;
         entry.height = d.h;
-        entry.anthills_count = (entry.width <= 31) ? 2 : 4;
         entry.minutes = d.minutes;
 
         // Dynamically parse authentic .LVL header from file if present
@@ -66,13 +64,6 @@ void MapSelectScreen::init(const std::string& maps_dir) {
             }
             if (!lvl.description.empty()) {
                 entry.description = lvl.description;
-            }
-            if (!lvl.anthill_spawns.empty()) {
-                uint32_t count = 0;
-                for (const auto& sp : lvl.anthill_spawns) {
-                    if (sp.team_id < 4) ++count;
-                }
-                if (count > 0) entry.anthills_count = count;
             }
         }
 
@@ -103,8 +94,7 @@ void MapSelectScreen::init(const std::string& maps_dir) {
                         extra.description = "Custom map";
                         extra.width = 60;
                         extra.height = 60;
-                        extra.anthills_count = 4;
-                        extra.minutes = 10;
+                                        extra.minutes = 10;
 
                         ants::assets::LevelData lvl;
                         if (lvl.load_from_file(extra.full_path)) {
@@ -114,13 +104,6 @@ void MapSelectScreen::init(const std::string& maps_dir) {
                                 extra.height = lvl.height;
                             }
                             if (!lvl.description.empty()) extra.description = lvl.description;
-                            if (!lvl.anthill_spawns.empty()) {
-                                uint32_t count = 0;
-                                for (const auto& sp : lvl.anthill_spawns) {
-                                    if (sp.team_id < 4) ++count;
-                                }
-                                if (count > 0) extra.anthills_count = count;
-                            }
                         }
                         maps_.push_back(std::move(extra));
                     }
@@ -130,7 +113,6 @@ void MapSelectScreen::init(const std::string& maps_dir) {
     }
 
     selected_index_ = 0;
-    connection_ticks_ = 0;
     fog_of_war_ = false;
     player_ready_mask_ = 0b0011; // Player 0 & 1 ready, Player 2 unready matching reference screenshot
 
@@ -138,7 +120,6 @@ void MapSelectScreen::init(const std::string& maps_dir) {
     btn_quit_hovered_ = false;
     btn_up_hovered_ = false;
     btn_down_hovered_ = false;
-    btn_drop_hovered_ = false;
     btn_fow_on_hovered_ = false;
     btn_fow_off_hovered_ = false;
 
@@ -146,7 +127,6 @@ void MapSelectScreen::init(const std::string& maps_dir) {
     btn_quit_pressed_ = false;
     btn_up_pressed_ = false;
     btn_down_pressed_ = false;
-    btn_drop_pressed_ = false;
 }
 
 void MapSelectScreen::set_selected_index(int32_t idx) noexcept {
@@ -212,9 +192,6 @@ void MapSelectScreen::handle_mouse_motion(int32_t screen_x, int32_t screen_y) {
 
     btn_quit_hovered_ = (screen_x >= BTN_QUIT_X && screen_x < BTN_QUIT_X + BTN_QUIT_W &&
                          screen_y >= BTN_QUIT_Y && screen_y < BTN_QUIT_Y + BTN_QUIT_H);
-
-    btn_drop_hovered_ = (screen_x >= BTN_DROP_X && screen_x < BTN_DROP_X + BTN_DROP_W &&
-                         screen_y >= BTN_DROP_Y && screen_y < BTN_DROP_Y + BTN_DROP_H);
 
     btn_fow_on_hovered_ = (screen_x >= BTN_FOW_ON_X && screen_x < BTN_FOW_ON_X + BTN_FOW_ON_W &&
                            screen_y >= BTN_FOW_ON_Y && screen_y < BTN_FOW_ON_Y + BTN_FOW_ON_H);
@@ -285,7 +262,6 @@ void MapSelectScreen::handle_mouse_down(int32_t screen_x, int32_t screen_y, uint
     // Drop Button: toggles Player 2 ready state (a placeholder of the local screen; a room shows the real players)
     if (!room_.networked && screen_x >= BTN_DROP_X && screen_x < BTN_DROP_X + BTN_DROP_W &&
         screen_y >= BTN_DROP_Y && screen_y < BTN_DROP_Y + BTN_DROP_H) {
-        btn_drop_pressed_ = true;
         play_sfx(sim::SoundID::ButtonClick);
         toggle_player_ready(2);
         return;
@@ -327,7 +303,6 @@ void MapSelectScreen::handle_mouse_up(int32_t, int32_t, uint8_t button) {
         btn_down_pressed_ = false;
         btn_start_pressed_ = false;
         btn_quit_pressed_ = false;
-        btn_drop_pressed_ = false;
     }
 }
 
@@ -357,8 +332,6 @@ void MapSelectScreen::handle_key_down(SDL_Keycode key) {
 
 void MapSelectScreen::render(IRenderer& renderer, const ants::assets::AssetArchive& archive) {
     using ants::assets::ColorRGBA;
-
-    connection_ticks_++;
 
     // 1. Authentic st_screen composite setup dialog (129 frame elements from Table 4 Animation 106)
     // Rendered in reverse order to produce authentic 640x480 terracotta layout with frames,

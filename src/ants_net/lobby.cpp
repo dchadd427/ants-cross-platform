@@ -336,7 +336,6 @@ void ClientLobby::update(uint32_t now_ms) {
             conn_->send(encode(h));
             phase_ = Phase::Joining;
             joined_at_ms_ = now_ms;
-            hello_sent_ = true;
         } else if (conn_->state() != Connection::State::Connecting) {
             phase_ = Phase::Closed;
             events_.push_back(Event{Event::Type::Disconnected});

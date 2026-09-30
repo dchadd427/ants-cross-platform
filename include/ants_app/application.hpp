@@ -3,7 +3,6 @@
 #include <cstdint>
 #include <string>
 #include <memory>
-#include <vector>
 #include <array>
 
 #if defined(__has_include)
@@ -42,7 +41,6 @@ struct ApplicationConfig {
     int window_height{960};
     bool fullscreen{false};
     bool integer_scaling{false};
-    bool vsync{true};
     bool headless{false};
     std::string chd_path{"Original-Ants/ants.chd"};
     std::string default_map_path{"Original-Ants/Maps/TREASURE.LVL"};
@@ -104,19 +102,16 @@ public:
     float get_current_fps() const noexcept { return current_fps_; }
 
     AppState state() const noexcept { return state_; }
-    void set_state(AppState st) noexcept { state_ = st; }
     bool start_game(const std::string& map_path);
     void return_to_map_select();
     MapSelectScreen& map_select() noexcept { return map_select_; }
     uint8_t local_player_id() const noexcept { return local_player_id_; }
     void set_local_player(uint8_t team_id);
 
-    const ApplicationConfig& config() const noexcept { return config_; }
     ants::sim::SimulationEngine& sim() noexcept { return sim_; }
     Renderer& renderer() noexcept { return *renderer_; }
     HUD& hud() noexcept { return hud_; }
     ScorecardModal& scorecard() noexcept { return scorecard_; }
-    AudioMixer& audio_mixer() noexcept { return audio_mixer_; }
     MidiPlayer& midi_player() noexcept { return midi_player_; }
     const ants::assets::AssetArchive& assets() const noexcept { return assets_; }
 
@@ -197,7 +192,6 @@ private:
     bool quick_help_start_pressed_{false};
 
     // 20 Hz Discrete Simulation Timing
-    uint64_t last_tick_time_{0};
     uint64_t last_frame_time_{0};
     int headless_frame_count_{0};
     float tick_accumulator_{0.0f};

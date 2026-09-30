@@ -94,16 +94,6 @@ constexpr int PLAYFIELD_Y = 22;
 constexpr int PLAYFIELD_W = 441;
 constexpr int PLAYFIELD_H = 439;
 
-// Authentic HUD Subsystem Rectangles
-constexpr int MINIMAP_X = 480;
-constexpr int MINIMAP_Y = 22;
-constexpr int MINIMAP_W = 160;
-constexpr int MINIMAP_H = 104;
-
-constexpr int CARD_X = 480;
-constexpr int CARD_Y = 126;
-constexpr int CARD_W = 160;
-constexpr int CARD_H = 128;
 
 constexpr int TILE_SIZE = 32;
 
@@ -151,13 +141,11 @@ struct ViewportCamera {
     }
     void center_on(int32_t world_px, int32_t world_py, uint32_t map_w = 60, uint32_t map_h = 60);
     void clamp_to_bounds(uint32_t map_w, uint32_t map_h);
-    void clamp(uint32_t map_w, uint32_t map_h) { clamp_to_bounds(map_w, map_h); }
 
     bool world_to_screen(int32_t wx, int32_t wy, int32_t& sx, int32_t& sy) const noexcept;
     bool screen_to_world(int32_t sx, int32_t sy, int32_t& wx, int32_t& wy) const noexcept;
 };
 
-using Camera = ViewportCamera;
 
 /**
  * @brief Abstract rendering interface for sprite, shape, and text drawing.
@@ -338,12 +326,9 @@ public:
 
     // Camera Accessors
     ViewportCamera& camera() noexcept { return camera_; }
-    const ViewportCamera& camera() const noexcept { return camera_; }
 
     // Helpers
     SDL_Renderer* get_sdl_renderer() const noexcept { return renderer_; }
-    TextureCache* get_texture_cache() const noexcept { return texture_cache_.get(); }
-    const ants::assets::AssetArchive* get_archive() const noexcept { return archive_; }
     void request_screenshot(const std::string& path) { pending_screenshot_ = path; }
     bool save_screenshot(const std::string& path);
     static size_t get_anim_subitem_by_time(const ants::assets::AnimationSequence& seq, uint32_t now_ms);
@@ -355,14 +340,11 @@ public:
         ++frame_counter_;
     }
     void unpin_animation_clock() noexcept { anim_clock_pin_ms_ = -1; }
-    uint32_t animation_clock_ms() const noexcept { return template_now_ms_; }
 
     // Software Cursor & Transient Effects
     void spawn_transient_effect(const std::string& anim_name, int32_t px, int32_t py, bool is_screen_space = false);
     void update_transient_effects(float dt);
     void render_software_cursor(CursorType type, int32_t screen_x, int32_t screen_y, uint32_t anim_tick = 0);
-    void set_cursor(CursorType type) noexcept { current_cursor_ = type; }
-    CursorType get_cursor() const noexcept { return current_cursor_; }
 
 private:
     void render_terrain_layer1(const ants::sim::Grid& grid);
@@ -487,7 +469,6 @@ private:
     bool show_hp_{false};
     bool integer_scale_{true};
     bool is_fullscreen_{false};
-    CursorType current_cursor_{CursorType::Normal};
     std::vector<TransientEffect> transient_effects_{};
     uint32_t sub_tick_ms_{0};
 };

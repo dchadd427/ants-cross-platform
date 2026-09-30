@@ -3,7 +3,6 @@
 #include <string>
 #include <memory>
 #include <cstdint>
-#include <cstddef>
 
 namespace ants::app {
 
@@ -55,7 +54,6 @@ public:
 
     // Headless / Testing Configuration
     void set_headless_mode(bool headless) noexcept;
-    bool is_headless_mode() const noexcept;
 
     void shutdown();
 

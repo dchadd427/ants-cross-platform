@@ -16,7 +16,6 @@ struct UIRect {
     int32_t w{0};
     int32_t h{0};
 
-    bool valid() const noexcept { return w > 0 && h > 0; }
     bool contains(int32_t px, int32_t py) const noexcept {
         return px >= x && px < x + w && py >= y && py < y + h;
     }
@@ -32,7 +31,5 @@ void draw_animation_frame0(IRenderer& renderer, const assets::AssetArchive& arch
 // Union of the sprite rectangles of frame 0 (an empty rectangle when the animation does not exist).
 UIRect animation_bounds(const assets::AssetArchive& archive, const char* name);
 
-// Sound id carried by frame 0 (the click of the pressed animations is one of these), or -1 when the frame is silent.
-int32_t animation_sound(const assets::AssetArchive& archive, const char* name);
 
 } // namespace ants::app

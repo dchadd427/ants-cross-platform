@@ -23,7 +23,6 @@ inline constexpr size_t kMaxMessageBytes = 64 * 1024;
 inline constexpr size_t kMaxTurnCommands = 512;
 inline constexpr size_t kMaxChatChars = 100;        // the original's chat entry
 inline constexpr size_t kMaxNameChars = 32;
-inline constexpr uint32_t kTicksPerTurn = 2;        // a turn is 2 ticks = 100 ms
 inline constexpr uint32_t kTurnMs = 100;
 inline constexpr uint32_t kHashEveryTurns = 10;     // a state hash every 20 ticks
 

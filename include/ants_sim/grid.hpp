@@ -2,10 +2,7 @@
 
 #include <cstdint>
 #include <vector>
-#include <array>
-#include <string>
 #include <algorithm>
-#include <cstdlib>
 
 #include "ants_assets/lvl_parser.hpp"
 #include "ants_sim/movement_tables.hpp"
@@ -49,7 +46,6 @@ constexpr uint16_t BOMB_GREEN = 103u;
 
 // Structure Lifetime: 180 seconds @ 20 Hz = 3,600 ticks
 constexpr uint32_t LIFETIME_180S_TICKS = 3600u;
-constexpr uint32_t BRIDGE_COLLAPSE_STAGE_TICKS = 8u; // 400ms per decay stage
 
 /**
  * @brief Discrete 2D integer tile coordinate.
@@ -67,44 +63,9 @@ struct TileCoord {
         return (dx > dy) ? dx : dy;
     }
 
-    constexpr int32_t manhattan_dist(const TileCoord& o) const noexcept {
-        int32_t dx = (x >= o.x) ? (x - o.x) : (o.x - x);
-        int32_t dy = (y >= o.y) ? (y - o.y) : (o.y - y);
-        return dx + dy;
-    }
 
-    constexpr int32_t euclidean_dist_sq(const TileCoord& o) const noexcept {
-        int32_t dx = x - o.x;
-        int32_t dy = y - o.y;
-        return dx * dx + dy * dy;
-    }
-
-    constexpr bool is_cardinal_adjacent(const TileCoord& o) const noexcept {
-        int32_t dx = (x >= o.x) ? (x - o.x) : (o.x - x);
-        int32_t dy = (y >= o.y) ? (y - o.y) : (o.y - y);
-        return (dx + dy == 1);
-    }
 };
 
-using Vec2i = TileCoord;
-
-/**
- * @brief Discrete 2D integer pixel coordinate in world space.
- */
-struct WorldCoord {
-    int32_t px{0};
-    int32_t py{0};
-
-    constexpr bool operator==(const WorldCoord& o) const noexcept { return px == o.px && py == o.py; }
-    constexpr bool operator!=(const WorldCoord& o) const noexcept { return !(*this == o); }
-
-    constexpr TileCoord to_tile() const noexcept {
-        return TileCoord{
-            (px >= 0) ? (px / TILE_PIXELS) : ((px - (TILE_PIXELS - 1)) / TILE_PIXELS),
-            (py >= 0) ? (py / TILE_PIXELS) : ((py - (TILE_PIXELS - 1)) / TILE_PIXELS)
-        };
-    }
-};
 
 // Surface Types for terrain-dependent locomotion speeds
 // Surface of a tile = its original terrain class (Ants.exe tile-info table, see movement_tables.hpp).
@@ -284,8 +245,6 @@ public:
 
     uint32_t width() const noexcept { return width_; }
     uint32_t height() const noexcept { return height_; }
-    int32_t  pixel_width() const noexcept { return static_cast<int32_t>(width_ * TILE_PIXELS); }
-    int32_t  pixel_height() const noexcept { return static_cast<int32_t>(height_ * TILE_PIXELS); }
 
     bool in_bounds(int32_t x, int32_t y) const noexcept {
         return x >= 0 && static_cast<uint32_t>(x) < width_ &&
@@ -336,11 +295,6 @@ public:
                (cell.terrain_type == TERRAIN_WATER && !cell.has_any_bridge());
     }
 
-    bool is_occupiable_non_wall(int32_t x, int32_t y) const noexcept {
-        if (!in_bounds(x, y)) return false;
-        const auto& cell = get_cell(static_cast<uint32_t>(x), static_cast<uint32_t>(y));
-        return cell.terrain_type != TERRAIN_OBSTACLE && !cell.is_obstacle_overlay && !cell.is_thief_only;
-    }
 
     const TileCell& get_cell(uint32_t x, uint32_t y) const noexcept {
         return cells_[y * width_ + x];
@@ -356,7 +310,6 @@ public:
     }
 
     const std::vector<TileCell>& cells() const noexcept { return cells_; }
-    std::vector<TileCell>& cells_mut() noexcept { return cells_; }
 
     const std::vector<ants::assets::AnthillSpawn>& anthills() const noexcept { return anthills_; }
     std::vector<ants::assets::AnthillSpawn>& anthills_mut() noexcept { return anthills_; }
@@ -410,10 +363,6 @@ public:
         return get_cell(pos).has_bomb();
     }
 
-    bool has_food_at(TileCoord pos) const noexcept {
-        if (!in_bounds(pos)) return false;
-        return get_cell(pos).has_food();
-    }
 
     bool has_bridge_at(TileCoord pos) const noexcept {
         if (!in_bounds(pos)) return false;

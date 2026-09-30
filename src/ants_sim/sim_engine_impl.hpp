@@ -4,7 +4,6 @@
 // (sim_engine.cpp, movement_system.cpp). Not part of the public ants_sim API.
 
 #include "ants_sim/sim_engine.hpp"
-#include "ants_sim/pathfinding.hpp"
 #include "ants_sim/path_planner.hpp"
 #include "ants_sim/movement_tables.hpp"
 #include "ants_sim/effect_specs.hpp"
@@ -158,24 +157,9 @@ public:
         spawn_effect(name, col * 32, row * 32, duration_ms, row * 32, true);
     }
 
-    // Death animation of an ant (Ants.exe FUN_0101ad02 case 0xc: rand() % 4 over death1..death4, played on the ant
-    // sprite at its position). The pick uses a cosmetic generator so the simulation's random stream is untouched.
-    void spawn_death_effect(int32_t px, int32_t py) {
-        static const char* const death_anims[4] = { "death1", "death2", "death3", "death4" };
-        const uint32_t pick = cosmetic_prng_.rand() % 4u;
-        spawn_effect(death_anims[pick], px, py, effect_spec::kDeathMs[pick], py, true);
-    }
 
     SimulationEngineImpl() = default;
 
-    std::vector<AntUnit*> get_unit_pointers() {
-        std::vector<AntUnit*> ptrs;
-        ptrs.reserve(ants_.size());
-        for (auto& a : ants_) {
-            if (a) ptrs.push_back(a.get());
-        }
-        return ptrs;
-    }
 
     AntUnit* find_unit(uint32_t id) {
         for (auto& a : ants_) {
@@ -184,12 +168,6 @@ public:
         return nullptr;
     }
 
-    const AntUnit* find_unit(uint32_t id) const {
-        for (const auto& a : ants_) {
-            if (a && a->id == id) return a.get();
-        }
-        return nullptr;
-    }
 
     bool is_valid_powerup_drop_tile(TileCoord adj) const noexcept {
         if (!grid_.in_bounds(adj)) return false;
@@ -233,19 +211,6 @@ public:
         return false;
     }
 
-    bool has_other_living_ant_at(TileCoord target, uint32_t ignore_ant_id) const noexcept {
-        for (const auto& ant : ants_) {
-            if (ant && ant->is_alive() && ant->id != ignore_ant_id) {
-                if (ant->pos == target) return true;
-                TileCoord cur_tile{
-                    (ant->pixel_x >= 0) ? (ant->pixel_x / 32) : ((ant->pixel_x - 31) / 32),
-                    (ant->pixel_y >= 0) ? (ant->pixel_y / 32) : ((ant->pixel_y - 31) / 32)
-                };
-                if (cur_tile == target) return true;
-            }
-        }
-        return false;
-    }
 
     // ================= Original movement system (implemented in movement_system.cpp) =================
     // Ports of the Ants.exe locomotion, order, path-manager and blocking code. Addresses in comments
@@ -261,7 +226,6 @@ public:
         bool    multi{false};        // bit 8: more than one ant registered
     };
 
-    SimulationEngine* engine_{nullptr};   // set while movement_tick() runs (bomb detonation callback)
     uint32_t anim_clock_ms_{0};      // animation clock ("timeGetTime()"), advances 50 ms per sim tick
     uint32_t now_ms_{0};             // clock value of the event being processed
     std::vector<OccCell> occ_;
@@ -273,7 +237,7 @@ public:
 
     // lifecycle / per tick
     void movement_reset();
-    void movement_tick(SimulationEngine& eng);
+    void movement_tick();
     void loco_sync(AntUnit& a);
 
     // occupancy (FUN_0100f17f / FUN_0100f2cd / FUN_0100f421 / FUN_0100f3ca)
@@ -358,7 +322,6 @@ public:
     void start_raid(AntUnit& a, uint8_t victim, uint32_t amount);   // FUN_0102184e
     void raid_clip_end(AntUnit& a);                    // step callback, actions 5 / 0xd, last frame
     void cleanup_raid(AntUnit& a);                     // FUN_0101e27f: loot transfer
-    void retreat_home(AntUnit& a);                     // FUN_0101dded with flag 1: a 1 hp ant goes home
     void anthillq_run();                               // ANTHILLQ task, every 200 ms
     void hatch_run(uint8_t team);                      // HATCHTSK (0x1025072)
     void add_score(uint8_t player, int32_t amount);    // FUN_01010cc9
