@@ -167,3 +167,39 @@ target_compile_definitions(test_status_messages PRIVATE
 
 add_test(NAME test_status_messages COMMAND test_status_messages)
 set_tests_properties(test_status_messages PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# Input model: edge scrolling, minimap drag, pointer rules (pure logic plus the HUD's input tick; golden data from the original's code)
+add_executable(test_input_model
+    test_input_model.cpp
+)
+
+target_include_directories(test_input_model PRIVATE
+    ${CMAKE_SOURCE_DIR}/include
+    ${SDL2_INCLUDE_DIRS}
+)
+
+target_link_libraries(test_input_model PRIVATE
+    ants_app
+    ants_sim
+    ants_assets
+    ${SDL2_LIBRARIES}
+)
+
+if(APPLE)
+    target_link_libraries(test_input_model PRIVATE
+        "-framework AudioToolbox"
+        "-framework CoreFoundation"
+        "-framework CoreAudio"
+    )
+endif()
+
+if(WIN32)
+    target_link_libraries(test_input_model PRIVATE ws2_32 winmm)
+endif()
+
+target_compile_definitions(test_input_model PRIVATE
+    TEST_DATA_DIR="${CMAKE_SOURCE_DIR}/tests/data"
+)
+
+add_test(NAME test_input_model COMMAND test_input_model)
+set_tests_properties(test_input_model PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")

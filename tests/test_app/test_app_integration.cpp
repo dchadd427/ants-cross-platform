@@ -1064,10 +1064,13 @@ void run_suite_7_input_controls() {
         camera.viewport_w = 441;
         camera.viewport_h = 439;
 
-        // Pan right and down with speed 480 px/s over 0.05s (24px)
-        camera.pan(1.0f, 1.0f, 0.05f, 60, 60);
+        // The view moves in whole pixel steps (the original's 50 ms input task) and stays inside the map
+        camera.scroll_pixels(24, 24, 60, 60);
         ASSERT_EQ(camera.world_x, 124);
         ASSERT_EQ(camera.world_y, 124);
+        camera.scroll_pixels(-500, -500, 60, 60);
+        ASSERT_EQ(camera.world_x, 0);
+        ASSERT_EQ(camera.world_y, 0);
 
         // Center on tile (30, 30) -> world px (960, 960)
         camera.center_on(960, 960, 60, 60);
@@ -1093,6 +1096,11 @@ void run_suite_7_input_controls() {
         ASSERT_EQ(app.mouse_screen_x(), 320);
         ASSERT_EQ(app.mouse_screen_y(), 240);
         ASSERT_FALSE(app.mouse_has_moved());
+
+        // The "get ready" modal (at least 5 s) is a dialog: no edge scrolling while it is open (Ants.exe: a dialog gets all input)
+        ASSERT_TRUE(app.hud().is_modal_open());
+        app.hud().update(app.sim().get_world_state(), 100);
+        ASSERT_FALSE(app.hud().is_modal_open());
 
         // Set camera away from boundaries using center_on so panning in any direction is unclamped
         app.renderer().camera().center_on(600, 600, app.sim().grid().width(), app.sim().grid().height());
@@ -1122,7 +1130,8 @@ void run_suite_7_input_controls() {
             ASSERT_EQ(app.renderer().camera().world_y, init_cam_y);
         }
 
-        // Simulate actual mouse motion to the top-left edge margin (x=10, y=10)
+        // Simulate actual mouse motion into the 12 px band of the top-left corner (x=10, y=10): the arrow shows, but only the 5 px
+        // inner strip scrolls (Ants.exe FUN_01026aa3), so the view stays
         SDL_MouseMotionEvent motion{};
         motion.type = SDL_MOUSEMOTION;
         motion.x = 10;
@@ -1132,12 +1141,19 @@ void run_suite_7_input_controls() {
         ASSERT_TRUE(app.mouse_has_moved());
         ASSERT_EQ(app.mouse_screen_x(), 10);
         ASSERT_EQ(app.mouse_screen_y(), 10);
-
-        // Step camera updates with mouse at top-left edge: camera now pans towards top-left
-        for (int i = 0; i < 5; ++i) {
+        for (int i = 0; i < 6; ++i) {
             app.handle_camera_panning(0.020f);
         }
+        ASSERT_EQ(app.renderer().camera().world_x, init_cam_x);
+        ASSERT_EQ(app.renderer().camera().world_y, init_cam_y);
 
+        // In the 5 px inner strip (x=2, y=2) the view scrolls at the 50 ms rate of the original's input task (two ticks = 100 ms)
+        motion.x = 2;
+        motion.y = 2;
+        app.handle_mouse_motion(motion);
+        for (int i = 0; i < 6; ++i) {
+            app.handle_camera_panning(0.020f);
+        }
         ASSERT_LT(app.renderer().camera().world_x, init_cam_x);
         ASSERT_LT(app.renderer().camera().world_y, init_cam_y);
     } TEST_END();
@@ -6419,10 +6435,10 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
 
     TEST_CASE("12.108: Version Invariant & Fog of War Cursor Concealment Parity") {
         // 1. Verify semantic versioning components
-        ASSERT_EQ(ants::VERSION_STRING, "v0.0.39");
+        ASSERT_EQ(ants::VERSION_STRING, "v0.0.40");
         ASSERT_EQ(ants::VERSION_MAJOR, 0);
         ASSERT_EQ(ants::VERSION_MINOR, 0);
-        ASSERT_EQ(ants::VERSION_PATCH, 39);
+        ASSERT_EQ(ants::VERSION_PATCH, 40);
 
         // 2. Setup simulation world with Fog of War enabled
         SimulationEngine sim;

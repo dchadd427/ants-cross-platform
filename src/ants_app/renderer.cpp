@@ -120,12 +120,6 @@ static const Glyph5x7 FONT_5X7[95] = {
 // ViewportCamera Implementation
 // ============================================================================
 
-void ViewportCamera::pan(float dx, float dy, float dt, uint32_t map_w, uint32_t map_h) {
-    x += dx * scroll_speed * dt;
-    y += dy * scroll_speed * dt;
-    clamp_to_bounds(map_w, map_h);
-}
-
 void ViewportCamera::center_on(int32_t world_px, int32_t world_py, uint32_t map_w, uint32_t map_h) {
     x = static_cast<float>(world_px - viewport_w / 2);
     y = static_cast<float>(world_py - viewport_h / 2);

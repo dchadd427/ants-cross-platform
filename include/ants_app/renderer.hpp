@@ -132,9 +132,13 @@ struct ViewportCamera {
     int32_t world_y{0};
     int32_t viewport_w{PLAYFIELD_W};
     int32_t viewport_h{PLAYFIELD_H};
-    float scroll_speed{480.0f}; // Pixels per second
 
-    void pan(float dx, float dy, float dt, uint32_t map_w, uint32_t map_h);
+    /// Moves the view by whole pixels (the scroll steps of the original's input task) and keeps it inside the map.
+    void scroll_pixels(int32_t dx, int32_t dy, uint32_t map_w, uint32_t map_h) {
+        x += static_cast<float>(dx);
+        y += static_cast<float>(dy);
+        clamp_to_bounds(map_w, map_h);
+    }
     void center_on(int32_t world_px, int32_t world_py, uint32_t map_w = 60, uint32_t map_h = 60);
     void clamp_to_bounds(uint32_t map_w, uint32_t map_h);
     void clamp(uint32_t map_w, uint32_t map_h) { clamp_to_bounds(map_w, map_h); }

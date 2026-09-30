@@ -1191,7 +1191,6 @@ bool HUD::handle_mouse_down(int32_t x, int32_t y, uint8_t button,
             if (x >= 180 && x <= 430 && y >= 244 && y <= 285) {
                 active_slider_dragging_ = 2;
                 scroll_rate_ = std::clamp(static_cast<float>(x - 188) / 185.0f, 0.0f, 1.0f);
-                if (on_scroll_rate_) on_scroll_rate_(scroll_rate_);
                 return true;
             }
             // Quick Chat Key Edit Fields
@@ -1394,15 +1393,7 @@ bool HUD::handle_mouse_down(int32_t x, int32_t y, uint8_t button,
         const int32_t rx = 480, ry = 35;
         const int32_t rw = 119, rh = 91;
         if (x >= rx && x < (rx + rw) && y >= ry && y < (ry + rh)) {
-            is_radar_dragging_ = true;
-            const auto& world = sim.get_world_state();
-            if (world.width > 0 && world.height > 0) {
-                int32_t tile_x = static_cast<int32_t>((static_cast<float>(x - rx) / rw) * static_cast<float>(world.width));
-                int32_t tile_y = static_cast<int32_t>((static_cast<float>(y - ry) / rh) * static_cast<float>(world.height));
-                tile_x = std::clamp(tile_x, 0, static_cast<int32_t>(world.width - 1));
-                tile_y = std::clamp(tile_y, 0, static_cast<int32_t>(world.height - 1));
-                camera.center_on(tile_x * 32, tile_y * 32, world.width, world.height);
-            }
+            is_radar_dragging_ = true;       // the press only captures; the view follows in the input ticks while the button is held
             return true;
         }
     }
@@ -1773,7 +1764,7 @@ bool HUD::handle_mouse_up(int32_t x, int32_t y, uint8_t button,
 }
 
 bool HUD::handle_mouse_motion(int32_t x, int32_t y,
-                              sim::SimulationEngine& sim, ViewportCamera& camera) {
+                              [[maybe_unused]] sim::SimulationEngine& sim, [[maybe_unused]] ViewportCamera& camera) {
     mouse_x_ = x;
     mouse_y_ = y;
     send_to_button_.is_hovered = send_to_button_.contains(x, y);
@@ -1791,7 +1782,6 @@ bool HUD::handle_mouse_motion(int32_t x, int32_t y,
             if (on_music_volume_) on_music_volume_(music_volume_);
         } else if (active_slider_dragging_ == 2) {
             scroll_rate_ = std::clamp(static_cast<float>(x - 188) / 185.0f, 0.0f, 1.0f);
-            if (on_scroll_rate_) on_scroll_rate_(scroll_rate_);
         }
         return true;
     }
@@ -1808,21 +1798,31 @@ bool HUD::handle_mouse_motion(int32_t x, int32_t y,
         return true;
     }
 
-    if (is_radar_dragging_) {
-        const int32_t rx = 480, ry = 35;
-        const int32_t rw = 119, rh = 91;
-        const auto& world = sim.get_world_state();
-        if (world.width > 0 && world.height > 0) {
-            int32_t tile_x = static_cast<int32_t>((static_cast<float>(x - rx) / rw) * static_cast<float>(world.width));
-            int32_t tile_y = static_cast<int32_t>((static_cast<float>(y - ry) / rh) * static_cast<float>(world.height));
-            tile_x = std::clamp(tile_x, 0, static_cast<int32_t>(world.width - 1));
-            tile_y = std::clamp(tile_y, 0, static_cast<int32_t>(world.height - 1));
-            camera.center_on(tile_x * 32, tile_y * 32, world.width, world.height);
-        }
-        return true;
-    }
+    if (is_radar_dragging_) return true;
 
     return false;
+}
+
+bool HUD::is_input_captured() const noexcept {
+    return is_dragging_ || is_radar_dragging_ || help_button_.is_pressed || options_button_.is_pressed || quit_button_.is_pressed ||
+           send_to_button_.is_pressed || team_button_.is_pressed || stop_button_.is_pressed || hatch_button_.is_pressed ||
+           team_up_button_.is_pressed || move_pedestal_button_.is_pressed || ability_pedestal_button_.is_pressed;
+}
+
+// The INPUT task (0x100ae26, every 50 ms) as far as the view is concerned: FUN_01026aa3 for the edge strips, or, while the left button
+// is held on the minimap, FUN_01009850.
+bool HUD::input_tick(ViewportCamera& camera, uint32_t map_w, uint32_t map_h, int32_t mouse_x, int32_t mouse_y) {
+    if (is_modal_open() || map_w == 0 || map_h == 0) return false;
+    const int32_t rate = std::min(99, static_cast<int32_t>(scroll_rate_ * 100.0f));
+    EdgeScroll step;
+    if (is_radar_dragging_) {
+        step = minimap_scroll_step(mouse_x, mouse_y, camera.world_x, camera.world_y, static_cast<int32_t>(map_w), static_cast<int32_t>(map_h));
+    } else if (!is_input_captured()) {
+        step = edge_scroll_step(mouse_x, mouse_y, rate, camera.world_x, camera.world_y, static_cast<int32_t>(map_w), static_cast<int32_t>(map_h));
+    }
+    if (step.dx == 0 && step.dy == 0) return false;
+    camera.scroll_pixels(step.dx, step.dy, map_w, map_h);
+    return true;
 }
 
 bool HUD::handle_key_down(int32_t key, sim::SimulationEngine& sim, ViewportCamera& camera, uint16_t mod) {
@@ -2667,54 +2667,17 @@ CursorType HUD::evaluate_cursor(int32_t screen_x, int32_t screen_y,
         return current_cursor_;
     }
 
-    // 1. Edge Panning Bounds Check (Matching Ants.exe 0x1026b09..0x1026d11)
-    // Left <= 12, Right >= 628, Top <= 12, Bottom >= 468
-    int32_t map_pw = static_cast<int32_t>(grid.width()) * 32;
-    int32_t map_ph = static_cast<int32_t>(grid.height()) * 32;
-    int32_t max_cam_x = std::max(0, map_pw - PLAYFIELD_WIDTH);
-    int32_t max_cam_y = std::max(0, map_ph - PLAYFIELD_HEIGHT);
-
-    bool can_n = (camera.world_y > 0);
-    bool can_s = (camera.world_y < max_cam_y);
-    bool can_w = (camera.world_x > 0);
-    bool can_e = (camera.world_x < max_cam_x);
-
-    bool at_left = (screen_x <= 12);
-    bool at_right = (screen_x >= 628);
-    bool at_top = (screen_y <= 12);
-    bool at_bottom = (screen_y >= 468);
-
-    if (at_left && at_top && (can_w || can_n)) {
-        current_cursor_ = CursorType::ScrollNW;
-        return current_cursor_;
-    }
-    if (at_right && at_top && (can_e || can_n)) {
-        current_cursor_ = CursorType::ScrollNE;
-        return current_cursor_;
-    }
-    if (at_right && at_bottom && (can_e || can_s)) {
-        current_cursor_ = CursorType::ScrollSE;
-        return current_cursor_;
-    }
-    if (at_left && at_bottom && (can_w || can_s)) {
-        current_cursor_ = CursorType::ScrollSW;
-        return current_cursor_;
-    }
-    if (at_top && can_n) {
-        current_cursor_ = CursorType::ScrollN;
-        return current_cursor_;
-    }
-    if (at_bottom && can_s) {
-        current_cursor_ = CursorType::ScrollS;
-        return current_cursor_;
-    }
-    if (at_left && can_w) {
-        current_cursor_ = CursorType::ScrollW;
-        return current_cursor_;
-    }
-    if (at_right && can_e) {
-        current_cursor_ = CursorType::ScrollE;
-        return current_cursor_;
+    // 1. The eight edge strips (Ants.exe FUN_01026aa3): a 12 px band shows the scroll arrow when the view can still move that way (the
+    //    5 px inner strip then scrolls, see edge_scroll.hpp). Not while a button is captured (a rubber band, the minimap, a pressed button).
+    if (!is_input_captured()) {
+        const EdgeScroll strip = edge_scroll_step(screen_x, screen_y, 0, camera.world_x, camera.world_y,
+                                                  static_cast<int32_t>(grid.width()), static_cast<int32_t>(grid.height()));
+        if (strip.dir >= 0) {
+            static const CursorType kArrows[8] = {CursorType::ScrollN, CursorType::ScrollNE, CursorType::ScrollE, CursorType::ScrollSE,
+                                                  CursorType::ScrollS, CursorType::ScrollSW, CursorType::ScrollW, CursorType::ScrollNW};
+            current_cursor_ = kArrows[strip.dir];
+            return current_cursor_;
+        }
     }
 
     // 2. Outside the map view rectangle (16,21)-(458,461) (Ants.exe 0x1026d6a): plain pointer

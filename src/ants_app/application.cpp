@@ -199,16 +199,6 @@ bool Application::init(const ApplicationConfig& config) {
         midi_player_.set_volume(v);
     });
 
-    if (renderer_) {
-        renderer_->camera().scroll_speed = 240.0f + hud_.get_scroll_rate() * 480.0f;
-    }
-
-    hud_.set_on_scroll_rate([this](float r) {
-        if (renderer_) {
-            renderer_->camera().scroll_speed = 240.0f + r * 480.0f;
-        }
-    });
-
     hud_.set_on_play_sfx([this](uint32_t sound_id) {
         audio_mixer_.play_sfx(sound_id, 1.0f, 255);
     });
@@ -358,7 +348,6 @@ bool Application::start_game(const std::string& map_path) {
                                           spawn.y * TILE_SIZE + 2 * TILE_SIZE,
                                           current_level_.width, current_level_.height);
         }
-        renderer_->camera().scroll_speed = 240.0f + hud_.get_scroll_rate() * 480.0f;
     }
 
     // 5. Reset HUD & Scorecard
@@ -669,37 +658,16 @@ void Application::handle_events() {
 
 }
 
+// The INPUT task of the original runs every 50 ms (Ants.exe 0x100ae26): the edge strips and the minimap drag move the view in whole pixel
+// steps at that rate (edge_scroll.hpp). Panning is strictly mouse-driven; keyboard keys do not scroll.
 void Application::handle_camera_panning(float dt) {
     if (state_ == AppState::MapSelect || scorecard_.is_open()) return;
-
-    float pan_x = 0.0f, pan_y = 0.0f;
-
-    // Panning is strictly mouse-driven (mouse edge panning and minimap navigation); keyboard keys do not pan
-    // Edge Pan Scrolling (Command & Conquer / League of Legends style)
-    // Uses logical canvas coordinate space (640x480)
-    constexpr int LOGICAL_W = 640;
-    constexpr int LOGICAL_H = 480;
-    constexpr int EDGE_MARGIN = 12; // Authentic 12px border zone (Ants.exe FUN_01026aa3 / 0xc)
-
-    if (mouse_has_moved_ &&
-        mouse_screen_x_ >= 0 && mouse_screen_x_ < LOGICAL_W &&
-        mouse_screen_y_ >= 0 && mouse_screen_y_ < LOGICAL_H) {
-        if (mouse_screen_x_ <= EDGE_MARGIN) {
-            pan_x -= 1.0f;
-        } else if (mouse_screen_x_ >= LOGICAL_W - EDGE_MARGIN) {
-            pan_x += 1.0f;
-        }
-        if (mouse_screen_y_ <= EDGE_MARGIN) {
-            pan_y -= 1.0f;
-        } else if (mouse_screen_y_ >= LOGICAL_H - EDGE_MARGIN) {
-            pan_y += 1.0f;
-        }
-    }
-
-    if (pan_x != 0.0f || pan_y != 0.0f) {
-        if (renderer_) {
-            renderer_->camera().pan(pan_x, pan_y, dt, current_level_.width, current_level_.height);
-        }
+    input_accumulator_ += dt;
+    while (input_accumulator_ >= 0.050f) {
+        input_accumulator_ -= 0.050f;
+        if (state_ != AppState::Playing || !renderer_ || !mouse_has_moved_) continue;
+        if (mouse_screen_x_ < 0 || mouse_screen_x_ >= 640 || mouse_screen_y_ < 0 || mouse_screen_y_ >= 480) continue;
+        hud_.input_tick(renderer_->camera(), current_level_.width, current_level_.height, mouse_screen_x_, mouse_screen_y_);
     }
 }
 

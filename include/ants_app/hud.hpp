@@ -12,6 +12,7 @@
 #include "ants_sim/game_strings.hpp"
 #include "ants_sim/sim_engine.hpp"
 #include "ants_app/renderer.hpp"
+#include "ants_app/edge_scroll.hpp"
 #include "ants_app/pedestal.hpp"
 #include "ants_app/status_line.hpp"
 
@@ -181,6 +182,14 @@ public:
     void set_multi_select_mode(bool multi) noexcept { is_multi_select_mode_ = multi; }
     bool has_friendly_selected(const sim::WorldState& world) const noexcept;
 
+    // Input task (Ants.exe INPUT, every 50 ms): edge scrolling with the pointer and the minimap drag; see edge_scroll.hpp. `map_w` / `map_h`
+    // are the map's size in tiles. Returns true when the view moved. Nothing happens while a dialog is open or the left button is captured.
+    bool input_tick(ViewportCamera& camera, uint32_t map_w, uint32_t map_h, int32_t mouse_x, int32_t mouse_y);
+    /// A dialog (options, quit, quick help, the "get ready" modal) is open: it gets all input, the hover and scroll logic does not run.
+    bool is_modal_open() const noexcept { return show_options_ || show_quit_dialog_ || show_quick_help_ || show_match_start_modal_; }
+    /// The left button is captured by the map (a rubber band), the minimap or a button (`[5534]` != 0): no edge scrolling then.
+    bool is_input_captured() const noexcept;
+
     // Status line (Ants.exe PostStatus): one slot, 5 s life, flash flag; see status_line.hpp
     void post_status(const std::string& text, bool flash = false) { status_line_.post(text, flash); }
     /// Posts the original's text of a string id (flash flag from the table); `arg` fills its `%s`.
@@ -230,13 +239,13 @@ public:
 
     void set_on_sfx_volume(std::function<void(float)> cb) { on_sfx_volume_ = std::move(cb); }
     void set_on_music_volume(std::function<void(float)> cb) { on_music_volume_ = std::move(cb); }
-    void set_on_scroll_rate(std::function<void(float)> cb) { on_scroll_rate_ = std::move(cb); }
     void set_on_play_sfx(std::function<void(uint32_t)> cb) { on_play_sfx_ = std::move(cb); }
     void play_sfx(uint32_t sound_id) { if (on_play_sfx_) on_play_sfx_(sound_id); }
 
     float get_sfx_volume() const noexcept { return sfx_volume_; }
     float get_music_volume() const noexcept { return music_volume_; }
     float get_scroll_rate() const noexcept { return scroll_rate_; }
+    void set_scroll_rate(float rate) noexcept { scroll_rate_ = std::clamp(rate, 0.0f, 1.0f); }
     bool is_chat_enabled() const noexcept { return chat_enabled_; }
     bool is_quick_help_enabled() const noexcept { return quick_help_enabled_; }
 
@@ -384,7 +393,6 @@ private:
     uint32_t voice_seed_{0x2545F491u};      // the original's rand() for the choice of a voice; never feeds the simulation
     std::function<void(float)> on_sfx_volume_{nullptr};
     std::function<void(float)> on_music_volume_{nullptr};
-    std::function<void(float)> on_scroll_rate_{nullptr};
     std::function<void(uint32_t)> on_play_sfx_{nullptr};
     std::function<void(int32_t, int32_t)> on_spawn_click_marker_{nullptr};
     mutable CursorType current_cursor_{CursorType::Normal};

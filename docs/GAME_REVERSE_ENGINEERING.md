@@ -1869,6 +1869,36 @@ Checked by `tests/test_app/test_status_messages.cpp` (alliance, chat log, chat r
 * **Removed as invented** (v0.0.39): the texts "Alliance proposed / formed! / declined / broken!", the drop-out as a status, the "(Team):" header, the 120-character input, the 50-line chat cap, the 27-character single-colour
   lines and the "System" chat entry.
 
+### 5.43 Input Task, Edge Scrolling and the Minimap Drag (Capstone-Verified; Supersedes Earlier Scrolling and Edge Pan Notes)
+
+Addresses are virtual addresses in `Original-Ants/Ants.exe`. Implemented in `include/ants_app/edge_scroll.hpp` (`edge_scroll_step`, `minimap_scroll_step`), `src/ants_app/hud.cpp` (`HUD::input_tick`, the cursor
+strips of `evaluate_cursor`) and `src/ants_app/application.cpp` (`handle_camera_panning`, the 50 ms input task). Checked by `tests/test_app/test_input_model.cpp` (70 checks, among them the 1152 golden
+samples in `tests/data/edge_scroll_samples.csv`, produced by a bit-exact emulation of the original's code) and test 7.7 of `test_app_integration.cpp`.
+
+* **Everything runs at 20 Hz.** The INPUT task (`AddTask(delay 0, period 0x32)` at 0x100ae26, `FUN_010242c5`) runs `ProcessInput` (`FUN_0102603f`) every 50 ms; hover, cursor mode, edge scroll, minimap drag,
+  the rubber band and the button hover all run in it (`FUN_0102653f`), and a click uses the pointer where the task finds it. The pointer is `GetCursorPos` into `world+0x118/0x11c`, clamped to 0..639 x 0..479.
+  There is no handler for the mouse wheel, the middle button or mouse motion, and the arrow keys map to nothing: **the view scrolls only by the edge strips, the minimap and Ctrl+N / Ctrl+P**. While a dialog is open it
+  gets all input and the hover and scroll logic does not run; while the left button is captured (`[5534]` != 0: a rubber band, the minimap, a pressed button) neither arrows nor scrolling happen.
+* **Strips** (`FUN_01026aa3`, 0x1026b02..0x1026c53; half-open rects on the 640 x 480 screen, order N NE E SE S SW W NW): the 12 px bands are x < 12, x >= 628, y < 12, y >= 468 (N (12,0,628,12), NE (628,0,640,12), E
+  (628,12,640,468), SE (628,468,640,480), S (12,468,628,480), SW (0,468,12,480), W (0,12,12,468), NW (0,0,12,12)); a pre-test skips the loop for 13 <= x < 627 and 13 <= y < 467. A strip counts only when the view can
+  move that way (CanScroll 0x10270d2: N `oy > 0`, E `ox < maxX`, S `oy < maxY`, W `ox > 0`, a corner the OR of its two axes; maxX = map px - 442, maxY = map px - 440); the strips are disjoint, so a corner never falls
+  back to an edge. A matching strip shows the scroll arrow cursor (mode 6, which also ignores every mouse button); only the 5 px inner strip of the same index scrolls (N (5,0,635,5), NE (635,0,640,5), E (635,5,640,475),
+  SE (635,475,640,480), S (5,475,635,480), SW (0,475,5,480), W (0,5,5,475), NW (0,0,5,5)), so the pixels x = 5..11 along a top or bottom edge and y = 5..11 along a side edge, and 6 - 11 px next to a corner, show an
+  arrow without scrolling.
+* **The step** (`FUN_01027251` -> `FUN_01027197` -> `FUN_0102fff8` ScrollToShow, margin and step 0, immediate): the target point is the pointer scaled from the screen to the 442 x 440 view, `Tx = ox + trunc(mx * 442 / 640)`,
+  `Ty = oy + trunc(my * 440 / 480)`, clamped to the map; `d = scrollRate + 10` (the option "Scroll Speed", default 50, 100 slider positions: 0..99); the square [Tx - d, Ty - d, Tx + d, Ty + d] is clipped to the map and the
+  view moves just far enough to show it: `dx = R > visR ? R - visR : L < visL ? L - visL : 0`, `dy = T < visT ? T - visT : B > visB ? B - visB : 0`. The step is therefore not fixed: on the pushed axis d - 1 .. d - 4 px
+  per 50 ms depending on the exact pixel (rate 50: 56 - 59 px at the east edge x = 635..639, 58 - 60 at the west edge), and the perpendicular axis also scrolls wherever the square sticks out of the view ("hot zones", rate 50:
+  the top edge also scrolls left for x 12..86 and right for x 555..627). At mid-map rate 0 moves 6 - 10 px per tick (120 - 200 px/s), rate 50 55 - 60 (1100 - 1200 px/s), rate 99 104 - 109 (2100 - 2200 px/s); near a map
+  edge the step shrinks to the remaining distance and at the edge the arrow disappears. The remake used a constant 480 px/s over the whole 13 px band.
+* **Minimap** (`FUN_01009850`; rect (480, 35) - (599, 126), scale = map px / 119 and map px / 91 as doubles): the press only captures (the cursor over the minimap is the normal pointer); every input tick while the left
+  button is held sets `W = (trunc(lx * scaleX), trunc(ly * scaleY))` with `l` the pointer relative to (480, 35), without a clamp, and scrolls to show the square W +- (221, 220) clipped to the map, i.e. the view centres on W
+  and stops at the map's edges, continuously; nothing happens on release (a right release on the minimap issues an order: pointer stage).
+* **Removed as invented** (v0.0.40): the continuous pan at `240 + rate * 480` px/s per frame with independent axes over a 13 px band (`<= 12`), the minimap jump on press with tile-snapped centring, edge panning while a dialog
+  is open, and `ViewportCamera::pan`. **Kept as non-original conveniences** for now: the mouse wheel and PageUp / PageDown / Up / Down scroll the chat log (the original scrolls it by dragging).
+* **Open** *(recorded, not ported)*: the view rect of the original is (16, 21) - (458, 461), 442 x 440; the remake still maps the world at (17, 22) with 441 x 439 (a one pixel shift in pointer-to-world and in the last
+  scroll position; the step model above already uses 442 x 440), Ctrl+N / Ctrl+P (scroll to +-128 around the ant), and the 50 ms input latency of the faithful tick model for clicks.
+
 ---
 
 ## 6. Target Multi-Platform Architecture

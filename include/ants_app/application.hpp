@@ -158,6 +158,7 @@ private:
     uint64_t last_frame_time_{0};
     int headless_frame_count_{0};
     float tick_accumulator_{0.0f};
+    float input_accumulator_{0.0f};     // the 50 ms input task (edge scrolling, minimap drag)
     float current_fps_{60.0f};
     int last_music_track_{-1};
     bool is_music_muted_{false};
