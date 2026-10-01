@@ -26,7 +26,17 @@ struct ServerLimits {
     size_t max_pending{128};                // connections that have not said Hello yet
     uint32_t hello_timeout_ms{10000};       // ... and the time they get for it
     uint32_t reject_linger_ms{2000};        // a rejected connection is kept open this long so that the answer reaches the peer
+    // Demo rooms (off by default; for a public test page that has no secret to make rooms with): a Hello for a room whose code starts with "demo-" that does not
+    // exist makes it, on `demo_map`, for `demo_players` players, at most `demo_rooms` of them at a time (0 = off). A demo room waits one minute for its players
+    // and is forgotten half a minute after it ended. Whoever can reach the door can fill these rooms and hold them for a match: that is the price of a page
+    // that works without a secret; real rooms are made by the control interface.
+    size_t demo_rooms{0};
+    std::string demo_map;
+    uint8_t demo_players{4};
 };
+
+/// The code prefix of the rooms that a Hello may make when demo rooms are on
+inline constexpr const char* kDemoRoomPrefix = "demo-";
 
 struct CreateResult {
     bool ok{false};
@@ -75,12 +85,15 @@ private:
 
     void reject(std::unique_ptr<net::Connection> connection, net::RejectReason reason, uint32_t now_ms);
     std::string new_code();
+    /// Makes the demo room that a Hello names, when demo rooms are on, the code has the prefix, and there is a free one; false otherwise
+    bool make_demo_room(const std::string& code, uint32_t now_ms);
 
     MapStore store_;
     ServerLimits limits_;
     std::map<std::string, std::unique_ptr<Room>> rooms_;
     std::vector<Pending> pending_;
     std::vector<Lingering> lingering_;
+    std::vector<RoomStatus> unreported_;     // the ends of rooms that were forgotten in the pass in which they ended
     uint64_t created_{0};
     uint64_t refused_{0};
     uint64_t code_counter_{0};

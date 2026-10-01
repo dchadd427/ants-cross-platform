@@ -20,6 +20,18 @@
   #include <unistd.h>
 #endif
 
+#if defined(__EMSCRIPTEN__)
+// Tells the page that embeds this game (web/four.html) the tick and the state hash (high word first, 16 hex digits). EM_JS and not EM_ASM: the `$0` of EM_ASM
+// is a warning under -Wpedantic.
+extern "C" {
+EM_JS(void, ants_post_sync_to_parent, (int seat, int tick, int hash_high, int hash_low), {
+    if (window.parent !== window) {
+        window.parent.postMessage({ants: 'sync', seat: seat, tick: tick, hash: (hash_high >>> 0).toString(16).padStart(8, '0') + (hash_low >>> 0).toString(16).padStart(8, '0')}, location.origin);
+    }
+});
+}
+#endif
+
 namespace ants::app {
 
 namespace {
@@ -125,6 +137,9 @@ ApplicationConfig Application::parse_arguments(int argc, char* argv[]) {
                 target.resize(colon);
             }
             cfg.net_address = target;
+        } else if (std::strcmp(argv[i], "--join-url") == 0 && i + 1 < argc) {
+            cfg.net_role = ApplicationConfig::NetRole::Join;
+            cfg.net_url = argv[++i];                                           // ws:// or wss://: through a game server's WebSocket door
         } else if (std::strcmp(argv[i], "--port") == 0 && i + 1 < argc) {
             cfg.net_port = static_cast<uint16_t>(std::stoul(argv[++i]));
         } else if (std::strcmp(argv[i], "--loopback") == 0) {
@@ -346,12 +361,22 @@ bool Application::init(const ApplicationConfig& config) {
         net_ = std::make_unique<net::NetGame>(sim_);
         net_->set_discovery(config_.lan_port);                                          // an open room announces itself to the local network (ants_net/lan.hpp)
         net_->set_game_version(std::string(VERSION_STRING));
-        const bool ok = config_.net_role == ApplicationConfig::NetRole::Host
-                            ? net_->host(config_.net_port, player_name, config_.net_loopback_only)
-                            : net_->join(config_.net_address, config_.net_port, player_name, config_.net_seat, config_.net_room, config_.net_token);
+        const bool host_role = config_.net_role == ApplicationConfig::NetRole::Host;
+        const bool ok = host_role                   ? net_->host(config_.net_port, player_name, config_.net_loopback_only)
+                        : !config_.net_url.empty() ? net_->join_url(config_.net_url, player_name, config_.net_seat, config_.net_room, config_.net_token)
+                                                   : net_->join(config_.net_address, config_.net_port, player_name, config_.net_seat, config_.net_room, config_.net_token);
+        if (!ok && !host_role && !config_.net_url.empty()) {
+#if defined(__EMSCRIPTEN__)
+            std::cerr << "[Application] Could not join " << config_.net_url << " (not a usable ws:// or wss:// address, or this browser has no WebSocket)" << std::endl;
+#else
+            std::cerr << "[Application] Could not join " << config_.net_url << ": --join-url works in the web build only, a native game joins with --join host[:port]" << std::endl;
+#endif
+            return false;
+        }
         if (!ok) {
-            std::cerr << "[Application] Could not " << (config_.net_role == ApplicationConfig::NetRole::Host ? "open a room on port " : "reach the host at ")
-                      << (config_.net_role == ApplicationConfig::NetRole::Host ? std::to_string(config_.net_port) : config_.net_address + ":" + std::to_string(config_.net_port))
+            std::cerr << "[Application] Could not " << (host_role ? "open a room on port " : "reach the host at ")
+                      << (host_role ? std::to_string(config_.net_port)
+                                    : !config_.net_url.empty() ? config_.net_url : config_.net_address + ":" + std::to_string(config_.net_port))
                       << std::endl;
             return false;
         }
@@ -1036,6 +1061,15 @@ void Application::post_tick() {
 
     auto audio_events = sim_.poll_audio_events();
     audio_mixer_.ingest_simulation_events(audio_events, local_player_id_);
+
+#if defined(__EMSCRIPTEN__)
+    // A page that embeds several games (web/four.html) shows that the machines stay in step: every 100 ticks the game tells its parent page the tick and the
+    // state hash (the page compares the hashes of the same tick)
+    if (network_active() && sim_.current_tick() % 100 == 0) {
+        const sim::StateHash h = sim_.state_hash();
+        ants_post_sync_to_parent(static_cast<int>(local_player_id_), static_cast<int>(sim_.current_tick()), static_cast<int>(h.total >> 32), static_cast<int>(h.total & 0xFFFFFFFFu));
+    }
+#endif
 
     check_match_over();
 }

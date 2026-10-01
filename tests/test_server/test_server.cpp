@@ -67,6 +67,15 @@ inline void run_test_case(const std::string& name, const std::function<void()>& 
     } while (0)
 #define ASSERT_FALSE(cond) ASSERT_TRUE(!(cond))
 #define ASSERT_EQ(a, b) ASSERT_TRUE((a) == (b))
+#define ASSERT_MSG(cond, msg) \
+    do { \
+        ++g_assert_count; \
+        if (!(cond)) { \
+            std::cout << "FAILED!\n    Assertion failed: " << (msg) << " (" #cond ") at " << __FILE__ << ":" << __LINE__ << "\n"; \
+            ++g_test_failures; \
+            return; \
+        } \
+    } while (0)
 
 namespace {
 
@@ -95,6 +104,7 @@ struct Client {
     sim::SimulationEngine sim;
     std::unique_ptr<net::ClientSession> session;
     bool fail_load{false};
+    bool freeze{false};                      // the session is no longer run: no acks, no orders (a seat that stopped executing the turns)
     bool lost{false};
     uint32_t next_order_ms{0};
     uint32_t rng{1};
@@ -140,7 +150,7 @@ struct Client {
                 session->start(now_ms);
             }
         }
-        if (session) {
+        if (session && !freeze) {
             session->update(now_ms);
             if (session->lost()) lost = true;
             if (now_ms >= next_order_ms && session->mode() == net::ClientSession::Mode::Normal) {
@@ -185,8 +195,7 @@ struct World {
         return c;
     }
     void run(uint32_t ms) {
-        const uint32_t end = now + ms;
-        while (now < end) {
+        for (uint32_t elapsed = 0; elapsed < ms; elapsed += 10) {            // (counted, not compared with an end time: the clock of a test may wrap)
             now += 10;
             net.set_time(now);
             mgr.update(now);
@@ -357,6 +366,166 @@ void run_manager_tests() {
     } TEST_END();
 }
 
+// (placed before the match tests: the door's tests)
+void run_demo_tests() {
+    TEST_CASE("S3.10 Demo Rooms: Off Unless Asked For; A Hello For \"demo-...\" Makes The Room, Only With The Prefix, Only Up To The Limit, And An Unfilled One Fails After A Minute") {
+        auto reject_of = [](World& w, Client& c) {
+            w.run(300);
+            return c.lobby->phase() == net::ClientLobby::Phase::Rejected ? c.lobby->reject_reason() : static_cast<net::RejectReason>(0);
+        };
+        {
+            World w;                                                                      // the default: no demo rooms
+            Client& a = w.connect("Ann", "demo-a");
+            ASSERT_EQ(reject_of(w, a), net::RejectReason::NoSuchRoom);
+            ASSERT_EQ(w.mgr.room_count(), size_t{0});
+        }
+        ServerLimits limits;
+        limits.demo_rooms = 2;
+        limits.demo_map = "TINY.LVL";
+        limits.demo_players = 2;
+        World w(limits);
+        Client& other = w.connect("Other", "other-1");                                    // no prefix: no room is made
+        ASSERT_EQ(reject_of(w, other), net::RejectReason::NoSuchRoom);
+        Client& bare = w.connect("Bare", "demo-");                                        // the prefix alone is no code
+        ASSERT_EQ(reject_of(w, bare), net::RejectReason::NoSuchRoom);
+        ASSERT_EQ(w.mgr.room_count(), size_t{0});
+        Client& ann = w.connect("Ann", "demo-a");
+        w.run(300);
+        ASSERT_EQ(ann.lobby->phase(), net::ClientLobby::Phase::InRoom);
+        ASSERT_EQ(w.mgr.room_count(), size_t{1});
+        ASSERT_TRUE(w.status("demo-a").state == RoomState::Waiting);
+        ASSERT_EQ(w.status("demo-a").map, std::string("TINY.LVL"));
+        ASSERT_EQ(w.status("demo-a").expected, 2);
+        Client& bob = w.connect("Bob", "demo-a");                                         // the second Hello finds the room that the first one made
+        w.run(800);
+        ASSERT_EQ(bob.lobby->my_seat(), 1);
+        ASSERT_EQ(w.mgr.room_count(), size_t{1});
+        ASSERT_TRUE(w.status("demo-a").state == RoomState::Loading || w.status("demo-a").state == RoomState::Running);
+        Client& cat = w.connect("Cat", "demo-b");                                         // a second demo room
+        w.run(300);
+        ASSERT_EQ(cat.lobby->phase(), net::ClientLobby::Phase::InRoom);
+        ASSERT_EQ(w.mgr.room_count(), size_t{2});
+        Client& dan = w.connect("Dan", "demo-c");                                         // the limit is two
+        ASSERT_EQ(reject_of(w, dan), net::RejectReason::NoSuchRoom);
+        ASSERT_EQ(w.mgr.room_count(), size_t{2});
+        w.run(62000);                                                                     // demo-b never filled: it fails after its minute (the match of demo-a goes on)
+        ASSERT_TRUE(w.status("demo-b").state == RoomState::Failed);
+        ASSERT_EQ(ServerLimits().demo_players, 4);                                        // the default is a room of four (this test uses two)
+        ASSERT_EQ(ServerLimits().demo_rooms, size_t{0});
+        w.run(31000);                                                                     // a failed demo room is forgotten after 30 s, and its place is free again
+        ASSERT_EQ(w.mgr.room_count(), size_t{1});
+        Client& eve = w.connect("Eve", "demo-d");
+        w.run(300);
+        ASSERT_EQ(eve.lobby->phase(), net::ClientLobby::Phase::InRoom);
+        ASSERT_EQ(w.mgr.room_count(), size_t{2});
+    } TEST_END();
+}
+
+void run_hardening_tests() {
+    TEST_CASE("S3.11 The Server's Clock Is Its Uptime: A Room Starts And Plays When The 32-Bit Clock Is Past Its Signed Half, And Across The Wrap") {
+        for (const uint32_t origin : {0x7FFFFE00u, 0x80000100u, 0xFFFFFC18u}) {          // just before the signed flip, just after it, a second before the wrap
+            World w;
+            w.now = origin;
+            ASSERT_TRUE(w.mgr.create_room(spec_of("CLOCK-1", 2), w.now).ok);
+            w.connect("Ann", "CLOCK-1");
+            w.connect("Bob", "CLOCK-1");
+            w.run(2500);
+            ASSERT_MSG(w.status("CLOCK-1").state == RoomState::Running, "the room started at origin " + std::to_string(origin));
+            w.run(20000);
+            const RoomStatus s = w.status("CLOCK-1");
+            ASSERT_MSG(s.state == RoomState::Running && s.ticks > 300, "the match runs at origin " + std::to_string(origin));
+            ASSERT_FALSE(w.clients[0]->session->desynced());
+            ASSERT_TRUE(w.clients[0]->sim.state_hash() == w.clients[1]->sim.state_hash() || w.clients[0]->sim.current_tick() != w.clients[1]->sim.current_tick());
+        }
+    } TEST_END();
+
+    TEST_CASE("S3.12 A Seat That Stops Executing Turns Cannot Hold A Room: It Is Dropped After 20 s And The Others Play On; A Running Room Has A Wall-Clock Limit") {
+        {
+            World w;
+            ASSERT_TRUE(w.mgr.create_room(spec_of("LAG-1", 3), w.now).ok);
+            Client& a = w.connect("Ann", "LAG-1");
+            Client& b = w.connect("Bob", "LAG-1");
+            Client& c = w.connect("Cat", "LAG-1");
+            w.run(3000);
+            ASSERT_TRUE(w.status("LAG-1").state == RoomState::Running);
+            b.freeze = true;                                                              // Bob's program hangs: it neither acks nor answers (a hostile client would still ping)
+            w.run(8000);
+            const uint32_t ticks_while_stuck = w.status("LAG-1").ticks;
+            w.run(4000);
+            ASSERT_TRUE(w.status("LAG-1").ticks - ticks_while_stuck < 40);                // the match is held up: (a few turns of the buffer, no more)
+            w.run(20000);                                                                 // 20 s of being the one that holds it up: dropped
+            const uint32_t after_drop = w.status("LAG-1").ticks;
+            w.run(5000);
+            ASSERT_TRUE(w.status("LAG-1").ticks > after_drop + 60);                       // Ann and Cat play on
+            ASSERT_TRUE(w.status("LAG-1").state == RoomState::Running);
+            ASSERT_FALSE(a.lost || c.lost);
+        }
+        {                                                                                 // two players: the one that is left has won, the room ends (it is not held for ever)
+            World w;
+            ASSERT_TRUE(w.mgr.create_room(spec_of("LAG-2", 2), w.now).ok);
+            w.connect("Ann", "LAG-2");
+            Client& b = w.connect("Bob", "LAG-2");
+            w.run(3000);
+            ASSERT_TRUE(w.status("LAG-2").state == RoomState::Running);
+            b.freeze = true;
+            w.run(40000);
+            ASSERT_TRUE(w.status("LAG-2").state == RoomState::Finished);
+        }
+        {
+            World w;
+            RoomSpec spec = spec_of("RUN-1", 2);
+            spec.run_ms = 5000;
+            ASSERT_TRUE(w.mgr.create_room(spec, w.now).ok);
+            w.connect("Ann", "RUN-1");
+            w.connect("Bob", "RUN-1");
+            w.run(2500);
+            ASSERT_TRUE(w.status("RUN-1").state == RoomState::Running);
+            w.run(6000);
+            const RoomStatus s = w.status("RUN-1");
+            ASSERT_TRUE(s.state == RoomState::Failed);
+            ASSERT_TRUE(s.reason.find("longer") != std::string::npos);
+        }
+    } TEST_END();
+
+    TEST_CASE("S3.13 The Door Cannot Be Locked By Silent Connections, And The End Of A Room That Is Forgotten At Once Is Still Reported") {
+        {
+            ServerLimits limits;
+            limits.max_pending = 4;
+            World w(limits);
+            ASSERT_TRUE(w.mgr.create_room(spec_of("DOOR-1", 2), w.now).ok);
+            std::vector<std::pair<net::Connection*, net::Connection*>> silent;
+            for (int i = 0; i < 4; ++i) {
+                auto ends = w.net.connect({5, 0});
+                w.mgr.add_connection(std::make_unique<Borrowed>(ends.first), "x", w.now);
+                silent.push_back(ends);
+            }
+            ASSERT_EQ(w.mgr.pending_count(), size_t{4});
+            Client& ann = w.connect("Ann", "DOOR-1");                                    // the fifth connection: it takes the place of the oldest silent one
+            w.run(400);
+            ASSERT_EQ(ann.lobby->phase(), net::ClientLobby::Phase::InRoom);
+            ASSERT_FALSE(silent[0].second->is_open());                                    // (the evicted one was closed)
+            ASSERT_TRUE(silent[3].second->is_open());
+            ASSERT_TRUE(w.mgr.connections_refused() >= 1);
+        }
+        {
+            World w;
+            RoomSpec spec = spec_of("GONE-1", 2);
+            spec.wait_ms = 1000;
+            spec.keep_ms = 0;                                                             // forgotten in the pass in which it fails
+            ASSERT_TRUE(w.mgr.create_room(spec, w.now).ok);
+            std::vector<RoomStatus> ended;
+            for (int i = 0; i < 300; ++i) {
+                w.run(10);
+                for (const RoomStatus& s : w.mgr.take_ended(w.now)) ended.push_back(s);
+            }
+            ASSERT_EQ(w.mgr.room_count(), size_t{0});
+            ASSERT_EQ(ended.size(), size_t{1});
+            ASSERT_EQ(ended[0].code, std::string("GONE-1"));
+            ASSERT_TRUE(ended[0].state == RoomState::Failed);
+        }
+    } TEST_END();
+}
+
 void run_match_tests() {
     TEST_CASE("S3.4 A Whole Match: Three Clients Join By Code, The Match Starts By Itself, The Referee Plays Along Bit-Identically To The End, The Result Is Kept") {
         World w;
@@ -511,6 +680,8 @@ void run_control_tests() {
         ASSERT_EQ(call("POST", "/rooms", R"({"map":"TINY.LVL","players":9})").status, 400);
         ASSERT_EQ(call("POST", "/rooms", R"({"map":"TINY.LVL","fog":"yes"})").status, 400);
         ASSERT_EQ(call("POST", "/rooms", R"({"map":"TINY.LVL","wait_seconds":0})").status, 400);
+        ASSERT_EQ(call("POST", "/rooms", R"({"map":"TINY.LVL","max_run_seconds":59})").status, 400);          // a match lasts at least a minute
+        ASSERT_EQ(call("POST", "/rooms", R"({"map":"TINY.LVL","max_run_seconds":86401})").status, 400);
         ASSERT_EQ(call("POST", "/rooms", R"({"map":"TINY.LVL","seed":-1})").status, 400);
         ASSERT_EQ(call("POST", "/rooms", R"({"map":"../../etc/passwd"})").status, 404);
         ASSERT_EQ(call("POST", "/rooms", R"({"map":"NOSUCH.LVL"})").status, 404);
@@ -588,6 +759,8 @@ int main() {
     std::cout << "=======================================================\n";
     run_store_tests();
     run_manager_tests();
+    run_demo_tests();
+    run_hardening_tests();
     run_match_tests();
     run_control_tests();
     run_socket_tests();

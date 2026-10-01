@@ -74,6 +74,9 @@ public:
     /// Starts joining the room at address:port. False when the address cannot be used or there is no transport; the outcome arrives as events.
     /// `want_seat` (0 .. 3) asks the host for that seat (the colour: 0 green, 1 red, 2 blue, 3 black); a seat that is taken gives the first free one; 255 = any.
     bool join(const std::string& address, uint16_t port, const std::string& name, uint8_t want_seat = 255, const std::string& room = std::string(), const std::string& token = std::string());
+    /// The same through a WebSocket (ws:// or wss:// URL, the game server's door behind its proxy): the browser build's only way to join. False when the URL cannot
+    /// be used or there is no WebSocket (every native build: it joins with TCP). A server's room has no host migration and no links between guests.
+    bool join_url(const std::string& url, const std::string& name, uint8_t want_seat = 255, const std::string& room = std::string(), const std::string& token = std::string());
     /// Leaves for good: tells the others (a guest says Leave), closes every connection. The others see the host or the guest gone.
     void leave();
 
@@ -157,6 +160,8 @@ private:
     void promote();
     void pump_peers();
     void begin_peer_links();
+    /// The part of joining that every transport shares: the uplink is ready, the lobby asks for its room and seat
+    void begin_client(std::unique_ptr<Connection> uplink, uint16_t peer_port, const std::string& name, uint8_t want_seat, const std::string& room, const std::string& token);
     void close_peer_links();
     void refresh_status();
     void set_notice(std::string text);

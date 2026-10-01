@@ -1,5 +1,7 @@
 #include "ants_net/lobby.hpp"
 
+#include "ants_net/clock.hpp"
+
 #include <algorithm>
 
 namespace ants::net {
@@ -226,7 +228,7 @@ void HostLobby::handle_guest_message(uint8_t seat, const std::vector<uint8_t>& m
             Guest& g = guests_[seat];
             // an answer to one of the last eight pings (its send time must be the recorded one: a made-up time is not believed)
             if (m.nonce == 0 || m.nonce > g.ping_nonce || g.ping_nonce - m.nonce >= 8u || g.ping_sent[m.nonce % 8u] != m.sent_ms ||
-                last_update_ms_ < m.sent_ms) {
+                static_cast<int32_t>(last_update_ms_ - m.sent_ms) < 0) {
                 return;
             }
             const LinkQuality before = g.measured ? link_quality(room_.slots[seat].rtt_ms) : LinkQuality::Unknown;
@@ -276,7 +278,7 @@ void HostLobby::update(uint32_t now_ms) {
     for (uint8_t s = 0; s < sim::MAX_PLAYERS && phase_ != Phase::Begun; ++s) {
         if (guests_[s].conn == nullptr) continue;
         Guest& g = guests_[s];
-        if (g.conn->is_open() && now_ms >= g.next_ping_ms) {        // measure the round trip: the thumb beside the name
+        if (g.conn->is_open() && (g.ping_nonce == 0 || time_reached(now_ms, g.next_ping_ms))) {        // measure the round trip: the thumb beside the name
             PingMsg ping;
             ping.nonce = ++g.ping_nonce;
             ping.sent_ms = now_ms;
@@ -329,21 +331,27 @@ void ClientLobby::leave() {
     if (phase_ != Phase::Begun) phase_ = Phase::Closed;
 }
 
+void ClientLobby::send_hello() {
+    if (conn_ == nullptr || phase_ != Phase::Connecting || !conn_->is_open()) return;
+    HelloMsg h;
+    h.name = printable(cfg_.name, kMaxNameChars);
+    h.listen_port = cfg_.listen_port;
+    h.want_seat = cfg_.want_seat;
+    h.room = cfg_.room;
+    h.token = cfg_.token;
+    conn_->send(encode(h));
+    phase_ = Phase::Joining;
+    joined_stamp_pending_ = true;
+}
+
 void ClientLobby::update(uint32_t now_ms) {
     if (conn_ == nullptr || phase_ == Phase::Begun || phase_ == Phase::Rejected || phase_ == Phase::Closed) return;
     if (phase_ == Phase::Connecting) {
         std::vector<uint8_t> nothing;
         conn_->poll(nothing);                        // lets a connection that is still being made (TCP) progress
         if (conn_->is_open()) {
-            HelloMsg h;
-            h.name = printable(cfg_.name, kMaxNameChars);
-            h.listen_port = cfg_.listen_port;
-            h.want_seat = cfg_.want_seat;
-            h.room = cfg_.room;
-            h.token = cfg_.token;
-            conn_->send(encode(h));
-            phase_ = Phase::Joining;
-            joined_at_ms_ = now_ms;
+            send_hello();
+            joined_stamp_pending_ = true;
         } else if (conn_->state() != Connection::State::Connecting) {
             phase_ = Phase::Closed;
             events_.push_back(Event{Event::Type::Disconnected});
@@ -351,6 +359,10 @@ void ClientLobby::update(uint32_t now_ms) {
         } else {
             return;
         }
+    }
+    if (joined_stamp_pending_) {
+        joined_at_ms_ = now_ms;
+        joined_stamp_pending_ = false;
     }
     std::vector<uint8_t> msg;
     int budget = 128;

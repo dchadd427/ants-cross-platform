@@ -1,10 +1,13 @@
 #include "ants_server/room.hpp"
 
+#include "ants_net/clock.hpp"
+
 #include <algorithm>
 
 namespace ants::server {
 
 namespace {
+constexpr uint32_t kLaggardDropMs = 20000;           // a seat that has held the match up this long is dropped (it does not execute the turns)
 constexpr uint32_t kMaxFailedStarts = 5;             // a room whose start is cancelled this many times (a client that cannot load the map, leavers) gives up
 }  // namespace
 
@@ -34,6 +37,7 @@ static net::HostLobby::Config lobby_config(const RoomSpec& spec) {
 Room::Room(RoomSpec spec, MapEntry map, assets::LevelData level, uint32_t seed, uint32_t now_ms)
     : spec_(std::move(spec)), map_(std::move(map)), level_(std::move(level)), seed_(seed), created_ms_(now_ms), lobby_(lobby_config(spec_)) {
     spec_.players = std::max<uint8_t>(2, std::min<uint8_t>(spec_.players, sim::MAX_PLAYERS));
+    retry_at_ms_ = now_ms;                                       // (not 0: the server's clock is its uptime, and a signed comparison against a stale 0 breaks after 24.8 days)
     lobby_.set_map(map_.name);
     lobby_.set_fog(spec_.fog);
 }
@@ -95,8 +99,10 @@ void Room::begin_match(uint32_t now_ms) {
         names_[seat] = start.names[seat];
         sim_->set_player_name(seat, start.names[seat]);
     }
+    started_ms_ = now_ms;
     net::HostSession::Config hc;
     hc.host_player = net::kNoSeat;
+    hc.laggard_drop_ms = kLaggardDropMs;                         // a seat that stops executing the turns cannot hold the room
     session_ = std::make_unique<net::HostSession>(*sim_, hc);
     for (uint8_t seat = 0; seat < sim::MAX_PLAYERS; ++seat) {
         if (net::Connection* c = lobby_.connection_of(seat)) session_->add_client(seat, c);
@@ -152,7 +158,7 @@ void Room::update(uint32_t now_ms) {
 
     if (state_ == RoomState::Waiting) {
         if (lobby_.can_start() && lobby_.players() >= spec_.players) {
-            if (static_cast<int32_t>(now_ms - retry_at_ms_) >= 0 && lobby_.start(seed_, map_.hash, now_ms)) {
+            if (net::time_reached(now_ms, retry_at_ms_) && lobby_.start(seed_, map_.hash, now_ms)) {
                 state_ = RoomState::Loading;
                 lobby_.host_loaded(true);                            // the server loaded the map when it made the room
             }
@@ -178,6 +184,7 @@ void Room::update(uint32_t now_ms) {
             finish("the match ended", now_ms);
             return;
         }
+        if (now_ms - started_ms_ >= spec_.run_ms) return fail("the match took longer than the room's limit", now_ms);
         bool anybody = false;
         for (uint8_t seat = 0; seat < sim::MAX_PLAYERS; ++seat) anybody = anybody || session_->client_present(seat);
         if (!anybody) finish("everybody left", now_ms);

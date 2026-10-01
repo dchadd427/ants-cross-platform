@@ -53,6 +53,8 @@ public:
         LockstepRunner::Config runner{};
         uint32_t violation_limit{8};        // undecodable or forbidden messages before a client is thrown out
         uint32_t silence_timeout_ms{60000}; // a client that sends nothing for this long is dropped (the original's 60 s drop-out)
+        uint32_t laggard_drop_ms{0};        // a seat that has held the match up this long (sealing stopped because it does not execute the turns) is dropped; 0 = never:
+                                            // a game between friends waits for a slow machine, a dedicated server cannot let one seat hold a room for ever
     };
 
     HostSession(sim::SimulationEngine& sim, Config config);
@@ -126,6 +128,8 @@ private:
     bool frozen_{false};
     uint32_t last_ms_{0};
     uint32_t next_seal_ms_{0};
+    uint8_t stall_player_{255};              // the seat that holds the match up, and since when (laggard_drop_ms)
+    uint32_t stall_since_ms_{0};
 };
 
 class ClientSession {

@@ -430,6 +430,7 @@ struct HttpServer::Impl {
     }
 
     void accept_new(uint32_t now);
+    bool evict_for_new_connection();
     bool step(Conn& c, uint32_t now, const Handler& handler);
     void advance_head(Conn& c, uint32_t now, const Handler& handler);
     void advance_body(Conn& c, uint32_t now, const Handler& handler);
@@ -455,12 +456,35 @@ void HttpServer::Impl::respond_error(Conn& c, uint32_t now, int status, const ch
     respond(c, now, status, "application/json", error_body(message), extra_headers);
 }
 
+// True when the peer has sent something that this server has not read yet
+bool has_unread_input(socket_t fd) {
+    char byte;
+    return ::recv(fd, &byte, 1, MSG_PEEK) > 0;
+}
+
+// When every slot is taken, a new connection wins the slot of the OLDEST connection that is waiting for its request head and has nothing unread on its socket
+// (a real client delivers its request within milliseconds of connecting, so a connection that has sent nothing, or only the beginning of a head, is idle or
+// hostile; a request that has arrived but has not been read yet, for instance one accepted in the same pass, is NOT idle), or else of the oldest one that is only
+// waiting for its client to close after an answer that was delivered. Connections that are being answered or whose body is arriving are never evicted.
+// False when there is nothing to evict. (Without this, a program that opens 32 silent connections would lock the interface out for good.)
+bool HttpServer::Impl::evict_for_new_connection() {
+    for (const Phase wanted : {Phase::Head, Phase::Lingering}) {
+        for (size_t i = 0; i < conns.size(); ++i) {                // (the vector is in the order of acceptance: the first one found is the oldest)
+            if (conns[i]->phase != wanted) continue;
+            if (wanted == Phase::Head && has_unread_input(conns[i]->fd)) continue;
+            conns.erase(conns.begin() + static_cast<std::ptrdiff_t>(i));
+            return true;
+        }
+    }
+    return false;
+}
+
 void HttpServer::Impl::accept_new(uint32_t now) {
     for (int n = 0; n < kMaxAcceptsPerUpdate; ++n) {
         const socket_t s = ::accept(listen_fd, nullptr, nullptr);
         if (s == kBadSocket) break;                               // nothing waiting (or an error that the next update will meet again)
-        if (conns.size() >= HttpServer::kMaxConnections || !set_nonblocking(s)) {
-            close_socket(s);                                      // too many: closed at once, without an answer
+        if ((conns.size() >= HttpServer::kMaxConnections && !evict_for_new_connection()) || !set_nonblocking(s)) {
+            close_socket(s);                                      // too many and none that may give way: closed at once, without an answer
             continue;
         }
         set_no_inherit(s);

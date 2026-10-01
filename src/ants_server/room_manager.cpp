@@ -55,6 +55,23 @@ CreateResult RoomManager::create_room(RoomSpec spec, uint32_t now_ms) {
     return r;
 }
 
+bool RoomManager::make_demo_room(const std::string& code, uint32_t now_ms) {
+    if (limits_.demo_rooms == 0 || limits_.demo_map.empty()) return false;
+    const std::string prefix = kDemoRoomPrefix;
+    if (code.size() <= prefix.size() || code.compare(0, prefix.size(), prefix) != 0 || !net::valid_room_code(code)) return false;
+    size_t demos = 0;
+    for (const auto& kv : rooms_) demos += kv.first.compare(0, prefix.size(), prefix) == 0 ? 1u : 0u;
+    if (demos >= limits_.demo_rooms) return false;
+    RoomSpec spec;
+    spec.code = code;
+    spec.map = limits_.demo_map;
+    spec.players = limits_.demo_players;
+    spec.wait_ms = 60000;
+    spec.keep_ms = 30000;
+    spec.run_ms = 30u * 60u * 1000u;                                // a demo room does not hold its slot for longer than half an hour of play
+    return create_room(std::move(spec), now_ms).ok;
+}
+
 void RoomManager::reject(std::unique_ptr<net::Connection> connection, net::RejectReason reason, uint32_t now_ms) {
     if (connection == nullptr) return;
     ++refused_;
@@ -68,9 +85,11 @@ void RoomManager::reject(std::unique_ptr<net::Connection> connection, net::Rejec
 void RoomManager::add_connection(std::unique_ptr<net::Connection> connection, const std::string& address, uint32_t now_ms) {
     if (connection == nullptr) return;
     if (pending_.size() >= limits_.max_pending) {
+        // Too many that have not said Hello yet. The newcomer wins: the oldest of them has been silent the longest (a real client says Hello at once, and every
+        // pass of update() reads the Hellos that came), so it is the one that is dropped. Otherwise 128 silent connections would keep every player out.
         ++refused_;
-        connection->close();                                   // too many that have not said Hello: no answer, no record
-        return;
+        pending_.front().connection->close();
+        pending_.erase(pending_.begin());
     }
     pending_.push_back(Pending{std::move(connection), address, now_ms});
 }
@@ -93,7 +112,8 @@ void RoomManager::update(uint32_t now_ms) {
             }
             Room* room = nullptr;
             if (good) {
-                const auto it = hello.room.empty() ? rooms_.end() : rooms_.find(hello.room);
+                auto it = hello.room.empty() ? rooms_.end() : rooms_.find(hello.room);
+                if (it == rooms_.end() && !hello.room.empty() && make_demo_room(hello.room, now_ms)) it = rooms_.find(hello.room);
                 if (it == rooms_.end()) {
                     good = false;
                     reason = net::RejectReason::NoSuchRoom;
@@ -128,13 +148,21 @@ void RoomManager::update(uint32_t now_ms) {
     // 3. the rooms
     for (auto it = rooms_.begin(); it != rooms_.end();) {
         it->second->update(now_ms);
-        if (it->second->expired(now_ms)) it = rooms_.erase(it);
-        else ++it;
+        if (it->second->expired(now_ms)) {
+            if (!it->second->end_reported()) {                     // (a room with no keep time ends and expires in one pass: its end is still reported)
+                it->second->mark_end_reported();
+                unreported_.push_back(it->second->status(now_ms));
+            }
+            it = rooms_.erase(it);
+        } else {
+            ++it;
+        }
     }
 }
 
 std::vector<RoomStatus> RoomManager::take_ended(uint32_t now_ms) {
     std::vector<RoomStatus> out;
+    out.swap(unreported_);
     for (auto& kv : rooms_) {
         Room& room = *kv.second;
         if ((room.state() == RoomState::Finished || room.state() == RoomState::Failed) && !room.end_reported()) {

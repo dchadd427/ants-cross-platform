@@ -2124,13 +2124,14 @@ int main() {
         ASSERT_EQ(rig.seen.back().path, "/after");
     } TEST_END();
 
-    TEST_CASE("CTL2.17 HTTP: at most 32 connections at once, the rest are closed at once, and freed slots are used again") {
+    TEST_CASE("CTL2.17 HTTP: at most 32 connections at once; a new one takes the slot of the oldest connection that has not sent its head, so idle ones can never lock the interface out; freed slots are used again") {
         Rig rig;
         ASSERT_TRUE(rig.ok());
+        // 40 clients connect and say nothing: every one beyond the 32nd takes the slot of the oldest silent one (clients 0 - 7 are evicted, 8 - 39 remain)
         std::vector<Client> clients(40);
         for (Client& c : clients) ASSERT_TRUE(rig.connect(c));
         ASSERT_TRUE(rig.wait_count(HttpServer::kMaxConnections));
-        for (size_t i = HttpServer::kMaxConnections; i < clients.size(); ++i) {                // the server closes the rest as it accepts them
+        for (size_t i = 0; i < clients.size() - HttpServer::kMaxConnections; ++i) {             // the server closes the evicted ones without an answer
             std::string raw;
             int rc = -1;
             for (int round = 0; round < 2000 && rc == -1; ++round) {
@@ -2138,7 +2139,8 @@ int main() {
                 rc = clients[i].recv_some(raw);
                 if (rc == -1) sleep_ms(1);
             }
-            ASSERT_MSG(rc == 0 || rc == -2, "connection " + std::to_string(i) + " is closed at once");
+            ASSERT_MSG(rc == 0 || rc == -2, "connection " + std::to_string(i) + " was evicted");
+            ASSERT_TRUE(raw.empty());
         }
         ASSERT_EQ(rig.server->connection_count(), HttpServer::kMaxConnections);
         size_t closed = 0;
@@ -2148,44 +2150,70 @@ int main() {
             const int rc = clients[i].recv_some(raw);
             if (rc == 0 || rc == -2) ++closed;
             if (rc == -1) ++open;
-            ASSERT_MSG((i < HttpServer::kMaxConnections) == (rc == -1), "connection " + std::to_string(i) + (rc == -1 ? " is open" : " is closed"));
+            ASSERT_MSG((i >= clients.size() - HttpServer::kMaxConnections) == (rc == -1), "connection " + std::to_string(i) + (rc == -1 ? " is open" : " is closed"));
             ASSERT_TRUE(raw.empty());
         }
         ASSERT_EQ(open, 32u);
         ASSERT_EQ(closed, 8u);
-        // the 32 that were taken still work
-        clients[0].send_all(make_request("GET", "/first"));
-        const Reply r = rig.read_reply(clients[0]);
+        // the newest one is served; a request that comes while all 32 are held by silent connections is served too (that is the point)
+        clients[8].send_all(make_request("GET", "/first"));
+        const Reply r = rig.read_reply(clients[8]);
         ASSERT_EQ(r.status, 200);
         ASSERT_EQ(rig.seen.back().path, "/first");
-        clients[0].close();
+        clients[8].close();
         ASSERT_TRUE(rig.wait_count(31));
-        // a new client takes the freed slot and is served; one more is turned away
         Client fresh;
         ASSERT_TRUE(rig.connect(fresh));
         ASSERT_TRUE(rig.wait_count(32));
-        Client too_many;
-        ASSERT_TRUE(rig.connect(too_many));
-        int rc = -1;
-        const std::string turned_away = rig.quiet_for(too_many, 2000, &rc);                 // returns when the server has closed it
-        ASSERT_TRUE(rc == 0 || rc == -2);
-        ASSERT_TRUE(turned_away.empty());
-        ASSERT_EQ(rig.server->connection_count(), 32u);
+        Client real;                                                                           // all 32 slots are held by silent connections: the real request still gets in
+        ASSERT_TRUE(rig.connect(real));
+        real.send_all(make_request("GET", "/real"));
+        ASSERT_EQ(rig.read_reply(real).status, 200);
+        ASSERT_EQ(rig.seen.back().path, "/real");
         std::string raw;
-        ASSERT_EQ(fresh.recv_some(raw), -1);
+        ASSERT_EQ(fresh.recv_some(raw), -1);                                                   // (the oldest silent one, clients[9], is the one that gave way)
+        int rc9 = -1;
+        for (int round = 0; round < 2000 && rc9 == -1; ++round) {
+            rig.pump();
+            rc9 = clients[9].recv_some(raw);
+            if (rc9 == -1) sleep_ms(1);
+        }
+        ASSERT_TRUE(rc9 == 0 || rc9 == -2);
         fresh.send_all(make_request("GET", "/fresh"));
         ASSERT_EQ(rig.read_reply(fresh).status, 200);
-        // the idle ones time out together after 5 seconds
+        // the remaining idle ones time out together after 5 seconds
         rig.now += HttpServer::kRequestTimeoutMs;
         int answered = 0;
-        for (size_t i = 1; i < clients.size(); ++i) {
-            if (i >= HttpServer::kMaxConnections) continue;
+        for (size_t i = 10; i < clients.size(); ++i) {
             if (rig.read_reply(clients[i], 500).status == 408) ++answered;
         }
-        ASSERT_EQ(answered, 31);
-        ASSERT_TRUE(rig.server->connection_count() >= 31u);                         // they wait for their clients to close (or for the linger time)
+        ASSERT_EQ(answered, 30);
+        ASSERT_TRUE(rig.server->connection_count() >= 30u);                         // they wait for their clients to close (or for the linger time)
         rig.now += HttpServer::kLingerMs;
         ASSERT_TRUE(rig.wait_count(0));
+        // connections that are being answered are never evicted: with every slot busy writing or receiving a body, a further connection is closed at once
+        {
+            std::vector<Client> bodies(HttpServer::kMaxConnections);
+            const std::string head = "POST /body HTTP/1.1\r\nHost: x\r\n" + auth_line() + "Content-Length: 100\r\n\r\n";
+            for (Client& c : bodies) {
+                ASSERT_TRUE(rig.connect(c));
+                c.send_all(head);                                                              // the head is complete; the body never comes
+            }
+            for (int i = 0; i < 30; ++i) {
+                rig.pump();
+                sleep_ms(2);
+            }
+            ASSERT_EQ(rig.server->connection_count(), HttpServer::kMaxConnections);
+            Client turned_away;
+            ASSERT_TRUE(rig.connect(turned_away));
+            int rc = -1;
+            const std::string nothing = rig.quiet_for(turned_away, 2000, &rc);
+            ASSERT_TRUE(rc == 0 || rc == -2);
+            ASSERT_TRUE(nothing.empty());
+            ASSERT_EQ(rig.server->connection_count(), HttpServer::kMaxConnections);
+            for (Client& c : bodies) c.close();
+            ASSERT_TRUE(rig.wait_count(0));
+        }
         // a flood of connections that connect and leave does not leak slots
         for (int i = 0; i < 300; ++i) {
             Client c;
@@ -2194,7 +2222,74 @@ int main() {
             if (i % 50 == 0) rig.pump();
         }
         fresh.close();
+        real.close();
         ASSERT_TRUE(rig.wait_count(0));
+    } TEST_END();
+
+    TEST_CASE("CTL2.17b HTTP: when every slot is taken, silent connections give way before connections that only wait to close, and the oldest of the kind first; a request that is waiting is never the one that gives way") {
+        // every slot waits to close after its answer (32 clients got an answer and keep their side open): a new connection takes the slot of the oldest
+        {
+            Rig rig;
+            ASSERT_TRUE(rig.ok());
+            std::vector<Client> clients(HttpServer::kMaxConnections);
+            for (size_t i = 0; i < clients.size(); ++i) {
+                ASSERT_TRUE(rig.connect(clients[i]));
+                clients[i].send_all(make_request("GET", "/linger" + std::to_string(i)));
+                ASSERT_EQ(rig.read_reply(clients[i]).status, 200);                      // answered; the server now waits for the client to close
+            }
+            ASSERT_EQ(rig.server->connection_count(), HttpServer::kMaxConnections);
+            Client fresh;
+            ASSERT_TRUE(rig.connect(fresh));
+            fresh.send_all(make_request("GET", "/new"));
+            ASSERT_EQ(rig.read_reply(fresh).status, 200);                               // it got in
+            ASSERT_EQ(rig.seen.back().path, "/new");
+            ASSERT_EQ(rig.server->connection_count(), HttpServer::kMaxConnections);     // one of the waiting connections was closed to make room (the server's end of a
+                                                                                       // finished answer is half-closed anyway: the client cannot tell which one from its side)
+        }
+        // 16 that only wait to close (the oldest) and 16 silent ones (newer): the new connection takes a SILENT slot, the waiting ones stay
+        {
+            Rig rig;
+            ASSERT_TRUE(rig.ok());
+            std::vector<Client> clients(HttpServer::kMaxConnections);
+            for (size_t i = 0; i < 16; ++i) {
+                ASSERT_TRUE(rig.connect(clients[i]));
+                clients[i].send_all(make_request("GET", "/linger"));
+                ASSERT_EQ(rig.read_reply(clients[i]).status, 200);
+            }
+            for (size_t i = 16; i < clients.size(); ++i) ASSERT_TRUE(rig.connect(clients[i]));
+            ASSERT_TRUE(rig.wait_count(HttpServer::kMaxConnections));
+            Client fresh;
+            ASSERT_TRUE(rig.connect(fresh));
+            fresh.send_all(make_request("GET", "/new"));
+            ASSERT_EQ(rig.read_reply(fresh).status, 200);
+            std::string raw;
+            int rc = -1;
+            for (int round = 0; round < 2000 && rc == -1; ++round) {                    // the oldest SILENT connection (16) gave way
+                rig.pump();
+                rc = clients[16].recv_some(raw);
+                if (rc == -1) sleep_ms(1);
+            }
+            ASSERT_TRUE(rc == 0 || rc == -2);
+            ASSERT_EQ(clients[17].recv_some(raw), -1);                                  // only that one: the next silent one is still open
+            ASSERT_EQ(rig.server->connection_count(), HttpServer::kMaxConnections);
+        }
+        // a request that has arrived but has not been read yet is not idle: 32 connections with their requests already waiting, a 33rd connects in the same
+        // pass: the 33rd is turned away, and every one of the 32 requests is answered
+        {
+            Rig rig;
+            ASSERT_TRUE(rig.ok());
+            std::vector<Client> clients(HttpServer::kMaxConnections + 1);
+            for (size_t i = 0; i < HttpServer::kMaxConnections; ++i) {
+                ASSERT_TRUE(rig.connect(clients[i]));
+                clients[i].send_all(make_request("GET", "/waiting" + std::to_string(i)));
+            }
+            ASSERT_TRUE(rig.connect(clients[HttpServer::kMaxConnections]));            // (nothing has been pumped yet: the server has accepted nothing)
+            size_t answered = 0;
+            for (size_t i = 0; i < HttpServer::kMaxConnections; ++i) {
+                if (rig.read_reply(clients[i]).status == 200) ++answered;
+            }
+            ASSERT_EQ(answered, HttpServer::kMaxConnections);
+        }
     } TEST_END();
 
     TEST_CASE("CTL2.18 HTTP response safety: the handler's output cannot split a response, bad statuses and exceptions become 500") {

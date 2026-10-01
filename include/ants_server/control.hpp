@@ -3,7 +3,7 @@
 // The calls of the control interface (docs/NETWORK_PORT.md), as a function of the room manager: a lobby's backend makes, inspects and closes rooms with them.
 // The HTTP server (ants::ctl::HttpServer) checks the bearer secret before this function is ever called; everything here is JSON in, JSON out.
 //
-//   POST   /rooms          {"map": "File name.lvl", "players": 2, "fog": false, "code": "ROOM-1", "seed": 123, "wait_seconds": 120, "load_seconds": 60}
+//   POST   /rooms          {"map": "File name.lvl", "players": 2, "fog": false, "code": "ROOM-1", "seed": 123, "wait_seconds": 120, "load_seconds": 60, "keep_seconds": 600, "max_run_seconds": 7200}
 //                          -> 201 {"code": "...", "state": "waiting", ...}   (code and seed are optional: the server draws them)
 //   GET    /rooms/<code>   -> 200 the room's status; 404
 //   GET    /rooms          -> 200 {"rooms": [status, ...]}

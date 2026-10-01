@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ants (1998) — four games, one server</title>
+    <link rel="icon" type="image/png" href="/favicon.png">
+    <style>
+        :root {
+            --bg-color: #121513;
+            --panel-bg: #1c231e;
+            --panel-border: #384d3e;
+            --accent-green: #48b870;
+            --accent-gold: #e6b830;
+            --accent-red: #e0584a;
+            --text-main: #d0e0d4;
+            --text-dim: #849688;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            background: var(--bg-color);
+            color: var(--text-main);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            padding: 10px 12px 16px;
+            min-height: 100vh;
+        }
+        header {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px 16px;
+            max-width: 1320px;
+            margin: 0 auto 10px;
+        }
+        h1 {
+            font-size: 1.25rem;
+            color: var(--accent-gold);
+            letter-spacing: 1px;
+            text-transform: uppercase;
+        }
+        .sub { color: var(--text-dim); font-size: 0.85rem; margin-top: 2px; }
+        .sub code { color: var(--text-main); }
+        .actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+        .btn {
+            background: var(--panel-bg);
+            border: 1px solid var(--panel-border);
+            color: var(--text-main);
+            padding: 8px 12px;
+            min-height: 38px;
+            border-radius: 6px;
+            font-size: 0.85rem;
+            cursor: pointer;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+        }
+        .btn:hover { border-color: var(--accent-green); color: #fff; }
+        #sync {
+            position: sticky;
+            top: 0;
+            z-index: 5;
+            max-width: 1320px;
+            margin: 0 auto 10px;
+            padding: 8px 12px;
+            border: 1px solid var(--panel-border);
+            border-radius: 6px;
+            background: var(--panel-bg);
+            font-size: 0.9rem;
+            color: var(--text-dim);
+        }
+        #sync.ok { color: var(--accent-green); border-color: var(--accent-green); }
+        #sync.bad { color: #fff; background: #5a2420; border-color: var(--accent-red); }
+        #grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 10px;
+            max-width: 1320px;
+            margin: 0 auto;
+        }
+        @media (max-width: 760px) { #grid { grid-template-columns: minmax(0, 1fr); } }
+        .cell {
+            border: 2px solid var(--panel-border);
+            border-radius: 6px;
+            overflow: hidden;
+            background: #000;
+        }
+        .cell.focus { border-color: var(--accent-gold); }
+        .label {
+            display: flex;
+            justify-content: space-between;
+            gap: 8px;
+            padding: 4px 8px;
+            font-size: 0.78rem;
+            background: var(--panel-bg);
+            color: var(--text-dim);
+        }
+        .label .seat { color: var(--text-main); font-weight: 600; }
+        .frame { position: relative; aspect-ratio: 4 / 3; }
+        iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; background: #000; }
+        .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; background: var(--text-dim); }
+        .dot.green { background: #48b870; } .dot.red { background: #e0584a; } .dot.blue { background: #4a8ae0; } .dot.black { background: #101010; border: 1px solid #888; }
+        footer { max-width: 1320px; margin: 12px auto 0; color: var(--text-dim); font-size: 0.8rem; line-height: 1.5; }
+    </style>
+</head>
+<body>
+    <header>
+        <div>
+            <h1>Four games, one server</h1>
+            <div class="sub">One match, four browser windows (Green, Red, Blue, Black), all connected to the game server through <code>/ws</code>. Room <code id="room-code">...</code></div>
+        </div>
+        <div class="actions">
+            <button id="new-room" type="button" class="btn">New match</button>
+            <a class="btn" href="/">Single game</a>
+        </div>
+    </header>
+
+    <div id="sync">Waiting for the four games to connect and start...</div>
+
+    <div id="grid"></div>
+
+    <footer>
+        Every window runs the whole simulation; the server only orders the commands and acts as the referee. Each game tells this page its tick and state hash every 100 ticks (5 seconds):
+        when the four agree, the machines are in step. Click a window to play it (the others stop their music and their sound: only the window you are in is heard). The match is the
+        original's clock: when it ends each window shows its results screen.
+    </footer>
+
+    <script>
+    (function () {
+        'use strict';
+        var SEATS = [
+            { name: 'Green', css: 'green' }, { name: 'Red', css: 'red' },
+            { name: 'Blue', css: 'blue' }, { name: 'Black', css: 'black' }
+        ];
+        var NAMES = ['Maple', 'Clover', 'Pebble', 'Sorrel', 'Fern', 'Bramble', 'Juniper', 'Flint', 'Willow', 'Cedar', 'Moss', 'Thistle'];
+
+        function randomCode() {
+            var chars = 'abcdefghjkmnpqrstuvwxyz23456789', out = '';
+            var buf = new Uint32Array(6);
+            (window.crypto || window.msCrypto).getRandomValues(buf);
+            for (var i = 0; i < 6; i++) out += chars.charAt(buf[i] % chars.length);
+            return out;
+        }
+
+        // ?room=<code> uses a room that was made some other way (the lobby, the control interface); without it the page asks for a demo room of its own
+        var params = new URLSearchParams(window.location.search);
+        var room = params.get('room');
+        if (!room || !/^[A-Za-z0-9_-]{1,32}$/.test(room)) room = 'demo-' + randomCode();
+        document.getElementById('room-code').textContent = room;
+
+        var state = SEATS.map(function () { return { tick: -1, hash: '', at: 0 }; });
+        var byTick = {};            // tick -> [hash per seat]
+        var agreedTick = -1;
+        var diverged = null;
+        var startedAt = Date.now();
+
+        var grid = document.getElementById('grid');
+        var cells = [], labels = [];
+        var names = NAMES.slice().sort(function () { return 0.5 - Math.random(); });
+        SEATS.forEach(function (seat, i) {
+            var cell = document.createElement('div');
+            cell.className = 'cell';
+            var label = document.createElement('div');
+            label.className = 'label';
+            label.innerHTML = '<span><span class="dot ' + seat.css + '"></span><span class="seat">' + seat.name + '</span> &middot; ' + names[i] + '</span><span class="info">connecting...</span>';
+            var frame = document.createElement('div');
+            frame.className = 'frame';
+            var iframe = document.createElement('iframe');
+            iframe.setAttribute('allow', 'autoplay; fullscreen');
+            iframe.setAttribute('title', seat.name + ' player');
+            iframe.src = './?join=/ws&room=' + encodeURIComponent(room) + '&seat=' + i + '&name=' + encodeURIComponent(names[i]) + '&embed=1';
+            frame.appendChild(iframe);
+            cell.appendChild(label);
+            cell.appendChild(frame);
+            grid.appendChild(cell);
+            cells.push(cell);
+            labels.push(label.querySelector('.info'));
+            iframe.addEventListener('load', function () { iframe.contentWindow.addEventListener('focus', function () { setFocus(i); }); });
+        });
+
+        function setFocus(i) {
+            cells.forEach(function (c, k) { c.classList.toggle('focus', k === i); });
+        }
+        window.addEventListener('blur', function () {            // focus moved into a frame (or away from the page)
+            setTimeout(function () {
+                var active = document.activeElement;
+                for (var k = 0; k < SEATS.length; k++) {
+                    if (cells[k].contains(active)) { setFocus(k); return; }
+                }
+            }, 0);
+        });
+
+        var syncBox = document.getElementById('sync');
+        function show(text, cls) { syncBox.textContent = text; syncBox.className = cls || ''; }
+
+        // A new match in the same page (the room was left and a new one started) begins again at tick 0: whatever was collected belongs to the old match
+        function resetMatch() {
+            byTick = {};
+            agreedTick = -1;
+            diverged = null;
+            state = SEATS.map(function () { return { tick: -1, hash: '', at: 0 }; });
+            startedAt = Date.now();
+            show('Waiting for the four games to connect and start...');
+        }
+
+        window.addEventListener('message', function (e) {
+            if (e.origin !== window.location.origin || !e.data || e.data.ants !== 'sync') return;
+            var seat = e.data.seat, tick = e.data.tick, hash = String(e.data.hash);
+            if (!(seat >= 0 && seat < SEATS.length) || typeof tick !== 'number' || !/^[0-9a-f]{16}$/.test(hash)) return;
+            if (tick < state[seat].tick) resetMatch();                // a seat that reports an earlier tick than before: a new match began
+            state[seat] = { tick: tick, hash: hash, at: Date.now() };
+            labels[seat].textContent = 'tick ' + tick + ' \u00b7 ' + hash.slice(0, 8);
+            var row = byTick[tick] || (byTick[tick] = []);
+            row[seat] = hash;
+            var complete = 0, same = true, first = null;
+            for (var k = 0; k < SEATS.length; k++) {
+                if (row[k]) { complete++; if (first === null) first = row[k]; else if (row[k] !== first) same = false; }
+            }
+            if (!same) {
+                diverged = tick;
+                var parts = [];
+                for (var j = 0; j < SEATS.length; j++) parts.push(SEATS[j].name + ' ' + (row[j] || '-').slice(0, 8));      // (an explicit loop: a sparse array has holes that map() skips)
+                show('OUT OF STEP at tick ' + tick + ': ' + parts.join(' \u00b7 '), 'bad');
+            } else if (complete === SEATS.length) {
+                if (tick > agreedTick) agreedTick = tick;
+                if (diverged === null) show('In step: all four games agree at tick ' + agreedTick + ' (' + Math.floor(agreedTick / 20) + ' seconds of play), state hash ' + first.slice(0, 8), 'ok');
+            }
+            Object.keys(byTick).forEach(function (t) { if (Number(t) < tick - 2000) delete byTick[t]; });   // keep the recent ones only
+        });
+
+        setInterval(function () {
+            if (agreedTick < 0 && diverged === null) {
+                var waited = Math.round((Date.now() - startedAt) / 1000);
+                show('Waiting for the four games to connect and start (' + waited + ' s)...' + (waited > 90 ? ' Is the game server reachable at /ws?' : ''));
+            }
+        }, 1000);
+
+        document.getElementById('new-room').addEventListener('click', function () {
+            // a fresh page, a fresh demo room (the address is rebuilt from this page's own origin, never taken from the path: a path that starts with // would leave the site)
+            window.location.assign(window.location.origin + window.location.pathname.replace(/^\/+/, '/'));
+        });
+    })();
+    </script>
+</body>
+</html>

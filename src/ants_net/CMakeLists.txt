@@ -17,6 +17,12 @@ if(NOT EMSCRIPTEN)
     endif()
 endif()
 
+# The browser's WebSocket client (the page's own WebSocket through Emscripten's library: -lwebsocket.js)
+if(EMSCRIPTEN)
+    target_sources(ants_net PRIVATE wasm_ws.cpp)
+    target_link_libraries(ants_net PUBLIC websocket.js)
+endif()
+
 target_include_directories(ants_net PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../../include>
     $<INSTALL_INTERFACE:include>

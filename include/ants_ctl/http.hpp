@@ -30,13 +30,17 @@
 //    Content-Length, Transfer-Encoding, Authorization, Host or Expect, both Content-Length and Transfer-Encoding, a target that is not an absolute
 //    path: nothing is guessed or repaired); HTTP versions other than 1.0 and 1.1 get 505; `Expect: 100-continue` is answered, any other expectation
 //    gets 417. The path and the query reach the handler as they came, not percent-decoded and not normalized: the router decides what they mean.
-//  - At most 32 connections are open at once; a further one is accepted and closed at once. Every connection carries one request: the answer has
+//  - At most 32 connections are open at once. A further one takes the slot of the oldest connection that is waiting for its request head and has nothing
+//    unread on its socket (such a connection is idle or hostile: a real client sends its request at once; a request that has arrived but not been read yet
+//    is never sacrificed), or else of the oldest one that only waits for its client to close after its answer; if every slot is busy answering,
+//    receiving a body or has a request waiting, the further connection is accepted and closed at once. Every connection carries one request: the answer has
 //    `Connection: close`, and whatever follows the first request on the same connection (a pipelined second one) is ignored.
 //  - The server's own answers are JSON `{"error":"..."}` (a fixed text, never an echo of the request), with an exact Content-Length, `Content-Type:
 //    application/json` and `Cache-Control: no-store`. No header is built from request data, and a handler's content type with a control character
 //    in it is replaced, so a request cannot split a response.
 //  - Not provided, on purpose: TLS (the traffic never leaves the machine; a deployment that opens the port to a network puts a TLS proxy in front),
-//    keep-alive, HEAD, and any protection against a local program that holds all 32 connections (it can slow the interface down, not use it).
+//    keep-alive, HEAD, and any protection against a program that keeps opening connections faster than real requests can finish (each new connection evicts one
+//    that is still waiting for its head; the loopback address and the secret are the protection).
 //
 // Like everything in the game's network code nothing blocks and nothing runs in a thread: the program calls update() from its main loop with a
 // millisecond clock, and update() accepts, reads, parses, calls the handler (synchronously, for a request that is complete and authenticated), writes

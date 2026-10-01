@@ -137,6 +137,9 @@ public:
 
     ClientLobby(Connection* connection, Config config) : conn_(connection), cfg_(std::move(config)) {}
 
+    /// Says Hello now when the connection is open (and no Hello has been sent): a browser tab that is not drawn runs no frames, so no update() comes, and the
+    /// server closes a connection that does not say Hello within seconds. update() does the same on its own; the timer of the Hello starts at the next update().
+    void send_hello();
     void update(uint32_t now_ms);
     Phase phase() const noexcept { return phase_; }
     uint8_t my_seat() const noexcept { return seat_; }
@@ -164,6 +167,7 @@ private:
     CancelMsg::Reason cancel_reason_{CancelMsg::Reason::HostCancelled};
     uint8_t cancel_player_{255};
     uint32_t joined_at_ms_{0};
+    bool joined_stamp_pending_{false};      // the Hello went out through send_hello(): update() stamps the time
     std::vector<Event> events_;
 };
 

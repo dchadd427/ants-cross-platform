@@ -100,11 +100,13 @@ bool spec_from_json(const JsonValue& body, RoomSpec& out, std::string& error) {
     int64_t wait = spec.wait_ms / 1000;
     int64_t load = spec.load_ms / 1000;
     int64_t keep = spec.keep_ms / 1000;
+    int64_t run = spec.run_ms / 1000;
     int64_t seed = 0;
-    if (!number("wait_seconds", 1, 86400, wait) || !number("load_seconds", 1, 600, load) || !number("keep_seconds", 0, 86400, keep)) return false;
+    if (!number("wait_seconds", 1, 86400, wait) || !number("load_seconds", 1, 600, load) || !number("keep_seconds", 0, 86400, keep) || !number("max_run_seconds", 60, 86400, run)) return false;
     spec.wait_ms = static_cast<uint32_t>(wait * 1000);
     spec.load_ms = static_cast<uint32_t>(load * 1000);
     spec.keep_ms = static_cast<uint32_t>(keep * 1000);
+    spec.run_ms = static_cast<uint32_t>(run * 1000);
     if (body.find("seed") != nullptr) {
         if (!number("seed", 0, 4294967295LL, seed)) return false;
         spec.has_seed = true;

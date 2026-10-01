@@ -8,6 +8,8 @@
 #ifndef __EMSCRIPTEN__
 #include "ants_net/lan.hpp"
 #include "ants_net/tcp.hpp"
+#else
+#include "ants_net/wasm_ws.hpp"
 #endif
 
 namespace ants::net {
@@ -30,6 +32,7 @@ bool hash_file(const std::string& path, uint64_t& out) {
 }
 
 struct NetGame::Transport {
+    std::unique_ptr<Connection> uplink;                     // client: the connection to the host (TCP) or to a server (TCP natively, a WebSocket in the browser)
 #ifndef __EMSCRIPTEN__
     struct PendingPeer {
         std::unique_ptr<TcpConnection> conn;
@@ -44,7 +47,6 @@ struct NetGame::Transport {
     };
     std::unique_ptr<TcpListener> listener;                  // host: the room's door (closed when the match begins: no late join)
     std::vector<std::unique_ptr<TcpConnection>> guests;     // host: every accepted connection (the lobby and the session borrow them)
-    std::unique_ptr<TcpConnection> uplink;                  // client: the connection to the host
     std::unique_ptr<TcpListener> peer_listener;             // client: where the other guests connect (host migration)
     std::vector<PendingPeer> pending_peers;                 // client: links to the other guests that are being made
     std::vector<PeerLink> peers;                            // client: the links that are made (the session and, after a host change, the new HostSession borrow them)
@@ -100,9 +102,9 @@ void NetGame::shutdown_transport() {
         for (auto& c : transport_->guests) {
             if (c) c->close();
         }
-        if (transport_->uplink) transport_->uplink->close();
         close_peer_links();
 #endif
+        if (transport_->uplink) transport_->uplink->close();
         transport_.reset();
     }
 }
@@ -154,10 +156,39 @@ bool NetGame::join(const std::string& address, uint16_t port, const std::string&
     if (role_ != Role::None) return false;
     auto conn = TcpConnection::connect(address, port);
     if (!conn) return false;
+    auto peer_listener = TcpListener::listen(0, false);                 // where the other guests reach us during the match (host migration)
+    const uint16_t peer_port = peer_listener ? peer_listener->port() : uint16_t{0};
+    begin_client(std::move(conn), peer_port, name, want_seat, room, token);
+    transport_->peer_listener = std::move(peer_listener);
+    return true;
+#endif
+}
+
+bool NetGame::join_url(const std::string& url, const std::string& name, uint8_t want_seat, const std::string& room, const std::string& token) {
+#ifdef __EMSCRIPTEN__
+    if (role_ != Role::None) return false;
+    auto conn = WasmWsConnection::connect(url);
+    if (!conn) return false;
+    WasmWsConnection* raw = conn.get();
+    begin_client(std::move(conn), 0, name, want_seat, room, token);       // no port for the other guests: a server's room has no links between guests
+    raw->set_on_open([this]() {                                           // the Hello goes out when the socket opens, not at the next frame: a page that is not drawn
+        if (client_lobby_) client_lobby_->send_hello();                   // runs no frames, and the server closes a connection that says nothing for 10 s
+    });
+    return true;
+#else
+    (void)url;
+    (void)name;
+    (void)want_seat;
+    (void)room;
+    (void)token;
+    return false;                                                         // (a native client joins with TCP)
+#endif
+}
+
+void NetGame::begin_client(std::unique_ptr<Connection> uplink, uint16_t peer_port, const std::string& name, uint8_t want_seat, const std::string& room, const std::string& token) {
     transport_ = std::make_unique<Transport>();
-    transport_->uplink = std::move(conn);
-    transport_->peer_listener = TcpListener::listen(0, false);          // where the other guests reach us during the match (host migration)
-    peer_port_ = transport_->peer_listener ? transport_->peer_listener->port() : uint16_t{0};
+    transport_->uplink = std::move(uplink);
+    peer_port_ = peer_port;
     ClientLobby::Config cfg;
     cfg.name = name;
     cfg.listen_port = peer_port_;
@@ -170,8 +201,6 @@ bool NetGame::join(const std::string& address, uint16_t port, const std::string&
     phase_since_ms_ = now_;
     refresh_status();
     desync_reported_ = false;
-    return true;
-#endif
 }
 
 void NetGame::leave() {
@@ -556,7 +585,9 @@ void NetGame::begin_match() {
         known_host_ = seat_;
         install_hooks();
         host_session_->start(now_);
-    } else {
+    } else
+#endif
+    {                                                           // a guest (the browser build only ever is one)
         ClientSession::Config cc;
         cc.player = seat_;
         cc.host = kNoSeat;
@@ -569,13 +600,12 @@ void NetGame::begin_match() {
         client_session_->set_connection(transport_->uplink.get());
         install_hooks();
         client_session_->start(now_);
-        pump_peers();                                           // hands over the links that were made while the map loaded
+        pump_peers();                                           // hands over the links that were made while the map loaded (none in the browser)
     }
     phase_ = Phase::Playing;
     loaded_reported_ = false;
     status_.clear();
     events_.push_back(Event{Event::Type::Begun, 255});
-#endif
 }
 
 LockstepRunner* NetGame::runner() const {

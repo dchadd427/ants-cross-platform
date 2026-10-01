@@ -122,7 +122,10 @@ void discard_input(socket_t s) {
 
 // Appends one frame to `out` (the server never masks; the tests' client does)
 void append_frame(std::vector<uint8_t>& out, WsOpcode opcode, const uint8_t* payload, size_t size, bool fin, const std::array<uint8_t, 4>* mask) {
-    out.reserve(out.size() + size + 14);
+    // Grow with slack: reserve(size + n) on every call reallocates and copies the WHOLE backlog each time (libc++ allocates exactly what is asked), so a peer that
+    // never reads and makes the server answer many tiny frames (pings) would cost time that grows with the square of the backlog
+    const size_t need = out.size() + size + 14;
+    if (out.capacity() < need) out.reserve(std::max(need, out.capacity() * 2));
     out.push_back(static_cast<uint8_t>((fin ? 0x80u : 0x00u) | static_cast<uint8_t>(opcode)));
     const uint8_t mask_bit = mask != nullptr ? 0x80u : 0x00u;
     if (size < 126) {

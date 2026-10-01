@@ -27,15 +27,19 @@ public:
 
     /// A connected pair (a, b): what a sends, b receives after the link's delay and vice versa. The endpoints stay valid while the network lives.
     std::pair<Connection*, Connection*> connect(Link link);
-    /// The current time; messages become receivable when it reaches their delivery time
-    void set_time(uint32_t now_ms) { now_ = now_ms; }
+    /// The current time; messages become receivable when it reaches their delivery time. The caller's clock is 32 bits and may wrap (tests of a server that has run
+    /// for weeks): the network keeps its own 64-bit time, advanced by the wrap-safe difference between two calls.
+    void set_time(uint32_t now_ms) {
+        now_ += static_cast<uint32_t>(now_ms - last_set_);
+        last_set_ = now_ms;
+    }
     /// Cuts the link (both ends see Closed); with `fail` they see Failed instead
     void cut(Connection* endpoint, bool fail = false);
 
 private:
     class Endpoint;
     struct Pending {
-        uint32_t deliver_at;
+        uint64_t deliver_at;
         std::vector<uint8_t> data;
     };
     uint32_t next_random() {
@@ -44,7 +48,8 @@ private:
     }
 
     std::vector<std::unique_ptr<Endpoint>> endpoints_;
-    uint32_t now_{0};
+    uint64_t now_{0};
+    uint32_t last_set_{0};
     uint32_t rng_;
 };
 

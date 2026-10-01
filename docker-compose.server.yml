@@ -18,6 +18,8 @@ services:
     image: ants-server
     container_name: ants-server
     restart: unless-stopped
+    # The page web/four.html (four games on one page) needs demo rooms, which are off by default: uncomment to allow them (the maps folder must hold the map).
+    # command: ["--port", "4001", "--ws-port", "4002", "--ctl-port", "4010", "--demo-rooms", "4", "--demo-map", "TINY.LVL"]
     environment:
       ANTS_SERVER_SECRET: ${ANTS_SERVER_SECRET:?set ANTS_SERVER_SECRET in .env}
     volumes:

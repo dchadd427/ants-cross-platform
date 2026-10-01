@@ -299,6 +299,22 @@ void run_command_line_tests() {
         c = Application::parse_arguments(static_cast<int>(args.size()), argv_of(args, st));
         ASSERT_EQ(c.net_room, "ROOM-42");
         ASSERT_EQ(c.net_token, "abc.DEF-123");
+        // --join-url URL (a server's WebSocket door: how the browser build joins; a native game only parses it)
+        args = {"ants", "--join-url", "wss://play.example.org/ws", "--room", "ROOM-42", "--seat", "2", "--name", "Web"};
+        c = Application::parse_arguments(static_cast<int>(args.size()), argv_of(args, st));
+        ASSERT_TRUE(c.net_role == ApplicationConfig::NetRole::Join);
+        ASSERT_EQ(c.net_url, "wss://play.example.org/ws");
+        ASSERT_EQ(c.net_room, "ROOM-42");
+        ASSERT_EQ(c.net_seat, 2);
+        args = {"ants", "--join", "host"};
+        ASSERT_EQ(Application::parse_arguments(static_cast<int>(args.size()), argv_of(args, st)).net_url, "");
+        ASSERT_EQ(Application::parse_arguments(static_cast<int>(args.size()), argv_of(args, st)).net_address, "host");
+        {                                                                                  // a native NetGame cannot join through a WebSocket (it joins with TCP)
+            ants::sim::SimulationEngine sim;
+            ants::net::NetGame game(sim);
+            ASSERT_FALSE(game.join_url("wss://play.example.org/ws", "Web"));
+            ASSERT_FALSE(game.active());
+        }
         args = {"ants", "--room", "no spaces allowed"};                                  // not a room code: ignored
         c = Application::parse_arguments(static_cast<int>(args.size()), argv_of(args, st));
         ASSERT_EQ(c.net_room, "");

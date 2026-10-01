@@ -14,7 +14,7 @@ public:
         uint32_t delay = link_.latency_ms;
         if (link_.jitter_ms > 0) delay += net_.next_random() % (link_.jitter_ms + 1);
         // reliable and ordered: never delivered before an earlier message of this direction
-        const uint32_t at = std::max(net_.now_ + delay, last_deliver_);
+        const uint64_t at = std::max(net_.now_ + delay, last_deliver_);
         last_deliver_ = at;
         peer_->inbox_.push_back(Pending{at, message});
         return true;
@@ -43,7 +43,7 @@ public:
     Endpoint* peer_{nullptr};
     State state_{State::Open};          // this end's own decision (Open, or closed by us, or cut)
     bool peer_closed_{false};           // the other end closed in an orderly way
-    uint32_t last_deliver_{0};
+    uint64_t last_deliver_{0};
     std::deque<Pending> inbox_;
 };
 

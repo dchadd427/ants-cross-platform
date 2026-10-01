@@ -37,6 +37,8 @@ struct RoomSpec {
     uint32_t wait_ms{120000};               // a room that has not started after this long fails ("nobody came", "somebody is missing")
     uint32_t load_ms{60000};                // everybody must have loaded the map this long after the start
     uint32_t keep_ms{10u * 60u * 1000u};    // a finished or failed room stays visible to status calls this long
+    uint32_t run_ms{2u * 3600u * 1000u};    // a match that is still running this long after it began is ended (failed, "took too long"): the game clock only advances while
+                                            // every player executes turns, so without a wall-clock limit a seat that stalls could hold the room for ever
 };
 
 enum class RoomState : uint8_t { Waiting, Loading, Running, Finished, Failed };
@@ -114,6 +116,7 @@ private:
     RoomState state_{RoomState::Waiting};
     std::string reason_;
     uint32_t cancels_{0};
+    uint32_t started_ms_{0};                 // when the match began (run_ms)
     uint32_t retry_at_ms_{0};                // after a cancelled start the room waits a moment before it tries again (a client that cannot load the map does not make a tight loop)
 
     net::HostLobby lobby_;

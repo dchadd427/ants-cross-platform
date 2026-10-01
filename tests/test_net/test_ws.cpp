@@ -465,6 +465,7 @@ public:
         return f;
     }
     bool send_frame(uint8_t first_byte, const Bytes& payload) { return send_bytes(build_frame(first_byte, payload)); }
+    bool send_raw(const Bytes& bytes) { return send_bytes(bytes); }
 
 private:
     sock_t s_{kBadSock};
@@ -1829,6 +1830,36 @@ int main() {
             ASSERT_EQ(next, sent.size());
             ASSERT_TRUE(srv.is_open());
             ASSERT_EQ(srv.backlog(), 0u);
+        }
+        // never reads, and PINGS the server about half a million times: every ping makes the server queue a 2-byte pong. The cost of queueing is linear in the
+        // number of frames (appending used to copy the whole backlog again and again: this took several seconds of the server's time, now some milliseconds)
+        {
+            Rig rig;
+            ASSERT_TRUE(rig.start());
+            Link link;
+            ASSERT_TRUE(open_link(rig, link, "", 4096));
+            WsConnection& srv = *link.server;
+            Bytes burst;
+            for (int i = 0; i < 2000; ++i) {
+                const Bytes ping = link.client.build_frame(0x89, Bytes());
+                burst.insert(burst.end(), ping.begin(), ping.end());
+            }
+            double server_seconds = 0;
+            size_t pings = 0;
+            for (int round = 0; round < 10000 && srv.is_open(); ++round) {                          // (until the connection fails: a host with big socket buffers takes more pings first)
+                if (!link.client.send_raw(burst)) break;
+                pings += 2000;
+                const auto started = std::chrono::steady_clock::now();
+                for (int k = 0; k < 8; ++k) {
+                    Bytes d;
+                    srv.poll(d);
+                }
+                server_seconds += std::chrono::duration<double>(std::chrono::steady_clock::now() - started).count();
+            }
+            std::cout << "[" << pings << " pings, the server needed " << server_seconds << " s] ";
+            ASSERT_TRUE(pings >= 400000);
+            ASSERT_EQ(srv.state(), Connection::State::Failed);                                         // 1 MB of pongs were waiting
+            ASSERT_TRUE(server_seconds < 1.5);
         }
     } TEST_END();
 

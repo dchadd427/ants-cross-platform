@@ -1,5 +1,7 @@
 #include "ants_net/session.hpp"
 
+#include "ants_net/clock.hpp"
+
 #include <algorithm>
 
 namespace ants::net {
@@ -222,11 +224,20 @@ void HostSession::update(uint32_t now_ms) {
     }
     // seal the turns that are due (a fixed 100 ms schedule; while a peer lags too far the game waits and the schedule slides)
     int sealed = 0;
-    while (!frozen_ && now_ms >= next_seal_ms_ && sealed < 5) {
+    while (!frozen_ && time_reached(now_ms, next_seal_ms_) && sealed < 5) {
         if (!sequencer_.can_seal()) {
             next_seal_ms_ = now_ms;
+            const uint8_t laggard = sequencer_.laggard();
+            if (laggard != stall_player_) {                  // a new holder-up: the clock starts again
+                stall_player_ = laggard;
+                stall_since_ms_ = now_ms;
+            } else if (cfg_.laggard_drop_ms != 0 && laggard < sim::MAX_PLAYERS && clients_[laggard].present && now_ms - stall_since_ms_ >= cfg_.laggard_drop_ms) {
+                drop(laggard);                               // it does not execute the turns (and may still answer pings): the others play on
+                stall_player_ = 255;
+            }
             break;
         }
+        stall_player_ = 255;
         const TurnMsg turn = sequencer_.seal();
         broadcast(encode(turn));
         runner_->on_turn(turn);
@@ -255,6 +266,8 @@ void ClientSession::start(uint32_t now_ms) {
     last_heard_ms_ = now_ms;
     next_ping_ms_ = now_ms;
     next_peer_ping_ms_ = now_ms;
+    next_request_ok_ms_.fill(now_ms);                // (deadlines are set from the clock, never left at 0: see clock.hpp)
+    hold_until_ms_ = now_ms;
     peer_heard_.fill(now_ms);
 }
 
@@ -416,7 +429,7 @@ void ClientSession::handle_peer_message(uint8_t seat, const std::vector<uint8_t>
         }
         case MsgType::Request: {
             RequestMsg m;
-            if (!decode(msg, m) || now_ms < next_request_ok_ms_[seat]) return;
+            if (!decode(msg, m) || !time_reached(now_ms, next_request_ok_ms_[seat])) return;
             next_request_ok_ms_[seat] = now_ms + 250;
             send_turns(peers_[seat], m.from_turn);
             return;
@@ -505,7 +518,7 @@ void ClientSession::begin_election(uint32_t now_ms) {
     following_ = 255;
     hint_ = 255;
     host_refusals_ = 0;
-    hold_until_ms_ = 0;
+    hold_until_ms_ = now_ms;
     mode_ = Mode::Electing;
     elect_start_ms_ = now_ms;
     wait_start_ms_ = now_ms;
@@ -632,7 +645,7 @@ void ClientSession::election_tick(uint32_t now_ms) {
         case Mode::Electing: {
             // our turn when no lower seat lives, or when the one we waited for did not propose: then we ask everybody (a guest whose host lives
             // answers so, and this machine learns that it is the one that lost the host)
-            const bool my_turn = (lowest_alive(now_ms) == cfg_.player || now_ms - wait_start_ms_ >= cfg_.elect_timeout_ms) && now_ms >= hold_until_ms_;
+            const bool my_turn = (lowest_alive(now_ms) == cfg_.player || now_ms - wait_start_ms_ >= cfg_.elect_timeout_ms) && time_reached(now_ms, hold_until_ms_);
             if (my_turn) {
                 if (!proposed_) propose(now_ms);
                 if (proposed_ && (all_answered(now_ms) || now_ms - proposal_ms_ >= cfg_.accept_timeout_ms)) resolve(now_ms);
@@ -679,14 +692,14 @@ void ClientSession::update(uint32_t now_ms) {
             conn_->send(encode(h));
         }
     }
-    if (mode_ == Mode::Normal && connected() && now_ms >= next_ping_ms_) {
+    if (mode_ == Mode::Normal && connected() && time_reached(now_ms, next_ping_ms_)) {
         PingMsg p;
         p.nonce = ++ping_nonce_;
         p.sent_ms = now_ms;
         conn_->send(encode_ping(p));
         next_ping_ms_ = now_ms + cfg_.ping_every_ms;
     }
-    if (mode_ != Mode::Lost && now_ms >= next_peer_ping_ms_) {      // keeps the links to the other guests alive and measured
+    if (mode_ != Mode::Lost && time_reached(now_ms, next_peer_ping_ms_)) {      // keeps the links to the other guests alive and measured
         PingMsg p;
         p.nonce = 0;
         p.sent_ms = now_ms;

@@ -69,6 +69,7 @@ struct ApplicationConfig {
     NetRole net_role{NetRole::None};
     std::string net_address{"127.0.0.1"};       // Join: the host's address
     uint16_t net_port{4001};                    // the original's port
+    std::string net_url;                        // Join through a WebSocket (--join-url ws://host/path or wss://...): the browser build's only way, and the one a server's proxy offers
     bool net_loopback_only{false};              // Host: accept only this machine (two copies on one computer, tests)
     uint16_t lan_port{net::kLanDiscoveryPort};  // the UDP port on which an open room announces itself to the local network (--lan-port N; 0 = not at all, --no-lan)
     std::string net_room;                       // Join: the room of a server (--room CODE); "" for a LAN / direct host
@@ -108,7 +109,7 @@ public:
     Application(const Application&) = delete;
     Application& operator=(const Application&) = delete;
 
-    /// The command line: --map, --seed, --player / -pnum: (or -pnum=), --name, -N<team><name> / --team-name, --host [port], --join host[:port], --port, --loopback,
+    /// The command line: --map, --seed, --player / -pnum: (or -pnum=), --name, -N<team><name> / --team-name, --host [port], --join host[:port], --join-url URL, --port, --loopback,
     /// --headless, --fullscreen, --screenshot, ... (docs: README, Command-Line Options)
     static ApplicationConfig parse_arguments(int argc, char* argv[]);
     bool init(int argc, char* argv[]);

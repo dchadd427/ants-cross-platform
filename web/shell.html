@@ -507,6 +507,30 @@
                 padding-bottom: 24px;
             }
         }
+
+        /* Embedded in another page (web/four.html: ?embed=1): only the game, filling the frame */
+        body.embed {
+            padding: 0;
+            min-height: 0;
+            background: #000;
+            overflow: hidden;
+        }
+        body.embed header,
+        body.embed footer,
+        body.embed .mobile-tip-banner,
+        body.embed .info-panel-wrapper {
+            display: none !important;
+        }
+        body.embed #game-container {
+            max-width: none;
+            width: 100vw;
+            height: 100vh;
+            height: 100dvh;
+            aspect-ratio: auto;
+            border: none;
+            border-radius: 0;
+            box-shadow: none;
+        }
     </style>
 </head>
 <body>
@@ -664,7 +688,37 @@
         var canvas = document.getElementById('canvas');
         var isReadyToPlay = false;
 
+        // Joining a game server from the page address (docs/NETWORK_PORT.md): ?join=/ws&room=<code>&seat=<0-3>&name=<name>[&embed=1]
+        //   join   the server's WebSocket door on THIS site: /ws or a path below it (the nginx of the site passes /ws to the server)
+        //   room   the room code (letters, digits, _ and -, up to 32); seat 0 green, 1 red, 2 blue, 3 black; name: printable ASCII, up to 32 characters
+        //   embed  the page is a frame of another page (four.html): no header, guide or start click; sound only while this frame has the focus
+        var ANTS_ARGS = [];
+        var ANTS_EMBED = false;
+        (function () {
+            var q;
+            try { q = new URLSearchParams(window.location.search); } catch (e) { return; }
+            var join = q.get('join');
+            var room = q.get('room');
+            var seat = q.get('seat');
+            var name = q.get('name');
+            ANTS_EMBED = q.get('embed') === '1';
+            if (ANTS_EMBED) {
+                document.body.classList.add('embed');
+                ANTS_ARGS.push('--audio-focus');
+            }
+            if (join && /^\/ws(\/[A-Za-z0-9._~\/-]*)?$/.test(join) && join.indexOf('//') === -1 && join.indexOf('..') === -1) {
+                ANTS_ARGS.push('--join-url', (window.location.protocol === 'https:' ? 'wss://' : 'ws://') + window.location.host + join);
+                if (room && /^[A-Za-z0-9_-]{1,32}$/.test(room)) ANTS_ARGS.push('--room', room);
+                if (seat && /^[0-3]$/.test(seat)) ANTS_ARGS.push('--seat', seat);
+                if (name) {
+                    name = name.replace(/[^\x20-\x7e]/g, '').trim().substring(0, 32);
+                    if (name) ANTS_ARGS.push('--name', name);
+                }
+            }
+        })();
+
         var Module = {
+            arguments: ANTS_ARGS,
             preRun: [],
             postRun: [function() {
                 // Game engine is initialized!
@@ -672,6 +726,7 @@
                 progressContainer.style.display = 'none';
                 statusElement.textContent = 'Audio ready. Click anywhere to play!';
                 playPrompt.style.display = 'inline-block';
+                if (ANTS_EMBED) unlockAudioAndStart();                          // a frame of another page has nobody to click its start prompt
             }],
             locateFile: function(path, prefix) {
                 // Enforce lockstep versioning on wasm and data bundles matching index.js
@@ -790,7 +845,7 @@
             splashOverlay.style.opacity = '0';
             setTimeout(function() {
                 splashOverlay.style.display = 'none';
-                canvas.focus();
+                if (!ANTS_EMBED) canvas.focus({preventScroll: true});          // (a frame of another page gets the focus when the player clicks it, and must not scroll the page)
             }, 300);
         }
 

@@ -13,6 +13,8 @@
 //                      (docker run -p 127.0.0.1:4010:4010 ...); never use these on a machine without that protection, the control interface speaks plain HTTP.
 //   --results-dir DIR  every ended room writes <code>.json there
 //   --max-rooms N      the most rooms at a time (default 256)
+//   --demo-rooms N     for a public test page: a Hello for a not yet existing room "demo-..." makes it (4 players, the --demo-map), at most N at a time (0 = off, the default)
+//   --demo-map NAME    the map of the demo rooms (a file name of the maps folder; required with --demo-rooms)
 //   --version, --help
 //
 // The control interface's secret comes from the environment (ANTS_SERVER_SECRET), never from the command line (a command line is visible to every user).
@@ -50,12 +52,15 @@ struct Options {
     bool ctl_any_interface{false};
     std::string results_dir;
     size_t max_rooms{256};
+    size_t demo_rooms{0};
+    std::string demo_map;
 };
 
 void usage(FILE* to) {
     std::fprintf(to,
                  "usage: ants_server --maps DIR [--port 4001] [--ws-port N] [--ctl-port N] [--public] [--ws-any-interface] [--ctl-any-interface]\n"
                  "                    [--results-dir DIR] [--max-rooms N]\n"
+                 "                    [--demo-rooms N --demo-map NAME]\n"
                  "  the control interface needs the secret in the environment variable ANTS_SERVER_SECRET\n");
 }
 
@@ -123,6 +128,17 @@ int main(int argc, char** argv) {
                 std::fprintf(stderr, "--max-rooms takes a positive number\n");
                 return 2;
             }
+        } else if (a == "--demo-rooms") {
+            const char* text = value("--demo-rooms");
+            char* end = nullptr;
+            const long n = std::strtol(text, &end, 10);
+            if (end == text || *end != '\0' || n < 1 || n > 1000000) {
+                std::fprintf(stderr, "--demo-rooms takes a positive number\n");
+                return 2;
+            }
+            o.demo_rooms = static_cast<size_t>(n);
+        } else if (a == "--demo-map") {
+            o.demo_map = value("--demo-map");
         } else {
             std::fprintf(stderr, "unknown option %s\n", a.c_str());
             usage(stderr);
@@ -181,7 +197,23 @@ int main(int argc, char** argv) {
 
     ants::server::ServerLimits limits;
     limits.max_rooms = o.max_rooms;
-    ants::server::RoomManager rooms{ants::server::MapStore(o.maps_dir), limits};
+    if (o.demo_rooms >= o.max_rooms) {
+        std::fprintf(stderr, "--demo-rooms must be smaller than --max-rooms (%zu), so that rooms made by the control interface keep their places\n", o.max_rooms);
+        return 2;
+    }
+    limits.demo_rooms = o.demo_rooms;
+    limits.demo_map = o.demo_map;
+    ants::server::MapStore store{o.maps_dir};
+    if (o.demo_rooms > 0) {
+        ants::server::MapEntry entry;
+        std::string why;
+        if (o.demo_map.empty() || !store.find(o.demo_map, entry, &why)) {
+            std::fprintf(stderr, "--demo-rooms needs --demo-map with a map of the maps folder%s%s\n", why.empty() ? "" : ": ", why.c_str());
+            return 2;
+        }
+    }
+    ants::server::RoomManager rooms{std::move(store), limits};
+    if (o.demo_rooms > 0) log("demo rooms on: up to " + std::to_string(o.demo_rooms) + " at a time, 4 players, map " + o.demo_map);
 
     std::signal(SIGINT, on_signal);
     std::signal(SIGTERM, on_signal);
@@ -214,8 +246,10 @@ int main(int argc, char** argv) {
         rooms.update(now);
         if (http) http->update(now, [&](const ants::ctl::HttpRequest& request) { return ants::server::handle_control(rooms, request, now); });
         for (const ants::server::RoomStatus& s : rooms.take_ended(now)) {
+            const bool demo = s.code.compare(0, std::strlen(ants::server::kDemoRoomPrefix), ants::server::kDemoRoomPrefix) == 0;
+            if (demo && s.ticks == 0) continue;                    // a demo room that nobody completed: no line, no file (a peer chooses these codes, nothing may pile up)
             log("room " + s.code + " " + ants::server::room_state_name(s.state) + ": " + s.reason + " (map " + s.map + ", " + std::to_string(s.ticks) + " ticks)");
-            if (!o.results_dir.empty()) {
+            if (!o.results_dir.empty() && !demo) {
                 std::ofstream out(std::filesystem::path(o.results_dir) / (s.code + ".json"), std::ios::binary | std::ios::trunc);
                 out << ants::ctl::to_json(ants::server::status_to_json(s)) << "\n";
             }
