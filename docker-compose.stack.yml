@@ -1,0 +1,53 @@
+# The whole site in one stack: the web game (ants-beta) and the dedicated game server (ants-server). For Portainer: Stacks -> Add stack -> Repository,
+# compose path "docker-compose.stack.yml"; the values below are set in the stack's "Environment variables" (they are NOT part of the repository):
+#
+#   ANTS_SERVER_SECRET=<a long random secret>       the bearer secret of the control interface (required)
+#   ANTS_MAPS_DIR=/path/on/the/host/to/the/maps     the folder of .lvl files that rooms may use (required, mounted read-only)
+#   ANTS_PORT=19980                                 the host port of the web page (optional)
+#   ANTS_SERVER_PORT=4001                           the public TCP game port of native clients (optional)
+#
+# Only the TCP game port is open to other machines. The WebSocket port (the site's nginx passes /ws to it over the network below) and the control
+# interface (the lobby's backend calls it) are published on the host's loopback address only.
+services:
+  ants-beta:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ants-beta
+    restart: unless-stopped
+    ports:
+      - "${ANTS_PORT:-19980}:80"
+    networks:
+      - proxy-network
+
+  ants-server:
+    build:
+      context: .
+      dockerfile: Dockerfile.server
+    container_name: ants-server
+    restart: unless-stopped
+    # The page web/four.html (four games on one page) needs demo rooms, which are off by default: uncomment to allow them (the maps folder must hold the map).
+    # command: ["--port", "4001", "--ws-port", "4002", "--ctl-port", "4010", "--demo-rooms", "4", "--demo-map", "TINY.LVL"]
+    environment:
+      ANTS_SERVER_SECRET: ${ANTS_SERVER_SECRET:?set ANTS_SERVER_SECRET in the stack's environment variables}
+    volumes:
+      - ${ANTS_MAPS_DIR:?set ANTS_MAPS_DIR in the stack's environment variables}:/maps:ro
+      - ants-server-results:/results
+    ports:
+      - "${ANTS_SERVER_PORT:-4001}:4001"
+      - "127.0.0.1:${ANTS_SERVER_WS_PORT:-4002}:4002"
+      - "127.0.0.1:${ANTS_SERVER_CTL_PORT:-4010}:4010"
+    networks:
+      - proxy-network
+    # the program needs nothing but its sockets and the results folder
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    pids_limit: 64
+
+volumes:
+  ants-server-results:
+
+networks:
+  proxy-network:
+    external: true
