@@ -4,7 +4,7 @@ A faithful, high-performance, deterministic C++17 native engine remake and port 
 
 The engine directly loads raw original binary assets (`ants.chd` and `Maps/*.LVL`) without pre-conversion, faithfully executing authentic gameplay mechanics, deterministic 20Hz simulation, 32-channel spatial audio, MIDI/MP3 score playback, TrueType font rendering, and an SDL2 hardware-accelerated 2D viewport.
 
-**Current version: v0.0.84** (shown on screen next to the FPS meter). Every release is listed in the **[changelog](CHANGELOG.md)**, which is also published at **[beta.playants.org/changelog.html](https://beta.playants.org/changelog.html)**. Since v0.0.24 every system is re-derived from the disassembly of the original `Ants.exe` (see [Reverse Engineering](#reverse-engineering--historical-preservation)); multiplayer over a network (host / join over TCP) works and is still being extended (see [Network Port](#network-port-in-progress)).
+**Current version: v0.0.85** (shown on screen next to the FPS meter). Every release is listed in the **[changelog](CHANGELOG.md)**, which is also published at **[beta.playants.org/changelog.html](https://beta.playants.org/changelog.html)**. Since v0.0.24 every system is re-derived from the disassembly of the original `Ants.exe` (see [Reverse Engineering](#reverse-engineering--historical-preservation)); multiplayer over a network (host / join over TCP) works and is still being extended (see [Network Port](#network-port-in-progress)).
 
 ---
 
@@ -98,7 +98,7 @@ The remake provides a complete, playable, standalone experience with authentic a
 | **Multiplayer: host / join over TCP** | 🟢 Playable (v0.0.46) | Lock-step core, room with names and connection thumbs, start barrier, roster, drop-out, predicted click feedback, chat; LAN / forwarded port. |
 | **Multiplayer: host migration** | 🟢 Playable (v0.0.47) | The match goes on when the host leaves, as in the original: links between the guests, election of the lowest seat, resync of the turns, the old host dropped in the first turn of the new one. |
 | **Multiplayer: dedicated server** | 🟢 Built (v0.0.83), browser client and four-games page (v0.0.84) | `ants_server`: many rooms per process, each run by a referee that plays nobody; rooms made by a lobby over an authenticated control interface; TCP for native clients, WebSocket for browsers and Electron; a Docker image; the browser build joins through a WebSocket and `web/four.html` plays four games on one page through the server. No NAT traversal in the game (a server is reachable by everybody). |
-| **Bot AI** | 🔧 In design (virtual clients only) | The original has no computer players: the 1:1 core never contains any. Bots are planned as separate virtual clients that use the public command interface (project rule 8, amended; plan in [`docs/BOTS.md`](docs/BOTS.md)). Off by default. |
+| **Bot AI** | 🔧 Plumbing built (B1); the bots themselves are next | The original has no computer players: the 1:1 core never contains any. Bots are separate virtual clients (`ants_ai`) that use the public command interface (project rule 8, amended; design and status in [`docs/BOTS.md`](docs/BOTS.md)). Built: the controller (reaction delay, command budget, HUD rules), `--bot SEAT[:SPEC]` for local games, bot seats in rooms. Every bot is still the idle bot that stands still. Off by default. |
 | **Asset Viewer Overhaul** | 📋 Planned (last) | Verify the viewer's groups and that every animation loads and plays properly, then overhaul it; scheduled after everything else. |
 
 ### Roadmap (in order)
@@ -134,6 +134,7 @@ Ants-Mac/
 │   ├── ants_assets/        # Archive decoders, map loaders, sprite/sound structs
 │   ├── ants_sim/           # Simulation engine, grid, ant units, command layer, state hash
 │   ├── ants_net/           # Lock-step protocol, sequencer, runner, sessions, room, TCP / WebSocket transports
+│   ├── ants_ai/            # Computer players: Bot interface, view, controller (budget, timing, HUD rules), idle bot
 │   ├── ants_ctl/           # Strict JSON and the authenticated HTTP server of the game server's control interface
 │   ├── ants_server/        # The dedicated server: map store, rooms, the door, control calls
 │   └── ants_app/           # SDL2 application, renderer, HUD, audio mixer, MIDI, version
@@ -146,6 +147,7 @@ Ants-Mac/
 │   ├── ants_assets/        # Asset decompression, palette mapping, mirroring
 │   ├── ants_sim/           # Tick loop, PATHMGR A*, locomotion and action clips, combat, commands, state hash
 │   ├── ants_net/           # Network core (no threads, no blocking calls), TCP and WebSocket transports
+│   ├── ants_ai/            # Computer players (virtual clients; no SDL, no sockets, no threads)
 │   ├── ants_ctl/           # JSON library and HTTP server with a bearer secret
 │   ├── ants_server/        # ants_server: the dedicated game server program
 │   └── ants_app/           # Windowing, input handling, viewport camera, rendering, HUD, setup screen
@@ -154,6 +156,7 @@ Ants-Mac/
 │   ├── test_assets/        # Binary asset parsing and movement-table parity tests
 │   ├── test_sim/           # Simulation rules, golden action suites, command layer / state hash
 │   ├── test_net/           # Lock-step core, room, TCP, WebSocket and LAN discovery suites
+│   ├── test_ai/            # Computer players: the controller, the idle bot, bot seats in rooms
 │   ├── test_ctl/           # JSON library and control HTTP server suites
 │   ├── test_server/        # Dedicated server suite (map store, rooms, the door, control calls)
 │   ├── test_app/           # Application integration, render, HUD, status, input, pointer and options suites
@@ -249,6 +252,7 @@ cmake --build build_asan -j8
 | `--map-select` | Start on the setup screen (the default). |
 | `--seed N` | Random seed of the match. |
 | `--player N` | The team you control (0 green, 1 red, 2 blue, 3 black). |
+| `--bot SEAT[:SPEC]` | A computer player at seat SEAT (0 to 3, not your own); repeat it for more. SPEC is `easy`, `medium` (the default), `hard`, `idle`, `worker` or `standard`, or `KIND:LEVEL` (`2:idle:hard`). The game then has the seats that are taken (you and the bots; an empty seat has no hill and no ants) and a bot is called "Bot (Medium)" unless `-N` / `--team-name` names it. Refused with a message: Fog of War on, your own seat, two bots on a seat, `--join`. With `--host` the room shows the bots as players and the host's machine runs them. See [Bots](#bots-computer-players). |
 | `--fullscreen` | Start in fullscreen. |
 | `--headless` | Hidden window with the dummy video driver (used by the tests). |
 | `--screenshot FILE` / `--frames N` | Save a screenshot after N frames (default 5) and exit. |
@@ -281,7 +285,7 @@ Names and network play:
 
 Try it on one computer: `./start_game.sh --host --loopback --name Alice`, then in a second terminal `./start_game.sh --join 127.0.0.1 --name Bob`.
 
-On a local network: `./start_game.sh --host --name Alice` on one machine; `ants --lan-list` on another prints the room (`192.168.1.20:4001  "Alice"  TINY.LVL  1/4 players  v0.0.84`), and `./start_game.sh --join 192.168.1.20 --name Bob` joins it. The firewall of the host must let UDP and TCP port 4001 in.
+On a local network: `./start_game.sh --host --name Alice` on one machine; `ants --lan-list` on another prints the room (`192.168.1.20:4001  "Alice"  TINY.LVL  1/4 players  v0.0.85`), and `./start_game.sh --join 192.168.1.20 --name Bob` joins it. The firewall of the host must let UDP and TCP port 4001 in.
 
 ---
 
@@ -385,7 +389,7 @@ The original game runs a full TCP mesh (port 4001) in which every machine simula
 | Alliance dialogs: the invitation question, the waiting dialog, the break confirmation (teaming works between players; team chat reaches only the allies) | ✅ v0.0.50 |
 | The original's end-of-match rules (CHECKGO elimination, the drop-out win test, quitting as a forfeit; the `Quit` command, protocol version 4) | ✅ v0.0.62 |
 
-How a match runs: a turn is 100 ms (two ticks). The host stamps every command with the sender's seat (a peer cannot speak for another player), seals a turn every 100 ms with the commands in canonical order and sends it to everybody; every machine executes the same turns after a two-turn jitter buffer, waits at a missing turn and runs faster to catch up. Every 20 ticks the machines compare a hash of the whole gameplay state: a mismatch names the peer and the subsystem and freezes the match. Malformed, flooding or host-only messages are counted and the peer is thrown out after eight strikes; the game waits for a peer that lags by up to 3 s and drops one that is silent for 60 s (the original's drop-out time). A player who leaves drops out at the same tick on every machine: its ants die, its alliance ends, "%s dropped out of the game!" is written into the chat log. No bots: every ant command comes from a human player.
+How a match runs: a turn is 100 ms (two ticks). The host stamps every command with the sender's seat (a peer cannot speak for another player), seals a turn every 100 ms with the commands in canonical order and sends it to everybody; every machine executes the same turns after a two-turn jitter buffer, waits at a missing turn and runs faster to catch up. Every 20 ticks the machines compare a hash of the whole gameplay state: a mismatch names the peer and the subsystem and freezes the match. Malformed, flooding or host-only messages are counted and the peer is thrown out after eight strikes; the game waits for a peer that lags by up to 3 s and drops one that is silent for 60 s (the original's drop-out time). A player who leaves drops out at the same tick on every machine: its ants die, its alliance ends, "%s dropped out of the game!" is written into the chat log. Every ant command comes from a person, or from a bot that the host runs through the same door (see [Bots](#bots-computer-players)).
 
 Host migration (v0.0.47): while the map loads, every guest connects to the guests above its seat (each announces a port in its `Hello`, the host passes the addresses on with the roster) and every machine keeps the last 30 s of turns. When the host's connection closes, or the host is silent for 10 s, the guests elect the lowest seat they still see alive (proposal, accept / refuse with an election number, one candidate per election); the winner collects how far everybody got, fetches the turns it lacks, becomes the host, tells the others and sends them the turns they miss; its first turn drops the old host (and any seat that did not follow) on every machine at the same tick. The game shows "The host left. Choosing a new host..." while it happens and "Bob is the host now." afterwards; orders given in the last ~300 ms before the host went are lost and must be given again. A match with one machine left goes on for it alone. Links between guests need the addresses the host saw, so on the internet this waits for the WebRTC transport too.
 
@@ -393,9 +397,23 @@ Limits of this release: raw TCP only (a LAN, a VPN or a forwarded port 4001; roo
 
 ---
 
+## Bots (computer players)
+
+The original 1998 game has no computer players, so the 1:1 core contains none and never will (project rule 8). A bot here is a **virtual client**: a seat whose commands are produced by a program (`ants_ai`) instead of a person. It reads the world through a read-only copy of what a player of its seat can see and sends the same `Command`s a mouse click makes, through the same door (the simulation of a local game, the sequencer of a room); the simulation validates every one of them, so a bot has a person's powers and cannot bend a rule. A game without `--bot` runs no bot code, and no state hash changes.
+
+What exists (v0.0.85, milestone B1 of the plan in [`docs/BOTS.md`](docs/BOTS.md)): the plumbing only, with a bot that stands still.
+
+- **Off by default and always visible.** Bots exist only when asked for (`--bot`); a bot seat is named "Bot (Medium)" etc. on the HUD labels, in the chat log and on the results screen, and in a room it is a slot of its own kind (`Bot`) that a person cannot take, nor fake with a name that starts with "Bot (".
+- **Fair.** The controller gives every bot a human pace: it looks at the world every 0.2 s (Hard) to 5 s (Easy), each command is released a reaction time later (0.4 s to 3 s, plus or minus 25 percent from the seat's own random numbers), and a token bucket limits the commands per second (3.0 / 1.5 / 0.4 with bursts of 10 / 6 / 2). It never sends more than 24 ants in one command (a chosen cap; the HUD lets a person send 32), a special order names one ant, it never quits, never attacks an ally, never orders an ant that is not its own, and never orders the same ant twice within half a second unless urgent. With Fog of War a bot would see through the fog, so a bot together with fog is **refused** everywhere (`check_setup`, the room, `NetGame`, the controller).
+- **Local games**: `ants --map Original-Ants/Maps/TINY.LVL --bot 1:medium` (you at seat 0 against one bot), `ants --player 2 --bot 0:hard --bot 1:easy --bot 3:easy`.
+- **Rooms**: `ants --host --bot 2` seats a bot at seat 2 of your room (guests take the first free seat, the room shows "Bot (Medium)" with the good thumb, START never waits for it). The host's machine runs the bot; a guest never does. The bot's commands enter the host's sequencer with the bot's seat, so every machine sees the same turns and the same state hash. The network protocol is unchanged (`SlotState::Bot` has been part of protocol 6 from the start). If the host leaves, its bot leaves with it (the new host drops the seat in its first turn, like any seat that did not follow).
+- **Until B3 / B4 every bot is the idle bot**: `idle`, `worker` and `standard` are accepted names, they all stand still and only read the world. The worker bot (harvest), the map analysis, the headless tournament runner and the standard bot with its three levels come in the next milestones.
+
+---
+
 ## Changelog & Versioning
 
-The version (`include/ants_app/version.hpp`, currently `v0.0.84`) is bumped with every release and shown on screen next to the FPS meter. [`CHANGELOG.md`](CHANGELOG.md) lists what changed in every version, newest first, from the first commit to the release in progress; it is published on the beta site at [`/changelog.html`](https://beta.playants.org/changelog.html) and linked from the game page.
+The version (`include/ants_app/version.hpp`, currently `v0.0.85`) is bumped with every release and shown on screen next to the FPS meter. [`CHANGELOG.md`](CHANGELOG.md) lists what changed in every version, newest first, from the first commit to the release in progress; it is published on the beta site at [`/changelog.html`](https://beta.playants.org/changelog.html) and linked from the game page.
 
 ---
 
@@ -413,14 +431,14 @@ To run all test suites in sequence:
 ### Running Specific Suites
 ```bash
 ./run_tests.sh --assets   # Asset decoders and movement-table parity with Ants.exe (suites 1, 1.1)
-./run_tests.sh --sim      # Simulation rules, golden action suites, movement differential, command layer, lock-step network, room, TCP (suites 2.x)
+./run_tests.sh --sim      # Simulation rules, golden action suites, movement differential, command layer, lock-step network, room, TCP, dedicated server, computer players (suites 2.x)
 ./run_tests.sh --app      # Application integration, render, HUD, status, input, pointer and options suites (suites 3.x)
 ./run_tests.sh --e2e      # Opaque-box E2E test runner (506 tests across 4 tiers; runs against its own model, see below)
 ./run_tests.sh --asan     # Rebuild and run with AddressSanitizer
 ./run_tests.sh --clean    # Remove the build directories and rebuild first
 ```
 
-### What the Suites Cover (v0.0.84, all passing)
+### What the Suites Cover (v0.0.85, all passing)
 | Suite | What it checks | Size |
 |---|---|---|
 | 1 Asset decoders | `ants.chd` header, palette, sprites, audio, event tags, Table 4 animations, `.LVL` maps, directional mirroring, fuzzing | 9 suites, 70,065 assertions |
@@ -441,11 +459,12 @@ To run all test suites in sequence:
 | 2.13.1 Control interface | The strict JSON library (vectors, 200,000 fuzzed documents, round trips) and the loopback HTTP server with its bearer secret (the right and every wrong secret, limits, timeouts, pipelining, 32 connections and who gives way when they are all taken) over real sockets | 39 tests, 1.44 million assertions |
 | 2.18 Map sweep | `map_sweep --selftest` on the six shipped maps: they load, run and are deterministic (two processes and a second play on one engine), the report counts what happened, an injected fault is found | 59 checks |
 | 2.19 Dedicated server | The map store (names, refusals, the real maps), rooms (waiting, the start by itself, a client that cannot load, a desync, closing), the door (Hello within the time, wrong room, wrong protocol, limits) and the control calls over real sockets | 13 tests, 210 assertions |
+| 2.20 Computer players | `--bot` text and names, `check_setup` (fog, seats, kinds, nobody human), the controller (the token bucket in every window at the three levels, the reaction delay between 75 and 125 percent and reproducible per seat, the schedule and seat phase, time to live, ants that died, issuer stamping, the filter, splitting at 24 / 12 ants, special orders, no attack on an ally, priorities, the anti-thrash cool-down, the end of the match, seating refusals), **a controller whose bots only read changes no state hash at any tick on four maps**, and bot seats in rooms (lobby, session acknowledgement for 1,200 turns with and without a seat for the host, `submit_bot`, a host + guest + bot match for 60 s, host migration dropping the bot, a LAN room with a bot over real sockets) | 22 tests, 65,930 assertions |
 | 3 Application integration | Whole-application behaviour through the HUD, renderer and simulation | 211 tests, 8,012 assertions |
-| 3.1 - 3.5 Model suites | Render parity 419 checks (with the text sizes and the health-number font, and 54 fog patterns of the layer-2 pass against a model of the original's), HUD layout 902 (with the network room screen, the guest screen and the order of the rows, the START buttons' click zones and the corner plate, the label sizes and wrapping, the three alliance dialogs, the results screen, the options screen's pictures and fields, the chat input box, the score boxes, the minimap and the chat log window), status messages 271, input model 110 (with the window layout maths), pointer model 387 (with the stored panel of a Shift-selected group, the Return button's zones and the cursor over dialogs) | 2,089 checks |
-| 3.6 Network application | The command line (names, `--host`, `--join`, `--join-url`, `--seat`, the LAN options, the window options, `--lan-list`), window placement and the 2 x 2 grid, the pointer leaving and entering the window, sound that follows the focus, a headless application as host and as guest of a room, start, a bit-identical match, chat, leaving, the host leaving (a two-player match is decided at once, in a three-player match the guest follows the new host and says so), a guest that quits (the quit ends the match on both machines), the score labels of a local game, teaming over three machines (an offer arrives as the question, Accept, team chat reaches only the ally, refusal, Withdraw) | 18 tests, 306 assertions |
+| 3.1 - 3.5 Model suites | Render parity 419 checks (with the text sizes and the health-number font, and 54 fog patterns of the layer-2 pass against a model of the original's), HUD layout 906 (with the network room screen, the guest screen and the order of the rows, the START buttons' click zones and the corner plate, the label sizes and wrapping, the three alliance dialogs, the results screen, the options screen's pictures and fields, the chat input box, the score boxes, the minimap and the chat log window), status messages 271, input model 110 (with the window layout maths), pointer model 387 (with the stored panel of a Shift-selected group, the Return button's zones and the cursor over dialogs) | 2,089 checks |
+| 3.6 Network application | The command line (names, `--host`, `--join`, `--join-url`, `--seat`, the LAN options, the window options, `--lan-list`), window placement and the 2 x 2 grid, the pointer leaving and entering the window, sound that follows the focus, a headless application as host and as guest of a room, start, a bit-identical match, chat, leaving, the host leaving (a two-player match is decided at once, in a three-player match the guest follows the new host and says so), a guest that quits (the quit ends the match on both machines), the score labels of a local game, teaming over three machines (an offer arrives as the question, Accept, team chat reaches only the ally, refusal, Withdraw); `--bot` (the command line and its refusals, the roster and names of a local game with bots, the results rows, the fog refusal on the setup screen, a room whose host runs a bot) | 26 tests, 431 assertions |
 | 3.7 Options | The original's slider (every configured value placed and read back, every pointer x, hit edges), latching button (pictures, capture, latch), edit field (focus, 100 characters, caret phases), the settings store (the validity rule, files, texts) and the options screen end to end | 135 checks |
-| 3.8 Start script | `start_game.sh --dry-run`: window i is player i and colour i, the host on this machine only, guests with their seats, the 2 x 2 (2 x 1) grid, different random names, the options that make it a single game | 82 checks |
+| 3.8 Start script | `start_game.sh --dry-run`: window i is player i and colour i, the host on this machine only, guests with their seats, the 2 x 2 (2 x 1) grid, different random names, the options that make it a single game (`--bot` too: it cannot be combined with extra windows) | 93 checks |
 | 3.9 Server end-to-end | The real `ants_server` and two headless game clients: the control interface refuses a missing or a wrong secret, a room by code, an automatic start, a match to its end, a clean stop and the result file; the bad demo-room options are refused at startup | 21 checks |
 | 4 E2E | Opaque-box scenarios in four tiers, run against the suite's own model of the rules (`tests/e2e/e2e_model.hpp`; no engine code is linked and the model still has the early combat rules, see `tests/TEST_INFRA.md`) | 506 tests |
 
@@ -545,6 +564,11 @@ flowchart TD
         Wire["Wire Protocol"] --> TCP["TCP Transport (WebRTC planned)"]
     end
 
+    subgraph Bots ["Computer Players (libants-ai, virtual clients)"]
+        View["BotView: read-only copy"] --> Think["Bot::think"]
+        Think --> Ctl["BotController: reaction delay, budget, HUD rules"]
+    end
+
     subgraph App ["Application Layer (libants-app)"]
         Sprites --> Renderer["SDL2 Hardware Renderer"]
         Grid --> Renderer
@@ -558,6 +582,8 @@ flowchart TD
 
     Runner -. "same turns, same tick" .-> Grid
     HUD -. "player commands" .-> Cmd
+    Ctl -. "bot commands, issuer = seat" .-> Cmd
+    Grid -. "read only" .-> View
 ```
 
 ---

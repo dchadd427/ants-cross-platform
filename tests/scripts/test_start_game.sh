@@ -84,13 +84,25 @@ has "$OUT" "--map X"; check "--single: the arguments still reach the game" $?
 OUT="$("$SCRIPT" --players 1 --dry-run)"
 check "--players 1 is --single" "$([ "$(echo "$OUT" | wc -l | tr -d ' ')" -eq 1 ]; echo $?)"
 # the options of one game make it a single game (what the README shows), unless --players is given
-for one in "--host" "--join 10.0.0.5" "--lan-list" "--headless" "--screenshot x.png" "--map X.LVL"; do
+for one in "--host" "--join 10.0.0.5" "--bot 1:medium" "--lan-list" "--headless" "--screenshot x.png" "--map X.LVL"; do
     OUT="$("$SCRIPT" --dry-run $one)"
     check "$one alone: one window, as before" "$([ "$(echo "$OUT" | wc -l | tr -d ' ')" -eq 1 ]; echo $?)"
     has "$OUT" "--grid"; [ $? -ne 0 ]; check "$one alone: no grid, no seat, nothing added" $?
 done
 OUT="$("$SCRIPT" --dry-run --host --name Alice --loopback)"
 check "a one-off host keeps its own arguments and adds none" "$([ "$OUT" = "./build/src/ants_app/ants --host --name Alice --loopback" ]; echo $?)"
+# --bot is an option of one game: it reaches the game as it is, and cannot be combined with extra windows (a guest runs no bots)
+OUT="$("$SCRIPT" --dry-run --bot 1:medium --name Alice)"
+check "--bot reaches the one game unchanged" "$([ "$OUT" = "./build/src/ants_app/ants --bot 1:medium --name Alice" ]; echo $?)"
+OUT="$("$SCRIPT" --dry-run --host --bot 2:hard --name Alice)"
+check "a host with a bot: one window, the arguments as given" "$([ "$OUT" = "./build/src/ants_app/ants --host --bot 2:hard --name Alice" ]; echo $?)"
+for n in 2 3 4; do
+    OUT="$("$SCRIPT" --dry-run --players "$n" --bot 1:medium 2>/dev/null)"; st=$?
+    check "--players $n with --bot is refused (exit status 2)" "$([ "$st" -eq 2 ]; echo $?)"
+    check "--players $n with --bot starts nothing" "$([ -z "$OUT" ]; echo $?)"
+done
+OUT="$("$SCRIPT" --dry-run --players 1 --bot 1:medium)"
+check "--players 1 with --bot is the one game" "$([ "$(echo "$OUT" | wc -l | tr -d ' ')" -eq 1 ]; echo $?)"
 OUT="$("$SCRIPT" --dry-run --players 2 --headless)"
 check "--players wins over the one-game options" "$([ "$(echo "$OUT" | wc -l | tr -d ' ')" -eq 2 ]; echo $?)"
 for bad in 0 5 x ""; do

@@ -775,12 +775,13 @@ void HUD::render_score_team(IRenderer& renderer, const assets::AssetArchive& ass
         return;
     }
     renderer.fill_rect(slot.box_left, slot.top, 54, 14, SCORE_BG_COLORS[team % 4]);
-    int32_t score = team < world.player_scores.size() ? world.player_scores[team] : 0;
+    // The number is the team's score plus its ally's (FUN_01021e36): the engine's player_scores ARE those sums already (get_display_score), so an allied team's
+    // box draws its own entry and nothing is added here (adding the ally's entry too drew every allied box with twice the sum)
+    const int32_t score = team < world.player_scores.size() ? world.player_scores[team] : 0;
     const uint8_t ally = team < world.player_alliances.size() ? world.player_alliances[team] : uint8_t{255};
     if (ally < 4 && ally != team) {
         const int32_t half = (455 - 402) / 2;                                                     // (right - left) / 2 of the 53-wide rectangle
         renderer.fill_rect(slot.box_left + half, slot.top, 54 - half, 14, SCORE_BG_COLORS[ally]);
-        if (ally < world.player_scores.size()) score += world.player_scores[ally];
     }
     draw_score_digits(renderer, assets, slot.box_left - 1, slot.top + 2, score);
 }

@@ -491,7 +491,7 @@ public:
      * picks it up; an own bomb at the destination is walked onto and set off (a player order ignores bombs at its goal, FUN_010202e7 flag 0x20).
      */
     void issue_move_order(uint32_t ant_id, TileCoord dest);
-    /// Move order given by a remake system (guard AI, hill queue, ability approach): GoTo without the player flag.
+    /// Move order given by a remake system (hill queue, ability approach): GoTo without the player flag.
     void issue_internal_move_order(uint32_t ant_id, TileCoord dest);
     /**
      * @brief Player group move (Ants.exe FUN_010287b5). The ants that accept orders (FUN_0101ff5a) and are

@@ -39,7 +39,7 @@ print_usage() {
     echo "Options:"
     echo "  --all            Run all test suites (libants-assets + libants-sim + libants-app + E2E, default)"
     echo "  --assets         Run only asset decoder tests (test_assets)"
-    echo "  --sim            Run only simulation rules tests (test_sim_rules)"
+    echo "  --sim            Run only simulation rules tests (test_sim_rules, and the network, bot and server suites that follow them)"
     echo "  --app            Run only application integration tests (test_app_integration)"
     echo "  --e2e            Run only opaque-box E2E test suites (e2e_runner)"
     echo "  --asan           Build and run with AddressSanitizer (build_asan)"
@@ -172,6 +172,7 @@ CHALLENGER_M2_1_STATUS=0
 CHALLENGER_M2_2_STATUS=0
 MAP_SWEEP_STATUS=0
 SERVER_STATUS=0
+AI_STATUS=0
 SERVER_E2E_STATUS=0
 APP_STATUS=0
 E2E_STATUS=0
@@ -342,6 +343,13 @@ if [ "$RUN_SIM" -eq 1 ]; then
     echo -e "${BOLD}${BLUE}======================================================================${RESET}"
     "./$BUILD_DIR/tests/test_server/test_server"
     SERVER_STATUS=$?
+
+    echo ""
+    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
+    echo -e "${BOLD}${BLUE}>>> 2.20 RUNNING COMPUTER PLAYERS SUITE (ants_ai controller, idle bot, bot seats in rooms)...${RESET}"
+    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
+    "./$BUILD_DIR/tests/test_ai/test_ai"
+    AI_STATUS=$?
 fi
 
 # 5. Execute Application Integration Tests
@@ -603,6 +611,13 @@ if [ "$RUN_SIM" -eq 1 ]; then
         echo -e " 2.19 Dedicated Server (test_server):                ${GREEN}PASSED${RESET}"
     else
         echo -e " 2.19 Dedicated Server (test_server):                ${RED}FAILED (exit code ${SERVER_STATUS})${RESET}"
+        TOTAL_FAILED=$((TOTAL_FAILED + 1))
+    fi
+
+    if [ "$AI_STATUS" -eq 0 ]; then
+        echo -e " 2.20 Computer Players (test_ai):                    ${GREEN}PASSED${RESET}"
+    else
+        echo -e " 2.20 Computer Players (test_ai):                    ${RED}FAILED (exit code ${AI_STATUS})${RESET}"
         TOTAL_FAILED=$((TOTAL_FAILED + 1))
     fi
 fi

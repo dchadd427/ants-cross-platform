@@ -18,6 +18,40 @@ std::string printable(const std::string& s, size_t max) {
     return out;
 }
 
+// Whether a name looks like a bot's ("Bot (Hard)"): its first four characters, leaving out the spaces and the case, are "bot(" (so "bot(x)", " Bot (x)" and
+// "B o t (x)" all count: none of them may pass for a person, and none may be taken by one)
+bool bot_like(const std::string& name) {
+    static const char kMark[] = "bot(";
+    size_t matched = 0;
+    for (const char raw : name) {
+        if (raw == ' ') continue;
+        const char c = raw >= 'A' && raw <= 'Z' ? static_cast<char>(raw - 'A' + 'a') : raw;
+        if (c != kMark[matched]) return false;
+        if (++matched == sizeof(kMark) - 1) return true;
+    }
+    return false;
+}
+
+std::string trimmed(const std::string& s) {
+    const size_t a = s.find_first_not_of(' ');
+    if (a == std::string::npos) return std::string();
+    return s.substr(a, s.find_last_not_of(' ') - a + 1);
+}
+
+// A person's name may not look like a bot's: the bots of a room are shown as bots, and a person is never shown as one. Replaced by `fallback`.
+std::string human_name(const std::string& raw, const std::string& fallback) {
+    const std::string name = trimmed(printable(raw, kMaxNameChars));
+    return bot_like(name) ? fallback : name;
+}
+
+// A bot's name always carries the marker: a name that does not start with "Bot (" is wrapped ("Zed" becomes "Bot (Zed)"), an empty one is "Bot"
+std::string bot_name(const std::string& raw) {
+    const std::string name = trimmed(printable(raw, kMaxNameChars));
+    if (name.empty()) return "Bot";
+    if (bot_like(name)) return name;
+    return printable("Bot (" + name + ")", kMaxNameChars);
+}
+
 }  // namespace
 
 // ------------------------------------------------------------------------------------------------
@@ -28,7 +62,7 @@ HostLobby::HostLobby(Config config) : cfg_(std::move(config)) {
     if (cfg_.host_seat != 255 && cfg_.host_seat >= sim::MAX_PLAYERS) cfg_.host_seat = 0;
     if (cfg_.host_seat < sim::MAX_PLAYERS) {                   // a dedicated server's host (255) holds no seat
         room_.slots[cfg_.host_seat].state = SlotState::Host;
-        room_.slots[cfg_.host_seat].name = printable(cfg_.host_name, kMaxNameChars);
+        room_.slots[cfg_.host_seat].name = human_name(cfg_.host_name, "Host");
         room_.slots[cfg_.host_seat].rtt_ms = 0;                // the host's own thumb is always good
     }
     // room_.map_name stays empty until the host chooses a map (the setup screen lists what the Maps folder holds; no map is named in the program)
@@ -42,8 +76,42 @@ void HostLobby::set_map(const std::string& map_name) {
 
 void HostLobby::set_fog(bool fog) {
     if (phase_ != Phase::Room || fog == room_.fog) return;
+    if (fog && has_bot()) return;                                // a bot would see through the fog: with a bot in the room it stays off
     room_.fog = fog;
     broadcast_room();
+}
+
+bool HostLobby::has_bot() const noexcept {
+    for (const auto& s : room_.slots) {
+        if (s.state == SlotState::Bot) return true;
+    }
+    return false;
+}
+
+bool HostLobby::add_bot(uint8_t seat, const std::string& name) {
+    if (phase_ != Phase::Room || seat >= sim::MAX_PLAYERS || room_.slots[seat].state != SlotState::Empty) return false;
+    if (room_.fog || players() >= cfg_.max_players) return false;
+    guests_[seat] = Guest{};
+    room_.slots[seat].state = SlotState::Bot;
+    room_.slots[seat].name = bot_name(name);
+    room_.slots[seat].rtt_ms = 0;                                // nothing to measure: the thumb of a bot is good
+    events_.push_back(Event{Event::Type::Joined, seat});
+    broadcast_room();
+    return true;
+}
+
+void HostLobby::remove_bot(uint8_t seat) {
+    if (phase_ == Phase::Begun || seat >= sim::MAX_PLAYERS || room_.slots[seat].state != SlotState::Bot) return;
+    room_.slots[seat] = RoomMsg::Slot{};
+    events_.push_back(Event{Event::Type::Left, seat});
+    if (phase_ == Phase::Loading) cancel_with(CancelMsg::Reason::PlayerLeft, seat);
+    else broadcast_room();
+}
+
+size_t HostLobby::humans() const noexcept {
+    size_t n = 0;
+    for (const auto& s : room_.slots) n += (s.state == SlotState::Host || s.state == SlotState::Client) ? 1u : 0u;
+    return n;
 }
 
 size_t HostLobby::players() const noexcept {
@@ -54,6 +122,7 @@ size_t HostLobby::players() const noexcept {
 
 bool HostLobby::measured(uint8_t seat) const noexcept {
     if (seat >= sim::MAX_PLAYERS) return false;
+    if (room_.slots[seat].state == SlotState::Bot) return true;                  // nothing to measure
     return seat == cfg_.host_seat ? room_.slots[seat].state == SlotState::Host : guests_[seat].measured;
 }
 
@@ -133,6 +202,7 @@ void HostLobby::cancel() {
 
 bool HostLobby::start(uint32_t seed, uint64_t map_hash, uint32_t now_ms) {
     if (!can_start()) return false;
+    if (room_.fog && has_bot()) return false;                    // (set_fog and add_bot keep this from happening: the last line of defence)
     start_ = StartMsg{};
     start_.seed = seed;
     start_.map_name = room_.map_name;
@@ -204,7 +274,7 @@ void HostLobby::handle_hello(Pending& p, const std::vector<uint8_t>& msg, uint32
     guests_[seat].address = p.address;
     guests_[seat].listen_port = hello.listen_port;
     room_.slots[seat].state = SlotState::Client;
-    room_.slots[seat].name = printable(hello.name, kMaxNameChars);
+    room_.slots[seat].name = human_name(hello.name, "Player " + std::to_string(static_cast<unsigned>(seat) + 1u));
     p.conn->send(encode(WelcomeMsg{seat, sim::MAX_PLAYERS}));
     events_.push_back(Event{Event::Type::Joined, seat});
     broadcast_room();

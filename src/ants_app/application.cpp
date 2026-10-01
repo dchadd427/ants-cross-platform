@@ -3,6 +3,8 @@
 #include "ants_app/edge_scroll.hpp"
 #include "ants_app/ui_anim.hpp"
 #include "ants_app/version.hpp"
+#include "ants_ai/bot.hpp"
+#include "ants_ai/bot_controller.hpp"
 #include <iostream>
 #include <fstream>
 #include <ctime>
@@ -61,6 +63,33 @@ float music_volume_of(int32_t v) {
     const int32_t word = (std::clamp(v, 0, 100) * 0xffff) / 100;
     return static_cast<float>(word) / 65535.0f;
 }
+
+// Where the commands of a bot of a local game go: straight into the simulation, as a click of the local player does
+class LocalBotSink final : public sim::CommandSink {
+public:
+    explicit LocalBotSink(sim::SimulationEngine& sim) : sim_(sim) {}
+    sim::CommandResult submit(const sim::Command& command) override { return sim_.apply_command(command); }
+
+private:
+    sim::SimulationEngine& sim_;
+};
+
+// ... and of a room's host: into the sequencer of the session, for the seat of the bot (the verdict arrives with the turn, like every command's: a bot ignores it)
+class NetBotSink final : public sim::CommandSink {
+public:
+    NetBotSink(net::NetGame& net, uint8_t seat) : net_(net), seat_(seat) {}
+    sim::CommandResult submit(const sim::Command& command) override {
+        sim::CommandResult result;
+        if (net_.submit_bot(seat_, command)) result.status = sim::CommandResult::Status::Applied;
+        return result;
+    }
+
+private:
+    net::NetGame& net_;
+    uint8_t seat_;
+};
+
+constexpr uint8_t seat_bit(uint8_t seat) noexcept { return static_cast<uint8_t>(1u << seat); }
 
 } // anonymous namespace
 
@@ -176,6 +205,16 @@ ApplicationConfig Application::parse_arguments(int argc, char* argv[]) {
             cfg.display_index = std::max(-1, std::atoi(argv[++i]));
         } else if (std::strcmp(argv[i], "--audio-focus") == 0) {
             cfg.audio_follows_focus = true;
+        } else if (std::strcmp(argv[i], "--bot") == 0) {                       // a computer player: --bot SEAT[:SPEC], repeatable (docs/BOTS.md)
+            ai::BotSpec spec;
+            std::string why;
+            if (i + 1 >= argc) {
+                if (cfg.startup_error.empty()) cfg.startup_error = "--bot needs SEAT[:SPEC], e.g. --bot 1:hard";
+            } else if (ai::parse_bot_spec(argv[++i], spec, why)) {
+                cfg.bots.push_back(spec);
+            } else if (cfg.startup_error.empty()) {
+                cfg.startup_error = "--bot " + std::string(argv[i]) + ": " + why;
+            }
         }
     }
     return cfg;
@@ -184,6 +223,20 @@ ApplicationConfig Application::parse_arguments(int argc, char* argv[]) {
 bool Application::init(const ApplicationConfig& config) {
     config_ = config;
     show_tile_grid_ = config_.show_tile_grid;
+
+    // A command line that is wrong, or bots that cannot play here (a seat that is taken, --join: a guest never runs bots), refuse to start: before anything is opened
+    if (!config_.startup_error.empty()) {
+        std::cerr << "[Application] " << config_.startup_error << std::endl;
+        return false;
+    }
+    const bool hosting = config_.net_role == ApplicationConfig::NetRole::Host;
+    const uint8_t own_seat = hosting ? uint8_t{0} : (config_.local_player_id < 4 ? config_.local_player_id : uint8_t{0});      // (a room's host sits at seat 0)
+    if (const std::string why = bot_setup_problem(own_seat, false); !why.empty()) {
+        std::cerr << "[Application] " << why << std::endl;
+        return false;
+    }
+    const bool local_bots = !config_.bots.empty() && config_.net_role == ApplicationConfig::NetRole::None;
+    local_roster_ = local_bots ? bot_roster(own_seat) : uint8_t{0x0F};
 
     // 1. Initialize SDL2
     uint32_t sdl_flags = SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_TIMER;
@@ -217,8 +270,14 @@ bool Application::init(const ApplicationConfig& config) {
         return false;
     }
 
-    // 4. Initialize Simulation Engine
-    sim_.init(current_level_, config_.random_seed);
+    // 4. Initialize Simulation Engine. A local game that starts at once with bots plays the seats that are taken (you and the bots): a team nobody plays has no hill
+    // and no ants (the setup screen's game does the same in start_game)
+    if (local_bots && !config_.start_in_map_select) {
+        if (local_roster_ != 0x0F) current_level_ = current_level_.for_roster(local_roster_);
+        sim_.init(current_level_, config_.random_seed, local_roster_);
+    } else {
+        sim_.init(current_level_, config_.random_seed);
+    }
 
     // 5. Initialize Audio Subsystem
     audio_mixer_.set_headless_mode(config_.headless);
@@ -284,7 +343,13 @@ bool Application::init(const ApplicationConfig& config) {
             return;
         }
         scorecard_.hide();
-        sim_.init(current_level_, config_.random_seed + 1);
+        if (bots_) {                                                  // the same seats play again, with new bots
+            stop_bots();
+            sim_.init(current_level_, config_.random_seed + 1, local_roster_);
+            start_local_bots(config_.random_seed + 1);
+        } else {
+            sim_.init(current_level_, config_.random_seed + 1);
+        }
         match_over_handled_ = false;
         hud_.reset();
         midi_player_.stop(); // In-game music stays silent
@@ -348,7 +413,10 @@ bool Application::init(const ApplicationConfig& config) {
         if (net_ && net_->is_host()) net_->set_map(filename);
     });
     map_select_.set_on_fog_changed([this](bool fog) {
-        if (net_ && net_->is_host()) net_->set_fog(fog);
+        if (net_ && net_->is_host()) {
+            net_->set_fog(fog);
+            if (fog && !net_->room().fog) map_select_.follow_host_choice(net_->room().map_name, false);      // refused (a bot would see through it): the screen shows Off again
+        }
     });
     map_select_.set_on_quit([this]() {
         quit();
@@ -380,6 +448,12 @@ bool Application::init(const ApplicationConfig& config) {
                       << std::endl;
             return false;
         }
+        for (const ai::BotSpec& bot : config_.bots) {                               // the computer players of a room: seated before any guest comes
+            if (net_->is_host() && !net_->add_bot(bot.seat, ai::bot_display_name(bot))) {
+                std::cerr << "[Application] Could not seat the bot at seat " << static_cast<unsigned>(bot.seat) << std::endl;
+                return false;
+            }
+        }
         net_->set_on_tick([this]() { post_tick(); });
         net_->set_on_chat([this](const net::ChatMsg& m) {
             if (m.sender == local_player_id_ || m.sender >= 4) return;                // the own text is in the log already
@@ -391,7 +465,8 @@ bool Application::init(const ApplicationConfig& config) {
         if (net_->is_host() && !map_select_.get_maps().empty()) net_->set_map(map_select_.get_maps()[static_cast<size_t>(map_select_.get_selected_index())].filename);
         sync_room_view();
     } else {
-        apply_team_names(config_.team_names, 0x0F);                                    // the names of a local game (the local player's own name too)
+        // the names of a local game (the local player's own name too); a bot is called "Bot (Medium)" unless -N / --team-name says otherwise
+        apply_team_names(local_bots ? local_team_names() : config_.team_names, local_bots && !config_.start_in_map_select ? local_roster_ : uint8_t{0x0F});
     }
 
     // --audio-focus: a window that opened behind the others never receives "focus lost": it starts silent and holds its music until it gets the focus
@@ -439,6 +514,11 @@ bool Application::init(const ApplicationConfig& config) {
             mr.decide_winners();
             scorecard_.show(mr, 0);
             scorecard_.update(0.25f);                                // the preview shows the rows, not the waiting label
+        }
+        if (local_bots) {                                            // --map with --bot: the game is running already, the bots join it
+            hud_.set_roster_mask(local_roster_);                     // (the bots are named: every taken seat has its label and its row)
+            scorecard_.set_shown_teams(local_roster_);
+            start_local_bots(config_.random_seed);
         }
     } else {
         if (!config_.skip_intro && !config_.headless) {
@@ -506,9 +586,23 @@ void Application::shutdown() {
 }
 
 bool Application::start_game(const std::string& map_path) {
-    if (!load_match(map_path, config_.random_seed, 0x0F, map_select_.is_fog_of_war_enabled())) return false;
-    apply_team_names(config_.team_names, 0x0F);
+    stop_bots();
+    uint8_t roster = 0x0F;
+    if (!config_.bots.empty()) {                                      // a game with bots: re-checked at START (Fog of War is chosen on this screen)
+        map_select_.set_room(MapSelectScreen::RoomView{});            // (a refusal of the last START is gone)
+        const uint8_t own = local_player_id_ < 4 ? local_player_id_ : uint8_t{0};
+        const std::string why = bot_setup_problem(own, map_select_.is_fog_of_war_enabled());
+        if (!why.empty()) {
+            show_setup_notice(why);
+            return false;
+        }
+        roster = bot_roster(own);
+        local_roster_ = roster;
+    }
+    if (!load_match(map_path, config_.random_seed, roster, map_select_.is_fog_of_war_enabled())) return false;
+    apply_team_names(config_.bots.empty() ? config_.team_names : local_team_names(), roster);
     enter_match();
+    if (!config_.bots.empty()) start_local_bots(config_.random_seed);
     return true;
 }
 
@@ -534,7 +628,7 @@ bool Application::load_match(const std::string& map_path, uint32_t seed, uint8_t
     if (!network_active() && !config_.label_unnamed_teams) {
         labelled = 0;
         for (uint8_t p = 0; p < 4; ++p) {
-            if (((roster >> p) & 1u) != 0 && (p == local_player_id_ || !config_.team_names[p].empty())) labelled = static_cast<uint8_t>(labelled | (1u << p));
+            if (((roster >> p) & 1u) != 0 && (p == local_player_id_ || !local_team_names()[p].empty())) labelled = static_cast<uint8_t>(labelled | (1u << p));
         }
     }
     hud_.set_roster_mask(labelled);
@@ -596,6 +690,86 @@ void Application::apply_team_names(const std::array<std::string, 4>& names, uint
     }
 }
 
+// ------------------------------------------------------------------------------------------------
+// Computer players (docs/BOTS.md): the virtual clients of ants_ai. A game without --bot never gets here and runs no bot code.
+// ------------------------------------------------------------------------------------------------
+
+// "" when the game may start with the bots of the command line, else why it may not. `own_seat` is the person's seat (a room's host sits at seat 0).
+std::string Application::bot_setup_problem(uint8_t own_seat, bool fog) const {
+    if (config_.bots.empty()) return std::string();
+    if (config_.net_role == ApplicationConfig::NetRole::Join) return "--bot cannot be used with --join: a guest never runs bots, the host's machine does.";
+    ai::SetupInfo info;
+    info.bots = config_.bots;
+    info.fog = fog;
+    info.human_mask = seat_bit(own_seat);
+    info.roster = bot_roster(own_seat);
+    return ai::check_setup(info);
+}
+
+uint8_t Application::bot_roster(uint8_t own_seat) const {
+    uint8_t roster = seat_bit(own_seat);
+    for (const ai::BotSpec& b : config_.bots) {
+        if (b.seat < 4) roster = static_cast<uint8_t>(roster | seat_bit(b.seat));
+    }
+    return roster;
+}
+
+std::array<std::string, 4> Application::local_team_names() const {
+    std::array<std::string, 4> names = config_.team_names;
+    for (const ai::BotSpec& b : config_.bots) {
+        if (b.seat < 4 && names[b.seat].empty()) names[b.seat] = ai::bot_display_name(b);      // a seat is shown as a bot; an explicit name wins
+    }
+    return names;
+}
+
+void Application::show_setup_notice(const std::string& text) {
+    std::cerr << "[Application] " << text << std::endl;
+    MapSelectScreen::RoomView view;                                   // the local setup screen: its prompt line is the status
+    view.status = text;
+    map_select_.set_room(view);
+}
+
+// The bots of a local game, built after the simulation was initialised: their commands go straight into the simulation, like the local player's clicks
+bool Application::start_local_bots(uint32_t match_seed) {
+    stop_bots();
+    if (config_.bots.empty() || network_active()) return false;
+    bots_ = std::make_unique<ai::BotController>(sim_, match_seed);
+    bool all = true;
+    for (const ai::BotSpec& spec : config_.bots) {
+        bot_sinks_.push_back(std::make_unique<LocalBotSink>(sim_));
+        std::string why;
+        if (!add_bot(spec, *bot_sinks_.back(), why)) {
+            std::cerr << "[Application] No bot at seat " << static_cast<unsigned>(spec.seat) << ": " << why << std::endl;
+            all = false;
+        }
+    }
+    return all;
+}
+
+// The host of a room runs the room's bots: their commands go into the host's sequencer. A guest (and a guest that took over as host) never does.
+void Application::start_net_bots() {
+    stop_bots();
+    if (config_.bots.empty() || !net_ || !net_->is_host()) return;
+    const net::RoomMsg& room = net_->room();
+    bots_ = std::make_unique<ai::BotController>(sim_, net_->start_info().seed);
+    for (const ai::BotSpec& spec : config_.bots) {
+        if (spec.seat >= 4 || room.slots[spec.seat].state != net::SlotState::Bot) continue;
+        bot_sinks_.push_back(std::make_unique<NetBotSink>(*net_, spec.seat));
+        std::string why;
+        if (!add_bot(spec, *bot_sinks_.back(), why)) std::cerr << "[Application] No bot at seat " << static_cast<unsigned>(spec.seat) << ": " << why << std::endl;
+    }
+}
+
+bool Application::add_bot(const ai::BotSpec& spec, sim::CommandSink& sink, std::string& why) {
+    if (config_.bot_factory) return bots_->add(spec, config_.bot_factory(spec), sink, why);
+    return bots_->add(spec, sink, why);
+}
+
+void Application::stop_bots() {
+    bots_.reset();                                                    // (the controller first: it holds the sinks)
+    bot_sinks_.clear();
+}
+
 void Application::quit() {
     if (net_) net_->leave();
 #if defined(__EMSCRIPTEN__)
@@ -630,6 +804,7 @@ void Application::finish_loading() {
 }
 
 void Application::return_to_map_select() {
+    stop_bots();
     if (network_active()) net_end_session(net_notice_);   // leaving a match leaves the room: the local setup screen follows
     net_notice_.clear();
     enter_map_select();
@@ -1072,6 +1247,7 @@ void Application::post_tick() {
 #endif
 
     check_match_over();
+    if (bots_ && !sim_.is_match_over()) bots_->on_tick(sim_);        // the computer players, last: they act on the world that this tick made
 }
 
 void Application::check_match_over() {
@@ -1232,10 +1408,12 @@ void Application::net_begin_match() {
     local_player_id_ = net_->my_seat();
     hud_.set_command_sink(net_.get());
     enter_match();
+    start_net_bots();
 }
 
 // The session is over (the player left, the host left, a match ended and its results were closed): back to the local setup screen.
 void Application::net_end_session(const std::string& notice) {
+    stop_bots();
     if (net_) net_->leave();
     hud_.set_command_sink(nullptr);
     hud_.set_roster_mask(0x0F);

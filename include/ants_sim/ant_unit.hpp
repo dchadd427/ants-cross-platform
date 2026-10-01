@@ -19,7 +19,7 @@ enum class AntType : uint8_t {
     Bomber  = 1, // Bomber ant (ab) - landmine planting & squash defusal
     Fire    = 2, // Fire ant (af) - magnifying glass ignition & extinguishing
     Thief   = 3, // Thief ant (at) - infiltration, fast raiding, score theft
-    Combat  = 4, // Combat ant (ac) - heavy punch (2 HP + knockback), guard AI
+    Combat  = 4, // Combat ant (ac) - heavy punch (2 HP + knockback), the original's auto-engage reflex (its only AI: no guard post)
     Swimmer = 5  // Swimmer ant (as) - deep water navigation, bridge building
 };
 
@@ -36,7 +36,7 @@ enum class UnitState : uint8_t {
     EnteringBase   = 8,  // Enter (action 2) or hatch (action 0x14) clip on the hill entrance (?h0 / ?hatch)
     Drowning       = 10, // 22-subitem drowning sequence (*dr301)
     Dead           = 11, // Unit eliminated
-    GuardIdle      = 12, // Combat Ant idle at guard post
+    GuardIdle      = 12, // Combat Ant at rest (the name is a leftover of the guard post AI that was removed in v0.0.33: there is no guard post)
     Swimming       = 15, // Swimmer Ant actively swimming in water
     Infiltrating   = 16, // Thief raid clip (action 0xD, atcr501) on the raid tile
     DivingInWater  = 17, // Swimmer Ant diving into water (asdi*, Sound 71)

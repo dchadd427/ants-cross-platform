@@ -7,8 +7,9 @@ rem   start_game.bat --players N     N windows (1 - 4); 2 windows sit side by si
 rem   start_game.bat --single        the same as --players 1 (one game, the setup screen, nothing else changes)
 rem   start_game.bat --dry-run ...   print the command line of every window and stop (nothing is built or started)
 rem   every other argument goes to every window (the game's own options, see README.md)
-rem   --host, --join, --lan-list, --headless, --screenshot and --map are options of one game: given without --players they make this a single game,
-rem   so that `start_game.bat --host --name Alice` and `start_game.bat --join 192.168.1.20` still do what the README says
+rem   --host, --join, --bot, --lan-list, --headless, --screenshot and --map are options of one game: given without --players they make this a single game,
+rem   so that `start_game.bat --host --name Alice` and `start_game.bat --join 192.168.1.20` still do what the README says. --bot cannot be combined with
+rem   --players (the other windows are guests, and a guest runs no bots: a game against bots is one window; use --host --bot and let others join it)
 rem
 rem Environment: ANTS_PORT (the room's TCP port, default 4001).
 rem
@@ -48,12 +49,20 @@ goto parse
 :parsed
 if "%GIVEN%"=="0" (
     for %%A in (!PASS!) do (
-        for %%O in (--host --join --lan-list --headless --screenshot --map) do if /i "%%~A"=="%%O" set "PLAYERS=1"
+        for %%O in (--host --join --bot --lan-list --headless --screenshot --map) do if /i "%%~A"=="%%O" set "PLAYERS=1"
     )
 )
 if not "%PLAYERS%"=="1" if not "%PLAYERS%"=="2" if not "%PLAYERS%"=="3" if not "%PLAYERS%"=="4" (
     echo [LAUNCHER] --players takes a number from 1 to 4.
     exit /b 2
+)
+if not "%PLAYERS%"=="1" (
+    for %%A in (!PASS!) do (
+        if /i "%%~A"=="--bot" (
+            echo [LAUNCHER] --bot cannot be combined with --players: the extra windows are guests and a guest runs no bots. Use start_game.bat --bot 1:medium for a game against a bot, or --host --bot 2:medium to let others join.
+            exit /b 2
+        )
+    )
 )
 
 set "PORT=%ANTS_PORT%"

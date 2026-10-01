@@ -304,11 +304,12 @@ void test_score_boxes(const assets::AssetArchive& arc) {
         check(has_text(rr, "Red:"), "its label stays");
         check(fill_at(rr, 254, 464, 54, colour[2]), "the others keep their slots");
     }
-    // teams 0 and 1 are allied: each box is half its colour and half its ally's (the right half from left + 26) and shows the two scores added
+    // teams 0 and 1 are allied: each box is half its colour and half its ally's (the right half from left + 26) and shows the two scores added. The engine's
+    // player_scores are the sums already (display scores): the box draws its team's entry once. (An earlier box added the ally's entry again: 1500.)
     {
         sim::WorldState world;
         world.player_alliances = {1, 0, 255, 255};
-        world.player_scores = {300, 450, 30, 40};
+        world.player_scores = {750, 750, 30, 40};
         HUD hud;
         hud.init(0);
         RecordingRenderer rr(arc);
@@ -318,6 +319,24 @@ void test_score_boxes(const assets::AssetArchive& arc) {
         check(fill_at(rr, 105, 464, 54, colour[1]) && fill_at(rr, 131, 464, 28, colour[0]), "the ally's box: red, and green from x = 131");
         check(digits_at(rr, 104, 466, 750), "it shows the same sum");
         check(!fill_at(rr, 254, 464, 28, colour[0]) && !fill_at(rr, 254 + 26, 464, 28, colour[0]), "a team without an ally has a single colour");
+        check(!digits_at(rr, 401, 6, 1500) && !digits_at(rr, 104, 466, 1500), "the sum is not added twice");
+    }
+    // the same with the real engine: two allied teams with 300 and 450 points, the boxes show 750, and a team that plays alone shows its own score
+    {
+        sim::SimulationEngine sim;
+        sim.init_test_world(40, 40, 1, 60000);
+        sim.set_player_score(0, 300);
+        sim.set_player_score(1, 450);
+        sim.set_player_score(2, 30);
+        sim.form_alliance(0, 1);
+        const sim::WorldState& world = sim.get_world_state();
+        HUD hud;
+        hud.init(0);
+        RecordingRenderer rr(arc);
+        render(hud, world, rr);
+        check(digits_at(rr, 401, 6, 750), "the engine's allied boxes: the local box shows 300 + 450 = 750");
+        check(digits_at(rr, 104, 466, 750), "and the ally's box shows the same 750");
+        check(digits_at(rr, 253, 466, 30), "a team that plays alone shows its own 30");
     }
 }
 

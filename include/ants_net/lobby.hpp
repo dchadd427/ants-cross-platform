@@ -59,10 +59,21 @@ public:
     Phase phase() const noexcept { return phase_; }
     const RoomMsg& room() const noexcept { return room_; }
     size_t players() const noexcept;
+    /// The seats that a person holds (the host and the guests, not the bots)
+    size_t humans() const noexcept;
     bool occupied(uint8_t seat) const noexcept { return seat < sim::MAX_PLAYERS && room_.slots[seat].state != SlotState::Empty; }
-    bool can_start() const noexcept { return phase_ == Phase::Room && players() >= cfg_.min_players && !room_.map_name.empty(); }
+    /// A match starts when enough seats are taken, a map is chosen, and at least one of the players is a person (a room of bots alone has nobody to play for)
+    bool can_start() const noexcept { return phase_ == Phase::Room && players() >= cfg_.min_players && humans() >= 1 && !room_.map_name.empty(); }
     /// Removes the guest of a seat (Reject Kicked)
     void kick(uint8_t seat);
+    /// A computer player takes `seat` (docs/BOTS.md): a slot in state Bot with no connection behind it. It counts as a player, its thumb is always good
+    /// (round trip 0) and the start never waits for it. False unless the room is open (Room phase), the seat is free, there is room for another player and
+    /// Fog of War is off (a bot would see through the fog). `name` is what the room shows ("Bot (Medium)"); the room's wire format is unchanged.
+    bool add_bot(uint8_t seat, const std::string& name);
+    /// Takes a bot out of the room (a bot seat of a started match stays)
+    void remove_bot(uint8_t seat);
+    /// True when a seat holds a bot
+    bool has_bot() const noexcept;
     /// The measured round trip to a guest (the host itself: 0); false while nothing has come back yet
     bool measured(uint8_t seat) const noexcept;
     uint32_t rtt_ms(uint8_t seat) const noexcept;

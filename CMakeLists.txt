@@ -76,6 +76,7 @@ include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
 add_subdirectory(src/ants_assets)
 add_subdirectory(src/ants_sim)
 add_subdirectory(src/ants_net)
+add_subdirectory(src/ants_ai)         # the computer players (virtual clients, docs/BOTS.md): no SDL, no sockets, no threads, so it builds for the web too
 if(NOT EMSCRIPTEN)
     add_subdirectory(src/ants_ctl)    # control interface of the game server (strict JSON, authenticated HTTP on the loopback address): sockets, native only
     add_subdirectory(src/ants_server) # the dedicated game server (rooms, a referee per room): native only
@@ -114,6 +115,7 @@ if(BUILD_TESTS AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tests")
     add_subdirectory(tests/test_assets)
     add_subdirectory(tests/test_sim)
     add_subdirectory(tests/test_net)
+    add_subdirectory(tests/test_ai)
     if(NOT EMSCRIPTEN)
         add_subdirectory(tests/test_ctl)
         add_subdirectory(tests/test_server)

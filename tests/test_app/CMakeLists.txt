@@ -21,6 +21,7 @@ target_include_directories(test_app_integration PRIVATE
 
 target_link_libraries(test_app_integration PRIVATE
     ants_app
+    ants_ai
     ants_net
     ants_sim
     ants_assets
@@ -73,6 +74,7 @@ target_include_directories(test_render_parity PRIVATE
 
 target_link_libraries(test_render_parity PRIVATE
     ants_app
+    ants_ai
     ants_net
     ants_sim
     ants_assets
@@ -110,6 +112,7 @@ target_include_directories(test_hud_layout PRIVATE
 
 target_link_libraries(test_hud_layout PRIVATE
     ants_app
+    ants_ai
     ants_net
     ants_sim
     ants_assets
@@ -147,6 +150,7 @@ target_include_directories(test_status_messages PRIVATE
 
 target_link_libraries(test_status_messages PRIVATE
     ants_app
+    ants_ai
     ants_net
     ants_sim
     ants_assets
@@ -184,6 +188,7 @@ target_include_directories(test_input_model PRIVATE
 
 target_link_libraries(test_input_model PRIVATE
     ants_app
+    ants_ai
     ants_net
     ants_sim
     ants_assets
@@ -221,6 +226,7 @@ target_include_directories(test_pointer_model PRIVATE
 
 target_link_libraries(test_pointer_model PRIVATE
     ants_app
+    ants_ai
     ants_net
     ants_sim
     ants_assets
@@ -254,6 +260,7 @@ target_include_directories(test_options PRIVATE
 
 target_link_libraries(test_options PRIVATE
     ants_app
+    ants_ai
     ants_net
     ants_sim
     ants_assets
@@ -286,6 +293,7 @@ target_include_directories(test_network_app PRIVATE
 
 target_link_libraries(test_network_app PRIVATE
     ants_app
+    ants_ai
     ants_net
     ants_sim
     ants_assets

@@ -63,6 +63,13 @@ public:
 
     /// A remote player of the roster (before start()). The connection outlives the session.
     void add_client(uint8_t player, Connection* connection);
+    /// A computer player's seat of the roster (before start(); docs/BOTS.md). It has no connection: the host acknowledges every turn for it (otherwise the
+    /// sequencer would stall after max_lag_turns turns), it never reports a hash and is never dropped for silence. Its commands come from submit_bot().
+    void add_bot_seat(uint8_t player);
+    bool is_bot_seat(uint8_t player) const noexcept { return player < sim::MAX_PLAYERS && (bot_seats_ & (1u << player)) != 0; }
+    /// A command of a bot seat's bot for the next turn (the issuer is stamped by the sequencer). False unless the match runs, the seat is a bot seat and the
+    /// command is one that a player may send (never Drop).
+    bool submit_bot(uint8_t player, sim::Command command);
     /// Begins the match at `now_ms`: turn 0 is sealed at once.
     void start(uint32_t now_ms);
     /// Continues a match in which the previous host left: the next turn sealed is `resume_turn`, every survivor is told (Resume) and gets the turns
@@ -121,6 +128,7 @@ private:
     Sequencer sequencer_;
     std::unique_ptr<LockstepRunner> runner_;
     std::array<Client, sim::MAX_PLAYERS> clients_{};
+    uint8_t bot_seats_{0};                  // bit s: seat s is a bot (no connection; acknowledged by this host). A new host after a migration has none: the bots leave with the old host
     std::vector<DesyncMsg> desyncs_;
     std::function<void(uint8_t)> on_left_;
     std::function<void(const ChatMsg&)> on_chat_;

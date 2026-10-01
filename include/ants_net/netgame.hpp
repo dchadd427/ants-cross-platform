@@ -113,7 +113,15 @@ public:
     // ---- the host's controls in the room ---------------------------------------------------------------------------------------------------------
     /// Host only: the map every machine will load (a plain .LVL file name of the maps folder) and the Fog of War option
     void set_map(const std::string& map_name);
+    /// Fog of War on is refused while a bot sits in the room (a bot would see through it): the option stays off and the status line says why
     void set_fog(bool fog);
+    /// Host only, in the room: a computer player takes `seat` (docs/BOTS.md). The room shows it as a bot with the good thumb; the machine's own bot (ants_ai) is
+    /// built by the application once the match begins and sends its commands with submit_bot(). False when the seat is taken, the room is full or Fog of War is on.
+    bool add_bot(uint8_t seat, const std::string& name);
+    void remove_bot(uint8_t seat);
+    /// Host only, during the match: a command of the bot at `seat` (the issuer is stamped with that seat). False unless this machine is the host and the seat is a bot seat.
+    /// The simulation's verdict arrives with the turn, like every command's; a bot ignores it.
+    bool submit_bot(uint8_t seat, const sim::Command& command);
     /// Host only, at least two players: sends Start (the map named in the room, `seed`, the roster) to everybody and expects report_loaded()
     bool start_match(uint32_t seed, uint64_t map_hash);
     bool can_start() const;

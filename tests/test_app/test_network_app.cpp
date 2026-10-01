@@ -2,6 +2,7 @@
 // one (the other side is a bare NetGame with its own simulation), the setup screen as the room with names and thumbs, the start, a match driven by the
 // lock-step runner with commands and chat, a guest that leaves, a host that leaves. Real sockets on the loopback interface; one Application per test
 // (SDL is initialised once per process).
+#include "ants_ai/bot_view.hpp"
 #include "ants_app/application.hpp"
 #include "ants_app/lan_list.hpp"
 #include "ants_net/lan.hpp"
@@ -476,6 +477,339 @@ void run_command_line_tests() {
         // a network game never sends the user and machine name by default
         ApplicationConfig none = headless_config();
         ASSERT_TRUE(none.player_name.empty());
+    } TEST_END();
+}
+
+// AI6: computer players in the application (docs/BOTS.md): the command line, the roster and the names of a local game, the refusals, a room whose host runs a bot
+void click_fog(Application& app, bool on) {
+    const int32_t x = (on ? MapSelectScreen::BTN_FOW_ON_X : MapSelectScreen::BTN_FOW_OFF_X) + 2;
+    const int32_t y = (on ? MapSelectScreen::BTN_FOW_ON_Y : MapSelectScreen::BTN_FOW_OFF_Y) + 2;
+    app.map_select().handle_mouse_motion(x, y);                                         // a button acts at the release
+    app.map_select().handle_mouse_down(x, y, 1);
+    app.map_select().handle_mouse_up(x, y, 1);
+}
+
+// A bot that acts (the registry has only the idle bot until the worker bot exists): at every look it sends its first ant to one of two tiles, alternately
+class MarchingBot final : public ai::Bot {
+public:
+    const char* kind() const noexcept override { return "marching"; }
+    void start(const ai::BotContext& c) override { seat = c.seat; }
+    void think(const ai::BotView& v, ai::Orders& o) override {
+        ++looks;
+        if (v.mine().empty()) return;
+        o.move({v.mine()[0].id}, sim::TileCoord{looks % 2 == 0 ? 8 : 14, looks % 2 == 0 ? 8 : 14});          // (inside every shipped map)
+    }
+    void on_command(const sim::Command&, Fate fate, uint64_t) override { fates[static_cast<size_t>(fate)]++; }
+    uint8_t seat{255};
+    int looks{0};
+    int fates[4]{};
+};
+
+ai::BotSpec bot_spec(const char* text) {
+    ai::BotSpec spec;
+    std::string why;
+    if (!ai::parse_bot_spec(text, spec, why)) std::cout << "    (bad spec " << text << ": " << why << ")\n";
+    return spec;
+}
+
+void run_bot_tests() {
+    TEST_CASE("AI6.1 Command Line: --bot SEAT[:SPEC] Is Repeatable And Keeps Its Order; A Spec That Does Not Parse Is A Startup Error; Nothing Without --bot") {
+        std::vector<std::string> args;
+        std::vector<char*> st;
+        args = {"ants", "--bot", "1", "--bot", "2:hard", "--bot", "3:idle:easy", "--headless"};
+        ApplicationConfig c = Application::parse_arguments(static_cast<int>(args.size()), argv_of(args, st));
+        ASSERT_TRUE(c.startup_error.empty() && c.headless);
+        ASSERT_EQ(c.bots.size(), 3u);
+        ASSERT_TRUE(c.bots[0].seat == 1 && c.bots[0].kind == "standard" && c.bots[0].level == ai::Level::Medium);
+        ASSERT_TRUE(c.bots[1].seat == 2 && c.bots[1].kind == "standard" && c.bots[1].level == ai::Level::Hard);
+        ASSERT_TRUE(c.bots[2].seat == 3 && c.bots[2].kind == "idle" && c.bots[2].level == ai::Level::Easy);
+        args = {"ants", "--bot", "2:worker", "-pnum=1"};
+        c = Application::parse_arguments(static_cast<int>(args.size()), argv_of(args, st));
+        ASSERT_TRUE(c.bots.size() == 1 && c.bots[0].kind == "worker" && c.local_player_id == 1 && c.startup_error.empty());
+        // what does not parse: a startup error with the reason (the first one), the good specs around it are kept
+        args = {"ants", "--bot", "1", "--bot", "7", "--bot", "fast"};
+        c = Application::parse_arguments(static_cast<int>(args.size()), argv_of(args, st));
+        ASSERT_TRUE(c.bots.size() == 1 && c.startup_error.find("--bot 7") != std::string::npos && c.startup_error.find("0, 1, 2 or 3") != std::string::npos);
+        args = {"ants", "--bot", "2:genius"};
+        c = Application::parse_arguments(static_cast<int>(args.size()), argv_of(args, st));
+        ASSERT_TRUE(c.bots.empty() && c.startup_error.find("genius") != std::string::npos);
+        args = {"ants", "--bot"};
+        c = Application::parse_arguments(static_cast<int>(args.size()), argv_of(args, st));
+        ASSERT_TRUE(c.bots.empty() && !c.startup_error.empty());
+        // and the program refuses to start with it (nothing is opened)
+        {
+            Application app;
+            c.headless = true;
+            ASSERT_FALSE(app.init(c));
+            ASSERT_TRUE(app.bots() == nullptr);
+        }
+        // no --bot: no bots, no error
+        args = {"ants", "--headless", "-N1Bob"};
+        c = Application::parse_arguments(static_cast<int>(args.size()), argv_of(args, st));
+        ASSERT_TRUE(c.bots.empty() && c.startup_error.empty());
+        ASSERT_TRUE(ApplicationConfig{}.bots.empty() && ApplicationConfig{}.startup_error.empty());
+    } TEST_END();
+
+    TEST_CASE("AI6.2 Refusals At Startup: A Seat Clash With The Local Player (Whatever The Order Of The Options), Two Bots On One Seat, --join With --bot, A Room's Host Seat") {
+        const auto refused = [](const std::function<void(ApplicationConfig&)>& setup) {
+            ApplicationConfig cfg = headless_config();
+            setup(cfg);
+            Application app;
+            const bool ok = app.init(cfg);
+            return !ok && app.bots() == nullptr;
+        };
+        ASSERT_TRUE(refused([](ApplicationConfig& c) { c.bots = {bot_spec("0")}; }));                                      // the local player sits at seat 0 by default
+        ASSERT_TRUE(refused([](ApplicationConfig& c) { c.local_player_id = 1; c.bots = {bot_spec("1")}; }));
+        ASSERT_TRUE(refused([](ApplicationConfig& c) { c.bots = {bot_spec("2"), bot_spec("2:hard")}; }));
+        ASSERT_TRUE(refused([](ApplicationConfig& c) {
+            c.net_role = ApplicationConfig::NetRole::Join;
+            c.net_address = "127.0.0.1";
+            c.bots = {bot_spec("1")};
+        }));
+        ASSERT_TRUE(refused([](ApplicationConfig& c) {
+            c.net_role = ApplicationConfig::NetRole::Host;
+            c.net_port = 0;
+            c.net_loopback_only = true;
+            c.bots = {bot_spec("0")};                                                                                  // the host sits at seat 0
+        }));
+        // via the command line the order of the options does not matter: --bot first, the seat afterwards
+        {
+            std::vector<std::string> args = {"ants", "--bot", "1", "-pnum=1", "--headless", "--no-lan"};
+            std::vector<char*> st;
+            ApplicationConfig c = Application::parse_arguments(static_cast<int>(args.size()), argv_of(args, st));
+            Application app;
+            ASSERT_FALSE(app.init(c));
+        }
+        // and a good one starts
+        {
+            ApplicationConfig cfg = headless_config();
+            cfg.bots = {bot_spec("1"), bot_spec("2:hard")};
+            Application app;
+            ASSERT_TRUE(app.init(cfg));
+            ASSERT_TRUE(app.bots() == nullptr);                                                                        // the setup screen: no game yet, no controller yet
+        }
+    } TEST_END();
+
+    TEST_CASE("AI6.3 Local Game With Bots: The Roster Is The Local Player And The Bots (No Hill, No Ants For The Empty Seat), The Names Are The Bots' (An Explicit Name Wins), The Controller Runs On The Ticks And Stops With The Match") {
+        ApplicationConfig cfg = headless_config();
+        cfg.player_name = "Alice";
+        cfg.bots = {bot_spec("1:medium"), bot_spec("3:idle:hard")};
+        cfg.team_names[3] = "Zed";
+        Application app;
+        ASSERT_TRUE(app.init(cfg));
+        ASSERT_TRUE(app.bots() == nullptr);
+        ASSERT_TRUE(app.start_game("Original-Ants/Maps/SMALL.LVL"));
+        ASSERT_EQ(app.sim().roster_mask(), 0x0B);                                                                      // seats 0, 1 and 3
+        ASSERT_EQ(app.sim().grid().anthills().size(), 3u);
+        ASSERT_EQ(app.hud().roster_mask(), 0x0B);
+        ASSERT_EQ(app.sim().get_player_name(0), "Alice");
+        ASSERT_EQ(app.sim().get_player_name(1), "Bot (Medium)");
+        ASSERT_EQ(app.sim().get_player_name(2), sim::strings::colour_name(1));                                          // nobody sits there: the colour word of seat 2 (red)
+        ASSERT_EQ(app.sim().get_player_name(3), "Zed");                                                                 // -N / --team-name wins over "Bot (Idle)"
+        ASSERT_EQ(app.hud().team_names()[1], "Bot (Medium)");
+        ASSERT_EQ(app.hud().team_names()[3], "Zed");
+        ASSERT_TRUE(app.bots() != nullptr);
+        ASSERT_EQ(app.bots()->seat_mask(), 0x0A);
+        ASSERT_TRUE(app.bots()->stats(1).decisions == 0 && app.bots()->stats(3).decisions == 0);
+        ASSERT_TRUE(ants_of(app.sim(), 2).empty() && !ants_of(app.sim(), 1).empty());
+        const uint64_t hash0 = app.sim().state_hash().total;
+        // the ticks of the local loop reach the controller: the bots look at the world (the idle ones never act)
+        for (int i = 0; i < 400; ++i) app.update_simulation(0.05f);
+        ASSERT_EQ(app.sim().current_tick(), 400u);
+        ASSERT_TRUE(app.bots()->stats(1).decisions >= 19 && app.bots()->stats(3).decisions >= 99);                      // medium: every 20 ticks, hard: every 4
+        ASSERT_TRUE(app.bots()->stats(1).released == 0 && app.bots()->stats(3).released == 0 && app.bots()->stats(1).filtered == 0);
+        ASSERT_TRUE(app.sim().state_hash().total != hash0);                                                              // the world moved on (food, queues, clock)
+        // the match ends: the results name the bots, and the controller falls silent
+        app.sim().set_match_time_remaining_ms(1000);
+        for (int i = 0; i < 200 && !app.sim().is_match_over(); ++i) app.update_simulation(0.05f);
+        ASSERT_TRUE(app.sim().is_match_over());
+        app.update_results(0.0f);
+        app.update_results(0.3f);
+        ASSERT_FALSE(app.scorecard().rows().empty());
+        std::vector<std::string> row_names;
+        for (const auto& row : app.scorecard().rows()) row_names.push_back(row.name);
+        ASSERT_TRUE(std::find(row_names.begin(), row_names.end(), "Bot (Medium)") != row_names.end());
+        ASSERT_TRUE(std::find(row_names.begin(), row_names.end(), "Alice") != row_names.end());
+        ASSERT_TRUE(std::find(row_names.begin(), row_names.end(), "Zed") != row_names.end());
+        ASSERT_EQ(row_names.size(), 3u);                                                                                 // the empty seat has no row
+        const uint32_t looks = app.bots()->stats(1).decisions;
+        for (int i = 0; i < 100; ++i) app.update_simulation(0.05f);
+        ASSERT_EQ(app.bots()->stats(1).decisions, looks);
+        // back to the setup screen: no bots; a new game builds new ones
+        app.return_to_map_select();
+        ASSERT_TRUE(app.bots() == nullptr);
+        ASSERT_TRUE(app.start_game("Original-Ants/Maps/TINY.LVL"));
+        ASSERT_TRUE(app.bots() != nullptr && app.bots()->stats(1).decisions == 0);
+        ASSERT_EQ(app.sim().roster_mask(), 0x0B);
+    } TEST_END();
+
+    TEST_CASE("AI6.4 Local Game With --map And --bot: The Game Is Running At Once With The Roster Of The Taken Seats; The Local Player May Sit Anywhere") {
+        ApplicationConfig cfg = headless_config();
+        cfg.start_in_map_select = false;
+        cfg.default_map_path = "Original-Ants/Maps/TINY.LVL";
+        cfg.local_player_id = 1;
+        cfg.bots = {bot_spec("2:hard")};
+        Application app;
+        ASSERT_TRUE(app.init(cfg));
+        ASSERT_EQ(app.state(), AppState::Playing);
+        ASSERT_EQ(app.local_player_id(), 1);
+        ASSERT_EQ(app.sim().roster_mask(), 0x06);
+        ASSERT_EQ(app.sim().grid().anthills().size(), 2u);
+        ASSERT_EQ(app.sim().get_player_name(2), "Bot (Hard)");
+        ASSERT_TRUE(app.bots() != nullptr && app.bots()->seat_mask() == 0x04);
+        for (int i = 0; i < 100; ++i) app.update_simulation(0.05f);
+        ASSERT_TRUE(app.bots()->stats(2).decisions >= 24);
+        // the same game without a bot has no controller and all four teams, as ever
+        ApplicationConfig plain = headless_config();
+        plain.start_in_map_select = false;
+        plain.default_map_path = "Original-Ants/Maps/TINY.LVL";
+        Application normal;
+        ASSERT_TRUE(normal.init(plain));
+        ASSERT_TRUE(normal.bots() == nullptr);
+        ASSERT_EQ(normal.sim().roster_mask(), 0x0F);
+    } TEST_END();
+
+    TEST_CASE("AI6.5 Fog Of War And Bots: START Is Refused With The Reason On The Setup Screen And On stderr; Without Fog It Starts; A Game Without --bot Plays With Fog As Ever And Has No Controller") {
+        ApplicationConfig cfg = headless_config();
+        cfg.bots = {bot_spec("1")};
+        Application app;
+        ASSERT_TRUE(app.init(cfg));
+        click_fog(app, true);
+        ASSERT_TRUE(app.map_select().is_fog_of_war_enabled());
+        ASSERT_FALSE(app.start_game("Original-Ants/Maps/SMALL.LVL"));
+        ASSERT_EQ(app.state(), AppState::MapSelect);
+        ASSERT_TRUE(app.bots() == nullptr);
+        ASSERT_TRUE(app.map_select().room().status.find("Fog of War") != std::string::npos);                              // the prompt line of the setup screen says why
+        click_fog(app, false);
+        ASSERT_FALSE(app.map_select().is_fog_of_war_enabled());
+        ASSERT_TRUE(app.start_game("Original-Ants/Maps/SMALL.LVL"));
+        ASSERT_EQ(app.state(), AppState::Playing);
+        ASSERT_TRUE(app.map_select().room().status.empty());                                                               // the refusal is gone
+        ASSERT_TRUE(app.bots() != nullptr && !app.sim().is_fog_of_war_enabled());
+        // no --bot: fog works, nothing of the bots exists
+        ApplicationConfig none = headless_config();
+        Application normal;
+        ASSERT_TRUE(normal.init(none));
+        click_fog(normal, true);
+        ASSERT_TRUE(normal.start_game("Original-Ants/Maps/SMALL.LVL"));
+        ASSERT_TRUE(normal.sim().is_fog_of_war_enabled());
+        ASSERT_TRUE(normal.bots() == nullptr);
+        ASSERT_EQ(normal.sim().roster_mask(), 0x0F);
+        for (int i = 0; i < 50; ++i) normal.update_simulation(0.05f);
+        ASSERT_TRUE(normal.bots() == nullptr);
+    } TEST_END();
+
+    TEST_CASE("AI6.6 Room With A Bot: The Host's Setup Screen Shows The Bot, Fog Is Refused, START Runs The Bot On The Host's Machine, The Guest Stays Bit-Identical Without Any Bot Code") {
+        ApplicationConfig cfg = headless_config();
+        cfg.net_role = ApplicationConfig::NetRole::Host;
+        cfg.net_port = 0;
+        cfg.net_loopback_only = true;
+        cfg.player_name = "Alice";
+        cfg.bots = {bot_spec("2:medium")};
+        Application app;
+        ASSERT_TRUE(app.init(cfg));
+        ASSERT_TRUE(app.network_active() && app.net()->is_host());
+        app.pump_network(0.01f);
+        ASSERT_TRUE(app.map_select().room().seats[2].occupied && app.map_select().room().seats[2].name == "Bot (Medium)");
+        ASSERT_TRUE(app.map_select().room().seats[2].thumb == MapSelectScreen::Thumb::Good);
+        ASSERT_TRUE(app.net()->room().slots[2].state == net::SlotState::Bot);
+        ASSERT_TRUE(app.bots() == nullptr);                                                                                // no match yet
+        click_fog(app, true);                                                                                              // refused: a bot would see through it, the screen shows Off again
+        ASSERT_FALSE(app.net()->room().fog);
+        ASSERT_FALSE(app.map_select().is_fog_of_war_enabled());
+        Peer bob;
+        ASSERT_TRUE(bob.net.join("127.0.0.1", app.net()->listen_port(), "Bob"));
+        Duo duo{app, bob};
+        ASSERT_TRUE(duo.until([&]() { return app.net()->room().slots[1].state == net::SlotState::Client && app.net()->can_start(); }, 8000));
+        ASSERT_EQ(bob.net.my_seat(), 1);                                                                                   // the first free seat: the bot has seat 2
+        ASSERT_TRUE(bob.net.room().slots[2].state == net::SlotState::Bot && bob.net.room().slots[2].name == "Bot (Medium)");
+        app.map_select().handle_key_down(SDLK_RETURN);
+        ASSERT_TRUE(duo.until([&]() { return app.state() == AppState::Playing && bob.net.phase() == net::NetGame::Phase::Playing; }, 8000));
+        ASSERT_EQ(app.sim().roster_mask(), 0x07);
+        ASSERT_EQ(app.sim().get_player_name(2), "Bot (Medium)");
+        ASSERT_EQ(app.hud().team_names()[2], "Bot (Medium)");
+        ASSERT_TRUE(app.bots() != nullptr && app.bots()->seat_mask() == 0x04);
+        duo.step(15000);
+        ASSERT_TRUE(app.bots()->stats(2).decisions >= 10);                                                                  // it looks every second of the match
+        ASSERT_EQ(app.bots()->stats(2).rejected, 0u);
+        ASSERT_EQ(bob.sim.roster_mask(), 0x07);
+        app.net()->freeze();                                                                                                // the host stops sealing: what is in flight arrives, then both are at the same tick
+        duo.step(3000);
+        ASSERT_EQ(app.sim().current_tick(), bob.sim.current_tick());
+        ASSERT_TRUE(app.sim().state_hash() == bob.sim.state_hash());                                                         // the guest ran no bot code and plays the same game
+        ASSERT_FALSE(app.net()->desynced() || bob.net.desynced());
+        app.quit();
+        app.return_to_map_select();
+        ASSERT_TRUE(app.bots() == nullptr);
+    } TEST_END();
+
+    TEST_CASE("AI6.7 A Bot That Acts, In A Local Game: Its Commands Go Through The Application's Door Into The Simulation With The Bot's Seat, None Is Rejected, And Its Ant Really Moves") {
+        ApplicationConfig cfg = headless_config();
+        cfg.bots = {bot_spec("1:hard")};
+        cfg.bot_factory = [](const ai::BotSpec&) { return std::make_unique<MarchingBot>(); };
+        Application app;
+        ASSERT_TRUE(app.init(cfg));
+        ASSERT_TRUE(app.start_game("Original-Ants/Maps/SMALL.LVL"));
+        ASSERT_TRUE(app.bots() != nullptr && app.bots()->seat_mask() == 0x02);
+        const std::vector<uint32_t> mine = ants_of(app.sim(), 1);
+        ASSERT_FALSE(mine.empty());
+        sim::TileCoord start{};
+        for (const auto& a : app.sim().get_world_state().ants) {
+            if (a.id == mine[0]) start = sim::TileCoord{a.tile_x, a.tile_y};
+        }
+        for (int i = 0; i < 200; ++i) app.update_simulation(0.05f);
+        const auto& st = app.bots()->stats(1);
+        ASSERT_TRUE(st.released >= 1);
+        ASSERT_EQ(st.rejected, 0u);                                                                                      // the engine accepted what the door carried
+        ASSERT_EQ(st.filtered, 0u);
+        bool moved = false;
+        for (const auto& a : app.sim().get_world_state().ants) {
+            if (a.id == mine[0]) moved = a.tile_x != start.x || a.tile_y != start.y || a.state == sim::UnitState::Walking;
+        }
+        ASSERT_TRUE(moved);                                                                                              // the order reached the ant
+        ASSERT_TRUE(ants_of(app.sim(), 0).size() > 0 && app.bots()->stats(1).decisions >= 40);
+    } TEST_END();
+
+    TEST_CASE("AI6.8 A Bot That Acts, In A Host's Room: Its Commands Go Through The Room's Door Into The Sequencer With The Bot's Seat, Reach The Guest In The Turn Stream, And Both Machines Stay Bit-Identical") {
+        ApplicationConfig cfg = headless_config();
+        cfg.net_role = ApplicationConfig::NetRole::Host;
+        cfg.net_port = 0;
+        cfg.net_loopback_only = true;
+        cfg.player_name = "Alice";
+        cfg.bots = {bot_spec("2:hard")};
+        cfg.bot_factory = [](const ai::BotSpec&) { return std::make_unique<MarchingBot>(); };
+        Application app;
+        ASSERT_TRUE(app.init(cfg));
+        Peer bob;
+        ASSERT_TRUE(bob.net.join("127.0.0.1", app.net()->listen_port(), "Bob"));
+        Duo duo{app, bob};
+        ASSERT_TRUE(duo.until([&]() { return app.net()->room().slots[1].state == net::SlotState::Client && app.net()->can_start(); }, 8000));
+        app.map_select().handle_key_down(SDLK_RETURN);
+        ASSERT_TRUE(duo.until([&]() { return app.state() == AppState::Playing && bob.net.phase() == net::NetGame::Phase::Playing; }, 8000));
+        ASSERT_TRUE(app.bots() != nullptr && app.bots()->seat_mask() == 0x04);
+        const std::vector<uint32_t> bots_ants = ants_of(app.sim(), 2);
+        ASSERT_FALSE(bots_ants.empty());
+        duo.step(20000);
+        const auto& st = app.bots()->stats(2);
+        ASSERT_TRUE(st.released >= 3);
+        ASSERT_EQ(st.rejected, 0u);                                                                                      // (the sink answers Applied when the sequencer took the command)
+        app.net()->freeze();
+        duo.step(3000);
+        ASSERT_EQ(app.sim().current_tick(), bob.sim.current_tick());
+        ASSERT_TRUE(app.sim().state_hash() == bob.sim.state_hash());
+        ASSERT_FALSE(app.net()->desynced() || bob.net.desynced());
+        // the guest saw the bot's orders: its copy of the bot's first ant stands where the host's does, and that is not where it started (the guest ran no bot code)
+        sim::TileCoord on_host{};
+        sim::TileCoord on_guest{};
+        for (const auto& a : app.sim().get_world_state().ants) {
+            if (a.id == bots_ants[0]) on_host = sim::TileCoord{a.tile_x, a.tile_y};
+        }
+        for (const auto& a : bob.sim.get_world_state().ants) {
+            if (a.id == bots_ants[0]) on_guest = sim::TileCoord{a.tile_x, a.tile_y};
+        }
+        ASSERT_TRUE(on_host.x == on_guest.x && on_host.y == on_guest.y);
+        app.quit();
+        app.return_to_map_select();
     } TEST_END();
 }
 
@@ -1040,6 +1374,7 @@ int main() {
     std::cout << "\n=======================================================\n [SUITE] Network port: the application (names, room, thumbs, start, match)\n"
                  "=======================================================\n";
     run_command_line_tests();
+    run_bot_tests();
     run_window_tests();
     run_host_tests();
     run_guest_tests();

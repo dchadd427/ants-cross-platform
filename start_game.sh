@@ -7,8 +7,9 @@
 #   ./start_game.sh --single        the same as --players 1 (one game, the setup screen, nothing else changes)
 #   ./start_game.sh --dry-run ...   print the command line of every window and stop (nothing is built or started)
 #   every other argument goes to every window (the game's own options, see README.md)
-#   --host, --join, --lan-list, --headless, --screenshot and --map are options of one game: given without --players they make this a single game,
-#   so that `./start_game.sh --host --name Alice` and `./start_game.sh --join 192.168.1.20` still do what the README says
+#   --host, --join, --bot, --lan-list, --headless, --screenshot and --map are options of one game: given without --players they make this a single game,
+#   so that `./start_game.sh --host --name Alice` and `./start_game.sh --join 192.168.1.20` still do what the README says. --bot cannot be combined with --players
+#   (the other windows are guests, and a guest runs no bots: a game against bots is one window; use --host --bot and let others join it)
 #
 # Environment: ANTS_PORT (the room's TCP port, default 4001), ANTS_NAMES_SEED (makes the random names repeatable).
 #
@@ -34,7 +35,7 @@ done
 if [ "$GIVEN" -eq 0 ] && [ "${#PASS[@]}" -gt 0 ]; then
     for arg in "${PASS[@]}"; do
         case "$arg" in
-            --host|--join|--lan-list|--headless|--screenshot|--map) PLAYERS=1 ;;
+            --host|--join|--bot|--lan-list|--headless|--screenshot|--map) PLAYERS=1 ;;
         esac
     done
 fi
@@ -42,6 +43,14 @@ case "$PLAYERS" in
     1|2|3|4) ;;
     *) echo "[LAUNCHER] --players takes a number from 1 to 4." >&2; exit 2 ;;
 esac
+if [ "$PLAYERS" -gt 1 ] && [ "${#PASS[@]}" -gt 0 ]; then
+    for arg in "${PASS[@]}"; do
+        if [ "$arg" = "--bot" ]; then
+            echo "[LAUNCHER] --bot cannot be combined with --players: the extra windows are guests and a guest runs no bots. Use ./start_game.sh --bot 1:medium for a game against a bot, or --host --bot 2:medium to let others join." >&2
+            exit 2
+        fi
+    done
+fi
 
 PORT="${ANTS_PORT:-4001}"
 BIN="./build/src/ants_app/ants"

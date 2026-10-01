@@ -28,12 +28,25 @@ void HostSession::add_client(uint8_t player, Connection* connection) {
     clients_[player].present = true;
 }
 
+void HostSession::add_bot_seat(uint8_t player) {
+    if (started_ || player >= sim::MAX_PLAYERS || player == cfg_.host_player || clients_[player].present) return;
+    bot_seats_ = static_cast<uint8_t>(bot_seats_ | bit(player));
+}
+
+bool HostSession::submit_bot(uint8_t player, sim::Command command) {
+    if (!started_ || !is_bot_seat(player)) return false;
+    return sequencer_.submit(player, std::move(command));
+}
+
 void HostSession::start(uint32_t now_ms) {
     if (started_) return;
     started_ = true;
     last_ms_ = now_ms;
     next_seal_ms_ = now_ms;
     sequencer_.set_active(cfg_.host_player, true);
+    for (uint8_t p = 0; p < sim::MAX_PLAYERS; ++p) {
+        if (is_bot_seat(p)) sequencer_.set_active(p, true);                    // a bot's commands are accepted and its turns awaited (see run_local)
+    }
     for (uint8_t p = 0; p < sim::MAX_PLAYERS; ++p) {
         if (!clients_[p].present) continue;
         sequencer_.set_active(p, true);
@@ -201,6 +214,9 @@ void HostSession::poll_clients() {
 void HostSession::run_local(uint32_t dt_ms) {
     for (const LockstepRunner::Executed& e : runner_->update(dt_ms)) {
         sequencer_.on_ack(cfg_.host_player, e.turn);
+        for (uint8_t p = 0; p < sim::MAX_PLAYERS; ++p) {
+            if (is_bot_seat(p)) sequencer_.on_ack(p, e.turn);                  // a bot has no connection to say it: it has executed what this machine has
+        }
         if (!e.has_hash) continue;
         if (seatless()) {                                 // the referee: its own engine's hash is what every client is compared with
             for (const DesyncMsg& d : sequencer_.on_referee_hash(e.turn, e.hash)) {

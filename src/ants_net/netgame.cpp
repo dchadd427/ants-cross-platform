@@ -580,6 +580,7 @@ void NetGame::begin_match() {
         host_session_ = std::make_unique<HostSession>(sim_, hc);
         for (uint8_t s = 0; s < sim::MAX_PLAYERS; ++s) {
             if (Connection* c = host_lobby_->connection_of(s)) host_session_->add_client(s, c);
+            if (host_lobby_->room().slots[s].state == SlotState::Bot) host_session_->add_bot_seat(s);      // the computer players: no connection, acknowledged by this host
         }
         transport_->listener.reset();                       // no late join: the door closes when the match begins
         known_host_ = seat_;
@@ -646,9 +647,37 @@ void NetGame::set_map(const std::string& map_name) {
 
 void NetGame::set_fog(bool fog) {
     if (role_ != Role::Host || phase_ != Phase::Room || !host_lobby_) return;
+    if (fog && host_lobby_->has_bot()) {
+        set_notice("Bots cannot play with Fog of War.");
+        return;
+    }
     host_lobby_->set_fog(fog);
     room_ = host_lobby_->room();
     room_.you = seat_;
+}
+
+bool NetGame::add_bot(uint8_t seat, const std::string& name) {
+    if (role_ != Role::Host || phase_ != Phase::Room || !host_lobby_) return false;
+    if (host_lobby_->fog()) {
+        set_notice("Bots cannot play with Fog of War.");
+        return false;
+    }
+    if (!host_lobby_->add_bot(seat, name)) return false;
+    room_ = host_lobby_->room();
+    room_.you = seat_;
+    return true;
+}
+
+void NetGame::remove_bot(uint8_t seat) {
+    if (role_ != Role::Host || phase_ != Phase::Room || !host_lobby_) return;
+    host_lobby_->remove_bot(seat);
+    room_ = host_lobby_->room();
+    room_.you = seat_;
+}
+
+bool NetGame::submit_bot(uint8_t seat, const sim::Command& command) {
+    if (phase_ != Phase::Playing || !host_session_ || !sim::is_client_command(command.type)) return false;
+    return host_session_->submit_bot(seat, command);
 }
 
 // START needs a second player and "all players' thumbs have appeared": every guest has been measured at least once

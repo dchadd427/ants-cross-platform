@@ -2,9 +2,11 @@
 
 #include <cstdint>
 #include <ctime>
+#include <functional>
 #include <string>
 #include <memory>
 #include <array>
+#include <vector>
 
 #if defined(__has_include)
   #if __has_include(<SDL.h>)
@@ -16,6 +18,8 @@
   #include <SDL2/SDL.h>
 #endif
 
+#include "ants_ai/bot.hpp"
+#include "ants_ai/bot_controller.hpp"
 #include "ants_assets/asset_archive.hpp"
 #include "ants_assets/lvl_parser.hpp"
 #include "ants_net/netgame.hpp"
@@ -96,6 +100,14 @@ struct ApplicationConfig {
     /// other players in it (no multiplayer yet), so the colour words "Red:", "Blue:", "Black:" would only be placeholders. The original draws a label only for
     /// players that exist (docs 5.42).
     bool label_unnamed_teams{true};
+    /// --bot SEAT[:SPEC] (repeatable): computer players at these seats (docs/BOTS.md). A local game then plays the seats that are taken (the local player and the bots); with
+    /// --host the room shows the bots as players and the host's machine runs them. Empty by default: a game without --bot runs no bot code at all.
+    std::vector<ai::BotSpec> bots;
+    /// For the tests: builds the bot of a spec instead of the registry (which has only the idle bot until the worker bot exists), so that the application's door for a
+    /// bot's commands (the local sink, the room's sink) can be exercised with a bot that acts. Empty in a game that is played.
+    std::function<std::unique_ptr<ai::Bot>(const ai::BotSpec&)> bot_factory;
+    /// What is wrong with the command line (parse_arguments cannot fail any other way: a --bot that does not parse). init() refuses to start with it.
+    std::string startup_error;
 };
 
 /**
@@ -148,6 +160,9 @@ public:
     MidiPlayer& midi_player() noexcept { return midi_player_; }
     AudioMixer& audio_mixer() noexcept { return audio_mixer_; }
     const ants::assets::AssetArchive& assets() const noexcept { return assets_; }
+
+    /// The bots of the running game (nullptr without --bot, and on a guest's machine: only the machine that owns a bot runs it)
+    const ai::BotController* bots() const noexcept { return bots_.get(); }
 
     /// The network of a room or a match (nullptr unless started with --host / --join)
     net::NetGame* net() noexcept { return net_.get(); }
@@ -223,6 +238,9 @@ private:
     MidiPlayer midi_player_;
 
     uint8_t local_player_id_{0};
+    uint8_t local_roster_{0x0F};                           // the seats of the local game that was started (all four, or the local player and the bots)
+    std::vector<std::unique_ptr<sim::CommandSink>> bot_sinks_;   // where the bots' commands go (declared before bots_: the controller is destroyed first)
+    std::unique_ptr<ai::BotController> bots_;
     std::unique_ptr<net::NetGame> net_;
     double net_time_ms_{0.0};
     bool match_over_handled_{false};
@@ -249,6 +267,16 @@ private:
     void sync_room_view();
     void render_net_overlay();
     void apply_team_names(const std::array<std::string, 4>& names, uint8_t roster);   // simulation texts, HUD labels, results rows
+
+    // Computer players (docs/BOTS.md): a game without --bot never creates any of this
+    std::string bot_setup_problem(uint8_t own_seat, bool fog) const;   // "" or why the game may not start with the bots of the command line (ai::check_setup)
+    uint8_t bot_roster(uint8_t own_seat) const;                        // the seats that play a local game with bots: the local player's and the bots'
+    std::array<std::string, 4> local_team_names() const;               // -N / --team-name, and "Bot (Medium)" for a bot seat that has no name of its own
+    void show_setup_notice(const std::string& text);                   // a refusal: stderr and the status line of the local setup screen
+    bool start_local_bots(uint32_t match_seed);                        // after the simulation was initialised: the controller, one LocalBotSink per seat
+    bool add_bot(const ai::BotSpec& spec, sim::CommandSink& sink, std::string& why);   // seats one bot (the registry's, or the tests' factory's)
+    void start_net_bots();                                             // the host of a room: the controller over NetBotSink, for the seats that hold a bot
+    void stop_bots();
 
     void apply_window_layout();                           // --grid / --cell, --window-pos, --window-size (native builds)
     void show_start_view();                               // the view at the start of a match: scrolled just far enough to show the square around the hill's anchor tile
