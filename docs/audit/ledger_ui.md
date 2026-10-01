@@ -43,7 +43,7 @@ Status is FIXED unless stated. "0 px" means 0 differing pixels against the origi
 | S-12 | loading composite | OPEN | dclay tiles skipped, parts forward | both |
 | S-13 | menu palette | OPEN (low) | green table; 5 entries differ by up to 16 levels | |
 | S-14 | portrait | PARTIAL | animated in modal and setup screen | results screen static |
-| S-15 | missing screens | PARTIAL | alliance dialogs built v0.0.50, thumbs drawn | sm_screen, nh_start, error, web dialog |
+| S-15 | missing screens | PARTIAL | alliance dialogs built v0.0.50, thumbs drawn; the guest setup screen `nh_start` (with `d_fowyes`) built v0.0.80 | sm_screen, error, web dialog; the host's Drop button `drop1` .. `drop3` |
 | C-03 | hover region | FIXED | `in_map_rect` (16,21)-(458,461) | none |
 | C-04 | cursor while dragging | FIXED | band >4 px gives Normal | none |
 | C-05 | hill brackets | FIXED | anchor +1 tile | none |
@@ -97,7 +97,7 @@ U-03 remainder:
 - The minimap frame offset and the score-box edge need a screenshot of the real game.
 - C-07 belongs to audits V and E.
 
-**Coverage numbers:** of 523 UI sprites, 385 are drawn now and 94 are world sprites drawn by the world renderer (other audits). 44 are never drawn: 25 are unused by the original (start markers, FOOD, RESERVED, c_cant, c_scroll, egg1h-3, flowbut, zobjbut, quit1-3, bleavhelp, op_ok*), and 19 are used by the original (scorcovr, ms_logo, drop1-3, fowyes, nh_start set, error, multi/single, bmohelp1). The "unused by the original" verdicts are inherited from audit U. I re-derived op_ok*, because the options builder `FUN_0101487c` creates exactly 5 buttons. I did not re-derive the rest.
+**Coverage numbers:** of 523 UI sprites, 385 are drawn now and 94 are world sprites drawn by the world renderer (other audits). 44 are never drawn: 25 are unused by the original (start markers, FOOD, RESERVED, c_cant, c_scroll, egg1h-3, flowbut, zobjbut, quit1-3, bleavhelp, op_ok*), and 18 are used by the original (scorcovr, ms_logo, drop1-3, error, multi/single, bmohelp1; fowyes and the nh_start set are drawn since v0.0.80). The "unused by the original" verdicts are inherited from audit U. I re-derived op_ok*, because the options builder `FUN_0101487c` creates exactly 5 buttons. I did not re-derive the rest.
 
 ## Top 10 to fix next
 1. **Minimap fog and objects** (NEW-3/U-03): paint layer-2 objects per pixel in fog too, with food, power-ups, fire wall and bombs showing terrain. Tests: add an objects-in-fog case to `test_hud_layout::test_minimap` (`mini_oracle.py` can generate expected pixels).

@@ -7,8 +7,10 @@
 #include <string>
 #include <vector>
 
+#include "ants_app/fps_overlay.hpp"
 #include "ants_app/hud.hpp"
 #include "ants_app/map_select.hpp"
+#include "ants_app/options_screen.hpp"
 #include "ants_app/ui_anim.hpp"
 #include "ants_app/renderer.hpp"
 #include "ants_app/scorecard.hpp"
@@ -1566,7 +1568,8 @@ void test_button_states(const assets::AssetArchive& arc) {
         hud.handle_mouse_up(700, 700, 1, sim, camera);
     }
 
-    // Setup screen: constants are the union of the resting and pressed art; art at the animation coordinates
+    // Setup screen: every button has the rectangle of its resting / hovering picture and that of its pressed picture (the original's hit test is the rectangle of the
+    // picture that shows, docs 5.52); the Fog of War pair keeps the union of its pictures; art at the animation coordinates
     {
         auto union_of = [&](const char* a, const char* b) {
             const UIRect ra = animation_bounds(arc, a);
@@ -1576,11 +1579,20 @@ void test_button_states(const assets::AssetArchive& arc) {
             return UIRect{x0, y0, x1 - x0, y1 - y0};
         };
         auto same = [&](const UIRect& r, int32_t x, int32_t y, int32_t w, int32_t h) { return r.x == x && r.y == y && r.w == w && r.h == h; };
+        auto same_pressed = [&](const UIRect& r, const ButtonRect& b) { return same(r, b.x, b.y, b.w, b.h); };
         using MS = MapSelectScreen;
-        check(same(union_of("up1", "up3"), MS::BTN_UP_X, MS::BTN_UP_Y, MS::BTN_UP_W, MS::BTN_UP_H), "setup: up button rect = union of up1 / up3");
-        check(same(union_of("down1", "down3"), MS::BTN_DOWN_X, MS::BTN_DOWN_Y, MS::BTN_DOWN_W, MS::BTN_DOWN_H), "setup: down button rect");
-        check(same(union_of("start1", "start3"), MS::BTN_START_X, MS::BTN_START_Y, MS::BTN_START_W, MS::BTN_START_H), "setup: start button rect");
-        check(same(union_of("leave1", "leave3"), MS::BTN_QUIT_X, MS::BTN_QUIT_Y, MS::BTN_QUIT_W, MS::BTN_QUIT_H), "setup: leave button rect");
+        check(same(animation_bounds(arc, "up1"), MS::BTN_UP_X, MS::BTN_UP_Y, MS::BTN_UP_W, MS::BTN_UP_H) && same(animation_bounds(arc, "up2"), MS::BTN_UP_X, MS::BTN_UP_Y, MS::BTN_UP_W, MS::BTN_UP_H),
+              "setup: up button rect = up1 = up2");
+        check(same_pressed(animation_bounds(arc, "up3"), MS::BTN_UP_PRESSED), "setup: up button pressed rect = up3");
+        check(same(animation_bounds(arc, "down1"), MS::BTN_DOWN_X, MS::BTN_DOWN_Y, MS::BTN_DOWN_W, MS::BTN_DOWN_H) && same(animation_bounds(arc, "down2"), MS::BTN_DOWN_X, MS::BTN_DOWN_Y, MS::BTN_DOWN_W, MS::BTN_DOWN_H),
+              "setup: down button rect = down1 = down2");
+        check(same_pressed(animation_bounds(arc, "down3"), MS::BTN_DOWN_PRESSED), "setup: down button pressed rect = down3");
+        check(same(animation_bounds(arc, "start1"), MS::BTN_START_X, MS::BTN_START_Y, MS::BTN_START_W, MS::BTN_START_H) && same(animation_bounds(arc, "start2"), MS::BTN_START_X, MS::BTN_START_Y, MS::BTN_START_W, MS::BTN_START_H),
+              "setup: start button rect = start1 = start2 = (526, 439, 98, 27)");
+        check(same_pressed(animation_bounds(arc, "start3"), MS::BTN_START_PRESSED) && MS::BTN_START_PRESSED == ButtonRect{527, 443, 97, 24}, "setup: start button pressed rect = start3 = (527, 443, 97, 24)");
+        check(same(animation_bounds(arc, "leave1"), MS::BTN_QUIT_X, MS::BTN_QUIT_Y, MS::BTN_QUIT_W, MS::BTN_QUIT_H) && same(animation_bounds(arc, "leave2"), MS::BTN_QUIT_X, MS::BTN_QUIT_Y, MS::BTN_QUIT_W, MS::BTN_QUIT_H),
+              "setup: leave button rect = leave1 = leave2");
+        check(same_pressed(animation_bounds(arc, "leave3"), MS::BTN_QUIT_PRESSED), "setup: leave button pressed rect = leave3");
         check(same(union_of("d_on1", "d_on3"), MS::BTN_FOW_ON_X, MS::BTN_FOW_ON_Y, MS::BTN_FOW_ON_W, MS::BTN_FOW_ON_H), "setup: Fog of War ON rect");
         check(same(union_of("d_off1", "d_off3"), MS::BTN_FOW_OFF_X, MS::BTN_FOW_OFF_Y, MS::BTN_FOW_OFF_W, MS::BTN_FOW_OFF_H), "setup: Fog of War OFF rect");
 
@@ -1616,6 +1628,15 @@ void test_button_states(const assets::AssetArchive& arc) {
         screen.render(prs, arc);
         check(prs.has_sprite_at("up3.bmp", 224, 301), "setup: up pressed art at (224,301)");
     }
+}
+
+MapSelectScreen::RoomView view_of_host_for_art() {
+    MapSelectScreen::RoomView v;
+    v.networked = true;
+    v.is_host = true;
+    v.my_seat = 0;
+    v.seats[0] = {true, "Host", MapSelectScreen::Thumb::Good};
+    return v;
 }
 
 // A click of the original's button class on the setup screen: the pointer moves onto the button, the left button goes down and up
@@ -1748,6 +1769,307 @@ void test_room_screen(const assets::AssetArchive& arc) {
     local.set_on_map_changed([&](const std::string&) { ++local_maps; });
     click(local, MS::BTN_DOWN_X + 3, MS::BTN_DOWN_Y + 3);
     check(local_maps == 0, "local setup screen: no room to tell about a map change");
+
+    // ---- the rows (FUN_010133ef: row i is slot i of the machine's own table, the local machine is slot 0) ----------------------------------------------------------------------------------
+    {
+        auto view_of = [](bool host, uint8_t my, std::initializer_list<uint8_t> occupied) {
+            MS::RoomView v;
+            v.networked = true;
+            v.is_host = host;
+            v.my_seat = my;
+            for (uint8_t s : occupied) v.seats[s] = {true, std::string("P") + std::to_string(s), MS::Thumb::Ok};
+            return v;
+        };
+        using Rows = std::array<int8_t, 4>;
+        check(MS::row_seats(view_of(true, 0, {0, 1, 3})) == Rows{0, 1, -1, 3}, "rows: a host shows the seats in their places, a seat that is not taken leaves its row blank");
+        check(MS::row_seats(view_of(false, 1, {0, 1, 3})) == Rows{1, 0, 3, -1}, "rows: a guest (seat 1) shows itself first, then the host (seat 0), then the others, compact");
+        check(MS::row_seats(view_of(false, 3, {0, 1, 2, 3})) == Rows{3, 0, 1, 2}, "rows: a guest in seat 3 of four: itself, then the seats 0, 1, 2");
+        check(MS::row_seats(view_of(false, 2, {0, 2})) == Rows{2, 0, -1, -1}, "rows: a guest and the host: [me, host]");
+        check(MS::row_seats(view_of(false, 255, {0, 1, 3})) == Rows{0, 1, 3, -1}, "rows: a guest without a seat shows the occupied seats in ascending order");
+        check(MS::row_seats(view_of(false, 2, {0, 1})) == Rows{0, 1, -1, -1}, "rows: a guest whose own seat is not in the room (yet) shows the others");
+        {
+            MS::RoomView solo;                                                       // the local screen is not a room: the seats stay where they are
+            solo.seats[0] = {true, "Me", MS::Thumb::Good};
+            check(MS::row_seats(solo) == Rows{0, -1, -1, -1}, "rows: the local screen shows its one row");
+        }
+    }
+
+    // ---- the GUEST screen (FUN_01014228): another composite, no Up / Down / START / Fog buttons, the fixed "Fog of War?" box, only Leave --------------------------------------------------
+    {
+        MS g;
+        g.init();
+        MS::RoomView v;
+        v.networked = true;
+        v.is_host = false;
+        v.my_seat = 2;
+        const char* const names[4] = {"Alice", "Bob", "Cara", "Dave"};
+        for (size_t i = 0; i < 4; ++i) v.seats[i] = {true, names[i], MS::Thumb::Ok};
+        v.seats[2].thumb = MS::Thumb::Bad;                                          // the local row is always the good thumb
+        v.map_file = "SMALL.LVL";
+        g.set_room(v);
+        RecordingRenderer early(arc);
+        g.render(early, arc);                                                       // before the first refresh: the art and Leave only
+        check(early.has_sprite_at("nhbanr.bmp", 140, 0) && early.has_sprite_at("bleave1.bmp", 525, 12), "guest: before the refresh the guest art and Leave show");
+        check(early.texts.empty() && early.named("fowyes.bmp").empty(), "guest: no label and no fog overlay before the first refresh");
+        g.update(0.5f);
+        RecordingRenderer gr(arc);
+        g.render(gr, arc);
+        check(gr.has_sprite_at("nhbanr.bmp", 140, 0) && gr.has_sprite_at("waiting.bmp", 20, 39) && gr.has_sprite_at("nhmap.bmp", 25, 278), "guest: the banner 'Game Set-Up', the 'WAITING FOR GAME TO START!' art and the 'Map' caption");
+        check(gr.has_sprite_at("fowno.bmp", 529, 361) && gr.has_sprite_at("Q_mark.bmp", 511, 372), "guest: the fixed 'Fog of War?' box shows No");
+        check(gr.has_sprite_at("bleave1.bmp", 525, 12), "guest: Leave is the one button");
+        bool host_art = false;
+        for (const char* n : {"hostbanr.bmp", "gamesetup.bmp", "pickmap.bmp", "up1.bmp", "down1.bmp", "bstart1.bmp", "dbutonu.bmp", "dbutoffu.bmp", "optoffd.bmp", "optond.bmp"}) host_art = host_art || !gr.named(n).empty();
+        check(!host_art, "guest: none of the host's art or buttons (banner, 'GAME SET UP!', 'Pick a Map', Up, Down, START, Fog On / Off)");
+        check(gr.named("fowyes.bmp").empty(), "guest: fog off = no 'Yes' over the box");
+        // the rows: the guest itself first (the colour follows the player: seat 2), then the others in ascending seat order
+        auto portrait_team = [&](int32_t row_y) -> int {
+            for (const auto& sp : gr.sprites) {
+                if (sp.name.rfind("agst30", 0) == 0 && sp.x >= 383 && sp.x <= 385 && sp.y >= 85 + row_y && sp.y <= 89 + row_y) return sp.team;      // the part offsets move with the frame
+            }
+            return -1;
+        };
+        check(portrait_team(0) == 2 && portrait_team(50) == 0 && portrait_team(100) == 1 && portrait_team(150) == 3, "guest: the portraits of the rows are seats 2, 0, 1, 3 (each in its own colour)");
+        auto text_row = [&](const char* t, int32_t y) {
+            for (const auto& tx : gr.texts) {
+                if (tx.text == t && tx.x == 415 && tx.y == y) return true;
+            }
+            return false;
+        };
+        check(text_row("Cara", 95) && text_row("Alice", 145) && text_row("Bob", 195) && text_row("Dave", 245), "guest: the names are Cara, Alice, Bob, Dave from the top (its own name first)");
+        check(gr.has_sprite_at("thumb1.bmp", 540, 95) && gr.has_sprite_at("thumb2.bmp", 540, 145) && gr.has_sprite_at("thumb2.bmp", 540, 195), "guest: the local row has the good thumb whatever its measured quality, the others their own");
+        // the map labels: the host's choice, the description from the guest's own copy of the file
+        bool name_label = false, info_label = false;
+        for (const auto& tx : gr.texts) {
+            if (tx.text == "SMALL" && tx.x == 36 && tx.y == 312) name_label = true;
+            if (tx.x == 36 && tx.y == 380 && tx.text != "???") info_label = true;
+        }
+        check(name_label && info_label, "guest: the map name without its extension at (36, 312) and the description of its own copy at (36, 380)");
+        // keys and mouse: Leave only
+        int guest_left = 0;
+        int guest_started = 0;
+        g.set_on_quit([&]() { ++guest_left; });
+        g.set_on_start([&](const std::string&) { ++guest_started; });
+        g.handle_mouse_motion(MS::BTN_UP_X + 3, MS::BTN_UP_Y + 3);
+        RecordingRenderer hov(arc);
+        g.render(hov, arc);
+        check(hov.named("up2.bmp").empty() && hov.named("up1.bmp").empty(), "guest: nothing to hover where the host's Up button is");
+        click(g, MS::BTN_START_X + 5, MS::BTN_START_Y + 5);
+        check(!g.start_button().hovered() && !g.start_button().pressed() && !g.up_button().hovered() && !g.down_button().hovered(), "guest: the host's buttons have no pointer state after a click on their places");
+        g.handle_key_down(SDLK_RETURN);
+        g.handle_key_down(SDLK_s);
+        g.handle_key_down(SDLK_UP);
+        g.handle_key_down(SDLK_DOWN);
+        g.handle_key_down(SDLK_ESCAPE);
+        check(guest_started == 0 && guest_left == 0, "guest: START, Enter, S, the arrows and Esc do nothing");
+        g.handle_key_down(SDLK_q);
+        g.handle_key_down(SDLK_x);
+        click(g, MS::BTN_QUIT_X + 5, MS::BTN_QUIT_Y + 5);
+        check(guest_left == 3, "guest: Q, X and the Leave button leave");
+        // fog on: the 'Yes' overlay over the box; a map the guest does not have: the host's name and '???'
+        check(g.follow_host_choice("SMALL.LVL", true), "guest: follows the host's fog choice");
+        RecordingRenderer fog(arc);
+        g.render(fog, arc);
+        check(fog.has_sprite_at("fowyes.bmp", 534, 366), "guest: fog on shows 'Yes' at (534, 366)");
+        {
+            MS fresh;
+            fresh.init();
+            fresh.set_room(v);
+            fresh.follow_host_choice("SMALL.LVL", true);
+            RecordingRenderer before_refresh(arc);
+            fresh.render(before_refresh, arc);                                              // no update yet: the 'Yes' overlay is put on by the first refresh, 500 ms after the screen
+            check(before_refresh.named("fowyes.bmp").empty(), "guest: fog on, but the 'Yes' overlay waits for the first refresh");
+        }
+        v.map_file = "NOSUCH.LVL";
+        g.set_room(v);
+        RecordingRenderer missing(arc);
+        g.render(missing, arc);
+        bool shown_name = false, unknown = false;
+        for (const auto& tx : missing.texts) {
+            if (tx.text == "NOSUCH" && tx.x == 36 && tx.y == 312) shown_name = true;
+            if (tx.text == "???" && tx.x == 36 && tx.y == 380) unknown = true;
+        }
+        check(shown_name && unknown, "guest: a map that the guest does not have: the host's name and the question marks for the description");
+        v.map_file.clear();
+        g.set_room(v);
+        RecordingRenderer none(arc);
+        g.render(none, arc);
+        bool any_name = false, still_unknown = false;
+        for (const auto& tx : none.texts) {
+            if (tx.x == 36 && tx.y == 312) any_name = true;
+            if (tx.text == "???" && tx.x == 36 && tx.y == 380) still_unknown = true;
+        }
+        check(!any_name && still_unknown, "guest: before the host's first message the name is empty and the description is the question marks");
+
+        // the host's screen and the local screen keep the host art
+        MS h;
+        h.init();
+        h.update(0.5f);
+        MS::RoomView hv = view_of_host_for_art();
+        h.set_room(hv);
+        RecordingRenderer hr(arc);
+        h.render(hr, arc);
+        check(hr.has_sprite_at("hostbanr.bmp", 140, 0) && hr.has_sprite_at("bstart1.bmp", 526, 439) && hr.named("nhbanr.bmp").empty() && hr.named("fowyes.bmp").empty(), "host: the host screen keeps its art and its controls");
+    }
+}
+
+// The original's button class tests the rectangle of the picture that shows (docs 5.52): the START! buttons of the quick help and of the setup screen, the zones
+// that follow from FUN_010112e9 / FUN_01011281 / FUN_01011206, and the plate that the remake draws in the corner
+void test_button_zones(const assets::AssetArchive& arc) {
+    std::printf("[zones] the START buttons: positions in each state, the hit rectangle of the picture that shows, dead strips, the corner plate\n");
+    using MS = MapSelectScreen;
+    auto rect = [&](const char* n) { const UIRect r = animation_bounds(arc, n); return ButtonRect{r.x, r.y, r.w, r.h}; };
+    const ButtonRect qh_up{529, 437, 98, 27};
+    const ButtonRect qh_down{528, 438, 97, 24};
+    const ButtonRect st_up{526, 439, 98, 27};
+    const ButtonRect st_down{527, 443, 97, 24};
+    check(rect("qh_start1") == qh_up && rect("qh_start2") == qh_up && rect("qh_start3") == qh_down, "quick help START pictures: qh_start1 / 2 (529, 437) 98 x 27, qh_start3 (528, 438) 97 x 24");
+    check(rect("start1") == st_up && rect("start2") == st_up && rect("start3") == st_down, "setup START pictures: start1 / 2 (526, 439) 98 x 27, start3 (527, 443) 97 x 24");
+    // the shift between the two screens is authored in the CHD (both buttons are built at (0, 0), both windows are (0, 0, 640, 480)): the original moves it too
+    check(st_up.x - qh_up.x == -3 && st_up.y - qh_up.y == 2 && st_down.x - qh_down.x == -1 && st_down.y - qh_down.y == 5,
+          "the setup START sits (-3, +2) from the quick help START (up, hover) and (-1, +5) (pressed): as in the original");
+    check(MS::BTN_START_X == st_up.x && MS::BTN_START_Y == st_up.y && MS::BTN_START_W == st_up.w && MS::BTN_START_H == st_up.h && MS::BTN_START_PRESSED == st_down, "the screen's constants are those pictures");
+
+    // click zones: the press must hit the up / hover picture, every move until the release must stay on the pressed picture
+    auto make = [](ButtonRect up, ButtonRect down) { return ScreenButton(up, down); };
+    auto fires = [](ScreenButton b, int32_t x, int32_t y) {
+        b.on_move(x, y);
+        b.on_press(x, y);
+        return b.on_release(x, y);
+    };
+    auto shows_pressed = [](ScreenButton b, int32_t x, int32_t y) {
+        b.on_move(x, y);
+        b.on_press(x, y);
+        return b.pressed();
+    };
+    auto sounds = [](ScreenButton b, int32_t x, int32_t y) {      // the press that captured (the pressed animation starts, its sound plays)
+        b.on_move(x, y);
+        return b.on_press(x, y);
+    };
+    const ScreenButton qh = make(qh_up, qh_down);
+    check(fires(qh, 529, 438) && fires(qh, 624, 461) && fires(qh, 580, 450), "quick help START: fires in [529, 625) x [438, 462)");
+    check(!fires(qh, 528, 450) && !sounds(qh, 528, 450), "quick help START: x = 528 is on the pressed picture only: no capture, no sound");
+    check(!fires(qh, 529, 437) && sounds(qh, 529, 437) && !shows_pressed(qh, 529, 437), "quick help START: y = 437 is on the up picture only: the press is cancelled at once (the pressed picture never shows)");
+    check(!fires(qh, 625, 450) && !fires(qh, 529, 462) && !fires(qh, 626, 463) && !fires(qh, 627, 450), "quick help START: x = 625, 626, y = 462, 463 and x = 627 fire nothing");
+    const ScreenButton st = make(st_up, st_down);
+    check(fires(st, 527, 443) && fires(st, 623, 465) && fires(st, 580, 450), "setup START: fires in [527, 624) x [443, 466)");
+    check(!fires(st, 623, 466) && !sounds(st, 623, 466), "setup START: y = 466 is on the pressed picture only: no capture");
+    check(!fires(st, 526, 450) && !fires(st, 531, 440) && !fires(st, 527, 442) && !fires(st, 527, 439), "setup START: x = 526 and y = 439 .. 442 are on the up picture only: nothing fires");
+    check(!fires(st, 624, 450), "setup START: x = 624 is outside both pictures");
+    // the hover picture at rest: the up rectangle (the pointer on the pressed-only strip does not hover)
+    {
+        ScreenButton b = st;
+        b.on_move(530, 440);
+        check(b.hovered() && !b.pressed(), "a pointer on the up picture hovers");
+        b.on_move(623, 466);
+        check(!b.hovered(), "a pointer below the up picture does not");
+        b.on_move(530, 450);
+        b.on_press(530, 450);
+        check(b.pressed() && b.hovered(), "a captured button is pressed and hovered");
+        b.on_move(526, 450);                                     // x = 526 is on the up picture only: the pressed picture does not contain it any more: the capture is gone
+        check(!b.pressed() && !b.hovered(), "a move onto the up-only strip while captured cancels the capture for good");
+        b.on_move(560, 450);
+        check(b.hovered() && !b.pressed(), "coming back only hovers");
+    }
+    // the corner plate (frame rate, sparkline, version) starts below the pressed START of the setup screen and ends at the last row
+    check(FPS_OVERLAY_TOP >= st_down.y + st_down.h && FPS_OVERLAY_TOP >= qh_up.y + qh_up.h, "the corner plate starts below both START buttons, pressed or not");
+    check(FPS_OVERLAY_BOTTOM <= 480 && FPS_OVERLAY_SPARK_Y + font_cell_height(FontSize::Px12) <= 480, "and the plate and the 12 px text end inside the 480 rows");
+}
+
+// The same rule for the other buttons of the class that the release converted: the setup screen's Up, Down and Leave, the results screen's Leave, the options
+// screen's Return; and the host's screen after a cancelled start
+void test_more_button_zones(const assets::AssetArchive& arc) {
+    std::printf("[zones] Up, Down, Leave (setup and results), Return (options): click zones; unlock after a cancelled start\n");
+    using MS = MapSelectScreen;
+    // setup Up: up1 [226, 272) x [299, 321), up3 [224, 271) x [301, 322): the zone is [226, 271) x [301, 321)
+    {
+        MS screen;
+        screen.init();
+        const int32_t n = static_cast<int32_t>(screen.get_maps().size());
+        auto steps = [&](int32_t x, int32_t y) {
+            const int32_t before = screen.get_selected_index();
+            click(screen, x, y);
+            return screen.get_selected_index() != before;
+        };
+        check(n >= 2, "setup zones: the map list has two maps or more (the six of the original)");
+        check(steps(230, 305) && steps(226, 301) && steps(270, 320), "setup Up: fires in [226, 271) x [301, 321)");
+        check(!steps(225, 305), "setup Up: x = 225 is on the pressed picture only: no capture");
+        check(!steps(230, 300) && !steps(271, 305), "setup Up: y = 300 and x = 271 are on the resting picture only: captured, then cancelled");
+        // setup Down: down1 [226, 273) x [323, 343), down3 [225, 272) x [324, 345): the zone is [226, 272) x [324, 343)
+        check(steps(230, 330) && steps(226, 324) && steps(271, 342), "setup Down: fires in [226, 272) x [324, 343)");
+        check(!steps(225, 330) && !steps(272, 330) && !steps(230, 323) && !steps(230, 343), "setup Down: x = 225, 272 and y = 323, 343 fire nothing");
+        // setup Leave: leave1 [525, 624) x [12, 34), leave3 [524, 622) x [14, 34): the zone is [525, 622) x [14, 34)
+        int left = 0;
+        screen.set_on_quit([&]() { ++left; });
+        click(screen, 530, 20);
+        click(screen, 525, 14);
+        click(screen, 621, 33);
+        check(left == 3, "setup Leave: fires in [525, 622) x [14, 34)");
+        click(screen, 524, 20);
+        click(screen, 530, 12);
+        click(screen, 623, 20);
+        click(screen, 530, 34);
+        check(left == 3, "setup Leave: x = 524, y = 12, x = 623 and y = 34 fire nothing");
+    }
+    // results Leave: the same pictures
+    {
+        ScorecardModal card;
+        sim::MatchResult mr;
+        mr.is_over = true;
+        card.show(mr, 0);
+        card.update(0.25f);                                                                    // the rows, and with them the Leave button
+        int left = 0;
+        card.set_on_quit([&]() { ++left; });
+        auto leave = [&](int32_t x, int32_t y) {
+            card.handle_mouse_motion(x, y);
+            card.handle_mouse_down(x, y);
+            card.handle_mouse_up(x, y);
+        };
+        leave(530, 20);
+        leave(525, 14);
+        leave(621, 33);
+        check(left == 3, "results Leave: fires in [525, 622) x [14, 34)");
+        leave(524, 20);
+        leave(530, 12);
+        leave(623, 20);
+        leave(530, 34);
+        check(left == 3, "results Leave: the strips of one picture only fire nothing");
+        card.handle_mouse_motion(530, 20);
+        check(card.is_quit_hovered(), "results Leave: hover on the resting picture");
+        card.handle_mouse_down(530, 20);
+        card.handle_mouse_motion(623, 20);                                                     // x = 623 is on the resting picture only: the capture is gone for good
+        card.handle_mouse_motion(530, 20);
+        card.handle_mouse_up(530, 20);
+        check(left == 3 && !card.is_quit_pressed(), "results Leave: leaving the pressed picture cancels the capture for good");
+    }
+    // options Return: breturn1 [351, 449) x [425, 451), breturn3 [353, 450) x [427, 451): the zone is [353, 449) x [427, 451)
+    {
+        ScreenButton ret(ButtonRect{OptionsScreen::RETURN_X, OptionsScreen::RETURN_Y, OptionsScreen::RETURN_W, OptionsScreen::RETURN_H}, OptionsScreen::RETURN_PRESSED);
+        auto fires = [&](int32_t x, int32_t y) {
+            ScreenButton b = ret;
+            b.on_move(x, y);
+            b.on_press(x, y);
+            return b.on_release(x, y);
+        };
+        check(ret.up_rect() == ButtonRect({351, 425, 98, 26}) && ret.pressed_rect() == ButtonRect({353, 427, 97, 24}), "options Return: breturn1 / 2 and breturn3 rectangles");
+        const UIRect r1 = animation_bounds(arc, "breturn1");
+        const UIRect r3 = animation_bounds(arc, "breturn3");
+        check(r1.x == 351 && r1.y == 425 && r1.w == 98 && r1.h == 26 && r3.x == 353 && r3.y == 427 && r3.w == 97 && r3.h == 24, "options Return: the rectangles are the CHD's");
+        check(fires(353, 427) && fires(448, 450) && fires(400, 440), "options Return: fires in [353, 449) x [427, 451)");
+        check(!fires(351, 440) && !fires(400, 425) && !fires(449, 440), "options Return: x = 351, y = 425 and x = 449 fire nothing");
+    }
+    // the host's screen after a cancelled start: unlock gives the controls back
+    {
+        MS screen;
+        screen.init();
+        screen.update(0.5f);
+        const int32_t first = screen.get_selected_index();
+        screen.lock();
+        screen.handle_key_down(SDLK_DOWN);
+        check(screen.is_locked() && screen.get_selected_index() == first, "locked (START ran): the map cannot be changed");
+        screen.unlock();
+        screen.handle_key_down(SDLK_DOWN);
+        check(!screen.is_locked() && screen.get_selected_index() != first, "unlocked (the start was cancelled): the map can be chosen again");
+    }
 }
 
 // The original's label fonts (Ants.exe label constructors 0x10116cb / 0x1011856, docs 5.14): every text uses its own cell height
@@ -2365,6 +2687,8 @@ int main() {
     test_rubber_band(arc);
     test_screens(arc);
     test_room_screen(arc);
+    test_button_zones(arc);
+    test_more_button_zones(arc);
     test_pedestal_chains(arc);
     test_pedestal_timeline(arc);
     test_minimap(arc);

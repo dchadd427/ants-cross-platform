@@ -29,8 +29,7 @@ void ScorecardModal::show(const sim::MatchResult& result, uint8_t local_player_i
     phase_ = Phase::Waiting;
     elapsed_ms_ = 0.0;
     local_player_id_ = local_player_id;
-    quit_hovered_ = false;
-    quit_pressed_ = false;
+    quit_.reset();
     audio_to_play_ = 0;
     rows_.clear();
     result_ = result;
@@ -67,15 +66,10 @@ void ScorecardModal::build_rows() {
     phase_ = Phase::Rows;
 }
 
-bool ScorecardModal::over_leave_button(int32_t x, int32_t y) const noexcept {
-    return x >= QUIT_BTN_X && x < (QUIT_BTN_X + QUIT_BTN_W) && y >= QUIT_BTN_Y && y < (QUIT_BTN_Y + QUIT_BTN_H);
-}
-
 bool ScorecardModal::handle_mouse_down(int32_t x, int32_t y) {
     if (!is_active_) return false;
 
-    if (phase_ == Phase::Rows && over_leave_button(x, y)) {
-        quit_pressed_ = true;
+    if (phase_ == Phase::Rows && quit_.on_press(x, y)) {
         play_sfx(sim::SoundID::ButtonClick);   // leave3 carries sound 0 (buttonclick.wav)
         return true;
     }
@@ -86,12 +80,9 @@ bool ScorecardModal::handle_mouse_down(int32_t x, int32_t y) {
 bool ScorecardModal::handle_mouse_up(int32_t x, int32_t y) {
     if (!is_active_) return false;
 
-    if (quit_pressed_) {
-        quit_pressed_ = false;
-        if (over_leave_button(x, y)) {
-            if (on_quit_) on_quit_();
-            return true;
-        }
+    if (phase_ == Phase::Rows && quit_.on_release(x, y)) {      // the callback runs at the release, on the button, while it is still captured
+        if (on_quit_) on_quit_();
+        return true;
     }
 
     return true;
@@ -99,7 +90,8 @@ bool ScorecardModal::handle_mouse_up(int32_t x, int32_t y) {
 
 void ScorecardModal::handle_mouse_motion(int32_t x, int32_t y) {
     if (!is_active_) return;
-    quit_hovered_ = phase_ == Phase::Rows && over_leave_button(x, y);
+    if (phase_ == Phase::Rows) quit_.on_move(x, y);
+    else quit_.reset();
 }
 
 // One AntSlot (FUN_01021ba4): the animation agst301 at (x, y) in the colour of the team, running since the screen was created
@@ -159,7 +151,7 @@ void ScorecardModal::render(IRenderer& renderer, const assets::AssetArchive& ass
     }
 
     // 4. Top-right "Leave Game" button: animations leave1 / leave2 (hover) / leave3 (pressed), absolute coordinates
-    draw_animation_frame0(renderer, assets, quit_pressed_ ? "leave3" : (quit_hovered_ ? "leave2" : "leave1"));
+    draw_animation_frame0(renderer, assets, quit_.pressed() ? "leave3" : (quit_.hovered() ? "leave2" : "leave1"));
 }
 
 } // namespace ants::app

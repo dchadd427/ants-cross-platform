@@ -56,17 +56,21 @@ public:
     static constexpr int32_t PLAYER_NAME_X = 415;
     static constexpr int32_t PLAYER_NAME_W = 120;
 
-    // Control rectangles are the union of the resting and pressed art of the original animations (their part offsets
-    // are absolute screen coordinates): up1/up3, down1/down3, start1/start3, leave1/leave3, d_on1/d_on3, d_off1/d_off3.
-    static constexpr int32_t BTN_UP_X = 224;
+    // The rectangles of the buttons' pictures (docs 5.50 / 5.52): the original's hit test is the rectangle of the picture that shows now, so every button has the
+    // rectangle of its resting / hovering picture (the BTN_*_X / Y / W / H, = up1 / up2, down1 / down2, start1 / start2, leave1 / leave2) and that of its pressed
+    // picture (BTN_*_PRESSED, = up3, down3, start3, leave3). The part offsets are absolute screen coordinates. The Fog of War pair is a latching pair of four
+    // pictures each; it keeps the union of its first and third picture (docs 5.52).
+    static constexpr int32_t BTN_UP_X = 226;
     static constexpr int32_t BTN_UP_Y = 299;
-    static constexpr int32_t BTN_UP_W = 48;
-    static constexpr int32_t BTN_UP_H = 23;
+    static constexpr int32_t BTN_UP_W = 46;
+    static constexpr int32_t BTN_UP_H = 22;
+    static constexpr ButtonRect BTN_UP_PRESSED{224, 301, 47, 21};
 
-    static constexpr int32_t BTN_DOWN_X = 225;
+    static constexpr int32_t BTN_DOWN_X = 226;
     static constexpr int32_t BTN_DOWN_Y = 323;
-    static constexpr int32_t BTN_DOWN_W = 48;
-    static constexpr int32_t BTN_DOWN_H = 22;
+    static constexpr int32_t BTN_DOWN_W = 47;
+    static constexpr int32_t BTN_DOWN_H = 20;
+    static constexpr ButtonRect BTN_DOWN_PRESSED{225, 324, 47, 21};
 
     static constexpr int32_t BTN_FOW_ON_X = 522;
     static constexpr int32_t BTN_FOW_ON_Y = 372;
@@ -78,16 +82,17 @@ public:
     static constexpr int32_t BTN_FOW_OFF_W = 49;
     static constexpr int32_t BTN_FOW_OFF_H = 24;
 
-
     static constexpr int32_t BTN_START_X = 526;
     static constexpr int32_t BTN_START_Y = 439;
     static constexpr int32_t BTN_START_W = 98;
-    static constexpr int32_t BTN_START_H = 28;
+    static constexpr int32_t BTN_START_H = 27;
+    static constexpr ButtonRect BTN_START_PRESSED{527, 443, 97, 24};
 
-    static constexpr int32_t BTN_QUIT_X = 524;
+    static constexpr int32_t BTN_QUIT_X = 525;
     static constexpr int32_t BTN_QUIT_Y = 12;
-    static constexpr int32_t BTN_QUIT_W = 100;
+    static constexpr int32_t BTN_QUIT_W = 99;
     static constexpr int32_t BTN_QUIT_H = 22;
+    static constexpr ButtonRect BTN_QUIT_PRESSED{524, 14, 98, 20};
 
     // The player rows of the Players' Status box: slot i has its portrait origin at (395, 115 + 50 i) and its thumb at
     // (540, 95 + 50 i) (Ants.exe setup screen, SetPos of the AntSlot and thumb sprites)
@@ -110,6 +115,9 @@ public:
     bool refreshed() const noexcept { return elapsed_ms_ >= REFRESH_MS; }
     /// START was accepted: up / down, the fog option and a second START do nothing any more (+0x130)
     void lock() noexcept { started_ = true; }
+    /// The start was cancelled (a player left, a map did not load): the host is back in the room and may choose again (the original's START is never undone; a mesh
+    /// has no cancel, the remake's barrier has)
+    void unlock() noexcept { started_ = false; }
     bool is_locked() const noexcept { return started_; }
 
     /// Left button only. The buttons capture on the press (their pressed picture and click sound) and act at the release (docs 5.45)
@@ -141,6 +149,10 @@ public:
     const std::vector<MapSelectEntry>& get_maps() const noexcept { return maps_; }
 
     bool is_fog_of_war_enabled() const noexcept { return fog_of_war_; }
+    const ScreenButton& up_button() const noexcept { return up_; }
+    const ScreenButton& down_button() const noexcept { return down_; }
+    const ScreenButton& start_button() const noexcept { return start_; }
+    const ScreenButton& quit_button() const noexcept { return quit_; }
 
     /// The thumb beside a player's name (the original's netgood / netok / netbad / netunk animations: connection quality)
     enum class Thumb : uint8_t { Good = 0, Ok = 1, Bad = 2, Unknown = 3 };
@@ -156,12 +168,21 @@ public:
         bool is_host{true};
         uint8_t my_seat{0};
         std::array<RoomSeat, 4> seats{};
+        std::string map_file;                  // the host's choice (its file name), what a guest shows ("" before the host's first message)
         std::string status;                    // replaces the prompt line while networked
     };
     void set_room(const RoomView& room) { room_ = room; }
     const RoomView& room() const noexcept { return room_; }
+    /// A player of a room who is not its host: the original shows him ANOTHER screen (FUN_01014228: nh_start, no Up / Down / START / Fog buttons, a fixed
+    /// "Fog of War?" box with the host's choice, only Leave) and its key handler knows Q / X only. A room on a dedicated server has no host: all are guests.
+    bool is_guest() const noexcept { return room_.networked && !room_.is_host; }
     /// The map, the fog option and START belong to the host of a room; a guest's clicks on them do nothing
-    bool can_change_setup() const noexcept { return !room_.networked || room_.is_host; }
+    bool can_change_setup() const noexcept { return !is_guest(); }
+    /// Which seat each of the four rows shows, -1 = the row stays blank (the original's row i is slot i of the machine's own peer table, FUN_010133ef: the local
+    /// machine is slot 0 on host and guest alike, a guest's slot 1 is the host, the others follow in the order they were met). A host (and the local screen):
+    /// row r = seat r, a seat that is not taken leaves its row blank. A guest: its own seat first, then the other seats in ascending order (the host is seat 0
+    /// of a LAN room, so it comes right after the guest itself), compact.
+    static std::array<int8_t, 4> row_seats(const RoomView& room) noexcept;
     /// The host changed the map (its file name) or the fog option through the controls
     void set_on_map_changed(std::function<void(const std::string& filename)> cb) { on_map_changed_ = std::move(cb); }
     void set_on_fog_changed(std::function<void(bool)> cb) { on_fog_changed_ = std::move(cb); }
@@ -182,10 +203,10 @@ private:
 
     int32_t mouse_x_{0};
     int32_t mouse_y_{0};
-    ScreenButton up_{BTN_UP_X, BTN_UP_Y, BTN_UP_W, BTN_UP_H};
-    ScreenButton down_{BTN_DOWN_X, BTN_DOWN_Y, BTN_DOWN_W, BTN_DOWN_H};
-    ScreenButton start_{BTN_START_X, BTN_START_Y, BTN_START_W, BTN_START_H};
-    ScreenButton quit_{BTN_QUIT_X, BTN_QUIT_Y, BTN_QUIT_W, BTN_QUIT_H};
+    ScreenButton up_{ButtonRect{BTN_UP_X, BTN_UP_Y, BTN_UP_W, BTN_UP_H}, BTN_UP_PRESSED};
+    ScreenButton down_{ButtonRect{BTN_DOWN_X, BTN_DOWN_Y, BTN_DOWN_W, BTN_DOWN_H}, BTN_DOWN_PRESSED};
+    ScreenButton start_{ButtonRect{BTN_START_X, BTN_START_Y, BTN_START_W, BTN_START_H}, BTN_START_PRESSED};
+    ScreenButton quit_{ButtonRect{BTN_QUIT_X, BTN_QUIT_Y, BTN_QUIT_W, BTN_QUIT_H}, BTN_QUIT_PRESSED};
     ScreenButton fow_on_{BTN_FOW_ON_X, BTN_FOW_ON_Y, BTN_FOW_ON_W, BTN_FOW_ON_H};
     ScreenButton fow_off_{BTN_FOW_OFF_X, BTN_FOW_OFF_Y, BTN_FOW_OFF_W, BTN_FOW_OFF_H};
 

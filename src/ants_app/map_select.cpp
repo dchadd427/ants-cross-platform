@@ -70,6 +70,22 @@ void MapSelectScreen::enter() {
     fow_off_.reset();
 }
 
+// FUN_010133ef shows slot i of the machine's own peer table in row i: the local machine is slot 0 on every machine, a guest's slot 1 is the host (docs 5.50)
+std::array<int8_t, 4> MapSelectScreen::row_seats(const RoomView& room) noexcept {
+    std::array<int8_t, 4> rows{-1, -1, -1, -1};
+    if (!room.networked || room.is_host) {                                   // the host and the local screen: the seats in their places, holes stay blank
+        for (size_t s = 0; s < rows.size(); ++s) rows[s] = room.seats[s].occupied ? static_cast<int8_t>(s) : static_cast<int8_t>(-1);
+        return rows;
+    }
+    size_t next = 0;                                                         // a guest: itself first, then the others in ascending seat order, compact
+    if (room.my_seat < room.seats.size() && room.seats[room.my_seat].occupied) rows[next++] = static_cast<int8_t>(room.my_seat);
+    for (size_t s = 0; s < room.seats.size() && next < rows.size(); ++s) {
+        if (!room.seats[s].occupied || s == room.my_seat) continue;
+        rows[next++] = static_cast<int8_t>(s);
+    }
+    return rows;
+}
+
 void MapSelectScreen::update(float dt_seconds) {
     elapsed_ms_ += static_cast<double>(dt_seconds) * 1000.0;
 }
@@ -125,6 +141,11 @@ void MapSelectScreen::trigger_quit() {
 void MapSelectScreen::handle_mouse_motion(int32_t screen_x, int32_t screen_y) {
     mouse_x_ = screen_x;
     mouse_y_ = screen_y;
+    if (is_guest()) {                                                         // the guest screen has no Up / Down / START / Fog buttons: only Leave (FUN_01014228)
+        for (ScreenButton* b : {&up_, &down_, &start_, &fow_on_, &fow_off_}) b->reset();
+        quit_.on_move(screen_x, screen_y);
+        return;
+    }
     for (ScreenButton* b : {&up_, &down_, &start_, &quit_, &fow_on_, &fow_off_}) b->on_move(screen_x, screen_y);
 }
 
@@ -155,6 +176,11 @@ void MapSelectScreen::handle_mouse_down(int32_t screen_x, int32_t screen_y, uint
 // The release runs the callback of the button that is still captured
 void MapSelectScreen::handle_mouse_up(int32_t screen_x, int32_t screen_y, uint8_t button) {
     if (button != SDL_BUTTON_LEFT) return;
+    if (is_guest()) {                                                         // the buttons that are not on the guest screen get no pointer events either
+        for (ScreenButton* b : {&up_, &down_, &start_, &fow_on_, &fow_off_}) b->reset();
+        if (quit_.on_release(screen_x, screen_y)) trigger_quit();
+        return;
+    }
     const bool fire_up = up_.on_release(screen_x, screen_y);
     const bool fire_down = down_.on_release(screen_x, screen_y);
     const bool fire_start = start_.on_release(screen_x, screen_y);
@@ -195,10 +221,12 @@ void MapSelectScreen::handle_key_down(SDL_Keycode key) {
 void MapSelectScreen::render(IRenderer& renderer, const ants::assets::AssetArchive& archive) {
     using ants::assets::ColorRGBA;
 
-    // 1. Authentic st_screen composite setup dialog (129 frame elements from Table 4 Animation 106)
-    // Rendered in reverse order to produce authentic 640x480 terracotta layout with frames,
-    // banners, headers, boxes, and Fog of War texts.
-    const auto* anim = archive.find_animation("st_screen");
+    // 1. The setup screen's composite: the HOST screen (FUN_01013b36) is animation 106 "st_screen" (Host Game Set-Up, Pick a Map, GAME SET UP!), the GUEST screen
+    // (FUN_01014228) is animation 107 "nh_start" (Game Set-Up, Map, WAITING FOR GAME TO START!, a fixed "Fog of War?" box showing No); the local screen is the host's.
+    // The frames are drawn in reverse order to produce the 640x480 layout with frames, banners, headers, boxes and the Fog of War texts.
+    const bool guest = is_guest();
+    const auto* anim = archive.find_animation(guest ? "nh_start" : "st_screen");
+    if (anim == nullptr || anim->subitems.empty()) anim = archive.find_animation("st_screen");
     if (anim && !anim->subitems.empty()) {
         const auto& frames = anim->subitems[0].frames;
         for (size_t i = frames.size(); i-- > 0; ) {
@@ -209,26 +237,44 @@ void MapSelectScreen::render(IRenderer& renderer, const ants::assets::AssetArchi
         renderer.fill_rect(0, 0, 640, 480, ColorRGBA{219, 75, 19, 255});
     }
 
-    // 2. Leave Game button: animations leave1 / leave2 (hover) / leave3 (pressed), absolute coordinates
+    // 2. Leave Game button (both screens): animations leave1 / leave2 (hover) / leave3 (pressed), absolute coordinates
     draw_animation_frame0(renderer, archive, quit_.pressed() ? "leave3" : (quit_.hovered() ? "leave2" : "leave1"));
 
-    // Up/Down stepper buttons: animations up1..3 and down1..3 (up / hover / pressed), absolute coordinates
-    draw_animation_frame0(renderer, archive, up_.pressed() ? "up3" : (up_.hovered() ? "up2" : "up1"));
-    draw_animation_frame0(renderer, archive, down_.pressed() ? "down3" : (down_.hovered() ? "down2" : "down1"));
+    if (!guest) {
+        // Up/Down stepper buttons: animations up1..3 and down1..3 (up / hover / pressed), absolute coordinates
+        draw_animation_frame0(renderer, archive, up_.pressed() ? "up3" : (up_.hovered() ? "up2" : "up1"));
+        draw_animation_frame0(renderer, archive, down_.pressed() ? "down3" : (down_.hovered() ? "down2" : "down1"));
 
-    // 3. Fog of War On / Off (animations d_on1..3, d_off1..3): the chosen one is shown down (so is a button that is being pressed), the other one up or hover
-    draw_animation_frame0(renderer, archive, (fog_of_war_ || fow_on_.pressed()) ? "d_on3" : (fow_on_.hovered() ? "d_on2" : "d_on1"));
-    draw_animation_frame0(renderer, archive, (!fog_of_war_ || fow_off_.pressed()) ? "d_off3" : (fow_off_.hovered() ? "d_off2" : "d_off1"));
+        // 3. Fog of War On / Off (animations d_on1..3, d_off1..3): the chosen one is shown down (so is a button that is being pressed), the other one up or hover
+        draw_animation_frame0(renderer, archive, (fog_of_war_ || fow_on_.pressed()) ? "d_on3" : (fow_on_.hovered() ? "d_on2" : "d_on1"));
+        draw_animation_frame0(renderer, archive, (!fog_of_war_ || fow_off_.pressed()) ? "d_off3" : (fow_off_.hovered() ? "d_off2" : "d_off1"));
 
-    // 4. START! button: animations start1 / start2 (hover) / start3 (pressed), absolute coordinates
-    draw_animation_frame0(renderer, archive, start_.pressed() ? "start3" : (start_.hovered() ? "start2" : "start1"));
+        // 4. START! button: animations start1 / start2 (hover) / start3 (pressed), absolute coordinates
+        draw_animation_frame0(renderer, archive, start_.pressed() ? "start3" : (start_.hovered() ? "start2" : "start1"));
+    }
 
     // The labels start empty: the refresh task's first run, 500 ms after the screen was created, fills them and puts the portraits and thumbs on the screen
     if (!refreshed()) return;
     const ColorRGBA label_colour{239, 231, 223, 255};                 // every label: 0xdfe7ef
 
-    // 5. The map name (36, 312) 179 x 26 and its description (36, 380) 293 x 26, 18 px lines
-    if (selected_index_ >= 0 && selected_index_ < static_cast<int32_t>(maps_.size())) {
+    // 5. The map name (36, 312) 179 x 26 and its description (36, 380) 293 x 26, 18 px lines. A guest shows the HOST's choice (game message 0x22: the file name; the
+    // description comes from the guest's OWN copy of the file, "???" when it has none, and before the host's first message the name is empty).
+    if (guest) {
+        const MapSelectEntry* own = nullptr;
+        for (const auto& m : maps_) {
+            if (!room_.map_file.empty() && m.filename == room_.map_file) own = &m;
+        }
+        std::string shown_name = fs::path(room_.map_file).stem().string();
+        std::string info_text = "???";
+        if (own != nullptr) {
+            shown_name = own->display_name;
+            info_text = own->description;
+            if (own->minutes > 0) info_text += " (" + std::to_string(own->minutes) + " min)";
+        }
+        if (!shown_name.empty()) renderer.draw_text(fit_text(renderer, shown_name, NAME_W, FontSize::Px18), LABEL_X, NAME_Y, label_colour, FontSize::Px18);
+        renderer.draw_text(fit_text(renderer, info_text, STATUS_W, FontSize::Px18), LABEL_X, INFO_Y, label_colour, FontSize::Px18);
+        if (fog_of_war_) draw_animation_frame0(renderer, archive, "d_fowyes");        // the "Yes" over the fixed "No" box (animation 108, (534, 366))
+    } else if (selected_index_ >= 0 && selected_index_ < static_cast<int32_t>(maps_.size())) {
         const auto& cur = maps_[static_cast<size_t>(selected_index_)];
         renderer.draw_text(fit_text(renderer, cur.display_name, NAME_W, FontSize::Px18), LABEL_X, NAME_Y, label_colour, FontSize::Px18);
         std::string info_text = cur.description;
@@ -254,16 +300,20 @@ void MapSelectScreen::render(IRenderer& renderer, const ants::assets::AssetArchi
         renderer.set_hud_team(0);
     };
     if (room_.networked) {
-        // a room: one row per occupied seat (portrait in the seat's colour, the name, the thumb of a player who is here)
-        for (size_t seat = 0; seat < room_.seats.size(); ++seat) {
-            if (!room_.seats[seat].occupied) continue;
-            const int32_t row = static_cast<int32_t>(seat) * PLAYER_ROW_PITCH;
+        // a room: the rows of FUN_010133ef (row_seats: the local player first on a guest), each with the portrait in the seat's colour (the colour follows the
+        // player, not the row), the name and the thumb of a player who is here; the local machine's own thumb is always the good one (latency 0, ready from the start)
+        const std::array<int8_t, 4> rows = row_seats(room_);
+        for (size_t r = 0; r < rows.size(); ++r) {
+            if (rows[r] < 0) continue;
+            const size_t seat = static_cast<size_t>(rows[r]);
+            const int32_t row = static_cast<int32_t>(r) * PLAYER_ROW_PITCH;
             draw_portrait(static_cast<uint8_t>(seat), row);
             std::string name = room_.seats[seat].name.empty() ? std::string("Player") : room_.seats[seat].name;
             if (name.size() > 16) name.resize(16);
-            renderer.draw_text(fit_text(renderer, name, PLAYER_NAME_W, FontSize::Px18), PLAYER_NAME_X, PLAYER_THUMB_Y + row, label_colour, FontSize::Px18);      // the label (415, 95 + 50 * seat) 120 x 20
+            renderer.draw_text(fit_text(renderer, name, PLAYER_NAME_W, FontSize::Px18), PLAYER_NAME_X, PLAYER_THUMB_Y + row, label_colour, FontSize::Px18);      // the label (415, 95 + 50 * row) 120 x 20
             static const char* const kThumbs[4] = {"thumb1.bmp", "thumb2.bmp", "thumb3.bmp", "thumb4.bmp"};   // netgood, netok, netbad, netunk
-            renderer.draw_named_sprite(kThumbs[static_cast<size_t>(room_.seats[seat].thumb) & 3u], PLAYER_THUMB_X, PLAYER_THUMB_Y + row);
+            const size_t thumb = seat == room_.my_seat ? 0u : (static_cast<size_t>(room_.seats[seat].thumb) & 3u);
+            renderer.draw_named_sprite(kThumbs[thumb], PLAYER_THUMB_X, PLAYER_THUMB_Y + row);
         }
     } else {
         const std::string display_user = player_name_.empty() ? "Player" : player_name_;

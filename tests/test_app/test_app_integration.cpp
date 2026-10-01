@@ -982,6 +982,42 @@ void run_suite_6_scorecard_and_audio_routing() {
         ASSERT_FALSE(app.is_running());
     } TEST_END();
 
+    TEST_CASE("6.3b Results Leave: The Left Button Only (FUN_01011206); A Pointer That Rests On It Hovers As Soon As The Rows Are There (The INPUT Task's Poll, FUN_0102653f)") {
+        Application app;
+        ApplicationConfig cfg;
+        cfg.headless = true;
+        cfg.start_in_map_select = false;
+        ASSERT_TRUE(app.init(cfg));
+        app.note_pointer(550, 20);                                                // the pointer rests where the Leave button will be
+        app.scorecard().show(app.sim().get_world_state().match_result, 0);
+        app.update_results(0.1f);                                                 // waiting for the scores: no button yet
+        ASSERT_FALSE(app.scorecard().is_quit_hovered());
+        app.update_results(0.2f);                                                 // the rows, and the Leave button under the resting pointer
+        ASSERT_TRUE(app.scorecard().is_quit_hovered());
+        for (uint8_t b : {static_cast<uint8_t>(SDL_BUTTON_RIGHT), static_cast<uint8_t>(SDL_BUTTON_MIDDLE)}) {
+            SDL_MouseButtonEvent ev{};
+            ev.type = SDL_MOUSEBUTTONDOWN;
+            ev.button = b;
+            ev.x = 550;
+            ev.y = 20;
+            app.handle_mouse_button(ev);
+            ASSERT_FALSE(app.scorecard().is_quit_pressed());                      // another button does not press it ...
+            ev.type = SDL_MOUSEBUTTONUP;
+            app.handle_mouse_button(ev);
+            ASSERT_TRUE(app.is_running());                                        // ... and does not leave
+        }
+        SDL_MouseButtonEvent left{};
+        left.type = SDL_MOUSEBUTTONDOWN;
+        left.button = SDL_BUTTON_LEFT;
+        left.x = 550;
+        left.y = 20;
+        app.handle_mouse_button(left);
+        ASSERT_TRUE(app.scorecard().is_quit_pressed());
+        left.type = SDL_MOUSEBUTTONUP;
+        app.handle_mouse_button(left);
+        ASSERT_FALSE(app.is_running());
+    } TEST_END();
+
     TEST_CASE("6.4 Quit Dialog Yes With Exactly One Other Side Left Ends The Match (FUN_0101453f): No Exit, The Results Open With The Quitter Last") {
         Application app;
         ApplicationConfig cfg;
@@ -2144,6 +2180,60 @@ void run_suite_9_gameplay_mechanics_and_options() {
         ASSERT_TRUE(mixer.is_music_playing());
     } TEST_END();
 
+    TEST_CASE("9.9b Music With --audio-focus (Several Games On One Machine): A Window Without The Focus HOLDS Its Music, The Focus Continues The Same Piece; A Piece That Starts Meanwhile Starts Held") {
+        Application app;
+        ApplicationConfig cfg;
+        cfg.headless = true;
+        cfg.start_in_map_select = true;
+        cfg.audio_follows_focus = true;
+        ASSERT_TRUE(app.init(cfg));
+        auto& mixer = app.audio_mixer();
+        ASSERT_TRUE(mixer.is_music_playing());
+        const std::string intro = mixer.music_filepath();
+        ASSERT_TRUE(intro.find("INTRO") != std::string::npos);
+        app.set_app_active(false);                                                // the focus goes to another game: its music is paused, not closed
+        ASSERT_FALSE(mixer.is_music_playing());
+        for (int i = 0; i < 20; ++i) app.update_music(0.016f);                    // a held piece has not ended: no new piece starts
+        ASSERT_TRUE(mixer.music_filepath() == intro);
+        app.set_app_active(true);                                                 // the focus is back: the SAME piece goes on (the original starts a new random one)
+        ASSERT_TRUE(mixer.is_music_playing());
+        ASSERT_TRUE(mixer.music_filepath() == intro);
+        // switching back and forth any number of times never changes the piece
+        for (int i = 0; i < 10; ++i) {
+            app.set_app_active(false);
+            ASSERT_FALSE(mixer.is_music_playing());
+            app.set_app_active(true);
+            ASSERT_TRUE(mixer.is_music_playing());
+            ASSERT_TRUE(mixer.music_filepath() == intro);
+        }
+        // a match that starts while the window is behind the others: its piece is there, but silent until the window gets the focus
+        app.set_app_active(false);
+        ASSERT_TRUE(app.start_game("Original-Ants/Maps/TREASURE.LVL"));
+        ASSERT_TRUE(mixer.music_filepath().find("INTRO") == std::string::npos);
+        const std::string piece = mixer.music_filepath();
+        ASSERT_FALSE(mixer.is_music_playing());
+        app.update_music(0.016f);
+        ASSERT_TRUE(mixer.music_filepath() == piece);
+        app.set_app_active(true);
+        ASSERT_TRUE(mixer.is_music_playing());
+        ASSERT_TRUE(mixer.music_filepath() == piece);
+        // the end of the piece still starts the next one (with the focus)
+        mixer.stop_music();
+        app.midi_player().stop();
+        app.update_music(0.016f);
+        ASSERT_TRUE(mixer.is_music_playing());
+        ASSERT_TRUE(mixer.music_filepath() != piece);
+        // the setup screen's intro, started while the window is behind the others, is held too, and the focus plays it
+        app.set_app_active(false);
+        app.return_to_map_select();
+        ASSERT_EQ(static_cast<int>(app.state()), static_cast<int>(AppState::MapSelect));
+        ASSERT_TRUE(mixer.music_filepath().find("INTRO") != std::string::npos);
+        ASSERT_FALSE(mixer.is_music_playing());
+        app.set_app_active(true);
+        ASSERT_TRUE(mixer.is_music_playing());
+        ASSERT_TRUE(mixer.music_filepath().find("INTRO") != std::string::npos);
+    } TEST_END();
+
     TEST_CASE("9.10 Music: The Release Of The Music Slider Starts A New Random Piece (0x100e714, 0x100e795); The Sound Slider Does Not") {
         Application app;
         ApplicationConfig cfg;
@@ -2338,19 +2428,31 @@ void run_suite_9_gameplay_mechanics_and_options() {
         app.quick_help_press(580, 450);
         app.quick_help_release(300, 200);
         ASSERT_EQ(app.state(), AppState::QuickHelp);
-        // the rectangle is the union of the pictures: (528, 437) - (627, 464)
-        app.quick_help_press(528, 437);
-        app.quick_help_release(528, 437);
-        ASSERT_EQ(app.state(), AppState::MapSelect);
+        // the hit test is the rectangle of the picture that shows (0x10112e9): a press must hit the up / hover picture [529, 627) x [437, 464), and every move until the
+        // release must stay on the pressed picture [528, 625) x [438, 462): the click zone is the intersection [529, 625) x [438, 462) (docs 5.52)
+        ASSERT_TRUE(app.quick_help_start_button().up_rect() == ButtonRect({529, 437, 98, 27}));
+        ASSERT_TRUE(app.quick_help_start_button().pressed_rect() == ButtonRect({528, 438, 97, 24}));
+        auto zone = [&](int32_t x, int32_t y) {
+            show();
+            app.quick_help_move(x, y);
+            app.quick_help_press(x, y);
+            app.quick_help_release(x, y);
+            return app.state() == AppState::MapSelect;
+        };
+        ASSERT_TRUE(zone(529, 438));
+        ASSERT_TRUE(zone(624, 461));
+        ASSERT_TRUE(zone(580, 450));
+        ASSERT_FALSE(zone(528, 450));                                          // the pressed picture only: no capture at all
+        ASSERT_FALSE(zone(528, 437));
+        ASSERT_FALSE(zone(529, 437));                                          // the up picture only: captured, the move that ends the input run cancels it
+        ASSERT_FALSE(zone(625, 450));
+        ASSERT_FALSE(zone(529, 462));
+        ASSERT_FALSE(zone(626, 463));
+        ASSERT_FALSE(zone(627, 450));
         show();
-        app.quick_help_press(626, 463);
-        app.quick_help_release(626, 463);
-        ASSERT_EQ(app.state(), AppState::MapSelect);
-        show();
-        app.quick_help_press(627, 450);
-        app.quick_help_release(627, 450);
-        ASSERT_EQ(app.state(), AppState::QuickHelp);
-
+        app.quick_help_move(529, 437);
+        app.quick_help_press(529, 437);
+        ASSERT_FALSE(app.quick_help_start_button().pressed());                 // a press in a dead strip never shows the pressed picture
         // the keys Enter, Esc, C and X (either case) are the same callback
         for (SDL_Keycode k : {SDLK_RETURN, SDLK_KP_ENTER, SDLK_ESCAPE, SDLK_c, SDLK_x}) {
             show();
@@ -2363,6 +2465,46 @@ void run_suite_9_gameplay_mechanics_and_options() {
         app.hud().options().quick_help = false;
         show();
         ASSERT_EQ(app.state(), AppState::MapSelect);
+    } TEST_END();
+
+    TEST_CASE("9.14b Quick Help To Setup Screen: The Pointer Is One Global (The New START Is In Hover At Once, Nothing Is Reset); START Is Where The Original Puts It On Each Screen (0x10110a4, 0x102653f)") {
+        Application app;
+        ApplicationConfig cfg;
+        cfg.headless = true;
+        cfg.start_in_map_select = true;
+        ASSERT_TRUE(app.init(cfg));
+        // the setup screen's START: up / hover [526, 624) x [439, 466), pressed [527, 624) x [443, 467)
+        ASSERT_TRUE(app.map_select().start_button().up_rect() == ButtonRect({526, 439, 98, 27}));
+        ASSERT_TRUE(app.map_select().start_button().pressed_rect() == ButtonRect({527, 443, 97, 24}));
+        // pointer on both buttons: the hand-over leaves the new START in the hover picture before any mouse move arrives
+        app.finish_loading();
+        app.quick_help_move(580, 450);
+        app.quick_help_press(580, 450);
+        app.quick_help_release(580, 450);
+        ASSERT_EQ(app.state(), AppState::MapSelect);
+        ASSERT_TRUE(app.map_select().start_button().hovered());
+        ASSERT_FALSE(app.map_select().start_button().pressed());
+        // pointer on the quick help START only (x = 628, 529 + ... is outside the setup START): the new START is up
+        app.finish_loading();
+        app.quick_help_move(625, 440);
+        app.quick_help_press(625, 440);
+        ASSERT_FALSE(app.quick_help_start_button().pressed());                 // (625, 440) is in the up picture only
+        app.quick_help_move(530, 437);
+        app.quick_help_press(530, 437);
+        app.quick_help_release(530, 437);                                      // inside the up picture, outside the pressed one: nothing
+        ASSERT_EQ(app.state(), AppState::QuickHelp);
+        app.quick_help_move(529, 462);
+        ASSERT_TRUE(app.quick_help_start_button().hovered());
+        app.quick_help_press(560, 460);
+        app.quick_help_release(560, 460);                                      // y = 460 is inside both pictures: fires
+        ASSERT_EQ(app.state(), AppState::MapSelect);
+        ASSERT_TRUE(app.map_select().start_button().hovered());                // (560, 460) is inside [526, 624) x [439, 466)
+        // a pointer outside both buttons: up
+        app.finish_loading();
+        app.quick_help_move(300, 200);
+        app.quick_help_key(SDLK_RETURN);
+        ASSERT_EQ(app.state(), AppState::MapSelect);
+        ASSERT_FALSE(app.map_select().start_button().hovered());
     } TEST_END();
 
     TEST_CASE("9.7 The Chat Box Is Always Active; Enter, [All] And [Team] Send; Hotkey Modifier Isolation") {
@@ -7359,10 +7501,10 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
 
     TEST_CASE("12.108: Version Invariant & Fog of War Cursor Concealment Parity") {
         // 1. Verify semantic versioning components
-        ASSERT_EQ(ants::VERSION_STRING, "v0.0.79");
+        ASSERT_EQ(ants::VERSION_STRING, "v0.0.80");
         ASSERT_EQ(ants::VERSION_MAJOR, 0);
         ASSERT_EQ(ants::VERSION_MINOR, 0);
-        ASSERT_EQ(ants::VERSION_PATCH, 79);
+        ASSERT_EQ(ants::VERSION_PATCH, 80);
 
         // 2. Setup simulation world with Fog of War enabled
         SimulationEngine sim;

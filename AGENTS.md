@@ -42,8 +42,11 @@ Native C++17 macOS port and remake of the 1998 classic RTS game *Ants*, featurin
 - **Continuous Version Tracking**: Starting at `v0.0.1` (pre-release), track and increment semantic version numbers in `include/ants_app/version.hpp` on every release/feature cycle.
 - **On-Screen Version Meter**: The current version string must always be rendered on screen adjacent to the FPS counter / sparkline in the bottom-right corner of the viewport across all game states.
 
-### 8. No Bot AI Invariant
-- **Strictly No Bot AI**: Do NOT implement or add computer/bot player AI into the game at this stage. Keep the game strictly 1:1 authentic to the original 1998 mechanics where all ant commands are issued directly by human players (except Combat Ant guard post patrol). Minimize all changes to strictly reverse-engineered original logic.
+### 8. Bots: Virtual Clients Only Invariant (amended 2026-09-30 at the owner's request; it used to forbid bot AI)
+- **Bot players are allowed as virtual clients, in the `ants_ai` library only.** A bot uses exactly the public command interface of a human (a `Command` through the `CommandSink` of a local game or the sequencer of a room), reads the world through a read-only view, and **never changes the simulation, the original screens, the lock-step rules of the network protocol or any golden state hash.** No bot code may be needed to start, host or join a normal game.
+- **Off by default, always visible**: a bot exists only when asked for (command line, room specification); a bot seat is always shown as a bot (name, results rows); nothing pretends that a bot is a person.
+- **Fair**: a bot knows nothing that a human of its team could not know (with Fog of War on it may only use its own team's view; until that view exists a bot together with fog is refused, never silently allowed to see through it) and has a command budget (commands per second, reaction delay) per difficulty level; no extra commands, no rule bending.
+- **The 1:1 core stays pure**: the original's mechanics, screens and keys are unchanged; the Combat Ant guard post patrol is the only computer behaviour inside the simulation. Bots are tested headless against each other (tournaments) and a bot test never replaces, disables or weakens an existing test.
 
 ### 9. Implementation Plan & Explicit User Approval Invariant
 - **Log in Implementation Plan**: Whenever the user provides tasks, features, or bug reports, thoroughly document all findings, reverse engineering references, planned code modifications, and test verifications into `implementation_plan.md`.

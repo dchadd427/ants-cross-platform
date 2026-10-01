@@ -510,7 +510,7 @@ private:
     uint32_t issue_group_order(sim::SimulationEngine& sim, sim::TileCoord tile, bool special, bool attack, const std::vector<uint32_t>& targets);
 
     bool show_quick_help_{false};
-    ScreenButton quick_help_return_{527, 437, 100, 26};      // the union of qh_return1 / 2 (529, 437, 98 x 26) and qh_return3 (527, 437, 97 x 24)
+    ScreenButton quick_help_return_{ButtonRect{529, 437, 98, 26}, ButtonRect{527, 437, 97, 24}};      // the pictures qh_return1 / 2 and qh_return3 (the hit test is the rectangle of the picture that shows)
 
     // The options screen and what it changes
     OptionsScreen options_;

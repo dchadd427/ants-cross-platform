@@ -34,7 +34,7 @@ and broadcasts the results (the game is not lock-step). Its lobby flow, texts an
   channel for commands and one for keep-alive and hashes) so the same protocol runs natively (libdatachannel) and in the browser (built-in RTCPeerConnection); a small WebSocket signaling service for rooms
   and the SDP / ICE hand-shake. TURN credentials are issued per session (the standard TURN REST scheme); the shared secret, host names and STUN / TURN URLs are configuration, never committed.
 * **Kept from the original**: the lobby flow and strings (latency thumbs, host picks map and fog and presses START, LOADED and READY barriers, "Get ready" for at least 5 s), a drop-out timeout (60 s in
-  the original), kick, quit, alliances, chat (100 characters, team-only filter), no late join, no pause, no bots (the alliance auto-accept of the old simulation is removed), and **the match goes on when
+  the original), kick, quit, alliances, chat (100 characters, team-only filter), no late join, no pause, no bots in the simulation (the alliance auto-accept of the old simulation is removed; bots, when they come, are virtual clients that send ordinary commands: `docs/BOTS.md`), and **the match goes on when
   the host leaves**: the original is a mesh in which nobody is special once the match runs, so the remake moves the sequencer role to another machine (host migration, below).
 
 ## Host migration (milestone 4b, shipped in v0.0.47)
@@ -139,8 +139,8 @@ Firewalls: the host needs UDP and TCP 4001 open; macOS may ask once for permissi
   `NetGame::status_text()` is the setup screen's status line, in the original's words (`docs/GAME_REVERSE_ENGINEERING.md` 5.48). A WebAssembly build has no TCP, so `host()` / `join()` return false there.
 * **Commands from the HUD**: `NetGame::submit` stamps the local seat, predicts the acknowledging ant with `SimulationEngine::predict_order_ack` (the click's voice and pedestal feedback are immediate although the
   order is applied a few turns later; the prediction equals the engine's answer for 2000 of 2000 random orders in `test_commands` N1.21) and queues the command for the next turn.
-* **The setup screen is the room** (`MapSelectScreen::RoomView`): a row per occupied seat (portrait in the seat's colour, name, thumb), the host's map / fog / START controls (a guest's clicks on them do nothing
-  and its map and fog follow the host's), LEAVE for everybody.
+* **The setup screen is the room** (`MapSelectScreen::RoomView`): the host (and the local screen) show a row per seat (portrait in the seat's colour, name, thumb) and the map / fog / START controls; **a guest has the original's other
+  screen** (`nh_start`: no Up / Down / START / Fog buttons, a fixed "Fog of War?" box that shows the host's choice, the host's map name, keys Q / X only), its own row first (then the host, then the others), LEAVE for everybody.
 * **The match**: the ticks come from the `LockstepRunner` (`Application::pump_network` runs `NetGame::update`, every tick calls `Application::post_tick`: HUD, events, audio, the end of the match); the frame is
   drawn at the runner's sub-tick position; a machine that waits for a turn says so after one second (remake text) and a desync stops the match and says so. There is no pause and no team switching.
 * **The room's map**: no map is named in the network layer: a room's map name is empty until its host chooses one (the application chooses the first map of the setup screen's list at once), a Room message may carry the empty name, a Start may not, and START needs a chosen map (v0.0.64).
@@ -151,7 +151,7 @@ Firewalls: the host needs UDP and TCP 4001 open; macOS may ask once for permissi
   exactly one other side left it ends the match for everybody and names the quitter (its row goes last on every results screen), otherwise it is a drop-out (`FUN_0101453f`, docs 5.47).
 * **Names**: `--name`, the original's `-N<team><name>` and `--team-name` reach the room (the `Hello`), the HUD's score labels, the results rows, the chat headers and the simulation's alliance and drop-out
   texts. A network game says "Player" unless `--name` is given: it never sends the user and machine name by default.
-* **Command line**: `--host [port]`, `--join host[:port]`, `--port`, `--name`, `-N<team><name>`, `--team-name <team> <name>`, `-pnum=<team>`, `--loopback` (accept only this machine); port 4001 by default (the original's).
+* **Command line**: `--host [port]`, `--join host[:port]`, `--port`, `--name`, `-N<team><name>`, `--team-name <team> <name>`, `-pnum:<team>` (or `-pnum=<team>`), `--loopback` (accept only this machine); port 4001 by default (the original's).
 * **Group order acknowledgement**: the ant that answers a group order is now decided by GoTo's real result (`issue_order` returns it), as in the original (`0x10289b2 .. 0x10289c0`); before, a stale path request
   of a refused order could still make an ant answer.
 * **Teaming (v0.0.50)**: the three modal dialogs of the original (the invitation question, the proposer's waiting dialog and the confirmation before a team is broken, `docs/GAME_REVERSE_ENGINEERING.md` 5.42)

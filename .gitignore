@@ -46,6 +46,10 @@ tests/artifacts/
 # Agent scratch directory
 .agents/
 
+# Per-user tool folders and the owner's private working plan (never committed)
+.claude/
+implementation_plan.md
+
 # Python cache
 __pycache__/
 *.pyc

@@ -9,6 +9,7 @@
 #include "ants_assets/asset_archive.hpp"
 #include "ants_sim/match_stats.hpp"
 #include "ants_app/renderer.hpp"
+#include "ants_app/screen_button.hpp"
 
 namespace ants::app {
 
@@ -42,11 +43,12 @@ public:
     static constexpr int32_t WAITING_Y         = 350;
     static constexpr int32_t WAITING_W         = 385;
 
-    // Leave button: animations leave1 (525, 12) 99x22 resting, leave3 (524, 14) 98x20 pressed; the union is the hit rectangle
-    static constexpr int32_t QUIT_BTN_X        = 524;
+    // Leave button: animations leave1 / leave2 (525, 12) 99x22 resting, leave3 (524, 14) 98x20 pressed (the hit test is the rectangle of the picture that shows)
+    static constexpr int32_t QUIT_BTN_X        = 525;
     static constexpr int32_t QUIT_BTN_Y        = 12;
-    static constexpr int32_t QUIT_BTN_W        = 100;
+    static constexpr int32_t QUIT_BTN_W        = 99;
     static constexpr int32_t QUIT_BTN_H        = 22;
+    static constexpr ButtonRect QUIT_BTN_PRESSED{524, 14, 98, 20};
 
     /// One row as shown
     struct Row {
@@ -93,15 +95,14 @@ public:
     void set_on_play_sfx(std::function<void(uint32_t)> cb) { on_play_sfx_ = std::move(cb); }
     void play_sfx(uint32_t sound_id) { if (on_play_sfx_) on_play_sfx_(sound_id); }
 
-    bool is_quit_hovered() const noexcept { return quit_hovered_; }
-    bool is_quit_pressed() const noexcept { return quit_pressed_; }
+    bool is_quit_hovered() const noexcept { return quit_.hovered(); }
+    bool is_quit_pressed() const noexcept { return quit_.pressed(); }
 
 private:
     enum class Phase : uint8_t { Waiting, Rows };
 
     void build_rows();
     std::string name_of(uint8_t team) const;
-    bool over_leave_button(int32_t x, int32_t y) const noexcept;
     void draw_portrait(IRenderer& renderer, const assets::AssetArchive& assets, uint8_t team, int32_t x, int32_t y) const;
 
     std::string local_player_name_{};
@@ -115,8 +116,7 @@ private:
     sim::MatchResult result_{};           // what the screen was created with, reduced to the shown teams
     std::vector<Row> rows_{};
     uint32_t audio_to_play_{0};           // Sound 56 (winner) vs Sound 42 (loser), set when the rows are built
-    bool quit_pressed_{false};
-    bool quit_hovered_{false};
+    ScreenButton quit_{ButtonRect{QUIT_BTN_X, QUIT_BTN_Y, QUIT_BTN_W, QUIT_BTN_H}, QUIT_BTN_PRESSED};      // exists once the rows are there
 
     std::function<void()> on_replay_;
     std::function<void()> on_quit_;

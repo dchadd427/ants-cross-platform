@@ -274,7 +274,7 @@ std::vector<uint32_t> ants_of(const sim::SimulationEngine& s, uint8_t player) {
 }
 
 void run_command_line_tests() {
-    TEST_CASE("N5.1 Command Line: --name, -N<team><name> (the original's), --team-name, -pnum=, --host [port], --join host[:port], --port, --loopback") {
+    TEST_CASE("N5.1 Command Line: --name, -N<team><name> (the original's), --team-name, -pnum: (the original's spelling) and -pnum=, --host [port], --join host[:port], --port, --loopback") {
         std::vector<std::string> args;
         std::vector<char*> st;
         args = {"ants", "--name", "Alice Smith", "-N1Bob", "-N3Dave", "-pnum=2", "--team-name", "0", "Zed", "--headless"};
@@ -287,6 +287,19 @@ void run_command_line_tests() {
         ASSERT_EQ(c.local_player_id, 2);
         ASSERT_TRUE(c.headless);
         ASSERT_TRUE(c.net_role == ApplicationConfig::NetRole::None);
+        // the original spells it with a colon (string "pnum:" at 0x1047134)
+        args = {"ants", "-pnum:3"};
+        c = Application::parse_arguments(static_cast<int>(args.size()), argv_of(args, st));
+        ASSERT_EQ(c.local_player_id, 3);
+        args = {"ants", "-pnum:1", "-pnum=2"};
+        c = Application::parse_arguments(static_cast<int>(args.size()), argv_of(args, st));
+        ASSERT_EQ(c.local_player_id, 2);                                                 // the last one wins, whichever spelling
+        const uint8_t unset = Application::parse_arguments(1, argv_of(args = {"ants"}, st)).local_player_id;
+        for (const char* bad : {"-pnum:4", "-pnum:7", "-pnum:-1", "-pnum:"}) {
+            args = {"ants", bad};
+            c = Application::parse_arguments(static_cast<int>(args.size()), argv_of(args, st));
+            ASSERT_EQ(c.local_player_id, unset);                                         // no team 4 or 7, no digits: ignored
+        }
         args = {"ants", "-N", "-N9x", "-N4y", "-N0"};                                   // nothing valid: no team 9, no team 4, an empty name
         c = Application::parse_arguments(static_cast<int>(args.size()), argv_of(args, st));
         ASSERT_EQ(c.team_names[0], "");
@@ -555,11 +568,24 @@ void run_guest_tests() {
         ASSERT_TRUE(app.init(cfg));
         ASSERT_TRUE(app.network_active());
         ASSERT_FALSE(app.net()->is_host());
+        // a guest that is still connecting shows itself alone (the original's slot 0 is the local machine from the start, with the good thumb)
+        app.pump_network(0.0f);
+        if (app.net()->phase() == net::NetGame::Phase::Connecting) {
+            const auto& early = app.map_select().room();
+            int shown = 0;
+            for (const auto& seat : early.seats) shown += seat.occupied ? 1 : 0;
+            ASSERT_TRUE(early.networked && !early.is_host && shown == 1);
+            ASSERT_TRUE(early.seats[early.my_seat].occupied && early.seats[early.my_seat].name == "Player" && early.seats[early.my_seat].thumb == MapSelectScreen::Thumb::Good);
+        }
         Duo duo{app, host};
         ASSERT_TRUE(duo.until([&]() { return app.net()->phase() == net::NetGame::Phase::Room && host.net.can_start(); }, 8000));
         const auto& room = app.map_select().room();
         ASSERT_TRUE(room.networked && !room.is_host && room.my_seat == 1);
         ASSERT_TRUE(room.seats[0].occupied && room.seats[0].name == "Alice" && room.seats[1].occupied && room.seats[1].name == "Player");
+        {   // the guest's rows: itself first, then the host (the original's slot 0 is the local machine, slot 1 the host)
+            const std::array<int8_t, 4> rows = MapSelectScreen::row_seats(room);
+            ASSERT_TRUE(rows[0] == 1 && rows[1] == 0 && rows[2] == -1 && rows[3] == -1);
+        }
         ASSERT_EQ(room.status, std::string(sim::strings::text(sim::strings::kWaitingForHost)));
         // the host's choice arrives; the guest's controls do nothing
         host.net.set_map("TINY.LVL");
@@ -567,6 +593,7 @@ void run_guest_tests() {
         duo.step(300);
         ASSERT_EQ(app.map_select().get_maps()[static_cast<size_t>(app.map_select().get_selected_index())].filename, "TINY.LVL");
         ASSERT_TRUE(app.map_select().is_fog_of_war_enabled());
+        ASSERT_EQ(app.map_select().room().map_file, std::string("TINY.LVL"));            // what a guest shows: the host's file name
         const int32_t idx = app.map_select().get_selected_index();
         app.map_select().handle_mouse_motion(MapSelectScreen::BTN_DOWN_X + 3, MapSelectScreen::BTN_DOWN_Y + 3);
         app.map_select().handle_mouse_down(MapSelectScreen::BTN_DOWN_X + 3, MapSelectScreen::BTN_DOWN_Y + 3, 1);

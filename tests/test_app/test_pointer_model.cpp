@@ -416,11 +416,21 @@ void test_cursor_misc() {
     expect_cursor("no arrow where the view cannot move (west at the map's edge)", f.cursor_px(2, 240), CursorType::Normal);
     f.cam.world_x = 400;
     f.cam.world_y = 400;
-    // while a dialog is open the cursor code does not run
-    const CursorType before = f.hud.evaluate_cursor(200, 200, f.world(), f.sim.grid(), f.cam);
-    f.hud.open_options();
-    expect_cursor("a dialog is open: the cursor stays", f.cursor_px(639, 240), before);
-    f.hud.close_options();
+    // while a dialog is open the cursor code does not run, and every dialog set mode 1 (the normal arrow) when it was attached (thunk 0x101279a, v0.0.80): the pointer over
+    // a dialog is the arrow whatever it was before, a map cursor or a scroll arrow; after the close the next input run decides again
+    expect_cursor("primer: on the east strip the scroll arrow", f.cursor_px(639, 240), CursorType::ScrollE);
+    auto over_dialog = [&](const char* name, const std::function<void()>& open, const std::function<void()>& close) {
+        auto said = [&](const char* what, CursorType got, CursorType want) { expect_cursor((std::string(name) + ": " + what).c_str(), got, want); };
+        said("primer (the cursor that the dialog finds when it opens)", f.cursor_px(639, 240), CursorType::ScrollE);
+        open();
+        said("the normal arrow over it (the pointer was on a scroll strip)", f.cursor_px(639, 240), CursorType::Normal);
+        said("the normal arrow over it (anywhere)", f.cursor_px(200, 200), CursorType::Normal);
+        close();
+        said("after the close the strip decides again", f.cursor_px(639, 240), CursorType::ScrollE);
+    };
+    over_dialog("options", [&]() { f.hud.open_options(); }, [&]() { f.hud.close_options(); });
+    over_dialog("quit dialog", [&]() { f.hud.open_quit_dialog(); }, [&]() { f.hud.close_quit_dialog(); });
+    over_dialog("quick help", [&]() { f.hud.open_quick_help(); }, [&]() { f.hud.close_quick_help(); });
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------------
@@ -1250,17 +1260,23 @@ void test_keyboard() {
         f.press(580, 450);
         f.release(300, 200);
         check(f.hud.is_quick_help_open(), "a release away from the button does not close it");
-        f.press(527, 437);
-        f.release(527, 437);
-        check(!f.hud.is_quick_help_open(), "the button's rectangle is the union of its pictures (527, 437) - (627, 463)");
-        key(SDLK_F1);
-        f.press(626, 462);
-        f.release(626, 462);
-        check(!f.hud.is_quick_help_open(), "(626, 462) is inside it");
-        key(SDLK_F1);
-        f.press(627, 440);
-        f.release(627, 440);
-        check(f.hud.is_quick_help_open(), "(627, 440) is outside");
+        // the hit test is the rectangle of the picture that shows (0x10112e9, docs 5.52): the press must hit qh_return1 / 2 = [529, 627) x [437, 463), every move until the
+        // release must stay on qh_return3 = [527, 624) x [437, 461): the click zone is the intersection [529, 624) x [437, 461)
+        check(f.hud.quick_help_return_button().up_rect() == ButtonRect({529, 437, 98, 26}) && f.hud.quick_help_return_button().pressed_rect() == ButtonRect({527, 437, 97, 24}),
+              "the Return button has two rectangles: the resting picture's and the pressed picture's");
+        auto zone = [&](int32_t x, int32_t y) {
+            key(SDLK_F1);
+            f.hud.handle_mouse_motion(x, y, f.sim, f.cam);
+            f.press(x, y);
+            f.release(x, y);
+            const bool closed = !f.hud.is_quick_help_open();
+            if (f.hud.is_quick_help_open()) key(SDLK_RETURN);
+            return closed;
+        };
+        check(zone(529, 437) && zone(623, 460) && zone(580, 450), "the click zone: (529, 437), (623, 460) and the middle close the quick help");
+        check(!zone(527, 437), "(527, 437) is on the pressed picture only: no capture, nothing closes");
+        check(!zone(626, 462), "(626, 462) is on the resting picture only: captured and cancelled at once, nothing closes");
+        check(!zone(528, 450) && !zone(529, 461) && !zone(627, 440), "(528, 450), (529, 461) and (627, 440) close nothing");
         key(SDLK_RETURN);
         key('o', KMOD_CTRL);
         check(f.hud.is_options_open(), "Ctrl+O opens the options");

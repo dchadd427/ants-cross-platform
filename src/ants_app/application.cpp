@@ -1,4 +1,5 @@
 #include "ants_app/application.hpp"
+#include "ants_app/fps_overlay.hpp"
 #include "ants_app/edge_scroll.hpp"
 #include "ants_app/ui_anim.hpp"
 #include "ants_app/version.hpp"
@@ -107,8 +108,8 @@ ApplicationConfig Application::parse_arguments(int argc, char* argv[]) {
             i += 2;
         } else if (argv[i][0] == '-' && argv[i][1] == 'N' && argv[i][2] >= '0' && argv[i][2] <= '3') {
             cfg.team_names[static_cast<size_t>(argv[i][2] - '0')] = argv[i] + 3;   // the original's -N<team><name>
-        } else if (std::strncmp(argv[i], "-pnum=", 6) == 0) {
-            const int team = std::atoi(argv[i] + 6);                           // the original's local team
+        } else if (std::strncmp(argv[i], "-pnum=", 6) == 0 || std::strncmp(argv[i], "-pnum:", 6) == 0) {
+            const int team = std::atoi(argv[i] + 6);                           // the original's local team (its own spelling has the colon, 0x1047134)
             if (team >= 0 && team < 4) cfg.local_player_id = static_cast<uint8_t>(team);
         } else if (std::strcmp(argv[i], "--host") == 0) {
             cfg.net_role = ApplicationConfig::NetRole::Host;
@@ -363,6 +364,12 @@ bool Application::init(const ApplicationConfig& config) {
         apply_team_names(config_.team_names, 0x0F);                                    // the names of a local game (the local player's own name too)
     }
 
+    // --audio-focus: a window that opened behind the others never receives "focus lost": it starts silent and holds its music until it gets the focus
+    if (config_.audio_follows_focus && !config_.headless && window_ != nullptr) {
+        SDL_PumpEvents();
+        if ((SDL_GetWindowFlags(window_) & SDL_WINDOW_INPUT_FOCUS) == 0) set_app_active(false);
+    }
+
     // Determine initial AppState & audio lifecycle
     if (!config_.start_in_map_select) {
         state_ = AppState::Playing;
@@ -576,6 +583,9 @@ void Application::quit() {
 void Application::enter_map_select() {
     state_ = AppState::MapSelect;
     map_select_.enter();
+    // The new screen's buttons are fresh objects in the up state; the INPUT task of the original sends the pointer to the top window in the very input run that
+    // follows (FUN_0102653f), so a button under the pointer shows its hover picture before the first frame. Nothing is reset or moved: the pointer is one global.
+    if (mouse_has_moved_ && !pointer_outside_) map_select_.handle_mouse_motion(mouse_screen_x_, mouse_screen_y_);
 }
 
 // The loading screen ends: the quick help when the option asks for it, else the setup screen
@@ -583,6 +593,7 @@ void Application::finish_loading() {
     if (hud_.is_quick_help_enabled()) {
         state_ = AppState::QuickHelp;
         quick_help_start_.reset();
+        if (mouse_has_moved_ && !pointer_outside_) quick_help_start_.on_move(mouse_screen_x_, mouse_screen_y_);       // the pointer goes to the new window at once (see enter_map_select)
     } else {
         enter_map_select();
     }
@@ -596,10 +607,7 @@ void Application::return_to_map_select() {
     hud_.close_quit_dialog();
     hud_.close_quick_help();
     hud_.close_options();
-    mouse_screen_x_ = 320;
-    mouse_screen_y_ = 240;
-    mouse_has_moved_ = false;
-    start_intro_music();
+    start_intro_music();                                       // (the pointer is one global in the original: it is neither reset nor moved here)
 }
 
 void Application::run_frame_with_delta(float delta_time) {
@@ -737,6 +745,8 @@ void Application::handle_events() {
         }
 
         if (state_ == AppState::Loading) {
+            if (event.type == SDL_MOUSEMOTION) note_pointer(event.motion.x, event.motion.y);            // the pointer is global in the original: the next screen knows it
+            if (event.type == SDL_MOUSEBUTTONDOWN || event.type == SDL_MOUSEBUTTONUP) note_pointer(event.button.x, event.button.y);
             if (event.type == SDL_KEYDOWN || event.type == SDL_MOUSEBUTTONDOWN) {
                 finish_loading();
             }
@@ -951,6 +961,7 @@ void Application::handle_mouse_button(const SDL_MouseButtonEvent& button) {
     if (button.type == SDL_MOUSEBUTTONUP) release_ui_sounds();                          // before the handlers: what the release itself plays is not cut
 
     if (scorecard_.is_open()) {
+        if (button.button != SDL_BUTTON_LEFT) return;                      // the button class knows the left button only (FUN_01011206): the screen swallows the others
         if (button.type == SDL_MOUSEBUTTONDOWN) {
             scorecard_.handle_mouse_down(button.x, button.y);
         } else if (button.type == SDL_MOUSEBUTTONUP) {
@@ -1040,6 +1051,7 @@ void Application::update_results(float dt) {
     if (state_ == AppState::Playing) check_match_over();
     if (!scorecard_.is_open()) return;
     scorecard_.update(dt);
+    if (mouse_has_moved_ && !pointer_outside_) scorecard_.handle_mouse_motion(mouse_screen_x_, mouse_screen_y_);   // the INPUT task's poll: the Leave button that appears under a resting pointer hovers
     const uint32_t cue = scorecard_.get_audio_to_play();
     if (cue > 0) {
         audio_mixer_.play_sfx(cue, 1.0f, 255);
@@ -1090,10 +1102,18 @@ void Application::sync_room_view() {
         view.seats[i].name = room.slots[i].name;
         view.seats[i].thumb = static_cast<MapSelectScreen::Thumb>(static_cast<uint8_t>(net_->seat_quality(static_cast<uint8_t>(i))));   // connection quality
     }
-    // A guest that has not been welcomed yet has no seat: it shows itself alone until the room arrives
+    // A guest that has not been welcomed yet has no seat and the room is not known: it shows ITSELF alone (the original's slot 0 is the local machine from the
+    // start, with the good thumb; the host's row follows once the connection exists), in the colour of its seat (or of the seat it asked for)
     if (net_->phase() == net::NetGame::Phase::Connecting || net_->phase() == net::NetGame::Phase::Failed) {
         for (auto& seat : view.seats) seat = MapSelectScreen::RoomSeat{};
+        const uint8_t assigned = net_->my_seat();                              // (known once the host has welcomed it; the requested seat is only a guess before that)
+        const uint8_t own = assigned < 4 ? assigned : (config_.net_seat < 4 ? config_.net_seat : (local_player_id_ < 4 ? local_player_id_ : static_cast<uint8_t>(0)));
+        view.my_seat = own;
+        view.seats[own].occupied = true;
+        view.seats[own].name = player_name_;
+        view.seats[own].thumb = MapSelectScreen::Thumb::Good;
     }
+    view.map_file = room.map_name;                                           // a guest shows the host's choice (an empty name before the host's first message)
     view.status = net_->status_text();
     map_select_.set_room(view);
     if (!net_->is_host() && net_->phase() == net::NetGame::Phase::Room) {
@@ -1130,6 +1150,9 @@ void Application::handle_net_events() {
                 break;
             case net::NetGame::Event::Type::Begun:
                 net_begin_match();
+                break;
+            case net::NetGame::Event::Type::Cancelled:               // the start failed: back in the room, the host's controls work again
+                map_select_.unlock();
                 break;
             case net::NetGame::Event::Type::HostLeft:                // the host is gone and no other machine could take over
                 net_notice_ = "The connection to the other players was lost.";
@@ -1180,6 +1203,9 @@ void Application::net_end_session(const std::string& notice) {
     MapSelectScreen::RoomView local;
     local.status = notice;                                    // a notice stays on the setup screen until the next action
     map_select_.set_room(local);
+    const uint8_t own_team = config_.local_player_id < 4 ? config_.local_player_id : static_cast<uint8_t>(0);      // the local game plays the configured team again, not the seat of the match
+    local_player_id_ = own_team;
+    map_select_.set_player_team(own_team);
     apply_team_names(config_.team_names, 0x0F);
 }
 
@@ -1243,9 +1269,9 @@ void Application::render_frame() {
     int32_t text_h = renderer_->get_text_height(FontSize::Px12);
     int32_t text_x = 632 - text_w;
     constexpr int32_t spark_w = static_cast<int32_t>(SPARKLINE_SAMPLES);
-    constexpr int32_t spark_h = 11;
+    constexpr int32_t spark_h = FPS_OVERLAY_SPARK_H;
     int32_t spark_x = text_x - spark_w - 6;
-    int32_t spark_y = 465;
+    int32_t spark_y = FPS_OVERLAY_SPARK_Y;
     int32_t text_y = spark_y + (spark_h - text_h) / 2;
     renderer_->draw_text(fps_text, text_x, text_y, {255, 255, 255, 255}, FontSize::Px12);
 
@@ -1257,8 +1283,8 @@ void Application::render_frame() {
     renderer_->draw_text(ver_text, ver_x, ver_y, {180, 190, 200, 220}, FontSize::Px12);
 
     // Dark translucent background plate + subtle border
-    renderer_->fill_rect(spark_x - 1, spark_y - 1, spark_w + 2, spark_h + 2, ants::assets::ColorRGBA{0, 0, 0, 160});
-    renderer_->draw_rect(spark_x - 1, spark_y - 1, spark_w + 2, spark_h + 2, ants::assets::ColorRGBA{80, 85, 90, 180});
+    renderer_->fill_rect(spark_x - 1, FPS_OVERLAY_TOP, spark_w + 2, FPS_OVERLAY_BOTTOM - FPS_OVERLAY_TOP, ants::assets::ColorRGBA{0, 0, 0, 160});
+    renderer_->draw_rect(spark_x - 1, FPS_OVERLAY_TOP, spark_w + 2, FPS_OVERLAY_BOTTOM - FPS_OVERLAY_TOP, ants::assets::ColorRGBA{80, 85, 90, 180});
 
     // 60 FPS reference guide line (16.67ms -> 5 pixels from bottom)
     int32_t ref_line_y = spark_y + spark_h - 5;
@@ -1308,6 +1334,7 @@ void Application::start_intro_music() {
     if (config_.headless) {
         midi_player_.play(false);
     }
+    if (music_held_) hold_music(true);                       // a window without the focus starts nothing audible
 }
 
 // `close AntsMidi`: the device is closed and stays closed until a match start, a piece's end is not waited for any more, the activation of the program or the music slider starts it again
@@ -1337,20 +1364,29 @@ void Application::play_next_ingame_music() {
     if (config_.headless) {
         midi_player_.play(false);
     }
+    if (music_held_) hold_music(true);
 }
 
 // MM_MCINOTIFY (0x100e8cc): when the piece that plays has ended, the next random in-game piece starts, on the setup screen as well as in a match
 void Application::update_music(float dt) {
     audio_mixer_.update_music(dt);
     midi_player_.update(dt);
-    if (music_open_ && !audio_mixer_.is_music_playing() && !midi_player_.is_playing()) {
+    if (music_open_ && !music_held_ && !audio_mixer_.is_music_playing() && !midi_player_.is_playing()) {       // (a held piece has not ended: it is paused)
         play_next_ingame_music();
     }
 }
 
-// WM_ACTIVATEAPP: deactivating closes the music (and remembers that it was open), activating starts a NEW random piece
+// WM_ACTIVATEAPP: deactivating closes the music (and remembers that it was open), activating starts a NEW random piece.
+// --audio-focus (several games on one machine, the start scripts; the original ran one game per machine): a window without the input focus is silent, and its music
+// is HELD, not closed: with the original's rule every click on another window would close a piece and the click back would start a new one, so that no piece
+// is ever heard to its end. The piece goes on where it was left when the window has the focus again; a piece that starts meanwhile (a match begins in a
+// window behind the others) starts held.
 void Application::set_app_active(bool active) {
-    if (config_.audio_follows_focus) audio_mixer_.set_sound_volume(active ? hud_.get_sound_volume() : 0);      // every sound, playing or new, is silent without the focus
+    if (config_.audio_follows_focus) {
+        audio_mixer_.set_sound_volume(active ? hud_.get_sound_volume() : 0);      // every sound, playing or new, is silent without the focus
+        hold_music(!active);
+        return;
+    }
     if (!active) {
         if (music_open_) {
             music_resume_on_activate_ = true;
@@ -1359,6 +1395,17 @@ void Application::set_app_active(bool active) {
     } else if (music_resume_on_activate_) {
         music_resume_on_activate_ = false;
         play_next_ingame_music();
+    }
+}
+
+void Application::hold_music(bool hold) {
+    music_held_ = hold;
+    if (hold) {
+        audio_mixer_.pause_music();
+        midi_player_.pause();
+    } else {
+        audio_mixer_.resume_music();
+        midi_player_.resume();
     }
 }
 
@@ -1401,11 +1448,25 @@ void Application::render_quick_help_screen() {
     draw_animation_frame0(*renderer_, assets_, quick_help_start_.pressed() ? "qh_start3" : (quick_help_start_.hovered() ? "qh_start2" : "qh_start1"));
 }
 
+// The pointer is one global in the original (GetCursorPos): every screen's events record it, and the next screen replays it into its buttons
+void Application::note_pointer(int32_t x, int32_t y) {
+    mouse_screen_x_ = x;
+    mouse_screen_y_ = y;
+    mouse_has_moved_ = true;
+    pointer_outside_ = false;
+}
 // The START! button of the quick help is the original's button class: the press captures it (qh_start3 carries no sound), the release runs the callback
 // (FUN_01014802: the window closes and the setup screen is created) while the capture is still there, leaving cancels it for good
-void Application::quick_help_move(int32_t x, int32_t y) { quick_help_start_.on_move(x, y); }
-void Application::quick_help_press(int32_t x, int32_t y) { quick_help_start_.on_press(x, y); }
+void Application::quick_help_move(int32_t x, int32_t y) {
+    note_pointer(x, y);
+    quick_help_start_.on_move(x, y);
+}
+void Application::quick_help_press(int32_t x, int32_t y) {
+    note_pointer(x, y);
+    quick_help_start_.on_press(x, y);
+}
 void Application::quick_help_release(int32_t x, int32_t y) {
+    note_pointer(x, y);
     if (quick_help_start_.on_release(x, y)) enter_map_select();
 }
 

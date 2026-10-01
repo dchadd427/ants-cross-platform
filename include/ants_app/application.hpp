@@ -106,7 +106,7 @@ public:
     Application(const Application&) = delete;
     Application& operator=(const Application&) = delete;
 
-    /// The command line: --map, --seed, --player / -pnum=, --name, -N<team><name> / --team-name, --host [port], --join host[:port], --port, --loopback,
+    /// The command line: --map, --seed, --player / -pnum: (or -pnum=), --name, -N<team><name> / --team-name, --host [port], --join host[:port], --port, --loopback,
     /// --headless, --fullscreen, --screenshot, ... (docs: README, Command-Line Options)
     static ApplicationConfig parse_arguments(int argc, char* argv[]);
     bool init(int argc, char* argv[]);
@@ -157,6 +157,7 @@ public:
     /// cancels); the keys Enter, Esc, C and X (either case) do the same; every other key and click does nothing (`M` would open the More Help dialog: not built).
     /// The loading screen ends: the quick help when the stored option asks for it, else the setup screen (public for the tests: a headless run has no loading screen)
     void finish_loading();
+    void note_pointer(int32_t x, int32_t y);                 // the pointer's position, whatever screen is up (the original has one global pointer)
     void quick_help_move(int32_t x, int32_t y);
     void quick_help_press(int32_t x, int32_t y);
     void quick_help_release(int32_t x, int32_t y);
@@ -177,6 +178,7 @@ public:
     void update_simulation(float dt);
     /// The music of the original is one sequencer device (docs 5.24e): the intro plays once, every piece that ends is followed by a random in-game piece, the match
     /// start, the activation of the program and the release of the music slider start one, the deactivation of the program and the end of a match close the device.
+    /// (With --audio-focus, several games on one machine, the deactivation HOLDS the piece and the activation continues it: see `set_app_active`.)
     /// `update_music` runs once per frame in every state (the tests call it directly).
     void update_music(float dt);
     /// WM_ACTIVATEAPP (0x100e875): the program loses / gets the input focus
@@ -252,13 +254,14 @@ private:
     void play_next_ingame_music();
     void start_intro_music();
     void close_music();
+    void hold_music(bool hold);               // --audio-focus: pause / continue the music with the window's focus
     void play_startup_sound();
     void render_loading_screen();
     void render_quick_help_screen();
 
     // Intro & Loading state
     uint32_t intro_ticks_{0};
-    ScreenButton quick_help_start_{528, 437, 99, 27};       // START!: the union of qh_start1 / 2 (529, 437, 98 x 27) and qh_start3 (528, 438, 97 x 24)
+    ScreenButton quick_help_start_{ButtonRect{529, 437, 98, 27}, ButtonRect{528, 438, 97, 24}};   // START!: the pictures qh_start1 / 2 and qh_start3 (the hit test is the rectangle of the picture that shows)
 
     // 20 Hz Discrete Simulation Timing
     uint64_t last_frame_time_{0};
@@ -269,6 +272,7 @@ private:
     int last_music_track_{-1};
     bool music_open_{false};            // the sequencer device is open (the intro or a piece was started and not closed): its end starts the next random piece
     bool music_resume_on_activate_{false};   // the device was open when the program was deactivated (0x5588)
+    bool music_held_{false};            // --audio-focus: the window has no focus, its music is held (paused), not closed
 
     // Smoothed FPS Display and Frametime Sparkline
     static constexpr size_t SPARKLINE_SAMPLES = 36;

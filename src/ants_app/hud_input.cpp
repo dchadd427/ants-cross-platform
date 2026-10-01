@@ -115,8 +115,14 @@ bool HUD::special_target(const sim::SimulationEngine* query, const sim::WorldSta
 
 CursorType HUD::evaluate_cursor(int32_t screen_x, int32_t screen_y, const sim::WorldState& world, const sim::Grid& grid,
                                 const ViewportCamera& camera) const {
-    // 1. A dialog is open: the cursor code does not run, the cursor stays as it is
-    if (is_modal_open()) return current_cursor_;
+    // 1. A dialog is open: the cursor code does not run (FUN_0102653f hands the pointer to the dialog), and every dialog window set cursor mode 1, the normal arrow, when it
+    // was attached (the thunk 0x101279a = FUN_01027e65(1, 0) in slot +0x20 of all 15 window vtables, called by AddChild 0x102f977), and nothing that runs while it is open
+    // writes another mode: the pointer over a dialog is always the arrow, whatever it was before (a scroll arrow, the attack crosshair); the next input run after the
+    // dialog closed decides again
+    if (is_modal_open()) {
+        current_cursor_ = CursorType::Normal;
+        return current_cursor_;
+    }
 
     // 2. The eight edge strips (mode 6): the scroll arrows (edge_scroll.hpp); not while a button is captured
     if (!is_input_captured()) {

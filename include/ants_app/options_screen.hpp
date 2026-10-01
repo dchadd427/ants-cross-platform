@@ -64,8 +64,9 @@ public:
     static constexpr int32_t EDIT_Y[4] = {370, 402, 370, 402};
     static constexpr int32_t EDIT_W = 141;
     static constexpr int32_t EDIT_H = 15;
-    // The rectangles of the buttons: the union of the pictures of their animations
+    // The rectangles of the buttons: breturn1 / breturn2 and the pressed breturn3 (the hit test is the rectangle of the picture that shows); the latching pairs keep the union of their pictures
     static constexpr int32_t RETURN_X = 351, RETURN_Y = 425, RETURN_W = 98, RETURN_H = 26;
+    static constexpr ButtonRect RETURN_PRESSED{353, 427, 97, 24};
     static constexpr int32_t CHAT_ON_X = 102, CHAT_OFF_X = 151, HELP_ON_X = 355, HELP_OFF_X = 404, TOGGLE_Y = 289, TOGGLE_W = 49, TOGGLE_H = 24;
 
     OptionsScreen();
@@ -112,7 +113,7 @@ private:
 
     OptionsState state_{};
     bool open_{false};
-    ScreenButton return_{RETURN_X, RETURN_Y, RETURN_W, RETURN_H};
+    ScreenButton return_{ButtonRect{RETURN_X, RETURN_Y, RETURN_W, RETURN_H}, RETURN_PRESSED};
     std::array<ScreenSlider, 3> sliders_{};
     ScreenToggle chat_on_{CHAT_ON_X, TOGGLE_Y, TOGGLE_W, TOGGLE_H};
     ScreenToggle chat_off_{CHAT_OFF_X, TOGGLE_Y, TOGGLE_W, TOGGLE_H};
