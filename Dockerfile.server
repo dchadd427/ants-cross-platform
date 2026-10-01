@@ -1,0 +1,44 @@
+# =============================================================================
+# The dedicated game server (ants_server): a headless program, no SDL, no assets.
+#   docker build -f Dockerfile.server -t ants-server .
+#   docker run --rm -e ANTS_SERVER_SECRET=<a long random secret> -v /path/to/maps:/maps:ro \
+#       -p 4001:4001 -p 127.0.0.1:4002:4002 -p 127.0.0.1:4010:4010 ants-server
+# The maps folder (the .lvl files that rooms may use) is mounted, not part of the image. The control interface (4010) and the WebSocket port (4002) are meant to be
+# reached from this machine only: publish them on 127.0.0.1 and let a reverse proxy (TLS) or the lobby's backend talk to them; only the TCP game port is public.
+# =============================================================================
+FROM debian:12-slim AS builder
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends build-essential cmake && \
+    rm -rf /var/lib/apt/lists/*
+
+WORKDIR /src
+COPY CMakeLists.txt ./
+COPY include/ ./include/
+COPY src/ ./src/
+COPY tools/ ./tools/
+
+RUN cmake -B build -DCMAKE_BUILD_TYPE=Release -DANTS_BUILD_APP=OFF -DBUILD_TESTS=OFF && \
+    cmake --build build -j"$(nproc)" --target ants_server
+
+# =============================================================================
+# The runtime image: the program and nothing else, run by an unprivileged user
+# =============================================================================
+FROM debian:12-slim AS runner
+
+RUN useradd --system --no-create-home --shell /usr/sbin/nologin ants && \
+    mkdir -p /maps /results && chown ants /results
+
+COPY --from=builder /src/build/src/ants_server/ants_server /usr/local/bin/ants_server
+
+USER ants
+WORKDIR /results
+EXPOSE 4001 4002 4010
+
+# Alive = the game port accepts a connection (bash opens it; the image has no curl). The control interface is not used: it needs the secret.
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+    CMD ["bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/4001"]
+
+# Every interface inside the container (a published port does not reach the container's loopback address): the published ports decide who can reach it, see the header
+ENTRYPOINT ["/usr/local/bin/ants_server", "--maps", "/maps", "--public", "--ws-any-interface", "--ctl-any-interface", "--results-dir", "/results"]
+CMD ["--port", "4001", "--ws-port", "4002", "--ctl-port", "4010"]

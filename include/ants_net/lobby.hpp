@@ -32,6 +32,7 @@ public:
         uint32_t violation_limit{8};
         uint32_t ping_every_ms{1000};        // the round trip to every guest is measured this often (the thumbs of the setup screen)
         uint8_t min_players{2};              // can_start() needs this many seats taken (a dedicated server's room: the host holds none of them)
+        uint8_t max_players{sim::MAX_PLAYERS};   // a Hello beyond this many seats taken is Rejected Full (a server's room that expects 3 players takes no fourth)
     };
     enum class Phase : uint8_t { Room, Loading, Begun };
     struct Event {
@@ -51,6 +52,8 @@ public:
     /// A connection that the listener accepted; it becomes a seat when its Hello is accepted. `address` is where the connection came from (the host
     /// part only): with the port the guest announces it tells the other guests where to reach it during the match (host migration).
     void add_connection(Connection* connection, uint32_t now_ms, const std::string& address = std::string());
+    /// The same for a connection whose first message (its Hello) was read already: a server reads it to find the room by its code, then hands both over.
+    void add_connection(Connection* connection, uint32_t now_ms, const std::string& address, const std::vector<uint8_t>& hello_message);
     void update(uint32_t now_ms);
 
     Phase phase() const noexcept { return phase_; }

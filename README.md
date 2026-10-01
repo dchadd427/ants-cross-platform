@@ -4,7 +4,7 @@ A faithful, high-performance, deterministic C++17 native engine remake and port 
 
 The engine directly loads raw original binary assets (`ants.chd` and `Maps/*.LVL`) without pre-conversion, faithfully executing authentic gameplay mechanics, deterministic 20Hz simulation, 32-channel spatial audio, MIDI/MP3 score playback, TrueType font rendering, and an SDL2 hardware-accelerated 2D viewport.
 
-**Current version: v0.0.82** (shown on screen next to the FPS meter). Every release is listed in the **[changelog](CHANGELOG.md)**, which is also published at **[beta.playants.org/changelog.html](https://beta.playants.org/changelog.html)**. Since v0.0.24 every system is re-derived from the disassembly of the original `Ants.exe` (see [Reverse Engineering](#reverse-engineering--historical-preservation)); multiplayer over a network (host / join over TCP) works and is still being extended (see [Network Port](#network-port-in-progress)).
+**Current version: v0.0.83** (shown on screen next to the FPS meter). Every release is listed in the **[changelog](CHANGELOG.md)**, which is also published at **[beta.playants.org/changelog.html](https://beta.playants.org/changelog.html)**. Since v0.0.24 every system is re-derived from the disassembly of the original `Ants.exe` (see [Reverse Engineering](#reverse-engineering--historical-preservation)); multiplayer over a network (host / join over TCP) works and is still being extended (see [Network Port](#network-port-in-progress)).
 
 ---
 
@@ -96,12 +96,12 @@ The remake provides a complete, playable, standalone experience with authentic a
 | **Combat, Knockback & Collisions** | 🟢 Original Action Model | Contact, strike frame, `gh` / `gb` flights, landing blocks, pile-up dispersal, bomb victims, stun, deferred death and the combat ant auto-engage. |
 | **Multiplayer: host / join over TCP** | 🟢 Playable (v0.0.46) | Lock-step core, room with names and connection thumbs, start barrier, roster, drop-out, predicted click feedback, chat; LAN / forwarded port. |
 | **Multiplayer: host migration** | 🟢 Playable (v0.0.47) | The match goes on when the host leaves, as in the original: links between the guests, election of the lowest seat, resync of the turns, the old host dropped in the first turn of the new one. |
-| **Multiplayer: NAT traversal (WebRTC, STUN / TURN)** | 📋 Planned | Data channels natively and in the browser, WebSocket signaling, coturn. Needs third-party libraries (asked first). |
+| **Multiplayer: dedicated server** | 🟢 Built (v0.0.83) | `ants_server`: many rooms per process, each run by a referee that plays nobody; rooms made by a lobby over an authenticated control interface; TCP for native clients, WebSocket for browsers and Electron; a Docker image. No NAT traversal in the game (a server is reachable by everybody). Next: the browser's connection and the four-games-on-one-page test. |
 | **Bot AI** | 🔧 In design (virtual clients only) | The original has no computer players: the 1:1 core never contains any. Bots are planned as separate virtual clients that use the public command interface (project rule 8, amended; plan in [`docs/BOTS.md`](docs/BOTS.md)). Off by default. |
 | **Asset Viewer Overhaul** | 📋 Planned (last) | Verify the viewer's groups and that every animation loads and plays properly, then overhaul it; scheduled after everything else. |
 
 ### Roadmap (in order)
-1. Network port: WebRTC + signaling + TURN deployment. (Host migration shipped in v0.0.47, the alliance dialogs in v0.0.50, the original's end-of-match rules in v0.0.62.)
+1. Network port: the browser build's WebSocket connection and the four-games test page, the in-game host / join screens, the deployment of the server. (The dedicated server shipped in v0.0.83, host migration in v0.0.47, the alliance dialogs in v0.0.50, the original's end-of-match rules in v0.0.62.)
 2. View origin (16, 21) at 442 x 440.
 3. Start-up flow (splash, loading, the single-player notice, More Help). (The results screen shipped in v0.0.63, the setup screen in v0.0.64, the options screen and the remembered settings in v0.0.65, the quick help and the chat input box in v0.0.66.)
 4. Removal of the remaining invented visuals and timings, and the last non-original tests.
@@ -132,7 +132,9 @@ Ants-Mac/
 ├── include/                # Public C++ headers
 │   ├── ants_assets/        # Archive decoders, map loaders, sprite/sound structs
 │   ├── ants_sim/           # Simulation engine, grid, ant units, command layer, state hash
-│   ├── ants_net/           # Lock-step protocol, sequencer, runner, sessions, room, TCP transport
+│   ├── ants_net/           # Lock-step protocol, sequencer, runner, sessions, room, TCP / WebSocket transports
+│   ├── ants_ctl/           # Strict JSON and the authenticated HTTP server of the game server's control interface
+│   ├── ants_server/        # The dedicated server: map store, rooms, the door, control calls
 │   └── ants_app/           # SDL2 application, renderer, HUD, audio mixer, MIDI, version
 ├── Original-Ants/          # Authentic 1998 game data
 │   ├── ants.chd            # Packed binary sprites, audio, palettes, animations
@@ -142,13 +144,17 @@ Ants-Mac/
 ├── src/                    # Implementation source code
 │   ├── ants_assets/        # Asset decompression, palette mapping, mirroring
 │   ├── ants_sim/           # Tick loop, PATHMGR A*, locomotion and action clips, combat, commands, state hash
-│   ├── ants_net/           # Network core (no threads, no blocking calls) and TCP transport
+│   ├── ants_net/           # Network core (no threads, no blocking calls), TCP and WebSocket transports
+│   ├── ants_ctl/           # JSON library and HTTP server with a bearer secret
+│   ├── ants_server/        # ants_server: the dedicated game server program
 │   └── ants_app/           # Windowing, input handling, viewport camera, rendering, HUD, setup screen
 ├── tests/                  # Automated verification test suites
 │   ├── e2e/                # Standalone 506-test opaque-box E2E test runner
 │   ├── test_assets/        # Binary asset parsing and movement-table parity tests
 │   ├── test_sim/           # Simulation rules, golden action suites, command layer / state hash
-│   ├── test_net/           # Lock-step core, room and TCP transport suites
+│   ├── test_net/           # Lock-step core, room, TCP, WebSocket and LAN discovery suites
+│   ├── test_ctl/           # JSON library and control HTTP server suites
+│   ├── test_server/        # Dedicated server suite (map store, rooms, the door, control calls)
 │   ├── test_app/           # Application integration, render, HUD, status, input, pointer and options suites
 │   └── data/               # Golden sample data (edge scrolling)
 ├── tools/                  # Reverse-engineering and generator scripts (Capstone analysis, table extraction, changelog page)
@@ -156,7 +162,9 @@ Ants-Mac/
 ├── CHANGELOG.md            # Running list of changes for every version (also served at /changelog.html)
 ├── CMakeLists.txt          # Root CMake build configuration
 ├── docker-compose.yml      # Service definition for beta.playants.org
+├── docker-compose.server.yml # Example service of the dedicated game server
 ├── Dockerfile              # Multi-stage Emscripten + Nginx build
+├── Dockerfile.server       # The dedicated game server alone (no SDL, no assets)
 ├── build_web.sh            # Local WebAssembly build into dist/
 ├── run_tests.sh            # Master test suite runner script
 ├── start_game.sh / .bat    # One-click build and launch scripts (macOS / Linux, Windows)
@@ -271,7 +279,7 @@ Names and network play:
 
 Try it on one computer: `./start_game.sh --host --loopback --name Alice`, then in a second terminal `./start_game.sh --join 127.0.0.1 --name Bob`.
 
-On a local network: `./start_game.sh --host --name Alice` on one machine; `ants --lan-list` on another prints the room (`192.168.1.20:4001  "Alice"  TINY.LVL  1/4 players  v0.0.82`), and `./start_game.sh --join 192.168.1.20 --name Bob` joins it. The firewall of the host must let UDP and TCP port 4001 in.
+On a local network: `./start_game.sh --host --name Alice` on one machine; `ants --lan-list` on another prints the room (`192.168.1.20:4001  "Alice"  TINY.LVL  1/4 players  v0.0.83`), and `./start_game.sh --join 192.168.1.20 --name Bob` joins it. The firewall of the host must let UDP and TCP port 4001 in.
 
 ---
 
@@ -370,7 +378,8 @@ The original game runs a full TCP mesh (port 4001) in which every machine simula
 | Host / join in the game (`--host`, `--join`), the room with names and connection thumbs, roster (teams without a player do not exist), drop-out through the turn stream, predicted click feedback, chat, waiting / out-of-sync messages, names from the command line | ✅ v0.0.46 |
 | Host migration: the match goes on when the host leaves (as in the original): links between the guests, the turn log, election with epochs, resync, the old host dropped by the first turn of the new one | ✅ v0.0.47 |
 | Games on the local network: an open room announces itself (UDP broadcast, once a second), `--lan-list` shows what is on offer; the in-game host / join screens are next | ✅ v0.0.78 (discovery), 📋 screens |
-| Internet play (NAT traversal): not part of the game itself; an external launcher or lobby provides the path and starts the game with addresses on the command line | 📋 outside the game |
+| Internet play: **no NAT traversal in the game**; a dedicated server that everybody can reach hosts the rooms (see below); a lobby may still start the game with addresses on the command line | ✅ server v0.0.83 |
+| The dedicated server (`ants_server`): rooms made over a control interface, a referee per room, TCP and WebSocket, a Docker image | ✅ v0.0.83 |
 | Alliance dialogs: the invitation question, the waiting dialog, the break confirmation (teaming works between players; team chat reaches only the allies) | ✅ v0.0.50 |
 | The original's end-of-match rules (CHECKGO elimination, the drop-out win test, quitting as a forfeit; the `Quit` command, protocol version 4) | ✅ v0.0.62 |
 
@@ -384,7 +393,7 @@ Limits of this release: raw TCP only (a LAN, a VPN or a forwarded port 4001; roo
 
 ## Changelog & Versioning
 
-The version (`include/ants_app/version.hpp`, currently `v0.0.82`) is bumped with every release and shown on screen next to the FPS meter. [`CHANGELOG.md`](CHANGELOG.md) lists what changed in every version, newest first, from the first commit to the release in progress; it is published on the beta site at [`/changelog.html`](https://beta.playants.org/changelog.html) and linked from the game page.
+The version (`include/ants_app/version.hpp`, currently `v0.0.83`) is bumped with every release and shown on screen next to the FPS meter. [`CHANGELOG.md`](CHANGELOG.md) lists what changed in every version, newest first, from the first commit to the release in progress; it is published on the beta site at [`/changelog.html`](https://beta.playants.org/changelog.html) and linked from the game page.
 
 ---
 
@@ -409,7 +418,7 @@ To run all test suites in sequence:
 ./run_tests.sh --clean    # Remove the build directories and rebuild first
 ```
 
-### What the Suites Cover (v0.0.82, all passing)
+### What the Suites Cover (v0.0.83, all passing)
 | Suite | What it checks | Size |
 |---|---|---|
 | 1 Asset decoders | `ants.chd` header, palette, sprites, audio, event tags, Table 4 animations, `.LVL` maps, directional mirroring, fuzzing | 9 suites, 70,065 assertions |
@@ -429,11 +438,13 @@ To run all test suites in sequence:
 | 2.17 WebSocket transport | RFC 6455: the SHA-1 and base64 vectors and the accept key, the frame codec for every length with random masks fed whole, byte by byte and in chunks, fragmentation, every protocol error with its close status, 200,000 fuzzed streams that never crash, hang or allocate more than the limit, the upgrade handshake (accepted variants and every refusal), a real-socket client for messages of every size in both directions, ping / pong, the close handshake, stuck and slow readers, 1000 random messages echoed through the `Connection` interface | 22 tests, 1.17 million assertions |
 | 2.13.1 Control interface | The strict JSON library (vectors, 200,000 fuzzed documents, round trips) and the loopback HTTP server with its bearer secret (the right and every wrong secret, limits, timeouts, pipelining, 32 connections) over real sockets | 38 tests, 1.44 million assertions |
 | 2.18 Map sweep | `map_sweep --selftest` on the six shipped maps: they load, run and are deterministic (two processes and a second play on one engine), the report counts what happened, an injected fault is found | 59 checks |
+| 2.19 Dedicated server | The map store (names, refusals, the real maps), rooms (waiting, the start by itself, a client that cannot load, a desync, closing), the door (Hello within the time, wrong room, wrong protocol, limits) and the control calls over real sockets | 9 tests, 146 assertions |
 | 3 Application integration | Whole-application behaviour through the HUD, renderer and simulation | 211 tests, 8,012 assertions |
 | 3.1 - 3.5 Model suites | Render parity 419 checks (with the text sizes and the health-number font, and 54 fog patterns of the layer-2 pass against a model of the original's), HUD layout 902 (with the network room screen, the guest screen and the order of the rows, the START buttons' click zones and the corner plate, the label sizes and wrapping, the three alliance dialogs, the results screen, the options screen's pictures and fields, the chat input box, the score boxes, the minimap and the chat log window), status messages 271, input model 110 (with the window layout maths), pointer model 387 (with the stored panel of a Shift-selected group, the Return button's zones and the cursor over dialogs) | 2,089 checks |
 | 3.6 Network application | The command line (names, `--host`, `--join`, `--seat`, the LAN options, the window options, `--lan-list`), window placement and the 2 x 2 grid, the pointer leaving and entering the window, sound that follows the focus, a headless application as host and as guest of a room, start, a bit-identical match, chat, leaving, the host leaving (a two-player match is decided at once, in a three-player match the guest follows the new host and says so), a guest that quits (the quit ends the match on both machines), the score labels of a local game, teaming over three machines (an offer arrives as the question, Accept, team chat reaches only the ally, refusal, Withdraw) | 18 tests, 298 assertions |
 | 3.7 Options | The original's slider (every configured value placed and read back, every pointer x, hit edges), latching button (pictures, capture, latch), edit field (focus, 100 characters, caret phases), the settings store (the validity rule, files, texts) and the options screen end to end | 135 checks |
 | 3.8 Start script | `start_game.sh --dry-run`: window i is player i and colour i, the host on this machine only, guests with their seats, the 2 x 2 (2 x 1) grid, different random names, the options that make it a single game | 82 checks |
+| 3.9 Server end-to-end | The real `ants_server` and two headless game clients: the control interface refuses a missing or a wrong secret, a room by code, an automatic start, a match to its end, a clean stop and the result file | 16 checks |
 | 4 E2E | Opaque-box scenarios in four tiers, run against the suite's own model of the rules (`tests/e2e/e2e_model.hpp`; no engine code is linked and the model still has the early combat rules, see `tests/TEST_INFRA.md`) | 506 tests |
 
 ### Standalone E2E Test Runner
@@ -471,6 +482,34 @@ open asset_catalog/index.html
 ```
 
 Or visit the online version at **[beta.playants.org/asset_catalog/](https://beta.playants.org/asset_catalog/)**.
+
+### The Dedicated Server (`ants_server`, v0.0.83)
+
+A headless program that hosts many games. A **room** is a host that plays nobody: it seals the turns, runs the match on its own engine as the **referee** and compares every client's state hash with its own. Players only need to reach the server (no NAT traversal, no port forwarding on their side). A lobby's backend makes the rooms; the players' game windows start with `--join HOST:PORT --room CODE` and the match starts by itself when the expected seats are taken and everybody has loaded the map.
+
+```bash
+cmake --build build --target ants_server
+ANTS_SERVER_SECRET=<a long random secret> ./build/src/ants_server/ants_server --maps /path/to/maps --port 4001 --ws-port 4002 --ctl-port 4010 --results-dir results
+```
+
+| Option | Meaning |
+|---|---|
+| `--maps DIR` | The folder of `.lvl` files that rooms may use (required; never part of the image). A room whose map is missing, invalid or does not load is refused. |
+| `--port N` | TCP game port of native clients (4001; 0: none). This machine only unless `--public`. |
+| `--ws-port N` | WebSocket port of browsers and Electron behind a reverse proxy that ends TLS (0: none, the default). This machine only. |
+| `--ctl-port N` | Control interface: HTTP + JSON on this machine only, `Authorization: Bearer <secret>`; the secret comes from the environment variable `ANTS_SERVER_SECRET` (a control port without one refuses to start). |
+| `--public` | The TCP game port accepts other machines. |
+| `--ws-any-interface`, `--ctl-any-interface` | For containers only (a published port does not reach a program on the container's loopback address): listen on every interface and let the host's port mapping decide who may connect. |
+| `--results-dir DIR` | An ended room writes `<code>.json` there. |
+| `--max-rooms N` | The most rooms at a time (256). |
+
+The control calls: `POST /rooms {"map": "TINY.LVL", "players": 2, "fog": false, "code": "ROOM-1", "seed": 1}` (code and seed are drawn when left out) makes a room (201, or 400 / 404 / 409 / 503 with the reason), `GET /rooms`, `GET /rooms/<code>` (state `waiting`, `loading`, `running`, `finished` or `failed`, the players, the ticks, and the result rows of the results screen), `DELETE /rooms/<code>`, `GET /stats`. A client's Hello names its room; a Hello for another room or protocol is rejected, a connection that does not say Hello within 10 s is closed.
+
+**Docker:** `Dockerfile.server` builds the program alone (no SDL, no game assets: `-DANTS_BUILD_APP=OFF`) and runs it as an unprivileged user with a healthcheck; `docker-compose.server.yml` is an example service (the secret and the maps folder come from a `.env` file, only the game port is public, the WebSocket and control ports are published on the host's loopback address only):
+
+```bash
+docker compose -f docker-compose.server.yml up -d --build
+```
 
 ---
 

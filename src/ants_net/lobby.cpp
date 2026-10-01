@@ -70,6 +70,13 @@ void HostLobby::add_connection(Connection* connection, uint32_t now_ms, const st
     if (connection != nullptr) pending_.push_back(Pending{connection, now_ms, address});
 }
 
+void HostLobby::add_connection(Connection* connection, uint32_t now_ms, const std::string& address, const std::vector<uint8_t>& hello_message) {
+    if (connection == nullptr) return;
+    Pending p{connection, now_ms, address};
+    bool consumed = false;
+    handle_hello(p, hello_message, now_ms, consumed);
+}
+
 void HostLobby::broadcast(const std::vector<uint8_t>& msg) {
     for (uint8_t s = 0; s < sim::MAX_PLAYERS; ++s) {
         if (guests_[s].conn != nullptr && guests_[s].conn->is_open()) guests_[s].conn->send(msg);
@@ -183,6 +190,7 @@ void HostLobby::handle_hello(Pending& p, const std::vector<uint8_t>& msg, uint32
     if (!decode(msg, hello)) return reject(RejectReason::BadRequest);                        // this version's layout, in full
     if (hello.room != cfg_.room_code) return reject(RejectReason::NoSuchRoom);               // a Hello for another room (or for none)
     if (phase_ != Phase::Room) return reject(RejectReason::MatchRunning);
+    if (players() >= cfg_.max_players) return reject(RejectReason::Full);
     uint8_t seat = 255;
     if (hello.want_seat < sim::MAX_PLAYERS && room_.slots[hello.want_seat].state == SlotState::Empty) seat = hello.want_seat;     // the seat it asked for, when it is free
     for (uint8_t s = 0; seat == 255 && s < sim::MAX_PLAYERS; ++s) {

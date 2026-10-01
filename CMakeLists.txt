@@ -78,8 +78,13 @@ add_subdirectory(src/ants_sim)
 add_subdirectory(src/ants_net)
 if(NOT EMSCRIPTEN)
     add_subdirectory(src/ants_ctl)    # control interface of the game server (strict JSON, authenticated HTTP on the loopback address): sockets, native only
+    add_subdirectory(src/ants_server) # the dedicated game server (rooms, a referee per room): native only
 endif()
-add_subdirectory(src/ants_app)
+# The game program needs SDL2 (window, audio, fonts); a build of the dedicated server alone (the server's Docker image) does not: -DANTS_BUILD_APP=OFF
+option(ANTS_BUILD_APP "Build the game program (needs SDL2)" ON)
+if(ANTS_BUILD_APP)
+    add_subdirectory(src/ants_app)
+endif()
 
 # Table generator (not part of the normal build): writes src/ants_sim/food_footprints_data.inc from Original-Ants/ants.chd
 #   cmake --build build --target gen_food_footprints && ./build/gen_food_footprints > src/ants_sim/food_footprints_data.inc
@@ -111,8 +116,11 @@ if(BUILD_TESTS AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tests")
     add_subdirectory(tests/test_net)
     if(NOT EMSCRIPTEN)
         add_subdirectory(tests/test_ctl)
+        add_subdirectory(tests/test_server)
     endif()
-    add_subdirectory(tests/test_app)
+    if(ANTS_BUILD_APP)
+        add_subdirectory(tests/test_app)
+    endif()
 endif()
 
 # Copy default game maps to binary directory

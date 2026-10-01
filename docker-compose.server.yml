@@ -1,0 +1,44 @@
+# The dedicated game server (Dockerfile.server). An example: set the three values in a .env file next to this file (it is not part of the repository).
+#
+#   ANTS_SERVER_SECRET=<a long random secret>       the bearer secret of the control interface (required)
+#   ANTS_MAPS_DIR=/path/to/the/maps                 the folder of .lvl files that rooms may use (required, mounted read-only)
+#   ANTS_SERVER_PORT=4001                           the public TCP game port of native clients (optional)
+#
+#   docker compose -f docker-compose.server.yml up -d --build
+#
+# Only the TCP game port is open to other machines. The WebSocket port (a reverse proxy that ends TLS passes browsers to it) and the control interface
+# (the lobby's backend calls it) are published on the host's loopback address only; a proxy or backend on another machine reaches them through a tunnel.
+# The service also joins the network of the site's container (docker-compose.yml): its nginx passes /ws to "ants-server:4002". Other containers of that
+# network can reach the control port too (it is behind the bearer secret): do not put a container there that you do not trust.
+services:
+  ants-server:
+    build:
+      context: .
+      dockerfile: Dockerfile.server
+    image: ants-server
+    container_name: ants-server
+    restart: unless-stopped
+    environment:
+      ANTS_SERVER_SECRET: ${ANTS_SERVER_SECRET:?set ANTS_SERVER_SECRET in .env}
+    volumes:
+      - ${ANTS_MAPS_DIR:?set ANTS_MAPS_DIR in .env}:/maps:ro
+      - ants-server-results:/results
+    ports:
+      - "${ANTS_SERVER_PORT:-4001}:4001"
+      - "127.0.0.1:${ANTS_SERVER_WS_PORT:-4002}:4002"
+      - "127.0.0.1:${ANTS_SERVER_CTL_PORT:-4010}:4010"
+    # the site's nginx (docker-compose.yml) reaches the WebSocket port by this name on the shared network
+    networks:
+      - proxy-network
+    # the program needs nothing but its sockets and the results folder
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    pids_limit: 64
+
+volumes:
+  ants-server-results:
+
+networks:
+  proxy-network:
+    external: true

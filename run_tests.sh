@@ -171,6 +171,8 @@ FOOD_ACTIONS_STATUS=0
 CHALLENGER_M2_1_STATUS=0
 CHALLENGER_M2_2_STATUS=0
 MAP_SWEEP_STATUS=0
+SERVER_STATUS=0
+SERVER_E2E_STATUS=0
 APP_STATUS=0
 E2E_STATUS=0
 START_TIME=$(date +%s)
@@ -333,6 +335,13 @@ if [ "$RUN_SIM" -eq 1 ]; then
     echo -e "${BOLD}${BLUE}======================================================================${RESET}"
     "./$BUILD_DIR/map_sweep" --selftest
     MAP_SWEEP_STATUS=$?
+
+    echo ""
+    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
+    echo -e "${BOLD}${BLUE}>>> 2.19 RUNNING DEDICATED SERVER SUITE (map store, rooms, the door, control calls, real sockets)...${RESET}"
+    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
+    "./$BUILD_DIR/tests/test_server/test_server"
+    SERVER_STATUS=$?
 fi
 
 # 5. Execute Application Integration Tests
@@ -399,6 +408,13 @@ if [ "$RUN_APP" -eq 1 ]; then
     echo -e "${BOLD}${BLUE}======================================================================${RESET}"
     "./tests/scripts/test_start_game.sh"
     START_SCRIPT_STATUS=$?
+
+    echo ""
+    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
+    echo -e "${BOLD}${BLUE}>>> 3.9 RUNNING SERVER END-TO-END (ants_server + two headless clients: secret, room by code, automatic start)...${RESET}"
+    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
+    BUILD_DIR="$BUILD_DIR" "./tests/scripts/test_ants_server.sh"
+    SERVER_E2E_STATUS=$?
 fi
 
 # 6. Execute E2E Opaque-Box Tests
@@ -582,6 +598,13 @@ if [ "$RUN_SIM" -eq 1 ]; then
         echo -e " 2.18 Map Sweep (map_sweep --selftest):              ${RED}FAILED (exit code ${MAP_SWEEP_STATUS})${RESET}"
         TOTAL_FAILED=$((TOTAL_FAILED + 1))
     fi
+
+    if [ "$SERVER_STATUS" -eq 0 ]; then
+        echo -e " 2.19 Dedicated Server (test_server):                ${GREEN}PASSED${RESET}"
+    else
+        echo -e " 2.19 Dedicated Server (test_server):                ${RED}FAILED (exit code ${SERVER_STATUS})${RESET}"
+        TOTAL_FAILED=$((TOTAL_FAILED + 1))
+    fi
 fi
 
 if [ "$RUN_APP" -eq 1 ]; then
@@ -645,6 +668,13 @@ if [ "$RUN_APP" -eq 1 ]; then
         echo -e " 3.8 Start Script (start_game.sh --dry-run):         ${GREEN}PASSED${RESET}"
     else
         echo -e " 3.8 Start Script (start_game.sh --dry-run):         ${RED}FAILED (exit code ${START_SCRIPT_STATUS})${RESET}"
+        TOTAL_FAILED=$((TOTAL_FAILED + 1))
+    fi
+
+    if [ "$SERVER_E2E_STATUS" -eq 0 ]; then
+        echo -e " 3.9 Server End-To-End (ants_server + 2 clients):    ${GREEN}PASSED${RESET}"
+    else
+        echo -e " 3.9 Server End-To-End (ants_server + 2 clients):    ${RED}FAILED (exit code ${SERVER_E2E_STATUS})${RESET}"
         TOTAL_FAILED=$((TOTAL_FAILED + 1))
     fi
 fi
