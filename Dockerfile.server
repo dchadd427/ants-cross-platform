@@ -3,7 +3,8 @@
 #   docker build -f Dockerfile.server -t ants-server .
 #   docker run --rm -e ANTS_SERVER_SECRET=<a long random secret> -v /path/to/maps:/maps:ro \
 #       -p 4001:4001 -p 127.0.0.1:4002:4002 -p 127.0.0.1:4010:4010 ants-server
-# The maps folder (the .lvl files that rooms may use) is mounted, not part of the image. The control interface (4010) and the WebSocket port (4002) are meant to be
+# The image holds the six maps of the original game in /maps, so a server runs at once. To use other maps (the .lvl files that rooms may use), mount a folder at /maps
+# (it replaces them): -v /path/to/maps:/maps:ro. The control interface (4010) and the WebSocket port (4002) are meant to be
 # reached from this machine only: publish them on 127.0.0.1 and let a reverse proxy (TLS) or the lobby's backend talk to them; only the TCP game port is public.
 # =============================================================================
 FROM debian:12-slim AS builder
@@ -28,6 +29,9 @@ FROM debian:12-slim AS runner
 
 RUN useradd --system --no-create-home --shell /usr/sbin/nologin ants && \
     mkdir -p /maps /results && chown ants /results
+
+# The maps of the original game (the same files as the web game's data)
+COPY Original-Ants/Maps/ /maps/
 
 COPY --from=builder /src/build/src/ants_server/ants_server /usr/local/bin/ants_server
 

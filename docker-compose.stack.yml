@@ -2,7 +2,9 @@
 # compose path "docker-compose.stack.yml"; the values below are set in the stack's "Environment variables" (they are NOT part of the repository):
 #
 #   ANTS_SERVER_SECRET=<a long random secret>       the bearer secret of the control interface (required)
-#   ANTS_MAPS_DIR=/path/on/the/host/to/the/maps     the folder of .lvl files that rooms may use (required, mounted read-only)
+#   ANTS_MAPS_DIR=/path/on/the/host/to/the/maps     a folder of .lvl files that rooms may use instead of the six maps of the original game (optional; without it
+#                                                   the server uses the volume "ants-maps", which is filled from the image the first time: to refresh it after an
+#                                                   update that adds maps, remove that volume; to add maps, copy them into it)
 #   ANTS_PORT=19980                                 the host port of the web page (optional)
 #   ANTS_SERVER_PORT=4001                           the public TCP game port of native clients (optional)
 #
@@ -31,7 +33,7 @@ services:
     environment:
       ANTS_SERVER_SECRET: ${ANTS_SERVER_SECRET:?set ANTS_SERVER_SECRET in the stack's environment variables}
     volumes:
-      - ${ANTS_MAPS_DIR:?set ANTS_MAPS_DIR in the stack's environment variables}:/maps:ro
+      - ${ANTS_MAPS_DIR:-ants-maps}:/maps:ro
       - ants-server-results:/results
     ports:
       - "${ANTS_SERVER_PORT:-4001}:4001"
@@ -47,6 +49,7 @@ services:
 
 volumes:
   ants-server-results:
+  ants-maps:
 
 networks:
   proxy-network:
