@@ -86,11 +86,12 @@ void HostSession::send_turns(Connection* conn, uint32_t from_turn, uint32_t to_t
 }
 
 void HostSession::submit_local(sim::Command command) {
-    if (!started_) return;
+    if (!started_ || seatless()) return;
     sequencer_.submit(cfg_.host_player, std::move(command));
 }
 
 void HostSession::chat_local(const std::string& text, bool team) {
+    if (seatless()) return;
     ChatMsg m;
     m.sender = cfg_.host_player;
     m.team = team;
@@ -198,7 +199,16 @@ void HostSession::poll_clients() {
 void HostSession::run_local(uint32_t dt_ms) {
     for (const LockstepRunner::Executed& e : runner_->update(dt_ms)) {
         sequencer_.on_ack(cfg_.host_player, e.turn);
-        if (e.has_hash) report_hash(cfg_.host_player, e.turn, e.hash);
+        if (!e.has_hash) continue;
+        if (seatless()) {                                 // the referee: its own engine's hash is what every client is compared with
+            for (const DesyncMsg& d : sequencer_.on_referee_hash(e.turn, e.hash)) {
+                desyncs_.push_back(d);
+                broadcast(encode(d));
+                frozen_ = true;
+            }
+        } else {
+            report_hash(cfg_.host_player, e.turn, e.hash);
+        }
     }
 }
 
@@ -350,7 +360,10 @@ void ClientSession::poll_host(uint32_t now_ms) {
         }
     }
     // the host is gone when its link is closed (after everything it sent was read) or it has said nothing for host_silence_ms
-    if (drained && !finished_ && (!conn_->is_open() || now_ms - last_heard_ms_ > cfg_.host_silence_ms)) begin_election(now_ms);
+    if (drained && !finished_ && (!conn_->is_open() || now_ms - last_heard_ms_ > cfg_.host_silence_ms)) {
+        if (cfg_.migration) begin_election(now_ms);
+        else go_lost();                              // a server does not hand over: when it is gone the match is over for this machine
+    }
 }
 
 // ---- peer links --------------------------------------------------------------------------------------------------------------------------------

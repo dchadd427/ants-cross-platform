@@ -39,6 +39,16 @@ Ground truth for every entry is in [`docs/GAME_REVERSE_ENGINEERING.md`](docs/GAM
   - **Found on the way, for the audit** (docs: implementation_plan.md section 18): `tests/test_sim/test_challenger_m2_it2_deep_stress.cpp` has not been part of the build since an early commit and no longer compiles
     (it uses the retired slot-queue API of the hill). (An earlier version of this line said that the death clips are no longer started by a separate effect: wrong, only the unused helper `spawn_death_effect` was removed; the effect path in `movement_system.cpp` is still in use, see the audit.)
 
+## v0.0.82 - 2026-10-01 - A host without a seat: the referee of a dedicated server
+
+The core of the dedicated server (implementation plan section 43): a host that plays nobody. Network protocol 6 (unchanged). No new option for players yet: the server program that uses it is the next step.
+
+- **`HostSession` without a seat** (`host_player = kNoSeat`): the host seals the turns, runs the match on its OWN engine as the **referee** and compares every client's state hash with its own (`Sequencer::on_referee_hash`; a diverging client is named within a second with the subsystem, everybody is told, the match stops sealing): suite S2.1 - S2.2 (four clients over 25 - 120 ms links with jitter, 60 s, the referee's engine equal to every client's). The host has no commands and no chat of its own.
+- **`HostLobby` without a seat** (`host_seat = 255`): the guests take the seats from 0, the room message has no Host slot (that is how a client knows it is in a server's room), `min_players` says how many seats a start needs, the LOADED / READY barrier is the same (the server loads the map itself and reports `host_loaded`): test N4.5b.
+- **No host migration in a server's room** (`ClientSession::Config::migration = false`, chosen by `NetGame` when the room has no Host slot): a client whose server link dies does not elect itself the host of a one-player game, the match is lost on that machine and the server drops the seat at the same tick for everybody else (S2.4).
+- **A hostile client cannot make the sequencer's hash maps grow**: a report for a turn that was not sealed yet is dropped (it used to be kept forever); the old sequencer test now seals the turns it reports (S2.3).
+- Not in this version: the server program, the room manager, the control interface calls, the map store and the "map is playable" gate (the open loader issues of the sweep are listed in the implementation plan, section 43).
+
 ## v0.0.81 - 2026-10-01 - Protocol 6, community map names, and the first pieces of the dedicated server
 
 The map library of the owner's lobby (586 `.lvl` files) was run through the engine for the first time; the server pieces that do not depend on the room logic were built and tested. Network protocol 6 (**not compatible with 5**).

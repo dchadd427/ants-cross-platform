@@ -34,6 +34,7 @@ void Sequencer::resume(uint32_t next_turn) {
     queued_by_.fill(0);
     reports_.clear();
     have_report_.clear();
+    referee_.clear();
     acked_.fill(0);
     active_.fill(false);                             // the new host activates the peers that follow it, one by one
 }
@@ -60,11 +61,53 @@ void Sequencer::on_ack(uint8_t player, uint32_t turn) {
             ++it;
         }
     }
+    for (auto it = referee_.begin(); it != referee_.end();) {            // the referee's reports of turns that everybody has passed
+        if (it->first + 1 < low) it = referee_.erase(it);
+        else ++it;
+    }
+}
+
+std::vector<DesyncMsg> Sequencer::on_referee_hash(uint32_t turn, const sim::StateHash& hash) {
+    std::vector<DesyncMsg> out;
+    if (host_player_ < sim::MAX_PLAYERS) return out;                      // a host with a seat reports through on_hash like everybody else
+    if (turn >= next_turn_) return out;                                   // the referee only executed turns that were sealed
+    if (turn + 64 < next_turn_) return out;                               // (a turn that is long past: nothing is waiting for it)
+    referee_[turn] = hash;
+    const auto found = reports_.find(turn);
+    if (found == reports_.end()) return out;
+    const auto have = have_report_.find(turn);
+    for (uint8_t p = 0; p < sim::MAX_PLAYERS; ++p) {
+        if (have == have_report_.end() || !have->second[p]) continue;
+        if (found->second[p] != hash) {
+            DesyncMsg d;
+            d.turn = turn;
+            d.player = p;
+            d.host = hash;
+            d.peer = found->second[p];
+            out.push_back(d);
+        }
+    }
+    return out;
 }
 
 std::vector<DesyncMsg> Sequencer::on_hash(uint8_t player, uint32_t turn, const sim::StateHash& hash) {
     std::vector<DesyncMsg> out;
-    if (player >= sim::MAX_PLAYERS || !active_[player] || host_player_ >= sim::MAX_PLAYERS) return out;
+    if (player >= sim::MAX_PLAYERS || !active_[player]) return out;
+    if (turn >= next_turn_) return out;                                   // only a turn that was sealed can be reported: a hostile client cannot make the maps grow with turns of the future
+    if (host_player_ >= sim::MAX_PLAYERS) {                               // a host without a seat: the referee's report is the reference
+        reports_[turn][player] = hash;
+        have_report_[turn][player] = true;
+        const auto ref = referee_.find(turn);
+        if (ref != referee_.end() && ref->second != hash) {
+            DesyncMsg d;
+            d.turn = turn;
+            d.player = player;
+            d.host = ref->second;
+            d.peer = hash;
+            out.push_back(d);
+        }
+        return out;
+    }
     auto& reports = reports_[turn];
     auto& have = have_report_[turn];
     reports[player] = hash;

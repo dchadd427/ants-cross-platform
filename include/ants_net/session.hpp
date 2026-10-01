@@ -41,10 +41,13 @@ struct PeerState {
     uint32_t next_execute{0};     // the first turn it has not executed yet
 };
 
+/// "No seat": a dedicated server's host plays no player (HostSession::Config::host_player, HostLobby::Config::host_seat)
+inline constexpr uint8_t kNoSeat = 255;
+
 class HostSession {
 public:
     struct Config {
-        uint8_t host_player{0};
+        uint8_t host_player{0};             // the host's own seat; kNoSeat (255) for a dedicated server: the host plays nobody, runs the match as the referee
         uint8_t epoch{0};                   // 0 for the first host, one more for every host change
         Sequencer::Config sequencer{};
         LockstepRunner::Config runner{};
@@ -64,10 +67,12 @@ public:
     /// it misses, and the first turn drops the old host and every seat of the roster that did not follow. Instead of start().
     void resume(uint32_t now_ms, uint32_t resume_turn, uint8_t old_host, const std::vector<PeerState>& survivors);
 
-    /// A command of the host's own player
+    /// A command of the host's own player (a host without a seat has none: ignored)
     void submit_local(sim::Command command);
-    /// Relays a chat text of the host's own player
+    /// Relays a chat text of the host's own player (a host without a seat has none: ignored)
     void chat_local(const std::string& text, bool team);
+    /// True when the host plays no seat (a dedicated server): it is the sequencer and the referee only
+    bool seatless() const noexcept { return cfg_.host_player >= sim::MAX_PLAYERS; }
 
     void update(uint32_t now_ms);
 
@@ -127,7 +132,8 @@ class ClientSession {
 public:
     struct Config {
         uint8_t player{1};
-        uint8_t host{0};                     // the seat of the host
+        uint8_t host{0};                     // the seat of the host (kNoSeat for a dedicated server's room)
+        bool migration{true};                // false (a dedicated server): the host is not a player and nobody can take over: a lost link ends the match here (Lost)
         LockstepRunner::Config runner{};
         uint32_t ping_every_ms{1000};
         uint32_t host_silence_ms{10000};     // a host that says nothing for this long is gone (its answers to our pings keep it alive)

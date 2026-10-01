@@ -51,6 +51,9 @@ public:
     /// `host_player`, reported through the same call), if any. Reports are kept until the turn is acknowledged by everybody.
     std::vector<DesyncMsg> on_hash(uint8_t player, uint32_t turn, const sim::StateHash& hash);
     void set_host_player(uint8_t player) noexcept { host_player_ = player; }
+    /// A host without a seat (a dedicated server) plays no player but runs the match on its own engine: its report is the reference (`DesyncMsg::player` names the
+    /// client that differs, `host` is the referee's hash). Returns the desyncs found against the client reports of that turn that are in already.
+    std::vector<DesyncMsg> on_referee_hash(uint32_t turn, const sim::StateHash& hash);
 
     /// True unless an active peer's ack is more than max_lag_turns behind the next turn.
     bool can_seal() const noexcept;
@@ -63,6 +66,8 @@ public:
     uint32_t acked(uint8_t player) const noexcept { return player < sim::MAX_PLAYERS ? acked_[player] : 0; }
     /// Number of commands waiting for the next turn
     size_t queued() const noexcept { return queue_.size(); }
+    /// Hash reports kept until every peer has passed their turn (diagnostics and the tests of the bound)
+    size_t pending_reports() const noexcept { return reports_.size() + referee_.size(); }
 
 private:
     Config cfg_;
@@ -74,6 +79,7 @@ private:
     uint8_t host_player_{255};
     std::map<uint32_t, std::array<sim::StateHash, sim::MAX_PLAYERS>> reports_;
     std::map<uint32_t, std::array<bool, sim::MAX_PLAYERS>> have_report_;
+    std::map<uint32_t, sim::StateHash> referee_;               // the seatless host's own reports, by turn
 };
 
 }  // namespace ants::net

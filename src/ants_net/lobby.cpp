@@ -23,10 +23,12 @@ std::string printable(const std::string& s, size_t max) {
 // ------------------------------------------------------------------------------------------------
 
 HostLobby::HostLobby(Config config) : cfg_(std::move(config)) {
-    if (cfg_.host_seat >= sim::MAX_PLAYERS) cfg_.host_seat = 0;
-    room_.slots[cfg_.host_seat].state = SlotState::Host;
-    room_.slots[cfg_.host_seat].name = printable(cfg_.host_name, kMaxNameChars);
-    room_.slots[cfg_.host_seat].rtt_ms = 0;                    // the host's own thumb is always good
+    if (cfg_.host_seat != 255 && cfg_.host_seat >= sim::MAX_PLAYERS) cfg_.host_seat = 0;
+    if (cfg_.host_seat < sim::MAX_PLAYERS) {                   // a dedicated server's host (255) holds no seat
+        room_.slots[cfg_.host_seat].state = SlotState::Host;
+        room_.slots[cfg_.host_seat].name = printable(cfg_.host_name, kMaxNameChars);
+        room_.slots[cfg_.host_seat].rtt_ms = 0;                // the host's own thumb is always good
+    }
     // room_.map_name stays empty until the host chooses a map (the setup screen lists what the Maps folder holds; no map is named in the program)
 }
 

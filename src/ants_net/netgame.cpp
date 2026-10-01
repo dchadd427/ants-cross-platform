@@ -455,7 +455,7 @@ void NetGame::begin_peer_links() {
 #ifndef __EMSCRIPTEN__
     if (!transport_) return;
     close_peer_links();
-    uint8_t host = 0;
+    uint8_t host = kNoSeat;                                      // (a dedicated server's room has no Host slot and no endpoints: no links are made)
     for (uint8_t s = 0; s < sim::MAX_PLAYERS; ++s) {
         if (room_.slots[s].state == SlotState::Host) host = s;
     }
@@ -559,9 +559,11 @@ void NetGame::begin_match() {
     } else {
         ClientSession::Config cc;
         cc.player = seat_;
+        cc.host = kNoSeat;
         for (uint8_t s = 0; s < sim::MAX_PLAYERS; ++s) {
             if (room_.slots[s].state == SlotState::Host) cc.host = s;
         }
+        cc.migration = cc.host != kNoSeat;                      // a room without a Host slot is a dedicated server's: nobody can take over from it
         known_host_ = cc.host;
         client_session_ = std::make_unique<ClientSession>(sim_, cc);
         client_session_->set_connection(transport_->uplink.get());

@@ -579,6 +579,54 @@ int main() {
         ASSERT_EQ(room.host.phase(), HostLobby::Phase::Begun);
     } TEST_END();
 
+    TEST_CASE("N4.5b A Dedicated Server's Room (A Host Without A Seat): Guests Take The Seats From 0, The Room Has No Host Slot, The Start Needs The Configured Number, The Barrier Is The Same") {
+        HostLobby::Config hc;
+        hc.host_seat = 255;                                                         // kNoSeat
+        hc.min_players = 3;
+        Room room(hc);
+        ASSERT_EQ(room.host.players(), size_t{0});                                  // nobody sits there yet: the host holds no seat
+        ASSERT_FALSE(room.host.can_start());
+        room.join("Ann");
+        room.join("Bob");
+        room.run(200);
+        ASSERT_EQ(room.guests[0].lobby->my_seat(), 0);                              // seat 0 is a guest's
+        ASSERT_EQ(room.guests[1].lobby->my_seat(), 1);
+        for (auto& g : room.guests) {
+            const RoomMsg& r = g.lobby->room();
+            for (const auto& slot : r.slots) ASSERT_TRUE(slot.state != SlotState::Host);      // no Host slot: the clients know it is a server's room
+            ASSERT_EQ(r.slots[0].name, "Ann");
+            ASSERT_EQ(r.slots[1].name, "Bob");
+            ASSERT_EQ(r.slots[2].state, SlotState::Empty);
+        }
+        ASSERT_EQ(room.host.players(), size_t{2});
+        ASSERT_FALSE(room.host.can_start());                                        // two of the three that the room wants
+        ASSERT_FALSE(room.host.start(1, 1, room.now));
+        room.join("Cara");
+        room.run(200);
+        ASSERT_TRUE(room.host.can_start());
+        ASSERT_TRUE(room.host.start(7, 99, room.now));
+        room.run(100);
+        for (auto& g : room.guests) ASSERT_EQ(g.lobby->phase(), ClientLobby::Phase::Loading);
+        ASSERT_EQ(room.guests[0].lobby->start_info().roster, 0x07);                 // seats 0, 1, 2
+        room.host.host_loaded(true);                                                // the server loaded the map itself
+        for (auto& g : room.guests) g.lobby->report_loaded(true);
+        room.run(200);
+        ASSERT_EQ(room.host.phase(), HostLobby::Phase::Begun);
+        for (auto& g : room.guests) ASSERT_EQ(g.lobby->phase(), ClientLobby::Phase::Begun);
+        ASSERT_TRUE(room.host.connection_of(0) != nullptr && room.host.connection_of(1) != nullptr && room.host.connection_of(2) != nullptr);
+        // a failed load by the server itself cancels like any other
+        Room again(hc);
+        again.join("A");
+        again.join("B");
+        again.join("C");
+        again.run(200);
+        ASSERT_TRUE(again.host.start(1, 1, again.now));
+        again.host.host_loaded(false);
+        again.run(100);
+        ASSERT_EQ(again.host.phase(), HostLobby::Phase::Room);
+        ASSERT_EQ(again.guests[0].lobby->cancel_reason(), CancelMsg::Reason::LoadFailed);
+    } TEST_END();
+
     TEST_CASE("N4.6 Kicking And Hostile Guests: A Kicked Guest Is Told, Wrong Messages Get A Guest Thrown Out") {
         Room room;
         room.join("Bob");

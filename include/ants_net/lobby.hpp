@@ -26,11 +26,12 @@ public:
     struct Config {
         std::string host_name{"Host"};
         std::string room_code;               // "" for a LAN / direct host; a server names its room: a Hello for another room is Rejected NoSuchRoom
-        uint8_t host_seat{0};
+        uint8_t host_seat{0};                // the host's own seat; 255 (kNoSeat) for a dedicated server: the host takes no seat, every seat is a guest's
         uint32_t hello_timeout_ms{10000};    // a connection that does not say Hello in this time is closed
         uint32_t load_timeout_ms{60000};     // everybody must report Loaded in this time
         uint32_t violation_limit{8};
         uint32_t ping_every_ms{1000};        // the round trip to every guest is measured this often (the thumbs of the setup screen)
+        uint8_t min_players{2};              // can_start() needs this many seats taken (a dedicated server's room: the host holds none of them)
     };
     enum class Phase : uint8_t { Room, Loading, Begun };
     struct Event {
@@ -56,7 +57,7 @@ public:
     const RoomMsg& room() const noexcept { return room_; }
     size_t players() const noexcept;
     bool occupied(uint8_t seat) const noexcept { return seat < sim::MAX_PLAYERS && room_.slots[seat].state != SlotState::Empty; }
-    bool can_start() const noexcept { return phase_ == Phase::Room && players() >= 2 && !room_.map_name.empty(); }
+    bool can_start() const noexcept { return phase_ == Phase::Room && players() >= cfg_.min_players && !room_.map_name.empty(); }
     /// Removes the guest of a seat (Reject Kicked)
     void kick(uint8_t seat);
     /// The measured round trip to a guest (the host itself: 0); false while nothing has come back yet

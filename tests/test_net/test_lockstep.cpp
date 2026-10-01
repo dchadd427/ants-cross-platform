@@ -202,6 +202,70 @@ struct Match {
     }
 };
 
+// A dedicated server's match: the host has NO seat (kNoSeat) and runs the match on its own engine as the referee; every seat 0 .. players - 1 is a client.
+struct ServerMatch {
+    LoopbackNetwork net;
+    sim::SimulationEngine referee;
+    std::vector<std::unique_ptr<sim::SimulationEngine>> sims;       // index = seat
+    Ids ids;
+    std::unique_ptr<HostSession> host;
+    std::vector<std::unique_ptr<ClientSession>> clients;            // index = seat
+    std::vector<Connection*> host_ends;
+    std::vector<Connection*> client_ends;
+    uint32_t now{0};
+    uint32_t seed{1};
+    uint8_t players{4};
+
+    ServerMatch(uint32_t seed_, uint8_t players_, LoopbackNetwork::Link link, HostSession::Config hc = {}, ClientSession::Config cc = {})
+        : net(seed_ * 17u), seed(seed_), players(players_) {
+        ids = build_world(referee, seed);
+        hc.host_player = kNoSeat;
+        host = std::make_unique<HostSession>(referee, hc);
+        for (uint8_t p = 0; p < players; ++p) {
+            sims.push_back(std::make_unique<sim::SimulationEngine>());
+            build_world(*sims.back(), seed);
+            auto ends = net.connect(link);
+            host_ends.push_back(ends.first);
+            client_ends.push_back(ends.second);
+            host->add_client(p, ends.first);
+            ClientSession::Config c = cc;
+            c.player = p;
+            c.host = kNoSeat;
+            c.migration = false;
+            clients.push_back(std::make_unique<ClientSession>(*sims[p], c));
+            clients.back()->set_connection(ends.second);
+        }
+        host->start(0);
+        for (auto& c : clients) c->start(0);
+    }
+    void run(uint32_t ms, bool scripted = true, const std::function<void(uint32_t)>& each_step = {}) {
+        const uint32_t end = now + ms;
+        while (now < end) {
+            now += 10;
+            net.set_time(now);
+            if (scripted) {
+                Command c;
+                for (uint8_t p = 0; p < players; ++p) {
+                    if (script(ids, seed, now, p, c)) clients[p]->submit(c);
+                }
+            }
+            if (each_step) each_step(now);
+            host->update(now);
+            for (auto& c : clients) c->update(now);
+        }
+    }
+    void settle(uint32_t ms = 3000) {
+        host->freeze();
+        run(ms, false);
+    }
+    bool all_equal() const {
+        for (const auto& s : sims) {
+            if (s->state_hash() != referee.state_hash()) return false;
+        }
+        return true;
+    }
+};
+
 // ---------------------------------------------------------------------------------------------------------------------------------
 
 // True when any decoder of the protocol accepts the bytes
@@ -603,6 +667,7 @@ void run_sequencer_tests() {
         Sequencer seq;
         seq.set_host_player(0);
         for (uint8_t p = 0; p < 3; ++p) seq.set_active(p, true);
+        for (int i = 0; i < 40; ++i) seq.seal();                       // turns 0 .. 39 exist (a report for a turn that was never sealed is dropped)
         const sim::StateHash good{10, 1, 2, 3, 4, 5, 6, 7};
         sim::StateHash bad = good;
         bad.total = 11;
@@ -781,6 +846,126 @@ void run_match_tests() {
 }
 
 void run_failure_tests() {
+    TEST_CASE("S2.1 Dedicated Server: A Host Without A Seat Referees Four Clients Over 25 - 120 ms Links; Every Machine, The Referee Included, Stays Bit-Identical For 60 Seconds") {
+        for (uint32_t seed : {1u, 2u}) {
+            ServerMatch m(seed, 4, {60, 60});
+            ASSERT_TRUE(m.host->seatless());
+            m.run(60000);
+            m.settle();
+            ASSERT_TRUE(m.host->desyncs().empty());
+            for (auto& c : m.clients) ASSERT_FALSE(c->desynced());
+            ASSERT_TRUE(m.host->turns_sealed() > 550);
+            ASSERT_TRUE(m.referee.current_tick() > 1100);
+            for (auto& s : m.sims) ASSERT_EQ(s->current_tick(), m.referee.current_tick());
+            ASSERT_TRUE(m.all_equal());                                              // the referee's own engine equals every client's
+            sim::SimulationEngine fresh;
+            build_world(fresh, seed);
+            for (uint8_t p = 0; p < 4; ++p) {                                        // every client's commands took effect on the referee's engine
+                int moved = 0;
+                for (uint32_t id : m.ids.ants[p]) {
+                    if (m.referee.get_unit(id).pos != fresh.get_unit(id).pos) ++moved;
+                }
+                ASSERT_TRUE(moved >= 2);
+            }
+        }
+    } TEST_END();
+
+    TEST_CASE("S2.2 Dedicated Server: The Referee Names A Diverging Client Within A Second, With The Subsystem; The Server Plays And Chats As Nobody") {
+        ServerMatch m(1, 4, {40, 10});
+        m.run(3000);
+        ASSERT_TRUE(m.host->desyncs().empty());
+        m.sims[3]->get_unit(m.ids.ants[3][1]).hp = 3;                                // a hit point that no command explains
+        const uint32_t before = m.now;
+        m.run(2000, false);
+        ASSERT_FALSE(m.host->desyncs().empty());
+        ASSERT_TRUE(m.now - before <= 2000);
+        const DesyncMsg& d = m.host->desyncs()[0];
+        ASSERT_EQ(d.player, 3);
+        ASSERT_TRUE(d.peer.ants != d.host.ants);
+        ASSERT_TRUE(d.peer.grid == d.host.grid && d.peer.players == d.host.players);
+        for (auto& c : m.clients) ASSERT_TRUE(c->desynced());                        // everybody is told
+        ASSERT_TRUE(m.host->frozen());
+        for (const auto& x : m.host->desyncs()) ASSERT_EQ(x.player, 3);              // only client 3 is blamed (the referee agrees with the others)
+        // a host without a seat has no commands and no chat of its own
+        ServerMatch quiet(2, 2, {20, 5});
+        quiet.run(500, false);
+        Command c;
+        c.type = CommandType::Stop;
+        c.ants = {quiet.ids.ants[0][0]};
+        quiet.host->submit_local(c);
+        quiet.host->chat_local("nobody speaks", false);
+        std::vector<uint8_t> msg;
+        bool chat_seen = false;
+        quiet.run(500, false);
+        for (auto* end : quiet.client_ends) {
+            while (end->poll(msg)) chat_seen = chat_seen || peek_type(msg) == MsgType::Chat;
+        }
+        ASSERT_FALSE(chat_seen);
+    } TEST_END();
+
+    TEST_CASE("S2.3 Dedicated Server: A Client Cannot Make The Report Maps Grow With Hashes For Turns That Were Never Sealed; A Report Of A Real Turn Is Compared Whichever Comes First") {
+        // the sequencer alone: a host with and a host without a seat
+        for (uint8_t host_seat : {uint8_t{0}, kNoSeat}) {
+            Sequencer seq;
+            seq.set_host_player(host_seat);
+            seq.set_active(1, true);
+            seq.set_active(2, true);
+            if (host_seat < sim::MAX_PLAYERS) seq.set_active(host_seat, true);
+            sim::StateHash bogus;
+            for (uint32_t t = 100000; t < 100500; ++t) {
+                ASSERT_TRUE(seq.on_hash(1, t, bogus).empty());
+                ASSERT_TRUE(seq.on_referee_hash(t, bogus).empty());
+            }
+            ASSERT_EQ(seq.pending_reports(), size_t{0});                                  // nothing was sealed: nothing is kept
+            for (int i = 0; i < 20; ++i) seq.seal();                                      // turns 0 .. 19 exist now
+            sim::StateHash a;
+            sim::StateHash b;
+            b.total = 1;
+            b.ants = 1;
+            if (host_seat == kNoSeat) {
+                ASSERT_TRUE(seq.on_hash(1, 10, a).empty());                               // the client is first: waits for the referee
+                ASSERT_TRUE(seq.on_hash(2, 10, b).empty());
+                const auto d = seq.on_referee_hash(10, a);                                // the referee agrees with client 1 and not with client 2
+                ASSERT_EQ(d.size(), size_t{1});
+                ASSERT_EQ(d[0].player, 2);
+                ASSERT_TRUE(d[0].host == a && d[0].peer == b);
+                const auto late = seq.on_hash(2, 10, b);                                  // a repeated report of the same turn is compared again
+                ASSERT_EQ(late.size(), size_t{1});
+                ASSERT_TRUE(seq.on_hash(1, 11, a).empty() && seq.on_referee_hash(11, a).empty());      // agreement: nothing
+                ASSERT_EQ(seq.on_hash(2, 12, b).size() + seq.on_referee_hash(12, a).size(), size_t{1});   // the referee is first: the client is found as it reports
+            }
+        }
+        // on the wire: a hostile client sends hashes for the far future; the match goes on unharmed
+        ServerMatch m(1, 2, {10, 0});
+        m.run(2000);
+        HashMsg h;
+        for (uint32_t t = 100000; t < 100200; ++t) {
+            h.turn = t;
+            m.client_ends[0]->send(encode(h));
+        }
+        m.run(1000);
+        m.settle();
+        ASSERT_TRUE(m.host->desyncs().empty());
+        ASSERT_TRUE(m.all_equal());
+    } TEST_END();
+
+    TEST_CASE("S2.4 Dedicated Server: A Client Whose Server Goes Away Does Not Elect Itself The Host (No Migration): The Match Is Lost Here After The Silence") {
+        ServerMatch m(1, 3, {20, 5});
+        m.run(3000);
+        ASSERT_EQ(static_cast<int>(m.clients[0]->mode()), static_cast<int>(ClientSession::Mode::Normal));
+        m.host_ends[0]->close();                                                      // client 0's link to the server dies
+        m.run(1500, false);
+        ASSERT_TRUE(m.clients[0]->lost());                                            // it does not become a host of a one-player game
+        ASSERT_FALSE(m.clients[0]->promoted());
+        ASSERT_FALSE(m.clients[0]->electing());
+        ASSERT_EQ(static_cast<int>(m.clients[1]->mode()), static_cast<int>(ClientSession::Mode::Normal));    // the others are not affected
+        m.net.set_time(m.now);
+        // the server drops the vanished client at the same tick for everybody
+        m.run(1000, false);
+        ASSERT_TRUE(m.referee.is_player_dropped(0));
+        for (uint8_t p = 1; p < 3; ++p) ASSERT_TRUE(m.sims[p]->is_player_dropped(0));
+    } TEST_END();
+
     TEST_CASE("N2.13 Desync: A Diverging Client Is Named Within A Second, With The Subsystem, And Sees It Itself") {
         Match m(1, 4, {40, 10});
         m.run(3000);
