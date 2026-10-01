@@ -133,9 +133,9 @@ if [ "$RUN_ASSETS" -eq 1 ] || [ "$RUN_SIM" -eq 1 ] || [ "$RUN_APP" -eq 1 ]; then
     if [ ! -d "$BUILD_DIR" ] || [ ! -f "$BUILD_DIR/CMakeCache.txt" ]; then
         echo -e "${YELLOW}[BUILD] Configuring ${BUILD_DIR} (CMake)...${RESET}"
         if [ "$RUN_ASAN" -eq 1 ]; then
-            cmake -B "$BUILD_DIR" -S . -DENABLE_ASAN=ON >/dev/null
+            cmake -B "$BUILD_DIR" -S . -DENABLE_ASAN=ON -DANTS_WERROR=ON >/dev/null
         else
-            cmake -B "$BUILD_DIR" -S . >/dev/null
+            cmake -B "$BUILD_DIR" -S . -DANTS_WERROR=ON -DCMAKE_BUILD_TYPE=Release >/dev/null
         fi
     fi
     echo -e "${YELLOW}[BUILD] Compiling libraries and test suites (-j${NCPU})...${RESET}"
@@ -160,6 +160,10 @@ fi
 set +e
 ASSETS_STATUS=0
 MOVEMENT_TABLES_STATUS=0
+CHALLENGER_M1_1_STATUS=0
+CHALLENGER_M1_2_STATUS=0
+CHALLENGER_M1_IT2_STATUS=0
+CHALLENGER_M1_IT2_2_STATUS=0
 SIM_STATUS=0
 PATH_PLANNER_STATUS=0
 MOVEMENT_GOLDEN_STATUS=0
@@ -193,6 +197,34 @@ if [ "$RUN_ASSETS" -eq 1 ]; then
     echo -e "${BOLD}${BLUE}======================================================================${RESET}"
     "./$BUILD_DIR/tests/test_assets/test_movement_tables"
     MOVEMENT_TABLES_STATUS=$?
+
+    echo ""
+    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
+    echo -e "${BOLD}${BLUE}>>> 1.2 RUNNING CHALLENGER M1_1 (adversarial asset decoding)...        ${RESET}"
+    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
+    "./$BUILD_DIR/tests/test_assets/test_challenger_m1_1"
+    CHALLENGER_M1_1_STATUS=$?
+
+    echo ""
+    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
+    echo -e "${BOLD}${BLUE}>>> 1.3 RUNNING CHALLENGER M1_2 (asset decoding, second pass)...       ${RESET}"
+    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
+    "./$BUILD_DIR/tests/test_assets/test_challenger_m1_2"
+    CHALLENGER_M1_2_STATUS=$?
+
+    echo ""
+    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
+    echo -e "${BOLD}${BLUE}>>> 1.4 RUNNING CHALLENGER M1_IT2 (asset interface contract)...        ${RESET}"
+    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
+    "./$BUILD_DIR/tests/test_assets/test_challenger_m1_it2"
+    CHALLENGER_M1_IT2_STATUS=$?
+
+    echo ""
+    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
+    echo -e "${BOLD}${BLUE}>>> 1.5 RUNNING CHALLENGER M1_IT2_2 (asset interface contract, deep)... ${RESET}"
+    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
+    "./$BUILD_DIR/tests/test_assets/test_challenger_m1_it2_2"
+    CHALLENGER_M1_IT2_2_STATUS=$?
 fi
 
 # 4. Execute Simulation Rules Tests
@@ -462,6 +494,34 @@ if [ "$RUN_ASSETS" -eq 1 ]; then
         echo -e " 1.1 Movement Table Parity (test_movement_tables):   ${GREEN}PASSED${RESET}"
     else
         echo -e " 1.1 Movement Table Parity (test_movement_tables):   ${RED}FAILED (exit code ${MOVEMENT_TABLES_STATUS})${RESET}"
+        TOTAL_FAILED=$((TOTAL_FAILED + 1))
+    fi
+
+    if [ "$CHALLENGER_M1_1_STATUS" -eq 0 ]; then
+        echo -e " 1.2 Challenger M1_1 (test_challenger_m1_1):         ${GREEN}PASSED${RESET}"
+    else
+        echo -e " 1.2 Challenger M1_1 (test_challenger_m1_1):         ${RED}FAILED (exit code ${CHALLENGER_M1_1_STATUS})${RESET}"
+        TOTAL_FAILED=$((TOTAL_FAILED + 1))
+    fi
+
+    if [ "$CHALLENGER_M1_2_STATUS" -eq 0 ]; then
+        echo -e " 1.3 Challenger M1_2 (test_challenger_m1_2):         ${GREEN}PASSED${RESET}"
+    else
+        echo -e " 1.3 Challenger M1_2 (test_challenger_m1_2):         ${RED}FAILED (exit code ${CHALLENGER_M1_2_STATUS})${RESET}"
+        TOTAL_FAILED=$((TOTAL_FAILED + 1))
+    fi
+
+    if [ "$CHALLENGER_M1_IT2_STATUS" -eq 0 ]; then
+        echo -e " 1.4 Challenger M1_IT2 (test_challenger_m1_it2):     ${GREEN}PASSED${RESET}"
+    else
+        echo -e " 1.4 Challenger M1_IT2 (test_challenger_m1_it2):     ${RED}FAILED (exit code ${CHALLENGER_M1_IT2_STATUS})${RESET}"
+        TOTAL_FAILED=$((TOTAL_FAILED + 1))
+    fi
+
+    if [ "$CHALLENGER_M1_IT2_2_STATUS" -eq 0 ]; then
+        echo -e " 1.5 Challenger M1_IT2_2 (test_challenger_m1_it2_2): ${GREEN}PASSED${RESET}"
+    else
+        echo -e " 1.5 Challenger M1_IT2_2 (test_challenger_m1_it2_2): ${RED}FAILED (exit code ${CHALLENGER_M1_IT2_2_STATUS})${RESET}"
         TOTAL_FAILED=$((TOTAL_FAILED + 1))
     fi
 fi

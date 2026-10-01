@@ -16,7 +16,7 @@
 
 ## 1. Executive Summary
 
-The comprehensive, opaque-box End-to-End (E2E) test suite for the Ants remake has been fully designed, implemented, compiled, and verified. The test suite operates strictly as an opaque-box validator against authoritative reverse-engineering specifications (`GAME_REVERSE_ENGINEERING.md`), original assets (`Original-Ants/ants.chd`, `Original-Ants/Maps/*.LVL`), and project requirements (`PROJECT.md`, `ORIGINAL_REQUEST.md`).
+The comprehensive, opaque-box End-to-End (E2E) test suite for the Ants remake has been fully designed, implemented, compiled, and verified. The test suite operates strictly as an opaque-box validator against authoritative reverse-engineering specifications (`GAME_REVERSE_ENGINEERING.md`), original assets (`Original-Ants/ants.chd`, `Original-Ants/Maps/*.LVL`), and the project requirements (`README.md`, `AGENTS.md`; the original brief is no longer in the repository).
 
 All 49 features cataloged in `TEST_INFRA.md` are covered across 4 testing tiers, fulfilling all quality gate thresholds:
 - **Tier 1 (Feature Coverage)**: >= 5 tests per feature (Features 1–49 = 245 tests).
@@ -103,57 +103,7 @@ cmake --build build_e2e
 
 ## 5. Feature Coverage Matrix (Features 1–49)
 
-| Feature | Category | Tier 1 Tests | Tier 2 Tests | Tier 3/4 Coverage |
-|---|---|:---:|:---:|:---:|
-| Feat 1: CHD Archive Parsing | Asset Pipeline | 5 | 5 | Pairwise 1, Scenario 6 |
-| Feat 2: LVL Map Parsing | Asset Pipeline | 5 | 5 | Pairwise 1, Scenario 6 |
-| Feat 3: 256-Color Palette System | Asset Pipeline | 5 | 5 | Pairwise 2 |
-| Feat 4: Sprite Extraction & Transparency | Asset Pipeline | 5 | 5 | Pairwise 2 |
-| Feat 5: PCM Audio Extraction | Asset Pipeline | 5 | 5 | Pairwise 3 |
-| Feat 6: Frame-Strip Animation Parsing | Asset Pipeline | 5 | 5 | Pairwise 2 |
-| Feat 7: 20Hz Fixed Tick Simulation Loop | Core Simulation | 5 | 5 | Scenarios 1, 2, 3, 5, 6 |
-| Feat 8: Deterministic PRNG | Core Simulation | 5 | 5 | Pairwise 4 |
-| Feat 9: Fixed-Point Arithmetic & Conversion | Core Simulation | 5 | 5 | Pairwise 4 |
-| Feat 10: Tile Grid & Terrain Tile Types | Core Simulation | 5 | 5 | Pairwise 5, Scenario 2 |
-| Feat 11: Anthill Infiltration & Ownership | Core Simulation | 5 | 5 | Scenarios 1, 6 |
-| Feat 12: Directional Movement (5-to-8 Mirroring) | Core Simulation | 5 | 5 | Pairwise 6 |
-| Feat 13: Sub-Tile Micro-Stepping & Speed | Core Simulation | 5 | 5 | Pairwise 6 |
-| Feat 14: Collision Detection & Resolution | Core Simulation | 5 | 5 | Scenario 5 |
-| Feat 15: Foraging Unit Class & Lifecycle | Core Simulation | 5 | 5 | Scenarios 1, 5, 6 |
-| Feat 16: Combat Ant Class & Attack Range | Core Simulation | 5 | 5 | Scenarios 3, 6 |
-| Feat 17: Thief Ant Class & Stealth Carry | Core Simulation | 5 | 5 | Pairwise 7 |
-| Feat 18: Recruiter Ant Class & Rally Aura | Core Simulation | 5 | 5 | Pairwise 8 |
-| Feat 19: Flying / Aerial Unit Class | Core Simulation | 5 | 5 | Pairwise 5 |
-| Feat 20: Food Discovery & Sugar Gathering | Core Simulation | 5 | 5 | Scenarios 1, 6 |
-| Feat 21: Food Hauling & Deposition | Core Simulation | 5 | 5 | Scenarios 1, 6 |
-| Feat 22: Food Expiration & Depletion | Core Simulation | 5 | 5 | Pairwise 9 |
-| Feat 23: Anthill Food Bank & Stockpiles | Core Simulation | 5 | 5 | Scenarios 1, 6 |
-| Feat 24: Forager Spawning & Population Cap | Core Simulation | 5 | 5 | Scenarios 1, 5 |
-| Feat 25: Combat Unit Spawning & Allocation | Core Simulation | 5 | 5 | Scenarios 1, 3 |
-| Feat 26: Specialist Unit Spawning (Thief/Recruiter) | Core Simulation | 5 | 5 | Pairwise 7, 8 |
-| Feat 27: Combat Resolution & Melee Damage | Core Simulation | 5 | 5 | Scenarios 3, 6 |
-| Feat 28: Melee Knockback & Displacement *(model rules, superseded by 5.36)* | Core Simulation | 5 | 5 | Scenarios 3 |
-| Feat 29: Unit Elimination & Death States | Core Simulation | 5 | 5 | Scenarios 3, 6 |
-| Feat 30: Autonomous Targeting & Agro Radii | Core Simulation | 5 | 5 | Scenarios 3, 6 |
-| Feat 31: Bridge Building & Path Creation | Core Simulation | 5 | 5 | Scenario 2 |
-| Feat 32: Bridge Deterioration & Collapse | Core Simulation | 5 | 5 | Scenario 2 |
-| Feat 33: Multi-Unit Bridge Traversal | Core Simulation | 5 | 5 | Scenario 2 |
-| Feat 34: Fog of War & Vision Radii | App & HUD | 5 | 5 | Pairwise 10 |
-| Feat 35: Minimap Radar Rendering | App & HUD | 5 | 5 | Pairwise 10 |
-| Feat 36: Command Bar & Unit Selection | App & HUD | 5 | 5 | Scenario 4 |
-| Feat 37: Waypoint / Target Command Dispatch | App & HUD | 5 | 5 | Scenario 4 |
-| Feat 38: HUD Resource Counters & Score Display | App & HUD | 5 | 5 | Scenarios 1, 6 |
-| Feat 39: Status Notifications & Alerts | App & HUD | 5 | 5 | Scenario 1 |
-| Feat 40: Camera Scrolling & Edge Panning | App & HUD | 5 | 5 | Pairwise 10 |
-| Feat 41: Viewport Clamping & Letterboxing | App & HUD | 5 | 5 | Pairwise 10 |
-| Feat 42: Audio Manager & Sfx Channels | App & HUD | 5 | 5 | Pairwise 3 |
-| Feat 43: Positional Audio Attenuation | App & HUD | 5 | 5 | Pairwise 3 |
-| Feat 44: Audio Priority & Drop Rule | App & HUD | 5 | 5 | Pairwise 3 |
-| Feat 45: Match Initialization & Map Loading | App & HUD | 5 | 5 | Scenario 6 |
-| Feat 46: Win/Loss Condition Evaluation | App & HUD | 5 | 5 | Scenario 6 |
-| Feat 47: Pause / Resume Game State | App & HUD | 5 | 5 | Scenario 4 |
-| Feat 48: Match Reset & Cleanup | App & HUD | 5 | 5 | Scenario 6 |
-| Feat 49: Replay Determinism & State Hashing | App & HUD | 5 | 5 | Scenario 6 |
+The feature list of the suite, with the tests of each feature in the four tiers, is section 3 of [`TEST_INFRA.md`](TEST_INFRA.md) (Feature Inventory Coverage Mapping). Every feature has at least 5 Tier 1 tests and at least 5 Tier 2 tests; the Tier 3 and Tier 4 columns of that table name the pairwise and scenario tests that touch it.
 
 ---
 
@@ -161,7 +111,7 @@ cmake --build build_e2e
 
 - **Direct Binary Asset Compatibility Verified**:
   - `Original-Ants/ants.chd` (8,411,866 bytes, 2,794 sprites, 91 PCM sounds, 1,344 anim scripts) successfully parsed.
-  - All 6 original maps (`GARDEN.LVL`, `LAWN.LVL`, `PARK.LVL`, `PATIO.LVL`, `PICNIC.LVL`, `SANDPIT.LVL`) parsed, verifying tile dimension headers, terrain matrices, and anthill entity coordinates.
+  - All 6 original maps (`TINY.LVL`, `SMALL.LVL`, `MEDIUM.LVL`, `GAUNTLET.LVL`, `ISLANDS.LVL`, `TREASURE.LVL`) parsed, verifying tile dimension headers, terrain matrices, and anthill entity coordinates.
 - **Physics & Melee Mechanics**:
   - Combat Ant knockback behavior of the suite's model: 2 HP melee attack displaces victim 4–5 tiles along the impact vector *(model rule; the engine flings the victim 4 tiles with one `gb` step, see 5.36)*. Carried food dropped upon death is placed at the post-knockback landing tile.
   - Bridge collapse timing verified: bridges withstand exactly 3,600 simulation ticks (180 seconds) before structural failure.

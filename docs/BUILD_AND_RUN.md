@@ -36,14 +36,10 @@ cmake --build build -j8
 ```
 `./start_game.sh` builds (when needed) and launches. If the build stops with an Xcode licence error on macOS, accept the licence (`sudo xcodebuild -license`) or set `DEVELOPER_DIR=/Library/Developer/CommandLineTools` for the shell that builds.
 
-## Test Results
-All test suites are run with `./run_tests.sh` (macOS, Apple clang) and have a 100% pass rate at v0.0.46 (the counts of every suite are in the [README](../README.md#what-the-suites-cover-v0046-all-passing)):
-- **Asset decoders and movement-table parity**: 8 suites, 69,809 assertions, and 7 suites, 120,582 assertions - **PASS**
-- **Simulation**: 13 rule suites (2,252 assertions), the challenger, path planner, movement golden and hill / combat / ability / power-up / food action suites, the command layer (21 tests, 504,300 assertions), the lock-step network core (21 tests, 119,424), the room (9 tests, 49,000), TCP transport (6 tests, 60,122) and NetGame (10 tests, 441) - **PASS**
-- **Application**: `test_app_integration` 188 tests, 6,529 assertions; render parity 237 checks, HUD layout 555, status messages 255, input model 70, pointer model 329; the network application suite 5 tests, 111 assertions - **PASS**
-- **Opaque-box E2E** (`e2e_runner --all`): 4 tiers, 506 test cases - **PASS**
+## Testing
+All test suites are run with `./run_tests.sh` (macOS, Apple clang). The suites, what each one checks and their current assertion counts are listed in the README under [Testing & Verification](../README.md#testing--verification).
 
-The Windows commands above (`start_game.bat`, `run_tests.bat`) run the same suites with MSVC.
+On Windows, `run_tests.bat` runs only part of them: the asset decoder suites, the first simulation suites (`test_sim_rules`, the two challengers), `test_app_integration` and the E2E runner. The other suites are built by the same CMake project; `ctest -N` in the build folder lists all of them and `ctest -C Release --output-on-failure` runs them (this route has not been tried on Windows yet).
 
 ## Running the Game
 To launch the interactive game window:

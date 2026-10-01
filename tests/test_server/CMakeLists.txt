@@ -10,4 +10,8 @@ target_include_directories(test_server PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/../../include
 )
 
+target_compile_definitions(test_server PRIVATE
+    ORIGINAL_ASSETS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../../Original-Ants"
+)
+
 add_test(NAME test_server COMMAND test_server)

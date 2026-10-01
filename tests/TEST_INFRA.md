@@ -14,9 +14,9 @@
 ## 1. Test Philosophy: Opaque-Box & Requirement-Driven
 
 The End-to-End (E2E) testing track for the Ants remake adheres to an **opaque-box, requirement-driven testing philosophy**. Tests treat the engine, simulation, and asset decoders as closed units governed strictly by:
-1. The authoritative reverse-engineering specification (`GAME_REVERSE_ENGINEERING.md`).
-2. The user requirements and directives (`ORIGINAL_REQUEST.md`).
-3. The decoupled interface contracts and milestone definitions (`PROJECT.md`).
+1. The authoritative reverse-engineering specification (`docs/GAME_REVERSE_ENGINEERING.md`).
+2. The project requirements and directives (`README.md` and `AGENTS.md`; the original brief is no longer in the repository).
+3. The original 1998 game itself (`Original-Ants/Ants.exe`, `Original-Ants/ants.chd`, `Original-Ants/Maps/*.LVL`), against which the specification is checked.
 
 ### Core Testing Tenets
 - **Opaque-Box Verification:** Tests assert exclusively on observable inputs, outputs, states, and contractual events (e.g. decoded binary structures, simulation tick outputs, state transitions, audio trigger events, scorecard numbers). Tests never rely on implementation internals or private structures.
@@ -81,7 +81,7 @@ Simulates end-to-end game scenarios:
 
 ## 3. Feature Inventory Coverage Mapping
 
-Every feature from `PROJECT.md` is mapped across the four testing tiers:
+Every feature of the suite's feature inventory is mapped across the four testing tiers (the brief the inventory was first taken from is no longer in the repository):
 
 | # | Feature Name | M-stone | Tier 1 (Feature >=5) | Tier 2 (Boundary >=5) | Tier 3 (Pairwise) | Tier 4 (Scenario) |
 |---|--------------|---------|-----------------------|------------------------|-------------------|-------------------|
@@ -196,6 +196,7 @@ cmake --build build_e2e --parallel
 #### Standalone Clang++ One-Step Build & Run
 For environments where CMake is bypassed or for instant standalone compilation:
 ```bash
+mkdir -p build_e2e
 clang++ -std=c++17 -O2 -Itests/e2e \
     tests/e2e/e2e_main.cpp \
     tests/e2e/tier1_assets.cpp \
@@ -204,9 +205,9 @@ clang++ -std=c++17 -O2 -Itests/e2e \
     tests/e2e/tier2_boundaries.cpp \
     tests/e2e/tier3_pairwise.cpp \
     tests/e2e/tier4_scenarios.cpp \
-    -o tests/e2e/e2e_runner
+    -o build_e2e/e2e_runner
 
-./tests/e2e/e2e_runner --all
+./build_e2e/e2e_runner --all
 ```
 
 ### 5.3 Test Execution Output & Exit Codes

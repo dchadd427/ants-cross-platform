@@ -301,17 +301,6 @@ SDL_Texture* TextureCache::get_sprite_texture(uint32_t sprite_id, bool mirrored,
     return tex;
 }
 
-SDL_Texture* TextureCache::get_named_sprite_texture(const std::string& name, bool mirrored, uint8_t team_id) {
-    int32_t sid = archive_.find_sprite_id(name);
-    if (sid < 0) {
-        sid = archive_.find_sprite_id(name + ".bmp");
-    }
-    if (sid >= 0) {
-        return get_sprite_texture(static_cast<uint32_t>(sid), mirrored, team_id);
-    }
-    return nullptr;
-}
-
 // ============================================================================
 // Renderer Implementation
 // ============================================================================

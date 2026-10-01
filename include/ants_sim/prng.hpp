@@ -7,7 +7,7 @@ namespace ants::sim {
 
 /**
  * @brief Deterministic Linear Congruential Generator matching MSVC CRT rand()/srand().
- * 
+ *
  * Verified against Ants.exe disassembly at 0x10345b0 and 0x10345c0:
  *   holdrand = holdrand * 214013 + 2531011;
  *   return (holdrand >> 16) & 0x7FFF;

@@ -139,8 +139,6 @@ void MapSelectScreen::trigger_quit() {
 }
 
 void MapSelectScreen::handle_mouse_motion(int32_t screen_x, int32_t screen_y) {
-    mouse_x_ = screen_x;
-    mouse_y_ = screen_y;
     if (is_guest()) {                                                         // the guest screen has no Up / Down / START / Fog buttons: only Leave (FUN_01014228)
         for (ScreenButton* b : {&up_, &down_, &start_, &fow_on_, &fow_off_}) b->reset();
         quit_.on_move(screen_x, screen_y);

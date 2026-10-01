@@ -183,7 +183,7 @@ void challenge_suite_1_headings() {
         for (int deg = 0; deg < 360; ++deg) {
             float angle = static_cast<float>(deg);
             Direction dir = angle_to_direction(angle);
-            
+
             // Expected sector logic:
             // [337.5, 360) or [0, 22.5) -> North (0)
             // [22.5, 67.5) -> NorthEast (1)
@@ -711,7 +711,7 @@ void challenge_suite_5_level_coordinates(const std::string& map_dir) {
                 ASSERT_LT(sp.y, map.height);
                 // Dictionary index check
                 ASSERT_LT(sp.tile_id, map.tile_dictionary.size());
-                
+
                 const std::string& tname = map.get_tile_name(sp.tile_id);
                 // Valid team ID is 0..3 for base spawns, or 255 for non-team map spawns (flowers, clovers)
                 ASSERT_TRUE(sp.team_id <= 3u || sp.team_id == 255u);
@@ -831,16 +831,41 @@ void challenge_suite_6_level_fuzzing(const std::string& map_dir) {
             15000,   // Beginning of Block 1
             16000,   // Middle of Block 1
             17000,   // Block 2
-            18000,   // Block 3
-            full_size - 3, // 1 byte before f_last
-            full_size - 2, // At f_last
-            full_size - 1  // 1 byte missing from f_last
+            18000    // Block 3
         };
 
         for (size_t trunc_size : truncation_points) {
             if (trunc_size < full_size) {
                 ASSERT_FALSE(lvl.load_from_memory(full_data.data(), trunc_size));
             }
+        }
+
+        // The last bytes of TINY.LVL are block 4 (a count of 0, two bytes) and the final word (two bytes). The original reads both inside its loader's try block
+        // (0x1006510 .. 0x100655e), so a file that ends there still loads: it is read as far as it goes, and the egg stock it did not read is 0 here. (These three
+        // truncation points were once asserted to be refused: a rule of the remake that the original does not have.)
+        LevelData reference;                                           // (a failed load empties its target, so the whole file is loaded again for the comparisons)
+        ASSERT_TRUE(reference.load_from_memory(full_data.data(), full_size));
+        const size_t tail_points[] = {
+            full_size - 3, // 1 byte before f_last: half of block 4's count word
+            full_size - 2, // At f_last: block 4 is whole, the final word is missing
+            full_size - 1  // 1 byte missing from f_last
+        };
+        for (size_t trunc_size : tail_points) {
+            LevelData cut;
+            ants::assets::LevelValidation report;
+            ASSERT_TRUE(cut.load_from_memory(full_data.data(), trunc_size, &report));
+            ASSERT_TRUE(report.playable);
+            ASSERT_TRUE(report.has(ants::assets::LevelProblemKind::EggStockMissing));
+            ASSERT_EQ(cut.boundary_param, 0u);
+            ASSERT_EQ(cut.width(), reference.width());
+            ASSERT_EQ(cut.anthill_spawns.size(), reference.anthill_spawns.size());
+            ASSERT_EQ(cut.food_schedules.size(), reference.food_schedules.size());
+        }
+        // ... and the cut that leaves block 3 whole (the count word of block 4 is the first byte of the try block) is the first one that loads
+        {
+            LevelData cut;
+            ASSERT_TRUE(cut.load_from_memory(full_data.data(), full_size - 4));
+            ASSERT_FALSE(cut.load_from_memory(full_data.data(), full_size - 5));
         }
     } CHALLENGE_END();
 
@@ -871,16 +896,24 @@ void challenge_suite_6_level_fuzzing(const std::string& map_dir) {
             ASSERT_FALSE(lvl.load_from_memory(bad.data(), bad.size()));
         }
 
-        // Invalid game mode != 1
+        // A game mode other than 1 is no error: the original stores the dword (0x100639f) and never reads it again, so the loader takes any value (15 community
+        // maps carry editor garbage there). (This block once asserted that such a file is refused: a rule of the remake that the original does not have.)
         {
             auto bad = base_data;
             uint32_t bad_mode = 0;
             std::memcpy(bad.data() + 4, &bad_mode, 4);
-            ASSERT_FALSE(lvl.load_from_memory(bad.data(), bad.size()));
+            ASSERT_TRUE(lvl.load_from_memory(bad.data(), bad.size()));
+            ASSERT_EQ(lvl.game_mode, 0u);
 
             bad_mode = 2;
             std::memcpy(bad.data() + 4, &bad_mode, 4);
-            ASSERT_FALSE(lvl.load_from_memory(bad.data(), bad.size()));
+            ASSERT_TRUE(lvl.load_from_memory(bad.data(), bad.size()));
+            ASSERT_EQ(lvl.game_mode, 2u);
+
+            bad_mode = 11047;
+            std::memcpy(bad.data() + 4, &bad_mode, 4);
+            ASSERT_TRUE(lvl.load_from_memory(bad.data(), bad.size()));
+            ASSERT_EQ(lvl.width(), 31u);
         }
 
         // Zero dimensions
@@ -933,9 +966,13 @@ void challenge_suite_6_level_fuzzing(const std::string& map_dir) {
         ASSERT_EQ(c.boundary_param, eggs);
         ASSERT_EQ(c.waypoints.size(), lvl.waypoints.size());
 
-        // a file that ends before the final parameter is still refused
+        // a file that ends inside the final parameter loads (the original catches that read error inside its loader), with an egg stock of 0 that was not read;
+        // a file that ends before block 3 is whole is refused
         LevelData d;
-        ASSERT_FALSE(d.load_from_memory(base_data.data(), full_size - 1));
+        ASSERT_TRUE(d.load_from_memory(base_data.data(), full_size - 1));
+        ASSERT_EQ(d.boundary_param, 0u);
+        LevelData e;
+        ASSERT_FALSE(e.load_from_memory(base_data.data(), full_size - 5));
     } CHALLENGE_END();
 
     CHALLENGE_CASE("6.5 Corrupted dimensions memory exhaustion vulnerability test") {

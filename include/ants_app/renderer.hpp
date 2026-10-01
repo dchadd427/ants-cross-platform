@@ -201,7 +201,6 @@ public:
     TextureCache& operator=(const TextureCache&) = delete;
 
     SDL_Texture* get_sprite_texture(uint32_t sprite_id, bool mirrored = false, uint8_t team_id = TEAM_NONE);
-    SDL_Texture* get_named_sprite_texture(const std::string& name, bool mirrored = false, uint8_t team_id = TEAM_NONE);
 
     // Pure palette selection for one image under a colour mode (see TEAM_NONE / ant_colour above). Public so tests
     // can check the original's per-pixel colour rule without an SDL renderer.

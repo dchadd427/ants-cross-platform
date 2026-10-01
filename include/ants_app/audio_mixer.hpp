@@ -22,7 +22,6 @@ constexpr int32_t AUDIO_LISTENER_RADIUS = 2500;     // world pixels: the radius 
  */
 struct MixerChannel {
     bool active{false};
-    uint32_t sound_id{0};
     const ants::assets::SoundClip* clip{nullptr};
     double cursor{0.0};       // Fractional sample index in clip
     double rate_step{1.0};    // clip_rate / mixer_rate

@@ -83,17 +83,13 @@ Direction vector_to_direction(int32_t dx, int32_t dy) noexcept;
  */
 const char* direction_to_string(Direction dir) noexcept;
 
-inline std::ostream& operator<<(std::ostream& os, Direction dir) {
-    return os << direction_to_string(dir);
-}
-
 // ============================================================================
 // Horizontal Reflection Transformation Mathematics
 // ============================================================================
 
 /**
  * @brief Computes the mirrored horizontal render offset dx' for a sprite.
- * 
+ *
  * In ants.chd Table 4, a frame specifies top-left render offset dx relative to the
  * ant's tile anchor. Its native horizontal span is [dx, dx + W]. Under horizontal
  * reflection across the anchor (x -> -x), the span transforms to [-(dx + W), -dx].
@@ -129,7 +125,7 @@ constexpr inline void mirror_bounding_box(int32_t left, int32_t right,
 
 /**
  * @brief Horizontally flips an 8-bit paletted pixel buffer.
- * 
+ *
  * Pixel column x maps to (width - 1 - x). Row stride padding bytes (pitch > width)
  * are cleared to 0x00.
  *

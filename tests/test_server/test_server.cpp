@@ -526,6 +526,66 @@ void run_hardening_tests() {
     } TEST_END();
 }
 
+void run_map_tests() {
+    TEST_CASE("S3.14 A Map That Is Playable For Some Seats And Not For Others: A Start Marker Outside The Grid Fails The Room When That Seat Plays, And Does Not When It Does Not") {
+        // TINY with the green start marker (tile 154) moved to row 200, outside the 40 x 40 grid: the engine loads it, the original would crash when green plays
+        const std::string dir = temp_dir_for("badmarker");
+        {
+            std::ifstream in(maps_dir() + "/TINY.LVL", std::ios::binary);
+            std::vector<uint8_t> bytes((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+            assets::LevelData tiny;
+            ASSERT_TRUE(tiny.load_from_memory(bytes.data(), bytes.size()));
+            const assets::AnthillSpawn* green = nullptr;
+            for (const auto& sp : tiny.anthill_spawns) {
+                if (sp.tile_id == 154) green = &sp;
+            }
+            ASSERT_TRUE(green != nullptr);
+            const uint8_t pattern[6] = {154, 0, static_cast<uint8_t>(green->y & 0xFF), static_cast<uint8_t>(green->y >> 8), static_cast<uint8_t>(green->x & 0xFF), static_cast<uint8_t>(green->x >> 8)};
+            size_t at = bytes.size();
+            for (size_t i = 0; i + 6 <= bytes.size() && at == bytes.size(); ++i) {
+                if (std::equal(pattern, pattern + 6, bytes.begin() + static_cast<std::ptrdiff_t>(i))) at = i;
+            }
+            ASSERT_TRUE(at < bytes.size());
+            bytes[at + 2] = 200;                                                          // the row: outside the grid
+            bytes[at + 3] = 0;
+            std::ofstream out(fs::path(dir) / "BAD.LVL", std::ios::binary | std::ios::trunc);
+            out.write(reinterpret_cast<const char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
+        }
+        const auto run_room = [&](uint8_t first_seat, uint8_t second_seat, RoomStatus& s) {
+            net::LoopbackNetwork net{5};
+            RoomManager mgr{MapStore(dir)};
+            uint32_t now = 1000;
+            RoomSpec spec = spec_of("BAD-1", 2, "BAD.LVL");
+            ASSERT_TRUE(mgr.create_room(spec, now).ok);                                   // it loads: the room is made
+            std::vector<std::unique_ptr<Client>> clients;
+            const uint8_t seats[2] = {first_seat, second_seat};
+            for (int i = 0; i < 2; ++i) {
+                auto ends = net.connect({20, 10});
+                mgr.add_connection(std::make_unique<Borrowed>(ends.first), "127.0.0.1", now);
+                clients.push_back(std::make_unique<Client>());
+                clients.back()->name = i == 0 ? "Ann" : "Bob";
+                clients.back()->room = "BAD-1";
+                clients.back()->want_seat = seats[i];
+                clients.back()->start(ends.second, 11u + static_cast<uint32_t>(i));
+            }
+            for (int step = 0; step < 300; ++step) {                                      // 3 s
+                now += 10;
+                net.set_time(now);
+                mgr.update(now);
+                for (auto& c : clients) c->update(now, dir);
+            }
+            ASSERT_TRUE(mgr.status("BAD-1", s, now));
+        };
+        RoomStatus with_green;
+        run_room(0, 1, with_green);                                                       // green (seat 0) plays: refused, and the room says why
+        ASSERT_TRUE(with_green.state == RoomState::Failed);
+        ASSERT_TRUE(with_green.reason.find("outside") != std::string::npos && with_green.reason.find("green") != std::string::npos);
+        RoomStatus without_green;
+        run_room(1, 2, without_green);                                                    // red and blue play: the marker is never used, the match starts
+        ASSERT_TRUE(without_green.state == RoomState::Running || without_green.state == RoomState::Loading);
+    } TEST_END();
+}
+
 void run_match_tests() {
     TEST_CASE("S3.4 A Whole Match: Three Clients Join By Code, The Match Starts By Itself, The Referee Plays Along Bit-Identically To The End, The Result Is Kept") {
         World w;
@@ -761,6 +821,7 @@ int main() {
     run_manager_tests();
     run_demo_tests();
     run_hardening_tests();
+    run_map_tests();
     run_match_tests();
     run_control_tests();
     run_socket_tests();

@@ -184,7 +184,7 @@ All original maps (`TREASURE.LVL`, `GAUNTLET.LVL`, `ISLANDS.LVL`, `MEDIUM.LVL`, 
 ```c
 struct LVLHeader {
     uint32_t version;          // 8
-    uint32_t game_mode;        // 1 (Standard Food Gathering)
+    uint32_t game_mode;        // 1 in the shipped maps; stored by the original and never read, so any value loads (4.5)
     uint16_t default_minutes;  // Match duration (e.g. 12 min for Treasure, 6 min for Tiny)
     char     description[30];  // Null-terminated description (e.g. "One person's trash...")
     uint16_t tile_type_count;  // Number of tile asset references (e.g. 1334)
@@ -210,12 +210,33 @@ Each map contains two full grid layers:
 - Food item spawn points and respawn schedules.
 
 ### 4.4 What the Original's Loader Does With a File (`FUN_01006349`, read in v0.0.64 because three community maps did not load)
-The loader is a sequence of reads into the level object; nothing validates the file beyond the version. Verified by reading `0x1006349 .. 0x10069d8`, `0x1006d19`, `0x1006f0e`, `0x1007025` and `0x10068de`.
+The loader is a sequence of reads into the level object; it checks the version of the header and nothing else of its contents (*see 4.5 below, which lists the checks the loader really makes: a short file is an error at the first read that falls short, with one exception that the loader swallows*). Verified by reading `0x1006349 .. 0x10069d8`, `0x1006d19`, `0x1006f0e`, `0x1007025` and `0x10068de`.
 * **Order**: version (dword, must be 8 unless the caller's flag is set), then for versions of 7 and up the mode dword (`+0x74`) and the minutes word (`+0x6e`), for 8 and up the 30-byte description (`+0xa6`); the tile dictionary (a word `n`, then `n + 1` names of 11 bytes: the loader builds a remap table from it); **two dimension dwords**; the two layers; block 1 (word count, then `(tile, y, x)` words, the tile through the dictionary's remap table: the start markers, `0x1006c7d`, verified); block 2 (food objects, `0x1006d19`); block 3 (two words: ambient flag and tile, `0x1007025`); block 4 (waypoints, `0x1006f0e`); and the final word (`+0x6c`).
 * **The first dimension dword is the number of ROWS, the second the number of COLUMNS** (`0x10068de`: `+0xd0` = first, `+0xd2` = second; every record addresses `cells[y][x]` with `y < +0xd0` and `x < +0xd2`, `0x100660c`; the layers are read with the rows as the outer loop, `0x10069d8`). The six shipped maps are square, so this never showed; the community map `OCEAN.LVL` has 81 rows of 100 columns (its hills stand at `x` 87 and its food at `x` 91, which only fit a width of 100).
 * **Nothing after the final word is read, and the file's length is not checked.** The community map editor's template ends its maps with 206 bytes of filler after the real blocks: block 2 holds one object, block 3 a tile that maps to nothing, block 4 one "waypoint" with coordinates far outside the map (it never matches a plant, so no dropper is made) and garbage probabilities, and the final word is `0x7FFE`. Two such maps (`POPcOrN`, `Bombz Away`) have an identical 286-byte tail except for the ambient tile. The remake accepts them since v0.0.64 (it used to demand that the last byte of the file is the last byte of the final word).
 * **The final word is the egg stock of every team**: `FUN_0100dc94` copies the level's `+0x6c` into each team's `+0x4a` (the eggs CHECKGO and the hatch read). It is used as it stands: a map whose word is 0 gives 0 eggs (the remake used 10), and the community template's `0x7FFE` gives **32766 eggs per team** (the remake now does the same: `SimulationEngine::init` takes `LevelData::boundary_param` without a fallback).
 * **The start markers are independent of the hills**: the ants of a team appear on the markers that carry the team's name (`GSTART`, `RSTART`, `USTART`, `BSTART`), the team's home hill is the `*HILL` art of layer 2. `Bombz Away` puts every team's ants on another team's hill (its markers are rotated by one corner against the art), `POPcOrN` puts one ant of three different teams on every hill; both play as they read, the ants walk home across the map.
+
+### 4.5 What the Loader Accepts, What It Refuses and What It Does With a Half-Read File (Capstone-Verified; the Audit of the Community Map Library)
+
+Addresses are virtual addresses in `Original-Ants/Ants.exe`. Sources: the disassembly of `0x1006349 .. 0x1006700`, `0x100674e`, `0x10068de`, `0x10069d8`, `0x1006c7d`, `0x1006d19`, `0x1006f0e`, `0x1007025`, `0x10060bc` (the Map constructor), `0x100bebf` (the caller), the C++ exception tables of the loader (`FuncInfo` `0x10416c0`) and of its caller (`0x1041d08`), and `docs/legacy/Ants.exe.c`. This section corrects 4.4 where it says that nothing validates the file beyond the version: the loader makes exactly the checks below, no more.
+
+* **One caller, flag 0.** `FUN_01006349(file, level name, flag)` is called once, by `FUN_0100bebf` at `0x100bf85` with `flag = 0`; no data word of the executable points at it. The path of `flag != 0` (no version check, a dictionary remapped by name, `0x100674e`) is never taken by the game. With `flag = 0` the dictionary's remap table is the identity (`*remap = i`, `0x10067a5`): **a tile index of a file is the tile id of the game**. The names are looked at once, and only for ".": the loop compares every name with the string "." (`0x10067a0 .. 0x10067ab`) and stores a per-name dword (name != ".") in the 0x1500-byte buffer, which `FUN_01006349` hands to the Map's virtual function `+0xc` (`0x100707a`, the same entry in both vtables `0x1001fc8` and `0x1002508`); that function sets bit 0 of the tile-info flags word (`[tileinfo + 0xe]`) for the fixed tile-id tables at `0x1001360`, `0x1001640` and `0x1001818` (`0x10070b7`, `0x10070eb`). The remake already treats "." specially (`grid.cpp`: `l1_name != "."`). (The remake looks names up in several other places; the open note below names a case where the names and the ids disagree.)
+* **The version is the only check of the header** (`0x1006386`: `cmp [flag], 0 / jne / cmp [version], 8 / je`, otherwise `xor eax, eax`). `FUN_0100bebf` then shows the string 78 (*"The MAP you tried to play (%s) is the wrong version. Get the latest version of all of the MAP files at the Microsoft Ants Home Page."*) and goes on: it closes the file, reads the dimensions of the Map object that the constructor zeroed (`+0xd0 = +0xd2 = 0`), and builds an empty world (no hill, no ant). The remake refuses such a file (`LevelProblemKind::WrongVersion`). **The mode dword is no check**: it is read into `+0x74` (`0x100639f`, the constructor's default is 1, `0x1006174`) and no instruction reads that field again (every dword access `[reg + 0x74]` of the executable belongs to another object or is a store); the editor of the community leaves garbage there (15 of the 586 maps of the library: 0, 4631, 10017, 11047, 14110, 26132, ...). The remake loads any mode (`LevelProblemKind::ModeIgnored`, a note).
+* **Every read but two is a checked read.** `FUN_010065b1` (`0x10065b1`) calls `file->Read(buffer, n)` (vtable `+0xc`) and compares the count it returns with `n`; on a difference it loads the string `0x271e` (*"System read file error."*) and throws a `CBPException` (`0x10297b9 -> 0x1029709 -> _CxxThrowException(0x10351f0)`, `ThrowInfo 0x1044450`, whose one catchable type is the type descriptor `0x1047050`, `.?AVCBPException@@`). The two reads that are not checked are the 30 bytes of the description (`0x10063c3`) and the names of the dictionary (`0x1006781`): their return values are dropped, so a file that ends inside them goes on and fails at the next checked read (the dimensions), which is the same outcome.
+* **The loader has one `try` block, and it holds block 4 and the final word only.** The exception table (`FuncInfo 0x10416c0`, reached from the stub `0x103e784`) has one `try` over the states `0 .. 0` and one handler for `0x1047050` (`0x1006542`). State 0 is entered at `0x1006510`, right before the call of block 4 (`0x1006f0e`), and left at `0x100655e` after the read of the final word (`0x100651d`). The handler destroys the exception object and returns the address `0x1006553`, which continues at `0x1006556`, the loader's normal tail (the virtual call `+0x10` = `0x100665a`, which collects the layer-1 tile ids in use, then the loop `FUN_0100660c(0, x, 1)` that sets the solid bit of row 0, then `return 1`). **A read error in block 4 or in the final word is swallowed and the loader returns 1 with what it has; a read error anywhere before leaves the loader** (the caller `FuncInfo 0x1041d08` has no `try`). Of the nine handlers for `CBPException` in the executable, one is the loader's; the one that holds the whole game is `WinMain`'s (`FUN_010193f7`: the `try` covers the states `3 .. 4`, which hold the message loop `FUN_01031916` with its idle step, the task and network pump that starts a match; the handler `0x10195d2` does `push 1; call 0x10296c9`: `0x10296c9(arg)` runs the empty destructor `0x10296a5` (a bare `ret`) and, when `arg != 0`, calls `0x10296a6`, which shows `MessageBoxA(GetDesktopWindow(), text, "Problem!", MB_ICONHAND)` with the exception's text (string `0x271e`, "System read file error.") unless the global at `0x104b44c` is non-zero (BSS, 0 by default), and only then returns to `0x10194b2`, the end of `WinMain`): the program shows the box "Problem!" and ends. The remake refuses such a file and says where it ends (`LevelProblemKind::Truncated`).
+* **What a half-read file leaves in the Map object.** Block 4's table is sized first (`FUN_0102a10f(+0x4c, count)`: a capacity growth with `operator new`, no zero fill, `count` slots) and filled as the loop goes: a record joins the table only after all of its reads (`0x1007003`), but its cell is marked solid as soon as the row and column words are read (`FUN_0100660c(row, column, 1)`, which is bounds checked: `cmp row, +0xd0 / jae`, `cmp column, +0xd2 / jae`). So after a cut the table holds the complete records and `count - read` slots of heap memory, which the only readers of the table walk without a null check: the dropper poll (`FUN_0100fc0d` -> `FUN_01008d79`, which scans `count` slots and reads `[slot + 8]`, once for every plant) and the Map destructor (`FUN_010061e6`, which frees every slot). The egg stock (`+0x6c`, the final word, `0x100651d`) is **not set by the constructor** (`0x10060bc` stores `+0x6e`, `+0x70`, `+0x74`, the dimensions, the tables, but not `+0x6c`) and the Map object comes from `operator new` (`0x1029411`, the C run time's `malloc`: not zeroed), so when the final word is not read the egg stock of every team (`FUN_0100dc94`) is whatever the heap held. The remake keeps the complete records, adds a record without a trigger for a half record (its cell is solid, nothing drops there, exactly as in the original), uses 0 eggs, and says so (`WaypointBlockTruncated`, `EggStockMissing`, severity Warning: the map plays, the original's numbers are indeterminate).
+* **Block 2 ends at the first food object without stages** (`0x1006dc9 .. 0x1006dcf`: after the five header words, `test ax, ax / je 0x1006efd`, the function's epilogue). The objects before it stay (they are placed on layer 2 by `FUN_0100744f` and `FUN_01007352` inside the loop), nothing else of the block is read, and **the next read, block 3, takes the bytes right behind that object's stage count**, so the rest of the file is read from the wrong place (one community map announces `0x7FFE` food objects and starts with an object without stages; another announces 152 and does the same). The list (`+0x30`) is sized to `count` first like block 4's, so its tail slots are heap garbage. The remake does the same (`FoodBlockEndedEarly`, Warning). It once read the announced number of objects and refused the file when the rest was short.
+* **Nothing is checked against the grid.** Block 1's records are stored as they are (`0x1006c7d`: a word count, `count * 6` bytes, `(tile through the remap table, row, column)`), the start markers are looked up later (`FUN_0100ec18`: for every team the records whose tile id is the team's start tile, the table `0x1002468` = `{152, 153, 155, 154}` by team colour, become message 5 `(player, ant type, row, column)` (`FUN_01022873`), which the handler at `0x10228f6` turns into `FUN_0100ef18`: the ant is created at the cell centre (`FUN_0100cd00`) and registered (`FUN_0100f17f`): `row_table = [game + 0x553c]; cell = [row_table + row * 4] + column * 2`, **no comparison with `+0xd0` / `+0xd2` anywhere**). A start marker outside the grid reads a pointer from beyond the row table (the next heap block) and writes through it: an access violation or a heap overwrite, not a behaviour. Block 2's objects are written the same way (`FUN_01007352(2, row, column, tile)`: `[layer + row * 4]` unchecked), so a food object anchored outside the grid writes words of the heap beside the row's array. Block 4's cells are bounds checked, the dropper poll checks the drop tile (`cmp si, +0xd0 / cmp di, +0xd2`, `0x100fd36`), and the plants of block 1 are made as world objects at a pixel position (5.29: the dropper poll walks the world's object table), with no grid access that I found: those three are harmless outside the grid.
+* **The dimensions and the tables.** The two dimension dwords are stored as 16-bit words (`FUN_010068de`: `+0xd0 = rows`, `+0xd2 = columns`, `movzx`/`mov word`), the layers are `rows` x `columns` x 3 words (`0x10069d8`: tile word `* 2 | solid bit`, the 'flags' word contributes its bit 0 only, the third word is the cell's second word) and a grid with 0 rows or 0 columns **loads** (no layer to read) into a map without a cell. The dictionary's names fill a 0x1500-byte buffer with one dword each (`0x1006795 .. 0x10067c8`, `T + 1` dwords): **more than 1344 names overrun it** (heap). A layer cell whose tile index (not `0x7FFE`, which is skipped by `(word & 0xfffe) != 0xfffc`) is beyond the dictionary reads the remap table out of bounds (`[table + tile * 2]`, heap garbage), and `0x100665a` then indexes a 0x540-entry array **on the stack** with the tile id it got.
+
+**What the remake does (`src/ants_assets/lvl_parser.cpp`, `LevelValidation`).** The loader reads in the original's order and with its widths and refuses what the original refuses; it takes what the original takes. The same call gives a server the answer to "may I host this map?": `LVLParser::check_file(path, roster)` (or `check_memory`, or `LevelData::validate(roster)` on a loaded level) returns `playable` (a yes or no for the teams of the roster) and the list of `problems` with a severity: **Fatal** (the original refuses, aborts or has no defined behaviour: wrong version; the file ends before block 4; no cell or more than 256 rows or columns; more than 1344 dictionary names; a start marker outside the grid **of a team that plays**; the roster decides, a team that does not play never uses its markers), **Warning** (the original loads it and goes on with what it has read or with indeterminate data: block 4 or the egg stock cut, block 2 ended early, tile indexes outside the dictionary, food outside the grid), **Note** (the mode, plants and waypoints outside the grid). `Application::load_match` refuses a Fatal level for the roster of the match, so the program, the host and every guest agree; `SimulationEngine::init` is defined for any level it is given (a start marker outside the grid places no ant; before, its ant stood outside the map and its 16.16 fixed-point position overflowed `int32`). The limit of 256 rows and columns is the remake's own (the anchor of a layer-2 object is two bytes: row and column), not a check of the original.
+
+**The flower droppers have one source.** `FUN_0100fc0d` (FDTASK) walks the world's objects, takes the plants (object flag 4 and tile info bit `0x10`, `FUN_01007227`), asks block 4's table for the record at the plant's cell (`FUN_01008d79`) and drops when the record's flag word (`+0xc`) is **non-zero** and its interval (`+0x10`, seconds) has run. There is no rule for a map size or a map without droppers: such a map has none. The remake's `SimulationEngine::init` used to add the two droppers of the shipped `SMALL.LVL` and their obstacle cells to every 40 x 40 map without a dropper (the block never ran for `SMALL.LVL` itself, whose droppers come from its waypoints; it altered four community maps) and no longer does. The remake still keys a dropper on the tile *name* (`flower`, `clover`) and `flag == 1`; the original keys on the tile property bit and `flag != 0`. No map of the library has a plant with a record whose flag is neither 0 nor 1, so the two agree on all of them (open: key it on the property bit and `!= 0`).
+
+**Open, found while checking (not changed here).** The original recognises a start marker by its tile id (`0x100ec18` compares the record's tile with the team's id from `0x1002468`), the remake by the *name* of the dictionary entry. Six community maps carry damaged names at the ids 152 .. 155 (`@START`, `GST>RT`, ...: 92 records in all), so the original places those ants and the remake does not.
+
+**The library of 586 community maps, as the original reads it** (the model of the disassembly, `Original-Ants/Ants.exe` `0x1006349`): 548 maps are read to their end, 6 are refused for the version (four of them start with `MZ`: they are executables, not maps), 32 end before block 4 (a read error that leaves the loader). Of the 548: 15 hold a mode other than 1, 14 end inside block 4 or the final word (three before block 4's count word, ten inside a waypoint record, one before the final word), 2 end block 2 at a food object without stages, one has a grid of 0 x 0. The remake loaded 522 of them before this audit and loads 547 now (the 0 x 0 map is refused for the lack of a cell); six files have a start marker outside the grid (two of them are one file under two names): a match with the team of that marker is refused (a game that starts straight into its match, `--map`, checks all four teams, so it refuses the map), the other rosters are played. Of the 547, 39 carry a Warning finding (the original reads them partially or from indeterminate data), 14 a mode note. A headless sweep of the library with the sanitizers (`map_sweep`, ASan + UBSan, 2400 ticks per play) found before the change three plays with undefined behaviour (the 16.16 position of an ant placed through a marker at row 21512: `left shift of 688400 by 16 places`) and none after; the plays of 514 maps are bit-identical before and after, the only changed plays are those of the four maps that had the 40 x 40 dropper fallback and the refused rosters.
 
 ---
 
@@ -255,6 +276,8 @@ The engine internal dispatch maps each ant class to an integer ID and correspond
 ---
 
 ### 5.0.1 Power-Up Transformation Lifecycle & Animation State Machine (Disasm `0x1020d26`, `0x101b212`, `0x101ace3`)
+
+> See 5.38 (later, Capstone-verified); this block differs: there is no 11-tick transformation timer, the pick-up is the 840 ms `getpow` clip during which orders are refused.
 
 - **State 4 Dispatch (`0x1020d26`, `0x101b212`):**
   - When an ant steps onto an eligible powerup tile, the engine executes `0x1020d26`:
@@ -307,6 +330,9 @@ Every ant type in *Ants* possesses a melee attack (`*at*`), triggered either man
 - **Fire Ants:** Fire Ants attack for 1 HP in melee and lay fire barriers (`wallup04`, `firestarta.wav`) that burn out after 180 seconds (`fireburnout.wav`, `sputter`) or can be extinguished. Fire Ants are immune to fire damage.
 
 ### 5.2 Fire & Bomb Placement Tile Restrictions & Fire Interaction
+
+> See 5.36 (flights, landings, bounce) and 5.37 (placement, fire walls, bombs) (later, Capstone-verified); this block differs.
+
 - **Strict Cardinal Adjacency Rule (No Diagonal Placement):**
   - Fire Ants and Bomber Ants can **ONLY** place firewalls and bombs on tiles that are strictly **cardinally adjacent** (North, East, South, West) to the ant's current coordinate:
     - **North:** `(x, y - 1)`
@@ -361,6 +387,9 @@ Every ant type in *Ants* possesses a melee attack (`*at*`), triggered either man
       2. **Fire Ant Extinguish Action (`State 7`, `0x0102077f` -> `0x0101e97b`):** A Fire Ant (`af`) can actively target and extinguish a fire wall (friendly or enemy). Upon reaching the fire tile, the Fire Ant clears the tile (`0x7ffe`), plays the smoke sputtering animation (`sputter`, Anim 135) and sound effect `fireextinguish.wav` (`0x0101eaac`), and deallocates the 180s timer (`0x0101edfe`). No other ant class can extinguish fire.
 
 ### 5.3 Bridge & Fire Wall Expiration Lifetimes & Collapse Drowning (`0x101e8d5`, `0x101ebd3`, `0x1024d85`, `0x100f8bf`)
+
+> See 5.37 (later, Capstone-verified); this block differs (the bridge stages and the collapse timer, a 2500 ms poll).
+
 Both temporary field structures created by specialized ants have strictly reverse-engineered lifespans and unique destruction behaviors:
 
 1. **Firewall Lifetime (Exact: 180 seconds / 3 minutes):**
@@ -386,6 +415,9 @@ Both temporary field structures created by specialized ants have strictly revers
 
 
 ### 5.4 Thief Ant Infiltration & 50-Point Steal Mechanics (Disasm `0x0101d57c`)
+
+> See 5.35 (Thief raid; later, Capstone-verified); this block differs (the victim hears the `anthill` cue, sound 48, not `underattack`).
+
 - **Target Infiltration:** A Thief Ant commands an infiltration order towards an opposing team's anthill.
 - **The 33-Frame Diving & Stealing Animation (`atcr501` / Anim 1095):**
   - **Phase 1: Stealth Approach (Frames 0–18):**
@@ -447,6 +479,9 @@ Both temporary field structures created by specialized ants have strictly revers
   - **Universal Pickup:** Any friendly teammate or enemy ant can walk over the dropped lunchbox to pick it up, immediately switching to their own `h*` holding animation set and carrying it back to their own anthill for points.
 
 ### 5.6 Anthill Queuing System, Base Deposit & Full Base Healing (`0x01019900`, `0x0101e27f`, `0x0101ac8c`)
+
+> See 5.35 (later, Capstone-verified); this block differs (the deposit and the heal happen at the end of the clip; the waiting ring and the ANTHILLQ task replace the slot queue).
+
 - **Concentric Chebyshev Queue System:**
   - Ants returning to the anthill to deposit food or heal cannot all occupy the entrance simultaneously.
   - The original engine calculates queue slots using Chebyshev distance rings:
@@ -475,7 +510,7 @@ Every special ability and combat interaction in *Ants* is governed by dedicated 
     - At tick 27 (1,360ms), flame erupts (`9smoke10.bmp` + `9sf01.bmp`), triggering sound **68 (`firestartb.wav`)** and placing the persistent firewall on the grid.
     - Subitems 18–21 run at 100ms each (400ms -> ticks 27..34): Fire Ant puts away the magnifying glass and returns upright.
   - **Ability Cooldown:**
-    - Verified from `Ants.exe` VA `0x101ba24` (`push 0x7d0; call 0x101c184`): Exactly **2,000ms (40 simulation ticks / 2.0s)** cooldown before the ability can be activated again.
+    - Verified from `Ants.exe` VA `0x101ba24` (`push 0x7d0; call 0x101c184`): Exactly **2,000ms (40 simulation ticks / 2.0s)** cooldown before the ability can be activated again. *(Differs, unresolved: see 5.37, which finds no ability cooldown. The disassembly shows `push 0x7d0 ; call 0x101c184` at `0x101ba24`: it allocates a 0x38-byte task object, stores it at ant `+0x80` and schedules it with a 2000 ms delay; that this gates re-activation is not shown.)*
 - **Extinguish Fire (`afxf301`, `afxf701`, `afxf901` - 12 Subitems / 12 Frames):**
   - Fire Ant advances to the flame tile (`afxf301..304.bmp`).
   - At Subitem 4, fires sound **69 (`fireextinguish.wav`)** as the ant smothers the flame (`afxf305.bmp`).
@@ -490,7 +525,7 @@ Every special ability and combat interaction in *Ants* is governed by dedicated 
     - **Phase 3 (Subitems 10–14 / Ticks 15–23):** Plants the bomb (`2bomb.bmp` / `blackbomb`..`bluebomb`) on the ground tile (appearing at subitem 11 / tick 18) and arms the fuse.
     - **Phase 4 (Subitems 15–16 / Ticks 24–27):** Steps backwards away from the live mine and returns to upright stance.
   - **Ability Cooldown:**
-    - Verified from `Ants.exe` VA `0x101bdd1` (`push 0xbb8; call 0x101c184`): Exactly **3,000ms (60 simulation ticks / 3.0s)** cooldown before the ability can be activated again.
+    - Verified from `Ants.exe` VA `0x101bdd1` (`push 0xbb8; call 0x101c184`): Exactly **3,000ms (60 simulation ticks / 3.0s)** cooldown before the ability can be activated again. *(Differs, unresolved: see 5.37, which finds no ability cooldown; the same `call 0x101c184` with `push 0xbb8` at `0x101bdd1` schedules a 3000 ms task, and it is not shown that this gates re-activation.)*
 - **Crush / Neutralize Bomb (`abdb301`, `abdb701`, `abdb901` - 12 Subitems / 15 Frames):**
   - **Phase 1 (Subitems 0–2):** Approaches and leans forward over the active mine (`abdb301..303.bmp`).
   - **Phase 2 (Subitem 3):** Grabs and pins down the bomb casing, firing sound **73 (`bombdrop.wav`)**.
@@ -522,6 +557,9 @@ Every special ability and combat interaction in *Ants* is governed by dedicated 
   - **Emerge onto Land (`asgo*`):** Climbs out of water back onto ground terrain.
 
 #### 5. Thief Ant (`at`): Infiltration & Stealth Steal
+
+> See 5.35 (Thief raid; later, Capstone-verified); this block differs (the victim hears the `anthill` cue, sound 48, not `underattack`; the raid clip has 33 frames).
+
 - **Anthill Infiltration (`atcr501` - 1 Subitem / 1 Frame):**
   - Crawls into the enemy anthill entry tunnel.
   - **Internal / Thief Audio:** Plays crawling/stealing audio (**83 `theifwhip.wav`** and **84 `steala.wav`**).
@@ -550,7 +588,7 @@ All ant classes share a unified, symmetrical combat and ballistic physical react
 | **Attack / "Hit Back"** | `*at*` (Action 1) | `agat`, `abat`, `afat`, `acat`, `asat`, `atat` | Directional forward strike (5 directions: 2, 3, 7, 8, 9). | Sound 57 (`attack.wav`) / Sound 78 (`attack2.wav`) | Deals 1 HP damage (Worker, Thief, Bomber, Fire, Swimmer) or 2 HP damage (Combat Ant). Single attack per order. |
 | **Get Hit (Flinch)** | `*gh*` (Action 10) | `aggh`, `abgh`, `afgh`, `acgh`, `asgh`, `atgh` | Staggered flinch reaction (Subitems 0–8). | Sound 64 (`flythumpa.wav`) @ frame 0, Sound 65 (`flythumpb.wav`) @ frame 3 | Brief stagger interrupt (stun for 4 ticks). Triggered on standard 1-tile melee hit pushback. |
 | **Burn / Scorch Stagger** | `*bu*` (Table `0x1004518`) | `agbu`, `abbu`, `afbu`, `acbu`, `asbu`, `atbu` | 11 subitems with smoke explosion puff (`*bu301..303`) and ground tumble (`aggh306..311`). | Sound 64 (`flythumpa.wav`) @ subitem 0, Sound 65 (`flythumpb.wav`) @ subitem 5 | Bomb dud / burn stagger for 11 ticks; unit remains in place. |
-| **Grab Food (Harvesting Bite)** | `*gf*` (Order 5) | `aggf`, `abgf`, `afgf`, `acgf`, `asgf`, `atgf` | Ant bites, chomps and harvests food morsel into carryable item (5–6 subitems, 300–440ms). | Sound 87 (`harvest.wav`) | Food harvested into inventory; unit switches to carrying `*h*` walk animations. |
+| **Grab Food (Harvesting Bite)** | `*gf*` (Order 5) | `aggf`, `abgf`, `afgf`, `acgf`, `asgf`, `atgf` | Ant bites, chomps and harvests food morsel into carryable item (5–6 subitems, 300–440ms). | Sound 66 (`harvest.wav`) / 77 (`harvest_alt.wav`) | Food harvested into inventory; unit switches to carrying `*h*` walk animations. |
 | **Ground Bounce (Ballistic Knockback & Bounce)** | `*gb*` (Action 14/19) | `aggb`, `abgb`, `afgb`, `acgb`, `asgb`, `atgb` | Hard ground landing rebound (`1612..1619.bmp`), skids forward, rolls to a stop (12 subitems, 128 px displacement). | Sound 64 @ impact, Sound 65 @ stop, Sound 70 (`stun.wav`) | Displaced 4–5 tiles along impact vector at high velocity (Combat Ant punch) or 1-tile collision bounce. Stunned for 10–12 ticks. |
 
 #### 7. Animation Audio Trigger Architecture (`default_sp`)
@@ -590,6 +628,8 @@ In `libants-assets`, while loading `ants.chd` at initialization, the engine can 
 ---
 
 ### 5.9 Game End Sequence & Authentic Scorecard Specification (`re_screen` / Animation 25)
+
+> See 5.49 (later, Capstone-verified); this block differs (rows, the one winner / loser cue, the Leave button and the keys).
 
 When the match timer reaches `0:00` (or round end condition is met), *Ants* immediately freezes unit simulation and transitions to the authentic full-screen **Game Results Scorecard** (`re_screen`, Animation 25 in `ants.chd` Table 4).
 
@@ -711,6 +751,8 @@ Matches in *Ants* commence in a default **Free-For-All (FFA)** configuration, wh
 
 ### 5.12 Water Splashing & Ant Drowning Animation Architecture
 
+> See 5.36 (later, Capstone-verified); #1 differs: the `dsplash` effect of a swimmer or a collapsing bridge is five frames without a sound.
+
 When an ant is launched into deep water (by a Combat Ant heavy punch, bomb explosion impulse, or collapsing bridge), *Ants* triggers specialized aquatic visual effects and sound sequences in `ants.chd`:
 
 #### 1. Standalone Water Splash (`dsplash` / Animation 40)
@@ -742,6 +784,8 @@ Every non-swimmer ant class has a dedicated 22-subitem drowning and sinking deat
 ---
 
 ### 5.13 Skull & Crossbones Death Animation Suite (`death1`, `death2`, `death3`)
+
+> See 5.60 (later, Capstone-verified); this block differs (`death1` .. `death4`, Table-4 animations 102 .. 105, are clips of the ant's own sprite, not an effect beside it).
 
 When an ant perishes due to HP depletion (melee combat damage, bomb blast shockwave, or fire contact) — as opposed to water drowning — *Ants* plays an authentic animated ant skeleton / skull & crossbones effect centered at the unit's death location:
 
@@ -892,6 +936,9 @@ Score boxes are NOT filled with bright ant unit colors; instead, `Ants.exe` spec
   - Score values are rendered right-justified inside the score boxes.
 
 #### 4. Game Setup Screen Geometry & Player Status Animation (`st_screen`, `agst201`)
+
+> See 5.14, 5.34 and 5.50 (later, Capstone-verified); this block differs (fonts and positions of the setup screen, the 1650 ms portrait clip).
+
 The host/client game setup screen (`st_screen`) presents map selection and player readiness:
 - **"Pick a Map" Box Geometry (`w_map.bmp` at `x=27, y=302, w=195, h=39`):**
   - Inner Cavity Bounds: `[left=31, right=218, top=307, bottom=339]` (`height = 33px`).
@@ -934,6 +981,8 @@ In `ants.chd`, standard terrestrial ant classes have dual animation sets: normal
 ---
 
 ### 5.19 HUD Status Text Typography & High-Contrast Styling
+
+> See 5.41 (later, Capstone-verified); this block differs (the status text colour is (79, 0, 143)).
 
 - The status label `wstatus.bmp` (160×13) features a pale seafoam / mint green recessed cavity `(115, 191, 155)`.
 - To ensure optimal legibility and contrast against this pale background, status text is rendered in deep dark green-black `{16, 40, 24, 255}`, completely eliminating washed-out low-contrast text.
@@ -995,6 +1044,8 @@ Through Capstone disassembly of `Original-Ants/Ants.exe` and inspection of `Orig
 
 ### 5.21 Closest Passable Water Shoreline Fallback & Pathfinding Heuristics
 
+> See 5.32 #10 (later, Capstone-verified); this block differs: the goal is resolved by the fixed ring scan.
+
 In the authentic 1998 executable, issuing a move order for a terrestrial (non-swimmer) unit onto water or an impassable obstacle does not immediately abort with `CantGo` (Sound 63).
 - **Shoreline Edge Fallback:** A* pathfinding tracks the explored node with the minimum heuristic distance to the requested goal (`best_node`). When the target is impassable or unreachable (e.g. deep water, isolated terrain across lakes, rock barriers), the engine reconstructs the path to `best_node`. The unit marches to the water's edge / shoreline and halts cleanly.
 - **Immediate Rejection Invariant:** If the unit is already positioned at `best_node` (i.e. `final_target == start`), no closer step is possible; the engine immediately transitions to `UnitState::CantGo` and plays Sound 63.
@@ -1004,12 +1055,16 @@ In the authentic 1998 executable, issuing a move order for a terrestrial (non-sw
 
 ### 5.22 Allied Unit Walk-Over Movement & Interaction Semantics
 
+> See 5.44 (later, Capstone-verified); this block differs (attacking an ally opens a confirmation dialog first).
+
 - **Cursor Evaluation:** When friendly units are selected, hovering over an allied teammate ant displays `CursorType::Move` (`c_mov1`), distinguishing allies from enemies which display `CursorType::Attack` (`c_attack`). Hovering in explicit force-attack mode over non-enemies displays `CursorType::Normal`.
 - **Walk-Over Movement:** Left-clicking or right-clicking on an allied ant does not trigger `AntStop` or attack logic. Instead, the engine spawns a ground confirmation marker (`xmarks`) and dispatches movement to the closest accessible Chebyshev neighbor tile ($\max(|dx|, |dy|) = 1$) surrounding the ally, stopping cleanly upon arrival.
 
 ---
 
 ### 5.23 Game Setup Map Selection Box Geometry & Centering
+
+> See 5.14, 5.34 and 5.50 (later, Capstone-verified); this block differs (and it contradicts 5.16 #4 on the font size).
 
 - **Cavity Geometry:** The map name box `w_map.bmp` (195×39, rendered at $X=27, Y=302$) contains an inner black recessed cavity bounded vertically between $Y=307$ and $Y=335$ (height = 29px).
 - **Typography & Centering:** Authentic setup screen typography renders the map title with `FontSize::Large` dynamically centered within the 29px cavity:
@@ -1072,6 +1127,8 @@ The remake gives every sound a source: `AudioEvent::owner` (an ant id, or 0x4000
 
 ### 5.25 Match Timer Warnings & Countdown Sequencing (`0x1024839`)
 
+> See 5.41 (later, Capstone-verified); this block differs (the clock task starts at 61000 ms and runs every 200 ms; the cues are sounds 55, 54 and 44).
+
 The authentic match clock routine at `0x1024839` evaluates remaining match milliseconds against three sequential milestones:
 1. **1 Minute Remaining (60,000 ms):** Triggers GameSound 43 (`1min.wav` / Sound 55) and broadcasts String 49: `"1 minute left in the game."`. Sets next milestone to 31,000 ms.
 2. **30 Seconds Remaining (30,000 ms):** Triggers GameSound 42 (`30sec.wav` / Sound 54) and broadcasts String 50: `"30 seconds left in the game."`. Sets next milestone to 11,000 ms.
@@ -1080,6 +1137,8 @@ The authentic match clock routine at `0x1024839` evaluates remaining match milli
 ---
 
 ### 5.26 Defeat SFX (`losers.wav`), Drop-Out (`playerout.wav`), Emergence (`exithill.wav`) & Bumping (`bump.wav`)
+
+> See 5.32 (bumping), 5.35 (emergence) and 5.49 (the results cue) (later, Capstone-verified); this block differs.
 
 - **Match Defeat (`0x1015a37`):** When the match concludes, losing teams hear `losers.wav` (Sound 42 / GameSound 31), not `playerout.wav`. Winning teams hear `winner.wav` (Sound 56 / GameSound 44).
 - **Player Drop-Out (`0x100d072`):** When a connected player leaves or disconnects during an active game, the engine triggers `playerout.wav` (Sound 41 / GameSound 30) along with String 46: `"%s dropped out of the game!"`.
@@ -1104,7 +1163,7 @@ The authentic match clock routine at `0x1024839` evaluates remaining match milli
 
 ### 5.28 8-Connected Pathfinding, Diagonal Corner Traversability & Intermediate Food Obstacles
 
-- **8-Connected Grid (`0x1019c31`, `0x1020951`):** In `Ants.exe`, neighbor generation evaluates all 8 directions without artificial orthogonal corner-cutting blocking. Diagonal steps scale cost by $\sqrt{2} \approx 1.414$ (`fmul qword ptr [0x10049e0]`). This allows units to navigate intentional diagonal chokepoints placed by level designers (such as the 4 corner gaps accessing the central food collection on `TINY.LVL`).
+- **8-Connected Grid (`0x1019c31`, `0x1020951`):** In `Ants.exe`, neighbor generation evaluates all 8 directions without artificial orthogonal corner-cutting blocking. Diagonal steps scale cost by 1.4, not $\sqrt{2}$ (the double at `0x10049e0` is `66 66 66 66 66 66 f6 3f` = 1.4; its only reference is `fmul qword ptr [0x10049e0]` at `0x1020c24`; see 5.32 #6). This allows units to navigate intentional diagonal chokepoints placed by level designers (such as the 4 corner gaps accessing the central food collection on `TINY.LVL`).
 - **Intermediate Food Obstacle Rule (`0x101f955`):** During normal movement orders, cells containing food Layer 2 items (`[esi + 0x18] & 4`) are impassable obstacles (`jne 0x101fc16`) unless the unit order is Harvesting (`[ebx + 0xa8] == 5`) targeted directly at that item (`[ebx + 0xb0] == [esi + 0x38]`). This prevents units from trampling over food.
 - **Harvest Command Dispatcher (`0x1020818`, `0x10217f8`):** Food harvesting is only triggered when explicitly ordered (left/right click on food morsels) or when an idle unit is assigned a food task. Moving units traversing adjacent or crossing ground tiles do not cancel their move order or auto-harvest intermediate food.
 
@@ -1166,6 +1225,8 @@ The authentic match clock routine at `0x1024839` evaluates remaining match milli
 
 ### 5.30 Anthill Hatch Emergence (`*hatch`) & Enemy Ant Inspection Selection
 
+> See 5.35 (later, Capstone-verified); this block differs (an ant in the hill is neither hidden nor invulnerable).
+
 - **Anthill Emergence (`*hatch` & `exithill.wav`):**
   - Newborn ants and ants returning to the surface after healing dwelling at the base play the authentic 9-frame `*hatch` emergence animation (frames 0..8, where frame 8 is the fully emerged standing ant).
   - Emergence triggers sound 43 (`exithill.wav`) at the anthill coordinates.
@@ -1194,7 +1255,9 @@ The authentic match clock routine at `0x1024839` evaluates remaining match milli
   - Frame 0 of sequence 56 specifies `sound_id = 3`, triggering `combatnetfairy.wav` (11,025 Hz, 6,860 bytes, 622 ms duration) upon scuffle contact.
   - When the displaced ant bounces and lands on the adjacent tile, the collision bounce sound triggers `flythumpb.wav` (Sound ID 65) alongside `bump.wav` (Sound ID 47).
 
-### 5.25 Authentic Navigation Button Audio Feedback (`navbuttonclick.wav`, Sound ID 89)
+### 5.31a Authentic Navigation Button Audio Feedback (`navbuttonclick.wav`, Sound ID 89)
+
+> See 5.34 and 5.50 (later, Capstone-verified); this block differs (sound 89 is carried only by the pedestal press chains; the top bar, send-to, quit dialog, setup and results buttons click with sound 0 `buttonclick`; some buttons are silent).
 
 Reverse engineering of `Original-Ants/ants.chd` Table 4 animations and binary event loop handlers revealed the authentic UI click audio feedback system:
 - **Audio Asset Specification:**
@@ -2405,6 +2468,8 @@ To deliver authentic 1:1 gameplay inside standard web browsers with zero install
 
 ### 6.2 Authentic Fog of War, SFX Protocol, Special Abilities, Plant Stem Collision & In-Engine Audio Streaming
 
+> See 5.32 - 5.40 and 5.54 - 5.57 (later, Capstone-verified); parts of this block differ.
+
 #### 1. Authentic Fog of War System (`Ants.exe` `0x1006af4`, `0x1008607`, `0x100a11c`, Table `0x1001a78`)
 - **Map Selection Toggle (`0x100bcc9`, `0x100bfed`)**: Setup screen Fog of War setting writes `1` or `0` into `[0x104b350] + 0x4b08`, which initializes `[world + 0xc8]`.
 - **Permanent Exploration (`0x1006af4`, `0x1006be9`, `0x101a9e4`)**: Friendly units reveal tiles within an authentic **radius of 6 tiles** (`push 6; call 0x1006af4`). Bits in the bitgrid (`[world + 0xcc]`) are set to 1 and never cleared; explored terrain stays revealed permanently.
@@ -2428,8 +2493,8 @@ To deliver authentic 1:1 gameplay inside standard web browsers with zero install
 
 #### 3. Fire Ant & Bomber Ability Cooldown Timings (`Ants.exe` `0x101ba24`, `0x101bdd1`)
 - In `Ants.exe`:
-  - Fire Ant cooldown is 2000ms (40 ticks, `push 0x7d0` at `0x101ba24`).
-  - Bomber Ant cooldown is 3000ms (60 ticks, `push 0xbb8` at `0x101bdd1`).
+  - Fire Ant cooldown is 2000ms (40 ticks, `push 0x7d0` at `0x101ba24`). *(Differs, unresolved: see 5.37.)*
+  - Bomber Ant cooldown is 3000ms (60 ticks, `push 0xbb8` at `0x101bdd1`). *(Differs, unresolved: see 5.37.)*
 - Cooldown timer starts at the **moment the order is initiated** (`0x101ba1f` / `0x101bdcc`), rather than accumulating after the placement animation ends.
 
 #### 4. Minimap Radar Firewall Exclusion
@@ -2496,9 +2561,9 @@ To deliver authentic 1:1 gameplay inside standard web browsers with zero install
 - **Chaotic Domino Cascades**:
   - When an ant bounces onto a tile occupied by another ant, the collision immediately cascades into a secondary scuffle clash, displacing the resident ant and enabling multi-ant chain bounces across dense clusters.
 - **Hazard Landings**:
-  - **Water Drowning vs. Swimming**: Non-swimmer ants bouncing into open water instantly enter `UnitState::Drowning` with `hp = 0`, queuing Sound 72 `ant_drown.wav` and Sound 71 `watersplash.wav`, and playing the 22-subitem drowning sequence (`*dr301`). Swimmer ants landing in water safely transition into `UnitState::Swimming` (`in_water = true`).
+  - **Water Drowning vs. Swimming**: Non-swimmer ants bouncing into open water instantly enter `UnitState::Drowning` with `hp = 0`, queuing Sound 72 `antdrown.wav` and Sound 71 `splash.wav`, and playing the 22-subitem drowning sequence (`*dr301`). Swimmer ants landing in water safely transition into `UnitState::Swimming` (`in_water = true`).
   - **Fire Wall Contact**: Ants bouncing onto a burning tile take +1 HP fire damage and trigger fire contact audio/visual feedback.
-  - **Bomb Detonation**: Ants bouncing onto a planted bomb instantly trigger detonation (`bombex` animation, Sound 24 `bombdetonate.wav`, 2 HP explosive blast damage, and clearing the bomb tile).
+  - **Bomb Detonation**: Ants bouncing onto a planted bomb instantly trigger detonation (`bombex` animation, Sound 4 `bombexp.wav`, 2 HP explosive blast damage, and clearing the bomb tile).
 
 #### 12. Authentic Attack Audio Sequencing, Sound 57 vs. 75 Differentiation & Flinch FlyThump Events (`ants.chd` Table 4 & `Ants.exe` `0x101dc7f`, `0x101e0ad`, `0x1020756`, `0x1021532`)
 - **Sound 57 (`attack.wav`) vs. Sound 75 (`attack_alt.wav`) Differentiation**:
@@ -2522,7 +2587,7 @@ To deliver authentic 1:1 gameplay inside standard web browsers with zero install
     - `0x1020756`: `push 0x41; call 0x100def5` -> plays Sound 65 (`flythumpb.wav`) when the ant completes its push slide and lands on the destination tile.
 - **Combat Ant Punch & Bomb Knockback Stun Audio**:
   - When struck by a Combat Ant punch or caught in a Bomb blast, the victim is launched into ballistic flight:
-    - At launch: Sound 78 (`attack2.wav`) / Sound 24 (`bombdetonate.wav`) + Sound 64 (`flythumpa.wav`).
+    - At launch: Sound 78 (`attack2.wav`) / Sound 4 (`bombexp.wav`) + Sound 64 (`flythumpa.wav`).
     - At ground landing: Sound 65 (`flythumpb.wav`) + Sound 70 (`stun.wav` / `SoundID::StunRecover`), placing the victim into `UnitState::Stunned`.
 
 #### 13. Multi-Directional Attack Registration, Victim Facing Dynamics, Bounce Animation (`gh` vs. `gb`), and Re-Collision Loop Breaking (`Ants.exe` `0x101a86a`, `0x1020de7`, `0x10215cb`)
@@ -2537,7 +2602,7 @@ To deliver authentic 1:1 gameplay inside standard web browsers with zero install
   - In `ants.chd` Table 4, the three displacement and contact action prefixes decode as:
     - `*gh*` ("Get Hit"): Combat flinch reaction. Subitems 0..2 execute the 1-tile pushback slide with Sound 64 (`flythumpa.wav`) at launch, and Sound 65 (`flythumpb.wav`) at Subitem 3 (arrival).
     - `*gb*` ("Ground Bounce"): Full tumbling collision bounce sequence (`aggb*`, `abgb*`, `afgb*`, `acgb*`, `asgb*`, `atgb*`). Subitem 0 triggers Sound 64 (`flythumpa.wav`), Subitems 0..5 represent airborne tumble flight, and Subitem 6 (tick 6, ~300ms) triggers Sound 65 (`flythumpb.wav`) upon ground impact/landing.
-    - `*gf*` ("Grab Food"): Food harvesting / grabbing sequence (`aggf*`, `abgf*`, `afgf*`, `acgf*`, `asgf*`, `atgf*`), triggering Sound 66 (`grabfood.wav`) or Sound 77 (`grabfood_alt.wav`).
+    - `*gf*` ("Grab Food"): Food harvesting / grabbing sequence (`aggf*`, `abgf*`, `afgf*`, `acgf*`, `asgf*`, `atgf*`), triggering Sound 66 (`harvest.wav`) or Sound 77 (`harvest_alt.wav`).
   - Renderer authentically maps `UnitState::Bounce` to action `"gb"`, and `UnitState::Flinch` to action `"gh"`.
 - **Re-Collision Loop Breaking & Cascade Preservation**:
   - Upon collision bounce resolution, both the displaced unit and the anchor unit clear their paths (`clear_path()`), reset their attack targets (`attack_target_id = 0`), enforce a 20-tick attack cooldown, and synchronize their Combat AI guard anchors to their respective positions.
@@ -2592,12 +2657,12 @@ To deliver authentic 1:1 gameplay inside standard web browsers with zero install
   - Subitem 4: Sound 69 (`fireextinguish.wav` / `FireExtinguish`) fires and the firewall object is extinguished from the grid.
   - Subitem 12: Fire Ant returns to Idle.
 - **Thief Ant Base Infiltration (`atcr`, 33 Ticks / 3,510ms)**:
-  - Subitem 19: Sound 58 (`siren.wav` / `BaseAlarmSiren`) + Sound 84 (`steala.wav` / `ThiefDive`) fire, dispatching the in-game alarm news flash to the victim team.
+  - Subitem 19: Sound 48 (`anthill.wav`) + Sound 84 (`steala.wav` / `ThiefDive`) fire, dispatching the in-game alarm news flash to the victim team.
   - Subitem 26: Sound 85 (`stealb.wav` / `ThiefRummage`) fires as the Thief ransacks the subterranean storehouse.
   - Subitem 31: Sound 86 (`stealc.wav` / `ThiefEmerge`) fires as the Thief resurfaces with loot.
   - Subitem 33: Thief collects up to 50 food points into inventory and begins return march to home base.
 - **Worker Ant Food Harvest (`aggf`, 6 Ticks / 420ms)**:
-  - Subitem 4: Sound 77 (`foodgrab.wav` / `FoodGrab`) fires as the worker bites and lifts the food portion.
+  - Subitem 4: Sound 77 (`harvest_alt.wav`) fires as the worker bites and lifts the food portion.
 
 #### 17. Base Ramp Concurrency, Invulnerability Tasks, Water Melee Isolation & Terrain Passability (`Ants.exe` `0x101f780`, `0x101cb0c`, `0x1024ae4`, `0x10049b8`, `0x1020951`)
 - **Base Mound / Ramp Max Concurrency Limit (`0x0101f780` / `FUN_0101f780`)**:
@@ -2782,7 +2847,9 @@ To deliver authentic 1:1 gameplay inside standard web browsers with zero install
   - **Mutual Bounce Preservation**: A 2 HP ant struck into another ant drops to 1 HP, completes its full push slide in `Flinch`/`Knockback`, collides with the other ant, triggers mutual bounce into separate tiles, and plays the bounce recovery animation. The retreat command NEVER prematurely cancels the slide or bounce.
   - **Idle Transition Trigger**: In `FUN_0101ee84` line 22579 and `FUN_0101ad02` line 19478, only when `Flinch` (14 simulation ticks / 700ms) or `Bounce` finishes and the unit transitions into `Idle` (state 0) does `FUN_0102151a` -> `FUN_0101dded` evaluate `hp == 1` and pathfind the ant back to base to heal.
 
-### 5.21 Ground Truth Reverse Engineering: Bomb Detonation, Z-Ordering, Dud (`a*bu`), Landing Stun (`a*sd`), Food Duplication & Combat Locomotion
+### 6.3 Early ground-truth notes (v0.0.9 - v0.0.18, 2026-09-10 to 2026-09-13): Bomb Detonation, Z-Ordering, Dud (`a*bu`), Landing Stun (`a*sd`), Food Duplication & Combat Locomotion
+
+> Historical notes; where they differ from 5.32 - 5.40 and 5.54 - 5.57 those later, Capstone-verified sections win.
 
 #### 1. Bomb Z-Ordering & Visual Hierarchy (`Ants.exe` `0x1009d49`, `0x1008089`, `0x10088e7`, `0x10089bd`, `0x1010008`)
 - **Viewport Frame Rendering Pipeline (`FUN_01009d49`)**:
@@ -2800,201 +2867,7 @@ To deliver authentic 1:1 gameplay inside standard web browsers with zero install
   - An ant triggered by the blast is launched airborne (`altitude_z > 0`). In 2.5D top-down perspective, the airborne ant sprite is offset upward above the ground explosion plane.
   - Rendering `render_visual_effects(world)` directly **between Layer 2 structures and ant units** places `bombex` in authentic Z-order: `Layer 2 bomb tile` -> `bombex explosion cloud` -> `ant unit animation`.
 
-##### 2. Bomb Dud Scorch (`a*bu301`, Table `0x1004518`) & Landing Stun (`a*sd301`, Table `0x10045d8`)
-- **Exact Ground Truth Dud Logic (`Ants.exe` `0x101c208`, `0x102313f`, `0x101df09`, `Ants.exe.c` lines 20931–20961 & 24440–24472)**:
-  - When an ant steps onto an active bomb tile (`case 0xa`, lines 20931–20961), the engine executes an authentic PRNG roll:
-    ```c
-    uVar8 = FUN_010345c0(); // rand() (MSVC LCG: seed * 0x343fd + 0x269ec3)
-    if ((int)uVar8 % 100 < 0x14) { // Exactly 20% probability (0x14 == 20)
-        // DUD / IN-PLACE SCORCH:
-        dest_x = current_x;
-        dest_y = current_y; // 0-tile displacement, remains on bomb tile
-    } else {
-        // FULL DETONATION (80% probability):
-        FUN_0101df5d(this, &current_pos, &dest_pos, 4, 0, 0, 0); // Knockback 4 tiles away
-    }
-    ```
-  - **Bomb Damage Invariant (`FUN_01021a6f` at `0x1021ae3` & `0x1021aeb`)**:
-    - Stepping on a bomb invokes `FUN_01021a6f`. The function executes `call 0x1021627` **twice unconditionally** before the position comparison:
-      ```x86
-      0x1021ae0: push ebx
-      0x1021ae1: mov ecx, esi
-      0x1021ae3: call 0x1021627   ; Damage 1 (HP -= 1)
-      0x1021ae8: push ebx
-      0x1021ae9: mov ecx, esi
-      0x1021aeb: call 0x1021627   ; Damage 2 (HP -= 1)
-      ```
-    - Therefore, **both dud and full explosion deal exactly 2 HP damage**.
-  - **Dud Branch (20% Roll)**:
-    - Target destination equals current position (`dest == current_pos`). Flag `this[0x2d] = 1`.
-    - In `0x102313f` / `0x101df09`, flag `1` selects reaction type **4**, which transitions the unit into **Action 19 (`0x13`)**: **`a*bu` (Burn / Scorch Dud animation)**.
-    - Animation `a*bu301` (`agbu301`, `abbu301`, `afbu301`, `acbu301`, `asbu301`, `atbu301` from Table `0x1004518`) plays in place for 11 ticks (~550ms) with smoke puff sprites (`*bu301..303`), firing **Sound 64 (`flythumpa.wav`)** at subitem 0 and **Sound 65 (`flythumpb.wav`)** at subitem 5.
-    - The bomb tile on Layer 2 is cleared (`0x7ffe`).
-    - Upon finishing the 11-tick burn sequence (line 22569: `case 0x13:`), the ant recovers into the dazed stun state (`a*sd301`).
-  - **Full Detonation Branch (80% Roll)**:
-    - Target destination is 4 tiles away (`dest != current_pos`). Flag `this[0x2d] = 0`.
-    - Flag `0` selects reaction type **1**, transitioning the unit into **Action 14 (`0xe`)**: **`a*gb` (Ballistic Knockback & Airborne flight)**.
-    - Spawns `bombex` (Anim 133) with `bombexp.wav`. Ant flies 4 tiles along parabolic altitude trajectory (`altitude_z > 0`).
-    - Upon landing on the ground, the ant enters `UnitState::Stunned` and plays `a*sd301` (dazed spinning stars with Sound 70 `stun.wav`).
-
-#### 3. Multi-Ant Food Access & 1998 Duplication Exploit (`0x102151a`, `0x101fc50`, Action 3 `aggf`, Anim 356 `lunchbox`)
-- *(Superseded by 5.40: unverified and contradicted by the disassembly; the classification decides, there is no food flag and no exception for friendly ants.)* In `FUN_0102151a` and `FUN_0101fc50`, when an ant is commanded to eat food (`is_food_order`), friendly ants occupying target cells are not treated as pathfinding obstacles.
-- Multiple ants can walk onto or stand around the food node (Chebyshev distance $\le 1$) and enter Action 3 (`aggf`, 7-frame bite cycle over 8 ticks / 420ms).
-- When the 8-tick bite completes, each biting ant receives a morsel into its lunchbox. Because remaining bites are checked at the start of a bite rather than each frame, all concurrent biters receive their food morsels even if the food node's counter reaches 0 mid-bite (1998 Food Duplication Exploit).
-- Ground dropped lunchboxes (Table 4 Anim 356) award points to all concurrent ants reaching the lunchbox on the collection tick before removal.
-
-#### 4. Combat Ant AI Locomotion & Melee Punch Mechanics (`0x101ace3`, `0x1021494`, `0x1021627`)
-- The Combat Ant never teleports. In `Ants.exe`, it paths smoothly along waypoints at standard speed with `acwk`.
-- When within distance $\le 1$, it executes `acat` (Table 4 Anim IDs 901–905: `acat201`, `acat301`, `acat701`, `acat801`, `acat901` across 6 subitems: `[80, 100, 60, 80, 100, 120]ms`, total 540ms / 11 simulation ticks).
-- Subitem 2 connects with `flag = 4`, dealing 2 HP damage and launching the target with ballistic parabolic trajectory.
-- Enforces an authentic **12-tick attack cooldown** (`attack_cooldown_ticks = 12`) with zero aggro or pursuit during cooldown.
-
-#### 5. Anthill Mound Anchor Offsets & Thief Infiltration Corridor (`0x100ee03`, `Ants.exe.c` lines 9656–9690)
-- The base mound graphic uses Table 4 offsets from anchor tile `(min_x + 1, min_y + 1)`:
-  - Red (`REDHILL`, Anim 247): `dx: -32, dy: -18` (`+14px` vertical shift relative to `min_y * 32`).
-  - Green (`GRNHILL`): `dx: -32, dy: -25` (`+7px` shift).
-  - Blue (`BLUHILL`): `dx: -32, dy: -20` (`+12px` shift).
-  - Black (`BLKHILL`): `dx: -32, dy: -24` (`+8px` shift).
-- Shifting Red down 14px aligns the bottlecap thief hole squarely onto grid row 36 (`(24, 36)`).
-- Thief ant infiltration is strictly checked on the 4 right-flank tiles `X = base_min_x + 3, Y in [base_min_y, base_min_y + 3]`.
-- The column to the right `X = base_min_x + 4, Y in [base_min_y, base_min_y + 3]` comprises open land tiles where Fire Ants can place up to 3 firewalls and Bomber Ants can place landmines.
-
-#### 6. HUD Pedestal Yellow Glow Animations (`butdefl`, `butdefr`), Bomb Targeting Cursor (`c_targ1`), and Dialog Parity (`std_dialg`, `0x1026aa3`, `0x1015b65`)
-- **HUD Pedestal Animated Yellow Glow (`Ants.exe.c` lines 29201, 29206, 29571–29595)**:
-  - In the 1998 engine, the bottom action buttons on the right-hand sidebar feature contextual highlighting via animated pulsing yellow glow overlays:
-    - **Move Pedestal (Left Pedestal at `(477, 163)`)**:
-      - Trigger condition `0x5510`: Set when cursor mode is 3 (`c_mov1`, hovering over passable land) or 7 (`c_food`, hovering over food/lunchbox).
-      - Graphic: Animation 1190 (`butdefl`), cycling 4 frames using sprites 2591–2599 across a 510ms duration.
-      - Sprite pixels contain authentic yellow border glow (`RGB(211, 183, 0)` / `#D3B700`).
-    - **Special Ability Pedestal (Right Pedestal at `(538, 163)`)**:
-      - Trigger condition `0x5514`: Set when holding right-click to use a special ability, active special ability placement mode, or hovering over a bomb / ability target (`c_targ1`).
-      - Graphic: Animation 1222 (`butdefr`), cycling 4 frames using sprites 2591–2599 across a 510ms duration.
-- **Bomber Bomb Targeting Cursor Mode 4 (`c_targ1`, Anim 43)**:
-  - When hovering over any planted bomb on the map (`grid.has_bomb_at({tx, ty})`), the cursor dynamically switches to the Mode 4 target reticle (`c_targ1`, Anim 43).
-  - While a Bomber Ant is actively placing a bomb (`UnitState::PlantingBomb`, playing `absb301`), the cursor remains locked to Mode 4 target reticle across the playfield.
-  - When right-clicking with a Bomber Ant selected over valid bomb placement ground, the cursor displays the Mode 4 target reticle.
-- **Seamless Bomb Placement Timing (`absb301`, 28 Ticks / 1.4s)**:
-  - Table 4 animation `absb301` has 9 subitems: `[100, 160, 160, 200, 180, 200, 200, 100, 100]ms` totaling 1,400ms (exactly 28 simulation ticks @ 20Hz).
-  - Subitem 0–4 depicts the bomber crouching and taking the bomb out of its backpack.
-  - Subitem 5 (`absb501`) sets down the bomb in the ant's sprite.
-  - At tick 28 (when `PlantingBomb` completes and transitions to `Idle`), the map entity bomb is placed onto Layer 2, providing a seamless visual transition with zero double-bomb artifacts.
-  - Placing a bomb triggers Sound 90 (`bombpick.wav`) at tick 14 (`flag = 4`).
-- **Ability Cardinal Placement Pathing Around Intervening Units**:
-  - Special ability placement candidate tiles evaluate orthogonal neighbors ($dx = 0, |dy| = 1$ or $dy = 0, |dx| = 1$).
-  - If a neighbor tile is occupied by an ant (`has_living_ant_at`), the placement algorithm filters it out and routes the unit smoothly around the obstacle to an unblocked cardinal tile.
-- **Water Bomb Order Rejection**:
-  - Right-clicking or issuing a bomb order onto water immediately rejects the order with `SoundID::CantGo` audio feedback and ant refusal.
-- **Knockback Ballistic Orientation Parity (`Ants.exe` `0x1002b40` / `Ants.exe.c` lines 16785–16824, 24010–24070)**:
-  - In `Ants.exe`, an ant struck by a melee attack or blast wave faces toward the attacker/epicenter prior to impact.
-  - Ballistic flight does not reverse the ant's orientation 180°; the ant remains facing the blast origin throughout flight until landing and entering `a*sd301` dizzy stun.
-- **Authentic Match Start Modal & Selection Marquee**:
-  - Ready modal: Authentic composite `std_dialg` (Animation 67, 320×224) background with dark purple/charcoal text `#1F1733` (`ColorRGBA{31, 23, 51, 255}`).
-  - Unit selection drag marquee tool: Authentic bright red border `RGB(220, 0, 0)` (`ColorRGBA{220, 0, 0, 255}`).
-- **Loading & Quick Help Screen Flow**:
-  - **Loading Screen Composite & Layer Ordering**:
-    - Canvas background filled with solid orange `#DB4B13` (`RGB(219, 75, 19)` / `ColorRGBA{219, 75, 19, 255}`).
-    - Outer green window frame tiles rendered along 640×480 screen edges (`dfram*` border sprites from Anim 57).
-    - `logo.bmp` (Sprite 162) rendered at `(25, 23)`.
-    - `credits.bmp` (Sprite 161) rendered at `(32, 299)`.
-    - `strip.bmp` (Sprite 160, 478×31 orange masking plate) rendered at `(40, 315)` directly over `credits.bmp`, cleanly masking the subtitle line and leaving only "An Internet Multi Player Game." centered underneath the main title logo.
-    - Dialog clay tiles (`dclay48`, `dclay96`) are strictly excluded so neither the title logo nor credit text is occluded.
-    - Progress bar rendered inside the designated indicator slot at `x = 229, y = 448, w = 234, h = 8` with authentic dark purple/charcoal `#1F1733` (`ColorRGBA{31, 23, 51, 255}`).
-  - **Quick Help Screen & START! Navigation**:
-    - Main help plate rendered from `qh_screen` (Anim 101: `qh1.bmp` 232, `qh2.bmp` 231, and perimeter border frames).
-    - Top-right corner contains no button (empty border).
-    - Bottom-right corner renders the authentic green "START!" button from Table 4 Animation 1335 `qh_start1` at `(529, 437)`:
-      - Normal: `bstart1.bmp` (Sprite 289, 98×27) at `(529, 437)`.
-      - Hovered: `bstart2.bmp` (Sprite 290, 98×27) at `(529, 437)`.
-      - Pressed: `bstart3.bmp` (Sprite 291, 97×24) at `(528, 438)`.
-    - Clicking the START! button, or pressing Enter, Esc, C or X (docs 5.52, `FUN_010147c2`; Space does nothing), makes no sound (`qh_start3` carries sound -1) and creates the setup screen (`FUN_01014802`).
-  - **Overall Flow Sequence**: `Loading` -> `QuickHelp` -> `MapSelect` -> `Playing`.
-
-#### 7. Daisy Flower Dropper Occupancy, Standing Fire Ability Pathing, Bomb Redirection & Chain Detonations, and Shift/HUD Bomb Tile Rules (`FUN_0101df5d`, `0x1021627`, `0x1015c70`)
-- **Daisy Flower Dropper Occupancy Preservation (`SMALL.LVL`, `GAUNTLET.LVL`, `ISLANDS.LVL`)**:
-  - In `Ants.exe`, if an ant or anything on layer 2 that is not a power-up (a bomb, a fire wall, a lunchbox, food ...) is on the dropper's target tile `(drop_x, drop_y)` when a poll finds the interval elapsed, nothing is posted and the stamp stays; the next poll (3 s later) posts as soon as the tile is free (see 5.29: the poll, the stamp and the landing).
-- **Fire Ant Ability Placement Pathing Through Fire**:
-  - When standing on fire and placing a fire wall adjacent, and then placing another further away, the Fire Ant treats fire tiles as passable staging neighbors and prioritizes current tile `cand == unit->pos` (distance 0) without self-blocking or detouring north around terrain.
-- **Bomb 8-Way Knockback Redirection (`FUN_0101df5d`)**:
-  - Recoil starts at 4 tiles opposite approach vector: `(facing + 4) % 8`.
-  - Landing eligibility in `FUN_0101df5d`: power-up items, solid obstacle rocks, and anthill base tiles cannot be landed on; when blocked by any of these, the landing trajectory rotates clockwise `(dir + 1) % 8` through all 8 compass directions.
-  - Water IS an eligible landing location (swimmers swim, non-swimmers drown).
-  - Fire walls ARE valid landing locations (ant lands, takes fire damage, and ricochets/burns).
-- **Chain Bomb Detonations & Dud Rolls**:
-  - When an airborne ant lands on a bomb tile from flight, it detonates the bomb immediately.
-  - Both standard and chain bomb detonations evaluate the authentic 20% dud probability (`prng.rand() % 100 < 20`). On a dud, the ant takes 2 HP damage and plays the scorch burn animation in place (`a*bu`). On full detonation, it takes 2 HP damage and launches into another airborne flight trajectory.
-- **Bomb Placement Smoothness & 0px Alignment**:
-  - Aligned static ground bomb destination rectangle `bomb_dst` to `{ sx + 10, sy + 0, 12, 24 }` to match Table 4 `absb` (Anim 1317) release frame `sy + 0` (`dx = 10, dy = 0` relative to target tile).
-- **HUD Right-Side Bomb Tile & Hover Cursor Rules** *(corrected 2026-09-30 against `Ants.exe`, see 5.44: the first version of these notes tied the behaviour to the Shift key, which the cursor and order code never read)*:
-  - A bomber that is the only selected ant (panel 3) hovering over a bomb shows `CursorType::Target` (disarm); the click is the defuse order.
-  - **A group is a group move.** The stored panel `[54ec]` is 4 after a Shift click that adds an ant or a Shift drag that picks any ant (`0x1027950`, `0x1027769`: `SetPanelMode(4)` whatever the count), so a Shift-selected bomber, even the only one, gets `CursorType::Move` over a bomb and a plain group move, which walks onto the bomb and sets it off (`FUN_010202e7` gets flag 0x20 for every player order). This is how a group gets off the island of ISLANDS.
-  - Non-bomber hovering over a bomb shows regular `CursorType::Move`.
-  - Pedestal 2 (the ability pedestal) exists in panel 3 only: `SetPanelMode` gives slot 2 the kind 9 (hidden) in panel 4 (`0x1027f07`, `FUN_01028360(1, 1, 9, 1, 0, 1)`), so several ants, same type or not, never have it.
-
-#### 8. Fire Extinguish Timing (`afxf`), Silent Active Action Order Rejection, Zero Ability Cooldown, and Bomber Pathing Around Friendly Bombs (`Ants.exe.c:22938-23085`, `Ants.exe.c:19435`, `Ants.exe.c:10693-10694`)
-- **Silent Order Rejection in Active Action States (`Ants.exe.c:22938`, `23077-23080` / `FUN_0101ff5a`)**:
-  - `FUN_0101ff5a` inspects `param_1[0x39]` (unit state). If the unit is not in state 0 (`Idle`), state 1 (`Walking`), or state 3 (`Swimming`), it returns 0.
-  - In `Ants.exe.c:22938`, when `FUN_0101ff5a` returns 0, execution jumps to `LAB_0101fef5`, which **silently returns 0** without playing `SoundID::CantGo` or triggering a CantGo animation.
-  - While a unit is in an active action state (`PlacingFire`, `PlantingBomb`, `BuildingBridge`, `DemolishingBridge`, `ExtinguishingFire`, `DefusingBomb`, or `is_transforming()`), all incoming player orders are completely and silently ignored, allowing the action to finish uninterrupted.
-- **Zero Post-Animation Cooldown**:
-  - The animation duration itself is the sole pacing mechanism for abilities (e.g. 35 ticks for fire, 28 ticks for bomb, 16 ticks for bridge, 24/26 ticks for extinguish).
-  - The instant the placement animation completes and the unit transitions back to `Idle` (state 0), `FUN_0101ff5a` immediately accepts new orders. There is zero artificial cooldown delay blocking subsequent orders once the unit is idle.
-- **Uninterruptible `getpow` Transformation (`Ants.exe.c:23694` / `FUN_01020cdb`)**:
-  - Once the 11-tick `getpow` transformation sequence begins, the ant commits to the new unit class.
-  - The transformation cannot be aborted by player orders; any order issued while transforming is silently ignored. The ant completes the full transformation and emerges as the new unit. To prevent an ant from taking a power-up, it must be redirected *prior* to `getpow` starting.
-- **Bomber Pathing Around Intervening Friendly Bombs (`Ants.exe.c:23167-23245` / `FUN_01020128`)**:
-  - When ordering a Bomber to plant a bomb at a target tile, candidate cardinal standing spots (`cand`) strictly reject tiles that already contain a bomb (`!grid.has_bomb_at(cand)`).
-  - Pathfinding treats friendly/allied bombs as impassable obstacles, enabling the Bomber to navigate *around* intervening friendly mines to reach an open cardinal tile and plant the bomb, instead of stalling in place. Enemy bombs are not treated as pathfinding obstacles.
-- **Fire Extinguish Sequence & Sputter Anchor (`Ants.exe.c:19435` -> `FUN_0101e97b`, `10693-10694` / `FUN_010100ab`)**:
-  - In `afxf`, the Fire Ant sprays its fire extinguisher canister at tick 8, triggering `SoundID::FireExtinguish` (sound 69, `fireextinguish.wav`).
-  - The firewall remains active while being sprayed until animation completion (24 ticks for South `afxf301`, 26 ticks for North/East/West `afxf701`/`afxf901`).
-  - At animation completion (`FUN_0101ad02:19435` -> `FUN_0101e97b`), the firewall tile is removed (`0x7ffe`), and `VisualEffect{"sputter", tx * 32, ty * 32, 0, 17}` is spawned.
-  - Tile effect positions in `FUN_010100ab` are anchored at `(tx * 32, ty * 32)` (top-left). Table 4 Anim 135 `sputter` frame offsets (`dx: 3, dy: 6`, etc.) are pre-centered within the 32x32 tile. Total duration is 830ms across 10 subitems = 17 simulation ticks @ 20Hz.
-- **Bomb Dud & Knockback Zero-Stun Pipeline (`Ants.exe.c:20944-20947`, `22568-22580`)**:
-  - **In-Flight & Dud Order Invariant**: During flight (`UnitState::Knockback`) and dud burn (`UnitState::Burn`), `is_stunned()` evaluates to `true`, preventing order inputs and path updates as enforced by `Ants.exe` `FUN_0101b8cb`.
-  - **Zero Post-Flight / Post-Dud Stun**: Upon completion of dud burn (`UnitState::Burn`, 11 ticks of `a*bu` scorch), the ant transitions directly to `UnitState::Idle` (`FUN_0101ace3(this, 0)`). No artificial 50-tick stun is applied.
-  - Upon landing from bomb knockback (`DamageSource::BombBlast`), the ant lands directly into `UnitState::Idle` with `stun_ticks_remaining = 0`, playing `SOUND_FLY_THUMP_B` (sound 71) without `SOUND_STUN` (sound 66) or 50-tick stun.
-- **Chain Bomb Landing Decoupling & Secondary Knockback Pipeline (`Ants.exe.c:20941-20949`, `22568-22580`)**:
-  - In `PhysicsEngine::tick()`, flight stepping is strictly decoupled from landing resolution. Completed flights are popped from `active_flights_` *prior* to calling `resolve_landing()`.
-  - When an ant lands on a second bomb, `on_bomb_land` triggers `trigger_bomb_detonation()`. If the second bomb is a full detonation, `apply_knockback()` safely registers the secondary ballistic flight in `active_flights_` without double-erasure or iterator invalidation.
-  - The ant seamlessly continues into its second flight trajectory, lands on its final destination tile, and cleanly transitions to `Idle` (or recovers from dud scorch), preventing any mid-animation freezing or lost units.
-- **Bomber Bomb Defusal 22-Tick Subitem Pacing & Smoke Compositing (Table 4 `abdb301` / `abdb701` / `abdb901`)**:
-  - In Table 4, bomb defusal has 12 subitems spanning exactly 1,100ms (22 simulation ticks):
-    - Subitems 0..2 (Ticks 0..4): Ant approaches and reaches forward over the bomb.
-    - Subitem 3 (Ticks 5..8, 200ms duration): Ant grabs the bomb detonator, playing Sound 73 (`bombdrop.wav` / `BombDefuseGrab`) at Tick 5.
-    - Subitems 4..5 (Ticks 9..12): Ant rears up over the mine.
-    - Subitem 6 (Ticks 13..14, 100ms duration): Ant drops its body onto the mine, triggering Sound 74 (`bombmuffle.wav` / `BombBodySquash`), clearing the bomb from the grid, and compositing with `9difuse1.bmp` smoke puff.
-    - Subitems 7..8 (Ticks 15..18): Ant stays squashed on the ground as the diffuse smoke puff expands (`9difuse2.bmp`, `9difuse3.bmp`).
-    - Subitems 9..11 (Ticks 19..22): Ant rises back upright, returning to `Idle` at Tick 22 with zero cooldown.
-- **Firewall Landing & Flight Recovery Invariant (`Ants.exe.c:20950-20960`)**:
-  - When an ant lands on a firewall from knockback (`resolve_fire_contact`), `unit.altitude_z` is reset to 0 and its flight state is cleanly resolved.
-  - Fire Ants (`AntType::Fire`) take 0 fire damage and immediately transition out of `UnitState::Knockback` into `UnitState::Idle` (or `GuardIdle`) with `stun_ticks_remaining = 0`, completely preventing flight freezing.
-  - Non-fire ants take contact fire damage, ricochet away from fire according to reflection physics, and transition to `UnitState::Idle` upon completing bomb knockback or stunned state upon punch knockback.
-- **Airborne Ballistic Flight Clearance Over Ground Units (`Ants.exe.c:20947`, `21612` / `FUN_0101df5d`)**:
-  - In `Ants.exe`, bomb blast knockback creates a 4-tile displacement arc (`param_3 = 4`, spanning 5 tiles total including origin).
-  - Units in ballistic flight (`UnitState::Knockback`, `altitude_z > 0`) fly above the 2D ground collision grid. Ground-plane mutual elastic separation and same-tile occupancy resolution (Section 5.5) strictly exempt airborne units (`a1->state == Knockback || a1->altitude_z > 0`).
-  - Airborne units fly smoothly *over* intermediate ground units (friendly or enemy) without colliding, bouncing, scuffling, or interrupting flight. Ground occupancy separation only resolves on the landing tile after flight completes.
-- **Animated Fire Contact Ricochet & Bounce Pacing (`Ants.exe.c:20193` / `FUN_0101c221`, Table 4 `aggb301` / `agbu301`)**:
-  - When a non-fire ant hits fire (via knockback landing, placement, or traversal), it takes 1 contact fire damage and ricochets away along reflection vectors.
-  - Instead of instantaneous coordinate teleportation, the ant enters `UnitState::Bounce` (`action == "gb"` tumble animation) with a 6-tick push slide (`push_ticks_total = 6`) and 10-tick total recovery.
-  - Impact triggers `SoundID::FlingThumpA` (sound 64, `flythumpa.wav`), spawns a `"bump"` impact visual effect, and plays `SoundID::FlingThumpB` (sound 65, `flythumpb.wav`) upon completing the bounce landing at tick 6.
-  - State resolution upon completing bounce (tick 10):
-    - Bomb knockback ricochet: Transitions to `UnitState::Idle` (or `GuardIdle`) and accepts orders immediately.
-    - Combat punch knockback ricochet: Transitions to `UnitState::Stunned` (50 ticks) with `SoundID::StunRecover` (sound 70, `stun.wav`).
-    - Standard contact ricochet: Transitions to `UnitState::Idle`.
-
-#### 9. Anthill Mound Bounds, Team-Locked Approach Corridor, Enemy-Thief Bottlecap, Universal Random Bounces & Bomb Knockback Momentum Preservation (`Ants.exe.c:9670–9690`, `21193–21250`, `21612–21685`, `22787–22895`)
-- **Anthill 4x4 Mound Tile Layout & Access Rules**:
-  - **Enemy-Thief-Only Bottlecap `(bx + 3, by + 2)`**: Exclusively occupiable by an enemy Thief ant (`AntType::Thief && ant.team != base.team`). Solid impassable obstacle for all friendly ants and enemy non-thief ants. Stepping onto `(bx + 3, by + 2)` triggers the infiltration sequence dive (`FUN_0101fc24` / `FUN_0101ace3`).
-  - **Top Approach Corridor `(bx + 0..2, by - 1)`**: Registered at team struct offsets `0x36, 0x3a, 0x3e` (`0x100eda5–0x100ee25`). Strictly blocked from placing bombs or firewalls (`FUN_0101d822`). Team-locked (`FUN_010200ab`): only ants of the base owner's team can traverse and occupy these 3 corridor tiles.
-  - **Base Entrance Ramp `(bx + 1, by + 0)` and Hole `(bx + 1, by + 1)`**: Blocked from bombs and firewalls. Passable strictly to friendly ants entering or leaving the base hole (`UnitState::EnteringBase`, `UnitState::ExitingBase`, depositing food, healing, emergence). Normal movement treats them as solid obstacles.
-  - **Remaining 13 Mound Tiles**: Impassable solid obstacles for all units.
-- **Universal 8-Directional Random Bounces (`FUN_0101df5d` / `0x10345c0` `rand() % 8`)**:
-  - In `Ants.exe`, `FUN_0101df5d` rolls `rand() % 8` to select a candidate direction out of 8 neighbors, checking only that the destination tile is within bounds and not an impassable wall/solid obstacle (`terrain_type != TERRAIN_OBSTACLE && !is_obstacle_overlay`).
-  - **Occupiable Landing Tiles**: An ant bouncing off fire, from ant-ant collision scuffle, or cascading domino collision can land on:
-    - **Another fire tile**: Takes additional 1 fire contact damage and ricochets again.
-    - **Water**: Swimmer ant swims safely; non-swimmer begins drowning with splash sound.
-    - **Bomb**: Lands on bomb tile and triggers bomb detonation.
-##### 2. Bomb Dud Scorch (`a*bu301`, Table `0x1004518`) & Landing Stun (`a*sd301`, Table `0x10045d8`)
+#### 2. Bomb Dud Scorch (`a*bu301`, Table `0x1004518`) & Landing Stun (`a*sd301`, Table `0x10045d8`)
 - **Exact Ground Truth Dud Logic (`Ants.exe` `0x101c208`, `0x102313f`, `0x101df09`, `Ants.exe.c` lines 20931–20961 & 24440–24472)**:
   - When an ant steps onto an active bomb tile (`case 0xa`, lines 20931–20961), the engine executes an authentic PRNG roll:
     ```c
@@ -3196,7 +3069,7 @@ To deliver authentic 1:1 gameplay inside standard web browsers with zero install
 - **Fire Burn Timing (`*bu301`, 22 Ticks @ 20Hz)**:
   - Authentic Table 4 `a*bu301` timing (1,150ms @ 20Hz, 22 ticks) with smooth 6-tick push slide to destination tile, Sound 64 (`flythumpa.wav`) on tick 0, Sound 65 (`flythumpb.wav`) on tick 11, and transition to `Idle` at tick 22.
 
-#### 20. Authentic 1998 Bomb Blast Flyback, Sidebar Action Buttons, Glow Glitch Fix, Thief Bottlecap Invariants, Dud Stability, Mutual Collision Bouncing, and Base Staging Spots (`Ants.exe.c:9678–9684`, `20280–20309`, `20941–20949`, `24460`, `Table 4`)
+#### 10. Authentic 1998 Bomb Blast Flyback, Sidebar Action Buttons, Glow Glitch Fix, Thief Bottlecap Invariants, Dud Stability, Mutual Collision Bouncing, and Base Staging Spots (`Ants.exe.c:9678–9684`, `20280–20309`, `20941–20949`, `24460`, `Table 4`)
 - **100% Authentic 1998 Bomb Blast Knockback Start Position & Trajectory (`Ants.exe.c:24460` & `Original-Ants/ants.chd`)**:
   - In 1998 `Ants.exe.c:24460`, upon bomb detonation the ant's logical tile position is anchored immediately at the destination tile: `this_00[0x2c] = *(int *)puVar4;` (4 tiles away along recoil heading `(facing + 4) % 8`).
   - Table 4's 30 `*gb*` animations (`aggb*`, `abgb*`, `afgb*`, etc.) natively embed the entire flight and tumble trajectory relative to this destination tile:

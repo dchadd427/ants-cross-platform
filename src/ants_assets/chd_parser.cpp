@@ -11,7 +11,6 @@ public:
     BinaryReader(const uint8_t* data, size_t size)
         : data_(data), size_(size), pos_(0) {}
 
-    size_t pos() const noexcept { return pos_; }
     size_t remaining() const noexcept { return (pos_ < size_) ? (size_ - pos_) : 0; }
 
     bool seek(size_t pos) noexcept {

@@ -1,22 +1,9 @@
-# SDL2 configuration
-find_package(SDL2 QUIET)
-if(NOT SDL2_FOUND AND NOT DEFINED SDL2_INCLUDE_DIRS)
-    find_path(SDL2_INCLUDE_DIRS SDL.h PATH_SUFFIXES SDL2 /opt/homebrew/include/SDL2 /opt/homebrew/opt/sdl2/include/SDL2)
-    find_library(SDL2_LIBRARIES NAMES SDL2 PATHS /opt/homebrew/lib /opt/homebrew/opt/sdl2/lib)
-endif()
-
-if(NOT SDL2_INCLUDE_DIRS)
-    set(SDL2_INCLUDE_DIRS "/opt/homebrew/opt/sdl2/include/SDL2")
-    set(SDL2_LIBRARIES "-L/opt/homebrew/opt/sdl2/lib -lSDL2")
-endif()
-
 add_executable(test_app_integration
     test_app_integration.cpp
 )
 
 target_include_directories(test_app_integration PRIVATE
     ${CMAKE_SOURCE_DIR}/include
-    ${SDL2_INCLUDE_DIRS}
 )
 
 target_link_libraries(test_app_integration PRIVATE
@@ -25,7 +12,6 @@ target_link_libraries(test_app_integration PRIVATE
     ants_net
     ants_sim
     ants_assets
-    ${SDL2_LIBRARIES}
 )
 
 if(APPLE)
@@ -48,11 +34,6 @@ if(WIN32)
             COMMAND ${CMAKE_COMMAND} -E copy_if_different "${SDL2_TTF_DLL}" "$<TARGET_FILE_DIR:test_app_integration>"
         )
     endif()
-    if(EXISTS "${CMAKE_SOURCE_DIR}/Original-Ants/Maps")
-        add_custom_command(TARGET test_app_integration POST_BUILD
-            COMMAND ${CMAKE_COMMAND} -E copy_directory "${CMAKE_SOURCE_DIR}/Original-Ants/Maps" "$<TARGET_FILE_DIR:test_app_integration>/Maps"
-        )
-    endif()
 endif()
 
 target_compile_definitions(test_app_integration PRIVATE
@@ -69,7 +50,6 @@ add_executable(test_render_parity
 
 target_include_directories(test_render_parity PRIVATE
     ${CMAKE_SOURCE_DIR}/include
-    ${SDL2_INCLUDE_DIRS}
 )
 
 target_link_libraries(test_render_parity PRIVATE
@@ -78,7 +58,6 @@ target_link_libraries(test_render_parity PRIVATE
     ants_net
     ants_sim
     ants_assets
-    ${SDL2_LIBRARIES}
 )
 
 if(APPLE)
@@ -107,7 +86,6 @@ add_executable(test_hud_layout
 
 target_include_directories(test_hud_layout PRIVATE
     ${CMAKE_SOURCE_DIR}/include
-    ${SDL2_INCLUDE_DIRS}
 )
 
 target_link_libraries(test_hud_layout PRIVATE
@@ -116,7 +94,6 @@ target_link_libraries(test_hud_layout PRIVATE
     ants_net
     ants_sim
     ants_assets
-    ${SDL2_LIBRARIES}
 )
 
 if(APPLE)
@@ -145,7 +122,6 @@ add_executable(test_status_messages
 
 target_include_directories(test_status_messages PRIVATE
     ${CMAKE_SOURCE_DIR}/include
-    ${SDL2_INCLUDE_DIRS}
 )
 
 target_link_libraries(test_status_messages PRIVATE
@@ -154,7 +130,6 @@ target_link_libraries(test_status_messages PRIVATE
     ants_net
     ants_sim
     ants_assets
-    ${SDL2_LIBRARIES}
 )
 
 if(APPLE)
@@ -183,7 +158,6 @@ add_executable(test_input_model
 
 target_include_directories(test_input_model PRIVATE
     ${CMAKE_SOURCE_DIR}/include
-    ${SDL2_INCLUDE_DIRS}
 )
 
 target_link_libraries(test_input_model PRIVATE
@@ -192,7 +166,6 @@ target_link_libraries(test_input_model PRIVATE
     ants_net
     ants_sim
     ants_assets
-    ${SDL2_LIBRARIES}
 )
 
 if(APPLE)
@@ -221,7 +194,6 @@ add_executable(test_pointer_model
 
 target_include_directories(test_pointer_model PRIVATE
     ${CMAKE_SOURCE_DIR}/include
-    ${SDL2_INCLUDE_DIRS}
 )
 
 target_link_libraries(test_pointer_model PRIVATE
@@ -230,7 +202,6 @@ target_link_libraries(test_pointer_model PRIVATE
     ants_net
     ants_sim
     ants_assets
-    ${SDL2_LIBRARIES}
 )
 
 if(APPLE)
@@ -255,7 +226,6 @@ add_executable(test_options
 
 target_include_directories(test_options PRIVATE
     ${CMAKE_SOURCE_DIR}/include
-    ${SDL2_INCLUDE_DIRS}
 )
 
 target_link_libraries(test_options PRIVATE
@@ -264,7 +234,6 @@ target_link_libraries(test_options PRIVATE
     ants_net
     ants_sim
     ants_assets
-    ${SDL2_LIBRARIES}
 )
 
 if(APPLE)
@@ -288,7 +257,6 @@ add_executable(test_network_app
 
 target_include_directories(test_network_app PRIVATE
     ${CMAKE_SOURCE_DIR}/include
-    ${SDL2_INCLUDE_DIRS}
 )
 
 target_link_libraries(test_network_app PRIVATE
@@ -297,7 +265,6 @@ target_link_libraries(test_network_app PRIVATE
     ants_net
     ants_sim
     ants_assets
-    ${SDL2_LIBRARIES}
 )
 
 target_compile_definitions(test_network_app PRIVATE

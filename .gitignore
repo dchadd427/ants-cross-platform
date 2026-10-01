@@ -57,3 +57,10 @@ __pycache__/
 # A local copy of the original game's font (commercial: never commit or ship it; the renderer uses it when it finds it)
 Original-Ants/framd.ttf
 Original-Ants/Franklin Gothic Medium.ttf
+
+# Local scratch folders and the files that editors and IDEs create inside the tree
+scratch/
+.cache/
+compile_commands.json
+.vs/
+CMakeUserPresets.json

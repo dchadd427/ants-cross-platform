@@ -1,23 +1,34 @@
 cmake_minimum_required(VERSION 3.16)
-project(AntsRemake VERSION 1.0.0 LANGUAGES C CXX)
+project(AntsRemake LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 # Compiler Warnings and Platform Flags
+# ANTS_WERROR turns every warning into an error (the project rule: -Wall -Wextra -Werror -Wsign-conversion, zero warnings). It is OFF by
+# default so that a newer compiler (or the Emscripten image) never breaks a plain build; the test runners and release builds switch it on:
+#   cmake -B build -DANTS_WERROR=ON
+option(ANTS_WERROR "Treat compiler warnings as errors" OFF)
 if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|AppleClang|GNU")
     add_compile_options(
         -Wall
         -Wextra
         -Wpedantic
         -Wconversion
+        -Wsign-conversion
         -Wshadow
         -Wnon-virtual-dtor
     )
+    if(ANTS_WERROR)
+        add_compile_options(-Werror)
+    endif()
 elseif(MSVC)
     add_compile_definitions(NOMINMAX WIN32_LEAN_AND_MEAN _CRT_SECURE_NO_WARNINGS)
     add_compile_options(/W4 /permissive- /wd4127 /wd4244 /wd4100 /wd4189)
+    if(ANTS_WERROR)
+        add_compile_options(/WX)
+    endif()
 endif()
 
 # Automated SDL2 resolution for Windows (PC)
@@ -124,9 +135,3 @@ if(BUILD_TESTS AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tests")
         add_subdirectory(tests/test_app)
     endif()
 endif()
-
-# Copy default game maps to binary directory
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/Original-Ants/Maps")
-    file(COPY "${CMAKE_CURRENT_SOURCE_DIR}/Original-Ants/Maps" DESTINATION "${CMAKE_BINARY_DIR}")
-endif()
-

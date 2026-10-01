@@ -15,10 +15,6 @@ struct UIRect {
     int32_t y{0};
     int32_t w{0};
     int32_t h{0};
-
-    bool contains(int32_t px, int32_t py) const noexcept {
-        return px >= x && px < x + w && py >= y && py < y + h;
-    }
 };
 
 // The original's user-interface animations carry ABSOLUTE screen coordinates in their part offsets: the sprite object is

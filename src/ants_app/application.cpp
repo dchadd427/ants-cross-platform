@@ -265,9 +265,21 @@ bool Application::init(const ApplicationConfig& config) {
         std::cerr << "[Application] There is no map (*.lvl) in " << config_.maps_dir << std::endl;
         return false;
     }
-    if (!current_level_.load_from_file(config_.default_map_path)) {
+    ants::assets::LevelValidation start_verdict;
+    if (!current_level_.load_from_file(config_.default_map_path, &start_verdict)) {
         std::cerr << "[Application] Failed to load Level: " << config_.default_map_path << std::endl;
+        if (start_verdict.first_fatal()) std::cerr << "[Application]   " << start_verdict.reason() << std::endl;
         return false;
+    }
+    // A game that starts straight into its match (--map, no setup screen, no network) plays all four teams: the level must be playable by them, as load_match demands
+    // of every match that starts from the setup screen (a start marker outside the grid has no behaviour in the original)
+    if (!config_.start_in_map_select && config_.net_role == ApplicationConfig::NetRole::None) {
+        start_verdict = current_level_.validate(0x0F);
+        if (!start_verdict.playable) {
+            std::cerr << "[Application] The level cannot be played: " << config_.default_map_path << std::endl;
+            std::cerr << "[Application]   " << start_verdict.reason() << std::endl;
+            return false;
+        }
     }
 
     // 4. Initialize Simulation Engine. A local game that starts at once with bots plays the seats that are taken (you and the bots): a team nobody plays has no hill
@@ -609,8 +621,17 @@ bool Application::start_game(const std::string& map_path) {
 // The level, the simulation and the renderer of a match (the map file, the seed, the teams that play and the Fog of War option are the whole
 // shared state: every machine of a network match calls this with the same values).
 bool Application::load_match(const std::string& map_path, uint32_t seed, uint8_t roster, bool fog) {
-    if (!current_level_.load_from_file(map_path)) {
+    ants::assets::LevelValidation verdict;
+    if (!current_level_.load_from_file(map_path, &verdict)) {
         std::cerr << "[Application] Failed to load level: " << map_path << std::endl;
+        if (verdict.first_fatal()) std::cerr << "[Application]   " << verdict.reason() << std::endl;
+        return false;
+    }
+    // Is the map playable by the teams of this match? (a start marker of a team that plays must lie inside the grid: the original has no behaviour for one outside)
+    verdict = current_level_.validate(roster);
+    if (!verdict.playable) {
+        std::cerr << "[Application] The level cannot be played: " << map_path << std::endl;
+        std::cerr << "[Application]   " << verdict.reason() << std::endl;
         return false;
     }
     config_.default_map_path = map_path;

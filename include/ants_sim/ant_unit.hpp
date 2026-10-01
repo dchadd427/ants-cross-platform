@@ -249,13 +249,19 @@ public:
     }
 
 
+    /// A pixel coordinate as 16.16 fixed point. The multiplication is done on the unsigned value: for every coordinate that fits (|px| < 32768) the result is the
+    /// shift's, a coordinate that does not fit wraps instead of being undefined behaviour (a left shift of a negative or overflowing int).
+    static constexpr int32_t to_fixed(int32_t px) noexcept {
+        return static_cast<int32_t>(static_cast<uint32_t>(px) * 65536u);
+    }
+
     void set_tile_pos(int32_t tx, int32_t ty) noexcept {
         pos.x = tx;
         pos.y = ty;
         pixel_x = tx * 32 + 16;
         pixel_y = ty * 32 + 16;
-        fx_x = pixel_x << 16;
-        fx_y = pixel_y << 16;
+        fx_x = to_fixed(pixel_x);
+        fx_y = to_fixed(pixel_y);
     }
 
     void set_pixel_pos(int32_t px, int32_t py) noexcept {
@@ -263,8 +269,8 @@ public:
         pixel_y = py;
         pos.x = (px >= 0) ? (px / 32) : ((px - 31) / 32);
         pos.y = (py >= 0) ? (py / 32) : ((py - 31) / 32);
-        fx_x = px << 16;
-        fx_y = py << 16;
+        fx_x = to_fixed(px);
+        fx_y = to_fixed(py);
     }
 
 

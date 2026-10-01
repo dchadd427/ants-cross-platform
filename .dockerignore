@@ -14,4 +14,8 @@ Original-Ants/cnc-ddraw config.exe
 *.md
 !CHANGELOG.md
 *.sh
-.DS_Store
+**/.DS_Store
+.claude
+scratch
+Original-Ants/Shaders
+Original-Ants/chat.txt

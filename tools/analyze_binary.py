@@ -207,7 +207,7 @@ def generate_markdown(func_map, string_map):
         if sounds or srefs:
             snd_str = ", ".join([f"{SOUND_NAMES.get(s, str(s))} ({s})" for s in sounds[:4]]) if sounds else "None"
             sref_str = ", ".join([f"`{s[:25]}`" for s in srefs[:3]]) if srefs else "None"
-            
+
             # Classify subsystem
             subsys = "General"
             combined = " ".join(srefs).lower() + " " + snd_str.lower()

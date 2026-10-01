@@ -723,10 +723,607 @@ void test_suite_6b_map_layout() {
             ASSERT_EQ(b.layer1_terrain.size(), a.layer1_terrain.size());
             ASSERT_EQ(b.description, std::string("Synthetic map"));
         }
-        // a file that stops inside the final word is still a short file
+        // a file that stops inside the final word loads (the original catches the read error: its loader's try block holds block 4 and the final word); the egg
+        // stock is then the one thing it has not read, and the loader says so (the earlier assertion here, that such a file is refused, was the remake's own rule)
         const std::vector<uint8_t> whole = build_test_lvl(6, 6, 5, 0);
         LevelData c;
-        ASSERT_FALSE(c.load_from_memory(whole.data(), whole.size() - 1));
+        LevelValidation report;
+        ASSERT_TRUE(c.load_from_memory(whole.data(), whole.size() - 1, &report));
+        ASSERT_EQ(c.boundary_param, 0u);
+        ASSERT_TRUE(report.has(LevelProblemKind::EggStockMissing));
+        ASSERT_EQ(c.waypoints.size(), 1u);
+        // ... but a file that stops before block 4 is refused (the tail is block 3: 4 bytes, block 4: the count and one waypoint without trigger: 2 + 8, the final word: 2)
+        LevelData d;
+        ASSERT_FALSE(d.load_from_memory(whole.data(), whole.size() - 13, &report));
+    } TEST_END();
+}
+
+// ============================================================================
+// SUITE 6c: The Loader Takes What Ants.exe Takes And Refuses What It Refuses (FUN_01006349 at 0x1006349, docs/GAME_REVERSE_ENGINEERING.md 4.5)
+// ============================================================================
+
+// Synthetic maps are made by editing bytes of the shipped TINY.LVL and SMALL.LVL: the helpers find the parts of a file the way the loader walks it.
+namespace lvl_edit {
+
+struct Spots {
+    size_t dims{0};                    // the rows dword; the columns dword follows
+    uint32_t rows{0};
+    uint32_t columns{0};
+    size_t layer1{0};
+    size_t layer2{0};
+    size_t b1_count{0};                // block 1: a word count, then (tile, row, column) words
+    size_t b1_records{0};
+    uint16_t b1{0};
+    size_t b2_count{0};                // block 2: a word count, then per object row, column, units, points, stages (words) and `stages` pairs of words
+    uint16_t b2{0};
+    std::vector<size_t> food;          // the offset of each object
+    size_t b3{0};                      // block 3: two words
+    size_t b4_count{0};                // block 4: a word count, then per waypoint row, column (words), a flag dword and, when it is not 0, 44 more bytes
+    uint16_t b4{0};
+    std::vector<size_t> waypoints;     // the offset of each record
+    size_t final_word{0};              // the egg stock
+};
+
+uint16_t rd16(const std::vector<uint8_t>& d, size_t p) { return static_cast<uint16_t>(d[p] | (d[p + 1] << 8)); }
+uint32_t rd32(const std::vector<uint8_t>& d, size_t p) { return static_cast<uint32_t>(rd16(d, p)) | (static_cast<uint32_t>(rd16(d, p + 2)) << 16); }
+void wr16(std::vector<uint8_t>& d, size_t p, uint32_t v) { d[p] = static_cast<uint8_t>(v & 0xFF); d[p + 1] = static_cast<uint8_t>((v >> 8) & 0xFF); }
+void wr32(std::vector<uint8_t>& d, size_t p, uint32_t v) { wr16(d, p, v & 0xFFFF); wr16(d, p + 2, v >> 16); }
+void put16(std::vector<uint8_t>& d, uint32_t v) { d.push_back(static_cast<uint8_t>(v & 0xFF)); d.push_back(static_cast<uint8_t>((v >> 8) & 0xFF)); }
+void put32(std::vector<uint8_t>& d, uint32_t v) { put16(d, v & 0xFFFF); put16(d, v >> 16); }
+
+std::vector<uint8_t> read_map(const std::string& path) {
+    std::ifstream f(path, std::ios::binary | std::ios::ate);
+    if (!f.is_open()) return {};
+    const std::streamsize size = f.tellg();
+    std::vector<uint8_t> bytes(static_cast<size_t>(size));
+    f.seekg(0, std::ios::beg);
+    f.read(reinterpret_cast<char*>(bytes.data()), size);
+    return bytes;
+}
+
+bool locate(const std::vector<uint8_t>& d, Spots& s) {
+    if (d.size() < 44) return false;
+    s = Spots{};
+    size_t p = 42 + (static_cast<size_t>(rd16(d, 40)) + 1) * 11;
+    s.dims = p;
+    s.rows = rd32(d, p);
+    s.columns = rd32(d, p + 4);
+    p += 8;
+    s.layer1 = p;
+    p += static_cast<size_t>(s.rows) * s.columns * 6;
+    s.layer2 = p;
+    p += static_cast<size_t>(s.rows) * s.columns * 6;
+    s.b1_count = p;
+    s.b1 = rd16(d, p);
+    s.b1_records = p + 2;
+    p += 2 + static_cast<size_t>(s.b1) * 6;
+    s.b2_count = p;
+    s.b2 = rd16(d, p);
+    p += 2;
+    for (size_t i = 0; i < s.b2; ++i) {
+        s.food.push_back(p);
+        p += 10 + static_cast<size_t>(rd16(d, p + 8)) * 4;
+    }
+    s.b3 = p;
+    p += 4;
+    s.b4_count = p;
+    s.b4 = rd16(d, p);
+    p += 2;
+    for (size_t i = 0; i < s.b4; ++i) {
+        s.waypoints.push_back(p);
+        p += 8 + (rd32(d, p + 4) != 0 ? 44 : 0);
+    }
+    s.final_word = p;
+    return p + 2 <= d.size();
+}
+
+// The first Block 1 record of the tile id (152 BSTART, 153 USTART, 154 GSTART, 155 RSTART, 421 flower1): its offset, or 0
+size_t record_of_tile(const std::vector<uint8_t>& d, const Spots& s, uint16_t tile) {
+    for (size_t i = 0; i < s.b1; ++i) {
+        const size_t at = s.b1_records + i * 6;
+        if (rd16(d, at) == tile) return at;
+    }
+    return 0;
+}
+
+std::vector<uint8_t> prefix(const std::vector<uint8_t>& d, size_t n) { return std::vector<uint8_t>(d.begin(), d.begin() + static_cast<std::ptrdiff_t>(n)); }
+
+// A flat map from nothing: the header with a dictionary of `names` names, the two dimension dwords as given, `data_rows` x `data_columns` cells of data in each layer
+// (empty overlay), and the blocks behind the layers (no start marker, no food, no waypoint, an egg stock of 3)
+std::vector<uint8_t> flat_map(uint32_t names, uint32_t rows_dword, uint32_t columns_dword, uint32_t data_rows, uint32_t data_columns) {
+    std::vector<uint8_t> b;
+    put32(b, 8);
+    put32(b, 1);
+    put16(b, 6);
+    for (int i = 0; i < 30; ++i) b.push_back(0);
+    put16(b, names - 1);
+    for (uint32_t i = 0; i < names * 11; ++i) b.push_back(0);
+    put32(b, rows_dword);
+    put32(b, columns_dword);
+    for (uint32_t i = 0; i < data_rows * data_columns; ++i) { put16(b, 0); put16(b, 0); put16(b, 0); }              // layer 1: tile 0
+    for (uint32_t i = 0; i < data_rows * data_columns; ++i) { put16(b, 0x7FFE); put16(b, 0); put16(b, 0); }        // layer 2: empty
+    put16(b, 0);                                                                                                      // block 1
+    put16(b, 0);                                                                                                      // block 2
+    put16(b, 0);
+    put16(b, 0x7FFE);                                                                                                 // block 3
+    put16(b, 0);                                                                                                      // block 4
+    put16(b, 3);                                                                                                      // the final word
+    return b;
+}
+
+bool has_fatal(const LevelValidation& v, LevelProblemKind kind) {
+    for (const LevelProblem& p : v.problems) {
+        if (p.kind == kind && p.severity == LevelProblemSeverity::Fatal) return true;
+    }
+    return false;
+}
+
+bool mentions(const LevelValidation& v, const char* text) { return v.reason().find(text) != std::string::npos; }
+
+bool is_empty_level(const LevelData& m) {
+    return m.width() == 0u && m.height() == 0u && m.layer1_terrain.empty() && m.layer2_interactive.empty() && m.anthill_spawns.empty() && m.food_schedules.empty() &&
+           m.waypoints.empty() && m.load_notes.empty();
+}
+
+}  // namespace lvl_edit
+
+void test_suite_6c_loader_parity(const std::string& map_dir) {
+    TEST_SUITE("Suite 6c: The Loader Takes What Ants.exe Takes And Refuses What It Refuses (FUN_01006349, Synthetic Maps Made By Byte Edits Of TINY.LVL And SMALL.LVL)");
+    using namespace lvl_edit;
+
+    const std::vector<uint8_t> tiny = read_map(map_dir + "/TINY.LVL");
+    const std::vector<uint8_t> small = read_map(map_dir + "/SMALL.LVL");
+    Spots t;
+    Spots s;
+    const bool located = locate(tiny, t) && locate(small, s);
+
+    TEST_CASE("6c.0 The Parts Of The Shipped Maps Are Found Where The Loader Walks (TINY: 31 x 31, 12 start markers, 14 food objects, no waypoint; SMALL: 40 x 40, 2 waypoints)") {
+        ASSERT_TRUE(located);
+        ASSERT_EQ(t.rows, 31u);
+        ASSERT_EQ(t.columns, 31u);
+        ASSERT_EQ(t.b1, 12u);
+        ASSERT_EQ(t.b2, 14u);
+        ASSERT_EQ(t.b4, 0u);
+        ASSERT_EQ(t.final_word + 2, tiny.size());
+        ASSERT_EQ(s.rows, 40u);
+        ASSERT_EQ(s.b4, 2u);
+        ASSERT_EQ(s.waypoints.size(), 2u);
+        ASSERT_EQ(s.final_word + 2, small.size());
+        ASSERT_NE(record_of_tile(tiny, t, 154), 0u);                      // GSTART
+        ASSERT_NE(record_of_tile(small, s, 421), 0u);                     // flower1
+    } TEST_END();
+    if (!located) return;
+
+    TEST_CASE("6c.1 The Mode Dword Is Stored And Never Read (0x100639f): Version 8 With Any Mode Loads, The Editor's Garbage Included") {
+        for (uint32_t mode : {0u, 2u, 11047u, 17703u, 26132u, 0xFFFFFFFFu}) {
+            std::vector<uint8_t> d = tiny;
+            wr32(d, 4, mode);
+            LevelData m;
+            LevelValidation v;
+            ASSERT_TRUE(m.load_from_memory(d.data(), d.size(), &v));
+            ASSERT_EQ(m.game_mode, mode);
+            ASSERT_TRUE(v.parsed);
+            ASSERT_TRUE(v.playable);
+            ASSERT_TRUE(v.clean());                                       // a note, no warning
+            ASSERT_TRUE(v.has(LevelProblemKind::ModeIgnored));
+            ASSERT_EQ(m.width(), 31u);                                    // everything else is read as ever
+            ASSERT_EQ(m.anthill_spawns.size(), 12u);
+            ASSERT_EQ(m.food_schedules.size(), 14u);
+            ASSERT_EQ(m.boundary_param, 3u);
+            LevelValidation answer = LVLParser::check_memory(d.data(), d.size(), 0x0F);
+            ASSERT_TRUE(answer.playable);
+        }
+        LevelData plain;
+        LevelValidation none;
+        ASSERT_TRUE(plain.load_from_memory(tiny.data(), tiny.size(), &none));
+        ASSERT_TRUE(none.problems.empty());                               // mode 1: nothing to say
+    } TEST_END();
+
+    TEST_CASE("6c.2 Only Version 8 Loads (0x1006386: The Original Shows 'The MAP You Tried To Play Is The Wrong Version' And Goes On Without A Map)") {
+        for (uint32_t version : {0u, 1u, 6u, 7u, 9u, 66012u, 0xFFFFFFFFu}) {
+            std::vector<uint8_t> d = tiny;
+            wr32(d, 0, version);
+            LevelData m;
+            LevelValidation v;
+            ASSERT_FALSE(m.load_from_memory(d.data(), d.size(), &v));
+            ASSERT_FALSE(v.parsed);
+            ASSERT_FALSE(v.playable);
+            ASSERT_TRUE(has_fatal(v, LevelProblemKind::WrongVersion));
+            ASSERT_TRUE(mentions(v, "wrong version"));
+            ASSERT_TRUE(is_empty_level(m));                               // nothing of the file is left behind
+        }
+        // the version is the first thing read: it decides before the size does
+        std::vector<uint8_t> ten = prefix(tiny, 10);
+        wr32(ten, 0, 7);
+        LevelData m;
+        LevelValidation v;
+        ASSERT_FALSE(m.load_from_memory(ten.data(), ten.size(), &v));
+        ASSERT_TRUE(has_fatal(v, LevelProblemKind::WrongVersion));
+        std::vector<uint8_t> three = prefix(tiny, 3);
+        ASSERT_FALSE(m.load_from_memory(three.data(), three.size(), &v));
+        ASSERT_TRUE(has_fatal(v, LevelProblemKind::Truncated));           // not even a version to judge
+    } TEST_END();
+
+    TEST_CASE("6c.3 A File That Ends Before Block 4 Is Refused Where It Ends (Every Read Outside The Loader's One Try Block Throws 'System Read File Error.')") {
+        struct Cut { size_t at; const char* where; };
+        const Cut cuts[] = {
+            {3, "header"}, {41, "header"},
+            {42 + 100, "tile dictionary"}, {t.dims - 1, "tile dictionary"},
+            {t.dims + 3, "grid size"}, {t.dims + 6, "grid size"},
+            {t.layer1 + 100, "layers"}, {t.layer2, "layers"}, {t.layer2 + 5000, "layers"}, {t.b1_count - 1, "layers"},
+            {t.b1_count, "block 1"}, {t.b1_count + 1, "block 1"}, {t.b1_records + 7, "block 1"}, {t.b2_count - 1, "block 1"},
+            {t.b2_count, "block 2"}, {t.b2_count + 1, "block 2"}, {t.food[0] + 5, "block 2"}, {t.food[0] + 10 + 1, "block 2"}, {t.food[5] + 12, "block 2"},
+            {t.b3 - 1, "block 2"},
+            {t.b3, "block 3"}, {t.b3 + 1, "block 3"}, {t.b3 + 2, "block 3"}, {t.b3 + 3, "block 3"},
+        };
+        for (const Cut& c : cuts) {
+            std::vector<uint8_t> d = prefix(tiny, c.at);
+            LevelData m;
+            LevelValidation v;
+            ASSERT_FALSE(m.load_from_memory(d.data(), d.size(), &v));
+            ASSERT_FALSE(v.playable);
+            ASSERT_TRUE(has_fatal(v, LevelProblemKind::Truncated));
+            ASSERT_TRUE(mentions(v, c.where));
+            ASSERT_TRUE(is_empty_level(m));
+            ASSERT_FALSE(LVLParser::check_memory(d.data(), d.size(), 0x0F).playable);
+        }
+        // the first cut that loads is the one that leaves blocks 1 to 3 whole (block 4's count word is the first byte in the loader's try block)
+        std::vector<uint8_t> whole_blocks = prefix(tiny, t.b4_count);
+        LevelData m;
+        ASSERT_TRUE(m.load_from_memory(whole_blocks.data(), whole_blocks.size()));
+    } TEST_END();
+
+    TEST_CASE("6c.4 A File That Ends Inside Block 4 Or The Final Word Loads With What Was Read (0x1006510 .. 0x100655e: The Loader Catches The Read Error And Returns 1)") {
+        LevelData whole;
+        LevelValidation whole_report;
+        ASSERT_TRUE(whole.load_from_memory(small.data(), small.size(), &whole_report));
+        ASSERT_TRUE(whole_report.clean());
+        ASSERT_EQ(whole.waypoints.size(), 2u);
+        ASSERT_EQ(whole.boundary_param, 2u);
+        const size_t w0 = s.waypoints[0];
+        const size_t w1 = s.waypoints[1];
+
+        struct Cut { size_t at; size_t waypoints; bool half; };
+        const Cut cuts[] = {
+            {s.b4_count, 0, false},                     // the count word is missing
+            {s.b4_count + 1, 0, false},                 // half of it
+            {s.b4_count + 2, 0, false},                 // the count, no record
+            {w0 + 2, 0, false},                         // a row, no column
+            {w0 + 4, 1, true},                          // the cell of a record, no flag: its cell is marked solid, the record is dropped
+            {w0 + 8, 1, true},                          // the flag, no interval
+            {w0 + 8 + 4 + 39, 1, true},                 // the interval and 39 bytes of the five doubles
+            {w1, 1, false},                             // the first record complete, the second absent
+            {w1 + 6, 2, true},                          // the second record cut inside its flag dword (its cell is whole)
+        };
+        for (const Cut& c : cuts) {
+            std::vector<uint8_t> d = prefix(small, c.at);
+            LevelData m;
+            LevelValidation v;
+            ASSERT_TRUE(m.load_from_memory(d.data(), d.size(), &v));
+            ASSERT_TRUE(v.parsed);
+            ASSERT_TRUE(v.playable);                                      // the original plays it, and so does the remake (with defined values)
+            ASSERT_FALSE(v.clean());
+            ASSERT_TRUE(v.has(LevelProblemKind::WaypointBlockTruncated));
+            ASSERT_TRUE(v.has(LevelProblemKind::EggStockMissing));
+            ASSERT_EQ(m.waypoints.size(), c.waypoints);
+            ASSERT_EQ(m.boundary_param, 0u);                              // the egg stock is uninitialised memory in the original: the remake uses 0
+            ASSERT_EQ(m.width(), 40u);                                    // everything before block 4 is whole
+            ASSERT_EQ(m.food_schedules.size(), 5u);
+            ASSERT_EQ(m.anthill_spawns.size(), 18u);
+            if (c.waypoints >= 1 && !(c.half && c.waypoints == 1)) {      // a complete first record is the file's record
+                ASSERT_EQ(m.waypoints[0].x, whole.waypoints[0].x);
+                ASSERT_EQ(m.waypoints[0].y, whole.waypoints[0].y);
+                ASSERT_EQ(m.waypoints[0].flag, whole.waypoints[0].flag);
+                ASSERT_EQ(m.waypoints[0].param, whole.waypoints[0].param);
+                ASSERT_TRUE(m.waypoints[0].probabilities == whole.waypoints[0].probabilities);
+            }
+            if (c.half) {                                                 // the half record: the cell, no trigger (so no dropper), as the original's table never holds it
+                const Waypoint& h = m.waypoints.back();
+                const Waypoint& real = whole.waypoints[c.waypoints - 1];
+                ASSERT_EQ(h.x, real.x);
+                ASSERT_EQ(h.y, real.y);
+                ASSERT_EQ(h.flag, 0u);
+            }
+        }
+        // all records, no (or half a) final word: only the egg stock is missing
+        for (size_t at : {s.final_word, s.final_word + 1}) {
+            std::vector<uint8_t> d = prefix(small, at);
+            LevelData m;
+            LevelValidation v;
+            ASSERT_TRUE(m.load_from_memory(d.data(), d.size(), &v));
+            ASSERT_TRUE(v.playable);
+            ASSERT_TRUE(v.has(LevelProblemKind::EggStockMissing));
+            ASSERT_FALSE(v.has(LevelProblemKind::WaypointBlockTruncated));
+            ASSERT_EQ(m.waypoints.size(), 2u);
+            ASSERT_EQ(m.boundary_param, 0u);
+            ASSERT_TRUE(m.waypoints[1].probabilities == whole.waypoints[1].probabilities);
+        }
+        // TINY has no waypoint: its count word is the last but two bytes
+        for (size_t at : {t.b4_count + 1, t.final_word, t.final_word + 1}) {
+            std::vector<uint8_t> d = prefix(tiny, at);
+            LevelData m;
+            ASSERT_TRUE(m.load_from_memory(d.data(), d.size()));
+            ASSERT_EQ(m.boundary_param, 0u);
+            ASSERT_EQ(m.waypoints.size(), 0u);
+        }
+        // and the whole file with filler behind it is as clean as ever
+        std::vector<uint8_t> more = small;
+        more.insert(more.end(), 206, 0x55);
+        LevelValidation again;
+        LevelData m;
+        ASSERT_TRUE(m.load_from_memory(more.data(), more.size(), &again));
+        ASSERT_TRUE(again.clean());
+        ASSERT_EQ(m.boundary_param, 2u);
+    } TEST_END();
+
+    TEST_CASE("6c.5 A Food Object Without Stages Ends Block 2 On The Spot (0x1006dcf); Blocks 3, 4 And The Final Word Are Read From The Bytes Behind Its Stage Count") {
+        // two good objects of TINY, a third without stages, then bytes that are valid blocks 3 and 4 and a final word, then filler
+        std::vector<uint8_t> d = prefix(tiny, t.b2_count);
+        put16(d, 9);                                                       // announces nine objects
+        d.insert(d.end(), tiny.begin() + static_cast<std::ptrdiff_t>(t.food[0]), tiny.begin() + static_cast<std::ptrdiff_t>(t.food[2]));
+        put16(d, 4); put16(d, 5); put16(d, 6); put16(d, 7); put16(d, 0);   // the object without stages
+        put16(d, 7); put16(d, 0x7FFE);                                     // block 3 (as read from there)
+        put16(d, 1); put16(d, 2); put16(d, 3); put32(d, 0);                // block 4: one waypoint at row 2, column 3, no trigger
+        put16(d, 33);                                                      // the final word
+        for (int i = 0; i < 10; ++i) d.push_back(0x99);
+        LevelData m;
+        LevelValidation v;
+        ASSERT_TRUE(m.load_from_memory(d.data(), d.size(), &v));
+        ASSERT_TRUE(v.playable);
+        ASSERT_TRUE(v.has(LevelProblemKind::FoodBlockEndedEarly));
+        ASSERT_FALSE(v.has(LevelProblemKind::WaypointBlockTruncated));
+        ASSERT_FALSE(v.has(LevelProblemKind::EggStockMissing));
+        ASSERT_FALSE(v.clean());
+        ASSERT_EQ(m.food_schedules.size(), 2u);                            // the two before it stay; it does not
+        ASSERT_EQ(m.food_schedules[0].y, 14u);                             // TINY's first two objects (rows 14 and 16)
+        ASSERT_EQ(m.food_schedules[1].y, 16u);
+        ASSERT_EQ(m.ambient_flag, 7u);
+        ASSERT_EQ(m.ambient_tile_or_sound, 0x7FFEu);
+        ASSERT_EQ(m.waypoints.size(), 1u);
+        ASSERT_EQ(m.waypoints[0].y, 2u);
+        ASSERT_EQ(m.waypoints[0].x, 3u);
+        ASSERT_EQ(m.boundary_param, 33u);
+        ASSERT_EQ(m.anthill_spawns.size(), 12u);                           // block 1 is whole
+
+        // the same with no object before it, and a stage count of 0 on the first object of the shipped TINY (the bytes behind it are no blocks: the original reads them anyway)
+        std::vector<uint8_t> e = tiny;
+        wr16(e, t.food[0] + 8, 0);
+        LevelData n;
+        LevelValidation w;
+        ASSERT_TRUE(n.load_from_memory(e.data(), e.size(), &w));
+        ASSERT_EQ(n.food_schedules.size(), 0u);
+        ASSERT_TRUE(w.has(LevelProblemKind::FoodBlockEndedEarly));
+        ASSERT_EQ(n.ambient_flag, rd16(e, t.food[0] + 10));                // block 3 starts right behind that stage count word
+        ASSERT_EQ(n.ambient_tile_or_sound, rd16(e, t.food[0] + 12));
+    } TEST_END();
+
+    TEST_CASE("6c.6 The Grid: The Original Keeps Both Dimensions As 16 Bit Words And Loads An Empty One; The Remake Refuses A Grid Without Cells Or Beyond 256") {
+        // 0 x 0, 31 x 0 and 0 x 31: the original loads them (no layer to read) and plays on a map without a cell
+        const uint32_t empties[3][2] = {{0, 0}, {31, 0}, {0, 31}};
+        for (const auto& dims : empties) {
+            std::vector<uint8_t> d = flat_map(4, dims[0], dims[1], 0, 0);
+            LevelData m;
+            LevelValidation v;
+            ASSERT_FALSE(m.load_from_memory(d.data(), d.size(), &v));
+            ASSERT_TRUE(v.parsed);                                         // the original's loader completes
+            ASSERT_FALSE(v.playable);
+            ASSERT_TRUE(has_fatal(v, LevelProblemKind::GridEmpty));
+            ASSERT_TRUE(is_empty_level(m));
+        }
+        // 257 rows: more than the remake hosts (the anchor bytes of a layer-2 object are 8 bit), 256 rows loads
+        {
+            std::vector<uint8_t> big = flat_map(4, 257, 1, 257, 1);
+            LevelData m;
+            LevelValidation v;
+            ASSERT_FALSE(m.load_from_memory(big.data(), big.size(), &v));
+            ASSERT_TRUE(v.parsed);
+            ASSERT_TRUE(has_fatal(v, LevelProblemKind::GridTooLarge));
+            std::vector<uint8_t> edge = flat_map(4, 256, 1, 256, 1);
+            LevelData n;
+            ASSERT_TRUE(n.load_from_memory(edge.data(), edge.size()));
+            ASSERT_EQ(n.height(), 256u);
+            ASSERT_EQ(n.width(), 1u);
+        }
+        // the dimension words are 16 bit in the original (0x10006d3 stores `ax`): a dword of 0x10005 is 5 rows, and the file holds 5 rows of data
+        {
+            std::vector<uint8_t> d = flat_map(4, 0x10005u, 0x20003u, 5, 3);
+            LevelData m;
+            ASSERT_TRUE(m.load_from_memory(d.data(), d.size()));
+            ASSERT_EQ(m.height(), 5u);
+            ASSERT_EQ(m.width(), 3u);
+            ASSERT_EQ(m.layer1_terrain.size(), 15u);
+        }
+        // a grid that claims more cells than the file holds is a short file (no allocation first)
+        {
+            std::vector<uint8_t> d = flat_map(4, 60000, 60000, 0, 0);
+            LevelData m;
+            LevelValidation v;
+            ASSERT_FALSE(m.load_from_memory(d.data(), d.size(), &v));
+            ASSERT_TRUE(has_fatal(v, LevelProblemKind::Truncated));
+            ASSERT_TRUE(mentions(v, "layers"));
+        }
+    } TEST_END();
+
+    TEST_CASE("6c.7 The Dictionary: 1344 Names Fill The Original's 0x1500 Byte Buffer, More Overrun It (0x100674e); The Remake Refuses The Overrun") {
+        for (uint32_t names : {1u, 670u, 1344u}) {
+            std::vector<uint8_t> d = flat_map(names, 1, 1, 1, 1);
+            LevelData m;
+            ASSERT_TRUE(m.load_from_memory(d.data(), d.size()));
+            ASSERT_EQ(m.tile_dictionary.size(), static_cast<size_t>(names));
+        }
+        for (uint32_t names : {1345u, 5917u}) {
+            std::vector<uint8_t> d = flat_map(names, 1, 1, 1, 1);
+            LevelData m;
+            LevelValidation v;
+            ASSERT_FALSE(m.load_from_memory(d.data(), d.size(), &v));
+            ASSERT_TRUE(v.parsed);
+            ASSERT_TRUE(has_fatal(v, LevelProblemKind::DictionaryTooLarge));
+        }
+    } TEST_END();
+
+    TEST_CASE("6c.8 A Start Marker Outside The Grid Has No Behaviour To Copy (0x100ef18 -> 0x100f17f Index The Row Table Unchecked): The Map Is Refused For A Roster That Contains The Team") {
+        const size_t g = record_of_tile(tiny, t, 154);                     // GSTART: the green team
+        ASSERT_NE(g, 0u);
+        const struct { uint32_t row; uint32_t column; bool outside; } places[] = {
+            {31, 9, true}, {8, 31, true}, {200, 9, true}, {21512, 21, true}, {65535, 65535, true}, {30, 30, false}, {0, 0, false},
+        };
+        for (const auto& pl : places) {
+            std::vector<uint8_t> d = tiny;
+            wr16(d, g + 2, pl.row);
+            wr16(d, g + 4, pl.column);
+            LevelData m;
+            LevelValidation v;
+            ASSERT_TRUE(m.load_from_memory(d.data(), d.size(), &v));       // the original loads it: so does the loader
+            ASSERT_TRUE(v.parsed);
+            ASSERT_EQ(v.playable, !pl.outside);                            // all four teams
+            ASSERT_EQ(m.validate(0x0F).playable, !pl.outside);
+            ASSERT_EQ(m.validate(0x01).playable, !pl.outside);             // the green team alone
+            ASSERT_TRUE(m.validate(0x0E).playable);                        // the team does not play: its markers are not used
+            ASSERT_TRUE(m.validate(0x06).playable);
+            ASSERT_EQ(LVLParser::check_memory(d.data(), d.size(), 0x0F).playable, !pl.outside);
+            ASSERT_TRUE(LVLParser::check_memory(d.data(), d.size(), 0x0E).playable);
+            if (pl.outside) {
+                const LevelValidation all = m.validate(0x0F);
+                ASSERT_TRUE(has_fatal(all, LevelProblemKind::StartMarkerOutsideGrid));
+                const LevelProblem* p = all.first_fatal();
+                ASSERT_TRUE(p != nullptr);
+                ASSERT_EQ(static_cast<int>(p->team), 0);
+                ASSERT_EQ(p->count, 1u);
+                ASSERT_TRUE(all.reason().find("green") != std::string::npos);
+                ASSERT_TRUE(all.reason().find("outside") != std::string::npos);
+                // without that team the same finding is a note
+                const LevelValidation rest = m.validate(0x0E);
+                ASSERT_TRUE(rest.has(LevelProblemKind::StartMarkerOutsideGrid));
+                ASSERT_TRUE(rest.first_fatal() == nullptr);
+                ASSERT_TRUE(m.for_roster(0x0E).validate(0x0E).clean());     // the roster's level has dropped the team's markers altogether
+            }
+        }
+        // two teams with a bad marker: each is named; a plant outside the grid is a note (no start marker, nothing is placed through it)
+        {
+            std::vector<uint8_t> d = small;
+            const size_t flower = record_of_tile(d, s, 421);
+            const size_t blue = record_of_tile(d, s, 153);
+            const size_t black = record_of_tile(d, s, 152);
+            ASSERT_TRUE(flower != 0u && blue != 0u && black != 0u);
+            wr16(d, flower + 2, 100);
+            wr16(d, blue + 4, 77);
+            wr16(d, black + 2, 99);
+            LevelData m;
+            ASSERT_TRUE(m.load_from_memory(d.data(), d.size()));
+            const LevelValidation all = m.validate(0x0F);
+            ASSERT_FALSE(all.playable);
+            size_t fatal = 0;
+            for (const LevelProblem& p : all.problems) fatal += p.severity == LevelProblemSeverity::Fatal ? 1u : 0u;
+            ASSERT_EQ(fatal, 2u);
+            ASSERT_TRUE(all.has(LevelProblemKind::ObjectOutsideGrid));
+            ASSERT_TRUE(m.validate(0x03).playable);                         // green and red play
+            ASSERT_FALSE(m.validate(0x04).playable);                        // blue
+            ASSERT_FALSE(m.validate(0x08).playable);                        // black
+            ASSERT_TRUE(m.validate(0x03).clean());                          // notes only
+        }
+    } TEST_END();
+
+    TEST_CASE("6c.9 Objects And Tiles Outside What The Original Checks Are Findings, Not Refusals: Food Outside The Grid, Tile Indexes Outside The Dictionary") {
+        {
+            std::vector<uint8_t> d = small;
+            wr16(d, s.food[0], 100);                                        // food object 0: its row
+            LevelData m;
+            LevelValidation v;
+            ASSERT_TRUE(m.load_from_memory(d.data(), d.size(), &v));
+            ASSERT_TRUE(v.playable);
+            ASSERT_TRUE(v.has(LevelProblemKind::FoodOutsideGrid));
+            ASSERT_FALSE(v.clean());
+        }
+        {
+            std::vector<uint8_t> d = tiny;                                  // T = 669: 670 names
+            wr16(d, t.layer1 + 6 * 40, 700);                                 // a layer-1 cell
+            wr16(d, t.layer2 + 6 * 41, 0xFFFF);                              // a layer-2 cell (0x7FFE is the empty tile, this is not)
+            wr16(d, t.b1_records, 60000);                                    // a block 1 record
+            LevelData m;
+            LevelValidation v;
+            ASSERT_TRUE(m.load_from_memory(d.data(), d.size(), &v));
+            ASSERT_TRUE(v.playable);
+            ASSERT_TRUE(v.has(LevelProblemKind::TileOutsideDictionary));
+            uint32_t count = 0;
+            for (const LevelProblem& p : v.problems) {
+                if (p.kind == LevelProblemKind::TileOutsideDictionary) count = p.count;
+            }
+            ASSERT_EQ(count, 3u);
+            ASSERT_EQ(m.get_cell_layer1(40 % 31, 40 / 31).tile_index, 700u);   // the raw index is kept
+        }
+        {
+            std::vector<uint8_t> d = tiny;                                  // the empty tile (0x7FFE) is no finding in a layer
+            wr16(d, t.layer2 + 6 * 7, 0x7FFE);
+            LevelData m;
+            LevelValidation v;
+            ASSERT_TRUE(m.load_from_memory(d.data(), d.size(), &v));
+            ASSERT_FALSE(v.has(LevelProblemKind::TileOutsideDictionary));
+        }
+    } TEST_END();
+
+    TEST_CASE("6c.10 The Six Shipped Maps Raise No Finding For Any Roster (The Question A Server Asks: One Call, A Yes Or No And The Reasons)") {
+        for (const char* name : {"GAUNTLET.LVL", "ISLANDS.LVL", "MEDIUM.LVL", "SMALL.LVL", "TINY.LVL", "TREASURE.LVL"}) {
+            for (uint8_t roster = 1; roster <= 0x0F; ++roster) {
+                const LevelValidation v = LVLParser::check_file(map_dir + "/" + name, roster);
+                ASSERT_TRUE(v.parsed);
+                ASSERT_TRUE(v.playable);
+                ASSERT_TRUE(v.problems.empty());
+                ASSERT_TRUE(v.clean());
+                ASSERT_EQ(v.roster_mask, roster);
+                ASSERT_TRUE(v.reason().empty());
+                ASSERT_TRUE(v.describe().empty());
+            }
+        }
+        const LevelValidation missing = LVLParser::check_file(map_dir + "/NO_SUCH_MAP.LVL");
+        ASSERT_FALSE(missing.playable);
+        ASSERT_FALSE(missing.parsed);
+        ASSERT_TRUE(has_fatal(missing, LevelProblemKind::Unreadable));
+        ASSERT_FALSE(missing.reason().empty());
+        ASSERT_TRUE(missing.describe().find("fatal unreadable") != std::string::npos);
+        const LevelValidation nothing = LVLParser::check_memory(nullptr, 0);
+        ASSERT_FALSE(nothing.playable);
+        ASSERT_TRUE(has_fatal(nothing, LevelProblemKind::Unreadable));
+        std::vector<uint8_t> empty;
+        ASSERT_FALSE(LVLParser::check_memory(empty.data(), empty.size()).playable);
+        // the names of the findings and of their severities are distinct and fixed (they travel in reports)
+        std::vector<std::string> names;
+        for (uint8_t k = 0; k <= static_cast<uint8_t>(LevelProblemKind::ObjectOutsideGrid); ++k) {
+            const std::string n = to_string(static_cast<LevelProblemKind>(k));
+            ASSERT_FALSE(n.empty());
+            ASSERT_NE(n, std::string("?"));
+            for (const std::string& other : names) ASSERT_NE(n, other);
+            names.push_back(n);
+        }
+        ASSERT_EQ(std::string(to_string(LevelProblemSeverity::Fatal)), std::string("fatal"));
+        ASSERT_EQ(std::string(to_string(LevelProblemSeverity::Warning)), std::string("warning"));
+        ASSERT_EQ(std::string(to_string(LevelProblemSeverity::Info)), std::string("note"));
+    } TEST_END();
+
+    TEST_CASE("6c.11 A Failed Load Leaves Nothing Behind; A Copy Or A Move Of A Level Keeps What The Loader Noticed") {
+        LevelData m;
+        ASSERT_TRUE(m.load_from_memory(tiny.data(), tiny.size()));
+        ASSERT_EQ(m.width(), 31u);
+        std::vector<uint8_t> garbage(500, 0xAB);
+        ASSERT_FALSE(m.load_from_memory(garbage.data(), garbage.size()));
+        ASSERT_TRUE(is_empty_level(m));
+        ASSERT_EQ(m.layer1_cells().size(), 0u);
+
+        std::vector<uint8_t> d = tiny;
+        wr32(d, 4, 77);
+        LevelData a;
+        ASSERT_TRUE(a.load_from_memory(d.data(), d.size()));
+        ASSERT_TRUE(a.validate().has(LevelProblemKind::ModeIgnored));
+        LevelData copy = a;
+        ASSERT_TRUE(copy.validate().has(LevelProblemKind::ModeIgnored));
+        LevelData moved = std::move(a);
+        ASSERT_TRUE(moved.validate().has(LevelProblemKind::ModeIgnored));
+        LevelData assigned;
+        assigned = copy;
+        ASSERT_TRUE(assigned.validate().has(LevelProblemKind::ModeIgnored));
+        LevelData move_assigned;
+        move_assigned = std::move(copy);
+        ASSERT_TRUE(move_assigned.validate().has(LevelProblemKind::ModeIgnored));
+        ASSERT_TRUE(move_assigned.for_roster(0x05).validate().has(LevelProblemKind::ModeIgnored));
     } TEST_END();
 }
 
@@ -1023,6 +1620,7 @@ int main() {
     test_suite_5_animations(chd_path);
     test_suite_6_maps(map_dir);
     test_suite_6b_map_layout();
+    test_suite_6c_loader_parity(map_dir);
     test_suite_7_mirroring(chd_path);
     test_suite_8_fuzzing(chd_path, map_dir);
 

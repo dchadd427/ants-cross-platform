@@ -261,7 +261,7 @@ void run_suite_1_basic_paths() {
     TEST_SUITE("Suite 1: Cost Fixture, Straight / Diagonal Paths, Corner Cutting");
 
     TEST_CASE("1.1 Terrain cost fixture matches the StepCost table (grass diag 28, mud diag 67)") {
-        // Verified table of re_pathfinder.md 3.11 (x87 53-bit double: 40 * 1.4 rounds to exactly 56.0).
+        // Verified table of docs/reverse_engineering/movement/05_path_manager_and_astar.md 3.11 (x87 53-bit double: 40 * 1.4 rounds to exactly 56.0).
         struct Pair { char a; char b; uint32_t orth; uint32_t diag; };
         const Pair table[] = {
             {'.', '.', 20, 28}, {'.', 's', 18, 25}, {'.', 'm', 34, 47}, {'.', 'd', 22, 30},

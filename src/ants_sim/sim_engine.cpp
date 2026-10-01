@@ -131,24 +131,9 @@ void SimulationEngine::init(const ants::assets::LevelData& level_in, uint32_t ra
             }
         }
     }
-    if (impl_->flower_droppers_.empty() && level.width == 40 && level.height == 40) {
-        // Fallback for SMALL.LVL if waypoints were absent
-        SimulationEngineImpl::FlowerDropper fd1;
-        fd1.pos = TileCoord{2, 19};
-        fd1.drop_pos = TileCoord{2, 20};
-        fd1.interval_s = 15;
-        fd1.probabilities = {0.45, 0.0, 0.0, 0.1, 0.45};
-        impl_->flower_droppers_.push_back(fd1);
-
-        SimulationEngineImpl::FlowerDropper fd2;
-        fd2.pos = TileCoord{37, 19};
-        fd2.drop_pos = TileCoord{37, 20};
-        fd2.interval_s = 15;
-        fd2.probabilities = {0.45, 0.0, 0.0, 0.1, 0.45};
-        impl_->flower_droppers_.push_back(fd2);
-        impl_->grid_.get_cell_mut(2, 19).is_obstacle_overlay = true;
-        impl_->grid_.get_cell_mut(37, 19).is_obstacle_overlay = true;
-    }
+    // The droppers are exactly the plants of Block 1 whose cell holds a Block 4 record with a trigger (above), the obstacle cells are those of Grid::init_from_level.
+    // The original has no further source: a map without such a pair has no dropper, whatever its size (the remake once added the droppers of SMALL.LVL to every
+    // 40 x 40 map without one; SMALL.LVL itself never ran that block, its droppers come from its waypoints).
 
     uint32_t starting_eggs = level.boundary_param;                          // the level's last word, as the original copies it to every team (+0x4a, FUN_0100dc94)
     for (uint8_t p = 0; p < MAX_PLAYERS; ++p) {
@@ -159,7 +144,11 @@ void SimulationEngine::init(const ants::assets::LevelData& level_in, uint32_t ra
         if (a.team_id < MAX_PLAYERS) {
             int32_t sx = a.x;
             int32_t sy = a.y;
-            if (!impl_->grid_.in_bounds(sx, sy) || !impl_->grid_.get_cell(TileCoord{sx, sy}).is_passable()) {
+            // A start marker outside the grid has no behaviour to copy: the original (0x100ef18 -> 0x100f17f) indexes its row table with the record's row and
+            // column without a check. LevelData::validate refuses such a map for a roster that contains the team; an engine that is handed it anyway (a tool, a test)
+            // places no ant for the marker rather than one outside the map (whose fixed-point position would overflow, and whose occupancy cell does not exist).
+            if (!impl_->grid_.in_bounds(sx, sy)) continue;
+            if (!impl_->grid_.get_cell(TileCoord{sx, sy}).is_passable()) {
                 static const int offsets[4][2] = { {0, -1}, {0, 1}, {-1, 0}, {1, 0} };
                 for (const auto& off : offsets) {
                     int32_t nx = sx + off[0];

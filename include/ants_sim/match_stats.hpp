@@ -42,11 +42,6 @@ struct PlayerMatchStats {
     uint32_t bombs_defused{0};
     uint32_t fires_lit{0};
     uint32_t bridges_built{0};
-
-    constexpr bool operator==(const PlayerMatchStats& o) const noexcept {
-        return score == o.score && friendly_lost == o.friendly_lost &&
-               enemy_killed == o.enemy_killed && (ants_hatched == o.ants_hatched || new_hatched == o.new_hatched);
-    }
 };
 
 /**

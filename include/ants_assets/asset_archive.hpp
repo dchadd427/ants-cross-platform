@@ -11,7 +11,7 @@ namespace ants::assets {
 
 /**
  * @brief Master asset archive manager for ants.chd.
- * 
+ *
  * Provides O(1) indexed and named lookups for all palettes, sprites, audio clips,
  * event tags, and animation sequences. Pre-computes 8-directional mirrored sprites
  * and directional animations in RAM for zero runtime rendering overhead.

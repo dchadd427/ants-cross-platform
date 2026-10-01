@@ -31,7 +31,7 @@ void check(bool ok, const std::string& what) {
     }
 }
 
-// The reference model of the slider, written from the disassembly independently of the class (scratch model audit/R/ref_options_model.py)
+// The reference model of the slider, written from the disassembly independently of the class (the script of the model is not kept in the repository)
 int32_t ref_pos_from_value(int32_t v) { return std::clamp(211 + (185 * v) / 99, 211, 395); }
 int32_t ref_value_from_pos(int32_t pos) { return ((std::clamp(pos, 211, 395) - 211) * 100) / 185; }
 

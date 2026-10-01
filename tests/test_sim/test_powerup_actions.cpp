@@ -8,6 +8,7 @@
 #include "ants_sim/movement_tables.hpp"
 
 #include <cstdint>
+#include <fstream>
 #include <functional>
 #include <iomanip>
 #include <iostream>
@@ -58,6 +59,51 @@ size_t dropper_at_column(const SimulationEngine& sim, int32_t x) {
         if (fds[i].x == x) return i;
     }
     return fds.size();
+}
+
+// A shipped map as bytes, and where the tail of its file lies (the loader's order: header, dictionary, dimensions, two layers, block 1, block 2, block 3, block 4,
+// the final word); synthetic maps of the loader tests are made by editing these bytes
+std::vector<uint8_t> read_bytes(const std::string& path) {
+    std::ifstream f(path, std::ios::binary | std::ios::ate);
+    if (!f.is_open()) return {};
+    const std::streamsize size = f.tellg();
+    std::vector<uint8_t> bytes(static_cast<size_t>(size));
+    f.seekg(0, std::ios::beg);
+    f.read(reinterpret_cast<char*>(bytes.data()), size);
+    return bytes;
+}
+uint16_t word_at(const std::vector<uint8_t>& d, size_t p) { return static_cast<uint16_t>(d[p] | (d[p + 1] << 8)); }
+uint32_t dword_at(const std::vector<uint8_t>& d, size_t p) { return static_cast<uint32_t>(word_at(d, p)) | (static_cast<uint32_t>(word_at(d, p + 2)) << 16); }
+
+struct MapTail {
+    bool ok{false};
+    size_t b1_count{0};          // block 1: a word count, then (tile, row, column) words
+    size_t b1_records{0};
+    size_t b4_count{0};          // block 4: a word count, then the waypoints
+    size_t final_word{0};
+};
+
+MapTail find_tail(const std::vector<uint8_t>& d) {
+    MapTail t;
+    if (d.size() < 44) return t;
+    size_t p = 42 + (static_cast<size_t>(word_at(d, 40)) + 1) * 11;
+    const size_t rows = dword_at(d, p);
+    const size_t columns = dword_at(d, p + 4);
+    p += 8 + rows * columns * 12;
+    t.b1_count = p;
+    t.b1_records = p + 2;
+    p += 2 + static_cast<size_t>(word_at(d, p)) * 6;
+    const size_t objects = word_at(d, p);
+    p += 2;
+    for (size_t i = 0; i < objects; ++i) p += 10 + static_cast<size_t>(word_at(d, p + 8)) * 4;
+    p += 4;
+    t.b4_count = p;
+    const size_t waypoints = word_at(d, p);
+    p += 2;
+    for (size_t i = 0; i < waypoints; ++i) p += 8 + (dword_at(d, p + 4) != 0 ? 44 : 0);
+    t.final_word = p;
+    t.ok = p + 2 <= d.size();
+    return t;
 }
 
 constexpr int kTickMs = 50;
@@ -827,6 +873,112 @@ int main() {
         ASSERT_FALSE(sim.grid().has_powerup_at(TileCoord{2, 20}));
         for (int t = 0; t < 14; ++t) sim.tick();                                             // 15850 ms
         ASSERT_TRUE(sim.grid().has_powerup_at(TileCoord{2, 20}));
+    } TEST_END();
+
+    // ---- where the droppers come from: the plants of block 1 whose cell holds a block 4 record with a trigger, and nothing else (FDTASK 0x100fc0d walks the plants and
+    // asks the table of block 4 for the record at each plant's cell, 0x1008d79; the map's size plays no part) ---------------------------------------------------
+    TEST_CASE("2.6 A 40 x 40 map without a flower dropper gets none (the remake once gave every such map the two droppers of SMALL.LVL, whose droppers come from its waypoints)") {
+        const std::string small_path = std::string(ORIGINAL_ASSETS_DIR) + "/Maps/SMALL.LVL";
+        const std::vector<uint8_t> bytes = read_bytes(small_path);
+        const MapTail tail = find_tail(bytes);
+        ASSERT_TRUE(tail.ok);
+        // block 4 emptied: a count of 0 and the final word (the two records go)
+        std::vector<uint8_t> bare(bytes.begin(), bytes.begin() + static_cast<std::ptrdiff_t>(tail.b4_count));
+        bare.push_back(0);
+        bare.push_back(0);
+        bare.push_back(bytes[tail.final_word]);
+        bare.push_back(bytes[tail.final_word + 1]);
+        ants::assets::LevelData lvl;
+        ASSERT_TRUE(lvl.load_from_memory(bare.data(), bare.size()));
+        ASSERT_EQ(lvl.width(), 40u);
+        ASSERT_EQ(lvl.height(), 40u);
+        ASSERT_TRUE(lvl.waypoints.empty());
+        SimulationEngine sim;
+        sim.init(lvl, 42);
+        ASSERT_EQ(sim.get_world_state().flower_droppers.size(), 0u);
+        for (int t = 0; t < 420; ++t) sim.tick();                                            // 21 s: the fallback posted at 15 s and landed at 15.8 s
+        ASSERT_FALSE(sim.grid().has_powerup_at(TileCoord{2, 20}));
+        ASSERT_FALSE(sim.grid().has_powerup_at(TileCoord{37, 20}));
+
+        // the same map with the trigger of its first waypoint taken away (the record shrinks to its 8 bytes) has the second dropper and no other
+        const size_t first_waypoint = tail.b4_count + 2;
+        std::vector<uint8_t> trimmed(bytes.begin(), bytes.begin() + static_cast<std::ptrdiff_t>(first_waypoint + 4));
+        trimmed.insert(trimmed.end(), {0, 0, 0, 0});                                          // the flag dword, now 0
+        trimmed.insert(trimmed.end(), bytes.begin() + static_cast<std::ptrdiff_t>(first_waypoint + 8 + 44), bytes.end());   // the rest: the second record, the final word
+        ants::assets::LevelData half;
+        ASSERT_TRUE(half.load_from_memory(trimmed.data(), trimmed.size()));
+        ASSERT_EQ(half.waypoints.size(), 2u);
+        ASSERT_EQ(half.waypoints[0].flag, 0u);
+        ASSERT_EQ(half.waypoints[1].flag, 1u);
+        SimulationEngine sim_half;
+        sim_half.init(half, 42);
+        ASSERT_EQ(sim_half.get_world_state().flower_droppers.size(), 1u);
+
+        // and the shipped SMALL.LVL still has its two
+        ants::assets::LevelData shipped;
+        ASSERT_TRUE(shipped.load_lvl(small_path));
+        SimulationEngine sim_shipped;
+        sim_shipped.init(shipped, 42);
+        ASSERT_EQ(sim_shipped.get_world_state().flower_droppers.size(), 2u);
+    } TEST_END();
+
+    // ---- a start marker outside the grid: the original indexes its row table with the record unchecked (0x100f17f), so the remake refuses such a map for a roster that
+    // contains the team (LevelData::validate); an engine that is handed it anyway places no ant for that marker, exactly as if the record were not in the file ------
+    TEST_CASE("2.7 A start marker outside the grid places no ant: the engine plays the map as if the record were not there (no ant outside the map, no undefined behaviour)") {
+        const std::vector<uint8_t> tiny = read_bytes(std::string(ORIGINAL_ASSETS_DIR) + "/Maps/TINY.LVL");
+        const MapTail tail = find_tail(tiny);
+        ASSERT_TRUE(tail.ok);
+        size_t green = 0;                                                                    // the first GSTART record (tile 154)
+        const size_t records = word_at(tiny, tail.b1_count);
+        for (size_t i = 0; i < records && green == 0; ++i) {
+            if (word_at(tiny, tail.b1_records + i * 6) == 154) green = tail.b1_records + i * 6;
+        }
+        ASSERT_TRUE(green != 0);
+
+        ants::assets::LevelData clean;
+        ASSERT_TRUE(clean.load_from_memory(tiny.data(), tiny.size()));
+        size_t markers = 0;
+        for (const auto& a : clean.anthill_spawns) markers += a.team_id < 4 ? 1u : 0u;
+        ASSERT_EQ(markers, 12u);                                                             // TINY: twelve start markers, three ants for each team
+
+        const struct { uint16_t row; uint16_t column; } places[] = {{21512, 21}, {31, 9}, {8, 31}, {65535, 65535}};
+        for (const auto& pl : places) {
+            std::vector<uint8_t> bad = tiny;                                                 // the marker moved outside the grid
+            bad[green + 2] = static_cast<uint8_t>(pl.row & 0xFF);
+            bad[green + 3] = static_cast<uint8_t>(pl.row >> 8);
+            bad[green + 4] = static_cast<uint8_t>(pl.column & 0xFF);
+            bad[green + 5] = static_cast<uint8_t>(pl.column >> 8);
+            std::vector<uint8_t> gone = tiny;                                                // the record cut out of the file
+            gone.erase(gone.begin() + static_cast<std::ptrdiff_t>(green), gone.begin() + static_cast<std::ptrdiff_t>(green + 6));
+            gone[tail.b1_count] = static_cast<uint8_t>((records - 1) & 0xFF);
+            gone[tail.b1_count + 1] = static_cast<uint8_t>((records - 1) >> 8);
+
+            ants::assets::LevelData bad_level;
+            ants::assets::LevelData gone_level;
+            ASSERT_TRUE(bad_level.load_from_memory(bad.data(), bad.size()));
+            ASSERT_TRUE(gone_level.load_from_memory(gone.data(), gone.size()));
+            ASSERT_FALSE(bad_level.validate(0x0F).playable);                                 // a roster with the green team: refused
+            ASSERT_TRUE(bad_level.validate(0x0E).playable);                                  // without it: its markers are not used
+            ASSERT_TRUE(gone_level.validate(0x0F).clean());
+
+            SimulationEngine a;
+            SimulationEngine b;
+            a.init(bad_level, 7);
+            b.init(gone_level, 7);
+            size_t ants_a = 0;
+            for (const auto& ant : a.get_world_state().ants) {
+                ASSERT_TRUE(ant.tile_x >= 0 && ant.tile_x < 31 && ant.tile_y >= 0 && ant.tile_y < 31);
+                ++ants_a;
+            }
+            ASSERT_EQ(ants_a, b.get_world_state().ants.size());
+            ASSERT_EQ(ants_a, markers - 1);                                                  // every marker but that one has its ant
+            ASSERT_TRUE(a.state_hash() == b.state_hash());
+            for (int t = 0; t < 120; ++t) {
+                a.tick();
+                b.tick();
+            }
+            ASSERT_TRUE(a.state_hash() == b.state_hash());
+        }
     } TEST_END();
 
     std::cout << "\n=======================================================\n"

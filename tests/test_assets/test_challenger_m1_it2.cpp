@@ -334,7 +334,7 @@ int main() {
         LevelData lvl;
         TEST_ASSERT(lvl.load_lvl(assets_dir + "/Maps/TINY.LVL"));
 
-        // PROJECT.md Contract Accessors:
+        // Contract Accessors (the interface that the tests pin):
         uint32_t w = lvl.width();
         uint32_t h = lvl.height();
         TEST_ASSERT(w == 31);

@@ -73,7 +73,7 @@ def parse_table4(data, t4_off, sound_map):
             pos += 40
             sval1 = struct.unpack("<i", struct.pack("<I", val1))[0]
             sval2 = struct.unpack("<i", struct.pack("<I", val2))[0]
-            
+
             frames = []
             for f_idx in range(frame_cnt):
                 dx, dy, sp_idx = struct.unpack_from("<2iI", data, pos)
@@ -156,7 +156,7 @@ def generate_markdown_reference(entries, sound_map):
 
     tracked_prefixes = ["ag", "ab", "af", "ac", "as", "at"]
     tracked_actions = ["at", "gh", "gb", "gf", "sb", "db", "sf", "xf", "bb", "cg", "dr", "bu", "st", "wg"]
-    
+
     seen = set()
     for e in entries:
         name = e["name"]
@@ -175,7 +175,7 @@ def generate_markdown_reference(entries, sound_map):
             seen.add(key)
             snd_str = ", ".join([f"Sub {st['subitem']}: `{st['sound_name']}` ({st['sound_id']})" for st in e["sound_triggers"]])
             if not snd_str: snd_str = "None"
-            
+
             dx_dy_list = []
             for s in e["subitems"][:4]:
                 if s["dx_per_tick"] != 0 or s["dy_per_tick"] != 0:

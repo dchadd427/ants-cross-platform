@@ -695,11 +695,15 @@ void test_suite_6_lvl_fuzzing(const std::string& map_path) {
         LevelData lvl;
         ASSERT_FALSE(LVLParser::load_from_memory(bad_v.data(), bad_v.size(), lvl));
 
-        // Bad game_mode != 1
+        // A game_mode other than 1 is no error: the original stores the dword (0x100639f) and never reads it again (15 community maps carry editor garbage there).
+        // (This case once asserted that such a file is refused: a rule of the remake that the original does not have.)
         std::vector<uint8_t> bad_gm = valid_lvl;
         uint32_t gm = 2;
         std::memcpy(bad_gm.data() + 4, &gm, 4);
-        ASSERT_FALSE(LVLParser::load_from_memory(bad_gm.data(), bad_gm.size(), lvl));
+        LevelData other_mode;
+        ASSERT_TRUE(LVLParser::load_from_memory(bad_gm.data(), bad_gm.size(), other_mode));
+        ASSERT_EQ(other_mode.game_mode, 2u);
+        ASSERT_EQ(other_mode.width(), 31u);
     } TEST_END();
 
     TEST_CASE("6.3 Zero Grid Dimensions (width == 0 or height == 0)") {
@@ -715,7 +719,7 @@ void test_suite_6_lvl_fuzzing(const std::string& map_path) {
         ASSERT_FALSE(LVLParser::load_from_memory(bad_dim.data(), bad_dim.size(), lvl));
     } TEST_END();
 
-    TEST_CASE("6.4 Bytes After The Final Parameter Are Ignored (The Original's Loader Stops Reading There; Community Maps End With Filler), A Truncated Final Parameter Is Rejected") {
+    TEST_CASE("6.4 Bytes After The Final Parameter Are Ignored (The Original's Loader Stops Reading There; Community Maps End With Filler), A Truncated Final Parameter Is Read As Far As It Goes (The Original Catches That Read Error)") {
         LevelData clean_lvl;
         ASSERT_TRUE(LVLParser::load_from_memory(valid_lvl.data(), valid_lvl.size(), clean_lvl));
 
@@ -734,10 +738,17 @@ void test_suite_6_lvl_fuzzing(const std::string& map_path) {
         ASSERT_TRUE(LVLParser::load_from_memory(junk_lvl.data(), junk_lvl.size(), extended16));
         ASSERT_EQ(extended16.boundary_param, clean_lvl.boundary_param);
 
-        // A file that ends inside the final parameter is cut short
+        // A file that ends inside the final parameter loads: the final word is read inside the loader's try block (0x1006510 .. 0x100655e), so the original catches the
+        // read error and returns 1; the egg stock it did not read is 0 in the remake (uninitialised memory in the original) and the loader reports it. (The case once
+        // asserted that such a file is refused: a rule of the remake that the original does not have.)
         std::vector<uint8_t> cut(valid_lvl.begin(), valid_lvl.end() - 1);
         LevelData cut_lvl;
-        ASSERT_FALSE(LVLParser::load_from_memory(cut.data(), cut.size(), cut_lvl));
+        ants::assets::LevelValidation cut_report;
+        ASSERT_TRUE(LVLParser::load_from_memory(cut.data(), cut.size(), cut_lvl, &cut_report));
+        ASSERT_EQ(cut_lvl.boundary_param, 0u);
+        ASSERT_TRUE(cut_report.has(ants::assets::LevelProblemKind::EggStockMissing));
+        ASSERT_EQ(cut_lvl.waypoints.size(), clean_lvl.waypoints.size());
+        ASSERT_EQ(cut_lvl.food_schedules.size(), clean_lvl.food_schedules.size());
     } TEST_END();
 }
 

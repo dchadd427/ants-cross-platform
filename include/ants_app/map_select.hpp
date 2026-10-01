@@ -152,7 +152,6 @@ public:
     const ScreenButton& up_button() const noexcept { return up_; }
     const ScreenButton& down_button() const noexcept { return down_; }
     const ScreenButton& start_button() const noexcept { return start_; }
-    const ScreenButton& quit_button() const noexcept { return quit_; }
 
     /// The thumb beside a player's name (the original's netgood / netok / netbad / netunk animations: connection quality)
     enum class Thumb : uint8_t { Good = 0, Ok = 1, Bad = 2, Unknown = 3 };
@@ -201,8 +200,6 @@ private:
     std::vector<MapSelectEntry> maps_;
     int32_t selected_index_{0};
 
-    int32_t mouse_x_{0};
-    int32_t mouse_y_{0};
     ScreenButton up_{ButtonRect{BTN_UP_X, BTN_UP_Y, BTN_UP_W, BTN_UP_H}, BTN_UP_PRESSED};
     ScreenButton down_{ButtonRect{BTN_DOWN_X, BTN_DOWN_Y, BTN_DOWN_W, BTN_DOWN_H}, BTN_DOWN_PRESSED};
     ScreenButton start_{ButtonRect{BTN_START_X, BTN_START_Y, BTN_START_W, BTN_START_H}, BTN_START_PRESSED};

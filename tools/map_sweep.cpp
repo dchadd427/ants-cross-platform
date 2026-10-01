@@ -7,7 +7,9 @@
 //   1. whether the NAME can travel in the network protocol (ants::net::valid_map_name) and, if not, why and which characters offend;
 //   2. what the file is: size, FNV-1a 64 hash (ants::net::hash_file, the identity of the start barrier), header version, size of the grid, minutes,
 //      description, and, when it loads (LevelData::load_from_file), the start markers, hills, plants, food objects, waypoints and the egg stock;
-//      when it does not load, the check of the loader that failed (a mirror of the loader's checks names it);
+//      when it does not load, why (the loader names it: LevelValidation, the findings of ants::assets::LVLParser, the same answer that a server gets from
+//      LVLParser::check_file), and every finding about a file that it does load (the original reads it only as far as it goes, tiles outside the
+//      dictionary, ...); a roster with a team whose start marker lies outside the grid is REFUSED, not played (the original has no behaviour for it);
 //   3. a headless match of N ticks (default 2400 = two minutes of game time) with a scripted player per team: every second each team gives one
 //      order with its own ants (group move, attack, special, stop, hatch) from a fixed-seed generator, aimed at food, hills, enemy ants or random
 //      tiles, so that ants harvest, hatch, fight and walk (the teams are given the 200 points of a hatch whenever they have less, as a player who has
@@ -25,7 +27,7 @@
 // Usage:
 //   map_sweep <maps-dir> [--ticks N] [--roster MASK] [--jobs J] [--timeout-seconds S] [--out report.json] [--only text] [--skip-run]
 //   map_sweep --selftest
-// Exit code: 0 only when every map loads, runs without a crash, hang or error and is deterministic. Bad names do not fail it (they are counted
+// Exit code: 0 only when every map loads, plays every roster, runs without a crash, hang or error and is deterministic. Bad names do not fail it (they are counted
 // apart: whether the protocol should accept them is a decision of the protocol). 1: findings, 2: bad usage or an unreadable folder.
 //
 // The JSON report has one object per map in the order of the folder's names, with a fixed key order, no time stamps and no paths: file NAMES only.
@@ -587,6 +589,10 @@ struct MapInfo {
     uint32_t food{0};
     uint32_t waypoints{0};
     uint32_t eggs{0};
+    bool playable{false};                       // LevelData::validate(all four teams): no Fatal finding
+    uint32_t blocked_teams{0};                  // bit t: team t has a start marker outside the grid, so a match with it is refused (not played)
+    std::string blocked_reason;                 // why (the first such finding)
+    std::vector<assets::LevelProblem> problems; // every finding about the file (LevelValidation::problems, all four teams)
     bool has_team(size_t t) const { return t < 4 && (starts[t] > 0 || hills[t] > 0); }
 };
 
@@ -611,61 +617,6 @@ void read_header(const std::vector<uint8_t>& d, MapInfo& info) {
         info.height = le32(d, dims_at);      // the first dword is the number of rows
         info.width = le32(d, dims_at + 4);
     }
-}
-
-// Which check of the loader (src/ants_assets/lvl_parser.cpp, same order) stops this file; "" when none does
-std::string diagnose_load_failure(const std::vector<uint8_t>& d) {
-    const size_t size = d.size();
-    if (size < 42) return fmt("file is %zu bytes, the header alone needs 42", size);
-    const uint32_t version = le32(d, 0);
-    const uint32_t mode = le32(d, 4);
-    if (version != assets::LVL_EXPECTED_VERSION) return fmt("header version %u, the loader reads version %u only", static_cast<unsigned>(version), static_cast<unsigned>(assets::LVL_EXPECTED_VERSION));
-    if (mode != assets::LVL_GAME_MODE_STANDARD) return fmt("game mode %u, the loader reads mode %u (standard) only", static_cast<unsigned>(mode), static_cast<unsigned>(assets::LVL_GAME_MODE_STANDARD));
-    size_t pos = 42;
-    const size_t dict = (static_cast<size_t>(le16(d, 40)) + 1) * 11;
-    if (size - pos < dict) return fmt("tile dictionary of %zu entries needs %zu bytes, %zu left", dict / 11, dict, size - pos);
-    pos += dict;
-    if (size - pos < 8) return "file ends inside the grid dimensions";
-    const uint32_t rows = le32(d, pos);
-    const uint32_t columns = le32(d, pos + 4);
-    pos += 8;
-    if (rows == 0 || columns == 0 || rows > 256 || columns > 256) return fmt("grid of %u rows x %u columns is outside 1 .. 256", static_cast<unsigned>(rows), static_cast<unsigned>(columns));
-    const size_t cells = static_cast<size_t>(rows) * columns;
-    if (size - pos < cells * 12) return fmt("the two layers of %zu cells need %zu bytes, %zu left", cells, cells * 12, size - pos);
-    pos += cells * 12;
-    if (size - pos < 2) return "file ends before block 1 (start markers and plants)";
-    const size_t b1 = le16(d, pos);
-    pos += 2;
-    if (size - pos < b1 * 6) return fmt("block 1 announces %zu records (%zu bytes), %zu left", b1, b1 * 6, size - pos);
-    pos += b1 * 6;
-    if (size - pos < 2) return "file ends before block 2 (food objects)";
-    const size_t b2 = le16(d, pos);
-    pos += 2;
-    if (size - pos < b2 * 10) return fmt("block 2 announces %zu food objects (at least %zu bytes), %zu left", b2, b2 * 10, size - pos);
-    for (size_t i = 0; i < b2; ++i) {
-        if (size - pos < 10) return fmt("block 2 ends inside food object %zu", i);
-        const size_t stages = le16(d, pos + 8);
-        pos += 10;
-        if (size - pos < stages * 4) return fmt("food object %zu announces %zu stages (%zu bytes), %zu left", i, stages, stages * 4, size - pos);
-        pos += stages * 4;
-    }
-    if (size - pos < 4) return "file ends inside block 3 (ambient parameters)";
-    pos += 4;
-    if (size - pos < 2) return "file ends before block 4 (waypoints)";
-    const size_t b4 = le16(d, pos);
-    pos += 2;
-    if (size - pos < b4 * 8) return fmt("block 4 announces %zu waypoints (at least %zu bytes), %zu left", b4, b4 * 8, size - pos);
-    for (size_t i = 0; i < b4; ++i) {
-        if (size - pos < 8) return fmt("block 4 ends inside waypoint %zu", i);
-        const uint32_t flag = le32(d, pos + 4);
-        pos += 8;
-        if (flag != 0) {
-            if (size - pos < 44) return fmt("waypoint %zu has a trigger (flag %u) but fewer than 44 bytes follow (%zu left)", i, static_cast<unsigned>(flag), size - pos);
-            pos += 44;
-        }
-    }
-    if (size - pos < 2) return "file ends before the final egg-stock word";
-    return "";
 }
 
 // The team whose hill a layer-2 tile is (GREENHILL 0, REDHILL 1, BLUEHILL 2, BLACKHILL 3), -1 for any other tile (the numbering of lvl_parser.cpp)
@@ -693,12 +644,22 @@ void analyze_map(const std::string& path, MapInfo& info, assets::LevelData& leve
         return;
     }
     read_header(bytes, info);
-    // LevelData::load_from_file reads the file and calls load_from_memory: the bytes read here serve the header, the diagnosis and the loader alike
-    info.loads = level.load_from_memory(bytes.data(), bytes.size());
+    // LevelData::load_from_file reads the file and calls load_from_memory: the bytes read here serve the header and the loader alike. The loader names why
+    // it refuses a file (LevelValidation), and lists every finding about one that it reads (the original's partial reads, tiles outside the dictionary, ...).
+    assets::LevelValidation verdict;
+    info.loads = level.load_from_memory(bytes.data(), bytes.size(), &verdict);
+    info.problems = verdict.problems;
+    info.playable = verdict.playable;
     if (!info.loads) {
-        info.load_error = diagnose_load_failure(bytes);
-        if (info.load_error.empty()) info.load_error = "the loader refused the file (no check of the loader's list names the cause)";
+        info.load_error = verdict.reason();
+        if (info.load_error.empty()) info.load_error = "the loader refused the file without naming a reason";
         return;
+    }
+    for (const assets::LevelProblem& p : verdict.problems) {
+        if (p.kind == assets::LevelProblemKind::StartMarkerOutsideGrid && p.severity == assets::LevelProblemSeverity::Fatal && p.team >= 0 && p.team < 4) {
+            info.blocked_teams |= 1u << p.team;
+            if (info.blocked_reason.empty()) info.blocked_reason = p.message;
+        }
     }
     info.width = level.width.val;
     info.height = level.height.val;
@@ -732,6 +693,44 @@ bool split_counts(const std::string& s, std::array<uint32_t, 4>& out) {
     return true;
 }
 
+// The findings of a map through the pipe: one line each, "severity TAB kind TAB team TAB count TAB message"
+std::string encode_problems(const std::vector<assets::LevelProblem>& problems) {
+    std::string out;
+    for (const assets::LevelProblem& p : problems) {
+        out += std::to_string(static_cast<unsigned>(p.severity)) + "\t" + std::to_string(static_cast<unsigned>(p.kind)) + "\t" + std::to_string(static_cast<int>(p.team)) + "\t" +
+               std::to_string(p.count) + "\t" + p.message + "\n";
+    }
+    return out;
+}
+
+std::vector<assets::LevelProblem> decode_problems(const std::string& text) {
+    std::vector<assets::LevelProblem> out;
+    size_t at = 0;
+    while (at < text.size()) {
+        size_t end = text.find('\n', at);
+        if (end == std::string::npos) end = text.size();
+        const std::string line = text.substr(at, end - at);
+        at = end + 1;
+        std::vector<std::string> fields;
+        size_t from = 0;
+        for (int k = 0; k < 4; ++k) {
+            const size_t tab = line.find('\t', from);
+            if (tab == std::string::npos) break;
+            fields.push_back(line.substr(from, tab - from));
+            from = tab + 1;
+        }
+        if (fields.size() != 4) continue;
+        assets::LevelProblem p;
+        p.severity = static_cast<assets::LevelProblemSeverity>(std::strtoul(fields[0].c_str(), nullptr, 10));
+        p.kind = static_cast<assets::LevelProblemKind>(std::strtoul(fields[1].c_str(), nullptr, 10));
+        p.team = static_cast<int8_t>(std::strtol(fields[2].c_str(), nullptr, 10));
+        p.count = static_cast<uint32_t>(std::strtoul(fields[3].c_str(), nullptr, 10));
+        p.message = line.substr(from);
+        out.push_back(std::move(p));
+    }
+    return out;
+}
+
 std::string info_line(const MapInfo& i) {
     Kv kv;
     kv.add("loads", i.loads ? 1u : 0u).add("load_error", i.load_error).add("header", i.have_header ? 1u : 0u).add("version", i.version);
@@ -739,6 +738,7 @@ std::string info_line(const MapInfo& i) {
     kv.add("dims", i.have_dims ? 1u : 0u).add("width", i.width).add("height", i.height).add("spawns", i.spawns);
     kv.add("starts", join_counts(i.starts)).add("hills", join_counts(i.hills)).add("plants", i.plants).add("food", i.food);
     kv.add("waypoints", i.waypoints).add("eggs", i.eggs);
+    kv.add("playable", i.playable ? 1u : 0u).add("blocked_teams", i.blocked_teams).add("blocked_reason", i.blocked_reason).add("problems", encode_problems(i.problems));
     return kv.line("INFO");
 }
 
@@ -762,6 +762,10 @@ MapInfo info_from_kv(const KvMap& m) {
     i.food = static_cast<uint32_t>(kv_uint(m, "food"));
     i.waypoints = static_cast<uint32_t>(kv_uint(m, "waypoints"));
     i.eggs = static_cast<uint32_t>(kv_uint(m, "eggs"));
+    i.playable = kv_uint(m, "playable") != 0;
+    i.blocked_teams = static_cast<uint32_t>(kv_uint(m, "blocked_teams"));
+    i.blocked_reason = kv_get(m, "blocked_reason");
+    i.problems = decode_problems(kv_get(m, "problems"));
     return i;
 }
 
@@ -1133,6 +1137,8 @@ int child_main(const Options& o, std::ostream& out) {
     analyze_map(o.child_file, info, level);
     out << info_line(info) << '\n' << std::flush;
     if (!info.loads || o.no_run) return 0;
+    // a match of a team whose start marker lies outside the grid is refused, not played (the parent records the refusal)
+    if ((info.blocked_teams & (o.roster > 0 ? static_cast<uint32_t>(o.roster) : kAllTeams)) != 0) return 0;
 
     PlayParams pp;
     pp.ticks = o.ticks;
@@ -1689,10 +1695,26 @@ MapReport sweep_map(const Options& o, const std::string& exe, const fs::path& fi
     }
     if (!r.info.loads || o.skip_run) return r;
 
-    r.runs.push_back(play_roster(o, exe, file.string(), first_roster, a));
+    // A roster with a team whose start marker lies outside the grid is not played: LevelData::validate refuses it (the original has no behaviour for it)
+    auto refused = [&](uint32_t roster) {
+        RunReport rr;
+        rr.roster = roster;
+        rr.status = "refused";
+        rr.detail = r.info.blocked_reason;
+        return rr;
+    };
+    if ((r.info.blocked_teams & first_roster) != 0) {
+        r.runs.push_back(refused(first_roster));
+    } else {
+        r.runs.push_back(play_roster(o, exe, file.string(), first_roster, a));
+    }
     if (o.roster < 0 && r.info.has_team(0) && r.info.has_team(3)) {
-        const Attempt two = run_attempt(o, exe, file.string(), kGreenAndBlack, 2, false);
-        r.runs.push_back(play_roster(o, exe, file.string(), kGreenAndBlack, two));
+        if ((r.info.blocked_teams & kGreenAndBlack) != 0) {
+            r.runs.push_back(refused(kGreenAndBlack));
+        } else {
+            const Attempt two = run_attempt(o, exe, file.string(), kGreenAndBlack, 2, false);
+            r.runs.push_back(play_roster(o, exe, file.string(), kGreenAndBlack, two));
+        }
     }
     return r;
 }
@@ -1705,6 +1727,7 @@ std::string run_verdict(const RunReport& r) {
     if (r.status == "crash") return "CRASH";
     if (r.status == "hang") return "HANG";
     if (r.status == "error") return "ERROR";
+    if (r.status == "refused") return "REFUSED";
     if (!r.deterministic) return "NONDET";
     return r.status == "ok" ? "ok" : "-";
 }
@@ -1712,7 +1735,7 @@ std::string run_verdict(const RunReport& r) {
 bool map_failed(const MapReport& m) {
     if (!m.info.loads) return true;
     for (const RunReport& r : m.runs) {
-        if (r.status == "crash" || r.status == "hang" || r.status == "error" || !r.deterministic) return true;
+        if (r.status == "crash" || r.status == "hang" || r.status == "error" || r.status == "refused" || !r.deterministic) return true;
     }
     return false;
 }
@@ -1720,6 +1743,8 @@ bool map_failed(const MapReport& m) {
 struct Summary {
     size_t maps{0}, loads{0}, load_failures{0}, bad_names{0}, names_over_limit{0};
     size_t crashes{0}, hangs{0}, errors{0}, nondeterministic{0}, runs{0}, with_diagnostics{0};
+    size_t refused{0};              // rosters that were not played because a team of them has a start marker outside the grid
+    size_t partial{0};              // maps that load but are read only as far as the original reads them (a finding of severity Warning)
     double mean_of_means{0}, median{0}, p95{0}, maximum{0};
     uint32_t peak_ants{0};
     struct Entry {
@@ -1744,7 +1769,19 @@ Summary summarize(const std::vector<MapReport>& maps) {
         bool hung = m.load_child_failure == "hang";
         bool errored = m.load_child_failure == "error";
         bool nondet = false, diag = false;
+        if (m.info.loads) {
+            for (const assets::LevelProblem& p : m.info.problems) {
+                if (p.severity == assets::LevelProblemSeverity::Warning) {
+                    ++s.partial;
+                    break;
+                }
+            }
+        }
         for (const RunReport& r : m.runs) {
+            if (r.status == "refused") {
+                ++s.refused;
+                continue;
+            }
             ++s.runs;
             crashed = crashed || r.status == "crash";
             hung = hung || r.status == "hang";
@@ -1840,6 +1877,8 @@ void print_summary(const Summary& s, double seconds, std::FILE* to) {
     std::fprintf(to, "  maps                 %zu\n", s.maps);
     std::fprintf(to, "  load                 %zu\n", s.loads);
     std::fprintf(to, "  load failures        %zu\n", s.load_failures);
+    std::fprintf(to, "  load with warnings   %zu (the original reads the file only as far as it goes, or its tables are indeterminate)\n", s.partial);
+    std::fprintf(to, "  refused rosters      %zu (a team of the roster has a start marker outside the grid)\n", s.refused);
     std::fprintf(to, "  bad names            %zu (%zu longer than %zu bytes)\n", s.bad_names, s.names_over_limit, net::kMaxMapNameChars);
     std::fprintf(to, "  crashes              %zu\n", s.crashes);
     std::fprintf(to, "  hangs                %zu\n", s.hangs);
@@ -1911,6 +1950,8 @@ std::string report_json(const Options& o, const std::vector<MapReport>& maps, co
     j.field("maps", static_cast<uint64_t>(s.maps));
     j.field("load", static_cast<uint64_t>(s.loads));
     j.field("load_failures", static_cast<uint64_t>(s.load_failures));
+    j.field("load_with_warnings", static_cast<uint64_t>(s.partial));
+    j.field("refused_rosters", static_cast<uint64_t>(s.refused));
     j.field("bad_names", static_cast<uint64_t>(s.bad_names));
     j.field("names_over_limit", static_cast<uint64_t>(s.names_over_limit));
     j.field("crashes", static_cast<uint64_t>(s.crashes));
@@ -1977,6 +2018,19 @@ std::string report_json(const Options& o, const std::vector<MapReport>& maps, co
         j.field("food_objects", static_cast<uint64_t>(m.info.food));
         j.field("waypoints", static_cast<uint64_t>(m.info.waypoints));
         j.field("eggs", static_cast<uint64_t>(m.info.eggs));
+        j.field_bool("playable", m.info.loads && m.info.playable);
+        j.key("problems");
+        j.begin_array();
+        for (const assets::LevelProblem& p : m.info.problems) {
+            j.begin_object();
+            j.field("severity", assets::to_string(p.severity));
+            j.field("kind", assets::to_string(p.kind));
+            j.field("team", static_cast<uint64_t>(p.team < 0 ? 255 : p.team));            // 255 = no team (the numbering of AnthillSpawn::team_id)
+            j.field("count", static_cast<uint64_t>(p.count));
+            j.field("message", p.message);
+            j.end_object();
+        }
+        j.end_array();
         j.key("runs");
         j.begin_array();
         for (const RunReport& r : m.runs) write_run_json(j, r);
@@ -2315,21 +2369,27 @@ int selftest(const std::string& exe) {
         t.check(read_file(maps / "TINY.LVL", good), "TINY.LVL is read");
         auto diagnosis = [&](std::vector<uint8_t> bytes) {
             assets::LevelData level;
-            const bool loads = level.load_from_memory(bytes.data(), bytes.size());
-            return std::make_pair(loads, diagnose_load_failure(bytes));
+            assets::LevelValidation verdict;
+            const bool loads = level.load_from_memory(bytes.data(), bytes.size(), &verdict);
+            return std::make_pair(loads, verdict.reason());
         };
         t.check(diagnosis(good) == std::make_pair(true, std::string()), "a good file has no diagnosis");
         auto cut = [&](size_t n) { return std::vector<uint8_t>(good.begin(), good.begin() + static_cast<std::ptrdiff_t>(n)); };
         const auto tiny = diagnosis(cut(20));
-        t.check(!tiny.first && tiny.second.find("header alone needs 42") != std::string::npos, "20 bytes: the header is cut");
+        t.check(!tiny.first && tiny.second.find("inside the header") != std::string::npos, "20 bytes: the header is cut");
         std::vector<uint8_t> v = good;
         v[0] = 9;
         const auto ver = diagnosis(v);
         t.check(!ver.first && ver.second.find("version 9") != std::string::npos, "version 9 is named");
         v = good;
         v[4] = 2;
-        const auto mode = diagnosis(v);
-        t.check(!mode.first && mode.second.find("game mode 2") != std::string::npos, "game mode 2 is named");
+        {
+            // the original stores the mode dword and never reads it again: any value loads (the community editor leaves garbage there), the finding says so
+            assets::LevelData level;
+            assets::LevelValidation verdict;
+            t.check(level.load_from_memory(v.data(), v.size(), &verdict) && level.game_mode == 2 && verdict.playable && verdict.has(assets::LevelProblemKind::ModeIgnored) &&
+                        !verdict.has(assets::LevelProblemKind::WrongVersion), "game mode 2 loads (the original ignores the mode) and the finding names it");
+        }
         const size_t dims_at = 42 + (static_cast<size_t>(good[40]) | (static_cast<size_t>(good[41]) << 8)) * 11 + 11;
         v = good;
         v[dims_at] = 0;
@@ -2339,7 +2399,7 @@ int selftest(const std::string& exe) {
         const auto zero = diagnosis(v);
         t.check(!zero.first && zero.second.find("0 rows") != std::string::npos, "a grid of 0 rows is named");
         const auto layers = diagnosis(cut(dims_at + 8 + 1000));
-        t.check(!layers.first && layers.second.find("two layers") != std::string::npos, "layers cut short are named");
+        t.check(!layers.first && layers.second.find("layers") != std::string::npos, "layers cut short are named");
         const auto dict = diagnosis(cut(100));
         t.check(!dict.first && dict.second.find("tile dictionary") != std::string::npos, "a cut dictionary is named");
         size_t needed = good.size();      // the shortest prefix that still loads (a file may carry filler after its final word)
@@ -2349,10 +2409,37 @@ int selftest(const std::string& exe) {
             const auto d = diagnosis(cut(n));
             if (d.first || d.second.empty()) every_cut_explained = false;
         }
-        t.check(every_cut_explained, "every truncation of a good file fails to load and is explained");
+        t.check(every_cut_explained && needed < good.size(), "every truncation before block 4 of a good file fails to load and is explained; a cut inside block 4 or the final word loads, as in the original");
         std::vector<uint8_t> longer = good;
         longer.insert(longer.end(), 206, 0);
         t.check(diagnosis(longer).first, "bytes after the final word are no error (the community editor's filler)");
+
+        // a start marker of a team outside the grid: the file loads, the roster with that team is refused, the others are not
+        const size_t rows = static_cast<size_t>(good[dims_at]) | (static_cast<size_t>(good[dims_at + 1]) << 8);
+        const size_t columns = static_cast<size_t>(good[dims_at + 4]) | (static_cast<size_t>(good[dims_at + 5]) << 8);
+        const size_t records_at = dims_at + 8 + rows * columns * 12 + 2;
+        const size_t record_count = static_cast<size_t>(good[records_at - 2]) | (static_cast<size_t>(good[records_at - 1]) << 8);
+        size_t red = 0;
+        for (size_t i = 0; i < record_count && red == 0; ++i) {
+            const size_t at = records_at + i * 6;
+            if ((static_cast<size_t>(good[at]) | (static_cast<size_t>(good[at + 1]) << 8)) == 155) red = at;      // RSTART
+        }
+        t.check(red != 0, "TINY.LVL has a start marker of the red team");
+        if (red != 0) {
+            v = good;
+            v[red + 2] = 200;                    // its row
+            v[red + 3] = 0;
+            MapInfo info;
+            assets::LevelData level;
+            std::vector<uint8_t> copy = v;
+            const fs::path file = fs::temp_directory_path() / ("ants_map_sweep_marker_" + std::to_string(current_pid()) + ".lvl");
+            write_file(file, copy);
+            analyze_map(file.string(), info, level);
+            std::error_code ignore;
+            fs::remove(file, ignore);
+            t.check(info.loads && !info.playable && info.blocked_teams == 2u && !info.blocked_reason.empty(), "a red start marker outside the grid: the file loads, a match with the red team is not playable");
+            t.check(level.validate(0x09).playable && !level.validate(0x0F).playable && level.validate(0x0F).first_fatal() != nullptr, "the other teams are not affected by it");
+        }
     }
 
     t.section("the sweep of the shipped maps (400 ticks, three plays each)");

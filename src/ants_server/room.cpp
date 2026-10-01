@@ -158,6 +158,10 @@ void Room::update(uint32_t now_ms) {
 
     if (state_ == RoomState::Waiting) {
         if (lobby_.can_start() && lobby_.players() >= spec_.players) {
+            uint8_t roster = 0;                                      // the seats that play: a map is playable for some rosters and not for others (a start marker outside the grid)
+            for (uint8_t seat = 0; seat < sim::MAX_PLAYERS; ++seat) roster = static_cast<uint8_t>(roster | (lobby_.room().slots[seat].state != net::SlotState::Empty ? 1u << seat : 0u));
+            const assets::LevelValidation check = level_.validate(roster);
+            if (!check.playable) return fail("the map cannot be played by these seats: " + check.reason(), now_ms);
             if (net::time_reached(now_ms, retry_at_ms_) && lobby_.start(seed_, map_.hash, now_ms)) {
                 state_ = RoomState::Loading;
                 lobby_.host_loaded(true);                            // the server loaded the map when it made the room

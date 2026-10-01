@@ -174,10 +174,6 @@ public:
     bool hit(int32_t px, int32_t py) const noexcept { return px >= x_ && px < x_ + w_ && py >= y_ && py < y_ + h_; }
 
     const std::string& text() const noexcept { return text_; }
-    void set_text(std::string text) {
-        text_ = std::move(text);
-        if (text_.size() > max_) text_.resize(max_);
-    }
     int32_t x() const noexcept { return x_; }
     int32_t y() const noexcept { return y_; }
     int32_t w() const noexcept { return w_; }

@@ -287,7 +287,7 @@ void Grid::configure_anthill_cells(TileCoord pos, uint8_t team_id) {
             int32_t my = static_cast<int32_t>(pos.y) + dy;
             if (in_bounds(mx, my)) {
                 auto& mcell = get_cell_mut(static_cast<uint32_t>(mx), static_cast<uint32_t>(my));
-                mcell.flags &= ~(FLAG_CAN_PLACE_BOMB | FLAG_CAN_PLACE_FIRE);
+                mcell.flags = static_cast<uint16_t>(mcell.flags & ~(FLAG_CAN_PLACE_BOMB | FLAG_CAN_PLACE_FIRE));
                 mcell.base_owner_team = team_id;
                 if (dx == 1 && (dy == 0 || dy == 1)) {
                     mcell.is_base_hole = true;
@@ -331,7 +331,7 @@ void Grid::configure_anthill_cells(TileCoord pos, uint8_t team_id) {
             rcell.terrain_type = TERRAIN_WALKABLE;
             rcell.is_obstacle_overlay = false;
             rcell.base_owner_team = team_id;
-            rcell.flags &= ~(FLAG_CAN_PLACE_BOMB | FLAG_CAN_PLACE_FIRE);
+            rcell.flags = static_cast<uint16_t>(rcell.flags & ~(FLAG_CAN_PLACE_BOMB | FLAG_CAN_PLACE_FIRE));
         }
     }
     // Ensure right approach corridor (bx + 4, by + dy for dy = 0..3) is passable,

@@ -14,7 +14,7 @@ enum class MidiState {
 
 /**
  * @brief Native macOS AudioToolbox MIDI background music player.
- * 
+ *
  * Plays standard MIDI files (e.g. INTRO.MID) using macOS AudioToolbox MusicPlayer
  * and Apple DLS General MIDI Synthesizer without third-party dependencies.
  * Supports looping, volume attenuation, and smooth fading.

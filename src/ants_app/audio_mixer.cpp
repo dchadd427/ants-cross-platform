@@ -214,7 +214,6 @@ int AudioMixer::play_sfx(uint32_t sound_id, float volume, uint8_t priority, bool
 
     MixerChannel& ch = channels_[static_cast<size_t>(ch_idx)];
     ch.active = true;
-    ch.sound_id = sound_id;
     ch.clip = &clip;
     ch.cursor = 0.0;
     ch.rate_step = static_cast<double>(clip.format.samples_per_sec) / static_cast<double>(output_sample_rate_);
@@ -241,7 +240,6 @@ int AudioMixer::play_spatial(uint32_t sound_id, int32_t world_x, int32_t world_y
 
     MixerChannel& ch = channels_[static_cast<size_t>(ch_idx)];
     ch.active = true;
-    ch.sound_id = sound_id;
     ch.clip = &clip;
     ch.cursor = 0.0;
     ch.rate_step = static_cast<double>(clip.format.samples_per_sec) / static_cast<double>(output_sample_rate_);

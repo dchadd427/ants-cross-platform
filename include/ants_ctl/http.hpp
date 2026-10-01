@@ -7,9 +7,8 @@
 // How a backend calls it (the secret here is made up; the port is whatever the server was started with):
 //
 //     curl -s http://127.0.0.1:4100/healthz                                   # {"ok":true}, no secret needed (a Docker HEALTHCHECK)
-//     curl -s -X POST http://127.0.0.1:4100/rooms \
-//          -H "Authorization: Bearer example-secret-0123456789" \
-//          -H "Content-Type: application/json" -d '{"seats":4}'                # the body is whatever the room logic defines
+//     curl -s -X POST http://127.0.0.1:4100/rooms -H "Authorization: Bearer example-secret-0123456789" -H "Content-Type: application/json" -d '{"seats":4}'
+//                                                                              # (the body is whatever the room logic defines)
 //     curl -s http://127.0.0.1:4100/rooms/ABCD -H "Authorization: Bearer example-secret-0123456789"
 //     curl -s -X DELETE http://127.0.0.1:4100/rooms/ABCD -H "Authorization: Bearer example-secret-0123456789"
 //

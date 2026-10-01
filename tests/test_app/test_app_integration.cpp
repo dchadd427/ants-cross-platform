@@ -172,6 +172,31 @@ static bool stand_on_powerup(SimulationEngine& sim, uint32_t ant_id, TileCoord h
     return u.pos == hat && u.loco_action == AntUnit::kActionIdle && sim.grid().has_powerup_at(hat);
 }
 
+// TINY.LVL with its first start marker of the green team (tile 154) moved to row 21512, written to a temporary file (a byte edit of a shipped map, as the loader
+// tests make their synthetic maps): the file loads, a match with the green team is not playable. Empty path when the shipped map cannot be read.
+static std::filesystem::path write_marker_outside_grid_map() {
+    std::ifstream in("Original-Ants/Maps/TINY.LVL", std::ios::binary);
+    std::vector<uint8_t> bytes((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+    if (bytes.size() < 19000) return {};
+    const size_t names = static_cast<size_t>(bytes[40] | (bytes[41] << 8)) + 1;
+    const size_t dims = 42 + names * 11;
+    const size_t cells = static_cast<size_t>(bytes[dims] | (bytes[dims + 1] << 8)) * static_cast<size_t>(bytes[dims + 4] | (bytes[dims + 5] << 8));
+    const size_t records = dims + 8 + cells * 12 + 2;                     // block 1: a word count, then (tile, row, column) words
+    const size_t count = static_cast<size_t>(bytes[records - 2] | (bytes[records - 1] << 8));
+    size_t green = 0;
+    for (size_t i = 0; i < count && green == 0; ++i) {
+        const size_t at = records + i * 6;
+        if ((bytes[at] | (bytes[at + 1] << 8)) == 154) green = at;
+    }
+    if (green == 0) return {};
+    bytes[green + 2] = static_cast<uint8_t>(21512 & 0xFF);
+    bytes[green + 3] = static_cast<uint8_t>(21512 >> 8);
+    const std::filesystem::path path = std::filesystem::temp_directory_path() / "ants_unplayable_marker.lvl";
+    std::ofstream out(path, std::ios::binary | std::ios::trunc);
+    out.write(reinterpret_cast<const char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
+    return out.good() ? path : std::filesystem::path{};
+}
+
 // Milliseconds from an ant's first path delivery to its last pixel move (the landing on the goal centre),
 // read from the locomotion trace (SimulationEngine::set_locomotion_trace_enabled); -1 without a path.
 static int32_t walk_duration_ms(const SimulationEngine& sim, uint32_t ant_id) {
@@ -1357,6 +1382,66 @@ void run_suite_7_input_controls() {
         int32_t expected_y = 960 - 440 / 2;
         ASSERT_EQ(camera.world_x, expected_x);
         ASSERT_EQ(camera.world_y, expected_y);
+    } TEST_END();
+
+    TEST_CASE("7.6b A Map With A Start Marker Outside The Grid Is Not Started (Application::load_match Asks LevelData::validate For The Teams Of The Match; The Original Has No Behaviour For It)") {
+        Application app;
+        ApplicationConfig cfg;
+        cfg.headless = true;
+        cfg.start_in_map_select = true;
+        ASSERT_TRUE(app.init(cfg));
+        ASSERT_EQ(app.state(), AppState::MapSelect);
+
+        // the file loads, the match with all four teams is refused
+        const std::filesystem::path unplayable = write_marker_outside_grid_map();
+        ASSERT_FALSE(unplayable.empty());
+        const bool started = app.start_game(unplayable.string());
+        std::error_code ignore;
+        std::filesystem::remove(unplayable, ignore);
+        ASSERT_FALSE(started);
+        ASSERT_EQ(app.state(), AppState::MapSelect);
+
+        // the shipped map starts as ever
+        ASSERT_TRUE(app.start_game("Original-Ants/Maps/TINY.LVL"));
+        ASSERT_EQ(app.state(), AppState::Playing);
+    } TEST_END();
+
+    TEST_CASE("7.6c A Game That Starts Straight Into Its Match (--map) Refuses The Same Map: Application::init Asks LevelData::validate For All Four Teams; The Setup Screen Starts Without Asking (The Match Is Checked When It Starts)") {
+        const std::filesystem::path unplayable = write_marker_outside_grid_map();
+        ASSERT_FALSE(unplayable.empty());
+        {
+            Application direct;
+            ApplicationConfig cfg;
+            cfg.headless = true;
+            cfg.start_in_map_select = false;
+            cfg.default_map_path = unplayable.string();
+            ASSERT_FALSE(direct.init(cfg));
+            direct.shutdown();
+        }
+        {
+            Application direct;
+            ApplicationConfig cfg;
+            cfg.headless = true;
+            cfg.start_in_map_select = false;
+            cfg.default_map_path = "Original-Ants/Maps/TINY.LVL";
+            ASSERT_TRUE(direct.init(cfg));
+            ASSERT_EQ(direct.state(), AppState::Playing);
+            direct.shutdown();
+        }
+        {
+            Application setup;
+            ApplicationConfig cfg;
+            cfg.headless = true;
+            cfg.start_in_map_select = true;
+            cfg.default_map_path = unplayable.string();
+            ASSERT_TRUE(setup.init(cfg));
+            ASSERT_EQ(setup.state(), AppState::MapSelect);
+            ASSERT_FALSE(setup.start_game(unplayable.string()));
+            ASSERT_EQ(setup.state(), AppState::MapSelect);
+            setup.shutdown();
+        }
+        std::error_code ignore;
+        std::filesystem::remove(unplayable, ignore);
     } TEST_END();
 
     TEST_CASE("7.7 Cursor Simulated in Screen Middle On Game Start (No Unwanted Edge Panning)") {
@@ -7501,10 +7586,10 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
 
     TEST_CASE("12.108: Version Invariant & Fog of War Cursor Concealment Parity") {
         // 1. Verify semantic versioning components
-        ASSERT_EQ(ants::VERSION_STRING, "v0.0.85");
+        ASSERT_EQ(ants::VERSION_STRING, "v0.0.86");
         ASSERT_EQ(ants::VERSION_MAJOR, 0);
         ASSERT_EQ(ants::VERSION_MINOR, 0);
-        ASSERT_EQ(ants::VERSION_PATCH, 85);
+        ASSERT_EQ(ants::VERSION_PATCH, 86);
 
         // 2. Setup simulation world with Fog of War enabled
         SimulationEngine sim;
