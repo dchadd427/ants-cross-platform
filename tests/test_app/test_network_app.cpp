@@ -294,6 +294,17 @@ void run_command_line_tests() {
         args = {"ants", "-pnum:1", "-pnum=2"};
         c = Application::parse_arguments(static_cast<int>(args.size()), argv_of(args, st));
         ASSERT_EQ(c.local_player_id, 2);                                                 // the last one wins, whichever spelling
+        // --room CODE and --token T (protocol 6: a server's room and the credential that came with it)
+        args = {"ants", "--join", "play.example.org:4001", "--room", "ROOM-42", "--token", "abc.DEF-123", "--name", "Ann"};
+        c = Application::parse_arguments(static_cast<int>(args.size()), argv_of(args, st));
+        ASSERT_EQ(c.net_room, "ROOM-42");
+        ASSERT_EQ(c.net_token, "abc.DEF-123");
+        args = {"ants", "--room", "no spaces allowed"};                                  // not a room code: ignored
+        c = Application::parse_arguments(static_cast<int>(args.size()), argv_of(args, st));
+        ASSERT_EQ(c.net_room, "");
+        args = {"ants", "--room", "a/../b"};
+        c = Application::parse_arguments(static_cast<int>(args.size()), argv_of(args, st));
+        ASSERT_EQ(c.net_room, "");
         const uint8_t unset = Application::parse_arguments(1, argv_of(args = {"ants"}, st)).local_player_id;
         for (const char* bad : {"-pnum:4", "-pnum:7", "-pnum:-1", "-pnum:"}) {
             args = {"ants", bad};

@@ -71,6 +71,8 @@ struct ApplicationConfig {
     uint16_t net_port{4001};                    // the original's port
     bool net_loopback_only{false};              // Host: accept only this machine (two copies on one computer, tests)
     uint16_t lan_port{net::kLanDiscoveryPort};  // the UDP port on which an open room announces itself to the local network (--lan-port N; 0 = not at all, --no-lan)
+    std::string net_room;                       // Join: the room of a server (--room CODE); "" for a LAN / direct host
+    std::string net_token;                      // Join: the credential that came with the room code (--token T)
     uint8_t net_seat{255};                      // Join: the seat asked for (--seat N, 0 .. 3: the colours green, red, blue, black); 255: any free seat
     /// Where the window goes (native builds): an explicit position and size (--window-pos X,Y, --window-size W,H), or a cell of a grid over the display's usable
     /// area (--grid CxR --cell N: the start scripts lay four games out as a 2 x 2 grid, each window the largest 4:3 rectangle of its cell); --display N picks the

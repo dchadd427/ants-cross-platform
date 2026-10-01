@@ -76,6 +76,9 @@ include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
 add_subdirectory(src/ants_assets)
 add_subdirectory(src/ants_sim)
 add_subdirectory(src/ants_net)
+if(NOT EMSCRIPTEN)
+    add_subdirectory(src/ants_ctl)    # control interface of the game server (strict JSON, authenticated HTTP on the loopback address): sockets, native only
+endif()
 add_subdirectory(src/ants_app)
 
 # Table generator (not part of the normal build): writes src/ants_sim/food_footprints_data.inc from Original-Ants/ants.chd
@@ -84,6 +87,14 @@ if(NOT EMSCRIPTEN)
     add_executable(gen_food_footprints EXCLUDE_FROM_ALL tools/gen_food_footprints.cpp)
     target_link_libraries(gen_food_footprints PRIVATE ants_sim ants_assets)
     target_compile_definitions(gen_food_footprints PRIVATE
+        ORIGINAL_ASSETS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/Original-Ants")
+
+    # Map sweep (not part of the normal build): plays every map of a folder headless with the real engine (loads, determinism, speed, memory)
+    #   cmake --build build --target map_sweep && ./build/map_sweep <maps-folder> --out report.json   (./build/map_sweep --selftest checks the tool itself)
+    find_package(Threads REQUIRED)
+    add_executable(map_sweep EXCLUDE_FROM_ALL tools/map_sweep.cpp)
+    target_link_libraries(map_sweep PRIVATE ants_net ants_sim ants_assets Threads::Threads)
+    target_compile_definitions(map_sweep PRIVATE
         ORIGINAL_ASSETS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/Original-Ants")
 endif()
 
@@ -98,6 +109,9 @@ if(BUILD_TESTS AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tests")
     add_subdirectory(tests/test_assets)
     add_subdirectory(tests/test_sim)
     add_subdirectory(tests/test_net)
+    if(NOT EMSCRIPTEN)
+        add_subdirectory(tests/test_ctl)
+    endif()
     add_subdirectory(tests/test_app)
 endif()
 

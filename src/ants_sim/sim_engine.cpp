@@ -86,6 +86,7 @@ void SimulationEngine::init(const ants::assets::LevelData& level_in, uint32_t ra
     impl_->score_bubbles_.clear();
     impl_->grid_.init_from_level(level);
     impl_->stats_.reset();
+    impl_->last_attacked_ms_.fill(-1000000);          // player +0x4c: no team has been attacked yet
     uint32_t match_minutes = (level.default_minutes > 0) ? level.default_minutes : 12;
     impl_->set_match_clock(static_cast<int64_t>(match_minutes) * 60 * 1000);
     impl_->match_limit_ms_ = match_minutes * 60 * 1000;
@@ -191,6 +192,7 @@ void SimulationEngine::init_test_world(uint32_t width, uint32_t height, uint32_t
     impl_->score_bubbles_.clear();
     impl_->grid_.init_empty(width, height);
     impl_->stats_.reset();
+    impl_->last_attacked_ms_.fill(-1000000);          // player +0x4c: no team has been attacked yet
     impl_->set_match_clock(static_cast<int64_t>(match_time_ms));
     impl_->match_limit_ms_ = match_time_ms;
     impl_->checkgo_stage_ = 0;

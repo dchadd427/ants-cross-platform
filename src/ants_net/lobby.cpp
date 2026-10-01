@@ -179,6 +179,7 @@ void HostLobby::handle_hello(Pending& p, const std::vector<uint8_t>& msg, uint32
     if (!decode_hello_prefix(msg.data(), msg.size(), hello)) return reject(RejectReason::BadRequest);
     if (hello.version != kProtocolVersion) return reject(RejectReason::VersionMismatch);      // the layout of another version is not read
     if (!decode(msg, hello)) return reject(RejectReason::BadRequest);                        // this version's layout, in full
+    if (hello.room != cfg_.room_code) return reject(RejectReason::NoSuchRoom);               // a Hello for another room (or for none)
     if (phase_ != Phase::Room) return reject(RejectReason::MatchRunning);
     uint8_t seat = 255;
     if (hello.want_seat < sim::MAX_PLAYERS && room_.slots[hello.want_seat].state == SlotState::Empty) seat = hello.want_seat;     // the seat it asked for, when it is free
@@ -328,6 +329,8 @@ void ClientLobby::update(uint32_t now_ms) {
             h.name = printable(cfg_.name, kMaxNameChars);
             h.listen_port = cfg_.listen_port;
             h.want_seat = cfg_.want_seat;
+            h.room = cfg_.room;
+            h.token = cfg_.token;
             conn_->send(encode(h));
             phase_ = Phase::Joining;
             joined_at_ms_ = now_ms;

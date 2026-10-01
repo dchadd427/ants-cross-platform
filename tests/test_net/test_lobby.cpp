@@ -145,7 +145,11 @@ int main() {
         ASSERT_EQ(peek_type(encode_begin()), MsgType::Begin);
         ASSERT_EQ(peek_type(encode_leave()), MsgType::Leave);
         // map names travel only as plain names of the maps folder
-        for (const char* bad : {"../secret.LVL", "a/b.LVL", "a\\b.LVL", ".hidden.LVL", "x.txt", "LVL", "MAP..LVL", "sp ace.LVL"}) {
+        const std::string too_long = std::string(kMaxMapNameChars - 3, 'M') + ".lvl";           // 65 characters: one too many
+        for (const std::string& bad : {std::string("../secret.LVL"), std::string("a/b.LVL"), std::string("a\\b.LVL"), std::string(".hidden.LVL"), std::string("x.txt"), std::string("LVL"),
+                                      std::string("a:b.LVL"), std::string("a*b.lvl"), std::string("a?b.lvl"), std::string("a\"b.lvl"), std::string("a<b.lvl"), std::string("a>b.lvl"), std::string("a|b.lvl"),
+                                      std::string("tab\t.lvl"), std::string("del\x7f.lvl"), std::string("caf\xC3\xA9.lvl"), std::string("nul\0x.lvl", 10), std::string("x.lv"), std::string("x.lvlx"),
+                                      std::string("..lvl"), too_long}) {
             ASSERT_FALSE(valid_map_name(bad));
             RoomMsg x = r;
             x.map_name = bad;
@@ -169,6 +173,40 @@ int main() {
             ASSERT_FALSE(decode(encode(sx), sy));
         }
         ASSERT_TRUE(valid_map_name("TREASURE.LVL") && valid_map_name("my-map_2.lvl"));
+        // protocol 6: the community's names hold spaces, '!', '~', '#', '$', '&', quotes and even ".." (a name cannot hold a separator, so none of them names a path)
+        for (const char* good : {"!!!! My Map ~v2~ (final).lvl", "ANTS WORLD....lvl", "Beach Day !...lvl", "OHH MY GOD..  TRAP!!.lvl", "Lero .lvl", "#1 Map $5 & It's.lvl", "a.LVL", "x y.lvl"}) {
+            ASSERT_TRUE(valid_map_name(good));
+            RoomMsg x = r;
+            x.map_name = good;
+            RoomMsg y;
+            ASSERT_TRUE(decode(encode(x), y) && y.map_name == good);
+            StartMsg sx = s;
+            sx.map_name = good;
+            StartMsg sy;
+            ASSERT_TRUE(decode(encode(sx), sy) && sy.map_name == good);
+        }
+        ASSERT_TRUE(valid_map_name(std::string(kMaxMapNameChars - 4, 'M') + ".lvl"));            // exactly the longest
+        ASSERT_FALSE(valid_map_name(std::string(kMaxMapNameChars - 3, 'M') + ".lvl"));           // one more is too long
+        // room codes and tokens
+        ASSERT_TRUE(valid_room_code("") && valid_room_code("ABCD-1234") && valid_room_code("room_7") && valid_room_code(std::string(kMaxRoomCodeChars, 'r')));
+        ASSERT_FALSE(valid_room_code(std::string(kMaxRoomCodeChars + 1, 'r')));
+        for (const char* bad_code : {"a b", "a/b", "..", "r\n", "room!", "caf\xC3\xA9"}) ASSERT_FALSE(valid_room_code(bad_code));
+        {
+            HelloMsg h;
+            h.name = "Ann";
+            h.room = "ROOM-42";
+            h.token = "tok.en+/=_-123";
+            HelloMsg back;
+            ASSERT_TRUE(decode(encode(h), back) && back.room == "ROOM-42" && back.token == h.token && back.name == "Ann" && back.want_seat == 255);
+            HelloMsg bad_room = h;
+            bad_room.room = "no spaces";
+            ASSERT_FALSE(decode(encode(bad_room), back));
+            HelloMsg bad_token = h;
+            bad_token.token = "a b";                                                              // a token has no spaces
+            ASSERT_FALSE(decode(encode(bad_token), back));
+            HelloMsg none;                                                                         // a LAN / direct Hello: no room, no token
+            ASSERT_TRUE(decode(encode(none), back) && back.room.empty() && back.token.empty());
+        }
         // out of range fields
         std::vector<uint8_t> b = encode(r);
         b[b.size() - 1] = 4;                                              // you = 4 (only 255 or 0..3)
@@ -215,6 +253,49 @@ int main() {
             if (decode(buf, dd)) { ++accepted; ASSERT_TRUE(encode(dd) == buf); }
         }
         ASSERT_TRUE(accepted > 3000);
+    } TEST_END();
+
+    TEST_CASE("N4.2c Room Codes (Protocol 6): A Server's Room Takes Only Hellos For Its Own Code; A LAN Host Takes Only Hellos Without One") {
+        auto answer_to = [](Room& r, const HelloMsg& hello) {
+            auto ends = r.net.connect({10, 0});
+            r.host.add_connection(ends.first, 0);
+            ends.second->send(encode(hello));
+            r.run(100);
+            std::vector<uint8_t> reply;
+            RejectMsg rj;
+            WelcomeMsg w;
+            if (!ends.second->poll(reply)) return std::string("silent");
+            if (decode(reply, rj)) return std::string("rejected ") + std::to_string(static_cast<int>(rj.reason));
+            if (decode(reply, w)) return std::string("welcome");
+            return std::string("other");
+        };
+        const std::string no_such_room = std::string("rejected ") + std::to_string(static_cast<int>(RejectReason::NoSuchRoom));
+        {   // a room of a server
+            HostLobby::Config hc;
+            hc.room_code = "ROOM-7";
+            Room server(hc);
+            HelloMsg h;
+            h.name = "Ann";
+            h.room = "ROOM-7";
+            h.token = "t0k3n";
+            ASSERT_EQ(answer_to(server, h), std::string("welcome"));
+            h.room = "ROOM-8";
+            ASSERT_EQ(answer_to(server, h), no_such_room);                              // another room
+            h.room = "";
+            ASSERT_EQ(answer_to(server, h), no_such_room);                              // no room at all
+            h.room = "room-7";
+            ASSERT_EQ(answer_to(server, h), no_such_room);                              // the code is case sensitive
+            ASSERT_EQ(server.host.players(), 2u);                                       // the host's seat and Ann: nobody else got in
+        }
+        {   // a LAN / direct host has no room code
+            Room lan;
+            HelloMsg h;
+            h.name = "Bob";
+            ASSERT_EQ(answer_to(lan, h), std::string("welcome"));
+            h.room = "ROOM-7";
+            ASSERT_EQ(answer_to(lan, h), no_such_room);
+            ASSERT_EQ(lan.host.players(), 2u);
+        }
     } TEST_END();
 
     TEST_CASE("N4.2 Joining: Seats Are Handed Out In Order, Everybody Sees The Roster; Full Rooms, Old Versions And Garbage Are Refused") {

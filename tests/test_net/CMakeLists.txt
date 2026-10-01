@@ -81,3 +81,19 @@ target_compile_definitions(test_netgame PRIVATE
 )
 
 add_test(NAME test_netgame COMMAND test_netgame)
+
+add_executable(test_ws
+    test_ws.cpp
+)
+
+target_link_libraries(test_ws PRIVATE
+    ants_net
+    ants_sim
+    ants_assets
+)
+
+target_include_directories(test_ws PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../include
+)
+
+add_test(NAME test_ws COMMAND test_ws)

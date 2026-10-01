@@ -185,12 +185,22 @@ uint16_t SimulationEngine::quitter() const noexcept {
     return impl_->quitter_;
 }
 
+namespace {
+// __ftol (0x1034580): the rounding control is set to truncate, `fistp qword` stores a 64-bit integer and the caller takes EAX = its low 32 bits. A value outside
+// the 64-bit range and NaN store the "integer indefinite" 0x8000000000000000, whose low half is 0. (A plain cast to int32_t is undefined for such a value and
+// differs between x86 and ARM: one community map has flower probabilities of 1e13 and more, which would have made two machines pick different power-ups.)
+int32_t ftol_msvc(double v) noexcept {
+    if (!(v > -9223372036854775808.0 && v < 9223372036854775808.0)) return 0;
+    return static_cast<int32_t>(static_cast<uint32_t>(static_cast<uint64_t>(static_cast<int64_t>(v))));
+}
+}  // namespace
+
 uint8_t SimulationEngine::pick_dropper_powerup(const std::array<double, 5>& probabilities, uint32_t r) noexcept {
-    int32_t total = 0;
+    uint32_t total = 0;                                                     // a 32-bit register: the sum wraps like the original's, without signed overflow
     for (uint8_t i = 0; i < 5; ++i) {
         if (probabilities[i] == 0.0) continue;                              // fcomp [0x1001fb8]: a zero entry is skipped
-        total += static_cast<int32_t>(probabilities[i] * 10000.0);          // fmul [0x1001fc0]; _ftol truncates
-        if (static_cast<int32_t>(r) < total) return i;
+        total += static_cast<uint32_t>(ftol_msvc(probabilities[i] * 10000.0));   // fmul [0x1001fc0]; _ftol truncates
+        if (static_cast<int32_t>(r) < static_cast<int32_t>(total)) return i;
     }
     return 0xFF;
 }

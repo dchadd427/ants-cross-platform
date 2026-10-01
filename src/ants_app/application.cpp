@@ -133,6 +133,11 @@ ApplicationConfig Application::parse_arguments(int argc, char* argv[]) {
             cfg.lan_port = static_cast<uint16_t>(std::stoul(argv[++i]));
         } else if (std::strcmp(argv[i], "--no-lan") == 0) {
             cfg.lan_port = 0;                                                  // the room is not announced on the local network
+        } else if (std::strcmp(argv[i], "--room") == 0 && i + 1 < argc) {
+            const std::string code = argv[++i];
+            if (net::valid_room_code(code)) cfg.net_room = code;               // letters, digits, '_' and '-' (up to 32); anything else is ignored
+        } else if (std::strcmp(argv[i], "--token") == 0 && i + 1 < argc) {
+            cfg.net_token = argv[++i];
         } else if (std::strcmp(argv[i], "--seat") == 0 && i + 1 < argc) {
             const int seat = std::atoi(argv[++i]);                             // the colour to sit in: 0 green, 1 red, 2 blue, 3 black
             if (seat >= 0 && seat < 4) cfg.net_seat = static_cast<uint8_t>(seat);
@@ -343,7 +348,7 @@ bool Application::init(const ApplicationConfig& config) {
         net_->set_game_version(std::string(VERSION_STRING));
         const bool ok = config_.net_role == ApplicationConfig::NetRole::Host
                             ? net_->host(config_.net_port, player_name, config_.net_loopback_only)
-                            : net_->join(config_.net_address, config_.net_port, player_name, config_.net_seat);
+                            : net_->join(config_.net_address, config_.net_port, player_name, config_.net_seat, config_.net_room, config_.net_token);
         if (!ok) {
             std::cerr << "[Application] Could not " << (config_.net_role == ApplicationConfig::NetRole::Host ? "open a room on port " : "reach the host at ")
                       << (config_.net_role == ApplicationConfig::NetRole::Host ? std::to_string(config_.net_port) : config_.net_address + ":" + std::to_string(config_.net_port))

@@ -18,7 +18,7 @@
 
 namespace ants::net {
 
-inline constexpr uint16_t kProtocolVersion = 5;         // 2: the Room message carries each seat's round trip (the thumbs); 3: host migration (mesh, election); 4: the Quit command (Drop moved from 11 to 12); 5: Hello carries the seat that the guest asks for
+inline constexpr uint16_t kProtocolVersion = 6;         // 2: the Room message carries each seat's round trip (the thumbs); 3: host migration (mesh, election); 4: the Quit command (Drop moved from 11 to 12); 5: Hello carries the seat that the guest asks for; 6: map names may hold any printable character that cannot leave the maps folder (up to 64), Hello carries a room code and a token, the slot state Bot, the rejection NoSuchRoom
 inline constexpr size_t kMaxMessageBytes = 64 * 1024;
 inline constexpr size_t kMaxTurnCommands = 512;
 inline constexpr size_t kMaxChatChars = 100;        // the original's chat entry
@@ -54,17 +54,26 @@ enum class MsgType : uint8_t {
     Last = PeerHello
 };
 
-/// Longest map file name that travels (a plain name of the maps folder: letters, digits, '_', '-', '.', ending in ".LVL")
-inline constexpr size_t kMaxMapNameChars = 32;
+/// Longest map file name that travels (a plain name of the maps folder, ending in ".lvl" / ".LVL")
+inline constexpr size_t kMaxMapNameChars = 64;
+/// The name of a map file of the maps folder, as it travels in the Room, Start and LAN messages: 5 .. kMaxMapNameChars printable ASCII characters (0x20 - 0x7E: the
+/// community's names hold spaces, '!', '~', '#', '&', ... and even ".."), none of `/ \ : * ? " < > |` (so a name can never name a path), not starting with '.',
+/// ending in ".lvl" or ".LVL"
 bool valid_map_name(const std::string& name) noexcept;
+/// A room code (a server hosts many rooms): empty = no room (a LAN or direct host), else 1 .. kMaxRoomCodeChars of letters, digits, '_' and '-'
+inline constexpr size_t kMaxRoomCodeChars = 32;
+inline constexpr size_t kMaxTokenChars = 64;                     // an opaque credential that a lobby hands out with the room code (printable, never interpreted by the game)
+bool valid_room_code(const std::string& code) noexcept;
 
-enum class RejectReason : uint8_t { Full = 1, VersionMismatch = 2, MatchRunning = 3, Kicked = 4, BadRequest = 5 };
+enum class RejectReason : uint8_t { Full = 1, VersionMismatch = 2, MatchRunning = 3, Kicked = 4, BadRequest = 5, NoSuchRoom = 6 };
 
 struct HelloMsg {
     uint16_t version{kProtocolVersion};
     std::string name;
     uint16_t listen_port{0};    // the port on which this guest accepts the other guests' connections during the match (0: none)
     uint8_t want_seat{255};     // the seat (0 .. 3) this guest asks for, 255: any; a seat that is taken (or the host's own) gives the first free one (protocol 5)
+    std::string room;           // the room of a server that this guest wants ("" for a LAN / direct host: valid_room_code); a room that does not exist is Rejected NoSuchRoom (protocol 6)
+    std::string token;          // the credential that came with the room code (kMaxTokenChars printable characters; "" when none): carried, never interpreted here (protocol 6)
 };
 struct WelcomeMsg {
     uint8_t player{255};        // the slot (0 .. 3) this client plays
@@ -104,7 +113,7 @@ struct PingMsg {
 };
 
 /// What a seat of the room holds
-enum class SlotState : uint8_t { Empty = 0, Host = 1, Client = 2 };
+enum class SlotState : uint8_t { Empty = 0, Host = 1, Client = 2, Bot = 3 };       // Bot: a computer player (docs/BOTS.md): no connection behind the seat
 
 /// The connection quality shown as a thumb beside a player's name on the setup screen (animations netgood, netok, netbad, netunk). The thresholds are
 /// the original's (Ants.exe 0x1013289): a measured latency below 1200 ms is good, below 1800 ms is ok, anything more is bad; a peer that is connected

@@ -10,6 +10,7 @@
 #include <cstdlib>
 #include <functional>
 #include <iomanip>
+#include <limits>
 #include <iostream>
 #include <string>
 #include <utility>
@@ -426,6 +427,26 @@ bool lockstep_run(uint32_t seed, uint32_t ticks, std::string& why, size_t* appli
 }
 
 void run_lockstep_tests() {
+    TEST_CASE("N1.9b Dropper Power-Up Pick: The Conversion Is __ftol (Truncate To 64 Bits, Keep The Low 32), Defined For Every Probability A Map File Can Hold (0x1034580)") {
+        // ordinary probabilities: 0.25 -> 2500 of 10000; a zero entry is skipped
+        ASSERT_EQ(static_cast<int>(SimulationEngine::pick_dropper_powerup({0.25, 0.0, 0.5, 0.25, 0.0}, 0)), 0);
+        ASSERT_EQ(static_cast<int>(SimulationEngine::pick_dropper_powerup({0.25, 0.0, 0.5, 0.25, 0.0}, 2499)), 0);
+        ASSERT_EQ(static_cast<int>(SimulationEngine::pick_dropper_powerup({0.25, 0.0, 0.5, 0.25, 0.0}, 2500)), 2);
+        ASSERT_EQ(static_cast<int>(SimulationEngine::pick_dropper_powerup({0.25, 0.0, 0.5, 0.25, 0.0}, 7499)), 2);
+        ASSERT_EQ(static_cast<int>(SimulationEngine::pick_dropper_powerup({0.25, 0.0, 0.5, 0.25, 0.0}, 7500)), 3);
+        ASSERT_EQ(static_cast<int>(SimulationEngine::pick_dropper_powerup({0.25, 0.0, 0.5, 0.25, 0.0}, 10000)), 0xFF);
+        // the community map with probabilities of 1e13 and more (4.2e17 of 10000 does not fit an int): the sums are the low 32 bits of the 64-bit truncations,
+        // 1437204480, 933429248 (so -1924333568 as a signed sum), ... on every platform
+        const std::array<double, 5> wild{4.2e13, 9.9e13, 0.0, 1.4e14, 2.8e13};
+        ASSERT_EQ(static_cast<int>(SimulationEngine::pick_dropper_powerup(wild, 0)), 0);                    // 0 < 1437204480
+        ASSERT_EQ(static_cast<int>(SimulationEngine::pick_dropper_powerup(wild, 1437204479)), 0);
+        ASSERT_EQ(static_cast<int>(SimulationEngine::pick_dropper_powerup(wild, 1437204480)), 0xFF);        // not below the first sum; the later sums are negative as signed 32-bit values: nothing is picked
+        // out of the 64-bit range, NaN, infinities: the indefinite value, low half 0 (no undefined behaviour)
+        ASSERT_EQ(static_cast<int>(SimulationEngine::pick_dropper_powerup({1e300, 0.0, 0.0, 0.0, 0.0}, 0)), 0xFF);      // adds 0: nothing is below 0 ...
+        ASSERT_EQ(static_cast<int>(SimulationEngine::pick_dropper_powerup({std::numeric_limits<double>::quiet_NaN(), 0.5, 0.0, 0.0, 0.0}, 100)), 1);
+        ASSERT_EQ(static_cast<int>(SimulationEngine::pick_dropper_powerup({std::numeric_limits<double>::infinity(), -1e300, 0.5, 0.0, 0.0}, 100)), 2);
+    } TEST_END();
+
     TEST_CASE("N1.10 Lock-Step: Two Engines With Permuted Command Arrival Stay Bit-Identical Every Tick (4 players, 600 ticks, 3 seeds)") {
         for (uint32_t seed : {1u, 2u, 3u}) {
             std::string why;

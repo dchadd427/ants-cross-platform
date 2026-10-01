@@ -60,6 +60,15 @@ inline void run_test_case(const std::string& name, const std::function<void()>& 
 
 namespace {
 
+// A Hello with a version and a name (the other fields at their defaults: the message has grown with the protocol, an aggregate initializer would miss fields)
+HelloMsg hello_of(uint16_t version, const char* name) {
+    HelloMsg h;
+    h.version = version;
+    h.name = name;
+    return h;
+}
+
+
 struct Lcg {
     uint32_t s;
     explicit Lcg(uint32_t seed) : s(seed) {}
@@ -351,8 +360,10 @@ void run_protocol_tests() {
         bytes = encode(RejectMsg{RejectReason::Full});
         bytes[1] = 0;
         ASSERT_FALSE(decode(bytes, r));
-        bytes[1] = 6;
+        bytes[1] = 7;                                                    // the reasons are 1 .. 6 (6 = NoSuchRoom, protocol 6)
         ASSERT_FALSE(decode(bytes, r));
+        bytes[1] = 6;
+        ASSERT_TRUE(decode(bytes, r) && r.reason == RejectReason::NoSuchRoom);
         DesyncMsg d;
         DesyncMsg good;
         good.player = 1;
@@ -383,7 +394,7 @@ void run_protocol_tests() {
         ASSERT_TRUE(decode(encode(longtext), back) && back.text.size() == kMaxChatChars);   // clipped by the encoder
         // a name with a control character
         HelloMsg h;
-        bytes = encode(HelloMsg{kProtocolVersion, "Bob"});
+        bytes = encode(hello_of(kProtocolVersion, "Bob"));
         bytes[4] = 7;
         ASSERT_FALSE(decode(bytes, h));
         // host migration: seats out of range, an Accept that executed more than it received, endpoints that are no addresses
@@ -435,7 +446,7 @@ void run_protocol_tests() {
         hash.turn = 10;
         hash.hash = {1, 2, 3, 4, 5, 6, 7, 8};
         const std::vector<std::vector<uint8_t>> seeds = {encode(turn), encode(hash), encode(CommandMsg{cmd(CommandType::GroupAttack, 2, 255, 5, 5, {1})}),
-                                                         encode(ChatMsg{1, true, "hello"}), encode(HelloMsg{1, "Ann"}), encode(WelcomeMsg{1, 4}),
+                                                         encode(ChatMsg{1, true, "hello"}), encode(hello_of(1, "Ann")), encode(WelcomeMsg{1, 4}),
                                                          encode(ProposeMsg{1, 2}), encode(AcceptMsg{1, 100, 98}), encode(RefuseMsg{1, 1}),
                                                          encode(ResumeMsg{1, 2, 500}), encode(RequestMsg{40}), encode(PeerHelloMsg{3})};
         size_t accepted = 0;

@@ -23,7 +23,7 @@ namespace ants::net {
 inline constexpr uint16_t kLanDiscoveryPort = 4001;     // UDP; the game's own TCP port has the same number
 inline constexpr uint32_t kLanAnnounceMs = 1000;         // a room announces itself this often
 inline constexpr uint32_t kLanExpireMs = 3500;           // a room that was not heard for this long is gone
-inline constexpr size_t kLanMaxDatagram = 128;           // a datagram is never longer (the longest message is 99 bytes)
+inline constexpr size_t kLanMaxDatagram = 160;           // a datagram is never longer (the longest message is 131 bytes: protocol 6 allows map names of 64 characters)
 inline constexpr size_t kLanMaxRooms = 64;               // a browser keeps at most this many rooms (a flood cannot make it grow)
 inline constexpr size_t kLanMaxVersionChars = 16;
 inline constexpr uint8_t kLanMaxSeats = 8;

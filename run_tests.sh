@@ -140,6 +140,10 @@ if [ "$RUN_ASSETS" -eq 1 ] || [ "$RUN_SIM" -eq 1 ] || [ "$RUN_APP" -eq 1 ]; then
     fi
     echo -e "${YELLOW}[BUILD] Compiling libraries and test suites (-j${NCPU})...${RESET}"
     cmake --build "$BUILD_DIR" -j"$NCPU"
+    if [ "$RUN_SIM" -eq 1 ]; then
+        # the map sweep tool is an optional target (not in the default build); its --selftest is run with the simulation suites
+        cmake --build "$BUILD_DIR" -j"$NCPU" --target map_sweep
+    fi
 fi
 
 # 2. Build E2E Runner
@@ -166,6 +170,7 @@ POWERUP_ACTIONS_STATUS=0
 FOOD_ACTIONS_STATUS=0
 CHALLENGER_M2_1_STATUS=0
 CHALLENGER_M2_2_STATUS=0
+MAP_SWEEP_STATUS=0
 APP_STATUS=0
 E2E_STATUS=0
 START_TIME=$(date +%s)
@@ -289,6 +294,13 @@ if [ "$RUN_SIM" -eq 1 ]; then
 
     echo ""
     echo -e "${BOLD}${BLUE}======================================================================${RESET}"
+    echo -e "${BOLD}${BLUE}>>> 2.13.1 RUNNING CONTROL INTERFACE SUITE (strict JSON, authenticated HTTP over real sockets)...${RESET}"
+    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
+    "./$BUILD_DIR/tests/test_ctl/test_ctl"
+    CTL_STATUS=$?
+
+    echo ""
+    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
     echo -e "${BOLD}${BLUE}>>> 2.14 RUNNING NETGAME SUITE (room, start barrier, matches over real sockets)...${RESET}"
     echo -e "${BOLD}${BLUE}======================================================================${RESET}"
     "./$BUILD_DIR/tests/test_net/test_netgame"
@@ -307,6 +319,20 @@ if [ "$RUN_SIM" -eq 1 ]; then
     echo -e "${BOLD}${BLUE}======================================================================${RESET}"
     "./$BUILD_DIR/tests/test_net/test_lan"
     LAN_STATUS=$?
+
+    echo ""
+    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
+    echo -e "${BOLD}${BLUE}>>> 2.17 RUNNING WEBSOCKET TRANSPORT SUITE (RFC 6455 codec, handshake, real-socket echo)...${RESET}"
+    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
+    "./$BUILD_DIR/tests/test_net/test_ws"
+    WS_STATUS=$?
+
+    echo ""
+    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
+    echo -e "${BOLD}${BLUE}>>> 2.18 RUNNING MAP SWEEP SELF-TEST (six shipped maps: loads, determinism, faults)...${RESET}"
+    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
+    "./$BUILD_DIR/map_sweep" --selftest
+    MAP_SWEEP_STATUS=$?
 fi
 
 # 5. Execute Application Integration Tests
@@ -515,6 +541,13 @@ if [ "$RUN_SIM" -eq 1 ]; then
         TOTAL_FAILED=$((TOTAL_FAILED + 1))
     fi
 
+    if [ "$CTL_STATUS" -eq 0 ]; then
+        echo -e " 2.13.1 Control Interface (test_ctl):                ${GREEN}PASSED${RESET}"
+    else
+        echo -e " 2.13.1 Control Interface (test_ctl):                ${RED}FAILED (exit code ${CTL_STATUS})${RESET}"
+        TOTAL_FAILED=$((TOTAL_FAILED + 1))
+    fi
+
     if [ "$NETGAME_STATUS" -eq 0 ]; then
         echo -e " 2.14 NetGame (test_netgame):                        ${GREEN}PASSED${RESET}"
     else
@@ -533,6 +566,20 @@ if [ "$RUN_SIM" -eq 1 ]; then
         echo -e " 2.16 LAN Discovery (test_lan):                      ${GREEN}PASSED${RESET}"
     else
         echo -e " 2.16 LAN Discovery (test_lan):                      ${RED}FAILED (exit code ${LAN_STATUS})${RESET}"
+        TOTAL_FAILED=$((TOTAL_FAILED + 1))
+    fi
+
+    if [ "$WS_STATUS" -eq 0 ]; then
+        echo -e " 2.17 WebSocket Transport (test_ws):                 ${GREEN}PASSED${RESET}"
+    else
+        echo -e " 2.17 WebSocket Transport (test_ws):                 ${RED}FAILED (exit code ${WS_STATUS})${RESET}"
+        TOTAL_FAILED=$((TOTAL_FAILED + 1))
+    fi
+
+    if [ "$MAP_SWEEP_STATUS" -eq 0 ]; then
+        echo -e " 2.18 Map Sweep (map_sweep --selftest):              ${GREEN}PASSED${RESET}"
+    else
+        echo -e " 2.18 Map Sweep (map_sweep --selftest):              ${RED}FAILED (exit code ${MAP_SWEEP_STATUS})${RESET}"
         TOTAL_FAILED=$((TOTAL_FAILED + 1))
     fi
 fi

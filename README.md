@@ -4,7 +4,7 @@ A faithful, high-performance, deterministic C++17 native engine remake and port 
 
 The engine directly loads raw original binary assets (`ants.chd` and `Maps/*.LVL`) without pre-conversion, faithfully executing authentic gameplay mechanics, deterministic 20Hz simulation, 32-channel spatial audio, MIDI/MP3 score playback, TrueType font rendering, and an SDL2 hardware-accelerated 2D viewport.
 
-**Current version: v0.0.80** (shown on screen next to the FPS meter). Every release is listed in the **[changelog](CHANGELOG.md)**, which is also published at **[beta.playants.org/changelog.html](https://beta.playants.org/changelog.html)**. Since v0.0.24 every system is re-derived from the disassembly of the original `Ants.exe` (see [Reverse Engineering](#reverse-engineering--historical-preservation)); multiplayer over a network (host / join over TCP) works and is still being extended (see [Network Port](#network-port-in-progress)).
+**Current version: v0.0.81** (shown on screen next to the FPS meter). Every release is listed in the **[changelog](CHANGELOG.md)**, which is also published at **[beta.playants.org/changelog.html](https://beta.playants.org/changelog.html)**. Since v0.0.24 every system is re-derived from the disassembly of the original `Ants.exe` (see [Reverse Engineering](#reverse-engineering--historical-preservation)); multiplayer over a network (host / join over TCP) works and is still being extended (see [Network Port](#network-port-in-progress)).
 
 ---
 
@@ -260,6 +260,8 @@ Names and network play:
 | `-pnum:<team>` (also `-pnum=<team>`) | The original's spelling of `--player` (the original has the colon). |
 | `--host [port]` | Open a room on this machine (TCP, port 4001 unless given). |
 | `--join host[:port]` | Join the room of a host (port 4001 unless given). |
+| `--room CODE` | Join: the room of a server (letters, digits, `_`, `-`, up to 32; network protocol 6). Without it the host is a LAN / direct host. |
+| `--token T` | Join: the credential that came with the room code (carried to the server, never interpreted by the game). |
 | `--seat N` | With `--join`: ask for seat N (0 green, 1 red, 2 blue, 3 black); a seat that is taken gives the first free one (network protocol 5). |
 | `--port N` | The port for `--host` / `--join`. |
 | `--loopback` | With `--host`: accept only this machine (two copies on one computer). |
@@ -269,7 +271,7 @@ Names and network play:
 
 Try it on one computer: `./start_game.sh --host --loopback --name Alice`, then in a second terminal `./start_game.sh --join 127.0.0.1 --name Bob`.
 
-On a local network: `./start_game.sh --host --name Alice` on one machine; `ants --lan-list` on another prints the room (`192.168.1.20:4001  "Alice"  TINY.LVL  1/4 players  v0.0.80`), and `./start_game.sh --join 192.168.1.20 --name Bob` joins it. The firewall of the host must let UDP and TCP port 4001 in.
+On a local network: `./start_game.sh --host --name Alice` on one machine; `ants --lan-list` on another prints the room (`192.168.1.20:4001  "Alice"  TINY.LVL  1/4 players  v0.0.81`), and `./start_game.sh --join 192.168.1.20 --name Bob` joins it. The firewall of the host must let UDP and TCP port 4001 in.
 
 ---
 
@@ -382,7 +384,7 @@ Limits of this release: raw TCP only (a LAN, a VPN or a forwarded port 4001; roo
 
 ## Changelog & Versioning
 
-The version (`include/ants_app/version.hpp`, currently `v0.0.80`) is bumped with every release and shown on screen next to the FPS meter. [`CHANGELOG.md`](CHANGELOG.md) lists what changed in every version, newest first, from the first commit to the release in progress; it is published on the beta site at [`/changelog.html`](https://beta.playants.org/changelog.html) and linked from the game page.
+The version (`include/ants_app/version.hpp`, currently `v0.0.81`) is bumped with every release and shown on screen next to the FPS meter. [`CHANGELOG.md`](CHANGELOG.md) lists what changed in every version, newest first, from the first commit to the release in progress; it is published on the beta site at [`/changelog.html`](https://beta.playants.org/changelog.html) and linked from the game page.
 
 ---
 
@@ -407,7 +409,7 @@ To run all test suites in sequence:
 ./run_tests.sh --clean    # Remove the build directories and rebuild first
 ```
 
-### What the Suites Cover (v0.0.80, all passing)
+### What the Suites Cover (v0.0.81, all passing)
 | Suite | What it checks | Size |
 |---|---|---|
 | 1 Asset decoders | `ants.chd` header, palette, sprites, audio, event tags, Table 4 animations, `.LVL` maps, directional mirroring, fuzzing | 9 suites, 70,065 assertions |
@@ -417,16 +419,19 @@ To run all test suites in sequence:
 | 2.3 Path planner | Port of the original `PATHMGR` A* | 228 assertions |
 | 2.4 Movement golden | 22 frame-exact timings from a reference model, blocking, bumping, terrain, solid bits | 17,710 assertions |
 | 2.5 - 2.9 Action suites | Hill actions, combat actions, abilities, power-ups, food (golden cases from the disassembly) | 394 / 179 / 221 / 4,827 / 641 assertions |
-| 2.10 Command layer | Codec fuzzing, validation, canonical order, engines fed permuted commands stay bit-identical, state-hash coverage field by field, rosters, drop-out, quit, the predicted acknowledgement | 23 tests, 506,381 assertions |
-| 2.11 Lock-step core | Protocol fuzzing, sequencer, runner, host and three clients over links with latency and jitter play 90 s bit-identically, desync detection, hostile peers, drop-out at the same tick, silent peers, runner hooks; host migration on the simulated network (the host dying abruptly or silently, two seats dying together, the successor or the only holder of the missing turns dying mid-election, a silent guest, a partitioned old host, three host changes in a row, forged and garbage messages, the turn log) | 36 tests, 99,583 assertions |
-| 2.12 Room | Joining, roster, map and fog, seat requests and the Hello layouts, the start barrier, the connection thumbs (round trip tiers 1200 / 1800 ms) | 11 tests, 55,081 assertions |
+| 2.10 Command layer | Codec fuzzing, validation, canonical order, engines fed permuted commands stay bit-identical, state-hash coverage field by field, rosters, drop-out, quit, the predicted acknowledgement | 24 tests, 506,393 assertions |
+| 2.11 Lock-step core | Protocol fuzzing, sequencer, runner, host and three clients over links with latency and jitter play 90 s bit-identically, desync detection, hostile peers, drop-out at the same tick, silent peers, runner hooks; host migration on the simulated network (the host dying abruptly or silently, two seats dying together, the successor or the only holder of the missing turns dying mid-election, a silent guest, a partitioned old host, three host changes in a row, forged and garbage messages, the turn log) | 36 tests, 97,659 assertions |
+| 2.12 Room | Joining, roster, map and fog, seat requests and the Hello layouts, the start barrier, the connection thumbs (round trip tiers 1200 / 1800 ms), the map names of the community (protocol 6), room codes and tokens | 12 tests, 57,254 assertions |
 | 2.13 TCP | Framing, hostile frames, a real-socket match | 6 tests, 60,122 assertions |
 | 2.14 NetGame | The room, thumbs, the start barrier, a match with commands and chat, a guest that leaves, host migration over real sockets (the host leaving a two-, three- and four-player match, the links between guests, strangers on a guest's port, no election after the match is over), refused joins, map mismatch, the room announcing itself on the local network (changes, start, failed start, leaving) | 17 tests, 572 assertions |
 | 2.15 Movement differential | Two independent models of the original, written from the disassembly and fed only with the raw tables of `Ants.exe` and the frames of `ants.chd`, against the remake: the A* of `PathRequest::Step` on 1,500 random maps (every path tile for tile) and the walk of a delivered path on 1,000 random walks (every position change with its time); a self-check breaks one rule of the walk model at a time | 3 tests, 1,019 assertions |
 | 2.16 LAN discovery | The datagram (layout, limits, refusal of everything that is not a whole and sane message, 20,000 fuzzed datagrams), an announcer and browsers over real UDP sockets (appearing, changing, goodbye, expiry, telling rooms apart, garbage, the size of the list, the pace, broadcast) | 12 tests, 4,995 assertions |
+| 2.17 WebSocket transport | RFC 6455: the SHA-1 and base64 vectors and the accept key, the frame codec for every length with random masks fed whole, byte by byte and in chunks, fragmentation, every protocol error with its close status, 200,000 fuzzed streams that never crash, hang or allocate more than the limit, the upgrade handshake (accepted variants and every refusal), a real-socket client for messages of every size in both directions, ping / pong, the close handshake, stuck and slow readers, 1000 random messages echoed through the `Connection` interface | 22 tests, 1.17 million assertions |
+| 2.13.1 Control interface | The strict JSON library (vectors, 200,000 fuzzed documents, round trips) and the loopback HTTP server with its bearer secret (the right and every wrong secret, limits, timeouts, pipelining, 32 connections) over real sockets | 38 tests, 1.44 million assertions |
+| 2.18 Map sweep | `map_sweep --selftest` on the six shipped maps: they load, run and are deterministic (two processes and a second play on one engine), the report counts what happened, an injected fault is found | 59 checks |
 | 3 Application integration | Whole-application behaviour through the HUD, renderer and simulation | 211 tests, 8,012 assertions |
 | 3.1 - 3.5 Model suites | Render parity 419 checks (with the text sizes and the health-number font, and 54 fog patterns of the layer-2 pass against a model of the original's), HUD layout 902 (with the network room screen, the guest screen and the order of the rows, the START buttons' click zones and the corner plate, the label sizes and wrapping, the three alliance dialogs, the results screen, the options screen's pictures and fields, the chat input box, the score boxes, the minimap and the chat log window), status messages 271, input model 110 (with the window layout maths), pointer model 387 (with the stored panel of a Shift-selected group, the Return button's zones and the cursor over dialogs) | 2,089 checks |
-| 3.6 Network application | The command line (names, `--host`, `--join`, `--seat`, the LAN options, the window options, `--lan-list`), window placement and the 2 x 2 grid, the pointer leaving and entering the window, sound that follows the focus, a headless application as host and as guest of a room, start, a bit-identical match, chat, leaving, the host leaving (a two-player match is decided at once, in a three-player match the guest follows the new host and says so), a guest that quits (the quit ends the match on both machines), the score labels of a local game, teaming over three machines (an offer arrives as the question, Accept, team chat reaches only the ally, refusal, Withdraw) | 18 tests, 294 assertions |
+| 3.6 Network application | The command line (names, `--host`, `--join`, `--seat`, the LAN options, the window options, `--lan-list`), window placement and the 2 x 2 grid, the pointer leaving and entering the window, sound that follows the focus, a headless application as host and as guest of a room, start, a bit-identical match, chat, leaving, the host leaving (a two-player match is decided at once, in a three-player match the guest follows the new host and says so), a guest that quits (the quit ends the match on both machines), the score labels of a local game, teaming over three machines (an offer arrives as the question, Accept, team chat reaches only the ally, refusal, Withdraw) | 18 tests, 298 assertions |
 | 3.7 Options | The original's slider (every configured value placed and read back, every pointer x, hit edges), latching button (pictures, capture, latch), edit field (focus, 100 characters, caret phases), the settings store (the validity rule, files, texts) and the options screen end to end | 135 checks |
 | 3.8 Start script | `start_game.sh --dry-run`: window i is player i and colour i, the host on this machine only, guests with their seats, the 2 x 2 (2 x 1) grid, different random names, the options that make it a single game | 82 checks |
 | 4 E2E | Opaque-box scenarios in four tiers, run against the suite's own model of the rules (`tests/e2e/e2e_model.hpp`; no engine code is linked and the model still has the early combat rules, see `tests/TEST_INFRA.md`) | 506 tests |

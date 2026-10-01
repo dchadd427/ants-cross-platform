@@ -68,12 +68,23 @@ bool valid_address(const std::string& a) {
 bool valid_map_name(const std::string& name) noexcept {
     if (name.size() < 5 || name.size() > kMaxMapNameChars) return false;
     for (char c : name) {
-        const bool ok = (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_' || c == '-' || c == '.';
-        if (!ok) return false;
+        const unsigned char u = static_cast<unsigned char>(c);
+        if (u < 0x20 || u > 0x7E) return false;                                       // printable ASCII only: no control character, no NUL, no multi-byte text
+        if (c == '/' || c == '\\' || c == ':' || c == '*' || c == '?' || c == '"' || c == '<' || c == '>' || c == '|') return false;      // never a path, never a Windows-forbidden name
     }
-    if (name.find("..") != std::string::npos || name[0] == '.') return false;
+    if (name[0] == '.') return false;                                                 // a hidden file; (a ".." INSIDE a name is harmless: the name cannot hold a separator and ends in ".lvl")
     const std::string tail = name.substr(name.size() - 4);
     return tail == ".LVL" || tail == ".lvl";
+}
+
+bool valid_room_code(const std::string& code) noexcept {
+    if (code.empty()) return true;                                                    // no room: a LAN or direct host
+    if (code.size() > kMaxRoomCodeChars) return false;
+    for (char c : code) {
+        const bool ok = (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_' || c == '-';
+        if (!ok) return false;
+    }
+    return true;
 }
 
 MsgType peek_type(const uint8_t* data, size_t size) noexcept {
@@ -90,6 +101,8 @@ std::vector<uint8_t> encode(const HelloMsg& m) {
     w.str8(clip(m.name, kMaxNameChars));
     w.u16(m.listen_port);
     w.u8(m.want_seat);
+    w.str8(clip(m.room, kMaxRoomCodeChars));
+    w.str8(clip(m.token, kMaxTokenChars));
     return out;
 }
 bool decode(const uint8_t* data, size_t size, HelloMsg& out) {
@@ -101,9 +114,14 @@ bool decode(const uint8_t* data, size_t size, HelloMsg& out) {
     m.name = r->str8();
     m.listen_port = r->u16();
     m.want_seat = r->u8();
-    if (!r->done() || m.name.size() > kMaxNameChars) return false;
+    m.room = r->str8();
+    m.token = r->str8();
+    if (!r->done() || m.name.size() > kMaxNameChars || m.token.size() > kMaxTokenChars || !valid_room_code(m.room)) return false;
     for (char c : m.name) {
         if (static_cast<unsigned char>(c) < 0x20 || static_cast<unsigned char>(c) > 0x7E) return false;
+    }
+    for (char c : m.token) {
+        if (static_cast<unsigned char>(c) < 0x21 || static_cast<unsigned char>(c) > 0x7E) return false;       // a token has no spaces and no control characters
     }
     out = std::move(m);
     return true;
@@ -155,7 +173,7 @@ bool decode(const uint8_t* data, size_t size, RejectMsg& out) {
     ByteReader* r = nullptr;
     if (!open(data, size, MsgType::Reject, r, storage)) return false;
     const uint8_t reason = r->u8();
-    if (!r->done() || reason < static_cast<uint8_t>(RejectReason::Full) || reason > static_cast<uint8_t>(RejectReason::BadRequest)) return false;
+    if (!r->done() || reason < static_cast<uint8_t>(RejectReason::Full) || reason > static_cast<uint8_t>(RejectReason::NoSuchRoom)) return false;
     out.reason = static_cast<RejectReason>(reason);
     return true;
 }
@@ -327,7 +345,7 @@ bool decode(const uint8_t* data, size_t size, RoomMsg& out) {
         const uint8_t st = r->u8();
         slot.name = r->str8();
         slot.rtt_ms = r->u16();
-        if (st > static_cast<uint8_t>(SlotState::Client) || !printable_name(slot.name, kMaxNameChars)) return false;
+        if (st > static_cast<uint8_t>(SlotState::Bot) || !printable_name(slot.name, kMaxNameChars)) return false;
         slot.state = static_cast<SlotState>(st);
     }
     m.map_name = r->str8();

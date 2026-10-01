@@ -25,6 +25,7 @@ class HostLobby {
 public:
     struct Config {
         std::string host_name{"Host"};
+        std::string room_code;               // "" for a LAN / direct host; a server names its room: a Hello for another room is Rejected NoSuchRoom
         uint8_t host_seat{0};
         uint32_t hello_timeout_ms{10000};    // a connection that does not say Hello in this time is closed
         uint32_t load_timeout_ms{60000};     // everybody must report Loaded in this time
@@ -121,6 +122,8 @@ public:
         uint32_t welcome_timeout_ms{10000};
         uint16_t listen_port{0};             // where this guest accepts the other guests during the match, announced in Hello (0: nowhere)
         uint8_t want_seat{255};              // the seat this guest asks for in Hello (0 .. 3; 255: any). Taken, or the host's: the first free seat
+        std::string room;                    // the room of a server (valid_room_code), "" for a LAN / direct host
+        std::string token;                   // the credential that came with the room code ("" when none)
     };
     enum class Phase : uint8_t { Connecting, Joining, InRoom, Loading, Loaded, Begun, Rejected, Closed };
     struct Event {

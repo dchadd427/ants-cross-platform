@@ -189,13 +189,13 @@ int main() {
         const LanRoomInfo longest = make_info(0xFFFFFFFFu, std::string(kMaxNameChars, 'N'), std::string(kMaxMapNameChars, 'M'), 8, 8, 65535,
                                               std::string(kLanMaxVersionChars, 'V'));
         const std::vector<uint8_t> l = encode_lan_message(LanMessageType::Announce, longest);
-        ASSERT_EQ(l.size(), size_t{16 + 17 + 33 + 33});
+        ASSERT_EQ(l.size(), size_t{16 + 17 + 33 + 65});                    // protocol 6: map names of up to 64 characters (131 bytes: below kLanMaxDatagram)
         ASSERT_TRUE(l.size() <= kLanMaxDatagram);
         ASSERT_TRUE(decode_lan_message(l.data(), l.size(), t, b) && b == longest);
     } TEST_END();
 
     TEST_CASE("L1.2 What goes out is printable ASCII and cut to its limits; what comes in must already be") {
-        LanRoomInfo a = make_info(7, "Jos\xC3\xA9\t\x01Q", std::string(50, 'm'), 1, 4, 4001, std::string(40, 'v'));
+        LanRoomInfo a = make_info(7, "Jos\xC3\xA9\t\x01Q", std::string(90, 'm'), 1, 4, 4001, std::string(40, 'v'));
         const std::vector<uint8_t> bytes = encode_lan_message(LanMessageType::Announce, a);
         LanMessageType t;
         LanRoomInfo b;

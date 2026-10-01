@@ -73,7 +73,7 @@ public:
     bool host(uint16_t port, const std::string& name, bool loopback_only = false);
     /// Starts joining the room at address:port. False when the address cannot be used or there is no transport; the outcome arrives as events.
     /// `want_seat` (0 .. 3) asks the host for that seat (the colour: 0 green, 1 red, 2 blue, 3 black); a seat that is taken gives the first free one; 255 = any.
-    bool join(const std::string& address, uint16_t port, const std::string& name, uint8_t want_seat = 255);
+    bool join(const std::string& address, uint16_t port, const std::string& name, uint8_t want_seat = 255, const std::string& room = std::string(), const std::string& token = std::string());
     /// Leaves for good: tells the others (a guest says Leave), closes every connection. The others see the host or the guest gone.
     void leave();
 

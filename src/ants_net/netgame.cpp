@@ -78,6 +78,7 @@ std::string reject_text(RejectReason r) {
         case RejectReason::VersionMismatch: return "This version cannot play with the host's version.";
         case RejectReason::MatchRunning: return "The match has already started.";
         case RejectReason::Kicked: return str::text(str::kDroppedFromGame);
+        case RejectReason::NoSuchRoom: return "There is no such room on this server.";
         default: return "The host refused the connection.";
     }
 }
@@ -140,12 +141,14 @@ bool NetGame::host(uint16_t port, const std::string& name, bool loopback_only) {
 #endif
 }
 
-bool NetGame::join(const std::string& address, uint16_t port, const std::string& name, uint8_t want_seat) {
+bool NetGame::join(const std::string& address, uint16_t port, const std::string& name, uint8_t want_seat, const std::string& room, const std::string& token) {
 #ifdef __EMSCRIPTEN__
     (void)address;
     (void)port;
     (void)name;
     (void)want_seat;
+    (void)room;
+    (void)token;
     return false;
 #else
     if (role_ != Role::None) return false;
@@ -159,6 +162,8 @@ bool NetGame::join(const std::string& address, uint16_t port, const std::string&
     cfg.name = name;
     cfg.listen_port = peer_port_;
     cfg.want_seat = want_seat;
+    cfg.room = room;
+    cfg.token = token;
     client_lobby_ = std::make_unique<ClientLobby>(transport_->uplink.get(), cfg);
     role_ = Role::Client;
     phase_ = Phase::Connecting;
