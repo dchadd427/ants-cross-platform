@@ -6,7 +6,8 @@
 #                                                   the server uses the volume "ants-maps", which is filled from the image the first time: to refresh it after an
 #                                                   update that adds maps, remove that volume; to add maps, copy them into it)
 #   ANTS_PORT=19980                                 the host port of the web page (optional)
-#   ANTS_SERVER_PORT=4001                           the public TCP game port of native clients (optional)
+#   ANTS_SERVER_PORT=4001                           the public TCP game port of native clients (optional; the browser page does not use it)
+#   ANTS_DEMO_ROOMS=4  ANTS_DEMO_MAP=TINY.LVL       how many demo rooms the page web/four.html may make at a time, and their map (optional)
 #
 # Only the TCP game port is open to other machines. The WebSocket port (the site's nginx passes /ws to it over the network below) and the control
 # interface (the lobby's backend calls it) are published on the host's loopback address only.
@@ -28,8 +29,10 @@ services:
       dockerfile: Dockerfile.server
     container_name: ants-server
     restart: unless-stopped
-    # The page web/four.html (four games on one page) needs demo rooms, which are off by default: uncomment to allow them (the maps folder must hold the map).
-    # command: ["--port", "4001", "--ws-port", "4002", "--ctl-port", "4010", "--demo-rooms", "4", "--demo-map", "TINY.LVL"]
+    # The page web/four.html (four games on one page) joins rooms named "demo-..." that it makes itself: demo rooms are ON here, at most ANTS_DEMO_ROOMS at a time
+    # (default 4) on the map ANTS_DEMO_MAP (default TINY.LVL; the maps folder must hold it). Whoever reaches the site can fill these rooms; rooms of the control
+    # interface keep their own places. To switch them off, delete the two demo options.
+    command: ["--port", "4001", "--ws-port", "4002", "--ctl-port", "4010", "--demo-rooms", "${ANTS_DEMO_ROOMS:-4}", "--demo-map", "${ANTS_DEMO_MAP:-TINY.LVL}"]
     environment:
       ANTS_SERVER_SECRET: ${ANTS_SERVER_SECRET:?set ANTS_SERVER_SECRET in the stack's environment variables}
     volumes:
