@@ -39,7 +39,7 @@ print_usage() {
     echo "Options:"
     echo "  --all            Run all test suites (libants-assets + libants-sim + libants-app + E2E, default)"
     echo "  --assets         Run only asset decoder tests (test_assets)"
-    echo "  --sim            Run only simulation rules tests (test_sim_rules, and the network, bot and server suites that follow them)"
+    echo "  --sim            Run only simulation rules tests (test_sim_rules, and the network, bot (test_ai, bot_arena --selftest) and server suites)"
     echo "  --app            Run only application integration tests (test_app_integration)"
     echo "  --e2e            Run only opaque-box E2E test suites (e2e_runner)"
     echo "  --asan           Build and run with AddressSanitizer (build_asan)"
@@ -141,8 +141,8 @@ if [ "$RUN_ASSETS" -eq 1 ] || [ "$RUN_SIM" -eq 1 ] || [ "$RUN_APP" -eq 1 ]; then
     echo -e "${YELLOW}[BUILD] Compiling libraries and test suites (-j${NCPU})...${RESET}"
     cmake --build "$BUILD_DIR" -j"$NCPU"
     if [ "$RUN_SIM" -eq 1 ]; then
-        # the map sweep tool is an optional target (not in the default build); its --selftest is run with the simulation suites
-        cmake --build "$BUILD_DIR" -j"$NCPU" --target map_sweep
+        # the map sweep and the bot arena are optional targets (not in the default build); their --selftest is run with the simulation suites
+        cmake --build "$BUILD_DIR" -j"$NCPU" --target map_sweep bot_arena
     fi
 fi
 
@@ -175,6 +175,7 @@ FOOD_ACTIONS_STATUS=0
 CHALLENGER_M2_1_STATUS=0
 CHALLENGER_M2_2_STATUS=0
 MAP_SWEEP_STATUS=0
+BOT_ARENA_STATUS=0
 SERVER_STATUS=0
 AI_STATUS=0
 SERVER_E2E_STATUS=0
@@ -382,6 +383,13 @@ if [ "$RUN_SIM" -eq 1 ]; then
     echo -e "${BOLD}${BLUE}======================================================================${RESET}"
     "./$BUILD_DIR/tests/test_ai/test_ai"
     AI_STATUS=$?
+
+    echo ""
+    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
+    echo -e "${BOLD}${BLUE}>>> 2.21 RUNNING BOT ARENA SELF-TEST (headless matches: determinism, replay without a bot, report, threads)...${RESET}"
+    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
+    "./$BUILD_DIR/bot_arena" --selftest
+    BOT_ARENA_STATUS=$?
 fi
 
 # 5. Execute Application Integration Tests
@@ -678,6 +686,13 @@ if [ "$RUN_SIM" -eq 1 ]; then
         echo -e " 2.20 Computer Players (test_ai):                    ${GREEN}PASSED${RESET}"
     else
         echo -e " 2.20 Computer Players (test_ai):                    ${RED}FAILED (exit code ${AI_STATUS})${RESET}"
+        TOTAL_FAILED=$((TOTAL_FAILED + 1))
+    fi
+
+    if [ "$BOT_ARENA_STATUS" -eq 0 ]; then
+        echo -e " 2.21 Bot Arena (bot_arena --selftest):              ${GREEN}PASSED${RESET}"
+    else
+        echo -e " 2.21 Bot Arena (bot_arena --selftest):              ${RED}FAILED (exit code ${BOT_ARENA_STATUS})${RESET}"
         TOTAL_FAILED=$((TOTAL_FAILED + 1))
     fi
 fi

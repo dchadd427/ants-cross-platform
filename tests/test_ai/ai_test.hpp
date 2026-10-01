@@ -16,6 +16,7 @@
 #include "ants_ai/bot.hpp"
 #include "ants_ai/bot_controller.hpp"
 #include "ants_ai/bot_view.hpp"
+#include "ants_ai/map_info.hpp"
 #include "ants_assets/lvl_parser.hpp"
 #include "ants_sim/sim_engine.hpp"
 
@@ -72,6 +73,9 @@ using ants::sim::Command;
 using ants::sim::CommandType;
 using ants::sim::TileCoord;
 
+/// A tile in one expression (a braced TileCoord{x, y} cannot be an argument of the assertion macros: the comma splits it)
+inline TileCoord tc(int32_t x, int32_t y) { return TileCoord{x, y}; }
+
 inline std::string maps_dir() { return std::string(ORIGINAL_ASSETS_DIR) + "/Maps/"; }
 
 /// A shipped map, loaded once
@@ -123,6 +127,7 @@ public:
         seat = c.seat;
         profile = c.profile;
         rng_seed = c.rng_seed;
+        map = c.map;
     }
     void think(const BotView& v, Orders& o) override {
         thought.push_back(v.tick());
@@ -144,6 +149,7 @@ public:
     uint8_t seat{255};
     ants::ai::Profile profile{};
     uint64_t rng_seed{0};
+    const ants::ai::MapInfo* map{nullptr};
     std::vector<uint64_t> thought;           // the ticks of every think()
     std::vector<Seen> fates;
 
@@ -170,8 +176,33 @@ inline void start_match(ants::sim::SimulationEngine& sim, const std::string& map
     sim.init(level_of(map), seed, roster);
 }
 
+/// A food pile as an LVL Block-2 entry describes it: `units` units of `value` points and the stage list {threshold, tile}; returns its index in the engine's table
+inline int32_t place_pile(ants::sim::SimulationEngine& sim, int32_t col, int32_t row, uint16_t units, uint16_t value, const std::vector<std::pair<uint16_t, uint16_t>>& stages) {
+    ants::sim::FoodObject o;
+    o.row = static_cast<uint16_t>(row);
+    o.col = static_cast<uint16_t>(col);
+    o.units = units;
+    o.value = value;
+    o.remaining = units;
+    for (const auto& st : stages) {
+        o.thresholds.push_back(st.first);
+        o.stage_tiles.push_back(st.second);
+    }
+    return sim.grid_mut().add_food_object(std::move(o));
+}
+
+inline constexpr uint16_t kPileGone = 0x7FFE;
+
+/// Crackers (tiles 369 .. 372, a 2 x 2 footprint around the anchor, shrinking) with four stages of `units` = 4: 4, 3, 2, 1 units
+inline int32_t place_crackers(ants::sim::SimulationEngine& sim, int32_t col, int32_t row, uint16_t value = 25) {
+    return place_pile(sim, col, row, 4, value, {{4, 369}, {3, 370}, {2, 371}, {1, 372}, {0, kPileGone}});
+}
+
 }  // namespace ai_test
 
 void run_setup_tests();
 void run_controller_tests();
 void run_net_tests();
+void run_view_tests();
+void run_map_tests();
+void run_arena_tests();

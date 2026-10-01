@@ -19,6 +19,7 @@
 namespace ants::ai {
 
 class BotView;
+class MapInfo;
 
 // ---- levels and profiles -------------------------------------------------------------------------------------------------------------------------
 
@@ -124,12 +125,13 @@ private:
     std::vector<Intent> intents_;
 };
 
-/// What a bot is told when it starts. Not the engine: the BotView (and, from the next milestone, a MapInfo built from the map) is the only window a bot has
+/// What a bot is told when it starts. Not the engine: the BotView (and the MapInfo, the analysis of the map as it stood at the start) is the only window a bot has
 /// on the game, so what a person could not know cannot be read by a bot.
 struct BotContext {
     uint8_t seat;
     Profile profile;
     uint64_t rng_seed;                   // a seed for the bot's own generator (BotRng): derived from the match seed, the seat and the kind
+    const MapInfo* map{nullptr};         // the analysis of the match (owned by the controller, valid as long as the bot is seated); null in a context made by hand
 };
 
 class Bot {

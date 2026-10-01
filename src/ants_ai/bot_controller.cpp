@@ -20,7 +20,7 @@ bool is_rejection(sim::CommandResult::Status status) noexcept {
 
 }  // namespace
 
-BotController::BotController(const sim::SimulationEngine& sim, uint64_t match_seed) : sim_(&sim), match_seed_(match_seed) {}
+BotController::BotController(const sim::SimulationEngine& sim, uint64_t match_seed) : sim_(&sim), match_seed_(match_seed), map_(sim) {}
 
 BotController::~BotController() = default;
 
@@ -103,7 +103,7 @@ bool BotController::add(const BotSpec& spec, std::unique_ptr<Bot> bot, sim::Comm
     s->tokens_milli = static_cast<int64_t>(s->profile.burst) * kToken;                     // the bucket starts full
     s->next_decision = sim_->current_tick() + 1u + spec.seat;                              // the seats do not all think on the same tick
     s->bot = std::move(bot);
-    s->bot->start(BotContext{spec.seat, s->profile, s->rng.next()});
+    s->bot->start(BotContext{spec.seat, s->profile, s->rng.next(), &map_});
     const auto where = std::find_if(seats_.begin(), seats_.end(), [&](const std::unique_ptr<Seat>& o) { return o->seat > spec.seat; });
     seats_.insert(where, std::move(s));
     return true;
@@ -165,7 +165,7 @@ bool BotController::allowed(const sim::SimulationEngine& sim, const Seat& s, con
 }
 
 void BotController::decide(const sim::SimulationEngine& sim, Seat& s, uint64_t tick) {
-    const BotView view = BotView::build(sim, s.seat);
+    const BotView view = BotView::build(sim, s.seat, &map_);
     Orders orders;
     s.bot->think(view, orders);
     ++s.stats.decisions;

@@ -31,6 +31,7 @@
 #include <vector>
 
 #include "ants_ai/bot.hpp"
+#include "ants_ai/map_info.hpp"
 #include "ants_ai/rng.hpp"
 #include "ants_sim/command.hpp"
 #include "ants_sim/sim_engine.hpp"
@@ -72,6 +73,8 @@ public:
     const SeatStats& stats(uint8_t seat) const noexcept;
     /// Commands of the seat that wait for their time or for a token
     size_t pending(uint8_t seat) const noexcept;
+    /// The analysis of the match's map, made when the controller was created (the start of the match); the bots get it through BotContext and BotView::map()
+    const MapInfo& map() const noexcept { return map_; }
     /// The bot of a seat (null when none): for the tests
     Bot* bot(uint8_t seat) noexcept;
     const Profile* profile(uint8_t seat) const noexcept;
@@ -111,6 +114,7 @@ private:
 
     const sim::SimulationEngine* sim_;
     uint64_t match_seed_;
+    MapInfo map_;
     std::vector<std::unique_ptr<Seat>> seats_;          // by seat number, so the order of the --bot options never matters
 };
 

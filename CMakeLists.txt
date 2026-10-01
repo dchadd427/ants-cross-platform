@@ -113,6 +113,14 @@ if(NOT EMSCRIPTEN)
     target_link_libraries(map_sweep PRIVATE ants_net ants_sim ants_assets Threads::Threads)
     target_compile_definitions(map_sweep PRIVATE
         ORIGINAL_ASSETS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/Original-Ants")
+
+    # Bot arena (not part of the normal build): plays matches of computer players headless with the real engine and the controller (docs/BOTS.md)
+    #   cmake --build build --target bot_arena && ./build/bot_arena --map TINY --seeds 1..8 --seat 0=worker:hard --seat 1=worker:easy --rotate --out report.json
+    #   (./build/bot_arena --selftest checks the tool itself)
+    add_executable(bot_arena EXCLUDE_FROM_ALL tools/bot_arena.cpp)
+    target_link_libraries(bot_arena PRIVATE ants_ai ants_sim ants_assets Threads::Threads)
+    target_compile_definitions(bot_arena PRIVATE
+        ORIGINAL_ASSETS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/Original-Ants")
 endif()
 
 # Testing

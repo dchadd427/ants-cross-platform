@@ -3,7 +3,9 @@
 add_library(ants_ai STATIC
     bot.cpp
     bot_view.cpp
+    map_info.cpp
     bot_controller.cpp
+    arena.cpp
 )
 
 target_include_directories(ants_ai PUBLIC

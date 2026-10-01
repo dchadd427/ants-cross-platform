@@ -1,0 +1,100 @@
+#pragma once
+
+// The match runner of the headless bot arena (tools/bot_arena.cpp, the tests of tests/test_ai, later the tournaments and the server): one match, played start to end with the
+// real engine and the BotController, no window, no sound, no network. It is pure: no threads, no clock, no files, no global state (so any number of matches may run at once
+// in different threads, and the same arguments always give the same match, bit for bit); what the tool adds is the command line, the threads, the wall clock and the report.
+//
+// A match is a map, a seed and bots on seats. The engine is initialised for the roster of the seats that have a bot (a seat without one has no hill and no ants), the
+// controller plays each bot, and every tick the news and audio queues are emptied (nobody reads them here and they would grow without bound).
+//
+// How a command reaches the engine is the SINK LATENCY: 0 applies a command the moment the controller releases it (a local game); more than 0 mimics a lock-step room
+// (docs/NETWORK_PORT.md): a command released at tick t is applied at the first turn boundary (every 2nd tick, a turn is 100 ms) that is at least `latency_ticks` later,
+// in canonical order (by issuer, each issuer's commands in the order they were released), before the bots look again. Contested results move by up to 15 percent per seat
+// between latency 0 and 3, which is why the default is 3: a tournament should play like a room.
+//
+// Replay: with `record` on, every command is kept with the tick it was applied at and the engine's state hash after every 20th tick. replay_commands() feeds those commands
+// into a FRESH engine without any bot and requires the same hash at every 20th tick and at the end: the proof that a bot match is nothing but its commands.
+
+#include <cstdint>
+#include <functional>
+#include <memory>
+#include <string>
+#include <vector>
+
+#include "ants_ai/bot.hpp"
+#include "ants_ai/bot_controller.hpp"
+#include "ants_assets/lvl_parser.hpp"
+#include "ants_sim/command.hpp"
+
+namespace ants::ai {
+
+/// A command as the engine applied it
+struct RecordedCommand {
+    uint64_t step{0};                    // the number of SimulationEngine::tick() calls made when it was applied: it came after that call (the call that ends a match does not advance
+                                         // current_tick(), so the tick count alone could not tell the last two apart)
+    uint64_t tick{0};                    // the engine's tick count at that time (for people)
+    sim::Command command;
+};
+
+/// How often the state hash is sampled (the lock-step check of a room uses the same period)
+inline constexpr uint64_t kArenaHashPeriod = 20;
+
+struct ArenaSpec {
+    const assets::LevelData* level{nullptr};   // the map (must outlive the call)
+    uint32_t seed{1};                          // the engine's seed AND the controller's match seed
+    std::vector<BotSpec> bots;                 // the seats that play: one bot each, seat 0 to 3, every seat once
+    uint64_t max_ticks{0};                     // 0 = until the match is over (the map's own length); else at most this many ticks
+    uint32_t latency_ticks{3};                 // the sink latency, see the top of this file
+    bool record{false};                        // keep the applied commands (for replay_commands)
+    /// A bot that is not in the registry (tests, later the tournaments): called instead of make_bot when set; a null result refuses the match. The `kind` of the BotSpec must
+    /// still be a name that make_bot knows (check_setup), and the Profile comes from the spec's level.
+    std::function<std::unique_ptr<Bot>(const BotSpec&)> factory;
+};
+
+struct ArenaSeatResult {
+    BotSpec spec;                              // what was asked for
+    std::string runs;                          // the kind of bot that actually played ("idle" for "worker" and "standard" until B3 and B4 exist)
+    int32_t score{0};                          // the individual score at the end (what the results screen ranks by, before ties)
+    int32_t shown_score{0};                    // the number of the score box (own plus ally's)
+    uint32_t ants{0};                          // living ants at the end
+    uint32_t eggs{0};
+    uint32_t hatched{0};
+    uint32_t food_deposited{0};                // points
+    uint32_t food_stolen{0};
+    uint32_t food_lost{0};
+    uint32_t kills{0};
+    uint32_t losses{0};
+    BotController::SeatStats stats;
+    /// commands released per second of game time, in thousandths
+    uint32_t milli_commands_per_second(uint64_t ticks) const noexcept {
+        return ticks == 0 ? 0u : static_cast<uint32_t>(static_cast<uint64_t>(stats.released) * 20000u / ticks);
+    }
+};
+
+struct ArenaResult {
+    std::string error;                         // not empty: the match was refused or could not be set up (nothing else is valid)
+    uint64_t ticks{0};                         // ticks played (the engine's tick count at the end)
+    uint64_t steps{0};                         // calls of SimulationEngine::tick(): ticks, plus one for the call that ended the match
+    bool match_over{false};                    // the engine declared the match over (else max_ticks ended it)
+    uint64_t initial_ticks{0};                 // the length of the match on this map, in ticks
+    uint64_t hash{0};                          // the engine's state hash after the last tick
+    std::vector<ArenaSeatResult> seats;        // in seat order
+    std::vector<uint64_t> checkpoints;         // the state hash after tick 20, 40, 60, ... (while the match lasted)
+    std::vector<RecordedCommand> log;          // with ArenaSpec::record
+};
+
+/// Plays one match. Never throws for a bad spec: `error` says why nothing was played.
+ArenaResult play_match(const ArenaSpec& spec);
+
+struct ReplayResult {
+    bool ok{false};
+    uint64_t first_bad_tick{0};                // 0 when ok; else the first checkpoint (or the last tick) at which the hash differed
+    uint64_t hash{0};                          // the hash after the last replayed tick
+    std::string error;
+};
+
+/// Re-plays `played.log` into a fresh engine with no bot at all and compares the state hash at every 20th tick and after the last tick. `spec` and `played` must be the
+/// arguments and the result of a play_match with `record` on.
+ReplayResult replay_commands(const ArenaSpec& spec, const ArenaResult& played);
+
+}  // namespace ants::ai

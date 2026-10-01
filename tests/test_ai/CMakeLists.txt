@@ -1,9 +1,13 @@
-# The bot suite (run_tests.sh suite 2.20): the vocabulary of the bots, the controller, and the bot seat in a room (lobby, session, NetGame on real sockets)
+# The bot suite (run_tests.sh suite 2.20): the vocabulary of the bots, the controller, the bot seat in a room (lobby, session, NetGame on real sockets), what a bot sees (the view),
+# the analysis of the map (MapInfo against the engine's path manager) and the match runner of the arena
 add_executable(test_ai
     test_ai_main.cpp
     test_ai_setup.cpp
     test_ai_controller.cpp
     test_ai_net.cpp
+    test_ai_view.cpp
+    test_ai_map.cpp
+    test_ai_arena.cpp
 )
 
 target_link_libraries(test_ai PRIVATE
