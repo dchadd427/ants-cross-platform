@@ -1,6 +1,6 @@
 # Status
 
-_Updated 2026-10-02 · current release **v0.0.93** · details: [CHANGELOG](CHANGELOG.md)_
+_Updated 2026-10-02 08:17 PDT · current release **v0.0.93** · details: [CHANGELOG](CHANGELOG.md)_
 
 ## In progress
 - **16:9 by default (priority)**: one screen layout and a 960 x 540 canvas done; the wide match screen (more map, frame stretched from the original art) and the web page in 16:9 being built; classic 4:3 stays selectable
