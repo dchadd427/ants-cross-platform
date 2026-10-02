@@ -1,7 +1,7 @@
 // Tests of the network in the application: the command line (names, --host, --join), a headless Application as the host of a room and as a guest of
 // one (the other side is a bare NetGame with its own simulation), the setup screen as the room with names and thumbs, the start, a match driven by the
-// lock-step runner with commands and chat, a guest that leaves, a host that leaves. Real sockets on the loopback interface; one Application per test
-// (SDL is initialised once per process).
+// lock-step runner with commands and chat, a guest that leaves, a host that leaves, a hidden page (the web build: no frames, the server's messages wake the
+// game: N5.32 - N5.39). Real sockets on the loopback interface; one Application per test (SDL is initialised once per process).
 #include "ants_ai/bot_view.hpp"
 #include "ants_app/application.hpp"
 #include "ants_app/fps_overlay.hpp"
@@ -22,9 +22,12 @@
 #include <algorithm>
 #include <chrono>
 #include <cstdint>
+#include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <deque>
+#include <filesystem>
+#include <fstream>
 #include <functional>
 #include <iomanip>
 #include <iostream>
@@ -2106,6 +2109,338 @@ void run_latency_tests() {
     } TEST_END();
 }
 
+// ------------------------------------------------------------------------------------------------------------------------------------------
+// A hidden page (the web build): a hidden or minimised browser tab runs no frames and the browser slows its timers, but the page's WebSocket events still arrive. A network
+// match is then driven by those wake-ups (Application::background_pump) and not by the frame loop. A native test cannot receive a browser's events, so it plays the browser:
+// HiddenDuo seals the host's turns and wakes the application, once per turn, with the time that has passed. (docs/NETWORK_PORT.md, "The browser as a client: hidden tabs, and sound")
+// ------------------------------------------------------------------------------------------------------------------------------------------
+
+// A two-player match on TINY: the application is the guest (seat 1) of a bare host (Alice, seat 0); both are in the room, START has run, the match is playing and the page is shown
+bool start_two(Peer& host, Application& app, uint32_t seed) {
+    if (!host.net.host(0, "Alice", true)) return false;
+    host.net.set_map("TINY.LVL");
+    ApplicationConfig cfg = headless_config();
+    cfg.net_role = ApplicationConfig::NetRole::Join;
+    cfg.net_address = "127.0.0.1";
+    cfg.net_port = host.net.listen_port();
+    cfg.player_name = "Bob";
+    if (!app.init(cfg)) return false;
+    Duo duo{app, host};
+    if (!duo.until([&]() { return app.net()->phase() == net::NetGame::Phase::Room && host.net.can_start(); }, 8000)) return false;
+    host.net.set_map("TINY.LVL");
+    duo.step(300);
+    uint64_t hash = 0;
+    if (!net::hash_file(maps_dir() + "TINY.LVL", hash) || !host.net.start_match(seed, hash)) return false;
+    if (!duo.until([&]() { return app.state() == AppState::Playing && host.net.phase() == net::NetGame::Phase::Playing; }, 8000)) return false;
+    duo.step(6000);                                                                   // the "get ready" dialog takes every key for its five seconds
+    return !app.hud().is_modal_open();
+}
+
+// The host seals turns for `ms` of game time and nobody polls them on the application's side (the page is not woken)
+void host_runs(Peer& host, uint32_t ms) {
+    for (uint32_t t = 0; t < ms; t += 10) {
+        host.now += 10;
+        host.update();
+        std::this_thread::sleep_for(std::chrono::microseconds(300));
+    }
+}
+
+// The browser with the page hidden: no frame runs; the host seals a turn every kTurnMs of game time, and each turn that arrives wakes the application with the time since the last one
+struct HiddenDuo {
+    Application& app;
+    Peer& peer;
+    uint32_t wakes{0};                                  // the wake-ups that made a step
+    uint32_t clock_ms{0};
+    void step(uint32_t ms) {
+        for (uint32_t t = 0; t < ms; t += 10) {
+            peer.now += 10;
+            peer.update();
+            std::this_thread::sleep_for(std::chrono::microseconds(300));
+            clock_ms += 10;
+            if (clock_ms % net::kTurnMs == 0 && app.background_pump_after(static_cast<float>(net::kTurnMs) / 1000.0f)) ++wakes;
+        }
+    }
+    bool until(const std::function<bool()>& cond, uint32_t max_ms) {
+        for (uint32_t t = 0; t < max_ms; t += 10) {
+            if (cond()) return true;
+            step(10);
+        }
+        return cond();
+    }
+};
+
+void run_hidden_page_tests() {
+    TEST_CASE("N5.32 Hidden Page: A Network Match Runs On The Wake-Ups Instead Of Frames (Turns Executed And Acknowledged, No Frame, No Picture), The Machines Stay Bit-Identical, The Frame Loop Has The Match Back When The Page Is Shown") {
+        Peer host;
+        Application app;
+        ASSERT_TRUE(start_two(host, app, 31337));
+        Duo duo{app, host};
+        const float fps_start = app.get_current_fps();
+        app.run_frame_with_delta(0.040f);                                                 // a frame of a shown page changes the frame statistics: the probe for "a frame ran"
+        const float fps_shown = app.get_current_fps();
+        ASSERT_TRUE(fps_shown != fps_start);
+        const std::string shot = (std::filesystem::temp_directory_path() / "ants_hidden_page_test.bmp").string();
+        std::remove(shot.c_str());
+        app.renderer().request_screenshot(shot);                                          // the next frame that is drawn writes this file
+
+        app.set_page_hidden(true);
+        ASSERT_TRUE(app.page_hidden());
+        ASSERT_TRUE(app.background_driven());
+        const uint32_t executed_before = app.net()->turns_executed();
+        HiddenDuo hidden{app, host};
+        hidden.step(30000);                                                               // 30 s without one frame
+        const uint32_t turns = 30000 / net::kTurnMs;
+        ASSERT_EQ(hidden.wakes, turns);
+        ASSERT_EQ(app.background_pumps(), turns);
+        const uint32_t executed = app.net()->turns_executed() - executed_before;
+        ASSERT_TRUE(executed + 4 >= turns && executed <= turns + 1);                      // every turn that the host sealed ran here too, give or take the jitter buffer
+        ASSERT_TRUE(host.net.turns_executed() - app.net()->turns_executed() <= 4);
+        ASSERT_FALSE(host.net.desynced());                                                // the host compared the hashes that this machine sent while it was hidden
+        ASSERT_FALSE(app.net()->desynced());
+        ASSERT_EQ(app.net()->phase(), net::NetGame::Phase::Playing);
+        ASSERT_EQ(app.get_current_fps(), fps_shown);                                      // no frame ran ...
+        ASSERT_FALSE(std::ifstream(shot).good());                                         // ... and nothing was drawn
+        const uint32_t pumps = app.background_pumps();
+        app.run_frame_with_delta(0.040f);                                                 // a browser that still runs the frames of a page that it calls hidden: the frame is a frame, it draws ...
+        ASSERT_TRUE(app.get_current_fps() != fps_shown);
+        ASSERT_TRUE(std::ifstream(shot).good());
+        std::remove(shot.c_str());
+        ASSERT_FALSE(app.background_pump_after(0.1f));                                    // ... and the wake-up stands down for a quarter of a second after it
+        ASSERT_EQ(app.background_pumps(), pumps);
+        std::this_thread::sleep_for(std::chrono::milliseconds(300));
+        ASSERT_TRUE(app.background_pump_after(0.1f));                                     // it drives the match again as soon as the frames stop
+        ASSERT_EQ(app.background_pumps(), pumps + 1);
+
+        app.set_page_hidden(false);                                                       // shown again: the frame loop has the match back
+        ASSERT_FALSE(app.page_hidden());
+        ASSERT_FALSE(app.background_driven());
+        const float fps_hidden_frame = app.get_current_fps();
+        app.renderer().request_screenshot(shot);
+        app.run_frame_with_delta(0.016f);
+        ASSERT_TRUE(app.get_current_fps() != fps_hidden_frame);
+        ASSERT_TRUE(std::ifstream(shot).good());                                          // and draws again
+        std::remove(shot.c_str());
+        host.net.freeze();                                                                // the host stops sealing; both machines run what they have and stand still
+        duo.step(2000);
+        ASSERT_EQ(app.net()->turns_executed(), host.net.turns_executed());
+        ASSERT_EQ(app.sim().current_tick(), host.sim.current_tick());
+        ASSERT_TRUE(app.sim().state_hash() == host.sim.state_hash());                     // the same game, tick for tick, hash for hash
+    } TEST_END();
+
+    TEST_CASE("N5.33 Hidden Page: One Driver At A Time - The Wake-Up Of A Shown Page Does Nothing, The Wake-Ups Of A Hidden Page Stand Down While Its Frames Run, No Step Starts Inside Another") {
+        Peer host;
+        Application app;
+        ASSERT_TRUE(start_two(host, app, 4242));
+        host_runs(host, 5 * net::kTurnMs);                                                // shown: five turns arrive and nobody polls them yet
+        const uint32_t waiting = app.net()->turns_executed();
+        ASSERT_FALSE(app.background_pump_after(0.5f));                                    // a wake-up of a shown page does nothing, whatever it says
+        ASSERT_FALSE(app.background_pump());
+        ASSERT_EQ(app.net()->turns_executed(), waiting);
+        ASSERT_EQ(app.background_pumps(), 0u);
+
+        app.set_page_hidden(true);
+        const float fps = app.get_current_fps();
+        ASSERT_TRUE(app.background_pump_after(0.100f));                                   // a hidden page: the wake-up drives the match, the turns that waited run, no frame
+        ASSERT_TRUE(app.net()->turns_executed() > waiting);
+        ASSERT_EQ(app.background_pumps(), 1u);
+        ASSERT_EQ(app.get_current_fps(), fps);
+        app.run_frame_with_delta(0.050f);                                                 // a frame in a hidden page (the browser still draws it): the frame loop drives the match ...
+        ASSERT_TRUE(app.get_current_fps() != fps);
+        ASSERT_FALSE(app.background_pump_after(0.1f));                                    // ... and the wake-up stands down while frames come (a quarter of a second after the last)
+        ASSERT_FALSE(app.background_pump());
+        ASSERT_EQ(app.background_pumps(), 1u);
+        std::this_thread::sleep_for(std::chrono::milliseconds(300));
+
+        uint32_t inside = 0;                                                              // no step starts inside another: from a tick of a step every way in is refused
+        uint32_t refused = 0;
+        app.net()->set_on_tick([&]() {
+            const uint32_t before = app.background_pumps();
+            ++inside;
+            if (!app.background_pump_after(0.1f)) ++refused;
+            if (!app.background_pump()) ++refused;
+            app.run_frame_with_delta(0.1f);                                               // (it has no result: it must change nothing)
+            if (app.background_pumps() == before) ++refused;
+        });
+        host_runs(host, 3 * net::kTurnMs);
+        const uint32_t pumps = app.background_pumps();
+        ASSERT_TRUE(app.background_pump_after(0.2f));
+        ASSERT_EQ(app.background_pumps(), pumps + 1);                                     // the outer step counts once, whatever was tried inside it
+        ASSERT_TRUE(inside >= 2);                                                         // ticks ran, so the nested attempts happened
+        ASSERT_EQ(refused, inside * 3);                                                   // and every one of them was refused
+
+        app.set_page_hidden(false);                                                       // a shown page: a frame never starts inside a frame, and nothing wakes it from inside either
+        uint32_t leaked = 0;
+        uint32_t ran_inside = 0;
+        app.net()->set_on_tick([&]() {
+            ++ran_inside;
+            const float before = app.get_current_fps();
+            app.run_frame_with_delta(0.1f);                                               // refused: it would change the frame statistics a second time
+            if (app.get_current_fps() != before) ++leaked;
+            if (app.background_pump_after(0.1f)) ++leaked;
+        });
+        host_runs(host, 3 * net::kTurnMs);
+        app.run_frame_with_delta(0.050f);
+        ASSERT_TRUE(ran_inside >= 1);
+        ASSERT_EQ(leaked, 0u);
+    } TEST_END();
+
+    TEST_CASE("N5.34 Hidden Page: The Time Accounting Of The Wake-Ups - A Wake-Up Counts For At Most A Second And Never For Less Than Nothing, A Long Pause Is Not A Lost Host, A Host That Is Really Gone Is Still Noticed") {
+        {
+            Peer host;
+            Application app;
+            ASSERT_TRUE(start_two(host, app, 777));
+            app.set_page_hidden(true);
+            host_runs(host, 30 * net::kTurnMs);                                           // thirty turns wait (3 s)
+            const uint32_t before = app.net()->turns_executed();
+            ASSERT_TRUE(app.background_pump_after(600.0f));                               // ten minutes of "time": the runner's own limit (eight ticks per step) is what counts
+            const uint32_t ran = app.net()->turns_executed() - before;
+            ASSERT_TRUE(ran >= 3 && ran <= 4);
+            ASSERT_EQ(app.net()->phase(), net::NetGame::Phase::Playing);
+            ASSERT_TRUE(app.background_pump_after(-5.0f));                                // a clock that went backwards counts for nothing (it must not wrap the network's clock)
+            ASSERT_EQ(app.net()->phase(), net::NetGame::Phase::Playing);
+            ASSERT_FALSE(app.net()->electing());
+            ASSERT_FALSE(app.net()->desynced());
+        }
+        {
+            Peer host;
+            Application app;
+            ASSERT_TRUE(start_two(host, app, 778));
+            app.set_page_hidden(true);
+            ASSERT_TRUE(app.background_pump_after(0.0f));                                 // (takes what the host sent last: from now on nothing is waiting and the host says nothing)
+            ASSERT_TRUE(app.background_pump_after(600.0f));                               // ten minutes of silence in one wake-up: it counts for one second, the host is not gone
+            ASSERT_EQ(app.net()->phase(), net::NetGame::Phase::Playing);
+            ASSERT_FALSE(app.net()->electing());
+            ASSERT_FALSE(app.net()->is_host());                                           // (alone, it would take the host's place at once: a silence that long would have made it host)
+            for (int i = 0; i < 12; ++i) ASSERT_TRUE(app.background_pump_after(1.0f));    // but twelve quiet seconds (the host is silent: 10 s are enough) are noticed
+            ASSERT_TRUE(app.net()->electing() || app.net()->is_host() || app.net()->phase() != net::NetGame::Phase::Playing);
+        }
+        {                                                                                  // frames and wake-ups share one timer: the time between two of them is counted once
+            Peer host;
+            Application app;
+            ASSERT_TRUE(start_two(host, app, 779));
+            app.run_frame();                                                              // (the frame loop's timer starts)
+            app.set_page_hidden(true);
+            std::this_thread::sleep_for(std::chrono::milliseconds(250));
+            ASSERT_TRUE(app.background_pump());                                           // the wake-up counts the quarter second ...
+            const float fps = app.get_current_fps();
+            app.run_frame();                                                              // ... and the frame after it measures from the wake-up, not from the frame before: no second quarter second
+            ASSERT_TRUE(app.get_current_fps() > fps - 3.0f);
+        }
+    } TEST_END();
+
+    TEST_CASE("N5.35 Hidden Page: The Hidden Hours Are Not One Huge Frame - The First Frame After The Page Is Shown Measures From The Moment It Was Shown") {
+        Application app;
+        ASSERT_TRUE(app.init(headless_config()));
+        ASSERT_TRUE(app.start_game("Original-Ants/Maps/SMALL.LVL"));
+        app.run_frame();                                                                  // the first frame starts the frame loop's timer
+        float before = app.get_current_fps();
+        std::this_thread::sleep_for(std::chrono::milliseconds(250));
+        app.run_frame();                                                                  // the control: a quarter second between two frames is one frame of 100 ms (the clamp), the rate drops
+        ASSERT_TRUE(app.get_current_fps() < before - 3.0f);
+        before = app.get_current_fps();
+        app.set_page_hidden(true);
+        std::this_thread::sleep_for(std::chrono::milliseconds(250));                      // the same quarter second, while the page is hidden
+        app.set_page_hidden(false);
+        app.run_frame();                                                                  // is no frame at all
+        ASSERT_TRUE(app.get_current_fps() > before - 3.0f);
+    } TEST_END();
+
+    TEST_CASE("N5.36 Hidden Page: No Sound Effects Are Played While The Page Is Hidden (The Events Are Dropped, Not Saved Up), The Sound Is Back When It Is Shown") {
+        Peer host;
+        Application app;
+        ASSERT_TRUE(start_two(host, app, 9090));
+        Duo duo{app, host};
+        Command hatch;                                                                    // "can't hatch" (the score is below 200): the cue of the clicking machine
+        hatch.type = CommandType::Hatch;
+        const size_t quiet = app.audio_mixer().active_channel_count();                    // (the match's start voice plays in a shown page: nothing mixes without a device, so it stays)
+        ASSERT_TRUE(quiet >= 1);
+        app.set_page_hidden(true);
+        HiddenDuo hidden{app, host};
+        ASSERT_EQ(app.net()->submit(hatch).status, sim::CommandResult::Status::Applied);
+        hidden.step(1500);
+        ASSERT_TRUE(app.sim().poll_audio_events().empty());                               // the queue of a page that nobody hears is drained all the same, it must not grow
+        ASSERT_EQ(app.audio_mixer().active_channel_count(), quiet);                       // and nothing was played
+        ASSERT_EQ(hidden.wakes, 1500 / net::kTurnMs);                                     // (the wake-ups did step: 1.5 s of turns)
+        ASSERT_EQ(app.net()->submit(hatch).status, sim::CommandResult::Status::Applied);  // a hidden page whose frames run all the same (the browser still draws it) keeps its sound:
+        host_runs(host, 2 * net::kTurnMs);                                                // the ticks of a frame are not a background step
+        for (int i = 0; i < 4 && app.audio_mixer().active_channel_count() == quiet; ++i) app.run_frame_with_delta(0.1f);        // (a frame runs one turn)
+        ASSERT_TRUE(app.audio_mixer().active_channel_count() > quiet);
+        app.audio_mixer().stop_all();
+        app.set_page_hidden(false);
+        ASSERT_EQ(app.audio_mixer().active_channel_count(), 0u);
+        ASSERT_EQ(app.net()->submit(hatch).status, sim::CommandResult::Status::Applied);
+        duo.step(1500);
+        ASSERT_TRUE(app.audio_mixer().active_channel_count() > 0u);                       // the same cue is heard in a page that is shown
+    } TEST_END();
+
+    TEST_CASE("N5.37 Hidden Page: When The Page Is Shown The Last Wake-Up Brings The Clocks Up To Date, Then The Frame Loop Has The Match And Nothing Steps Twice") {
+        Peer host;
+        Application app;
+        ASSERT_TRUE(start_two(host, app, 2468));
+        app.run_frame();                                                                  // (the frame loop's timer starts)
+        app.set_page_hidden(true);
+        host_runs(host, 4 * net::kTurnMs);                                                // four turns are on their way and nobody woke the page
+        std::this_thread::sleep_for(std::chrono::milliseconds(300));
+        const uint32_t before = app.net()->turns_executed();
+        ASSERT_EQ(app.background_pumps(), 0u);
+        app.set_page_hidden(false);
+        ASSERT_TRUE(app.net()->turns_executed() > before);                                // the turns that waited ran at the moment the page was shown
+        ASSERT_EQ(app.background_pumps(), 1u);
+        ASSERT_FALSE(app.background_driven());
+        ASSERT_FALSE(app.background_pump_after(0.1f));                                    // nothing steps in the background any more
+        app.set_page_hidden(false);                                                       // (shown twice is shown once)
+        ASSERT_EQ(app.background_pumps(), 1u);
+    } TEST_END();
+
+    TEST_CASE("N5.38 Hidden Page: A Local Game Is Not Driven By Wake-Ups - It Stands Still With The Page, Frames Run As Before; A Page That Was Never Told Is Shown") {
+        Application app;
+        ASSERT_TRUE(app.init(headless_config()));
+        ASSERT_FALSE(app.page_hidden());
+        ASSERT_TRUE(app.start_game("Original-Ants/Maps/SMALL.LVL"));
+        app.set_page_hidden(true);
+        ASSERT_TRUE(app.page_hidden());
+        ASSERT_FALSE(app.background_driven());                                            // no room, no match of the network
+        ASSERT_FALSE(app.background_pump_after(1.0f));
+        ASSERT_FALSE(app.background_pump());
+        const float fps = app.get_current_fps();
+        app.run_frame_with_delta(0.040f);                                                 // the frame loop is the only driver of a local game
+        ASSERT_TRUE(app.get_current_fps() != fps);
+        ASSERT_EQ(app.background_pumps(), 0u);
+        app.set_page_hidden(false);
+        ASSERT_FALSE(app.page_hidden());
+    } TEST_END();
+
+    TEST_CASE("N5.39 Hidden Page: A Page That Is Hidden Before The Match Starts Is Driven Through The Room, The Start And The Match By The Wake-Ups Alone") {
+        Peer host;
+        ASSERT_TRUE(host.net.host(0, "Alice", true));
+        host.net.set_map("TINY.LVL");
+        ApplicationConfig cfg = headless_config();
+        cfg.net_role = ApplicationConfig::NetRole::Join;
+        cfg.net_address = "127.0.0.1";
+        cfg.net_port = host.net.listen_port();
+        cfg.player_name = "Bob";
+        Application app;
+        ASSERT_TRUE(app.init(cfg));
+        app.set_page_hidden(true);                                                        // a background tab: the page never draws a frame
+        HiddenDuo hidden{app, host};
+        ASSERT_TRUE(hidden.until([&]() { return app.net()->phase() == net::NetGame::Phase::Room && host.net.can_start(); }, 8000));
+        ASSERT_EQ(app.net()->my_seat(), 1);
+        host.net.set_map("TINY.LVL");
+        hidden.step(300);
+        uint64_t hash = 0;
+        ASSERT_TRUE(net::hash_file(maps_dir() + "TINY.LVL", hash));
+        ASSERT_TRUE(host.net.start_match(5150, hash));
+        ASSERT_TRUE(hidden.until([&]() { return app.state() == AppState::Playing && host.net.phase() == net::NetGame::Phase::Playing; }, 8000));
+        ASSERT_EQ(app.local_player_id(), 1);
+        ASSERT_EQ(app.audio_mixer().active_channel_count(), 0u);                          // a match that begins in a hidden page has no start voice (the shown page's has one: N5.36)
+        hidden.step(10000);
+        ASSERT_TRUE(app.net()->turns_executed() + 6 >= 10000 / net::kTurnMs);             // the match runs here although no frame ever did
+        ASSERT_FALSE(host.net.desynced());
+        ASSERT_FALSE(app.net()->desynced());
+        ASSERT_EQ(app.net()->phase(), net::NetGame::Phase::Playing);
+    } TEST_END();
+}
+
 }  // namespace
 
 int main() {
@@ -2118,6 +2453,7 @@ int main() {
     run_guest_tests();
     run_leader_tests();
     run_latency_tests();
+    run_hidden_page_tests();
     std::cout << "\n=======================================================\n Total Test Cases: " << g_test_count << "\n Total Assertions: " << g_assert_count
               << "\n Failed:           " << g_test_failures << "\n=======================================================\n";
     return g_test_failures == 0 ? 0 : 1;

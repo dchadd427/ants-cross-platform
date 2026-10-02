@@ -156,7 +156,8 @@
             touch-action: none;
         }
 
-        /* Overlay Splash / Loading Screen */
+        /* The loading screen: shows the download of the game's data and goes away by itself when the game is ready (there is no start button; a failure puts its
+           message here and the button of that message must work, see showCacheError). It takes no clicks and no keys while it is up. */
         #splash-overlay {
             position: absolute;
             inset: 0;
@@ -166,8 +167,12 @@
             align-items: center;
             justify-content: center;
             z-index: 50;
-            cursor: pointer;
+            pointer-events: none;
             transition: opacity 0.3s ease;
+        }
+
+        #splash-overlay.failed {
+            pointer-events: auto;
         }
 
         .splash-card {
@@ -207,24 +212,6 @@
             height: 100%;
             background: linear-gradient(90deg, #2b7040, var(--accent-green));
             transition: width 0.15s ease;
-        }
-
-        .play-prompt {
-            display: none;
-            font-size: 1.15rem;
-            font-weight: bold;
-            color: #fff;
-            background: #256b3b;
-            border: 2px solid var(--accent-green);
-            padding: 10px 24px;
-            border-radius: 6px;
-            box-shadow: 0 0 16px rgba(72, 184, 112, 0.5);
-            animation: pulse 1.6s infinite alternate;
-        }
-
-        @keyframes pulse {
-            0% { transform: scale(1.0); box-shadow: 0 0 12px rgba(72, 184, 112, 0.4); }
-            100% { transform: scale(1.04); box-shadow: 0 0 24px rgba(72, 184, 112, 0.8); }
         }
 
         /* Mobile Orientation Tip Banner */
@@ -576,7 +563,6 @@
                 <div class="progress-bar-container" id="progress-container">
                     <div class="progress-bar-fill" id="progress-fill"></div>
                 </div>
-                <div class="play-prompt" id="play-prompt">CLICK TO START</div>
             </div>
         </div>
     </div>
@@ -687,7 +673,6 @@
         var statusElement = document.getElementById('status-text');
         var progressContainer = document.getElementById('progress-container');
         var progressFill = document.getElementById('progress-fill');
-        var playPrompt = document.getElementById('play-prompt');
         var splashOverlay = document.getElementById('splash-overlay');
         var canvas = document.getElementById('canvas');
         var isReadyToPlay = false;
@@ -695,7 +680,7 @@
         // Joining a game server from the page address (docs/NETWORK_PORT.md): ?join=/ws&room=<code>&seat=<0-3>&name=<name>[&embed=1]
         //   join   the server's WebSocket door on THIS site: /ws or a path below it (the nginx of the site passes /ws to the server)
         //   room   the room code (letters, digits, _ and -, up to 32); seat 0 green, 1 red, 2 blue, 3 black; name: printable ASCII, up to 32 characters
-        //   embed  the page is a frame of another page (four.html): no header, guide or start click; sound only while this frame has the focus
+        //   embed  the page is a frame of another page (four.html): no header and no guide; sound only while this frame has the focus
         var ANTS_ARGS = [];
         var ANTS_EMBED = false;
         (function () {
@@ -725,12 +710,11 @@
             arguments: ANTS_ARGS,
             preRun: [],
             postRun: [function() {
-                // Game engine is initialized!
+                // Game engine is initialized: the game is running already, so the loading screen goes away (nobody has to click anything to start; the sound follows the
+                // first press, see the audio block below)
                 isReadyToPlay = true;
                 progressContainer.style.display = 'none';
-                statusElement.textContent = 'Audio ready. Click anywhere to play!';
-                playPrompt.style.display = 'inline-block';
-                if (ANTS_EMBED) unlockAudioAndStart();                          // a frame of another page has nobody to click its start prompt
+                hideLoadingScreen();
             }],
             locateFile: function(path, prefix) {
                 // Enforce lockstep versioning on wasm and data bundles matching index.js
@@ -804,7 +788,7 @@
 
         function showCacheError() {
             if (progressContainer) progressContainer.style.display = 'none';
-            if (playPrompt) playPrompt.style.display = 'none';
+            if (splashOverlay) splashOverlay.classList.add('failed');            // (the loading screen takes no clicks, but the button of this message needs them)
             if (statusElement) {
                 statusElement.innerHTML = '<div style="background: rgba(220, 40, 40, 0.25); border: 1px solid #f87171; border-radius: 6px; padding: 14px; margin-top: 8px; text-align: center;">' +
                     '<div style="color: #fca5a5; font-weight: bold; font-size: 0.95rem; margin-bottom: 6px;">Browser Cache Mismatch Detected</div>' +
@@ -827,41 +811,79 @@
 
         Module.setStatus('Downloading game data package...');
 
-        function unlockAudioAndStart() {
-            if (!isReadyToPlay) return;
-
-            // Resume Web Audio AudioContext if browser suspended it
-            if (typeof SDL2 !== 'undefined' && SDL2.audioContext && SDL2.audioContext.state === 'suspended') {
-                SDL2.audioContext.resume();
-            }
-            try {
-                var AudioContextClass = window.AudioContext || window.webkitAudioContext;
-                if (AudioContextClass) {
-                    var ctx = new AudioContextClass();
-                    if (ctx.state === 'suspended') {
-                        ctx.resume();
-                    }
-                }
-            } catch (e) {
-                // Ignore audio unlock exceptions
-            }
-
+        // The game starts by itself: when it is ready the loading screen goes away and the canvas takes the keyboard. The first press inside the game takes it again
+        // (a click focuses the canvas anyway; this makes it sure in every browser). A frame of another page (ANTS_EMBED) gets the focus when the player clicks it,
+        // and must not scroll that page.
+        function focusGame() {
+            try { canvas.focus({preventScroll: true}); } catch (e) { /* nothing to focus */ }
+        }
+        function hideLoadingScreen() {
             splashOverlay.style.opacity = '0';
-            setTimeout(function() {
-                splashOverlay.style.display = 'none';
-                if (!ANTS_EMBED) canvas.focus({preventScroll: true});          // (a frame of another page gets the focus when the player clicks it, and must not scroll the page)
-            }, 300);
+            setTimeout(function() { splashOverlay.style.display = 'none'; }, 300);
+            if (!ANTS_EMBED) focusGame();
+        }
+        if (!ANTS_EMBED) {
+            ['pointerdown', 'mousedown'].forEach(function(name) {
+                document.getElementById('game-container').addEventListener(name, focusGame, { capture: true, once: true });
+            });
         }
 
-        splashOverlay.addEventListener('click', unlockAudioAndStart);
-
-        function ensureAudioUnlocked() {
-            if (typeof SDL2 !== 'undefined' && SDL2.audioContext && SDL2.audioContext.state === 'suspended') {
-                SDL2.audioContext.resume();
+        // Sound and the browsers' autoplay rules. A page may make sound only after the person has done something on it, so the game's Web Audio context (SDL's, which the game
+        // opens when it starts: Module.SDL2.audioContext) begins suspended and the game's sound and music begin the moment it is resumed; the game itself does not wait for it.
+        // SDL's own Emscripten audio resumes it at the first keydown, mousedown and touchstart (autoResumeAudioContext: once each, on the document and the canvas). That is not
+        // enough in every browser, so this keeps trying until the context really runs: on pointerdown and click, on touchend (iOS Safari and Chrome on Android grant their
+        // permission at the END of a touch, not at its start), and on a key. A press before the context exists (a click while the game's data downloads) is not lost, a key that
+        // grants nothing (Esc, a shortcut of the browser) does not use the attempt up, and a context that stops later (Safari: a call, the lock screen) is resumed by the next press. The listeners
+        // are taken off as soon as the context runs. (docs/NETWORK_PORT.md lists what the browsers' policies need.)
+        (function() {
+            var events = ['pointerdown', 'mousedown', 'touchend', 'click', 'keydown'];
+            var armed = false;
+            var watched = null;
+            function audioContext() {
+                return (typeof Module !== 'undefined' && Module.SDL2 && Module.SDL2.audioContext) || null;
             }
-        }
-        window.addEventListener('click', ensureAudioUnlocked, { capture: true });
-        window.addEventListener('keydown', ensureAudioUnlocked, { capture: true });
+            function arm() {
+                if (armed) return;
+                armed = true;
+                events.forEach(function(name) { window.addEventListener(name, onPress, true); });
+            }
+            function disarm() {
+                armed = false;
+                events.forEach(function(name) { window.removeEventListener(name, onPress, true); });
+            }
+            function check() {                                              // armed while the game's audio does not run, taken off while it does
+                var ctx = audioContext();
+                if (ctx && ctx !== watched && ctx.addEventListener) {
+                    watched = ctx;
+                    ctx.addEventListener('statechange', check);
+                }
+                if (ctx && ctx.state === 'running') disarm(); else arm();
+            }
+            function onPress() {
+                var ctx = audioContext();
+                if (ctx && ctx.state !== 'running') {
+                    try {
+                        var resumed = ctx.resume();
+                        if (resumed && resumed.then) resumed.then(check, check);
+                    } catch (e) { /* the browser refuses: the next press tries again */ }
+                }
+                check();
+            }
+            arm();
+            document.addEventListener('visibilitychange', function() { if (!document.hidden) check(); });
+        })();
+
+        // A hidden page (another tab in front, a minimised window): the browser stops requestAnimationFrame and slows the page's timers (to once a second; Chrome to once a minute
+        // after five quiet minutes), so a network match cannot depend on the frame loop. The game drives itself from the messages of the game server instead: each one wakes it
+        // (src/ants_net/wasm_ws.cpp), and Application::background_pump (src/ants_app/application.cpp, which also follows visibilitychange by itself) executes the ticks that are due.
+        // This timer is the fallback for a quiet server; the game does nothing when the page is shown or when there is no network match. window.antsBackgroundTimer is its handle.
+        window.antsBackgroundTimer = setInterval(function() {
+            try {
+                if (document.hidden && typeof Module !== 'undefined' && Module._ants_background_pump) Module._ants_background_pump();
+            } catch (e) {
+                clearInterval(window.antsBackgroundTimer);                  // the game has stopped (an abort): there is nothing more to wake
+            }
+        }, 250);
 
         document.getElementById('fullscreen-btn').addEventListener('click', function() {
             var el = document.getElementById('game-container');
@@ -920,7 +942,7 @@
         // The game still receives every key: only the default action is cancelled (never for Space or letters: they type into the chat box). Keys that a
         // browser reserves (Ctrl+N, Ctrl+T, Ctrl+W) cannot be reached.
         window.addEventListener('keydown', function(e) {
-            if (splashOverlay.style.display !== 'none') return;              // before the game starts the page behaves as usual
+            if (!isReadyToPlay) return;                                      // before the game is ready the page behaves as usual
             var key = (e.key || '').toLowerCase();
             var ctrlOnly = e.ctrlKey && !e.altKey && !e.metaKey && !e.shiftKey;
             var gameCtrlKey = ctrlOnly && key.length === 1 && 'ahlnopqs'.indexOf(key) !== -1;

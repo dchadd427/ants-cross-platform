@@ -2,7 +2,7 @@
 
 // The browser's side of the game server's WebSocket door (docs/NETWORK_PORT.md): a Connection over the page's own WebSocket (Emscripten's websocket API), one
 // binary message = one protocol message, the same bytes as everywhere else. The web build has no threads and no blocking calls: the browser delivers the events
-// between two frames of the main loop, and the game polls the connection from there.
+// between two frames of the main loop, and the game polls the connection from there (a hidden page runs no frames: set_on_wake lets the game poll from the event itself).
 //
 // Only the WebAssembly build has this class (a native client uses TCP).
 
@@ -40,6 +40,12 @@ public:
     /// session is sent from here and not from the frame loop (the server closes a connection that says nothing for 10 s).
     void set_on_open(std::function<void()> fn) { on_open_ = std::move(fn); }
 
+    /// Called (from the browser's event loop, as the last thing of the browser's callback) when the connection has news: a message was queued for poll(), the
+    /// browser reported an error, or the link closed. A hidden page runs no frames and the browser slows its timers, but its WebSocket events still arrive, so the
+    /// game hangs its background step here (NetGame::set_on_wake, Application::background_pump). The function may end the match and with it delete this connection:
+    /// it runs from a copy and nothing here touches the connection afterwards.
+    void set_on_wake(std::function<void()> fn) { on_wake_ = std::move(fn); }
+
     /// The kinds of address the game accepts, the ones that cannot make the browser throw: ws:// or wss://, a host name (letters, digits, dots, hyphens) or a
     /// bracketed IPv6 address, an optional port of at most 65535, then an optional path and query without spaces, controls or '#'; at most 512 characters
     static bool valid_url(const std::string& url);
@@ -53,6 +59,7 @@ private:
     State state_{State::Connecting};
     bool browser_closed_{false};                // the browser reported the close: nothing is left to close
     std::function<void()> on_open_;
+    std::function<void()> on_wake_;
     struct Queued {
         std::vector<uint8_t> data;
         double arrived_ms;                          // emscripten_get_now() when the browser delivered it

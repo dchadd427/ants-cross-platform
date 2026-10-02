@@ -178,6 +178,10 @@ bool NetGame::join_url(const std::string& url, const std::string& name, uint8_t 
     raw->set_on_open([this]() {                                           // the Hello goes out when the socket opens, not at the next frame: a page that is not drawn
         if (client_lobby_) client_lobby_->send_hello();                   // runs no frames, and the server closes a connection that says nothing for 10 s
     });
+    raw->set_on_wake([this]() {                                           // news from the server (a message, an error, the close) reaches the application at once, also
+        const std::function<void()> wake = on_wake_;                      // while the page is hidden; the application's step may end the session and with it this very
+        if (wake) wake();                                                 // connection and its callbacks: so the function runs from a copy
+    });
     return true;
 #else
     (void)url;

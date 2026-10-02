@@ -20,6 +20,7 @@
   #include <windows.h>
 #elif defined(__EMSCRIPTEN__)
   #include <emscripten.h>
+  #include <emscripten/html5.h>                                  // the page's visibility (a hidden page runs no frames, see Application::set_page_hidden)
   #include <unistd.h>
 #else
   #include <unistd.h>
@@ -51,6 +52,11 @@ EM_JS(void, ants_post_sync_to_parent, (int seat, int tick, int hash_high, int ha
     }
 });
 }
+
+// The one application of the page (main() keeps it alive for as long as the page lives): the entry for ants_background_pump below
+namespace {
+ants::app::Application* g_web_app = nullptr;
+}  // namespace
 #endif
 
 namespace ants::app {
@@ -109,6 +115,31 @@ private:
 };
 
 constexpr uint8_t seat_bit(uint8_t seat) noexcept { return static_cast<uint8_t>(1u << seat); }
+
+// A wake-up of a hidden page counts for at most this much time: after a freeze or a sleep of the page the session must not see a silence that was the page's own
+constexpr double kMaxWakeSeconds = 1.0;
+
+// A hidden page whose frame loop still runs (the browser draws it all the same) is driven by its frames: the wake-ups stand down for this long after each frame
+constexpr double kFrameAliveSeconds = 0.25;
+
+// A frame or a background step holds the flag while it runs: nothing may start another one inside it (Application::run_frame_with_delta, background_pump_after)
+struct AdvanceGuard {
+    explicit AdvanceGuard(bool& flag) : flag_(flag) { flag_ = true; }
+    ~AdvanceGuard() { flag_ = false; }
+    AdvanceGuard(const AdvanceGuard&) = delete;
+    AdvanceGuard& operator=(const AdvanceGuard&) = delete;
+
+private:
+    bool& flag_;
+};
+
+#if defined(__EMSCRIPTEN__)
+// The browser's visibilitychange (registered in init): the page was hidden (a background tab, a minimised window) or is shown again
+EM_BOOL on_visibility_change(int, const EmscriptenVisibilityChangeEvent* e, void* user) {
+    static_cast<Application*>(user)->set_page_hidden(e->hidden != 0);
+    return EM_FALSE;
+}
+#endif
 
 #if !defined(__EMSCRIPTEN__)
 // The operating system holds the window fullscreen without SDL's fullscreen flags. macOS: a fullscreen Space (the green button, or Cmd+Ctrl+F, the item
@@ -512,6 +543,7 @@ bool Application::init(const ApplicationConfig& config) {
             }
         }
         net_->set_on_tick([this]() { post_tick(); });
+        net_->set_on_wake([this]() { background_pump(); });                            // the browser build: a message of the server wakes a hidden page (docs/NETWORK_PORT.md)
         net_->set_on_chat([this](const net::ChatMsg& m) {
             if (m.sender == local_player_id_ || m.sender >= 4) return;                // the own text is in the log already
             hud_.receive_chat_message(m.sender, sim_.get_player_name(m.sender), m.text, m.team, sim_.get_world_state());
@@ -596,6 +628,12 @@ bool Application::init(const ApplicationConfig& config) {
     mouse_screen_x_ = 320;
     mouse_screen_y_ = 240;
     mouse_has_moved_ = false;
+#if defined(__EMSCRIPTEN__)
+    // The browser tells when the page is hidden or shown (visibilitychange); a page may also have been opened in a background tab, so ask once now
+    g_web_app = this;
+    emscripten_set_visibilitychange_callback(this, EM_FALSE, on_visibility_change);
+    refresh_page_visibility();
+#endif
     return true;
 }
 
@@ -707,8 +745,8 @@ void Application::enter_match() {
     // In-Game Music: Shuffle between ANTS2A, ANTS2B, ANTSFUN3
     play_next_ingame_music();
 
-    // Play authentic random game startup sound (rndm1..6.wav / Sound IDs 7..12)
-    play_startup_sound();
+    // Play authentic random game startup sound (rndm1..6.wav / Sound IDs 7..12); a match that begins while the page is hidden makes no sound effect
+    if (!background_stepping_) play_startup_sound();
 
     // Reset HUD & Scorecard
     hud_.init(local_player_id_);
@@ -883,7 +921,9 @@ void Application::return_to_map_select() {
 }
 
 void Application::run_frame_with_delta(float delta_time) {
-    if (!is_running_) return;
+    if (!is_running_ || advancing_) return;                  // (a frame never starts inside a frame or inside a background step)
+    const AdvanceGuard advance(advancing_);
+    last_frame_run_ = SDL_GetPerformanceCounter();           // (the wake-ups of a hidden page stand down while frames come)
 
     // The network's clock keeps real time (a frame counts for at most a second of it), unlike the local simulation's below: the lock-step runner has its own bounds (it pays
     // back at most 400 ms and runs the rest down at double speed). With the clamp a hitch of 400 ms left three turns standing in its queue for the rest of the match.
@@ -956,12 +996,94 @@ void Application::run_frame() {
     run_frame_with_delta(delta_time);
 }
 
+// ------------------------------------------------------------------------------------------------
+// A hidden page (see the comment at set_page_hidden in application.hpp)
+// ------------------------------------------------------------------------------------------------
+
+void Application::set_page_hidden(bool hidden) {
+    if (hidden == page_hidden_) return;
+    if (hidden) {
+        page_hidden_ = true;                                 // from now on the wake-ups may drive a network match: the first one counts the time since the last frame
+        last_frame_run_ = 0;                                 // (only a frame that runs from now on shows that the browser still delivers frames)
+        hidden_since_ = SDL_GetPerformanceCounter();
+        hidden_wakes_ = 0;
+        hidden_tick_ = sim_.current_tick();
+        return;
+    }
+    if (background_driven()) background_step();              // shown again: one last wake-up so that the clocks are up to date, then the frame loop has the match back
+    page_hidden_ = false;
+    last_frame_time_ = SDL_GetPerformanceCounter();          // the first frame measures from here: the hours that the page was hidden are not a frame
+#if defined(__EMSCRIPTEN__)
+    if (hidden_wakes_ > 0) {                                 // (one line per hidden period, for the browser's console)
+        const double seconds = static_cast<double>(last_frame_time_ - hidden_since_) / static_cast<double>(SDL_GetPerformanceFrequency());
+        std::cout << "[Application] The page was hidden for " << static_cast<int>(seconds * 10.0 + 0.5) / 10.0 << " s; the match advanced by " << (sim_.current_tick() - hidden_tick_)
+                  << " ticks and " << hidden_wakes_ << " wake-ups stepped it in the background" << std::endl;
+    }
+#endif
+}
+
+void Application::refresh_page_visibility() {
+#if defined(__EMSCRIPTEN__)
+    EmscriptenVisibilityChangeEvent status{};
+    if (emscripten_get_visibility_status(&status) == EMSCRIPTEN_RESULT_SUCCESS) set_page_hidden(status.hidden != 0);
+#endif
+}
+
+bool Application::background_pump() {
+    refresh_page_visibility();                               // (what the browser says, not only what its events said)
+    return background_step();
+}
+
+// Do the wake-ups drive the match now? The page is hidden, a room or a match exists, no step is running, and the frame loop has been silent for a quarter of a second: a browser
+// that still draws a page that it calls hidden (an embedded browser pane that is not on screen) keeps the frames in charge, with picture and sound
+bool Application::wake_may_step() {
+    if (!is_running_ || advancing_ || !background_driven()) return false;
+    if (last_frame_run_ != 0) {
+        const double since = static_cast<double>(SDL_GetPerformanceCounter() - last_frame_run_) / static_cast<double>(SDL_GetPerformanceFrequency());
+        if (since < kFrameAliveSeconds) return false;
+    }
+    return true;
+}
+
+// The real time since the clocks were last advanced (a frame or the wake-up before): the same timer as the frame loop's, so that a frame after a wake-up measures from it
+bool Application::background_step() {
+    if (!wake_may_step()) return false;
+    const uint64_t now = SDL_GetPerformanceCounter();
+    const double elapsed = last_frame_time_ > 0 && now > last_frame_time_
+                               ? static_cast<double>(now - last_frame_time_) / static_cast<double>(SDL_GetPerformanceFrequency())
+                               : 0.0;
+    last_frame_time_ = now;
+    background_run(static_cast<float>(elapsed));
+    return true;
+}
+
+bool Application::background_pump_after(float dt) {
+    if (!wake_may_step()) return false;
+    background_run(dt);
+    return true;
+}
+
+void Application::background_run(float dt) {
+    const AdvanceGuard advance(advancing_);
+    const AdvanceGuard silent(background_stepping_);         // (the ticks of this step make no sound)
+    const double seconds = std::clamp(static_cast<double>(dt), 0.0, kMaxWakeSeconds);
+    pump_network(static_cast<float>(seconds));               // the network clock, the room or the session, every tick that is due (post_tick: the HUD's state) and what the net reports
+    ++background_pumps_;
+    ++hidden_wakes_;
+}
+
 #if defined(__EMSCRIPTEN__)
 extern "C" void emscripten_main_loop_iter(void* arg) {
     auto* app = static_cast<Application*>(arg);
     if (app && app->is_running()) {
         app->run_frame();
     }
+}
+
+// For the page (web/shell.html): its timer wakes a hidden page's network match when the server is quiet (every message of the server wakes it by itself, see
+// NetGame::set_on_wake). It does nothing in a page that is shown, and nothing while a step is already running.
+extern "C" EMSCRIPTEN_KEEPALIVE void ants_background_pump() {
+    if (g_web_app != nullptr) g_web_app->background_pump();
 }
 #endif
 
@@ -1357,8 +1479,8 @@ void Application::post_tick() {
     hud_.update(world, 1);
     hud_.poll_sim_events(sim_);
 
-    auto audio_events = sim_.poll_audio_events();
-    audio_mixer_.ingest_simulation_events(audio_events, local_player_id_);
+    auto audio_events = sim_.poll_audio_events();            // (drained in every case: the queue must not grow)
+    if (!background_stepping_) audio_mixer_.ingest_simulation_events(audio_events, local_player_id_);   // a background step makes no sound: its events are dropped, not saved up
 
 #if defined(__EMSCRIPTEN__)
     // A page that embeds several games (web/four.html) shows that the machines stay in step: every 100 ticks the game tells its parent page the tick and the

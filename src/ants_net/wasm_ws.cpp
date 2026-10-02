@@ -18,6 +18,13 @@ constexpr size_t kMaxUrlChars = 512;
 // The browser's callbacks (plain functions with the connection as user data). The socket is deleted in the destructor, which also removes them, so a callback
 // never runs for a connection that is gone.
 struct WasmWsCallbacks {
+    // Tells the game that the connection has news (set_on_wake). The game's step may end the match, which deletes this connection and its callbacks while the
+    // browser's callback is still running: so the function runs from a copy, and every callback below calls this LAST and returns without touching `c` again.
+    static void wake(WasmWsConnection* c) {
+        if (!c->on_wake_) return;
+        const std::function<void()> fn = c->on_wake_;
+        fn();
+    }
     static EM_BOOL on_open(int, const EmscriptenWebSocketOpenEvent*, void* user) {
         auto* c = static_cast<WasmWsConnection*>(user);
         if (c->state_ == Connection::State::Connecting) {
@@ -29,6 +36,7 @@ struct WasmWsCallbacks {
     static EM_BOOL on_error(int, const EmscriptenWebSocketErrorEvent*, void* user) {
         auto* c = static_cast<WasmWsConnection*>(user);
         if (c->state_ == Connection::State::Connecting) c->state_ = Connection::State::Failed;      // never opened: "unable to connect"
+        wake(c);
         return EM_TRUE;
     }
     static EM_BOOL on_close(int, const EmscriptenWebSocketCloseEvent*, void* user) {
@@ -36,6 +44,7 @@ struct WasmWsCallbacks {
         c->browser_closed_ = true;
         if (c->state_ == Connection::State::Connecting) c->state_ = Connection::State::Failed;
         else if (c->state_ == Connection::State::Open) c->state_ = Connection::State::Closed;
+        wake(c);
         return EM_TRUE;
     }
     static EM_BOOL on_message(int, const EmscriptenWebSocketMessageEvent* e, void* user) {
@@ -44,9 +53,11 @@ struct WasmWsCallbacks {
         if (e->isText || e->numBytes > kMaxMessageBytes || c->inbox_.size() >= kMaxQueuedMessages) {        // the protocol is binary; a text frame or a too large one is a broken peer
             c->state_ = Connection::State::Failed;
             c->close_socket(4002, "protocol error");                         // (a browser accepts only 1000 and 3000 - 4999 from a script)
+            wake(c);
             return EM_TRUE;
         }
         c->inbox_.push_back(WasmWsConnection::Queued{std::vector<uint8_t>(e->data, e->data + e->numBytes), emscripten_get_now()});     // (stamped with the browser's clock: see last_message_age_ms)
+        wake(c);                                                             // a hidden page polls the message from here (nobody draws a frame)
         return EM_TRUE;
     }
 };

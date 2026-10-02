@@ -99,6 +99,11 @@ public:
     // ---- every frame -----------------------------------------------------------------------------------------------------------------------------
     void update(uint32_t now_ms);
     std::vector<Event> take_events();
+    /// The browser build only: called from the browser's event loop when the server's connection has news (a message arrived, an error, the link closed), whether or
+    /// not the page draws frames. A hidden page runs none and the browser slows its timers, but the WebSocket's events still come: the application makes its
+    /// background step from here (Application::background_pump), which calls update() and take_events() like a frame does. The function may end the session (leave()).
+    /// A native build never calls it (its transports are polled by the frame loop).
+    void set_on_wake(std::function<void()> fn) { on_wake_ = std::move(fn); }
 
     // ---- state -----------------------------------------------------------------------------------------------------------------------------------
     Phase phase() const noexcept { return phase_; }
@@ -239,6 +244,7 @@ private:
     std::string game_version_;
 
     std::function<void(const ChatMsg&)> on_chat_;
+    std::function<void()> on_wake_;
     std::function<void()> on_tick_;
     std::function<void(const sim::Command&, const sim::CommandResult&)> on_command_;
 
