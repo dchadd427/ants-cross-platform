@@ -1,6 +1,7 @@
 #include "ants_ai/arena.hpp"
 
 #include <algorithm>
+#include <array>
 #include <set>
 #include <utility>
 
@@ -19,7 +20,7 @@ struct Recorder {
     std::vector<RecordedCommand>* log{nullptr};
     const uint64_t* steps{nullptr};
     const sim::SimulationEngine* sim{nullptr};
-    void add(const sim::Command& c) const {
+    void applied(const sim::Command& c) const {
         if (log != nullptr) log->push_back(RecordedCommand{*steps, sim->current_tick(), c});
     }
 };
@@ -30,7 +31,7 @@ public:
     DirectSink(sim::SimulationEngine& sim, Recorder rec) : sim_(sim), rec_(rec) {}
     sim::CommandResult submit(const sim::Command& c) override {
         const sim::CommandResult r = sim_.apply_command(c);
-        rec_.add(c);
+        rec_.applied(c);
         return r;
     }
 
@@ -64,7 +65,7 @@ public:
         sim::canonical_order(due);
         for (const sim::Command& c : due) {
             sim_.apply_command(c);
-            rec_.add(c);
+            rec_.applied(c);
         }
     }
 
@@ -79,9 +80,12 @@ private:
     std::vector<Waiting> pending_;
 };
 
+/// The seats of the specs as a roster mask. A seat that does not exist (check_setup refuses it, with a reason) adds nothing: shifting by it would be undefined.
 uint8_t roster_of(const std::vector<BotSpec>& bots) {
     uint8_t roster = 0;
-    for (const BotSpec& b : bots) roster = static_cast<uint8_t>(roster | (1u << b.seat));
+    for (const BotSpec& b : bots) {
+        if (b.seat < sim::MAX_PLAYERS) roster = static_cast<uint8_t>(roster | (1u << b.seat));
+    }
     return roster;
 }
 
@@ -94,10 +98,52 @@ std::string refusal(const ArenaSpec& spec) {
     info.bots = spec.bots;
     info.fog = false;
     info.allow_all_bots = true;                          // the arena is the one place where nobody is a person
-    return check_setup(info);
+    const std::string why = check_setup(info);
+    if (!why.empty()) return why;
+    // Is the map playable by the teams that sit? (a start marker of a team that plays must lie inside the grid: the engine places no ant for one outside and the team would start
+    // short of an ant.) The server and the application ask the same question before they start a match.
+    const assets::LevelValidation verdict = spec.level->validate(info.roster);
+    if (!verdict.playable) return "the map cannot be played by these seats: " + verdict.reason();
+    return "";
 }
 
 }  // namespace
+
+void ScoreLedger::start(const sim::SimulationEngine& sim) {
+    for (uint8_t t = 0; t < sim::MAX_PLAYERS; ++t) {
+        last_[t] = sim.get_player_score(t);
+        hatched_[t] = sim.get_player_hatched(t);
+    }
+}
+
+void ScoreLedger::sample(const sim::SimulationEngine& sim) {
+    for (uint8_t t = 0; t < sim::MAX_PLAYERS; ++t) {
+        const int32_t now = sim.get_player_score(t);
+        const uint32_t hatched = sim.get_player_hatched(t);
+        int32_t before = last_[t];
+        for (uint32_t egg = hatched_[t]; egg != hatched; ++egg) {          // an egg was started for the seat since the last sample: the engine charged min(score, 200) for it
+            before -= std::min<int32_t>(static_cast<int32_t>(sim::HATCH_COST_POINTS), std::max<int32_t>(0, before));
+        }
+        hatched_[t] = hatched;
+        if (now > before) banked_[t] += static_cast<uint32_t>(now - before);
+        else if (now < before) raided_[t] += static_cast<uint32_t>(before - now);
+        last_[t] = now;
+    }
+}
+
+void read_seat_result(const sim::SimulationEngine& sim, uint8_t seat, ArenaSeatResult& out) {
+    out.score = sim.get_player_score(seat);
+    out.shown_score = sim.get_display_score(seat);
+    out.eggs = sim.get_player_eggs(seat);
+    out.hatched = sim.get_player_hatched(seat);
+    const sim::PlayerMatchStats st = sim.get_player_stats(seat);
+    out.kills = st.enemy_killed;
+    out.losses = st.friendly_lost;
+    out.ants = 0;
+    for (const sim::AntSnapshot& a : sim.get_world_state().ants) {
+        if (a.player_id == seat && a.hp > 0 && a.state != sim::UnitState::Dead && a.state != sim::UnitState::Drowning) ++out.ants;
+    }
+}
 
 ArenaResult play_match(const ArenaSpec& spec) {
     ArenaResult out;
@@ -116,6 +162,8 @@ ArenaResult play_match(const ArenaSpec& spec) {
     out.initial_ticks = sim.get_match_time_remaining_ms() / sim::TICK_MS;
 
     uint64_t steps = 0;
+    ScoreLedger ledger;
+    ledger.start(sim);
     Recorder rec;
     rec.log = spec.record ? &out.log : nullptr;
     rec.steps = &steps;
@@ -138,10 +186,15 @@ ArenaResult play_match(const ArenaSpec& spec) {
     while (sim.current_tick() < limit) {
         sim.tick();
         ++steps;                                         // the call that ends the match does not advance current_tick(): count the calls
+        ledger.sample(sim);
         if (spec.latency_ticks != 0) delayed.flush();
         controller.on_tick(sim);
-        sim.clear_news_events();                         // nobody polls them here, and they would grow for the whole match
-        sim.clear_audio_events();
+        // nobody polls the news and audio queues here, and they would grow for the whole match: empty them every tick (and count what they held)
+        const size_t news = sim.poll_news_events().size();
+        const size_t audio = sim.poll_audio_events().size();
+        out.news_events += news;
+        out.audio_events += audio;
+        out.peak_queue = std::max(out.peak_queue, static_cast<uint32_t>(std::max(news, audio)));
         if (sim.current_tick() % kArenaHashPeriod == 0) out.checkpoints.push_back(sim.state_hash().total);
         if (sim.is_match_over()) {
             out.match_over = true;
@@ -160,29 +213,19 @@ ArenaResult play_match(const ArenaSpec& spec) {
             if (reach && p.bite_index < objects.size() && counted.insert(p.bite_index).second) out.reachable_units_left += objects[p.bite_index].remaining;
         }
     }
-    const sim::WorldState& ws = sim.get_world_state();
     for (const BotSpec& b : spec.bots) {
         ArenaSeatResult r;
         r.spec = b;
         const Bot* bot = controller.bot(b.seat);
         r.runs = bot != nullptr ? bot->kind() : "";
-        r.score = sim.get_player_score(b.seat);
-        r.shown_score = sim.get_display_score(b.seat);
-        r.eggs = sim.get_player_eggs(b.seat);
-        r.hatched = sim.get_player_hatched(b.seat);
-        const sim::PlayerMatchStats st = sim.get_player_stats(b.seat);
-        r.food_deposited = st.food_deposited;
-        r.food_stolen = st.food_stolen;
-        r.food_lost = st.food_lost;
-        r.kills = st.enemy_killed;
-        r.losses = st.friendly_lost;
-        for (const sim::AntSnapshot& a : ws.ants) {
-            if (a.player_id == b.seat && a.hp > 0 && a.state != sim::UnitState::Dead && a.state != sim::UnitState::Drowning) ++r.ants;
-        }
+        read_seat_result(sim, b.seat, r);
+        r.banked = ledger.banked(b.seat);
+        r.raided = ledger.raided(b.seat);
         r.stats = controller.stats(b.seat);
         out.seats.push_back(r);
     }
     std::sort(out.seats.begin(), out.seats.end(), [](const ArenaSeatResult& a, const ArenaSeatResult& b) { return a.spec.seat < b.spec.seat; });
+    if (spec.inspect) spec.inspect(sim);
     return out;
 }
 

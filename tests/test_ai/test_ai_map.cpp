@@ -215,8 +215,10 @@ void run_map_tests() {
             ASSERT_EQ(t.limit_vs_engine, 0);                                                    // and so is "optimum below the path finder's limit"
             ASSERT_EQ(t.cheaper, 0);                                                            // MapInfo's weights are the engine's: no engine path is cheaper than the optimum
             ASSERT_EQ(t.odd, 0);
-            ASSERT_TRUE(t.suboptimal * 10 <= t.reachable);                                      // the original's search is not exact (no decrease-key): a few paths cost more, never by much
-            ASSERT_TRUE(t.worst <= 1.15);
+            ASSERT_TRUE(t.suboptimal * 10 <= t.reachable);                                      // the original's search is not exact (no decrease-key): a few paths cost more
+            // ... by a modest margin: a sanity bound on the ENGINE's finder, not a property of MapInfo. The worst ratio of these 300 pairs is one sample (TINY: 1.06; over 60 other
+            // seeds of 300 pairs the worst was 1.22 and 5 of the 60 were above 1.15), so a bound near the sample would fail on a changed random sequence with no defect
+            ASSERT_TRUE(t.worst <= 1.5);
             if (std::string(name) == "ISLANDS") ASSERT_TRUE(t.reachable < 150 && t.reachable > 5);      // most pairs are on different islands, and the engine refuses them all
             else if (std::string(name) == "SMALL") ASSERT_TRUE(t.reachable < 300 && t.reachable > 250);  // a lake
             else ASSERT_TRUE(t.reachable > 250);
@@ -232,7 +234,7 @@ void run_map_tests() {
             ASSERT_EQ(t.cheaper, 0);
             ASSERT_EQ(t.odd, 0);
             ASSERT_TRUE(t.suboptimal * 5 <= t.reachable);
-            ASSERT_TRUE(t.worst <= 1.15);
+            ASSERT_TRUE(t.worst <= 1.5);                                                        // (a sanity bound on the engine's finder, see AI1.9)
         }
     } TEST_END();
 
@@ -363,7 +365,7 @@ void run_map_tests() {
             ASSERT_TRUE(delivered_at != 0 && arrived_at != 0);
             const double walked = static_cast<double>(arrived_at - delivered_at);
             const double predicted = static_cast<double>(MapInfo::walking_ticks(cost));
-                        ASSERT_TRUE(std::abs(walked - predicted) <= predicted * 0.08 + 4);                  // within 8 percent and the first step (mud walks 7 percent faster than its weight says)
+            ASSERT_TRUE(std::abs(walked - predicted) <= predicted * 0.08 + 4);                  // within 8 percent and the first step (mud walks 7 percent faster than its weight says)
         }
         ASSERT_EQ(MapInfo::walking_ticks(20), 8);
         ASSERT_EQ(MapInfo::trip_ticks_for_cost(-1), -1);
@@ -680,7 +682,7 @@ void run_map_tests() {
             ASSERT_TRUE(mi.can_reach_pile(0, tc(12, 35), static_cast<uint32_t>(behind)));      // an ant on the far side can reach it: the question is per ant
             // the cost of the open pile, by an independent Bellman-Ford over the same tiles with the weights written out by hand (grass: 20 straight, 28 diagonal)
             std::vector<int32_t> d(40 * 40, 1 << 28);
-            d[1 * 40 + 3] = 0;                                                                         // the queue tile of the hill at (2, 2)
+            for (size_t qx = 2; qx <= 4; ++qx) d[1 * 40 + qx] = 0;                                        // the queue row of the hill at (2, 2): an ant on the ramp steps onto any of its three tiles
             for (int round = 0; round < 100; ++round) {
                 for (int y = 1; y < 40; ++y) {
                     for (int x = 0; x < 40; ++x) {

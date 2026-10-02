@@ -1,8 +1,55 @@
 #include "ants_ai/bot_view.hpp"
 
 #include <algorithm>
+#include <array>
+
+#include "ants_sim/movement_tables.hpp"
 
 namespace ants::ai {
+
+namespace {
+
+// The ants.chd clips that MOVE an ant across the ground: the walk clips of every ant type on every terrain (carrying a crumb or not) and the swimmer's swim, dive and climb clips.
+// The renderer draws an ant from the clip the simulation plays on it (loco_clip, Renderer::draw_single_ant), so these are the clips of an ant that is seen walking. (Mirrored clips
+// share the index of the stored one.)
+const std::array<bool, sim::movement::kTileIdCount>& walking_clips() {
+    static const std::array<bool, sim::movement::kTileIdCount> table = [] {
+        std::array<bool, sim::movement::kTileIdCount> t{};
+        const auto add = [&t](const sim::movement::MotionClip& c) {
+            if (c.valid() && c.chd_index < t.size()) t[c.chd_index] = true;
+        };
+        for (uint8_t dir = 0; dir < sim::movement::kDirectionCount; ++dir) {
+            for (uint8_t type = 0; type < sim::movement::kAntTypeCount; ++type) {
+                for (uint8_t terrain : {sim::movement::kTerrainGrass, sim::movement::kTerrainSand, sim::movement::kTerrainMud, sim::movement::kTerrainDirt}) {
+                    add(sim::movement::walk_clip(type, terrain, dir, false));
+                    add(sim::movement::walk_clip(type, terrain, dir, true));
+                }
+            }
+            add(sim::movement::swim_clip(dir));
+            add(sim::movement::dive_clip(dir));
+            add(sim::movement::climb_clip(dir));
+        }
+        return t;
+    }();
+    return table;
+}
+
+bool walking_label(sim::UnitState s) noexcept {
+    return s == sim::UnitState::Walking || s == sim::UnitState::DivingInWater || s == sim::UnitState::ExitingWater;
+}
+
+// What an observer reads off another team's ant. The engine labels an ant "walking" the moment it is ordered (go_to sets the label before the path manager has answered, and the
+// label stays while the ant waits behind a blocker), but the sprite keeps its idle clip until the path is delivered and the first step starts: the screen shows a standing ant, so the
+// view says it stands. Idle is the idle label of the engine (Combat Ant: guard, swimmer on water: swimming).
+sim::UnitState seen_state(const sim::AntSnapshot& a, const sim::Grid& grid) {
+    if (!walking_label(a.state)) return a.state;
+    if (a.loco_clip < sim::movement::kTileIdCount && walking_clips()[a.loco_clip]) return a.state;
+    if (a.type == sim::AntType::Combat) return sim::UnitState::GuardIdle;
+    if (a.type == sim::AntType::Swimmer && grid.terrain_class_at(sim::TileCoord{a.tile_x, a.tile_y}) == sim::movement::kTerrainWater) return sim::UnitState::Swimming;
+    return sim::UnitState::Idle;
+}
+
+}  // namespace
 
 BotView::BotView(const BotView& other)
     : sim_(nullptr),
@@ -42,6 +89,15 @@ uint32_t BotView::predict_ack(const sim::Command& command, uint32_t* needed) con
     return sim_->predict_order_ack(c, needed);
 }
 
+WalkContext BotView::walk_context() const noexcept {
+    WalkContext ctx;
+    ctx.ally = ally_;
+    for (uint8_t t = 0; t < sim::MAX_PLAYERS; ++t) {
+        if (rows_[t].dropped) ctx.dropped_mask = static_cast<uint8_t>(ctx.dropped_mask | (1u << t));
+    }
+    return ctx;
+}
+
 bool BotView::has_pending_path(uint32_t ant) const {
     if (sim_ == nullptr) return false;
     const auto it = std::lower_bound(mine_.begin(), mine_.end(), ant, [](const AntView& a, uint32_t id) { return a.id < id; });
@@ -61,7 +117,6 @@ BotView BotView::build(const sim::SimulationEngine& sim, uint8_t seat, const Map
     // The scores are what the score boxes show (FUN_01021e36): the team's score plus its ally's, and a box draws 0 for a negative number. Not the individual score:
     // a person cannot see how the sum is made up.
     const auto shown = [&](uint8_t team) { return std::max<int32_t>(0, ws.player_scores[team]); };
-    v.score_ = shown(v.seat_);
     v.ally_ = ws.player_alliances[v.seat_];
     v.invite_from_ = ws.pending_invite_from[v.seat_];
     // The own egg stock and incubator only: the hatch pedestal of a person's HUD shows its own team's (hud.cpp), nobody else's is on any screen
@@ -72,9 +127,10 @@ BotView BotView::build(const sim::SimulationEngine& sim, uint8_t seat, const Map
         TeamRow& row = v.rows_[t];
         row.present = ((roster >> t) & 1u) != 0;
         row.dropped = ((ws.dropped_mask >> t) & 1u) != 0;
-        row.score = shown(t);
+        row.score = row.present && !row.dropped ? shown(t) : 0;               // the box of a team that is not in the match or has dropped out is covered: no number
         row.ally = ws.player_alliances[t];
     }
+    v.score_ = v.rows_[v.seat_].score;
     for (const sim::AntSnapshot& a : ws.ants) {
         if (a.hp == 0 || a.state == sim::UnitState::Dead || a.state == sim::UnitState::Drowning) continue;      // gone: nobody sees it as an ant any more
         AntView av;
@@ -82,13 +138,14 @@ BotView BotView::build(const sim::SimulationEngine& sim, uint8_t seat, const Map
         av.team = a.player_id;
         av.type = a.type;
         av.tile = sim::TileCoord{a.tile_x, a.tile_y};
-        av.state = a.state;
         av.holding = a.is_holding;
         if (a.player_id == v.seat_) {
+            av.state = a.state;                                                // an own ant: the engine's label
             av.hp = static_cast<uint8_t>(a.hp > 255u ? 255u : a.hp);
             av.carried_points = a.carried_points;
             v.mine_.push_back(av);
         } else {
+            av.state = seen_state(a, sim.grid());                              // another team's ant: what is drawn
             v.others_.push_back(av);
         }
     }
@@ -103,8 +160,8 @@ BotView BotView::build(const sim::SimulationEngine& sim, uint8_t seat, const Map
         p.index = static_cast<uint32_t>(i);
         p.anchor = sim::TileCoord{o.col, o.row};
         p.remaining = o.remaining;
-        p.value = o.value;
         p.lunchbox = sim.grid().has_lunchbox_at(p.anchor);
+        p.value = p.lunchbox ? kLunchboxNominalValue : o.value;                 // a lunchbox holds what the dead ant carried, which the picture does not tell
         v.piles_.push_back(p);
     }
     return v;

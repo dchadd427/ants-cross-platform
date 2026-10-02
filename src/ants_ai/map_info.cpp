@@ -20,29 +20,63 @@ const std::vector<int32_t>& no_field() {
 constexpr int kDx[8] = {0, 1, 1, 1, 0, -1, -1, -1};
 constexpr int kDy[8] = {-1, -1, 0, 1, 1, 1, 0, -1};
 
+// Row 90 of a map taller than 90 rows: the engine's path finder never generates a tile of it (path_planner.cpp PathSearch::step skips every neighbour whose row is the invalid
+// marker 0x5a = 90; the original does the same: Ants.exe 0x1019b23, docs/legacy/Ants.exe.c FUN_01019a66 `if (*local_14 != 0x5a)`)
+bool in_sentinel_row(const sim::Grid& grid, sim::TileCoord t) noexcept {
+    return t.y == MapInfo::kPathSentinelRow && grid.height() > static_cast<uint32_t>(MapInfo::kPathSentinelRow);
+}
+
+// The walkable tiles of the queue row of the hill whose origin is (bx, by), left to right, in the given mask
+std::vector<sim::TileCoord> queue_starts(const std::vector<uint8_t>& mask, int w, int h, sim::TileCoord origin) {
+    std::vector<sim::TileCoord> out;
+    for (int dx = 0; dx <= 2; ++dx) {
+        const sim::TileCoord t{origin.x + dx, origin.y - 1};
+        if (t.x < 0 || t.y < 0 || t.x >= w || t.y >= h) continue;
+        if (mask[static_cast<size_t>(t.y) * static_cast<size_t>(w) + static_cast<size_t>(t.x)] != 0) out.push_back(t);
+    }
+    return out;
+}
+
 }  // namespace
 
 // ---- the engine's rules --------------------------------------------------------------------------------------------------------------------------------
 
-// SimulationEngineImpl::can_enter for an ant that walks (no swimmer, fire ant or thief; no order that has a pile, a power-up, a bomb or a hill for its goal), rules R1, R3, R4
-// and R5 (R2, the occupants, and R6, the claims of team-mates, move with the ants; R7, the bombs, is dynamic and none lie on the map at the start). The engine's search
-// (step_cost) blocks exactly the same tiles. NOT Grid::is_passable and not the tile's is_obstacle_overlay flag: the engine does not look at them (an overlay that the LVL file
-// does not mark solid is walked over: TREASURE has one).
-bool MapInfo::walkable(const sim::Grid& grid, uint8_t team, sim::TileCoord tile) noexcept {
+// SimulationEngineImpl::can_enter for an ant that walks (no swimmer, fire ant or thief; no order that has a pile, a power-up, a bomb or a hill for its goal), rules R1, R3, R4, R5
+// and R7 (R2, the occupants, and R6, the claims of team-mates, move with the ants), plus the path finder's own refusal of row 90. The engine's search (step_cost) blocks exactly the
+// same tiles. NOT Grid::is_passable and not the tile's is_obstacle_overlay flag: the engine does not look at them (an overlay that the LVL file does not mark solid is walked over:
+// TREASURE has one).
+bool MapInfo::walkable(const sim::Grid& grid, uint8_t team, sim::TileCoord tile, const WalkContext& ctx) noexcept {
     if (!grid.in_bounds(tile)) return false;
+    if (in_sentinel_row(grid, tile)) return false;
     if (!sim::movement::terrain_walkable(grid.terrain_class_at(tile))) return false;          // R1: water, unless a bridge stands on it (a bridge piece is mud)
     for (const assets::AnthillSpawn& ah : grid.anthills()) {
         const int32_t bx = static_cast<int32_t>(ah.x);
         const int32_t by = static_cast<int32_t>(ah.y);
         if (tile.x >= bx && tile.x <= bx + 3 && tile.y >= by && tile.y <= by + 3) return false;                 // R3: the mound of any hill, its ramp and its hole too
-        if (tile.y == by - 1 && tile.x >= bx && tile.x <= bx + 2 && ah.team_id != team) return false;            // R5: another team's queue row
+        if (tile.y == by - 1 && tile.x >= bx && tile.x <= bx + 2 && ah.team_id != team && !ctx.dropped(ah.team_id)) return false;    // R5: another live team's queue row
     }
-    return !grid.is_solid_object(tile);                                                       // R4: obstacles, food, power-ups, lunchboxes, fire walls
+    if (grid.is_solid_object(tile)) return false;                                             // R4: obstacles, food, power-ups, lunchboxes, fire walls
+    const sim::TileCell& cell = grid.get_cell(tile);
+    return !(cell.has_bomb() && (cell.interactive_owner == team || cell.interactive_owner == ctx.ally));   // R7: a bomb of the team itself or of its ally
+}
+
+bool MapInfo::can_step_onto(const sim::Grid& grid, uint8_t team, sim::TileCoord cell, const WalkContext& ctx) noexcept {
+    if (!grid.in_bounds(cell) || in_sentinel_row(grid, cell)) return false;
+    if (!sim::movement::terrain_walkable(grid.terrain_class_at(cell))) return false;          // water (step_cost: a weight of 8000 on either tile is a blocked step)
+    for (const assets::AnthillSpawn& ah : grid.anthills()) {
+        const int32_t bx = static_cast<int32_t>(ah.x);
+        const int32_t by = static_cast<int32_t>(ah.y);
+        if (cell.x >= bx && cell.x <= bx + 3 && cell.y >= by && cell.y <= by + 3) return false;                // R3: an own mound is a walk home, another one is closed
+        if (cell.y == by - 1 && cell.x >= bx && cell.x <= bx + 2 && ah.team_id != team && !ctx.dropped(ah.team_id)) return false;   // R5, tested before the food exemption
+    }
+    return true;
 }
 
 uint32_t MapInfo::step_cost(const sim::Grid& grid, sim::TileCoord from, sim::TileCoord to) noexcept {
     const uint32_t ca = sim::movement::terrain_step_weight(grid.terrain_class_at(from), false);
     const uint32_t cb = sim::movement::terrain_step_weight(grid.terrain_class_at(to), false);
+    constexpr uint32_t kBlocked = static_cast<uint32_t>(kPathCostLimit);                      // the engine's kBlockedCost: the weight of water for a walker
+    if (ca == kBlocked || cb == kBlocked) return kBlocked;
     uint32_t s = ca + cb;
     if (from.x != to.x && from.y != to.y) {
         // The same double multiply, truncated, as the engine (fild / fmul qword [0x10049e0] / __ftol at 0x10208e8)
@@ -51,28 +85,37 @@ uint32_t MapInfo::step_cost(const sim::Grid& grid, sim::TileCoord from, sim::Til
     return s >> 1;
 }
 
-std::vector<uint8_t> MapInfo::walkable_mask(const sim::Grid& grid, uint8_t team) {
+std::vector<uint8_t> MapInfo::walkable_mask(const sim::Grid& grid, uint8_t team, const WalkContext& ctx) {
     const int w = static_cast<int>(grid.width());
     const int h = static_cast<int>(grid.height());
     std::vector<uint8_t> mask(static_cast<size_t>(std::max(w, 0)) * static_cast<size_t>(std::max(h, 0)), 0);
     for (int y = 0; y < h; ++y) {
-        for (int x = 0; x < w; ++x) mask[static_cast<size_t>(y) * static_cast<size_t>(w) + static_cast<size_t>(x)] = walkable(grid, team, sim::TileCoord{x, y}) ? 1 : 0;
+        for (int x = 0; x < w; ++x) mask[static_cast<size_t>(y) * static_cast<size_t>(w) + static_cast<size_t>(x)] = walkable(grid, team, sim::TileCoord{x, y}, ctx) ? 1 : 0;
     }
     return mask;
 }
 
-std::vector<int32_t> MapInfo::cost_field(const sim::Grid& grid, uint8_t team, sim::TileCoord source) { return cost_field(grid, walkable_mask(grid, team), source); }
+std::vector<int32_t> MapInfo::cost_field(const sim::Grid& grid, uint8_t team, sim::TileCoord source, const WalkContext& ctx) {
+    return cost_field(grid, walkable_mask(grid, team, ctx), source);
+}
 
 std::vector<int32_t> MapInfo::cost_field(const sim::Grid& grid, const std::vector<uint8_t>& mask, sim::TileCoord source) {
+    return cost_field(grid, mask, std::vector<sim::TileCoord>{source});
+}
+
+std::vector<int32_t> MapInfo::cost_field(const sim::Grid& grid, const std::vector<uint8_t>& mask, const std::vector<sim::TileCoord>& sources) {
     const int w = static_cast<int>(grid.width());
     const int h = static_cast<int>(grid.height());
     std::vector<int32_t> d(static_cast<size_t>(std::max(w, 0)) * static_cast<size_t>(std::max(h, 0)), -1);
     const auto ok = [&](sim::TileCoord t) { return t.x >= 0 && t.y >= 0 && t.x < w && t.y < h && mask[static_cast<size_t>(t.y) * static_cast<size_t>(w) + static_cast<size_t>(t.x)] != 0; };
-    if (w <= 0 || h <= 0 || mask.size() != d.size() || !ok(source)) return d;
+    if (w <= 0 || h <= 0 || mask.size() != d.size()) return d;
     using Item = std::pair<int32_t, int>;                                                       // (cost, index): the cost is final when popped, ties cannot matter
     std::priority_queue<Item, std::vector<Item>, std::greater<Item>> open;
-    d[static_cast<size_t>(source.y) * static_cast<size_t>(w) + static_cast<size_t>(source.x)] = 0;
-    open.push({0, source.y * w + source.x});
+    for (const sim::TileCoord& source : sources) {
+        if (!ok(source)) continue;                                                              // an unwalkable source is ignored
+        d[static_cast<size_t>(source.y) * static_cast<size_t>(w) + static_cast<size_t>(source.x)] = 0;
+        open.push({0, source.y * w + source.x});
+    }
     while (!open.empty()) {
         const auto [cost, idx] = open.top();
         open.pop();
@@ -98,10 +141,11 @@ MapInfo::MapInfo(const sim::SimulationEngine& sim) { build(sim.grid()); }
 
 MapInfo::MapInfo(const sim::Grid& grid) { build(grid); }
 
-Approach MapInfo::approach_in(const sim::Grid& grid, const std::vector<int32_t>& field, const std::vector<sim::TileCoord>& cells) const {
+Approach MapInfo::approach_in(const sim::Grid& grid, const std::vector<int32_t>& field, const std::vector<sim::TileCoord>& cells, uint8_t team, const WalkContext& ctx) const {
     Approach best;
     if (field.empty()) return best;
     for (const sim::TileCoord& c : cells) {
+        if (!can_step_onto(grid, team, c, ctx)) continue;                                       // the engine refuses the last step: water, a mound, another team's queue row
         for (int k = 0; k < 8; ++k) {
             const sim::TileCoord n{c.x + kDx[k], c.y + kDy[k]};
             if (!inside(n)) continue;
@@ -125,9 +169,10 @@ void MapInfo::build(const sim::Grid& grid) {
     if (w_ <= 0 || h_ <= 0) return;
     for (const assets::AnthillSpawn& a : grid.anthills()) {
         if (a.team_id >= sim::MAX_PLAYERS) continue;
+        HillInfo& hi = hills_[a.team_id];
+        if (hi.present) continue;                      // the FIRST hill of a team, as Grid::find_anthill picks it (a map without hill art can name a team twice)
         const int32_t bx = static_cast<int32_t>(a.x);
         const int32_t by = static_cast<int32_t>(a.y);
-        HillInfo& hi = hills_[a.team_id];
         hi.present = true;
         hi.origin = {bx, by};
         hi.mouth = {bx + 1, by};
@@ -164,7 +209,11 @@ void MapInfo::build(const sim::Grid& grid) {
             }
         }
         comp_count_[t] = labels;
-        if (hills_[t].present) cost_[t] = cost_field(grid, mask, hills_[t].queue);
+        if (hills_[t].present) {
+            // an ant on the ramp steps onto any walkable tile of the queue row (the outer two diagonally): every one of them is a start, the engine does not need the middle one
+            hills_[t].starts = queue_starts(mask, w_, h_, hills_[t].origin);
+            cost_[t] = cost_field(grid, mask, hills_[t].starts);
+        }
     }
 
     // piles: the footprint of every object as the engine attributes the cells, and how far each is for each team
@@ -187,8 +236,9 @@ void MapInfo::build(const sim::Grid& grid) {
             if (o >= 0 && static_cast<size_t>(o) < piles_.size()) piles_[static_cast<size_t>(o)].cells.push_back(c);
         }
     }
+    const WalkContext start_ctx;
     for (PileInfo& p : piles_) {
-        for (uint8_t t = 0; t < sim::MAX_PLAYERS; ++t) p.approach[t] = approach_in(grid, cost_[t], p.cells);
+        for (uint8_t t = 0; t < sim::MAX_PLAYERS; ++t) p.approach[t] = approach_in(grid, cost_[t], p.cells, t, start_ctx);
     }
 
     // power-ups
@@ -200,7 +250,7 @@ void MapInfo::build(const sim::Grid& grid) {
             PowerUpInfo pu;
             pu.tile = c;
             pu.type = static_cast<sim::AntType>(cell.powerup_type);                              // 1 Bomber, 2 Fire, 3 Thief, 4 Combat, 5 Swimmer: the AntType numbers
-            for (uint8_t t = 0; t < sim::MAX_PLAYERS; ++t) pu.approach[t] = approach_in(grid, cost_[t], std::vector<sim::TileCoord>{c});
+            for (uint8_t t = 0; t < sim::MAX_PLAYERS; ++t) pu.approach[t] = approach_in(grid, cost_[t], std::vector<sim::TileCoord>{c}, t, start_ctx);
             powerups_.push_back(pu);
         }
     }
@@ -236,7 +286,10 @@ int32_t MapInfo::ant_component(uint8_t team, sim::TileCoord tile) const noexcept
     return best;
 }
 
-int32_t MapInfo::hill_component(uint8_t team) const noexcept { return team < sim::MAX_PLAYERS && hills_[team].present ? component(team, hills_[team].queue) : -1; }
+int32_t MapInfo::hill_component(uint8_t team) const noexcept {
+    if (team >= sim::MAX_PLAYERS || !hills_[team].present || hills_[team].starts.empty()) return -1;
+    return component(team, hills_[team].starts.front());
+}
 
 int32_t MapInfo::component_count(uint8_t team) const noexcept { return team < sim::MAX_PLAYERS ? comp_count_[team] : 0; }
 
@@ -252,28 +305,28 @@ bool MapInfo::can_reach_pile(uint8_t team, sim::TileCoord from, uint32_t pile) c
     return false;
 }
 
-uint32_t MapInfo::reachable_points(uint8_t team) const noexcept {
+uint64_t MapInfo::reachable_points(uint8_t team) const noexcept {
     if (team >= sim::MAX_PLAYERS) return 0;
-    uint32_t sum = 0;
+    uint64_t sum = 0;
     for (const PileInfo& p : piles_) {
-        if (p.approach[team].reachable()) sum += static_cast<uint32_t>(piles_[p.bite_index].units) * p.value;
+        if (p.approach[team].reachable()) sum += static_cast<uint64_t>(piles_[p.bite_index].units) * p.value;
     }
     return sum;
 }
 
-uint32_t MapInfo::reachable_points() const noexcept {
-    uint32_t sum = 0;
+uint64_t MapInfo::reachable_points() const noexcept {
+    uint64_t sum = 0;
     for (const PileInfo& p : piles_) {
         bool any = false;
         for (uint8_t t = 0; t < sim::MAX_PLAYERS; ++t) any = any || p.approach[t].reachable();
-        if (any) sum += static_cast<uint32_t>(piles_[p.bite_index].units) * p.value;
+        if (any) sum += static_cast<uint64_t>(piles_[p.bite_index].units) * p.value;
     }
     return sum;
 }
 
-uint32_t MapInfo::total_points() const noexcept {
-    uint32_t sum = 0;
-    for (const PileInfo& p : piles_) sum += static_cast<uint32_t>(p.units) * p.value;
+uint64_t MapInfo::total_points() const noexcept {
+    uint64_t sum = 0;
+    for (const PileInfo& p : piles_) sum += static_cast<uint64_t>(p.units) * p.value;
     return sum;
 }
 
@@ -282,21 +335,37 @@ int32_t MapInfo::trip_ticks(uint8_t team, uint32_t pile) const noexcept {
     return trip_ticks_for_cost(piles_[pile].approach[team].cost);
 }
 
-Approach MapInfo::approach_now(const sim::Grid& grid, uint8_t team, uint32_t pile) const {
-    if (pile >= piles_.size() || team >= sim::MAX_PLAYERS || !hills_[team].present || static_cast<int>(grid.width()) != w_ || static_cast<int>(grid.height()) != h_) return Approach{};
-    const PileInfo& p = piles_[pile];
-    if (pile >= grid.food_objects().size() || grid.food_objects()[pile].remaining == 0) return Approach{};      // nothing left to walk to (a leftover crumb of the picture is not a pile)
-    // the cells of the object now: the cells within a window of the anchor that the engine still attributes to it (footprints are a few tiles wide)
+MapInfo::NowField MapInfo::field_now(const sim::Grid& grid, uint8_t team, const WalkContext& ctx) const {
+    NowField out;
+    out.team = team;
+    out.ctx = ctx;
+    if (team >= sim::MAX_PLAYERS || !hills_[team].present || static_cast<int>(grid.width()) != w_ || static_cast<int>(grid.height()) != h_) return out;
+    const std::vector<uint8_t> mask = walkable_mask(grid, team, ctx);
+    out.cost = cost_field(grid, mask, queue_starts(mask, w_, h_, hills_[team].origin));        // the queue row as it is now: a bomb or a fire wall may lie on a tile of it
+    return out;
+}
+
+Approach MapInfo::approach_now(const sim::Grid& grid, uint32_t pile, const NowField& field) const {
+    if (!field.valid() || static_cast<int>(grid.width()) != w_ || static_cast<int>(grid.height()) != h_) return Approach{};
+    const std::vector<sim::FoodObject>& table = grid.food_objects();
+    if (pile >= table.size() || table[pile].remaining == 0) return Approach{};                // nothing left to walk to (a leftover crumb of the picture is not a pile)
+    // the cells of the object now: the cells within a window of the anchor that the engine still attributes to it (footprints are a few tiles wide). The anchor comes from the
+    // engine's table, not from the analysis: the table grows during a match (a lunchbox is an object of its own at the end of it)
+    const sim::TileCoord anchor{table[pile].col, table[pile].row};
     std::vector<sim::TileCoord> cells;
     const int r = 8;
-    for (int y = std::max(0, p.anchor.y - r); y <= std::min(h_ - 1, p.anchor.y + r); ++y) {
-        for (int x = std::max(0, p.anchor.x - r); x <= std::min(w_ - 1, p.anchor.x + r); ++x) {
+    for (int y = std::max(0, anchor.y - r); y <= std::min(h_ - 1, anchor.y + r); ++y) {
+        for (int x = std::max(0, anchor.x - r); x <= std::min(w_ - 1, anchor.x + r); ++x) {
             const sim::TileCoord c{x, y};
             if (grid.get_cell(c).is_food && grid.food_object_at_cell(c) == static_cast<int32_t>(pile)) cells.push_back(c);
         }
     }
     if (cells.empty()) return Approach{};
-    return approach_in(grid, cost_field(grid, team, hills_[team].queue), cells);
+    return approach_in(grid, field.cost, cells, field.team, field.ctx);
+}
+
+Approach MapInfo::approach_now(const sim::Grid& grid, uint8_t team, uint32_t pile, const WalkContext& ctx) const {
+    return approach_now(grid, pile, field_now(grid, team, ctx));
 }
 
 }  // namespace ants::ai

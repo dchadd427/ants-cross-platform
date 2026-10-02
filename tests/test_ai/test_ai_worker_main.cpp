@@ -8,7 +8,7 @@ int main() {
                  "=======================================================\n";
     run_worker_tests();
     if (ai_test::g_test_count == 0) {
-        std::cout << "\n no test ran: the filter W_ONLY matches no test of this suite (a misspelt or forgotten W_ONLY must not turn the suite green)\n";
+        std::cout << "\n no test ran: the filter W_ONLY (or ANTS_TEST_FILTER) matches no test of this suite (a misspelt or forgotten filter must not turn the suite green)\n";
         ++ai_test::g_test_failures;
     }
     std::cout << "\n=======================================================\n Total Test Cases: " << ai_test::g_test_count << "\n Total Assertions: " << ai_test::g_assert_count

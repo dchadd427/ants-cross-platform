@@ -11,6 +11,11 @@ int main() {
     run_view_tests();
     run_map_tests();
     run_arena_tests();
+    run_b2fix_tests();
+    if (ai_test::g_test_count == 0) {
+        std::cout << "\n no test ran: the filter ANTS_TEST_FILTER matches no test of this suite (a misspelt or forgotten filter must not turn the suite green)\n";
+        ++ai_test::g_test_failures;
+    }
     std::cout << "\n=======================================================\n Total Test Cases: " << ai_test::g_test_count << "\n Total Assertions: " << ai_test::g_assert_count
               << "\n Failed:           " << ai_test::g_test_failures << "\n=======================================================\n";
     return ai_test::g_test_failures == 0 ? 0 : 1;

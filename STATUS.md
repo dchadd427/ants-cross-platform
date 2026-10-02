@@ -6,7 +6,7 @@ _Updated 2026-10-01 · current release **v0.0.92** · details: [CHANGELOG](CHANG
 - **Public history rewrite**: purge the removed files from every commit · being prepared
 - **Room leader START**: the first player in a server room can start with fewer players (v0.0.93)
 - **Reconnect**: pause, rejoin the same seat, vote after 30 s to continue without the player · design
-- **Bots**: B2 review fixes being brought up to date; power-up facts (standing on them, walking around them) researched for B4
+- **Bots**: power-up facts (standing on them, walking around them) researched for B4
 
 ## Next
 - Widescreen M1: one screen layout, the original's numbers, no visible change

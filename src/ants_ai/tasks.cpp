@@ -169,15 +169,17 @@ void HarvestTask::reask(const TaskContext& c) {
     now_field_.clear();
     const BotView& v = c.view;
     if (!v.has_grid()) return;
-    const HillInfo& hill = c.map.hill(c.seat);
-    if (!hill.present) return;
+    if (!c.map.hill(c.seat).present) return;
+    // ONE walking field of the map as it is now, with the engine's rules of the moment for this seat (its own and its ally's bombs block, the queue row of a team that dropped
+    // out is open ground: BotView::walk_context) and from every walkable tile of the hill's queue row, as the hill's ants leave it; then one cheap question per pile
+    MapInfo::NowField field = c.map.field_now(v.grid(), c.seat, v.walk_context());
     for (const PileView& p : v.piles()) {
         const PileInfo* info = c.map.pile(p.index);
         if (info == nullptr || info->approach[c.seat].reachable()) continue;                // the start analysis could reach it: nothing to ask again
-        const Approach ap = c.map.approach_now(v.grid(), c.seat, p.index);
+        const Approach ap = c.map.approach_now(v.grid(), p.index, field);
         if (ap.reachable()) reach_now_[p.index] = ap;
     }
-    now_field_ = MapInfo::cost_field(v.grid(), c.seat, hill.queue);
+    now_field_ = std::move(field.cost);
 }
 
 void HarvestTask::step(TaskContext& c) {
@@ -372,6 +374,18 @@ void HarvestTask::step(TaskContext& c) {
     }
 
     // 3. the piles that are worth a trip
+    // The map as it is now is asked for the piles that were shut off at the start and for those that have been eaten into: with ONE walking field per look, made when the first
+    // pile needs it (the seat's rules of the moment: BotView::walk_context), and one cheap question per pile
+    MapInfo::NowField now_field;
+    bool now_made = false;
+    const auto ask_now = [&](uint32_t pile) {
+        if (!v.has_grid()) return Approach{};
+        if (!now_made) {
+            now_field = c.map.field_now(v.grid(), c.seat, v.walk_context());
+            now_made = true;
+        }
+        return c.map.approach_now(v.grid(), pile, now_field);
+    };
     std::vector<Candidate> cands;
     for (const PileView& p : v.piles()) {
         if (blacklisted(p.index, now)) continue;
@@ -384,10 +398,10 @@ void HarvestTask::step(TaskContext& c) {
         if (!ap.reachable()) {
             if (reach_now_.count(p.index) == 0) continue;                                   // the hill could not walk there at the start, nor at the last look at the map
             shut = true;
-            ap = c.map.approach_now(v.grid(), c.seat, p.index);                             // a pile of that kind has been worked on, or has not: ask for its click tile as it is now
+            ap = ask_now(p.index);                                                          // a pile of that kind has been worked on, or has not: ask for its click tile as it is now
             if (!ap.reachable()) continue;
         } else if (v.has_grid() && p.remaining < info->units) {
-            ap = c.map.approach_now(v.grid(), c.seat, p.index);                             // a pile that has been eaten into has another footprint: its click tile of the start may no longer be food
+            ap = ask_now(p.index);                                                          // a pile that has been eaten into has another footprint: its click tile of the start may no longer be food
             if (!ap.reachable()) continue;
         }
         const int32_t trip = MapInfo::trip_ticks_for_cost(ap.cost);

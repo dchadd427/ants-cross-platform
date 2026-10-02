@@ -149,8 +149,7 @@ void run_arena_tests() {
         late.log[late.log.size() / 2].step += 11;
         ASSERT_FALSE(replay_commands(s, late).ok);
         ArenaResult extra = played;
-        RecordedCommand more = played.log.back();
-        more.command.ants = {played.log.front().command.ants.front()};
+        RecordedCommand more = played.log.front();                                                // the issuer and the ant of one command belong together (the engine ignores an order for another team's ant): the added command always reaches the engine (AI4.12 runs it over twelve seeds)
         more.command.tile_x = 3;
         more.command.tile_y = 3;
         more.step = 40;
@@ -172,7 +171,7 @@ void run_arena_tests() {
         ASSERT_FALSE(replay_commands(none, refused).ok);
     } TEST_END();
 
-    TEST_CASE("AI4.3 The Length Of Every Shipped Match (TINY 7200 Ticks, SMALL 9600, MEDIUM 12000, GAUNTLET 12000, TREASURE 14400, ISLANDS 14400) And The Limits: max_ticks Stops A Match, A Full Match Ends By The Clock, The Arena Clears The News And Audio Queues Every Tick") {
+    TEST_CASE("AI4.3 The Length Of Every Shipped Match (TINY 7200 Ticks, SMALL 9600, MEDIUM 12000, GAUNTLET 12000, TREASURE 14400, ISLANDS 14400) And The Limits: max_ticks Stops A Match, A Full Match Ends By The Clock (The Queues Of News And Audio Are Emptied Every Tick: AI4.10)") {
         struct Row { const char* map; uint64_t ticks; };
         for (const Row& r : {Row{"TINY", 7200}, Row{"SMALL", 9600}, Row{"MEDIUM", 12000}, Row{"GAUNTLET", 12000}, Row{"TREASURE", 14400}, Row{"ISLANDS", 14400}}) {
             ArenaSpec s;
@@ -192,7 +191,7 @@ void run_arena_tests() {
         const ArenaResult a = play_match(idle);
         ASSERT_TRUE(a.error.empty() && a.match_over && a.ticks >= 7200);
         for (const ArenaSeatResult& s : a.seats) {
-            ASSERT_TRUE(s.score == 0 && s.shown_score == 0 && s.food_deposited == 0 && s.kills == 0 && s.losses == 0 && s.hatched == 0);
+            ASSERT_TRUE(s.score == 0 && s.shown_score == 0 && s.banked == 0 && s.raided == 0 && s.kills == 0 && s.losses == 0 && s.hatched == 0);
             ASSERT_TRUE(s.ants == 3 && s.eggs == 3);                                            // TINY: three ants and three eggs per hill
             ASSERT_EQ(s.stats.released, 0u);
             ASSERT_EQ(s.milli_commands_per_second(a.ticks), 0u);

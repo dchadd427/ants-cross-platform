@@ -4,6 +4,7 @@
 // suites needs: a match on a shipped map, a recording sink, a scripted bot.
 
 #include <cstdint>
+#include <cstdlib>
 #include <exception>
 #include <functional>
 #include <iomanip>
@@ -31,6 +32,10 @@ inline int g_test_failures = 0;
 inline int g_assert_count = 0;
 
 inline void run_test_case(const std::string& name, const std::function<void()>& fn) {
+    // ANTS_TEST_FILTER=text runs only the cases whose title contains the text (for working on one test; the suite as run_tests.sh runs it has no filter)
+    if (const char* filter = std::getenv("ANTS_TEST_FILTER")) {
+        if (name.find(filter) == std::string::npos) return;
+    }
     ++g_test_count;
     std::cout << "  RUNNING: " << std::left << std::setw(100) << name << " ... " << std::flush;
     const int prev = g_test_failures;
@@ -206,3 +211,4 @@ void run_net_tests();
 void run_view_tests();
 void run_map_tests();
 void run_arena_tests();
+void run_b2fix_tests();

@@ -186,7 +186,7 @@ void run_view_tests() {
         for (const PileView& q : v.piles()) {
             if (!q.lunchbox) continue;
             ++lunchboxes;
-            ASSERT_TRUE(q.remaining == 1 && q.value == 40 && q.anchor == tc(25, 35));
+            ASSERT_TRUE(q.remaining == 1 && q.value == kLunchboxNominalValue && q.anchor == tc(25, 35));      // not the 40 points that the dead ant carried: the picture does not tell
         }
         ASSERT_EQ(lunchboxes, 1u);
         // the pile is the engine's table, read now: a bite shows in the next view, an eaten pile is gone, and indices of the others never move
@@ -415,22 +415,23 @@ void run_view_tests() {
         ASSERT_TRUE(BotView::build(sim, 0, &c.map()).map() == &c.map());
         // the cost of a look grows with the ants and no faster: a world of 500 ants against one of 48 (10 times as many); the design measured 3 - 27 microseconds on a release build, and an
         // absolute limit means nothing in a build with sanitizers, so the test compares the two (linear: about 10; an accidental quadratic loop: about 100). The build includes the
-        // rebuild of the engine's world state that every first look after a tick makes.
+        // rebuild of the engine's world state that every first look after a tick makes. The figure is the FASTEST of 300 looks, not their mean: a busy machine (a Docker build next to
+        // the test run) can only make a look slower, and one preemption of 30 ms inside the mean of the big world used to fail a correct build; the minimum ignores it.
         const auto cost_of_a_look = [&](uint32_t ants_per_team) {
             sim::SimulationEngine world;
             build_world(world, 28, ants_per_team);
             const MapInfo map(world);
-            double total = 0.0;
+            double fastest = 1e300;
             size_t sum = 0;
             const int rounds = 300;
             for (int i = 0; i < rounds; ++i) {
                 world.tick();
                 const auto t0 = std::chrono::steady_clock::now();
                 const BotView v = BotView::build(world, static_cast<uint8_t>(i % 4), &map);
-                total += std::chrono::duration<double, std::micro>(std::chrono::steady_clock::now() - t0).count();
+                fastest = std::min(fastest, std::chrono::duration<double, std::micro>(std::chrono::steady_clock::now() - t0).count());
                 sum += v.mine().size() + v.others().size();
             }
-            return std::make_pair(total / rounds, sum / static_cast<size_t>(rounds));
+            return std::make_pair(fastest, sum / static_cast<size_t>(rounds));
         };
         const auto small = cost_of_a_look(12);
         const auto big = cost_of_a_look(125);

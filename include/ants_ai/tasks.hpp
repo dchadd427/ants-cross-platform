@@ -113,7 +113,8 @@ private:
 ///   candidates  piles with units left, that the seat's hill can walk to (MapInfo), that the ant can walk to as well (its walker component, so an ant stranded on another
 ///               island is never sent to the pile of the hill's island), that did not fail lately (blacklist), that the ant did not fail on lately (see "learning") and whose trip
 ///               can still be finished before the clock runs out. MapInfo is the map of the START: a pile that was shut off then (a wall, food that plugs a corridor) is asked again
-///               every reask_ticks with the map as it is now (MapInfo::approach_now), and so are the ants that the start analysis took for shut in.
+///               every reask_ticks with the map as it is now (MapInfo::field_now and approach_now, with the seat's rules of the moment from BotView::walk_context: its own and its
+///               ally's bombs block, a dropped team's queue row is open), and so are the ants that the start analysis took for shut in.
 ///   rank        value-aware levels: points per tick of the trip (value * 100000 / trip), the best first; Easy: the nearest first
 ///   caps        at most Profile::max_ants_per_pile (8 at Medium and Hard, 4 at Easy) and trip / gate_gap + 2 ants per pile, whichever is less (the hill banks about one
 ///               deposit per 90 to 110 ticks, so more ants than that cannot bring more): an ant goes to the first pile with room, else to the best one
@@ -232,7 +233,7 @@ private:
     std::map<uint32_t, uint64_t> stuck_;     // ant id -> the tick it was first seen idle with food
     std::map<uint32_t, uint64_t> rescued_;   // ant id -> the tick it was last sent home by hand
     std::map<uint32_t, Approach> reach_now_; // piles that were shut off at the start and can be walked to now (as of the last reask)
-    std::vector<int32_t> now_field_;         // the hill's walking field now (as of the last reask), for the ants that the start analysis took for shut in
+    std::vector<int32_t> now_field_;         // the hill's walking field now (as of the last reask: MapInfo::field_now, from every walkable tile of the queue row), for the ants that the start analysis took for shut in
     uint64_t next_reask_{0};
     bool want_reask_{false};                 // an ant was seen that the start analysis took for shut in: look at the map again
     uint32_t rescues_{0};

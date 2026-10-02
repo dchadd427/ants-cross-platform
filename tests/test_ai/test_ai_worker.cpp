@@ -23,6 +23,7 @@
 //   AI3.19  the deep queue: with many workers on one hill the rescue leaves the queue alone (no rescue of an ant that waits its turn)
 //   AI3.20  the watchdog never stops a carrier on its way home
 //   AI3.21  the watchdog halves the ants ordered at one look after a jam; the default task orders 8 at a look
+//   AI3.22  the map as it is now is asked with the seat's rules of the moment (a dropped team's queue row is open) and from the hill's whole queue row (a rock on its middle tile)
 //
 // W_ONLY=AI3.4 (or AI3.4,AI3.7) runs only the tests with exactly that number, W_SKIP=AI3.9,AI3.12 leaves those out; a filter that leaves no test makes the program fail.
 #include "ai_test.hpp"
@@ -520,9 +521,11 @@ void run_worker_tests() {
                     ASSERT_TRUE(r.seats[seat].score >= margin_of(map));
                     ASSERT_EQ(r.seats[seat].runs, "worker");
                     ASSERT_TRUE(r.seats[seat].stats.released >= 1u);
+                    // the arena's own count (the engine's food_deposited is never fed): the worker's whole score was banked at its hill (it never hatches, nobody raids it)
+                    ASSERT_TRUE(r.seats[seat].banked == static_cast<uint32_t>(r.seats[seat].score) && r.seats[seat].raided == 0);
                     for (uint8_t other = 0; other < 4; ++other) {
                         if (other == seat) continue;
-                        ASSERT_TRUE(r.seats[other].score == 0 && r.seats[other].food_deposited == 0 && r.seats[other].stats.released == 0 && r.seats[other].runs == "idle");
+                        ASSERT_TRUE(r.seats[other].score == 0 && r.seats[other].banked == 0 && r.seats[other].raided == 0 && r.seats[other].stats.released == 0 && r.seats[other].runs == "idle");
                     }
                 }
             }
@@ -928,23 +931,27 @@ void run_worker_tests() {
             d.run(200);
             ASSERT_TRUE(d.worker()->harvest().rescues() >= 1u);
         }
-        // whole matches, alone on a seat: TREASURE seed 1 (the carrier that stands on the tile in front of the gate after the walk home was refused: it waits for ever without the
-        // clock) and TINY seed 2 on seat 3 (the carrier that stands at its pile with its food after a bite, 7 tiles from the hill)
+        // whole matches, alone on a seat: TREASURE seat 0 at Hard, seed 5 (the carrier that stands on the tile in front of the gate, (35, 23), after the walk home was refused: it waits
+        // for ever without the clock) and TINY seed 2 on seat 3 (the carrier that stands at its pile with its food after a bite, 7 tiles from the hill). (Until the walking costs of a hill
+        // started from its whole queue row, TREASURE seat 0 at Medium had this jam around tick 240 in seeds 1, 2, 3, 9, 10 and 12; the cheaper start swaps the first two piles of its six ants
+        // and the jam comes rarely and late now: of seeds 1 to 12 only seed 5 at Hard and seed 7 at Easy have it, of seeds 1 to 60 at Medium only 26 and 50.)
         for (const bool treasure : {true, false}) {
             const char* map = treasure ? "TREASURE" : "TINY";
             const uint8_t seat = treasure ? 0 : 3;
             sim::SimulationEngine engine;
             engine.init(level_of(map), 2, 0x0F);
             const TileCoord entrance = MapInfo(engine).hill(seat).entrance;
-            const ArenaResult r = play_match(match_of(map, treasure ? 1 : 2, static_cast<uint8_t>(1u << seat), Level::Medium, 0, 3, true));
+            const ArenaResult r = play_match(match_of(map, treasure ? 5 : 2, static_cast<uint8_t>(1u << seat), treasure ? Level::Hard : Level::Medium, 0, 3, true));
             ASSERT_TRUE(r.error.empty() && r.match_over);
             uint64_t first_home = 0;
             for (const RecordedCommand& c : r.log) {
                 if (c.command.type == CommandType::GroupMove && c.command.ants.size() == 1 && c.command.tile_x == entrance.x && c.command.tile_y == entrance.y && first_home == 0) first_home = c.tick;
             }
             if (treasure) {
-                ASSERT_TRUE(first_home >= 900 && first_home <= 1600);                                         // after the clock (the carrier stood idle since tick 240)
-                ASSERT_TRUE(r.seats[seat].score >= 2900);                                                     // 2750 when it was left standing for the whole match
+                // after the clock: the carrier was first seen standing idle with its food at the look of tick 6677, so the look of tick 6677 + 900 sends it, and a Hard reaction (6 to
+                // 10 ticks) and the turn boundary of the room's latency later it is applied (7588); one look earlier or 100 ticks of clock less would be outside
+                ASSERT_TRUE(first_home >= 6677 + 900 && first_home <= 6677 + 900 + 30);
+                ASSERT_TRUE(r.seats[seat].score >= 2900);                                                     // 2845 when it was left standing for the whole match
             } else {
                 ASSERT_TRUE(first_home >= 1700 && first_home <= 2000);                                        // a few looks after the bite at tick 1725
                 ASSERT_TRUE(r.seats[seat].score >= 1700);                                                     // 1380 without
@@ -2010,6 +2017,65 @@ void run_worker_tests() {
             ASSERT_EQ(worker_of(c, 0)->harvest().rescues(), 0u);                                              // 28 with 20 workers when a carrier more than 4 tiles from the mound counted as stuck
             ASSERT_TRUE(score_of(sim, 0) >= 1100);
             for (const auto& e : sink.log) ASSERT_TRUE(e.second.type == CommandType::GroupMove ? e.second.ants.size() <= 8u : e.second.type == CommandType::Stop);      // (a Stop: the watchdog found a jam)
+        }
+    } TEST_END();
+
+    WORKER_TEST("AI3.22 The Map As It Is Now Is Asked With The Seat's Rules Of The Moment And From The Hill's Whole Queue Row: The Queue Row Of A Team That Dropped Out Opens The Way To A Pile; With A Rock On The Middle Tile Of The Queue Row An Ant That Was Shut In Is Sent When It Is Free") {
+        // the queue row of a team that dropped out is open ground (BotView::walk_context through HarvestTask): team 1's hill sits below a wall whose only gap is its three queue
+        // tiles and the pile lies beyond it; while team 1 plays the pile cannot be walked to, within a re-ask, a look and a reaction time after team 1 drops out the worker sends its ants
+        {
+            sim::SimulationEngine sim;
+            sim.init_test_world(40, 30, 62, 14400 * sim::TICK_MS);
+            sim.set_anthill(0, TileCoord{2, 2});
+            sim.set_anthill(1, TileCoord{20, 12});
+            sim.set_anthill(2, TileCoord{32, 2});                                                             // a third team that plays on: the drop of team 1 does not end the match
+            for (int32_t x = 0; x < 40; ++x) {
+                if (x < 20 || x > 22) sim.set_terrain(x, 11, sim::TERRAIN_OBSTACLE);
+            }
+            const int32_t p = pile(sim, 30, 25, 40, 25);
+            for (int32_t i = 0; i < 3; ++i) sim.spawn_unit(0, sim::AntType::Worker, TileCoord{3 + i, 8});
+            sim.spawn_unit(2, sim::AntType::Worker, TileCoord{33, 8});
+            RecordingSink sink(sim, true);
+            BotController c(sim, 1);
+            std::string why;
+            ASSERT_TRUE(c.add(spec_of(0, "worker", Level::Medium), sink, why));
+            ASSERT_FALSE(c.map().piles()[static_cast<size_t>(p)].approach[0].reachable());                 // the gap is team 1's queue row: closed to team 0 while team 1 plays
+            step_all(sim, c, 600);
+            ASSERT_TRUE(sink.log.empty() && units_left(sim, p) == 40u);                                       // nothing to do: the only pile lies behind the queue row of a live team
+            sim.drop_player(1);
+            step_all(sim, c, 700);                                                                            // the re-ask (200 ticks), a look and a reaction time
+            ASSERT_FALSE(sim.is_match_over());
+            size_t to_pile = 0;
+            for (const auto& e : sink.log) to_pile += (e.second.type == CommandType::GroupMove && chebyshev(TileCoord{e.second.tile_x, e.second.tile_y}, TileCoord{30, 25}) <= 2) ? 1u : 0u;
+            ASSERT_TRUE(to_pile >= 1u);
+            step_all(sim, c, 2000);
+            ASSERT_TRUE(units_left(sim, p) < 40u && score_of(sim, 0) > 0);                                    // through the open row to the pile, and home again
+        }
+        // the hill's field of the moment starts from every walkable tile of its queue row (MapInfo::field_now): with a rock on the middle tile (the hill still works, its ants step
+        // diagonally onto the outer two) an ant that the analysis of the start took for shut in is sent to the pile once its ring opens
+        {
+            sim::SimulationEngine sim;
+            world(sim, 14400, 1, 0);
+            sim.set_terrain(kHills[0].x + 1, kHills[0].y - 1, sim::TERRAIN_OBSTACLE);                         // the middle tile of seat 0's queue row
+            pile(sim, 12, 12, 30, 25);
+            ring(sim, 28, 38, 32, 42);
+            const uint32_t shut = sim.spawn_unit(0, sim::AntType::Worker, TileCoord{30, 40});
+            RecordingSink sink(sim, true);
+            BotController c(sim, 1);
+            std::string why;
+            ASSERT_TRUE(c.add(spec_of(0, "worker", Level::Medium), sink, why));
+            ASSERT_FALSE(MapInfo::walkable(sim.grid(), 0, c.map().hill(0).queue));
+            ASSERT_TRUE(c.map().hill(0).starts.size() == 2u && c.map().hill_component(0) >= 0 && c.map().piles()[0].approach[0].reachable());
+            ASSERT_TRUE(c.map().ant_component(0, TileCoord{30, 40}) != c.map().hill_component(0));
+            step_all(sim, c, 600);
+            ASSERT_TRUE(sink.log.empty() && worker_of(c, 0)->harvest().unplaced() == 1u);                     // shut in: never sent
+            sim.set_terrain(30, 38, sim::TERRAIN_WALKABLE);                                                   // the way out
+            step_all(sim, c, 600);
+            size_t ordered = 0;
+            for (const auto& e : sink.log) ordered += names(e.second, shut) ? 1u : 0u;
+            ASSERT_TRUE(ordered >= 1u);                                                                       // a field from the middle tile alone (a rock) says "shut in" for ever
+            step_all(sim, c, 3000);
+            ASSERT_TRUE(units_left(sim, 0) < 30u && score_of(sim, 0) > 0);                                    // the pile is worked, the food comes home past the rock
         }
     } TEST_END();
 }

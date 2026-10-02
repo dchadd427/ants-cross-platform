@@ -2750,6 +2750,8 @@ To deliver authentic 1:1 gameplay inside standard web browsers with zero install
     - Layer 5: Hard obstacle / rock barrier (0; impassable)
 - **Pathfinding Infinite Cost Sentinel (`0x01020951` / `FUN_01020951`)**:
   - Original A* routing uses `8000` as the infinite-cost sentinel value for blocked or impassable nodes.
+- **Tile row 90 can never be entered by the path finder (`FUN_01019a66`, the search step; `FUN_01019c31`, the neighbour routine; verified for the review of milestone B2, 2026-10-01, with Capstone and the decompilation)**:
+  - The neighbour routine writes the marker `0x5a` (90) into the ROW word of the neighbours that fall off the map (the record is `{row, column}`: `docs/legacy/Ants.exe.c` lines 18413 - 18430), and the search loop skips every neighbour whose row word is `0x5a` (`0x1019b1c: mov ax, [ecx]`, `0x1019b23: cmp ax, 0x5a`, `0x1019b2f: je 0x1019be0`; `docs/legacy/Ants.exe.c` line 18335 `if (*local_14 != 0x5a)`). The marker is also a real row: on a map of 91 or more rows no tile of row 90 is ever generated, as a goal or as a step, so a path can neither end in row 90 nor cross it (a START in row 90 can leave it, the start is popped, not generated). The loader accepts grids of up to 256 rows; the shipped maps have at most 60, so the rule cannot occur in them. The remake reproduces it (`path_planner.cpp` `kSentinelRow`) and `ants_ai::MapInfo::walkable` models it (conformance test AI1.31 on a 100-row world).
 - **Authentic Match Announcement Strings (`0x1047468`)**:
   - Game Start: `"Game started! Go get that food!"` (binary string at VA `0x1047468`).
   - News Flash Header: `[%ld:%02ld] News Flash` (binary string at VA `0x1047258`).

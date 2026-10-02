@@ -20,18 +20,21 @@
 //   --repeat N        play every match N times and require identical results (finds any nondeterminism)
 //   --replay-check    re-feed the commands that were applied into a FRESH engine with no bot at all and require the same state hash at every 20th tick and at the end
 //   --threads N       matches played at the same time (default 1; every match is independent, the report is sorted by map, seed and arrangement)
-//   --out FILE        write the JSON report (fixed key order; the maps' NAMES only, no paths)
+//   --out FILE        write the JSON report (fixed key order; the maps' NAMES only, no paths). The file is opened BEFORE the first match (an unwritable path costs nothing) and
+//                     checked after the last: a report that could not be written completely is exit code 2, never a silent success
 //   --no-wall-time    leave the wall clock time of each match out of the report, so that the file is bit-reproducible
 //   --maps-dir DIR    where map names are looked for (default: the shipped maps)
-//   --selftest        check the tool itself (determinism, replay check, report, threads)
+//   --selftest        check the tool itself (determinism, replay check, report, threads, the tool end to end on a temporary folder)
 //   --write-baselines print the table that tests/test_ai/baselines.inc pins (the worker bot at the three levels on the six shipped maps, a fixed seed set, seats rotated:
 //                     include/ants_ai/baselines.hpp) to stdout; the other options (but --threads and --maps-dir) are ignored. Regenerate it ON PURPOSE, when the bot or the
 //                     hill's banking changed.
 //
-// Exit code: 0 when every match was played and every check passed, 1 on a finding (a match that could not be played, a replay or repeat that differs), 2 on bad usage.
+// Exit code: 0 when every match was played and every check passed, 1 on a finding (a match that could not be played, a replay or repeat that differs), 2 on bad usage or when the
+// report (or the match list: too many matches) cannot be handled.
 #include <algorithm>
 #include <atomic>
 #include <chrono>
+#include <csignal>
 #include <cstdarg>
 #include <cstdint>
 #include <cstdio>
@@ -43,6 +46,12 @@
 #include <functional>
 #include <map>
 #include <memory>
+#include <mutex>
+#include <condition_variable>
+#include <ostream>
+#include <set>
+#include <sstream>
+#include <streambuf>
 #include <string>
 #include <thread>
 #include <utility>
@@ -55,6 +64,10 @@
 #include "ants_ai/rng.hpp"
 #include "ants_assets/lvl_parser.hpp"
 #include "ants_sim/sim_engine.hpp"
+
+#if defined(__unix__) || defined(__APPLE__)
+#include <sys/resource.h>
+#endif
 
 #ifndef ORIGINAL_ASSETS_DIR
 #define ORIGINAL_ASSETS_DIR "Original-Ants"
@@ -144,9 +157,17 @@ std::string json_quote(const std::string& s) {
     return out;
 }
 
-// Pretty printed, keys in the order they are written
+// Pretty printed, keys in the order they are written. With a sink the text is handed over by drain() (called at the end of each match) instead of piling up in one string, so
+// the memory of a report does not grow with the number of matches; without a sink text() is the whole report.
 class JsonWriter {
 public:
+    explicit JsonWriter(std::ostream* sink = nullptr) : sink_(sink) {}
+    /// Hands what has been written to the sink (if there is one) and forgets it: the layout state (depth, commas) is kept
+    void drain() {
+        if (sink_ == nullptr) return;
+        sink_->write(out_.data(), static_cast<std::streamsize>(out_.size()));
+        out_.clear();
+    }
     void begin_object() { prefix(); out_ += '{'; stack_.push_back({0}); }
     void end_object() { close('}'); }
     void begin_array() { prefix(); out_ += '['; stack_.push_back({0}); }
@@ -176,6 +197,7 @@ private:
         if (!empty) newline();
         out_ += c;
     }
+    std::ostream* sink_{nullptr};
     std::string out_;
     std::vector<Level> stack_;
     bool key_pending_{false};
@@ -269,6 +291,125 @@ private:
         if (c == 'f') return literal("false");
         if (c == 'n') return literal("null");
         return number();
+    }
+    const std::string& s_;
+    size_t i_{0};
+};
+
+// A report read back (the self-test reads the file that run_tool wrote and compares its numbers): the values of a JSON text as a tree. Numbers are doubles (every counter of the
+// report is far below 2^53), strings are the ASCII text of the file with the escapes undone.
+struct JsonValue {
+    enum class Kind { Null, Bool, Number, String, Array, Object };
+    Kind kind{Kind::Null};
+    bool b{false};
+    double number{0.0};
+    std::string text;
+    std::vector<JsonValue> items;                  // an array's elements
+    std::vector<std::string> keys;                 // an object's keys, in file order, and the values that belong to them
+    std::vector<JsonValue> values;
+
+    const JsonValue* get(const std::string& key) const {
+        for (size_t i = 0; i < keys.size(); ++i) {
+            if (keys[i] == key) return &values[i];
+        }
+        return nullptr;
+    }
+    uint64_t u64() const { return static_cast<uint64_t>(number); }
+    int64_t i64() const { return static_cast<int64_t>(number); }
+};
+
+class JsonReader {
+public:
+    explicit JsonReader(const std::string& s) : s_(s) {}
+    bool parse(JsonValue& out) {
+        skip();
+        if (!value(out)) return false;
+        skip();
+        return i_ == s_.size();
+    }
+
+private:
+    void skip() { while (i_ < s_.size() && (s_[i_] == ' ' || s_[i_] == '\n' || s_[i_] == '\t' || s_[i_] == '\r')) ++i_; }
+    bool string(std::string& out) {
+        if (i_ >= s_.size() || s_[i_] != '"') return false;
+        ++i_;
+        out.clear();
+        while (i_ < s_.size()) {
+            const char c = s_[i_];
+            if (c == '"') { ++i_; return true; }
+            if (c == '\\') {
+                ++i_;
+                if (i_ >= s_.size()) return false;
+                const char e = s_[i_];
+                if (e == 'u') {
+                    if (i_ + 4 >= s_.size()) return false;
+                    out += static_cast<char>(std::strtol(s_.substr(i_ + 1, 4).c_str(), nullptr, 16));
+                    i_ += 4;
+                } else if (e == 'n') out += '\n';
+                else if (e == 't') out += '\t';
+                else if (e == 'r') out += '\r';
+                else if (e == 'b') out += '\b';
+                else if (e == 'f') out += '\f';
+                else out += e;
+            } else {
+                out += c;
+            }
+            ++i_;
+        }
+        return false;
+    }
+    bool value(JsonValue& v) {
+        if (i_ >= s_.size()) return false;
+        const char c = s_[i_];
+        if (c == '{') {
+            v.kind = JsonValue::Kind::Object;
+            ++i_;
+            skip();
+            if (i_ < s_.size() && s_[i_] == '}') { ++i_; return true; }
+            for (;;) {
+                skip();
+                std::string key;
+                if (!string(key)) return false;
+                skip();
+                if (i_ >= s_.size() || s_[i_] != ':') return false;
+                ++i_;
+                skip();
+                JsonValue member;
+                if (!value(member)) return false;
+                v.keys.push_back(std::move(key));
+                v.values.push_back(std::move(member));
+                skip();
+                if (i_ < s_.size() && s_[i_] == ',') { ++i_; continue; }
+                if (i_ < s_.size() && s_[i_] == '}') { ++i_; return true; }
+                return false;
+            }
+        }
+        if (c == '[') {
+            v.kind = JsonValue::Kind::Array;
+            ++i_;
+            skip();
+            if (i_ < s_.size() && s_[i_] == ']') { ++i_; return true; }
+            for (;;) {
+                skip();
+                JsonValue item;
+                if (!value(item)) return false;
+                v.items.push_back(std::move(item));
+                skip();
+                if (i_ < s_.size() && s_[i_] == ',') { ++i_; continue; }
+                if (i_ < s_.size() && s_[i_] == ']') { ++i_; return true; }
+                return false;
+            }
+        }
+        if (c == '"') { v.kind = JsonValue::Kind::String; return string(v.text); }
+        if (s_.compare(i_, 4, "true") == 0) { v.kind = JsonValue::Kind::Bool; v.b = true; i_ += 4; return true; }
+        if (s_.compare(i_, 5, "false") == 0) { v.kind = JsonValue::Kind::Bool; v.b = false; i_ += 5; return true; }
+        if (s_.compare(i_, 4, "null") == 0) { v.kind = JsonValue::Kind::Null; i_ += 4; return true; }
+        char* end = nullptr;
+        v.number = std::strtod(s_.c_str() + i_, &end);
+        if (end == s_.c_str() + i_) return false;
+        v.kind = JsonValue::Kind::Number;
+        i_ = static_cast<size_t>(end - s_.c_str());
+        return true;
     }
     const std::string& s_;
     size_t i_{0};
@@ -413,6 +554,7 @@ bool parse_args(const std::vector<std::string>& a, Options& o, std::string& err)
             o.threads = static_cast<unsigned>(n);
         } else if (s == "--out") {
             if (!value("--out", o.out)) return false;
+            if (o.out.empty()) { err = "--out needs a file name (an empty one, from an unset shell variable perhaps, is not 'no report': leave --out out for that)"; return false; }
         } else if (s == "--maps-dir") {
             if (!value("--maps-dir", o.maps_dir)) return false;
         } else {
@@ -444,11 +586,25 @@ struct LoadedMap {
     std::string error;
 };
 
+// Anything with a folder separator or an extension is a path, the rest is a name
+bool looks_like_path(const std::string& what) {
+    return what.find('/') != std::string::npos || what.find('\\') != std::string::npos || what.find('.') != std::string::npos;
+}
+
+// What the report calls a map that was given as a path: the last component without its extension (the folders are separated by '/' or by '\\', whichever system wrote the path;
+// the report never holds a folder, found or not)
+std::string stem_of_path(const std::string& path) {
+    const size_t slash = path.find_last_of("/\\");
+    std::string base = slash == std::string::npos ? path : path.substr(slash + 1);
+    const size_t dot = base.find_last_of('.');
+    if (dot != std::string::npos && dot > 0) base.erase(dot);
+    return base;
+}
+
 // A name is looked for in the maps folder (NAME.LVL or NAME.lvl, any case of the extension); anything with a folder separator or an extension is a path
 bool resolve_map(const std::string& what, const std::string& dir, fs::path& out) {
     std::error_code ec;
-    const bool is_path = what.find('/') != std::string::npos || what.find('\\') != std::string::npos || what.find('.') != std::string::npos;
-    if (is_path) {
+    if (looks_like_path(what)) {
         out = what;
         return fs::is_regular_file(out, ec);
     }
@@ -471,12 +627,12 @@ std::vector<LoadedMap> load_maps(const Options& o) {
         LoadedMap& m = maps[i];
         fs::path p;
         if (!resolve_map(o.maps[i], o.maps_dir, p)) {
-            m.name = o.maps[i];
-            m.error = "map '" + o.maps[i] + "' not found";
+            m.name = looks_like_path(o.maps[i]) ? stem_of_path(o.maps[i]) : o.maps[i];           // never the folders of a path that does not exist
+            m.error = "map '" + m.name + "' not found";
             continue;
         }
-        const std::string stem = p.stem().string();
-        m.name = o.maps[i].find('.') == std::string::npos && o.maps[i].find('/') == std::string::npos ? upper(stem) : stem;
+        const std::string stem = stem_of_path(p.string());
+        m.name = looks_like_path(o.maps[i]) ? stem : upper(stem);
         if (!m.level.load_from_file(p.string())) {
             m.error = "map '" + stem + "' does not load";
             continue;
@@ -536,27 +692,40 @@ struct Job {
 
 struct MatchReport {
     Job job;
-    ai::ArenaResult result;
+    ai::ArenaResult result;                        // after run_job the applied-command log and the hash checkpoints are gone (see `commands`): a report keeps the numbers only
     bool replay_checked{false};
     ai::ReplayResult replay;
-    uint32_t plays{1};
+    uint64_t commands{0};                          // how many commands were applied (the size of the log that run_job dropped)
+    uint32_t plays{0};                             // how many times the match was actually played (--repeat)
     bool repeat_ok{true};
     std::string repeat_note;
     double wall_ms{0.0};
     bool ok() const { return result.error.empty() && (!replay_checked || replay.ok) && repeat_ok; }
 };
 
+// Two plays of one match are the same match: every number of the result is equal (the log is not compared: only the first play records one)
 bool same_match(const ai::ArenaResult& a, const ai::ArenaResult& b) {
-    if (a.ticks != b.ticks || a.hash != b.hash || a.match_over != b.match_over || a.checkpoints != b.checkpoints || a.seats.size() != b.seats.size()) return false;
+    if (a.error != b.error || a.ticks != b.ticks || a.steps != b.steps || a.hash != b.hash || a.match_over != b.match_over || a.initial_ticks != b.initial_ticks ||
+        a.checkpoints != b.checkpoints || a.seats.size() != b.seats.size() || a.news_events != b.news_events || a.audio_events != b.audio_events || a.peak_queue != b.peak_queue ||
+        a.reachable_units_left != b.reachable_units_left) {
+        return false;
+    }
     for (size_t i = 0; i < a.seats.size(); ++i) {
         const ai::ArenaSeatResult& x = a.seats[i];
         const ai::ArenaSeatResult& y = b.seats[i];
-        if (x.score != y.score || x.ants != y.ants || x.food_deposited != y.food_deposited || x.stats.decisions != y.stats.decisions || x.stats.released != y.stats.released ||
-            x.stats.intents != y.stats.intents || x.stats.expired != y.stats.expired || x.stats.rejected != y.stats.rejected) {
+        if (x.spec.seat != y.spec.seat || x.runs != y.runs || x.score != y.score || x.shown_score != y.shown_score || x.ants != y.ants || x.eggs != y.eggs || x.hatched != y.hatched ||
+            x.banked != y.banked || x.raided != y.raided || x.kills != y.kills || x.losses != y.losses || x.stats.decisions != y.stats.decisions || x.stats.intents != y.stats.intents ||
+            x.stats.released != y.stats.released || x.stats.expired != y.stats.expired || x.stats.pruned != y.stats.pruned || x.stats.superseded != y.stats.superseded ||
+            x.stats.filtered != y.stats.filtered || x.stats.rejected != y.stats.rejected) {
             return false;
         }
     }
     return true;
+}
+
+template <class T>
+void release_memory(std::vector<T>& v) {
+    std::vector<T>().swap(v);
 }
 
 ai::ArenaSpec spec_of(const Options& o, const LoadedMap& m, const Job& j, bool record) {
@@ -573,7 +742,6 @@ ai::ArenaSpec spec_of(const Options& o, const LoadedMap& m, const Job& j, bool r
 MatchReport run_job(const Options& o, const std::vector<LoadedMap>& maps, const Job& job, std::function<std::unique_ptr<ai::Bot>(const ai::BotSpec&)> factory) {
     MatchReport r;
     r.job = job;
-    r.plays = o.repeat;
     const LoadedMap& m = maps[job.map];
     if (!m.ok) {
         r.result.error = m.error;
@@ -583,6 +751,7 @@ MatchReport run_job(const Options& o, const std::vector<LoadedMap>& maps, const 
     ai::ArenaSpec spec = spec_of(o, m, job, o.replay_check);
     spec.factory = factory;
     r.result = ai::play_match(spec);
+    r.plays = 1;
     if (r.result.error.empty() && o.replay_check) {
         r.replay_checked = true;
         r.replay = ai::replay_commands(spec, r.result);
@@ -591,19 +760,36 @@ MatchReport run_job(const Options& o, const std::vector<LoadedMap>& maps, const 
         ai::ArenaSpec s2 = spec_of(o, m, job, false);
         s2.factory = factory;
         const ai::ArenaResult second = ai::play_match(s2);
+        ++r.plays;
         if (!same_match(r.result, second)) {
             r.repeat_ok = false;
             r.repeat_note = fmt("play %u differs: ticks %llu / %llu, hash %s / %s", again + 1, static_cast<unsigned long long>(r.result.ticks), static_cast<unsigned long long>(second.ticks),
                                 hex64(r.result.hash).c_str(), hex64(second.hash).c_str());
         }
     }
+    // The report needs the NUMBER of commands, not the commands, and the checkpoints only served the replay and repeat checks: a whole run keeps one MatchReport per match, and with
+    // the real bots a log is hundreds of kilobytes
+    r.commands = r.result.log.size();
+    release_memory(r.result.log);
+    release_memory(r.result.checkpoints);
     r.wall_ms = std::chrono::duration<double, std::milli>(Clock::now() - started).count();
     return r;
 }
 
-std::vector<Job> make_jobs(const Options& o, size_t map_count) {
-    std::vector<Job> jobs;
+// The matches of a run: maps x seeds x arrangements. The count is checked BEFORE a single Job is built (overflow-safe): a Job costs about 260 bytes, so a request for tens of millions
+// has to be refused, not tried. `error` says why not.
+bool make_jobs(const Options& o, size_t map_count, std::vector<Job>& jobs, std::string& error) {
+    jobs.clear();
     const std::vector<std::vector<ai::BotSpec>> arr = arrangements(o.seats, o.rotate);
+    uint64_t total = map_count;
+    for (const uint64_t factor : {static_cast<uint64_t>(o.seeds.size()), static_cast<uint64_t>(arr.size()), static_cast<uint64_t>(o.repeat)}) {
+        if (factor != 0 && total > kMaxMatches / factor) {
+            error = fmt("%zu map(s) x %zu seed(s) x %zu arrangement(s) x %u repeat(s) are too many matches (at most %zu)", map_count, o.seeds.size(), arr.size(), o.repeat, kMaxMatches);
+            return false;
+        }
+        total *= factor;
+    }
+    jobs.reserve(static_cast<size_t>(total / std::max<uint32_t>(1, o.repeat)));
     for (size_t m = 0; m < map_count; ++m) {
         for (uint32_t seed : o.seeds) {
             for (size_t r = 0; r < arr.size(); ++r) {
@@ -616,7 +802,7 @@ std::vector<Job> make_jobs(const Options& o, size_t map_count) {
             }
         }
     }
-    return jobs;
+    return true;
 }
 
 // Plays every job, `threads` at a time; the reports come back in the order of the jobs (map, seed, arrangement)
@@ -657,7 +843,7 @@ std::string seeds_text(const std::vector<uint32_t>& seeds) {
     std::string out;
     for (size_t i = 0; i < seeds.size();) {
         size_t j = i;
-        while (j + 1 < seeds.size() && seeds[j + 1] == seeds[j] + 1) ++j;
+        while (j + 1 < seeds.size() && static_cast<uint64_t>(seeds[j + 1]) == static_cast<uint64_t>(seeds[j]) + 1) ++j;       // in 64 bits: 4294967295 is followed by 0 without being "the next"
         if (!out.empty()) out += ",";
         out += j > i ? fmt("%u..%u", seeds[i], seeds[j]) : fmt("%u", seeds[i]);
         i = j + 1;
@@ -665,11 +851,12 @@ std::string seeds_text(const std::vector<uint32_t>& seeds) {
     return out;
 }
 
-std::string report_json(const Options& o, const std::vector<LoadedMap>& maps, const std::vector<MatchReport>& reports) {
-    JsonWriter j;
+// Writes the report to `out` one match at a time (nothing is built as one big string); false when the stream is not good afterwards
+bool write_report(std::ostream& out, const Options& o, const std::vector<LoadedMap>& maps, const std::vector<MatchReport>& reports) {
+    JsonWriter j(&out);
     j.begin_object();
     j.field("tool", "bot_arena");
-    j.field("format", uint64_t{1});
+    j.field("format", uint64_t{2});                                   // 2: banked and raided replace the engine's food_deposited, food_stolen and food_lost (never fed, always 0)
     j.field("note", kKindsNote);
     j.key("options");
     j.begin_object();
@@ -699,6 +886,7 @@ std::string report_json(const Options& o, const std::vector<LoadedMap>& maps, co
         if (!r.result.error.empty()) {
             j.field("error", r.result.error);
             j.end_object();
+            j.drain();
             continue;
         }
         j.field("ticks", r.result.ticks);
@@ -717,9 +905,8 @@ std::string report_json(const Options& o, const std::vector<LoadedMap>& maps, co
             j.field("ants", uint64_t{s.ants});
             j.field("eggs", uint64_t{s.eggs});
             j.field("hatched", uint64_t{s.hatched});
-            j.field("food_deposited", uint64_t{s.food_deposited});
-            j.field("food_stolen", uint64_t{s.food_stolen});
-            j.field("food_lost", uint64_t{s.food_lost});
+            j.field("banked", uint64_t{s.banked});
+            j.field("raided", uint64_t{s.raided});
             j.field("kills", uint64_t{s.kills});
             j.field("losses", uint64_t{s.losses});
             j.field("decisions", uint64_t{s.stats.decisions});
@@ -738,7 +925,7 @@ std::string report_json(const Options& o, const std::vector<LoadedMap>& maps, co
             j.key("replay");
             j.begin_object();
             j.field_bool("ok", r.replay.ok);
-            j.field("commands", uint64_t{r.result.log.size()});
+            j.field("commands", r.commands);
             if (!r.replay.ok) j.field("first_bad_tick", r.replay.first_bad_tick);
             j.end_object();
         }
@@ -752,6 +939,7 @@ std::string report_json(const Options& o, const std::vector<LoadedMap>& maps, co
         }
         if (o.wall_time) j.field("wall_ms", r.wall_ms, 1);
         j.end_object();
+        j.drain();
     }
     j.end_array();
     j.key("summary");
@@ -761,7 +949,17 @@ std::string report_json(const Options& o, const std::vector<LoadedMap>& maps, co
     j.field("ticks", ticks);
     j.end_object();
     j.end_object();
-    return j.text() + "\n";
+    j.drain();
+    out << '\n';
+    out.flush();
+    return out.good();
+}
+
+// The whole report as one string (for the self-test: the same bytes write_report puts in a file)
+std::string report_json(const Options& o, const std::vector<LoadedMap>& maps, const std::vector<MatchReport>& reports) {
+    std::ostringstream text;
+    write_report(text, o, maps, reports);
+    return text.str();
 }
 
 std::string seats_line(const MatchReport& r) {
@@ -772,25 +970,40 @@ std::string seats_line(const MatchReport& r) {
     return s;
 }
 
+// Where the tool prints its lines and its complaints (stdout and stderr; the self-test points them at scratch files while it runs the tool end to end)
+std::FILE* g_out = stdout;
+std::FILE* g_err = stderr;
+
 void print_match(const std::vector<LoadedMap>& maps, const MatchReport& r) {
     if (!r.result.error.empty()) {
-        std::printf("%-9s seed %u #%u: NOT PLAYED: %s\n", maps[r.job.map].name.c_str(), r.job.seed, r.job.rotation, r.result.error.c_str());
+        std::fprintf(g_out, "%-9s seed %u #%u: NOT PLAYED: %s\n", maps[r.job.map].name.c_str(), r.job.seed, r.job.rotation, r.result.error.c_str());
         return;
     }
-    std::printf("%-9s seed %u #%u:%s  ticks %llu%s  hash %s  %s%s\n", maps[r.job.map].name.c_str(), r.job.seed, r.job.rotation, seats_line(r).c_str(),
-                static_cast<unsigned long long>(r.result.ticks), r.result.match_over ? " (over)" : "", hex64(r.result.hash).c_str(),
-                r.replay_checked ? (r.replay.ok ? "replay ok" : "REPLAY DIFFERS") : "", r.repeat_ok ? "" : "  REPEAT DIFFERS");
+    std::fprintf(g_out, "%-9s seed %u #%u:%s  ticks %llu%s  hash %s  %s%s\n", maps[r.job.map].name.c_str(), r.job.seed, r.job.rotation, seats_line(r).c_str(),
+                 static_cast<unsigned long long>(r.result.ticks), r.result.match_over ? " (over)" : "", hex64(r.result.hash).c_str(),
+                 r.replay_checked ? (r.replay.ok ? "replay ok" : "REPLAY DIFFERS") : "", r.repeat_ok ? "" : "  REPEAT DIFFERS");
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------------
 // The tool
 // ---------------------------------------------------------------------------------------------------------------------------------
 
-int run_tool(const Options& o) {
+// `factory` (null: the registry's bots) lets the self-test seat bots that the registry does not have
+int run_tool(const Options& o, const std::function<std::unique_ptr<ai::Bot>(const ai::BotSpec&)>& factory = nullptr) {
+    // The report file is opened BEFORE the first match: a path that cannot be written is found in a moment, not after a run of hours
+    std::ofstream report;
+    if (!o.out.empty()) {
+        report.open(o.out, std::ios::binary | std::ios::trunc);
+        if (!report) {
+            std::fprintf(g_err, "bot_arena: cannot write %s\n", o.out.c_str());
+            return 2;
+        }
+    }
     std::vector<LoadedMap> maps = load_maps(o);
-    const std::vector<Job> jobs = make_jobs(o, maps.size());
-    if (jobs.size() * o.repeat > kMaxMatches) {
-        std::fprintf(stderr, "bot_arena: %zu matches are too many (at most %zu)\n", jobs.size() * o.repeat, kMaxMatches);
+    std::vector<Job> jobs;
+    std::string why;
+    if (!make_jobs(o, maps.size(), jobs, why)) {
+        std::fprintf(g_err, "bot_arena: %s\n", why.c_str());
         return 2;
     }
     std::string kinds;
@@ -799,12 +1012,12 @@ int run_tool(const Options& o) {
         kinds += (kinds.empty() ? "" : ", ") + std::to_string(static_cast<unsigned>(s.seat)) + "=" + spec_text(s);
         placeholder = placeholder || s.kind == "standard";
     }
-    std::printf("bot_arena: %zu match(es): maps %zu, seeds %s, %zu arrangement(s) of [%s], ticks %s, latency %u%s%s\n", jobs.size(), maps.size(), seeds_text(o.seeds).c_str(),
-                arrangements(o.seats, o.rotate).size(), kinds.c_str(), o.ticks == 0 ? "full" : std::to_string(o.ticks).c_str(), o.latency, o.replay_check ? ", replay check" : "",
-                o.repeat > 1 ? fmt(", every match %u times", o.repeat).c_str() : "");
-    if (placeholder) std::printf("NOTE: %s\n", kKindsNote);
+    std::fprintf(g_out, "bot_arena: %zu match(es): maps %zu, seeds %s, %zu arrangement(s) of [%s], ticks %s, latency %u%s%s\n", jobs.size(), maps.size(), seeds_text(o.seeds).c_str(),
+                 arrangements(o.seats, o.rotate).size(), kinds.c_str(), o.ticks == 0 ? "full" : std::to_string(o.ticks).c_str(), o.latency, o.replay_check ? ", replay check" : "",
+                 o.repeat > 1 ? fmt(", every match %u times", o.repeat).c_str() : "");
+    if (placeholder) std::fprintf(g_out, "NOTE: %s\n", kKindsNote);
     const Clock::time_point started = Clock::now();
-    const std::vector<MatchReport> reports = run_jobs(o, maps, jobs, nullptr, jobs.size() > 100);
+    const std::vector<MatchReport> reports = run_jobs(o, maps, jobs, factory, jobs.size() > 100);
     if (!o.quiet) {
         for (const MatchReport& r : reports) print_match(maps, r);
     }
@@ -815,14 +1028,15 @@ int run_tool(const Options& o) {
         ticks += r.result.ticks;
     }
     const double seconds = std::chrono::duration<double>(Clock::now() - started).count();
-    std::printf("bot_arena: %zu match(es), %llu ticks, %.2f s%s\n", reports.size(), static_cast<unsigned long long>(ticks), seconds, failures == 0 ? ", every check passed" : "");
-    if (failures != 0) std::printf("bot_arena: %zu match(es) FAILED (not played, replay or repeat differs)\n", failures);
-    if (!o.out.empty()) {
-        std::ofstream f(o.out, std::ios::binary | std::ios::trunc);
-        const std::string json = report_json(o, maps, reports);
-        f << json;
-        if (!f) {
-            std::fprintf(stderr, "bot_arena: cannot write %s\n", o.out.c_str());
+    std::fprintf(g_out, "bot_arena: %zu match(es), %llu ticks, %.2f s%s\n", reports.size(), static_cast<unsigned long long>(ticks), seconds, failures == 0 ? ", every check passed" : "");
+    if (failures != 0) std::fprintf(g_out, "bot_arena: %zu match(es) FAILED (not played, replay or repeat differs)\n", failures);
+    if (report.is_open()) {
+        // written match by match, then flushed and CLOSED, and only then judged: a failure that comes at the flush (a full disk, a size limit) is a failure, not a truncated file
+        // with exit code 0
+        const bool written = write_report(report, o, maps, reports);
+        report.close();
+        if (!written || report.fail()) {
+            std::fprintf(g_err, "bot_arena: cannot write %s completely\n", o.out.c_str());
             return 2;
         }
     }
@@ -924,7 +1138,10 @@ struct SelfTest {
             std::printf("    FAILED: %s\n", what.c_str());
         }
     }
-    void section(const char* name) { std::printf("  %s\n", name); }
+    void section(const char* name) {
+        std::printf("  %s\n", name);
+        std::fflush(stdout);
+    }
 };
 
 ai::BotSpec spec_for(uint8_t seat, const char* kind, ai::Level level) {
@@ -933,6 +1150,463 @@ ai::BotSpec spec_for(uint8_t seat, const char* kind, ai::Level level) {
     s.kind = kind;
     s.level = level;
     return s;
+}
+
+// A bot that earns points (the self-test's fields must be read back with numbers that are not 0): idle ants go to the nearest pile of MapInfo that still has units
+class SelftestHarvester final : public ai::Bot {
+public:
+    const char* kind() const noexcept override { return "selftest-harvester"; }
+    void start(const ai::BotContext&) override {}
+    void think(const ai::BotView& v, ai::Orders& o) override {
+        const ai::MapInfo* map = v.map();
+        if (map == nullptr) return;
+        std::vector<uint32_t> idle;
+        for (const ai::AntView& a : v.mine()) {
+            if (a.idle()) idle.push_back(a.id);
+        }
+        if (idle.empty()) return;
+        const ai::PileInfo* best = nullptr;
+        for (const ai::PileView& p : v.piles()) {
+            const ai::PileInfo* info = map->pile(p.index);
+            if (p.lunchbox || info == nullptr || !info->approach[v.seat()].reachable()) continue;
+            if (best == nullptr || info->approach[v.seat()].cost < best->approach[v.seat()].cost) best = info;
+        }
+        if (best != nullptr) o.move(idle, best->approach[v.seat()].click);
+    }
+};
+
+// A bot that is NOT reproducible on purpose: where it sends its ant depends on a counter that outlives the match (a repeat of a match must notice)
+class SelftestDrifter final : public ai::Bot {
+public:
+    explicit SelftestDrifter(uint32_t offset) : offset_(offset) {}
+    const char* kind() const noexcept override { return "selftest-drifter"; }
+    void start(const ai::BotContext&) override {}
+    void think(const ai::BotView& view, ai::Orders& orders) override {
+        if (view.mine().empty()) return;
+        const ai::AntView& a = view.mine().front();
+        orders.move({a.id}, sim::TileCoord{a.tile.x + 2 + static_cast<int32_t>(offset_ % 5), a.tile.y + 2});
+    }
+
+private:
+    uint32_t offset_;
+};
+
+// A scratch folder (the tool may write files; ants_ai may not)
+struct TempDir {
+    fs::path path;
+    TempDir() {
+        std::error_code ec;
+        path = fs::temp_directory_path(ec) / ("bot_arena_selftest_" + std::to_string(static_cast<unsigned long long>(Clock::now().time_since_epoch().count())));
+        fs::create_directories(path, ec);
+    }
+    ~TempDir() {
+        std::error_code ec;
+        fs::remove_all(path, ec);
+    }
+    bool ok() const {
+        std::error_code ec;
+        return fs::is_directory(path, ec);
+    }
+    std::string file(const char* name) const { return (path / name).string(); }
+};
+
+std::string read_file(const std::string& name) {
+    std::ifstream f(name, std::ios::binary);
+    std::ostringstream text;
+    text << f.rdbuf();
+    return text.str();
+}
+
+// A stream buffer that refuses every byte after `limit` (a full disk, a size limit) and remembers how it was written to
+class LimitedBuf final : public std::streambuf {
+public:
+    explicit LimitedBuf(size_t limit) : limit_(limit) {}
+    size_t bytes{0};
+    size_t writes{0};
+    size_t biggest{0};
+
+protected:
+    std::streamsize xsputn(const char*, std::streamsize n) override {
+        ++writes;
+        biggest = std::max(biggest, static_cast<size_t>(n));
+        if (bytes + static_cast<size_t>(n) > limit_) return 0;
+        bytes += static_cast<size_t>(n);
+        return n;
+    }
+    int_type overflow(int_type c) override {
+        if (bytes + 1 > limit_) return traits_type::eof();
+        ++bytes;
+        return traits_type::not_eof(c);
+    }
+
+private:
+    size_t limit_;
+};
+
+// What run_tool printed (g_out and g_err) while it ran, and its exit code
+struct ToolRun {
+    int code{-1};
+    std::string out;
+    std::string err;
+};
+
+ToolRun run_tool_quietly(const Options& o, const TempDir& dir, const std::function<std::unique_ptr<ai::Bot>(const ai::BotSpec&)>& factory) {
+    ToolRun r;
+    const std::string out_name = dir.file("stdout.txt");
+    const std::string err_name = dir.file("stderr.txt");
+    std::FILE* out = std::fopen(out_name.c_str(), "wb");
+    std::FILE* err = std::fopen(err_name.c_str(), "wb");
+    if (out == nullptr || err == nullptr) {
+        if (out != nullptr) std::fclose(out);
+        if (err != nullptr) std::fclose(err);
+        return r;
+    }
+    std::FILE* keep_out = g_out;
+    std::FILE* keep_err = g_err;
+    g_out = out;
+    g_err = err;
+    r.code = run_tool(o, factory);
+    g_out = keep_out;
+    g_err = keep_err;
+    std::fclose(out);
+    std::fclose(err);
+    r.out = read_file(out_name);
+    r.err = read_file(err_name);
+    return r;
+}
+
+// The checks of the tool's own wiring: each of them kills a one-line change that used to leave the self-test green
+void selftest_wiring(SelfTest& t, const LoadedMap& tiny) {
+    t.section("the wiring: options reach the arena, equal results are noticed, unequal ones are not missed");
+    {
+        // --ticks and --latency-ticks reach the match
+        Options o;
+        o.maps = {"TINY"};
+        o.seats = {spec_for(0, "worker", ai::Level::Hard), spec_for(1, "worker", ai::Level::Hard)};
+        o.seats_given = true;
+        o.ticks = 300;
+        o.latency = 3;
+        o.wall_time = false;
+        Job job;
+        job.seed = 5;
+        job.bots = o.seats;
+        const ai::ArenaSpec spec = spec_of(o, tiny, job, true);
+        t.check(spec.max_ticks == 300 && spec.latency_ticks == 3 && spec.seed == 5 && spec.record && spec.bots.size() == 2 && spec.level == &tiny.level, "spec_of carries --ticks, --latency-ticks, the seed and the seats");
+        const std::vector<LoadedMap> maps = [&] {
+            std::vector<LoadedMap> v(1);
+            v[0].name = tiny.name;
+            v[0].ok = true;
+            v[0].level = tiny.level;
+            return v;
+        }();
+        const MatchReport three = run_job(o, maps, job, selftest_factory);
+        o.latency = 0;
+        const MatchReport zero = run_job(o, maps, job, selftest_factory);
+        t.check(three.result.error.empty() && three.result.ticks == 300 && !three.result.match_over, "a match of --ticks 300 plays 300 ticks");
+        t.check(zero.result.ticks == 300 && zero.result.hash != three.result.hash, "--latency-ticks 0 and 3 are different matches");
+        o.ticks = 0;
+        o.latency = 3;
+        t.check(spec_of(o, tiny, job, false).max_ticks == 0, "--ticks full means no limit");
+        // a result that is not the same is not the same: every number is compared
+        const ai::ArenaResult base = three.result;
+        t.check(same_match(base, base), "a result equals itself");
+        const std::vector<std::pair<const char*, std::function<void(ai::ArenaResult&)>>> changes = {
+            {"hash", [](ai::ArenaResult& r) { r.hash ^= 1; }},
+            {"ticks", [](ai::ArenaResult& r) { ++r.ticks; }},
+            {"steps", [](ai::ArenaResult& r) { ++r.steps; }},
+            {"checkpoints", [](ai::ArenaResult& r) { r.checkpoints.push_back(7); }},        // (run_job dropped the checkpoints of `base`: one more is a difference)
+            {"score", [](ai::ArenaResult& r) { ++r.seats[1].score; }},
+            {"shown score", [](ai::ArenaResult& r) { ++r.seats[0].shown_score; }},
+            {"ants", [](ai::ArenaResult& r) { ++r.seats[0].ants; }},
+            {"banked", [](ai::ArenaResult& r) { ++r.seats[1].banked; }},
+            {"kills", [](ai::ArenaResult& r) { ++r.seats[1].kills; }},
+            {"released", [](ai::ArenaResult& r) { ++r.seats[0].stats.released; }},
+            {"decisions", [](ai::ArenaResult& r) { ++r.seats[0].stats.decisions; }},
+            {"rejected", [](ai::ArenaResult& r) { ++r.seats[1].stats.rejected; }},
+            {"audio events", [](ai::ArenaResult& r) { ++r.audio_events; }},
+            {"units left on reachable piles", [](ai::ArenaResult& r) { ++r.reachable_units_left; }},
+            {"seat count", [](ai::ArenaResult& r) { r.seats.pop_back(); }},
+        };
+        for (const auto& c : changes) {
+            ai::ArenaResult other = base;
+            c.second(other);
+            t.check(!same_match(base, other), std::string("a result that differs in its ") + c.first + " is not the same match");
+        }
+        // --repeat: a match that is not reproducible is found, one that is reproducible passes, and the plays are counted as they are played
+        o.repeat = 3;
+        const MatchReport good = run_job(o, maps, job, selftest_factory);
+        t.check(good.repeat_ok && good.ok() && good.plays == 3, "a reproducible match is played 3 times and passes");
+        std::atomic<uint32_t> counter{0};
+        const auto drifting = [&counter](const ai::BotSpec&) { return std::unique_ptr<ai::Bot>(new SelftestDrifter(counter.fetch_add(1))); };
+        o.ticks = 300;
+        const MatchReport drift = run_job(o, maps, job, drifting);
+        t.check(!drift.repeat_ok && !drift.ok() && drift.plays == 3 && !drift.repeat_note.empty(), "a match that is not reproducible is found by --repeat and fails");
+        const std::vector<MatchReport> as_one = {drift};
+        t.check(report_json(o, maps, as_one).find("\"identical\": false") != std::string::npos, "and the report says so");
+        // the report keeps the number of commands and drops the log and the checkpoints
+        o.repeat = 1;
+        o.replay_check = true;
+        const MatchReport checked = run_job(o, maps, job, selftest_factory);
+        t.check(checked.replay_checked && checked.replay.ok && checked.commands > 20 && checked.result.log.empty() && checked.result.checkpoints.empty() && checked.result.ticks == 300,
+                "a match that was replay-checked keeps the number of its commands, not the commands");
+        // a replay that fails is reported as such, with its first bad tick
+        std::vector<MatchReport> broken = {checked};
+        broken[0].replay.ok = false;
+        broken[0].replay.first_bad_tick = 140;
+        const JsonValue* replay_of = nullptr;
+        JsonValue tree;
+        const std::string text = report_json(o, maps, broken);
+        t.check(JsonReader(text).parse(tree) && tree.get("matches") != nullptr && !tree.get("matches")->items.empty(), "the report of a failed replay can be read back");
+        if (tree.get("matches") != nullptr && !tree.get("matches")->items.empty()) replay_of = tree.get("matches")->items[0].get("replay");
+        t.check(replay_of != nullptr && replay_of->get("ok") != nullptr && !replay_of->get("ok")->b && replay_of->get("first_bad_tick") != nullptr && replay_of->get("first_bad_tick")->u64() == 140 &&
+                    replay_of->get("commands") != nullptr && replay_of->get("commands")->u64() == checked.commands,
+                "the replay block of the report says: failed, the first bad tick, the commands");
+    }
+
+    t.section("text: JSON quoting, seeds, map names that are paths");
+    {
+        t.check(json_quote("a\"b\\c\nd") == "\"a\\\"b\\\\c\\u000ad\"", "json_quote escapes the quote, the backslash and a newline");
+        JsonValue v;
+        t.check(JsonReader(json_quote("say \"hi\" \\ there")).parse(v) && v.kind == JsonValue::Kind::String && v.text == "say \"hi\" \\ there", "a quoted string reads back as it was");
+        t.check(seeds_text({4294967295u, 0u}) == "4294967295,0", "the seeds 4294967295 and 0 are two seeds, not a range");
+        t.check(seeds_text({4294967294u, 4294967295u}) == "4294967294..4294967295", "but 4294967294 and 4294967295 are a range");
+        t.check(seeds_text({1, 2, 3, 7, 9, 10}) == "1..3,7,9..10", "ranges and singles");
+        t.check(stem_of_path("/a/b/NOPE.LVL") == "NOPE" && stem_of_path("C:\\Users\\x\\Maps\\NOPE.lvl") == "NOPE" && stem_of_path("NOPE.LVL") == "NOPE" && stem_of_path("a.b/c") == "c" && stem_of_path("c/") == "",
+                "the name of a map given as a path is its file name without folders and extension, for either kind of folder separator");
+        TempDir dir;
+        t.check(dir.ok(), "a scratch folder");
+        if (dir.ok()) {
+            // a garbage file that is no map
+            {
+                std::ofstream f(dir.file("BROKEN.LVL"), std::ios::binary);
+                f << "this is not a level";
+            }
+            Options o;
+            o.maps = {fs::path(std::string(ORIGINAL_ASSETS_DIR) + "/Maps/TINY.LVL").string(), dir.file("NOPE_A.LVL"), "C:\\Users\\someone\\private\\NOPE_B.LVL", dir.file("BROKEN.LVL"), "NOSUCHNAME"};
+            const std::vector<LoadedMap> maps = load_maps(o);
+            t.check(maps.size() == 5 && maps[0].ok && maps[0].name == "TINY", "a map given as a path that exists loads and is named by its file");
+            t.check(!maps[1].ok && maps[1].name == "NOPE_A" && maps[1].error == "map 'NOPE_A' not found", "a path that does not exist is named by its file name only");
+            t.check(!maps[2].ok && maps[2].name == "NOPE_B" && maps[2].error == "map 'NOPE_B' not found", "also a Windows-style path");
+            t.check(!maps[3].ok && maps[3].name == "BROKEN" && maps[3].error == "map 'BROKEN' does not load", "a file that is no map: does not load, named by its file name");
+            t.check(!maps[4].ok && maps[4].name == "NOSUCHNAME", "a name that is no map");
+            o.seats = {spec_for(0, "idle", ai::Level::Medium)};
+            o.seats_given = true;
+            o.seeds = {1};
+            o.ticks = 20;
+            o.wall_time = false;
+            std::vector<Job> jobs;
+            std::string why;
+            t.check(make_jobs(o, maps.size(), jobs, why), "the jobs of the five maps");
+            const std::vector<MatchReport> reports = run_jobs(o, maps, jobs, selftest_factory, false);
+            const std::string json = report_json(o, maps, reports);
+            const std::string folder = dir.path.string();
+            t.check(JsonChecker(json).valid(), "the report of maps given as paths is valid JSON");
+            t.check(json.find(folder) == std::string::npos && json.find("Users") == std::string::npos && json.find("someone") == std::string::npos && json.find("private") == std::string::npos &&
+                        json.find(ORIGINAL_ASSETS_DIR) == std::string::npos && json.find('\\') == std::string::npos && json.find('/') == std::string::npos && json.find(".LVL") == std::string::npos,
+                    "no folder of any path is in the report, found or not");
+            std::string lines;
+            for (const MatchReport& r : reports) lines += r.result.error;
+            t.check(lines.find(folder) == std::string::npos && lines.find("someone") == std::string::npos, "nor in the errors");
+        }
+    }
+
+    t.section("the tool's limits: too many matches are refused before any is built, the pool really runs threads");
+    {
+        Options o;
+        o.maps = {"TINY", "SMALL", "MEDIUM", "GAUNTLET", "TREASURE", "ISLANDS"};
+        o.seats = {spec_for(0, "idle", ai::Level::Easy), spec_for(1, "worker", ai::Level::Medium), spec_for(2, "standard", ai::Level::Hard), spec_for(3, "standard", ai::Level::Medium)};
+        o.seats_given = true;
+        o.rotate = true;                                                        // 24 arrangements of four different bots
+        std::string err;
+        t.check(parse_seeds("1..199999", o.seeds, err), "a seed range just under the limit");
+        std::vector<Job> jobs;
+        std::string why;
+        t.check(!make_jobs(o, o.maps.size(), jobs, why) && jobs.empty() && jobs.capacity() == 0 && why.find("too many") != std::string::npos,
+                "6 maps x 199,999 seeds x 24 arrangements (28.8 million matches) is refused with nothing allocated");
+        o.rotate = false;
+        o.repeat = 16;
+        t.check(!make_jobs(o, o.maps.size(), jobs, why) && jobs.capacity() == 0, "a repeat that takes it over the limit is counted too (6 x 199,999 x 1 x 16)");
+        o.seeds = {1, 2};
+        o.maps = {"TINY"};
+        o.repeat = 1;
+        t.check(make_jobs(o, o.maps.size(), jobs, why) && jobs.size() == 2, "a small run is made");
+        o.maps.assign(10, "TINY");
+        o.seeds.assign(20000, 1u);
+        o.repeat = 1;
+        t.check(make_jobs(o, o.maps.size(), jobs, why) && jobs.size() == 200000, "exactly the limit is allowed");
+        o.seeds.push_back(1);
+        t.check(!make_jobs(o, o.maps.size(), jobs, why) && jobs.empty(), "one more is not");
+        // the pool: with 4 threads the matches are played by at least 2 threads at the same time (a bot made for the match waits until a second thread has also arrived)
+        struct Rendezvous {
+            std::mutex m;
+            std::condition_variable cv;
+            std::set<std::thread::id> ids;
+            bool gave_up{false};
+        } rv;
+        const auto meeting = [&rv](const ai::BotSpec& spec) {
+            std::unique_lock<std::mutex> lock(rv.m);
+            rv.ids.insert(std::this_thread::get_id());
+            rv.cv.notify_all();
+            if (!rv.gave_up && !rv.cv.wait_for(lock, std::chrono::seconds(10), [&rv] { return rv.ids.size() >= 2; })) rv.gave_up = true;
+            lock.unlock();
+            return selftest_factory(spec);
+        };
+        Options p;
+        p.maps = {"TINY"};
+        p.seats = {spec_for(0, "worker", ai::Level::Hard)};
+        p.seats_given = true;
+        p.seeds = {1, 2, 3, 4, 5, 6};
+        p.ticks = 40;
+        p.threads = 4;
+        std::vector<LoadedMap> one_map(1);
+        one_map[0].name = tiny.name;
+        one_map[0].ok = true;
+        one_map[0].level = tiny.level;
+        std::vector<Job> pool_jobs;
+        make_jobs(p, 1, pool_jobs, why);
+        const std::vector<MatchReport> played = run_jobs(p, one_map, pool_jobs, meeting, false);
+        t.check(played.size() == 6 && rv.ids.size() >= 2 && !rv.gave_up, "four threads were asked for and at least two ran matches at the same time");
+        size_t good = 0;
+        for (const MatchReport& r : played) good += r.ok() ? 1u : 0u;
+        t.check(good == 6, "and all six matches were played");
+    }
+}
+
+// The tool end to end on a scratch folder: the exit codes, the report that is written and read back, what happens to a report that cannot be written
+void selftest_tool(SelfTest& t) {
+    t.section("the tool end to end: exit codes, the report written and read back, a report that cannot be written");
+    TempDir dir;
+    t.check(dir.ok(), "a scratch folder");
+    if (!dir.ok()) return;
+    const auto factory = [](const ai::BotSpec& spec) -> std::unique_ptr<ai::Bot> {
+        if (spec.kind == "worker") return std::make_unique<SelftestHarvester>();
+        return ai::make_bot(spec);
+    };
+    Options o;
+    o.maps = {"TINY"};
+    o.seats = {spec_for(0, "worker", ai::Level::Hard), spec_for(1, "worker", ai::Level::Hard), spec_for(2, "idle", ai::Level::Medium)};
+    o.seats_given = true;
+    o.seeds = {1};
+    o.ticks = 2400;
+    o.quiet = true;
+    o.wall_time = false;
+    o.replay_check = true;
+    o.out = dir.file("report.json");
+    const ToolRun ok = run_tool_quietly(o, dir, factory);
+    t.check(ok.code == 0 && ok.out.find("every check passed") != std::string::npos, "a run that passes exits 0 and says so");
+    const std::string text = read_file(o.out);
+    JsonValue tree;
+    t.check(!text.empty() && JsonChecker(text).valid() && JsonReader(text).parse(tree), "the report file is there, valid JSON, and reads back");
+    const JsonValue* matches = tree.get("matches");
+    const JsonValue* summary = tree.get("summary");
+    t.check(tree.get("tool") != nullptr && tree.get("tool")->text == "bot_arena" && tree.get("format") != nullptr && tree.get("format")->u64() == 2 && matches != nullptr && matches->items.size() == 1 &&
+                summary != nullptr && summary->get("matches") != nullptr && summary->get("matches")->u64() == 1 && summary->get("failures") != nullptr && summary->get("failures")->u64() == 0,
+            "the tool, the format and the summary");
+    // the numbers of the report are the numbers of the match: play the same match in-process and compare every field
+    const std::vector<LoadedMap> loaded = load_maps(o);
+    ai::ArenaSpec spec;
+    spec.level = &loaded[0].level;
+    spec.seed = 1;
+    spec.bots = o.seats;
+    spec.max_ticks = o.ticks;
+    spec.latency_ticks = o.latency;
+    spec.factory = factory;
+    const ai::ArenaResult played = ai::play_match(spec);
+    bool fields_ok = matches != nullptr && matches->items.size() == 1;
+    if (fields_ok) {
+        const JsonValue& m = matches->items[0];
+        fields_ok = m.get("map") != nullptr && m.get("map")->text == "TINY" && m.get("ok") != nullptr && m.get("ok")->b && m.get("ticks") != nullptr && m.get("ticks")->u64() == played.ticks &&
+                    m.get("hash") != nullptr && m.get("hash")->text == hex64(played.hash) && m.get("seats") != nullptr && m.get("seats")->items.size() == played.seats.size();
+        for (size_t i = 0; fields_ok && i < played.seats.size(); ++i) {
+            const JsonValue& s = m.get("seats")->items[i];
+            const ai::ArenaSeatResult& r = played.seats[i];
+            const auto num = [&s](const char* key) { return s.get(key) != nullptr ? s.get(key)->i64() : int64_t{-12345}; };
+            fields_ok = num("seat") == r.spec.seat && num("score") == r.score && num("shown_score") == r.shown_score && num("ants") == r.ants && num("eggs") == r.eggs && num("hatched") == r.hatched &&
+                        num("banked") == r.banked && num("raided") == r.raided && num("kills") == r.kills && num("losses") == r.losses && num("decisions") == r.stats.decisions &&
+                        num("released") == r.stats.released && num("intents") == r.stats.intents && num("expired") == r.stats.expired && num("rejected") == r.stats.rejected &&
+                        s.get("bot") != nullptr && s.get("bot")->text == spec_text(r.spec) && s.get("runs") != nullptr && s.get("runs")->text == r.runs;
+        }
+        const JsonValue* replay = m.get("replay");
+        fields_ok = fields_ok && replay != nullptr && replay->get("ok") != nullptr && replay->get("ok")->b && replay->get("commands") != nullptr && replay->get("commands")->u64() > 20;
+    }
+    t.check(fields_ok, "every field of the report equals the match it describes (scores, counts, hash, replay)");
+    t.check(played.seats.size() == 3 && played.seats[0].score > 0 && played.seats[0].banked == static_cast<uint32_t>(played.seats[0].score) && played.seats[2].score == 0, "(and the harvesting seats really scored, so the fields above are not all zero)");
+    // the defaults of the command line mean four standard bots at medium level
+    Options d;
+    std::string err;
+    bool defaults = parse_args({}, d, err) && d.seats.size() == 4;
+    for (size_t i = 0; defaults && i < 4; ++i) defaults = d.seats[i].seat == i && d.seats[i].kind == "standard" && d.seats[i].level == ai::Level::Medium;
+    t.check(defaults, "the default seats are four standard bots of medium level");
+    // a map that is not there: exit 1, the finding in the report, no folder in it
+    Options missing = o;
+    missing.maps = {dir.file("NOT_THERE.LVL")};
+    missing.out = dir.file("missing.json");
+    missing.replay_check = false;
+    const ToolRun lost = run_tool_quietly(missing, dir, factory);
+    JsonValue lost_tree;
+    t.check(lost.code == 1 && lost.out.find("FAILED") != std::string::npos, "a map that is not there is a finding: exit 1");
+    t.check(JsonReader(read_file(missing.out)).parse(lost_tree) && lost_tree.get("matches") != nullptr && lost_tree.get("matches")->items.size() == 1 &&
+                lost_tree.get("matches")->items[0].get("ok") != nullptr && !lost_tree.get("matches")->items[0].get("ok")->b && read_file(missing.out).find(dir.path.string()) == std::string::npos,
+            "and it is in the report as a match that was not played, without the folder");
+    // a report that cannot be opened is found BEFORE the first match
+    Options unwritable = o;
+    unwritable.out = (dir.path / "no_such_folder" / "report.json").string();
+    const ToolRun refused = run_tool_quietly(unwritable, dir, factory);
+    t.check(refused.code == 2 && refused.err.find("cannot write") != std::string::npos && refused.out.find("match(es)") == std::string::npos, "an unwritable --out is exit 2 and no match was played");
+#if defined(__unix__) || defined(__APPLE__)
+    // a report that breaks while it is being written (a size limit does what a full disk does) is exit 2, not a truncated file with exit 0
+    {
+        Options cut_options = o;
+        cut_options.seats = {spec_for(0, "worker", ai::Level::Hard), spec_for(1, "idle", ai::Level::Medium)};
+        cut_options.ticks = 40;
+        cut_options.replay_check = false;
+        cut_options.out = dir.file("cut.json");
+        const ToolRun whole = run_tool_quietly(cut_options, dir, factory);                  // without the limit: a good report of more than 1,500 bytes
+        const std::string whole_text = read_file(cut_options.out);
+        rlimit old_limit{};
+        const bool have_limit = getrlimit(RLIMIT_FSIZE, &old_limit) == 0 && old_limit.rlim_max >= 700;
+        t.check(whole.code == 0 && whole_text.size() > 1500 && have_limit, "(a report that fits: exit 0, more than 1,500 bytes)");
+        if (have_limit) {
+            void (*old_handler)(int) = std::signal(SIGXFSZ, SIG_IGN);
+            rlimit small = old_limit;
+            small.rlim_cur = 700;
+            setrlimit(RLIMIT_FSIZE, &small);
+            const ToolRun cut = run_tool_quietly(cut_options, dir, factory);
+            setrlimit(RLIMIT_FSIZE, &old_limit);
+            std::signal(SIGXFSZ, old_handler);
+            t.check(cut.code == 2 && cut.err.find("completely") != std::string::npos && read_file(cut_options.out).size() <= 700, "a report that breaks after 700 bytes is exit 2 and says so");
+        }
+    }
+#endif
+    // too many matches: exit 2 before anything is built or played
+    Options many = o;
+    many.maps.assign(10, "TINY");
+    many.out = "";
+    many.seeds.assign(30000, 1u);
+    const ToolRun refused_many = run_tool_quietly(many, dir, factory);
+    t.check(refused_many.code == 2 && refused_many.err.find("too many") != std::string::npos && refused_many.out.find("match(es)") == std::string::npos, "300,000 matches: exit 2 and none was played");
+    // a report that cannot be written to the end: the stream says so, whenever it breaks
+    {
+        std::vector<LoadedMap> maps = load_maps(o);
+        std::vector<Job> jobs;
+        std::string why;
+        o.seeds = {1, 2, 3, 4, 5};
+        o.ticks = 40;
+        o.replay_check = false;
+        make_jobs(o, maps.size(), jobs, why);
+        const std::vector<MatchReport> reports = run_jobs(o, maps, jobs, factory, false);
+        LimitedBuf unlimited(1u << 30);
+        std::ostream all(&unlimited);
+        t.check(write_report(all, o, maps, reports), "a report written to a good stream is a success");
+        const std::string whole = report_json(o, maps, reports);
+        t.check(unlimited.bytes == whole.size(), "and it is the same bytes as the report as text");
+        t.check(unlimited.writes >= 4 && unlimited.biggest * 2 < whole.size(), "it is written match by match, not as one string");
+        for (const size_t limit : {size_t{0}, size_t{10}, whole.size() / 2, whole.size() - 2}) {
+            LimitedBuf small(limit);
+            std::ostream cut(&small);
+            t.check(!write_report(cut, o, maps, reports), "a stream that breaks after " + std::to_string(limit) + " bytes is a failure");
+        }
+    }
 }
 
 int selftest() {
@@ -976,6 +1650,9 @@ int selftest() {
         t.check(!parse_args({"--seat", "0=idle", "--seat", "0=hard"}, bad, err) && !parse_args({"--ticks", "0"}, bad, err) && !parse_args({"--wat"}, bad, err) &&
                     !parse_args({"--threads", "0"}, bad, err) && !parse_args({"--map"}, bad, err),
                 "two bots on one seat, 0 ticks, an unknown option, 0 threads and a missing value are refused");
+        Options out_given;
+        t.check(parse_args({"--out", "report.json"}, out_given, err) && out_given.out == "report.json" && !parse_args({"--out", ""}, bad, err) && !parse_args({"--out"}, bad, err),
+                "--out takes a file name; an empty one (an unset shell variable) is refused, not taken for 'no report'");
     }
 
     t.section("the table of baselines (tests/test_ai/baselines.inc)");
@@ -1046,20 +1723,64 @@ int selftest() {
         other.seed = 4;
         const ai::ArenaResult c = ai::play_match(other);
         t.check(c.hash != a.hash, "another seed gives another match");
-        ai::ArenaResult dropped = a;
-        dropped.log.erase(dropped.log.begin() + static_cast<std::ptrdiff_t>(dropped.log.size() / 2));
-        t.check(!ai::replay_commands(s, dropped).ok, "a replay with one command missing is noticed");
-        ai::ArenaResult moved = a;
-        moved.log[moved.log.size() / 2].command.tile_x = static_cast<int16_t>(moved.log[moved.log.size() / 2].command.tile_x + 5);
-        t.check(!ai::replay_commands(s, moved).ok, "a replay with one command changed is noticed");
-        ai::ArenaResult late = a;
-        late.log[late.log.size() / 2].step += 7;
-        t.check(!ai::replay_commands(s, late).ok, "a replay with one command at another step is noticed");
+        if (a.log.size() >= 40 && a.checkpoints.size() == 75) {                       // (without the precondition the checks below would index an empty log: report, do not crash)
+            ai::ArenaResult dropped = a;
+            dropped.log.erase(dropped.log.begin() + static_cast<std::ptrdiff_t>(dropped.log.size() / 2));
+            t.check(!ai::replay_commands(s, dropped).ok, "a replay with one command missing is noticed");
+            ai::ArenaResult moved = a;
+            moved.log[moved.log.size() / 2].command.tile_x = static_cast<int16_t>(moved.log[moved.log.size() / 2].command.tile_x + 5);
+            t.check(!ai::replay_commands(s, moved).ok, "a replay with one command changed is noticed");
+            ai::ArenaResult late = a;
+            late.log[late.log.size() / 2].step += 7;
+            t.check(!ai::replay_commands(s, late).ok, "a replay with one command at another step is noticed");
+            ai::ArenaResult added = a;
+            ai::RecordedCommand more = a.log.front();                                   // the issuer and the ant of one command belong together, so the added command reaches the engine
+            more.command.tile_x = 2;
+            more.command.tile_y = 2;
+            more.step = 40;
+            more.tick = 40;
+            added.log.insert(added.log.begin(), more);
+            std::stable_sort(added.log.begin(), added.log.end(), [](const ai::RecordedCommand& x, const ai::RecordedCommand& y) { return x.step < y.step; });
+            t.check(!ai::replay_commands(s, added).ok, "a replay with one command added is noticed");
+            ai::ArenaResult wrong_hash = a;
+            wrong_hash.hash ^= 1;
+            t.check(!ai::replay_commands(s, wrong_hash).ok, "a replay whose last hash is wrong is noticed");
+            ai::ArenaResult wrong_checkpoint = a;
+            wrong_checkpoint.checkpoints[30] ^= 1;
+            const ai::ReplayResult bad = ai::replay_commands(s, wrong_checkpoint);
+            t.check(!bad.ok && bad.first_bad_tick == 31 * ai::kArenaHashPeriod, "a replay with a wrong checkpoint is noticed, and names its tick");
+            ai::ArenaResult extra_checkpoint = a;
+            extra_checkpoint.checkpoints.push_back(a.hash);
+            t.check(!ai::replay_commands(s, extra_checkpoint).ok, "a replay that was promised one more checkpoint than it can make is noticed");
+            ai::ArenaResult after_end = a;
+            ai::RecordedCommand last = a.log.back();
+            last.step = a.steps + 3;
+            after_end.log.push_back(last);
+            t.check(!ai::replay_commands(s, after_end).ok, "a command that was recorded after the last step is noticed");
+        }
         ai::ArenaSpec direct = s;
         direct.latency_ticks = 0;
         const ai::ArenaResult d = ai::play_match(direct);
         t.check(d.error.empty() && ai::replay_commands(direct, d).ok, "latency 0: the commands are applied at once, and replay as well");
         t.check(d.hash != a.hash, "the sink latency changes the match (so it is part of the arguments)");
+        // the counters of the controller reach the result, and latency 0 applies every released command at once (nothing waits at the end), latency 3 all but the last few
+        bool counted = true;
+        bool direct_all = true;
+        bool room_most = true;
+        for (const ai::ArenaSeatResult& seat : a.seats) {
+            size_t applied = 0;
+            for (const ai::RecordedCommand& rc : a.log) applied += rc.command.issuer == seat.spec.seat ? 1u : 0u;
+            if (seat.spec.kind == "worker") counted = counted && seat.stats.released > 10 && seat.stats.decisions > 100;
+            room_most = room_most && applied <= seat.stats.released && applied + 4 >= seat.stats.released;
+        }
+        for (const ai::ArenaSeatResult& seat : d.seats) {
+            size_t applied = 0;
+            for (const ai::RecordedCommand& rc : d.log) applied += rc.command.issuer == seat.spec.seat ? 1u : 0u;
+            direct_all = direct_all && applied == seat.stats.released;
+        }
+        t.check(counted, "the walkers' counters (decisions, commands released) are in the result");
+        t.check(direct_all, "latency 0: every released command is applied, none waits");
+        t.check(room_most, "latency 3: every command but the last few is applied");
         // the whole match, ended by the engine's clock: the call that ends it does not advance the tick count
         ai::ArenaSpec full;
         full.level = &tiny.level;
@@ -1084,6 +1805,22 @@ int selftest() {
         s.level = nullptr;
         s.bots = {spec_for(0, "idle", ai::Level::Medium)};
         t.check(!ai::play_match(s).error.empty(), "no map: refused");
+        // a seat that does not exist, and a map that the seated teams cannot play (a start marker outside the grid)
+        s.level = &tiny.level;
+        s.bots = {spec_for(0, "idle", ai::Level::Medium), spec_for(32, "idle", ai::Level::Medium)};
+        t.check(!ai::play_match(s).error.empty(), "a seat 32: refused");
+        assets::LevelData broken = tiny.level;
+        for (assets::AnthillSpawn& sp : broken.anthill_spawns) {
+            if (sp.team_id < sim::MAX_PLAYERS) {
+                sp.x = 999;
+                break;
+            }
+        }
+        s.level = &broken;
+        s.max_ticks = 30;
+        s.bots = {spec_for(0, "idle", ai::Level::Medium), spec_for(1, "idle", ai::Level::Medium), spec_for(2, "idle", ai::Level::Medium), spec_for(3, "idle", ai::Level::Medium)};
+        const ai::ArenaResult unplayable = ai::play_match(s);
+        t.check(unplayable.error.find("cannot be played") != std::string::npos && unplayable.ticks == 0, "a map that the seated teams cannot play: refused with the reason");
     }
 
     t.section("the tool: matches in order, threads, repeat, report");
@@ -1101,7 +1838,9 @@ int selftest() {
         o.wall_time = false;
         const std::vector<LoadedMap> maps = load_maps(o);
         t.check(maps.size() == 3 && maps[0].ok && maps[1].ok && !maps[2].ok, "TINY and SMALL load, a name that is no map does not");
-        const std::vector<Job> jobs = make_jobs(o, maps.size());
+        std::vector<Job> jobs;
+        std::string jobs_error;
+        t.check(make_jobs(o, maps.size(), jobs, jobs_error), "the jobs of a small run are made");
         t.check(jobs.size() == 3u * 2u * 2u, "3 maps x 2 seeds x 2 arrangements = 12 matches");
         o.threads = 1;
         const std::vector<MatchReport> one = run_jobs(o, maps, jobs, selftest_factory, false);
@@ -1119,7 +1858,7 @@ int selftest() {
             if (!r.result.error.empty()) continue;
             ++played;
             good += r.ok() ? 1u : 0u;
-            replays = replays && r.replay_checked && r.replay.ok && !r.result.log.empty();
+            replays = replays && r.replay_checked && r.replay.ok && r.commands > 0;
             repeats = repeats && r.repeat_ok && r.plays == 2;
         }
         t.check(played == 8 && good == 8, "the 8 matches on real maps were played and passed every check");
@@ -1140,6 +1879,9 @@ int selftest() {
         broken[0].replay.ok = false;
         t.check(!broken[0].ok() && report_json(o, maps, broken).find("\"failures\": 5") != std::string::npos, "a replay that differs is one more failure");
     }
+
+    selftest_wiring(t, tiny);
+    selftest_tool(t);
 
     const double seconds = std::chrono::duration<double>(Clock::now() - started).count();
     std::printf("bot_arena selftest: %d checks, %d failures, %.1f s\n", t.checks, t.failures, seconds);

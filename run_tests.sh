@@ -383,7 +383,8 @@ if [ "$RUN_SIM" -eq 1 ]; then
     echo -e "${BOLD}${BLUE}======================================================================${RESET}"
     echo -e "${BOLD}${BLUE}>>> 2.20 RUNNING COMPUTER PLAYERS SUITE (ants_ai controller, idle bot, bot seats in rooms)...${RESET}"
     echo -e "${BOLD}${BLUE}======================================================================${RESET}"
-    "./$BUILD_DIR/tests/test_ai/test_ai"
+    # a developer's ANTS_TEST_FILTER (run only the cases whose title contains a text) must not leak into the master run, for the same reason as W_ONLY below
+    env -u ANTS_TEST_FILTER "./$BUILD_DIR/tests/test_ai/test_ai"
     AI_STATUS=$?
 
     echo ""
@@ -397,12 +398,12 @@ if [ "$RUN_SIM" -eq 1 ]; then
     echo -e "${BOLD}${BLUE}======================================================================${RESET}"
     echo -e "${BOLD}${BLUE}>>> 2.22 RUNNING WORKER BOT SUITE (the economy on every shipped map, learning, endgame, budget, pinned baselines)...${RESET}"
     echo -e "${BOLD}${BLUE}======================================================================${RESET}"
-    # The test filters of a developer (W_ONLY, W_SKIP) must not leak into the master run: a forgotten W_ONLY would run one test and print PASSED. Under ASan + UBSan (unoptimised) the
-    # 18-row pinned table (AI3.9, AI3.12) is about four fifths of the run time and checks numbers, not memory: the sanitizer pass leaves those two out (docs/audit/B3_notes.md).
+    # The test filters of a developer (W_ONLY, W_SKIP, ANTS_TEST_FILTER) must not leak into the master run: a forgotten W_ONLY would run one test and print PASSED. Under ASan + UBSan
+    # (unoptimised) the 18-row pinned table (AI3.9, AI3.12) is about four fifths of the run time and checks numbers, not memory: the sanitizer pass leaves those two out (docs/audit/B3_notes.md).
     if [ "$RUN_ASAN" -eq 1 ]; then
-        env -u W_ONLY W_SKIP=AI3.9,AI3.12 "./$BUILD_DIR/tests/test_ai/test_ai_worker"
+        env -u W_ONLY -u ANTS_TEST_FILTER W_SKIP=AI3.9,AI3.12 "./$BUILD_DIR/tests/test_ai/test_ai_worker"
     else
-        env -u W_ONLY -u W_SKIP "./$BUILD_DIR/tests/test_ai/test_ai_worker"
+        env -u W_ONLY -u W_SKIP -u ANTS_TEST_FILTER "./$BUILD_DIR/tests/test_ai/test_ai_worker"
     fi
     AI_WORKER_STATUS=$?
 fi
