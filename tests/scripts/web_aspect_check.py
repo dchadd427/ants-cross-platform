@@ -14,7 +14,10 @@ profile, its own port; nothing of yours is touched) and looks at what only a bro
   * the address and the selector: `?aspect=4:3`, `?aspect=16:9`, a bad value, the selector's click (remembered, reload with the parameter), a portrait phone gets the classic picture;
   * the picture follows the window when it is resized, and fullscreen (the browser's, and the page's own where there is no Fullscreen API: an iPhone) enters and leaves with the
     canvas the right shape;
-  * the pointer: the game draws its own cursor at the position that it reads from the browser; two screenshots with the pointer at two places show the cursor at those places.
+  * the pointer: the game draws its own cursor at the position that it reads from the browser; two screenshots with the pointer at two places show the cursor at those places;
+  * the download of the game's data (index.data): the retry rule, a download that the browser fails once (injected with the DevTools Fetch domain) is retried and the game starts, a
+    download that fails for good shows the message with a Reload button, and (`--downloads N`, needs the game server behind /ws) N cold-cache runs of web/four.html with 2 and with
+    4 games on the page, every frame of which must start (the browser's cache refuses one of several equal downloads at the same moment: net::ERR_CACHE_WRITE_FAILURE).
 
 Exit status 0: every check passed; 1: a check failed; 3: the check could not be made (no browser, the page did not come up); 2 is the status of a bad command line.
 """
@@ -28,6 +31,7 @@ import struct
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import zlib
 
@@ -207,6 +211,55 @@ def screen_of_canvas(g, lx, ly, canvas_w, canvas_h):
     return bx[0] + lx / canvas_w * bx[2], bx[1] + ly / canvas_h * bx[3]
 
 
+# The retry rule of the data download (ANTS_PAGE.downloadWithRetries) with a fake download that fails a given number of times
+RETRY_CHECKS = r"""
+(async function () {
+  var bad = [], n = 0;
+  function eq(a, b, what) { n++; if (JSON.stringify(a) !== JSON.stringify(b)) bad.push(what + ': ' + JSON.stringify(a) + ' != ' + JSON.stringify(b)); }
+  var P = ANTS_PAGE;
+  async function run(failures, delays) {
+    var calls = [], waits = [], reports = [];
+    var fetchOnce = function (attempt) { calls.push(attempt); return attempt < failures ? Promise.reject(new Error('fail ' + attempt)) : Promise.resolve('bytes'); };
+    var wait = function (ms) { waits.push(ms); return Promise.resolve(); };
+    var out;
+    try { out = { value: await P.downloadWithRetries(fetchOnce, delays, wait, function (a, e) { reports.push(a + ':' + e.message); }) }; } catch (e) { out = { error: e.message }; }
+    return { out: out, calls: calls, waits: waits, reports: reports };
+  }
+  var d = [400, 1200, 3000];
+  eq(await run(0, d), { out: { value: 'bytes' }, calls: [0], waits: [], reports: [] }, 'no failure: one try');
+  eq(await run(1, d), { out: { value: 'bytes' }, calls: [0, 1], waits: [400], reports: ['0:fail 0'] }, 'one failure: a second try after 0.4 s');
+  eq(await run(3, d), { out: { value: 'bytes' }, calls: [0, 1, 2, 3], waits: [400, 1200, 3000], reports: ['0:fail 0', '1:fail 1', '2:fail 2'] }, 'three failures: the fourth try succeeds');
+  eq(await run(4, d), { out: { error: 'fail 3' }, calls: [0, 1, 2, 3], waits: [400, 1200, 3000], reports: ['0:fail 0', '1:fail 1', '2:fail 2'] }, 'four failures: it fails with the last error after 3 retries');
+  eq(await run(99, []), { out: { error: 'fail 0' }, calls: [0], waits: [], reports: [] }, 'no retries allowed: one try');
+  return JSON.stringify({ checks: n, bad: bad });
+})()
+"""
+
+
+class EventDevTools(DevTools):
+    """DevTools that also hands the events (messages without an id) to handlers, which run in threads of their own (a handler may call the browser)."""
+
+    def __init__(self, port):
+        self.handlers = []
+        super().__init__(port)
+
+    def _pump(self):
+        while True:
+            text = self.ws.receive()
+            if text is None:
+                for q in list(self.waiting.values()):
+                    q.put({"error": {"message": "connection closed"}})
+                return
+            msg = json.loads(text)
+            if "id" in msg:
+                q = self.waiting.pop(msg["id"], None)
+                if q is not None:
+                    q.put(msg)
+            else:
+                for handler in list(self.handlers):
+                    threading.Thread(target=handler, args=(msg,), daemon=True).start()
+
+
 class Browser:
     def __init__(self, browser_path):
         self.profile = tempfile.mkdtemp(prefix="ants_aspect_profile.")
@@ -218,7 +271,7 @@ class Browser:
         self.devtools = None
         for _ in range(100):
             try:
-                self.devtools = DevTools(self.port)
+                self.devtools = EventDevTools(self.port)
                 break
             except (OSError, ValueError, ConnectionError):
                 time.sleep(0.2)
@@ -312,6 +365,9 @@ def main():
     ap.add_argument("--shots", default="", help="a folder to save the screenshots in")
     ap.add_argument("--quick", action="store_true", help="fewer sizes (1280 x 720, a phone)")
     ap.add_argument("--logic-only", action="store_true", help="only the page's own logic (ANTS_PAGE): no game, no layout")
+    ap.add_argument("--runs-only", action="store_true", help="only the cold-cache runs of four.html (with --downloads N)")
+    ap.add_argument("--downloads-only", action="store_true", help="only the page's logic and the data download's faults (retry, failure for good)")
+    ap.add_argument("--downloads", type=int, default=0, metavar="N", help="also N cold-cache runs of web/four.html with 2 and with 4 games on the page (needs the game server behind /ws)")
     ap.add_argument("--four", action="store_true", help="also check web/four.html (the page that plays seats in frames); needs the game server behind /ws (the stack)")
     args = ap.parse_args()
 
@@ -337,8 +393,121 @@ def main():
         print("[web aspect] the page's own logic (ANTS_PAGE) in %s" % os.path.basename(path))
         tab.emulate(1280, 720, 1)
         tab.open(web, settle=0.5)
+        def cold_runs():
+            print("[web aspect] web/four.html with 2 and with 4 games on the page, cold cache, %d runs each: every frame must start" % args.downloads)
+            for seats in (2, 4):
+                for run in range(args.downloads):
+                    fresh = Browser(path)                                       # a browser of its own: nothing is cached
+                    try:
+                        t = Tab(fresh)
+                        t.emulate(1500, 900, 1)
+                        t.call("Page.navigate", {"url": web + "four.html?map=tiny&players=%d&play=here" % seats})
+                        deadline = time.time() + 120
+                        states = []
+                        while time.time() < deadline:
+                            time.sleep(1.0)
+                            try:
+                                states = json.loads(t.ev(r"""JSON.stringify(Array.prototype.map.call(document.querySelectorAll('iframe'), function (f) {
+                                    try { var w = f.contentWindow; return { ready: !!w.isReadyToPlay, log: w.antsDownloadLog || [] }; } catch (e) { return { ready: false, log: [] }; } }))"""))
+                            except (RuntimeError, TimeoutError):
+                                states = []
+                            if len(states) == seats and all(x["ready"] for x in states):
+                                break
+                        retries = sum(1 for x in states for e in x["log"] if not e.get("ok"))
+                        check(len(states) == seats and all(x["ready"] for x in states), "%d seats, run %d: every frame started (%d of %d; %d download(s) were retried)" % (seats, run + 1, sum(1 for x in states if x["ready"]), seats, retries))
+                        t.close()
+                    finally:
+                        fresh.close()
+
+        if args.runs_only:
+            tab.close()
+            cold_runs()
+            print("[web aspect] %d checks, %d failed" % (count[0], len(failures)))
+            return 1 if failures else 0
         res = json.loads(tab.ev(PURE_CHECKS))
         check(not res["bad"], "ANTS_PAGE: %d checks%s" % (res["checks"], "" if not res["bad"] else ": " + "; ".join(res["bad"][:6])))
+        retry = json.loads(tab.ev(RETRY_CHECKS))
+        check(not retry["bad"], "the download's retry rule: %d checks%s" % (retry["checks"], "" if not retry["bad"] else ": " + "; ".join(retry["bad"][:6])))
+        def download_fault_checks():
+            print("[web aspect] the game's data: a failed download is retried, a failed one for good says so (faults injected with the DevTools Fetch domain)")
+
+            def inject(tab_, fail_first, fail_all=False):
+                state = {"seen": 0}
+
+                def respond(p):
+                    state["seen"] += 1
+                    try:
+                        if fail_all or state["seen"] <= fail_first:
+                            tab_.call("Fetch.failRequest", {"requestId": p["requestId"], "errorReason": "Failed"})
+                        else:
+                            tab_.call("Fetch.continueRequest", {"requestId": p["requestId"]})
+                    except (RuntimeError, TimeoutError):
+                        pass
+
+                def handler(msg):
+                    if msg.get("method") == "Fetch.requestPaused" and msg.get("sessionId") == tab_.session:
+                        respond(msg["params"])
+
+                tab_.dt.handlers.append(handler)
+                tab_.call("Fetch.enable", {"patterns": [{"urlPattern": "*index.data*", "requestStage": "Request"}]})
+                return state, handler
+
+            tab.emulate(1280, 720, 1)
+            state, handler = inject(tab, 1)
+            tab.open(web, settle=1.0)
+            log = json.loads(tab.ev("JSON.stringify(window.antsDownloadLog)"))
+            check(state["seen"] >= 2 and [e["ok"] for e in log] == [False, True], "the first request of index.data is failed: the page tries again and the game starts (requests seen: %d, log: %s)" % (state["seen"], log))
+            check(tab.ev("window.isReadyToPlay") is True and tab.ev("document.getElementById('status-text').querySelector('button')") is None, "the game runs and no error card is shown")
+            g = tab.geometry()
+            check(g["backing"][0] * 9 == g["backing"][1] * 16, "the game that started after a retry has its 16:9 canvas (%s)" % g["backing"])
+            tab.call("Fetch.disable")
+            tab.dt.handlers.remove(handler)
+            state, handler = inject(tab, 3)
+            tab.open(web, settle=1.0)
+            log = json.loads(tab.ev("JSON.stringify(window.antsDownloadLog)"))
+            check([e["ok"] for e in log] == [False, False, False, True], "three failures in a row: the fourth try (the last of the three retries) starts the game (log: %s)" % [e["ok"] for e in log])
+            tab.call("Fetch.disable")
+            tab.dt.handlers.remove(handler)
+            state, handler = inject(tab, 0, fail_all=True)
+            tab.open(web, wait=False)
+            deadline = time.time() + 60
+            shown = None
+            while time.time() < deadline:
+                time.sleep(1.0)
+                try:
+                    shown = tab.ev("(function(){var b=document.getElementById('status-text').querySelector('button');return b?document.getElementById('status-text').innerText:null;})()")
+                except (RuntimeError, TimeoutError):
+                    shown = None
+                if shown:
+                    break
+            check(shown is not None and "could not be downloaded" in shown and "Reload" in shown, "a download that fails for good shows the message and a Reload button (%s)" % (repr(shown)[:120],))
+            check(state["seen"] == 4, "it tried four times (the first and three retries), not more (%d requests)" % state["seen"])
+            check(tab.ev("window.isReadyToPlay") is not True, "the game did not start")
+            tab.save_shot(args.shots, "download_failed_for_good")
+            card = json.loads(tab.ev("JSON.stringify((function(){var c=document.getElementById('splash-overlay').getBoundingClientRect(),b=document.getElementById('status-text').querySelector('button').getBoundingClientRect();return {overlay:getComputedStyle(document.getElementById('splash-overlay')).pointerEvents, button:[b.x+b.width/2,b.y+b.height/2], inside:b.x>=c.x&&b.right<=c.right&&b.y>=c.y&&b.bottom<=c.bottom};})())"))
+            check(card["overlay"] == "auto" and card["inside"], "the card takes clicks and its button is on the card (%s)" % card)
+            before = state["seen"]
+            tab.call("Fetch.disable")
+            tab.dt.handlers.remove(handler)
+            tab.click(card["button"][0], card["button"][1])
+            deadline = time.time() + 120
+            ready = False
+            while time.time() < deadline and not ready:
+                time.sleep(1.0)
+                try:
+                    ready = bool(tab.ev("!!window.isReadyToPlay"))
+                except (RuntimeError, TimeoutError):
+                    ready = False
+            check(ready, "the Reload button loads the page again and, the download working, the game starts")
+
+
+        if args.downloads_only:
+            download_fault_checks()
+            tab.close()
+            if args.downloads > 0:
+                cold_runs()
+            print("[web aspect] %d checks, %d failed" % (count[0], len(failures)))
+            return 1 if failures else 0
         if args.logic_only:
             tab.close()
             print("[web aspect] %d checks, %d failed" % (count[0], len(failures)))
@@ -569,6 +738,8 @@ def main():
             tab.ev("document.getElementById('pseudo-exit').click(); 1")
             time.sleep(0.8)
 
+        download_fault_checks()
+
         if args.four:
             print("[web aspect] web/four.html: the games' frames (the game server must be behind /ws)")
             for query, want, label in (("?map=tiny&players=2&play=here", "16:9", "default"), ("?map=tiny&players=2&play=here&aspect=4:3", "4:3", "?aspect=4:3")):
@@ -588,6 +759,8 @@ def main():
                     check(ok and abs(ratio - shape[0] / shape[1]) < 0.01, "%s: a frame of %.0f x %.0f holds a %s picture (canvas %s)" % (label, f["frame"][0], f["frame"][1], want, f["backing"]))
                 tab.save_shot(args.shots, "four_" + want.replace(":", "x"))
         tab.close()
+        if args.downloads > 0:
+            cold_runs()
     except (RuntimeError, TimeoutError, ConnectionError, OSError, ValueError, KeyError, AssertionError) as error:
         print("  %s: the browser or the page could not be driven (%s: %s)" % ("FAIL" if failures else "SKIP", type(error).__name__, error))
         return 1 if failures else 3

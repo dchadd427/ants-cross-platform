@@ -871,6 +871,7 @@
         var splashOverlay = document.getElementById('splash-overlay');
         var canvas = document.getElementById('canvas');
         var isReadyToPlay = false;
+        var antsDataPackage = null;                                          // the bytes of index.data, once downloaded (handed to the game by Module.getPreloadedPackage)
 
         // Joining a game server from the page address (docs/NETWORK_PORT.md): ?join=/ws&room=<code>&seat=<0-3>&name=<name>[&embed=1]
         //   join   the server's WebSocket door on THIS site: /ws or a path below it (the nginx of the site passes /ws to the server)
@@ -982,7 +983,24 @@
                 return accept;
             }
 
-            return { parseAspect: parseAspect, resolveAspect: resolveAspect, cssFor: cssFor, fitBox: fitBox, makeFrameLimiter: makeFrameLimiter };
+            // The retry rule of the game's data download (the page downloads index.data itself, see "The game's data" below): fetchOnce(attempt) starts download number `attempt`
+            // (0 is the first) and returns a promise of the bytes, wait(ms) a promise that ends after ms, report(attempt, error) is told of a failure that will be retried. A failed
+            // download is tried again after each of `delays` (so delays.length retries) and the promise fails with the last error when the last try fails too.
+            function downloadWithRetries(fetchOnce, delays, wait, report) {
+                var attempt = 0;
+                function go() {
+                    return fetchOnce(attempt).catch(function (error) {
+                        if (attempt >= delays.length) throw error;
+                        if (report) report(attempt, error);
+                        var pause = delays[attempt];
+                        attempt++;
+                        return wait(pause).then(go);
+                    });
+                }
+                return go();
+            }
+
+            return { parseAspect: parseAspect, resolveAspect: resolveAspect, cssFor: cssFor, fitBox: fitBox, makeFrameLimiter: makeFrameLimiter, downloadWithRetries: downloadWithRetries };
         })();
 
         // The shape of this page's picture, passed on to the game as --aspect (the game validates it too). The stage's data-aspect gives the box its shape in CSS.
@@ -1015,6 +1033,15 @@
                 progressContainer.style.display = 'none';
                 hideLoadingScreen();
             }],
+            getPreloadedPackage: function(name, size) {
+                // The data package that the page downloaded itself (see "The game's data" below): the file packager of index.js asks for it, synchronously, when it starts
+                var bytes = antsDataPackage;
+                if (bytes && String(name).indexOf('index.data') === 0) {
+                    antsDataPackage = null;                                  // (handed over: the page keeps no second copy of 15 MB)
+                    return bytes;
+                }
+                return null;                                                 // not downloaded: the packager downloads it by itself, as it always did
+            },
             locateFile: function(path, prefix) {
                 // Enforce lockstep versioning on wasm and data bundles matching index.js
                 if (path.endsWith('.wasm') || path.endsWith('.data')) {
@@ -1097,8 +1124,42 @@
             }
         }
 
+        // The download of the game's data failed for good: the card says so and has a button that loads the page again (v0.0.96 answered a failure of the file packager's own
+        // download with a card that said "Downloading data (0%)" for ever)
+        function showDownloadError(error) {
+            if (progressContainer) progressContainer.style.display = 'none';
+            if (splashOverlay) {
+                splashOverlay.classList.add('failed');                         // (the loading screen takes no clicks, but the button of this message needs them)
+                splashOverlay.style.display = 'flex';
+                splashOverlay.style.opacity = '1';
+            }
+            if (!statusElement) return;
+            while (statusElement.firstChild) statusElement.removeChild(statusElement.firstChild);
+            var box = document.createElement('div');
+            box.style.cssText = 'background: rgba(220, 40, 40, 0.25); border: 1px solid #f87171; border-radius: 6px; padding: 14px; margin-top: 8px; text-align: center;';
+            var title = document.createElement('div');
+            title.style.cssText = 'color: #fca5a5; font-weight: bold; font-size: 0.95rem; margin-bottom: 6px;';
+            title.textContent = "The game's data could not be downloaded";
+            var detail = document.createElement('div');
+            detail.style.cssText = 'font-size: 0.8rem; color: #cbd5e1; margin-bottom: 12px;';
+            detail.textContent = 'The connection failed or the browser could not keep the file' + (error && error.message ? ' (' + String(error.message).substring(0, 120) + ')' : '') + '. Loading the page again usually helps.';
+            var button = document.createElement('button');
+            button.type = 'button';
+            button.style.cssText = 'background:#22c55e;color:#fff;border:none;padding:10px 20px;border-radius:4px;cursor:pointer;font-weight:bold;font-size:0.9rem;box-shadow: 0 2px 8px rgba(34,197,94,0.4);';
+            button.textContent = '\uD83D\uDD04 Reload';
+            button.addEventListener('click', function() { window.location.reload(); });
+            box.appendChild(title);
+            box.appendChild(detail);
+            box.appendChild(button);
+            statusElement.appendChild(box);
+        }
+
         window.addEventListener('error', function(e) {
             var msg = (e && e.message) ? e.message : String(e);
+            if (msg.indexOf('NetworkError for:') !== -1) {                      // the file packager's own download failed (where the page's own was not used)
+                showDownloadError(new Error('NetworkError'));
+                return;
+            }
             if (msg.indexOf('null function') !== -1 ||
                 msg.indexOf('RuntimeError') !== -1 ||
                 msg.indexOf('ASM_CONSTS') !== -1 ||
@@ -1418,11 +1479,101 @@
         }, false);
     </script>
     <script>
+        // ---- The game's data (index.data, about 15 MB) ----
+        // The file packager in index.js downloads it with an XMLHttpRequest and throws when that fails; two or four frames of web/four.html asked for the same file at the same
+        // moment and one of them was refused by the browser's cache (net::ERR_CACHE_WRITE_FAILURE in Chromium), after which its card said "Downloading data (0%)" for ever. So the
+        // page downloads the data itself, with fetch: the first try with the browser's cache (a repeat visit costs a 304), the retries (up to 3, after 0.4, 1.2 and 3 seconds)
+        // without it, so that a cache entry that cannot be written cannot fail them again; progress is shown as before; the bytes are handed to the packager through
+        // Module.getPreloadedPackage (which it calls synchronously when index.js starts, so index.js is loaded after the download; index.js and index.wasm are asked for at once, so
+        // that they are in the browser's cache by then). After the last failure the card says so and has a Reload button. A browser without fetch does what it always did.
         (function() {
-            var s = document.createElement('script');
-            s.async = true;
-            s.src = 'index.js?v=' + ANTS_BUILD_VER;
-            document.body.appendChild(s);
+            var DATA_URL = Module.locateFile('index.data', '');
+            var RETRY_DELAYS = [400, 1200, 3000];
+            var DEFAULT_SIZE = 14650810;                                    // (only to scale the bar when the server compresses and says no length; the real size is remembered below)
+
+            function startGame() {
+                var s = document.createElement('script');
+                s.async = true;
+                s.src = 'index.js?v=' + ANTS_BUILD_VER;
+                document.body.appendChild(s);
+            }
+            if (!window.fetch || !window.Promise || !window.Uint8Array) { startGame(); return; }
+
+            function rememberedSize() {
+                try {
+                    var n = parseInt(window.localStorage.getItem('ants.datasize'), 10);
+                    if (n > 1000000 && n < 400000000) return n;
+                } catch (e) { /* nothing remembered */ }
+                return DEFAULT_SIZE;
+            }
+            function remember(size) {
+                try { window.localStorage.setItem('ants.datasize', String(size)); } catch (e) { /* private window */ }
+            }
+            function showProgress(got, total) {
+                var pct = Math.max(0, Math.min(99, Math.floor(got * 100 / total)));
+                progressContainer.style.display = 'block';
+                progressFill.style.width = pct + '%';
+                statusElement.textContent = 'Downloading data (' + pct + '%)...';
+            }
+            function join(chunks, total) {
+                var out = new Uint8Array(total);
+                var at = 0;
+                chunks.forEach(function(c) { out.set(c, at); at += c.length; });
+                return out.buffer;
+            }
+            function fetchOnce(attempt) {
+                // attempt 0: the browser's cache as usual; the retries: no cache at all (nothing is read from it or written to it)
+                return fetch(DATA_URL, { cache: attempt === 0 ? 'default' : 'no-store', credentials: 'same-origin' }).then(function(response) {
+                    if (!response.ok) throw new Error('HTTP ' + response.status);
+                    var declared = response.headers.get('content-encoding') ? 0 : (parseInt(response.headers.get('content-length'), 10) || 0);
+                    var total = declared || rememberedSize();
+                    if (!response.body || !response.body.getReader) return response.arrayBuffer();
+                    var reader = response.body.getReader();
+                    var chunks = [];
+                    var got = 0;
+                    function pump() {
+                        return reader.read().then(function(r) {
+                            if (r.done) {
+                                if (got === 0 || (declared && got !== declared)) throw new Error('the download ended early (' + got + ' bytes)');
+                                return join(chunks, got);
+                            }
+                            chunks.push(r.value);
+                            got += r.value.length;
+                            showProgress(got, Math.max(total, got + 1));
+                            return pump();
+                        });
+                    }
+                    return pump();
+                });
+            }
+            function warm(url) {                                            // ask for a file now so that it is in the cache when the game asks (the answer is not used)
+                try { fetch(url, { credentials: 'same-origin' }).then(function(r) { return r.arrayBuffer(); }).catch(function() { /* it is asked for again */ }); } catch (e) { /* ditto */ }
+            }
+
+            var log = window.antsDownloadLog = [];                          // what happened (for the tests: tests/scripts/web_aspect_check.py reads it)
+            warm(Module.locateFile('index.wasm', ''));
+            warm('index.js?v=' + ANTS_BUILD_VER);
+            ANTS_PAGE.downloadWithRetries(
+                function(attempt) {
+                    return fetchOnce(attempt).then(function(bytes) { log.push({ attempt: attempt, ok: true, bytes: bytes.byteLength }); return bytes; },
+                                                   function(error) { log.push({ attempt: attempt, ok: false, error: String(error && error.message ? error.message : error) }); throw error; });
+                },
+                RETRY_DELAYS,
+                function(ms) { return new Promise(function(resolve) { setTimeout(resolve, ms); }); },
+                function(attempt, error) {
+                    console.warn('[download] the game data failed (try ' + (attempt + 1) + ' of ' + (RETRY_DELAYS.length + 1) + '): ' + (error && error.message ? error.message : error));
+                    progressContainer.style.display = 'none';
+                    statusElement.textContent = 'The download failed, trying again (' + (attempt + 2) + ' of ' + (RETRY_DELAYS.length + 1) + ')...';
+                }
+            ).then(function(bytes) {
+                remember(bytes.byteLength);
+                progressFill.style.width = '100%';
+                antsDataPackage = bytes;
+                startGame();
+            }, function(error) {
+                console.error('[download] the game data could not be downloaded:', error);
+                showDownloadError(error);
+            });
         })();
     </script>
     <noscript>{{{ SCRIPT }}}</noscript>
