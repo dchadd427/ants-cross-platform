@@ -47,6 +47,17 @@ check "--demo-rooms with a map that is not in the folder is refused" "$([ "$(exi
 check "--demo-rooms 0 is refused" "$([ "$(exit_of --demo-rooms 0 --demo-map TINY.LVL)" = "2" ]; echo $?)"
 check "--demo-rooms that is no number is refused" "$([ "$(exit_of --demo-rooms many --demo-map TINY.LVL)" = "2" ]; echo $?)"
 check "--demo-rooms as many as --max-rooms is refused (rooms of the control interface keep their places)" "$([ "$(exit_of --demo-rooms 5 --max-rooms 5 --demo-map TINY.LVL)" = "2" ]; echo $?)"
+check "--demo-maps without --demo-rooms is refused" "$([ "$(exit_of --demo-maps TINY.LVL)" = "2" ]; echo $?)"
+check "--demo-maps with a map that is not in the folder is refused" "$([ "$(exit_of --demo-rooms 2 --demo-map TINY.LVL --demo-maps TINY.LVL,NO-SUCH-MAP.LVL)" = "2" ]; echo $?)"
+check "--demo-maps with an empty name is refused" "$([ "$(exit_of --demo-rooms 2 --demo-map TINY.LVL --demo-maps TINY.LVL,,SMALL.LVL)" = "2" ]; echo $?)"
+check "--demo-maps with a good list starts the server (the alarm ends it: status 142)" "$([ "$(exit_of --demo-rooms 2 --demo-map TINY.LVL --demo-maps TINY.LVL,SMALL.LVL)" = "142" ]; echo $?)"
+check "--demo-maps drops blanks around the names (\"TINY.LVL, SMALL.LVL\" starts the server)" "$([ "$(exit_of --demo-rooms 2 --demo-map TINY.LVL --demo-maps 'TINY.LVL, SMALL.LVL ')" = "142" ]; echo $?)"
+mkdir -p "$WORK/maps_odd"
+cp "$ROOT/Original-Ants/Maps/TINY.LVL" "$WORK/maps_odd/TINY.LVL"
+cp "$ROOT/Original-Ants/Maps/TINY.LVL" "$WORK/maps_odd/A B.LVL"
+env ANTS_SERVER_SECRET=x perl -e 'alarm 3; exec @ARGV' "$SERVER" --maps "$WORK/maps_odd" --port "$(free_port)" --demo-rooms 2 --demo-map TINY.LVL --demo-maps "TINY.LVL,A B.LVL" > "$WORK/odd.log" 2>&1
+ODD_STATUS=$?
+check "a listed map that no room code can name is a warning at startup, not an error" "$([ "$ODD_STATUS" = "142" ] && grep -q "'A B.LVL' can never be chosen" "$WORK/odd.log" && ! grep -q "'TINY.LVL' can never be chosen" "$WORK/odd.log"; echo $?)"
 
 ANTS_SERVER_SECRET="$SECRET" "$SERVER" --maps "$ROOT/Original-Ants/Maps" --port "$GAME_PORT" --ctl-port "$CTL_PORT" --results-dir "$WORK/results" > "$WORK/server.log" 2>&1 &
 SERVER_PID=$!
@@ -178,6 +189,28 @@ check "no secret and nowhere to keep one: status 2 (as before)" "$([ "$(exit_nos
 check "--secret-file puts the generated secret where it is told" "$(start_nosecret "$WORK/gen4.log" "$(free_port)" --secret-file "$WORK/elsewhere/key"; r=$?; stop_server; [ "$r" = "0" ] && [ -s "$WORK/elsewhere/key" ]; echo $?)"
 # the Docker image always passes --results-dir: an explicit --secret-file must win over the default file in that folder (which then is not made)
 check "--secret-file together with --results-dir: the secret goes to the file that is named (owner-only), the default file in the results folder is not made" "$(start_nosecret "$WORK/gen5.log" "$(free_port)" --results-dir "$WORK/res5" --secret-file "$WORK/elsewhere5/key"; r=$?; stop_server; [ "$r" = "0" ] && [ -s "$WORK/elsewhere5/key" ] && [ "$(mode_of "$WORK/elsewhere5/key")" = "600" ] && [ ! -e "$WORK/res5/control-secret" ]; echo $?)"
+
+# demo rooms that choose their map: "demo-<map>-..." makes the room on that map when it is in --demo-maps, any other code on --demo-map
+PICK_PORT="$(free_port)"
+PICK_CTL="$(free_port)"
+ANTS_SERVER_SECRET="$SECRET" "$SERVER" --maps "$ROOT/Original-Ants/Maps" --port "$PICK_PORT" --ctl-port "$PICK_CTL" --demo-rooms 5 --demo-map TINY.LVL --demo-maps TINY.LVL,SMALL.LVL > "$WORK/pick.log" 2>&1 &
+SERVER_PID=$!
+for _ in $(seq 1 50); do curl -s -m 1 "http://127.0.0.1:$PICK_CTL/healthz" | grep -q '"ok"' && break; sleep 0.1; done
+check "the log names the maps that a demo code can choose" "$(grep -q 'chooses one of TINY.LVL, SMALL.LVL' "$WORK/pick.log"; echo $?)"
+PICK_PIDS=""
+for code in demo-small-t1 demo-tiny-t2 demo-t3 demo-medium-t4 demo-small-2p-t5; do
+    "$GAME" --headless --no-lan --name Chooser --join "127.0.0.1:$PICK_PORT" --room "$code" --frames 400 > "$WORK/pick_$code.log" 2>&1 &
+    PICK_PIDS="$PICK_PIDS $!"
+done
+map_of_room() { for _ in $(seq 1 60); do M="$(curl -s -m 2 -H "Authorization: Bearer $SECRET" "http://127.0.0.1:$PICK_CTL/rooms/$1" | python3 -c 'import sys, json; print(json.load(sys.stdin).get("map", ""))' 2> /dev/null)"; [ -n "$M" ] && break; sleep 0.2; done; echo "$M"; }
+check "demo-small-t1 is made on SMALL.LVL" "$([ "$(map_of_room demo-small-t1)" = "SMALL.LVL" ]; echo $?)"
+check "demo-tiny-t2 is made on TINY.LVL" "$([ "$(map_of_room demo-tiny-t2)" = "TINY.LVL" ]; echo $?)"
+check "demo-t3 (no map in the code) is made on the default map" "$([ "$(map_of_room demo-t3)" = "TINY.LVL" ]; echo $?)"
+check "demo-medium-t4 (a map that is not in the list) is made on the default map" "$([ "$(map_of_room demo-medium-t4)" = "TINY.LVL" ]; echo $?)"
+expected_of_room() { curl -s -m 2 -H "Authorization: Bearer $SECRET" "http://127.0.0.1:$PICK_CTL/rooms/$1" | python3 -c 'import sys, json; print(json.load(sys.stdin).get("expected", ""))' 2> /dev/null; }
+check "demo-small-2p-t5 is made on SMALL.LVL for two players" "$([ "$(map_of_room demo-small-2p-t5)" = "SMALL.LVL" ] && [ "$(expected_of_room demo-small-2p-t5)" = "2" ] && [ "$(expected_of_room demo-small-t1)" = "4" ]; echo $?)"
+for p in $PICK_PIDS; do kill "$p" 2> /dev/null; done
+stop_server
 
 echo "server e2e: $CHECKS checks, $FAILS failures"
 [ "$FAILS" -eq 0 ]

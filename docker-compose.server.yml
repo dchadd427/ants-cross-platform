@@ -19,9 +19,10 @@ services:
     image: ants-server
     container_name: ants-server
     restart: unless-stopped
-    # The page web/four.html (four games on one page) needs demo rooms, which are off by default: uncomment to allow them (the maps folder must hold the map; the number is
-    # 1 to 255, and 0 or 256 and more make the server exit at its start, which with restart: unless-stopped is a restart loop; whoever reaches a game port can fill the rooms).
-    # command: ["--port", "4001", "--ws-port", "4002", "--ctl-port", "4010", "--demo-rooms", "4", "--demo-map", "TINY.LVL"]
+    # The page web/four.html (Play online) needs demo rooms, which are off by default: uncomment to allow them. The maps folder must hold the demo map and every map of
+    # --demo-maps (the page offers the six maps of the original); the number of rooms is 1 to 255 (0, or 256 and more, stop the server at startup); a demo room waits
+    # ten minutes for its players; whoever reaches a game port can fill the rooms.
+    # command: ["--port", "4001", "--ws-port", "4002", "--ctl-port", "4010", "--demo-rooms", "12", "--demo-map", "TINY.LVL", "--demo-maps", "TINY.LVL,SMALL.LVL,MEDIUM.LVL,GAUNTLET.LVL,TREASURE.LVL,ISLANDS.LVL"]
     environment:
       ANTS_SERVER_SECRET: ${ANTS_SERVER_SECRET:-}
     volumes:

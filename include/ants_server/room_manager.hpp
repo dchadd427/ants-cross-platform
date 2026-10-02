@@ -27,12 +27,21 @@ struct ServerLimits {
     uint32_t hello_timeout_ms{10000};       // ... and the time they get for it
     uint32_t reject_linger_ms{2000};        // a rejected connection is kept open this long so that the answer reaches the peer
     // Demo rooms (off by default; for a public test page that has no secret to make rooms with): a Hello for a room whose code starts with "demo-" that does not
-    // exist makes it, on `demo_map`, for `demo_players` players, at most `demo_rooms` of them at a time (0 = off). A demo room waits one minute for its players
-    // and is forgotten half a minute after it ended. Whoever can reach the door can fill these rooms and hold them for a match: that is the price of a page
-    // that works without a secret; real rooms are made by the control interface.
+    // exist makes it, on `demo_map`, for `demo_players` players, at most `demo_rooms` of them at a time (0 = off); the code can choose the map and the players
+    // (`demo_maps`). A demo room waits `demo_wait_ms` (ten minutes) for its players and is forgotten half a minute after it ended; a Hello for the code of one that
+    // is over makes a new room at once. Whoever can reach the door can fill these rooms and hold them for a match: that is the price of a page that works without
+    // a secret; real rooms are made by the control interface.
     size_t demo_rooms{0};
     std::string demo_map;
     uint8_t demo_players{4};
+    // How long a demo room waits for its players, from the first Hello (the page's link goes to friends on other computers: they need time to arrive)
+    uint32_t demo_wait_ms{10u * 60u * 1000u};
+    // The maps that a Hello may choose for a demo room. The code of a demo room chooses: "demo-[<map>-][<n>p-]<anything>": <map> is the name of one of these
+    // maps without its extension (any case, then a dash; file names of the maps folder, e.g. "SMALL.LVL"), <n>p the number of players, 2 to 4 ("demo-small-2p-x7k2":
+    // SMALL.LVL for two). The player count may also follow a first word that is not one of these maps ("demo-medium-2p-x" on a server without MEDIUM: the default
+    // map, for two), so that a page that offers a map the server does not allow still gets the players it asked for. What a code does not choose is `demo_map` and
+    // `demo_players`, as before. The choice rides in the room code because the Hello has no other field (the protocol is unchanged).
+    std::vector<std::string> demo_maps;
 };
 
 /// The code prefix of the rooms that a Hello may make when demo rooms are on

@@ -9,10 +9,12 @@
 #                                                   update that adds maps, remove that volume; to add maps, copy them into it)
 #   ANTS_PORT=19980                                 the host port of the web page (optional)
 #   ANTS_SERVER_PORT=4001                           the public TCP game port of native clients (optional; the browser page does not use it)
-#   ANTS_DEMO_ROOMS=4  ANTS_DEMO_MAP=TINY.LVL       how many demo rooms the page web/four.html may make at a time, and their map (optional). ANTS_DEMO_ROOMS must be
-#                                                   1 to 255: 0, or 256 and more, make the server exit at its start, and with restart: unless-stopped it then
-#                                                   restarts again and again. There is no variable that switches the demo rooms off: delete the two demo options
-#                                                   from the command below (in your copy of this file).
+#   ANTS_DEMO_ROOMS=12 ANTS_DEMO_MAP=TINY.LVL       how many demo rooms the page web/four.html may make at a time, and the map of a room whose code names none
+#                                                   (optional). ANTS_DEMO_ROOMS must be 1 to 255: 0, or 256 and more, make the server exit at its start, and with
+#                                                   restart: unless-stopped it then restarts again and again. There is no variable that switches the demo rooms off:
+#                                                   delete the three demo options from the command below (in your copy of this file).
+#   ANTS_DEMO_MAPS=TINY.LVL,SMALL.LVL,...           the maps a room code may choose (the six maps of the original game by default, which the page offers; comma
+#                                                   separated, blanks around a name are dropped; every one must be in the maps folder, or the server stops at startup)
 #
 # Only the TCP game port is open to other machines. The WebSocket port (the site's nginx passes /ws to it over the network below) and the control
 # interface (the lobby's backend calls it) are published on the host's loopback address only.
@@ -34,10 +36,11 @@ services:
       dockerfile: Dockerfile.server
     container_name: ants-server
     restart: unless-stopped
-    # The page web/four.html (four games on one page) joins rooms named "demo-..." that it makes itself: demo rooms are ON here, at most ANTS_DEMO_ROOMS at a time
-    # (default 4) on the map ANTS_DEMO_MAP (default TINY.LVL; the maps folder must hold it). Whoever reaches a game port (the site, or TCP port 4001) can fill these
-    # rooms; rooms of the control interface keep their own places. ANTS_DEMO_ROOMS is 1 to 255 (see the header). To switch them off, delete the two demo options.
-    command: ["--port", "4001", "--ws-port", "4002", "--ctl-port", "4010", "--demo-rooms", "${ANTS_DEMO_ROOMS:-4}", "--demo-map", "${ANTS_DEMO_MAP:-TINY.LVL}"]
+    # The page web/four.html (Play online) joins rooms named "demo-..." that it makes itself: demo rooms are ON here, at most ANTS_DEMO_ROOMS at a time
+    # (default 12) on the map ANTS_DEMO_MAP (default TINY.LVL) unless the code names one of ANTS_DEMO_MAPS (the page's choice; the maps folder must hold them
+    # all). Whoever reaches a game port (the site, or TCP port 4001) can fill these rooms; rooms of the control interface keep their own places.
+    # ANTS_DEMO_ROOMS is 1 to 255 (see the header). To switch them off, delete the three demo options. A demo room waits ten minutes for its players.
+    command: ["--port", "4001", "--ws-port", "4002", "--ctl-port", "4010", "--demo-rooms", "${ANTS_DEMO_ROOMS:-12}", "--demo-map", "${ANTS_DEMO_MAP:-TINY.LVL}", "--demo-maps", "${ANTS_DEMO_MAPS:-TINY.LVL,SMALL.LVL,MEDIUM.LVL,GAUNTLET.LVL,TREASURE.LVL,ISLANDS.LVL}"]
     environment:
       ANTS_SERVER_SECRET: ${ANTS_SERVER_SECRET:-}
     volumes:

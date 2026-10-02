@@ -1,12 +1,11 @@
 # Status
 
-_Updated 2026-10-01 · current release **v0.0.89** · details: [CHANGELOG](CHANGELOG.md)_
+_Updated 2026-10-01 · current release **v0.0.90** · details: [CHANGELOG](CHANGELOG.md)_
 
 ## In progress
-- **v0.0.90 Play online**: host (map, 2–4 players), join by code, seats on the page, in windows or by link; desktop and web players in one match verified · in review
 - **Pointer fix**: the black bars of fullscreen scroll the map; fullscreen (incl. the macOS green button) keeps the mouse · fixing 9 review findings
-- **Original program out of the repo** (Ants.exe, its decompilation, the DirectDraw wrapper); tests keep full strength
-- **Widescreen M0**: drawing safety net before the 16:9 work
+- **Original program out of the repo** (Ants.exe, its decompilation, the DirectDraw wrapper); tests keep full strength · done, to be merged
+- **Widescreen M0**: drawing safety net before the 16:9 work · done, ships with the pointer fix
 
 ## Next
 - Public history rewrite: purge the removed files from every commit
@@ -17,6 +16,7 @@ _Updated 2026-10-01 · current release **v0.0.89** · details: [CHANGELOG](CHANG
 - Short room codes, in-game host / join, replays, match API
 
 ## Recently done
+- **v0.0.90** Play online: host (map, 2–4 players), join by code, seats on the page / in windows / by link; friends get 10 minutes to join
 - **v0.0.89** server makes its own control secret; one Portainer stack; "Play online" link
 - **License**: MIT for the code and docs; the original game is not covered
 - **v0.0.88** bots B3 (worker bot); engine fix: a carrier keeps its food source

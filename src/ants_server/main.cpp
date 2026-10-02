@@ -14,9 +14,12 @@
 //   --results-dir DIR  every ended room writes <code>.json there
 //   --secret-file PATH where the server keeps the control secret that it makes when ANTS_SERVER_SECRET is not set (default: control-secret in the results folder)
 //   --max-rooms N      the most rooms at a time (default 256)
-//   --demo-rooms N     for a public test page: a Hello for a not yet existing room "demo-..." makes it (4 players, the --demo-map), at most N at a time. N is 1 to
+//   --demo-rooms N     for a public test page: a Hello for a not yet existing room "demo-..." makes it (4 players, the --demo-map, unless its code chooses: see --demo-maps), at most N at a time. N is 1 to
 //                      --max-rooms - 1 (255 by default); the option is left out to switch demo rooms off (the default): 0 and more than that stop the server at startup
 //   --demo-map NAME    the map of the demo rooms (a file name of the maps folder; required with --demo-rooms)
+//   --demo-maps LIST   the maps a demo room may be made on, file names of the maps folder separated by commas (blanks around a name are dropped). The code of a
+//                      demo room chooses: "demo-[<map>-][<n>p-]<anything>": <map> one of these names without its extension (any case), <n>p 2 to 4 players;
+//                      what it does not choose is 4 players on --demo-map (needs --demo-rooms). A demo room waits ten minutes for its players.
 //   --version, --help
 //
 // The control interface's secret comes from the environment (ANTS_SERVER_SECRET), never from the command line (a command line is visible to every user). Without
@@ -34,11 +37,13 @@
 #include <fstream>
 #include <string>
 #include <thread>
+#include <vector>
 
 #include "ants_app/version.hpp"
 #include "ants_ctl/http.hpp"
 #include "ants_net/tcp.hpp"
 #include "ants_net/ws.hpp"
+#include "ants_net/protocol.hpp"
 #include "ants_server/control.hpp"
 #include "ants_server/room_manager.hpp"
 #include "ants_server/secret.hpp"
@@ -61,13 +66,15 @@ struct Options {
     size_t max_rooms{256};
     size_t demo_rooms{0};
     std::string demo_map;
+    std::vector<std::string> demo_maps;
+    bool demo_maps_given{false};
 };
 
 void usage(FILE* to) {
     std::fprintf(to,
                  "usage: ants_server --maps DIR [--port 4001] [--ws-port N] [--ctl-port N] [--public] [--ws-any-interface] [--ctl-any-interface]\n"
                  "                    [--results-dir DIR] [--secret-file PATH] [--max-rooms N]\n"
-                 "                    [--demo-rooms N --demo-map NAME]\n"
+                 "                    [--demo-rooms N --demo-map NAME [--demo-maps A.LVL,B.LVL,...]]\n"
                  "  the control interface takes its secret from the environment variable ANTS_SERVER_SECRET; without it the server makes one and keeps it\n"
                  "  in --secret-file (default: control-secret in --results-dir)\n");
 }
@@ -149,6 +156,27 @@ int main(int argc, char** argv) {
             o.demo_rooms = static_cast<size_t>(n);
         } else if (a == "--demo-map") {
             o.demo_map = value("--demo-map");
+        } else if (a == "--demo-maps") {
+            o.demo_maps_given = true;
+            const std::string list = value("--demo-maps");
+            size_t from = 0;
+            while (true) {                                         // "A.LVL,B.LVL" (blanks around a name are dropped): an empty item is a mistake, not a skipped entry
+                const size_t comma = list.find(',', from);
+                std::string item = list.substr(from, comma == std::string::npos ? std::string::npos : comma - from);
+                while (!item.empty() && (item.front() == ' ' || item.front() == '\t')) item.erase(item.begin());
+                while (!item.empty() && (item.back() == ' ' || item.back() == '\t')) item.pop_back();
+                if (item.empty()) {
+                    std::fprintf(stderr, "--demo-maps takes file names separated by commas (no empty name)\n");
+                    return 2;
+                }
+                o.demo_maps.push_back(item);
+                if (comma == std::string::npos) break;
+                from = comma + 1;
+            }
+            if (o.demo_maps.size() > 64) {
+                std::fprintf(stderr, "--demo-maps takes at most 64 maps\n");
+                return 2;
+            }
         } else {
             std::fprintf(stderr, "unknown option %s\n", a.c_str());
             usage(stderr);
@@ -225,7 +253,12 @@ int main(int argc, char** argv) {
     }
     limits.demo_rooms = o.demo_rooms;
     limits.demo_map = o.demo_map;
+    limits.demo_maps = o.demo_maps;
     ants::server::MapStore store{o.maps_dir};
+    if (o.demo_maps_given && o.demo_rooms == 0) {
+        std::fprintf(stderr, "--demo-maps needs --demo-rooms (and --demo-map)\n");
+        return 2;
+    }
     if (o.demo_rooms > 0) {
         ants::server::MapEntry entry;
         std::string why;
@@ -233,9 +266,29 @@ int main(int argc, char** argv) {
             std::fprintf(stderr, "--demo-rooms needs --demo-map with a map of the maps folder%s%s\n", why.empty() ? "" : ": ", why.c_str());
             return 2;
         }
+        for (const std::string& name : o.demo_maps) {
+            why.clear();
+            if (!store.find(name, entry, &why)) {
+                std::fprintf(stderr, "--demo-maps: '%s' is not a map of the maps folder%s%s\n", name.c_str(), why.empty() ? "" : ": ", why.c_str());
+                return 2;
+            }
+            // A room code holds letters, digits, '-' and '_' only, up to 32 characters ("demo-" + the name without its extension + "-" + at least one more
+            // character): a map whose name cannot be written that way can never be chosen. It does no harm: say so and go on.
+            const size_t dot = name.rfind('.');
+            const std::string stem = dot == std::string::npos ? name : name.substr(0, dot);
+            bool writable = !stem.empty() && stem.size() + std::strlen(ants::server::kDemoRoomPrefix) + 2 <= ants::net::kMaxRoomCodeChars;
+            for (const char ch : stem) {
+                if (!((ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9') || ch == '-' || ch == '_')) writable = false;
+            }
+            if (!writable) std::fprintf(stderr, "--demo-maps: '%s' can never be chosen by a room code (only letters, digits, '-' and '_' fit in a code, and a code has at most %zu characters)\n", name.c_str(), ants::net::kMaxRoomCodeChars);
+        }
     }
     ants::server::RoomManager rooms{std::move(store), limits};
-    if (o.demo_rooms > 0) log("demo rooms on: up to " + std::to_string(o.demo_rooms) + " at a time, 4 players, map " + o.demo_map);
+    if (o.demo_rooms > 0) {
+        std::string chooseable;
+        for (const std::string& name : o.demo_maps) chooseable += (chooseable.empty() ? "" : ", ") + name;
+        log("demo rooms on: up to " + std::to_string(o.demo_rooms) + " at a time, 4 players unless the code says 2p or 3p (\"demo-[<map>-]<n>p-...\"), map " + o.demo_map + (chooseable.empty() ? std::string() : "; a code \"demo-<map>-...\" chooses one of " + chooseable));
+    }
 
     std::signal(SIGINT, on_signal);
     std::signal(SIGTERM, on_signal);

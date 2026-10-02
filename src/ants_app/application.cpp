@@ -23,12 +23,19 @@
 #endif
 
 #if defined(__EMSCRIPTEN__)
-// Tells the page that embeds this game (web/four.html) the tick and the state hash (high word first, 16 hex digits). EM_JS and not EM_ASM: the `$0` of EM_ASM
-// is a warning under -Wpedantic.
+// Tells the page that embeds this game (web/four.html) the tick and the state hash (high word first, 16 hex digits). A game in a frame posts to its parent; a game in
+// a window of its own posts on the broadcast channel "ants-sync" of its origin, with its room code, for the page that opened it or any page of the site that listens.
+// EM_JS and not EM_ASM: the `$0` of EM_ASM is a warning under -Wpedantic.
 extern "C" {
 EM_JS(void, ants_post_sync_to_parent, (int seat, int tick, int hash_high, int hash_low), {
+    var hash = (hash_high >>> 0).toString(16).padStart(8, '0') + (hash_low >>> 0).toString(16).padStart(8, '0');
     if (window.parent !== window) {
-        window.parent.postMessage({ants: 'sync', seat: seat, tick: tick, hash: (hash_high >>> 0).toString(16).padStart(8, '0') + (hash_low >>> 0).toString(16).padStart(8, '0')}, location.origin);
+        window.parent.postMessage({ants: 'sync', seat: seat, tick: tick, hash: hash}, location.origin);
+    } else if (typeof BroadcastChannel !== "undefined") {
+        try {
+            if (!window.antsSyncChannel) window.antsSyncChannel = new BroadcastChannel("ants-sync");
+            window.antsSyncChannel.postMessage({ants: "sync", seat: seat, tick: tick, hash: hash, room: new URLSearchParams(location.search).get("room") || ""});
+        } catch (e) {}
     }
 });
 }

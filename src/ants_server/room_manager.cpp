@@ -55,6 +55,64 @@ CreateResult RoomManager::create_room(RoomSpec spec, uint32_t now_ms) {
     return r;
 }
 
+namespace {
+
+bool iequals(const std::string& a, const std::string& b) {
+    if (a.size() != b.size()) return false;
+    for (size_t i = 0; i < a.size(); ++i) {
+        const auto lower = [](char c) { return static_cast<char>((c >= 'A' && c <= 'Z') ? c - 'A' + 'a' : c); };
+        if (lower(a[i]) != lower(b[i])) return false;
+    }
+    return true;
+}
+
+// What the code of a demo room chooses: "demo-[<map>-][<n>p-]<anything>". <map> is the name of one of the allowed maps without its extension (any case; of
+// several that fit, the longest name wins: a name may contain dashes itself); <n>p is the number of players, 2 to 4 ("demo-small-2p-x7k2": SMALL.LVL for two
+// players). When the first word is not an allowed map, <n>p may still be the first or the second word (the page offers the six maps of the original; a server
+// that allows fewer still makes the room for the players the page shows). What the code does not choose is the default (`demo_map`, `demo_players`).
+struct DemoChoice {
+    std::string map;
+    uint8_t players;
+};
+
+bool is_demo_code(const std::string& code) {
+    const size_t n = std::char_traits<char>::length(kDemoRoomPrefix);
+    return code.size() > n && code.compare(0, n, kDemoRoomPrefix) == 0;
+}
+
+bool players_word(const std::string& rest, size_t at, uint8_t& players) {
+    if (rest.size() < at + 3 || rest[at] < '2' || rest[at] > '4' || (rest[at + 1] != 'p' && rest[at + 1] != 'P') || rest[at + 2] != '-') return false;
+    players = static_cast<uint8_t>(rest[at] - '0');
+    return true;
+}
+
+DemoChoice demo_choice_of(const std::string& code, const ServerLimits& limits) {
+    DemoChoice c{limits.demo_map, limits.demo_players};
+    const std::string rest = code.substr(std::char_traits<char>::length(kDemoRoomPrefix));
+    const std::string* best = nullptr;
+    size_t best_len = 0;
+    for (const std::string& file : limits.demo_maps) {
+        const size_t dot = file.rfind('.');
+        const size_t len = dot == std::string::npos ? file.size() : dot;
+        if (len == 0 || len <= best_len || rest.size() <= len || rest[len] != '-') continue;
+        if (iequals(rest.substr(0, len), file.substr(0, len))) {
+            best = &file;
+            best_len = len;
+        }
+    }
+    if (best != nullptr) {
+        c.map = *best;
+        players_word(rest, best_len + 1, c.players);
+        return c;
+    }
+    if (players_word(rest, 0, c.players)) return c;
+    const size_t dash = rest.find('-');
+    if (dash != std::string::npos && dash > 0) players_word(rest, dash + 1, c.players);
+    return c;
+}
+
+}  // namespace
+
 bool RoomManager::make_demo_room(const std::string& code, uint32_t now_ms) {
     if (limits_.demo_rooms == 0 || limits_.demo_map.empty()) return false;
     const std::string prefix = kDemoRoomPrefix;
@@ -64,9 +122,10 @@ bool RoomManager::make_demo_room(const std::string& code, uint32_t now_ms) {
     if (demos >= limits_.demo_rooms) return false;
     RoomSpec spec;
     spec.code = code;
-    spec.map = limits_.demo_map;
-    spec.players = limits_.demo_players;
-    spec.wait_ms = 60000;
+    const DemoChoice choice = demo_choice_of(code, limits_);
+    spec.map = choice.map;
+    spec.players = choice.players;
+    spec.wait_ms = limits_.demo_wait_ms;
     spec.keep_ms = 30000;
     spec.run_ms = 30u * 60u * 1000u;                                // a demo room does not hold its slot for longer than half an hour of play
     return create_room(std::move(spec), now_ms).ok;
@@ -113,10 +172,24 @@ void RoomManager::update(uint32_t now_ms) {
             Room* room = nullptr;
             if (good) {
                 auto it = hello.room.empty() ? rooms_.end() : rooms_.find(hello.room);
+                const bool ended = it != rooms_.end() && (it->second->state() == RoomState::Finished || it->second->state() == RoomState::Failed);
+                if (ended && is_demo_code(hello.room) && limits_.demo_rooms > 0) {
+                    // A demo room that is over is forgotten at once when somebody comes back to its code (a late friend, a reload, a rematch with the same
+                    // link): its end is reported, and the Hello makes a new room below
+                    if (!it->second->end_reported()) {
+                        it->second->mark_end_reported();
+                        unreported_.push_back(it->second->status(now_ms));
+                    }
+                    rooms_.erase(it);
+                    it = rooms_.end();
+                }
                 if (it == rooms_.end() && !hello.room.empty() && make_demo_room(hello.room, now_ms)) it = rooms_.find(hello.room);
                 if (it == rooms_.end()) {
                     good = false;
                     reason = net::RejectReason::NoSuchRoom;
+                } else if (it->second->state() == RoomState::Finished || it->second->state() == RoomState::Failed) {
+                    good = false;
+                    reason = net::RejectReason::NoSuchRoom;                // the room is over: "the match has already started" would be wrong
                 } else if (!it->second->accepting()) {
                     good = false;
                     reason = net::RejectReason::MatchRunning;

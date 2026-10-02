@@ -149,8 +149,8 @@ struct Client {
                 if (ok) {
                     sim.set_fog_of_war_enabled(s.fog);
                     sim.init(level, s.seed, s.roster);
-                    map_w = level.width;
-                    map_h = level.height;
+                    map_w = level.width();
+                    map_h = level.height();
                 }
                 lobby->report_loaded(ok);
             } else if (ev.type == net::ClientLobby::Event::Type::Begun) {
@@ -194,7 +194,7 @@ struct World {
     std::vector<std::unique_ptr<Client>> clients;
     uint32_t now{1000};
 
-    explicit World(ServerLimits limits = ServerLimits()) : mgr(MapStore(maps_dir()), limits) {}
+    explicit World(ServerLimits limits = ServerLimits(), const std::string& dir = maps_dir()) : mgr(MapStore(dir), limits) {}
 
     Client& connect(const std::string& name, const std::string& room, uint8_t seat = 255, net::LoopbackNetwork::Link link = {20, 10}) {
         auto ends = net.connect(link);
@@ -381,7 +381,7 @@ void run_manager_tests() {
 
 // (placed before the match tests: the door's tests)
 void run_demo_tests() {
-    TEST_CASE("S3.10 Demo Rooms: Off Unless Asked For; A Hello For \"demo-...\" Makes The Room, Only With The Prefix, Only Up To The Limit, And An Unfilled One Fails After A Minute") {
+    TEST_CASE("S3.10 Demo Rooms: Off Unless Asked For; A Hello For \"demo-...\" Makes The Room, Only With The Prefix, Only Up To The Limit, And An Unfilled One Fails After Its Wait (One Minute Here, Ten By Default)") {
         auto reject_of = [](World& w, Client& c) {
             w.run(300);
             return c.lobby->phase() == net::ClientLobby::Phase::Rejected ? c.lobby->reject_reason() : static_cast<net::RejectReason>(0);
@@ -396,6 +396,7 @@ void run_demo_tests() {
         limits.demo_rooms = 2;
         limits.demo_map = "TINY.LVL";
         limits.demo_players = 2;
+        limits.demo_wait_ms = 60000;                                                     // (the default is ten minutes: S3.25)
         World w(limits);
         Client& other = w.connect("Other", "other-1");                                    // no prefix: no room is made
         ASSERT_EQ(reject_of(w, other), net::RejectReason::NoSuchRoom);
@@ -431,6 +432,175 @@ void run_demo_tests() {
         w.run(300);
         ASSERT_EQ(eve.lobby->phase(), net::ClientLobby::Phase::InRoom);
         ASSERT_EQ(w.mgr.room_count(), size_t{2});
+    } TEST_END();
+
+    TEST_CASE("S3.23 A Demo Room Code Can Choose Its Map: demo-<map>-... Makes The Room On That Map When It Is In The List, In Any Case; Every Other Code Keeps The Default Map; Without A List Nothing Changes") {
+        ServerLimits limits;
+        limits.demo_rooms = 13;                                                   // room for the twelve codes below and one more
+        limits.demo_map = "TINY.LVL";
+        limits.demo_maps = {"TINY.LVL", "SMALL.LVL", "GAUNTLET.LVL"};
+        limits.demo_players = 2;
+        World w(limits);
+        auto map_of = [&](const std::string& code) {
+            w.connect("P", code);
+            w.run(300);
+            return w.status(code).map;
+        };
+        ASSERT_EQ(map_of("demo-small-x7k2"), std::string("SMALL.LVL"));              // the choice
+        ASSERT_EQ(map_of("demo-SMALL-upper"), std::string("SMALL.LVL"));             // any case in the code
+        ASSERT_EQ(map_of("demo-tiny-ab12"), std::string("TINY.LVL"));
+        ASSERT_EQ(map_of("demo-GaUnTlEt-q"), std::string("GAUNTLET.LVL"));           // the name as the list spells it, whatever the case of the code
+        ASSERT_EQ(map_of("demo-small-a-b-c"), std::string("SMALL.LVL"));             // only the first word counts
+        ASSERT_EQ(map_of("demo-small-"), std::string("SMALL.LVL"));                  // an empty tail is a valid code
+        ASSERT_EQ(map_of("demo-medium-x1"), std::string("TINY.LVL"));                // a real map that is not in the list: the default
+        ASSERT_EQ(map_of("demo-smallish-x1"), std::string("TINY.LVL"));              // a longer word is not the map
+        ASSERT_EQ(map_of("demo-smal-x1"), std::string("TINY.LVL"));                  // nor a shorter one
+        ASSERT_EQ(map_of("demo-small"), std::string("TINY.LVL"));                    // no dash after the word: that is just a code
+        ASSERT_EQ(map_of("demo--x1"), std::string("TINY.LVL"));                      // an empty word
+        ASSERT_EQ(map_of("demo-x7k2"), std::string("TINY.LVL"));                     // the page's old codes
+        ASSERT_EQ(map_of("demo-small.lvl-x"), std::string());                        // '.' is no character of a room code: refused, no room
+        ASSERT_EQ(w.mgr.room_count(), size_t{12});
+        // a second Hello for the same code finds the room that the first one made, on the same map
+        Client& second = w.connect("Q", "demo-small-x7k2");
+        w.run(800);
+        ASSERT_EQ(second.lobby->my_seat(), 1);
+        ASSERT_EQ(w.mgr.room_count(), size_t{12});
+        ASSERT_EQ(w.status("demo-small-x7k2").map, std::string("SMALL.LVL"));
+        // no list: the choice is ignored, every demo room is on the default map (what the server did before the list existed)
+        ServerLimits plain;
+        plain.demo_rooms = 4;
+        plain.demo_map = "TINY.LVL";
+        plain.demo_players = 2;
+        ASSERT_TRUE(plain.demo_maps.empty());
+        World p(plain);
+        p.connect("P", "demo-small-x7k2");
+        p.run(300);
+        ASSERT_EQ(p.status("demo-small-x7k2").map, std::string("TINY.LVL"));
+        // a listed map that does not load makes the Hello fail like any room with a bad map: the room is not made
+        ServerLimits broken = limits;
+        broken.demo_maps = {"NO-SUCH-MAP.LVL"};
+        World b(broken);
+        Client& lost = b.connect("P", "demo-no-such-map-x");
+        b.run(300);
+        ASSERT_TRUE(lost.lobby->phase() != net::ClientLobby::Phase::InRoom);
+        ASSERT_EQ(b.mgr.room_count(), size_t{0});
+        // of two names that fit, the longest wins (a name may contain dashes): a maps folder with BIG.LVL and BIG-ISLAND.LVL (copies of TINY.LVL)
+        const std::string big_dir = temp_dir_for("demo_longest");
+        fs::copy_file(maps_dir() + "/TINY.LVL", big_dir + "/BIG.LVL");
+        fs::copy_file(maps_dir() + "/TINY.LVL", big_dir + "/BIG-ISLAND.LVL");
+        ServerLimits two;
+        two.demo_rooms = 4;
+        two.demo_map = "BIG.LVL";
+        two.demo_maps = {"BIG.LVL", "BIG-ISLAND.LVL"};
+        two.demo_players = 2;
+        World g(two, big_dir);
+        g.connect("P", "demo-big-island-2p-x");
+        g.connect("Q", "demo-big-y");
+        g.connect("R", "demo-BIG-ISLAND-z");
+        g.run(300);
+        ASSERT_EQ(g.status("demo-big-island-2p-x").map, std::string("BIG-ISLAND.LVL"));
+        ASSERT_EQ(g.status("demo-big-y").map, std::string("BIG.LVL"));
+        ASSERT_EQ(g.status("demo-BIG-ISLAND-z").map, std::string("BIG-ISLAND.LVL"));
+        std::error_code ignore;
+        fs::remove_all(big_dir, ignore);
+    } TEST_END();
+
+    TEST_CASE("S3.24 A Demo Room Code Can Choose Its Number Of Players: demo-[<map>-]<n>p-... Makes A Room For 2, 3 Or 4; Anything Else Keeps The Default; A Room For Two Starts With Two") {
+        ServerLimits limits;
+        limits.demo_rooms = 20;
+        limits.demo_map = "TINY.LVL";
+        limits.demo_maps = {"TINY.LVL", "SMALL.LVL", "GAUNTLET.LVL"};
+        ASSERT_EQ(limits.demo_players, 4);                                        // the default: four
+        World w(limits);
+        auto made = [&](const std::string& code) {
+            w.connect("P", code);
+            w.run(300);
+            return w.status(code);
+        };
+        struct Case { const char* code; const char* map; int players; };
+        const Case cases[] = {
+            {"demo-small-2p-a", "SMALL.LVL", 2}, {"demo-small-3P-b", "SMALL.LVL", 3}, {"demo-small-4p-c", "SMALL.LVL", 4},
+            {"demo-2p-d", "TINY.LVL", 2},                                          // a player count without a map: the default map
+            {"demo-gauntlet-3p-e", "GAUNTLET.LVL", 3},
+            {"demo-small-5p-f", "SMALL.LVL", 4}, {"demo-small-1p-g", "SMALL.LVL", 4}, {"demo-small-0p-h", "SMALL.LVL", 4},   // not 2 to 4: the default
+            {"demo-small-2px-i", "SMALL.LVL", 4},                                  // no dash after the word: part of the code
+            {"demo-small-2p", "SMALL.LVL", 4},                                     // the word without a dash after it
+            {"demo-small-22p-j", "SMALL.LVL", 4}, {"demo-medium-x-2p-m", "TINY.LVL", 4},   // the players word is the first or second word only
+            {"demo-medium-2p-k", "TINY.LVL", 2},                                   // a map that is not allowed: the default map, but the players are read (the page offers six maps)
+            {"demo-2p-small-l", "TINY.LVL", 2},                                    // the order is map, then players: here the map word comes too late
+            {"demo-x7k2", "TINY.LVL", 4},                                          // the page's old codes
+        };
+        for (const Case& c : cases) {
+            const RoomStatus st = made(c.code);
+            ASSERT_MSG(st.map == c.map, c.code);
+            ASSERT_MSG(static_cast<int>(st.expected) == c.players, c.code);
+        }
+        // without a list of maps the player count is still chosen
+        ServerLimits plain;
+        plain.demo_rooms = 4;
+        plain.demo_map = "TINY.LVL";
+        World p(plain);
+        p.connect("P", "demo-2p-x");
+        p.connect("Q", "demo-small-2p-y");
+        p.run(300);
+        ASSERT_EQ(static_cast<int>(p.status("demo-2p-x").expected), 2);
+        ASSERT_EQ(p.status("demo-2p-x").map, std::string("TINY.LVL"));
+        ASSERT_EQ(static_cast<int>(p.status("demo-small-2p-y").expected), 2);                     // no list: "small" is no map here, the players are still read
+        // a room for two starts as soon as two have joined, and a third player cannot get in
+        World s2(limits);
+        Client& ann = s2.connect("Ann", "demo-small-2p-duel");
+        Client& bob = s2.connect("Bob", "demo-small-2p-duel");
+        s2.run(800);
+        ASSERT_EQ(ann.lobby->my_seat() != bob.lobby->my_seat(), true);
+        ASSERT_TRUE(s2.status("demo-small-2p-duel").state == RoomState::Loading || s2.status("demo-small-2p-duel").state == RoomState::Running);
+        ASSERT_EQ(static_cast<int>(s2.status("demo-small-2p-duel").joined), 2);
+        Client& cat = s2.connect("Cat", "demo-small-2p-duel");
+        s2.run(800);
+        ASSERT_TRUE(cat.lobby->phase() == net::ClientLobby::Phase::Rejected || cat.lobby->phase() == net::ClientLobby::Phase::Closed);
+        ASSERT_EQ(static_cast<int>(s2.status("demo-small-2p-duel").joined), 2);
+    } TEST_END();
+
+    TEST_CASE("S3.25 Friends Who Come Late: A Demo Room Waits Ten Minutes By Default; A Code Whose Demo Room Is Over Makes A New One (Its End Is Still Reported); A Room Of The Control Interface That Is Over Answers \"No Such Room\", Not \"Match Running\"") {
+        ASSERT_EQ(ServerLimits().demo_wait_ms, 600000u);
+        ServerLimits limits;
+        limits.demo_rooms = 4;
+        limits.demo_map = "TINY.LVL";
+        limits.demo_maps = {"TINY.LVL", "SMALL.LVL"};
+        {
+            World w(limits);                                                          // the default wait: a friend can come after a minute
+            w.connect("Host", "demo-small-2p-slow");
+            w.run(61000);
+            ASSERT_TRUE(w.status("demo-small-2p-slow").state == RoomState::Waiting);
+            Client& friend_ = w.connect("Friend", "demo-small-2p-slow");
+            w.run(800);
+            ASSERT_EQ(friend_.lobby->my_seat(), 1);
+            ASSERT_TRUE(w.status("demo-small-2p-slow").state == RoomState::Loading || w.status("demo-small-2p-slow").state == RoomState::Running);
+        }
+        ServerLimits short_wait = limits;
+        short_wait.demo_wait_ms = 60000;
+        World w(short_wait);
+        Client& host = w.connect("Host", "demo-small-2p-late");
+        w.run(61000);                                                                 // nobody came in time: the room failed
+        ASSERT_TRUE(w.status("demo-small-2p-late").state == RoomState::Failed);
+        ASSERT_TRUE(host.lobby->phase() != net::ClientLobby::Phase::InRoom);
+        Client& late = w.connect("Late", "demo-small-2p-late");                       // within the 30 s of keep time: a new room at once, not "match running"
+        w.run(300);
+        ASSERT_EQ(late.lobby->phase(), net::ClientLobby::Phase::InRoom);
+        ASSERT_TRUE(w.status("demo-small-2p-late").state == RoomState::Waiting);
+        ASSERT_EQ(static_cast<int>(w.status("demo-small-2p-late").joined), 1);
+        ASSERT_EQ(w.status("demo-small-2p-late").map, std::string("SMALL.LVL"));
+        bool reported = false;
+        for (const RoomStatus& st : w.mgr.take_ended(w.now)) reported = reported || (st.code == "demo-small-2p-late" && st.state == RoomState::Failed);
+        ASSERT_TRUE(reported);                                                        // the old room's end is not lost
+        // a room of the control interface that is over is not replaced: "no such room"
+        ASSERT_TRUE(w.mgr.create_room(spec_of("CTL-1", 2), w.now).ok);
+        ASSERT_TRUE(w.mgr.close_room("CTL-1", w.now));
+        ASSERT_TRUE(w.status("CTL-1").state == RoomState::Failed);
+        Client& too_late = w.connect("TooLate", "CTL-1");
+        w.run(300);
+        ASSERT_TRUE(too_late.lobby->phase() == net::ClientLobby::Phase::Rejected);
+        ASSERT_EQ(too_late.lobby->reject_reason(), net::RejectReason::NoSuchRoom);
+        ASSERT_TRUE(w.status("CTL-1").state == RoomState::Failed);
     } TEST_END();
 }
 

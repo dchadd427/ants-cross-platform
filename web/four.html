@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Ants (1998) — four games, one server</title>
+    <title>Ants (1998) — play online</title>
     <link rel="icon" type="image/png" href="/favicon.png">
     <style>
         :root {
@@ -101,13 +101,37 @@
         .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; background: var(--text-dim); }
         .dot.green { background: #48b870; } .dot.red { background: #e0584a; } .dot.blue { background: #4a8ae0; } .dot.black { background: #101010; border: 1px solid #888; }
         footer { max-width: 1320px; margin: 12px auto 0; color: var(--text-dim); font-size: 0.8rem; line-height: 1.5; }
-    </style>
+    
+        #setup, #join, #room-panel {
+            max-width: 1320px;
+            margin: 0 auto 10px;
+            padding: 12px;
+            border: 1px solid var(--panel-border);
+            border-radius: 6px;
+            background: var(--panel-bg);
+        }
+        #setup h2, #join h2, #room-panel h2 { font-size: 0.95rem; color: var(--accent-gold); margin-bottom: 8px; letter-spacing: 0.5px; }
+        .row { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; margin-bottom: 8px; }
+        .row label { color: var(--text-dim); font-size: 0.85rem; }
+        select, input[type=text] {
+            background: var(--bg-color); color: var(--text-main); border: 1px solid var(--panel-border);
+            border-radius: 6px; padding: 8px 10px; min-height: 38px; font-size: 0.9rem;
+        }
+        input[type=text] { min-width: 0; flex: 1 1 260px; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.8rem; }
+        .btn.primary { border-color: var(--accent-green); color: #fff; }
+        .hint { color: var(--text-dim); font-size: 0.8rem; line-height: 1.45; }
+        .seatrow { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; padding: 4px 0; border-top: 1px solid var(--panel-border); }
+        .seatrow .who { min-width: 150px; font-size: 0.9rem; }
+        .seatrow .state { color: var(--text-dim); font-size: 0.8rem; min-width: 90px; }
+        .btn.small { padding: 4px 10px; min-height: 30px; font-size: 0.78rem; }
+        [hidden] { display: none !important; }
+</style>
 </head>
 <body>
     <header>
         <div>
-            <h1>Four games, one server</h1>
-            <div class="sub">One match, four browser windows (Green, Red, Blue, Black), all connected to the game server through <code>/ws</code>. Room <code id="room-code">...</code></div>
+            <h1>Play online</h1>
+            <div class="sub" id="subtitle">Host a match on the game server and share its code or links, or join a match with its code. You can also play every seat yourself, on this page or in windows of their own.</div>
         </div>
         <div class="actions">
             <button id="new-room" type="button" class="btn">New match</button>
@@ -115,14 +139,60 @@
         </div>
     </header>
 
-    <div id="sync">Waiting for the four games to connect and start...</div>
+    <section id="setup" hidden>
+        <h2>New match</h2>
+        <div class="row">
+            <label for="map">Map</label>
+            <select id="map"></select>
+            <label for="players">Players</label>
+            <select id="players">
+                <option value="2">2</option>
+                <option value="3">3</option>
+                <option value="4">4</option>
+            </select>
+            <button id="create" type="button" class="btn primary">Create the match</button>
+        </div>
+        <div class="hint">The page makes a code for the match; the room is made on the server when the first player connects, and waits up to ten minutes for the others. The match starts by itself when all its seats are taken (there are no computer players in these rooms yet), and a running match takes nobody new. Afterwards you choose, seat by seat, whether you play it on this page, in a window of its own, or send its link to somebody else.</div>
+    </section>
+
+    <section id="join" hidden>
+        <h2>Join a match</h2>
+        <div class="row">
+            <label for="join-code">Room code</label>
+            <input type="text" id="join-code" placeholder="demo-small-2p-x7k2" maxlength="32" autocomplete="off" autocapitalize="off" spellcheck="false" aria-label="Room code">
+            <label for="join-name">Your name</label>
+            <input type="text" id="join-name" placeholder="Player" maxlength="32" autocomplete="off" aria-label="Your name" style="flex: 0 1 160px">
+            <button id="join-go" type="button" class="btn primary">Join</button>
+        </div>
+        <div class="hint" id="join-hint">The code of a match that somebody else made here (they see it above their seats). It takes you into the game in this window and gives you the first free seat; the match starts by itself when all its seats are filled.</div>
+    </section>
+
+    <section id="room-panel" hidden>
+        <h2>Room <code id="room-code">...</code> &middot; <span id="room-map"></span></h2>
+        <div class="row">
+            <label for="any-link">Link for anybody (they get the first free seat)</label>
+        </div>
+        <div class="row">
+            <input type="text" id="any-link" readonly aria-label="Link for anybody">
+            <button id="copy-any" type="button" class="btn small">Copy</button>
+        </div>
+        <div class="row">
+            <button id="all-here" type="button" class="btn primary">All seats on this page</button>
+            <button id="all-windows" type="button" class="btn primary">All seats in separate windows</button>
+        </div>
+        <div id="seat-rows"></div>
+        <div class="hint" id="popup-hint" hidden>The browser blocked some of the windows: allow pop-ups for this site, or use the buttons of the seats.</div>
+        <div class="hint">A window that is hidden or covered stops playing (the browser stops drawing it) and the match waits for it: keep separate windows side by side, or use this page.</div>
+    </section>
+
+    <div id="sync" hidden>Waiting for the games to connect and start...</div>
 
     <div id="grid"></div>
 
     <footer>
         Every window runs the whole simulation; the server only orders the commands and acts as the referee. Each game tells this page its tick and state hash every 100 ticks (5 seconds):
-        when the four agree, the machines are in step. Click a window to play it (the others stop their music and their sound: only the window you are in is heard). The match is the
-        original's clock: when it ends each window shows its results screen.
+        when the seats that report agree, the machines are in step (a seat that plays on another computer cannot report to this page). Click a window of this page to play it (the others stop
+        their music and their sound: only the window you are in is heard). The match is the original's clock: when it ends each window shows its results screen.
     </footer>
 
     <script>
@@ -132,8 +202,17 @@
             { name: 'Green', css: 'green' }, { name: 'Red', css: 'red' },
             { name: 'Blue', css: 'blue' }, { name: 'Black', css: 'black' }
         ];
+        // The maps of the original game; the server must allow them (--demo-maps). The room code carries the choice: demo-<map>-<random>
+        var MAPS = [
+            { key: 'tiny', name: 'Tiny' }, { key: 'small', name: 'Small' }, { key: 'medium', name: 'Medium' },
+            { key: 'gauntlet', name: 'Gauntlet' }, { key: 'treasure', name: 'Treasure' }, { key: 'islands', name: 'Islands' }
+        ];
         var NAMES = ['Maple', 'Clover', 'Pebble', 'Sorrel', 'Fern', 'Bramble', 'Juniper', 'Flint', 'Willow', 'Cedar', 'Moss', 'Thistle'];
+        var names = NAMES.slice().sort(function () { return 0.5 - Math.random(); });
 
+        function $(id) { return document.getElementById(id); }
+        function remember(key, value) { try { window.localStorage.setItem(key, value); } catch (e) { /* private window: not remembered */ } }
+        function recall(key) { try { return window.localStorage.getItem(key); } catch (e) { return null; } }
         function randomCode() {
             var chars = 'abcdefghjkmnpqrstuvwxyz23456789', out = '';
             var buf = new Uint32Array(6);
@@ -141,75 +220,41 @@
             for (var i = 0; i < 6; i++) out += chars.charAt(buf[i] % chars.length);
             return out;
         }
-
-        // ?room=<code> uses a room that was made some other way (the lobby, the control interface); without it the page asks for a demo room of its own
-        var params = new URLSearchParams(window.location.search);
-        var room = params.get('room');
-        if (!room || !/^[A-Za-z0-9_-]{1,32}$/.test(room)) room = 'demo-' + randomCode();
-        document.getElementById('room-code').textContent = room;
-
-        var state = SEATS.map(function () { return { tick: -1, hash: '', at: 0 }; });
-        var byTick = {};            // tick -> [hash per seat]
-        var agreedTick = -1;
-        var diverged = null;
-        var startedAt = Date.now();
-
-        var grid = document.getElementById('grid');
-        var cells = [], labels = [];
-        var names = NAMES.slice().sort(function () { return 0.5 - Math.random(); });
-        SEATS.forEach(function (seat, i) {
-            var cell = document.createElement('div');
-            cell.className = 'cell';
-            var label = document.createElement('div');
-            label.className = 'label';
-            label.innerHTML = '<span><span class="dot ' + seat.css + '"></span><span class="seat">' + seat.name + '</span> &middot; ' + names[i] + '</span><span class="info">connecting...</span>';
-            var frame = document.createElement('div');
-            frame.className = 'frame';
-            var iframe = document.createElement('iframe');
-            iframe.setAttribute('allow', 'autoplay; fullscreen');
-            iframe.setAttribute('title', seat.name + ' player');
-            iframe.src = './?join=/ws&room=' + encodeURIComponent(room) + '&seat=' + i + '&name=' + encodeURIComponent(names[i]) + '&embed=1';
-            frame.appendChild(iframe);
-            cell.appendChild(label);
-            cell.appendChild(frame);
-            grid.appendChild(cell);
-            cells.push(cell);
-            labels.push(label.querySelector('.info'));
-            iframe.addEventListener('load', function () { iframe.contentWindow.addEventListener('focus', function () { setFocus(i); }); });
-        });
-
-        function setFocus(i) {
-            cells.forEach(function (c, k) { c.classList.toggle('focus', k === i); });
+        function mapByKey(key) {
+            for (var i = 0; i < MAPS.length; i++) if (MAPS[i].key === key) return MAPS[i];
+            return null;
         }
-        window.addEventListener('blur', function () {            // focus moved into a frame (or away from the page)
-            setTimeout(function () {
-                var active = document.activeElement;
-                for (var k = 0; k < SEATS.length; k++) {
-                    if (cells[k].contains(active)) { setFocus(k); return; }
-                }
-            }, 0);
-        });
 
-        var syncBox = document.getElementById('sync');
-        function show(text, cls) { syncBox.textContent = text; syncBox.className = cls || ''; }
+        var room = '';
+        var seatCount = 4;                  // the seats of this room (the code of a page-made room says how many: demo-<map>-<n>p-...)
+        var roomMap = '';
+        var inFrame = [false, false, false, false];
+        var frames = [null, null, null, null];          // the iframe of each seat that plays on this page
+        var wins = [null, null, null, null];            // the window of each seat that plays in a window of its own
+        var cells = [], labels = [], rows = [];
 
-        // A new match in the same page (the room was left and a new one started) begins again at tick 0: whatever was collected belongs to the old match
+        // ---- the state of the match as the games report it (frames post to this page, windows on the broadcast channel "ants-sync") ----
+        var state, byTick, agreedTick, diverged, startedAt, reported;
         function resetMatch() {
+            state = SEATS.map(function () { return { tick: -1, hash: '', at: 0 }; });
             byTick = {};
             agreedTick = -1;
             diverged = null;
-            state = SEATS.map(function () { return { tick: -1, hash: '', at: 0 }; });
+            reported = false;
             startedAt = Date.now();
-            show('Waiting for the four games to connect and start...');
+            show('Waiting for the games to connect and start...');
         }
+        var syncBox = $('sync');
+        function show(text, cls) { syncBox.textContent = text; syncBox.className = cls || ''; }
 
-        window.addEventListener('message', function (e) {
-            if (e.origin !== window.location.origin || !e.data || e.data.ants !== 'sync') return;
-            var seat = e.data.seat, tick = e.data.tick, hash = String(e.data.hash);
+        function onSync(seat, tick, hash) {
             if (!(seat >= 0 && seat < SEATS.length) || typeof tick !== 'number' || !/^[0-9a-f]{16}$/.test(hash)) return;
             if (tick < state[seat].tick) resetMatch();                // a seat that reports an earlier tick than before: a new match began
+            $('sync').hidden = false;                                  // (games of this room that were opened some other way report too)
+            reported = true;
             state[seat] = { tick: tick, hash: hash, at: Date.now() };
-            labels[seat].textContent = 'tick ' + tick + ' \u00b7 ' + hash.slice(0, 8);
+            if (labels[seat]) labels[seat].textContent = 'tick ' + tick + ' \u00b7 ' + hash.slice(0, 8);
+            setRowState(seat, 'tick ' + tick);
             var row = byTick[tick] || (byTick[tick] = []);
             row[seat] = hash;
             var complete = 0, same = true, first = null;
@@ -219,24 +264,249 @@
             if (!same) {
                 diverged = tick;
                 var parts = [];
-                for (var j = 0; j < SEATS.length; j++) parts.push(SEATS[j].name + ' ' + (row[j] || '-').slice(0, 8));      // (an explicit loop: a sparse array has holes that map() skips)
+                for (var j = 0; j < Math.max(seatCount, row.length); j++) parts.push(SEATS[j].name + ' ' + (row[j] || '-').slice(0, 8));      // (an explicit loop: a sparse array has holes that map() skips)
                 show('OUT OF STEP at tick ' + tick + ': ' + parts.join(' \u00b7 '), 'bad');
-            } else if (complete === SEATS.length) {
+            } else if (complete >= 2) {
                 if (tick > agreedTick) agreedTick = tick;
-                if (diverged === null) show('In step: all four games agree at tick ' + agreedTick + ' (' + Math.floor(agreedTick / 20) + ' seconds of play), state hash ' + first.slice(0, 8), 'ok');
+                if (diverged === null) show('In step: ' + (complete >= seatCount ? 'all ' + seatCount + ' games' : complete + ' of the ' + seatCount + ' games') + ' agree at tick ' + agreedTick + ' (' + Math.floor(agreedTick / 20) + ' seconds of play), state hash ' + first.slice(0, 8), 'ok');
+            } else if (agreedTick < 0 && diverged === null) {
+                // only one game reports to this page (the other seats play on other computers or pages): it plays; the server's referee checks everybody
+                show('Playing: ' + SEATS[seat].name + ' at tick ' + tick + ' (' + Math.floor(tick / 20) + ' seconds). The other seats play elsewhere; the game server checks that every game stays in step.', 'ok');
             }
             Object.keys(byTick).forEach(function (t) { if (Number(t) < tick - 2000) delete byTick[t]; });   // keep the recent ones only
+        }
+        window.addEventListener('message', function (e) {
+            if (e.origin !== window.location.origin || !e.data || e.data.ants !== 'sync') return;
+            onSync(e.data.seat, e.data.tick, String(e.data.hash));
         });
+        var channel = null;
+        try {
+            if (typeof BroadcastChannel !== 'undefined') {
+                channel = new BroadcastChannel('ants-sync');
+                channel.onmessage = function (e) {
+                    var m = e.data;
+                    if (!m || m.ants !== 'sync' || m.room !== room || !room) return;      // only the games of this room
+                    onSync(m.seat, m.tick, String(m.hash));
+                };
+            }
+        } catch (e) { channel = null; }
 
         setInterval(function () {
-            if (agreedTick < 0 && diverged === null) {
+            if (room && !reported && diverged === null) {
                 var waited = Math.round((Date.now() - startedAt) / 1000);
-                show('Waiting for the four games to connect and start (' + waited + ' s)...' + (waited > 90 ? ' Is the game server reachable at /ws?' : ''));
+                show('Waiting for the games to connect and start (' + waited + ' s)...' + (waited > 90 ? ' Is the game server reachable at /ws, and does it allow this map?' : ''));
             }
         }, 1000);
 
-        document.getElementById('new-room').addEventListener('click', function () {
-            // a fresh page, a fresh demo room (the address is rebuilt from this page's own origin, never taken from the path: a path that starts with // would leave the site)
+        // ---- the seats: on this page (a frame), in a window of its own, or a link for somebody else ----
+        function gameUrl(seat) {            // a link to the game page of this site (never taken from the path of this page: a path that starts with // would leave the site)
+            var q = '?join=/ws&room=' + encodeURIComponent(room);
+            if (seat >= 0) q += '&seat=' + seat + '&name=' + encodeURIComponent(names[seat]);
+            return new URL('./' + q, window.location.href).href;
+        }
+        function setRowState(seat, text) { if (rows[seat]) rows[seat].state.textContent = text; }
+        function playHere(seat) {
+            if (inFrame[seat]) {                     // again: reconnect that seat (a frame whose game lost its connection, or a room that was made again)
+                if (frames[seat]) frames[seat].src = gameUrl(seat) + '&embed=1';
+                setRowState(seat, 'on this page (reconnected)');
+                return true;
+            }
+            inFrame[seat] = true;
+            var cell = document.createElement('div');
+            cell.className = 'cell';
+            var label = document.createElement('div');
+            label.className = 'label';
+            label.innerHTML = '<span><span class="dot ' + SEATS[seat].css + '"></span><span class="seat">' + SEATS[seat].name + '</span> &middot; ' + names[seat] + '</span><span class="info">connecting...</span>';
+            var frame = document.createElement('div');
+            frame.className = 'frame';
+            var iframe = document.createElement('iframe');
+            iframe.setAttribute('allow', 'autoplay; fullscreen');
+            iframe.setAttribute('title', SEATS[seat].name + ' player');
+            iframe.src = gameUrl(seat) + '&embed=1';
+            frames[seat] = iframe;
+            frame.appendChild(iframe);
+            cell.appendChild(label);
+            cell.appendChild(frame);
+            $('grid').appendChild(cell);
+            cells[seat] = cell;
+            labels[seat] = label.querySelector('.info');
+            iframe.addEventListener('load', function () { iframe.contentWindow.addEventListener('focus', function () { setFocus(seat); }); });
+            setRowState(seat, 'on this page');
+            $('sync').hidden = false;
+            return true;
+        }
+        function openWindow(seat) {
+            if (wins[seat] && !wins[seat].closed) {   // already open: bring it to the front (opening it again would reload that seat's game and drop it from the match)
+                try { wins[seat].focus(); } catch (e) { /* the browser decides */ }
+                return true;
+            }
+            var w = window.open(gameUrl(seat), 'ants-seat-' + seat + '-' + room, 'popup=yes,width=860,height=700');
+            if (!w) { $('popup-hint').hidden = false; return false; }
+            wins[seat] = w;
+            setRowState(seat, 'in a window');
+            $('sync').hidden = false;
+            return true;
+        }
+        function copyText(text, done) {
+            function fallback() {
+                var box = document.createElement('input');
+                box.value = text; box.setAttribute('readonly', ''); box.style.position = 'fixed'; box.style.opacity = '0';
+                document.body.appendChild(box); box.select();
+                try { document.execCommand('copy'); done(true); } catch (e) { done(false); }
+                document.body.removeChild(box);
+            }
+            if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(function () { done(true); }, fallback);
+            else fallback();
+        }
+        function copyButton(btn, text) {
+            var label = btn.textContent;
+            btn.addEventListener('click', function () {
+                copyText(text(), function (ok) {
+                    btn.textContent = ok ? 'Copied' : 'Select the link and copy it';
+                    setTimeout(function () { btn.textContent = label; }, 1800);
+                });
+            });
+        }
+        function button(text, cls, onclick) {
+            var b = document.createElement('button');
+            b.type = 'button'; b.className = cls; b.textContent = text; b.addEventListener('click', onclick);
+            return b;
+        }
+        function setFocus(i) { cells.forEach(function (c, k) { if (c) c.classList.toggle('focus', k === i); }); }
+        window.addEventListener('blur', function () {            // focus moved into a frame (or away from the page)
+            setTimeout(function () {
+                var active = document.activeElement;
+                for (var k = 0; k < SEATS.length; k++) {
+                    if (cells[k] && cells[k].contains(active)) { setFocus(k); return; }
+                }
+            }, 0);
+        });
+
+        function startRoom(code, mapName, play, n) {
+            room = code;
+            try {                                   // the address names the room: a reload, a bookmark or a copied address come back to it
+                history.replaceState(null, '', window.location.pathname.replace(/^\/+/, '/') + '?room=' + encodeURIComponent(code));
+            } catch (e) { /* not essential */ }
+            roomMap = mapName;
+            seatCount = n >= 2 && n <= SEATS.length ? n : SEATS.length;
+            var seats = SEATS.slice(0, seatCount);
+            resetMatch();
+            $('setup').hidden = true;
+            $('join').hidden = true;
+            $('room-panel').hidden = false;
+            $('room-code').textContent = room;
+            $('room-map').textContent = (mapName ? mapName + ' map' : 'a room made some other way') + ', ' + seatCount + ' players';
+            $('subtitle').textContent = 'One match, ' + seatCount + ' seats (' + seats.map(function (x) { return x.name; }).join(', ') + '), all connected to the game server through /ws. Share the code or a link; the match starts when every seat is taken.';
+            $('any-link').value = gameUrl(-1);
+            copyButton($('copy-any'), function () { return gameUrl(-1); });
+            var holder = $('seat-rows');
+            seats.forEach(function (seat, i) {
+                var row = document.createElement('div');
+                row.className = 'seatrow';
+                var who = document.createElement('span');
+                who.className = 'who';
+                who.innerHTML = '<span class="dot ' + seat.css + '"></span><strong>' + seat.name + '</strong> &middot; ' + names[i];
+                var st = document.createElement('span');
+                st.className = 'state';
+                st.textContent = 'not started';
+                row.appendChild(who);
+                row.appendChild(st);
+                row.appendChild(button('Play here', 'btn small', function () { playHere(i); }));
+                row.appendChild(button('Open a window', 'btn small', function () { openWindow(i); }));
+                var copy = button('Copy link', 'btn small', function () {});
+                copyButton(copy, function () { return gameUrl(i); });
+                row.appendChild(copy);
+                holder.appendChild(row);
+                rows[i] = { state: st };
+            });
+            $('all-here').addEventListener('click', function () { seats.forEach(function (s, i) { playHere(i); }); });
+            $('all-windows').addEventListener('click', function () {
+                // the seats that are not open yet (a browser lets one click open one window unless pop-ups are allowed for the site: click again after allowing them)
+                $('popup-hint').hidden = true;
+                for (var i = 0; i < seats.length; i++) {
+                    if (inFrame[i] || (wins[i] && !wins[i].closed)) continue;
+                    if (!openWindow(i)) break;
+                }
+            });
+            if (play === 'here') seats.forEach(function (s, i) { playHere(i); });
+        }
+
+        // ---- what the address says ----
+        // ?room=<code>  a room that was made elsewhere (a shared code, the lobby, the control interface): its panel at once; a page-made code says its map and players
+        // ?map=<name>   host a match on that map at once (&players=2|3|4, default 4; &play=here plays every seat on this page, as the page used to do)
+        // nothing       the setup: choose the map and the players, or join with a code
+        var params = new URLSearchParams(window.location.search);
+        var mapSelect = $('map');
+        MAPS.forEach(function (m) {
+            var o = document.createElement('option');
+            o.value = m.key; o.textContent = m.name;
+            mapSelect.appendChild(o);
+        });
+        var last = recall('ants-four-map');
+        if (last && mapByKey(last)) mapSelect.value = last;
+        var playersSelect = $('players');
+        var lastPlayers = recall('ants-four-players');
+        playersSelect.value = lastPlayers === '2' || lastPlayers === '3' ? lastPlayers : '4';
+        // The code carries the choice (the server reads it: demo-<map>-<n>p-<random>)
+        function create(mapKey, play, n) {
+            var m = mapByKey(mapKey) || MAPS[0];
+            var players = (n === 2 || n === 3 || n === 4) ? n : 4;
+            remember('ants-four-map', m.key);
+            remember('ants-four-players', String(players));
+            startRoom('demo-' + m.key + '-' + players + 'p-' + randomCode(), m.name, play, players);
+        }
+        // What a page-made code says (only for the panel: the server decides)
+        function describeCode(code) {
+            var keys = MAPS.map(function (m) { return m.key; }).join('|');
+            var withMap = new RegExp('^demo-(' + keys + ')-(?:([2-4])[pP]-)?', 'i').exec(code);
+            var withoutMap = /^demo-([2-4])[pP]-/i.exec(code);
+            if (withMap) return { map: mapByKey(withMap[1].toLowerCase()).name, players: withMap[2] ? Number(withMap[2]) : 4 };
+            if (withoutMap) return { map: '', players: Number(withoutMap[1]) };
+            return { map: '', players: 4 };
+        }
+        var wanted = params.get('room');
+        var wantedMap = params.get('map');
+        var wantedPlayersText = params.get('players');
+        var wantedPlayers = (wantedPlayersText === '2' || wantedPlayersText === '3' || wantedPlayersText === '4') ? Number(wantedPlayersText) : 4;
+        if (wanted && /^[A-Za-z0-9_-]{1,32}$/.test(wanted)) {
+            var d = describeCode(wanted);
+            startRoom(wanted, d.map, params.get('play') === 'here' ? 'here' : '', d.players);
+        } else if (wantedMap && mapByKey(wantedMap.toLowerCase())) {
+            create(wantedMap.toLowerCase(), params.get('play') === 'here' ? 'here' : '', wantedPlayers);
+        } else {
+            $('setup').hidden = false;
+            $('join').hidden = false;
+        }
+        $('create').addEventListener('click', function () { create(mapSelect.value, '', Number(playersSelect.value)); });
+
+        // Join: the code that somebody else made (or any room of the server), typed or pasted; the game opens in this window and takes the first free seat
+        var joinName = $('join-name');
+        var savedName = recall('ants-four-name');
+        if (savedName) joinName.value = savedName;
+        function joinNow() {
+            var code = $('join-code').value.trim();
+            var name = joinName.value.trim();
+            var hint = $('join-hint');
+            if (!/^[A-Za-z0-9_-]{1,32}$/.test(code)) {
+                hint.textContent = 'A room code has letters, digits, - and _ only (up to 32), like demo-small-x7k2.';
+                hint.style.color = 'var(--accent-red)';
+                return;
+            }
+            if (name && !/^[\x20-\x7e]{1,32}$/.test(name)) {
+                hint.textContent = 'The name may hold printable ASCII characters only (up to 32).';
+                hint.style.color = 'var(--accent-red)';
+                return;
+            }
+            remember('ants-four-name', name);
+            var q = '?join=/ws&room=' + encodeURIComponent(code) + (name ? '&name=' + encodeURIComponent(name) : '');
+            window.location.assign(new URL('./' + q, window.location.href).href);
+        }
+        $('join-go').addEventListener('click', joinNow);
+        $('join-code').addEventListener('keydown', function (e) { if (e.key === 'Enter') joinNow(); });
+        joinName.addEventListener('keydown', function (e) { if (e.key === 'Enter') joinNow(); });
+
+        $('new-room').addEventListener('click', function () {
+            // the setup again (the address is rebuilt from this page's own origin, never taken from the path: a path that starts with // would leave the site)
             window.location.assign(window.location.origin + window.location.pathname.replace(/^\/+/, '/'));
         });
     })();

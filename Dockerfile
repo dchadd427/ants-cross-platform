@@ -47,7 +47,7 @@ COPY --from=builder /src/build_web/src/ants_app/index.* /usr/share/nginx/html/
 # Copy favicon assets
 COPY web/favicon.* /usr/share/nginx/html/
 
-# The page with four games on it, all connected to the game server (four.html; it embeds the game page four times)
+# The Play online page: host a match on the game server or join one by its code (four.html; it embeds the game page for the seats that play on it)
 COPY web/four.html /usr/share/nginx/html/four.html
 
 # The changelog page (built from CHANGELOG.md, linked from the page header)
