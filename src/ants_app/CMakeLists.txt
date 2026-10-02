@@ -34,6 +34,7 @@ add_library(ants_app STATIC
     config_store.cpp
     midi_player.cpp
     renderer.cpp
+    renderer_world_image.cpp
     hud.cpp
     hud_input.cpp
     minimap_tables.cpp

@@ -104,6 +104,20 @@ private:
     std::streambuf* old_;
 };
 
+/// What a screen logs on std::cerr (the map preview says once that it fell back to the minimap colours) is of no interest to the tests that use a renderer that cannot draw offscreen; it is
+/// kept, and test_map_preview checks it. (Failures are printed on the C stream stderr, which this does not touch.)
+class QuietCerr {
+public:
+    QuietCerr() : old_(std::cerr.rdbuf(sink_.rdbuf())) {}
+    ~QuietCerr() { std::cerr.rdbuf(old_); }
+    QuietCerr(const QuietCerr&) = delete;
+    QuietCerr& operator=(const QuietCerr&) = delete;
+
+private:
+    std::ostringstream sink_;
+    std::streambuf* old_;
+};
+
 /// FNV-1a 64 over bytes
 class Fnv {
 public:
@@ -597,6 +611,26 @@ uint64_t preview_digest(const MapPreview& p) {
     return f.value();
 }
 
+/// The digest (region_digest's, RGB) of a picture centred in the black box of inner x inner pixels (the box is filled with the black of the original's frames, (7, 11, 15))
+uint64_t boxed_digest(const MapPreview& p, int32_t inner) {
+    constexpr uint8_t kBoxBlack[3] = {7, 11, 15};
+    Fnv f;
+    const int32_t ox = (inner - p.width) / 2;
+    const int32_t oy = (inner - p.height) / 2;
+    for (int32_t y = 0; y < inner; ++y) {
+        for (int32_t x = 0; x < inner; ++x) {
+            const int32_t px = x - ox;
+            const int32_t py = y - oy;
+            const bool in = px >= 0 && py >= 0 && px < p.width && py < p.height;
+            const size_t i = in ? (static_cast<size_t>(py) * static_cast<size_t>(p.width) + static_cast<size_t>(px)) * 4u : 0;
+            for (size_t k = 0; k < 3; ++k) f.byte(in ? p.rgba[i + k] : kBoxBlack[k]);
+        }
+    }
+    return f.value();
+}
+
+assets::LevelData load_level(const char* name);
+
 std::vector<LayoutRect> text_masks(bool online_column, bool bot_thumb, bool footer, bool chat) {
     std::vector<LayoutRect> m = {{35, 370, 252, 22}, {35, 438, 366, 22}, {34, 505, 368, 24}};     // the map's name and description, the prompt
     for (int32_t i = 0; i < 4; ++i) m.push_back({733, 93 + 50 * i, 124, 22});                       // the four players' names
@@ -617,9 +651,8 @@ struct MockCase {
     int map_index;
     SetupVariant variant;
     std::vector<LayoutRect> masks;
-    LayoutRect preview;                 // where the picture is
-    uint64_t mock_masked;               // the digest of the mock-up PNG with the masks blanked
-    uint64_t mock_preview;              // ... of the picture's pixels in the mock-up PNG
+    LayoutRect preview;                 // the preview's inner box (the black box's inner square that the picture is centred in)
+    uint64_t mock_masked;               // the digest of the mock-up PNG with the masks blanked (the preview's inner box is one of them)
 };
 
 void test_mockups(const assets::AssetArchive& arc) {
@@ -627,13 +660,18 @@ void test_mockups(const assets::AssetArchive& arc) {
     RendererRig rig(arc, 960, 540);
     check(rig.ok, "the renderer is up on a 960 x 540 canvas");
     if (!rig.ok) return;
-    const LayoutRect single_pic{363, 60, 279, 279};
+    // The mock-ups drew the map preview as the minimap-colour picture. The preview is now the game's own render of the map (map_preview.hpp), so the mock-ups' own pixels of the preview are
+    // no longer the picture (the preview of the real renderer is pinned in test_map_preview); what stays the mock-ups' is everything around it. The mask is the preview's whole inner box
+    // (the 300 x 300 or 248 x 248 square: the pictures fill it now, the old ones were smaller whole-scale squares inside it), the pinned digests are those of the mock-ups' PNGs with that
+    // mask (the three single-player cases share one: the art outside the preview and the text is the same on every map).
+    const LayoutRect single_box{353, 50, 300, 300};
+    const LayoutRect online_box{379, 83, 248, 248};
     const std::vector<MockCase> cases = {
-        {"C_single_TINY", [](ScreenState&) {}, kTiny, SetupVariant::Single, [&] { auto m = text_masks(false, false, false, false); m.push_back({363, 60, 279, 279}); return m; }(), single_pic, 0x1ba9d15334525fb2ull, 0xa69b975a94620fd0ull},
-        {"C_single_GAUNTLET", [](ScreenState&) {}, kGauntlet, SetupVariant::Single, [&] { auto m = text_masks(false, false, false, false); m.push_back({353, 50, 300, 300}); return m; }(), LayoutRect{353, 50, 300, 300}, 0xe1806faf8326f5b7ull, 0x4736f4e8163df59dull},
-        {"C_single_ISLANDS", [](ScreenState&) {}, kIslands, SetupVariant::Single, [&] { auto m = text_masks(false, false, false, false); m.push_back({353, 50, 300, 300}); return m; }(), LayoutRect{353, 50, 300, 300}, 0xe1806faf8326f5b7ull, 0x39589fd86c7d7fd9ull},
-        {"C2_online_leader", [](ScreenState& s) { s.online(true); }, kIslands, SetupVariant::Online, [&] { auto m = text_masks(true, true, true, true); m.push_back({383, 87, 240, 240}); return m; }(), LayoutRect{383, 87, 240, 240}, 0x3f735da0c577108cull, 0xbb4f27b34ea6e8e5ull},
-        {"C2_online_guest", [](ScreenState& s) { s.guest(true); }, kIslands, SetupVariant::Guest, [&] { auto m = text_masks(true, true, false, true); m.push_back({383, 87, 240, 240}); return m; }(), LayoutRect{383, 87, 240, 240}, 0xbd4c48dd96e2016full, 0xbb4f27b34ea6e8e5ull},
+        {"C_single_TINY", [](ScreenState&) {}, kTiny, SetupVariant::Single, [&] { auto m = text_masks(false, false, false, false); m.push_back(single_box); return m; }(), single_box, 0xe1806faf8326f5b7ull},
+        {"C_single_GAUNTLET", [](ScreenState&) {}, kGauntlet, SetupVariant::Single, [&] { auto m = text_masks(false, false, false, false); m.push_back(single_box); return m; }(), single_box, 0xe1806faf8326f5b7ull},
+        {"C_single_ISLANDS", [](ScreenState&) {}, kIslands, SetupVariant::Single, [&] { auto m = text_masks(false, false, false, false); m.push_back(single_box); return m; }(), single_box, 0xe1806faf8326f5b7ull},
+        {"C2_online_leader", [](ScreenState& s) { s.online(true); }, kIslands, SetupVariant::Online, [&] { auto m = text_masks(true, true, true, true); m.push_back(online_box); return m; }(), online_box, 0xe80f507abc56da2cull},
+        {"C2_online_guest", [](ScreenState& s) { s.guest(true); }, kIslands, SetupVariant::Guest, [&] { auto m = text_masks(true, true, false, true); m.push_back(online_box); return m; }(), online_box, 0x40aab98264b6217full},
     };
     for (const MockCase& c : cases) {
         ScreenState state(c.map_index);
@@ -644,8 +682,12 @@ void test_mockups(const assets::AssetArchive& arc) {
         const std::vector<uint8_t> px = rig.read();
         const uint64_t got = masked_digest(px, 960, 540, c.masks);
         check(got == c.mock_masked, std::string(c.name) + ": the picture outside the text areas and the preview is the mock-up's: digest " + hex64(got) + ", the mock-up's is " + hex64(c.mock_masked));
-        const uint64_t pic = region_digest(px, 960, c.preview);
-        check(pic == c.mock_preview, std::string(c.name) + ": the map preview is the mock-up's: digest " + hex64(pic) + ", the mock-up's is " + hex64(c.mock_preview));
+        // the preview box shows the game's own render of the map, centred, on black: the screen's pixels are the preview that render_map_preview_world makes for the same renderer
+        const std::vector<std::string> files = {"GAUNTLET.LVL", "ISLANDS.LVL", "MEDIUM.LVL", "SMALL.LVL", "TINY.LVL", "TREASURE.LVL"};
+        const assets::LevelData level = load_level(files[static_cast<size_t>(c.map_index)].c_str());
+        const MapPreview want = render_map_preview_world(rig.renderer, level, c.preview.w);
+        check(want.valid() && want.rendered, std::string(c.name) + ": the renderer makes the preview from its own drawing");
+        check(region_digest(px, 960, c.preview) == boxed_digest(want, c.preview.w), std::string(c.name) + ": the preview box shows that picture, centred on black: " + hex64(region_digest(px, 960, c.preview)) + ", wanted " + hex64(boxed_digest(want, c.preview.w)));
     }
     // a mask that hides nothing would make every digest above a lie: the same picture with one pixel of the art changed has another digest, and a blanked pixel does not
     {
@@ -701,7 +743,7 @@ assets::LevelData big_level(uint32_t cols, uint32_t rows) {
 }
 
 void test_preview(const assets::AssetArchive& arc) {
-    group("preview", "the map preview: the size rule, the mock-ups' pictures, a big map sampled, plants, the caption");
+    group("preview", "the minimap-colour preview (the fallback of the rendered one): the size rule, the mock-ups' pictures, a big map sampled, plants, the caption");
     const auto& pal = arc.get_palette();
     // the size rule
     struct SizeCase {
@@ -887,7 +929,7 @@ public:
         const uint8_t* image{nullptr};
     };
 
-    explicit Spy(const assets::AssetArchive& archive) : arc_(archive) {}
+    explicit Spy(const assets::AssetArchive& archive) : arc_(archive) {}   // (this renderer draws no offscreen images: the screens it sees show the minimap-colour preview)
 
     void draw_sprite(uint32_t id, int32_t x, int32_t y, bool) override { push(Kind::Sprite, arc_.get_sprite(id).name, x, y); }
     void draw_named_sprite(const std::string& name, int32_t x, int32_t y, bool) override { push(Kind::Named, name, x, y); }
@@ -999,6 +1041,7 @@ private:
         e.x = x; e.y = y; e.colour = c; e.size = size;
         events.push_back(e);
     }
+    QuietCerr quiet_;
     const assets::AssetArchive& arc_;
 };
 
@@ -1327,7 +1370,7 @@ void test_state(const assets::AssetArchive& arc) {
         int32_t w_single = 0, w_room = 0;
         for (const Spy::Ev& e : single.events) w_single = e.kind == Spy::Kind::Image ? e.w : w_single;
         for (const Spy::Ev& e : room.events) w_room = e.kind == Spy::Kind::Image ? e.w : w_room;
-        check(w_single == 300 && w_room == 240, "the same map is 300 pixels wide in the single player's box and 240 in the room's (" + std::to_string(w_single) + ", " + std::to_string(w_room) + ")");
+        check(w_single == 300 && w_room == 240, "the same map is 300 pixels wide in the single player's box and 240 in the room's (the minimap-colour picture of this test renderer: a whole scale of 4 cells in 248) (" + std::to_string(w_single) + ", " + std::to_string(w_room) + ")");
     }
     // a chat panel on a game of one machine has no place: the Single variant has no chat column, whatever was set
     {
@@ -1742,8 +1785,9 @@ void test_application() {
             std::vector<LayoutRect> masks = text_masks(false, false, false, false);
             masks.push_back({95, 35, 40, 45});                    // the pointer
             masks.push_back({640, 524, 320, 16});                 // the frame rate, its sparkline and the version
+            masks.push_back({353, 50, 300, 300});                 // the preview (the game's own render of the map: test_map_preview pins it)
             const uint64_t digest = masked_digest(px, 960, 540, masks);
-            check(digest == 0x373cf6b669d4199full, "the application's frame of the setup screen (GAUNTLET) is the mock-up's outside the text, the pointer and the corner: " + hex64(digest));
+            check(digest == 0xcfcf2beb520c2777ull, "the application's frame of the setup screen (GAUNTLET) is the mock-up's outside the text, the pointer and the corner: " + hex64(digest));
         }
     }
 }
@@ -1773,13 +1817,13 @@ constexpr Golden kGolden[] = {
     {"screen.wide.guest.plain", 0x1d74e66a65e1ef8b, 196ull},
     {"screen.wide.guest.chat", 0xf3413141c8f47af8, 247ull},
     {"screen.wide.guest.fog_yes", 0x3e3c95792dd3e14f, 248ull},
-    {"px.wide.setup.single.tiny", 0xdcad492ba620596f, 518400ull},
+    {"px.wide.setup.single.tiny", 0x28ca52e9932a5b64, 518400ull},
     {"px.wide.setup.single.hover_start", 0xfed41daaf70690da, 518400ull},
     {"px.wide.setup.single.pressed_start", 0xf520b5efe54fdde5, 518400ull},
     {"px.wide.setup.single.fog_on", 0x40de301d4557325c, 518400ull},
-    {"px.wide.setup.online.chat_reserved", 0x0853d41c0264805a, 518400ull},
-    {"px.wide.setup.online.chat_shown", 0x3f735da0c577108c, 518400ull},
-    {"px.wide.setup.guest.fog_yes", 0x6616110beacc6811, 518400ull},
+    {"px.wide.setup.online.chat_reserved", 0x44211137c7909fda, 518400ull},
+    {"px.wide.setup.online.chat_shown", 0xe80f507abc56da2c, 518400ull},
+    {"px.wide.setup.guest.fog_yes", 0xf2e71ac507e7b3a1, 518400ull},
 };
 
 
@@ -1885,12 +1929,12 @@ void test_fingerprints(const assets::AssetArchive& arc) {
                 ScreenState s(kIslands);
                 s.online(false);
                 std::vector<LayoutRect> m = text_masks(true, true, false, false);
-                m.push_back({383, 87, 240, 240});
+                m.push_back({379, 83, 248, 248});
                 px("online.chat_reserved", s, m);                       // the chat column's frame is NOT there: the clay shows
                 s.screen.set_chat_panel(sample_chat(true));
                 s.screen.set_fill_footer("Empty seats at START:", "Medium bots");
                 std::vector<LayoutRect> m2 = text_masks(true, true, true, true);
-                m2.push_back({383, 87, 240, 240});
+                m2.push_back({379, 83, 248, 248});
                 px("online.chat_shown", s, m2);
             }
             {
@@ -1898,7 +1942,7 @@ void test_fingerprints(const assets::AssetArchive& arc) {
                 s.guest(true);
                 s.screen.follow_host_choice("ISLANDS.LVL", true);
                 std::vector<LayoutRect> m = text_masks(true, true, false, true);
-                m.push_back({383, 87, 240, 240});
+                m.push_back({379, 83, 248, 248});
                 px("guest.fog_yes", s, m);
             }
         }

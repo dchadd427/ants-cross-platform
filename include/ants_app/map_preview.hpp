@@ -1,9 +1,17 @@
 #pragma once
 
-// The picture of a map that the wide setup screen shows (setup_layout.hpp): the selected map's .LVL drawn with the colours of the match screen's minimap (minimap_tables.hpp),
-// one flat colour per terrain class (gravel, slate, water, mud, dirt) and the colour of every object by its tile id from the minimap's table: the four hills in their team colours,
-// water, food and power-ups, bridges, toys and rocks, and a dot for every plant the table gives a size. Where the picture has room for two pixels of every cell it is drawn at a
-// whole scale per cell (a cell is a square of scale x scale pixels: nothing is stretched unevenly); a map too big for that is sampled, nearest neighbour, into the box.
+// The picture of a map that the wide setup screen shows (setup_layout.hpp). It is the map as the game draws it: render_map_preview_world sets the level up as for a new match (the same
+// SimulationEngine and level loader, all four start positions, so that every hill shows), has the game's own renderer draw the whole world once into an offscreen image (1 world pixel per
+// pixel: Renderer::render_world_image: terrain, water, grass and plants, the hills in their team colours, food, power-ups, rocks and every other object; no HUD, no fog, no cursor, and no
+// ants: see below) and reduces it to the preview box with an exact area filter (box_downscale: every output pixel is the average of the area of the world image that it covers, weighted by
+// how much of each source pixel it covers, averaged in linear light, not in the gamma-encoded values). The aspect of the map is kept: a map that is not square is centred in the box.
+//
+// The ants are left out: the starting ants (three at each hill's mouth, at the first tick) are 30 pixel sprites that become 4 to 6 pixel blobs in the box; they hide the paths and the
+// ground beside the hills, and the picture is of the MAP, not of a match.
+//
+// When the offscreen image cannot be made (a renderer without render targets, a level that is not a grid, a start marker outside the grid) the preview is the older minimap-colour picture
+// (render_map_preview_in_box: the selected map's .LVL drawn with the colours of the match screen's minimap, minimap_tables.hpp: one flat colour per terrain class and the colour of every
+// object by its tile id; where the picture has room for two pixels of every cell it is drawn at a whole scale per cell, a map too big for that is sampled, nearest neighbour, into the box).
 
 #include <array>
 #include <cstdint>
@@ -14,6 +22,9 @@
 #include "ants_assets/lvl_parser.hpp"
 
 namespace ants::app {
+
+class IRenderer;
+struct WorldImage;
 
 /// How big the picture of a map of cols x rows cells is in a box of inner x inner pixels
 struct MapPreviewSize {
@@ -37,6 +48,7 @@ struct MapPreview {
     uint32_t cols{0};            // the map's size in cells
     uint32_t rows{0};
     uint32_t players{0};         // the hills that the map has (what the playing teams are)
+    bool rendered{false};        // made from the game's own drawing of the world (render_map_preview_world); false: the minimap-colour picture
     std::vector<uint8_t> rgba;
     bool valid() const noexcept { return width > 0 && height > 0 && rgba.size() == static_cast<size_t>(width) * static_cast<size_t>(height) * 4u; }
 };
@@ -48,6 +60,27 @@ MapPreview render_map_preview(const assets::LevelData& level, const std::array<a
 MapPreview render_map_preview(const assets::LevelData& level, const std::array<assets::ColorRGBA, 256>& palette, int32_t scale);
 /// ... in a box of inner x inner pixels (map_preview_size)
 MapPreview render_map_preview_in_box(const assets::LevelData& level, const std::array<assets::ColorRGBA, 256>& palette, int32_t inner);
+
+/// The size of the picture of a world in a box of inner x inner pixels that keeps the map's proportion: the longer side of the map is exactly `inner` pixels, the shorter one is rounded down
+/// (at least 1). A map of cols x rows cells is as big as its world pixels (cols * 32 x rows * 32) in proportion, so the cells are enough. An empty size for an empty map or a box without room.
+/// width / height only: scale 0, not sampled.
+MapPreviewSize map_preview_fit(uint32_t cols, uint32_t rows, int32_t inner) noexcept;
+
+/// The exact area (box) filter: the RGBA8 image `src` of src_w x src_h pixels reduced (or enlarged) to dst_w x dst_h. An output pixel covers a rectangle of the source whose sides are
+/// src_w / dst_w and src_h / dst_h source pixels; its colour is the average of that rectangle, every source pixel weighted by the area of it that the rectangle covers (whole pixels
+/// inside, fractions at the edges), and the average is taken in LINEAR light: every colour channel is converted from sRGB to linear (a 16 bit table), summed in integers with the exact
+/// areas (the same result on every compiler and machine: no floating point), divided by the area and converted back to the nearest sRGB byte. A flat area keeps its colour exactly.
+/// Alpha of the result is 255. Returns dst_w * dst_h * 4 bytes, empty when a size is not positive, the source is null or a side is over 65535.
+std::vector<uint8_t> box_downscale(const uint8_t* src, int32_t src_w, int32_t src_h, int32_t dst_w, int32_t dst_h);
+
+/// The preview of a rendered world image of a map of cols x rows cells with `players` hills in a box of inner x inner pixels: map_preview_fit and box_downscale
+MapPreview downscale_world_image(const WorldImage& image, uint32_t cols, uint32_t rows, uint32_t players, int32_t inner);
+
+/// The preview that the game draws: `level` is set up as for a new match (a SimulationEngine started with every team that the level can be played by: all four for a level that is
+/// playable by four), `renderer` draws its whole world offscreen (IRenderer::render_world_image) and the image is reduced to the box (downscale_world_image). An invalid MapPreview, and the
+/// reason in `why` when it is given, when that cannot be done (the renderer cannot draw offscreen, the level cannot be played by any team). `max_target_side` is passed on to the renderer
+/// (0: what the device allows). Nothing of a running match is touched: the engine is a new one and the renderer puts back what it had.
+MapPreview render_map_preview_world(IRenderer& renderer, const assets::LevelData& level, int32_t inner, std::string* why = nullptr, int32_t max_target_side = 0);
 
 /// The line under the picture: "60 x 60 cells · 4 players" (the middle dot is U+00B7; "1 player"; no player count for a map without a hill)
 std::string map_preview_caption(const MapPreview& preview);

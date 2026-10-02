@@ -188,6 +188,7 @@ SCREEN_LAYOUT_STATUS=0
 CANVAS_LAYOUT_STATUS=0
 WIDE_HUD_STATUS=0
 WIDE_SETUP_STATUS=0
+MAP_PREVIEW_STATUS=0
 APP_STATUS=0
 E2E_STATUS=0
 START_TIME=$(date +%s)
@@ -556,6 +557,13 @@ if [ "$RUN_APP" -eq 1 ]; then
     echo -e "${BOLD}${BLUE}======================================================================${RESET}"
     "./$BUILD_DIR/tests/test_app/test_wide_setup"
     WIDE_SETUP_STATUS=$?
+
+    echo ""
+    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
+    echo -e "${BOLD}${BLUE}>>> 3.15 RUNNING MAP PREVIEW SUITE (the preview is the game's own render of the map: the area filter against an oracle, the fit, the render, the cache, the fallback, the six maps)...${RESET}"
+    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
+    "./$BUILD_DIR/tests/test_app/test_map_preview"
+    MAP_PREVIEW_STATUS=$?
 fi
 
 # 6. Execute E2E Opaque-Box Tests
@@ -935,6 +943,13 @@ if [ "$RUN_APP" -eq 1 ]; then
         echo -e " 3.14 Wide Setup (test_wide_setup):                  ${GREEN}PASSED${RESET}"
     else
         echo -e " 3.14 Wide Setup (test_wide_setup):                  ${RED}FAILED (exit code ${WIDE_SETUP_STATUS})${RESET}"
+        TOTAL_FAILED=$((TOTAL_FAILED + 1))
+    fi
+
+    if [ "$MAP_PREVIEW_STATUS" -eq 0 ]; then
+        echo -e " 3.15 Map Preview (test_map_preview):                ${GREEN}PASSED${RESET}"
+    else
+        echo -e " 3.15 Map Preview (test_map_preview):                ${RED}FAILED (exit code ${MAP_PREVIEW_STATUS})${RESET}"
         TOTAL_FAILED=$((TOTAL_FAILED + 1))
     fi
 fi

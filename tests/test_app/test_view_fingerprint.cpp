@@ -3173,7 +3173,8 @@ const std::vector<MaskRect> kWMaskMatch = {{799, 252, 942, 268}, {800, 297, 942,
 const std::vector<MaskRect> kWMaskStartModal = {{265, 167, 509, 331}, {265, 347, 509, 373}};
 const std::vector<MaskRect> kWMaskQuit = {{265, 237, 529, 401}};
 /// The setup screen's labels in the wide screen (the setup screen of a 960 x 540 canvas is the whole canvas, no page: tests/test_app/test_wide_setup.cpp pins the screen in detail): the map's name,
-/// its description and the prompt, the four players' names, the caption under the map preview
+/// its description and the prompt, the four players' names, the caption under the map preview. The preview itself is NOT masked: it is the game's own render of the map (map_preview.hpp), so the
+/// three px.wide.app.setup.* fingerprints that show it (refreshed, hover_start, cursor) were regenerated when the preview changed from minimap colour blocks to that render (before_refresh has none)
 const std::vector<MaskRect> kWMaskSetup = {{35, 370, 287, 392}, {35, 438, 401, 460}, {34, 505, 402, 529}, {733, 93, 857, 115}, {733, 143, 857, 165}, {733, 193, 857, 215}, {733, 243, 857, 265}, {349, 359, 657, 381}};
 /// The options screen's edit fields and the results rows are text too: the whole page's text boxes are not known one by one, so the pages that carry TrueType text are masked as a
 /// whole where it appears (the results' rows, the options' four quick-chat fields)
@@ -4075,9 +4076,9 @@ const Golden kGoldens[] = {
     {"px.wide.world.small16", 0xda3d4b1c95658b25, 518400},
     {"px.wide.world.small12", 0xf388b740365b8b25, 518400},
     {"px.wide.app.setup.before_refresh", 0x59b5c5c52c351532, 518400},
-    {"px.wide.app.setup.refreshed", 0x74d88f1e58401552, 518400},
-    {"px.wide.app.setup.hover_start", 0xa7898f364c0d8667, 518400},
-    {"px.wide.app.setup.cursor", 0xbb6cfb23a000e8d7, 518400},
+    {"px.wide.app.setup.refreshed", 0x8177f35cb27351de, 518400},
+    {"px.wide.app.setup.hover_start", 0xc91cdbb20a855a13, 518400},
+    {"px.wide.app.setup.cursor", 0x821af42c439fcaf3, 518400},
     {"px.wide.app.quickhelp.rest", 0x174b067d6bc59e00, 518400},
     {"px.wide.app.quickhelp.hover_start", 0x76c3bbba45f90b9c, 518400},
     {"px.wide.app.results", 0x5e72ea394f3c73a0, 518400},

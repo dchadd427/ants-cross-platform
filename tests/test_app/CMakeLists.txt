@@ -538,3 +538,40 @@ target_compile_definitions(test_wide_setup PRIVATE
 
 add_test(NAME test_wide_setup COMMAND test_wide_setup)
 set_tests_properties(test_wide_setup PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# The map preview as the game's own picture of the map (the world drawn offscreen by the real renderer and reduced by an exact area filter): the filter against an independent oracle, the fit
+# of a non-square map, the render (the match screen's own pixels, the live renderer left as it was, tiles equal the whole), the engine, the cache, the fallback, the six shipped maps pinned
+add_executable(test_map_preview
+    test_map_preview.cpp
+)
+
+target_include_directories(test_map_preview PRIVATE
+    ${CMAKE_SOURCE_DIR}/include
+)
+
+target_link_libraries(test_map_preview PRIVATE
+    ants_app
+    ants_ai
+    ants_net
+    ants_sim
+    ants_assets
+)
+
+if(APPLE)
+    target_link_libraries(test_map_preview PRIVATE
+        "-framework AudioToolbox"
+        "-framework CoreFoundation"
+        "-framework CoreAudio"
+    )
+endif()
+
+if(WIN32)
+    target_link_libraries(test_map_preview PRIVATE ws2_32 winmm)
+endif()
+
+target_compile_definitions(test_map_preview PRIVATE
+    ORIGINAL_ASSETS_DIR="${CMAKE_SOURCE_DIR}/Original-Ants"
+)
+
+add_test(NAME test_map_preview COMMAND test_map_preview)
+set_tests_properties(test_map_preview PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")

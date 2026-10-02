@@ -170,6 +170,14 @@ struct ViewportCamera {
 };
 
 
+/// The whole world of a level drawn once, 1 world pixel per image pixel: tightly packed RGBA8 (alpha 255), width x height pixels (the map's columns x 32 by its rows x 32)
+struct WorldImage {
+    int32_t width{0};
+    int32_t height{0};
+    std::vector<uint8_t> rgba;
+    bool valid() const noexcept { return width > 0 && height > 0 && rgba.size() == static_cast<size_t>(width) * static_cast<size_t>(height) * 4u; }
+};
+
 /**
  * @brief Abstract rendering interface for sprite, shape, and text drawing.
  */
@@ -216,6 +224,15 @@ public:
                 fill_rect(x + i, y + j, 1, 1, ants::assets::ColorRGBA{px[0], px[1], px[2], px[3]});
             }
         }
+    }
+    /// The whole world of `level` as the game draws it (terrain, objects, plants, hills, food, power-ups, ants: the match screen's view of it, no HUD, no fog, no cursor) into `out`, at the
+    /// state of `world` / `grid` (a simulation that was started for the level). A renderer that cannot draw offscreen (the test renderers that only count calls; a device without render
+    /// targets) returns false and says why in `why` when it is given; Renderer::render_world_image is the real one. `max_side` > 0 limits the side of the offscreen target (0: what the device allows).
+    virtual bool render_world_image(const ants::assets::LevelData& level, const ants::sim::WorldState& world, const ants::sim::Grid& grid, WorldImage& out, std::string* why = nullptr,
+                                    int32_t max_side = 0) {
+        (void)level; (void)world; (void)grid; (void)out; (void)max_side;
+        if (why != nullptr) *why = "this renderer draws no offscreen images";
+        return false;
     }
 };
 
@@ -391,6 +408,12 @@ public:
     SDL_Renderer* get_sdl_renderer() const noexcept { return renderer_; }
     void request_screenshot(const std::string& path) { pending_screenshot_ = path; }
     bool save_screenshot(const std::string& path);
+    /// IRenderer::render_world_image with the game's own drawing (render_world) into render-target textures: the level is set up as for a new match (set_level), the camera shows a window
+    /// of the world, and the pixels are read back. A world that fits the device's texture size (and `max_side`, 0 = no limit of its own; at most 2048) is drawn in one go, a bigger one in
+    /// tiles of 1536 pixels with 256 pixels of the neighbours around each (an object is drawn when its anchor is near the view, so that what crosses a seam is drawn by both
+    /// tiles). Nothing of the live game changes: the level that the renderer shows, the camera, the layout, the picture and the clip are put back (the preview of a map does not touch a match).
+    bool render_world_image(const ants::assets::LevelData& level, const ants::sim::WorldState& world, const ants::sim::Grid& grid, WorldImage& out, std::string* why = nullptr,
+                            int32_t max_side = 0) override;
     static size_t get_anim_subitem_by_time(const ants::assets::AnimationSequence& seq, uint32_t now_ms);
 
     // Template animation clock (terrain, objects). It starts at set_level(); tests can pin it to a fixed ms value.
@@ -451,6 +474,26 @@ private:
     int32_t food_stage_anim(uint16_t tile) const;
     void draw_single_ant(const ants::sim::AntSnapshot& ant);
     void draw_anthill_selection_brackets(int32_t cx, int32_t cy, uint32_t elapsed_ms = 0);
+    /// Everything that set_level derives from a level (and the clock that starts with it): render_world_image swaps it out and back, so that drawing another level offscreen leaves the shown
+    /// level as it was. A member that set_level writes belongs here.
+    struct LevelState {
+        uint32_t map_width{0};
+        uint32_t map_height{0};
+        std::vector<int32_t> tile_anim_id;
+        std::vector<AnimBounds> anim_bounds;
+        std::vector<uint32_t> anim_frame_stamp;
+        std::vector<uint16_t> anim_frame_cache;
+        uint32_t map_epoch_ms{0};
+        uint32_t template_now_ms{0};
+        bool level_set{false};
+        std::array<SDL_Point, 4> hill_anchor_cell{};
+        std::array<SDL_Point, 4> anthill_bases{};
+        bool has_anthill_bases{false};
+        std::vector<StaticMapObject> static_decor_objects;
+        std::vector<int32_t> object_index_by_cell;
+        std::vector<ObjectListSprite> object_list_sprites;
+    };
+    void swap_level_state(LevelState& other) noexcept;
 
 #ifdef ANTS_ENABLE_SDL_TTF
     struct CachedTextEntry {

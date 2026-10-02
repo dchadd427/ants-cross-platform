@@ -247,7 +247,7 @@ public:
 private:
     void render_wide(IRenderer& renderer, const ants::assets::AssetArchive& archive);        // map_select_wide.cpp
     void place_buttons();                                                                      // the buttons' rectangles for the classic or the wide page
-    const MapPreview* preview_of(const MapSelectEntry& entry, int32_t inner, const ants::assets::AssetArchive& archive);
+    const MapPreview* preview_of(const MapSelectEntry& entry, int32_t inner, IRenderer& renderer, const ants::assets::AssetArchive& archive);
     void trigger_start();
     void trigger_quit();
     void step_map(int32_t delta);          // FUN_01013fc9
@@ -278,7 +278,8 @@ private:
         MapPreview preview;               // invalid when the file cannot be read
     };
     std::vector<PreviewSlot> previews_;   // the pictures made so far (the newest last, at most kMaxPreviews)
-    static constexpr size_t kMaxPreviews = 8;
+    static constexpr size_t kMaxPreviews = 24;      // 24 pictures of 300 x 300 pixels: 8.6 MB at most
+    bool fallback_logged_{false};         // the line that says the preview fell back to the minimap colours is logged once
 
     RoomView room_{};
     std::function<void(const std::string& filename)> on_map_changed_{nullptr};

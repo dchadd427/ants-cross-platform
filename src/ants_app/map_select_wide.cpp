@@ -3,6 +3,7 @@
 // stands changes, and the preview, the chat column and the bot-fill footer are new.
 #include <algorithm>
 #include <filesystem>
+#include <iostream>
 
 #include "ants_app/map_select.hpp"
 #include "ants_app/text_layout.hpp"
@@ -43,8 +44,10 @@ void MapSelectScreen::set_wide_layout(bool wide) {
     place_buttons();
 }
 
-// The picture of a map for a box of inner x inner pixels: made once and kept (the last few); a file that cannot be read is remembered too, so that it is not read again every frame
-const MapPreview* MapSelectScreen::preview_of(const MapSelectEntry& entry, int32_t inner, const ants::assets::AssetArchive& archive) {
+// The picture of a map for a box of inner x inner pixels: made once and kept (the last few; a map that is shown again is not drawn again); a file that cannot be read is remembered too, so
+// that it is not read again every frame. The picture is the game's own drawing of the map's world, made when the map is first shown (render_map_preview_world); when the renderer cannot
+// draw offscreen (or the level cannot be played by any team) the older minimap-colour picture is used instead, and the first time that happens the reason is logged (once per screen).
+const MapPreview* MapSelectScreen::preview_of(const MapSelectEntry& entry, int32_t inner, IRenderer& renderer, const ants::assets::AssetArchive& archive) {
     for (const PreviewSlot& slot : previews_) {
         if (slot.inner == inner && slot.path == entry.full_path) return slot.preview.valid() ? &slot.preview : nullptr;
     }
@@ -52,7 +55,17 @@ const MapPreview* MapSelectScreen::preview_of(const MapSelectEntry& entry, int32
     slot.path = entry.full_path;
     slot.inner = inner;
     ants::assets::LevelData level;
-    if (level.load_from_file(entry.full_path)) slot.preview = render_map_preview_in_box(level, archive.get_palette(), inner);
+    if (level.load_from_file(entry.full_path)) {
+        std::string why;
+        slot.preview = render_map_preview_world(renderer, level, inner, &why);
+        if (!slot.preview.valid()) {
+            if (!fallback_logged_) {
+                fallback_logged_ = true;
+                std::cerr << "[MapSelect] The map preview is not drawn from the game's own renderer (" << why << "): the minimap colours are shown instead." << std::endl;
+            }
+            slot.preview = render_map_preview_in_box(level, archive.get_palette(), inner);
+        }
+    }
     if (previews_.size() >= kMaxPreviews) previews_.erase(previews_.begin());
     previews_.push_back(std::move(slot));
     return previews_.back().preview.valid() ? &previews_.back().preview : nullptr;
@@ -153,7 +166,7 @@ void MapSelectScreen::render_wide(IRenderer& renderer, const ants::assets::Asset
     }
 
     // 7. The map preview: the picture in the black box (centred), its caption under the box; a map that this machine does not have, or cannot read, has a "No preview" box
-    const MapPreview* preview = shown != nullptr ? preview_of(*shown, layout.preview_inner, archive) : nullptr;
+    const MapPreview* preview = shown != nullptr ? preview_of(*shown, layout.preview_inner, renderer, archive) : nullptr;
     std::string caption;
     if (preview != nullptr) {
         const LayoutRect picture = layout.preview_picture(preview->width, preview->height);
