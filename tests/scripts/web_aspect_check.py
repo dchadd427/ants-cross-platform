@@ -396,6 +396,18 @@ def main():
             diff = sum(1 for i in range(0, len(before[3]), before[2] * 97) if abs(before[3][i] - after[3][i]) > 40)
             check(diff > 60, "%s: a tap on the quick help's START button leaves the quick help (%d sampled pixels changed)" % (label, diff))
 
+        # a portrait phone that is turned to landscape: it keeps the classic picture (the game was made for it), the box follows, and a note offers the wide one
+        tab.emulate(390, 844, 3, True)
+        tab.open(web, settle=1.0)
+        g = tab.geometry()
+        check(g["aspect"] == "4:3" and g["note"] == "none", "a portrait phone: classic picture, no note yet")
+        tab.emulate(844, 390, 3, True)
+        time.sleep(1.5)
+        g = tab.geometry()
+        layout_checks("the portrait phone turned to landscape", g, "4:3")
+        check(g["note"] == "inline", "turned to landscape, the page offers the 16:9 picture (the note is shown)")
+        tab.save_shot(args.shots, "phone_turned_to_landscape")
+
         print("[web aspect] the address and the selector")
         tab.emulate(1280, 720, 1)
         for query, want in (("?aspect=4:3", "4:3"), ("?aspect=16:9", "16:9"), ("?aspect=4%3A3", "4:3"), ("?aspect=21:9", "16:9"), ("?aspect=", "16:9"), ("?aspect=16:9&aspect=4:3", "16:9"),
