@@ -17,8 +17,10 @@
 #endif
 
 #include "ants_assets/asset_archive.hpp"
+#include "ants_app/map_preview.hpp"
 #include "ants_app/renderer.hpp"
 #include "ants_app/screen_button.hpp"
+#include "ants_app/setup_layout.hpp"
 
 namespace ants::app {
 
@@ -160,6 +162,9 @@ public:
     const ScreenButton& up_button() const noexcept { return up_; }
     const ScreenButton& down_button() const noexcept { return down_; }
     const ScreenButton& start_button() const noexcept { return start_; }
+    const ScreenButton& quit_button() const noexcept { return quit_; }
+    const ScreenButton& fog_on_button() const noexcept { return fow_on_; }
+    const ScreenButton& fog_off_button() const noexcept { return fow_off_; }
 
     /// The thumb beside a player's name (the original's netgood / netok / netbad / netunk animations: connection quality)
     enum class Thumb : uint8_t { Good = 0, Ok = 1, Bad = 2, Unknown = 3 };
@@ -208,7 +213,41 @@ public:
     void set_player_name(std::string name) { player_name_ = std::move(name); }
     void set_player_team(uint8_t team) noexcept { player_team_ = team; }
 
+    // ---- The wide setup screen (setup_layout.hpp): the same screen composed for the 16:9 picture of 960 x 540, with a map preview ----
+    /// true: the screen is drawn and answers the pointer as the wide screen (the picture is the whole 960 x 540 canvas: the application decides, SetupLayout::supports); false (the default):
+    /// the original's 640 x 480 page, exactly as always. The buttons' rectangles follow (the hit tests are the rectangles of the pictures that show).
+    void set_wide_layout(bool wide);
+    bool wide_layout() const noexcept { return wide_; }
+    /// Which variant of the wide screen the room shows: the local game's host screen, the host screen of a network game (a LAN host, the leader of a room) or a guest's screen
+    SetupVariant setup_variant() const noexcept { return is_guest() ? SetupVariant::Guest : (room_.networked ? SetupVariant::Online : SetupVariant::Single); }
+
+    /// The chat column of the wide screen's Online and Guest variants (SetupLayout::chat) is RESERVED for the waiting-room chat of the online rooms: nothing is drawn there until the room's UI
+    /// turns it on (`visible`) and fills it. The black chat box (an efram box) holds the lines, the input box (statline's box) the typed text, the label "Chat" is TrueType in the engraved
+    /// labels' teal with their ink as shadow; the lines are in the font, size and colour of the players' names (18 px, the labels' cream), a notice (a line of the server: sender 255) in
+    /// the colour and size of the screen's status text (14 px). Nothing here applies to the Single variant or the classic page.
+    struct ChatPanel {
+        bool visible{false};
+        struct Line {
+            std::string text;               // the whole line as it is shown ("Ben: hi"; a notice: "Ben joined.")
+            bool notice{false};
+        };
+        std::vector<Line> lines;            // oldest first; they are wrapped to the box and as many of the newest as fit stand at its bottom
+        std::string typed;                  // the input box's text (its end shows when it is longer than the box)
+        bool caret{false};                  // the blinking caret behind the typed text
+    };
+    void set_chat_panel(ChatPanel panel) { chat_panel_ = std::move(panel); }
+    const ChatPanel& chat_panel() const noexcept { return chat_panel_; }
+    /// The foot of the Players' Status box on the Online variant, where the leader sees what fills the empty seats at START ("Empty seats at START:" / "Medium bots"): two 18 px lines in the
+    /// colour of the players' names. Nothing is drawn while both are empty (the default).
+    void set_fill_footer(std::string first_line, std::string second_line) {
+        fill_footer_[0] = std::move(first_line);
+        fill_footer_[1] = std::move(second_line);
+    }
+
 private:
+    void render_wide(IRenderer& renderer, const ants::assets::AssetArchive& archive);        // map_select_wide.cpp
+    void place_buttons();                                                                      // the buttons' rectangles for the classic or the wide page
+    const MapPreview* preview_of(const MapSelectEntry& entry, int32_t inner, const ants::assets::AssetArchive& archive);
     void trigger_start();
     void trigger_quit();
     void step_map(int32_t delta);          // FUN_01013fc9
@@ -229,6 +268,17 @@ private:
     double elapsed_ms_{0.0};              // since the screen was created
     std::string player_name_{};
     uint8_t player_team_{0};
+
+    bool wide_{false};                    // the wide 960 x 540 screen (set_wide_layout)
+    ChatPanel chat_panel_{};
+    std::array<std::string, 2> fill_footer_{};
+    struct PreviewSlot {
+        std::string path;
+        int32_t inner{0};
+        MapPreview preview;               // invalid when the file cannot be read
+    };
+    std::vector<PreviewSlot> previews_;   // the pictures made so far (the newest last, at most kMaxPreviews)
+    static constexpr size_t kMaxPreviews = 8;
 
     RoomView room_{};
     std::function<void(const std::string& filename)> on_map_changed_{nullptr};

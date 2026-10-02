@@ -36,10 +36,14 @@ add_library(ants_app STATIC
     renderer.cpp
     hud.cpp
     hud_input.cpp
+    minimap_tables.cpp
+    map_preview.cpp
+    setup_layout.cpp
     pedestal.cpp
     ui_anim.cpp
     scorecard.cpp
     map_select.cpp
+    map_select_wide.cpp
     options_screen.cpp
     text_layout.cpp
     latency_corner.cpp

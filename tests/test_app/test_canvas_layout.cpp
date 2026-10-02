@@ -701,17 +701,20 @@ void test_centred_pixels() {
     check(bar_pixels(wide.app, 834, 527, 118, 13) > 20, "16:9: the sparkline is in the canvas's bottom right corner (rows 527 .. 539)");
     check(bar_pixels(wide.app, 514, 467, 118, 13) == 0, "16:9: and not where the 4:3 picture's corner is (the original's place of the plate)");
     check(bar_pixels(classic.app, 514, 467, 118, 13) > 20, "4:3: it is in the picture's corner, as it was");
-    // the setup screen is a page: the same
+    // the quick help is a page of the original's: the same (the setup screen has its own wide version in a 960 x 540 canvas: tests/test_app/test_wide_setup.cpp)
     AppFixture classic_setup("", config_of(Aspect::Classic4x3, true, 640, 480), false);
     AppFixture wide_setup("", config_of(Aspect::Wide16x9, true, 960, 540), false);
-    check(classic_setup.ok && wide_setup.ok, "both applications show the setup screen");
+    check(classic_setup.ok && wide_setup.ok, "both applications show a page of the original's");
     if (classic_setup.ok && wide_setup.ok) {
+        classic_setup.app.finish_loading();
+        wide_setup.app.finish_loading();
+        check(classic_setup.app.state() == AppState::QuickHelp && wide_setup.app.state() == AppState::QuickHelp, "the quick help is up in both");
         for (AppFixture* f : {&classic_setup, &wide_setup}) f->app.renderer().pin_animation_clock(1500);
         classic_setup.app.render_frame();
         wide_setup.app.render_frame();
         const std::vector<uint8_t> sa = masked(read_canvas(classic_setup.app, 0, 0, 640, 480), 640, 440, 464, 200, 16);
         const std::vector<uint8_t> sb = masked(read_canvas(wide_setup.app, 160, 30, 640, 480), 640, 440, 464, 200, 16);
-        check(sa == sb, "the setup screen of the 16:9 canvas is the 4:3 application's, centred");
+        check(sa == sb, "the quick help of the 16:9 canvas is the 4:3 application's, centred");
     }
 }
 
@@ -786,10 +789,12 @@ void test_pointer_over_bars() {
         f.scroll(12);
         check(f.app.renderer().camera().world_x > x1, "... and the map scrolls east");
     }
-    {   // a page of the original in the 16:9 canvas: a pointer over the margin is the page's nearest edge pixel (the setup screen is centred at (160, 30))
+    {   // a page of the original in the 16:9 canvas: a pointer over the margin is the page's nearest edge pixel (the quick help is centred at (160, 30))
         AppFixture f("", config_of(Aspect::Wide16x9, true, 1920, 1080), false);
-        check(f.ok && f.window != nullptr, "the 16:9 application shows its setup screen");
+        check(f.ok && f.window != nullptr, "the 16:9 application shows a page");
         if (!f.ok || f.window == nullptr) return;
+        f.app.finish_loading();
+        f.deliver();
         f.motion_at_canvas(160 + 100, 30 + 100);
         f.deliver();
         check(f.app.mouse_screen_x() == 100 && f.app.mouse_screen_y() == 100, "the canvas point (260, 130) is the page's (100, 100)");

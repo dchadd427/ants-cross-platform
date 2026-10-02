@@ -187,6 +187,7 @@ VIEW_FINGERPRINT_STATUS=0
 SCREEN_LAYOUT_STATUS=0
 CANVAS_LAYOUT_STATUS=0
 WIDE_HUD_STATUS=0
+WIDE_SETUP_STATUS=0
 APP_STATUS=0
 E2E_STATUS=0
 START_TIME=$(date +%s)
@@ -548,6 +549,13 @@ if [ "$RUN_APP" -eq 1 ]; then
     echo -e "${BOLD}${BLUE}======================================================================${RESET}"
     "./$BUILD_DIR/tests/test_app/test_wide_hud"
     WIDE_HUD_STATUS=$?
+
+    echo ""
+    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
+    echo -e "${BOLD}${BLUE}>>> 3.14 RUNNING WIDE SETUP SUITE (the 16:9 setup screen with its map preview: layout, seams, the mock-ups pixel for pixel, the preview, the pointer, fingerprints)...${RESET}"
+    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
+    "./$BUILD_DIR/tests/test_app/test_wide_setup"
+    WIDE_SETUP_STATUS=$?
 fi
 
 # 6. Execute E2E Opaque-Box Tests
@@ -920,6 +928,13 @@ if [ "$RUN_APP" -eq 1 ]; then
         echo -e " 3.15 Wide HUD (test_wide_hud):                      ${GREEN}PASSED${RESET}"
     else
         echo -e " 3.15 Wide HUD (test_wide_hud):                      ${RED}FAILED (exit code ${WIDE_HUD_STATUS})${RESET}"
+        TOTAL_FAILED=$((TOTAL_FAILED + 1))
+    fi
+
+    if [ "$WIDE_SETUP_STATUS" -eq 0 ]; then
+        echo -e " 3.14 Wide Setup (test_wide_setup):                  ${GREEN}PASSED${RESET}"
+    else
+        echo -e " 3.14 Wide Setup (test_wide_setup):                  ${RED}FAILED (exit code ${WIDE_SETUP_STATUS})${RESET}"
         TOTAL_FAILED=$((TOTAL_FAILED + 1))
     fi
 fi

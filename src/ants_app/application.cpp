@@ -717,13 +717,22 @@ void Application::set_layout(const ScreenLayout& layout) {
 // screen (the loading screen, the quick help, the setup screen and the room, the results), centred
 LayoutRect Application::picture_for_state() const {
     const bool match = state_ == AppState::Playing && !scorecard_.is_open();
-    return match ? canvas().centred(layout_.width, layout_.height) : canvas().centred(ScreenLayout::kClassicWidth, ScreenLayout::kClassicHeight);
+    if (match) return canvas().centred(layout_.width, layout_.height);
+    if (state_ == AppState::MapSelect && wide_setup()) return canvas().rect();            // the setup screen of a 960 x 540 canvas is composed for it (setup_layout.hpp)
+    return canvas().centred(ScreenLayout::kClassicWidth, ScreenLayout::kClassicHeight);
+}
+
+// The setup screen has a wide version for the 16:9 canvas of 960 x 540 (and for no other size: any other canvas draws the original's page centred)
+bool Application::wide_setup() const {
+    const CanvasLayout c = canvas();
+    return SetupLayout::supports(c.width, c.height);
 }
 
 // The picture changes when the screen does (a match starts, the results open, the setup screen comes back). The pointer stays where it is on the canvas, so its coordinates, which are the
 // picture's own, move with the corner; a pointer that was beside the new picture (on the clay of a page, left of x = 160) is at the picture's nearest edge pixel, which is where the
 // original's one-monitor pointer is when it is pushed against an edge (pointer_clamp.hpp), and not outside the picture, where the cursor would vanish.
 void Application::update_picture() {
+    map_select_.set_wide_layout(wide_setup());                                              // (the screen is drawn and answers the pointer as its wide version when the canvas is 960 x 540)
     const LayoutRect want = picture_for_state();
     if (want == picture_) return;
     mouse_screen_x_ = std::clamp(mouse_screen_x_ + picture_.x - want.x, 0, want.w - 1);
@@ -1028,6 +1037,7 @@ void Application::finish_loading() {
 void Application::show_opening_screens() {
     if (hud_.is_quick_help_enabled()) {
         state_ = AppState::QuickHelp;
+        update_picture();                                    // (the quick help is a page of the original's, centred; the setup screen of a 960 x 540 canvas is not)
         quick_help_start_.reset();
         if (mouse_has_moved_ && !pointer_outside_) quick_help_start_.on_move(mouse_screen_x_, mouse_screen_y_);       // the pointer goes to the new window at once (see enter_map_select)
     } else {

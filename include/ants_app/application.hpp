@@ -38,6 +38,7 @@
 #include "ants_app/map_select.hpp"
 #include "ants_app/host_lookup.hpp"
 #include "ants_app/start_menu.hpp"
+#include "ants_app/setup_layout.hpp"
 #include "ants_app/screen_layout.hpp"
 #include "ants_app/window_layout.hpp"
 
@@ -473,6 +474,7 @@ private:
     void start_net_bots();                                             // the host of a room: the controller over NetBotSink, for the seats that hold a bot
     void stop_bots();
 
+    bool wide_setup() const;                              // the canvas is the 960 x 540 one that the setup screen's wide version is made for
     LayoutRect picture_for_state() const;                 // where the picture on screen sits in the canvas: the match is the layout's picture, every other screen the original's 640 x 480, centred
     void update_picture();                                // the screen changed (a match starts, the results open, the setup screen is back): the picture and the pointer's coordinates follow
     void apply_window_layout();                           // --grid / --cell, --window-pos, --window-size, the aspect's first size (native builds)

@@ -1762,6 +1762,76 @@ void run_leader_tests() {
         ASSERT_TRUE(duo.until([&]() { return app.state() == AppState::Playing && bob.net.phase() == net::NetGame::Phase::Playing; }, 15000));
         ASSERT_EQ(app.sim().roster_mask(), 0x03);
     } TEST_END();
+
+    // The same at 16:9: the setup screen is the wide screen (the whole 960 x 540 canvas, the headless window is that size: a window point is a canvas point). The quick help is a centred page, its
+    // START! at the canvas point (740, 480); the leader's START of the wide screen is at (846 .. 944, 499 .. 526) and does not lie under it.
+    const auto wide_button = [](Uint32 type, int32_t x, int32_t y, Uint8 clicks) {
+        SDL_Event e{};
+        e.type = type;
+        e.button.windowID = SDL_GetWindowID(SDL_GetWindowFromID(1));
+        e.button.button = SDL_BUTTON_LEFT;
+        e.button.state = type == SDL_MOUSEBUTTONDOWN ? SDL_PRESSED : SDL_RELEASED;
+        e.button.clicks = clicks;
+        e.button.x = x;
+        e.button.y = y;
+        SDL_PushEvent(&e);
+    };
+
+    TEST_CASE("N5.26w Leader At 16:9: The Wide Setup Screen Is The Online Variant; The Quick Help's Closing Click Still Does Not Press ITS START (A Click Within The Double-Click Time Is The Rest Of That Gesture Wherever It Falls, And Nothing Is Asked Of The Server); A Click After That Time Asks, And The Server Starts The Match") {
+        Server server;
+        ASSERT_TRUE(server.make_room("LEAD-WIDE", 4));
+        ApplicationConfig cfg = join_config(server, "LEAD-WIDE", "Leader");
+        cfg.aspect = Aspect::Wide16x9;
+        cfg.aspect_given = true;
+        cfg.has_window_size = true;
+        cfg.window_w = 960;
+        cfg.window_h = 540;
+        Application app;
+        ASSERT_TRUE(app.init(cfg));
+        Peer bob;
+        Hall hall{server, &app, {&bob}};
+        ASSERT_TRUE(hall.until([&]() { return app.net()->phase() == net::NetGame::Phase::Room && app.net()->is_leader(); }, 8000));
+        ASSERT_TRUE(bob.net.join("127.0.0.1", server.port(), "Bob", 255, "LEAD-WIDE"));
+        ASSERT_TRUE(hall.until([&]() { return bob.net.phase() == net::NetGame::Phase::Room && app.net()->room().slots[1].state == net::SlotState::Client; }, 8000));
+        app.run_frame_with_delta(0.001f);
+        ASSERT_TRUE(app.map_select().wide_layout() && app.map_select().leads_server_room());
+        ASSERT_TRUE(app.map_select().setup_variant() == SetupVariant::Online);
+        ASSERT_TRUE(app.map_select().start_button().up_rect() == ButtonRect({846, 499, 98, 27}));
+        app.finish_loading();
+        app.run_frame_with_delta(0.001f);
+        ASSERT_EQ(app.state(), AppState::QuickHelp);
+        ASSERT_TRUE(app.picture() == LayoutRect({160, 30, 640, 480}));              // (the quick help is a page)
+        wide_button(SDL_MOUSEBUTTONDOWN, 740, 480, 1);                              // the click on START! of the quick help
+        wide_button(SDL_MOUSEBUTTONUP, 740, 480, 1);
+        app.run_frame_with_delta(0.001f);
+        ASSERT_EQ(app.state(), AppState::MapSelect);
+        ASSERT_TRUE(app.picture() == LayoutRect({0, 0, 960, 540}));
+        ASSERT_TRUE(app.closing_click_pending());
+        ASSERT_FALSE(app.map_select().start_button().hovered());                    // (the pointer is at (740, 480), nowhere near the wide START)
+        wide_button(SDL_MOUSEBUTTONDOWN, 895, 512, 1);                              // a quick click on the wide START: the rest of the gesture (within the double-click time), swallowed
+        wide_button(SDL_MOUSEBUTTONUP, 895, 512, 1);
+        app.run_frame_with_delta(0.001f);
+        ASSERT_FALSE(app.map_select().start_button().pressed());
+        ASSERT_TRUE(app.map_select().start_button().hovered());                     // (the pointer is there: a hover, nothing pressed)
+        wide_button(SDL_MOUSEBUTTONDOWN, 895, 512, 2);                              // a second click that SDL counts
+        wide_button(SDL_MOUSEBUTTONUP, 895, 512, 2);
+        app.run_frame_with_delta(0.001f);
+        hall.step(800);
+        ASSERT_EQ(app.state(), AppState::MapSelect);
+        ASSERT_FALSE(app.map_select().is_locked());
+        {
+            const server::RoomStatus s = server.status("LEAD-WIDE");
+            ASSERT_TRUE(s.state == server::RoomState::Waiting && s.ignored_start_requests == 0 && s.joined == 2);      // nothing was asked of the server
+        }
+        SDL_Delay(600);                                                             // the double-click time is over
+        wide_button(SDL_MOUSEBUTTONDOWN, 895, 512, 1);                              // a click that begins now: the screen's. START asks, and the server starts the match with the two of them
+        wide_button(SDL_MOUSEBUTTONUP, 895, 512, 1);
+        app.run_frame_with_delta(0.001f);
+        ASSERT_FALSE(app.closing_click_pending());
+        ASSERT_TRUE(hall.until([&]() { return app.state() == AppState::Playing && bob.net.phase() == net::NetGame::Phase::Playing; }, 15000));
+        ASSERT_TRUE(server.status("LEAD-WIDE").state == server::RoomState::Running && server.status("LEAD-WIDE").joined == 2);
+        app.quit();
+    } TEST_END();
 }
 
 void run_window_tests() {

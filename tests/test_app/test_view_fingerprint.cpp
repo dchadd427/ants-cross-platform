@@ -3172,8 +3172,9 @@ const std::vector<MaskRect> kWMaskMatch = {{799, 252, 942, 268}, {800, 297, 942,
 /// The "Get ready" dialog's two labels and the quit dialog's prompt, moved by the dialog origin (137, 59)
 const std::vector<MaskRect> kWMaskStartModal = {{265, 167, 509, 331}, {265, 347, 509, 373}};
 const std::vector<MaskRect> kWMaskQuit = {{265, 237, 529, 401}};
-/// The setup screen's labels moved by the page origin (160, 30)
-const std::vector<MaskRect> kWMaskSetup = {{192, 338, 382, 382}, {192, 406, 496, 470}, {192, 473, 496, 510}, {571, 123, 699, 149}, {571, 173, 699, 199}, {571, 223, 699, 249}, {571, 273, 699, 299}};
+/// The setup screen's labels in the wide screen (the setup screen of a 960 x 540 canvas is the whole canvas, no page: tests/test_app/test_wide_setup.cpp pins the screen in detail): the map's name,
+/// its description and the prompt, the four players' names, the caption under the map preview
+const std::vector<MaskRect> kWMaskSetup = {{35, 370, 287, 392}, {35, 438, 401, 460}, {34, 505, 402, 529}, {733, 93, 857, 115}, {733, 143, 857, 165}, {733, 193, 857, 215}, {733, 243, 857, 265}, {349, 359, 657, 381}};
 /// The options screen's edit fields and the results rows are text too: the whole page's text boxes are not known one by one, so the pages that carry TrueType text are masked as a
 /// whole where it appears (the results' rows, the options' four quick-chat fields)
 const std::vector<MaskRect> kWMaskResults = {{190, 230, 770, 500}};
@@ -3276,16 +3277,16 @@ struct WideAppRig {
 };
 
 void app_pixel_wide_scenarios() {
-    // the pages of the original centred over the clay margin: the setup screen and the quick help (the loading screen needs a window)
+    // the setup screen of the 16:9 canvas (its wide version: the whole canvas) and the quick help, a page of the original centred over the clay margin (the loading screen needs a window)
     if (wanted_group("px.wide.app.setup")) {
         WideAppRig rig;
         check(rig.ok, "the wide application is up");
         if (rig.ok) {
-            check(rig.app.picture() == (LayoutRect{160, 30, 640, 480}), "the wide application's setup screen is the page centred at (160, 30)");
+            check(rig.app.picture() == (LayoutRect{0, 0, 960, 540}), "the wide application's setup screen is the whole canvas (its own wide version, not a page)");
             rig.shot("px.wide.app.setup.before_refresh", wide_masks({}));
             rig.app.map_select().update(0.5f);
             rig.shot("px.wide.app.setup.refreshed", wide_masks({&kWMaskSetup}));
-            rig.app.map_select().handle_mouse_motion(MapSelectScreen::BTN_START_X + 5, MapSelectScreen::BTN_START_Y + 5);
+            rig.app.map_select().handle_mouse_motion(MapSelectScreen::BTN_START_X + 5 + 320, MapSelectScreen::BTN_START_Y + 5 + 60);        // START! of the wide screen
             rig.shot("px.wide.app.setup.hover_start", wide_masks({&kWMaskSetup}));
             rig.pointer_at(300, 200);
             rig.shot("px.wide.app.setup.cursor", wide_masks({&kWMaskSetup}));
@@ -4073,10 +4074,10 @@ const Golden kGoldens[] = {
     {"px.wide.world.TREASURE.cam_mid", 0x2edba5c122d49a2c, 518400},
     {"px.wide.world.small16", 0xda3d4b1c95658b25, 518400},
     {"px.wide.world.small12", 0xf388b740365b8b25, 518400},
-    {"px.wide.app.setup.before_refresh", 0x8632a02b6a6cfcd8, 518400},
-    {"px.wide.app.setup.refreshed", 0x26d853760c5933a1, 518400},
-    {"px.wide.app.setup.hover_start", 0x5042d296fbb0e0bc, 518400},
-    {"px.wide.app.setup.cursor", 0x43e58d871ee0d00f, 518400},
+    {"px.wide.app.setup.before_refresh", 0x59b5c5c52c351532, 518400},
+    {"px.wide.app.setup.refreshed", 0x74d88f1e58401552, 518400},
+    {"px.wide.app.setup.hover_start", 0xa7898f364c0d8667, 518400},
+    {"px.wide.app.setup.cursor", 0xbb6cfb23a000e8d7, 518400},
     {"px.wide.app.quickhelp.rest", 0x174b067d6bc59e00, 518400},
     {"px.wide.app.quickhelp.hover_start", 0x76c3bbba45f90b9c, 518400},
     {"px.wide.app.results", 0x5e72ea394f3c73a0, 518400},

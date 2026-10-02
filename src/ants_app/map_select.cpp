@@ -53,6 +53,7 @@ void MapSelectScreen::init(const std::string& maps_dir) {
     }
     std::sort(found.begin(), found.end(), [](const auto& a, const auto& b) { return a.first < b.first; });
     for (const auto& f : found) maps_.push_back(make_entry(f.first, f.second));
+    previews_.clear();                                                      // (the pictures of the wide screen belong to the files that were listed)
 
     selected_index_ = 0;
     fog_of_war_ = false;
@@ -223,6 +224,11 @@ void MapSelectScreen::handle_key_down(SDL_Keycode key, bool repeat) {
 
 void MapSelectScreen::render(IRenderer& renderer, const ants::assets::AssetArchive& archive) {
     using ants::assets::ColorRGBA;
+
+    if (wide_) {                                                              // the 960 x 540 screen (map_select_wide.cpp); the original's page below is not touched
+        render_wide(renderer, archive);
+        return;
+    }
 
     // 1. The setup screen's composite: the HOST screen (FUN_01013b36) is animation 106 "st_screen" (Host Game Set-Up, Pick a Map, GAME SET UP!), the GUEST screen
     // (FUN_01014228) is animation 107 "nh_start" (Game Set-Up, Map, WAITING FOR GAME TO START!, a fixed "Fog of War?" box showing No); the local screen is the host's.

@@ -501,3 +501,40 @@ target_compile_definitions(test_wide_hud PRIVATE
 
 add_test(NAME test_wide_hud COMMAND test_wide_hud)
 set_tests_properties(test_wide_hud PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# Wide setup screen (the setup / map selection screen at 960 x 540 with a map preview): the layout against the mock-ups, the seams against the art, the composed screens pixel for pixel,
+# the preview, the screens' state, the pointer through the application, the picture per screen, fingerprints
+add_executable(test_wide_setup
+    test_wide_setup.cpp
+)
+
+target_include_directories(test_wide_setup PRIVATE
+    ${CMAKE_SOURCE_DIR}/include
+)
+
+target_link_libraries(test_wide_setup PRIVATE
+    ants_app
+    ants_ai
+    ants_net
+    ants_sim
+    ants_assets
+)
+
+if(APPLE)
+    target_link_libraries(test_wide_setup PRIVATE
+        "-framework AudioToolbox"
+        "-framework CoreFoundation"
+        "-framework CoreAudio"
+    )
+endif()
+
+if(WIN32)
+    target_link_libraries(test_wide_setup PRIVATE ws2_32 winmm)
+endif()
+
+target_compile_definitions(test_wide_setup PRIVATE
+    ORIGINAL_ASSETS_DIR="${CMAKE_SOURCE_DIR}/Original-Ants"
+)
+
+add_test(NAME test_wide_setup COMMAND test_wide_setup)
+set_tests_properties(test_wide_setup PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")

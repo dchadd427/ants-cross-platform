@@ -1,4 +1,5 @@
 #include "ants_app/hud.hpp"
+#include "ants_app/minimap_tables.hpp"
 #include <cstdio>
 #include "ants_sim/game_strings.hpp"
 #include "ants_sim/movement_tables.hpp"
@@ -44,74 +45,6 @@ void draw_score_digits(IRenderer& renderer, const assets::AssetArchive& archive,
         }
         divisor /= 10;
         x += 9;
-    }
-}
-
-// Minimap ground truth (Ants.exe FUN_01009596): 119x91 image at (480,35), palette-index colours
-struct MinimapObject { uint16_t id; uint8_t colour; uint8_t size_flag; };
-#include "minimap_tables.inc"
-
-// Speckle table of the terrain classes (0x1001c28): 5 palette indices per class 0..5, picked with rand() % 5
-constexpr uint8_t kMinimapClassColours[6][5] = {
-    {251, 201, 249, 251, 251},   // 0 gravel
-    {235, 235, 235, 235, 235},   // 1 slate
-    { 37,  37,  37,  37,  37},   // 2 water
-    { 77,  77,  77,  77,  77},   // 3 mud
-    {231, 232, 233, 231, 231},   // 4 dirt
-    {  0,   0,   0,   0,   0}    // 5 (unused class)
-};
-// Colours of unexplored cells by class (0x1001c48)
-constexpr uint8_t kMinimapFogColours[8] = { 244, 237, 225, 245, 236, 0, 0, 0 };
-// Ant dot colours by remake player id (green, red, blue, black) = original colour {3,2,1,0} (FUN_0101aa65)
-constexpr uint8_t kMinimapAntColours[4] = { 47, 158, 211, 239 };
-
-// The colour table of the original (0x1001c50 copied by the constructor FUN_01009056 into a table indexed by the tile id): entry = colour | size << 8. The table is
-// cleared first, so a tile id without a record has colour 0 and size 0
-constexpr size_t kMinimapTileIds = 1344;
-uint16_t minimap_object_entry(uint16_t id) {
-    static const std::array<uint16_t, kMinimapTileIds> table = [] {
-        std::array<uint16_t, kMinimapTileIds> t{};
-        for (const auto& o : kMinimapObjects) {
-            if (o.id < kMinimapTileIds) t[o.id] = static_cast<uint16_t>(o.colour | (o.size_flag << 8));
-        }
-        return t;
-    }();
-    return id < kMinimapTileIds ? table[id] : uint16_t{0};
-}
-
-// The layer-2 id of a snapshot cell as the original's painter reads it: the remake keeps a bomb it planted as 100 .. 103 and a dropped power-up as 0x8000 | type, the original
-// as 129 .. 132 and the power-up's own tile id
-constexpr uint16_t kMinimapNoObject = 0x7ffe;
-constexpr uint16_t kMinimapBomb = 129;
-uint16_t minimap_object_id(const sim::TileCell& cell) {
-    const uint16_t id = cell.interactive_id;
-    if (id == sim::TILE_EMPTY || id == 0xFFFFu) return kMinimapNoObject;
-    if (id >= sim::BOMB_BLACK && id <= sim::BOMB_GREEN) return kMinimapBomb;
-    if ((id & 0x8000u) != 0) {
-        switch (cell.powerup_type) {
-            case 1:  return sim::PU_BOMBER;
-            case 2:  return sim::PU_FIRE;
-            case 3:  return sim::PU_THIEF;
-            case 4:  return sim::PU_COMBAT;
-            case 5:  return sim::PU_SWIMMER;
-            default: return kMinimapNoObject;
-        }
-    }
-    return id;
-}
-
-// FUN_01008bc6: the four bomb ids 0x81 .. 0x84
-bool minimap_is_bomb(uint16_t id) { return id >= 129 && id <= 132; }
-
-// Terrain class of a snapshot cell (0 gravel, 1 slate, 2 water, 3 mud, 4 dirt)
-uint8_t minimap_class(const sim::TileCell& cell) {
-    if (cell.terrain_type == sim::TERRAIN_WATER) return 2;
-    switch (cell.surface_type) {
-        case sim::SurfaceType::Slate:  return 1;
-        case sim::SurfaceType::Water:  return 2;
-        case sim::SurfaceType::Mud:    return 3;
-        case sim::SurfaceType::Gravel: return 4;
-        default:                       return 0;
     }
 }
 
