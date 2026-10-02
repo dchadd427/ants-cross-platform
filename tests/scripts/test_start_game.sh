@@ -2,6 +2,8 @@
 # Checks start_game.sh without starting anything: its --dry-run prints the command line of every window.
 # The rig: window i is player i and colour i (0 green, 1 red, 2 blue, 3 black), window 0 hosts on this machine only, the others join and ask for their seat,
 # the windows lie in a 2 x 2 grid (2 x 1 for two), every name is different and random, nothing grabs the pointer, only the focused window has sound.
+# Where each window lies is the owner's layout (the same as the games on web/four.html, and the way the hills lie on the Small and Treasure maps):
+# black top left, green top right, red bottom left, blue bottom right.
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 SCRIPT="$ROOT/start_game.sh"
 FAILS=0
@@ -23,15 +25,28 @@ word_after() { # the word after an option in a dry-run line: word_after "line" -
     done
 }
 
-echo "[start script] dry runs: seats, colours, names, grid, host and guests, the options that keep the pointer free"
+cells_of() {   # the --cell of every window of a dry run, in window order: "1 2 3 0"
+    local cells="" line
+    while IFS= read -r line; do cells="$cells $(word_after "$line" --cell)"; done <<< "$1"
+    echo "${cells# }"
+}
+
+echo "[start script] dry runs: seats, colours, cells, names, grid, host and guests, the options that keep the pointer free"
 
 OUT="$("$SCRIPT" --dry-run)"
 check "four windows" "$([ "$(echo "$OUT" | wc -l | tr -d ' ')" -eq 4 ]; echo $?)"
 COLOURS=(Green Red Blue Black)
+# The owner's layout: green top right, red bottom left, blue bottom right, black top left, the way the four hills lie on the Small and Treasure maps (the games
+# on web/four.html lie the same way). --cell counts row by row (0 top left, 1 top right, 2 bottom left, 3 bottom right), so by seat (window n is seat n):
+# green 1, red 2, blue 3, black 0. This check used to say that window n sits in cell n (green top left, red top right, blue bottom left, black bottom right),
+# the order of the seats; the owner's layout replaces it, so it is rewritten (each window's cell is still checked exactly, nothing is weakened).
+CELLS=(1 2 3 0)
+PLACES=("top right" "bottom left" "bottom right" "top left")
 NAMES_SEEN=""
 n=0
 while IFS= read -r line; do
-    has "$line" "--cell $n "; check "window $n sits in cell $n" $?
+    cell="$(word_after "$line" --cell)"
+    check "window $n (${COLOURS[$n]}) sits in cell ${CELLS[$n]}, ${PLACES[$n]} (the owner's layout), not in cell $n" "$([ "$cell" = "${CELLS[$n]}" ]; echo $?)"
     has "$line" "--grid 2x2"; check "window $n: 2 x 2 grid" $?
     has "$line" "--audio-focus"; check "window $n: sound only with the focus" $?
     has "$line" "--no-lan"; check "window $n: no announcements on the network" $?
@@ -51,6 +66,9 @@ while IFS= read -r line; do
     has "$line" "--fullscreen"; [ $? -ne 0 ]; check "window $n: not fullscreen" $?
     n=$((n + 1))
 done <<< "$OUT"
+check "the cells of the four windows, by seat, are 1 2 3 0 (green, red, blue, black)" "$([ "$(cells_of "$OUT")" = "1 2 3 0" ]; echo $?)"
+SORTED="$(cells_of "$OUT" | tr ' ' '\n' | sort | tr '\n' ' ')"
+check "the four windows fill the four cells of the grid, each once (none lies on another)" "$([ "$SORTED" = "0 1 2 3 " ]; echo $?)"
 
 # the names are random, and repeatable on request
 A="$(ANTS_NAMES_SEED=11 "$SCRIPT" --dry-run)"
@@ -69,10 +87,15 @@ check "without a seed the names change from run to run" "$([ "$R1" != "$R2" ] ||
 OUT="$("$SCRIPT" --dry-run --players 2)"
 check "two windows" "$([ "$(echo "$OUT" | wc -l | tr -d ' ')" -eq 2 ]; echo $?)"
 has "$OUT" "--grid 2x1"; check "two windows sit side by side" $?
+# fewer windows keep the order of the colours (black, green, red, blue) without holes, as the games on web/four.html do: nobody is black, so the top left cell
+# goes to green; two windows are green left (cell 0), red right (cell 1)
+check "two windows: green left (cell 0), red right (cell 1)" "$([ "$(cells_of "$OUT")" = "0 1" ]; echo $?)"
 OUT="$("$SCRIPT" --players 3 --dry-run)"
 check "three windows" "$([ "$(echo "$OUT" | wc -l | tr -d ' ')" -eq 3 ]; echo $?)"
 has "$OUT" "--seat 2"; check "the third window asks for seat 2 (blue)" $?
 has "$OUT" "--seat 3"; [ $? -ne 0 ]; check "there is no fourth window" $?
+has "$OUT" "--grid 2x2"; check "three windows lie in the 2 x 2 grid" $?
+check "three windows: green, red, blue in the cells 0, 1, 2 (black is missing, the colours keep their order without a hole)" "$([ "$(cells_of "$OUT")" = "0 1 2" ]; echo $?)"
 OUT="$(ANTS_PORT=5123 "$SCRIPT" --dry-run --fog-test)"
 has "$OUT" "--host 5123 --loopback"; check "ANTS_PORT moves the room" $?
 has "$OUT" "--join 127.0.0.1:5123"; check "... and the guests follow" $?

@@ -2,8 +2,11 @@
 rem Starts Ants (Windows).
 rem
 rem   start_game.bat                 four games on this machine, one player each, in a 2 x 2 grid, playing one networked match together:
-rem                                  window 0 hosts (green), windows 1 - 3 join (red, blue, black), every player has a random name
-rem   start_game.bat --players N     N windows (1 - 4); 2 windows sit side by side, 1 is the plain single game
+rem                                  window 0 hosts (green), windows 1 - 3 join (red, blue, black), every player has a random name.
+rem                                  The windows lie by colour, the way the four hills lie on the Small and Treasure maps (the owner's layout, the
+rem                                  same as the games on web/four.html): black top left, green top right, red bottom left, blue bottom right
+rem   start_game.bat --players N     N windows (1 - 4); 2 windows sit side by side (green left, red right), 3 are green, red, blue in the first three
+rem                                  cells of the grid (black, green, red, blue keep their order without holes), 1 is the plain single game
 rem   start_game.bat --single        the same as --players 1 (one game, the setup screen, nothing else changes)
 rem   start_game.bat --dry-run ...   print the command line of every window and stop (nothing is built or started)
 rem   every other argument goes to every window (the game's own options, see README.md)
@@ -161,6 +164,23 @@ set "COLOUR3=Black"
 set "GRID=2x2"
 if "%PLAYERS%"=="2" set "GRID=2x1"
 
+rem The cell of window N (= seat N) in the grid; --cell counts row by row, 0 = top left (1 top right, 2 bottom left, 3 bottom right of the 2 x 2 grid).
+rem Four windows lie by colour, the way the four hills lie on the Small and Treasure maps (the owner's layout, the same as the games of web/four.html):
+rem black (seat 3) top left, green (seat 0) top right, red (seat 1) bottom left, blue (seat 2) bottom right.
+rem (Other maps put the hills elsewhere; the layout is the same for every map.)
+rem Fewer windows keep that order of the colours (black, green, red, blue) without holes, as on the page: two are green left, red right (2 x 1),
+rem three are green, red, blue in cells 0, 1, 2 (nobody is black, so the top left cell goes to green).
+set "CELL0=0"
+set "CELL1=1"
+set "CELL2=2"
+set "CELL3=3"
+if "%PLAYERS%"=="4" (
+    set "CELL0=1"
+    set "CELL1=2"
+    set "CELL2=3"
+    set "CELL3=0"
+)
+
 if "%DRYRUN%"=="1" (
     for /l %%N in (0,1,%PLAYERS%) do if %%N lss %PLAYERS% call :window %%N echo
     exit /b 0
@@ -182,7 +202,8 @@ rem :window N echo|start - the command line of window N: window 0 opens the room
 set "WN=%~1"
 set "WNAME=!PICK%WN%!"
 set "WCOLOUR=!COLOUR%WN%!"
-set "WARGS=--name !WNAME! --title "Ants - !WCOLOUR! (!WNAME!)" --grid %GRID% --cell %WN% --audio-focus --no-lan"
+set "WCELL=!CELL%WN%!"
+set "WARGS=--name !WNAME! --title "Ants - !WCOLOUR! (!WNAME!)" --grid %GRID% --cell !WCELL! --audio-focus --no-lan"
 if "%WN%"=="0" (
     set "WARGS=!WARGS! --host %PORT% --loopback"
 ) else (

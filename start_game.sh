@@ -2,8 +2,11 @@
 # Starts Ants (macOS / Linux).
 #
 #   ./start_game.sh                 four games on this machine, one player each, in a 2 x 2 grid, playing one networked match together:
-#                                   window 0 hosts (green), windows 1 - 3 join (red, blue, black), every player has a random name
-#   ./start_game.sh --players N     N windows (1 - 4); 2 windows sit side by side, 1 is the plain single game
+#                                   window 0 hosts (green), windows 1 - 3 join (red, blue, black), every player has a random name.
+#                                   The windows lie by colour, the way the four hills lie on the Small and Treasure maps (the owner's layout, the
+#                                   same as the games on web/four.html): black top left, green top right, red bottom left, blue bottom right
+#   ./start_game.sh --players N     N windows (1 - 4); 2 windows sit side by side (green left, red right), 3 are green, red, blue in the first three
+#                                   cells of the grid (black, green, red, blue keep their order without holes), 1 is the plain single game
 #   ./start_game.sh --single        the same as --players 1 (one game, the setup screen, nothing else changes)
 #   ./start_game.sh --dry-run ...   print the command line of every window and stop (nothing is built or started)
 #   every other argument goes to every window (the game's own options, see README.md)
@@ -125,11 +128,21 @@ fi
 GRID="2x2"
 [ "$PLAYERS" -eq 2 ] && GRID="2x1"
 
+# The cell of window n (= seat n) in the grid; --cell counts row by row, 0 = top left (1 top right, 2 bottom left, 3 bottom right of the 2 x 2 grid).
+# Four windows lie by colour, the way the four hills lie on the Small and Treasure maps (the owner's layout, the same as the games of web/four.html):
+#   black (seat 3) top left, green (seat 0) top right, red (seat 1) bottom left, blue (seat 2) bottom right.
+# (Other maps put the hills elsewhere; the layout is the same for every map.)
+# Fewer windows keep that order of the colours (black, green, red, blue) without holes, as on the page: two are green left, red right (2 x 1),
+# three are green, red, blue in cells 0, 1, 2 (nobody is black, so the top left cell goes to green).
+FOUR_CELLS=(1 2 3 0)        # by seat: green 1, red 2, blue 3, black 0
+
 # the command line of window $1: window 0 opens the room on this machine only, the others join it and ask for their own colour
 window_args() {
     local n="$1"
     local name="${pool[$n]}"
-    WINDOW_ARGS=(--name "$name" --title "Ants - ${COLOURS[$n]} ($name)" --grid "$GRID" --cell "$n" --audio-focus --no-lan)
+    local cell="$n"
+    if [ "$PLAYERS" -eq 4 ]; then cell="${FOUR_CELLS[$n]}"; fi
+    WINDOW_ARGS=(--name "$name" --title "Ants - ${COLOURS[$n]} ($name)" --grid "$GRID" --cell "$cell" --audio-focus --no-lan)
     if [ "$n" -eq 0 ]; then
         WINDOW_ARGS+=(--host "$PORT" --loopback)
     else

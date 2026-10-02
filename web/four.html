@@ -79,6 +79,14 @@
             margin: 0 auto;
         }
         @media (max-width: 760px) { #grid { grid-template-columns: minmax(0, 1fr); } }
+        /* The games lie by colour, whatever order the seats were started in, the way the four hills lie on the Small and Treasure maps: Black top left, Green top right,
+           Red bottom left, Blue bottom right. Each cell takes its place in the reading order of the grid from its seat number (data-seat, set when the seat starts
+           playing here); the grid fills row by row in that order, so fewer games keep the order Black, Green, Red, Blue without holes, and the one column of a narrow
+           screen shows them top to bottom in it. A CSS order, not a move in the DOM: a frame that is moved loads its game again and the seat would leave the match. */
+        .cell[data-seat="3"] { order: 0; }      /* Black */
+        .cell[data-seat="0"] { order: 1; }      /* Green */
+        .cell[data-seat="1"] { order: 2; }      /* Red */
+        .cell[data-seat="2"] { order: 3; }      /* Blue */
         .cell {
             border: 2px solid var(--panel-border);
             border-radius: 6px;
@@ -314,6 +322,7 @@
             inFrame[seat] = true;
             var cell = document.createElement('div');
             cell.className = 'cell';
+            cell.setAttribute('data-seat', String(seat));      // the place on the page comes from the seat number (CSS above), not from the order the seats were started in
             var label = document.createElement('div');
             label.className = 'label';
             label.innerHTML = '<span><span class="dot ' + SEATS[seat].css + '"></span><span class="seat">' + SEATS[seat].name + '</span> &middot; ' + names[seat] + '</span><span class="info">connecting...</span>';
