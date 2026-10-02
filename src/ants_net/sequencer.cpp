@@ -13,6 +13,7 @@ Sequencer::Sequencer(Config config) : cfg_(config) {}
 void Sequencer::set_active(uint8_t player, bool active) {
     if (player >= sim::MAX_PLAYERS) return;
     active_[player] = active;
+    if (!active) carry_[player].clear();               // a player that is gone has no commands waiting for a later turn
     // a player that joins is level with the sequencer: it has "executed" everything before the current turn
     if (active) acked_[player] = next_turn_;
 }
@@ -20,10 +21,17 @@ void Sequencer::set_active(uint8_t player, bool active) {
 bool Sequencer::submit(uint8_t player, sim::Command command) {
     if (player >= sim::MAX_PLAYERS || !active_[player]) return false;
     if (!sim::is_client_command(command.type)) return false;     // Drop and unknown types are not for clients
-    if (queued_by_[player] >= cfg_.max_commands_per_turn) return false;
     command.issuer = player;                       // the connection decides who speaks, not the payload
-    ++queued_by_[player];
-    queue_.push_back(std::move(command));
+    // A command that does not fit into the turn waits for the next ones, behind the commands of the same player that wait already (what was sent first is run first: a player
+    // that has commands waiting has a full turn, so a new one never finds room in front of them). A burst that a stuck uplink delivers at last is carried into the turns that
+    // follow; a peer with more waiting than the bound is a flood.
+    if (queued_by_[player] < cfg_.max_commands_per_turn) {
+        ++queued_by_[player];
+        queue_.push_back(std::move(command));
+        return true;
+    }
+    if (carry_[player].size() >= cfg_.max_carried_commands) return false;
+    carry_[player].push_back(std::move(command));
     return true;
 }
 
@@ -36,6 +44,7 @@ void Sequencer::resume(uint32_t next_turn) {
     next_turn_ = next_turn;
     queue_.clear();
     queued_by_.fill(0);
+    for (auto& c : carry_) c.clear();
     reports_.clear();
     have_report_.clear();
     referee_.clear();
@@ -160,6 +169,13 @@ TurnMsg Sequencer::seal() {
     t.commands = std::move(queue_);
     queue_.clear();
     queued_by_.fill(0);
+    for (uint8_t p = 0; p < sim::MAX_PLAYERS; ++p) {   // the commands that did not fit are the first of the next turn, as many as the turn takes from each player
+        while (!carry_[p].empty() && queued_by_[p] < cfg_.max_commands_per_turn) {
+            queue_.push_back(std::move(carry_[p].front()));
+            carry_[p].pop_front();
+            ++queued_by_[p];
+        }
+    }
     return t;
 }
 

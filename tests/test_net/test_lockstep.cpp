@@ -2,6 +2,7 @@
 // turn runner, and whole matches of a host and three clients over links with latency and jitter, including a desync, a stalled peer, a dropped
 // peer and a hostile peer.
 #include "ants_net/loopback.hpp"
+#include "ants_net/netgame.hpp"
 #include "ants_net/protocol.hpp"
 #include "ants_net/sequencer.hpp"
 #include "ants_net/session.hpp"
@@ -15,6 +16,7 @@
 #include <iostream>
 #include <memory>
 #include <string>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -57,6 +59,12 @@ inline void run_test_case(const std::string& name, const std::function<void()>& 
 #define ASSERT_FALSE(cond) ASSERT_TRUE(!(cond))
 #define ASSERT_EQ(a, b) ASSERT_TRUE((a) == (b))
 #define ASSERT_NE(a, b) ASSERT_TRUE((a) != (b))
+
+// The sessions hand the runner hooks that capture `this` (the delay meters): a copy or a move would leave them pointing at a session that is gone, so neither exists
+static_assert(!std::is_copy_constructible<HostSession>::value && !std::is_copy_assignable<HostSession>::value, "a HostSession is never copied");
+static_assert(!std::is_move_constructible<HostSession>::value && !std::is_move_assignable<HostSession>::value, "a HostSession is never moved");
+static_assert(!std::is_copy_constructible<ClientSession>::value && !std::is_copy_assignable<ClientSession>::value, "a ClientSession is never copied");
+static_assert(!std::is_move_constructible<ClientSession>::value && !std::is_move_assignable<ClientSession>::value, "a ClientSession is never moved");
 
 namespace {
 
@@ -332,6 +340,27 @@ public:
 
 private:
     Connection* inner_;
+};
+
+// A connection that hands the game one message every `period_ms` at the most (0: all that is there): a slow downlink. What is not handed over waits in the link, not in the game.
+class SlowReader final : public Connection {
+public:
+    SlowReader(Connection* inner, const uint32_t* clock) : inner_(inner), clock_(clock) {}
+    bool send(const std::vector<uint8_t>& m) override { return inner_->send(m); }
+    bool poll(std::vector<uint8_t>& m) override {
+        if (period_ms != 0 && *clock_ - last_ < period_ms) return false;
+        if (!inner_->poll(m)) return false;
+        last_ = *clock_;
+        return true;
+    }
+    State state() const override { return inner_->state(); }
+    void close() override { inner_->close(); }
+    uint32_t period_ms{0};
+
+private:
+    Connection* inner_;
+    const uint32_t* clock_;
+    uint32_t last_{0};
 };
 
 // ---------------------------------------------------------------------------------------------------------------------------------
@@ -840,16 +869,77 @@ void run_sequencer_tests() {
         ASSERT_EQ(t.commands[1].type, CommandType::GroupMove);       // player 1's commands keep their order
         ASSERT_EQ(t.commands[2].type, CommandType::GroupAttack);
         ASSERT_EQ(seq.seal().turn, 1u);                              // turns are numbered without gaps
-        // flooding: only max_commands_per_turn per peer and turn
+        // flooding: max_commands_per_turn per peer and turn; what does not fit waits for a later turn, up to max_carried_commands; a peer with more than that waiting is refused
         Sequencer::Config cfg;
         cfg.max_commands_per_turn = 3;
+        cfg.max_carried_commands = 4;
         Sequencer small(cfg);
         small.set_active(1, true);
         int taken = 0;
         for (int i = 0; i < 10; ++i) taken += small.submit(1, cmd(CommandType::Hatch, 1)) ? 1 : 0;
-        ASSERT_EQ(taken, 3);
-        small.seal();
-        ASSERT_TRUE(small.submit(1, cmd(CommandType::Hatch, 1)));      // the limit is per turn
+        ASSERT_EQ(taken, 7);                                           // 3 for the turn and 4 that wait
+        ASSERT_EQ(small.seal().commands.size(), 3u);
+        ASSERT_EQ(small.carried(1), 1u);                               // (three of the four moved into the next turn, one still waits)
+        ASSERT_TRUE(small.submit(1, cmd(CommandType::Hatch, 1)));      // and there is room to wait again
+        ASSERT_EQ(small.seal().commands.size(), 3u);
+    } TEST_END();
+
+    TEST_CASE("N2.5b Sequencer: Commands Beyond The Turn's Quota Are Carried Into The Next Turns In The Order They Came (A Stuck Uplink That Is Let Go Delivers 76 Orders At Once: They Are Not A Flood), Nobody Else's Quota Is Touched, Only More Than Four Turns' Worth Waiting Is Refused") {
+        Sequencer seq;                                                 // the defaults: 64 per turn, 256 waiting
+        seq.set_active(0, true);
+        seq.set_active(1, true);
+        for (int i = 0; i < 76; ++i) ASSERT_TRUE(seq.submit(1, cmd(CommandType::GroupMove, 1, 255, static_cast<int16_t>(i), 0, {7})));   // order i goes to the tile x = i
+        ASSERT_EQ(seq.queued(), 64u);
+        ASSERT_EQ(seq.carried(1), 12u);
+        ASSERT_TRUE(seq.submit(0, cmd(CommandType::Hatch, 0)));        // another player's command is not behind them
+        ASSERT_EQ(seq.carried(0), 0u);
+        const TurnMsg first = seq.seal();
+        ASSERT_EQ(first.commands.size(), 65u);                         // 64 of player 1 and the one of player 0
+        ASSERT_EQ(first.commands[0].issuer, 0);                        // (canonical order: by issuer)
+        for (int i = 0; i < 64; ++i) {
+            ASSERT_EQ(first.commands[static_cast<size_t>(i) + 1].issuer, 1);
+            ASSERT_EQ(first.commands[static_cast<size_t>(i) + 1].tile_x, i);               // in the order they came
+        }
+        ASSERT_EQ(seq.carried(1), 0u);                                 // the other twelve are the first commands of the next turn
+        ASSERT_EQ(seq.queued(), 12u);
+        // a command that comes now goes behind the twelve that wait, not before them
+        ASSERT_TRUE(seq.submit(1, cmd(CommandType::GroupMove, 1, 255, 100, 0, {7})));
+        const TurnMsg second = seq.seal();
+        ASSERT_EQ(second.commands.size(), 13u);
+        for (int i = 0; i < 12; ++i) ASSERT_EQ(second.commands[static_cast<size_t>(i)].tile_x, 64 + i);
+        ASSERT_EQ(second.commands[12].tile_x, 100);
+        // a burst that fills the turn and the carry: 64 + 256 are taken, the rest refused; nobody's quota is shared
+        Sequencer flood;
+        flood.set_active(1, true);
+        flood.set_active(2, true);
+        int taken = 0;
+        for (int i = 0; i < 400; ++i) taken += flood.submit(1, cmd(CommandType::Hatch, 1)) ? 1 : 0;
+        ASSERT_EQ(taken, 64 + 256);
+        ASSERT_EQ(flood.carried(1), 256u);
+        ASSERT_TRUE(flood.submit(2, cmd(CommandType::Hatch, 2)));      // player 2 is not affected by player 1's flood
+        size_t total = 0;
+        uint32_t turns = 0;
+        while (flood.carried(1) > 0 || flood.queued() > 0) {           // the 320 commands take five turns of 64, in order, none lost
+            const TurnMsg t = flood.seal();
+            total += t.commands.size();
+            ++turns;
+            ASSERT_TRUE(turns <= 5);
+        }
+        ASSERT_EQ(total, size_t{64 + 256 + 1});
+        // a player that is gone has no commands waiting, and a host that resumes forgets them
+        Sequencer gone;
+        gone.set_active(1, true);
+        for (int i = 0; i < 70; ++i) gone.submit(1, cmd(CommandType::Hatch, 1));
+        ASSERT_EQ(gone.carried(1), 6u);
+        gone.set_active(1, false);
+        ASSERT_EQ(gone.carried(1), 0u);
+        Sequencer moved;
+        moved.set_active(1, true);
+        for (int i = 0; i < 70; ++i) moved.submit(1, cmd(CommandType::Hatch, 1));
+        moved.resume(500);
+        ASSERT_TRUE(moved.carried(1) == 0 && moved.queued() == 0);
+        ASSERT_FALSE(moved.submit(1, cmd(CommandType::Hatch, 1)));     // (nobody is active after a resume)
+        ASSERT_EQ(moved.carried(1), 0u);
     } TEST_END();
 
     TEST_CASE("N2.6 Sequencer: Flow Control Stalls Sealing While A Peer Lags, Acks Only Move Forward, Reports Are Pruned") {
@@ -1017,7 +1107,7 @@ void run_runner_tests() {
         // 38 turns queued: far more than the buffer: the first runs at once, then the queue is run down at up to four times normal speed, never faster
         done = runner.update(16);
         ASSERT_EQ(done.size(), 1u);
-        ASSERT_EQ(runner.buffer_turns(), 4u);                                        // a bunch of 38 turns after a wait of 1.7 s: their lateness asks for the largest buffer (the wait itself, over 150 ms, did not grow it)
+        ASSERT_EQ(runner.buffer_turns(), 1u);                                        // a bunch of 38 turns after a wait of 1.7 s: the freeze's own lateness, not the link's (it is left out, jitter.hpp): the buffer stays at one turn (the wait itself, over 150 ms, did not grow it either)
         ASSERT_FALSE(runner.stalled());
         ASSERT_EQ(runner.stalled_ms(), 0u);
         ASSERT_EQ(runner.speed_x4(), 16u);                                           // 37 queued, 3 wanted: the limit, 4x
@@ -1413,7 +1503,9 @@ void run_failure_tests() {
         ASSERT_EQ(m.host->lagging_mask(), 1u << 2);
         ASSERT_TRUE(m.host->client_present(2));                                       // 5 s: not dropped
         ASSERT_EQ(m.clients[2]->lagging_seat(), 255);                                 // (it is never told about itself)
-        // it is back: it finds 5 s of turns waiting, says so, runs them at up to 4 times normal speed (never faster) and is level again within a few seconds
+        m.run(4000);                                                                  // it stays frozen for 4 s more (9 s in all: its first frame back runs a second at 4x, 80 ticks, and 100 turns are left)
+        ASSERT_TRUE(m.host->client_present(2));
+        // it is back: it finds 9 s of turns waiting, says so, runs them at up to 4 times normal speed (never faster) and is level again within a few seconds
         m.frozen_mask = 0;
         const uint32_t back_at = m.now;
         bool catching = false;
@@ -1529,7 +1621,8 @@ void run_failure_tests() {
             ASSERT_TRUE(sealed_at_10s >= 199);                                            // the server sealed all along: 200 turns in 10 s
             ASSERT_TRUE(r.host->turns_sealed() >= 590);
             for (int i = 0; i < 40; ++i) r.step(-1);                                      // (the last notice, that of the drop, is on its way)
-            ASSERT_TRUE(r.told_client_1.empty());                                         // the lagger itself is not told
+            ASSERT_EQ(r.told_client_1.size() + 1, r.notices.size());                      // the lagger is told too (its own link may be the slow one: its backlog is on the way, not in its queue) ...
+            for (const LagMsg& l : r.told_client_1) ASSERT_EQ(l.seat, 1);                 // ... about itself, once a second like the others, only the last one (the drop ends the notice for the others, and the lagger is gone) is not
             ASSERT_TRUE(r.notices.size() >= 27 && r.notices.size() <= 29);               // one a second from 3 s to 30 s ...
             if (r.notices.empty() || r.notices.front().first < 2900 || r.notices.front().first > 3100) std::cout << "\n    first notice at " << (r.notices.empty() ? 0u : r.notices.front().first) << ", " << r.notices.size() << " notices\n";
             ASSERT_TRUE(r.notices.front().first >= 2900 && r.notices.front().first <= 3100);   // 3 s behind: sixty turns sealed and none acknowledged
@@ -1606,6 +1699,288 @@ void run_failure_tests() {
             m.settle();
             ASSERT_TRUE(m.host->desyncs().empty());
             ASSERT_TRUE(m.all_equal());
+        }
+    } TEST_END();
+
+    TEST_CASE("S2.10 Dedicated Server: The End Of A Match Over A Spiky Link: Every Guest Runs Every Turn The Referee Sealed And Reaches Its Final Tick (The Host Freezes When The Match Ends; A Guest That Stalled Near The End Waited For A Buffer That Could Not Come And Never Saw The End)") {
+        // 2 % of the messages are held up by 250 ms (a resend), the ones behind them wait; sixty matches of two guests, each ends at another moment
+        uint32_t guests = 0;
+        uint32_t missed = 0;
+        for (uint32_t match = 1; match <= 60; ++match) {
+            ServerMatch m(match * 7919u + 3, 2, {30, 0, 250, 20});
+            m.run(24000 + (match % 17) * 50);
+            m.settle(6000);                                                           // the match ends: the host stops sealing, everything in flight arrives
+            for (uint8_t p = 0; p < 2; ++p) {
+                ++guests;
+                if (m.clients[p]->runner().next_turn_to_execute() != m.host->turns_sealed() || m.sims[p]->current_tick() != m.referee.current_tick()) ++missed;
+            }
+            ASSERT_TRUE(m.host->desyncs().empty());
+        }
+        if (missed != 0) std::cout << "\n    " << missed << " of " << guests << " guests did not reach the final tick\n";
+        ASSERT_EQ(missed, 0u);
+    } TEST_END();
+
+    TEST_CASE("S2.11 Dedicated Server: A Player Whose Own Link Is The Slow One Is Told That It Lags (Its Backlog Is On The Way, Not In Its Queue: \"Catching up...\" Had Nothing To Say And Nobody Told It Until It Was Dropped At 60 s); Everybody Else Is Told Too, And The Notice Ends When It Is Level") {
+        ServerMatch m(1, 3, {30, 5});
+        SlowReader slow(m.client_ends[2], &m.now);
+        m.clients[2]->set_connection(&slow);
+        m.run(3000);
+        ASSERT_EQ(m.clients[2]->self_lag_behind_ms(), 0u);
+        slow.period_ms = 150;                                                       // seat 2's downlink hands the game 7 messages a second against the 21 that the room sends
+        bool told_self = false;
+        bool catching = false;
+        bool others_told = false;
+        uint32_t told_at = 0;
+        const uint32_t from = m.now;
+        m.run(40000, true, [&](uint32_t now) {
+            if (!told_self && m.clients[2]->self_lag_behind_ms() > 0) {
+                told_self = true;
+                told_at = now - from;
+            }
+            catching = catching || m.clients[2]->catching_up();
+            others_told = others_told || (m.clients[0]->lagging_seat() == 2 && m.clients[1]->lagging_seat() == 2);
+            ASSERT_TRUE(m.clients[2]->lagging_seat() == 255);                       // (the OTHER players: nobody else lags)
+        });
+        if (!told_self) std::cout << "\n    the laggard was never told\n";
+        ASSERT_TRUE(told_self);                                                    // it is told, although nothing is queued in its game
+        ASSERT_TRUE(told_at >= 3000 && told_at <= 30000);                          // (the notice comes behind the turns that wait in front of it)
+        ASSERT_FALSE(catching);                                                    // "Catching up..." never had anything to say: the turns it misses are still in the link
+        ASSERT_TRUE(others_told);
+        ASSERT_TRUE(m.clients[2]->self_lag_behind_ms() >= 3000);
+        ASSERT_TRUE(m.host->client_present(2));
+        // the link is back: it reads what waited, catches up, and the notice ends for everybody
+        slow.period_ms = 0;
+        m.run(20000);
+        ASSERT_EQ(m.clients[2]->self_lag_behind_ms(), 0u);
+        ASSERT_EQ(m.clients[0]->lagging_seat(), 255);
+        ASSERT_FALSE(m.clients[2]->catching_up());
+        ASSERT_TRUE(m.clients[2]->runner().next_turn_to_execute() + 10 >= m.clients[0]->runner().next_turn_to_execute());
+        m.settle();
+        ASSERT_TRUE(m.host->desyncs().empty());
+        ASSERT_TRUE(m.all_equal());
+    } TEST_END();
+
+    TEST_CASE("S2.12 Dedicated Server: A Player Who Was Dropped For Being Away Is Told Why When It Is Back (Its Link Was Closed While Half A Minute Of The Match Waited Unplayed); A Link That Fails By Itself, Or A Server That Goes Silent, Is Only A Lost Connection") {
+        ASSERT_EQ(match_lost_text(ClientSession::LostReason::AwayTooLong), std::string("You were away too long and were dropped from the match."));
+        ASSERT_EQ(match_lost_text(ClientSession::LostReason::Connection), std::string("The connection to the other players was lost."));
+        ASSERT_EQ(match_lost_text(ClientSession::LostReason::None), std::string("The connection to the other players was lost."));
+        {   // seat 2's process stops for 35 s: the server drops it at 30 s without an acknowledgement and closes the link; when the process runs again it reads the turns that waited, then the close
+            ServerMatch m(1, 3, {30, 5});
+            m.run(3000);
+            m.frozen_mask = 1u << 2;
+            m.run(35000);
+            ASSERT_FALSE(m.host->client_present(2));
+            ASSERT_TRUE(m.clients[0]->mode() == ClientSession::Mode::Normal && !m.clients[0]->lost());
+            ASSERT_FALSE(m.clients[2]->lost());                                      // (it has not run: it does not know yet)
+            m.frozen_mask = 0;
+            m.run(1000);
+            ASSERT_TRUE(m.clients[2]->lost());
+            ASSERT_TRUE(m.clients[2]->lost_reason() == ClientSession::LostReason::AwayTooLong);
+            ASSERT_TRUE(m.clients[2]->runner().backlog_ms() >= kAwayBacklogMs);
+            ASSERT_FALSE(m.clients[0]->lost());                                      // the others play on
+        }
+        {   // a link that fails while the player plays: nothing waits in its queue
+            ServerMatch m(1, 3, {30, 5});
+            m.run(5000);
+            m.net.cut(m.client_ends[1]);
+            m.run(500);
+            ASSERT_TRUE(m.clients[1]->lost());
+            ASSERT_TRUE(m.clients[1]->lost_reason() == ClientSession::LostReason::Connection);
+            ASSERT_TRUE(m.clients[1]->runner().backlog_ms() < kAwayBacklogMs);
+        }
+        {   // a server that says nothing for 10 s (the link stays open): lost, and not "dropped"
+            ServerMatch m(1, 3, {30, 5});
+            m.run(5000);
+            uint32_t t = m.now;
+            while (m.now < t + 12000) {
+                m.now += 10;
+                m.net.set_time(m.now);
+                m.clients[1]->update(m.now);                                         // the host is not updated: no turns, no pongs
+            }
+            ASSERT_TRUE(m.clients[1]->lost());
+            ASSERT_TRUE(m.clients[1]->lost_reason() == ClientSession::LostReason::Connection);
+        }
+        {   // a player that is behind by more than a minute is dropped by the other rule (60 s): the same message
+            ServerMatch m(1, 3, {30, 5});
+            m.run(3000);
+            m.frozen_mask = 1u << 2;
+            m.run(26000);
+            ASSERT_TRUE(m.host->client_present(2));                                  // 26 s: still a lagger
+            m.frozen_mask = 0;
+            ASSERT_FALSE(m.clients[2]->lost());
+        }
+    } TEST_END();
+
+    TEST_CASE("S2.13 Dedicated Server: A Stuck Uplink That Is Let Go After 5 s Delivers The 76 Orders Of A Player Who Gave 15 A Second: Nobody Is Dropped For It, Every Order Is Run In The Order It Was Given, And Every Machine Runs The Same Turns (The 64 A Turn Of The Sequencer Made 12 Of Them Violations: Eight Throw The Player Out)") {
+        ServerMatch m(1, 3, {30, 5}, {}, {}, true);
+        std::vector<int16_t> run_order;                                             // the orders of seat 1 as the referee executes them
+        m.host->runner().set_on_command([&](const sim::Command& c, const sim::CommandResult&) {
+            if (c.issuer == 1 && c.type == CommandType::GroupMove) run_order.push_back(c.tile_x);
+        });
+        m.run(10000, false);
+        const uint32_t stuck_from = m.now;
+        m.arrivals[1]->hold = true;                                                 // seat 1's way to the host is stuck: what it sends waits in the pipe
+        int16_t next_order = 0;
+        uint32_t next_at = m.now;
+        m.run(5000, false, [&](uint32_t now) {
+            if (now >= next_at) {
+                next_at += 1000 / 15;                                               // 15 orders a second
+                m.clients[1]->submit(cmd(CommandType::GroupMove, 1, 255, next_order++, 0, {m.ids.ants[1][0]}));
+            }
+        });
+        ASSERT_TRUE(next_order >= 74 && next_order <= 76);
+        ASSERT_TRUE(m.now - stuck_from == 5000);
+        m.arrivals[1]->hold = false;                                                // let go: everything arrives in one poll
+        m.run(15000, false);
+        m.settle();
+        ASSERT_TRUE(m.host->client_present(1));                                    // not dropped
+        ASSERT_EQ(m.host->violations(1), 0u);                                      // not a single one counted
+        ASSERT_EQ(run_order.size(), static_cast<size_t>(next_order));              // every order was run ...
+        for (size_t i = 0; i < run_order.size(); ++i) ASSERT_EQ(run_order[i], static_cast<int16_t>(i));       // ... in the order that it was given
+        // the turns that carry them are the same on every machine: the referee's log and every client's log hold the same bytes
+        const uint32_t sealed = m.host->turns_sealed();
+        ASSERT_TRUE(sealed > 400);
+        const uint32_t first_logged = sealed > LockstepRunner::kTurnLogTurns - 10 ? sealed - (static_cast<uint32_t>(LockstepRunner::kTurnLogTurns) - 10) : 0u;      // (the runners keep the last 600 turns)
+        for (uint32_t t = first_logged; t < sealed; ++t) {
+            const TurnMsg* host_turn = m.host->runner().logged_turn(t);
+            ASSERT_TRUE(host_turn != nullptr);
+            const std::vector<uint8_t> bytes = encode(*host_turn);
+            for (auto& c : m.clients) {
+                const TurnMsg* turn = c->runner().logged_turn(t);
+                ASSERT_TRUE(turn != nullptr && encode(*turn) == bytes);
+            }
+        }
+        // the 64 a turn of the sequencer shows in the turns: the turn that came first carried 64 of seat 1, the next the other twelve (or fewer, when the orders came in two bunches)
+        size_t most = 0;
+        for (uint32_t t = first_logged; t < sealed; ++t) {
+            size_t n = 0;
+            for (const sim::Command& c : m.host->runner().logged_turn(t)->commands) n += (c.issuer == 1 && c.type == CommandType::GroupMove) ? 1 : 0;
+            most = std::max(most, n);
+        }
+        ASSERT_EQ(most, size_t{64});
+        ASSERT_TRUE(m.host->desyncs().empty());
+        ASSERT_TRUE(m.all_equal());
+    } TEST_END();
+
+    TEST_CASE("S2.14 Dedicated Server: The Small Rules Of The Lag Policy That No Other Test Pinned: The Ack Of A Frame That Ran Several Turns Is For The Last, A Notice That Is Not Renewed Goes Stale (3 s; 10 s For The Notice About Oneself), Notices About Oneself Are Kept Apart, A Late Pass Seals At Most Ten Turns, The Server's Host Never Waits, And \"Catching Up...\" Begins At Sixty Turns") {
+        {   // the ack of a frame that ran many turns is for the LAST of them (the host sees a machine that is level, not one that is as far behind as the frame began)
+            ServerMatch m(1, 3, {30, 5});
+            m.run(3000);
+            const uint32_t last_clock = m.now;
+            m.frozen_mask = 1u << 1;
+            m.run(3000);                                                            // seat 1 stands still: 60 turns are waiting for it
+            ASSERT_TRUE(m.host->behind_ms(1) >= 3000);
+            m.frozen_mask = 0;
+            m.now += 10;
+            m.net.set_time(m.now);
+            m.clients[1]->update(last_clock + 1000);                               // ONE frame: it runs the turns that it has (a second, at four times the speed: 80 ticks at the most) and acks once
+            ASSERT_TRUE(m.clients[1]->runner().next_turn_to_execute() > 55);
+            for (int i = 0; i < 20; ++i) {                                          // the host takes the ack (nobody else runs a frame of seat 1)
+                m.now += 10;
+                m.net.set_time(m.now);
+                m.host->update(m.now);
+            }
+            if (m.host->behind_ms(1) > 500) std::cout << "\n    behind " << m.host->behind_ms(1) << " ms after one frame that ran " << m.clients[1]->runner().next_turn_to_execute() << " turns\n";
+            ASSERT_TRUE(m.host->behind_ms(1) <= 500);
+            // (and what the server's host says of such a player: it is the server's, so it never waits, and names nobody as the one that holds the game up)
+            ASSERT_FALSE(m.host->waiting());
+            ASSERT_EQ(m.host->laggard(), 255);
+        }
+        {   // the server's host: a player 5 s behind is announced, and the host neither waits nor names a laggard (HostSession::waiting / laggard are for a host with a seat)
+            ServerMatch m(1, 3, {30, 5});
+            m.run(3000);
+            m.frozen_mask = 1u << 2;
+            m.run(5000);
+            ASSERT_EQ(m.host->lagging_mask(), 1u << 2);
+            ASSERT_TRUE(m.host->behind_ms(2) >= 4000);
+            ASSERT_FALSE(m.host->waiting());
+            ASSERT_EQ(m.host->laggard(), 255);
+        }
+        {   // a notice that is not renewed goes stale after 3 s, one about the client itself after 10 s; a notice about itself never names the others' seat
+            LoopbackNetwork net(1);
+            sim::SimulationEngine sim;
+            build_world(sim, 1);
+            ClientSession::Config cc;
+            cc.player = 0;
+            cc.host = kNoSeat;
+            cc.migration = false;
+            ClientSession cs(sim, cc);
+            auto ends = net.connect({1, 0});
+            cs.set_connection(ends.second);
+            cs.start(0);
+            ASSERT_TRUE(ends.first->send(encode(LagMsg{2, 5000})));
+            ASSERT_TRUE(ends.first->send(encode(LagMsg{0, 8000})));                   // about this client itself
+            uint32_t now = 0;
+            const auto step_to = [&](uint32_t t) {
+                while (now < t) {
+                    ++now;
+                    net.set_time(now);
+                    if (now % 2000 == 0) ends.first->send(encode(TurnMsg{now / 50, {}}));         // (keeps the host's silence from being noticed: any message is a sign of life)
+                    cs.update(now);
+                }
+            };
+            step_to(20);
+            ASSERT_EQ(cs.lagging_seat(), 2);
+            ASSERT_EQ(cs.lagging_behind_ms(), 5000u);
+            ASSERT_EQ(cs.self_lag_behind_ms(), 8000u);
+            step_to(2900);
+            ASSERT_EQ(cs.lagging_seat(), 2);                                          // 2.9 s after it came
+            step_to(3100);
+            ASSERT_EQ(cs.lagging_seat(), 255);                                        // gone: not renewed
+            ASSERT_EQ(cs.lagging_behind_ms(), 0u);
+            ASSERT_EQ(cs.self_lag_behind_ms(), 8000u);                                // the one about itself lasts longer
+            step_to(9900);
+            ASSERT_EQ(cs.self_lag_behind_ms(), 8000u);
+            step_to(10100);
+            ASSERT_EQ(cs.self_lag_behind_ms(), 0u);
+            // renewed and ended
+            ASSERT_TRUE(ends.first->send(encode(LagMsg{0, 4000})));
+            step_to(10200);
+            ASSERT_EQ(cs.self_lag_behind_ms(), 4000u);
+            ASSERT_TRUE(ends.first->send(encode(LagMsg{0, 0})));                       // "back within a second"
+            step_to(10300);
+            ASSERT_EQ(cs.self_lag_behind_ms(), 0u);
+            ASSERT_EQ(cs.lagging_seat(), 255);
+        }
+        {   // a pass that comes late seals the turns it missed, ten at the most (half a second), and the schedule goes on in the passes that follow
+            HostSession::Config hc;
+            hc.host_player = kNoSeat;
+            sim::SimulationEngine sim;
+            build_world(sim, 1);
+            HostSession host(sim, hc);
+            host.start(0);
+            host.update(2000);                                                     // forty turns are due
+            ASSERT_EQ(host.turns_sealed(), 10u);
+            host.update(2000);
+            ASSERT_EQ(host.turns_sealed(), 20u);
+            host.update(2000);
+            host.update(2000);
+            host.update(2000);
+            ASSERT_EQ(host.turns_sealed(), 41u);                                   // all the turns up to 2000 ms (0, 50, ... 2000), then the schedule is level
+            host.update(2049);
+            ASSERT_EQ(host.turns_sealed(), 41u);
+            host.update(2050);
+            ASSERT_EQ(host.turns_sealed(), 42u);
+        }
+        {   // "Catching up..." begins when 60 turns (3 s) of the match wait unplayed in the queue, not before
+            for (const uint32_t queued : {60u, 61u}) {
+                LoopbackNetwork net(1);
+                sim::SimulationEngine sim;
+                build_world(sim, 1);
+                ClientSession::Config cc;
+                cc.player = 0;
+                cc.host = kNoSeat;
+                cc.migration = false;
+                ClientSession cs(sim, cc);
+                auto ends = net.connect({1, 0});
+                cs.set_connection(ends.second);
+                cs.start(0);
+                for (uint32_t t = 0; t < queued; ++t) ASSERT_TRUE(ends.first->send(encode(TurnMsg{t, {}})));
+                net.set_time(10);
+                cs.update(10);                                                      // the runner starts and runs one turn: queued - 1 stay
+                ASSERT_EQ(cs.runner().backlog_ms(), (queued - 1) * 50);
+                ASSERT_EQ(cs.catching_up(), queued - 1 >= 60);                      // 59 turns are 2950 ms, 60 are 3000
+            }
         }
     } TEST_END();
 

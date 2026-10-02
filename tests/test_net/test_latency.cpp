@@ -7,11 +7,13 @@
 #include "ants_net/latency.hpp"
 #include "ants_net/lobby.hpp"
 #include "ants_net/loopback.hpp"
+#include "ants_net/message_age.hpp"
 #include "ants_net/protocol.hpp"
 #include "ants_net/session.hpp"
 #include "ants_sim/sim_engine.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <cstdint>
 #include <cstdlib>
 #include <functional>
@@ -544,7 +546,7 @@ int main() {
         ASSERT_EQ(m.pending(), CommandDelayMeter::kMaxPending);
     } TEST_END();
 
-    TEST_CASE("N9.10 CommandDelayMeter: The Number Is The Mean Over The Last Ten Commands") {
+    TEST_CASE("N9.10 CommandDelayMeter: The Number Is The Median Of The Last Five Commands (It Was The Mean Over Ten: After A Stop It Stayed At 1 s For 25 s)") {
         CommandDelayMeter m(0);
         uint32_t t = 0;
         for (uint32_t i = 1; i <= 12; ++i) {                              // delays 100, 200, ... 1200
@@ -554,9 +556,70 @@ int main() {
             t += 5000;
         }
         ASSERT_EQ(m.samples(), CommandDelayMeter::kCommandsKept);
-        ASSERT_EQ(m.delay_ms(), 750u);                                   // (300 + ... + 1200) / 10
+        ASSERT_EQ(CommandDelayMeter::kCommandsKept, 5u);
+        ASSERT_EQ(m.delay_ms(), 1000u);                                  // the median of 800, 900, 1000, 1100, 1200
         ASSERT_EQ(m.last_ms(), 1200u);
     } TEST_END();
+
+    TEST_CASE("N9.29 MedianWindow: Nothing Until The First Value, The Middle One Of An Odd Number, The Rounded Mean Of The Two In The Middle Of An Even Number, The Oldest Leaves When The Window Is Full") {
+        MedianWindow<5> w;
+        ASSERT_TRUE(w.empty() && w.size() == 0 && w.median() == 0 && w.last() == 0);
+        w.add(100);
+        ASSERT_TRUE(!w.empty() && w.size() == 1 && w.median() == 100 && w.last() == 100);
+        w.add(300);
+        ASSERT_EQ(w.median(), 200u);                                     // two values: their mean
+        w.add(101);
+        ASSERT_EQ(w.median(), 101u);                                     // 100, 101, 300
+        w.add(5000);
+        ASSERT_EQ(w.median(), 201u);                                     // 100, 101, 300, 5000: (101 + 300) / 2 = 200.5 rounds up
+        w.add(120);
+        ASSERT_EQ(w.size(), 5u);
+        ASSERT_EQ(w.median(), 120u);                                     // 100, 101, 120, 300, 5000: the one outlier (and a 300) do not show
+        w.add(130);                                                      // 100 leaves: 101, 120, 130, 300, 5000
+        ASSERT_EQ(w.median(), 130u);
+        ASSERT_EQ(w.last(), 130u);
+        w.add(140);                                                      // 300 leaves: 101, 120, 130, 140, 5000
+        ASSERT_EQ(w.median(), 130u);
+        w.add(150);                                                      // 101 leaves: 120, 130, 140, 150, 5000
+        ASSERT_EQ(w.median(), 140u);
+        MedianWindow<1> one;
+        one.add(7);
+        one.add(9);
+        ASSERT_TRUE(one.median() == 9 && one.size() == 1);
+        MedianWindow<4> big;                                             // no overflow with large values
+        for (int i = 0; i < 4; ++i) big.add(0xFFFFFFFFu);
+        ASSERT_EQ(big.median(), 0xFFFFFFFFu);
+    } TEST_END();
+
+    TEST_CASE("N9.30 Delay After A Stop: A Command That Waited Out A Stall Does Not Show, And The Number Is Back Within Three Commands Of The Stall's End (The Mean Over Ten Kept A Stop Of 1 s On The Screen For 25 s)") {
+        CommandDelayMeter m(0);
+        uint32_t t = 0;
+        uint16_t n = 0;
+        const auto command = [&](uint32_t delay) {
+            const Command c = order(0, 1, static_cast<int16_t>(++n), 0);
+            m.on_sent(c);
+            m.on_frame(t);
+            const bool applied = m.on_applied(c, t + delay);
+            t += 2500;                                                    // the player gives an order every 2.5 s
+            return applied;
+        };
+        for (int i = 0; i < 12; ++i) ASSERT_TRUE(command(120));
+        ASSERT_EQ(m.delay_ms(), 120u);
+        ASSERT_TRUE(command(1900));                                       // one order that was given during a stall of the game
+        ASSERT_EQ(m.delay_ms(), 120u);                                    // does not show at all
+        ASSERT_TRUE(command(1700));
+        ASSERT_EQ(m.delay_ms(), 120u);
+        ASSERT_TRUE(command(1500));                                       // three in a row: the game stood still for a while, and that is what the number says now
+        ASSERT_EQ(m.delay_ms(), 1500u);
+        ASSERT_TRUE(command(120));                                        // the stall is over: 1900, 1700, 1500, 120 ...
+        ASSERT_EQ(m.delay_ms(), 1500u);
+        ASSERT_TRUE(command(125));                                        // ... 1700, 1500, 120, 125: two fresh commands
+        ASSERT_EQ(m.delay_ms(), 1500u);                                   // (still three slow ones of five)
+        ASSERT_TRUE(command(118));                                        // three fresh commands (1700, 1500 and these three: 118, 120, 125 before the 1500 and 1700): the median is a fresh one
+        ASSERT_EQ(m.delay_ms(), 125u);
+    } TEST_END();
+
+
 
     TEST_CASE("N9.11 Ping Over A Link Of 40 ms Each Way In A Match: 80 ms, From The First Answer On") {
         Duel d({40, 0});
@@ -604,24 +667,25 @@ int main() {
         ASSERT_TRUE(d.guest->command_delay().measured());
     } TEST_END();
 
-    TEST_CASE("N9.13 Command Delay: The Mean Over Ten Commands Sent Every 130 ms Is The Mean Of The Model, About 155 ms On A 40 + 40 ms Link") {
+    TEST_CASE("N9.13 Command Delay: The Median Over The Last Five Of Ten Commands Sent Every 130 ms Is The Median Of The Model, About 155 ms On A 40 + 40 ms Link") {
         Duel d({40, 0});
         d.run_to(1000);
         uint32_t sent = 0;
-        uint32_t sum_expected = 0;
+        std::vector<uint32_t> expected_all;
         uint32_t next = 1003;
         d.run_to(1003 + 130 * 10 + 1500, [&](uint32_t now) {
             if (now == next && sent < 10) {
                 d.guest->submit(order(1, d.guest_ant, static_cast<int16_t>(20 + sent), 20));
-                sum_expected += expected_guest_delay(now, 40);
+                expected_all.push_back(expected_guest_delay(now, 40));
                 ++sent;
                 next += 130;
             }
         });
         ASSERT_EQ(sent, 10u);
-        ASSERT_EQ(d.guest->command_delay().samples(), 10u);
-        const uint32_t expected_mean = (sum_expected + 5u) / 10u;
-        ASSERT_EQ(d.guest->command_delay().delay_ms(), expected_mean);
+        ASSERT_EQ(d.guest->command_delay().samples(), CommandDelayMeter::kCommandsKept);
+        std::vector<uint32_t> last_five(expected_all.end() - 5, expected_all.end());
+        std::sort(last_five.begin(), last_five.end());
+        ASSERT_EQ(d.guest->command_delay().delay_ms(), last_five[2]);
         ASSERT_TRUE(d.guest->command_delay().delay_ms() >= 130 && d.guest->command_delay().delay_ms() <= 180);
         ASSERT_EQ(d.guest->command_delay().pending(), 0u);
     } TEST_END();
@@ -759,6 +823,37 @@ int main() {
         ASSERT_TRUE(guest.ping().answers() >= 3);
         ASSERT_TRUE(host.measured(1));                                    // the host measures the guest for the thumbs the same way
         ASSERT_EQ(host.rtt_ms(1), 50u);
+    } TEST_END();
+
+    TEST_CASE("N9.35 The Room's Ping Is The Link's Round Trip At Every Frame Rate Too: A Guest In The Room That Is Drawn Every 17, 67, 250 And 1000 ms Reads Exactly 2 x The One-Way Delay (The Lobby Subtracts The Age Of The Pong Like The Match Does)") {
+        for (const uint32_t frame_ms : {1u, 17u, 67u, 250u, 1000u}) {
+            LoopbackNetwork net(11);
+            HostLobby host;
+            host.set_map("TINY.LVL");
+            auto ends = net.connect({25, 0});
+            ClientLobby::Config cc;
+            cc.name = "Bob";
+            ClientLobby guest(ends.second, cc);
+            uint32_t now = 0;
+            host.add_connection(ends.first, now);
+            uint32_t next_frame = 3;
+            uint32_t checked = 0;
+            while (now < 40000) {
+                ++now;
+                net.set_time(now);
+                host.update(now);                                           // the host takes what comes the moment it comes
+                if (now >= next_frame) {                                    // the guest only at its frames
+                    guest.update(now);
+                    next_frame += frame_ms;
+                    if (guest.ping().answers() >= PingMeter::kAnswersKept) {
+                        ASSERT_EQ(guest.ping().ping_ms(), 50u);
+                        ASSERT_EQ(guest.ping().last_ms(), 50u);
+                        ++checked;
+                    }
+                }
+            }
+            ASSERT_TRUE(checked > 10);
+        }
     } TEST_END();
 
     TEST_CASE("N9.19 Waiting: The Count Of The Wait Is The Time Since The Tick That Was Due, So The Message Goes When The Turns Come Again (a frozen window holds the turns of a host WITH a seat up; it did not go)") {
@@ -991,6 +1086,154 @@ int main() {
         const uint32_t turn_a = t.a->runner().next_turn_to_execute();
         const uint32_t turn_b = t.b->runner().next_turn_to_execute();
         ASSERT_TRUE((turn_a > turn_b ? turn_a - turn_b : turn_b - turn_a) <= 6);       // 5 s after it is drawn normally again, the window is back in step
+    } TEST_END();
+
+    TEST_CASE("N9.31 PingMeter And The Age Of An Answer: The Round Trip Is The Frame Clock's Time From The Send To The Reading Less The Time The Answer Waited To Be Read; An Age Beyond The Clock Is Not A Measurement; A Reading Older Than Three Seconds Is Stale") {
+        PingMeter m;
+        ASSERT_TRUE(m.stale(0));                                          // nothing was ever measured: nothing to show
+        const PingMsg a = m.next(1000);
+        ASSERT_TRUE(m.on_pong(a, 1100, 30));                              // read at the frame of 1100, but it had come 30 ms before: 70 ms
+        ASSERT_EQ(m.last_ms(), 70u);
+        ASSERT_EQ(m.ping_ms(), 70u);
+        const PingMsg b = m.next(2000);
+        ASSERT_TRUE(m.on_pong(b, 2100));                                  // no age given (a transport that cannot tell): the frame clock alone, as before
+        ASSERT_EQ(m.last_ms(), 100u);
+        const PingMsg c = m.next(3000);
+        ASSERT_TRUE(m.on_pong(c, 3100, 100));                             // it had been read the instant it came: age as old as the whole time since the send is a round trip of 0
+        ASSERT_EQ(m.last_ms(), 0u);
+        const PingMsg d = m.next(4000);
+        ASSERT_FALSE(m.on_pong(d, 4100, 101));                            // it came before the clock says that the ping went out: the clock was cut, not a measurement
+        ASSERT_EQ(m.answers(), 3u);
+        ASSERT_EQ(m.ping_ms(), 57u);                                      // (70 + 100 + 0) / 3
+        ASSERT_FALSE(m.on_pong(d, 4100, 0));                              // and the ping is spent: the same echo again does not count either
+        // staleness is measured from the time the answer CAME (the reading less its age)
+        PingMeter n;
+        const PingMsg e = n.next(10000);
+        ASSERT_TRUE(n.on_pong(e, 10200, 150));                            // came at 10050
+        ASSERT_FALSE(n.stale(10050));
+        ASSERT_FALSE(n.stale(13050));                                     // 3000 ms later: not yet older than three seconds
+        ASSERT_TRUE(n.stale(13051));
+        ASSERT_FALSE(n.stale(13051, 5000));                               // (another limit, when asked)
+        ASSERT_EQ(PingMeter::kStaleAfterMs, 3000u);
+        // the clock wraps
+        PingMeter w;
+        const PingMsg f = w.next(0xFFFFFF00u);
+        ASSERT_TRUE(w.on_pong(f, 0x00000064u, 20));
+        ASSERT_EQ(w.last_ms(), 0x100u + 0x64u - 20u);
+        ASSERT_FALSE(w.stale(0x00000064u + 2000u));
+        ASSERT_TRUE(w.stale(0x00000064u + 3000u));
+    } TEST_END();
+
+    TEST_CASE("N9.32 Ping Is The Link's Round Trip At Every Frame Rate: A Window Drawn At 144, 60, 30, 15, 10, 4 And 1 Frames A Second Reads Exactly 2 x The One-Way Delay (It Read The Round Trip Plus Up To One Frame Of Waiting)") {
+        for (const uint32_t one_way : {10u, 40u}) {
+            for (const uint32_t frame_ms : {7u, 17u, 33u, 67u, 100u, 250u, 1000u}) {
+                Duel d({one_way, 0});
+                uint32_t next_frame = 3;
+                uint32_t checked = 0;
+                while (d.now < 40000) {
+                    ++d.now;
+                    d.net.set_time(d.now);
+                    d.host->update(d.now);                                // the host takes what comes the moment it comes
+                    if (d.now >= next_frame) {                            // the guest only at its frames: what the link delivered meanwhile waits in the queue
+                        d.guest->update(d.now);
+                        next_frame += frame_ms;
+                        if (d.now > 12000 && d.guest->ping().answers() == PingMeter::kAnswersKept) {
+                            if (d.guest->ping().ping_ms() != 2 * one_way || d.guest->ping().last_ms() != 2 * one_way) {
+                                std::cout << "\n    one way " << one_way << " ms, a frame every " << frame_ms << " ms: ping " << d.guest->ping().ping_ms() << ", last " << d.guest->ping().last_ms() << "\n";
+                            }
+                            ASSERT_EQ(d.guest->ping().ping_ms(), 2 * one_way);
+                            ASSERT_EQ(d.guest->ping().last_ms(), 2 * one_way);
+                            ++checked;
+                        }
+                    }
+                }
+                ASSERT_TRUE(checked > 20);
+            }
+        }
+    } TEST_END();
+
+    TEST_CASE("N9.33 A Window That Was Not Drawn For 20 s (A Hidden Tab): The Answers That Waited Longer Than The Clock That Was Handed To The Network Are Not A Reading, The Old Readings Stay, And The Next Answer After The Return Is Right") {
+        Duel d({40, 0});
+        d.run_to(6000);
+        ASSERT_EQ(d.guest->ping().ping_ms(), 80u);
+        const uint32_t last_clock = d.now;
+        // 20 s pass with no frame of the guest: the host answers (nothing it hears) and the link delivers into the queue
+        for (uint32_t i = 0; i < 20000; ++i) {
+            ++d.now;
+            d.net.set_time(d.now);
+            d.host->update(d.now);
+        }
+        // the first frame back is handed one second (the application's clock cut): the answers that came during the 20 s are older than that second
+        uint32_t clock = last_clock + 1000;
+        d.guest->update(clock);
+        ASSERT_EQ(d.guest->ping().answers(), PingMeter::kAnswersKept);        // nothing was added: no answer is a measurement in this clock
+        ASSERT_EQ(d.guest->ping().ping_ms(), 80u);
+        // from here the frames come every 17 ms of real time again; the next ping, sent by the first frame, is answered 80 ms after it went out
+        for (uint32_t i = 0; i < 300; ++i) {
+            ++d.now;
+            ++clock;
+            d.net.set_time(d.now);
+            d.host->update(d.now);
+            if (i % 17 == 0) d.guest->update(clock);
+        }
+        ASSERT_EQ(d.guest->ping().last_ms(), 80u);
+        ASSERT_EQ(d.guest->ping().ping_ms(), 80u);
+        ASSERT_FALSE(d.guest->ping().stale(clock));
+    } TEST_END();
+
+    TEST_CASE("N9.36 CommandDelayMeter Goes Stale: Ten Seconds After The Last Command Was Applied The Number Is Not About Now Any More (\"delay -\"); Nothing Was Ever Measured Is Stale Too; The Next Command Brings It Back") {
+        CommandDelayMeter m(0);
+        ASSERT_TRUE(m.stale(0));
+        m.on_sent(order(0, 1, 5, 5));
+        m.on_frame(1000);
+        ASSERT_TRUE(m.stale(1100));                                       // sent, not applied: nothing measured yet
+        ASSERT_TRUE(m.on_applied(order(0, 1, 5, 5), 1130));
+        ASSERT_FALSE(m.stale(1130));
+        ASSERT_FALSE(m.stale(11130));                                     // exactly ten seconds later: still a reading
+        ASSERT_TRUE(m.stale(11131));
+        ASSERT_FALSE(m.stale(11131, 20000));                              // (another limit, when asked)
+        ASSERT_EQ(CommandDelayMeter::kStaleAfterMs, 10000u);
+        m.on_sent(order(0, 1, 6, 6));
+        m.on_frame(20000);
+        ASSERT_TRUE(m.on_applied(order(0, 1, 6, 6), 20120));
+        ASSERT_FALSE(m.stale(20121));                                     // back
+        ASSERT_EQ(m.delay_ms(), 125u);                                    // the median of 130 and 120
+        // the clock wraps
+        CommandDelayMeter w(0);
+        w.on_sent(order(0, 1, 7, 7));
+        w.on_frame(0xFFFFFF00u);
+        ASSERT_TRUE(w.on_applied(order(0, 1, 7, 7), 0xFFFFFF40u));
+        ASSERT_FALSE(w.stale(0xFFFFFF40u + 9000u));
+        ASSERT_TRUE(w.stale(0xFFFFFF40u + 10001u));
+    } TEST_END();
+
+    TEST_CASE("N9.34 The Age Of A Message From Two Readings Of One Clock: Rounded To The Millisecond, Zero When The Clock Stood Still Or Went Back Or Is Not A Number, Saturated At 32 Bits") {
+        ASSERT_EQ(message_age_ms(110.4, 100.0), 10u);
+        ASSERT_EQ(message_age_ms(110.5, 100.0), 11u);
+        ASSERT_EQ(message_age_ms(100.4, 100.0), 0u);
+        ASSERT_EQ(message_age_ms(100.0, 100.0), 0u);
+        ASSERT_EQ(message_age_ms(99.0, 100.0), 0u);
+        ASSERT_EQ(message_age_ms(std::nan(""), 100.0), 0u);
+        ASSERT_EQ(message_age_ms(100.0, std::nan("")), 0u);
+        ASSERT_EQ(message_age_ms(61000.0, 1000.0), 60000u);
+        ASSERT_EQ(message_age_ms(1.0e12, 0.0), 0xFFFFFFFFu);
+        ASSERT_EQ(message_age_ms(4294967295.0, 0.0), 0xFFFFFFFFu);
+        ASSERT_EQ(message_age_ms(4294967294.0, 0.0), 4294967294u);
+        // the loopback network (the browser's stand-in) reports what the transport knows: how long the message lay in the queue
+        LoopbackNetwork net(1);
+        auto ends = net.connect({20, 0});
+        net.set_time(100);
+        ASSERT_TRUE(ends.first->send({1, 2, 3}));
+        net.set_time(150);                                                 // delivered at 120, polled at 150
+        std::vector<uint8_t> m;
+        ASSERT_TRUE(ends.second->poll(m));
+        ASSERT_EQ(ends.second->last_message_age_ms(), 30u);
+        net.set_time(500);
+        ASSERT_TRUE(ends.first->send({4}));
+        net.set_time(520);                                                 // polled the moment it is delivered
+        ASSERT_TRUE(ends.second->poll(m));
+        ASSERT_EQ(ends.second->last_message_age_ms(), 0u);
+        ASSERT_EQ(ends.first->last_message_age_ms(), 0u);                  // (this end polled nothing)
     } TEST_END();
 
     std::cout << "\n=======================================================\n Total Test Cases: " << g_test_count << "\n Total Assertions: " << g_assert_count

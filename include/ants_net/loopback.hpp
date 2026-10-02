@@ -18,6 +18,8 @@ public:
     struct Link {
         uint32_t latency_ms{20};      // one way
         uint32_t jitter_ms{0};        // each message takes latency + a pseudo-random 0 .. jitter (ordering is preserved)
+        uint32_t spike_ms{0};         // a message is held up by this much more with the chance below (a lost packet that the link resends); the messages behind it wait for it
+        uint32_t spike_per_mille{0};  // the chance of a spike in a thousand messages; 0: none (and no random number is drawn: links without spikes behave as they always did)
     };
 
     explicit LoopbackNetwork(uint32_t seed = 1);

@@ -613,8 +613,8 @@ void run_net_tests() {
             drop.type = CommandType::None;
             ASSERT_FALSE(host.submit_bot(2, drop));
             int accepted = 0;
-            for (int i = 0; i < 100; ++i) accepted += host.submit_bot(2, hatch_of(2)) ? 1 : 0;
-            ASSERT_EQ(accepted, 63);                                                                        // 64 per seat and turn (one is queued already)
+            for (int i = 0; i < 400; ++i) accepted += host.submit_bot(2, hatch_of(2)) ? 1 : 0;
+            ASSERT_EQ(accepted, 63 + 256);                                                                  // 64 per seat and turn (one is queued already), and 256 more wait for the turns after it; the rest is a flood
             uint32_t now = 0;
             while (now < 1500) {
                 now += 10;

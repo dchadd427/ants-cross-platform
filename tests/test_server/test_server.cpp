@@ -111,12 +111,34 @@ private:
     net::Connection* c_;
 };
 
+// A connection that hands the game one message every `period_ms` at the most (0: everything that is there): a slow downlink. What is not handed over waits in the link.
+class Throttled final : public net::Connection {
+public:
+    Throttled(net::Connection* inner, const uint32_t* clock) : inner_(inner), clock_(clock) {}
+    bool send(const std::vector<uint8_t>& m) override { return inner_->send(m); }
+    bool poll(std::vector<uint8_t>& m) override {
+        if (period_ms != 0 && *clock_ - last_ < period_ms) return false;
+        if (!inner_->poll(m)) return false;
+        last_ = *clock_;
+        return true;
+    }
+    State state() const override { return inner_->state(); }
+    void close() override { inner_->close(); }
+    uint32_t period_ms{0};
+
+private:
+    net::Connection* inner_;
+    const uint32_t* clock_;
+    uint32_t last_{0};
+};
+
 // A player: a client lobby that asks for a room, loads the match, reports, and plays with a session of its own. It behaves like the application does.
 struct Client {
     std::string name;
     std::string room;
     uint8_t want_seat{255};
     net::Connection* end{nullptr};
+    net::Connection* server_end{nullptr};    // the other end of the link (the server's): open until the server closes it, whatever this client has or has not read
     std::unique_ptr<net::ClientLobby> lobby;
     sim::SimulationEngine sim;
     std::unique_ptr<net::ClientSession> session;
@@ -173,6 +195,7 @@ struct Client {
             if (last_frame_ms != 0 && now_ms - last_frame_ms > 1000) clock_lag += now_ms - last_frame_ms - 1000;      // a frame after a stop hands the network one second at the most
             last_frame_ms = now_ms;
             session->update(now_ms - clock_lag);
+            if (sim.is_match_over()) session->finish();                                  // the application does this when its simulation says the match is over (check_match_over): a server that closes the link after it is no loss
             if (session->lost()) lost = true;
             if (now_ms >= next_order_ms && session->mode() == net::ClientSession::Mode::Normal) {
                 next_order_ms = now_ms + 700;
@@ -204,7 +227,9 @@ struct World {
 
     explicit World(ServerLimits limits = ServerLimits(), const std::string& dir = maps_dir()) : mgr(MapStore(dir), limits) {}
 
-    Client& connect(const std::string& name, const std::string& room, uint8_t seat = 255, net::LoopbackNetwork::Link link = {20, 10}) {
+    std::vector<std::unique_ptr<Throttled>> throttles;                      // the slow downlinks of connect_throttled (index = the order they were made in)
+
+    Client& connect(const std::string& name, const std::string& room, uint8_t seat = 255, net::LoopbackNetwork::Link link = {20, 10}, Throttled** throttle = nullptr) {
         auto ends = net.connect(link);
         mgr.add_connection(std::make_unique<Borrowed>(ends.first), "127.0.0.1", now);
         clients.push_back(std::make_unique<Client>());
@@ -212,7 +237,14 @@ struct World {
         c.name = name;
         c.room = room;
         c.want_seat = seat;
-        c.start(ends.second, static_cast<uint32_t>(clients.size()) * 7919u);
+        c.server_end = ends.first;
+        net::Connection* end = ends.second;
+        if (throttle != nullptr) {
+            throttles.push_back(std::make_unique<Throttled>(ends.second, &now));
+            *throttle = throttles.back().get();
+            end = throttles.back().get();
+        }
+        c.start(end, static_cast<uint32_t>(clients.size()) * 7919u);
         return c;
     }
     void run(uint32_t ms) {
@@ -268,7 +300,7 @@ struct FloodPeer {
             std::vector<uint8_t> f;
             const uint32_t n = static_cast<uint32_t>(m.size());
             for (int i = 0; i < 4; ++i) f.push_back(static_cast<uint8_t>((n >> (8 * i)) & 0xFFu));
-            f.insert(f.end(), m.begin(), m.end());
+            for (const uint8_t b : m) f.push_back(b);                                   // (byte by byte: GCC 12 reads a range insert here as an overread and the project builds with -Werror)
             return f;
         };
         net::HelloMsg hello;
@@ -791,6 +823,84 @@ void run_hardening_tests() {
             const RoomStatus s = w.status("RUN-1");
             ASSERT_TRUE(s.state == RoomState::Failed);
             ASSERT_TRUE(s.reason.find("longer") != std::string::npos);
+        }
+    } TEST_END();
+
+    TEST_CASE("S3.34 The End Of A Match Does Not Cut Off A Laggard: A Player Who Is Far Behind When The Match Ends (Its Slow Link Brought It 55 s Behind) Is Still Answered And Served Until It Has Run The Last Turn, Then The Room Closes (It Closed 15 s After The End: The Player Was Cut Off 10 s Into Its Catch-Up, Never Saw The Results)") {
+        World w;
+        ASSERT_TRUE(w.mgr.create_room(spec_of("END-1", 3), w.now).ok);
+        Client& a = w.connect("Ann", "END-1");
+        Client& b = w.connect("Bob", "END-1");
+        Throttled* slow = nullptr;
+        Client& c = w.connect("Cat", "END-1", 255, {20, 10}, &slow);
+        w.run(4000);
+        ASSERT_TRUE(w.status("END-1").state == RoomState::Running);
+        slow->period_ms = 150;                                                       // Cat's downlink hands the game 7 of the 21 messages a second that the room sends
+        w.run(82000);                                                                // it falls behind by two thirds of a second each second: 55 s behind (not 60: not dropped), and it still makes progress
+        RoomStatus s = w.status("END-1");
+        ASSERT_TRUE(s.state == RoomState::Running);
+        ASSERT_TRUE(a.sim.current_tick() > 1500 && c.sim.current_tick() + 900 < a.sim.current_tick());
+        ASSERT_FALSE(a.lost || b.lost || c.lost);
+        // the match ends for everybody else: Ann and Bob go, Cat is the last team and has won; its link is healthy again
+        w.net.cut(a.end);
+        w.net.cut(b.end);
+        slow->period_ms = 0;
+        for (int i = 0; i < 100 && w.status("END-1").state == RoomState::Running; ++i) w.run(100);
+        ASSERT_TRUE(w.status("END-1").state == RoomState::Finished);
+        const uint32_t ended_at = w.now;
+        const uint32_t final_turns = w.status("END-1").turns;
+        ASSERT_TRUE(final_turns > 1600);
+        ASSERT_TRUE(c.sim.current_tick() + 800 < final_turns);                        // it is more than 40 s short of the end: its catch-up takes more than 10 s (the first frame back 4 s, then 4 s a second)
+        // ... it is answered all the while (pings), and runs every turn to the last one
+        uint32_t level_after_ms = 0;
+        while (w.now - ended_at < 40000 && c.end->is_open()) {
+            w.run(100);
+            if (level_after_ms == 0 && c.sim.is_match_over()) level_after_ms = w.now - ended_at;
+        }
+        if (level_after_ms == 0 || c.lost) std::cout << "\n    Cat: lost " << c.lost << ", at turn " << c.session->runner().next_turn_to_execute() << " of " << final_turns << " after " << (w.now - ended_at) << " ms\n";
+        ASSERT_FALSE(c.lost);
+        ASSERT_TRUE(level_after_ms > 10000 && level_after_ms < 30000);                // it needed more than the 10 s of silence that cut it off, and the room waited
+        ASSERT_EQ(c.session->runner().next_turn_to_execute(), final_turns);           // every turn of the match
+        ASSERT_TRUE(c.sim.is_match_over());
+        // the room closes: not before the grace period (a client that is level finds the results in peace), and not long after the last acknowledgement
+        ASSERT_TRUE(w.now - ended_at >= Room::kGraceMs);
+        ASSERT_FALSE(c.end->is_open());
+        ASSERT_TRUE(w.now - ended_at <= level_after_ms + Room::kGraceMs + 1000 || w.now - ended_at <= Room::kEndWaitMs + 1000);
+    } TEST_END();
+
+    TEST_CASE("S3.35 A Finished Room Closes Its Connections At The Latest After kEndWaitMs, Whoever Is Still Behind, And At The Earliest After kGraceMs; Everybody Level Closes It At kGraceMs") {
+        ASSERT_EQ(Room::kGraceMs, 15000u);
+        ASSERT_EQ(Room::kEndWaitMs, 30000u);
+        {   // everybody level: the connections stay open for the grace period and then close
+            World w;
+            ASSERT_TRUE(w.mgr.create_room(spec_of("END-2", 2), w.now).ok);
+            Client& a = w.connect("Ann", "END-2");
+            Client& b = w.connect("Bob", "END-2");
+            w.run(4000);
+            w.net.cut(b.end);
+            for (int i = 0; i < 100 && w.status("END-2").state == RoomState::Running; ++i) w.run(100);
+            ASSERT_TRUE(w.status("END-2").state == RoomState::Finished);
+            w.run(Room::kGraceMs - 1500);
+            ASSERT_TRUE(a.server_end->is_open());
+            w.run(3000);
+            ASSERT_FALSE(a.server_end->is_open());
+        }
+        {   // a client that never acknowledges (a process that was stopped): the room does not wait for it for ever, and it is not dropped by the idle rule after the end
+            World w;
+            ASSERT_TRUE(w.mgr.create_room(spec_of("END-3", 3), w.now).ok);
+            Client& a = w.connect("Ann", "END-3");
+            Client& b = w.connect("Bob", "END-3");
+            Client& c = w.connect("Cat", "END-3");
+            w.run(4000);
+            c.freeze = true;
+            w.net.cut(a.end);
+            w.net.cut(b.end);
+            for (int i = 0; i < 100 && w.status("END-3").state == RoomState::Running; ++i) w.run(100);
+            ASSERT_TRUE(w.status("END-3").state == RoomState::Finished);
+            w.run(Room::kEndWaitMs - 2000);
+            ASSERT_TRUE(c.server_end->is_open());                                    // 28 s: the room still waits for it
+            w.run(4000);
+            ASSERT_FALSE(c.server_end->is_open());                                   // 32 s: it does not wait any longer
         }
     } TEST_END();
 

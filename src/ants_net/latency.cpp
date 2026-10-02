@@ -19,15 +19,17 @@ PingMsg PingMeter::next(uint32_t now_ms) noexcept {
     return ping;
 }
 
-bool PingMeter::on_pong(const PingMsg& pong, uint32_t now_ms) noexcept {
+bool PingMeter::on_pong(const PingMsg& pong, uint32_t now_ms, uint32_t age_ms) noexcept {
     // one of the last eight pings (`nonce_ - pong.nonce` wraps to a huge number for a nonce that was never sent, so this also refuses the future)
     if (pong.nonce == 0 || nonce_ - pong.nonce >= kInFlight) return false;
     InFlight& slot = in_flight_[pong.nonce % kInFlight];
     if (!slot.open || slot.sent_ms != pong.sent_ms) return false;
-    const uint32_t round_trip = now_ms - pong.sent_ms;
-    if (static_cast<int32_t>(round_trip) < 0) return false;        // an answer that arrives before its question went out
+    const uint32_t elapsed = now_ms - pong.sent_ms;                // from the frame that sent the ping to the frame that read the answer
+    if (static_cast<int32_t>(elapsed) < 0) return false;           // an answer that arrives before its question went out
     slot.open = false;
-    answers_.add(round_trip);
+    if (age_ms > elapsed) return false;                            // it came before the frame clock says the ping went out: the clock was cut (see the declaration), nothing is measured
+    answers_.add(elapsed - age_ms);                                // the round trip: what the answer waited in the queue of a page that is drawn less often than the link answers is not the link's
+    last_answer_ms_ = now_ms - age_ms;
     return true;
 }
 
@@ -58,6 +60,7 @@ bool CommandDelayMeter::on_applied(const sim::Command& command, uint32_t now_ms)
     for (auto it = pending_.begin(); it != pending_.end(); ++it) {
         if (!it->stamped || it->command != command) continue;
         delays_.add(now_ms - it->sent_ms);
+        last_applied_ms_ = now_ms;
         pending_.erase(pending_.begin(), it + 1);                  // the host keeps the order of one player's commands: whatever was sent before this one and is still here was lost
         return true;
     }

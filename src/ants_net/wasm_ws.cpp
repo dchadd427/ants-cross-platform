@@ -2,8 +2,10 @@
 
 #include "ants_net/wasm_ws.hpp"
 
+#include <emscripten/emscripten.h>
 #include <emscripten/websocket.h>
 
+#include "ants_net/message_age.hpp"
 #include "ants_net/protocol.hpp"
 
 namespace ants::net {
@@ -44,7 +46,7 @@ struct WasmWsCallbacks {
             c->close_socket(4002, "protocol error");                         // (a browser accepts only 1000 and 3000 - 4999 from a script)
             return EM_TRUE;
         }
-        c->inbox_.emplace_back(e->data, e->data + e->numBytes);
+        c->inbox_.push_back(WasmWsConnection::Queued{std::vector<uint8_t>(e->data, e->data + e->numBytes), emscripten_get_now()});     // (stamped with the browser's clock: see last_message_age_ms)
         return EM_TRUE;
     }
 };
@@ -122,7 +124,8 @@ bool WasmWsConnection::send(const std::vector<uint8_t>& message) {
 
 bool WasmWsConnection::poll(std::vector<uint8_t>& message) {
     if (inbox_.empty()) return false;
-    message = std::move(inbox_.front());
+    last_age_ms_ = message_age_ms(emscripten_get_now(), inbox_.front().arrived_ms);
+    message = std::move(inbox_.front().data);
     inbox_.pop_front();
     return true;
 }

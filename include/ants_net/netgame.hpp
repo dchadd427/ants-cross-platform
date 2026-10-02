@@ -37,6 +37,10 @@ namespace ants::net {
 /// FNV-1a 64 over the bytes of a file (the map identity that the start barrier compares); false when the file cannot be read.
 bool hash_file(const std::string& path, uint64_t& out);
 
+/// What the player is told when the match is lost to this machine (NetGame::status_text after the event HostLeft): the reason as the session knows it. A server that closed
+/// the link of a machine that held half a minute of the match unplayed dropped it for being away (a hidden tab, a process that was stopped); anything else is a link that is gone.
+std::string match_lost_text(ClientSession::LostReason reason);
+
 class NetGame final : public sim::CommandSink {
 public:
     enum class Role : uint8_t { None, Host, Client };
@@ -122,10 +126,11 @@ public:
 
     // ---- what the network costs this player (latency.hpp), shown next to the frame rate -----------------------------------------------------------
     /// The round trip to the host in ms, as this machine measures it (the mean of its last few Ping / Pong round trips, in the room and in the match). The host has no
-    /// link to itself: 0 (a guest that took over as host too). Empty before the first answer came back, and when there is nothing to measure.
+    /// link to itself: 0 (a guest that took over as host too). Empty before the first answer came back, when there is nothing to measure, and when the last answer is older
+    /// than three seconds (PingMeter::kStaleAfterMs: the host says nothing, or this machine was not run for a while: an old reading is not shown as if it were one).
     std::optional<uint32_t> ping_ms() const;
     /// The delay of this player's own commands in ms: the real time from sending one (a guest) or handing it to the sequencer (the host) to the tick that applies it on
-    /// this machine, the mean over the last ten. Empty until a command has been applied.
+    /// this machine, the median of the last five. Empty until a command has been applied, and when the last one was applied more than ten seconds ago.
     std::optional<uint32_t> command_delay_ms() const;
 
     // ---- the host's controls in the room ---------------------------------------------------------------------------------------------------------
@@ -177,6 +182,9 @@ public:
     std::optional<LagNotice> lag_notice() const;
     /// This machine is more than 3 s behind the match and runs the backlog down at up to four times normal speed (a dedicated server's room): "Catching up..."
     bool catching_up() const;
+    /// The server told this player that it is the one who lags, and how far behind the match it is in ms (a dedicated server's room): the notice that reaches a player whose
+    /// own link is slow, so that its backlog is on the way and not in its queue and "Catching up..." has nothing to say. Empty when none, and in games of the local network.
+    std::optional<uint32_t> self_lag_behind_ms() const;
     bool desynced() const;
     /// Milliseconds into the current tick, for smooth drawing between ticks
     uint32_t sub_tick_ms() const;

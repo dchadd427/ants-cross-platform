@@ -8,10 +8,12 @@
 //   3. "Waiting for the other players..."           this machine has waited a second for a turn; "Waiting for Bob..." when the host knows who holds the game up (a host with a
 //                                                   seat waits for a peer that is more than 3 s behind)
 //   4. "Catching up..."                             this machine is more than 3 s behind a server's room (it was away) and runs the backlog down at up to four times normal speed
-//   5. "Bob is lagging (12 s behind)"               a server's room does not wait for a player that falls behind: the others are told who it is, once a second, while it is
+//   5. "You are lagging (12 s behind)"              the server told this player that it is the one who falls behind (its own link is slow: the turns it misses are still on their
+//                                                   way, so there is no backlog in its queue and nothing else tells it)
+//   6. "Bob is lagging (12 s behind)"               a server's room does not wait for a player that falls behind: the others are told who it is, once a second, while it is
 //                                                   more than 3 s behind and until it is within one second (ants_net/session.hpp)
-//   6. the match notice                             "Bob is the host now." for a few seconds
-// A line of a lower number never hides one of a higher number: a machine that is itself cut off says so (3) before it says who else is slow (5).
+//   7. the match notice                             "Bob is the host now." for a few seconds
+// A line of a lower number never hides one of a higher number: a machine that is itself cut off says so (3) before it says who else is slow (6).
 
 #include <cstdint>
 #include <string>
@@ -24,6 +26,7 @@ struct NetOverlayInput {
     uint32_t stalled_ms{0};          // how long this machine has waited for a turn (NetGame::stalled_ms)
     std::string waiting_for;         // the player that holds the game up, when a host with a seat knows ("" when none)
     bool catching_up{false};         // NetGame::catching_up
+    uint32_t self_lag_behind_ms{0};  // how far behind the match the server says this player is (NetGame::self_lag_behind_ms), 0 when it does not say so
     int lag_seat{-1};                // the player that the server announced as lagging (0 .. 3), -1 when none
     std::string lag_name;            // its name ("" when it has none: "Player 3")
     uint32_t lag_behind_ms{0};       // how far behind the match it was at the last announcement

@@ -11,7 +11,8 @@
 //            (two at least), without waiting for the rest
 //   Loading  a client that cannot load the map or leaves cancels the start: back to Waiting (a few times at most)
 //   Running  the referee executes the turns; a diverging client is named and the room fails; the match end (the clock, the rules) finishes it
-//   Finished the result (rows as the results screen shows them) is kept; the connections close after a short grace period
+//   Finished the result (rows as the results screen shows them) is kept; the room goes on answering its players (pings, acknowledgements: the session is frozen, it seals nothing)
+//            and the connections close after a grace period, later when a player is still catching up (kGraceMs, kEndWaitMs)
 //   Failed   nobody came, too many failed starts, a desync, the owner closed it: the reason is kept
 
 #include <array>
@@ -84,7 +85,10 @@ class Room {
 public:
     static constexpr size_t kMaxConnections = 32;           // everything that ever said Hello to this room (rejected ones included): a flood is refused beyond this
     static constexpr uint32_t kRetryMs = 2000;              // the pause after a cancelled start
-    static constexpr uint32_t kGraceMs = 15000;             // after the end of the match the connections stay open this long, then they are closed
+    static constexpr uint32_t kGraceMs = 15000;             // after the end of the match the connections stay open at least this long (a client that is level finds the results in peace) ...
+    static constexpr uint32_t kEndWaitMs = 30000;           // ... and until every player that is still connected has acknowledged the last turn, at the most this long: a player that was
+                                                            // 60 s behind when the match ended (the most a seat may be) needs 15 s at 4x to run what is left, and is answered (pings,
+                                                            // acknowledgements) until it has
 
     Room(RoomSpec spec, MapEntry map, assets::LevelData level, uint32_t seed, uint32_t now_ms);
 

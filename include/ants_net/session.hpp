@@ -22,9 +22,13 @@
 // Who waits for whom. A host with a seat (a game on the local network) stops sealing while a peer is more than 3 s behind: its friends wait for the slow machine (the
 // match is theirs, and the machine may be back in a moment). A host without a seat (a dedicated server) never waits: a room is made of strangers, and one machine that
 // stalls (a window in the background, a laptop that went to sleep) must not slow down the others. The server keeps sealing every 50 ms; the player that falls behind
-// catches up on its own at up to four times normal speed (its runner is told by the length of its queue, lockstep.hpp) and its commands apply when they arrive; the others
-// are told with a Lag message ("Bob is lagging (12 s behind)") from 3 s behind, once a second, and that it is back when it is within one second. A player that is 60 s behind,
-// or whose acks have not moved for 30 s although it is connected, is dropped like a player that left (a Drop in the turn stream).
+// catches up on its own at up to four times normal speed (its runner is told by the length of its queue, lockstep.hpp) and its commands apply when they arrive; the room is
+// told with a Lag message ("Bob is lagging (12 s behind)") from 3 s behind, once a second, and that it is back when it is within one second; the laggard itself gets the
+// notice too ("You are lagging (12 s behind)"): a player whose own link is the slow one has its backlog on the way, not in its queue, and nothing else tells it. A player that
+// is 60 s behind, or whose acks have not moved for 30 s although it is connected, is dropped like a player that left (a Drop in the turn stream): its link is closed, and a
+// machine that finds its link closed with half a minute of the match unplayed in its queue says so ("You were away too long and were dropped from the match.").
+// A command that does not fit into a turn (more than the 64 a player may have in one) waits for the next turns (up to 256 of them) in the sequencer instead of costing the
+// player a violation: a stuck uplink that is let go delivers 76 orders at once.
 
 #include <array>
 #include <cstdint>
@@ -66,6 +70,13 @@ inline constexpr uint32_t kLagDropBehindMs = 60000;
 inline constexpr uint32_t kLagDropIdleMs = 30000;
 /// A stale notice is not shown for longer than this without a renewal (the server renews it every kLagNoticeEveryMs)
 inline constexpr uint32_t kLagNoticeStaleMs = 3000;
+/// ... the notice about the player ITSELF lives longer: it reaches a player whose own link is the slow one (that is the case it is for) behind the turns that wait in front of it, so
+/// a notice every second is read every few seconds
+inline constexpr uint32_t kSelfLagNoticeStaleMs = 10000;
+/// A server that closes the link of a player who holds this much of the match unplayed (the turns that this machine received and did not run) dropped it for being away: the
+/// idle rule drops a player whose acknowledgements stood still for kLagDropIdleMs, so at least that much waits in its queue when it is back (a process that was stopped, a hidden
+/// tab). Ten seconds are left for the turns that were still on their way. A link that fails by itself, or a server that dies, finds nothing like it.
+inline constexpr uint32_t kAwayBacklogMs = kLagDropIdleMs - 10000;
 
 class HostSession {
 public:
@@ -90,6 +101,11 @@ public:
     HostSession(sim::SimulationEngine& sim, Config config);
     /// A guest that becomes the host keeps its runner (with the log of the last turns and the presentation hooks): see promote_to_host()
     HostSession(sim::SimulationEngine& sim, Config config, std::unique_ptr<LockstepRunner> runner);
+    /// The runner's hooks capture `this` (the delay meter): a session that was copied or moved would leave them pointing at the one that is gone
+    HostSession(const HostSession&) = delete;
+    HostSession& operator=(const HostSession&) = delete;
+    HostSession(HostSession&&) = delete;
+    HostSession& operator=(HostSession&&) = delete;
 
     /// A remote player of the roster (before start()). The connection outlives the session.
     void add_client(uint8_t player, Connection* connection);
@@ -221,6 +237,11 @@ public:
     };
 
     ClientSession(sim::SimulationEngine& sim, Config config);
+    /// The runner's hooks capture `this` (the delay meter): a session that was copied or moved would leave them pointing at the one that is gone
+    ClientSession(const ClientSession&) = delete;
+    ClientSession& operator=(const ClientSession&) = delete;
+    ClientSession(ClientSession&&) = delete;
+    ClientSession& operator=(ClientSession&&) = delete;
 
     void set_connection(Connection* connection) { conn_ = connection; }
     /// A link to another guest, for host migration; the connection outlives the session
@@ -260,6 +281,10 @@ public:
     /// This machine is more than 3 s behind the match (the turns it holds and has not run, in a dedicated server's room) and runs the backlog down at up to four times normal
     /// speed: the screen says "Catching up..." until it is within one second.
     bool catching_up() const noexcept { return catching_up_; }
+    /// The server's own word about this player: how far behind the match it is in ms, from the last Lag notice about THIS seat that was not ended by one with 0 and did not
+    /// go stale (kSelfLagNoticeStaleMs); 0 when there is none. It tells a player whose backlog is not in its own queue (its link is slow: the turns are still on their way, so
+    /// "Catching up..." has nothing to say) that it is the one who lags.
+    uint32_t self_lag_behind_ms() const noexcept { return last_ms_ - self_lag_.heard_ms > kSelfLagNoticeStaleMs ? 0u : self_lag_.behind_ms; }
 
     uint8_t player() const noexcept { return cfg_.player; }
     Mode mode() const noexcept { return mode_; }
@@ -268,6 +293,10 @@ public:
     uint8_t host_seat() const noexcept { return host_seat_; }
     bool promoted() const noexcept { return mode_ == Mode::Promoted; }
     bool lost() const noexcept { return mode_ == Mode::Lost; }
+    /// Why the match is lost to this machine (Mode::Lost): its link to the server closed while it held kAwayBacklogMs or more of the match unplayed (it was dropped for being away),
+    /// or the other players cannot be reached for any other reason
+    enum class LostReason : uint8_t { None, Connection, AwayTooLong };
+    LostReason lost_reason() const noexcept { return lost_reason_; }
     /// True while the host is gone and a new one is being chosen
     bool electing() const noexcept { return mode_ == Mode::Electing || mode_ == Mode::Following || mode_ == Mode::Fetching; }
     const Promotion& promotion() const noexcept { return promotion_; }
@@ -306,7 +335,7 @@ private:
     uint8_t election_epoch() const noexcept { return static_cast<uint8_t>(epoch_ + 1); }
     void send_turns(Connection* link, uint32_t from_turn);
     void send_to_peer(uint8_t seat, const std::vector<uint8_t>& msg);
-    void go_lost();
+    void go_lost(LostReason reason = LostReason::Connection);
 
     Config cfg_;
     std::unique_ptr<LockstepRunner> runner_;
@@ -330,7 +359,9 @@ private:
         uint32_t behind_ms{0};              // 0: no notice
         uint32_t heard_ms{0};
     };
-    std::array<LagNotice, sim::MAX_PLAYERS> lag_{};
+    std::array<LagNotice, sim::MAX_PLAYERS> lag_{};     // the notices about the other seats
+    LagNotice self_lag_{};                              // the notice about this seat (self_lag_behind_ms)
+    LostReason lost_reason_{LostReason::None};
 
     // host migration
     Mode mode_{Mode::Normal};

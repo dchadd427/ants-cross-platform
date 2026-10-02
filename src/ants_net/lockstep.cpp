@@ -60,21 +60,36 @@ std::vector<LockstepRunner::Executed> LockstepRunner::update(uint32_t dt_ms) {
     }
     ++updates_;
     if (!started_ || rebuilding_) {
-        if (queue_.size() < static_cast<size_t>(jitter_.target()) + 1) {      // still collecting the jitter buffer
+        // The buffer is collected again after a stall (or for the first time): target + 1 turns are wanted. After a stall the wait is bounded: on a healthy stream the first turn
+        // that is queued is followed by one more every 50 ms, so when the oldest has waited target + 1 turns' time and the buffer is still not full, the stream is not going to
+        // fill it (the host froze when the match ended: nothing comes after the decisive turn; a link that is down) and the runner goes on with what it has. Without the bound the
+        // last turns of a stream that the stall found behind a grown buffer were never run (the player never saw the match end). The turns were read at the start of this update,
+        // so the wait counts from its clock.
+        const size_t wanted_turns = static_cast<size_t>(jitter_.target()) + 1;
+        if (rebuilding_ && !queue_.empty() && !rebuild_has_first_) {
+            rebuild_has_first_ = true;
+            rebuild_first_ms_ = now_ms_;
+        }
+        const bool waited_enough = rebuild_has_first_ && now_ms_ - rebuild_first_ms_ >= static_cast<uint64_t>(wanted_turns) * kTickMs;      // (only a rebuilding runner has a first turn)
+        if (queue_.size() < wanted_turns && !waited_enough) {                  // still collecting the jitter buffer
             if (rebuilding_) stall_ms_ = saturating_add(stall_ms_, dt_ms);    // (the wait goes on being counted: "Waiting for the other players..." stays up until the turns run)
             return out;
         }
         started_ = true;
         rebuilding_ = false;
+        rebuild_has_first_ = false;
         acc_q_ = kTickQuarters;                                 // the first tick is due at once; what was waited is not owed
     } else {
-        // The speed-up eats the turns that stand in the queue beyond the buffer, a little each frame. A frame that stood for a long time (a hitch, a window in the background)
-        // holds those turns itself, in the time that it stood for: it runs at normal speed, or it would burn through the whole queue and leave no buffer behind it.
-        acc_q_ += dt_ms * (dt_ms > hitch_ms ? 4u : speed_x4(dt_ms));
+        // The speed-up eats the turns that stand in the queue beyond the buffer, a little each frame, in every frame, long or short. The speed is a function of the slack that
+        // is left AFTER the frame's own time has passed at normal speed (slack_ms(dt_ms)): a long frame (a hitch, a window in the background) whose time covers every turn that
+        // is queued asks for no speed-up and runs exactly the turns that its time holds, leaving no buffer behind it (the next turns come on their own); one that finds more
+        // than its time covers (a backlog: a window that is drawn once a second after it was frozen) runs the rest down at up to 4x. At normal speed the long frame ran no more
+        // than the turns that arrived while it stood, so a backlog that it found stayed for ever (a page drawn once a second was 2 - 15 s behind the others for the rest of the match).
+        acc_q_ = saturating_add(acc_q_, static_cast<uint32_t>(std::min<uint64_t>(static_cast<uint64_t>(dt_ms) * speed_x4(dt_ms), UINT32_MAX)));
     }
-    // A frame that stood for a long time (a window that is hardly drawn, a hitch) may also run the ticks that its time beyond 100 ms stands for: with the allowance of a
-    // frame alone, a window that is drawn once in 0.75 s could run no more than 8 of the 15 ticks that the time holds and would fall behind the others for ever
-    const uint32_t max_ticks = cfg_.max_ticks_per_update + (dt_ms > 100u ? (dt_ms - 100u) / kTickMs : 0u);
+    // A frame may run the ticks that its time stands for at the fastest speed: max_ticks_per_update for each 100 ms of it (a window that is drawn once in 0.75 s must be able to run
+    // the 15 ticks that the time holds, and the 80 that a second at 4x holds, or it falls behind the others for ever)
+    const uint32_t max_ticks = static_cast<uint32_t>(std::min<uint64_t>(static_cast<uint64_t>(cfg_.max_ticks_per_update) * std::max<uint64_t>(1u, (static_cast<uint64_t>(dt_ms) + 99u) / 100u), uint64_t{1} << 20));
     uint32_t ticks = 0;
     while (acc_q_ >= kTickQuarters && ticks < max_ticks && !queue_.empty()) {
         TurnMsg turn = std::move(queue_.front());
@@ -113,6 +128,7 @@ std::vector<LockstepRunner::Executed> LockstepRunner::update(uint32_t dt_ms) {
             stall_told_ = false;
             if (dt_ms <= hitch_ms) {                            // (a long frame ends empty-handed when it runs every turn that came: not the link's fault)
                 rebuilding_ = true;
+                rebuild_has_first_ = false;
                 acc_q_ = 0;
             }
         }

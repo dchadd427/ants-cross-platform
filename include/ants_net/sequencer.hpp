@@ -10,6 +10,7 @@
 
 #include <array>
 #include <cstdint>
+#include <deque>
 #include <map>
 #include <vector>
 
@@ -21,7 +22,10 @@ class Sequencer {
 public:
     struct Config {
         uint32_t max_lag_turns = 3 * kTurnsPerSecond;   // sealing stalls while a peer's ack is this many turns behind (3 s); a host without a seat never waits (session.hpp)
-        uint32_t max_commands_per_turn = 64;  // per peer and turn: more are refused (a flooding client cannot fill a turn)
+        uint32_t max_commands_per_turn = 64;  // per peer and turn: what does not fit waits for the next turns (a flooding client cannot fill a turn)
+        uint32_t max_carried_commands = 4 * 64;   // per peer: the commands that wait for a later turn (four turns' worth at the default): a stuck uplink that is let go delivers
+                                                  // all the orders of the player at once (15 a second for 5 s are 76), which are NOT a flood and must not cost the player its
+                                                  // seat; beyond this many waiting commands a peer is refused
     };
 
     Sequencer() : Sequencer(Config{}) {}
@@ -31,8 +35,10 @@ public:
     void set_active(uint8_t player, bool active);
     bool is_active(uint8_t player) const noexcept { return player < sim::MAX_PLAYERS && active_[player]; }
 
-    /// A command of `player` for the next turn. The issuer is set to `player` whatever the payload says. False when the player is not active, the
-    /// command is not one that a client may send, or the peer already sent max_commands_per_turn commands for this turn.
+    /// A command of `player` for the next turn. The issuer is set to `player` whatever the payload says. False when the player is not active, the command is not one that a
+    /// client may send, or the peer already has max_carried_commands commands waiting beyond the max_commands_per_turn of this turn. A command that does not fit into the turn
+    /// goes into one of the next turns (the first that has room for it, behind the older commands of the same player: the order in which a player sent its commands is kept).
+    /// The sequencer alone decides which turn carries a command, so every machine runs the same turns.
     bool submit(uint8_t player, sim::Command command);
     /// A command that the sequencer itself creates: the drop-out of a peer that left or fell silent (`command.issuer` is that peer). It goes into
     /// the next turn whatever the state of the peer, so that every machine drops the team at the same tick. Clients cannot send these (submit
@@ -68,6 +74,8 @@ public:
     uint32_t acked(uint8_t player) const noexcept { return player < sim::MAX_PLAYERS ? acked_[player] : 0; }
     /// Number of commands waiting for the next turn
     size_t queued() const noexcept { return queue_.size(); }
+    /// Number of commands of `player` that did not fit into the next turn and wait for a later one
+    size_t carried(uint8_t player) const noexcept { return player < sim::MAX_PLAYERS ? carry_[player].size() : 0u; }
     /// Hash reports kept until every peer has passed their turn (diagnostics and the tests of the bound)
     size_t pending_reports() const noexcept { return reports_.size() + referee_.size(); }
 
@@ -77,6 +85,7 @@ private:
     std::array<uint32_t, sim::MAX_PLAYERS> acked_{};          // highest executed turn + 1 (0 = nothing executed yet)
     std::array<uint32_t, sim::MAX_PLAYERS> queued_by_{};
     std::vector<sim::Command> queue_;
+    std::array<std::deque<sim::Command>, sim::MAX_PLAYERS> carry_;   // per player: the commands beyond max_commands_per_turn, in the order they came
     uint32_t next_turn_{0};
     uint8_t host_player_{255};
     std::map<uint32_t, std::array<sim::StateHash, sim::MAX_PLAYERS>> reports_;

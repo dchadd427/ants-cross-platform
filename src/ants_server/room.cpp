@@ -140,7 +140,15 @@ void Room::finish(const std::string& reason, uint32_t now_ms) {
 void Room::update(uint32_t now_ms) {
     if (state_ == RoomState::Failed) return;
     if (state_ == RoomState::Finished) {
-        if (!connections_closed_ && now_ms - ended_ms_ >= kGraceMs) close_connections();
+        if (connections_closed_) return;
+        // The match is over, but a player that was far behind when it ended (a laggard that catches up at four times the speed, up to a minute of turns) has not run the last turns
+        // yet, and a client that is not answered for 10 s gives up on the server: the session goes on (it is frozen: it seals nothing) and answers pings and takes acknowledgements
+        // until every player that is still here has acknowledged the last turn, but at least for the grace period and at most for kEndWaitMs.
+        if (session_) session_->update(now_ms);
+        const uint32_t since = now_ms - ended_ms_;
+        bool level = true;
+        for (uint8_t seat = 0; seat < sim::MAX_PLAYERS && session_; ++seat) level = level && (!session_->client_present(seat) || session_->behind_ms(seat) == 0);
+        if (since >= kEndWaitMs || (since >= kGraceMs && level)) close_connections();
         return;
     }
 

@@ -31,6 +31,10 @@ bool hash_file(const std::string& path, uint64_t& out) {
     return true;
 }
 
+std::string match_lost_text(ClientSession::LostReason reason) {
+    return reason == ClientSession::LostReason::AwayTooLong ? "You were away too long and were dropped from the match." : "The connection to the other players was lost.";
+}
+
 struct NetGame::Transport {
     std::unique_ptr<Connection> uplink;                     // client: the connection to the host (TCP) or to a server (TCP natively, a WebSocket in the browser)
 #ifndef __EMSCRIPTEN__
@@ -274,14 +278,16 @@ bool NetGame::request_start() {
 std::optional<uint32_t> NetGame::ping_ms() const {
     if (role_ == Role::None) return std::nullopt;
     if (is_host()) return 0u;                                                    // the room's owner, or the guest that took over: no link to measure
-    if (client_session_ && client_session_->ping().measured()) return client_session_->ping().ping_ms();
-    if (client_lobby_ && client_lobby_->ping().measured()) return client_lobby_->ping().ping_ms();   // in the room, and in the first moments of the match
-    return std::nullopt;
+    const PingMeter* meter = nullptr;
+    if (client_session_ && client_session_->ping().measured()) meter = &client_session_->ping();
+    else if (client_lobby_ && client_lobby_->ping().measured()) meter = &client_lobby_->ping();       // in the room, and in the first moments of the match
+    if (meter == nullptr || meter->stale(now_)) return std::nullopt;       // a reading older than three seconds is not shown (the host answers nothing, the link is stuck)
+    return meter->ping_ms();
 }
 
 std::optional<uint32_t> NetGame::command_delay_ms() const {
     const CommandDelayMeter* meter = host_session_ ? &host_session_->command_delay() : (client_session_ ? &client_session_->command_delay() : nullptr);
-    if (meter == nullptr || !meter->measured()) return std::nullopt;
+    if (meter == nullptr || meter->stale(now_)) return std::nullopt;       // none yet, or the last one was applied more than ten seconds ago: "delay -"
     return meter->delay_ms();
 }
 
@@ -461,7 +467,7 @@ void NetGame::update_client() {
             promote();                                            // the host is gone and this machine is the lowest seat left
         } else if (client_session_->lost()) {
             phase_ = Phase::Over;
-            status_ = "The connection to the other players was lost.";
+            status_ = match_lost_text(client_session_->lost_reason());
             events_.push_back(Event{Event::Type::HostLeft, 255});
         } else if (client_session_->host_seat() != known_host_) {   // another guest took over and this one follows it
             known_host_ = client_session_->host_seat();
@@ -786,6 +792,13 @@ std::optional<NetGame::LagNotice> NetGame::lag_notice() const {
 }
 
 bool NetGame::catching_up() const { return phase_ == Phase::Playing && client_session_ && client_session_->catching_up(); }
+
+std::optional<uint32_t> NetGame::self_lag_behind_ms() const {
+    if (phase_ != Phase::Playing || !client_session_) return std::nullopt;
+    const uint32_t ms = client_session_->self_lag_behind_ms();
+    if (ms == 0) return std::nullopt;
+    return ms;
+}
 
 bool NetGame::desynced() const {
     if (host_session_) return !host_session_->desyncs().empty();

@@ -1924,6 +1924,20 @@ void run_latency_tests() {
         ASSERT_TRUE(*app.net()->command_delay_ms() >= 50 && *app.net()->command_delay_ms() <= 150);
         ASSERT_TRUE(app.net()->stalled_ms() < 1000);                                       // turns are flowing: no "Waiting for the other players..."
         app.render_frame();                                                                // the match's corner: two lines above the row
+        // a player who gives no order for more than ten seconds sees "delay -" (the number is not about now any more), and the next order brings it back
+        duo.step(9000);
+        ASSERT_TRUE(app.net()->command_delay_ms().has_value());
+        duo.step(2500);
+        ASSERT_FALSE(app.net()->command_delay_ms().has_value());
+        app.render_frame();                                                                // (the corner draws the dash)
+        for (uint32_t t = 0; t < 2000 && !app.net()->command_delay_ms().has_value(); t += 10) {
+            if (t % 300 == 0) {
+                const auto mine = ants_of(app.sim(), 1);
+                if (!mine.empty()) app.net()->submit(order(1, mine[(t / 300) % mine.size()], static_cast<int16_t>(5 + t % 20), 7));
+            }
+            duo.step(10);
+        }
+        ASSERT_TRUE(app.net()->command_delay_ms().has_value());
         // the results screen of a match shows the readout too (one row: nothing stands in the corner row there)
         app.return_to_map_select();
         ASSERT_FALSE(app.network_active());
@@ -1998,6 +2012,42 @@ void run_latency_tests() {
         ASSERT_TRUE(paid_back >= 6);                                                      // 400 ms of ticks at once: eight turns of 50 ms (a clamp to 100 ms would run two)
         duo.step(1000);
         ASSERT_TRUE(app.net()->stalled_ms() < 1000);
+    } TEST_END();
+
+    TEST_CASE("N5.31 A Ping Reading Older Than Three Seconds Is Not Shown: The Host Stops Answering For 3.5 s (The Corner Says \"ping -\"), Then Answers Again (A Number Again)") {
+        Peer host;
+        ASSERT_TRUE(host.net.host(0, "Alice", true));
+        host.net.set_map("TINY.LVL");
+        ApplicationConfig cfg = headless_config();
+        cfg.net_role = ApplicationConfig::NetRole::Join;
+        cfg.net_address = "127.0.0.1";
+        cfg.net_port = host.net.listen_port();
+        cfg.player_name = "Bob";
+        Application app;
+        ASSERT_TRUE(app.init(cfg));
+        Duo duo{app, host};
+        ASSERT_TRUE(duo.until([&]() { return app.net()->phase() == net::NetGame::Phase::Room && host.net.can_start(); }, 8000));
+        uint64_t hash = 0;
+        ASSERT_TRUE(net::hash_file(maps_dir() + "TINY.LVL", hash));
+        ASSERT_TRUE(host.net.start_match(4343, hash));
+        ASSERT_TRUE(duo.until([&]() { return app.state() == AppState::Playing && host.net.phase() == net::NetGame::Phase::Playing; }, 8000));
+        duo.step(3000);
+        ASSERT_TRUE(app.net()->ping_ms().has_value() && *app.net()->ping_ms() <= 30);
+        // the host's machine stops (its process hangs: it reads nothing, answers nothing); the guest's clock goes on
+        const auto guest_only = [&](uint32_t ms) {
+            for (uint32_t t = 0; t < ms; t += 10) {
+                app.pump_network(0.010f);
+                app.update_simulation(0.010f);
+                std::this_thread::sleep_for(std::chrono::microseconds(300));
+            }
+        };
+        guest_only(1500);
+        ASSERT_TRUE(app.net()->ping_ms().has_value());                                    // the last answer is 1.5 s old at the least and 2.5 s at the most (a ping goes out every second): still a reading
+        guest_only(2200);                                                                 // 3.7 s after the host stopped: the last answer is older than 3 s whenever it came
+        ASSERT_FALSE(app.net()->ping_ms().has_value());                                   // "ping -"
+        app.render_frame();                                                               // (the corner draws the dash)
+        duo.step(1500);                                                                   // the host is back: the answers that waited come (the pings it did not answer), the new ones too
+        ASSERT_TRUE(app.net()->ping_ms().has_value());
     } TEST_END();
 
     TEST_CASE("N5.29 Latency Corner With The Real Font: The Row Of The Setup And Results Screens And The Two Lines Of The Match Clear The Version, The Frame Rate, The Sparkline And The Score Boxes") {

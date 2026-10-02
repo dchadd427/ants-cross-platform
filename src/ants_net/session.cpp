@@ -243,7 +243,7 @@ uint8_t HostSession::lagging_mask() const noexcept {
 }
 
 void HostSession::announce_lag(uint8_t player, uint32_t behind_ms) {
-    broadcast(encode(LagMsg{player, behind_ms}), player);          // everybody but the player itself, which knows how far behind it is
+    broadcast(encode(LagMsg{player, behind_ms}));                  // everybody, the player itself too: its backlog may be on the way (a slow link) and not in its own queue
 }
 
 // A host without a seat does not wait for a player that falls behind (see the head of this file): it says so to the others, and throws out the player that cannot be waited for
@@ -430,8 +430,9 @@ void ClientSession::send_turns(Connection* link, uint32_t from_turn) {
     }
 }
 
-void ClientSession::go_lost() {
+void ClientSession::go_lost(LostReason reason) {
     mode_ = Mode::Lost;
+    lost_reason_ = reason;
     proposed_ = false;
     following_ = 255;
 }
@@ -470,14 +471,15 @@ void ClientSession::poll_host(uint32_t now_ms) {
             }
             case MsgType::Pong: {
                 PingMsg p;
-                if (decode_ping(msg.data(), msg.size(), p)) ping_.on_pong(p, now_ms);
+                if (decode_ping(msg.data(), msg.size(), p)) ping_.on_pong(p, now_ms, conn_->last_message_age_ms());
                 break;
             }
             case MsgType::Lag: {
                 LagMsg m;
-                if (decode(msg.data(), msg.size(), m) && m.seat != cfg_.player) {      // (a player is never told about itself)
-                    lag_[m.seat].behind_ms = m.behind_ms;
-                    lag_[m.seat].heard_ms = now_ms;
+                if (decode(msg.data(), msg.size(), m)) {
+                    LagNotice& n = m.seat == cfg_.player ? self_lag_ : lag_[m.seat];      // (a notice about this seat is kept apart: lagging_seat() names the OTHER players)
+                    n.behind_ms = m.behind_ms;
+                    n.heard_ms = now_ms;
                 }
                 break;
             }
@@ -488,7 +490,9 @@ void ClientSession::poll_host(uint32_t now_ms) {
     // the host is gone when its link is closed (after everything it sent was read) or it has said nothing for host_silence_ms
     if (drained && !finished_ && (!conn_->is_open() || now_ms - last_heard_ms_ > cfg_.host_silence_ms)) {
         if (cfg_.migration) begin_election(now_ms);
-        else go_lost();                              // a server does not hand over: when it is gone the match is over for this machine
+        else go_lost(!conn_->is_open() && dedicated() && runner_->backlog_ms() >= kAwayBacklogMs ? LostReason::AwayTooLong : LostReason::Connection);
+        // (a server does not hand over: when it is gone the match is over for this machine. A server that closed the link of a machine that holds half a minute of the match
+        // unplayed dropped it for being away: the idle rule, kLagDropIdleMs; and the turns that it sent before are all read by now)
     }
 }
 

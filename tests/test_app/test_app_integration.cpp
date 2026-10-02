@@ -2511,6 +2511,23 @@ void run_suite_9_gameplay_mechanics_and_options() {
         // FPS getter returns non-negative
         ASSERT_TRUE(app.get_current_fps() >= 0.0f);
 
+        // The counter is the real rate, not the rate of a clamped frame: a window drawn four times a second reads 4 (every rate under ten frames a second read "10 FPS" when
+        // the frame was cut at 100 ms for the local simulation), one drawn once a second reads 1; a frame counts for at most a second. (A headless application stops after ten
+        // frames unless it is taking a screenshot far away: this one does.)
+        Application timed;
+        ApplicationConfig tcfg = cfg;
+        tcfg.screenshot_path = "fps_counter_test.png";
+        tcfg.screenshot_frames = 1000000;
+        ASSERT_TRUE(timed.init(tcfg));
+        for (int i = 0; i < 80; ++i) timed.run_frame_with_delta(0.25f);
+        ASSERT_TRUE(timed.get_current_fps() > 3.5f && timed.get_current_fps() < 4.5f);
+        for (int i = 0; i < 80; ++i) timed.run_frame_with_delta(1.0f);
+        ASSERT_TRUE(timed.get_current_fps() > 0.9f && timed.get_current_fps() < 1.3f);
+        for (int i = 0; i < 80; ++i) timed.run_frame_with_delta(5.0f);                   // (a frame of 5 s is counted as the second that the network gets of it)
+        ASSERT_TRUE(timed.get_current_fps() > 0.9f && timed.get_current_fps() < 1.3f);
+        for (int i = 0; i < 200; ++i) timed.run_frame_with_delta(1.0f / 60.0f);
+        ASSERT_TRUE(timed.get_current_fps() > 58.0f && timed.get_current_fps() < 62.0f);
+
         // The tile grid is off unless --show-grid asks for it (test 8.6): no runtime toggle exists
         ASSERT_FALSE(app.is_tile_grid_visible());
     } TEST_END();

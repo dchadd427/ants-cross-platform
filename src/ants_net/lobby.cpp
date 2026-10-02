@@ -530,7 +530,7 @@ void ClientLobby::update(uint32_t now_ms) {
             }
             case MsgType::Pong: {                    // the answer to this guest's own ping
                 PingMsg p;
-                if (decode_ping(msg.data(), msg.size(), p)) ping_.on_pong(p, now_ms);
+                if (decode_ping(msg.data(), msg.size(), p)) ping_.on_pong(p, now_ms, conn_->last_message_age_ms());
                 break;
             }
             default:

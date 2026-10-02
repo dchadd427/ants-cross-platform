@@ -205,8 +205,9 @@ struct RequestMsg {
 struct PeerHelloMsg {
     uint8_t seat{255};
 };
-/// A dedicated server never stops sealing for a player that falls behind (the others' game goes on): it tells them who it is, once a second while it lasts, and when
-/// the player is back within a second (`behind_ms` 0). The notice goes to everybody but the player itself (which knows how far behind it is).
+/// A dedicated server never stops sealing for a player that falls behind (the others' game goes on): it tells the room who it is, once a second while it lasts, and when
+/// the player is back within a second (`behind_ms` 0). The notice goes to everybody, the player itself included: a player whose own link is the slow one has its backlog on
+/// the way, not in its queue, and would otherwise be the only one in the room that does not know it is behind (its game says "You are lagging (N s behind)").
 struct LagMsg {
     uint8_t seat{255};        // the player that lags
     uint32_t behind_ms{0};    // how far behind the match it is, in ms of turns it has not executed yet; 0: it is not lagging any more

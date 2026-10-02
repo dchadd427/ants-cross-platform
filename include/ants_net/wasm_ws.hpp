@@ -32,6 +32,9 @@ public:
     bool poll(std::vector<uint8_t>& message) override;
     State state() const override { return state_; }
     void close() override;
+    /// The browser delivers a message in an event between two frames; it is stamped with emscripten_get_now() then, and this is how long the message that poll() returned last
+    /// lay in the queue until the frame took it (a page drawn at 30 frames a second: up to 33 ms, a hidden tab: about a second). The ping readout subtracts it.
+    uint32_t last_message_age_ms() const override { return last_age_ms_; }
 
     /// Called (from the browser's event loop, between frames) when the connection has opened. A page that is not drawn runs no frames, so the Hello that opens a
     /// session is sent from here and not from the frame loop (the server closes a connection that says nothing for 10 s).
@@ -50,7 +53,12 @@ private:
     State state_{State::Connecting};
     bool browser_closed_{false};                // the browser reported the close: nothing is left to close
     std::function<void()> on_open_;
-    std::deque<std::vector<uint8_t>> inbox_;
+    struct Queued {
+        std::vector<uint8_t> data;
+        double arrived_ms;                          // emscripten_get_now() when the browser delivered it
+    };
+    std::deque<Queued> inbox_;
+    uint32_t last_age_ms_{0};
 
     friend struct WasmWsCallbacks;
 };

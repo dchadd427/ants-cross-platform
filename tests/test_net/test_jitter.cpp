@@ -12,6 +12,7 @@
 #include <functional>
 #include <iomanip>
 #include <iostream>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -341,6 +342,85 @@ int main() {
         ASSERT_EQ(reset.wanted(), 1u);
     } TEST_END();
 
+    TEST_CASE("J1.10 A Freeze Of The Link Is Not Jitter: The Turns That Come In A Bunch After A Wait Of 1.5 s Or More Are The Freeze's Own Lateness And Are Not Counted (The Buffer Does Not Sit At Four Turns For Half A Minute After One Freeze); A Jittery Link Keeps What It Needs") {
+        // a steady link, then a freeze of 3 s: the wait is told when the late turn comes (the bunch of 60 turns is read in the same frame)
+        {
+            JitterBuffer jb;
+            for (uint32_t k = 0; k < 300; ++k) jb.on_arrivals(k, 1, 40 + k * 50, 17);              // 15 s, steady: one turn
+            ASSERT_EQ(jb.target(), 1u);
+            const uint64_t at = 40 + 300 * 50 + 3000;                                               // turn 300 .. 359 were held for the freeze: they come together
+            jb.on_stall(at, 3000);
+            jb.on_arrivals(300, 60, at, 17);
+            ASSERT_EQ(jb.target(), 1u);                                                             // no growth: no buffer bridges 3 s
+            ASSERT_EQ(jb.lateness_ms(), 0u);                                                        // and the bunch is not a measure of the link
+            // the frames that follow read the turns on time: the link is steady, and so the rule says
+            for (uint32_t k = 360; k < 700; ++k) jb.on_arrivals(k, 1, 40 + k * 50 + 3000, 17);
+            ASSERT_EQ(jb.target(), 1u);
+            ASSERT_TRUE(jb.lateness_ms() <= 3);
+        }
+        // without the wait having been told (a bunch of 60 turns from nowhere), the same bunch is counted as before: it IS a measure of what the link did
+        {
+            JitterBuffer jb;
+            for (uint32_t k = 0; k < 300; ++k) jb.on_arrivals(k, 1, 40 + k * 50, 17);
+            jb.on_arrivals(300, 60, 40 + 300 * 50 + 3000, 17);
+            ASSERT_EQ(jb.target(), 4u);
+        }
+        // a freeze of 400 ms or more (1000 here: 20 turns held) is left out like a longer one, but nothing that was read before it is forgotten (that takes 1.5 s)
+        {
+            JitterBuffer jb;
+            for (uint32_t k = 0; k < 300; ++k) jb.on_arrivals(k, 1, 40 + k * 50 + (k % 3) * 20, 17);        // jitter of 40 ms: two turns at most
+            const uint32_t lateness_before = jb.lateness_ms();
+            const uint32_t target_before = jb.target();
+            ASSERT_TRUE(lateness_before >= 20 && target_before <= 2);
+            const uint64_t at = 40 + 300 * 50 + 1000;
+            jb.on_stall(at, 1000);
+            jb.on_arrivals(300, 20, at, 17);
+            ASSERT_EQ(jb.lateness_ms(), lateness_before);                                                    // not counted, not forgotten
+            ASSERT_EQ(jb.target(), target_before);
+        }
+        // a wait of less than 400 ms is counted as it always was: three stalls of 300 ms (bunches of six turns) within ten seconds are jitter, and the buffer grows to what they need
+        {
+            JitterBuffer jb;
+            for (uint32_t k = 0; k < 300; ++k) {
+                const uint64_t now = 40 + k * 50;
+                if (k == 100 || k == 140 || k == 180) {                                                       // a stall of 300 ms: six turns come together
+                    jb.on_stall(now + 300, 300);
+                    jb.on_arrivals(k, 6, now + 300, 17);
+                    k += 5;
+                } else {
+                    jb.on_arrivals(k, 1, now, 17);
+                }
+            }
+            ASSERT_EQ(jb.target(), 4u);
+        }
+        // the skip lasts half a second of the rule's clock (a bunch that reaches the runner in two frames), then everything is counted again
+        {
+            JitterBuffer jb;
+            for (uint32_t k = 0; k < 300; ++k) jb.on_arrivals(k, 1, 40 + k * 50, 17);
+            const uint64_t at = 40 + 300 * 50 + 3000;
+            jb.on_stall(at, 3000);
+            jb.on_arrivals(300, 40, at, 17);                                                        // the first part of the bunch
+            jb.on_arrivals(340, 20, at + 17, 17);                                                   // and the rest, a frame later
+            ASSERT_EQ(jb.lateness_ms(), 0u);
+            ASSERT_EQ(jb.target(), 1u);
+            for (uint32_t k = 360; k < 400; ++k) jb.on_arrivals(k, 1, at + 600 + (k - 360) * 50 + (k % 4) * 60, 17);     // jitter of 180 ms, from 0.6 s after the stall on
+            ASSERT_TRUE(jb.lateness_ms() >= 100);                                                   // counted again
+            ASSERT_TRUE(jb.target() >= 3);
+        }
+        // a jittery link that freezes once keeps the buffer that its jitter needs (the freeze's wait forgets what was read, the jitter after it is read again)
+        {
+            JitterBuffer jb;
+            for (uint32_t k = 0; k < 300; ++k) jb.on_arrivals(k, 1, 40 + k * 50 + (k % 4) * 60, 17);
+            const uint32_t wanted_before = jb.target();
+            ASSERT_TRUE(wanted_before >= 3);
+            const uint64_t at = 40 + 300 * 50 + 3000;
+            jb.on_stall(at, 3000);
+            jb.on_arrivals(300, 60, at, 17);
+            for (uint32_t k = 360; k < 700; ++k) jb.on_arrivals(k, 1, 40 + k * 50 + 3000 + (k % 4) * 60, 17);
+            ASSERT_TRUE(jb.target() >= wanted_before);                                              // (the jitter went on: the buffer stays)
+        }
+    } TEST_END();
+
     TEST_CASE("J1.6 One Spike In Twenty Seconds Is Not A Reason For A Bigger Buffer (the 95th percentile ignores it) But A Stall Of It Grows The Buffer By One; Spikes Every Few Seconds Are") {
         {   // one lost packet's worth: a bunch of turns held up by 300 ms, 3 % of the last 200 turns
             JitterBuffer jb;
@@ -449,7 +529,7 @@ int main() {
             stall_ms_max = std::max(stall_ms_max, d.runner.stalled_ms());
         }
         ASSERT_TRUE(rebuilt_seen);                                                        // it waited and collected the buffer again
-        ASSERT_TRUE(d.runner.buffer_turns() >= 2);                                        // the stall told the rule: a turn more at once
+        ASSERT_EQ(d.runner.buffer_turns(), 1u);                                           // a hold of 600 ms: no buffer bridges it (J2.7 has the ones that one turn would), and the bunch that it held back is the freeze's own lateness, not the link's
         ASSERT_TRUE(stall_ms_max >= 400 && stall_ms_max <= 650);                          // the wait was counted: from the tick that was due to the bunch
         ASSERT_EQ(d.stall_episodes, 1u);
         ASSERT_TRUE(d.tick_times.size() > ticks_before + 20);                             // and the game went on
@@ -600,7 +680,7 @@ int main() {
         }
     } TEST_END();
 
-    TEST_CASE("J2.5 A Long Frame Runs Its Time's Ticks At Normal Speed And Leaves The Buffer Behind It: A Hidden Window (0.75 s Frames) Neither Stalls, Nor Grows The Buffer, Nor Falls Behind") {
+    TEST_CASE("J2.5 A Long Frame Runs Its Time's Ticks And Leaves The Buffer Behind It (Nothing Stands In The Queue Beyond What Its Time Covers, So Normal Speed): A Hidden Window (0.75 s Frames) Neither Stalls, Nor Grows The Buffer, Nor Falls Behind") {
         Drive d;
         auto link = [](uint32_t k) { return k * kTurnMs + 40; };
         for (uint32_t i = 0; i < 300; ++i) d.frame(17, link);
@@ -647,7 +727,8 @@ int main() {
         for (uint32_t i = 0; i < 600; ++i) d.frame(17, steady);                           // 10 s of a steady link
         ASSERT_EQ(d.runner.buffer_turns(), 1u);
         d.freeze(10000, 1000, steady);                                                    // frozen for 10 s: 200 turns are waiting, the runner's clock moved 1 s
-        ASSERT_TRUE(d.runner.queued() >= 150);                                            // (the first frame ran a second's ticks)
+        ASSERT_TRUE(d.runner.queued() >= 100);                                            // (the first frame ran 80 ticks: the second it stood for, at four times the speed; 200 were waiting)
+        ASSERT_TRUE(d.runner.queued() <= 125);
         ASSERT_TRUE(d.runner.backlog_ms() >= 3000);
         for (uint32_t i = 0; i < 600; ++i) d.frame(17, steady);                           // 10 s more
         ASSERT_TRUE(d.runner.queued() <= 3);                                              // caught up
@@ -684,6 +765,272 @@ int main() {
         ASSERT_TRUE(e.tick_times.size() > 90);
         ASSERT_TRUE(most_in_window(e.tick_times, 3000, 50) <= 6);
         ASSERT_EQ(e.stall_episodes, 1u);
+    } TEST_END();
+
+    TEST_CASE("J2.9 The Last Turns Of A Stream Run After A Stall: The Host Stops Sealing When The Match Ends, So Fewer Than Target + 1 Turns Are Queued For Ever (The Runner Went On Waiting For A Buffer That Could Not Come: The Player Never Saw The Match End)") {
+        // The host freezes after the decisive turn T (the room ends the match): no turn comes after it. A runner that stalled shortly before collects the buffer again, waits for target + 1
+        // queued turns, and used to wait for ever when the stall had grown the buffer (or the last turns came late): the last turn(s) were never run. Measured with the real client:
+        // the last turn 60 ms late -> unexecuted. Every turn must run, whatever came late near the end.
+        const uint32_t T = 240;                                                              // the last turn number
+        struct Scenario {
+            std::string name;
+            std::function<uint32_t(uint32_t)> arrival;
+            LockstepRunner::Config cfg;
+        };
+        const auto steady = [](uint32_t k) { return k > T ? UINT32_MAX : k * kTurnMs + 30; };
+        std::vector<Scenario> all;
+        all.push_back({"steady link", steady, {}});
+        for (const uint32_t late : {10u, 30u, 60u, 90u, 120u, 200u, 500u, 2000u}) {
+            all.push_back({"the last turn late by " + std::to_string(late) + " ms", [=](uint32_t k) { return k == T ? T * kTurnMs + 30 + late : steady(k); }, {}});
+        }
+        for (const uint32_t late : {60u, 120u, 300u}) {                                      // the last two come late, together
+            all.push_back({"the last two turns late by " + std::to_string(late) + " ms", [=](uint32_t k) {
+                               if (k == T - 1) return (T - 1) * kTurnMs + 30 + late;
+                               if (k == T) return std::max(T * kTurnMs + 30, (T - 1) * kTurnMs + 30 + late);
+                               return steady(k);
+                           }, {}});
+        }
+        for (uint32_t before = 1; before <= 6; ++before) {                                   // a stall of 120 ms that ends `before` turns before the end: the rest is on time again
+            all.push_back({"turn T-" + std::to_string(before) + " late by 120 ms, the rest on time", [=](uint32_t k) {
+                               return k >= T - before ? std::max(steady(k), (T - before) * kTurnMs + 30 + 120) : steady(k);
+                           }, {}});
+        }
+        LockstepRunner::Config four;
+        four.jitter.min_turns = four.jitter.max_turns = 4;                                   // a rough link that the rule has learned: four turns to collect
+        all.push_back({"a buffer of four turns, the last turn late by 120 ms", [=](uint32_t k) { return k == T ? T * kTurnMs + 30 + 120 : steady(k); }, four});
+        for (const Scenario& sc : all) {
+            for (const uint32_t phase : {0u, 1u, 2u}) {                                      // the frames (60 Hz) fall differently on the arrivals
+                Drive d(sc.cfg);
+                uint32_t i = phase;
+                while (d.now < T * kTurnMs + 30 + 2500 + 3000) d.frame(i++ % 3 == 2 ? 17u : 16u, sc.arrival);
+                if (d.runner.next_turn_to_execute() != T + 1) std::cout << "\n    " << sc.name << " (phase " << phase << "): executed " << d.runner.next_turn_to_execute() << " of " << T + 1 << ", queued " << d.runner.queued() << "\n";
+                ASSERT_EQ(d.runner.next_turn_to_execute(), T + 1);
+                ASSERT_EQ(d.runner.queued(), size_t{0});
+            }
+        }
+    } TEST_END();
+
+    TEST_CASE("J2.10 The Wait For The Buffer Is Bounded: After A Stall The Runner Goes On With What Is Queued Once The Oldest Turn Has Waited Target + 1 Turns (A Healthy Stream Would Have Brought Them); A Stream That Comes On Time Is Not Hurried") {
+        // a runner with a buffer of two (collects three turns), a stream that has stopped for good after the stall: one turn is queued
+        LockstepRunner::Config cfg;
+        cfg.jitter.min_turns = cfg.jitter.max_turns = 2;
+        sim::SimulationEngine sim;
+        sim.init_test_world(40, 40, 1, 720000);
+        LockstepRunner r(sim, cfg);
+        const auto feed = [&](uint32_t turn) {
+            TurnMsg t;
+            t.turn = turn;
+            return r.on_turn(t);
+        };
+        for (uint32_t k = 0; k < 3; ++k) ASSERT_TRUE(feed(k));
+        r.update(17);                                                                       // starts: three turns are queued
+        for (uint32_t i = 0; i < 20; ++i) r.update(17);                                     // runs them (the stream stops after turn 2): the queue is empty, a tick is due
+        ASSERT_EQ(r.next_turn_to_execute(), 3u);
+        ASSERT_TRUE(r.rebuilding());
+        ASSERT_TRUE(feed(3));                                                               // ONE more turn comes after a stall (the stream ends here: the host froze)
+        r.update(16);                                                                       // read at this frame: it has waited 0 ms
+        ASSERT_EQ(r.next_turn_to_execute(), 3u);
+        uint32_t waited = 0;
+        while (r.next_turn_to_execute() == 3 && waited < 1000) {
+            r.update(16);
+            waited += 16;
+        }
+        // (target 2 + 1) * 50 ms = 150 ms from the frame that read it; frames of 16 ms
+        ASSERT_TRUE(waited >= 150 - 16 && waited <= 150 + 16);
+        ASSERT_EQ(r.next_turn_to_execute(), 4u);
+        ASSERT_EQ(r.queued(), size_t{0});
+        // the wait is counted for the oldest queued turn: a second turn that comes 40 ms later does not make it wait longer, and with two queued the third is still awaited
+        // (the buffer asks for three) until the bound
+        ASSERT_TRUE(feed(4));
+        r.update(16);
+        for (uint32_t i = 0; i < 2; ++i) r.update(16);                                      // 32 ms
+        ASSERT_TRUE(feed(5));
+        waited = 0;
+        while (r.next_turn_to_execute() == 4 && waited < 1000) {
+            r.update(16);
+            waited += 16;
+        }
+        ASSERT_TRUE(waited <= 150 - 32 + 16);                                               // from the first turn's reading, not the second's
+        // the bound is for the rebuilding after a stall only: a runner that has never started waits for its full buffer however long it takes
+        sim::SimulationEngine sim2;
+        sim2.init_test_world(40, 40, 1, 720000);
+        LockstepRunner fresh(sim2, cfg);
+        TurnMsg t0;
+        t0.turn = 0;
+        fresh.on_turn(t0);
+        for (uint32_t i = 0; i < 100; ++i) fresh.update(16);                                // 1.6 s with one turn
+        ASSERT_EQ(fresh.next_turn_to_execute(), 0u);
+        ASSERT_FALSE(fresh.rebuilding());
+    } TEST_END();
+
+    TEST_CASE("J2.11 A Window That Is Drawn Less Often Than Every 100 ms Runs A Standing Backlog Down: Long Frames Run At The Speed The Slack Asks For (Up To 4x), Not At Normal Speed (A Page Drawn Once A Second Stayed 2 - 15 s Behind For Ever)") {
+        for (const uint32_t frame_ms : {150u, 250u, 500u, 1000u}) {
+            Drive d;
+            auto steady = [](uint32_t k) { return k * kTurnMs + 40; };
+            for (uint32_t i = 0; i < 600; ++i) d.frame(17, steady);                       // 10 s of a steady link at 60 Hz
+            d.freeze(10000, 1000, steady);                                                // frozen for 10 s: the first frame back runs a second's worth and leaves a backlog
+            ASSERT_TRUE(d.runner.backlog_ms() >= 3000);
+            // from now on the window is drawn once per `frame_ms`: every frame reads the turns that came meanwhile; the backlog must not stand for ever
+            uint32_t frames_to_level = 0;
+            for (uint32_t i = 0; i < 120 && frames_to_level == 0; ++i) {
+                d.frame(frame_ms, steady);
+                if (d.runner.queued() <= frame_ms / kTurnMs + 3) frames_to_level = i + 1;      // what one frame's time brings, and the buffer
+            }
+            if (frames_to_level == 0) std::cout << "\n    " << frame_ms << " ms frames: still " << d.runner.queued() << " turns queued after 120 frames\n";
+            ASSERT_TRUE(frames_to_level > 0);
+            ASSERT_TRUE(static_cast<uint64_t>(frames_to_level) * frame_ms <= 12000);      // a 10 s backlog at four times the speed: a few seconds at the most (the first frame back ran 1 s of it)
+            // and level for good: every later frame leaves no more behind than it brings
+            for (uint32_t i = 0; i < 60; ++i) {
+                d.frame(frame_ms, steady);
+                ASSERT_TRUE(d.runner.queued() <= frame_ms / kTurnMs + 3);
+            }
+            ASSERT_EQ(d.stall_episodes, 0u);                                              // (a hidden window is not "waiting": the frame ran every turn that came)
+            ASSERT_TRUE(d.runner.next_turn_expected() - d.runner.next_turn_to_execute() <= frame_ms / kTurnMs + 3);
+        }
+    } TEST_END();
+
+    TEST_CASE("J2.16 One Freeze Of The Link, Isolated: The Buffer Stays At One Turn (It Sat At Four For 10 s And Stepped Down Every 10 s: +150 / +100 / +50 ms For Half A Minute), The Backlog Is Run Down, And A Jittery Link That Freezes Keeps The Buffer It Needs") {
+        for (const uint32_t freeze_ms : {1500u, 3000u, 5000u, 10000u}) {
+            Drive d;
+            const uint32_t start = 30000;
+            auto link = [=](uint32_t k) {
+                const uint32_t at = k * kTurnMs + 40;
+                return (at >= start && at < start + freeze_ms) ? start + freeze_ms + 40 + (at - start) / 1000 : at;      // the turns held come in a bunch (a millisecond apart)
+            };
+            uint32_t max_target = 1;
+            while (d.now < start + freeze_ms + 40000) {
+                d.frame(17, link);
+                max_target = std::max(max_target, d.runner.buffer_turns());
+            }
+            if (max_target != 1) std::cout << "\n    freeze " << freeze_ms << " ms: the buffer went to " << max_target << "\n";
+            ASSERT_EQ(max_target, 1u);
+            ASSERT_EQ(d.stall_episodes, 1u);                                               // the freeze itself is one wait
+            ASSERT_TRUE(d.runner.queued() <= 3);                                           // and the backlog is gone
+        }
+        // jitter of 0 - 130 ms (the rule asks for three turns), a freeze of 3 s in the middle, jitter after it: the buffer stays what the jitter needs, before, during and after
+        {
+            Drive d;
+            Lcg rng(11);
+            auto table = std::make_shared<std::vector<uint32_t>>();
+            uint32_t last = 0;
+            for (uint32_t k = 0; k < 3000; ++k) {
+                uint32_t at = k * kTurnMs + 30 + rng.below(130);
+                if (at >= 40000 && at < 43000) at = 43000;
+                at = std::max(at, last);
+                last = at;
+                table->push_back(at);
+            }
+            auto link = [table](uint32_t k) { return k < table->size() ? (*table)[k] : UINT32_MAX; };
+            while (d.now < 39900) d.frame(17, link);
+            ASSERT_EQ(d.runner.buffer_turns(), 3u);
+            uint32_t min_after = 99;
+            uint32_t max_after = 0;
+            while (d.now < 70000) {
+                d.frame(17, link);
+                if (d.now > 43100) {
+                    min_after = std::min(min_after, d.runner.buffer_turns());
+                    max_after = std::max(max_after, d.runner.buffer_turns());
+                }
+            }
+            ASSERT_EQ(min_after, 3u);                                                      // the jitter did not stop: the freeze neither shrank the buffer nor made it larger
+            ASSERT_EQ(max_after, 3u);
+        }
+    } TEST_END();
+
+    TEST_CASE("J2.12 A Stall That Begins In A Long Frame Is Counted From The Frames That Follow (The \"Waiting\" Message Needs It), Does Not Collect The Buffer Again, And The Next Late Turn Runs The Moment It Comes") {
+        sim::SimulationEngine sim;
+        sim.init_test_world(40, 40, 1, 720000);
+        LockstepRunner r(sim);
+        for (uint32_t k = 0; k < 10; ++k) {
+            TurnMsg t;
+            t.turn = k;
+            ASSERT_TRUE(r.on_turn(t));
+        }
+        r.update(16);                                                                      // starts (two turns are enough: ten are queued)
+        r.update(600);                                                                     // ONE long frame: it runs every turn that is there and ends empty-handed (a tick is due)
+        ASSERT_EQ(r.next_turn_to_execute(), 10u);
+        ASSERT_EQ(r.stalled_ms(), 0u);                                                     // (a tick ran in it: its own time is not counted)
+        ASSERT_FALSE(r.rebuilding());                                                      // a long frame ends empty-handed because it ran everything: not the link's fault, no buffer to collect
+        for (uint32_t i = 0; i < 120; ++i) r.update(16);                                   // 1.9 s of frames, no turn
+        ASSERT_EQ(r.stalled_ms(), 120u * 16u);                                             // counted: the overlay shows "Waiting for the other players..." from 1000
+        ASSERT_TRUE(r.stalled_ms() >= 1000);
+        ASSERT_FALSE(r.rebuilding());
+        TurnMsg late;
+        late.turn = 10;
+        ASSERT_TRUE(r.on_turn(late));
+        r.update(16);                                                                      // the late turn runs at once: it is not held for a buffer
+        ASSERT_EQ(r.next_turn_to_execute(), 11u);
+        ASSERT_EQ(r.stalled_ms(), 0u);
+    } TEST_END();
+
+    TEST_CASE("J2.13 A Stall That Ends In A Long Frame Is Not Told To The Rule: What The Rule Had Read Is Kept (A Frame's Own Length Says Nothing About The Link), And The Buffer Is Not Grown Or Forgotten By It") {
+        Drive d;
+        Lcg rng(7);
+        // a link with 0 - 100 ms of jitter for 20 s: the rule learns it
+        const uint32_t jitter_until = 20000;
+        auto cumulative = std::make_shared<std::vector<uint32_t>>();
+        {
+            uint32_t last = 0;
+            for (uint32_t k = 0; k < 2000; ++k) {
+                uint32_t at = k * kTurnMs + 30 + rng.below(100);
+                if (k * kTurnMs >= jitter_until + 10000) at = k * kTurnMs + 30;
+                at = std::max(at, last);
+                // a stall of 2 s: nothing is delivered in [22000, 24000), the turns that were held come together at 24000
+                if (at >= 22000 && at < 24000) at = 24000;
+                last = at;
+                cumulative->push_back(at);
+            }
+        }
+        const auto link = [cumulative](uint32_t k) { return k < cumulative->size() ? (*cumulative)[k] : UINT32_MAX; };
+        while (d.now < 21900) d.frame(17, link);
+        const uint32_t lateness_before = d.runner.jitter().lateness_ms();
+        const uint32_t buffer_before = d.runner.buffer_turns();
+        ASSERT_TRUE(lateness_before >= 40);                                                // it has learned the link
+        ASSERT_TRUE(buffer_before >= 2);
+        while (d.now < 23900) d.frame(17, link);                                           // the stall: 2 s without a turn, in ordinary frames
+        ASSERT_TRUE(d.runner.stalled_ms() >= 1500);
+        d.frame(150, link);                                                                // the frame that reads the bunch is a LONG one (a hitch)
+        ASSERT_TRUE(d.runner.queued() > 10);                                               // (the bunch was read in it)
+        ASSERT_EQ(d.runner.jitter().lateness_ms(), lateness_before);                       // not forgotten (a long stall told in an ordinary frame would forget it)
+        ASSERT_EQ(d.runner.buffer_turns(), buffer_before);                                 // and not grown by a stall that no turn would have bridged
+    } TEST_END();
+
+    TEST_CASE("J2.14 Owed Game Time Is Bounded: A Frame That Cannot Run Everything It Is Owed (max_ticks_per_update) Keeps At Most That Much For The Next One, Not All Of It") {
+        LockstepRunner::Config cfg;
+        cfg.max_ticks_per_update = 2;
+        sim::SimulationEngine sim;
+        sim.init_test_world(40, 40, 1, 720000);
+        LockstepRunner r(sim, cfg);
+        for (uint32_t k = 0; k < 300; ++k) {
+            TurnMsg t;
+            t.turn = k;
+            ASSERT_TRUE(r.on_turn(t));
+        }
+        r.update(16);                                                                      // starts: one tick
+        ASSERT_EQ(r.next_turn_to_execute(), 1u);
+        r.update(100);                                                                     // 4x for 100 ms is eight ticks owed; two are allowed in a frame of this length
+        ASSERT_EQ(r.next_turn_to_execute(), 3u);
+        for (uint32_t i = 0; i < 6; ++i) r.update(0);                                      // no time passes: only what is still owed runs, and that is bounded to two ticks
+        ASSERT_EQ(r.next_turn_to_execute(), 5u);                                           // (unbounded it would be 3 + 2 + 2 + 2 ... = 9 or more)
+    } TEST_END();
+
+    TEST_CASE("J2.15 backlog_ms Counts A Turn As 50 ms: The Turns That Are Here And Not Run, In Milliseconds Of Play (\"Catching up...\" Is Shown From 3000 Of Them: Sixty Turns)") {
+        sim::SimulationEngine sim;
+        sim.init_test_world(40, 40, 1, 720000);
+        LockstepRunner r(sim);
+        ASSERT_EQ(r.backlog_ms(), 0u);
+        uint32_t next = 0;
+        for (const uint32_t total : {1u, 2u, 7u, 59u, 60u, 61u, 400u}) {
+            while (next < total) {
+                TurnMsg t;
+                t.turn = next++;
+                ASSERT_TRUE(r.on_turn(t));
+            }
+            ASSERT_EQ(r.backlog_ms(), total * kTurnMs);
+            ASSERT_EQ(r.queued(), size_t{total});
+        }
+        ASSERT_EQ(kTurnMs, 50u);
+        ASSERT_EQ(r.backlog_ms(), 400u * 50u);
     } TEST_END();
 
     std::cout << "\n=======================================================\n Total Test Cases: " << g_test_count << "\n Total Assertions: " << g_assert_count

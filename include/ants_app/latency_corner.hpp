@@ -1,7 +1,9 @@
 #pragma once
 
-// The network's share of the bottom right corner: "ping NN ms" (the round trip to the host) and "delay NN ms" (the time from sending one of the player's own commands to the
-// tick that applies it, see ants_net/latency.hpp), in the style and size of the frame rate counter next to which they stand (12 px, white, no plate of their own). They
+// The network's share of the bottom right corner: "ping NN ms" (the round trip to the host; a dash when the last answer is older than three seconds) and "delay NN ms" (the
+// median over the last five commands of the time from sending one of the player's own commands to the tick that applies it; a dash when the last command was applied more than ten
+// seconds ago, see ants_net/latency.hpp), in the style and size of
+// the frame rate counter next to which they stand (12 px, white, no plate of their own). They
 // are shown in the room of a network game and during its match (never in a game of one machine) and are a remake-only overlay like the counter: the original draws nothing
 // there.
 //
@@ -21,7 +23,7 @@
 
 namespace ants::app {
 
-/// What the corner shows of the network; an empty value is shown as "-"
+/// What the corner shows of the network; an empty value is shown as "-" (nothing measured yet, no command applied yet for ten seconds, or a ping reading older than three seconds)
 struct LatencyReadout {
     std::optional<uint32_t> ping_ms;
     std::optional<uint32_t> delay_ms;

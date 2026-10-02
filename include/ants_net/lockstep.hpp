@@ -9,15 +9,20 @@
 //   - start     the runner begins when target + 1 turns are queued (the first one runs at once, `target` stay behind it)
 //   - stall     the next turn is due and has not arrived. The runner waits, owes nothing for the wait (the accumulator holds one tick at most: a late turn runs the moment
 //               it comes, never in a burst) and collects target + 1 turns again before it goes on, so that the buffer that the stall used up is back and the next late turn
-//               is on time. When the late turn comes the jitter buffer is told how long the wait was: a short one grows the buffer at once, a long one (a lost packet that
-//               the link resends: no buffer would bridge it) does not. A turn that comes late behind a bunch of others (a blocked link that frees at last) finds the queue
-//               full and does not wait.
+//               is on time. The wait for the buffer is bounded: once the oldest turn that is queued has waited target + 1 turns' time (what a healthy stream needs to bring
+//               them) the runner goes on with what it has. A host stops sealing when the match ends, so after the last stall fewer than target + 1 turns may stay queued for
+//               ever; without the bound they were never run and the player never saw the match end. When the late turn comes the jitter buffer is told how long the wait was:
+//               a short one grows the buffer at once, a long one (a lost packet that the link resends: no buffer would bridge it) does not. A turn that comes late behind a
+//               bunch of others (a blocked link that frees at last) finds the queue full and does not wait.
 //   - too many  more turns are queued than the buffer asks for (a stall that ended in a bunch, a window that was not drawn for a second, a lagging player's backlog, the
 //               buffer that shrank): the runner runs faster, in proportion to the excess, up to four times, instead of carrying the extra turns as delay to the end of the
 //               match. The excess is measured in time: the newest queued turn is due `slack_ms()` from now, and the buffer wants `target * 50 ms` and 10 ms of rounding
-//               for the frames; every 50 ms beyond that adds a quarter of the normal speed (1.25x, 1.5x, ...), twelve turns or more run at 4x.
+//               for the frames; every 50 ms beyond that adds a quarter of the normal speed (1.25x, 1.5x, ...), twelve turns or more run at 4x. A long frame is run down the
+//               same way: it runs the turns that its own time covers and the standing backlog beyond them at up to 4x (a page that is drawn once a second stood 2 s behind
+//               for ever when a long frame ran at normal speed: the backlog was never touched).
 //   - a frame that stood for more than 100 ms (a window that is hardly drawn) is not read as the link's lateness and does not count as a stall: the turns that came meanwhile
-//               are all there at its start, and its own time covers the ticks that its length holds.
+//               are all there at its start, and its own time covers the ticks that its length holds (and may run as many as its time holds at the fastest speed: max_ticks_per_update
+//               for every 100 ms of it).
 
 #include <algorithm>
 #include <cstdint>
@@ -35,7 +40,7 @@ class LockstepRunner {
 public:
     struct Config {
         JitterBuffer::Config jitter{};    // the buffer in turns: min_turns == max_turns makes it fixed
-        uint32_t max_ticks_per_update = 8;   // ticks that one update runs at most (a frame that stood for more than 100 ms may run the ticks of its time beyond that, too)
+        uint32_t max_ticks_per_update = 8;   // ticks that one update runs at most for a frame of up to 100 ms; a longer frame gets as many for each 100 ms of it (eight: the ticks that 100 ms hold at 4x)
         uint32_t max_speed_x4 = 16;       // the fastest run-down of a queue that is longer than the buffer, in quarters of normal speed (16: four times)
     };
 
@@ -111,6 +116,8 @@ private:
     uint32_t next_execute_{0};
     bool started_{false};
     bool rebuilding_{false};       // a stall used the buffer up: collecting target + 1 turns again (stall_ms_ goes on counting meanwhile)
+    bool rebuild_has_first_{false};      // ... and a turn has been queued meanwhile: the oldest queued turn was read at rebuild_first_ms_ (the wait for the rest is bounded by it)
+    uint64_t rebuild_first_ms_{0};
     bool in_stall_{false};         // a tick was due and had no turn, and no tick has run since
     bool stall_told_{false};       // ... and the jitter buffer has been told how long the wait was (when the late turn came)
     uint32_t acc_q_{0};            // game time owed to the next tick, in quarters of a millisecond

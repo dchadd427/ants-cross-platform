@@ -18,7 +18,9 @@
 //            that one more turn would have bridged, or nearly): one more at once, whatever the numbers say (they may have been taken in the shadow of the stall). A turn that
 //            is later than that (a lost packet that the link resends, a host that paused) is not bridged by one more turn, and a buffer for it would cost every command
 //            50 ms more for as long as it stays: the stall is the price, as with the 5 % of turns that the percentile leaves out. A wait of 1.5 s or more (a frozen link, a
-//            host that stopped sealing) starts the measuring afresh: what was seen before it describes a link that is gone, and the turns that come after it show the new one
+//            host that stopped sealing) starts the measuring afresh: what was seen before it describes a link that is gone, and the turns that come after it show the new one;
+//            the bunch that a freeze of 400 ms or more held back is not counted either (one freeze is not jitter: it would keep the buffer at four turns for ten seconds and make
+//            it step down for twenty more, and no buffer of this system bridges it)
 //   shrink   slowly: a step of one turn after 10 s without a stall during which the lateness would have needed fewer; the next step 10 s later (a spike that was
 //            seen once is not forgotten at once: the next one may be near)
 //   hitches  a frame that stood for more than 100 ms (a window that is hardly drawn, a hitch of the machine) reads all the turns that came meanwhile at once: their read
@@ -44,6 +46,8 @@ public:
         uint32_t hitch_ms = 100;           // a frame longer than this is not a measurement of the link (see above)
         uint32_t stall_grow_max_ms = 100;  // a stall that lasted longer than this (the late turn came more than two turns after it was due) does not grow the buffer
         uint32_t reset_after_ms = 1500;    // a stall of this length forgets the turns read before it
+        uint32_t freeze_ms = 400;          // a wait of this length is a freeze (not jitter): the turns that are read in the next freeze_skip_ms are not counted, see below
+        uint32_t freeze_skip_ms = 500;
     };
 
     JitterBuffer() : JitterBuffer(Config{}) {}
@@ -53,7 +57,11 @@ public:
     /// one waited longest. Frames longer than hitch_ms are not counted.
     void on_arrivals(uint32_t first_turn, uint32_t count, uint64_t now_ms, uint32_t frame_ms);
     /// The runner had to run a turn and had none, and the turn that came after `stall_ms` of waiting (0: not known) is the first since. The buffer grows by a turn at once
-    /// (up to max_turns) when the wait was short (stall_grow_max_ms); a wait of reset_after_ms or more forgets the turns that were read before it.
+    /// (up to max_turns) when the wait was short (stall_grow_max_ms); a wait of reset_after_ms or more forgets the turns that were read before it. A wait of freeze_ms or more
+    /// is a FREEZE: the turns that are read in the next freeze_skip_ms are left out of the percentile. The first of them waited the whole freeze and the others are what it held
+    /// back (a bunch of ten or more turns: the 5 % that the percentile leaves out), so their lateness is that of one freeze, not of the link; counted, they asked for four
+    /// turns for the next ten seconds, and the buffer stepped down a turn per ten seconds after that: half a minute of 100 - 150 ms more delay for a link that froze once, and
+    /// no buffer of four turns (200 ms) bridges a freeze of 400 ms or more anyway. Shorter waits, and a link that is jittery before or after a freeze, are counted as before.
     void on_stall(uint64_t now_ms, uint32_t stall_ms = 0);
 
     /// The turns read so far are forgotten (the buffer itself stays as it is, and shrinks at its own pace). For a clock that jumped: what was measured before and what comes
@@ -84,6 +92,8 @@ private:
     size_t filled_{0};
     size_t next_{0};
     uint64_t last_change_ms_{0};                     // the last time the target grew or shrank, or a stall was seen: the shrink waits shrink_after_ms from there
+    uint64_t skip_until_ms_{0};                      // arrivals read before this time are the bunch of a freeze (see on_stall) and are not counted
+    bool skipping_{false};
     bool seen_{false};
 };
 

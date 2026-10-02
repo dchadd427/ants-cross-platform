@@ -40,7 +40,9 @@ void JitterBuffer::on_arrivals(uint32_t first_turn, uint32_t count, uint64_t now
         seen_ = true;
         last_change_ms_ = now_ms;                          // (the first shrink is due shrink_after_ms after the first look at the link)
     }
-    if (count > 0 && frame_ms <= cfg_.hitch_ms) {
+    const bool freeze_bunch = skipping_ && now_ms < skip_until_ms_;            // the turns that a freeze held back (on_stall): not the link's lateness
+    if (skipping_ && !freeze_bunch) skipping_ = false;
+    if (count > 0 && frame_ms <= cfg_.hitch_ms && !freeze_bunch) {
         // Every turn of the bunch was read now: the turn numbered k has "read time - k * turn_ms" = now - k * turn_ms. Only the last kSamples of a long bunch can count.
         const uint32_t skip = count > kSamples ? count - static_cast<uint32_t>(kSamples) : 0u;
         for (uint32_t i = skip; i < count; ++i) {
@@ -51,7 +53,7 @@ void JitterBuffer::on_arrivals(uint32_t first_turn, uint32_t count, uint64_t now
     if (want > target_) {
         target_ = want;
         last_change_ms_ = now_ms;
-    } else if (want < target_ && now_ms - last_change_ms_ >= cfg_.shrink_after_ms) {
+    } else if (filled_ >= kMinSamples && want < target_ && now_ms - last_change_ms_ >= cfg_.shrink_after_ms) {      // (no evidence, no step down: a forgotten link asks for nothing)
         --target_;
         last_change_ms_ = now_ms;
     }
@@ -59,6 +61,10 @@ void JitterBuffer::on_arrivals(uint32_t first_turn, uint32_t count, uint64_t now
 
 void JitterBuffer::on_stall(uint64_t now_ms, uint32_t stall_ms) {
     if (stall_ms >= cfg_.reset_after_ms) forget();         // the link that was measured is gone (a frozen link, a host that paused): measure the one that comes
+    if (stall_ms >= cfg_.freeze_ms) {                      // a freeze, not jitter: the bunch that it held back says how long it was, not how rough the link is
+        skipping_ = true;
+        skip_until_ms_ = now_ms + cfg_.freeze_skip_ms;
+    }
     if (stall_ms > cfg_.stall_grow_max_ms) return;         // no buffer of this system bridges it (see the head of this file): the stall is its price
     target_ = std::min(cfg_.max_turns, std::max(target_ + 1, wanted()));
     last_change_ms_ = now_ms;

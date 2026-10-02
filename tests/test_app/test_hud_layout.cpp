@@ -2269,9 +2269,21 @@ void test_net_overlay() {
     check(net_overlay_line(in).text == "Bob is the host now.", "overlay: a seat that does not exist is no notice");
     in.lag_seat = 0;
     in.lag_name = "Ann";
+    // the server's word that THIS player is the one who lags (its link is slow: nothing is queued in its game, so nothing else tells it): before the notice about the others
+    in.self_lag_behind_ms = 12000;
+    check(net_overlay_line(in).text == "You are lagging (12 s behind)" && !net_overlay_line(in).alarm, "overlay: a player whose own link is slow is told that it lags, in seconds");
+    in.self_lag_behind_ms = 12499;
+    check(net_overlay_line(in).text == "You are lagging (12 s behind)", "overlay: the own notice rounds like the others': 12.499 s is 12 s");
+    in.self_lag_behind_ms = 12500;
+    check(net_overlay_line(in).text == "You are lagging (13 s behind)", "overlay: 12.5 s is 13 s");
+    in.self_lag_behind_ms = 3000;
+    check(net_overlay_line(in).text == "You are lagging (3 s behind)", "overlay: from 3 s");
+    in.self_lag_behind_ms = 0;
+    check(net_overlay_line(in).text == "Ann is lagging (59 s behind)", "overlay: no notice about itself: the one about the others shows");
+    in.self_lag_behind_ms = 8000;
     // this machine's own state comes before the others'
     in.catching_up = true;
-    check(net_overlay_line(in).text == "Catching up...", "overlay: a machine that is more than 3 s behind says so before it says who else lags");
+    check(net_overlay_line(in).text == "Catching up...", "overlay: a machine that is more than 3 s behind says so before it says who else lags (and before it says that it lags)");
     in.stalled_ms = 999;
     check(net_overlay_line(in).text == "Catching up...", "overlay: a wait shorter than a second is not shown");
     in.stalled_ms = 1000;

@@ -888,23 +888,26 @@ void Application::run_frame_with_delta(float delta_time) {
     // The network's clock keeps real time (a frame counts for at most a second of it), unlike the local simulation's below: the lock-step runner has its own bounds (it pays
     // back at most 400 ms and runs the rest down at double speed). With the clamp a hitch of 400 ms left three turns standing in its queue for the rest of the match.
     const float net_delta_time = std::min(delta_time, 1.0f);
+    // The frame rate counter is the real rate down to one frame a second: a frame counts for at most a second here as it does for the network's clock (with the local
+    // simulation's clamp of 100 ms below, every rate under 10 frames a second read "10 FPS")
+    const float fps_delta_time = net_delta_time;
 
     // Clamp delta_time to prevent physics / tick spiral when tab or window is backgrounded
     if (delta_time > 0.100f) {
         delta_time = 0.100f;
     }
 
-    if (delta_time > 0.0001f) {
-        float instant_fps = 1.0f / delta_time;
+    if (fps_delta_time > 0.0001f) {
+        float instant_fps = 1.0f / fps_delta_time;
         current_fps_ = current_fps_ * 0.9f + instant_fps * 0.1f;
 
-        // Record frametime in ms for sparkline
+        // Record frametime in ms for sparkline (the bars end at 33 ms: a longer frame is a full bar either way)
         float frame_ms = delta_time * 1000.0f;
         frametime_history_[frametime_index_] = frame_ms;
         frametime_index_ = (frametime_index_ + 1) % SPARKLINE_SAMPLES;
 
         // Rolling average: update displayed FPS every 250ms (~4 times/sec) for clear, stable readability
-        fps_time_accumulator_ += delta_time;
+        fps_time_accumulator_ += fps_delta_time;
         fps_frame_counter_++;
         if (fps_time_accumulator_ >= 0.25f) {
             fps_display_value_ = static_cast<float>(fps_frame_counter_) / fps_time_accumulator_;
@@ -1508,8 +1511,8 @@ void Application::handle_net_events() {
             case net::NetGame::Event::Type::Cancelled:               // the start failed: back in the room, the host's controls work again
                 map_select_.unlock();
                 break;
-            case net::NetGame::Event::Type::HostLeft:                // the host is gone and no other machine could take over
-                net_notice_ = "The connection to the other players was lost.";
+            case net::NetGame::Event::Type::HostLeft:                // the host is gone and no other machine could take over (or the server dropped this player for being away)
+                net_notice_ = net_->status_text();                   // the reason, as the network layer says it: "The connection to the other players was lost." or "You were away too long ..."
                 if (state_ == AppState::Playing && !scorecard_.is_open()) return_to_map_select();
                 break;
             case net::NetGame::Event::Type::Desync:
@@ -1576,6 +1579,7 @@ void Application::render_net_overlay() {
     const uint8_t slow = net_->laggard();
     if (slow < 4) in.waiting_for = sim_.get_player_name(slow);
     in.catching_up = net_->catching_up();
+    if (const std::optional<uint32_t> self_lag = net_->self_lag_behind_ms()) in.self_lag_behind_ms = *self_lag;
     if (const std::optional<net::NetGame::LagNotice> lag = net_->lag_notice()) {
         in.lag_seat = lag->seat;
         in.lag_name = sim_.get_player_name(lag->seat);
