@@ -5,16 +5,21 @@
 //   * POWER-UPS AND FLOWER DROPPERS by TILE ID (FUN_01007202 at 0x1007202 for ids 62 .. 66, FUN_01007227 at 0x1007227 for the plants of the droppers): the dictionary of a
 //     map names its tiles, and community editors often name these entries "." (the dictionary remap of FUN_0100674e is the identity, 0x10067a5; the name only decides
 //     which graphics load, and the ids of the power-ups and flowers load whatever it says: the table at 0x1001ba8).
-// A level that names no default type (every shipped map) and whose power-ups carry their names plays exactly as before: test 1.7 pins the state hashes of the six shipped maps
-// (taken from the commit before this change); the other tests pin the new behaviour with synthetic levels made here from the bytes of TINY.LVL (nothing of the community
-// library is in the repository).
+// A level that names no default type (every shipped map) and whose power-ups carry their names plays as before, with ONE exception that the review of this change found and that is a
+// change of the lock-step rules: the last frame of an attack clip resumes the saved auto-engage of ANY ant whose engage flag (+0xbc) is set, as the original does (0x101ef4a calls
+// FUN_0101dd6f without a type test), and the flag outlives a change of type, so a combat ant that was ordered away in the middle of an auto-engage and then took another power-up
+// resumes at the end of its next attack, where v0.0.92 left it standing (tests 4.6 and 4.7; test 1.8 pins plays of the shipped maps in which that happens). Test 1.7 pins the state
+// hashes of plays of the six shipped maps with move orders only, which are those of v0.0.92; the other tests pin the new behaviour with synthetic levels made here from the bytes
+// of TINY.LVL (nothing of the community library is in the repository).
 #include "ants_assets/lvl_parser.hpp"
 #include "ants_sim/command.hpp"
 #include "ants_sim/movement_tables.hpp"
 #include "ants_sim/sim_engine.hpp"
 
+#include <algorithm>
 #include <array>
 #include <cstdint>
+#include <cstdlib>
 #include <fstream>
 #include <functional>
 #include <iomanip>
@@ -293,6 +298,134 @@ int equivalence(AntType type, uint16_t tile, const Fixture& fixture, const Scrip
     return diff;
 }
 
+// ---------------------------------------------------------------------------------------------------------------------------------------------------------------
+// A scripted player at the command layer (test 1.8)
+// ---------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+struct Lcg {
+    uint32_t s;
+    explicit Lcg(uint32_t seed) : s(seed) {}
+    uint32_t next() {
+        s = s * 1664525u + 1013904223u;
+        return s >> 8;
+    }
+    uint32_t below(uint32_t n) { return n == 0 ? 0 : next() % n; }
+};
+
+// The plays of test 1.8: `level` is played with the engine seed `seed` and `roster`, and the state hash after each tick of `at` (ascending) is returned. Every half second (every 10
+// ticks) each team of the roster gives ONE order, from its own generator, to one of its ants through the player's command layer (apply_command): a click on a power-up (the nearest or a
+// random one, so that ants change type on the maps that have power-ups or droppers), a Stop, a special click near the ant, an attack on an enemy ant, a click on an enemy hill (a raid) or
+// on a random tile, or a hatch. A team that has fewer points than a hatch costs is given them, as a player who has harvested would have them.
+std::vector<uint64_t> play_with_orders(const LevelData& level, uint8_t roster, uint32_t seed, const std::vector<uint32_t>& at) {
+    SimulationEngine sim;
+    sim.init(level, seed, roster);
+    const int32_t width = static_cast<int32_t>(sim.grid().width());
+    const int32_t height = static_cast<int32_t>(sim.grid().height());
+    std::array<Lcg, 4> rng = {Lcg(seed + 1u), Lcg(seed + 7920u), Lcg(seed + 15839u), Lcg(seed + 23758u)};
+    const auto clamp_x = [&](int32_t x) { return std::min(std::max(x, 0), width - 1); };
+    const auto clamp_y = [&](int32_t y) { return std::min(std::max(y, 0), height - 1); };
+    std::vector<uint64_t> hashes;
+    size_t checkpoint = 0;
+    const uint32_t last = at.empty() ? 0u : at.back();
+    for (uint32_t t = 0; t < last; ++t) {
+        if (t % 10 == 0) {
+            for (uint8_t team = 0; team < 4; ++team) {
+                if ((roster & (1u << team)) != 0 && sim.get_player_score(team) < static_cast<int32_t>(HATCH_COST_POINTS)) sim.set_player_score(team, static_cast<int32_t>(HATCH_COST_POINTS));
+            }
+            std::vector<TileCoord> powerups;
+            const Grid& grid = sim.grid();
+            for (int32_t y = 0; y < height; ++y) {
+                for (int32_t x = 0; x < width; ++x) {
+                    if (grid.get_cell(static_cast<uint32_t>(x), static_cast<uint32_t>(y)).has_powerup()) powerups.push_back(TileCoord{x, y});
+                }
+            }
+            std::array<std::vector<AntSnapshot>, 4> by_team;
+            for (const AntSnapshot& a : sim.get_world_state().ants) {
+                if (a.hp == 0 || a.player_id >= 4) continue;
+                by_team[a.player_id].push_back(a);
+            }
+            std::array<std::vector<TileCoord>, 4> hills;
+            for (const auto& hill : grid.anthills()) {
+                if (hill.team_id < 4) hills[hill.team_id].push_back(TileCoord{hill.x + 1, hill.y + 1});
+            }
+            for (uint8_t team = 0; team < 4; ++team) {
+                if ((roster & (1u << team)) == 0) continue;
+                Lcg& r = rng[team];
+                const std::vector<AntSnapshot>& mine = by_team[team];
+                const uint32_t roll = r.below(100);
+                Command c;
+                c.issuer = team;
+                if (roll < 10) {
+                    c.type = CommandType::Hatch;
+                    (void)sim.apply_command(c);
+                    continue;
+                }
+                if (mine.empty()) continue;
+                const AntSnapshot& lead = mine[r.below(static_cast<uint32_t>(mine.size()))];
+                c.ants.push_back(lead.id);
+                std::vector<TileCoord> enemies;
+                for (uint8_t other = 0; other < 4; ++other) {
+                    if (other == team || (roster & (1u << other)) == 0) continue;
+                    for (const AntSnapshot& a : by_team[other]) enemies.push_back(TileCoord{a.tile_x, a.tile_y});
+                }
+                if (roll < 40 && !powerups.empty()) {
+                    TileCoord best = powerups[r.below(static_cast<uint32_t>(powerups.size()))];
+                    if (r.below(2) == 0) {
+                        int32_t best_distance = 1 << 30;
+                        for (const TileCoord& q : powerups) {
+                            const int32_t d = std::abs(q.x - lead.tile_x) + std::abs(q.y - lead.tile_y);
+                            if (d < best_distance) {
+                                best_distance = d;
+                                best = q;
+                            }
+                        }
+                    }
+                    c.type = CommandType::GroupMove;
+                    c.tile_x = static_cast<int16_t>(best.x);
+                    c.tile_y = static_cast<int16_t>(best.y);
+                } else if (roll < 50) {
+                    c.type = CommandType::Stop;
+                } else if (roll < 68) {
+                    c.type = CommandType::GroupSpecial;
+                    c.tile_x = static_cast<int16_t>(clamp_x(lead.tile_x + static_cast<int32_t>(r.below(7)) - 3));
+                    c.tile_y = static_cast<int16_t>(clamp_y(lead.tile_y + static_cast<int32_t>(r.below(7)) - 3));
+                } else if (roll < 80 && !enemies.empty()) {
+                    const TileCoord e = enemies[r.below(static_cast<uint32_t>(enemies.size()))];
+                    c.type = CommandType::GroupAttack;
+                    c.tile_x = static_cast<int16_t>(e.x);
+                    c.tile_y = static_cast<int16_t>(e.y);
+                } else if (roll < 88) {
+                    std::vector<TileCoord> enemy_hills;
+                    for (uint8_t other = 0; other < 4; ++other) {
+                        if (other == team || (roster & (1u << other)) == 0) continue;
+                        enemy_hills.insert(enemy_hills.end(), hills[other].begin(), hills[other].end());
+                    }
+                    c.type = CommandType::GroupMove;
+                    if (!enemy_hills.empty()) {
+                        const TileCoord h = enemy_hills[r.below(static_cast<uint32_t>(enemy_hills.size()))];
+                        c.tile_x = static_cast<int16_t>(h.x);
+                        c.tile_y = static_cast<int16_t>(h.y);
+                    } else {
+                        c.tile_x = static_cast<int16_t>(r.below(static_cast<uint32_t>(width)));
+                        c.tile_y = static_cast<int16_t>(r.below(static_cast<uint32_t>(height)));
+                    }
+                } else {
+                    c.type = CommandType::GroupMove;
+                    c.tile_x = static_cast<int16_t>(r.below(static_cast<uint32_t>(width)));
+                    c.tile_y = static_cast<int16_t>(r.below(static_cast<uint32_t>(height)));
+                }
+                (void)sim.apply_command(c);
+            }
+        }
+        sim.tick();
+        if (checkpoint < at.size() && t + 1 == at[checkpoint]) {
+            hashes.push_back(sim.state_hash().total);
+            ++checkpoint;
+        }
+    }
+    return hashes;
+}
+
 }  // namespace
 
 int main() {
@@ -381,9 +514,11 @@ int main() {
         ASSERT_TRUE(a.state_hash() == b.state_hash());
     } TEST_END();
 
-    TEST_CASE("1.7 The six shipped maps keep the state hashes they had before the default ant type existed (pinned from the commit before this change: a scripted minute and a quarter, two rosters)") {
+    TEST_CASE("1.7 The six shipped maps keep the state hashes they had before the default ant type existed (pinned from the commit before this change: a scripted minute and a quarter of move orders, two rosters)") {
         // The hashes were taken with the engine of commit 2185be0, which knows nothing of a default ant type; the script is the one below (orders, hatches and the droppers' drops
         // all change the state). If a change of the simulation moves them on purpose, that is a change of the lock-step rules of the network protocol: say so in the changelog.
+        // These plays give move orders only, and v0.0.92 (8fb009a, whose simulation is that of 2185be0) gives the same twelve rows. Plays with power-up pick-ups and attacks are test 1.8,
+        // where the rule of the attack clip's last frame (resume of the auto-engage for any ant that has the flag) shows on the shipped maps.
         struct Pin { const char* map; int roster; uint64_t at0, at800, at1600; };
         static const Pin kPins[] = {
             {"TINY",     0x0F, 0xd40271bb630258ccull, 0x7e4a4676c5e71d91ull, 0x8c5ca460219bf849ull},
@@ -440,6 +575,140 @@ int main() {
         }
         if (!bad.empty()) std::cout << "\n    state hashes moved:" << bad << "\n    ";
         ASSERT_TRUE(bad.empty());
+    } TEST_END();
+
+    TEST_CASE("1.8 Plays of the six shipped maps with power-up pick-ups, attacks, raids and specials (the player's command layer, 8,000 ticks, seed 7, two rosters): pinned; five of the twelve differ from v0.0.92, by the rule of the attack clip's last frame") {
+        // Test 1.7's plays give move orders only, so no ant of a shipped map ever changes type in them. Here a scripted player (play_with_orders) clicks power-ups, attacks, raids and
+        // gives special orders, so ants take power-ups, and the plays differ from v0.0.92 (8fb009a) exactly where the rule of the attack clip's last frame shows: the original calls the
+        // resume of the auto-engage (FUN_0101dd6f) at the end of EVERY attack clip without a type test (0x101ef4a), the engage flag (+0xbc) is cleared only by that resume and by
+        // StartEngaged (0x1020cae) and is not touched by a new order (GoTo) or a pick-up, so a combat ant that was ordered away in the middle of an auto-engage and then took another power-up
+        // (a bomber, fire ant, swimmer ...) still has the flag, and when it attacks later the original sends it back to the saved place where v0.0.92 left it standing (tests 4.6, 4.7).
+        // The columns: the state hash after tick 2000, 4000, 6000 and 8000 as v0.0.92 gave it, and as the engine gives it now. The first ant that differs, in each of the five plays, is an ant of
+        // own type Bomber, Fire or Swimmer with the engage flag set whose saved order is resumed (GAUNTLET 0x0F from tick 2721 on, MEDIUM 0x09 from 5688, GAUNTLET 0x09 from 6749, TREASURE
+        // 0x0F from 6958, TREASURE 0x09 from 7298); with the old condition restored the same plays give v0.0.92's numbers again, tick by tick. TINY, SMALL, ISLANDS and MEDIUM with the
+        // full roster never get there in 8,000 ticks and are the same as in v0.0.92. This is a change of the lock-step rules: a v0.0.92 peer and a newer one can disagree on a shipped
+        // map in such a case (the changelog says so).
+        struct Play {
+            const char* map;
+            int roster;
+            uint64_t v092[4];
+            uint64_t now[4];
+        };
+        static const Play kPlays[] = {
+            {"TINY", 0x0F, {0x5e2a4e436c160678ull, 0x20e6b93285b9be70ull, 0x95a6036e66cde3f2ull, 0x22c46cd28e3082abull},
+             {0x5e2a4e436c160678ull, 0x20e6b93285b9be70ull, 0x95a6036e66cde3f2ull, 0x22c46cd28e3082abull}},
+            {"TINY", 0x09, {0xe04b03e59568ba62ull, 0xc66825bcd1625f87ull, 0xc2b1578ff71ed35eull, 0x58ea06c4c1ff516aull},
+             {0xe04b03e59568ba62ull, 0xc66825bcd1625f87ull, 0xc2b1578ff71ed35eull, 0x58ea06c4c1ff516aull}},
+            {"SMALL", 0x0F, {0x0aa6ec2619cd2b4eull, 0x2bfc87394de142d5ull, 0x193cea108e2ebcd0ull, 0x0e57c435b272c237ull},
+             {0x0aa6ec2619cd2b4eull, 0x2bfc87394de142d5ull, 0x193cea108e2ebcd0ull, 0x0e57c435b272c237ull}},
+            {"SMALL", 0x09, {0xcb4a086f596ade6dull, 0x43bffdc49ef9eb3full, 0x654a73becdcc58d8ull, 0xd5d5fdafaf00c932ull},
+             {0xcb4a086f596ade6dull, 0x43bffdc49ef9eb3full, 0x654a73becdcc58d8ull, 0xd5d5fdafaf00c932ull}},
+            {"MEDIUM", 0x0F, {0x06b6a8de391480efull, 0x2948d82f68b5a61bull, 0x2c603682b63c9edeull, 0xada3f4d2c9c7213cull},
+             {0x06b6a8de391480efull, 0x2948d82f68b5a61bull, 0x2c603682b63c9edeull, 0xada3f4d2c9c7213cull}},
+            {"MEDIUM", 0x09, {0x9d25db3215b8e1d7ull, 0x9e4864555f7e5c39ull, 0x5768fe23f75d6c9eull, 0x351866dd887383e9ull},
+             {0x9d25db3215b8e1d7ull, 0x9e4864555f7e5c39ull, 0xb9b733533541ec1full, 0x9601b830cc9f1f01ull}},
+            {"GAUNTLET", 0x0F, {0x99882d295c80e214ull, 0xa017f03fa8eb2cbdull, 0xcff64a78f647122aull, 0xec558812e7f1ff01ull},
+             {0x99882d295c80e214ull, 0xe9a87c07f7f45bd3ull, 0x7779260cd0c99b17ull, 0x8ae8aad81c47e034ull}},
+            {"GAUNTLET", 0x09, {0x27ecf591e7d88dc9ull, 0x3e8f4b907b0a27ebull, 0xb7951c1d0e9d2956ull, 0xd1d33f68d199510bull},
+             {0x27ecf591e7d88dc9ull, 0x3e8f4b907b0a27ebull, 0xb7951c1d0e9d2956ull, 0xec31809794b99713ull}},
+            {"ISLANDS", 0x0F, {0x5041399949f6d9a8ull, 0xba788499b96239bdull, 0x2478700e0734d088ull, 0xc9fe4d7fda6ff99cull},
+             {0x5041399949f6d9a8ull, 0xba788499b96239bdull, 0x2478700e0734d088ull, 0xc9fe4d7fda6ff99cull}},
+            {"ISLANDS", 0x09, {0x7eaa828e7f5849deull, 0x8eed646b41f324c6ull, 0x133b3688de7c9a65ull, 0x3590055c5320c086ull},
+             {0x7eaa828e7f5849deull, 0x8eed646b41f324c6ull, 0x133b3688de7c9a65ull, 0x3590055c5320c086ull}},
+            {"TREASURE", 0x0F, {0xf4b61683eaf845e0ull, 0x423afcd23afce999ull, 0x822482356efd2f0aull, 0xea8b1d4f2749ab35ull},
+             {0xf4b61683eaf845e0ull, 0x423afcd23afce999ull, 0x822482356efd2f0aull, 0x33cb481bfb17e9e1ull}},
+            {"TREASURE", 0x09, {0xcd56a9d87ac079bfull, 0x97e8643d9a434995ull, 0x15943bccfe19474bull, 0x0a42012d7ba7a43full},
+             {0xcd56a9d87ac079bfull, 0x97e8643d9a434995ull, 0x15943bccfe19474bull, 0x649a3d8a3f771a01ull}},
+        };
+        const std::vector<uint32_t> checkpoints = {2000, 4000, 6000, 8000};
+        std::string bad;
+        int differing_plays = 0;
+        for (const Play& play : kPlays) {
+            LevelData level;
+            ASSERT_TRUE(level.load_from_file(maps_dir() + play.map + ".LVL"));
+            const std::vector<uint64_t> got = play_with_orders(level, static_cast<uint8_t>(play.roster), 7, checkpoints);
+            ASSERT_EQ(got.size(), checkpoints.size());
+            bool differs = false;
+            for (size_t i = 0; i < checkpoints.size(); ++i) {
+                differs = differs || play.v092[i] != play.now[i];
+                if (got[i] == play.now[i]) continue;
+                std::ostringstream o;
+                o << "\n      " << play.map << " roster 0x" << std::hex << play.roster << std::dec << " tick " << checkpoints[i] << ": got " << std::hex << got[i] << ", pinned " << play.now[i] << std::dec;
+                bad += o.str();
+            }
+            differing_plays += differs ? 1 : 0;
+        }
+        if (!bad.empty()) std::cout << "\n    state hashes moved:" << bad << "\n    ";
+        ASSERT_TRUE(bad.empty());
+        ASSERT_EQ(differing_plays, 5);                                       // GAUNTLET and TREASURE with both rosters ... (see above): the plays that the attack clip's rule moves
+    } TEST_END();
+
+    TEST_CASE("1.9 A block-3 index outside the dictionary is no default type, whatever it is (4094 as 11 community maps have it, 38912 as one, the first index past the dictionary): the level loads and plays on with plain workers") {
+        // The original reads its remap table out of bounds there (a word of the heap, FUN_01007025 0x1007057), so there is no behaviour to copy: the remake takes it for "no default"
+        // (Grid::init_from_level) and plays the level exactly as one that says 0x7FFE, tick by tick.
+        const auto plays_like_plain = [&](const LevelData& level, const char* what) {
+            LevelData reference = level;                                     // the same level that says 0x7FFE: only block 3 differs
+            reference.ambient_tile_or_sound = kNoDefault;
+            SimulationEngine plain, odd;
+            plain.init(reference, 5, 0x0F);
+            odd.init(level, 5, 0x0F);
+            ASSERT_EQ(odd.grid().default_ant_tile(), kNoDefault);
+            ASSERT_EQ(odd.grid().default_ant_type(), 0);
+            ASSERT_EQ(odd.get_world_state().ants.size(), 12u);
+            for (const AntSnapshot& a : odd.get_world_state().ants) {
+                ASSERT_EQ(a.type, AntType::Worker);
+                ASSERT_EQ(a.raw_type, AntType::Worker);
+            }
+            ASSERT_TRUE(plain.state_hash() == odd.state_hash());             // the hash mixes the default tile only when a level has one
+            for (int t = 0; t < 400; ++t) {
+                if (t % 100 == 0) {                                          // hatches and walks, so that the engine does something with these workers
+                    plain.set_player_score(0, 400);
+                    odd.set_player_score(0, 400);
+                    (void)plain.try_hatch(0, AntType::Worker, false);
+                    (void)odd.try_hatch(0, AntType::Worker, false);
+                    const uint32_t id = odd.get_world_state().ants.front().id;
+                    plain.apply_command(group(CommandType::GroupMove, 0, 20 + t / 10, 20, {id}));
+                    odd.apply_command(group(CommandType::GroupMove, 0, 20 + t / 10, 20, {id}));
+                }
+                plain.tick();
+                odd.tick();
+                if (!(plain.state_hash() == odd.state_hash())) {
+                    std::cout << "\n    " << what << ": the hashes differ at tick " << t << "\n    ";
+                }
+                ASSERT_TRUE(plain.state_hash() == odd.state_hash());
+            }
+        };
+        // synthetic levels: the dictionary of a community map (1,324 names) and TINY's own (670), the indexes of the library, one that is just past the dictionary
+        for (const uint16_t index : {uint16_t{4094}, uint16_t{38912}, uint16_t{670}}) {
+            plays_like_plain(level_with_default(index), "outside the dictionary of TINY");
+        }
+        LevelData community = level_with_default(4094);
+        community.tile_dictionary.resize(1324);                              // a dictionary of the size of the 11 community maps whose block 3 says 4094
+        plays_like_plain(community, "4094 in a dictionary of 1,324 names");
+        // the boundary: an index equal to the size of the dictionary is outside it (no default), the same index in a dictionary one entry longer is the Combat power-up
+        LevelData edge = level_with_default(62);
+        edge.tile_dictionary.resize(62);
+        Grid g_out;
+        ASSERT_TRUE(g_out.init_from_level(edge));
+        ASSERT_EQ(g_out.default_ant_tile(), kNoDefault);
+        plays_like_plain(edge, "index 62 in a dictionary of 62 names");
+        edge.tile_dictionary.resize(63);
+        Grid g_in;
+        ASSERT_TRUE(g_in.init_from_level(edge));
+        ASSERT_EQ(g_in.default_ant_tile(), 62);
+        // from the bytes of a file, as the loader of the game reads it (TINY with its block 3 changed): the file loads, the finding is a warning, and the engine ignores it
+        for (const uint16_t index : {uint16_t{4094}, uint16_t{38912}}) {
+            std::vector<uint8_t> bytes = read_bytes(maps_dir() + "TINY.LVL");
+            ASSERT_FALSE(bytes.empty());
+            const size_t b3 = block3_offset(bytes);
+            bytes[b3 + 2] = static_cast<uint8_t>(index & 0xFFu);
+            bytes[b3 + 3] = static_cast<uint8_t>(index >> 8);
+            LevelData level;
+            ASSERT_TRUE(level.load_from_memory(bytes.data(), bytes.size()));
+            ASSERT_EQ(level.ambient_tile_or_sound, index);
+            ASSERT_TRUE(index >= level.tile_dictionary.size());
+            plays_like_plain(level, "from the bytes of a file");
+        }
     } TEST_END();
 
     TEST_CASE("1.5 A level load starts from nothing: an engine that plays a level with a default type and then a shipped map has no default") {
@@ -518,6 +787,20 @@ int main() {
         for (int x = 20; x <= 22; ++x) plain.grid_mut().set_terrain(x, 10, TERRAIN_WATER);
         const uint32_t w = plain.spawn_unit(0, AntType::Worker, TileCoord{21, 10});
         ASSERT_EQ(snapshot_of(plain, w)->state, UnitState::Drowning);          // a worker that is put into water drowns
+        // water that appears under an idle ant (the terrain of its cell changes: the tick of the engine looks at every ant): a swimmer gets the water flag and the swimming label, whether
+        // its type is its own or the level's default
+        for (const bool own : {true, false}) {
+            SimulationEngine rise;
+            make_world(rise, own ? kNoDefault : 65);
+            const uint32_t id = rise.spawn_unit(0, own ? AntType::Swimmer : AntType::Worker, TileCoord{21, 10});
+            ASSERT_FALSE(rise.get_unit(id).in_water);
+            ASSERT_TRUE(snapshot_of(rise, id)->state != UnitState::Swimming);
+            rise.set_terrain(21, 10, TERRAIN_WATER);
+            run_ticks(rise, 2);
+            ASSERT_TRUE(rise.get_unit(id).in_water);
+            ASSERT_EQ(snapshot_of(rise, id)->state, UnitState::Swimming);
+            ASSERT_TRUE(snapshot_of(rise, id)->hp > 0);
+        }
     } TEST_END();
 
     TEST_CASE("2.4 The Cancel order of the AntOrder interface leaves the ant with the idle label of the type it is (GuardIdle for a default Combat ant, Swimming for a default Swimmer in water)") {
@@ -933,6 +1216,126 @@ int main() {
         }
     } TEST_END();
 
+    TEST_CASE("4.6 The last frame of an attack clip resumes the saved auto-engage of ANY ant whose engage flag is set, whatever its type (0x101ef4a: FUN_0101dd6f, no type test): a thief, bomber, fire ant or swimmer that still has the flag goes back to the saved place") {
+        // The engage flag (+0xbc) is written only by the constructor, by AttackTile (0x101daa5, set), by the resume (0x101dde3, clear) and by StartEngaged for a combat ant (0x1020cae); a new
+        // order (GoTo) and a pick-up leave it alone, so an ant that was a combat ant, was ordered away in the middle of an auto-engage and then took another power-up still has it. The
+        // flag and the saved order are set by hand here (test 4.7 gets there by playing); v0.0.92 asked `own type == Combat` first and left such an ant standing at the end of its attack.
+        for (AntType type : {AntType::Thief, AntType::Bomber, AntType::Fire, AntType::Swimmer}) {
+            SimulationEngine sim;
+            make_world(sim, kNoDefault);
+            const uint32_t a = sim.spawn_unit(0, type, TileCoord{10, 10});
+            const uint32_t e = sim.spawn_unit(1, AntType::Worker, TileCoord{11, 10});      // an enemy next to it
+            AntUnit& u = sim.get_unit(a);
+            u.auto_engage = true;                                                          // the stale flag of an earlier life as a combat ant ...
+            u.ae_order = AntUnit::kOrderNone;                                              // ... with the order that it saved then: stand at (20, 10) (a plain move)
+            u.ae_target = TileCoord{20, 10};
+            u.ae_home_state = 0;
+            ASSERT_TRUE(sim.apply_command(group(CommandType::GroupAttack, 0, 11, 10, {a})).accepted());
+            run_ticks(sim, 80);
+            ASSERT_TRUE(sim.get_unit(e).hp < 10u);                                         // it punched
+            ASSERT_FALSE(sim.get_unit(a).auto_engage);                                     // the resume gave the saved order again and cleared the flag
+            ASSERT_TRUE(sim.get_unit(a).pos != (TileCoord{10, 10}));                       // and the ant is on its way to the saved tile ...
+            int arrived = -1;
+            for (int t = 0; t < 400 && arrived < 0; ++t) {
+                sim.tick();
+                if (sim.get_unit(a).pos == (TileCoord{20, 10}) && sim.get_unit(a).waypoints.empty()) arrived = t;
+            }
+            ASSERT_TRUE(arrived >= 0);                                                     // ... where it stands in the end
+        }
+        // an ant without the flag ends its attack and its order, as ever: a thief with the order to attack stands where it hit
+        SimulationEngine control;
+        make_world(control, kNoDefault);
+        const uint32_t c = control.spawn_unit(0, AntType::Thief, TileCoord{10, 10});
+        control.spawn_unit(1, AntType::Worker, TileCoord{11, 10});
+        ASSERT_TRUE(control.apply_command(group(CommandType::GroupAttack, 0, 11, 10, {c})).accepted());
+        run_ticks(control, 300);
+        ASSERT_EQ(control.get_unit(c).pos, (TileCoord{10, 10}));
+        ASSERT_FALSE(control.get_unit(c).auto_engage);
+    } TEST_END();
+
+    TEST_CASE("4.7 The same on the player's path: a combat ant starts an auto-engage, is ordered away, takes a Thief power-up and attacks: at the end of that attack it goes back to where the engage began (v0.0.92 left it standing)") {
+        SimulationEngine sim;
+        make_world(sim, kNoDefault);
+        sim.grid_mut().place_powerup(10, 20, 3);                                          // a Thief power-up
+        const uint32_t a = sim.spawn_unit(0, AntType::Combat, TileCoord{10, 10});
+        sim.spawn_unit(1, AntType::Worker, TileCoord{40, 40});                            // id 2: far away
+        sim.spawn_unit(1, AntType::Worker, TileCoord{13, 10});                            // id 3: within three tiles of the idle combat ant, which the reflex finds after 2 s
+        int engaged = -1;
+        for (int t = 0; t < 200 && engaged < 0; ++t) {
+            sim.tick();
+            if (sim.get_unit(a).auto_engage) engaged = t;
+        }
+        ASSERT_TRUE(engaged >= 0);                                                        // the reflex started (the flag is +0xbc, the saved place is where the ant stood)
+        ASSERT_EQ(sim.get_unit(a).ae_target, (TileCoord{10, 10}));
+        ASSERT_TRUE(sim.get_unit(a).combevt_due_ms != 0);                                 // with its COMBEVT timer
+        // the player sends it away in the middle of the engage: GoTo cancels the timer and does not touch the flag
+        ASSERT_TRUE(sim.apply_command(group(CommandType::GroupMove, 0, 10, 20, {a})).accepted());
+        ASSERT_TRUE(sim.get_unit(a).auto_engage);
+        ASSERT_EQ(sim.get_unit(a).combevt_due_ms, 0u);
+        run_ticks(sim, 400);                                                              // it walks onto the power-up and takes it: a Thief now (own type 3)
+        ASSERT_EQ(sim.get_unit(a).type, AntType::Thief);
+        ASSERT_EQ(sim.get_unit(a).pos, (TileCoord{10, 20}));
+        ASSERT_TRUE(sim.get_unit(a).auto_engage);                                         // the pick-up did not touch the flag either
+        // now it attacks an enemy that stands next to it
+        const TileCoord at = sim.get_unit(a).pos;
+        const uint32_t victim = sim.spawn_unit(1, AntType::Worker, TileCoord{at.x + 1, at.y});
+        ASSERT_TRUE(sim.apply_command(group(CommandType::GroupAttack, 0, at.x + 1, at.y, {a})).accepted());
+        run_ticks(sim, 80);
+        ASSERT_EQ(sim.get_unit(victim).hp, 9u);                                           // the thief's punch
+        ASSERT_FALSE(sim.get_unit(a).auto_engage);                                        // the end of the attack clip resumed the saved engage ...
+        ASSERT_TRUE(sim.get_unit(a).pos.y < at.y);                                        // ... and the ant is on its way back
+        run_ticks(sim, 400);
+        ASSERT_EQ(sim.get_unit(a).pos, (TileCoord{10, 10}));                              // to the place where it stood when the engage began
+    } TEST_END();
+
+    TEST_CASE("4.8 The InfiltrateAnthill order of the AntOrder interface (only tests give one: the game's group orders are AntOrders of the Move type) reads the own type at an enemy hill as GoTo does: a worker of a default Thief level does not raid, a thief does") {
+        // InfiltrateAnthill: without a team the order looks the hill up by the clicked tile, with one it takes the team (sim_engine.cpp issue_order); a thief's goal is the raid tile of the
+        // hill (x + 3, y + 2), every other ant's the middle (x + 1, y + 1), and an ant that stands on the goal starts the raid at once. The workers of a default Thief level have the own type 0,
+        // so they take the middle (0x101fcb7 reads +0x54): a worker that stands on the middle starts the raid, a thief that stands there walks to the raid tile.
+        for (const bool explicit_team : {false, true}) {
+            SimulationEngine sim;
+            make_world(sim, 63);                                                          // the default type is Thief
+            const uint32_t worker = sim.spawn_unit(0, AntType::Worker, TileCoord{51, 51});     // the middle of team 1's hill (50, 50)
+            const uint32_t thief = sim.spawn_unit(0, AntType::Thief, TileCoord{52, 51});
+            AntOrder order;
+            order.type = OrderType::InfiltrateAnthill;
+            order.target_x = explicit_team ? 0 : 51;
+            order.target_y = explicit_team ? 0 : 51;
+            order.target_entity_id = explicit_team ? 1 : -1;
+            order.ant_id = worker;
+            ASSERT_TRUE(sim.issue_order(order));
+            ASSERT_EQ(sim.get_unit(worker).loco_action, AntUnit::kActionRaid);           // the middle is its goal: the raid clip starts
+            order.ant_id = thief;
+            order.target_x = explicit_team ? 0 : 51;
+            order.target_y = explicit_team ? 0 : 51;
+            ASSERT_TRUE(sim.issue_order(order));
+            ASSERT_TRUE(sim.get_unit(thief).loco_action != AntUnit::kActionRaid);        // its goal is the raid tile (53, 52): it walks there first
+        }
+    } TEST_END();
+
+    TEST_CASE("4.9 The ability entry points (a test and tool interface) start the clip of the type that the ant IS: a worker of a default Bomber, Fire or Swimmer level plants, lights and builds like the ant of that own type") {
+        // plant_bomb, ignite_fire and build_bridge_step without `instant` ask whether the ant is ready for the ability of the type (type, not engaged, not frozen, action 0, 1 or 3): the
+        // type is the getter's (0x100f9cb), so a worker of a default level qualifies, and an ant that already works does not
+        for (int k = 0; k < 3; ++k) {
+            const uint16_t tile = k == 0 ? 64 : k == 1 ? 66 : 65;                          // Bomber, Fire, Swimmer
+            SimulationEngine sim;
+            make_world(sim, tile);
+            sim.set_terrain(12, 10, TERRAIN_WATER);                                        // water for the bridge, next to the ant at (11, 10)
+            const uint32_t a = sim.spawn_unit(0, AntType::Worker, TileCoord{11, 10});
+            const TileCoord target = k == 2 ? TileCoord{12, 10} : TileCoord{11, 11};
+            const bool started = k == 0 ? sim.plant_bomb(a, target, false) : k == 1 ? sim.ignite_fire(a, target, false) : sim.build_bridge_step(a, target);
+            ASSERT_TRUE(started);
+            run_ticks(sim, 2);
+            ASSERT_TRUE(sim.get_unit(a).state == (k == 0 ? UnitState::PlantingBomb : k == 1 ? UnitState::PlacingFire : UnitState::BuildingBridge));
+            const bool again = k == 0 ? sim.plant_bomb(a, TileCoord{10, 10}, false) : k == 1 ? sim.ignite_fire(a, TileCoord{10, 10}, false) : sim.build_bridge_step(a, TileCoord{12, 10});
+            ASSERT_FALSE(again);                                                           // busy with the clip: not ready
+        }
+        SimulationEngine plain;                                                            // a worker of a level without a default has no ability at all
+        make_world(plain, kNoDefault);
+        const uint32_t w = plain.spawn_unit(0, AntType::Worker, TileCoord{11, 10});
+        ASSERT_FALSE(plain.plant_bomb(w, TileCoord{11, 11}, false));
+    } TEST_END();
+
     // ===================================================================================================================================================================
     // 5. Power-ups are tile ids: a dictionary that calls them "." changes nothing
     // ===================================================================================================================================================================
@@ -1124,7 +1527,11 @@ int main() {
         ASSERT_EQ(sim.get_world_state().flower_droppers.size(), 0u);
     } TEST_END();
 
-    TEST_CASE("6.5 The record is looked up by the first one at the plant's cell (FUN_01008d79), and two plants of one record are one dropper") {
+    TEST_CASE("6.5 The record is looked up by the first one at the plant's cell (FUN_01008d79), and the remake makes one dropper of two plants that share a record (the original may post twice in a poll there, which no map can show)") {
+        // The original: the stamp (+0x18) is the record's, but the poll compares the elapsed time with the clock that it took at its start as an UNSIGNED difference (0x100fcf2 - 0x100fcf4: `cmp ecx, eax; jbe`)
+        // and a drop renews the stamp with a LATER timeGetTime (0x100fdb8), so the second plant of the record, further down the same poll, can see a "negative" elapsed time (a huge unsigned number) and
+        // drop too, when the clock has moved by a millisecond in between. That wall-clock effect cannot be copied by a lock-step engine, and no map of the library has two plants on a cell that has a
+        // record (0 of 540), so the remake keeps the one dropper per record that is deterministic: this test pins that.
         LevelData level = level_with_dropper(421, ".", 15, 20, 0, 5, {1.0, 0.0, 0.0, 0.0, 0.0});      // the first record at the cell has the flag 0
         Waypoint second;
         second.x = 15;
@@ -1143,6 +1550,60 @@ int main() {
         SimulationEngine sim;
         sim.init(shared, 3, 0x0F);
         ASSERT_EQ(sim.get_world_state().flower_droppers.size(), 1u);
+    } TEST_END();
+
+    TEST_CASE("6.6 The plants of block 1 (the world objects that the minimap shows) are the records whose tile id has the plant flag 0x10 OR the effect flag 0x20; only the 0x10 ones can be droppers") {
+        // 0x100e3b0 - 0x100e436 makes a world object of every record whose id has 0x10 or 0x20 (the flowers and clovers, and the effect animations dsplash, bombex, sputter, the droplets:
+        // 40, 53, 133, 135, 230, 422 .. 426, 1177); the dropper task (0x100fc78, FUN_01007227) takes the 0x10 ids only. A record of any other id is no world object.
+        for (const uint16_t id : {uint16_t{40}, uint16_t{53}, uint16_t{133}, uint16_t{135}, uint16_t{230}, uint16_t{422}, uint16_t{423}, uint16_t{424}, uint16_t{425}, uint16_t{426}, uint16_t{1177}}) {
+            ASSERT_TRUE(movement::is_plant_object_tile(id));
+            ASSERT_FALSE(movement::is_dropper_plant_tile(id));
+        }
+        for (const uint16_t id : {uint16_t{404}, uint16_t{405}, uint16_t{406}, uint16_t{407}, uint16_t{408}, uint16_t{410}, uint16_t{411}, uint16_t{412}, uint16_t{413}, uint16_t{414}, uint16_t{415},
+                                  uint16_t{416}, uint16_t{420}, uint16_t{421}}) {
+            ASSERT_TRUE(movement::is_plant_object_tile(id));
+            ASSERT_TRUE(movement::is_dropper_plant_tile(id));
+        }
+        for (const uint16_t id : {uint16_t{0}, uint16_t{61}, uint16_t{62}, uint16_t{100}, uint16_t{403}, uint16_t{409}, uint16_t{417}, uint16_t{419}, uint16_t{427}, uint16_t{1343}, uint16_t{1344}, uint16_t{4094}}) {
+            ASSERT_FALSE(movement::is_plant_object_tile(id));
+            ASSERT_FALSE(movement::is_dropper_plant_tile(id));
+        }
+        // a level with one record of each kind, every one of them with a block 4 record that has a flag
+        LevelData level = tiny_level();
+        struct Record {
+            uint16_t id;
+            uint16_t x;
+        };
+        const Record records[] = {{410, 15}, {426, 17}, {133, 19}, {100, 21}, {62, 23}, {409, 25}, {40, 27}};      // a flower, three effects, a rock, a power-up, a solid id
+        for (const Record& r : records) {
+            AnthillSpawn sp;
+            sp.tile_id = r.id;
+            sp.x = r.x;
+            sp.y = 20;
+            sp.team_id = 255;
+            level.anthill_spawns.push_back(sp);
+            Waypoint wp;
+            wp.x = r.x;
+            wp.y = 20;
+            wp.flag = 1;
+            wp.param = 5;
+            wp.probabilities = {1.0, 0.0, 0.0, 0.0, 0.0};
+            level.waypoints.push_back(wp);
+        }
+        Grid g;
+        ASSERT_TRUE(g.init_from_level(level));
+        ASSERT_EQ(g.plants().size(), 4u);                                                // the flower, the effects 426, 133 and 40
+        ASSERT_EQ(g.plants()[0].tile_id, 410);
+        ASSERT_EQ(g.plants()[1].tile_id, 426);
+        ASSERT_EQ(g.plants()[2].tile_id, 133);
+        ASSERT_EQ(g.plants()[3].tile_id, 40);
+        ASSERT_EQ(g.plants()[1].x, 17);
+        ASSERT_EQ(g.plants()[1].y, 20);
+        SimulationEngine sim;
+        sim.init(level, 3, 0x0F);
+        ASSERT_EQ(sim.get_world_state().plants.size(), 4u);                              // what the minimap draws
+        ASSERT_EQ(sim.get_world_state().flower_droppers.size(), 1u);                     // but only the flower can drop
+        ASSERT_EQ(sim.get_world_state().flower_droppers[0].x, 15);
     } TEST_END();
 
     std::cout << "\n=======================================================\n"

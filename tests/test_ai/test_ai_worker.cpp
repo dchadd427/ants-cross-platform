@@ -24,6 +24,7 @@
 //   AI3.20  the watchdog never stops a carrier on its way home
 //   AI3.21  the watchdog halves the ants ordered at one look after a jam; the default task orders 8 at a look
 //   AI3.22  the map as it is now is asked with the seat's rules of the moment (a dropped team's queue row is open) and from the hill's whole queue row (a rock on its middle tile)
+//   AI3.23  a level with a default ant type (LVL block 3: some community maps): its workers are the ants of that type; a stuck carrier is rescued and the pool works the others
 //
 // W_ONLY=AI3.4 (or AI3.4,AI3.7) runs only the tests with exactly that number, W_SKIP=AI3.9,AI3.12 leaves those out; a filter that leaves no test makes the program fail.
 #include "ai_test.hpp"
@@ -2076,6 +2077,46 @@ void run_worker_tests() {
             ASSERT_TRUE(ordered >= 1u);                                                                       // a field from the middle tile alone (a rock) says "shut in" for ever
             step_all(sim, c, 3000);
             ASSERT_TRUE(units_left(sim, 0) < 30u && score_of(sim, 0) > 0);                                    // the pile is worked, the food comes home past the rock
+        }
+    } TEST_END();
+
+    WORKER_TEST("AI3.23 On A Level With A Default Ant Type The Ants That Work Are The Ants Of That Type: A Stuck Carrier Is Rescued, And The Pool Works The Others (The Task Asks The View's default_ant_type(), Not \"Worker\")") {
+        // The first block of AI3.5 on levels whose block 3 names the Thief (63) or the Bomber (64) power-up: every worker of such a level is of that type, its AntView::type says so, and a
+        // bot that took only the type Worker for a worker would find no carrier to rescue (it would not find the pool either: the others would never go to work).
+        for (const uint16_t tile : {uint16_t{63}, uint16_t{64}}) {
+            sim::SimulationEngine sim;
+            world(sim);
+            sim.grid_mut().set_default_ant_tile(tile);
+            const int32_t a = pile(sim, 14, 8, 30, 25);
+            const uint32_t stuck = sim.spawn_unit(0, sim::AntType::Worker, TileCoord{20, 20});
+            sim.get_unit(stuck).pick_up_food(1, 25);
+            Driver d(sim, 0, profile_for(Level::Medium), std::make_unique<WorkerBot>());
+            const TileCoord a_click = d.map().piles()[static_cast<size_t>(a)].approach[0].click;
+            const TileCoord entrance = d.map().hill(0).entrance;
+            const BotView view = BotView::build(sim, 0, &d.map());
+            ASSERT_EQ(view.default_ant_type(), static_cast<sim::AntType>(tile == 63 ? 3 : 1));
+            const AntView* seen = nullptr;
+            for (const AntView& v : view.mine()) seen = v.id == stuck ? &v : seen;
+            ASSERT_TRUE(seen != nullptr && seen->type == view.default_ant_type() && seen->holding);       // a worker of this level, with its food: the sprite is that of the default type
+            d.run(30);
+            ASSERT_EQ(d.worker()->harvest().rescues(), 0u);                                                   // not yet: it may only just have stopped
+            ASSERT_TRUE(holds(sim, stuck));
+            uint64_t emptied = 0;
+            for (uint64_t t = 0; t < 500; ++t) {
+                d.tick();
+                if (emptied == 0 && !holds(sim, stuck)) emptied = sim.current_tick();
+            }
+            ASSERT_EQ(d.worker()->harvest().rescues(), 1u);                                                   // the idle carrier was seen, and sent home
+            ASSERT_TRUE(emptied > 100 && emptied < 400);                                                      // it walked to the hill and delivered
+            ASSERT_TRUE(score_of(sim, 0) >= 25);
+            size_t to_hill = 0;
+            for (const auto& e : d.sent) {
+                if (!names(e.second, stuck) || e.first > emptied) continue;
+                ASSERT_TRUE(e.second.type == CommandType::GroupMove && e.second.tile_x == entrance.x && e.second.tile_y == entrance.y && e.second.ants.size() == 1);
+                ++to_hill;
+            }
+            ASSERT_EQ(to_hill, 1u);
+            ASSERT_TRUE(group_moves_to(d.sent, a_click) >= 1);                                                // the others work the pile (the pool is the ants of the default type)
         }
     } TEST_END();
 }

@@ -456,7 +456,9 @@ void SimulationEngineImpl::loco_on_step(AntUnit& a, StepEvt& e) {
 }
 
 // Step callback, action 0x12 at the last frame (0x101ef14): idle again; an ant that is in its auto-engage resumes the order it had before
-// (FUN_0101dd6f, called at 0x101ef4a without any look at the ant's type: only a combat ant ever has the engage flag +0xbc), every other ant ends its order (SetPath(0)).
+// (FUN_0101dd6f, called at 0x101ef4a without any look at the ant's type: it tests the engage flag +0xbc alone, and the flag outlives a change of type: only AttackTile sets it and
+// only the resume and StartEngaged clear it, so a combat ant that was ordered away in the middle of an engage and then took another power-up still has it, and resumes here),
+// every other ant ends its order (SetPath(0)).
 void SimulationEngineImpl::attack_clip_end(AntUnit& a) {
     set_action(a, AntUnit::kActionIdle, static_cast<uint8_t>(a.facing), -1, -1, false);
     if (!resume_after_auto_engage(a)) {

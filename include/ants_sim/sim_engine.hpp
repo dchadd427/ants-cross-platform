@@ -250,6 +250,10 @@ struct AntSnapshot {
     int32_t  burn_elapsed_ms{-1};       // dud burn overlay (?bu) time since it started, -1 = none
     bool     frozen{false};             // +0xfc: the display loop skips a frozen ant (only its ?bu overlay is drawn)
     UnitState state{UnitState::Idle};
+    /// The ant's current action as the original numbers it (+0xe4, the engine's orig_action_of: 0 idle, 1 walking, 3 stunned, 4 power-up, 6 .. 9 fire and bombs, 0x12 attack ...).
+    /// The ant type getter with flag 1, FUN_0100f9cb(ant, 1), which the cursor and the right click ask (FUN_010282e0(1)), answers Worker for an ant whose own type is Bomber, Fire or
+    /// Swimmer while this is anything but 0, 1 or 3 (0x100f9eb - 0x100fa27); a hand-made snapshot that leaves it 0 is an ant that is ready for orders
+    uint8_t  action{0};
     uint8_t  target_team_id{255};
 
     // Original locomotion animation (idle / walk / swim / dive / climb / can't-go) currently shown, exactly

@@ -1,7 +1,8 @@
 // Pointer model tests (stage I): the ant hit boxes, the cursor decision table, the click by cursor mode, the rubber band and the release of the
 // left button, the right button, the command pedestals, the keyboard table and the button class as Ants.exe does them (FUN_01026904 / FUN_01026a39 / FUN_01026aa3 / FUN_01026f91 /
 // FUN_01027530 / FUN_010277f4 / FUN_01027b51 / FUN_010287b5 / FUN_010274be / FUN_01028d30). docs/GAME_REVERSE_ENGINEERING.md 5.44
-// Also the pointer beyond the picture of a wide window (pointer_clamp.hpp, group pillarbox; docs 5.43, "The pointer and the screen").
+// Also the pointer beyond the picture of a wide window (pointer_clamp.hpp, group pillarbox; docs 5.43, "The pointer and the screen"), the ant type getter's flag 1 that the cursor and the
+// right click ask (a bomber, fire ant or swimmer that is busy is a worker there: group "busy ants", docs 5.62) and the HUD on levels with a default ant type (group "default type").
 #include <algorithm>
 #include <cstdint>
 #include <cstdio>
@@ -936,6 +937,305 @@ void test_right_button() {
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------------
+// The ant type getter with flag 1 (a busy bomber, fire ant or swimmer), and the HUD on levels with a default ant type
+// ---------------------------------------------------------------------------------------------------------------------------------
+
+// What the HUD sends, recorded and applied
+class RecordingSink final : public sim::CommandSink {
+public:
+    explicit RecordingSink(sim::SimulationEngine& sim) : sim_(sim) {}
+    sim::CommandResult submit(const sim::Command& c) override {
+        log.push_back(c);
+        return sim_.apply_command(c);
+    }
+    std::vector<sim::Command> log;
+
+private:
+    sim::SimulationEngine& sim_;
+};
+
+const sim::AntSnapshot* snapshot_of(Fixture& f, uint32_t id) {
+    for (const auto& a : f.world().ants) {
+        if (a.id == id) return &a;
+    }
+    return nullptr;
+}
+
+// FUN_0100f9cb with flag 1: the action (+0xe4) of an ant that takes an order is 0, 1 or 3
+bool takes_orders_now(Fixture& f, uint32_t id) {
+    const sim::AntSnapshot* a = snapshot_of(f, id);
+    return a != nullptr && (a->action == 0 || a->action == 1 || a->action == 3);
+}
+
+void test_busy_ability_ants() {
+    g_group = "busy ants";
+    std::printf("[pointer] the cursor and the right click ask the ant type with flag 1 (FUN_010282e0(1) at 0x1026f9d, 0x1027da6, 0x1027db3): a bomber, fire ant or swimmer that is busy is a worker there, and nothing else is\n");
+    // a bomber: planting a bomb is its busy action (8); walking (1) is not busy
+    {
+        Scene s = make_scene();
+        Fixture& f = *s.f;
+        f.sim.grid_mut().place_bomb(20, 20, 1);                                // an enemy bomb
+        const uint32_t bomber = f.spawn(0, AntType::Bomber, 8, 30);
+        f.settle();
+        f.hud.select_ant(bomber);
+        RecordingSink sink(f.sim);
+        f.hud.set_command_sink(&sink);
+        expect_cursor("a bomber at rest: a bomb is a special target", f.cursor_tile(20, 20), CursorType::Target);
+        sim::Command walk;
+        walk.type = sim::CommandType::GroupMove;
+        walk.issuer = 0;
+        walk.tile_x = 8;
+        walk.tile_y = 40;
+        walk.ants = {bomber};
+        check(f.sim.apply_command(walk).accepted(), "the bomber is sent for a walk");
+        for (int t = 0; t < 10; ++t) f.settle();
+        check(snapshot_of(f, bomber)->action == 1, "it walks (action 1)");
+        expect_cursor("a bomber on its way is still a bomber for the cursor: a bomb is a special target", f.cursor_tile(20, 20), CursorType::Target);
+        f.sim.stop_ant(bomber);
+        for (int t = 0; t < 100 && snapshot_of(f, bomber)->action != 0; ++t) f.settle();
+        check(f.sim.plant_bomb(bomber, TileCoord{snapshot_of(f, bomber)->tile_x + 1, snapshot_of(f, bomber)->tile_y}, false), "the bomber starts to plant a bomb");
+        f.settle();
+        check(!takes_orders_now(f, bomber) && snapshot_of(f, bomber)->action == 8, "and is busy with the planting clip (action 8)");
+        expect_cursor("a bomber that is planting: flag 1 answers worker, so the bomb is no special target", f.cursor_tile(20, 20), CursorType::Move);
+        f.latch_ability();
+        check(f.hud.is_ability_latched(), "the ability pedestal is still the bomber's (the panel asks with flag 0)");
+        expect_cursor("busy and latched: plantable ground is no special target either", f.cursor_tile(18, 20), CursorType::Move);
+        f.hud.unlatch_pedestals();
+        sink.log.clear();
+        f.click_tile(20, 20, SDL_BUTTON_RIGHT);
+        check(sink.log.size() == 1 && sink.log[0].type == sim::CommandType::GroupMove, "a right click on the bomb sends the plain move for a busy bomber");
+        for (int t = 0; t < 200 && !takes_orders_now(f, bomber); ++t) f.settle();
+        check(takes_orders_now(f, bomber), "the planting clip ends");
+        expect_cursor("at rest again: the bomb is a special target", f.cursor_tile(20, 20), CursorType::Target);
+        sink.log.clear();
+        f.click_tile(20, 20, SDL_BUTTON_RIGHT);
+        check(sink.log.size() == 1 && sink.log[0].type == sim::CommandType::GroupSpecial, "and the right click sends the special order");
+    }
+    // a bomber that a dud bomb has frozen under the burn overlay (action 0xA) is busy; when the overlay ends it is stunned (action 3) and takes orders, so it is a bomber again
+    {
+        bool tested = false;
+        for (uint32_t seed = 1; seed < 150 && !tested; ++seed) {
+            Fixture f(seed);
+            f.sim.grid_mut().set_anthill(0, TileCoord{2, 2});
+            f.sim.grid_mut().set_anthill(1, TileCoord{40, 40});
+            f.sim.grid_mut().place_bomb(20, 20, 1);                            // an enemy bomb to point at
+            const uint32_t bomber = f.spawn(0, AntType::Bomber, 15, 15);
+            f.sim.grid_mut().place_bomb(15, 15, 1);
+            f.sim.trigger_bomb_detonation(bomber, TileCoord{15, 15});
+            if (!f.sim.get_unit(bomber).knock_flag) continue;                 // a dud: the ant burns under the overlay and is then stunned (the other seeds are real blasts)
+            f.settle();
+            f.hud.select_ant(bomber);
+            bool saw_burn = false;
+            bool saw_stun = false;
+            for (int t = 0; t < 300 && !saw_stun; ++t) {
+                const sim::AntSnapshot* a = snapshot_of(f, bomber);
+                if (a == nullptr || a->hp == 0) break;
+                if (a->action == 0x0A) {
+                    saw_burn = true;
+                    expect_cursor("a bomber under the burn overlay (action 0xA) is busy: no special target", f.cursor_tile(20, 20), CursorType::Move);
+                }
+                if (a->action == 3) {
+                    saw_stun = true;
+                    expect_cursor("a stunned bomber (action 3) takes orders: the bomb is a special target", f.cursor_tile(20, 20), CursorType::Target);
+                }
+                f.settle();
+            }
+            tested = saw_burn && saw_stun;
+        }
+        check(tested, "a dud seed exists in which the bomber burns and is then stunned");
+    }
+    // a fire ant (igniting a wall is action 6), the pedestal latched: plantable ground
+    {
+        Scene s = make_scene();
+        Fixture& f = *s.f;
+        const uint32_t fire = f.spawn(0, AntType::Fire, 8, 30);
+        f.settle();
+        f.hud.select_ant(fire);
+        f.latch_ability();
+        expect_cursor("a fire ant at rest, the pedestal latched: plantable ground is a special target", f.cursor_tile(18, 20), CursorType::Target);
+        check(f.sim.ignite_fire(fire, TileCoord{9, 30}, false), "the fire ant starts to light a wall");
+        f.settle();
+        check(!takes_orders_now(f, fire), "and is busy");
+        expect_cursor("a fire ant that is busy: no special target (flag 1 answers worker)", f.cursor_tile(18, 20), CursorType::Move);
+        check(f.hud.is_ability_latched(), "the pedestal stays latched");
+    }
+    // a swimmer (building a bridge is action 0x10), the pedestal latched: water
+    {
+        Scene s = make_scene();
+        Fixture& f = *s.f;
+        f.sim.set_terrain(24, 20, 2);
+        f.sim.set_terrain(30, 20, 2);
+        const uint32_t swimmer = f.spawn(0, AntType::Swimmer, 23, 20);
+        f.settle();
+        f.hud.select_ant(swimmer);
+        f.latch_ability();
+        expect_cursor("a swimmer at rest, the pedestal latched: water is a special target", f.cursor_tile(30, 20), CursorType::Target);
+        check(f.sim.build_bridge_step(swimmer, TileCoord{24, 20}), "the swimmer starts to build a bridge");
+        f.settle();
+        check(!takes_orders_now(f, swimmer), "and is busy");
+        expect_cursor("a swimmer that is busy: no special target", f.cursor_tile(30, 20), CursorType::Move);
+        check(f.hud.is_ability_latched(), "the pedestal stays latched");
+    }
+    // a thief that is busy is still a thief: only the own types 1, 2 and 5 have the branch
+    {
+        Scene s = make_scene();
+        Fixture& f = *s.f;
+        const uint32_t thief = f.spawn(0, AntType::Thief, 8, 30);
+        const uint32_t foe = f.spawn(1, AntType::Worker, 9, 30);
+        f.settle();
+        f.hud.select_ant(thief);
+        expect_cursor("a thief at rest: an enemy hill is a special target", f.cursor_tile(42, 42), CursorType::Target);
+        f.sim.execute_melee_attack(thief, foe);
+        f.settle();
+        check(!takes_orders_now(f, thief), "the thief is busy with its attack clip");
+        expect_cursor("a busy thief is still a thief for the cursor", f.cursor_tile(42, 42), CursorType::Target);
+    }
+    // the busy rule reads the OWN type field: a worker of a level whose default is Bomber, Fire or Swimmer has the own type 0, so the getter takes its flag-0 path for it and it is that
+    // type busy or not (0x100f9d5 - 0x100f9e9 jump to 0x100fa2c for an own type that is not 1, 2 or 5), while the ant of the own type 1, 2 or 5 beside it becomes a worker
+    for (int k = 0; k < 3; ++k) {
+        const uint16_t tile = k == 0 ? 64 : k == 1 ? 66 : 65;                          // Bomber, Fire, Swimmer
+        const AntType type = k == 0 ? AntType::Bomber : k == 1 ? AntType::Fire : AntType::Swimmer;
+        Scene s = make_scene();
+        Fixture& f = *s.f;
+        f.sim.grid_mut().set_default_ant_tile(tile);
+        f.sim.set_terrain(12, 12, 2);                                                  // water for the bridge of the swimmer (and for the one of the swimmer beside it)
+        f.sim.set_terrain(12, 14, 2);
+        const uint32_t worker = f.spawn(0, AntType::Worker, 11, 12);                   // the default type, own type 0
+        const uint32_t typed = f.spawn(0, type, 11, 14);                                // own type 1, 2 or 5
+        f.settle();
+        const TileCoord target = k == 2 ? TileCoord{12, 12} : TileCoord{11, 13};
+        check((k == 0 ? f.sim.plant_bomb(worker, target, false) : k == 1 ? f.sim.ignite_fire(worker, target, false) : f.sim.build_bridge_step(worker, target)),
+              "the worker of the default type starts its ability");
+        check((k == 0 ? f.sim.plant_bomb(typed, TileCoord{11, 15}, false) : k == 1 ? f.sim.ignite_fire(typed, TileCoord{11, 15}, false) : f.sim.build_bridge_step(typed, TileCoord{12, 14})),
+              "and so does the ant of the own type");
+        f.settle();
+        check(!takes_orders_now(f, worker) && !takes_orders_now(f, typed), "both are busy");
+        sim::AntType common = AntType::Combat;
+        f.hud.set_selected_ant_ids({worker});
+        check(f.hud.homogeneous_type(f.world(), common, true) && common == type, "a busy worker of the default type is still that type for the cursor and the right click (own type 0: flag 0 path)");
+        f.hud.set_selected_ant_ids({typed});
+        check(f.hud.homogeneous_type(f.world(), common, true) && common == AntType::Worker, "a busy ant of the own type is a worker there");
+        f.hud.set_selected_ant_ids({worker, typed});
+        check(!f.hud.homogeneous_type(f.world(), common, true), "and the two have no common type under flag 1 (they have one under flag 0)");
+        check(f.hud.homogeneous_type(f.world(), common) && common == type, "flag 0: both are of the type");
+    }
+    // a group: the types of the selection must agree under flag 1 too: a busy bomber and a bomber at rest are no common type
+    {
+        Scene s = make_scene();
+        Fixture& f = *s.f;
+        const uint32_t busy = f.spawn(0, AntType::Bomber, 8, 30);
+        const uint32_t rest = f.spawn(0, AntType::Bomber, 8, 32);
+        f.settle();
+        check(f.sim.plant_bomb(busy, TileCoord{9, 30}, false), "one bomber plants");
+        f.settle();
+        f.hud.set_selected_ant_ids({busy, rest});
+        sim::AntType type = AntType::Combat;
+        check(f.hud.homogeneous_type(f.world(), type) && type == AntType::Bomber, "with flag 0 both are bombers");
+        check(!f.hud.homogeneous_type(f.world(), type, true), "with flag 1 a busy bomber (a worker) and a bomber at rest have no common type");
+        f.hud.set_selected_ant_ids({busy});
+        check(f.hud.homogeneous_type(f.world(), type, true) && type == AntType::Worker, "a busy bomber alone is a worker with flag 1");
+        check(f.hud.homogeneous_type(f.world(), type) && type == AntType::Bomber, "and a bomber with flag 0");
+    }
+}
+
+void test_default_type_hud() {
+    g_group = "default type";
+    std::printf("[pointer] on a level with a default ant type the HUD reads what the ant IS: the ready voice (three ways to select), the ability pedestal, the special target and the right click, the rebuilt panel after a pick-up\n");
+    const uint16_t tiles[5] = {62, 63, 64, 65, 66};                            // Combat, Thief, Bomber, Swimmer, Fire
+    const AntType types[5] = {AntType::Combat, AntType::Thief, AntType::Bomber, AntType::Swimmer, AntType::Fire};
+    const auto in_voices = [](AntType type, uint32_t sound) {
+        for (uint32_t variant = 0; variant < 6; ++variant) {
+            if (sim::get_ready_voice_sound(type, variant) == sound) return true;
+        }
+        return false;
+    };
+    for (int k = 0; k < 5; ++k) {
+        const std::string what = std::string("default ") + (k == 0 ? "combat" : k == 1 ? "thief" : k == 2 ? "bomber" : k == 3 ? "swimmer" : "fire") + " level: ";
+        // the ready voice of the ant that was selected (FUN_0101b5f9 asks the getter): by a click, by a rubber band, by Ctrl+A
+        for (int how = 0; how < 3; ++how) {
+            Scene s = make_scene();
+            Fixture& f = *s.f;
+            f.sim.grid_mut().set_default_ant_tile(tiles[k]);
+            f.settle();
+            f.sounds.clear();
+            if (how == 0) f.click_tile(10, 10);
+            else if (how == 1) f.hud.select_ants_in_rect(326, 326, 346, 346, f.world(), false);
+            else f.hud.handle_key_down('a', f.sim, f.cam, KMOD_CTRL, false);
+            check(f.hud.is_ant_selected(s.mine), what + "the worker is selected");
+            check(f.sounds.size() == 1, what + "one voice answers");
+            check(!f.sounds.empty() && in_voices(types[k], f.sounds[0]), what + "the ready voice is that of the type the ant is (" + (how == 0 ? "click" : how == 1 ? "rubber band" : "Ctrl+A") + ")");
+            check(!f.sounds.empty() && !in_voices(AntType::Worker, f.sounds[0]), what + "and not the worker's");
+        }
+        // the ability pedestal and the special target of the type: the HUD's common type is the ant's type, not its own type field
+        {
+            Scene s = make_scene();
+            Fixture& f = *s.f;
+            f.sim.grid_mut().set_default_ant_tile(tiles[k]);
+            f.sim.grid_mut().place_bomb(20, 20, 1);
+            f.sim.set_fire_at({22, 20}, 3600);
+            f.sim.set_terrain(24, 20, 2);
+            f.settle();
+            RecordingSink sink(f.sim);
+            f.hud.set_command_sink(&sink);
+            f.hud.select_ant(s.mine);
+            sim::AntType type = AntType::Worker;
+            check(f.hud.homogeneous_type(f.world(), type) && type == types[k], what + "the selection's type");
+            check(f.hud.homogeneous_type(f.world(), type, true) && type == types[k], what + "the same for the orders (the own type is 0: the flag 0 path)");
+            f.latch_ability();
+            check(f.hud.is_ability_latched(), what + "the ability pedestal exists and latches");
+            f.hud.unlatch_pedestals();
+            const TileCoord target = k == 2 ? TileCoord{20, 20} : k == 4 ? TileCoord{22, 20} : k == 3 ? TileCoord{24, 20} : k == 1 ? TileCoord{42, 42} : TileCoord{18, 20};
+            const bool has_target = k != 0;
+            if (k == 2 || k == 1) {                                          // the bomb (bomber) and the enemy hill (thief) are special targets without the pedestal
+                expect_cursor((what + "the special target without the pedestal").c_str(), f.cursor_tile(target.x, target.y), CursorType::Target);
+            } else if (k != 0) {
+                f.latch_ability();
+                expect_cursor((what + "the special target with the pedestal latched").c_str(), f.cursor_tile(target.x, target.y), CursorType::Target);
+                f.hud.unlatch_pedestals();
+            } else {
+                f.latch_ability();
+                expect_cursor((what + "no special target for a combat ant").c_str(), f.cursor_tile(target.x, target.y), CursorType::Move);
+                f.hud.unlatch_pedestals();
+            }
+            if (has_target && (k == 1 || k == 2)) {                          // the right click: the special order of the type, not the move of a worker
+                sink.log.clear();
+                f.click_tile(target.x, target.y, SDL_BUTTON_RIGHT);
+                check(sink.log.size() == 1 && sink.log[0].type == sim::CommandType::GroupSpecial, what + "the right click sends the special order");
+            }
+        }
+    }
+    // a level without a default: a worker has no ability pedestal (the control of the above)
+    {
+        Scene s = make_scene();
+        Fixture& f = *s.f;
+        f.hud.select_ant(s.mine);
+        f.latch_ability();
+        check(!f.hud.is_ability_latched(), "a plain worker has no ability pedestal");
+    }
+    // a worker of a default Combat level that takes the Combat power-up is a combat ant before and after, but the pick-up rebuilds its panel (FUN_0100cd40 is the last thing the
+    // pick-up does): the text of its type is posted again; a Thief power-up changes the type and posts the new text
+    for (int own = 0; own < 2; ++own) {
+        Scene s = make_scene();
+        Fixture& f = *s.f;
+        f.sim.grid_mut().set_default_ant_tile(62);
+        f.sim.grid_mut().place_powerup(12, 12, own == 0 ? 4 : 3);                        // a Combat power-up, or a Thief power-up
+        f.settle();
+        f.hud.select_ant(s.mine);
+        for (int t = 0; t < 101; ++t) f.hud.update(f.world(), 1);
+        check(f.hud.status_line().text().empty(), "the selection text has expired");
+        f.sim.issue_move_order(s.mine, TileCoord{12, 12});
+        std::string seen;
+        for (int t = 0; t < 200 && seen.empty(); ++t) {
+            f.sim.tick();
+            f.hud.update(f.world(), 1);
+            seen = f.hud.status_line().text();
+        }
+        check(f.unit(s.mine).type == (own == 0 ? AntType::Combat : AntType::Thief), "the ant took the power-up");
+        check(seen == (own == 0 ? "Yessir!" : "Thief here"), std::string("the panel is rebuilt after the pick-up with the text of the type the ant is: ") + seen);
+    }
+}
+
+// ---------------------------------------------------------------------------------------------------------------------------------
 // The pedestals (FUN_010274be -> FUN_01028d30 -> FUN_01028ee0)
 // ---------------------------------------------------------------------------------------------------------------------------------
 
@@ -1539,6 +1839,8 @@ int main() {
     test_drag_select();
     test_shift_group();
     test_right_button();
+    test_busy_ability_ants();
+    test_default_type_hud();
     test_pedestals();
     test_keyboard();
     test_buttons();

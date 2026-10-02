@@ -321,15 +321,21 @@ void HUD::apply_selection_status(const sim::WorldState& world) {
 }
 
 void HUD::check_selected_type_change(const sim::WorldState& world) {
+    // FUN_0100cd40 is the last thing the pick-up does (its only call, 0x1020dd2, after the own type field +0x54 was written at 0x1020d72), so the pick-up is noticed by the OWN type
+    // changing (AntSnapshot::raw_type), not by the type the ant is (AntSnapshot::type): a worker of a level whose default type is Combat is a combat ant before and after it takes
+    // the Combat power-up, and the original rebuilds the panel all the same. (A typed ant that takes the power-up of its own type again changes nothing that can be seen here: the
+    // panel is not rebuilt for it, a difference that stays.) The text that the rebuilt panel shows is that of the type the lone ant is.
     std::vector<std::pair<uint32_t, sim::AntType>> now;
+    sim::AntType lone_type = sim::AntType::Worker;
     bool changed = false;
     if (selected_base_team_id_ < 0) {
         for (uint32_t id : selected_ant_ids_) {
             for (const auto& a : world.ants) {
                 if (a.id != id || a.player_id != local_player_id_ || a.hp == 0 || a.is_drowning) continue;
-                now.emplace_back(id, a.type);
+                now.emplace_back(id, a.raw_type);
+                lone_type = a.type;
                 for (const auto& before : selected_types_) {
-                    if (before.first == id && before.second != a.type) changed = true;
+                    if (before.first == id && before.second != a.raw_type) changed = true;
                 }
                 break;
             }
@@ -340,7 +346,7 @@ void HUD::check_selected_type_change(const sim::WorldState& world) {
     if (selected_types_.size() == 1 && !is_multi_select_mode_) {      // FUN_0100cd40 keeps the panel: panel 3 names the type, panel 4 says string 12
         static const uint16_t kByType[6] = {sim::strings::kSelWorker, sim::strings::kSelBomber, sim::strings::kSelFire,
                                             sim::strings::kSelThief, sim::strings::kSelCombat, sim::strings::kSelSwimmer};
-        const size_t t = static_cast<size_t>(selected_types_.front().second);
+        const size_t t = static_cast<size_t>(lone_type);
         if (t < 6) post_status_id(kByType[t]);
     } else {
         post_status_id(sim::strings::kSelMany);

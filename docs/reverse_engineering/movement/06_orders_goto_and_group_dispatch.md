@@ -849,9 +849,9 @@ Each item below was checked instruction by instruction, including push order, si
 
 **A10. Special orders to several ants can converge.** Approach tiles use mask 0x81, which has no teammate reservation, so several bombers or fire ants may pick the same neighbour tile. +0xac holds the clicked tile until the path is delivered, when FUN_0101ab87 sets it to the approach tile.
 
-**A11. Dead special-power cooldown.**
+**A11. Dead special-power cooldown, and the readiness test of FUN_0100f9cb(ant, 1).**
 - +0x4c is set to timeGetTime() and +0x48 to 8/9/6/7 when a special is performed (0x101e572, 0x101e664, 0x101e960, 0x101eadb).
-- FUN_0100f9cb(1) rejects orders only within that same millisecond, because the per-subtype switch compiled to nothing. The effective cooldown is 0 ms.
+- FUN_0100f9cb(ant, 1) for an own type (+0x54) of 1, 2 or 5 (Bomber, Fire, Swimmer; Capstone 0x100f9d5 - 0x100fa27) returns 0 (Worker) for EVERY action [+0xe4] other than 0, 1 or 3 (idle, walking, stunned: `cmp eax, 1`, `cmp eax, 3`, `jne 0x100fa27`). For those three actions it returns the own type, except in the very millisecond that +0x4c was written (`call [0x10012a4]` = timeGetTime at 0x100fa16, `sub eax, [esi + 0x4c]`, `je 0x100fa27`): the per-subtype switch on [+0x48] before that call (0x100f9ff - 0x100fa15) compiled to nothing, because every branch reaches 0x100fa16. So the effective cooldown is 0 ms, but the flag-1 getter is also a test that the ant is READY for an order: a busy bomber, fire ant or swimmer is a worker for its callers with flag 1 (the accept predicate FUN_0101ff5a at 0x101ff60, which tests the action itself as well, and the HUD's cursor and right click through FUN_010282e0(1) at 0x1026f9d, 0x1027da6, 0x1027db3). An ant whose own type is 0, 3 or 4 answers as with flag 0. (Earlier text here said that flag 1 rejects only within the same millisecond; it also rejects every busy action. docs/GAME_REVERSE_ENGINEERING.md 5.62 has the callers and what the remake does.)
 
 **A12. Action 3 ("sd" anims) nuances.**
 - Action 3 is accepted for orders and for path delivery.

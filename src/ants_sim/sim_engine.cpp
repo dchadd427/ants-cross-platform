@@ -104,8 +104,11 @@ void SimulationEngine::init(const ants::assets::LevelData& level_in, uint32_t ra
     impl_->flower_droppers_.clear();
     // The flower dropper task (FDTASK, Ants.exe 0x100fc0d): it walks the plants of Block 1 (the world objects of 0x100e3b0 - 0x100e436), and a plant whose TILE ID has the plant
     // flag 0x10 (FUN_01007227 at 0x100fc78: the clovers 404 .. 408, the flowers 410 .. 416, 420, 421, whatever the dictionary calls them) looks up the FIRST Block 4 record at its
-    // cell (FUN_01008d79: the record's row and column are the plant's) and drops when that record's flag dword is not 0 (0x100fcc5). A record that two plants share is one dropper:
-    // the stamp (+0x18) is the record's, so the plant that comes first in the list posts and renews it before the second one is due.
+    // cell (FUN_01008d79: the record's row and column are the plant's) and drops when that record's flag dword is not 0 (0x100fcc5). A record that two plants share is one dropper here:
+    // the stamp (+0x18) is the record's, and the plant that comes first in the list posts and renews it. (The original may post twice in one poll for such a record: it compares the
+    // elapsed time with the clock of the poll's start as an UNSIGNED difference, 0x100fcf2 - 0x100fcf4, and renews the stamp with a later timeGetTime, 0x100fdb8, so the second plant
+    // can see a wrapped-around difference and drop too; a wall-clock effect that a lock-step engine cannot copy and that no map of the library can show: 0 of 540 have two plants on a
+    // cell that has a record.)
     std::vector<bool> record_taken(level.waypoints.size(), false);
     for (const auto& sp : level.anthill_spawns) {
         if (!movement::is_dropper_plant_tile(sp.tile_id)) continue;
@@ -769,6 +772,7 @@ const WorldState& SimulationEngine::get_world_state() const {
             s.is_drowning = (a->state == UnitState::Drowning);
             s.is_on_mud = a->is_on_mud;
             s.state = a->state;
+            s.action = impl_->orig_action_of(*a);             // +0xe4: what the getter's flag-1 branch asks (the cursor, the right click)
             s.frozen = a->frozen;
             if (a->burn_end_ms != 0) {                       // the dud burn overlay (?bu) that covers the frozen ant
                 const uint32_t total = movement::action_clip(movement::ActionClip::Burn, static_cast<uint8_t>(impl_->type_of(*a)), 0, false).total_duration_ms();

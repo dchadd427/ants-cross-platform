@@ -54,13 +54,21 @@ HUD::PanelMode HUD::panel_mode(const sim::WorldState& world) const {
     return PanelMode::None;
 }
 
-bool HUD::homogeneous_type(const sim::WorldState& world, sim::AntType& type) const {
+bool HUD::homogeneous_type(const sim::WorldState& world, sim::AntType& type, bool for_orders) const {
     bool any = false;
     for (uint32_t id : selected_ant_ids_) {
         for (const auto& a : world.ants) {
             if (a.id != id || a.player_id != local_player_id_) continue;
-            if (!any) { type = a.type; any = true; }
-            else if (a.type != type) return false;
+            sim::AntType t = a.type;
+            // FUN_0100f9cb with flag 1 (0x100f9d5 - 0x100fa27): for an OWN type of Bomber, Fire or Swimmer (+0x54 = 1, 2, 5) the answer is 0 unless the action (+0xe4) is 0, 1 or 3
+            // (and unless the clock of +0x4c, the dead cooldown of 0 ms, differs: not modelled, the same millisecond of the original's wall clock); every other ant, a default-type
+            // worker included (its own type is 0), takes the flag 0 path
+            if (for_orders && (a.raw_type == sim::AntType::Bomber || a.raw_type == sim::AntType::Fire || a.raw_type == sim::AntType::Swimmer) &&
+                !(a.action == 0 || a.action == 1 || a.action == 3)) {
+                t = sim::AntType::Worker;
+            }
+            if (!any) { type = t; any = true; }
+            else if (t != type) return false;
             break;
         }
     }
@@ -106,9 +114,10 @@ HUD::BandRect HUD::band_rect() const noexcept {
 }
 
 bool HUD::special_target(const sim::SimulationEngine* query, const sim::WorldState& world, sim::TileCoord tile, PanelMode panel) const {
-    // ([54fc] == 2 && FUN_01026f91(tile, 0)) || (panel == 3 && FUN_01026f91(tile, 1)); the type is the selection's common type (FUN_010282e0)
+    // ([54fc] == 2 && FUN_01026f91(tile, 0)) || (panel == 3 && FUN_01026f91(tile, 1)); the type is the selection's common type with flag 1 (FUN_010282e0(1) at 0x1026f9d, the first
+    // thing FUN_01026f91 does): a Bomber, Fire or Swimmer ant that is busy counts as a worker, which has no special target
     sim::AntType type = sim::AntType::Worker;
-    if (query == nullptr || !homogeneous_type(world, type)) return false;
+    if (query == nullptr || !homogeneous_type(world, type, true)) return false;
     if (slot_latched_[1] && query->is_special_target_valid(type, tile, false, local_player_id_)) return true;
     return panel == PanelMode::OneAnt && query->is_special_target_valid(type, tile, true, local_player_id_);
 }
@@ -451,9 +460,10 @@ void HUD::pointer_right_click(sim::SimulationEngine& sim, ViewportCamera& camera
     const int32_t world_y = camera.world_y + (press_y - PLAYFIELD_Y);
     const sim::TileCoord tile{world_x / 32, world_y / 32};
     spawn_click_marker(world_x, world_y);                       // the marker is always spawned
-    // modes 3, 4 and 7: a move for several ants and for a worker / combat ant (or a mixed group), otherwise the ability of the ant's type
+    // modes 3, 4 and 7: a move for several ants and for a worker / combat ant (or a mixed group), otherwise the ability of the ant's type; the type is the one of flag 1
+    // (0x1027da6, 0x1027db3): a busy bomber, fire ant or swimmer is asked as a worker and gets the plain move
     sim::AntType type = sim::AntType::Worker;
-    const bool homogeneous = homogeneous_type(world, type);
+    const bool homogeneous = homogeneous_type(world, type, true);
     const bool move = panel == PanelMode::Ants || !homogeneous || type == sim::AntType::Worker || type == sim::AntType::Combat;
     order_selected(sim, tile, !move, false);
 }

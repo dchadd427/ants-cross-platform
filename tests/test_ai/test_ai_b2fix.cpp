@@ -1,6 +1,7 @@
 // Tests that came out of the adversarial review of milestone B2 (docs/audit/B2_notes.md, "Review"): each of them fails without the fix of the finding it belongs to.
 //
 //   AI1.21  the state of another team's ants is what the screen draws (an ant that has an order but still stands in its idle clip is idle)
+//   AI1.21b the same on a level with a default ant type: the guard of a default Combat ant, swimming for a default swimmer on its lake
 //   AI1.22  takes_orders() against the engine for swimmers (diving in, climbing out), stunned ants and combat ants at rest
 //   AI1.23  the score boxes of a team that dropped out or is not in the match are covered: 0
 //   AI1.24  a lunchbox is worth the same to every bot (its real value is the dead ant's hidden carried points)
@@ -388,6 +389,26 @@ void run_b2fix_tests() {
         ASSERT_TRUE(hidden > 100);                                                        // the scenario did produce ordered-but-standing ants (queued paths and blocked ants)
         ASSERT_TRUE(shown > 1000);                                                        // and the walking ants are still seen walking
         ASSERT_TRUE(pending_listed > 100);
+    } TEST_END();
+
+    TEST_CASE("AI1.21b On A Level With A Default Ant Type The Ordered-But-Standing Ant Of Another Team Reads As The Idle Label Of The Type It Is: The Guard For A Default Combat Ant, Swimming For A Default Swimmer On Its Lake") {
+        // seen_state() reads the type that the sprite shows (AntView::type: the ant's own type, the level's default for an ant that never took a power-up), not the own type field: a worker
+        // of a default Combat level that has just been ordered and still stands in its idle clip is the guard, and a default swimmer that floats on a lake is swimming at rest
+        for (const uint16_t tile : {uint16_t{62}, uint16_t{65}}) {
+            sim::SimulationEngine sim;
+            build_world(sim, 31, 0);
+            sim.grid_mut().set_default_ant_tile(tile);
+            water_rect(sim, 24, 40, 34, 46);
+            const uint32_t id = sim.spawn_unit(3, sim::AntType::Worker, tile == 62 ? TileCoord{30, 36} : TileCoord{28, 43});
+            ASSERT_TRUE(sim.apply_command(move_of(3, {id}, 30, 10)).accepted());
+            sim.tick();                                                                   // ordered a moment ago: the engine says walking, the sprite still stands in its idle clip
+            ASSERT_TRUE(snapshot_of(sim, id)->state == sim::UnitState::Walking);
+            const BotView v = BotView::build(sim, 0);
+            const AntView* seen = find_ant(v.others(), id);
+            ASSERT_TRUE(seen != nullptr);
+            ASSERT_TRUE(seen->type == (tile == 62 ? sim::AntType::Combat : sim::AntType::Swimmer));
+            ASSERT_TRUE(seen->state == (tile == 62 ? sim::UnitState::GuardIdle : sim::UnitState::Swimming));
+        }
     } TEST_END();
 
     TEST_CASE("AI1.22 takes_orders() Against The Engine: A Swimmer Diving Into The Water Or Climbing Out Of It Takes Orders (The Engine Maps Both To The Walking Action), So Does A Stunned Ant And A Combat Ant At Rest") {

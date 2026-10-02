@@ -200,8 +200,11 @@ public:
     // click does. Panel mode [54ec]: 1 nothing selected, 2 a hill, 3 one own ant, 4 several own ants, 5 another player's ant (inspect).
     enum class PanelMode : uint8_t { None = 1, Base = 2, OneAnt = 3, Ants = 4, Other = 5 };
     PanelMode panel_mode(const sim::WorldState& world) const;
-    /// FUN_010282e0: true and the type when all selected own ants have the same type (the ability pedestal and the special order need it).
-    bool homogeneous_type(const sim::WorldState& world, sim::AntType& type) const;
+    /// FUN_010282e0: true and the type when all selected own ants have the same type (the ability pedestal and the panel text ask it with flag 0: what the ant IS, FUN_0100f9cb(ant, 0)).
+    /// `for_orders` is the flag 1 of the cursor (FUN_01026f91, 0x1026f9d) and of the right click (0x1027da6, 0x1027db3): the getter's own-type branch for Bomber, Fire and Swimmer
+    /// (0x100f9eb - 0x100fa27) answers Worker for such an ant while its action is anything but idle, walking or stunned (0, 1, 3), so a busy bomber is no bomber for the special target
+    /// and the right click; every other ant (a thief, a combat ant, a worker of any default type) answers as with flag 0.
+    bool homogeneous_type(const sim::WorldState& world, sim::AntType& type, bool for_orders = false) const;
     /// The simulation that answers the cursor's special-target question (FUN_01026f91); without it no tile is a special target.
     void set_sim_query(const sim::SimulationEngine* sim) noexcept { sim_query_ = sim; }
     /// Where the HUD sends the player's commands (group orders, Stop, hatch, alliance offers): a single-player game applies them at once (null =
@@ -449,8 +452,9 @@ private:
     // shift included (they pass 0 as the last argument); the death of a selected ant and the alliance refresh keep the text.
     bool selection_status_pending_{false};
     void apply_selection_status(const sim::WorldState& world);
-    // FUN_0100cd40 (called by the power-up pick-up): a selected own ant whose type changed rebuilds the panel, which posts the text of
-    // its new type when it is the only ant selected and string 12 otherwise
+    // FUN_0100cd40 (called by the power-up pick-up): a selected own ant that took a power-up rebuilds the panel, which posts the text of
+    // its new type when it is the only ant selected and string 12 otherwise. The pick-up writes the ant's OWN type field (0x1020d72), which is what is remembered here
+    // (AntSnapshot::raw_type): an ant that is of its level's default type until it takes the power-up of that very type keeps its type but still took one
     std::vector<std::pair<uint32_t, sim::AntType>> selected_types_;
     void check_selected_type_change(const sim::WorldState& world);
     // The voices of the ordering commands and the status text that goes with them (Ants.exe FUN_0101b5f9 / FUN_0101b67b /
