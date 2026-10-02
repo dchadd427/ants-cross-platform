@@ -18,6 +18,9 @@ Native C++17 macOS port and remake of the 1998 classic RTS game *Ants*, featurin
 - **Never accumulate uncommitted changes**: Do not allow tested, working code to linger unstaged or uncommitted across multiple user requests.
 - **Mandatory Dual Local + Docker Web Builds**: Whenever making changes, committing, and pushing, ALWAYS build a new version for BOTH: (1) Local machine (`cmake --build build -j8`), and (2) Web (`beta.playants.org`) Docker image (`wsl docker build -t ants-beta .`). Verify that both build targets succeed and all test suites maintain 100% pass rate before committing and pushing.
 
+### 1b. STATUS.md Is Always Current
+- **`STATUS.md`** (repo root) is the owner's one-glance view: In progress, Next, Recently done. Update it whenever a task starts, finishes, changes or a release ships (with the release commit). Keep it very brief: one line per item, no details (those go to CHANGELOG.md and `implementation_plan.md`), nothing private.
+
 ### 2. Code Quality & Standards
 - **Compiler Flags**: Code must compile cleanly with `-Wall -Wextra -Werror -Wsign-conversion`. Zero warnings allowed.
 - **Test Integrity**: Never break or disable existing tests. All 77 integration tests and 506 E2E tests must maintain a 100% pass rate.
