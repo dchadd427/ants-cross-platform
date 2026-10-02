@@ -54,8 +54,9 @@ public:
         Failed         // could not join (refused, full, wrong version, connection failed)
     };
     /// Why a join ended in Phase::Failed (None until it has): the server was never reached, the server answered with a Reject (reject_reason()), the connection was lost after it
-    /// was made but before the room was joined, or the room's connection ended once the player was in it
-    enum class FailReason : uint8_t { None, Unreachable, Rejected, Lost, Closed };
+    /// was made but before the room was joined, the server accepted the connection and never answered (no Welcome within ten seconds: NoAnswer), or the room's connection ended once
+    /// the player was in it
+    enum class FailReason : uint8_t { None, Unreachable, Rejected, Lost, Closed, NoAnswer };
     struct Event {
         enum class Type : uint8_t {
             RoomChanged,      // somebody joined or left, or the host changed the map or the fog
@@ -121,6 +122,9 @@ public:
     FailReason fail_reason() const noexcept { return fail_reason_; }
     /// The server's reason when fail_reason() is Rejected
     RejectReason reject_reason() const noexcept { return reject_reason_; }
+    /// A test hook: puts the session in `phase` as it would stand when the network layer got there by itself (Over comes only from a match that is lost, so the application's way of
+    /// treating a session that is over under the setup screen, the room's panel or a join cannot be reached by any real sequence of messages). Nothing else changes.
+    void force_phase_for_test(Phase phase) noexcept { phase_ = phase; }
     uint16_t listen_port() const noexcept { return listen_port_; }
     /// A guest: the port on which the other guests connect to it during the match (0 when it has none)
     uint16_t peer_port() const noexcept { return peer_port_; }

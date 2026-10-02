@@ -197,6 +197,8 @@ public:
     RejectReason reject_reason() const noexcept { return reject_; }
     /// The connection was open at some time (the Hello went out): a lobby that closed without it never reached its server
     bool was_open() const noexcept { return was_open_; }
+    /// The server accepted the connection and sent no Welcome within `welcome_timeout_ms` (10 s): the lobby closed the connection itself (a server that does not answer, not one that hung up)
+    bool welcome_timed_out() const noexcept { return welcome_timed_out_; }
     CancelMsg::Reason cancel_reason() const noexcept { return cancel_reason_; }
     /// The seat that caused the cancel (a player who left, a machine that could not load the map), 255 when unknown
     uint8_t cancel_player() const noexcept { return cancel_player_; }
@@ -225,6 +227,7 @@ private:
     uint32_t next_ping_ms_{0};
     bool ping_armed_{false};                // the first ping goes out as soon as the guest has a seat (the deadline is taken from the clock then: clock.hpp)
     bool was_open_{false};                  // the connection was open when the Hello was sent
+    bool welcome_timed_out_{false};         // no Welcome came within the limit (see welcome_timed_out())
     std::vector<Event> events_;
 };
 

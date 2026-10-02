@@ -18,6 +18,17 @@ namespace {
 
 bool printable_char(char c) noexcept { return c >= 0x20 && c <= 0x7E; }
 
+// The printable ASCII of a text. `refused` is set when something else was dropped that a person would miss: an accent, a CJK character, a control character (a line end or a tab, which a
+// paste brings, is dropped silently)
+std::string printable_text(const std::string& text, bool& refused) {
+    std::string out;
+    for (char c : text) {
+        if (printable_char(c)) out.push_back(c);
+        else if (c != '\n' && c != '\r' && c != '\t') refused = true;
+    }
+    return out;
+}
+
 std::string trim_blanks(const std::string& s) {
     const size_t a = s.find_first_not_of(' ');
     if (a == std::string::npos) return std::string();
@@ -378,25 +389,45 @@ void StartMenu::request(MenuRequest::Type type) {
 // ---- what happens to the menu ---------------------------------------------------------------------------------------------------------------------
 
 void StartMenu::go(MenuPanel panel) {
+    flush();                                                    // (a name that was typed on the panel that is left)
     panel_ = panel;
     pressed_ = MenuId::None;
     all_selected_ = false;
     caret_since_ms_ = elapsed_ms_;
+    panel_since_ms_ = elapsed_ms_;
     select_first();
 }
 
+// What a new panel preselects is the first INPUT, never a button that acts: an Enter that is pressed twice, or a key that is held, must not act on the panel that the first one opened
+// (Single player's Continue started the game, the Host panel's Host made a room, the Connecting panel's Cancel gave up the attempt). The Room panel's way on is the one thing to do there.
 void StartMenu::select_first() {
     switch (panel_) {
         case MenuPanel::Main: selected_ = main_selection_; break;
-        case MenuPanel::Single: selected_ = MenuId::Continue; break;
-        case MenuPanel::Join:
-            selected_ = name_.empty() ? MenuId::Name : MenuId::Code;
-            all_selected_ = selected_ == MenuId::Name && !name_.empty();
+        case MenuPanel::Single: {
+            const std::vector<size_t> seats = other_seats();
+            selected_ = static_cast<MenuId>(static_cast<uint8_t>(MenuId::Seat0) + seats.front());
             break;
-        case MenuPanel::Host: selected_ = MenuId::Host; break;
-        case MenuPanel::Connecting: selected_ = MenuId::Cancel; break;
+        }
+        case MenuPanel::Join:                                   // the name when it is empty, else the code, with the text that is there (a code of an earlier room) selected: typing replaces it
+            selected_ = name_.empty() ? MenuId::Name : MenuId::Code;
+            all_selected_ = !field_text(selected_)->empty();
+            break;
+        case MenuPanel::Host: selected_ = MenuId::HostMap; break;
+        case MenuPanel::Connecting: selected_ = MenuId::None; break;       // Esc cancels, Tab or the pointer reaches Cancel
         case MenuPanel::Room: selected_ = MenuId::EnterRoom; break;
     }
+}
+
+void StartMenu::flush() {
+    if (!name_dirty_) return;
+    name_dirty_ = false;
+    settings_.name = name_;
+    notify(MenuSetting::Name);
+}
+
+void StartMenu::name_changed() {
+    settings_.name = name_;
+    name_dirty_ = true;
 }
 
 void StartMenu::show_main(const std::string& notice) {
@@ -536,14 +567,14 @@ std::vector<MenuElement> StartMenu::elements() const {
                 out.push_back(cycler);
                 y += 56;
             }
-            if (any_bot()) {
-                MenuElement fog = control(MenuId::None, MenuKind::Text, ButtonRect{kTextX, 298, kTextW, 22}, "Bots play without fog of war. Empty seats have no ants.", FontSize::Px18);
-                fog.centered = true;
-                out.push_back(fog);
+            {                                                           // what the seats mean, in both states: the original's game when nobody is seated, the bots' rule when somebody is
+                MenuElement rule = control(MenuId::None, MenuKind::Text, ButtonRect{kTextX, 290, kTextW, 42}, any_bot() ? kBotsLine : kNoBotsLine, FontSize::Px18);
+                rule.centered = true;
+                out.push_back(rule);
             }
             out.push_back(control(MenuId::Continue, MenuKind::Button, centred_button(334), "Continue"));
             out.push_back(control(MenuId::Back, MenuKind::Button, centred_button(388, 40), "Back"));
-            add_hint(out, "Left / Right: change a seat     Enter: continue     Esc: back");
+            add_hint(out, "Up / Down: choose     Left / Right: change a seat     Enter: change a seat or continue     Esc: back");
             break;
         }
         case MenuPanel::Join: {
@@ -582,7 +613,7 @@ std::vector<MenuElement> StartMenu::elements() const {
                 out.push_back(info);
             }
             add_server_line(out, 424);
-            add_hint(out, "Left / Right: change     Tab: next     Enter: host     Esc: back");
+            add_hint(out, "Up / Down / Tab: choose     Left / Right: change     Enter: change or host     Esc: back");
             break;
         }
         case MenuPanel::Connecting: {
@@ -652,6 +683,7 @@ MenuId StartMenu::control_at(int32_t x, int32_t y) const {
 
 void StartMenu::set_selected(MenuId id) {
     if (id == selected_) return;
+    if (selected_ == MenuId::Name || selected_ == MenuId::HostName) flush();       // the field is left
     selected_ = id;
     if (panel_ == MenuPanel::Main && id != MenuId::None) main_selection_ = id;
     all_selected_ = false;
@@ -747,7 +779,7 @@ void StartMenu::copy_code() {
         message_.clear();
     } else {
         copied_ms_ = 0.0;
-        message_ = "The code could not be copied. Write it down: " + room_code_;
+        message_ = "Copy failed. Write down the code above.";                // (the code stands in full in the box above: a text that repeated it was cut)
         message_tone_ = MenuTone::Bad;
     }
 }
@@ -795,7 +827,9 @@ void StartMenu::activate(MenuId id) {
 
 void StartMenu::back() {
     switch (panel_) {
-        case MenuPanel::Main: request(MenuRequest::Type::Quit); break;
+        case MenuPanel::Main:
+            if (settled()) request(MenuRequest::Type::Quit);        // (an Esc that comes in a hurry after the one that left another panel is the same gesture: it does not quit)
+            break;
         case MenuPanel::Single:
         case MenuPanel::Join:
         case MenuPanel::Host:
@@ -842,22 +876,23 @@ void StartMenu::edit(MenuId id, const std::string& typed) {
     std::string* text = field_text(id);
     if (text == nullptr) return;
     const size_t limit = id == MenuId::Code ? kCodeMax : kNameMax;
-    std::string add;
-    for (char c : typed) {
-        if (printable_char(c)) add.push_back(c);
+    bool refused = false;
+    const std::string add = printable_text(typed, refused);
+    if (add.empty() && !refused) return;
+    if (!add.empty()) {
+        if (all_selected_) text->clear();
+        all_selected_ = false;
+        for (char c : add) {
+            if (text->size() >= limit) break;
+            text->push_back(c);
+        }
+        caret_since_ms_ = elapsed_ms_;
+        if (id != MenuId::Code) name_changed();
     }
-    if (add.empty()) return;
-    if (all_selected_) text->clear();
-    all_selected_ = false;
-    for (char c : add) {
-        if (text->size() >= limit) break;
-        text->push_back(c);
-    }
-    caret_since_ms_ = elapsed_ms_;
     message_.clear();
-    if (id != MenuId::Code) {
-        settings_.name = name_;
-        notify(MenuSetting::Name);
+    if (refused) {                                                  // never silently: the person sees why a letter did not appear
+        message_ = kRefusedCharsText;
+        message_tone_ = MenuTone::Bad;
     }
 }
 
@@ -867,12 +902,14 @@ void StartMenu::on_text(const std::string& text) {
 
 void StartMenu::paste(const std::string& text) {
     if (!is_field(selected_)) return;
-    std::string add;
-    for (char c : text) {
-        if (printable_char(c)) add.push_back(c);                    // a line end or a tab in the clipboard is dropped
-    }
+    bool refused = false;
+    std::string add = printable_text(text, refused);                // (a line end or a tab in the clipboard is dropped)
     if (selected_ == MenuId::Code) add = trim_blanks(add);
     edit(selected_, add);
+    if (refused) {
+        message_ = kRefusedCharsText;
+        message_tone_ = MenuTone::Bad;
+    }
 }
 
 void StartMenu::on_key(SDL_Keycode key, uint16_t modifiers, bool repeat) {
@@ -887,10 +924,7 @@ void StartMenu::on_key(SDL_Keycode key, uint16_t modifiers, bool repeat) {
             field_text(selected_)->clear();
             all_selected_ = false;
             message_.clear();
-            if (selected_ != MenuId::Code) {
-                settings_.name = name_;
-                notify(MenuSetting::Name);
-            }
+            if (selected_ != MenuId::Code) name_changed();
         }
         return;
     }
@@ -917,10 +951,10 @@ void StartMenu::on_key(SDL_Keycode key, uint16_t modifiers, bool repeat) {
             break;
         case SDLK_RETURN:
         case SDLK_KP_ENTER:
-            if (!repeat) activate(selected_);
+            if (!repeat && settled()) activate(selected_);           // (a key that is held, or pressed again within kSettleMs of the panel's appearing, does not act on that panel)
             break;
         case SDLK_SPACE:
-            if (!repeat && !in_field) activate(selected_);           // (in a field the space is text, and arrives as text input)
+            if (!repeat && !in_field && settled()) activate(selected_);   // (in a field the space is text, and arrives as text input)
             break;
         case SDLK_BACKSPACE:
             if (in_field) {
@@ -930,10 +964,7 @@ void StartMenu::on_key(SDL_Keycode key, uint16_t modifiers, bool repeat) {
                 all_selected_ = false;
                 caret_since_ms_ = elapsed_ms_;
                 message_.clear();
-                if (selected_ != MenuId::Code) {
-                    settings_.name = name_;
-                    notify(MenuSetting::Name);
-                }
+                if (selected_ != MenuId::Code) name_changed();
             }
             break;
         default:

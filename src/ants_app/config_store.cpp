@@ -1,8 +1,11 @@
 #include "ants_app/config_store.hpp"
 
 #include <cstdio>
+#include <filesystem>
 #include <fstream>
 #include <iterator>
+#include <random>
+#include <system_error>
 
 #if defined(__EMSCRIPTEN__)
   #include <emscripten.h>
@@ -112,10 +115,29 @@ bool ConfigStore::save() const {
     emscripten_run_script(script.c_str());
     return true;
 #else
-    std::ofstream out(location_, std::ios::binary | std::ios::trunc);
-    if (!out) return false;
-    out << serialise();
-    return static_cast<bool>(out);
+    // All at once: the whole file is written next to the final one and then given its name (a replace), so that a program that dies in the middle of a write, or a second window of
+    // the same player that reads at that moment, never sees half a file. The name of the temporary file is random: windows that save together do not share it.
+    char hex[16];
+    std::snprintf(hex, sizeof(hex), "%08x", static_cast<unsigned>(std::random_device()()));
+    const std::string tmp = location_ + "." + hex + ".tmp";
+    {
+        std::ofstream out(tmp, std::ios::binary | std::ios::trunc);
+        if (!out) return false;
+        out << serialise();
+        out.close();
+        if (!out) {
+            std::error_code ignored;
+            std::filesystem::remove(tmp, ignored);
+            return false;
+        }
+    }
+    std::error_code ec;
+    std::filesystem::rename(tmp, location_, ec);
+    if (ec) {
+        std::filesystem::remove(tmp, ec);
+        return false;
+    }
+    return true;
 #endif
 }
 

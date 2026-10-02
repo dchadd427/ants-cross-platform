@@ -140,5 +140,14 @@ for bad in 0 5 x ""; do
     check "--players '$bad' starts nothing" "$([ -z "$OUT" ]; echo $?)"
 done
 
+# the banner of the setup screen says what that screen takes (MapSelectScreen::handle_key_down: Up, Down, Enter, S, Q, X; the fog is a pair of buttons) and nothing that it does not
+for f in start_game.sh start_game.bat; do
+    banner="$(grep -F -A2 'SETUP SCREEN:' "$ROOT/$f")"
+    check "$f: the setup screen's banner names Up / Down, Enter or S, Q or X" "$({ has "$banner" 'Up / Down' && has "$banner" 'Enter or S' && has "$banner" 'Q or X'; } ; echo $?)"
+    check "$f: the setup screen's banner has no digit keys" "$({ has "$banner" '[1-6]'; } ; [ $? -ne 0 ]; echo $?)"
+    check "$f: the setup screen's banner has no F key for the fog (it is two buttons)" "$({ has "$banner" '[F] toggles'; } ; [ $? -ne 0 ]; echo $?)"
+    check "$f: the setup screen's banner does not say that Esc leaves (Esc does nothing there)" "$({ has "$banner" 'Esc leaves'; } ; [ $? -ne 0 ]; echo $?)"
+done
+
 echo "start script: $CHECKS checks, $FAILS failures"
 [ "$FAILS" -eq 0 ]

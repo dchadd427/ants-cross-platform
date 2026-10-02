@@ -176,6 +176,14 @@ public:
     static constexpr size_t kCodeMax = 32;              // = net::kMaxRoomCodeChars
     static constexpr uint32_t kCaretHalfPeriodMs = 150; // as the original's edit field
     static constexpr uint32_t kCopiedMs = 2000;         // how long "Copied!" shows on the Copy button
+    /// After a panel appears, Enter and Space do nothing for this long (the menu's own clock), and Esc does not quit from the first panel: a key that is pressed twice in a hurry (Enter, Enter)
+    /// is one gesture, and its second press must not act on the panel that the first one opened (its default button would start the game, create the room or cancel the attempt)
+    static constexpr uint32_t kSettleMs = 300;
+    /// What the Join and Host panels say when a typed or pasted character was refused (a letter that is not A-Z, an accent, a CJK character: the name and the code take printable ASCII)
+    static constexpr const char* kRefusedCharsText = "Only letters A-Z, digits and simple punctuation.";
+    /// The line of the single-player panel under the seats (the rule-8 text when a computer player is seated, the original's game when nobody is)
+    static constexpr const char* kBotsLine = "Bots play without fog of war. Empty seats have no ants.";
+    static constexpr const char* kNoBotsLine = "No bots: the original single-player game (the other colours stand still).";
 
     StartMenu();
 
@@ -209,8 +217,11 @@ public:
     void set_room_players(int players_in, int capacity);
     /// The room's panel is left (the connection is gone): back to the Host panel, with `message` as an error line when it is not empty
     void room_left(const std::string& message = std::string());
-    /// The menu's own clock (caret blink, "Copied!"), in seconds of game time
+    /// The menu's own clock (caret blink, "Copied!", the settling of a new panel), in seconds of game time
     void update(float dt_seconds);
+    /// Writes the name that was typed and not written yet (the owner stores it). The name is written when the field is left, a panel changes, Join or Host is pressed, and by the owner when
+    /// the program ends: not at every key.
+    void flush();
 
     // ---- input ------------------------------------------------------------------------------------------------------------------------------------------
     /// The pointer moved: the control under it becomes the selection
@@ -221,7 +232,7 @@ public:
     void on_mouse_up(int32_t x, int32_t y, uint8_t button);
     /// Keys: Up / Down / Tab / Shift+Tab select, Left / Right change a cycler, Enter (and Space on a button) acts, Esc goes back (on the first panel: Quit; while connecting: cancels),
     /// Backspace deletes in a field (Ctrl / Cmd+Backspace clears it), Ctrl / Cmd+V pastes, Ctrl / Cmd+A selects the field's text, Ctrl / Cmd+C copies the room's code. `repeat` is the
-    /// auto-repeat of a held key: Enter, Space and Esc ignore it.
+    /// auto-repeat of a held key: Enter, Space and Esc ignore it; Enter and Space also ignore a press within kSettleMs of the last panel change (Esc then does not quit from the first panel).
     void on_key(SDL_Keycode key, uint16_t modifiers, bool repeat = false);
     /// Typed text (SDL's text input): printable ASCII goes into the field that has the focus
     void on_text(const std::string& text);
@@ -254,6 +265,8 @@ public:
     /// The panel that Join or Host started from (what a failure or a cancel returns to)
     MenuPanel connect_origin() const noexcept { return origin_; }
     bool copied() const noexcept { return copied_ms_ > 0.0; }
+    /// True when the current panel has been up for kSettleMs (Enter and Space act)
+    bool settled() const noexcept { return elapsed_ms_ - panel_since_ms_ >= static_cast<double>(kSettleMs); }
 
     // The geometry (the frame of the background is 16 pixels wide)
     static constexpr int32_t kTitleY = 28;
@@ -283,6 +296,7 @@ private:
     bool is_field(MenuId id) const noexcept { return id == MenuId::Name || id == MenuId::Code || id == MenuId::HostName; }
     std::string* field_text(MenuId id) noexcept;
     void edit(MenuId id, const std::string& typed);
+    void name_changed();                                    // the name field changed: written later (flush)
     void refuse(const std::string& message, MenuId focus);
     std::vector<size_t> other_seats() const;
     void copy_code();
@@ -304,6 +318,8 @@ private:
     int room_players_{1};
     int room_capacity_{4};
     bool all_selected_{false};                              // the focused field's text is selected
+    bool name_dirty_{false};                                // the name changed and is not written yet (flush)
+    double panel_since_ms_{-1.0e9};                         // when the current panel appeared (the menu's clock)
     double elapsed_ms_{0.0};
     double caret_since_ms_{0.0};
     double copied_ms_{0.0};

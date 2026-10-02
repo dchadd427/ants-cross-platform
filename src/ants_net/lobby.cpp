@@ -544,6 +544,7 @@ void ClientLobby::update(uint32_t now_ms) {
         return;
     }
     if (phase_ == Phase::Joining && now_ms - joined_at_ms_ > cfg_.welcome_timeout_ms) {
+        welcome_timed_out_ = true;
         conn_->close();
         phase_ = Phase::Closed;
         events_.push_back(Event{Event::Type::Disconnected});

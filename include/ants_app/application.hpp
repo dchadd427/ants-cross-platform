@@ -123,8 +123,9 @@ struct ApplicationConfig {
     std::function<std::string()> clipboard_get;
     std::function<bool(const std::string&)> clipboard_set;
     HostLookup::Resolver host_resolver;
+    HostLookup::Launcher host_launcher;                     // (the tests': a worker thread that cannot be started)
     /// How long the menu's Join or Host may take, from the press of the button to the first message of the room (the name lookup, the connection, the server's welcome), before it
-    /// gives up with "does not answer". A test hook (the player's limit is 20 s): a hung lookup or a server that never answers must end in a message, not in a hang.
+    /// gives up with "The server ... did not answer". A test hook (the player's limit is 20 s): a hung lookup or a server that never answers must end in a message, not in a hang.
     uint32_t menu_connect_timeout_ms{20000};
     /// A test hook: the random bits of the code of a hosted room (32 bits per call; empty: the system's entropy). A test that makes the server hold the very code that the menu is about to
     /// make (the one-in-900-million collision) needs it to be known.
@@ -174,6 +175,8 @@ public:
     /// from the moment the player is in the room until the player is back at the menu)
     StartMenu& start_menu() noexcept { return start_menu_; }
     bool start_menu_enabled() const noexcept { return menu_enabled_; }
+    /// The reason that a lost match gave ("The connection to the other players was lost."); a network game that the menu led to returns to the menu with it and leaves none behind
+    const std::string& net_notice() const noexcept { return net_notice_; }
     const std::string& window_title() const noexcept { return window_title_; }
     /// The keys, the text and the mouse of the start menu (what the event loop does with an event while the menu is up; public for the tests)
     void handle_menu_event(const SDL_Event& event);
@@ -267,6 +270,15 @@ public:
     /// not touched: its window class has no double-click messages, so its second click was a press like any other.
     static constexpr uint32_t kDoubleClickMs = 500;
     bool closing_click_pending() const noexcept { return closing_click_pending_; }
+
+    /// The start menu's panels and the screens around it lie on top of each other (Quit under Host an online match's Host button, Cancel's place on the Join panel's Back, the quick
+    /// help's START! under the setup screen's, the loading screen under the first panel). A click that changed the screen has its second click, or the rest of it, for the screen that it
+    /// opened, so in a run with a menu that second click is not the new screen's: after a left press or release changed the panel or the screen, a left press that SDL counts as part of the
+    /// sequence (`clicks` above 1), or that comes within SDL's double-click time (kDoubleClickMs) of the event that changed it, does nothing but move the hover (the same rule as
+    /// closing_click_pending() for the quick help; the first press that is neither begins a new click and ends the rule). A release always belongs to a press that began on the screen
+    /// that is up (the buttons of a new panel are fresh: nothing is pressed in them). Public for the tests, which give the time; a run without a menu never has the rule.
+    bool swallow_menu_gesture(uint8_t clicks, uint32_t timestamp_ms);
+    bool menu_gesture_pending() const noexcept { return menu_gesture_pending_; }
 
     void handle_key_down(const SDL_KeyboardEvent& key);
     void handle_mouse_motion(const SDL_MouseMotionEvent& motion);
@@ -368,6 +380,7 @@ private:
         std::string label;                                // the server as the player reads it
         ServerAddress server;
         int players{4};                                   // hosting: the seats of the room
+        int map{0};                                       // hosting: the index of the map that the player chose (menu_map)
         double elapsed_ms{0.0};                           // how long the attempt has taken (its time limit, menu_connect_timeout_ms)
     } menu_conn_;
     int32_t mouse_screen_x_{320};
@@ -387,13 +400,14 @@ private:
     void enter_start_menu(const std::string& notice = std::string());   // state StartMenu, the first panel (with a line of notice when there is one)
     void update_start_menu(float dt);                     // the menu's clock, what it asked for, its connection (once per frame, from pump_network)
     void process_menu_request(const MenuRequest& request);
-    void begin_menu_connection(bool hosting, const std::string& room, const std::string& name, int players);
+    void begin_menu_connection(bool hosting, const std::string& room, const std::string& name, int players, int map);
     void pump_menu_connection();                          // the name lookup, the join, the room: what became of them
     void menu_connection_failed(const std::string& message);
     void abort_menu_connection();                         // Cancel, Back from the room, a failure: nothing of the connection stays
     void menu_connected();                                // the player is in the server's room
     void menu_start_single(const std::vector<ai::BotSpec>& bots);
     std::string menu_failure_text() const;                // what a failed join says, in the menu's words
+    bool room_has_chosen_map() const;                     // hosting: the room that the server made is on the map that the player chose
     void show_opening_screens();                          // after the menu (or the loading screen of a game without one): the quick help when the option asks for it, else the setup screen
     void return_to_start_menu(const std::string& notice); // a network game is over (left, ended, lost): back to the menu, nothing of it stays
     void leave_game();                                    // Leave of a network game's screens: back to the menu when this run has one, else the program ends as always
@@ -437,6 +451,9 @@ private:
     void render_loading_screen();
     void render_quick_help_screen();
     void close_quick_help(bool by_click);                  // the quick help is over (a click on START! or a key): its button is let go of, the setup screen follows
+    uint32_t screen_signature() const noexcept;           // which screen and which panel are up (the start menu's gesture rule sees a change of it)
+    void begin_menu_gesture(uint32_t at_ms);              // a left press or release changed the screen at this time (SDL's): see swallow_menu_gesture
+    bool swallow_the_rest_of_a_click(uint8_t clicks, uint32_t timestamp_ms);   // the setup screen's left press: is it the rest of a click that closed the quick help or left the start menu?
     bool swallow_closing_click(uint8_t clicks, uint32_t timestamp_ms);   // a left press on the setup screen (SDL's count and time of it): is it the rest of the click that closed the quick help?
     bool joined_a_room() const noexcept { return net_ != nullptr && !net_->is_host(); }   // (stable from the start: the room view of the screen follows the first Room message)
 
@@ -445,6 +462,8 @@ private:
     ScreenButton quick_help_start_{ButtonRect{529, 437, 98, 27}, ButtonRect{528, 438, 97, 24}};   // START!: the pictures qh_start1 / 2 and qh_start3 (the hit test is the rectangle of the picture that shows)
     bool closing_click_pending_{false};                    // the quick help was closed by a click, on a machine that joined a room: the rest of that click sequence is not for the screen
     uint32_t closing_click_ms_{0};                         // ... closed at this time (SDL's ticks)
+    bool menu_gesture_pending_{false};                     // a click changed the screen of a run with a menu: the rest of that click sequence is not for the screen that is up now
+    uint32_t menu_gesture_ms_{0};                          // ... at this time (SDL's ticks)
 
     // 20 Hz Discrete Simulation Timing
     uint64_t last_frame_time_{0};

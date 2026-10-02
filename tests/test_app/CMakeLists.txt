@@ -376,6 +376,7 @@ target_link_libraries(test_start_menu PRIVATE
 
 target_compile_definitions(test_start_menu PRIVATE
     ORIGINAL_ASSETS_DIR="${CMAKE_SOURCE_DIR}/Original-Ants"
+    ANTS_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
 )
 
 if(APPLE)

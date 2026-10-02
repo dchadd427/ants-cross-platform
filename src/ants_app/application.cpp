@@ -701,6 +701,7 @@ bool Application::write_chat_transcript(const std::string& path) const {
 
 void Application::shutdown() {
     is_running_ = false;
+    if (menu_enabled_) start_menu_.flush();
 #if !defined(__EMSCRIPTEN__)
     if (!config_.headless && match_started_) {
         const std::string folder = ConfigStore::default_folder();
@@ -923,6 +924,7 @@ void Application::stop_bots() {
 }
 
 void Application::quit() {
+    if (menu_enabled_) start_menu_.flush();                    // (a name that was typed and not written yet)
     if (net_) net_->leave();
 #if defined(__EMSCRIPTEN__)
     if (state_ == AppState::Playing || scorecard_.is_open()) {
@@ -1233,7 +1235,22 @@ void Application::release_ui_sounds() {
 void Application::handle_events() {
     SDL_Event event;
     bool pointer_gone = false;                               // the last event took the pointer away (pointer_gone_after: a release outside the window, a lifted finger)
+    // A run with a start menu: a left press or release that changes the screen or the panel begins the rule for the rest of its click sequence (swallow_menu_gesture). The change is looked
+    // for when the next event comes and when the events end: the handlers below leave their loop body by `continue`.
+    uint32_t screen_before = menu_enabled_ ? screen_signature() : 0u;
+    bool left_event = false;
+    uint32_t left_event_ms = 0;
+    const auto watch_screen = [&]() {
+        if (!menu_enabled_) return;
+        const uint32_t now_screen = screen_signature();
+        if (left_event && now_screen != screen_before) begin_menu_gesture(left_event_ms);
+        screen_before = now_screen;
+        left_event = false;
+    };
     while (SDL_PollEvent(&event)) {
+        watch_screen();
+        left_event = (event.type == SDL_MOUSEBUTTONDOWN || event.type == SDL_MOUSEBUTTONUP) && event.button.button == SDL_BUTTON_LEFT;
+        left_event_ms = left_event ? event.button.timestamp : 0u;
         if (pointer_gone) pointer_outside_ = true;           // ... marked once that event has been handled (its handlers clear the mark)
         pointer_gone = pointer_gone_after(event, event.type == SDL_MOUSEBUTTONUP && button_outside_window(event.button));   // the position before the clamp
         clamp_pointer_event(event);                          // a pointer over a black bar of a wide window is the pointer on the edge of the picture (pointer_clamp.hpp)
@@ -1271,7 +1288,10 @@ void Application::handle_events() {
                 mouse_screen_y_ = event.button.y;
                 mouse_has_moved_ = true;
                 pointer_outside_ = false;
-                if (event.button.button == SDL_BUTTON_LEFT) quick_help_press(event.button.x, event.button.y);
+                if (event.button.button == SDL_BUTTON_LEFT) {
+                    if (swallow_menu_gesture(event.button.clicks, event.button.timestamp)) quick_help_move(event.button.x, event.button.y);       // (the second click of the one that opened the quick help)
+                    else quick_help_press(event.button.x, event.button.y);
+                }
             } else if (event.type == SDL_MOUSEBUTTONUP) {
                 mouse_screen_x_ = event.button.x;
                 mouse_screen_y_ = event.button.y;
@@ -1283,6 +1303,11 @@ void Application::handle_events() {
         }
 
         if (state_ == AppState::StartMenu) {
+            if (event.type == SDL_MOUSEBUTTONDOWN && event.button.button == SDL_BUTTON_LEFT && swallow_menu_gesture(event.button.clicks, event.button.timestamp)) {
+                note_pointer(event.button.x, event.button.y);
+                start_menu_.on_mouse_move(event.button.x, event.button.y);              // the pointer is there (a hover); nothing is pressed
+                continue;
+            }
             handle_menu_event(event);
             continue;
         }
@@ -1304,7 +1329,7 @@ void Application::handle_events() {
                     mouse_screen_y_ = event.button.y;
                     mouse_has_moved_ = true;
                     pointer_outside_ = false;
-                    if (event.button.button == SDL_BUTTON_LEFT && swallow_closing_click(event.button.clicks, event.button.timestamp)) {
+                    if (event.button.button == SDL_BUTTON_LEFT && swallow_the_rest_of_a_click(event.button.clicks, event.button.timestamp)) {
                         map_select_.handle_mouse_motion(event.button.x, event.button.y);       // the pointer is there (a hover); nothing is pressed
                         break;
                     }
@@ -1344,6 +1369,7 @@ void Application::handle_events() {
                 break;
         }
     }
+    watch_screen();
     if (pointer_gone) pointer_outside_ = true;
 }
 
@@ -2110,6 +2136,13 @@ bool Application::swallow_closing_click(uint8_t clicks, uint32_t timestamp_ms) {
     if (clicks > 1 || within) return true;
     closing_click_pending_ = false;
     return false;
+}
+
+// The setup screen's left press: the rest of the click that closed the quick help of a joined room, or of the click that left the start menu (both rules are asked: each ends by itself)
+bool Application::swallow_the_rest_of_a_click(uint8_t clicks, uint32_t timestamp_ms) {
+    const bool closing = swallow_closing_click(clicks, timestamp_ms);
+    const bool gesture = swallow_menu_gesture(clicks, timestamp_ms);
+    return closing || gesture;
 }
 
 // FUN_010147c2: Enter (0x18), Esc (0x1a), C (0x43), X (0x58), c (0x63) and x (0x78) run the same callback; M and m open the More Help dialog (not built); no other key does anything

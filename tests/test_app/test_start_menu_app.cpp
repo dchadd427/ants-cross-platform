@@ -170,20 +170,22 @@ struct Peer {
 
 // ---- a dedicated server in the test: the real room manager behind a real TCP listener ----------------------------------------------------------------------------------
 
-server::ServerLimits demo_limits(size_t demo_rooms) {
+server::ServerLimits demo_limits(size_t demo_rooms, const std::vector<std::string>& maps) {
     server::ServerLimits limits;
     limits.demo_rooms = demo_rooms;
     limits.demo_map = "TINY.LVL";
-    limits.demo_maps = {"TINY.LVL", "SMALL.LVL", "MEDIUM.LVL", "GAUNTLET.LVL", "TREASURE.LVL", "ISLANDS.LVL"};
+    limits.demo_maps = maps;
     return limits;
 }
+const std::vector<std::string> kAllMaps = {"TINY.LVL", "SMALL.LVL", "MEDIUM.LVL", "GAUNTLET.LVL", "TREASURE.LVL", "ISLANDS.LVL"};
 
 struct Server {
     server::RoomManager mgr;
     std::unique_ptr<net::TcpListener> listener{net::TcpListener::listen(0, true)};
     uint32_t now{1000};
 
-    explicit Server(size_t demo_rooms = 4) : mgr(server::MapStore(std::string(ORIGINAL_ASSETS_DIR) + "/Maps"), demo_limits(demo_rooms)) {}
+    // `maps`: the maps that the server's demo rooms may be made on (--demo-maps; the menu offers the six of the original, a server may offer fewer)
+    explicit Server(size_t demo_rooms = 4, const std::vector<std::string>& maps = kAllMaps) : mgr(server::MapStore(std::string(ORIGINAL_ASSETS_DIR) + "/Maps"), demo_limits(demo_rooms, maps)) {}
     uint16_t port() const { return listener ? listener->port() : uint16_t{0}; }
     void update() {
         if (listener) {
@@ -335,6 +337,12 @@ void write_no_quick_help(const std::string& path) {
     out << "Show Quick Help at Startup=0\n";
 }
 
+// A settings file of this name with no quick help at the start (and the path of it)
+std::string ini(const TempDir& temp, const std::string& name) {
+    write_no_quick_help(temp.file(name));
+    return temp.file(name);
+}
+
 SDL_Event key_event(SDL_Keycode sym, uint16_t mod = 0, bool repeat = false) {
     SDL_Event e;
     std::memset(&e, 0, sizeof(e));
@@ -367,7 +375,13 @@ SDL_Event mouse_event(uint32_t type, int32_t x, int32_t y, uint8_t button = SDL_
     return e;
 }
 
-void press(Application& app, SDL_Keycode sym, uint16_t mod = 0) { app.handle_menu_event(key_event(sym, mod)); }
+// A key as a person presses it: the panel has been up for longer than StartMenu::kSettleMs by then (Enter and Space ignore a press within it, Esc does not quit from the first
+// panel); `quick_press` is a key that comes at once (the tests of that rule)
+void quick_press(Application& app, SDL_Keycode sym, uint16_t mod = 0) { app.handle_menu_event(key_event(sym, mod)); }
+void press(Application& app, SDL_Keycode sym, uint16_t mod = 0) {
+    if (sym == SDLK_RETURN || sym == SDLK_KP_ENTER || sym == SDLK_SPACE || sym == SDLK_ESCAPE) app.start_menu().update(static_cast<float>(StartMenu::kSettleMs + 10) / 1000.0f);
+    quick_press(app, sym, mod);
+}
 void type_text(Application& app, const std::string& text) { app.handle_menu_event(text_event(text)); }
 
 // A click on a control by the mouse: motion, press, release at its middle
@@ -380,6 +394,38 @@ bool click(Application& app, MenuId id) {
     app.handle_menu_event(mouse_event(SDL_MOUSEBUTTONDOWN, x, y));
     app.handle_menu_event(mouse_event(SDL_MOUSEBUTTONUP, x, y));
     return true;
+}
+
+// The events of one click as the window queues them (SDL's count of the click in every one: 1 for a first click, 2 for the second of a double click), queued like the window's own
+// (SDL stamps them with the time of the queueing); the application takes them in its next frame
+struct Pt {
+    int32_t x{0};
+    int32_t y{0};
+};
+void queue_event(SDL_Event e) { SDL_PushEvent(&e); }
+void queue_press(Pt at, uint8_t clicks) {
+    SDL_Event e = mouse_event(SDL_MOUSEBUTTONDOWN, at.x, at.y);
+    e.button.clicks = clicks;
+    queue_event(e);
+}
+void queue_release(Pt at, uint8_t clicks) {
+    SDL_Event e = mouse_event(SDL_MOUSEBUTTONUP, at.x, at.y);
+    e.button.clicks = clicks;
+    queue_event(e);
+}
+void queue_click(Pt at, uint8_t clicks) {
+    queue_event(mouse_event(SDL_MOUSEMOTION, at.x, at.y));
+    queue_press(at, clicks);
+    queue_release(at, clicks);
+}
+Pt middle_of(Application& app, MenuId id) {
+    MenuElement e;
+    app.start_menu().find_element(id, e);
+    return Pt{e.rect.x + e.rect.w / 2, e.rect.y + e.rect.h / 2};
+}
+bool lies_on(Application& app, MenuId id, Pt at) {
+    MenuElement e;
+    return app.start_menu().find_element(id, e) && e.rect.contains(at.x, at.y);
 }
 
 // Fills a text field as a player does: a click puts the focus on it, Ctrl+A selects what is there, the typing replaces it
@@ -562,6 +608,31 @@ int make_shots(const std::string& dir) {
     press(app, SDLK_ESCAPE);
     app.start_menu().show_main("The connection to the other players was lost.");
     shot(app, dir + "/15_first_panel_notice.png");
+    // what the review fixes added: a character that the fields cannot take, the copy that failed, a server that does not offer the map, the first panel after a lost game with the old code
+    click(app, MenuId::JoinWithCode);
+    press(app, SDLK_a, KMOD_CTRL);
+    type_text(app, "caf\xC3\xA9-room");
+    shot(app, dir + "/16_join_refused_character.png");
+    press(app, SDLK_ESCAPE);
+    click(app, MenuId::JoinWithCode);
+    shot(app, dir + "/17_join_old_code_selected.png");
+    press(app, SDLK_ESCAPE);
+    app.start_menu().set_clipboard([]() { return std::string(); }, [](const std::string&) { return false; });
+    app.start_menu().show_room("demo-gauntlet-4p-k3n7pq", 2, 4);
+    click(app, MenuId::Copy);
+    shot(app, dir + "/18_room_copy_failed.png");
+    app.start_menu().show_main();
+    Server small(2, {"TINY.LVL", "SMALL.LVL"});
+    Hall hall2{&small, &app, {}, nullptr, false};
+    app.start_menu().set_server(ServerAddress{"127.0.0.1", small.port()});
+    click(app, MenuId::HostOnline);
+    while (app.start_menu().settings().host_map != 5) click(app, MenuId::HostMap);                         // Islands
+    click(app, MenuId::Host);
+    if (!hall2.until([&]() { return failed_on(app, MenuPanel::Host); }, 8000)) {
+        std::cerr << "the Host panel's line did not come: state " << static_cast<int>(app.state()) << " panel " << static_cast<int>(app.start_menu().panel()) << " message '" << app.start_menu().message() << "'\n";
+        return 1;
+    }
+    shot(app, dir + "/19_host_map_not_offered.png");
     return 0;
 }
 
@@ -1308,8 +1379,8 @@ int main(int argc, char** argv) {
         lookup->release = false;
         app.start_menu().set_server(ServerAddress{"slow.example.org", raw.port()});
         click(app, MenuId::Join);
-        ASSERT_TRUE(hall.until([&]() { return failed_on(app, MenuPanel::Join) && app.start_menu().message().find("does not answer") != std::string::npos; }, 8000));
-        ASSERT_HAS(app.start_menu().message(), "slow.example.org:" + std::to_string(raw.port()) + " does not answer");
+        ASSERT_TRUE(hall.until([&]() { return failed_on(app, MenuPanel::Join) && app.start_menu().message().find("did not answer") != std::string::npos; }, 8000));
+        ASSERT_HAS(app.start_menu().message(), "The server slow.example.org:" + std::to_string(raw.port()) + " did not answer");
         ASSERT_TRUE(app.net() == nullptr);
         lookup->release = true;
         hall.step(100);
@@ -1324,7 +1395,7 @@ int main(int argc, char** argv) {
         app.start_menu().set_server(ServerAddress{"127.0.0.1", raw.port()});
         click(app, MenuId::Join);
         ASSERT_TRUE(hall.until([&]() { return failed_on(app, MenuPanel::Join); }, 30000));
-        ASSERT_HAS(app.start_menu().message(), "does not answer");
+        ASSERT_HAS(app.start_menu().message(), "did not answer");
         ASSERT_TRUE(app.net() == nullptr);
     } TEST_END();
 
@@ -1601,7 +1672,7 @@ int main(int argc, char** argv) {
         writable = false;
         click(app, MenuId::Copy);
         ASSERT_TRUE(written.size() == 1 && written[0] == shown_code(app));
-        ASSERT_HAS(app.start_menu().message(), "could not be copied");
+        ASSERT_HAS(app.start_menu().message(), "Copy failed");
         writable = true;
         click(app, MenuId::Copy);
         ASSERT_TRUE(written.size() == 2 && written[1] == shown_code(app));
@@ -1731,6 +1802,7 @@ int main(int argc, char** argv) {
         Application app;
         ASSERT_TRUE(app.init(menu_config("127.0.0.1:1", temp.file("s.ini"))));
         const auto push = [](SDL_Event e) { ASSERT_TRUE(SDL_PushEvent(&e) == 1); };
+        app.start_menu().update(0.4f);                                                       // (the first panel has been up for a while: Enter acts)
         push(key_event(SDLK_DOWN));                                                          // first panel: Join with a code
         push(key_event(SDLK_RETURN));
         app.run_frame_with_delta(0.016f);
@@ -1739,6 +1811,7 @@ int main(int argc, char** argv) {
         push(text_event("demo-queued"));                                                     // typed text goes to the field that has the focus: the code (the name is proposed)
         app.run_frame_with_delta(0.016f);
         ASSERT_EQ(app.start_menu().code(), std::string("demo-queued"));
+        app.start_menu().update(0.4f);
         push(key_event(SDLK_ESCAPE));                                                        // back to the first panel
         app.run_frame_with_delta(0.016f);
         ASSERT_EQ(app.start_menu().panel(), MenuPanel::Main);
@@ -1822,6 +1895,550 @@ int main(int argc, char** argv) {
         ASSERT_TRUE(p.net.fail_reason() == FailReason::Lost);
         p.net.leave();
         ASSERT_TRUE(p.net.fail_reason() == FailReason::None && p.net.phase() == net::NetGame::Phase::Off);
+    } TEST_END();
+
+
+    // ---- the review fixes of the start menu ---------------------------------------------------------------------------------------------------------------------
+
+    TEST_CASE("A13.1 The second click of a double click is not a click on the screen that the first one opened (the controls lie on top of each other): the entries and the panels, Cancel and Back, the loading screen and Quit, the quit dialog and the Host entry; a click after the double-click time is a click") {
+        TempDir temp;
+        Server server;
+        {   // "Host an online match" and the Host panel's Host button: the second click made a room on the server
+            Application app;
+            Hall hall{&server, &app, {}, nullptr, false};
+            ASSERT_TRUE(app.init(menu_config(server.address(), ini(temp, "a.ini"))));
+            const Pt entry = middle_of(app, MenuId::HostOnline);
+            queue_click(entry, 1);
+            app.run_frame_with_delta(0.016f);
+            ASSERT_EQ(app.start_menu().panel(), MenuPanel::Host);
+            ASSERT_TRUE(lies_on(app, MenuId::Host, entry));                                 // the geometry that makes it dangerous: Host is under the entry that was clicked
+            ASSERT_TRUE(app.menu_gesture_pending());
+            queue_press(entry, 2);                                                           // the second click of the double click
+            queue_release(entry, 2);
+            app.run_frame_with_delta(0.016f);
+            hall.step(200);
+            ASSERT_EQ(app.start_menu().panel(), MenuPanel::Host);                           // not Connecting, not the room
+            ASSERT_TRUE(app.net() == nullptr && server.mgr.list(server.now).empty());
+            // the time alone is enough (SDL gave up the count: the pointer moved between the clicks): a press that is stamped no later than the double-click time after the click that changed
+            // the screen, or before it (it was queued before that click was handled), is the rest of it
+            ASSERT_TRUE(app.swallow_menu_gesture(1, 0));
+            // the count alone is enough too, long after the first click (a slow double click): clicks 2 is the rest of a sequence, whatever the time says
+            ASSERT_TRUE(app.swallow_menu_gesture(2, 0x7FFFFFFFu));
+            ASSERT_TRUE(app.menu_gesture_pending());
+            // a click after the double-click time is a new click: the screen's, and the rule ends
+            ASSERT_FALSE(app.swallow_menu_gesture(1, SDL_GetTicks() + Application::kDoubleClickMs + 50));
+            ASSERT_FALSE(app.menu_gesture_pending());
+            queue_click(entry, 1);
+            app.run_frame_with_delta(0.016f);
+            ASSERT_TRUE(hall.until([&]() { return on_panel(app, MenuPanel::Room); }, 8000));  // (the Host button works: this is the room that it makes)
+            ASSERT_EQ(server.mgr.list(server.now).size(), static_cast<size_t>(1));
+        }
+        {   // "Single player" and the Red seat's row: the second click changed Red to an Easy bot and wrote it to the settings
+            Application app;
+            ASSERT_TRUE(app.init(menu_config(server.address(), ini(temp, "b.ini"))));
+            const Pt entry = middle_of(app, MenuId::Single);
+            queue_click(entry, 1);
+            app.run_frame_with_delta(0.016f);
+            ASSERT_EQ(app.start_menu().panel(), MenuPanel::Single);
+            ASSERT_TRUE(lies_on(app, MenuId::Seat1, entry));
+            queue_press(entry, 2);
+            queue_release(entry, 2);
+            app.run_frame_with_delta(0.016f);
+            ASSERT_EQ(app.start_menu().seat(1), SeatChoice::Empty);
+            ASSERT_TRUE(app.start_menu().bots().empty());
+            ASSERT_TRUE(read_file(temp.file("b.ini")).find("bots") == std::string::npos);   // nothing was saved
+            // a cycler is clicked twice on purpose when the panel is the same: a double click on a row changes it twice (no screen changed)
+            ASSERT_FALSE(app.swallow_menu_gesture(1, SDL_GetTicks() + 2 * Application::kDoubleClickMs));
+            const Pt row = middle_of(app, MenuId::Seat2);
+            queue_click(row, 1);
+            queue_click(row, 2);
+            app.run_frame_with_delta(0.016f);
+            ASSERT_EQ(app.start_menu().seat(2), SeatChoice::Medium);
+        }
+        {   // Cancel on "Connecting" and the Join panel's Back button under it: the second click went on to the first panel; the same with the Host panel's Host button at the top of Cancel
+            const auto slow = std::make_shared<Lookup>();
+            for (const bool host : {false, true}) {
+                Application app;
+                ApplicationConfig cfg = menu_config("slow.example.org:4001", ini(temp, host ? "c2.ini" : "c1.ini"));
+                cfg.host_resolver = lookup_of(slow);
+                ASSERT_TRUE(app.init(cfg));
+                if (host) menu_host(app, "Dave", 0, 0);
+                else menu_join(app, "Dave", "abc-1");
+                app.pump_network(0.01f);
+                ASSERT_EQ(app.start_menu().panel(), MenuPanel::Connecting);
+                MenuElement cancel;
+                ASSERT_TRUE(app.start_menu().find_element(MenuId::Cancel, cancel));
+                const Pt at{cancel.rect.x + cancel.rect.w / 2, cancel.rect.y + (host ? 2 : 20)};   // (the Host button ends at y 294, Cancel begins at 290)
+                queue_click(at, 1);
+                app.run_frame_with_delta(0.016f);
+                ASSERT_EQ(app.start_menu().panel(), host ? MenuPanel::Host : MenuPanel::Join);
+                ASSERT_TRUE(lies_on(app, host ? MenuId::Host : MenuId::Back, at));
+                queue_press(at, 2);
+                queue_release(at, 2);
+                app.run_frame_with_delta(0.016f);
+                ASSERT_EQ(app.start_menu().panel(), host ? MenuPanel::Host : MenuPanel::Join);   // not the first panel, not a new attempt
+                ASSERT_TRUE(app.net() == nullptr);
+                ASSERT_EQ(slow->calls.load(), host ? 2 : 1);                                       // (the lookups of this run so far: the Join one, then the Host one; no third)
+            }
+            slow->release = true;
+        }
+        {   // the loading screen: its closing click and the second click on "Quit" ended the program
+            Application app;
+            SDL_SetHint(SDL_HINT_VIDEODRIVER, "dummy");                                      // a real window without a screen (as test 7.8e of the integration suite has)
+            SDL_SetHint(SDL_HINT_AUDIODRIVER, "dummy");
+            ApplicationConfig cfg = menu_config("127.0.0.1:1", ini(temp, "e.ini"));
+            cfg.headless = false;
+            cfg.skip_intro = false;
+            ASSERT_TRUE(app.init(cfg));
+            ASSERT_EQ(app.state(), AppState::Loading);
+            StartMenu layout;
+            layout.show_main();
+            MenuElement quit;
+            ASSERT_TRUE(layout.find_element(MenuId::Quit, quit));
+            const Pt at{quit.rect.x + quit.rect.w / 2, quit.rect.y + quit.rect.h / 2};
+            queue_click(at, 1);                                                               // the click that ends the loading screen
+            queue_press(at, 2);
+            queue_release(at, 2);
+            app.run_frame_with_delta(0.016f);
+            ASSERT_EQ(app.state(), AppState::StartMenu);
+            ASSERT_EQ(app.start_menu().panel(), MenuPanel::Main);
+            ASSERT_TRUE(app.is_running());                                                    // Quit was not pressed
+            SDL_Delay(Application::kDoubleClickMs + 60);
+            queue_press(at, 1);                                                               // ... a click of its own, after the sequence, is: the menu answers it
+            queue_release(at, 1);
+            app.run_frame_with_delta(0.016f);
+            ASSERT_FALSE(app.is_running());
+            app.shutdown();
+        }
+        {   // Continue leads to the quick help: a click that follows within the double-click time is the rest of Continue's click, not a press on the quick help's START! (and not on the setup screen's START either)
+            for (const bool quick_help : {true, false}) {
+                Application app;
+                ASSERT_TRUE(app.init(menu_config(server.address(), quick_help ? temp.file("g.ini") : ini(temp, "h.ini"))));
+                click(app, MenuId::Single);                                                       // (the menu's own handler: no gesture here)
+                queue_click(middle_of(app, MenuId::Continue), 1);
+                app.run_frame_with_delta(0.016f);
+                ASSERT_EQ(app.state(), quick_help ? AppState::QuickHelp : AppState::MapSelect);
+                const Pt start = quick_help ? Pt{578, 450} : Pt{MapSelectScreen::BTN_START_X + 49, MapSelectScreen::BTN_START_Y + 13};     // START! / START: lie under the same hand
+                queue_press(start, 2);                                                             // (SDL's count says it is the second click: the rule does not depend on the machine's speed)
+                queue_release(start, 2);
+                app.run_frame_with_delta(0.016f);
+                ASSERT_EQ(app.state(), quick_help ? AppState::QuickHelp : AppState::MapSelect);        // nothing was pressed
+                SDL_Delay(Application::kDoubleClickMs + 60);
+                queue_press(start, 1);                                                             // a click of its own, after the sequence
+                queue_release(start, 1);
+                app.run_frame_with_delta(0.016f);
+                ASSERT_EQ(app.state(), quick_help ? AppState::MapSelect : AppState::Playing);
+            }
+        }
+        {   // a match that is left through the quit dialog's Yes: the second click of the double click lands on "Host an online match" of the first panel (the Yes button lies under it)
+            Application app;
+            Peer ann;
+            Peer bob;
+            Hall hall{&server, &app, {&ann, &bob}, nullptr, false};
+            ASSERT_TRUE(app.init(menu_config(server.address(), ini(temp, "f.ini"))));
+            ASSERT_TRUE(ann.join("127.0.0.1", server.port(), "Ann", "demo-tiny-3p-dblclk"));
+            ASSERT_TRUE(hall.until([&]() { return ann.net.phase() == net::NetGame::Phase::Room; }, 8000));
+            ASSERT_TRUE(bob.join("127.0.0.1", server.port(), "Bob", "demo-tiny-3p-dblclk"));
+            ASSERT_TRUE(hall.until([&]() { return bob.net.phase() == net::NetGame::Phase::Room; }, 8000));
+            menu_join(app, "Dave", "demo-tiny-3p-dblclk");
+            ASSERT_TRUE(hall.until([&]() { return app.state() == AppState::Playing; }, 20000));
+            hall.step(6000);
+            SDL_KeyboardEvent q_ev{};
+            q_ev.type = SDL_KEYDOWN;
+            q_ev.keysym.sym = SDLK_q;
+            q_ev.keysym.mod = KMOD_LCTRL;
+            app.handle_key_down(q_ev);
+            ASSERT_TRUE(app.hud().is_quit_dialog_open());
+            const Pt yes{204, 272};                                                           // the Yes button (180, 260, 49 x 24)
+            queue_click(yes, 1);
+            queue_press(yes, 2);
+            queue_release(yes, 2);
+            app.run_frame_with_delta(0.016f);
+            ASSERT_EQ(app.state(), AppState::StartMenu);
+            ASSERT_TRUE(lies_on(app, MenuId::HostOnline, yes));
+            ASSERT_EQ(app.start_menu().panel(), MenuPanel::Main);                             // the second click did not open the Host panel
+            ASSERT_TRUE(app.is_running());
+        }
+    } TEST_END();
+
+    TEST_CASE("A13.2 Enter pressed twice in a hurry, through the window's own events: the first opens a panel or starts an attempt, the second does nothing (it does not make a room, cycle the map, start the game, or cancel the attempt); after the settling time Enter acts; the name that was typed is written when the program ends") {
+        TempDir temp;
+        Server server;
+        const auto key = [](SDL_Keycode k) { queue_event(key_event(k)); };
+        {   // Host an online match
+            Application app;
+            Hall hall{&server, &app, {}, nullptr, false};
+            ASSERT_TRUE(app.init(menu_config(server.address(), ini(temp, "a.ini"))));
+            app.start_menu().update(0.4f);                                                    // (the first panel has been up for a while)
+            key(SDLK_DOWN);
+            key(SDLK_DOWN);
+            key(SDLK_RETURN);
+            key(SDLK_RETURN);
+            app.run_frame_with_delta(0.016f);
+            hall.step(300);
+            ASSERT_EQ(app.start_menu().panel(), MenuPanel::Host);
+            ASSERT_TRUE(app.net() == nullptr && server.mgr.list(server.now).empty());        // no room was made
+            ASSERT_EQ(app.start_menu().settings().host_map, 0);                              // and the map under the cursor was not cycled by the second Enter
+            app.start_menu().update(0.4f);
+            key(SDLK_RETURN);
+            app.run_frame_with_delta(0.016f);
+            ASSERT_EQ(app.start_menu().settings().host_map, 1);                              // Enter of its own does cycle it
+        }
+        {   // Single player
+            Application app;
+            ASSERT_TRUE(app.init(menu_config(server.address(), ini(temp, "b.ini"))));
+            app.start_menu().update(0.4f);
+            key(SDLK_RETURN);
+            key(SDLK_RETURN);
+            app.run_frame_with_delta(0.016f);
+            ASSERT_EQ(app.state(), AppState::StartMenu);
+            ASSERT_EQ(app.start_menu().panel(), MenuPanel::Single);                          // the game was not started
+            ASSERT_EQ(app.start_menu().seat(1), SeatChoice::Empty);
+            // Esc, Esc leaves the panel and does not leave the program
+            app.start_menu().update(0.4f);
+            key(SDLK_ESCAPE);
+            key(SDLK_ESCAPE);
+            app.run_frame_with_delta(0.016f);
+            ASSERT_TRUE(app.is_running());
+            ASSERT_EQ(app.start_menu().panel(), MenuPanel::Main);
+        }
+        {   // Join: the Enter that joins and a second one: the attempt goes on and the server answers (it used to be cancelled, silently)
+            Application app;
+            Hall hall{&server, &app, {}, nullptr, false};
+            ASSERT_TRUE(app.init(menu_config(server.address(), ini(temp, "c.ini"))));
+            app.start_menu().update(0.4f);
+            key(SDLK_DOWN);
+            key(SDLK_RETURN);
+            app.run_frame_with_delta(0.016f);
+            ASSERT_EQ(app.start_menu().panel(), MenuPanel::Join);
+            queue_event(text_event("abc-1"));
+            app.start_menu().update(0.4f);
+            key(SDLK_RETURN);
+            key(SDLK_RETURN);
+            app.run_frame_with_delta(0.016f);
+            ASSERT_TRUE(hall.until([&]() { return failed_on(app, MenuPanel::Join); }, 8000));
+            ASSERT_HAS(app.start_menu().message(), "no room with the code abc-1");           // the server's own answer, not a cancel
+        }
+        {   // the name that was typed and not written yet is written when the program ends (the window's close button), not at every key
+            Application app;
+            ASSERT_TRUE(app.init(menu_config(server.address(), ini(temp, "d.ini"))));
+            app.start_menu().update(0.4f);
+            key(SDLK_DOWN);
+            key(SDLK_RETURN);
+            app.run_frame_with_delta(0.016f);
+            key(SDLK_UP);                                                                      // the name field (its text selected)
+            queue_event(text_event("Zed"));
+            app.run_frame_with_delta(0.016f);
+            ASSERT_EQ(app.start_menu().name(), std::string("Zed"));
+            ASSERT_TRUE(read_file(temp.file("d.ini")).find("name=Zed") == std::string::npos);   // not yet: the field was not left
+            SDL_Event quit;
+            std::memset(&quit, 0, sizeof(quit));
+            quit.type = SDL_QUIT;
+            queue_event(quit);
+            app.run_frame_with_delta(0.016f);
+            ASSERT_FALSE(app.is_running());
+            ASSERT_HAS(read_file(temp.file("d.ini")), "name=Zed");
+        }
+        {   // an input method's composition in progress is not text: only what it commits (SDL_TEXTINPUT) is
+            Application app;
+            ASSERT_TRUE(app.init(menu_config(server.address(), ini(temp, "e.ini"))));
+            click(app, MenuId::JoinWithCode);
+            ASSERT_EQ(app.start_menu().selected(), MenuId::Code);
+            SDL_Event editing;
+            std::memset(&editing, 0, sizeof(editing));
+            editing.type = SDL_TEXTEDITING;
+            std::snprintf(editing.edit.text, sizeof(editing.edit.text), "%s", "ni");
+            editing.edit.length = 2;
+            app.handle_menu_event(editing);
+            ASSERT_EQ(app.start_menu().code(), std::string(""));
+            app.handle_menu_event(text_event("\xE4\xBD\xA0"));                                  // the committed character: not ASCII, refused with the line
+            ASSERT_EQ(app.start_menu().code(), std::string(""));
+            ASSERT_EQ(app.start_menu().message(), std::string(StartMenu::kRefusedCharsText));
+        }
+    } TEST_END();
+
+    TEST_CASE("A13.3 What a menu game leaves behind: Leave of a single-player game ends the program (the original's way), and a network game that ends takes everything with it: the quit dialog and the in-match windows, the attempt that was left at its room, the reason of a lost match, the seat that was played") {
+        TempDir temp;
+        {   // Leave of the setup screen and the quit dialog's Yes of a single-player game end the program, with the menu or without
+            Server server;
+            Application app;
+            ASSERT_TRUE(app.init(menu_config(server.address(), ini(temp, "a.ini"))));
+            click(app, MenuId::Single);
+            click(app, MenuId::Continue);
+            app.pump_network(0.01f);
+            ASSERT_EQ(app.state(), AppState::MapSelect);
+            ASSERT_FALSE(app.network_active());
+            app.map_select().handle_key_down(SDLK_q);                                         // Leave
+            ASSERT_FALSE(app.is_running());
+        }
+        {
+            Server server;
+            Application app;
+            ASSERT_TRUE(app.init(menu_config(server.address(), ini(temp, "b.ini"))));
+            click(app, MenuId::Single);
+            click(app, MenuId::Continue);
+            app.pump_network(0.01f);
+            app.map_select().handle_key_down(SDLK_RETURN);                                    // START
+            ASSERT_EQ(app.state(), AppState::Playing);
+            for (int i = 0; i < 160; ++i) app.update_simulation(0.05f);                      // the "get ready" dialog is over
+            SDL_KeyboardEvent q_ev{};
+            q_ev.type = SDL_KEYDOWN;
+            q_ev.keysym.sym = SDLK_q;
+            q_ev.keysym.mod = KMOD_LCTRL;
+            app.handle_key_down(q_ev);
+            ASSERT_TRUE(app.hud().is_quit_dialog_open());
+            SDL_KeyboardEvent y_ev{};
+            y_ev.type = SDL_KEYDOWN;
+            y_ev.keysym.sym = SDLK_y;
+            app.handle_key_down(y_ev);
+            ASSERT_FALSE(app.is_running());                                                    // (the menu is for network games: a single-player game ends the program as the original does)
+        }
+        {   // the room closes under a player who sits at seat 1 with the quit dialog, the match's quick help and the options open: back at the menu with all of them closed, seat 0 again
+            Server server;
+            Application app;
+            Peer ann;
+            Hall hall{&server, &app, {&ann}, nullptr, false};
+            ASSERT_TRUE(ann.join("127.0.0.1", server.port(), "Ann", "demo-tiny-2p-gone01"));
+            ASSERT_TRUE(hall.until([&]() { return ann.net.phase() == net::NetGame::Phase::Room; }, 8000));
+            ASSERT_TRUE(app.init(menu_config(server.address(), ini(temp, "c.ini"))));
+            menu_join(app, "Bob", "demo-tiny-2p-gone01");
+            ASSERT_TRUE(hall.until([&]() { return app.state() == AppState::Playing && ann.net.phase() == net::NetGame::Phase::Playing; }, 20000));
+            hall.step(1000);
+            ASSERT_EQ(app.local_player_id(), 1);
+            ASSERT_EQ(app.hud().local_player_id(), 1);
+            app.hud().open_quit_dialog();
+            app.hud().open_quick_help();
+            app.hud().open_options();
+            ASSERT_TRUE(app.hud().is_quit_dialog_open() && app.hud().is_quick_help_open() && app.hud().is_options_open());
+            ASSERT_TRUE(server.mgr.close_room("demo-tiny-2p-gone01", server.now));
+            ASSERT_TRUE(hall.until([&]() { return app.state() == AppState::StartMenu; }, 12000));
+            ASSERT_FALSE(app.hud().is_quit_dialog_open());                                    // (a dialog of the match that is gone would be on the next match's screen)
+            ASSERT_FALSE(app.hud().is_quick_help_open());
+            ASSERT_FALSE(app.hud().is_options_open());
+            ASSERT_EQ(app.local_player_id(), 0);                                              // the seat that was played is not the seat of the next game
+            ASSERT_EQ(app.hud().local_player_id(), 0);
+            ASSERT_TRUE(app.net_notice().empty());                                            // the reason went to the first panel (below) and is not kept
+            ASSERT_HAS(app.start_menu().message(), "lost");
+        }
+        {   // a room that fills while its code is on the screen starts the match; leaving it must not leave the attempt behind (the menu was told "the connection was lost" a frame later)
+            Server server;
+            Application app;
+            Peer guest;
+            Hall hall{&server, &app, {&guest}, nullptr, false};
+            ASSERT_TRUE(app.init(menu_config(server.address(), ini(temp, "e.ini"))));
+            menu_host(app, "Hostess", 0, 1);                                                   // Tiny, two players
+            ASSERT_TRUE(hall.until([&]() { return on_panel(app, MenuPanel::Room); }, 8000));
+            ASSERT_TRUE(guest.join("127.0.0.1", server.port(), "Guest", shown_code(app)));
+            ASSERT_TRUE(hall.until([&]() { return app.state() == AppState::Playing && guest.net.phase() == net::NetGame::Phase::Playing; }, 20000));
+            hall.step(1000);
+            ASSERT_TRUE(server.mgr.close_room(server.mgr.list(server.now)[0].code, server.now));
+            ASSERT_TRUE(hall.until([&]() { return app.state() == AppState::StartMenu; }, 12000));
+            hall.step(500);                                                                    // frames at the menu: nothing of the attempt is left to say anything
+            ASSERT_EQ(app.start_menu().panel(), MenuPanel::Main);
+            ASSERT_HAS(app.start_menu().message(), "lost");                                    // (the match's notice, not a failure of the attempt)
+            ASSERT_TRUE(app.net() == nullptr);
+        }
+    } TEST_END();
+
+    TEST_CASE("A13.4 A session that is over is not a room: the setup screen, the room's panel and a join in progress each go back to the menu with the line of their own, for Failed and for Over (Over comes only from a match that is lost, so the test puts the session there); Enter on 'Continue to the room' needs the room") {
+        TempDir temp;
+        Server server;
+        for (const net::NetGame::Phase dead : {net::NetGame::Phase::Failed, net::NetGame::Phase::Over}) {   // under the setup screen
+            Application app;
+            Hall hall{&server, &app, {}, nullptr, false};
+            ASSERT_TRUE(app.init(menu_config(server.address(), ini(temp, "a.ini"))));
+            menu_join(app, "Dave", "demo-tiny-4p-dead02");
+            ASSERT_TRUE(hall.until([&]() { return app.state() == AppState::MapSelect && app.net() != nullptr && app.net()->phase() == net::NetGame::Phase::Room; }, 8000));
+            app.net()->force_phase_for_test(dead);
+            app.pump_network(0.01f);
+            ASSERT_EQ(app.state(), AppState::StartMenu);
+            ASSERT_TRUE(app.net() == nullptr && app.is_running());
+            hall.step(100);
+        }
+        for (const net::NetGame::Phase dead : {net::NetGame::Phase::Failed, net::NetGame::Phase::Over}) {   // on the room's panel
+            Application app;
+            Hall hall{&server, &app, {}, nullptr, false};
+            ASSERT_TRUE(app.init(menu_config(server.address(), ini(temp, "b.ini"))));
+            menu_host(app, "Hostess", 0, 1);
+            ASSERT_TRUE(hall.until([&]() { return on_panel(app, MenuPanel::Room); }, 8000));
+            app.net()->force_phase_for_test(dead);
+            app.pump_network(0.01f);
+            ASSERT_TRUE(failed_on(app, MenuPanel::Host));
+            ASSERT_TRUE(app.net() == nullptr);
+            ASSERT_EQ(app.window_title(), std::string("Ants"));
+        }
+        {   // a join in progress whose session is over (Over, or no session at all): "lost before you were in the room", not "cannot reach"
+            Application app;
+            RawServer raw;
+            Hall hall{nullptr, &app, {}, &raw, false};
+            ASSERT_TRUE(app.init(menu_config("127.0.0.1:" + std::to_string(raw.port()), ini(temp, "c.ini"))));
+            menu_join(app, "Dave", "room-x");
+            ASSERT_TRUE(hall.until([&]() { return app.net() != nullptr && app.net()->phase() == net::NetGame::Phase::Connecting && raw.accepted == 1; }, 8000));
+            app.net()->force_phase_for_test(net::NetGame::Phase::Over);
+            app.pump_network(0.01f);
+            ASSERT_TRUE(failed_on(app, MenuPanel::Join));
+            ASSERT_HAS(app.start_menu().message(), "was lost before you were in the room");
+            ASSERT_TRUE(app.start_menu().message().find("Cannot reach") == std::string::npos);
+            ASSERT_TRUE(app.net() == nullptr);
+        }
+        {   // "Continue to the room" with the match already loading: the room is no longer the screen to go to
+            Application app;
+            Hall hall{&server, &app, {}, nullptr, false};
+            ASSERT_TRUE(app.init(menu_config(server.address(), ini(temp, "d.ini"))));
+            menu_host(app, "Hostess", 0, 1);
+            ASSERT_TRUE(hall.until([&]() { return on_panel(app, MenuPanel::Room); }, 8000));
+            app.net()->force_phase_for_test(net::NetGame::Phase::Loading);
+            click(app, MenuId::EnterRoom);
+            app.pump_network(0.0f);
+            ASSERT_EQ(app.state(), AppState::StartMenu);                                      // nothing happened
+            ASSERT_EQ(app.start_menu().panel(), MenuPanel::Room);
+            app.net()->force_phase_for_test(net::NetGame::Phase::Room);
+            click(app, MenuId::EnterRoom);
+            app.pump_network(0.0f);
+            ASSERT_EQ(app.state(), AppState::MapSelect);                                      // with the room it does
+        }
+    } TEST_END();
+
+    TEST_CASE("A13.5 Time limits and silence: the player's limit is 20 seconds for a lookup that never ends, a server that accepts and never says Welcome ends after the room's 10 seconds; both say 'The server <name> did not answer' (one rule), a server that hangs up says 'lost before you were in the room', and NetGame names the difference (NoAnswer, Lost)") {
+        TempDir temp;
+        ASSERT_EQ(ApplicationConfig{}.menu_connect_timeout_ms, 20000u);                       // the production limit is the default of the config (the tests below do not set it)
+        {   // a name that is never resolved: 20 s of game time, not 5 and not 60
+            Application app;
+            const auto lookup = std::make_shared<Lookup>();
+            Hall hall{nullptr, &app, {}, nullptr, false};
+            ApplicationConfig cfg = menu_config("never.example.org:4001", ini(temp, "a.ini"));
+            cfg.host_resolver = lookup_of(lookup);
+            ASSERT_TRUE(app.init(cfg));
+            menu_join(app, "Dave", "abc-1");
+            uint32_t waited = 0;
+            while (waited < 30000 && !failed_on(app, MenuPanel::Join)) {
+                hall.step(10);
+                waited += 10;
+            }
+            ASSERT_TRUE(waited >= 19900 && waited <= 20300);
+            ASSERT_HAS(app.start_menu().message(), "The server never.example.org:4001 did not answer");
+            lookup->release = true;
+        }
+        {   // a server that accepts and stays silent: the lobby's welcome limit (10 s) ends it, and the line is the same
+            Application app;
+            RawServer raw;
+            raw.mode = RawServer::Mode::Silent;
+            Hall hall{nullptr, &app, {}, &raw, false};
+            ASSERT_TRUE(app.init(menu_config("127.0.0.1:" + std::to_string(raw.port()), ini(temp, "b.ini"))));
+            menu_join(app, "Dave", "abc-1");
+            uint32_t waited = 0;
+            while (waited < 30000 && !failed_on(app, MenuPanel::Join)) {
+                hall.step(10);
+                waited += 10;
+            }
+            ASSERT_TRUE(waited >= 9900 && waited <= 14000);                                    // (the game's clock runs ahead of the socket: the connection takes some of it)
+            ASSERT_HAS(app.start_menu().message(), "did not answer");
+            ASSERT_TRUE(app.start_menu().message().find("lost") == std::string::npos);
+            ASSERT_EQ(raw.hellos.size(), static_cast<size_t>(1));                             // the guest asked for the room and named itself, for any seat (255)
+            ASSERT_TRUE(raw.hellos[0].want_seat == 255 && raw.hellos[0].name == "Dave" && raw.hellos[0].room == "abc-1");
+        }
+        {   // NetGame alone: the silent server is NoAnswer after ten seconds of the guest's clock; the one that hangs up is Lost at once
+            RawServer raw;
+            Peer p;
+            Hall hall{nullptr, nullptr, {&p}, &raw, false};
+            using FailReason = net::NetGame::FailReason;
+            raw.mode = RawServer::Mode::Silent;
+            ASSERT_TRUE(p.join("127.0.0.1", raw.port(), "Ann", "room-x"));
+            const uint32_t begun = p.now;
+            ASSERT_TRUE(hall.until([&]() { return p.net.phase() == net::NetGame::Phase::Failed; }, 20000));
+            ASSERT_TRUE(p.net.fail_reason() == FailReason::NoAnswer);
+            ASSERT_TRUE(p.now - begun >= 9900 && p.now - begun <= 14000);
+            p.net.leave();
+            raw.mode = RawServer::Mode::HangUp;
+            ASSERT_TRUE(p.join("127.0.0.1", raw.port(), "Ann", "room-x"));
+            ASSERT_TRUE(hall.until([&]() { return p.net.phase() == net::NetGame::Phase::Failed; }, 20000));
+            ASSERT_TRUE(p.net.fail_reason() == FailReason::Lost);
+        }
+        {   // the player's limit also covers a server that has accepted and says nothing (here a limit of 3 s, shorter than the room's welcome): the attempt ends at the player's limit
+            Application app;
+            RawServer raw;
+            raw.mode = RawServer::Mode::Silent;
+            Hall hall{nullptr, &app, {}, &raw, false};
+            ApplicationConfig cfg = menu_config("127.0.0.1:" + std::to_string(raw.port()), ini(temp, "b3.ini"));
+            cfg.menu_connect_timeout_ms = 3000;
+            ASSERT_TRUE(app.init(cfg));
+            menu_join(app, "Dave", "abc-1");
+            uint32_t waited = 0;
+            while (waited < 30000 && !failed_on(app, MenuPanel::Join)) {
+                hall.step(10);
+                waited += 10;
+            }
+            ASSERT_TRUE(waited >= 2900 && waited <= 8000);                                     // not the room's 10 s
+            ASSERT_HAS(app.start_menu().message(), "did not answer");
+            ASSERT_TRUE(app.net() == nullptr);
+        }
+        {   // a server that hangs up before the Welcome: the line of a lost connection
+            Application app;
+            RawServer raw;
+            raw.mode = RawServer::Mode::HangUp;
+            Hall hall{nullptr, &app, {}, &raw, false};
+            ASSERT_TRUE(app.init(menu_config("127.0.0.1:" + std::to_string(raw.port()), ini(temp, "c.ini"))));
+            menu_join(app, "Dave", "abc-1");
+            ASSERT_TRUE(hall.until([&]() { return failed_on(app, MenuPanel::Join); }, 8000));
+            ASSERT_HAS(app.start_menu().message(), "was lost before you were in the room");
+        }
+    } TEST_END();
+
+    TEST_CASE("A13.6 A lookup that cannot start its thread says so (not 'the name is not known'), the player of a bot seat at the setup screen is named before START, and a server that does not offer the map that the player chose is told, and the room is left") {
+        TempDir temp;
+        {   // the system has no thread to give
+            Application app;
+            ApplicationConfig cfg = menu_config("somewhere.example.org:4001", ini(temp, "a.ini"));
+            cfg.host_resolver = [](const std::string&, std::string&, std::string&) { return false; };
+            cfg.host_launcher = [](std::function<void()>) { throw std::system_error(std::make_error_code(std::errc::resource_unavailable_try_again)); };
+            ASSERT_TRUE(app.init(cfg));
+            menu_join(app, "Dave", "abc-1");
+            app.pump_network(0.01f);
+            ASSERT_TRUE(failed_on(app, MenuPanel::Join));
+            ASSERT_HAS(app.start_menu().message(), "Could not start the lookup of somewhere.example.org");
+            ASSERT_TRUE(app.start_menu().message().find("not known") == std::string::npos);
+            ASSERT_TRUE(app.net() == nullptr && app.is_running());
+        }
+        {   // Continue with two bots: the setup screen names them before START (the original's single-player game keeps its names)
+            Server server;
+            Application app;
+            ApplicationConfig cfg = menu_config(server.address(), ini(temp, "b.ini"));
+            cfg.team_names[1] = "Zed";                                                         // (--team-name: a name that the command line gave to a seat)
+            ASSERT_TRUE(app.init(cfg));
+            click(app, MenuId::Single);
+            click(app, MenuId::Seat2);                                                         // Blue: Easy
+            click(app, MenuId::Seat3);
+            click(app, MenuId::Seat3);
+            click(app, MenuId::Seat3);                                                         // Black: Hard
+            click(app, MenuId::Continue);
+            app.pump_network(0.01f);
+            ASSERT_EQ(app.state(), AppState::MapSelect);                                       // (before START)
+            ASSERT_EQ(app.sim().get_player_name(2), std::string("Bot (Easy)"));
+            ASSERT_EQ(app.sim().get_player_name(3), std::string("Bot (Hard)"));
+            ASSERT_EQ(app.sim().get_player_name(1), std::string("Zed"));                       // a seat without a bot keeps what the command line named it
+        }
+        {   // a server whose demo rooms are on Tiny and Small only, and the player asked for Islands (the menu offers the six maps of the game)
+            Server server(4, {"TINY.LVL", "SMALL.LVL"});
+            Application app;
+            Hall hall{&server, &app, {}, nullptr, false};
+            ASSERT_TRUE(app.init(menu_config(server.address(), ini(temp, "c.ini"))));
+            menu_host(app, "Hostess", 5, 2);                                                   // Islands, three players
+            ASSERT_TRUE(hall.until([&]() { return failed_on(app, MenuPanel::Host); }, 8000));
+            ASSERT_HAS(app.start_menu().message(), "does not offer the Islands map");
+            ASSERT_HAS(app.start_menu().message(), "TINY.LVL");                               // what the server would have played instead
+            ASSERT_TRUE(app.net() == nullptr);
+            ASSERT_EQ(app.window_title(), std::string("Ants"));
+            ASSERT_EQ(app.start_menu().settings().host_map, 5);                               // the choice stays: the player picks another map and goes on
+            ASSERT_TRUE(hall.until([&]() { return server.mgr.list(server.now).empty() || server.mgr.list(server.now)[0].joined == 0; }, 4000));   // (the player left the room again)
+            click(app, MenuId::HostMap);                                                       // Islands -> Tiny
+            click(app, MenuId::Host);
+            ASSERT_TRUE(hall.until([&]() { return on_panel(app, MenuPanel::Room); }, 8000));  // a map that the server offers is made
+            click(app, MenuId::Back);
+            hall.step(100);
+            click(app, MenuId::HostMap);                                                       // Tiny -> Small: offered too
+            click(app, MenuId::Host);
+            ASSERT_TRUE(hall.until([&]() { return on_panel(app, MenuPanel::Room); }, 8000));
+        }
     } TEST_END();
 
     std::cout << "\nstart menu in the application: " << g_test_count << " tests, " << g_assert_count << " assertions, " << g_test_failures << " failures\n";

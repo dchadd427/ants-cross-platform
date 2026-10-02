@@ -108,8 +108,8 @@ echo    * Single player (with computer players per seat), Join with a code, Host
 echo    * Up / Down and Enter, or the mouse; Esc goes back (on the first panel: quits).
 echo.
 echo  SETUP SCREEN:
-echo    * [1-6] or the arrow keys pick a map; click START (or press Enter) to begin; Esc leaves.
-echo    * [F] toggles Fog of War. INTRO music plays here; a match plays a random in-game track (Ctrl+M mutes).
+echo    * Up / Down pick a map; click START (or press Enter or S) to begin; Q or X (or the Leave button) leaves; Esc does nothing here.
+echo    * Fog of War is the On / Off pair of buttons (mouse). INTRO music plays here; a match plays a random in-game track (Ctrl+M mutes).
 echo.
 echo  MOUSE (the original's pointer model):
 echo    * Left click an ant: select it. Shift + click adds an ant of yours to the selection or takes it out again.

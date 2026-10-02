@@ -1074,7 +1074,11 @@ void menu_scenarios(const assets::AssetArchive& arc) {
         menu.show_main();
         return menu;
     };
-    const auto key = [](StartMenu& m, SDL_Keycode k) { m.on_key(k, 0, false); };
+    // (a key as a person presses it: the panel has been up for longer than StartMenu::kSettleMs, within which Enter and Space do nothing)
+    const auto key = [](StartMenu& m, SDL_Keycode k) {
+        if (k == SDLK_RETURN || k == SDLK_SPACE || k == SDLK_ESCAPE) m.update(static_cast<float>(StartMenu::kSettleMs + 10) / 1000.0f);
+        m.on_key(k, 0, false);
+    };
     {
         StartMenu m = make(0);
         menu_frame("screen.menu.main", m);
@@ -1090,7 +1094,8 @@ void menu_scenarios(const assets::AssetArchive& arc) {
         StartMenu m = make(0);
         key(m, SDLK_RETURN);
         menu_frame("screen.menu.single.empty", m);
-        key(m, SDLK_UP);
+        key(m, SDLK_DOWN);                                                                                       // the first row is selected on arrival: Black, then Blue
+        key(m, SDLK_DOWN);
         key(m, SDLK_RIGHT);
         key(m, SDLK_UP);
         key(m, SDLK_RIGHT);
@@ -1098,7 +1103,8 @@ void menu_scenarios(const assets::AssetArchive& arc) {
         menu_frame("screen.menu.single.two_bots", m);
         StartMenu own = make(2);
         key(own, SDLK_RETURN);
-        key(own, SDLK_UP);
+        key(own, SDLK_DOWN);
+        key(own, SDLK_DOWN);
         key(own, SDLK_RIGHT);
         key(own, SDLK_RIGHT);
         key(own, SDLK_RIGHT);
@@ -1131,9 +1137,6 @@ void menu_scenarios(const assets::AssetArchive& arc) {
         key(m, SDLK_DOWN);
         key(m, SDLK_RETURN);
         menu_frame("screen.menu.host.default", m);
-        key(m, SDLK_UP);
-        key(m, SDLK_UP);
-        key(m, SDLK_UP);
         key(m, SDLK_RIGHT);
         key(m, SDLK_RIGHT);
         key(m, SDLK_DOWN);
@@ -2859,17 +2862,17 @@ const Golden kGoldens[] = {
     {"screen.menu.main.second_selected", 0x7ec2b1c259beacce, 146},
     {"screen.menu.main.quit_selected", 0x647ac943406089ce, 146},
     {"screen.menu.main.notice", 0xe9d5e1ba26ad5f25, 156},
-    {"screen.menu.single.empty", 0xc8b734d187555ee9, 206},
-    {"screen.menu.single.two_bots", 0x77194f4bd262b6ab, 207},
-    {"screen.menu.single.own_seat_2", 0xc0fe1dcecbbb77f2, 207},
+    {"screen.menu.single.empty", 0x985b15c8c2fc8ab2, 207},
+    {"screen.menu.single.two_bots", 0x3799c5d3d81c9318, 207},
+    {"screen.menu.single.own_seat_2", 0xb470829b76dc0289, 207},
     {"screen.menu.join.empty", 0xa3719b0cf65673ec, 148},
     {"screen.menu.join.typed", 0x97292172383f912c, 149},
     {"screen.menu.join.caret_off", 0xffc1932a3464e20d, 148},
     {"screen.menu.join.name_refused", 0x654e9cdadc7be96a, 160},
-    {"screen.menu.connecting", 0xb201962f4fc8ecf3, 114},
+    {"screen.menu.connecting", 0xa95f45bb91fe2012, 114},
     {"screen.menu.join.error", 0x902ef842457399e8, 158},
-    {"screen.menu.host.default", 0xdcd1457c50dc4b2c, 185},
-    {"screen.menu.host.map_and_players", 0xeb7b5573eb39bea9, 185},
+    {"screen.menu.host.default", 0x97e3b2dfd25a83a8, 185},
+    {"screen.menu.host.map_and_players", 0x38b8de70ac67d78d, 185},
     {"screen.menu.room.code", 0xab14102277407908, 149},
     {"screen.menu.room.full", 0x073718be4ddb297b, 149},
     {"screen.menu.room.longest_code", 0x054cb5ecb543fd00, 149},

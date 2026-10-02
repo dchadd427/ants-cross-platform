@@ -16,6 +16,7 @@
 #include <sstream>
 #include <memory>
 #include <string>
+#include <system_error>
 #include <thread>
 #include <vector>
 
@@ -33,6 +34,9 @@ using namespace ants::app;
 
 #ifndef ORIGINAL_ASSETS_DIR
 #define ORIGINAL_ASSETS_DIR "Original-Ants"
+#endif
+#ifndef ANTS_SOURCE_DIR
+#define ANTS_SOURCE_DIR "."
 #endif
 
 static int g_test_count = 0;
@@ -118,7 +122,14 @@ struct Rig {
         });
         menu.show_main();
     }
-    void key(SDL_Keycode k, uint16_t mod = 0, bool repeat = false) { menu.on_key(k, mod, repeat); }
+    // A key as a person presses it: a panel has been up for longer than StartMenu::kSettleMs by then (Enter and Space ignore a press within it, Esc does not quit from the first panel;
+    // the tests of that rule press with `quick_key`)
+    void key(SDL_Keycode k, uint16_t mod = 0, bool repeat = false) {
+        if (k == SDLK_RETURN || k == SDLK_KP_ENTER || k == SDLK_SPACE || k == SDLK_ESCAPE) menu.update(static_cast<float>(StartMenu::kSettleMs + 10) / 1000.0f);
+        menu.on_key(k, mod, repeat);
+    }
+    // A key that comes at once (no time passes in the menu's clock)
+    void quick_key(SDL_Keycode k, uint16_t mod = 0, bool repeat = false) { menu.on_key(k, mod, repeat); }
     void type(const std::string& text) { menu.on_text(text); }
     MenuElement element(MenuId id) const {
         MenuElement e;
@@ -425,7 +436,9 @@ int main() {
             ASSERT_TRUE(colours == want);
             ASSERT_FALSE(r.exists(static_cast<MenuId>(static_cast<uint8_t>(MenuId::Seat0) + own)));
             ASSERT_FALSE(has_text(all, "fog of war"));
-            ASSERT_EQ(r.menu.selected(), MenuId::Continue);
+            ASSERT_TRUE(has_text(all, StartMenu::kNoBotsLine));                            // nobody seated: the panel says that this is the original's game (L7)
+            const uint8_t first_other = own == 0 ? uint8_t{1} : uint8_t{0};
+            ASSERT_EQ(r.menu.selected(), static_cast<MenuId>(static_cast<uint8_t>(MenuId::Seat0) + first_other));   // the first INPUT, never a button that acts (M2)
             ASSERT_TRUE(r.menu.bots().empty());
         }
         Rig r0(0);
@@ -436,7 +449,7 @@ int main() {
         r2.to_panel(MenuId::Single);
         ASSERT_TRUE(has_text(r2.menu.elements(), "Green") && has_text(r2.menu.elements(), "Red") && has_text(r2.menu.elements(), "Black"));
         ASSERT_TRUE(has_text(r2.menu.elements(), "You play the blue ants."));
-        r0.key(SDLK_RETURN);                                                               // Continue with nobody: the original's single-player game
+        r0.click(MenuId::Continue);                                                        // Continue with nobody: the original's single-player game
         const MenuRequest request = r0.take();
         ASSERT_TRUE(request.type == MenuRequest::Type::Single && request.bots.empty());
     } TEST_END();
@@ -444,7 +457,8 @@ int main() {
     TEST_CASE("M2.2 Single player: a row cycles Empty, Easy, Medium, Hard and round by click, Enter and Right (Left goes back); the bots are the standard bot of the level at their seat as --bot SEAT:LEVEL would give them; the rule-8 line shows while any seat has a bot") {
         Rig r;
         r.to_panel(MenuId::Single);
-        r.key(SDLK_UP);                                                                    // the last row (Black, seat 3)
+        r.key(SDLK_DOWN);
+        r.key(SDLK_DOWN);                                                                  // the last row (Black, seat 3): the first row is selected on arrival
         ASSERT_EQ(r.menu.selected(), MenuId::Seat3);
         ASSERT_EQ(r.element(MenuId::Seat3).value, std::string("Empty"));
         r.key(SDLK_RIGHT);
@@ -673,8 +687,10 @@ int main() {
         ASSERT_EQ(request.room, std::string("Demo-Small-X7K2"));
         ASSERT_EQ(r.menu.panel(), MenuPanel::Connecting);
         ASSERT_TRUE(has_text(r.menu.elements(), "Connecting to play.example.org:4010..."));
-        ASSERT_EQ(r.menu.selected(), MenuId::Cancel);
+        ASSERT_EQ(r.menu.selected(), MenuId::None);                                        // nothing is preselected here: an Enter that comes twice must not cancel the attempt (M2)
         ASSERT_EQ(r.menu.connect_origin(), MenuPanel::Join);
+        r.key(SDLK_TAB);
+        ASSERT_EQ(r.menu.selected(), MenuId::Cancel);                                      // Tab (or the pointer) reaches the button
         // Esc and the Cancel button both ask to cancel (the application cancels, then says so)
         r.key(SDLK_ESCAPE);
         ASSERT_TRUE(r.take().type == MenuRequest::Type::Cancel);
@@ -694,8 +710,10 @@ int main() {
         ASSERT_EQ(r.menu.message(), std::string("There is no room with that code."));
         ASSERT_TRUE(has_text(r.menu.elements(), "There is no room with that code."));
         ASSERT_EQ(r.menu.selected(), MenuId::Join);
-        r.key(SDLK_ESCAPE);                                                                // Back: the first panel, the error is gone from the next visit
+        r.key(SDLK_ESCAPE);                                                                // Back: the first panel, the error is gone (it is not carried to the first panel as a notice)
         ASSERT_EQ(r.menu.panel(), MenuPanel::Main);
+        ASSERT_TRUE(r.menu.message().empty());
+        ASSERT_FALSE(has_text(r.menu.elements(), "There is no room with that code."));
         r.click(MenuId::JoinWithCode);
         ASSERT_TRUE(r.menu.message().empty());
         // Enter in the name field goes on to the code field and joins nothing; Enter in the code field joins
@@ -720,12 +738,8 @@ int main() {
         Rig r;
         r.to_panel(MenuId::HostOnline);
         ASSERT_EQ(r.menu.panel(), MenuPanel::Host);
-        ASSERT_EQ(r.menu.selected(), MenuId::Host);
+        ASSERT_EQ(r.menu.selected(), MenuId::HostMap);                                     // the first input is selected on arrival, not the Host button (M2)
         const std::vector<std::string> maps = {"Tiny", "Small", "Medium", "Gauntlet", "Treasure", "Islands"};
-        r.key(SDLK_UP);
-        r.key(SDLK_UP);
-        r.key(SDLK_UP);
-        ASSERT_EQ(r.menu.selected(), MenuId::HostMap);
         for (int lap = 0; lap < 2; ++lap) {
             for (size_t i = 0; i < maps.size(); ++i) {
                 ASSERT_EQ(r.element(MenuId::HostMap).value, maps[i]);
@@ -823,11 +837,11 @@ int main() {
         bad.click(MenuId::Copy);
         ASSERT_EQ(bad.clipboard.writes.size(), static_cast<size_t>(1));
         ASSERT_FALSE(bad.menu.copied());
-        ASSERT_TRUE(has_text(bad.menu.elements(), "could not be copied") && has_text(bad.menu.elements(), "demo-tiny-2p-qqqqqq"));
+        ASSERT_TRUE(has_text(bad.menu.elements(), "Copy failed") && element_text(bad.menu.elements(), MenuKind::Code) == "demo-tiny-2p-qqqqqq");   // (the code stands in full in its box)
         bad.clipboard.writable = true;                                                      // the clipboard comes back: the failure line goes with the next copy that works
         bad.click(MenuId::Copy);
         ASSERT_TRUE(bad.menu.copied());
-        ASSERT_FALSE(has_text(bad.menu.elements(), "could not be copied"));
+        ASSERT_FALSE(has_text(bad.menu.elements(), "Copy failed"));
         bad.menu.show_room("demo-tiny-2p-rrrrrr", 1, 2);                                    // a new room: "Copied!" of the old one is not carried over
         ASSERT_FALSE(bad.menu.copied());
         ASSERT_EQ(bad.element(MenuId::Copy).text, std::string("Copy"));
@@ -885,14 +899,17 @@ int main() {
     TEST_CASE("M5.2 Room codes of a hosted match: demo-<map>-<n>p-<six characters> from the page's alphabet (read from web/four.html), at most 23 characters, a valid room code for every map and size, different every time") {
         std::string page_alphabet;
         {
-            std::ifstream page("web/four.html");
+            std::ifstream page(std::string(ANTS_SOURCE_DIR) + "/web/four.html");           // (by the source folder, not the working directory: it is read wherever the test is run from)
+            ASSERT_TRUE(page.good());                                                      // a page that cannot be read, or in which the variable is renamed, FAILS the test (it used to skip it)
             std::stringstream text;
             text << page.rdbuf();
             const std::string html = text.str();
             const size_t at = html.find("var chars = '");
-            if (at != std::string::npos) page_alphabet = html.substr(at + 13, html.find('\'', at + 13) - (at + 13));
+            ASSERT_TRUE(at != std::string::npos);
+            page_alphabet = html.substr(at + 13, html.find('\'', at + 13) - (at + 13));
         }
-        if (!page_alphabet.empty()) ASSERT_EQ(page_alphabet, std::string(kRoomCodeAlphabet));   // the same alphabet as web/four.html (the page is in the repository)
+        ASSERT_FALSE(page_alphabet.empty());
+        ASSERT_EQ(page_alphabet, std::string(kRoomCodeAlphabet));                          // the same alphabet as web/four.html (the page is in the repository)
         ASSERT_EQ(std::string(kRoomCodeAlphabet).size(), static_cast<size_t>(31));
         ASSERT_EQ(kRoomCodeRandomChars, static_cast<size_t>(6));
         const char* keys[] = {"tiny", "small", "medium", "gauntlet", "treasure", "islands"};
@@ -1025,15 +1042,35 @@ int main() {
         store.set_location(temp.file("settings.ini"));
         Rig r(0, "Zed");
         MenuSettings s = r.menu.settings();
-        r.menu.set_on_change([&](MenuSetting which) { r.menu.settings().write(store, which); });
+        int name_writes = 0;
+        r.menu.set_on_change([&](MenuSetting which) {
+            name_writes += which == MenuSetting::Name ? 1 : 0;
+            r.menu.settings().write(store, which);
+        });
         r.to_panel(MenuId::JoinWithCode);
         r.key(SDLK_UP);
         r.type("Ruth");
-        ASSERT_EQ(store.get_string("name", "", 99), std::string("Ruth"));
-        ASSERT_FALSE(store.has("bots") || store.has("host_map") || store.has("host_players"));
+        ASSERT_FALSE(store.has("name"));                                                   // not at every key: the file is written when the field is left (a keystroke used to write it)
         r.key(SDLK_BACKSPACE);
-        ASSERT_EQ(store.get_string("name", "", 99), std::string("Rut"));                   // the store follows every keystroke
+        ASSERT_FALSE(store.has("name"));
+        r.key(SDLK_TAB);                                                                   // the field is left: now it is written
+        ASSERT_EQ(store.get_string("name", "", 99), std::string("Rut"));
+        ASSERT_FALSE(store.has("bots") || store.has("host_map") || store.has("host_players"));
+        r.key(SDLK_UP);                                                                    // back in the field (its text selected)
+        r.key(SDLK_BACKSPACE);                                                             // ... cleared
+        ASSERT_EQ(store.get_string("name", "", 99), std::string("Rut"));                   // not written yet
+        r.menu.show_main();                                                                // a panel changes: it is
+        ASSERT_EQ(store.get_string("name", "", 99), std::string(""));
+        ASSERT_EQ(name_writes, 2);                                                         // one write each time, never one per key (seven keys were pressed)
+        r.to_panel(MenuId::JoinWithCode);
+        ASSERT_EQ(r.menu.selected(), MenuId::Name);                                        // the name is empty: it is the first empty field
+        r.type("Rut");
+        r.menu.flush();                                                                    // what the application does when the program ends
+        ASSERT_EQ(store.get_string("name", "", 99), std::string("Rut"));
+        r.menu.flush();
+        ASSERT_EQ(name_writes, 3);                                                         // nothing new to write: no write
         r.menu.show_main();
+        ASSERT_EQ(name_writes, 3);
         r.click(MenuId::Single);
         r.click(MenuId::Seat2);
         ASSERT_EQ(store.get_string("bots", "", 99), std::string("off,off,easy,off"));
@@ -1354,6 +1391,387 @@ int main() {
             ASSERT_TRUE(HostLookup::is_numeric(address));
             ASSERT_EQ(address, std::string("127.0.0.1"));                                      // a name that has both is answered with its IPv4 address: the game's server listens on IPv4
         }
+    } TEST_END();
+
+
+    // ---- the review fixes of the start menu -------------------------------------------------------------------------------------------------------------
+
+    TEST_CASE("M10.2 The name lookup when its thread cannot be started: Failed at once with a reason of its own (start_failed), never an exception out of the menu; an address needs no thread; a launcher that works runs the job; the lookup polled while its worker answers is race free (run under TSan too)") {
+        const HostLookup::Launcher none = [](std::function<void()>) { throw std::system_error(std::make_error_code(std::errc::resource_unavailable_try_again)); };
+        const HostLookup::Resolver found = [](const std::string&, std::string& address, std::string&) {
+            address = "10.0.0.1";
+            return true;
+        };
+        {
+            HostLookup lookup;
+            lookup.start("nothread.example.test", found, none);
+            ASSERT_TRUE(lookup.state() == HostLookup::State::Failed && lookup.start_failed());
+            ASSERT_EQ(lookup.error(), std::string("could not start the lookup"));
+            ASSERT_TRUE(lookup.address().empty());
+            ASSERT_TRUE(lookup.poll() == HostLookup::State::Failed);                         // (and it stays so: nothing is pending)
+            lookup.cancel();
+            ASSERT_TRUE(lookup.state() == HostLookup::State::Idle && !lookup.start_failed());
+            lookup.start("127.0.0.1", found, none);                                           // an address is never looked up: no thread is needed
+            ASSERT_TRUE(lookup.state() == HostLookup::State::Done && !lookup.start_failed() && lookup.address() == "127.0.0.1");
+            lookup.start("nothread.example.test", found, none);                               // the next start begins from nothing
+            ASSERT_TRUE(lookup.start_failed());
+            int launched = 0;
+            const HostLookup::Launcher own_thread = [&launched](std::function<void()> job) {
+                ++launched;
+                std::thread(std::move(job)).detach();
+            };
+            lookup.start("thread.example.test", found, own_thread);
+            ASSERT_FALSE(lookup.start_failed());
+            ASSERT_EQ(launched, 1);
+            HostLookup::State state = HostLookup::State::Pending;
+            for (int i = 0; i < 5000 && (state = lookup.poll()) == HostLookup::State::Pending; ++i) std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            ASSERT_TRUE(state == HostLookup::State::Done && lookup.address() == "10.0.0.1");
+        }
+        {   // the main thread polls in a tight loop while the worker stores its answer: poll() takes the lock (without it ThreadSanitizer reports the race on the state)
+            for (int round = 0; round < 300; ++round) {
+                HostLookup lookup;
+                lookup.start("race.example.test", found);
+                HostLookup::State state = HostLookup::State::Pending;
+                for (long spins = 0; spins < 50000000L && (state = lookup.poll()) == HostLookup::State::Pending; ++spins) {
+                }
+                ASSERT_TRUE(state == HostLookup::State::Done && lookup.address() == "10.0.0.1");
+            }
+        }
+    } TEST_END();
+
+    TEST_CASE("M11.1 Enter pressed twice in a hurry acts once: a new panel preselects the first INPUT (never Continue, Host or Cancel), and Enter and Space within StartMenu::kSettleMs of a panel's appearing do nothing, Esc does not quit from the first panel then; a held key never acts") {
+        // Single player: Enter on the entry opens the panel; the second Enter must not start the game (Continue used to be selected) and must not change a row either
+        {
+            Rig r;
+            r.key(SDLK_RETURN);
+            ASSERT_EQ(r.menu.panel(), MenuPanel::Single);
+            ASSERT_EQ(r.menu.selected(), MenuId::Seat1);                                   // the first row, not Continue
+            r.quick_key(SDLK_RETURN);
+            ASSERT_FALSE(r.menu.has_request());
+            ASSERT_EQ(r.menu.seat(1), SeatChoice::Empty);                                  // (nor does it cycle the row it lands on)
+            r.quick_key(SDLK_SPACE);
+            ASSERT_FALSE(r.menu.has_request());
+            ASSERT_EQ(r.menu.seat(1), SeatChoice::Empty);
+            r.menu.update(0.29f);                                                          // 290 ms: still the same gesture
+            r.quick_key(SDLK_KP_ENTER);
+            ASSERT_EQ(r.menu.seat(1), SeatChoice::Empty);
+            r.menu.update(0.02f);                                                          // 310 ms: a person's own press
+            r.quick_key(SDLK_RETURN);
+            ASSERT_EQ(r.menu.seat(1), SeatChoice::Easy);
+            r.quick_key(SDLK_SPACE);
+            ASSERT_EQ(r.menu.seat(1), SeatChoice::Medium);
+            r.key(SDLK_RETURN, 0, true);                                                   // a held key never acts, however old the panel is
+            ASSERT_EQ(r.menu.seat(1), SeatChoice::Medium);
+            r.key(SDLK_DOWN);
+            r.key(SDLK_DOWN);
+            r.key(SDLK_DOWN);
+            ASSERT_EQ(r.menu.selected(), MenuId::Continue);                                // Continue is one Down away from the last row, and Enter on it still starts
+            r.key(SDLK_RETURN);
+            ASSERT_TRUE(r.take().type == MenuRequest::Type::Single);
+        }
+        // Host an online match: the Host panel's selection is the map, so the second Enter makes no room
+        {
+            Rig r;
+            r.key(SDLK_DOWN);
+            r.key(SDLK_DOWN);
+            r.key(SDLK_RETURN);
+            ASSERT_EQ(r.menu.panel(), MenuPanel::Host);
+            ASSERT_EQ(r.menu.selected(), MenuId::HostMap);
+            r.quick_key(SDLK_RETURN);
+            ASSERT_FALSE(r.menu.has_request());
+            ASSERT_EQ(r.menu.panel(), MenuPanel::Host);
+            ASSERT_EQ(r.element(MenuId::HostMap).value, std::string("Tiny"));              // the map is not cycled by it
+            r.key(SDLK_RETURN);
+            ASSERT_EQ(r.element(MenuId::HostMap).value, std::string("Small"));             // a press of its own is
+        }
+        // Join: the Enter that joins is followed by a second one while "Connecting" shows: it must not cancel the attempt (Cancel used to be selected)
+        {
+            Rig r(0, "Dave");
+            r.to_panel(MenuId::JoinWithCode);
+            r.type("room-one");
+            r.key(SDLK_RETURN);
+            ASSERT_TRUE(r.take().type == MenuRequest::Type::Join);
+            ASSERT_EQ(r.menu.panel(), MenuPanel::Connecting);
+            r.quick_key(SDLK_RETURN);
+            ASSERT_FALSE(r.menu.has_request());
+            ASSERT_EQ(r.menu.panel(), MenuPanel::Connecting);
+            r.quick_key(SDLK_ESCAPE);                                                      // Esc cancels at once (it does not wait for the panel to settle)
+            ASSERT_TRUE(r.take().type == MenuRequest::Type::Cancel);
+            r.menu.connection_cancelled();                                                 // and once more, to see that Enter and Space do nothing here however late they come
+            r.key(SDLK_RETURN);
+            ASSERT_TRUE(r.take().type == MenuRequest::Type::Join);
+            ASSERT_EQ(r.menu.panel(), MenuPanel::Connecting);
+            r.key(SDLK_RETURN);                                                            // nothing is selected on this panel
+            r.key(SDLK_SPACE);
+            ASSERT_FALSE(r.menu.has_request());
+        }
+        // Esc, Esc: leaves the panel and does not quit the program with the second press
+        {
+            Rig r;
+            r.to_panel(MenuId::Single);
+            r.quick_key(SDLK_ESCAPE);                                                      // (the panel is new; Esc goes back from every panel but the first)
+            ASSERT_EQ(r.menu.panel(), MenuPanel::Main);
+            r.quick_key(SDLK_ESCAPE);
+            ASSERT_FALSE(r.menu.has_request());                                            // the same gesture: no Quit
+            r.menu.update(0.31f);
+            r.quick_key(SDLK_ESCAPE);
+            ASSERT_TRUE(r.take().type == MenuRequest::Type::Quit);
+        }
+        // a failure and a room arrive on their own time: an Enter that comes right then is not a decision about the new panel
+        {
+            Rig r(0, "Dave");
+            r.to_panel(MenuId::JoinWithCode);
+            r.type("room-one");
+            r.key(SDLK_RETURN);
+            r.take();
+            r.menu.connection_failed("There is no room with that code.");
+            ASSERT_EQ(r.menu.selected(), MenuId::Join);
+            r.quick_key(SDLK_RETURN);
+            ASSERT_FALSE(r.menu.has_request());                                            // (no new attempt)
+            r.key(SDLK_RETURN);
+            ASSERT_TRUE(r.take().type == MenuRequest::Type::Join);
+            r.menu.show_room("demo-tiny-2p-abcdef", 1, 2);
+            r.quick_key(SDLK_RETURN);
+            ASSERT_FALSE(r.menu.has_request());
+            r.key(SDLK_RETURN);
+            ASSERT_TRUE(r.take().type == MenuRequest::Type::EnterRoom);
+        }
+        // the same on the Host panel's failure and on the first panel after a lost game
+        {
+            Rig r;
+            r.to_panel(MenuId::HostOnline);
+            r.key(SDLK_DOWN);
+            r.key(SDLK_DOWN);
+            r.key(SDLK_DOWN);
+            r.key(SDLK_RETURN);
+            ASSERT_TRUE(r.take().type == MenuRequest::Type::Host);
+            r.menu.connection_failed("The server is busy.");
+            r.quick_key(SDLK_RETURN);
+            ASSERT_FALSE(r.menu.has_request());
+            r.menu.show_main("The connection was lost.");
+            r.quick_key(SDLK_ESCAPE);
+            ASSERT_FALSE(r.menu.has_request());
+            r.quick_key(SDLK_RETURN);
+            ASSERT_EQ(r.menu.panel(), MenuPanel::Main);                                    // (the entry that was selected does not open either)
+        }
+        // the menu as it first appears: the Enter or Esc that ended the loading screen is not an answer to it
+        {
+            StartMenu m;
+            m.set_settings(MenuSettings{});
+            m.show_main();
+            m.on_key(SDLK_ESCAPE, 0, false);
+            ASSERT_FALSE(m.has_request());
+            m.on_key(SDLK_RETURN, 0, false);
+            ASSERT_EQ(m.panel(), MenuPanel::Main);
+            m.update(StartMenu::kSettleMs / 1000.0f + 0.001f);
+            ASSERT_TRUE(m.settled());
+            m.on_key(SDLK_RETURN, 0, false);
+            ASSERT_EQ(m.panel(), MenuPanel::Single);
+        }
+        // the mouse is not slowed by it (a click is two events, and its rest is the application's rule: test_start_menu_app)
+        {
+            Rig r;
+            r.click(MenuId::Single);
+            r.click(MenuId::Continue);
+            ASSERT_TRUE(r.take().type == MenuRequest::Type::Single);
+        }
+    } TEST_END();
+
+    TEST_CASE("M11.2 The Join panel's code field after a Back or a finished game: the text that is there is selected and typing replaces it (it used to append), like arriving by Tab; the first empty field has the focus") {
+        Rig r(0, "Dave");
+        r.to_panel(MenuId::JoinWithCode);
+        ASSERT_EQ(r.menu.selected(), MenuId::Code);                                        // the name is there: the code is the first empty field
+        ASSERT_FALSE(r.element(MenuId::Code).all_selected);                                // (empty: nothing to select)
+        r.type("room-one");
+        r.key(SDLK_ESCAPE);                                                                // Back ...
+        r.click(MenuId::JoinWithCode);                                                     // ... and in again: the old code stands there, selected
+        ASSERT_EQ(r.menu.selected(), MenuId::Code);
+        ASSERT_EQ(r.menu.code(), std::string("room-one"));
+        ASSERT_TRUE(r.element(MenuId::Code).all_selected);
+        r.type("room-two");
+        ASSERT_EQ(r.menu.code(), std::string("room-two"));                                 // replaced, not "room-oneroom-two"
+        // by the keyboard it is the same, and so is the way back after a game (show_main with a notice) and after a failed attempt
+        r.key(SDLK_ESCAPE);
+        r.key(SDLK_RETURN);                                                                // (the entry that was left is selected again)
+        ASSERT_EQ(r.menu.panel(), MenuPanel::Join);
+        ASSERT_TRUE(r.element(MenuId::Code).all_selected);
+        r.menu.show_main("The connection was lost.");
+        r.click(MenuId::JoinWithCode);
+        ASSERT_TRUE(r.element(MenuId::Code).all_selected);
+        r.type("room-three");
+        ASSERT_EQ(r.menu.code(), std::string("room-three"));
+        r.key(SDLK_UP);                                                                    // Tab and Up agree with the arrival: the name's text is selected too
+        ASSERT_TRUE(r.element(MenuId::Name).all_selected);
+        r.key(SDLK_TAB);
+        ASSERT_TRUE(r.element(MenuId::Code).all_selected);
+        // no name yet: the name is the first empty field, and the code that is there is not the focus
+        Rig e(0, "");
+        e.to_panel(MenuId::JoinWithCode);
+        ASSERT_EQ(e.menu.selected(), MenuId::Name);
+        // a failed attempt keeps what was typed and lights the button, as before
+        Rig f(0, "Dave");
+        f.to_panel(MenuId::JoinWithCode);
+        f.type("room-x");
+        f.key(SDLK_RETURN);
+        f.take();
+        f.menu.connection_failed("Nope.");
+        ASSERT_EQ(f.menu.selected(), MenuId::Join);
+        ASSERT_EQ(f.menu.code(), std::string("room-x"));
+        f.key(SDLK_ESCAPE);
+        f.click(MenuId::JoinWithCode);
+        f.type("room-y");
+        ASSERT_EQ(f.menu.code(), std::string("room-y"));
+    } TEST_END();
+
+    TEST_CASE("M11.3 A character that the fields cannot take is said, never dropped in silence: 'Jose-acute CJK' leaves 'Jos ' and the line 'Only letters A-Z, digits and simple punctuation.'; so does a paste; a line end of a paste and typing that is all good say nothing; the next good key takes the line away") {
+        Rig r(0, "");
+        r.to_panel(MenuId::JoinWithCode);
+        ASSERT_EQ(r.menu.selected(), MenuId::Name);
+        r.type("Jos\xC3\xA9 \xE6\x9D\x8E");                                                // "José 李" as SDL's text input delivers it (UTF-8)
+        ASSERT_EQ(r.menu.name(), std::string("Jos "));
+        ASSERT_EQ(r.menu.message(), std::string(StartMenu::kRefusedCharsText));
+        ASSERT_TRUE(has_text(r.menu.elements(), "Only letters A-Z, digits and simple punctuation"));
+        r.type("e");                                                                       // the next key takes the line away
+        ASSERT_EQ(r.menu.name(), std::string("Jos e"));
+        ASSERT_TRUE(r.menu.message().empty());
+        r.type("abc");                                                                     // ASCII only: no line
+        ASSERT_TRUE(r.menu.message().empty());
+        r.type("\xC3\xA9");                                                                // only a refused character: nothing typed, the line shows
+        ASSERT_EQ(r.menu.name(), std::string("Jos eabc"));
+        ASSERT_EQ(r.menu.message(), std::string(StartMenu::kRefusedCharsText));
+        r.key(SDLK_TAB);                                                                   // the code field takes the same
+        r.key(SDLK_BACKSPACE);
+        r.type("caf\xC3\xA9");
+        ASSERT_EQ(r.menu.code(), std::string("caf"));
+        ASSERT_EQ(r.menu.message(), std::string(StartMenu::kRefusedCharsText));
+        r.key(SDLK_BACKSPACE);                                                             // Backspace takes the line away too
+        ASSERT_TRUE(r.menu.message().empty());
+        r.type("\x01");                                                                    // a control character is refused as well
+        ASSERT_EQ(r.menu.message(), std::string(StartMenu::kRefusedCharsText));
+        // a paste: an accent in the clipboard says it, a line end or a tab does not
+        r.clipboard.text = "demo-ti\xC3\xA9ny";
+        r.key(SDLK_a, KMOD_CTRL);
+        r.key(SDLK_v, KMOD_CTRL);
+        ASSERT_EQ(r.menu.code(), std::string("demo-tiny"));
+        ASSERT_EQ(r.menu.message(), std::string(StartMenu::kRefusedCharsText));
+        r.clipboard.text = "room-9\r\n";
+        r.key(SDLK_a, KMOD_CTRL);
+        r.key(SDLK_v, KMOD_CTRL);
+        ASSERT_EQ(r.menu.code(), std::string("room-9"));
+        ASSERT_TRUE(r.menu.message().empty());
+        r.clipboard.text = "\t\n";
+        r.key(SDLK_v, KMOD_CTRL);
+        ASSERT_EQ(r.menu.code(), std::string("room-9"));
+        ASSERT_TRUE(r.menu.message().empty());
+        // the Host panel's name field too (its line stands where the server's note was)
+        Rig h(0, "");
+        h.to_panel(MenuId::HostOnline);
+        h.key(SDLK_DOWN);
+        h.key(SDLK_DOWN);
+        ASSERT_EQ(h.menu.selected(), MenuId::HostName);
+        h.type("\xE6\x9D\x8E");
+        ASSERT_EQ(h.menu.name(), std::string(""));
+        ASSERT_TRUE(has_text(h.menu.elements(), "Only letters A-Z, digits and simple punctuation"));
+        // the line fits its box in the drawing (it is a notice of one line at 18 px)
+        Recorder rec;
+        render_start_menu(rec, archive(), h.menu);
+        bool whole = false;
+        for (const Recorder::Text& t : rec.texts) whole = whole || t.text == StartMenu::kRefusedCharsText;
+        ASSERT_TRUE(whole);
+    } TEST_END();
+
+    TEST_CASE("M11.4 What the panels say: the single-player panel says what its seats mean in both states (nobody: the original's game, the other colours stand still; a bot: no fog of war, empty seats have no ants), a bot choice that is stored for the player's own seat is not a bot; the copy failure is one line that is not cut") {
+        Rig r;
+        r.to_panel(MenuId::Single);
+        ASSERT_TRUE(has_text(r.menu.elements(), "No bots: the original single-player game (the other colours stand still)."));
+        ASSERT_FALSE(has_text(r.menu.elements(), "Bots play without fog of war"));
+        r.click(MenuId::Seat2);
+        ASSERT_TRUE(has_text(r.menu.elements(), "Bots play without fog of war. Empty seats have no ants."));
+        ASSERT_FALSE(has_text(r.menu.elements(), "No bots:"));
+        r.click(MenuId::Seat2);
+        r.click(MenuId::Seat2);
+        r.click(MenuId::Seat2);
+        ASSERT_TRUE(has_text(r.menu.elements(), "No bots:"));                              // back to nobody: back to the other line
+        // a stored choice for the own seat: no row, no bot, the panel says "No bots" (the line follows the bots that will play, not the stored words)
+        for (uint8_t own = 0; own < 4; ++own) {
+            Rig s(own);
+            MenuSettings st;
+            st.name = "Player";
+            st.seats = {SeatChoice::Empty, SeatChoice::Empty, SeatChoice::Empty, SeatChoice::Empty};
+            st.seats[own] = SeatChoice::Hard;
+            s.menu.set_settings(st);
+            ASSERT_FALSE(s.menu.any_bot());
+            ASSERT_TRUE(s.menu.bots().empty());
+            s.to_panel(MenuId::Single);
+            ASSERT_TRUE(has_text(s.menu.elements(), "No bots:") && !has_text(s.menu.elements(), "Bots play without"));
+        }
+        // both lines fit their box at the font's estimate (no '...'), and at a font twice as wide they are cut to their box and not beyond it
+        for (const bool with_bot : {false, true}) {
+            Rig d;
+            d.to_panel(MenuId::Single);
+            if (with_bot) d.click(MenuId::Seat1);
+            Recorder rec;
+            render_start_menu(rec, archive(), d.menu);
+            const std::string want = with_bot ? StartMenu::kBotsLine : StartMenu::kNoBotsLine;
+            std::string drawn;
+            for (const Recorder::Text& t : rec.texts) {
+                if (t.size == FontSize::Px18 && (want.find(t.text) != std::string::npos || t.text.find("...") != std::string::npos) && t.y >= 290 && t.y < 332) {
+                    if (!drawn.empty()) drawn += " ";                                       // (a wrapped line ends where the blank was)
+                    drawn += t.text;
+                }
+            }
+            ASSERT_EQ(drawn, want);                                                        // all of it, however many lines it takes
+        }
+        // the copy failure: one line that says what to do, the code stands in full in its own box above it, and neither is cut
+        Rig bad;
+        bad.clipboard.writable = false;
+        bad.menu.show_room("demo-gauntlet-4p-abcdef", 1, 4);
+        bad.click(MenuId::Copy);
+        ASSERT_TRUE(has_text(bad.menu.elements(), "Copy failed. Write down the code above."));
+        ASSERT_EQ(element_text(bad.menu.elements(), MenuKind::Code), std::string("demo-gauntlet-4p-abcdef"));
+        Recorder rc;
+        render_start_menu(rc, archive(), bad.menu);
+        bool line_whole = false;
+        bool code_whole = false;
+        for (const Recorder::Text& t : rc.texts) {
+            line_whole = line_whole || t.text == "Copy failed. Write down the code above.";
+            code_whole = code_whole || t.text == "demo-gauntlet-4p-abcdef";
+        }
+        ASSERT_TRUE(line_whole && code_whole);
+    } TEST_END();
+
+    TEST_CASE("M11.5 A release belongs to a press that began on the panel that is up: a button that is held while the panel changes under it does nothing at its release, over whatever button of the new panel lies there") {
+        Rig r;
+        const MenuElement quit = r.element(MenuId::Quit);
+        const int32_t x = quit.rect.x + quit.rect.w / 2;
+        const int32_t y = quit.rect.y + quit.rect.h / 2;
+        r.menu.on_mouse_move(x, y);
+        ASSERT_TRUE(r.menu.on_mouse_down(x, y, SDL_BUTTON_LEFT));
+        r.menu.show_room("demo-tiny-2p-abcdef", 1, 2);                                    // the room appears while the button is down ...
+        MenuElement copy;
+        ASSERT_TRUE(r.menu.find_element(MenuId::Copy, copy) && copy.rect.contains(x, y));  // ... and its Copy button lies where Quit was
+        ASSERT_FALSE(r.element(MenuId::Copy).pressed);
+        r.menu.on_mouse_up(x, y, SDL_BUTTON_LEFT);
+        ASSERT_TRUE(r.clipboard.writes.empty());                                           // nothing was copied
+        ASSERT_FALSE(r.menu.has_request());                                                // nothing was asked for
+        r.click(MenuId::Copy);                                                             // a click that begins on the panel does
+        ASSERT_EQ(r.clipboard.writes.size(), static_cast<size_t>(1));
+        // the same with a button that the next panel has too, at the same place: the Join panel's Back is held while a room that was left puts the player on the Host panel, whose Back lies under it
+        Rig j(0, "Dave");
+        j.to_panel(MenuId::JoinWithCode);
+        const MenuElement back = j.element(MenuId::Back);
+        const int32_t bx = back.rect.x + back.rect.w / 2;
+        const int32_t by = back.rect.y + back.rect.h - 4;
+        j.menu.on_mouse_move(bx, by);
+        ASSERT_TRUE(j.menu.on_mouse_down(bx, by, SDL_BUTTON_LEFT));
+        j.menu.room_left("The connection to the server was lost.");                       // the Host panel appears under the held button
+        MenuElement host_back;
+        ASSERT_TRUE(j.menu.find_element(MenuId::Back, host_back) && host_back.rect.contains(bx, by));
+        j.menu.on_mouse_up(bx, by, SDL_BUTTON_LEFT);
+        ASSERT_EQ(j.menu.panel(), MenuPanel::Host);                                        // the release did not press the other panel's Back
+        ASSERT_EQ(j.menu.message(), std::string("The connection to the server was lost."));
+        j.click(MenuId::Back);                                                             // a click that begins on this panel does
+        ASSERT_EQ(j.menu.panel(), MenuPanel::Main);
     } TEST_END();
 
     std::cout << "\nstart menu model: " << g_test_count << " tests, " << g_assert_count << " assertions, " << g_test_failures << " failures\n";

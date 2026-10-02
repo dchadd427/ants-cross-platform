@@ -66,6 +66,7 @@ public:
     void set_ticks_function(uint32_t (*fn)()) noexcept { ticks_fn_ = fn; }
 
     void init(uint8_t local_player_id = 0);
+    uint8_t local_player_id() const noexcept { return local_player_id_; }       // the seat that init() was given (the tests ask what a screen was left with)
     void reset();
 
     // Per-tick / per-frame update

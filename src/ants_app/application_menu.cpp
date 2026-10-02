@@ -24,6 +24,10 @@ SeatChoice seat_choice_of_level(ai::Level level) noexcept {
 
 std::string unreachable_text(const std::string& server) { return "Cannot reach " + server + ". Check the server's address and your connection."; }
 
+// One rule for a server that says nothing: the lookup that never ends, a connection that is never made, and a server that accepts and never sends its Welcome all end in this line (after
+// 20 seconds for the whole attempt, or the 10 that the room's Welcome may take, whichever comes first)
+std::string no_answer_text(const std::string& server) { return "The server " + server + " did not answer. Check the server's address and your connection."; }
+
 }  // anonymous namespace
 
 // The menu's settings, server, clipboard and callbacks (init, when this run has a menu)
@@ -96,6 +100,8 @@ void Application::handle_menu_event(const SDL_Event& event) {
         case SDL_TEXTINPUT:
             start_menu_.on_text(event.text.text);
             break;
+        case SDL_TEXTEDITING:                                                // an input method's composition in progress (SDL_StartTextInput is on for the whole run): it is not text yet, the
+            break;                                                           // committed characters arrive as SDL_TEXTINPUT (printable ASCII goes into the field, the rest is refused with a line)
         default:
             break;
     }
@@ -124,13 +130,13 @@ void Application::process_menu_request(const MenuRequest& request) {
             menu_start_single(request.bots);
             break;
         case MenuRequest::Type::Join:
-            begin_menu_connection(false, request.room, request.name, 0);
+            begin_menu_connection(false, request.room, request.name, 0, 0);
             break;
         case MenuRequest::Type::Host: {
             static std::random_device entropy;
             const std::function<uint32_t()> random = config_.room_code_random ? config_.room_code_random : std::function<uint32_t()>([]() { return static_cast<uint32_t>(entropy()); });
             const std::string code = make_room_code(menu_map(static_cast<size_t>(request.map)), request.players, random);
-            begin_menu_connection(true, code, request.name, request.players);
+            begin_menu_connection(true, code, request.name, request.players, request.map);
             break;
         }
         case MenuRequest::Type::Cancel:
@@ -154,7 +160,7 @@ void Application::process_menu_request(const MenuRequest& request) {
 
 // Join (hosting false: the room is the code that the player typed) and Host (hosting true: the code is a new "demo-<map>-<n>p-<random>" that the server makes on the first Hello): the same
 // path as `--join HOST:PORT --room CODE --name NAME`, after the server's name has been looked up on a worker thread (the window stays alive; Esc cancels)
-void Application::begin_menu_connection(bool hosting, const std::string& room, const std::string& name, int players) {
+void Application::begin_menu_connection(bool hosting, const std::string& room, const std::string& name, int players, int map) {
     abort_menu_connection();
     menu_conn_ = MenuConnection{};
     menu_conn_.stage = MenuConnection::Stage::Lookup;
@@ -164,7 +170,8 @@ void Application::begin_menu_connection(bool hosting, const std::string& room, c
     menu_conn_.server = start_menu_.server();
     menu_conn_.label = server_label(menu_conn_.server);
     menu_conn_.players = players;
-    host_lookup_.start(menu_conn_.server.host, config_.host_resolver);
+    menu_conn_.map = map;
+    host_lookup_.start(menu_conn_.server.host, config_.host_resolver, config_.host_launcher);
 }
 
 void Application::menu_connection_failed(const std::string& message) {
@@ -189,7 +196,7 @@ void Application::pump_menu_connection() {
     // The most the menu waits for a server that has not answered (a name that does not resolve, a connection that is neither made nor refused, a server that never says Welcome): the
     // player is told and may try again. (A player who is in the room already has nothing to wait for.)
     if ((menu_conn_.stage == Stage::Lookup || menu_conn_.stage == Stage::Joining) && menu_conn_.elapsed_ms > static_cast<double>(config_.menu_connect_timeout_ms)) {
-        menu_connection_failed(menu_conn_.label + " does not answer. Check the server's address and your connection.");
+        menu_connection_failed(no_answer_text(menu_conn_.label));
         return;
     }
     switch (menu_conn_.stage) {
@@ -199,14 +206,13 @@ void Application::pump_menu_connection() {
             const HostLookup::State state = host_lookup_.poll();
             if (state == HostLookup::State::Pending) break;
             if (state != HostLookup::State::Done) {
-                menu_connection_failed("Cannot find " + menu_conn_.server.host + ": the name is not known. Check the server's name and your connection.");
+                if (host_lookup_.start_failed()) menu_connection_failed("Could not start the lookup of " + menu_conn_.server.host + " (the system has no thread to spare). Please try again.");
+                else menu_connection_failed("Cannot find " + menu_conn_.server.host + ": the name is not known. Check the server's name and your connection.");
                 break;
             }
             net_ = std::make_unique<net::NetGame>(sim_);
             net_time_ms_ = 0.0;
-            net_->set_discovery(0);                                          // a guest announces nothing
-            net_->set_game_version(std::string(VERSION_STRING));
-            attach_net();
+            attach_net();                                                    // (a guest announces nothing on the LAN: only a host's room does, so neither the announcement nor its version is set)
             if (!net_->join(host_lookup_.address(), menu_conn_.server.port, menu_conn_.name, 255, menu_conn_.room, std::string())) {
                 menu_connection_failed(unreachable_text(menu_conn_.label));            // (no socket could be made for the address: the same to the player as a server that does not answer)
                 break;
@@ -258,6 +264,13 @@ void Application::menu_connected() {
         menu_connection_failed("That room code was taken already. Please try again.");
         return;
     }
+    if (menu_conn_.hosting && !room_has_chosen_map()) {
+        // The server makes a demo room on the map that the code names when it offers that map (--demo-maps), and on its default map when it does not: the player chose a map that this server does
+        // not play. The room is left again, and the player is told which map it was.
+        const MenuMap& wanted = menu_map(static_cast<size_t>(menu_conn_.map));
+        menu_connection_failed(std::string("This server does not offer the ") + wanted.name + " map (its room is on " + net_->room().map_name + "). Choose another map.");
+        return;
+    }
     apply_player_name(menu_conn_.name);
     set_window_title((config_.title.empty() ? std::string("Ants") : config_.title) + " - room " + menu_conn_.room);
     if (menu_conn_.hosting) {
@@ -271,6 +284,15 @@ void Application::menu_connected() {
     show_opening_screens();                                                  // the quick help, then the room's screen: the guest's, or the leader's with START
 }
 
+// The room that the server made is on the map that the menu asked for (the file's name without its extension is the map's word of the room code, in any case)
+bool Application::room_has_chosen_map() const {
+    if (!net_) return true;
+    std::string stem = net_->room().map_name;
+    const size_t dot = stem.rfind('.');
+    if (dot != std::string::npos) stem.resize(dot);
+    return stem.empty() || menu_map_index(stem) == menu_conn_.map;                       // (a room that names no map is the server's business)
+}
+
 // What a failed join says, in the menu's words: every reason the server can send (Reject) and every way the connection can fail before the room
 std::string Application::menu_failure_text() const {
     const std::string& server = menu_conn_.label;
@@ -278,6 +300,8 @@ std::string Application::menu_failure_text() const {
     switch (net_->fail_reason()) {
         case net::NetGame::FailReason::Unreachable:
             return unreachable_text(server);
+        case net::NetGame::FailReason::NoAnswer:
+            return no_answer_text(server);
         case net::NetGame::FailReason::Lost:
             return "The connection to " + server + " was lost before you were in the room. Please try again.";
         case net::NetGame::FailReason::Closed:
@@ -326,22 +350,15 @@ void Application::menu_start_single(const std::vector<ai::BotSpec>& bots) {
 // A network game is over, left or lost: nothing of it stays (the room, the match, the bots of a host, the results screen, the names of its players), and the player is at the menu again
 void Application::return_to_start_menu(const std::string& notice_in) {
     const std::string notice = notice_in;                                    // (a copy: the caller may pass net_notice_ or the status text of the net, which this function clears and destroys)
-    stop_bots();
     if (net_) {
-        net_end_session(std::string());
+        net_end_session(std::string());                                      // (it stops the bots of the room)
         net_.reset();
     }
     net_notice_.clear();
-    menu_conn_ = MenuConnection{};
-    host_lookup_.cancel();
+    menu_conn_ = MenuConnection{};                                           // (a match that began while the room's code was on the screen left its attempt at InRoom; no lookup runs then)
     scorecard_.hide();
-    hud_.close_quit_dialog();
-    hud_.close_quick_help();
-    hud_.close_options();
-    config_.bots.clear();
-    local_roster_ = 0x0F;
     apply_player_name(local_player_name_);
-    set_local_player(config_.local_player_id < 4 ? config_.local_player_id : uint8_t{0});
+    set_local_player(config_.local_player_id < 4 ? config_.local_player_id : uint8_t{0});      // (the HUD's init closes the quit dialog, the quick help and the options, and forgets the match's chat and selection)
     set_window_title(config_.title);
     enter_start_menu(notice);
     start_intro_music();
@@ -379,6 +396,27 @@ void Application::apply_player_name(const std::string& name) {
 void Application::set_window_title(const std::string& title) {
     window_title_ = title;
     if (window_ != nullptr) SDL_SetWindowTitle(window_, title.c_str());
+}
+
+// ---- the rest of a click that changed the screen ---------------------------------------------------------------------------------------------------
+
+// Which screen is up, and which panel of the menu: a change of this value by a left press or release is a click that changed the screen. A request that the menu has taken but the
+// application has not carried out yet (Continue, Cancel, Continue to the room, Quit) counts: its screen follows in the same frame.
+uint32_t Application::screen_signature() const noexcept {
+    return static_cast<uint32_t>(state_) | (static_cast<uint32_t>(start_menu_.panel()) << 8) | (start_menu_.has_request() ? 0x10000u : 0u);
+}
+
+void Application::begin_menu_gesture(uint32_t at_ms) {
+    menu_gesture_pending_ = true;
+    menu_gesture_ms_ = at_ms;
+}
+
+bool Application::swallow_menu_gesture(uint8_t clicks, uint32_t timestamp_ms) {
+    if (!menu_gesture_pending_) return false;
+    const bool within = static_cast<int32_t>(timestamp_ms - menu_gesture_ms_) <= static_cast<int32_t>(kDoubleClickMs);
+    if (clicks > 1 || within) return true;
+    menu_gesture_pending_ = false;                                           // a new click: it is the screen's
+    return false;
 }
 
 }  // namespace ants::app

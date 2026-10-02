@@ -2,6 +2,7 @@
 
 #include <cstring>
 #include <mutex>
+#include <system_error>
 #include <thread>
 
 #if !defined(__EMSCRIPTEN__)
@@ -35,7 +36,7 @@ bool HostLookup::system_resolve(const std::string& host, std::string& address, s
     return true;
 }
 
-void HostLookup::start(const std::string& host, const Resolver&) {
+void HostLookup::start(const std::string& host, const Resolver&, const Launcher&) {
     cancel();
     address_ = host;
     state_ = State::Done;
@@ -116,9 +117,10 @@ bool HostLookup::system_resolve(const std::string& host, std::string& address, s
     return true;
 }
 
-void HostLookup::start(const std::string& host, const Resolver& resolver) {
+void HostLookup::start(const std::string& host, const Resolver& resolver, const Launcher& launcher) {
     cancel();
     error_.clear();
+    start_failed_ = false;
     if (is_numeric(host)) {
         address_ = host;
         state_ = State::Done;
@@ -127,7 +129,7 @@ void HostLookup::start(const std::string& host, const Resolver& resolver) {
     shared_ = std::make_shared<Shared>();
     state_ = State::Pending;
     std::shared_ptr<Shared> shared = shared_;
-    std::thread([shared, host, resolver]() {
+    const std::function<void()> job = [shared, host, resolver]() {
         std::string address;
         std::string error;
         const bool ok = resolver ? resolver(host, address, error) : HostLookup::system_resolve(host, address, error);
@@ -135,7 +137,16 @@ void HostLookup::start(const std::string& host, const Resolver& resolver) {
         shared->address = address;
         shared->error = error;
         shared->state = ok ? State::Done : State::Failed;
-    }).detach();
+    };
+    try {
+        if (launcher) launcher(job);
+        else std::thread(job).detach();
+    } catch (const std::system_error&) {                   // a system that has no thread to give (a limit of processes, no memory): the player is told, the window does not die of it
+        shared_.reset();
+        state_ = State::Failed;
+        start_failed_ = true;
+        error_ = "could not start the lookup";
+    }
 }
 
 #endif  // !__EMSCRIPTEN__
@@ -155,6 +166,7 @@ void HostLookup::cancel() {
     state_ = State::Idle;
     address_.clear();
     error_.clear();
+    start_failed_ = false;
 }
 
 }  // namespace ants::app

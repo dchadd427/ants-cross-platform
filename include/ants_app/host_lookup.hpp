@@ -20,6 +20,9 @@ public:
     /// The lookup itself: true with a numeric address in `address`, or false with the reason in `error`. The default asks the system's resolver (getaddrinfo; an IPv4 address
     /// is preferred when the name has one: the game's server listens on IPv4). The tests give their own (a slow one that waits to be released, one that fails).
     using Resolver = std::function<bool(const std::string& host, std::string& address, std::string& error)>;
+    /// Runs a job on another thread (the default: a detached std::thread). It throws std::system_error when the system has no thread to give, which the lookup reports as a failure of its
+    /// own (start_failed()); the tests give one that throws.
+    using Launcher = std::function<void(std::function<void()>)>;
     enum class State : uint8_t { Idle, Pending, Done, Failed };
 
     HostLookup() = default;
@@ -28,7 +31,7 @@ public:
     HostLookup& operator=(const HostLookup&) = delete;
 
     /// Begins a lookup of `host` (a lookup that is still running is abandoned). A numeric address is Done at once.
-    void start(const std::string& host, const Resolver& resolver = Resolver());
+    void start(const std::string& host, const Resolver& resolver = Resolver(), const Launcher& launcher = Launcher());
     /// Where it stands now: Pending until the worker has answered
     State poll();
     /// Gives it up: the state is Idle again
@@ -37,6 +40,8 @@ public:
     /// Done: the numeric address; Failed: the resolver's reason
     const std::string& address() const noexcept { return address_; }
     const std::string& error() const noexcept { return error_; }
+    /// Failed because no worker thread could be started (not because the name is unknown): the reason is "could not start the lookup"
+    bool start_failed() const noexcept { return start_failed_; }
 
     /// The system resolver (what start() uses without a Resolver of its own)
     static bool system_resolve(const std::string& host, std::string& address, std::string& error);
@@ -49,6 +54,7 @@ private:
     State state_{State::Idle};
     std::string address_;
     std::string error_;
+    bool start_failed_{false};
 };
 
 }  // namespace ants::app

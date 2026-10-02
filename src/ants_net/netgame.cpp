@@ -459,7 +459,8 @@ void NetGame::update_client() {
                     events_.push_back(Event{Event::Type::Failed, 255});
                     break;
                 case ClientLobby::Event::Type::Disconnected:
-                    fail_reason_ = phase_ != Phase::Connecting ? FailReason::Closed : (client_lobby_->was_open() ? FailReason::Lost : FailReason::Unreachable);
+                    fail_reason_ = phase_ != Phase::Connecting ? FailReason::Closed
+                                   : (client_lobby_->welcome_timed_out() ? FailReason::NoAnswer : (client_lobby_->was_open() ? FailReason::Lost : FailReason::Unreachable));
                     status_ = phase_ == Phase::Connecting ? str::text(str::kUnableToConnect) : std::string("The host closed the room.");
                     phase_ = Phase::Failed;
                     events_.push_back(Event{Event::Type::Failed, 255});

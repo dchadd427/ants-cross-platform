@@ -243,6 +243,24 @@ void test_config_store() {
     ConfigStore bad;
     bad.set_location((dir / "no_such_folder" / "settings.ini").string());
     check(!bad.save(), "a file that cannot be written reports it");
+    // the file is replaced all at once (written beside it, then given its name): no temporary file stays, after a save or after one that fails
+    const auto files_in = [&]() {
+        std::vector<std::string> names;
+        for (const auto& entry : std::filesystem::directory_iterator(dir)) names.push_back(entry.path().filename().string());
+        return names;
+    };
+    g.set_string("Quick Chat F11", "Again");
+    check(files_in() == std::vector<std::string>{"settings.ini"}, "a save leaves the settings file and nothing else beside it");
+    std::filesystem::create_directories(dir / "taken" / "inside");                      // a name that is a folder with something in it: the file cannot be given that name
+    ConfigStore blocked;
+    blocked.set_location((dir / "taken").string());
+    blocked.set_int("X", 1);
+    check(!blocked.save() && std::filesystem::is_directory(dir / "taken") && std::filesystem::exists(dir / "taken" / "inside"), "a save that cannot be completed reports it and leaves what was there");
+    std::filesystem::remove_all(dir / "taken");
+    check(files_in() == std::vector<std::string>{"settings.ini"}, "... and leaves no temporary file");
+    ConfigStore again;
+    again.set_location(file);
+    check(again.load() && again.get_string("Quick Chat F11", "", 100) == "Again" && again.get_int("Music Volume", 65, 0, 100) == 12, "the file holds the whole of the settings after the replacements");
     std::filesystem::remove_all(dir);
 }
 
