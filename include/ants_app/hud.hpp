@@ -452,11 +452,13 @@ private:
     // shift included (they pass 0 as the last argument); the death of a selected ant and the alliance refresh keep the text.
     bool selection_status_pending_{false};
     void apply_selection_status(const sim::WorldState& world);
-    // FUN_0100cd40 (called by the power-up pick-up): a selected own ant that took a power-up rebuilds the panel, which posts the text of
-    // its new type when it is the only ant selected and string 12 otherwise. The pick-up writes the ant's OWN type field (0x1020d72), which is what is remembered here
-    // (AntSnapshot::raw_type): an ant that is of its level's default type until it takes the power-up of that very type keeps its type but still took one
-    std::vector<std::pair<uint32_t, sim::AntType>> selected_types_;
-    void check_selected_type_change(const sim::WorldState& world);
+    // FUN_0100cd40 (the last act of every power-up pick-up, FUN_01020cdb, at 0x1020dd2; it plays no sound): when the picking ant is the local player's and selected ([ant + 0x50]), the panel is
+    // rebuilt (SetPanelMode 3, or 4 when the stored panel is not 3), which posts the text of the type the lone ant is (string 12 for a group) and raises BOTH command pedestals
+    // (FUN_01028360(1, 1, kind, 1, 0, 1): the slot states [54f8] and [54fc] go back to 1, a latch of either is released). Every pick-up does it, also one that changes nothing about the ant: its
+    // own type again, or the type that the level already makes of a worker. The pick-up is seen as the rising edge of the ant's action 4 (the only SetAction call that pushes 4 is the one at 0x1020d2a, in the same
+    // call), so what is remembered is the action of each selected own ant at the last update.
+    std::vector<std::pair<uint32_t, uint8_t>> selected_actions_;
+    void check_selected_pickups(const sim::WorldState& world);
     // The voices of the ordering commands and the status text that goes with them (Ants.exe FUN_0101b5f9 / FUN_0101b67b /
     // FUN_0101b711 / FUN_0101b78a)
     uint32_t voice_rand() noexcept;

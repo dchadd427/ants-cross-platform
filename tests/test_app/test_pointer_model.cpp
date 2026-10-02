@@ -1236,6 +1236,465 @@ void test_default_type_hud() {
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------------
+// The whole table of the busy rule, the snapshot's action, and the pick-up that rebuilds the panel
+// ---------------------------------------------------------------------------------------------------------------------------------
+
+// A copy of a real world in which the only ant is a hand-made snapshot of the local player's: what the HUD reads of an ant is its snapshot and nothing else
+sim::WorldState made_world(Fixture& f, AntType type, AntType raw_type, uint8_t action) {
+    sim::WorldState w = f.world();
+    w.ants.clear();
+    sim::AntSnapshot a;
+    a.id = 77;
+    a.player_id = 0;
+    a.type = type;
+    a.raw_type = raw_type;
+    a.action = action;
+    w.ants.push_back(a);
+    return w;
+}
+
+// The remake's own statement of the rule (it is not a copy of the program's code): with flag 1 an ant whose OWN type is Bomber, Fire or Swimmer answers Worker unless it is idle (0),
+// walking (1) or stunned (3); every other ant, and every ant under flag 0, answers what it is
+bool busy_for_orders(AntType own, uint8_t action) {
+    return (own == AntType::Bomber || own == AntType::Fire || own == AntType::Swimmer) && !(action == 0 || action == 1 || action == 3);
+}
+
+// What the application does in every frame, in its order: the match ticks, then the HUD looks at it
+void tick_and_update(Fixture& f) {
+    f.sim.tick();
+    f.hud.update(f.world(), 1);
+}
+
+// Runs until `id` starts the getpow clip (action 4: the pick-up, SetAction(4) is the first thing FUN_01020cdb does); the HUD has looked at that very tick when it returns true
+bool run_to_pickup(Fixture& f, uint32_t id, int max_ticks = 400) {
+    for (int t = 0; t < max_ticks; ++t) {
+        tick_and_update(f);
+        const sim::AntSnapshot* a = snapshot_of(f, id);
+        if (a != nullptr && a->action == 4) return true;
+    }
+    return false;
+}
+
+// The 5 s that a posted text lives (StatusLine::kLifeTicks), with the match standing still
+void let_text_expire(Fixture& f) {
+    for (int t = 0; t < 101; ++t) f.hud.update(f.world(), 1);
+}
+
+// The world of the review's probes: own hill (2, 2), enemy hill (40, 40), an enemy worker far away (so that the match goes on)
+void pickup_world(Fixture& f) {
+    f.sim.grid_mut().set_anthill(0, TileCoord{2, 2});
+    f.sim.grid_mut().set_anthill(1, TileCoord{40, 40});
+    f.spawn(1, AntType::Worker, 50, 50);
+}
+
+void test_busy_table() {
+    g_group = "busy table";
+    std::printf("[pointer] the ant type getter with flag 1, the whole table: own type Bomber, Fire or Swimmer x every action (0 .. 0x14 and beyond), the other own types, the default-type workers, flag 0\n");
+    Fixture f;
+    f.settle();
+    f.hud.set_selected_ant_ids({77});
+    const AntType own_types[6] = {AntType::Worker, AntType::Bomber, AntType::Fire, AntType::Thief, AntType::Combat, AntType::Swimmer};
+    // the actions of the original: 0 idle, 1 walking, 2 entering the hill, 3 stunned, 4 power-up, 5 harvest, 6 / 7 fire wall, 8 / 9 bomb, 0xA burn, 0xB can't go, 0xC death, 0xD raid, 0xE hit,
+    // 0xF drown, 0x10 / 0x11 bridge, 0x12 attack, 0x13 blown, 0x14 hatch; the rule is a test of the three that take orders, so 0x15 .. 0x20 and 0xFF are busy as well
+    int rows = 0;
+    for (const AntType own : own_types) {
+        for (int action = 0; action <= 0x20; ++action) {
+            const std::string what = "own type " + std::to_string(static_cast<int>(own)) + ", action " + std::to_string(action) + ": ";
+            const sim::WorldState w = made_world(f, own, own, static_cast<uint8_t>(action));
+            AntType got = AntType::Combat;
+            const bool busy = busy_for_orders(own, static_cast<uint8_t>(action));
+            check(f.hud.homogeneous_type(w, got, true) && got == (busy ? AntType::Worker : own), what + (busy ? "busy: a worker for the cursor and the right click" : "answers its own type"));
+            check(f.hud.homogeneous_type(w, got) && got == own, what + "flag 0 (the panel text, the ability pedestal) never filters");
+            ++rows;
+        }
+        const sim::WorldState w = made_world(f, own, own, 0xFF);
+        AntType got = AntType::Combat;
+        check(f.hud.homogeneous_type(w, got, true) && got == (busy_for_orders(own, 0xFF) ? AntType::Worker : own), "an action that no ant has (0xFF) is busy for the three types, free for the others");
+    }
+    check(rows == 6 * 33, "every row of the table was run");
+    // a worker of a level with a default type has the own type 0: it is that type whatever it does (the getter's flag-0 path)
+    const AntType defaults[5] = {AntType::Combat, AntType::Thief, AntType::Bomber, AntType::Swimmer, AntType::Fire};
+    for (const AntType d : defaults) {
+        for (int action = 0; action <= 0x14; ++action) {
+            const sim::WorldState w = made_world(f, d, AntType::Worker, static_cast<uint8_t>(action));
+            AntType got = AntType::Worker;
+            check(f.hud.homogeneous_type(w, got, true) && got == d, "a default-type worker is never filtered (type " + std::to_string(static_cast<int>(d)) + ", action " + std::to_string(action) + ")");
+        }
+    }
+    // a hand-made snapshot that says nothing of its action is an ant that takes orders (its action is 0): a busy-by-default snapshot would turn every bomber of a hand-made world into a worker
+    {
+        sim::AntSnapshot blank;
+        check(blank.action == 0, "the default action of a snapshot is 0 (idle)");
+        sim::WorldState w = f.world();
+        w.ants.clear();
+        blank.id = 77;
+        blank.player_id = 0;
+        blank.type = AntType::Bomber;
+        blank.raw_type = AntType::Bomber;
+        w.ants.push_back(blank);
+        AntType got = AntType::Worker;
+        check(f.hud.homogeneous_type(w, got, true) && got == AntType::Bomber, "a hand-made bomber snapshot with no action is a bomber for the cursor and the right click");
+    }
+    // a mixed selection must agree under flag 1: a bomber at rest and one that is busy have no common type, two busy ones are two workers, a bomber and a thief never agree
+    {
+        sim::WorldState w = f.world();
+        w.ants.clear();
+        for (uint32_t k = 0; k < 3; ++k) {
+            sim::AntSnapshot a;
+            a.id = 100 + k;
+            a.player_id = 0;
+            a.type = k < 2 ? AntType::Bomber : AntType::Thief;
+            a.raw_type = a.type;
+            w.ants.push_back(a);
+        }
+        AntType got = AntType::Combat;
+        f.hud.set_selected_ant_ids({100, 101});
+        check(f.hud.homogeneous_type(w, got, true) && got == AntType::Bomber, "two bombers at rest are bombers");
+        w.ants[0].action = 8;
+        check(!f.hud.homogeneous_type(w, got, true), "one of them planting: no common type under flag 1");
+        check(f.hud.homogeneous_type(w, got) && got == AntType::Bomber, "and a common type under flag 0");
+        w.ants[1].action = 4;
+        check(f.hud.homogeneous_type(w, got, true) && got == AntType::Worker, "two busy bombers are two workers, whatever they are busy with");
+        f.hud.set_selected_ant_ids({100, 102});
+        check(!f.hud.homogeneous_type(w, got, true) && !f.hud.homogeneous_type(w, got), "a busy bomber and a thief: no common type under either flag");
+    }
+}
+
+// Runs a bomber through a situation and asks the HUD at every tick what the cursor and the right click make of it (a worker while the action is not 0, 1 or 3); `seen` collects the actions
+void watch_bomber(Fixture& f, uint32_t bomber, int ticks, std::vector<bool>& seen) {
+    f.hud.set_selected_ant_ids({bomber});
+    for (int t = 0; t < ticks; ++t) {
+        f.settle();
+        const sim::AntSnapshot* a = snapshot_of(f, bomber);
+        if (a == nullptr || a->hp == 0) return;
+        seen[std::min<size_t>(a->action, seen.size() - 1)] = true;
+        AntType got = AntType::Combat;
+        const bool busy = busy_for_orders(AntType::Bomber, a->action);
+        check(f.hud.homogeneous_type(f.world(), got, true) && got == (busy ? AntType::Worker : AntType::Bomber),
+              "a bomber doing action " + std::to_string(a->action) + (busy ? " is a worker for the orders" : " is a bomber for the orders"));
+        check(f.hud.homogeneous_type(f.world(), got) && got == AntType::Bomber, "and a bomber for the panel (flag 0)");
+    }
+}
+
+// The ants in real situations: the snapshot's action is the original's +0xe4 (the engine's orig_action_of): the locomotion clip's action or, for an ant that no clip drives, the number of its state
+void test_snapshot_action() {
+    g_group = "snapshot action";
+    std::printf("[pointer] AntSnapshot::action: the action of the locomotion clip, the state's number for an ant without a clip, and the busy rule on bombers in real situations\n");
+    // the state-only fallback: an ant that no locomotion clip drives (loco_action 0xFF) has the action of its state
+    {
+        struct Row { sim::UnitState state; uint8_t action; };
+        const Row rows[] = {
+            {sim::UnitState::PoweringUp, 0x04}, {sim::UnitState::Attacking, 0x12}, {sim::UnitState::Flinch, 0x0E}, {sim::UnitState::Knockback, 0x13},
+            {sim::UnitState::Stunned, 0x03}, {sim::UnitState::Burn, 0x0A}, {sim::UnitState::EnteringBase, 0x02}, {sim::UnitState::Drowning, 0x0F},
+            {sim::UnitState::Dead, 0x0C}, {sim::UnitState::Infiltrating, 0x0D}, {sim::UnitState::BuildingBridge, 0x10}, {sim::UnitState::DemolishingBridge, 0x11},
+            {sim::UnitState::PlantingBomb, 0x08}, {sim::UnitState::DefusingBomb, 0x09}, {sim::UnitState::PlacingFire, 0x06}, {sim::UnitState::ExtinguishingFire, 0x07},
+            {sim::UnitState::HarvestingFood, 0x05}, {sim::UnitState::CantGo, 0x0B}, {sim::UnitState::Walking, 0x01}, {sim::UnitState::DivingInWater, 0x01},
+            {sim::UnitState::ExitingWater, 0x01}, {sim::UnitState::Idle, 0x00}, {sim::UnitState::GuardIdle, 0x00}, {sim::UnitState::Swimming, 0x00},
+        };
+        for (const Row& r : rows) {
+            Fixture f;
+            const uint32_t id = f.spawn(0, AntType::Bomber, 10, 10);
+            f.settle();                                                                   // (the snapshot is rebuilt when it is asked for after a tick, so the edit below is in it)
+            sim::AntUnit& u = f.sim.get_unit(id);
+            u.loco_action = sim::AntUnit::kActionNone;
+            u.state = r.state;
+            const sim::AntSnapshot* a = snapshot_of(f, id);
+            check(a != nullptr && a->action == r.action, "state " + std::to_string(static_cast<int>(r.state)) + " without a clip is action " + std::to_string(r.action) + ": " +
+                                                             std::to_string(a ? a->action : -1));
+        }
+        Fixture f;
+        const uint32_t id = f.spawn(0, AntType::Bomber, 10, 10);
+        f.settle();
+        check(snapshot_of(f, id)->action == 0, "a new ant is idle (action 0)");
+        f.settle();
+        sim::AntUnit& u = f.sim.get_unit(id);
+        u.loco_action = sim::AntUnit::kActionBlown;                                      // with a clip the clip's action wins, whatever the state says
+        u.state = sim::UnitState::Idle;
+        check(snapshot_of(f, id)->action == 0x13, "a locomotion clip's action is the snapshot's action");
+        f.settle();
+        f.sim.get_unit(id).loco_action = sim::AntUnit::kActionHatch;
+        check(snapshot_of(f, id)->action == 0x14, "also the hatch clip's (0x14)");
+    }
+    // real situations of a bomber, one match each: the HUD's answer under flag 1 follows the action that the engine reports, tick by tick, and the situation gives the action it should
+    struct Situation { const char* name; uint8_t action; };
+    const Situation situations[6] = {{"blown away by a combat ant's punch", 0x13}, {"hit by a worker", 0x0E}, {"attacking", 0x12}, {"cannot go there", 0x0B},
+                                     {"entering its hill", 0x02}, {"grabbing a lunchbox", 0x05}};
+    for (int k = 0; k < 6; ++k) {
+        Fixture f;
+        pickup_world(f);
+        std::vector<bool> seen(0x20, false);
+        uint32_t bomber = 0;
+        int ticks = 100;
+        if (k < 3) {
+            bomber = f.spawn(0, AntType::Bomber, 20, 20);
+            const uint32_t other = f.spawn(1, k == 0 ? AntType::Combat : AntType::Worker, 21, 20);
+            f.settle();
+            if (k == 2) f.sim.execute_melee_attack(bomber, other); else f.sim.execute_melee_attack(other, bomber);
+        } else if (k == 3) {
+            for (int dx = -1; dx <= 1; ++dx) for (int dy = -1; dy <= 1; ++dy) if (dx != 0 || dy != 0) f.sim.set_terrain(30 + dx, 30 + dy, 2);      // a tile in a ring of water
+            bomber = f.spawn(0, AntType::Bomber, 25, 30);
+            f.settle();
+            f.sim.issue_move_order(bomber, TileCoord{30, 30});
+            ticks = 60;
+        } else if (k == 4) {
+            bomber = f.spawn(0, AntType::Bomber, 8, 8);
+            f.settle();
+            f.sim.join_base_queue(bomber);
+            ticks = 400;
+        } else {
+            f.sim.grid_mut().drop_lunchbox(14, 10, 25);
+            bomber = f.spawn(0, AntType::Bomber, 10, 10);
+            f.settle();
+            f.sim.issue_move_order(bomber, TileCoord{14, 10});
+            ticks = 300;
+        }
+        watch_bomber(f, bomber, ticks, seen);
+        check(seen[situations[k].action], std::string("a bomber ") + situations[k].name + " is in action " + std::to_string(situations[k].action) + " at some tick");
+    }
+}
+
+// FUN_0100cd40 (the last act of every pick-up, 0x1020dd2): for a selected ant of the local player the panel is rebuilt: the text of the type, string 12 for a group, and both pedestals raised
+void test_pickup_panel() {
+    g_group = "pick-up panel";
+    std::printf("[pointer] a pick-up by a selected own ant rebuilds the panel (FUN_0100cd40 at 0x1020dd2): the text of its type (string 12 for a group) and both command pedestals raised, whatever the pick-up changed\n");
+    // 1. a bomber with its ability pedestal latched, or its move pedestal latched, takes a Swimmer power-up: both latches are released and the new type's text is posted
+    for (int latch = 0; latch < 2; ++latch) {
+        const std::string what = std::string(latch == 0 ? "ability" : "move") + " pedestal latched: ";
+        Fixture f;
+        pickup_world(f);
+        const uint32_t bomber = f.spawn(0, AntType::Bomber, 10, 20);
+        f.sim.grid_mut().place_powerup(12, 20, 5);                                          // a Swimmer power-up
+        f.settle();
+        f.hud.select_ant(bomber);
+        let_text_expire(f);
+        if (latch == 0) f.latch_ability(); else f.latch_move();
+        check(latch == 0 ? f.hud.is_ability_latched() : f.hud.is_move_latched(), what + "latched before");
+        f.sim.issue_move_order(bomber, TileCoord{12, 20});
+        check(run_to_pickup(f, bomber), what + "the bomber takes the power-up");
+        check(f.unit(bomber).type == AntType::Swimmer, what + "and is a swimmer now");
+        check(!f.hud.is_ability_latched() && !f.hud.is_move_latched(), what + "the rebuilt panel raised both pedestals");
+        check(f.hud.status_line().text() == "SwimmerAnt selected.", what + "and posted the text of the new type: " + f.hud.status_line().text());
+        // the pick-up clip (action 4) is a busy action: the swimmer is a worker for the cursor and the right click until it ends, a swimmer after
+        sim::AntType got = AntType::Combat;
+        check(f.hud.homogeneous_type(f.world(), got, true) && got == AntType::Worker, what + "during the getpow clip the ant is busy for the orders");
+        uint32_t after = 0;
+        while (after < 100 && snapshot_of(f, bomber)->action == 4) { tick_and_update(f); ++after; }
+        check(after > 3 && snapshot_of(f, bomber)->action != 4, what + "the clip ends");
+        check(f.hud.homogeneous_type(f.world(), got, true) && got == AntType::Swimmer, what + "and a swimmer when it ends");
+        check(f.hud.status_line().text() == "SwimmerAnt selected." && f.hud.status_line().age_ticks() == after, what + "the end of the clip posts nothing again");
+        // a latch that is made after the pick-up stays (nothing rebuilds the panel again)
+        f.latch_ability();
+        for (int t = 0; t < 20; ++t) tick_and_update(f);
+        check(f.hud.is_ability_latched(), what + "a latch made after the pick-up is not released by anything");
+    }
+    // 2. an ant that takes the power-up of its own type again changes nothing that can be seen, and the panel is rebuilt all the same: a Bomber takes a Bomber power-up
+    {
+        Fixture f;
+        pickup_world(f);
+        const uint32_t bomber = f.spawn(0, AntType::Bomber, 10, 20);
+        f.sim.grid_mut().place_powerup(12, 20, 1);                                          // a Bomber power-up
+        f.settle();
+        f.hud.select_ant(bomber);
+        let_text_expire(f);
+        f.latch_ability();
+        check(f.hud.is_ability_latched(), "same type: latched before");
+        f.sim.issue_move_order(bomber, TileCoord{12, 20});
+        check(run_to_pickup(f, bomber), "same type: the bomber takes the power-up");
+        check(f.unit(bomber).type == AntType::Bomber, "same type: it is a bomber before and after");
+        check(f.hud.status_line().text() == "BomberAnt selected.", "same type: the panel text is posted again: " + f.hud.status_line().text());
+        check(!f.hud.is_ability_latched(), "same type: and the ability pedestal is raised");
+    }
+    // 3. the default-type cases: on a level whose default is Combat a worker (own type 0, it IS a combat ant) takes the Combat power-up, and a combat ant with the own type 4 takes it again
+    for (int own = 0; own < 2; ++own) {
+        const std::string what = std::string(own == 0 ? "default-type worker" : "typed combat ant") + " takes a Combat power-up on a default-Combat level: ";
+        Fixture f;
+        pickup_world(f);
+        f.sim.grid_mut().set_default_ant_tile(62);
+        const uint32_t ant = f.spawn(0, own == 0 ? AntType::Worker : AntType::Combat, 10, 20);
+        f.sim.grid_mut().place_powerup(12, 20, 4);
+        f.settle();
+        f.hud.select_ant(ant);
+        let_text_expire(f);
+        f.latch_ability();
+        check(f.hud.is_ability_latched(), what + "the attack pedestal is latched before");
+        f.sim.issue_move_order(ant, TileCoord{12, 20});
+        check(run_to_pickup(f, ant), what + "it takes the power-up");
+        check(snapshot_of(f, ant)->type == AntType::Combat, what + "it is a combat ant before and after");
+        check(f.hud.status_line().text() == "Yessir!", what + "the panel text is posted: " + f.hud.status_line().text());
+        check(!f.hud.is_ability_latched(), what + "and the pedestal is raised");
+    }
+    // 4. another team's ant under inspection (panel 5) takes a power-up: nothing happens (FUN_0100cd7d: the ant's team must be the local player)
+    {
+        Fixture f;
+        pickup_world(f);
+        const uint32_t foe = f.spawn(1, AntType::Worker, 20, 20);
+        f.sim.grid_mut().place_powerup(22, 20, 4);
+        f.settle();
+        f.hud.select_ant(foe);
+        let_text_expire(f);
+        check(f.hud.panel_mode(f.world()) == HUD::PanelMode::Other, "inspected enemy: panel 5");
+        f.hud.post_status("Bomb dropped.");
+        f.sim.issue_move_order(foe, TileCoord{22, 20});
+        check(run_to_pickup(f, foe), "inspected enemy: it takes the power-up");
+        check(f.unit(foe).type == AntType::Combat, "inspected enemy: and is a combat ant now");
+        check(f.hud.status_line().text() == "Bomb dropped.", "inspected enemy: the text is not touched: " + f.hud.status_line().text());
+    }
+    // 5. an own ant that is not selected takes a power-up while another own ant is selected: nothing happens to the selected one's panel
+    {
+        Fixture f;
+        pickup_world(f);
+        const uint32_t selected = f.spawn(0, AntType::Bomber, 10, 20);
+        const uint32_t other = f.spawn(0, AntType::Worker, 10, 30);
+        f.sim.grid_mut().place_powerup(12, 30, 3);                                          // a Thief power-up
+        f.settle();
+        f.hud.select_ant(selected);
+        let_text_expire(f);
+        f.latch_ability();
+        f.hud.post_status("Bomb dropped.");
+        f.sim.issue_move_order(other, TileCoord{12, 30});
+        check(run_to_pickup(f, other), "unselected own ant: it takes the power-up");
+        check(f.unit(other).type == AntType::Thief, "unselected own ant: and is a thief now");
+        check(f.hud.status_line().text() == "Bomb dropped.", "unselected own ant: the selected ant's panel is not rebuilt: " + f.hud.status_line().text());
+        check(f.hud.is_ability_latched(), "unselected own ant: and its pedestal stays latched");
+        // an ant that is selected only while its clip already runs was not selected when it took the power-up: no rebuild for it
+        f.hud.select_ant(other);
+        f.hud.update(f.world(), 1);
+        check(snapshot_of(f, other)->action == 4, "late selection: the clip still runs");
+        check(f.hud.status_line().text() == "Thief here", "late selection: the selection posts its own text: " + f.hud.status_line().text());
+        f.latch_ability();
+        check(f.hud.is_ability_latched(), "late selection: the thief's ability pedestal latches");
+        f.hud.post_status("Bomb dropped.");
+        for (int t = 0; t < 5; ++t) tick_and_update(f);
+        check(f.hud.status_line().text() == "Bomb dropped." && f.hud.is_ability_latched(), "late selection: nothing is rebuilt while the clip runs on");
+    }
+    // 6. a group: one of two selected ants takes a power-up: string 12, and a latched move pedestal is raised (the group's panel has no ability pedestal)
+    {
+        Fixture f;
+        pickup_world(f);
+        const uint32_t a = f.spawn(0, AntType::Bomber, 10, 20);
+        const uint32_t b = f.spawn(0, AntType::Worker, 10, 30);
+        f.sim.grid_mut().place_powerup(12, 20, 4);                                          // a Combat power-up: panel 3 would say "Yessir!"
+        f.settle();
+        f.hud.set_selected_ant_ids({a, b});
+        let_text_expire(f);
+        f.latch_move();
+        check(f.hud.is_move_latched() && f.hud.panel_mode(f.world()) == HUD::PanelMode::Ants, "group: panel 4 with the move pedestal latched");
+        f.sim.issue_move_order(a, TileCoord{12, 20});
+        check(run_to_pickup(f, a), "group: one of them takes the power-up");
+        check(f.hud.status_line().text() == "Ready!", "group: string 12 is posted, not the text of the type: " + f.hud.status_line().text());
+        check(!f.hud.is_move_latched(), "group: the move pedestal is raised");
+    }
+    // 7. panel 4 with a single ant (a shift selection of one: the panel is stored, not counted): string 12 as well, even for a type with a text of its own
+    {
+        Fixture f;
+        pickup_world(f);
+        const uint32_t a = f.spawn(0, AntType::Bomber, 10, 20);
+        f.sim.grid_mut().place_powerup(12, 20, 4);
+        f.settle();
+        f.hud.select_ant(a, true);
+        let_text_expire(f);
+        check(f.hud.panel_mode(f.world()) == HUD::PanelMode::Ants, "panel 4 with one ant");
+        f.sim.issue_move_order(a, TileCoord{12, 20});
+        check(run_to_pickup(f, a), "panel 4 with one ant: it takes the power-up");
+        check(f.hud.status_line().text() == "Ready!", "panel 4 with one ant says string 12, not \"Yessir!\": " + f.hud.status_line().text());
+    }
+    // 8. two selected ants take their power-ups in the same tick: the one text of a group, posted once for the update
+    {
+        Fixture f;
+        pickup_world(f);
+        const uint32_t a = f.spawn(0, AntType::Bomber, 10, 20);
+        const uint32_t b = f.spawn(0, AntType::Fire, 10, 30);
+        f.settle();
+        f.hud.set_selected_ant_ids({a, b});
+        let_text_expire(f);
+        sim::WorldState w = f.world();
+        f.hud.update(w, 1);                                                                 // both at rest: remembered
+        for (auto& ant : w.ants) if (ant.id == a || ant.id == b) ant.action = 4;
+        f.latch_move();
+        check(f.hud.is_move_latched(), "two pick-ups: the move pedestal of the group is latched");
+        f.hud.update(w, 1);
+        check(f.hud.status_line().text() == "Ready!" && f.hud.status_line().age_ticks() == 0, "two pick-ups in one update: string 12, freshly posted: " + f.hud.status_line().text());
+        check(!f.hud.is_move_latched(), "two pick-ups in one update: the pedestal is raised");
+        f.hud.post_status("Bomb dropped.");
+        f.hud.update(w, 1);                                                                 // both still in their clips: no new edge
+        check(f.hud.status_line().text() == "Bomb dropped.", "and nothing more while the clips run");
+    }
+    // 9. the guards, on snapshots that the test edits: a dead or a drowning ant, and an ant that is not the local player's, never rebuild a panel
+    for (int guard = 0; guard < 3; ++guard) {
+        const std::string what = std::string(guard == 0 ? "dead own ant" : guard == 1 ? "drowning own ant" : "another team's ant") + ": ";
+        Fixture f;
+        pickup_world(f);
+        const uint32_t a = f.spawn(0, AntType::Bomber, 10, 20);
+        f.settle();
+        f.hud.select_ant(a);
+        let_text_expire(f);
+        f.latch_ability();
+        sim::WorldState w = f.world();
+        f.hud.update(w, 1);                                                                 // at rest: remembered
+        f.hud.post_status("Bomb dropped.");
+        for (auto& ant : w.ants) {
+            if (ant.id != a) continue;
+            ant.action = 4;
+            if (guard == 0) ant.hp = 0;
+            else if (guard == 1) ant.is_drowning = true;
+            else ant.player_id = 1;
+        }
+        f.hud.update(w, 1);
+        check(f.hud.status_line().text() == "Bomb dropped.", what + "no text: " + f.hud.status_line().text());
+        check(f.hud.is_ability_latched(), what + "no pedestal raised");
+    }
+    // the same edit with an own ant that is alive and not drowning does rebuild the panel: the guards above are the only reason that nothing happened
+    {
+        Fixture f;
+        pickup_world(f);
+        const uint32_t a = f.spawn(0, AntType::Bomber, 10, 20);
+        f.settle();
+        f.hud.select_ant(a);
+        let_text_expire(f);
+        f.latch_ability();
+        sim::WorldState w = f.world();
+        f.hud.update(w, 1);
+        f.hud.post_status("Bomb dropped.");
+        for (auto& ant : w.ants) if (ant.id == a) ant.action = 4;
+        f.hud.update(w, 1);
+        check(f.hud.status_line().text() == "BomberAnt selected." && !f.hud.is_ability_latched(), "the control: a live own ant that starts the getpow clip rebuilds the panel");
+    }
+    // the text is that of the type the ant IS (the getter's answer, AntSnapshot::type), not of the own type field (which is 0 for a worker): a worker of a default-Combat level says "Yessir!"
+    {
+        Fixture f;
+        pickup_world(f);
+        f.sim.grid_mut().set_default_ant_tile(62);
+        const uint32_t a = f.spawn(0, AntType::Worker, 10, 20);
+        f.settle();
+        f.hud.select_ant(a);
+        let_text_expire(f);
+        sim::WorldState w = f.world();
+        const sim::AntSnapshot* made = snapshot_of(f, a);
+        check(made != nullptr && made->type == AntType::Combat && made->raw_type == AntType::Worker, "the worker of the default-Combat level is a combat ant with the own type 0");
+        f.hud.update(w, 1);
+        for (auto& ant : w.ants) if (ant.id == a) ant.action = 4;
+        f.hud.update(w, 1);
+        check(f.hud.status_line().text() == "Yessir!", "the rebuilt panel names the type the ant is, not its own type field: " + f.hud.status_line().text());
+    }
+    // a new match forgets what the panel remembers: an ant that is already in its clip when the first update of a fresh HUD sees it is no pick-up
+    {
+        Fixture f;
+        pickup_world(f);
+        const uint32_t a = f.spawn(0, AntType::Bomber, 10, 20);
+        f.settle();
+        f.hud.set_selected_ant_ids({a});
+        sim::WorldState w = f.world();
+        f.hud.update(w, 1);                                                                 // remembered at rest
+        f.hud.init(0);
+        const std::string welcome = f.hud.status_line().text();
+        f.hud.set_selected_ant_ids({a});
+        for (auto& ant : w.ants) if (ant.id == a) ant.action = 4;
+        f.hud.update(w, 1);
+        check(f.hud.status_line().text() == welcome, "a fresh HUD remembers nothing: no pick-up from a record of the last match: " + f.hud.status_line().text());
+    }
+}
+
+// ---------------------------------------------------------------------------------------------------------------------------------
 // The pedestals (FUN_010274be -> FUN_01028d30 -> FUN_01028ee0)
 // ---------------------------------------------------------------------------------------------------------------------------------
 
@@ -1841,6 +2300,9 @@ int main() {
     test_right_button();
     test_busy_ability_ants();
     test_default_type_hud();
+    test_busy_table();
+    test_snapshot_action();
+    test_pickup_panel();
     test_pedestals();
     test_keyboard();
     test_buttons();

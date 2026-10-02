@@ -22,17 +22,23 @@
 #include <chrono>
 #include <csignal>
 #include <cstdint>
+#include <cstdio>
 #include <filesystem>
 #include <fstream>
 #include <functional>
 #include <iomanip>
 #include <iostream>
 #include <memory>
+#include <random>
 #include <set>
+#include <stdexcept>
 #include <string>
 #include <thread>
 #include <vector>
 
+#ifdef _WIN32
+#include <process.h>
+#endif
 #ifndef _WIN32
 #include <arpa/inet.h>
 #include <netinet/in.h>
@@ -376,8 +382,53 @@ double peak_memory_mb() {
 }
 #endif
 
+// A folder of this process alone, `ants_server_test_<pid>_<random hex>`, made new (create_directory says no when the name exists, and another is drawn) and removed with everything in it when
+// the object goes. The folders of the suite used to be `ants_server_test_<tag>` and `ants_secret_test_<tag>` under the temp folder, the same for every run on the machine: two runs at the
+// same time (two checkouts, a developer and a CI job) removed each other's files, and S3.1, S3.18 and S3.21 failed when they overlapped.
+long process_id() {
+#ifdef _WIN32
+    return static_cast<long>(_getpid());
+#else
+    return static_cast<long>(getpid());
+#endif
+}
+
+class ScratchRoot {
+public:
+    ScratchRoot() {
+        std::random_device entropy;
+        for (int attempt = 0; attempt < 1000; ++attempt) {
+            char suffix[16];
+            std::snprintf(suffix, sizeof suffix, "%06x", static_cast<unsigned>(entropy() & 0xFFFFFFu));
+            const fs::path candidate = fs::temp_directory_path() / ("ants_server_test_" + std::to_string(process_id()) + "_" + suffix);
+            std::error_code ec;
+            if (fs::create_directory(candidate, ec) && !ec) {
+                path_ = candidate;
+                return;
+            }
+        }
+        throw std::runtime_error("cannot make a scratch folder under " + fs::temp_directory_path().string());
+    }
+    ~ScratchRoot() {
+        std::error_code ec;
+        fs::remove_all(path_, ec);
+    }
+    ScratchRoot(const ScratchRoot&) = delete;
+    ScratchRoot& operator=(const ScratchRoot&) = delete;
+    const fs::path& path() const noexcept { return path_; }
+
+private:
+    fs::path path_;
+};
+
+// The folder of this run (made at the first use, removed when the program ends)
+const fs::path& scratch_root() {
+    static ScratchRoot root;
+    return root.path();
+}
+
 std::string temp_dir_for(const char* tag) {
-    const fs::path p = fs::temp_directory_path() / (std::string("ants_server_test_") + tag);
+    const fs::path p = scratch_root() / tag;
     fs::remove_all(p);
     fs::create_directories(p);
     return p.string();
@@ -392,6 +443,37 @@ void write_bytes(const fs::path& p, size_t n, char fill) {
 }  // namespace
 
 void run_store_tests() {
+    TEST_CASE("S3.0 The Scratch Folders Of A Run Are Its Own: Named With The Process And A Random Part, Never The Name That Every Run Of The Suite Shared, And Removed With Their Contents") {
+        const std::string pid = std::to_string(process_id());
+        fs::path a_path;
+        fs::path b_path;
+        {
+            ScratchRoot a;
+            ScratchRoot b;                                                          // two roots in one process (and so two processes) never get the same folder
+            a_path = a.path();
+            b_path = b.path();
+            ASSERT_TRUE(a_path != b_path);
+            ASSERT_TRUE(fs::is_directory(a_path) && fs::is_directory(b_path));
+            ASSERT_TRUE(fs::equivalent(a_path.parent_path(), fs::temp_directory_path()) && fs::equivalent(b_path.parent_path(), fs::temp_directory_path()));   // (the temp path may end in a slash)
+            ASSERT_TRUE(a_path.filename().string().rfind("ants_server_test_" + pid + "_", 0) == 0);        // the process's own: its id in the name
+            ASSERT_TRUE(b_path.filename().string().rfind("ants_server_test_" + pid + "_", 0) == 0);
+            ASSERT_TRUE(a_path.filename().string().size() > std::string("ants_server_test_" + pid + "_").size());   // and a random part after it
+            fs::create_directories(a_path / "deep" / "er");
+            write_bytes(a_path / "deep" / "er" / "file", 10, 'x');
+            ASSERT_TRUE(fs::exists(a_path / "deep" / "er" / "file"));
+        }
+        ASSERT_FALSE(fs::exists(a_path) || fs::exists(b_path));                     // removed with everything in them
+        // the folders that the suite asks for are made fresh under the root of this run, and never at the old shared names
+        const std::string dir = temp_dir_for("s30");
+        ASSERT_TRUE(fs::path(dir).parent_path() == scratch_root());
+        ASSERT_TRUE(fs::path(dir) != fs::temp_directory_path() / "ants_server_test_s30");
+        ASSERT_TRUE(fs::path(dir).string().find("ants_server_test_" + pid + "_") != std::string::npos);
+        write_bytes(fs::path(dir) / "left_behind", 10, 'x');
+        const std::string again = temp_dir_for("s30");                              // a second request for the same name starts empty
+        ASSERT_TRUE(again == dir && !fs::exists(fs::path(again) / "left_behind"));
+        ASSERT_TRUE(scratch_root().filename().string().rfind("ants_server_test_" + pid + "_", 0) == 0);
+    } TEST_END();
+
     TEST_CASE("S3.1 Map Store: A Map Of The Folder Is Found With Its Hash; Names That Are No Map Of The Folder Are Refused") {
         MapStore store(maps_dir());
         MapEntry e;
@@ -471,19 +553,24 @@ void run_manager_tests() {
         w.run(300);
         ASSERT_EQ(ann.lobby->phase(), net::ClientLobby::Phase::InRoom);
         ASSERT_EQ(ann.lobby->my_seat(), 0);                                              // seat 0 is a guest's: the server has none
-        // an old client: its layout is not read, the answer is "version mismatch"
-        {
-            auto ends = w.net.connect({10, 0});
-            w.mgr.add_connection(std::make_unique<Borrowed>(ends.first), "x", w.now);
-            net::HelloMsg old;
-            old.version = 4;
-            old.name = "Old";
-            old.room = "AAA-1";
-            ends.second->send(net::encode(old));
-            w.run(200);
-            std::vector<uint8_t> reply;
-            net::RejectMsg rj;
-            ASSERT_TRUE(ends.second->poll(reply) && net::decode(reply, rj) && rj.reason == net::RejectReason::VersionMismatch);
+        // an old client: its layout is not read, the answer is "version mismatch"; so is the answer to a game of protocol 8 (v0.0.94), whose Hello has exactly this protocol's layout:
+        // the engine's rules changed in 9 (the community-map rules), and the number is all that the door has to tell the two games apart
+        // (the door decides the version before it looks for the room, so an old game that asks for a room that does not exist is refused for its version, not told "no such room")
+        ASSERT_TRUE(net::kProtocolVersion != 8);
+        for (const uint16_t old_version : {uint16_t{4}, uint16_t{8}}) {
+            for (const char* room : {"AAA-1", "NOPE-9"}) {
+                auto ends = w.net.connect({10, 0});
+                w.mgr.add_connection(std::make_unique<Borrowed>(ends.first), "x", w.now);
+                net::HelloMsg old;
+                old.version = old_version;
+                old.name = "Old";
+                old.room = room;
+                ends.second->send(net::encode(old));
+                w.run(200);
+                std::vector<uint8_t> reply;
+                net::RejectMsg rj;
+                ASSERT_TRUE(ends.second->poll(reply) && net::decode(reply, rj) && rj.reason == net::RejectReason::VersionMismatch);
+            }
         }
         // garbage and a message that is no Hello
         {
@@ -1798,7 +1885,7 @@ size_t entries_in(const fs::path& dir) {
 // The control secret: from the environment, or made once and kept in a file (secret.hpp)
 void run_secret_tests() {
     auto fresh_dir = [](const char* tag) {
-        const fs::path d = fs::temp_directory_path() / (std::string("ants_secret_test_") + tag);
+        const fs::path d = scratch_root() / (std::string("secret_") + tag);
         std::error_code ec;
         fs::remove_all(d, ec);
         fs::create_directories(d, ec);

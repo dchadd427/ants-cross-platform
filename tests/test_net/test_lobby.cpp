@@ -519,18 +519,28 @@ int main() {
         ASSERT_TRUE(ends.second->poll(reply));
         RejectMsg rj;
         ASSERT_TRUE(decode(reply, rj) && rj.reason == RejectReason::VersionMismatch);
-        // a client of protocol 6 (the version before the room's leader): the same answer, from a LAN host and from a server's room alike
-        for (const bool server : {false, true}) {
-            HostLobby::Config hc;
-            if (server) hc.host_seat = 255;
-            Room r6(hc);
-            auto e6 = r6.net.connect({10, 0});
-            r6.host.add_connection(e6.first, 0);
-            e6.second->send(v6_hello);
-            r6.run(100);
-            ASSERT_TRUE(e6.second->poll(reply) && decode(reply, rj) && rj.reason == RejectReason::VersionMismatch);
-            ASSERT_EQ(r6.host.players(), server ? size_t{0} : size_t{1});          // nobody was seated, and no leader named
-            ASSERT_EQ(r6.host.leader(), kNoLeader);
+        // protocol 8 (v0.0.94, the release before the community-map rules) has this very Hello layout too: nothing but the number tells it from this protocol's Hello, and the number refuses it
+        HelloMsg eight = h;
+        eight.version = 8;
+        const std::vector<uint8_t> v8_hello = encode(eight);
+        ASSERT_TRUE(decode(v8_hello.data(), v8_hello.size(), old));
+        ASSERT_EQ(old.version, 8);
+        ASSERT_TRUE(kProtocolVersion != 8);                                       // (v0.0.94's number: the release that changed the engine's rules moved it)
+        // a client of protocol 6 (the version before the room's leader) and one of protocol 8 (the version before the engine's rules of the community maps changed; its Hello is exactly
+        // this protocol's layout): the same answer, from a LAN host and from a server's room alike, and nobody is seated
+        for (const std::vector<uint8_t>* hello : {&v6_hello, &v8_hello}) {
+            for (const bool server : {false, true}) {
+                HostLobby::Config hc;
+                if (server) hc.host_seat = 255;
+                Room r6(hc);
+                auto e6 = r6.net.connect({10, 0});
+                r6.host.add_connection(e6.first, 0);
+                e6.second->send(*hello);
+                r6.run(100);
+                ASSERT_TRUE(e6.second->poll(reply) && decode(reply, rj) && rj.reason == RejectReason::VersionMismatch);
+                ASSERT_EQ(r6.host.players(), server ? size_t{0} : size_t{1});          // nobody was seated, and no leader named
+                ASSERT_EQ(r6.host.leader(), kNoLeader);
+            }
         }
     } TEST_END();
 

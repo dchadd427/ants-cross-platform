@@ -413,6 +413,30 @@ int main() {
         ASSERT_EQ(browser->rooms().size(), size_t{1});
     } TEST_END();
 
+    TEST_CASE("L1.9b A room of protocol 8 (v0.0.94) is listed as another version of the game and the one of this protocol is not") {
+        // the engine's rules changed with protocol 9 (default ant types, power-ups by tile, the attack clip), so a game of the release before cannot join this one's room, and the list says so
+        auto browser = LanBrowser::open(0);
+        RawSender raw;
+        ASSERT_TRUE(raw.ok());
+        uint32_t now = 1000;
+        const auto listen = [&](uint32_t t) { browser->update(t); };
+        ASSERT_TRUE(kProtocolVersion != 8);
+        LanRoomInfo previous = make_info(11, "Alice", "TINY.LVL");
+        previous.protocol = 8;
+        const LanRoomInfo current = make_info(12, "Bob", "TINY.LVL");
+        ASSERT_EQ(current.protocol, kProtocolVersion);
+        raw.send(browser->port(), encode_lan_message(LanMessageType::Announce, previous));
+        raw.send(browser->port(), encode_lan_message(LanMessageType::Announce, current));
+        ASSERT_TRUE(wait_until(now, listen, [&]() { return browser->rooms().size() == 2; }));
+        const std::vector<LanRoom> rooms = browser->rooms();
+        ASSERT_EQ(rooms.size(), size_t{2});                                // sorted by the host's name: Alice, Bob
+        ASSERT_EQ(rooms[0].info.host_name, std::string("Alice"));
+        ASSERT_EQ(rooms[0].info.protocol, 8);
+        ASSERT_FALSE(rooms[0].compatible);
+        ASSERT_EQ(rooms[1].info.host_name, std::string("Bob"));
+        ASSERT_TRUE(rooms[1].compatible);
+    } TEST_END();
+
     TEST_CASE("L1.10 The list never holds more than 64 rooms; the rooms it knows keep updating") {
         auto browser = LanBrowser::open(0);
         RawSender raw;

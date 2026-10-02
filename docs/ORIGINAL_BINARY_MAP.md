@@ -7,6 +7,8 @@ Automated static disassembly, control flow graph, and data structure recovery fr
 
 ## 1. Key Subsystem Entry Points with Verified Audio & String Signatures
 
+**Read this column with care: it is a guess, not a finding.** "Sounds Dispatched" lists every small integer (0 .. 90) that a function pushes as an immediate and that equals the id of a sound, whatever the push is for, and the classification follows from those ids and from a few keywords of the strings. Most rows of "Audio / SFX Dispatch" play no sound: `0x100cd40` pushes 3 and 4, the arguments of the panel rebuild that a power-up pick-up asks for (it posts a status text and raises the two command pedestals; it plays nothing), `0x1007025` reads block 3 of a level file and `0x1007202` tests the power-up flag of a tile id. What a function does is in `docs/GAME_REVERSE_ENGINEERING.md`.
+
 | Function Address | Calls Out | Inbound Callers | Sounds Dispatched | String Cross-References | Subsystem Classification |
 |:-----------------|:---------:|:---------------:|:-------------------|:------------------------|:-------------------------|
 | `0x100607b` | 1 | 1 | buttonclick.wav (0) | None | **Audio / SFX Dispatch** |

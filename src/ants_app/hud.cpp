@@ -138,6 +138,7 @@ void HUD::init(uint8_t local_player_id) {
     is_radar_dragging_ = false;
     status_line_.clear();
     selection_status_pending_ = false;
+    selected_actions_.clear();
     chat_entries_.clear();
     chat_log_.clear();
     chat_line_colour_.clear();
@@ -228,7 +229,7 @@ void HUD::update(const sim::WorldState& world, uint32_t delta_ticks) {
     // 1. The status line (CLEARSTAT and TXTFLASH tasks) and the text that a selection change decides
     status_line_.update(delta_ticks);
     apply_selection_status(world);
-    check_selected_type_change(world);
+    check_selected_pickups(world);
 
     // The INPUT task polls the pointer every 50 ms (FUN_0102653f dispatches the move to the top window): the pictures of the options' controls follow it
     if (options_.is_open()) options_.on_move(mouse_x_, mouse_y_);
@@ -320,34 +321,38 @@ void HUD::apply_selection_status(const sim::WorldState& world) {
     }
 }
 
-void HUD::check_selected_type_change(const sim::WorldState& world) {
-    // FUN_0100cd40 is the last thing the pick-up does (its only call, 0x1020dd2, after the own type field +0x54 was written at 0x1020d72), so the pick-up is noticed by the OWN type
-    // changing (AntSnapshot::raw_type), not by the type the ant is (AntSnapshot::type): a worker of a level whose default type is Combat is a combat ant before and after it takes
-    // the Combat power-up, and the original rebuilds the panel all the same. (A typed ant that takes the power-up of its own type again changes nothing that can be seen here: the
-    // panel is not rebuilt for it, a difference that stays.) The text that the rebuilt panel shows is that of the type the lone ant is.
-    std::vector<std::pair<uint32_t, sim::AntType>> now;
-    sim::AntType lone_type = sim::AntType::Worker;
-    bool changed = false;
+void HUD::check_selected_pickups(const sim::WorldState& world) {
+    // FUN_0100cd40 is the last thing a pick-up does (its only call, 0x1020dd2, in FUN_01020cdb, which pushes SetAction(4) at 0x1020d2a in the same call): for an ant of the local player that is selected
+    // ([ant + 0x50], FUN_0100cd7d tests the observer flag and the team) it rebuilds the panel, whatever the pick-up changed: an ant that takes the power-up of its own type again, or a worker of a
+    // level whose default type is that of the power-up, changes nothing that can be seen and the panel is rebuilt all the same. So the pick-up is the rising edge of the action 4 of an own ant that
+    // was selected at the last update (AntSnapshot::action); the text that the rebuilt panel posts is that of the type the lone ant is. (The ant that is selected while the clip already runs was not
+    // selected when the pick-up happened: no edge.)
+    std::vector<std::pair<uint32_t, uint8_t>> now;
+    const sim::AntSnapshot* lone = nullptr;
+    bool picked_up = false;
     if (selected_base_team_id_ < 0) {
         for (uint32_t id : selected_ant_ids_) {
             for (const auto& a : world.ants) {
                 if (a.id != id || a.player_id != local_player_id_ || a.hp == 0 || a.is_drowning) continue;
-                now.emplace_back(id, a.raw_type);
-                lone_type = a.type;
-                for (const auto& before : selected_types_) {
-                    if (before.first == id && before.second != a.raw_type) changed = true;
+                now.emplace_back(id, a.action);
+                lone = &a;
+                if (a.action == sim::AntUnit::kActionGetPow) {
+                    for (const auto& before : selected_actions_) {
+                        if (before.first == id && before.second != sim::AntUnit::kActionGetPow) picked_up = true;
+                    }
                 }
                 break;
             }
         }
     }
-    selected_types_ = std::move(now);
-    if (!changed) return;
-    if (selected_types_.size() == 1 && !is_multi_select_mode_) {      // FUN_0100cd40 keeps the panel: panel 3 names the type, panel 4 says string 12
+    selected_actions_ = std::move(now);
+    if (!picked_up) return;
+    unlatch_pedestals();                                              // SetPanelMode 3 / 4: FUN_01028360(1, 1, kind, 1, 0, 1) raises both pedestals (0x1027fde - 0x1028001, 0x1027f99 - 0x1027fa7)
+    if (selected_actions_.size() == 1 && !is_multi_select_mode_) {    // panel 3 names the type, panel 4 (several ants, or a shift-selection of one) says string 12
         static const uint16_t kByType[6] = {sim::strings::kSelWorker, sim::strings::kSelBomber, sim::strings::kSelFire,
                                             sim::strings::kSelThief, sim::strings::kSelCombat, sim::strings::kSelSwimmer};
-        const size_t t = static_cast<size_t>(lone_type);
-        if (t < 6) post_status_id(kByType[t]);
+        const size_t t = static_cast<size_t>(lone->type);
+        if (t < 6) post_status_id(kByType[t]); else status_line_.clear();
     } else {
         post_status_id(sim::strings::kSelMany);
     }
