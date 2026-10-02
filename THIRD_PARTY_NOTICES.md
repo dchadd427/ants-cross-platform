@@ -9,9 +9,8 @@ program, artwork, sounds, music and maps are not covered by it: they belong to t
 - Where: the folder `Original-Ants/` (the program `Ants.exe`, the data archive `ants.chd` with the artwork, animations and sound effects, the music
   files, the map files in `Original-Ants/Maps/`, and a few support files), and the data bundle that the web build packs from that folder.
 - What: the 1998 game *Ants* and its data. This project is a reverse-engineered remake; it does not own the original and cannot license it.
-- Why it is here: so that the remake can run and so that its tests can compare it with the original. The owner's plan is to replace the original artwork
-  with open material over time and later the other data, until the remake needs nothing of the original but a copy that the player already has
-  (`implementation_plan.md`, "Artwork phase-out").
+- Why it is here: so that the remake can run and so that its tests can compare it with the original. Replacing the original artwork with open material is
+  planned as a separate, later project.
 - Rights holders: if you hold rights to something here and want it removed, open an issue at the project's repository and it will be taken out.
 
 ## Included in the repository

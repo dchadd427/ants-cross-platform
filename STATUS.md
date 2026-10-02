@@ -15,7 +15,6 @@ _Updated 2026-10-01 · current release **v0.0.89** · details: [CHANGELOG](CHANG
 - Bots B4–B6: island hops, standard bot, bots in server rooms
 - CI (build + test on every push), Docker hardening
 - Short room codes, in-game host / join, replays, match API
-- Artwork phase-out: replace the original art with open material
 
 ## Recently done
 - **v0.0.89** server makes its own control secret; one Portainer stack; "Play online" link
