@@ -182,7 +182,8 @@ void HostSession::lose(uint8_t player) {
 }
 
 // A seat that the attendance dropped (a won vote, the cap on the pauses): its Drop goes into the first turn that is sealed after the pause, the same tick on every machine. A player of
-// that seat who is coming back right now is told that it is out. The key stays: whoever shows it later is told "dropped", not "the match has started".
+// that seat who is coming back right now is told that it is out, and so is one that is connected (a seat that flapped and was voted out while it was back). The key stays: whoever shows it
+// later is told "dropped", not "the match has started".
 void HostSession::finish_drop(uint8_t seat) {
     for (size_t i = 0; i < rejoiners_.size();) {
         if (rejoiners_[i].seat != seat) {
@@ -195,6 +196,16 @@ void HostSession::finish_drop(uint8_t seat) {
             c->close();
         }
         rejoiners_.erase(rejoiners_.begin() + static_cast<std::ptrdiff_t>(i));
+    }
+    if (seat < sim::MAX_PLAYERS && clients_[seat].present) {
+        Client& c = clients_[seat];
+        end_lag_notice(seat);
+        c.present = false;
+        if (c.conn != nullptr && c.conn->is_open()) {
+            c.conn->send(encode(RejectMsg{RejectReason::Dropped}));
+            c.conn->close();
+        }
+        sequencer_.set_active(seat, false);
     }
     announce_drop(seat);
     presence_dirty_ = true;
@@ -374,12 +385,14 @@ void HostSession::update(uint32_t now_ms) {
     if (cfg_.hold_seats) {
         for (const uint8_t seat : attendance_.update(now_ms)) finish_drop(seat);        // a catch-up that went nowhere is let go, a vote that was won, the cap: the seats that are dropped
         pump_rejoiners(now_ms);
-        const bool paused_now = paused();
-        if (presence_dirty_ || paused_now != was_paused_ || (paused_now && time_reached(now_ms, next_presence_ms_))) {
+        const bool paused_now = paused();                    // (a pause, and the countdown that follows it)
+        const bool voting = attendance_.vote_subject(now_ms) != 255;       // (a seat that flaps is put to the vote while the match runs: the players are told when it opens and when it closes, and at every vote)
+        if (presence_dirty_ || paused_now != was_paused_ || voting != was_voting_ || (paused_now && time_reached(now_ms, next_presence_ms_))) {
             send_presence();
             next_presence_ms_ = now_ms + cfg_.presence_every_ms;
             presence_dirty_ = false;
             was_paused_ = paused_now;
+            was_voting_ = voting;
         }
         if (paused_now) {                                    // nothing is sealed while a seat is away: the schedule slides, as it does behind a laggard
             next_seal_ms_ = now_ms;
@@ -461,6 +474,10 @@ bool HostSession::accept_rejoin(Connection* conn, const HelloMsg& hello, uint32_
     const uint32_t total = log_.turns();
     if (hello.have_turns > total) return refuse(RejectReason::BadRequest);                  // more turns than were ever sealed
     if (hello.have_turns == 0 && !have_rejoin_start_) return refuse(RejectReason::RejoinFailed);     // a machine with nothing cannot be told how to load the match
+    // The seat's budgets (attendance.hpp): the catch-up time of this absence, three accepted Hellos a minute, three times the log's size streamed in ten minutes. Past any of them the
+    // answer is RejoinFailed, the seat stays as it was (held: the vote and the cap apply), and nothing of an attempt that may be in progress is touched. A Hello that is accepted is the
+    // attempt (a second Hello of an attempt that goes on does not give it a new stall clock).
+    if (!attendance_.returning(seat, now_ms, log_.bytes_between(hello.have_turns, total), log_.bytes())) return refuse(RejectReason::RejoinFailed);
     // The newer link wins over whatever the seat had: a connection that this host has not found dead yet (a Wi-Fi switch leaves one for up to 10 s) or a second window with the same key
     // (a duplicated tab). The old link is told that it was replaced, so that its window stops trying, and it is closed; an earlier attempt of the same seat that is still catching up too.
     if (clients_[seat].present) {
@@ -485,7 +502,6 @@ bool HostSession::accept_rejoin(Connection* conn, const HelloMsg& hello, uint32_
         }
         rejoiners_.erase(rejoiners_.begin() + static_cast<std::ptrdiff_t>(i));
     }
-    if (!attendance_.returning(seat, now_ms)) return refuse(RejectReason::RejoinFailed);
     uint8_t players = 0;
     for (uint8_t p = 0; p < sim::MAX_PLAYERS; ++p) players = static_cast<uint8_t>(players + ((sim_->roster_mask() >> p) & 1u));
     WelcomeMsg w;
@@ -519,7 +535,7 @@ void HostSession::pump_rejoiners(uint32_t now_ms) {
         enum class Fate : uint8_t { Going, Back, Failed, Left } fate = Fate::Going;
         Connection* const conn = r.conn;
         const uint8_t seat = r.seat;
-        if (attendance_.state(seat) != Attendance::State::CatchingUp) fate = Fate::Failed;       // the attendance decides (a catch-up that went nowhere is let go, the seat was dropped): over
+        if (attendance_.state(seat) != Attendance::State::CatchingUp || !log_.usable()) fate = Fate::Failed;       // the attendance decides (a catch-up that went nowhere is let go, the seat was dropped): over
         std::vector<uint8_t> msg;
         int budget = 128;
         while (budget-- > 0 && fate == Fate::Going && conn->poll(msg)) {
@@ -593,6 +609,7 @@ void HostSession::pump_rejoiners(uint32_t now_ms) {
             const uint32_t n = log_.read(r.next, static_cast<uint32_t>(kMaxBatchTurns), kBatchBytes, packed);
             if (n == 0) break;
             if (!conn->send(encode_turn_batch_packed(r.next, n, packed.data(), packed.size()))) fate = Fate::Failed;
+            attendance_.charge_stream(seat, now_ms, packed.size());        // (what a key holder is given is counted: attendance.hpp)
             r.next += n;
         }
         // the player says it has them all: the referee has executed what it sealed or holds the last of it in its queue (the match is paused, so the number cannot grow), and the states are compared
@@ -685,7 +702,7 @@ void ClientSession::start(uint32_t now_ms) {
 }
 
 bool ClientSession::submit(sim::Command command) {
-    if (!started_ || mode_ != Mode::Normal || !connected() || !presence_.missing.empty()) return false;
+    if (!started_ || mode_ != Mode::Normal || !connected() || paused()) return false;
     command.issuer = cfg_.player;
     CommandMsg m;
     m.command = std::move(command);
@@ -815,9 +832,9 @@ void ClientSession::poll_host(uint32_t now_ms) {
                 }
                 break;
             }
-            case MsgType::Presence: {                // who is missing, the vote, the cap (a server that holds seats)
+            case MsgType::Presence: {                // who is missing, the vote, the cap, the resume countdown (a server that holds seats)
                 PresenceMsg p;
-                if (decode(msg, p)) presence_ = std::move(p);
+                if (decode(msg, p)) apply_presence(std::move(p), now_ms);
                 break;
             }
             case MsgType::Reject: {                  // a newer window took the seat (Superseded), the seat was dropped, ...: the server's word is final
@@ -1143,7 +1160,7 @@ void ClientSession::update(uint32_t now_ms) {
     if (mode_ == Mode::Normal) poll_host(now_ms);    // and again: what the new host sent behind its Resume, or what arrived meanwhile
     if (mode_ == Mode::Rejoining || mode_ == Mode::CatchingUp) poll_new_link(now_ms);
     if (cfg_.reconnect && mode_ == Mode::Normal) poll_host(now_ms);          // what came behind the Presence that ended a catch-up
-    if ((mode_ == Mode::Reconnecting || mode_ == Mode::Rejoining) && now_ms - reconnect_since_ms_ > cfg_.reconnect_give_up_ms) go_lost();      // the way back is closed for good
+    if ((mode_ == Mode::Reconnecting || mode_ == Mode::Rejoining) && now_ms - reconnect_since_ms_ > give_up_ms()) go_lost();      // the way back is closed for good
     if (electing()) election_tick(now_ms);
     if (mode_ == Mode::Promoted) return;             // the runner goes to the new HostSession
     if (mode_ == Mode::CatchingUp) {                 // the match so far, at full speed and silently; nothing else of the live match runs meanwhile
@@ -1317,6 +1334,28 @@ void ClientSession::send_rejoin_hello() {
     hello_pending_ = false;
 }
 
+// What the server said about who is missing, the vote, the cap and the countdown. The match is HELD while a seat is missing or a countdown runs: the runner is told, so that the wait for
+// turns that the server will not seal is no stall of the link (it would grow the jitter buffer of every player for a pause that has nothing to do with the link: lockstep.hpp). The cap that
+// it names is what the way back is given up by.
+void ClientSession::apply_presence(PresenceMsg p, uint32_t now_ms) {
+    const bool was_held = paused();
+    presence_ = std::move(p);
+    cap_known_ = true;
+    cap_s_ = presence_.cap_s;
+    cap_heard_ms_ = now_ms;
+    cap_paused_ = !presence_.missing.empty();
+    if (paused() != was_held && runner_ != nullptr) runner_->set_held(paused());
+}
+
+uint32_t ClientSession::give_up_ms() const noexcept {
+    if (!cap_known_) return cfg_.reconnect_give_up_ms;
+    // the cap runs from the loss of the link, or from the last Presence when a seat was missing then (the pause was on already)
+    const int64_t cap_ms = cap_s_ >= kCapSecondsMore ? int64_t{kMaxCapSeconds} * 1000 : int64_t{cap_s_} * 1000;
+    const int64_t earlier = cap_paused_ ? int64_t{static_cast<int32_t>(reconnect_since_ms_ - cap_heard_ms_)} : 0;      // (how long before the loss that Presence was, wrap-safe)
+    const int64_t limit = cap_ms + int64_t{kReconnectMarginMs} - std::min(earlier, cap_ms);                              // (never less than the margin)
+    return static_cast<uint32_t>(std::min<int64_t>(limit, UINT32_MAX));
+}
+
 bool ClientSession::vote(uint8_t seat, bool continue_without) {
     if (mode_ != Mode::Normal || !connected() || seat >= sim::MAX_PLAYERS) return false;
     return conn_->send(encode(VoteMsg{seat, continue_without}));
@@ -1410,7 +1449,7 @@ void ClientSession::handle_stream_message(const std::vector<uint8_t>& msg, uint3
         case MsgType::Presence: {
             PresenceMsg p;
             if (!decode(msg, p)) return;
-            presence_ = std::move(p);
+            apply_presence(std::move(p), now_ms);
             if (mode_ == Mode::CatchingUp && caught_up_sent_) begin_normal(now_ms);     // the server compared the states and gave the seat back
             return;
         }

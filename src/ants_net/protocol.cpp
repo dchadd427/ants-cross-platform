@@ -593,6 +593,7 @@ std::vector<uint8_t> encode(const PresenceMsg& m) {
     w.u8(m.voters);
     w.u8(m.your_vote);
     w.u16(m.cap_s);
+    w.u8(m.resume_s);
     return out;
 }
 bool decode(const uint8_t* data, size_t size, PresenceMsg& out) {
@@ -603,7 +604,6 @@ bool decode(const uint8_t* data, size_t size, PresenceMsg& out) {
     const size_t n = r->u8();
     if (!r->ok() || n > sim::MAX_PLAYERS) return false;
     unsigned listed = 0;                                       // the seats listed so far (a bit each)
-    int first_absent = -1;                                     // the seat of the first absent entry
     for (size_t i = 0; i < n; ++i) {
         PresenceMsg::Entry e;
         e.seat = r->u8();
@@ -616,7 +616,6 @@ bool decode(const uint8_t* data, size_t size, PresenceMsg& out) {
         if (e.progress > 100 || (e.state == PresenceMsg::State::Absent && e.progress != 0)) return false;     // only a seat that is catching up has made progress
         if (!m.missing.empty() && e.waited_s > m.missing.back().waited_s) return false;                        // longest away first
         listed |= 1u << e.seat;
-        if (e.state == PresenceMsg::State::Absent && first_absent < 0) first_absent = e.seat;
         m.missing.push_back(e);
     }
     m.vote_seat = r->u8();
@@ -624,10 +623,13 @@ bool decode(const uint8_t* data, size_t size, PresenceMsg& out) {
     m.voters = r->u8();
     m.your_vote = r->u8();
     m.cap_s = r->u16();
+    m.resume_s = r->u8();
     if (!r->done() || m.votes_continue > m.voters || m.voters > sim::MAX_PLAYERS || m.your_vote > 2) return false;
-    // the vote is about the longest away seat that is absent (a seat that is catching up is back: never put to the vote), or there is none; without a vote nobody has voted
-    if (m.vote_seat != 255 && m.vote_seat != first_absent) return false;
+    // the vote is about a seat (an absent one that has been away long enough, or one that flaps in any state), or there is none; without a vote nobody has voted
+    if (m.vote_seat != 255 && m.vote_seat >= sim::MAX_PLAYERS) return false;
     if (m.vote_seat == 255 && (m.votes_continue != 0 || m.your_vote != 0)) return false;
+    // the countdown of the resume is at most a minute, and runs only when nobody is missing
+    if (m.resume_s > kMaxResumeSeconds || (m.resume_s != 0 && !m.missing.empty())) return false;
     out = std::move(m);
     return true;
 }

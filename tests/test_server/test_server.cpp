@@ -633,6 +633,7 @@ RoomSpec held_spec(const std::string& code, uint8_t players = 2, const char* map
     s.has_seed = true;
     s.seed = 4242;
     s.reconnect = true;
+    s.resume_countdown_ms = 0;                              // (the countdown after a pause is off in the tests that are not about it: each would wait 10 s after every return; S3.52 is about it)
     return s;
 }
 
@@ -2827,14 +2828,16 @@ void run_reconnect_tests() {
         RWorld w;
         w.link = {20, 0};                                                                // no jitter: the Hello of the second link arrives exactly when this test needs it
         ASSERT_TRUE(w.mgr.create_room(held_spec("P-1", 3), w.now).ok);
-        w.connect("Ann", "P-1");
+        RClient& a = w.connect("Ann", "P-1");
         RClient& b = w.connect("Bob", "P-1");
         RClient& c = w.connect("Cat", "P-1");
         w.run(4000);
+        RClient* const seats[3] = {&b, &c, &a};
+        // (a seat may be taken back three times a minute: the three of them take turns, one cut every 7 s, so that each is cut every 21 s)
         for (int i = 0; i < 80 && w.status("P-1").connections != Room::kMaxConnections - 1; ++i) {        // until the room keeps 31 connections: the next one fills it
-            w.cut(b);
+            w.cut(*seats[i % 3]);
             ASSERT_TRUE(w.until([&]() { return !w.status("P-1").paused && w.status("P-1").rejoins == static_cast<uint32_t>(i + 1); }, 6000));
-            w.run(60);
+            w.run(7000);
         }
         ASSERT_EQ(w.status("P-1").connections, static_cast<uint32_t>(Room::kMaxConnections - 1));
         b.reconnects = false;
@@ -2843,6 +2846,7 @@ void run_reconnect_tests() {
         const net::SeatKey key_c = c.session->key();
         const uint32_t have_b = b.session->runner().next_turn_expected();
         const uint32_t have_c = c.session->runner().next_turn_expected();
+        w.run(15000);                                                                    // (the last returns of the loop were 21 s apart: the oldest of the three leaves the minute)
         w.cut(b);
         w.cut(c);
         w.run(200);
@@ -2869,26 +2873,28 @@ void run_reconnect_tests() {
         ASSERT_TRUE(w.status("P-1").connections < static_cast<uint32_t>(Room::kMaxConnections));    // the closed ones were pruned (the table is not full any more)
     } TEST_END();
 
-    TEST_CASE("S3.43 A Connection That Flaps 40 Times: Every Return Is Verified, The Closed Connections Are Pruned And The Live One Never Is, The Match Ends Identical (The Pauses Add Up To A Few Seconds, The Cap Is Far Away)") {
+    TEST_CASE("S3.43 Connections That Are Cut 40 Times (Three Players Take Turns, Each Is Cut Every 21 s: A Seat May Be Taken Back Three Times A Minute): Every Return Is Verified, The Closed Connections Are Pruned And The Live Ones Never Are, The Match Ends Identical (Each Pause Counts 5 s Toward The Cap At Least, The Cap Is Far Away)") {
         RWorld w;
-        ASSERT_TRUE(w.mgr.create_room(held_spec("F-1", 2), w.now).ok);
+        ASSERT_TRUE(w.mgr.create_room(held_spec("F-1", 3), w.now).ok);
         RClient& a = w.connect("Ann", "F-1");
         RClient& b = w.connect("Bob", "F-1");
+        RClient& c = w.connect("Cat", "F-1");
         w.run(4000);
+        RClient* const seats[3] = {&b, &c, &a};
         for (int i = 0; i < 40; ++i) {
-            w.cut(b);
+            w.cut(*seats[i % 3]);
             ASSERT_TRUE(w.until([&]() { return !w.status("F-1").paused && w.status("F-1").rejoins == static_cast<uint32_t>(i + 1); }, 6000));
-            w.run(100);
+            w.run(7000);                                                                 // (the next seat's turn: this one is cut again 21 s from now, which is within three a minute)
         }
         const RoomStatus s = w.status("F-1");
-        ASSERT_TRUE(s.state == RoomState::Running && s.rejoins == 40 && s.drops_by_vote == 0 && s.drops_by_cap == 0);
+        ASSERT_TRUE(s.state == RoomState::Running && s.rejoins == 40 && s.drops_by_vote == 0 && s.drops_by_cap == 0 && s.rejoins_refused == 0);
         ASSERT_TRUE(s.connections <= Room::kMaxConnections + 1u);                        // (the table did not grow with every return)
-        ASSERT_FALSE(b.lost);
-        ASSERT_TRUE(s.paused_s < 40);
+        ASSERT_FALSE(a.lost || b.lost || c.lost);
+        ASSERT_TRUE(s.paused_s >= 40 * 5 && s.paused_s < 40 * 5 + 40);                   // (each pause counts at least 5 s toward the cap: 40 of them are 200 s, and they were a second each)
         w.play_to_the_end("F-1");
         ASSERT_TRUE(w.status("F-1").state == RoomState::Finished);
-        ASSERT_TRUE(a.sim.state_hash() == b.sim.state_hash());
-        ASSERT_FALSE(a.session->desynced() || b.session->desynced());
+        ASSERT_TRUE(a.sim.state_hash() == b.sim.state_hash() && b.sim.state_hash() == c.sim.state_hash());
+        ASSERT_FALSE(a.session->desynced() || b.session->desynced() || c.session->desynced());
     } TEST_END();
 
     TEST_CASE("S3.44 The Door And A Hello With A Key: A Wrong Key, No Key And A Made-Up Key Are Told \"The Match Has Started\" By A Running Room (Nobody Is Disturbed, Nothing Is Revealed), So Is A Key For A Room That Does Not Hold Seats Or Is Loading; A Room That Is Over Says \"No Such Room\"; A Refusal Is Counted") {
@@ -3188,20 +3194,29 @@ void run_reconnect_tests() {
         (void)a2;
         (void)b2;
         uint64_t most = 0;
-        bool full = false;
-        for (int i = 0; i < 40000 && !full; ++i) {
+        bool first_dead = false;
+        bool both = false;
+        for (int i = 0; i < 40000 && !both; ++i) {
             w.run(250);
             most = std::max(most, w.mgr.log_bytes());
             ASSERT_TRUE(w.mgr.log_bytes() <= w.mgr.log_budget_bytes());                   // never more than the budget, however busy the rooms are
-            full = !w.status("G-1").log_usable || !w.status("G-2").log_usable;
+            const RoomStatus r1 = w.status("G-1");
+            const RoomStatus r2 = w.status("G-2");
+            if (!first_dead && (!r1.log_usable || !r2.log_usable)) {
+                first_dead = true;
+                const RoomStatus& dead = r1.log_usable ? r2 : r1;
+                ASSERT_TRUE(dead.log_bytes == 0 && dead.log_turns == 0);                  // a log that cannot grow is DEAD: it freed what it held at once (and gave it back to the budget)
+            }
+            both = !r1.log_usable && !r2.log_usable;                                      // (the one that is left may grow in what the dead one gave back, until it is full too)
         }
-        ASSERT_TRUE(full);
-        ASSERT_TRUE(most > 8 * 1024);                                                    // it filled up
+        ASSERT_TRUE(first_dead && both);
+        ASSERT_TRUE(most > 6 * 1024);                                                    // it filled up (the budget counts what the logs have allocated, which grows by doubling)
         w.run(2000);
         const RoomStatus s1 = w.status("G-1");
         const RoomStatus s2 = w.status("G-2");
         ASSERT_FALSE(s1.log_usable);
-        ASSERT_FALSE(s2.log_usable);                                                     // the server has no memory left for either: neither log grows any more
+        ASSERT_FALSE(s2.log_usable);                                                     // the server has no memory for either: neither log grows any more, and both are dead (they hold nothing)
+        ASSERT_TRUE(w.mgr.log_bytes() == 0);
         ASSERT_TRUE(w.mgr.log_bytes() <= w.mgr.log_budget_bytes());
         // a room with a log that is not usable drops a lost seat at once: no pause, no way back (its key is told "dropped")
         const uint8_t bob = b1.lobby->my_seat();
@@ -3212,25 +3227,23 @@ void run_reconnect_tests() {
         ASSERT_TRUE(!after.paused && after.absent.empty() && after.state == RoomState::Running);          // the two that are left play on
         ASSERT_TRUE(a1.sim.is_player_dropped(bob));
         ASSERT_TRUE(b1.lost && b1.was_rejected && b1.rejected == net::RejectReason::Dropped);
-        // the end of a match gives its log back; the next room can keep a log again
-        const uint64_t held = w.mgr.log_bytes();
+        // two dead logs hold nothing: the budget is free, and the next room can keep a log again
         ASSERT_TRUE(w.mgr.close_room("G-2", w.now));
         w.run(100);
-        ASSERT_TRUE(w.mgr.log_bytes() < held);
+        ASSERT_TRUE(w.mgr.log_bytes() == 0);
         ASSERT_TRUE(w.mgr.create_room(held_spec("G-3", 2), w.now).ok);
         w.connect("A3", "G-3");
         w.connect("B3", "G-3");
         w.run(8000);
         const RoomStatus s3 = w.status("G-3");
         ASSERT_TRUE(s3.state == RoomState::Running && s3.log_usable && s3.log_bytes > 0);
-        ASSERT_TRUE(w.mgr.log_bytes() <= w.mgr.log_budget_bytes());
-        // a match that ends by itself gives its log back at once too, and the status keeps what it held
-        const uint64_t before_end = w.mgr.log_bytes();
-        w.play_to_the_end("G-3");
+        ASSERT_TRUE(w.mgr.log_bytes() > 0 && w.mgr.log_bytes() <= w.mgr.log_budget_bytes());
+        // the end of a match gives its log back at once, and the status keeps what it held
+        ASSERT_TRUE(w.mgr.close_room("G-3", w.now));
+        w.run(100);
         const RoomStatus ended = w.status("G-3");
-        ASSERT_TRUE(ended.state == RoomState::Finished);
-        ASSERT_TRUE(ended.log_turns > 0 && ended.log_bytes > 0);                         // (the budget may have run out again by the end of the match: the log is then unusable, but it held something)
-        ASSERT_TRUE(w.mgr.log_bytes() < before_end);                                     // what the room held is not held any more (what is left is the other room's, which cannot grow)
+        ASSERT_TRUE(ended.log_turns > 0 && ended.log_bytes > 0 && ended.log_usable);
+        ASSERT_TRUE(w.mgr.log_bytes() == 0);                                             // what the room held is not held any more
     } TEST_END();
 
     TEST_CASE("S3.49 Lag Is Not A Loss In A Room That Holds Seats: A Machine That Draws A Frame Every 4 s Falls Behind (The Others Are Told It Lags, Nobody Is Paused, Nobody Waits), Is Not Held And Not Dropped, And Is Level Again When Its Frames Come Back; The States Agree At The End") {
@@ -3387,6 +3400,431 @@ void run_reconnect_tests() {
             }
             ASSERT_FALSE(paused_ever);
             ASSERT_TRUE(w.status("Z-2").rejoins == 0 && b.session->mode() == net::ClientSession::Mode::Normal);
+        }
+    } TEST_END();
+
+    // ---- the fixes of the review of release A, through the real manager and door (S3.52 - S3.57) -------------------------------------------------------------------------------
+
+    TEST_CASE("S3.52 The Resume Countdown Through The Manager: After A Pause Of 6 s And A Return The Room Is Held For 10 s More (The Status Says \"paused\" And The Seconds Left, The Ticks Stand Still, The Pause Total Does Not Grow); The Wall-Clock Limit Counts Play And Not The Waiting Nor The Countdown; A Room With The Countdown Off Resumes At Once; A Blip Is No Countdown") {
+        {
+            RWorld w;
+            RoomSpec s = held_spec("N-1", 3);
+            s.resume_countdown_ms = 10000;
+            s.run_ms = 30000;                                                            // the limit counts the match's play: 30 s of it
+            ASSERT_TRUE(w.mgr.create_room(s, w.now).ok);
+            RClient& a = w.connect("Ann", "N-1");
+            RClient& b = w.connect("Bob", "N-1");
+            RClient& c = w.connect("Cat", "N-1");
+            w.run(12000);                                                                // 12 s of play (the match began about a second after the clients came)
+            ASSERT_TRUE(w.status("N-1").state == RoomState::Running);
+            b.reconnects = false;
+            w.cut(b);
+            w.run(12000);                                                                // 12 s of waiting
+            RoomStatus st = w.status("N-1");
+            ASSERT_TRUE(st.paused && st.absent.size() == 1 && st.resume_s == 0);
+            const uint32_t ticks_at_pause = st.ticks;
+            b.reconnects = true;
+            ASSERT_TRUE(w.until([&]() { return w.status("N-1").absent.empty(); }, 8000));                // verified: nobody is missing now ...
+            const uint32_t back_at = w.now;
+            st = w.status("N-1");
+            ASSERT_TRUE(st.paused && st.resume_s >= 9 && st.resume_s <= 10 && st.rejoins == 1);       // ... and the room is held: ten seconds to go
+            const uint32_t pause_total = st.paused_s;
+            ASSERT_TRUE(pause_total >= 11 && pause_total <= 14);
+            w.run(150);                                                                  // (the Presence of the countdown reaches the players)
+            ASSERT_TRUE(a.session->paused() && c.session->paused() && a.session->resume_seconds_left() >= 8 && a.session->resume_seconds_left() <= 10);
+            std::vector<unsigned> seen;
+            while (w.now - back_at < 9500) {
+                w.run(100);
+                st = w.status("N-1");
+                ASSERT_TRUE(st.paused && st.absent.empty() && st.ticks <= ticks_at_pause + 2);   // the ticks stand still
+                ASSERT_EQ(st.paused_s, pause_total);                                     // the pause total does not grow in the countdown: the cap is not spent by it
+                if (seen.empty() || seen.back() != st.resume_s) seen.push_back(st.resume_s);
+            }
+            ASSERT_TRUE(seen.size() >= 9 && seen.front() >= 9 && seen.back() <= 1);
+            for (size_t i = 1; i < seen.size(); ++i) ASSERT_TRUE(seen[i] < seen[i - 1]);       // counting down
+            w.run(1500);
+            st = w.status("N-1");
+            ASSERT_TRUE(!st.paused && st.resume_s == 0 && st.ticks > ticks_at_pause + 20 && st.state == RoomState::Running);
+            ASSERT_FALSE(a.session->paused() || b.session->paused() || c.session->paused());
+            // 12 s of play + 12 s of waiting + 10 s of countdown + play: the room has played about 14 s, the limit is 30 s of play: it runs on (it would have failed at 22 s of "play" if the waiting and
+            // the countdown counted: 12 + 12 + 10 = 34 s of wall clock already)
+            w.run(10000);
+            ASSERT_TRUE(w.status("N-1").state == RoomState::Running);
+            w.run(20000);
+            st = w.status("N-1");
+            ASSERT_TRUE(st.state == RoomState::Failed && st.reason.find("took longer") != std::string::npos);      // and the limit does come, after about 30 s of play
+        }
+        {   // the countdown off: the return resumes the room at once (a room's setting of 0)
+            RWorld w;
+            RoomSpec s = held_spec("N-2", 2);
+            s.resume_countdown_ms = 0;
+            ASSERT_TRUE(w.mgr.create_room(s, w.now).ok);
+            w.connect("Ann", "N-2");
+            RClient& b = w.connect("Bob", "N-2");
+            w.run(5000);
+            b.reconnects = false;
+            w.cut(b);
+            w.run(6000);
+            b.reconnects = true;
+            ASSERT_TRUE(w.until([&]() { return !w.status("N-2").paused; }, 8000));
+            ASSERT_EQ(w.status("N-2").resume_s, 0u);
+        }
+        {   // a blip (the link cut and back within a second or two): no countdown
+            RWorld w;
+            RoomSpec s = held_spec("N-3", 2);
+            s.resume_countdown_ms = 10000;
+            ASSERT_TRUE(w.mgr.create_room(s, w.now).ok);
+            w.connect("Ann", "N-3");
+            RClient& b = w.connect("Bob", "N-3");
+            w.run(5000);
+            w.cut(b);
+            bool counted_down = false;
+            ASSERT_TRUE(w.until([&]() {
+                counted_down = counted_down || w.status("N-3").resume_s != 0;
+                return w.status("N-3").rejoins == 1 && !w.status("N-3").paused;
+            }, 5000));
+            ASSERT_FALSE(counted_down);
+        }
+    } TEST_END();
+
+    TEST_CASE("S3.53 The New Settings: \"max_catch_up_seconds\" (10 - 3600, Default 300) And \"resume_countdown_seconds\" (0 - 60, Default 10) In The Control Interface, The Server's Defaults (--max-catch-up-seconds, --resume-countdown-seconds) And The Status Keys (The Counters Of The Budgets, The Countdown); The Bounds Are Checked For Everybody; A Room Cannot Keep Fewer Connections Than It Has Players") {
+        RoomManager mgr{MapStore(maps_dir())};
+        const auto call = [&](const std::string& body) {
+            ctl::HttpRequest rq;
+            rq.method = "POST";
+            rq.path = "/rooms";
+            rq.body = body;
+            return handle_control(mgr, rq, 5000);
+        };
+        const auto parse = [](const ctl::HttpResponse& r) {
+            ctl::JsonValue v;
+            std::string why;
+            ctl::parse_json(r.body, v, &why);
+            return v;
+        };
+        ASSERT_TRUE(ServerLimits().max_catch_up_ms == 300000u && ServerLimits().resume_countdown_ms == 10000u);
+        ASSERT_TRUE(RoomSpec().max_catch_up_ms == 300000u && RoomSpec().resume_countdown_ms == 10000u && RoomSpec().max_connections == Room::kMaxConnections);
+        ctl::HttpResponse r = call(R"({"map":"TINY.LVL","code":"Q-1"})");
+        ASSERT_EQ(r.status, 201);
+        ctl::JsonValue v = parse(r);
+        ASSERT_TRUE(v.get("max_catch_up_seconds").as_int_or(0) == 300 && v.get("resume_countdown_seconds").as_int_or(99) == 10);
+        ASSERT_TRUE(v.get("resume_seconds").as_int_or(99) == 0 && v.get("rejoins_refused").as_int_or(99) == 0 && v.get("catch_up_expired").as_int_or(99) == 0 && v.get("streamed_bytes").as_int_or(99) == 0);
+        r = call(R"({"map":"TINY.LVL","code":"Q-2","max_catch_up_seconds":10,"resume_countdown_seconds":0})");           // the edges are good
+        ASSERT_EQ(r.status, 201);
+        v = parse(r);
+        ASSERT_TRUE(v.get("max_catch_up_seconds").as_int_or(0) == 10 && v.get("resume_countdown_seconds").as_int_or(99) == 0);
+        r = call(R"({"map":"TINY.LVL","code":"Q-3","max_catch_up_seconds":3600,"resume_countdown_seconds":60})");
+        ASSERT_EQ(r.status, 201);
+        v = parse(r);
+        ASSERT_TRUE(v.get("max_catch_up_seconds").as_int_or(0) == 3600 && v.get("resume_countdown_seconds").as_int_or(0) == 60);
+        for (const char* bad : {R"("max_catch_up_seconds":9)", R"("max_catch_up_seconds":3601)", R"("max_catch_up_seconds":0)", R"("max_catch_up_seconds":-1)", R"("max_catch_up_seconds":"300")", R"("max_catch_up_seconds":300.5)",
+                                R"("resume_countdown_seconds":61)", R"("resume_countdown_seconds":-1)", R"("resume_countdown_seconds":"10")", R"("resume_countdown_seconds":10.5)", R"("resume_countdown_seconds":true)"}) {
+            r = call(std::string(R"({"map":"TINY.LVL",)") + bad + "}");
+            ASSERT_MSG(r.status == 400, bad);
+            const std::string key = std::string(bad).find("max_catch_up") != std::string::npos ? "\"max_catch_up_seconds\" must be an integer from 10 to 3600" : "\"resume_countdown_seconds\" must be an integer from 0 to 60";
+            ASSERT_MSG(parse(r).get("error").str() == key, parse(r).get("error").str());
+        }
+        ASSERT_EQ(mgr.room_count(), size_t{3});
+        {   // the server's defaults reach a room that says nothing; what a room says wins
+            ServerLimits limits;
+            limits.max_catch_up_ms = 120000;
+            limits.resume_countdown_ms = 5000;
+            RoomManager other{MapStore(maps_dir()), limits};
+            const auto call2 = [&](const std::string& body) {
+                ctl::HttpRequest rq;
+                rq.method = "POST";
+                rq.path = "/rooms";
+                rq.body = body;
+                return parse(handle_control(other, rq, 5000));
+            };
+            ctl::JsonValue d = call2(R"({"map":"TINY.LVL","code":"D-1"})");
+            ASSERT_TRUE(d.get("max_catch_up_seconds").as_int_or(0) == 120 && d.get("resume_countdown_seconds").as_int_or(0) == 5);
+            d = call2(R"({"map":"TINY.LVL","code":"D-2","resume_countdown_seconds":0,"max_catch_up_seconds":30})");
+            ASSERT_TRUE(d.get("max_catch_up_seconds").as_int_or(0) == 30 && d.get("resume_countdown_seconds").as_int_or(9) == 0);
+            ASSERT_TRUE(other.default_spec().max_catch_up_ms == 120000 && other.default_spec().resume_countdown_ms == 5000);
+        }
+        {   // create_room checks the bounds for everybody who does not come through the JSON
+            RoomManager direct{MapStore(maps_dir())};
+            const auto made = [&](const std::string& code, const std::function<void(RoomSpec&)>& change) {
+                RoomSpec spec = spec_of(code, 2);
+                change(spec);
+                return direct.create_room(spec, 5000);
+            };
+            ASSERT_EQ(made("C-1", [](RoomSpec& s) { s.max_catch_up_ms = 9999; }).http_status, 400);
+            ASSERT_EQ(made("C-2", [](RoomSpec& s) { s.max_catch_up_ms = 3600001; }).http_status, 400);
+            ASSERT_EQ(made("C-3", [](RoomSpec& s) { s.resume_countdown_ms = 60001; }).http_status, 400);
+            ASSERT_EQ(made("C-4", [](RoomSpec& s) { s.max_connections = 1; }).http_status, 400);                    // fewer than the players
+            ASSERT_EQ(made("C-5", [](RoomSpec& s) { s.max_connections = 5000; }).http_status, 400);
+            ASSERT_TRUE(made("C-6", [](RoomSpec& s) { s.max_catch_up_ms = 10000; s.resume_countdown_ms = 0; s.max_connections = 2; }).ok);
+            ASSERT_TRUE(made("C-7", [](RoomSpec& s) { s.max_catch_up_ms = 3600000; s.resume_countdown_ms = 60000; s.max_connections = 4096; }).ok);
+        }
+    } TEST_END();
+
+    TEST_CASE("S3.54 A Key Holder Cannot Freeze A Room Through The Door (The Real Server): A Hello Every 12 s, Each With A Little Progress, Is A Catch-Up Of 30 s (The Room's Budget) And Then Refused; The Status Says It (Expired, Refused, Absent Again), The Others May Vote, The Cap (90 s) Takes The Seat And The Match Goes On To Its End") {
+        RWorld w;
+        RoomSpec s = held_spec("W-1", 3);
+        s.max_catch_up_ms = 30000;
+        s.max_pause_ms = 90000;
+        ASSERT_TRUE(w.mgr.create_room(s, w.now).ok);
+        RClient& a = w.connect("Ann", "W-1");
+        RClient& b = w.connect("Bob", "W-1");
+        RClient& c = w.connect("Cat", "W-1");
+        w.run(6000);
+        ASSERT_TRUE(w.status("W-1").state == RoomState::Running);
+        const net::SeatKey key = c.lobby->key();
+        const uint8_t cat = c.lobby->my_seat();
+        c.reconnects = false;
+        w.cut(c);
+        const uint32_t cut_at = w.now;
+        w.run(200);
+        ASSERT_TRUE(w.status("W-1").paused);
+        const uint32_t ticks_at_pause = w.status("W-1").ticks;
+        std::vector<net::Connection*> links;
+        uint32_t next_hello = w.now;
+        uint32_t next_ack = w.now + 3000;
+        uint32_t total = 0;
+        uint32_t creeping = 0;
+        const auto step = [&]() {
+            w.run(10);
+            if (static_cast<int32_t>(w.now - next_hello) >= 0) {
+                net::Connection* link = w.open_link();
+                net::HelloMsg h;
+                h.name = "Eve";
+                h.room = "W-1";
+                h.key = key;
+                h.have_turns = 1;
+                link->send(net::encode(h));
+                links.push_back(link);
+                next_hello = w.now + 12000;
+            }
+            for (net::Connection* l : links) {
+                std::vector<uint8_t> msg;
+                while (l->poll(msg)) {
+                    net::CatchUpMsg cu;
+                    if (net::peek_type(msg) == net::MsgType::CatchUp && net::decode(msg, cu)) total = cu.total_turns;
+                }
+            }
+            if (static_cast<int32_t>(w.now - next_ack) >= 0 && total > 100 && !links.empty() && links.back()->is_open()) {
+                creeping = std::min(total, creeping + std::max<uint32_t>(total / 40, 2));
+                net::AckMsg ack;
+                ack.turn = creeping - 1;
+                links.back()->send(net::encode(ack));
+                next_ack = w.now + 3000;
+            }
+        };
+        while (w.now - cut_at < 25000) step();
+        RoomStatus st = w.status("W-1");
+        ASSERT_TRUE(st.paused && st.absent.size() == 1 && st.absent[0].seat == cat && st.absent[0].catching_up && st.absent[0].progress > 0);       // 25 s into a catch-up that shows progress
+        ASSERT_EQ(st.catch_up_expired, 0u);
+        while (w.now - cut_at < 33000) step();
+        st = w.status("W-1");
+        ASSERT_TRUE(st.paused && st.absent.size() == 1 && !st.absent[0].catching_up);                // 33 s: the budget of 30 s is spent: it is absent again
+        ASSERT_EQ(st.catch_up_expired, 1u);
+        ASSERT_TRUE(st.rejoins == 0);
+        ASSERT_TRUE(st.vote_seat == cat);                                                            // and the others are asked about it
+        while (w.now - cut_at < 40000) step();
+        ASSERT_TRUE(w.status("W-1").rejoins_refused >= 1);                                           // (the Hello of 36 s: the fourth in a minute, and a seat whose budget is spent)
+        while (w.now - cut_at < 80000) step();
+        st = w.status("W-1");
+        ASSERT_TRUE(st.paused && st.ticks <= ticks_at_pause + 2);
+        ASSERT_TRUE(st.rejoins_refused >= 3);
+        const uint64_t refused_before = w.mgr.connections_refused();
+        while (w.now - cut_at < 95000) step();
+        st = w.status("W-1");
+        ASSERT_TRUE(!st.paused && st.state == RoomState::Running && st.drops_by_cap == 1 && st.drops_by_vote == 0);       // the cap: the seat is dropped and the match goes on
+        ASSERT_TRUE(st.rejoins == 0 && st.absent.empty());
+        (void)refused_before;
+        w.run(3000);
+        ASSERT_TRUE(w.status("W-1").ticks > ticks_at_pause + 40);
+        w.play_to_the_end("W-1");
+        ASSERT_TRUE(w.status("W-1").state == RoomState::Finished);
+        ASSERT_TRUE(a.sim.state_hash() == b.sim.state_hash());
+        ASSERT_TRUE(a.sim.is_player_dropped(cat) && b.sim.is_player_dropped(cat));
+        ASSERT_FALSE(a.session->desynced() || b.session->desynced());
+    } TEST_END();
+
+    TEST_CASE("S3.55 A Key Holder Cannot Make The Server Stream Its Log Again And Again (The Real Server): With A Log Of More Than A Megabyte, 100 Hellos In 10 s Make Three Streams At Most; The Status Counts What Was Refused And What Was Streamed (3 x The Log At The Most), A Key Is In None Of It; The Others Are Not Disturbed And The Seat Is Held: The Vote And The Cap Apply") {
+        std::ostringstream captured;
+        std::streambuf* old_cerr = std::cerr.rdbuf(captured.rdbuf());
+        {
+            RWorld w;
+            ASSERT_TRUE(w.mgr.create_room(held_spec("M-1", 3), w.now).ok);
+            RClient& a = w.connect("Ann", "M-1");
+            RClient& b = w.connect("Bob", "M-1");
+            RClient& c = w.connect("Cat", "M-1");
+            w.run(6000);
+            ASSERT_TRUE(w.status("M-1").state == RoomState::Running);
+            a.orders = false;
+            b.orders = false;
+            std::vector<uint32_t> many;
+            for (uint32_t i = 0; i < 32; ++i) many.push_back(1000 + i);
+            for (int i = 0; i < 800 && w.status("M-1").log_bytes <= 1200u * 1024u; ++i) {         // two players put commands of 32 ants into every turn: a log of more than a megabyte
+                w.run(10);
+                for (net::Connection* end : {a.end, b.end}) {
+                    for (int k = 0; k < 8; ++k) {
+                        net::CommandMsg msg;
+                        msg.command.type = sim::CommandType::GroupMove;
+                        msg.command.issuer = 0;
+                        msg.command.tile_x = 5;
+                        msg.command.tile_y = 5;
+                        for (const uint32_t id : many) msg.command.ants.push_back(id);          // (a loop: GCC 12 reads the copy of a vector as a null memmove)
+                        end->send(net::encode(msg));
+                    }
+                }
+            }
+            const uint32_t log_bytes = w.status("M-1").log_bytes;
+            ASSERT_TRUE(log_bytes > 1024u * 1024u && w.status("M-1").log_usable);
+            const net::SeatKey key = c.lobby->key();
+            c.reconnects = false;
+            w.cut(c);
+            w.run(300);
+            ASSERT_TRUE(w.status("M-1").paused);
+            std::vector<net::Connection*> links;
+            uint32_t sent = 0;
+            for (int i = 0; i < 1400; ++i) {                                                     // 100 Hellos in 10 s, and 4 s more
+                w.run(10);
+                if (sent < 100 && i % 10 == 0) {
+                    net::Connection* link = w.open_link();
+                    net::HelloMsg h;
+                    h.name = "Eve";
+                    h.room = "M-1";
+                    h.key = key;
+                    h.have_turns = 1;
+                    link->send(net::encode(h));
+                    links.push_back(link);
+                    ++sent;
+                }
+                for (net::Connection* l : links) {
+                    std::vector<uint8_t> msg;
+                    while (l->poll(msg)) {
+                        net::TurnBatchMsg batch;
+                        if (net::peek_type(msg) == net::MsgType::TurnBatch && net::decode(msg, batch) && !batch.turns.empty()) {
+                            net::AckMsg ack;
+                            ack.turn = batch.first_turn + static_cast<uint32_t>(batch.turns.size()) - 1;
+                            l->send(net::encode(ack));
+                        }
+                    }
+                }
+            }
+            ASSERT_EQ(sent, 100u);
+            const RoomStatus st = w.status("M-1");
+            ASSERT_TRUE(st.streamed_bytes <= 3 * uint64_t{st.log_bytes} && st.streamed_bytes >= uint64_t{st.log_bytes} / 2);        // at most three streams of the log (a hundred before)
+            ASSERT_TRUE(st.rejoins_refused >= 90);                                                // every refusal counted
+            ASSERT_EQ(st.rejoins, 0u);
+            ASSERT_TRUE(st.state == RoomState::Running && !a.lost && !b.lost);
+            ASSERT_TRUE(st.absent.size() == 1 && st.absent[0].seat == c.lobby->my_seat());          // the seat is held (catching up or absent): the vote and the cap apply
+            // the status says it in JSON, and a key is nowhere in it
+            ctl::HttpRequest rq;
+            rq.method = "GET";
+            rq.path = "/rooms/M-1";
+            const ctl::HttpResponse r = handle_control(w.mgr, rq, w.now);
+            ctl::JsonValue v;
+            std::string why;
+            ASSERT_TRUE(ctl::parse_json(r.body, v, &why));
+            ASSERT_TRUE(v.get("rejoins_refused").as_int_or(0) >= 90 && v.get("streamed_bytes").as_int_or(0) > 0 && v.get("streamed_bytes").as_int_or(0) <= 3 * int64_t{log_bytes});
+            ASSERT_TRUE(r.body.find(hex_of(key)) == std::string::npos && r.body.find("key") == std::string::npos);
+            ASSERT_TRUE(captured.str().find(hex_of(key)) == std::string::npos);
+        }
+        std::cerr.rdbuf(old_cerr);
+        ASSERT_TRUE(captured.str().empty());
+    } TEST_END();
+
+    TEST_CASE("S3.56 Hostile Rooms Cannot Exhaust The Way Back For Everybody (The Real Server): 16 Rooms Whose Players Fill Their Logs Are Dead After A Few Seconds (Each Log Frees What It Held The Moment It Dies, The Server's Budget Is Whole Again), And A Room That Is Made Afterwards Keeps Its Log, Holds A Lost Seat And Takes It Back") {
+        ServerLimits limits;
+        limits.log_budget_bytes = 3u * 1024u * 1024u;
+        RWorld w(limits);
+        for (int i = 0; i < 16; ++i) {
+            RoomSpec s = held_spec("H" + std::to_string(i), 2);
+            s.max_log_bytes = 256 * 1024;
+            ASSERT_TRUE(w.mgr.create_room(s, w.now).ok);
+        }
+        std::vector<RClient*> hostile;
+        for (int i = 0; i < 16; ++i) {
+            hostile.push_back(&w.connect("A" + std::to_string(i), "H" + std::to_string(i)));
+            hostile.push_back(&w.connect("B" + std::to_string(i), "H" + std::to_string(i)));
+        }
+        w.run(4000);
+        for (int i = 0; i < 16; ++i) ASSERT_TRUE(w.status("H" + std::to_string(i)).state == RoomState::Running);
+        for (RClient* c : hostile) c->orders = false;
+        std::vector<uint32_t> many;
+        for (uint32_t i = 0; i < 32; ++i) many.push_back(1000 + i);
+        net::CommandMsg flood;
+        flood.command.type = sim::CommandType::GroupMove;
+        flood.command.tile_x = 5;
+        flood.command.tile_y = 5;
+        for (const uint32_t id : many) flood.command.ants.push_back(id);            // (a loop: GCC 12 reads the copy of a vector as a null memmove)
+        const std::vector<uint8_t> flood_bytes = net::encode(flood);
+        uint64_t most = 0;
+        for (int i = 0; i < 700; ++i) {                                                           // 7 s: every player fills its room's log
+            w.run(10);
+            for (RClient* c : hostile) {
+                if (c->end != nullptr && c->end->is_open()) {
+                    for (int k = 0; k < 4; ++k) c->end->send(flood_bytes);
+                }
+            }
+            most = std::max(most, w.mgr.log_bytes());
+            ASSERT_TRUE(w.mgr.log_bytes() <= w.mgr.log_budget_bytes());                           // never more than the budget
+        }
+        ASSERT_TRUE(most > 1024 * 1024);                                                          // (they did fill it)
+        int dead = 0;
+        for (int i = 0; i < 16; ++i) {
+            const RoomStatus s = w.status("H" + std::to_string(i));
+            dead += !s.log_usable ? 1 : 0;
+            if (!s.log_usable) ASSERT_TRUE(s.log_bytes == 0 && s.log_turns == 0);                  // a dead log holds nothing
+        }
+        ASSERT_EQ(dead, 16);                                                                      // every log of a room that was made to fill it is dead
+        ASSERT_EQ(w.mgr.log_bytes(), uint64_t{0});                                                // ... and the budget is whole again (the dead logs used to keep it for ever)
+        for (RClient* c : hostile) c->orders = false;
+        // the good room: made after the hostile ones died, it logs, holds a lost seat and gives it back
+        ASSERT_TRUE(w.mgr.create_room(held_spec("GOOD", 2), w.now).ok);
+        w.connect("Ann", "GOOD");
+        RClient& bob = w.connect("Bob", "GOOD");
+        w.run(5000);
+        RoomStatus g = w.status("GOOD");
+        ASSERT_TRUE(g.state == RoomState::Running && g.log_usable && g.log_bytes > 0 && w.mgr.log_bytes() > 0);
+        bob.reconnects = false;
+        w.cut(bob);
+        w.run(1000);
+        g = w.status("GOOD");
+        ASSERT_TRUE(g.paused && g.absent.size() == 1);                                            // held, not dropped at once
+        bob.reconnects = true;
+        ASSERT_TRUE(w.until([&]() { return !w.status("GOOD").paused; }, 8000));
+        ASSERT_EQ(w.status("GOOD").rejoins, 1u);
+        ASSERT_FALSE(bob.lost);
+    } TEST_END();
+
+    TEST_CASE("S3.57 A Room Keeps At Most As Many Connections As Its Setting Says, Whatever Comes Through The Door With A Key: With Room For Only The Three That Play, A Returning Player Is Told \"Full\" (The Room Is Not Grown, Nothing Leaks, The Seat Stays Held); With Room To Spare The Same Player Comes Back")  {
+        {
+            RWorld w;
+            RoomSpec s = held_spec("L-1", 3);
+            s.max_connections = 3;                                                                // exactly the connections of the lobby: nothing can be pruned
+            ASSERT_TRUE(w.mgr.create_room(s, w.now).ok);
+            RClient& a = w.connect("Ann", "L-1");
+            RClient& b = w.connect("Bob", "L-1");
+            RClient& c = w.connect("Cat", "L-1");
+            w.run(5000);
+            ASSERT_TRUE(w.status("L-1").state == RoomState::Running);
+            ASSERT_EQ(w.status("L-1").connections, 3u);
+            b.reconnects = true;
+            w.cut(b);
+            ASSERT_TRUE(w.until([&]() { return b.lost; }, 8000));
+            ASSERT_TRUE(b.was_rejected && b.rejected == net::RejectReason::Full);                 // the answer, in words that say what it is
+            const RoomStatus st = w.status("L-1");
+            ASSERT_TRUE(st.state == RoomState::Running && st.paused && st.absent.size() == 1 && st.absent[0].seat == b.lobby->my_seat());      // the seat is held
+            ASSERT_EQ(st.connections, 3u);                                                        // the room did not grow
+            ASSERT_EQ(st.rejoins, 0u);
+            ASSERT_FALSE(a.lost || c.lost);
+        }
+        {   // with room to spare (the default) the same cut is a return
+            RWorld w;
+            ASSERT_TRUE(w.mgr.create_room(held_spec("L-2", 3), w.now).ok);
+            w.connect("Ann", "L-2");
+            RClient& b = w.connect("Bob", "L-2");
+            w.connect("Cat", "L-2");
+            w.run(5000);
+            w.cut(b);
+            ASSERT_TRUE(w.until([&]() { return w.status("L-2").rejoins == 1 && !w.status("L-2").paused; }, 8000));
+            ASSERT_FALSE(b.lost);
         }
     } TEST_END();
 }

@@ -48,11 +48,13 @@ struct ServerLimits {
     // map, for two), so that a page that offers a map the server does not allow still gets the players it asked for. What a code does not choose is `demo_map` and
     // `demo_players`, as before. The choice rides in the room code because the Hello has no other field (the protocol is unchanged).
     std::vector<std::string> demo_maps;
-    // Reconnect (protocol 10; ants_server's --reconnect, --hold-vote-seconds, --max-pause-seconds, --log-mb): what a room holds unless its specification says otherwise. Demo rooms follow
+    // Reconnect (protocol 10; ants_server's --reconnect, --hold-vote-seconds, --max-pause-seconds, --max-catch-up-seconds, --resume-countdown-seconds, --log-mb): what a room holds unless its specification says otherwise. Demo rooms follow
     // `reconnect`. OFF by default in this release.
     bool reconnect{false};
     uint32_t hold_vote_ms{net::kVoteAfterMs};                       // the vote opens after a seat has been away this long in all
-    uint32_t max_pause_ms{net::kMaxPauseMs};                        // a match's pauses may last this long in all; at the cap every absent seat is dropped
+    uint32_t max_pause_ms{net::kMaxPauseMs};                        // a match's pauses may last this long in all; at the cap every seat that is not present is dropped
+    uint32_t max_catch_up_ms{net::kMaxCatchUpMs};                   // one absence may spend this long catching up in all (--max-catch-up-seconds)
+    uint32_t resume_countdown_ms{net::kResumeCountdownMs};          // the match is held this long after a pause of 3 s or more (--resume-countdown-seconds; 0: none)
     size_t room_log_bytes{net::TurnLog::kDefaultMaxBytes};          // the limit of one room's turn log (16 MiB)
     uint64_t log_budget_bytes{256ull * 1024ull * 1024ull};          // the memory that all the rooms' logs may take together; a log that cannot grow is not kept (its room drops a lost seat at once)
 };

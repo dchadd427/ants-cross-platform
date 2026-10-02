@@ -20,7 +20,7 @@
 // make_key) and passes the keys of the seats, the Start message and its limits to the match's session (HostSession::Config::hold_seats). From then on a connection that is lost
 // (closed, a send fails, or nothing at all arrives for 10 s) holds its seat; nothing is sealed while a seat is away; a Hello with a seat's key reaches the running room through the
 // door (RoomManager: Room::rejoin) and the session gives the player the match again from its turn log. The others may vote to go on without the seat (more than half of those who are
-// there, after 30 s of absence in all) and the match's total pause is capped (30 minutes): at the cap every absent seat is dropped. The room is finished by its rules as before, and
+// there, after 30 s of absence in all) and the match's total pause is capped (30 minutes): at the cap every seat that is not present is dropped. The room is finished by its rules as before, and
 // when everybody has left: a held seat counts as present, so a room whose players all lost their connection waits (until the cap) and then ends "everybody left". The wall-clock limit
 // `run_ms` counts the time that the match ran, not the time that it waited. The log of the match, which the stream of a returning player is cut from, is bounded per room and by the
 // server's budget (net::LogBudget), and is freed when the match is over. A room without `reconnect` is exactly what it was before: keys are zero, a Hello for a running match is
@@ -61,8 +61,13 @@ struct RoomSpec {
     // "reconnect" turn it on): a server that held seats for clients that cannot come back yet would be worse than one that does not.
     bool reconnect{false};
     uint32_t vote_after_ms{net::kVoteAfterMs};      // the others may vote on going on without a seat once it has been away this long in all (5 s .. 1 h; the control key "hold_vote_seconds")
-    uint32_t max_pause_ms{net::kMaxPauseMs};        // the match's total paused time is capped: at the cap every absent seat is dropped (1 min .. 24 h; the control key "max_pause_seconds")
+    uint32_t max_pause_ms{net::kMaxPauseMs};        // the match's total paused time is capped: at the cap every seat that is not present is dropped (1 min .. 24 h; the control key "max_pause_seconds")
     size_t max_log_bytes{net::TurnLog::kDefaultMaxBytes};    // the limit of the match's turn log (16 MiB: 25 times a busy match); past it a lost seat is dropped at once again
+    uint32_t max_catch_up_ms{net::kMaxCatchUpMs};            // one absence may spend this long catching up in all, over all its attempts (10 s .. 1 h; the control key "max_catch_up_seconds"): then the
+                                                             // catch-up fails, the seat is absent (the vote and the cap apply) and the key is refused
+    uint32_t resume_countdown_ms{net::kResumeCountdownMs};   // after a pause of at least 3 s the match is held this long before it goes on (0 .. 60 s, 0 = none; the control key "resume_countdown_seconds")
+    size_t max_connections{32};                              // the connections that the room keeps at once (everything that ever said Hello to it, and every connection that came back, until it is closed and
+                                                             // nobody uses it): a flood is refused beyond this. 32 for every room the server makes; the control interface has no key for it
 };
 
 /// The bounds of the room's reconnect settings (the control interface refuses others, RoomManager::create_room too)
@@ -70,6 +75,9 @@ inline constexpr uint32_t kMinVoteAfterMs = 5u * 1000u;
 inline constexpr uint32_t kMaxVoteAfterMs = 3600u * 1000u;
 inline constexpr uint32_t kMinMaxPauseMs = 60u * 1000u;
 inline constexpr uint32_t kMaxMaxPauseMs = 86400u * 1000u;
+inline constexpr uint32_t kMinCatchUpMs = 10u * 1000u;
+inline constexpr uint32_t kMaxCatchUpLimitMs = 3600u * 1000u;
+inline constexpr uint32_t kMaxResumeCountdownMs = 60u * 1000u;
 inline constexpr size_t kMinLogBytes = 1024;
 inline constexpr size_t kMaxLogBytes = size_t{1} << 30;
 
@@ -110,6 +118,9 @@ struct RoomStatus {
     bool reconnect{false};                  // the room holds the seats of players whose connections are lost
     uint32_t vote_after_ms{0};              // its rules: the vote opens after this much absence in all, the match's pauses may last this long in all
     uint32_t max_pause_ms{0};
+    uint32_t max_catch_up_ms{0};            // ... one absence may spend this long catching up in all; the match is held this long after a pause (0: not at all)
+    uint32_t resume_countdown_ms{0};
+    uint8_t resume_s{0};                    // the countdown that follows a pause is running: the seconds that are left (0: none)
     bool paused{false};                     // the match waits for a seat (running rooms only)
     struct Absent {
         uint8_t seat{255};
@@ -126,6 +137,9 @@ struct RoomStatus {
     uint32_t rejoins{0};                    // seats that came back and were verified
     uint32_t drops_by_vote{0};              // seats dropped because the players voted to go on without them
     uint32_t drops_by_cap{0};               // seats dropped because the match's pauses used up max_pause_ms
+    uint32_t rejoins_refused{0};            // Hellos with a key that were refused for a budget (the absence's catch-up time, three attempts a minute, three times the log's size in ten minutes)
+    uint32_t catch_up_expired{0};           // absences whose catch-up time ran out
+    uint64_t streamed_bytes{0};             // the bytes of the turn log that were streamed to returning players (all seats)
     uint32_t log_turns{0};                  // the match's turn log (what a returning player is given): its turns, its bytes, and whether it can still be used
     uint32_t log_bytes{0};
     bool log_usable{true};
@@ -134,7 +148,7 @@ struct RoomStatus {
 
 class Room {
 public:
-    static constexpr size_t kMaxConnections = 32;           // everything that ever said Hello to this room (rejected ones included): a flood is refused beyond this
+    static constexpr size_t kMaxConnections = 32;           // RoomSpec::max_connections of a room that says nothing: everything that ever said Hello to it (rejected ones included): a flood is refused beyond this
     static constexpr uint32_t kRetryMs = 2000;              // the pause after a cancelled start
     static constexpr uint32_t kGraceMs = 15000;             // after the end of the match the connections stay open at least this long (a client that is level finds the results in peace) ...
     static constexpr uint32_t kEndWaitMs = 30000;           // ... and until every player that is still connected has acknowledged the last turn, at the most this long: a player that was
@@ -159,7 +173,7 @@ public:
     bool add_connection(std::unique_ptr<net::Connection>& connection, const std::string& address, const std::vector<uint8_t>& hello, uint32_t now_ms);
     /// A Hello with a key reaches a match that runs (the door: RoomManager) when the room holds seats and the match runs: the session decides (HostSession::accept_rejoin). True: the room
     /// owns the connection (the session points at it until it has been replaced). False: the room takes nothing; the session has answered with a Reject and closed the connection, which the
-    /// caller keeps until the answer has arrived.
+    /// caller keeps until the answer has arrived. A room that keeps max_connections connections that are all in use answers Full (it never keeps more).
     bool can_rejoin() const noexcept { return state_ == RoomState::Running && session_ != nullptr && spec_.reconnect; }
     bool rejoin(std::unique_ptr<net::Connection>& connection, const net::HelloMsg& hello, uint32_t now_ms);
 

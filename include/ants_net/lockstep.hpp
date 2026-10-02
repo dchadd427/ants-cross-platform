@@ -23,6 +23,10 @@
 //   - a frame that stood for more than 100 ms (a window that is hardly drawn) is not read as the link's lateness and does not count as a stall: the turns that came meanwhile
 //               are all there at its start, and its own time covers the ticks that its length holds (and may run as many as its time holds at the fastest speed: max_ticks_per_update
 //               for every 100 ms of it).
+//   - held      the server said that the match is held (a pause for a seat that is away, the countdown that follows it: Presence, protocol 10; set_held): no turn is going to be sealed, and
+//               the wait for one is not the link's lateness. The runner runs the turns that it has, then waits without a stall (no "Waiting for the other players...", nothing told to the
+//               jitter buffer) and collects the buffer again for the turns that come when the match goes on; when it does, the lateness that was measured before the pause is forgotten (the
+//               first turn after a pause of 150 ms is 150 ms "late" for every turn that follows, and the buffer would have grown, in every player's window, for a pause that was nobody's link).
 //
 // The catch-up (protocol 10, docs/NETWORK_PORT.md "Reconnect"). A machine that comes back to a match that it lost (a lost connection, a reloaded page) is given the turns it misses, up to
 // all of them, from the server's log. They are handed in with on_catch_up_turn() and executed with fast_forward(): as fast as the machine can, without waiting for real time, without
@@ -124,6 +128,10 @@ public:
     const JitterBuffer& jitter() const noexcept { return jitter_; }
     /// True while the runner collects the buffer again after a stall (it runs nothing meanwhile)
     bool rebuilding() const noexcept { return started_ && rebuilding_; }
+    /// The server announced that the match is held, or that it is not any more (see "held" above). While it is held the runner never counts the wait for a turn as a stall. When it is
+    /// released the lateness that was read before the pause is forgotten (a runner that ran dry during the pause collects its buffer again for the first turns after it).
+    void set_held(bool held);
+    bool held() const noexcept { return held_; }
 
 private:
     static constexpr uint32_t kTickQuarters = kTickMs * 4u;           // the accumulator counts quarters of a millisecond of game time
@@ -142,6 +150,7 @@ private:
     bool rebuilding_{false};       // a stall used the buffer up: collecting target + 1 turns again (stall_ms_ goes on counting meanwhile)
     bool rebuild_has_first_{false};      // ... and a turn has been queued meanwhile: the oldest queued turn was read at rebuild_first_ms_ (the wait for the rest is bounded by it)
     uint64_t rebuild_first_ms_{0};
+    bool held_{false};             // the server holds the match (set_held): a tick that is due with no turn to run is no stall
     bool in_stall_{false};         // a tick was due and had no turn, and no tick has run since
     bool stall_told_{false};       // ... and the jitter buffer has been told how long the wait was (when the late turn came)
     uint32_t acc_q_{0};            // game time owed to the next tick, in quarters of a millisecond

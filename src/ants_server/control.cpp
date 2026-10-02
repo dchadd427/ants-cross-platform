@@ -52,7 +52,10 @@ JsonValue status_to_json(const RoomStatus& s) {
     o.set("reconnect", JsonValue::make_bool(s.reconnect));
     o.set("hold_vote_seconds", JsonValue::make_int(s.vote_after_ms / 1000));
     o.set("max_pause_seconds", JsonValue::make_int(s.max_pause_ms / 1000));
+    o.set("max_catch_up_seconds", JsonValue::make_int(s.max_catch_up_ms / 1000));
+    o.set("resume_countdown_seconds", JsonValue::make_int(s.resume_countdown_ms / 1000));
     o.set("paused", JsonValue::make_bool(s.paused));
+    o.set("resume_seconds", JsonValue::make_int(s.resume_s));
     JsonValue absent = JsonValue::make_array();
     for (const RoomStatus::Absent& a : s.absent) {
         JsonValue row = JsonValue::make_object();
@@ -77,6 +80,9 @@ JsonValue status_to_json(const RoomStatus& s) {
     o.set("rejoins", JsonValue::make_int(s.rejoins));
     o.set("drops_by_vote", JsonValue::make_int(s.drops_by_vote));
     o.set("drops_by_cap", JsonValue::make_int(s.drops_by_cap));
+    o.set("rejoins_refused", JsonValue::make_int(s.rejoins_refused));
+    o.set("catch_up_expired", JsonValue::make_int(s.catch_up_expired));
+    o.set("streamed_bytes", JsonValue::make_int(static_cast<int64_t>(s.streamed_bytes)));
     JsonValue log = JsonValue::make_object();
     log.set("turns", JsonValue::make_int(s.log_turns));
     log.set("bytes", JsonValue::make_int(s.log_bytes));
@@ -177,6 +183,11 @@ bool spec_from_json(const JsonValue& body, RoomSpec& out, std::string& error) {
     if (!number("hold_vote_seconds", kMinVoteAfterMs / 1000, kMaxVoteAfterMs / 1000, vote_s) || !number("max_pause_seconds", kMinMaxPauseMs / 1000, kMaxMaxPauseMs / 1000, pause_s)) return false;
     spec.vote_after_ms = static_cast<uint32_t>(vote_s * 1000);
     spec.max_pause_ms = static_cast<uint32_t>(pause_s * 1000);
+    int64_t catch_s = spec.max_catch_up_ms / 1000;
+    int64_t resume_s = spec.resume_countdown_ms / 1000;
+    if (!number("max_catch_up_seconds", kMinCatchUpMs / 1000, kMaxCatchUpLimitMs / 1000, catch_s) || !number("resume_countdown_seconds", 0, kMaxResumeCountdownMs / 1000, resume_s)) return false;
+    spec.max_catch_up_ms = static_cast<uint32_t>(catch_s * 1000);
+    spec.resume_countdown_ms = static_cast<uint32_t>(resume_s * 1000);
     if (const JsonValue* v = body.find("code")) {
         if (!v->is_string()) {
             error = "\"code\" must be a string";

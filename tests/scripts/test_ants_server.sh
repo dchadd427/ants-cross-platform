@@ -94,13 +94,22 @@ check "--hold-vote-seconds that is no number is refused" "$([ "$(exit_of --hold-
 check "--max-pause-seconds below 60 is refused" "$([ "$(exit_of --max-pause-seconds 59)" = "2" ]; echo $?)"
 check "--max-pause-seconds above 86400 is refused" "$([ "$(exit_of --max-pause-seconds 86401)" = "2" ]; echo $?)"
 check "--max-pause-seconds that is no number is refused" "$([ "$(exit_of --max-pause-seconds 30min)" = "2" ]; echo $?)"
+check "--max-catch-up-seconds below 10 is refused" "$([ "$(exit_of --max-catch-up-seconds 9)" = "2" ]; echo $?)"
+check "--max-catch-up-seconds above 3600 is refused" "$([ "$(exit_of --max-catch-up-seconds 3601)" = "2" ]; echo $?)"
+check "--max-catch-up-seconds that is no number is refused" "$([ "$(exit_of --max-catch-up-seconds 5min)" = "2" ]; echo $?)"
+check "--resume-countdown-seconds above 60 is refused" "$([ "$(exit_of --resume-countdown-seconds 61)" = "2" ]; echo $?)"
+check "--resume-countdown-seconds below 0 is refused" "$([ "$(exit_of --resume-countdown-seconds -1)" = "2" ]; echo $?)"
+check "--resume-countdown-seconds that is no number is refused" "$([ "$(exit_of --resume-countdown-seconds ten)" = "2" ]; echo $?)"
+check "--resume-countdown-seconds without a value is refused" "$([ "$(exit_of --resume-countdown-seconds)" = "2" ]; echo $?)"
 check "--log-mb 0 is refused" "$([ "$(exit_of --log-mb 0)" = "2" ]; echo $?)"
 check "--log-mb above 256 is refused" "$([ "$(exit_of --log-mb 257)" = "2" ]; echo $?)"
 check "--log-mb that is no number is refused" "$([ "$(exit_of --log-mb big)" = "2" ]; echo $?)"
 check "--hold-vote-seconds without a value is refused" "$([ "$(exit_of --hold-vote-seconds)" = "2" ]; echo $?)"
 check "good reconnect options start the server (the alarm ends it: status 142)" "$([ "$(exit_of --reconnect --hold-vote-seconds 5 --max-pause-seconds 86400 --log-mb 256)" = "142" ]; echo $?)"
 check "the edges of the other side start it too" "$([ "$(exit_of --no-reconnect --hold-vote-seconds 3600 --max-pause-seconds 60 --log-mb 1)" = "142" ]; echo $?)"
-check "--help names the reconnect options and their ranges" "$("$SERVER" --help 2>&1 | grep -q -- '--reconnect | --no-reconnect' && "$SERVER" --help 2>&1 | grep -q -- '--hold-vote-seconds 5-3600' && "$SERVER" --help 2>&1 | grep -q -- '--max-pause-seconds 60-86400' && "$SERVER" --help 2>&1 | grep -q -- '--log-mb 1-256'; echo $?)"
+check "the new options' edges start it: 10 and 0" "$([ "$(exit_of --reconnect --max-catch-up-seconds 10 --resume-countdown-seconds 0)" = "142" ]; echo $?)"
+check "the new options' edges start it: 3600 and 60" "$([ "$(exit_of --reconnect --max-catch-up-seconds 3600 --resume-countdown-seconds 60)" = "142" ]; echo $?)"
+check "--help names the reconnect options and their ranges" "$("$SERVER" --help 2>&1 | grep -q -- '--reconnect | --no-reconnect' && "$SERVER" --help 2>&1 | grep -q -- '--hold-vote-seconds 5-3600' && "$SERVER" --help 2>&1 | grep -q -- '--max-pause-seconds 60-86400' && "$SERVER" --help 2>&1 | grep -q -- '--max-catch-up-seconds 10-3600' && "$SERVER" --help 2>&1 | grep -q -- '--resume-countdown-seconds 0-60' && "$SERVER" --help 2>&1 | grep -q -- '--log-mb 1-256'; echo $?)"
 mkdir -p "$WORK/maps_odd"
 cp "$ROOT/Original-Ants/Maps/TINY.LVL" "$WORK/maps_odd/TINY.LVL"
 cp "$ROOT/Original-Ants/Maps/TINY.LVL" "$WORK/maps_odd/A B.LVL"
@@ -425,7 +434,7 @@ rc_field() { curl -s -m 3 -H "Authorization: Bearer $SECRET" "$RC_URL/rooms/$1" 
 for part in sys.argv[1].split("."):
     v = v.get(part) if isinstance(v, dict) else None
 print(json.dumps(v) if isinstance(v, (dict, list)) or v is None else str(v).lower() if isinstance(v, bool) else v)' "$2" 2> /dev/null; }
-ANTS_SERVER_SECRET="$SECRET" "$SERVER" --maps "$ROOT/Original-Ants/Maps" --port "$RC_PORT" --ctl-port "$RC_CTL" --results-dir "$WORK/rc_results" --reconnect --max-pause-seconds 60 > "$WORK/rc_server.log" 2>&1 &
+ANTS_SERVER_SECRET="$SECRET" "$SERVER" --maps "$ROOT/Original-Ants/Maps" --port "$RC_PORT" --ctl-port "$RC_CTL" --results-dir "$WORK/rc_results" --reconnect --max-pause-seconds 60 --resume-countdown-seconds 8 > "$WORK/rc_server.log" 2>&1 &
 SERVER_PID=$!
 RC_UP=1
 for _ in $(seq 1 50); do
@@ -532,8 +541,19 @@ done
 RC_CAPPED_AFTER="$(python3 -c "import time; print(round(time.time() - $RC_CUT_AT, 1))")"
 check "the cap drops the absent seat ($RC_CAPPED_AFTER s after the cut: 60 s of pause)" "$RC_CAPPED"
 check "... about 60 s after the cut (59 - 64 s)" "$(python3 -c "print(0 if 59 <= $RC_CAPPED_AFTER <= 64 else 1)")"
-sleep 3
-check "the match goes on without it: not paused, nobody absent" "$([ "$(rc_field "$RC_CODE" paused)" = "false" ] && [ "$(rc_field "$RC_CODE" absent)" = "[]" ] && [ "$(rc_field "$RC_CODE" state)" = "running" ]; echo $?)"
+sleep 2
+check "the room is held for the resume countdown (8 s here) after the cap dropped the last seat that was missing: paused, nobody absent, the seconds left are told" "$([ "$(rc_field "$RC_CODE" paused)" = "true" ] && [ "$(rc_field "$RC_CODE" absent)" = "[]" ] && [ "$(rc_field "$RC_CODE" resume_seconds)" -ge 1 ] && [ "$(rc_field "$RC_CODE" resume_seconds)" -le 8 ] && [ "$(rc_field "$RC_CODE" resume_countdown_seconds)" = "8" ]; echo $?)"
+RC_TC="$(rc_field "$RC_CODE" ticks)"
+sleep 2
+check "nothing advances during the countdown" "$([ "$(( $(rc_field "$RC_CODE" ticks) - RC_TC ))" -le 2 ]; echo $?)"
+RC_RESUMED=1
+for _ in $(seq 1 100); do
+    [ "$(rc_field "$RC_CODE" paused)" = "false" ] && { RC_RESUMED=0; break; }
+    sleep 0.2
+done
+check "the countdown ends and the match goes on" "$RC_RESUMED"
+sleep 1
+check "the match goes on without it: not paused, nobody absent" "$([ "$(rc_field "$RC_CODE" paused)" = "false" ] && [ "$(rc_field "$RC_CODE" absent)" = "[]" ] && [ "$(rc_field "$RC_CODE" state)" = "running" ] && [ "$(rc_field "$RC_CODE" resume_seconds)" = "0" ]; echo $?)"
 RC_TC="$(rc_field "$RC_CODE" ticks)"
 sleep 3
 RC_TD="$(rc_field "$RC_CODE" ticks)"

@@ -66,6 +66,20 @@ void LockstepRunner::restart_pacing() noexcept {
     jitter_.reset();
 }
 
+// The match is held by the server (a pause, a countdown), or goes on. Nothing that was waited for in the pause is a stall, and nothing that was measured before it describes the link after it:
+// when it ends the lateness read so far is forgotten (the first turns after a pause come all at their own pace; a runner that has used its buffer up collects it again: update() does that while the match is held).
+void LockstepRunner::set_held(bool held) {
+    if (held == held_) return;
+    held_ = held;
+    in_stall_ = false;
+    stall_told_ = false;
+    stall_ms_ = 0;
+    if (held) return;
+    jitter_.forget();                                           // (a runner whose turns in hand ran out during the pause is collecting its buffer already: update() does it while the match is held)
+    fresh_count_ = 0;                                           // (a turn that was read before the end of the pause is not an arrival after it: nothing is measured from the pause)
+    updates_ = 0;                                               // the first update after a pause reads what waited for the runner: how long it waited is not the link's lateness
+}
+
 uint32_t LockstepRunner::fast_forward(uint32_t max_ticks) {
     uint32_t turns = 0;
     while (turns < max_ticks && !queue_.empty()) {
@@ -110,7 +124,7 @@ std::vector<LockstepRunner::Executed> LockstepRunner::update(uint32_t dt_ms) {
         }
         const bool waited_enough = rebuild_has_first_ && now_ms_ - rebuild_first_ms_ >= static_cast<uint64_t>(wanted_turns) * kTickMs;      // (only a rebuilding runner has a first turn)
         if (queue_.size() < wanted_turns && !waited_enough) {                  // still collecting the jitter buffer
-            if (rebuilding_) stall_ms_ = saturating_add(stall_ms_, dt_ms);    // (the wait goes on being counted: "Waiting for the other players..." stays up until the turns run)
+            if (rebuilding_ && in_stall_) stall_ms_ = saturating_add(stall_ms_, dt_ms);    // (the wait goes on being counted: "Waiting for the other players..." stays up until the turns run; the buffer that is collected after a pause is no wait for the link)
             return out;
         }
         started_ = true;
@@ -162,6 +176,15 @@ std::vector<LockstepRunner::Executed> LockstepRunner::update(uint32_t dt_ms) {
     // A tick is due and there is no turn: nothing is owed for the wait (a late turn runs the moment it comes), and the buffer is collected again
     if (queue_.empty() && acc_q_ >= kTickQuarters) {
         acc_q_ = kTickQuarters;
+        if (held_) {                                            // the server holds the match: no turn is due, so the wait is no stall; the buffer is collected for the turns that follow
+            stall_ms_ = 0;
+            if (started_ && !rebuilding_) {
+                rebuilding_ = true;
+                rebuild_has_first_ = false;
+                acc_q_ = 0;
+            }
+            return out;
+        }
         if (ticks == 0) stall_ms_ = saturating_add(stall_ms_, dt_ms);
         if (!in_stall_) {
             in_stall_ = true;

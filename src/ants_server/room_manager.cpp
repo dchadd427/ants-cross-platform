@@ -14,6 +14,8 @@ RoomSpec RoomManager::default_spec() const {
     spec.reconnect = limits_.reconnect;
     spec.vote_after_ms = limits_.hold_vote_ms;
     spec.max_pause_ms = limits_.max_pause_ms;
+    spec.max_catch_up_ms = limits_.max_catch_up_ms;
+    spec.resume_countdown_ms = limits_.resume_countdown_ms;
     spec.max_log_bytes = limits_.room_log_bytes;
     return spec;
 }
@@ -46,6 +48,9 @@ CreateResult RoomManager::create_room(RoomSpec spec, uint32_t now_ms) {
     if (spec.load_ms < 1000 || spec.load_ms > 600u * 1000u) return fail(400, "load_seconds must be 1 to 600");
     if (spec.vote_after_ms < kMinVoteAfterMs || spec.vote_after_ms > kMaxVoteAfterMs) return fail(400, "hold_vote_seconds must be 5 to 3600");
     if (spec.max_pause_ms < kMinMaxPauseMs || spec.max_pause_ms > kMaxMaxPauseMs) return fail(400, "max_pause_seconds must be 60 to 86400");
+    if (spec.max_catch_up_ms < kMinCatchUpMs || spec.max_catch_up_ms > kMaxCatchUpLimitMs) return fail(400, "max_catch_up_seconds must be 10 to 3600");
+    if (spec.resume_countdown_ms > kMaxResumeCountdownMs) return fail(400, "resume_countdown_seconds must be 0 to 60");
+    if (spec.max_connections < spec.players || spec.max_connections > 4096) return fail(400, "max_connections must be the number of players to 4096");
     if (spec.max_log_bytes < kMinLogBytes || spec.max_log_bytes > kMaxLogBytes) return fail(400, "the limit of the turn log must be 1 KiB to 1 GiB");
     MapEntry entry;
     std::string why;

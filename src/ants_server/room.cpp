@@ -65,16 +65,23 @@ void Room::prune_connections() {
 
 bool Room::rejoin(std::unique_ptr<net::Connection>& connection, const net::HelloMsg& hello, uint32_t now_ms) {
     if (connection == nullptr || !can_rejoin()) return false;
+    if (connections_.size() >= spec_.max_connections) prune_connections();
+    if (connections_.size() >= spec_.max_connections) {             // every connection that the room keeps is in use: it keeps no more (the caller lets this one linger, the answer arrives)
+        if (connection->is_open()) {
+            connection->send(net::encode(net::RejectMsg{net::RejectReason::Full}));
+            connection->close();
+        }
+        return false;
+    }
     if (!session_->accept_rejoin(connection.get(), hello, now_ms)) return false;       // the session has answered and closed it: the caller lets it linger
-    if (connections_.size() >= kMaxConnections) prune_connections();
     connections_.push_back(std::move(connection));                  // the session points at it: the room keeps it alive (and prune_connections asks the session before it frees one)
     return true;
 }
 
 bool Room::add_connection(std::unique_ptr<net::Connection>& connection, const std::string& address, const std::vector<uint8_t>& hello, uint32_t now_ms) {
     if (connection == nullptr || state_ != RoomState::Waiting) return false;
-    if (connections_.size() >= kMaxConnections) prune_connections();
-    if (connections_.size() >= kMaxConnections) return false;
+    if (connections_.size() >= spec_.max_connections) prune_connections();
+    if (connections_.size() >= spec_.max_connections) return false;
     connections_.push_back(std::move(connection));
     lobby_.add_connection(connections_.back().get(), now_ms, address, hello);
     return true;
@@ -134,6 +141,8 @@ void Room::begin_match(uint32_t now_ms) {
     hc.hold_seats = spec_.reconnect;
     hc.attendance.vote_after_ms = spec_.vote_after_ms;
     hc.attendance.max_pause_ms = spec_.max_pause_ms;
+    hc.attendance.max_catch_up_ms = spec_.max_catch_up_ms;
+    hc.attendance.resume_countdown_ms = spec_.resume_countdown_ms;
     hc.max_log_bytes = spec_.max_log_bytes;
     hc.log_budget = log_budget_;
     session_ = std::make_unique<net::HostSession>(*sim_, hc);
@@ -247,7 +256,7 @@ void Room::update(uint32_t now_ms) {
         }
         // the limit is on the time that the match ran: a pause (a seat that is away) is not play (a room that waited minutes for a player must not fail "took longer than the limit")
         const uint32_t elapsed_ms = now_ms - started_ms_;
-        const uint32_t paused_ms = session_->attendance().pause_ms(now_ms);
+        const uint32_t paused_ms = session_->attendance().held_ms(now_ms);      // (the pauses as they were, and the countdowns after them: the match did not run then either)
         if ((elapsed_ms > paused_ms ? elapsed_ms - paused_ms : 0u) >= spec_.run_ms) return fail("the match took longer than the room's limit", now_ms);
         // somebody is there when a player is connected or a seat is held for a player who may come back: a room whose players all lost their connection waits for them (until the cap)
         bool anybody = false;
@@ -283,6 +292,8 @@ RoomStatus Room::status(uint32_t now_ms) const {
     s.reconnect = spec_.reconnect;
     s.vote_after_ms = spec_.vote_after_ms;
     s.max_pause_ms = spec_.max_pause_ms;
+    s.max_catch_up_ms = spec_.max_catch_up_ms;
+    s.resume_countdown_ms = spec_.resume_countdown_ms;
     s.connections = static_cast<uint32_t>(connections_.size());
     if (session_) {
         const net::Attendance& a = session_->attendance();
@@ -290,6 +301,9 @@ RoomStatus Room::status(uint32_t now_ms) const {
         s.rejoins = a.rejoins();
         s.drops_by_vote = a.drops_by_vote();
         s.drops_by_cap = a.drops_by_cap();
+        s.rejoins_refused = a.rejoins_refused();
+        s.catch_up_expired = a.catch_up_expired();
+        s.streamed_bytes = a.streamed_bytes();
         if (log_released_) {                                        // the match is over: what the log held at the end
             s.log_turns = log_turns_;
             s.log_bytes = log_bytes_;
@@ -304,6 +318,7 @@ RoomStatus Room::status(uint32_t now_ms) const {
         if (running) {                                              // who is missing now, and the vote (the status is the server's view: no seat is the viewer)
             const net::PresenceMsg p = a.presence_for(255, now_ms);
             s.paused = session_->paused();
+            s.resume_s = a.resume_s(now_ms);
             for (const net::PresenceMsg::Entry& e : p.missing) {
                 RoomStatus::Absent row;
                 row.seat = e.seat;

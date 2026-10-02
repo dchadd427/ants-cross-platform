@@ -33,7 +33,7 @@ namespace ants::net {
 // or in some rare sequence of orders, because peers that run different rules desynchronise in the first play where they differ, and the door checks nothing else: a Hello of another
 // number is refused ("version mismatch") by a LAN host and by a server's room, and a LAN announcement of another number is listed as another version. A release that cannot say "no
 // state hash of any play changed" raises it, and the history below says why (nothing in the wire changed in 9: the rules of the engine did).
-inline constexpr uint16_t kProtocolVersion = 10;         // 2: the Room message carries each seat's round trip (the thumbs); 3: host migration (mesh, election); 4: the Quit command (Drop moved from 11 to 12); 5: Hello carries the seat that the guest asks for; 6: map names may hold any printable character that cannot leave the maps folder (up to 64), Hello carries a room code and a token, the slot state Bot, the rejection NoSuchRoom; 7: the Room message names the room's leader (a dedicated server's room: the first player who joined), the message StartRequest (the leader asks the server to start now); 8: turns of 50 ms with one tick each (they were 100 ms with two; a client keeps a jitter buffer of 1 to 4 turns, ants_net/jitter.hpp), a state hash every 20 turns (one second, as before), and the Lag message, type 25 (a dedicated server never waits for a player that falls behind: it tells the room instead); 9: the community-map rules (default ant types, power-ups by tile, the attack clip); 10: rejoin keys, presence, votes, the catch-up stream (every seat of a server's room has a key that the Welcome hands out, and a Hello that shows it takes the seat back: Hello carries the key and the number of turns the client has, Welcome the key and flags; the rejections Dropped, RejoinFailed and Superseded; the messages Presence, Vote, CatchUp, TurnBatch and CaughtUp, types 26 - 30)
+inline constexpr uint16_t kProtocolVersion = 10;         // 2: the Room message carries each seat's round trip (the thumbs); 3: host migration (mesh, election); 4: the Quit command (Drop moved from 11 to 12); 5: Hello carries the seat that the guest asks for; 6: map names may hold any printable character that cannot leave the maps folder (up to 64), Hello carries a room code and a token, the slot state Bot, the rejection NoSuchRoom; 7: the Room message names the room's leader (a dedicated server's room: the first player who joined), the message StartRequest (the leader asks the server to start now); 8: turns of 50 ms with one tick each (they were 100 ms with two; a client keeps a jitter buffer of 1 to 4 turns, ants_net/jitter.hpp), a state hash every 20 turns (one second, as before), and the Lag message, type 25 (a dedicated server never waits for a player that falls behind: it tells the room instead); 9: the community-map rules (default ant types, power-ups by tile, the attack clip); 10: rejoin keys, presence, votes, the catch-up stream (every seat of a server's room has a key that the Welcome hands out, and a Hello that shows it takes the seat back: Hello carries the key and the number of turns the client has, Welcome the key and flags; the rejections Dropped, RejoinFailed and Superseded; the messages Presence, Vote, CatchUp, TurnBatch and CaughtUp, types 26 - 30; Presence ends with the seconds left of the resume countdown that follows a pause)
 inline constexpr size_t kMaxMessageBytes = 64 * 1024;
 inline constexpr size_t kMaxTurnCommands = 512;
 inline constexpr size_t kMaxChatChars = 100;        // the original's chat entry
@@ -73,7 +73,7 @@ enum class MsgType : uint8_t {
     PeerHello = 23, // guest -> guest on a new link between guests: who I am
     StartRequest = 24,   // leader -> server (protocol 7): start the match now with the players who are here; no payload, only the leader of a server's room is heard
     Lag = 25,       // dedicated server -> the other players (protocol 8): a player is more than 3 s behind the match (or is not any more)
-    Presence = 26,  // dedicated server -> the players (protocol 10): who is missing from the match and for how long, the vote about the seat that has been away longest, the cap on the pauses
+    Presence = 26,  // dedicated server -> the players (protocol 10): who is missing from the match and for how long, the vote about the seat that has been away longest (or flaps), the cap on the pauses, the resume countdown
     Vote = 27,      // player -> dedicated server (protocol 10): keep waiting for the seat that is missing / continue without it
     CatchUp = 28,   // dedicated server -> a player who came back (protocol 10): the turns of the match follow, this many in all (first_turn ..)
     TurnBatch = 29, // dedicated server -> a player who came back (protocol 10): consecutive sealed turns of the match, packed (the stream that CatchUp announces)
@@ -94,8 +94,9 @@ bool valid_room_code(const std::string& code) noexcept;
 
 /// Dropped (protocol 10): the key is right and the seat was dropped (by the others' vote, by the cap on the pauses, by a violation): the player is told it is out ("Sorry, you
 /// have been dropped from the game", the original's own text). RejoinFailed: the key is right but the way back is closed (the server's turn log is not usable, or it cannot tell a
-/// machine that has nothing how to load the match, or that machine could not load the map; and on the machine's side, a stream that does not fit its announcement or the server's
-/// verdict that its state differs from the referee's: the session ends with this reason). There is no limit on the number of attempts: a link that flaps must be able to come back.
+/// machine that has nothing how to load the match, or that machine could not load the map, or the seat has used up what a key holder may ask of the server: the catch-up time of the
+/// absence, three attempts a minute, three times the log's size in ten minutes; and on the machine's side, a stream that does not fit its announcement or the server's verdict that its
+/// state differs from the referee's: the session ends with this reason). The seat stays held: the others may vote and the cap applies as for any absent seat.
 /// Superseded: a newer connection with the key took the seat; sent to the older one just before it is closed, so that the older window stops trying.
 enum class RejectReason : uint8_t { Full = 1, VersionMismatch = 2, MatchRunning = 3, Kicked = 4, BadRequest = 5, NoSuchRoom = 6, Dropped = 7, RejoinFailed = 8, Superseded = 9 };
 
@@ -262,14 +263,16 @@ struct LagMsg {
 // ---- protocol 10: presence, votes and the catch-up stream (docs/NETWORK_PORT.md "Reconnect") -----------------------------------------------------------------
 
 /// Who is missing from the match, sent by a dedicated server to the players that are there (one per recipient: `your_vote` is the recipient's own), on every change and once a
-/// second while the match is paused. A seat is MISSING when its connection was lost (the link closed, a send failed, or nothing at all arrived for 10 s: a player who lags but
-/// keeps talking is never missing, only announced with Lag) or when it came back and is being given the match. Nothing is sealed while a seat is missing: the match is paused for
-/// everybody, chat goes on. `missing` empty means the match runs.
+/// second while the match is held (a pause, and the countdown that follows it). A seat is MISSING when its connection was lost (the link closed, a send failed, or nothing at all
+/// arrived for 10 s: a player who lags but keeps talking is never missing, only announced with Lag) or when it came back and is being given the match. Nothing is sealed while a
+/// seat is missing: the match is paused for everybody, chat goes on. `missing` empty means that nobody is missing: the match runs, or (`resume_s` above 0) it is held for the countdown
+/// that follows a pause.
 ///
 /// Wire layout: u8 n (0 .. 4), n x { u8 seat, u8 state (1 absent, 2 catching up), u16 waited_s, u8 progress }, u8 vote_seat (255 none), u8 votes_continue, u8 voters, u8 your_vote
-/// (0 none, 1 keep waiting, 2 continue), u16 cap_s. The decoder refuses anything that an honest server would not say: a seat listed twice, a seat above 3, a state other than 1 and 2,
-/// a progress above 100 or one that is not 0 for an absent seat, entries that are not sorted longest away first, a vote about a seat that is not the first absent one of the list,
-/// votes that are more than the voters or more than 4 voters, a vote count or a choice of the receiver without a vote, a trailing byte, a missing byte.
+/// (0 none, 1 keep waiting, 2 continue), u16 cap_s, u8 resume_s (0 none, 1 .. 60: the seconds of the resume countdown that are left, rounded up). The decoder refuses anything that an
+/// honest server would not say: a seat listed twice, a seat above 3, a state other than 1 and 2, a progress above 100 or one that is not 0 for an absent seat, entries that are not
+/// sorted longest away first, a vote about a seat above 3, votes that are more than the voters or more than 4 voters, a vote count or a choice of the receiver without a vote, a
+/// countdown above 60 seconds or one that runs while a seat is missing, a trailing byte, a missing byte.
 struct PresenceMsg {
     enum class State : uint8_t { Absent = 1, CatchingUp = 2 };
     struct Entry {
@@ -279,12 +282,15 @@ struct PresenceMsg {
         uint8_t progress{0};           // CatchingUp: the percent of the match's turns that it has executed (0 .. 100); 0 for an absent seat
     };
     std::vector<Entry> missing;        // longest away first (the seat of a tie below)
-    uint8_t vote_seat{255};            // the seat the open vote is about (255: no vote is open): the first ABSENT entry of `missing`, once it has been away long enough to be put to the vote
+    uint8_t vote_seat{255};            // the seat the open vote is about (255: no vote is open): an absent seat that has been away long enough to be put to the vote (the one that has been away
+                                       // longest), or a seat that FLAPS (lost three times in a minute) in any state, missing or back
     uint8_t votes_continue{0};         // the connected players who chose "continue without it" (0 without a vote)
-    uint8_t voters{0};                 // the connected players: the vote is won by MORE THAN HALF of them (2 * votes_continue > voters)
+    uint8_t voters{0};                 // the connected players that may vote about it (not the seat itself): the vote is won by MORE THAN HALF of them (2 * votes_continue > voters)
     uint8_t your_vote{0};              // the receiver's own choice: 0 none, 1 keep waiting, 2 continue (0 without a vote)
-    uint16_t cap_s{0xFFFF};            // seconds of pause that the match has left before the cap drops every absent seat (the cap is the match's total paused time); 0xFFFF: that or more
+    uint16_t cap_s{0xFFFF};            // seconds of pause that the match has left before the cap drops every seat that is not present (the cap is the match's total paused time); 0xFFFF: that or more
+    uint8_t resume_s{0};               // the match goes on after this many seconds (the countdown that follows a pause of a few seconds or more); 0: no countdown (nobody is missing then, or the match runs)
 };
+inline constexpr uint8_t kMaxResumeSeconds = 60;
 inline constexpr uint16_t kCapSecondsMore = 0xFFFF;
 /// A connected player's choice about the seat that the vote is about. 3 bytes on the wire: type, seat (0 .. 3), choice (0 keep waiting, 1 continue without it). A vote that does not
 /// fit (no vote is open, the seat is not its subject, the voter is not connected) is ignored by the server: it crossed a state change on the wire, it is no offence.

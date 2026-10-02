@@ -732,7 +732,8 @@ struct HoldMatch {
                         clients[p] = std::make_unique<ClientSession>(*sims[p], c);
                         clients[p]->set_connection(client_ends[p]);
                         clients[p]->set_on_chat([this, p](const ChatMsg& m) { chats[p].push_back(m); });
-                        clients[p]->start(now);
+                        clients[p]->start(clock_of(p));                         // (the clock that this machine's session is updated with: a machine that lags behind has its own)
+                        last_frame[p] = 0;                                      // (a page that was reloaded has had no frame yet: the time in the lobby is no stop of this session's frames, which would put its clock back)
                     } else if (ev.type == ClientLobby::Event::Type::Rejected) {
                         rejected_lobby[p] = l.reject_reason();
                     }
@@ -1391,7 +1392,7 @@ void run_protocol_tests() {
         ASSERT_TRUE(with_leader > 1000);
     } TEST_END();
 
-    TEST_CASE("N2.40 Protocol 10: Keys In Hello And Welcome, Three More Rejections, Presence, Vote, CatchUp, TurnBatch And CaughtUp: Numbers, Layouts Byte By Byte, Every Truncation, Every Range Rule, The Batch Encoders Agree") {
+    TEST_CASE("N2.40 Protocol 10: Keys In Hello And Welcome, Three More Rejections, Presence (With The Resume Countdown), Vote, CatchUp, TurnBatch And CaughtUp: Numbers, Layouts Byte By Byte, Every Truncation, Every Range Rule, The Batch Encoders Agree") {
         // ---- the numbers ----
         ASSERT_EQ(kProtocolVersion, 10);
         ASSERT_TRUE(static_cast<int>(MsgType::Presence) == 26 && static_cast<int>(MsgType::Vote) == 27 && static_cast<int>(MsgType::CatchUp) == 28 &&
@@ -1531,11 +1532,12 @@ void run_protocol_tests() {
             base.your_vote = 2;
             base.cap_s = 1700;
             const std::vector<uint8_t> bytes = encode(base);
-            ASSERT_EQ(bytes.size(), size_t{1 + 1 + 2 * 5 + 4 + 2});
+            ASSERT_EQ(bytes.size(), size_t{1 + 1 + 2 * 5 + 4 + 2 + 1});
             ASSERT_TRUE(bytes[0] == 26 && bytes[1] == 2);
             ASSERT_TRUE(bytes[2] == 1 && bytes[3] == 1 && bytes[4] == 42 && bytes[5] == 0 && bytes[6] == 0);                    // seat 1, absent, waited 42 s (u16), no progress
             ASSERT_TRUE(bytes[7] == 3 && bytes[8] == 2 && bytes[9] == 31 && bytes[10] == 0 && bytes[11] == 63);                // seat 3, catching up, 31 s, 63 %
             ASSERT_TRUE(bytes[12] == 1 && bytes[13] == 1 && bytes[14] == 2 && bytes[15] == 2 && bytes[16] == (1700 & 0xFF) && bytes[17] == (1700 >> 8));
+            ASSERT_TRUE(bytes[18] == 0);                                                                                       // no countdown
             PresenceMsg back;
             ASSERT_TRUE(decode(bytes, back) && back.missing.size() == 2 && back.missing[0].seat == 1 && back.missing[0].waited_s == 42 && back.missing[1].state == PresenceMsg::State::CatchingUp &&
                         back.missing[1].progress == 63 && back.vote_seat == 1 && back.votes_continue == 1 && back.voters == 2 && back.your_vote == 2 && back.cap_s == 1700);
@@ -1556,7 +1558,7 @@ void run_protocol_tests() {
             ASSERT_TRUE(decode(encode(runs), back) && back.missing.empty() && back.vote_seat == 255 && back.voters == 3 && back.cap_s == 0);
             runs.cap_s = 0xFFFF;
             ASSERT_TRUE(decode(encode(runs), back) && back.cap_s == 0xFFFF);
-            ASSERT_EQ(encode(PresenceMsg{}).size(), size_t{1 + 1 + 4 + 2});
+            ASSERT_EQ(encode(PresenceMsg{}).size(), size_t{1 + 1 + 4 + 2 + 1});
             // every truncation and a byte too many
             for (size_t keep = 0; keep < bytes.size(); ++keep) {
                 const std::vector<uint8_t> shorter(bytes.begin(), bytes.begin() + static_cast<std::ptrdiff_t>(keep));
@@ -1588,10 +1590,9 @@ void run_protocol_tests() {
             ASSERT_TRUE(with(9, 42) && back.missing[1].waited_s == 42);  // equal waits are in order (a tie)
             ASSERT_FALSE(with(9, 43));                                   // the second seat waited longer than the first: not longest away first
             ASSERT_TRUE(with(4, 255) && back.missing[0].waited_s == 255);// (a longer first wait is in order: the second is 31)
-            ASSERT_FALSE(with(12, 3));                                   // the vote is about a seat that is catching up
-            ASSERT_FALSE(with(12, 0));                                   // ... or about one that is not listed
-            ASSERT_FALSE(with(12, 2));
-            ASSERT_FALSE(with(12, 4));
+            ASSERT_TRUE(with(12, 3) && back.vote_seat == 3);             // the vote may be about a seat that is catching up, or one that is not missing at all (a seat that FLAPS is put to the vote in any state) ...
+            ASSERT_TRUE(with(12, 0) && with(12, 2) && back.vote_seat == 2);
+            ASSERT_FALSE(with(12, 4));                                   // ... but about a seat that exists
             ASSERT_FALSE(with(12, 254));
             ASSERT_FALSE(with(13, 3));                                   // more votes (3) than voters (2)
             ASSERT_TRUE(with(13, 2));
@@ -1604,6 +1605,10 @@ void run_protocol_tests() {
             ASSERT_TRUE(with(16, 0) && back.cap_s == (1700 & 0xFF00));   // the cap, a u16 that nothing constrains
             ASSERT_TRUE(with(17, 0) && back.cap_s == (1700 & 0x00FF));
             ASSERT_TRUE(with(17, 0xFF) && back.cap_s == (0xFF00 | (1700 & 0xFF)));
+            ASSERT_TRUE(with(18, 0) && back.resume_s == 0);              // the countdown of the resume: none while a seat is missing (the match is paused, nothing counts down)
+            ASSERT_FALSE(with(18, 1));
+            ASSERT_FALSE(with(18, 60));
+            ASSERT_FALSE(with(18, 255));
             // no vote: nobody has voted, and the receiver has no choice
             PresenceMsg no_vote = base;
             no_vote.vote_seat = 255;
@@ -1615,22 +1620,47 @@ void run_protocol_tests() {
             no_vote.votes_continue = 0;
             no_vote.your_vote = 1;
             ASSERT_FALSE(decode(encode(no_vote), back));
-            // the vote is about the FIRST ABSENT seat of the list: a catching-up seat that is away longer comes first and is not the subject
+            // the vote may be about any seat of the match (a seat that flaps is the subject whatever its state), listed or not; only a seat that does not exist is refused
             PresenceMsg catching_first;
             catching_first.missing = {{3, PresenceMsg::State::CatchingUp, 90, 10}, {1, PresenceMsg::State::Absent, 60, 0}, {0, PresenceMsg::State::Absent, 40, 0}};
             catching_first.voters = 1;
-            catching_first.vote_seat = 1;
-            ASSERT_TRUE(decode(encode(catching_first), back) && back.vote_seat == 1);
-            catching_first.vote_seat = 0;                                // the second absent seat is not the subject
+            for (const uint8_t seat : {uint8_t{0}, uint8_t{1}, uint8_t{2}, uint8_t{3}}) {
+                catching_first.vote_seat = seat;
+                ASSERT_TRUE(decode(encode(catching_first), back) && back.vote_seat == seat);
+            }
+            catching_first.vote_seat = 4;
             ASSERT_FALSE(decode(encode(catching_first), back));
-            catching_first.vote_seat = 3;
-            ASSERT_FALSE(decode(encode(catching_first), back));
-            // four missing (everybody), all catching up: no vote is possible
+            // the resume countdown: 1 .. 60 seconds, only while nobody is missing; the vote may go on during it (a seat that flaps and is back)
+            PresenceMsg count;
+            count.voters = 3;
+            count.cap_s = 1234;
+            for (unsigned secs = 0; secs <= 60; ++secs) {
+                count.resume_s = static_cast<uint8_t>(secs);
+                const std::vector<uint8_t> b = encode(count);
+                ASSERT_TRUE(b.size() == 1 + 1 + 4 + 2 + 1 && b.back() == secs);
+                ASSERT_TRUE(decode(b, back) && back.resume_s == secs && encode(back) == b);
+            }
+            for (unsigned secs = 61; secs < 256; ++secs) {
+                count.resume_s = static_cast<uint8_t>(secs);
+                ASSERT_FALSE(decode(encode(count), back));                          // more than a minute is not a countdown that a server makes
+            }
+            count.resume_s = 10;
+            count.vote_seat = 2;
+            count.votes_continue = 1;
+            count.voters = 2;
+            ASSERT_TRUE(decode(encode(count), back) && back.resume_s == 10 && back.vote_seat == 2);
+            count.missing = {{1, PresenceMsg::State::Absent, 5, 0}};                    // somebody is missing again: no countdown runs
+            ASSERT_FALSE(decode(encode(count), back));
+            count.missing = {{1, PresenceMsg::State::CatchingUp, 5, 50}};
+            ASSERT_FALSE(decode(encode(count), back));
+            count.resume_s = 0;
+            ASSERT_TRUE(decode(encode(count), back) && back.resume_s == 0);
+            // four missing (everybody), all catching up
             PresenceMsg all_four;
             for (uint8_t s = 0; s < 4; ++s) all_four.missing.push_back({s, PresenceMsg::State::CatchingUp, static_cast<uint16_t>(100 - s), static_cast<uint8_t>(s * 10)});
             ASSERT_TRUE(decode(encode(all_four), back) && back.missing.size() == 4);
-            all_four.vote_seat = 0;
-            ASSERT_FALSE(decode(encode(all_four), back));
+            all_four.vote_seat = 0;                                      // (a seat that flaps may be the subject of a vote in any state: the decoder takes it)
+            ASSERT_TRUE(decode(encode(all_four), back) && back.vote_seat == 0);
             // the encoder never writes more than four entries
             PresenceMsg crowd = all_four;
             crowd.vote_seat = 255;
@@ -2442,18 +2472,16 @@ void run_reconnect_core_tests() {
                 ASSERT_TRUE(hostile.bytes() <= limit);
             }
             ASSERT_EQ(made, fit);                                         // exactly the turns that fit
-            ASSERT_EQ(hostile.turns(), fit);
-            ASSERT_EQ(hostile.bytes(), size_t{fit} * each);
-            ASSERT_FALSE(hostile.usable());                               // a log with a hole serves no replay
-            const size_t held = hostile.bytes();
+            ASSERT_FALSE(hostile.usable());                               // a log with a hole serves no replay ...
+            ASSERT_TRUE(hostile.turns() == 0 && hostile.bytes() == 0 && hostile.capacity_bytes() == 0);   // ... and a log that is dead holds nothing: what it had is freed the moment it died
             ASSERT_FALSE(hostile.append(heavy_turn(fit, 64, 32)));
             TurnMsg tiny;
             tiny.turn = fit;
-            ASSERT_FALSE(hostile.append(tiny));                           // not even a small turn: it stays stopped, and nothing is stored or allocated
-            ASSERT_TRUE(hostile.turns() == fit && hostile.bytes() == held && !hostile.usable());
-            std::vector<uint8_t> out;                                     // what was stored can still be read
-            ASSERT_EQ(hostile.read(0, 4096, SIZE_MAX, out), fit);
-            ASSERT_EQ(out.size(), held - size_t{fit} * 4);
+            ASSERT_FALSE(hostile.append(tiny));                           // not even a small turn: it stays dead, and nothing is stored or allocated
+            ASSERT_TRUE(hostile.turns() == 0 && hostile.bytes() == 0 && hostile.capacity_bytes() == 0 && !hostile.usable());
+            std::vector<uint8_t> out;                                     // nothing can be read from it, nothing streamed
+            ASSERT_EQ(hostile.read(0, 4096, SIZE_MAX, out), 0u);
+            ASSERT_TRUE(out.empty() && hostile.bytes_between(0, 100) == 0);
         }
         // the limit to the byte: three empty turns cost 3 x (2 + 4) = 18
         for (const size_t limit : {size_t{0}, size_t{5}, size_t{6}, size_t{11}, size_t{12}, size_t{17}, size_t{18}, size_t{19}, size_t{23}, size_t{24}}) {
@@ -2466,8 +2494,14 @@ void run_reconnect_core_tests() {
                 ++made;
             }
             ASSERT_EQ(made, static_cast<uint32_t>(limit / 6));
-            ASSERT_TRUE(tight.bytes() == size_t{made} * 6 && tight.bytes() <= limit);
-            ASSERT_FALSE(tight.usable());                                 // (the loop ends when an append is refused)
+            ASSERT_FALSE(tight.usable());                                 // (the loop ends when an append is refused: the log is dead and holds nothing)
+            ASSERT_TRUE(tight.bytes() == 0 && tight.turns() == 0);
+            // (what it held while it lived: the same turns again, one fewer than refused)
+            TurnLog again(limit);
+            for (uint32_t t = 0; t < made; ++t) {
+                empty.turn = t;
+                ASSERT_TRUE(again.append(empty) && again.bytes() == size_t{t + 1} * 6 && again.bytes() <= limit);
+            }
         }
         // whatever the limit, never more than 0xFFFFFFF0 bytes (the offsets are 32 bits)
         ASSERT_EQ(TurnLog(SIZE_MAX).max_bytes(), static_cast<size_t>(0xFFFFFFF0u));
@@ -2485,7 +2519,7 @@ void run_reconnect_core_tests() {
             TurnLog twice;
             ASSERT_TRUE(twice.append(t0));
             ASSERT_FALSE(twice.append(t0));
-            ASSERT_TRUE(!twice.usable() && twice.turns() == 1);
+            ASSERT_TRUE(!twice.usable() && twice.turns() == 0 && twice.bytes() == 0);      // (dead: it freed the turn that it had)
         }
         // a turn that no batch could carry: the largest turn that does is 65,526 bytes packed (7 bytes of batch header and 65,529 are what a message may hold, and a turn is 2 + a multiple of 4)
         {
@@ -2521,7 +2555,7 @@ void run_reconnect_core_tests() {
         }
     } TEST_END();
 
-    TEST_CASE("N2.42 Attendance: Every Transition Of The Table, The Impossible Ones Change Nothing, Away Time Adds Up Over Episodes (Each Loss Counts At Least 5 s), The Pause Counts Each Moment Once And Not The Minimum") {
+    TEST_CASE("N2.42 Attendance: Every Transition Of The Table, The Impossible Ones Change Nothing, Away Time Adds Up Over Episodes (Each Loss Counts At Least 5 s), The Pause Counts Each Moment Once (And At Least 5 s For Every Pause, For The Cap)") {
         using S = Attendance::State;
         const uint32_t t0 = 100000;
         // a snapshot of everything that can be seen: a call that must be a no-op may not change any of it
@@ -2598,7 +2632,8 @@ void run_reconnect_core_tests() {
             ASSERT_TRUE(a.paused());
             ASSERT_EQ(a.away_ms(1, t0 + 1000), 0u);
             ASSERT_EQ(a.away_ms(1, t0 + 4000), 3000u);
-            ASSERT_EQ(a.pause_ms(t0 + 4000), 3000u);
+            ASSERT_EQ(a.pause_ms(t0 + 4000), 5000u);                                 // (a pause counts at least 5 s toward the cap, from the moment it begins: 3 s were real)
+            ASSERT_EQ(a.held_ms(t0 + 4000), 3000u);                                  // (the time that the match was held counts what it really was)
             ASSERT_FALSE(a.lost(1, t0 + 4500));                                      // already lost: the absence does not begin again
             ASSERT_EQ(a.away_ms(1, t0 + 5000), 4000u);
             ASSERT_EQ(a.connected_humans(), 2);
@@ -2625,23 +2660,25 @@ void run_reconnect_core_tests() {
             ASSERT_EQ(a.pause_ms(t0 + 8000), 7000u);
             ASSERT_EQ(a.pause_ms(t0 + 99999), 7000u);                                // nor does the pause
             ASSERT_EQ(a.connected_humans(), 3);
-            // episode 2: a blip of 300 ms: it counts 5 s toward the seat's total, and 300 ms toward the pause
+            // episode 2: a blip of 300 ms: it counts 5 s toward the seat's total, and 5 s toward the pause (so that a connection that flaps reaches the cap too)
             ASSERT_TRUE(a.lost(1, t0 + 20000));
             ASSERT_TRUE(a.returning(1, t0 + 20100));
             ASSERT_EQ(a.away_ms(1, t0 + 20300), 7300u);                              // (while it goes on, the real time: 7 s and 300 ms)
             ASSERT_TRUE(a.caught_up(1, t0 + 20300));
             ASSERT_EQ(a.away_ms(1, t0 + 20300), 12000u);                             // 7 s + the minimum of 5 s
-            ASSERT_EQ(a.pause_ms(t0 + 20300), 7300u);                                // the pause was 300 ms: the minimum is for the vote, not for the room's budget
+            ASSERT_EQ(a.pause_ms(t0 + 20300), 7000u + 5000u);                        // the pause was 300 ms: the minimum counts for the cap, as for the vote
+            ASSERT_EQ(a.held_ms(t0 + 20300), 7300u);                                 // (and what the match really waited: 7 s and 300 ms)
             // episode 3: 9 s, over the minimum
             ASSERT_TRUE(a.lost(1, t0 + 30000));
             ASSERT_EQ(a.away_ms(1, t0 + 30100), 12100u);
             ASSERT_TRUE(a.returning(1, t0 + 38000));
             ASSERT_TRUE(a.caught_up(1, t0 + 39000));
             ASSERT_EQ(a.away_ms(1, t0 + 39000), 21000u);                             // 12 s + 9 s
-            ASSERT_EQ(a.pause_ms(t0 + 39000), 7300u + 9000u);
+            ASSERT_EQ(a.pause_ms(t0 + 39000), 12000u + 9000u);
+            ASSERT_EQ(a.held_ms(t0 + 39000), 7300u + 9000u);
             ASSERT_EQ(a.rejoins(), 3u);
             ASSERT_EQ(a.away_ms(0, t0 + 39000), 0u);                                 // the others have not been away
-            ASSERT_EQ(a.cap_s(t0 + 39000), static_cast<uint16_t>((1800000u - 16300u + 999u) / 1000u));
+            ASSERT_EQ(a.cap_s(t0 + 39000), static_cast<uint16_t>((1800000u - 21000u + 999u) / 1000u));
         }
         {   // a catch-up that fails: the seat is Absent again and its time kept running from the loss; the pause goes on
             Attendance a;
@@ -2654,10 +2691,10 @@ void run_reconnect_core_tests() {
             ASSERT_EQ(a.away_ms(1, t0 + 17000), 16000u);
             ASSERT_TRUE(a.paused());
             ASSERT_EQ(a.pause_ms(t0 + 17000), 16000u);
-            ASSERT_TRUE(a.returning(1, t0 + 18000));                                 // a second try: the percent starts again
+            ASSERT_TRUE(a.returning(1, t0 + 18000));                                 // a second try (after the first failed): the percent starts again
             ASSERT_TRUE(a.progress(1, 5, t0 + 18100));                               // (5 is more than the 0 of the new try, less than the 30 of the old)
-            ASSERT_TRUE(a.returning(1, t0 + 19000));                                 // a third while still catching up: again from 0, the loss still counts from the first
-            ASSERT_EQ(a.percent(1), 0);
+            ASSERT_TRUE(a.returning(1, t0 + 19000));                                 // a third Hello while the second try goes on: the try goes on as it was (REWRITTEN: it used to start again from 0 with a new stall clock, which let a key holder keep the pause alive for ever)
+            ASSERT_EQ(a.percent(1), 5);
             ASSERT_EQ(a.away_ms(1, t0 + 20000), 19000u);
             ASSERT_TRUE(a.caught_up(1, t0 + 21000));
             ASSERT_EQ(a.away_ms(1, t0 + 21000), 20000u);
@@ -2670,10 +2707,12 @@ void run_reconnect_core_tests() {
             ASSERT_TRUE(a.paused());
             ASSERT_EQ(a.away_ms(1, t0 + 5000), 0u);
             ASSERT_EQ(a.away_ms(1, t0 + 7000), 2000u);                               // not since the start of the match
-            ASSERT_EQ(a.pause_ms(t0 + 7000), 2000u);
+            ASSERT_EQ(a.pause_ms(t0 + 7000), 5000u);                                 // (2 s were real: a pause counts at least 5 s toward the cap)
+            ASSERT_EQ(a.held_ms(t0 + 7000), 2000u);
             ASSERT_TRUE(a.caught_up(1, t0 + 7000));
             ASSERT_EQ(a.away_ms(1, t0 + 7000), 5000u);                               // a loss counts at least 5 s
-            ASSERT_EQ(a.pause_ms(t0 + 7000), 2000u);
+            ASSERT_EQ(a.pause_ms(t0 + 7000), 5000u);
+            ASSERT_EQ(a.held_ms(t0 + 7000), 2000u);
         }
         // ---- dropped is final, from every state, and ends the absence ----
         for (const int from : {0, 1, 2}) {
@@ -2716,10 +2755,11 @@ void run_reconnect_core_tests() {
             ASSERT_EQ(a.away_ms(1, t0 + 80000), 10000u);
             ASSERT_EQ(a.away_ms(2, t0 + 80000), 8000u);
             ASSERT_EQ(a.rejoins(), 2u);
-            // a blip of a second: 5 s for the seat, 1 s for the pause
+            // a blip of a second: 5 s for the seat, and 5 s for the cap (what the match really waited was 1 s)
             ASSERT_TRUE(a.lost(2, t0 + 100000) && a.returning(2, t0 + 100500) && a.caught_up(2, t0 + 101000));
             ASSERT_EQ(a.away_ms(2, t0 + 101000), 13000u);
-            ASSERT_EQ(a.pause_ms(t0 + 101000), 13000u);
+            ASSERT_EQ(a.pause_ms(t0 + 101000), 12000u + 5000u);
+            ASSERT_EQ(a.held_ms(t0 + 101000), 12000u + 1000u);
         }
         {   // the match begins again: everything that was before is forgotten
             Attendance a;
@@ -2751,7 +2791,9 @@ void run_reconnect_core_tests() {
             ASSERT_EQ(b.away_ms(3, t0 + 42999), 29999u);
             ASSERT_EQ(b.vote_subject(t0 + 42999), 255);
             ASSERT_EQ(b.vote_subject(t0 + 43000), 3);
-            Attendance c;                                                            // three losses of a second each count 5 s each: the vote opens at 15 s of loss in all ...
+            Attendance::Config many;                                                 // (a seat is taken back three times a minute by default: this one is cut every 3 s, so the rule is raised to its most)
+            many.rejoin_attempts = Attendance::kMaxRejoinAttempts;
+            Attendance c(many);                                                      // six losses of a second each count 5 s each: the vote opens at 30 s of loss in all ...
             c.seat_humans(0b1011, t0);
             for (int i = 0; i < 6; ++i) {
                 const uint32_t at = t0 + static_cast<uint32_t>(i) * 3000u;
@@ -2937,7 +2979,7 @@ void run_reconnect_core_tests() {
         }
     } TEST_END();
 
-    TEST_CASE("N2.44 Attendance: A Catch-Up That Shows No Progress For 20 s Is Let Go; No Seat Is Dropped For Its Own Time, The Match's Total Pause Is Capped (Every Absent Seat Is Dropped At The Cap, A Seat That Progresses Is Not) And cap_s Counts Down; The Same Sequence Across The Wrap Of The Clock; Presence Is Always Something The Decoder Takes") {
+    TEST_CASE("N2.44 Attendance: A Catch-Up That Shows No Progress For 20 s Is Let Go; No Seat Is Dropped For Its Own Time, The Match's Total Pause Is Capped (Every Seat That Is Not Present Is Dropped At The Cap, Absent Or Catching Up, Whatever Progress It Shows) And cap_s Counts Down; The Same Sequence Across The Wrap Of The Clock; Presence Is Always Something The Decoder Takes") {
         using S = Attendance::State;
         // ---- the stall: 20 s without progress (a higher percent) and the seat is absent again ----
         {
@@ -3025,29 +3067,27 @@ void run_reconnect_core_tests() {
                 const std::vector<uint8_t> dropped = a.update(t0 + 310000);
                 ASSERT_TRUE(dropped.size() == 1 && dropped[0] == 1);
             }
-            {   // a seat that is catching up and makes progress keeps its chance past the cap; when it stops, it is Absent again and the cap takes it in the same pass
+            {   // the cap is ABSOLUTE: a seat that is catching up and makes progress is dropped at the cap like every seat that is not present (REWRITTEN: it used to keep its chance for as long as it
+                // made progress, and a key holder that said Hello again and again, each time with a little progress, held a room paused for ever)
                 Attendance a(cfg);
                 a.seat_humans(0b0111, t0);
                 ASSERT_TRUE(a.lost(1, t0) && a.returning(1, t0 + 30000));
                 ASSERT_TRUE(a.progress(1, 5, t0 + 40000) && a.progress(1, 6, t0 + 55000));
-                ASSERT_TRUE(a.update(t0 + 60000).empty() && a.state(1) == S::CatchingUp);     // the cap is reached: nothing is dropped, the seat is back and getting on
-                ASSERT_TRUE(a.cap_reached(t0 + 60000) && a.cap_s(t0 + 60000) == 0 && a.paused());
-                ASSERT_TRUE(a.progress(1, 10, t0 + 65000) && a.update(t0 + 70000).empty() && a.state(1) == S::CatchingUp);
-                ASSERT_TRUE(a.progress(1, 20, t0 + 80000) && a.update(t0 + 90000).empty() && a.state(1) == S::CatchingUp);
-                ASSERT_TRUE(a.update(t0 + 99999).empty() && a.state(1) == S::CatchingUp);     // 19,999 ms since the last progress
-                ASSERT_EQ(a.pause_ms(t0 + 99999), 99999u);                                    // (the pause goes on counting: it is a pause)
-                const std::vector<uint8_t> dropped = a.update(t0 + 100000);                  // 20 s: let go, Absent, and there is no pause left: dropped, in one pass
+                ASSERT_TRUE(a.update(t0 + 59999).empty() && a.state(1) == S::CatchingUp);     // 1 ms before the cap: it is getting on
+                ASSERT_FALSE(a.cap_reached(t0 + 59999));
+                const std::vector<uint8_t> dropped = a.update(t0 + 60000);                   // the cap: dropped, whatever progress it shows
                 ASSERT_TRUE(dropped.size() == 1 && dropped[0] == 1 && a.state(1) == S::Dropped);
+                ASSERT_TRUE(a.cap_reached(t0 + 60000) && a.cap_s(t0 + 60000) == 0);
                 ASSERT_EQ(a.drops_by_cap(), 1u);
                 ASSERT_FALSE(a.paused());
-                // a seat that catches up in time is back, and past the cap it stays: a later loss is dropped at once
+                // a seat that catches up in time is back; a later loss, which counts 5 s at least, finds the cap reached and is dropped at once
                 Attendance b(cfg);
                 b.seat_humans(0b0111, t0);
                 ASSERT_TRUE(b.lost(1, t0) && b.returning(1, t0 + 30000) && b.progress(1, 50, t0 + 50000));
-                ASSERT_TRUE(b.update(t0 + 60000).empty() && b.progress(1, 99, t0 + 65000) && b.caught_up(1, t0 + 66000));
+                ASSERT_TRUE(b.update(t0 + 55000).empty() && b.progress(1, 99, t0 + 55000) && b.caught_up(1, t0 + 56000));
                 ASSERT_TRUE(b.state(1) == S::Present && !b.paused());
-                ASSERT_EQ(b.pause_ms(t0 + 66000), 66000u);                                    // (past the cap: the pause that it ended is counted all the same)
-                ASSERT_TRUE(b.lost(2, t0 + 70000));                                           // the budget is gone: the next loss is dropped at once
+                ASSERT_EQ(b.pause_ms(t0 + 56000), 56000u);
+                ASSERT_TRUE(b.lost(2, t0 + 70000));                                           // (56 s + at least 5 s: the budget of 60 s is gone)
                 const std::vector<uint8_t> next = b.update(t0 + 70000);
                 ASSERT_TRUE(next.size() == 1 && next[0] == 2);
                 // a catch-up that was not getting on at all is let go before the cap can wait for it: 20 s without progress
@@ -3079,10 +3119,12 @@ void run_reconnect_core_tests() {
             ASSERT_EQ(a.cap_s(t0), 60);                                                       // not paused: the whole budget
             ASSERT_EQ(a.cap_s(t0 + 99999), 60);                                               // (and it does not run down while nobody is away)
             ASSERT_TRUE(a.lost(1, t0 + 5000));
-            ASSERT_EQ(a.cap_s(t0 + 5000), 60);
-            ASSERT_EQ(a.cap_s(t0 + 5001), 60);                                                // 59,999 ms: still "60" (rounded up)
-            ASSERT_EQ(a.cap_s(t0 + 6000), 59);
-            ASSERT_EQ(a.cap_s(t0 + 6001), 59);
+            ASSERT_EQ(a.cap_s(t0 + 5000), 55);                                                // (a pause counts at least 5 s, from its first moment)
+            ASSERT_EQ(a.cap_s(t0 + 5001), 55);
+            ASSERT_EQ(a.cap_s(t0 + 10000), 55);                                               // 5 s really: the minimum and the pause agree
+            ASSERT_EQ(a.cap_s(t0 + 10001), 55);                                               // 54,999 ms: still "55" (rounded up)
+            ASSERT_EQ(a.cap_s(t0 + 11000), 54);
+            ASSERT_EQ(a.cap_s(t0 + 11001), 54);
             ASSERT_EQ(a.cap_s(t0 + 34000), 31);
             ASSERT_EQ(a.cap_s(t0 + 64000), 1);
             ASSERT_EQ(a.cap_s(t0 + 64001), 1);
@@ -3245,7 +3287,7 @@ void run_reconnect_core_tests() {
                         ASSERT_EQ(back.vote_seat, a.vote_subject(now));
                         if (back.vote_seat != 255) {
                             ASSERT_EQ(back.votes_continue, a.votes_for_continue(back.vote_seat));
-                            ASSERT_TRUE(a.state(back.vote_seat) == S::Absent && a.away_ms(back.vote_seat, now) >= cfg.vote_after_ms);
+                            ASSERT_TRUE((a.state(back.vote_seat) == S::Absent && a.away_ms(back.vote_seat, now) >= cfg.vote_after_ms) || a.flapping(back.vote_seat, now));      // (away long enough, or a seat that flaps)
                             ASSERT_TRUE(viewer == 255 ? back.your_vote == 0 : (a.state(viewer) == S::Present || back.your_vote == 0));
                         }
                         for (const auto& e : back.missing) {
@@ -3640,6 +3682,679 @@ void run_reconnect_core_tests() {
             ASSERT_EQ(runner.fast_forward(100), 0u);                                      // nothing queued: nothing done, and what the runner has learned stays learned
             ASSERT_EQ(runner.fast_forward(100), 0u);
             ASSERT_TRUE(runner.buffer_turns() == learned && runner.jitter().lateness_ms() == lateness);
+        }
+    } TEST_END();
+    // ---- the fixes of the review of release A: the budgets of a key holder, flapping, the resume countdown (N2.75 - N2.79) -------------------------------------------------------
+
+    TEST_CASE("N2.75 Attendance: The Catch-Up Budget Of An Absence: A Hello Of An Attempt That Is In Progress Does Not Start Its Stall Clock, Percent Or Time Again; The Time Of All The Attempts Of One Absence Is Added Up; Used Up, The Catch-Up Fails At That Moment (The Seat Is Absent: The Vote And The Cap Apply) And A Hello Is Refused; A New Absence Has It All Again") {
+        using S = Attendance::State;
+        const uint32_t t0 = 400000;
+        Attendance::Config cfg;
+        cfg.max_catch_up_ms = 60000;
+        cfg.max_pause_ms = 600000;
+        cfg.rejoin_attempts = Attendance::kMaxRejoinAttempts;               // (this test is about time, not about the number of Hellos: N2.76)
+        ASSERT_TRUE(Attendance::Config{}.max_catch_up_ms == 300000 && kMaxCatchUpMs == 300000);          // the default: five minutes
+        {   // a Hello of the attempt that goes on changes nothing of it
+            Attendance a(cfg);
+            a.seat_humans(0b0111, t0);
+            ASSERT_TRUE(a.lost(1, t0) && a.returning(1, t0 + 1000));
+            ASSERT_TRUE(a.progress(1, 10, t0 + 5000));
+            ASSERT_TRUE(a.returning(1, t0 + 12000));                         // 12 s into the attempt it says Hello again
+            ASSERT_EQ(a.state(1), S::CatchingUp);
+            ASSERT_EQ(a.percent(1), 10);                                      // (it used to start at 0 again)
+            ASSERT_EQ(a.catching_up_ms(1, t0 + 12000), 11000u);               // the attempt began at 1 s: its time goes on
+            ASSERT_TRUE(a.returning(1, t0 + 24000));                          // and again: the stall clock is that of the progress at 5 s, whatever Hellos come
+            ASSERT_TRUE(a.update(t0 + 24999).empty() && a.state(1) == S::CatchingUp);
+            ASSERT_TRUE(a.update(t0 + 25000).empty());
+            ASSERT_EQ(a.state(1), S::Absent);                                 // 20 s after the last progress
+            ASSERT_EQ(a.catching_up_ms(1, t0 + 25000), 24000u);               // the attempt took 24 s of the 60
+        }
+        {   // the attempts of one absence add up, and a seat that makes progress is let go at the budget all the same
+            Attendance a(cfg);
+            a.seat_humans(0b0111, t0);
+            ASSERT_TRUE(a.lost(1, t0));
+            ASSERT_EQ(a.catching_up_ms(1, t0 + 100000), 0u);                  // an absent seat is not catching up
+            ASSERT_TRUE(a.returning(1, t0 + 10000));                          // attempt 1: it never progresses, the stall ends it after 20 s
+            ASSERT_TRUE(a.update(t0 + 30000).empty() && a.state(1) == S::Absent);
+            ASSERT_EQ(a.catching_up_ms(1, t0 + 31000), 20000u);
+            ASSERT_TRUE(a.returning(1, t0 + 40000));                          // attempt 2: it progresses every 10 s, so the stall never ends it
+            for (uint32_t k = 1; k <= 3; ++k) ASSERT_TRUE(a.progress(1, static_cast<uint8_t>(k * 10), t0 + 40000 + k * 10000));     // 50, 60 and 70 s
+            ASSERT_EQ(a.catching_up_ms(1, t0 + 79999), 20000u + 39999u);
+            ASSERT_TRUE(a.update(t0 + 79999).empty() && a.state(1) == S::CatchingUp);
+            ASSERT_EQ(a.rejoin_check(1, t0 + 79999), Attendance::Rejoin::Allowed);          // 1 ms is left
+            ASSERT_EQ(a.rejoin_check(1, t0 + 80000), Attendance::Rejoin::CatchUpSpent);     // 60 s: none
+            ASSERT_TRUE(a.update(t0 + 80000).empty());                        // let go at the budget, 10 s after its last progress
+            ASSERT_EQ(a.state(1), S::Absent);
+            ASSERT_EQ(a.catch_up_expired(), 1u);
+            ASSERT_EQ(a.percent(1), 0);
+            ASSERT_EQ(a.rejoins_refused(), 0u);
+            ASSERT_FALSE(a.returning(1, t0 + 81000));                         // a Hello is refused, nothing changes, it is counted
+            ASSERT_EQ(a.state(1), S::Absent);
+            ASSERT_EQ(a.rejoins_refused(), 1u);
+            ASSERT_EQ(a.catching_up_ms(1, t0 + 500000), 60000u);              // (it stays what it was: an absent seat does not catch up)
+            ASSERT_FALSE(a.returning(1, t0 + 500000));
+            ASSERT_EQ(a.catch_up_expired(), 1u);                              // (and a refusal is not an expiry)
+            ASSERT_EQ(a.vote_subject(t0 + 81000), 1);                         // the vote opens: it has been away 81 s, and nothing keeps it catching up
+            ASSERT_TRUE(a.vote(0, 1, true, t0 + 81000) && a.vote(2, 1, true, t0 + 81000));
+            ASSERT_EQ(a.update(t0 + 81000).size(), 1u);
+            ASSERT_EQ(a.drops_by_vote(), 1u);
+        }
+        {   // the cap applies to a seat whose budget is spent (no vote is cast: the cap, 120 s, takes it)
+            Attendance::Config cap = cfg;
+            cap.max_pause_ms = 120000;
+            Attendance a(cap);
+            a.seat_humans(0b0111, t0);
+            ASSERT_TRUE(a.lost(1, t0) && a.returning(1, t0 + 1000));
+            for (uint32_t k = 1; k <= 5; ++k) ASSERT_TRUE(a.progress(1, static_cast<uint8_t>(k), t0 + 1000 + k * 10000));
+            ASSERT_TRUE(a.update(t0 + 60999).empty() && a.state(1) == S::CatchingUp);
+            ASSERT_TRUE(a.update(t0 + 61000).empty() && a.state(1) == S::Absent);
+            ASSERT_FALSE(a.returning(1, t0 + 62000));
+            ASSERT_TRUE(a.update(t0 + 119999).empty());
+            const std::vector<uint8_t> dropped = a.update(t0 + 120000);
+            ASSERT_TRUE(dropped.size() == 1 && dropped[0] == 1 && a.drops_by_cap() == 1u);
+        }
+        {   // the budget is of one absence: catching up ends it (the next absence has all of it), and so does a seat that was Present (a second window)
+            Attendance a(cfg);
+            a.seat_humans(0b0111, t0);
+            ASSERT_TRUE(a.lost(1, t0) && a.returning(1, t0 + 1000));
+            ASSERT_TRUE(a.progress(1, 50, t0 + 20000) && a.progress(1, 60, t0 + 40000));
+            ASSERT_TRUE(a.update(t0 + 50000).empty() && a.caught_up(1, t0 + 50000));      // 49 s of the 60 were spent
+            ASSERT_EQ(a.catching_up_ms(1, t0 + 50000), 0u);
+            ASSERT_TRUE(a.lost(1, t0 + 100000) && a.returning(1, t0 + 101000));
+            ASSERT_EQ(a.catching_up_ms(1, t0 + 130000), 29000u);
+            ASSERT_TRUE(a.progress(1, 5, t0 + 110000) && a.progress(1, 6, t0 + 120000) && a.progress(1, 7, t0 + 130000));
+            ASSERT_TRUE(a.update(t0 + 130000).empty() && a.state(1) == S::CatchingUp);    // (49 s would have been 20 s over)
+            ASSERT_TRUE(a.caught_up(1, t0 + 131000));
+            // a window that takes over a seat whose old link was alive starts an absence with all of the budget
+            ASSERT_TRUE(a.returning(1, t0 + 200000));
+            ASSERT_EQ(a.catching_up_ms(1, t0 + 210000), 10000u);
+        }
+        {   // an attempt that failed and one that got through: the time of the first is given back with the seat (caught up), and what the next absence may spend is all of it again
+            Attendance a(cfg);
+            a.seat_humans(0b0111, t0);
+            ASSERT_TRUE(a.lost(1, t0) && a.returning(1, t0 + 1000));
+            ASSERT_TRUE(a.update(t0 + 21000).empty() && a.state(1) == S::Absent);        // 20 s without progress
+            ASSERT_EQ(a.catching_up_ms(1, t0 + 25000), 20000u);
+            ASSERT_TRUE(a.returning(1, t0 + 30000) && a.progress(1, 90, t0 + 35000) && a.caught_up(1, t0 + 36000));
+            ASSERT_EQ(a.catching_up_ms(1, t0 + 36000), 0u);                               // back: nothing of the absence is held against the seat
+            ASSERT_TRUE(a.lost(1, t0 + 100000) && a.returning(1, t0 + 101000));
+            ASSERT_EQ(a.catching_up_ms(1, t0 + 130000), 29000u);                          // (the next absence counts from 0, not from the 26 s of the last)
+            ASSERT_EQ(a.rejoin_check(1, t0 + 130000), Attendance::Rejoin::Allowed);
+        }
+    } TEST_END();
+
+    TEST_CASE("N2.76 Attendance: The Rejoin Budget Of A Seat: At Most Three Hellos Are Accepted In A Minute (The Window Slides To The Millisecond), And At Most Three Times The Log's Size Is Streamed In Ten Minutes, At Least 1 MiB; A Refused Hello Changes Nothing, Counts Nothing Against The Seat And Is Counted; The Streams Are Charged As They Are Sent") {
+        using S = Attendance::State;
+        const uint32_t t0 = 900000;
+        {   // three Hellos a minute
+            Attendance a;
+            a.seat_humans(0b0111, t0);
+            ASSERT_TRUE(Attendance::Config{}.rejoin_attempts == 3 && Attendance::Config{}.rejoin_window_ms == 60000 && kRejoinAttempts == 3 && kRejoinWindowMs == 60000);
+            ASSERT_TRUE(a.lost(1, t0));
+            ASSERT_TRUE(a.returning(1, t0 + 1000));                                       // 1
+            ASSERT_TRUE(a.returning(1, t0 + 11000));                                      // 2
+            ASSERT_TRUE(a.returning(1, t0 + 21000));                                      // 3
+            ASSERT_EQ(a.rejoin_check(1, t0 + 31000), Attendance::Rejoin::TooManyAttempts);
+            const uint8_t percent = a.percent(1);
+            ASSERT_TRUE(a.progress(1, 7, t0 + 31000));
+            ASSERT_FALSE(a.returning(1, t0 + 31000));                                     // the fourth is refused: nothing changes
+            ASSERT_TRUE(a.state(1) == S::CatchingUp && a.percent(1) == 7 && percent == 0);
+            ASSERT_EQ(a.rejoins_refused(), 1u);
+            ASSERT_FALSE(a.returning(1, t0 + 45000));                                     // (and a refused Hello does not count: the window is that of the three that were accepted)
+            ASSERT_FALSE(a.returning(1, t0 + 60999));                                     // the first one is 59,999 ms old: it still counts
+            ASSERT_EQ(a.rejoins_refused(), 3u);
+            ASSERT_TRUE(a.returning(1, t0 + 61000));                                      // 60,000 ms: it is out of the minute
+            ASSERT_EQ(a.rejoin_check(1, t0 + 61000), Attendance::Rejoin::TooManyAttempts);
+            ASSERT_EQ(a.rejoin_check(1, t0 + 71000), Attendance::Rejoin::Allowed);        // (the second leaves at 71 s)
+            ASSERT_EQ(a.rejoins_refused(), 3u);
+            // a seat that is dropped, or no seat, is not "refused": nothing is held for it
+            ASSERT_TRUE(a.dropped(1, t0 + 62000));
+            ASSERT_FALSE(a.returning(1, t0 + 300000));
+            ASSERT_EQ(a.rejoin_check(1, t0 + 300000), Attendance::Rejoin::NotHeld);
+            ASSERT_EQ(a.rejoin_check(3, t0), Attendance::Rejoin::NotHeld);               // (seat 3 is no seat of this match)
+            ASSERT_EQ(a.rejoins_refused(), 3u);
+            // each seat has its own budget
+            ASSERT_TRUE(a.lost(0, t0 + 65000) && a.returning(0, t0 + 65100));
+        }
+        {   // the configured number: one a minute, eight a minute (the most), and a request for more or for none is clamped
+            Attendance::Config one;
+            one.rejoin_attempts = 1;
+            Attendance a(one);
+            a.seat_humans(0b0011, t0);
+            ASSERT_TRUE(a.lost(1, t0) && a.returning(1, t0 + 100));
+            ASSERT_FALSE(a.returning(1, t0 + 200));
+            ASSERT_TRUE(a.returning(1, t0 + 60100));
+            Attendance::Config lots;
+            lots.rejoin_attempts = 1000;
+            ASSERT_EQ(Attendance(lots).config().rejoin_attempts, Attendance::kMaxRejoinAttempts);
+            lots.rejoin_attempts = 0;
+            ASSERT_EQ(Attendance(lots).config().rejoin_attempts, 1u);
+            Attendance::Config flap;
+            flap.flap_losses = 1;
+            ASSERT_EQ(Attendance(flap).config().flap_losses, 2u);
+            flap.flap_losses = 99;
+            ASSERT_EQ(Attendance(flap).config().flap_losses, Attendance::kMaxFlapLosses);
+        }
+        {   // bytes: three times the log's size in ten minutes (here with no floor)
+            Attendance::Config cfg;
+            cfg.stream_floor_bytes = 0;
+            cfg.rejoin_attempts = Attendance::kMaxRejoinAttempts;
+            cfg.max_pause_ms = 3600000;
+            cfg.max_catch_up_ms = 3600000;
+            Attendance a(cfg);
+            a.seat_humans(0b0011, t0);
+            ASSERT_TRUE(a.lost(1, t0));
+            ASSERT_EQ(a.streamed_bytes(), uint64_t{0});
+            const size_t log = 1000;
+            const size_t planned = 900;                                                    // (the packed turns are less than the log: the index is not streamed)
+            ASSERT_TRUE(a.returning(1, t0 + 1000, planned, log));
+            a.charge_stream(1, t0 + 1100, 500);                                            // the stream is charged as it is sent
+            a.charge_stream(1, t0 + 1200, 400);
+            ASSERT_EQ(a.streamed_bytes(), uint64_t{900});
+            ASSERT_TRUE(a.catch_up_failed(1, t0 + 2000) && a.returning(1, t0 + 100000, planned, log));        // the second: 900 + 900
+            a.charge_stream(1, t0 + 100100, 900);
+            ASSERT_TRUE(a.catch_up_failed(1, t0 + 101000) && a.returning(1, t0 + 200000, planned, log));      // the third: 1800 + 900 = 2700 of 3000
+            a.charge_stream(1, t0 + 200100, 900);
+            ASSERT_TRUE(a.catch_up_failed(1, t0 + 201000));
+            ASSERT_EQ(a.rejoin_check(1, t0 + 250000, planned, log), Attendance::Rejoin::TooMuchStreamed);     // the fourth: 2700 + 900 = 3600 of 3000
+            ASSERT_EQ(a.rejoin_check(1, t0 + 250000, 300, log), Attendance::Rejoin::Allowed);                 // a smaller one still fits: 3000 of 3000 ...
+            ASSERT_EQ(a.rejoin_check(1, t0 + 250000, 301, log), Attendance::Rejoin::TooMuchStreamed);         // ... and not a byte more
+            ASSERT_EQ(a.rejoin_check(1, t0 + 250000), Attendance::Rejoin::Allowed);                           // (no size given: the bytes are not asked)
+            ASSERT_EQ(a.rejoin_check(1, t0 + 250000, planned, 0), Attendance::Rejoin::Allowed);
+            ASSERT_EQ(a.rejoin_check(1, t0 + 250000, 0, log), Attendance::Rejoin::Allowed);
+            ASSERT_FALSE(a.returning(1, t0 + 250000, planned, log));
+            ASSERT_EQ(a.rejoins_refused(), 1u);
+            ASSERT_EQ(a.state(1), S::Absent);
+            ASSERT_EQ(a.streamed_bytes(), uint64_t{2700});                                                    // (a refusal streams nothing)
+            // the window of ten minutes slides: the first stream (at 1.1 - 1.2 s) is out of it at 601.1 s
+            ASSERT_EQ(a.rejoin_check(1, t0 + 601099, planned, log), Attendance::Rejoin::TooMuchStreamed);
+            ASSERT_EQ(a.rejoin_check(1, t0 + 601100, planned, log), Attendance::Rejoin::Allowed);             // 1800 + 900
+            ASSERT_EQ(a.rejoin_check(1, t0 + 700099, planned, log), Attendance::Rejoin::Allowed);
+            ASSERT_EQ(a.rejoin_check(1, t0 + 700100, planned, log), Attendance::Rejoin::Allowed);
+            ASSERT_TRUE(a.returning(1, t0 + 700100, planned, log));
+            ASSERT_EQ(a.streamed_bytes(), uint64_t{2700});
+        }
+        {   // the floor: a log of a few KB is no reason to refuse a fifth reload; the budget is the larger of three logs and 1 MiB
+            Attendance::Config cfg;
+            cfg.rejoin_attempts = Attendance::kMaxRejoinAttempts;
+            cfg.max_catch_up_ms = 3600000;
+            cfg.max_pause_ms = 3600000;
+            ASSERT_TRUE(cfg.stream_factor == 3 && cfg.stream_floor_bytes == (size_t{1} << 20) && cfg.stream_window_ms == 600000 && kStreamFactor == 3 && kStreamWindowMs == 600000);
+            Attendance a(cfg);
+            a.seat_humans(0b0011, t0);
+            ASSERT_TRUE(a.lost(1, t0));
+            uint32_t at = t0 + 1000;
+            for (int i = 0; i < 10; ++i) {                                                 // ten streams of 100 KB of a log of 100 KB: 1 MB of the 1 MiB
+                ASSERT_TRUE(a.returning(1, at, 100000, 100000));
+                a.charge_stream(1, at + 10, 100000);
+                ASSERT_TRUE(a.catch_up_failed(1, at + 20));
+                at += 8000;                                                                // (eight Hellos a minute are allowed here: this spacing is within it)
+            }
+            ASSERT_EQ(a.rejoin_check(1, at, 100000, 100000), Attendance::Rejoin::TooMuchStreamed);   // the eleventh: 1.1 MB of 1,048,576
+            ASSERT_EQ(a.rejoin_check(1, at, 48576, 100000), Attendance::Rejoin::Allowed);
+            ASSERT_EQ(a.rejoin_check(1, at, 48577, 100000), Attendance::Rejoin::TooMuchStreamed);
+            // a log of 2 MB: three times that
+            Attendance b(cfg);
+            b.seat_humans(0b0011, t0);
+            ASSERT_TRUE(b.lost(1, t0));
+            const size_t big = 2u << 20;
+            for (int i = 0; i < 3; ++i) {
+                ASSERT_TRUE(b.returning(1, t0 + 1000 + 20000u * static_cast<uint32_t>(i), big - 100, big));
+                b.charge_stream(1, t0 + 1100 + 20000u * static_cast<uint32_t>(i), big - 100);
+                ASSERT_TRUE(b.catch_up_failed(1, t0 + 1200 + 20000u * static_cast<uint32_t>(i)));
+            }
+            ASSERT_EQ(b.rejoin_check(1, t0 + 61000, big - 100, big), Attendance::Rejoin::TooMuchStreamed);
+        }
+        {   // the same sequence from other points of the 32-bit clock gives the same answers (the windows are differences)
+            for (const uint32_t start : {0u, 0xFFFFFF00u, 0xFFFF0000u, 0x80000000u - 500u}) {
+                Attendance::Config cfg;
+                cfg.stream_floor_bytes = 0;
+                cfg.max_catch_up_ms = 3600000;                                               // (the attempt is left open for ten minutes: not the subject here)
+                cfg.max_pause_ms = 3600000;
+                Attendance a(cfg);
+                a.seat_humans(0b0011, start);
+                ASSERT_TRUE(a.lost(1, start));
+                ASSERT_TRUE(a.returning(1, start + 1000, 900, 1000));
+                a.charge_stream(1, start + 1100, 2800);
+                ASSERT_TRUE(a.returning(1, start + 2000));
+                ASSERT_TRUE(a.returning(1, start + 3000));
+                ASSERT_EQ(a.rejoin_check(1, start + 4000), Attendance::Rejoin::TooManyAttempts);
+                ASSERT_EQ(a.rejoin_check(1, start + 61000 - 1), Attendance::Rejoin::TooManyAttempts);
+                ASSERT_EQ(a.rejoin_check(1, start + 61000), Attendance::Rejoin::Allowed);
+                ASSERT_EQ(a.rejoin_check(1, start + 61000, 900, 1000), Attendance::Rejoin::TooMuchStreamed);     // 2800 + 900 > 3000
+                ASSERT_EQ(a.rejoin_check(1, start + 601100 - 1, 900, 1000), Attendance::Rejoin::TooMuchStreamed);
+                ASSERT_EQ(a.rejoin_check(1, start + 601100, 900, 1000), Attendance::Rejoin::Allowed);
+            }
+        }
+    } TEST_END();
+
+    TEST_CASE("N2.77 Attendance: A Seat That Flaps: Lost Three Times Within A Minute (A Second Window That Takes The Seat Over Counts As A Loss) It Is The Subject Of The Vote At Once, In Any State (Absent, Catching Up, Or Back); Its Votes Stay Across Its Returns And Win Or Close; It Does Not Vote On Itself; Every Pause Counts At Least 5 s Toward The Cap, So That Flapping Reaches It") {
+        using S = Attendance::State;
+        const uint32_t t0 = 3000000;
+        Attendance::Config cfg;
+        cfg.rejoin_attempts = Attendance::kMaxRejoinAttempts;
+        cfg.max_pause_ms = 3600000;
+        ASSERT_TRUE(Attendance::Config{}.flap_losses == 3 && Attendance::Config{}.flap_window_ms == 60000 && kFlapLosses == 3 && kFlapWindowMs == 60000);
+        // ---- three losses in a minute; two are none; three in more than a minute are none ----
+        {
+            Attendance a(cfg);
+            a.seat_humans(0b0111, t0);
+            ASSERT_TRUE(a.lost(1, t0) && a.returning(1, t0 + 500) && a.caught_up(1, t0 + 1000));
+            ASSERT_TRUE(a.lost(1, t0 + 20000));
+            ASSERT_FALSE(a.flapping(1, t0 + 20000));                                      // two
+            ASSERT_EQ(a.vote_subject(t0 + 20000), 255);
+            ASSERT_TRUE(a.returning(1, t0 + 20500) && a.caught_up(1, t0 + 21000));
+            ASSERT_TRUE(a.lost(1, t0 + 40000));                                           // the third, 40 s after the first
+            ASSERT_TRUE(a.flapping(1, t0 + 40000));
+            ASSERT_TRUE(a.away_ms(1, t0 + 40000) < 30000u);                               // (it is nowhere near 30 s away in all: the flap alone puts it to the vote)
+            ASSERT_EQ(a.vote_subject(t0 + 40000), 1);
+            ASSERT_EQ(a.presence_for(0, t0 + 40000).vote_seat, 1);
+            Attendance b(cfg);
+            b.seat_humans(0b0111, t0);
+            ASSERT_TRUE(b.lost(1, t0) && b.returning(1, t0 + 500) && b.caught_up(1, t0 + 1000) && b.lost(1, t0 + 30000) && b.returning(1, t0 + 30500) && b.caught_up(1, t0 + 31000));
+            ASSERT_TRUE(b.lost(1, t0 + 60001));                                           // the third is 60,001 ms after the first
+            ASSERT_FALSE(b.flapping(1, t0 + 60001));
+            ASSERT_EQ(b.vote_subject(t0 + 60001), 255);
+            Attendance c(cfg);
+            c.seat_humans(0b0111, t0);
+            ASSERT_TRUE(c.lost(1, t0) && c.returning(1, t0 + 500) && c.caught_up(1, t0 + 1000) && c.lost(1, t0 + 30000) && c.returning(1, t0 + 30500) && c.caught_up(1, t0 + 31000));
+            ASSERT_TRUE(c.lost(1, t0 + 60000));                                           // ... and 60,000 ms: within the minute
+            ASSERT_TRUE(c.flapping(1, t0 + 60000));
+        }
+        // ---- the vote stays open across the returns of the seat, in every state, with its votes ----
+        {
+            Attendance a(cfg);
+            a.seat_humans(0b0111, t0);
+            for (uint32_t i = 0; i < 3; ++i) {
+                const uint32_t at = t0 + i * 10000;
+                ASSERT_TRUE(a.lost(1, at));
+                if (i < 2) ASSERT_TRUE(a.returning(1, at + 500) && a.caught_up(1, at + 1000));
+            }
+            const uint32_t now = t0 + 20000;                                              // the third loss: Absent
+            ASSERT_EQ(a.state(1), S::Absent);
+            ASSERT_EQ(a.vote_subject(now), 1);
+            ASSERT_TRUE(a.vote(0, 1, true, now));
+            ASSERT_EQ(a.votes_for_continue(1), 1u);
+            ASSERT_TRUE(a.returning(1, now + 500));                                       // catching up: still the subject, and its votes stay
+            ASSERT_EQ(a.state(1), S::CatchingUp);
+            ASSERT_EQ(a.vote_subject(now + 500), 1);
+            ASSERT_EQ(a.votes_for_continue(1), 1u);
+            ASSERT_EQ(a.presence_for(2, now + 500).vote_seat, 1);
+            ASSERT_EQ(a.presence_for(2, now + 500).votes_continue, 1);
+            ASSERT_TRUE(a.caught_up(1, now + 1000));                                      // back and Present: still the subject, with the vote that was cast
+            ASSERT_EQ(a.state(1), S::Present);
+            ASSERT_EQ(a.vote_subject(now + 1000), 1);
+            ASSERT_EQ(a.votes_for_continue(1), 1u);
+            const PresenceMsg p = a.presence_for(2, now + 1000);
+            ASSERT_TRUE(p.missing.empty() && p.vote_seat == 1 && p.votes_continue == 1 && p.voters == 2 && p.your_vote == 0);   // (the voters are the others: seat 1 does not vote on itself)
+            ASSERT_EQ(a.presence_for(0, now + 1000).your_vote, 2);                        // seat 0's own choice is still its own
+            ASSERT_FALSE(a.vote(1, 1, true, now + 1000));                                 // a seat does not vote on its own case
+            ASSERT_EQ(a.connected_humans(), 3);
+            ASSERT_EQ(a.connected_humans(1), 2);
+            std::vector<uint8_t> dropped = a.update(now + 1000);                          // 1 of 2: not more than half
+            ASSERT_TRUE(dropped.empty() && a.state(1) == S::Present);
+            ASSERT_TRUE(a.vote(2, 1, true, now + 1500));                                  // 2 of 2: the seat is dropped though it is connected
+            dropped = a.update(now + 1500);
+            ASSERT_TRUE(dropped.size() == 1 && dropped[0] == 1);
+            ASSERT_EQ(a.state(1), S::Dropped);
+            ASSERT_EQ(a.drops_by_vote(), 1u);
+            ASSERT_FALSE(a.paused());
+            ASSERT_EQ(a.vote_subject(now + 1500), 255);
+            ASSERT_EQ(a.votes_for_continue(1), 0u);
+        }
+        // ---- the vote closes by itself after a minute without a loss, with the votes that were cast; a vote of the other kind (away long enough) is not closed by it ----
+        {
+            Attendance a(cfg);
+            a.seat_humans(0b0111, t0);
+            for (uint32_t i = 0; i < 3; ++i) {
+                const uint32_t at = t0 + i * 10000;
+                ASSERT_TRUE(a.lost(1, at) && a.returning(1, at + 500) && a.caught_up(1, at + 1000));
+            }
+            ASSERT_TRUE(a.flapping(1, t0 + 20000 + 59999));
+            ASSERT_TRUE(a.vote(0, 1, true, t0 + 30000));
+            ASSERT_EQ(a.vote_subject(t0 + 20000 + 59999), 1);
+            ASSERT_TRUE(a.update(t0 + 20000 + 59999).empty());
+            ASSERT_FALSE(a.flapping(1, t0 + 20000 + 60000));                              // 60 s after the last loss
+            ASSERT_EQ(a.vote_subject(t0 + 20000 + 60000), 255);
+            ASSERT_TRUE(a.update(t0 + 20000 + 60000).empty());
+            ASSERT_EQ(a.votes_for_continue(1), 0u);                                       // the vote that was cast is gone with the vote
+            ASSERT_EQ(a.presence_for(0, t0 + 100000).vote_seat, 255);
+            // a seat that flapped and is away for long is a subject for that too: the votes stay when the flap runs out
+            Attendance b(cfg);
+            b.seat_humans(0b0111, t0);
+            ASSERT_TRUE(b.lost(1, t0) && b.returning(1, t0 + 500) && b.caught_up(1, t0 + 1000) && b.lost(1, t0 + 5000) && b.returning(1, t0 + 5500) && b.caught_up(1, t0 + 6000) && b.lost(1, t0 + 10000));
+            ASSERT_TRUE(b.vote(0, 1, true, t0 + 11000));
+            ASSERT_TRUE(b.update(t0 + 80000).empty());                                    // the flap is over (70 s), the seat has been away 70 s: the vote goes on
+            ASSERT_FALSE(b.flapping(1, t0 + 80000));
+            ASSERT_EQ(b.vote_subject(t0 + 80000), 1);
+            ASSERT_EQ(b.votes_for_continue(1), 1u);
+        }
+        // ---- a second window that takes over a seat that is still Present is a loss, like a cut link ----
+        {
+            Attendance a(cfg);
+            a.seat_humans(0b0111, t0);
+            ASSERT_TRUE(a.lost(1, t0) && a.returning(1, t0 + 500) && a.caught_up(1, t0 + 1000));
+            ASSERT_TRUE(a.returning(1, t0 + 10000));                                      // a Hello for a seat whose link the host thinks is alive
+            ASSERT_FALSE(a.flapping(1, t0 + 10000));
+            ASSERT_TRUE(a.caught_up(1, t0 + 10500) && a.returning(1, t0 + 20000));        // ... a third time within the minute
+            ASSERT_TRUE(a.flapping(1, t0 + 20000));
+            ASSERT_EQ(a.vote_subject(t0 + 20000), 1);
+        }
+        // ---- the cap: every pause counts at least 5 s, so a connection that flaps reaches it long before it has cost that much time ----
+        {
+            Attendance::Config cap = cfg;
+            cap.max_pause_ms = 40000;
+            Attendance a(cap);
+            a.seat_humans(0b0111, t0);
+            for (uint32_t i = 0; i < 8; ++i) {
+                const uint32_t at = t0 + i * 1500;
+                ASSERT_FALSE(a.cap_reached(at));
+                ASSERT_TRUE(a.update(at).empty());
+                ASSERT_TRUE(a.lost(1, at) && a.returning(1, at + 400) && a.caught_up(1, at + 800));
+            }
+            ASSERT_EQ(a.held_ms(t0 + 12000), 8u * 800u);                                  // the match really waited 6.4 s ...
+            ASSERT_EQ(a.pause_ms(t0 + 12000), 8u * 5000u);                                // ... and the cap counted 40 s
+            ASSERT_TRUE(a.cap_reached(t0 + 12000) && a.cap_s(t0 + 12000) == 0);
+            ASSERT_TRUE(a.lost(1, t0 + 12000));                                           // the next loss finds no budget: dropped at once
+            const std::vector<uint8_t> dropped = a.update(t0 + 12000);
+            ASSERT_TRUE(dropped.size() == 1 && dropped[0] == 1 && a.drops_by_cap() == 1u);
+        }
+        // ---- the same from other points of the clock ----
+        for (const uint32_t start : {0u, 0xFFFFFC00u, 0xFFFF0000u, 0x7FFFF000u}) {
+            Attendance a(cfg);
+            a.seat_humans(0b0111, start);
+            for (uint32_t i = 0; i < 3; ++i) ASSERT_TRUE(a.lost(1, start + i * 20000) && (i == 2 || (a.returning(1, start + i * 20000 + 500) && a.caught_up(1, start + i * 20000 + 1000))));
+            ASSERT_TRUE(a.flapping(1, start + 40000) && a.vote_subject(start + 40000) == 1);
+            ASSERT_TRUE(a.flapping(1, start + 99999) && !a.flapping(1, start + 100000));
+        }
+    } TEST_END();
+
+    TEST_CASE("N2.78 Attendance: The Resume Countdown: After A Pause Of 3 s Or More (A Seat Back And Verified, Or Dropped By A Vote Or The Cap) The Match Is Held For The Countdown, Which Is No Pause (Not The Cap's, Not Any Catch-Up's, But The Match's Own Held Time); A Shorter Pause Resumes At Once; A Loss Cancels It And One Follows That Pause; 0 Is Off") {
+        using S = Attendance::State;
+        const uint32_t t0 = 5000000;
+        Attendance::Config cfg;
+        cfg.resume_countdown_ms = 10000;
+        cfg.rejoin_attempts = Attendance::kMaxRejoinAttempts;
+        ASSERT_TRUE(Attendance::Config{}.resume_countdown_ms == 0 && kResumeCountdownMs == 10000 && kResumeMinPauseMs == 3000 && Attendance::Config{}.resume_min_pause_ms == 3000);   // (the library's default is none, a room's is ten seconds)
+        {   // a pause of 20 s ends with a seat that is back: ten seconds of countdown
+            Attendance a(cfg);
+            a.seat_humans(0b0111, t0);
+            ASSERT_FALSE(a.counting_down(t0) || a.paused());
+            ASSERT_TRUE(a.lost(1, t0) && a.returning(1, t0 + 15000));
+            ASSERT_FALSE(a.counting_down(t0 + 16000));                                    // (it is a pause: no countdown yet)
+            ASSERT_TRUE(a.caught_up(1, t0 + 20000));
+            ASSERT_FALSE(a.paused());
+            ASSERT_TRUE(a.counting_down(t0 + 20000));
+            ASSERT_EQ(a.resume_s(t0 + 20000), 10);
+            ASSERT_EQ(a.resume_s(t0 + 20001), 10);                                        // 9,999 ms: rounded up
+            ASSERT_EQ(a.resume_s(t0 + 20999), 10);                                        // 9,001 ms: still ten
+            ASSERT_EQ(a.resume_s(t0 + 21000), 9);                                         // 9,000 ms: nine
+            ASSERT_EQ(a.resume_s(t0 + 21001), 9);
+            ASSERT_EQ(a.resume_s(t0 + 29001), 1);
+            ASSERT_EQ(a.resume_s(t0 + 29999), 1);
+            ASSERT_TRUE(a.counting_down(t0 + 29999));
+            ASSERT_FALSE(a.counting_down(t0 + 30000));                                    // ten seconds to the millisecond
+            ASSERT_EQ(a.resume_s(t0 + 30000), 0);
+            ASSERT_EQ(a.resume_s(t0 + 99999), 0);
+            // it is no pause: the cap and the seat's away time do not count it, the match's held time does
+            ASSERT_EQ(a.pause_ms(t0 + 20000), 20000u);
+            ASSERT_EQ(a.pause_ms(t0 + 25000), 20000u);
+            ASSERT_EQ(a.pause_ms(t0 + 99999), 20000u);
+            ASSERT_EQ(a.cap_left_ms(t0 + 25000), cfg.max_pause_ms - 20000u);
+            ASSERT_EQ(a.away_ms(1, t0 + 99999), 20000u);
+            ASSERT_EQ(a.held_ms(t0 + 20000), 20000u);
+            ASSERT_EQ(a.held_ms(t0 + 25000), 25000u);
+            ASSERT_EQ(a.held_ms(t0 + 30000), 30000u);
+            ASSERT_EQ(a.held_ms(t0 + 99999), 30000u);                                     // (the time that the match did not run: 20 s paused, 10 s counted down)
+            // the presence says it, to everybody, with nobody missing
+            const PresenceMsg p = a.presence_for(0, t0 + 23500);
+            ASSERT_TRUE(p.missing.empty() && p.resume_s == 7 && p.cap_s == a.cap_s(t0 + 23500));
+            PresenceMsg back;
+            ASSERT_TRUE(decode(encode(p), back) && back.resume_s == 7);
+            ASSERT_EQ(a.presence_for(255, t0 + 31000).resume_s, 0);
+        }
+        {   // a pause shorter than 3 s is a blip: no countdown (2,999 ms none, 3,000 ms one)
+            Attendance a(cfg);
+            a.seat_humans(0b0111, t0);
+            ASSERT_TRUE(a.lost(1, t0) && a.returning(1, t0 + 1000) && a.caught_up(1, t0 + 2999));
+            ASSERT_FALSE(a.counting_down(t0 + 2999) || a.counting_down(t0 + 3000) || a.paused());
+            ASSERT_EQ(a.held_ms(t0 + 3000), 2999u);
+            ASSERT_TRUE(a.lost(1, t0 + 10000) && a.returning(1, t0 + 10500) && a.caught_up(1, t0 + 13000));
+            ASSERT_TRUE(a.counting_down(t0 + 13000));
+            ASSERT_EQ(a.resume_s(t0 + 13000), 10);
+            // the pause of two seats is one pause: 5 s here, though neither seat was away 3 s on its own after the other came back
+            Attendance b(cfg);
+            b.seat_humans(0b0111, t0);
+            ASSERT_TRUE(b.lost(1, t0) && b.lost(2, t0 + 2000) && b.returning(1, t0 + 2500) && b.caught_up(1, t0 + 3000));
+            ASSERT_FALSE(b.counting_down(t0 + 3000));                                     // seat 2 is away: the pause goes on
+            ASSERT_TRUE(b.returning(2, t0 + 4000) && b.caught_up(2, t0 + 5000));
+            ASSERT_TRUE(b.counting_down(t0 + 5000));
+        }
+        {   // a loss during the countdown cancels it (the pause rules apply); a countdown follows that pause, however short it is
+            Attendance a(cfg);
+            a.seat_humans(0b0111, t0);
+            ASSERT_TRUE(a.lost(1, t0) && a.returning(1, t0 + 4000) && a.caught_up(1, t0 + 5000));
+            ASSERT_TRUE(a.counting_down(t0 + 8000));
+            ASSERT_TRUE(a.lost(2, t0 + 8000));                                            // 3 s into the countdown
+            ASSERT_TRUE(a.paused());
+            ASSERT_FALSE(a.counting_down(t0 + 8000) || a.counting_down(t0 + 9000));
+            ASSERT_EQ(a.resume_s(t0 + 9000), 0);
+            ASSERT_EQ(a.held_ms(t0 + 9000), 5000u + 3000u + 1000u);                       // 5 s paused, 3 s counted, 1 s paused
+            ASSERT_TRUE(a.returning(2, t0 + 8200) && a.caught_up(2, t0 + 8400));          // the new pause was 400 ms: shorter than 3 s ...
+            ASSERT_TRUE(a.counting_down(t0 + 8400));                                      // ... and the countdown comes all the same: 10 s from now
+            ASSERT_EQ(a.resume_s(t0 + 8400), 10);
+            ASSERT_FALSE(a.counting_down(t0 + 18400));
+            ASSERT_EQ(a.pause_ms(t0 + 18400), 5000u + 5000u);                             // (400 ms counted 5 s: the pauses count at least 5 s for the cap)
+            ASSERT_EQ(a.held_ms(t0 + 18400), 5000u + 3000u + 400u + 10000u);
+            // and the countdown after the second pause does not owe a third
+            ASSERT_FALSE(a.counting_down(t0 + 40000));
+            ASSERT_TRUE(a.lost(2, t0 + 40000) && a.returning(2, t0 + 40100) && a.caught_up(2, t0 + 40200));
+            ASSERT_FALSE(a.counting_down(t0 + 40200));                                    // a plain blip again
+        }
+        {   // a seat that returns and is lost again within the countdown: a loss in the very ms of the countdown's end is the same as one after it
+            Attendance a(cfg);
+            a.seat_humans(0b0111, t0);
+            ASSERT_TRUE(a.lost(1, t0) && a.returning(1, t0 + 4000) && a.caught_up(1, t0 + 5000));
+            ASSERT_TRUE(a.lost(2, t0 + 15000));                                           // the countdown is over (10 s): this is an ordinary loss
+            ASSERT_TRUE(a.returning(2, t0 + 15100) && a.caught_up(2, t0 + 15200));
+            ASSERT_FALSE(a.counting_down(t0 + 15200));
+        }
+        {   // the countdown after a vote that was won, and after the cap
+            Attendance a(cfg);
+            a.seat_humans(0b1111, t0);
+            ASSERT_TRUE(a.lost(3, t0));
+            ASSERT_TRUE(a.vote(0, 3, true, t0 + 31000) && a.vote(1, 3, true, t0 + 31000));
+            ASSERT_EQ(a.update(t0 + 31000).size(), 1u);
+            ASSERT_FALSE(a.paused());
+            ASSERT_TRUE(a.counting_down(t0 + 31000));                                     // the match goes on after ten seconds, without seat 3
+            ASSERT_EQ(a.resume_s(t0 + 31000), 10);
+            ASSERT_EQ(a.pause_ms(t0 + 41000), 31000u);
+            ASSERT_FALSE(a.counting_down(t0 + 41000));
+            Attendance::Config capped = cfg;
+            capped.max_pause_ms = 60000;
+            Attendance b(capped);
+            b.seat_humans(0b0111, t0);
+            ASSERT_TRUE(b.lost(2, t0));
+            ASSERT_EQ(b.update(t0 + 60000).size(), 1u);
+            ASSERT_FALSE(b.paused());
+            ASSERT_TRUE(b.counting_down(t0 + 60000));
+            ASSERT_EQ(b.pause_ms(t0 + 65000), 60000u);                                    // (the cap is spent: the countdown is not on it)
+            ASSERT_EQ(b.held_ms(t0 + 65000), 65000u);
+            // a pause that ends with a seat that LEFT (a Leave while the other one is away) is a pause that ended too
+            Attendance c(cfg);
+            c.seat_humans(0b0111, t0);
+            ASSERT_TRUE(c.lost(1, t0) && c.dropped(1, t0 + 8000));
+            ASSERT_TRUE(c.counting_down(t0 + 8000));
+        }
+        {   // 0 is off; a short or a long setting is what it says; the match begins again: nothing is left
+            Attendance::Config off = cfg;
+            off.resume_countdown_ms = 0;
+            Attendance a(off);
+            a.seat_humans(0b0111, t0);
+            ASSERT_TRUE(a.lost(1, t0) && a.returning(1, t0 + 5000) && a.caught_up(1, t0 + 20000));
+            ASSERT_FALSE(a.counting_down(t0 + 20000) || a.paused());
+            ASSERT_EQ(a.resume_s(t0 + 20000), 0);
+            ASSERT_EQ(a.held_ms(t0 + 20000), 20000u);
+            Attendance::Config sixty = cfg;
+            sixty.resume_countdown_ms = 60000;
+            Attendance b(sixty);
+            b.seat_humans(0b0111, t0);
+            ASSERT_TRUE(b.lost(1, t0) && b.returning(1, t0 + 5000) && b.caught_up(1, t0 + 20000));
+            ASSERT_EQ(b.resume_s(t0 + 20000), 60);
+            ASSERT_EQ(b.resume_s(t0 + 79001), 1);
+            ASSERT_FALSE(b.counting_down(t0 + 80000));
+            Attendance c(cfg);
+            c.seat_humans(0b0111, t0);
+            ASSERT_TRUE(c.lost(1, t0) && c.returning(1, t0 + 5000) && c.caught_up(1, t0 + 20000));
+            c.seat_humans(0b0111, t0 + 22000);
+            ASSERT_FALSE(c.counting_down(t0 + 22000) || c.paused());
+            ASSERT_EQ(c.held_ms(t0 + 22500), 0u);
+            ASSERT_TRUE(c.state(1) == S::Present);
+        }
+        {   // the same from other points of the clock
+            for (const uint32_t start : {0u, 0xFFFFF000u, 0xFFFFFFFFu, 0x80000000u - 1u}) {
+                Attendance a(cfg);
+                a.seat_humans(0b0111, start);
+                ASSERT_TRUE(a.lost(1, start) && a.returning(1, start + 4000) && a.caught_up(1, start + 5000));
+                ASSERT_TRUE(a.counting_down(start + 14999) && a.resume_s(start + 14999) == 1 && !a.counting_down(start + 15000));
+                ASSERT_EQ(a.held_ms(start + 20000), 15000u);
+            }
+        }
+    } TEST_END();
+    TEST_CASE("N2.79 Lock-Step Runner: A Match That The Server Holds (Presence: A Pause, The Countdown After It) Is No Stall Of The Link: The Turns In Hand Run, Then The Runner Waits Without A Stall (Nothing Is Told To The Jitter Buffer, No \"Waiting For The Other Players\", Pauses Of 40 ms To 30 s) And Collects The Buffer Again; What Was Read Before The Pause Is Forgotten When It Ends, The Buffer Itself Is Not Reset") {
+        auto empty_turn = [](uint32_t n) {
+            TurnMsg t;
+            t.turn = n;
+            return t;
+        };
+        // One continuous stream on a runner of its own: turn k is sealed at k * 50 ms (and arrives `delay(k)` later, never before an earlier turn), every 10 ms the runner has its frame; no turn
+        // is sealed for `pause_ms` after turn `pause_after_turn`; when `held` the runner is told (set_held) when the pause begins and when it ends. The start of the match and the end of the
+        // stream (nothing follows the last turn: that is a stall, and no business of this) are not looked at.
+        struct Run {
+            uint32_t buffer_max{0};
+            uint32_t buffer_at_end{0};
+            uint32_t stalled_most_ms{0};
+            bool stalled_ever{false};
+            bool stalled_in_pause{false};                                             // the runner was stalled at a moment inside the pause (after the turns in hand had run)
+            bool rebuilding_at_release{false};
+            size_t executed{0};
+            uint32_t jitter_ms_after{0};
+        };
+        const auto stream = [&](LockstepRunner& runner, uint32_t turns, uint32_t pause_after_turn, uint32_t pause_ms, bool held, const std::function<uint32_t(uint32_t)>& delay) {
+            Run out;
+            std::vector<std::pair<uint32_t, uint32_t>> arrivals;                      // (arrival, turn)
+            uint32_t last = 0;
+            uint32_t seal = 0;
+            for (uint32_t i = 0; i < turns; ++i) {
+                if (i == pause_after_turn) seal += pause_ms;                          // nothing is sealed for the pause
+                last = std::max(last, seal + delay(i));
+                arrivals.push_back({last, i});
+                seal += kTurnMs;
+            }
+            const uint32_t pause_begin = pause_after_turn * kTurnMs;
+            const uint32_t pause_end = pause_begin + pause_ms;
+            size_t next = 0;
+            bool announced = false;
+            bool released = false;
+            for (uint32_t now = 10; now <= seal + 400; now += 10) {
+                if (held && !announced && now >= pause_begin) {                       // the Presence reaches the machine right behind the last turn that was sealed
+                    runner.set_held(true);
+                    announced = true;
+                }
+                if (held && announced && !released && now >= pause_end) {              // ... and the one that ends the pause right before the first turn after it
+                    out.rebuilding_at_release = runner.rebuilding();
+                    runner.set_held(false);
+                    released = true;
+                }
+                while (next < arrivals.size() && arrivals[next].first <= now) {
+                    runner.on_turn(empty_turn(arrivals[next].second));
+                    ++next;
+                }
+                out.executed += runner.update(10).size();
+                out.buffer_max = std::max(out.buffer_max, runner.buffer_turns());
+                if (now > pause_begin + 150 && now < pause_end && runner.stalled()) out.stalled_in_pause = true;
+                if (now < 500 || now > seal - kTurnMs) continue;
+                out.stalled_most_ms = std::max(out.stalled_most_ms, runner.stalled_ms());
+                out.stalled_ever = out.stalled_ever || runner.stalled();
+            }
+            out.buffer_at_end = runner.buffer_turns();
+            out.jitter_ms_after = runner.jitter().lateness_ms();
+            return out;
+        };
+        const auto none = [](uint32_t) { return 0u; };
+        // ---- the control: a pause that the runner does not know of is a stall, and a short one grows the buffer (this is what the others' windows did) ----
+        {
+            sim::SimulationEngine sim;
+            build_world(sim, 1, 2 * 3600 * 1000);
+            LockstepRunner steady(sim);
+            const Run quiet = stream(steady, 800, 100000, 0, false, none);             // no pause: a steady link keeps one turn
+            ASSERT_TRUE(quiet.buffer_max == 1 && !quiet.stalled_ever);
+            sim::SimulationEngine other;
+            build_world(other, 1, 2 * 3600 * 1000);
+            LockstepRunner runner(other);
+            const Run cut = stream(runner, 800, 600, 130, false, none);                // 30 s of a steady link and a pause of 130 ms
+            ASSERT_TRUE(cut.stalled_ever);
+            ASSERT_TRUE(cut.stalled_in_pause || cut.buffer_max >= 2);
+            ASSERT_TRUE(cut.buffer_max >= 2);                                          // the buffer grew for a pause that was nobody's link
+        }
+        // ---- held: the same pauses, the runner told: no stall, no growth, whatever the length of the pause ----
+        for (const uint32_t pause : {40u, 130u, 210u, 600u, 1200u, 5000u, 30000u}) {
+            sim::SimulationEngine sim;
+            build_world(sim, 1, 2 * 3600 * 1000);
+            LockstepRunner runner(sim);
+            const Run cut = stream(runner, 800, 600, pause, true, none);
+            ASSERT_FALSE(cut.stalled_ever || cut.stalled_in_pause);                   // no "Waiting for the other players..." ever, not even in a pause of half a minute
+            ASSERT_EQ(cut.stalled_most_ms, 0u);
+            ASSERT_EQ(cut.buffer_max, 1u);                                            // the jitter buffer was told nothing: it is where it was
+            ASSERT_EQ(cut.buffer_at_end, 1u);
+            ASSERT_TRUE(cut.rebuilding_at_release || pause <= 130);                   // (a pause that the buffer's turns outlast never ran dry: nothing to collect)
+            ASSERT_EQ(cut.executed, size_t{800});                                     // every turn ran
+            ASSERT_EQ(runner.next_turn_to_execute(), 800u);
+            ASSERT_FALSE(runner.held());
+            ASSERT_EQ(cut.jitter_ms_after, 0u);                                       // a pause is not lateness: the later turns were measured against each other
+        }
+        // ---- a rough link keeps what it learned across a pause (the pause forgets the samples, not the buffer) ----
+        {
+            sim::SimulationEngine sim;
+            build_world(sim, 1, 2 * 3600 * 1000);
+            LockstepRunner runner(sim);
+            Lcg rng(79);
+            const Run cut = stream(runner, 900, 600, 5000, true, [&](uint32_t) { return rng.below(130); });
+            ASSERT_FALSE(cut.stalled_in_pause);                                       // (the link is rough: it stalls now and then, as it should; the pause is no stall)
+            ASSERT_TRUE(cut.buffer_max >= 3);                                         // a link of 0 - 130 ms of jitter needs three or four turns ...
+            ASSERT_TRUE(cut.buffer_at_end >= 3 && cut.buffer_at_end <= 4);            // ... and still does after the pause: it was not reset to one by it
+            ASSERT_EQ(cut.executed, size_t{900});
+        }
+        // ---- the details: turns that were queued before the Presence run; a turn that arrives while the match is held runs; held twice or released twice changes nothing ----
+        {
+            sim::SimulationEngine sim;
+            build_world(sim, 1);
+            LockstepRunner runner(sim);
+            ASSERT_FALSE(runner.held());
+            runner.set_held(false);                                                    // nothing to release
+            ASSERT_FALSE(runner.held());
+            for (uint32_t k = 0; k < 5; ++k) ASSERT_TRUE(runner.on_turn(empty_turn(k)));
+            ASSERT_EQ(runner.update(0).size(), 1u);                                    // it starts
+            runner.set_held(true);
+            runner.set_held(true);
+            ASSERT_TRUE(runner.held());
+            size_t ran = 1;
+            for (int i = 0; i < 30; ++i) ran += runner.update(10).size();              // 300 ms: the four turns that were queued run (the server sealed them)
+            ASSERT_EQ(ran, size_t{5});
+            for (int i = 0; i < 400; ++i) runner.update(50);                           // 20 s of nothing: not a stall, not a message
+            ASSERT_FALSE(runner.stalled());
+            ASSERT_EQ(runner.stalled_ms(), 0u);
+            ASSERT_EQ(runner.buffer_turns(), 1u);
+            ASSERT_TRUE(runner.rebuilding());                                          // collecting the buffer for the turns that follow
+            ASSERT_TRUE(runner.on_turn(empty_turn(5)));                                // (a turn that was in flight: it is not run before the buffer is full again, as after a start)
+            ASSERT_TRUE(runner.update(50).empty());
+            ASSERT_TRUE(runner.on_turn(empty_turn(6)));
+            ASSERT_EQ(runner.update(50).size(), 1u);
+            runner.set_held(false);
+            runner.set_held(false);
+            ASSERT_FALSE(runner.held());
+            ASSERT_FALSE(runner.stalled());
+            ASSERT_EQ(runner.buffer_turns(), 1u);
         }
     } TEST_END();
 }
@@ -5481,7 +6196,8 @@ void run_reconnect_session_tests() {
         m.run(20000);
         ASSERT_EQ(m.sealed(), sealed_at_pause);                                  // nothing is sealed for 20 s ...
         ASSERT_TRUE(m.sims[0]->current_tick() <= ticks_at_pause + 3 && m.sims[2]->current_tick() <= ticks_at_pause + 3);       // ... so nobody plays: the clients wait at a turn boundary
-        ASSERT_TRUE(m.clients[0]->runner().stalled() && m.clients[2]->runner().stalled());
+        ASSERT_TRUE(m.clients[0]->runner().held() && m.clients[2]->runner().held());          // REWRITTEN: the others' runners used to be STALLED here (which told their jitter buffers about a pause); they know the match is held (Presence): they wait, with no stall
+        ASSERT_FALSE(m.clients[0]->runner().stalled() || m.clients[2]->runner().stalled());
         const PresenceMsg& later = m.clients[0]->presence();
         ASSERT_TRUE(later.missing[0].waited_s >= 19 && later.missing[0].waited_s <= 22);        // since when: the seat has been away for 20 s and more
         ASSERT_TRUE(later.cap_s < 1795);                                                         // the cap counts down
@@ -5515,8 +6231,8 @@ void run_reconnect_session_tests() {
         for (auto& c : m.clients) ASSERT_FALSE(c->desynced());
         for (auto& s : m.sims) ASSERT_EQ(s->current_tick(), m.referee.current_tick());
         ASSERT_TRUE(m.all_equal());                                              // the three machines and the referee: one state
-        ASSERT_TRUE(m.clients[0]->runner().buffer_turns() <= 2 && m.clients[2]->runner().buffer_turns() <= 2);      // a pause is no lateness of the link: the others' jitter buffers did not grow
-        ASSERT_TRUE(m.clients[1]->runner().buffer_turns() <= 2);                 // and the returning machine's did not (the catch-up feeds it nothing)
+        ASSERT_TRUE(m.clients[0]->runner().buffer_turns() == 1 && m.clients[2]->runner().buffer_turns() == 1);      // a pause is no lateness of the link: the others' jitter buffers did not grow
+        ASSERT_TRUE(m.clients[1]->runner().buffer_turns() == 1);                 // and the returning machine's did not (the catch-up feeds it nothing)
     } TEST_END();
 
     TEST_CASE("N2.48 Hold: A Machine That Starts From Nothing (A Reloaded Page: A New Engine, The Lobby, Then The Match) Is Given More Than 300 Turns And Verified, Twice, The Second Time With A Slowed Catch-Up That Lasts Past 30 s Of Away Time: The Seat Is Catching Up, So No Vote Is Opened For It And It Is Not Dropped While Its Acknowledgements Move") {
@@ -5645,7 +6361,7 @@ void run_reconnect_session_tests() {
         ASSERT_EQ(m.host->rejoiners(), size_t{0});
     } TEST_END();
 
-    TEST_CASE("N2.50 Hold: The Match's Total Pause Is Capped (Here 20 s): At The Cap Every Absent Seat Is Dropped At The Same Tick Everywhere And The Match Goes On, cap_s Counts Down For The Players; A Seat That Is Catching Up Keeps Its Chance Past The Cap While It Progresses, One That Stops Is Let Go After 20 s And Then Dropped At Once; A Seat That Was Dropped Is Told So By Its Key") {
+    TEST_CASE("N2.50 Hold: The Match's Total Pause Is Capped (Here 20 s) And The Cap Is Absolute: At The Cap Every Seat That Is Not Present Is Dropped At The Same Tick Everywhere, A Seat That Is Catching Up And Progressing Too, And The Match Goes On, cap_s Counts Down For The Players; One That Stops Is Let Go After 20 s And Then Dropped At Once; A Seat That Was Dropped Is Told So By Its Key") {
         {
             HoldOptions o;
             o.host.attendance.max_pause_ms = 20000;
@@ -5682,7 +6398,7 @@ void run_reconnect_session_tests() {
             m.run(4000);
             ASSERT_TRUE(m.clients[2]->lost() && m.clients[2]->rejected() && m.clients[2]->reject_reason() == RejectReason::Dropped);
         }
-        {   // a seat that is catching up and progresses keeps its chance; the other absent seat is dropped at the cap
+        {   // the cap is ABSOLUTE: a seat that is catching up and progresses is dropped at the cap with the other seat that is not present (REWRITTEN: it used to keep its chance while it progressed)
             HoldOptions o;
             o.host.attendance.max_pause_ms = 20000;
             o.client.catch_up_ticks = 1;                                                                   // 100 turns a second
@@ -5694,19 +6410,29 @@ void run_reconnect_session_tests() {
             m.cut(2);
             m.run(500);
             m.reload(1);                                                                                   // seat 1 comes back (slowly), seat 2 does not
-            m.run(21000);                                                                                  // past the cap
+            m.run(15000);
+            ASSERT_EQ(m.host->attendance().state(1), Attendance::State::CatchingUp);                       // on its way, and getting on: 15 s into a catch-up of 30 s
+            ASSERT_TRUE(m.host->attendance().percent(1) > 20 && m.host->attendance().percent(1) < 80);
+            uint64_t drop_tick[3] = {0, 0, 0};
+            const auto watch = [&](uint32_t) {
+                if (drop_tick[0] == 0 && m.sims[0]->is_player_dropped(1)) drop_tick[0] = m.sims[0]->current_tick();
+                if (drop_tick[1] == 0 && m.sims[3]->is_player_dropped(1)) drop_tick[1] = m.sims[3]->current_tick();
+                if (drop_tick[2] == 0 && m.referee.is_player_dropped(1)) drop_tick[2] = m.referee.current_tick();
+            };
+            ASSERT_TRUE(m.until([&]() { return !m.host->paused(); }, 8000));                              // the cap: 20 s of pause in all
             ASSERT_EQ(m.host->attendance().state(2), Attendance::State::Dropped);                          // the absent seat went at the cap ...
-            ASSERT_EQ(m.host->attendance().drops_by_cap(), 1u);
-            ASSERT_EQ(m.host->attendance().state(1), Attendance::State::CatchingUp);                       // ... the one that is on its way did not
-            ASSERT_TRUE(m.host->paused());
-            ASSERT_TRUE(m.until([&]() { return !m.host->paused(); }, 30000));
-            ASSERT_EQ(m.host->attendance().state(1), Attendance::State::Present);
-            ASSERT_EQ(m.host->attendance().rejoins(), 1u);
-            m.run(3000);
+            ASSERT_EQ(m.host->attendance().state(1), Attendance::State::Dropped);                          // ... and so did the one that was on its way, whatever progress it showed
+            ASSERT_EQ(m.host->attendance().drops_by_cap(), 2u);
+            ASSERT_EQ(m.host->attendance().rejoins(), 0u);
+            ASSERT_EQ(m.host->rejoiners(), size_t{0});
+            m.run(3000, true, watch);                                                                      // (the Drops are sealed in the first turn after the pause)
             m.settle();
             ASSERT_TRUE(m.host->desyncs().empty());
-            ASSERT_TRUE(m.sims[0]->is_player_dropped(2) && m.sims[1]->is_player_dropped(2) && m.sims[3]->is_player_dropped(2));
+            ASSERT_TRUE(m.sims[0]->is_player_dropped(1) && m.sims[0]->is_player_dropped(2) && m.sims[3]->is_player_dropped(1) && m.sims[3]->is_player_dropped(2));
+            ASSERT_TRUE(m.referee.is_player_dropped(1) && m.referee.is_player_dropped(2));
+            ASSERT_TRUE(drop_tick[0] != 0 && drop_tick[0] == drop_tick[1] && drop_tick[1] == drop_tick[2]);   // the same tick everywhere
             ASSERT_TRUE(m.all_equal());
+            ASSERT_TRUE(m.clients[1] == nullptr || m.clients[1]->lost() || m.clients[1]->mode() != ClientSession::Mode::Normal);      // (the machine that was coming back is told that it is out)
         }
         {   // a catch-up that stops: let go after 20 s without progress, and then the cap takes the seat (the match has no pause left)
             HoldOptions o;
@@ -5909,7 +6635,7 @@ void run_reconnect_session_tests() {
         ASSERT_TRUE(m.until([&]() { return !m.host->paused() && m.clients[2]->mode() == ClientSession::Mode::Normal; }, 6000));
         m.run(40000);
         ASSERT_FALSE(m.host->log().usable());                                            // the 3000 bytes were used up (the index alone is 80 bytes a second)
-        ASSERT_TRUE(m.host->log().bytes() <= 3000);
+        ASSERT_TRUE(m.host->log().bytes() == 0 && m.host->log().turns() == 0 && m.host->log().capacity_bytes() == 0);     // (REWRITTEN: a log that is full used to keep its 3000 bytes for the rest of the match; it is DEAD, it freed them the moment it died)
         m.auto_reconnect[1] = false;
         m.cut(1);
         uint64_t drop_tick[3] = {0, 0, 0};
@@ -5965,7 +6691,7 @@ void run_reconnect_session_tests() {
             bool paused_at_all = false;
             t.run(8000, true, [&](uint32_t) { paused_at_all = paused_at_all || t.host->paused(); });
             ASSERT_FALSE(t.host->log().usable());
-            ASSERT_EQ(t.host->log().turns(), turn);
+            ASSERT_TRUE(t.host->log().turns() == 0 && t.host->log().bytes() == 0);          // (dead: nothing is kept)
             ASSERT_FALSE(paused_at_all);
             ASSERT_EQ(t.host->attendance().state(2), Attendance::State::Dropped);
         }
@@ -6070,7 +6796,7 @@ void run_reconnect_session_tests() {
         }
     } TEST_END();
 
-    TEST_CASE("N2.57 Hold: Absences Add Up: A Seat That Was Away For 20.2 s, Came Back And Is Lost Again Is Put To The Vote 9.4 s Into The Second Absence (30 s In All), Not 30 s; Every Loss Counts At Least 5 s, So A Connection That Flaps Every Second Is Put To The Vote At Its Seventh Loss") {
+    TEST_CASE("N2.57 Hold: Absences Add Up: A Seat That Was Away For 20.2 s, Came Back And Is Lost Again Is Put To The Vote 9.4 s Into The Second Absence (30 s In All), Not 30 s; Every Loss Counts At Least 5 s, And A Connection That Is Lost Three Times In A Minute Is Put To The Vote At Its Third Loss") {
         {
             HoldMatch m(3);
             m.run(4000);
@@ -6093,23 +6819,23 @@ void run_reconnect_session_tests() {
             ASSERT_TRUE(m.clients[0]->presence().vote_seat == 2 && m.clients[1]->presence().vote_seat == 2);
             ASSERT_TRUE(m.now - second_cut < 12000);                                     // about 9 s into the second absence: 30 s in all
         }
-        {
+        {   // REWRITTEN (it was: six short absences of a second, each counting 5 s, put to the vote at the seventh loss): a connection that is lost three times within a minute FLAPS, and the vote
+            // about it opens at its third loss, though it is back each time (the 5 s of every loss are still counted: N2.42, N2.43)
             HoldMatch m(3);
             m.run(4000);
-            for (int i = 1; i <= 6; ++i) {                                               // six short absences: each counts 5 s
+            for (int i = 1; i <= 3; ++i) {
                 m.cut(2);
                 m.run(100);
                 ASSERT_TRUE(m.host->paused());
                 ASSERT_TRUE(m.until([&]() { return !m.host->paused() && m.clients[2]->mode() == ClientSession::Mode::Normal; }, 5000));
                 ASSERT_TRUE(m.host->attendance().away_ms(2, m.now) >= static_cast<uint32_t>(5000 * i));      // however short, a loss counts 5 s
-                ASSERT_EQ(m.clients[0]->presence().vote_seat, 255);
+                if (i < 3) ASSERT_EQ(m.clients[0]->presence().vote_seat, 255);                              // (two losses are no flapping)
                 m.run(300);
             }
-            ASSERT_TRUE(m.host->attendance().away_ms(2, m.now) < 36000);                 // (it was not thirty-six: the minimum is a minimum)
-            m.auto_reconnect[2] = false;
-            m.cut(2);                                                                    // the seventh loss: 30 s in all
+            ASSERT_TRUE(m.host->attendance().flapping(2, m.now));
             m.run(1500);
-            ASSERT_TRUE(m.clients[0]->presence().vote_seat == 2 && m.clients[1]->presence().vote_seat == 2);
+            ASSERT_TRUE(m.clients[0]->presence().vote_seat == 2 && m.clients[1]->presence().vote_seat == 2);   // the vote about a seat that is back
+            ASSERT_TRUE(m.host->client_present(2) && !m.host->paused());
         }
     } TEST_END();
 
@@ -7049,7 +7775,9 @@ void run_reconnect_session_tests() {
             return false;
         };
         {
-            HoldMatch m(3);
+            HoldOptions many;                                                               // (a seat is taken back three times a minute: this block says Hello five times in a few seconds)
+            many.host.attendance.rejoin_attempts = Attendance::kMaxRejoinAttempts;
+            HoldMatch m(3, many);
             m.run(5000);
             m.auto_reconnect[2] = false;
             m.cut(2);
@@ -7300,60 +8028,96 @@ void run_reconnect_session_tests() {
         }
     } TEST_END();
 
-    TEST_CASE("N2.73 Turn Log And The Server's Budget: Every Log Takes What It Stores From A Budget That Many Logs Share (Packed Turn + 4 Bytes Of Index: Exactly bytes()), A Turn That Exactly Fits Is Kept And One Byte More Is Not (Nothing Is Taken, The Log Is Unusable For Good), Destroying Or Releasing A Log Gives Everything Back Once, A Released Log Holds Nothing And Serves Nothing") {
+    TEST_CASE("N2.73 Turn Log And The Server's Budget: Every Log Takes What It Has ALLOCATED (Its Capacity, Which Grows By Doubling And Is At Most Twice What It Stores) From A Budget That Many Logs Share; A Log That The Budget Cannot Grow Is DEAD: It Frees What It Held And Gives It Back At Once, And Serves Nothing; Destroying Or Releasing A Log Gives Everything Back Once") {
         const std::vector<TurnMsg> turns = real_looking_turns(2000, 11, 60);
         std::vector<size_t> cost(turns.size());                                          // what each turn takes: its packed bytes and its 4 bytes of index
         for (size_t i = 0; i < turns.size(); ++i) cost[i] = pack_turn(turns[i]).size() + sizeof(uint32_t);
-        {   // accounting: the budget holds exactly what the logs hold, whoever appends
+        {   // accounting: the budget holds exactly what the logs have allocated, whoever appends, and that is never less than what they hold nor more than twice that and the first allocation
             LogBudget budget(1u << 30);
             TurnLog one(1u << 30, &budget);
             TurnLog two(1u << 30, &budget);
             for (size_t i = 0; i < 700; ++i) {
                 ASSERT_TRUE(one.append(turns[i]));
                 if (i % 3 == 0) ASSERT_TRUE(two.append(turns[i / 3]) || two.turns() != i / 3);        // (two takes a turn every third step, in order, from the front)
-                ASSERT_EQ(budget.used(), uint64_t{one.bytes()} + uint64_t{two.bytes()});
+                ASSERT_EQ(budget.used(), uint64_t{one.capacity_bytes()} + uint64_t{two.capacity_bytes()});
+                ASSERT_TRUE(one.capacity_bytes() >= one.bytes() && one.capacity_bytes() <= 2 * one.bytes() + TurnLog::kFirstBlobBytes + TurnLog::kFirstOffsets * sizeof(uint32_t));
+                ASSERT_TRUE(two.capacity_bytes() >= two.bytes());
             }
             ASSERT_TRUE(budget.used() > 0 && budget.limit() == (1u << 30));
+            ASSERT_TRUE(budget.used() > uint64_t{one.bytes()} + uint64_t{two.bytes()});          // (the capacity is what is charged: more than what the logs hold)
         }
-        {   // the edge: a budget that holds exactly the first 100 turns
-            uint64_t exactly = 0;
-            for (size_t i = 0; i < 100; ++i) exactly += cost[i];
-            LogBudget budget(exactly);
+        {   // the first allocation is 1.5 KiB: a budget of less keeps no log, a budget of exactly that keeps the 128 turns that its index holds (a turn without a command costs 6 bytes: 2 and 4)
+            const size_t first = TurnLog::kFirstBlobBytes + TurnLog::kFirstOffsets * sizeof(uint32_t);
+            ASSERT_EQ(first, size_t{1536});
+            for (const size_t room : {first - 1, first, first + 1}) {
+                LogBudget budget(room);
+                TurnLog log(1u << 30, &budget);
+                TurnMsg empty;
+                uint32_t made = 0;
+                while (made < 1000) {
+                    empty.turn = made;
+                    ASSERT_TRUE(budget.used() <= budget.limit());
+                    if (!log.append(empty)) break;
+                    ASSERT_EQ(budget.used(), uint64_t{log.capacity_bytes()});
+                    ++made;
+                }
+                ASSERT_EQ(made, room < first ? 0u : 128u);                                // exactly the turns that the index holds; the next one needs a growth that the budget cannot give
+                ASSERT_FALSE(log.usable());
+                ASSERT_TRUE(log.turns() == 0 && log.bytes() == 0 && log.capacity_bytes() == 0);      // DEAD: it held made turns, and freed them
+                ASSERT_EQ(budget.used(), uint64_t{0});                                    // ... and gave every byte back at the moment that it died
+                ASSERT_FALSE(log.append(empty));
+                std::vector<uint8_t> packed;
+                ASSERT_EQ(log.read(0, 10, 1000, packed), 0u);
+            }
+        }
+        {   // a budget that cannot double a log's vectors but can add a quarter keeps the log going a while longer, and then the log is dead and holds nothing
+            LogBudget budget(2047);
             TurnLog log(1u << 30, &budget);
-            for (size_t i = 0; i < 100; ++i) ASSERT_TRUE(log.append(turns[i]));
-            ASSERT_EQ(budget.used(), exactly);
-            ASSERT_TRUE(log.usable());                                                    // exactly full is not too full
-            ASSERT_FALSE(log.append(turns[100]));                                         // one turn more does not fit
-            ASSERT_FALSE(log.usable());                                                   // and the log is unusable from then on
-            ASSERT_EQ(budget.used(), exactly);                                            // nothing was taken for the turn that was refused
-            ASSERT_EQ(log.turns(), 100u);
-            ASSERT_FALSE(log.append(turns[100]));                                         // it stays so
-            std::vector<uint8_t> packed;
-            ASSERT_EQ(log.read(0, 1000, 1u << 20, packed), 100u);                         // (what it holds can still be read: the session never reads an unusable log)
-            // one byte less than the turn needs
-            LogBudget tight(exactly + cost[100] - 1);
-            TurnLog fits(1u << 30, &tight);
-            for (size_t i = 0; i < 100; ++i) ASSERT_TRUE(fits.append(turns[i]));
-            ASSERT_FALSE(fits.append(turns[100]));
-            LogBudget just(exactly + cost[100]);
-            TurnLog fits_now(1u << 30, &just);
-            for (size_t i = 0; i < 101; ++i) ASSERT_TRUE(fits_now.append(turns[i]));
-            ASSERT_EQ(just.used(), exactly + cost[100]);
+            TurnMsg empty;
+            uint32_t made = 0;
+            while (made < 1000) {
+                empty.turn = made;
+                if (!log.append(empty)) break;
+                ASSERT_TRUE(budget.used() <= 2047);
+                ++made;
+            }
+            ASSERT_TRUE(made > 128 && made < 256);                                        // past the first allocation (the index grew by a quarter), short of the doubling that 2048 would have held
+            ASSERT_TRUE(!log.usable() && budget.used() == 0 && log.capacity_bytes() == 0);
         }
-        {   // two logs share one budget: the one that comes later finds less
+        {   // the edge of the budget for real turns: it never passes the budget, the log dies at the first turn that it cannot hold, and its bytes come back
+            for (const uint64_t limit : {uint64_t{4000}, uint64_t{9000}, uint64_t{31000}}) {
+                LogBudget budget(limit);
+                TurnLog log(1u << 30, &budget);
+                size_t made = 0;
+                while (made < turns.size() && log.append(turns[made])) {
+                    ASSERT_TRUE(budget.used() <= limit && budget.used() == log.capacity_bytes());
+                    ++made;
+                }
+                ASSERT_TRUE(made > 0 && made < turns.size());
+                size_t held = 0;
+                for (size_t i = 0; i < made; ++i) held += cost[i];
+                ASSERT_TRUE(held <= limit);                                               // what it held fitted the budget ...
+                ASSERT_FALSE(log.usable());
+                ASSERT_EQ(budget.used(), uint64_t{0});                                    // ... and it gave all of it back
+                ASSERT_TRUE(log.turns() == 0 && log.bytes() == 0);
+                ASSERT_FALSE(log.append(turns[made]));                                    // it stays dead
+            }
+        }
+        {   // two logs share one budget: the one that comes later finds less, and the one that dies frees the room that the other may grow into
             uint64_t half = 0;
             for (size_t i = 0; i < 200; ++i) half += cost[i];
-            LogBudget budget(half + half / 2);
+            LogBudget budget(half * 3);
             TurnLog first(1u << 30, &budget);
             TurnLog second(1u << 30, &budget);
             for (size_t i = 0; i < 200; ++i) ASSERT_TRUE(first.append(turns[i]));
             size_t got = 0;
-            while (got < 200 && second.append(turns[got])) ++got;
-            ASSERT_TRUE(got > 50 && got < 200);                                           // the second log got what was left
+            while (got < 2000 && second.append(turns[got])) ++got;
+            ASSERT_TRUE(got > 50 && got < 2000);                                          // the second log got what was left
             ASSERT_FALSE(second.usable());
             ASSERT_TRUE(first.usable());
             ASSERT_TRUE(budget.used() <= budget.limit());
-            ASSERT_EQ(budget.used(), uint64_t{first.bytes()} + uint64_t{second.bytes()});
+            ASSERT_EQ(budget.used(), uint64_t{first.capacity_bytes()});                   // (the dead one holds nothing)
+            for (size_t i = 200; i < 400; ++i) ASSERT_TRUE(first.append(turns[i]));       // the first goes on in the room that the second gave back
         }
         {   // destruction and release give everything back, once
             LogBudget budget(1u << 30);
@@ -7365,25 +8129,35 @@ void run_reconnect_session_tests() {
                     ASSERT_TRUE(b.append(turns[i]));
                 }
                 const uint64_t both = budget.used();
-                ASSERT_EQ(both, uint64_t{a.bytes()} + uint64_t{b.bytes()});
+                ASSERT_EQ(both, uint64_t{a.capacity_bytes()} + uint64_t{b.capacity_bytes()});
                 a.release();
-                ASSERT_EQ(budget.used(), uint64_t{b.bytes()});                            // a gave back all that it held
-                ASSERT_TRUE(a.turns() == 0 && a.bytes() == 0 && !a.usable());
+                ASSERT_EQ(budget.used(), uint64_t{b.capacity_bytes()});                   // a gave back all that it held
+                ASSERT_TRUE(a.turns() == 0 && a.bytes() == 0 && a.capacity_bytes() == 0 && !a.usable());
                 ASSERT_FALSE(a.append(turns[300]));                                       // a released log takes nothing
-                ASSERT_EQ(budget.used(), uint64_t{b.bytes()});
+                ASSERT_EQ(budget.used(), uint64_t{b.capacity_bytes()});
                 std::vector<uint8_t> packed;
                 ASSERT_EQ(a.read(0, 10, 1000, packed), 0u);
                 ASSERT_EQ(a.bytes_between(0, 10), size_t{0});
                 a.release();                                                              // twice is harmless
-                ASSERT_EQ(budget.used(), uint64_t{b.bytes()});
+                ASSERT_EQ(budget.used(), uint64_t{b.capacity_bytes()});
             }                                                                             // the destructors: a gives nothing more, b gives its bytes
             ASSERT_EQ(budget.used(), uint64_t{0});
         }
         {   // a log without a budget is what it was
             TurnLog plain(1u << 20);
             for (size_t i = 0; i < 100; ++i) ASSERT_TRUE(plain.append(turns[i]));
+            ASSERT_TRUE(plain.capacity_bytes() >= plain.bytes());
             plain.release();
             ASSERT_TRUE(plain.turns() == 0 && plain.bytes() == 0 && !plain.usable());
+        }
+        {   // the log's own limit counts what it holds (its size), the budget what it has allocated: the log dies at its limit and gives its capacity back
+            LogBudget budget(1u << 30);
+            TurnLog log(5000, &budget);
+            size_t made = 0;
+            while (made < turns.size() && log.append(turns[made])) ++made;
+            ASSERT_TRUE(made > 10 && made < turns.size());
+            ASSERT_FALSE(log.usable());
+            ASSERT_EQ(budget.used(), uint64_t{0});
         }
         LogBudget over(10);                                                               // a budget never gives more than it was given
         over.give(1000);
@@ -7578,6 +8352,748 @@ void run_reconnect_session_tests() {
             ASSERT_TRUE(L.s->lost());
             ASSERT_FALSE(L.s->note_gap(60000));
         }
+    } TEST_END();
+    // ---- the fixes of the review of release A, through whole matches (N2.80 - N2.87) --------------------------------------------------------------------------------------------
+
+    TEST_CASE("N2.80 Hold: A Key Holder Cannot Freeze A Room: A Hello Every 12 s, Each Time With A Little Progress So That No Stall Is Ever Seen, Holds The Match For The Catch-Up Budget Of The Absence (Here 40 s) And No Longer; Then The Seat Is Absent, Its Hellos Are Refused And Counted, The Vote Opens, And The Cap (Here 120 s) Drops It; The Others Play On To The End Identical And The Key Says \"Dropped\"") {
+        HoldOptions o;
+        o.host.attendance.max_catch_up_ms = 40000;
+        o.host.attendance.max_pause_ms = 120000;
+        HoldMatch m(3, o);
+        m.run(6000);
+        m.auto_reconnect[2] = false;
+        m.cut(2);
+        const uint32_t cut_at = m.now;
+        m.run(200);
+        ASSERT_TRUE(m.host->paused() && m.host->attendance().state(2) == Attendance::State::Absent);
+        const uint32_t sealed_at_pause = m.sealed();
+        // the key holder: a raw client that says Hello for the seat on a new link every 12 s, and acknowledges a few more turns every 5 s
+        std::vector<Connection*> links;
+        uint32_t next_hello = m.now;
+        uint32_t next_ack = m.now + 4000;
+        uint32_t total = 0;
+        uint32_t creeping = 0;
+        const auto key_holder = [&](uint32_t now) {
+            if (static_cast<int32_t>(now - next_hello) >= 0) {
+                auto ends = m.open_link();
+                HelloMsg h;
+                h.name = "Eve";
+                h.key = m.keys[2];
+                h.have_turns = 1;
+                ends.second->send(encode(h));
+                links.push_back(ends.second);
+                next_hello = now + 12000;
+            }
+            for (Connection* c : links) {
+                std::vector<uint8_t> msg;
+                while (c->poll(msg)) {
+                    CatchUpMsg cu;
+                    if (peek_type(msg) == MsgType::CatchUp && decode(msg, cu)) total = cu.total_turns;
+                }
+            }
+            if (static_cast<int32_t>(now - next_ack) >= 0 && total > 100 && !links.empty() && links.back()->is_open()) {
+                creeping = std::min(total, creeping + std::max<uint32_t>(total / 40, 2));
+                AckMsg a;
+                a.turn = creeping - 1;
+                links.back()->send(encode(a));
+                next_ack = now + 4000;
+            }
+        };
+        m.run(cut_at + 39000 - m.now, true, key_holder);
+        ASSERT_EQ(m.host->attendance().state(2), Attendance::State::CatchingUp);       // 39 s: it has been catching up for 39 s of the 40, and has shown progress all along
+        ASSERT_TRUE(m.host->paused() && m.host->attendance().percent(2) > 5);
+        ASSERT_EQ(m.host->attendance().catch_up_expired(), 0u);
+        m.run(3000, true, key_holder);
+        ASSERT_EQ(m.host->attendance().state(2), Attendance::State::Absent);            // 42 s: the budget is used up, whatever progress it made: let go
+        ASSERT_EQ(m.host->attendance().catch_up_expired(), 1u);
+        ASSERT_EQ(m.host->attendance().rejoins(), 0u);
+        ASSERT_TRUE(m.host->attendance().rejoins_refused() >= 1);                       // (the Hello at 36 s was the fourth in a minute)
+        ASSERT_TRUE(m.host->paused());
+        m.run(2000, true, key_holder);
+        ASSERT_TRUE(m.clients[0]->presence().vote_seat == 2 && m.clients[1]->presence().vote_seat == 2);      // the others may vote on it: it is away (nothing keeps it catching up)
+        ASSERT_TRUE(m.clients[0]->presence().missing.size() == 1 && m.clients[0]->presence().missing[0].state == PresenceMsg::State::Absent);
+        uint32_t resumed_after_ms = 0;
+        m.run(100000, true, [&](uint32_t now) {
+            key_holder(now);
+            if (resumed_after_ms == 0 && !m.host->paused()) resumed_after_ms = now - cut_at;
+            if (resumed_after_ms == 0) {
+                ASSERT_TRUE(m.sealed() == sealed_at_pause);                             // nothing is sealed for all that time
+            }
+        });
+        ASSERT_TRUE(resumed_after_ms >= 120000 && resumed_after_ms <= 120400);           // the cap, to the pass (a key holder held the room for ever before)
+        ASSERT_EQ(m.host->attendance().drops_by_cap(), 1u);
+        ASSERT_EQ(m.host->attendance().drops_by_vote(), 0u);
+        ASSERT_EQ(m.host->attendance().state(2), Attendance::State::Dropped);
+        ASSERT_EQ(m.host->attendance().rejoins(), 0u);
+        ASSERT_TRUE(m.host->attendance().rejoins_refused() >= 6 && m.host->attendance().rejoins_refused() <= 8);       // the Hellos of 36 s to 108 s
+        ASSERT_EQ(m.host->rejoiners(), size_t{0});
+        m.run(3000);
+        ASSERT_TRUE(m.sealed() > sealed_at_pause + 40);                                 // the others play on
+        m.run(5000);
+        m.settle();
+        ASSERT_TRUE(m.host->desyncs().empty());
+        ASSERT_TRUE(m.sims[0]->is_player_dropped(2) && m.sims[1]->is_player_dropped(2) && m.referee.is_player_dropped(2));
+        ASSERT_TRUE(m.all_equal());
+        m.auto_reconnect[2] = true;                                                     // the seat's own machine comes by: its key says "dropped"
+        m.run(5000);
+        ASSERT_TRUE(m.clients[2]->lost() && m.clients[2]->rejected() && m.clients[2]->reject_reason() == RejectReason::Dropped);
+    } TEST_END();
+
+    TEST_CASE("N2.81 Hold: A Key Holder Cannot Make The Server Stream Its Log Again And Again: With A Log Of More Than A Megabyte, 100 Hellos In 10 s Make Three Streams At Most (The Fourth Hello Of A Minute Is Refused), And With The Hellos Allowed The Bytes Stop It At Three Times The Log's Size; Every Refusal Is Counted And Streams Nothing") {
+        const auto big_match = [](const HoldOptions& o) {
+            auto m = std::make_unique<HoldMatch>(3, o);
+            std::vector<uint32_t> many;
+            for (uint32_t i = 0; i < 32; ++i) many.push_back(1000 + i);
+            m->run(8000, false, [&](uint32_t) {                                       // two players put 16 commands of 32 ants into every 10 ms: a log that is bigger than a megabyte
+                for (const uint8_t p : {uint8_t{0}, uint8_t{1}}) {
+                    for (int i = 0; i < 8; ++i) {
+                        CommandMsg msg;
+                        msg.command = cmd(CommandType::GroupMove, p, 255, 5, 5, many);
+                        m->client_ends[p]->send(encode(msg));
+                    }
+                }
+            });
+            return m;
+        };
+        // the key holder: Hello on a new link every `every_ms`, `hellos` times; whatever it is sent it acknowledges at once, so that the window of the stream never closes
+        const auto hammer = [](HoldMatch& m, uint32_t hellos, uint32_t every_ms) {
+            std::vector<Connection*> links;
+            uint32_t sent = 0;
+            uint32_t next = m.now;
+            m.run(hellos * every_ms + 4000, false, [&](uint32_t now) {
+                if (sent < hellos && static_cast<int32_t>(now - next) >= 0) {
+                    auto ends = m.open_link();
+                    HelloMsg h;
+                    h.name = "Eve";
+                    h.key = m.keys[2];
+                    h.have_turns = 1;
+                    ends.second->send(encode(h));
+                    links.push_back(ends.second);
+                    ++sent;
+                    next = now + every_ms;
+                }
+                for (Connection* c : links) {
+                    std::vector<uint8_t> msg;
+                    while (c->poll(msg)) {
+                        TurnBatchMsg b;
+                        if (peek_type(msg) == MsgType::TurnBatch && decode(msg, b) && !b.turns.empty()) {
+                            AckMsg a;
+                            a.turn = b.first_turn + static_cast<uint32_t>(b.turns.size()) - 1;
+                            c->send(encode(a));
+                        }
+                    }
+                }
+            });
+            uint64_t streamed = 0;
+            for (const auto& audit : m.audits) streamed += audit->sent;
+            return streamed;
+        };
+        {   // 100 Hellos in 10 s (a Hello every 100 ms): three are accepted, the rest are refused
+            HoldOptions o;
+            auto mp = big_match(o);
+            HoldMatch& m = *mp;
+            const size_t log_bytes = m.host->log().bytes();
+            ASSERT_TRUE(log_bytes > 1024u * 1024u);
+            m.auto_reconnect[2] = false;
+            m.audit_new_links = true;
+            m.audit_limit = SIZE_MAX / 2;
+            m.cut(2);
+            m.run(300);
+            ASSERT_TRUE(m.host->paused());
+            const uint64_t streamed = hammer(m, 100, 100);
+            ASSERT_TRUE(streamed <= 3 * uint64_t{log_bytes} + 65536);                  // at most three streams of the log (a hundred before: 150 MB in 10 s)
+            ASSERT_TRUE(streamed >= uint64_t{log_bytes} * 9 / 10);                     // (the third was let to finish: its player did not say Hello again that was accepted)
+            ASSERT_TRUE(m.host->attendance().streamed_bytes() <= 3 * uint64_t{log_bytes});
+            ASSERT_TRUE(m.host->attendance().rejoins_refused() >= 90);                 // 97 Hellos refused, every one counted
+            ASSERT_TRUE(m.refusals >= 90);                                             // (the door saw the refusals too)
+            ASSERT_EQ(m.host->attendance().rejoins(), 0u);
+            ASSERT_TRUE(m.host->rejoiners() <= 1);
+            ASSERT_EQ(m.host->attendance().state(2) == Attendance::State::CatchingUp || m.host->attendance().state(2) == Attendance::State::Absent, true);
+            ASSERT_TRUE(m.host->client_present(0) && m.host->client_present(1));       // nobody else was disturbed
+        }
+        {   // the attempts raised to eight a minute and no floor: the bytes alone stop it, at the fourth stream (3 x the log's size streamed in ten minutes)
+            HoldOptions o;
+            o.host.attendance.rejoin_attempts = Attendance::kMaxRejoinAttempts;
+            o.host.attendance.stream_floor_bytes = 0;
+            o.host.attendance.max_catch_up_ms = 3600000;
+            o.host.attendance.max_pause_ms = 3600000;
+            auto mp = big_match(o);
+            HoldMatch& m = *mp;
+            const size_t log_bytes = m.host->log().bytes();
+            ASSERT_TRUE(log_bytes > 1024u * 1024u);
+            m.auto_reconnect[2] = false;
+            m.audit_new_links = true;
+            m.audit_limit = SIZE_MAX / 2;
+            m.cut(2);
+            m.run(300);
+            const uint64_t streamed = hammer(m, 10, 2000);                              // ten Hellos, two seconds apart: each stream is finished before the next Hello comes
+            ASSERT_TRUE(streamed <= 3 * uint64_t{log_bytes} + 65536);
+            ASSERT_TRUE(streamed >= 2 * uint64_t{log_bytes});
+            ASSERT_TRUE(m.host->attendance().streamed_bytes() <= 3 * uint64_t{log_bytes});
+            ASSERT_TRUE(m.host->attendance().streamed_bytes() > 2 * uint64_t{log_bytes});
+            ASSERT_EQ(m.host->attendance().rejoins_refused(), 7u);                      // the fourth to the tenth: the bytes (and not the eight Hellos a minute, which would have refused two)
+        }
+    } TEST_END();
+
+    TEST_CASE("N2.82 Hold: A Short Pause Does Not Inflate The Others' Jitter Buffers: Three Cuts Of A Seat's Link (Each A Pause Of Under A Second, Links Of 5 ms) Leave The Buffers Of The Two Other Machines, And Of The One That Came Back, At One Turn For The Next 12 s; Nobody Is Told \"Waiting For The Other Players\"") {
+        HoldOptions o;
+        o.link.latency_ms = 5;
+        o.link.jitter_ms = 2;
+        HoldMatch m(3, o);
+        m.run(8000);
+        ASSERT_TRUE(m.clients[0]->runner().buffer_turns() == 1 && m.clients[2]->runner().buffer_turns() == 1 && m.clients[1]->runner().buffer_turns() == 1);
+        for (int i = 0; i < 3; ++i) {
+            const uint32_t sealed_before = m.sealed();
+            m.cut(1);
+            uint32_t paused_ms = 0;
+            bool waiting = false;
+            m.run(2000, true, [&](uint32_t) {
+                if (m.host->paused()) paused_ms += 10;
+                waiting = waiting || m.clients[0]->runner().stalled_ms() >= 1000 || m.clients[2]->runner().stalled_ms() >= 1000;
+            });
+            ASSERT_TRUE(paused_ms >= 30 && paused_ms <= 600);                           // a short pause (the review measured 130 - 210 ms over its links)
+            ASSERT_TRUE(m.sealed() - sealed_before >= 25);                              // the match went on
+            ASSERT_FALSE(waiting);
+            ASSERT_EQ(m.clients[0]->runner().buffer_turns(), 1u);                       // (they used to be 2, then 4, and 150 ms of input delay for half a minute)
+            ASSERT_EQ(m.clients[2]->runner().buffer_turns(), 1u);
+            ASSERT_EQ(m.clients[1]->runner().buffer_turns(), 1u);
+        }
+        ASSERT_EQ(m.host->attendance().rejoins(), 3u);
+        m.run(12000);
+        ASSERT_TRUE(m.clients[0]->runner().buffer_turns() == 1 && m.clients[2]->runner().buffer_turns() == 1 && m.clients[1]->runner().buffer_turns() == 1);
+        ASSERT_TRUE(m.clients[0]->runner().jitter().lateness_ms() <= 20 && m.clients[2]->runner().jitter().lateness_ms() <= 20);
+        ASSERT_FALSE(m.clients[0]->runner().held() || m.clients[1]->runner().held() || m.clients[2]->runner().held());      // the Presence that ended the pause let go of the runners
+        m.settle();
+        ASSERT_TRUE(m.host->desyncs().empty());
+        ASSERT_TRUE(m.all_equal());
+    } TEST_END();
+
+    TEST_CASE("N2.83 Hold: A Connection That Flaps Cannot Slow The Match Down For Ever (Cut Every 300 ms): Three Losses In A Minute Put The Seat To The Vote At Once, Whatever Its State; Back And Present It Is Voted Out By The Two Others (Its Link Is Closed, The Drop Is The Same Tick Everywhere, The Machine Is Told \"Dropped\"); A Seat That Is Cut Again And Again Is Refused At Its Fourth Hello Of A Minute And The Vote And The Cap Take It; The Match Is At Full Speed Afterwards") {
+        {   // three cuts, then the seat stays: it is back and Present, and the vote about it is open
+            HoldMatch m(3);
+            m.run(6000);
+            uint32_t cuts = 0;
+            uint32_t last_cut = 0;
+            for (int i = 0; i < 3000 && cuts < 3; ++i) {
+                m.run(10);
+                if (m.clients[2]->mode() == ClientSession::Mode::Normal && m.host->client_present(2) && !m.host->paused() && m.now - last_cut >= 300) {
+                    m.cut(2);
+                    last_cut = m.now;
+                    ++cuts;
+                }
+            }
+            ASSERT_EQ(cuts, 3u);
+            ASSERT_TRUE(m.until([&]() { return !m.host->paused() && m.clients[2]->mode() == ClientSession::Mode::Normal && m.host->client_present(2); }, 6000));
+            m.run(1500);
+            ASSERT_EQ(m.host->attendance().rejoins(), 3u);
+            ASSERT_TRUE(m.host->attendance().flapping(2, m.now));
+            ASSERT_EQ(m.host->attendance().state(2), Attendance::State::Present);       // the seat is back and plays
+            for (const uint8_t seat : {uint8_t{0}, uint8_t{1}}) {
+                const PresenceMsg& p = m.clients[seat]->presence();
+                ASSERT_TRUE(p.missing.empty() && p.vote_seat == 2 && p.voters == 2 && p.votes_continue == 0);      // the vote about a seat that is not missing: the others are asked
+            }
+            ASSERT_TRUE(m.clients[2]->presence().vote_seat == 2 && m.clients[2]->presence().voters == 2);           // (it is told too: the vote is about it, the two others vote)
+            ASSERT_FALSE(m.host->paused());
+            ASSERT_TRUE(m.clients[0]->vote(2, true));                                    // one of two is not more than half ...
+            m.run(1500);
+            ASSERT_TRUE(m.host->client_present(2) && m.clients[0]->presence().votes_continue == 1 && m.clients[0]->presence().your_vote == 2);
+            ASSERT_TRUE(m.clients[2]->vote(2, true));                                    // ... and the seat does not vote on its own case: its message is ignored (it crossed nothing: no offence)
+            m.run(1500);
+            ASSERT_EQ(m.host->violations(2), 0u);
+            ASSERT_EQ(m.clients[0]->presence().votes_continue, 1);
+            const uint32_t sealed_before = m.sealed();
+            ASSERT_TRUE(m.clients[1]->vote(2, true));                                    // two of two: the seat is dropped though it is connected
+            uint64_t drop_tick[3] = {0, 0, 0};
+            m.run(3000, true, [&](uint32_t) {
+                if (drop_tick[0] == 0 && m.sims[0]->is_player_dropped(2)) drop_tick[0] = m.sims[0]->current_tick();
+                if (drop_tick[1] == 0 && m.sims[1]->is_player_dropped(2)) drop_tick[1] = m.sims[1]->current_tick();
+                if (drop_tick[2] == 0 && m.referee.is_player_dropped(2)) drop_tick[2] = m.referee.current_tick();
+            });
+            ASSERT_TRUE(drop_tick[0] != 0 && drop_tick[0] == drop_tick[1] && drop_tick[1] == drop_tick[2]);      // the same tick everywhere
+            ASSERT_EQ(m.host->attendance().drops_by_vote(), 1u);
+            ASSERT_EQ(m.host->attendance().state(2), Attendance::State::Dropped);
+            ASSERT_FALSE(m.host->client_present(2));                                     // its connection was closed by the host ...
+            ASSERT_EQ(m.host->behind_ms(2), 0u);                                         // ... its seat gates nothing
+            ASSERT_TRUE(m.clients[2]->lost() && m.clients[2]->rejected() && m.clients[2]->reject_reason() == RejectReason::Dropped);        // ... and its machine knows why
+            ASSERT_TRUE(m.sealed() > sealed_before + 40);
+            for (const uint8_t seat : {uint8_t{0}, uint8_t{1}}) ASSERT_TRUE(m.clients[seat]->presence().vote_seat == 255 && m.clients[seat]->presence().missing.empty());
+            // the match is at full speed: 20 turns a second
+            const uint32_t at = m.sealed();
+            m.run(5000);
+            ASSERT_TRUE(m.sealed() - at >= 98 && m.sealed() - at <= 102);
+            m.settle();
+            ASSERT_TRUE(m.host->desyncs().empty());
+            ASSERT_TRUE(m.all_equal());
+        }
+        {   // nobody votes: the vote about a seat that flapped is open for a minute after its last loss, then the players are told that it is closed (and the seat plays on)
+            HoldMatch m(3);
+            m.run(6000);
+            uint32_t cuts = 0;
+            uint32_t last_cut = 0;
+            for (int i = 0; i < 3000 && cuts < 3; ++i) {
+                m.run(10);
+                if (m.clients[2]->mode() == ClientSession::Mode::Normal && m.host->client_present(2) && !m.host->paused() && m.now - last_cut >= 300) {
+                    m.cut(2);
+                    last_cut = m.now;
+                    ++cuts;
+                }
+            }
+            ASSERT_EQ(cuts, 3u);
+            ASSERT_TRUE(m.until([&]() { return !m.host->paused() && m.clients[2]->mode() == ClientSession::Mode::Normal; }, 6000));
+            const uint32_t last_loss = last_cut;
+            m.run(2000);
+            ASSERT_TRUE(m.clients[0]->presence().vote_seat == 2 && m.clients[1]->presence().vote_seat == 2);
+            m.run(last_loss + 55000 - m.now);                                            // 55 s after the last loss: still open
+            ASSERT_TRUE(m.clients[0]->presence().vote_seat == 2 && m.clients[1]->presence().vote_seat == 2);
+            m.run(8000);                                                                 // more than a minute: closed, and the others were told
+            ASSERT_TRUE(m.clients[0]->presence().vote_seat == 255 && m.clients[1]->presence().vote_seat == 255);
+            ASSERT_FALSE(m.host->attendance().flapping(2, m.now));
+            ASSERT_TRUE(m.host->client_present(2) && !m.host->paused() && m.host->attendance().state(2) == Attendance::State::Present);
+            m.settle();
+            ASSERT_TRUE(m.host->desyncs().empty());
+            ASSERT_TRUE(m.all_equal());
+        }
+        {   // a seat that is cut again and again: the fourth Hello of a minute is refused, and its machine is told that there is no way back; the vote and the cap take the seat
+            HoldOptions o;
+            o.host.attendance.max_pause_ms = 60000;
+            HoldMatch m(3, o);
+            m.run(6000);
+            const uint32_t sealed_before_cuts = m.sealed();
+            const uint32_t t_start = m.now;
+            uint32_t cuts = 0;
+            uint32_t last_cut = 0;
+            for (int i = 0; i < 6000 && !m.clients[2]->lost() && cuts < 12; ++i) {
+                m.run(10);
+                if (m.clients[2]->mode() == ClientSession::Mode::Normal && m.host->client_present(2) && !m.host->paused() && m.now - last_cut >= 300) {
+                    m.cut(2);
+                    last_cut = m.now;
+                    ++cuts;
+                }
+            }
+            ASSERT_TRUE(m.until([&]() { return m.clients[2]->lost(); }, 10000));
+            ASSERT_EQ(cuts, 4u);                                                          // the fourth cut is the last one: its Hello is the fourth of a minute
+            ASSERT_TRUE(m.clients[2]->rejected() && m.clients[2]->reject_reason() == RejectReason::RejoinFailed);
+            ASSERT_EQ(m.host->attendance().rejoins(), 3u);
+            ASSERT_EQ(m.host->attendance().rejoins_refused(), 1u);
+            ASSERT_EQ(m.host->attendance().state(2), Attendance::State::Absent);          // the seat is held: the vote and the cap apply
+            ASSERT_TRUE(m.host->paused());
+            ASSERT_TRUE(m.now - t_start < 20000);
+            const uint32_t held_in_flapping = m.host->attendance().held_ms(m.now);
+            ASSERT_TRUE(held_in_flapping < 12000);                                        // (the whole flapping cost the others a few seconds: it used to go on for as long as the machine kept it up)
+            ASSERT_TRUE(m.sealed() > sealed_before_cuts + 10);                            // (the match ran between the cuts)
+            m.run(2000);
+            ASSERT_TRUE(m.clients[0]->presence().vote_seat == 2 && m.clients[1]->presence().vote_seat == 2);      // the vote is open about it
+            ASSERT_TRUE(m.clients[0]->vote(2, true) && m.clients[1]->vote(2, true));
+            m.run(2000);
+            ASSERT_EQ(m.host->attendance().state(2), Attendance::State::Dropped);
+            ASSERT_FALSE(m.host->paused());
+            ASSERT_EQ(m.host->attendance().drops_by_vote(), 1u);
+            m.run(8000);
+            m.settle();
+            ASSERT_TRUE(m.host->desyncs().empty());
+            ASSERT_TRUE(m.all_equal());
+        }
+    } TEST_END();
+
+    TEST_CASE("N2.84 Hold: The Resume Countdown (Owner's Request): After A Pause Of 3 s Or More The Match Stays Held For 10 s More Before The Next Turn Is Sealed (After A Return Or After A Vote Or The Cap Dropped The Seat): Presence Says The Seconds Left, Once A Second (10, 9, ... 1, 0); Chat Goes On, Commands Are Discarded Without A Violation; A Loss Cancels It And A Countdown Follows That Pause; A Blip Under 3 s And The Setting 0 Resume At Once; The Countdown Is Not The Cap's Time Nor A Catch-Up's; The Drops And The Resume Are The Same Tick On Every Machine") {
+        HoldOptions o;
+        o.host.attendance.resume_countdown_ms = 10000;
+        {   // after a return: a pause of 6 s
+            HoldMatch m(3, o);
+            m.run(5000);
+            m.auto_reconnect[1] = false;
+            m.cut(1);
+            m.run(6000);
+            ASSERT_TRUE(m.host->paused());
+            const uint32_t sealed_at_pause = m.sealed();
+            const uint32_t cap_s_before = m.host->attendance().cap_s(m.now);
+            m.auto_reconnect[1] = true;
+            uint32_t back_at = 0;
+            uint32_t resumed_at = 0;
+            uint32_t pause_at_back = 0;
+            std::vector<unsigned> seen;
+            bool mid_checked = false;
+            bool mid_submit = true;
+            bool mid_paused = false;
+            unsigned mid_left = 0;
+            bool mid_held = false;
+            m.run(18000, true, [&](uint32_t now) {
+                if (back_at == 0 && m.host->attendance().state(1) == Attendance::State::Present) {
+                    back_at = now;
+                    pause_at_back = m.host->attendance().pause_ms(now);
+                }
+                if (back_at != 0 && resumed_at == 0 && m.sealed() > sealed_at_pause) resumed_at = now;
+                if (back_at != 0 && resumed_at == 0 && now - back_at < 9900) {            // the countdown: nothing is sealed, the room is held for no seat's sake
+                    ASSERT_EQ(m.sealed(), sealed_at_pause);
+                    ASSERT_TRUE(m.host->paused() && !m.host->attendance().paused() && m.host->attendance().counting_down(now));
+                }
+                if (back_at != 0 && !mid_checked && now - back_at >= 4000) {              // 4 s into it
+                    mid_checked = true;
+                    mid_paused = m.clients[0]->paused() && m.clients[2]->paused();
+                    mid_left = m.clients[0]->resume_seconds_left();
+                    mid_held = m.clients[0]->runner().held() && m.clients[2]->runner().held() && m.clients[1]->runner().held();
+                    mid_submit = m.clients[0]->submit(cmd(CommandType::Hatch, 0));       // the client refuses what the server would discard
+                    ASSERT_TRUE(m.clients[0]->chat("anybody there", false));              // chat goes on
+                    for (int i = 0; i < 20; ++i) {                                        // a client that does not know: the server discards, no offence
+                        CommandMsg msg;
+                        msg.command = cmd(CommandType::Hatch, 0);
+                        m.client_ends[0]->send(encode(msg));
+                    }
+                }
+                const unsigned s = m.clients[0]->presence().resume_s;
+                if (seen.empty() ? s != 0 : s != seen.back()) seen.push_back(s);
+            });
+            ASSERT_TRUE(back_at != 0 && resumed_at != 0);
+            ASSERT_TRUE(resumed_at - back_at >= 10000 && resumed_at - back_at <= 10040);   // ten seconds from the verified return to the first turn
+            ASSERT_TRUE(seen == (std::vector<unsigned>{10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0}));  // the seconds, once each, and the end
+            ASSERT_TRUE(mid_paused && mid_left >= 5 && mid_left <= 7 && !mid_submit && mid_held);
+            ASSERT_EQ(m.host->violations(0), 0u);                                         // the commands of the countdown cost nothing ...
+            std::vector<uint8_t> packed;
+            ASSERT_EQ(m.host->log().read(sealed_at_pause, 1, 100000, packed), 1u);
+            TurnBatchMsg first;
+            ASSERT_TRUE(decode(encode_turn_batch_packed(sealed_at_pause, 1, packed.data(), packed.size()), first) && first.turns[0].commands.size() < 5);     // ... and were not kept for the first turn after it
+            ASSERT_TRUE(m.chats[2].size() >= 1 && m.chats[2].back().text == "anybody there" && m.chats[2].back().sender == 0);     // chat was relayed
+            // it is no pause: the cap and the away times are what the pause left, the match's held time has the countdown in it
+            ASSERT_EQ(m.host->attendance().pause_ms(m.now), pause_at_back);
+            ASSERT_TRUE(m.host->attendance().cap_s(m.now) <= cap_s_before && m.host->attendance().cap_s(m.now) >= cap_s_before - 3);   // (the cap is where the pause left it: 1 - 2 s of the return)
+            ASSERT_TRUE(m.host->attendance().held_ms(m.now) >= pause_at_back + 9990);
+            ASSERT_TRUE(m.host->attendance().away_ms(1, m.now) <= pause_at_back);
+            ASSERT_FALSE(m.clients[0]->paused() || m.clients[1]->paused() || m.clients[2]->paused());
+            ASSERT_FALSE(m.clients[0]->runner().held() || m.clients[1]->runner().held() || m.clients[2]->runner().held());
+            ASSERT_TRUE(m.clients[0]->submit(cmd(CommandType::Hatch, 0)));                // the match runs: the client may send again
+            m.run(8000);
+            m.settle();
+            ASSERT_TRUE(m.host->desyncs().empty());
+            ASSERT_TRUE(m.all_equal());
+            for (auto& c : m.clients) ASSERT_EQ(c->runner().buffer_turns(), 1u);           // (a countdown is no stall either)
+        }
+        {   // a blip: the match resumes at once, no countdown is ever told
+            HoldMatch m(3, o);
+            m.run(5000);
+            m.cut(1);
+            std::vector<unsigned> seen;
+            uint32_t back_at = 0;
+            uint32_t resumed_at = 0;
+            const uint32_t sealed_before = m.sealed();
+            m.run(3000, true, [&](uint32_t now) {
+                if (back_at == 0 && m.host->attendance().state(1) == Attendance::State::Present && m.host->attendance().rejoins() == 1) back_at = now;
+                if (back_at != 0 && resumed_at == 0 && !m.host->paused()) resumed_at = now;
+                if (m.clients[0]->presence().resume_s != 0) seen.push_back(m.clients[0]->presence().resume_s);
+            });
+            ASSERT_TRUE(back_at != 0 && resumed_at != 0 && resumed_at - back_at <= 10);
+            ASSERT_TRUE(seen.empty());
+            ASSERT_FALSE(m.host->attendance().counting_down(m.now));
+            ASSERT_TRUE(m.sealed() > sealed_before + 30);
+            ASSERT_TRUE(m.host->attendance().held_ms(m.now) < 2000);
+        }
+        {   // a loss during the countdown cancels it; a countdown follows that pause, however short it is
+            HoldMatch m(3, o);
+            m.run(5000);
+            m.auto_reconnect[1] = false;
+            m.auto_reconnect[2] = false;
+            m.cut(1);
+            m.run(6000);
+            m.auto_reconnect[1] = true;
+            ASSERT_TRUE(m.until([&]() { return m.host->attendance().state(1) == Attendance::State::Present; }, 6000));
+            const uint32_t sealed_before = m.sealed();
+            m.run(4000);                                                                  // 4 s into the countdown
+            ASSERT_TRUE(m.host->paused() && m.host->attendance().counting_down(m.now));
+            ASSERT_TRUE(m.clients[0]->resume_seconds_left() > 0);
+            m.cut(2);
+            m.run(250);
+            ASSERT_TRUE(m.host->attendance().paused() && !m.host->attendance().counting_down(m.now));        // cancelled: seat 2 is missing
+            ASSERT_EQ(m.sealed(), sealed_before);
+            ASSERT_TRUE(m.clients[0]->presence().missing.size() == 1 && m.clients[0]->presence().missing[0].seat == 2 && m.clients[0]->presence().resume_s == 0);
+            ASSERT_TRUE(m.clients[0]->resume_seconds_left() == 0 && m.clients[0]->paused());
+            m.auto_reconnect[2] = true;
+            ASSERT_TRUE(m.until([&]() { return m.host->attendance().state(2) == Attendance::State::Present; }, 6000));        // it is back within a second or two: a short pause ...
+            const uint32_t back2 = m.now;
+            ASSERT_TRUE(m.host->attendance().counting_down(m.now));                       // ... and the countdown comes: 10 s from this return
+            m.run(9500);
+            ASSERT_EQ(m.sealed(), sealed_before);
+            m.run(800);
+            ASSERT_TRUE(m.sealed() > sealed_before);
+            ASSERT_TRUE(m.now - back2 >= 10000);
+            ASSERT_FALSE(m.host->paused());
+            m.run(6000);
+            m.settle();
+            ASSERT_TRUE(m.host->desyncs().empty());
+            ASSERT_TRUE(m.all_equal());
+        }
+        {   // the countdown is a setting: 0 resumes at once after a long pause (a room with it off), and so does the library's default
+            HoldOptions off;
+            ASSERT_EQ(off.host.attendance.resume_countdown_ms, 0u);
+            off.host.attendance.resume_countdown_ms = 0;
+            HoldMatch m(3, off);
+            m.run(5000);
+            m.auto_reconnect[1] = false;
+            m.cut(1);
+            m.run(6000);
+            m.auto_reconnect[1] = true;
+            uint32_t back_at = 0;
+            uint32_t resumed_at = 0;
+            bool any_countdown = false;
+            m.run(3000, true, [&](uint32_t now) {
+                if (back_at == 0 && m.host->attendance().state(1) == Attendance::State::Present) back_at = now;
+                if (back_at != 0 && resumed_at == 0 && !m.host->paused()) resumed_at = now;
+                any_countdown = any_countdown || m.clients[0]->presence().resume_s != 0;
+            });
+            ASSERT_TRUE(back_at != 0 && resumed_at != 0 && resumed_at - back_at <= 10 && !any_countdown);
+        }
+        {   // after a vote that dropped the last seat that was missing: ten seconds more, then the Drop is sealed and executes at the same tick everywhere
+            HoldMatch m(3, o);
+            m.run(5000);
+            m.auto_reconnect[2] = false;
+            m.cut(2);
+            m.run(31000);
+            ASSERT_TRUE(m.clients[0]->presence().vote_seat == 2 && m.clients[1]->presence().vote_seat == 2);
+            const uint32_t sealed_at_pause = m.sealed();
+            ASSERT_TRUE(m.clients[0]->vote(2, true) && m.clients[1]->vote(2, true));
+            uint32_t dropped_at = 0;
+            uint32_t resumed_at = 0;
+            std::vector<unsigned> seen;
+            uint64_t drop_tick[3] = {0, 0, 0};
+            m.run(16000, true, [&](uint32_t now) {
+                if (dropped_at == 0 && m.host->attendance().state(2) == Attendance::State::Dropped) dropped_at = now;
+                if (dropped_at != 0 && resumed_at == 0 && m.sealed() > sealed_at_pause) resumed_at = now;
+                if (dropped_at != 0 && resumed_at == 0) ASSERT_EQ(m.sealed(), sealed_at_pause);
+                const unsigned s = m.clients[0]->presence().resume_s;
+                if (seen.empty() ? s != 0 : s != seen.back()) seen.push_back(s);
+                if (drop_tick[0] == 0 && m.sims[0]->is_player_dropped(2)) drop_tick[0] = m.sims[0]->current_tick();
+                if (drop_tick[1] == 0 && m.sims[1]->is_player_dropped(2)) drop_tick[1] = m.sims[1]->current_tick();
+                if (drop_tick[2] == 0 && m.referee.is_player_dropped(2)) drop_tick[2] = m.referee.current_tick();
+            });
+            ASSERT_TRUE(dropped_at != 0 && resumed_at != 0);
+            ASSERT_TRUE(resumed_at - dropped_at >= 10000 && resumed_at - dropped_at <= 10040);
+            ASSERT_TRUE(seen.size() == 11 && seen.front() == 10 && seen.back() == 0);
+            ASSERT_TRUE(drop_tick[0] != 0 && drop_tick[0] == drop_tick[1] && drop_tick[1] == drop_tick[2]);      // the same tick on every machine, after the countdown
+            ASSERT_EQ(m.host->attendance().drops_by_vote(), 1u);
+            m.run(4000);
+            m.settle();
+            ASSERT_TRUE(m.host->desyncs().empty());
+            ASSERT_TRUE(m.all_equal());
+        }
+        {   // after the cap dropped the seat: ten seconds more; the cap's account is the pause only
+            HoldOptions capped = o;
+            capped.host.attendance.max_pause_ms = 20000;
+            HoldMatch m(3, capped);
+            m.run(5000);
+            m.auto_reconnect[2] = false;
+            m.cut(2);
+            const uint32_t cut_at = m.now;
+            const uint32_t sealed_at_pause = m.sealed();
+            uint32_t dropped_at = 0;
+            uint32_t resumed_at = 0;
+            m.run(34000, true, [&](uint32_t now) {
+                if (dropped_at == 0 && m.host->attendance().state(2) == Attendance::State::Dropped) dropped_at = now;
+                if (dropped_at != 0 && resumed_at == 0 && m.sealed() > sealed_at_pause) resumed_at = now;
+            });
+            ASSERT_TRUE(dropped_at - cut_at >= 20000 && dropped_at - cut_at <= 20300);    // the cap: 20 s of pause
+            ASSERT_TRUE(resumed_at - dropped_at >= 10000 && resumed_at - dropped_at <= 10040);
+            ASSERT_EQ(m.host->attendance().drops_by_cap(), 1u);
+            ASSERT_TRUE(m.host->attendance().pause_ms(m.now) >= 20000 && m.host->attendance().pause_ms(m.now) <= 20300);        // the 10 s of countdown are not in it
+            ASSERT_TRUE(m.host->attendance().held_ms(m.now) >= 30000);
+            m.settle();
+            ASSERT_TRUE(m.host->desyncs().empty());
+            ASSERT_TRUE(m.all_equal());
+        }
+        {   // the countdown is not the catch-up's time: a seat that catches up for 25 s of a budget of 30 s is not let go in the countdown that a slow stream's end begins
+            HoldOptions slow = o;
+            slow.host.attendance.max_catch_up_ms = 30000;
+            slow.client.catch_up_ticks = 1;                                               // 100 turns a second
+            HoldMatch m(3, slow);
+            m.run(100000);                                                                // 2000 turns: a catch-up of 20 s
+            m.auto_reconnect[2] = false;
+            m.cut(2);
+            m.run(500);
+            m.reload(2);
+            ASSERT_TRUE(m.until([&]() { return m.host->attendance().state(2) == Attendance::State::Present; }, 28000));
+            ASSERT_TRUE(m.host->attendance().catch_up_expired() == 0 && m.host->attendance().counting_down(m.now));
+            m.run(11000);                                                                 // the countdown passes (it would have run the 30 s out, were it a catch-up)
+            ASSERT_EQ(m.host->attendance().catch_up_expired(), 0u);
+            ASSERT_FALSE(m.host->paused());
+            ASSERT_EQ(m.host->attendance().state(2), Attendance::State::Present);
+            m.settle();
+            ASSERT_TRUE(m.host->desyncs().empty());
+            ASSERT_TRUE(m.all_equal());
+        }
+    } TEST_END();
+
+    TEST_CASE("N2.85 Hold: A Log That Is Dead Frees Its Memory At Once (Nobody Can Be Streaming From It: A Log Only Grows While The Match Runs, And A Seat Is Only Brought Back While It Is Paused): The Server's Budget Is Whole Again The Moment It Dies, And The Room Falls Back To Dropping A Lost Seat At Once; A Pause Never Changes What The Log Holds") {
+        LogBudget budget(6000);
+        HoldOptions o;
+        o.host.log_budget = &budget;
+        HoldMatch m(3, o);
+        m.run(1000);
+        ASSERT_TRUE(m.host->log().usable() && budget.used() > 0 && budget.used() == m.host->log().capacity_bytes());
+        // a pause: nothing is appended, nothing is allocated, whatever the seat does meanwhile
+        m.auto_reconnect[2] = false;
+        m.cut(2);
+        m.run(500);
+        ASSERT_TRUE(m.host->paused());
+        const uint64_t held = budget.used();
+        const uint32_t turns = m.host->log().turns();
+        m.run(5000);
+        ASSERT_TRUE(budget.used() == held && m.host->log().turns() == turns && m.host->log().usable());
+        m.auto_reconnect[2] = true;
+        ASSERT_TRUE(m.until([&]() { return !m.host->paused() && m.clients[2]->mode() == ClientSession::Mode::Normal; }, 8000));
+        // the match runs on until the budget is spent: the log is dead from that moment and has given everything back
+        uint64_t most = 0;
+        ASSERT_TRUE(m.until([&]() {
+            most = std::max(most, budget.used());
+            return !m.host->log().usable();
+        }, 120000));
+        ASSERT_TRUE(most > 3000 && most <= 6000);
+        ASSERT_EQ(budget.used(), uint64_t{0});                                            // at once: not when the match ends
+        ASSERT_TRUE(m.host->log().turns() == 0 && m.host->log().bytes() == 0 && m.host->log().capacity_bytes() == 0);
+        m.run(2000);
+        ASSERT_EQ(budget.used(), uint64_t{0});
+        // a lost seat is dropped at once now (no pause, no way back)
+        m.auto_reconnect[1] = false;
+        m.cut(1);
+        bool paused_ever = false;
+        m.run(3000, true, [&](uint32_t) { paused_ever = paused_ever || m.host->paused(); });
+        ASSERT_FALSE(paused_ever);
+        ASSERT_EQ(m.host->attendance().state(1), Attendance::State::Dropped);
+        m.settle();
+        ASSERT_TRUE(m.host->desyncs().empty());
+        ASSERT_TRUE(m.all_equal());
+    } TEST_END();
+
+    TEST_CASE("N2.86 Client: How Long A Machine Tries To Come Back Follows The Room's Cap: The Last Cap That A Presence Named (From The Loss, Or From That Presence When A Seat Was Missing Then) And A Minute; 31 Minutes Before Any Presence; A Cap Of \"That Or More\" Is A Day; The Last Presence Wins") {
+        const auto lose_and_wait = [](LoneSession& L) {
+            L.lose_link();
+            const uint32_t since = L.s->lost_since_ms();
+            uint32_t waited = 0;
+            while (!L.s->lost() && waited < 3 * 3600u * 1000u) {
+                L.step(1000);
+                waited += 1000;
+            }
+            return L.now - since;
+        };
+        const auto presence = [](LoneSession& L, uint16_t cap_s, bool missing) {
+            PresenceMsg p;
+            p.cap_s = cap_s;
+            p.voters = 2;
+            if (missing) p.missing = {{2, PresenceMsg::State::Absent, 20, 0}};
+            L.first().srv->send(encode(p));
+            L.step(100);
+        };
+        ASSERT_TRUE(kReconnectGiveUpMs == 31u * 60u * 1000u && kReconnectMarginMs == 60000u && kMaxCapSeconds == 86400u);
+        {   // before any Presence: the default, 31 minutes (what a room's default cap and a minute make)
+            LoneSession L;
+            L.first().pong = true;
+            L.step(100);
+            L.lose_link();
+            ASSERT_EQ(L.s->give_up_ms(), kReconnectGiveUpMs);
+            ClientSession::Config c;
+            c.reconnect_give_up_ms = 7000;
+            LoneSession configured(c);
+            configured.step(100);
+            configured.lose_link();
+            ASSERT_EQ(configured.s->give_up_ms(), 7000u);                                // (the configured time is the one that holds until a Presence names a cap)
+        }
+        {   // a Presence that names a cap of 100 s while nobody was missing: the cap runs from the loss: 100 s and a minute
+            LoneSession L;
+            L.first().pong = true;
+            L.step(100);
+            presence(L, 100, false);
+            L.lose_link();
+            ASSERT_EQ(L.s->give_up_ms(), 160000u);
+            const uint32_t waited = lose_and_wait(L);
+            ASSERT_TRUE(L.s->lost() && !L.s->rejected());
+            ASSERT_TRUE(waited >= 160000 && waited <= 161100);
+        }
+        {   // a Presence of a pause that was on already, 30 s before the loss: the cap was running since: 100 s from that Presence and a minute, so 130 s from the loss
+            LoneSession L;
+            L.first().pong = true;
+            L.step(100);
+            presence(L, 100, true);
+            L.step(30000);
+            L.lose_link();
+            const uint32_t gone = L.s->lost_since_ms();
+            ASSERT_TRUE(L.s->give_up_ms() >= 129000 && L.s->give_up_ms() <= 130000);
+            const uint32_t waited = lose_and_wait(L);
+            ASSERT_TRUE(waited >= 129000 && waited <= 131100);
+            (void)gone;
+        }
+        {   // the last Presence wins (a cap that ran down, a pause that ended); a cap that is spent leaves the margin
+            LoneSession L;
+            L.first().pong = true;
+            L.step(100);
+            presence(L, 100, false);
+            presence(L, 50, false);
+            L.lose_link();
+            ASSERT_EQ(L.s->give_up_ms(), 110000u);
+            LoneSession spent;
+            spent.first().pong = true;
+            spent.step(100);
+            presence(spent, 0, false);
+            spent.lose_link();
+            ASSERT_EQ(spent.s->give_up_ms(), kReconnectMarginMs);
+            LoneSession huge;
+            huge.first().pong = true;
+            huge.step(100);
+            presence(huge, kCapSecondsMore, false);
+            huge.lose_link();
+            ASSERT_EQ(huge.s->give_up_ms(), 86400u * 1000u + 60000u);                    // 0xFFFF seconds says "that or more": a room's cap is at most a day
+            LoneSession exact;
+            exact.first().pong = true;
+            exact.step(100);
+            presence(exact, 1800, false);
+            exact.lose_link();
+            ASSERT_EQ(exact.s->give_up_ms(), 1860000u);                                  // the default cap of 30 minutes is the default give-up time
+        }
+    } TEST_END();
+
+    TEST_CASE("N2.87 Hold: Presence Goes Out At Once For A Second Loss While The Match Is Paused (Not Up To A Second Later), And Once A Second And No Faster While Nothing Changes; A Vote That Opens Or Closes While The Match Runs Is Told Too") {
+        HoldMatch m(3);
+        m.run(3000);
+        m.auto_reconnect[1] = false;
+        m.auto_reconnect[2] = false;
+        m.cut(1);
+        m.run(300);                                                                       // paused; the last Presence went out at the loss, the next is due in 0.7 s
+        ASSERT_TRUE(m.host->paused());
+        const size_t before = m.taps[0]->sent_of(MsgType::Presence);
+        ASSERT_TRUE(before >= 1);
+        m.cut(2);
+        m.run(30);                                                                        // the next pass or two
+        ASSERT_TRUE(m.taps[0]->sent_of(MsgType::Presence) > before);                       // told in the same pass that saw the loss
+        m.run(120);                                                                       // ... and it reaches the player
+        ASSERT_EQ(m.clients[0]->presence().missing.size(), size_t{2});
+        // nothing changes for ten seconds: a Presence a second, to every player that is there
+        const size_t quiet_from = m.taps[0]->sent_of(MsgType::Presence);
+        m.run(10000);
+        const size_t quiet = m.taps[0]->sent_of(MsgType::Presence) - quiet_from;
+        ASSERT_TRUE(quiet >= 9 && quiet <= 11);                                           // (a thousand when it went out on every pass)
+        // a vote that opens by itself: told when the seat's away time reaches the vote's 30 s (within the second), and nothing more often than that
+        ASSERT_TRUE(m.clients[0]->presence().vote_seat == 255);
+        m.run(20000);
+        ASSERT_TRUE(m.clients[0]->presence().vote_seat == 1);
+    } TEST_END();
+    TEST_CASE("N2.88 Hold (the rig): A Machine That Is Reloaded Over A Slow Link (More Than A Second In The Lobby) Has A Sane Clock: Its Session Is Started With The Machine's Own Clock And Its First Frame Does Not Take Back The Time That The Lobby Took, So It Is Not \"Silent\" And Does Not Give Up At Once; The Rig Of Every Other Test Reloads The Same Way") {
+        HoldOptions o;
+        o.link.latency_ms = 700;                                                        // four trips for the lobby alone: more than 2.8 s before the session exists
+        o.link.jitter_ms = 0;
+        HoldMatch m(3, o);
+        m.run(8000);
+        m.auto_reconnect[2] = false;
+        m.cut(2);
+        m.run(3000);
+        ASSERT_TRUE(m.host->paused());
+        const uint32_t reload_at = m.now;
+        m.clock_lag[2] = 4000;                                                          // this machine's own clock is behind (a window that was frozen earlier): the new session is started with that clock, not the real one
+        m.reload(2);
+        ASSERT_TRUE(m.until([&]() { return m.clients[2] != nullptr; }, 8000));
+        ASSERT_TRUE(m.now - reload_at > 2000);                                          // the lobby took longer than a second: the old rig put the session's clock back by that much at its first frame
+        ASSERT_EQ(m.clock_lag[2], 4000u);                                               // ... and the time in the lobby is no stop of the session's frames: the lag has not grown by it
+        ASSERT_TRUE(m.until([&]() { return m.clients[2]->mode() == ClientSession::Mode::Normal && !m.host->paused(); }, 30000));
+        ASSERT_FALSE(m.clients[2]->lost());
+        ASSERT_EQ(m.host->attendance().rejoins(), 1u);
+        m.run(8000);
+        m.settle(6000);
+        ASSERT_TRUE(m.host->desyncs().empty());
+        ASSERT_TRUE(m.all_equal());
     } TEST_END();
 }
 

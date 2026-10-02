@@ -1,7 +1,8 @@
 // ants_server: the dedicated game server. A headless program: it hosts many rooms, each a host without a seat that runs the match as the referee (docs/NETWORK_PORT.md).
 //
 //   ants_server --maps DIR [--port 4001] [--ws-port 4002] [--ctl-port 4010] [--public] [--ws-any-interface] [--ctl-any-interface] [--results-dir DIR] [--secret-file PATH] [--max-rooms N]
-//               [--reconnect | --no-reconnect] [--hold-vote-seconds N] [--max-pause-seconds N] [--log-mb N]
+//               [--reconnect | --no-reconnect] [--hold-vote-seconds N] [--max-pause-seconds N] [--max-catch-up-seconds N]
+//               [--resume-countdown-seconds N] [--log-mb N]
 //
 //   --maps DIR         the maps folder (the .lvl files that rooms may use); required
 //   --port N           the TCP port of native clients (0: none; default 4001); every interface with --public, else this machine only
@@ -29,7 +30,12 @@
 //   --hold-vote-seconds N
 //                      the others may vote on going on without a seat once it has been away N seconds in all (5 - 3600, default 30; the control interface's "hold_vote_seconds")
 //   --max-pause-seconds N
-//                      the cap on a match's total paused time: at the cap every absent seat is dropped (60 - 86400, default 1800; the control interface's "max_pause_seconds")
+//                      the cap on a match's total paused time: at the cap every seat that is not present is dropped (60 - 86400, default 1800; the control interface's "max_pause_seconds")
+//   --max-catch-up-seconds N
+//                      the time that one absence may spend catching up in all, over all its attempts: then the catch-up fails, the seat is absent (the vote and the cap apply) and its key
+//                      is refused (10 - 3600, default 300; the control interface's "max_catch_up_seconds")
+//   --resume-countdown-seconds N
+//                      after a pause of 3 s or more the match is held this long before it goes on (0 - 60, default 10, 0 = none; the control interface's "resume_countdown_seconds")
 //   --log-mb N         the limit of one room's turn log, which a returning player is given the match from, in MiB (1 - 256, default 16); the logs of all the rooms together may take 256 MiB
 //   --version, --help
 //
@@ -82,6 +88,8 @@ struct Options {
     bool reconnect{false};
     long hold_vote_s{30};
     long max_pause_s{1800};
+    long max_catch_up_s{300};
+    long resume_countdown_s{10};
     long log_mb{16};
 };
 
@@ -90,7 +98,8 @@ void usage(FILE* to) {
                  "usage: ants_server --maps DIR [--port 4001] [--ws-port N] [--ctl-port N] [--public] [--ws-any-interface] [--ctl-any-interface]\n"
                  "                    [--results-dir DIR] [--secret-file PATH] [--max-rooms N]\n"
                  "                    [--demo-rooms N --demo-map NAME [--demo-maps A.LVL,B.LVL,...]]\n"
-                 "                    [--reconnect | --no-reconnect] [--hold-vote-seconds 5-3600] [--max-pause-seconds 60-86400] [--log-mb 1-256]\n"
+                 "                    [--reconnect | --no-reconnect] [--hold-vote-seconds 5-3600] [--max-pause-seconds 60-86400]\n"
+                 "                    [--max-catch-up-seconds 10-3600] [--resume-countdown-seconds 0-60] [--log-mb 1-256]\n"
                  "  the control interface takes its secret from the environment variable ANTS_SERVER_SECRET; without it the server makes one and keeps it\n"
                  "  in --secret-file (default: control-secret in --results-dir)\n");
 }
@@ -174,19 +183,21 @@ int main(int argc, char** argv) {
             o.reconnect = true;
         } else if (a == "--no-reconnect") {
             o.reconnect = false;
-        } else if (a == "--hold-vote-seconds" || a == "--max-pause-seconds" || a == "--log-mb") {
+        } else if (a == "--hold-vote-seconds" || a == "--max-pause-seconds" || a == "--max-catch-up-seconds" || a == "--resume-countdown-seconds" || a == "--log-mb") {
             const char* text = value(a.c_str());
             char* end = nullptr;
             const long n = std::strtol(text, &end, 10);
-            const bool vote = a == "--hold-vote-seconds";
-            const bool pause = a == "--max-pause-seconds";
-            const long lo = vote ? 5 : (pause ? 60 : 1);
-            const long hi = vote ? 3600 : (pause ? 86400 : 256);
+            long lo = 1, hi = 256;
+            long* target = &o.log_mb;
+            if (a == "--hold-vote-seconds") { lo = 5; hi = 3600; target = &o.hold_vote_s; }
+            else if (a == "--max-pause-seconds") { lo = 60; hi = 86400; target = &o.max_pause_s; }
+            else if (a == "--max-catch-up-seconds") { lo = 10; hi = 3600; target = &o.max_catch_up_s; }
+            else if (a == "--resume-countdown-seconds") { lo = 0; hi = 60; target = &o.resume_countdown_s; }
             if (end == text || *end != '\0' || n < lo || n > hi) {
                 std::fprintf(stderr, "%s takes a whole number from %ld to %ld\n", a.c_str(), lo, hi);
                 return 2;
             }
-            (vote ? o.hold_vote_s : (pause ? o.max_pause_s : o.log_mb)) = n;
+            *target = n;
         } else if (a == "--demo-map") {
             o.demo_map = value("--demo-map");
         } else if (a == "--demo-maps") {
@@ -290,6 +301,8 @@ int main(int argc, char** argv) {
     limits.reconnect = o.reconnect;
     limits.hold_vote_ms = static_cast<uint32_t>(o.hold_vote_s * 1000);
     limits.max_pause_ms = static_cast<uint32_t>(o.max_pause_s * 1000);
+    limits.max_catch_up_ms = static_cast<uint32_t>(o.max_catch_up_s * 1000);
+    limits.resume_countdown_ms = static_cast<uint32_t>(o.resume_countdown_s * 1000);
     limits.room_log_bytes = static_cast<size_t>(o.log_mb) * 1024u * 1024u;
     ants::server::MapStore store{o.maps_dir};
     if (o.demo_maps_given && o.demo_rooms == 0) {
@@ -335,7 +348,8 @@ int main(int argc, char** argv) {
     log(std::string("ants_server ") + std::string(ants::VERSION_STRING) + " (network protocol " + std::to_string(ants::net::kProtocolVersion) + "), maps in " + o.maps_dir);
     if (o.reconnect) {
         log("rooms hold the seat of a player whose connection is lost (--reconnect): a vote after " + std::to_string(o.hold_vote_s) + " s away, the pauses of a match capped at " + std::to_string(o.max_pause_s) +
-            " s, a turn log of at most " + std::to_string(o.log_mb) + " MiB per room");
+            " s, a catch-up of at most " + std::to_string(o.max_catch_up_s) + " s per absence, a resume countdown of " + std::to_string(o.resume_countdown_s) + " s, a turn log of at most " +
+            std::to_string(o.log_mb) + " MiB per room");
     }
     if (tcp) log("TCP game port " + std::to_string(tcp->port()) + (o.is_public ? " (all interfaces)" : " (this machine only)"));
     if (ws) log("WebSocket port " + std::to_string(ws->port()) + (o.ws_any_interface ? " (all interfaces: the host must restrict it)" : " (this machine only: put a TLS proxy in front)"));
@@ -374,7 +388,8 @@ int main(int argc, char** argv) {
             if (demo && s.ticks == 0) continue;                    // a demo room that nobody completed: no line, no file (a peer chooses these codes, nothing may pile up)
             std::string held;                                      // a room that held seats says what came of it (never a key)
             if (s.reconnect) {
-                held = ", paused " + std::to_string(s.paused_s) + " s, " + std::to_string(s.rejoins) + " back, dropped " + std::to_string(s.drops_by_vote) + " by vote and " + std::to_string(s.drops_by_cap) + " by the cap";
+                held = ", paused " + std::to_string(s.paused_s) + " s, " + std::to_string(s.rejoins) + " back, dropped " + std::to_string(s.drops_by_vote) + " by vote and " + std::to_string(s.drops_by_cap) + " by the cap, " + std::to_string(s.rejoins_refused) +
+                       " refused by a budget";
             }
             log("room " + s.code + " " + ants::server::room_state_name(s.state) + ": " + s.reason + " (map " + s.map + ", " + std::to_string(s.ticks) + " ticks" + held + ")");
             if (!o.results_dir.empty() && !demo) {
