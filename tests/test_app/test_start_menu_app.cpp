@@ -477,9 +477,11 @@ void shot(Application& app, const std::string& path) {
     app.render_frame();
 }
 
+// (the button's own rectangle: the setup screen of the 16:9 picture, which a command line gets by default, has the buttons elsewhere than the original's 640 x 480 page)
 void click_fog(Application& app, bool on) {
-    const int32_t x = (on ? MapSelectScreen::BTN_FOW_ON_X : MapSelectScreen::BTN_FOW_OFF_X) + 2;
-    const int32_t y = (on ? MapSelectScreen::BTN_FOW_ON_Y : MapSelectScreen::BTN_FOW_OFF_Y) + 2;
+    const ButtonRect& rect = (on ? app.map_select().fog_on_button() : app.map_select().fog_off_button()).up_rect();
+    const int32_t x = rect.x + 2;
+    const int32_t y = rect.y + 2;
     app.map_select().handle_mouse_motion(x, y);
     app.map_select().handle_mouse_down(x, y, 1);
     app.map_select().handle_mouse_up(x, y, 1);

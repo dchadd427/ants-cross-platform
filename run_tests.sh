@@ -553,14 +553,14 @@ if [ "$RUN_APP" -eq 1 ]; then
 
     echo ""
     echo -e "${BOLD}${BLUE}======================================================================${RESET}"
-    echo -e "${BOLD}${BLUE}>>> 3.14 RUNNING WIDE SETUP SUITE (the 16:9 setup screen with its map preview: layout, seams, the mock-ups pixel for pixel, the preview, the pointer, fingerprints)...${RESET}"
+    echo -e "${BOLD}${BLUE}>>> 3.16 RUNNING WIDE SETUP SUITE (the 16:9 setup screen with its map preview: layout, seams, the mock-ups pixel for pixel, the preview, the pointer, fingerprints)...${RESET}"
     echo -e "${BOLD}${BLUE}======================================================================${RESET}"
     "./$BUILD_DIR/tests/test_app/test_wide_setup"
     WIDE_SETUP_STATUS=$?
 
     echo ""
     echo -e "${BOLD}${BLUE}======================================================================${RESET}"
-    echo -e "${BOLD}${BLUE}>>> 3.15 RUNNING MAP PREVIEW SUITE (the preview is the game's own render of the map: the area filter against an oracle, the fit, the render, the cache, the fallback, the six maps)...${RESET}"
+    echo -e "${BOLD}${BLUE}>>> 3.17 RUNNING MAP PREVIEW SUITE (the preview is the game's own render of the map: the area filter against an oracle, the fit, the render, the cache, the fallback, the six maps)...${RESET}"
     echo -e "${BOLD}${BLUE}======================================================================${RESET}"
     "./$BUILD_DIR/tests/test_app/test_map_preview"
     MAP_PREVIEW_STATUS=$?
@@ -940,16 +940,16 @@ if [ "$RUN_APP" -eq 1 ]; then
     fi
 
     if [ "$WIDE_SETUP_STATUS" -eq 0 ]; then
-        echo -e " 3.14 Wide Setup (test_wide_setup):                  ${GREEN}PASSED${RESET}"
+        echo -e " 3.16 Wide Setup (test_wide_setup):                  ${GREEN}PASSED${RESET}"
     else
-        echo -e " 3.14 Wide Setup (test_wide_setup):                  ${RED}FAILED (exit code ${WIDE_SETUP_STATUS})${RESET}"
+        echo -e " 3.16 Wide Setup (test_wide_setup):                  ${RED}FAILED (exit code ${WIDE_SETUP_STATUS})${RESET}"
         TOTAL_FAILED=$((TOTAL_FAILED + 1))
     fi
 
     if [ "$MAP_PREVIEW_STATUS" -eq 0 ]; then
-        echo -e " 3.15 Map Preview (test_map_preview):                ${GREEN}PASSED${RESET}"
+        echo -e " 3.17 Map Preview (test_map_preview):                ${GREEN}PASSED${RESET}"
     else
-        echo -e " 3.15 Map Preview (test_map_preview):                ${RED}FAILED (exit code ${MAP_PREVIEW_STATUS})${RESET}"
+        echo -e " 3.17 Map Preview (test_map_preview):                ${RED}FAILED (exit code ${MAP_PREVIEW_STATUS})${RESET}"
         TOTAL_FAILED=$((TOTAL_FAILED + 1))
     fi
 fi
