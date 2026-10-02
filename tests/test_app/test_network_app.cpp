@@ -2371,7 +2371,7 @@ void run_hidden_page_tests() {
             const double ten_minutes = given(600.0f);
             ASSERT_TRUE(std::abs(ten_minutes - 1000.0) < 0.001);                          // ten minutes of "time" give exactly one second ...
             const uint32_t ran = app.net()->turns_executed() - turns_before;
-            ASSERT_TRUE(ran >= 3 && ran <= 1000 / net::kTurnMs + 1);                      // ... which the runner pays out under its own limits, never more than a second of play
+            ASSERT_TRUE(ran >= 3 && ran <= 4 * 1000 / net::kTurnMs);                      // ... which the runner pays out under its own limits: at most the ticks that that second holds at its fastest speed (it runs a backlog down at up to 4x, also in a long step)
             ASSERT_EQ(app.net()->phase(), net::NetGame::Phase::Playing);                  // (the host is alive: what waited in the link was read first, it is no silence)
             ASSERT_FALSE(app.net()->electing());
             ASSERT_FALSE(app.net()->is_host());

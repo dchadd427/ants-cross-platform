@@ -8,6 +8,7 @@ control interface for the given time:
 
   * the room keeps running at 20 ticks a second (the hidden seat is driven by the server's messages, not by its frames), with both players in it;
   * the state hashes that both games report (the page posts one every 100 ticks on the broadcast channel "ants-sync") are equal, tick for tick;
+  * the hidden seat is never called lagging (no Lag notice, message type 25, reaches either page: the server tells the room when a seat is 3 s behind);
   * the hidden page starts no music while it is hidden (no .mp3 / .MID file is opened after the match began);
   * after the hidden period the seat is still in the match (the room is still running with two players).
 
@@ -201,6 +202,21 @@ HOOK = r"""
     var bc = new BroadcastChannel('ants-sync');
     bc.onmessage = function (e) { if (e.data && e.data.ants === 'sync') window.__sync.push({ t: performance.now() - t0, seat: e.data.seat, tick: e.data.tick, hash: e.data.hash, room: e.data.room }); };
   } catch (e) {}
+  window.__ws = { messages: 0, lag: 0 };                                      // the messages of the game server (binary; the first byte is the message type) and the Lag notices among them (type 25)
+  try {
+    var NativeWebSocket = window.WebSocket;
+    var CountingWebSocket = function (url, protocols) {
+      var ws = protocols === undefined ? new NativeWebSocket(url) : new NativeWebSocket(url, protocols);
+      ws.addEventListener('message', function (e) {
+        window.__ws.messages++;
+        try { if (e.data instanceof ArrayBuffer && e.data.byteLength > 0 && new Uint8Array(e.data)[0] === 25) window.__ws.lag++; } catch (x) {}
+      });
+      return ws;
+    };
+    CountingWebSocket.prototype = NativeWebSocket.prototype;
+    ['CONNECTING', 'OPEN', 'CLOSING', 'CLOSED'].forEach(function (k) { CountingWebSocket[k] = NativeWebSocket[k]; });
+    window.WebSocket = CountingWebSocket;
+  } catch (e) {}
   window.__music = [];
   var timer = setInterval(function () {
     if (window.Module && Module.FS && Module.FS.open && !Module.FS.__wrapped) {
@@ -366,6 +382,9 @@ def main():
             check(19.0 <= progress <= 21.0, "the hidden seat itself executed 20 ticks a second (%.2f, from its own hash reports)" % progress)
         else:
             check(False, "the hidden seat reported its hash %d times (at least 3 expected)" % len(reports))
+        ws = {name: json.loads(devtools.evaluate(session, "JSON.stringify(window.__ws)")) for name, session in (("hidden", session_a), ("shown", session_b))}
+        check(all(w["messages"] > 20 * args.seconds // 2 for w in ws.values()), "both pages received the server's turns (%d and %d messages)" % (ws["hidden"]["messages"], ws["shown"]["messages"]))
+        check(ws["hidden"]["lag"] == 0 and ws["shown"]["lag"] == 0, "nobody was called lagging: no Lag notice reached either page (hidden %d, shown %d)" % (ws["hidden"]["lag"], ws["shown"]["lag"]))
         music = json.loads(devtools.evaluate(session_a, "JSON.stringify(window.__music)"))
         late = [m for m in music[music_before:] if m["hidden"]]
         check(not late, "the hidden page opened no music file after the match began (%s)" % ", ".join(m["path"] for m in late))

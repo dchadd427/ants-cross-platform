@@ -3,7 +3,7 @@
 # No automated test reaches the code of the web build (wasm_ws.cpp's wake-ups, ants_background_pump, the page's timer, sound and visibility logic): a native test plays
 # the browser (suite 3.6, N5.32 - N5.44), this plays a real one. It starts a throwaway headless browser, opens the two seats of a demo room in two tabs, covers the first
 # tab with the second so that it is hidden for real, and checks through the control interface and the games' own hash reports that the room runs at 20 ticks a second,
-# that both state hashes agree, that nobody is dropped and that the hidden page starts no music.
+# that both state hashes agree, that nobody is dropped or called lagging (no Lag notice reaches either page) and that the hidden page starts no music.
 #
 #   ANTS_WEB_URL=http://127.0.0.1:19980/ ANTS_CTL_URL=http://127.0.0.1:4010 ANTS_CTL_SECRET=$(docker exec ants-server cat /results/control-secret) \
 #       tests/scripts/test_web_hidden.sh [seconds hidden, default 45]
