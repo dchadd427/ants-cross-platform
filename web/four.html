@@ -56,6 +56,7 @@
             align-items: center;
         }
         .btn:hover { border-color: var(--accent-green); color: #fff; }
+        .aspect-pick { display: inline-flex; align-items: center; gap: 6px; color: var(--text-dim); font-size: 0.85rem; }
         #sync {
             position: sticky;
             top: 0;
@@ -104,7 +105,8 @@
             color: var(--text-dim);
         }
         .label .seat { color: var(--text-main); font-weight: 600; }
-        .frame { position: relative; aspect-ratio: 4 / 3; }
+        .frame { position: relative; aspect-ratio: 16 / 9; }          /* the shape of the picture: 16:9 by default, 4:3 with ?aspect=4:3 (data-aspect of the body) */
+        body[data-aspect="4:3"] .frame { aspect-ratio: 4 / 3; }
         iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; background: #000; }
         .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; background: var(--text-dim); }
         .dot.green { background: #48b870; } .dot.red { background: #e0584a; } .dot.blue { background: #4a8ae0; } .dot.black { background: #101010; border: 1px solid #888; }
@@ -142,6 +144,12 @@
             <div class="sub" id="subtitle">Host a match on the game server and share its code or links, or join a match with its code. You can also play every seat yourself, on this page or in windows of their own.</div>
         </div>
         <div class="actions">
+            <label class="aspect-pick" for="aspect-select">Picture
+                <select id="aspect-select" aria-label="Shape of the picture">
+                    <option value="16:9">16:9</option>
+                    <option value="4:3">Classic 4:3</option>
+                </select>
+            </label>
             <button id="new-room" type="button" class="btn">New match</button>
             <a class="btn" href="/">Single game</a>
         </div>
@@ -234,6 +242,20 @@
             return null;
         }
 
+        // The shape of the games' pictures: ?aspect=16:9 or ?aspect=4:3 (anything else is ignored), else what the game page's selector remembered, else 16:9. Each game passes it on
+        // (?aspect= of its address) and the frames of the games have that shape. Links made for other people carry it only when this address names it.
+        var aspect = '16:9';
+        var aspectFromAddress = false;
+        (function () {
+            var asked = null;
+            try { asked = new URLSearchParams(window.location.search).get('aspect'); } catch (e) { /* no address to read */ }
+            var remembered = recall('ants.aspect');
+            if (asked === '16:9' || asked === '4:3') { aspect = asked; aspectFromAddress = true; }
+            else if (remembered === '16:9' || remembered === '4:3') aspect = remembered;
+            document.body.setAttribute('data-aspect', aspect);
+            $('aspect-select').value = aspect;
+        })();
+
         var room = '';
         var seatCount = 4;                  // the seats of this room (the code of a page-made room says how many: demo-<map>-<n>p-...)
         var roomMap = '';
@@ -308,15 +330,16 @@
         }, 1000);
 
         // ---- the seats: on this page (a frame), in a window of its own, or a link for somebody else ----
-        function gameUrl(seat) {            // a link to the game page of this site (never taken from the path of this page: a path that starts with // would leave the site)
+        function gameUrl(seat, withAspect) {            // a link to the game page of this site (never taken from the path of this page: a path that starts with // would leave the site)
             var q = '?join=/ws&room=' + encodeURIComponent(room);
             if (seat >= 0) q += '&seat=' + seat + '&name=' + encodeURIComponent(names[seat]);
+            if (withAspect || aspectFromAddress) q += '&aspect=' + aspect;
             return new URL('./' + q, window.location.href).href;
         }
         function setRowState(seat, text) { if (rows[seat]) rows[seat].state.textContent = text; }
         function playHere(seat) {
             if (inFrame[seat]) {                     // again: reconnect that seat (a frame whose game lost its connection, or a room that was made again)
-                if (frames[seat]) frames[seat].src = gameUrl(seat) + '&embed=1';
+                if (frames[seat]) frames[seat].src = gameUrl(seat, true) + '&embed=1';
                 setRowState(seat, 'on this page (reconnected)');
                 return true;
             }
@@ -332,7 +355,7 @@
             var iframe = document.createElement('iframe');
             iframe.setAttribute('allow', 'autoplay; fullscreen');
             iframe.setAttribute('title', SEATS[seat].name + ' player');
-            iframe.src = gameUrl(seat) + '&embed=1';
+            iframe.src = gameUrl(seat, true) + '&embed=1';
             frames[seat] = iframe;
             frame.appendChild(iframe);
             cell.appendChild(label);
@@ -350,7 +373,7 @@
                 try { wins[seat].focus(); } catch (e) { /* the browser decides */ }
                 return true;
             }
-            var w = window.open(gameUrl(seat), 'ants-seat-' + seat + '-' + room, 'popup=yes,width=860,height=700');
+            var w = window.open(gameUrl(seat, true), 'ants-seat-' + seat + '-' + room, 'popup=yes,width=980,height=660');
             if (!w) { $('popup-hint').hidden = false; return false; }
             wins[seat] = w;
             setRowState(seat, 'in a window');
@@ -395,7 +418,7 @@
         function startRoom(code, mapName, play, n) {
             room = code;
             try {                                   // the address names the room: a reload, a bookmark or a copied address come back to it
-                history.replaceState(null, '', window.location.pathname.replace(/^\/+/, '/') + '?room=' + encodeURIComponent(code));
+                history.replaceState(null, '', window.location.pathname.replace(/^\/+/, '/') + '?room=' + encodeURIComponent(code) + (aspectFromAddress ? '&aspect=' + aspect : ''));
             } catch (e) { /* not essential */ }
             roomMap = mapName;
             seatCount = n >= 2 && n <= SEATS.length ? n : SEATS.length;
@@ -508,12 +531,25 @@
                 return;
             }
             remember('ants-four-name', name);
-            var q = '?join=/ws&room=' + encodeURIComponent(code) + (name ? '&name=' + encodeURIComponent(name) : '');
+            var q = '?join=/ws&room=' + encodeURIComponent(code) + (name ? '&name=' + encodeURIComponent(name) : '') + (aspectFromAddress ? '&aspect=' + aspect : '');
             window.location.assign(new URL('./' + q, window.location.href).href);
         }
         $('join-go').addEventListener('click', joinNow);
         $('join-code').addEventListener('keydown', function (e) { if (e.key === 'Enter') joinNow(); });
         joinName.addEventListener('keydown', function (e) { if (e.key === 'Enter') joinNow(); });
+
+        $('aspect-select').addEventListener('change', function () {
+            // the choice is remembered (the game page's selector reads it too) and this page reloads with it: the games of a room start again with the new picture
+            var value = $('aspect-select').value === '4:3' ? '4:3' : '16:9';
+            remember('ants.aspect', value);
+            if (value === aspect) return;
+            if (room && !window.confirm('Changing the picture restarts the games on this page: the seats leave the match they are in. Continue?')) { $('aspect-select').value = aspect; return; }
+            try {
+                var url = new URL(window.location.href);
+                url.searchParams.set('aspect', value);
+                window.location.assign(url.href);
+            } catch (e) { $('aspect-select').value = aspect; }
+        });
 
         $('new-room').addEventListener('click', function () {
             // the setup again (the address is rebuilt from this page's own origin, never taken from the path: a path that starts with // would leave the site)

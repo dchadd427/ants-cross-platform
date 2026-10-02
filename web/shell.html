@@ -41,10 +41,12 @@
 
         header {
             display: flex;
+            flex-wrap: wrap;
             align-items: center;
             justify-content: space-between;
+            gap: 6px 12px;
             width: 100%;
-            max-width: 960px;
+            max-width: 1280px;
             margin-bottom: 10px;
             padding: 4px 8px;
         }
@@ -70,6 +72,8 @@
 
         .header-actions {
             display: flex;
+            flex-wrap: wrap;
+            justify-content: flex-end;
             gap: 8px;
         }
 
@@ -110,41 +114,110 @@
             display: none;
         }
 
-        #game-container {
+        /* The picture is 16:9 by default (the game's fixed canvas is 960 x 540; "Classic 4:3" is the original's 640 x 480 and is chosen with ?aspect=4:3 or the selector under
+           the game). Two boxes: #game-stage is the SLOT, sized by CSS alone (width: the page's column, at most 1280 px, and what the height of the window leaves after the page's
+           own header and bar, so the whole picture fits the window; --chrome is that height, measured by the script below, 120 px until then) and the element that goes
+           fullscreen; #game-container is the picture's box inside it, sized by the script to the exact pixels of the picture (a whole number of 16 x 9 canvas pixels, so
+           that the canvas the game makes has exactly the shape of its picture and the game shows no black bar of its own), centred in the slot. The ring around the box is
+           a shadow, not a border, so that the box has no frame inside it. */
+        :root {
+            --chrome: 120px;
+        }
+
+        #game-stage {
+            --ar-w: 16;
+            --ar-h: 9;
+            --stage-max: 1280px;
             position: relative;
-            width: 100%;
-            max-width: 960px;
-            aspect-ratio: 4 / 3;
-            background: #000;
-            border: 2px solid var(--panel-border);
-            border-radius: 6px;
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.7);
-            overflow: hidden;
+            width: min(100%, var(--stage-max), calc((100vh - var(--chrome)) * var(--ar-w) / var(--ar-h)));
+            width: min(100%, var(--stage-max), calc((100dvh - var(--chrome)) * var(--ar-w) / var(--ar-h)));
+            min-width: min(100%, 320px);
+            aspect-ratio: var(--ar-w) / var(--ar-h);
             display: flex;
             align-items: center;
             justify-content: center;
         }
 
-        #game-container:fullscreen,
-        #game-container:-webkit-full-screen {
+        #game-stage[data-aspect="4:3"] {
+            --ar-w: 4;
+            --ar-h: 3;
+            --stage-max: 960px;
+        }
+
+        #game-container {
+            position: relative;
+            flex: 0 0 auto;
+            width: 100%;                                /* until the script sizes it */
+            height: 100%;
+            background: #000;
+            border-radius: 6px;
+            box-shadow: 0 0 0 2px var(--panel-border), 0 8px 32px rgba(0, 0, 0, 0.7);
+            overflow: hidden;
+        }
+
+        /* Fullscreen (the browser's, on the stage) and the page's own fullscreen where the browser has none (an iPhone): the stage fills the screen, black, and the script
+           sizes the box to the largest picture that fits, centred; the bars of a screen of another shape are the stage's black. */
+        #game-stage:fullscreen,
+        #game-stage:-webkit-full-screen,
+        #game-stage.pseudo-fullscreen {
             width: 100vw;
             height: 100vh;
             height: 100dvh;
             max-width: none;
-            border: none;
-            border-radius: 0;
-            box-shadow: none;
+            min-width: 0;
+            aspect-ratio: auto;
             background: #000;
         }
 
-        #game-container:fullscreen canvas.emscripten,
-        #game-container:-webkit-full-screen canvas.emscripten {
+        #game-stage.pseudo-fullscreen {
+            position: fixed;
+            inset: 0;
+            z-index: 1000;
+            padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+        }
+
+        #game-stage:fullscreen #game-container,
+        #game-stage:-webkit-full-screen #game-container,
+        #game-stage.pseudo-fullscreen #game-container {
+            border-radius: 0;
+            box-shadow: none;
+        }
+
+        body.pseudo-fullscreen {
+            overflow: hidden;
+            position: fixed;
             width: 100%;
-            height: 100%;
-            object-fit: contain;
+        }
+
+        /* The way out of the page's own fullscreen (the browser's fullscreen has its own: Esc, or a swipe) */
+        #pseudo-exit {
+            display: none;
+        }
+
+        #game-stage.pseudo-fullscreen #pseudo-exit {
+            display: flex;
+            position: absolute;
+            top: max(8px, env(safe-area-inset-top));
+            right: max(8px, env(safe-area-inset-right));
+            z-index: 1001;
+            width: 44px;
+            height: 44px;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.4rem;
+            line-height: 1;
+            color: #fff;
+            background: rgba(0, 0, 0, 0.55);
+            border: 1px solid rgba(255, 255, 255, 0.35);
+            border-radius: 22px;
+            cursor: pointer;
+            touch-action: manipulation;
+            -webkit-tap-highlight-color: transparent;
         }
 
         canvas.emscripten {
+            position: absolute;
+            inset: 0;
             width: 100%;
             height: 100%;
             display: block;
@@ -154,6 +227,62 @@
             image-rendering: crisp-edges;
             outline: none;
             touch-action: none;
+        }
+
+        /* The picture's shape, under the game: the selector of "16:9 / Classic 4:3" (it reloads the page with ?aspect= and is remembered by the browser) */
+        .view-bar {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 6px 12px;
+            width: 100%;
+            max-width: 1280px;
+            margin-top: 8px;
+            padding: 0 4px;
+            font-size: 0.8rem;
+            color: var(--text-dim);
+        }
+
+        .seg {
+            display: inline-flex;
+            border: 1px solid var(--panel-border);
+            border-radius: 6px;
+            overflow: hidden;
+        }
+
+        .seg button {
+            background: var(--panel-bg);
+            border: none;
+            border-right: 1px solid var(--panel-border);
+            color: var(--text-dim);
+            padding: 5px 12px;
+            min-height: 32px;
+            font-size: 0.8rem;
+            cursor: pointer;
+            touch-action: manipulation;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        .seg button:last-child {
+            border-right: none;
+        }
+
+        .seg button[aria-checked="true"] {
+            background: #2b7040;
+            color: #fff;
+            cursor: default;
+        }
+
+        @media (hover: hover) {
+            .seg button[aria-checked="false"]:hover {
+                background: #26332a;
+                color: #fff;
+            }
+        }
+
+        #aspect-note {
+            display: none;
+            color: var(--accent-gold);
         }
 
         /* The loading screen: shows the download of the game's data and goes away by itself when the game is ready (there is no start button; a failure puts its
@@ -218,7 +347,7 @@
         .mobile-tip-banner {
             display: none;
             width: 100%;
-            max-width: 960px;
+            max-width: 1280px;
             margin-top: 8px;
             background: rgba(230, 184, 48, 0.12);
             border: 1px solid rgba(230, 184, 48, 0.35);
@@ -250,7 +379,7 @@
         /* Controls & Guide drawer */
         .info-panel-wrapper {
             width: 100%;
-            max-width: 960px;
+            max-width: 1280px;
             margin-top: 12px;
         }
 
@@ -495,6 +624,53 @@
             }
         }
 
+        /* A window that is wide and short (a phone on its side): one slim row of header buttons and a small bar, so that the picture gets the height */
+        @media (min-width: 641px) and (max-height: 520px) {
+            body {
+                padding-top: max(4px, env(safe-area-inset-top));
+                padding-bottom: max(6px, env(safe-area-inset-bottom));
+            }
+
+            header {
+                margin-bottom: 4px;
+                padding: 0 4px;
+                flex-wrap: nowrap;
+            }
+
+            h1 {
+                font-size: 1rem;
+                white-space: nowrap;
+            }
+
+            .subtitle {
+                display: none;
+            }
+
+            .header-actions {
+                flex-wrap: nowrap;
+                gap: 4px;
+            }
+
+            button.nav-btn, a.nav-btn {
+                min-height: 32px;
+                padding: 4px 8px;
+                font-size: 0.78rem;
+                white-space: nowrap;
+            }
+
+            .btn-text {
+                display: none;
+            }
+
+            .btn-text-short {
+                display: inline;
+            }
+
+            .view-bar {
+                margin-top: 4px;
+            }
+        }
+
         /* Embedded in another page (web/four.html: ?embed=1): only the game, filling the frame */
         body.embed {
             padding: 0;
@@ -505,18 +681,28 @@
         body.embed header,
         body.embed footer,
         body.embed .mobile-tip-banner,
+        body.embed .view-bar,
         body.embed .info-panel-wrapper {
             display: none !important;
         }
-        body.embed #game-container {
+        body.embed #game-stage {
             max-width: none;
+            min-width: 0;
             width: 100vw;
             height: 100vh;
             height: 100dvh;
             aspect-ratio: auto;
-            border: none;
+        }
+        body.embed #game-container {
             border-radius: 0;
             box-shadow: none;
+        }
+
+        /* Wide windows: the six guide panels in two rows of three */
+        @media (min-width: 1100px) {
+            #info-panel {
+                grid-template-columns: repeat(3, minmax(0, 1fr));
+            }
         }
     </style>
 </head>
@@ -553,22 +739,34 @@
         </div>
     </header>
 
-    <div id="game-container">
-        <canvas class="emscripten" id="canvas" oncontextmenu="event.preventDefault()" tabindex="-1"></canvas>
+    <div id="game-stage" data-aspect="16:9">
+        <div id="game-container">
+            <canvas class="emscripten" id="canvas" oncontextmenu="event.preventDefault()" tabindex="-1"></canvas>
 
-        <div id="splash-overlay">
-            <div class="splash-card">
-                <div class="splash-title">ANTS</div>
-                <div class="splash-status" id="status-text">Loading game assets...</div>
-                <div class="progress-bar-container" id="progress-container">
-                    <div class="progress-bar-fill" id="progress-fill"></div>
+            <div id="splash-overlay">
+                <div class="splash-card">
+                    <div class="splash-title">ANTS</div>
+                    <div class="splash-status" id="status-text">Loading game assets...</div>
+                    <div class="progress-bar-container" id="progress-container">
+                        <div class="progress-bar-fill" id="progress-fill"></div>
+                    </div>
                 </div>
             </div>
         </div>
+        <button type="button" id="pseudo-exit" aria-label="Leave fullscreen" title="Leave fullscreen">&times;</button>
+    </div>
+
+    <div class="view-bar" id="view-bar">
+        <span id="view-bar-label">Picture</span>
+        <div class="seg" role="radiogroup" aria-labelledby="view-bar-label">
+            <button type="button" role="radio" id="aspect-16-9" data-aspect="16:9" aria-checked="true" title="The wide picture (960 x 540)">16:9</button>
+            <button type="button" role="radio" id="aspect-4-3" data-aspect="4:3" aria-checked="false" title="The original's picture (640 x 480)">Classic 4:3</button>
+        </div>
+        <span id="aspect-note"></span>
     </div>
 
     <div class="mobile-tip-banner" id="mobile-tip-banner">
-        <span>💡 <strong>Tip:</strong> Rotate to <strong>landscape</strong> for full battlefield view</span>
+        <span>💡&#8197;<strong>Tip:</strong>&#8197;Rotate to&#8197;<strong>landscape</strong>&#8197;and choose&#8197;<strong>16:9</strong>&#8197;under the game for the biggest picture</span>
         <button type="button" class="tip-close" onclick="document.getElementById('mobile-tip-banner').style.display='none'" aria-label="Dismiss tip">&times;</button>
     </div>
 
@@ -582,11 +780,12 @@
                 <summary><h3>🎯 How to Play</h3></summary>
                 <div class="info-content">
                     <ul>
-                        <li><strong>Goal:</strong> get the most points by getting <strong>food</strong>. Send your ants to food: they pick it up and carry it home to your anthill, one piece at a time.</li>
-                        <li><strong>Score:</strong> yours is at the top of the screen, the other players' at the bottom. When the clock reaches 0:00 the highest score wins.</li>
-                        <li><strong>Power-ups</strong> dropped by special flowers give an ant a special power (see below); an ant holds one at a time.</li>
-                        <li><strong>Alone in the browser:</strong> there are no computer opponents (the original had none). To play against friends, use the desktop version over a network.</li>
-                        <li><strong>Help:</strong> <kbd>F1</kbd> or the Help button shows the original's quick help.</li>
+                        <li><strong>Goal:</strong>&#8197;get the most points by getting&#8197;<strong>food</strong>. Send your ants to food: they pick it up and carry it home to your anthill, one piece at a time.</li>
+                        <li><strong>Score:</strong>&#8197;yours is at the top of the screen, the other players' at the bottom. When the clock reaches 0:00 the highest score wins.</li>
+                        <li><strong>Power-ups</strong>&#8197;dropped by special flowers give an ant a special power (see below); an ant holds one at a time.</li>
+                        <li><strong>Alone in the browser:</strong>&#8197;there are no computer opponents (the original had none). To play against friends, use the desktop version over a network.</li>
+                        <li><strong>Help:</strong>&#8197;<kbd>F1</kbd>&#8197;or the Help button shows the original's quick help.</li>
+                        <li><strong>Picture:</strong>&#8197;16:9 by default;&#8197;<em>Classic 4:3</em>&#8197;is the original's picture. Choose it under the game (the game restarts), or add&#8197;<kbd>?aspect=4:3</kbd>&#8197;to the address (<kbd>?aspect=16:9</kbd>&#8197;for the wide one).&#8197;<kbd>&#x26F6;</kbd>&#8197;Fullscreen makes the picture as big as your screen allows.</li>
                     </ul>
                 </div>
             </details>
@@ -594,11 +793,11 @@
                 <summary><h3>🖱️ Mouse</h3></summary>
                 <div class="info-content">
                     <ul>
-                        <li><strong>Select:</strong> left click an ant. <kbd>Shift</kbd>+click adds or removes one. Drag a box (more than 4 px) to select your ants inside it.</li>
-                        <li><strong>Order with a left click:</strong> ground = move, food = harvest and carry it home, another player's ant = attack.</li>
-                        <li><strong>Right click:</strong> a move for groups, workers and combat ants; a single powered ant uses its special power. It acts when you release the button.</li>
-                        <li><strong>Buttons</strong> left of the Status box: Move, and for a powered ant Use Special Power. Click one, then click the target. Stop (on the right) halts the ants.</li>
-                        <li><strong>Minimap:</strong> hold the left button on it to scroll the map; right click sends your selected ants there.</li>
+                        <li><strong>Select:</strong>&#8197;left click an ant.&#8197;<kbd>Shift</kbd>+click adds or removes one. Drag a box (more than 4 px) to select your ants inside it.</li>
+                        <li><strong>Order with a left click:</strong>&#8197;ground = move, food = harvest and carry it home, another player's ant = attack.</li>
+                        <li><strong>Right click:</strong>&#8197;a move for groups, workers and combat ants; a single powered ant uses its special power. It acts when you release the button.</li>
+                        <li><strong>Buttons</strong>&#8197;left of the Status box: Move, and for a powered ant Use Special Power. Click one, then click the target. Stop (on the right) halts the ants.</li>
+                        <li><strong>Minimap:</strong>&#8197;hold the left button on it to scroll the map; right click sends your selected ants there.</li>
                     </ul>
                 </div>
             </details>
@@ -606,9 +805,9 @@
                 <summary><h3>🗺️ Scrolling</h3></summary>
                 <div class="info-content">
                     <ul>
-                        <li><strong>Edge scrolling:</strong> move the pointer to the edge of the map: an arrow shows and the map scrolls. Options &rarr; Map Scroll Rate sets the speed.</li>
-                        <li><strong>Minimap:</strong> hold the left button on it and the view follows the pointer.</li>
-                        <li><strong>Jump to an ant:</strong> <kbd>Ctrl</kbd>+<kbd>N</kbd> / <kbd>Ctrl</kbd>+<kbd>P</kbd> select the next / previous ant and scroll to it; <kbd>Ctrl</kbd>+<kbd>H</kbd> selects your anthill.</li>
+                        <li><strong>Edge scrolling:</strong>&#8197;move the pointer to the edge of the map: an arrow shows and the map scrolls. Options &rarr; Map Scroll Rate sets the speed.</li>
+                        <li><strong>Minimap:</strong>&#8197;hold the left button on it and the view follows the pointer.</li>
+                        <li><strong>Jump to an ant:</strong>&#8197;<kbd>Ctrl</kbd>+<kbd>N</kbd>&#8197;/&#8197;<kbd>Ctrl</kbd>+<kbd>P</kbd>&#8197;select the next / previous ant and scroll to it;&#8197;<kbd>Ctrl</kbd>+<kbd>H</kbd>&#8197;selects your anthill.</li>
                         <li class="note">As in the original, nothing scrolls with the keyboard or the wheel: arrows, WASD and the wheel do nothing.</li>
                     </ul>
                 </div>
@@ -617,13 +816,13 @@
                 <summary><h3>⌨️ Keyboard</h3></summary>
                 <div class="info-content">
                     <ul>
-                        <li><strong>Hold <kbd>Ctrl</kbd></strong> (the Control key, on a Mac too):</li>
-                        <li><kbd>A</kbd> select all your ants &bull; <kbd>S</kbd> stop the selected ants</li>
-                        <li><kbd>L</kbd> show / hide hit-point numbers</li>
-                        <li><kbd>O</kbd> options &bull; <kbd>Q</kbd> quit dialog</li>
-                        <li><kbd>Esc</kbd> deselect &bull; <kbd>F1</kbd> quick help</li>
-                        <li><strong>Chat:</strong> just type; <kbd>Enter</kbd> sends. <kbd>F9</kbd>&ndash;<kbd>F12</kbd> send the four quick chat texts (edit them in Options).</li>
-                        <li><strong>Setup screen:</strong> <kbd>&uarr;</kbd> / <kbd>&darr;</kbd> pick the map, <kbd>Enter</kbd> or <kbd>S</kbd> starts, <kbd>Q</kbd> or <kbd>X</kbd> leaves.</li>
+                        <li><strong>Hold&#8197;<kbd>Ctrl</kbd></strong>&#8197;(the Control key, on a Mac too):</li>
+                        <li><kbd>A</kbd>&#8197;select all your ants &bull;&#8197;<kbd>S</kbd>&#8197;stop the selected ants</li>
+                        <li><kbd>L</kbd>&#8197;show / hide hit-point numbers</li>
+                        <li><kbd>O</kbd>&#8197;options &bull;&#8197;<kbd>Q</kbd>&#8197;quit dialog</li>
+                        <li><kbd>Esc</kbd>&#8197;deselect &bull;&#8197;<kbd>F1</kbd>&#8197;quick help</li>
+                        <li><strong>Chat:</strong>&#8197;just type;&#8197;<kbd>Enter</kbd>&#8197;sends.&#8197;<kbd>F9</kbd>&ndash;<kbd>F12</kbd>&#8197;send the four quick chat texts (edit them in Options).</li>
+                        <li><strong>Setup screen:</strong>&#8197;<kbd>&uarr;</kbd>&#8197;/&#8197;<kbd>&darr;</kbd>&#8197;pick the map,&#8197;<kbd>Enter</kbd>&#8197;or&#8197;<kbd>S</kbd>&#8197;starts,&#8197;<kbd>Q</kbd>&#8197;or&#8197;<kbd>X</kbd>&#8197;leaves.</li>
                         <li class="note">Browsers keep some Ctrl shortcuts for themselves (Ctrl+N opens a window on Windows and Linux); the on-screen buttons always work.</li>
                     </ul>
                 </div>
@@ -633,11 +832,11 @@
                 <div class="info-content">
                     <ul>
                         <li>An ant that picks up a power-up gets its power. Select the ant, click the special power button (or right click), then click where to use it.</li>
-                        <li><strong>Bomber:</strong> plants a bomb, or puts out one of yours. A bomb goes off when an ant walks onto it.</li>
-                        <li><strong>Fire ant:</strong> builds a wall of fire (about 3 minutes, not on mud) or puts one out.</li>
-                        <li><strong>Swimmer:</strong> swims, and builds or demolishes mud mound bridges on water.</li>
-                        <li><strong>Thief:</strong> steals food (up to 50 points) from another player's anthill.</li>
-                        <li><strong>Combat ant:</strong> hits hard (it throws its victim four tiles) and attacks enemy ants near it by itself.</li>
+                        <li><strong>Bomber:</strong>&#8197;plants a bomb, or puts out one of yours. A bomb goes off when an ant walks onto it.</li>
+                        <li><strong>Fire ant:</strong>&#8197;builds a wall of fire (about 3 minutes, not on mud) or puts one out.</li>
+                        <li><strong>Swimmer:</strong>&#8197;swims, and builds or demolishes mud mound bridges on water.</li>
+                        <li><strong>Thief:</strong>&#8197;steals food (up to 50 points) from another player's anthill.</li>
+                        <li><strong>Combat ant:</strong>&#8197;hits hard (it throws its victim four tiles) and attacks enemy ants near it by itself.</li>
                     </ul>
                 </div>
             </details>
@@ -645,10 +844,10 @@
                 <summary><h3>📱 Touch &amp; Mobile</h3></summary>
                 <div class="info-content">
                     <ul>
-                        <li><strong>Tap</strong> acts like a left click: select, move, harvest, attack.</li>
-                        <li><strong>Special powers:</strong> tap the special power button, then tap the target (there is no right click on a touch screen).</li>
-                        <li><strong>Minimap:</strong> press and drag on it to scroll the map.</li>
-                        <li><strong>Fullscreen:</strong> tap &#x26F6; in the header; landscape works best.</li>
+                        <li><strong>Tap</strong>&#8197;acts like a left click: select, move, harvest, attack.</li>
+                        <li><strong>Special powers:</strong>&#8197;tap the special power button, then tap the target (there is no right click on a touch screen).</li>
+                        <li><strong>Minimap:</strong>&#8197;press and drag on it to scroll the map.</li>
+                        <li><strong>Fullscreen:</strong>&#8197;tap &#x26F6; in the header; landscape works best.</li>
                         <li class="note">The keyboard shortcuts need a keyboard.</li>
                     </ul>
                 </div>
@@ -657,11 +856,7 @@
     </div>
 
     <footer>
-        <span id="game-version-line">Version <span id="game-version">@@GAME_VERSION@@</span> &bull; </span>Ants 1998 Native Engine Remake &amp; Port &bull; Built with C++17, WebAssembly &amp; SDL2 &bull;
-        <a href="/asset_catalog/" target="_blank" rel="noopener noreferrer">Asset Catalog Viewer</a> &bull;
-        <a href="/four.html" target="_blank" rel="noopener noreferrer">Play online</a> &bull;
-        <a href="/changelog.html" target="_blank" rel="noopener noreferrer">Changelog</a> &bull;
-        <a href="https://github.com/dchadd427/ants-cross-platform" target="_blank" rel="noopener noreferrer">GitHub Repository</a>
+        <span id="game-version-line">Version&#8197;<span id="game-version">@@GAME_VERSION@@</span>&#8197;&bull;&#8197;</span>Ants 1998 Native Engine Remake &amp; Port &bull; Built with C++17, WebAssembly &amp; SDL2 &bull;&#8197;<a href="/asset_catalog/" target="_blank" rel="noopener noreferrer">Asset Catalog Viewer</a>&#8197;&bull;&#8197;<a href="/four.html" target="_blank" rel="noopener noreferrer">Play online</a>&#8197;&bull;&#8197;<a href="/changelog.html" target="_blank" rel="noopener noreferrer">Changelog</a>&#8197;&bull;&#8197;<a href="https://github.com/dchadd427/ants-cross-platform" target="_blank" rel="noopener noreferrer">GitHub Repository</a>
     </footer>
 
     <script>
@@ -704,6 +899,103 @@
                     if (name) ANTS_ARGS.push('--name', name);
                 }
             }
+        })();
+
+        // The page's own logic that needs no browser (ANTS_PAGE; tests/scripts/web_aspect_check.py calls these in a real one).
+        //   aspect  the shape of the picture: "16:9" (the game's fixed canvas of 960 x 540) or "4:3" (the original's 640 x 480); nothing else is a shape
+        //   fitBox  the picture's box: the largest whole number of canvas steps (16 x 9, or 4 x 3 for the classic picture) that fits an area, in device pixels
+        //   limiter the frame cap
+        var ANTS_PAGE = (function () {
+            var SHAPES = { '16:9': { w: 16, h: 9 }, '4:3': { w: 4, h: 3 } };
+
+            function parseAspect(text) {
+                return (typeof text === 'string' && Object.prototype.hasOwnProperty.call(SHAPES, text)) ? text : null;
+            }
+
+            // Which shape the page shows: the address (?aspect=16:9 or ?aspect=4:3; anything else is ignored), else the choice that the selector remembered, else 16:9, except
+            // on a portrait phone, where the picture of 16:9 would be a thin strip and the classic 4:3 one is bigger.
+            function resolveAspect(fromAddress, remembered, portraitPhone) {
+                var a = parseAspect(fromAddress);
+                if (a) return { aspect: a, source: 'address' };
+                a = parseAspect(remembered);
+                if (a) return { aspect: a, source: 'remembered' };
+                return portraitPhone ? { aspect: '4:3', source: 'portrait' } : { aspect: '16:9', source: 'default' };
+            }
+
+            // The CSS size that makes the browser's canvas device pixels exactly `px`. The game's window system (SDL) sets the canvas to floor(CSS size x devicePixelRatio) of the
+            // canvas's box, so a size that rounds to px - 1 in floating point would leave a black line of its own: sizes that are exact (a whole or half pixel at device ratios 1 and 2)
+            // stay exact, any other ratio gets a quarter of a device pixel more, which the floor drops and the layout's rounding (1/64 px, or 1/60 in Firefox) cannot take away.
+            function cssFor(px, dpr) {
+                var exact = px / dpr;
+                if ((dpr === 1 || dpr === 2) && Math.abs(exact * 64 - Math.round(exact * 64)) < 1e-9) return exact;
+                return (px + 0.25) / dpr;
+            }
+
+            // The box of the picture inside an area of availW x availH CSS pixels at device ratio dpr: backing = k whole steps of the shape (16 x 9 or 4 x 3), the biggest that
+            // fits (at least one), cssW / cssH = the CSS size to give the box. The canvas then has exactly the shape of its picture, so the game's logical canvas fills it.
+            function fitBox(availW, availH, dpr, aspect) {
+                var shape = SHAPES[parseAspect(aspect) || '16:9'];
+                var ratio = dpr > 0 && isFinite(dpr) ? dpr : 1;
+                var k = Math.floor(Math.min(availW * ratio / shape.w, availH * ratio / shape.h));
+                if (!(k >= 1)) k = 1;
+                var bw = k * shape.w;
+                var bh = k * shape.h;
+                return { k: k, bw: bw, bh: bh, cssW: cssFor(bw, ratio), cssH: cssFor(bh, ratio) };
+            }
+
+            // The frame cap (the original ran at 60 frames a second; a display of 120 Hz or more would draw the game two or more times as often for nothing, at the full
+            // resolution of the screen). accept(timestamp) says whether the frame at this display time is drawn. It measures the display first (the median gap of 24 frames):
+            // a display below about 100 Hz (60, 75, 90) is not capped at all, a faster one is held to 60 a second by a schedule that keeps its phase (144 Hz: every second or
+            // third frame, 60 on average), and a long frame (a page that was hidden) does not leave a burst behind.
+            function makeFrameLimiter(periodMs) {
+                var last = 0;
+                var due = 0;
+                var gaps = [];
+                var capped = false;
+                var measured = false;
+                function accept(ts) {
+                    if (!measured) {
+                        if (last) gaps.push(ts - last);
+                        last = ts;
+                        if (gaps.length >= 24) {
+                            gaps.sort(function (a, b) { return a - b; });
+                            capped = gaps[12] < periodMs * 0.62;
+                            measured = true;
+                            due = ts + periodMs;
+                        }
+                        return true;
+                    }
+                    if (!capped) return true;
+                    if (ts + 1.5 < due) return false;                       // not yet (the display's timestamps jitter by a millisecond or so)
+                    due = (ts - due > periodMs) ? ts + periodMs : due + periodMs;
+                    return true;
+                }
+                accept.isCapped = function () { return capped; };
+                accept.isMeasured = function () { return measured; };
+                return accept;
+            }
+
+            return { parseAspect: parseAspect, resolveAspect: resolveAspect, cssFor: cssFor, fitBox: fitBox, makeFrameLimiter: makeFrameLimiter };
+        })();
+
+        // The shape of this page's picture, passed on to the game as --aspect (the game validates it too). The stage's data-aspect gives the box its shape in CSS.
+        var ANTS_ASPECT = '16:9';
+        var ANTS_ASPECT_SOURCE = 'default';
+        (function () {
+            var fromAddress = null;
+            var remembered = null;
+            var portraitPhone = false;
+            try { fromAddress = new URLSearchParams(window.location.search).get('aspect'); } catch (e) { /* no address to read */ }
+            try { remembered = window.localStorage.getItem('ants.aspect'); } catch (e) { /* private window: nothing was remembered */ }
+            try { portraitPhone = window.matchMedia('(max-width: 768px) and (orientation: portrait)').matches; } catch (e) { /* not a phone */ }
+            var chosen = ANTS_PAGE.resolveAspect(fromAddress, ANTS_EMBED ? null : remembered, portraitPhone && !ANTS_EMBED);
+            ANTS_ASPECT = chosen.aspect;
+            ANTS_ASPECT_SOURCE = chosen.source;
+            ANTS_ARGS.push('--aspect', ANTS_ASPECT);
+            document.getElementById('game-stage').setAttribute('data-aspect', ANTS_ASPECT);
+            document.querySelectorAll('.seg button[data-aspect]').forEach(function (b) {
+                b.setAttribute('aria-checked', b.getAttribute('data-aspect') === ANTS_ASPECT ? 'true' : 'false');
+            });
         })();
 
         var Module = {
@@ -904,28 +1196,168 @@
             }
         })();
 
-        document.getElementById('fullscreen-btn').addEventListener('click', function() {
-            var el = document.getElementById('game-container');
-            var isFs = document.fullscreenElement || document.webkitFullscreenElement;
-            if (!isFs) {
-                if (el.requestFullscreen) {
-                    el.requestFullscreen().catch(function() {});
-                } else if (el.webkitRequestFullscreen) {
-                    el.webkitRequestFullscreen();
-                } else if (canvas.webkitEnterFullscreen) {
-                    canvas.webkitEnterFullscreen();
-                }
-                if (screen.orientation && screen.orientation.lock) {
-                    screen.orientation.lock('landscape').catch(function() {});
-                }
-            } else {
-                if (document.exitFullscreen) {
-                    document.exitFullscreen().catch(function() {});
-                } else if (document.webkitExitFullscreen) {
-                    document.webkitExitFullscreen();
-                }
+        // ---- The picture's box, fullscreen and the selector ----
+        // The game's window system (SDL) listens to the window's `resize` event and nothing else: it sets the canvas to floor(CSS size x devicePixelRatio) of the canvas's box then.
+        // A box that changes without a `resize` (fullscreen can do that; so can a panel above it that wraps, or a change of devicePixelRatio) leaves the canvas of the old size,
+        // scaled by the browser: blurred, and with the pointer's position off. So the page watches what matters (the slot, the page's own header and bar, the fullscreen state,
+        // the device ratio) and tells the game with a `resize` of its own whenever the box's pixels change.
+        var stageElement = document.getElementById('game-stage');
+        var boxElement = document.getElementById('game-container');
+        var pageBoxKey = '';
+        var pageDispatching = false;
+        var pageFullscreen = false;                                         // the page's own fullscreen (no Fullscreen API: an iPhone)
+
+        function isFullscreen() {
+            return !!(document.fullscreenElement || document.webkitFullscreenElement) || pageFullscreen;
+        }
+
+        // The height of everything on the page that is not the game's box: the slot's CSS size is what is left of the window (--chrome, see the style above)
+        function measureChrome() {
+            if (ANTS_EMBED || isFullscreen()) return;
+            var bar = document.getElementById('view-bar');
+            var bodyStyle = window.getComputedStyle(document.body);
+            var barHeight = bar ? bar.offsetHeight + (parseFloat(window.getComputedStyle(bar).marginTop) || 0) : 0;
+            var chrome = stageElement.getBoundingClientRect().top + (window.pageYOffset || 0) + barHeight + (parseFloat(bodyStyle.paddingBottom) || 0);
+            if (isFinite(chrome) && chrome > 0) {
+                var old = parseFloat(document.documentElement.style.getPropertyValue('--chrome')) || 0;
+                if (Math.abs(old - chrome) > 0.5) document.documentElement.style.setProperty('--chrome', chrome.toFixed(1) + 'px');
             }
+        }
+
+        // Size the box to the exact pixels of the picture (ANTS_PAGE.fitBox) and tell the game when they changed (or always, with `force`)
+        function layoutBox(force) {
+            var style = window.getComputedStyle(stageElement);
+            var availW = stageElement.clientWidth - (parseFloat(style.paddingLeft) || 0) - (parseFloat(style.paddingRight) || 0);
+            var availH = stageElement.clientHeight - (parseFloat(style.paddingTop) || 0) - (parseFloat(style.paddingBottom) || 0);
+            if (!(availW > 0 && availH > 0)) return;
+            var dpr = window.devicePixelRatio || 1;
+            var fit = ANTS_PAGE.fitBox(availW, availH, dpr, ANTS_ASPECT);
+            var key = fit.bw + 'x' + fit.bh + '@' + dpr;
+            boxElement.style.width = fit.cssW + 'px';
+            boxElement.style.height = fit.cssH + 'px';
+            if (force || key !== pageBoxKey) {
+                pageBoxKey = key;
+                pageDispatching = true;
+                try { window.dispatchEvent(new Event('resize')); } finally { pageDispatching = false; }
+            }
+        }
+        function relayout(force) {
+            measureChrome();
+            layoutBox(force);
+        }
+        window.addEventListener('resize', function () { if (!pageDispatching) relayout(false); });
+        if (window.ResizeObserver) {
+            var observer = new ResizeObserver(function () { relayout(false); });
+            observer.observe(stageElement);
+            observer.observe(document.querySelector('header'));
+            observer.observe(document.getElementById('view-bar'));
+        }
+        ['fullscreenchange', 'webkitfullscreenchange'].forEach(function (name) {
+            document.addEventListener(name, function () {
+                // the size of the stage follows the change at once in some browsers and a moment later in others (and `resize` is not always sent): ask again as it settles
+                relayout(true);
+                setTimeout(function () { relayout(true); }, 150);
+                setTimeout(function () { relayout(false); }, 600);
+            });
         });
+        (function watchDeviceRatio() {                                      // the page zoomed, or moved to a screen of another density
+            if (!window.matchMedia) return;
+            var query = window.matchMedia('(resolution: ' + (window.devicePixelRatio || 1) + 'dppx)');
+            var again = function () { relayout(true); watchDeviceRatio(); };
+            if (query.addEventListener) query.addEventListener('change', again, { once: true });
+            else if (query.addListener) query.addListener(again);
+        })();
+        relayout(true);
+        document.addEventListener('visibilitychange', function () { if (!document.hidden) relayout(false); });      // (a hidden page may have missed a size change)
+        document.addEventListener('DOMContentLoaded', function () { relayout(false); });
+        window.addEventListener('load', function () { relayout(false); });
+
+        // Fullscreen: the stage goes fullscreen (the picture as large as the screen allows, bars on a screen of another shape). A browser without the Fullscreen API for an
+        // element (Safari on an iPhone) gets the page's own: the stage covers the window and a button leaves it.
+        function setPageFullscreen(on) {
+            pageFullscreen = on;
+            stageElement.classList.toggle('pseudo-fullscreen', on);
+            document.body.classList.toggle('pseudo-fullscreen', on);
+            if (!on) window.scrollTo(0, 0);
+            relayout(true);
+            setTimeout(function () { relayout(true); }, 150);
+        }
+        function enterFullscreen() {
+            var request = stageElement.requestFullscreen || stageElement.webkitRequestFullscreen;
+            if (!request) { setPageFullscreen(true); return; }
+            var result;
+            try { result = request.call(stageElement); } catch (e) { setPageFullscreen(true); return; }
+            if (result && result.catch) result.catch(function () { setPageFullscreen(true); });          // refused (a frame without permission, a policy): the page's own
+            if (screen.orientation && screen.orientation.lock) {
+                screen.orientation.lock('landscape').catch(function () { /* the browser may not lock */ });
+            }
+        }
+        function leaveFullscreen() {
+            if (pageFullscreen) { setPageFullscreen(false); return; }
+            if (document.exitFullscreen) document.exitFullscreen().catch(function () { /* nothing to leave */ });
+            else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
+        }
+        document.getElementById('fullscreen-btn').addEventListener('click', function () {
+            if (isFullscreen()) leaveFullscreen(); else enterFullscreen();
+        });
+        document.getElementById('pseudo-exit').addEventListener('click', leaveFullscreen);
+
+        // The selector: the choice is remembered by the browser and the page reloads with ?aspect= (the game's picture is made when it starts). Other parts of the address
+        // (the room of a match, the seat) stay.
+        (function () {
+            var remember = function (value) { try { window.localStorage.setItem('ants.aspect', value); } catch (e) { /* private window: not remembered */ } };
+            document.querySelectorAll('.seg button[data-aspect]').forEach(function (button) {
+                button.addEventListener('click', function () {
+                    var value = button.getAttribute('data-aspect');
+                    remember(value);
+                    if (value === ANTS_ASPECT) return;
+                    var joined = ANTS_ARGS.indexOf('--join-url') !== -1;
+                    if (joined && !window.confirm('Changing the picture restarts the game: you leave the match you are in. Continue?')) return;
+                    var url;
+                    try {
+                        url = new URL(window.location.href);
+                        url.searchParams.set('aspect', value);
+                        url.search = url.search.replace('aspect=' + encodeURIComponent(value), 'aspect=' + value);       // (the colon needs no escape in a query)
+                    } catch (e) { return; }
+                    window.location.assign(url.href);
+                });
+            });
+            // a portrait phone that was given the classic picture: in landscape the wide one is bigger
+            var note = document.getElementById('aspect-note');
+            if (note && ANTS_ASPECT_SOURCE === 'portrait' && window.matchMedia) {
+                var landscape = window.matchMedia('(orientation: landscape)');
+                var update = function () {
+                    note.style.display = landscape.matches ? 'inline' : 'none';
+                    note.textContent = 'Landscape: choose 16:9 for a bigger picture (the game restarts).';
+                };
+                update();
+                if (landscape.addEventListener) landscape.addEventListener('change', update);
+                else if (landscape.addListener) landscape.addListener(update);
+            }
+        })();
+
+        // The frame cap (ANTS_PAGE.makeFrameLimiter): the game's loop is the browser's requestAnimationFrame
+        (function () {
+            if (!window.requestAnimationFrame || !window.cancelAnimationFrame) return;
+            var realRequest = window.requestAnimationFrame.bind(window);
+            var realCancel = window.cancelAnimationFrame.bind(window);
+            var accept = ANTS_PAGE.makeFrameLimiter(1000 / 60);
+            var nextId = 1;
+            var live = {};
+            window.antsFrameLimiter = accept;
+            window.requestAnimationFrame = function (callback) {
+                var id = nextId++;
+                var again = function (timestamp) {
+                    if (!(id in live)) return;                              // cancelled
+                    if (accept(timestamp)) { delete live[id]; callback(timestamp); } else { live[id] = realRequest(again); }
+                };
+                live[id] = realRequest(again);
+                return id;
+            };
+            window.cancelAnimationFrame = function (id) {
+                if (id in live) { realCancel(live[id]); delete live[id]; }
+            };
+        })();
 
         // The guide: a touch screen sees its own controls first; on a small screen only the first panel starts open; Expand All / Collapse All
         (function() {
