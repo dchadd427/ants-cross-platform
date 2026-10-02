@@ -618,3 +618,9 @@ flowchart TD
 This project is a clean-room educational remake and historical preservation effort. All mechanics, timings, and constants are reverse-engineered directly from the original 1998 binary executable (`Ants.exe`) using Capstone disassembly to achieve authentic 1:1 fidelity.
 
 Comprehensive disassembly addresses, opcode traces, and formulas are actively documented in **[`docs/GAME_REVERSE_ENGINEERING.md`](docs/GAME_REVERSE_ENGINEERING.md)**. All original game assets belong to their respective copyright holders. The bundled text font, Libre Franklin Medium, is © The Libre Franklin Project Authors and licensed under the SIL Open Font License 1.1 (`Original-Ants/LibreFranklin-OFL.txt`).
+
+## License
+
+The source code and the documents written for this project are released under the **MIT License** ([`LICENSE`](LICENSE)): anybody may use, copy, change and distribute them, including in other projects and commercial ones, as long as the licence text stays with them.
+
+**The original game is not part of that licence.** The 1998 game's program, artwork, sounds, music and maps (the folder `Original-Ants/` and the data bundle the web build packs from it) belong to their copyright holders; this project does not own them and cannot license them. They are in the repository for now so that the remake can run and so that its tests can compare it with the original; the plan is to replace the original artwork (and later the other data) with open material over time, step by step (see `implementation_plan.md`, "Artwork phase-out"), until the remake needs nothing of the original but a copy that the player already has. If you hold rights to something in this repository and want it removed, open an issue and it will be taken out. Third-party components (SDL2, dr_mp3, Libre Franklin, ...) keep their own licences: see [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
