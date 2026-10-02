@@ -1776,6 +1776,7 @@ void Application::handle_net_events() {
                 break;
             case net::NetGame::Event::Type::HostLeft:                // the host is gone and no other machine could take over (or the server dropped this player for being away)
                 net_notice_ = net_->status_text();                   // the reason, as the network layer says it: "The connection to the other players was lost." or "You were away too long ..."
+                std::cerr << "[Application] " << net_notice_ << std::endl;                    // (for the scripts that run a headless client: nothing else says it)
                 if (state_ == AppState::Playing && !scorecard_.is_open()) {
                     if (menu_enabled_) {
                         return_to_start_menu(net_notice_);                   // (the net is gone: the rest of the events belong to it)

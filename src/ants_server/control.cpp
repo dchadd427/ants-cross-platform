@@ -48,6 +48,40 @@ JsonValue status_to_json(const RoomStatus& s) {
     o.set("turns", JsonValue::make_int(s.turns));
     o.set("age_seconds", JsonValue::make_int(s.age_ms / 1000));
     o.set("reason", JsonValue::make_string(s.reason));
+    // Reconnect (protocol 10): whether the room holds the seats of players whose connections are lost, its rules, who is missing now, the vote, and what happened (never a key)
+    o.set("reconnect", JsonValue::make_bool(s.reconnect));
+    o.set("hold_vote_seconds", JsonValue::make_int(s.vote_after_ms / 1000));
+    o.set("max_pause_seconds", JsonValue::make_int(s.max_pause_ms / 1000));
+    o.set("paused", JsonValue::make_bool(s.paused));
+    JsonValue absent = JsonValue::make_array();
+    for (const RoomStatus::Absent& a : s.absent) {
+        JsonValue row = JsonValue::make_object();
+        row.set("seat", JsonValue::make_int(a.seat));
+        row.set("name", JsonValue::make_string(a.name));
+        row.set("state", JsonValue::make_string(a.catching_up ? "catching_up" : "absent"));
+        row.set("away_seconds", JsonValue::make_int(a.away_s));
+        row.set("progress", JsonValue::make_int(a.progress));
+        absent.push_back(std::move(row));
+    }
+    o.set("absent", std::move(absent));
+    if (s.vote_seat < 4) {
+        JsonValue vote = JsonValue::make_object();
+        vote.set("seat", JsonValue::make_int(s.vote_seat));
+        vote.set("continue", JsonValue::make_int(s.votes_continue));
+        vote.set("voters", JsonValue::make_int(s.voters));
+        o.set("vote", std::move(vote));
+    } else {
+        o.set("vote", JsonValue::make_null());
+    }
+    o.set("paused_seconds", JsonValue::make_int(s.paused_s));
+    o.set("rejoins", JsonValue::make_int(s.rejoins));
+    o.set("drops_by_vote", JsonValue::make_int(s.drops_by_vote));
+    o.set("drops_by_cap", JsonValue::make_int(s.drops_by_cap));
+    JsonValue log = JsonValue::make_object();
+    log.set("turns", JsonValue::make_int(s.log_turns));
+    log.set("bytes", JsonValue::make_int(s.log_bytes));
+    log.set("usable", JsonValue::make_bool(s.log_usable));
+    o.set("log", std::move(log));
     if (s.state == RoomState::Finished) {
         JsonValue result = JsonValue::make_object();
         result.set("quitter", s.quitter < 4 ? JsonValue::make_int(s.quitter) : JsonValue::make_null());
@@ -80,7 +114,7 @@ bool spec_from_json(const JsonValue& body, RoomSpec& out, std::string& error) {
         error = "the body must be a JSON object";
         return false;
     }
-    RoomSpec spec;
+    RoomSpec spec = out;                                    // the caller's defaults (the server's own: RoomManager::default_spec); only what the body says is changed
     const JsonValue* map = body.find("map");
     if (map == nullptr || !map->is_string() || map->str().empty()) {
         error = "\"map\" (the map file name) is required";
@@ -129,6 +163,20 @@ bool spec_from_json(const JsonValue& body, RoomSpec& out, std::string& error) {
         }
         spec.early_start = v->as_bool_or(true);
     }
+    // Reconnect (protocol 10): whether the room holds the seats of players whose connections are lost (the server's default when the body says nothing), how long a seat must have been away
+    // before the others may vote on going on without it, and how long the match's pauses may last in all
+    if (const JsonValue* v = body.find("reconnect")) {
+        if (!v->is_bool()) {
+            error = "\"reconnect\" must be true or false";
+            return false;
+        }
+        spec.reconnect = v->as_bool_or(false);
+    }
+    int64_t vote_s = spec.vote_after_ms / 1000;
+    int64_t pause_s = spec.max_pause_ms / 1000;
+    if (!number("hold_vote_seconds", kMinVoteAfterMs / 1000, kMaxVoteAfterMs / 1000, vote_s) || !number("max_pause_seconds", kMinMaxPauseMs / 1000, kMaxMaxPauseMs / 1000, pause_s)) return false;
+    spec.vote_after_ms = static_cast<uint32_t>(vote_s * 1000);
+    spec.max_pause_ms = static_cast<uint32_t>(pause_s * 1000);
     if (const JsonValue* v = body.find("code")) {
         if (!v->is_string()) {
             error = "\"code\" must be a string";
@@ -154,7 +202,7 @@ ctl::HttpResponse handle_control(RoomManager& rooms, const ctl::HttpRequest& req
             JsonValue body;
             std::string why;
             if (request.body.empty() || !ctl::parse_json(request.body, body, &why)) return error_response(400, request.body.empty() ? "a JSON body is required" : "bad JSON: " + why);
-            RoomSpec spec;
+            RoomSpec spec = rooms.default_spec();           // what the server was started with (--reconnect, --hold-vote-seconds, --max-pause-seconds, --log-mb); the body overrides it
             if (!spec_from_json(body, spec, why)) return error_response(400, why);
             const CreateResult made = rooms.create_room(std::move(spec), now_ms);
             if (!made.ok) return error_response(made.http_status, made.error);
@@ -171,6 +219,8 @@ ctl::HttpResponse handle_control(RoomManager& rooms, const ctl::HttpRequest& req
         o.set("pending", JsonValue::make_int(static_cast<int64_t>(rooms.pending_count())));
         o.set("created", JsonValue::make_int(static_cast<int64_t>(rooms.rooms_created())));
         o.set("refused", JsonValue::make_int(static_cast<int64_t>(rooms.connections_refused())));
+        o.set("log_bytes", JsonValue::make_int(static_cast<int64_t>(rooms.log_bytes())));                 // the turn logs of all the rooms (reconnect), and what they may take together
+        o.set("log_budget_bytes", JsonValue::make_int(static_cast<int64_t>(rooms.log_budget_bytes())));
         return json_response(200, o);
     }
     static const std::string kPrefix = "/rooms/";

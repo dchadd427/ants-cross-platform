@@ -12,7 +12,10 @@
 // shows the key in a new Hello and gets its seat back. Meanwhile the server tells the others who is missing and what the vote says (Presence), they vote (Vote: keep
 // waiting / continue without), and the player who returns is given the match from the server's turn log (CatchUp, then TurnBatch messages of consecutive turns, each as
 // big as a message may be) and reports its state hash when it has executed them all (CaughtUp). Old-layout Hellos (protocols 6 to 9: protocol 9 changed the rules of the match, not a message) are still answered "version mismatch":
-// decode_hello_prefix reads the version and the name, which lead every layout.
+// decode_hello_prefix reads the version and the name, which lead every layout. Who sends what: the room's door takes a Hello with a key to the running room (ants_server, RoomManager), the host's session
+// (HostSession::accept_rejoin, session.hpp) answers Welcome (flags 1), Start and CatchUp, or a Reject (a key that fits no seat is told MatchRunning, like a Hello without a key: nothing is revealed), and
+// the returning client's session (ClientSession, Mode::Rejoining / CatchingUp) answers Loaded, TurnAck and CaughtUp. A host that holds no seats (a LAN or direct host, a room without reconnect) never sends
+// Presence, CatchUp or TurnBatch and answers a key like any Hello.
 
 #include <array>
 #include <cstddef>
@@ -90,9 +93,10 @@ inline constexpr size_t kMaxTokenChars = 64;                     // an opaque cr
 bool valid_room_code(const std::string& code) noexcept;
 
 /// Dropped (protocol 10): the key is right and the seat was dropped (by the others' vote, by the cap on the pauses, by a violation): the player is told it is out ("Sorry, you
-/// have been dropped from the game", the original's own text). RejoinFailed: the key is right but the way back is closed (the server's turn log is not usable, the map or the
-/// state of the machine that came back differs, too many tries). Superseded: a newer connection with the key took the seat; sent to the older one just before it is closed, so
-/// that the older window stops trying.
+/// have been dropped from the game", the original's own text). RejoinFailed: the key is right but the way back is closed (the server's turn log is not usable, or it cannot tell a
+/// machine that has nothing how to load the match, or that machine could not load the map; and on the machine's side, a stream that does not fit its announcement or the server's
+/// verdict that its state differs from the referee's: the session ends with this reason). There is no limit on the number of attempts: a link that flaps must be able to come back.
+/// Superseded: a newer connection with the key took the seat; sent to the older one just before it is closed, so that the older window stops trying.
 enum class RejectReason : uint8_t { Full = 1, VersionMismatch = 2, MatchRunning = 3, Kicked = 4, BadRequest = 5, NoSuchRoom = 6, Dropped = 7, RejoinFailed = 8, Superseded = 9 };
 
 /// A seat's KEY (protocol 10): 128 random bits that a server hands out in the Welcome of the seat (the server makes them, ants_net never reads the operating system's generator:

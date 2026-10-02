@@ -1,6 +1,7 @@
 #include "ants_server/room.hpp"
 
 #include "ants_net/clock.hpp"
+#include "ants_server/secret.hpp"
 
 #include <algorithm>
 
@@ -31,11 +32,14 @@ static net::HostLobby::Config lobby_config(const RoomSpec& spec) {
     cfg.max_players = players;
     cfg.early_start = spec.early_start;                              // the lobby names the leader only in a room that allows it
     cfg.load_timeout_ms = spec.load_ms;
+    // A room that holds seats gives every player a key (128 random bits of the operating system's generator: ants_net never reads it itself, the library is built for the web too).
+    // A room that does not has none: its Welcomes carry the zero key and a Hello with a key is just a Hello.
+    if (spec.reconnect) cfg.make_key = [](net::SeatKey& key) { return random_bytes(key.data(), key.size()); };
     return cfg;
 }
 
-Room::Room(RoomSpec spec, MapEntry map, assets::LevelData level, uint32_t seed, uint32_t now_ms)
-    : spec_(std::move(spec)), map_(std::move(map)), level_(std::move(level)), seed_(seed), created_ms_(now_ms), lobby_(lobby_config(spec_)) {
+Room::Room(RoomSpec spec, MapEntry map, assets::LevelData level, uint32_t seed, uint32_t now_ms, net::LogBudget* log_budget)
+    : spec_(std::move(spec)), map_(std::move(map)), level_(std::move(level)), seed_(seed), created_ms_(now_ms), lobby_(lobby_config(spec_)), log_budget_(log_budget) {
     spec_.players = std::max<uint8_t>(2, std::min<uint8_t>(spec_.players, sim::MAX_PLAYERS));
     retry_at_ms_ = now_ms;                                       // (not 0: the server's clock is its uptime, and a signed comparison against a stale 0 breaks after 24.8 days)
     lobby_.set_map(map_.name);
@@ -47,14 +51,24 @@ bool Room::expired(uint32_t now_ms) const noexcept {
 }
 
 void Room::prune_connections() {
-    // closed connections that nobody uses any more (a rejected Hello): the lobby and the session hold pointers to the others
+    // closed connections that nobody uses any more (a rejected Hello): the lobby and the session hold pointers to the others. The session holds the connection of a player who is coming
+    // back (its link can close while its catch-up is being kept, and the session looks at it at its next pass) and the last connection of every seat: asking only the lobby would free
+    // an object that the session still points at (a heap-use-after-free that AddressSanitizer shows: test_server S3.42).
     for (auto it = connections_.begin(); it != connections_.end();) {
         net::Connection* c = it->get();
-        bool used = false;
+        bool used = session_ != nullptr && session_->uses_connection(c);
         for (uint8_t seat = 0; seat < sim::MAX_PLAYERS; ++seat) used = used || lobby_.connection_of(seat) == c;
         if (!used && !c->is_open() && c->state() != net::Connection::State::Connecting) it = connections_.erase(it);
         else ++it;
     }
+}
+
+bool Room::rejoin(std::unique_ptr<net::Connection>& connection, const net::HelloMsg& hello, uint32_t now_ms) {
+    if (connection == nullptr || !can_rejoin()) return false;
+    if (!session_->accept_rejoin(connection.get(), hello, now_ms)) return false;       // the session has answered and closed it: the caller lets it linger
+    if (connections_.size() >= kMaxConnections) prune_connections();
+    connections_.push_back(std::move(connection));                  // the session points at it: the room keeps it alive (and prune_connections asks the session before it frees one)
+    return true;
 }
 
 bool Room::add_connection(std::unique_ptr<net::Connection>& connection, const std::string& address, const std::vector<uint8_t>& hello, uint32_t now_ms) {
@@ -71,7 +85,19 @@ void Room::fail(const std::string& reason, uint32_t now_ms) {
     state_ = RoomState::Failed;
     reason_ = reason;
     ended_ms_ = now_ms;
+    end_log(now_ms);
     close_connections();
+}
+
+// The match is over (or the room failed): what the turn log held and how long the match waited are kept for the status, the log itself is freed (a returning player has nothing to come back to)
+void Room::end_log(uint32_t now_ms) {
+    if (session_ == nullptr || log_released_) return;
+    log_turns_ = session_->log().turns();
+    log_bytes_ = static_cast<uint32_t>(std::min<size_t>(session_->log().bytes(), UINT32_MAX));
+    log_usable_ = session_->log().usable();
+    final_pause_ms_ = session_->attendance().pause_ms(now_ms);
+    session_->release_log();
+    log_released_ = true;
 }
 
 void Room::close(const std::string& reason, uint32_t now_ms) {
@@ -104,9 +130,21 @@ void Room::begin_match(uint32_t now_ms) {
     hc.host_player = net::kNoSeat;
     // (no waiting for a seat that falls behind: the room keeps its pace, the seat catches up alone, and one that is 60 s behind or has run nothing for 30 s is dropped:
     // the lag policy of a host without a seat, session.hpp)
+    // A room that holds seats pauses the match for a player whose connection is lost (and whose key it knows) instead of dropping it: the vote, the cap and the log are the room's settings
+    hc.hold_seats = spec_.reconnect;
+    hc.attendance.vote_after_ms = spec_.vote_after_ms;
+    hc.attendance.max_pause_ms = spec_.max_pause_ms;
+    hc.max_log_bytes = spec_.max_log_bytes;
+    hc.log_budget = log_budget_;
     session_ = std::make_unique<net::HostSession>(*sim_, hc);
     for (uint8_t seat = 0; seat < sim::MAX_PLAYERS; ++seat) {
         if (net::Connection* c = lobby_.connection_of(seat)) session_->add_client(seat, c);
+    }
+    if (spec_.reconnect) {
+        std::array<net::SeatKey, sim::MAX_PLAYERS> keys{};          // what the lobby gave out: the keys stay valid for the whole match (a seat that is dropped is told so by its key)
+        for (uint8_t seat = 0; seat < sim::MAX_PLAYERS; ++seat) keys[seat] = lobby_.key_of(seat);
+        session_->set_seat_keys(keys);
+        session_->set_rejoin_start(start);                          // what a machine that starts from nothing is sent first
     }
     session_->start(now_ms);
     state_ = RoomState::Running;
@@ -118,6 +156,7 @@ void Room::finish(const std::string& reason, uint32_t now_ms) {
     state_ = RoomState::Finished;
     ended_ms_ = now_ms;
     if (session_) session_->freeze();
+    end_log(now_ms);
     if (sim_) {
         const sim::MatchResult result = sim_->get_world_state().match_result;
         quitter_ = result.quitter;
@@ -206,9 +245,13 @@ void Room::update(uint32_t now_ms) {
             finish("the match ended", now_ms);
             return;
         }
-        if (now_ms - started_ms_ >= spec_.run_ms) return fail("the match took longer than the room's limit", now_ms);
+        // the limit is on the time that the match ran: a pause (a seat that is away) is not play (a room that waited minutes for a player must not fail "took longer than the limit")
+        const uint32_t elapsed_ms = now_ms - started_ms_;
+        const uint32_t paused_ms = session_->attendance().pause_ms(now_ms);
+        if ((elapsed_ms > paused_ms ? elapsed_ms - paused_ms : 0u) >= spec_.run_ms) return fail("the match took longer than the room's limit", now_ms);
+        // somebody is there when a player is connected or a seat is held for a player who may come back: a room whose players all lost their connection waits for them (until the cap)
         bool anybody = false;
-        for (uint8_t seat = 0; seat < sim::MAX_PLAYERS; ++seat) anybody = anybody || session_->client_present(seat);
+        for (uint8_t seat = 0; seat < sim::MAX_PLAYERS; ++seat) anybody = anybody || session_->client_present(seat) || session_->seat_held(seat);
         if (!anybody) finish("everybody left", now_ms);
     }
 }
@@ -237,6 +280,44 @@ RoomStatus Room::status(uint32_t now_ms) const {
     s.age_ms = now_ms - created_ms_;
     s.quitter = quitter_;
     s.rows = rows_;
+    s.reconnect = spec_.reconnect;
+    s.vote_after_ms = spec_.vote_after_ms;
+    s.max_pause_ms = spec_.max_pause_ms;
+    s.connections = static_cast<uint32_t>(connections_.size());
+    if (session_) {
+        const net::Attendance& a = session_->attendance();
+        const bool running = state_ == RoomState::Running;
+        s.rejoins = a.rejoins();
+        s.drops_by_vote = a.drops_by_vote();
+        s.drops_by_cap = a.drops_by_cap();
+        if (log_released_) {                                        // the match is over: what the log held at the end
+            s.log_turns = log_turns_;
+            s.log_bytes = log_bytes_;
+            s.log_usable = log_usable_;
+            s.paused_s = final_pause_ms_ / 1000u;
+        } else {
+            s.log_turns = session_->log().turns();
+            s.log_bytes = static_cast<uint32_t>(std::min<size_t>(session_->log().bytes(), UINT32_MAX));
+            s.log_usable = session_->log().usable();
+            s.paused_s = a.pause_ms(now_ms) / 1000u;
+        }
+        if (running) {                                              // who is missing now, and the vote (the status is the server's view: no seat is the viewer)
+            const net::PresenceMsg p = a.presence_for(255, now_ms);
+            s.paused = session_->paused();
+            for (const net::PresenceMsg::Entry& e : p.missing) {
+                RoomStatus::Absent row;
+                row.seat = e.seat;
+                row.name = names_[e.seat];
+                row.catching_up = e.state == net::PresenceMsg::State::CatchingUp;
+                row.away_s = a.away_ms(e.seat, now_ms) / 1000u;
+                row.progress = e.progress;
+                s.absent.push_back(std::move(row));
+            }
+            s.vote_seat = p.vote_seat;
+            s.votes_continue = p.votes_continue;
+            s.voters = p.voters;
+        }
+    }
     return s;
 }
 

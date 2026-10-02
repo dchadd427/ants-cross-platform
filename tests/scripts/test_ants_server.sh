@@ -4,7 +4,9 @@
 # presses START), runs, and both clients finish their frames without an error; a room for four whose leader (the first client to join, --start-when 2: a test hook that
 # presses START for a headless client) starts it with the two players who are there; a raw client (no game) that floods the server with valid messages (StartRequests, Pings) is
 # dropped within seconds while a match in another room keeps its clock, the control interface answers, and the process neither grows nor stays busy; the server stops cleanly on
-# SIGTERM and writes the result file of a room that was closed.
+# SIGTERM and writes the result file of a room that was closed. The last section is the server that HOLDS the seat of a player whose connection is lost (protocol 10, --reconnect):
+# a small TCP proxy (flaky_proxy.py) between a client and the server is cut, the room pauses and names the absent seat, nothing runs while it waits, and at the cap the seat is dropped
+# and the match goes on; a client that is stopped (kill -STOP) for 15 s pauses the room after 10 s of silence and finds its link closed when it wakes up.
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 BUILD="${BUILD_DIR:-build}"
 SERVER="$ROOT/$BUILD/src/ants_server/ants_server"
@@ -31,7 +33,8 @@ fi
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/ants_e2e.XXXXXX")"
 cleanup() {
     [ -n "$SERVER_PID" ] && kill "$SERVER_PID" 2> /dev/null
-    for p in $CLIENT_PIDS $VICTIM_PIDS $LEAD_PIDS; do kill "$p" 2> /dev/null; done
+    for p in $CLIENT_PIDS $VICTIM_PIDS $LEAD_PIDS $RC_PIDS; do kill -CONT "$p" 2> /dev/null; kill "$p" 2> /dev/null; done
+    [ -n "$PROXY_PID" ] && kill "$PROXY_PID" 2> /dev/null
     rm -rf "$WORK"
 }
 trap cleanup EXIT
@@ -85,6 +88,19 @@ check "--demo-maps with a map that is not in the folder is refused" "$([ "$(exit
 check "--demo-maps with an empty name is refused" "$([ "$(exit_of --demo-rooms 2 --demo-map TINY.LVL --demo-maps TINY.LVL,,SMALL.LVL)" = "2" ]; echo $?)"
 check "--demo-maps with a good list starts the server (the alarm ends it: status 142)" "$([ "$(exit_of --demo-rooms 2 --demo-map TINY.LVL --demo-maps TINY.LVL,SMALL.LVL)" = "142" ]; echo $?)"
 check "--demo-maps drops blanks around the names (\"TINY.LVL, SMALL.LVL\" starts the server)" "$([ "$(exit_of --demo-rooms 2 --demo-map TINY.LVL --demo-maps 'TINY.LVL, SMALL.LVL ')" = "142" ]; echo $?)"
+check "--hold-vote-seconds below 5 is refused" "$([ "$(exit_of --hold-vote-seconds 4)" = "2" ]; echo $?)"
+check "--hold-vote-seconds above 3600 is refused" "$([ "$(exit_of --hold-vote-seconds 3601)" = "2" ]; echo $?)"
+check "--hold-vote-seconds that is no number is refused" "$([ "$(exit_of --hold-vote-seconds soon)" = "2" ]; echo $?)"
+check "--max-pause-seconds below 60 is refused" "$([ "$(exit_of --max-pause-seconds 59)" = "2" ]; echo $?)"
+check "--max-pause-seconds above 86400 is refused" "$([ "$(exit_of --max-pause-seconds 86401)" = "2" ]; echo $?)"
+check "--max-pause-seconds that is no number is refused" "$([ "$(exit_of --max-pause-seconds 30min)" = "2" ]; echo $?)"
+check "--log-mb 0 is refused" "$([ "$(exit_of --log-mb 0)" = "2" ]; echo $?)"
+check "--log-mb above 256 is refused" "$([ "$(exit_of --log-mb 257)" = "2" ]; echo $?)"
+check "--log-mb that is no number is refused" "$([ "$(exit_of --log-mb big)" = "2" ]; echo $?)"
+check "--hold-vote-seconds without a value is refused" "$([ "$(exit_of --hold-vote-seconds)" = "2" ]; echo $?)"
+check "good reconnect options start the server (the alarm ends it: status 142)" "$([ "$(exit_of --reconnect --hold-vote-seconds 5 --max-pause-seconds 86400 --log-mb 256)" = "142" ]; echo $?)"
+check "the edges of the other side start it too" "$([ "$(exit_of --no-reconnect --hold-vote-seconds 3600 --max-pause-seconds 60 --log-mb 1)" = "142" ]; echo $?)"
+check "--help names the reconnect options and their ranges" "$("$SERVER" --help 2>&1 | grep -q -- '--reconnect | --no-reconnect' && "$SERVER" --help 2>&1 | grep -q -- '--hold-vote-seconds 5-3600' && "$SERVER" --help 2>&1 | grep -q -- '--max-pause-seconds 60-86400' && "$SERVER" --help 2>&1 | grep -q -- '--log-mb 1-256'; echo $?)"
 mkdir -p "$WORK/maps_odd"
 cp "$ROOT/Original-Ants/Maps/TINY.LVL" "$WORK/maps_odd/TINY.LVL"
 cp "$ROOT/Original-Ants/Maps/TINY.LVL" "$WORK/maps_odd/A B.LVL"
@@ -395,5 +411,150 @@ check "demo-small-2p-t5 is made on SMALL.LVL for two players" "$([ "$(map_of_roo
 for p in $PICK_PIDS; do kill "$p" 2> /dev/null; done
 stop_server
 
+# ---- the server that holds the seat of a player whose connection is lost (protocol 10, --reconnect) --------------------------------------------------------------
+# The game's own clients do not come back yet (that is release B: a native client whose link is cut is lost, the message below says so). What is tested here is the SERVER, with
+# real programs: a client behind a proxy that is cut, a client that is stopped. The room pauses for everybody and names the seat, nothing runs while it waits, the cap (60 s here)
+# drops the seat and the match goes on for the others.
+RC_PORT="$(free_port)"
+RC_CTL="$(free_port)"
+RC_PROXY_PORT="$(free_port)"
+RC_CODE="E2E-HOLD-$RANDOM"
+RC_STOP_CODE="E2E-STOP-$RANDOM"
+RC_URL="http://127.0.0.1:$RC_CTL"
+rc_field() { curl -s -m 3 -H "Authorization: Bearer $SECRET" "$RC_URL/rooms/$1" | python3 -c 'import sys, json; v = json.load(sys.stdin)
+for part in sys.argv[1].split("."):
+    v = v.get(part) if isinstance(v, dict) else None
+print(json.dumps(v) if isinstance(v, (dict, list)) or v is None else str(v).lower() if isinstance(v, bool) else v)' "$2" 2> /dev/null; }
+ANTS_SERVER_SECRET="$SECRET" "$SERVER" --maps "$ROOT/Original-Ants/Maps" --port "$RC_PORT" --ctl-port "$RC_CTL" --results-dir "$WORK/rc_results" --reconnect --max-pause-seconds 60 > "$WORK/rc_server.log" 2>&1 &
+SERVER_PID=$!
+RC_UP=1
+for _ in $(seq 1 50); do
+    if curl -s -m 1 "$RC_URL/healthz" | grep -q '"ok"'; then RC_UP=0; break; fi
+    kill -0 "$SERVER_PID" 2> /dev/null || break
+    sleep 0.1
+done
+check "the reconnect server is up" "$RC_UP"
+check "the log says that rooms hold the seat of a player whose connection is lost, with the vote and the cap" "$(grep -q 'rooms hold the seat of a player whose connection is lost' "$WORK/rc_server.log" && grep -q 'capped at 60 s' "$WORK/rc_server.log"; echo $?)"
+RC_BODY="{\"map\":\"TINY.LVL\",\"players\":3,\"code\":\"$RC_CODE\",\"seed\":5}"      # (made in an assignment: a JSON body inside "$( )" in an argument is mangled by the brace expansion of macOS's bash 3.2)
+RC_RESP="$(curl -s -m 3 -X POST -H "Authorization: Bearer $SECRET" -d "$RC_BODY" "$RC_URL/rooms")"
+check "a room that says nothing takes the server's setting: reconnect on, the cap 60 s, the vote 30 s" "$(echo "$RC_RESP" | grep -q '"reconnect":true' && [ "$(rc_field "$RC_CODE" max_pause_seconds)" = "60" ] && [ "$(rc_field "$RC_CODE" hold_vote_seconds)" = "30" ]; echo $?)"
+check "a vote time of 4 s is refused by the control interface: 400" "$([ "$(code_of -X POST -H "Authorization: Bearer $SECRET" -d '{"map":"TINY.LVL","hold_vote_seconds":4}' "$RC_URL/rooms")" = "400" ]; echo $?)"
+check "a pause cap of 59 s is refused by the control interface: 400" "$([ "$(code_of -X POST -H "Authorization: Bearer $SECRET" -d '{"map":"TINY.LVL","max_pause_seconds":59}' "$RC_URL/rooms")" = "400" ]; echo $?)"
+curl -s -m 3 -o /dev/null -X POST -H "Authorization: Bearer $SECRET" -d "{\"map\":\"TINY.LVL\",\"players\":3,\"code\":\"$RC_STOP_CODE\",\"seed\":6}" "$RC_URL/rooms"
+python3 "$ROOT/tests/scripts/flaky_proxy.py" "$RC_PROXY_PORT" "$RC_PORT" 3600 > "$WORK/proxy.log" 2>&1 &
+PROXY_PID=$!
+for _ in $(seq 1 50); do grep -q listening "$WORK/proxy.log" 2> /dev/null && break; sleep 0.1; done
+RC_PIDS=""
+"$GAME" --headless --no-lan --name Holder1 --join "127.0.0.1:$RC_PORT" --room "$RC_CODE" --screenshot "$WORK/h1.png" --frames 4000000 > "$WORK/h1.log" 2>&1 &
+RC_PIDS="$!"
+"$GAME" --headless --no-lan --name Holder2 --join "127.0.0.1:$RC_PORT" --room "$RC_CODE" --screenshot "$WORK/h2.png" --frames 4000000 > "$WORK/h2.log" 2>&1 &
+RC_PIDS="$RC_PIDS $!"
+"$GAME" --headless --no-lan --name Victim --join "127.0.0.1:$RC_PROXY_PORT" --room "$RC_CODE" --screenshot "$WORK/hv.png" --frames 4000000 > "$WORK/hv.log" 2>&1 &
+RC_VICTIM_PID="$!"
+RC_PIDS="$RC_PIDS $RC_VICTIM_PID"
+RC_RUNNING=1
+for _ in $(seq 1 150); do
+    [ "$(rc_field "$RC_CODE" state)" = "running" ] && { RC_RUNNING=0; break; }
+    sleep 0.2
+done
+check "three clients (one of them behind the proxy) joined and the match runs" "$RC_RUNNING"
+check "the status says that nobody waits: not paused, nobody absent, no vote, the log is being kept" "$([ "$(rc_field "$RC_CODE" paused)" = "false" ] && [ "$(rc_field "$RC_CODE" absent)" = "[]" ] && [ "$(rc_field "$RC_CODE" vote)" = "null" ] && [ "$(rc_field "$RC_CODE" log.usable)" = "true" ] && [ "$(rc_field "$RC_CODE" log.turns)" -gt 0 ]; echo $?)"
+sleep 2
+RC_T0="$(rc_field "$RC_CODE" ticks)"
+check "the referee's clock runs before the cut" "$([ "${RC_T0:-0}" -gt 0 ]; echo $?)"
+
+# the second room: a client that is stopped (a machine that hangs: its link stays open and says nothing)
+"$GAME" --headless --no-lan --name Steady1 --join "127.0.0.1:$RC_PORT" --room "$RC_STOP_CODE" --screenshot "$WORK/s1.png" --frames 4000000 > "$WORK/s1.log" 2>&1 &
+RC_PIDS="$RC_PIDS $!"
+"$GAME" --headless --no-lan --name Steady2 --join "127.0.0.1:$RC_PORT" --room "$RC_STOP_CODE" --screenshot "$WORK/s2.png" --frames 4000000 > "$WORK/s2.log" 2>&1 &
+RC_PIDS="$RC_PIDS $!"
+"$GAME" --headless --no-lan --name Frozen --join "127.0.0.1:$RC_PORT" --room "$RC_STOP_CODE" --screenshot "$WORK/sf.png" --frames 4000000 > "$WORK/sf.log" 2>&1 &
+RC_FROZEN_PID="$!"
+RC_PIDS="$RC_PIDS $RC_FROZEN_PID"
+RC_STOP_RUNNING=1
+for _ in $(seq 1 150); do
+    [ "$(rc_field "$RC_STOP_CODE" state)" = "running" ] && { RC_STOP_RUNNING=0; break; }
+    sleep 0.2
+done
+check "the second room runs with its three clients" "$RC_STOP_RUNNING"
+sleep 2
+
+# cut the proxy: the victim's link dies, the room pauses (within a few seconds), and says who is missing
+kill -USR1 "$PROXY_PID"
+RC_CUT_AT="$(python3 -c 'import time; print(time.time())')"
+RC_PAUSED=1
+for _ in $(seq 1 50); do
+    [ "$(rc_field "$RC_CODE" paused)" = "true" ] && { RC_PAUSED=0; break; }
+    sleep 0.1
+done
+RC_PAUSED_AFTER="$(python3 -c "import time; print(round(time.time() - $RC_CUT_AT, 1))")"
+check "cutting the link pauses the room (status: paused, after $RC_PAUSED_AFTER s)" "$RC_PAUSED"
+check "the status names the absent seat: Victim, state absent" "$(rc_field "$RC_CODE" absent | python3 -c 'import sys, json; a = json.load(sys.stdin); sys.exit(0 if len(a) == 1 and a[0]["name"] == "Victim" and a[0]["state"] == "absent" else 1)'; echo $?)"
+RC_TA="$(rc_field "$RC_CODE" ticks)"
+sleep 6
+RC_TB="$(rc_field "$RC_CODE" ticks)"
+check "nothing advances while the room waits (ticks $RC_TA, $RC_TB six seconds later)" "$([ "$((RC_TB - RC_TA))" -le 2 ]; echo $?)"
+check "the others are still in the match, paused, not dropped: the room is running and still holds the seat" "$([ "$(rc_field "$RC_CODE" state)" = "running" ] && [ "$(rc_field "$RC_CODE" paused)" = "true" ] && [ "$(rc_field "$RC_CODE" drops_by_cap)" = "0" ]; echo $?)"
+check "the paused time grows (paused_seconds at least 5)" "$([ "$(rc_field "$RC_CODE" paused_seconds)" -ge 5 ]; echo $?)"
+check "the victim's game says that the connection was lost (a native client does not rejoin yet: release B)" "$(grep -q 'connection to the other players was lost' "$WORK/hv.log"; echo $?)"
+
+# the second room: stop a client for 15 s
+kill -STOP "$RC_FROZEN_PID"
+RC_STOP_AT="$(python3 -c 'import time; print(time.time())')"
+sleep 8
+check "8 s of silence is no loss: the second room is not paused yet" "$([ "$(rc_field "$RC_STOP_CODE" paused)" = "false" ]; echo $?)"
+RC_STOP_PAUSED=1
+for _ in $(seq 1 70); do
+    [ "$(rc_field "$RC_STOP_CODE" paused)" = "true" ] && { RC_STOP_PAUSED=0; break; }
+    sleep 0.1
+done
+RC_STOP_PAUSED_AFTER="$(python3 -c "import time; print(round(time.time() - $RC_STOP_AT, 1))")"
+check "10 s of silence is a loss: the second room pauses, $RC_STOP_PAUSED_AFTER s after the client was stopped" "$RC_STOP_PAUSED"
+check "... between 9.5 and 13 s after it (its last word, and the check every pass)" "$(python3 -c "print(0 if 9.5 <= $RC_STOP_PAUSED_AFTER <= 13 else 1)")"
+check "the absent seat is the stopped client (Frozen), absent and not lagging" "$(rc_field "$RC_STOP_CODE" absent | python3 -c 'import sys, json; a = json.load(sys.stdin); sys.exit(0 if len(a) == 1 and a[0]["name"] == "Frozen" and a[0]["state"] == "absent" else 1)'; echo $?)"
+sleep 5
+kill -CONT "$RC_FROZEN_PID"
+RC_FROZEN_LOST=1
+for _ in $(seq 1 100); do
+    grep -q 'connection to the other players was lost' "$WORK/sf.log" && { RC_FROZEN_LOST=0; break; }
+    sleep 0.2
+done
+check "the client that wakes up finds its old link closed and ends with the lost connection message (release B will make it rejoin)" "$RC_FROZEN_LOST"
+check "the second room is still paused and holds the seat" "$([ "$(rc_field "$RC_STOP_CODE" paused)" = "true" ] && [ "$(rc_field "$RC_STOP_CODE" state)" = "running" ]; echo $?)"
+code_of -X DELETE -H "Authorization: Bearer $SECRET" "$RC_URL/rooms/$RC_STOP_CODE" > /dev/null
+
+# the cap: 60 s after the cut the absent seat is dropped, the match goes on
+RC_CAPPED=1
+for _ in $(seq 1 300); do
+    [ "$(rc_field "$RC_CODE" drops_by_cap)" = "1" ] && { RC_CAPPED=0; break; }
+    sleep 0.2
+done
+RC_CAPPED_AFTER="$(python3 -c "import time; print(round(time.time() - $RC_CUT_AT, 1))")"
+check "the cap drops the absent seat ($RC_CAPPED_AFTER s after the cut: 60 s of pause)" "$RC_CAPPED"
+check "... about 60 s after the cut (59 - 64 s)" "$(python3 -c "print(0 if 59 <= $RC_CAPPED_AFTER <= 64 else 1)")"
+sleep 3
+check "the match goes on without it: not paused, nobody absent" "$([ "$(rc_field "$RC_CODE" paused)" = "false" ] && [ "$(rc_field "$RC_CODE" absent)" = "[]" ] && [ "$(rc_field "$RC_CODE" state)" = "running" ]; echo $?)"
+RC_TC="$(rc_field "$RC_CODE" ticks)"
+sleep 3
+RC_TD="$(rc_field "$RC_CODE" ticks)"
+check "the referee's clock runs again (ticks $RC_TC, $RC_TD three seconds later)" "$([ "$((RC_TD - RC_TC))" -ge 40 ]; echo $?)"
+check "the status keeps the counters: the pause lasted about 60 s, nobody came back, one seat dropped by the cap, none by a vote" "$([ "$(rc_field "$RC_CODE" paused_seconds)" -ge 59 ] && [ "$(rc_field "$RC_CODE" paused_seconds)" -le 65 ] && [ "$(rc_field "$RC_CODE" rejoins)" = "0" ] && [ "$(rc_field "$RC_CODE" drops_by_vote)" = "0" ]; echo $?)"
+check "the two clients that stayed saw no error" "$(grep -qiE 'out of sync|failed|error' "$WORK/h1.log" "$WORK/h2.log"; [ $? -ne 0 ]; echo $?)"
+check "the second room's two steady clients saw no error either" "$(grep -qiE 'out of sync|failed|error' "$WORK/s1.log" "$WORK/s2.log"; [ $? -ne 0 ]; echo $?)"
+for p in $RC_PIDS; do kill -CONT "$p" 2> /dev/null; kill "$p" 2> /dev/null; done
+for p in $RC_PIDS; do wait "$p" 2> /dev/null; done
+RC_PIDS=""
+code_of -X DELETE -H "Authorization: Bearer $SECRET" "$RC_URL/rooms/$RC_CODE" > /dev/null
+sleep 0.5
+kill -TERM "$SERVER_PID" 2> /dev/null
+wait "$SERVER_PID" 2> /dev/null
+SERVER_PID=""
+kill "$PROXY_PID" 2> /dev/null
+wait "$PROXY_PID" 2> /dev/null
+PROXY_PID=""
+check "the result file of the room that held a seat keeps the counters (drops_by_cap 1, log) and no secret or key" "$([ -s "$WORK/rc_results/$RC_CODE.json" ] && grep -q '"drops_by_cap":1' "$WORK/rc_results/$RC_CODE.json" && grep -q '"log":{' "$WORK/rc_results/$RC_CODE.json" && ! grep -q "$SECRET" "$WORK/rc_results/$RC_CODE.json"; echo $?)"
+check "the server's log names the rooms' ends with what the pause came to, and never the secret" "$(grep -q "room $RC_CODE" "$WORK/rc_server.log" && grep -q 'by the cap' "$WORK/rc_server.log" && ! grep -q "$SECRET" "$WORK/rc_server.log"; echo $?)"
+
+echo "  [reconnect e2e] the link cut: the room paused after $RC_PAUSED_AFTER s; the cap dropped the seat $RC_CAPPED_AFTER s after the cut (60 s of pause); a client stopped: the room paused $RC_STOP_PAUSED_AFTER s later"
 echo "server e2e: $CHECKS checks, $FAILS failures"
 [ "$FAILS" -eq 0 ]

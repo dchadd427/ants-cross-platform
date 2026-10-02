@@ -13,7 +13,18 @@ size_t packed_command_bytes(const sim::Command& c) noexcept { return sim::kComma
 
 }  // namespace
 
-TurnLog::TurnLog(size_t max_bytes) noexcept : max_bytes_(static_cast<size_t>(std::min<uint64_t>(max_bytes, kHardMaxBytes))) {}
+TurnLog::TurnLog(size_t max_bytes, LogBudget* budget) noexcept : max_bytes_(static_cast<size_t>(std::min<uint64_t>(max_bytes, kHardMaxBytes))), budget_(budget) {}
+
+TurnLog::~TurnLog() {
+    if (budget_ != nullptr) budget_->give(bytes());
+}
+
+void TurnLog::release() noexcept {
+    usable_ = false;
+    if (budget_ != nullptr) budget_->give(bytes());
+    std::vector<uint8_t>().swap(blob_);              // (swapped with empty ones: a clear() keeps the memory)
+    std::vector<uint32_t>().swap(offsets_);
+}
 
 bool TurnLog::append(const TurnMsg& turn) {
     if (!usable_) return false;
@@ -28,6 +39,10 @@ bool TurnLog::append(const TurnMsg& turn) {
     const uint64_t blob_after = uint64_t{blob_.size()} + need;
     const uint64_t bytes_after = blob_after + (uint64_t{offsets_.size()} + 1u) * sizeof(uint32_t);
     if (need > kMaxMessageBytes - kBatchHeaderBytes || blob_after > kHardMaxBytes || bytes_after > max_bytes_) {
+        usable_ = false;
+        return false;
+    }
+    if (budget_ != nullptr && !budget_->take(need + sizeof(uint32_t))) {     // the server's memory for logs is used up: this log is not kept (and nothing was taken)
         usable_ = false;
         return false;
     }

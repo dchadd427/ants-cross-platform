@@ -15,6 +15,11 @@
 // connection is lost is dropped at once). Bytes() never passes the limit: the append that would go beyond it stores nothing. The vectors may hold spare capacity, at most what their
 // growth by doubling leaves, so what is allocated is never more than twice the limit. Whatever the limit, the log never holds more than 0xFFFFFFF0 bytes (the offsets are 32 bits).
 //
+// The server's budget. A server holds the logs of many rooms, and each of them may grow to its own limit: a LogBudget is the memory that all the logs of a server may take together
+// (ants_server: 256 MiB). A log takes what it stores from the budget at every append (the packed turn and its 4 bytes of index) and gives all of it back when it is destroyed or
+// released; an append that the budget refuses stores nothing and makes the log unusable for good, exactly as the log's own limit does, so a server that is full of logs falls back
+// to dropping a lost seat at once in the rooms that cannot log (and says so in their status) and never grows beyond the budget.
+//
 // Pure data, no clock, no sockets; the host's session (session.hpp) appends every turn it seals, before it sends it.
 
 #include <cstddef>
@@ -25,6 +30,26 @@
 
 namespace ants::net {
 
+/// The memory that the logs of a server may take together (see above). One thread, like everything here: plain numbers.
+class LogBudget {
+public:
+    explicit LogBudget(uint64_t limit_bytes) noexcept : limit_(limit_bytes) {}
+    /// Takes `bytes` from the budget; false (and nothing is taken) when less than that is left
+    bool take(uint64_t bytes) noexcept {
+        if (bytes > limit_ - used_) return false;
+        used_ += bytes;
+        return true;
+    }
+    /// Gives `bytes` back (never more than was taken)
+    void give(uint64_t bytes) noexcept { used_ = bytes >= used_ ? 0 : used_ - bytes; }
+    uint64_t used() const noexcept { return used_; }
+    uint64_t limit() const noexcept { return limit_; }
+
+private:
+    uint64_t limit_;
+    uint64_t used_{0};
+};
+
 class TurnLog {
 public:
     /// The limit of a room's log
@@ -32,8 +57,12 @@ public:
     /// The most that a log ever holds, whatever limit it is given: the offsets of its index are 32 bits
     static constexpr uint64_t kHardMaxBytes = 0xFFFFFFF0u;
 
-    /// A log that holds at most `max_bytes` (the packed turns and the 4 bytes of index of each: bytes()), and never more than kHardMaxBytes
-    explicit TurnLog(size_t max_bytes = kDefaultMaxBytes) noexcept;
+    /// A log that holds at most `max_bytes` (the packed turns and the 4 bytes of index of each: bytes()), and never more than kHardMaxBytes. With a `budget` (a server's, shared by the logs
+    /// of all its rooms; it must outlive the log) everything that the log stores is taken from it, and given back when the log is destroyed or released.
+    explicit TurnLog(size_t max_bytes = kDefaultMaxBytes, LogBudget* budget = nullptr) noexcept;
+    ~TurnLog();
+    TurnLog(const TurnLog&) = delete;               // (a copy would give the budget back twice)
+    TurnLog& operator=(const TurnLog&) = delete;
 
     /// Appends turn number turns(): turns must come in order, one after the other, starting with 0. False, and the log is not usable from now on (and keeps what it had), when the
     /// turn is not the next one (a hole or a repeat), when it would take the log beyond its limit (bytes() would pass max_bytes()), or when it is too big to be sent as a batch on
@@ -41,7 +70,7 @@ public:
     /// log is not usable, nothing is appended and nothing is allocated.
     bool append(const TurnMsg& turn);
 
-    /// The turns stored: the next turn to append
+    /// The turns stored: the next turn to append (0 again after release())
     uint32_t turns() const noexcept { return static_cast<uint32_t>(offsets_.size()); }
     /// What the log holds: the packed turns and their index (4 bytes a turn). Never above max_bytes()
     size_t bytes() const noexcept { return blob_.size() + offsets_.size() * sizeof(uint32_t); }
@@ -56,8 +85,13 @@ public:
     /// at or beyond turns()). The bytes are exactly what encode_turn_batch_packed() takes. Reads what is stored whether or not the log is still usable.
     uint32_t read(uint32_t from, uint32_t max_turns, size_t limit_bytes, std::vector<uint8_t>& out) const;
 
+    /// The match is over (or the log is dead): everything stored is freed and given back to the budget, and the log is not usable (it holds nothing: turns() and bytes() are 0, a read
+    /// gives nothing, an append is refused)
+    void release() noexcept;
+
 private:
     size_t max_bytes_;
+    LogBudget* budget_;
     bool usable_{true};
     std::vector<uint8_t> blob_;
     std::vector<uint32_t> offsets_;     // offsets_[t]: where turn t starts in blob_

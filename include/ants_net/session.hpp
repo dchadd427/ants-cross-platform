@@ -29,6 +29,18 @@
 // machine that finds its link closed with half a minute of the match unplayed in its queue says so ("You were away too long and were dropped from the match.").
 // A command that does not fit into a turn (more than the 64 a player may have in one) waits for the next turns (up to 256 of them) in the sequencer instead of costing the
 // player a violation: a stuck uplink that is let go delivers 76 orders at once.
+//
+// Coming back (protocol 10, docs/NETWORK_PORT.md "Reconnect"). A dedicated server's room may HOLD the seat of a player whose connection is LOST instead of dropping it
+// (HostSession::Config::hold_seats, the server's `--reconnect`; every other host, a game on the local network above all, keeps the rules above). A connection is lost when its link
+// closes, a send to it fails, or nothing at all arrives from it for 10 s (a half-open link: a power cut, a frozen machine); a player that is slow but keeps talking is lag, never a
+// loss. While a seat is held nothing is sealed: the match is paused for everybody, chat goes on, commands are discarded without being counted as violations, and the others are told
+// who is missing, since when, the vote and the cap (Presence, per recipient, on every change and once a second). The seat comes back with its key (a Hello that shows it, accepted by
+// HostSession::accept_rejoin): the host gives the player the turns it has not got from its TurnLog (CatchUp, TurnBatch messages paced by what the player has executed, in bytes),
+// the player runs them with fast_forward (nothing is drawn) and says CaughtUp with its state hash, and when the hash is the referee's the connection is the seat's again and the
+// match goes on at the next turn; a different state is answered with a Desync to that player alone (the room does not fail). Meanwhile the others may vote (Attendance), and the
+// match's total pause is capped. A returning connection is not a client of the host until it has caught up (HostSession::Rejoiner). ClientSession is the other end: a lost link with a
+// key is not the end of the match (Mode::Reconnecting): it asks its owner for a new link (wants_connection / attach), says the Hello when the link is open, is given the match again
+// (Mode::Rejoining, Mode::CatchingUp) and goes on; a Reject (the seat was dropped, the room is gone, a newer window took the seat) ends it for good.
 
 #include <array>
 #include <cstdint>
@@ -37,12 +49,14 @@
 #include <string>
 #include <vector>
 
+#include "ants_net/attendance.hpp"
 #include "ants_net/flood.hpp"
 #include "ants_net/latency.hpp"
 #include "ants_net/lockstep.hpp"
 #include "ants_net/protocol.hpp"
 #include "ants_net/sequencer.hpp"
 #include "ants_net/transport.hpp"
+#include "ants_net/turnlog.hpp"
 #include "ants_sim/sim_engine.hpp"
 
 namespace ants::net {
@@ -78,6 +92,15 @@ inline constexpr uint32_t kSelfLagNoticeStaleMs = 10000;
 /// tab). Ten seconds are left for the turns that were still on their way. A link that fails by itself, or a server that dies, finds nothing like it.
 inline constexpr uint32_t kAwayBacklogMs = kLagDropIdleMs - 10000;
 
+/// Reconnect (see above). A client from which nothing at all arrives for this long is LOST (a live client sends an acknowledgement every 50 ms of play and a ping a second)
+inline constexpr uint32_t kLostSilenceMs = 10000;
+/// ... the Presence message goes to the players this often while the match is paused (and at once on every change)
+inline constexpr uint32_t kPresenceEveryMs = 1000;
+/// ... the stream of the log to a player who came back: the bytes that may be on their way beyond what the player has executed (a WebSocket fails at 1 MB of backlog)
+inline constexpr size_t kStreamWindowBytes = 256 * 1024;
+/// ... a client gives up coming back after this long (the server's pause cap of 30 minutes and a minute for the last attempt), unless a Reject ends it earlier
+inline constexpr uint32_t kReconnectGiveUpMs = (30u * 60u + 60u) * 1000u;
+
 class HostSession {
 public:
     struct Config {
@@ -96,6 +119,14 @@ public:
         uint32_t lag_drop_idle_ms{kLagDropIdleMs};       // ... dropped when its acks have not moved for this long while turns wait for it (0: never)
         uint32_t message_burst{kMessageBurst};                  // flood control (flood.hpp): the messages that one client may send, a token bucket; a message beyond it is not
         uint32_t messages_per_second{kMessagesPerSecond};       // handled and is a violation
+        // Reconnect (see above). Off: today's rules, exactly (a lost connection is a drop at once).
+        bool hold_seats{false};                                 // a lost connection holds the seat and pauses the match (it needs the seat's key: set_seat_keys) instead of dropping it
+        uint32_t silence_ms{kLostSilenceMs};                    // hold_seats: nothing at all from a client for this long = its connection is lost (without hold_seats it is silence_timeout_ms and a drop)
+        Attendance::Config attendance{};                        // the vote after 30 s away, the catch-up stall of 20 s, the least an absence counts, the cap on the pause (30 minutes)
+        size_t max_log_bytes{TurnLog::kDefaultMaxBytes};        // the limit of the turn log (16 MiB): past it a lost seat is dropped at once again
+        LogBudget* log_budget{nullptr};                         // the server's memory for the logs of all its rooms (turnlog.hpp), shared: a log that it refuses is not kept
+        uint32_t presence_every_ms{kPresenceEveryMs};
+        size_t stream_window_bytes{kStreamWindowBytes};
     };
 
     HostSession(sim::SimulationEngine& sim, Config config);
@@ -114,7 +145,7 @@ public:
     void add_bot_seat(uint8_t player);
     bool is_bot_seat(uint8_t player) const noexcept { return player < sim::MAX_PLAYERS && (bot_seats_ & (1u << player)) != 0; }
     /// A command of a bot seat's bot for the next turn (the issuer is stamped by the sequencer). False unless the match runs, the seat is a bot seat and the
-    /// command is one that a player may send (never Drop).
+    /// command is one that a player may send (never Drop), and false while the match is paused (a bot waits like everybody; a bot seat is never absent and never votes).
     bool submit_bot(uint8_t player, sim::Command command);
     /// Begins the match at `now_ms`: turn 0 is sealed at once.
     void start(uint32_t now_ms);
@@ -165,6 +196,42 @@ public:
     /// host without a seat.
     const CommandDelayMeter& command_delay() const noexcept { return delay_; }
 
+    // ---- reconnect (hold_seats; see the head of this file) -----------------------------------------------------------------------------------------------------
+    /// The keys of the seats (before start(); the room hands over what its lobby gave out: HostLobby::key_of). A seat whose key is all zero (a bot, an empty seat, a guest that was
+    /// given none) cannot be held: its lost connection is a drop at once. The keys stay what they were for the whole match, whatever becomes of the seats (a seat that was dropped
+    /// answers its owner "dropped").
+    void set_seat_keys(const std::array<SeatKey, sim::MAX_PLAYERS>& keys) { keys_ = keys; }
+    /// What a machine that comes back with nothing needs to load the match: the room's Start message (before start()). Without it a Hello that has no turns is refused (RejoinFailed).
+    void set_rejoin_start(const StartMsg& start) {
+        rejoin_start_ = start;
+        have_rejoin_start_ = true;
+    }
+    /// A connection whose first message was a Hello with a key (the door has decoded it: the room is right, the version is right). True: the connection is taken over (the Welcome
+    /// is sent, the catch-up follows) and the caller must keep it alive for as long as the session lives: the host holds the pointer until the connection is the seat's or the attempt
+    /// ends, and then until it is closed and replaced (uses_connection). False: refused, a Reject has been sent and the connection is closed (the caller lets it linger so that the
+    /// answer arrives). The refusals: no seat has this key (or the session does not hold seats): MatchRunning, exactly what a Hello without a key is told, so a wrong key reveals nothing;
+    /// the seat was dropped: Dropped; the log is not usable, or a machine that has nothing cannot be told how to load the match: RejoinFailed; more turns than were sealed: BadRequest.
+    /// A seat whose old connection is still open (a half-dead link, a second window with the same key) is taken over: the old connection is told Superseded and closed; an earlier
+    /// attempt of the same seat that is still catching up is closed too. A Hello with no turns (have_turns 0) is answered Welcome, Start and, when Loaded comes, Begin and
+    /// CatchUp{0, total}; one with turns is answered Welcome and CatchUp{have_turns, total} at once.
+    bool accept_rejoin(Connection* conn, const HelloMsg& hello, uint32_t now_ms);
+    /// True while the match waits for a seat (hold_seats only): a seat is absent or is catching up. Nothing is sealed then.
+    bool paused() const noexcept { return cfg_.hold_seats && attendance_.paused(); }
+    /// The seat is held or being brought back: not present, not dropped
+    bool seat_held(uint8_t seat) const noexcept {
+        const Attendance::State st = attendance_.state(seat);
+        return st == Attendance::State::Absent || st == Attendance::State::CatchingUp;
+    }
+    const Attendance& attendance() const noexcept { return attendance_; }
+    const TurnLog& log() const noexcept { return log_; }
+    /// The match is over: the log is freed and its bytes go back to the budget (the counters stay readable in attendance())
+    void release_log() noexcept { log_.release(); }
+    /// The players that are coming back now (a connection that said Hello with a key and has not caught up)
+    size_t rejoiners() const noexcept { return rejoiners_.size(); }
+    /// True while this session still points at the connection: a present client's, or one that is coming back. Whoever owns the connections (the room) must not free one that this
+    /// answers true for (a rejoining player's link can close while its catch-up is being kept, and nobody may have deleted the object under it).
+    bool uses_connection(const Connection* c) const noexcept;
+
 private:
     struct Client {
         Connection* conn{nullptr};
@@ -189,10 +256,40 @@ private:
     void send_turns(Connection* conn, uint32_t from_turn, uint32_t to_turn);
     void police_laggards(uint32_t now_ms);
     void announce_lag(uint8_t player, uint32_t behind_ms);
+    // reconnect
+    void lose(uint8_t player);
+    void finish_drop(uint8_t seat);
+    void pump_rejoiners(uint32_t now_ms);
+    void send_presence();
+    void end_lag_notice(uint8_t player);
+
+    /// A connection that said Hello with a seat's key and is being given the match: not a client of the host until it has caught up
+    struct Rejoiner {
+        enum class Stage : uint8_t { AwaitLoaded, Streaming };
+        Connection* conn{nullptr};
+        uint8_t seat{255};
+        Stage stage{Stage::Streaming};
+        uint32_t total{0};                  // the turns sealed when the attempt began: the match is paused, so it cannot grow
+        uint32_t next{0};                   // the next turn to send
+        uint32_t acked{0};                  // the turns that the player has executed (never more than were sent)
+        bool verify{false};                 // the player said CaughtUp: the referee compares the hash as soon as it has executed as many turns
+        CaughtUpMsg claim;
+        uint32_t violations{0};
+        MessageBudget talk;                 // flood control, as for a client
+    };
 
     Config cfg_;
     sim::SimulationEngine* sim_;
     Sequencer sequencer_;
+    Attendance attendance_;
+    TurnLog log_;
+    std::array<SeatKey, sim::MAX_PLAYERS> keys_{};
+    StartMsg rejoin_start_;
+    bool have_rejoin_start_{false};
+    std::vector<Rejoiner> rejoiners_;
+    uint32_t next_presence_ms_{0};
+    bool presence_dirty_{false};
+    bool was_paused_{false};
     std::unique_ptr<LockstepRunner> runner_;
     std::array<Client, sim::MAX_PLAYERS> clients_{};
     uint8_t bot_seats_{0};                  // bit s: seat s is a bot (no connection; acknowledged by this host). A new host after a migration has none: the bots leave with the old host
@@ -225,10 +322,22 @@ public:
         uint32_t retry_ms{1000};             // a candidate whose proposal was refused because the others' host lives asks again after this
         uint32_t host_refusals_limit{3};     // ... and gives up (Lost) after this many such refusals: it is this machine that lost the host
         uint32_t election_limit_ms{30000};   // no host after this long: the match cannot go on here
+        // Reconnect (see the head of this file): a dedicated server's room that holds seats. Off: today's rules (a lost link ends the match here).
+        bool reconnect{false};               // a lost link (closed, or the host silent) is not the end: this machine asks for a new link and gets its seat back, as long as it has a key
+        HelloMsg hello;                      // what to say on a new link: name, room code, token, wanted seat (the version, the key and the turns are filled in)
+        SeatKey key{};                       // the key of the seat (the Welcome gave it; a machine that starts again is given it from outside)
+        bool rejoin{false};                  // this machine starts from nothing and is given the match by the server: its lobby did the Hello (Welcome, Start, Loaded, Begin), the session
+                                             // starts by catching up (CatchUp and TurnBatch follow)
+        uint32_t reconnect_every_ms{2000};   // a new attempt this long after the last one began
+        uint32_t reconnect_give_up_ms{kReconnectGiveUpMs};  // no way back after this long since the link was lost (Lost, no Reject): the server's cap of 30 minutes and a minute
+        uint32_t rejoin_timeout_ms{10000};   // an attempt that has no Welcome after this long is abandoned (the next one follows)
+        uint32_t catch_up_ticks{200};        // the turns that one update() runs while catching up (the owner may lower it for a slow machine: a window slices the work into frames)
     };
     /// Normal: following the host. Electing / Following / Fetching: the host is gone and a new one is being chosen (no turns arrive meanwhile).
-    /// Promoted: this machine is the new host (see promote_to_host). Lost: the other players cannot be reached, or this machine was cut off.
-    enum class Mode : uint8_t { Normal, Electing, Following, Fetching, Promoted, Lost };
+    /// Promoted: this machine is the new host (see promote_to_host). Lost: the other players cannot be reached, or this machine was cut off, or the server said no (reject_reason()).
+    /// Reconnecting: the link to the server was lost and this machine waits for its owner to make a new one (wants_connection, attach); Rejoining: a new link says Hello and waits for
+    /// the Welcome; CatchingUp: the server gives this machine the turns it lacks, which it runs without drawing them, and the match goes on (Normal) when the server confirms.
+    enum class Mode : uint8_t { Normal, Electing, Following, Fetching, Promoted, Lost, Reconnecting, Rejoining, CatchingUp };
     struct Promotion {
         uint8_t epoch{0};
         uint8_t old_host{255};
@@ -248,10 +357,11 @@ public:
     void set_peer(uint8_t seat, Connection* link);
     void start(uint32_t now_ms);
 
-    /// The player's command, sent to the host (which stamps the issuer). False when there is no host (an election is going on).
+    /// The player's command, sent to the host (which stamps the issuer). False when there is no host (an election is going on), when this machine is not following the match
+    /// (it reconnects or catches up), and while a seat is missing (the last Presence names one: nothing is sealed, the host would discard it).
     bool submit(sim::Command command);
     bool chat(const std::string& text, bool team);
-    /// The player quits the match
+    /// The player quits the match. A machine that is reconnecting or catching up has nothing to say to anybody: its session is over (Lost).
     void leave();
     /// The match is over: a host that goes now is no reason to look for a new one
     void finish() noexcept { finished_ = true; }
@@ -262,7 +372,10 @@ public:
     /// waited was heard) has been silent for that time too, and its silence is counted in real time. But only a host that has been ASKED can be called silent: a page that
     /// sleeps sends no pings, and a live host that holds its turns says nothing either. So a host that has not been asked since it was last heard (no ping went out after it)
     /// gets the gap only up to kAskGraceMs short of the limit (the update that has just run sent the ping); its answer is a message, which wakes the page and is heard, and a
-    /// host that does not answer is called silent by the next wake-up (the gap counts in full once a ping is outstanding). True when the stamp was touched.
+    /// host that does not answer is called silent by the next wake-up (the gap counts in full once a ping is outstanding). True when a stamp was touched.
+    /// This is the rule of "the server is silent" in every mode in which the session waits for the server: Normal and CatchingUp (the answers to the pings: the silence that
+    /// takes the machine to Reconnecting, or ends an attempt), and, counted in full, Rejoining (a Hello that no Welcome has answered) and Reconnecting (the time of the way back:
+    /// the next attempt, the give-up). The caller judges the session at once afterwards (update() with the same clock), as it does after every update.
     bool note_gap(uint32_t gap_ms);
     /// How long a host has to answer the ping that asks whether it lives, before the silence of the gap is held against it (see note_gap)
     static constexpr uint32_t kAskGraceMs = 3000;
@@ -294,6 +407,33 @@ public:
     /// go stale (kSelfLagNoticeStaleMs); 0 when there is none. It tells a player whose backlog is not in its own queue (its link is slow: the turns are still on their way, so
     /// "Catching up..." has nothing to say) that it is the one who lags.
     uint32_t self_lag_behind_ms() const noexcept { return last_ms_ - self_lag_.heard_ms > kSelfLagNoticeStaleMs ? 0u : self_lag_.behind_ms; }
+
+    // ---- reconnect (cfg.reconnect; see the head of this file) -------------------------------------------------------------------------------------------------
+    /// The session is Reconnecting and the next attempt is due: the owner makes a new link to the server (a connection is made without blocking) and hands it over with attach()
+    bool wants_connection(uint32_t now_ms) const noexcept;
+    /// A new link to the server, made because wants_connection() said so. The session says Hello (the key and the number of turns it has) when the link is open, which may be later
+    /// (a TCP link opens without blocking), and is Rejoining until the Welcome. The owner keeps the connection alive for as long as the session lives, closes the old one it replaced,
+    /// and does not let a link that the session gave up on (it is closed) go on. nullptr: no link could be made, the next attempt is a few seconds away. Ignored unless Reconnecting.
+    void attach(Connection* link, uint32_t now_ms);
+    /// The key of the seat as this session has it (the Welcome's, or the one it was given)
+    const SeatKey& key() const noexcept { return cfg_.key; }
+    /// The last Presence message of the server: who is missing, the vote that is open, the cap (an empty `missing`: the match runs)
+    const PresenceMsg& presence() const noexcept { return presence_; }
+    /// True while the server says that a seat is missing (the match is paused for everybody)
+    bool paused() const noexcept { return !presence_.missing.empty(); }
+    /// Chooses for the vote about `seat`: continue the match without it, or keep waiting. False unless this machine follows the match (the server ignores a vote that does not fit)
+    bool vote(uint8_t seat, bool continue_without);
+    /// 0 .. 100: the share of the turns that the server gave this machine that it has executed, while it is catching up (100 when it has said CaughtUp and waits for the server)
+    uint8_t catch_up_percent() const noexcept;
+    /// This machine's link to the server was lost and it is on its way back: Reconnecting, Rejoining or CatchingUp
+    bool reconnecting() const noexcept { return mode_ == Mode::Reconnecting || mode_ == Mode::Rejoining || mode_ == Mode::CatchingUp; }
+    /// When the link was lost (the clock of update()) and how many new links were made since (attach), for the screen that says "trying to connect"; valid while reconnecting()
+    uint32_t lost_since_ms() const noexcept { return reconnect_since_ms_; }
+    uint32_t reconnect_attempts() const noexcept { return attempts_; }
+    /// Why the session ended when the server said no (a Reject: dropped, no such room, a newer window took the seat, ...) and whether it did; lost() without a Reject is a link that
+    /// could not be restored in reconnect_give_up_ms, a protocol failure, or the end of a match that has no way back
+    bool rejected() const noexcept { return has_reject_; }
+    RejectReason reject_reason() const noexcept { return reject_; }
 
     uint8_t player() const noexcept { return cfg_.player; }
     Mode mode() const noexcept { return mode_; }
@@ -345,8 +485,19 @@ private:
     void send_turns(Connection* link, uint32_t from_turn);
     void send_to_peer(uint8_t seat, const std::vector<uint8_t>& msg);
     void go_lost(LostReason reason = LostReason::Connection);
+    // reconnect
+    void reject(RejectReason reason);
+    void enter_reconnecting(uint32_t now_ms);
+    void attempt_failed(uint32_t now_ms);
+    void send_rejoin_hello();
+    void poll_new_link(uint32_t now_ms);
+    void handle_stream_message(const std::vector<uint8_t>& msg, uint32_t now_ms);
+    void catch_up_step(uint32_t now_ms);
+    void ping_while_catching_up(uint32_t now_ms);
+    void begin_normal(uint32_t now_ms);
 
     Config cfg_;
+    sim::SimulationEngine* sim_;                        // (the state hash that CaughtUp carries)
     std::unique_ptr<LockstepRunner> runner_;
     Connection* conn_{nullptr};
     std::array<Connection*, sim::MAX_PLAYERS> peers_{};
@@ -363,6 +514,8 @@ private:
     PingMeter ping_;
     CommandDelayMeter delay_;
     uint32_t last_heard_ms_{0};
+    bool asked_{false};                  // a ping went out (the oldest of them: asked_ms_) and nothing at all has come from the host since (note_gap)
+    uint32_t asked_ms_{0};
     bool catching_up_{false};
     struct LagNotice {
         uint32_t behind_ms{0};              // 0: no notice
@@ -371,8 +524,21 @@ private:
     std::array<LagNotice, sim::MAX_PLAYERS> lag_{};     // the notices about the other seats
     LagNotice self_lag_{};                              // the notice about this seat (self_lag_behind_ms)
     LostReason lost_reason_{LostReason::None};
-    bool asked_{false};                  // a ping went out (the oldest of them: asked_ms_) and nothing at all has come from the host since (note_gap)
-    uint32_t asked_ms_{0};
+
+    // reconnect
+    PresenceMsg presence_;                              // the last Presence of the server
+    RejectReason reject_{RejectReason::BadRequest};
+    bool has_reject_{false};
+    bool left_{false};                                  // leave() was called: no more attempts
+    uint32_t reconnect_since_ms_{0};                    // the first loss of the link (the give-up time counts from here, through every attempt)
+    uint32_t next_attempt_ms_{0};
+    uint32_t attempts_{0};
+    uint32_t attempt_ms_{0};                            // when the attempt that goes on began (attach)
+    bool hello_pending_{false};                         // the new link was not open yet when it was attached: the Hello goes out when it is
+    bool catch_known_{false};                           // CatchUp has come: the stream of turns is announced
+    uint32_t catch_total_{0};
+    bool caught_up_sent_{false};                        // CaughtUp is out: this machine waits for the server to confirm (Presence) or refuse
+    uint32_t last_ack_{0};                              // the turns that the last acknowledgement of the catch-up said were executed
 
     // host migration
     Mode mode_{Mode::Normal};

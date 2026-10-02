@@ -7,7 +7,16 @@
 
 namespace ants::server {
 
-RoomManager::RoomManager(MapStore store, ServerLimits limits) : store_(std::move(store)), limits_(limits) {}
+RoomManager::RoomManager(MapStore store, ServerLimits limits) : store_(std::move(store)), limits_(limits), log_budget_(limits.log_budget_bytes) {}
+
+RoomSpec RoomManager::default_spec() const {
+    RoomSpec spec;
+    spec.reconnect = limits_.reconnect;
+    spec.vote_after_ms = limits_.hold_vote_ms;
+    spec.max_pause_ms = limits_.max_pause_ms;
+    spec.max_log_bytes = limits_.room_log_bytes;
+    return spec;
+}
 
 std::string RoomManager::new_code() {
     // eight characters without the look-alikes (no 0 / O, 1 / I / L): easy to read out and to type
@@ -35,6 +44,9 @@ CreateResult RoomManager::create_room(RoomSpec spec, uint32_t now_ms) {
     if (!spec.code.empty() && rooms_.find(spec.code) != rooms_.end()) return fail(409, "a room with this code exists");
     if (spec.wait_ms < 1000 || spec.wait_ms > 24u * 3600u * 1000u) return fail(400, "wait_seconds must be 1 to 86400");
     if (spec.load_ms < 1000 || spec.load_ms > 600u * 1000u) return fail(400, "load_seconds must be 1 to 600");
+    if (spec.vote_after_ms < kMinVoteAfterMs || spec.vote_after_ms > kMaxVoteAfterMs) return fail(400, "hold_vote_seconds must be 5 to 3600");
+    if (spec.max_pause_ms < kMinMaxPauseMs || spec.max_pause_ms > kMaxMaxPauseMs) return fail(400, "max_pause_seconds must be 60 to 86400");
+    if (spec.max_log_bytes < kMinLogBytes || spec.max_log_bytes > kMaxLogBytes) return fail(400, "the limit of the turn log must be 1 KiB to 1 GiB");
     MapEntry entry;
     std::string why;
     if (!store_.find(spec.map, entry, &why)) return fail(404, "map '" + spec.map + "': " + why);
@@ -47,7 +59,7 @@ CreateResult RoomManager::create_room(RoomSpec spec, uint32_t now_ms) {
         seed = rd();
     }
     const std::string code = spec.code;
-    rooms_.emplace(code, std::make_unique<Room>(std::move(spec), std::move(entry), std::move(level), seed, now_ms));
+    rooms_.emplace(code, std::make_unique<Room>(std::move(spec), std::move(entry), std::move(level), seed, now_ms, &log_budget_));
     ++created_;
     r.ok = true;
     r.http_status = 201;
@@ -120,7 +132,7 @@ bool RoomManager::make_demo_room(const std::string& code, uint32_t now_ms) {
     size_t demos = 0;
     for (const auto& kv : rooms_) demos += kv.first.compare(0, prefix.size(), prefix) == 0 ? 1u : 0u;
     if (demos >= limits_.demo_rooms) return false;
-    RoomSpec spec;
+    RoomSpec spec = default_spec();                                 // (demo rooms follow the server's reconnect setting and its limits)
     spec.code = code;
     const DemoChoice choice = demo_choice_of(code, limits_);
     spec.map = choice.map;
@@ -171,6 +183,7 @@ void RoomManager::update(uint32_t now_ms) {
                 else good = true;
             }
             Room* room = nullptr;
+            bool rejoin = false;                                       // a player who comes back to a match that runs (a Hello with the key of a seat)
             if (good) {
                 auto it = hello.room.empty() ? rooms_.end() : rooms_.find(hello.room);
                 const bool ended = it != rooms_.end() && (it->second->state() == RoomState::Finished || it->second->state() == RoomState::Failed);
@@ -192,8 +205,13 @@ void RoomManager::update(uint32_t now_ms) {
                     good = false;
                     reason = net::RejectReason::NoSuchRoom;                // the room is over: "the match has already started" would be wrong
                 } else if (!it->second->accepting()) {
-                    good = false;
-                    reason = net::RejectReason::MatchRunning;
+                    if (!net::key_is_zero(hello.key) && it->second->can_rejoin()) {
+                        room = it->second.get();                      // the session of the match decides (a key that fits no seat is told MatchRunning there, as here)
+                        rejoin = true;
+                    } else {
+                        good = false;
+                        reason = net::RejectReason::MatchRunning;
+                    }
                 } else {
                     room = it->second.get();
                 }
@@ -201,6 +219,13 @@ void RoomManager::update(uint32_t now_ms) {
             std::unique_ptr<net::Connection> connection = std::move(p.connection);
             const std::string address = p.address;
             pending_.erase(pending_.begin() + static_cast<std::ptrdiff_t>(i));
+            if (good && rejoin) {
+                if (!room->rejoin(connection, hello, now_ms)) {        // the session has answered (a Reject) and closed it: it stays a moment so that the answer arrives
+                    ++refused_;
+                    lingering_.push_back(Lingering{std::move(connection), now_ms});
+                }
+                continue;
+            }
             if (good && room->add_connection(connection, address, msg, now_ms)) continue;        // the room owns it now
             reject(std::move(connection), good ? net::RejectReason::Full : reason, now_ms);
             continue;

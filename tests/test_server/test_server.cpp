@@ -31,6 +31,7 @@
 #include <memory>
 #include <random>
 #include <set>
+#include <sstream>
 #include <stdexcept>
 #include <string>
 #include <thread>
@@ -438,6 +439,221 @@ void write_bytes(const fs::path& p, size_t n, char fill) {
     std::ofstream out(p, std::ios::binary | std::ios::trunc);
     const std::string chunk(4096, fill);
     for (size_t done = 0; done < n; done += chunk.size()) out.write(chunk.data(), static_cast<std::streamsize>(std::min(chunk.size(), n - done)));
+}
+
+// ---------------------------------------------------------------------------------------------------------------------------------
+// Reconnect (protocol 10): the machines of players whose connections are lost, as the game will behave in release B, and a world that has them
+// ---------------------------------------------------------------------------------------------------------------------------------
+
+struct RWorld;
+
+// A player: a client lobby that asks for a room, loads the match, reports, and plays with a session of its own, and, when the link to the server is lost, asks the world for a new one
+// (the session says when) and says Hello with its key: what the application does
+struct RClient {
+    std::string name;
+    std::string room;
+    uint8_t want_seat{255};
+    net::SeatKey key{};                      // a machine that starts from nothing (a page that was reloaded) is given the key that its page kept: its lobby says Hello with it
+    net::Connection* end{nullptr};           // the link that the machine uses now
+    std::unique_ptr<net::ClientLobby> lobby;
+    sim::SimulationEngine sim;
+    std::unique_ptr<net::ClientSession> session;
+    bool reconnects{true};                   // its session may open a new link when it wants one
+    bool hung{false};                        // the machine does not run (a frozen window): no frames, no acknowledgements, no pings
+    uint32_t frame_every_ms{0};              // a slow machine: it runs a frame this often only (0: at every pass of the world)
+    bool orders{true};                       // it gives orders (a person's clicks)
+    bool lost{false};
+    bool was_rejected{false};
+    net::RejectReason rejected{net::RejectReason::BadRequest};
+    uint32_t catch_up_ticks{200};
+    uint32_t clock_lag{0};                   // the application's network clock never advances more than a second per frame: what a window that stood still lost of the real time
+    uint32_t last_frame_ms{0};
+    uint32_t next_order_ms{0};
+    uint32_t rng{1};
+    uint32_t map_w{40};
+    uint32_t map_h{40};
+    std::vector<net::ChatMsg> chats;
+    std::function<void(sim::SimulationEngine&)> tamper;      // runs on the engine when the machine has loaded the map (to make its state differ)
+
+    void start(net::Connection* client_end, uint32_t seed) {
+        end = client_end;
+        rng = seed;
+        net::ClientLobby::Config cc;
+        cc.name = name;
+        cc.room = room;
+        cc.want_seat = want_seat;
+        cc.key = key;
+        lobby = std::make_unique<net::ClientLobby>(end, cc);
+    }
+    uint32_t next_random() {
+        rng = rng * 1664525u + 1013904223u;
+        return rng >> 8;
+    }
+    void update(uint32_t now_ms, const std::string& maps, RWorld& w);
+};
+
+struct RWorld {
+    net::LoopbackNetwork net{5};
+    RoomManager mgr;
+    std::vector<std::unique_ptr<RClient>> clients;
+    uint32_t now{1000};
+    net::LoopbackNetwork::Link link{20, 10};
+
+    explicit RWorld(ServerLimits limits = ServerLimits()) : mgr(MapStore(maps_dir()), limits) {}
+
+    // a new link to the server: the door's end is the manager's, this end is the caller's
+    net::Connection* open_link() {
+        auto ends = net.connect(link);
+        mgr.add_connection(std::make_unique<Borrowed>(ends.first), "127.0.0.1", now);
+        return ends.second;
+    }
+    RClient& connect(const std::string& name, const std::string& room, uint8_t seat = 255, const net::SeatKey& key = net::SeatKey{}) {
+        net::Connection* end = open_link();
+        clients.push_back(std::make_unique<RClient>());
+        RClient& c = *clients.back();
+        c.name = name;
+        c.room = room;
+        c.want_seat = seat;
+        c.key = key;
+        c.start(end, static_cast<uint32_t>(clients.size()) * 7919u);
+        return c;
+    }
+    void run(uint32_t ms) {
+        for (uint32_t elapsed = 0; elapsed < ms; elapsed += 10) {            // (counted, not compared with an end time: the clock of a test may wrap)
+            now += 10;
+            net.set_time(now);
+            mgr.update(now);
+            for (size_t i = 0; i < clients.size(); ++i) clients[i]->update(now, maps_dir(), *this);
+        }
+    }
+    bool until(const std::function<bool()>& cond, uint32_t max_ms) {
+        for (uint32_t t = 0; t < max_ms; t += 10) {
+            if (cond()) return true;
+            run(10);
+        }
+        return cond();
+    }
+    RoomStatus status(const std::string& code) {
+        RoomStatus s;
+        mgr.status(code, s, now);
+        return s;
+    }
+    // the link of a machine is cut: both ends see it closed
+    void cut(RClient& c) { net.cut(c.end); }
+    // plays the match to its end (the clock of the map) and a little beyond it
+    void play_to_the_end(const std::string& code) {
+        for (int guard = 0; guard < 4000 && status(code).state == RoomState::Running; ++guard) run(250);
+        run(Room::kGraceMs + 500);
+    }
+};
+
+void RClient::update(uint32_t now_ms, const std::string& maps, RWorld& w) {
+    if (hung) return;
+    if (lobby && !session) {
+        lobby->update(now_ms);
+        for (const net::ClientLobby::Event& ev : lobby->take_events()) {
+            if (ev.type == net::ClientLobby::Event::Type::StartRequested) {
+                const net::StartMsg& s = lobby->start_info();
+                assets::LevelData level;
+                uint64_t hash = 0;
+                const bool ok = level.load_from_file(maps + "/" + s.map_name) && net::hash_file(maps + "/" + s.map_name, hash) && hash == s.map_hash;
+                if (ok) {
+                    sim.set_fog_of_war_enabled(s.fog);
+                    sim.init(level, s.seed, s.roster);
+                    if (tamper) tamper(sim);
+                    map_w = level.width();
+                    map_h = level.height();
+                }
+                lobby->report_loaded(ok);
+            } else if (ev.type == net::ClientLobby::Event::Type::Rejected) {
+                rejected = lobby->reject_reason();
+                was_rejected = true;
+                lost = true;
+            } else if (ev.type == net::ClientLobby::Event::Type::Begun) {
+                net::ClientSession::Config sc;
+                sc.player = lobby->my_seat();
+                sc.host = net::kNoSeat;
+                sc.migration = false;
+                sc.reconnect = !net::key_is_zero(lobby->key());      // a room that holds seats gave it a key; a room that does not gave none: no way back
+                sc.key = lobby->key();
+                sc.hello.name = name;
+                sc.hello.room = room;
+                sc.rejoin = lobby->rejoined();
+                sc.catch_up_ticks = catch_up_ticks;
+                session = std::make_unique<net::ClientSession>(sim, sc);
+                session->set_connection(end);
+                session->set_on_chat([this](const net::ChatMsg& m) { chats.push_back(m); });
+                session->start(now_ms);
+            }
+        }
+    }
+    if (!session) return;
+    if (frame_every_ms != 0 && last_frame_ms != 0 && now_ms - last_frame_ms < frame_every_ms) return;       // a slow machine's frames are far apart
+    if (last_frame_ms != 0 && now_ms - last_frame_ms > 1000) clock_lag += now_ms - last_frame_ms - 1000;      // a frame after a stop hands the network one second at the most
+    last_frame_ms = now_ms;
+    const uint32_t t = now_ms - clock_lag;
+    // the application's side of reconnecting: a new link to the door when the session asks for one
+    if (reconnects && session->wants_connection(t)) {
+        net::Connection* link = w.open_link();
+        end = link;
+        session->attach(link, t);
+    }
+    if (sim.is_match_over()) session->finish();               // the application knows when the match is over: a server that closes its links after that is no loss
+    session->update(t);
+    if (session->lost()) {
+        lost = true;
+        was_rejected = session->rejected();
+        rejected = session->reject_reason();
+    }
+    if (orders && now_ms >= next_order_ms && session->mode() == net::ClientSession::Mode::Normal && !session->paused()) {
+        next_order_ms = now_ms + 700;
+        std::vector<uint32_t> mine;
+        for (const auto& a : sim.get_world_state().ants) {
+            if (a.player_id == session->player()) mine.push_back(a.id);
+        }
+        if (!mine.empty()) {
+            sim::Command c;
+            c.type = (next_random() % 4 == 0) ? sim::CommandType::Hatch : sim::CommandType::GroupMove;
+            if (c.type == sim::CommandType::GroupMove) {
+                c.tile_x = static_cast<int16_t>(next_random() % map_w);
+                c.tile_y = static_cast<int16_t>(next_random() % map_h);
+                for (size_t i = 0; i < mine.size() && i < 6; ++i) c.ants.push_back(mine[(i + next_random()) % mine.size()]);
+            }
+            session->submit(c);
+        }
+    }
+}
+
+// a room that holds the seats of players whose connections are lost
+RoomSpec held_spec(const std::string& code, uint8_t players = 2, const char* map = "TINY.LVL") {
+    RoomSpec s;
+    s.code = code;
+    s.map = map;
+    s.players = players;
+    s.has_seed = true;
+    s.seed = 4242;
+    s.reconnect = true;
+    return s;
+}
+
+// the Reject that a raw connection was sent (0: none yet)
+int reject_on(net::Connection* c) {
+    std::vector<uint8_t> msg;
+    net::RejectMsg r;
+    while (c->poll(msg)) {
+        if (net::peek_type(msg) == net::MsgType::Reject && net::decode(msg, r)) return static_cast<int>(r.reason);
+    }
+    return 0;
+}
+
+std::string hex_of(const net::SeatKey& key) {
+    static const char kDigits[] = "0123456789abcdef";
+    std::string out;
+    for (const uint8_t b : key) {
+        out.push_back(kDigits[b >> 4]);
+        out.push_back(kDigits[b & 15]);
+    }
+    return out;
 }
 
 }  // namespace
@@ -2350,6 +2566,831 @@ void run_secret_tests() {
     } TEST_END();
 }
 
+// Reconnect, release A: the server (protocol 10). A room that holds the seat of a player whose connection is lost, through the real manager, door and lobby. S3.35 - S3.5x.
+void run_reconnect_tests() {
+    TEST_CASE("S3.35 Keys: A Room That Holds Seats Gives Every Player A Different Key (None Is Zero) In Its Welcome, And The Session Knows It; A Room That Does Not Gives None, And Its Players Have No Way Back") {
+        {
+            RWorld w;
+            ASSERT_TRUE(w.mgr.create_room(held_spec("K-1", 3), w.now).ok);
+            RClient& a = w.connect("Ann", "K-1");
+            RClient& b = w.connect("Bob", "K-1");
+            RClient& c = w.connect("Cat", "K-1");
+            w.run(3000);
+            const RoomStatus s = w.status("K-1");
+            ASSERT_TRUE(s.state == RoomState::Running && s.reconnect && !s.paused && s.absent.empty() && s.rejoins == 0);
+            ASSERT_TRUE(!net::key_is_zero(a.lobby->key()) && !net::key_is_zero(b.lobby->key()) && !net::key_is_zero(c.lobby->key()));
+            ASSERT_TRUE(a.lobby->key() != b.lobby->key() && b.lobby->key() != c.lobby->key() && a.lobby->key() != c.lobby->key());
+            ASSERT_TRUE(a.session->key() == a.lobby->key() && b.session->key() == b.lobby->key());
+            ASSERT_FALSE(a.lobby->rejoined());                                           // a first Welcome is no rejoin
+            ASSERT_TRUE(s.log_usable && s.log_turns > 0 && s.log_bytes > 0);              // the log of the match is being kept
+        }
+        {
+            RWorld w;
+            ASSERT_TRUE(w.mgr.create_room(spec_of("K-2", 2), w.now).ok);                // (the default of a room is not to hold seats in this release)
+            RClient& a = w.connect("Ann", "K-2");
+            RClient& b = w.connect("Bob", "K-2");
+            w.run(3000);
+            const RoomStatus s = w.status("K-2");
+            ASSERT_TRUE(s.state == RoomState::Running && !s.reconnect);
+            ASSERT_TRUE(net::key_is_zero(a.lobby->key()) && net::key_is_zero(b.lobby->key()));
+            ASSERT_FALSE(a.session->reconnecting());
+            ASSERT_TRUE(s.log_turns == 0 && s.log_bytes == 0);                           // nothing is logged for a room that cannot use a log
+            // a Hello with a made-up key for it is what any Hello for a running match is
+            net::Connection* c = w.open_link();
+            net::HelloMsg h;
+            h.room = "K-2";
+            for (uint8_t& v : h.key) v = 9;
+            c->send(net::encode(h));
+            w.run(300);
+            ASSERT_EQ(reject_on(c), static_cast<int>(net::RejectReason::MatchRunning));
+        }
+    } TEST_END();
+
+    TEST_CASE("S3.36 A Lost Link Pauses The Room (The Status Says Who Is Missing And Since When, Nothing Is Sealed For 10 s), The Player Comes Back Through The Door With Its Key And The Match Goes On To Its End: Three Machines And The Referee End Identical, The Counters Say What Happened") {
+        RWorld w;
+        ASSERT_TRUE(w.mgr.create_room(held_spec("R-1", 3), w.now).ok);
+        RClient& a = w.connect("Ann", "R-1");
+        RClient& b = w.connect("Bob", "R-1");
+        RClient& c = w.connect("Cat", "R-1");
+        w.run(6000);
+        ASSERT_TRUE(w.status("R-1").state == RoomState::Running);
+        const uint8_t bob = b.lobby->my_seat();
+        b.reconnects = false;
+        w.cut(b);
+        w.run(1000);
+        RoomStatus s = w.status("R-1");
+        ASSERT_TRUE(s.paused && s.absent.size() == 1);
+        ASSERT_TRUE(s.absent[0].seat == bob && s.absent[0].name == "Bob" && !s.absent[0].catching_up && s.absent[0].away_s <= 2 && s.absent[0].progress == 0);
+        ASSERT_TRUE(s.vote_seat == 255);
+        const uint32_t ticks_at_pause = s.ticks;
+        w.run(10000);
+        s = w.status("R-1");
+        ASSERT_TRUE(s.ticks <= ticks_at_pause + 2);                                      // nothing runs while Bob is away
+        ASSERT_TRUE(s.absent[0].away_s >= 10 && s.absent[0].away_s <= 12 && s.paused_s >= 10);
+        ASSERT_TRUE(a.session->paused() && c.session->paused());
+        b.reconnects = true;                                                             // its session finds a new link: the door takes it to the running room
+        ASSERT_TRUE(w.until([&]() { return !w.status("R-1").paused; }, 8000));
+        w.run(5000);
+        s = w.status("R-1");
+        ASSERT_TRUE(s.state == RoomState::Running && !s.paused && s.absent.empty());
+        ASSERT_TRUE(s.rejoins == 1 && s.drops_by_vote == 0 && s.drops_by_cap == 0);
+        ASSERT_TRUE(s.paused_s >= 11 && s.paused_s <= 13);
+        ASSERT_TRUE(s.ticks > ticks_at_pause + 60);
+        w.play_to_the_end("R-1");
+        ASSERT_TRUE(w.status("R-1").state == RoomState::Finished);
+        ASSERT_TRUE(a.sim.state_hash() == b.sim.state_hash() && b.sim.state_hash() == c.sim.state_hash());
+        ASSERT_TRUE(a.sim.is_match_over() && b.sim.is_match_over() && c.sim.is_match_over());
+        ASSERT_FALSE(a.session->desynced() || b.session->desynced() || c.session->desynced());
+        ASSERT_FALSE(a.lost || b.lost || c.lost);
+        const RoomStatus end = w.status("R-1");
+        ASSERT_TRUE(end.rejoins == 1 && end.log_usable && end.log_turns > 1000 && end.paused_s >= 11 && !end.paused && end.absent.empty());     // the log was freed at the end and says what it held
+    } TEST_END();
+
+    TEST_CASE("S3.37 A Machine That Starts From Nothing (A Reloaded Page: Its Lobby Says Hello With The Key) Is Given The Match, More Than 300 Turns Of It, Through The Door: The Seat Is Back With Its Name, The Hash Agreed, The Match Ends Identical On Three Machines") {
+        RWorld w;
+        ASSERT_TRUE(w.mgr.create_room(held_spec("L-1", 3), w.now).ok);
+        RClient& a = w.connect("Ann", "L-1");
+        RClient& b = w.connect("Bob", "L-1");
+        RClient& c = w.connect("Cat", "L-1");
+        w.run(40000);                                                                    // more than the 600 turns that every machine keeps
+        ASSERT_TRUE(w.status("L-1").state == RoomState::Running && w.status("L-1").turns > 700);
+        const net::SeatKey key = b.lobby->key();
+        const uint8_t seat = b.lobby->my_seat();
+        b.reconnects = false;
+        w.cut(b);                                                                        // the page of Bob is reloaded: its game is gone
+        w.run(2000);
+        ASSERT_TRUE(w.status("L-1").paused);
+        RClient& b2 = w.connect("Bob", "L-1", 255, key);                                 // a new machine with nothing but the key
+        bool saw_catching_up = false;
+        bool saw_catching_up_in_json = false;                                            // the control interface says so too: state "catching_up" and a progress of 0 - 100
+        ASSERT_TRUE(w.until([&]() {
+            const RoomStatus st = w.status("L-1");
+            for (const RoomStatus::Absent& e : st.absent) saw_catching_up = saw_catching_up || (e.catching_up && e.seat == seat);
+            ctl::HttpRequest rq;
+            rq.method = "GET";
+            rq.path = "/rooms/L-1";
+            ctl::JsonValue j;
+            std::string why;
+            ctl::parse_json(handle_control(w.mgr, rq, w.now).body, j, &why);
+            if (j.get("absent").size() == 1) {
+                const ctl::JsonValue& row = j.get("absent").at(0);
+                saw_catching_up_in_json = saw_catching_up_in_json || (row.get("state").str() == "catching_up" && row.get("seat").as_int_or(9) == seat && row.get("name").str() == "Bob" &&
+                                                                      row.get("progress").as_int_or(-1) >= 0 && row.get("progress").as_int_or(101) <= 100);
+            }
+            return !st.paused && b2.session != nullptr && b2.session->mode() == net::ClientSession::Mode::Normal;
+        }, 20000));
+        ASSERT_TRUE(saw_catching_up && saw_catching_up_in_json);
+        ASSERT_EQ(b2.lobby->my_seat(), seat);
+        ASSERT_TRUE(b2.lobby->key() == key && b2.lobby->rejoined());
+        ASSERT_EQ(w.status("L-1").names[seat], std::string("Bob"));
+        w.run(4000);
+        w.play_to_the_end("L-1");
+        ASSERT_TRUE(w.status("L-1").state == RoomState::Finished);
+        ASSERT_TRUE(a.sim.state_hash() == b2.sim.state_hash() && b2.sim.state_hash() == c.sim.state_hash());
+        ASSERT_TRUE(w.status("L-1").rejoins == 1);
+        ASSERT_FALSE(a.session->desynced() || b2.session->desynced() || c.session->desynced());
+    } TEST_END();
+
+    TEST_CASE("S3.38 Two Players: The One That Stays Votes After 30 s (The Status Shows The Vote), The Absent Seat Is Dropped, The Room Finishes With The Survivor The Winner In The Rows") {
+        RWorld w;
+        ASSERT_TRUE(w.mgr.create_room(held_spec("V-1", 2), w.now).ok);
+        RClient& a = w.connect("Ann", "V-1");
+        RClient& b = w.connect("Bob", "V-1");
+        w.run(6000);
+        const uint8_t bob = b.lobby->my_seat();
+        b.reconnects = false;
+        w.cut(b);
+        w.run(25000);
+        RoomStatus s = w.status("V-1");
+        ASSERT_TRUE(s.paused && s.vote_seat == 255);                                     // 25 s: the vote is not open
+        w.run(6500);
+        s = w.status("V-1");
+        ASSERT_TRUE(s.paused && s.vote_seat == bob && s.voters == 1 && s.votes_continue == 0);
+        ASSERT_TRUE(a.session->presence().vote_seat == bob);
+        ASSERT_TRUE(a.session->vote(bob, true));                                         // the one player that is left: more than half of one
+        w.run(300);
+        s = w.status("V-1");
+        w.run(3000);
+        s = w.status("V-1");
+        ASSERT_EQ(s.drops_by_vote, 1u);
+        ASSERT_TRUE(s.state == RoomState::Finished);                                     // Ann has won: the drop leaves her alone
+        ASSERT_TRUE(a.sim.is_match_over());
+        ASSERT_TRUE(!s.rows.empty() && s.rows[0].name == "Ann" && s.rows[0].winner);
+        ASSERT_EQ(s.reason, std::string("the match ended"));
+        {   // a room that says 8 s: the vote opens after 8 s of absence, not 30
+            RWorld v;
+            RoomSpec quick = held_spec("V-2", 3);
+            quick.vote_after_ms = 8000;
+            ASSERT_TRUE(v.mgr.create_room(quick, v.now).ok);
+            RClient& x = v.connect("Xan", "V-2");
+            RClient& y = v.connect("Yan", "V-2");
+            RClient& z = v.connect("Zed", "V-2");
+            v.run(4000);
+            z.reconnects = false;
+            v.cut(z);
+            v.run(6500);
+            ASSERT_TRUE(v.status("V-2").paused && v.status("V-2").vote_seat == 255 && x.session->presence().vote_seat == 255);
+            v.run(3000);
+            ASSERT_TRUE(v.status("V-2").vote_seat == z.lobby->my_seat() && v.status("V-2").voters == 2);
+            ASSERT_TRUE(x.session->presence().vote_seat == z.lobby->my_seat() && y.session->presence().vote_seat == z.lobby->my_seat());
+        }
+    } TEST_END();
+
+    TEST_CASE("S3.39 The Room's Wall-Clock Limit Counts Play, Not Waiting: A Minute Of Waiting For A Player Inside A Limit Of 30 s Does Not Fail The Room, 30 s Of Play Do") {
+        RWorld w;
+        RoomSpec spec = held_spec("T-1", 2);
+        spec.run_ms = 30000;
+        spec.max_pause_ms = 600000;                                                      // (nobody is dropped by the cap in this test)
+        ASSERT_TRUE(w.mgr.create_room(spec, w.now).ok);
+        w.connect("Ann", "T-1");
+        RClient& b = w.connect("Bob", "T-1");
+        w.run(5000);
+        b.reconnects = false;
+        w.cut(b);
+        w.run(60000);                                                                    // a minute of waiting: more than the limit
+        ASSERT_TRUE(w.status("T-1").state == RoomState::Running);
+        b.reconnects = true;
+        ASSERT_TRUE(w.until([&]() { return !w.status("T-1").paused; }, 8000));
+        w.run(10000);
+        ASSERT_TRUE(w.status("T-1").state == RoomState::Running);
+        w.run(25000);                                                                    // now 30 s of play have passed
+        ASSERT_TRUE(w.status("T-1").state == RoomState::Failed && w.status("T-1").reason.find("longer") != std::string::npos);
+    } TEST_END();
+
+    TEST_CASE("S3.40 Everybody Lost: Each Seat Is Held (The Room Waits For Them As Long As The Cap Allows), Then The Room Ends \"Everybody Left\" With All Seats Dropped By The Cap; A Short Cap In The Spec Is Obeyed To The Second") {
+        RWorld w;
+        RoomSpec spec = held_spec("E-1", 3);
+        spec.max_pause_ms = 60000;
+        ASSERT_TRUE(w.mgr.create_room(spec, w.now).ok);
+        RClient& a = w.connect("Ann", "E-1");
+        RClient& b = w.connect("Bob", "E-1");
+        RClient& c = w.connect("Cat", "E-1");
+        w.run(4000);
+        for (RClient* p : {&a, &b, &c}) {
+            p->reconnects = false;
+            w.cut(*p);
+        }
+        const uint32_t cut_at = w.now;
+        w.run(30000);
+        RoomStatus s = w.status("E-1");
+        ASSERT_TRUE(s.state == RoomState::Running && s.paused && s.absent.size() == 3);   // nobody is there, but each seat is held
+        ASSERT_TRUE(s.absent[0].away_s >= 29 && s.absent[0].away_s <= 31);
+        uint32_t ended_after_ms = 0;
+        for (int i = 0; i < 4000 && ended_after_ms == 0; ++i) {
+            w.run(10);
+            if (w.status("E-1").state != RoomState::Running) ended_after_ms = w.now - cut_at;
+        }
+        s = w.status("E-1");
+        ASSERT_TRUE(s.state == RoomState::Finished && s.reason == "everybody left");
+        ASSERT_TRUE(ended_after_ms >= 60000 && ended_after_ms <= 60100);
+        ASSERT_EQ(s.drops_by_cap, 3u);
+        ASSERT_EQ(s.drops_by_vote, 0u);
+        ASSERT_TRUE(s.paused_s >= 59 && s.paused_s <= 61);
+    } TEST_END();
+
+    TEST_CASE("S3.41 The Cap On A Match's Pauses Through The Door: With Three Players One Of Them Is Away For The Whole Cap (60 s): The Seat Is Dropped At The Same Tick For The Others, The Match Goes On To Its End, And The Key Of The Dropped Seat Is Told \"Dropped\" When It Comes Back") {
+        RWorld w;
+        RoomSpec spec = held_spec("C-1", 3);
+        spec.max_pause_ms = 60000;
+        ASSERT_TRUE(w.mgr.create_room(spec, w.now).ok);
+        RClient& a = w.connect("Ann", "C-1");
+        RClient& b = w.connect("Bob", "C-1");
+        RClient& c = w.connect("Cat", "C-1");
+        w.run(6000);
+        const uint8_t bob = b.lobby->my_seat();
+        b.reconnects = false;
+        w.cut(b);
+        const uint32_t cut_at = w.now;
+        w.run(55000);
+        RoomStatus s = w.status("C-1");
+        ASSERT_TRUE(s.paused && s.vote_seat == bob);                                      // (the vote is open since 30 s; nobody votes)
+        uint32_t resumed_after_ms = 0;
+        for (int i = 0; i < 1000 && resumed_after_ms == 0; ++i) {
+            w.run(10);
+            if (!w.status("C-1").paused) resumed_after_ms = w.now - cut_at;
+        }
+        ASSERT_TRUE(resumed_after_ms >= 60000 && resumed_after_ms <= 60100);
+        s = w.status("C-1");
+        ASSERT_TRUE(s.state == RoomState::Running && s.drops_by_cap == 1 && s.drops_by_vote == 0 && s.rejoins == 0);
+        w.run(3000);
+        ASSERT_TRUE(a.sim.is_player_dropped(bob) && c.sim.is_player_dropped(bob));
+        b.reconnects = true;                                                              // Bob's machine finds a link: its seat is gone
+        w.run(4000);
+        ASSERT_TRUE(b.lost && b.was_rejected && b.rejected == net::RejectReason::Dropped);
+        w.play_to_the_end("C-1");
+        ASSERT_TRUE(w.status("C-1").state == RoomState::Finished);
+        ASSERT_TRUE(a.sim.state_hash() == c.sim.state_hash());
+        ASSERT_FALSE(a.session->desynced() || c.session->desynced());
+    } TEST_END();
+
+    TEST_CASE("S3.42 The Prune Window (Run It Under AddressSanitizer): A Returning Player's Link Closes While The Session Is Keeping Its Catch-Up, In The Very Pass In Which The Door Reads Another Seat's Hello And A Room That Keeps 32 Connections Prunes The Closed Ones: The Connection That The Session Still Points At Is Not Freed") {
+        RWorld w;
+        w.link = {20, 0};                                                                // no jitter: the Hello of the second link arrives exactly when this test needs it
+        ASSERT_TRUE(w.mgr.create_room(held_spec("P-1", 3), w.now).ok);
+        w.connect("Ann", "P-1");
+        RClient& b = w.connect("Bob", "P-1");
+        RClient& c = w.connect("Cat", "P-1");
+        w.run(4000);
+        for (int i = 0; i < 80 && w.status("P-1").connections != Room::kMaxConnections - 1; ++i) {        // until the room keeps 31 connections: the next one fills it
+            w.cut(b);
+            ASSERT_TRUE(w.until([&]() { return !w.status("P-1").paused && w.status("P-1").rejoins == static_cast<uint32_t>(i + 1); }, 6000));
+            w.run(60);
+        }
+        ASSERT_EQ(w.status("P-1").connections, static_cast<uint32_t>(Room::kMaxConnections - 1));
+        b.reconnects = false;
+        c.reconnects = false;
+        const net::SeatKey key_b = b.session->key();
+        const net::SeatKey key_c = c.session->key();
+        const uint32_t have_b = b.session->runner().next_turn_expected();
+        const uint32_t have_c = c.session->runner().next_turn_expected();
+        w.cut(b);
+        w.cut(c);
+        w.run(200);
+        ASSERT_TRUE(w.status("P-1").paused);
+        const auto make_link = [&](const net::SeatKey& key, uint32_t have) {
+            net::Connection* end = w.open_link();
+            net::HelloMsg h;
+            h.name = "x";
+            h.room = "P-1";
+            h.key = key;
+            h.have_turns = have;
+            end->send(net::encode(h));
+            return end;
+        };
+        net::Connection* link_b = make_link(key_b, have_b);                              // Bob's Hello reaches the door 20 ms later
+        w.run(30);                                                                       // accepted: the room keeps the connection, the session has a returning player for it
+        ASSERT_EQ(w.status("P-1").connections, static_cast<uint32_t>(Room::kMaxConnections));
+        make_link(key_c, have_c);                                                        // Cat's Hello arrives 20 ms from now ...
+        w.run(10);
+        w.net.cut(link_b);                                                               // ... and 10 ms from now Bob's link is closed (the session has not looked at it yet)
+        w.run(10);                                                                       // the pass in which the door reads Cat's Hello: the room prunes, the session pumps its returning players
+        w.run(2000);
+        ASSERT_TRUE(w.status("P-1").state == RoomState::Running);
+        ASSERT_TRUE(w.status("P-1").connections < static_cast<uint32_t>(Room::kMaxConnections));    // the closed ones were pruned (the table is not full any more)
+    } TEST_END();
+
+    TEST_CASE("S3.43 A Connection That Flaps 40 Times: Every Return Is Verified, The Closed Connections Are Pruned And The Live One Never Is, The Match Ends Identical (The Pauses Add Up To A Few Seconds, The Cap Is Far Away)") {
+        RWorld w;
+        ASSERT_TRUE(w.mgr.create_room(held_spec("F-1", 2), w.now).ok);
+        RClient& a = w.connect("Ann", "F-1");
+        RClient& b = w.connect("Bob", "F-1");
+        w.run(4000);
+        for (int i = 0; i < 40; ++i) {
+            w.cut(b);
+            ASSERT_TRUE(w.until([&]() { return !w.status("F-1").paused && w.status("F-1").rejoins == static_cast<uint32_t>(i + 1); }, 6000));
+            w.run(100);
+        }
+        const RoomStatus s = w.status("F-1");
+        ASSERT_TRUE(s.state == RoomState::Running && s.rejoins == 40 && s.drops_by_vote == 0 && s.drops_by_cap == 0);
+        ASSERT_TRUE(s.connections <= Room::kMaxConnections + 1u);                        // (the table did not grow with every return)
+        ASSERT_FALSE(b.lost);
+        ASSERT_TRUE(s.paused_s < 40);
+        w.play_to_the_end("F-1");
+        ASSERT_TRUE(w.status("F-1").state == RoomState::Finished);
+        ASSERT_TRUE(a.sim.state_hash() == b.sim.state_hash());
+        ASSERT_FALSE(a.session->desynced() || b.session->desynced());
+    } TEST_END();
+
+    TEST_CASE("S3.44 The Door And A Hello With A Key: A Wrong Key, No Key And A Made-Up Key Are Told \"The Match Has Started\" By A Running Room (Nobody Is Disturbed, Nothing Is Revealed), So Is A Key For A Room That Does Not Hold Seats Or Is Loading; A Room That Is Over Says \"No Such Room\"; A Refusal Is Counted") {
+        RWorld w;
+        ASSERT_TRUE(w.mgr.create_room(held_spec("X-1", 2), w.now).ok);
+        RClient& a = w.connect("Ann", "X-1");
+        RClient& b = w.connect("Bob", "X-1");
+        w.run(4000);
+        ASSERT_TRUE(w.status("X-1").state == RoomState::Running);
+        const auto hello_for = [&](const std::string& room, const net::SeatKey& key, uint32_t have) {
+            net::Connection* end = w.open_link();
+            net::HelloMsg h;
+            h.name = "Mallory";
+            h.room = room;
+            h.key = key;
+            h.have_turns = have;
+            end->send(net::encode(h));
+            return end;
+        };
+        net::SeatKey bad;
+        for (uint8_t& v : bad) v = 7;
+        const uint64_t refused_before = w.mgr.connections_refused();
+        net::Connection* wrong = hello_for("X-1", bad, 0);
+        net::Connection* none = hello_for("X-1", net::SeatKey{}, 0);
+        net::SeatKey almost = a.lobby->key();
+        almost[15] = static_cast<uint8_t>(almost[15] ^ 0x80);                             // the key of Ann with one bit changed
+        net::Connection* near_miss = hello_for("X-1", almost, 0);
+        w.run(400);
+        ASSERT_EQ(reject_on(wrong), static_cast<int>(net::RejectReason::MatchRunning));
+        ASSERT_EQ(reject_on(none), static_cast<int>(net::RejectReason::MatchRunning));
+        ASSERT_EQ(reject_on(near_miss), static_cast<int>(net::RejectReason::MatchRunning));
+        ASSERT_EQ(w.mgr.connections_refused() - refused_before, uint64_t{3});
+        RoomStatus s = w.status("X-1");
+        ASSERT_TRUE(!s.paused && s.absent.empty() && s.rejoins == 0);                    // nobody was disturbed
+        ASSERT_TRUE(a.session->mode() == net::ClientSession::Mode::Normal && b.session->mode() == net::ClientSession::Mode::Normal);
+        // a key that is Ann's, with a count of turns that was never sealed: refused (the session says BadRequest: the key was right, the claim is not) and nobody is held for it
+        net::Connection* liar = hello_for("X-1", a.lobby->key(), 999999999);
+        w.run(400);
+        ASSERT_EQ(reject_on(liar), static_cast<int>(net::RejectReason::BadRequest));
+        ASSERT_TRUE(!w.status("X-1").paused && a.session->mode() == net::ClientSession::Mode::Normal);
+        // a room that does not hold seats: a key is a key to nothing
+        ASSERT_TRUE(w.mgr.create_room(spec_of("X-2", 2), w.now).ok);
+        w.connect("Cat", "X-2");
+        w.connect("Dan", "X-2");
+        w.run(3000);
+        ASSERT_TRUE(w.status("X-2").state == RoomState::Running);
+        net::Connection* off = hello_for("X-2", a.lobby->key(), 0);
+        w.run(300);
+        ASSERT_EQ(reject_on(off), static_cast<int>(net::RejectReason::MatchRunning));
+        // a room that is loading (one player never says that it has loaded the map): MatchRunning too
+        ASSERT_TRUE(w.mgr.create_room(held_spec("X-3", 2), w.now).ok);
+        RClient& e = w.connect("Eve", "X-3");
+        net::Connection* raw = w.open_link();                                            // a raw player that says Hello and then nothing
+        net::HelloMsg h;
+        h.name = "Slow";
+        h.room = "X-3";
+        raw->send(net::encode(h));
+        w.run(2500);
+        ASSERT_TRUE(w.status("X-3").state == RoomState::Loading);
+        net::Connection* during = hello_for("X-3", e.lobby->key(), 0);
+        w.run(300);
+        ASSERT_EQ(reject_on(during), static_cast<int>(net::RejectReason::MatchRunning));
+        // a room that is over: NoSuchRoom, whatever is in the Hello
+        w.play_to_the_end("X-1");
+        ASSERT_TRUE(w.status("X-1").state == RoomState::Finished);
+        net::Connection* late = hello_for("X-1", a.lobby->key(), 0);
+        net::Connection* late2 = hello_for("X-1", bad, 0);
+        w.run(300);
+        ASSERT_EQ(reject_on(late), static_cast<int>(net::RejectReason::NoSuchRoom));
+        ASSERT_EQ(reject_on(late2), static_cast<int>(net::RejectReason::NoSuchRoom));
+        ASSERT_TRUE(w.mgr.close_room("X-3", w.now));
+        w.run(100);
+        ASSERT_TRUE(w.status("X-3").state == RoomState::Failed);
+        net::Connection* failed = hello_for("X-3", e.lobby->key(), 0);
+        w.run(300);
+        ASSERT_EQ(reject_on(failed), static_cast<int>(net::RejectReason::NoSuchRoom));
+    } TEST_END();
+
+    TEST_CASE("S3.45 A Page That Is Reloaded In The Waiting Room Takes Its Seat Back Through The Door (Same Seat, Same Key, The Room Still Counts One Player, The Leader Stays The Leader), The Old Connection Is Told It Was Superseded; The Room Then Fills And Plays") {
+        RWorld w;
+        ASSERT_TRUE(w.mgr.create_room(held_spec("W-1", 3), w.now).ok);
+        RClient& a = w.connect("Ann", "W-1");
+        w.run(1000);
+        ASSERT_TRUE(w.status("W-1").joined == 1 && w.status("W-1").leader == a.lobby->my_seat());
+        const net::SeatKey key = a.lobby->key();
+        const uint8_t seat = a.lobby->my_seat();
+        RClient& a2 = w.connect("Ann", "W-1", 255, key);                                  // a reload: the new page says Hello with the key before the room has noticed that the old link is dead
+        w.run(1000);
+        RoomStatus s = w.status("W-1");
+        ASSERT_TRUE(s.joined == 1 && s.state == RoomState::Waiting && s.leader == seat);
+        ASSERT_EQ(a2.lobby->my_seat(), seat);
+        ASSERT_TRUE(a2.lobby->key() == key);
+        ASSERT_FALSE(a2.lobby->rejoined());                                               // (still the waiting room: no catch-up)
+        ASSERT_TRUE(a.lobby->phase() == net::ClientLobby::Phase::Rejected && a.lobby->reject_reason() == net::RejectReason::Superseded);
+        w.connect("Bob", "W-1");
+        w.connect("Cat", "W-1");
+        w.run(3000);
+        ASSERT_TRUE(w.status("W-1").state == RoomState::Running);
+        ASSERT_TRUE(a2.session != nullptr && a2.session->key() == key);
+    } TEST_END();
+
+    TEST_CASE("S3.46 The Control Interface's Status Says What The Reconnect Does: Paused, Who Is Missing And Since When, The Vote, The Total Pause, The Counters, The Log, The Rules; A Seat's Key Is In None Of It: Not In The Status Of A Running Or Finished Room, The List, A Result File's Text, The Log Output (Nothing Is Written To Stderr)") {
+        std::ostringstream captured;                                                     // whatever the server code writes to stderr in this test
+        std::streambuf* old_cerr = std::cerr.rdbuf(captured.rdbuf());
+        {
+            RWorld w;
+            ASSERT_TRUE(w.mgr.create_room(held_spec("J-1", 3), w.now).ok);
+            RClient& a = w.connect("Ann", "J-1");
+            RClient& b = w.connect("Bob", "J-1");
+            RClient& c = w.connect("Cat", "J-1");
+            w.run(5000);
+            const std::vector<net::SeatKey> keys = {a.lobby->key(), b.lobby->key(), c.lobby->key()};
+            const auto status_json = [&](const std::string& code) {
+                ctl::HttpRequest rq;
+                rq.method = "GET";
+                rq.path = "/rooms/" + code;
+                return handle_control(w.mgr, rq, w.now);
+            };
+            const auto parse = [](const ctl::HttpResponse& r) {
+                ctl::JsonValue v;
+                std::string why;
+                ctl::parse_json(r.body, v, &why);
+                return v;
+            };
+            ctl::HttpResponse r = status_json("J-1");
+            ASSERT_EQ(r.status, 200);
+            ctl::JsonValue v = parse(r);
+            ASSERT_TRUE(v.get("reconnect").as_bool_or(false) && !v.get("paused").as_bool_or(true) && v.get("absent").size() == 0 && v.get("vote").is_null());
+            ASSERT_TRUE(v.get("hold_vote_seconds").as_int_or(0) == 30 && v.get("max_pause_seconds").as_int_or(0) == 1800);
+            ASSERT_TRUE(v.get("rejoins").as_int_or(9) == 0 && v.get("drops_by_vote").as_int_or(9) == 0 && v.get("drops_by_cap").as_int_or(9) == 0 && v.get("paused_seconds").as_int_or(9) == 0);
+            ASSERT_TRUE(v.get("log").get("usable").as_bool_or(false) && v.get("log").get("turns").as_int_or(0) > 50 && v.get("log").get("bytes").as_int_or(0) > 100);
+            b.reconnects = false;
+            w.cut(b);
+            w.run(31500);
+            a.session->vote(b.lobby->my_seat(), true);                                   // one of two connected players: not enough
+            w.run(2500);
+            r = status_json("J-1");
+            v = parse(r);
+            ASSERT_TRUE(v.get("paused").as_bool_or(false) && v.get("absent").size() == 1);
+            const ctl::JsonValue& row = v.get("absent").at(0);
+            ASSERT_TRUE(row.get("seat").as_int_or(9) == b.lobby->my_seat() && row.get("name").str() == "Bob" && row.get("state").str() == "absent");
+            ASSERT_TRUE(row.get("away_seconds").as_int_or(0) >= 33 && row.get("away_seconds").as_int_or(0) <= 35 && row.get("progress").as_int_or(9) == 0);
+            ASSERT_TRUE(v.get("vote").get("seat").as_int_or(9) == b.lobby->my_seat() && v.get("vote").get("continue").as_int_or(9) == 1 && v.get("vote").get("voters").as_int_or(9) == 2);
+            ASSERT_TRUE(v.get("paused_seconds").as_int_or(0) >= 33 && v.get("paused_seconds").as_int_or(0) <= 35);
+            ASSERT_TRUE(v.get("rejoins").as_int_or(9) == 0);
+            std::string everything = r.body;
+            ctl::HttpRequest list;
+            list.method = "GET";
+            list.path = "/rooms";
+            everything += handle_control(w.mgr, list, w.now).body;
+            ctl::HttpRequest stats;
+            stats.method = "GET";
+            stats.path = "/stats";
+            const ctl::HttpResponse stat = handle_control(w.mgr, stats, w.now);
+            ASSERT_TRUE(parse(stat).get("log_bytes").as_int_or(0) > 100 && parse(stat).get("log_budget_bytes").as_int_or(0) == 256 * 1024 * 1024);
+            everything += stat.body;
+            // Bob comes back: the counters
+            b.reconnects = true;
+            ASSERT_TRUE(w.until([&]() { return !w.status("J-1").paused; }, 8000));
+            w.run(1000);
+            v = parse(status_json("J-1"));
+            ASSERT_TRUE(!v.get("paused").as_bool_or(true) && v.get("absent").size() == 0 && v.get("vote").is_null() && v.get("rejoins").as_int_or(0) == 1);
+            ASSERT_TRUE(v.get("paused_seconds").as_int_or(0) >= 33);
+            everything += status_json("J-1").body;
+            w.play_to_the_end("J-1");
+            // the room that ended: what main() writes to <code>.json is exactly this text
+            std::string result_file;
+            for (const RoomStatus& ended : w.mgr.take_ended(w.now)) result_file += ctl::to_json(status_to_json(ended)) + "\n";
+            ASSERT_FALSE(result_file.empty());
+            v = parse(status_json("J-1"));
+            ASSERT_TRUE(v.get("state").str() == "finished" && v.get("rejoins").as_int_or(0) == 1 && v.get("log").get("turns").as_int_or(0) > 1000 && v.get("log").get("usable").as_bool_or(false));
+            ASSERT_TRUE(v.get("drops_by_vote").as_int_or(9) == 0 && !v.get("paused").as_bool_or(true) && v.get("absent").size() == 0);
+            everything += status_json("J-1").body + result_file;
+            ASSERT_TRUE(result_file.find("\"rejoins\":1") != std::string::npos && result_file.find("\"log\":{") != std::string::npos);
+            for (const net::SeatKey& key : keys) {
+                const std::string hex = hex_of(key);
+                ASSERT_TRUE(everything.find(hex) == std::string::npos);                   // no key anywhere in what the control interface says
+                ASSERT_TRUE(captured.str().find(hex) == std::string::npos);               // nor in what the server code logged
+            }
+            ASSERT_TRUE(everything.find("key") == std::string::npos);                     // (the word does not occur either: nothing is there to leak)
+        }
+        std::cerr.rdbuf(old_cerr);
+        ASSERT_TRUE(captured.str().empty());                                              // the server code writes nothing to stderr
+    } TEST_END();
+
+    TEST_CASE("S3.47 The Reconnect Settings Of A Room And Of The Server: The Control Interface Takes \"reconnect\", \"hold_vote_seconds\" (5 - 3600) And \"max_pause_seconds\" (60 - 86400) And Refuses What Is Outside Or Of Another Kind; A Body Without Them Gets The Server's Defaults (--reconnect, --hold-vote-seconds, --max-pause-seconds); create_room Checks The Bounds Too; Demo Rooms Follow The Server's Setting") {
+        {
+            RoomManager mgr{MapStore(maps_dir())};
+            const auto call = [&](const std::string& body) {
+                ctl::HttpRequest rq;
+                rq.method = "POST";
+                rq.path = "/rooms";
+                rq.body = body;
+                return handle_control(mgr, rq, 5000);
+            };
+            const auto parse = [](const ctl::HttpResponse& r) {
+                ctl::JsonValue v;
+                std::string why;
+                ctl::parse_json(r.body, v, &why);
+                return v;
+            };
+            // the built-in defaults: do not hold seats, 30 s, 1800 s
+            ctl::HttpResponse r = call(R"({"map":"TINY.LVL","code":"O-1"})");
+            ASSERT_EQ(r.status, 201);
+            ctl::JsonValue v = parse(r);
+            ASSERT_TRUE(!v.get("reconnect").as_bool_or(true) && v.get("hold_vote_seconds").as_int_or(0) == 30 && v.get("max_pause_seconds").as_int_or(0) == 1800);
+            r = call(R"({"map":"TINY.LVL","code":"O-2","reconnect":true,"hold_vote_seconds":5,"max_pause_seconds":86400})");     // the edges are good
+            ASSERT_EQ(r.status, 201);
+            v = parse(r);
+            ASSERT_TRUE(v.get("reconnect").as_bool_or(false) && v.get("hold_vote_seconds").as_int_or(0) == 5 && v.get("max_pause_seconds").as_int_or(0) == 86400);
+            r = call(R"({"map":"TINY.LVL","code":"O-3","hold_vote_seconds":3600,"max_pause_seconds":60})");
+            ASSERT_EQ(r.status, 201);
+            v = parse(r);
+            ASSERT_TRUE(v.get("hold_vote_seconds").as_int_or(0) == 3600 && v.get("max_pause_seconds").as_int_or(0) == 60 && !v.get("reconnect").as_bool_or(true));
+            for (const char* bad : {R"("hold_vote_seconds":4)", R"("hold_vote_seconds":3601)", R"("hold_vote_seconds":0)", R"("hold_vote_seconds":-5)", R"("hold_vote_seconds":"30")", R"("hold_vote_seconds":30.5)",
+                                    R"("max_pause_seconds":59)", R"("max_pause_seconds":86401)", R"("max_pause_seconds":0)", R"("max_pause_seconds":"1800")", R"("reconnect":"yes")", R"("reconnect":1)", R"("reconnect":null)"}) {
+                r = call(std::string(R"({"map":"TINY.LVL",)") + bad + "}");
+                ASSERT_MSG(r.status == 400, bad);
+                const std::string why = parse(r).get("error").str();
+                ASSERT_TRUE(why.size() > 10);
+                // the body is refused by the control interface itself, with the bounds in its words (the room manager would refuse the numbers too, with a message of its own)
+                const std::string key = std::string(bad).find("hold_vote") != std::string::npos ? "\"hold_vote_seconds\" must be an integer from 5 to 3600"
+                                        : std::string(bad).find("max_pause") != std::string::npos ? "\"max_pause_seconds\" must be an integer from 60 to 86400" : "\"reconnect\" must be true or false";
+                ASSERT_MSG(why == key, why);
+            }
+            ASSERT_EQ(mgr.room_count(), size_t{3});                                       // none of the refused ones made a room
+        }
+        {   // the server's own defaults reach a room that says nothing; what a room says wins
+            ServerLimits limits;
+            limits.reconnect = true;
+            limits.hold_vote_ms = 45000;
+            limits.max_pause_ms = 900000;
+            RoomManager mgr{MapStore(maps_dir()), limits};
+            const auto call = [&](const std::string& body) {
+                ctl::HttpRequest rq;
+                rq.method = "POST";
+                rq.path = "/rooms";
+                rq.body = body;
+                ctl::JsonValue v;
+                std::string why;
+                ctl::parse_json(handle_control(mgr, rq, 5000).body, v, &why);
+                return v;
+            };
+            ctl::JsonValue v = call(R"({"map":"TINY.LVL","code":"D-1"})");
+            ASSERT_TRUE(v.get("reconnect").as_bool_or(false) && v.get("hold_vote_seconds").as_int_or(0) == 45 && v.get("max_pause_seconds").as_int_or(0) == 900);
+            v = call(R"({"map":"TINY.LVL","code":"D-2","reconnect":false,"max_pause_seconds":120})");
+            ASSERT_TRUE(!v.get("reconnect").as_bool_or(true) && v.get("hold_vote_seconds").as_int_or(0) == 45 && v.get("max_pause_seconds").as_int_or(0) == 120);
+            const RoomSpec defaults = mgr.default_spec();
+            ASSERT_TRUE(defaults.reconnect && defaults.vote_after_ms == 45000 && defaults.max_pause_ms == 900000 && defaults.max_log_bytes == net::TurnLog::kDefaultMaxBytes);
+        }
+        {   // create_room checks the bounds for everybody who does not come through the JSON
+            RoomManager mgr{MapStore(maps_dir())};
+            const auto made = [&](const std::string& code, const std::function<void(RoomSpec&)>& change) {
+                RoomSpec spec = spec_of(code, 2);
+                change(spec);
+                return mgr.create_room(spec, 5000);
+            };
+            ASSERT_EQ(made("B-1", [](RoomSpec& s) { s.vote_after_ms = 4999; }).http_status, 400);
+            ASSERT_EQ(made("B-2", [](RoomSpec& s) { s.vote_after_ms = 3600001; }).http_status, 400);
+            ASSERT_EQ(made("B-3", [](RoomSpec& s) { s.max_pause_ms = 59999; }).http_status, 400);
+            ASSERT_EQ(made("B-4", [](RoomSpec& s) { s.max_pause_ms = 86400001; }).http_status, 400);
+            ASSERT_EQ(made("B-5", [](RoomSpec& s) { s.max_log_bytes = 100; }).http_status, 400);
+            ASSERT_EQ(made("B-6", [](RoomSpec& s) { s.max_log_bytes = size_t{2} << 30; }).http_status, 400);
+            ASSERT_TRUE(made("B-7", [](RoomSpec& s) { s.vote_after_ms = 5000; s.max_pause_ms = 60000; s.max_log_bytes = 1024; }).ok);
+            ASSERT_TRUE(made("B-8", [](RoomSpec& s) { s.vote_after_ms = 3600000; s.max_pause_ms = 86400000; s.max_log_bytes = size_t{1} << 30; }).ok);
+        }
+        {   // demo rooms follow the server's setting: keys in the Welcome (or none), and the status says so
+            for (const bool hold : {false, true}) {
+                ServerLimits limits;
+                limits.demo_rooms = 2;
+                limits.demo_map = "TINY.LVL";
+                limits.reconnect = hold;
+                RWorld w(limits);
+                RClient& a = w.connect("Ann", "demo-tiny-2p-held");
+                RClient& b = w.connect("Bob", "demo-tiny-2p-held");
+                w.run(4000);
+                const RoomStatus s = w.status("demo-tiny-2p-held");
+                ASSERT_TRUE(s.state == RoomState::Running && s.reconnect == hold);
+                ASSERT_EQ(!net::key_is_zero(a.lobby->key()) && !net::key_is_zero(b.lobby->key()), hold);
+                ASSERT_EQ(net::key_is_zero(a.lobby->key()) && net::key_is_zero(b.lobby->key()), !hold);
+            }
+        }
+    } TEST_END();
+
+    TEST_CASE("S3.48 The Server's Budget For The Logs Of All Its Rooms: The Logs Together Never Hold More Than The Budget (The Statistics Say How Much); A Log That Cannot Grow Is Not Kept And The Room Falls Back To Dropping At Once (Its Status Says Unusable); What A Match Held Is Given Back When It Ends, And A New Room Can Log Again") {
+        ServerLimits limits;
+        limits.log_budget_bytes = 9 * 1024;                                              // 9 KB for all the logs of the server (a quiet match adds about 120 bytes a second)
+        RWorld w(limits);
+        ASSERT_EQ(w.mgr.log_budget_bytes(), uint64_t{9 * 1024});
+        ASSERT_TRUE(w.mgr.create_room(held_spec("G-1", 3), w.now).ok);
+        ASSERT_TRUE(w.mgr.create_room(held_spec("G-2", 2), w.now).ok);
+        RClient& a1 = w.connect("A1", "G-1");
+        RClient& b1 = w.connect("B1", "G-1");
+        w.connect("C1", "G-1");
+        RClient& a2 = w.connect("A2", "G-2");
+        RClient& b2 = w.connect("B2", "G-2");
+        (void)a2;
+        (void)b2;
+        uint64_t most = 0;
+        bool full = false;
+        for (int i = 0; i < 40000 && !full; ++i) {
+            w.run(250);
+            most = std::max(most, w.mgr.log_bytes());
+            ASSERT_TRUE(w.mgr.log_bytes() <= w.mgr.log_budget_bytes());                   // never more than the budget, however busy the rooms are
+            full = !w.status("G-1").log_usable || !w.status("G-2").log_usable;
+        }
+        ASSERT_TRUE(full);
+        ASSERT_TRUE(most > 8 * 1024);                                                    // it filled up
+        w.run(2000);
+        const RoomStatus s1 = w.status("G-1");
+        const RoomStatus s2 = w.status("G-2");
+        ASSERT_FALSE(s1.log_usable);
+        ASSERT_FALSE(s2.log_usable);                                                     // the server has no memory left for either: neither log grows any more
+        ASSERT_TRUE(w.mgr.log_bytes() <= w.mgr.log_budget_bytes());
+        // a room with a log that is not usable drops a lost seat at once: no pause, no way back (its key is told "dropped")
+        const uint8_t bob = b1.lobby->my_seat();
+        b1.reconnects = true;
+        w.cut(b1);
+        w.run(2000);
+        const RoomStatus after = w.status("G-1");
+        ASSERT_TRUE(!after.paused && after.absent.empty() && after.state == RoomState::Running);          // the two that are left play on
+        ASSERT_TRUE(a1.sim.is_player_dropped(bob));
+        ASSERT_TRUE(b1.lost && b1.was_rejected && b1.rejected == net::RejectReason::Dropped);
+        // the end of a match gives its log back; the next room can keep a log again
+        const uint64_t held = w.mgr.log_bytes();
+        ASSERT_TRUE(w.mgr.close_room("G-2", w.now));
+        w.run(100);
+        ASSERT_TRUE(w.mgr.log_bytes() < held);
+        ASSERT_TRUE(w.mgr.create_room(held_spec("G-3", 2), w.now).ok);
+        w.connect("A3", "G-3");
+        w.connect("B3", "G-3");
+        w.run(8000);
+        const RoomStatus s3 = w.status("G-3");
+        ASSERT_TRUE(s3.state == RoomState::Running && s3.log_usable && s3.log_bytes > 0);
+        ASSERT_TRUE(w.mgr.log_bytes() <= w.mgr.log_budget_bytes());
+        // a match that ends by itself gives its log back at once too, and the status keeps what it held
+        const uint64_t before_end = w.mgr.log_bytes();
+        w.play_to_the_end("G-3");
+        const RoomStatus ended = w.status("G-3");
+        ASSERT_TRUE(ended.state == RoomState::Finished);
+        ASSERT_TRUE(ended.log_turns > 0 && ended.log_bytes > 0);                         // (the budget may have run out again by the end of the match: the log is then unusable, but it held something)
+        ASSERT_TRUE(w.mgr.log_bytes() < before_end);                                     // what the room held is not held any more (what is left is the other room's, which cannot grow)
+    } TEST_END();
+
+    TEST_CASE("S3.49 Lag Is Not A Loss In A Room That Holds Seats: A Machine That Draws A Frame Every 4 s Falls Behind (The Others Are Told It Lags, Nobody Is Paused, Nobody Waits), Is Not Held And Not Dropped, And Is Level Again When Its Frames Come Back; The States Agree At The End") {
+        RWorld w;
+        ASSERT_TRUE(w.mgr.create_room(held_spec("S-1", 3), w.now).ok);
+        RClient& a = w.connect("Ann", "S-1");
+        RClient& b = w.connect("Bob", "S-1");
+        RClient& c = w.connect("Cat", "S-1");
+        w.run(4000);
+        const uint8_t bob = b.lobby->my_seat();
+        b.frame_every_ms = 4000;
+        bool paused_ever = false;
+        bool told = false;
+        const uint32_t ticks_before = w.status("S-1").ticks;
+        for (int i = 0; i < 3000; ++i) {                                                  // 30 s
+            w.run(10);
+            const RoomStatus st = w.status("S-1");
+            paused_ever = paused_ever || st.paused || !st.absent.empty();
+            told = told || a.session->lagging_seat() == bob;
+        }
+        ASSERT_FALSE(paused_ever);
+        ASSERT_TRUE(told);
+        ASSERT_TRUE(w.status("S-1").ticks - ticks_before >= 590);                         // the room played on at its own pace (20 ticks a second)
+        ASSERT_FALSE(a.sim.is_player_dropped(bob) || c.sim.is_player_dropped(bob));
+        ASSERT_TRUE(w.status("S-1").rejoins == 0 && w.status("S-1").drops_by_cap == 0 && w.status("S-1").drops_by_vote == 0);
+        b.frame_every_ms = 0;                                                             // its frames are back: it runs the backlog at up to 4x
+        w.run(40000);
+        ASSERT_TRUE(b.session->mode() == net::ClientSession::Mode::Normal && !b.session->catching_up());
+        ASSERT_TRUE(a.session->lagging_seat() == 255);
+        w.play_to_the_end("S-1");
+        ASSERT_TRUE(w.status("S-1").state == RoomState::Finished);
+        ASSERT_TRUE(a.sim.state_hash() == b.sim.state_hash() && b.sim.state_hash() == c.sim.state_hash());
+        ASSERT_FALSE(a.session->desynced() || b.session->desynced() || c.session->desynced());
+    } TEST_END();
+
+    TEST_CASE("S3.50 A Room That Does Not Hold Seats (reconnect: false, Said Out Loud) Behaves Exactly As In v0.0.94: A Cut Link Is A Drop For Everybody At The Same Tick Within 3 s (And The Machine Is Lost At Once), When Everybody Has Left The Room Finishes; A Seat That Stops Executing Is Dropped After 30 s And The Others Play On, With Two Players The Room Finishes; No Presence Is Ever Sent") {
+        {
+            RWorld w;
+            RoomSpec spec = spec_of("DROP-1", 3);
+            spec.reconnect = false;
+            ASSERT_TRUE(w.mgr.create_room(spec, w.now).ok);
+            RClient& a = w.connect("A", "DROP-1");
+            RClient& b = w.connect("B", "DROP-1");
+            RClient& c = w.connect("C", "DROP-1");
+            w.run(4000);
+            ASSERT_TRUE(w.status("DROP-1").state == RoomState::Running);
+            w.cut(b);
+            bool paused_ever = false;
+            for (int i = 0; i < 300; ++i) {
+                w.run(10);
+                paused_ever = paused_ever || w.status("DROP-1").paused;
+            }
+            ASSERT_FALSE(paused_ever);
+            ASSERT_TRUE(a.sim.is_player_dropped(1) && c.sim.is_player_dropped(1));
+            ASSERT_TRUE(b.lost && !b.was_rejected);                                       // its match is over at once: no key, no way back
+            ASSERT_TRUE(w.status("DROP-1").state == RoomState::Running);
+            for (RClient* p : {&a, &c}) ASSERT_TRUE(p->session->presence().missing.empty() && !p->session->paused());
+            w.cut(a);
+            w.cut(c);
+            w.run(3000);
+            ASSERT_TRUE(w.status("DROP-1").state == RoomState::Finished);
+            ASSERT_TRUE(w.status("DROP-1").reason == "everybody left" || w.status("DROP-1").reason == "the match ended");
+        }
+        {
+            RWorld w;
+            RoomSpec spec = spec_of("LAG-1", 3);
+            spec.reconnect = false;
+            ASSERT_TRUE(w.mgr.create_room(spec, w.now).ok);
+            RClient& a = w.connect("Ann", "LAG-1");
+            RClient& b = w.connect("Bob", "LAG-1");
+            RClient& c = w.connect("Cat", "LAG-1");
+            w.run(3000);
+            const uint8_t bob = b.lobby->my_seat();
+            const uint32_t ticks_before = w.status("LAG-1").ticks;
+            b.hung = true;                                                               // Bob's program hangs: it neither acks nor answers
+            w.run(8000);
+            ASSERT_TRUE(w.status("LAG-1").ticks - ticks_before >= 150);                  // the room did not wait for Bob
+            ASSERT_TRUE(a.session->lagging_seat() == bob && c.session->lagging_seat() == bob);
+            w.run(18000);                                                                // 26 s: a lagger, not yet dropped
+            ASSERT_FALSE(a.sim.is_player_dropped(bob));
+            ASSERT_TRUE(w.status("LAG-1").state == RoomState::Running && !w.status("LAG-1").paused);       // (a room without a way back never pauses, however long a seat is silent)
+            w.run(7000);                                                                 // 33 s: dropped, at one tick for both of the others
+            ASSERT_TRUE(a.sim.is_player_dropped(bob) && c.sim.is_player_dropped(bob));
+            ASSERT_TRUE(a.sim.state_hash() == c.sim.state_hash());
+            w.run(3000);
+            ASSERT_TRUE(w.status("LAG-1").state == RoomState::Running);
+            ASSERT_FALSE(a.lost || c.lost);
+            ASSERT_EQ(a.session->lagging_seat(), 255);
+        }
+        {
+            RWorld w;
+            RoomSpec spec = spec_of("LAG-2", 2);
+            spec.reconnect = false;
+            ASSERT_TRUE(w.mgr.create_room(spec, w.now).ok);
+            w.connect("Ann", "LAG-2");
+            RClient& b = w.connect("Bob", "LAG-2");
+            w.run(3000);
+            b.hung = true;
+            w.run(40000);
+            ASSERT_TRUE(w.status("LAG-2").state == RoomState::Finished);                 // two players: the one that is left has won, the room ends
+        }
+    } TEST_END();
+
+    TEST_CASE("S3.51 Silence Is A Loss After 10 s In A Room That Holds Seats (A Hung Window): The Room Pauses 10 s After The Last Word And Says So In Its Status (\"absent\", Not \"lagging\"), 9 s Of Silence Is No Loss; The Window That Wakes Up Finds Its Link Closed, Comes Back Through The Door And The Match Goes On To Its End, Identical") {
+        {
+            RWorld w;
+            ASSERT_TRUE(w.mgr.create_room(held_spec("Z-1", 3), w.now).ok);
+            RClient& a = w.connect("Ann", "Z-1");
+            RClient& b = w.connect("Bob", "Z-1");
+            RClient& c = w.connect("Cat", "Z-1");
+            w.run(4000);
+            const uint8_t bob = b.lobby->my_seat();
+            b.hung = true;
+            const uint32_t at = w.now;
+            uint32_t paused_after_ms = 0;
+            bool noticed = false;
+            for (int i = 0; i < 1100 && paused_after_ms == 0; ++i) {
+                w.run(10);
+                noticed = noticed || a.session->lagging_seat() == bob;
+                if (w.status("Z-1").paused) paused_after_ms = w.now - at;
+            }
+            ASSERT_TRUE(paused_after_ms >= 10000 && paused_after_ms <= 10100);          // 10 s after its last word
+            ASSERT_TRUE(noticed);                                                        // (for 7 s of it the others were told that it lags)
+            w.run(300);
+            const RoomStatus s = w.status("Z-1");
+            ASSERT_TRUE(s.paused && s.absent.size() == 1 && s.absent[0].seat == bob && !s.absent[0].catching_up);
+            ASSERT_EQ(a.session->lagging_seat(), 255);                                   // the notice ended with the loss: it is missing now, not lagging
+            ASSERT_TRUE(a.session->paused() && c.session->paused());
+            w.run(5000);
+            b.hung = false;                                                              // the window wakes up
+            ASSERT_TRUE(w.until([&]() { return !w.status("Z-1").paused && b.session->mode() == net::ClientSession::Mode::Normal; }, 10000));
+            ASSERT_EQ(w.status("Z-1").rejoins, 1u);
+            w.play_to_the_end("Z-1");
+            ASSERT_TRUE(w.status("Z-1").state == RoomState::Finished);
+            ASSERT_TRUE(a.sim.state_hash() == b.sim.state_hash() && b.sim.state_hash() == c.sim.state_hash());
+            ASSERT_FALSE(a.session->desynced() || b.session->desynced() || c.session->desynced());
+        }
+        {   // 9 s of silence is no loss: nobody is paused, the window catches up as a lagger
+            RWorld w;
+            ASSERT_TRUE(w.mgr.create_room(held_spec("Z-2", 2), w.now).ok);
+            w.connect("Ann", "Z-2");
+            RClient& b = w.connect("Bob", "Z-2");
+            w.run(4000);
+            b.hung = true;
+            bool paused_ever = false;
+            for (int i = 0; i < 900; ++i) {
+                w.run(10);
+                paused_ever = paused_ever || w.status("Z-2").paused;
+            }
+            b.hung = false;
+            for (int i = 0; i < 2000; ++i) {
+                w.run(10);
+                paused_ever = paused_ever || w.status("Z-2").paused;
+            }
+            ASSERT_FALSE(paused_ever);
+            ASSERT_TRUE(w.status("Z-2").rejoins == 0 && b.session->mode() == net::ClientSession::Mode::Normal);
+        }
+    } TEST_END();
+}
+
 int main() {
     std::cout << "=======================================================\n";
     std::cout << " Dedicated game server: map store, rooms, the door, control calls\n";
@@ -2364,6 +3405,7 @@ int main() {
     run_control_tests();
     run_socket_tests();
     run_secret_tests();
+    run_reconnect_tests();
     std::cout << "=======================================================\n";
     std::cout << " Total Test Cases: " << g_test_count << "\n Total Assertions: " << g_assert_count << "\n Failed:           " << g_test_failures << "\n";
     std::cout << "=======================================================\n";

@@ -7,6 +7,11 @@
 //
 // Rooms are made from outside (create_room: the control interface calls it), update() runs every room and forgets the finished ones when their keep time is over.
 // Limits protect the server: the number of rooms, the number of connections that have not said Hello yet, the time they get for it.
+//
+// A Hello with a KEY (protocol 10) for a room whose match runs and that holds seats goes to that room (Room::rejoin: the session takes the connection over and gives the player the match
+// again); a key that fits no seat, a room that does not hold seats and a room that is loading are answered MatchRunning, as a Hello without a key is, so that nothing is revealed; a room
+// that is over is NoSuchRoom. A Hello with a key for a room that still waits is the lobby's (a page that was reloaded in the waiting room takes its seat over). The server's own defaults
+// for what the rooms hold (reconnect, the vote, the cap, the limit of the log) and the budget that all the logs share are ServerLimits.
 
 #include <cstdint>
 #include <map>
@@ -16,6 +21,7 @@
 
 #include "ants_net/protocol.hpp"
 #include "ants_net/transport.hpp"
+#include "ants_net/turnlog.hpp"
 #include "ants_server/map_store.hpp"
 #include "ants_server/room.hpp"
 
@@ -42,6 +48,13 @@ struct ServerLimits {
     // map, for two), so that a page that offers a map the server does not allow still gets the players it asked for. What a code does not choose is `demo_map` and
     // `demo_players`, as before. The choice rides in the room code because the Hello has no other field (the protocol is unchanged).
     std::vector<std::string> demo_maps;
+    // Reconnect (protocol 10; ants_server's --reconnect, --hold-vote-seconds, --max-pause-seconds, --log-mb): what a room holds unless its specification says otherwise. Demo rooms follow
+    // `reconnect`. OFF by default in this release.
+    bool reconnect{false};
+    uint32_t hold_vote_ms{net::kVoteAfterMs};                       // the vote opens after a seat has been away this long in all
+    uint32_t max_pause_ms{net::kMaxPauseMs};                        // a match's pauses may last this long in all; at the cap every absent seat is dropped
+    size_t room_log_bytes{net::TurnLog::kDefaultMaxBytes};          // the limit of one room's turn log (16 MiB)
+    uint64_t log_budget_bytes{256ull * 1024ull * 1024ull};          // the memory that all the rooms' logs may take together; a log that cannot grow is not kept (its room drops a lost seat at once)
 };
 
 /// The code prefix of the rooms that a Hello may make when demo rooms are on
@@ -60,6 +73,11 @@ public:
 
     const MapStore& store() const noexcept { return store_; }
     const ServerLimits& limits() const noexcept { return limits_; }
+    /// A room's specification with the server's defaults in it (reconnect, the vote, the cap, the limit of the log): what the control interface starts from
+    RoomSpec default_spec() const;
+    /// What the logs of all the rooms hold now and what they may hold together (bytes)
+    uint64_t log_bytes() const noexcept { return log_budget_.used(); }
+    uint64_t log_budget_bytes() const noexcept { return log_budget_.limit(); }
 
     /// Makes a room: the map must exist in the store and load, the code must be new and valid (an empty code gets a generated one), 2 <= players <= 4, and the
     /// server must have room for one more.
@@ -99,6 +117,7 @@ private:
 
     MapStore store_;
     ServerLimits limits_;
+    net::LogBudget log_budget_;                  // (declared before the rooms: they give their logs back when they are destroyed)
     std::map<std::string, std::unique_ptr<Room>> rooms_;
     std::vector<Pending> pending_;
     std::vector<Lingering> lingering_;

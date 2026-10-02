@@ -1,6 +1,7 @@
 // ants_server: the dedicated game server. A headless program: it hosts many rooms, each a host without a seat that runs the match as the referee (docs/NETWORK_PORT.md).
 //
 //   ants_server --maps DIR [--port 4001] [--ws-port 4002] [--ctl-port 4010] [--public] [--ws-any-interface] [--ctl-any-interface] [--results-dir DIR] [--secret-file PATH] [--max-rooms N]
+//               [--reconnect | --no-reconnect] [--hold-vote-seconds N] [--max-pause-seconds N] [--log-mb N]
 //
 //   --maps DIR         the maps folder (the .lvl files that rooms may use); required
 //   --port N           the TCP port of native clients (0: none; default 4001); every interface with --public, else this machine only
@@ -20,6 +21,16 @@
 //   --demo-maps LIST   the maps a demo room may be made on, file names of the maps folder separated by commas (blanks around a name are dropped). The code of a
 //                      demo room chooses: "demo-[<map>-][<n>p-]<anything>": <map> one of these names without its extension (any case), <n>p 2 to 4 players;
 //                      what it does not choose is 4 players on --demo-map (needs --demo-rooms). A demo room waits ten minutes for its players.
+//   --reconnect, --no-reconnect
+//                      a room holds the seat of a player whose connection is lost (protocol 10): the match is paused for everybody, the seat comes back with its key, the others
+//                      may vote to go on without it, the match's total pause is capped. This is the default of the rooms (the control interface's "reconnect" overrides it per room;
+//                      demo rooms follow it). OFF by default in this release: the game's own clients do not come back yet (release B), so a server that held seats for them would only make
+//                      the others wait; the last of the two options wins
+//   --hold-vote-seconds N
+//                      the others may vote on going on without a seat once it has been away N seconds in all (5 - 3600, default 30; the control interface's "hold_vote_seconds")
+//   --max-pause-seconds N
+//                      the cap on a match's total paused time: at the cap every absent seat is dropped (60 - 86400, default 1800; the control interface's "max_pause_seconds")
+//   --log-mb N         the limit of one room's turn log, which a returning player is given the match from, in MiB (1 - 256, default 16); the logs of all the rooms together may take 256 MiB
 //   --version, --help
 //
 // The control interface's secret comes from the environment (ANTS_SERVER_SECRET), never from the command line (a command line is visible to every user). Without
@@ -68,6 +79,10 @@ struct Options {
     std::string demo_map;
     std::vector<std::string> demo_maps;
     bool demo_maps_given{false};
+    bool reconnect{false};
+    long hold_vote_s{30};
+    long max_pause_s{1800};
+    long log_mb{16};
 };
 
 void usage(FILE* to) {
@@ -75,6 +90,7 @@ void usage(FILE* to) {
                  "usage: ants_server --maps DIR [--port 4001] [--ws-port N] [--ctl-port N] [--public] [--ws-any-interface] [--ctl-any-interface]\n"
                  "                    [--results-dir DIR] [--secret-file PATH] [--max-rooms N]\n"
                  "                    [--demo-rooms N --demo-map NAME [--demo-maps A.LVL,B.LVL,...]]\n"
+                 "                    [--reconnect | --no-reconnect] [--hold-vote-seconds 5-3600] [--max-pause-seconds 60-86400] [--log-mb 1-256]\n"
                  "  the control interface takes its secret from the environment variable ANTS_SERVER_SECRET; without it the server makes one and keeps it\n"
                  "  in --secret-file (default: control-secret in --results-dir)\n");
 }
@@ -154,6 +170,23 @@ int main(int argc, char** argv) {
                 return 2;
             }
             o.demo_rooms = static_cast<size_t>(n);
+        } else if (a == "--reconnect") {
+            o.reconnect = true;
+        } else if (a == "--no-reconnect") {
+            o.reconnect = false;
+        } else if (a == "--hold-vote-seconds" || a == "--max-pause-seconds" || a == "--log-mb") {
+            const char* text = value(a.c_str());
+            char* end = nullptr;
+            const long n = std::strtol(text, &end, 10);
+            const bool vote = a == "--hold-vote-seconds";
+            const bool pause = a == "--max-pause-seconds";
+            const long lo = vote ? 5 : (pause ? 60 : 1);
+            const long hi = vote ? 3600 : (pause ? 86400 : 256);
+            if (end == text || *end != '\0' || n < lo || n > hi) {
+                std::fprintf(stderr, "%s takes a whole number from %ld to %ld\n", a.c_str(), lo, hi);
+                return 2;
+            }
+            (vote ? o.hold_vote_s : (pause ? o.max_pause_s : o.log_mb)) = n;
         } else if (a == "--demo-map") {
             o.demo_map = value("--demo-map");
         } else if (a == "--demo-maps") {
@@ -254,6 +287,10 @@ int main(int argc, char** argv) {
     limits.demo_rooms = o.demo_rooms;
     limits.demo_map = o.demo_map;
     limits.demo_maps = o.demo_maps;
+    limits.reconnect = o.reconnect;
+    limits.hold_vote_ms = static_cast<uint32_t>(o.hold_vote_s * 1000);
+    limits.max_pause_ms = static_cast<uint32_t>(o.max_pause_s * 1000);
+    limits.room_log_bytes = static_cast<size_t>(o.log_mb) * 1024u * 1024u;
     ants::server::MapStore store{o.maps_dir};
     if (o.demo_maps_given && o.demo_rooms == 0) {
         std::fprintf(stderr, "--demo-maps needs --demo-rooms (and --demo-map)\n");
@@ -296,6 +333,10 @@ int main(int argc, char** argv) {
     std::signal(SIGPIPE, SIG_IGN);
 #endif
     log(std::string("ants_server ") + std::string(ants::VERSION_STRING) + " (network protocol " + std::to_string(ants::net::kProtocolVersion) + "), maps in " + o.maps_dir);
+    if (o.reconnect) {
+        log("rooms hold the seat of a player whose connection is lost (--reconnect): a vote after " + std::to_string(o.hold_vote_s) + " s away, the pauses of a match capped at " + std::to_string(o.max_pause_s) +
+            " s, a turn log of at most " + std::to_string(o.log_mb) + " MiB per room");
+    }
     if (tcp) log("TCP game port " + std::to_string(tcp->port()) + (o.is_public ? " (all interfaces)" : " (this machine only)"));
     if (ws) log("WebSocket port " + std::to_string(ws->port()) + (o.ws_any_interface ? " (all interfaces: the host must restrict it)" : " (this machine only: put a TLS proxy in front)"));
     if (http) log("control interface on port " + std::to_string(http->port()) + (o.ctl_any_interface ? " (all interfaces: the host must restrict it, bearer secret)" : " (this machine only, bearer secret)"));
@@ -331,7 +372,11 @@ int main(int argc, char** argv) {
         for (const ants::server::RoomStatus& s : rooms.take_ended(now)) {
             const bool demo = s.code.compare(0, std::strlen(ants::server::kDemoRoomPrefix), ants::server::kDemoRoomPrefix) == 0;
             if (demo && s.ticks == 0) continue;                    // a demo room that nobody completed: no line, no file (a peer chooses these codes, nothing may pile up)
-            log("room " + s.code + " " + ants::server::room_state_name(s.state) + ": " + s.reason + " (map " + s.map + ", " + std::to_string(s.ticks) + " ticks)");
+            std::string held;                                      // a room that held seats says what came of it (never a key)
+            if (s.reconnect) {
+                held = ", paused " + std::to_string(s.paused_s) + " s, " + std::to_string(s.rejoins) + " back, dropped " + std::to_string(s.drops_by_vote) + " by vote and " + std::to_string(s.drops_by_cap) + " by the cap";
+            }
+            log("room " + s.code + " " + ants::server::room_state_name(s.state) + ": " + s.reason + " (map " + s.map + ", " + std::to_string(s.ticks) + " ticks" + held + ")");
             if (!o.results_dir.empty() && !demo) {
                 std::ofstream out(std::filesystem::path(o.results_dir) / (s.code + ".json"), std::ios::binary | std::ios::trunc);
                 out << ants::ctl::to_json(ants::server::status_to_json(s)) << "\n";
