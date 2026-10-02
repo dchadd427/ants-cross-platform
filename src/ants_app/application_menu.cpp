@@ -318,6 +318,13 @@ std::string Application::menu_failure_text() const {
                     return "You were removed from the room.";
                 case net::RejectReason::BadRequest:
                     return "The server did not accept the request. Check your name and the room code.";
+                // (protocol 10: the answers to a Hello that shows a key. The menu's Hello never does, so a server does not send these to it; they are told in the words of the net layer's texts)
+                case net::RejectReason::Dropped:
+                    return "Sorry, you have been dropped from the game.";
+                case net::RejectReason::RejoinFailed:
+                    return "The game could not be rejoined.";
+                case net::RejectReason::Superseded:
+                    return "This game was taken over by another window.";
                 case net::RejectReason::NoSuchRoom:
                     if (menu_conn_.hosting) return "The server could not make a room now: it is busy, or it does not host online matches. Try again in a few minutes.";
                     return "There is no room with the code " + menu_conn_.room + " on " + server + ". Check the code (capital letters matter).";

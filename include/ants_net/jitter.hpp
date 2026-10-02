@@ -71,6 +71,16 @@ public:
         next_ = 0;
     }
 
+    /// Back to the state of a buffer that has not seen the link yet: the target at its steady value (min_turns), no turn read, no change made. For a runner that has run a catch-up (the
+    /// turns that it was given came all at once, and what it had measured before describes a link and a clock that are gone): see LockstepRunner::fast_forward
+    void reset() noexcept {
+        target_ = cfg_.min_turns;
+        filled_ = 0;
+        next_ = 0;
+        last_change_ms_ = 0;
+        seen_ = false;
+    }
+
     /// How many turns the runner keeps in hand: it runs a turn once that many are queued behind it (that is: it begins when `target() + 1` turns are queued)
     uint32_t target() const noexcept { return target_; }
     /// The lateness that the buffer covers, in ms: the `percentile`th percentile, over the last kSamples turns, of how much later than the earliest of them a turn was read

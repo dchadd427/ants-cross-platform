@@ -4,16 +4,22 @@
 
 namespace ants::net {
 
-bool LockstepRunner::on_turn(TurnMsg turn) {
+bool LockstepRunner::enqueue(TurnMsg turn, bool live) {
     if (turn.turn != next_receive_ || turn.commands.size() > kMaxTurnCommands) return false;
-    if (fresh_count_ == 0) fresh_first_ = turn.turn;
-    ++fresh_count_;
+    if (live) {                                                 // (a turn of the catch-up is no arrival of the link: the jitter buffer never hears of it)
+        if (fresh_count_ == 0) fresh_first_ = turn.turn;
+        ++fresh_count_;
+    }
     ++next_receive_;
     log_.push_back(turn);
     if (log_.size() > kTurnLogTurns) log_.pop_front();
     queue_.push_back(std::move(turn));
     return true;
 }
+
+bool LockstepRunner::on_turn(TurnMsg turn) { return enqueue(std::move(turn), true); }
+
+bool LockstepRunner::on_catch_up_turn(TurnMsg turn) { return enqueue(std::move(turn), false); }
 
 const TurnMsg* LockstepRunner::logged_turn(uint32_t turn) const noexcept {
     if (log_.empty() || turn >= next_receive_) return nullptr;
@@ -42,6 +48,38 @@ uint32_t LockstepRunner::speed_x4(uint32_t dt_ms) const noexcept {
     if (slack <= wanted) return 4;
     const uint32_t over = slack - wanted;
     return std::min(std::max(cfg_.max_speed_x4, 4u), 4u + (over + kTickMs - 1u) / kTickMs);
+}
+
+static_assert(kTicksPerTurn == 1, "update() and fast_forward() run one tick for every turn: a turn of more ticks needs both changed, and a half-done turn at_boundary() can report");
+
+// The runner as it is at the start of a match: nothing owed, nothing waited for, the jitter buffer at its steady value with no turn read, the next turns collected before the first of them
+// runs. The turns that are queued when the next update comes (live turns that arrived while the catch-up ran, or in the frame that ended it) waited for the runner: the first update
+// after a restart, like the very first update of a runner (updates_ is 0 again), does not take their read times for the link's lateness.
+void LockstepRunner::restart_pacing() noexcept {
+    started_ = false;
+    rebuilding_ = false;
+    in_stall_ = false;
+    stall_told_ = false;
+    stall_ms_ = 0;
+    acc_q_ = 0;
+    updates_ = 0;
+    jitter_.reset();
+}
+
+uint32_t LockstepRunner::fast_forward(uint32_t max_ticks) {
+    uint32_t turns = 0;
+    while (turns < max_ticks && !queue_.empty()) {
+        TurnMsg turn = std::move(queue_.front());
+        queue_.pop_front();
+        in_turn_ = true;
+        for (const sim::Command& c : turn.commands) sim_.apply_command(c);        // (no hook: nothing is presented, nobody is asked what the engine said)
+        sim_.tick();
+        ++next_execute_;
+        in_turn_ = false;
+        ++turns;
+    }
+    if (turns > 0) restart_pacing();
+    return turns;
 }
 
 std::vector<LockstepRunner::Executed> LockstepRunner::update(uint32_t dt_ms) {
@@ -94,6 +132,7 @@ std::vector<LockstepRunner::Executed> LockstepRunner::update(uint32_t dt_ms) {
     while (acc_q_ >= kTickQuarters && ticks < max_ticks && !queue_.empty()) {
         TurnMsg turn = std::move(queue_.front());
         queue_.pop_front();
+        in_turn_ = true;
         for (const sim::Command& c : turn.commands) {
             const sim::CommandResult r = sim_.apply_command(c);
             if (on_applied_) on_applied_(c);
@@ -109,6 +148,7 @@ std::vector<LockstepRunner::Executed> LockstepRunner::update(uint32_t dt_ms) {
         }
         out.push_back(e);
         ++next_execute_;
+        in_turn_ = false;
         acc_q_ -= kTickQuarters;
         ++ticks;
     }

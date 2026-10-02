@@ -848,6 +848,60 @@ void run_migration_tests() {
     } TEST_END();
 }
 
+// A client that is refused: every reason of a Reject ends the join with its own text on the screen
+void run_reject_tests() {
+    TEST_CASE("N3.17 Rejections (Protocol 10): Dropped Is The Original's Text For A Dropped Machine (String 94), RejoinFailed And Superseded Say What Happened, Each Ends The Join With Its Own Line; The Texts Of The Older Reasons Are What They Were") {
+        struct Case {
+            RejectReason reason;
+            std::string text;
+        };
+        const std::vector<Case> cases = {
+            {RejectReason::Full, "The room is full."},
+            {RejectReason::VersionMismatch, "This version cannot play with the host's version."},
+            {RejectReason::MatchRunning, "The match has already started."},
+            {RejectReason::Kicked, sim::strings::text(sim::strings::kDroppedFromGame)},
+            {RejectReason::BadRequest, "The host refused the connection."},
+            {RejectReason::NoSuchRoom, "There is no such room on this server."},
+            {RejectReason::Dropped, sim::strings::text(sim::strings::kDroppedFromGame)},      // the original's one text for a machine that was dropped: "Sorry, you have been dropped from the game.  Hit OK to exit the program."
+            {RejectReason::RejoinFailed, "The game could not be rejoined."},
+            {RejectReason::Superseded, "This game was taken over by another window."},
+        };
+        ASSERT_EQ(sim::strings::text(sim::strings::kDroppedFromGame), std::string("Sorry, you have been dropped from the game.  Hit OK to exit the program."));
+        for (const Case& c : cases) {
+            auto listener = TcpListener::listen(0, true);
+            ASSERT_TRUE(listener != nullptr);
+            sim::SimulationEngine sim;
+            NetGame net(sim);
+            net.set_discovery(0);
+            ASSERT_TRUE(net.join("127.0.0.1", listener->port(), "Bob", 255, "ROOM-1"));
+            std::unique_ptr<TcpConnection> server;
+            bool replied = false;
+            uint32_t now = 1000;
+            for (int i = 0; i < 3000 && net.phase() != NetGame::Phase::Failed; ++i) {
+                now += 10;
+                net.update(now);
+                if (!server) server = listener->accept();
+                if (server && !replied) {
+                    std::vector<uint8_t> m;
+                    if (server->poll(m)) {
+                        HelloMsg h;
+                        ASSERT_TRUE(decode(m, h) && h.room == "ROOM-1" && h.version == kProtocolVersion && key_is_zero(h.key) && h.have_turns == 0);      // (a new player: no key)
+                        server->send(encode(RejectMsg{c.reason}));
+                        replied = true;
+                    }
+                }
+                std::this_thread::sleep_for(std::chrono::microseconds(300));
+            }
+            ASSERT_TRUE(replied);
+            ASSERT_EQ(net.phase(), NetGame::Phase::Failed);
+            ASSERT_EQ(net.status_text(), c.text);
+            bool failed = false;
+            for (const NetGame::Event& e : net.take_events()) failed = failed || e.type == NetGame::Event::Type::Failed;
+            ASSERT_TRUE(failed);
+        }
+    } TEST_END();
+}
+
 }  // namespace
 
 int main() {
@@ -860,6 +914,7 @@ int main() {
     run_lan_tests();
     run_seat_tests();
     run_migration_tests();
+    run_reject_tests();
     std::cout << "\n=======================================================\n Total Test Cases: " << g_test_count << "\n Total Assertions: " << g_assert_count
               << "\n Failed:           " << g_test_failures << "\n=======================================================\n";
     return g_test_failures == 0 ? 0 : 1;

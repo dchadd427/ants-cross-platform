@@ -6,6 +6,8 @@
 #include "ants_net/protocol.hpp"
 #include "ants_net/sequencer.hpp"
 #include "ants_net/session.hpp"
+#include "ants_net/attendance.hpp"
+#include "ants_net/turnlog.hpp"
 #include "ants_sim/sim_engine.hpp"
 
 #include <algorithm>
@@ -106,9 +108,9 @@ struct Ids {
     std::vector<uint32_t> ants[sim::MAX_PLAYERS];
 };
 
-Ids build_world(sim::SimulationEngine& sim, uint32_t seed) {
+Ids build_world(sim::SimulationEngine& sim, uint32_t seed, uint32_t match_ms = 720000) {
     Ids ids;
-    sim.init_test_world(60, 60, seed, 720000);
+    sim.init_test_world(60, 60, seed, match_ms);
     const TileCoord hills[sim::MAX_PLAYERS] = {{4, 4}, {50, 4}, {4, 50}, {50, 50}};
     for (uint8_t p = 0; p < sim::MAX_PLAYERS; ++p) sim.grid_mut().set_anthill(p, hills[p]);
     for (int32_t y = 0; y < 60; ++y) sim.grid_mut().set_terrain(30, y, sim::TERRAIN_WATER);
@@ -389,9 +391,39 @@ bool any_decodes(const std::vector<uint8_t>& b) {
     PingMsg m20;
     StartRequestMsg m21;
     LagMsg m22;
+    PresenceMsg m23;
+    VoteMsg m24;
+    CatchUpMsg m25;
+    TurnBatchMsg m26;
+    CaughtUpMsg m27;
     return decode(b, m1) || decode(b, m2) || decode(b, m3) || decode(b, m4) || decode(b, m5) || decode(b, m6) || decode(b, m7) || decode(b, m8) ||
            decode(b, m9) || decode(b, m10) || decode(b, m11) || decode(b, m12) || decode(b, m13) || decode(b, m14) || decode(b, m15) ||
-           decode(b, m16) || decode(b, m17) || decode(b, m18) || decode(b, m19) || decode_ping(b.data(), b.size(), m20) || decode(b, m21) || decode(b, m22);
+           decode(b, m16) || decode(b, m17) || decode(b, m18) || decode(b, m19) || decode_ping(b.data(), b.size(), m20) || decode(b, m21) || decode(b, m22) ||
+           decode(b, m23) || decode(b, m24) || decode(b, m25) || decode(b, m26) || decode(b, m27);      // (protocol 10: Presence, Vote, CatchUp, TurnBatch, CaughtUp)
+}
+
+// A key that is not zero, and different for every `salt`
+SeatKey key_with(uint8_t salt) {
+    SeatKey k{};
+    for (size_t i = 0; i < k.size(); ++i) k[i] = static_cast<uint8_t>(salt * 31u + i * 7u + 1u);
+    return k;
+}
+
+// What a Hello of protocols 6 to 9 looked like (they shared the layout: protocol 9 changed the rules of the match, not a message): no key, no turns. Protocol 10 adds both.
+std::vector<uint8_t> old_layout_hello(uint16_t version, const std::string& name, const std::string& room = std::string(), const std::string& token = std::string()) {
+    std::vector<uint8_t> out = {static_cast<uint8_t>(MsgType::Hello), static_cast<uint8_t>(version & 0xFF), static_cast<uint8_t>(version >> 8), static_cast<uint8_t>(name.size())};
+    const auto put = [&out](const std::string& s) {                  // (byte by byte: GCC 12 reads a range insert into a vector this small as an overread and the project builds with -Werror)
+        for (const char c : s) out.push_back(static_cast<uint8_t>(c));
+    };
+    put(name);
+    out.push_back(0x34);                                              // listen_port 0x1234
+    out.push_back(0x12);
+    out.push_back(255);                                               // want_seat
+    out.push_back(static_cast<uint8_t>(room.size()));
+    put(room);
+    out.push_back(static_cast<uint8_t>(token.size()));
+    put(token);
+    return out;
 }
 
 // A dedicated server's room as the Room message shows it (protocol 7): three guests (no Host slot), the first of them the leader
@@ -408,10 +440,10 @@ RoomMsg server_room_of(uint8_t leader) {
 
 void run_protocol_tests() {
     TEST_CASE("N2.1 Protocol: Every Message Round-Trips And Trailing Or Missing Bytes Are Rejected") {
-        ASSERT_EQ(kProtocolVersion, 9);                                  // 7: the room leader's START; 8: turns of 50 ms, one tick each, the adaptive buffer and the Lag message (type 25); 9: the community-map rules (default ant types, power-ups by tile, the attack clip: the engine's rules, no wire change)
+        ASSERT_EQ(kProtocolVersion, 10);                                 // 7: the room leader's START; 8: turns of 50 ms, one tick each, the adaptive buffer and the Lag message (type 25); 9: the community-map rules; 10: keys, presence, votes and the catch-up stream (types 26 - 30)
         ASSERT_TRUE(kTurnMs == 50 && kTicksPerTurn == 1 && kTurnsPerSecond == 20 && kHashEveryTurns == 20);     // a hash every 20 ticks, one second, as before
         ASSERT_TRUE(turns_for_ms(0) == 0 && turns_for_ms(1) == 1 && turns_for_ms(50) == 1 && turns_for_ms(51) == 2 && turns_for_ms(3000) == 60);
-        ASSERT_EQ(static_cast<int>(MsgType::Last), static_cast<int>(MsgType::Lag));
+        ASSERT_EQ(static_cast<int>(MsgType::Last), static_cast<int>(MsgType::CaughtUp));
         LagMsg lag;
         lag.seat = 2;
         lag.behind_ms = 12345;
@@ -525,10 +557,26 @@ void run_protocol_tests() {
         ASSERT_TRUE(decode(encode(led), led2) && led2.leader == 3 && led2.you == 1 && led2.map_name == "SMALL.LVL" && led2.slots[3].name == "Cat" && led2.slots[2].state == SlotState::Empty);
         StartRequestMsg sr;
         ASSERT_TRUE(decode(encode(sr), sr) && peek_type(encode(sr)) == MsgType::StartRequest);
+        // protocol 10: a Hello and a Welcome that carry a key (the five new messages are N2.40's)
+        HelloMsg keyed;
+        keyed.name = "Ann";
+        keyed.room = "ROOM-7";
+        keyed.key = key_with(1);
+        keyed.have_turns = 1234;
+        HelloMsg keyed2;
+        ASSERT_TRUE(decode(encode(keyed), keyed2) && keyed2.key == key_with(1) && keyed2.have_turns == 1234 && keyed2.room == "ROOM-7");
+        WelcomeMsg welcome_key;
+        welcome_key.player = 3;
+        welcome_key.players = 4;
+        welcome_key.key = key_with(2);
+        welcome_key.flags = kWelcomeRejoin;
+        WelcomeMsg welcome_key2;
+        ASSERT_TRUE(decode(encode(welcome_key), welcome_key2) && welcome_key2.key == key_with(2) && welcome_key2.flags == kWelcomeRejoin && welcome_key2.player == 3);
         // every valid message is rejected with a byte too many and with any byte missing
         const std::vector<std::vector<uint8_t>> all = {encode(hello), encode(w),  encode(r),  encode(cm), encode(t),  encode(a),  encode(hm),
                                                        encode(d),     encode(c),  encode(pr), encode(ac), encode(rf), encode(rs), encode(rq),
-                                                       encode(ph),    encode(hello_port), encode(start), encode(lag), encode(led), encode(sr), encode(server_room_of(255))};
+                                                       encode(ph),    encode(hello_port), encode(start), encode(lag), encode(led), encode(sr), encode(server_room_of(255)),
+                                                       encode(keyed), encode(welcome_key)};
         for (const auto& m : all) {
             std::vector<uint8_t> longer = m;
             longer.push_back(0);
@@ -554,10 +602,14 @@ void run_protocol_tests() {
         bytes = encode(RejectMsg{RejectReason::Full});
         bytes[1] = 0;
         ASSERT_FALSE(decode(bytes, r));
-        bytes[1] = 7;                                                    // the reasons are 1 .. 6 (6 = NoSuchRoom, protocol 6)
+        bytes[1] = 10;                                                   // the reasons are 1 .. 9 (6 = NoSuchRoom, protocol 6; 7 - 9 = Dropped, RejoinFailed, Superseded, protocol 10)
+        ASSERT_FALSE(decode(bytes, r));
+        bytes[1] = 255;
         ASSERT_FALSE(decode(bytes, r));
         bytes[1] = 6;
         ASSERT_TRUE(decode(bytes, r) && r.reason == RejectReason::NoSuchRoom);
+        bytes[1] = 9;
+        ASSERT_TRUE(decode(bytes, r) && r.reason == RejectReason::Superseded);
         DesyncMsg d;
         DesyncMsg good;
         good.player = 1;
@@ -630,14 +682,16 @@ void run_protocol_tests() {
         ASSERT_FALSE(decode(encode(bad_lag), lag2));
         bad_lag.seat = 255;
         ASSERT_FALSE(decode(encode(bad_lag), lag2));
-        // unknown types (24 was one until protocol 7 gave it to StartRequest, and 25 until protocol 8 gave it to Lag)
-        for (uint8_t type : std::vector<uint8_t>{0, 26, 100, 255}) {
+        // unknown types (24 was one until protocol 7 gave it to StartRequest, 25 until protocol 8 gave it to Lag, and 26 - 30 until protocol 10 gave them to Presence, Vote, CatchUp, TurnBatch, CaughtUp)
+        for (uint8_t type : std::vector<uint8_t>{0, 31, 100, 255}) {
             const std::vector<uint8_t> m = {type, 0, 0, 0, 0};
             ASSERT_EQ(peek_type(m), MsgType::None);
         }
         ASSERT_EQ(peek_type(std::vector<uint8_t>{24}), MsgType::StartRequest);
         ASSERT_EQ(peek_type(std::vector<uint8_t>{25}), MsgType::Lag);
-        ASSERT_EQ(static_cast<int>(MsgType::Last), 25);
+        ASSERT_EQ(peek_type(std::vector<uint8_t>{26}), MsgType::Presence);
+        ASSERT_EQ(peek_type(std::vector<uint8_t>{30}), MsgType::CaughtUp);
+        ASSERT_EQ(static_cast<int>(MsgType::Last), 30);
         ASSERT_EQ(peek_type(std::vector<uint8_t>{}), MsgType::None);
     } TEST_END();
 
@@ -649,18 +703,48 @@ void run_protocol_tests() {
         HashMsg hash;
         hash.turn = 10;
         hash.hash = {1, 2, 3, 4, 5, 6, 7, 8};
+        HelloMsg keyed;                                                // the messages of protocol 10 as seeds (N2.40 has the rules one by one; this is the net under them)
+        keyed.name = "Ann";
+        keyed.room = "ROOM-7";
+        keyed.token = "tok";
+        keyed.key = key_with(3);
+        keyed.have_turns = 700;
+        const std::vector<uint8_t> seed_hello = encode(keyed);
+        WelcomeMsg welcome;
+        welcome.player = 2;
+        welcome.players = 4;
+        welcome.key = key_with(4);
+        welcome.flags = kWelcomeRejoin;
+        const std::vector<uint8_t> seed_welcome = encode(welcome);
+        PresenceMsg presence;
+        presence.missing = {{1, PresenceMsg::State::Absent, 42, 0}, {3, PresenceMsg::State::CatchingUp, 31, 63}};
+        presence.vote_seat = 1;
+        presence.votes_continue = 1;
+        presence.voters = 2;
+        presence.your_vote = 2;
+        presence.cap_s = 1700;
+        const std::vector<uint8_t> seed_presence = encode(presence);
+        TurnBatchMsg batch;
+        batch.first_turn = 500;
+        batch.turns.resize(3);
+        batch.turns[0].commands = {cmd(CommandType::GroupMove, 1, 255, 3, 4, {1, 2}), cmd(CommandType::Hatch, 2)};
+        batch.turns[2].commands = {cmd(CommandType::Stop, 0, 255, 0, 0, {9})};
+        for (uint32_t i = 0; i < 3; ++i) batch.turns[i].turn = 500 + i;
+        const std::vector<uint8_t> seed_batch = encode(batch);
         const std::vector<std::vector<uint8_t>> seeds = {encode(turn), encode(hash), encode(CommandMsg{cmd(CommandType::GroupAttack, 2, 255, 5, 5, {1})}),
                                                          encode(ChatMsg{1, true, "hello"}), encode(hello_of(1, "Ann")), encode(WelcomeMsg{1, 4}),
                                                          encode(ProposeMsg{1, 2}), encode(AcceptMsg{1, 100, 98}), encode(RefuseMsg{1, 1}),
                                                          encode(ResumeMsg{1, 2, 500}), encode(RequestMsg{40}), encode(PeerHelloMsg{3}),
-                                                         encode(server_room_of(0)), encode(server_room_of(255)), encode(StartRequestMsg{}), encode(LagMsg{2, 7000})};
+                                                         encode(server_room_of(0)), encode(server_room_of(255)), encode(StartRequestMsg{}), encode(LagMsg{2, 7000}), seed_hello,
+                                                         seed_welcome, encode(RejectMsg{RejectReason::Superseded}), seed_presence, encode(VoteMsg{2, true}), encode(CatchUpMsg{100, 4000}),
+                                                         seed_batch, encode(CaughtUpMsg{4000, {1, 2, 3, 4, 5, 6, 7, 8}})};
         size_t accepted = 0;
         for (int i = 0; i < 400000; ++i) {
             std::vector<uint8_t> buf;
             if (i % 3 == 0) {
                 buf.resize(rng.below(80));
                 for (auto& x : buf) x = static_cast<uint8_t>(rng.below(256));
-                if (!buf.empty()) buf[0] = static_cast<uint8_t>(1 + rng.below(25));    // a plausible type byte
+                if (!buf.empty()) buf[0] = static_cast<uint8_t>(1 + rng.below(30));    // a plausible type byte
             } else {
                 buf = seeds[rng.below(static_cast<uint32_t>(seeds.size()))];
                 for (uint32_t m = 1 + rng.below(3); m > 0; --m) buf[rng.below(static_cast<uint32_t>(buf.size()))] = static_cast<uint8_t>(rng.below(256));
@@ -681,7 +765,29 @@ void run_protocol_tests() {
             RoomMsg room;
             StartRequestMsg sreq;
             LagMsg lg;
+            RejectMsg rj;
+            PresenceMsg pres;
+            VoteMsg vt;
+            CatchUpMsg cu;
+            TurnBatchMsg tb;
+            CaughtUpMsg cg;
             if (decode(buf, lg)) { ++accepted; ASSERT_TRUE(encode(lg) == buf); }
+            if (decode(buf, rj)) { ++accepted; ASSERT_TRUE(encode(rj) == buf); }
+            if (decode(buf, pres)) {                   // a Presence that gets through is one that an honest server could have said, and encodes back to the same bytes
+                ++accepted;
+                ASSERT_TRUE(encode(pres) == buf);
+                ASSERT_TRUE(pres.missing.size() <= sim::MAX_PLAYERS && pres.votes_continue <= pres.voters && pres.voters <= sim::MAX_PLAYERS && pres.your_vote <= 2);
+                ASSERT_TRUE(pres.vote_seat == 255 || (pres.vote_seat < sim::MAX_PLAYERS && !pres.missing.empty()));
+            }
+            if (decode(buf, vt)) { ++accepted; ASSERT_TRUE(encode(vt) == buf && buf.size() == 3); }
+            if (decode(buf, cu)) { ++accepted; ASSERT_TRUE(encode(cu) == buf && cu.first_turn <= cu.total_turns); }
+            if (decode(buf, tb)) {
+                ++accepted;
+                ASSERT_TRUE(encode(tb) == buf);
+                ASSERT_TRUE(!tb.turns.empty() && tb.turns.size() <= kMaxBatchTurns && buf.size() <= kMaxMessageBytes);
+                for (size_t k = 0; k < tb.turns.size(); ++k) ASSERT_TRUE(tb.turns[k].turn == tb.first_turn + k && tb.turns[k].commands.size() <= kMaxTurnCommands);
+            }
+            if (decode(buf, cg)) { ++accepted; ASSERT_TRUE(encode(cg) == buf && buf.size() == 69); }
             if (decode(buf, t)) {
                 ++accepted;
                 ASSERT_TRUE(encode(t) == buf);
@@ -801,6 +907,515 @@ void run_protocol_tests() {
             }
         }
         ASSERT_TRUE(with_leader > 1000);
+    } TEST_END();
+
+    TEST_CASE("N2.40 Protocol 10: Keys In Hello And Welcome, Three More Rejections, Presence, Vote, CatchUp, TurnBatch And CaughtUp: Numbers, Layouts Byte By Byte, Every Truncation, Every Range Rule, The Batch Encoders Agree") {
+        // ---- the numbers ----
+        ASSERT_EQ(kProtocolVersion, 10);
+        ASSERT_TRUE(static_cast<int>(MsgType::Presence) == 26 && static_cast<int>(MsgType::Vote) == 27 && static_cast<int>(MsgType::CatchUp) == 28 &&
+                    static_cast<int>(MsgType::TurnBatch) == 29 && static_cast<int>(MsgType::CaughtUp) == 30 && static_cast<int>(MsgType::Last) == 30);
+        ASSERT_TRUE(static_cast<int>(RejectReason::Dropped) == 7 && static_cast<int>(RejectReason::RejoinFailed) == 8 && static_cast<int>(RejectReason::Superseded) == 9);
+        ASSERT_TRUE(kKeyBytes == 16 && kMaxBatchTurns == 4096 && kBatchBytes == 48 * 1024 && kBatchHeaderBytes == 7 && kWelcomeRejoin == 1 && kCapSecondsMore == 0xFFFF);
+        for (const MsgType t : {MsgType::Presence, MsgType::Vote, MsgType::CatchUp, MsgType::TurnBatch, MsgType::CaughtUp}) {
+            ASSERT_EQ(peek_type(std::vector<uint8_t>{static_cast<uint8_t>(t)}), t);
+        }
+        ASSERT_EQ(peek_type(std::vector<uint8_t>{31}), MsgType::None);
+
+        // ---- the keys: zero is no key, a key matches only itself, and never "no key" ----
+        {
+            SeatKey zero{};
+            ASSERT_TRUE(key_is_zero(zero));
+            ASSERT_FALSE(key_matches(zero, zero));                           // "no key" matches nothing, not even "no key"
+            ASSERT_FALSE(key_matches(zero, key_with(1)));
+            ASSERT_FALSE(key_matches(key_with(1), zero));
+            ASSERT_TRUE(key_matches(key_with(1), key_with(1)));
+            ASSERT_FALSE(key_matches(key_with(1), key_with(2)));
+            for (size_t i = 0; i < kKeyBytes; ++i) {                         // a key that differs in ANY one byte, in any bit, is another key
+                for (unsigned bit = 0; bit < 8; ++bit) {
+                    SeatKey other = key_with(1);
+                    other[i] = static_cast<uint8_t>(other[i] ^ (1u << bit));
+                    ASSERT_FALSE(key_matches(key_with(1), other));
+                    ASSERT_FALSE(key_is_zero(other));
+                }
+                SeatKey one_byte{};
+                one_byte[i] = 1;
+                ASSERT_FALSE(key_is_zero(one_byte));                         // a key with one byte set, wherever it is, is a key
+            }
+        }
+
+        // ---- Hello: the layout (v6 fields, then the key and the turns), the rules ----
+        {
+            HelloMsg h;
+            h.name = "Ann";
+            h.listen_port = 0x1234;
+            h.want_seat = 2;
+            h.room = "ROOM-7";
+            h.token = "tok";
+            h.key = key_with(5);
+            h.have_turns = 0x01020304;
+            const std::vector<uint8_t> bytes = encode(h);
+            ASSERT_EQ(bytes.size(), size_t{1 + 2 + 4 + 2 + 1 + 7 + 4 + 16 + 4});     // type, version, "Ann", port, seat, "ROOM-7", "tok", key, turns
+            ASSERT_TRUE(bytes[0] == 1 && bytes[1] == 10 && bytes[2] == 0);
+            const SeatKey key5 = key_with(5);
+            ASSERT_TRUE(std::equal(key5.begin(), key5.end(), bytes.begin() + static_cast<std::ptrdiff_t>(bytes.size() - 20)));       // the key: 16 bytes
+            ASSERT_TRUE(bytes[bytes.size() - 4] == 4 && bytes[bytes.size() - 3] == 3 && bytes[bytes.size() - 2] == 2 && bytes[bytes.size() - 1] == 1);   // the turns, little endian
+            HelloMsg back;
+            ASSERT_TRUE(decode(bytes, back) && back.version == 10 && back.name == "Ann" && back.listen_port == 0x1234 && back.want_seat == 2 && back.room == "ROOM-7" && back.token == "tok" &&
+                        back.key == key_with(5) && back.have_turns == 0x01020304);
+            ASSERT_TRUE(encode(back) == bytes);
+            // a new player: no key, no turns; the largest count with a key; no key with turns is no Hello (a count belongs to a key)
+            HelloMsg fresh;
+            ASSERT_TRUE(decode(encode(fresh), back) && key_is_zero(back.key) && back.have_turns == 0);
+            h.have_turns = 0xFFFFFFFFu;
+            ASSERT_TRUE(decode(encode(h), back) && back.have_turns == 0xFFFFFFFFu);
+            h.have_turns = 0;
+            ASSERT_TRUE(decode(encode(h), back) && back.key == key_with(5) && back.have_turns == 0);        // a key and nothing yet: starts from nothing
+            HelloMsg orphan;
+            orphan.have_turns = 1;
+            ASSERT_FALSE(decode(encode(orphan), back));
+            // a key that is cut short: every length between the end of the token and the end of the message
+            const std::vector<uint8_t> core = encode(h);
+            for (size_t keep = core.size() - 20; keep < core.size(); ++keep) {
+                const std::vector<uint8_t> shorter(core.begin(), core.begin() + static_cast<std::ptrdiff_t>(keep));
+                ASSERT_FALSE(decode(shorter, back));
+                ASSERT_FALSE(any_decodes(shorter));
+            }
+            std::vector<uint8_t> longer = core;
+            longer.push_back(0);
+            ASSERT_FALSE(decode(longer, back));
+            // the prefix of every version's Hello reads the same: a host answers "version mismatch" without reading what follows
+            ASSERT_TRUE(decode_hello_prefix(core.data(), core.size(), back) && back.version == 10 && back.name == "Ann");
+            for (const uint16_t version : {uint16_t{6}, uint16_t{7}, uint16_t{8}, uint16_t{9}}) {         // the old layout (protocols 6 to 9 had it): no key, no turns
+                const std::vector<uint8_t> old = old_layout_hello(version, "Old", "ROOM-7", "tok");
+                ASSERT_FALSE(decode(old, back));                                             // it is not a Hello of this protocol ...
+                ASSERT_TRUE(decode_hello_prefix(old.data(), old.size(), back) && back.version == version && back.name == "Old");    // ... but its version and name are read
+                ASSERT_FALSE(any_decodes(old));
+            }
+        }
+
+        // ---- Welcome: the layout, the flags, the rules ----
+        {
+            WelcomeMsg w;
+            w.player = 2;
+            w.players = 4;
+            w.key = key_with(6);
+            w.flags = kWelcomeRejoin;
+            std::vector<uint8_t> bytes = encode(w);
+            ASSERT_EQ(bytes.size(), size_t{20});                                             // type, player, players, key, flags
+            ASSERT_TRUE(bytes[0] == 2 && bytes[1] == 2 && bytes[2] == 4 && bytes[19] == 1);
+            const SeatKey key6 = key_with(6);
+            ASSERT_TRUE(std::equal(key6.begin(), key6.end(), bytes.begin() + 3));
+            WelcomeMsg back;
+            ASSERT_TRUE(decode(bytes, back) && back.player == 2 && back.players == 4 && back.key == key_with(6) && back.flags == kWelcomeRejoin);
+            ASSERT_TRUE(encode(back) == bytes);
+            WelcomeMsg lan;                                                                  // a LAN or direct host: no key, no flags
+            lan.player = 1;
+            lan.players = 4;
+            ASSERT_TRUE(decode(encode(lan), back) && key_is_zero(back.key) && back.flags == 0);
+            w.flags = 0;                                                                     // a seat in the room: a key and no rejoin
+            ASSERT_TRUE(decode(encode(w), back) && back.key == key_with(6) && back.flags == 0);
+            for (unsigned flags = 2; flags < 256; ++flags) {                                 // the flags are 0 or 1
+                bytes = encode(w);
+                bytes[19] = static_cast<uint8_t>(flags);
+                ASSERT_FALSE(decode(bytes, back));
+            }
+            lan.flags = kWelcomeRejoin;                                                      // a rejoin is of a seat that has a key
+            ASSERT_FALSE(decode(encode(lan), back));
+            // the old layout (type, player, players) and a cut key
+            ASSERT_FALSE(decode(std::vector<uint8_t>{2, 1, 4}, back));
+            bytes = encode(w);
+            for (size_t keep = 3; keep < bytes.size(); ++keep) ASSERT_FALSE(any_decodes(std::vector<uint8_t>(bytes.begin(), bytes.begin() + static_cast<std::ptrdiff_t>(keep))));
+            bytes.push_back(1);
+            ASSERT_FALSE(decode(bytes, back));
+        }
+
+        // ---- Reject: the three new reasons ----
+        for (unsigned reason = 0; reason < 256; ++reason) {
+            RejectMsg rj;
+            const std::vector<uint8_t> bytes = {static_cast<uint8_t>(MsgType::Reject), static_cast<uint8_t>(reason)};
+            ASSERT_EQ(decode(bytes, rj), reason >= 1 && reason <= 9);
+            if (reason >= 1 && reason <= 9) {
+                ASSERT_TRUE(static_cast<unsigned>(rj.reason) == reason && encode(rj) == bytes);
+            }
+        }
+
+        // ---- Presence ----
+        {
+            PresenceMsg base;
+            base.missing = {{1, PresenceMsg::State::Absent, 42, 0}, {3, PresenceMsg::State::CatchingUp, 31, 63}};
+            base.vote_seat = 1;
+            base.votes_continue = 1;
+            base.voters = 2;
+            base.your_vote = 2;
+            base.cap_s = 1700;
+            const std::vector<uint8_t> bytes = encode(base);
+            ASSERT_EQ(bytes.size(), size_t{1 + 1 + 2 * 5 + 4 + 2});
+            ASSERT_TRUE(bytes[0] == 26 && bytes[1] == 2);
+            ASSERT_TRUE(bytes[2] == 1 && bytes[3] == 1 && bytes[4] == 42 && bytes[5] == 0 && bytes[6] == 0);                    // seat 1, absent, waited 42 s (u16), no progress
+            ASSERT_TRUE(bytes[7] == 3 && bytes[8] == 2 && bytes[9] == 31 && bytes[10] == 0 && bytes[11] == 63);                // seat 3, catching up, 31 s, 63 %
+            ASSERT_TRUE(bytes[12] == 1 && bytes[13] == 1 && bytes[14] == 2 && bytes[15] == 2 && bytes[16] == (1700 & 0xFF) && bytes[17] == (1700 >> 8));
+            PresenceMsg back;
+            ASSERT_TRUE(decode(bytes, back) && back.missing.size() == 2 && back.missing[0].seat == 1 && back.missing[0].waited_s == 42 && back.missing[1].state == PresenceMsg::State::CatchingUp &&
+                        back.missing[1].progress == 63 && back.vote_seat == 1 && back.votes_continue == 1 && back.voters == 2 && back.your_vote == 2 && back.cap_s == 1700);
+            ASSERT_TRUE(encode(back) == bytes);
+            // the u16 fields use both bytes: a wait of 0xFFFF s (it saturates there) and one of 0x1234, a cap of 0xABCD
+            PresenceMsg wide;
+            wide.missing = {{2, PresenceMsg::State::Absent, 0xFFFF, 0}, {0, PresenceMsg::State::CatchingUp, 0x1234, 100}};
+            wide.vote_seat = 2;
+            wide.votes_continue = 3;
+            wide.voters = 3;
+            wide.your_vote = 1;
+            wide.cap_s = 0xABCD;
+            ASSERT_TRUE(decode(encode(wide), back) && back.missing[0].waited_s == 0xFFFF && back.missing[1].waited_s == 0x1234 && back.cap_s == 0xABCD && encode(back) == encode(wide));
+            // the match runs: nobody missing, no vote, any number of voters; the cap is told all the same
+            PresenceMsg runs;
+            runs.voters = 3;
+            runs.cap_s = 0;
+            ASSERT_TRUE(decode(encode(runs), back) && back.missing.empty() && back.vote_seat == 255 && back.voters == 3 && back.cap_s == 0);
+            runs.cap_s = 0xFFFF;
+            ASSERT_TRUE(decode(encode(runs), back) && back.cap_s == 0xFFFF);
+            ASSERT_EQ(encode(PresenceMsg{}).size(), size_t{1 + 1 + 4 + 2});
+            // every truncation and a byte too many
+            for (size_t keep = 0; keep < bytes.size(); ++keep) {
+                const std::vector<uint8_t> shorter(bytes.begin(), bytes.begin() + static_cast<std::ptrdiff_t>(keep));
+                ASSERT_FALSE(decode(shorter, back));
+                ASSERT_FALSE(any_decodes(shorter));
+            }
+            std::vector<uint8_t> longer = bytes;
+            longer.push_back(0);
+            ASSERT_FALSE(decode(longer, back));
+            // every range rule, one at a time, on the base message
+            auto with = [&](size_t at, uint8_t value) {
+                std::vector<uint8_t> b = bytes;
+                b[at] = value;
+                return decode(b, back);
+            };
+            ASSERT_FALSE(with(1, 5));                                    // more than four missing
+            ASSERT_FALSE(with(1, 4));                                    // four promised, two there
+            ASSERT_FALSE(with(1, 3));                                    // three promised: the vote's bytes are read as the third entry, and then a byte is short
+            ASSERT_FALSE(with(2, 4));                                    // a seat that does not exist (the entry's seat, and the vote is about it)
+            ASSERT_FALSE(with(7, 1));                                    // a seat twice
+            ASSERT_FALSE(with(3, 0));                                    // a state that is neither absent nor catching up
+            ASSERT_FALSE(with(3, 3));
+            ASSERT_FALSE(with(8, 0));
+            ASSERT_FALSE(with(8, 3));
+            ASSERT_FALSE(with(6, 1));                                    // an absent seat has no progress
+            ASSERT_TRUE(with(11, 100) && back.missing[1].progress == 100);
+            ASSERT_FALSE(with(11, 101));                                 // a progress above 100
+            ASSERT_FALSE(with(11, 255));
+            ASSERT_TRUE(with(9, 42) && back.missing[1].waited_s == 42);  // equal waits are in order (a tie)
+            ASSERT_FALSE(with(9, 43));                                   // the second seat waited longer than the first: not longest away first
+            ASSERT_TRUE(with(4, 255) && back.missing[0].waited_s == 255);// (a longer first wait is in order: the second is 31)
+            ASSERT_FALSE(with(12, 3));                                   // the vote is about a seat that is catching up
+            ASSERT_FALSE(with(12, 0));                                   // ... or about one that is not listed
+            ASSERT_FALSE(with(12, 2));
+            ASSERT_FALSE(with(12, 4));
+            ASSERT_FALSE(with(12, 254));
+            ASSERT_FALSE(with(13, 3));                                   // more votes (3) than voters (2)
+            ASSERT_TRUE(with(13, 2));
+            ASSERT_FALSE(with(14, 5));                                   // five voters
+            ASSERT_FALSE(with(14, 255));
+            ASSERT_TRUE(with(14, 1) && back.voters == 1);                // one vote of one voter is all of them
+            ASSERT_FALSE(with(14, 0));                                   // one vote and no voter
+            ASSERT_FALSE(with(15, 3));                                   // a choice of the receiver that is not 0, 1 or 2
+            ASSERT_TRUE(with(15, 0) && with(15, 1) && with(15, 2));
+            ASSERT_TRUE(with(16, 0) && back.cap_s == (1700 & 0xFF00));   // the cap, a u16 that nothing constrains
+            ASSERT_TRUE(with(17, 0) && back.cap_s == (1700 & 0x00FF));
+            ASSERT_TRUE(with(17, 0xFF) && back.cap_s == (0xFF00 | (1700 & 0xFF)));
+            // no vote: nobody has voted, and the receiver has no choice
+            PresenceMsg no_vote = base;
+            no_vote.vote_seat = 255;
+            no_vote.votes_continue = 0;
+            no_vote.your_vote = 0;
+            ASSERT_TRUE(decode(encode(no_vote), back) && back.vote_seat == 255);
+            no_vote.votes_continue = 1;
+            ASSERT_FALSE(decode(encode(no_vote), back));
+            no_vote.votes_continue = 0;
+            no_vote.your_vote = 1;
+            ASSERT_FALSE(decode(encode(no_vote), back));
+            // the vote is about the FIRST ABSENT seat of the list: a catching-up seat that is away longer comes first and is not the subject
+            PresenceMsg catching_first;
+            catching_first.missing = {{3, PresenceMsg::State::CatchingUp, 90, 10}, {1, PresenceMsg::State::Absent, 60, 0}, {0, PresenceMsg::State::Absent, 40, 0}};
+            catching_first.voters = 1;
+            catching_first.vote_seat = 1;
+            ASSERT_TRUE(decode(encode(catching_first), back) && back.vote_seat == 1);
+            catching_first.vote_seat = 0;                                // the second absent seat is not the subject
+            ASSERT_FALSE(decode(encode(catching_first), back));
+            catching_first.vote_seat = 3;
+            ASSERT_FALSE(decode(encode(catching_first), back));
+            // four missing (everybody), all catching up: no vote is possible
+            PresenceMsg all_four;
+            for (uint8_t s = 0; s < 4; ++s) all_four.missing.push_back({s, PresenceMsg::State::CatchingUp, static_cast<uint16_t>(100 - s), static_cast<uint8_t>(s * 10)});
+            ASSERT_TRUE(decode(encode(all_four), back) && back.missing.size() == 4);
+            all_four.vote_seat = 0;
+            ASSERT_FALSE(decode(encode(all_four), back));
+            // the encoder never writes more than four entries
+            PresenceMsg crowd = all_four;
+            crowd.vote_seat = 255;
+            crowd.missing.push_back({0, PresenceMsg::State::Absent, 1, 0});
+            ASSERT_EQ(encode(crowd)[1], 4);
+        }
+
+        // ---- Vote ----
+        {
+            for (uint8_t seat = 0; seat < 4; ++seat) {
+                for (const bool cont : {false, true}) {
+                    VoteMsg v;
+                    v.seat = seat;
+                    v.continue_without = cont;
+                    const std::vector<uint8_t> bytes = encode(v);
+                    ASSERT_TRUE(bytes.size() == 3 && bytes[0] == 27 && bytes[1] == seat && bytes[2] == (cont ? 1 : 0));
+                    VoteMsg back;
+                    ASSERT_TRUE(decode(bytes, back) && back.seat == seat && back.continue_without == cont);
+                }
+            }
+            VoteMsg back;
+            ASSERT_FALSE(decode(std::vector<uint8_t>{27, 4, 0}, back));       // a seat that does not exist
+            ASSERT_FALSE(decode(std::vector<uint8_t>{27, 255, 0}, back));
+            ASSERT_FALSE(decode(std::vector<uint8_t>{27, 0, 2}, back));       // a choice that is neither
+            ASSERT_FALSE(decode(std::vector<uint8_t>{27, 0}, back));          // short, long
+            ASSERT_FALSE(decode(std::vector<uint8_t>{27}, back));
+            ASSERT_FALSE(decode(std::vector<uint8_t>{27, 0, 1, 0}, back));
+            ASSERT_FALSE(decode(std::vector<uint8_t>{26, 0, 1}, back));       // another type
+            ASSERT_FALSE(any_decodes(std::vector<uint8_t>{27, 0}) || any_decodes(std::vector<uint8_t>{27, 0, 1, 0}) || any_decodes(std::vector<uint8_t>{27, 4, 0}));
+        }
+
+        // ---- CatchUp ----
+        {
+            CatchUpMsg c;
+            c.first_turn = 0x01020304;
+            c.total_turns = 0x05060708;
+            const std::vector<uint8_t> bytes = encode(c);
+            ASSERT_TRUE(bytes.size() == 9 && bytes[0] == 28 && bytes[1] == 4 && bytes[4] == 1 && bytes[5] == 8 && bytes[8] == 5);
+            CatchUpMsg back;
+            ASSERT_TRUE(decode(bytes, back) && back.first_turn == 0x01020304 && back.total_turns == 0x05060708);
+            c.first_turn = c.total_turns;                                      // nothing to stream: the client has everything
+            ASSERT_TRUE(decode(encode(c), back) && back.first_turn == back.total_turns);
+            c.first_turn = 0;
+            c.total_turns = 0;
+            ASSERT_TRUE(decode(encode(c), back));
+            c.first_turn = 0xFFFFFFFFu;
+            c.total_turns = 0xFFFFFFFFu;
+            ASSERT_TRUE(decode(encode(c), back));
+            c.first_turn = 6;                                                  // the stream cannot start after its end
+            c.total_turns = 5;
+            ASSERT_FALSE(decode(encode(c), back));
+            c.first_turn = 0xFFFFFFFFu;
+            c.total_turns = 0;
+            ASSERT_FALSE(decode(encode(c), back));
+            for (size_t keep = 0; keep < bytes.size(); ++keep) ASSERT_FALSE(any_decodes(std::vector<uint8_t>(bytes.begin(), bytes.begin() + static_cast<std::ptrdiff_t>(keep))));
+            std::vector<uint8_t> longer = bytes;
+            longer.push_back(0);
+            ASSERT_FALSE(decode(longer, back));
+        }
+
+        // ---- CaughtUp ----
+        {
+            CaughtUpMsg c;
+            c.turns = 36000;
+            c.hash = {0x1111111111111111ull, 2, 3, 4, 5, 6, 7, 0x8888888888888888ull};
+            const std::vector<uint8_t> bytes = encode(c);
+            ASSERT_TRUE(bytes.size() == 1 + 4 + 64 && bytes[0] == 30 && bytes[1] == (36000 & 0xFF) && bytes[2] == ((36000 >> 8) & 0xFF) && bytes[5] == 0x11 && bytes[bytes.size() - 1] == 0x88);
+            CaughtUpMsg back;
+            ASSERT_TRUE(decode(bytes, back) && back.turns == 36000 && back.hash == c.hash);
+            ASSERT_TRUE(encode(back) == bytes);
+            for (size_t keep = 0; keep < bytes.size(); ++keep) {
+                const std::vector<uint8_t> shorter(bytes.begin(), bytes.begin() + static_cast<std::ptrdiff_t>(keep));
+                ASSERT_FALSE(decode(shorter, back));
+                ASSERT_FALSE(any_decodes(shorter));
+            }
+            std::vector<uint8_t> longer = bytes;
+            longer.push_back(0);
+            ASSERT_FALSE(decode(longer, back));
+        }
+
+        // ---- TurnBatch ----
+        {
+            auto pack = [](const std::vector<TurnMsg>& turns) {                // the packing by hand: u16 count, the commands (not TurnLog's: that is N2.41's to prove the same)
+                std::vector<uint8_t> out;
+                for (const TurnMsg& t : turns) {
+                    out.push_back(static_cast<uint8_t>(t.commands.size() & 0xFF));
+                    out.push_back(static_cast<uint8_t>(t.commands.size() >> 8));
+                    for (const Command& c : t.commands) sim::encode(c, out);
+                }
+                return out;
+            };
+            TurnBatchMsg b;
+            b.first_turn = 0x00010203;
+            b.turns.resize(4);
+            b.turns[0].commands = {cmd(CommandType::GroupMove, 0, 255, 1, 2, {1}), cmd(CommandType::Hatch, 1), cmd(CommandType::AllianceInvite, 2, 3)};
+            b.turns[1].commands = {};
+            std::vector<uint32_t> thirty_two;
+            for (uint32_t i = 0; i < 32; ++i) thirty_two.push_back(1000 + i);
+            b.turns[2].commands = {cmd(CommandType::GroupAttack, 3, 255, 59, 59, thirty_two)};
+            b.turns[3].commands = {cmd(CommandType::Stop, 1, 255, 0, 0, {7, 8}), cmd(CommandType::Drop, 2)};
+            for (uint32_t i = 0; i < 4; ++i) b.turns[i].turn = b.first_turn + i;
+            const std::vector<uint8_t> bytes = encode(b);
+            const std::vector<uint8_t> packed = pack(b.turns);
+            ASSERT_EQ(bytes.size(), kBatchHeaderBytes + packed.size());
+            ASSERT_TRUE(bytes[0] == 29 && bytes[1] == 3 && bytes[2] == 2 && bytes[3] == 1 && bytes[4] == 0 && bytes[5] == 4 && bytes[6] == 0);
+            ASSERT_TRUE(std::equal(packed.begin(), packed.end(), bytes.begin() + static_cast<std::ptrdiff_t>(kBatchHeaderBytes)));
+            TurnBatchMsg back;
+            ASSERT_TRUE(decode(bytes, back) && back.first_turn == b.first_turn && back.turns.size() == 4);
+            for (uint32_t i = 0; i < 4; ++i) ASSERT_TRUE(back.turns[i].turn == b.first_turn + i && back.turns[i].commands == b.turns[i].commands);
+            ASSERT_TRUE(encode(back) == bytes);
+            // the two encoders agree: from the turns, and from the turns packed already
+            ASSERT_TRUE(encode_turn_batch_packed(b.first_turn, 4, packed.data(), packed.size()) == bytes);
+            ASSERT_TRUE(encode_turn_batch_packed(0, 0, packed.data(), packed.size()).empty());            // no turn: no message
+            ASSERT_TRUE(encode_turn_batch_packed(0, static_cast<uint32_t>(kMaxBatchTurns) + 1, packed.data(), packed.size()).empty());
+            ASSERT_TRUE(encode_turn_batch_packed(5, 1, nullptr, 0).size() == kBatchHeaderBytes);          // (a count that its bytes do not match is the caller's: this is no message that decodes)
+            ASSERT_FALSE(decode(encode_turn_batch_packed(5, 1, nullptr, 0), back));
+            Lcg rng(40);
+            for (int round = 0; round < 200; ++round) {                        // random batches: both ways round give the same bytes, and decoding gives the turns back
+                TurnBatchMsg r;
+                r.first_turn = rng.below(1000000);
+                const uint32_t count = 1 + rng.below(40);
+                r.turns.resize(count);
+                for (uint32_t i = 0; i < count; ++i) {
+                    r.turns[i].turn = r.first_turn + i;
+                    const uint32_t n = rng.below(4) == 0 ? rng.below(6) : 0;
+                    for (uint32_t k = 0; k < n; ++k) {
+                        const uint8_t issuer = static_cast<uint8_t>(rng.below(4));
+                        if (rng.below(3) == 0) {
+                            r.turns[i].commands.push_back(cmd(CommandType::Hatch, issuer));
+                        } else {
+                            std::vector<uint32_t> ants;
+                            for (uint32_t a = 1 + rng.below(32); a > 0; --a) ants.push_back(rng.below(100000));
+                            r.turns[i].commands.push_back(cmd(CommandType::GroupMove, issuer, 255, static_cast<int16_t>(rng.below(60)), static_cast<int16_t>(rng.below(60)), ants));
+                        }
+                    }
+                }
+                const std::vector<uint8_t> a = encode(r);
+                const std::vector<uint8_t> p = pack(r.turns);
+                ASSERT_TRUE(encode_turn_batch_packed(r.first_turn, count, p.data(), p.size()) == a);
+                TurnBatchMsg again;
+                ASSERT_TRUE(decode(a, again) && again.first_turn == r.first_turn && again.turns.size() == count);
+                for (uint32_t i = 0; i < count; ++i) ASSERT_TRUE(again.turns[i].turn == r.turns[i].turn && again.turns[i].commands == r.turns[i].commands);
+            }
+            // every truncation (a turn that ends inside the buffer, a count that promises more, a half command) and a byte too many
+            for (size_t keep = 0; keep < bytes.size(); ++keep) {
+                const std::vector<uint8_t> shorter(bytes.begin(), bytes.begin() + static_cast<std::ptrdiff_t>(keep));
+                ASSERT_FALSE(decode(shorter, back));
+                ASSERT_FALSE(any_decodes(shorter));
+            }
+            std::vector<uint8_t> longer = bytes;
+            longer.push_back(0);
+            ASSERT_FALSE(decode(longer, back));
+            longer = bytes;
+            longer.insert(longer.end(), {0, 0});                               // the bytes of another (empty) turn that the count does not promise
+            ASSERT_FALSE(decode(longer, back));
+            // the count: 0 and 4097 are refused; 4096 (empty turns: 2 bytes each) is the largest
+            {
+                std::vector<uint8_t> empty_turns = {29, 0, 0, 0, 0, 0, 0};
+                ASSERT_FALSE(decode(empty_turns, back));                       // count 0
+                TurnBatchMsg full;
+                full.first_turn = 7;
+                full.turns.resize(kMaxBatchTurns);
+                const std::vector<uint8_t> big = encode(full);
+                ASSERT_EQ(big.size(), kBatchHeaderBytes + 2 * kMaxBatchTurns);
+                ASSERT_TRUE(decode(big, back) && back.turns.size() == kMaxBatchTurns && back.turns.back().turn == 7 + kMaxBatchTurns - 1);
+                std::vector<uint8_t> too_many = big;                           // count 4097 and the 2 bytes of the extra turn that it promises
+                too_many[5] = static_cast<uint8_t>((kMaxBatchTurns + 1) & 0xFF);
+                too_many[6] = static_cast<uint8_t>((kMaxBatchTurns + 1) >> 8);
+                too_many.insert(too_many.end(), {0, 0});
+                ASSERT_FALSE(decode(too_many, back));
+                full.turns.resize(kMaxBatchTurns + 5);                         // the encoder cuts what the decoder would refuse
+                ASSERT_EQ(encode(full).size(), big.size());
+            }
+            // the commands of a turn: at most kMaxTurnCommands (512), written as a count that is checked before any command is read
+            {
+                TurnBatchMsg five_twelve;
+                five_twelve.turns.resize(1);
+                for (size_t i = 0; i < kMaxTurnCommands; ++i) five_twelve.turns[0].commands.push_back(cmd(CommandType::Hatch, static_cast<uint8_t>(i % 4)));
+                const std::vector<uint8_t> ok = encode(five_twelve);
+                ASSERT_TRUE(decode(ok, back) && back.turns[0].commands.size() == kMaxTurnCommands);
+                std::vector<uint8_t> over = ok;                                // 513: the count and the command that it promises
+                over[kBatchHeaderBytes] = static_cast<uint8_t>((kMaxTurnCommands + 1) & 0xFF);
+                over[kBatchHeaderBytes + 1] = static_cast<uint8_t>((kMaxTurnCommands + 1) >> 8);
+                sim::encode(cmd(CommandType::Hatch, 0), over);
+                ASSERT_FALSE(decode(over, back));
+                five_twelve.turns[0].commands.push_back(cmd(CommandType::Hatch, 0));    // (the encoder cuts at 512)
+                ASSERT_EQ(encode(five_twelve).size(), ok.size());
+                std::vector<uint8_t> lie = ok;                                 // a count of 65535 and a few bytes
+                lie[kBatchHeaderBytes] = 0xFF;
+                lie[kBatchHeaderBytes + 1] = 0xFF;
+                ASSERT_FALSE(decode(lie, back));
+            }
+            // a command that is no command (unknown type, 33 ants, an ant list on a Hatch) inside a batch
+            {
+                std::vector<uint8_t> bad = {29, 1, 0, 0, 0, 1, 0, 1, 0};       // one turn, one command
+                const std::vector<uint8_t> good_command = {static_cast<uint8_t>(CommandType::Hatch), 0, 255, 0, 0, 0, 0, 0};
+                std::vector<uint8_t> v = bad;
+                v.insert(v.end(), good_command.begin(), good_command.end());
+                ASSERT_TRUE(decode(v, back));
+                v[kBatchHeaderBytes + 2] = 0;                                  // type None
+                ASSERT_FALSE(decode(v, back));
+                v[kBatchHeaderBytes + 2] = 99;                                 // unknown type
+                ASSERT_FALSE(decode(v, back));
+                v[kBatchHeaderBytes + 2] = static_cast<uint8_t>(CommandType::Hatch);
+                v[kBatchHeaderBytes + 2 + 7] = 1;                              // a Hatch with an ant list
+                v.insert(v.end(), {1, 0, 0, 0});
+                ASSERT_FALSE(decode(v, back));
+                std::vector<uint8_t> w = bad;
+                w.insert(w.end(), {static_cast<uint8_t>(CommandType::GroupMove), 0, 255, 0, 0, 0, 0, 33});     // 33 ants
+                w.insert(w.end(), 33 * 4, 0);
+                ASSERT_FALSE(decode(w, back));
+            }
+            // the turn numbers must not wrap: first_turn + count - 1 is at most 0xFFFFFFFF
+            {
+                TurnBatchMsg edge;
+                edge.first_turn = 0xFFFFFFFFu - 2;
+                edge.turns.resize(3);
+                ASSERT_TRUE(decode(encode(edge), back) && back.turns[2].turn == 0xFFFFFFFFu);
+                edge.first_turn = 0xFFFFFFFFu - 1;                             // three turns from here would end past the last number
+                ASSERT_FALSE(decode(encode(edge), back));
+                edge.first_turn = 0xFFFFFFFFu;
+                edge.turns.resize(1);
+                ASSERT_TRUE(decode(encode(edge), back) && back.turns[0].turn == 0xFFFFFFFFu);
+                edge.turns.resize(2);
+                ASSERT_FALSE(decode(encode(edge), back));
+            }
+            // the size of the message: the largest that fits (65,535 bytes: a batch is 7 + an even number) is taken, one more is not
+            {
+                TurnBatchMsg fill;
+                size_t size = kBatchHeaderBytes;
+                uint32_t number = 0;
+                std::vector<uint32_t> thirty_two_ants;
+                for (uint32_t i = 0; i < 32; ++i) thirty_two_ants.push_back(i);
+                const size_t big_turn = 2 + sim::kCommandHeaderBytes + 4 * 32;
+                while (kMaxMessageBytes - 1 - size >= big_turn + 10) {
+                    TurnMsg t;
+                    t.turn = number++;
+                    t.commands = {cmd(CommandType::GroupMove, 0, 255, 1, 1, thirty_two_ants)};
+                    fill.turns.push_back(std::move(t));
+                    size += big_turn;
+                }
+                // the rest, an even number of bytes, in turns of 2 + 8 h bytes: j turns with the last one holding the Hatch commands
+                const size_t rest = kMaxMessageBytes - 1 - size;
+                ASSERT_EQ(rest % 2, size_t{0});
+                size_t j = 0;
+                for (size_t k = 1; k <= 4 && j == 0; ++k) {
+                    if (rest >= 2 * k && (rest - 2 * k) % 8 == 0) j = k;
+                }
+                ASSERT_TRUE(j != 0);
+                for (size_t k = 0; k < j; ++k) {
+                    TurnMsg t;
+                    t.turn = number++;
+                    if (k + 1 == j) {
+                        for (size_t h = 0; h < (rest - 2 * j) / 8; ++h) t.commands.push_back(cmd(CommandType::Hatch, 0));
+                    }
+                    fill.turns.push_back(std::move(t));
+                }
+                const std::vector<uint8_t> largest = encode(fill);
+                ASSERT_EQ(largest.size(), kMaxMessageBytes - 1);
+                ASSERT_TRUE(decode(largest, back) && back.turns.size() == fill.turns.size());
+                fill.turns.push_back(TurnMsg{});                               // two more bytes: 65,537
+                const std::vector<uint8_t> too_big = encode(fill);
+                ASSERT_EQ(too_big.size(), kMaxMessageBytes + 1);
+                ASSERT_FALSE(decode(too_big, back));
+                ASSERT_FALSE(any_decodes(too_big));
+            }
+        }
     } TEST_END();
 }
 
@@ -1129,6 +1744,1421 @@ void run_runner_tests() {
         ASSERT_EQ(sim.current_tick(), 40u);                                          // a turn is a tick
         ASSERT_EQ(hashes, 2u);                                                       // turns 19 and 39: a hash every 20 turns (one second)
         ASSERT_TRUE(runner.stalled() == false || runner.queued() == 0);
+    } TEST_END();
+}
+
+// ---------------------------------------------------------------------------------------------------------------------------------
+// Coming back (protocol 10): the turn log, the attendance rules, the runner's fast-forward (docs/NETWORK_PORT.md "Reconnect")
+// ---------------------------------------------------------------------------------------------------------------------------------
+
+// A match as a server logs it: `count` turns of 50 ms with about 4 commands a second over the four players (what people give: orders of 1 - 24 ants, Stops, a Hatch, now and then an
+// invitation), in canonical order with the issuers stamped. `per_hundred_turns` is the share of turns that carry a command.
+std::vector<TurnMsg> real_looking_turns(uint32_t count, uint32_t seed, uint32_t per_hundred_turns = 20) {
+    Lcg rng(seed);
+    std::vector<TurnMsg> turns(count);
+    for (uint32_t t = 0; t < count; ++t) {
+        turns[t].turn = t;
+        uint32_t n = rng.below(100) < per_hundred_turns ? 1u : 0u;
+        if (n == 1 && rng.below(10) == 0) n = 2 + rng.below(2);
+        for (uint32_t k = 0; k < n; ++k) {
+            const uint8_t issuer = static_cast<uint8_t>(rng.below(4));
+            const uint32_t kind = rng.below(100);
+            std::vector<uint32_t> ants;
+            if (kind < 90) {
+                for (uint32_t a = 1 + rng.below(24); a > 0; --a) ants.push_back(1000u * issuer + rng.below(60));
+            }
+            const int16_t x = static_cast<int16_t>(rng.below(60));
+            const int16_t y = static_cast<int16_t>(rng.below(60));
+            if (kind < 55) turns[t].commands.push_back(cmd(CommandType::GroupMove, issuer, 255, x, y, ants));
+            else if (kind < 70) turns[t].commands.push_back(cmd(CommandType::GroupAttack, issuer, 255, x, y, ants));
+            else if (kind < 80) turns[t].commands.push_back(cmd(CommandType::GroupSpecial, issuer, 255, x, y, ants));
+            else if (kind < 90) turns[t].commands.push_back(cmd(CommandType::Stop, issuer, 255, 0, 0, ants));
+            else if (kind < 96) turns[t].commands.push_back(cmd(CommandType::Hatch, issuer));
+            else turns[t].commands.push_back(cmd(CommandType::AllianceInvite, issuer, static_cast<uint8_t>((issuer + 1) % 4)));
+        }
+        sim::canonical_order(turns[t].commands);
+    }
+    return turns;
+}
+
+// The packing of a turn by hand (u16 count, the commands in their wire form): what the log must keep, written down once more without the log
+std::vector<uint8_t> pack_turn(const TurnMsg& t) {
+    std::vector<uint8_t> out;
+    out.push_back(static_cast<uint8_t>(t.commands.size() & 0xFF));
+    out.push_back(static_cast<uint8_t>(t.commands.size() >> 8));
+    for (const Command& c : t.commands) sim::encode(c, out);
+    return out;
+}
+
+// A turn that holds `commands` commands of `ants` ants each (a hostile client's turn is 64 of 32 for each of four players)
+TurnMsg heavy_turn(uint32_t number, size_t commands, size_t ants) {
+    TurnMsg t;
+    t.turn = number;
+    std::vector<uint32_t> list;
+    for (size_t i = 0; i < ants; ++i) list.push_back(static_cast<uint32_t>(i));
+    for (size_t i = 0; i < commands; ++i) t.commands.push_back(cmd(CommandType::GroupMove, static_cast<uint8_t>(i % 4), 255, 1, 1, list));
+    return t;
+}
+
+// True when the turns of the batch are the turns `from` .. of `all`, number and commands
+bool batch_is(const std::vector<TurnMsg>& all, size_t from, const TurnBatchMsg& b) {
+    if (b.first_turn != from || b.turns.empty() || from + b.turns.size() > all.size()) return false;
+    for (size_t i = 0; i < b.turns.size(); ++i) {
+        if (b.turns[i].turn != all[from + i].turn || b.turns[i].commands != all[from + i].commands) return false;
+    }
+    return true;
+}
+
+void run_reconnect_core_tests() {
+    TEST_CASE("N2.41 Turn Log: 36,000 Real-Looking Turns (30 Minutes Of 50 ms) Are Kept Packed And Read Back In Batches Of Every Size, Identical To What Was Sealed; The Limit Stops It At The Right Turn And For Good") {
+        const std::vector<TurnMsg> all = real_looking_turns(36000, 7);
+        std::vector<size_t> sizes(all.size());                            // what each turn packs to, and the sum (the blob), worked out without the log
+        size_t blob = 0;
+        std::vector<uint8_t> everything;
+        for (size_t t = 0; t < all.size(); ++t) {
+            const std::vector<uint8_t> p = pack_turn(all[t]);
+            sizes[t] = p.size();
+            blob += p.size();
+            everything.insert(everything.end(), p.begin(), p.end());
+        }
+        TurnLog log;
+        ASSERT_TRUE(log.max_bytes() == TurnLog::kDefaultMaxBytes && TurnLog::kDefaultMaxBytes == 16u * 1024u * 1024u && log.usable() && log.turns() == 0 && log.bytes() == 0);
+        for (const TurnMsg& t : all) ASSERT_TRUE(log.append(t));
+        ASSERT_TRUE(log.usable());
+        ASSERT_EQ(log.turns(), 36000u);
+        ASSERT_EQ(log.bytes(), blob + 36000u * 4u);                       // the packed turns and a 4-byte offset for each
+        ASSERT_TRUE(log.bytes() > 36000u * 6u && log.bytes() < 700u * 1024u);   // 30 minutes of busy play (4 - 5 orders a second, up to 24 ants): 651,372 bytes, 144,000 of them the index; nobody giving an order at all is 216,000. Far under the limit
+        ASSERT_EQ(log.bytes_between(0, log.turns()), blob);
+        // everything in one read is the packing by hand, byte for byte
+        {
+            std::vector<uint8_t> out;
+            ASSERT_EQ(log.read(0, 36000, SIZE_MAX, out), 36000u);
+            ASSERT_TRUE(out == everything);
+        }
+        // the stream as the host sends it (4096 turns, 48 KB): every batch decodes to the turns that were sealed, every message fits
+        {
+            uint32_t next = 0;
+            size_t batches = 0;
+            while (next < log.turns()) {
+                std::vector<uint8_t> packed;
+                const uint32_t n = log.read(next, static_cast<uint32_t>(kMaxBatchTurns), kBatchBytes, packed);
+                ASSERT_TRUE(n >= 1 && n <= kMaxBatchTurns);
+                const std::vector<uint8_t> message = encode_turn_batch_packed(next, n, packed.data(), packed.size());
+                ASSERT_TRUE(!message.empty() && message.size() <= kMaxMessageBytes && packed.size() <= kBatchBytes);
+                TurnBatchMsg b;
+                ASSERT_TRUE(decode(message, b) && b.turns.size() == n && batch_is(all, next, b));
+                TurnBatchMsg built;                                       // and the batch made from the decoded turns is the same message
+                built.first_turn = next;
+                built.turns = b.turns;
+                ASSERT_TRUE(encode(built) == message);
+                next += n;
+                ++batches;
+            }
+            ASSERT_EQ(next, 36000u);
+            ASSERT_TRUE(batches >= 9 && batches <= 60);                   // 36,000 turns / 4096 at the least; a few hundred KB / 48 KB
+        }
+        // batches of every size (the turn limit, no byte limit): the count is the size asked for until the end, and everything comes back
+        for (const uint32_t size : {1u, 2u, 3u, 5u, 7u, 16u, 63u, 64u, 65u, 100u, 255u, 256u, 1000u, 4095u, 4096u}) {
+            uint32_t next = 0;
+            while (next < 36000u) {
+                std::vector<uint8_t> packed;
+                const uint32_t n = log.read(next, size, SIZE_MAX, packed);
+                ASSERT_EQ(n, std::min(size, 36000u - next));
+                ASSERT_EQ(packed.size(), log.bytes_between(next, next + n));
+                if (next % 997 == 0 || next + n == 36000u) {              // (decoded for a sample of them: all would be 15 x 36000 turns of decoding)
+                    TurnBatchMsg b;
+                    ASSERT_TRUE(decode(encode_turn_batch_packed(next, n, packed.data(), packed.size()), b) && batch_is(all, next, b));
+                }
+                next += n;
+            }
+        }
+        // a limit in bytes: at least one turn, then as many as fit; a turn that is alone over the limit is a batch of its own
+        for (const size_t limit : {size_t{1}, size_t{10}, size_t{100}, size_t{1000}, size_t{4096}, kBatchBytes}) {
+            uint32_t next = 0;
+            while (next < 36000u) {
+                std::vector<uint8_t> packed;
+                const uint32_t n = log.read(next, 4096, limit, packed);
+                ASSERT_TRUE(n >= 1 && packed.size() == log.bytes_between(next, next + n));
+                ASSERT_TRUE(n == 1 || packed.size() <= limit);            // more than one turn only when they fit
+                if (next + n < 36000u) {                                  // ... and the next turn would not have fitted (or 4096 are in)
+                    ASSERT_TRUE(n == 4096 || packed.size() + sizes[next + n] > limit);
+                }
+                next += n;
+            }
+        }
+        // random reads from anywhere against the sealed turns
+        {
+            Lcg rng(11);
+            for (int i = 0; i < 400; ++i) {
+                const uint32_t from = rng.below(36000);
+                const uint32_t max_turns = 1 + rng.below(100);
+                const size_t limit = 1 + rng.below(5000);
+                std::vector<uint8_t> packed;
+                const uint32_t n = log.read(from, max_turns, limit, packed);
+                ASSERT_TRUE(n >= 1 && n <= max_turns && from + n <= 36000u);
+                TurnBatchMsg b;
+                ASSERT_TRUE(decode(encode_turn_batch_packed(from, n, packed.data(), packed.size()), b) && batch_is(all, from, b));
+            }
+        }
+        // bytes_between is the sum of the turns' sizes, for any range; ranges that are empty, reversed or past the end count for nothing
+        {
+            Lcg rng(12);
+            for (int i = 0; i < 400; ++i) {
+                const uint32_t a = rng.below(36000);
+                const uint32_t b = a + rng.below(36000 - a + 1);
+                size_t sum = 0;
+                for (uint32_t t = a; t < b; ++t) sum += sizes[t];
+                ASSERT_EQ(log.bytes_between(a, b), sum);
+            }
+            ASSERT_EQ(log.bytes_between(5, 5), size_t{0});
+            ASSERT_EQ(log.bytes_between(9, 5), size_t{0});
+            ASSERT_EQ(log.bytes_between(36000, 99999), size_t{0});
+            ASSERT_EQ(log.bytes_between(35999, 99999), sizes[35999]);     // (the end is cut at the turns that there are)
+            ASSERT_EQ(log.bytes_between(0, 0xFFFFFFFFu), blob);
+            std::vector<uint8_t> out = {1, 2, 3};
+            ASSERT_EQ(log.read(36000, 10, 100, out), 0u);                 // nothing at or past the end, nothing for zero turns, and `out` is only ever appended to
+            ASSERT_EQ(log.read(0xFFFFFFFFu, 10, 100, out), 0u);
+            ASSERT_EQ(log.read(0, 0, 100, out), 0u);
+            ASSERT_TRUE(out == (std::vector<uint8_t>{1, 2, 3}));
+            ASSERT_EQ(log.read(0, 1, 100, out), 1u);
+            ASSERT_TRUE(out.size() == 3 + sizes[0] && out[0] == 1 && out[3] == everything[0]);
+        }
+        // an empty log reads nothing and costs nothing
+        {
+            TurnLog empty;
+            std::vector<uint8_t> out;
+            ASSERT_TRUE(empty.read(0, 10, 100, out) == 0 && out.empty() && empty.bytes() == 0 && empty.bytes_between(0, 10) == 0 && empty.usable() && empty.turns() == 0);
+        }
+        // a turn that is alone bigger than the byte limit still goes (a batch holds at least one turn)
+        {
+            TurnLog big;
+            ASSERT_TRUE(big.append(heavy_turn(0, 200, 32)));
+            TurnMsg small;
+            small.turn = 1;
+            ASSERT_TRUE(big.append(small));
+            ASSERT_TRUE(big.append(heavy_turn(2, 1, 1)));
+            std::vector<uint8_t> out;
+            ASSERT_EQ(big.read(0, 10, 100, out), 1u);
+            ASSERT_EQ(out.size(), 2 + 200 * (sim::kCommandHeaderBytes + 4 * 32));
+            out.clear();
+            ASSERT_EQ(big.read(1, 10, 100, out), 2u);                     // the two small turns go together
+            out.clear();
+            ASSERT_EQ(big.read(0, 10, 2 + 200 * (sim::kCommandHeaderBytes + 4 * 32) + 1, out), 1u);    // one byte more than the big turn: the empty turn after it (2 bytes) does not
+            out.clear();
+            ASSERT_EQ(big.read(0, 10, 2 + 200 * (sim::kCommandHeaderBytes + 4 * 32) + 2, out), 2u);    // two bytes more: it does
+        }
+        // the limit: a hostile client's log (64 commands of 32 ants in every turn: 8706 bytes and 4 of index) at 1 MiB stops at the turn that would pass it, and stays stopped
+        {
+            const size_t limit = 1024 * 1024;
+            TurnLog hostile(limit);
+            ASSERT_EQ(hostile.max_bytes(), limit);
+            const size_t each = 2 + 64 * (sim::kCommandHeaderBytes + 4 * 32) + 4;
+            const uint32_t fit = static_cast<uint32_t>(limit / each);     // 120
+            uint32_t made = 0;
+            while (made < 5000 && hostile.append(heavy_turn(made, 64, 32))) {
+                ++made;
+                ASSERT_TRUE(hostile.bytes() <= limit);
+            }
+            ASSERT_EQ(made, fit);                                         // exactly the turns that fit
+            ASSERT_EQ(hostile.turns(), fit);
+            ASSERT_EQ(hostile.bytes(), size_t{fit} * each);
+            ASSERT_FALSE(hostile.usable());                               // a log with a hole serves no replay
+            const size_t held = hostile.bytes();
+            ASSERT_FALSE(hostile.append(heavy_turn(fit, 64, 32)));
+            TurnMsg tiny;
+            tiny.turn = fit;
+            ASSERT_FALSE(hostile.append(tiny));                           // not even a small turn: it stays stopped, and nothing is stored or allocated
+            ASSERT_TRUE(hostile.turns() == fit && hostile.bytes() == held && !hostile.usable());
+            std::vector<uint8_t> out;                                     // what was stored can still be read
+            ASSERT_EQ(hostile.read(0, 4096, SIZE_MAX, out), fit);
+            ASSERT_EQ(out.size(), held - size_t{fit} * 4);
+        }
+        // the limit to the byte: three empty turns cost 3 x (2 + 4) = 18
+        for (const size_t limit : {size_t{0}, size_t{5}, size_t{6}, size_t{11}, size_t{12}, size_t{17}, size_t{18}, size_t{19}, size_t{23}, size_t{24}}) {
+            TurnLog tight(limit);
+            uint32_t made = 0;
+            TurnMsg empty;
+            while (made < 100) {
+                empty.turn = made;
+                if (!tight.append(empty)) break;
+                ++made;
+            }
+            ASSERT_EQ(made, static_cast<uint32_t>(limit / 6));
+            ASSERT_TRUE(tight.bytes() == size_t{made} * 6 && tight.bytes() <= limit);
+            ASSERT_FALSE(tight.usable());                                 // (the loop ends when an append is refused)
+        }
+        // whatever the limit, never more than 0xFFFFFFF0 bytes (the offsets are 32 bits)
+        ASSERT_EQ(TurnLog(SIZE_MAX).max_bytes(), static_cast<size_t>(0xFFFFFFF0u));
+        ASSERT_EQ(TurnLog(1000).max_bytes(), size_t{1000});
+        ASSERT_TRUE(TurnLog::kHardMaxBytes == 0xFFFFFFF0u);
+        // a hole or a repeat is the end of the log: the turn is not the next one
+        {
+            TurnLog holey;
+            TurnMsg t5;
+            t5.turn = 5;
+            ASSERT_FALSE(holey.append(t5));
+            ASSERT_FALSE(holey.usable());
+            TurnMsg t0;
+            ASSERT_FALSE(holey.append(t0));                               // stopped for good
+            TurnLog twice;
+            ASSERT_TRUE(twice.append(t0));
+            ASSERT_FALSE(twice.append(t0));
+            ASSERT_TRUE(!twice.usable() && twice.turns() == 1);
+        }
+        // a turn that no batch could carry: the largest turn that does is 65,526 bytes packed (7 bytes of batch header and 65,529 are what a message may hold, and a turn is 2 + a multiple of 4)
+        {
+            auto turn_of = [](uint32_t number, size_t last_ants) {         // 481 commands of 32 ants, and one of `last_ants`
+                TurnMsg t = heavy_turn(number, 481, 32);
+                std::vector<uint32_t> list;
+                for (size_t i = 0; i < last_ants; ++i) list.push_back(static_cast<uint32_t>(i));
+                t.commands.push_back(cmd(CommandType::GroupMove, 0, 255, 1, 1, list));
+                return t;
+            };
+            TurnLog fits;
+            ASSERT_TRUE(fits.append(turn_of(0, 25)));                      // 2 + 481 x 136 + 108 = 65,526
+            ASSERT_EQ(fits.bytes(), size_t{65526 + 4});
+            std::vector<uint8_t> packed;
+            ASSERT_EQ(fits.read(0, 10, 1, packed), 1u);
+            TurnBatchMsg b;
+            ASSERT_TRUE(decode(encode_turn_batch_packed(0, 1, packed.data(), packed.size()), b) && b.turns.size() == 1 && b.turns[0].commands.size() == 482);
+            TurnLog too_big;
+            ASSERT_FALSE(too_big.append(turn_of(0, 26)));                  // 65,530: no message could hold it
+            ASSERT_TRUE(!too_big.usable() && too_big.turns() == 0 && too_big.bytes() == 0);
+        }
+        // more commands than a turn may hold are cut, as encode(TurnMsg) cuts them
+        {
+            TurnMsg many;
+            for (size_t i = 0; i < kMaxTurnCommands + 88; ++i) many.commands.push_back(cmd(CommandType::Hatch, static_cast<uint8_t>(i % 4)));
+            TurnLog cut;
+            ASSERT_TRUE(cut.append(many));
+            std::vector<uint8_t> packed;
+            ASSERT_EQ(cut.read(0, 1, 1, packed), 1u);
+            TurnBatchMsg b;
+            ASSERT_TRUE(decode(encode_turn_batch_packed(0, 1, packed.data(), packed.size()), b) && b.turns[0].commands.size() == kMaxTurnCommands);
+            ASSERT_EQ(packed.size(), 2 + kMaxTurnCommands * sim::kCommandHeaderBytes);
+        }
+    } TEST_END();
+
+    TEST_CASE("N2.42 Attendance: Every Transition Of The Table, The Impossible Ones Change Nothing, Away Time Adds Up Over Episodes (Each Loss Counts At Least 5 s), The Pause Counts Each Moment Once And Not The Minimum") {
+        using S = Attendance::State;
+        const uint32_t t0 = 100000;
+        // a snapshot of everything that can be seen: a call that must be a no-op may not change any of it
+        auto snapshot = [](const Attendance& a, uint32_t now) {
+            std::vector<uint32_t> v;
+            for (uint8_t s = 0; s < 4; ++s) {
+                v.push_back(static_cast<uint32_t>(a.state(s)));
+                v.push_back(a.away_ms(s, now));
+                v.push_back(a.percent(s));
+                v.push_back(a.votes_for_continue(s));
+            }
+            v.insert(v.end(), {a.paused() ? 1u : 0u, a.pause_ms(now), a.connected_humans(), a.vote_subject(now), a.drops_by_vote(), a.drops_by_cap(), a.rejoins(), a.cap_s(now)});
+            return v;
+        };
+        // ---- the table: which event is possible from which state, and where it leads ----
+        struct Row {
+            S from;
+            bool lost, returning, progress, caught_up, failed, dropped;
+        };
+        const Row table[] = {
+            {S::Present, true, true, false, false, false, true},
+            {S::Absent, false, true, false, false, false, true},
+            {S::CatchingUp, false, true, true, true, true, true},
+            {S::Dropped, false, false, false, false, false, false},
+            {S::Empty, false, false, false, false, false, false},
+        };
+        for (const Row& row : table) {
+            for (int event = 0; event < 6; ++event) {
+                Attendance a;
+                a.seat_humans(0b0001 | (row.from == S::Empty ? 0 : 0b0010) | 0b1000, t0);        // seats 0, 3 and (unless the row is Empty) 1 are people; seat 2 is no person
+                if (row.from == S::Absent) ASSERT_TRUE(a.lost(1, t0 + 1000));
+                if (row.from == S::CatchingUp) ASSERT_TRUE(a.lost(1, t0 + 1000) && a.returning(1, t0 + 2000));
+                if (row.from == S::Dropped) ASSERT_TRUE(a.dropped(1, t0 + 1000));
+                ASSERT_EQ(a.state(1), row.from);
+                const uint32_t now = t0 + 3000;
+                const std::vector<uint32_t> before = snapshot(a, now);
+                bool result = false;
+                bool expect = false;
+                S after = row.from;
+                switch (event) {
+                    case 0: result = a.lost(1, now); expect = row.lost; after = S::Absent; break;
+                    case 1: result = a.returning(1, now); expect = row.returning; after = S::CatchingUp; break;
+                    case 2: result = a.progress(1, 50, now); expect = row.progress; after = S::CatchingUp; break;
+                    case 3: result = a.caught_up(1, now); expect = row.caught_up; after = S::Present; break;
+                    case 4: result = a.catch_up_failed(1, now); expect = row.failed; after = S::Absent; break;
+                    default: result = a.dropped(1, now); expect = row.dropped; after = S::Dropped; break;
+                }
+                ASSERT_EQ(result, expect);
+                ASSERT_EQ(a.state(1), expect ? after : row.from);
+                if (!expect) ASSERT_TRUE(snapshot(a, now) == before);                              // an event that does not fit changes nothing at all
+            }
+        }
+        {   // seats that are no seats, and calls with seats out of range
+            Attendance a;
+            a.seat_humans(0b1011, t0);
+            const std::vector<uint32_t> before = snapshot(a, t0 + 10);
+            ASSERT_FALSE(a.lost(2, t0) || a.lost(4, t0) || a.lost(255, t0) || a.returning(2, t0) || a.returning(255, t0) || a.progress(2, 5, t0) || a.progress(7, 5, t0) ||
+                         a.caught_up(2, t0) || a.caught_up(9, t0) || a.catch_up_failed(2, t0) || a.dropped(2, t0) || a.dropped(4, t0) || a.vote(0, 1, true, t0) || a.vote(9, 1, true, t0) || a.vote(0, 9, true, t0));
+            ASSERT_TRUE(snapshot(a, t0 + 10) == before);
+            ASSERT_TRUE(a.state(2) == S::Empty && a.state(4) == S::Empty && a.state(255) == S::Empty);
+            ASSERT_TRUE(a.away_ms(2, t0 + 1000) == 0 && a.away_ms(200, t0 + 1000) == 0 && a.percent(200) == 0 && a.votes_for_continue(200) == 0);
+            ASSERT_EQ(a.connected_humans(), 3);
+            ASSERT_TRUE(a.state(0) == S::Present && a.state(1) == S::Present && a.state(3) == S::Present);
+            ASSERT_EQ(a.config().vote_after_ms, kVoteAfterMs);
+            ASSERT_TRUE(kVoteAfterMs == 30000 && kCatchUpStallMs == 20000 && kMinAbsenceMs == 5000 && kMaxPauseMs == 1800000);
+        }
+        // ---- one seat's episodes: loss, return, progress, catching up, three times; the total, the minimum, the pause ----
+        {
+            Attendance a;
+            a.seat_humans(0b0111, t0);
+            ASSERT_TRUE(!a.paused() && a.pause_ms(t0 + 9999) == 0 && a.away_ms(1, t0 + 9999) == 0 && a.cap_s(t0) == 1800);
+            // episode 1: lost at +1 s, back at +6 s, caught up at +8 s: 7 s away
+            ASSERT_TRUE(a.lost(1, t0 + 1000));
+            ASSERT_TRUE(a.paused());
+            ASSERT_EQ(a.away_ms(1, t0 + 1000), 0u);
+            ASSERT_EQ(a.away_ms(1, t0 + 4000), 3000u);
+            ASSERT_EQ(a.pause_ms(t0 + 4000), 3000u);
+            ASSERT_FALSE(a.lost(1, t0 + 4500));                                      // already lost: the absence does not begin again
+            ASSERT_EQ(a.away_ms(1, t0 + 5000), 4000u);
+            ASSERT_EQ(a.connected_humans(), 2);
+            ASSERT_TRUE(a.returning(1, t0 + 6000));
+            ASSERT_EQ(a.state(1), S::CatchingUp);
+            ASSERT_EQ(a.away_ms(1, t0 + 7000), 6000u);                               // the away time goes on from the loss
+            ASSERT_TRUE(a.paused());
+            ASSERT_FALSE(a.progress(1, 0, t0 + 7000));                               // 0 is not more than 0
+            ASSERT_TRUE(a.progress(1, 10, t0 + 7100));
+            ASSERT_EQ(a.percent(1), 10);
+            ASSERT_FALSE(a.progress(1, 10, t0 + 7200));                              // the same again, or less, is no progress
+            ASSERT_FALSE(a.progress(1, 9, t0 + 7300));
+            ASSERT_EQ(a.percent(1), 10);
+            ASSERT_TRUE(a.progress(1, 250, t0 + 7400));                              // above 100 is 100
+            ASSERT_EQ(a.percent(1), 100);
+            ASSERT_EQ(a.percent(0), 0);
+            ASSERT_TRUE(a.caught_up(1, t0 + 8000));
+            ASSERT_EQ(a.state(1), S::Present);
+            ASSERT_EQ(a.percent(1), 0);
+            ASSERT_FALSE(a.paused());
+            ASSERT_EQ(a.rejoins(), 1u);
+            ASSERT_EQ(a.away_ms(1, t0 + 8000), 7000u);
+            ASSERT_EQ(a.away_ms(1, t0 + 99999), 7000u);                              // (an absence that is over does not grow)
+            ASSERT_EQ(a.pause_ms(t0 + 8000), 7000u);
+            ASSERT_EQ(a.pause_ms(t0 + 99999), 7000u);                                // nor does the pause
+            ASSERT_EQ(a.connected_humans(), 3);
+            // episode 2: a blip of 300 ms: it counts 5 s toward the seat's total, and 300 ms toward the pause
+            ASSERT_TRUE(a.lost(1, t0 + 20000));
+            ASSERT_TRUE(a.returning(1, t0 + 20100));
+            ASSERT_EQ(a.away_ms(1, t0 + 20300), 7300u);                              // (while it goes on, the real time: 7 s and 300 ms)
+            ASSERT_TRUE(a.caught_up(1, t0 + 20300));
+            ASSERT_EQ(a.away_ms(1, t0 + 20300), 12000u);                             // 7 s + the minimum of 5 s
+            ASSERT_EQ(a.pause_ms(t0 + 20300), 7300u);                                // the pause was 300 ms: the minimum is for the vote, not for the room's budget
+            // episode 3: 9 s, over the minimum
+            ASSERT_TRUE(a.lost(1, t0 + 30000));
+            ASSERT_EQ(a.away_ms(1, t0 + 30100), 12100u);
+            ASSERT_TRUE(a.returning(1, t0 + 38000));
+            ASSERT_TRUE(a.caught_up(1, t0 + 39000));
+            ASSERT_EQ(a.away_ms(1, t0 + 39000), 21000u);                             // 12 s + 9 s
+            ASSERT_EQ(a.pause_ms(t0 + 39000), 7300u + 9000u);
+            ASSERT_EQ(a.rejoins(), 3u);
+            ASSERT_EQ(a.away_ms(0, t0 + 39000), 0u);                                 // the others have not been away
+            ASSERT_EQ(a.cap_s(t0 + 39000), static_cast<uint16_t>((1800000u - 16300u + 999u) / 1000u));
+        }
+        {   // a catch-up that fails: the seat is Absent again and its time kept running from the loss; the pause goes on
+            Attendance a;
+            a.seat_humans(0b0011, t0);
+            ASSERT_TRUE(a.lost(1, t0 + 1000) && a.returning(1, t0 + 11000));
+            ASSERT_TRUE(a.progress(1, 30, t0 + 12000));
+            ASSERT_TRUE(a.catch_up_failed(1, t0 + 16000));
+            ASSERT_EQ(a.state(1), S::Absent);
+            ASSERT_EQ(a.percent(1), 0);
+            ASSERT_EQ(a.away_ms(1, t0 + 17000), 16000u);
+            ASSERT_TRUE(a.paused());
+            ASSERT_EQ(a.pause_ms(t0 + 17000), 16000u);
+            ASSERT_TRUE(a.returning(1, t0 + 18000));                                 // a second try: the percent starts again
+            ASSERT_TRUE(a.progress(1, 5, t0 + 18100));                               // (5 is more than the 0 of the new try, less than the 30 of the old)
+            ASSERT_TRUE(a.returning(1, t0 + 19000));                                 // a third while still catching up: again from 0, the loss still counts from the first
+            ASSERT_EQ(a.percent(1), 0);
+            ASSERT_EQ(a.away_ms(1, t0 + 20000), 19000u);
+            ASSERT_TRUE(a.caught_up(1, t0 + 21000));
+            ASSERT_EQ(a.away_ms(1, t0 + 21000), 20000u);
+        }
+        {   // a seat whose old link was not known to be dead: the new link takes it over, the seat is away from that moment on
+            Attendance a;
+            a.seat_humans(0b0011, t0);
+            ASSERT_TRUE(a.returning(1, t0 + 5000));
+            ASSERT_EQ(a.state(1), S::CatchingUp);
+            ASSERT_TRUE(a.paused());
+            ASSERT_EQ(a.away_ms(1, t0 + 5000), 0u);
+            ASSERT_EQ(a.away_ms(1, t0 + 7000), 2000u);                               // not since the start of the match
+            ASSERT_EQ(a.pause_ms(t0 + 7000), 2000u);
+            ASSERT_TRUE(a.caught_up(1, t0 + 7000));
+            ASSERT_EQ(a.away_ms(1, t0 + 7000), 5000u);                               // a loss counts at least 5 s
+            ASSERT_EQ(a.pause_ms(t0 + 7000), 2000u);
+        }
+        // ---- dropped is final, from every state, and ends the absence ----
+        for (const int from : {0, 1, 2}) {
+            Attendance a;
+            a.seat_humans(0b0111, t0);
+            if (from >= 1) ASSERT_TRUE(a.lost(1, t0 + 1000));
+            if (from >= 2) ASSERT_TRUE(a.returning(1, t0 + 2000));
+            ASSERT_TRUE(a.dropped(1, t0 + 10000));
+            ASSERT_EQ(a.state(1), S::Dropped);
+            ASSERT_FALSE(a.paused());                                                // nobody else is away
+            ASSERT_EQ(a.connected_humans(), 2);
+            const uint32_t away = a.away_ms(1, t0 + 10000);
+            ASSERT_EQ(away, from == 0 ? 0u : 9000u);
+            ASSERT_EQ(a.away_ms(1, t0 + 500000), away);                              // frozen
+            ASSERT_EQ(a.pause_ms(t0 + 500000), from == 0 ? 0u : 9000u);
+            ASSERT_FALSE(a.lost(1, t0 + 20000) || a.returning(1, t0 + 20000) || a.progress(1, 99, t0 + 20000) || a.caught_up(1, t0 + 20000) || a.catch_up_failed(1, t0 + 20000) || a.dropped(1, t0 + 20000));
+            ASSERT_FALSE(a.vote(1, 2, true, t0 + 20000));                            // a dropped seat does not vote
+            ASSERT_EQ(a.state(1), S::Dropped);
+            ASSERT_EQ(a.drops_by_vote(), 0u);                                        // (a seat that left is no drop by vote or by the cap)
+            ASSERT_EQ(a.drops_by_cap(), 0u);
+            ASSERT_TRUE(a.update(t0 + 60000).empty());
+        }
+        // ---- the pause counts every moment once, however many seats are away ----
+        {
+            Attendance a;
+            a.seat_humans(0b0111, t0);
+            ASSERT_TRUE(a.lost(1, t0));                                              // seat 1 from 0 to 10 s, seat 2 from 4 s to 12 s: the pause is 0 to 12 s
+            ASSERT_TRUE(a.lost(2, t0 + 4000));
+            ASSERT_EQ(a.pause_ms(t0 + 6000), 6000u);
+            ASSERT_TRUE(a.returning(1, t0 + 8000));
+            ASSERT_TRUE(a.caught_up(1, t0 + 10000));
+            ASSERT_TRUE(a.paused());
+            ASSERT_EQ(a.pause_ms(t0 + 11000), 11000u);                               // (seat 2 is still away)
+            ASSERT_TRUE(a.returning(2, t0 + 11500));
+            ASSERT_EQ(a.pause_ms(t0 + 11800), 11800u);                               // catching up is pause too
+            ASSERT_TRUE(a.caught_up(2, t0 + 12000));
+            ASSERT_FALSE(a.paused());
+            ASSERT_EQ(a.pause_ms(t0 + 12000), 12000u);
+            ASSERT_EQ(a.pause_ms(t0 + 80000), 12000u);
+            ASSERT_EQ(a.away_ms(1, t0 + 80000), 10000u);
+            ASSERT_EQ(a.away_ms(2, t0 + 80000), 8000u);
+            ASSERT_EQ(a.rejoins(), 2u);
+            // a blip of a second: 5 s for the seat, 1 s for the pause
+            ASSERT_TRUE(a.lost(2, t0 + 100000) && a.returning(2, t0 + 100500) && a.caught_up(2, t0 + 101000));
+            ASSERT_EQ(a.away_ms(2, t0 + 101000), 13000u);
+            ASSERT_EQ(a.pause_ms(t0 + 101000), 13000u);
+        }
+        {   // the match begins again: everything that was before is forgotten
+            Attendance a;
+            a.seat_humans(0b1111, t0);
+            ASSERT_TRUE(a.lost(1, t0 + 100) && a.returning(1, t0 + 200) && a.caught_up(1, t0 + 300) && a.lost(2, t0 + 400) && a.dropped(3, t0 + 500));
+            a.seat_humans(0b0110, t0 + 1000);
+            ASSERT_TRUE(a.state(0) == S::Empty && a.state(1) == S::Present && a.state(2) == S::Present && a.state(3) == S::Empty);
+            ASSERT_TRUE(!a.paused() && a.pause_ms(t0 + 1000) == 0 && a.away_ms(1, t0 + 1000) == 0 && a.rejoins() == 0 && a.connected_humans() == 2);
+        }
+    } TEST_END();
+
+    TEST_CASE("N2.43 Attendance: The Vote Opens At 30 s In All, One Seat At A Time (The One Away Longest, Never One That Is Catching Up); More Than Half Of The Connected Players Win It (1, 2 And 3 Connected, Every Number Of Votes); A Lost Voter Leaves The Count") {
+        using S = Attendance::State;
+        const uint32_t t0 = 5000000;
+        // ---- the vote opens when the seat's total reaches 30 s: not a millisecond before, also over several absences ----
+        {
+            Attendance a;
+            a.seat_humans(0b1011, t0);
+            ASSERT_TRUE(a.lost(3, t0));
+            ASSERT_EQ(a.vote_subject(t0 + 29999), 255);
+            ASSERT_FALSE(a.vote(0, 3, true, t0 + 29999));                            // no vote is open: the choice is ignored
+            ASSERT_EQ(a.presence_for(0, t0 + 29999).vote_seat, 255);
+            ASSERT_EQ(a.vote_subject(t0 + 30000), 3);
+            ASSERT_EQ(a.presence_for(0, t0 + 30000).vote_seat, 3);
+            ASSERT_TRUE(a.update(t0 + 29999).empty() && a.update(t0 + 30000).empty());        // (no vote was cast)
+            Attendance b;                                                            // 7 s, a return, then 23 s more: the total is 30 s at the same instant
+            b.seat_humans(0b1011, t0);
+            ASSERT_TRUE(b.lost(3, t0) && b.returning(3, t0 + 6000) && b.caught_up(3, t0 + 7000) && b.lost(3, t0 + 20000));
+            ASSERT_EQ(b.away_ms(3, t0 + 42999), 29999u);
+            ASSERT_EQ(b.vote_subject(t0 + 42999), 255);
+            ASSERT_EQ(b.vote_subject(t0 + 43000), 3);
+            Attendance c;                                                            // three losses of a second each count 5 s each: the vote opens at 15 s of loss in all ...
+            c.seat_humans(0b1011, t0);
+            for (int i = 0; i < 6; ++i) {
+                const uint32_t at = t0 + static_cast<uint32_t>(i) * 3000u;
+                ASSERT_TRUE(c.lost(3, at) && c.returning(3, at + 500) && c.caught_up(3, at + 1000));
+            }
+            ASSERT_EQ(c.away_ms(3, t0 + 20000), 30000u);                             // six blips of a second are 30 s
+            ASSERT_TRUE(c.lost(3, t0 + 20000));
+            ASSERT_EQ(c.vote_subject(t0 + 20000), 3);                                // ... so the next loss is put to the vote at once
+        }
+        // ---- the rule: 2 * votes > connected; 1, 2 and 3 connected players (a match has four seats: one that is missing leaves at most three to vote), every subset that chooses Continue ----
+        for (uint8_t connected = 1; connected <= 3; ++connected) {
+            uint8_t mask = 0b1000;                                                   // seat 3 is the one that is missing; seats 0 .. connected - 1 are connected
+            for (uint8_t s = 0; s < connected; ++s) mask = static_cast<uint8_t>(mask | (1u << s));
+            for (unsigned chose = 0; chose < (1u << connected); ++chose) {           // the voters that choose Continue (bit v); the others choose Keep waiting
+                for (const bool others_abstain : {false, true}) {
+                    Attendance a;
+                    a.seat_humans(mask, t0);
+                    ASSERT_TRUE(a.lost(3, t0));
+                    const uint32_t now = t0 + 31000;
+                    unsigned votes = 0;
+                    for (uint8_t v = 0; v < connected; ++v) {
+                        const bool cont = (chose & (1u << v)) != 0;
+                        if (!cont && others_abstain) continue;
+                        ASSERT_TRUE(a.vote(v, 3, cont, now));
+                        votes += cont ? 1u : 0u;
+                    }
+                    ASSERT_EQ(a.votes_for_continue(3), votes);
+                    const PresenceMsg p = a.presence_for(0, now);
+                    ASSERT_TRUE(p.vote_seat == 3 && p.votes_continue == votes && p.voters == connected);
+                    const bool wins = 2 * votes > connected;                         // 1 of 1; 2 of 2; 2 of 3 (not 1 of 2: that is half)
+                    const std::vector<uint8_t> dropped = a.update(now);
+                    ASSERT_EQ(dropped.size(), wins ? size_t{1} : size_t{0});
+                    ASSERT_EQ(a.state(3), wins ? S::Dropped : S::Absent);
+                    ASSERT_EQ(a.drops_by_vote(), wins ? 1u : 0u);
+                    ASSERT_EQ(a.drops_by_cap(), 0u);
+                    if (wins) ASSERT_TRUE(dropped[0] == 3 && !a.paused());
+                    else ASSERT_TRUE(a.paused() && a.vote_subject(now) == 3);
+                }
+            }
+        }
+        // the rule itself, for every number of connected players that the arithmetic knows (a match has four seats, so a missing one leaves three at most; 4 shows the rule is general)
+        for (uint8_t connected = 0; connected <= 4; ++connected) {
+            for (uint8_t votes = 0; votes <= connected; ++votes) {
+                ASSERT_EQ(Attendance::vote_won(votes, connected), connected > 0 && votes * 2 > connected);
+            }
+        }
+        ASSERT_TRUE(Attendance::vote_won(1, 1) && Attendance::vote_won(2, 2) && Attendance::vote_won(2, 3) && Attendance::vote_won(3, 4));        // 1 of 1, 2 of 2, 2 of 3, 3 of 4
+        ASSERT_FALSE(Attendance::vote_won(0, 1) || Attendance::vote_won(1, 2) || Attendance::vote_won(1, 3) || Attendance::vote_won(2, 4) || Attendance::vote_won(0, 0));    // half is not more than half
+        ASSERT_FALSE(Attendance::vote_won(1, 0) || Attendance::vote_won(4, 0));                                                                                       // nobody connected: never
+        {   // nobody connected can never win (and one seat of one is all of them)
+            Attendance a;
+            a.seat_humans(0b0011, t0);
+            ASSERT_TRUE(a.lost(1, t0) && a.lost(0, t0 + 1000));                      // both away: nobody is there to vote
+            ASSERT_EQ(a.connected_humans(), 0);
+            ASSERT_TRUE(a.update(t0 + 600000).empty());                              // (the cap is 30 minutes)
+            ASSERT_EQ(a.vote_subject(t0 + 600000), 1);
+            ASSERT_FALSE(a.vote(0, 1, true, t0 + 600000));                           // an absent seat does not vote
+        }
+        // ---- a choice can be changed; a seat that does not vote is as one that wants to keep waiting ----
+        {
+            Attendance a;
+            a.seat_humans(0b1111, t0);
+            ASSERT_TRUE(a.lost(3, t0));
+            const uint32_t now = t0 + 30000;
+            ASSERT_TRUE(a.vote(0, 3, true, now) && a.vote(1, 3, true, now));        // two of three: a majority ...
+            ASSERT_TRUE(a.vote(1, 3, false, now));                                   // ... until the second thinks again
+            ASSERT_EQ(a.votes_for_continue(3), 1u);
+            ASSERT_TRUE(a.presence_for(1, now).your_vote == 1 && a.presence_for(0, now).your_vote == 2 && a.presence_for(2, now).your_vote == 0);
+            ASSERT_TRUE(a.update(now).empty());
+            ASSERT_TRUE(a.vote(1, 3, true, now));
+            ASSERT_TRUE(a.vote(2, 3, false, now + 1));
+            ASSERT_EQ(a.presence_for(0, now + 1).votes_continue, 2);
+            const std::vector<uint8_t> dropped = a.update(now + 1);                  // 2 of 3 chose Continue; the third chose to keep waiting
+            ASSERT_TRUE(dropped.size() == 1 && dropped[0] == 3);
+        }
+        // ---- a voter that is lost leaves the count at once, and its choice does not come back with it ----
+        {
+            Attendance a;
+            a.seat_humans(0b1111, t0);
+            ASSERT_TRUE(a.lost(3, t0));
+            const uint32_t now = t0 + 30000;
+            ASSERT_TRUE(a.vote(0, 3, true, now) && a.vote(1, 3, true, now));        // 2 of 3: it would win at the next update
+            ASSERT_TRUE(a.lost(1, now + 10));                                        // ... but one of the two voters is lost first: 1 of 2 is only half
+            ASSERT_EQ(a.connected_humans(), 2);
+            ASSERT_EQ(a.votes_for_continue(3), 1u);
+            ASSERT_EQ(a.presence_for(0, now + 10).voters, 2);
+            ASSERT_TRUE(a.update(now + 10).empty());
+            ASSERT_TRUE(a.returning(1, now + 20000) && a.caught_up(1, now + 21000));
+            ASSERT_EQ(a.connected_humans(), 3);
+            ASSERT_EQ(a.votes_for_continue(3), 1u);                                  // its old choice is gone: it must choose again
+            ASSERT_EQ(a.presence_for(1, now + 21000).your_vote, 0);
+            ASSERT_TRUE(a.update(now + 21000).empty());
+            ASSERT_TRUE(a.vote(1, 3, true, now + 21000));
+            ASSERT_EQ(a.update(now + 21000).size(), 1u);
+            // the same with a voter that is dropped (it left): its choice leaves the count
+            Attendance d;
+            d.seat_humans(0b1111, t0);
+            ASSERT_TRUE(d.lost(3, t0) && d.vote(0, 3, true, now) && d.vote(1, 3, true, now) && d.dropped(1, now + 5));
+            ASSERT_EQ(d.votes_for_continue(3), 1u);
+            ASSERT_TRUE(d.update(now + 5).empty());                                  // 1 of the 2 that are left
+        }
+        // ---- votes that do not count: wrong subject, a voter that is not connected, a seat that is no seat; and no violation (only false) ----
+        {
+            Attendance a;
+            a.seat_humans(0b1111, t0);
+            ASSERT_TRUE(a.lost(2, t0) && a.lost(3, t0 + 10000));
+            const uint32_t now = t0 + 31000;                                         // seat 2 has been away 31 s, seat 3 21 s: the vote is about 2
+            ASSERT_EQ(a.vote_subject(now), 2);
+            ASSERT_FALSE(a.vote(0, 3, true, now));                                   // about seat 3: it is not the subject
+            ASSERT_FALSE(a.vote(0, 1, true, now));                                   // about a seat that is present
+            ASSERT_FALSE(a.vote(0, 0, true, now));
+            ASSERT_FALSE(a.vote(2, 2, true, now));                                   // from the seat that is missing
+            ASSERT_FALSE(a.vote(3, 2, true, now));                                   // from another seat that is missing
+            ASSERT_FALSE(a.vote(4, 2, true, now));                                   // from a seat that does not exist
+            ASSERT_FALSE(a.vote(0, 4, true, now));
+            ASSERT_FALSE(a.vote(255, 255, true, now));
+            ASSERT_EQ(a.votes_for_continue(2), 0u);
+            ASSERT_EQ(a.votes_for_continue(3), 0u);
+            ASSERT_TRUE(a.returning(3, now) && a.vote_subject(now) == 2);            // a seat that is catching up cannot vote either
+            ASSERT_FALSE(a.vote(3, 2, true, now));
+            ASSERT_TRUE(a.vote(0, 2, true, now));
+        }
+        // ---- one vote at a time: the seat that has been away longest; of a tie the lowest seat; a seat that is catching up is never the subject; votes about a seat are gone when it changes state ----
+        {
+            Attendance a;
+            a.seat_humans(0b1111, t0);
+            ASSERT_TRUE(a.lost(2, t0) && a.lost(3, t0));                             // lost together: a tie
+            ASSERT_EQ(a.vote_subject(t0 + 40000), 2);
+            const PresenceMsg tie = a.presence_for(0, t0 + 40000);
+            ASSERT_EQ(tie.missing.size(), 2u);
+            ASSERT_TRUE(tie.missing[0].seat == 2 && tie.missing[1].seat == 3 && tie.missing[0].waited_s == 40 && tie.missing[1].waited_s == 40);       // (a tie: the lowest seat first)
+            Attendance b;
+            b.seat_humans(0b1111, t0);
+            ASSERT_TRUE(b.lost(3, t0) && b.lost(1, t0 + 5000));                      // 3 has been away longer than 1: 3, whatever the numbers of the seats
+            ASSERT_EQ(b.vote_subject(t0 + 36000), 3);
+            ASSERT_EQ(b.vote_subject(t0 + 29999), 255);
+            ASSERT_EQ(b.presence_for(0, t0 + 36000).missing.size(), 2u);
+            ASSERT_EQ(b.presence_for(0, t0 + 36000).missing[0].seat, 3);              // longest away first
+            // seat 3 (away 60 s) comes back and is catching up: not the subject any more, though it has been away longest; seat 1 (55 s) is
+            Attendance c;
+            c.seat_humans(0b1111, t0);
+            ASSERT_TRUE(c.lost(3, t0) && c.lost(1, t0 + 5000));
+            const uint32_t now = t0 + 60000;
+            ASSERT_EQ(c.vote_subject(now), 3);
+            ASSERT_TRUE(c.vote(0, 3, true, now));
+            ASSERT_TRUE(c.returning(3, now));
+            ASSERT_EQ(c.vote_subject(now), 1);
+            ASSERT_EQ(c.presence_for(0, now).vote_seat, 1);
+            ASSERT_EQ(c.presence_for(0, now).missing[0].seat, 3);                    // (still first in the list: away longest) and not the vote's seat
+            ASSERT_EQ(c.votes_for_continue(3), 0u);                                  // the votes about it are gone: it is back
+            ASSERT_TRUE(c.vote(0, 1, true, now));
+            ASSERT_EQ(c.votes_for_continue(1), 1u);
+            ASSERT_TRUE(c.catch_up_failed(3, now + 1000));                           // it fails: absent again, with the longest total: the subject again, with no votes
+            ASSERT_EQ(c.vote_subject(now + 1000), 3);
+            ASSERT_EQ(c.votes_for_continue(3), 0u);
+            ASSERT_FALSE(c.vote(0, 1, true, now + 1000));                            // the vote is about 3 now: a choice about 1 is ignored
+            ASSERT_EQ(c.votes_for_continue(1), 1u);                                  // (what was chosen about 1 stays with 1 until it changes state)
+            // the votes of one subject are gone when it returns, whether it catches up or not
+            ASSERT_TRUE(c.vote(0, 3, true, now + 1000));
+            ASSERT_TRUE(c.returning(3, now + 2000) && c.catch_up_failed(3, now + 3000));
+            ASSERT_EQ(c.votes_for_continue(3), 0u);
+        }
+        // ---- one vote at a time, through update(): the first seat is dropped by its vote, the second starts with no votes ----
+        {
+            Attendance a;
+            a.seat_humans(0b1111, t0);
+            ASSERT_TRUE(a.lost(1, t0) && a.lost(2, t0 + 2000));
+            const uint32_t now = t0 + 40000;
+            ASSERT_EQ(a.vote_subject(now), 1);
+            ASSERT_TRUE(a.vote(0, 1, true, now) && a.vote(3, 1, true, now));        // 2 of the 2 that are connected
+            std::vector<uint8_t> dropped = a.update(now);
+            ASSERT_TRUE(dropped.size() == 1 && dropped[0] == 1);                     // seat 1 only: seat 2 was not asked yet
+            ASSERT_EQ(a.state(2), S::Absent);
+            ASSERT_EQ(a.vote_subject(now), 2);                                       // now it is
+            ASSERT_EQ(a.votes_for_continue(2), 0u);
+            ASSERT_TRUE(a.paused());                                                 // (seat 2 is still away: the match still waits)
+            ASSERT_TRUE(a.update(now + 100).empty());
+            ASSERT_TRUE(a.vote(0, 2, true, now + 200) && a.vote(3, 2, true, now + 200));
+            dropped = a.update(now + 200);
+            ASSERT_TRUE(dropped.size() == 1 && dropped[0] == 2);
+            ASSERT_FALSE(a.paused());
+            ASSERT_EQ(a.drops_by_vote(), 2u);
+        }
+    } TEST_END();
+
+    TEST_CASE("N2.44 Attendance: A Catch-Up That Shows No Progress For 20 s Is Let Go; No Seat Is Dropped For Its Own Time, The Match's Total Pause Is Capped (Every Absent Seat Is Dropped At The Cap, A Seat That Progresses Is Not) And cap_s Counts Down; The Same Sequence Across The Wrap Of The Clock; Presence Is Always Something The Decoder Takes") {
+        using S = Attendance::State;
+        // ---- the stall: 20 s without progress (a higher percent) and the seat is absent again ----
+        {
+            const uint32_t t0 = 1000000;
+            Attendance a;
+            a.seat_humans(0b0111, t0);
+            ASSERT_TRUE(a.lost(1, t0) && a.returning(1, t0 + 5000));
+            ASSERT_TRUE(a.update(t0 + 24999).empty() && a.state(1) == S::CatchingUp);        // 19,999 ms since the return
+            ASSERT_TRUE(a.progress(1, 10, t0 + 15000));                                       // a sign of life at 10 s into it: the clock starts again
+            ASSERT_TRUE(a.update(t0 + 34999).empty() && a.state(1) == S::CatchingUp);
+            ASSERT_FALSE(a.progress(1, 10, t0 + 30000));                                      // the same percent again is no progress: the clock goes on from 15 s
+            ASSERT_TRUE(a.update(t0 + 34999).empty() && a.state(1) == S::CatchingUp);
+            ASSERT_TRUE(a.update(t0 + 35000).empty());                                        // 20,000 ms: let go (not dropped: it is Absent again, with its time)
+            ASSERT_EQ(a.state(1), S::Absent);
+            ASSERT_TRUE(a.paused());
+            ASSERT_EQ(a.away_ms(1, t0 + 35000), 35000u);
+            ASSERT_EQ(a.percent(1), 0);
+            ASSERT_TRUE(a.returning(1, t0 + 36000) && a.progress(1, 1, t0 + 40000));         // it may try again, and each try has its own 20 s
+            ASSERT_TRUE(a.update(t0 + 59999).empty() && a.state(1) == S::CatchingUp);
+            ASSERT_TRUE(a.update(t0 + 60000).empty() && a.state(1) == S::Absent);
+            // a seat that is only Absent has no stall clock
+            ASSERT_TRUE(a.update(t0 + 900000).empty() && a.state(1) == S::Absent);
+        }
+        // ---- no seat is dropped for its own time ----
+        {
+            const uint32_t t0 = 1000000;
+            Attendance::Config cfg;
+            cfg.max_pause_ms = 24u * 3600u * 1000u;                                           // (the longest that a room may be set to)
+            Attendance a(cfg);
+            a.seat_humans(0b0111, t0);
+            ASSERT_TRUE(a.lost(1, t0));
+            ASSERT_EQ(a.cap_s(t0), static_cast<uint16_t>(0xFFFF));                            // (a day is more than a u16 of seconds: it is told as "more")
+            for (uint32_t hours = 1; hours <= 20; hours += 3) {
+                ASSERT_TRUE(a.update(t0 + hours * 3600u * 1000u).empty());                    // ten hours, nineteen: still held
+                ASSERT_EQ(a.state(1), S::Absent);
+            }
+            ASSERT_TRUE(a.update(t0 + 24u * 3600u * 1000u - 1).empty());
+            const std::vector<uint8_t> at_cap = a.update(t0 + 24u * 3600u * 1000u);          // only the cap ends it
+            ASSERT_TRUE(at_cap.size() == 1 && at_cap[0] == 1);
+            ASSERT_EQ(a.cap_s(t0 + 24u * 3600u * 1000u), 0);
+        }
+        // ---- the cap: the total of the match's pauses; every Absent seat goes with it, whatever its own time ----
+        {
+            const uint32_t t0 = 3000000;
+            Attendance::Config cfg;
+            cfg.max_pause_ms = 60000;
+            {   // one seat: dropped exactly when the pauses reach 60 s
+                Attendance a(cfg);
+                a.seat_humans(0b0111, t0);
+                ASSERT_TRUE(a.lost(1, t0 + 5000));
+                ASSERT_TRUE(a.update(t0 + 64999).empty() && a.state(1) == S::Absent);
+                ASSERT_EQ(a.cap_left_ms(t0 + 64999), 1u);
+                const std::vector<uint8_t> dropped = a.update(t0 + 65000);
+                ASSERT_TRUE(dropped.size() == 1 && dropped[0] == 1 && a.state(1) == S::Dropped);
+                ASSERT_TRUE(a.cap_reached(t0 + 65000) && a.cap_left_ms(t0 + 65000) == 0 && a.cap_s(t0 + 65000) == 0);
+                ASSERT_EQ(a.drops_by_cap(), 1u);
+                ASSERT_EQ(a.drops_by_vote(), 0u);
+                ASSERT_FALSE(a.paused());
+                ASSERT_EQ(a.pause_ms(t0 + 70000), 60000u);
+                // the budget is gone: the next loss is dropped by the next update, however brief
+                ASSERT_TRUE(a.lost(2, t0 + 100000));
+                const std::vector<uint8_t> at_once = a.update(t0 + 100000);
+                ASSERT_TRUE(at_once.size() == 1 && at_once[0] == 2 && a.state(2) == S::Dropped);
+                ASSERT_EQ(a.drops_by_cap(), 2u);
+            }
+            {   // two seats: both go at the cap, the one that was away 10 s as the one that was away 60 s (no per-seat time)
+                Attendance a(cfg);
+                a.seat_humans(0b0111, t0);
+                ASSERT_TRUE(a.lost(1, t0) && a.lost(2, t0 + 50000));
+                const std::vector<uint8_t> dropped = a.update(t0 + 60000);
+                ASSERT_TRUE(dropped.size() == 2 && dropped[0] == 1 && dropped[1] == 2);
+                ASSERT_EQ(a.away_ms(2, t0 + 60000), 10000u);
+                ASSERT_EQ(a.drops_by_cap(), 2u);
+            }
+            {   // the pauses add up over the match: 20 s + 30 s, and the third pause is dropped when it reaches the 10 s that are left
+                Attendance a(cfg);
+                a.seat_humans(0b0111, t0);
+                ASSERT_TRUE(a.lost(1, t0) && a.returning(1, t0 + 19000) && a.caught_up(1, t0 + 20000));
+                ASSERT_EQ(a.cap_left_ms(t0 + 50000), 40000u);
+                ASSERT_TRUE(a.lost(2, t0 + 100000) && a.returning(2, t0 + 129000) && a.caught_up(2, t0 + 130000));
+                ASSERT_EQ(a.pause_ms(t0 + 200000), 50000u);
+                ASSERT_EQ(a.cap_left_ms(t0 + 200000), 10000u);
+                ASSERT_TRUE(a.lost(1, t0 + 300000));
+                ASSERT_TRUE(a.update(t0 + 309999).empty() && a.state(1) == S::Absent);
+                const std::vector<uint8_t> dropped = a.update(t0 + 310000);
+                ASSERT_TRUE(dropped.size() == 1 && dropped[0] == 1);
+            }
+            {   // a seat that is catching up and makes progress keeps its chance past the cap; when it stops, it is Absent again and the cap takes it in the same pass
+                Attendance a(cfg);
+                a.seat_humans(0b0111, t0);
+                ASSERT_TRUE(a.lost(1, t0) && a.returning(1, t0 + 30000));
+                ASSERT_TRUE(a.progress(1, 5, t0 + 40000) && a.progress(1, 6, t0 + 55000));
+                ASSERT_TRUE(a.update(t0 + 60000).empty() && a.state(1) == S::CatchingUp);     // the cap is reached: nothing is dropped, the seat is back and getting on
+                ASSERT_TRUE(a.cap_reached(t0 + 60000) && a.cap_s(t0 + 60000) == 0 && a.paused());
+                ASSERT_TRUE(a.progress(1, 10, t0 + 65000) && a.update(t0 + 70000).empty() && a.state(1) == S::CatchingUp);
+                ASSERT_TRUE(a.progress(1, 20, t0 + 80000) && a.update(t0 + 90000).empty() && a.state(1) == S::CatchingUp);
+                ASSERT_TRUE(a.update(t0 + 99999).empty() && a.state(1) == S::CatchingUp);     // 19,999 ms since the last progress
+                ASSERT_EQ(a.pause_ms(t0 + 99999), 99999u);                                    // (the pause goes on counting: it is a pause)
+                const std::vector<uint8_t> dropped = a.update(t0 + 100000);                  // 20 s: let go, Absent, and there is no pause left: dropped, in one pass
+                ASSERT_TRUE(dropped.size() == 1 && dropped[0] == 1 && a.state(1) == S::Dropped);
+                ASSERT_EQ(a.drops_by_cap(), 1u);
+                ASSERT_FALSE(a.paused());
+                // a seat that catches up in time is back, and past the cap it stays: a later loss is dropped at once
+                Attendance b(cfg);
+                b.seat_humans(0b0111, t0);
+                ASSERT_TRUE(b.lost(1, t0) && b.returning(1, t0 + 30000) && b.progress(1, 50, t0 + 50000));
+                ASSERT_TRUE(b.update(t0 + 60000).empty() && b.progress(1, 99, t0 + 65000) && b.caught_up(1, t0 + 66000));
+                ASSERT_TRUE(b.state(1) == S::Present && !b.paused());
+                ASSERT_EQ(b.pause_ms(t0 + 66000), 66000u);                                    // (past the cap: the pause that it ended is counted all the same)
+                ASSERT_TRUE(b.lost(2, t0 + 70000));                                           // the budget is gone: the next loss is dropped at once
+                const std::vector<uint8_t> next = b.update(t0 + 70000);
+                ASSERT_TRUE(next.size() == 1 && next[0] == 2);
+                // a catch-up that was not getting on at all is let go before the cap can wait for it: 20 s without progress
+                Attendance c(cfg);
+                c.seat_humans(0b0111, t0);
+                ASSERT_TRUE(c.lost(1, t0) && c.returning(1, t0 + 30000));
+                ASSERT_TRUE(c.update(t0 + 49999).empty() && c.state(1) == S::CatchingUp);
+                const std::vector<uint8_t> stalled = c.update(t0 + 50000);                    // 20 s of no progress: Absent again; the pause is 50 s, the cap 60 s: held
+                ASSERT_TRUE(stalled.empty() && c.state(1) == S::Absent);
+            }
+            {   // the cap and a vote at the same moment: the vote's seat is the vote's, the rest are the cap's
+                Attendance a(cfg);
+                a.seat_humans(0b1111, t0);
+                ASSERT_TRUE(a.lost(1, t0) && a.lost(2, t0 + 1000));
+                ASSERT_TRUE(a.vote(0, 1, true, t0 + 59000) && a.vote(3, 1, true, t0 + 59000));          // the two that are connected
+                ASSERT_FALSE(a.vote(2, 1, true, t0 + 59000));                                            // (seat 2 is away: it cannot vote)
+                const std::vector<uint8_t> dropped = a.update(t0 + 60000);
+                ASSERT_TRUE(dropped.size() == 2 && dropped[0] == 1 && dropped[1] == 2);
+                ASSERT_TRUE(a.drops_by_vote() == 1 && a.drops_by_cap() == 1);
+            }
+        }
+        // ---- cap_s: seconds that are left, rounded up, so 0 means the cap is reached; 0xFFFF for more than a u16 holds ----
+        {
+            const uint32_t t0 = 777;
+            Attendance::Config cfg;
+            cfg.max_pause_ms = 60000;
+            Attendance a(cfg);
+            a.seat_humans(0b0011, t0);
+            ASSERT_EQ(a.cap_s(t0), 60);                                                       // not paused: the whole budget
+            ASSERT_EQ(a.cap_s(t0 + 99999), 60);                                               // (and it does not run down while nobody is away)
+            ASSERT_TRUE(a.lost(1, t0 + 5000));
+            ASSERT_EQ(a.cap_s(t0 + 5000), 60);
+            ASSERT_EQ(a.cap_s(t0 + 5001), 60);                                                // 59,999 ms: still "60" (rounded up)
+            ASSERT_EQ(a.cap_s(t0 + 6000), 59);
+            ASSERT_EQ(a.cap_s(t0 + 6001), 59);
+            ASSERT_EQ(a.cap_s(t0 + 34000), 31);
+            ASSERT_EQ(a.cap_s(t0 + 64000), 1);
+            ASSERT_EQ(a.cap_s(t0 + 64001), 1);
+            ASSERT_EQ(a.cap_s(t0 + 64999), 1);
+            ASSERT_EQ(a.cap_s(t0 + 65000), 0);
+            ASSERT_EQ(a.cap_s(t0 + 99999), 0);
+            Attendance::Config long_cfg;
+            long_cfg.max_pause_ms = 86400u * 1000u;
+            Attendance b(long_cfg);
+            b.seat_humans(0b0011, t0);
+            ASSERT_EQ(b.cap_s(t0), 0xFFFF);
+            ASSERT_TRUE(b.lost(1, t0));
+            ASSERT_EQ(b.cap_s(t0 + 20000000), 0xFFFF);                                        // 86,400 - 20,000 s = 66,400 s: more than a u16
+            ASSERT_EQ(b.cap_s(t0 + 21000000), static_cast<uint16_t>(65400));                  // 65,400 s
+            ASSERT_EQ(b.cap_s(t0 + 20865000), static_cast<uint16_t>(65535));                  // 65,535 s left: exactly the largest
+            ASSERT_EQ(b.cap_s(t0 + 20864999), 0xFFFF);                                        // 65,535.001 s
+            ASSERT_EQ(b.cap_s(t0 + 20865001), static_cast<uint16_t>(65535));                  // 65,534.999 s rounds up to 65,535
+            ASSERT_EQ(b.cap_s(t0 + 20866000), static_cast<uint16_t>(65534));
+            // the wait that Presence tells saturates at 0xFFFF seconds too (a pause of a day: the cap of such a room is 24 hours)
+            ASSERT_EQ(b.presence_for(0, t0 + 65534999).missing[0].waited_s, 65534);
+            ASSERT_EQ(b.presence_for(0, t0 + 65535000).missing[0].waited_s, 0xFFFF);
+            ASSERT_EQ(b.presence_for(0, t0 + 70000000).missing[0].waited_s, 0xFFFF);
+            ASSERT_EQ(b.presence_for(0, t0 + 70000000).cap_s, 16400);                       // (86,400 s of cap less the 70,000 s that have gone)
+            Attendance::Config zero_cfg;                                                      // a room with no pause budget at all: the first update drops any seat that is away
+            zero_cfg.max_pause_ms = 0;
+            Attendance z(zero_cfg);
+            z.seat_humans(0b0011, t0);
+            ASSERT_EQ(z.cap_s(t0), 0);
+            ASSERT_TRUE(z.lost(1, t0 + 10));
+            ASSERT_EQ(z.update(t0 + 10).size(), 1u);
+        }
+        // ---- the same sequence, started at different points of the 32-bit clock (8 s before the wrap, at the wrap, over the signed half), makes the same decisions at the same offsets ----
+        {
+            auto scenario = [](uint32_t t0) {
+                std::vector<int64_t> trace;
+                auto at = [&](uint32_t ms) { return t0 + ms; };
+                Attendance::Config cfg;
+                cfg.max_pause_ms = 120000;
+                Attendance a(cfg);
+                a.seat_humans(0b1111, at(0));
+                auto note = [&](uint32_t ms) {                                                // what can be seen at an offset
+                    trace.push_back(ms);
+                    for (uint8_t s = 0; s < 4; ++s) {
+                        trace.push_back(static_cast<int64_t>(a.state(s)));
+                        trace.push_back(a.away_ms(s, at(ms)));
+                    }
+                    trace.push_back(a.pause_ms(at(ms)));
+                    trace.push_back(a.cap_s(at(ms)));
+                    trace.push_back(a.vote_subject(at(ms)));
+                    trace.push_back(a.connected_humans());
+                    const PresenceMsg p = a.presence_for(0, at(ms));
+                    trace.push_back(p.vote_seat);
+                    trace.push_back(p.votes_continue);
+                    trace.push_back(static_cast<int64_t>(p.missing.size()));
+                    for (const auto& e : p.missing) {
+                        trace.push_back(e.seat);
+                        trace.push_back(e.waited_s);
+                        trace.push_back(e.progress);
+                    }
+                };
+                note(0);
+                trace.push_back(a.lost(3, at(2000)));
+                note(2000);
+                trace.push_back(a.lost(2, at(9000)));
+                trace.push_back(a.returning(2, at(11000)));
+                trace.push_back(a.progress(2, 40, at(12000)));
+                note(15000);
+                trace.push_back(a.caught_up(2, at(17000)));
+                note(17000);
+                note(31999);                                                                  // seat 3 has been away 29,999 ms
+                note(32000);                                                                  // 30,000: the vote opens
+                trace.push_back(a.vote(0, 3, true, at(33000)));
+                trace.push_back(a.vote(1, 3, false, at(33000)));
+                note(33000);
+                for (uint32_t ms = 34000; ms <= 70000; ms += 6000) {
+                    for (uint8_t seat : a.update(at(ms))) trace.push_back(1000 + seat);
+                    note(ms);
+                }
+                trace.push_back(a.vote(2, 3, true, at(70500)));
+                for (uint8_t seat : a.update(at(70600))) trace.push_back(2000 + seat);       // 2 of 3 voted Continue: seat 3 is dropped
+                note(70600);
+                trace.push_back(a.lost(1, at(80000)));
+                trace.push_back(a.returning(1, at(81000)));
+                for (uint32_t ms = 82000; ms <= 135000; ms += 1000) {                         // seat 1 never makes progress: let go at 20 s, then the cap (120 s of pause in all) drops it
+                    for (uint8_t seat : a.update(at(ms))) trace.push_back(3000 + seat);
+                }
+                note(135000);
+                trace.push_back(a.drops_by_vote());
+                trace.push_back(a.drops_by_cap());
+                trace.push_back(a.rejoins());
+                return trace;
+            };
+            const std::vector<int64_t> reference = scenario(1000000);
+            ASSERT_TRUE(reference.size() > 100);
+            for (const uint32_t start : {0u, 0xFFFFE000u, 0xFFFFFFFFu, 0xFFFFFFFFu - 40000u, 0x7FFFF000u, 0x80000000u, 0x80000000u - 1u, 0xFFFFFFFFu - 100000u}) {
+                ASSERT_TRUE(scenario(start) == reference);
+            }
+            bool saw_drop_by_vote = false;
+            bool saw_drop_by_cap = false;
+            for (const int64_t v : reference) {
+                saw_drop_by_vote = saw_drop_by_vote || v == 2003;
+                saw_drop_by_cap = saw_drop_by_cap || v == 3001;
+            }
+            ASSERT_TRUE(saw_drop_by_vote && saw_drop_by_cap);                                 // (the scenario does run through a vote and through the cap)
+        }
+        // ---- Presence is whatever the state is, and always a message that the decoder takes: a random walk over every event ----
+        {
+            Lcg rng(44);
+            for (const uint32_t start : {500000u, 0xFFFFF000u}) {
+                Attendance::Config cfg;
+                cfg.max_pause_ms = 300000;
+                Attendance a(cfg);
+                a.seat_humans(0b1111, start);
+                uint32_t now = start;
+                std::vector<bool> was_dropped(4, false);
+                uint32_t last_pause = 0;
+                size_t valid_votes = 0;
+                size_t with_vote = 0;
+                size_t with_missing = 0;
+                size_t vote_drops = 0;
+                size_t cap_drops = 0;
+                for (int step = 0; step < 8000; ++step) {
+                    now += rng.below(10) == 0 ? 40000u : rng.below(3000);
+                    const uint8_t seat = static_cast<uint8_t>(rng.below(4));
+                    switch (rng.below(10)) {
+                        case 0: a.lost(seat, now); break;
+                        case 1: a.returning(seat, now); break;
+                        case 2: a.progress(seat, static_cast<uint8_t>(rng.below(120)), now); break;
+                        case 3: a.caught_up(seat, now); break;
+                        case 4: a.catch_up_failed(seat, now); break;
+                        case 5: if (rng.below(8) == 0) a.dropped(seat, now); break;
+                        case 6:
+                        case 7: valid_votes += a.vote(seat, rng.below(2) == 0 ? a.vote_subject(now) : static_cast<uint8_t>(rng.below(4)), rng.below(3) != 0, now) ? 1u : 0u; break;
+                        default: a.update(now); break;
+                    }
+                    for (uint8_t s = 0; s < 4; ++s) {
+                        ASSERT_FALSE(was_dropped[s] && a.state(s) != S::Dropped);                                       // a seat that is dropped stays so ...
+                        was_dropped[s] = a.state(s) == S::Dropped;
+                    }
+                    ASSERT_TRUE(a.pause_ms(now) >= last_pause);                                                          // ... and the pause never runs back
+                    last_pause = a.pause_ms(now);
+                    bool everybody_gone = true;
+                    for (uint8_t s = 0; s < 4; ++s) everybody_gone = everybody_gone && a.state(s) == S::Dropped;
+                    if (everybody_gone) {                                                                                // (a new match begins, with the same attendance)
+                        vote_drops += a.drops_by_vote();
+                        cap_drops += a.drops_by_cap();
+                        a.seat_humans(0b1111, now);
+                        was_dropped.assign(4, false);
+                        last_pause = 0;
+                    }
+                    for (const uint8_t viewer : {uint8_t{0}, uint8_t{1}, uint8_t{2}, uint8_t{3}, uint8_t{255}}) {
+                        const PresenceMsg m = a.presence_for(viewer, now);
+                        const std::vector<uint8_t> bytes = encode(m);
+                        PresenceMsg back;
+                        ASSERT_TRUE(decode(bytes, back));                                                                // a Presence of the real state is always one that the decoder takes ...
+                        ASSERT_TRUE(encode(back) == bytes);
+                        ASSERT_EQ(back.missing.empty(), !a.paused());                                                    // ... and it says what the state says
+                        ASSERT_EQ(back.voters, a.connected_humans());
+                        ASSERT_EQ(back.cap_s, a.cap_s(now));
+                        ASSERT_EQ(back.vote_seat, a.vote_subject(now));
+                        if (back.vote_seat != 255) {
+                            ASSERT_EQ(back.votes_continue, a.votes_for_continue(back.vote_seat));
+                            ASSERT_TRUE(a.state(back.vote_seat) == S::Absent && a.away_ms(back.vote_seat, now) >= cfg.vote_after_ms);
+                            ASSERT_TRUE(viewer == 255 ? back.your_vote == 0 : (a.state(viewer) == S::Present || back.your_vote == 0));
+                        }
+                        for (const auto& e : back.missing) {
+                            ASSERT_TRUE(a.state(e.seat) == S::Absent || a.state(e.seat) == S::CatchingUp);
+                            ASSERT_EQ(e.waited_s, std::min<uint32_t>(a.away_ms(e.seat, now) / 1000u, 0xFFFFu));
+                            ASSERT_EQ(e.progress, a.percent(e.seat));
+                        }
+                    }
+                    const PresenceMsg m = a.presence_for(0, now);
+                    with_vote += m.vote_seat != 255 ? 1u : 0u;
+                    with_missing += m.missing.empty() ? 0u : 1u;
+                }
+                vote_drops += a.drops_by_vote();
+                cap_drops += a.drops_by_cap();
+                ASSERT_TRUE(valid_votes > 40 && with_vote > 1500 && with_missing > 3000 && vote_drops > 3 && cap_drops > 20);      // (the walk does reach votes, pauses and drops of both kinds)
+            }
+        }
+    } TEST_END();
+
+    TEST_CASE("N2.45 Lock-Step Runner: fast_forward Runs Queued Turns At Once Without Any Hook, In The Order Of update(): The Same State After Every Turn As The Paced Runner Over 600 Turns Of The Four-Player Match, In Slices Of Every Kind; Nothing Queued Is Nothing Done; Paced Play Goes On From There") {
+        const uint32_t seed = 1;
+        sim::SimulationEngine proto;
+        const Ids ids = build_world(proto, seed);
+        // 600 turns of the four-player match: the scripted orders of every player, and three turns that only the right ORDER can survive: an invitation and its acceptance in one turn
+        // (the acceptance needs the invitation: canonical order is by issuer), a Hatch of every player, and the drop-out of seat 3
+        std::vector<TurnMsg> turns(600);
+        for (uint32_t k = 0; k < 600; ++k) {
+            turns[k].turn = k;
+            for (uint8_t p = 0; p < 4; ++p) {
+                Command c;
+                if (script(ids, seed, k * kTurnMs, p, c)) turns[k].commands.push_back(c);
+            }
+        }
+        turns[100].commands.push_back(cmd(CommandType::AllianceAccept, 2, 1));
+        turns[100].commands.push_back(cmd(CommandType::AllianceInvite, 1, 2));
+        for (uint8_t p = 0; p < 4; ++p) turns[150].commands.push_back(cmd(CommandType::Hatch, p));
+        turns[400].commands.push_back(cmd(CommandType::Drop, 3));
+        for (TurnMsg& t : turns) sim::canonical_order(t.commands);
+        size_t commands_in_all = 0;
+        for (const TurnMsg& t : turns) commands_in_all += t.commands.size();
+        ASSERT_TRUE(commands_in_all > 300);
+        // the paced runner's state after every turn (one turn runs per update, a turn behind the one that was fed)
+        std::vector<sim::StateHash> after(600);
+        {
+            sim::SimulationEngine sim;
+            build_world(sim, seed);
+            LockstepRunner runner(sim);
+            size_t done = 0;
+            for (uint32_t k = 0; k < 640; ++k) {
+                if (k < 600) ASSERT_TRUE(runner.on_turn(turns[k]));
+                for (const LockstepRunner::Executed& e : runner.update(kTurnMs)) {
+                    ASSERT_EQ(e.turn, done);
+                    after[done++] = sim.state_hash();
+                }
+            }
+            ASSERT_EQ(done, size_t{600});
+        }
+        for (size_t k = 1; k < 600; ++k) ASSERT_TRUE(after[k] != after[k - 1]);       // (the match changes every turn: a tick that was skipped shows)
+        {   // the scenario is order sensitive: turn 100 applied backwards gives another state (so the equality below proves the order, and a runner that applied it so would be caught)
+            sim::SimulationEngine good;
+            sim::SimulationEngine bad;
+            build_world(good, seed);
+            build_world(bad, seed);
+            for (uint32_t k = 0; k < 100; ++k) {
+                for (const Command& c : turns[k].commands) { good.apply_command(c); bad.apply_command(c); }
+                good.tick();
+                bad.tick();
+            }
+            ASSERT_TRUE(good.state_hash() == bad.state_hash());
+            for (const Command& c : turns[100].commands) good.apply_command(c);
+            for (auto it = turns[100].commands.rbegin(); it != turns[100].commands.rend(); ++it) bad.apply_command(*it);
+            ASSERT_TRUE(good.state_hash() != bad.state_hash());
+        }
+        // ---- one turn at a time: the state after each is the paced runner's ----
+        {
+            sim::SimulationEngine sim;
+            build_world(sim, seed);
+            LockstepRunner runner(sim);
+            size_t hooks = 0;
+            runner.set_on_tick([&]() { ++hooks; });
+            runner.set_on_command([&](const Command&, const sim::CommandResult&) { ++hooks; });
+            runner.set_on_applied([&](const Command&) { ++hooks; });
+            for (uint32_t k = 0; k < 600; ++k) {
+                ASSERT_TRUE(runner.on_catch_up_turn(turns[k]));
+                ASSERT_EQ(runner.queued(), size_t{1});
+                ASSERT_EQ(runner.fast_forward(1), 1u);
+                ASSERT_TRUE(sim.state_hash() == after[k]);                              // the same state after EVERY turn
+                ASSERT_EQ(runner.next_turn_to_execute(), k + 1);
+                ASSERT_EQ(runner.next_turn_expected(), k + 1);
+                ASSERT_EQ(sim.current_tick(), uint64_t{k} + 1);
+                ASSERT_TRUE(runner.at_boundary());
+            }
+            ASSERT_EQ(hooks, size_t{0});                                                // ... and no hook was called: nothing was drawn, no sound, no news
+            ASSERT_EQ(runner.queued(), size_t{0});
+        }
+        // ---- slices of every kind: the state at each boundary of a slice is the paced runner's after that many turns ----
+        for (const uint32_t pattern : {0u, 1u, 2u, 3u, 4u}) {
+            sim::SimulationEngine sim;
+            build_world(sim, seed);
+            LockstepRunner runner(sim);
+            size_t hooks = 0;
+            runner.set_on_tick([&]() { ++hooks; });
+            runner.set_on_command([&](const Command&, const sim::CommandResult&) { ++hooks; });
+            runner.set_on_applied([&](const Command&) { ++hooks; });
+            Lcg rng(100 + pattern);
+            uint32_t fed = 0;
+            uint32_t executed = 0;
+            size_t calls = 0;
+            while (executed < 600) {
+                // turns come in bunches of the size of a batch (or of one), while the slices are of whatever size the frame had time for
+                const uint32_t bunch = pattern == 0 ? 1u : (pattern == 1 ? 600u : 1u + rng.below(300));
+                for (uint32_t i = 0; i < bunch && fed < 600; ++i) ASSERT_TRUE(runner.on_catch_up_turn(turns[fed++]));
+                while (runner.queued() > 0) {
+                    const uint32_t slice = pattern == 3 ? 7u : (pattern == 4 ? 1u + rng.below(100) : (pattern == 0 ? 1u : 64u));
+                    const uint32_t ran = runner.fast_forward(slice);
+                    ASSERT_TRUE(ran >= 1 && ran <= slice);
+                    executed += ran;
+                    ++calls;
+                    ASSERT_EQ(runner.next_turn_to_execute(), executed);
+                    ASSERT_TRUE(sim.state_hash() == after[executed - 1]);
+                }
+            }
+            ASSERT_EQ(executed, 600u);
+            ASSERT_EQ(hooks, size_t{0});
+            ASSERT_TRUE(calls >= 10);
+            ASSERT_EQ(sim.current_tick(), uint64_t{600});
+        }
+        // ---- max_ticks is respected, 0 does nothing, an empty queue is nothing done (and the runner is left as it was) ----
+        {
+            sim::SimulationEngine sim;
+            build_world(sim, seed);
+            LockstepRunner runner(sim);
+            ASSERT_EQ(runner.fast_forward(100), 0u);                                     // nothing queued
+            ASSERT_EQ(runner.next_turn_to_execute(), 0u);
+            ASSERT_EQ(sim.current_tick(), uint64_t{0});
+            for (uint32_t k = 0; k < 10; ++k) ASSERT_TRUE(runner.on_catch_up_turn(turns[k]));
+            ASSERT_EQ(runner.fast_forward(0), 0u);                                       // asked for no ticks
+            ASSERT_TRUE(runner.queued() == 10 && sim.current_tick() == 0);
+            ASSERT_EQ(runner.fast_forward(5), 5u);
+            ASSERT_TRUE(runner.queued() == 5 && sim.current_tick() == 5 && runner.next_turn_to_execute() == 5);
+            ASSERT_TRUE(sim.state_hash() == after[4]);
+            ASSERT_EQ(runner.fast_forward(1000), 5u);                                    // what is there, no more
+            ASSERT_TRUE(runner.queued() == 0 && sim.current_tick() == 10 && sim.state_hash() == after[9]);
+            ASSERT_EQ(runner.fast_forward(1000), 0u);
+            ASSERT_EQ(sim.current_tick(), uint64_t{10});
+            // a runner that is in the middle of paced play and has nothing queued is not touched by a fast-forward of nothing: it is still started, with the buffer that it had
+            sim::SimulationEngine live;
+            build_world(live, seed);
+            LockstepRunner paced(live);
+            for (uint32_t k = 0; k < 30; ++k) {
+                ASSERT_TRUE(paced.on_turn(turns[k]));
+                paced.update(kTurnMs);
+            }
+            const uint32_t buffer = paced.buffer_turns();
+            const uint32_t expected = paced.next_turn_expected();
+            const uint32_t executed_before = paced.next_turn_to_execute();
+            ASSERT_TRUE(paced.queued() >= 1);
+            const size_t queued = paced.queued();
+            ASSERT_EQ(paced.fast_forward(0), 0u);
+            ASSERT_TRUE(paced.queued() == queued && paced.buffer_turns() == buffer && paced.next_turn_expected() == expected && paced.next_turn_to_execute() == executed_before);
+            paced.update(kTurnMs);                                                       // the last turn that was fed runs: the queue is empty, the runner is in paced play
+            ASSERT_EQ(paced.queued(), size_t{0});
+            const bool rebuilding = paced.rebuilding();
+            const uint32_t stalled_for = paced.stalled_ms();
+            const uint32_t at_turn = paced.next_turn_to_execute();
+            ASSERT_EQ(paced.fast_forward(10), 0u);                                       // nothing queued is nothing done: not even the pacing is touched
+            ASSERT_TRUE(paced.buffer_turns() == buffer && paced.rebuilding() == rebuilding && paced.stalled_ms() == stalled_for && paced.next_turn_to_execute() == at_turn);
+            ASSERT_EQ(live.current_tick(), uint64_t{at_turn});
+        }
+        // ---- the numbering and the order of arrival: catch-up turns and live turns are one sequence, with the same refusals ----
+        {
+            sim::SimulationEngine sim;
+            build_world(sim, seed);
+            LockstepRunner runner(sim);
+            ASSERT_FALSE(runner.on_catch_up_turn(turns[1]));                              // must start at 0
+            ASSERT_TRUE(runner.on_catch_up_turn(turns[0]));
+            ASSERT_FALSE(runner.on_catch_up_turn(turns[0]));                              // no repeat
+            ASSERT_FALSE(runner.on_catch_up_turn(turns[2]));                              // no gap
+            ASSERT_TRUE(runner.on_turn(turns[1]));                                        // a live turn follows a catch-up turn ...
+            ASSERT_TRUE(runner.on_catch_up_turn(turns[2]));                               // ... and the other way round
+            ASSERT_FALSE(runner.on_turn(turns[2]));
+            TurnMsg many;
+            many.turn = 3;
+            for (size_t i = 0; i < kMaxTurnCommands + 1; ++i) many.commands.push_back(cmd(CommandType::Hatch, 0));
+            ASSERT_FALSE(runner.on_catch_up_turn(many));                                  // more commands than a turn may hold
+            ASSERT_FALSE(runner.on_turn(many));
+            ASSERT_EQ(runner.next_turn_expected(), 3u);
+            ASSERT_TRUE(runner.logged_turn(0) != nullptr && runner.logged_turn(2) != nullptr && runner.logged_turn(2)->commands == turns[2].commands);      // (a machine that caught up can serve what it was given)
+            ASSERT_EQ(runner.fast_forward(100), 3u);
+            ASSERT_TRUE(sim.state_hash() == after[2]);
+        }
+        // ---- paced play goes on from a fast-forward: the next live turns are collected (target + 1 of them), then run in order, with every hook, to the paced runner's final state ----
+        {
+            sim::SimulationEngine sim;
+            build_world(sim, seed);
+            LockstepRunner runner(sim);
+            size_t ticks = 0;
+            size_t applied = 0;
+            size_t verdicts = 0;
+            bool boundary_inside_a_hook = false;
+            runner.set_on_tick([&]() { ++ticks; boundary_inside_a_hook = boundary_inside_a_hook || runner.at_boundary(); });
+            runner.set_on_command([&](const Command&, const sim::CommandResult&) { ++verdicts; boundary_inside_a_hook = boundary_inside_a_hook || runner.at_boundary(); });
+            runner.set_on_applied([&](const Command&) { ++applied; boundary_inside_a_hook = boundary_inside_a_hook || runner.at_boundary(); });
+            for (uint32_t k = 0; k < 300; ++k) ASSERT_TRUE(runner.on_catch_up_turn(turns[k]));
+            ASSERT_EQ(runner.fast_forward(300), 300u);
+            ASSERT_TRUE(ticks == 0 && applied == 0 && verdicts == 0);
+            ASSERT_TRUE(sim.state_hash() == after[299]);
+            ASSERT_FALSE(runner.stalled());                                               // (no "waiting for the other players": the runner is not waiting, it has not started)
+            ASSERT_FALSE(runner.rebuilding());
+            ASSERT_EQ(runner.buffer_turns(), 1u);
+            ASSERT_TRUE(runner.update(50).empty());                                       // nothing is queued: nothing runs, and nothing is a stall
+            ASSERT_FALSE(runner.stalled());
+            ASSERT_TRUE(runner.on_turn(turns[300]));
+            ASSERT_TRUE(runner.update(50).empty());                                       // one live turn is not enough: the buffer (target 1 + the turn that runs) is collected first
+            ASSERT_TRUE(runner.on_turn(turns[301]));
+            std::vector<LockstepRunner::Executed> ran = runner.update(0);
+            ASSERT_TRUE(ran.size() == 1 && ran[0].turn == 300);                           // ... and the first live turn runs at once, numbered as it is
+            ASSERT_TRUE(sim.state_hash() == after[300]);
+            size_t commands_applied = 0;
+            for (uint32_t k = 301; k < 600; ++k) {
+                if (k + 1 < 600) ASSERT_TRUE(runner.on_turn(turns[k + 1]));
+                ran = runner.update(kTurnMs);
+                ASSERT_TRUE(ran.size() == 1 && ran[0].turn == k);
+                ASSERT_TRUE(sim.state_hash() == after[k]);
+            }
+            ran = runner.update(kTurnMs);
+            ASSERT_TRUE(ran.empty() && runner.next_turn_to_execute() == 600);
+            for (uint32_t k = 300; k < 600; ++k) commands_applied += turns[k].commands.size();
+            ASSERT_EQ(ticks, size_t{300});                                                // the hooks are called for the live turns, one tick each ...
+            ASSERT_TRUE(applied == commands_applied && verdicts == commands_applied);     // ... and for every command of them
+            ASSERT_FALSE(boundary_inside_a_hook);                                         // (inside a hook a turn is half done: not at a boundary)
+            ASSERT_TRUE(runner.at_boundary());
+            ASSERT_TRUE(sim.state_hash() == after[599]);
+        }
+    } TEST_END();
+
+    TEST_CASE("N2.46 Lock-Step Runner: The Catch-Up Tells The Jitter Buffer Nothing, And Leaves The Runner As At The Start Of A Match (The Buffer At Its Steady Value, No Turn Read, The Next Live Turns Collected First): A Link That Was Rough Before The Pause Does Not Make The Buffer Grow After It") {
+        // a turn's commands are not what this is about: empty turns, and a world that nothing happens in
+        auto empty_turn = [](uint32_t n) {
+            TurnMsg t;
+            t.turn = n;
+            return t;
+        };
+        // drives live turns into a runner: turn k (k0 .. k0 + count - 1) is sealed at base + (k - k0) * 50 ms and arrives `delay(k)` later (never before an earlier turn: the link is ordered); every
+        // 10 ms the runner has its frame. `buffer_max` is the largest buffer that was asked for.
+        struct Drive {
+            uint32_t buffer_max{0};
+            uint32_t buffer_at_end{0};
+            size_t executed{0};
+        };
+        auto drive = [&](LockstepRunner& runner, uint32_t k0, uint32_t count, const std::function<uint32_t(uint32_t)>& delay) {
+            Drive out;
+            std::vector<uint32_t> arrival(count);
+            uint32_t last = 0;
+            for (uint32_t i = 0; i < count; ++i) {
+                last = std::max(last, i * kTurnMs + delay(i));
+                arrival[i] = last;
+            }
+            uint32_t next = 0;
+            for (uint32_t now = 10; now <= (count + 30) * kTurnMs; now += 10) {
+                while (next < count && arrival[next] <= now) {
+                    runner.on_turn(empty_turn(k0 + next));
+                    ++next;
+                }
+                out.executed += runner.update(10).size();
+                out.buffer_max = std::max(out.buffer_max, runner.buffer_turns());
+            }
+            out.buffer_at_end = runner.buffer_turns();
+            return out;
+        };
+        // ---- the catch-up's turns are not arrivals: even when the runner is driven in between, the jitter buffer reads nothing from them ----
+        {
+            sim::SimulationEngine sim;
+            build_world(sim, 1);
+            LockstepRunner runner(sim);
+            ASSERT_TRUE(runner.update(10).empty());                                       // (the first update of a runner reads what waited for it and counts none of it: so one frame goes by first)
+            for (uint32_t k = 0; k < 1000; ++k) ASSERT_TRUE(runner.on_catch_up_turn(empty_turn(k)));
+            runner.update(50);                                                            // a frame that finds a thousand turns that came all at once: for live turns that is a bunch of 1000 and wants the largest buffer
+            ASSERT_EQ(runner.jitter().lateness_ms(), 0u);
+            ASSERT_EQ(runner.buffer_turns(), 1u);
+            ASSERT_EQ(runner.jitter().wanted(), 1u);
+            // the same turns as live ones: the buffer reads them (the control: this is what the catch-up must not do)
+            sim::SimulationEngine other;
+            build_world(other, 1);
+            LockstepRunner live(other);
+            ASSERT_TRUE(live.update(10).empty());
+            for (uint32_t k = 0; k < 1000; ++k) ASSERT_TRUE(live.on_turn(empty_turn(k)));
+            live.update(50);
+            ASSERT_TRUE(live.jitter().lateness_ms() > 1000 && live.buffer_turns() == 4);
+        }
+        // ---- a long catch-up (36,000 turns, in the batches that the server sends) and then the live match: nothing was learned, nothing is wrong ----
+        {
+            sim::SimulationEngine sim;
+            build_world(sim, 1, 2 * 3600 * 1000);                                         // (a match of two hours: the engine ends a match of 12 minutes, which has 14,400 ticks)
+            LockstepRunner runner(sim);
+            uint32_t next = 0;
+            while (next < 36000) {
+                for (uint32_t i = 0; i < 4096 && next < 36000; ++i) ASSERT_TRUE(runner.on_catch_up_turn(empty_turn(next++)));
+                while (runner.queued() > 0) runner.fast_forward(500);
+            }
+            ASSERT_EQ(runner.next_turn_to_execute(), 36000u);
+            ASSERT_EQ(sim.current_tick(), uint64_t{36000});
+            ASSERT_EQ(runner.jitter().lateness_ms(), 0u);
+            ASSERT_EQ(runner.buffer_turns(), 1u);
+            ASSERT_FALSE(runner.stalled());
+            const Drive live = drive(runner, 36000, 400, [](uint32_t) { return 0u; });      // the live match goes on over a steady link
+            ASSERT_EQ(live.buffer_max, 1u);                                               // the buffer never asked for more than one turn
+            ASSERT_EQ(live.buffer_at_end, 1u);
+            ASSERT_EQ(live.executed, size_t{400});                                        // every turn ran (the last one when its tick was due)
+            ASSERT_EQ(runner.next_turn_to_execute(), 36000u + 400u);
+        }
+        // ---- a link that was rough before the pause: the buffer had grown; the pause, the catch-up and a steady link afterwards leave it at its steady value ----
+        {
+            sim::SimulationEngine sim;
+            build_world(sim, 1);
+            LockstepRunner runner(sim);
+            Lcg rng(46);
+            const Drive rough = drive(runner, 0, 600, [&](uint32_t) { return rng.below(130); });   // 0 - 130 ms of jitter: a buffer of three or four turns
+            ASSERT_TRUE(rough.buffer_max >= 3);
+            const uint32_t learned = runner.buffer_turns();
+            ASSERT_TRUE(learned >= 2);
+            const uint32_t executed_before = runner.next_turn_to_execute();
+            for (int i = 0; i < 100; ++i) runner.update(50);                              // the pause: 5 s with no turn at all (the connection was lost and the match waits)
+            ASSERT_TRUE(runner.stalled());
+            const uint32_t next = runner.next_turn_expected();
+            ASSERT_TRUE(runner.on_turn(empty_turn(next)));                                // (a live turn that came in the frame that the catch-up began in: nobody has read it yet)
+            for (uint32_t k = next + 1; k < next + 300; ++k) ASSERT_TRUE(runner.on_catch_up_turn(empty_turn(k)));      // the turns that this machine missed come as a catch-up
+            ASSERT_EQ(runner.fast_forward(1000), 300u);
+            ASSERT_EQ(runner.next_turn_to_execute(), next + 300);
+            ASSERT_TRUE(runner.next_turn_to_execute() > executed_before);
+            ASSERT_EQ(runner.buffer_turns(), 1u);                                         // the buffer starts again from its steady value ...
+            ASSERT_EQ(runner.jitter().lateness_ms(), 0u);                                 // ... with nothing read: what was read describes a link and a clock that are gone
+            ASSERT_FALSE(runner.stalled());
+            ASSERT_FALSE(runner.rebuilding());
+            const Drive steady = drive(runner, next + 300, 400, [](uint32_t) { return 0u; });      // the match goes on, over a link that is steady now
+            ASSERT_EQ(steady.buffer_max, 1u);                                             // the stale measurements did not come back, the clock that jumped did not look like a late link
+            ASSERT_EQ(steady.buffer_at_end, 1u);
+            ASSERT_EQ(steady.executed, size_t{400});
+            // and a link that IS rough after the catch-up is learned afresh: it grows as it would at the start of a match
+            const Drive rough_again = drive(runner, next + 300 + 400, 600, [&](uint32_t) { return rng.below(130); });
+            ASSERT_TRUE(rough_again.buffer_max >= 3);
+        }
+        // ---- live turns that waited behind the catch-up (a window that was not drawn for a second after it) come in a bunch: that is not the link's lateness either ----
+        {
+            sim::SimulationEngine sim;
+            build_world(sim, 1);
+            LockstepRunner runner(sim);
+            for (uint32_t k = 0; k < 300; ++k) ASSERT_TRUE(runner.on_catch_up_turn(empty_turn(k)));
+            ASSERT_EQ(runner.fast_forward(1000), 300u);
+            for (uint32_t k = 300; k < 340; ++k) ASSERT_TRUE(runner.on_turn(empty_turn(k)));      // two seconds of the live match, all there when the first frame comes
+            runner.update(10);
+            ASSERT_EQ(runner.jitter().lateness_ms(), 0u);                                 // read at once, but they were not late: they waited for the runner
+            ASSERT_EQ(runner.buffer_turns(), 1u);
+            for (int i = 0; i < 400 && runner.queued() > 0; ++i) runner.update(10);        // and the queue is run down at up to four times normal speed, as for any bunch
+            ASSERT_EQ(runner.queued(), size_t{0});
+            ASSERT_EQ(runner.next_turn_to_execute(), 340u);
+            ASSERT_EQ(runner.buffer_turns(), 1u);
+        }
+        // ---- a runner that had waited a moment for a turn (80 ms: a stall that one more turn of buffer would have bridged) when a small catch-up came: the wait is over, so the live turns that come
+        // after it do not grow the buffer as a late turn would ----
+        {
+            sim::SimulationEngine sim;
+            build_world(sim, 1);
+            LockstepRunner runner(sim);
+            for (uint32_t k = 0; k < 60; ++k) {
+                ASSERT_TRUE(runner.on_turn(empty_turn(k)));
+                runner.update(kTurnMs);
+            }
+            runner.update(kTurnMs);                                                       // the last turn that was queued runs
+            ASSERT_EQ(runner.queued(), size_t{0});
+            for (int i = 0; i < 8; ++i) runner.update(10);                                // 80 ms with no turn although one is due
+            ASSERT_TRUE(runner.stalled() && runner.stalled_ms() <= 100);
+            const uint32_t next = runner.next_turn_expected();
+            ASSERT_TRUE(runner.on_catch_up_turn(empty_turn(next)) && runner.on_catch_up_turn(empty_turn(next + 1)));
+            ASSERT_EQ(runner.fast_forward(10), 2u);
+            ASSERT_FALSE(runner.stalled());                                               // not waiting for anything now
+            const Drive live = drive(runner, next + 2, 200, [](uint32_t) { return 0u; });
+            ASSERT_EQ(live.buffer_max, 1u);                                               // (the end of the stall was never counted as a late turn)
+            ASSERT_EQ(live.executed, size_t{200});
+        }
+        // ---- a fast-forward that runs nothing does not reset what the runner has learned ----
+        {
+            sim::SimulationEngine sim;
+            build_world(sim, 1);
+            LockstepRunner runner(sim);
+            Lcg rng(47);
+            drive(runner, 0, 600, [&](uint32_t) { return rng.below(130); });
+            while (runner.queued() > 0) runner.update(50);                               // (the turns of the run that wait in the buffer run: nothing is queued now)
+            const uint32_t learned = runner.buffer_turns();
+            const uint32_t lateness = runner.jitter().lateness_ms();
+            ASSERT_TRUE(learned >= 2 && lateness > 0);
+            ASSERT_EQ(runner.fast_forward(100), 0u);                                      // nothing queued: nothing done, and what the runner has learned stays learned
+            ASSERT_EQ(runner.fast_forward(100), 0u);
+            ASSERT_TRUE(runner.buffer_turns() == learned && runner.jitter().lateness_ms() == lateness);
+        }
     } TEST_END();
 }
 
@@ -2942,6 +4972,7 @@ int main() {
     run_sequencer_tests();
     run_flood_budget_tests();
     run_runner_tests();
+    run_reconnect_core_tests();
     run_match_tests();
     run_failure_tests();
     run_dropout_tests();

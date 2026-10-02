@@ -207,7 +207,7 @@ def frame(p): return struct.pack('<I', len(p)) + p
 def str8(t):
     b = t.encode()
     return bytes([len(b)]) + b
-hello = bytes([1]) + struct.pack('<H', protocol) + str8('Evil') + struct.pack('<H', 0) + bytes([255]) + str8(room) + str8('')
+hello = bytes([1]) + struct.pack('<H', protocol) + str8('Evil') + struct.pack('<H', 0) + bytes([255]) + str8(room) + str8('') + bytes(16) + struct.pack('<I', 0)     # (protocol 10: no key, no turns)
 message = bytes([24]) if kind == 'startreq' else bytes([10]) + struct.pack('<II', 1, 0)
 sock = socket.create_connection(('127.0.0.1', port), timeout=5)
 sock.sendall(frame(hello))

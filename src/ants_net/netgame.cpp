@@ -85,6 +85,9 @@ std::string reject_text(RejectReason r) {
         case RejectReason::MatchRunning: return "The match has already started.";
         case RejectReason::Kicked: return str::text(str::kDroppedFromGame);
         case RejectReason::NoSuchRoom: return "There is no such room on this server.";
+        case RejectReason::Dropped: return str::text(str::kDroppedFromGame);                       // (protocol 10) a seat that was dropped while its player was away: the original's one text for a dropped machine, string 94
+        case RejectReason::RejoinFailed: return "The game could not be rejoined.";                // (protocol 10; the remake's own: the original has no way back)
+        case RejectReason::Superseded: return "This game was taken over by another window.";      // (protocol 10; the remake's own)
         default: return "The host refused the connection.";
     }
 }

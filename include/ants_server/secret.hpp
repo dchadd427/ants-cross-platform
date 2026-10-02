@@ -9,6 +9,8 @@
 // not check them. A symbolic link at the path is followed (a mounted secret is often one); a link whose target does not exist is an error, never a place for a new file.
 #pragma once
 
+#include <cstddef>
+#include <cstdint>
 #include <string>
 
 namespace ants::server {
@@ -33,6 +35,11 @@ struct SecretResult {
 /// with the same complete secret, exactly one of them gets SecretSource::Generated, and a crash leaves at most a stale temporary file, never a half written secret
 /// file. The folder of `file` must be on a file system that supports hard links (a POSIX requirement); otherwise the error says so.
 SecretResult resolve_secret(const char* from_env, const std::string& file);
+
+/// Fills out[0 .. n) with random bytes of the operating system's generator (/dev/urandom, BCryptGenRandom): the generator that makes the control secret, and the one that the server gives
+/// the rooms to make the keys of the seats (ants_net itself never reads the operating system's generator: the library is built for the web too). True when all n bytes are written;
+/// false when the generator fails, and then what `out` holds is not to be used. n = 0 is true and writes nothing.
+bool random_bytes(uint8_t* out, size_t n);
 
 /// 32 random bytes of the operating system's generator as 64 lower-case hex digits. Empty when the generator fails.
 std::string generate_secret_text();

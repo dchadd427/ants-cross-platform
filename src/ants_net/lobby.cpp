@@ -257,6 +257,57 @@ void HostLobby::check_all_loaded() {
     events_.push_back(Event{Event::Type::Begun, cfg_.host_seat});
 }
 
+// A key for the guest that is about to be welcomed: none (the zero key) without a key maker, when it fails, or when it only gives keys that cannot be told apart (zero, or the key of a guest
+// that is seated: two seats must never share a key). Called before the new guest is seated, so a key never equals the guest's own.
+SeatKey HostLobby::new_key() const {
+    if (!cfg_.make_key) return SeatKey{};
+    for (int attempt = 0; attempt < 4; ++attempt) {
+        SeatKey key{};
+        if (!cfg_.make_key(key) || key_is_zero(key) || seat_of_key(key) != 255) continue;
+        return key;
+    }
+    return SeatKey{};
+}
+
+// The seat whose guest holds `key`, 255 when none does. Every seat is compared, whatever the first comparison said, and the comparison itself does not stop at the first byte
+// that differs (key_matches): how long the answer takes says nothing about how much of a guess was right.
+uint8_t HostLobby::seat_of_key(const SeatKey& key) const noexcept {
+    uint8_t found = 255;
+    for (uint8_t s = 0; s < sim::MAX_PLAYERS; ++s) {
+        const bool held = guests_[s].conn != nullptr && key_matches(guests_[s].key, key);
+        found = held ? s : found;
+    }
+    return found;
+}
+
+// A Hello with the key of a seated guest while the room is open: the new connection is that guest from now on. The seat keeps everything that is its own (its name, its key, its place in the
+// order of the Welcomes, so that the leader stays the leader; its violations and its message budget: a connection that is thrown out cannot start again by coming back), the thumb is
+// measured again, the old connection is told that it was replaced (it must not try to come back: Superseded) and closed. The Welcome is the one of the seat, with its key.
+void HostLobby::take_over(uint8_t seat, Pending& p, const HelloMsg& hello) {
+    Guest& g = guests_[seat];
+    Connection* old = g.conn;
+    g.conn = p.conn;
+    g.address = p.address;
+    g.listen_port = hello.listen_port;
+    g.measured = false;
+    g.rtt_ms = 0;
+    g.ping_nonce = 0;
+    g.next_ping_ms = 0;
+    for (uint32_t& sent : g.ping_sent) sent = 0;
+    room_.slots[seat].rtt_ms = kRttUnknown;
+    ++takeovers_;
+    if (old != nullptr && old != p.conn && old->is_open()) {
+        old->send(encode(RejectMsg{RejectReason::Superseded}));
+        old->close();
+    }
+    WelcomeMsg w;
+    w.player = seat;
+    w.players = sim::MAX_PLAYERS;
+    w.key = g.key;
+    p.conn->send(encode(w));
+    broadcast_room();
+}
+
 void HostLobby::handle_hello(Pending& p, const std::vector<uint8_t>& msg, uint32_t /*now_ms*/, bool& consumed) {
     consumed = true;                                 // whatever happens, this connection is not pending any more
     if (peek_type(msg) != MsgType::Hello) {          // the first message must be Hello
@@ -273,7 +324,11 @@ void HostLobby::handle_hello(Pending& p, const std::vector<uint8_t>& msg, uint32
     if (hello.version != kProtocolVersion) return reject(RejectReason::VersionMismatch);      // the layout of another version is not read
     if (!decode(msg, hello)) return reject(RejectReason::BadRequest);                        // this version's layout, in full
     if (hello.room != cfg_.room_code) return reject(RejectReason::NoSuchRoom);               // a Hello for another room (or for none)
-    if (phase_ != Phase::Room) return reject(RejectReason::MatchRunning);
+    if (phase_ == Phase::Room && !key_is_zero(hello.key)) {                                  // the key of a seated guest: that guest, on a new connection (a key that fits no seat: a new player)
+        const uint8_t holder = seat_of_key(hello.key);
+        if (holder != 255) return take_over(holder, p, hello);
+    }
+    if (phase_ != Phase::Room) return reject(RejectReason::MatchRunning);                    // (a key in a match that loads or runs is the session's business, not the lobby's)
     if (players() >= cfg_.max_players) return reject(RejectReason::Full);
     uint8_t seat = 255;
     if (hello.want_seat < sim::MAX_PLAYERS && room_.slots[hello.want_seat].state == SlotState::Empty) seat = hello.want_seat;     // the seat it asked for, when it is free
@@ -281,15 +336,21 @@ void HostLobby::handle_hello(Pending& p, const std::vector<uint8_t>& msg, uint32
         if (room_.slots[s].state == SlotState::Empty) seat = s;                        // else the first free one
     }
     if (seat == 255) return reject(RejectReason::Full);
+    const SeatKey key = new_key();
     guests_[seat] = Guest{};
     guests_[seat].conn = p.conn;
     guests_[seat].address = p.address;
     guests_[seat].listen_port = hello.listen_port;
     guests_[seat].join_order = ++joins_;
+    guests_[seat].key = key;
     room_.slots[seat].state = SlotState::Client;
     room_.slots[seat].name = human_name(hello.name, "Player " + std::to_string(static_cast<unsigned>(seat) + 1u));
     elect_leader();                                              // the first guest to be welcomed leads (a server's room that allows an early start)
-    p.conn->send(encode(WelcomeMsg{seat, sim::MAX_PLAYERS}));
+    WelcomeMsg welcome;
+    welcome.player = seat;
+    welcome.players = sim::MAX_PLAYERS;
+    welcome.key = key;
+    p.conn->send(encode(welcome));
     events_.push_back(Event{Event::Type::Joined, seat});
     broadcast_room();
 }
@@ -444,6 +505,7 @@ void ClientLobby::send_hello() {
     h.want_seat = cfg_.want_seat;
     h.room = cfg_.room;
     h.token = cfg_.token;
+    h.key = cfg_.key;                                // (have_turns stays 0: this lobby starts from nothing; a key that is zero makes the Hello that of a new player)
     conn_->send(encode(h));
     phase_ = Phase::Joining;
     joined_stamp_pending_ = true;
@@ -477,6 +539,8 @@ void ClientLobby::update(uint32_t now_ms) {
                 WelcomeMsg w;
                 if (phase_ == Phase::Joining && decode(msg, w)) {
                     seat_ = w.player;
+                    key_ = w.key;
+                    rejoined_ = (w.flags & kWelcomeRejoin) != 0;
                     phase_ = Phase::InRoom;
                 }
                 break;

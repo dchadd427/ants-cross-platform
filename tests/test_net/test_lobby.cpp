@@ -110,6 +110,80 @@ struct Room {
     }
 };
 
+// A server's room (the host holds no seat) that gives every guest a key. The keys come from a seeded generator, so that a test can tell them apart and repeat them.
+HostLobby::Config keyed_server_config(uint32_t seed, const std::string& room_code = std::string()) {
+    HostLobby::Config hc;
+    hc.host_seat = 255;
+    hc.min_players = 2;
+    hc.room_code = room_code;
+    auto rng = std::make_shared<Lcg>(seed);
+    hc.make_key = [rng](SeatKey& key) {
+        for (uint8_t& b : key) b = static_cast<uint8_t>(rng->below(256));
+        return true;
+    };
+    return hc;
+}
+
+// A key that is not zero, and different for every `salt`
+SeatKey key_with(uint8_t salt) {
+    SeatKey k{};
+    for (size_t i = 0; i < k.size(); ++i) k[i] = static_cast<uint8_t>(salt * 31u + i * 7u + 1u);
+    return k;
+}
+
+// What a Hello of protocols 6 to 9 looked like (they shared the layout: protocol 9 changed the rules of the match, not a message): no key, no turns. Protocol 10 added both.
+std::vector<uint8_t> old_layout_hello(uint16_t version, const std::string& name, const std::string& room = std::string(), const std::string& token = std::string()) {
+    std::vector<uint8_t> out = {static_cast<uint8_t>(MsgType::Hello), static_cast<uint8_t>(version & 0xFF), static_cast<uint8_t>(version >> 8), static_cast<uint8_t>(name.size())};
+    const auto put = [&out](const std::string& s) {                  // (byte by byte: GCC 12 reads a range insert into a vector this small as an overread and the project builds with -Werror)
+        for (const char c : s) out.push_back(static_cast<uint8_t>(c));
+    };
+    put(name);
+    out.push_back(0x34);                                              // listen_port 0x1234
+    out.push_back(0x12);
+    out.push_back(255);                                               // want_seat
+    out.push_back(static_cast<uint8_t>(room.size()));
+    put(room);
+    out.push_back(static_cast<uint8_t>(token.size()));
+    put(token);
+    return out;
+}
+
+// A guest that shows a key in its Hello (a page that was reloaded, a game that was started again), joined to the room like Room::join does; returns its index
+size_t join_keyed(Room& r, const std::string& name, const SeatKey& key, uint8_t want_seat = 255, const std::string& room_code = std::string()) {
+    auto ends = r.net.connect({10, 0});
+    r.guests.emplace_back();
+    Room::Guest& g = r.guests.back();
+    g.host_end = ends.first;
+    g.client_end = ends.second;
+    ClientLobby::Config cc;
+    cc.name = name;
+    cc.want_seat = want_seat;
+    cc.key = key;
+    cc.room = room_code;
+    g.lobby = std::make_unique<ClientLobby>(ends.second, cc);
+    r.host.add_connection(ends.first, r.now);
+    return r.guests.size() - 1;
+}
+
+// A raw client (no lobby behind it) that has said Hello: what the host answers can be read from `end`
+struct RawClient {
+    Connection* host_end{nullptr};
+    Connection* end{nullptr};
+};
+RawClient raw_hello(Room& r, const HelloMsg& hello) {
+    auto ends = r.net.connect({10, 0});
+    r.host.add_connection(ends.first, r.now);
+    ends.second->send(encode(hello));
+    return RawClient{ends.first, ends.second};
+}
+// Every message that waits on a connection
+std::vector<std::vector<uint8_t>> drain_messages(Connection* c) {
+    std::vector<std::vector<uint8_t>> out;
+    std::vector<uint8_t> m;
+    while (c->poll(m)) out.push_back(m);
+    return out;
+}
+
 // A connection that counts the messages that are taken from it: what a host polls in one update
 class CountingConnection final : public Connection {
 public:
@@ -496,19 +570,22 @@ int main() {
         ASSERT_FALSE(decode_hello_prefix(torn.data(), torn.size(), old));
         std::vector<uint8_t> coded = {static_cast<uint8_t>(MsgType::Hello), 4, 0, 2, 'O', 0x07};    // nor is a name with a control character
         ASSERT_FALSE(decode_hello_prefix(coded.data(), coded.size(), old));
-        // protocol 6 had this very Hello layout (but not this protocol's Room message): the version number alone makes it "version mismatch"
-        HelloMsg six = h;
-        six.version = 6;
-        const std::vector<uint8_t> v6_hello = encode(six);
-        ASSERT_TRUE(decode(v6_hello.data(), v6_hello.size(), old));
-        ASSERT_EQ(old.version, 6);
+        // protocols 6 to 9 shared one Hello layout (the fields up to the token): it is not this protocol's Hello (which has the key and the turns after them), but its version and name
+        // are read, so that the host answers "version mismatch" without reading what follows
+        for (const uint16_t version : {uint16_t{6}, uint16_t{7}, uint16_t{8}, uint16_t{9}}) {
+            const std::vector<uint8_t> raw = old_layout_hello(version, "Old", "ROOM-7", "tok");
+            ASSERT_FALSE(decode(raw.data(), raw.size(), old));
+            ASSERT_TRUE(decode_hello_prefix(raw.data(), raw.size(), old));
+            ASSERT_EQ(old.version, version);
+            ASSERT_EQ(old.name, "Old");
+        }
         // the current layout must be exact
         std::vector<uint8_t> current = encode(h);
         current.push_back(0);
         ASSERT_FALSE(decode(current.data(), current.size(), h2));
         std::vector<uint8_t> shorter = encode(h);
         shorter.pop_back();
-        ASSERT_FALSE(decode(shorter.data(), shorter.size(), h2));                // (the version is the current one, so the seat byte is required)
+        ASSERT_FALSE(decode(shorter.data(), shorter.size(), h2));                // (the last byte of the turns is missing)
         // on the wire: an old client is refused with the reason, not with "bad request"
         Room r;
         auto ends = r.net.connect({10, 0});
@@ -519,28 +596,40 @@ int main() {
         ASSERT_TRUE(ends.second->poll(reply));
         RejectMsg rj;
         ASSERT_TRUE(decode(reply, rj) && rj.reason == RejectReason::VersionMismatch);
-        // protocol 8 (v0.0.94, the release before the community-map rules) has this very Hello layout too: nothing but the number tells it from this protocol's Hello, and the number refuses it
-        HelloMsg eight = h;
-        eight.version = 8;
-        const std::vector<uint8_t> v8_hello = encode(eight);
-        ASSERT_TRUE(decode(v8_hello.data(), v8_hello.size(), old));
-        ASSERT_EQ(old.version, 8);
-        ASSERT_TRUE(kProtocolVersion != 8);                                       // (v0.0.94's number: the release that changed the engine's rules moved it)
-        // a client of protocol 6 (the version before the room's leader) and one of protocol 8 (the version before the engine's rules of the community maps changed; its Hello is exactly
-        // this protocol's layout): the same answer, from a LAN host and from a server's room alike, and nobody is seated
-        for (const std::vector<uint8_t>* hello : {&v6_hello, &v8_hello}) {
-            for (const bool server : {false, true}) {
+        // clients of protocols 6 to 9 (the versions before the keys: their Hello has the old layout; 7, 8 and 9 are the leader's, the latency release's and the community-map rules'): the same answer from a
+        // LAN host and from a server's room alike, whatever is in the Hello (the key that this protocol's Hello has is not read from it), and nobody is seated
+        for (const bool server : {false, true}) {
+            for (const uint16_t version : {uint16_t{6}, uint16_t{7}, uint16_t{8}, uint16_t{9}}) {
                 HostLobby::Config hc;
                 if (server) hc.host_seat = 255;
                 Room r6(hc);
                 auto e6 = r6.net.connect({10, 0});
                 r6.host.add_connection(e6.first, 0);
-                e6.second->send(*hello);
+                e6.second->send(old_layout_hello(version, "Old", std::string(), "tok"));
                 r6.run(100);
                 ASSERT_TRUE(e6.second->poll(reply) && decode(reply, rj) && rj.reason == RejectReason::VersionMismatch);
                 ASSERT_EQ(r6.host.players(), server ? size_t{0} : size_t{1});          // nobody was seated, and no leader named
                 ASSERT_EQ(r6.host.leader(), kNoLeader);
             }
+        }
+        // a Hello of this layout but another version number is "version mismatch" as well (protocols 8 and 9 with the new fields: nobody sends them, a stranger may), key and all; before the
+        // keys, protocol 8 (v0.0.94) was the release whose Hello had exactly the layout of protocol 9 (the community-map rules): nothing but the number told them apart, and the number refuses them
+        for (const uint16_t version : {uint16_t{8}, uint16_t{9}}) {
+            Room r8;
+            auto e8 = r8.net.connect({10, 0});
+            r8.host.add_connection(e8.first, 0);
+            HelloMsg other = h;
+            other.version = version;
+            other.key = key_with(1);
+            other.have_turns = 5;
+            const std::vector<uint8_t> other_hello = encode(other);
+            ASSERT_TRUE(decode(other_hello.data(), other_hello.size(), old));
+            ASSERT_EQ(old.version, version);
+            ASSERT_TRUE(kProtocolVersion != version);
+            e8.second->send(other_hello);
+            r8.run(100);
+            ASSERT_TRUE(e8.second->poll(reply) && decode(reply, rj) && rj.reason == RejectReason::VersionMismatch);
+            ASSERT_EQ(r8.host.players(), size_t{1});
         }
     } TEST_END();
 
@@ -1328,6 +1417,574 @@ int main() {
             }
             ASSERT_FALSE(room.host.occupied(bob_seat));
             ASSERT_TRUE(room.now - start >= 1500 && room.now - start <= 3500);
+        }
+    } TEST_END();
+
+    TEST_CASE("N4.14 Keys (Protocol 10): A Host With A Key Maker Gives Every Guest Its Own Key, Never Zero, In Its Welcome; A Host Without One Gives Nobody A Key; A Maker That Fails Or Cannot Tell Its Keys Apart Gives No Key, And Two Seats Never Share One") {
+        // ---- with a maker: four guests, four different keys; the Welcome carries the one that the host holds for the seat ----
+        {
+            Room room(keyed_server_config(1));
+            std::vector<size_t> guests;
+            for (const char* name : {"Ann", "Bob", "Cat", "Dan"}) guests.push_back(room.join_seat(name));
+            room.run(200);
+            std::vector<SeatKey> keys;
+            for (const size_t i : guests) {
+                const SeatKey& k = room.guests[i].lobby->key();
+                ASSERT_FALSE(key_is_zero(k));
+                ASSERT_TRUE(key_matches(k, room.host.key_of(room.guests[i].lobby->my_seat())));
+                ASSERT_FALSE(room.guests[i].lobby->rejoined());                           // (a Welcome of the room: no rejoin flag)
+                for (const SeatKey& other : keys) ASSERT_FALSE(key_matches(k, other));
+                keys.push_back(k);
+            }
+            ASSERT_TRUE(key_is_zero(room.host.key_of(4)) && key_is_zero(room.host.key_of(255)));      // seats that are no seats have none
+            ASSERT_EQ(room.host.players(), size_t{4});
+            room.guests[guests[1]].lobby->leave();                                         // a guest that leaves takes its key with it: the seat has none until the next guest comes
+            room.run(200);
+            ASSERT_TRUE(key_is_zero(room.host.key_of(1)));
+            const size_t eve = room.join_seat("Eve");
+            ASSERT_EQ(room.guests[eve].lobby->my_seat(), 1);
+            const SeatKey eve_key = room.guests[eve].lobby->key();
+            ASSERT_FALSE(key_is_zero(eve_key));
+            for (const SeatKey& other : keys) ASSERT_FALSE(key_matches(eve_key, other));  // a new key: not the one of the guest who left, nor of any other
+            ASSERT_TRUE(key_matches(room.host.key_of(1), eve_key));
+        }
+        // ---- without a maker: a server's room and a LAN host alike give no key, and the Welcome says so ----
+        for (const bool server : {true, false}) {
+            HostLobby::Config hc;
+            if (server) hc.host_seat = 255;
+            Room room(hc);
+            const size_t a = room.join_seat("A");
+            const size_t b = room.join_seat("B");
+            ASSERT_TRUE(key_is_zero(room.guests[a].lobby->key()) && key_is_zero(room.guests[b].lobby->key()));
+            for (uint8_t s = 0; s < 4; ++s) ASSERT_TRUE(key_is_zero(room.host.key_of(s)));
+            ASSERT_EQ(room.guests[a].lobby->phase(), ClientLobby::Phase::InRoom);
+        }
+        {   // a host that holds a seat and has a maker: its own seat has no key, the guests have
+            HostLobby::Config hc = keyed_server_config(2);
+            hc.host_seat = 0;
+            Room room(hc);
+            const size_t a = room.join_seat("A");
+            ASSERT_TRUE(key_is_zero(room.host.key_of(0)));
+            ASSERT_FALSE(key_is_zero(room.guests[a].lobby->key()));
+        }
+        // ---- a maker that fails: no key for the guest, but the seat; it is asked four times and no more ----
+        {
+            HostLobby::Config hc;
+            hc.host_seat = 255;
+            int calls = 0;
+            hc.make_key = [&calls](SeatKey&) { ++calls; return false; };
+            Room room(hc);
+            const size_t a = room.join_seat("A");
+            ASSERT_EQ(room.guests[a].lobby->phase(), ClientLobby::Phase::InRoom);
+            ASSERT_EQ(room.guests[a].lobby->my_seat(), 0);
+            ASSERT_TRUE(key_is_zero(room.guests[a].lobby->key()) && key_is_zero(room.host.key_of(0)));
+            ASSERT_EQ(calls, 4);
+        }
+        {   // one that fails three times and then works gives a key (it is asked again); one that fails four times for a guest gives that guest none and the next guest a key
+            HostLobby::Config hc;
+            hc.host_seat = 255;
+            int calls = 0;
+            hc.make_key = [&calls](SeatKey& k) {
+                ++calls;
+                if (calls <= 3 || (calls >= 5 && calls <= 8)) return false;
+                for (size_t i = 0; i < k.size(); ++i) k[i] = static_cast<uint8_t>(calls * 16 + static_cast<int>(i) + 1);
+                return true;
+            };
+            Room room(hc);
+            const size_t a = room.join_seat("A");                                          // calls 1 - 3 fail, call 4 works
+            const size_t b = room.join_seat("B");                                          // calls 5 - 8 fail: no key
+            const size_t c = room.join_seat("C");                                          // call 9 works
+            ASSERT_FALSE(key_is_zero(room.guests[a].lobby->key()));
+            ASSERT_TRUE(key_is_zero(room.guests[b].lobby->key()));
+            ASSERT_FALSE(key_is_zero(room.guests[c].lobby->key()));
+            ASSERT_FALSE(key_matches(room.guests[a].lobby->key(), room.guests[c].lobby->key()));
+            ASSERT_EQ(calls, 9);
+        }
+        // ---- a maker that cannot tell its keys apart: the same key every time, and the key zero ----
+        {
+            HostLobby::Config hc;
+            hc.host_seat = 255;
+            hc.make_key = [](SeatKey& k) {
+                k.fill(0x42);
+                return true;
+            };
+            Room room(hc);
+            const size_t a = room.join_seat("A");
+            const size_t b = room.join_seat("B");
+            const size_t c = room.join_seat("C");
+            ASSERT_FALSE(key_is_zero(room.guests[a].lobby->key()));                        // the first guest has it (nobody else had it then)
+            ASSERT_TRUE(key_is_zero(room.guests[b].lobby->key()) && key_is_zero(room.guests[c].lobby->key()));      // the others get none: a key is never shared
+            ASSERT_EQ(room.guests[a].lobby->phase(), ClientLobby::Phase::InRoom);
+            ASSERT_EQ(room.guests[b].lobby->phase(), ClientLobby::Phase::InRoom);          // (and still have their seats)
+            HostLobby::Config zero = hc;
+            zero.make_key = [](SeatKey& k) {
+                k.fill(0);
+                return true;
+            };
+            Room room2(zero);
+            const size_t z = room2.join_seat("Z");
+            ASSERT_TRUE(key_is_zero(room2.guests[z].lobby->key()) && key_is_zero(room2.host.key_of(0)));
+        }
+        {   // one that gives the zero key first and a good key at its second try: the zero key is no key, so the guest is given the good one
+            HostLobby::Config hc;
+            hc.host_seat = 255;
+            int calls = 0;
+            hc.make_key = [&calls](SeatKey& k) {
+                ++calls;
+                k.fill(calls == 1 ? uint8_t{0} : uint8_t{9});
+                return true;
+            };
+            Room room(hc);
+            const size_t a = room.join_seat("A");
+            ASSERT_TRUE(room.guests[a].lobby->key()[0] == 9 && calls == 2);
+        }
+        {   // one that repeats a key once and then gives a new one: the second guest gets the new one
+            HostLobby::Config hc;
+            hc.host_seat = 255;
+            int calls = 0;
+            hc.make_key = [&calls](SeatKey& k) {
+                ++calls;
+                k.fill(calls == 1 || calls == 2 ? uint8_t{7} : static_cast<uint8_t>(calls));
+                return true;
+            };
+            Room room(hc);
+            const size_t a = room.join_seat("A");                                          // call 1: 7
+            const size_t b = room.join_seat("B");                                          // call 2: 7 again, refused; call 3: 3
+            ASSERT_TRUE(room.guests[a].lobby->key()[0] == 7 && room.guests[b].lobby->key()[0] == 3);
+            ASSERT_EQ(calls, 3);
+        }
+    } TEST_END();
+
+    TEST_CASE("N4.15 Taking A Seat Back In The Waiting Room (Protocol 10): A Hello With The Key Of A Seated Guest Takes Over Its Seat (The Same Seat, Key, Name And Place In The Order Of The Welcomes, So The Leader Stays The Leader); The Old Connection Is Told Superseded And Closed; The Thumb Is Measured Again; A Wrong Key Is A New Player; In A Match That Loads Or Runs A Key Is 'Match Running'") {
+        // ---- the takeover itself ----
+        {
+            Room room(keyed_server_config(3));
+            const size_t ann = room.join_seat("Ann");
+            const size_t bob = room.join_seat("Bob");
+            const size_t cat = room.join_seat("Cat");
+            room.run(300);
+            ASSERT_TRUE(room.host.measured(0) && room.host.measured(1) && room.host.measured(2));
+            ASSERT_EQ(room.guests[bob].lobby->my_seat(), 1);
+            const SeatKey bob_key = room.guests[bob].lobby->key();
+            room.host.take_events();                                                        // (the joins)
+            // Bob's page is reloaded: a new connection says Hello with Bob's key, a new name, and asks for another seat
+            const size_t again = join_keyed(room, "Bob again", bob_key, 3);
+            room.run(20);                                                                   // two steps: the client says its Hello, the host handles it (the first answer to its ping is not back yet)
+            ASSERT_EQ(room.host.takeovers(), 1u);
+            ASSERT_FALSE(room.host.measured(1));                                            // the thumb is measured again
+            ASSERT_TRUE(key_matches(room.host.key_of(1), bob_key));                         // the same key
+            ASSERT_EQ(room.host.players(), size_t{3});
+            ASSERT_FALSE(room.host.occupied(3));                                            // (the seat it asked for was not given)
+            ASSERT_EQ(room.host.room().slots[1].name, "Bob");                               // the seat keeps its name
+            ASSERT_EQ(room.host.leader(), 0);
+            ASSERT_TRUE(room.host.take_events().empty());                                   // nobody joined, nobody left
+            room.run(400);
+            ASSERT_TRUE(room.host.measured(1));
+            ASSERT_EQ(room.guests[again].lobby->phase(), ClientLobby::Phase::InRoom);
+            ASSERT_EQ(room.guests[again].lobby->my_seat(), 1);
+            ASSERT_TRUE(key_matches(room.guests[again].lobby->key(), bob_key));
+            ASSERT_FALSE(room.guests[again].lobby->rejoined());                             // (the room follows: this is no rejoin of a running match)
+            ASSERT_EQ(room.guests[again].lobby->room().slots[1].name, "Bob");
+            ASSERT_EQ(room.guests[again].lobby->room().you, 1);
+            ASSERT_EQ(room.guests[ann].lobby->room().slots[1].state, SlotState::Client);    // the others see the same room
+            ASSERT_EQ(room.guests[cat].lobby->room().slots[1].name, "Bob");
+            ASSERT_EQ(room.guests[cat].lobby->room().slots[3].state, SlotState::Empty);
+            // the old connection was told, and closed
+            ASSERT_EQ(room.guests[bob].lobby->phase(), ClientLobby::Phase::Rejected);
+            ASSERT_EQ(room.guests[bob].lobby->reject_reason(), RejectReason::Superseded);
+            ASSERT_FALSE(room.guests[bob].client_end->is_open());
+            ASSERT_TRUE(room.host.connection_of(1) == room.guests[again].host_end);
+            ASSERT_TRUE(room.host.take_events().empty());
+        }
+        // ---- what the new connection is told: the Welcome of the seat, with its key and without the rejoin flag, then the room ----
+        {
+            Room room(keyed_server_config(4));
+            room.join_seat("Ann");
+            const size_t bob = room.join_seat("Bob");
+            const SeatKey bob_key = room.guests[bob].lobby->key();
+            HelloMsg h;
+            h.name = "Whoever";
+            h.key = bob_key;
+            const RawClient raw = raw_hello(room, h);
+            room.run(20);
+            const std::vector<std::vector<uint8_t>> got = drain_messages(raw.end);
+            ASSERT_TRUE(got.size() >= 2);
+            WelcomeMsg w;
+            ASSERT_TRUE(decode(got[0], w) && w.player == 1 && w.players == 4 && key_matches(w.key, bob_key) && w.flags == 0);
+            RoomMsg r;
+            ASSERT_TRUE(decode(got[1], r) && r.you == 1 && r.slots[1].name == "Bob" && r.slots[1].state == SlotState::Client && r.leader == 0);
+            ASSERT_EQ(r.slots[1].rtt_ms, kRttUnknown);                                      // its thumb starts again
+        }
+        // ---- the leader keeps the lead, and every guest its place in the order of the Welcomes ----
+        {
+            Room room(keyed_server_config(5));
+            const size_t ann = room.join_seat("Ann");
+            const size_t bob = room.join_seat("Bob");
+            const size_t cat = room.join_seat("Cat");
+            room.run(200);
+            ASSERT_EQ(room.host.leader(), 0);
+            const SeatKey ann_key = room.guests[ann].lobby->key();
+            const SeatKey bob_key = room.guests[bob].lobby->key();
+            const size_t ann2 = join_keyed(room, "Ann", ann_key);                          // the leader's page is reloaded
+            room.run(300);
+            ASSERT_EQ(room.host.takeovers(), 1u);
+            ASSERT_EQ(room.host.leader(), 0);                                               // still the leader
+            ASSERT_TRUE(room.guests[ann2].lobby->is_leader() && room.guests[ann2].lobby->my_seat() == 0);
+            ASSERT_TRUE(room.guests[bob].lobby->room().leader == 0 && room.guests[cat].lobby->room().leader == 0);
+            const size_t bob2 = join_keyed(room, "Bob", bob_key);                          // Bob's too: it is not the newest guest for it
+            room.run(300);
+            ASSERT_EQ(room.host.takeovers(), 2u);
+            const size_t dan = room.join_seat("Dan");                                       // a guest that comes now is the newest
+            ASSERT_EQ(room.host.leader(), 0);
+            room.guests[ann2].lobby->leave();                                               // the leader goes: Bob leads, not Cat (Bob's place in the order is what it was)
+            room.run(300);
+            ASSERT_EQ(room.host.leader(), 1);
+            ASSERT_TRUE(room.guests[bob2].lobby->is_leader());
+            ASSERT_FALSE(room.guests[cat].lobby->is_leader() || room.guests[dan].lobby->is_leader());
+            // the contrast: a guest that leaves and comes back WITHOUT its key is the newest
+            Room other(keyed_server_config(6));
+            const size_t a = other.join_seat("Ann");
+            const size_t b = other.join_seat("Bob");
+            other.guests[a].lobby->leave();
+            other.run(200);
+            const size_t a2 = other.join_seat("Ann");
+            ASSERT_EQ(other.host.leader(), other.guests[b].lobby->my_seat());
+            ASSERT_FALSE(other.guests[a2].lobby->is_leader());
+        }
+        // ---- a key that fits no seat is a new player; a wrong key does not get past a full room ----
+        {
+            Room room(keyed_server_config(7));
+            room.join_seat("Ann");
+            const size_t bob = room.join_seat("Bob");
+            const SeatKey bob_key = room.guests[bob].lobby->key();
+            const SeatKey wrong = key_with(99);
+            const size_t newcomer = join_keyed(room, "New", wrong);
+            room.run(300);
+            ASSERT_EQ(room.host.takeovers(), 0u);
+            ASSERT_EQ(room.guests[newcomer].lobby->my_seat(), 2);                           // a seat of its own
+            ASSERT_FALSE(key_is_zero(room.guests[newcomer].lobby->key()));
+            ASSERT_FALSE(key_matches(room.guests[newcomer].lobby->key(), wrong));          // it is given a key of its own: the one that it showed is nothing
+            ASSERT_EQ(room.host.players(), size_t{3});
+            // a seat that was left: the key of its guest is dead
+            room.guests[bob].lobby->leave();
+            room.run(200);
+            ASSERT_FALSE(room.host.occupied(1));
+            const size_t late = join_keyed(room, "Bob late", bob_key);
+            room.run(300);
+            ASSERT_EQ(room.host.takeovers(), 0u);
+            ASSERT_EQ(room.guests[late].lobby->my_seat(), 1);                               // (the first free seat, as for anybody)
+            ASSERT_FALSE(key_matches(room.guests[late].lobby->key(), bob_key));
+            // a full room refuses a wrong key as it refuses anybody
+            const size_t fourth = room.join_seat("Dan");
+            ASSERT_EQ(room.host.players(), size_t{4});
+            const size_t fifth = join_keyed(room, "Eve", key_with(98));
+            room.run(300);
+            ASSERT_EQ(room.guests[fifth].lobby->phase(), ClientLobby::Phase::Rejected);
+            ASSERT_EQ(room.guests[fifth].lobby->reject_reason(), RejectReason::Full);
+            ASSERT_TRUE(room.guests[fourth].lobby->phase() == ClientLobby::Phase::InRoom && room.host.takeovers() == 0);
+            // but the key of a seated guest gets in whatever the number of players: it is no new player
+            const size_t again = join_keyed(room, "New again", room.guests[newcomer].lobby->key());
+            room.run(300);
+            ASSERT_EQ(room.guests[again].lobby->phase(), ClientLobby::Phase::InRoom);
+            ASSERT_EQ(room.guests[again].lobby->my_seat(), 2);
+            ASSERT_EQ(room.host.takeovers(), 1u);
+            ASSERT_EQ(room.host.players(), size_t{4});
+        }
+        {   // a host without keys ignores the key of a Hello (a LAN host): the Hello is the Hello of a new player
+            for (const bool server : {true, false}) {
+                HostLobby::Config hc;
+                if (server) hc.host_seat = 255;
+                Room room(hc);
+                room.join_seat("Ann");
+                const size_t guest = join_keyed(room, "Guest", key_with(5));
+                room.run(300);
+                ASSERT_EQ(room.guests[guest].lobby->phase(), ClientLobby::Phase::InRoom);
+                ASSERT_EQ(room.host.takeovers(), 0u);
+                ASSERT_TRUE(key_is_zero(room.guests[guest].lobby->key()));
+                ASSERT_EQ(room.host.players(), server ? size_t{2} : size_t{3});
+            }
+        }
+        {   // the zero key takes no seat: a guest whose maker failed has the zero key, and a Hello with the zero key is a new player, not that guest
+            HostLobby::Config hc;
+            hc.host_seat = 255;
+            int calls = 0;
+            hc.make_key = [&calls](SeatKey&) { ++calls; return false; };
+            Room room(hc);
+            const size_t a = room.join_seat("A");
+            const size_t b = join_keyed(room, "B", SeatKey{});
+            room.run(300);
+            ASSERT_TRUE(room.guests[a].lobby->my_seat() == 0 && room.guests[b].lobby->my_seat() == 1);
+            ASSERT_EQ(room.host.takeovers(), 0u);
+            ASSERT_EQ(room.host.players(), size_t{2});
+        }
+        // ---- two connections with one key in one pass: the second takes the seat from the first; nobody else is touched ----
+        {
+            Room room(keyed_server_config(8));
+            room.join_seat("Ann");
+            const size_t bob = room.join_seat("Bob");
+            room.join_seat("Cat");
+            room.run(300);
+            HelloMsg h;
+            h.name = "Twin";
+            h.key = room.guests[bob].lobby->key();
+            const RawClient first = raw_hello(room, h);
+            const RawClient second = raw_hello(room, h);
+            room.run(20);
+            ASSERT_EQ(room.host.takeovers(), 2u);
+            ASSERT_EQ(room.host.players(), size_t{3});
+            ASSERT_TRUE(room.host.connection_of(1) == second.host_end);
+            const std::vector<std::vector<uint8_t>> from_first = drain_messages(first.end);
+            bool superseded = false;
+            for (const auto& m : from_first) {
+                RejectMsg rj;
+                if (decode(m, rj) && rj.reason == RejectReason::Superseded) superseded = true;
+            }
+            ASSERT_TRUE(superseded);                                                        // the first twin was told that the second took the seat ...
+            ASSERT_FALSE(first.end->is_open());                                             // ... and its connection is closed (once what it was told is read)
+            ASSERT_TRUE(second.end->is_open());
+            ASSERT_EQ(room.guests[bob].lobby->reject_reason(), RejectReason::Superseded);
+            ASSERT_TRUE(key_matches(room.host.key_of(1), h.key));
+        }
+        // ---- the room code is checked before the key: a Hello for another room with the right key takes nothing ----
+        {
+            Room room(keyed_server_config(9, "ROOM-7"));
+            const size_t ann = join_keyed(room, "Ann", SeatKey{}, 255, "ROOM-7");
+            const size_t bob = join_keyed(room, "Bob", SeatKey{}, 255, "ROOM-7");
+            room.run(300);
+            ASSERT_EQ(room.guests[bob].lobby->phase(), ClientLobby::Phase::InRoom);
+            HelloMsg h;
+            h.name = "Other";
+            h.room = "OTHER";
+            h.key = room.guests[bob].lobby->key();
+            const RawClient raw = raw_hello(room, h);
+            room.run(50);
+            RejectMsg rj;
+            std::vector<uint8_t> m;
+            ASSERT_TRUE(raw.end->poll(m) && decode(m, rj) && rj.reason == RejectReason::NoSuchRoom);
+            ASSERT_EQ(room.host.takeovers(), 0u);
+            ASSERT_TRUE(room.host.connection_of(1) == room.guests[bob].host_end && room.guests[bob].client_end->is_open());
+            ASSERT_EQ(room.guests[ann].lobby->phase(), ClientLobby::Phase::InRoom);
+        }
+        // ---- the old link is dead in the very pass in which the new Hello comes: the Hello is read first, the seat is held ----
+        {
+            Room room(keyed_server_config(10));
+            room.join_seat("Ann");
+            const size_t bob = room.join_seat("Bob");
+            room.run(300);
+            room.host.take_events();
+            HelloMsg h;
+            h.name = "Bob";
+            h.key = room.guests[bob].lobby->key();
+            const RawClient raw = raw_hello(room, h);
+            room.net.cut(room.guests[bob].client_end, true);                                // the old link fails now; the Hello is read by the next update, with the old link closed
+            room.run(10);
+            ASSERT_EQ(room.host.takeovers(), 1u);
+            ASSERT_TRUE(room.host.occupied(1) && room.host.take_events().empty());          // nobody left
+            ASSERT_TRUE(room.host.connection_of(1) == raw.host_end && raw.end->is_open());
+            room.run(300);
+            ASSERT_TRUE(room.host.occupied(1) && room.host.takeovers() == 1u);
+            // when the old link was seen to be closed BEFORE the Hello comes, the seat was freed and its key is gone with it: the Hello is the Hello of a new player (the key of a seat that
+            // was left is dead: nothing is kept for it)
+            const size_t carl = room.join_seat("Carl");
+            room.net.cut(room.guests[carl].client_end, true);
+            room.run(100);
+            const SeatKey carl_key = room.guests[carl].lobby->key();
+            ASSERT_FALSE(room.host.occupied(room.guests[carl].lobby->my_seat()));
+            const size_t carl2 = join_keyed(room, "Carl", carl_key);
+            room.run(300);
+            ASSERT_EQ(room.host.takeovers(), 1u);
+            ASSERT_FALSE(key_matches(room.guests[carl2].lobby->key(), carl_key));
+        }
+        // ---- what a guest has done follows its seat: seven violations and a takeover, and one more is the eighth ----
+        {
+            Room room(keyed_server_config(11));
+            room.join_seat("Ann");
+            const size_t bob = room.join_seat("Bob");
+            room.run(300);
+            for (int i = 0; i < 7; ++i) room.guests[bob].client_end->send({250, 1, 2});
+            room.run(100);
+            ASSERT_TRUE(room.host.occupied(1));                                             // seven are not enough
+            const size_t again = join_keyed(room, "Bob", room.guests[bob].lobby->key());
+            room.run(300);
+            ASSERT_EQ(room.host.takeovers(), 1u);
+            ASSERT_TRUE(room.host.occupied(1));
+            room.guests[again].client_end->send({250, 1, 2});                               // one more, from the new connection
+            room.run(100);
+            ASSERT_FALSE(room.host.occupied(1));                                            // is the eighth: coming back does not start the count again
+            ASSERT_EQ(room.guests[again].lobby->phase(), ClientLobby::Phase::Rejected);
+        }
+        // ---- in a match that loads or runs, a key is the session's business: the lobby says 'match running' (and the seat of the key is not touched) ----
+        {
+            Room room(keyed_server_config(12));
+            const size_t ann = room.join_seat("Ann");
+            const size_t bob = room.join_seat("Bob");
+            room.run(300);
+            const SeatKey bob_key = room.guests[bob].lobby->key();
+            ASSERT_TRUE(room.host.start(1, 1, room.now));
+            room.run(100);
+            ASSERT_EQ(room.host.phase(), HostLobby::Phase::Loading);
+            auto hello_with_key = [&](const char* name) {
+                auto ends = room.net.connect({10, 0});
+                HelloMsg h;
+                h.name = name;
+                h.key = bob_key;
+                room.host.add_connection(ends.first, room.now, std::string(), encode(h));     // (the door of a server: it read the Hello to find the room, then hands both over)
+                room.run(30);
+                std::vector<uint8_t> m;
+                RejectMsg rj;
+                if (!ends.second->poll(m)) return std::string("silent");
+                if (decode(m, rj)) return std::string("rejected ") + std::to_string(static_cast<int>(rj.reason));
+                return std::string("other");
+            };
+            const std::string running = std::string("rejected ") + std::to_string(static_cast<int>(RejectReason::MatchRunning));
+            ASSERT_EQ(hello_with_key("Loading"), running);
+            ASSERT_TRUE(room.host.connection_of(1) == room.guests[bob].host_end && room.guests[bob].client_end->is_open() && room.host.takeovers() == 0);
+            ASSERT_TRUE(room.guests[ann].lobby->phase() == ClientLobby::Phase::Loading && room.guests[bob].lobby->phase() == ClientLobby::Phase::Loading);
+            for (auto& g : room.guests) g.lobby->report_loaded(true);
+            room.host.host_loaded(true);
+            room.run(100);
+            ASSERT_EQ(room.host.phase(), HostLobby::Phase::Begun);
+            ASSERT_EQ(hello_with_key("Begun"), running);
+            ASSERT_TRUE(room.host.connection_of(1) == room.guests[bob].host_end && room.host.takeovers() == 0);
+            ASSERT_TRUE(key_matches(room.host.key_of(1), bob_key));                         // the keys stay with the seats: the session of the match is handed them from here
+        }
+    } TEST_END();
+
+    TEST_CASE("N4.16 The Rejoin Flow Of A Machine That Starts From Nothing, Through ClientLobby (Protocol 10): The Hello Carries The Key And No Turns; Welcome With The Rejoin Flag, Start, Loaded, Begin, Begun; The New Rejections Are Told") {
+        const SeatKey key = key_with(21);
+        // ---- the flow, against a server that is played by the test ----
+        {
+            LoopbackNetwork net(5);
+            auto ends = net.connect({10, 0});
+            Connection* server = ends.first;
+            ClientLobby::Config cc;
+            cc.name = "Bob";
+            cc.room = "ROOM-7";
+            cc.token = "tok";
+            cc.want_seat = 2;
+            cc.key = key;
+            ClientLobby lobby(ends.second, cc);
+            uint32_t now = 0;
+            auto step = [&](uint32_t ms) {
+                const uint32_t end = now + ms;
+                while (now < end) {
+                    now += 10;
+                    net.set_time(now);
+                    lobby.update(now);
+                }
+            };
+            step(30);
+            std::vector<uint8_t> m;
+            HelloMsg h;
+            ASSERT_TRUE(server->poll(m) && decode(m, h));                                    // the Hello shows the key, and has no turns: this machine starts from nothing
+            ASSERT_TRUE(h.version == kProtocolVersion && h.name == "Bob" && h.room == "ROOM-7" && h.token == "tok" && h.want_seat == 2);
+            ASSERT_TRUE(key_matches(h.key, key) && h.have_turns == 0);
+            ASSERT_EQ(lobby.phase(), ClientLobby::Phase::Joining);
+            ASSERT_FALSE(lobby.rejoined());
+            WelcomeMsg w;
+            w.player = 2;
+            w.players = 4;
+            w.key = key;
+            w.flags = kWelcomeRejoin;
+            server->send(encode(w));
+            step(30);
+            ASSERT_EQ(lobby.phase(), ClientLobby::Phase::InRoom);
+            ASSERT_EQ(lobby.my_seat(), 2);
+            ASSERT_TRUE(lobby.rejoined() && key_matches(lobby.key(), key));
+            ASSERT_TRUE(lobby.take_events().empty());                                        // (no Room message comes for a rejoiner: nothing changed in a room)
+            StartMsg s;
+            s.seed = 777;
+            s.map_name = "TINY.LVL";
+            s.map_hash = 0x1234567890ABCDEFull;
+            s.roster = 0x07;
+            s.names[0] = "Ann";
+            s.names[1] = "Cat";
+            s.names[2] = "Bob";
+            server->send(encode(s));
+            step(30);
+            ASSERT_EQ(lobby.phase(), ClientLobby::Phase::Loading);
+            const auto events = lobby.take_events();
+            ASSERT_TRUE(events.size() == 1 && events[0].type == ClientLobby::Event::Type::StartRequested);
+            ASSERT_TRUE(lobby.start_info().seed == 777 && lobby.start_info().map_name == "TINY.LVL" && lobby.start_info().roster == 0x07 && lobby.start_info().names[2] == "Bob");
+            lobby.report_loaded(true);
+            step(30);
+            ASSERT_EQ(lobby.phase(), ClientLobby::Phase::Loaded);
+            bool loaded_told = false;
+            while (server->poll(m)) {
+                LoadedMsg l;
+                if (decode(m, l) && l.ok) loaded_told = true;
+            }
+            ASSERT_TRUE(loaded_told);
+            server->send(encode_begin());
+            step(30);
+            ASSERT_EQ(lobby.phase(), ClientLobby::Phase::Begun);
+            const auto begun = lobby.take_events();
+            ASSERT_TRUE(begun.size() == 1 && begun[0].type == ClientLobby::Event::Type::Begun);
+            ASSERT_TRUE(lobby.rejoined() && lobby.my_seat() == 2 && key_matches(lobby.key(), key));      // (it keeps what it was told, for the NetGame that goes on from here)
+        }
+        // ---- a client with no key says so; the Welcome of a room (no rejoin) and of a host without keys ----
+        {
+            LoopbackNetwork net(6);
+            auto ends = net.connect({10, 0});
+            ClientLobby::Config cc;
+            cc.name = "New";
+            ClientLobby lobby(ends.second, cc);
+            net.set_time(10);
+            lobby.update(10);
+            net.set_time(30);
+            std::vector<uint8_t> m;
+            HelloMsg h;
+            ASSERT_TRUE(ends.first->poll(m) && decode(m, h) && key_is_zero(h.key) && h.have_turns == 0);
+            WelcomeMsg w;
+            w.player = 1;
+            w.players = 4;
+            ends.first->send(encode(w));                                                     // a host without keys: the zero key, no flags
+            net.set_time(60);
+            lobby.update(60);
+            ASSERT_TRUE(lobby.phase() == ClientLobby::Phase::InRoom && lobby.my_seat() == 1 && key_is_zero(lobby.key()) && !lobby.rejoined());
+        }
+        // ---- the rejections that protocol 10 adds end the join, with their reason ----
+        for (const RejectReason reason : {RejectReason::Dropped, RejectReason::RejoinFailed, RejectReason::Superseded, RejectReason::MatchRunning, RejectReason::NoSuchRoom}) {
+            LoopbackNetwork net(7);
+            auto ends = net.connect({10, 0});
+            ClientLobby::Config cc;
+            cc.key = key;
+            ClientLobby lobby(ends.second, cc);
+            net.set_time(10);
+            lobby.update(10);
+            ends.first->send(encode(RejectMsg{reason}));
+            net.set_time(40);
+            lobby.update(40);
+            ASSERT_EQ(lobby.phase(), ClientLobby::Phase::Rejected);
+            ASSERT_EQ(lobby.reject_reason(), reason);
+            const auto events = lobby.take_events();
+            ASSERT_TRUE(events.size() == 1 && events[0].type == ClientLobby::Event::Type::Rejected);
+        }
+        // ---- through a real host lobby: a client that shows its key in the waiting room gets the seat back and the room follows ----
+        {
+            Room room(keyed_server_config(13));
+            room.join_seat("Ann");
+            const size_t bob = room.join_seat("Bob");
+            room.run(300);
+            const SeatKey bob_key = room.guests[bob].lobby->key();
+            const size_t again = join_keyed(room, "Bob", bob_key);
+            room.run(300);
+            ClientLobby& lobby = *room.guests[again].lobby;
+            ASSERT_EQ(lobby.phase(), ClientLobby::Phase::InRoom);
+            ASSERT_TRUE(lobby.my_seat() == 1 && key_matches(lobby.key(), bob_key) && !lobby.rejoined());
+            ASSERT_EQ(lobby.room().slots[0].name, "Ann");                                    // the room follows: the roster is there
+            ASSERT_EQ(lobby.room().you, 1);
+            // and the match starts with it as with any guest
+            ASSERT_TRUE(room.host.start(1, 1, room.now));
+            room.run(100);
+            ASSERT_EQ(lobby.phase(), ClientLobby::Phase::Loading);
+            for (auto& g : room.guests) {
+                if (g.lobby->phase() == ClientLobby::Phase::Loading) g.lobby->report_loaded(true);
+            }
+            room.host.host_loaded(true);
+            room.run(100);
+            ASSERT_EQ(room.host.phase(), HostLobby::Phase::Begun);
+            ASSERT_EQ(lobby.phase(), ClientLobby::Phase::Begun);
         }
     } TEST_END();
 

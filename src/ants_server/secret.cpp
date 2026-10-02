@@ -23,13 +23,9 @@ namespace fs = std::filesystem;
 
 namespace ants::server {
 
-namespace {
-
-constexpr size_t kMinSecret = 32;
-constexpr size_t kMaxSecret = 256;
-constexpr size_t kMaxFile = 1024;       // a secret file is one short line: anything bigger is not one (and never more than this + 1 byte of it is read)
-
 bool random_bytes(uint8_t* out, size_t n) {
+    if (n == 0) return true;
+    if (out == nullptr) return false;
 #ifdef _WIN32
     return BCryptGenRandom(nullptr, out, static_cast<ULONG>(n), BCRYPT_USE_SYSTEM_PREFERRED_RNG) == 0;
 #else
@@ -49,6 +45,12 @@ bool random_bytes(uint8_t* out, size_t n) {
     return true;
 #endif
 }
+
+namespace {
+
+constexpr size_t kMinSecret = 32;
+constexpr size_t kMaxSecret = 256;
+constexpr size_t kMaxFile = 1024;       // a secret file is one short line: anything bigger is not one (and never more than this + 1 byte of it is read)
 
 std::string to_hex(const uint8_t* bytes, size_t n) {
     static const char kHex[] = "0123456789abcdef";

@@ -572,6 +572,18 @@ void run_manager_tests() {
                 ASSERT_TRUE(ends.second->poll(reply) && net::decode(reply, rj) && rj.reason == net::RejectReason::VersionMismatch);
             }
         }
+        // the Hello of protocols 6 to 9 has the layout before the keys (no key, no turns after the token): it is told "version mismatch" without its layout being read, and nobody is seated
+        for (const uint16_t version : {uint16_t{6}, uint16_t{7}, uint16_t{8}, uint16_t{9}}) {
+            std::vector<uint8_t> raw = {static_cast<uint8_t>(net::MsgType::Hello), static_cast<uint8_t>(version), 0, 3, 'O', 'l', 'd', 0x34, 0x12, 255, 5, 'A', 'A', 'A', '-', '1', 0};
+            auto ends = w.net.connect({10, 0});
+            w.mgr.add_connection(std::make_unique<Borrowed>(ends.first), "x", w.now);
+            ends.second->send(raw);
+            w.run(200);
+            std::vector<uint8_t> reply;
+            net::RejectMsg rj;
+            ASSERT_TRUE(ends.second->poll(reply) && net::decode(reply, rj) && rj.reason == net::RejectReason::VersionMismatch);
+            ASSERT_EQ(w.status("AAA-1").joined, 1u);                                          // (only Ann)
+        }
         // garbage and a message that is no Hello
         {
             auto a = w.net.connect({10, 0});
@@ -2132,6 +2144,41 @@ void run_secret_tests() {
                 } else {
                     ASSERT_MSG(slurp(dir / "control-secret") == text, tag + ": a refused file was changed");
                 }
+            }
+        }
+    } TEST_END();
+
+    TEST_CASE("S3.34 random_bytes, The Generator Of The Control Secret, Is There For The Server To Make The Keys Of The Seats With (Protocol 10): Every Length Is Filled Exactly And Nothing Beyond It Is Touched; 512 Keys Of 16 Bytes Show Many Values At Every Position, None Repeats, None Is Zero, No Position Copies Another; Zero Bytes Is Nothing To Do") {
+        for (const size_t n : {size_t{0}, size_t{1}, size_t{2}, size_t{7}, size_t{16}, size_t{31}, size_t{32}, size_t{33}, size_t{255}, size_t{4096}, size_t{100000}}) {
+            std::vector<uint8_t> buf(n + 16, 0xA5);
+            ASSERT_TRUE(server::random_bytes(buf.data() + 8, n));
+            for (size_t i = 0; i < 8; ++i) ASSERT_TRUE(buf[i] == 0xA5 && buf[n + 8 + i] == 0xA5);        // the bytes before and after the buffer are as they were
+            if (n >= 32) {                                                                                 // a run of 32 bytes or more is not constant, and not left as it was
+                std::set<uint8_t> values(buf.begin() + 8, buf.begin() + 8 + static_cast<std::ptrdiff_t>(n));
+                ASSERT_TRUE(values.size() >= 16);
+            }
+        }
+        ASSERT_TRUE(server::random_bytes(nullptr, 0));                                                    // nothing to do is done
+        ASSERT_FALSE(server::random_bytes(nullptr, 1));                                                   // nowhere to write it is not
+        // the keys of seats as the server makes them: 512 of 16 bytes
+        std::vector<net::SeatKey> keys(512);
+        for (net::SeatKey& k : keys) {
+            ASSERT_TRUE(server::random_bytes(k.data(), k.size()));
+            ASSERT_FALSE(net::key_is_zero(k));
+        }
+        std::vector<net::SeatKey> sorted = keys;
+        std::sort(sorted.begin(), sorted.end());
+        ASSERT_TRUE(std::adjacent_find(sorted.begin(), sorted.end()) == sorted.end());                     // never the same key twice
+        for (size_t p = 0; p < net::kKeyBytes; ++p) {                                                      // every position shows many of the 256 values (a position that is fixed means missing random bytes)
+            std::set<uint8_t> seen;
+            for (const net::SeatKey& k : keys) seen.insert(k[p]);
+            ASSERT_MSG(seen.size() >= 150, "position " + std::to_string(p) + " shows only " + std::to_string(seen.size()) + " values");
+        }
+        for (size_t a = 0; a < net::kKeyBytes; ++a) {                                                      // no position is a copy of another
+            for (size_t b = a + 1; b < net::kKeyBytes; ++b) {
+                bool differ = false;
+                for (const net::SeatKey& k : keys) differ = differ || k[a] != k[b];
+                ASSERT_MSG(differ, "positions " + std::to_string(a) + " and " + std::to_string(b) + " are always equal");
             }
         }
     } TEST_END();

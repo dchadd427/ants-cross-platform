@@ -3,6 +3,8 @@ add_library(ants_net STATIC
     sequencer.cpp
     lockstep.cpp
     jitter.cpp
+    turnlog.cpp
+    attendance.cpp
     latency.cpp
     loopback.cpp
     session.cpp

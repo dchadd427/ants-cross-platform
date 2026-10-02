@@ -7,6 +7,12 @@
 // Star topology: the room owner (host) is the sequencer. Clients send Command, TurnAck, Hash, Ping and Chat to it; it answers with Turn (the
 // sealed commands of one 50 ms turn, which is one tick, in canonical order, issuer stamped from the connection), Desync, Pong and Chat, and a dedicated
 // server tells the room with Lag when a player is far behind the match.
+//
+// Coming back (protocol 10, docs/NETWORK_PORT.md "Reconnect"). A dedicated server gives every seat a KEY (128 random bits, in the Welcome). A player whose connection is lost
+// shows the key in a new Hello and gets its seat back. Meanwhile the server tells the others who is missing and what the vote says (Presence), they vote (Vote: keep
+// waiting / continue without), and the player who returns is given the match from the server's turn log (CatchUp, then TurnBatch messages of consecutive turns, each as
+// big as a message may be) and reports its state hash when it has executed them all (CaughtUp). Old-layout Hellos (protocols 6 to 9: protocol 9 changed the rules of the match, not a message) are still answered "version mismatch":
+// decode_hello_prefix reads the version and the name, which lead every layout.
 
 #include <array>
 #include <cstddef>
@@ -24,7 +30,7 @@ namespace ants::net {
 // or in some rare sequence of orders, because peers that run different rules desynchronise in the first play where they differ, and the door checks nothing else: a Hello of another
 // number is refused ("version mismatch") by a LAN host and by a server's room, and a LAN announcement of another number is listed as another version. A release that cannot say "no
 // state hash of any play changed" raises it, and the history below says why (nothing in the wire changed in 9: the rules of the engine did).
-inline constexpr uint16_t kProtocolVersion = 9;         // 2: the Room message carries each seat's round trip (the thumbs); 3: host migration (mesh, election); 4: the Quit command (Drop moved from 11 to 12); 5: Hello carries the seat that the guest asks for; 6: map names may hold any printable character that cannot leave the maps folder (up to 64), Hello carries a room code and a token, the slot state Bot, the rejection NoSuchRoom; 7: the Room message names the room's leader (a dedicated server's room: the first player who joined), the message StartRequest (the leader asks the server to start now); 8: turns of 50 ms with one tick each (they were 100 ms with two; a client keeps a jitter buffer of 1 to 4 turns, ants_net/jitter.hpp), a state hash every 20 turns (one second, as before), and the Lag message, type 25 (a dedicated server never waits for a player that falls behind: it tells the room instead); 9: the community-map rules (default ant types, power-ups by tile, the attack clip)
+inline constexpr uint16_t kProtocolVersion = 10;         // 2: the Room message carries each seat's round trip (the thumbs); 3: host migration (mesh, election); 4: the Quit command (Drop moved from 11 to 12); 5: Hello carries the seat that the guest asks for; 6: map names may hold any printable character that cannot leave the maps folder (up to 64), Hello carries a room code and a token, the slot state Bot, the rejection NoSuchRoom; 7: the Room message names the room's leader (a dedicated server's room: the first player who joined), the message StartRequest (the leader asks the server to start now); 8: turns of 50 ms with one tick each (they were 100 ms with two; a client keeps a jitter buffer of 1 to 4 turns, ants_net/jitter.hpp), a state hash every 20 turns (one second, as before), and the Lag message, type 25 (a dedicated server never waits for a player that falls behind: it tells the room instead); 9: the community-map rules (default ant types, power-ups by tile, the attack clip); 10: rejoin keys, presence, votes, the catch-up stream (every seat of a server's room has a key that the Welcome hands out, and a Hello that shows it takes the seat back: Hello carries the key and the number of turns the client has, Welcome the key and flags; the rejections Dropped, RejoinFailed and Superseded; the messages Presence, Vote, CatchUp, TurnBatch and CaughtUp, types 26 - 30)
 inline constexpr size_t kMaxMessageBytes = 64 * 1024;
 inline constexpr size_t kMaxTurnCommands = 512;
 inline constexpr size_t kMaxChatChars = 100;        // the original's chat entry
@@ -64,7 +70,12 @@ enum class MsgType : uint8_t {
     PeerHello = 23, // guest -> guest on a new link between guests: who I am
     StartRequest = 24,   // leader -> server (protocol 7): start the match now with the players who are here; no payload, only the leader of a server's room is heard
     Lag = 25,       // dedicated server -> the other players (protocol 8): a player is more than 3 s behind the match (or is not any more)
-    Last = Lag
+    Presence = 26,  // dedicated server -> the players (protocol 10): who is missing from the match and for how long, the vote about the seat that has been away longest, the cap on the pauses
+    Vote = 27,      // player -> dedicated server (protocol 10): keep waiting for the seat that is missing / continue without it
+    CatchUp = 28,   // dedicated server -> a player who came back (protocol 10): the turns of the match follow, this many in all (first_turn ..)
+    TurnBatch = 29, // dedicated server -> a player who came back (protocol 10): consecutive sealed turns of the match, packed (the stream that CatchUp announces)
+    CaughtUp = 30,  // a player who came back -> dedicated server (protocol 10): I have executed every turn of the stream, my state hash is this
+    Last = CaughtUp
 };
 
 /// Longest map file name that travels (a plain name of the maps folder, ending in ".lvl" / ".LVL")
@@ -78,7 +89,28 @@ inline constexpr size_t kMaxRoomCodeChars = 32;
 inline constexpr size_t kMaxTokenChars = 64;                     // an opaque credential that a lobby hands out with the room code (printable, never interpreted by the game)
 bool valid_room_code(const std::string& code) noexcept;
 
-enum class RejectReason : uint8_t { Full = 1, VersionMismatch = 2, MatchRunning = 3, Kicked = 4, BadRequest = 5, NoSuchRoom = 6 };
+/// Dropped (protocol 10): the key is right and the seat was dropped (by the others' vote, by the cap on the pauses, by a violation): the player is told it is out ("Sorry, you
+/// have been dropped from the game", the original's own text). RejoinFailed: the key is right but the way back is closed (the server's turn log is not usable, the map or the
+/// state of the machine that came back differs, too many tries). Superseded: a newer connection with the key took the seat; sent to the older one just before it is closed, so
+/// that the older window stops trying.
+enum class RejectReason : uint8_t { Full = 1, VersionMismatch = 2, MatchRunning = 3, Kicked = 4, BadRequest = 5, NoSuchRoom = 6, Dropped = 7, RejoinFailed = 8, Superseded = 9 };
+
+/// A seat's KEY (protocol 10): 128 random bits that a server hands out in the Welcome of the seat (the server makes them, ants_net never reads the operating system's generator:
+/// this library is built for the web too). Whoever shows the key of a seat in a Hello gets the seat back. All zero = no key (a LAN or direct host, a room without a way back).
+inline constexpr size_t kKeyBytes = 16;
+using SeatKey = std::array<uint8_t, kKeyBytes>;
+inline bool key_is_zero(const SeatKey& k) noexcept {
+    uint8_t any = 0;
+    for (const uint8_t b : k) any = static_cast<uint8_t>(any | b);
+    return any == 0;
+}
+/// True when two keys are the same key. Compared in constant time (the loop has no early exit: the time does not tell how many bytes of a guess were right), and "no key" is
+/// never the same key as anything, not even another "no key".
+inline bool key_matches(const SeatKey& a, const SeatKey& b) noexcept {
+    uint8_t diff = 0;
+    for (size_t i = 0; i < kKeyBytes; ++i) diff = static_cast<uint8_t>(diff | (a[i] ^ b[i]));
+    return diff == 0 && !key_is_zero(a);
+}
 
 struct HelloMsg {
     uint16_t version{kProtocolVersion};
@@ -87,11 +119,16 @@ struct HelloMsg {
     uint8_t want_seat{255};     // the seat (0 .. 3) this guest asks for, 255: any; a seat that is taken (or the host's own) gives the first free one (protocol 5)
     std::string room;           // the room of a server that this guest wants ("" for a LAN / direct host: valid_room_code); a room that does not exist is Rejected NoSuchRoom (protocol 6)
     std::string token;          // the credential that came with the room code (kMaxTokenChars printable characters; "" when none): carried, never interpreted here (protocol 6)
+    SeatKey key{};              // protocol 10: the key of the seat that this client had (all zero: a new player). The server answers a key that fits a seat with that seat, whatever want_seat says
+    uint32_t have_turns{0};     // protocol 10: with a key: how many turns of the match this client has executed already (0: it starts from nothing and is sent Start first). Zero without a key
 };
 struct WelcomeMsg {
     uint8_t player{255};        // the slot (0 .. 3) this client plays
     uint8_t players{0};         // how many slots the room has
+    SeatKey key{};              // protocol 10: the key of this seat (all zero: this room offers no way back: a LAN or direct host, a room that does not hold seats)
+    uint8_t flags{0};           // protocol 10: bit 0 (kWelcomeRejoin) = a Hello with a key was accepted in a running match: Start (from nothing) or CatchUp follow, no Room message does; 0 or 1 only, and 1 needs a key
 };
+inline constexpr uint8_t kWelcomeRejoin = 1;
 struct RejectMsg {
     RejectReason reason{RejectReason::BadRequest};
 };
@@ -218,6 +255,63 @@ struct LagMsg {
     uint32_t behind_ms{0};    // how far behind the match it is, in ms of turns it has not executed yet; 0: it is not lagging any more
 };
 
+// ---- protocol 10: presence, votes and the catch-up stream (docs/NETWORK_PORT.md "Reconnect") -----------------------------------------------------------------
+
+/// Who is missing from the match, sent by a dedicated server to the players that are there (one per recipient: `your_vote` is the recipient's own), on every change and once a
+/// second while the match is paused. A seat is MISSING when its connection was lost (the link closed, a send failed, or nothing at all arrived for 10 s: a player who lags but
+/// keeps talking is never missing, only announced with Lag) or when it came back and is being given the match. Nothing is sealed while a seat is missing: the match is paused for
+/// everybody, chat goes on. `missing` empty means the match runs.
+///
+/// Wire layout: u8 n (0 .. 4), n x { u8 seat, u8 state (1 absent, 2 catching up), u16 waited_s, u8 progress }, u8 vote_seat (255 none), u8 votes_continue, u8 voters, u8 your_vote
+/// (0 none, 1 keep waiting, 2 continue), u16 cap_s. The decoder refuses anything that an honest server would not say: a seat listed twice, a seat above 3, a state other than 1 and 2,
+/// a progress above 100 or one that is not 0 for an absent seat, entries that are not sorted longest away first, a vote about a seat that is not the first absent one of the list,
+/// votes that are more than the voters or more than 4 voters, a vote count or a choice of the receiver without a vote, a trailing byte, a missing byte.
+struct PresenceMsg {
+    enum class State : uint8_t { Absent = 1, CatchingUp = 2 };
+    struct Entry {
+        uint8_t seat{255};
+        State state{State::Absent};
+        uint16_t waited_s{0};          // how long the seat has been away in this match, all its absences added up, in whole seconds (saturates at 0xFFFF); not growing along the list
+        uint8_t progress{0};           // CatchingUp: the percent of the match's turns that it has executed (0 .. 100); 0 for an absent seat
+    };
+    std::vector<Entry> missing;        // longest away first (the seat of a tie below)
+    uint8_t vote_seat{255};            // the seat the open vote is about (255: no vote is open): the first ABSENT entry of `missing`, once it has been away long enough to be put to the vote
+    uint8_t votes_continue{0};         // the connected players who chose "continue without it" (0 without a vote)
+    uint8_t voters{0};                 // the connected players: the vote is won by MORE THAN HALF of them (2 * votes_continue > voters)
+    uint8_t your_vote{0};              // the receiver's own choice: 0 none, 1 keep waiting, 2 continue (0 without a vote)
+    uint16_t cap_s{0xFFFF};            // seconds of pause that the match has left before the cap drops every absent seat (the cap is the match's total paused time); 0xFFFF: that or more
+};
+inline constexpr uint16_t kCapSecondsMore = 0xFFFF;
+/// A connected player's choice about the seat that the vote is about. 3 bytes on the wire: type, seat (0 .. 3), choice (0 keep waiting, 1 continue without it). A vote that does not
+/// fit (no vote is open, the seat is not its subject, the voter is not connected) is ignored by the server: it crossed a state change on the wire, it is no offence.
+struct VoteMsg {
+    uint8_t seat{255};                 // the missing seat that the vote is about
+    bool continue_without{false};      // true: continue the match without it; false: keep waiting for it
+};
+/// The server announces the stream of turns that a player who came back is given: the turns first_turn .. total_turns - 1 follow in TurnBatch messages (nothing follows when the two
+/// are equal: the player has all of them), and the player answers with CaughtUp when it has executed them. 9 bytes on the wire; first_turn is never above total_turns.
+struct CatchUpMsg {
+    uint32_t first_turn{0};            // the first turn of the stream: what the client already has (Hello::have_turns) is not sent again
+    uint32_t total_turns{0};           // the turns sealed so far: the stream ends with turn total_turns - 1
+};
+/// A run of consecutive sealed turns of the match, in canonical order with the issuers stamped, as they were sealed. On the wire: u8 type, u32 first_turn, u16 count (1 ..
+/// kMaxBatchTurns), then count x { u16 commands (at most kMaxTurnCommands), the commands in their wire form }; the whole message is at most kMaxMessageBytes and the host fills
+/// one up to kBatchBytes (a single turn that is bigger than that is a batch of its own). The `turn` of the i-th TurnMsg is not sent: it is first_turn + i. The last turn of the
+/// batch is numbered at most 0xFFFFFFFF.
+struct TurnBatchMsg {
+    uint32_t first_turn{0};
+    std::vector<TurnMsg> turns;        // consecutive from first_turn
+};
+/// A player who came back has executed every turn that CatchUp announced (`turns` of them: it must equal total_turns) and its state is this: the server compares the hash with its
+/// own (it is the referee) and gives the seat back, or answers that client alone with Desync and keeps the seat away. 69 bytes on the wire.
+struct CaughtUpMsg {
+    uint32_t turns{0};
+    sim::StateHash hash;
+};
+inline constexpr size_t kMaxBatchTurns = 4096;                  // turns in one TurnBatch (the u16 count has room for 65535; a batch of empty turns is 2 bytes a turn)
+inline constexpr size_t kBatchBytes = 48 * 1024;                // the host stops filling a batch at this size (after the first turn): a message is at most kMaxMessageBytes (64 KB)
+inline constexpr size_t kBatchHeaderBytes = 1 + 4 + 2;          // type, first_turn, count
+
 /// The type byte of a message, MsgType::None when the message is empty or the type is unknown.
 MsgType peek_type(const uint8_t* data, size_t size) noexcept;
 inline MsgType peek_type(const std::vector<uint8_t>& m) noexcept { return peek_type(m.data(), m.size()); }
@@ -244,6 +338,16 @@ std::vector<uint8_t> encode(const RequestMsg&);
 std::vector<uint8_t> encode(const PeerHelloMsg&);
 std::vector<uint8_t> encode(const StartRequestMsg&);
 std::vector<uint8_t> encode(const LagMsg&);
+std::vector<uint8_t> encode(const PresenceMsg&);
+std::vector<uint8_t> encode(const VoteMsg&);
+std::vector<uint8_t> encode(const CatchUpMsg&);
+/// At most kMaxBatchTurns turns are encoded (the rest of `turns` is cut, as encode(TurnMsg) cuts the commands above kMaxTurnCommands); the message is only a message that decode()
+/// accepts when it is at most kMaxMessageBytes and the turns are not empty
+std::vector<uint8_t> encode(const TurnBatchMsg&);
+std::vector<uint8_t> encode(const CaughtUpMsg&);
+/// The same TurnBatch message made from turns that are packed already (the host's TurnLog keeps them so, turnlog.hpp): `packed` holds exactly `count` turns, each u16 command count
+/// and the commands in their wire form. For 1 .. kMaxBatchTurns turns; an empty vector (no message) for any other count.
+std::vector<uint8_t> encode_turn_batch_packed(uint32_t first_turn, uint32_t count, const uint8_t* packed, size_t size);
 std::vector<uint8_t> encode_begin();
 std::vector<uint8_t> encode_leave();
 std::vector<uint8_t> encode_ping(const PingMsg&);
@@ -274,6 +378,11 @@ bool decode(const uint8_t* data, size_t size, PeerHelloMsg& out);
 /// Exactly the type byte: a StartRequest with a payload is no StartRequest
 bool decode(const uint8_t* data, size_t size, StartRequestMsg& out);
 bool decode(const uint8_t* data, size_t size, LagMsg& out);
+bool decode(const uint8_t* data, size_t size, PresenceMsg& out);
+bool decode(const uint8_t* data, size_t size, VoteMsg& out);
+bool decode(const uint8_t* data, size_t size, CatchUpMsg& out);
+bool decode(const uint8_t* data, size_t size, TurnBatchMsg& out);
+bool decode(const uint8_t* data, size_t size, CaughtUpMsg& out);
 /// Ping and Pong share the payload; the type byte tells them apart (peek_type).
 bool decode_ping(const uint8_t* data, size_t size, PingMsg& out);
 

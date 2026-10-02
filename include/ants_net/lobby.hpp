@@ -12,11 +12,20 @@
 // message names it to everybody (RoomMsg::leader); it may send StartRequest, and the room (ants_server) then starts the match with the players who are there, when it can.
 // A host that holds a seat (LAN / direct) has no leader and ignores StartRequest.
 //
+// Keys (protocol 10, docs/NETWORK_PORT.md "Reconnect"). A host that is given a key maker (HostLobby::Config::make_key: a dedicated server, which has the operating system's random
+// generator; ants_net itself never reads it, the library is built for the web too) gives every guest a KEY with its Welcome, and a guest that shows the key of a seat in its Hello gets
+// that seat back: in the room (Phase::Room) the new connection TAKES THE SEAT OVER at once (same seat, same key, same place in the order of the Welcomes, so the leader stays the
+// leader; the old connection is told Superseded and closed; the thumb is measured again; the room is broadcast), which is what a page that is reloaded in the waiting room needs before
+// the old link is known to be dead. In a match that is loading or running a key is not the lobby's business (the session of the match answers, docs/NETWORK_PORT.md): the lobby says
+// MatchRunning to it as to any Hello. A key that fits no seat is no offence: the Hello is the Hello of a new player. Without a key maker (a LAN or direct host) there are no keys,
+// every Welcome carries the zero key and every Hello's key is ignored.
+//
 // Both classes are pure logic over Connection, driven from the main loop like the sessions. The connections stay owned by the caller; when the match
 // begins the host lobby hands them (seat -> connection) to the HostSession.
 
 #include <array>
 #include <cstdint>
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -46,6 +55,10 @@ public:
         /// Flood control (flood.hpp): the messages that one guest may send, a token bucket. A message beyond it is not handled and is a violation (eight throw the guest out).
         uint32_t message_burst{kMessageBurst};
         uint32_t messages_per_second{kMessagesPerSecond};
+        /// Makes the key of a seat (a server fills it with 16 random bytes of the operating system): true when `key` was filled. Called once for every guest that is welcomed. A key that is
+        /// all zero, that equals the key of another guest, or a maker that returns false, gives the guest NO key (the zero key in its Welcome: no way back for it); the lobby tries a few
+        /// times before it gives up. Unset (the default: a LAN or direct host): no guest has a key.
+        std::function<bool(SeatKey&)> make_key;
     };
     enum class Phase : uint8_t { Room, Loading, Begun };
     struct Event {
@@ -108,6 +121,11 @@ public:
     const StartMsg& start_info() const noexcept { return start_; }
     /// Once Begun: the connection of a seat (nullptr for the host's own seat and empty seats)
     Connection* connection_of(uint8_t seat) const noexcept { return seat < sim::MAX_PLAYERS ? guests_[seat].conn : nullptr; }
+    /// The key that the guest of a seat was given with its Welcome: all zero for a seat without a guest (the host's own, a bot's, an empty one), for a lobby without a key maker, and for a guest
+    /// that the maker gave none. Stays what it was after Begun (the session of the match is given the keys of the seats from here).
+    SeatKey key_of(uint8_t seat) const noexcept { return seat < sim::MAX_PLAYERS ? guests_[seat].key : SeatKey{}; }
+    /// How many times a connection took a seat over with its key (the old one was closed)
+    uint32_t takeovers() const noexcept { return takeovers_; }
 
     std::vector<Event> take_events();
 
@@ -124,6 +142,7 @@ private:
         std::string address;                     // where the guest's connection came from
         uint16_t listen_port{0};                 // the port on which it accepts the other guests during the match (0: none)
         uint32_t join_order{0};                  // 1, 2, 3, ... in the order of the Welcomes: the earliest guest still here leads a server's room
+        SeatKey key{};                           // protocol 10: the key of the seat, handed out with the Welcome (all zero: none)
         MessageBudget talk;                      // flood control: every message that the guest sends takes one from it
         uint32_t ignored_start_requests{0};      // the StartRequests of this guest that were ignored (the first kIgnoredStartRequestsAllowed are free)
     };
@@ -137,6 +156,9 @@ private:
     void remove_guest(uint8_t seat, bool notify_reject, RejectReason reason);
     void violation(uint8_t seat);
     void handle_hello(Pending& p, const std::vector<uint8_t>& msg, uint32_t now_ms, bool& consumed);
+    SeatKey new_key() const;
+    uint8_t seat_of_key(const SeatKey& key) const noexcept;
+    void take_over(uint8_t seat, Pending& p, const HelloMsg& hello);
     void handle_guest_message(uint8_t seat, const std::vector<uint8_t>& msg);
     void check_all_loaded();
     void cancel_with(CancelMsg::Reason reason, uint8_t player);
@@ -157,6 +179,7 @@ private:
     std::vector<Event> events_;
     uint32_t joins_{0};                      // the Welcomes sent so far (Guest::join_order)
     uint32_t ignored_start_requests_{0};
+    uint32_t takeovers_{0};
 };
 
 class ClientLobby {
@@ -169,6 +192,8 @@ public:
         std::string room;                    // the room of a server (valid_room_code), "" for a LAN / direct host
         std::string token;                   // the credential that came with the room code ("" when none)
         uint32_t ping_every_ms{1000};        // the guest measures its own round trip to the host this often once it has a seat (the "ping" next to the frame rate)
+        SeatKey key{};                       // protocol 10: the key of the seat that this machine had (a page that was reloaded, a game that was started again): the Hello shows it and the
+                                             // server gives the seat back. All zero: a new player. Its turns (Hello::have_turns) are 0: this lobby starts from nothing
     };
     enum class Phase : uint8_t { Connecting, Joining, InRoom, Loading, Loaded, Begun, Rejected, Closed };
     struct Event {
@@ -199,6 +224,12 @@ public:
     bool was_open() const noexcept { return was_open_; }
     /// The server accepted the connection and sent no Welcome within `welcome_timeout_ms` (10 s): the lobby closed the connection itself (a server that does not answer, not one that hung up)
     bool welcome_timed_out() const noexcept { return welcome_timed_out_; }
+    /// The key that the Welcome carried (valid from InRoom on): all zero when the host offers no way back (a LAN or direct host, a room that holds no seats)
+    const SeatKey& key() const noexcept { return key_; }
+    /// The Welcome said that a Hello with a key was accepted into a match that is running or loading (kWelcomeRejoin): the server goes on with Start (this machine starts from nothing),
+    /// no Room message comes, and the flow is Welcome -> Start -> report_loaded -> Begin -> Begun as for anybody. False after the Welcome of a seat in the room (also one that took its
+    /// seat over in the waiting room: the room follows).
+    bool rejoined() const noexcept { return rejoined_; }
     CancelMsg::Reason cancel_reason() const noexcept { return cancel_reason_; }
     /// The seat that caused the cancel (a player who left, a machine that could not load the map), 255 when unknown
     uint8_t cancel_player() const noexcept { return cancel_player_; }
@@ -218,6 +249,8 @@ private:
     RoomMsg room_;
     StartMsg start_;
     uint8_t seat_{255};
+    SeatKey key_{};
+    bool rejoined_{false};
     RejectReason reject_{RejectReason::BadRequest};
     CancelMsg::Reason cancel_reason_{CancelMsg::Reason::HostCancelled};
     uint8_t cancel_player_{255};

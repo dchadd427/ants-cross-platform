@@ -23,6 +23,13 @@
 //   - a frame that stood for more than 100 ms (a window that is hardly drawn) is not read as the link's lateness and does not count as a stall: the turns that came meanwhile
 //               are all there at its start, and its own time covers the ticks that its length holds (and may run as many as its time holds at the fastest speed: max_ticks_per_update
 //               for every 100 ms of it).
+//
+// The catch-up (protocol 10, docs/NETWORK_PORT.md "Reconnect"). A machine that comes back to a match that it lost (a lost connection, a reloaded page) is given the turns it misses, up to
+// all of them, from the server's log. They are handed in with on_catch_up_turn() and executed with fast_forward(): as fast as the machine can, without waiting for real time, without
+// calling any hook (nothing is drawn, no sound plays, no news appears: the match of the past is only replayed), in exactly the order of update(): a turn's commands are applied in
+// order, then its tick runs. The catch-up is not the live stream and tells the jitter buffer nothing about the link: its turns all arrive at once, "late" by minutes, and would
+// make the buffer ask for its maximum (and make the lateness that it measured before the pause look like a clock that jumped). After a fast-forward the runner is as it is at the
+// start of a match: the buffer back at its steady value with no turns read, the next live turns collected before the first of them runs (the first is not due before target + 1 are queued).
 
 #include <algorithm>
 #include <cstdint>
@@ -56,6 +63,20 @@ public:
 
     /// A sealed turn from the host. Turns must arrive in order without gaps (the transport is reliable and ordered); anything else is refused.
     bool on_turn(TurnMsg turn);
+    /// A turn of the catch-up stream (a TurnBatch of the server's log): queued in order exactly like on_turn (the same numbering, the same refusals, it is logged for logged_turn), but it is
+    /// not an arrival of the live stream: the jitter buffer is not told about it. Run these turns with fast_forward(), never with update().
+    bool on_catch_up_turn(TurnMsg turn);
+
+    /// Executes up to `max_ticks` of the queued turns at once, without pacing and without any hook (set_on_tick, set_on_command and set_on_applied are not called): for each turn its
+    /// commands are applied in order, then its tick runs, as update() does it, and the state hash is not taken (the caller asks state_hash() when it has run what it wanted to).
+    /// A turn is one tick (kTicksPerTurn), so `max_ticks` is also the most turns. Returns the number of turns executed, 0 when nothing is queued. When it executed any turn the runner is
+    /// left as at the start of a match (see "The catch-up" above), so update() goes on from there as soon as the live turns are in. Calls to it are as short or as long as the caller
+    /// likes (a window slices the catch-up into frames); the executed turns are numbered as by update().
+    uint32_t fast_forward(uint32_t max_ticks);
+    /// True between turns: no turn is being executed (false only inside the hooks that update() calls, in the middle of a turn: the state is not that of any number of whole turns and
+    /// next_turn_to_execute() does not say what the engine has done). The state hash that a machine reports is only that of a boundary. With one tick to a turn the other turns of a
+    /// fast_forward() are all boundaries too.
+    bool at_boundary() const noexcept { return !in_turn_; }
 
     /// Advances real time by `dt_ms` and executes the ticks that are due (one every 50 ms of game time, faster while the queue is longer than the buffer: a turn's commands are
     /// applied, then its tick runs). Returns the turns that were completed, in order.
@@ -107,6 +128,9 @@ public:
 private:
     static constexpr uint32_t kTickQuarters = kTickMs * 4u;           // the accumulator counts quarters of a millisecond of game time
 
+    bool enqueue(TurnMsg turn, bool live);
+    void restart_pacing() noexcept;
+
     sim::SimulationEngine& sim_;
     Config cfg_;
     JitterBuffer jitter_;
@@ -126,6 +150,7 @@ private:
     uint64_t updates_{0};          // how many updates there have been
     uint32_t fresh_first_{0};      // the turns received since the last update (they are stamped with the clock of that update): the first of them and how many
     uint32_t fresh_count_{0};
+    bool in_turn_{false};          // a turn is being executed (its commands applied, its tick run, its number not counted yet): see at_boundary
     std::function<void()> on_tick_;
     std::function<void(const sim::Command&, const sim::CommandResult&)> on_command_;
     std::function<void(const sim::Command&)> on_applied_;

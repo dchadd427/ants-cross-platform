@@ -1284,7 +1284,7 @@ int main(int argc, char** argv) {
         ASSERT_TRUE(app.net() == nullptr);
     } TEST_END();
 
-    TEST_CASE("A5.2 Every reason that a server can answer with is told in its own words: room full, another version (this game's version named), the match already running, removed, bad request, no such room; hosting that is refused by NoSuchRoom says the server is busy") {
+    TEST_CASE("A5.2 Every reason that a server can answer with is told in its own words: room full, another version (this game's version named), the match already running, removed, bad request, no such room, and (protocol 10) dropped, rejoin failed, taken over; hosting that is refused by NoSuchRoom says the server is busy") {
         TempDir temp;
         Application app;
         RawServer raw;
@@ -1301,6 +1301,9 @@ int main(int argc, char** argv) {
             {net::RejectReason::Kicked, "removed"},
             {net::RejectReason::BadRequest, "did not accept"},
             {net::RejectReason::NoSuchRoom, "no room with the code"},
+            {net::RejectReason::Dropped, "dropped from the game"},                       // (protocol 10: the answers to a Hello with a key; the menu's own never shows one, but a server may send them)
+            {net::RejectReason::RejoinFailed, "could not be rejoined"},
+            {net::RejectReason::Superseded, "taken over by another window"},
         };
         raw.mode = RawServer::Mode::Reject;
         std::vector<std::string> seen;
@@ -1876,7 +1879,8 @@ int main(int argc, char** argv) {
         p.net.leave();
         ASSERT_TRUE(p.net.fail_reason() == FailReason::None);                                // (leave() starts the next attempt from nothing)
         for (const net::RejectReason reason : {net::RejectReason::Full, net::RejectReason::VersionMismatch, net::RejectReason::MatchRunning, net::RejectReason::Kicked,
-                                               net::RejectReason::BadRequest, net::RejectReason::NoSuchRoom}) {
+                                               net::RejectReason::BadRequest, net::RejectReason::NoSuchRoom, net::RejectReason::Dropped, net::RejectReason::RejoinFailed,
+                                               net::RejectReason::Superseded}) {
             raw.mode = RawServer::Mode::Reject;
             raw.reason = reason;
             ASSERT_TRUE(p.join("127.0.0.1", raw.port(), "Ann", "room-x"));

@@ -32,6 +32,12 @@ sim::StateHash get_hash(ByteReader& r) {
     return h;
 }
 
+SeatKey get_key(ByteReader& r) {
+    SeatKey k{};
+    if (const uint8_t* b = r.take(kKeyBytes)) std::copy(b, b + kKeyBytes, k.begin());
+    return k;
+}
+
 // A message starts with its type byte; check it and give the reader for the rest
 bool open(const uint8_t* data, size_t size, MsgType type, ByteReader*& out, ByteReader& storage) {
     if (data == nullptr || size == 0 || size > kMaxMessageBytes) return false;
@@ -103,6 +109,8 @@ std::vector<uint8_t> encode(const HelloMsg& m) {
     w.u8(m.want_seat);
     w.str8(clip(m.room, kMaxRoomCodeChars));
     w.str8(clip(m.token, kMaxTokenChars));
+    w.bytes(m.key.data(), m.key.size());
+    w.u32(m.have_turns);
     return out;
 }
 bool decode(const uint8_t* data, size_t size, HelloMsg& out) {
@@ -116,7 +124,10 @@ bool decode(const uint8_t* data, size_t size, HelloMsg& out) {
     m.want_seat = r->u8();
     m.room = r->str8();
     m.token = r->str8();
+    m.key = get_key(*r);
+    m.have_turns = r->u32();
     if (!r->done() || m.name.size() > kMaxNameChars || m.token.size() > kMaxTokenChars || !valid_room_code(m.room)) return false;
+    if (key_is_zero(m.key) && m.have_turns != 0) return false;                  // a new player has no turns: a count needs the key that it belongs to
     for (char c : m.name) {
         if (static_cast<unsigned char>(c) < 0x20 || static_cast<unsigned char>(c) > 0x7E) return false;
     }
@@ -147,6 +158,8 @@ std::vector<uint8_t> encode(const WelcomeMsg& m) {
     w.u8(static_cast<uint8_t>(MsgType::Welcome));
     w.u8(m.player);
     w.u8(m.players);
+    w.bytes(m.key.data(), m.key.size());
+    w.u8(m.flags);
     return out;
 }
 bool decode(const uint8_t* data, size_t size, WelcomeMsg& out) {
@@ -156,7 +169,10 @@ bool decode(const uint8_t* data, size_t size, WelcomeMsg& out) {
     WelcomeMsg m;
     m.player = r->u8();
     m.players = r->u8();
+    m.key = get_key(*r);
+    m.flags = r->u8();
     if (!r->done() || m.player >= sim::MAX_PLAYERS || m.players < 2 || m.players > sim::MAX_PLAYERS) return false;
+    if (m.flags > kWelcomeRejoin || (m.flags == kWelcomeRejoin && key_is_zero(m.key))) return false;       // 0 or 1 only; a rejoin is of a seat that has a key
     out = m;
     return true;
 }
@@ -173,7 +189,7 @@ bool decode(const uint8_t* data, size_t size, RejectMsg& out) {
     ByteReader* r = nullptr;
     if (!open(data, size, MsgType::Reject, r, storage)) return false;
     const uint8_t reason = r->u8();
-    if (!r->done() || reason < static_cast<uint8_t>(RejectReason::Full) || reason > static_cast<uint8_t>(RejectReason::NoSuchRoom)) return false;
+    if (!r->done() || reason < static_cast<uint8_t>(RejectReason::Full) || reason > static_cast<uint8_t>(RejectReason::Superseded)) return false;
     out.reason = static_cast<RejectReason>(reason);
     return true;
 }
@@ -554,6 +570,168 @@ bool decode(const uint8_t* data, size_t size, LagMsg& out) {
     m.seat = r->u8();
     m.behind_ms = r->u32();
     if (!r->done() || m.seat >= sim::MAX_PLAYERS) return false;
+    out = m;
+    return true;
+}
+
+// ---- protocol 10 ---------------------------------------------------------------------------------------------------------------------------------
+
+std::vector<uint8_t> encode(const PresenceMsg& m) {
+    std::vector<uint8_t> out;
+    ByteWriter w(out);
+    w.u8(static_cast<uint8_t>(MsgType::Presence));
+    const size_t n = std::min<size_t>(m.missing.size(), sim::MAX_PLAYERS);
+    w.u8(static_cast<uint8_t>(n));
+    for (size_t i = 0; i < n; ++i) {
+        w.u8(m.missing[i].seat);
+        w.u8(static_cast<uint8_t>(m.missing[i].state));
+        w.u16(m.missing[i].waited_s);
+        w.u8(m.missing[i].progress);
+    }
+    w.u8(m.vote_seat);
+    w.u8(m.votes_continue);
+    w.u8(m.voters);
+    w.u8(m.your_vote);
+    w.u16(m.cap_s);
+    return out;
+}
+bool decode(const uint8_t* data, size_t size, PresenceMsg& out) {
+    ByteReader storage(nullptr, 0);
+    ByteReader* r = nullptr;
+    if (!open(data, size, MsgType::Presence, r, storage)) return false;
+    PresenceMsg m;
+    const size_t n = r->u8();
+    if (!r->ok() || n > sim::MAX_PLAYERS) return false;
+    unsigned listed = 0;                                       // the seats listed so far (a bit each)
+    int first_absent = -1;                                     // the seat of the first absent entry
+    for (size_t i = 0; i < n; ++i) {
+        PresenceMsg::Entry e;
+        e.seat = r->u8();
+        const uint8_t state = r->u8();
+        e.waited_s = r->u16();
+        e.progress = r->u8();
+        if (!r->ok() || e.seat >= sim::MAX_PLAYERS || (listed & (1u << e.seat)) != 0) return false;           // out of range, or the seat twice
+        if (state != static_cast<uint8_t>(PresenceMsg::State::Absent) && state != static_cast<uint8_t>(PresenceMsg::State::CatchingUp)) return false;
+        e.state = static_cast<PresenceMsg::State>(state);
+        if (e.progress > 100 || (e.state == PresenceMsg::State::Absent && e.progress != 0)) return false;     // only a seat that is catching up has made progress
+        if (!m.missing.empty() && e.waited_s > m.missing.back().waited_s) return false;                        // longest away first
+        listed |= 1u << e.seat;
+        if (e.state == PresenceMsg::State::Absent && first_absent < 0) first_absent = e.seat;
+        m.missing.push_back(e);
+    }
+    m.vote_seat = r->u8();
+    m.votes_continue = r->u8();
+    m.voters = r->u8();
+    m.your_vote = r->u8();
+    m.cap_s = r->u16();
+    if (!r->done() || m.votes_continue > m.voters || m.voters > sim::MAX_PLAYERS || m.your_vote > 2) return false;
+    // the vote is about the longest away seat that is absent (a seat that is catching up is back: never put to the vote), or there is none; without a vote nobody has voted
+    if (m.vote_seat != 255 && m.vote_seat != first_absent) return false;
+    if (m.vote_seat == 255 && (m.votes_continue != 0 || m.your_vote != 0)) return false;
+    out = std::move(m);
+    return true;
+}
+
+std::vector<uint8_t> encode(const VoteMsg& m) { return {static_cast<uint8_t>(MsgType::Vote), m.seat, static_cast<uint8_t>(m.continue_without ? 1 : 0)}; }
+bool decode(const uint8_t* data, size_t size, VoteMsg& out) {
+    if (data == nullptr || size != 3 || data[0] != static_cast<uint8_t>(MsgType::Vote) || data[1] >= sim::MAX_PLAYERS || data[2] > 1) return false;
+    out.seat = data[1];
+    out.continue_without = data[2] == 1;
+    return true;
+}
+
+std::vector<uint8_t> encode(const CatchUpMsg& m) {
+    std::vector<uint8_t> out;
+    ByteWriter w(out);
+    w.u8(static_cast<uint8_t>(MsgType::CatchUp));
+    w.u32(m.first_turn);
+    w.u32(m.total_turns);
+    return out;
+}
+bool decode(const uint8_t* data, size_t size, CatchUpMsg& out) {
+    ByteReader storage(nullptr, 0);
+    ByteReader* r = nullptr;
+    if (!open(data, size, MsgType::CatchUp, r, storage)) return false;
+    CatchUpMsg m;
+    m.first_turn = r->u32();
+    m.total_turns = r->u32();
+    if (!r->done() || m.first_turn > m.total_turns) return false;           // the stream cannot start after its end
+    out = m;
+    return true;
+}
+
+std::vector<uint8_t> encode_turn_batch_packed(uint32_t first_turn, uint32_t count, const uint8_t* packed, size_t size) {
+    if (count == 0 || count > kMaxBatchTurns || (packed == nullptr && size != 0)) return {};
+    std::vector<uint8_t> out;
+    out.reserve(kBatchHeaderBytes + size);
+    ByteWriter w(out);
+    w.u8(static_cast<uint8_t>(MsgType::TurnBatch));
+    w.u32(first_turn);
+    w.u16(static_cast<uint16_t>(count));
+    if (size != 0) w.bytes(packed, size);
+    return out;
+}
+std::vector<uint8_t> encode(const TurnBatchMsg& m) {
+    const size_t count = std::min(m.turns.size(), kMaxBatchTurns);
+    std::vector<uint8_t> packed;
+    for (size_t t = 0; t < count; ++t) {
+        const TurnMsg& turn = m.turns[t];
+        const size_t commands = std::min(turn.commands.size(), kMaxTurnCommands);
+        ByteWriter w(packed);
+        w.u16(static_cast<uint16_t>(commands));
+        for (size_t i = 0; i < commands; ++i) sim::encode(turn.commands[i], packed);
+    }
+    return encode_turn_batch_packed(m.first_turn, static_cast<uint32_t>(count), packed.data(), packed.size());
+}
+bool decode(const uint8_t* data, size_t size, TurnBatchMsg& out) {
+    ByteReader storage(nullptr, 0);
+    ByteReader* r = nullptr;
+    if (!open(data, size, MsgType::TurnBatch, r, storage)) return false;
+    TurnBatchMsg m;
+    m.first_turn = r->u32();
+    const size_t count = r->u16();
+    if (!r->ok() || count == 0 || count > kMaxBatchTurns) return false;
+    if (uint64_t{m.first_turn} + count > (uint64_t{1} << 32)) return false;                // the turn numbers would wrap
+    size_t pos = kBatchHeaderBytes;
+    m.turns.reserve(count);
+    for (size_t t = 0; t < count; ++t) {
+        if (size - pos < 2) return false;                                                  // the command count of the turn is cut off
+        const size_t commands = static_cast<size_t>(data[pos]) | (static_cast<size_t>(data[pos + 1]) << 8);
+        pos += 2;
+        if (commands > kMaxTurnCommands) return false;
+        TurnMsg turn;
+        turn.turn = m.first_turn + static_cast<uint32_t>(t);
+        turn.commands.reserve(commands);
+        for (size_t i = 0; i < commands; ++i) {
+            sim::Command c;
+            size_t used = 0;
+            if (pos >= size || sim::decode(data + pos, size - pos, c, &used) != sim::DecodeError::None) return false;
+            pos += used;
+            turn.commands.push_back(std::move(c));
+        }
+        m.turns.push_back(std::move(turn));
+    }
+    if (pos != size) return false;                                                         // no trailing bytes
+    out = std::move(m);
+    return true;
+}
+
+std::vector<uint8_t> encode(const CaughtUpMsg& m) {
+    std::vector<uint8_t> out;
+    ByteWriter w(out);
+    w.u8(static_cast<uint8_t>(MsgType::CaughtUp));
+    w.u32(m.turns);
+    put_hash(w, m.hash);
+    return out;
+}
+bool decode(const uint8_t* data, size_t size, CaughtUpMsg& out) {
+    ByteReader storage(nullptr, 0);
+    ByteReader* r = nullptr;
+    if (!open(data, size, MsgType::CaughtUp, r, storage)) return false;
+    CaughtUpMsg m;
+    m.turns = r->u32();
+    m.hash = get_hash(*r);
+    if (!r->done()) return false;
     out = m;
     return true;
 }

@@ -499,6 +499,45 @@ int main() {
         ASSERT_TRUE(rf.max_target == 2 && rf.changes_at.empty());
     } TEST_END();
 
+    TEST_CASE("J1.10 reset() Gives Back A Buffer That Has Not Seen The Link: The Steady Target, No Turn Read, And It Then Behaves Exactly Like A New One (A Runner Does This After A Catch-Up)") {
+        Feed rough;
+        rough.jitter = 300;
+        JitterBuffer used;
+        feed_rule(used, rough, 20000, {5000, 6000});
+        ASSERT_TRUE(used.target() >= 3 && used.lateness_ms() > 0);                       // it has learned a link
+        used.reset();
+        ASSERT_EQ(used.target(), 1u);                                                    // the steady value
+        ASSERT_EQ(used.lateness_ms(), 0u);                                               // nothing read
+        ASSERT_EQ(used.wanted(), 1u);
+        for (uint32_t seed = 1; seed <= 3; ++seed) {                                     // from there on it is a new buffer: the same arrivals give the same targets at the same times
+            Feed f;
+            f.jitter = 90;
+            f.spike_every = 60;
+            f.spike_ms = 250;
+            f.seed = seed;
+            JitterBuffer again = used;
+            JitterBuffer fresh;
+            const Run ra = feed_rule(again, f, 40000, {12000});
+            const Run rb = feed_rule(fresh, f, 40000, {12000});
+            ASSERT_TRUE(ra.target_each_second == rb.target_each_second && ra.changes_at == rb.changes_at && ra.final_target == rb.final_target);
+        }
+        // a rule with another range goes back to ITS steady value
+        JitterBuffer::Config cfg;
+        cfg.min_turns = 2;
+        cfg.max_turns = 4;
+        JitterBuffer ranged(cfg);
+        feed_rule(ranged, rough, 20000, {5000});
+        ASSERT_TRUE(ranged.target() >= 3);
+        ranged.reset();
+        ASSERT_EQ(ranged.target(), 2u);
+        ASSERT_EQ(ranged.lateness_ms(), 0u);
+        ASSERT_EQ(ranged.config().min_turns, 2u);                                        // (the rule itself is not reset)
+        // a buffer that never saw anything is not changed by a reset
+        JitterBuffer virgin;
+        virgin.reset();
+        ASSERT_TRUE(virgin.target() == 1 && virgin.lateness_ms() == 0);
+    } TEST_END();
+
     TEST_CASE("J2.1 The Runner Waits For The Buffer It Needs: It Starts When Target + 1 Turns Are Queued, A Stall Grows The Target By A Turn And It Collects The Buffer Again Before It Goes On") {
         Drive d;
         std::vector<uint32_t> arrived;
