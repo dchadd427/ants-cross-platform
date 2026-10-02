@@ -3,23 +3,27 @@
 _Updated 2026-10-02 · current release **v0.0.93** · details: [CHANGELOG](CHANGELOG.md)_
 
 ## In progress
-- **Latency**: ping and delay readout, fix for the stuck "waiting" message, less lag (adaptive buffer, 50 ms turns), a lagging player no longer freezes the others
-- **Web**: the game starts at once (no start overlay); a network match keeps playing in a hidden or minimized tab · in review
-- **Community maps**: default ant types (e.g. combat ants when hatching on popcorn.lvl) and power-ups recognised and drawn by tile, as in the original · fixing review findings
+- **16:9 by default (priority)**: one screen layout and a 960 x 540 canvas done; the wide match screen (more map, frame stretched from the original art) and the web page in 16:9 being built; classic 4:3 stays selectable
+- **v0.0.94 Less lag**: ping and delay next to the FPS counter, 50 ms turns, an adaptive buffer, a lagging player no longer freezes the others · fixing review findings
+- **v0.0.95 Community maps**: default ant types (popcorn.lvl hatches combat ants), power-ups by tile, busy ants and the pick-up panel as in the original · ready, ships after v0.0.94
+- **v0.0.96 Web**: the game starts at once (no start overlay) and keeps playing in a hidden tab · ready, ships after v0.0.95
+- **Desktop start menu**: Single player with bots per seat, Join with a code, Host an online match · in review
+- **Reconnect** (release A, the server side, off by default): a lost player's seat is held, the match pauses, vote after 30 s · in review
+- **Online rooms**: bots fill the empty seats at START, chat in the waiting room · network side being built
 
 ## Next
-- **Desktop start menu**: Single player (with bots per seat), Join with a code, Host an online match; single-player bots on the web too
-- **Reconnect**: a lost connection pauses the match, rejoin the same seat even after a crash or power cut, the others vote after 30 s (design done)
-- **Dead-code cleanup**: the 41 items the survey found
-- Widescreen: M1 (one screen layout, no visible change), then 16:9 default, custom aspect, wheel zoom, stretched HUD
-- Touch: tap fixes, two-finger pan, pinch zoom (owner tests on a phone)
-- Bots B4a (island hops, swimmer ferry) and B4b (standard bot: power-ups incl. standing on them, raids, defence, fights, alliances), then bots in online rooms
-- CI, Docker hardening, short room codes, replays, match API
+- The screens for the online bots and the waiting-room chat (host choice, chat box)
+- Reconnect release B: the games rejoin by themselves (also after a crash or power cut), "Rejoin" in the menu and on the page; then on by default
+- Matches survive a server restart (rooms restored from their turn log)
+- Mouse-wheel zoom; later an option to match the monitor's aspect
+- Touch: tap fixes, two-finger pan, pinch zoom
+- Bots B4a / B4b (power-ups incl. standing on them, raids, defence, fights)
+- Dead-code cleanup, CI, Docker hardening, short room codes, replays, match API
 
 ## Recently done
-- **v0.0.93** the room leader (the first player of a server's room) can start the match early; a client that floods the server is dropped and cannot grow it or slow other rooms (the review's finding); the quick help no longer presses the leader's START; the web files are revalidated (304) instead of downloaded again on every reload
-- **v0.0.92** pointer fix + fullscreen mouse grab (the black bars of a wide window scroll the map), the widescreen safety net (M0), GCC 12 builds with warnings as errors, the bots' B2 review fixes, the four-corner layout
-- **History rewrite**: the removed files and local paths are gone from every commit of the public history
-- **v0.0.91** the original program (Ants.exe, its decompilation, the DirectDraw wrapper) is out of the repo; the table tests keep full strength by pinned digests
-- **v0.0.90** Play online: host (map, 2–4 players), join by code, seats on the page / in windows / by link; friends get 10 minutes to join
+- **v0.0.93** the room leader can start the match early; flooding clients are dropped; web files revalidated (304)
+- **v0.0.92** pointer fix + fullscreen mouse grab (black bars scroll the map), the widescreen safety net, GCC 12 builds, bots' review fixes, four-corner layout
+- **History rewrite**: removed files and local paths gone from every public commit
+- **v0.0.91** the original program is out of the repo; table tests keep full strength by pinned digests
+- **v0.0.90** Play online: host (map, 2–4 players), join by code, seats on the page / in windows / by link
 - **v0.0.89** server makes its own control secret; one Portainer stack; "Play online" link
