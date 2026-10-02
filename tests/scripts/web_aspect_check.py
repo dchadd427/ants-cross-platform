@@ -189,6 +189,12 @@ PURE_CHECKS = r"""
 """
 
 
+def screen_of_canvas(g, lx, ly, canvas_w, canvas_h):
+    """Where a point of the game's canvas (canvas_w x canvas_h logical pixels) is on the page, from the box's rectangle."""
+    bx = g["box"]
+    return bx[0] + lx / canvas_w * bx[2], bx[1] + ly / canvas_h * bx[3]
+
+
 class Browser:
     def __init__(self, browser_path):
         self.profile = tempfile.mkdtemp(prefix="ants_aspect_profile.")
@@ -275,6 +281,11 @@ class Tab:
         time.sleep(0.1)
         self.mouse("mouseReleased", x, y)
 
+    def tap(self, x, y):
+        self.call("Input.dispatchTouchEvent", {"type": "touchStart", "touchPoints": [{"x": x, "y": y}]})
+        time.sleep(0.08)
+        self.call("Input.dispatchTouchEvent", {"type": "touchEnd", "touchPoints": []})
+
     def close(self):
         self.dt.close_tab(self.target)
 
@@ -354,6 +365,19 @@ def main():
             portrait_phone = w <= 768 and h > w                      # the page's rule: (max-width: 768px) and (orientation: portrait)
             layout_checks(label, g, "4:3" if portrait_phone else "16:9")
             tab.save_shot(args.shots, "page_" + label.replace(" ", "_").replace("(", "").replace(")", "").replace("@", "_dpr"))
+
+        print("[web aspect] touch: a tap lands where it should (a phone, both shapes)")
+        for label, w, h, query, shape in (("portrait phone, classic picture", 390, 844, "", (640, 480)), ("landscape phone, 16:9 picture", 844, 390, "", (960, 540))):
+            tab.emulate(w, h, 3, True)
+            tab.open(web + query, settle=2.5)
+            g = tab.geometry()
+            before = tab.shot()
+            sx, sy = screen_of_canvas(g, (shape[0] - 640) / 2 + 576, (shape[1] - 480) / 2 + 450, shape[0], shape[1])
+            tab.tap(sx, sy)
+            time.sleep(1.8)
+            after = tab.shot()
+            diff = sum(1 for i in range(0, len(before[3]), before[2] * 97) if abs(before[3][i] - after[3][i]) > 40)
+            check(diff > 60, "%s: a tap on the quick help's START button leaves the quick help (%d sampled pixels changed)" % (label, diff))
 
         print("[web aspect] the address and the selector")
         tab.emulate(1280, 720, 1)
@@ -455,10 +479,6 @@ def main():
         bx = g["box"]
         cursor_error(tab, (bx[0] + bx[2] * 0.25, bx[1] + bx[3] * 0.25), (bx[0] + bx[2] * 0.75, bx[1] + bx[3] * 0.7), "1280x720")
         # a click on a button: the quick help's START (the first page of the game) is at (576, 450) of the original's 640 x 480 page, which sits at (160, 30) of the 960 x 540 canvas
-        def screen_of_canvas(g, lx, ly, canvas_w, canvas_h):
-            bx = g["box"]
-            return bx[0] + lx / canvas_w * bx[2], bx[1] + ly / canvas_h * bx[3]
-
         tab.open(web, settle=2.5)
         g = tab.geometry()
         before = tab.shot()
