@@ -64,3 +64,10 @@ scratch/
 compile_commands.json
 .vs/
 CMakeUserPresets.json
+
+# A local run of ants_server (README: "The Dedicated Server"): its results folder, the control secret that it makes (and the temporary files of making it), and the
+# .env files of the compose examples (secrets: never commit them)
+results/
+control-secret
+control-secret.*
+.env

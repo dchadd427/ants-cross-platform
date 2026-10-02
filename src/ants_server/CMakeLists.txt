@@ -4,6 +4,7 @@ add_library(ants_server_core STATIC
     room.cpp
     room_manager.cpp
     control.cpp
+    secret.cpp
 )
 target_include_directories(ants_server_core PUBLIC
     ${CMAKE_SOURCE_DIR}/include
@@ -14,6 +15,9 @@ target_link_libraries(ants_server_core PUBLIC
     ants_assets
     ants_ctl
 )
+if(WIN32)
+    target_link_libraries(ants_server_core PRIVATE bcrypt)      # the random number generator that makes the control secret
+endif()
 set_target_properties(ants_server_core PROPERTIES
     CXX_STANDARD 17
     CXX_STANDARD_REQUIRED ON

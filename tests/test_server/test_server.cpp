@@ -13,10 +13,14 @@
 #include "ants_server/map_store.hpp"
 #include "ants_server/room.hpp"
 #include "ants_server/room_manager.hpp"
+#include "ants_server/secret.hpp"
 #include "ants_sim/sim_engine.hpp"
 
 #include <algorithm>
+#include <atomic>
+#include <cctype>
 #include <chrono>
+#include <csignal>
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
@@ -24,9 +28,18 @@
 #include <iomanip>
 #include <iostream>
 #include <memory>
+#include <set>
 #include <string>
 #include <thread>
 #include <vector>
+
+#ifndef _WIN32
+#include <sys/resource.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <unistd.h>
+#endif
 
 using namespace ants;
 using namespace ants::server;
@@ -813,6 +826,463 @@ void run_socket_tests() {
     } TEST_END();
 }
 
+namespace {
+
+#ifndef _WIN32
+// umask 0 for the life of the object: a mode that the code asks for is then the mode that the file gets. A umask can only take bits away, so under a strict umask
+// (077, as hardened hosts have) a wrong mode would hide behind it and the check on the mode could not fail.
+struct ZeroUmask {
+    mode_t previous;
+    ZeroUmask() : previous(::umask(0)) {}
+    ~ZeroUmask() { ::umask(previous); }
+    ZeroUmask(const ZeroUmask&) = delete;
+    ZeroUmask& operator=(const ZeroUmask&) = delete;
+};
+
+// The highest resident memory of this process so far (macOS counts bytes, Linux kilobytes)
+size_t peak_rss_bytes() {
+    struct rusage usage;
+    if (::getrusage(RUSAGE_SELF, &usage) != 0) return 0;
+#ifdef __APPLE__
+    return static_cast<size_t>(usage.ru_maxrss);
+#else
+    return static_cast<size_t>(usage.ru_maxrss) * 1024;
+#endif
+}
+#endif
+
+size_t entries_in(const fs::path& dir) {
+    size_t n = 0;
+    for (const auto& e : fs::directory_iterator(dir)) {
+        (void)e;
+        ++n;
+    }
+    return n;
+}
+
+}  // namespace
+
+// The control secret: from the environment, or made once and kept in a file (secret.hpp)
+void run_secret_tests() {
+    auto fresh_dir = [](const char* tag) {
+        const fs::path d = fs::temp_directory_path() / (std::string("ants_secret_test_") + tag);
+        std::error_code ec;
+        fs::remove_all(d, ec);
+        fs::create_directories(d, ec);
+        return d;
+    };
+    auto slurp = [](const fs::path& p) {
+        std::ifstream in(p, std::ios::binary);
+        return std::string((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+    };
+    auto put = [](const fs::path& p, const std::string& text) {
+        std::ofstream out(p, std::ios::binary);
+        out << text;
+    };
+    auto is_hex64 = [](const std::string& t) {
+        if (t.size() != 64) return false;
+        for (const char c : t) if (!std::isxdigit(static_cast<unsigned char>(c)) || std::isupper(static_cast<unsigned char>(c))) return false;
+        return true;
+    };
+    // the control interface's own verdict: it refuses to start with a secret that it does not take
+    auto http_takes = [](const std::string& s) { return ctl::HttpServer::listen(0, s) != nullptr; };
+
+    TEST_CASE("S3.15 The Control Secret: The Environment Wins And Never Touches The File; Without Both The Server Refuses; Without The Environment It Makes A Random Secret Once, Keeps It Owner-Only (Under Any umask), And Reads The Same One Next Time") {
+#ifndef _WIN32
+        const ZeroUmask zero_umask;
+#endif
+        const fs::path dir = fresh_dir("make");
+        const std::string file = (dir / "state" / "control-secret").string();      // the folder does not exist yet: it is made
+        // the environment wins; no file is made, an existing one is not read
+        auto env = server::resolve_secret("from-the-environment-0123456789", file);
+        ASSERT_TRUE(env.ok);
+        ASSERT_EQ(env.secret, std::string("from-the-environment-0123456789"));
+        ASSERT_TRUE(env.source == server::SecretSource::Environment);
+        ASSERT_FALSE(fs::exists(file));
+        // an environment variable that is set but empty counts as not set
+        ASSERT_FALSE(server::resolve_secret("", "").ok);
+        auto empty_env = server::resolve_secret("", file);
+        ASSERT_TRUE(empty_env.ok);
+        ASSERT_TRUE(empty_env.source == server::SecretSource::Generated);
+#ifndef _WIN32
+        struct stat made;
+        ASSERT_EQ(::stat(file.c_str(), &made), 0);
+        ASSERT_EQ(static_cast<unsigned>(made.st_mode & 0777), 0600u);
+#endif
+        ASSERT_TRUE(fs::remove(file));
+        // no environment and no place for a file: refused, with a sentence that says what to do
+        auto none = server::resolve_secret(nullptr, "");
+        ASSERT_FALSE(none.ok);
+        ASSERT_TRUE(none.error.find("ANTS_SERVER_SECRET") != std::string::npos);
+        ASSERT_TRUE(none.error.find("--secret-file") != std::string::npos);
+        // the first start makes it: 64 hex digits, in the file, one line
+        auto first = server::resolve_secret(nullptr, file);
+        ASSERT_TRUE(first.ok);
+        ASSERT_TRUE(first.source == server::SecretSource::Generated);
+        ASSERT_EQ(first.path, file);
+        ASSERT_TRUE(is_hex64(first.secret));
+        ASSERT_EQ(slurp(file), first.secret + "\n");
+        ASSERT_TRUE(server::usable_secret_text(first.secret));
+        ASSERT_EQ(entries_in(dir / "state"), size_t{1});                            // the temporary file of the making is gone: nothing but the secret file
+#ifndef _WIN32
+        struct stat st;
+        ASSERT_EQ(::stat(file.c_str(), &st), 0);
+        ASSERT_EQ(static_cast<unsigned>(st.st_mode & 0777), 0600u);                 // nobody but its owner can read it, and the umask did not have to help
+        ASSERT_EQ(static_cast<unsigned>(st.st_nlink), 1u);                          // no second name (the temporary one) is left behind
+#endif
+        // every later start reads the same secret and does not write the file again
+        const auto before = fs::last_write_time(file);
+        for (int i = 0; i < 3; ++i) {
+            auto again = server::resolve_secret(nullptr, file);
+            ASSERT_TRUE(again.ok);
+            ASSERT_TRUE(again.source == server::SecretSource::File);
+            ASSERT_EQ(again.secret, first.secret);
+        }
+        ASSERT_TRUE(fs::last_write_time(file) == before);
+        ASSERT_EQ(entries_in(dir / "state"), size_t{1});
+        // a secret in the environment still wins over a file that exists
+        auto over = server::resolve_secret("the-environment-is-stronger-0123456789", file);
+        ASSERT_EQ(over.secret, std::string("the-environment-is-stronger-0123456789"));
+        ASSERT_EQ(slurp(file), first.secret + "\n");
+        // two servers do not share a secret: a second file gets a different one
+        auto other = server::resolve_secret(nullptr, (dir / "second").string());
+        ASSERT_TRUE(other.ok);
+        ASSERT_TRUE(other.secret != first.secret);
+        // the HTTP server takes the generated secret
+        ASSERT_TRUE(http_takes(first.secret));
+    } TEST_END();
+
+    TEST_CASE("S3.16 A Secret File That Is Not A Usable Secret Is Never Overwritten: An Empty, Short, Long, Spaced, Two-Line, Padded Or Binary File, A Directory, A Device, A FIFO And A Folder That Cannot Be Made All Stop The Server With A Sentence") {
+        const fs::path dir = fresh_dir("refuse");
+        const std::string hex = server::generate_secret_text();
+        struct Case {
+            const char* name;
+            std::string content;
+            const char* says = "does not hold a usable secret";
+        };
+        const std::vector<Case> cases = {
+            {"empty", ""},
+            {"only a line end", "\n"},
+            {"31 characters", std::string(31, 'a') + "\n"},
+            {"257 characters", std::string(257, 'a') + "\n"},
+            {"a space inside", hex.substr(0, 20) + " " + hex.substr(20) + "\n"},
+            {"a space in front", " " + hex + "\n"},
+            {"a tab in front", "\t" + hex + "\n"},
+            {"a line end in front", "\n" + hex + "\n"},
+            {"two lines", hex + "\n" + hex + "\n"},
+            {"a control character", hex.substr(0, 40) + std::string(1, '\x01') + hex.substr(40) + "\n"},
+            {"a DEL", hex.substr(0, 40) + std::string(1, '\x7f') + hex.substr(40) + "\n"},
+            {"a byte above 127", hex.substr(0, 40) + std::string(1, static_cast<char>(0xC3)) + hex.substr(40) + "\n"},
+            {"a tab inside", hex.substr(0, 30) + "\t" + hex.substr(30) + "\n"},
+            {"1024 bytes that are no secret", std::string(1024, 'x')},                                 // the biggest file that is looked at: still too long a secret
+            {"1025 bytes", std::string(1025, 'x'), "is too big to be a secret"},
+            {"5000 bytes", std::string(5000, 'x'), "is too big to be a secret"},
+            {"a secret and 1100 blanks", hex + std::string(1100, ' ') + "\n", "is too big to be a secret"},       // only the size branch can refuse this one
+            {"a secret and 1100 line ends", hex + std::string(1100, '\n'), "is too big to be a secret"},
+        };
+        for (const Case& c : cases) {
+            const fs::path f = dir / "control-secret";
+            put(f, c.content);
+            auto r = server::resolve_secret(nullptr, f.string());
+            ASSERT_MSG(!r.ok, c.name);
+            ASSERT_MSG(r.error.find("nothing was changed") != std::string::npos, c.name);
+            ASSERT_MSG(r.error.find(c.says) != std::string::npos, std::string(c.name) + ": " + r.error);
+            ASSERT_MSG(r.secret.empty(), c.name);
+            ASSERT_MSG(slurp(f) == c.content, c.name);                                // not repaired, not replaced
+            // the environment is still all it takes to start, and it does not look at the file at all
+            ASSERT_MSG(server::resolve_secret("a-good-secret-from-the-environment-0123", f.string()).ok, c.name);
+        }
+        // a directory where the file should be
+        const fs::path as_dir = dir / "is-a-directory";
+        fs::create_directories(as_dir);
+        auto d = server::resolve_secret(nullptr, as_dir.string());
+        ASSERT_FALSE(d.ok);
+        ASSERT_TRUE(d.error.find("not a regular file") != std::string::npos);
+        // a "folder" that is a file: nothing can be made below it
+        const fs::path blocker = dir / "blocker";
+        put(blocker, "x");
+        auto b = server::resolve_secret(nullptr, (blocker / "control-secret").string());
+        ASSERT_FALSE(b.ok);
+        ASSERT_TRUE(b.error.find("ANTS_SERVER_SECRET") != std::string::npos);
+        ASSERT_EQ(slurp(blocker), std::string("x"));
+#ifndef _WIN32
+        // a device and a FIFO: refused as "not a regular file" before anything is read (a FIFO that nobody writes to must not make the server wait: the alarm ends a hang)
+        ::alarm(30);
+        auto z = server::resolve_secret(nullptr, "/dev/zero");
+        ASSERT_FALSE(z.ok);
+        ASSERT_TRUE(z.error.find("not a regular file") != std::string::npos);
+        const fs::path fifo = dir / "a-fifo";
+        ASSERT_EQ(::mkfifo(fifo.c_str(), 0600), 0);
+        auto q = server::resolve_secret(nullptr, fifo.string());
+        ASSERT_FALSE(q.ok);
+        ASSERT_TRUE(q.error.find("not a regular file") != std::string::npos);
+        ::alarm(0);
+        // a folder that may not be written (not for root, which may write anywhere)
+        if (::geteuid() != 0) {
+            const fs::path ro = dir / "readonly";
+            fs::create_directories(ro);
+            ASSERT_EQ(::chmod(ro.c_str(), 0500), 0);
+            auto w = server::resolve_secret(nullptr, (ro / "control-secret").string());
+            ASSERT_FALSE(w.ok);
+            ASSERT_TRUE(w.error.find("cannot be created") != std::string::npos);
+            ASSERT_EQ(entries_in(ro), size_t{0});                                     // no file, no temporary file
+            ASSERT_EQ(::chmod(ro.c_str(), 0700), 0);
+        }
+#endif
+    } TEST_END();
+
+    TEST_CASE("S3.17 A Secret File That Somebody Wrote By Hand Is Used As It Is: Its Line End, A Carriage Return Or Trailing Blanks Do Not Belong To The Secret; 32 And 256 Characters Are Both Fine") {
+        const fs::path dir = fresh_dir("hand");
+        const std::string secret = "My-own-secret_with.punctuation/and+symbols=0123456789";
+        const std::vector<std::string> shapes = {secret, secret + "\n", secret + "\r\n", secret + " \t\n\n", secret + "\r\n\r\n"};
+        for (const std::string& shape : shapes) {
+            put(dir / "control-secret", shape);
+            auto r = server::resolve_secret(nullptr, (dir / "control-secret").string());
+            ASSERT_TRUE(r.ok);
+            ASSERT_TRUE(r.source == server::SecretSource::File);
+            ASSERT_EQ(r.secret, secret);
+        }
+        for (const size_t n : {size_t{32}, size_t{256}}) {
+            put(dir / "control-secret", std::string(n, 'k') + "\n");
+            auto r = server::resolve_secret(nullptr, (dir / "control-secret").string());
+            ASSERT_TRUE(r.ok);
+            ASSERT_EQ(r.secret.size(), n);
+        }
+        // the largest file that is looked at: 1024 bytes, a secret and blanks that are not part of it
+        put(dir / "control-secret", std::string(256, 'k') + std::string(768, ' '));
+        auto padded = server::resolve_secret(nullptr, (dir / "control-secret").string());
+        ASSERT_TRUE(padded.ok);
+        ASSERT_EQ(padded.secret, std::string(256, 'k'));
+        ASSERT_TRUE(server::usable_secret_text(std::string(32, '!')));
+        ASSERT_TRUE(server::usable_secret_text(std::string(256, '~')));
+        ASSERT_FALSE(server::usable_secret_text(std::string(32, ' ')));
+        ASSERT_FALSE(server::usable_secret_text(std::string(31, 'a')));
+        ASSERT_FALSE(server::usable_secret_text(std::string(257, 'a')));
+    } TEST_END();
+
+    TEST_CASE("S3.18 The Generated Secret Has All Its Strength, And The Rule For A Secret In A File Is The Control Interface's Own: 512 Secrets Show Every Digit At Every Position, No Position Copies Another, No Half Is Zero; All 256 Byte Values At The Start, In The Middle And At The End Agree With The HTTP Server") {
+        std::vector<std::string> many;
+        for (int i = 0; i < 512; ++i) many.push_back(server::generate_secret_text());
+        for (const std::string& t : many) ASSERT_TRUE(is_hex64(t));
+        std::vector<std::string> sorted = many;
+        std::sort(sorted.begin(), sorted.end());
+        ASSERT_TRUE(std::adjacent_find(sorted.begin(), sorted.end()) == sorted.end());       // never the same twice
+        // every one of the 64 positions shows at least 10 of the 16 digits (a position that is fixed or mostly zero means missing random bytes)
+        for (size_t p = 0; p < 64; ++p) {
+            std::set<char> seen;
+            for (const std::string& t : many) seen.insert(t[p]);
+            ASSERT_MSG(seen.size() >= 10, "position " + std::to_string(p) + " shows only " + std::to_string(seen.size()) + " digits");
+        }
+        // no position is a copy of another one (a byte that is written twice, or random bytes that are used again further on)
+        for (size_t a = 0; a < 64; ++a) {
+            for (size_t b = a + 1; b < 64; ++b) {
+                bool differ = false;
+                for (const std::string& t : many) {
+                    if (t[a] != t[b]) {
+                        differ = true;
+                        break;
+                    }
+                }
+                ASSERT_MSG(differ, "positions " + std::to_string(a) + " and " + std::to_string(b) + " are always equal");
+            }
+        }
+        // no secret has a half of zeros
+        const std::string zeros(32, '0');
+        for (const std::string& t : many) ASSERT_MSG(t.substr(0, 32) != zeros && t.substr(32) != zeros, t);
+
+        // The rule for a file: what the reader gives for every byte value in front of, inside and behind a secret, written out again here
+        const fs::path dir = fresh_dir("bytes");
+        const std::string core(40, 'k');
+        for (int b = 0; b < 256; ++b) {
+            const std::string c(1, static_cast<char>(b));
+            const std::string shapes[3] = {c + core, core.substr(0, 20) + c + core.substr(20), core + c};
+            for (const std::string& text : shapes) {
+                const std::string tag = "byte " + std::to_string(b) + " in " + std::to_string(text.size()) + " characters";
+                // the file reader's own rule and the HTTP server's agree: a usable text is always accepted by the control interface, and a refused one is not
+                ASSERT_MSG(server::usable_secret_text(text) == http_takes(text), tag + ": usable_secret_text and the HTTP server disagree");
+                // through a file: trailing line ends and blanks do not belong to the secret; the rest must be usable
+                std::string trimmed = text;
+                while (!trimmed.empty() && (trimmed.back() == '\n' || trimmed.back() == '\r' || trimmed.back() == ' ' || trimmed.back() == '\t')) trimmed.pop_back();
+                put(dir / "control-secret", text);
+                auto r = server::resolve_secret(nullptr, (dir / "control-secret").string());
+                ASSERT_MSG(r.ok == server::usable_secret_text(trimmed), tag + ": the file reader decided otherwise than the rule");
+                if (r.ok) {
+                    ASSERT_MSG(r.secret == trimmed, tag);
+                    ASSERT_MSG(http_takes(r.secret), tag + ": the control interface refuses a secret that the file reader gave");
+                } else {
+                    ASSERT_MSG(slurp(dir / "control-secret") == text, tag + ": a refused file was changed");
+                }
+            }
+        }
+    } TEST_END();
+
+    TEST_CASE("S3.19 A File Bigger Than A Secret Is Refused Without Being Read: A Sparse File Of 256 MiB Is Called Too Big At Once (The Whole File Used To Be Read Into Memory First)") {
+#ifndef _WIN32
+        const fs::path dir = fresh_dir("big");
+        const fs::path big = dir / "control-secret";
+        put(big, "");
+        std::error_code ec;
+        fs::resize_file(big, std::uintmax_t{256} << 20, ec);                        // sparse: it costs no disk, and reading it whole costs a second and half a gigabyte
+        ASSERT_FALSE(ec);
+        const size_t peak_before = peak_rss_bytes();
+        double best_ms = 1e9;
+        for (int i = 0; i < 3; ++i) {                                               // the best of three: a stall of the machine does not fail the test
+            const auto t0 = std::chrono::steady_clock::now();
+            auto r = server::resolve_secret(nullptr, big.string());
+            const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
+            ASSERT_FALSE(r.ok);
+            ASSERT_TRUE(r.error.find("is too big to be a secret") != std::string::npos);
+            best_ms = std::min(best_ms, ms);
+        }
+        ASSERT_MSG(best_ms < 250.0, "the refusal took " + std::to_string(best_ms) + " ms: the file was read");
+        // and the memory never held the file (a read of all of it raises the highest resident size of this process by at least its size)
+        const size_t peak_after = peak_rss_bytes();
+        ASSERT_MSG(peak_after - peak_before < (std::size_t{32} << 20), "the refusal raised the peak memory by " + std::to_string((peak_after - peak_before) >> 20) + " MiB");
+        ASSERT_EQ(fs::file_size(big), std::uintmax_t{256} << 20);                    // and left alone
+        fs::remove(big, ec);
+#endif
+    } TEST_END();
+
+#ifndef _WIN32
+    TEST_CASE("S3.20 Symbolic Links: A Link To A Good File (A Mounted Secret) Is Followed, A Link To A Bad File Or A Directory Is Refused, A Link To Nothing Is Called That (And Nothing Is Made Behind It), A Loop Is Called A Loop") {
+        const fs::path dir = fresh_dir("links");
+        const std::string secret = server::generate_secret_text();
+        put(dir / "real", secret + "\n");
+        fs::create_symlink("real", dir / "link");                                   // relative, as the mounts of a secrets store make them
+        auto ok = server::resolve_secret(nullptr, (dir / "link").string());
+        ASSERT_TRUE(ok.ok);
+        ASSERT_TRUE(ok.source == server::SecretSource::File);
+        ASSERT_EQ(ok.secret, secret);
+        ASSERT_EQ(ok.path, (dir / "link").string());
+        ASSERT_TRUE(fs::is_symlink(dir / "link"));                                  // still a link
+        // a chain of links through a folder that is a link too (a Kubernetes secret volume: key -> data/key, data -> a folder with a timestamp)
+        const std::string secret2 = "A-mounted-secret-0123456789-abcdefghijklmnop";
+        fs::create_directories(dir / "mount" / "ts-1");
+        put(dir / "mount" / "ts-1" / "key", secret2);
+        fs::create_directory_symlink("ts-1", dir / "mount" / "data");
+        fs::create_symlink("data/key", dir / "mount" / "key");
+        auto chain = server::resolve_secret(nullptr, (dir / "mount" / "key").string());
+        ASSERT_TRUE(chain.ok);
+        ASSERT_EQ(chain.secret, secret2);
+        // a link to a file that is no secret: refused, the file is left as it was
+        put(dir / "badreal", "short");
+        fs::create_symlink("badreal", dir / "badlink");
+        auto bad = server::resolve_secret(nullptr, (dir / "badlink").string());
+        ASSERT_FALSE(bad.ok);
+        ASSERT_TRUE(bad.error.find("nothing was changed") != std::string::npos);
+        ASSERT_EQ(slurp(dir / "badreal"), std::string("short"));
+        // a link to a directory
+        fs::create_directories(dir / "somedir");
+        fs::create_directory_symlink("somedir", dir / "dirlink");
+        auto dl = server::resolve_secret(nullptr, (dir / "dirlink").string());
+        ASSERT_FALSE(dl.ok);
+        ASSERT_TRUE(dl.error.find("not a regular file") != std::string::npos);
+        // a link to nothing, in the same folder and into a folder that exists: the truth, and nothing made (not the target, not a file instead of the link)
+        fs::create_symlink("nowhere", dir / "dangling");
+        fs::create_symlink("somedir/missing", dir / "dangling2");
+        for (const char* name : {"dangling", "dangling2"}) {
+            auto r = server::resolve_secret(nullptr, (dir / name).string());
+            ASSERT_MSG(!r.ok, name);
+            ASSERT_MSG(r.error.find("is a symbolic link to nothing") != std::string::npos, std::string(name) + ": " + r.error);
+            ASSERT_MSG(r.error.find("keeps changing") == std::string::npos, name);
+            ASSERT_MSG(fs::is_symlink(dir / name), name);
+            ASSERT_MSG(!fs::exists(dir / "nowhere") && !fs::exists(dir / "somedir" / "missing"), name);
+        }
+        ASSERT_EQ(fs::read_symlink(dir / "dangling").string(), std::string("nowhere"));
+        // the environment is all it takes to start, whatever is at the path
+        ASSERT_TRUE(server::resolve_secret("a-good-secret-from-the-environment-0123", (dir / "dangling").string()).ok);
+        // a loop
+        fs::create_symlink("loop-b", dir / "loop-a");
+        fs::create_symlink("loop-a", dir / "loop-b");
+        auto lp = server::resolve_secret(nullptr, (dir / "loop-a").string());
+        ASSERT_FALSE(lp.ok);
+        ASSERT_TRUE(lp.error.find("cannot be looked at") != std::string::npos);
+    } TEST_END();
+#endif
+
+    TEST_CASE("S3.21 Starts At The Same Moment: 8 Threads On One Fresh Folder, 200 Rounds (Half With A Folder That Does Not Exist Yet): Every Start Works, All Get The Same Secret, Exactly One Made It, The File Holds It Complete, Nothing Else Is Left In The Folder") {
+        constexpr int kThreads = 8;
+        constexpr int kRounds = 200;
+        const fs::path base = fresh_dir("race");
+        for (int round = 0; round < kRounds; ++round) {
+            const fs::path folder = base / ("round-" + std::to_string(round));
+            if (round % 2 == 0) fs::create_directories(folder);
+            const std::string file = (folder / "control-secret").string();
+            std::atomic<int> ready{0};
+            std::atomic<bool> go{false};
+            std::vector<server::SecretResult> results(kThreads);
+            std::vector<std::thread> threads;
+            for (int i = 0; i < kThreads; ++i) {
+                threads.emplace_back([&, i] {
+                    ready.fetch_add(1);
+                    while (!go.load()) std::this_thread::yield();                  // released together
+                    results[static_cast<size_t>(i)] = server::resolve_secret(nullptr, file);
+                });
+            }
+            while (ready.load() < kThreads) std::this_thread::yield();
+            go.store(true);
+            for (std::thread& t : threads) t.join();
+            int generated = 0;
+            for (const server::SecretResult& r : results) {
+                ASSERT_MSG(r.ok, "round " + std::to_string(round) + ": a start failed: " + r.error);
+                ASSERT_MSG(r.secret == results[0].secret, "round " + std::to_string(round) + ": the starts did not get the same secret");
+                if (r.source == server::SecretSource::Generated) ++generated;
+            }
+            ASSERT_MSG(generated == 1, "round " + std::to_string(round) + ": " + std::to_string(generated) + " starts made the secret");
+            ASSERT_MSG(slurp(file) == results[0].secret + "\n", "round " + std::to_string(round) + ": the file does not hold the secret that the starts use");
+            ASSERT_MSG(entries_in(folder) == 1, "round " + std::to_string(round) + ": something besides the secret file is left in the folder");
+        }
+    } TEST_END();
+
+    TEST_CASE("S3.22 A Start That Dies While It Makes The File Leaves No Half Secret: Stale Temporary Files (Of Any Name A Simple Scheme Would Use) Never Block The Next Start, And A Process That Is Killed At Its First Write Leaves Nothing That Blocks It") {
+        const fs::path dir = fresh_dir("crash");
+        const std::string file = (dir / "control-secret").string();
+        // what a crashed start can leave: empty or half written temporary files, with the names that a fixed or process-number scheme would pick
+        const std::vector<std::string> stale = {"control-secret.tmp", "control-secret.tmp.1", "control-secret.1.tmp", ".control-secret.tmp", "control-secret.0123456789abcdef.tmp", "control-secret~"};
+        for (const std::string& name : stale) put(dir / name, name == "control-secret.tmp.1" ? "0123456789abcdef0123" : "");
+        auto r = server::resolve_secret(nullptr, file);
+        ASSERT_TRUE(r.ok);
+        ASSERT_TRUE(r.source == server::SecretSource::Generated);
+        ASSERT_EQ(slurp(file), r.secret + "\n");
+        for (const std::string& name : stale) ASSERT_MSG(fs::exists(dir / name), name);          // the leftovers of others are not the server's to remove
+        ASSERT_EQ(entries_in(dir), stale.size() + 1);
+        auto next = server::resolve_secret(nullptr, file);
+        ASSERT_TRUE(next.ok);
+        ASSERT_TRUE(next.source == server::SecretSource::File);
+        ASSERT_EQ(next.secret, r.secret);
+#ifndef _WIN32
+        // a real death: a child whose files may not grow is killed (SIGXFSZ) by its first write
+        const fs::path dir2 = fresh_dir("crash2");
+        const std::string file2 = (dir2 / "control-secret").string();
+        const pid_t pid = ::fork();
+        ASSERT_TRUE(pid >= 0);
+        if (pid == 0) {
+            struct rlimit none = {0, 0};
+            ::setrlimit(RLIMIT_CORE, &none);                                         // no core file for this death
+            ::setrlimit(RLIMIT_FSIZE, &none);
+            ::signal(SIGXFSZ, SIG_DFL);
+            (void)server::resolve_secret(nullptr, file2);
+            ::_exit(0);                                                              // not reached: the write kills the process
+        }
+        int wait_status = 0;
+        ASSERT_EQ(::waitpid(pid, &wait_status, 0), pid);
+        ASSERT_TRUE(WIFSIGNALED(wait_status));
+        ASSERT_TRUE(WTERMSIG(wait_status) == SIGXFSZ);
+        ASSERT_FALSE(fs::exists(file2));                                             // nothing under the name that the next start would find and refuse
+        auto after = server::resolve_secret(nullptr, file2);
+        ASSERT_TRUE(after.ok);
+        ASSERT_TRUE(after.source == server::SecretSource::Generated);
+        ASSERT_EQ(slurp(file2), after.secret + "\n");
+        // what the dead start left is a temporary file and nothing else
+        for (const auto& e : fs::directory_iterator(dir2)) {
+            const std::string name = e.path().filename().string();
+            ASSERT_MSG(name == "control-secret" || name.size() > 4, name);
+            ASSERT_MSG(name == "control-secret" || name.compare(name.size() - 4, 4, ".tmp") == 0, name);
+        }
+#endif
+    } TEST_END();
+}
+
 int main() {
     std::cout << "=======================================================\n";
     std::cout << " Dedicated game server: map store, rooms, the door, control calls\n";
@@ -825,6 +1295,7 @@ int main() {
     run_match_tests();
     run_control_tests();
     run_socket_tests();
+    run_secret_tests();
     std::cout << "=======================================================\n";
     std::cout << " Total Test Cases: " << g_test_count << "\n Total Assertions: " << g_assert_count << "\n Failed:           " << g_test_failures << "\n";
     std::cout << "=======================================================\n";

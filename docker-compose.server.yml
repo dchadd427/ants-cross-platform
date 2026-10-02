@@ -1,7 +1,8 @@
-# The dedicated game server (Dockerfile.server). An example: set the three values in a .env file next to this file (it is not part of the repository).
+# The dedicated game server (Dockerfile.server). An example: the values below go in a .env file next to this file (.gitignore keeps it out of the repository); all of them are optional.
 #
-#   ANTS_SERVER_SECRET=<a long random secret>       the bearer secret of the control interface (required)
-#   ANTS_MAPS_DIR=/path/to/the/maps                 the folder of .lvl files that rooms may use (required, mounted read-only)
+#   ANTS_SERVER_SECRET=<a long random secret>       the bearer secret of the control interface (optional: without it the server makes one the first time it starts,
+#                                                   prints it once in its log and keeps it in /results/control-secret of the volume ants-server-results)
+#   ANTS_MAPS_DIR=/path/to/the/maps                 a folder of .lvl files that rooms may use instead of the six maps of the original game in the image (optional, mounted read-only)
 #   ANTS_SERVER_PORT=4001                           the public TCP game port of native clients (optional)
 #
 #   docker compose -f docker-compose.server.yml up -d --build
@@ -18,12 +19,13 @@ services:
     image: ants-server
     container_name: ants-server
     restart: unless-stopped
-    # The page web/four.html (four games on one page) needs demo rooms, which are off by default: uncomment to allow them (the maps folder must hold the map).
+    # The page web/four.html (four games on one page) needs demo rooms, which are off by default: uncomment to allow them (the maps folder must hold the map; the number is
+    # 1 to 255, and 0 or 256 and more make the server exit at its start, which with restart: unless-stopped is a restart loop; whoever reaches a game port can fill the rooms).
     # command: ["--port", "4001", "--ws-port", "4002", "--ctl-port", "4010", "--demo-rooms", "4", "--demo-map", "TINY.LVL"]
     environment:
-      ANTS_SERVER_SECRET: ${ANTS_SERVER_SECRET:?set ANTS_SERVER_SECRET in .env}
+      ANTS_SERVER_SECRET: ${ANTS_SERVER_SECRET:-}
     volumes:
-      - ${ANTS_MAPS_DIR:?set ANTS_MAPS_DIR in .env}:/maps:ro
+      - ${ANTS_MAPS_DIR:-ants-maps}:/maps:ro
       - ants-server-results:/results
     ports:
       - "${ANTS_SERVER_PORT:-4001}:4001"
@@ -40,6 +42,7 @@ services:
 
 volumes:
   ants-server-results:
+  ants-maps:
 
 networks:
   proxy-network:

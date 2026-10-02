@@ -1,6 +1,6 @@
 // ants_server: the dedicated game server. A headless program: it hosts many rooms, each a host without a seat that runs the match as the referee (docs/NETWORK_PORT.md).
 //
-//   ants_server --maps DIR [--port 4001] [--ws-port 4002] [--ctl-port 4010] [--public] [--ws-any-interface] [--ctl-any-interface] [--results-dir DIR] [--max-rooms N]
+//   ants_server --maps DIR [--port 4001] [--ws-port 4002] [--ctl-port 4010] [--public] [--ws-any-interface] [--ctl-any-interface] [--results-dir DIR] [--secret-file PATH] [--max-rooms N]
 //
 //   --maps DIR         the maps folder (the .lvl files that rooms may use); required
 //   --port N           the TCP port of native clients (0: none; default 4001); every interface with --public, else this machine only
@@ -12,12 +12,17 @@
 //                      from a container does not reach a program that listens on the container's loopback address. The host decides who can connect
 //                      (docker run -p 127.0.0.1:4010:4010 ...); never use these on a machine without that protection, the control interface speaks plain HTTP.
 //   --results-dir DIR  every ended room writes <code>.json there
+//   --secret-file PATH where the server keeps the control secret that it makes when ANTS_SERVER_SECRET is not set (default: control-secret in the results folder)
 //   --max-rooms N      the most rooms at a time (default 256)
-//   --demo-rooms N     for a public test page: a Hello for a not yet existing room "demo-..." makes it (4 players, the --demo-map), at most N at a time (0 = off, the default)
+//   --demo-rooms N     for a public test page: a Hello for a not yet existing room "demo-..." makes it (4 players, the --demo-map), at most N at a time. N is 1 to
+//                      --max-rooms - 1 (255 by default); the option is left out to switch demo rooms off (the default): 0 and more than that stop the server at startup
 //   --demo-map NAME    the map of the demo rooms (a file name of the maps folder; required with --demo-rooms)
 //   --version, --help
 //
-// The control interface's secret comes from the environment (ANTS_SERVER_SECRET), never from the command line (a command line is visible to every user).
+// The control interface's secret comes from the environment (ANTS_SERVER_SECRET), never from the command line (a command line is visible to every user). Without
+// it the server makes a random secret the first time it starts and keeps it in the secret file (POSIX: for its owner only, mode 600; Windows: the file takes the
+// permissions of its folder), so a container needs no setup: the secret is printed once, the moment it is made (before anything else can stop the server); later it is read
+// from the file (docker exec <container> cat /results/control-secret). A secret in the environment wins. A file that exists is used as it is (secret.hpp).
 
 #include <atomic>
 #include <chrono>
@@ -36,6 +41,7 @@
 #include "ants_net/ws.hpp"
 #include "ants_server/control.hpp"
 #include "ants_server/room_manager.hpp"
+#include "ants_server/secret.hpp"
 
 namespace {
 
@@ -51,6 +57,7 @@ struct Options {
     bool ws_any_interface{false};
     bool ctl_any_interface{false};
     std::string results_dir;
+    std::string secret_file;
     size_t max_rooms{256};
     size_t demo_rooms{0};
     std::string demo_map;
@@ -59,9 +66,10 @@ struct Options {
 void usage(FILE* to) {
     std::fprintf(to,
                  "usage: ants_server --maps DIR [--port 4001] [--ws-port N] [--ctl-port N] [--public] [--ws-any-interface] [--ctl-any-interface]\n"
-                 "                    [--results-dir DIR] [--max-rooms N]\n"
+                 "                    [--results-dir DIR] [--secret-file PATH] [--max-rooms N]\n"
                  "                    [--demo-rooms N --demo-map NAME]\n"
-                 "  the control interface needs the secret in the environment variable ANTS_SERVER_SECRET\n");
+                 "  the control interface takes its secret from the environment variable ANTS_SERVER_SECRET; without it the server makes one and keeps it\n"
+                 "  in --secret-file (default: control-secret in --results-dir)\n");
 }
 
 bool parse_port(const char* text, uint16_t& out) {
@@ -122,6 +130,8 @@ int main(int argc, char** argv) {
             o.ctl_any_interface = true;
         } else if (a == "--results-dir") {
             o.results_dir = value("--results-dir");
+        } else if (a == "--secret-file") {
+            o.secret_file = value("--secret-file");
         } else if (a == "--max-rooms") {
             o.max_rooms = static_cast<size_t>(std::strtoul(value("--max-rooms"), nullptr, 10));
             if (o.max_rooms == 0) {
@@ -157,13 +167,25 @@ int main(int argc, char** argv) {
     if (!o.results_dir.empty()) std::filesystem::create_directories(o.results_dir, ec);
 
     std::string secret;
+    ants::server::SecretResult secret_info;
     if (o.ctl_port != 0) {
-        const char* env = std::getenv("ANTS_SERVER_SECRET");
-        if (env == nullptr || *env == '\0') {
-            std::fprintf(stderr, "the control interface needs a secret in the environment variable ANTS_SERVER_SECRET\n");
+        std::string secret_file = o.secret_file;
+        if (secret_file.empty() && !o.results_dir.empty()) secret_file = (std::filesystem::path(o.results_dir) / "control-secret").string();
+        secret_info = ants::server::resolve_secret(std::getenv("ANTS_SERVER_SECRET"), secret_file);
+        if (!secret_info.ok) {
+            std::fprintf(stderr, "%s\n", secret_info.error.c_str());
             return 2;
         }
-        secret = env;
+        secret = secret_info.secret;
+        if (secret_info.source == ants::server::SecretSource::Generated) {
+            // shown the moment it is stored, before the listeners and the option checks below can end the program: the next start only reads the file
+#ifdef _WIN32
+            const char* protection = "on Windows it takes the permissions of its folder";
+#else
+            const char* protection = "owner-only";
+#endif
+            log("control secret made now and stored in " + secret_info.path + " (" + protection + "); it is shown here this once: " + secret_info.secret);
+        }
     }
 
     std::unique_ptr<ants::net::TcpListener> tcp;
@@ -224,6 +246,14 @@ int main(int argc, char** argv) {
     if (tcp) log("TCP game port " + std::to_string(tcp->port()) + (o.is_public ? " (all interfaces)" : " (this machine only)"));
     if (ws) log("WebSocket port " + std::to_string(ws->port()) + (o.ws_any_interface ? " (all interfaces: the host must restrict it)" : " (this machine only: put a TLS proxy in front)"));
     if (http) log("control interface on port " + std::to_string(http->port()) + (o.ctl_any_interface ? " (all interfaces: the host must restrict it, bearer secret)" : " (this machine only, bearer secret)"));
+    if (http) {
+        using ants::server::SecretSource;
+        if (secret_info.source == SecretSource::File) {
+            log("control secret read from " + secret_info.path);
+        } else if (secret_info.source == SecretSource::Environment) {
+            log("control secret from the environment variable ANTS_SERVER_SECRET");
+        }                                          // made now: shown above, once
+    }
 
     while (!g_stop) {
         const uint32_t now = now_ms();
