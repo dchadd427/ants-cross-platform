@@ -2508,6 +2508,49 @@ void test_options_dim(const assets::AssetArchive& arc) {
             check(pixel(p.open, 960, 880, 301) == dither && pixel(p.open, 960, 20, 31) == dither, "the right panel and the frame's left edge are dimmed as in the original's picture");
         }
     }
+    {   // what the HUD draws: the original's own picture needs no dim of its own (the window's pieces do it), a bigger one dims four disjoint bands that are the picture minus the card,
+        // each band's tiles under its own clip, before the window and with the origin at the picture's
+        const ScreenLayout layouts[] = {ScreenLayout::classic(), ScreenLayout::with_size(960, 540), ScreenLayout::with_size(1280, 720)};
+        for (const ScreenLayout& layout : layouts) {
+            HudRig rig(arc, layout);
+            rig.hud.open_options();
+            const Spy spy = rig.frame();
+            const std::string at = std::to_string(layout.width) + " x " + std::to_string(layout.height) + ": ";
+            std::vector<LayoutRect> bands;
+            size_t tiles = 0, outside = 0;
+            for (size_t i = 0; i < spy.events.size(); ++i) {
+                if (spy.events[i].kind != Spy::Kind::Clip || spy.events[i].ox != 0 || spy.events[i].oy != 0) continue;
+                const LayoutRect band{spy.events[i].x, spy.events[i].y, spy.events[i].w, spy.events[i].h};
+                size_t n = 0;
+                for (size_t j = i + 1; j < spy.events.size() && spy.events[j].kind != Spy::Kind::ClearClip; ++j) {
+                    if (spy.events[j].kind == Spy::Kind::Named && spy.events[j].name == "dith200.bmp") {
+                        ++n;
+                        if (spy.events[j].x >= band.x + band.w || spy.events[j].x + 200 <= band.x || spy.events[j].y >= band.y + band.h || spy.events[j].y + 200 <= band.y) ++outside;
+                    }
+                }
+                if (n > 0) { bands.push_back(band); tiles += n; }
+            }
+            if (layout.is_classic()) {
+                check(bands.empty() && tiles == 0, at + "the original's own picture draws no dim of its own (the window's pieces are it)");
+                continue;
+            }
+            const LayoutRect card = layout.options_card();
+            int64_t area = 0;
+            bool disjoint = true, clear_of_card = true;
+            for (size_t i = 0; i < bands.size(); ++i) {
+                area += static_cast<int64_t>(bands[i].w) * bands[i].h;
+                const LayoutRect& b = bands[i];
+                if (b.x < card.x + card.w && b.x + b.w > card.x && b.y < card.y + card.h && b.y + b.h > card.y) clear_of_card = false;
+                for (size_t j = i + 1; j < bands.size(); ++j) {
+                    const LayoutRect& c = bands[j];
+                    if (b.x < c.x + c.w && b.x + b.w > c.x && b.y < c.y + c.h && b.y + b.h > c.y) disjoint = false;
+                }
+            }
+            check(bands.size() == 4 && disjoint && clear_of_card, at + "four bands, disjoint, none over the card");
+            check(area == static_cast<int64_t>(layout.width) * layout.height - static_cast<int64_t>(card.w) * card.h, at + "the bands are the whole picture minus the card (" + std::to_string(area) + " pixels)");
+            check(tiles >= 4 && outside == 0, at + "every tile reaches into its band (" + std::to_string(tiles) + " tiles)");
+        }
+    }
     {   // another size (a layout that is not the 16:9 one): the dim follows the card's offset, its parity is the window's own
         const ScreenLayout other = ScreenLayout::with_size(961, 541);
         check(other.options_card().x == ScreenLayout::kOptionsCardX + other.options_offset().x && other.options_card().y == ScreenLayout::kOptionsCardY + other.options_offset().y, "the card is the window's own rectangle moved by the options offset at any size");
