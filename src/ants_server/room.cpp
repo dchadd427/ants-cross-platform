@@ -7,7 +7,6 @@
 namespace ants::server {
 
 namespace {
-constexpr uint32_t kLaggardDropMs = 20000;           // a seat that has held the match up this long is dropped (it does not execute the turns)
 constexpr uint32_t kMaxFailedStarts = 5;             // a room whose start is cancelled this many times (a client that cannot load the map, leavers) gives up
 }  // namespace
 
@@ -103,7 +102,8 @@ void Room::begin_match(uint32_t now_ms) {
     started_ms_ = now_ms;
     net::HostSession::Config hc;
     hc.host_player = net::kNoSeat;
-    hc.laggard_drop_ms = kLaggardDropMs;                         // a seat that stops executing the turns cannot hold the room
+    // (no waiting for a seat that falls behind: the room keeps its pace, the seat catches up alone, and one that is 60 s behind or has run nothing for 30 s is dropped:
+    // the lag policy of a host without a seat, session.hpp)
     session_ = std::make_unique<net::HostSession>(*sim_, hc);
     for (uint8_t seat = 0; seat < sim::MAX_PLAYERS; ++seat) {
         if (net::Connection* c = lobby_.connection_of(seat)) session_->add_client(seat, c);

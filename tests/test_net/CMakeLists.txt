@@ -113,3 +113,19 @@ target_include_directories(test_latency PRIVATE
 )
 
 add_test(NAME test_latency COMMAND test_latency)
+
+add_executable(test_jitter
+    test_jitter.cpp
+)
+
+target_link_libraries(test_jitter PRIVATE
+    ants_net
+    ants_sim
+    ants_assets
+)
+
+target_include_directories(test_jitter PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../include
+)
+
+add_test(NAME test_jitter COMMAND test_jitter)

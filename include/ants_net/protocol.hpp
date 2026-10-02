@@ -5,7 +5,8 @@
 // unbounded 2 KB stack receive, unchecked type / count / index fields), and rejects trailing bytes.
 //
 // Star topology: the room owner (host) is the sequencer. Clients send Command, TurnAck, Hash, Ping and Chat to it; it answers with Turn (the
-// sealed commands of one 100 ms turn, in canonical order, issuer stamped from the connection), Desync, Pong and Chat.
+// sealed commands of one 50 ms turn, which is one tick, in canonical order, issuer stamped from the connection), Desync, Pong and Chat, and a dedicated
+// server tells the room with Lag when a player is far behind the match.
 
 #include <array>
 #include <cstddef>
@@ -18,13 +19,18 @@
 
 namespace ants::net {
 
-inline constexpr uint16_t kProtocolVersion = 7;         // 2: the Room message carries each seat's round trip (the thumbs); 3: host migration (mesh, election); 4: the Quit command (Drop moved from 11 to 12); 5: Hello carries the seat that the guest asks for; 6: map names may hold any printable character that cannot leave the maps folder (up to 64), Hello carries a room code and a token, the slot state Bot, the rejection NoSuchRoom; 7: the Room message names the room's leader (a dedicated server's room: the first player who joined), the message StartRequest (the leader asks the server to start now)
+inline constexpr uint16_t kProtocolVersion = 8;         // 2: the Room message carries each seat's round trip (the thumbs); 3: host migration (mesh, election); 4: the Quit command (Drop moved from 11 to 12); 5: Hello carries the seat that the guest asks for; 6: map names may hold any printable character that cannot leave the maps folder (up to 64), Hello carries a room code and a token, the slot state Bot, the rejection NoSuchRoom; 7: the Room message names the room's leader (a dedicated server's room: the first player who joined), the message StartRequest (the leader asks the server to start now); 8: turns of 50 ms with one tick each (they were 100 ms with two; a client keeps a jitter buffer of 1 to 4 turns, ants_net/jitter.hpp), a state hash every 20 turns (one second, as before), and the Lag message, type 25 (a dedicated server never waits for a player that falls behind: it tells the room instead)
 inline constexpr size_t kMaxMessageBytes = 64 * 1024;
 inline constexpr size_t kMaxTurnCommands = 512;
 inline constexpr size_t kMaxChatChars = 100;        // the original's chat entry
 inline constexpr size_t kMaxNameChars = 32;
-inline constexpr uint32_t kTurnMs = 100;
-inline constexpr uint32_t kHashEveryTurns = 10;     // a state hash every 20 ticks
+/// A turn is one tick: the host seals one every 50 ms, every machine applies its commands and runs one tick (protocol 8; before, 100 ms and two ticks). Everything that is
+/// counted in turns is derived from a time with these (a second is kTurnsPerSecond turns): never write a number of turns that stands for a time.
+inline constexpr uint32_t kTurnMs = 50;
+inline constexpr uint32_t kTicksPerTurn = 1;
+inline constexpr uint32_t kTurnsPerSecond = 1000 / kTurnMs;
+inline constexpr uint32_t turns_for_ms(uint32_t ms) noexcept { return (ms + kTurnMs - 1) / kTurnMs; }
+inline constexpr uint32_t kHashEveryTurns = 20;     // a state hash every 20 ticks: one second
 
 enum class MsgType : uint8_t {
     None = 0,
@@ -52,7 +58,8 @@ enum class MsgType : uint8_t {
     Request = 22,   // peer -> peer: send me the turns from this one on
     PeerHello = 23, // guest -> guest on a new link between guests: who I am
     StartRequest = 24,   // leader -> server (protocol 7): start the match now with the players who are here; no payload, only the leader of a server's room is heard
-    Last = StartRequest
+    Lag = 25,       // dedicated server -> the other players (protocol 8): a player is more than 3 s behind the match (or is not any more)
+    Last = Lag
 };
 
 /// Longest map file name that travels (a plain name of the maps folder, ending in ".lvl" / ".LVL")
@@ -198,6 +205,12 @@ struct RequestMsg {
 struct PeerHelloMsg {
     uint8_t seat{255};
 };
+/// A dedicated server never stops sealing for a player that falls behind (the others' game goes on): it tells them who it is, once a second while it lasts, and when
+/// the player is back within a second (`behind_ms` 0). The notice goes to everybody but the player itself (which knows how far behind it is).
+struct LagMsg {
+    uint8_t seat{255};        // the player that lags
+    uint32_t behind_ms{0};    // how far behind the match it is, in ms of turns it has not executed yet; 0: it is not lagging any more
+};
 
 /// The type byte of a message, MsgType::None when the message is empty or the type is unknown.
 MsgType peek_type(const uint8_t* data, size_t size) noexcept;
@@ -224,6 +237,7 @@ std::vector<uint8_t> encode(const ResumeMsg&);
 std::vector<uint8_t> encode(const RequestMsg&);
 std::vector<uint8_t> encode(const PeerHelloMsg&);
 std::vector<uint8_t> encode(const StartRequestMsg&);
+std::vector<uint8_t> encode(const LagMsg&);
 std::vector<uint8_t> encode_begin();
 std::vector<uint8_t> encode_leave();
 std::vector<uint8_t> encode_ping(const PingMsg&);
@@ -253,6 +267,7 @@ bool decode(const uint8_t* data, size_t size, RequestMsg& out);
 bool decode(const uint8_t* data, size_t size, PeerHelloMsg& out);
 /// Exactly the type byte: a StartRequest with a payload is no StartRequest
 bool decode(const uint8_t* data, size_t size, StartRequestMsg& out);
+bool decode(const uint8_t* data, size_t size, LagMsg& out);
 /// Ping and Pong share the payload; the type byte tells them apart (peek_type).
 bool decode_ping(const uint8_t* data, size_t size, PingMsg& out);
 

@@ -778,6 +778,15 @@ uint32_t NetGame::stalled_ms() const {
 
 uint8_t NetGame::laggard() const { return host_session_ ? host_session_->laggard() : uint8_t{255}; }
 
+std::optional<NetGame::LagNotice> NetGame::lag_notice() const {
+    if (phase_ != Phase::Playing || !client_session_) return std::nullopt;
+    const uint8_t seat = client_session_->lagging_seat();
+    if (seat >= sim::MAX_PLAYERS) return std::nullopt;
+    return LagNotice{seat, client_session_->lagging_behind_ms()};
+}
+
+bool NetGame::catching_up() const { return phase_ == Phase::Playing && client_session_ && client_session_->catching_up(); }
+
 bool NetGame::desynced() const {
     if (host_session_) return !host_session_->desyncs().empty();
     if (client_session_) return client_session_->desynced();

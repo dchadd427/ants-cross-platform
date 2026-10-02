@@ -541,8 +541,8 @@ void run_net_tests() {
         }
     } TEST_END();
 
-    TEST_CASE("AI5.2 Session: A Bot Seat Is Acknowledged By The Host, So The Sequencer Never Stalls (1000+ Turns, With And Without A Seat For The Host); Without The Ack It Stalls After 31 Turns") {
-        {   // the reason: a seat that is active and never acknowledges holds the sequencer up (max_lag_turns = 30)
+    TEST_CASE("AI5.2 Session: A Bot Seat Is Acknowledged By The Host, So The Sequencer Never Stalls (1000+ Turns, With And Without A Seat For The Host); Without The Ack It Stalls After 61 Turns") {
+        {   // the reason: a seat that is active and never acknowledges holds the sequencer up (max_lag_turns = 60: 3 s of 50 ms turns)
             Sequencer s;
             s.set_active(0, true);
             s.set_active(1, true);
@@ -552,7 +552,7 @@ void run_net_tests() {
                 s.on_ack(0, t.turn);
                 ++sealed;
             }
-            ASSERT_EQ(sealed, 31u);
+            ASSERT_EQ(sealed, 61u);
             ASSERT_EQ(s.laggard(), 1);
         }
         for (const bool seatless : {false, true}) {
@@ -571,15 +571,15 @@ void run_net_tests() {
             host.start(0);
             host.add_bot_seat(3);                                                                           // too late: the roster is fixed once the match runs
             uint32_t now = 0;
-            while (host.turns_sealed() < 1200 && now < 300000) {
+            while (host.turns_sealed() < 2400 && now < 300000) {
                 now += 10;
                 host.update(now);
                 ASSERT_FALSE(host.waiting());                                                                 // never held up
             }
-            ASSERT_TRUE(host.turns_sealed() >= 1200);
+            ASSERT_TRUE(host.turns_sealed() >= 2400);
             ASSERT_EQ(host.laggard(), 255);
             ASSERT_TRUE(host.desyncs().empty());
-            ASSERT_TRUE(sim.current_tick() > 2000);                                                         // the engine ran along: 1200 turns are 2400 ticks
+            ASSERT_TRUE(sim.current_tick() > 2000);                                                         // the engine ran along: 2400 turns are 2400 ticks (a turn is one tick)
             ASSERT_EQ(host.is_bot_seat(3), seatless);
         }
     } TEST_END();
@@ -632,7 +632,7 @@ void run_net_tests() {
         BotMatch m(41);
         ASSERT_TRUE(m.bot != nullptr);
         m.run(60000);
-        ASSERT_TRUE(m.host->turns_sealed() > 500);
+        ASSERT_TRUE(m.host->turns_sealed() > 1150);
         ASSERT_FALSE(m.host->waiting());
         m.host->freeze();
         m.run(3000, false);                                                                               // what is in flight arrives and executes
@@ -666,7 +666,7 @@ void run_net_tests() {
         BotMesh m;
         m.run(5000);
         ASSERT_TRUE(m.hosts[0]->is_bot_seat(3));
-        ASSERT_TRUE(m.hosts[0]->turns_sealed() > 40);
+        ASSERT_TRUE(m.hosts[0]->turns_sealed() > 80);
         ASSERT_TRUE(of_issuer(m.saw1, 3).size() > 5);                                                      // the bot played, and the guest saw it
         const size_t before = of_issuer(m.saw1, 3).size();
         m.kill_host();

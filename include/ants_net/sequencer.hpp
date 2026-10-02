@@ -1,7 +1,7 @@
 #pragma once
 
 // The host's turn sequencer. The room owner does not simulate on behalf of anybody: it only decides which commands go into which turn. Clients hand
-// it their commands (the issuer is stamped from the connection, never taken from the payload); every 100 ms it seals a turn, the commands of that
+// it their commands (the issuer is stamped from the connection, never taken from the payload); every 50 ms it seals a turn, the commands of that
 // turn in canonical order, and broadcasts it. Every peer, the host included, executes the turns in sequence, so they all apply the same commands at
 // the same tick. The sequencer also compares the state hashes the peers report against the host's own, and stalls sealing while a peer lags too far
 // behind (flow control), so nobody is left behind by more than a few seconds.
@@ -20,7 +20,7 @@ namespace ants::net {
 class Sequencer {
 public:
     struct Config {
-        uint32_t max_lag_turns = 30;          // sealing stalls while a peer's ack is this many turns behind (3 s)
+        uint32_t max_lag_turns = 3 * kTurnsPerSecond;   // sealing stalls while a peer's ack is this many turns behind (3 s); a host without a seat never waits (session.hpp)
         uint32_t max_commands_per_turn = 64;  // per peer and turn: more are refused (a flooding client cannot fill a turn)
     };
 
@@ -59,6 +59,8 @@ public:
     bool can_seal() const noexcept;
     /// The peer that holds the sequencer up (its ack is furthest behind), 255 when none does.
     uint8_t laggard() const noexcept;
+    /// The sealed turns that `player` has not executed yet (as far as its acks tell: they travel); 0 for a slot that is not active
+    uint32_t behind_turns(uint8_t player) const noexcept;
 
     /// Seals the next turn: the queued commands in canonical order (by issuer, each issuer's commands in submission order).
     TurnMsg seal();

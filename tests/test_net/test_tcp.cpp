@@ -437,7 +437,7 @@ int main() {
             for (auto& cl : clients) cl->update(now);
         }
         ASSERT_TRUE(host.desyncs().empty());
-        ASSERT_TRUE(host.turns_sealed() > 380);
+        ASSERT_TRUE(host.turns_sealed() > 760);                              // (turns of 50 ms: the 380 of 100 ms that this stood for, twice)
         for (int i = 1; i < 4; ++i) {
             ASSERT_TRUE(sims[static_cast<size_t>(i)]->current_tick() == sims[0]->current_tick());
             ASSERT_TRUE(sims[static_cast<size_t>(i)]->state_hash() == sims[0]->state_hash());

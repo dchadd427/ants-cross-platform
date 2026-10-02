@@ -538,6 +538,26 @@ bool decode(const uint8_t* data, size_t size, StartRequestMsg&) {
     return data != nullptr && size == 1 && data[0] == static_cast<uint8_t>(MsgType::StartRequest);
 }
 
+std::vector<uint8_t> encode(const LagMsg& m) {
+    std::vector<uint8_t> out;
+    ByteWriter w(out);
+    w.u8(static_cast<uint8_t>(MsgType::Lag));
+    w.u8(m.seat);
+    w.u32(m.behind_ms);
+    return out;
+}
+bool decode(const uint8_t* data, size_t size, LagMsg& out) {
+    ByteReader storage(nullptr, 0);
+    ByteReader* r = nullptr;
+    if (!open(data, size, MsgType::Lag, r, storage)) return false;
+    LagMsg m;
+    m.seat = r->u8();
+    m.behind_ms = r->u32();
+    if (!r->done() || m.seat >= sim::MAX_PLAYERS) return false;
+    out = m;
+    return true;
+}
+
 std::vector<uint8_t> encode_leave() { return {static_cast<uint8_t>(MsgType::Leave)}; }
 
 static std::vector<uint8_t> encode_ping_type(MsgType t, const PingMsg& m) {

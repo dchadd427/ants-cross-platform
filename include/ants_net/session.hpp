@@ -4,8 +4,9 @@
 // Both are driven from the game's main loop with a monotonic millisecond clock and never block.
 //
 //   client: submit(command) -> CommandMsg -> host
-//   host:   Sequencer::submit (issuer stamped) ... every 100 ms: seal a turn -> TurnMsg to every client and to its own runner
-//   both:   LockstepRunner executes the turns on the local SimulationEngine (2 ticks each), then reports TurnAck and, every 10 turns, HashMsg
+//   host:   Sequencer::submit (issuer stamped) ... every 50 ms: seal a turn -> TurnMsg to every client and to its own runner
+//   both:   LockstepRunner executes the turns on the local SimulationEngine (one tick each), then reports TurnAck (once per frame, for the last turn it ran) and, every 20
+//           turns, HashMsg
 //   host:   compares the hashes; a mismatch is broadcast as DesyncMsg
 //
 // The roster and the shared start state (map, seed, fog) are established before start() by the lobby; the sessions only run the match.
@@ -17,6 +18,13 @@
 // promote_to_host() turns it into a HostSession that goes on with the same runner and tells the other guests (Resume), who switch their host link.
 // The old host and every seat that did not follow are dropped by the first turn of the new host. Commands that were in flight when the host went
 // are lost. See docs/NETWORK_PORT.md.
+//
+// Who waits for whom. A host with a seat (a game on the local network) stops sealing while a peer is more than 3 s behind: its friends wait for the slow machine (the
+// match is theirs, and the machine may be back in a moment). A host without a seat (a dedicated server) never waits: a room is made of strangers, and one machine that
+// stalls (a window in the background, a laptop that went to sleep) must not slow down the others. The server keeps sealing every 50 ms; the player that falls behind
+// catches up on its own at up to four times normal speed (its runner is told by the length of its queue, lockstep.hpp) and its commands apply when they arrive; the others
+// are told with a Lag message ("Bob is lagging (12 s behind)") from 3 s behind, once a second, and that it is back when it is within one second. A player that is 60 s behind,
+// or whose acks have not moved for 30 s although it is connected, is dropped like a player that left (a Drop in the turn stream).
 
 #include <array>
 #include <cstdint>
@@ -46,6 +54,19 @@ struct PeerState {
 /// "No seat": a dedicated server's host plays no player (HostSession::Config::host_player, HostLobby::Config::host_seat)
 inline constexpr uint8_t kNoSeat = 255;
 
+/// The numbers of the lag policy of a dedicated server (see above), in ms of play: a player this far behind the match gets a notice to the others and its own "Catching up..."
+inline constexpr uint32_t kLagNoticeMs = 3000;
+/// ... the notice ends when the player is back within this
+inline constexpr uint32_t kLagClearMs = 1000;
+/// ... and while it lasts it is repeated this often, so that the number shown follows
+inline constexpr uint32_t kLagNoticeEveryMs = 1000;
+/// ... a player this far behind is dropped
+inline constexpr uint32_t kLagDropBehindMs = 60000;
+/// ... and so is a player whose acks have not moved for this long while turns wait for it (it is connected, but it runs nothing)
+inline constexpr uint32_t kLagDropIdleMs = 30000;
+/// A stale notice is not shown for longer than this without a renewal (the server renews it every kLagNoticeEveryMs)
+inline constexpr uint32_t kLagNoticeStaleMs = 3000;
+
 class HostSession {
 public:
     struct Config {
@@ -55,8 +76,13 @@ public:
         LockstepRunner::Config runner{};
         uint32_t violation_limit{8};        // undecodable or forbidden messages before a client is thrown out
         uint32_t silence_timeout_ms{60000}; // a client that sends nothing for this long is dropped (the original's 60 s drop-out)
-        uint32_t laggard_drop_ms{0};        // a seat that has held the match up this long (sealing stopped because it does not execute the turns) is dropped; 0 = never:
-                                            // a game between friends waits for a slow machine, a dedicated server cannot let one seat hold a room for ever
+        uint32_t laggard_drop_ms{0};        // a host WITH a seat: a seat that has held the match up this long (sealing stopped because it does not execute the turns) is
+                                            // dropped; 0 = never: a game between friends waits for a slow machine. A dedicated server does not wait (the lag_* fields)
+        uint32_t lag_notice_ms{kLagNoticeMs};            // a host WITHOUT a seat: a player this far behind the match is announced to the others (and not waited for)
+        uint32_t lag_clear_ms{kLagClearMs};              // ... it is announced back when it is within this
+        uint32_t lag_notice_every_ms{kLagNoticeEveryMs}; // ... the announcement is repeated this often while the lag lasts
+        uint32_t lag_drop_behind_ms{kLagDropBehindMs};   // ... dropped when this far behind (0: never)
+        uint32_t lag_drop_idle_ms{kLagDropIdleMs};       // ... dropped when its acks have not moved for this long while turns wait for it (0: never)
         uint32_t message_burst{kMessageBurst};                  // flood control (flood.hpp): the messages that one client may send, a token bucket; a message beyond it is not
         uint32_t messages_per_second{kMessagesPerSecond};       // handled and is a violation
     };
@@ -84,8 +110,11 @@ public:
     void submit_local(sim::Command command);
     /// Relays a chat text of the host's own player (a host without a seat has none: ignored)
     void chat_local(const std::string& text, bool team);
-    /// True when the host plays no seat (a dedicated server): it is the sequencer and the referee only
+    /// True when the host plays no seat (a dedicated server): it is the sequencer and the referee only, and it never waits for a player that falls behind
     bool seatless() const noexcept { return cfg_.host_player >= sim::MAX_PLAYERS; }
+    /// The players that are announced as lagging (a bit per seat), and how far behind they are in ms (a host without a seat only)
+    uint8_t lagging_mask() const noexcept;
+    uint32_t behind_ms(uint8_t player) const noexcept { return sequencer_.behind_turns(player) * kTurnMs; }
 
     void update(uint32_t now_ms);
 
@@ -102,8 +131,9 @@ public:
 
     const std::vector<DesyncMsg>& desyncs() const noexcept { return desyncs_; }
     uint32_t turns_sealed() const noexcept { return sequencer_.next_turn(); }
-    bool waiting() const noexcept { return started_ && !sequencer_.can_seal(); }
-    uint8_t laggard() const noexcept { return sequencer_.laggard(); }
+    /// True while a host with a seat has stopped sealing because a peer is more than 3 s behind (a host without a seat never waits)
+    bool waiting() const noexcept { return started_ && !seatless() && !sequencer_.can_seal(); }
+    uint8_t laggard() const noexcept { return seatless() ? uint8_t{255} : sequencer_.laggard(); }
     bool client_present(uint8_t player) const noexcept { return player < sim::MAX_PLAYERS && clients_[player].present; }
     uint32_t violations(uint8_t player) const noexcept { return player < sim::MAX_PLAYERS ? clients_[player].violations : 0; }
     /// The StartRequests that reached the running match of a dedicated server (the leader's second click crossed the Start): heard and ignored, all clients together
@@ -127,6 +157,10 @@ private:
         uint32_t last_heard_ms{0};          // when the client last sent anything
         MessageBudget talk;                 // flood control: every message that the client sends takes one from it
         uint32_t ignored_start_requests{0}; // its StartRequests that arrived in the running match (the first kIgnoredStartRequestsAllowed are free)
+        bool lagging{false};                // announced to the others as lagging (a host without a seat)
+        uint32_t next_notice_ms{0};         // when the announcement is repeated
+        uint32_t acked_seen{0};             // the ack the last progress check saw, and when it moved (lag_drop_idle_ms)
+        uint32_t progress_ms{0};
     };
     void poll_clients();
     void handle_message(uint8_t player, const std::vector<uint8_t>& msg);
@@ -137,6 +171,8 @@ private:
     void report_hash(uint8_t player, uint32_t turn, const sim::StateHash& hash);
     void run_local(uint32_t dt_ms);
     void send_turns(Connection* conn, uint32_t from_turn, uint32_t to_turn);
+    void police_laggards(uint32_t now_ms);
+    void announce_lag(uint8_t player, uint32_t behind_ms);
 
     Config cfg_;
     sim::SimulationEngine* sim_;
@@ -215,6 +251,16 @@ public:
     const CommandDelayMeter& command_delay() const noexcept { return delay_; }
     LockstepRunner& runner() noexcept { return *runner_; }
 
+    /// A dedicated server's room (no seat for the host, no migration): the server does not wait for a player that falls behind (see above)
+    bool dedicated() const noexcept { return cfg_.host >= sim::MAX_PLAYERS; }
+    /// The player that the server announced as lagging (the one that is furthest behind), 255 when none; and how far behind it was at the last announcement. An announcement
+    /// that was not renewed for kLagNoticeStaleMs is gone (the player is back, or dropped, or the host is silent).
+    uint8_t lagging_seat() const noexcept;
+    uint32_t lagging_behind_ms() const noexcept;
+    /// This machine is more than 3 s behind the match (the turns it holds and has not run, in a dedicated server's room) and runs the backlog down at up to four times normal
+    /// speed: the screen says "Catching up..." until it is within one second.
+    bool catching_up() const noexcept { return catching_up_; }
+
     uint8_t player() const noexcept { return cfg_.player; }
     Mode mode() const noexcept { return mode_; }
     /// The number of host changes so far, and the seat of the current host
@@ -279,6 +325,12 @@ private:
     PingMeter ping_;
     CommandDelayMeter delay_;
     uint32_t last_heard_ms_{0};
+    bool catching_up_{false};
+    struct LagNotice {
+        uint32_t behind_ms{0};              // 0: no notice
+        uint32_t heard_ms{0};
+    };
+    std::array<LagNotice, sim::MAX_PLAYERS> lag_{};
 
     // host migration
     Mode mode_{Mode::Normal};

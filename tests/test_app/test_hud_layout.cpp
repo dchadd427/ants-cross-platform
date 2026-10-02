@@ -11,6 +11,7 @@
 #include "ants_app/hud.hpp"
 #include "ants_app/latency_corner.hpp"
 #include "ants_app/map_select.hpp"
+#include "ants_app/net_overlay.hpp"
 #include "ants_app/options_screen.hpp"
 #include "ants_app/ui_anim.hpp"
 #include "ants_app/renderer.hpp"
@@ -2238,6 +2239,52 @@ void test_button_zones(const assets::AssetArchive& arc) {
 }
 
 
+// The line that a network match shows at the top of the playfield (net_overlay.hpp): which one wins, and the words of the lag policy of a server ("Catching up...",
+// "Bob is lagging (12 s behind)").
+void test_net_overlay() {
+    std::printf("[overlay] the line of a network match: priorities and words\n");
+    NetOverlayInput in;
+    check(net_overlay_line(in).text.empty() && !net_overlay_line(in).alarm, "overlay: nothing to say says nothing");
+    in.notice = "Bob is the host now.";
+    check(net_overlay_line(in).text == "Bob is the host now." && !net_overlay_line(in).alarm, "overlay: the match notice is shown when nothing else is");
+    // the lag policy of a server
+    in.lag_seat = 1;
+    in.lag_name = "Bob";
+    in.lag_behind_ms = 12000;
+    check(net_overlay_line(in).text == "Bob is lagging (12 s behind)" && !net_overlay_line(in).alarm, "overlay: the others are told who lags, in seconds");
+    in.lag_behind_ms = 12499;
+    check(net_overlay_line(in).text == "Bob is lagging (12 s behind)", "overlay: 12.499 s is 12 s");
+    in.lag_behind_ms = 12500;
+    check(net_overlay_line(in).text == "Bob is lagging (13 s behind)", "overlay: 12.5 s is 13 s (rounded)");
+    in.lag_behind_ms = 3000;
+    check(net_overlay_line(in).text == "Bob is lagging (3 s behind)", "overlay: the notice starts at 3 s");
+    in.lag_behind_ms = 59000;
+    check(net_overlay_line(in).text == "Bob is lagging (59 s behind)", "overlay: and goes on to the drop at 60 s");
+    in.lag_name.clear();
+    in.lag_seat = 2;
+    check(net_overlay_line(in).text == "Player 3 is lagging (59 s behind)", "overlay: a player without a name is \"Player\" and its seat's number");
+    in.lag_seat = -1;
+    check(net_overlay_line(in).text == "Bob is the host now.", "overlay: no notice any more: the match notice again");
+    in.lag_seat = 4;
+    check(net_overlay_line(in).text == "Bob is the host now.", "overlay: a seat that does not exist is no notice");
+    in.lag_seat = 0;
+    in.lag_name = "Ann";
+    // this machine's own state comes before the others'
+    in.catching_up = true;
+    check(net_overlay_line(in).text == "Catching up...", "overlay: a machine that is more than 3 s behind says so before it says who else lags");
+    in.stalled_ms = 999;
+    check(net_overlay_line(in).text == "Catching up...", "overlay: a wait shorter than a second is not shown");
+    in.stalled_ms = 1000;
+    check(net_overlay_line(in).text == "Waiting for the other players...", "overlay: a machine that has waited a second for a turn says so, before the rest");
+    in.waiting_for = "Cat";
+    check(net_overlay_line(in).text == "Waiting for Cat...", "overlay: a host with a seat names the player that holds the game up");
+    in.electing = true;
+    check(net_overlay_line(in).text == "The host left. Choosing a new host...", "overlay: an election comes before a wait");
+    in.desynced = true;
+    check(net_overlay_line(in).text == "Out of sync: the match has stopped." && net_overlay_line(in).alarm, "overlay: a desync comes first and is drawn in red");
+    check(NET_WAIT_MESSAGE_MS == 1000, "overlay: the wait message shows at one second");
+}
+
 // The network's share of the corner: "ping NN ms" and "delay NN ms" next to the frame rate (latency_corner.hpp). The strings, where the readout is drawn at all, the
 // layout on each screen at 640 x 480 (the recording renderer measures 6 px per character: the real font's geometry is checked with the application's renderer in
 // test_network_app) and the draw calls: two texts, in the frame rate's style and size, and nothing else.
@@ -3060,6 +3107,7 @@ int main() {
     test_held_keys_on_original_screens();
     test_button_zones(arc);
     test_latency_corner(arc);
+    test_net_overlay();
     test_more_button_zones(arc);
     test_pedestal_chains(arc);
     test_pedestal_timeline(arc);

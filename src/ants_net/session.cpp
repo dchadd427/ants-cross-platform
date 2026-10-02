@@ -8,6 +8,7 @@ namespace ants::net {
 
 namespace {
 constexpr uint8_t bit(uint8_t seat) noexcept { return static_cast<uint8_t>(1u << seat); }
+constexpr int kMaxSealsPerUpdate = static_cast<int>(500 / kTurnMs);     // a pass that came late seals the turns it missed, up to half a second of them, then the schedule goes on
 }  // namespace
 
 // ------------------------------------------------------------------------------------------------
@@ -53,6 +54,8 @@ void HostSession::start(uint32_t now_ms) {
         if (!clients_[p].present) continue;
         sequencer_.set_active(p, true);
         clients_[p].last_heard_ms = now_ms;
+        clients_[p].progress_ms = now_ms;
+        clients_[p].acked_seen = sequencer_.acked(p);
     }
 }
 
@@ -72,9 +75,11 @@ void HostSession::resume(uint32_t now_ms, uint32_t resume_turn, uint8_t old_host
         clients_[s.seat].present = true;
         clients_[s.seat].violations = 0;
         clients_[s.seat].last_heard_ms = now_ms;
+        clients_[s.seat].progress_ms = now_ms;
         following = static_cast<uint8_t>(following | bit(s.seat));
         sequencer_.set_active(s.seat, true);
         sequencer_.set_acked(s.seat, s.next_execute);
+        clients_[s.seat].acked_seen = sequencer_.acked(s.seat);
         ResumeMsg r;
         r.epoch = cfg_.epoch;
         r.host = cfg_.host_player;
@@ -135,6 +140,10 @@ void HostSession::announce_drop(uint8_t player) {
 
 void HostSession::drop(uint8_t player) {
     if (player >= sim::MAX_PLAYERS || !clients_[player].present) return;
+    if (clients_[player].lagging) {                  // the others' notice about this player ends with it (the drop itself is told by the turn stream)
+        clients_[player].lagging = false;
+        broadcast(encode(LagMsg{player, 0}), player);
+    }
     clients_[player].present = false;
     if (clients_[player].conn != nullptr && clients_[player].conn->is_open()) clients_[player].conn->close();
     sequencer_.set_active(player, false);
@@ -225,6 +234,47 @@ void HostSession::poll_clients() {
     }
 }
 
+uint8_t HostSession::lagging_mask() const noexcept {
+    uint8_t mask = 0;
+    for (uint8_t p = 0; p < sim::MAX_PLAYERS; ++p) {
+        if (clients_[p].present && clients_[p].lagging) mask = static_cast<uint8_t>(mask | bit(p));
+    }
+    return mask;
+}
+
+void HostSession::announce_lag(uint8_t player, uint32_t behind_ms) {
+    broadcast(encode(LagMsg{player, behind_ms}), player);          // everybody but the player itself, which knows how far behind it is
+}
+
+// A host without a seat does not wait for a player that falls behind (see the head of this file): it says so to the others, and throws out the player that cannot be waited for
+void HostSession::police_laggards(uint32_t now_ms) {
+    for (uint8_t p = 0; p < sim::MAX_PLAYERS; ++p) {
+        Client& c = clients_[p];
+        if (!c.present) continue;
+        const uint32_t acked = sequencer_.acked(p);
+        if (acked != c.acked_seen) {                                 // an ack that moved: it runs turns
+            c.acked_seen = acked;
+            c.progress_ms = now_ms;
+        }
+        const uint32_t behind = behind_ms(p);
+        const bool idle = behind > 0 && cfg_.lag_drop_idle_ms != 0 && now_ms - c.progress_ms >= cfg_.lag_drop_idle_ms;
+        if (idle || (cfg_.lag_drop_behind_ms != 0 && behind >= cfg_.lag_drop_behind_ms)) {
+            drop(p);                                                 // the others play on, as they did all along; the drop travels in the turn stream
+            continue;
+        }
+        if (behind >= cfg_.lag_notice_ms) {
+            if (!c.lagging || time_reached(now_ms, c.next_notice_ms)) {
+                c.lagging = true;
+                c.next_notice_ms = now_ms + cfg_.lag_notice_every_ms;
+                announce_lag(p, behind);
+            }
+        } else if (c.lagging && behind <= cfg_.lag_clear_ms) {
+            c.lagging = false;
+            announce_lag(p, 0);
+        }
+    }
+}
+
 void HostSession::run_local(uint32_t dt_ms) {
     for (const LockstepRunner::Executed& e : runner_->update(dt_ms)) {
         sequencer_.on_ack(cfg_.host_player, e.turn);
@@ -253,10 +303,10 @@ void HostSession::update(uint32_t now_ms) {
     for (uint8_t p = 0; p < sim::MAX_PLAYERS; ++p) {         // a peer that says nothing for a minute is gone (its ack and ping stop)
         if (clients_[p].present && now_ms - clients_[p].last_heard_ms > cfg_.silence_timeout_ms) drop(p);
     }
-    // seal the turns that are due (a fixed 100 ms schedule; while a peer lags too far the game waits and the schedule slides)
+    // seal the turns that are due (a fixed 50 ms schedule). A host with a seat waits while a peer lags too far (the schedule slides); a host without a seat never does.
     int sealed = 0;
-    while (!frozen_ && time_reached(now_ms, next_seal_ms_) && sealed < 5) {
-        if (!sequencer_.can_seal()) {
+    while (!frozen_ && time_reached(now_ms, next_seal_ms_) && sealed < kMaxSealsPerUpdate) {
+        if (!seatless() && !sequencer_.can_seal()) {
             next_seal_ms_ = now_ms;
             const uint8_t laggard = sequencer_.laggard();
             if (laggard != stall_player_) {                  // a new holder-up: the clock starts again
@@ -275,6 +325,7 @@ void HostSession::update(uint32_t now_ms) {
         next_seal_ms_ += kTurnMs;
         ++sealed;
     }
+    if (seatless() && started_ && !frozen_) police_laggards(now_ms);
     run_local(dt);
 }
 
@@ -331,6 +382,25 @@ bool ClientSession::chat(const std::string& text, bool team) {
     m.team = team;
     m.text = text;
     return conn_->send(encode(m));
+}
+
+uint8_t ClientSession::lagging_seat() const noexcept {
+    uint8_t worst = 255;
+    uint32_t worst_ms = 0;
+    for (uint8_t seat = 0; seat < sim::MAX_PLAYERS; ++seat) {
+        const LagNotice& n = lag_[seat];
+        if (n.behind_ms == 0 || last_ms_ - n.heard_ms > kLagNoticeStaleMs) continue;     // none, or not renewed: gone
+        if (n.behind_ms > worst_ms) {
+            worst = seat;
+            worst_ms = n.behind_ms;
+        }
+    }
+    return worst;
+}
+
+uint32_t ClientSession::lagging_behind_ms() const noexcept {
+    const uint8_t seat = lagging_seat();
+    return seat < sim::MAX_PLAYERS ? lag_[seat].behind_ms : 0u;
 }
 
 bool ClientSession::peer_alive(uint8_t seat, uint32_t now_ms) const {
@@ -401,6 +471,14 @@ void ClientSession::poll_host(uint32_t now_ms) {
             case MsgType::Pong: {
                 PingMsg p;
                 if (decode_ping(msg.data(), msg.size(), p)) ping_.on_pong(p, now_ms);
+                break;
+            }
+            case MsgType::Lag: {
+                LagMsg m;
+                if (decode(msg.data(), msg.size(), m) && m.seat != cfg_.player) {      // (a player is never told about itself)
+                    lag_[m.seat].behind_ms = m.behind_ms;
+                    lag_[m.seat].heard_ms = now_ms;
+                }
                 break;
             }
             default:
@@ -716,17 +794,23 @@ void ClientSession::update(uint32_t now_ms) {
     if (mode_ == Mode::Normal) poll_host(now_ms);    // and again: what the new host sent behind its Resume, or what arrived meanwhile
     if (electing()) election_tick(now_ms);
     if (mode_ == Mode::Promoted) return;             // the runner goes to the new HostSession
-    for (const LockstepRunner::Executed& e : runner_->update(dt)) {
-        if (mode_ != Mode::Normal || !connected()) continue;
-        AckMsg a;
-        a.turn = e.turn;
-        conn_->send(encode(a));
-        if (e.has_hash) {
+    const std::vector<LockstepRunner::Executed> ran = runner_->update(dt);
+    if (!ran.empty() && mode_ == Mode::Normal && connected()) {
+        for (const LockstepRunner::Executed& e : ran) {      // the hashes first: the host drops its reference of a turn that everybody has acknowledged
+            if (!e.has_hash) continue;
             HashMsg h;
             h.turn = e.turn;
             h.hash = e.hash;
             conn_->send(encode(h));
         }
+        AckMsg a;                                            // one ack per frame, for the last turn it ran: an ack says "I have executed up to this turn"
+        a.turn = ran.back().turn;
+        conn_->send(encode(a));
+    }
+    if (dedicated()) {                                       // "Catching up..." from 3 s behind until within 1 s (the host does not wait: the backlog is run down at up to 4x)
+        const uint32_t backlog = runner_->backlog_ms();
+        if (!catching_up_ && backlog >= kLagNoticeMs) catching_up_ = true;
+        else if (catching_up_ && backlog <= kLagClearMs) catching_up_ = false;
     }
     if (mode_ == Mode::Normal && connected() && time_reached(now_ms, next_ping_ms_)) {
         conn_->send(encode_ping(ping_.next(now_ms)));

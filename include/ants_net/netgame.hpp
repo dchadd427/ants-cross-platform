@@ -166,8 +166,17 @@ public:
     /// How long the runner has stood still for want of a turn: the time since it last ran a tick (0 while it runs; the application shows "Waiting for the other players..." at
     /// one second)
     uint32_t stalled_ms() const;
-    /// The host: the seat that holds the game up (255 when none does)
+    /// The host: the seat that holds the game up (255 when none does). A dedicated server never waits for anybody (see lag_notice).
     uint8_t laggard() const;
+    /// A dedicated server's room: the player that the server announced as lagging, and how far behind the match it is in ms. The match goes on without waiting for it (it
+    /// catches up on its own); this is the one-line notice for the others. Empty when nobody lags, and in games of the local network (their host waits: laggard()).
+    struct LagNotice {
+        uint8_t seat{255};
+        uint32_t behind_ms{0};
+    };
+    std::optional<LagNotice> lag_notice() const;
+    /// This machine is more than 3 s behind the match and runs the backlog down at up to four times normal speed (a dedicated server's room): "Catching up..."
+    bool catching_up() const;
     bool desynced() const;
     /// Milliseconds into the current tick, for smooth drawing between ticks
     uint32_t sub_tick_ms() const;

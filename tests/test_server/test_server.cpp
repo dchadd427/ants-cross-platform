@@ -122,6 +122,8 @@ struct Client {
     std::unique_ptr<net::ClientSession> session;
     bool fail_load{false};
     bool freeze{false};                      // the session is no longer run: no acks, no orders (a seat that stopped executing the turns)
+    uint32_t clock_lag{0};                   // the application's network clock never advances more than a second per frame: what a window that stood still lost of the real time
+    uint32_t last_frame_ms{0};               // and when the session's last frame ran
     bool lost{false};
     uint32_t next_order_ms{0};
     uint32_t rng{1};
@@ -168,7 +170,9 @@ struct Client {
             }
         }
         if (session && !freeze) {
-            session->update(now_ms);
+            if (last_frame_ms != 0 && now_ms - last_frame_ms > 1000) clock_lag += now_ms - last_frame_ms - 1000;      // a frame after a stop hands the network one second at the most
+            last_frame_ms = now_ms;
+            session->update(now_ms - clock_lag);
             if (session->lost()) lost = true;
             if (now_ms >= next_order_ms && session->mode() == net::ClientSession::Mode::Normal) {
                 next_order_ms = now_ms + 700;
@@ -730,7 +734,7 @@ void run_hardening_tests() {
         }
     } TEST_END();
 
-    TEST_CASE("S3.12 A Seat That Stops Executing Turns Cannot Hold A Room: It Is Dropped After 20 s And The Others Play On; A Running Room Has A Wall-Clock Limit") {
+    TEST_CASE("S3.12 A Seat That Stops Executing Turns Does Not Hold A Room Even For A Moment: The Others Play On At Their Pace And Are Told, It Is Dropped After 30 s Without An Ack; A Running Room Has A Wall-Clock Limit") {
         {
             World w;
             ASSERT_TRUE(w.mgr.create_room(spec_of("LAG-1", 3), w.now).ok);
@@ -739,17 +743,29 @@ void run_hardening_tests() {
             Client& c = w.connect("Cat", "LAG-1");
             w.run(3000);
             ASSERT_TRUE(w.status("LAG-1").state == RoomState::Running);
+            const uint8_t bob = b.lobby->my_seat();
+            const uint32_t ticks_before = w.status("LAG-1").ticks;
             b.freeze = true;                                                              // Bob's program hangs: it neither acks nor answers (a hostile client would still ping)
             w.run(8000);
+            // the room did not wait for Bob (it used to, 3 s after he stopped, until the 20 s were up): 8 s are 160 ticks, and Ann and Cat played them
             const uint32_t ticks_while_stuck = w.status("LAG-1").ticks;
+            ASSERT_TRUE(ticks_while_stuck - ticks_before >= 150);
+            ASSERT_TRUE(a.session->lagging_seat() == bob && c.session->lagging_seat() == bob);      // ... and they are told who lags
+            ASSERT_TRUE(a.session->lagging_behind_ms() >= 3000);
+            ASSERT_TRUE(w.status("LAG-1").state == RoomState::Running);
             w.run(4000);
-            ASSERT_TRUE(w.status("LAG-1").ticks - ticks_while_stuck < 40);                // the match is held up: (a few turns of the buffer, no more)
-            w.run(20000);                                                                 // 20 s of being the one that holds it up: dropped
+            ASSERT_TRUE(w.status("LAG-1").ticks - ticks_while_stuck >= 75);               // and on: 4 s, 80 ticks
+            w.run(14000);                                                                 // 26 s since Bob stopped: still a lagger, not yet dropped (30 s without an ack)
+            ASSERT_FALSE(a.sim.is_player_dropped(bob));
+            w.run(7000);                                                                  // 33 s: dropped, at one tick for both of the others
+            ASSERT_TRUE(a.sim.is_player_dropped(bob) && c.sim.is_player_dropped(bob));
+            ASSERT_TRUE(a.sim.state_hash() == c.sim.state_hash());
             const uint32_t after_drop = w.status("LAG-1").ticks;
             w.run(5000);
-            ASSERT_TRUE(w.status("LAG-1").ticks > after_drop + 60);                       // Ann and Cat play on
+            ASSERT_TRUE(w.status("LAG-1").ticks >= after_drop + 95);                      // Ann and Cat play on
             ASSERT_TRUE(w.status("LAG-1").state == RoomState::Running);
             ASSERT_FALSE(a.lost || c.lost);
+            ASSERT_EQ(a.session->lagging_seat(), 255);                                    // the notice ended with the drop
         }
         {                                                                                 // two players: the one that is left has won, the room ends (it is not held for ever)
             World w;
@@ -900,7 +916,7 @@ void run_match_tests() {
         for (int guard = 0; guard < 4000 && w.status("MATCH-1").state == RoomState::Running; ++guard) w.run(250);
         s = w.status("MATCH-1");
         ASSERT_TRUE(s.state == RoomState::Finished);
-        ASSERT_TRUE(s.ticks > 1000 && s.turns > 500);
+        ASSERT_TRUE(s.ticks > 1000 && s.turns > 1000);                                   // (a turn is a tick: turns of 50 ms)
         ASSERT_EQ(s.rows.size(), size_t{3});                                            // three teams, no alliances: three rows
         int winners = 0;
         for (const RoomRow& r : s.rows) winners += r.winner ? 1 : 0;
@@ -1033,12 +1049,57 @@ void run_leader_tests() {
         for (int guard = 0; guard < 4000 && w.status("LEAD-1").state == RoomState::Running; ++guard) w.run(250);
         s = w.status("LEAD-1");
         ASSERT_TRUE(s.state == RoomState::Finished);
-        ASSERT_TRUE(s.ticks > 1000 && s.turns > 500);
+        ASSERT_TRUE(s.ticks > 1000 && s.turns > 1000);                                    // (a turn is a tick since protocol 8: this said 500 for turns of two ticks)
         ASSERT_EQ(s.rows.size(), size_t{2});                                              // two teams: two rows
         ASSERT_FALSE(ann.session->desynced() || bob.session->desynced());
         w.run(Room::kGraceMs + 500);
         ASSERT_TRUE(ann.sim.state_hash() == bob.sim.state_hash());
         ASSERT_TRUE(ann.sim.is_match_over() && bob.sim.is_match_over());
+        ASSERT_EQ(ann.sim.current_tick(), bob.sim.current_tick());
+    } TEST_END();
+
+    TEST_CASE("S3.33 The Leader And The Lag Policy: A Waiting Room Has No Lag And No Notice; A Leader Whose Window Stops After The Start Does Not Hold The Room Up, The Other Player Is Told That It Lags, Its Late Clicks On START Are Counted And Cost It Nothing, It Catches Up (\"Catching Up\") And Is Not Dropped; Both End Bit-Identical") {
+        World w;
+        ASSERT_TRUE(w.mgr.create_room(spec_of("LEAD-LAG", 4), w.now).ok);
+        Client& ann = w.connect("Ann", "LEAD-LAG");
+        Client& bob = w.connect("Bob", "LEAD-LAG");
+        w.run(500);
+        ASSERT_TRUE(ann.lobby->is_leader() && !bob.lobby->is_leader());
+        w.run(20000);                                                                       // twenty seconds in the waiting room: nothing is sealed, so nobody is behind, nobody is told, nobody is dropped
+        ASSERT_TRUE(w.status("LEAD-LAG").state == RoomState::Waiting && w.status("LEAD-LAG").joined == 2);
+        ASSERT_TRUE(ann.session == nullptr && bob.session == nullptr);
+        ASSERT_TRUE(ann.lobby->is_leader() && ann.lobby->phase() == net::ClientLobby::Phase::InRoom);
+        ASSERT_TRUE(ann.lobby->request_start());
+        w.run(3000);
+        ASSERT_TRUE(w.status("LEAD-LAG").state == RoomState::Running);
+        ASSERT_TRUE(ann.session != nullptr && bob.session != nullptr);
+        ASSERT_EQ(w.status("LEAD-LAG").leader, 255);                                        // once the match runs nobody leads: the lobby is over
+        ASSERT_EQ(bob.session->lagging_seat(), 255);
+        // the leader's window stops for 8 s; three clicks on START that it made in its last moment reach the server late
+        const uint32_t ticks_before = w.status("LEAD-LAG").ticks;
+        ann.freeze = true;
+        for (int i = 0; i < 3; ++i) ann.end->send(net::encode(net::StartRequestMsg{}));
+        w.run(8000);
+        ASSERT_TRUE(w.status("LEAD-LAG").ticks - ticks_before >= 150);                      // the room did not wait for it: 8 s are 160 ticks, and Bob played them
+        ASSERT_EQ(bob.session->lagging_seat(), 0);                                          // Bob is told who lags: the seat of the first player
+        ASSERT_TRUE(bob.session->lagging_behind_ms() >= 3000);
+        ASSERT_EQ(w.status("LEAD-LAG").ignored_start_requests, 3u);                         // the three clicks are counted, they were free (16 are), nothing else came of them
+        ASSERT_TRUE(w.status("LEAD-LAG").state == RoomState::Running);
+        ann.freeze = false;
+        w.run(300);
+        ASSERT_TRUE(ann.session->catching_up());                                            // "Catching up..." on the leader's screen, until it is within a second
+        w.run(7000);
+        ASSERT_FALSE(ann.session->catching_up());
+        ASSERT_EQ(bob.session->lagging_seat(), 255);                                        // and the notice of the other player ended
+        ASSERT_FALSE(ann.lost || bob.lost);
+        ASSERT_TRUE(w.status("LEAD-LAG").state == RoomState::Running);
+        ASSERT_TRUE(ann.sim.current_tick() + 40 >= bob.sim.current_tick());                 // level (within the turns that are on the way)
+        // played to the end: both clients stand where the referee stands, and the room did not fail with a desync
+        for (int guard = 0; guard < 4000 && w.status("LEAD-LAG").state == RoomState::Running; ++guard) w.run(250);
+        ASSERT_TRUE(w.status("LEAD-LAG").state == RoomState::Finished);
+        ASSERT_FALSE(ann.session->desynced() || bob.session->desynced());
+        w.run(Room::kGraceMs + 500);
+        ASSERT_TRUE(ann.sim.state_hash() == bob.sim.state_hash());
         ASSERT_EQ(ann.sim.current_tick(), bob.sim.current_tick());
     } TEST_END();
 

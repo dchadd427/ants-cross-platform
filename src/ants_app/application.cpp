@@ -2,6 +2,7 @@
 #include "ants_app/pointer_clamp.hpp"
 #include "ants_app/fps_overlay.hpp"
 #include "ants_app/latency_corner.hpp"
+#include "ants_app/net_overlay.hpp"
 #include "ants_app/edge_scroll.hpp"
 #include "ants_app/ui_anim.hpp"
 #include "ants_app/version.hpp"
@@ -1568,23 +1569,22 @@ void Application::net_end_session(const std::string& notice) {
 // says so after one second; a desync stops the match and says so.
 void Application::render_net_overlay() {
     if (!network_active() || net_->phase() != net::NetGame::Phase::Playing) return;
-    std::string text;
-    ants::assets::ColorRGBA colour{255, 255, 255, 255};
-    if (net_->desynced()) {
-        text = "Out of sync: the match has stopped.";
-        colour = ants::assets::ColorRGBA{255, 90, 90, 255};
-    } else if (net_->electing()) {
-        text = "The host left. Choosing a new host...";                 // no turns arrive until the guests have agreed
-    } else if (net_->stalled_ms() >= 1000) {
-        text = "Waiting for the other players...";
-        const uint8_t slow = net_->laggard();
-        if (slow < 4) {
-            const std::string name = sim_.get_player_name(slow);
-            if (!name.empty()) text = "Waiting for " + name + "...";
-        }
-    } else {
-        text = net_->match_notice();                                    // "Bob is the host now." for a few seconds
+    NetOverlayInput in;
+    in.desynced = net_->desynced();
+    in.electing = net_->electing();
+    in.stalled_ms = net_->stalled_ms();
+    const uint8_t slow = net_->laggard();
+    if (slow < 4) in.waiting_for = sim_.get_player_name(slow);
+    in.catching_up = net_->catching_up();
+    if (const std::optional<net::NetGame::LagNotice> lag = net_->lag_notice()) {
+        in.lag_seat = lag->seat;
+        in.lag_name = sim_.get_player_name(lag->seat);
+        in.lag_behind_ms = lag->behind_ms;
     }
+    in.notice = net_->match_notice();                                   // "Bob is the host now." for a few seconds
+    const NetOverlayLine line = net_overlay_line(in);
+    const std::string& text = line.text;
+    const ants::assets::ColorRGBA colour = line.alarm ? ants::assets::ColorRGBA{255, 90, 90, 255} : ants::assets::ColorRGBA{255, 255, 255, 255};
     if (text.empty()) return;
     const int32_t w = renderer_->get_text_width(text, FontSize::Px14);
     const int32_t h = renderer_->get_text_height(FontSize::Px14);

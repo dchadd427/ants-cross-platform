@@ -43,6 +43,7 @@ add_library(ants_app STATIC
     options_screen.cpp
     text_layout.cpp
     latency_corner.cpp
+    net_overlay.cpp
     application.cpp
 )
 

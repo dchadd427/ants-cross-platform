@@ -12,7 +12,7 @@
 //   GET    /stats          -> 200 {"rooms": n, "pending": n, "created": n, "refused": n}
 //
 // A status: {"code", "state": "waiting|loading|running|finished|failed", "map", "fog", "expected", "joined", "early_start", "leader": seat | null (while the room waits or
-// loads), "ignored_start_requests", "players": [{"seat", "name"}], "ticks", "turns", "age_seconds", "reason",
+// loads), "ignored_start_requests", "players": [{"seat", "name"}], "ticks", "turns" (one per tick: turns of 50 ms, protocol 8), "age_seconds", "reason",
 // "result": {"quitter": seat | null, "rows": [{"names": [..], "score", "lost", "killed", "hatched", "winner"}]}}
 
 #include <cstdint>

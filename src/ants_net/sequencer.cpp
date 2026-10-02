@@ -4,6 +4,10 @@
 
 namespace ants::net {
 
+namespace {
+constexpr uint32_t kRefereeWindowTurns = turns_for_ms(6400);       // the referee's report of a turn is taken while the turn is at most 6.4 s old
+}  // namespace
+
 Sequencer::Sequencer(Config config) : cfg_(config) {}
 
 void Sequencer::set_active(uint8_t player, bool active) {
@@ -71,7 +75,7 @@ std::vector<DesyncMsg> Sequencer::on_referee_hash(uint32_t turn, const sim::Stat
     std::vector<DesyncMsg> out;
     if (host_player_ < sim::MAX_PLAYERS) return out;                      // a host with a seat reports through on_hash like everybody else
     if (turn >= next_turn_) return out;                                   // the referee only executed turns that were sealed
-    if (turn + 64 < next_turn_) return out;                               // (a turn that is long past: nothing is waiting for it)
+    if (turn + kRefereeWindowTurns < next_turn_) return out;              // (a turn that is long past: nothing is waiting for it)
     referee_[turn] = hash;
     const auto found = reports_.find(turn);
     if (found == reports_.end()) return out;
@@ -129,6 +133,11 @@ std::vector<DesyncMsg> Sequencer::on_hash(uint8_t player, uint32_t turn, const s
 }
 
 bool Sequencer::can_seal() const noexcept { return laggard() == 255; }
+
+uint32_t Sequencer::behind_turns(uint8_t player) const noexcept {
+    if (player >= sim::MAX_PLAYERS || !active_[player]) return 0;
+    return next_turn_ - std::min(acked_[player], next_turn_);
+}
 
 uint8_t Sequencer::laggard() const noexcept {
     uint8_t worst = 255;

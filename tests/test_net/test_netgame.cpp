@@ -495,7 +495,7 @@ void run_match_tests() {
             ASSERT_EQ(m.drop_ticks.size(), 1u);
         }
         ASSERT_EQ(host.drop_ticks[0], t.machines[1]->drop_ticks[0]);         // the same tick
-        ASSERT_TRUE(host.net.turns_executed() > 85);                         // the game went on (10 s = about 100 turns)
+        ASSERT_TRUE(host.net.turns_executed() > 170);                        // the game went on (10 s = about 200 turns of 50 ms)
         host.net.freeze();
         t.run(2000);
         ASSERT_TRUE(all_equal(t, 2));
@@ -776,7 +776,7 @@ void run_migration_tests() {
         ASSERT_TRUE(carol.drop_ticks == dave.drop_ticks);                           // both drops at the same ticks on both machines
         const uint32_t before = dave.net.turns_executed();
         t.run(3000);
-        ASSERT_TRUE(dave.net.turns_executed() > before + 20);
+        ASSERT_TRUE(dave.net.turns_executed() > before + 40);                  // 3 s: sixty turns of 50 ms
         carol.net.freeze();
         t.run(3000);
         ASSERT_TRUE(carol.sim.state_hash() == dave.sim.state_hash());

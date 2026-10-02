@@ -991,7 +991,7 @@ void run_host_tests() {
         }
         ASSERT_TRUE(given > 20 && predicted > given / 2);
         ASSERT_FALSE(app.hud().is_modal_open());                                         // the ticks reached the HUD (post_tick), the modal ended
-        ASSERT_TRUE(app.net()->turns_executed() > 250);
+        ASSERT_TRUE(app.net()->turns_executed() > 500);                                  // (turns of 50 ms: the 250 of 100 ms that this stood for, twice)
         // chat both ways
         app.hud().set_chat_input("hello Bob");
         app.hud().send_chat(false);
@@ -1188,7 +1188,7 @@ void run_guest_tests() {
         // the game goes on with the two of them: the old host is dropped everywhere, an order of the application reaches Bob's simulation
         const uint32_t before = app.net()->turns_executed();
         trio.step(2000);
-        ASSERT_TRUE(app.net()->turns_executed() > before + 10);
+        ASSERT_TRUE(app.net()->turns_executed() > before + 20);                      // 2 s: forty turns of 50 ms
         ASSERT_TRUE(app.sim().is_player_dropped(0) && bob.sim.is_player_dropped(0));
         ASSERT_FALSE(app.sim().is_player_dropped(1) || app.sim().is_player_dropped(2));
         const auto mine = ants_of(app.sim(), 2);
@@ -1920,8 +1920,8 @@ void run_latency_tests() {
         }
         ASSERT_TRUE(app.net()->ping_ms().has_value() && *app.net()->ping_ms() <= 30);
         ASSERT_TRUE(app.net()->command_delay_ms().has_value());
-        // the delay: the way there (up to one step), the wait for the next 100 ms turn (0 - 100), the way back (up to one step), and one turn of jitter buffer (100)
-        ASSERT_TRUE(*app.net()->command_delay_ms() >= 100 && *app.net()->command_delay_ms() <= 260);
+        // the delay: the way there (up to one step), the wait for the next 50 ms turn (0 - 50), the way back (up to one step), and one turn of jitter buffer (50 - 60)
+        ASSERT_TRUE(*app.net()->command_delay_ms() >= 50 && *app.net()->command_delay_ms() <= 150);
         ASSERT_TRUE(app.net()->stalled_ms() < 1000);                                       // turns are flowing: no "Waiting for the other players..."
         app.render_frame();                                                                // the match's corner: two lines above the row
         // the results screen of a match shows the readout too (one row: nothing stands in the corner row there)
@@ -1963,11 +1963,11 @@ void run_latency_tests() {
             duo.step(10);
         }
         ASSERT_TRUE(app.net()->command_delay_ms().has_value());
-        ASSERT_TRUE(*app.net()->command_delay_ms() >= 100 && *app.net()->command_delay_ms() <= 220);       // 0 - 100 for the seal, 100 for the buffer, one step of rounding
+        ASSERT_TRUE(*app.net()->command_delay_ms() >= 50 && *app.net()->command_delay_ms() <= 120);        // 0 - 50 for the seal, 50 for the buffer, one step of rounding
         app.render_frame();                                                                  // the host's corner: "ping 0 ms", its own delay
     } TEST_END();
 
-    TEST_CASE("N5.30 The Network Keeps Real Time: A Frame Of 400 ms Lets The Runner Pay Back Four Turns At Once (the local simulation's clamp of 100 ms left them standing in the queue for good)") {
+    TEST_CASE("N5.30 The Network Keeps Real Time: A Frame Of 400 ms Lets The Runner Pay Back Eight Turns At Once (the local simulation's clamp of 100 ms would run two and leave the rest in the queue)") {
         Peer host;
         ASSERT_TRUE(host.net.host(0, "Alice", true));
         host.net.set_map("TINY.LVL");
@@ -1995,7 +1995,7 @@ void run_latency_tests() {
         const uint32_t before = app.net()->turns_executed();
         app.run_frame_with_delta(0.4f);                                                   // the frame that follows the hitch: 400 ms of real time
         const uint32_t paid_back = app.net()->turns_executed() - before;
-        ASSERT_TRUE(paid_back >= 3);                                                      // 400 ms of ticks at once: four turns (a clamp to 100 ms would run one)
+        ASSERT_TRUE(paid_back >= 6);                                                      // 400 ms of ticks at once: eight turns of 50 ms (a clamp to 100 ms would run two)
         duo.step(1000);
         ASSERT_TRUE(app.net()->stalled_ms() < 1000);
     } TEST_END();

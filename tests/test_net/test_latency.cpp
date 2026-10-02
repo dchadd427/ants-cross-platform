@@ -1,7 +1,9 @@
 // Tests of what the player feels of the network (ants_net/latency.hpp): the round trip to the host from Ping / Pong timings, the delay of the player's own commands from
 // the send to the tick that applies them, the means over the last answers / commands, and both measured in whole sessions over simulated links (a host and a guest with
-// 40 ms in each direction: the delay must come out as the way there + the wait for the next 100 ms turn + the way back + the runner's jitter buffer). And what the player
-// sees when the game waits: "stalled for" is the time since the last tick, so the "Waiting for the other players..." message goes when the turns come again.
+// 40 ms in each direction: the delay must come out as the way there + the wait for the next 50 ms turn + the way back + the runner's jitter buffer, one turn of 50 ms on a
+// steady link). And what the player sees when the game waits: "stalled for" is the time since a tick was due and had no turn, so the "Waiting for the other players..."
+// message goes when the turns come again; and what a stall, a bunch of turns, a hitch or a hidden window leaves behind in the runner (nothing: the buffer is rebuilt, the
+// queue is run down).
 #include "ants_net/latency.hpp"
 #include "ants_net/lobby.hpp"
 #include "ants_net/loopback.hpp"
@@ -128,7 +130,8 @@ struct Duel {
 };
 
 // A host (seat 0) and two guests (seats 1 and 2) over links of 30 ms each way with a little jitter. Guest 2 can be frozen (its frame loop does not run: a window that the
-// browser stops drawing, a hitch): after a few seconds the host stops sealing turns (the frozen guest's acknowledgements are 30 turns behind), and guest 1 waits.
+// browser stops drawing, a hitch): after a few seconds the host (which has a seat: a game on the local network) stops sealing turns (the frozen guest's acknowledgements
+// are 60 turns behind), and guest 1 waits.
 struct Trio {
     LoopbackNetwork net{9};
     sim::SimulationEngine host_sim;
@@ -189,9 +192,9 @@ struct Trio {
 
 // ---------------------------------------------------------------------------------------------------------------------------------
 // A runner fed with a synthetic stream of turns and a frame loop, to see what a stall, a bunch of turns, a hitch or a hidden window leave behind. The host seals a turn every
-// 100 ms (a pause leaves a hole, and sealing goes on at the normal rate); each turn takes `latency` plus a pseudo-random 0 .. jitter (and `spike_ms` on one turn in
+// 50 ms (a pause leaves a hole, and sealing goes on at the normal rate); each turn takes `latency` plus a pseudo-random 0 .. jitter (and `spike_ms` on one turn in
 // `spike_every`) to arrive, in order; a frozen link holds everything until it thaws (what comes after comes in a bunch); the frames are 16.67 ms apart (a hitch blocks the
-// loop, a hidden window draws one frame a second); a frame hands the runner its real time up to `max_dt` (the application: a second; before: 100 ms).
+// loop, a hidden window draws one frame a second); a frame hands the runner its real time up to `max_dt` (the application: a second).
 // ---------------------------------------------------------------------------------------------------------------------------------
 
 struct Rig {
@@ -291,7 +294,7 @@ struct Rig {
             last_arrival = at;
             out.seal.push_back(next_seal);
             out.arrive.push_back(at);
-            next_seal += 100;
+            next_seal += kTurnMs;
         }
         out.exec.assign(out.seal.size(), 0);
         sim::SimulationEngine sim;
@@ -301,7 +304,7 @@ struct Rig {
         size_t ticks_run = 0;
         runner_.set_on_tick([&]() {
             out.ticks.push_back(now);
-            if (ticks_run % 2 == 0 && ticks_run / 2 < out.exec.size()) out.exec[ticks_run / 2] = now;        // the first tick of a turn
+            if (ticks_run < out.exec.size()) out.exec[ticks_run] = now;        // a turn is a tick
             ++ticks_run;
         });
         size_t next_turn = 0;
@@ -337,28 +340,20 @@ struct Rig {
     }
 };
 
-// What the runner did before: neither the buffer rebuilt after a stall nor a standing queue run down
-LockstepRunner::Config old_runner() {
-    LockstepRunner::Config c;
-    c.rebuild_after_ms = 0;
-    c.standing_window = 0;
-    return c;
-}
-
 // What the guest's delay must be for a command sent at `t` over a link of `one_way` ms each way: the command reaches the host at t + one_way and goes into the first turn
-// that is sealed at or after that moment (the host seals at 0, 100, 200, ...); that turn is back at the guest one_way later. The guest's runner starts when the second turn
-// has arrived (seal 100 + one_way) and executes one turn every 100 ms from then on: turn k at one_way + 100 + 100 k, i.e. 100 ms after the turn is there.
+// that is sealed at or after that moment (the host seals at 0, 50, 100, ...); that turn is back at the guest one_way later. The guest's runner starts when the second turn
+// has arrived (seal 50 + one_way) and executes one turn every 50 ms from then on: turn k at one_way + 50 + 50 k, i.e. 50 ms after the turn is there (one turn of buffer).
 uint32_t expected_guest_delay(uint32_t t, uint32_t one_way) {
     const uint32_t arrives = t + one_way;
-    const uint32_t sealed = (arrives + 99u) / 100u * 100u;
-    const uint32_t executed = one_way + 100u + sealed;
+    const uint32_t sealed = (arrives + kTurnMs - 1u) / kTurnMs * kTurnMs;
+    const uint32_t executed = one_way + kTurnMs + sealed;
     return executed - t;
 }
 
-// The host's own command: sealed at the first seal at or after t, and the host's runner (which also waits for two turns) executes turn k at 100 + 100 k
+// The host's own command: sealed at the first seal at or after t, and the host's runner (which also waits for two turns) executes turn k at 50 + 50 k
 uint32_t expected_host_delay(uint32_t t) {
-    const uint32_t sealed = (t + 99u) / 100u * 100u;
-    return sealed + 100u - t;
+    const uint32_t sealed = (t + kTurnMs - 1u) / kTurnMs * kTurnMs;
+    return sealed + kTurnMs - t;
 }
 
 }  // namespace
@@ -579,12 +574,12 @@ int main() {
         ASSERT_FALSE(d.guest->command_delay().measured());
     } TEST_END();
 
-    TEST_CASE("N9.12 Command Delay Over A Link Of 40 ms Each Way: 40 + Seal Wait + 40 + One Turn Of Jitter Buffer, For Every Phase Of The 100 ms Turns") {
+    TEST_CASE("N9.12 Command Delay Over A Link Of 40 ms Each Way: 40 + Seal Wait + 40 + One Turn Of Jitter Buffer, For Every Phase Of The 50 ms Turns") {
         Duel d({40, 0});
         d.run_to(1000);                                                   // the runner is in its steady state
         ASSERT_TRUE(d.guest->runner().queued() <= 2);
-        // one command at every moment of the 100 ms turns (the phase is t mod 100; a command sent at phase 60 reaches the host exactly when it seals), 600 ms apart so that
-        // each one is applied before the next goes out
+        // one command at every moment of the 50 ms turns (the phase is t mod 50; a command sent at phase 10 reaches the host exactly when it seals), 600 ms apart so that
+        // each one is applied before the next goes out; twice round
         uint32_t lowest = 1000000;
         uint32_t highest = 0;
         for (uint32_t phase = 0; phase < 100; ++phase) {
@@ -604,12 +599,12 @@ int main() {
             lowest = std::min(lowest, measured);
             highest = std::max(highest, measured);
         }
-        ASSERT_TRUE(lowest >= 178 && lowest <= 190);                      // 40 + 40 + 100 and the smallest seal wait
-        ASSERT_TRUE(highest >= 270 && highest <= 282);                    // ... and the largest (almost a whole turn of waiting): 40 + 99 + 40 + 100
+        ASSERT_TRUE(lowest >= 128 && lowest <= 135);                      // 40 + 40 + 50 and the smallest seal wait
+        ASSERT_TRUE(highest >= 172 && highest <= 180);                    // ... and the largest (almost a whole turn of waiting): 40 + 49 + 40 + 50
         ASSERT_TRUE(d.guest->command_delay().measured());
     } TEST_END();
 
-    TEST_CASE("N9.13 Command Delay: The Mean Over Ten Commands Sent Every 130 ms Is The Mean Of The Model, About 230 ms On A 40 + 40 ms Link") {
+    TEST_CASE("N9.13 Command Delay: The Mean Over Ten Commands Sent Every 130 ms Is The Mean Of The Model, About 155 ms On A 40 + 40 ms Link") {
         Duel d({40, 0});
         d.run_to(1000);
         uint32_t sent = 0;
@@ -627,14 +622,14 @@ int main() {
         ASSERT_EQ(d.guest->command_delay().samples(), 10u);
         const uint32_t expected_mean = (sum_expected + 5u) / 10u;
         ASSERT_EQ(d.guest->command_delay().delay_ms(), expected_mean);
-        ASSERT_TRUE(d.guest->command_delay().delay_ms() >= 180 && d.guest->command_delay().delay_ms() <= 280);
+        ASSERT_TRUE(d.guest->command_delay().delay_ms() >= 130 && d.guest->command_delay().delay_ms() <= 180);
         ASSERT_EQ(d.guest->command_delay().pending(), 0u);
     } TEST_END();
 
-    TEST_CASE("N9.14 The Host's Own Commands: Delay Is The Wait For The Next Seal Plus One Turn Of Buffer (100 - 200 ms), Ping Is None; Commands Of The Other Seat Are Not Counted") {
+    TEST_CASE("N9.14 The Host's Own Commands: Delay Is The Wait For The Next Seal Plus One Turn Of Buffer (50 - 100 ms), Ping Is None; Commands Of The Other Seat Are Not Counted") {
         Duel d({40, 0});
         d.run_to(1000);
-        const uint32_t phases[] = {3, 0, 1, 99, 50};
+        const uint32_t phases[] = {3, 0, 1, 49, 25};
         for (size_t i = 0; i < sizeof(phases) / sizeof(phases[0]); ++i) {
             const uint32_t t = 1100 + 500u * static_cast<uint32_t>(i) + phases[i];
             d.run_to(t - 1);
@@ -730,9 +725,9 @@ int main() {
         ASSERT_EQ(d.guest->command_delay().samples(), CommandDelayMeter::kCommandsKept);
         ASSERT_TRUE(d.guest->ping().measured());
         ASSERT_TRUE(d.guest->ping().ping_ms() >= 80 && d.guest->ping().ping_ms() <= 140);        // 2 x 40 plus two draws of 0 .. 30
-        // the way there and back (80 - 140), the wait for the seal (0 - 99), one turn of buffer that the jitter of the first turns moves by up to 30 either way (70 - 130)
-        ASSERT_TRUE(d.guest->command_delay().delay_ms() >= 150 && d.guest->command_delay().delay_ms() <= 370);
-        ASSERT_FALSE(stalled);                                            // 30 ms of jitter is inside the buffer of one turn
+        // the way there and back (80 - 140), the wait for the seal (0 - 49), one turn of buffer that the jitter of the first turns moves by up to 30 either way (20 - 80)
+        ASSERT_TRUE(d.guest->command_delay().delay_ms() >= 100 && d.guest->command_delay().delay_ms() <= 280);
+        ASSERT_FALSE(stalled);                                            // 30 ms of jitter is inside the buffer of one turn (50 ms)
     } TEST_END();
 
     TEST_CASE("N9.18 The Room: A Guest Pings The Host Once A Second From The Moment It Has A Seat, And Measures The Round Trip (25 ms each way: 50 ms)") {
@@ -766,8 +761,9 @@ int main() {
         ASSERT_EQ(host.rtt_ms(1), 50u);
     } TEST_END();
 
-    TEST_CASE("N9.19 Waiting: The Count Of The Wait Is The Time Since The Last Tick, So The Message Goes When The Turns Come Again (a frozen window holds the host's turns up; it did not go)") {
-        // guest 2 is frozen from 2 s to 7 s: after 3 s of its acknowledgements missing the host stops sealing (30 turns), guest 1 gets no turns until guest 2 has caught up
+    TEST_CASE("N9.19 Waiting: The Count Of The Wait Is The Time Since The Tick That Was Due, So The Message Goes When The Turns Come Again (a frozen window holds the turns of a host WITH a seat up; it did not go)") {
+        // guest 2 is frozen from 2 s to 7 s: after 3 s of its acknowledgements missing the host (it has a seat: a game on the local network) stops sealing (60 turns), and
+        // guest 1 gets no turns until guest 2 has caught up
         Trio t;
         const uint32_t freeze_from = 2000;
         const uint32_t freeze_to = 7000;
@@ -787,19 +783,19 @@ int main() {
             if (resumed_at != 0 && now >= resumed_at + 300) worst_after_300 = std::max(worst_after_300, waited);
             if (now < freeze_from) seen_before = std::max(seen_before, waited);
         });
-        ASSERT_TRUE(seen_before < 150);                                   // before the freeze nothing waits (turns are due every 100 ms)
+        ASSERT_TRUE(seen_before < 100);                                   // before the freeze nothing waits (turns are due every 50 ms)
         ASSERT_TRUE(longest_wait >= 1000);                                // the wait was real: the message is right to show while it lasts ...
         ASSERT_TRUE(resumed_at != 0);                                     // ... and it ended: the guest ran turns again
         ASSERT_TRUE(resumed_at > freeze_from + 3000 && resumed_at < freeze_to + 3000);
         ASSERT_TRUE(worst_after_300 < 300);                               // ... and 300 ms after the turns flow again the count is low, and stays low (it grew for ever)
         ASSERT_TRUE(t.a->runner().stalled_ms() < 300);
         ASSERT_TRUE(t.b->runner().stalled_ms() < 300);                    // the frozen guest too: it has caught up and runs turn by turn
-        // and the two windows are at the same moment of the match again: the one that waited rebuilt its buffer, the one that was frozen ran its backlog down (it kept five turns
-        // standing in its queue for the rest of the match: half a second behind the other, which the clock of the match shows as 6:41 against 6:40)
+        // and the two windows are at the same moment of the match again: the one that waited rebuilt its buffer, the one that was frozen ran its backlog down (it once kept five
+        // turns standing in its queue for the rest of the match: half a second behind the other, which the clock of the match shows as 6:41 against 6:40)
         const uint32_t turn_a = t.a->runner().next_turn_to_execute();
         const uint32_t turn_b = t.b->runner().next_turn_to_execute();
-        ASSERT_TRUE((turn_a > turn_b ? turn_a - turn_b : turn_b - turn_a) <= 2);
-        ASSERT_TRUE(t.b->runner().queued() <= 3);
+        ASSERT_TRUE((turn_a > turn_b ? turn_a - turn_b : turn_b - turn_a) <= 5);
+        ASSERT_TRUE(t.b->runner().queued() <= 5);                         // (the standing queue of a buffer of one turn is two; the frozen window may hold a larger one for a stall's sake)
     } TEST_END();
 
     TEST_CASE("N9.20 Waiting: A Hitch Of One Second In One Window Does Not Make The Other One Wait (the host seals for three seconds before it waits), And Nobody Waits Afterwards") {
@@ -807,11 +803,11 @@ int main() {
         auto b_frozen = [&](uint32_t now) { return now >= 2000 && now < 3000; };
         uint32_t worst_a = 0;
         t.run_to(12000, b_frozen, [&](uint32_t) { worst_a = std::max(worst_a, t.a->runner().stalled_ms()); });
-        ASSERT_TRUE(worst_a < 150);                                       // guest 1 never waited: the host kept sealing
+        ASSERT_TRUE(worst_a < 100);                                       // guest 1 never waited: the host kept sealing
         ASSERT_TRUE(t.b->runner().stalled_ms() < 300);
     } TEST_END();
 
-    TEST_CASE("N9.21 Waiting: The Runner Counts From The Last Tick, Not From The Accumulator Of Unspent Time (a one second gap, then turns every 100 ms with jitter)") {
+    TEST_CASE("N9.21 Waiting: The Runner Counts From The Tick That Was Due, Not From The Accumulator Of Unspent Time (a one second gap, then turns every 50 ms with jitter)") {
         sim::SimulationEngine sim;
         Trio::build(sim);
         LockstepRunner runner(sim);
@@ -824,27 +820,26 @@ int main() {
         ASSERT_EQ(runner.stalled_ms(), 0u);                               // not started: nothing to wait for
         ASSERT_TRUE(runner.on_turn(turn()));
         ASSERT_TRUE(runner.on_turn(turn()));
-        runner.update(0);                                                 // starts, runs the first tick
+        runner.update(0);                                                 // starts, runs the first turn
         ASSERT_EQ(runner.stalled_ms(), 0u);
-        runner.update(50);                                                // the second tick of turn 0
-        runner.update(100);                                               // turn 1
+        runner.update(50);                                                // turn 1
         ASSERT_FALSE(runner.stalled());                                   // just ran: nothing is due that is missing
         uint32_t t = 0;                                                   // 16 ms frames from here
         for (; t < 1000; t += 16) runner.update(16);                       // no turn for a second: the runner waits
         ASSERT_TRUE(runner.stalled());
-        ASSERT_TRUE(runner.stalled_ms() >= 990 && runner.stalled_ms() <= 1010);   // (the count went on while the runner collected its buffer again after 300 ms)
-        // turns arrive again, one every 100 ms with a little jitter. The runner waits for the second one (it rebuilds its jitter buffer), then runs: from then on a turn is
-        // queued whenever the next one is due, so nothing waits any more
+        ASSERT_TRUE(runner.stalled_ms() >= 900 && runner.stalled_ms() <= 1010);   // (from the tick that was due, 50 ms after the last one; the count went on while the buffer was collected again)
+        // turns arrive again, one every 50 ms with a little jitter. The runner waits for the third one (the stall grew its buffer to two turns and it collects them again), then
+        // runs: from then on a turn is queued whenever the next one is due, so nothing waits any more
         uint32_t jitter = 0;
         uint32_t due = t;
         uint32_t worst = 0;
         uint32_t frames_running = 0;
-        for (uint32_t i = 0; i < 200; ++i) {
-            due += 100;
+        for (uint32_t i = 0; i < 400; ++i) {
+            due += kTurnMs;
             jitter = (jitter * 7 + 11) % 21;                              // 0 .. 20 ms
             for (; t < due + jitter; t += 16) {
                 runner.update(16);
-                if (i >= 3) {
+                if (i >= 8) {
                     worst = std::max(worst, runner.stalled_ms());
                     frames_running += runner.stalled() ? 0u : 1u;
                 }
@@ -854,113 +849,132 @@ int main() {
         ASSERT_EQ(worst, 0u);                                             // the buffer absorbs the jitter: there is always a turn when the next one is due
         ASSERT_TRUE(frames_running > 1000);
         ASSERT_FALSE(runner.stalled_ms() >= 1000);
-        ASSERT_TRUE(runner.queued() >= 1 && runner.queued() <= 2);        // one turn of buffer
+        ASSERT_TRUE(runner.queued() >= 1 && runner.queued() <= 4);        // the buffer: one turn on a steady link, two after the stall, and the turn that runs
     } TEST_END();
 
-    TEST_CASE("N9.22 Runner: After A Stall That Used Up The Buffer It Is Rebuilt (the host stops for 2 s and goes on at the normal rate): One Turn Of Buffer, Ticks 50 ms Apart; Before: No Buffer, Ticks In Pairs") {
+    TEST_CASE("N9.22 Runner: After A Stall That Used Up The Buffer It Is Rebuilt (the host stops for 2 s and goes on at the normal rate): One Turn Again, Ticks 50 ms Apart, Never In Pairs, And Nothing Stays Behind (a stall that long grows no buffer and the lateness it caused is forgotten)") {
         Rig rig;
         rig.host_pauses = {{10000, 12000}};
         rig.jitter = 5;
-        const Rig::Outcome now = rig.run();
-        rig.runner = old_runner();
-        const Rig::Outcome before = rig.run();
-        // from 14 s on (the nominal delay is the link, 40 ms, and one turn of buffer, 100 ms, and up to two frames of rounding)
-        ASSERT_TRUE(now.lag_from(14000) >= 40 + 100 - 20 && now.lag_from(14000) <= 40 + 100 + 40);
-        ASSERT_EQ(now.back_to_back_from(14000), 0.0);                    // a tick every 50 ms, no two together
-        ASSERT_TRUE(now.longest_gap_from(14000) <= 67);
-        // before: the runner ran the turns the moment they arrived, both ticks at once, with no buffer to speak of
-        ASSERT_TRUE(before.lag_from(14000) < 40 + 30);
-        ASSERT_TRUE(before.back_to_back_from(14000) > 0.4);
-        ASSERT_TRUE(before.longest_gap_from(14000) >= 100);
+        rig.duration = 60000;
+        const Rig::Outcome out = rig.run();
+        // from 14 s on: the runner collected its turns again (before the rebuild it ran each turn the moment it came, with no buffer at all, and the ticks of a turn together:
+        // ticks in pairs, every bit of jitter a stall). The stall of 2 s grew no buffer (no buffer bridges it) and the turns that were read before it were forgotten (they
+        // describe a link that is gone: the host's clock slid by two seconds), so the delay is the link's and one turn, at once and for good
+        ASSERT_TRUE(out.lag_from(14000) >= 40 + 50 - 20 && out.lag_from(14000) <= 40 + 50 + 40);
+        ASSERT_EQ(out.back_to_back_from(14000), 0.0);                    // no two ticks together
+        ASSERT_TRUE(out.longest_gap_from(14000) <= 67);
+        ASSERT_EQ(out.gaps_over(70, 14000), 0u);
+        ASSERT_TRUE(out.lag_from(35000) >= 40 + 50 - 20 && out.lag_from(35000) <= 40 + 50 + 40);
     } TEST_END();
 
-    TEST_CASE("N9.23 Runner: With Jitter After That Stall The Old Runner Stood Still For A Hundred Milliseconds Again And Again; The New One Does Not Once") {
+    TEST_CASE("N9.23 Runner: With Jitter After That Stall The Game Never Stands Still For A Hundred Milliseconds Again (it used to, again and again, for want of a buffer)") {
         Rig rig;
         rig.host_pauses = {{10000, 12000}};
         rig.jitter = 60;
-        const Rig::Outcome now = rig.run();
-        rig.runner = old_runner();
-        const Rig::Outcome before = rig.run();
-        ASSERT_EQ(now.gaps_over(100, 14000), 0u);
-        ASSERT_TRUE(before.gaps_over(100, 14000) > 50);                   // (no buffer: every other turn that came more than 100 ms after the one before stopped the game)
-        ASSERT_TRUE(now.lag_from(14000) <= 40 + 60 + 100 + 40);
+        const Rig::Outcome out = rig.run();
+        ASSERT_EQ(out.gaps_over(100, 14000), 0u);
+        ASSERT_TRUE(out.lag_from(14000) <= 40 + 60 + 150 + 40);          // the link, its jitter and at most three turns of buffer
     } TEST_END();
 
-    TEST_CASE("N9.24 Runner: The Turns Of A Link That Froze For A Second Come In A Bunch; The Queue That Is Left Standing Is Run Down (before: five turns, half a second, for the rest of the match)") {
+    TEST_CASE("N9.24 Runner: The Turns Of A Link That Froze For A Second Come In A Bunch; The Queue That Is Left Standing Is Run Down At Up To 4x (it kept five turns for the rest of the match), And The Buffer Shrinks Back Slowly") {
         Rig rig;
         rig.freezes = {{10000, 11000}};
         rig.jitter = 5;
-        const Rig::Outcome now = rig.run();
-        rig.runner = old_runner();
-        const Rig::Outcome before = rig.run();
-        // the bunch is run at double speed down to the buffer; what stays is the buffer (100 ms) and a turn at the most
-        ASSERT_TRUE(now.lag_from(20000) <= 40 + 100 + 100 + 40);
-        ASSERT_TRUE(now.queued.back() <= 2);
-        ASSERT_TRUE(before.lag_from(20000) >= 40 + 100 + 300);            // five turns queued: 400 ms more than the buffer
-        ASSERT_TRUE(before.queued.back() >= 4);
-        // the bunch is gone within a few seconds of the thaw, not only in the end
-        ASSERT_TRUE(now.lag_from(15000) <= 40 + 100 + 100 + 60);
+        rig.duration = 60000;
+        const Rig::Outcome out = rig.run();
+        // the bunch of twenty turns is run down: within two seconds of the thaw what stands in the queue is the buffer (the stall and the late bunch asked for the largest: four
+        // turns and the one that runs), not the bunch
+        ASSERT_TRUE(out.lag_from(13000) <= 40 + 200 + 50 + 40 && out.lag_from(13000) >= 40 + 50 - 20);
+        ASSERT_TRUE(out.queued[out.queued.size() * 14 / 60] <= 6);       // (the queue at 14 s)
+        // and the extra buffer goes, a turn every ten seconds: from 45 s on the link's own delay and one turn
+        ASSERT_TRUE(out.lag_from(45000) <= 40 + 50 + 40);
+        ASSERT_TRUE(out.queued.back() <= 2);
+        ASSERT_EQ(out.gaps_over(70, 13000), 0u);
     } TEST_END();
 
-    TEST_CASE("N9.25 Runner: A Hitch Of 400 ms Of The Frame Loop: With The Real Frame Time Nothing Is Left Over; With The 100 ms The Application Used To Hand Over, The Standing Queue Is Run Down; Before, 300 ms Stayed For Good") {
+    TEST_CASE("N9.25 Runner: A Hitch Of 400 ms Of The Frame Loop Leaves Nothing Behind: The Frame That Follows It Runs Its Time's Ticks, The Buffer Stays, Nobody Waits, And The Hitch Is Not Mistaken For A Slow Link") {
         Rig rig;
         rig.hitches = {{10000, 400}, {20000, 400}, {30000, 300}};
         rig.jitter = 5;
-        rig.max_dt = 1000;                                                // the application now: a frame is at most a second of the network's time
-        const Rig::Outcome real_time = rig.run();
-        rig.max_dt = 100;                                                 // the clamp of the local simulation
-        const Rig::Outcome clamped = rig.run();
-        rig.runner = old_runner();
-        const Rig::Outcome before = rig.run();                            // the application and the runner as they were
-        ASSERT_TRUE(real_time.lag_from(33000) <= 40 + 100 + 40);          // the runner pays back 400 ms at once: the hitches left no queue
-        ASSERT_TRUE(real_time.queued.back() <= 2);
-        ASSERT_TRUE(clamped.lag_from(36000) <= 40 + 100 + 100 + 40);      // with the clamp the queue stood two seconds before it was run down, then went
-        ASSERT_TRUE(before.lag_from(36000) >= 40 + 100 + 250);            // and before it stayed: the three hitches left four or five turns
+        rig.max_dt = 1000;                                                // the application: a frame hands the network its real time, up to a second
+        const Rig::Outcome out = rig.run();
+        ASSERT_TRUE(out.lag_from(33000) <= 40 + 50 + 40);                 // what the hitches left once: a queue of four or five turns (and, until it was run down, a buffer that stayed too large)
+        ASSERT_TRUE(out.queued.back() <= 2);
+        ASSERT_TRUE(out.lag_from(12000) <= 40 + 50 + 60);                 // a second and a half after the first hitch it is already back at one turn
+        ASSERT_EQ(out.gaps_over(100, 12000), 2u);                         // the hitches at 20 s and 30 s themselves (the frame loop stood still), nothing else: no wait, no stall
+        ASSERT_TRUE(out.longest_gap_from(12000) <= 400 + 70);
+        // the buffer rule did not take the hitches for lateness of the link: it is at its smallest at the end
+        sim::SimulationEngine sim;
+        Trio::build(sim);
+        LockstepRunner runner(sim);
+        uint32_t next = 0;
+        uint32_t now = 0;
+        for (; now < 5000; now += 17) {                                   // 5 s of a steady link, then a frame that stood for 400 ms
+            while (static_cast<uint64_t>(next) * kTurnMs + 40 <= now) {
+                TurnMsg m;
+                m.turn = next++;
+                runner.on_turn(m);
+            }
+            runner.update(17);
+        }
+        ASSERT_EQ(runner.buffer_turns(), 1u);
+        now += 400;
+        while (static_cast<uint64_t>(next) * kTurnMs + 40 <= now) {
+            TurnMsg m;
+            m.turn = next++;
+            runner.on_turn(m);
+        }
+        runner.update(400);                                               // eight turns were waiting: their read time says how long the window slept, not how late the link was
+        ASSERT_EQ(runner.buffer_turns(), 1u);
+        ASSERT_FALSE(runner.rebuilding());
+        ASSERT_TRUE(runner.queued() <= 3);                                // what is left is the buffer (and the turn that is just due)
     } TEST_END();
 
-    TEST_CASE("N9.26 Runner: A Window That Is Not Drawn For 5 s (one frame a second, as a browser does for a hidden tab) Catches Up When It Is Shown And Keeps No Extra Delay") {
+    TEST_CASE("N9.26 Runner: A Window That Is Not Drawn For 5 s (one frame a second, as a browser does for a hidden tab) Keeps Up With The Match While It Is Hidden, And Keeps No Extra Delay When It Is Shown") {
         Rig rig;
         rig.hidden = {{10000, 15000}};
         rig.jitter = 5;
-        const Rig::Outcome now = rig.run();
-        rig.runner = old_runner();
-        rig.max_dt = 100;
-        const Rig::Outcome before = rig.run();
-        ASSERT_TRUE(now.lag_from(25000) <= 40 + 100 + 100 + 40);
-        ASSERT_TRUE(before.lag_from(25000) >= 40 + 100 + 350);
-        ASSERT_TRUE(now.queued.back() <= 2);
+        const Rig::Outcome out = rig.run();
+        size_t ticks_hidden = 0;                                          // the game of the hidden window ran in real time: 100 ticks in 5 s (a frame of a second runs a second's ticks)
+        for (const uint32_t at : out.ticks) ticks_hidden += (at >= 11000 && at < 15000) ? 1 : 0;
+        ASSERT_TRUE(ticks_hidden >= 4 * 20 - 21 && ticks_hidden <= 4 * 20 + 21);
+        ASSERT_TRUE(out.lag_from(25000) <= 40 + 50 + 40);
+        ASSERT_TRUE(out.queued.back() <= 2);
     } TEST_END();
 
-    TEST_CASE("N9.27 Runner: On A Link Without A Stall Or A Standing Queue (clean, jitter up to 120 ms) The New Runner Does Exactly What The Old One Did; With Spikes It Never Adds Delay") {
+    TEST_CASE("N9.27 Runner: On Links Of Every Kind The Buffer Is As Small As The Link Allows: One Turn On A Steady Link, More Where The Jitter Needs It, And Once It Has Learned The Link The Game Does Not Stand Still For 100 ms; A Spike Is A Stall Of Its Own Length At The Most") {
         for (const uint32_t jitter : {0u, 20u, 60u, 120u}) {
             for (uint32_t seed = 1; seed <= 3; ++seed) {
                 Rig rig;
                 rig.jitter = jitter;
                 rig.seed = seed;
-                const Rig::Outcome now = rig.run();
-                rig.runner = old_runner();
-                const Rig::Outcome before = rig.run();
-                ASSERT_TRUE(now.ticks == before.ticks);                   // every tick at the same millisecond: nothing was rebuilt, nothing was run down
-                ASSERT_TRUE(now.exec == before.exec);
+                rig.duration = 40000;
+                const Rig::Outcome out = rig.run();
+                ASSERT_EQ(out.gaps_over(100, 15000), 0u);                // learned: no more stops
+                ASSERT_TRUE(out.queued.back() <= 5);
+                if (jitter == 0) {
+                    ASSERT_TRUE(out.lag_from(5000) >= 40 + 50 - 10 && out.lag_from(5000) <= 40 + 50 + 30);    // steady: the link and one turn
+                    ASSERT_EQ(out.gaps_over(60, 3000), 0u);
+                } else {
+                    ASSERT_TRUE(out.lag_from(15000) <= 40 + jitter + 200 + 40);                               // never more than the jitter and four turns
+                }
             }
         }
-        // a link that holds a turn up for 300 ms now and then (a lost packet: head-of-line blocking): the standing queue that the old runner kept after a bunch of turns is
-        // run down by the new one, and the delay does not grow; what the old runner's accidental buffer hid, a spike, the new one shows as a stall of its own length
+        // a link that holds a turn up for 300 ms now and then (a lost packet: head-of-line blocking): the game stops for what the spike lasts beyond the buffer, no longer
         for (const uint32_t seed : {1u, 2u, 3u, 4u}) {
             Rig rig;
             rig.jitter = 20;
-            rig.spike_every = 70;
+            rig.spike_every = 140;
             rig.spike_ms = 300;
             rig.seed = seed;
-            const Rig::Outcome now = rig.run();
-            rig.runner = old_runner();
-            const Rig::Outcome before = rig.run();
-            ASSERT_TRUE(now.lag_from(10000) <= before.lag_from(10000) + 30.0);
-            ASSERT_TRUE(now.longest_gap_from(10000) <= 300 + 70);         // a spike of 300 ms stops the game for what it lasts beyond the buffer, and the rebuild adds a turn
+            const Rig::Outcome out = rig.run();
+            ASSERT_TRUE(out.longest_gap_from(10000) <= 300 + 70);
+            ASSERT_TRUE(out.lag_from(10000) <= 40 + 20 + 200 + 60);
         }
     } TEST_END();
 
-    TEST_CASE("N9.28 Waiting: A Window That Is Hardly Drawn (one frame in 0.75 s) Keeps Up With The Match, So The Others' Games Do Not Slow Down To Its Speed (the host does not seal more than 30 turns ahead of the slowest)") {
+    TEST_CASE("N9.28 Waiting: A Window That Is Hardly Drawn (one frame in 0.75 s) Keeps Up With The Match, So The Others' Games Do Not Slow Down To Its Speed (a host with a seat does not seal more than 60 turns ahead of the slowest)") {
         Trio t;
         // guest 2 draws one frame every 750 ms from 5 s to 25 s (a window in the background); every frame hands it the real time since the one before
         auto b_slow = [](uint32_t now) { return now >= 5000 && now < 25000 && now % 750 != 0; };
@@ -972,11 +986,11 @@ int main() {
             if (now == 25000) a_at_25 = t.a->runner().next_turn_to_execute();
             if (now >= 5000 && now < 25000) longest_wait_a = std::max(longest_wait_a, t.a->runner().stalled_ms());
         });
-        ASSERT_TRUE(a_at_25 - a_at_15 >= 95);                             // the other game ran at (almost) full speed: about 100 turns in 10 s (before: about 45)
+        ASSERT_TRUE(a_at_25 - a_at_15 >= 195);                            // the other game ran at (almost) full speed: about 200 turns in 10 s (before: about 90)
         ASSERT_TRUE(longest_wait_a < 400);                                // and never stood still for long
         const uint32_t turn_a = t.a->runner().next_turn_to_execute();
         const uint32_t turn_b = t.b->runner().next_turn_to_execute();
-        ASSERT_TRUE((turn_a > turn_b ? turn_a - turn_b : turn_b - turn_a) <= 3);       // 5 s after it is drawn normally again, the window is back in step
+        ASSERT_TRUE((turn_a > turn_b ? turn_a - turn_b : turn_b - turn_a) <= 6);       // 5 s after it is drawn normally again, the window is back in step
     } TEST_END();
 
     std::cout << "\n=======================================================\n Total Test Cases: " << g_test_count << "\n Total Assertions: " << g_assert_count

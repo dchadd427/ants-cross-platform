@@ -845,7 +845,7 @@ int main() {
             for (uint8_t p = 1; p < 4; ++p) clients[p]->update(now);
         }
         ASSERT_TRUE(host.desyncs().empty());
-        ASSERT_TRUE(host.turns_sealed() > 250);
+        ASSERT_TRUE(host.turns_sealed() > 500);                              // (turns of 50 ms: the 250 of 100 ms that this stood for, twice)
         for (int i = 1; i < 4; ++i) ASSERT_TRUE(sims[static_cast<size_t>(i)]->state_hash() == sims[0]->state_hash());
     } TEST_END();
 

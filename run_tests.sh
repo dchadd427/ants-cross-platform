@@ -178,6 +178,7 @@ MAP_SWEEP_STATUS=0
 BOT_ARENA_STATUS=0
 AI_WORKER_STATUS=0
 LATENCY_STATUS=0
+JITTER_STATUS=0
 SERVER_STATUS=0
 AI_STATUS=0
 SERVER_E2E_STATUS=0
@@ -414,6 +415,13 @@ if [ "$RUN_SIM" -eq 1 ]; then
     echo -e "${BOLD}${BLUE}======================================================================${RESET}"
     "./$BUILD_DIR/tests/test_net/test_latency"
     LATENCY_STATUS=$?
+
+    echo ""
+    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
+    echo -e "${BOLD}${BLUE}>>> 2.24 RUNNING JITTER BUFFER SUITE (the rule, the runner's speed, stalls, hitches, hidden windows)...${RESET}"
+    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
+    "./$BUILD_DIR/tests/test_net/test_jitter"
+    JITTER_STATUS=$?
 fi
 
 # 5. Execute Application Integration Tests
@@ -738,6 +746,13 @@ if [ "$RUN_SIM" -eq 1 ]; then
         echo -e " 2.23 Ping, Delay, Waiting (test_latency):           ${GREEN}PASSED${RESET}"
     else
         echo -e " 2.23 Ping, Delay, Waiting (test_latency):           ${RED}FAILED (exit code ${LATENCY_STATUS})${RESET}"
+        TOTAL_FAILED=$((TOTAL_FAILED + 1))
+    fi
+
+    if [ "$JITTER_STATUS" -eq 0 ]; then
+        echo -e " 2.24 Jitter Buffer (test_jitter):                   ${GREEN}PASSED${RESET}"
+    else
+        echo -e " 2.24 Jitter Buffer (test_jitter):                   ${RED}FAILED (exit code ${JITTER_STATUS})${RESET}"
         TOTAL_FAILED=$((TOTAL_FAILED + 1))
     fi
 fi

@@ -12,9 +12,10 @@ and broadcasts the results (the game is not lock-step). Its lobby flow, texts an
 ## The remake's design
 
 * **Sync model: deterministic lock-step of player commands** (the Age of Empires / StarCraft / Warcraft III lineage). Every machine simulates everything with the same shared PRNG; only intent crosses the wire.
-  A turn is 2 ticks (100 ms) and commands are applied two turns after they were given (the input delay adapts to the round trip, capped); the local player gets immediate click feedback (voice, marker,
-  pedestal flash) from a prediction on its own state. The commands of a turn are applied in canonical order (by issuer, stable). Every 20 ticks every peer hashes the gameplay state; a mismatch freezes the
-  match and dumps the per-subsystem hashes.
+  A turn is one tick (50 ms: protocol 8, unreleased, after v0.0.91; before it, two ticks of 100 ms) and a command is applied in the first turn that the host seals after the command reaches it; every
+  machine runs a turn after a jitter buffer of one to four turns (50 - 200 ms, one on a steady link, see "What the player feels"), so a click reaches its effect about a round trip + 25 ms + 50 ms later; the local
+  player gets immediate click feedback (voice, marker, pedestal flash) from a prediction on its own state. The commands of a turn are applied in canonical order (by issuer, stable). Every 20 ticks (every 20 turns,
+  one second) every peer hashes the gameplay state; a mismatch freezes the match and dumps the per-subsystem hashes.
 * **Commands** (`include/ants_sim/command.hpp`, milestone 1): `GroupMove`, `GroupSpecial`, `GroupAttack`, `Stop`, `Hatch`, `AllianceInvite`, `AllianceAccept`, `AllianceDeny`, `AllianceWithdraw`, `AllianceBreak`
   (`Leave` and the drop-out stamped by the sequencer come with milestone 3). `SimulationEngine::apply_command` is the only way a player changes the simulation; the HUD sends its commands through a
   `CommandSink` (`HUD::set_command_sink`; null means the engine itself).
@@ -47,9 +48,9 @@ already runs the whole simulation and holds the same state. What moves is sealin
    `Hello.listen_port`; the host passes what it saw (the guest's address and that port) to everybody in `Start.endpoints`. An inbound link starts with `PeerHello{seat}` and is accepted only from a lower seat of the
    roster, once per seat, and only from the address the host reported for that seat; everything else is closed. The links carry a ping every second (`peer_silence_ms` = 5 s tells "alive") and, when the host goes,
    the election. The sessions only need a `Connection*` per seat (`ClientSession::set_peer`), so any other transport would plug in the same way (the WebRTC mesh that was planned here was dropped, see milestone 5).
-2. **Turn log.** Every machine keeps the last 300 turns (30 s) it received (`LockstepRunner::logged_turn`; the host those it sealed), commands included.
+2. **Turn log.** Every machine keeps the last 600 turns (30 s) it received (`LockstepRunner::logged_turn`; the host those it sealed), commands included.
 3. **Trigger.** The host link is closed (everything the host sent before is read first) or the host has been silent for `host_silence_ms` (10 s; the host answers a guest's ping every second and seals a turn
-   every 100 ms, so silence means gone). A guest that receives a proposal while it has not noticed yet re-reads its host link first, and believes "the host is alive" only if it heard the host within
+   every 50 ms, so silence means gone). A guest that receives a proposal while it has not noticed yet re-reads its host link first, and believes "the host is alive" only if it heard the host within
    `host_alive_ms` (2 s). After `NetGame::freeze()` (the match is over) a leaving host is no reason to elect anybody.
 4. **Election** (bully algorithm with epochs; `Propose`, `Accept`, `Refuse`, `Resume`, `Request`, `PeerHello`). The candidate is the lowest seat that a survivor still sees alive on its peer links; it proposes
    `epoch + 1` to every live peer. A peer accepts the proposal of the lowest seat it sees alive and only one candidate per election (a second one is refused with the name of the first); a candidate that
@@ -80,21 +81,22 @@ driven from the game's main loop with a monotonic millisecond clock: no threads,
 
 * **Messages** (`protocol.hpp`, one datagram each: `u8 type`, payload, little endian; every decoder checks every length, count and range and rejects trailing bytes): `Hello` (version, name), `Welcome`
   (slot), `Reject`, `Command` (client -> host), `Turn` (turn number and the sealed commands in canonical order), `TurnAck`, `Hash` (state hash after a turn, all seven parts), `Desync`, `Chat` (100 printable
-  characters), `Ping` / `Pong`. Messages are limited to 64 KB and turns to 512 commands.
+  characters), `Ping` / `Pong`, and since protocol 8 `Lag` (a dedicated server tells a room that a player is far behind). Messages are limited to 64 KB and turns to 512 commands.
 * **Sequencer** (`sequencer.hpp`, host only): stamps the issuer from the connection (a client cannot speak for another player), refuses inactive slots and floods (64 commands per peer and turn), seals a
-  turn every 100 ms with the queued commands in canonical order (by issuer, each issuer's commands in submission order), compares every peer's hash report with the host's own and names the peer and the
-  subsystem that differs, and stops sealing while a peer's acknowledgement is more than 30 turns (3 s) behind (flow control; `laggard()` says who).
-* **Runner** (`lockstep.hpp`, every machine): queues the turns (in order, no gaps), waits for a jitter buffer of two turns (so that a turn runs one turn, 100 ms, after it arrived), then executes a tick every 50 ms
-  of real time: a turn's commands are applied before its first tick, its second tick follows 50 ms later; it stalls at a turn boundary when the next turn has not arrived and runs at double speed while it is
-  far behind. Every 10th turn it returns the state hash. What it does after a stall, a bunch of turns or a slow frame is in "What the player feels" below.
+  turn every 50 ms with the queued commands in canonical order (by issuer, each issuer's commands in submission order), compares every peer's hash report with the host's own and names the peer and the
+  subsystem that differs, and, for a host with a seat, stops sealing while a peer's acknowledgement is more than 60 turns (3 s) behind (flow control; `laggard()` says who). A host without a seat never stops: "Who waits for whom" below.
+* **Runner** (`lockstep.hpp`, every machine): queues the turns (in order, no gaps), waits until the jitter buffer's turns are in hand (`target + 1` queued: a turn runs `target` turns after it arrived; `jitter.hpp` decides
+  the target, 1 to 4), then runs a turn, one tick, every 50 ms of real time; it waits at a missing turn without owing the wait, collects its buffer again after a stall, and runs faster, up to four times, while more is queued
+  than the buffer asks for. Every 20th turn it returns the state hash. What it does after a stall, a bunch of turns or a slow frame is in "What the player feels" below.
 * **Sessions** (`session.hpp`): `HostSession` (sequencer, broadcast of turns, its own runner, relay of chat, violation counting: a client that sends garbage, host-only messages, oversized messages or floods is
-  thrown out after 8 violations, dropping a client reports it once through `on_player_left`, a desync or `freeze()` stops sealing) and `ClientSession` (sends commands, executes turns, acknowledges, reports
-  hashes, pings for the round trip, sees a `Desync`).
-* **Tests** (`tests/test_net/test_lockstep.cpp`, 42 tests): every message round-trips and rejects any missing or extra byte, out-of-range fields, 400000 random and mutated messages; the loopback link is
+  thrown out after 8 violations, dropping a client reports it once through `on_player_left`, a desync or `freeze()` stops sealing; for a host without a seat the lag policy) and `ClientSession` (sends commands, executes turns, acknowledges
+  (once per frame, for the last turn it ran), reports hashes, pings for the round trip, sees a `Desync` and the server's `Lag` notices).
+* **Tests** (`tests/test_net/test_lockstep.cpp`, 48 tests): every message round-trips and rejects any missing or extra byte, out-of-range fields, 400000 random and mutated messages; the loopback link is
   ordered and respects latency; sequencer stamping, canonical order, flood limit, flow control, hash comparison; the runner's buffering, tick cadence, stall and catch-up; whole matches of a host and three
   clients over 60 ms links with jitter for 90 s and over 40 / 150 / 300 ms links, all bit-identical at the end, ticks steady at 20 Hz; a client cannot issue commands as another player; a corrupted client is
-  named within a second with the differing subsystem and the match freezes; a frozen peer stalls the game after 3 s and it goes on when the peer catches up; a cut connection reports the drop-out once; a
-  hostile client is thrown out without anybody else noticing; chat is relayed with the sender stamped by the connection.
+  named within a second with the differing subsystem and the match freezes; a frozen peer stalls the game of a host with a seat after 3 s and it goes on when the peer catches up; a cut connection reports the drop-out once; a
+  hostile client is thrown out without anybody else noticing; chat is relayed with the sender stamped by the connection; a server's room that does not wait for a client that stops for 5 s, tells the others, lets it catch
+  up at up to 4x and ends with every state hash equal (S2.5), the numbers of the lag policy (S2.6) and a round trip of 200 - 400 ms that is never called lag (S2.7).
 
 ## The room and the start barrier (`lobby.hpp`, v0.0.45)
 
@@ -143,7 +145,7 @@ Firewalls: the host needs UDP and TCP 4001 open; macOS may ask once for permissi
 * **The setup screen is the room** (`MapSelectScreen::RoomView`): the host (and the local screen) show a row per seat (portrait in the seat's colour, name, thumb) and the map / fog / START controls; **a guest has the original's other
   screen** (`nh_start`: no Up / Down / START / Fog buttons, a fixed "Fog of War?" box that shows the host's choice, the host's map name, keys Q / X only), its own row first (then the host, then the others), LEAVE for everybody.
 * **The match**: the ticks come from the `LockstepRunner` (`Application::pump_network` runs `NetGame::update`, every tick calls `Application::post_tick`: HUD, events, audio, the end of the match); the frame is
-  drawn at the runner's sub-tick position; a machine that waits for a turn says so after one second (remake text) and a desync stops the match and says so. There is no pause and no team switching.
+  drawn at the runner's sub-tick position; a machine that waits for a turn says so after one second (remake text) and a desync stops the match and says so; which line the playfield shows is decided by `net_overlay_line` (`ants_app/net_overlay.hpp`: desync, election, waiting, "Catching up...", "Bob is lagging (12 s behind)", the match notice, in that order; tested in `test_hud_layout`). There is no pause and no team switching.
 * **The room's map**: no map is named in the network layer: a room's map name is empty until its host chooses one (the application chooses the first map of the setup screen's list at once), a Room message may carry the empty name, a Start may not, and START needs a chosen map (v0.0.64).
 * **Roster and drop-out**: `Start` carries the roster mask; a team without a player has no hill (`LevelData::for_roster` also removes its hill art for the renderer), no start markers and no eggs. A player that
   leaves, is thrown out or is silent for 60 s is dropped by a host-only `Drop` command in the next turn (`SimulationEngine::drop_player`, `FUN_0100d03b`), so every machine drops the team at the same tick.
@@ -166,7 +168,7 @@ Firewalls: the host needs UDP and TCP 4001 open; macOS may ask once for permissi
   (the original queues several). Since v0.0.47 the host may leave and the match goes on (see Host migration: `HostChanged` reports it, `HostLeft` only says that no
   new host could be agreed).
 
-## What the player feels: ping, delay and the jitter buffer (unreleased)
+## What the player feels: ping, delay, the jitter buffer and the laggard (unreleased, protocol 8)
 
 **The readout** (`latency.hpp`, `latency_corner.hpp`): next to the frame rate, in the room of a network game and during its match (never in a game of one machine), the corner shows `ping NN ms` and `delay NN ms`
 in the frame rate's style and size (a dash while nothing is measured). On the setup and results screens they stand in the corner row to the left of the version; in a match the bottom row of the screen holds the
@@ -179,61 +181,161 @@ score boxes, so they stand on two lines above the row, right aligned with the fr
 * **delay** is what the player feels of a click: the real time from the moment one of the player's own commands is sent (a guest: written to the link; the host: handed to the sequencer) to the moment the tick that
   applies it runs on this machine, the mean over the last ten commands. A command is found again in the turn by its content and its issuer (the host keeps one player's commands in the order they were sent, so the
   oldest sent command of that content is the one; a command that the host refused or that a host change lost leaves the list when a later command of the player is applied, or after 20 s). It is the sum of
-  everything between the click and its effect: the way to the host, the wait for the next 100 ms turn to be sealed (0 - 100 ms, 50 on average), the way back and the jitter buffer.
+  everything between the click and its effect: the way to the host, the wait for the next 50 ms turn to be sealed (0 - 50 ms, 25 on average), the way back and the jitter buffer.
 * Both are measured with the machine's frame clock, so each end is rounded to the frame it happens in (16.7 ms at 60 frames a second): the ping includes the frame in which the answer is read; the delay the frame in
   which the command was sent (input is handled at the start of a frame, before that frame's clock is taken: a command is stamped with the clock of the next frame) and the frame in which its tick runs. That is what
   the player's screen can show, so that is what is measured.
 
-**Where the delay comes from** (measured with the real client, headless but paced at the display's 60 frames a second wanted, 50 achieved by the software renderer; `ants_server` in Docker and the live beta
-server; a TCP relay on the client's machine logged every message when it was read from the socket):
+**Where the delay comes from, and what turns of 50 ms and an adaptive buffer made of it** (the real client, headless but paced at the display's 60 frames a second wanted, 50 achieved by the software renderer; `ants_server`
+in Docker; a TCP relay on the client's machine logged every message when it was read from the socket; "before" is v0.0.91, turns of 100 ms and the buffer of two turns, which is what the game had):
 
-| | local Docker stack | live server (beta), round trip 60 ms |
+| | Docker stack on this machine (round trip 20 ms) | round trip 60 ms, steady (a relay adds 20 ms each way) |
 |---|---|---|
-| round trip (relay - server - relay) | 2.4 ms | 59.7 ms (sd 3.7) |
-| wait for the next seal | 46 - 54 ms (uniform 0 - 100) | 52 ms |
-| jitter buffer, and the frames that poll and run | 122 ms (100 + 22) | 112 - 130 ms |
-| **delay, mean** (the application's own number agrees within 1 ms) | **171 - 182 ms** (min 116, max 227) | **224 - 242 ms** (min 166, max 302) |
-| turn inter-arrival at the relay | mean 100.0, sd 1.2, 96.7 - 103.5 ms | mean 100.0, sd 1.0 - 1.1, 90.4 - 108.5 ms, none above 120 ms in 1,322 turns |
-| turn inter-arrival at the client's poll | sd 7 - 10 ms: the client's own frame quantization | the same |
+| **delay before** (100 ms turns, buffer one turn of 100 ms) | **188 ms** (168 - 288) | **229 - 239 ms** (the live beta server, round trip 60 ms, gave 224 - 242 before the change) |
+| wait for the next seal | 0 - 100 ms, 50 on average | 0 - 100 ms, 50 |
+| **delay now** (50 ms turns, buffer one turn of 50 ms) | **88 - 93 ms** (60 - 125, sd 5 as the application shows it) | **130 - 137 ms** (98 - 170) |
+| wait for the next seal now | 0 - 50 ms, 25 on average | 25.6 ms (sd 14) |
+| turn at the relay to the tick that applies it now | | 82 - 88 ms (the buffer, 50 ms, and the frames that poll and run) |
+| turns that ran within 20 ms of arriving (no buffer) | 0.1 % | 0 % |
 
-So a click takes about **round trip + 50 + 100 + 20 ms**: 230 - 240 ms at 60 ms on a steady link, 170 - 180 ms on the same machine. The server's seal timer is accurate to 3 ms (`ants_server` sleeps 2 ms per
-pass and keeps a schedule of its own, `next_seal_ms += 100`), the path to beta had 1 ms of jitter, and TCP_NODELAY is set on every socket (`tcp.cpp`, `ws.cpp`): the only large terms are the round trip,
-the wait for the seal and the jitter buffer.
+So a click takes about **round trip + 25 + 50 + 10 - 20 ms**: 130 - 140 ms at 60 ms on a steady link (it was 224 - 242), 90 ms on the same machine (it was 188). Half of the 100 ms that went is the buffer (one turn
+of 50 ms instead of 100), a quarter the wait for the seal (a turn is half as long), the rest the frame loop, which the client cannot change (below).
 
-**The jitter buffer, and what used to go wrong with it** (`lockstep.hpp`). A turn runs one turn (100 ms) after it arrived: the runner starts when two turns are queued, and from then on a tick is due every 50 ms.
-Three things broke that state for good, and each is reproduced by a test that fails without the fix:
+**Turns of 50 ms: one tick per turn (protocol 8).** `kTurnMs` is 50 and `kTicksPerTurn` 1 (`protocol.hpp`); every number that stands for a time keeps that time, written as a time and turned into turns
+by `turns_for_ms` / `kTurnsPerSecond`, never as a bare count of turns:
+
+| what | before (turns of 100 ms) | now (50 ms) | the same time |
+|---|---|---|---|
+| a turn is sealed every | 100 ms | 50 ms | the clock of the sequencer (`next_seal_ms += kTurnMs`) |
+| ticks per turn, and per second | 2, 20 | 1, 20 | the simulation is untouched: every golden hash and every state hash suite is as it was |
+| a state hash every | 10 turns | 20 turns | 20 ticks, one second |
+| the turn log of a machine (host migration) | 300 turns | 600 turns | 30 s |
+| the flow control of a host with a seat (`max_lag_turns`) | 30 turns | 60 turns | 3 s |
+| the referee's hash of a turn is taken while the turn is at most | 64 turns old | 128 turns | 6.4 s |
+| seals a pass may catch up (a pass that came late) | 5 | 10 | 0.5 s |
+| the buffer on a steady link | one turn behind the turn that runs: 100 ms | one turn behind: 50 ms | the one number that is not kept: making it shorter is the point |
+| acknowledgements | one per turn | one per frame, for the last turn that ran | at most 20 a second |
+
+Protocol version 8 (7 is reserved for the room leader's START, which another change brings): the layout of every message but `Turn`'s contents is unchanged; the new message is `Lag` (type 24, `u8 seat`, `u32 behind_ms`). A client and a
+host of protocols 6 and 8 refuse each other at the `Hello` ("version mismatch"). The bots' arena (`src/ants_ai/arena.cpp`) is not part of the protocol: it models a room with its own constant (a turn boundary every 2 ticks,
+`kTurnTicks`), which is what the pinned baselines of `tests/test_ai/baselines.inc` were played with; it stays as it is, so the baselines and every bot result are byte for byte what they were (suite 2.22). A room
+now has half of that wait for a bot's commands: a bot in a room is a little faster than the arena's model of it, never slower.
+
+**The jitter buffer** (`jitter.hpp`, `lockstep.hpp`). A machine must run a turn at the same tick as every other, one tick per turn, so a turn that runs the moment it has arrived stalls whenever a later one comes late. Keeping a
+few turns in hand lets a late turn still be on time, and every turn in hand is 50 ms between a click and its effect: the buffer is as small as the link allows. The rule is a pure piece of logic (`JitterBuffer`: it is told when
+the host's turns were read and when the runner had none, it says how many turns to keep) and is tested without a clock or a simulation (`test_jitter`, suite 2.24, 17 tests):
+
+* **What it measures.** The turn numbered k is sealed at k * 50 ms of the host's clock, so `read time - k * 50` is the same number for every turn of a link that does not change (its value is the link's delay and the offset of the
+  two clocks, which do not matter); its variation is the **lateness** of a turn. The buffer is the 95th percentile of the lateness of the last 200 turns (10 s of play) plus a margin of 10 ms, rounded up to whole turns, between
+  one and four. The one turn in twenty that is later than that (a lost packet that the link resends: 300 ms late, a handful of turns at a time) is not worth a buffer that would cost every command 150 ms: it is a stall.
+  Frames that stood for more than 100 ms (a hitch, a window that is hardly drawn) read a bunch of turns at once: their read times say how long the machine slept, not how late the link was, and they are not counted; nor is
+  the first update of a runner (whatever waited for it to exist), nor anything before a second of turns has been read.
+* **Grow at once.** The lateness needs more turns than the buffer has: the buffer is that big at once. Or a tick was due and no turn was there, and the late turn came within 100 ms: one more turn at once, whatever the numbers
+  say. A later turn than that is not bridged by one more turn; the stall is its price, and the buffer stays as it was. A wait of 1.5 s or more (a link that froze, a host that stopped sealing) starts the measuring afresh:
+  what was seen before it describes a link that is gone.
+* **Shrink slowly.** One turn down after ten seconds without a stall (and without growth) during which the lateness would have needed fewer; the next step ten seconds later. A spike is not forgotten at once: the next may be near.
+* **The runner uses it** (`LockstepRunner`): it starts when `target + 1` turns are queued (the first one runs at once, `target` stay behind it). **A stall** (a tick is due and there is no turn) is waited out without owing the wait:
+  the accumulator holds one tick at most, so a late turn runs the moment it comes and never in a burst; and the runner collects `target + 1` turns again before it goes on, so that the buffer that the stall used up is back (a
+  bunch of turns behind a late one, a link that frees at last, finds the queue full and costs no extra wait). **More turns queued than the buffer asks for** (a stall that ended in a bunch, a window that was not drawn for a
+  second, a lagging player's backlog, a buffer that shrank) is run down at up to four times normal speed, in proportion to the time that the newest queued turn is further away than the buffer wants (`target * 50 ms` and 10 ms
+  for the frames): every 50 ms more adds a quarter of the speed (1.25x, 1.5x, ...), 550 ms more and up to 4x. The count is in time, not in whole turns: a whole turn's dead zone left the queue up to 49 ms longer than the buffer for good.
+  A frame that stood for more than 100 ms runs at normal speed (its own time holds the turns that are queued) and runs the ticks that its time stands for besides the allowance of 8 (a window that a browser draws once in
+  0.75 s keeps up with the match), and is not counted as a stall.
+
+Measured with the real client, two players in one demo room, all against the same links (a relay on the client's machine; pooled over three runs of two windows for the lines marked x3; "tick gaps" are the times between
+frames that ran a tick, 50 ms is a steady game; a gap over 100 ms happens about once a minute in every build, on this machine, whatever the link: a frame that took long):
+
+| link (relay, each way) | build | delay mean (95th percentile) | stall episodes a minute (over 100 ms) | tick gaps over 100 ms a minute (longest) |
+|---|---|---|---|---|
+| none: the Docker stack, round trip 20 ms | v0.0.91 | 188 ms (202) | 0 | 0.7 (151) |
+| | **now** | **91 ms (119)** | 0 | 0.7 (152) |
+| 20 ms: round trip 60 ms | v0.0.91 | 235 ms (279) | 0 | 1.0 (159) |
+| | **now** | **134 ms (159)** | 0.4 (0.4) | 0.4 (114) |
+| 10 ms + 0 - 60 ms of jitter (x3) | 100 ms turns with this release's runner fixes | 259 ms (316) | 0 | 1.4 (375) |
+| | v0.0.91 | 292 ms (341) | 0 | 0.5 (158) |
+| | **now** | **164 ms (201)** | 0.3 (0.3) | 1.1 (273) |
+| 15 ms + 0 - 20 ms of jitter and a lost packet's resend, 250 ms (two a minute each way) (x3) | 100 ms turns with this release's runner fixes | 228 ms (272) | 2.1 (2.1) | 2.9 (243) |
+| | v0.0.91 | 225 ms (269) | 2.1 (1.8) | 2.9 (205) |
+| | **now** | **144 ms (173)** | 2.4 (2.4) | 2.9 (271) |
+
+A lost packet's resend that no buffer bridges is the same stall as before: as many of them a minute (2.4 against 2.1: the relay's spikes are the same number a second in every row) and each about 30 ms longer (the longest 220 ms against 187), since the buffer that would have held 100 ms of it holds 50; between them the delay is 84 ms lower. What the rule does not do is
+buy a smooth game on a very lossy link at a low delay: a link whose turns are late by more than 150 ms in more than one turn in twenty gets the largest buffer (four turns, 200 ms) and stalls for the rest.
+
+**What used to go wrong with the buffer** (found with the readout; each is reproduced by a test that fails without the fix, and all three now follow from the runner above):
 
 1. *"Waiting for the other players..." stayed on the screen after a real stall.* The runner called itself stalled while its accumulator of unspent time (up to 400 ms after a stall) held a tick and no turn was
-   queued; after a stall that is true for ever, although turns arrive on time (each runs the moment it arrives and the queue is empty again). `NetGame::stalled_ms()` grew without end and the message never went.
-   Now `stalled_ms()` is the time since the last tick, while the runner stands at a turn boundary with nothing queued: a turn that arrives ends the stall at once. (Reproduced with a host and two guests, one of
-   which draws no frame for 5 s: the host stops sealing after 30 turns of missing acknowledgements, the other guest waits, and its count rose to 21 s. N9.19, N9.21.)
-2. *A stall used the buffer up for good.* The 400 ms of unspent time were paid back against the turns that arrive afterwards, so every later turn ran the moment it arrived, with both its ticks at once: no buffer
-   (delay 100 ms lower), the game stepping 10 times a second instead of 20 (half of the ticks 0 ms after the one before, the rest 100 ms apart), and every bit of jitter a visible stall (179 stalls over 100 ms in
-   40 s with jitter up to 60 ms). Now a runner that has stood still for `rebuild_after_ms` (300 ms) collects `buffer_turns` turns again before it goes on, as at the start (N9.22, N9.23).
-3. *A queue left standing was never run down.* A bunch of turns after a frozen link, a frame that took 400 ms, a window that is hardly drawn: the turns pile up, the runner runs at double speed only while more
-   than five are queued, and stays at five for the rest of the match: half a second of delay for good, and two windows of one match running 0.5 s apart (the clock of the match shows it as 6:41 against 6:40).
-   Now a queue that is longer than the buffer at each of the last 20 turns started (two seconds) is a standing queue and is run down at double speed (N9.24, N9.25, N9.26).
+   queued; after a stall that is true for ever, although turns arrive on time. `NetGame::stalled_ms()` grew without end and the message never went. Now `stalled_ms()` is the time since a tick was due and had no
+   turn, while that goes on: a turn that arrives and runs ends it at once. (Reproduced with a host and two guests, one of which draws no frame for 5 s: the host stops sealing after 3 s of missing acknowledgements, the
+   other guest waits, and its count rose to 21 s. N9.19, N9.21.)
+2. *A stall used the buffer up for good.* The 400 ms of unspent time were paid back against the turns that arrive afterwards, so every later turn ran the moment it arrived, with both its ticks at once: no buffer, the game
+   stepping 10 times a second instead of 20, and every bit of jitter a visible stall (179 stalls over 100 ms in 40 s with jitter up to 60 ms). Now nothing is owed for a wait and the buffer is collected again (N9.22, N9.23, J2.1).
+3. *A queue left standing was never run down.* A bunch of turns after a frozen link, a frame that took 400 ms, a window that is hardly drawn: the turns pile up, the runner ran at double speed only while more than
+   five were queued and stayed at five for the rest of the match: half a second of delay for good, and two windows of one match running 0.5 s apart (the match clock shows it as 6:41 against 6:40). Now every queue
+   longer than the buffer is run down at up to 4x, down to the buffer and 10 ms (N9.24, N9.25, N9.26, J2.3, J2.4).
 
-Two more changes belong to the same cause. **The network's clock keeps real time**: `Application::run_frame_with_delta` clamps a frame to 100 ms for the local simulation, which also cut the network's clock; a hitch
-of 400 ms left three turns standing for good. The network now gets the real frame time up to one second (N5.30). **A long frame runs the ticks that its time stands for**: a frame that stood for more than 100 ms may
-run `max_ticks_per_update` (8) plus one tick for every 50 ms beyond that; a window that is drawn once in 0.75 s (a browser draws a hidden tab at about one frame a second: measured 1.3) used to run 8 of the 15
-ticks that its time holds, so its game ran at 40% of the speed, and the host, which does not seal more than 30 turns ahead of the slowest peer, held every other player's game back to that speed
-(N9.28).
+Two more changes belong to the same cause. **The network's clock keeps real time**: `Application::run_frame_with_delta` clamps a frame to 100 ms for the local simulation, which also cut the network's clock; a hitch of 400 ms left
+three turns standing for good. The network now gets the real frame time up to one second (N5.30). **A long frame runs the ticks that its time stands for** (above; N9.28): a window that is drawn once in 0.75 s (a browser draws
+a hidden tab at about one frame a second: measured 1.3) used to run 8 of the 15 ticks that its time holds, so its game ran at 40% of the speed, and the host, which did not seal more than 30 turns ahead of the slowest peer, held
+every other player's game back to that speed.
 
-Measured with the real client against the Docker stack (`runs` of two clients in one demo room, one of them with a frame loop that stands still for 5 s, or draws one frame in 0.75 s for 40 s):
+**Who waits for whom: the lag policy (protocol 8).** "I'm not a fan of making the other players' experience worse because somebody lags" (the owner). A game on the local network is between friends: the host (it has a seat) stops sealing
+while a peer is more than 3 s behind, shows "Waiting for Bob..." and goes on when the machine is back, as before (60 turns instead of 30, the same 3 s; `laggard_drop_ms` is 0 there: it waits for ever, until the connection or the silence
+timeout of 60 s ends it; host migration is unchanged). A **dedicated server's room is made of strangers, and one machine that stalls (a window in the background, a laptop that went to sleep) must not slow down the others**: the
+server's host has no seat, never stops sealing, and punishes the lagger only:
 
-| | before | now |
-|---|---|---|
-| the other window, while one draws a frame in 0.75 s | game at **2.6 turns/s** (nominal 10) | **10.0 turns/s** |
-| after a freeze of 5 s: the window that waited | zero buffer, delay 55 ms (was 183), ticks in pairs (gap p99 118 ms) | one turn of buffer, delay 153 ms, gap p99 65 ms |
-| after it: the window that was frozen | 4 - 5 turns standing, delay 520 ms (was 172) | 1 - 2 turns, delay 228 ms |
-| the two windows, same turn, first tick of A minus B | **-463 ms** (A 0.46 s ahead for the rest of the match) | **78 ms** |
-| the overlay "Waiting for the other players..." after the freeze | stayed on (21 s and counting in the emulation) | gone with the first turn that runs |
+| | |
+|---|---|
+| the others | their game goes on at 20 ticks a second. From the moment a player is more than **3 s** behind (`kLagNoticeMs`; its acknowledgements are measured against the turns sealed) they get a `Lag` message about it once a second (`kLagNoticeEveryMs`), and see one line, "**Bob is lagging (12 s behind)**" (the seconds are the server's number, rounded); when it is within **1 s** again (`kLagClearMs`) they get `Lag` with 0 and the line goes. A notice that is not renewed for 3 s (`kLagNoticeStaleMs`) is gone anyway. The line never hides the player's own state: a machine that is itself cut off says "Waiting for the other players..." first |
+| the lagger | its commands go to the server at once and apply when they arrive, in the turn that is being sealed then (the others' present, not its own screen's past); its runner finds the backlog of turns in its socket and runs it at up to **4x** normal speed (above: the first frame after a stop stands for what the application hands the network, one second, and runs that second's ticks, then 4x), and its screen says "**Catching up...**" while it is more than 3 s behind, until it is within 1 s. Nothing is lost: every state hash is compared with the referee's as it executes the turns |
+| dropped | a player **60 s behind** (`kLagDropBehindMs`), or one whose acknowledgements have not moved for **30 s** while turns wait for it (`kLagDropIdleMs`: connected, but it runs nothing: a process that was stopped), is dropped like a player that left: a `Drop` in the turn stream, at one tick for everybody, "%s dropped out of the game!" (the old rule dropped a seat that had held the match up for 20 s: `laggard_drop_ms`, which a server's room no longer uses) |
 
-**Tests** (`tests/test_net/test_latency.cpp`, 28 tests): the pure meters (the window means and their rounding, a ping from Ping / Pong timings with unbelieved answers, a slow link with several pings out, a clock
-that wraps, a command's delay from send to execution, the stamp of a command sent between frames, identical commands in order, a lost or refused command, the mean over ten); a host and a guest over a simulated link
-of 40 ms each way (ping 80 ms, delay = 40 + the wait for the seal + 40 + one turn of buffer, exact for all 100 phases of a turn: 180 - 279 ms; the host's own delay 100 - 199 ms; the room's ping), over a link
-with jitter; and the stall, the rebuilt buffer, the standing queue, the hitch and the hidden window as above, each against the old runner (`rebuild_after_ms = standing_window = 0`) on the same stream of turns.
+* **Bounded memory and no growth in CPU.** What the server holds for a lagger is its output buffer: a stuck TCP connection is cut when more than 512 KB wait to be written (`tcp.cpp`), a stuck WebSocket at 1 MB (`ws.cpp`), and a
+  send that fails drops the player like any other. 60 s of turns are 1,200 messages: 15 bytes each when nothing is ordered, about 30 - 60 bytes with the orders of four people, so 18 - 72 KB; a very busy room (every player 10
+  commands a second of eight ants) is about 100 KB a minute; a room whose players flood it (64 commands per player and turn: 150 KB of turns a second) is cut off by the buffer in a few seconds, which is the bound doing its work. The sequencer's report
+  maps are pruned by the slowest acknowledgement, so a lagger keeps at most 60 s of reports (60 per player). The work per pass is unchanged: one loop over the four seats.
+* **Tests.** S2.5 (over the loopback network: a client stops for 5 s: the others' ticks go on at the normal rate (95 or more of 100), they are told after 3 s and the notice goes after it is back, the lagger catches up within a few seconds
+  at 4 ticks per 50 ms at the most, "Catching up..." shows and goes, and all three states and the referee's end identical), S2.6 (the numbers of the table on raw links: the notice at 3 s once a second, 12 s of notices, the drop at 30 s without
+  an ack and at 60 s behind, the hysteresis between 1 and 3 s, nothing for a silent but not lagging client), S2.7 (a round trip of 200 ms and one of 200 - 400 ms are never lag for 60 s), S3.12 (a server's room with three real
+  clients, one frozen), N2.14 and N2.20 (a host with a seat still waits), `test_hud_layout` (the words and the priorities of the overlay). S2.5, S2.6 and S3.12 fail without the change (a server that waits again stops sealing after 3 s) and S2.7 fails with a notice
+  threshold of 300 ms (mutation checks).
+* **Measured** (two native clients in one demo room, one of them stopped with SIGSTOP for 10 s and continued): while the host of the old rule (v0.0.91) waited, **the other window's game ran 31 turns in the 10 s (3.1 of the nominal 10 a second: it stood still for 7 s and said "Waiting for the other players...")** and its commands in that time were applied 1.9 s late on average; now **the other window ran 201 turns in the 10 s (20.0 of the nominal 20), its delay stayed at 87 - 89 ms** and nothing was shown but the line "Bob is lagging (N s behind)"; the stopped window found 200 turns waiting, said "Catching up...", ran 99 + 80 + 77 turns in its first three seconds (the first frame stands for a second, then 4x) and was **level with the match 3.1 s after its first turn back**; afterwards the two windows ran the same turn 2 ms apart on average (-22 to +106 ms; 463 ms in v0.0.91, the owner's screenshot), both with a buffer of one turn (delay 86 - 91 ms). **In a real browser tab** (the WebAssembly build behind the nginx of the stack, its page blocked for 12 s by a script, which stops its frames and its socket reads as a hung tab does) the other window, a native client, ran **20.1 turns a second during the block (19.9 before, 20.1 after)** at an unchanged delay, and the tab was still seated and running afterwards.
+
+**The server's turn clock.** `ants_server` seals by a schedule of its own (`next_seal_ms += kTurnMs`, not "50 ms after the pass"), so the turns cannot drift or bunch; the loop sleeps 2 ms a pass, so each turn goes
+out when the first pass after its time runs. Measured with a client that polled without sleeping: in Docker (Linux, through the published port) the turns reached a client that polled without sleeping every **50.00 ms, sd 1.11 ms, 47.7 - 53.0 ms over 740 turns** (natively on macOS: sd 1.16, 47.6 - 53.7); with 12 rooms of 4 clients playing, at the 48 clients: sd 1.56 ms, 1st to 99th percentile 46.4 - 53.5, **worst 56.9 ms, none bunched, none later than 7 ms from its place**. The mean is exact (no drift); the spread is the pass: a turn waits for the first pass after its time, uniformly 0 - 2.2 ms, sd 1.1. Nothing to fix. The server of v0.0.91 (turns of 100 ms, built from
+the base commit, the same stack and the same clients) gave **100.00 ms, sd 1.12 ms, 97.5 - 102.8 ms over 371 turns**, and with the 12 rooms sd 1.51 ms, worst 109.8 ms: the spread in milliseconds is the same before and after (the code of the clock is unchanged), so it is twice as large a
+share of a turn now (2.2 % against 1.1 %) and still far below a frame (16.7 ms). A variant that slept until the next turn was due (`sleep_for` the remaining microseconds, at most 2 ms) was tried and
+dropped: on macOS the timer wakes late and unevenly (sd 4.2 ms, worst 79 ms against 1.2 and 54), on Linux the fixed pass is already within a millisecond.
+
+**The server's load.** 12 demo rooms of 4 headless clients (`room_load`: Hello, loaded, a turn read and acknowledged per poll, a ping a second, a `Hatch` every 700 ms; the match runs on the referee's engine) at 50 ms turns: **the server container used 8.5 % of one core on average (6.2 - 12.8 % over 32 samples; 1.4 % idle: the 2 ms pass) and 3 - 4 MB of memory**, the turns reached all 48 clients 50.0 ms apart (above), and nobody was ever called a lagger or dropped (64,320 turns read). Natively on macOS the same load took 2.4 % of a core.
+**Before, the same measurement against the server of v0.0.91 (turns of 100 ms; the same stack, the same clients, `docker stats` once a second for 32 s): 5.7 % of one core on average (4.4 - 7.8 %; 1.4 % idle; 3.0 - 4.0 MB), the turns 100.0 ms apart, 32,175 read.** Halving the turn costs 1.7 times the work above the idle pass (7.1
+points of a core against 4.3, 2.8 points more for 48 players: the simulation is the same 20 ticks a second, the turns, the acknowledgements and the writes are twice as many), about 0.6 % of a core per room. The load is one thread: by extrapolation (not tested) a core carries more than a hundred rooms
+before a pass takes longer than a turn.
+A finding: the TCP listener's backlog is 8 (`tcp.cpp`), so a burst of 48 connections in a few milliseconds loses some on macOS (they come 25 ms apart in the tool); the WebSocket listener has 32, the proxy hands connections on as they come.
+
+**The frame loop: what a machine can do about its own part.** Every frame polls the network, runs the ticks that are due and then draws, in that order (`Application::run_frame_with_delta`: `handle_events`, `pump_network`, the simulation,
+`render_frame`), so a turn that has arrived is run by the frame that follows it, never one frame later, and drawn in that same frame. Running a tick between frames would change the state earlier than the screen can show it: the
+picture only changes at the frame, so a tick that waits for its frame costs the player nothing he can see (it costs the readout up to a frame: the delay is measured to the tick). The rest of the 10 - 20 ms of frames in the
+budget is the input being read at the start of the next frame (the average click waits half a frame before it is sent: 8 - 10 ms) and the frame that polls the answer. The browser has the same order inside `requestAnimationFrame`
+(display rate, 60 - 144 a frame second; a WebSocket message waits in the page's queue until the next frame polls it) and a hidden tab is drawn about once a second: the long-frame rule above keeps its game in step with real time.
+What would cut the input wait is reading the pointer's events between frames (a native loop that sleeps in slices) or a WebSocket that is read by the page's own event and sent at once: not done, for 8 ms of 130.
+
+**Recommendations, with their numbers.**
+
+* **Keep the buffer rule as it is** (1 - 4 turns, 95th percentile, grow at once up to the number that bridges a late turn, shrink a turn per 10 s): gain 75 ms on a steady link (50 for the buffer, 25 for the seal), nothing lost on a jittery
+  one (0 - 60 ms of jitter: no stall, delay 164 against 252 - 301), and on a link with lost packets the same stalls as before (a spike of 250 ms stops the game for 150 - 200 ms in both). The risk is a link whose lateness is
+  between 50 and 150 ms in one turn in twenty: it gets two or three turns (100 - 150 ms) until it calms down for 10 s per turn; a steady 50 ms jitter costs 50 ms more than a clean link, not more.
+* **Do not go below 50 ms per turn**: a turn is a tick (the engine runs at 20 Hz, a command applies at a tick boundary); a half tick would need a different simulation. The cost of the shorter turn is twice the messages: 20 turns and 20
+  acknowledgements a second per client (about 3 KB/s per client with the WebSocket, TLS and TCP headers), and the server's CPU measured above (12 rooms of 4: 5.7 % of a core with turns of 100 ms, 8.5 % with 50 ms).
+* **TCP_NODELAY** is set on every socket (`tcp.cpp`, `ws.cpp`) and `nginx` forwards `/ws` with `proxy_buffering off` (`docker/nginx.conf`): the path adds nothing measurable (1 ms of jitter to beta, turn spacing at the relay sd 1.0 ms).
+* Raise the TCP listener's backlog from 8 to 64 (one line in `tcp.cpp`) before a server expects bursts of connections on its TCP port; not done here.
+* The browser's frame loop is the largest part of what is left (10 - 20 ms): a page that handles `pointerdown` and sends at once, and a hidden tab that is run by a timer instead of the animation frame, would cut it further.
+
+**Tests** (`tests/test_net/test_latency.cpp`, 28 tests; `tests/test_net/test_jitter.cpp`, 17 tests): the pure meters (the window means and their rounding, a ping from Ping / Pong timings with unbelieved answers, a slow link with
+several pings out, a clock that wraps, a command's delay from send to execution, the stamp of a command sent between frames, identical commands in order, a lost or refused command, the mean over ten); a host and a guest over
+a simulated link of 40 ms each way (ping 80 ms, delay = 40 + the wait for the seal + 40 + one turn of buffer, exact for all 100 phases of a turn: 130 - 179 ms; the host's own delay 50 - 99 ms; the room's ping), over a link with
+jitter; the stall, the rebuilt buffer, the bunch run down, the hitch and the hidden window; and the rule alone: a steady link gives one turn at every frame rate, jitter of 30 / 60 / 120 / 200 ms gives 1 - 2 / 2 - 3 / 3 - 4 / 4 turns,
+a stall grows it by one only when one more turn would bridge it, a spike under 5 % of the turns is ignored, a frame over 100 ms is not counted, the shrink is one step per ten seconds and never two together, the speed of the runner
+is 4 quarters in the buffer and a quarter more per 50 ms beyond it, 16 at most, and a runner on ten random jittery links learns them in a few seconds and does not stand still for 100 ms after.
 
 ## Protocol 6, the WebSocket transport and the pieces of the dedicated server (v0.0.81)
 
@@ -252,12 +354,13 @@ Decision (owner, 2026-09-30): **no NAT traversal in the game**. The game has no 
 * **The map store** (`map_store.hpp`): the folder of `.lvl` files from `--maps`; a name is only a name in the folder (the protocol's `valid_map_name`: never a path), a room is refused (404 / 400) when the map is missing or does not load, so a room that exists can always be played. The Docker image carries the six maps of the original game in `/maps`; a folder mounted there replaces them (the lobby keeps the library and syncs it).
 * **The control interface** (`control.hpp`, HTTP + JSON, `ants_ctl`): `POST /rooms`, `GET /rooms`, `GET /rooms/<code>`, `DELETE /rooms/<code>`, `GET /stats`, every call behind the bearer secret (constant-time compare). The secret is never read from the command line (a command line is visible to every user): it is `ANTS_SERVER_SECRET`, or, when that is not set, a random secret (32 bytes of the operating system's generator, 64 hex digits) that the server makes the first time it starts and keeps in a file (`--secret-file`, default `control-secret` in `--results-dir`, an explicit `--secret-file` wins) (`src/ants_server/secret.cpp`). It is shown in the log once, the moment it is made (before the ports are opened), and read from the file at every later start. The file is made all at once: the complete secret goes to a temporary file next to it, which is linked to the final name (POSIX `link()`, Windows `MoveFileEx` without replacing), so servers that start at the same moment share one secret and a crash leaves no half-written file. On POSIX only its owner can read it (mode 600); **on Windows the server sets no permissions and the file takes those of its folder**. A file that already exists is used as it is (its owner and mode are the operator's responsibility, a symbolic link is followed); one that is no usable secret (not a regular file, empty, outside 32 - 256 characters, a space or control character, more than one line, bigger than 1,024 bytes) stops the server and is never overwritten. It listens on the loopback address; a deployment that needs more says so explicitly (`--ctl-any-interface`, for a container whose host maps the port to its own loopback address). The lobby's backend calls it; room codes first, per-player tokens (the Hello carries one already, the game never interprets it) when the lobby wants to check who joins.
 * **Clients**: the same game, `--join HOST:PORT --room CODE` (a Hello with the room code; a lobby launches it with the code). `NetGame` recognises a server's room by its **missing Host slot**: no host migration (a client whose server link dies loses the match, it does not elect itself the host of a one-player game; the server drops the seat at the same tick for everybody else), and the match starts when the room says so: when every seat is taken, or, since protocol 7, when the room's **leader** (the first player who joined) presses START (below). Everybody else's screen waits.
+* **A room never waits (protocol 8, unreleased)**: the room's host has no seat, so it keeps sealing a turn every 50 ms whatever a seat does; a seat that falls behind is announced to the others (`Lag`, "Bob is lagging (12 s behind)") from 3 s, catches up alone at up to 4x ("Catching up..."), and is dropped at 60 s behind or after 30 s without an acknowledgement (the old rule held the room up for 3 s and then for 20 s). `RoomStatus::turns` is one per tick now (turns of 50 ms). See "What the player feels: ... Who waits for whom".
 * **Deployment**: `Dockerfile.server` (debian:12-slim, builds the program alone with `-DANTS_BUILD_APP=OFF`, runs unprivileged, healthcheck = a connection to the game port), `docker-compose.server.yml` (example). Only the TCP port is public; the WebSocket port goes behind the nginx that ends TLS (the proxy lines are in the header of `ws.hpp`), the control port is for the lobby's backend only. Capacity: a match costs about 83 microseconds of one core per tick on average (map sweep, 586 maps), so a core holds hundreds of games; the memory of a room is the engine (a few MB).
 * **Tests**: suite 2.19 (`tests/test_server`, 31 tests over real sockets and real files: the store, the rooms' whole life, the door, the control calls, demo rooms (S3.10, S3.23 - S3.25: off unless asked for; the code chooses the map and the players; the ten-minute wait; a code whose demo room is over makes a new room; a room of the control interface that is over (closed by its owner) answers `NoSuchRoom`), the server's clock across the 32-bit wrap, a seat that stops executing turns, the wall-clock limit, and the control secret (S3.15 - S3.22: made once and for its owner only, every kind of bad file, the generator's strength, a file too big to read, symbolic links, eight starts at the same moment, a start that dies); 10,176 assertions), 3.9 (`tests/scripts/test_ants_server.sh`: the real server and two headless game clients, the startup refusals (`--demo-maps` too), demo rooms made on the map and for the number of players that their codes choose, and the control secret that the server makes, 65 checks), and S2.x in suite 2.11 (the referee).
 * **The browser as a client (v0.0.84)**: `WasmWsConnection` (`wasm_ws.hpp`, Emscripten only, `-lwebsocket.js`) is a `Connection` over the page's own WebSocket; `NetGame::join_url` / `--join-url ws[s]://...` joins through it, and the guest branch of `begin_match` is compiled in the web build (no peer listener, no links between guests: a server's room has no Host slot, so migration is off). The page reads `?join=/ws&room=&seat=&name=[&embed=1]` (`web/shell.html`; `join` must be a path on the same site, everything is validated before it becomes an argument); nginx passes `/ws` to the server's WebSocket port (`docker/nginx.conf`: the backend name is resolved per request, so the site starts without the server).
 * **`web/four.html`** ("Play online", v0.0.90): host a room (a map of the six and 2 - 4 players, in the code `demo-<map>-<n>p-<random>`) or join one by its code; each seat on the page (a frame of the game page, `embed=1`), in a window of its own, or by a link for somebody else. Before v0.0.90: four frames, seats 0 - 3, one room (`demo-<random>` unless `?room=` names a room made some other way), a 2 x 2 grid. Each game posts `{ants:'sync', seat, tick, hash}` to its parent every 100 ticks (`Application::post_tick`, web build only), or, in a window of its own, on the `BroadcastChannel` "ants-sync" of the site with its room code, and the page compares the hashes of the same tick. **Demo rooms** (`--demo-rooms N --demo-map NAME [--demo-maps LIST]`, `RoomManager::make_demo_room`): a Hello for a not yet existing `demo-...` room makes it (ten minutes to fill (`ServerLimits::demo_wait_ms`; one minute before v0.0.90, which is too short for friends on other computers), 30 s of keep time, at most 30 minutes of play), at most N at a time; off by default. The code chooses the map (one of `--demo-maps`) and 2 - 4 players: `demo-[<map>-][<n>p-]<anything>`, the players word right after the map or, when the first word is no allowed map, as the first or the second word; otherwise 4 players on `--demo-map`. A running room refuses every Hello (`MatchRunning`): nobody is removed, nobody new comes in. A Hello for the code of a demo room that is over (finished or failed) forgets that room (its end is reported as ever) and makes a new one at once: a friend who comes late, a reload, a rematch with the same link; the same Hello for a room of the control interface that is over answers `NoSuchRoom` (before v0.0.90: `MatchRunning`). The page keeps `?room=<code>` in the address bar (`history.replaceState`), so a reload comes back to the room's panel. Verified in the built-in browser against the real images (web, server, nginx proxy): four wasm games and a native referee agree on every hash, orders travel through the server.
-* **Hardening from the security review (v0.0.84)**: the WebSocket output buffer grows with slack (a flood of pings cost quadratic time: 762,000 pings took 8.1 s, now 0.024 s); the control interface gives a new connection the slot of the oldest one that is waiting for its head with nothing unread (the door of the server does the same with connections that have not said Hello), so idle connections cannot lock either out. From the review of the release itself: all millisecond deadlines are wrap-safe (`clock.hpp`: the server's clock is its uptime and wraps after 49.7 days; a signed comparison against a deadline left at 0 stopped rooms from starting after 24.8 days); a seat that holds the match up for 20 s is dropped (`laggard_drop_ms`) and a running room has a wall-clock limit (`max_run_seconds`, 2 h; demo rooms 30 min); a room with no keep time is still reported; the browser client says Hello when the socket opens (a hidden tab runs no frames).
-* **Bot seats (v0.0.85, `docs/BOTS.md`)**: no wire change (`SlotState::Bot` is part of protocol 6). `HostLobby::add_bot` / `remove_bot` (a slot of state `Bot`: it counts as a player, its round trip is 0 so its thumb is good, the start never waits for it; Fog of War and a bot refuse each other in `set_fog`, `add_bot` and `start`; a person whose name starts with "Bot (" is renamed, so the slot state and the name are the only way to tell a bot), `HostSession::add_bot_seat` / `submit_bot` (the host acknowledges every turn for the bot seat, otherwise the sequencer would stall after `max_lag_turns` = 30 turns; the issuer is stamped by the sequencer; a bot seat never reports a hash and is never dropped for silence), `NetGame::add_bot` / `remove_bot` / `submit_bot`. The bot runs on the host's machine only; when the host leaves its bot seat leaves with it: the new host drops every seat of the roster that did not follow (the bot has no endpoint), the survivors stay identical (suite 2.20, AI5.5).
+* **Hardening from the security review (v0.0.84)**: the WebSocket output buffer grows with slack (a flood of pings cost quadratic time: 762,000 pings took 8.1 s, now 0.024 s); the control interface gives a new connection the slot of the oldest one that is waiting for its head with nothing unread (the door of the server does the same with connections that have not said Hello), so idle connections cannot lock either out. From the review of the release itself: all millisecond deadlines are wrap-safe (`clock.hpp`: the server's clock is its uptime and wraps after 49.7 days; a signed comparison against a deadline left at 0 stopped rooms from starting after 24.8 days); a seat that holds the match up for 20 s is dropped (`laggard_drop_ms`; protocol 8 replaced it: a server's room never waits, see "Who waits for whom") and a running room has a wall-clock limit (`max_run_seconds`, 2 h; demo rooms 30 min); a room with no keep time is still reported; the browser client says Hello when the socket opens (a hidden tab runs no frames).
+* **Bot seats (v0.0.85, `docs/BOTS.md`)**: no wire change (`SlotState::Bot` is part of protocol 6). `HostLobby::add_bot` / `remove_bot` (a slot of state `Bot`: it counts as a player, its round trip is 0 so its thumb is good, the start never waits for it; Fog of War and a bot refuse each other in `set_fog`, `add_bot` and `start`; a person whose name starts with "Bot (" is renamed, so the slot state and the name are the only way to tell a bot), `HostSession::add_bot_seat` / `submit_bot` (the host acknowledges every turn for the bot seat, otherwise the sequencer would stall after `max_lag_turns` = 60 turns (3 s; 30 turns before protocol 8); the issuer is stamped by the sequencer; a bot seat never reports a hash and is never dropped for silence), `NetGame::add_bot` / `remove_bot` / `submit_bot`. The bot runs on the host's machine only; when the host leaves its bot seat leaves with it: the new host drops every seat of the roster that did not follow (the bot has no endpoint), the survivors stay identical (suite 2.20, AI5.5).
 * **Not built yet**: the in-game host / join screens for `--join --room`, the bots of a server room (the room specification of `docs/BOTS.md`, milestone B6), a token check by the lobby, replay output.
 
 ## Protocol 7: the room's leader starts early (the first player of a server's room)

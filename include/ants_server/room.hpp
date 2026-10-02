@@ -41,8 +41,8 @@ struct RoomSpec {
     uint32_t wait_ms{120000};               // a room that has not started after this long fails ("nobody came", "somebody is missing")
     uint32_t load_ms{60000};                // everybody must have loaded the map this long after the start
     uint32_t keep_ms{10u * 60u * 1000u};    // a finished or failed room stays visible to status calls this long
-    uint32_t run_ms{2u * 3600u * 1000u};    // a match that is still running this long after it began is ended (failed, "took too long"): the game clock only advances while
-                                            // every player executes turns, so without a wall-clock limit a seat that stalls could hold the room for ever
+    uint32_t run_ms{2u * 3600u * 1000u};    // a match that is still running this long after it began is ended (failed, "took too long"): a wall-clock limit on the life of
+                                            // a room (it never waits for a seat, but a match that does not end by its rules would run on for ever)
 };
 
 enum class RoomState : uint8_t { Waiting, Loading, Running, Finished, Failed };
@@ -74,7 +74,7 @@ struct RoomStatus {
     uint8_t joined{0};
     std::array<std::string, 4> names{};     // by seat; "" for an empty seat
     uint32_t ticks{0};                      // the referee's clock (20 per second)
-    uint32_t turns{0};
+    uint32_t turns{0};                      // turns sealed: one per tick since protocol 8 (turns of 50 ms; they were 100 ms, two ticks, before)
     uint32_t age_ms{0};
     uint16_t quitter{0xFFFF};
     std::vector<RoomRow> rows;              // the result of a finished match, best first
