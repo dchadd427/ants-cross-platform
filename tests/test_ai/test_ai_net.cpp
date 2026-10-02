@@ -1,6 +1,6 @@
 // Tests of the bot seat in a room: the lobby (a computer player takes a seat, is shown as one, is never waited for, can never be faked by a name), the session (the host
 // acknowledges its turns, so the sequencer never stalls; its commands carry its seat), a match with a bot seat on two machines (identical states), a host that leaves
-// (the bot leaves with it), and a room on real sockets (AI5.1 .. AI5.6). No wire change: SlotState::Bot has been part of protocol 6 from the start.
+// (the bot leaves with it), and a room on real sockets (AI5.1 .. AI5.6), and the fill of a room's empty seats at the host's START (AI5.7, protocol 11). SlotState::Bot has been part of protocol 6 from the start.
 #include "ai_test.hpp"
 
 #include <algorithm>
@@ -775,6 +775,87 @@ void run_net_tests() {
         ASSERT_EQ(bots.stats(2).rejected, 0u);
         ASSERT_FALSE(host.sim.is_player_dropped(2) || bob.sim.is_player_dropped(2));
         // leaving ends it for everybody; the host's room and the bot go with it
+        host.net.leave();
+        ASSERT_FALSE(host.net.active());
+    } TEST_END();
+
+    TEST_CASE("AI5.7 The Fill Of A Room On The Local Network (Protocol 11): The Names Of The Fill And Of ants_ai Agree For Every Level; The Host's Own START Seats Bots Of A Level In The Empty Seats (Easy / Medium / Hard), Their Real Bots Run On The Host's Machine Through The Sequencer For 40 Seconds, Both Engines Stay Bit-Identical, The Bots Played (Commands In The Turn Stream With Their Seats, Nobody Refused, Nobody Dropped); The Bots Are Not Needed To Host Or Join A Room") {
+        for (const FillLevel fill : {FillLevel::Easy, FillLevel::Medium, FillLevel::Hard}) {            // the room's name for a fill bot is the name of the standard bot of that level
+            BotSpec spec;
+            spec.seat = 1;
+            spec.level = fill == FillLevel::Easy ? Level::Easy : fill == FillLevel::Medium ? Level::Medium : Level::Hard;
+            ASSERT_EQ(fill_bot_name(fill), bot_display_name(spec));
+            ASSERT_EQ(std::string(fill_level_name(fill)), std::string(level_name(spec.level)));
+        }
+        {   // no bot code to host or join: a room without a fill never builds a controller, and the room is the one of every earlier version
+            Table t;
+            Machine& host = t.add("Alice");
+            ASSERT_TRUE(host.net.host(0, "Alice", true));
+            host.net.set_map("TINY.LVL");
+            Machine& bob = t.add("Bob");
+            ASSERT_TRUE(bob.net.join("127.0.0.1", host.net.listen_port(), "Bob"));
+            ASSERT_TRUE(t.run_until([&]() { return bob.net.phase() == NetGame::Phase::Room && host.net.can_start(); }, 8000));
+            ASSERT_EQ(host.net.fill_bots(), FillLevel::None);
+            ASSERT_FALSE(host.net.room().slots[2].state == SlotState::Bot || host.net.room().slots[3].state == SlotState::Bot);
+        }
+        Table t;
+        Machine& host = t.add("Alice");
+        ASSERT_TRUE(host.net.host(0, "Alice", true));
+        host.net.set_map("TINY.LVL");
+        Machine& bob = t.add("Bob");
+        ASSERT_TRUE(bob.net.join("127.0.0.1", host.net.listen_port(), "Bob", 1));
+        ASSERT_TRUE(t.run_until([&]() { return bob.net.phase() == NetGame::Phase::Room && bob.net.room().slots[1].state == SlotState::Client && host.net.can_start(); }, 8000));
+        std::vector<uint8_t> seats;
+        ASSERT_EQ(host.net.fill_bots(FillLevel::Hard, &seats), size_t{2});                                // the empty seats: 2 and 3
+        ASSERT_EQ(seats, (std::vector<uint8_t>{2, 3}));
+        ASSERT_TRUE(t.run_until([&]() { return bob.net.room().slots[2].state == SlotState::Bot && bob.net.room().slots[3].state == SlotState::Bot; }, 3000));
+        ASSERT_EQ(bob.net.room().slots[3].name, "Bot (Hard)");
+        uint64_t hash = 0;
+        ASSERT_TRUE(hash_file(maps_dir() + "TINY.LVL", hash));
+        ASSERT_TRUE(host.net.start_match(4243, hash));
+        ASSERT_TRUE(t.run_until([&]() { return host.net.phase() == NetGame::Phase::Playing && bob.net.phase() == NetGame::Phase::Playing; }, 8000));
+        for (Machine* m : {&host, &bob}) {
+            ASSERT_EQ(m->sim.roster_mask(), 0x0F);
+            ASSERT_TRUE(m->sim.get_player_name(2) == "Bot (Hard)" && m->sim.get_player_name(3) == "Bot (Hard)" && m->sim.get_player_name(1) == "Bob");
+        }
+        // the bots of the filled seats, as the application builds them: the controller over the host's engine, one sink per seat, called after every tick
+        BotController bots(host.sim, 4243);
+        NetSink sink2(host.net, 2);
+        NetSink sink3(host.net, 3);
+        std::string why;
+        ASSERT_TRUE(bots.add(BotSpec{2, "standard", Level::Hard}, sink2, why));
+        ASSERT_TRUE(bots.add(BotSpec{3, "standard", Level::Hard}, sink3, why));
+        host.on_tick = [&]() { bots.on_tick(host.sim); };
+        const std::vector<uint32_t> mine = ants_of(host.sim, 0);
+        const std::vector<uint32_t> theirs = ants_of(bob.sim, 1);
+        t.run(40000, [&](uint32_t now) {
+            if (now % 900 != 0) return;
+            Command c;
+            c.type = CommandType::GroupMove;
+            c.tile_x = static_cast<int16_t>(6 + (now / 900) % 28);
+            c.tile_y = static_cast<int16_t>(6 + (now / 450) % 28);
+            c.ants = {mine[(now / 900) % mine.size()]};
+            host.net.submit(c);
+            c.ants = {theirs[(now / 900) % theirs.size()]};
+            bob.net.submit(c);
+        });
+        host.net.freeze();
+        t.run(3000);
+        ASSERT_TRUE(host.sim.state_hash() == bob.sim.state_hash());
+        ASSERT_EQ(host.sim.current_tick(), bob.sim.current_tick());
+        ASSERT_FALSE(host.net.desynced() || bob.net.desynced());
+        for (const uint8_t seat : {uint8_t{2}, uint8_t{3}}) {
+            const auto host_saw = of_issuer(host.saw, seat);
+            const auto bob_saw = of_issuer(bob.saw, seat);
+            ASSERT_TRUE(host_saw.size() >= 1 && host_saw.size() == bob_saw.size());                      // the bots acted (a worker needs few commands: one order starts a harvest loop that runs by itself), and both machines saw the same commands at the same ticks
+            ASSERT_TRUE(host.sim.get_display_score(seat) > 0 && host.sim.get_display_score(seat) == bob.sim.get_display_score(seat));       // and what they did is in the match: they banked food, the same on both machines
+            for (size_t i = 0; i < host_saw.size(); ++i) ASSERT_TRUE(host_saw[i].first == bob_saw[i].first && host_saw[i].second == bob_saw[i].second);
+            ASSERT_EQ(bots.stats(seat).rejected, 0u);
+            ASSERT_TRUE(bots.stats(seat).released >= 1 && bots.stats(seat).released <= static_cast<uint32_t>(host_saw.size()) + 3);
+            ASSERT_FALSE(host.sim.is_player_dropped(seat) || bob.sim.is_player_dropped(seat));
+        }
+        // a person may not take a bot's name, and a bot's seat is never absent: the room that this machine keeps has no connection behind the bots
+        ASSERT_TRUE(host.net.room().slots[2].state == SlotState::Bot && host.net.room().slots[3].state == SlotState::Bot);
         host.net.leave();
         ASSERT_FALSE(host.net.active());
     } TEST_END();

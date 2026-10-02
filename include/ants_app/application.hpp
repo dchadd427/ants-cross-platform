@@ -98,9 +98,17 @@ struct ApplicationConfig {
     std::string net_room;                       // Join: the room of a server (--room CODE); "" for a LAN / direct host
     std::string net_token;                      // Join: the credential that came with the room code (--token T)
     uint8_t net_seat{255};                      // Join: the seat asked for (--seat N, 0 .. 3: the colours green, red, blue, black); 255: any free seat
-    /// A test hook (--start-when N, 2 .. 4; 0 = off, the default): a headless client has nobody to click START, so when it leads a server's room it presses START itself (the S key
-    /// of the setup screen, the same path as a click) once N players are in the room, again every second until the match starts. A game that is played never uses it.
+    /// A test hook (--start-when N, 1 .. 4; 0 = off, the default): a headless client has nobody to click START, so when it leads a server's room it presses START itself (the S key
+    /// of the setup screen, the same path as a click) once N players are in the room, again every second until the match starts. 1 is for a leader with --fill-bots (one person is
+    /// enough then; without a fill the START of one person is the can't-go cue, every second). A game that is played never uses it.
     uint8_t net_start_when{0};
+    /// --fill-bots none|easy|medium|hard (protocol 11): the bots that this player's START seats in the empty seats of its room when it can start one: the leader of a server's room
+    /// (the request goes to the server, which seats them and runs them) and the host of a room on the local network (this machine runs them, as for --bot). None, the default, is the START
+    /// of every earlier version. A game that is not a room ignores it. The setup screens of a later version choose it from a panel; the web page's address carries it.
+    net::FillLevel fill_bots{net::FillLevel::None};
+    /// A test hook (--say TEXT): this client says the line once in the waiting room, as soon as two players are in it (so that somebody hears it). The lines that arrive in the room go to the
+    /// log of the program (stderr, "Room chat: Name: text") and to NetGame::take_pregame_chat().
+    std::string net_say;
     /// Where the window goes (native builds): an explicit position and size (--window-pos X,Y, --window-size WxH or W,H), or a cell of a grid over the display's usable
     /// area (--grid CxR --cell N: the start scripts lay four games out as a 2 x 2 grid, each window the largest 4:3 rectangle of its cell); --display N picks the
     /// display (default: the one the window opens on). --title sets the window's title.
@@ -229,6 +237,13 @@ public:
 
     /// The bots of the running game (nullptr without --bot, and on a guest's machine: only the machine that owns a bot runs it)
     const ai::BotController* bots() const noexcept { return bots_.get(); }
+    /// The bots that this player's START seats in the empty seats of its room (protocol 11; --fill-bots at the start): the setup screen's panel or the web page calls it when the player
+    /// chooses, any time before START. It takes effect for the next START of a leader (the request carries it) and of a LAN host (net_start_from_setup).
+    void set_fill_bots(net::FillLevel level) {
+        config_.fill_bots = level;
+        if (net_) net_->set_fill_bots(level);
+    }
+    net::FillLevel fill_bots() const noexcept { return config_.fill_bots; }
 
     /// The network of a room or a match (nullptr unless started with --host / --join)
     net::NetGame* net() noexcept { return net_.get(); }
@@ -401,6 +416,8 @@ private:
     uint64_t hidden_ticks_{0};
     uint64_t hidden_line_at_{0};                           // when the console last got a line about a hidden period (performance counter; 0: never)
     std::string hidden_line_;                              // (the web build prints it when the page is shown again; see hidden_period_line)
+    bool say_sent_{false};                                // --say: the line has been said
+    std::vector<ai::BotSpec> fill_specs_;                 // the bots that this machine's START seated in the empty seats of a room on the local network (taken out again when the start is cancelled)
     bool match_over_handled_{false};
     std::string net_notice_;
     std::string player_name_;

@@ -17,10 +17,17 @@
 // the returning client's session (ClientSession, Mode::Rejoining / CatchingUp) answers Loaded, TurnAck and CaughtUp. A host that holds no seats (a LAN or direct host, a room without reconnect) never sends
 // Presence, CatchUp or TurnBatch and answers a key like any Hello.
 
+// Bots fill the empty seats, and chat in the waiting room (protocol 11, docs/NETWORK_PORT.md "Protocol 11"). The StartRequest of a server's room leader carries a FILL LEVEL (none / easy
+// / medium / hard): when the server starts the match on that request, every seat that is still empty (up to the room's player count) gets a bot of that level, named "Bot (Easy)" and so on
+// (a person can never take such a name: the lobby renames it), and the server runs the bots as virtual clients. Chat works in the waiting room too, and while the map loads: the Chat message is
+// the match's, unchanged (sender, team flag, text of at most 100 printable characters); a line from a guest is relayed to everybody in the room with the sender's seat stamped (team chat does
+// not exist before the match: the flag is cleared), a line with sender kRoomSender (255) is the room itself speaking (a notice to the leader).
+
 #include <array>
 #include <cstddef>
 #include <cstdint>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "ants_sim/command.hpp"
@@ -33,7 +40,7 @@ namespace ants::net {
 // or in some rare sequence of orders, because peers that run different rules desynchronise in the first play where they differ, and the door checks nothing else: a Hello of another
 // number is refused ("version mismatch") by a LAN host and by a server's room, and a LAN announcement of another number is listed as another version. A release that cannot say "no
 // state hash of any play changed" raises it, and the history below says why (nothing in the wire changed in 9: the rules of the engine did).
-inline constexpr uint16_t kProtocolVersion = 10;         // 2: the Room message carries each seat's round trip (the thumbs); 3: host migration (mesh, election); 4: the Quit command (Drop moved from 11 to 12); 5: Hello carries the seat that the guest asks for; 6: map names may hold any printable character that cannot leave the maps folder (up to 64), Hello carries a room code and a token, the slot state Bot, the rejection NoSuchRoom; 7: the Room message names the room's leader (a dedicated server's room: the first player who joined), the message StartRequest (the leader asks the server to start now); 8: turns of 50 ms with one tick each (they were 100 ms with two; a client keeps a jitter buffer of 1 to 4 turns, ants_net/jitter.hpp), a state hash every 20 turns (one second, as before), and the Lag message, type 25 (a dedicated server never waits for a player that falls behind: it tells the room instead); 9: the community-map rules (default ant types, power-ups by tile, the attack clip); 10: rejoin keys, presence, votes, the catch-up stream (every seat of a server's room has a key that the Welcome hands out, and a Hello that shows it takes the seat back: Hello carries the key and the number of turns the client has, Welcome the key and flags; the rejections Dropped, RejoinFailed and Superseded; the messages Presence, Vote, CatchUp, TurnBatch and CaughtUp, types 26 - 30; Presence ends with the seconds left of the resume countdown that follows a pause)
+inline constexpr uint16_t kProtocolVersion = 11;         // 2: the Room message carries each seat's round trip (the thumbs); 3: host migration (mesh, election); 4: the Quit command (Drop moved from 11 to 12); 5: Hello carries the seat that the guest asks for; 6: map names may hold any printable character that cannot leave the maps folder (up to 64), Hello carries a room code and a token, the slot state Bot, the rejection NoSuchRoom; 7: the Room message names the room's leader (a dedicated server's room: the first player who joined), the message StartRequest (the leader asks the server to start now); 8: turns of 50 ms with one tick each (they were 100 ms with two; a client keeps a jitter buffer of 1 to 4 turns, ants_net/jitter.hpp), a state hash every 20 turns (one second, as before), and the Lag message, type 25 (a dedicated server never waits for a player that falls behind: it tells the room instead); 9: the community-map rules (default ant types, power-ups by tile, the attack clip); 10: rejoin keys, presence, votes, the catch-up stream (every seat of a server's room has a key that the Welcome hands out, and a Hello that shows it takes the seat back: Hello carries the key and the number of turns the client has, Welcome the key and flags; the rejections Dropped, RejoinFailed and Superseded; the messages Presence, Vote, CatchUp, TurnBatch and CaughtUp, types 26 - 30; Presence ends with the seconds left of the resume countdown that follows a pause); 11: bots fill empty seats at the leader's START, chat in the waiting room (StartRequest carries a fill level: two bytes now; the room's own notices travel as Chat with sender 255)
 inline constexpr size_t kMaxMessageBytes = 64 * 1024;
 inline constexpr size_t kMaxTurnCommands = 512;
 inline constexpr size_t kMaxChatChars = 100;        // the original's chat entry
@@ -185,6 +192,13 @@ inline LinkQuality link_quality(uint16_t rtt_ms) noexcept {
 /// The room's leader in a RoomMsg when the room has none (every LAN / direct room, and a server's room that does not allow an early start)
 inline constexpr uint8_t kNoLeader = 255;
 
+/// The sender of a Chat message that the room itself says (protocol 11): a notice to a player ("Bots cannot play with Fog of War."), not a player's line. What a client writes in the sender
+/// byte of its own Chat messages does not matter (the host stamps the seat of the connection on relay), so the value only means "the room speaks" in a message that a client RECEIVES.
+inline constexpr uint8_t kRoomSender = 255;
+/// The notices that a server's room sends to its leader when it cannot do what the START asked (a Chat message from kRoomSender; each is at most kMaxChatChars)
+inline constexpr const char* kNoticeFillFog = "Bots cannot play with Fog of War.";
+inline constexpr const char* kNoticeFillMap = "This map cannot be played by every seat: no bots in the empty seats.";
+
 struct RoomMsg {
     struct Slot {
         SlotState state{SlotState::Empty};
@@ -200,8 +214,21 @@ struct RoomMsg {
     /// A leader is always a seat that a person holds as a guest (SlotState::Client): the decoder refuses anything else.
     uint8_t leader{kNoLeader};
 };
-/// The leader's request to start the match now with the players who are in the room (protocol 7, client -> server). It has no payload: exactly one byte on the wire.
-struct StartRequestMsg {};
+/// Which bots a leader's START asks the server to seat in the empty seats of its room (protocol 11). None: the match starts with the people who are there, as in protocol 7.
+enum class FillLevel : uint8_t { None = 0, Easy = 1, Medium = 2, Hard = 3 };
+inline constexpr uint8_t kFillLevelLast = 3;
+/// "none", "easy", "medium", "hard"
+const char* fill_level_name(FillLevel level) noexcept;
+/// The words of fill_level_name, in either case; false (and `out` unchanged) for anything else
+bool parse_fill_level(std::string_view text, FillLevel& out) noexcept;
+/// What the room calls the bot that a fill seats: "Bot (Easy)", "Bot (Medium)", "Bot (Hard)" (the name of the standard bot of that level: ants_ai's bot_display_name says the same; a
+/// person can never take a name that starts with "Bot (": the lobby renames it). Empty for None.
+std::string fill_bot_name(FillLevel level);
+/// The leader's request to start the match now with the players who are in the room (protocol 7, client -> server), and, since protocol 11, to seat bots of `fill` in the seats that are
+/// still empty (up to the room's player count). Two bytes on the wire: the type and the fill level (0 .. 3); nothing else is a StartRequest.
+struct StartRequestMsg {
+    FillLevel fill{FillLevel::None};
+};
 /// Where a guest accepts connections from the other guests (the host fills it from the address it saw and the port the guest announced)
 struct Endpoint {
     std::string address;

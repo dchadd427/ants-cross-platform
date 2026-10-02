@@ -8,7 +8,10 @@
 //           (StartRequested event, report_loaded) -> Begun -> the match runs -> freeze() at its end
 //   client: join(address, port, name) -> room (follows the host's map and fog) -> StartRequested -> load, report_loaded -> Begun -> the match runs
 //   leader: the first player in a dedicated server's room (protocol 7) is the room's leader (is_leader()); request_start() asks the server to start with the players who are
-//           there (the server may refuse: fewer than two players), the rest is as for any client
+//           there (the server may refuse: fewer than two players), the rest is as for any client. Since protocol 11 the request carries set_fill_bots(): with a level the server seats
+//           bots of that level in every empty seat first, and one player is enough. A LAN host's own START does the same with fill_bots() (its machine runs the bots).
+//   chat:   in the waiting room and while the map loads everybody can talk (chat(), protocol 11): the lines come back from the room (Event::Chat, take_pregame_chat(), pregame_chat()), and
+//           the status line shows the latest for a few seconds. Nothing about it is a command: it is the room's, before the match has a simulation.
 //
 // During the match the guests are also linked to each other (each guest listens on a port that the host passes on with the roster; the links are made
 // while the map loads). When the host goes, the guests agree on the lowest living seat as the new host and the match goes on (see session.hpp); the
@@ -67,7 +70,8 @@ public:
             HostLeft,         // during the match (client): the host is gone and no new host could be agreed: the match cannot go on here
             Desync,           // two machines disagree: the match is frozen
             Failed,           // joining failed, see status_text()
-            HostChanged       // during the match: the host left and `seat` is the new host (this machine when it is our own seat)
+            HostChanged,      // during the match: the host left and `seat` is the new host (this machine when it is our own seat)
+            Chat              // in the room (protocol 11): a line was said, `seat` is its sender (kRoomSender: the room itself); take_pregame_chat() has it
         };
         Type type{Type::RoomChanged};
         uint8_t seat{255};
@@ -142,6 +146,21 @@ public:
     /// room is not open, or fewer than two players are in it: the same answer as the host's START gives when `start_match` refuses (the application plays the can't-go cue).
     /// True means the request was sent, not that the server will start: it starts at once when it can, otherwise nothing happens.
     bool request_start();
+    /// The bots that this machine's START asks for when it leads a server's room (protocol 11): None (the default) is the START of protocol 7. With a level, request_start() also works with
+    /// one player in the room (the server seats bots in the empty seats and starts); Fog of War and bots refuse each other: the server says so in a notice to this machine and starts without
+    /// them only if two people are there. Set it before the START (the application does from --fill-bots).
+    void set_fill_bots(FillLevel level) noexcept { fill_ = level; }
+    FillLevel fill_bots() const noexcept { return fill_; }
+
+    // ---- the waiting room's chat (protocol 11) ------------------------------------------------------------------------------------------------------
+    /// Says a line to everybody in the room: in the waiting room and while the map loads (and, as ever, during the match: then `team` counts; before it nobody has a team and the flag is
+    /// ignored). Printable ASCII, at most kMaxChatChars characters. The room relays it to everybody, this machine included, so the line comes back as an Event::Chat. True when the line was
+    /// sent (false: not in a room or a match, nothing to say).
+    bool chat(const std::string& text, bool team = false);
+    /// The lines that arrived in the room since the last call (a guest's, the host's, and the room's own notices to this machine: ChatLine::notice())
+    std::vector<ChatLine> take_pregame_chat();
+    /// Every line of the waiting room (the last 200), kept after the match begins so that the match's chat log can start with them: the application decides
+    const std::vector<ChatLine>& pregame_chat() const noexcept;
 
     // ---- what the network costs this player (latency.hpp), shown next to the frame rate -----------------------------------------------------------
     /// The round trip to the host in ms, as this machine measures it (the mean of its last few Ping / Pong round trips, in the room and in the match). The host has no
@@ -161,6 +180,10 @@ public:
     /// built by the application once the match begins and sends its commands with submit_bot(). False when the seat is taken, the room is full or Fog of War is on.
     bool add_bot(uint8_t seat, const std::string& name);
     void remove_bot(uint8_t seat);
+    /// Host only, in the room (protocol 11: the host's own START with a fill level): seats a bot named fill_bot_name(level) in every empty seat (a room on the local network has four) and
+    /// appends the seats to `seats` when it is given; returns how many. Fog of War is refused (a notice on the status line, 0 seated). The application builds the bots of those seats when the
+    /// match begins, as for --bot, and takes them out again (remove_bot) when the start is cancelled.
+    size_t fill_bots(FillLevel level, std::vector<uint8_t>* seats = nullptr);
     /// Host only, during the match: a command of the bot at `seat` (the issuer is stamped with that seat). False unless this machine is the host and the seat is a bot seat.
     /// The simulation's verdict arrives with the turn, like every command's; a bot ignores it.
     bool submit_bot(uint8_t seat, const sim::Command& command);
@@ -176,8 +199,7 @@ public:
     /// The HUD's sink: the command is stamped with this machine's seat and queued for the next turn; the answer carries the predicted acknowledgement
     /// (the ant that will say "Yessir!") so that the click feels immediate although the order reaches the simulation a few turns later.
     sim::CommandResult submit(const sim::Command& command) override;
-    /// Chat: the message goes through the host and comes back to everybody (own text included); use the callback to show it
-    void chat(const std::string& text, bool team);
+    /// (the chat() above is the match's too) the message goes through the host and comes back to everybody (own text included); use the callback to show it
     void set_on_chat(std::function<void(const ChatMsg&)> fn) { on_chat_ = std::move(fn); }
     /// After every simulation tick / for every applied command (see LockstepRunner); may be set before the match begins
     void set_on_tick(std::function<void()> fn);
@@ -233,6 +255,8 @@ private:
     void shutdown_transport();
     void announce_room();
     LockstepRunner* runner() const;
+    /// Takes the new lines of the lobby (the room's chat), shows the latest on the status line and queues them for take_pregame_chat()
+    void collect_room_chat();
 
     sim::SimulationEngine& sim_;
     Role role_{Role::None};
@@ -258,6 +282,8 @@ private:
     [[maybe_unused]] bool room_loopback_only_{false};   // host(): the door accepts this machine only, so the announcements stay here too (native builds)
     [[maybe_unused]] uint32_t room_id_{0};              // names the room in the announcements (native builds)
     std::string game_version_;
+    FillLevel fill_{FillLevel::None};       // the bots that this machine's START asks for (protocol 11)
+    std::vector<ChatLine> pending_chat_;    // the waiting room's lines that take_pregame_chat() has not handed out
 
     std::function<void(const ChatMsg&)> on_chat_;
     std::function<void()> on_wake_;

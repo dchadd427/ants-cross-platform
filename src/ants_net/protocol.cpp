@@ -549,9 +549,53 @@ bool decode(const uint8_t* data, size_t size, PeerHelloMsg& out) {
     return true;
 }
 
-std::vector<uint8_t> encode(const StartRequestMsg&) { return {static_cast<uint8_t>(MsgType::StartRequest)}; }
-bool decode(const uint8_t* data, size_t size, StartRequestMsg&) {
-    return data != nullptr && size == 1 && data[0] == static_cast<uint8_t>(MsgType::StartRequest);
+std::vector<uint8_t> encode(const StartRequestMsg& m) {
+    std::vector<uint8_t> out;
+    ByteWriter w(out);
+    w.u8(static_cast<uint8_t>(MsgType::StartRequest));
+    w.u8(static_cast<uint8_t>(m.fill));
+    return out;
+}
+bool decode(const uint8_t* data, size_t size, StartRequestMsg& out) {
+    ByteReader storage(nullptr, 0);
+    ByteReader* r = nullptr;
+    if (!open(data, size, MsgType::StartRequest, r, storage)) return false;
+    const uint8_t fill = r->u8();
+    if (!r->done() || fill > kFillLevelLast) return false;               // exactly the type and one fill level: protocol 7's single byte is no StartRequest any more
+    out.fill = static_cast<FillLevel>(fill);
+    return true;
+}
+
+const char* fill_level_name(FillLevel level) noexcept {
+    switch (level) {
+        case FillLevel::None: return "none";
+        case FillLevel::Easy: return "easy";
+        case FillLevel::Medium: return "medium";
+        case FillLevel::Hard: return "hard";
+    }
+    return "none";
+}
+
+bool parse_fill_level(std::string_view text, FillLevel& out) noexcept {
+    std::string lower;
+    for (const char c : text) lower.push_back(c >= 'A' && c <= 'Z' ? static_cast<char>(c - 'A' + 'a') : c);
+    for (uint8_t v = 0; v <= kFillLevelLast; ++v) {
+        if (lower == fill_level_name(static_cast<FillLevel>(v))) {
+            out = static_cast<FillLevel>(v);
+            return true;
+        }
+    }
+    return false;
+}
+
+std::string fill_bot_name(FillLevel level) {
+    switch (level) {
+        case FillLevel::Easy: return "Bot (Easy)";
+        case FillLevel::Medium: return "Bot (Medium)";
+        case FillLevel::Hard: return "Bot (Hard)";
+        case FillLevel::None: break;
+    }
+    return std::string();
 }
 
 std::vector<uint8_t> encode(const LagMsg& m) {

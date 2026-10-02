@@ -279,8 +279,43 @@ bool NetGame::request_start() {
     if (!is_leader() || phase_ != Phase::Room || !client_lobby_) return false;
     size_t players = 0;
     for (const auto& slot : room_.slots) players += slot.state != SlotState::Empty ? 1u : 0u;
-    if (players < 2) return false;                                  // "too few players": as the host's START
-    return client_lobby_->request_start();
+    if (players < 2 && fill_ == FillLevel::None) return false;      // "too few players": as the host's START (with a fill the bots make up the rest: one person is enough)
+    return client_lobby_->request_start(fill_);
+}
+
+// ---- the waiting room's chat (protocol 11) ----------------------------------------------------------------------------------------------------------
+
+const std::vector<ChatLine>& NetGame::pregame_chat() const noexcept {
+    static const std::vector<ChatLine> kNone;
+    if (host_lobby_) return host_lobby_->chat_log();
+    if (client_lobby_) return client_lobby_->chat_log();
+    return kNone;
+}
+
+std::vector<ChatLine> NetGame::take_pregame_chat() {
+    std::vector<ChatLine> out;
+    out.swap(pending_chat_);
+    return out;
+}
+
+// The lines that the lobby has not handed over yet: queued for the application (bounded, like the log), announced as an event, and the latest of somebody else's shown on the status line
+// for a few seconds (the notice mechanism of the setup screen: "Ann: hello"; a room's own notice is its text). Nothing is shown for a line of this machine's own: the player knows it.
+void NetGame::collect_room_chat() {
+    std::vector<ChatLine> lines;
+    if (host_lobby_) lines = host_lobby_->take_chat();
+    else if (client_lobby_) lines = client_lobby_->take_chat();
+    for (ChatLine& line : lines) {
+        if (!line.notice() && line.seat == seat_) {
+            events_.push_back(Event{Event::Type::Chat, line.seat});
+        } else {
+            std::string shown = line.notice() ? line.text : (line.name.empty() ? "Seat " + std::to_string(static_cast<unsigned>(line.seat) + 1u) : line.name) + ": " + line.text;
+            if (shown.size() > 84) shown = shown.substr(0, 81) + "...";                      // (the status label has two lines of 14 px text)
+            set_notice(std::move(shown));
+            events_.push_back(Event{Event::Type::Chat, line.seat});
+        }
+        pending_chat_.push_back(std::move(line));
+    }
+    if (pending_chat_.size() > ChatLog::kMaxLines) pending_chat_.erase(pending_chat_.begin(), pending_chat_.begin() + static_cast<std::ptrdiff_t>(pending_chat_.size() - ChatLog::kMaxLines));
 }
 
 std::optional<uint32_t> NetGame::ping_ms() const {
@@ -373,6 +408,7 @@ void NetGame::update_host() {
         host_lobby_->update(now_);
         room_ = host_lobby_->room();                     // the thumbs move with the measurements
         room_.you = seat_;
+        collect_room_chat();
         for (const HostLobby::Event& ev : host_lobby_->take_events()) {
             switch (ev.type) {
                 case HostLobby::Event::Type::Joined:
@@ -417,6 +453,7 @@ void NetGame::update_host_session() {
 void NetGame::update_client() {
     if ((phase_ == Phase::Connecting || phase_ == Phase::Room || phase_ == Phase::Loading) && client_lobby_) {
         client_lobby_->update(now_);
+        collect_room_chat();
         for (const ClientLobby::Event& ev : client_lobby_->take_events()) {
             switch (ev.type) {
                 case ClientLobby::Event::Type::RoomChanged:
@@ -467,6 +504,8 @@ void NetGame::update_client() {
                     status_ = phase_ == Phase::Connecting ? str::text(str::kUnableToConnect) : std::string("The host closed the room.");
                     phase_ = Phase::Failed;
                     events_.push_back(Event{Event::Type::Failed, 255});
+                    break;
+                case ClientLobby::Event::Type::Chat:             // (a line: collect_room_chat above has it already)
                     break;
             }
             if (phase_ == Phase::Playing || phase_ == Phase::Failed) break;
@@ -720,6 +759,25 @@ void NetGame::remove_bot(uint8_t seat) {
     room_.you = seat_;
 }
 
+size_t NetGame::fill_bots(FillLevel level, std::vector<uint8_t>* seats) {
+    if (level == FillLevel::None || role_ != Role::Host || phase_ != Phase::Room || !host_lobby_) return 0;
+    if (host_lobby_->fog()) {
+        set_notice(kNoticeFillFog);
+        refresh_status();                                            // (the status line says why at once, not with the next update)
+        return 0;
+    }
+    size_t seated = 0;
+    for (uint8_t seat = 0; seat < sim::MAX_PLAYERS; ++seat) {
+        if (host_lobby_->occupied(seat)) continue;
+        if (!host_lobby_->add_bot(seat, fill_bot_name(level))) break;
+        if (seats != nullptr) seats->push_back(seat);
+        ++seated;
+    }
+    room_ = host_lobby_->room();
+    room_.you = seat_;
+    return seated;
+}
+
 bool NetGame::submit_bot(uint8_t seat, const sim::Command& command) {
     if (phase_ != Phase::Playing || !host_session_ || !sim::is_client_command(command.type)) return false;
     return host_session_->submit_bot(seat, command);
@@ -777,11 +835,19 @@ sim::CommandResult NetGame::submit(const sim::Command& command) {
     return result;
 }
 
-void NetGame::chat(const std::string& text, bool team) {
-    if (phase_ != Phase::Playing || text.empty()) return;
+bool NetGame::chat(const std::string& text, bool team) {
+    if (text.empty()) return false;
+    if (phase_ == Phase::Room || phase_ == Phase::Loading) {             // the waiting room (protocol 11): nobody has a team yet, everybody hears it
+        if (host_lobby_) return host_lobby_->chat(text);
+        return client_lobby_ && client_lobby_->chat(text);
+    }
+    if (phase_ != Phase::Playing) return false;
     const std::string body = text.size() > kMaxChatChars ? text.substr(0, kMaxChatChars) : text;
-    if (host_session_) host_session_->chat_local(body, team);
-    else if (client_session_) client_session_->chat(body, team);
+    if (host_session_) {
+        host_session_->chat_local(body, team);
+        return true;
+    }
+    return client_session_ && client_session_->chat(body, team);
 }
 
 void NetGame::freeze() {

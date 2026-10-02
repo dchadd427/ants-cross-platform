@@ -1543,16 +1543,16 @@ void run_leader_tests() {
         ASSERT_TRUE(hall.identical(app.sim(), cat.sim));
     } TEST_END();
 
-    TEST_CASE("N5.22 Leader: --start-when N Is A Test Hook That Presses START For The Leader Of A Server's Room Once N Players Are In (2 To 4 Only); A Game That Does Not Say It Never Does") {
+    TEST_CASE("N5.22 Leader: --start-when N Is A Test Hook That Presses START For The Leader Of A Server's Room Once N Players Are In (1 To 4 Only: 1 Is For A Leader With --fill-bots; 2 To 4 Only Before Protocol 11); A Game That Does Not Say It Never Does") {
         {   // the command line
             std::vector<std::string> args = {"ants", "--join", "127.0.0.1:4001", "--room", "R-1", "--start-when", "2"};
             std::vector<char*> storage;
             ASSERT_EQ(Application::parse_arguments(static_cast<int>(args.size()), argv_of(args, storage)).net_start_when, 2);
-            for (const char* value : {"3", "4"}) {
+            for (const char* value : {"1", "3", "4"}) {
                 args = {"ants", "--start-when", value};
                 ASSERT_EQ(Application::parse_arguments(static_cast<int>(args.size()), argv_of(args, storage)).net_start_when, static_cast<uint8_t>(value[0] - '0'));
             }
-            for (const char* value : {"0", "1", "5", "-2", "many", ""}) {                    // not a number of players of a match: no hook
+            for (const char* value : {"0", "5", "-2", "many", ""}) {                         // not a number of players of a match: no hook (1 is one since protocol 11: a person and the bots of a fill)
                 args = {"ants", "--start-when", value};
                 ASSERT_EQ(Application::parse_arguments(static_cast<int>(args.size()), argv_of(args, storage)).net_start_when, 0);
             }
@@ -3071,6 +3071,243 @@ void run_hidden_page_tests() {
     } TEST_END();
 }
 
+// Bots that fill the empty seats at START and chat in the waiting room (protocol 11): the application's hooks (--fill-bots, --say), the leader of a server's room and the host of a room
+// on the local network
+void run_room_bot_tests() {
+    const auto click_start = [](Application& app) {
+        const int32_t x = MapSelectScreen::BTN_START_X + 5;
+        const int32_t y = MapSelectScreen::BTN_START_Y + 5;
+        app.map_select().handle_mouse_motion(x, y);
+        app.map_select().handle_mouse_down(x, y, 1);
+        app.map_select().handle_mouse_up(x, y, 1);
+    };
+    const auto join_config = [](const Server& server, const std::string& room, const std::string& name) {
+        ApplicationConfig cfg = headless_config();
+        cfg.net_role = ApplicationConfig::NetRole::Join;
+        cfg.net_address = "127.0.0.1";
+        cfg.net_port = server.port();
+        cfg.net_room = room;
+        cfg.player_name = name;
+        return cfg;
+    };
+    const auto lines = [](const std::vector<net::ChatLine>& v) {
+        std::vector<std::string> out;
+        for (const net::ChatLine& l : v) out.push_back(std::to_string(static_cast<unsigned>(l.seat)) + "|" + l.name + "|" + l.text);
+        return out;
+    };
+
+    TEST_CASE("N5.31 Command Line: --fill-bots none|easy|medium|hard Is The Bots That This Player's START Seats In The Empty Seats Of Its Room (Any Case; Off By Default; Anything Else Or No Value Refuses To Start), --say TEXT Is A Test Hook That Says A Line In The Waiting Room") {
+        std::vector<std::string> args;
+        std::vector<char*> st;
+        args = {"ants", "--join", "127.0.0.1:4001", "--room", "R-1"};
+        ApplicationConfig c = Application::parse_arguments(static_cast<int>(args.size()), argv_of(args, st));
+        ASSERT_TRUE(c.fill_bots == net::FillLevel::None && c.startup_error.empty() && c.net_say.empty());          // off by default: the START of every earlier version
+        const std::pair<const char*, net::FillLevel> good[] = {{"none", net::FillLevel::None}, {"easy", net::FillLevel::Easy}, {"medium", net::FillLevel::Medium}, {"hard", net::FillLevel::Hard},
+                                                                {"HARD", net::FillLevel::Hard}, {"Medium", net::FillLevel::Medium}};
+        for (const auto& g : good) {
+            args = {"ants", "--fill-bots", g.first, "--host"};
+            c = Application::parse_arguments(static_cast<int>(args.size()), argv_of(args, st));
+            ASSERT_TRUE(c.fill_bots == g.second && c.startup_error.empty());
+        }
+        for (const char* bad : {"harder", "", "1", "easy medium", "none,easy"}) {
+            args = {"ants", "--fill-bots", bad};
+            c = Application::parse_arguments(static_cast<int>(args.size()), argv_of(args, st));
+            ASSERT_TRUE(c.fill_bots == net::FillLevel::None && c.startup_error.find("--fill-bots") != std::string::npos);
+            Application refuses;
+            ASSERT_FALSE(refuses.init(c));                                                    // refused at startup, with the reason on stderr
+        }
+        args = {"ants", "--fill-bots"};                                                       // no value
+        c = Application::parse_arguments(static_cast<int>(args.size()), argv_of(args, st));
+        ASSERT_TRUE(c.startup_error.find("--fill-bots") != std::string::npos);
+        args = {"ants", "--say", "hello there", "--join", "127.0.0.1:4001"};
+        c = Application::parse_arguments(static_cast<int>(args.size()), argv_of(args, st));
+        ASSERT_EQ(c.net_say, std::string("hello there"));
+    } TEST_END();
+
+    TEST_CASE("N5.32 Leader With --fill-bots And --say: The Line Is Said Once When Two Players Are In The Room (The Other Player Hears It With The Leader's Name, The Leader Hears The Reply), The Leader's START Seats Bots In The Two Empty Seats (The Leader Did Not Need A Third Person), The Match Runs With Four Teams And The Two Machines Stay Identical; The Lines Of The Waiting Room Are Kept") {
+        Server server;
+        ASSERT_TRUE(server.make_room("FILL-APP", 4));
+        ApplicationConfig cfg = join_config(server, "FILL-APP", "Leader");
+        cfg.fill_bots = net::FillLevel::Hard;
+        cfg.net_say = "hello from the leader";
+        Application app;
+        ASSERT_TRUE(app.init(cfg));
+        Peer bob;
+        Hall hall{server, &app, {&bob}};
+        ASSERT_TRUE(hall.until([&]() { return app.net()->phase() == net::NetGame::Phase::Room && app.net()->is_leader(); }, 8000));
+        ASSERT_EQ(app.net()->fill_bots(), net::FillLevel::Hard);
+        app.set_fill_bots(net::FillLevel::Easy);                                              // the screens' way: the player chooses, any time before START
+        ASSERT_TRUE(app.fill_bots() == net::FillLevel::Easy && app.net()->fill_bots() == net::FillLevel::Easy);
+        app.set_fill_bots(net::FillLevel::Hard);
+        ASSERT_TRUE(app.fill_bots() == net::FillLevel::Hard && app.net()->fill_bots() == net::FillLevel::Hard);
+        hall.step(1500);
+        ASSERT_TRUE(app.net()->pregame_chat().empty());                                       // alone, the hook waits for somebody to hear it
+        ASSERT_TRUE(bob.net.join("127.0.0.1", server.port(), "Bob", 255, "FILL-APP"));
+        ASSERT_TRUE(hall.until([&]() { return !bob.net.pregame_chat().empty(); }, 8000));
+        ASSERT_EQ(lines(bob.net.pregame_chat()), (std::vector<std::string>{"0|Leader|hello from the leader"}));
+        ASSERT_EQ(lines(app.net()->pregame_chat()), lines(bob.net.pregame_chat()));          // the room tells the leader its own line as well
+        hall.step(2000);
+        ASSERT_EQ(bob.net.pregame_chat().size(), size_t{1});                                  // once, not again and again
+        ASSERT_TRUE(bob.net.chat("hi leader"));
+        ASSERT_TRUE(hall.until([&]() { return app.net()->pregame_chat().size() == 2; }, 8000));
+        ASSERT_EQ(lines(app.net()->pregame_chat()).back(), std::string("1|Bob|hi leader"));
+        ASSERT_TRUE(hall.until([&]() { return app.net()->room().slots[1].rtt_ms != net::kRttUnknown; }, 8000));
+        click_start(app);                                                                     // the leader's START: the request carries the fill level
+        ASSERT_TRUE(hall.until([&]() { return app.state() == AppState::Playing && bob.net.phase() == net::NetGame::Phase::Playing; }, 15000));
+        const server::RoomStatus s = server.status("FILL-APP");
+        ASSERT_TRUE(s.state == server::RoomState::Running && s.joined == 4 && s.expected == 4 && s.bots.size() == 2);
+        ASSERT_TRUE(s.names[0] == "Leader" && s.names[1] == "Bob" && s.names[2] == "Bot (Hard)" && s.names[3] == "Bot (Hard)");
+        ASSERT_TRUE(s.bots[0].seat == 2 && s.bots[0].level == "hard" && s.bots[0].fill && s.bots[1].seat == 3);
+        ASSERT_EQ(app.sim().roster_mask(), 0x0F);
+        ASSERT_EQ(bob.sim.roster_mask(), 0x0F);
+        ASSERT_EQ(app.sim().get_player_name(3), "Bot (Hard)");                                // the screens name the bots as bots
+        ASSERT_TRUE(app.bots() == nullptr);                                                   // a guest runs no bot: the server does
+        hall.step(6000);
+        ASSERT_TRUE(hall.identical(app.sim(), bob.sim));
+        ASSERT_FALSE(app.net()->desynced() || bob.net.desynced());
+        ASSERT_TRUE(server.status("FILL-APP").state == server::RoomState::Running);          // the referee agrees
+        ASSERT_EQ(app.net()->pregame_chat().size(), size_t{2});                              // the waiting room's lines are still there for the match's log
+        app.quit();
+        ASSERT_FALSE(app.network_active());
+    } TEST_END();
+
+    TEST_CASE("N5.33 Leader Alone With --fill-bots: START Is Not The Can't-Go Cue Any More (One Person Is Enough): The Server Seats Three Bots And Starts; With Fog Of War In The Room The Leader's Status Line Says Bots Cannot Play With It And The Room Waits") {
+        {
+            Server server;
+            ASSERT_TRUE(server.make_room("ALONE-APP", 4));
+            ApplicationConfig cfg = join_config(server, "ALONE-APP", "Solo");
+            cfg.fill_bots = net::FillLevel::Medium;
+            Application app;
+            ASSERT_TRUE(app.init(cfg));
+            Hall hall{server, &app, {}};
+            ASSERT_TRUE(hall.until([&]() { return app.net()->phase() == net::NetGame::Phase::Room && app.net()->is_leader(); }, 8000));
+            const size_t channels = app.audio_mixer().active_channel_count();
+            click_start(app);
+            ASSERT_EQ(app.audio_mixer().active_channel_count(), channels + 1);               // the click only: no can't-go cue
+            ASSERT_TRUE(hall.until([&]() { return app.state() == AppState::Playing; }, 15000));
+            const server::RoomStatus s = server.status("ALONE-APP");
+            ASSERT_TRUE(s.state == server::RoomState::Running && s.joined == 4 && s.bots.size() == 3 && s.names[0] == "Solo");
+            ASSERT_EQ(app.sim().roster_mask(), 0x0F);
+            hall.step(4000);
+            ASSERT_FALSE(app.net()->desynced());
+            ASSERT_TRUE(server.status("ALONE-APP").ticks > 40);
+            app.quit();
+        }
+        {   // without a fill the same START is the can't-go cue, as before
+            Server server;
+            ASSERT_TRUE(server.make_room("ALONE-NOFILL", 4));
+            Application app;
+            ASSERT_TRUE(app.init(join_config(server, "ALONE-NOFILL", "Solo")));
+            Hall hall{server, &app, {}};
+            ASSERT_TRUE(hall.until([&]() { return app.net()->phase() == net::NetGame::Phase::Room && app.net()->is_leader(); }, 8000));
+            const size_t channels = app.audio_mixer().active_channel_count();
+            click_start(app);
+            ASSERT_EQ(app.audio_mixer().active_channel_count(), channels + 2);               // the click and the cue
+            hall.step(1000);
+            ASSERT_TRUE(server.status("ALONE-NOFILL").state == server::RoomState::Waiting && server.status("ALONE-NOFILL").bots.empty());
+        }
+        {   // Fog of War: the server refuses the bots and says so; the room is not started
+            Server server;
+            server::RoomSpec spec;
+            spec.code = "ALONE-FOG";
+            spec.map = "TINY.LVL";
+            spec.players = 4;
+            spec.fog = true;
+            ASSERT_TRUE(server.mgr.create_room(spec, server.now).ok);
+            ApplicationConfig cfg = join_config(server, "ALONE-FOG", "Solo");
+            cfg.fill_bots = net::FillLevel::Easy;
+            Application app;
+            ASSERT_TRUE(app.init(cfg));
+            Hall hall{server, &app, {}};
+            ASSERT_TRUE(hall.until([&]() { return app.net()->phase() == net::NetGame::Phase::Room && app.net()->is_leader(); }, 8000));
+            click_start(app);
+            ASSERT_TRUE(hall.until([&]() { return app.net()->status_text() == net::kNoticeFillFog; }, 8000));      // the notice of the room is on the status line
+            ASSERT_EQ(app.map_select().room().status, std::string(net::kNoticeFillFog));
+            ASSERT_TRUE(app.net()->pregame_chat().size() == 1 && app.net()->pregame_chat()[0].notice());
+            hall.step(1500);
+            ASSERT_TRUE(server.status("ALONE-FOG").state == server::RoomState::Waiting && server.status("ALONE-FOG").bots.empty());
+            ASSERT_EQ(app.state(), AppState::MapSelect);
+        }
+    } TEST_END();
+
+    TEST_CASE("N5.34 Host Of A Room On The Local Network With --fill-bots: START Seats Bots In The Empty Seats And This Machine Runs Them (The Controller Holds Exactly Those Seats); A Start That Is Cancelled Takes Them Out Again; Fog Of War Seats None") {
+        ApplicationConfig cfg = headless_config();
+        cfg.net_role = ApplicationConfig::NetRole::Host;
+        cfg.net_port = 0;
+        cfg.net_loopback_only = true;
+        cfg.player_name = "Alice";
+        cfg.fill_bots = net::FillLevel::Easy;
+        Application app;
+        ASSERT_TRUE(app.init(cfg));
+        {   // a guest that says Hello and never answers a ping: its thumb has not appeared, so START cannot go through (the can't-go cue), and the bots that the fill seated for it go again
+            auto mute = net::TcpConnection::connect("127.0.0.1", app.net()->listen_port());
+            ASSERT_TRUE(mute != nullptr);
+            net::HelloMsg hello;
+            hello.name = "Mute";
+            bool sent = false;
+            for (int i = 0; i < 800 && app.net()->room().slots[1].state != net::SlotState::Client; ++i) {
+                app.pump_network(0.010f);
+                std::vector<uint8_t> unread;
+                mute->poll(unread);                                                          // (it reads the host's pings and never answers them)
+                if (!sent && mute->is_open()) sent = mute->send(net::encode(hello));
+                std::this_thread::sleep_for(std::chrono::microseconds(300));
+            }
+            ASSERT_TRUE(app.net()->room().slots[1].state == net::SlotState::Client && app.net()->room().slots[1].rtt_ms == net::kRttUnknown);
+            const size_t channels = app.audio_mixer().active_channel_count();
+            app.map_select().handle_key_down(SDLK_RETURN);
+            ASSERT_EQ(app.audio_mixer().active_channel_count(), channels + 1);               // the cue (sound 63)
+            ASSERT_TRUE(app.net()->room().slots[2].state == net::SlotState::Empty && app.net()->room().slots[3].state == net::SlotState::Empty);
+            ASSERT_FALSE(app.map_select().is_locked());
+            ASSERT_EQ(app.net()->phase(), net::NetGame::Phase::Room);
+            mute->close();
+            for (int i = 0; i < 800 && app.net()->room().slots[1].state != net::SlotState::Empty; ++i) {
+                app.pump_network(0.010f);
+                std::this_thread::sleep_for(std::chrono::microseconds(300));
+            }
+            ASSERT_TRUE(app.net()->room().slots[1].state == net::SlotState::Empty);
+        }
+        Peer bob;
+        ASSERT_TRUE(bob.net.join("127.0.0.1", app.net()->listen_port(), "Bob"));
+        Duo duo{app, bob};
+        ASSERT_TRUE(duo.until([&]() { return app.net()->room().slots[1].state == net::SlotState::Client && app.net()->room().slots[1].rtt_ms != net::kRttUnknown; }, 8000));
+        // Bob's machine cannot load the map: the start is cancelled and the bots that it seated go again
+        bob.hold_report = true;
+        app.map_select().handle_key_down(SDLK_RETURN);
+        ASSERT_TRUE(duo.until([&]() { return bob.report_pending; }, 8000));
+        ASSERT_TRUE(app.net()->room().slots[2].state == net::SlotState::Bot && app.net()->room().slots[3].state == net::SlotState::Bot);
+        ASSERT_EQ(app.net()->room().slots[2].name, "Bot (Easy)");
+        bob.report_pending = false;
+        bob.net.report_loaded(false);
+        ASSERT_TRUE(duo.until([&]() { return app.net()->phase() == net::NetGame::Phase::Room && !app.map_select().is_locked(); }, 8000));
+        ASSERT_TRUE(app.net()->room().slots[2].state == net::SlotState::Empty && app.net()->room().slots[3].state == net::SlotState::Empty);
+        ASSERT_TRUE(duo.until([&]() { return bob.net.room().slots[2].state == net::SlotState::Empty; }, 3000));                  // Bob sees the room without them
+        // the same START with a machine that loads: two people and two bots, the host's machine runs the bots
+        bob.hold_report = false;
+        duo.step(500);
+        app.map_select().handle_key_down(SDLK_RETURN);
+        ASSERT_TRUE(duo.until([&]() { return app.state() == AppState::Playing && bob.net.phase() == net::NetGame::Phase::Playing; }, 8000));
+        ASSERT_EQ(app.sim().roster_mask(), 0x0F);
+        ASSERT_EQ(bob.sim.roster_mask(), 0x0F);
+        ASSERT_TRUE(app.bots() != nullptr);
+        ASSERT_EQ(app.bots()->seat_mask(), 0x0C);                                            // exactly the seats that the fill took: 2 and 3
+        ASSERT_TRUE(app.sim().get_player_name(2) == "Bot (Easy)" && app.sim().get_player_name(3) == "Bot (Easy)");
+        duo.step(8000);
+        ASSERT_TRUE(app.bots()->stats(2).decisions > 0 && app.bots()->stats(3).decisions > 0);
+        ASSERT_EQ(app.bots()->stats(2).rejected, 0u);
+        bool same = false;                                                                   // both machines stand at the same tick at some moment: their states are then equal
+        for (int i = 0; i < 400 && !same; ++i) {
+            if (app.sim().current_tick() == bob.sim.current_tick()) {
+                ASSERT_TRUE(app.sim().state_hash() == bob.sim.state_hash());
+                same = true;
+            }
+            duo.step(10);
+        }
+        ASSERT_TRUE(same);
+        ASSERT_FALSE(app.net()->desynced() || bob.net.desynced());
+        app.quit();
+    } TEST_END();
+}
+
 }  // namespace
 
 int main(int argc, char* argv[]) {
@@ -3087,6 +3324,7 @@ int main(int argc, char* argv[]) {
     run_leader_tests();
     run_latency_tests();
     run_hidden_page_tests();
+    run_room_bot_tests();
     std::cout << "\n=======================================================\n Total Test Cases: " << g_test_count << "\n Total Assertions: " << g_assert_count
               << "\n Failed:           " << g_test_failures << "\n=======================================================\n";
     return g_test_failures == 0 ? 0 : 1;

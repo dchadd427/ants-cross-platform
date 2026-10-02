@@ -20,6 +20,14 @@
 // MatchRunning to it as to any Hello. A key that fits no seat is no offence: the Hello is the Hello of a new player. Without a key maker (a LAN or direct host) there are no keys,
 // every Welcome carries the zero key and every Hello's key is ignored.
 //
+// Chat and the fill (protocol 11, docs/NETWORK_PORT.md "Protocol 11"). Everybody who is in the room can talk before the match, while it waits for players and while the map loads: a Chat message
+// from a guest is relayed to EVERYBODY in the room (the sender included), with the seat of its connection stamped (a team does not exist yet: the team flag is cleared), under the same
+// flood budget as every other message of the connection; a line that cannot be decoded is a violation as in the match. A guest who joins later hears only what is said after it joined. Both
+// lobbies keep the lines (ChatLog: the last 200) and hand the new ones to their owner (take_chat() and the Chat event), so that the application can show them and start the match's chat log with
+// them. The room itself can speak to one guest (HostLobby::notify: a Chat message from kRoomSender), which is how a server's room tells its leader why a fill was refused. The StartRequest of the
+// leader carries a fill level: with one, the room's owner may seat bots in the empty seats and start (Event::LeaderStart carries the level; HostLobby::can_start_filled says whether the room
+// could start with them: one person is enough).
+//
 // Both classes are pure logic over Connection, driven from the main loop like the sessions. The connections stay owned by the caller; when the match
 // begins the host lobby hands them (seat -> connection) to the HostSession.
 
@@ -35,6 +43,32 @@
 #include "ants_net/transport.hpp"
 
 namespace ants::net {
+
+/// One line of the waiting room's chat (protocol 11). `seat` is the sender's seat, kRoomSender (255) for a line that the room itself said (a notice); `name` is the sender's name as the
+/// room showed it when the line arrived ("" for a notice).
+struct ChatLine {
+    uint8_t seat{kRoomSender};
+    std::string name;
+    std::string text;
+    bool notice() const noexcept { return seat >= sim::MAX_PLAYERS; }
+};
+
+/// The lines of the waiting room, oldest first, the last kMaxLines of them (the match's chat log can start with them: the application decides), and the ones that nobody took yet.
+class ChatLog {
+public:
+    static constexpr size_t kMaxLines = 200;
+    void add(ChatLine line);
+    const std::vector<ChatLine>& lines() const noexcept { return lines_; }
+    /// The lines added since the last take() (at most kMaxLines: a consumer that never comes does not make the lobby grow)
+    std::vector<ChatLine> take();
+    /// How many lines were ever added
+    uint64_t total() const noexcept { return total_; }
+
+private:
+    std::vector<ChatLine> lines_;
+    uint64_t total_{0};
+    uint64_t taken_{0};
+};
 
 class HostLobby {
 public:
@@ -62,10 +96,12 @@ public:
     };
     enum class Phase : uint8_t { Room, Loading, Begun };
     struct Event {
-        /// LeaderStart (a dedicated server's room): the leader (`seat`) asked to start now and can_start() holds; the owner of the lobby decides and calls start()
-        enum class Type : uint8_t { Joined, Left, Rejected, LoadFailed, Cancelled, Begun, LeaderStart };
+        /// LeaderStart (a dedicated server's room): the leader (`seat`) asked to start now and can_start() holds (with a `fill` level: can_start_filled(): the room could start once the empty
+        /// seats were filled); the owner of the lobby decides and calls start(). Chat: a line was said in the room (`seat` is its sender; take_chat() has it)
+        enum class Type : uint8_t { Joined, Left, Rejected, LoadFailed, Cancelled, Begun, LeaderStart, Chat };
         Type type{Type::Joined};
         uint8_t seat{255};
+        FillLevel fill{FillLevel::None};        // LeaderStart: the bots that the leader asked for in the empty seats (protocol 11)
     };
 
     HostLobby() : HostLobby(Config{}) {}
@@ -97,6 +133,20 @@ public:
     bool occupied(uint8_t seat) const noexcept { return seat < sim::MAX_PLAYERS && room_.slots[seat].state != SlotState::Empty; }
     /// A match starts when enough seats are taken, a map is chosen, and at least one of the players is a person (a room of bots alone has nobody to play for)
     bool can_start() const noexcept { return phase_ == Phase::Room && players() >= cfg_.min_players && humans() >= 1 && !room_.map_name.empty(); }
+    /// The same once every empty seat up to max_players has a bot (a leader's START with a fill level): one person is enough, because the bots make up the rest. Fog of War is not looked at
+    /// here: the owner refuses the fill itself (add_bot and start refuse a room with fog and a bot) and tells the leader why.
+    bool can_start_filled() const noexcept { return phase_ == Phase::Room && humans() >= 1 && !room_.map_name.empty() && cfg_.max_players >= cfg_.min_players; }
+    /// The room's chat (protocol 11): every line that was said (a guest's, relayed to everybody; the host's own, see chat()), kept for the match's log, and the new ones for the owner
+    const std::vector<ChatLine>& chat_log() const noexcept { return chat_.lines(); }
+    std::vector<ChatLine> take_chat() { return chat_.take(); }
+    /// How many lines were said in the room in all (the log keeps the last ChatLog::kMaxLines of them)
+    uint64_t chat_total() const noexcept { return chat_.total(); }
+    /// The host's own line (a host that holds a seat; a server's host has none): printable ASCII, at most kMaxChatChars characters, not empty. Relayed to every guest and kept in the log. False
+    /// when nothing was said (no seat, an empty line, the match has begun).
+    bool chat(const std::string& text);
+    /// The room speaks to ONE guest (a Chat message from kRoomSender): a server's room tells its leader why it could not do what the START asked. Not kept in the log. False when the seat
+    /// has no open connection or the text is empty.
+    bool notify(uint8_t seat, const std::string& text);
     /// Removes the guest of a seat (Reject Kicked)
     void kick(uint8_t seat);
     /// A computer player takes `seat` (docs/BOTS.md): a slot in state Bot with no connection behind it. It counts as a player, its thumb is always good
@@ -160,6 +210,7 @@ private:
     uint8_t seat_of_key(const SeatKey& key) const noexcept;
     void take_over(uint8_t seat, Pending& p, const HelloMsg& hello);
     void handle_guest_message(uint8_t seat, const std::vector<uint8_t>& msg);
+    void relay_chat(uint8_t sender, const std::string& text);
     void check_all_loaded();
     void cancel_with(CancelMsg::Reason reason, uint8_t player);
     /// A dedicated server's room that allows an early start has a leader
@@ -180,6 +231,7 @@ private:
     uint32_t joins_{0};                      // the Welcomes sent so far (Guest::join_order)
     uint32_t ignored_start_requests_{0};
     uint32_t takeovers_{0};
+    ChatLog chat_;
 };
 
 class ClientLobby {
@@ -197,8 +249,9 @@ public:
     };
     enum class Phase : uint8_t { Connecting, Joining, InRoom, Loading, Loaded, Begun, Rejected, Closed };
     struct Event {
-        enum class Type : uint8_t { RoomChanged, StartRequested, Begun, Cancelled, Rejected, Disconnected };
+        enum class Type : uint8_t { RoomChanged, StartRequested, Begun, Cancelled, Rejected, Disconnected, Chat };       // Chat (protocol 11): a line arrived; take_chat() has it
         Type type{Type::RoomChanged};
+        uint8_t seat{255};                      // Chat: the sender's seat, kRoomSender (255) for a notice of the room itself
     };
 
     ClientLobby(Connection* connection, Config config) : conn_(connection), cfg_(std::move(config)) {}
@@ -215,8 +268,16 @@ public:
         return (phase_ == Phase::InRoom || phase_ == Phase::Loading || phase_ == Phase::Loaded) && seat_ < sim::MAX_PLAYERS && room_.leader == seat_;
     }
     /// The leader asks the server to start the match now with the players who are here (StartRequest). False unless this machine leads an open room (InRoom) and the message went
-    /// out. The server decides: it starts only when it can (two players at least) and says nothing to a request that it cannot honour.
-    bool request_start();
+    /// out. The server decides: it starts only when it can (two players at least) and says nothing to a request that it cannot honour. With a `fill` level (protocol 11) it also seats
+    /// bots of that level in every seat that is still empty (up to the room's player count), and then one person is enough; with Fog of War it refuses the bots, says why (a notice, see
+    /// take_chat()) and starts without them if two people are there.
+    bool request_start(FillLevel fill = FillLevel::None);
+    /// Says a line in the room (protocol 11): in the waiting room, while the map loads and while this machine waits for the match to begin. Printable ASCII, at most kMaxChatChars characters
+    /// (a longer line is cut), not empty. The room relays it to everybody, this machine included: the line comes back through take_chat(). False when nothing was sent.
+    bool chat(const std::string& text);
+    /// Every line that was said in the room since this machine was welcomed (the last ChatLog::kMaxLines), the room's notices to this machine among them, and the new ones (the Chat event)
+    const std::vector<ChatLine>& chat_log() const noexcept { return chat_.lines(); }
+    std::vector<ChatLine> take_chat() { return chat_.take(); }
     /// The host's Start (valid from Loading on): the map, the seed, the roster
     const StartMsg& start_info() const noexcept { return start_; }
     RejectReason reject_reason() const noexcept { return reject_; }
@@ -262,6 +323,7 @@ private:
     bool was_open_{false};                  // the connection was open when the Hello was sent
     bool welcome_timed_out_{false};         // no Welcome came within the limit (see welcome_timed_out())
     std::vector<Event> events_;
+    ChatLog chat_;
 };
 
 }  // namespace ants::net

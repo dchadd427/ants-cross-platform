@@ -55,6 +55,24 @@ std::string bot_name(const std::string& raw) {
 }  // namespace
 
 // ------------------------------------------------------------------------------------------------
+// ChatLog
+// ------------------------------------------------------------------------------------------------
+
+void ChatLog::add(ChatLine line) {
+    lines_.push_back(std::move(line));
+    ++total_;
+    if (lines_.size() > kMaxLines) lines_.erase(lines_.begin(), lines_.begin() + static_cast<std::ptrdiff_t>(lines_.size() - kMaxLines));
+}
+
+std::vector<ChatLine> ChatLog::take() {
+    const uint64_t fresh = total_ - taken_;                           // lines added since the last take (some may have been pushed out of the log meanwhile: then only what is left)
+    const size_t n = static_cast<size_t>(std::min<uint64_t>(fresh, lines_.size()));
+    std::vector<ChatLine> out(lines_.end() - static_cast<std::ptrdiff_t>(n), lines_.end());
+    taken_ = total_;
+    return out;
+}
+
+// ------------------------------------------------------------------------------------------------
 // HostLobby
 // ------------------------------------------------------------------------------------------------
 
@@ -161,6 +179,36 @@ void HostLobby::broadcast_room() {
         m.you = s;
         guests_[s].conn->send(encode(m));
     }
+}
+
+// A line said in the room goes to EVERYBODY (the sender too: the line that comes back is the room's word that it was heard) with the seat of the connection stamped, never a team (before the match
+// nobody has one), and into the log. `sender` is a seat that a person holds.
+void HostLobby::relay_chat(uint8_t sender, const std::string& text) {
+    ChatMsg out;
+    out.sender = sender;
+    out.team = false;
+    out.text = text;
+    broadcast(encode(out));
+    chat_.add(ChatLine{sender, room_.slots[sender].name, text});
+    events_.push_back(Event{Event::Type::Chat, sender, FillLevel::None});
+}
+
+bool HostLobby::chat(const std::string& text) {
+    if (cfg_.host_seat >= sim::MAX_PLAYERS || phase_ == Phase::Begun || room_.slots[cfg_.host_seat].state != SlotState::Host) return false;
+    const std::string line = printable(text, kMaxChatChars);
+    if (line.empty()) return false;
+    relay_chat(cfg_.host_seat, line);
+    return true;
+}
+
+bool HostLobby::notify(uint8_t seat, const std::string& text) {
+    if (seat >= sim::MAX_PLAYERS || guests_[seat].conn == nullptr || !guests_[seat].conn->is_open()) return false;
+    const std::string line = printable(text, kMaxChatChars);
+    if (line.empty()) return false;
+    ChatMsg out;
+    out.sender = kRoomSender;
+    out.text = line;
+    return guests_[seat].conn->send(encode(out));
 }
 
 void HostLobby::elect_leader() {
@@ -385,16 +433,24 @@ void HostLobby::handle_guest_message(uint8_t seat, const std::vector<uint8_t>& m
         }
         case MsgType::StartRequest: {
             StartRequestMsg m;
-            if (!decode(msg, m)) return violation(seat);                  // it has no payload: anything else is garbage
-            // Only the leader of a server's room is heard, and only while the room is open and could start now. A request that cannot be honoured is no offence at first (the leader's
-            // second click on START arrives when the match is loading already; a host that holds a seat has no leader; a player is told who leads): it is ignored and counted. A
-            // connection that sends more of them than a person ever could (kIgnoredStartRequestsAllowed) is flooding: every one after those is a violation.
-            if (phase_ == Phase::Room && seat == room_.leader && can_start()) {
-                events_.push_back(Event{Event::Type::LeaderStart, seat});
+            if (!decode(msg, m)) return violation(seat);                  // exactly the type and a fill level (0 .. 3): anything else is garbage
+            // Only the leader of a server's room is heard, and only while the room is open and could start now (with the empty seats filled when the request asks for bots: then one person is
+            // enough). A request that cannot be honoured is no offence at first (the leader's second click on START arrives when the match is loading already; a host that holds a seat has
+            // no leader; a player is told who leads): it is ignored and counted. A connection that sends more of them than a person ever could (kIgnoredStartRequestsAllowed) is flooding:
+            // every one after those is a violation.
+            const bool could = m.fill == FillLevel::None ? can_start() : can_start_filled();
+            if (phase_ == Phase::Room && seat == room_.leader && could) {
+                events_.push_back(Event{Event::Type::LeaderStart, seat, m.fill});
             } else {
                 ++ignored_start_requests_;
                 if (++guests_[seat].ignored_start_requests > kIgnoredStartRequestsAllowed) violation(seat);
             }
+            return;
+        }
+        case MsgType::Chat: {                                             // (protocol 11) a line for the room: in the waiting room and while the map loads
+            ChatMsg m;
+            if (!decode(msg, m)) return violation(seat);                  // the match's rules: at most kMaxChatChars printable characters, a flag that is 0 or 1
+            if (!m.text.empty()) relay_chat(seat, m.text);               // (an empty line says nothing; it cost a message of the budget, like every other)
             return;
         }
         case MsgType::Loaded: {
@@ -491,9 +547,21 @@ void ClientLobby::leave() {
     if (phase_ != Phase::Begun) phase_ = Phase::Closed;
 }
 
-bool ClientLobby::request_start() {
+bool ClientLobby::request_start(FillLevel fill) {
     if (conn_ == nullptr || phase_ != Phase::InRoom || !is_leader() || !conn_->is_open()) return false;
-    return conn_->send(encode(StartRequestMsg{}));
+    StartRequestMsg m;
+    m.fill = fill;
+    return conn_->send(encode(m));
+}
+
+bool ClientLobby::chat(const std::string& text) {
+    if (conn_ == nullptr || !conn_->is_open() || (phase_ != Phase::InRoom && phase_ != Phase::Loading && phase_ != Phase::Loaded)) return false;
+    ChatMsg m;
+    m.sender = seat_ < sim::MAX_PLAYERS ? seat_ : kRoomSender;       // (whatever it says, the room stamps the seat of the connection)
+    m.team = false;
+    m.text = printable(text, kMaxChatChars);
+    if (m.text.empty()) return false;
+    return conn_->send(encode(m));
 }
 
 void ClientLobby::send_hello() {
@@ -585,6 +653,15 @@ void ClientLobby::update(uint32_t now_ms) {
                     cancel_player_ = c.player;
                     phase_ = Phase::InRoom;
                     events_.push_back(Event{Event::Type::Cancelled});
+                }
+                break;
+            }
+            case MsgType::Chat: {                    // (protocol 11) a line of the room: from a player's seat, or from the room itself (kRoomSender: a notice)
+                ChatMsg c;
+                if ((phase_ == Phase::InRoom || phase_ == Phase::Loading || phase_ == Phase::Loaded) && decode(msg, c) && !c.text.empty() &&
+                    (c.sender < sim::MAX_PLAYERS || c.sender == kRoomSender)) {
+                    chat_.add(ChatLine{c.sender, c.sender < sim::MAX_PLAYERS ? room_.slots[c.sender].name : std::string(), c.text});
+                    events_.push_back(Event{Event::Type::Chat, c.sender});
                 }
                 break;
             }

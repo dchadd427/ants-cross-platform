@@ -923,7 +923,7 @@ struct LoneSession {
 
 void run_protocol_tests() {
     TEST_CASE("N2.1 Protocol: Every Message Round-Trips And Trailing Or Missing Bytes Are Rejected") {
-        ASSERT_EQ(kProtocolVersion, 10);                                 // 7: the room leader's START; 8: turns of 50 ms, one tick each, the adaptive buffer and the Lag message (type 25); 9: the community-map rules; 10: keys, presence, votes and the catch-up stream (types 26 - 30)
+        ASSERT_EQ(kProtocolVersion, 11);                                 // 7: the room leader's START; 8: turns of 50 ms, one tick each, the adaptive buffer and the Lag message (type 25); 9: the community-map rules; 10: keys, presence, votes and the catch-up stream (types 26 - 30); 11: the leader's START carries a fill level, chat in the waiting room
         ASSERT_TRUE(kTurnMs == 50 && kTicksPerTurn == 1 && kTurnsPerSecond == 20 && kHashEveryTurns == 20);     // a hash every 20 ticks, one second, as before
         ASSERT_TRUE(turns_for_ms(0) == 0 && turns_for_ms(1) == 1 && turns_for_ms(50) == 1 && turns_for_ms(51) == 2 && turns_for_ms(3000) == 60);
         ASSERT_EQ(static_cast<int>(MsgType::Last), static_cast<int>(MsgType::CaughtUp));
@@ -1292,13 +1292,13 @@ void run_protocol_tests() {
                 ASSERT_TRUE(encode(room) == buf);
                 ASSERT_TRUE(room.leader == kNoLeader || (room.leader < sim::MAX_PLAYERS && room.slots[room.leader].state == SlotState::Client));
             }
-            if (decode(buf, sreq)) { ++accepted; ASSERT_TRUE(encode(sreq) == buf && buf.size() == 1); }
+            if (decode(buf, sreq)) { ++accepted; ASSERT_TRUE(encode(sreq) == buf && buf.size() == 2 && buf[1] <= kFillLevelLast); }       // (protocol 11: the type and a fill level)
         }
         ASSERT_TRUE(accepted > 5000);                  // the mutations of valid messages do get through
     } TEST_END();
 
-    TEST_CASE("N2.3b Protocol 7: The Room Names Its Leader (Every Value; Only The Seat Of A Guest Or Nobody), StartRequest Is One Byte And Nothing Else, The Layout Of Protocol 6 Is Refused") {
-        ASSERT_TRUE(kProtocolVersion >= 7);                                // protocol 7 grew the Room message by a byte and added a message type (8 and 9 keep both): a client of protocol 6 cannot play with it
+    TEST_CASE("N2.3b Protocol 7: The Room Names Its Leader (Every Value; Only The Seat Of A Guest Or Nobody), StartRequest Is The Type And A Fill Level 0 .. 3 (Two Bytes Since Protocol 11, One Before) And Nothing Else, The Layout Of Protocol 6 Is Refused") {
+        ASSERT_TRUE(kProtocolVersion >= 7);                                // protocol 7 grew the Room message by a byte and added a message type (8 to 11 keep both): a client of protocol 6 cannot play with it
         ASSERT_EQ(kNoLeader, 255);
         // every value of the leader: nobody, and each seat that a guest holds; the byte is the last of the message, the receiver's own seat ("you") the one before it
         for (const uint8_t leader : {uint8_t{255}, uint8_t{0}, uint8_t{1}, uint8_t{3}}) {
@@ -1351,24 +1351,30 @@ void run_protocol_tests() {
             longer.push_back(255);
             ASSERT_FALSE(decode(longer, out));
         }
-        // StartRequest: exactly the type byte
+        // StartRequest (protocol 11): exactly the type and one fill level, 0 .. 3
         const std::vector<uint8_t> request = encode(StartRequestMsg{});
-        ASSERT_TRUE(request.size() == 1 && request[0] == 24);
+        ASSERT_TRUE(request.size() == 2 && request[0] == 24 && request[1] == 0);
         StartRequestMsg sr;
-        ASSERT_TRUE(decode(request, sr));
+        ASSERT_TRUE(decode(request, sr) && sr.fill == FillLevel::None);
+        for (uint8_t level = 0; level <= kFillLevelLast; ++level) {
+            const std::vector<uint8_t> m = {24, level};
+            ASSERT_TRUE(decode(m, sr) && static_cast<uint8_t>(sr.fill) == level && encode(sr) == m);
+        }
+        ASSERT_FALSE(decode(std::vector<uint8_t>{24}, sr));                // protocol 7's single byte is no StartRequest any more
         ASSERT_FALSE(decode(std::vector<uint8_t>{}, sr));
         ASSERT_FALSE(decode(nullptr, 1, sr));
-        for (size_t extra : {size_t{1}, size_t{2}, size_t{9}, size_t{200}, kMaxMessageBytes - 1}) {    // a payload of any size makes it garbage
+        for (unsigned level = kFillLevelLast + 1u; level < 256u; ++level) ASSERT_FALSE(decode(std::vector<uint8_t>{24, static_cast<uint8_t>(level)}, sr));      // a level above 3
+        for (size_t extra : {size_t{1}, size_t{2}, size_t{9}, size_t{200}, kMaxMessageBytes - 2}) {    // a payload of any size beyond the level makes it garbage
             std::vector<uint8_t> payload = request;
-            payload.resize(1 + extra, 0x5A);
+            payload.resize(2 + extra, 0x01);
             ASSERT_FALSE(decode(payload, sr));
         }
         for (unsigned type = 0; type < 256; ++type) {                      // no other type byte is a StartRequest
             if (type == 24) continue;
-            ASSERT_FALSE(decode(std::vector<uint8_t>{static_cast<uint8_t>(type)}, sr));
+            ASSERT_FALSE(decode(std::vector<uint8_t>{static_cast<uint8_t>(type), 0}, sr));
         }
         // and the neighbours: no other decoder takes it, and it takes no other message
-        ASSERT_FALSE(any_decodes(std::vector<uint8_t>{24, 0}) || any_decodes(std::vector<uint8_t>{}));
+        ASSERT_FALSE(any_decodes(std::vector<uint8_t>{24}) || any_decodes(std::vector<uint8_t>{24, 4}) || any_decodes(std::vector<uint8_t>{}));
         for (const auto& m : {encode(server_room_of(0)), encode(hello_of(kProtocolVersion, "A")), encode_begin(), encode_leave(), encode(WelcomeMsg{1, 4})}) {
             ASSERT_FALSE(decode(m, sr));
         }
@@ -1394,7 +1400,7 @@ void run_protocol_tests() {
 
     TEST_CASE("N2.40 Protocol 10: Keys In Hello And Welcome, Three More Rejections, Presence (With The Resume Countdown), Vote, CatchUp, TurnBatch And CaughtUp: Numbers, Layouts Byte By Byte, Every Truncation, Every Range Rule, The Batch Encoders Agree") {
         // ---- the numbers ----
-        ASSERT_EQ(kProtocolVersion, 10);
+        ASSERT_EQ(kProtocolVersion, 11);                                 // (the layouts of protocol 10 below are still the layouts of protocol 11: 11 changed the StartRequest only)
         ASSERT_TRUE(static_cast<int>(MsgType::Presence) == 26 && static_cast<int>(MsgType::Vote) == 27 && static_cast<int>(MsgType::CatchUp) == 28 &&
                     static_cast<int>(MsgType::TurnBatch) == 29 && static_cast<int>(MsgType::CaughtUp) == 30 && static_cast<int>(MsgType::Last) == 30);
         ASSERT_TRUE(static_cast<int>(RejectReason::Dropped) == 7 && static_cast<int>(RejectReason::RejoinFailed) == 8 && static_cast<int>(RejectReason::Superseded) == 9);
@@ -1438,12 +1444,12 @@ void run_protocol_tests() {
             h.have_turns = 0x01020304;
             const std::vector<uint8_t> bytes = encode(h);
             ASSERT_EQ(bytes.size(), size_t{1 + 2 + 4 + 2 + 1 + 7 + 4 + 16 + 4});     // type, version, "Ann", port, seat, "ROOM-7", "tok", key, turns
-            ASSERT_TRUE(bytes[0] == 1 && bytes[1] == 10 && bytes[2] == 0);
+            ASSERT_TRUE(bytes[0] == 1 && bytes[1] == (kProtocolVersion & 0xFF) && bytes[2] == (kProtocolVersion >> 8));      // (the version is whatever this protocol is: 10 here until protocol 11)
             const SeatKey key5 = key_with(5);
             ASSERT_TRUE(std::equal(key5.begin(), key5.end(), bytes.begin() + static_cast<std::ptrdiff_t>(bytes.size() - 20)));       // the key: 16 bytes
             ASSERT_TRUE(bytes[bytes.size() - 4] == 4 && bytes[bytes.size() - 3] == 3 && bytes[bytes.size() - 2] == 2 && bytes[bytes.size() - 1] == 1);   // the turns, little endian
             HelloMsg back;
-            ASSERT_TRUE(decode(bytes, back) && back.version == 10 && back.name == "Ann" && back.listen_port == 0x1234 && back.want_seat == 2 && back.room == "ROOM-7" && back.token == "tok" &&
+            ASSERT_TRUE(decode(bytes, back) && back.version == kProtocolVersion && back.name == "Ann" && back.listen_port == 0x1234 && back.want_seat == 2 && back.room == "ROOM-7" && back.token == "tok" &&
                         back.key == key_with(5) && back.have_turns == 0x01020304);
             ASSERT_TRUE(encode(back) == bytes);
             // a new player: no key, no turns; the largest count with a key; no key with turns is no Hello (a count belongs to a key)
@@ -1467,7 +1473,7 @@ void run_protocol_tests() {
             longer.push_back(0);
             ASSERT_FALSE(decode(longer, back));
             // the prefix of every version's Hello reads the same: a host answers "version mismatch" without reading what follows
-            ASSERT_TRUE(decode_hello_prefix(core.data(), core.size(), back) && back.version == 10 && back.name == "Ann");
+            ASSERT_TRUE(decode_hello_prefix(core.data(), core.size(), back) && back.version == kProtocolVersion && back.name == "Ann");
             for (const uint16_t version : {uint16_t{6}, uint16_t{7}, uint16_t{8}, uint16_t{9}}) {         // the old layout (protocols 6 to 9 had it): no key, no turns
                 const std::vector<uint8_t> old = old_layout_hello(version, "Old", "ROOM-7", "tok");
                 ASSERT_FALSE(decode(old, back));                                             // it is not a Hello of this protocol ...
@@ -4586,7 +4592,7 @@ void run_failure_tests() {
         for (uint8_t p = 1; p < 3; ++p) ASSERT_TRUE(m.sims[p]->is_player_dropped(0));
     } TEST_END();
 
-    TEST_CASE("S2.5 Dedicated Server: A StartRequest That Reaches A Running Match (The Leader's Second Click Crossed The Start) Is Ignored And Costs Nothing (Up To The 16 That A Person Could Send, S2.6 Has The Flood); With A Payload It Is Garbage; A Host That Holds A Seat Has No Leader And Counts It As A Violation") {
+    TEST_CASE("S2.5 Dedicated Server: A StartRequest That Reaches A Running Match (The Leader's Second Click Crossed The Start) Is Ignored And Costs Nothing (Up To The 16 That A Person Could Send, S2.6 Has The Flood); With A Payload Beyond The Fill Level It Is Garbage; A Host That Holds A Seat Has No Leader And Counts It As A Violation") {
         {
             ServerMatch m(1, 3, {20, 5});
             m.run(1000);
@@ -4595,7 +4601,7 @@ void run_failure_tests() {
             ASSERT_TRUE(m.host->client_present(0));
             ASSERT_EQ(m.host->violations(0), 0u);
             ASSERT_EQ(m.host->ignored_start_requests(), kIgnoredStartRequestsAllowed);
-            m.client_ends[1]->send({static_cast<uint8_t>(MsgType::StartRequest), 1});               // with a payload: garbage like any other
+            m.client_ends[1]->send({static_cast<uint8_t>(MsgType::StartRequest), 0, 1});            // with a payload beyond the fill level: garbage like any other
             m.run(300);
             ASSERT_EQ(m.host->violations(1), 1u);
             ASSERT_TRUE(m.host->client_present(1));
@@ -9097,6 +9103,94 @@ void run_reconnect_session_tests() {
     } TEST_END();
 }
 
+// ---------------------------------------------------------------------------------------------------------------------------------
+// Protocol 11: the fill level of the leader's START, and chat in the waiting room
+// ---------------------------------------------------------------------------------------------------------------------------------
+
+void run_protocol11_tests() {
+    TEST_CASE("N2.75 Protocol 11: StartRequest Carries A Fill Level (Every Level Round-Trips, Every Truncation, Trailing Byte And Level Above 3 Is Refused, The Names And Parsing Of The Levels), The Room's Notices Are Chat From Sender 255 (Round Trip, Limits), And 300000 Mutated StartRequests And Chat Lines Only Give Messages That Encode Back To The Same Bytes") {
+        ASSERT_EQ(kProtocolVersion, 11);
+        ASSERT_TRUE(kFillLevelLast == 3 && kRoomSender == 255 && static_cast<int>(MsgType::StartRequest) == 24 && static_cast<int>(MsgType::Chat) == 9);
+        // every level
+        const std::pair<FillLevel, const char*> levels[] = {{FillLevel::None, "none"}, {FillLevel::Easy, "easy"}, {FillLevel::Medium, "medium"}, {FillLevel::Hard, "hard"}};
+        for (uint8_t i = 0; i < 4; ++i) {
+            StartRequestMsg m;
+            m.fill = levels[i].first;
+            const std::vector<uint8_t> bytes = encode(m);
+            ASSERT_TRUE(bytes == (std::vector<uint8_t>{24, i}));
+            StartRequestMsg back;
+            back.fill = FillLevel::Hard;
+            ASSERT_TRUE(decode(bytes, back) && back.fill == levels[i].first);
+            ASSERT_EQ(std::string(fill_level_name(levels[i].first)), std::string(levels[i].second));
+            FillLevel parsed = FillLevel::Hard;
+            ASSERT_TRUE(parse_fill_level(levels[i].second, parsed) && parsed == levels[i].first);
+            std::string upper = levels[i].second;
+            for (char& c : upper) c = static_cast<char>(c - 'a' + 'A');
+            ASSERT_TRUE(parse_fill_level(upper, parsed) && parsed == levels[i].first);
+            // every strict prefix, and every trailing byte, is refused
+            for (size_t cut = 0; cut < bytes.size(); ++cut) {
+                ASSERT_FALSE(decode(std::vector<uint8_t>(bytes.begin(), bytes.begin() + static_cast<std::ptrdiff_t>(cut)), back));
+            }
+            for (unsigned extra = 0; extra < 256; ++extra) {
+                std::vector<uint8_t> longer = bytes;
+                longer.push_back(static_cast<uint8_t>(extra));
+                ASSERT_FALSE(decode(longer, back));
+            }
+        }
+        ASSERT_TRUE(fill_bot_name(FillLevel::Easy) == "Bot (Easy)" && fill_bot_name(FillLevel::Medium) == "Bot (Medium)" && fill_bot_name(FillLevel::Hard) == "Bot (Hard)" && fill_bot_name(FillLevel::None).empty());
+        FillLevel keep = FillLevel::Easy;
+        for (const char* bad : {"", "none ", " easy", "med", "mediumm", "hard1", "2", "harder", "NONE\\0"}) ASSERT_FALSE(parse_fill_level(bad, keep));
+        ASSERT_EQ(keep, FillLevel::Easy);                                // a refusal leaves the value alone
+        // the room's notice: a Chat message whose sender is 255; the limits of a Chat line are the match's
+        ChatMsg notice;
+        notice.sender = kRoomSender;
+        notice.text = kNoticeFillFog;
+        ChatMsg back;
+        ASSERT_TRUE(decode(encode(notice), back) && back.sender == 255 && !back.team && back.text == kNoticeFillFog);
+        ASSERT_TRUE(std::string(kNoticeFillFog).size() <= kMaxChatChars && std::string(kNoticeFillMap).size() <= kMaxChatChars);
+        for (const char* text : {kNoticeFillFog, kNoticeFillMap}) {
+            for (const char c : std::string(text)) ASSERT_TRUE(c >= 0x20 && c <= 0x7E);       // printable ASCII, as a chat line must be
+        }
+        ChatMsg full;
+        full.sender = 2;
+        full.text = std::string(kMaxChatChars, 'q');
+        ASSERT_TRUE(decode(encode(full), back) && back.text.size() == kMaxChatChars);
+        std::vector<uint8_t> raw = {9, 2, 0, 101};
+        raw.insert(raw.end(), 101, 'q');
+        ASSERT_FALSE(decode(raw, back));                                 // one character too many
+        ASSERT_FALSE(decode(std::vector<uint8_t>{9, 2, 2, 1, 'a'}, back) || decode(std::vector<uint8_t>{9, 2, 0, 1, 0x1F}, back) || decode(std::vector<uint8_t>{9, 2, 0, 1, 0x7F}, back));
+        // the fuzz: bytes made from valid StartRequests and chat lines, mutated, cut and lengthened, give a message only when it encodes back to exactly those bytes
+        const std::vector<std::vector<uint8_t>> seeds = {encode(StartRequestMsg{FillLevel::Easy}), encode(StartRequestMsg{FillLevel::Hard}), encode(notice), encode(full),
+                                                         encode(ChatMsg{1, false, "hello"}), encode(ChatMsg{3, true, ""})};
+        Lcg rng(11);
+        size_t accepted_requests = 0;
+        size_t accepted_chat = 0;
+        for (int i = 0; i < 300000; ++i) {
+            std::vector<uint8_t> buf = seeds[rng.below(static_cast<uint32_t>(seeds.size()))];
+            for (uint32_t k = 1 + rng.below(3); k > 0; --k) buf[rng.below(static_cast<uint32_t>(buf.size()))] = static_cast<uint8_t>(rng.below(256));
+            const uint32_t shape = rng.below(6);
+            if (shape == 0) buf.resize(rng.below(static_cast<uint32_t>(buf.size()) + 1));
+            else if (shape == 1) buf.push_back(static_cast<uint8_t>(rng.below(256)));
+            StartRequestMsg sr;
+            ChatMsg chat;
+            const bool is_request = decode(buf, sr);
+            const bool is_chat = decode(buf, chat);
+            ASSERT_FALSE(is_request && is_chat);                          // (they have different type bytes)
+            if (is_request) {
+                ++accepted_requests;
+                ASSERT_TRUE(encode(sr) == buf && buf.size() == 2 && buf[0] == 24 && buf[1] <= kFillLevelLast);
+            }
+            if (is_chat) {
+                ++accepted_chat;
+                ASSERT_TRUE(encode(chat) == buf && chat.text.size() <= kMaxChatChars);
+                for (const char c : chat.text) ASSERT_TRUE(c >= 0x20 && c <= 0x7E);
+            }
+            if (!buf.empty() && (buf[0] == 24 || buf[0] == 9)) ASSERT_EQ(any_decodes(buf), is_request || is_chat);     // no other decoder takes either type
+        }
+        ASSERT_TRUE(accepted_requests > 300 && accepted_chat > 3000);               // (a message of two bytes survives a mutation rarely; the ones that do are all the right ones)
+    } TEST_END();
+}
+
 }  // namespace
 
 int main() {
@@ -9113,6 +9207,7 @@ int main() {
     run_dropout_tests();
     run_migration_tests();
     run_reconnect_session_tests();
+    run_protocol11_tests();
     std::cout << "\n=======================================================\n Total Test Cases: " << g_test_count << "\n Total Assertions: " << g_assert_count
               << "\n Failed:           " << g_test_failures << "\n=======================================================\n";
     return g_test_failures == 0 ? 0 : 1;

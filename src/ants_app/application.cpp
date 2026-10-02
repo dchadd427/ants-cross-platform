@@ -274,7 +274,15 @@ ApplicationConfig Application::parse_arguments(int argc, char* argv[]) {
             mode_given = true;
         } else if (std::strcmp(argv[i], "--start-when") == 0 && i + 1 < argc) {
             const int players = std::atoi(argv[++i]);                          // a test hook: the leader of a server's room presses START once this many players are in
-            if (players >= 2 && players <= 4) cfg.net_start_when = static_cast<uint8_t>(players);
+            if (players >= 1 && players <= 4) cfg.net_start_when = static_cast<uint8_t>(players);       // (1: a leader with --fill-bots starts alone)
+        } else if (std::strcmp(argv[i], "--fill-bots") == 0) {                // the bots that this player's START seats in the empty seats of its room (protocol 11)
+            if (i + 1 >= argc) {
+                if (cfg.startup_error.empty()) cfg.startup_error = "--fill-bots needs none, easy, medium or hard";
+            } else if (!net::parse_fill_level(argv[++i], cfg.fill_bots) && cfg.startup_error.empty()) {
+                cfg.startup_error = "--fill-bots " + std::string(argv[i]) + ": none, easy, medium or hard";
+            }
+        } else if (std::strcmp(argv[i], "--say") == 0 && i + 1 < argc) {
+            cfg.net_say = argv[++i];                                           // a test hook: a line to say in the waiting room
         } else if (std::strcmp(argv[i], "--title") == 0 && i + 1 < argc) {
             cfg.title = argv[++i];
         } else if (std::strcmp(argv[i], "--window-pos") == 0 && i + 1 < argc) {
@@ -610,6 +618,7 @@ bool Application::init(const ApplicationConfig& config) {
                 return false;
             }
         }
+        net_->set_fill_bots(config_.fill_bots);                                     // the bots that this machine's START seats in the empty seats (protocol 11)
         attach_net();
         if (net_->is_host() && !map_select_.get_maps().empty()) net_->set_map(map_select_.get_maps()[static_cast<size_t>(map_select_.get_selected_index())].filename);
         sync_room_view();
@@ -977,10 +986,12 @@ bool Application::start_local_bots(uint32_t match_seed) {
 // The host of a room runs the room's bots: their commands go into the host's sequencer. A guest (and a guest that took over as host) never does.
 void Application::start_net_bots() {
     stop_bots();
-    if (config_.bots.empty() || !net_ || !net_->is_host()) return;
+    if ((config_.bots.empty() && fill_specs_.empty()) || !net_ || !net_->is_host()) return;
     const net::RoomMsg& room = net_->room();
     bots_ = std::make_unique<ai::BotController>(sim_, net_->start_info().seed);
-    for (const ai::BotSpec& spec : config_.bots) {
+    std::vector<ai::BotSpec> specs = config_.bots;                   // --bot's seats, and the seats that this machine's START filled
+    specs.insert(specs.end(), fill_specs_.begin(), fill_specs_.end());
+    for (const ai::BotSpec& spec : specs) {
         if (spec.seat >= 4 || room.slots[spec.seat].state != net::SlotState::Bot) continue;
         bot_sinks_.push_back(std::make_unique<NetBotSink>(*net_, spec.seat));
         std::string why;
@@ -1820,6 +1831,12 @@ void Application::pump_network(float dt, double gap_seconds) {
     if (state_ == AppState::MapSelect && net_->active()) {
         sync_room_view();
         // --start-when N (a test hook): the leader of a server's room presses START, as a click or the S key would, once N players are in; again every second until the match starts
+        // --say TEXT (a test hook): the line is said once, in the waiting room, as soon as two players are there to hear it
+        if (!config_.net_say.empty() && !say_sent_ && net_->phase() == net::NetGame::Phase::Room && net_->my_seat() < 4) {
+            size_t here = 0;
+            for (const auto& slot : net_->room().slots) here += slot.state != net::SlotState::Empty ? 1u : 0u;
+            if (here >= 2) say_sent_ = net_->chat(config_.net_say);
+        }
         if (config_.net_start_when > 0 && net_->is_leader() && !map_select_.is_locked() && net_time_ms_ - start_when_pressed_ms_ >= 1000.0) {
             size_t players = 0;
             for (const auto& slot : net_->room().slots) players += slot.state != net::SlotState::Empty ? 1u : 0u;
@@ -1881,11 +1898,18 @@ void Application::net_start_from_setup(const std::string& map_path) {
         return;
     }
     net_->set_map(filename);
+    // The host's own START with a fill level (protocol 11): the empty seats get bots first, which this machine runs from the moment the match begins (as for --bot); one player is then
+    // enough. With Fog of War nothing is seated (the status line says why). A START that does not go through takes them out again.
+    std::vector<uint8_t> filled;
+    if (config_.fill_bots != net::FillLevel::None) net_->fill_bots(config_.fill_bots, &filled);
     std::random_device rd;
     if (!net_->start_match(static_cast<uint32_t>(rd()), hash)) {
+        for (const uint8_t seat : filled) net_->remove_bot(seat);
         play_effect(sim::SoundID::CantGo);                                   // not enough players yet
         return;
     }
+    fill_specs_.clear();
+    for (const uint8_t seat : filled) fill_specs_.push_back(ai::BotSpec{seat, "standard", config_.fill_bots == net::FillLevel::Easy ? ai::Level::Easy : config_.fill_bots == net::FillLevel::Hard ? ai::Level::Hard : ai::Level::Medium});
     map_select_.lock();                                                      // START ran: the map and the fog option are fixed (+0x130)
 }
 
@@ -1902,6 +1926,13 @@ void Application::handle_net_events() {
                 break;
             case net::NetGame::Event::Type::Cancelled:               // the start failed: back in the room, the host's controls work again
                 map_select_.unlock();
+                for (const ai::BotSpec& spec : fill_specs_) net_->remove_bot(spec.seat);      // the room is as it was before the START: the bots that it seated go again
+                fill_specs_.clear();
+                break;
+            case net::NetGame::Event::Type::Chat:                    // (protocol 11) a line in the waiting room: the log of the program has it; the status line shows it for a few seconds
+                for (const net::ChatLine& line : net_->take_pregame_chat()) {
+                    std::cerr << "[Application] Room chat: " << (line.notice() ? std::string("(room)") : line.name) << ": " << line.text << std::endl;
+                }
                 break;
             case net::NetGame::Event::Type::HostLeft:                // the host is gone and no other machine could take over (or the server dropped this player for being away)
                 net_notice_ = net_->status_text();                   // the reason, as the network layer says it: "The connection to the other players was lost." or "You were away too long ..."
@@ -1955,6 +1986,8 @@ void Application::net_begin_match() {
 // The session is over (the player left, the host left, a match ended and its results were closed): back to the local setup screen.
 void Application::net_end_session(const std::string& notice) {
     stop_bots();
+    fill_specs_.clear();
+    say_sent_ = false;
     if (net_) net_->leave();
     hud_.set_command_sink(nullptr);
     hud_.set_roster_mask(0x0F);

@@ -72,6 +72,7 @@ struct Machine {
     NetGame net{sim};
     std::string name;
     bool corrupt_map{false};                // this machine cannot load the map (a different file)
+    bool hold_load{false};                  // this machine loads the map but does not report it (a slow disk): the test reports with net.report_loaded(true) when it is time
     std::vector<NetGame::Event> events;
     std::vector<ChatMsg> chats;
     std::vector<uint64_t> drop_ticks;       // the sim tick at which a Drop command was applied
@@ -93,6 +94,7 @@ struct Machine {
                 for (uint8_t p = 0; p < sim::MAX_PLAYERS; ++p) sim.set_player_name(p, s.names[p]);
                 ++loads;
             }
+            if (hold_load && ok) return;
             net.report_loaded(ok);
         }
     }
@@ -902,6 +904,151 @@ void run_reject_tests() {
     } TEST_END();
 }
 
+// ---- chat in the waiting room and the fill of a room on the local network (protocol 11) -----------------------------------------------------------
+
+// The lines of a machine's room chat as "seat|name|text"
+std::vector<std::string> room_lines(const std::vector<ChatLine>& lines) {
+    std::vector<std::string> out;
+    for (const ChatLine& l : lines) out.push_back(std::to_string(static_cast<unsigned>(l.seat)) + "|" + l.name + "|" + l.text);
+    return out;
+}
+
+void run_room_chat_tests() {
+    TEST_CASE("N3.18 Chat In The Waiting Room (Protocol 11) On A Room Of The Local Network: A Line Of The Host Or Of A Guest Reaches Everybody In Seat Order With Its Name (The Latest Of Somebody Else's Is On The Status Line For A Few Seconds, Never Its Own), Chat Works While The Map Loads And The Lines Are Kept When The Match Has Begun; Nothing Is Sent Out Of A Room; The Match's Chat Is As Before") {
+        Table t;
+        ASSERT_TRUE(make_room(t, 2));
+        Machine& alice = *t.machines[0];
+        Machine& bob = *t.machines[1];
+        Machine& carol = *t.machines[2];
+        ASSERT_TRUE(alice.net.chat("hello room"));
+        ASSERT_TRUE(t.run_until([&]() { return bob.net.pregame_chat().size() == 1 && carol.net.pregame_chat().size() == 1; }, 3000));
+        ASSERT_EQ(room_lines(bob.net.take_pregame_chat()), (std::vector<std::string>{"0|Alice|hello room"}));
+        ASSERT_TRUE(bob.net.take_pregame_chat().empty());                                  // handed out once
+        ASSERT_EQ(room_lines(carol.net.take_pregame_chat()), (std::vector<std::string>{"0|Alice|hello room"}));
+        ASSERT_EQ(room_lines(alice.net.take_pregame_chat()), (std::vector<std::string>{"0|Alice|hello room"}));        // the host's own line is in its own log too
+        ASSERT_TRUE(bob.saw(NetGame::Event::Type::Chat) && carol.saw(NetGame::Event::Type::Chat));
+        ASSERT_EQ(bob.net.status_text(), std::string("Alice: hello room"));               // the status line shows somebody else's line ...
+        ASSERT_EQ(alice.net.status_text(), std::string(sim::strings::text(sim::strings::kPressStart)));          // ... never one's own
+        ASSERT_TRUE(bob.net.chat("hi Alice, Bob here"));
+        ASSERT_TRUE(t.run_until([&]() { return alice.net.pregame_chat().size() == 2 && carol.net.pregame_chat().size() == 2 && bob.net.pregame_chat().size() == 2; }, 3000));
+        ASSERT_EQ(room_lines(carol.net.pregame_chat()), (std::vector<std::string>{"0|Alice|hello room", "1|Bob|hi Alice, Bob here"}));
+        ASSERT_EQ(room_lines(alice.net.pregame_chat()), room_lines(carol.net.pregame_chat()));
+        ASSERT_EQ(room_lines(bob.net.pregame_chat()), room_lines(carol.net.pregame_chat()));
+        ASSERT_EQ(carol.net.status_text(), std::string("Bob: hi Alice, Bob here"));
+        ASSERT_EQ(alice.net.status_text(), std::string("Bob: hi Alice, Bob here"));
+        t.run(6000);                                                                        // five seconds later the standing prompt is back (Bob's own line never showed)
+        ASSERT_EQ(carol.net.status_text(), std::string(sim::strings::text(sim::strings::kWaitingForHost)));
+        ASSERT_EQ(bob.net.status_text(), std::string(sim::strings::text(sim::strings::kWaitingForHost)));
+        // a long line is cut to 100 characters, a line of nothing is not sent, the status line holds at most 84 characters of one
+        ASSERT_TRUE(carol.net.chat(std::string(150, 'x')));
+        ASSERT_FALSE(carol.net.chat(""));
+        ASSERT_TRUE(t.run_until([&]() { return alice.net.pregame_chat().size() == 3; }, 3000));
+        ASSERT_EQ(alice.net.pregame_chat().back().text.size(), kMaxChatChars);
+        ASSERT_TRUE(bob.net.status_text().size() <= 84);
+        // chat while the map loads: Carol loads but does not report yet (a slow disk), so the room stays in Loading
+        carol.hold_load = true;
+        uint64_t hash = 0;
+        ASSERT_TRUE(hash_file(maps_dir() + "TINY.LVL", hash));
+        ASSERT_TRUE(alice.net.start_match(7, hash));
+        ASSERT_TRUE(t.run_until([&]() { return bob.net.phase() == NetGame::Phase::Loading && carol.net.phase() == NetGame::Phase::Loading && carol.loads == 1; }, 3000));
+        t.run(300);
+        ASSERT_EQ(alice.net.phase(), NetGame::Phase::Loading);                              // (still waiting for Carol)
+        ASSERT_TRUE(bob.net.chat("loaded and waiting"));
+        ASSERT_TRUE(t.run_until([&]() { return carol.net.pregame_chat().size() == 4 && alice.net.pregame_chat().size() == 4; }, 3000));
+        ASSERT_EQ(carol.net.pregame_chat().back().text, std::string("loaded and waiting"));
+        ASSERT_EQ(carol.net.pregame_chat().back().name, std::string("Bob"));
+        carol.net.report_loaded(true);
+        ASSERT_TRUE(t.run_until([&]() { return everybody_playing(t); }, 5000));
+        // the lines are still there when the match has begun: the application decides what to do with them
+        for (Machine* m : {&alice, &bob, &carol}) {
+            ASSERT_EQ(m->net.pregame_chat().size(), size_t{4});
+            ASSERT_EQ(m->net.pregame_chat().front().text, std::string("hello room"));
+        }
+        // and the chat of the match is the match's: the callback has it, with the team flag
+        ASSERT_TRUE(alice.net.chat("in the match", false));
+        ASSERT_TRUE(t.run_until([&]() { return !bob.chats.empty() && !carol.chats.empty(); }, 3000));
+        ASSERT_TRUE(bob.chats.back().text == "in the match" && bob.chats.back().sender == 0 && !bob.chats.back().team);
+        ASSERT_EQ(bob.net.pregame_chat().size(), size_t{4});                                // (the match's chat is not the room's)
+        // nothing is sent out of a room: a machine that is off, one that has not joined, empty lines
+        sim::SimulationEngine off_sim;
+        NetGame off(off_sim);
+        ASSERT_FALSE(off.chat("anybody"));
+        ASSERT_TRUE(off.pregame_chat().empty() && off.take_pregame_chat().empty());
+    } TEST_END();
+
+    TEST_CASE("N3.19 The Fill Of A Room On The Local Network (Protocol 11): The Host's Own START Can Seat A Bot In Every Empty Seat (Named \"Bot (Level)\", Good Thumbs): Alone It Takes Three, With Two Guests One; The Start Then Needs No Other Player; Fog Of War Refuses It (A Notice On The Status Line, Nothing Seated); A Cancelled Start's Bots Are Taken Out Again; Only The Host Of An Open Room Can Fill; None Fills Nothing") {
+        {   // alone: three bots, and the host can start although nobody else is there
+            Table t;
+            Machine& host = t.add("Alice");
+            ASSERT_TRUE(host.net.host(0, "Alice", true));
+            host.net.set_map("TINY.LVL");
+            t.run(200);
+            ASSERT_FALSE(host.net.can_start());
+            ASSERT_EQ(host.net.fill_bots(FillLevel::None), size_t{0});                      // none fills nothing
+            ASSERT_FALSE(host.net.can_start());
+            std::vector<uint8_t> seats;
+            ASSERT_EQ(host.net.fill_bots(FillLevel::Medium, &seats), size_t{3});
+            ASSERT_EQ(seats, (std::vector<uint8_t>{1, 2, 3}));
+            for (const uint8_t seat : seats) {
+                ASSERT_TRUE(host.net.room().slots[seat].state == SlotState::Bot && host.net.room().slots[seat].name == "Bot (Medium)");
+                ASSERT_EQ(host.net.seat_quality(seat), LinkQuality::Good);                  // a bot's thumb is good
+            }
+            ASSERT_TRUE(host.net.can_start());                                              // four players, one of them a person
+            ASSERT_EQ(host.net.fill_bots(FillLevel::Hard), size_t{0});                      // nothing left to fill
+            uint64_t hash = 0;
+            ASSERT_TRUE(hash_file(maps_dir() + "TINY.LVL", hash));
+            ASSERT_TRUE(host.net.start_match(5, hash));
+            ASSERT_EQ(host.net.start_info().roster, 0x0F);
+            ASSERT_TRUE(host.net.start_info().names[1] == "Bot (Medium)" && host.net.start_info().names[3] == "Bot (Medium)");
+            ASSERT_TRUE(t.run_until([&]() { return host.net.phase() == NetGame::Phase::Playing; }, 3000));
+            ASSERT_FALSE(host.net.add_bot(2, "late"));
+            ASSERT_EQ(host.net.fill_bots(FillLevel::Easy), size_t{0});                      // (a match that runs is no room)
+        }
+        {   // with two guests: one bot, in the seat that is left; a fill never takes a seat that a person holds
+            Table t;
+            ASSERT_TRUE(make_room(t, 2));
+            Machine& host = *t.machines[0];
+            std::vector<uint8_t> seats;
+            ASSERT_EQ(host.net.fill_bots(FillLevel::Easy, &seats), size_t{1});
+            ASSERT_EQ(seats, (std::vector<uint8_t>{3}));
+            ASSERT_TRUE(host.net.room().slots[3].state == SlotState::Bot && host.net.room().slots[3].name == "Bot (Easy)");
+            ASSERT_TRUE(t.run_until([&]() { return t.machines[1]->net.room().slots[3].state == SlotState::Bot && t.machines[2]->net.room().slots[3].name == "Bot (Easy)"; }, 3000));      // the guests see the bot
+            // a guest cannot fill, and a fill leaves the room as it is for the people
+            ASSERT_EQ(t.machines[1]->net.fill_bots(FillLevel::Hard), size_t{0});
+            ASSERT_TRUE(t.machines[1]->net.room().slots[1].state == SlotState::Client && t.machines[1]->net.room().slots[3].name == "Bot (Easy)");
+            // the start is cancelled (Carol cannot load the map): the bots go again and the room is as it was
+            t.machines[2]->corrupt_map = true;
+            uint64_t hash = 0;
+            ASSERT_TRUE(hash_file(maps_dir() + "TINY.LVL", hash));
+            ASSERT_TRUE(host.net.start_match(9, hash));
+            ASSERT_TRUE(t.run_until([&]() { return host.net.phase() == NetGame::Phase::Room && host.saw(NetGame::Event::Type::Cancelled); }, 5000));
+            host.net.remove_bot(3);                                                         // (what the application does on the Cancelled event)
+            ASSERT_TRUE(host.net.room().slots[3].state == SlotState::Empty);
+            ASSERT_TRUE(t.run_until([&]() { return t.machines[1]->net.room().slots[3].state == SlotState::Empty; }, 3000));
+        }
+        {   // Fog of War: bots would see through it
+            Table t;
+            Machine& host = t.add("Alice");
+            ASSERT_TRUE(host.net.host(0, "Alice", true));
+            host.net.set_map("TINY.LVL");
+            host.net.set_fog(true);
+            t.run(200);
+            ASSERT_EQ(host.net.fill_bots(FillLevel::Medium), size_t{0});
+            ASSERT_EQ(host.net.status_text(), std::string(kNoticeFillFog));
+            ASSERT_FALSE(host.net.can_start());
+            for (uint8_t seat = 1; seat < 4; ++seat) ASSERT_TRUE(host.net.room().slots[seat].state == SlotState::Empty);
+        }
+        {   // a guest that has not been welcomed, a machine that is off: nothing to fill
+            sim::SimulationEngine sim;
+            NetGame off(sim);
+            ASSERT_EQ(off.fill_bots(FillLevel::Medium), size_t{0});
+            off.set_fill_bots(FillLevel::Hard);
+            ASSERT_EQ(off.fill_bots(), FillLevel::Hard);
+            ASSERT_FALSE(off.request_start());                                               // not a leader of anything
+        }
+    } TEST_END();
+}
+
 }  // namespace
 
 int main() {
@@ -915,6 +1062,7 @@ int main() {
     run_seat_tests();
     run_migration_tests();
     run_reject_tests();
+    run_room_chat_tests();
     std::cout << "\n=======================================================\n Total Test Cases: " << g_test_count << "\n Total Assertions: " << g_assert_count
               << "\n Failed:           " << g_test_failures << "\n=======================================================\n";
     return g_test_failures == 0 ? 0 : 1;
