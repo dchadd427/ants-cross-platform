@@ -10,6 +10,13 @@ pefile and capstone. Maps:
 Outputs:
   - docs/ORIGINAL_BINARY_MAP.md
   - docs/binary_analysis.json
+
+Run it from the repository root (python3 tools/analyze_binary.py; it needs pefile
+and capstone). It needs YOUR OWN COPY of the original program:
+Original-Ants/Ants.exe is not part of the repository (a local reference that
+.gitignore keeps out of every commit; the repository holds only the original's
+data archive, maps and music). Put your own copy of the original Ants.exe in
+Original-Ants/; without it the script stops with that message (exit status 1).
 """
 
 import os
@@ -268,7 +275,9 @@ def generate_markdown(func_map, string_map):
 
 def main():
     if not os.path.exists(EXE_PATH):
-        print(f"Error: {EXE_PATH} not found", file=sys.stderr)
+        print(f"Error: {EXE_PATH} not found: the original program is not part of the repository; "
+              "put your own copy of the original Ants.exe in Original-Ants/ (and run this script from the repository root)",
+              file=sys.stderr)
         return 1
 
     func_map, string_map = analyze_binary()

@@ -82,7 +82,9 @@ target_compile_definitions(test_movement_golden PRIVATE
 
 add_test(NAME test_movement_golden COMMAND test_movement_golden)
 
-# Independent models of the original walk and of PathRequest::Step against the remake on random scenarios
+# Independent models of the original walk and of PathRequest::Step against the remake on random scenarios (the models' tables
+# come from a local copy of Ants.exe, or without it from the remake's tables checked against the pinned digests of
+# tests/common/original_program_bytes.hpp, which includes the generated src/ants_sim/movement_tables_data.inc)
 add_executable(test_movement_differential
     test_movement_differential.cpp
 )
@@ -94,6 +96,8 @@ target_link_libraries(test_movement_differential PRIVATE
 
 target_include_directories(test_movement_differential PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/../../include
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../src/ants_sim
+    ${CMAKE_CURRENT_SOURCE_DIR}/../common
 )
 
 target_compile_definitions(test_movement_differential PRIVATE

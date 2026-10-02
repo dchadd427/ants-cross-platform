@@ -37,7 +37,7 @@ order in which it is proposed to be fixed. The owner decides (AGENTS.md rule 9).
 The request: make sure that the game is truly one-to-one with the original (improved networking aside), "check the visuals, the animations, the timing,
 recheck everything".
 
-* **Sources of truth**: `Original-Ants/Ants.exe` (Capstone disassembly; the Ghidra-style decompilation only to navigate), `Original-Ants/ants.chd`, the six
+* **Sources of truth**: `Original-Ants/Ants.exe` (Capstone disassembly; the Ghidra-style decompilation only to navigate; both are local copies, not in the repository), `Original-Ants/ants.chd`, the six
   shipped maps. The repository's own notes were treated as unverified. **The original was never run**: every statement is static evidence plus probes of the
   remake against models derived from the binary. Anything that needs the real game running is listed in section 6.
 * **Earlier audits** (per area, before the releases v0.0.25 .. v0.0.43 re-derived those systems) listed deviations such as F1..F15 for the ants. They were
@@ -162,6 +162,6 @@ The goal is a one-to-one copy; the owner asks for tweaks on top of it, each reco
 * LA NEW-6 ("the `L` digit toggle needs no Ctrl"): `FUN_0102609a` returns before the letter switch unless the state word of key 0x17 (Ctrl, `W + 0x3e`) is set; Ctrl+L is right (docs 5.45, 5.58).
 
 ## 6. What static analysis cannot settle (needs the real game)
-Screenshots of the original (cnc-ddraw in `Original-Ants/` saves the game's own 640 x 480 picture with the Print Screen key) would settle:
+Screenshots of the original (cnc-ddraw in a local copy of the original game's folder, `Original-Ants/` on the owner's machine, saves the game's own 640 x 480 picture with the Print Screen key) would settle:
 the minimap hit flash, the start view, the setup and results layouts and the start-up timeline, the splash jingle, the score-box edge and minimap frame, the real refresh cadence (hence bubble and task periods),
 the 180 s life of fire walls and bridges (0.3-2.2 s spread), contact latency of fights, and whether pressed-button clicks play sounds at the press. A stopwatch recording of a fire wall's life would settle the timers.

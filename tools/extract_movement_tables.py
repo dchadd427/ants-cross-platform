@@ -23,7 +23,14 @@ run from any directory):
     python3 tools/extract_movement_tables.py --check   # exit 1 if the committed file is stale
     python3 tools/extract_movement_tables.py --stdout  # print the generated file
 
-Requirements: python3 and pefile (`pip install pefile`).
+Requirements: python3, pefile (`pip install pefile`) and YOUR OWN COPY of the
+original program: Original-Ants/Ants.exe is not part of the repository (it is
+a local reference that .gitignore keeps out of every commit; the repository
+holds only the original's data archive, maps and music). Put your own copy of
+the original Ants.exe in Original-Ants/; without it the script stops with that
+message (exit status 1). The tests do not need it: test_movement_tables and
+test_movement_differential check the generated tables against pinned SHA-256
+digests of the program's bytes (tests/common/original_program_bytes.hpp).
 
 All addresses are Ants.exe virtual addresses (image base 0x01000000); they were
 reverse engineered with Capstone. Before extracting anything the script checks
@@ -701,12 +708,19 @@ def render(t, chd, exe_bytes, chd_bytes):
     return "\n".join(out) + "\n"
 
 
+def require_exe(path):
+    """Stops with a clear message when the local copy of the original program is missing."""
+    if not Path(path).is_file():
+        fail(f"{EXE_REL} not found: the original program is not part of the repository; "
+             "put your own copy of the original Ants.exe in Original-Ants/")
+
+
 def generate():
     exe_path = REPO_ROOT / EXE_REL
     chd_path = REPO_ROOT / CHD_REL
-    for p, rel in ((exe_path, EXE_REL), (chd_path, CHD_REL)):
-        if not p.is_file():
-            fail(f"{rel} not found (run from a checkout that contains Original-Ants/)")
+    require_exe(exe_path)
+    if not chd_path.is_file():
+        fail(f"{CHD_REL} not found (run from a checkout that contains Original-Ants/)")
     exe = Exe(exe_path)
     chd = Chd(chd_path)
     tables = extract(exe, chd)

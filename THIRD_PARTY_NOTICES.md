@@ -2,15 +2,19 @@
 
 This file lists the third-party code and fonts that are inside this repository or that the build downloads or links, and where the licence
 text of each one can be found. This project's own source code and documents are under the MIT License (`LICENSE`). The original 1998 game's
-program, artwork, sounds, music and maps are not covered by it: they belong to their copyright holders (see the next section).
+artwork, sounds, music and maps are not covered by it: they belong to their copyright holders (see the next section).
 
-## The original game's program and data (not this project's, to be replaced over time)
+## The original game's data (not this project's, to be replaced over time)
 
-- Where: the folder `Original-Ants/` (the program `Ants.exe`, the data archive `ants.chd` with the artwork, animations and sound effects, the music
-  files, the map files in `Original-Ants/Maps/`, and a few support files), and the data bundle that the web build packs from that folder.
-- What: the 1998 game *Ants* and its data. This project is a reverse-engineered remake; it does not own the original and cannot license it.
-- Why it is here: so that the remake can run and so that its tests can compare it with the original. Replacing the original artwork with open material is
-  planned as a separate, later project.
+- Where: in the folder `Original-Ants/` exactly these files of the original game: the data archive `ants.chd` (the artwork, animations and sound
+  effects), the map files `Maps/*.LVL` and the music files `*.mp3` and `*.MID`; and the data bundle that the web build packs from that folder.
+  The font files `LibreFranklin-Medium.ttf` and `LibreFranklin-OFL.txt` in the same folder are not from the original game (see Libre Franklin below).
+- What: the data of the 1998 game *Ants*. This project is a reverse-engineered remake; it does not own the original and cannot license it.
+- Not here: the original game's program (`Ants.exe`) and its decompilation are not part of the repository. They are local references for the
+  reverse engineering: an owner of the original game keeps a copy at `Original-Ants/Ants.exe` (and `docs/legacy/Ants.exe.c`), which `.gitignore`
+  keeps out of every commit; the tests do not need them (see "Reverse Engineering" in the README).
+- Why the data is here: so that the remake can run and so that its tests can compare it with the original. Replacing the original artwork with open
+  material is planned as a separate, later project.
 - Rights holders: if you hold rights to something here and want it removed, open an issue at the project's repository and it will be taken out.
 
 ## Included in the repository
@@ -29,19 +33,12 @@ program, artwork, sounds, music and maps are not covered by it: they belong to t
 - What: Libre Franklin, Copyright 2020 The Libre Franklin Project Authors, <https://github.com/googlefonts/Libre-Franklin>.
 - Licence: SIL Open Font License, Version 1.1. The full text is in `Original-Ants/LibreFranklin-OFL.txt`; keep that file together with the font.
 
-### cnc-ddraw (Windows DirectDraw wrapper, not used by the remake)
+## Removed from the repository
 
-- Where: `Original-Ants/ddraw.dll`, `Original-Ants/cnc-ddraw config.exe`, `Original-Ants/ddraw.ini`.
-- What: cnc-ddraw (the PE version resource of `ddraw.dll` reads: FileVersion 7.1.0.0, Copyright (c) 2010-2024, github.com/FunkyFr3sh),
-  <https://github.com/FunkyFr3sh/cnc-ddraw>. It is only used to run the original `Ants.exe` on Windows; the remake neither loads nor reads it.
-- Licence: the licence text is not part of this repository and is not reproduced here. To be added by the owner.
-
-### libretro GLSL shaders (not used by the remake)
-
-- Where: `Original-Ants/Shaders/` (including `shader-package.zip`).
-- What: a set of pixel shaders for emulators, <https://github.com/libretro/glsl-shaders>. `Original-Ants/Shaders/readme.txt` says: "Copyrights are
-  held by the respective authors." The remake does not load them.
-- Licence: differs from shader to shader and is not reproduced here. To be added by the owner.
+- cnc-ddraw (the Windows DirectDraw wrapper <https://github.com/FunkyFr3sh/cnc-ddraw>: `Original-Ants/ddraw.dll`, `Original-Ants/ddraw.ini`,
+  `Original-Ants/cnc-ddraw config.exe`) and the libretro GLSL shaders (<https://github.com/libretro/glsl-shaders>: `Original-Ants/Shaders/`) used
+  to be in the folder `Original-Ants/`. They only run the original `Ants.exe` on Windows, the remake never used them, and they left the repository
+  together with the original program; a local setup of the original keeps them there (`.gitignore` keeps them out of every commit).
 
 ## Not in the repository (linked or downloaded by the build)
 

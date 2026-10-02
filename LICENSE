@@ -22,9 +22,12 @@ SOFTWARE.
 
 This licence covers the source code and the documents that the project's
 contributors wrote (the folders include/, src/, tests/, tools/, web/, docs/,
-docker/ and the build and start files). It does NOT cover the original 1998
-game's program, artwork, sounds, music and maps (the folder Original-Ants/ and
-what the build packs from it), which belong to their copyright holders and are
-not the project's to license, nor the third-party components listed in
-THIRD_PARTY_NOTICES.md, which keep their own licences. See "License" in the
-README.
+docker/ and the build and start files). It does NOT cover the data of the
+original 1998 game that the repository holds - the archive
+Original-Ants/ants.chd (artwork, animations, sounds), the maps
+Original-Ants/Maps/*.LVL and the music Original-Ants/*.mp3 and *.MID - nor what
+the build packs from them: they belong to their copyright holders and are not
+the project's to license. The original game's program is not part of the
+repository. Nor does it cover the third-party components listed in
+THIRD_PARTY_NOTICES.md (among them the font in Original-Ants/), which keep
+their own licences. See "License" in the README.

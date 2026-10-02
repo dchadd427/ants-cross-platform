@@ -195,7 +195,7 @@ if [ "$RUN_ASSETS" -eq 1 ]; then
 
     echo ""
     echo -e "${BOLD}${BLUE}======================================================================${RESET}"
-    echo -e "${BOLD}${BLUE}>>> 1.1 RUNNING MOVEMENT TABLE PARITY (generated tables vs Ants.exe / ants.chd)...${RESET}"
+    echo -e "${BOLD}${BLUE}>>> 1.1 RUNNING MOVEMENT TABLE PARITY (generated tables vs Ants.exe or its pinned digests / ants.chd)...${RESET}"
     echo -e "${BOLD}${BLUE}======================================================================${RESET}"
     "./$BUILD_DIR/tests/test_assets/test_movement_tables"
     MOVEMENT_TABLES_STATUS=$?

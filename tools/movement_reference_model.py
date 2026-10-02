@@ -19,6 +19,10 @@ Times are milliseconds after the path is delivered; the ant starts idle facing s
 
 Usage:  python3 tools/movement_reference_model.py            # print the golden table
         python3 tools/movement_reference_model.py --trace    # also print every pixel move of each case
+
+Needs YOUR OWN COPY of the original program: Original-Ants/Ants.exe is not part of the repository (a local
+reference that .gitignore keeps out of every commit). Put your own copy of the original Ants.exe in
+Original-Ants/; without it the script stops with that message (exit status 1).
 """
 
 import argparse
@@ -284,6 +288,7 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--trace", action="store_true", help="print every pixel move")
     args = ap.parse_args()
+    emt.require_exe(emt.REPO_ROOT / emt.EXE_REL)  # the original program is a local copy, not part of the repository
     exe = emt.Exe(emt.REPO_ROOT / emt.EXE_REL)
     chd = emt.Chd(emt.REPO_ROOT / emt.CHD_REL)
     tables = Tables(exe, chd)

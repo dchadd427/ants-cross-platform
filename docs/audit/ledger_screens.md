@@ -92,7 +92,7 @@ Not verified, because no oracle exists here:
 - Exact pixels of the edge-scroll step.
 - Whether message 3 reaches other machines (inferred from the broadcast flags).
 
-The owner's Windows copy (cnc-ddraw is in `Original-Ants/`) could settle those: screenshots of the splash, setup, results and options screens, and a note whether a jingle plays at start.
+The owner's Windows copy (with cnc-ddraw in the owner's local copy of `Original-Ants/`; not in the repository) could settle those: screenshots of the splash, setup, results and options screens, and a note whether a jingle plays at start.
 
 ## Top 10 to fix next
 This is the ordered stage R outline; the detailed version with VAs is in `stage_R_outline.txt`.

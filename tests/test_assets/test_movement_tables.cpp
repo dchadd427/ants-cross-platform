@@ -3,10 +3,17 @@
 // (src/ants_sim/movement_tables_data.inc, written by
 // tools/extract_movement_tables.py) with the original game files, and the
 // verified locomotion facts of the 1998 game.
+//
+// Suite 5 reads the static tables of the original program. The program is not
+// part of the repository: with a local copy in Original-Ants/Ants.exe the bytes
+// come from it, without one from the remake's tables serialised in the
+// program's layout; either way every region is checked against its pinned
+// SHA-256 digest first (tests/common/original_program_bytes.hpp, test 5.0).
 // ============================================================================
 
 #include "ants_sim/movement_tables.hpp"
 #include "movement_tables_data.inc"  // generated tables (include directory set by CMake)
+#include "original_program_bytes.hpp"  // the bytes of Ants.exe that suite 5 reads, with their pinned digests (tests/common)
 
 #include "ants_assets/asset_archive.hpp"
 #include "ants_assets/chd_parser.hpp"
@@ -38,6 +45,7 @@ using ants::assets::Direction;
 static int g_test_count = 0;
 static int g_test_failures = 0;
 static int g_assert_count = 0;
+static int g_skip_count = 0;  // test cases that need Ants.exe itself and are skipped without it
 static std::string g_ctx;  // optional context printed with a failure (e.g. "clip 816 frame 3")
 
 #define TEST_SUITE(name)                                                          \
@@ -50,8 +58,19 @@ static void run_test_case(const std::string& name, const std::function<void()>& 
     g_ctx.clear();
     std::cout << "  RUNNING: " << name << " ... " << std::flush;
     const int prev_fails = g_test_failures;
-    fn();
+    try {
+        fn();
+    } catch (const std::exception& e) {  // e.g. a read outside the pinned regions of Ants.exe
+        std::cout << "FAILED! Exception: " << e.what() << "\n";
+        ++g_test_failures;
+        return;
+    }
     if (g_test_failures == prev_fails) std::cout << "PASS\n";
+}
+
+static void skip_test_case(const std::string& name, const std::string& why) {
+    ++g_skip_count;
+    std::cout << "  SKIPPED: " << name << " (" << why << ")\n";
 }
 
 #define TEST_CASE(name) run_test_case(name, [&]()
@@ -99,6 +118,7 @@ static void report_failure(const std::string& what, const char* file, int line) 
         }                                                                                           \
     } while (0)
 
+// The folder of the original's data: ants.chd alone decides (Ants.exe is a local copy that a clone does not have).
 static std::string locate_assets_dir() {
     const std::vector<std::string> candidates = {
 #ifdef ORIGINAL_ASSETS_DIR
@@ -107,7 +127,7 @@ static std::string locate_assets_dir() {
         "Original-Ants", "../Original-Ants", "../../Original-Ants", "../../../Original-Ants",
     };
     for (const auto& path : candidates) {
-        if (fs::exists(path + "/ants.chd") && fs::exists(path + "/Ants.exe")) return path;
+        if (fs::exists(path + "/ants.chd")) return path;
     }
     return "Original-Ants";
 }
@@ -132,74 +152,6 @@ static uint16_t tile_id(const AssetArchive& archive, const std::string& name) {
     const int32_t id = archive.find_animation_id(name);
     return id < 0 ? uint16_t{0xFFFF} : static_cast<uint16_t>(id);
 }
-
-// ============================================================================
-// Minimal PE32 reader for the Ants.exe parity suite
-// ============================================================================
-
-class PeImage {
-public:
-    bool load(const std::string& path) {
-        std::ifstream f(path, std::ios::binary | std::ios::ate);
-        if (!f) return false;
-        const std::streamsize size = static_cast<std::streamsize>(f.tellg());
-        if (size < 0x40) return false;
-        f.seekg(0, std::ios::beg);
-        bytes_.resize(static_cast<size_t>(size));
-        if (!f.read(reinterpret_cast<char*>(bytes_.data()), size)) return false;
-        const uint32_t pe = raw_u32(0x3C);
-        if (pe + 24 > bytes_.size() || raw_u32(pe) != 0x00004550u) return false;  // "PE\0\0"
-        const uint32_t sections = raw_u16(pe + 6);
-        const uint32_t opt_size = raw_u16(pe + 20);
-        const uint32_t opt = pe + 24;
-        if (raw_u16(opt) != 0x10B) return false;  // PE32
-        image_base_ = raw_u32(opt + 28);
-        const uint32_t table = opt + opt_size;
-        for (uint32_t i = 0; i < sections; ++i) {
-            const uint32_t s = table + 40 * i;
-            if (s + 40 > bytes_.size()) return false;
-            sections_.push_back({raw_u32(s + 12), raw_u32(s + 16), raw_u32(s + 20)});
-        }
-        return true;
-    }
-
-    uint32_t image_base() const noexcept { return image_base_; }
-
-    // File offset of n initialised bytes at a virtual address, or 0 if unmapped.
-    size_t offset_of(uint32_t va, uint32_t n) const noexcept {
-        const uint32_t rva = va - image_base_;
-        for (const auto& s : sections_) {
-            if (rva >= s.rva && rva + n <= s.rva + s.raw_size && s.raw_ptr + s.raw_size <= bytes_.size()) {
-                return s.raw_ptr + (rva - s.rva);
-            }
-        }
-        return 0;
-    }
-
-    bool mapped(uint32_t va, uint32_t n) const noexcept { return offset_of(va, n) != 0; }
-    uint8_t u8(uint32_t va) const noexcept { return bytes_[offset_of(va, 1)]; }
-    uint16_t u16(uint32_t va) const noexcept { return raw_u16(offset_of(va, 2)); }
-    int16_t i16(uint32_t va) const noexcept { return static_cast<int16_t>(u16(va)); }
-    uint32_t u32(uint32_t va) const noexcept { return raw_u32(offset_of(va, 4)); }
-    int32_t i32(uint32_t va) const noexcept { return static_cast<int32_t>(u32(va)); }
-
-private:
-    struct Section {
-        uint32_t rva;
-        uint32_t raw_size;
-        uint32_t raw_ptr;
-    };
-    uint16_t raw_u16(size_t off) const noexcept {
-        return static_cast<uint16_t>(bytes_[off] | (bytes_[off + 1] << 8));
-    }
-    uint32_t raw_u32(size_t off) const noexcept {
-        return static_cast<uint32_t>(bytes_[off]) | (static_cast<uint32_t>(bytes_[off + 1]) << 8) |
-               (static_cast<uint32_t>(bytes_[off + 2]) << 16) | (static_cast<uint32_t>(bytes_[off + 3]) << 24);
-    }
-    std::vector<uint8_t> bytes_;
-    uint32_t image_base_{0};
-    std::vector<Section> sections_;
-};
 
 // ============================================================================
 // SUITE 1: generated clips == ants.chd Table 4
@@ -799,16 +751,36 @@ static void suite_path_tables() {
 // ============================================================================
 // SUITE 5: generated tables == static tables inside Ants.exe
 // ============================================================================
-static void suite_exe_parity(const std::string& exe_path) {
+// `pe` reads Ants.exe when the program is there, else the remake's tables laid out like the program's; 5.0 checks
+// either source against the pinned digests (tests/common/original_program_bytes.hpp).
+static void suite_exe_parity(const original_program::ProgramBytes& pe) {
     TEST_SUITE("Suite 5: Generated tables match the static tables in Ants.exe");
 
-    PeImage pe;
-    const bool loaded = pe.load(exe_path);
-
-    TEST_CASE("5.1 Ants.exe is a PE32 image based at 0x01000000") {
-        ASSERT_TRUE(loaded);
-        ASSERT_EQ(pe.image_base(), 0x01000000u);
+    TEST_CASE("5.0 The bytes this suite reads equal the pinned SHA-256 digests of Ants.exe (layout, every region, the hash's known answers)") {
+        ASSERT_TRUE(pe.loaded());
+        for (const std::string& failure : pe.failures()) std::cout << "\n    " << failure << "\n    ";
+        g_assert_count += static_cast<int>(pe.checks());  // one check per known-answer set, layout field and region
+        ASSERT_EQ(pe.failures().size(), size_t{0});
+        if (!pe.from_exe()) {
+            // without the program, only the lists of FUN_0100724c are missing (5.3 checks their per-tile results instead)
+            ASSERT_EQ(pe.unavailable().size(), size_t{7});
+            for (const std::string& region : pe.unavailable()) ASSERT_TRUE(region == "terrain pairs" || region.rfind("flag list", 0) == 0);
+        }
     } TEST_END();
+
+    // Ants.exe: the PE32 image was read (as before); the remake's tables: only when they are the original's bytes.
+    const bool loaded = pe.from_exe() ? pe.loaded() : pe.verified();
+
+    if (pe.from_exe()) {
+        TEST_CASE("5.1 Ants.exe is a PE32 image based at 0x01000000") {
+            ASSERT_TRUE(loaded);
+            ASSERT_EQ(pe.image_base(), 0x01000000u);
+        } TEST_END();
+    } else {
+        skip_test_case("5.1 Ants.exe is a PE32 image based at 0x01000000",
+                       "needs Ants.exe: the PE header is not part of the remake's data; the layout the suite reads through is "
+                       "pinned and checked against the header when the program is there");
+    }
     if (!loaded) return;
 
     TEST_CASE("5.2 Animation-index tables (colour-0 block, dirs 0..4)") {
@@ -880,12 +852,6 @@ static void suite_exe_parity(const std::string& exe_path) {
 
     TEST_CASE("5.3 Terrain-class pairs and tile-flag lists (FUN_0100724c)") {
         ASSERT_TRUE(pe.mapped(0x1001360, 0x1001574 - 0x1001360));
-        uint8_t terrain[1344] = {};
-        for (uint32_t va = 0x1001360; va < 0x1001574; va += 4) {
-            const uint16_t id = pe.u16(va);
-            ASSERT_TRUE(id < 1344);
-            terrain[id] = static_cast<uint8_t>(pe.u16(va + 2));
-        }
         struct FlagList {
             uint8_t bit;
             uint32_t va;
@@ -895,19 +861,40 @@ static void suite_exe_parity(const std::string& exe_path) {
         const FlagList lists[6] = {{0x01, 0x1001838, 0xC0, 2}, {0x02, 0x10019C0, 0x57, 2},
                                    {0x04, 0x1001AD8, 0x05, 2}, {0x08, 0x1001578, 0x61, 2},
                                    {0x10, 0x1001AF8, 0x0E, 12}, {0x20, 0x1001818, 0x0B, 2}};
-        uint8_t flags[1344] = {};
-        for (const FlagList& l : lists) {
-            ASSERT_TRUE(pe.mapped(l.va, l.count * l.stride));
-            for (uint32_t k = 0; k < l.count; ++k) {
-                const uint16_t id = pe.u16(l.va + k * l.stride);
+        if (pe.has("terrain pairs")) {  // Ants.exe: the original's lists
+            uint8_t terrain[1344] = {};
+            for (uint32_t va = 0x1001360; va < 0x1001574; va += 4) {
+                const uint16_t id = pe.u16(va);
                 ASSERT_TRUE(id < 1344);
-                flags[id] = static_cast<uint8_t>(flags[id] | l.bit);
+                terrain[id] = static_cast<uint8_t>(pe.u16(va + 2));
             }
-        }
-        for (uint32_t id = 0; id < 1344; ++id) {
-            g_ctx = "tile " + std::to_string(id);
-            ASSERT_EQ(md::kTileTerrain[id], terrain[id]);
-            ASSERT_EQ(md::kTileFlags[id], flags[id]);
+            uint8_t flags[1344] = {};
+            for (const FlagList& l : lists) {
+                ASSERT_TRUE(pe.mapped(l.va, l.count * l.stride));
+                for (uint32_t k = 0; k < l.count; ++k) {
+                    const uint16_t id = pe.u16(l.va + k * l.stride);
+                    ASSERT_TRUE(id < 1344);
+                    flags[id] = static_cast<uint8_t>(flags[id] | l.bit);
+                }
+            }
+            for (uint32_t id = 0; id < 1344; ++id) {
+                g_ctx = "tile " + std::to_string(id);
+                ASSERT_EQ(md::kTileTerrain[id], terrain[id]);
+                ASSERT_EQ(md::kTileFlags[id], flags[id]);
+            }
+            // the pins that the run without the program checks: the per-tile arrays these lists produce
+            g_ctx.clear();
+            ASSERT_STREQ(original_program::sha256_hex(terrain, sizeof terrain), original_program::kTileTerrainSha256);
+            ASSERT_STREQ(original_program::sha256_hex(flags, sizeof flags), original_program::kTileFlagsSha256);
+        } else {
+            // Without the program the lists cannot be read: the remake keeps their per-tile results, not the lists (their
+            // order and the pair list's 25 explicit grass entries are not in its data). The per-tile arrays are checked
+            // against the pinned digests of the arrays that the original's lists produce (verified by the run with Ants.exe).
+            std::cout << "[without Ants.exe the original's terrain-pair and tile-flag lists are not read; kTileTerrain and "
+                         "kTileFlags are checked against the pinned digests of the per-tile arrays those lists produce] ";
+            for (const FlagList& l : lists) ASSERT_TRUE(pe.mapped(l.va, l.count * l.stride));
+            ASSERT_STREQ(original_program::sha256_hex(md::kTileTerrain, sizeof md::kTileTerrain), original_program::kTileTerrainSha256);
+            ASSERT_STREQ(original_program::sha256_hex(md::kTileFlags, sizeof md::kTileFlags), original_program::kTileFlagsSha256);
         }
         // Bridge ids: cmp ax, imm16 at 0x1008b95 / 9b / a1 / a7 (FUN_01008b90).
         const uint32_t cmps[4] = {0x1008B95, 0x1008B9B, 0x1008BA1, 0x1008BA7};
@@ -1040,10 +1027,10 @@ int main() {
 
     const std::string assets_dir = locate_assets_dir();
     const std::string chd_path = assets_dir + "/ants.chd";
-    const std::string exe_path = assets_dir + "/Ants.exe";
+    const std::string exe_path = assets_dir + "/Ants.exe";  // optional: a local copy of the original program
     std::cout << "Assets directory: " << assets_dir << "\n";
-    if (!fs::exists(chd_path) || !fs::exists(exe_path)) {
-        std::cerr << "ERROR: ants.chd / Ants.exe not found in " << assets_dir << "\n";
+    if (!fs::exists(chd_path)) {
+        std::cerr << "ERROR: ants.chd not found in " << assets_dir << "\n";
         return 1;
     }
 
@@ -1053,11 +1040,16 @@ int main() {
         return 1;
     }
 
+    // The bytes of Ants.exe that suite 5 reads: from the program when it is there, else from the remake's tables.
+    const original_program::ProgramBytes program =
+        original_program::ProgramBytes::open(exe_path, original_program::all_region_names());
+    std::cout << "Bytes of the original program: " << program.summary() << "\n";
+
     suite_chd_parity(archive);
     suite_locomotion_facts();
     suite_tiles(archive);
     suite_path_tables();
-    suite_exe_parity(exe_path);
+    suite_exe_parity(program);
     suite_archive_signed_dx(archive);
     suite_food_footprints(archive);
 
@@ -1065,8 +1057,11 @@ int main() {
               << " TEST SUMMARY\n"
               << " Total Test Cases: " << g_test_count << "\n"
               << " Total Assertions: " << g_assert_count << "\n"
-              << " Failures:         " << g_test_failures << "\n"
-              << "=======================================================\n";
+              << " Failures:         " << g_test_failures << "\n";
+    if (g_skip_count > 0) {
+        std::cout << " Skipped:          " << g_skip_count << " (they need Ants.exe itself: put your own copy of the original Ants.exe in Original-Ants/)\n";
+    }
+    std::cout << "=======================================================\n";
     if (g_test_failures == 0) {
         std::cout << " >>> ALL MOVEMENT TABLE TESTS PASSED (100% PASS) <<<\n";
         return 0;

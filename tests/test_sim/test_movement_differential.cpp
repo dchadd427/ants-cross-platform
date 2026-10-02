@@ -7,6 +7,12 @@
 // cannot pass unnoticed even when the hand-written golden cases (test_movement_golden, test_path_planner) do not
 // happen to exercise it.
 //
+// The program's tables: the original program is not part of the repository. With a local copy in
+// Original-Ants/Ants.exe the models read its bytes; without one they read the remake's generated tables laid out like
+// the program's. Either way the bytes are first checked against the pinned SHA-256 digests of the program's bytes
+// (tests/common/original_program_bytes.hpp, test 0.1), so what the models read is byte for byte the original's: a
+// changed remake table fails that check instead of passing unnoticed.
+//
 //   * A* model   PathRequest::Step FUN_01019a66 with its 0-rooted heap FUN_01019e20 / FUN_01019f0a: 32-bit search
 //                cells (g bits 0..13, h bits 14..26, parent direction bits 27..29, opened bit 30, closed bit 31),
 //                live f reads, no decrease-key, failure when a popped f >= 8000 (tested before the goal), the
@@ -24,6 +30,7 @@
 #include "ants_assets/asset_archive.hpp"
 #include "ants_sim/path_planner.hpp"
 #include "ants_sim/sim_engine.hpp"
+#include "original_program_bytes.hpp"  // the bytes of Ants.exe that the models read, with their pinned digests (tests/common)
 
 #include <array>
 #include <cstdint>
@@ -95,6 +102,7 @@ static void run_test_case(const std::string& name, const std::function<void()>& 
 
 namespace {
 
+// The folder of the original's data: ants.chd alone decides (Ants.exe is a local copy that a clone does not have).
 std::string locate_assets_dir() {
     const std::vector<std::string> candidates = {
 #ifdef ORIGINAL_ASSETS_DIR
@@ -103,7 +111,7 @@ std::string locate_assets_dir() {
         "Original-Ants", "../Original-Ants", "../../Original-Ants", "../../../Original-Ants",
     };
     for (const auto& path : candidates) {
-        if (fs::exists(path + "/ants.chd") && fs::exists(path + "/Ants.exe")) return path;
+        if (fs::exists(path + "/ants.chd")) return path;
     }
     return "Original-Ants";
 }
@@ -112,62 +120,12 @@ std::string locate_assets_dir() {
 // Raw data of the original
 // ---------------------------------------------------------------------------------------------------------------
 
-// Minimal PE32 reader: initialised bytes of Ants.exe at a virtual address (image base 0x01000000).
-class PeImage {
-public:
-    bool load(const std::string& path) {
-        std::ifstream f(path, std::ios::binary | std::ios::ate);
-        if (!f) return false;
-        const std::streamsize size = static_cast<std::streamsize>(f.tellg());
-        if (size < 0x40) return false;
-        f.seekg(0, std::ios::beg);
-        bytes_.resize(static_cast<size_t>(size));
-        if (!f.read(reinterpret_cast<char*>(bytes_.data()), size)) return false;
-        const uint32_t pe = raw_u32(0x3C);
-        if (pe + 24 > bytes_.size() || raw_u32(pe) != 0x00004550u) return false;
-        const uint32_t sections = raw_u16(pe + 6);
-        const uint32_t opt_size = raw_u16(pe + 20);
-        const uint32_t opt = pe + 24;
-        if (raw_u16(opt) != 0x10B) return false;
-        image_base_ = raw_u32(opt + 28);
-        const uint32_t table = opt + opt_size;
-        for (uint32_t i = 0; i < sections; ++i) {
-            const uint32_t s = table + 40 * i;
-            if (s + 40 > bytes_.size()) return false;
-            sections_.push_back({raw_u32(s + 12), raw_u32(s + 16), raw_u32(s + 20)});
-        }
-        return true;
-    }
+// The bytes of Ants.exe at virtual addresses (image base 0x01000000): from the program, or from the remake's tables laid
+// out like the program's, either way checked against the pinned digests (tests/common/original_program_bytes.hpp).
+using ProgramBytes = original_program::ProgramBytes;
 
-    uint16_t u16(uint32_t va) const {
-        const uint32_t rva = va - image_base_;
-        for (const auto& s : sections_) {
-            if (rva >= s.rva && rva + 2 <= s.rva + s.raw_size) return raw_u16(s.raw_ptr + (rva - s.rva));
-        }
-        throw std::runtime_error("unmapped address in Ants.exe");
-    }
-
-    std::vector<uint16_t> u16s(uint32_t va, uint32_t n) const {
-        std::vector<uint16_t> out;
-        for (uint32_t i = 0; i < n; ++i) out.push_back(u16(va + 2 * i));
-        return out;
-    }
-
-private:
-    struct Section {
-        uint32_t rva;
-        uint32_t raw_size;
-        uint32_t raw_ptr;
-    };
-    uint16_t raw_u16(size_t off) const { return static_cast<uint16_t>(bytes_.at(off) | (bytes_.at(off + 1) << 8)); }
-    uint32_t raw_u32(size_t off) const {
-        return static_cast<uint32_t>(bytes_.at(off)) | (static_cast<uint32_t>(bytes_.at(off + 1)) << 8) |
-               (static_cast<uint32_t>(bytes_.at(off + 2)) << 16) | (static_cast<uint32_t>(bytes_.at(off + 3)) << 24);
-    }
-    std::vector<uint8_t> bytes_;
-    uint32_t image_base_{0};
-    std::vector<Section> sections_;
-};
+// The pinned regions of Ants.exe that the models read.
+const std::vector<std::string> kModelRegions = {"walk", "carry walk", "idle", "carry idle", "swim", "idle in water"};
 
 struct Frame {
     int32_t dx;
@@ -175,17 +133,30 @@ struct Frame {
     uint32_t dur;
 };
 
+// An entry the model never reads: the directions 5..7 of a row hold the virtual ids of the mirrored copies that the
+// original makes at start (FUN_01018a7a); the model mirrors the clips of 3, 2, 1 itself (src()).
+constexpr uint16_t kNotStored = 0xFFFF;
+
+// The rows of a colour-0 animation table: 8 directions per row (16 bytes), of which the original stores 0..4.
+std::vector<uint16_t> stored_rows(const ProgramBytes& exe, uint32_t va, uint32_t rows) {
+    std::vector<uint16_t> out(8u * rows, kNotStored);
+    for (uint32_t r = 0; r < rows; ++r) {
+        for (uint32_t d = 0; d < 5; ++d) out[8u * r + d] = exe.u16(va + 16u * r + 2u * d);
+    }
+    return out;
+}
+
 // The animation tables of the walk model, read straight from the executable (colour-0 blocks), and the Table-4
 // frames of the archive.
 class Original {
 public:
-    Original(const PeImage& exe, const AssetArchive& chd)
+    Original(const ProgramBytes& exe, const AssetArchive& chd)
         : chd_(chd),
-          walk_(exe.u16s(0x1002FB8, 240)),     // [type 6][terrain 5][dir 8]
-          carry_(exe.u16s(0x1003738, 240)),    // the same while carrying food
-          idle_(exe.u16s(0x1002CB8, 48)),      // [type 6][dir 8]
-          carry_idle_(exe.u16s(0x1002E38, 48)),
-          swim_(exe.u16s(0x1004838, 8)),       // swimmer on water [dir 8]
+          walk_(stored_rows(exe, 0x1002FB8, 30)),   // [type 6][terrain 5][dir 8]
+          carry_(stored_rows(exe, 0x1003738, 30)),  // the same while carrying food
+          idle_(stored_rows(exe, 0x1002CB8, 6)),    // [type 6][dir 8]
+          carry_idle_(stored_rows(exe, 0x1002E38, 6)),
+          swim_(stored_rows(exe, 0x1004838, 1)),    // swimmer on water [dir 8]
           idle_water_(exe.u16(0x10048B8)) {}
 
     // The stored direction of the table for a facing 0..7 (5, 6, 7 use the clips of 3, 2, 1 mirrored).
@@ -195,6 +166,7 @@ public:
     }
 
     std::vector<Frame> frames(uint16_t index, bool mirrored) const {
+        if (index == kNotStored) throw std::logic_error("the model read a direction 5..7 entry of an animation table");
         std::vector<Frame> out;
         for (const auto& sub : chd_.get_animation(index).subitems) {
             out.push_back({mirrored ? -sub.val1 : sub.val1, sub.val2, sub.val3});
@@ -824,12 +796,29 @@ int main() {
 
     const std::string assets_dir = locate_assets_dir();
     const std::string chd_path = assets_dir + "/ants.chd";
-    const std::string exe_path = assets_dir + "/Ants.exe";
+    const std::string exe_path = assets_dir + "/Ants.exe";  // optional: a local copy of the original program
     std::cout << "Assets directory: " << assets_dir << "\n";
-    PeImage exe;
     AssetArchive archive;
-    if (!exe.load(exe_path) || !archive.load_from_file(chd_path)) {
-        std::cerr << "ERROR: Ants.exe / ants.chd could not be loaded from " << assets_dir << "\n";
+    if (!archive.load_from_file(chd_path)) {
+        std::cerr << "ERROR: ants.chd could not be loaded from " << assets_dir << "\n";
+        return 1;
+    }
+    // The tables the models read: from Ants.exe when the program is there, else from the remake's tables.
+    const ProgramBytes exe = ProgramBytes::open(exe_path, kModelRegions);
+    std::cout << "Bytes of the original program: " << exe.summary() << "\n";
+
+    TEST_SUITE("Suite 0: the bytes of Ants.exe that the models read");
+    TEST_CASE("0.1 The tables the models read equal the pinned SHA-256 digests of Ants.exe (layout, every region, the hash's known answers)") {
+        ASSERT_TRUE(exe.loaded());
+        for (const std::string& failure : exe.failures()) std::cout << "\n    " << failure << "\n    ";
+        g_assert_count += static_cast<int>(exe.checks());  // one check per known-answer set, layout field and region
+        ASSERT_EQ(exe.failures().size(), size_t{0});
+        ASSERT_EQ(exe.unavailable().size(), size_t{0});  // the remake holds every table the models read
+    } TEST_END();
+    if (!exe.verified()) {
+        // The models must read the original's bytes and nothing else: a different program, or remake tables that are not
+        // the original's, would make the comparison meaningless.
+        std::cout << "\n >>> the bytes are not the original's (see 0.1): the model suites are not run <<< \n\n";
         return 1;
     }
     const Original original(exe, archive);

@@ -1,7 +1,7 @@
 # Line endings. The text sources, scripts and documents of the project are stored with LF; Git decides for itself which other files are text.
 # No file in the repository is renormalised by these rules (do not run `git add --renormalize`): the files that are stored with CRLF
-# (third-party notices and shaders, the cnc-ddraw settings, the sample of the original's chat file, a byte-exact test table) are marked
-# -text below, so their bytes stay exactly as they are.
+# (the licence text of the bundled font in Original-Ants/, a byte-exact test table) are marked -text below, so their bytes stay exactly
+# as they are.
 * text=auto
 
 # Scripts: a shell script with CRLF does not run; a batch file for cmd.exe needs CRLF in the working tree (it is stored with LF in the index)
@@ -28,9 +28,8 @@ tests/data/*.csv        -text
 *.wasm  binary
 *.wav   binary
 
-# Hints for the language statistics and diffs of GitHub: vendored, generated or decompiled files are not the project's own code
+# Hints for the language statistics and diffs of GitHub: vendored or generated files are not the project's own code
 include/ants_app/dr_mp3.h           linguist-vendored
 asset_catalog/catalog_data.js       linguist-generated
-docs/legacy/Ants.exe.c              linguist-generated
 docs/*.json                         linguist-generated
 src/ants_sim/*_data.inc             linguist-generated

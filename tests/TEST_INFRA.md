@@ -16,7 +16,7 @@
 The End-to-End (E2E) testing track for the Ants remake adheres to an **opaque-box, requirement-driven testing philosophy**. Tests treat the engine, simulation, and asset decoders as closed units governed strictly by:
 1. The authoritative reverse-engineering specification (`docs/GAME_REVERSE_ENGINEERING.md`).
 2. The project requirements and directives (`README.md` and `AGENTS.md`; the original brief is no longer in the repository).
-3. The original 1998 game itself (`Original-Ants/Ants.exe`, `Original-Ants/ants.chd`, `Original-Ants/Maps/*.LVL`), against which the specification is checked.
+3. The original 1998 game itself (`Original-Ants/Ants.exe`, `Original-Ants/ants.chd`, `Original-Ants/Maps/*.LVL`), against which the specification is checked. (The program `Ants.exe` is a local copy that is not part of the repository; the repository holds the data archive, the maps and the music.)
 
 ### Core Testing Tenets
 - **Opaque-Box Verification:** Tests assert exclusively on observable inputs, outputs, states, and contractual events (e.g. decoded binary structures, simulation tick outputs, state transitions, audio trigger events, scorecard numbers). Tests never rely on implementation internals or private structures.

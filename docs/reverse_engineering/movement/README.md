@@ -6,7 +6,8 @@ movement code (`src/ants_sim/movement_system.cpp`, `src/ants_sim/path_planner.cp
 
 Method: Capstone disassembly of `Original-Ants/Ants.exe` (image base `0x01000000`) is the primary source; the Ghidra
 output `docs/legacy/Ants.exe.c` was used only to navigate. Each report was followed by an independent adversarial
-pass that re-derived every claim from the instructions; its verdicts are appended to the report.
+pass that re-derived every claim from the instructions; its verdicts are appended to the report. The program and the
+decompilation are local copies that are not part of the repository (`docs/GAME_REVERSE_ENGINEERING.md` 2.0).
 
 | Report | Covers |
 |---|---|
@@ -17,7 +18,8 @@ pass that re-derived every claim from the instructions; its verdicts are appende
 | [05_path_manager_and_astar.md](05_path_manager_and_astar.md) | PATHMGR task, PathRequest A*, heap, step cost `FUN_01020951`, delivery |
 | [06_orders_goto_and_group_dispatch.md](06_orders_goto_and_group_dispatch.md) | Group order `FUN_010287b5`, accept predicate, GoTo `FUN_0101fc50`, classification, goal ring scan |
 
-Regenerate and audit the numbers:
+Regenerate and audit the numbers (both scripts need your own copy of the original `Ants.exe` in `Original-Ants/`; the
+tests do not, they check the generated tables against pinned SHA-256 digests of the program's bytes):
 
 ```bash
 python3 tools/extract_movement_tables.py --check      # generated tables still match Ants.exe / ants.chd
