@@ -2365,7 +2365,7 @@ void run_secret_tests() {
         }
     } TEST_END();
 
-    TEST_CASE("S3.34 random_bytes, The Generator Of The Control Secret, Is There For The Server To Make The Keys Of The Seats With (Protocol 10): Every Length Is Filled Exactly And Nothing Beyond It Is Touched; 512 Keys Of 16 Bytes Show Many Values At Every Position, None Repeats, None Is Zero, No Position Copies Another; Zero Bytes Is Nothing To Do") {
+    TEST_CASE("S3.58 random_bytes, The Generator Of The Control Secret, Is There For The Server To Make The Keys Of The Seats With (Protocol 10): Every Length Is Filled Exactly And Nothing Beyond It Is Touched; 512 Keys Of 16 Bytes Show Many Values At Every Position, None Repeats, None Is Zero, No Position Copies Another; Zero Bytes Is Nothing To Do") {
         for (const size_t n : {size_t{0}, size_t{1}, size_t{2}, size_t{7}, size_t{16}, size_t{31}, size_t{32}, size_t{33}, size_t{255}, size_t{4096}, size_t{100000}}) {
             std::vector<uint8_t> buf(n + 16, 0xA5);
             ASSERT_TRUE(server::random_bytes(buf.data() + 8, n));
@@ -2567,9 +2567,9 @@ void run_secret_tests() {
     } TEST_END();
 }
 
-// Reconnect, release A: the server (protocol 10). A room that holds the seat of a player whose connection is lost, through the real manager, door and lobby. S3.35 - S3.5x.
+// Reconnect, release A: the server (protocol 10). A room that holds the seat of a player whose connection is lost, through the real manager, door and lobby. S3.36 - S3.59 (S3.34 and S3.35 are the end of a match and a laggard, v0.0.94: the ids S3.58 and S3.59 are this release's random_bytes and keys).
 void run_reconnect_tests() {
-    TEST_CASE("S3.35 Keys: A Room That Holds Seats Gives Every Player A Different Key (None Is Zero) In Its Welcome, And The Session Knows It; A Room That Does Not Gives None, And Its Players Have No Way Back") {
+    TEST_CASE("S3.59 Keys: A Room That Holds Seats Gives Every Player A Different Key (None Is Zero) In Its Welcome, And The Session Knows It; A Room That Does Not Gives None, And Its Players Have No Way Back") {
         {
             RWorld w;
             ASSERT_TRUE(w.mgr.create_room(held_spec("K-1", 3), w.now).ok);

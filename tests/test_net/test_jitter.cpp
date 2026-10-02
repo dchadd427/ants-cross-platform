@@ -499,7 +499,7 @@ int main() {
         ASSERT_TRUE(rf.max_target == 2 && rf.changes_at.empty());
     } TEST_END();
 
-    TEST_CASE("J1.10 reset() Gives Back A Buffer That Has Not Seen The Link: The Steady Target, No Turn Read, And It Then Behaves Exactly Like A New One (A Runner Does This After A Catch-Up)") {
+    TEST_CASE("J1.11 reset() Gives Back A Buffer That Has Not Seen The Link: The Steady Target, No Turn Read, And It Then Behaves Exactly Like A New One (A Runner Does This After A Catch-Up)") {
         Feed rough;
         rough.jitter = 300;
         JitterBuffer used;
