@@ -36,6 +36,10 @@ static int g_test_failures = 0;
 static int g_assert_count = 0;
 
 inline void run_test_case(const std::string& name, const std::function<void()>& fn) {
+    // ANTS_TEST_FILTER=text runs only the cases whose title contains the text (for working on one test and for mutation runs; the suite as run_tests.sh runs it has no filter)
+    if (const char* filter = std::getenv("ANTS_TEST_FILTER")) {
+        if (name.find(filter) == std::string::npos) return;
+    }
     ++g_test_count;
     std::cout << "  RUNNING: " << std::left << std::setw(100) << name << " ... " << std::flush;
     const int prev = g_test_failures;
@@ -5396,7 +5400,7 @@ void run_failure_tests() {
         ASSERT_TRUE(m.host->turns_sealed() > 40);                       // the game went on for everybody else
     } TEST_END();
 
-    TEST_CASE("N2.17 Chat: Relayed To Everybody With The Sender Stamped By The Connection") {
+    TEST_CASE("N2.17 Chat: A Line For All Is Relayed To Everybody With The Sender Stamped By The Connection (A Line For The Team Is Another Rule Since The Release That Filters Team Chat: N2.90 - N2.92)") {
         Match m(1, 3, {20, 0});
         std::vector<ChatMsg> host_seen;
         std::vector<ChatMsg> c1_seen;
@@ -5406,7 +5410,7 @@ void run_failure_tests() {
         m.clients[1]->set_on_chat([&](const ChatMsg& c) { c2_seen.push_back(c); });
         m.run(500);
         ASSERT_TRUE(m.clients[0]->chat("hello all", false));
-        m.host->chat_local("host here", true);
+        m.host->chat_local("host here", false);                          // (this line used to be a team line: a team line goes to the ally only now, N2.92)
         m.run(500, false);
         ASSERT_EQ(host_seen.size(), 2u);
         ASSERT_EQ(c2_seen.size(), 2u);
@@ -5422,8 +5426,12 @@ void run_failure_tests() {
             const ChatMsg* b = find(*seen, "host here");
             ASSERT_TRUE(a != nullptr && b != nullptr);
             ASSERT_TRUE(a->sender == 1 && !a->team);
-            ASSERT_TRUE(b->sender == 0 && b->team);
+            ASSERT_TRUE(b->sender == 0 && !b->team);
         }
+        m.host->chat_local("host team", true);                          // the host has no ally: nobody but itself hears a line for its team
+        m.run(500, false);
+        ASSERT_EQ(host_seen.size(), 3u);
+        ASSERT_TRUE(c1_seen.size() == 2u && c2_seen.size() == 2u);
         // a client that forges the sender byte is stamped anyway
         ChatMsg forged;
         forged.sender = 0;
@@ -5956,15 +5964,18 @@ void run_migration_tests() {
         m.run(4000);
         ASSERT_EQ(m.promotions, 1);
         ASSERT_TRUE(m.clients[3]->chat("still here", false));
-        m.hosts[1]->chat_local("the host of the rest", true);
+        m.hosts[1]->chat_local("the host of the rest", false);
+        m.hosts[1]->chat_local("team of the new host", true);                     // (no alliance: a line for the team stays with its sender, N2.90)
         m.run(1000);
         for (uint8_t s = 1; s < 4; ++s) {
-            bool a = false, b = false;
+            bool a = false, b = false, t = false;
             for (const ChatMsg& c : m.chats[s]) {
                 if (c.text == "still here") a = c.sender == 3 && !c.team;
-                if (c.text == "the host of the rest") b = c.sender == 1 && c.team;
+                if (c.text == "the host of the rest") b = c.sender == 1 && !c.team;
+                if (c.text == "team of the new host") t = true;
             }
             ASSERT_TRUE(a && b);
+            ASSERT_EQ(t, s == 1);
         }
         m.clients[2]->leave();                                               // seat 2 quits: the new host drops it
         m.run(2000);
@@ -6967,13 +6978,13 @@ void run_reconnect_session_tests() {
         ASSERT_TRUE(m.host->paused());
         ASSERT_TRUE(m.clients[0]->chat("anybody home?", false));
         m.run(300);
-        ASSERT_TRUE(m.clients[1]->chat("only us", true));
+        ASSERT_TRUE(m.clients[1]->chat("only us", false));
         m.run(300);
         ASSERT_FALSE(m.clients[2]->chat("(from the dark)", false));                      // no link: nothing can be said
         for (uint8_t seat : {uint8_t{0}, uint8_t{1}}) {
             ASSERT_EQ(m.chats[seat].size(), size_t{2});
             ASSERT_TRUE(m.chats[seat][0].sender == 0 && m.chats[seat][0].text == "anybody home?" && !m.chats[seat][0].team);
-            ASSERT_TRUE(m.chats[seat][1].sender == 1 && m.chats[seat][1].text == "only us" && m.chats[seat][1].team);
+            ASSERT_TRUE(m.chats[seat][1].sender == 1 && m.chats[seat][1].text == "only us" && !m.chats[seat][1].team);
         }
         ASSERT_TRUE(m.chats[2].empty());
         m.auto_reconnect[2] = true;
@@ -9108,7 +9119,7 @@ void run_reconnect_session_tests() {
 // ---------------------------------------------------------------------------------------------------------------------------------
 
 void run_protocol11_tests() {
-    TEST_CASE("N2.75 Protocol 11: StartRequest Carries A Fill Level (Every Level Round-Trips, Every Truncation, Trailing Byte And Level Above 3 Is Refused, The Names And Parsing Of The Levels), The Room's Notices Are Chat From Sender 255 (Round Trip, Limits), And 300000 Mutated StartRequests And Chat Lines Only Give Messages That Encode Back To The Same Bytes") {
+    TEST_CASE("N2.89 Protocol 11: StartRequest Carries A Fill Level (Every Level Round-Trips, Every Truncation, Trailing Byte And Level Above 3 Is Refused, The Names And Parsing Of The Levels), The Room's Notices Are Chat From Sender 255 (Round Trip, Limits), And 300000 Mutated StartRequests And Chat Lines Only Give Messages That Encode Back To The Same Bytes") {
         ASSERT_EQ(kProtocolVersion, 11);
         ASSERT_TRUE(kFillLevelLast == 3 && kRoomSender == 255 && static_cast<int>(MsgType::StartRequest) == 24 && static_cast<int>(MsgType::Chat) == 9);
         // every level
@@ -9191,6 +9202,217 @@ void run_protocol11_tests() {
     } TEST_END();
 }
 
+// ---------------------------------------------------------------------------------------------------------------------------------
+// Team chat reaches only the allies (the relay of a host, by the host's own alliance table at the time of the relay)
+// ---------------------------------------------------------------------------------------------------------------------------------
+
+// A match of a host and `players` seats over a loopback network, built to see WHAT THE HOST PUTS ON EACH LINK: the host's end of every link is a HostTap (it counts the Chat messages that
+// it sends), and a seat of `raw_mask` has no session at all: a raw client that never filters, never acknowledges and reads every message of its link (what a modified client would see).
+// `lan` is a game on the local network (the host holds seat 0 and is a receiver like the others); without it the host is a dedicated server's referee and holds no seat.
+struct TeamChatRig {
+    LoopbackNetwork net;
+    sim::SimulationEngine host_engine;                                  // the host's own engine: the table that the relay reads
+    std::vector<std::unique_ptr<sim::SimulationEngine>> sims;           // by seat (null for the host's seat and for a raw seat)
+    Ids ids;
+    std::unique_ptr<HostSession> host;
+    std::vector<std::unique_ptr<HostTap>> taps;                         // the host's end of the link of each seat (null for the host's own seat)
+    std::vector<std::unique_ptr<ClientSession>> clients;                // by seat (null for the host's seat and for a raw seat)
+    std::vector<Connection*> client_ends;
+    std::vector<ChatMsg> heard[sim::MAX_PLAYERS];                       // what the session of a seat reported as chat
+    std::vector<ChatMsg> raw[sim::MAX_PLAYERS];                         // every Chat message that arrived on the link of a raw seat (decoded from the bytes)
+    std::vector<ChatMsg> host_heard;                                    // what the host's own callback was given
+    uint32_t now{0};
+    uint8_t players;
+    bool lan;
+
+    TeamChatRig(bool lan_, uint8_t players_, uint8_t raw_mask) : net(77), players(players_), lan(lan_) {
+        ids = build_world(host_engine, 1);
+        HostSession::Config hc;
+        hc.host_player = lan ? uint8_t{0} : kNoSeat;
+        host = std::make_unique<HostSession>(host_engine, hc);
+        sims.resize(players);
+        taps.resize(players);
+        clients.resize(players);
+        client_ends.assign(players, nullptr);
+        for (uint8_t p = lan ? 1 : 0; p < players; ++p) {
+            auto ends = net.connect({20, 0});
+            taps[p] = std::make_unique<HostTap>(ends.first, &now);
+            host->add_client(p, taps[p].get());
+            client_ends[p] = ends.second;
+            if ((raw_mask & (1u << p)) != 0) continue;
+            sims[p] = std::make_unique<sim::SimulationEngine>();
+            build_world(*sims[p], 1);
+            ClientSession::Config c;
+            c.player = p;
+            c.host = lan ? uint8_t{0} : kNoSeat;
+            c.migration = false;
+            clients[p] = std::make_unique<ClientSession>(*sims[p], c);
+            clients[p]->set_connection(ends.second);
+            clients[p]->set_on_chat([this, p](const ChatMsg& m) { heard[p].push_back(m); });
+        }
+        host->set_on_chat([this](const ChatMsg& m) { host_heard.push_back(m); });
+        host->start(0);
+        for (auto& c : clients) {
+            if (c) c->start(0);
+        }
+    }
+
+    void step(uint32_t ms) {
+        const uint32_t end = now + ms;
+        while (now < end) {
+            now += 10;
+            net.set_time(now);
+            host->update(now);
+            for (uint8_t p = 0; p < players; ++p) {
+                if (clients[p]) {
+                    clients[p]->update(now);
+                } else if (client_ends[p] != nullptr) {
+                    std::vector<uint8_t> msg;
+                    while (client_ends[p]->poll(msg)) {
+                        ChatMsg c;
+                        if (peek_type(msg) == MsgType::Chat && decode(msg, c)) raw[p].push_back(c);
+                    }
+                }
+            }
+        }
+    }
+    void order(uint8_t seat, const Command& c) {
+        if (lan && seat == 0) host->submit_local(c);
+        else clients[seat]->submit(c);
+    }
+    bool say(uint8_t seat, const std::string& text, bool team) {
+        if (lan && seat == 0) {
+            host->chat_local(text, team);
+            return true;
+        }
+        return clients[seat]->chat(text, team);
+    }
+    // `a` invites `b`, `b` accepts: true when the host's table says that they are allies
+    bool ally(uint8_t a, uint8_t b) {
+        order(a, cmd(CommandType::AllianceInvite, a, b));
+        step(500);
+        order(b, cmd(CommandType::AllianceAccept, b, a));
+        step(500);
+        return host_engine.alliance_of(a) == b && host_engine.alliance_of(b) == a;
+    }
+    size_t on_wire(uint8_t seat) const { return taps[seat] ? taps[seat]->sent_of(MsgType::Chat) : 0; }     // the Chat messages that the host has sent to the seat
+};
+
+bool has_line(const std::vector<ChatMsg>& v, const std::string& text) {
+    for (const ChatMsg& c : v) {
+        if (c.text == text) return true;
+    }
+    return false;
+}
+
+void run_team_chat_tests() {
+    TEST_CASE("N2.90 Team Chat At The Wire (A Dedicated Server's Host): A Line For The Team Goes To The Sender And Its Ally Only, By The Referee's Alliance Table; A Raw Client Of A Non-Ally That Reads Every Byte Of Its Link Gets Nothing; A Line For All Goes To Everybody; A Player Without An Ally Hears Only Itself; The Referee Logs Every Line") {
+        TeamChatRig m(false, 4, 0x08);                                   // seats 0 and 1 will be allies, seat 2 is not, seat 3 is a raw client without a session
+        ASSERT_TRUE(m.host->seatless());
+        ASSERT_EQ(m.host_engine.alliance_of(0), sim::ALLIANCE_NONE);
+        ASSERT_TRUE(m.ally(0, 1));
+        ASSERT_TRUE(m.host_engine.alliance_of(2) == sim::ALLIANCE_NONE && m.host_engine.alliance_of(3) == sim::ALLIANCE_NONE);
+        // the rule, as a function of the table
+        ASSERT_TRUE(m.host->hears_chat(0, true, 0) && m.host->hears_chat(0, true, 1) && !m.host->hears_chat(0, true, 2) && !m.host->hears_chat(0, true, 3));
+        ASSERT_TRUE(m.host->hears_chat(0, false, 2) && m.host->hears_chat(0, false, 3) && m.host->hears_chat(2, true, 2) && !m.host->hears_chat(2, true, 0));
+
+        const size_t before_2 = m.on_wire(2);
+        const size_t before_3 = m.on_wire(3);
+        ASSERT_TRUE(m.say(0, "team A", true));
+        m.step(300);
+        ASSERT_TRUE(has_line(m.heard[0], "team A") && has_line(m.heard[1], "team A"));        // the sender (its own line comes back) and its ally
+        ASSERT_FALSE(has_line(m.heard[2], "team A"));
+        ASSERT_TRUE(m.raw[3].empty());                                                         // nothing at all arrived at the raw client
+        ASSERT_EQ(m.on_wire(2), before_2);                                                     // and the host never sent it to either: counted on the host's end of the links
+        ASSERT_EQ(m.on_wire(3), before_3);
+        for (const ChatMsg& c : m.heard[1]) {
+            if (c.text == "team A") ASSERT_TRUE(c.sender == 0 && c.team);                      // the line is what it was: the sender's seat (stamped by the connection) and the flag
+        }
+
+        ASSERT_TRUE(m.say(1, "team B", true));                                                 // the other way round
+        m.step(300);
+        ASSERT_TRUE(has_line(m.heard[0], "team B") && has_line(m.heard[1], "team B"));
+        ASSERT_FALSE(has_line(m.heard[2], "team B"));
+        ASSERT_TRUE(m.raw[3].empty());
+
+        ASSERT_TRUE(m.say(2, "lonely", true));                                                 // a player without an ally: its own screen only
+        m.step(300);
+        ASSERT_TRUE(has_line(m.heard[2], "lonely"));
+        ASSERT_FALSE(has_line(m.heard[0], "lonely") || has_line(m.heard[1], "lonely"));
+        ASSERT_TRUE(m.raw[3].empty());
+
+        ASSERT_TRUE(m.say(2, "to all", false));                                                // a line for all: everybody, the raw client too
+        m.step(300);
+        for (uint8_t p = 0; p < 3; ++p) ASSERT_TRUE(has_line(m.heard[p], "to all"));
+        ASSERT_TRUE(m.raw[3].size() == 1 && m.raw[3][0].text == "to all" && m.raw[3][0].sender == 2 && !m.raw[3][0].team);
+        // counted at the wire: seats 0 and 1 got three lines (team A, team B, to all), seat 2 two (lonely, to all), seat 3 one
+        ASSERT_TRUE(m.on_wire(0) == 3 && m.on_wire(1) == 3 && m.on_wire(2) == before_2 + 2 && m.on_wire(3) == before_3 + 1);
+        // the referee hears them all (its callback is its log, not a screen)
+        ASSERT_EQ(m.host_heard.size(), size_t{4});
+    } TEST_END();
+
+    TEST_CASE("N2.91 Team Chat: An Alliance That Is Broken Stops The Delivery At Once (The Next Line After The Referee's Table Changed), A New Alliance Starts It At Once, A Line That Was Sent Before The Break Arrives") {
+        TeamChatRig m(false, 4, 0x08);
+        ASSERT_TRUE(m.ally(0, 1));
+        ASSERT_TRUE(m.say(1, "before the break", true));
+        m.step(300);
+        ASSERT_TRUE(has_line(m.heard[0], "before the break") && !has_line(m.heard[2], "before the break"));
+        const size_t at_0 = m.on_wire(0);
+        // seat 0 leaves the team; the very step in which the referee's table changes is the last one in which the line could still go to it
+        m.order(0, cmd(CommandType::AllianceBreak, 0));
+        int steps = 0;
+        while (m.host_engine.alliance_of(0) != sim::ALLIANCE_NONE && steps++ < 300) m.step(10);
+        ASSERT_TRUE(steps < 300);
+        ASSERT_TRUE(m.host_engine.alliance_of(1) == sim::ALLIANCE_NONE);                       // (an alliance ends for both)
+        ASSERT_TRUE(m.say(1, "after the break", true));
+        m.step(300);
+        ASSERT_TRUE(has_line(m.heard[1], "after the break"));                                  // seat 1 hears itself
+        ASSERT_FALSE(has_line(m.heard[0], "after the break"));
+        ASSERT_EQ(m.on_wire(0), at_0);                                                         // not sent: the line is not on the host's end of seat 0's link
+        ASSERT_TRUE(m.raw[3].empty());
+        ASSERT_TRUE(m.say(0, "from the former ally", true));                                   // and the other direction
+        m.step(300);
+        ASSERT_FALSE(has_line(m.heard[1], "from the former ally"));
+        // a new alliance with another seat, and the next line goes there and nowhere else
+        ASSERT_TRUE(m.ally(0, 2));
+        ASSERT_TRUE(m.say(0, "to the new ally", true));
+        m.step(300);
+        ASSERT_TRUE(has_line(m.heard[2], "to the new ally") && has_line(m.heard[0], "to the new ally"));
+        ASSERT_FALSE(has_line(m.heard[1], "to the new ally"));
+        ASSERT_TRUE(m.raw[3].empty());
+    } TEST_END();
+
+    TEST_CASE("N2.92 Team Chat: A Host On The Local Network (It Holds A Seat) Relays The Same Way And Is A Receiver Like The Guests: It Hears A Team Line Only When It Is The Sender Or The Sender's Ally; Lines For All Reach Everybody, The Raw Client Included") {
+        TeamChatRig m(true, 4, 0x08);                                    // the host is seat 0, seats 1 and 2 are guests with sessions, seat 3 is a raw client
+        ASSERT_FALSE(m.host->seatless());
+        ASSERT_TRUE(m.ally(1, 2));                                       // two guests are allies; the host is not one of them
+        ASSERT_TRUE(m.say(1, "guest team", true));
+        m.step(300);
+        ASSERT_TRUE(has_line(m.heard[1], "guest team") && has_line(m.heard[2], "guest team"));
+        ASSERT_FALSE(has_line(m.host_heard, "guest team"));              // the host's own screen is not told either
+        ASSERT_TRUE(m.raw[3].empty() && m.on_wire(3) == 0);
+        ASSERT_TRUE(m.say(0, "host team", true));                        // the host has no ally: the line is its own screen's and nobody else's
+        m.step(300);
+        ASSERT_TRUE(has_line(m.host_heard, "host team"));
+        ASSERT_FALSE(has_line(m.heard[1], "host team") || has_line(m.heard[2], "host team"));
+        ASSERT_TRUE(m.raw[3].empty() && m.on_wire(3) == 0);
+        ASSERT_TRUE(m.ally(0, 1));                                       // the host teams up with seat 1 (the pair of the guests ends)
+        ASSERT_EQ(m.host_engine.alliance_of(2), sim::ALLIANCE_NONE);
+        ASSERT_TRUE(m.say(0, "host team 2", true));
+        ASSERT_TRUE(m.say(1, "guest team 2", true));
+        m.step(300);
+        ASSERT_TRUE(has_line(m.heard[1], "host team 2") && !has_line(m.heard[2], "host team 2"));
+        ASSERT_TRUE(has_line(m.host_heard, "guest team 2") && has_line(m.heard[1], "guest team 2") && !has_line(m.heard[2], "guest team 2"));      // the host hears its ally
+        ASSERT_TRUE(m.raw[3].empty() && m.on_wire(3) == 0);
+        ASSERT_TRUE(m.say(2, "all of you", false));                      // a line for all: the host, the guests and the raw client
+        ASSERT_TRUE(m.say(0, "host to all", false));
+        m.step(300);
+        ASSERT_TRUE(has_line(m.host_heard, "all of you") && has_line(m.heard[1], "all of you") && has_line(m.heard[2], "all of you"));
+        ASSERT_TRUE(has_line(m.heard[1], "host to all") && has_line(m.heard[2], "host to all"));
+        ASSERT_TRUE(m.raw[3].size() == 2 && m.on_wire(3) == 2);
+    } TEST_END();
+}
+
 }  // namespace
 
 int main() {
@@ -9208,7 +9430,12 @@ int main() {
     run_migration_tests();
     run_reconnect_session_tests();
     run_protocol11_tests();
+    run_team_chat_tests();
     std::cout << "\n=======================================================\n Total Test Cases: " << g_test_count << "\n Total Assertions: " << g_assert_count
               << "\n Failed:           " << g_test_failures << "\n=======================================================\n";
+    if (g_test_count == 0) {                                      // (a misspelt or forgotten filter must not turn the suite green)
+        std::cout << "\n no test ran: the filter ANTS_TEST_FILTER matches no test of this suite\n";
+        return 1;
+    }
     return g_test_failures == 0 ? 0 : 1;
 }

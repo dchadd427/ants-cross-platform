@@ -35,6 +35,10 @@ static int g_test_failures = 0;
 static int g_assert_count = 0;
 
 inline void run_test_case(const std::string& name, const std::function<void()>& fn) {
+    // ANTS_TEST_FILTER=text runs only the cases whose title contains the text (for working on one test and for mutation runs; the suite as run_tests.sh runs it has no filter)
+    if (const char* filter = std::getenv("ANTS_TEST_FILTER")) {
+        if (name.find(filter) == std::string::npos) return;
+    }
     ++g_test_count;
     std::cout << "  RUNNING: " << std::left << std::setw(100) << name << " ... " << std::flush;
     const int prev = g_test_failures;
@@ -1065,5 +1069,9 @@ int main() {
     run_room_chat_tests();
     std::cout << "\n=======================================================\n Total Test Cases: " << g_test_count << "\n Total Assertions: " << g_assert_count
               << "\n Failed:           " << g_test_failures << "\n=======================================================\n";
+    if (g_test_count == 0) {                                      // (a misspelt or forgotten filter must not turn the suite green)
+        std::cout << "\n no test ran: the filter ANTS_TEST_FILTER matches no test of this suite\n";
+        return 1;
+    }
     return g_test_failures == 0 ? 0 : 1;
 }

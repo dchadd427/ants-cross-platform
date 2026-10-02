@@ -129,8 +129,27 @@ void HostSession::chat_local(const std::string& text, bool team) {
     m.sender = cfg_.host_player;
     m.team = team;
     m.text = text;
-    broadcast(encode(m));
-    if (on_chat_) on_chat_(m);
+    relay_chat(m);
+    if (on_chat_) on_chat_(m);                       // (the host's own line: it hears itself, as it always has)
+}
+
+bool HostSession::hears_chat(uint8_t sender, bool team, uint8_t seat) const noexcept {
+    if (!team) return true;                          // a line for all: everybody
+    if (seat == sender) return true;                 // the sender's own line comes back to it (the screens log it already and ignore it)
+    // the sender's ally, by the host's own table now: the receiver's own filter says the same of every line that reaches it (HUD::receive_chat_message)
+    return sender < sim::MAX_PLAYERS && seat < sim::MAX_PLAYERS && sim_ != nullptr && sim_->alliance_of(sender) == seat;
+}
+
+void HostSession::relay_chat(const ChatMsg& m) {
+    if (!m.team) {
+        broadcast(encode(m));
+        return;
+    }
+    const std::vector<uint8_t> bytes = encode(m);
+    for (uint8_t p = 0; p < sim::MAX_PLAYERS; ++p) {
+        if (!hears_chat(m.sender, true, p) || !clients_[p].present || clients_[p].conn == nullptr) continue;
+        if (!clients_[p].conn->send(bytes)) lose(p);       // a send that fails: the connection is gone (as in broadcast)
+    }
 }
 
 void HostSession::broadcast(const std::vector<uint8_t>& msg, uint8_t except) {
@@ -273,8 +292,9 @@ void HostSession::handle_message(uint8_t player, const std::vector<uint8_t>& msg
             ChatMsg m;
             if (!decode(msg, m)) return violation(player);
             m.sender = player;                       // the connection speaks, not the payload
-            broadcast(encode(m));
-            if (on_chat_) on_chat_(m);
+            relay_chat(m);
+            // the host's own screen is a receiver like the others: a host with a seat hears a team line of two others no more than a guest does; a host without a seat (the referee) logs every line
+            if (on_chat_ && (seatless() || hears_chat(m.sender, m.team, cfg_.host_player))) on_chat_(m);
             return;
         }
         default:

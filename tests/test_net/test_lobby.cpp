@@ -7,6 +7,7 @@
 #include "ants_sim/sim_engine.hpp"
 
 #include <algorithm>
+#include <cstdlib>
 #include <cstdint>
 #include <functional>
 #include <iomanip>
@@ -27,6 +28,10 @@ static int g_test_failures = 0;
 static int g_assert_count = 0;
 
 inline void run_test_case(const std::string& name, const std::function<void()>& fn) {
+    // ANTS_TEST_FILTER=text runs only the cases whose title contains the text (for working on one test and for mutation runs; the suite as run_tests.sh runs it has no filter)
+    if (const char* filter = std::getenv("ANTS_TEST_FILTER")) {
+        if (name.find(filter) == std::string::npos) return;
+    }
     ++g_test_count;
     std::cout << "  RUNNING: " << std::left << std::setw(100) << name << " ... " << std::flush;
     const int prev = g_test_failures;
@@ -2384,7 +2389,47 @@ int main() {
         }
     } TEST_END();
 
+    TEST_CASE("N4.19 The Waiting Room Has No Teams: A Line That Says It Is For The Team Reaches Everybody In The Room As A Line For All (The Flag Cleared On The Wire), Never Only An Ally; Nobody Is Left Out, A Raw Client Included") {
+        HostLobby::Config hc;
+        hc.host_seat = 255;
+        hc.min_players = 2;
+        Room room(hc);
+        const size_t ann = room.join_seat("Ann");
+        const size_t bob = room.join_seat("Bob");
+        const size_t cat = room.join_seat("Cat");
+        HelloMsg rawhello;
+        rawhello.name = "Raw";
+        RawClient raw = raw_hello(room, rawhello);
+        room.run(200);
+        drain_messages(raw.end);
+        for (const size_t g : {ann, bob, cat}) room.guests[g].lobby->take_chat();
+        // a client that marks its line for the team (the lobby's own chat() never does: a modified client may)
+        ChatMsg team_line;
+        team_line.sender = 0;
+        team_line.team = true;
+        team_line.text = "team only please";
+        room.guests[ann].client_end->send(encode(team_line));
+        room.run(200);
+        for (const size_t g : {ann, bob, cat}) {
+            const std::vector<ChatLine> heard = room.guests[g].lobby->take_chat();
+            ASSERT_TRUE(heard.size() == 1 && heard[0].text == "team only please" && heard[0].seat == room.guests[ann].lobby->my_seat());
+        }
+        size_t on_wire = 0;
+        for (const auto& m : drain_messages(raw.end)) {
+            ChatMsg c;
+            if (peek_type(m) != MsgType::Chat) continue;
+            ASSERT_TRUE(decode(m, c));
+            ASSERT_TRUE(!c.team && c.text == "team only please");                    // the flag is gone: the room is no team
+            ++on_wire;
+        }
+        ASSERT_EQ(on_wire, size_t{1});
+    } TEST_END();
+
     std::cout << "\n=======================================================\n Total Test Cases: " << g_test_count << "\n Total Assertions: " << g_assert_count
               << "\n Failed:           " << g_test_failures << "\n=======================================================\n";
+    if (g_test_count == 0) {                                      // (a misspelt or forgotten filter must not turn the suite green)
+        std::cout << "\n no test ran: the filter ANTS_TEST_FILTER matches no test of this suite\n";
+        return 1;
+    }
     return g_test_failures == 0 ? 0 : 1;
 }

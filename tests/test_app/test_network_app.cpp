@@ -53,6 +53,10 @@ static int g_test_failures = 0;
 static int g_assert_count = 0;
 
 inline void run_test_case(const std::string& name, const std::function<void()>& fn) {
+    // ANTS_TEST_FILTER=text runs only the cases whose title contains the text (for working on one test and for mutation runs; the suite as run_tests.sh runs it has no filter)
+    if (const char* filter = std::getenv("ANTS_TEST_FILTER")) {
+        if (name.find(filter) == std::string::npos) return;
+    }
     ++g_test_count;
     std::cout << "  RUNNING: " << std::left << std::setw(100) << name << " ... " << std::flush;
     const int prev = g_test_failures;
@@ -3096,7 +3100,7 @@ void run_room_bot_tests() {
         return out;
     };
 
-    TEST_CASE("N5.31 Command Line: --fill-bots none|easy|medium|hard Is The Bots That This Player's START Seats In The Empty Seats Of Its Room (Any Case; Off By Default; Anything Else Or No Value Refuses To Start), --say TEXT Is A Test Hook That Says A Line In The Waiting Room") {
+    TEST_CASE("N5.45 Command Line: --fill-bots none|easy|medium|hard Is The Bots That This Player's START Seats In The Empty Seats Of Its Room (Any Case; Off By Default; Anything Else Or No Value Refuses To Start), --say TEXT Is A Test Hook That Says A Line In The Waiting Room") {
         std::vector<std::string> args;
         std::vector<char*> st;
         args = {"ants", "--join", "127.0.0.1:4001", "--room", "R-1"};
@@ -3124,7 +3128,7 @@ void run_room_bot_tests() {
         ASSERT_EQ(c.net_say, std::string("hello there"));
     } TEST_END();
 
-    TEST_CASE("N5.32 Leader With --fill-bots And --say: The Line Is Said Once When Two Players Are In The Room (The Other Player Hears It With The Leader's Name, The Leader Hears The Reply), The Leader's START Seats Bots In The Two Empty Seats (The Leader Did Not Need A Third Person), The Match Runs With Four Teams And The Two Machines Stay Identical; The Lines Of The Waiting Room Are Kept") {
+    TEST_CASE("N5.46 Leader With --fill-bots And --say: The Line Is Said Once When Two Players Are In The Room (The Other Player Hears It With The Leader's Name, The Leader Hears The Reply), The Leader's START Seats Bots In The Two Empty Seats (The Leader Did Not Need A Third Person), The Match Runs With Four Teams And The Two Machines Stay Identical; The Lines Of The Waiting Room Are Kept") {
         Server server;
         ASSERT_TRUE(server.make_room("FILL-APP", 4));
         ApplicationConfig cfg = join_config(server, "FILL-APP", "Leader");
@@ -3171,7 +3175,7 @@ void run_room_bot_tests() {
         ASSERT_FALSE(app.network_active());
     } TEST_END();
 
-    TEST_CASE("N5.33 Leader Alone With --fill-bots: START Is Not The Can't-Go Cue Any More (One Person Is Enough): The Server Seats Three Bots And Starts; With Fog Of War In The Room The Leader's Status Line Says Bots Cannot Play With It And The Room Waits") {
+    TEST_CASE("N5.47 Leader Alone With --fill-bots: START Is Not The Can't-Go Cue Any More (One Person Is Enough): The Server Seats Three Bots And Starts; With Fog Of War In The Room The Leader's Status Line Says Bots Cannot Play With It And The Room Waits") {
         {
             Server server;
             ASSERT_TRUE(server.make_room("ALONE-APP", 4));
@@ -3230,7 +3234,7 @@ void run_room_bot_tests() {
         }
     } TEST_END();
 
-    TEST_CASE("N5.34 Host Of A Room On The Local Network With --fill-bots: START Seats Bots In The Empty Seats And This Machine Runs Them (The Controller Holds Exactly Those Seats); A Start That Is Cancelled Takes Them Out Again; Fog Of War Seats None") {
+    TEST_CASE("N5.48 Host Of A Room On The Local Network With --fill-bots: START Seats Bots In The Empty Seats And This Machine Runs Them (The Controller Holds Exactly Those Seats); A Start That Is Cancelled Takes Them Out Again; Fog Of War Seats None") {
         ApplicationConfig cfg = headless_config();
         cfg.net_role = ApplicationConfig::NetRole::Host;
         cfg.net_port = 0;
@@ -3327,5 +3331,9 @@ int main(int argc, char* argv[]) {
     run_room_bot_tests();
     std::cout << "\n=======================================================\n Total Test Cases: " << g_test_count << "\n Total Assertions: " << g_assert_count
               << "\n Failed:           " << g_test_failures << "\n=======================================================\n";
+    if (g_test_count == 0) {                                      // (a misspelt or forgotten filter must not turn the suite green)
+        std::cout << "\n no test ran: the filter ANTS_TEST_FILTER matches no test of this suite\n";
+        return 1;
+    }
     return g_test_failures == 0 ? 0 : 1;
 }

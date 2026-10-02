@@ -65,6 +65,10 @@ void SimulationEngine::init(const ants::assets::LevelData& level, uint32_t rando
     init(level, random_seed, 0x0Fu);
 }
 
+uint8_t SimulationEngine::alliance_of(uint8_t player_id) const noexcept {
+    return player_id < MAX_PLAYERS ? impl_->stats_.get_alliance(player_id) : ALLIANCE_NONE;
+}
+
 uint8_t SimulationEngine::roster_mask() const noexcept {
     return impl_->roster_mask_;
 }

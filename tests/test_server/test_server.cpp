@@ -17,6 +17,7 @@
 #include "ants_sim/sim_engine.hpp"
 
 #include <algorithm>
+#include <cstdlib>
 #include <atomic>
 #include <cctype>
 #include <chrono>
@@ -66,6 +67,10 @@ static int g_test_failures = 0;
 static int g_assert_count = 0;
 
 inline void run_test_case(const std::string& name, const std::function<void()>& fn) {
+    // ANTS_TEST_FILTER=text runs only the cases whose title contains the text (for working on one test and for mutation runs; the suite as run_tests.sh runs it has no filter)
+    if (const char* filter = std::getenv("ANTS_TEST_FILTER")) {
+        if (name.find(filter) == std::string::npos) return;
+    }
     ++g_test_count;
     std::cout << "  RUNNING: " << std::left << std::setw(110) << name.substr(0, 110) << " ... " << std::flush;
     const int prev = g_test_failures;
@@ -3866,7 +3871,7 @@ std::vector<std::string> said(const std::vector<net::ChatLine>& lines) {
 }  // namespace
 
 void run_bot_tests() {
-    TEST_CASE("S3.52 The Leader's START With A Fill: One Person In A Room For Four Starts It With Bots In Exactly The Three Empty Seats, Named \"Bot (Medium)\" (The Person's Own Seat Is Left Alone), The Match Runs To Its End With The Bots Playing (Their Scores In The Rows), The Referee And The Client Stand At The Same State At The Same Tick, The Status Lists The Bots") {
+    TEST_CASE("S3.60 The Leader's START With A Fill: One Person In A Room For Four Starts It With Bots In Exactly The Three Empty Seats, Named \"Bot (Medium)\" (The Person's Own Seat Is Left Alone), The Match Runs To Its End With The Bots Playing (Their Scores In The Rows), The Referee And The Client Stand At The Same State At The Same Tick, The Status Lists The Bots") {
         World w;
         ASSERT_TRUE(w.mgr.create_room(spec_of("FILL-1", 4), w.now).ok);
         Client& ann = w.connect("Ann", "FILL-1", 2);                                     // the person sits in seat 2: the bots take 0, 1 and 3
@@ -3909,7 +3914,7 @@ void run_bot_tests() {
         ASSERT_EQ(end.bots.size(), size_t{3});                                            // the seats stay listed after the match
     } TEST_END();
 
-    TEST_CASE("S3.53 The Fill Only Happens On The Leader's Request: A Player Who Is Not The Leader Is Ignored, Fill None Is The START Of Protocol 7 (One Person Alone Does Nothing, Two Start Without Bots), A Room That Fills Up Starts By Itself With No Bots, A Room For Three Gets Two Bots (Never More Than The Room's Players), Easy And Hard Name Their Bots, A Room Without A Leader Ignores The Fill") {
+    TEST_CASE("S3.61 The Fill Only Happens On The Leader's Request: A Player Who Is Not The Leader Is Ignored, Fill None Is The START Of Protocol 7 (One Person Alone Does Nothing, Two Start Without Bots), A Room That Fills Up Starts By Itself With No Bots, A Room For Three Gets Two Bots (Never More Than The Room's Players), Easy And Hard Name Their Bots, A Room Without A Leader Ignores The Fill") {
         {   // not the leader
             World w;
             ASSERT_TRUE(w.mgr.create_room(spec_of("FR-1", 4), w.now).ok);
@@ -3994,7 +3999,7 @@ void run_bot_tests() {
         }
     } TEST_END();
 
-    TEST_CASE("S3.54 Bots And Fog Of War Never Mix: A Fill Request In A Room With Fog Is Refused And The Leader Is Told Why (A Notice From The Room, To The Leader Only); One Person Alone Stays In The Waiting Room, Two Start Without Bots; A Room Specification With Bots And Fog Is A 400") {
+    TEST_CASE("S3.62 Bots And Fog Of War Never Mix: A Fill Request In A Room With Fog Is Refused And The Leader Is Told Why (A Notice From The Room, To The Leader Only); One Person Alone Stays In The Waiting Room, Two Start Without Bots; A Room Specification With Bots And Fog Is A 400") {
         {
             World w;
             RoomSpec spec = spec_of("FOG-1", 4);
@@ -4027,7 +4032,7 @@ void run_bot_tests() {
         }
     } TEST_END();
 
-    TEST_CASE("S3.55 A Cancelled Start Takes The Fill Away Again: A Player Who Cannot Load The Map Cancels It, The Bots Go (The Room Is As It Was: The Status Lists None, Their Seats Are Free), The Next Player Who Comes Gets A Seat, And The Leader's New Request Seats Bots Again Round The Three People; The Pause After A Cancel Loses A Request") {
+    TEST_CASE("S3.63 A Cancelled Start Takes The Fill Away Again: A Player Who Cannot Load The Map Cancels It, The Bots Go (The Room Is As It Was: The Status Lists None, Their Seats Are Free), The Next Player Who Comes Gets A Seat, And The Leader's New Request Seats Bots Again Round The Three People; The Pause After A Cancel Loses A Request") {
         World w;
         ASSERT_TRUE(w.mgr.create_room(spec_of("CAN-1", 4), w.now).ok);
         Client& ann = w.connect("Ann", "CAN-1");
@@ -4058,7 +4063,7 @@ void run_bot_tests() {
         ASSERT_TRUE(ann.sim.roster_mask() == 0x0F);
     } TEST_END();
 
-    TEST_CASE("S3.56 A Map The Filled Roster Cannot Play: The Request Does Nothing But Tell The Leader (A Notice), The Room Does Not Fail And Seats No Bot; The Same Request Where The Bots Take Playable Seats Starts") {
+    TEST_CASE("S3.64 A Map The Filled Roster Cannot Play: The Request Does Nothing But Tell The Leader (A Notice), The Room Does Not Fail And Seats No Bot; The Same Request Where The Bots Take Playable Seats Starts") {
         const std::string dir = temp_dir_for("fill_marker");
         {   // TINY with the green start marker moved outside the grid (as in S3.14 and S3.29)
             std::ifstream in(maps_dir() + "/TINY.LVL", std::ios::binary);
@@ -4120,7 +4125,7 @@ void run_bot_tests() {
         fs::remove_all(dir, ignore);
     } TEST_END();
 
-    TEST_CASE("S3.57 The Control Interface Seats Bots In A Room's Specification (\"bots\": [{\"seat\": 2, \"bot\": \"medium\"}]): The Status JSON Lists Them Next To The Players, A Mistake Is A 400 That Names The Key, A Person Who Joins Gets Another Seat, The Room Starts By Itself When The Person Has Come (The Bots Count As Players) And Plays To Its End; The Referee's Final Hash Is In The JSON") {
+    TEST_CASE("S3.65 The Control Interface Seats Bots In A Room's Specification (\"bots\": [{\"seat\": 2, \"bot\": \"medium\"}]): The Status JSON Lists Them Next To The Players, A Mistake Is A 400 That Names The Key, A Person Who Joins Gets Another Seat, The Room Starts By Itself When The Person Has Come (The Bots Count As Players) And Plays To Its End; The Referee's Final Hash Is In The JSON") {
         World w;
         const auto call = [&w](const char* method, const std::string& path, const std::string& body = std::string()) {
             ctl::HttpRequest rq;
@@ -4191,7 +4196,7 @@ void run_bot_tests() {
         ASSERT_TRUE(r.status == 200 && json_of(r).get("rooms").size() == 3);
     } TEST_END();
 
-    TEST_CASE("S3.58 A Room's Own Bots: The Early Start With Them (One Person And The Bot Of A Room For Three Start At The Leader's Request, No Fill Needed), And A Fill On Top Of Them Seats Only The Seats That Are Still Empty") {
+    TEST_CASE("S3.66 A Room's Own Bots: The Early Start With Them (One Person And The Bot Of A Room For Three Start At The Leader's Request, No Fill Needed), And A Fill On Top Of Them Seats Only The Seats That Are Still Empty") {
         World w;
         RoomSpec spec = spec_of("CB-4", 3);
         spec.bots = {ai::BotSpec{2, "standard", ai::Level::Hard}};
@@ -4221,7 +4226,7 @@ void run_bot_tests() {
         }
     } TEST_END();
 
-    TEST_CASE("S3.59 Bot Seats In A Room That Holds Seats: A Bot Is Never Absent And Never Votes (Two People And Two Bots: The Person Who Is Cut Is The Only One Missing, The Vote Has ONE Voter, The Survivor's Vote Drops The Absent Person And The Bots Play On To The End, The Referee And The Survivor Agree); A Person Who Comes Back Through The Door Finds The Bots Where They Were; The Bots' Commands Wait While The Match Is Paused") {
+    TEST_CASE("S3.67 Bot Seats In A Room That Holds Seats: A Bot Is Never Absent And Never Votes (Two People And Two Bots: The Person Who Is Cut Is The Only One Missing, The Vote Has ONE Voter, The Survivor's Vote Drops The Absent Person And The Bots Play On To The End, The Referee And The Survivor Agree); A Person Who Comes Back Through The Door Finds The Bots Where They Were; The Bots' Commands Wait While The Match Is Paused") {
         {
             RWorld w;
             RoomSpec spec = held_spec("BH-1", 4);
@@ -4298,7 +4303,7 @@ void run_bot_tests() {
         }
     } TEST_END();
 
-    TEST_CASE("S3.60 Chat In A Server's Waiting Room: Everybody Hears A Line With The Sender's Seat And Name (The Sender Too), A Player Who Comes Later Hears Only What Is Said After It Came, Chat Works While The Map Loads (A Slow Link Keeps The Room In Loading), A Flood Of Lines Costs The Sender Its Seat And Nobody Else Notices, And The Lines Are Kept For The Match's Log After The Start") {
+    TEST_CASE("S3.68 Chat In A Server's Waiting Room: Everybody Hears A Line With The Sender's Seat And Name (The Sender Too), A Player Who Comes Later Hears Only What Is Said After It Came, Chat Works While The Map Loads (A Slow Link Keeps The Room In Loading), A Flood Of Lines Costs The Sender Its Seat And Nobody Else Notices, And The Lines Are Kept For The Match's Log After The Start") {
         World w;
         ASSERT_TRUE(w.mgr.create_room(spec_of("CHAT-1", 4), w.now).ok);
         Client& ann = w.connect("Ann", "CHAT-1");
@@ -4356,7 +4361,7 @@ void run_bot_tests() {
         ASSERT_TRUE(heard);
     } TEST_END();
 
-    TEST_CASE("S3.61 The Door Of Protocol 11: A Hello Of Protocol 10 Is Answered VersionMismatch (The Layout Is The Same, The Messages Are Not: A One-Byte StartRequest Of Protocol 10 Is Garbage Now); A Leader's Old One-Byte Request Costs A Violation Each Time, Eight Throw It Out") {
+    TEST_CASE("S3.69 The Door Of Protocol 11: A Hello Of Protocol 10 Is Answered VersionMismatch (The Layout Is The Same, The Messages Are Not: A One-Byte StartRequest Of Protocol 10 Is Garbage Now); A Leader's Old One-Byte Request Costs A Violation Each Time, Eight Throw It Out") {
         World w;
         ASSERT_TRUE(w.mgr.create_room(spec_of("V11-1", 4), w.now).ok);
         {
@@ -4383,7 +4388,7 @@ void run_bot_tests() {
         ASSERT_EQ(w.status("V11-1").ignored_start_requests, 0u);                                              // (garbage is no request)
     } TEST_END();
 
-    TEST_CASE("S3.62 Over Real Sockets: A Person Alone Starts A Room For Four With A Fill (Bots In The Three Other Seats), Two Players Chat In The Waiting Room First; The Match Is Played, Both Clients Stand At The Referee's State, The Status Lists The Bots") {
+    TEST_CASE("S3.70 Over Real Sockets: A Person Alone Starts A Room For Four With A Fill (Bots In The Three Other Seats), Two Players Chat In The Waiting Room First; The Match Is Played, Both Clients Stand At The Referee's State, The Status Lists The Bots") {
         RoomManager mgr{MapStore(maps_dir())};
         auto listener = net::TcpListener::listen(0, true);
         ASSERT_TRUE(listener != nullptr);
@@ -4445,7 +4450,7 @@ void run_bot_tests() {
         ASSERT_TRUE(clients[0]->lobby->chat_log().size() == 2);                              // the waiting room's lines are still there
     } TEST_END();
 
-    TEST_CASE("S3.63 Server CPU With Bots (Measured): Twelve Rooms Of One Person And Three Bots Each Cost The Server's Thread A Few Milliseconds A Second (Only mgr.update Is Timed: The Clients' Work Is Not The Server's), On TINY And On TREASURE, With Idle, Medium And Hard Bots; The Start Of Twelve Rooms Is Not A Stall (Each Room Analyses Its Map Once)") {
+    TEST_CASE("S3.71 Server CPU With Bots (Measured): Twelve Rooms Of One Person And Three Bots Each Cost The Server's Thread A Few Milliseconds A Second (Only mgr.update Is Timed: The Clients' Work Is Not The Server's), On TINY And On TREASURE, With Idle, Medium And Hard Bots; The Start Of Twelve Rooms Is Not A Stall (Each Room Analyses Its Map Once)") {
         struct Result {
             double ms_per_second{0};
             double worst_pass_ms{0};
@@ -4539,6 +4544,79 @@ void run_bot_tests() {
             ASSERT_TRUE(r->start_pass_ms < 250.0);                                           // twelve rooms that start in a few passes: a hitch, not a stall
         }
     } TEST_END();
+
+    TEST_CASE("S3.72 Team Chat On A Real Server (The Referee's Relay): In A Match Of Three, A Line For The Team Reaches The Sender And Its Ally Only, Measured On The Link Of A Raw Client That Reads Every Byte Of It (It Gets No Team Line, Not Even One That Its Own Screen Would Have Dropped); A Line For All Reaches It; A Broken Alliance Stops The Delivery At Once; The Waiting Room Before The Match Has No Teams And Tells Everybody") {
+        World w;
+        ASSERT_TRUE(w.mgr.create_room(spec_of("TEAM-1", 4), w.now).ok);                      // (a room for four, started by its leader with the three who are there)
+        Client& ann = w.connect("Ann", "TEAM-1");
+        Client& bob = w.connect("Bob", "TEAM-1");
+        Client& cat = w.connect("Cat", "TEAM-1");
+        w.run(500);
+        ASSERT_TRUE(ann.lobby->chat("before the match"));                                    // the waiting room: everybody, whatever the clients would call their teams
+        w.run(300);
+        for (Client* c : {&ann, &bob, &cat}) ASSERT_TRUE(!c->room_chat.empty() && c->room_chat.back().text == "before the match");
+        ASSERT_TRUE(ann.lobby->is_leader() && ann.lobby->request_start());
+        w.run(3000);
+        ASSERT_TRUE(w.status("TEAM-1").state == RoomState::Running);
+        ASSERT_TRUE(ann.session && bob.session && cat.session);
+        cat.freeze = true;                                                                   // Cat's session stops: nothing filters, nothing acknowledges; the test reads its link
+        std::vector<net::ChatMsg> raw;
+        const auto pump = [&](uint32_t ms) {
+            for (uint32_t t = 0; t < ms; t += 10) {
+                w.run(10);
+                std::vector<uint8_t> msg;
+                while (cat.end->poll(msg)) {
+                    net::ChatMsg c;
+                    if (net::peek_type(msg) == net::MsgType::Chat && net::decode(msg, c)) raw.push_back(c);
+                }
+            }
+        };
+        const uint8_t a = ann.lobby->my_seat();
+        const uint8_t b = bob.lobby->my_seat();
+        const auto command = [](sim::CommandType type, uint8_t issuer, uint8_t other) {
+            sim::Command c;
+            c.type = type;
+            c.issuer = issuer;
+            c.other_player = other;
+            return c;
+        };
+        const auto has = [](const std::vector<net::ChatMsg>& v, const char* text) {
+            for (const net::ChatMsg& c : v) {
+                if (c.text == text) return true;
+            }
+            return false;
+        };
+        pump(500);
+        ASSERT_TRUE(ann.session->submit(command(sim::CommandType::AllianceInvite, a, b)));
+        pump(800);
+        ASSERT_TRUE(bob.session->submit(command(sim::CommandType::AllianceAccept, b, a)));
+        pump(800);
+        ASSERT_TRUE(ann.sim.alliance_of(a) == b && bob.sim.alliance_of(b) == a);              // allies, by the clients' own engines (the referee's is the same state)
+        ann.next_order_ms = bob.next_order_ms = UINT32_MAX;                                  // (no more random orders: the test's own commands only)
+        raw.clear();
+        ASSERT_TRUE(ann.session->chat("team talk", true));
+        pump(500);
+        ASSERT_TRUE(has(ann.chats, "team talk") && has(bob.chats, "team talk"));
+        ASSERT_TRUE(raw.empty());                                                            // not one team line on the raw client's link
+        ASSERT_TRUE(bob.session->chat("team reply", true));
+        pump(500);
+        ASSERT_TRUE(has(ann.chats, "team reply") && has(bob.chats, "team reply"));
+        ASSERT_TRUE(raw.empty());
+        ASSERT_TRUE(bob.session->chat("to everybody", false));                               // a line for all reaches the raw client
+        pump(500);
+        ASSERT_TRUE(has(ann.chats, "to everybody") && has(bob.chats, "to everybody"));
+        ASSERT_TRUE(raw.size() == 1 && raw[0].text == "to everybody" && raw[0].sender == b && !raw[0].team);
+        // a broken alliance: the next team line of the former ally does not reach the one who left the team
+        ASSERT_TRUE(ann.session->submit(command(sim::CommandType::AllianceBreak, a, 255)));
+        for (int i = 0; i < 300 && (ann.sim.alliance_of(a) != sim::ALLIANCE_NONE || bob.sim.alliance_of(b) != sim::ALLIANCE_NONE); ++i) pump(10);
+        ASSERT_TRUE(ann.sim.alliance_of(a) == sim::ALLIANCE_NONE && bob.sim.alliance_of(b) == sim::ALLIANCE_NONE);
+        const size_t ann_heard = ann.chats.size();
+        ASSERT_TRUE(bob.session->chat("late team line", true));
+        pump(500);
+        ASSERT_TRUE(has(bob.chats, "late team line"));                                       // Bob hears itself
+        ASSERT_EQ(ann.chats.size(), ann_heard);                                              // Ann nothing
+        ASSERT_EQ(raw.size(), size_t{1});                                                    // and the raw client still only the line for all
+    } TEST_END();
 }
 
 
@@ -4561,5 +4639,9 @@ int main() {
     std::cout << "=======================================================\n";
     std::cout << " Total Test Cases: " << g_test_count << "\n Total Assertions: " << g_assert_count << "\n Failed:           " << g_test_failures << "\n";
     std::cout << "=======================================================\n";
+    if (g_test_count == 0) {                                      // (a misspelt or forgotten filter must not turn the suite green)
+        std::cout << "\n no test ran: the filter ANTS_TEST_FILTER matches no test of this suite\n";
+        return 1;
+    }
     return g_test_failures == 0 ? 0 : 1;
 }

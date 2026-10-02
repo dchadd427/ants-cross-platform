@@ -160,7 +160,7 @@ public:
 
     /// A command of the host's own player (a host without a seat has none: ignored)
     void submit_local(sim::Command command);
-    /// Relays a chat text of the host's own player (a host without a seat has none: ignored)
+    /// Relays a chat text of the host's own player (a host without a seat has none: ignored). A team line goes to the players that may read it, see "Who hears a team line".
     void chat_local(const std::string& text, bool team);
     /// True when the host plays no seat (a dedicated server): it is the sequencer and the referee only, and it never waits for a player that falls behind
     bool seatless() const noexcept { return cfg_.host_player >= sim::MAX_PLAYERS; }
@@ -178,8 +178,16 @@ public:
     /// Called when a player leaves the match (its connection closed, it was thrown out, it fell silent). The drop-out itself travels in the turn
     /// stream (a Drop command of the sequencer), so that every machine drops the team at the same tick; this callback is for the presentation.
     void set_on_player_left(std::function<void(uint8_t)> fn) { on_left_ = std::move(fn); }
-    /// Called for every chat message the host receives from a client (already relayed) and for its own
+    /// Called for every chat message the host receives from a client (already relayed) and for its own. A host with a seat is a receiver like the guests: it hears a team line only when it
+    /// is the sender or the sender's ally (the same rule as the relay's); a host without a seat (a dedicated server) is the referee and hears every line, it only logs them.
     void set_on_chat(std::function<void(const ChatMsg&)> fn) { on_chat_ = std::move(fn); }
+
+    /// WHO HEARS A TEAM LINE. The host relays every chat line, and a line that is meant for the sender's TEAM (ChatMsg::team) goes to the sender and to the sender's ally only, by the host's
+    /// own alliance table AT THE MOMENT OF THE RELAY (a break takes effect for the very next line, a new alliance for the next one too): `sim::SimulationEngine::alliance_of(sender)`, the
+    /// rule that a receiver's HUD applies to the lines that it gets (HUD::receive_chat_message: the original's), so that nothing is delivered that a screen would drop, and nothing that a
+    /// screen would show is withheld. A line for ALL goes to everybody. The others never get the bytes at all (a modified client that shows every line cannot read the team's talk).
+    /// True when `seat` is to hear a line that `sender` says: used by the relay, and public for the tests that pin the rule.
+    bool hears_chat(uint8_t sender, bool team, uint8_t seat) const noexcept;
 
     const std::vector<DesyncMsg>& desyncs() const noexcept { return desyncs_; }
     uint32_t turns_sealed() const noexcept { return sequencer_.next_turn(); }
@@ -257,6 +265,7 @@ private:
     void drop(uint8_t player);
     void announce_drop(uint8_t player);
     void broadcast(const std::vector<uint8_t>& msg, uint8_t except = 255);
+    void relay_chat(const ChatMsg& m);                 // every client of the match hears an all line; a team line only the sender and its ally (hears_chat)
     void report_hash(uint8_t player, uint32_t turn, const sim::StateHash& hash);
     void run_local(uint32_t dt_ms);
     void send_turns(Connection* conn, uint32_t from_turn, uint32_t to_turn);
