@@ -1267,6 +1267,13 @@
             if (query.addEventListener) query.addEventListener('change', again, { once: true });
             else if (query.addListener) query.addListener(again);
         })();
+        (function pollDeviceRatio() {                                       // (where the media query does not report a change: some browsers and emulations)
+            var last = window.devicePixelRatio || 1;
+            setInterval(function () {
+                var now = window.devicePixelRatio || 1;
+                if (now !== last) { last = now; relayout(true); }
+            }, 500);
+        })();
         relayout(true);
         document.addEventListener('visibilitychange', function () { if (!document.hidden) relayout(false); });      // (a hidden page may have missed a size change)
         document.addEventListener('DOMContentLoaded', function () { relayout(false); });
@@ -1309,10 +1316,10 @@
             document.querySelectorAll('.seg button[data-aspect]').forEach(function (button) {
                 button.addEventListener('click', function () {
                     var value = button.getAttribute('data-aspect');
-                    remember(value);
-                    if (value === ANTS_ASPECT) return;
+                    if (value === ANTS_ASPECT) { remember(value); return; }           // (the same picture: nothing to restart; the choice is remembered)
                     var joined = ANTS_ARGS.indexOf('--join-url') !== -1;
                     if (joined && !window.confirm('Changing the picture restarts the game: you leave the match you are in. Continue?')) return;
+                    remember(value);
                     var url;
                     try {
                         url = new URL(window.location.href);

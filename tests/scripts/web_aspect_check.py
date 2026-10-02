@@ -400,9 +400,9 @@ def main():
         print("[web aspect] resizing, fullscreen and the pointer (1280 x 720)")
         tab.emulate(1280, 720, 1)
         tab.open(web)
-        for w, h, dpr in ((1000, 700, 1), (1600, 900, 1), (900, 500, 2), (1280, 720, 1)):
+        for w, h, dpr in ((1000, 700, 1), (1600, 900, 1), (900, 500, 2), (1280, 720, 1), (1280, 720, 2), (1280, 720, 1.5), (1280, 720, 1)):      # (the same window at other device ratios: a zoom, a move to another screen)
             tab.emulate(w, h, dpr)
-            time.sleep(1.0)
+            time.sleep(1.5)
             g = tab.geometry()
             layout_checks("resized to %dx%d@%s" % (w, h, dpr), g, "16:9")
         tab.save_shot(args.shots, "resized_back")
@@ -502,6 +502,23 @@ def main():
         g = tab.geometry()
         check(not g["pseudo"], "its button leaves it")
         layout_checks("after the page's own fullscreen", g, "16:9")
+        # screens of other shapes (the page's own fullscreen takes the window's whole size, as the browser's takes the screen's): the picture is the largest 16:9 that fits, centred, the rest is black
+        for w, h, dpr in ((1440, 900, 2), (2560, 1080, 1), (1920, 1080, 1), (1024, 1366, 2), (844, 390, 3)):
+            tab.emulate(w, h, dpr)
+            time.sleep(1.5)
+            fs_now = json.loads(tab.ev("JSON.stringify((function(){var b=document.getElementById('fullscreen-btn').getBoundingClientRect();return [b.x+b.width/2,b.y+b.height/2];})())"))
+            tab.click(fs_now[0], fs_now[1])
+            time.sleep(1.2)
+            g = tab.geometry()
+            label = "fullscreen on a %dx%d@%s screen" % (w, h, dpr)
+            check(g["pseudo"], "%s: the page's own fullscreen is open" % label)
+            layout_checks(label, g, "16:9")
+            bx = g["box"]
+            check(bx[2] >= min(w, h * 16 / 9) - 16 / dpr - 0.6, "%s: the picture is as large as the screen allows (%.1f x %.1f of %d x %d)" % (label, bx[2], bx[3], w, h))
+            check(abs((bx[0] + bx[2] / 2) - w / 2) < 1.0 and abs((bx[1] + bx[3] / 2) - h / 2) < 1.0, "%s: the picture is centred" % label)
+            tab.save_shot(args.shots, "pseudo_fullscreen_%dx%d_dpr%s" % (w, h, dpr))
+            tab.ev("document.getElementById('pseudo-exit').click(); 1")
+            time.sleep(0.8)
 
         if args.four:
             print("[web aspect] web/four.html: the games' frames (the game server must be behind /ws)")

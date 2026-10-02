@@ -541,9 +541,9 @@
         $('aspect-select').addEventListener('change', function () {
             // the choice is remembered (the game page's selector reads it too) and this page reloads with it: the games of a room start again with the new picture
             var value = $('aspect-select').value === '4:3' ? '4:3' : '16:9';
-            remember('ants.aspect', value);
-            if (value === aspect) return;
+            if (value === aspect) { remember('ants.aspect', value); return; }
             if (room && !window.confirm('Changing the picture restarts the games on this page: the seats leave the match they are in. Continue?')) { $('aspect-select').value = aspect; return; }
+            remember('ants.aspect', value);
             try {
                 var url = new URL(window.location.href);
                 url.searchParams.set('aspect', value);
