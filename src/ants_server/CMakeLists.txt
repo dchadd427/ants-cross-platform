@@ -11,6 +11,7 @@ target_include_directories(ants_server_core PUBLIC
 )
 target_link_libraries(ants_server_core PUBLIC
     ants_net
+    ants_ai          # the bots of a room (docs/BOTS.md B6): virtual clients that the referee runs
     ants_sim
     ants_assets
     ants_ctl

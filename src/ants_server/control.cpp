@@ -41,10 +41,32 @@ JsonValue status_to_json(const RoomStatus& s) {
         JsonValue p = JsonValue::make_object();
         p.set("seat", JsonValue::make_int(static_cast<int64_t>(seat)));
         p.set("name", JsonValue::make_string(s.names[seat]));
+        bool is_bot = false;
+        for (const RoomStatus::Bot& b : s.bots) is_bot = is_bot || b.seat == seat;
+        p.set("bot", JsonValue::make_bool(is_bot));                  // a bot is a player of the room, and says so
         players.push_back(std::move(p));
     }
     o.set("players", std::move(players));
+    // The computer players of the room (the specification's and the leader's fill); `joined` and `players` above count them: a bot is a player
+    JsonValue bots = JsonValue::make_array();
+    for (const RoomStatus::Bot& b : s.bots) {
+        JsonValue row = JsonValue::make_object();
+        row.set("seat", JsonValue::make_int(b.seat));
+        row.set("bot", JsonValue::make_string(b.kind == "standard" ? b.level : b.kind + ":" + b.level));
+        row.set("kind", JsonValue::make_string(b.kind));
+        row.set("level", JsonValue::make_string(b.level));
+        row.set("name", JsonValue::make_string(b.name));
+        row.set("fill", JsonValue::make_bool(b.fill));
+        bots.push_back(std::move(row));
+    }
+    o.set("bots", std::move(bots));
     o.set("ticks", JsonValue::make_int(s.ticks));
+    if (s.state == RoomState::Finished) {                           // the referee's state at the end of the match, as 16 hex digits (what every player's game stands at, at `ticks`)
+        static const char kHex[] = "0123456789abcdef";
+        std::string hex(16, '0');
+        for (int i = 0; i < 16; ++i) hex[static_cast<size_t>(15 - i)] = kHex[(s.referee_hash >> (4 * i)) & 0xFu];
+        o.set("state_hash", JsonValue::make_string(hex));
+    }
     o.set("turns", JsonValue::make_int(s.turns));
     o.set("age_seconds", JsonValue::make_int(s.age_ms / 1000));
     o.set("reason", JsonValue::make_string(s.reason));
@@ -188,6 +210,30 @@ bool spec_from_json(const JsonValue& body, RoomSpec& out, std::string& error) {
     if (!number("max_catch_up_seconds", kMinCatchUpMs / 1000, kMaxCatchUpLimitMs / 1000, catch_s) || !number("resume_countdown_seconds", 0, kMaxResumeCountdownMs / 1000, resume_s)) return false;
     spec.max_catch_up_ms = static_cast<uint32_t>(catch_s * 1000);
     spec.resume_countdown_ms = static_cast<uint32_t>(resume_s * 1000);
+    // The computer players that sit in the room from the start (docs/BOTS.md B6): [{"seat": 2, "bot": "medium"}]; "bot" is what --bot takes after the seat ("easy", "medium", "hard",
+    // "idle", "worker", "worker:easy", ...; "standard" is the default kind)
+    if (const JsonValue* v = body.find("bots")) {
+        if (!v->is_array()) {
+            error = "\"bots\" must be an array of {\"seat\": 0 to 3, \"bot\": \"easy\" | \"medium\" | \"hard\" | ...}";
+            return false;
+        }
+        spec.bots.clear();
+        for (const JsonValue& item : v->items()) {
+            const JsonValue* seat = item.is_object() ? item.find("seat") : nullptr;
+            const JsonValue* bot = item.is_object() ? item.find("bot") : nullptr;
+            if (seat == nullptr || !seat->is_int() || seat->as_int_or(-1) < 0 || seat->as_int_or(-1) > 3 || bot == nullptr || !bot->is_string()) {
+                error = "every entry of \"bots\" must be {\"seat\": 0 to 3, \"bot\": \"easy\" | \"medium\" | \"hard\" | ...}";
+                return false;
+            }
+            ai::BotSpec parsed;
+            std::string why;
+            if (!ai::parse_bot_spec(std::to_string(seat->as_int_or(0)) + ":" + bot->str(), parsed, why)) {
+                error = "\"bots\": " + why;
+                return false;
+            }
+            spec.bots.push_back(parsed);
+        }
+    }
     if (const JsonValue* v = body.find("code")) {
         if (!v->is_string()) {
             error = "\"code\" must be a string";

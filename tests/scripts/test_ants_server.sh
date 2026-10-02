@@ -33,7 +33,7 @@ fi
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/ants_e2e.XXXXXX")"
 cleanup() {
     [ -n "$SERVER_PID" ] && kill "$SERVER_PID" 2> /dev/null
-    for p in $CLIENT_PIDS $VICTIM_PIDS $LEAD_PIDS $RC_PIDS; do kill -CONT "$p" 2> /dev/null; kill "$p" 2> /dev/null; done
+    for p in $CLIENT_PIDS $VICTIM_PIDS $LEAD_PIDS $FILL_PIDS $CHAT_PIDS $RC_PIDS; do kill -CONT "$p" 2> /dev/null; kill "$p" 2> /dev/null; done
     [ -n "$PROXY_PID" ] && kill "$PROXY_PID" 2> /dev/null
     rm -rf "$WORK"
 }
@@ -197,6 +197,57 @@ for p in $LEAD_PIDS; do kill "$p" 2> /dev/null; done
 for p in $LEAD_PIDS; do wait "$p" 2> /dev/null; done
 code_of -X DELETE -H "Authorization: Bearer $SECRET" "$CTL/rooms/$LEAD" > /dev/null
 
+# bots fill the empty seats (protocol 11): a room for four whose leader (a headless client with --fill-bots medium, --start-when 1: a test hook that presses START once one player is
+# in) starts it ALONE: the server seats a "Bot (Medium)" in each of the three empty seats and runs them, the status lists them, the match runs and the client reports no error; two
+# clients that chat in the waiting room (--say: a test hook that says a line once two players are in) hear each other
+FILL="E2E-FILL-$RANDOM"
+curl -s -m 3 -o /dev/null -X POST -H "Authorization: Bearer $SECRET" -d "{\"map\":\"TINY.LVL\",\"players\":4,\"code\":\"$FILL\",\"seed\":13}" "$CTL/rooms"
+"$GAME" --headless --no-lan --name Solo --join "127.0.0.1:$GAME_PORT" --room "$FILL" --fill-bots medium --start-when 1 --screenshot "$WORK/f1.png" --frames 4000 > "$WORK/f1.log" 2>&1 &
+FILL_PIDS="$!"
+FILL_UP=1
+for _ in $(seq 1 150); do
+    STATUS="$(curl -s -m 2 -H "Authorization: Bearer $SECRET" "$CTL/rooms/$FILL")"
+    if echo "$STATUS" | grep -q '"state":"running"'; then FILL_UP=0; break; fi
+    sleep 0.2
+done
+check "alone with --fill-bots medium the leader starts a room for four: the match runs" "$FILL_UP"
+BOTS_OK="$(echo "$STATUS" | python3 -c '
+import sys, json
+r = json.load(sys.stdin)
+bots = r.get("bots", [])
+ok = len(bots) == 3 and [b["seat"] for b in bots] == [1, 2, 3] and all(b["bot"] == "medium" and b["name"] == "Bot (Medium)" and b["fill"] for b in bots)
+ok = ok and r.get("joined") == 4 and r.get("expected") == 4 and r["players"][0]["name"] == "Solo" and sum(1 for p in r["players"] if p["name"] == "Bot (Medium)") == 3
+print(0 if ok else 1)' 2> /dev/null)"
+check "the status lists three bots on seats 1 - 3 (medium, named Bot (Medium), seated by the fill), four players, the person on seat 0" "${BOTS_OK:-1}"
+FILL_T1="$(curl -s -m 2 -H "Authorization: Bearer $SECRET" "$CTL/rooms/$FILL" | python3 -c 'import sys, json; print(json.load(sys.stdin).get("ticks", 0))' 2> /dev/null)"
+sleep 3
+FILL_T2="$(curl -s -m 2 -H "Authorization: Bearer $SECRET" "$CTL/rooms/$FILL" | python3 -c 'import sys, json; print(json.load(sys.stdin).get("ticks", 0))' 2> /dev/null)"
+FILL_RATE="$(python3 -c "print(($FILL_T2 - $FILL_T1) / 3.0)" 2> /dev/null)"
+check "the referee runs the match with the bots at 20 ticks a second (measured: ${FILL_RATE:-?})" "$(python3 -c "import sys; r = float('${FILL_RATE:-0}'); sys.exit(0 if 17.0 <= r <= 23.0 else 1)"; echo $?)"
+check "the room did not fail (no desync with the bots) and the client reported no error" "$(curl -s -m 2 -H "Authorization: Bearer $SECRET" "$CTL/rooms/$FILL" | grep -q '"state":"running"' && ! grep -qiE 'out of sync|failed|error' "$WORK/f1.log"; echo $?)"
+for p in $FILL_PIDS; do kill "$p" 2> /dev/null; done
+for p in $FILL_PIDS; do wait "$p" 2> /dev/null; done
+code_of -X DELETE -H "Authorization: Bearer $SECRET" "$CTL/rooms/$FILL" > /dev/null
+
+CHAT="E2E-CHAT-$RANDOM"
+curl -s -m 3 -o /dev/null -X POST -H "Authorization: Bearer $SECRET" -d "{\"map\":\"TINY.LVL\",\"players\":4,\"code\":\"$CHAT\",\"seed\":17}" "$CTL/rooms"
+"$GAME" --headless --no-lan --name Ann --join "127.0.0.1:$GAME_PORT" --room "$CHAT" --say "hello from Ann" --screenshot "$WORK/ch1.png" --frames 4000 > "$WORK/ch1.log" 2>&1 &
+CHAT_PIDS="$!"
+sleep 1
+"$GAME" --headless --no-lan --name Bob --join "127.0.0.1:$GAME_PORT" --room "$CHAT" --say "hello from Bob" --screenshot "$WORK/ch2.png" --frames 4000 > "$WORK/ch2.log" 2>&1 &
+CHAT_PIDS="$CHAT_PIDS $!"
+HEARD=1
+for _ in $(seq 1 100); do
+    if grep -q "Room chat: Bob: hello from Bob" "$WORK/ch1.log" && grep -q "Room chat: Ann: hello from Ann" "$WORK/ch2.log"; then HEARD=0; break; fi
+    sleep 0.2
+done
+check "two clients chat in the waiting room: each hears the other's line from the room, with the sender's name" "$HEARD"
+check "each also hears its own line from the room (the room tells the sender that it was heard)" "$(grep -q 'Room chat: Ann: hello from Ann' "$WORK/ch1.log" && grep -q 'Room chat: Bob: hello from Bob' "$WORK/ch2.log"; echo $?)"
+check "nobody started the match by chatting: the room still waits" "$(curl -s -m 2 -H "Authorization: Bearer $SECRET" "$CTL/rooms/$CHAT" | grep -q '"state":"waiting"'; echo $?)"
+for p in $CHAT_PIDS; do kill "$p" 2> /dev/null; done
+for p in $CHAT_PIDS; do wait "$p" 2> /dev/null; done
+code_of -X DELETE -H "Authorization: Bearer $SECRET" "$CTL/rooms/$CHAT" > /dev/null
+
 # flood control (v0.0.93): a raw client that is no game sends valid messages as fast as its line allows (a StartRequest that is ignored, a Ping), in a room of its own while two real
 # clients play in another. Before the TCP inbox was bounded and the messages counted, the server read and parsed everything into memory (the process grew by gigabytes in seconds,
 # one thread busy, the referee of the other room late, the control interface slow) and never dropped the sender; now the sender is dropped after a second's worth at the most.
@@ -233,7 +284,7 @@ def str8(t):
     b = t.encode()
     return bytes([len(b)]) + b
 hello = bytes([1]) + struct.pack('<H', protocol) + str8('Evil') + struct.pack('<H', 0) + bytes([255]) + str8(room) + str8('') + bytes(16) + struct.pack('<I', 0)     # (protocol 10: no key, no turns)
-message = bytes([24]) if kind == 'startreq' else bytes([10]) + struct.pack('<II', 1, 0)
+message = bytes([24, 0]) if kind == 'startreq' else bytes([10]) + struct.pack('<II', 1, 0)       # (protocol 11: a StartRequest is the type and a fill level, 0 = none)
 sock = socket.create_connection(('127.0.0.1', port), timeout=5)
 sock.sendall(frame(hello))
 sock.setblocking(False)

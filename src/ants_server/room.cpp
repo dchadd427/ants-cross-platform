@@ -38,12 +38,45 @@ static net::HostLobby::Config lobby_config(const RoomSpec& spec) {
     return cfg;
 }
 
+namespace {
+
+ai::Level ai_level_of(net::FillLevel fill) noexcept {
+    switch (fill) {
+        case net::FillLevel::Easy: return ai::Level::Easy;
+        case net::FillLevel::Hard: return ai::Level::Hard;
+        default: return ai::Level::Medium;
+    }
+}
+
+}  // namespace
+
+// Where a bot's commands go: into the sequencer of the room's session for the bot's seat, as the commands of a person do from its connection (the verdict arrives with the turn, like every
+// command's: a bot never sees it). While the match is paused for an absent player the session refuses them (a bot waits like everybody): the controller counts that as a command sent, and the
+// bot finds out in its next look.
+class Room::BotSink final : public sim::CommandSink {
+public:
+    BotSink(Room& room, uint8_t seat) : room_(room), seat_(seat) {}
+    sim::CommandResult submit(const sim::Command& command) override {
+        sim::CommandResult result;
+        if (room_.session_ != nullptr && room_.session_->submit_bot(seat_, command)) result.status = sim::CommandResult::Status::Applied;
+        return result;
+    }
+
+private:
+    Room& room_;
+    uint8_t seat_;
+};
+
 Room::Room(RoomSpec spec, MapEntry map, assets::LevelData level, uint32_t seed, uint32_t now_ms, net::LogBudget* log_budget)
     : spec_(std::move(spec)), map_(std::move(map)), level_(std::move(level)), seed_(seed), created_ms_(now_ms), lobby_(lobby_config(spec_)), log_budget_(log_budget) {
     spec_.players = std::max<uint8_t>(2, std::min<uint8_t>(spec_.players, sim::MAX_PLAYERS));
     retry_at_ms_ = now_ms;                                       // (not 0: the server's clock is its uptime, and a signed comparison against a stale 0 breaks after 24.8 days)
     lobby_.set_map(map_.name);
     lobby_.set_fog(spec_.fog);
+    for (const ai::BotSpec& bot : spec_.bots) {                  // the room's own bots sit down before anybody comes (the lobby refuses what the specification should not have asked: fog, a full room)
+        if (lobby_.add_bot(bot.seat, ai::bot_display_name(bot))) bot_specs_.push_back(bot);
+    }
+    std::sort(bot_specs_.begin(), bot_specs_.end(), [](const ai::BotSpec& a, const ai::BotSpec& b) { return a.seat < b.seat; });
 }
 
 bool Room::expired(uint32_t now_ms) const noexcept {
@@ -122,6 +155,39 @@ void Room::close_connections() {
     }
 }
 
+// The bots that the leader's START seated are only for that start: a cancelled start (a player left, a map did not load) puts the room back as it was (otherwise a room that is "full" of bots
+// would start again by itself, and a seat would be missing for the player who comes next)
+void Room::unseat_fill() {
+    for (uint8_t seat = 0; seat < sim::MAX_PLAYERS; ++seat) {
+        if ((fill_seats_ & (1u << seat)) == 0) continue;
+        lobby_.remove_bot(seat);
+        bot_specs_.erase(std::remove_if(bot_specs_.begin(), bot_specs_.end(), [seat](const ai::BotSpec& b) { return b.seat == seat; }), bot_specs_.end());
+    }
+    fill_seats_ = 0;
+}
+
+// The controller of the match: one for the room, over the referee's own engine, called after every tick that the referee runs; each bot seat gets a sink that leads into the session. Nothing
+// here is built for a room without a bot.
+bool Room::start_bots(uint32_t seed, std::string& why) {
+    bool any = false;
+    for (uint8_t seat = 0; seat < sim::MAX_PLAYERS; ++seat) any = any || lobby_.room().slots[seat].state == net::SlotState::Bot;
+    if (!any || sim_ == nullptr || session_ == nullptr) return true;
+    bot_controller_ = std::make_unique<ai::BotController>(*sim_, seed);
+    for (const ai::BotSpec& spec : bot_specs_) {
+        if (spec.seat >= sim::MAX_PLAYERS || lobby_.room().slots[spec.seat].state != net::SlotState::Bot) continue;
+        bot_sinks_.push_back(std::make_unique<BotSink>(*this, spec.seat));
+        std::string error;
+        if (!bot_controller_->add(spec, *bot_sinks_.back(), error)) {
+            why = "the bot of seat " + std::to_string(static_cast<unsigned>(spec.seat)) + " could not sit down: " + error;
+            return false;
+        }
+    }
+    session_->runner().set_on_tick([this]() {
+        if (bot_controller_ != nullptr && sim_ != nullptr) bot_controller_->on_tick(*sim_);
+    });
+    return true;
+}
+
 void Room::begin_match(uint32_t now_ms) {
     const net::StartMsg& start = lobby_.start_info();
     sim_ = std::make_unique<sim::SimulationEngine>();
@@ -148,6 +214,7 @@ void Room::begin_match(uint32_t now_ms) {
     session_ = std::make_unique<net::HostSession>(*sim_, hc);
     for (uint8_t seat = 0; seat < sim::MAX_PLAYERS; ++seat) {
         if (net::Connection* c = lobby_.connection_of(seat)) session_->add_client(seat, c);
+        if (lobby_.room().slots[seat].state == net::SlotState::Bot) session_->add_bot_seat(seat);       // a computer player: no connection, acknowledged by the server itself
     }
     if (spec_.reconnect) {
         std::array<net::SeatKey, sim::MAX_PLAYERS> keys{};          // what the lobby gave out: the keys stay valid for the whole match (a seat that is dropped is told so by its key)
@@ -156,6 +223,11 @@ void Room::begin_match(uint32_t now_ms) {
         session_->set_rejoin_start(start);                          // what a machine that starts from nothing is sent first
     }
     session_->start(now_ms);
+    std::string bot_problem;
+    if (!start_bots(start.seed, bot_problem)) {
+        fail(bot_problem, now_ms);                                  // (cannot happen: the room refuses fog with bots and the roster holds every bot seat)
+        return;
+    }
     state_ = RoomState::Running;
 }
 
@@ -167,6 +239,7 @@ void Room::finish(const std::string& reason, uint32_t now_ms) {
     if (session_) session_->freeze();
     end_log(now_ms);
     if (sim_) {
+        final_hash_ = sim_->state_hash().total;                       // (once, at the end: the hash is not worth computing at every pass)
         const sim::MatchResult result = sim_->get_world_state().match_result;
         quitter_ = result.quitter;
         for (const sim::ResultRow& r : result.rows(255)) {
@@ -202,17 +275,20 @@ void Room::update(uint32_t now_ms) {
 
     lobby_.update(now_ms);
     uint8_t asked_by = net::kNoLeader;                               // the leader who asked to start now, in this pass
+    net::FillLevel asked_fill = net::FillLevel::None;                // ... and the bots that it asked for in the empty seats (protocol 11)
     for (const net::HostLobby::Event& ev : lobby_.take_events()) {
         if (ev.type == net::HostLobby::Event::Type::Cancelled || ev.type == net::HostLobby::Event::Type::LoadFailed) {
             if (state_ == RoomState::Loading && ++cancels_ >= kMaxFailedStarts) return fail("the start failed too many times (a player could not load the map or left)", now_ms);
             if (state_ == RoomState::Loading) {
                 state_ = RoomState::Waiting;
                 retry_at_ms_ = now_ms + kRetryMs;
+                unseat_fill();                                       // the room is as it was before the START: the bots that it seated go again
             }
         } else if (ev.type == net::HostLobby::Event::Type::Begun && state_ == RoomState::Loading) {
             begin_match(now_ms);
         } else if (ev.type == net::HostLobby::Event::Type::LeaderStart) {
             asked_by = ev.seat;
+            asked_fill = ev.fill;
         }
     }
 
@@ -221,16 +297,47 @@ void Room::update(uint32_t now_ms) {
         // with the seats that are taken now, as the room would with all of them; a request that falls into the pause after a cancelled start is lost (START again).
         const bool full = lobby_.players() >= spec_.players;
         const bool early = spec_.early_start && asked_by != net::kNoLeader && lobby_.leader() == asked_by;
-        if (lobby_.can_start() && (full || early)) {
+        // The fill (protocol 11): only the leader's request seats bots, in the seats that are still empty up to the players the room expects; a room that is full starts by itself with nobody
+        // added. Bots and Fog of War never mix (docs/BOTS.md rule 8): the leader is told, and the match starts without bots if two people are there.
+        net::FillLevel fill = early && !full ? asked_fill : net::FillLevel::None;
+        if (fill != net::FillLevel::None && lobby_.fog()) {
+            lobby_.notify(asked_by, net::kNoticeFillFog);
+            fill = net::FillLevel::None;
+        }
+        std::vector<uint8_t> fill_seats;
+        if (fill != net::FillLevel::None) {
+            for (uint8_t seat = 0; seat < sim::MAX_PLAYERS && lobby_.players() + fill_seats.size() < spec_.players; ++seat) {
+                if (lobby_.room().slots[seat].state == net::SlotState::Empty) fill_seats.push_back(seat);
+            }
+            if (fill_seats.empty()) fill = net::FillLevel::None;
+        }
+        const bool can = fill != net::FillLevel::None ? lobby_.can_start_filled() : lobby_.can_start();
+        if (can && (full || early)) {
             uint8_t roster = 0;                                      // the seats that play: a map is playable for some rosters and not for others (a start marker outside the grid)
             for (uint8_t seat = 0; seat < sim::MAX_PLAYERS; ++seat) roster = static_cast<uint8_t>(roster | (lobby_.room().slots[seat].state != net::SlotState::Empty ? 1u << seat : 0u));
+            for (const uint8_t seat : fill_seats) roster = static_cast<uint8_t>(roster | (1u << seat));      // (with the bots that the fill would seat)
             const assets::LevelValidation check = level_.validate(roster);
             if (!check.playable) {
                 if (full) return fail("the map cannot be played by these seats: " + check.reason(), now_ms);
-                // (an early start for seats that the map cannot be played by: nothing happens, the room waits for the others, it does not fail)
-            } else if (net::time_reached(now_ms, retry_at_ms_) && lobby_.start(seed_, map_.hash, now_ms)) {
-                state_ = RoomState::Loading;
-                lobby_.host_loaded(true);                            // the server loaded the map when it made the room
+                // (an early start for seats that the map cannot be played by: nothing happens, the room waits for the others, it does not fail; the leader who asked for bots is told)
+                if (fill != net::FillLevel::None && net::time_reached(now_ms, retry_at_ms_)) lobby_.notify(asked_by, net::kNoticeFillMap);
+            } else if (net::time_reached(now_ms, retry_at_ms_)) {
+                bool seated = true;
+                for (const uint8_t seat : fill_seats) {
+                    const ai::BotSpec bot{seat, "standard", ai_level_of(fill)};
+                    if (!lobby_.add_bot(seat, ai::bot_display_name(bot))) {
+                        seated = false;
+                        break;
+                    }
+                    bot_specs_.push_back(bot);
+                    fill_seats_ = static_cast<uint8_t>(fill_seats_ | (1u << seat));
+                }
+                if (seated && lobby_.start(seed_, map_.hash, now_ms)) {
+                    state_ = RoomState::Loading;
+                    lobby_.host_loaded(true);                        // the server loaded the map when it made the room
+                } else {
+                    unseat_fill();                                   // (the lobby refused: the room is as it was)
+                }
             }
         } else if (now_ms - created_ms_ >= spec_.wait_ms) {
             fail("the players did not all come (" + std::to_string(lobby_.players()) + " of " + std::to_string(spec_.players) + ")", now_ms);
@@ -277,6 +384,15 @@ RoomStatus Room::status(uint32_t now_ms) const {
     s.state = state_;
     s.reason = reason_;
     s.joined = static_cast<uint8_t>(lobby_.players());
+    for (const ai::BotSpec& b : bot_specs_) {
+        RoomStatus::Bot row;
+        row.seat = b.seat;
+        row.kind = b.kind;
+        row.level = ai::level_name(b.level);
+        row.name = ai::bot_display_name(b);
+        row.fill = b.seat < sim::MAX_PLAYERS && (fill_seats_ & (1u << b.seat)) != 0;
+        s.bots.push_back(std::move(row));
+    }
     const net::RoomMsg& room = lobby_.room();
     for (uint8_t seat = 0; seat < sim::MAX_PLAYERS; ++seat) {
         s.names[seat] = room.slots[seat].state == net::SlotState::Empty ? std::string() : room.slots[seat].name;
@@ -285,6 +401,7 @@ RoomStatus Room::status(uint32_t now_ms) const {
         }
     }
     s.ticks = last_ticks_;
+    s.referee_hash = final_hash_;
     s.turns = last_turns_;
     s.age_ms = now_ms - created_ms_;
     s.quitter = quitter_;

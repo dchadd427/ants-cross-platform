@@ -8,9 +8,14 @@
 //   Waiting  clients join (Hello with the room's code); when `players` seats are taken the room starts: Start goes to all, the server's own copy of the map is
 //            already loaded (the room was refused otherwise), every client loads and reports, and the match begins when all have. The first player who joined is the
 //            room's LEADER (the next one when it leaves); with `early_start` on, the leader's StartRequest starts the match at once with the players who are there
-//            (two at least), without waiting for the rest
-//   Loading  a client that cannot load the map or leaves cancels the start: back to Waiting (a few times at most)
-//   Running  the referee executes the turns; a diverging client is named and the room fails; the match end (the clock, the rules) finishes it. A room that HOLDS seats
+//            (two at least), without waiting for the rest. With a FILL LEVEL in the request (protocol 11) the room first seats a bot of that level, named "Bot (Medium)", in
+//            every seat that is still empty (up to `players`), and then one person is enough; a room with Fog of War refuses the bots (bots and fog never mix, docs/BOTS.md rule
+//            8: the leader is told, and the match starts without them if two people are there), and so does a map that the filled roster cannot play. Only the leader's request seats
+//            bots: a room that fills up, or starts by itself, never does
+//   Loading  a client that cannot load the map or leaves cancels the start: back to Waiting (a few times at most); the bots that the fill seated go again, so the room is what it was
+//   Running  the referee executes the turns (and runs the room's bots: ants_ai's BotController over the referee's own engine, called after every tick, its commands go
+//            through the session's sequencer like a person's, `HostSession::submit_bot`; a bot seat has no connection, is never absent, never votes and is never counted as
+//            connected); a diverging client is named and the room fails; the match end (the clock, the rules) finishes it. A room that HOLDS seats
 //            (RoomSpec::reconnect, protocol 10) keeps the seat of a player whose connection is lost and PAUSES the match for everybody (see "Reconnect" below)
 //   Finished the result (rows as the results screen shows them) is kept; the room goes on answering its players (pings, acknowledgements: the session is frozen, it seals nothing)
 //            and the connections close after a grace period, later when a player is still catching up (kGraceMs, kEndWaitMs)
@@ -32,6 +37,8 @@
 #include <string>
 #include <vector>
 
+#include "ants_ai/bot.hpp"
+#include "ants_ai/bot_controller.hpp"
 #include "ants_assets/lvl_parser.hpp"
 #include "ants_net/lobby.hpp"
 #include "ants_net/session.hpp"
@@ -49,6 +56,10 @@ struct RoomSpec {
     uint8_t players{2};                     // 2 .. 4: the match starts when this many seats are taken (and takes no more)
     bool early_start{true};                 // the room's leader (the first player who joined) may start the match before all the seats are taken: with at least two players there
                                             // (the roster is then the seats that are taken). False: the room has no leader and starts only when every seat is taken. Demo rooms have it on.
+    /// Computer players that sit in the room from the start (docs/BOTS.md, B6; the control interface's "bots": [{"seat": 2, "bot": "medium"}]): each takes a seat that counts towards `players`,
+    /// is shown as a bot ("Bot (Medium)") and is run by the server as a virtual client. At least one seat must be left for a person, the seats are distinct and Fog of War is off
+    /// (RoomManager::create_room refuses anything else). Empty: no bot code runs in the room, unless its leader's START asks for a fill.
+    std::vector<ai::BotSpec> bots;
     bool has_seed{false};
     uint32_t seed{1};                       // the match's random seed (the server draws one when the spec has none)
     uint32_t wait_ms{120000};               // a room that has not started after this long fails ("nobody came", "somebody is missing")
@@ -105,11 +116,22 @@ struct RoomStatus {
     bool early_start{true};                 // the room allows the leader's early start
     uint8_t leader{255};                    // the seat of the leader while the room waits or loads (255: none: nobody has joined yet, the room does not allow an early start, or the match runs)
     uint32_t ignored_start_requests{0};     // StartRequest messages that were heard and not acted on (a player who is not the leader, a room that cannot start, a late click of a match that runs)
+    /// The computer players of the room: the specification's, and the ones that the leader's START seated (`fill`); the seats stay listed after the match. `joined` counts them (a bot is a player).
+    struct Bot {
+        uint8_t seat{255};
+        std::string kind;                   // "standard" (the bot of the three levels), "worker", "idle"
+        std::string level;                  // "easy", "medium", "hard"
+        std::string name;                   // "Bot (Medium)"
+        bool fill{false};                   // seated by the leader's START (false: by the room's specification)
+    };
+    std::vector<Bot> bots;
     RoomState state{RoomState::Waiting};
     std::string reason;                     // why a room failed, or how it ended ("" while it runs)
     uint8_t joined{0};
     std::array<std::string, 4> names{};     // by seat; "" for an empty seat
     uint32_t ticks{0};                      // the referee's clock (20 per second)
+    uint64_t referee_hash{0};               // the referee's state hash (StateHash::total) at `ticks` when the match ended, 0 before: what every client of the match stands at, the same tick
+                                            // (the tests compare it; a lobby that keeps results can too)
     uint32_t turns{0};                      // turns sealed: one per tick since protocol 8 (turns of 50 ms; they were 100 ms, two ticks, before)
     uint32_t age_ms{0};
     uint16_t quitter{0xFFFF};
@@ -189,6 +211,10 @@ private:
     void close_connections();
     void prune_connections();
     void end_log(uint32_t now_ms);
+    // Bots (docs/BOTS.md B6): the specification's are seated in the lobby when the room is made; the leader's fill seats the rest at START and takes them out again when the start is cancelled
+    class BotSink;
+    void unseat_fill();
+    bool start_bots(uint32_t seed, std::string& why);
 
     RoomSpec spec_;
     MapEntry map_;
@@ -203,9 +229,13 @@ private:
     uint32_t retry_at_ms_{0};                // after a cancelled start the room waits a moment before it tries again (a client that cannot load the map does not make a tight loop)
 
     net::HostLobby lobby_;
+    std::vector<ai::BotSpec> bot_specs_;     // the bots that sit in the room now, by seat (the specification's and the fill's)
+    uint8_t fill_seats_{0};                  // bit s: seat s holds a bot that the leader's START seated (it goes again when the start is cancelled)
     std::vector<std::unique_ptr<net::Connection>> connections_;
     std::unique_ptr<sim::SimulationEngine> sim_;
     std::unique_ptr<net::HostSession> session_;
+    std::vector<std::unique_ptr<sim::CommandSink>> bot_sinks_;      // (after the session and before the controller: the controller is destroyed first, then the sinks that it holds)
+    std::unique_ptr<ai::BotController> bot_controller_;
     uint32_t last_ticks_{0};
     uint32_t last_turns_{0};
     bool connections_closed_{false};
@@ -218,6 +248,7 @@ private:
     uint32_t final_pause_ms_{0};
     std::vector<RoomRow> rows_;
     uint16_t quitter_{0xFFFF};
+    uint64_t final_hash_{0};                 // the referee's state hash when the match ended
     std::array<std::string, 4> names_{};
 };
 

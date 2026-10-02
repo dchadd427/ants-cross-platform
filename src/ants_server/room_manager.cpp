@@ -52,6 +52,18 @@ CreateResult RoomManager::create_room(RoomSpec spec, uint32_t now_ms) {
     if (spec.resume_countdown_ms > kMaxResumeCountdownMs) return fail(400, "resume_countdown_seconds must be 0 to 60");
     if (spec.max_connections < spec.players || spec.max_connections > 4096) return fail(400, "max_connections must be the number of players to 4096");
     if (spec.max_log_bytes < kMinLogBytes || spec.max_log_bytes > kMaxLogBytes) return fail(400, "the limit of the turn log must be 1 KiB to 1 GiB");
+    // The bots of the room (docs/BOTS.md B6): distinct seats, a kind that exists, at least one seat left for a person, and never together with Fog of War (a bot would see through it)
+    if (!spec.bots.empty()) {
+        if (spec.fog) return fail(400, "bots cannot play with Fog of War: a bot would see through it");
+        if (spec.bots.size() >= spec.players) return fail(400, "bots: at least one of the room's players must be a person (players " + std::to_string(spec.players) + ", bots " + std::to_string(spec.bots.size()) + ")");
+        uint8_t seats = 0;
+        for (const ai::BotSpec& b : spec.bots) {
+            if (b.seat >= sim::MAX_PLAYERS) return fail(400, "bots: a seat is 0 to 3");
+            if ((seats & (1u << b.seat)) != 0) return fail(400, "bots: seat " + std::to_string(static_cast<unsigned>(b.seat)) + " has a bot already");
+            if (!ai::known_bot_kind(b.kind)) return fail(400, "bots: unknown bot '" + b.kind + "'");
+            seats = static_cast<uint8_t>(seats | (1u << b.seat));
+        }
+    }
     MapEntry entry;
     std::string why;
     if (!store_.find(spec.map, entry, &why)) return fail(404, "map '" + spec.map + "': " + why);
