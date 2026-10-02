@@ -331,9 +331,9 @@ target_include_directories(test_start_menu_app PRIVATE
     ${CMAKE_SOURCE_DIR}/include
 )
 
+# (ants_server_core brings ants_ai with it since protocol 11: naming it here as well is a duplicate library for the linker)
 target_link_libraries(test_start_menu_app PRIVATE
     ants_app
-    ants_ai
     ants_server_core
 )
 
