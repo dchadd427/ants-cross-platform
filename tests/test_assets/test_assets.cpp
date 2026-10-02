@@ -811,7 +811,7 @@ bool locate(const std::vector<uint8_t>& d, Spots& s) {
     p += 2;
     for (size_t i = 0; i < s.b4; ++i) {
         s.waypoints.push_back(p);
-        p += 8 + (rd32(d, p + 4) != 0 ? 44 : 0);
+        p += 8u + (rd32(d, p + 4) != 0 ? 44u : 0u);
     }
     s.final_word = p;
     return p + 2 <= d.size();

@@ -79,6 +79,7 @@ if(APPLE AND NOT EMSCRIPTEN)
         "-framework AudioToolbox"
         "-framework CoreFoundation"
         "-framework CoreAudio"
+        objc                      # the Objective-C runtime: the application asks the window whether it is in a fullscreen Space (os_fullscreen)
     )
 endif()
 

@@ -639,7 +639,7 @@ void challenge_suite_4_animations_and_lunchbox(const std::string& chd_path) {
         ASSERT_NE(archive.find_sprite("3lb0001.bmp"), nullptr); // Sprite 513
 
         // Verify horizontal mirroring on lunchbox sprites
-        for (const std::string& spr_name : { "7lb0000.bmp", "6lb0000.bmp", "5lb0000.bmp", "4lb0000.bmp", "3lb0000.bmp" }) {
+        for (const std::string spr_name : { "7lb0000.bmp", "6lb0000.bmp", "5lb0000.bmp", "4lb0000.bmp", "3lb0000.bmp" }) {
             const Sprite* spr = archive.find_sprite(spr_name);
             ASSERT_NE(spr, nullptr);
             const Sprite& mirr = archive.get_mirrored_sprite(spr->id);

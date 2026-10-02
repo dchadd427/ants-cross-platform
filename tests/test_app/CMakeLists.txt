@@ -285,3 +285,39 @@ endif()
 
 add_test(NAME test_network_app COMMAND test_network_app)
 set_tests_properties(test_network_app PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# View fingerprint (M0 of the widescreen / zoom / touch work): what the game draws (draw-call and pixel hashes) and what the pointer does (every pixel of the 640 x 480 screen), pinned at the classic picture
+add_executable(test_view_fingerprint
+    test_view_fingerprint.cpp
+)
+
+target_include_directories(test_view_fingerprint PRIVATE
+    ${CMAKE_SOURCE_DIR}/include
+)
+
+target_link_libraries(test_view_fingerprint PRIVATE
+    ants_app
+    ants_ai
+    ants_net
+    ants_sim
+    ants_assets
+)
+
+if(APPLE)
+    target_link_libraries(test_view_fingerprint PRIVATE
+        "-framework AudioToolbox"
+        "-framework CoreFoundation"
+        "-framework CoreAudio"
+    )
+endif()
+
+if(WIN32)
+    target_link_libraries(test_view_fingerprint PRIVATE ws2_32 winmm)
+endif()
+
+target_compile_definitions(test_view_fingerprint PRIVATE
+    ORIGINAL_ASSETS_DIR="${CMAKE_SOURCE_DIR}/Original-Ants"
+)
+
+add_test(NAME test_view_fingerprint COMMAND test_view_fingerprint)
+set_tests_properties(test_view_fingerprint PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")

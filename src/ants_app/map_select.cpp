@@ -26,8 +26,8 @@ MapSelectEntry make_entry(const std::string& file_name, const std::string& full_
     ants::assets::LevelData lvl;
     if (lvl.load_from_file(full_path)) {
         entry.minutes = lvl.default_minutes;
-        entry.width = lvl.width;
-        entry.height = lvl.height;
+        entry.width = lvl.width();
+        entry.height = lvl.height();
         entry.description = lvl.description;
     }
     return entry;

@@ -2130,9 +2130,26 @@ strips of `evaluate_cursor`) and `src/ants_app/application.cpp` (`handle_camera_
 samples in `tests/data/edge_scroll_samples.csv`, produced by a bit-exact emulation of the original's code) and test 7.7 of `test_app_integration.cpp`.
 
 * **Everything runs at 20 Hz.** The INPUT task (`AddTask(delay 0, period 0x32)` at 0x100ae26, `FUN_010242c5`) runs `ProcessInput` (`FUN_0102603f`) every 50 ms; hover, cursor mode, edge scroll, minimap drag,
-  the rubber band and the button hover all run in it (`FUN_0102653f`), and a click uses the pointer where the task finds it. The pointer is `GetCursorPos` into `world+0x118/0x11c`, clamped to 0..639 x 0..479.
+  the rubber band and the button hover all run in it (`FUN_0102653f`), and a click uses the pointer where the task finds it. The pointer is `GetCursorPos` stored as it is into `world+0x118/0x11c` (next point: the game
+  never clamps or clips the mouse pointer; an earlier version of this line said "clamped to 0..639 x 0..479", which the binary does not do).
   There is no handler for the mouse wheel, the middle button or mouse motion, and the arrow keys map to nothing: **the view scrolls only by the edge strips, the minimap and Ctrl+N / Ctrl+P**. While a dialog is open it
   gets all input and the hover and scroll logic does not run; while the left button is captured (`[5534]` != 0: a rubber band, the minimap, a pressed button) neither arrows nor scrolling happen.
+* **The pointer and the screen** (Capstone-verified 2026-10-01). The MOUSE task (its name at 0x1047710, vtable 0x1005268 installed at 0x103161b, slot 3 = 0x1030b7a) calls 0x1030a80 with the engine at `world+8`
+  (0x1030b7a / 0x1030b7f); 0x1030a80 makes the file's only `GetCursorPos` call (0x1030a8c, import 0x1001238) and stores x and y as they come (0x1030a95, 0x1030a9e) into engine `+0x110 / +0x114` = `world+0x118 /
+  0x11c`: no compare, no clamp. Ants.exe imports no `ClipCursor`, `SetCapture`, `ClientToScreen` or `GetClientRect` (none of these names is anywhere in the file); its USER32 pointer functions are `GetCursorPos`,
+  `SetCursorPos` and `ShowCursor`, and the two `SetCursorPos` calls (0x1025ad1, 0x102571e) are the user messages 0x408 / 0x413 of `FUN_01025515` warping the cursor to a point they are given. **What keeps the pointer
+  on the 640 x 480 picture is the display mode**: `FUN_0102c819` creates the DirectDraw object (`DirectDrawCreate`, 0x102c839), calls `SetCooperativeLevel(hwnd, 0x53)` = FULLSCREEN | ALLOWREBOOT | EXCLUSIVE |
+  ALLOWMODEX (0x102c8e0 - 0x102c8eb, vtable slot 0x50) and `SetDisplayMode(640, 480, 8)` (0x102c95d - 0x102c96c, slot 0x54), so on a one-monitor machine the whole desktop is the picture and an edge push reads 0 / 639
+  / 479 (Windows keeps the cursor on the desktop). With a second monitor the pointer can leave, and `FUN_0102653f` then does nothing: a pointer outside the root window's rectangle ((0, 0, 640, 480) half-open, at
+  `[world+0xe98]+0x14`, set at 0x102c46e - 0x102c482 through `FUN_01030198`) jumps to the function's end 0x1026883 (0x10265ad, 0x10265ba, 0x10265c7, 0x10265d4), before the edge strips (`FUN_01026aa3`, called at
+  0x1026620). The only clamp to (0, 0, 639, 479) in the file is the relative move 0x103071a (limits at engine `+0x118..+0x11e`, written at 0x1030677 - 0x103068a; it writes the pointer at 0x1030750 / 0x1030783). It is
+  called only at 0x1030819 inside 0x103078d, the handler of an input entry (callers: the joystick poll `FUN_01030913` at 0x10309eb - 0x1030a69, the mouse button handler 0x1031b63 at 0x1031bb2, and 0x1031cca), and
+  only for an entry whose flag bit 1 is set (`test byte [entry+0x134], 2` at 0x10307c4). No code sets that bit: the only writers of the field are the constructor's zeroing loop (0x103063d - 0x103065c) and
+  `FUN_01030aa7`, which sets and clears bit 0 (0x1030acc, 0x1030ad5), so the clamp never runs. The other writers of the pointer are the constructor ((320, 240) at 0x1030693 / 0x103069d) and the user message 0x413
+  (0x1025737 / 0x102573d). **The remake** (`include/ants_app/pointer_clamp.hpp`, `Application::handle_events`, `Application::update_mouse_grab`): SDL reports a pointer over a black bar of a wider window as a position
+  beyond the picture; it is put on the nearest edge pixel, which is what the one-monitor original shows. A button released outside the window and a lifted finger end the pointer's stay (SDL sends no LEAVE for them;
+  while a button is held the pointer stays on the edge, as on the original's one screen). In fullscreen (`--fullscreen`, or a macOS fullscreen Space) SDL keeps the pointer in the window while it has the focus; a
+  Linux window manager's fullscreen toggle is not detected, and the web build cannot keep the pointer. Tests: `test_pointer_model` (group pillarbox) and `test_app_integration` 7.8 - 7.8e.
 * **Strips** (`FUN_01026aa3`, 0x1026b02..0x1026c53; half-open rects on the 640 x 480 screen, order N NE E SE S SW W NW): the 12 px bands are x < 12, x >= 628, y < 12, y >= 468 (N (12,0,628,12), NE (628,0,640,12), E
   (628,12,640,468), SE (628,468,640,480), S (12,468,628,480), SW (0,468,12,480), W (0,12,12,468), NW (0,0,12,12)); a pre-test skips the loop for 13 <= x < 627 and 13 <= y < 467. A strip counts only when the view can
   move that way (CanScroll 0x10270d2: N `oy > 0`, E `ox < maxX`, S `oy < maxY`, W `ox > 0`, a corner the OR of its two axes; maxX = map px - 442, maxY = map px - 440); the strips are disjoint, so a corner never falls

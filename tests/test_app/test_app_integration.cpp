@@ -10,6 +10,11 @@
 #include <fstream>
 #include <functional>
 #include <set>
+#if defined(_WIN32)
+#include <process.h>
+#else
+#include <unistd.h>
+#endif
 
 #include "ants_assets/asset_archive.hpp"
 #include "ants_assets/lvl_parser.hpp"
@@ -172,6 +177,16 @@ static bool stand_on_powerup(SimulationEngine& sim, uint32_t ant_id, TileCoord h
     return u.pos == hat && u.loco_action == AntUnit::kActionIdle && sim.grid().has_powerup_at(hat);
 }
 
+// A name in the temporary folder that belongs to this run of the suite alone: two runs at the same time share the folder (the process id tells them apart)
+static std::filesystem::path temp_path_of_this_run(const std::string& name) {
+#if defined(_WIN32)
+    const long long pid = static_cast<long long>(_getpid());
+#else
+    const long long pid = static_cast<long long>(getpid());
+#endif
+    return std::filesystem::temp_directory_path() / (name + "_" + std::to_string(pid));
+}
+
 // TINY.LVL with its first start marker of the green team (tile 154) moved to row 21512, written to a temporary file (a byte edit of a shipped map, as the loader
 // tests make their synthetic maps): the file loads, a match with the green team is not playable. Empty path when the shipped map cannot be read.
 static std::filesystem::path write_marker_outside_grid_map() {
@@ -191,7 +206,7 @@ static std::filesystem::path write_marker_outside_grid_map() {
     if (green == 0) return {};
     bytes[green + 2] = static_cast<uint8_t>(21512 & 0xFF);
     bytes[green + 3] = static_cast<uint8_t>(21512 >> 8);
-    const std::filesystem::path path = std::filesystem::temp_directory_path() / "ants_unplayable_marker.lvl";
+    const std::filesystem::path path = temp_path_of_this_run("ants_unplayable_marker").replace_extension(".lvl");
     std::ofstream out(path, std::ios::binary | std::ios::trunc);
     out.write(reinterpret_cast<const char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
     return out.good() ? path : std::filesystem::path{};
@@ -776,8 +791,8 @@ void run_suite_4_audio_mixer() {
         ASSERT_FALSE(mixer.is_music_playing());
 
         std::string intro_path = std::string(ORIGINAL_ASSETS_DIR) + "/INTRO.mp3";
-        bool loaded = mixer.play_music(intro_path, true);
-        ASSERT_TRUE(loaded);
+        bool music_loaded = mixer.play_music(intro_path, true);
+        ASSERT_TRUE(music_loaded);
         ASSERT_TRUE(mixer.is_music_playing());
 
         // Volume control
@@ -1150,6 +1165,56 @@ void run_suite_6_scorecard_and_audio_routing() {
 // ============================================================================
 // SUITE 7: Input Scheme, Multi-Unit Marquee Selection & Right-Click Abilities
 // ============================================================================
+
+// Pointer events of a headless application's window, pushed through the application's own event loop (tests 7.8 - 7.8d). SDL maps a pushed pointer event of
+// the window from window to picture coordinates as it maps a real one (the renderer's event watch), so the positions here are window positions; the headless
+// window is 1280 x 960 (the picture at scale 2). One tiny frame delivers what is queued (a headless application stops after 10 frames, and a longer frame
+// would run the match); the edge scrolling is then stepped as the INPUT task does, every 50 ms.
+struct PointerRig {
+    Application& app;
+    SDL_Window* window{nullptr};
+    uint32_t id{0};
+
+    explicit PointerRig(Application& a) : app(a), window(SDL_GetWindowFromID(1)), id(window != nullptr ? SDL_GetWindowID(window) : 0) {}
+    void motion(int x, int y, Uint32 state = 0, Uint32 which = 0) const {
+        SDL_Event e{};
+        e.type = SDL_MOUSEMOTION;
+        e.motion.windowID = id;
+        e.motion.which = which;
+        e.motion.state = state;
+        e.motion.x = x;
+        e.motion.y = y;
+        SDL_PushEvent(&e);
+    }
+    // a left button event; `window_id` 0 is an event of no window (SDL had no mouse focus)
+    void button(Uint32 type, int x, int y, Uint32 which = 0, int64_t window_id = -1) const {
+        SDL_Event e{};
+        e.type = type;
+        e.button.windowID = window_id < 0 ? id : static_cast<Uint32>(window_id);
+        e.button.which = which;
+        e.button.button = SDL_BUTTON_LEFT;
+        e.button.state = type == SDL_MOUSEBUTTONDOWN ? SDL_PRESSED : SDL_RELEASED;
+        e.button.clicks = 1;
+        e.button.x = x;
+        e.button.y = y;
+        SDL_PushEvent(&e);
+    }
+    void window_event(Uint8 what) const {
+        SDL_Event e{};
+        e.type = SDL_WINDOWEVENT;
+        e.window.windowID = id;
+        e.window.event = what;
+        SDL_PushEvent(&e);
+    }
+    void deliver() const { app.run_frame_with_delta(0.001f); }
+    void scroll(int ticks_of_20_ms) const {
+        for (int i = 0; i < ticks_of_20_ms; ++i) app.handle_camera_panning(0.020f);
+    }
+    void center() const { app.renderer().camera().center_on(600, 600, app.sim().grid().width(), app.sim().grid().height()); }   // every way open
+    int32_t view_x() const { return app.renderer().camera().world_x; }
+    int32_t view_y() const { return app.renderer().camera().world_y; }
+};
+
 void run_suite_7_input_controls() {
     TEST_SUITE("Suite 7: Input Scheme, Multi-Unit Marquee Selection & Right-Click Abilities");
 
@@ -1521,6 +1586,317 @@ void run_suite_7_input_controls() {
         ASSERT_LT(app.renderer().camera().world_x, init_cam_x);
         ASSERT_LT(app.renderer().camera().world_y, init_cam_y);
     } TEST_END();
+
+    TEST_CASE("7.8 A Pointer Beyond The Picture (What SDL Reports Over A Black Bar Of A Wide Window) Is The Pointer On The Edge Pixel: The Map Scrolls And The Game's Cursor Is Drawn There (On A One-Monitor Machine The Original's Exclusive 640 x 480 Mode Keeps Its Pointer On The Picture)") {
+        Application app;
+        ApplicationConfig cfg;
+        cfg.headless = true;
+        cfg.start_in_map_select = false;
+        ASSERT_TRUE(app.init(cfg));
+        ASSERT_TRUE(app.start_game("Original-Ants/Maps/SMALL.LVL"));
+        ASSERT_EQ(app.state(), AppState::Playing);
+        app.hud().update(app.sim().get_world_state(), 100);                        // the get-ready dialog is gone: the edges scroll
+        ASSERT_FALSE(app.hud().is_modal_open());
+        const PointerRig rig(app);
+        ASSERT_TRUE(rig.window != nullptr);
+        int win_w = 0;
+        int win_h = 0;
+        SDL_GetWindowSize(rig.window, &win_w, &win_h);
+        ASSERT_EQ(win_w, 1280);                                                    // the headless window: the picture at scale 2, no bars (SDL maps a window
+        ASSERT_EQ(win_h, 960);                                                     // position to the picture: x / 2, y / 2)
+
+        // far to the left of the picture (what SDL reports for a pointer over the left bar: a negative x): the view scrolls west, the cursor is drawn on x = 0
+        rig.center();
+        const int32_t x0 = rig.view_x();
+        rig.motion(-4000, 480);
+        rig.deliver();
+        rig.scroll(12);
+        ASSERT_EQ(app.mouse_screen_x(), 0);
+        ASSERT_EQ(app.mouse_screen_y(), 240);
+        ASSERT_FALSE(app.pointer_outside());                                       // (render_frame draws the game's cursor unless the pointer is outside)
+        ASSERT_LT(rig.view_x(), x0);
+        // far to the right: east, the cursor on x = 639
+        rig.center();
+        const int32_t x1 = rig.view_x();
+        rig.motion(40000, 480);
+        rig.deliver();
+        rig.scroll(12);
+        ASSERT_EQ(app.mouse_screen_x(), 639);
+        ASSERT_FALSE(app.pointer_outside());
+        ASSERT_GT(rig.view_x(), x1);
+        // above and below the picture (a window that is taller than 4:3: bars at the top and bottom)
+        rig.center();
+        const int32_t y0 = rig.view_y();
+        rig.motion(640, -4000);
+        rig.deliver();
+        rig.scroll(12);
+        ASSERT_EQ(app.mouse_screen_y(), 0);
+        ASSERT_FALSE(app.pointer_outside());
+        ASSERT_LT(rig.view_y(), y0);
+        rig.center();
+        const int32_t y1 = rig.view_y();
+        rig.motion(640, 40000);
+        rig.deliver();
+        rig.scroll(12);
+        ASSERT_EQ(app.mouse_screen_y(), 479);
+        ASSERT_FALSE(app.pointer_outside());
+        ASSERT_GT(rig.view_y(), y1);
+        // a button event beyond the picture lands on the edge too (here the press and the release are also beyond the window: see 7.8c for what the release does)
+        rig.button(SDL_MOUSEBUTTONDOWN, -4000, 40000);
+        rig.deliver();
+        ASSERT_EQ(app.mouse_screen_x(), 0);
+        ASSERT_EQ(app.mouse_screen_y(), 479);
+        rig.button(SDL_MOUSEBUTTONUP, -4000, 40000);
+        rig.deliver();
+        ASSERT_EQ(app.mouse_screen_x(), 0);
+        ASSERT_EQ(app.mouse_screen_y(), 479);
+        // a pointer that is on the picture is left alone: window (300, 200) is picture (150, 100)
+        rig.motion(300, 200);
+        rig.deliver();
+        ASSERT_EQ(app.mouse_screen_x(), 150);
+        ASSERT_EQ(app.mouse_screen_y(), 100);
+        ASSERT_FALSE(app.pointer_outside());
+        app.shutdown();
+    } TEST_END();
+
+    TEST_CASE("7.8b The Setup Screen And The Quick Help Get The Same Clamped Pointer: The Clamp Is At The Top Of The Event Loop, Before Any Screen Takes The Event") {
+        Application app;
+        ApplicationConfig cfg;
+        cfg.headless = true;
+        cfg.start_in_map_select = true;
+        ASSERT_TRUE(app.init(cfg));
+        ASSERT_EQ(app.state(), AppState::MapSelect);
+        const PointerRig rig(app);
+        ASSERT_TRUE(rig.window != nullptr);
+        for (int screen = 0; screen < 2; ++screen) {
+            if (screen == 1) {
+                app.finish_loading();                                              // the quick help (the stored option is on), as 9.14 reaches it
+                ASSERT_EQ(app.state(), AppState::QuickHelp);
+            }
+            rig.motion(-4000, 40000);                                              // beyond the bottom left corner of the picture
+            rig.deliver();
+            ASSERT_EQ(app.mouse_screen_x(), 0);
+            ASSERT_EQ(app.mouse_screen_y(), 479);
+            rig.motion(300, 200);
+            rig.deliver();
+            ASSERT_EQ(app.mouse_screen_x(), 150);
+            rig.button(SDL_MOUSEBUTTONDOWN, 40000, -4000);                         // beyond the top right corner
+            rig.button(SDL_MOUSEBUTTONUP, 40000, -4000);
+            rig.deliver();
+            ASSERT_EQ(app.mouse_screen_x(), 639);
+            ASSERT_EQ(app.mouse_screen_y(), 0);
+            ASSERT_EQ(app.state(), screen == 0 ? AppState::MapSelect : AppState::QuickHelp);   // (the corner pixel is on no button)
+        }
+        app.shutdown();
+    } TEST_END();
+
+    TEST_CASE("7.8c A Button Released Outside The Window Ends The Pointer's Stay Although No LEAVE Comes (macOS After A Drag That Left The Window; The Web After Its LEAVE): The Map Does Not Scroll On Its Own. While The Button Is Held The Pointer Stays On The Edge; A Release Over A Black Bar Is A Release In The Window") {
+        Application app;
+        ApplicationConfig cfg;
+        cfg.headless = true;
+        cfg.start_in_map_select = false;
+        ASSERT_TRUE(app.init(cfg));
+        ASSERT_TRUE(app.start_game("Original-Ants/Maps/SMALL.LVL"));
+        app.hud().update(app.sim().get_world_state(), 100);
+        ASSERT_FALSE(app.hud().is_modal_open());
+        const PointerRig rig(app);
+        ASSERT_TRUE(rig.window != nullptr);
+        int win_w = 0;
+        int win_h = 0;
+        SDL_GetWindowSize(rig.window, &win_w, &win_h);
+        ASSERT_EQ(win_w, 1280);
+        ASSERT_EQ(win_h, 960);
+
+        // the press on the map, a drag out of the window to the right, the release out there; SDL on macOS sends no LEAVE after it (the capture of the drag
+        // ends with the release)
+        rig.motion(500, 400);                                                      // picture (250, 200): the map
+        rig.button(SDL_MOUSEBUTTONDOWN, 500, 400);
+        rig.motion(1000, 450, SDL_BUTTON_LMASK);
+        rig.motion(1900, 480, SDL_BUTTON_LMASK);                                   // beyond the window's right edge: picture (950, 240)
+        rig.deliver();
+        ASSERT_EQ(app.mouse_screen_x(), 639);                                      // while the button is held the pointer stays on the edge pixel, as the
+        ASSERT_EQ(app.mouse_screen_y(), 240);                                      // one-monitor original's pointer on its screen
+        ASSERT_FALSE(app.pointer_outside());
+        rig.button(SDL_MOUSEBUTTONUP, 1900, 480);
+        rig.deliver();
+        ASSERT_TRUE(app.pointer_outside());                                        // the pointer has gone: no cursor, no hover, no edge scroll
+        ASSERT_EQ(app.mouse_screen_x(), 639);                                      // (its last position is kept: the pointer is one global)
+        rig.center();
+        const int32_t x0 = rig.view_x();
+        const int32_t y0 = rig.view_y();
+        rig.scroll(100);                                                           // 2 s of the 50 ms input task
+        ASSERT_EQ(rig.view_x(), x0);
+        ASSERT_EQ(rig.view_y(), y0);
+        rig.motion(600, 400);                                                      // the pointer comes back: its first motion in the window ends it
+        rig.deliver();
+        ASSERT_FALSE(app.pointer_outside());
+        ASSERT_EQ(app.mouse_screen_x(), 300);
+        ASSERT_EQ(app.mouse_screen_y(), 200);
+
+        // the web build: the pointer leaves the canvas while the button is held (a LEAVE: no capture there), the release comes afterwards and names no window
+        // (SDL has no mouse focus then, so it did not map the position to the picture either)
+        rig.motion(4, 240);                                                        // picture (2, 120): the west scroll strip
+        rig.button(SDL_MOUSEBUTTONDOWN, 4, 240);
+        rig.window_event(SDL_WINDOWEVENT_LEAVE);
+        rig.button(SDL_MOUSEBUTTONUP, 4, 240, 0, 0);                               // window position (4, 240), windowID 0
+        rig.deliver();
+        ASSERT_TRUE(app.pointer_outside());
+        rig.center();
+        const int32_t x1 = rig.view_x();
+        rig.scroll(100);
+        ASSERT_EQ(rig.view_x(), x1);
+
+        // a release over a black bar is a release in the window: the pointer stays there, on the edge pixel, and the map scrolls on
+        SDL_SetWindowSize(rig.window, 1920, 960);                                  // a wide window: the picture 1280 x 960 in the middle, bars of 320 px
+        rig.deliver();
+        rig.motion(100, 480);                                                      // the left bar: picture (-110, 240), the pointer on (0, 240)
+        rig.button(SDL_MOUSEBUTTONDOWN, 100, 480);
+        rig.button(SDL_MOUSEBUTTONUP, 100, 480);
+        rig.deliver();
+        ASSERT_EQ(app.mouse_screen_x(), 0);
+        ASSERT_EQ(app.mouse_screen_y(), 240);
+        ASSERT_FALSE(app.pointer_outside());
+        rig.center();
+        const int32_t x2 = rig.view_x();
+        rig.scroll(12);
+        ASSERT_LT(rig.view_x(), x2);
+        app.shutdown();
+    } TEST_END();
+
+    TEST_CASE("7.8d A Lifted Finger Leaves No Pointer Behind (Touch Arrives As Mouse Events With which = SDL_TOUCH_MOUSEID): A Tap On A Black Bar Or In The Edge Strip Does Not Keep The Map Scrolling; A Mouse Click In The Same Places Still Leaves The Pointer There") {
+        Application app;
+        ApplicationConfig cfg;
+        cfg.headless = true;
+        cfg.start_in_map_select = false;
+        ASSERT_TRUE(app.init(cfg));
+        ASSERT_TRUE(app.start_game("Original-Ants/Maps/SMALL.LVL"));
+        app.hud().update(app.sim().get_world_state(), 100);
+        ASSERT_FALSE(app.hud().is_modal_open());
+        const PointerRig rig(app);
+        ASSERT_TRUE(rig.window != nullptr);
+        SDL_SetWindowSize(rig.window, 1920, 960);                                  // a wide window (a phone in landscape): bars of 320 px on both sides
+        rig.deliver();
+        auto tap = [&](int x, int y, Uint32 which) {                               // what SDL sends for a tap: a motion, the press, the release
+            rig.motion(x, y, 0, which);
+            rig.button(SDL_MOUSEBUTTONDOWN, x, y, which);
+            rig.button(SDL_MOUSEBUTTONUP, x, y, which);
+            rig.deliver();
+        };
+        // the places: the left bar (window x 100: the pointer on picture x 0) and the picture's own 5 px strip (window x 324: picture x 2)
+        for (const int x : {100, 324}) {
+            const int32_t px = x == 100 ? 0 : 2;
+            // a finger: once it is lifted the pointer is gone and the view stays (without that rule it ran to the map's edge until the next touch)
+            tap(x, 480, SDL_TOUCH_MOUSEID);
+            ASSERT_EQ(app.mouse_screen_x(), px);
+            ASSERT_EQ(app.mouse_screen_y(), 240);
+            ASSERT_TRUE(app.pointer_outside());
+            rig.center();
+            const int32_t t0 = rig.view_x();
+            rig.scroll(100);                                                       // 2 s
+            ASSERT_EQ(rig.view_x(), t0);
+            // the mouse: its pointer is still there, so the view scrolls west as before
+            tap(x, 480, 0);
+            ASSERT_EQ(app.mouse_screen_x(), px);
+            ASSERT_FALSE(app.pointer_outside());
+            rig.center();
+            const int32_t m0 = rig.view_x();
+            rig.scroll(12);
+            ASSERT_LT(rig.view_x(), m0);
+        }
+        app.shutdown();
+    } TEST_END();
+
+    TEST_CASE("7.8e The Pointer Grab: --fullscreen Asks For It, A Window Does Not; Entering And Leaving Fullscreen Ask And Let Go; SDL Holds The Pointer While The Window Has The Focus, Lets Go For Another Window, Takes It Back With The Focus, And Not For A Window That Left Fullscreen Meanwhile (A Real Window Of SDL's Dummy Video Driver, No Match)") {
+        // A real window (headless = false) without a screen: SDL's dummy video driver. The settings go to a file of this run (never the player's own), no
+        // match starts (so nothing is written at the end) and the sound goes to SDL's dummy audio driver. What the game asks for is SDL's grab flag; what SDL
+        // makes of it (SDL_GetWindowMouseGrab) needs the input focus. SDL 2.32's dummy driver gives a window that is shown the focus; SDL 2.26 (Debian 12) and
+        // 2.28 give none, so SDL holds nothing there: the requests are checked everywhere, the focus part only where the driver moves the focus.
+        const std::filesystem::path settings = temp_path_of_this_run("ants_grab_settings").replace_extension(".ini");
+        auto open = [&](Application& app, bool fullscreen) {
+            SDL_SetHint(SDL_HINT_VIDEODRIVER, "dummy");                            // (SDL_Quit clears the hints: set before every start)
+            SDL_SetHint(SDL_HINT_AUDIODRIVER, "dummy");
+            ApplicationConfig cfg;
+            cfg.headless = false;
+            cfg.skip_intro = true;                                                 // the setup screen at once
+            cfg.fullscreen = fullscreen;
+            cfg.settings_path = settings.string();
+            return app.init(cfg);
+        };
+        auto frame = [](Application& app) { app.run_frame_with_delta(0.001f); };
+        auto asked = [](SDL_Window* w) { return (SDL_GetWindowFlags(w) & SDL_WINDOW_MOUSE_GRABBED) != 0; };     // the game's request
+        auto held = [](SDL_Window* w) { return SDL_GetWindowMouseGrab(w) == SDL_TRUE; };                      // SDL's grab
+        auto focused = [](SDL_Window* w) { return (SDL_GetWindowFlags(w) & SDL_WINDOW_INPUT_FOCUS) != 0; };
+        {
+            Application app;
+            ASSERT_TRUE(open(app, true));
+            SDL_Window* window = SDL_GetWindowFromID(1);
+            ASSERT_TRUE(window != nullptr);
+            ASSERT_TRUE((SDL_GetWindowFlags(window) & SDL_WINDOW_FULLSCREEN_DESKTOP) == SDL_WINDOW_FULLSCREEN_DESKTOP);
+            ASSERT_TRUE(asked(window));                                            // --fullscreen: asked for from the start
+            ASSERT_EQ(held(window), focused(window));                              // ... and held while the window has the focus
+            SDL_SetWindowFullscreen(window, 0);                                    // back to a window
+            frame(app);
+            ASSERT_FALSE(asked(window));
+            ASSERT_FALSE(held(window));
+            SDL_SetWindowFullscreen(window, SDL_WINDOW_FULLSCREEN_DESKTOP);        // and fullscreen again
+            frame(app);
+            ASSERT_TRUE(asked(window));
+            ASSERT_EQ(held(window), focused(window));
+            if (focused(window)) {                                                 // (a driver that moves the focus: SDL 2.32's dummy driver)
+                auto focus_elsewhere = [&]() {
+                    SDL_Window* other = SDL_CreateWindow("other", 0, 0, 64, 64, SDL_WINDOW_SHOWN);   // (the dummy driver gives a window that is shown the focus)
+                    frame(app);
+                    return other;
+                };
+                auto focus_back = [&](SDL_Window* other) {
+                    SDL_DestroyWindow(other);
+                    SDL_HideWindow(window);
+                    SDL_ShowWindow(window);
+                    frame(app);
+                };
+                // another window takes the focus: SDL lets go of the pointer, the request stands; the focus returns: SDL holds it again
+                SDL_Window* other = focus_elsewhere();
+                ASSERT_TRUE(other != nullptr);
+                ASSERT_FALSE(focused(window));
+                ASSERT_FALSE(held(window));
+                ASSERT_TRUE(asked(window));
+                focus_back(other);
+                ASSERT_TRUE(focused(window));
+                ASSERT_TRUE((SDL_GetWindowFlags(window) & SDL_WINDOW_FULLSCREEN_DESKTOP) == SDL_WINDOW_FULLSCREEN_DESKTOP);
+                ASSERT_TRUE(held(window));
+                // the window leaves fullscreen while another window has the focus: when the focus returns it is a plain window, and nothing holds the pointer
+                other = focus_elsewhere();
+                ASSERT_TRUE(other != nullptr);
+                SDL_SetWindowFullscreen(window, 0);
+                frame(app);
+                ASSERT_FALSE(asked(window));
+                focus_back(other);
+                ASSERT_TRUE(focused(window));
+                ASSERT_FALSE(held(window));
+            } else {
+                std::cout << "(7.8e: this SDL's dummy driver gives no window the focus: the focus part is not run) ";
+            }
+            app.shutdown();
+        }
+        {
+            Application app;
+            ASSERT_TRUE(open(app, false));
+            SDL_Window* window = SDL_GetWindowFromID(1);
+            ASSERT_TRUE(window != nullptr);
+            ASSERT_FALSE(asked(window));                                           // a window: the pointer is free (four games on one screen, other programs)
+            ASSERT_FALSE(held(window));
+            frame(app);
+            ASSERT_FALSE(asked(window));
+            ASSERT_FALSE(held(window));
+            SDL_SetWindowFullscreen(window, SDL_WINDOW_FULLSCREEN_DESKTOP);
+            frame(app);
+            ASSERT_TRUE(asked(window));
+            ASSERT_EQ(held(window), focused(window));
+            app.shutdown();
+        }
+        std::error_code ignore;
+        std::filesystem::remove(settings, ignore);
+    } TEST_END();
 }
 
 // ============================================================================
@@ -1728,7 +2104,7 @@ void run_suite_8_unit_health_and_map_select() {
             fs::path path;
             ~TempDir() { std::error_code ec; fs::remove_all(path, ec); }
         } dir;
-        dir.path = fs::temp_directory_path() / ("ants_map_list_test_" + std::to_string(static_cast<long long>(SDL_GetTicks())));
+        dir.path = temp_path_of_this_run("ants_map_list_test");
         std::error_code ec;
         fs::create_directories(dir.path / "inner", ec);
         const fs::path source = fs::path("Original-Ants/Maps/TINY.LVL");
@@ -2365,7 +2741,7 @@ void run_suite_9_gameplay_mechanics_and_options() {
     } TEST_END();
 
     TEST_CASE("9.12 Options: Every Setting Is Written When Its Callback Runs And The Next Start Reads It (FUN_0100c20c, FUN_0100a2c9)") {
-        const std::filesystem::path dir = std::filesystem::temp_directory_path() / "ants_test_settings";
+        const std::filesystem::path dir = temp_path_of_this_run("ants_test_settings");
         std::filesystem::remove_all(dir);
         std::filesystem::create_directories(dir);
         const std::string file = (dir / "settings.ini").string();
@@ -2455,7 +2831,7 @@ void run_suite_9_gameplay_mechanics_and_options() {
         ASSERT_FALSE(app.hud().is_options_open());
         ASSERT_TRUE(ConfigStore::default_location().empty() || !std::filesystem::exists(std::filesystem::path(ConfigStore::default_location()).parent_path() / "headless_marker"));
 
-        const std::filesystem::path dir = std::filesystem::temp_directory_path() / "ants_test_settings2";
+        const std::filesystem::path dir = temp_path_of_this_run("ants_test_settings2");
         std::filesystem::remove_all(dir);
         std::filesystem::create_directories(dir);
         const std::string file = (dir / "settings.ini").string();
@@ -3512,7 +3888,7 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         ASSERT_TRUE(app.init(cfg));
         app.hud().add_chat_entry("Ann", "Rush the base!", false, 2);
         app.hud().add_chat_entry("Bob", "on my way", true, 3);
-        const std::filesystem::path dir = std::filesystem::temp_directory_path() / "ants_test_chat_transcript";
+        const std::filesystem::path dir = temp_path_of_this_run("ants_test_chat_transcript");
         std::filesystem::create_directories(dir);
         const std::filesystem::path file = dir / "chat.txt";
         std::filesystem::remove(file);
@@ -7586,10 +7962,10 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
 
     TEST_CASE("12.108: Version Invariant & Fog of War Cursor Concealment Parity") {
         // 1. Verify semantic versioning components
-        ASSERT_EQ(ants::VERSION_STRING, "v0.0.91");
+        ASSERT_EQ(ants::VERSION_STRING, "v0.0.92");
         ASSERT_EQ(ants::VERSION_MAJOR, 0);
         ASSERT_EQ(ants::VERSION_MINOR, 0);
-        ASSERT_EQ(ants::VERSION_PATCH, 91);
+        ASSERT_EQ(ants::VERSION_PATCH, 92);
 
         // 2. Setup simulation world with Fog of War enabled
         SimulationEngine sim;

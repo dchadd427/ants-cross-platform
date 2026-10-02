@@ -279,6 +279,8 @@ private:
     void stop_bots();
 
     void apply_window_layout();                           // --grid / --cell, --window-pos, --window-size (native builds)
+    void update_mouse_grab();                             // fullscreen (SDL's or a macOS Space): SDL keeps the pointer in the window while it has the focus (native builds)
+    bool button_outside_window(const SDL_MouseButtonEvent& button) const;   // the position SDL delivered (before the clamp) lies outside the window, not merely the picture
     void show_start_view();                               // the view at the start of a match: scrolled just far enough to show the square around the hill's anchor tile
     void enter_map_select();                              // the setup screen is created (again): its labels stay empty until its refresh
 

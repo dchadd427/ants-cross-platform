@@ -180,6 +180,7 @@ AI_WORKER_STATUS=0
 SERVER_STATUS=0
 AI_STATUS=0
 SERVER_E2E_STATUS=0
+VIEW_FINGERPRINT_STATUS=0
 APP_STATUS=0
 E2E_STATUS=0
 START_TIME=$(date +%s)
@@ -477,6 +478,13 @@ if [ "$RUN_APP" -eq 1 ]; then
     echo -e "${BOLD}${BLUE}======================================================================${RESET}"
     BUILD_DIR="$BUILD_DIR" "./tests/scripts/test_ants_server.sh"
     SERVER_E2E_STATUS=$?
+
+    echo ""
+    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
+    echo -e "${BOLD}${BLUE}>>> 3.10 RUNNING VIEW FINGERPRINT SUITE (the classic 640 x 480 picture and pointer pinned: draw calls, pixels, every pixel's cursor, scroll and click)...${RESET}"
+    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
+    "./$BUILD_DIR/tests/test_app/test_view_fingerprint"
+    VIEW_FINGERPRINT_STATUS=$?
 fi
 
 # 6. Execute E2E Opaque-Box Tests
@@ -786,6 +794,13 @@ if [ "$RUN_APP" -eq 1 ]; then
         echo -e " 3.9 Server End-To-End (ants_server + 2 clients):    ${GREEN}PASSED${RESET}"
     else
         echo -e " 3.9 Server End-To-End (ants_server + 2 clients):    ${RED}FAILED (exit code ${SERVER_E2E_STATUS})${RESET}"
+        TOTAL_FAILED=$((TOTAL_FAILED + 1))
+    fi
+
+    if [ "$VIEW_FINGERPRINT_STATUS" -eq 0 ]; then
+        echo -e " 3.10 View Fingerprint (test_view_fingerprint):      ${GREEN}PASSED${RESET}"
+    else
+        echo -e " 3.10 View Fingerprint (test_view_fingerprint):      ${RED}FAILED (exit code ${VIEW_FINGERPRINT_STATUS})${RESET}"
         TOTAL_FAILED=$((TOTAL_FAILED + 1))
     fi
 fi

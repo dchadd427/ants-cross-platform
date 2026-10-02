@@ -100,7 +100,7 @@ MapTail find_tail(const std::vector<uint8_t>& d) {
     t.b4_count = p;
     const size_t waypoints = word_at(d, p);
     p += 2;
-    for (size_t i = 0; i < waypoints; ++i) p += 8 + (dword_at(d, p + 4) != 0 ? 44 : 0);
+    for (size_t i = 0; i < waypoints; ++i) p += 8u + (dword_at(d, p + 4) != 0 ? 44u : 0u);
     t.final_word = p;
     t.ok = p + 2 <= d.size();
     return t;

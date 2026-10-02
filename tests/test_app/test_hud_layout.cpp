@@ -2557,7 +2557,7 @@ void test_alliance_answers(const assets::AssetArchive&) {
         t.sim.apply_command(AllianceTable::command(CT::AllianceInvite, 0, 1));
         t.refresh(alice);
         t.refresh(bob);
-        alice.handle_key_down(way == 0 ? 'w' : SDLK_ESCAPE, t.sim, t.camera);
+        alice.handle_key_down(way == 0 ? SDLK_w : SDLK_ESCAPE, t.sim, t.camera);
         check(alice.alliance_dialog() == D::None && t.sim.get_world_state().pending_invite_from[1] == 255, "withdraw (" + std::to_string(way) + "): the offer is taken back");
         check(t.news_has("Alice withdrew offer to team up"), "withdraw (" + std::to_string(way) + "): the invitee reads string 82");
         t.refresh(bob);

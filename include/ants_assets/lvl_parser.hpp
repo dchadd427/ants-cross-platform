@@ -140,9 +140,12 @@ public:
     uint16_t tile_type_count{0}; // Tile dictionary count
     std::vector<std::string> tile_dictionary; // 11-byte ASCII tile names
     // Dimension property supporting both .width and .width()
+    // Both conversions return a reference, as the non-const one always did: with a const one that returned a value, GCC 12's -Wconversion rejected
+    // every implicit use of `.width` / `.height` on a non-const object ("choosing operator uint32_t&() over operator uint32_t() const"), which stopped
+    // a GCC build with warnings as errors (the tests use the property form on purpose, the application the call form).
     struct DimensionProp {
         uint32_t val{0};
-        constexpr operator uint32_t() const noexcept { return val; }
+        constexpr operator const uint32_t&() const noexcept { return val; }
         constexpr operator uint32_t&() noexcept { return val; }
         constexpr uint32_t operator()() const noexcept { return val; }
     };

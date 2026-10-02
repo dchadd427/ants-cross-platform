@@ -1,4 +1,5 @@
 #include "ants_app/application.hpp"
+#include "ants_app/pointer_clamp.hpp"
 #include "ants_app/fps_overlay.hpp"
 #include "ants_app/edge_scroll.hpp"
 #include "ants_app/ui_anim.hpp"
@@ -20,6 +21,15 @@
   #include <unistd.h>
 #else
   #include <unistd.h>
+#endif
+#if defined(__APPLE__) && !defined(__EMSCRIPTEN__)
+  #if defined(__has_include) && __has_include(<SDL_syswm.h>)
+    #include <SDL_syswm.h>
+  #else
+    #include <SDL2/SDL_syswm.h>
+  #endif
+  #include <objc/message.h>                                  // os_fullscreen asks the window's NSWindow for its style mask (libobjc, src/ants_app/CMakeLists.txt)
+  #include <objc/runtime.h>
 #endif
 
 #if defined(__EMSCRIPTEN__)
@@ -97,6 +107,27 @@ private:
 };
 
 constexpr uint8_t seat_bit(uint8_t seat) noexcept { return static_cast<uint8_t>(1u << seat); }
+
+#if !defined(__EMSCRIPTEN__)
+// The operating system holds the window fullscreen without SDL's fullscreen flags. macOS: a fullscreen Space (the green button, or Cmd+Ctrl+F, the item
+// Toggle Full Screen of SDL's Window menu) carries neither SDL_WINDOW_FULLSCREEN nor SDL_WINDOW_FULLSCREEN_DESKTOP, only SDL_WINDOW_MAXIMIZED, which a plain
+// zoom gives too; the NSWindow's style mask tells (NSWindowStyleMaskFullScreen, 1 << 14). Elsewhere false: a fullscreen toggle of a Linux window manager
+// (F11, a menu) is NOT detected (SDL does not report it and the game does not ask X11 or Wayland), so such a window does not grab the pointer; Windows
+// has no such toggle for a normal window.
+bool os_fullscreen(SDL_Window* window) {
+#if defined(__APPLE__) && defined(SDL_VIDEO_DRIVER_COCOA)
+    SDL_SysWMinfo info;
+    SDL_VERSION(&info.version);
+    if (window == nullptr || SDL_GetWindowWMInfo(window, &info) != SDL_TRUE || info.subsystem != SDL_SYSWM_COCOA || info.info.cocoa.window == nullptr) return false;
+    using StyleMaskFn = unsigned long (*)(id, SEL);                     // -[NSWindow styleMask] returns an NSUInteger
+    const unsigned long mask = reinterpret_cast<StyleMaskFn>(objc_msgSend)(reinterpret_cast<id>(info.info.cocoa.window), sel_registerName("styleMask"));
+    return (mask & (1ul << 14)) != 0;
+#else
+    (void)window;
+    return false;
+#endif
+}
+#endif
 
 } // anonymous namespace
 
@@ -327,6 +358,7 @@ bool Application::init(const ApplicationConfig& config) {
     apply_window_layout();
     if (!config_.headless) {
         SDL_RaiseWindow(window_);
+        update_mouse_grab();
         // the game draws its own cursor: the system cursor is hidden while the pointer is over the window and shown everywhere else (other windows,
         // the desktop: nothing grabs or hides the pointer outside the game); SDL tells when it enters and leaves (handle_window_event)
         SDL_PumpEvents();
@@ -505,7 +537,7 @@ bool Application::init(const ApplicationConfig& config) {
             if (renderer_) {
                 for (const auto& a : sim_.get_world_state().ants) {
                     if (a.id == static_cast<uint32_t>(config_.select_ant_id)) {
-                        renderer_->camera().center_on(a.px, a.py, current_level_.width, current_level_.height);
+                        renderer_->camera().center_on(a.px, a.py, current_level_.width(), current_level_.height());
                         break;
                     }
                 }
@@ -689,7 +721,7 @@ void Application::enter_match() {
         if (renderer_) {
             for (const auto& a : sim_.get_world_state().ants) {
                 if (a.id == static_cast<uint32_t>(config_.select_ant_id)) {
-                    renderer_->camera().center_on(a.px, a.py, current_level_.width, current_level_.height);
+                    renderer_->camera().center_on(a.px, a.py, current_level_.width(), current_level_.height());
                     break;
                 }
             }
@@ -963,7 +995,11 @@ void Application::release_ui_sounds() {
 
 void Application::handle_events() {
     SDL_Event event;
+    bool pointer_gone = false;                               // the last event took the pointer away (pointer_gone_after: a release outside the window, a lifted finger)
     while (SDL_PollEvent(&event)) {
+        if (pointer_gone) pointer_outside_ = true;           // ... marked once that event has been handled (its handlers clear the mark)
+        pointer_gone = pointer_gone_after(event, event.type == SDL_MOUSEBUTTONUP && button_outside_window(event.button));   // the position before the clamp
+        clamp_pointer_event(event);                          // a pointer over a black bar of a wide window is the pointer on the edge of the picture (pointer_clamp.hpp)
         if (event.type == SDL_QUIT) {
             quit();
             return;
@@ -1062,7 +1098,24 @@ void Application::handle_events() {
                 break;
         }
     }
+    if (pointer_gone) pointer_outside_ = true;
+}
 
+// Is the position of a button event, as SDL delivered it (before the clamp), outside the window? Not merely outside the picture: the black bars are part of
+// the window. SDL gives the position in the picture's coordinates (SDL_RenderSetLogicalSize); SDL_RenderLogicalToWindow (SDL 2.0.18; the game already
+// needs 2.0.22 for SDL_HINT_VIDEODRIVER) takes it back to the window's. An event that names no window of ours (windowID 0: SDL had no mouse focus, so the
+// pointer was not over the window, and the position was not mapped either; the web build's release after a LEAVE) is outside.
+bool Application::button_outside_window(const SDL_MouseButtonEvent& button) const {
+    if (window_ == nullptr || button.windowID != SDL_GetWindowID(window_)) return true;
+    int w = 0;
+    int h = 0;
+    SDL_GetWindowSize(window_, &w, &h);
+    int wx = button.x;
+    int wy = button.y;
+    if (renderer_ && renderer_->get_sdl_renderer() != nullptr) {
+        SDL_RenderLogicalToWindow(renderer_->get_sdl_renderer(), static_cast<float>(button.x), static_cast<float>(button.y), &wx, &wy);
+    }
+    return wx < 0 || wy < 0 || wx >= w || wy >= h;
 }
 
 void Application::handle_window_event(const SDL_WindowEvent& we) {
@@ -1098,7 +1151,31 @@ void Application::handle_window_event(const SDL_WindowEvent& we) {
             config_.fullscreen = (flags & (SDL_WINDOW_FULLSCREEN | SDL_WINDOW_FULLSCREEN_DESKTOP)) != 0;
             renderer_->set_fullscreen(is_fs);
         }
+        update_mouse_grab();
     }
+}
+
+// In fullscreen the pointer stays in the window while the game has the focus (wants_mouse_grab, pointer_clamp.hpp): SDL's fullscreen (--fullscreen) and a
+// macOS fullscreen Space (os_fullscreen) both ask SDL for the grab, and SDL applies it while the window has the input focus; with a second monitor the
+// pointer used to slip away at the edge of the picture, and the edge scrolling stopped. The original's exclusive 640 x 480 mode gives the same on a
+// one-monitor machine (the display mode does it: Ants.exe never clips the pointer, and with a second monitor its pointer could leave and its edge scrolling
+// stopped, as the remake's did). In a window the pointer is free. Limits: a fullscreen toggle of a Linux window manager (F11) is not detected, so it does
+// not grab. On X11, when SDL applies the grab (at the start, on entering fullscreen, when the focus returns) while another client holds the pointer (a
+// menu, a screenshot tool), SDL retries XGrabPointer 100 times, 50 ms apart, inside that call: the game can stall for up to 5 s, once, because after a
+// failed round SDL stops grabbing for the rest of the run (SDL_GetWindowMouseGrab still answers yes); SDL has no hint to shorten it. The web build never
+// grabs: the browser decides (pointer lock). Called at the start and on every size event (the focus needs no call: SDL lets go and grabs again itself);
+// macOS reports the entry into and the exit from a Space with SIZE_CHANGED, RESIZED and MAXIMIZED or RESTORED (SDL 2.32's Cocoa listener sends them at the
+// end of the transition).
+void Application::update_mouse_grab() {
+#if !defined(__EMSCRIPTEN__)
+    if (window_ == nullptr) return;
+    const uint32_t flags = SDL_GetWindowFlags(window_);
+    const bool sdl_fullscreen = (flags & (SDL_WINDOW_FULLSCREEN | SDL_WINDOW_FULLSCREEN_DESKTOP)) != 0;
+    const bool space = !config_.headless && os_fullscreen(window_);                          // (a headless run asks nothing of the window system)
+    const bool want = wants_mouse_grab(sdl_fullscreen, space, config_.headless);
+    const bool asked = (flags & SDL_WINDOW_MOUSE_GRABBED) != 0;                              // the request (SDL_GetWindowMouseGrab is its effect: no while unfocused)
+    if (asked != want) SDL_SetWindowMouseGrab(window_, want ? SDL_TRUE : SDL_FALSE);
+#endif
 }
 
 WindowRect Application::window_rect() const {
@@ -1147,7 +1224,7 @@ void Application::handle_camera_panning(float dt) {
         input_accumulator_ -= 0.050f;
         if (state_ != AppState::Playing || !renderer_ || !mouse_has_moved_ || pointer_outside_) continue;
         if (mouse_screen_x_ < 0 || mouse_screen_x_ >= 640 || mouse_screen_y_ < 0 || mouse_screen_y_ >= 480) continue;
-        hud_.input_tick(renderer_->camera(), current_level_.width, current_level_.height, mouse_screen_x_, mouse_screen_y_);
+        hud_.input_tick(renderer_->camera(), current_level_.width(), current_level_.height(), mouse_screen_x_, mouse_screen_y_);
     }
 }
 
@@ -1756,11 +1833,11 @@ void Application::show_start_view() {
     }
     int32_t ox = 0;
     int32_t oy = 0;
-    start_view_origin(tx, ty, static_cast<int32_t>(current_level_.width), static_cast<int32_t>(current_level_.height), ox, oy);
+    start_view_origin(tx, ty, static_cast<int32_t>(current_level_.width()), static_cast<int32_t>(current_level_.height()), ox, oy);
     ViewportCamera& camera = renderer_->camera();
     camera.x = 0.0f;
     camera.y = 0.0f;
-    camera.scroll_pixels(ox, oy, current_level_.width, current_level_.height);
+    camera.scroll_pixels(ox, oy, current_level_.width(), current_level_.height());
 }
 
 } // namespace ants::app

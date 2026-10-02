@@ -1,16 +1,20 @@
 // Pointer model tests (stage I): the ant hit boxes, the cursor decision table, the click by cursor mode, the rubber band and the release of the
 // left button, the right button, the command pedestals, the keyboard table and the button class as Ants.exe does them (FUN_01026904 / FUN_01026a39 / FUN_01026aa3 / FUN_01026f91 /
 // FUN_01027530 / FUN_010277f4 / FUN_01027b51 / FUN_010287b5 / FUN_010274be / FUN_01028d30). docs/GAME_REVERSE_ENGINEERING.md 5.44
+// Also the pointer beyond the picture of a wide window (pointer_clamp.hpp, group pillarbox; docs 5.43, "The pointer and the screen").
 #include <algorithm>
 #include <cstdint>
 #include <cstdio>
 #include <functional>
 #include <memory>
 #include <string>
+#include <cstring>
 #include <utility>
 #include <vector>
 
+#include "ants_app/edge_scroll.hpp"
 #include "ants_app/hud.hpp"
+#include "ants_app/pointer_clamp.hpp"
 #include "ants_app/renderer.hpp"
 #include "ants_sim/sim_engine.hpp"
 
@@ -739,7 +743,7 @@ void test_shift_group() {
     std::printf("[pointer] the stored panel: a shift add or shift drag is panel 4 even for one ant, and the click on an own bomb is then a group move (ISLANDS)\n");
     const TileCoord bomb{20, 20};
     auto scene = [&](Fixture& f, uint32_t& bomber, uint32_t& worker) {
-        f.sim.grid_mut().place_bomb(bomb.x, bomb.y, 0);
+        f.sim.grid_mut().place_bomb(static_cast<uint32_t>(bomb.x), static_cast<uint32_t>(bomb.y), 0);
         bomber = f.spawn(0, AntType::Bomber, 16, 20);           // (528, 656): box [508, 548) x [624, 672)
         worker = f.spawn(0, AntType::Worker, 16, 23);            // (528, 752)
         f.settle();
@@ -1409,6 +1413,118 @@ void test_buttons() {
     f.release(545, 450);
 }
 
+// A pointer over a black bar of a wide window arrives at the game as a position outside the 640 x 480 picture; it is the pointer on the nearest edge pixel
+// (pointer_clamp.hpp). Also the two rules around it: after which events the pointer is gone, and when the window grabs it.
+void test_pillarbox() {
+    g_group = "pillarbox";
+    check(clamp_to_screen_x(-180) == 0 && clamp_to_screen_x(-1) == 0 && clamp_to_screen_x(0) == 0, "left of the picture: x = 0");
+    check(clamp_to_screen_x(1) == 1 && clamp_to_screen_x(320) == 320 && clamp_to_screen_x(638) == 638 && clamp_to_screen_x(639) == 639, "on the picture: unchanged");
+    check(clamp_to_screen_x(640) == 639 && clamp_to_screen_x(819) == 639 && clamp_to_screen_x(100000) == 639, "right of the picture: x = 639");
+    check(clamp_to_screen_y(-1) == 0 && clamp_to_screen_y(0) == 0 && clamp_to_screen_y(479) == 479 && clamp_to_screen_y(480) == 479 && clamp_to_screen_y(-100000) == 0, "the same for y");
+    check(clamp_to_screen_x(INT32_MIN) == 0 && clamp_to_screen_x(INT32_MAX) == 639 && clamp_to_screen_y(INT32_MIN) == 0 && clamp_to_screen_y(INT32_MAX) == 479, "any int");
+
+    SDL_Event m{};
+    m.type = SDL_MOUSEMOTION;
+    m.motion.x = -50;
+    m.motion.y = 700;
+    m.motion.xrel = -7;
+    m.motion.yrel = 9;
+    m.motion.state = SDL_BUTTON_LMASK;
+    m.motion.which = 3;
+    clamp_pointer_event(m);
+    check(m.motion.x == 0 && m.motion.y == 479, "a motion over the bottom left corner of the bars lands on the corner pixel");
+    check(m.motion.xrel == -7 && m.motion.yrel == 9 && m.motion.state == SDL_BUTTON_LMASK && m.motion.which == 3u, "the motion's other fields are not touched");
+    for (const Uint32 type : {static_cast<Uint32>(SDL_MOUSEBUTTONDOWN), static_cast<Uint32>(SDL_MOUSEBUTTONUP)}) {
+        SDL_Event b{};
+        b.type = type;
+        b.button.x = 900;
+        b.button.y = -5;
+        b.button.button = SDL_BUTTON_RIGHT;
+        b.button.clicks = 2;
+        b.button.state = SDL_PRESSED;
+        clamp_pointer_event(b);
+        check(b.button.x == 639 && b.button.y == 0, "a button over the top right of the bars lands on the corner pixel");
+        check(b.button.button == SDL_BUTTON_RIGHT && b.button.clicks == 2 && b.button.state == SDL_PRESSED, "the button's other fields are not touched");
+    }
+    SDL_Event k{};
+    k.type = SDL_KEYDOWN;
+    k.key.keysym.sym = SDLK_a;
+    SDL_Event k_before = k;
+    clamp_pointer_event(k);
+    check(std::memcmp(&k, &k_before, sizeof k) == 0, "a key event is not touched");
+    SDL_Event w{};
+    w.type = SDL_MOUSEWHEEL;
+    w.wheel.x = -999;
+    w.wheel.y = 999;
+    SDL_Event w_before = w;
+    clamp_pointer_event(w);
+    check(std::memcmp(&w, &w_before, sizeof w) == 0, "a wheel event (its x and y are scroll amounts) is not touched");
+
+    // what it is for: raw positions over the bars give no scrolling at the picture's own rules (edge_scroll_step finds no strip for them), the clamped ones
+    // scroll like the edge pixel
+    check(edge_scroll_step(-1, 240, 50, 700, 700, 60, 60).dir == -1 && edge_scroll_step(640, 240, 50, 700, 700, 60, 60).dir == -1 &&
+              edge_scroll_step(320, -1, 50, 700, 700, 60, 60).dir == -1 && edge_scroll_step(320, 480, 50, 700, 700, 60, 60).dir == -1,
+          "the premise: a raw position just beside the picture (a bar on any side) is in no edge strip");
+    for (const int32_t raw : {-180, -90, -1}) {
+        const EdgeScroll s = edge_scroll_step(clamp_to_screen_x(raw), 240, 50, 700, 700, 60, 60);
+        check(s.dx < 0 && s.dir == edge_scroll_step(0, 240, 50, 700, 700, 60, 60).dir, "over the left bar the view scrolls west like on x = 0");
+    }
+    for (const int32_t raw : {640, 700, 819}) {
+        const EdgeScroll s = edge_scroll_step(clamp_to_screen_x(raw), 240, 50, 700, 700, 60, 60);
+        check(s.dx > 0 && s.dir == edge_scroll_step(639, 240, 50, 700, 700, 60, 60).dir, "over the right bar the view scrolls east like on x = 639");
+    }
+    for (const int32_t raw : {-60, -1}) {
+        const EdgeScroll s = edge_scroll_step(320, clamp_to_screen_y(raw), 50, 700, 700, 60, 60);
+        check(s.dy < 0, "over a bar above the picture the view scrolls north");
+    }
+    for (const int32_t raw : {480, 560}) {
+        const EdgeScroll s = edge_scroll_step(320, clamp_to_screen_y(raw), 50, 700, 700, 60, 60);
+        check(s.dy > 0, "over a bar below the picture the view scrolls south");
+    }
+
+    // After which events is the pointer gone (no LEAVE follows): a release outside the window, and the lift of a finger; nothing else
+    auto button = [](Uint32 type, Uint32 which) {
+        SDL_Event e{};
+        e.type = type;
+        e.button.which = which;
+        e.button.button = SDL_BUTTON_LEFT;
+        return e;
+    };
+    const SDL_Event up_mouse = button(SDL_MOUSEBUTTONUP, 0);
+    const SDL_Event up_touch = button(SDL_MOUSEBUTTONUP, SDL_TOUCH_MOUSEID);
+    const SDL_Event down_mouse = button(SDL_MOUSEBUTTONDOWN, 0);
+    const SDL_Event down_touch = button(SDL_MOUSEBUTTONDOWN, SDL_TOUCH_MOUSEID);
+    check(pointer_gone_after(up_mouse, true), "a mouse button released outside the window: the pointer is gone");
+    check(!pointer_gone_after(up_mouse, false), "a mouse button released in the window (a black bar is in the window): the pointer stays");
+    check(pointer_gone_after(up_touch, false) && pointer_gone_after(up_touch, true), "a lifted finger, wherever it was: gone");
+    check(!pointer_gone_after(down_mouse, true) && !pointer_gone_after(down_mouse, false) && !pointer_gone_after(down_touch, false) &&
+              !pointer_gone_after(down_touch, true),
+          "a press is never the end (SDL captures the pointer while a button is held: the drag goes on at the edge)");
+    SDL_Event motion_out{};
+    motion_out.type = SDL_MOUSEMOTION;
+    SDL_Event motion_touch = motion_out;
+    motion_touch.motion.which = SDL_TOUCH_MOUSEID;
+    check(!pointer_gone_after(motion_out, true) && !pointer_gone_after(motion_touch, false) && !pointer_gone_after(k, true) && !pointer_gone_after(w, true),
+          "a motion (SDL sends a LEAVE for an uncaptured pointer that leaves), a key or the wheel is never the end");
+
+    // The grab that the game asks SDL for: fullscreen (SDL's or the system's), never headless; the whole table of the three inputs (SDL applies the request
+    // only while the window has the focus: test 7.8e)
+    int grabbing = 0;
+    for (int bits = 0; bits < 8; ++bits) {
+        const bool sdl_fs = (bits & 1) != 0;
+        const bool os_fs = (bits & 2) != 0;
+        const bool headless = (bits & 4) != 0;
+        const bool want = wants_mouse_grab(sdl_fs, os_fs, headless);
+        if (want) ++grabbing;
+        check(want == (!headless && (sdl_fs || os_fs)), "the grab table, row " + std::to_string(bits));
+    }
+    check(grabbing == 3, "the grab is asked for in exactly 3 of the 8 cases: not headless, and SDL's fullscreen, the system's, or both");
+    check(wants_mouse_grab(true, false, false) && wants_mouse_grab(false, true, false), "SDL's fullscreen (--fullscreen) grabs, and so does a macOS fullscreen Space");
+    check(!wants_mouse_grab(false, false, false), "a window (also a maximized one: that is not fullscreen) does not grab");
+    check(!wants_mouse_grab(true, true, true), "a headless run never grabs");
+    std::printf("[pillarbox] a pointer beyond the picture is on its edge pixel; a release outside the window and a lifted finger end it; fullscreen grabs\n");
+}
+
 }  // namespace
 
 
@@ -1426,6 +1542,7 @@ int main() {
     test_pedestals();
     test_keyboard();
     test_buttons();
+    test_pillarbox();
     std::printf("pointer model: %d checks, %d failures\n", g_checks, g_failures);
     return g_failures == 0 ? 0 : 1;
 }
