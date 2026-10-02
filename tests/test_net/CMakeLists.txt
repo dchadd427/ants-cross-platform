@@ -97,3 +97,19 @@ target_include_directories(test_ws PRIVATE
 )
 
 add_test(NAME test_ws COMMAND test_ws)
+
+add_executable(test_latency
+    test_latency.cpp
+)
+
+target_link_libraries(test_latency PRIVATE
+    ants_net
+    ants_sim
+    ants_assets
+)
+
+target_include_directories(test_latency PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../include
+)
+
+add_test(NAME test_latency COMMAND test_latency)

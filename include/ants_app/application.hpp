@@ -281,6 +281,7 @@ private:
     void net_request_start();                             // START of the leader of a server's room: the request goes to the server; the can't-go cue when there is nobody to play with
     void sync_room_view();
     void render_net_overlay();
+    void render_latency_corner(int32_t version_x, int32_t text_y);       // "ping NN ms" / "delay NN ms" next to the frame rate, in a room and a match of a network game
     void apply_team_names(const std::array<std::string, 4>& names, uint8_t roster);   // simulation texts, HUD labels, results rows
 
     // Computer players (docs/BOTS.md): a game without --bot never creates any of this

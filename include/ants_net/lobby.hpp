@@ -21,6 +21,7 @@
 #include <vector>
 
 #include "ants_net/flood.hpp"
+#include "ants_net/latency.hpp"
 #include "ants_net/protocol.hpp"
 #include "ants_net/transport.hpp"
 
@@ -167,6 +168,7 @@ public:
         uint8_t want_seat{255};              // the seat this guest asks for in Hello (0 .. 3; 255: any). Taken, or the host's: the first free seat
         std::string room;                    // the room of a server (valid_room_code), "" for a LAN / direct host
         std::string token;                   // the credential that came with the room code ("" when none)
+        uint32_t ping_every_ms{1000};        // the guest measures its own round trip to the host this often once it has a seat (the "ping" next to the frame rate)
     };
     enum class Phase : uint8_t { Connecting, Joining, InRoom, Loading, Loaded, Begun, Rejected, Closed };
     struct Event {
@@ -201,6 +203,9 @@ public:
     void report_loaded(bool ok);
     void leave();
     std::vector<Event> take_events();
+    /// This guest's own measurement of its round trip to the host (latency.hpp): it pings the host once a second from the moment it has a seat (the room's host and a
+    /// server's room answer a guest's Ping, so the protocol is unchanged); nothing is measured before the first answer
+    const PingMeter& ping() const noexcept { return ping_; }
 
 private:
     Connection* conn_;
@@ -214,6 +219,9 @@ private:
     uint8_t cancel_player_{255};
     uint32_t joined_at_ms_{0};
     bool joined_stamp_pending_{false};      // the Hello went out through send_hello(): update() stamps the time
+    PingMeter ping_;
+    uint32_t next_ping_ms_{0};
+    bool ping_armed_{false};                // the first ping goes out as soon as the guest has a seat (the deadline is taken from the clock then: clock.hpp)
     std::vector<Event> events_;
 };
 

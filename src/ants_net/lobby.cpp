@@ -528,6 +528,11 @@ void ClientLobby::update(uint32_t now_ms) {
                 if (decode_ping(msg.data(), msg.size(), p)) conn_->send(encode_pong(p));
                 break;
             }
+            case MsgType::Pong: {                    // the answer to this guest's own ping
+                PingMsg p;
+                if (decode_ping(msg.data(), msg.size(), p)) ping_.on_pong(p, now_ms);
+                break;
+            }
             default:
                 break;
         }
@@ -541,6 +546,19 @@ void ClientLobby::update(uint32_t now_ms) {
         conn_->close();
         phase_ = Phase::Closed;
         events_.push_back(Event{Event::Type::Disconnected});
+        return;
+    }
+    // The round trip to the host, measured with a Ping of this guest's own once a second while it waits in the room (the host measures its guests the same way for the
+    // thumbs, but only tells the room when a thumb changes): the same message that a running match uses
+    if ((phase_ == Phase::InRoom || phase_ == Phase::Loading || phase_ == Phase::Loaded) && conn_->is_open()) {
+        if (!ping_armed_) {
+            ping_armed_ = true;
+            next_ping_ms_ = now_ms;
+        }
+        if (time_reached(now_ms, next_ping_ms_)) {
+            conn_->send(encode_ping(ping_.next(now_ms)));
+            next_ping_ms_ = now_ms + cfg_.ping_every_ms;
+        }
     }
 }
 

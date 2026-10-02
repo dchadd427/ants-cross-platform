@@ -4,7 +4,10 @@
 // (SDL is initialised once per process).
 #include "ants_ai/bot_view.hpp"
 #include "ants_app/application.hpp"
+#include "ants_app/fps_overlay.hpp"
 #include "ants_app/lan_list.hpp"
+#include "ants_app/latency_corner.hpp"
+#include "ants_app/version.hpp"
 #include "ants_net/lan.hpp"
 #include "ants_net/netgame.hpp"
 #include "ants_net/protocol.hpp"
@@ -1876,6 +1879,183 @@ void run_window_tests() {
     } TEST_END();
 }
 
+
+// ping and delay next to the frame rate (latency_corner.hpp, ants_net/latency.hpp): what a guest and a host measure in the room and in the match, and what the corner does
+void run_latency_tests() {
+    TEST_CASE("N5.27 Latency: A Guest Measures Its Ping In The Room And Its Ping And The Delay Of Its Own Commands In The Match; The Corner Draws Them; Nothing Waits At The End") {
+        Peer host;
+        ASSERT_TRUE(host.net.host(0, "Alice", true));
+        host.net.set_map("TINY.LVL");
+        ApplicationConfig cfg = headless_config();
+        cfg.net_role = ApplicationConfig::NetRole::Join;
+        cfg.net_address = "127.0.0.1";
+        cfg.net_port = host.net.listen_port();
+        cfg.player_name = "Bob";
+        Application app;
+        ASSERT_TRUE(app.init(cfg));
+        ASSERT_FALSE(app.net()->ping_ms().has_value());                                   // nothing is measured before the guest has a seat
+        ASSERT_FALSE(app.net()->command_delay_ms().has_value());
+        Duo duo{app, host};
+        ASSERT_TRUE(duo.until([&]() { return app.net()->phase() == net::NetGame::Phase::Room && host.net.can_start(); }, 8000));
+        // the room: the guest pings the host once it has a seat (the game's clock is virtual and steps 10 ms: the answer is read one step later)
+        ASSERT_TRUE(duo.until([&]() { return app.net()->ping_ms().has_value(); }, 8000));
+        ASSERT_TRUE(*app.net()->ping_ms() <= 30);
+        ASSERT_FALSE(app.net()->command_delay_ms().has_value());                           // no command yet: "-"
+        app.render_frame();                                                                // the room's corner: one row left of the version
+        // the match
+        uint64_t hash = 0;
+        ASSERT_TRUE(net::hash_file(maps_dir() + "TINY.LVL", hash));
+        ASSERT_TRUE(host.net.start_match(777, hash));
+        ASSERT_TRUE(duo.until([&]() { return app.state() == AppState::Playing && host.net.phase() == net::NetGame::Phase::Playing; }, 8000));
+        ASSERT_TRUE(app.net()->ping_ms().has_value());                                     // the room's measurement carries over to the first moments of the match
+        ASSERT_FALSE(app.net()->command_delay_ms().has_value());
+        uint32_t next = 0;
+        for (uint32_t t = 0; t < 12000; t += 10) {
+            if (t >= next) {
+                next = t + 700;
+                const auto mine = ants_of(app.sim(), 1);
+                if (!mine.empty()) app.net()->submit(order(1, mine[(t / 700) % mine.size()], static_cast<int16_t>((t / 10) % 31), static_cast<int16_t>((t / 20) % 31)));
+            }
+            duo.step(10);
+        }
+        ASSERT_TRUE(app.net()->ping_ms().has_value() && *app.net()->ping_ms() <= 30);
+        ASSERT_TRUE(app.net()->command_delay_ms().has_value());
+        // the delay: the way there (up to one step), the wait for the next 100 ms turn (0 - 100), the way back (up to one step), and one turn of jitter buffer (100)
+        ASSERT_TRUE(*app.net()->command_delay_ms() >= 100 && *app.net()->command_delay_ms() <= 260);
+        ASSERT_TRUE(app.net()->stalled_ms() < 1000);                                       // turns are flowing: no "Waiting for the other players..."
+        app.render_frame();                                                                // the match's corner: two lines above the row
+        // the results screen of a match shows the readout too (one row: nothing stands in the corner row there)
+        app.return_to_map_select();
+        ASSERT_FALSE(app.network_active());
+        ASSERT_FALSE(app.net() != nullptr && app.net()->ping_ms().has_value());
+    } TEST_END();
+
+    TEST_CASE("N5.28 Latency: A Host's Ping Is 0 (it has no link to itself), The Delay Of Its Own Commands Is The Wait For The Seal Plus One Turn Of Buffer") {
+        ApplicationConfig cfg = headless_config();
+        cfg.net_role = ApplicationConfig::NetRole::Host;
+        cfg.net_port = 0;
+        cfg.net_loopback_only = true;
+        cfg.player_name = "Alice";
+        Application app;
+        ASSERT_TRUE(app.init(cfg));
+        ASSERT_TRUE(app.net()->ping_ms().has_value() && *app.net()->ping_ms() == 0);        // in the room, alone
+        ASSERT_FALSE(app.net()->command_delay_ms().has_value());
+        int32_t tiny = -1;
+        for (size_t i = 0; i < app.map_select().get_maps().size(); ++i) {
+            if (app.map_select().get_maps()[i].filename == "TINY.LVL") tiny = static_cast<int32_t>(i);
+        }
+        ASSERT_TRUE(tiny >= 0);
+        app.map_select().set_selected_index(tiny);
+        Peer bob;
+        ASSERT_TRUE(bob.net.join("127.0.0.1", app.net()->listen_port(), "Bob"));
+        Duo duo{app, bob};
+        ASSERT_TRUE(duo.until([&]() { return app.net()->can_start(); }, 8000));
+        app.map_select().handle_key_down(SDLK_RETURN);
+        ASSERT_TRUE(duo.until([&]() { return app.state() == AppState::Playing && bob.net.phase() == net::NetGame::Phase::Playing; }, 8000));
+        ASSERT_TRUE(app.net()->ping_ms().has_value() && *app.net()->ping_ms() == 0);        // in the match
+        uint32_t next = 0;
+        for (uint32_t t = 0; t < 12000; t += 10) {
+            if (t >= next) {
+                next = t + 700;
+                const auto mine = ants_of(app.sim(), 0);
+                if (!mine.empty()) app.net()->submit(order(0, mine[(t / 700) % mine.size()], static_cast<int16_t>((t / 10) % 31), static_cast<int16_t>((t / 20) % 31)));
+            }
+            duo.step(10);
+        }
+        ASSERT_TRUE(app.net()->command_delay_ms().has_value());
+        ASSERT_TRUE(*app.net()->command_delay_ms() >= 100 && *app.net()->command_delay_ms() <= 220);       // 0 - 100 for the seal, 100 for the buffer, one step of rounding
+        app.render_frame();                                                                  // the host's corner: "ping 0 ms", its own delay
+    } TEST_END();
+
+    TEST_CASE("N5.30 The Network Keeps Real Time: A Frame Of 400 ms Lets The Runner Pay Back Four Turns At Once (the local simulation's clamp of 100 ms left them standing in the queue for good)") {
+        Peer host;
+        ASSERT_TRUE(host.net.host(0, "Alice", true));
+        host.net.set_map("TINY.LVL");
+        ApplicationConfig cfg = headless_config();
+        cfg.net_role = ApplicationConfig::NetRole::Join;
+        cfg.net_address = "127.0.0.1";
+        cfg.net_port = host.net.listen_port();
+        cfg.player_name = "Bob";
+        Application app;
+        ASSERT_TRUE(app.init(cfg));
+        Duo duo{app, host};
+        ASSERT_TRUE(duo.until([&]() { return app.net()->phase() == net::NetGame::Phase::Room && host.net.can_start(); }, 8000));
+        uint64_t hash = 0;
+        ASSERT_TRUE(net::hash_file(maps_dir() + "TINY.LVL", hash));
+        ASSERT_TRUE(host.net.start_match(4242, hash));
+        ASSERT_TRUE(duo.until([&]() { return app.state() == AppState::Playing && host.net.phase() == net::NetGame::Phase::Playing; }, 8000));
+        duo.step(1000);                                                                   // the match runs: one turn of buffer
+        ASSERT_TRUE(app.net()->stalled_ms() < 1000);
+        // the window is busy for 400 ms (a hitch): the host goes on sealing, its turns wait in the socket
+        for (int i = 0; i < 40; ++i) {
+            host.now += 10;
+            host.update();
+            std::this_thread::sleep_for(std::chrono::microseconds(300));
+        }
+        const uint32_t before = app.net()->turns_executed();
+        app.run_frame_with_delta(0.4f);                                                   // the frame that follows the hitch: 400 ms of real time
+        const uint32_t paid_back = app.net()->turns_executed() - before;
+        ASSERT_TRUE(paid_back >= 3);                                                      // 400 ms of ticks at once: four turns (a clamp to 100 ms would run one)
+        duo.step(1000);
+        ASSERT_TRUE(app.net()->stalled_ms() < 1000);
+    } TEST_END();
+
+    TEST_CASE("N5.29 Latency Corner With The Real Font: The Row Of The Setup And Results Screens And The Two Lines Of The Match Clear The Version, The Frame Rate, The Sparkline And The Score Boxes") {
+        ApplicationConfig cfg = headless_config();
+        Application app;
+        ASSERT_TRUE(app.init(cfg));
+        Renderer& r = app.renderer();
+        const int32_t text_h = r.get_text_height(FontSize::Px12);
+        const int32_t fps_w = r.get_text_width("144 FPS", FontSize::Px12);                  // the widest frame rate text that matters (three digits)
+        const int32_t text_x = 632 - fps_w;
+        const int32_t spark_x = text_x - 36 - 6;
+        const int32_t ver_w = r.get_text_width(std::string(ants::VERSION_STRING), FontSize::Px12);
+        const int32_t ver_x = spark_x - ver_w - 6;
+        const int32_t text_y = FPS_OVERLAY_SPARK_Y + (FPS_OVERLAY_SPARK_H - text_h) / 2;
+        const int32_t widest = r.get_text_width(ping_text(LATENCY_SHOWN_MAX_MS), FontSize::Px12) + LATENCY_TEXT_GAP + r.get_text_width(delay_text(LATENCY_SHOWN_MAX_MS), FontSize::Px12);
+        struct Box { int32_t x, y, w, h; };
+        auto overlap = [](const Box& a, const Box& b) { return a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h; };
+        for (const uint32_t ms : {0u, 7u, 42u, 230u, 1234u, 9999u}) {
+            const std::string p = ping_text(ms);
+            const std::string d = delay_text(ms);
+            const int32_t pw = r.get_text_width(p, FontSize::Px12);
+            const int32_t dw = r.get_text_width(d, FontSize::Px12);
+            const Box version{ver_x, text_y, ver_w, text_h};
+            const Box plate{spark_x - 1, FPS_OVERLAY_TOP, 36 + 2, FPS_OVERLAY_BOTTOM - FPS_OVERLAY_TOP};
+            const Box fps{text_x, text_y, fps_w, text_h};
+            // setup and results screens: one row, left of the version; the prompt box of the setup screen (36 .. 329, picture to 336, rows 441 .. 468) is further left
+            for (const int32_t limit : {LATENCY_LEFT_LIMIT_SETUP, LATENCY_LEFT_LIMIT_RESULTS}) {
+                const LatencyCornerLayout l = layout_latency_corner(pw, dw, widest, text_h, ver_x, text_y, limit);
+                ASSERT_FALSE(l.stacked);
+                const Box ping{l.ping_x, l.ping_y, pw, text_h};
+                const Box delay{l.delay_x, l.delay_y, dw, text_h};
+                ASSERT_FALSE(overlap(ping, version) || overlap(delay, version) || overlap(ping, plate) || overlap(delay, plate) || overlap(ping, fps) || overlap(delay, fps) || overlap(ping, delay));
+                ASSERT_TRUE(l.ping_x >= limit);
+                ASSERT_TRUE(l.ping_y == text_y && l.delay_y == text_y);                      // level with the frame rate, in the corner row
+            }
+            ASSERT_TRUE(layout_latency_corner(pw, dw, widest, text_h, ver_x, text_y, LATENCY_LEFT_LIMIT_SETUP).ping_x > 336);                  // right of the prompt box's picture
+            // match: two lines above the row. They clear the version, the sparkline plate, the frame rate and the score boxes (bottom row, to x = 458) and the chat input box
+            // (x 479 .. 622, rows 423 .. 436); the only HUD piece they touch is the right edge of the "Send to: All" button (x 532 .. 576, rows 443 .. 467), by at most 7 pixels
+            const LatencyCornerLayout m = layout_latency_corner(pw, dw, widest, text_h, ver_x, text_y, LATENCY_LEFT_LIMIT_MATCH);
+            ASSERT_TRUE(m.stacked);
+            const Box ping{m.ping_x, m.ping_y, pw, text_h};
+            const Box delay{m.delay_x, m.delay_y, dw, text_h};
+            ASSERT_FALSE(overlap(ping, version) || overlap(delay, version) || overlap(ping, plate) || overlap(delay, plate) || overlap(ping, fps) || overlap(delay, fps) || overlap(ping, delay));
+            const Box score_boxes{0, 461, 458, 19};
+            const Box chat_input{479, 423, 143, 14};
+            ASSERT_FALSE(overlap(ping, score_boxes) || overlap(delay, score_boxes) || overlap(ping, chat_input) || overlap(delay, chat_input));
+            // the "Send to: All" button's box is x 532 .. 575, rows 443 .. 466 (its picture ends a pixel or two inside it): the lines end at the frame rate's right edge, so a longer
+            // text reaches further into the box: "delay 230 ms" 7 px, "ping 230 ms" 2, a number of one or two digits none, "delay 9999 ms" 13 (and "ping 9999 ms" 9)
+            const Box all_button{532, 443, 44, 24};
+            auto touches = [&](const Box& line) { return std::max(0, std::min(all_button.x + all_button.w, line.x + line.w) - std::max(all_button.x, line.x)); };
+            ASSERT_TRUE(touches(delay) <= 13 && touches(ping) <= 9);
+            ASSERT_TRUE(ms >= 1000 || (touches(delay) <= 7 && touches(ping) <= 2));
+            ASSERT_TRUE(ms >= 100 || (touches(delay) == 0 && touches(ping) == 0));
+            ASSERT_TRUE(m.ping_x >= 0 && m.delay_x >= 0 && m.delay_y + text_h <= 480 && m.ping_y >= 436);
+        }
+    } TEST_END();
+}
+
 }  // namespace
 
 int main() {
@@ -1887,6 +2067,7 @@ int main() {
     run_host_tests();
     run_guest_tests();
     run_leader_tests();
+    run_latency_tests();
     std::cout << "\n=======================================================\n Total Test Cases: " << g_test_count << "\n Total Assertions: " << g_assert_count
               << "\n Failed:           " << g_test_failures << "\n=======================================================\n";
     return g_test_failures == 0 ? 0 : 1;

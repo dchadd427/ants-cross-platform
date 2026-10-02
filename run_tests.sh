@@ -177,6 +177,7 @@ CHALLENGER_M2_2_STATUS=0
 MAP_SWEEP_STATUS=0
 BOT_ARENA_STATUS=0
 AI_WORKER_STATUS=0
+LATENCY_STATUS=0
 SERVER_STATUS=0
 AI_STATUS=0
 SERVER_E2E_STATUS=0
@@ -406,6 +407,13 @@ if [ "$RUN_SIM" -eq 1 ]; then
         env -u W_ONLY -u W_SKIP -u ANTS_TEST_FILTER "./$BUILD_DIR/tests/test_ai/test_ai_worker"
     fi
     AI_WORKER_STATUS=$?
+
+    echo ""
+    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
+    echo -e "${BOLD}${BLUE}>>> 2.23 RUNNING PING, DELAY AND WAITING SUITE (the meters, a simulated link, the buffer after a stall)...${RESET}"
+    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
+    "./$BUILD_DIR/tests/test_net/test_latency"
+    LATENCY_STATUS=$?
 fi
 
 # 5. Execute Application Integration Tests
@@ -723,6 +731,13 @@ if [ "$RUN_SIM" -eq 1 ]; then
         echo -e " 2.22 Worker Bot (test_ai_worker):                   ${GREEN}PASSED${RESET}"
     else
         echo -e " 2.22 Worker Bot (test_ai_worker):                   ${RED}FAILED (exit code ${AI_WORKER_STATUS})${RESET}"
+        TOTAL_FAILED=$((TOTAL_FAILED + 1))
+    fi
+
+    if [ "$LATENCY_STATUS" -eq 0 ]; then
+        echo -e " 2.23 Ping, Delay, Waiting (test_latency):           ${GREEN}PASSED${RESET}"
+    else
+        echo -e " 2.23 Ping, Delay, Waiting (test_latency):           ${RED}FAILED (exit code ${LATENCY_STATUS})${RESET}"
         TOTAL_FAILED=$((TOTAL_FAILED + 1))
     fi
 fi

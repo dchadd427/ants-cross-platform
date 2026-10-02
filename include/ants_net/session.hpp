@@ -26,6 +26,7 @@
 #include <vector>
 
 #include "ants_net/flood.hpp"
+#include "ants_net/latency.hpp"
 #include "ants_net/lockstep.hpp"
 #include "ants_net/protocol.hpp"
 #include "ants_net/sequencer.hpp"
@@ -114,6 +115,9 @@ public:
     LockstepRunner& runner() noexcept { return *runner_; }
     uint8_t epoch() const noexcept { return cfg_.epoch; }
     uint8_t host_player() const noexcept { return cfg_.host_player; }
+    /// The delay of the host's own commands (latency.hpp): from the hand-over to the sequencer to the tick that applies them on this machine. Nothing is measured for a
+    /// host without a seat.
+    const CommandDelayMeter& command_delay() const noexcept { return delay_; }
 
 private:
     struct Client {
@@ -146,6 +150,7 @@ private:
     bool started_{false};
     bool frozen_{false};
     uint32_t last_ms_{0};
+    CommandDelayMeter delay_;
     uint32_t next_seal_ms_{0};
     uint8_t stall_player_{255};              // the seat that holds the match up, and since when (laggard_drop_ms)
     uint32_t stall_since_ms_{0};
@@ -202,7 +207,12 @@ public:
     bool desynced() const noexcept { return desynced_; }
     const DesyncMsg& desync() const noexcept { return desync_; }
     bool connected() const noexcept { return conn_ != nullptr && conn_->is_open(); }
-    uint32_t rtt_ms() const noexcept { return rtt_ms_; }
+    /// The last round trip to the host that a Pong measured (0 before the first one)
+    uint32_t rtt_ms() const noexcept { return ping_.last_ms(); }
+    /// The round trip to the host as this machine measures it: the mean of the last few answers to the once-a-second pings (latency.hpp)
+    const PingMeter& ping() const noexcept { return ping_; }
+    /// The delay of this player's commands: from the send to the tick that applies them on this machine (latency.hpp)
+    const CommandDelayMeter& command_delay() const noexcept { return delay_; }
     LockstepRunner& runner() noexcept { return *runner_; }
 
     uint8_t player() const noexcept { return cfg_.player; }
@@ -216,7 +226,10 @@ public:
     bool electing() const noexcept { return mode_ == Mode::Electing || mode_ == Mode::Following || mode_ == Mode::Fetching; }
     const Promotion& promotion() const noexcept { return promotion_; }
     /// For promote_to_host(): the runner leaves with the promotion
-    std::unique_ptr<LockstepRunner> release_runner() { return std::move(runner_); }
+    std::unique_ptr<LockstepRunner> release_runner() {
+        if (runner_) runner_->set_on_applied(nullptr);    // the observer belongs to this session, which is about to go
+        return std::move(runner_);
+    }
 
 private:
     struct Answer {
@@ -263,8 +276,8 @@ private:
     uint32_t last_ms_{0};
     uint32_t next_ping_ms_{0};
     uint32_t next_peer_ping_ms_{0};
-    uint32_t ping_nonce_{0};
-    uint32_t rtt_ms_{0};
+    PingMeter ping_;
+    CommandDelayMeter delay_;
     uint32_t last_heard_ms_{0};
 
     // host migration

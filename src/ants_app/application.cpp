@@ -1,6 +1,7 @@
 #include "ants_app/application.hpp"
 #include "ants_app/pointer_clamp.hpp"
 #include "ants_app/fps_overlay.hpp"
+#include "ants_app/latency_corner.hpp"
 #include "ants_app/edge_scroll.hpp"
 #include "ants_app/ui_anim.hpp"
 #include "ants_app/version.hpp"
@@ -883,6 +884,10 @@ void Application::return_to_map_select() {
 void Application::run_frame_with_delta(float delta_time) {
     if (!is_running_) return;
 
+    // The network's clock keeps real time (a frame counts for at most a second of it), unlike the local simulation's below: the lock-step runner has its own bounds (it pays
+    // back at most 400 ms and runs the rest down at double speed). With the clamp a hitch of 400 ms left three turns standing in its queue for the rest of the match.
+    const float net_delta_time = std::min(delta_time, 1.0f);
+
     // Clamp delta_time to prevent physics / tick spiral when tab or window is backgrounded
     if (delta_time > 0.100f) {
         delta_time = 0.100f;
@@ -911,7 +916,7 @@ void Application::run_frame_with_delta(float delta_time) {
 
     handle_camera_panning(delta_time);
 
-    pump_network(delta_time);                   // a network match has no pause: it keeps running while the window is in the background
+    pump_network(net_delta_time);               // a network match has no pause: it keeps running while the window is in the background
 
     if (state_ == AppState::MapSelect) map_select_.update(delta_time);
     update_results(delta_time);
@@ -1589,6 +1594,21 @@ void Application::render_net_overlay() {
     renderer_->draw_text(text, x, y, colour, FontSize::Px14);
 }
 
+// The network's part of the corner (ants_app/latency_corner.hpp): "ping NN ms" and "delay NN ms" while a room or a match of a network game is on screen. A game of one
+// machine, the loading and quick help screens, a connection that is being made, one that failed or is over draw nothing here.
+void Application::render_latency_corner(int32_t version_x, int32_t text_y) {
+    if (!network_active()) return;
+    const CornerScreen screen = state_ == AppState::MapSelect ? CornerScreen::Setup
+                                : state_ == AppState::Playing ? (scorecard_.is_open() ? CornerScreen::Results : CornerScreen::Match)
+                                                              : CornerScreen::Other;
+    const std::optional<int32_t> left_limit = latency_left_limit(true, net_->phase(), screen);
+    if (!left_limit) return;
+    LatencyReadout readout;
+    readout.ping_ms = net_->ping_ms();
+    readout.delay_ms = net_->command_delay_ms();
+    draw_latency_corner(*renderer_, readout, version_x, text_y, *left_limit);
+}
+
 void Application::render_frame() {
     renderer_->begin_frame();
 
@@ -1665,6 +1685,8 @@ void Application::render_frame() {
 
         renderer_->fill_rect(spark_x + i, bar_y, 1, bar_h, bar_color);
     }
+
+    render_latency_corner(ver_x, text_y);
 
     // Authentic Software Cursor (Matching Ants.exe 0x1026c5c / 0x1027e65)
     CursorType cur = CursorType::Normal;

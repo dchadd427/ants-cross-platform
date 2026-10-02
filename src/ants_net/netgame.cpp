@@ -271,6 +271,20 @@ bool NetGame::request_start() {
     return client_lobby_->request_start();
 }
 
+std::optional<uint32_t> NetGame::ping_ms() const {
+    if (role_ == Role::None) return std::nullopt;
+    if (is_host()) return 0u;                                                    // the room's owner, or the guest that took over: no link to measure
+    if (client_session_ && client_session_->ping().measured()) return client_session_->ping().ping_ms();
+    if (client_lobby_ && client_lobby_->ping().measured()) return client_lobby_->ping().ping_ms();   // in the room, and in the first moments of the match
+    return std::nullopt;
+}
+
+std::optional<uint32_t> NetGame::command_delay_ms() const {
+    const CommandDelayMeter* meter = host_session_ ? &host_session_->command_delay() : (client_session_ ? &client_session_->command_delay() : nullptr);
+    if (meter == nullptr || !meter->measured()) return std::nullopt;
+    return meter->delay_ms();
+}
+
 void NetGame::update(uint32_t now_ms) {
     now_ = now_ms;
     if (role_ == Role::Host) {
@@ -280,10 +294,6 @@ void NetGame::update(uint32_t now_ms) {
         update_client();
     }
     refresh_status();
-    // how long the game has been waiting for the next turn
-    const bool stalled_now = phase_ == Phase::Playing && stalled();
-    if (stalled_now && !stall_active_) stall_since_ms_ = now_ms;
-    stall_active_ = stalled_now;
 }
 
 void NetGame::set_discovery(uint16_t udp_port, bool loopback_only) {
@@ -758,10 +768,13 @@ void NetGame::freeze() {
 
 bool NetGame::stalled() const {
     const LockstepRunner* r = runner();
-    return r != nullptr && r->stalled();
+    return phase_ == Phase::Playing && r != nullptr && r->stalled();
 }
 
-uint32_t NetGame::stalled_ms() const { return stall_active_ ? now_ - stall_since_ms_ : 0u; }
+uint32_t NetGame::stalled_ms() const {
+    const LockstepRunner* r = runner();
+    return phase_ == Phase::Playing && r != nullptr ? r->stalled_ms() : 0u;
+}
 
 uint8_t NetGame::laggard() const { return host_session_ ? host_session_->laggard() : uint8_t{255}; }
 

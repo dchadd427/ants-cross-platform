@@ -18,8 +18,10 @@ HostSession::HostSession(sim::SimulationEngine& sim, Config config)
     : HostSession(sim, config, std::make_unique<LockstepRunner>(sim, config.runner)) {}
 
 HostSession::HostSession(sim::SimulationEngine& sim, Config config, std::unique_ptr<LockstepRunner> runner)
-    : cfg_(config), sim_(&sim), sequencer_(config.sequencer), runner_(std::move(runner)) {
+    : cfg_(config), sim_(&sim), sequencer_(config.sequencer), runner_(std::move(runner)), delay_(config.host_player) {
     sequencer_.set_host_player(cfg_.host_player);
+    // the delay of the host's own commands: the tick that applies one is read off the runner (a runner that a promoted guest brings has its old session's observer replaced)
+    runner_->set_on_applied([this](const sim::Command& c) { delay_.on_applied(c, last_ms_); });
 }
 
 void HostSession::add_client(uint8_t player, Connection* connection) {
@@ -102,7 +104,8 @@ void HostSession::send_turns(Connection* conn, uint32_t from_turn, uint32_t to_t
 
 void HostSession::submit_local(sim::Command command) {
     if (!started_ || seatless()) return;
-    sequencer_.submit(cfg_.host_player, std::move(command));
+    command.issuer = cfg_.host_player;
+    if (sequencer_.submit(cfg_.host_player, command)) delay_.on_sent(command);     // (a refused command never reaches a turn: nothing to measure)
 }
 
 void HostSession::chat_local(const std::string& text, bool team) {
@@ -245,6 +248,7 @@ void HostSession::update(uint32_t now_ms) {
     if (!started_) return;
     const uint32_t dt = now_ms - last_ms_;
     last_ms_ = now_ms;
+    delay_.on_frame(now_ms);
     poll_clients();
     for (uint8_t p = 0; p < sim::MAX_PLAYERS; ++p) {         // a peer that says nothing for a minute is gone (its ack and ping stop)
         if (clients_[p].present && now_ms - clients_[p].last_heard_ms > cfg_.silence_timeout_ms) drop(p);
@@ -279,7 +283,9 @@ void HostSession::update(uint32_t now_ms) {
 // ------------------------------------------------------------------------------------------------
 
 ClientSession::ClientSession(sim::SimulationEngine& sim, Config config)
-    : cfg_(config), runner_(std::make_unique<LockstepRunner>(sim, config.runner)), host_seat_(config.host) {}
+    : cfg_(config), runner_(std::make_unique<LockstepRunner>(sim, config.runner)), delay_(config.player), host_seat_(config.host) {
+    runner_->set_on_applied([this](const sim::Command& c) { delay_.on_applied(c, last_ms_); });    // the delay of this player's commands (latency.hpp)
+}
 
 void ClientSession::set_peer(uint8_t seat, Connection* link) {
     if (seat >= sim::MAX_PLAYERS || seat == cfg_.player || seat == host_seat_ || link == nullptr) return;
@@ -303,7 +309,9 @@ bool ClientSession::submit(sim::Command command) {
     command.issuer = cfg_.player;
     CommandMsg m;
     m.command = std::move(command);
-    return conn_->send(encode(m));
+    if (!conn_->send(encode(m))) return false;
+    delay_.on_sent(m.command);                       // measured from now to the tick that applies it (its send time is the clock of the frame that sends it)
+    return true;
 }
 
 void ClientSession::leave() {
@@ -392,7 +400,7 @@ void ClientSession::poll_host(uint32_t now_ms) {
             }
             case MsgType::Pong: {
                 PingMsg p;
-                if (decode_ping(msg.data(), msg.size(), p) && p.nonce == ping_nonce_) rtt_ms_ = now_ms - p.sent_ms;
+                if (decode_ping(msg.data(), msg.size(), p)) ping_.on_pong(p, now_ms);
                 break;
             }
             default:
@@ -702,6 +710,7 @@ void ClientSession::update(uint32_t now_ms) {
     if (!started_ || mode_ == Mode::Promoted || runner_ == nullptr) return;
     const uint32_t dt = now_ms - last_ms_;
     last_ms_ = now_ms;
+    delay_.on_frame(now_ms);
     if (mode_ == Mode::Normal) poll_host(now_ms);    // first: a host whose link has closed must be known as gone before a peer's proposal is judged
     poll_peers(now_ms);
     if (mode_ == Mode::Normal) poll_host(now_ms);    // and again: what the new host sent behind its Resume, or what arrived meanwhile
@@ -720,10 +729,7 @@ void ClientSession::update(uint32_t now_ms) {
         }
     }
     if (mode_ == Mode::Normal && connected() && time_reached(now_ms, next_ping_ms_)) {
-        PingMsg p;
-        p.nonce = ++ping_nonce_;
-        p.sent_ms = now_ms;
-        conn_->send(encode_ping(p));
+        conn_->send(encode_ping(ping_.next(now_ms)));
         next_ping_ms_ = now_ms + cfg_.ping_every_ms;
     }
     if (mode_ != Mode::Lost && time_reached(now_ms, next_peer_ping_ms_)) {      // keeps the links to the other guests alive and measured

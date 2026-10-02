@@ -20,6 +20,7 @@
 #include <cstdint>
 #include <functional>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -119,6 +120,14 @@ public:
     /// True means the request was sent, not that the server will start: it starts at once when it can, otherwise nothing happens.
     bool request_start();
 
+    // ---- what the network costs this player (latency.hpp), shown next to the frame rate -----------------------------------------------------------
+    /// The round trip to the host in ms, as this machine measures it (the mean of its last few Ping / Pong round trips, in the room and in the match). The host has no
+    /// link to itself: 0 (a guest that took over as host too). Empty before the first answer came back, and when there is nothing to measure.
+    std::optional<uint32_t> ping_ms() const;
+    /// The delay of this player's own commands in ms: the real time from sending one (a guest) or handing it to the sequencer (the host) to the tick that applies it on
+    /// this machine, the mean over the last ten. Empty until a command has been applied.
+    std::optional<uint32_t> command_delay_ms() const;
+
     // ---- the host's controls in the room ---------------------------------------------------------------------------------------------------------
     /// Host only: the map every machine will load (a plain .LVL file name of the maps folder) and the Fog of War option
     void set_map(const std::string& map_name);
@@ -152,9 +161,10 @@ public:
     /// The match is over: the host stops sealing turns
     void freeze();
 
-    /// True while the next turn is due and has not arrived (the game shows "waiting")
+    /// True while the runner stands at a turn boundary and the next turn has not arrived (see LockstepRunner::stalled)
     bool stalled() const;
-    /// How long the runner has been stalled (0 when it is not)
+    /// How long the runner has stood still for want of a turn: the time since it last ran a tick (0 while it runs; the application shows "Waiting for the other players..." at
+    /// one second)
     uint32_t stalled_ms() const;
     /// The host: the seat that holds the game up (255 when none does)
     uint8_t laggard() const;
@@ -205,8 +215,6 @@ private:
     bool desync_reported_{false};
     uint8_t known_host_{255};               // the seat of the host as far as this machine knows (changes with a host migration)
     uint16_t peer_port_{0};                 // guest: the port on which the other guests connect (announced in Hello)
-    uint32_t stall_since_ms_{0};
-    bool stall_active_{false};
     uint16_t discovery_port_{kLanDiscoveryPort};   // 0: the room is not announced
     bool discovery_loopback_only_{false};
     [[maybe_unused]] bool room_loopback_only_{false};   // host(): the door accepts this machine only, so the announcements stay here too (native builds)

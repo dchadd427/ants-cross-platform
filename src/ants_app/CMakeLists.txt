@@ -42,6 +42,7 @@ add_library(ants_app STATIC
     map_select.cpp
     options_screen.cpp
     text_layout.cpp
+    latency_corner.cpp
     application.cpp
 )
 
