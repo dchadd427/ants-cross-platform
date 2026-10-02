@@ -11,7 +11,7 @@
 namespace ants::net {
 
 namespace {
-constexpr size_t kMaxQueuedMessages = 4096;     // a page that is not drawn (a hidden tab) receives but does not poll: a peer that floods it fails the connection
+constexpr size_t kMaxQueuedMessages = 4096;     // messages that wait for the game to poll them (it polls from every frame and, in a hidden page, from every message: set_on_wake): a peer that floods the page fails the connection
 constexpr size_t kMaxUrlChars = 512;
 }  // namespace
 

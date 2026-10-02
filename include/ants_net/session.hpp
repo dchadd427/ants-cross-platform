@@ -257,6 +257,15 @@ public:
     void finish() noexcept { finished_ = true; }
 
     void update(uint32_t now_ms);
+    /// `gap_ms` of real time went by that the clock of update() did not count (a page that the browser did not wake for a while: the application hands the session at most a
+    /// second per wake-up, so that the lock-step runner is not paid back more at once). A host that said nothing in the update that has just run (the link is read first: what
+    /// waited was heard) has been silent for that time too, and its silence is counted in real time. But only a host that has been ASKED can be called silent: a page that
+    /// sleeps sends no pings, and a live host that holds its turns says nothing either. So a host that has not been asked since it was last heard (no ping went out after it)
+    /// gets the gap only up to kAskGraceMs short of the limit (the update that has just run sent the ping); its answer is a message, which wakes the page and is heard, and a
+    /// host that does not answer is called silent by the next wake-up (the gap counts in full once a ping is outstanding). True when the stamp was touched.
+    bool note_gap(uint32_t gap_ms);
+    /// How long a host has to answer the ping that asks whether it lives, before the silence of the gap is held against it (see note_gap)
+    static constexpr uint32_t kAskGraceMs = 3000;
 
     void set_on_chat(std::function<void(const ChatMsg&)> fn) { on_chat_ = std::move(fn); }
 
@@ -362,6 +371,8 @@ private:
     std::array<LagNotice, sim::MAX_PLAYERS> lag_{};     // the notices about the other seats
     LagNotice self_lag_{};                              // the notice about this seat (self_lag_behind_ms)
     LostReason lost_reason_{LostReason::None};
+    bool asked_{false};                  // a ping went out (the oldest of them: asked_ms_) and nothing at all has come from the host since (note_gap)
+    uint32_t asked_ms_{0};
 
     // host migration
     Mode mode_{Mode::Normal};

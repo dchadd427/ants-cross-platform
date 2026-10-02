@@ -873,17 +873,36 @@
             document.addEventListener('visibilitychange', function() { if (!document.hidden) check(); });
         })();
 
-        // A hidden page (another tab in front, a minimised window): the browser stops requestAnimationFrame and slows the page's timers (to once a second; Chrome to once a minute
-        // after five quiet minutes), so a network match cannot depend on the frame loop. The game drives itself from the messages of the game server instead: each one wakes it
-        // (src/ants_net/wasm_ws.cpp), and Application::background_pump (src/ants_app/application.cpp, which also follows visibilitychange by itself) executes the ticks that are due.
-        // This timer is the fallback for a quiet server; the game does nothing when the page is shown or when there is no network match. window.antsBackgroundTimer is its handle.
-        window.antsBackgroundTimer = setInterval(function() {
-            try {
-                if (document.hidden && typeof Module !== 'undefined' && Module._ants_background_pump) Module._ants_background_pump();
-            } catch (e) {
-                clearInterval(window.antsBackgroundTimer);                  // the game has stopped (an abort): there is nothing more to wake
+        // A hidden page (another tab in front, a minimised window): the browser stops requestAnimationFrame and slows the page's timers (to once a second; then Chrome to once a
+        // minute: measured in headless Chrome 154, the throttle began after about 58 s hidden; Chrome documents it for a page hidden for five minutes), so a network match cannot
+        // depend on the frame loop. The game drives itself from the messages of the game server instead: each one wakes it (src/ants_net/wasm_ws.cpp), and
+        // Application::background_pump (src/ants_app/application.cpp, which also follows visibilitychange by itself) executes the ticks that are due.
+        // A timer wakes it as well, for a server that is quiet (it pings the server, which answers; the game measures the server's silence in real time, see
+        // ClientSession::note_gap). A Worker's timer is not slowed in a hidden page (measured in headless Chrome 154: an interval of 250 ms in a Worker delivered 18 to 40 messages in
+        // every 10 s of 150 s hidden, while the page's own interval ran once a minute from the 58th second), so the Worker's messages are that timer. Without a Worker (the browser
+        // refuses it) the page's own interval does it, slowed. The game does nothing when the page is shown or when there is no network match.
+        // window.antsBackgroundWorker and window.antsBackgroundTimer are the handles.
+        (function() {
+            function wake() {
+                try {
+                    if (document.hidden && typeof Module !== 'undefined' && Module._ants_background_pump) Module._ants_background_pump();
+                } catch (e) {
+                    stop();                                                 // the game has stopped (an abort): there is nothing more to wake
+                }
             }
-        }, 250);
+            function stop() {
+                if (window.antsBackgroundWorker) { window.antsBackgroundWorker.terminate(); window.antsBackgroundWorker = null; }
+                if (window.antsBackgroundTimer) { clearInterval(window.antsBackgroundTimer); window.antsBackgroundTimer = null; }
+            }
+            try {
+                var source = 'setInterval(function () { postMessage(0); }, 250);';
+                window.antsBackgroundWorker = new Worker(URL.createObjectURL(new Blob([source], { type: 'text/javascript' })));
+                window.antsBackgroundWorker.onmessage = wake;
+            } catch (e) {
+                window.antsBackgroundWorker = null;
+                window.antsBackgroundTimer = setInterval(wake, 250);
+            }
+        })();
 
         document.getElementById('fullscreen-btn').addEventListener('click', function() {
             var el = document.getElementById('game-container');

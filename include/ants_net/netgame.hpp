@@ -98,6 +98,9 @@ public:
 
     // ---- every frame -----------------------------------------------------------------------------------------------------------------------------
     void update(uint32_t now_ms);
+    /// Real time that the clock of update() did not count (the browser build, a hidden page: the application hands the network at most a second per wake-up): a host that
+    /// said nothing in the last update has been silent for `ms` more (ClientSession::note_gap), and the session judges it now. Only a match as a guest is touched.
+    void note_gap(uint32_t ms);
     std::vector<Event> take_events();
     /// The browser build only: called from the browser's event loop when the server's connection has news (a message arrived, an error, the link closed), whether or
     /// not the page draws frames. A hidden page runs none and the browser slows its timers, but the WebSocket's events still come: the application makes its

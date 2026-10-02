@@ -348,6 +348,7 @@ void ClientSession::start(uint32_t now_ms) {
     started_ = true;
     last_ms_ = now_ms;
     last_heard_ms_ = now_ms;
+    asked_ = false;
     next_ping_ms_ = now_ms;
     next_peer_ping_ms_ = now_ms;
     next_request_ok_ms_.fill(now_ms);                // (deadlines are set from the clock, never left at 0: see clock.hpp)
@@ -450,6 +451,7 @@ void ClientSession::poll_host(uint32_t now_ms) {
             break;
         }
         last_heard_ms_ = now_ms;
+        asked_ = false;                              // whatever the host says, it lives
         switch (peek_type(msg)) {
             case MsgType::Turn: {
                 TurnMsg t;
@@ -618,6 +620,7 @@ void ClientSession::on_resume(uint8_t seat, const ResumeMsg& m, uint32_t now_ms)
     proposed_ = false;
     expected_mask_ = 0;
     last_heard_ms_ = now_ms;
+    asked_ = false;
     next_ping_ms_ = now_ms;
 }
 
@@ -819,6 +822,10 @@ void ClientSession::update(uint32_t now_ms) {
     if (mode_ == Mode::Normal && connected() && time_reached(now_ms, next_ping_ms_)) {
         conn_->send(encode_ping(ping_.next(now_ms)));
         next_ping_ms_ = now_ms + cfg_.ping_every_ms;
+        if (!asked_) {                                 // the host is asked whether it lives: the oldest question that nothing has answered yet (note_gap)
+            asked_ = true;
+            asked_ms_ = now_ms;
+        }
     }
     if (mode_ != Mode::Lost && time_reached(now_ms, next_peer_ping_ms_)) {      // keeps the links to the other guests alive and measured
         PingMsg p;
@@ -830,6 +837,25 @@ void ClientSession::update(uint32_t now_ms) {
         }
         next_peer_ping_ms_ = now_ms + cfg_.ping_every_ms;
     }
+}
+
+// A host that said nothing in the update that has just run has said nothing in the gap either (a message that arrived meanwhile waited in the link and was read: heard at
+// that update's clock, which is the last of last_ms_). It is held to account only if it was ASKED before: a ping went out in an earlier update and nothing at all has come from
+// the host since, so that the answer is overdue. Otherwise the host had no chance to say that it lives (a sleeping page pings nobody; a host that holds its turns is quiet
+// and answers pings): the gap counts only up to kAskGraceMs short of the limit. The update that has just run sent the ping (a wake-up that hands over a gap is more than
+// a ping period after the one before it), the answer, a message, is heard, and a host that stays silent has the gap held against it by the next wake-up. The unsigned
+// arithmetic of the silence test is modular, so the stamp may be taken back below zero.
+bool ClientSession::note_gap(uint32_t gap_ms) {
+    if (!started_ || mode_ != Mode::Normal || gap_ms == 0 || last_heard_ms_ == last_ms_) return false;
+    uint32_t credit = gap_ms;
+    const bool asked_before = asked_ && static_cast<int32_t>(last_ms_ - asked_ms_) > 0;
+    if (!asked_before) {
+        const uint32_t silent_ms = last_ms_ - last_heard_ms_;
+        const uint32_t room = cfg_.host_silence_ms > silent_ms + kAskGraceMs ? cfg_.host_silence_ms - silent_ms - kAskGraceMs : 0u;
+        credit = std::min(gap_ms, room);
+    }
+    last_heard_ms_ -= credit;
+    return true;
 }
 
 std::unique_ptr<HostSession> promote_to_host(ClientSession& client, sim::SimulationEngine& sim, HostSession::Config config, uint32_t now_ms,

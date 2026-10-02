@@ -116,12 +116,6 @@ private:
 
 constexpr uint8_t seat_bit(uint8_t seat) noexcept { return static_cast<uint8_t>(1u << seat); }
 
-// A wake-up of a hidden page counts for at most this much time: after a freeze or a sleep of the page the session must not see a silence that was the page's own
-constexpr double kMaxWakeSeconds = 1.0;
-
-// A hidden page whose frame loop still runs (the browser draws it all the same) is driven by its frames: the wake-ups stand down for this long after each frame
-constexpr double kFrameAliveSeconds = 0.25;
-
 // A frame or a background step holds the flag while it runs: nothing may start another one inside it (Application::run_frame_with_delta, background_pump_after)
 struct AdvanceGuard {
     explicit AdvanceGuard(bool& flag) : flag_(flag) { flag_ = true; }
@@ -742,11 +736,15 @@ bool Application::load_match(const std::string& map_path, uint32_t seed, uint8_t
 
 // The moment a match starts for the player: music and the start sound, the HUD, the "get ready" modal, the Playing state.
 void Application::enter_match() {
-    // In-Game Music: Shuffle between ANTS2A, ANTS2B, ANTSFUN3
-    play_next_ingame_music();
-
-    // Play authentic random game startup sound (rndm1..6.wav / Sound IDs 7..12); a match that begins while the page is hidden makes no sound effect
-    if (!background_stepping_) play_startup_sound();
+    // In-Game Music: Shuffle between ANTS2A, ANTS2B, ANTSFUN3. A match that begins while the page is hidden (a background step) starts no music and no sound effect: the page
+    // is not heard; the music starts when it is shown (apply_pending_music)
+    if (background_stepping_) {
+        pending_music_ = PendingMusic::InGame;
+    } else {
+        play_next_ingame_music();
+        // Play authentic random game startup sound (rndm1..6.wav / Sound IDs 7..12)
+        play_startup_sound();
+    }
 
     // Reset HUD & Scorecard
     hud_.init(local_player_id_);
@@ -917,13 +915,15 @@ void Application::return_to_map_select() {
     hud_.close_quit_dialog();
     hud_.close_quick_help();
     hud_.close_options();
-    start_intro_music();                                       // (the pointer is one global in the original: it is neither reset nor moved here)
+    if (background_stepping_) pending_music_ = PendingMusic::Intro;      // (a hidden page starts no music: it does when the page is shown)
+    else start_intro_music();                                  // (the pointer is one global in the original: it is neither reset nor moved here)
 }
 
 void Application::run_frame_with_delta(float delta_time) {
     if (!is_running_ || advancing_) return;                  // (a frame never starts inside a frame or inside a background step)
     const AdvanceGuard advance(advancing_);
-    last_frame_run_ = SDL_GetPerformanceCounter();           // (the wake-ups of a hidden page stand down while frames come)
+    last_frame_run_ = now_counter();                         // (the wake-ups of a hidden page stand down while frames come)
+    apply_pending_music();                                   // a frame is what a page that is drawn runs: the music that a background step left for it starts now
 
     // The network's clock keeps real time (a frame counts for at most a second of it), unlike the local simulation's below: the lock-step runner has its own bounds (it pays
     // back at most 400 ms and runs the rest down at double speed). With the clamp a hitch of 400 ms left three turns standing in its queue for the rest of the match.
@@ -989,7 +989,7 @@ void Application::run_frame_with_delta(float delta_time) {
 
 void Application::run_frame() {
     uint64_t perf_freq = SDL_GetPerformanceFrequency();
-    uint64_t current_time = SDL_GetPerformanceCounter();
+    uint64_t current_time = now_counter();
     float delta_time = (last_frame_time_ > 0) ? (static_cast<float>(current_time - last_frame_time_) / static_cast<float>(perf_freq)) : 0.01666f;
     last_frame_time_ = current_time;
 
@@ -1005,20 +1005,52 @@ void Application::set_page_hidden(bool hidden) {
     if (hidden) {
         page_hidden_ = true;                                 // from now on the wake-ups may drive a network match: the first one counts the time since the last frame
         last_frame_run_ = 0;                                 // (only a frame that runs from now on shows that the browser still delivers frames)
-        hidden_since_ = SDL_GetPerformanceCounter();
+        hidden_since_ = now_counter();
         hidden_wakes_ = 0;
-        hidden_tick_ = sim_.current_tick();
+        hidden_ticks_ = 0;
         return;
     }
     if (background_driven()) background_step();              // shown again: one last wake-up so that the clocks are up to date, then the frame loop has the match back
     page_hidden_ = false;
-    last_frame_time_ = SDL_GetPerformanceCounter();          // the first frame measures from here: the hours that the page was hidden are not a frame
-#if defined(__EMSCRIPTEN__)
-    if (hidden_wakes_ > 0) {                                 // (one line per hidden period, for the browser's console)
-        const double seconds = static_cast<double>(last_frame_time_ - hidden_since_) / static_cast<double>(SDL_GetPerformanceFrequency());
-        std::cout << "[Application] The page was hidden for " << static_cast<int>(seconds * 10.0 + 0.5) / 10.0 << " s; the match advanced by " << (sim_.current_tick() - hidden_tick_)
-                  << " ticks and " << hidden_wakes_ << " wake-ups stepped it in the background" << std::endl;
+    last_frame_time_ = now_counter();                        // the first frame measures from here: the hours that the page was hidden are not a frame
+    apply_pending_music();                                   // the page is heard again: the music of what happened meanwhile starts now, once
+    note_hidden_period();
+}
+
+// What the page's steps wanted of the music while nobody heard it (a match began, ended or was lost): the last wish is carried out once, by the next frame or when the
+// page is shown. Nothing happened: nothing is touched, the piece that plays goes on.
+void Application::apply_pending_music() {
+    const PendingMusic what = pending_music_;
+    pending_music_ = PendingMusic::None;
+    switch (what) {
+        case PendingMusic::InGame: play_next_ingame_music(); break;
+        case PendingMusic::Intro: start_intro_music(); break;
+        case PendingMusic::Closed: close_music(); break;
+        case PendingMusic::None: break;
     }
+}
+
+std::string Application::hidden_period_line(double seconds, uint64_t ticks, uint32_t wakes, double seconds_since_last_line) {
+    if (seconds < 1.0 || wakes == 0 || seconds_since_last_line < 10.0) return std::string();     // a short period (a tab that is flicked through) is not worth a line, nor is a stream of them
+    const double shown = static_cast<int>(seconds * 10.0 + 0.5) / 10.0;
+    std::string line = "The page was hidden for " + std::to_string(shown);
+    line.resize(line.find('.') + 2);                         // one decimal
+    line += " s; ";
+    if (ticks > 0) line += "the match advanced by " + std::to_string(ticks) + " ticks and " + std::to_string(wakes) + " wake-ups stepped it in the background";
+    else line += std::to_string(wakes) + " wake-ups kept the connection going in the background (no match tick ran)";
+    return line;
+}
+
+// The page is shown again: the console gets one line about the hidden period (web build), unless it was short or another line came just before
+void Application::note_hidden_period() {
+    const double frequency = static_cast<double>(SDL_GetPerformanceFrequency());
+    const double seconds = last_frame_time_ > hidden_since_ ? static_cast<double>(last_frame_time_ - hidden_since_) / frequency : 0.0;
+    const double since_line = hidden_line_at_ != 0 && last_frame_time_ > hidden_line_at_ ? static_cast<double>(last_frame_time_ - hidden_line_at_) / frequency : 1.0e9;
+    hidden_line_ = hidden_period_line(seconds, hidden_ticks_, hidden_wakes_, since_line);
+    if (hidden_line_.empty()) return;
+    hidden_line_at_ = last_frame_time_;
+#if defined(__EMSCRIPTEN__)
+    std::cout << "[Application] " << hidden_line_ << std::endl;
 #endif
 }
 
@@ -1034,13 +1066,15 @@ bool Application::background_pump() {
     return background_step();
 }
 
-// Do the wake-ups drive the match now? The page is hidden, a room or a match exists, no step is running, and the frame loop has been silent for a quarter of a second: a browser
-// that still draws a page that it calls hidden (an embedded browser pane that is not on screen) keeps the frames in charge, with picture and sound
+// Do the wake-ups drive the match now? The page is hidden, a room or a match exists, no step is running, and the frame loop is slower than the turns: a browser that still
+// draws a hidden page often enough (an embedded browser pane that is not on screen) keeps the frames in charge, with picture and sound. A frame loop that comes less often than
+// once per turn cannot carry the match alone (the server sends a turn every kTurnMs); the wake-ups step between its frames.
 bool Application::wake_may_step() {
     if (!is_running_ || advancing_ || !background_driven()) return false;
     if (last_frame_run_ != 0) {
-        const double since = static_cast<double>(SDL_GetPerformanceCounter() - last_frame_run_) / static_cast<double>(SDL_GetPerformanceFrequency());
-        if (since < kFrameAliveSeconds) return false;
+        const uint64_t now = now_counter();
+        if (now >= last_frame_run_ && static_cast<double>(now - last_frame_run_) / static_cast<double>(SDL_GetPerformanceFrequency()) < kFrameAliveSeconds) return false;
+        // (a clock that went backwards says nothing of when the last frame ran: the frames are not taken to be in charge, the hidden page is not left without a driver)
     }
     return true;
 }
@@ -1048,26 +1082,28 @@ bool Application::wake_may_step() {
 // The real time since the clocks were last advanced (a frame or the wake-up before): the same timer as the frame loop's, so that a frame after a wake-up measures from it
 bool Application::background_step() {
     if (!wake_may_step()) return false;
-    const uint64_t now = SDL_GetPerformanceCounter();
+    const uint64_t now = now_counter();
     const double elapsed = last_frame_time_ > 0 && now > last_frame_time_
                                ? static_cast<double>(now - last_frame_time_) / static_cast<double>(SDL_GetPerformanceFrequency())
                                : 0.0;
     last_frame_time_ = now;
-    background_run(static_cast<float>(elapsed));
+    background_run(elapsed);
     return true;
 }
 
 bool Application::background_pump_after(float dt) {
     if (!wake_may_step()) return false;
-    background_run(dt);
+    background_run(static_cast<double>(dt));
     return true;
 }
 
-void Application::background_run(float dt) {
+// The network gets at most kMaxWakeSeconds of the time that passed (the lock-step runner must not be paid back more at once); the rest is a gap that only the host's silence
+// counts (pump_network reads the connection first: what waited is not silence)
+void Application::background_run(double elapsed) {
     const AdvanceGuard advance(advancing_);
-    const AdvanceGuard silent(background_stepping_);         // (the ticks of this step make no sound)
-    const double seconds = std::clamp(static_cast<double>(dt), 0.0, kMaxWakeSeconds);
-    pump_network(static_cast<float>(seconds));               // the network clock, the room or the session, every tick that is due (post_tick: the HUD's state) and what the net reports
+    const AdvanceGuard silent(background_stepping_);         // (the ticks of this step make no sound, its events start no music)
+    const double seconds = std::clamp(elapsed, 0.0, kMaxWakeSeconds);
+    pump_network(static_cast<float>(seconds), elapsed > seconds ? elapsed - seconds : 0.0);    // the network clock, the room or the session, every tick that is due (post_tick: the HUD's state) and what the net reports
     ++background_pumps_;
     ++hidden_wakes_;
 }
@@ -1122,6 +1158,12 @@ int Application::run() {
 // released and its clip is replaced by the raised one (FUN_0102c0db -> StopTracked), so a short click is cut short. The other UI sounds are not tied to a release.
 void Application::play_ui_sound(uint32_t sound_id) {
     const uint32_t owner = (sound_id == sim::SoundID::ButtonClick) ? kUiPressOwner : 0u;
+    play_effect(sound_id, owner);
+}
+
+// A sound effect that no tick makes (the buttons, the can't-go cue): a background step makes none, the page is not heard
+void Application::play_effect(uint32_t sound_id, uint32_t owner) {
+    if (background_stepping_) return;
     audio_mixer_.play_sfx(sound_id, 1.0f, 255, false, owner);
 }
 
@@ -1479,6 +1521,7 @@ void Application::post_tick() {
     hud_.update(world, 1);
     hud_.poll_sim_events(sim_);
 
+    if (page_hidden_) ++hidden_ticks_;                       // (the console's line about a hidden period says how far the match went)
     auto audio_events = sim_.poll_audio_events();            // (drained in every case: the queue must not grow)
     if (!background_stepping_) audio_mixer_.ingest_simulation_events(audio_events, local_player_id_);   // a background step makes no sound: its events are dropped, not saved up
 
@@ -1500,7 +1543,8 @@ void Application::check_match_over() {
     match_over_handled_ = true;
     const auto& world = sim_.get_world_state();
     scorecard_.show(world.match_result, local_player_id_);       // "Waiting for scores..."; the cue plays when the rows appear (update_scorecard)
-    close_music();                                               // FUN_010226da closes the music sequencer at once (0x1022714); nothing restarts it
+    if (background_stepping_) pending_music_ = PendingMusic::Closed;     // (a hidden page changes no sound: the music closes when the page is shown)
+    else close_music();                                          // FUN_010226da closes the music sequencer at once (0x1022714); nothing restarts it
     music_resume_on_activate_ = false;
     if (net_) net_->freeze();                                    // the host stops sealing turns
 }
@@ -1542,10 +1586,11 @@ void Application::confirm_quit() {
 // Network play (docs/NETWORK_PORT.md): the setup screen is the room, the lock-step runner drives the ticks
 // ------------------------------------------------------------------------------------------------
 
-void Application::pump_network(float dt) {
+void Application::pump_network(float dt, double gap_seconds) {
     if (!net_ || !net_->active()) return;
     net_time_ms_ += static_cast<double>(dt) * 1000.0;
-    net_->update(static_cast<uint32_t>(net_time_ms_));
+    net_->update(static_cast<uint32_t>(net_time_ms_));        // (the connection is read here: whatever waited counts as heard)
+    if (gap_seconds > 0.0) net_->note_gap(static_cast<uint32_t>(std::min(gap_seconds * 1000.0, 4.0e9)));   // a host that said nothing has been silent for the gap too
     handle_net_events();
     if (state_ == AppState::MapSelect && net_->active()) {
         sync_room_view();
@@ -1596,7 +1641,7 @@ void Application::sync_room_view() {
 // START on the leader's screen: the request goes to the server, which starts the match with the players who are in the room if it can. With fewer than two players the
 // answer is the host's: the can't-go cue (and nothing else: no message, no change of the screen); the room of the server has no thumbs to wait for.
 void Application::net_request_start() {
-    if (!net_ || !net_->request_start()) audio_mixer_.play_sfx(sim::SoundID::CantGo, 1.0f, 255);
+    if (!net_ || !net_->request_start()) play_effect(sim::SoundID::CantGo);
 }
 
 // START on the setup screen of a room (host only): the map file's hash goes with the Start message so that every machine checks its own copy.
@@ -1613,7 +1658,7 @@ void Application::net_start_from_setup(const std::string& map_path) {
     net_->set_map(filename);
     std::random_device rd;
     if (!net_->start_match(static_cast<uint32_t>(rd()), hash)) {
-        audio_mixer_.play_sfx(sim::SoundID::CantGo, 1.0f, 255);              // not enough players yet
+        play_effect(sim::SoundID::CantGo);                                   // not enough players yet
         return;
     }
     map_select_.lock();                                                      // START ran: the map and the fog option are fixed (+0x130)

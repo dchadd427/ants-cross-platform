@@ -306,6 +306,11 @@ void NetGame::update(uint32_t now_ms) {
     refresh_status();
 }
 
+void NetGame::note_gap(uint32_t ms) {
+    if (phase_ != Phase::Playing || client_session_ == nullptr || !client_session_->note_gap(ms)) return;
+    update(now_);                                              // the same reading of the session as every update: a host that stayed silent too long is gone
+}
+
 void NetGame::set_discovery(uint16_t udp_port, bool loopback_only) {
     discovery_port_ = udp_port;
     discovery_loopback_only_ = loopback_only;

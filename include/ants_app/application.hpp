@@ -171,19 +171,23 @@ public:
     net::NetGame* net() noexcept { return net_.get(); }
     /// True while a room or a network match exists
     bool network_active() const noexcept { return net_ && net_->active(); }
-    /// Advances the network by `dt` seconds of game time and handles what it reports (run once per frame; the tests call it directly)
-    void pump_network(float dt);
+    /// Advances the network by `dt` seconds of game time and handles what it reports (run once per frame; the tests call it directly). `gap_seconds` is real time that
+    /// `dt` did not count (a hidden page that was not woken for a while, see background_run): once the connection has been read, a host that said nothing has been silent
+    /// for that time as well (NetGame::note_gap).
+    void pump_network(float dt, double gap_seconds = 0.0);
 
     /// A page that is not drawn (a hidden or minimised browser tab, the web build) runs no frames, and the browser slows its timers: but the page's WebSocket events still
     /// arrive. So while the page is hidden a ROOM or a MATCH of the network is driven by those events instead of by the frame loop: every message of the game server wakes
     /// the game (NetGame::set_on_wake), and `background_pump` does what a frame does for the network (the network clock, the session and the lock-step runner with every
     /// tick that is due, the acknowledgements and hashes that go back, the room and start events) and nothing that is drawn or heard: no frame, no sound effect (the
-    /// events of the ticks are drained and dropped, not saved up), no music chain. Without it the hidden seat stopped executing turns, the server held the whole room
-    /// up and dropped the seat after 20 s. A local game just stands still while the page is hidden, as the native game does when minimised.
+    /// events of the ticks are drained and dropped, not saved up), and no music: a match that begins, ends or is lost in a hidden page leaves its music for when the page is
+    /// shown (the piece that plays goes on meanwhile). Without it a hidden seat stopped executing and acknowledging turns, and the server dropped it.
+    /// A local game just stands still while the page is hidden, as the native game does when minimised.
     /// The match has ONE driver at a time. `page_hidden` (the browser's visibilitychange, which the web build registers itself; the tests call set_page_hidden) says
-    /// whether the wake-ups MAY drive it: a shown page is driven by its frames only. A hidden page is driven by the wake-ups, unless the frame loop is running all the
-    /// same (a browser that keeps drawing a page that it calls hidden, an embedder with background throttling off): then the frames drive it, with picture and
-    /// sound, as they always did, and the wake-ups stand down for a quarter of a second after each frame. A step never starts inside another one, and a frame and a
+    /// whether the wake-ups MAY drive it: a shown page is driven by its frames only. A hidden page is driven by the wake-ups, unless the frame loop keeps up with the turns
+    /// by itself (a browser that keeps drawing a page that it calls hidden, an embedder with background throttling off: a frame at least once per turn, kFrameAliveSeconds):
+    /// then the frames drive it, with picture and sound, as they always did, and the wake-ups stand down. A frame loop that is slower than the turns (a hidden page that
+    /// still gets a frame a few times a second) cannot keep up alone: the wake-ups drive between its frames. A step never starts inside another one, and a frame and a
     /// wake-up share one timer, so that the time between two of them is counted once.
     void set_page_hidden(bool hidden);
     bool page_hidden() const noexcept { return page_hidden_; }
@@ -193,8 +197,26 @@ public:
     /// the match now and no step is running. The web build asks the browser first whether the page is hidden (so a visibilitychange that was missed cannot leave the
     /// match without a driver). The page's timer for a quiet server calls it too (ants_background_pump).
     bool background_pump();
-    /// The same with the time given (seconds; the tests call it). It counts for at most one second: a page that was asleep must not look to the session like a silence.
+    /// The same with the time given (seconds; the tests call it)
     bool background_pump_after(float dt);
+    /// What a wake-up does with the time that has passed since the clocks last moved (`elapsed`, real time; a clock that went backwards counts for nothing). The network's
+    /// clock, and with it the lock-step runner, gets at most kMaxWakeSeconds of it: a page that was asleep must not be paid back more than a second at once. The rest is a
+    /// gap that the host's silence still counts (its link is read first: what waited is not silence): a hidden page that the browser wakes once a minute notices a server
+    /// that stopped answering at the first wake-up after ten seconds of real time, not after ten minutes.
+    static constexpr double kMaxWakeSeconds = 1.0;
+    /// A hidden page whose frame loop delivers a frame at least once per turn keeps the match going by itself, with picture and sound: the wake-ups stand down for this long
+    /// after each frame (a turn: net::kTurnMs). Later than that the frames are too few to carry the turns and the wake-ups step between them.
+    static constexpr double kFrameAliveSeconds = static_cast<double>(net::kTurnMs) / 1000.0;
+    /// The line for the browser's console when a hidden page is shown again ("" when there is nothing worth a line: a period of less than a second, no wake-up that stepped,
+    /// or another line less than ten seconds ago). `ticks` is what the match advanced in the period; none: the period was spent in a room (or after the match).
+    static std::string hidden_period_line(double seconds, uint64_t ticks, uint32_t wakes, double seconds_since_last_line);
+    /// The last line that hidden_period_line gave (the web build prints it)
+    const std::string& last_hidden_line() const noexcept { return hidden_line_; }
+    /// The clock that frames and wake-ups are timed with is SDL's performance counter; a test gives the application a virtual one (in the counter's units:
+    /// SDL_GetPerformanceFrequency per second) so that every rule of the time is checked exactly and without waiting. Nothing: the real clock.
+    void set_clock(std::function<uint64_t()> counter) { clock_ = std::move(counter); }
+    /// The network's clock in ms: what the frames and the wake-ups have given the session so far
+    double net_clock_ms() const noexcept { return net_time_ms_; }
     /// How many wake-ups made a step since the application started
     uint32_t background_pumps() const noexcept { return background_pumps_; }
 
@@ -251,8 +273,12 @@ private:
     void handle_events();
     void refresh_page_visibility();                       // web build: asks the browser whether the page is hidden (set_page_hidden); a native build has no page, nothing to ask
     bool background_step();                               // background_pump without asking the browser first
-    bool wake_may_step();                                 // the wake-ups drive the match now: hidden page, network, no step running, and the frame loop silent for a quarter of a second
-    void background_run(float dt);                        // the step itself: the network for `dt` seconds, no sound
+    bool wake_may_step();                                 // the wake-ups drive the match now: hidden page, network, no step running, and the frame loop slower than the turns
+    void background_run(double elapsed);                  // the step itself: the network for `elapsed` seconds (at most kMaxWakeSeconds for the clock, see there), no sound
+    uint64_t now_counter() const { return clock_ ? clock_() : SDL_GetPerformanceCounter(); }   // the clock of frames and wake-ups (set_clock)
+    void apply_pending_music();                           // what a hidden page's steps left for the ears: the music of a match that began, ended or was lost meanwhile
+    void note_hidden_period();                            // the page is shown again: the console's line about the period
+    void play_effect(uint32_t sound_id, uint32_t owner = 0);   // a sound effect that no tick makes: none in a background step
     void play_ui_sound(uint32_t sound_id);
     void release_ui_sounds();
     static constexpr uint32_t kUiPressOwner = 0x80000001u;      // the sound owner of the button that is being pressed (there is only one at a time)
@@ -288,11 +314,16 @@ private:
     bool page_hidden_{false};                              // the browser's page is hidden (set_page_hidden): a network match belongs to the wake-ups, see background_pump
     bool advancing_{false};                                // a frame or a background step is advancing the clocks and the match: no other one may start inside it
     uint32_t background_pumps_{0};                         // the wake-ups that made a step, in all
-    bool background_stepping_{false};                      // inside a background step: its ticks make no sound
+    bool background_stepping_{false};                      // inside a background step: it makes no sound and starts no music (pending_music_ keeps what the music should do)
+    enum class PendingMusic : uint8_t { None, InGame, Intro, Closed };
+    PendingMusic pending_music_{PendingMusic::None};       // what a background step wanted of the music, done by the next frame or when the page is shown (the last wish counts)
+    std::function<uint64_t()> clock_;                      // set_clock: a virtual clock for the tests (empty: SDL's performance counter)
     uint64_t last_frame_run_{0};                           // when a frame last ran (performance counter; 0: none since the page was hidden): the wake-ups stand down while frames come
-    uint64_t hidden_since_{0};                             // this hidden period: when it began (performance counter), the steps made in it and the tick it began at
-    uint32_t hidden_wakes_{0};                             // (the web build says so in one line when the page is shown again)
-    uint64_t hidden_tick_{0};
+    uint64_t hidden_since_{0};                             // this hidden period: when it began (performance counter), the wake-ups that stepped in it and the ticks that ran in it
+    uint32_t hidden_wakes_{0};
+    uint64_t hidden_ticks_{0};
+    uint64_t hidden_line_at_{0};                           // when the console last got a line about a hidden period (performance counter; 0: never)
+    std::string hidden_line_;                              // (the web build prints it when the page is shown again; see hidden_period_line)
     bool match_over_handled_{false};
     std::string net_notice_;
     std::string player_name_;
