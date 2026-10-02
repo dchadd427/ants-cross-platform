@@ -27,6 +27,13 @@
 // clock (the HUD's clock is injected, the renderer's animation clock is pinned), a random device, a file other than ants.chd and the original maps, or the
 // network. The program runs in about two seconds of CPU time.
 //
+//   5. The wide match screen (milestone M3; names "*.wide.*", 226 more fingerprints with golden numbers made at the commit that introduced it, the classic ones above did not move):
+//      the same families for the 16:9 picture of 960 x 540: HUD::render draw calls of 82 scenes (the frame in 14 pieces and 18 parts, the panel moved by (320, 0) and (320, 60), the
+//      score slots of 2, 3, 4 teams, the pages of the original centred over the clay and the dialogs over the middle of the map view as origins, maps smaller than the view), the pointer
+//      at every pixel of the 960 x 540 picture (edge strips from nine cameras and on small maps, the zones, the minimap, the cursor in 13 states, refined click sweeps), the camera of
+//      the 762 x 500 view (a map smaller than the view is centred) and the pixels of the real renderer on the 960 x 540 canvas (six maps, nine cameras of two of them, two synthetic small
+//      maps, and whole Application frames: the setup screen, the quick help and the results as centred pages, the match screen and its windows).
+//
 // WHAT IS NOT COVERED (the blind spots; the places that hard-code 640 / 480 / 442 / 440 / the margins with a covered / not covered note: docs/audit/M0_notes.md)
 //   - the glyph pixels of TrueType text (the CALLS that draw it are fingerprinted: string, place, size, colour; the text boxes are masked in the pixel hashes);
 //   - the frame-rate counter, its sparkline and the version text (Application::render_frame: their width depends on the font and the version changes every release);
@@ -191,7 +198,7 @@ void record(const std::string& name, const Measure& m) {
 /// not recorded but deterministic: the interface's 6 px per character, and the cell height of the font size (what the real renderer reports).
 class FrameRecorder : public IRenderer {
 public:
-    enum Op : uint8_t { OpSprite = 1, OpNamed, OpFill, OpRect, OpText, OpTeam, OpClip, OpClearClip, OpImage, OpCount };
+    enum Op : uint8_t { OpSprite = 1, OpNamed, OpFill, OpRect, OpText, OpTeam, OpClip, OpClearClip, OpImage, OpRegion, OpOrigin, OpCount };
 
     explicit FrameRecorder(bool keep_log = false) : keep_log_(keep_log) {}
 
@@ -241,6 +248,31 @@ public:
     void clear_clip_rect() override {
         begin(OpClearClip);
         logf("clip off");
+    }
+    /// A part of a sprite stretched to a rectangle (the wide frame's pieces): the sprite and both rectangles are in the hash (milestone M3; no classic scene draws one)
+    void draw_sprite_region(uint32_t sprite_id, int32_t x, int32_t y, int32_t w, int32_t h, int32_t sx, int32_t sy, int32_t sw, int32_t sh) override {
+        begin(OpRegion);
+        hash_.u32(sprite_id);
+        hash_.i32(x);
+        hash_.i32(y);
+        hash_.i32(w);
+        hash_.i32(h);
+        hash_.i32(sx);
+        hash_.i32(sy);
+        hash_.i32(sw);
+        hash_.i32(sh);
+        logf("region id=%u (%d,%d) %dx%d from (%d,%d) %dx%d", sprite_id, x, y, w, h, sx, sy, sw, sh);
+    }
+    /// The origin of a window of the original (a page, a dialog) in a bigger picture: a CHANGE of the origin is a call; setting the origin that is set already is not (the classic scenes
+    /// set (0, 0) around their dialogs, which changes nothing and must not change a classic number)
+    void set_origin(int32_t x, int32_t y) override {
+        if (x == origin_x_ && y == origin_y_) return;
+        origin_x_ = x;
+        origin_y_ = y;
+        begin(OpOrigin);
+        hash_.i32(x);
+        hash_.i32(y);
+        logf("origin (%d,%d)", x, y);
     }
     void draw_rgba_image(int32_t x, int32_t y, int32_t w, int32_t h, const uint8_t* rgba) override {
         begin(OpImage);
@@ -310,6 +342,8 @@ private:
 
     bool keep_log_;
     Fnv64 hash_;
+    int32_t origin_x_{0};
+    int32_t origin_y_{0};
     uint64_t calls_{0};
     std::array<uint64_t, OpCount> op_count_{};
     std::vector<std::string> log_;
@@ -444,10 +478,15 @@ void add_default_ants(sim::WorldState& world) {
 /// The HUD of one local player over a hand-built world and a camera, with an injected clock
 class Scene {
 public:
-    explicit Scene(const assets::AssetArchive& archive, uint8_t local_player = 0, uint32_t w = kMap, uint32_t h = kMap) : arc(archive), local(local_player) {
+    explicit Scene(const assets::AssetArchive& archive, uint8_t local_player = 0, uint32_t w = kMap, uint32_t h = kMap, const ScreenLayout* layout = nullptr) : arc(archive), local(local_player) {
         g_now_ms = 0;
         hud.set_ticks_function(&test_clock);                     // before init: the chat box's caret starts from this clock
         hud.init(local_player);
+        if (layout != nullptr) {                                 // a picture other than the original's (milestone M3): the HUD and the camera take its view
+            hud.set_layout(*layout);
+            camera.set_view(layout->view());
+            camera.centre_small_maps = !layout->is_classic();
+        }
         hud.set_text_metrics(&g_metrics);
         world = make_world(archive, w, h);
         add_default_ants(world);
@@ -1573,9 +1612,9 @@ public:
 /// the pixels between them are probed as well, so that the edge of every zone is found to the exact pixel (a zone that is one pixel wider or narrower changes the hash)
 /// at a fraction of the cost of probing every pixel. The count of the measure is the number of probes.
 template <class Probe>
-Measure refined_sweep(const Probe& probe, int32_t stride) {
-    const int32_t nx = (kW + stride - 1) / stride;
-    const int32_t ny = (kH + stride - 1) / stride;
+Measure refined_sweep(const Probe& probe, int32_t stride, int32_t width = kW, int32_t height = kH) {
+    const int32_t nx = (width + stride - 1) / stride;
+    const int32_t ny = (height + stride - 1) / stride;
     const auto signature = [&](int32_t x, int32_t y) {
         Fnv64 s;
         probe(s, x, y);
@@ -1608,9 +1647,9 @@ Measure refined_sweep(const Probe& probe, int32_t stride) {
             const bool down = j + 1 < ny && at(i, j + 1) != s;
             const bool diagonal = i + 1 < nx && j + 1 < ny && at(i + 1, j + 1) != s;
             for (int32_t d = 1; d < stride; ++d) {
-                if (right && x + d < kW) fold(x + d, y, signature(x + d, y));
-                if (down && y + d < kH) fold(x, y + d, signature(x, y + d));
-                if (diagonal && x + d < kW && y + d < kH) fold(x + d, y + d, signature(x + d, y + d));
+                if (right && x + d < width) fold(x + d, y, signature(x + d, y));
+                if (down && y + d < height) fold(x, y + d, signature(x, y + d));
+                if (diagonal && x + d < width && y + d < height) fold(x + d, y + d, signature(x + d, y + d));
             }
         }
     }
@@ -1627,12 +1666,14 @@ struct ClickProbe {
     const std::function<void(HUD&, PointerScene&)>& setup;
     uint8_t button;
     ClickTally* tally{nullptr};
+    const ScreenLayout* layout{nullptr};          // a picture other than the original's (milestone M3)
 
     void operator()(Fnv64& h, int32_t x, int32_t y) const {
         HUD hud;
         hud.set_ticks_function(&test_clock);
         g_now_ms = 0;
         hud.init(0);
+        if (layout != nullptr) hud.set_layout(*layout);
         hud.set_sim_query(&ps.sim);
         RecordingSink sink;
         hud.set_command_sink(&sink);
@@ -1646,6 +1687,10 @@ struct ClickProbe {
         hud.update(ps.world(), 0);
         const HUD::AllianceDialog dialog_before = hud.alliance_dialog();
         ViewportCamera cam = camera_at(400, 400);
+        if (layout != nullptr) {
+            cam.set_view(layout->view());
+            cam.centre_small_maps = !layout->is_classic();
+        }
         const bool down = hud.handle_mouse_down(x, y, button, ps.sim, cam);
         const bool captured = hud.is_input_captured();
         const bool scrolled = hud.input_tick(cam, 60, 60, x, y);                     // the 50 ms task that follows a press: edge strips, the minimap drag
@@ -1939,7 +1984,7 @@ int32_t idle_clip(const assets::AssetArchive& arc, int type, int dir_digit) {
 
 /// Ants of every type and colour, of every facing and mirrored clip, spread over the view of the camera (cx, cy) and 80 px beyond its edges, so that sprites straddle
 /// every border of the playfield
-void populate_view(sim::WorldState& world, const assets::AssetArchive& arc, int32_t cx, int32_t cy, int count, uint32_t seed) {
+void populate_view(sim::WorldState& world, const assets::AssetArchive& arc, int32_t cx, int32_t cy, int count, uint32_t seed, int32_t view_w = PLAYFIELD_W, int32_t view_h = PLAYFIELD_H) {
     static const int kDirs[5] = {3, 7, 2, 8, 9};
     const int32_t map_w = static_cast<int32_t>(world.width) * 32;
     const int32_t map_h = static_cast<int32_t>(world.height) * 32;
@@ -1947,8 +1992,8 @@ void populate_view(sim::WorldState& world, const assets::AssetArchive& arc, int3
         const int type = i % 6;
         const int dir = kDirs[(i / 6) % 5];
         const bool mirrored = (dir == 2 || dir == 8 || dir == 9) && (i % 3 == 0);
-        const int32_t px = std::clamp(cx - 80 + static_cast<int32_t>(lcg(seed) % static_cast<uint32_t>(PLAYFIELD_W + 160)), 4, map_w - 4);
-        const int32_t py = std::clamp(cy - 80 + static_cast<int32_t>(lcg(seed) % static_cast<uint32_t>(PLAYFIELD_H + 160)), 4, map_h - 4);
+        const int32_t px = std::clamp(cx - 80 + static_cast<int32_t>(lcg(seed) % static_cast<uint32_t>(view_w + 160)), 4, map_w - 4);
+        const int32_t py = std::clamp(cy - 80 + static_cast<int32_t>(lcg(seed) % static_cast<uint32_t>(view_h + 160)), 4, map_h - 4);
         sim::AntSnapshot a;
         a.id = 5000u + static_cast<uint32_t>(i);
         a.player_id = static_cast<uint8_t>(i % 4);
@@ -1971,9 +2016,9 @@ void populate_view(sim::WorldState& world, const assets::AssetArchive& arc, int3
 }
 
 /// Effects and score bubbles around the edges of the view (the explosion, the sputter, the splash, the scuffle; a gain and a loss)
-void add_effects(sim::WorldState& world, int32_t cx, int32_t cy) {
+void add_effects(sim::WorldState& world, int32_t cx, int32_t cy, int32_t view_w = PLAYFIELD_W, int32_t view_h = PLAYFIELD_H) {
     const struct { const char* name; uint32_t duration; } kinds[4] = {{"bombex", 680}, {"sputter", 830}, {"dsplash", 460}, {"battle", 270}};
-    const int32_t at[8][2] = {{-10, 200}, {PLAYFIELD_W - 20, 150}, {200, -10}, {250, PLAYFIELD_H - 30}, {30, 30}, {PLAYFIELD_W - 40, 40}, {60, PLAYFIELD_H - 50}, {PLAYFIELD_W - 70, PLAYFIELD_H - 60}};
+    const int32_t at[8][2] = {{-10, 200}, {view_w - 20, 150}, {200, -10}, {250, view_h - 30}, {30, 30}, {view_w - 40, 40}, {60, view_h - 50}, {view_w - 70, view_h - 60}};
     for (int i = 0; i < 8; ++i) {
         sim::VisualEffect e;
         e.anim_name = kinds[i % 4].name;
@@ -2424,6 +2469,912 @@ void app_pointer_scenarios() {
 }  // namespace
 
 // =====================================================================================================================================================
+// The wide match screen (milestone M3): the same safety net for the 16:9 picture of 960 x 540 (golden numbers made at the commit that introduced it). Names "*.wide.*".
+// The classic numbers above are untouched; these pin the wide frame (14 pieces, 6 of them stretched), the HUD's panel moved by (320, 0) and (320, 60), the windows of the original
+// (pages centred over a clay margin, dialogs over the middle of the map view), the pointer over the 960 x 540 picture, the 762 x 500 view and the maps that are smaller than it.
+// =====================================================================================================================================================
+
+namespace {
+
+const ScreenLayout kWide = ScreenLayout::with_size(960, 540);
+constexpr int32_t kWW = 960;                                  // the wide screen
+constexpr int32_t kWH = 540;
+constexpr uint64_t kWPixels = static_cast<uint64_t>(kWW) * static_cast<uint64_t>(kWH);
+constexpr int32_t kWViewW = 762;                              // its map view
+constexpr int32_t kWViewH = 500;
+
+template <class F>
+Measure sweep_wide(F&& per_pixel) {
+    Fnv64 h;
+    for (int32_t y = 0; y < kWH; ++y) {
+        for (int32_t x = 0; x < kWW; ++x) per_pixel(h, x, y);
+    }
+    return Measure{h.value(), kWPixels};
+}
+
+/// The nine view origins on a map of tiles_w x tiles_h tiles in the 762 x 500 view: away from the borders, at the four corners and the four edges; on an axis where the map is
+/// smaller than the view there is one origin, the centred one (negative)
+std::array<Cam, 9> wide_nine_cams(int32_t tiles_w, int32_t tiles_h) {
+    const int32_t mx = tiles_w * 32 - kWViewW;
+    const int32_t my = tiles_h * 32 - kWViewH;
+    const int32_t x0 = mx > 0 ? 0 : mx / 2, x1 = mx > 0 ? mx / 2 : mx / 2, x2 = mx > 0 ? mx : mx / 2;
+    const int32_t y0 = my > 0 ? 0 : my / 2, y1 = my > 0 ? my / 2 : my / 2, y2 = my > 0 ? my : my / 2;
+    return {{{"tl", x0, y0}, {"t", x1, y0}, {"tr", x2, y0}, {"l", x0, y1}, {"mid", x1, y1}, {"r", x2, y1}, {"bl", x0, y2}, {"b", x1, y2}, {"br", x2, y2}}};
+}
+
+ViewportCamera wide_camera_at(int32_t x, int32_t y) {
+    ViewportCamera cam = camera_at(x, y);
+    cam.set_view(kWide.view());
+    cam.centre_small_maps = true;
+    return cam;
+}
+
+// ---- the HUD's draw calls at 960 x 540
+
+void hud_wide_scenarios(const assets::AssetArchive& arc) {
+    constexpr int32_t kMaxX = static_cast<int32_t>(kMap) * 32 - kWViewW;
+    constexpr int32_t kMaxY = static_cast<int32_t>(kMap) * 32 - kWViewH;
+    const auto make = [&](uint8_t local = 0, uint32_t w = kMap, uint32_t h = kMap) { return std::make_unique<Scene>(arc, local, w, h, &kWide); };
+
+    for (uint8_t p = 0; p < 4; ++p) {                                           // the "Get ready" dialog over the wide frame, for each local colour
+        auto s = make(p);
+        s->hud.start_match_modal();
+        s->look(100, 80);
+        s->shoot("hud.wide.start.modal.p" + std::to_string(p));
+    }
+    for (uint8_t p = 0; p < 4; ++p) {
+        auto s = make(p);
+        s->shoot("hud.wide.start.idle.p" + std::to_string(p));
+    }
+    {
+        const char* names[7] = {"worker", "worker2", "bomber", "fire", "thief", "combat", "swimmer"};
+        for (uint32_t i = 0; i < 7; ++i) {
+            auto s = make(0);
+            s->hud.select_ant(1 + i);
+            s->tick(0);
+            s->shoot(std::string("hud.wide.sel.one.") + names[i]);
+        }
+    }
+    {
+        auto s = make(0);
+        s->hud.set_selected_ant_ids({1, 2, 3, 4, 5});
+        s->tick(0);
+        s->shoot("hud.wide.sel.group");
+        auto c = make(0);
+        for (auto& a : c->world.ants) if (a.player_id == 0) a.is_holding = true;
+        c->hud.set_selected_ant_ids({1, 2});
+        c->tick(0);
+        c->shoot("hud.wide.sel.group.carrying");
+        auto e = make(0);
+        e->hud.select_ant(12);
+        e->tick(0);
+        e->shoot("hud.wide.sel.enemy");
+        auto own = make(0);
+        own->hud.select_base(0);
+        own->tick(0);
+        own->shoot("hud.wide.sel.hill.own");
+        auto few = make(0);
+        few->world.player_eggs[0] = 3;
+        few->hud.select_base(0);
+        few->tick(0);
+        few->shoot("hud.wide.sel.hill.own.3eggs");
+        auto enemy = make(0);
+        enemy->hud.select_base(1);
+        enemy->tick(0);
+        enemy->shoot("hud.wide.sel.hill.enemy");
+        auto blue = make(2);
+        blue->hud.select_ant(21);
+        blue->tick(0);
+        blue->shoot("hud.wide.sel.one.p2");
+    }
+    {   // the pedestals rising
+        const uint32_t moments[3] = {100, 450, 1200};
+        for (uint32_t i = 0; i < 3; ++i) {
+            auto s = make(0);
+            s->hud.select_ant(3);
+            s->tick(0);
+            s->shoot("hud.wide.pedestal.rising." + std::to_string(moments[i]), moments[i]);
+        }
+    }
+    // the chat: the log takes the extra height (161 px), the input box is 60 px lower
+    auto fill_chat = [](Scene& s) {
+        s.hud.add_chat_entry("Alice", "Hello everybody, this is a rather long message that has to wrap over several lines of the log window.", false, 3);
+        s.hud.add_chat_entry("Bob", "Team only: attack the red hill together!", true, 2);
+        s.hud.add_chat_entry("Carol", "ok", false, 1);
+        s.hud.add_news_flash(65000, "Black dropped out of the game!");
+    };
+    {
+        auto s = make(0);
+        fill_chat(*s);
+        s->hud.set_chat_input("Typing a message to all of you");
+        s->shoot("hud.wide.chat.typing.caret_on", 10000);
+        s->shoot("hud.wide.chat.typing.caret_off", 10100);
+        auto l = make(0);
+        l->hud.set_chat_input("This message is much too long to fit into the one line box of the chat input field at the bottom");
+        l->shoot("hud.wide.chat.typing.long");
+        auto m = make(0);                                        // many entries: the taller log shows more of them
+        for (int i = 0; i < 14; ++i) m->hud.add_chat_entry("Player" + std::to_string(i), "message number " + std::to_string(i) + " of the long conversation", i % 3 == 0, i % 4);
+        for (int i = 0; i < 60; ++i) {
+            g_now_ms += 50;
+            m->hud.update(m->world, 1);
+        }
+        m->shoot("hud.wide.chat.scrolled", 9000);
+        auto t = make(0);                                        // an ally: [Team] exists; hovered and pressed buttons ([All] (532, 443, 44 x 24) moved by (320, 60))
+        t->world.player_alliances = {1, 0, 255, 255};
+        fill_chat(*t);
+        t->tick(0);
+        t->shoot("hud.wide.chat.team.buttons");
+        t->move(555 + 320, 455 + 60);
+        t->shoot("hud.wide.chat.team.hover_all");
+        t->move(600 + 320, 455 + 60);
+        t->press(600 + 320, 455 + 60);
+        t->shoot("hud.wide.chat.team.pressed_team");
+        auto off = make(0);
+        off->hud.options().chat = false;
+        fill_chat(*off);
+        off->shoot("hud.wide.chat.off");
+    }
+    // the minimap and its view frame (762 x 500 of the map) at the corners and edges; maps of other sizes, the small ones centred
+    {
+        auto s = make(0);
+        s->shoot("hud.wide.minimap.teams");
+        const struct { const char* name; int32_t x, y; } cams[] = {{"tl", 0, 0}, {"tr", kMaxX, 0}, {"bl", 0, kMaxY}, {"br", kMaxX, kMaxY}, {"top", 700, 0}, {"left", 0, 700}, {"mid", 700, 700}};
+        for (const auto& c : cams) {
+            auto t = make(0);
+            t->look(c.x, c.y);
+            t->shoot(std::string("hud.wide.minimap.frame.") + c.name);
+        }
+        const struct { uint32_t w, h; } sizes[] = {{31, 31}, {40, 40}, {14, 14}, {16, 16}, {12, 12}, {80, 50}, {13, 9}};
+        for (const auto& sz : sizes) {
+            auto t = make(0, sz.w, sz.h);
+            t->camera.x = 100000.0f;                                // (the far corner, held by the camera's rule: a small axis is centred)
+            t->camera.y = 100000.0f;
+            t->camera.clamp_to_bounds(sz.w, sz.h);
+            t->shoot("hud.wide.minimap.size." + std::to_string(sz.w) + "x" + std::to_string(sz.h));
+        }
+    }
+    {
+        auto s = make(0);                                        // fog
+        s->world.fog_of_war_enabled = true;
+        s->world.fog_revealed.assign(static_cast<size_t>(kMap) * kMap, 0);
+        for (uint32_t y = 0; y < kMap; ++y) {
+            for (uint32_t x = 0; x < kMap; ++x) {
+                const int32_t dx = static_cast<int32_t>(x) - 14;
+                const int32_t dy = static_cast<int32_t>(y) - 12;
+                if (dx * dx + dy * dy < 120 || (x >= 40 && y >= 40 && (x + y) % 3 == 0)) s->world.fog_revealed[static_cast<size_t>(y) * kMap + x] = 1;
+            }
+        }
+        s->hud.select_ant(1);
+        s->tick(0);
+        s->shoot("hud.wide.fog.on");
+    }
+    // the score boxes: slots by the team's order, whatever the number of teams
+    {
+        auto s = make(0);
+        s->world.player_alliances = {1, 0, 255, 255};
+        s->world.player_scores = {500, 500, 450, 100};
+        s->shoot("hud.wide.scores.allied");
+        auto b = make(0);
+        b->world.player_alliances = {255, 255, 3, 2};
+        b->world.player_scores = {10, 20, 530, 530};
+        b->shoot("hud.wide.scores.allied.bottom_pair");
+        auto d = make(0);
+        d->world.dropped_mask = 0x04;
+        d->shoot("hud.wide.scores.dropped");
+        for (const uint8_t mask : std::array<uint8_t, 5>{0x03, 0x07, 0x0B, 0x0F, 0x0D}) {
+            auto t = make(mask == 0x0D ? 1 : 0);
+            t->hud.set_roster_mask(mask);
+            t->shoot("hud.wide.scores.roster." + std::to_string(static_cast<unsigned>(mask)));
+        }
+        auto u = make(3);
+        u->hud.set_roster_mask(0x09);
+        u->shoot("hud.wide.scores.two_players.black_local");
+        auto n = make(0);
+        n->hud.set_player_name("Local Player With A Long Name");
+        n->hud.set_team_names({"", "Redmond", "A Very Long Name Indeed", "Dave"});
+        n->shoot("hud.wide.scores.names");
+    }
+    // the windows of the original: the dialogs over the middle of the map view (origin (137, 59)), the pages centred over the clay (origin (160, 30))
+    {
+        auto s = make(0);
+        s->hud.open_quit_dialog();
+        s->shoot("hud.wide.quit.open");
+        s->move(200 + 137, 270 + 59);
+        s->shoot("hud.wide.quit.hover_yes");
+        s->move(300 + 137, 270 + 59);
+        s->press(300 + 137, 270 + 59);
+        s->shoot("hud.wide.quit.pressed_no");
+    }
+    {
+        auto s = make(0);
+        s->hud.open_options();
+        s->shoot("hud.wide.options.open");
+        auto t = make(0);
+        t->hud.options().sound_volume = 30;
+        t->hud.options().music_volume = 80;
+        t->hud.options().scroll_speed = 99;
+        t->hud.options().chat = false;
+        t->hud.options().quick_chat[0] = "Hello!";
+        t->hud.open_options();
+        t->shoot("hud.wide.options.changed");
+        t->move(375 + 160, 435 + 30);
+        t->shoot("hud.wide.options.hover_return");
+    }
+    {
+        auto s = make(0);
+        s->hud.open_quick_help();
+        s->shoot("hud.wide.quickhelp.open");
+        s->move(540 + 160, 445 + 30);
+        s->shoot("hud.wide.quickhelp.hover_return");
+        s->press(540 + 160, 445 + 30);
+        s->shoot("hud.wide.quickhelp.pressed_return");
+    }
+    {
+        auto s = make(1);
+        s->world.pending_invite_from[1] = 0;
+        s->tick(0);
+        s->shoot("hud.wide.dialog.invitation");
+        s->move(160 + 137, 270 + 59);
+        s->shoot("hud.wide.dialog.invitation.hover_accept");
+        auto w = make(0);
+        w->world.pending_invite_from[1] = 0;
+        w->tick(0);
+        w->shoot("hud.wide.dialog.waiting");
+        auto b = make(0);
+        b->sim.form_alliance(0, 2);
+        b->hud.request_team_up(b->sim, 1);
+        b->shoot("hud.wide.dialog.breakconfirm");
+    }
+    {   // the top bar's buttons, moved by (320, 0)
+        const struct { const char* name; int32_t x; } buttons[] = {{"help", 490 + 320}, {"options", 550 + 320}, {"quit", 600 + 320}};
+        for (const auto& b : buttons) {
+            auto s = make(0);
+            s->move(b.x, 18);
+            s->shoot(std::string("hud.wide.topbar.hover_") + b.name);
+            s->press(b.x, 18);
+            s->shoot(std::string("hud.wide.topbar.pressed_") + b.name);
+        }
+    }
+    {   // the rubber band over the wide map view
+        auto s = make(0);
+        s->press(120, 100);
+        s->move(330, 260);
+        s->shoot("hud.wide.marquee.band");
+        auto t = make(0);
+        t->press(120, 100);
+        t->move(900, 700);                                       // held one pixel inside the view: it ends at (777, 520)
+        t->shoot("hud.wide.marquee.clamped");
+        auto u = make(0);
+        u->press(600, 300);
+        u->move(2, 2);
+        u->shoot("hud.wide.marquee.clamped_low");
+    }
+    {
+        auto s = make(0);
+        s->hud.post_status("A status text that is much too long to fit into the status box of 139 pixels width");
+        s->shoot("hud.wide.status.long");
+    }
+}
+
+// ---- the pointer over the 960 x 540 picture
+
+/// The edge-scroll step at every pixel of the 960 x 540 picture, from the given view origins on a map of tiles_w x tiles_h tiles
+Measure wide_edge_sweep(int32_t tiles_w, int32_t tiles_h, int32_t rate, const std::vector<Cam>& cams) {
+    Fnv64 h;
+    uint64_t n = 0;
+    for (const Cam& c : cams) {
+        for (int32_t y = 0; y < kWH; ++y) {
+            for (int32_t x = 0; x < kWW; ++x) {
+                hash_scroll(h, edge_scroll_step(x, y, rate, c.x, c.y, tiles_w, tiles_h, kWide));
+                ++n;
+            }
+        }
+    }
+    return Measure{h.value(), n};
+}
+
+void ptr_wide_scenarios() {
+    // the zones of the picture: the map view, the minimap, the chat log
+    {
+        HUD hud;
+        hud.set_layout(kWide);
+        record("ptr.wide.class.map_view", sweep_wide([&](Fnv64& h, int32_t x, int32_t y) { h.flag(hud.over_map(x, y)); }));
+        record("ptr.wide.class.minimap", sweep_wide([&](Fnv64& h, int32_t x, int32_t y) { h.flag(hud.over_minimap(x, y)); }));
+        record("ptr.wide.class.chat_view", sweep_wide([&](Fnv64& h, int32_t x, int32_t y) { h.flag(hud.in_chat_view(x, y)); }));
+    }
+    // the edge strips: every pixel of the picture from nine cameras of the 60 x 60 map, and the other maps (the small ones from their one, centred, camera)
+    for (const Cam& c : wide_nine_cams(60, 60)) {
+        const std::string name = "ptr.wide.edge.60x60.rate50.cam_" + std::string(c.name);
+        if (wanted(name)) record(name, wide_edge_sweep(60, 60, 50, {c}));
+    }
+    const struct { int32_t w, h, rate; } more[] = {{60, 60, 0}, {60, 60, 99}, {31, 31, 50}, {40, 40, 25}, {14, 14, 50}, {16, 16, 50}, {12, 12, 50}, {80, 50, 75}, {13, 9, 50}};
+    for (const auto& m : more) {
+        const std::string name = "ptr.wide.edge." + map_name(m.w, m.h) + ".rate" + std::to_string(m.rate) + ".all9";
+        if (!wanted(name)) continue;
+        const auto nine = wide_nine_cams(m.w, m.h);
+        record(name, wide_edge_sweep(m.w, m.h, m.rate, std::vector<Cam>(nine.begin(), nine.end())));
+    }
+    {   // the pointer outside the picture: a ring of 16 pixels around it
+        const std::string name = "ptr.wide.edge.60x60.rate50.outside_ring.mid";
+        if (wanted(name)) {
+            Fnv64 h;
+            uint64_t n = 0;
+            for (int32_t y = -16; y < kWH + 16; ++y) {
+                for (int32_t x = -16; x < kWW + 16; ++x) {
+                    if (x >= 0 && x < kWW && y >= 0 && y < kWH) continue;
+                    hash_scroll(h, edge_scroll_step(x, y, 50, 600, 700, 60, 60, kWide));
+                    ++n;
+                }
+            }
+            record(name, Measure{h.value(), n});
+        }
+    }
+    // the minimap: the world point under every pixel, the view's step towards it from nine cameras
+    const struct { int32_t w, h; } sizes[] = {{60, 60}, {31, 31}, {40, 40}, {14, 14}, {16, 16}, {80, 50}};
+    for (const auto& s : sizes) {
+        const std::string name = "ptr.wide.minimap.point." + map_name(s.w, s.h);
+        if (!wanted(name)) continue;
+        record(name, sweep_wide([&](Fnv64& h, int32_t x, int32_t y) {
+                   int32_t wx = 0, wy = 0;
+                   minimap_point(x, y, s.w, s.h, wx, wy, kWide);
+                   h.i32(wx);
+                   h.i32(wy);
+               }));
+    }
+    for (const auto& s : {std::pair<int32_t, int32_t>{60, 60}, std::pair<int32_t, int32_t>{31, 31}, std::pair<int32_t, int32_t>{14, 14}, std::pair<int32_t, int32_t>{16, 16}}) {
+        const std::string name = "ptr.wide.minimap.scroll." + map_name(s.first, s.second) + ".all9";
+        if (!wanted(name)) continue;
+        Fnv64 h;
+        uint64_t n = 0;
+        for (const Cam& c : wide_nine_cams(s.first, s.second)) {
+            for (int32_t y = 0; y < kWH; ++y) {
+                for (int32_t x = 0; x < kWW; ++x) {
+                    hash_scroll(h, minimap_scroll_step(x, y, c.x, c.y, s.first, s.second, kWide));
+                    ++n;
+                }
+            }
+        }
+        record(name, Measure{h.value(), n});
+    }
+    {   // the start view of every anchor tile of six maps in the 762 x 500 view
+        const std::string name = "ptr.wide.start_view.origins";
+        if (wanted(name)) {
+            Fnv64 h;
+            uint64_t n = 0;
+            for (const auto& s : {std::pair<int32_t, int32_t>{60, 60}, std::pair<int32_t, int32_t>{31, 31}, std::pair<int32_t, int32_t>{40, 40}, std::pair<int32_t, int32_t>{14, 14},
+                                  std::pair<int32_t, int32_t>{16, 16}, std::pair<int32_t, int32_t>{80, 50}}) {
+                for (int32_t ty = 0; ty < s.second; ++ty) {
+                    for (int32_t tx = 0; tx < s.first; ++tx) {
+                        int32_t ox = 0, oy = 0;
+                        start_view_origin(tx, ty, s.first, s.second, ox, oy, kWide);
+                        h.i32(ox);
+                        h.i32(oy);
+                        ++n;
+                    }
+                }
+            }
+            record(name, Measure{h.value(), n});
+        }
+    }
+}
+
+void camera_wide_scenarios() {
+    const struct { uint32_t w, h; } maps[] = {{60, 60}, {31, 31}, {14, 14}, {16, 16}, {12, 12}, {13, 9}, {80, 50}};
+    for (const bool centre : {true, false}) {
+        const std::string suffix = centre ? "" : ".corner";
+        if (wanted("view.wide.camera.clamp" + suffix)) {
+            Fnv64 h;
+            uint64_t n = 0;
+            const float values[] = {-500.0f, -1.0f, 0.0f, 0.5f, 7.0f, 100.25f, 441.0f, 761.0f, 762.0f, 763.0f, 1000.0f, 1157.5f, 1158.0f, 1159.0f, 1420.0f, 1600.0f, 5000.0f};
+            for (const auto& m : maps) {
+                for (float vx : values) {
+                    for (float vy : values) {
+                        ViewportCamera cam = wide_camera_at(0, 0);
+                        cam.centre_small_maps = centre;
+                        cam.x = vx;
+                        cam.y = vy;
+                        cam.clamp_to_bounds(m.w, m.h);
+                        h.i32(static_cast<int32_t>(cam.x * 4.0f));
+                        h.i32(static_cast<int32_t>(cam.y * 4.0f));
+                        h.i32(cam.world_x);
+                        h.i32(cam.world_y);
+                        ++n;
+                    }
+                }
+            }
+            record("view.wide.camera.clamp" + suffix, Measure{h.value(), n});
+        }
+        if (wanted("view.wide.camera.center_on" + suffix)) {
+            Fnv64 h;
+            uint64_t n = 0;
+            for (const auto& m : maps) {
+                for (int32_t wy = -64; wy < static_cast<int32_t>(m.h) * 32 + 64; wy += 37) {
+                    for (int32_t wx = -64; wx < static_cast<int32_t>(m.w) * 32 + 64; wx += 41) {
+                        ViewportCamera cam = wide_camera_at(0, 0);
+                        cam.centre_small_maps = centre;
+                        cam.center_on(wx, wy, m.w, m.h);
+                        h.i32(cam.world_x);
+                        h.i32(cam.world_y);
+                        ++n;
+                    }
+                }
+            }
+            record("view.wide.camera.center_on" + suffix, Measure{h.value(), n});
+        }
+        if (wanted("view.wide.camera.scroll_pixels" + suffix)) {
+            Fnv64 h;
+            uint64_t n = 0;
+            for (const auto& m : maps) {
+                ViewportCamera cam = wide_camera_at(0, 0);
+                cam.centre_small_maps = centre;
+                for (int32_t i = 0; i < 400; ++i) {
+                    const int32_t dx = ((i * 7) % 61) - 30;
+                    const int32_t dy = ((i * 11) % 53) - 26;
+                    cam.scroll_pixels(dx * (1 + i / 50), dy * (1 + i / 50), m.w, m.h);
+                    h.i32(cam.world_x);
+                    h.i32(cam.world_y);
+                    ++n;
+                }
+            }
+            record("view.wide.camera.scroll_pixels" + suffix, Measure{h.value(), n});
+        }
+    }
+    // screen -> world and world -> screen of a centred camera (a 16 x 16 map: the camera is at (-125, 0)) and of a camera in the middle of a big map
+    for (const Cam& c : {Cam{"origin", 0, 0}, Cam{"mid", 700, 700}, Cam{"far", 1158, 1420}, Cam{"small16", -125, 6}}) {
+        const std::string name = std::string("view.wide.camera.screen_to_world.") + c.name;
+        if (wanted(name)) {
+            const ViewportCamera cam = wide_camera_at(c.x, c.y);
+            record(name, sweep_wide([&](Fnv64& h, int32_t x, int32_t y) {
+                       int32_t wx = -1, wy = -1;
+                       const bool ok = cam.screen_to_world(x, y, wx, wy);
+                       h.flag(ok);
+                       if (ok) {
+                           h.i32(wx);
+                           h.i32(wy);
+                       }
+                   }));
+        }
+        const std::string name2 = std::string("view.wide.camera.world_to_screen.") + c.name;
+        if (wanted(name2)) {
+            const ViewportCamera cam = wide_camera_at(c.x, c.y);
+            Fnv64 h;
+            uint64_t n = 0;
+            for (int32_t wy = c.y - 80; wy < c.y + kWViewH + 80; wy += 9) {
+                for (int32_t wx = c.x - 80; wx < c.x + kWViewW + 80; wx += 9) {
+                    int32_t sx = 0, sy = 0;
+                    const bool in = cam.world_to_screen(wx, wy, sx, sy);
+                    h.flag(in);
+                    h.i32(sx);
+                    h.i32(sy);
+                    ++n;
+                }
+            }
+            record(name2, Measure{h.value(), n});
+        }
+    }
+}
+
+/// The cursor at every pixel of the wide picture for a fixed state of the selection (the scene of the classic sweeps, seen from (400, 400) in the 762 x 500 view)
+Measure wide_cursor_sweep(PointerScene& ps, HUD& hud, const ViewportCamera& cam) {
+    const sim::WorldState& world = ps.world();
+    const sim::Grid& grid = ps.sim.grid();
+    return sweep_wide([&](Fnv64& h, int32_t x, int32_t y) { h.byte(static_cast<uint8_t>(hud.evaluate_cursor(x, y, world, grid, cam))); });
+}
+
+void cursor_wide_scenarios() {
+    const std::vector<CursorState> states = {
+        {"idle", false, [](HUD&, PointerScene&, ViewportCamera&) {}},
+        {"own_worker", false, [](HUD& h, PointerScene& p, ViewportCamera&) { h.select_ant(p.worker); }},
+        {"own_bomber", false, [](HUD& h, PointerScene& p, ViewportCamera&) { h.select_ant(p.bomber); }},
+        {"own_thief", false, [](HUD& h, PointerScene& p, ViewportCamera&) { h.select_ant(p.thief); }},
+        {"bomber_latched", false,
+         [](HUD& h, PointerScene& p, ViewportCamera& cam) {
+             h.select_ant(p.bomber);
+             h.handle_mouse_down(560 + 320, 180, SDL_BUTTON_LEFT, p.sim, cam);      // the ability pedestal (slot 2) latches, moved by dx
+             h.handle_mouse_up(560 + 320, 180, SDL_BUTTON_LEFT, p.sim, cam);
+         }},
+        {"worker_move_latched", false,
+         [](HUD& h, PointerScene& p, ViewportCamera& cam) {
+             h.select_ant(p.worker);
+             h.handle_mouse_down(500 + 320, 170, SDL_BUTTON_LEFT, p.sim, cam);
+             h.handle_mouse_up(500 + 320, 170, SDL_BUTTON_LEFT, p.sim, cam);
+         }},
+        {"enemy_inspected", false, [](HUD& h, PointerScene& p, ViewportCamera&) { h.select_ant(p.foe); }},
+        {"hill_own", false, [](HUD& h, PointerScene&, ViewportCamera&) { h.select_base(0); }},
+        {"fog_own_worker", true, [](HUD& h, PointerScene& p, ViewportCamera&) { h.select_ant(p.worker); }},
+        {"options_open", false, [](HUD& h, PointerScene&, ViewportCamera&) { h.open_options(); }},
+        {"quit_open", false, [](HUD& h, PointerScene&, ViewportCamera&) { h.open_quit_dialog(); }},
+        {"band_dragging", false,
+         [](HUD& h, PointerScene& p, ViewportCamera& cam) {
+             h.select_ant(p.worker);
+             h.handle_mouse_down(100, 100, SDL_BUTTON_LEFT, p.sim, cam);
+             h.handle_mouse_motion(300, 260, p.sim, cam);
+         }},
+        {"button_captured", false,
+         [](HUD& h, PointerScene& p, ViewportCamera& cam) {
+             h.select_ant(p.worker);
+             h.handle_mouse_down(500 + 320, 18, SDL_BUTTON_LEFT, p.sim, cam);
+         }},
+    };
+    for (const CursorState& s : states) {
+        const std::string name = std::string("ptr.wide.cursor.") + s.name + ".cam_mid400";
+        if (!wanted(name)) continue;
+        PointerScene ps(s.fog);
+        HUD hud;
+        hud.set_ticks_function(&test_clock);
+        g_now_ms = 0;
+        hud.init(0);
+        hud.set_layout(kWide);
+        hud.set_sim_query(&ps.sim);
+        ViewportCamera cam = wide_camera_at(400, 400);
+        s.setup(hud, ps, cam);
+        record(name, wide_cursor_sweep(ps, hud, cam));
+    }
+    for (const char* state : {"idle", "own_worker"}) {
+        for (const Cam& c : wide_nine_cams(60, 60)) {
+            const std::string name = std::string("ptr.wide.cursor.") + state + ".cam_" + c.name;
+            if (!wanted(name)) continue;
+            PointerScene ps;
+            HUD hud;
+            hud.set_ticks_function(&test_clock);
+            g_now_ms = 0;
+            hud.init(0);
+            hud.set_layout(kWide);
+            hud.set_sim_query(&ps.sim);
+            if (std::string(state) == "own_worker") hud.select_ant(ps.worker);
+            record(name, wide_cursor_sweep(ps, hud, wide_camera_at(c.x, c.y)));
+        }
+    }
+}
+
+void click_wide_scenarios() {
+    struct State {
+        const char* name;
+        std::function<void(HUD&, PointerScene&)> setup;
+        uint8_t button;
+        const char* expects;
+    };
+    const std::vector<State> states = {
+        {"idle", [](HUD&, PointerScene&) {}, SDL_BUTTON_LEFT, "mp"},
+        {"own_worker", [](HUD& h, PointerScene& p) { h.select_ant(p.worker); }, SDL_BUTTON_LEFT, "csplmp"},
+        {"own_bomber", [](HUD& h, PointerScene& p) { h.select_ant(p.bomber); }, SDL_BUTTON_LEFT, "csl"},
+        {"hill_own", [](HUD& h, PointerScene&) { h.select_base(0); }, SDL_BUTTON_LEFT, "cs"},
+        {"own_worker.right_button", [](HUD& h, PointerScene& p) { h.select_ant(p.worker); }, SDL_BUTTON_RIGHT, "c"},
+        {"dialog.quit", [](HUD& h, PointerScene&) { h.open_quit_dialog(); }, SDL_BUTTON_LEFT, "qx"},
+        {"dialog.quickhelp", [](HUD& h, PointerScene&) { h.open_quick_help(); }, SDL_BUTTON_LEFT, "x"},
+        {"dialog.options", [](HUD& h, PointerScene&) { h.open_options(); }, SDL_BUTTON_LEFT, "ox"},
+        {"dialog.start_modal", [](HUD& h, PointerScene&) { h.start_match_modal(); }, SDL_BUTTON_LEFT, ""},
+    };
+    for (const State& s : states) {
+        const std::string name = std::string("ptr.wide.click.") + s.name;
+        if (!wanted(name)) continue;
+        PointerScene ps;
+        ClickTally tally;
+        ClickProbe probe{ps, s.setup, s.button, &tally};
+        probe.layout = &kWide;
+        const Measure m = refined_sweep(probe, 4, kWW, kWH);
+        record(name, m);
+        for (const char* e = s.expects; *e != '\0'; ++e) {
+            uint64_t seen = 0;
+            const char* what = "";
+            switch (*e) {
+                case 'c': seen = tally.commands; what = "issues a command"; break;
+                case 'q': seen = tally.quit; what = "quits"; break;
+                case 'o': seen = tally.options; what = "changes an option"; break;
+                case 's': seen = tally.selection; what = "keeps a selection"; break;
+                case 'l': seen = tally.latched; what = "latches a pedestal"; break;
+                case 'm': seen = tally.scrolled; what = "scrolls the view"; break;
+                case 'p': seen = tally.captured; what = "captures the pointer"; break;
+                case 'x': seen = tally.closed; what = "closes the dialog"; break;
+                default: break;
+            }
+            check(seen > 0, std::string("wide click scenario ") + s.name + ": some click " + what);
+        }
+        check(tally.clicks == m.count, std::string("wide click scenario ") + s.name + ": every click was probed");
+    }
+}
+
+// ---- what the real renderer draws on the 960 x 540 canvas
+
+struct WideCanvas {
+    std::vector<uint8_t> px = std::vector<uint8_t>(static_cast<size_t>(kWW) * static_cast<size_t>(kWH) * 4u, 0);
+};
+
+WideCanvas read_wide_canvas(SDL_Renderer* sr) {
+    WideCanvas c;
+    if (SDL_RenderReadPixels(sr, nullptr, SDL_PIXELFORMAT_RGBA32, c.px.data(), kWW * 4) != 0) std::fprintf(stderr, "SDL_RenderReadPixels failed: %s\n", SDL_GetError());
+    return c;
+}
+
+void record_wide_canvas(const std::string& name, WideCanvas c, const std::vector<MaskRect>& mask = {}) {
+    if (!wanted(name)) return;
+    for (const MaskRect& m : mask) {
+        for (int32_t y = std::max(0, m.y0); y < std::min(kWH, m.y1); ++y) {
+            for (int32_t x = std::max(0, m.x0); x < std::min(kWW, m.x1); ++x) std::memset(&c.px[(static_cast<size_t>(y) * kWW + static_cast<size_t>(x)) * 4u], 0, 4);
+        }
+    }
+    Fnv64 h;
+    h.bytes(c.px.data(), c.px.size());
+    if (!g_save_dir.empty()) {
+        std::vector<uint8_t> shown = c.px;
+        for (size_t i = 0; i < shown.size(); i += 4) {
+            if (shown[i + 3] == 0) {
+                shown[i] = 255;
+                shown[i + 1] = 0;
+                shown[i + 2] = 255;
+            }
+            shown[i + 3] = 255;
+        }
+        SDL_Surface* s = SDL_CreateRGBSurfaceWithFormatFrom(shown.data(), kWW, kWH, 32, kWW * 4, SDL_PIXELFORMAT_RGBA32);
+        if (s != nullptr) {
+            SDL_SaveBMP(s, (g_save_dir + "/" + name + ".bmp").c_str());
+            SDL_FreeSurface(s);
+        }
+    }
+    record(name, Measure{h.value(), kWPixels});
+}
+
+/// A real renderer over a hidden 960 x 540 window with the wide layout, a map loaded (or none: a synthetic world), a pinned clock
+struct WideRendererRig {
+    WideRendererRig(const assets::AssetArchive& archive, const std::string& map, uint32_t synthetic_tiles = 0) : arc(archive) {
+        const QuietStdout quiet;
+        SDL_Init(SDL_INIT_VIDEO);
+        win = SDL_CreateWindow("view-fingerprint-wide", 0, 0, kWW, kWH, SDL_WINDOW_HIDDEN);
+        if (win == nullptr || !renderer.init(win, archive)) return;
+        renderer.set_canvas_size(kWW, kWH);
+        renderer.set_layout(kWide);
+        renderer.pin_animation_clock(1500);
+        renderer.set_hud_team(0);
+        if (synthetic_tiles > 0) {
+            engine.init_test_world(synthetic_tiles, synthetic_tiles, 1, 600000);
+        } else {
+            if (!level.load_from_file(std::string(ORIGINAL_ASSETS_DIR) + "/Maps/" + map + ".LVL")) return;
+            engine.init(level, 1337);
+            renderer.set_level(level);
+        }
+        world = engine.get_world_state();
+        world.ants.clear();
+        ok = true;
+    }
+    ~WideRendererRig() {
+        renderer.shutdown();
+        if (win != nullptr) SDL_DestroyWindow(win);
+    }
+    WideRendererRig(const WideRendererRig&) = delete;
+    WideRendererRig& operator=(const WideRendererRig&) = delete;
+    void look(int32_t x, int32_t y, uint32_t tiles_w, uint32_t tiles_h) {
+        renderer.camera().x = static_cast<float>(x);
+        renderer.camera().y = static_cast<float>(y);
+        renderer.camera().clamp_to_bounds(tiles_w, tiles_h);
+    }
+    int32_t cam_x() { return renderer.camera().world_x; }
+    int32_t cam_y() { return renderer.camera().world_y; }
+    void shoot(const std::string& name, const std::vector<MaskRect>& mask = {}) {
+        if (!wanted(name)) return;
+        renderer.begin_frame();
+        renderer.render_world(world, engine.grid(), -1, {}, false, false, -1, -1, -1, 0.0f);
+        record_wide_canvas(name, read_wide_canvas(renderer.get_sdl_renderer()), mask);
+    }
+    const assets::AssetArchive& arc;
+    SDL_Window* win{nullptr};
+    assets::LevelData level;
+    sim::SimulationEngine engine;
+    Renderer renderer;
+    sim::WorldState world;
+    bool ok{false};
+};
+
+/// TrueType text is masked as in the classic frames: the boxes of the labels of the wide picture (fixed rectangles) and the plate in the canvas's corner
+const MaskRect kWMaskPlate{790, 526, 960, 540};
+/// The match screen's labels: the status line (801, 254) 139 px, the chat log (802, 299) 138 x 161, the chat input (801, 484) 139 px, the score labels (the local one at (632 .. 719, 4), the
+/// bottom ones (325 .. 421, 483 .. 571, 632 .. 719) x 524)
+const std::vector<MaskRect> kWMaskMatch = {{799, 252, 942, 268}, {800, 297, 942, 462}, {799, 482, 942, 498}, {630, 2, 722, 20}, {323, 522, 423, 540}, {481, 522, 573, 540}, {630, 522, 722, 540}};
+/// The "Get ready" dialog's two labels and the quit dialog's prompt, moved by the dialog origin (137, 59)
+const std::vector<MaskRect> kWMaskStartModal = {{265, 167, 509, 331}, {265, 347, 509, 373}};
+const std::vector<MaskRect> kWMaskQuit = {{265, 237, 529, 401}};
+/// The setup screen's labels moved by the page origin (160, 30)
+const std::vector<MaskRect> kWMaskSetup = {{192, 338, 382, 382}, {192, 406, 496, 470}, {192, 473, 496, 510}, {571, 123, 699, 149}, {571, 173, 699, 199}, {571, 223, 699, 249}, {571, 273, 699, 299}};
+/// The options screen's edit fields and the results rows are text too: the whole page's text boxes are not known one by one, so the pages that carry TrueType text are masked as a
+/// whole where it appears (the results' rows, the options' four quick-chat fields)
+const std::vector<MaskRect> kWMaskResults = {{190, 230, 770, 500}};
+const std::vector<MaskRect> kWMaskOptions = {{250, 398, 396, 418}, {250, 430, 396, 450}, {460, 398, 606, 418}, {460, 430, 606, 450}};
+
+std::vector<MaskRect> wide_masks(std::initializer_list<const std::vector<MaskRect>*> lists) {
+    std::vector<MaskRect> all{kWMaskPlate};
+    for (const auto* l : lists) all.insert(all.end(), l->begin(), l->end());
+    return all;
+}
+
+void world_pixel_wide_scenarios(const assets::AssetArchive& arc) {
+    // the playfield of 762 x 500 at the corners and edges of two maps (MEDIUM 60 x 60; TINY 31 x 31 = 992 px: narrower than 1.5 views), ants of every kind straddling the borders
+    for (const char* map : {"MEDIUM", "TINY"}) {
+        const int32_t tiles = std::string(map) == "TINY" ? 31 : 60;
+        for (const Cam& c : wide_nine_cams(tiles, tiles)) {
+            const std::string name = std::string("px.wide.world.") + map + ".cam_" + c.name;
+            if (!wanted(name)) continue;
+            WideRendererRig rig(arc, map);
+            check(rig.ok, "the wide renderer rig for " + std::string(map) + " is up");
+            if (!rig.ok) continue;
+            rig.look(c.x, c.y, static_cast<uint32_t>(tiles), static_cast<uint32_t>(tiles));
+            populate_view(rig.world, arc, rig.cam_x(), rig.cam_y(), 140, 4242u + static_cast<uint32_t>(c.x), kWViewW, kWViewH);
+            add_effects(rig.world, rig.cam_x(), rig.cam_y(), kWViewW, kWViewH);
+            rig.shoot(name);
+        }
+    }
+    for (const char* map : {"GAUNTLET", "ISLANDS", "SMALL", "TREASURE"}) {
+        const int32_t tiles = std::string(map) == "SMALL" ? 40 : 60;
+        for (const Cam& c : {wide_nine_cams(tiles, tiles)[0], wide_nine_cams(tiles, tiles)[4]}) {
+            const std::string name = std::string("px.wide.world.") + map + ".cam_" + c.name;
+            if (!wanted(name)) continue;
+            WideRendererRig rig(arc, map);
+            check(rig.ok, "the wide renderer rig for " + std::string(map) + " is up");
+            if (!rig.ok) continue;
+            rig.look(c.x, c.y, static_cast<uint32_t>(tiles), static_cast<uint32_t>(tiles));
+            populate_view(rig.world, arc, rig.cam_x(), rig.cam_y(), 60, 17u + static_cast<uint32_t>(c.x), kWViewW, kWViewH);
+            rig.shoot(name);
+        }
+    }
+    // the maps that are smaller than the view (a synthetic world: flat colours): centred, black around it; 16 x 16 is 12 px taller than the view, 12 x 12 is smaller on both axes
+    for (const uint32_t tiles : {16u, 12u}) {
+        const std::string name = "px.wide.world.small" + std::to_string(tiles);
+        if (!wanted(name)) continue;
+        WideRendererRig rig(arc, "", tiles);
+        check(rig.ok, "the wide renderer rig for a " + std::to_string(tiles) + " x " + std::to_string(tiles) + " world is up");
+        if (!rig.ok) continue;
+        rig.look(100000, 100000, tiles, tiles);
+        check(rig.cam_x() == (static_cast<int32_t>(tiles) * 32 - 762) / 2, "the " + std::to_string(tiles) + " x " + std::to_string(tiles) + " map is centred across the view");
+        rig.shoot(name);
+    }
+}
+
+// ---- whole application frames at 960 x 540: the pages and the match
+
+struct WideAppRig {
+    WideAppRig() {
+        const QuietStdout quiet;
+        SDL_Init(SDL_INIT_VIDEO);
+        ApplicationConfig cfg = app_config();
+        cfg.aspect = Aspect::Wide16x9;
+        cfg.aspect_given = true;
+        cfg.has_window_size = true;                              // the canvas and the window are the same size: one pixel of the canvas is one pixel read back
+        cfg.window_w = kWW;
+        cfg.window_h = kWH;
+        cfg.window_width = kWW;
+        cfg.window_height = kWH;
+        ok = app.init(cfg);
+        if (!ok) return;
+        app.renderer().pin_animation_clock(1500);
+        app.hud().set_ticks_function(&test_clock);
+        g_now_ms = 0;
+        app.handle_window_event(window_event(SDL_WINDOWEVENT_LEAVE));
+    }
+    void pointer_at(int32_t x, int32_t y) {
+        app.handle_window_event(window_event(SDL_WINDOWEVENT_ENTER));
+        app.note_pointer(x, y);
+    }
+    std::string map_path(const char* name) const { return std::string(ORIGINAL_ASSETS_DIR) + "/Maps/" + name + ".LVL"; }
+    bool start_match(const char* map) {
+        if (!app.start_game(map_path(map))) return false;
+        app.hud().reset();
+        g_now_ms = 0;
+        app.hud().start_match_modal();
+        return true;
+    }
+    void shot(const std::string& name, const std::vector<MaskRect>& mask) {
+        if (!wanted(name)) return;
+        app.render_frame();
+        record_wide_canvas(name, read_wide_canvas(app.renderer().get_sdl_renderer()), mask);
+    }
+    void look(int32_t x, int32_t y) {
+        ViewportCamera& cam = app.renderer().camera();
+        cam.x = static_cast<float>(x);
+        cam.y = static_cast<float>(y);
+        cam.clamp_to_bounds(app.sim().grid().width(), app.sim().grid().height());
+    }
+    Application app;
+    bool ok{false};
+};
+
+void app_pixel_wide_scenarios() {
+    // the pages of the original centred over the clay margin: the setup screen and the quick help (the loading screen needs a window)
+    if (wanted_group("px.wide.app.setup")) {
+        WideAppRig rig;
+        check(rig.ok, "the wide application is up");
+        if (rig.ok) {
+            check(rig.app.picture() == (LayoutRect{160, 30, 640, 480}), "the wide application's setup screen is the page centred at (160, 30)");
+            rig.shot("px.wide.app.setup.before_refresh", wide_masks({}));
+            rig.app.map_select().update(0.5f);
+            rig.shot("px.wide.app.setup.refreshed", wide_masks({&kWMaskSetup}));
+            rig.app.map_select().handle_mouse_motion(MapSelectScreen::BTN_START_X + 5, MapSelectScreen::BTN_START_Y + 5);
+            rig.shot("px.wide.app.setup.hover_start", wide_masks({&kWMaskSetup}));
+            rig.pointer_at(300, 200);
+            rig.shot("px.wide.app.setup.cursor", wide_masks({&kWMaskSetup}));
+        }
+    }
+    if (wanted_group("px.wide.app.quickhelp")) {
+        WideAppRig rig;
+        if (rig.ok) {
+            rig.app.finish_loading();
+            check(rig.app.state() == AppState::QuickHelp, "the quick help follows the loading screen");
+            rig.shot("px.wide.app.quickhelp.rest", wide_masks({}));
+            rig.app.quick_help_move(540, 445);
+            rig.shot("px.wide.app.quickhelp.hover_start", wide_masks({}));
+        }
+    }
+    if (wanted_group("px.wide.app.results")) {
+        WideAppRig rig;
+        if (rig.ok && rig.start_match("SMALL")) {
+            sim::MatchResult mr;
+            mr.is_over = true;
+            mr.ally = {1, 0, sim::ALLIANCE_NONE, sim::ALLIANCE_NONE};
+            const int32_t scores[4] = {900, 600, 420, 100};
+            for (size_t p = 0; p < 4; ++p) {
+                mr.stats[p].score = scores[p];
+                mr.stats[p].friendly_lost = static_cast<uint32_t>(5 + p);
+                mr.stats[p].enemy_killed = static_cast<uint32_t>(18 - 4 * p);
+                mr.stats[p].new_hatched = static_cast<uint32_t>(25 - 5 * p);
+            }
+            mr.decide_winners();
+            rig.app.scorecard().show(mr, 0);
+            rig.app.scorecard().update(0.25f);
+            rig.shot("px.wide.app.results", wide_masks({&kWMaskResults}));
+        }
+    }
+    // the match screen: the "Get ready" dialog, the start view of every map, the corners and edges of MEDIUM, the windows of the original
+    if (wanted_group("px.wide.app.match")) {
+        WideAppRig rig;
+        if (rig.ok && rig.start_match("MEDIUM")) {
+            check(rig.app.picture() == (LayoutRect{0, 0, 960, 540}), "the wide match is the whole canvas");
+            rig.shot("px.wide.app.match.modal", wide_masks({&kWMaskMatch, &kWMaskStartModal}));
+            rig.app.hud().dismiss_match_start_modal();
+            rig.shot("px.wide.app.match.start_view", wide_masks({&kWMaskMatch}));
+            const int32_t tiles = static_cast<int32_t>(rig.app.sim().grid().width());
+            for (const Cam& c : wide_nine_cams(tiles, tiles)) {
+                rig.look(c.x, c.y);
+                rig.shot(std::string("px.wide.app.match.cam_") + c.name, wide_masks({&kWMaskMatch}));
+            }
+            rig.look(700, 700);
+            rig.app.hud().open_quit_dialog();
+            rig.shot("px.wide.app.match.quit_dialog", wide_masks({&kWMaskMatch, &kWMaskQuit}));
+            rig.app.hud().close_quit_dialog();
+            rig.app.hud().open_options();
+            rig.shot("px.wide.app.match.options_page", wide_masks({&kWMaskOptions}));
+            rig.app.hud().close_options();
+            rig.app.hud().open_quick_help();
+            rig.shot("px.wide.app.match.quickhelp_page", wide_masks({}));
+            rig.app.hud().close_quick_help();
+            rig.pointer_at(300, 300);
+            rig.shot("px.wide.app.match.cursor_map", wide_masks({&kWMaskMatch}));
+            rig.pointer_at(10, 240);
+            rig.shot("px.wide.app.match.cursor_edge", wide_masks({&kWMaskMatch}));
+            rig.pointer_at(955, 270);                                 // the east strip at the right edge of the 960 wide picture
+            rig.shot("px.wide.app.match.cursor_edge_east", wide_masks({&kWMaskMatch}));
+        }
+    }
+    for (const char* map : {"TINY", "SMALL", "ISLANDS", "GAUNTLET", "TREASURE"}) {
+        const std::string name = std::string("px.wide.app.start.") + map;
+        if (!wanted(name)) continue;
+        WideAppRig rig;
+        if (rig.ok && rig.start_match(map)) {
+            rig.app.hud().dismiss_match_start_modal();
+            rig.shot(name, wide_masks({&kWMaskMatch}));
+        }
+    }
+}
+
+void wide_scenarios(const assets::AssetArchive& arc) {
+    hud_wide_scenarios(arc);
+    ptr_wide_scenarios();
+    camera_wide_scenarios();
+    cursor_wide_scenarios();
+    click_wide_scenarios();
+    world_pixel_wide_scenarios(arc);
+    app_pixel_wide_scenarios();
+}
+
+}  // namespace
+
+// =====================================================================================================================================================
 // The self-check: the fingerprints can fail
 // =====================================================================================================================================================
 
@@ -2537,6 +3488,51 @@ void self_check_scenarios() {
         const Measure rect = sweep([](Fnv64& h, int32_t x, int32_t y) { h.flag(HUD::in_map_rect(x, y)); });
         const Measure moved = sweep([](Fnv64& h, int32_t x, int32_t y) { h.flag(HUD::in_map_rect(x - 1, y)); });
         check(rect.hash != moved.hash, "sensitivity: a rectangle that moves by one pixel changes the classification hash");
+    }
+}
+
+/// The wide family's own recorder calls (milestone M3): a part of a sprite and the origin of a window are calls with every parameter in the hash; setting the origin that is set is no call
+void self_check_wide_scenarios() {
+    const std::array<int32_t, 9> base{7, 100, 200, 50, 60, 3, 4, 1, 9};              // sprite id, x, y, w, h, sx, sy, sw, sh
+    auto region_hash = [](const std::array<int32_t, 9>& p) {
+        FrameRecorder rec;
+        rec.draw_sprite_region(static_cast<uint32_t>(p[0]), p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8]);
+        return rec.result();
+    };
+    const Measure reference = region_hash(base);
+    check(reference.count == 1 && region_hash(base).hash == reference.hash, "wide self-check: a region is one call, the same call gives the same hash");
+    const char* names[9] = {"sprite id", "x", "y", "w", "h", "sx", "sy", "sw", "sh"};
+    for (size_t i = 0; i < base.size(); ++i) {
+        std::array<int32_t, 9> changed = base;
+        changed[i] += 1;
+        check(region_hash(changed).hash != reference.hash, std::string("wide self-check: the hash changes when the region's '") + names[i] + "' changes by one");
+    }
+    {
+        FrameRecorder a, b, c, d;
+        a.set_origin(137, 59);
+        b.set_origin(137, 60);
+        c.set_origin(138, 59);
+        d.set_origin(137, 59);
+        check(a.result().hash == d.result().hash && a.result().hash != b.result().hash && a.result().hash != c.result().hash && a.calls() == 1, "wide self-check: an origin is one call and both numbers are in the hash");
+        FrameRecorder none;
+        none.set_origin(0, 0);
+        none.set_origin(0, 0);
+        check(none.calls() == 0 && none.result().hash == FrameRecorder{}.result().hash, "wide self-check: the origin (0, 0) that is set already is no call (the classic scenes set it around their dialogs)");
+        FrameRecorder moved;
+        moved.set_origin(5, 6);
+        moved.set_origin(5, 6);
+        moved.set_origin(0, 0);
+        check(moved.calls() == 2, "wide self-check: a change of the origin is a call, the same again is none, back to (0, 0) is one");
+    }
+    // the pointer and pixel families of the wide picture move with their inputs
+    {
+        const Measure a = wide_edge_sweep(60, 60, 50, {Cam{"c", 400, 400}});
+        check(wide_edge_sweep(60, 60, 50, {Cam{"c", 400, 400}}).hash == a.hash, "wide self-check: the same sweep gives the same hash");
+        check(wide_edge_sweep(60, 60, 51, {Cam{"c", 400, 400}}).hash != a.hash, "wide self-check: the scroll rate changes the wide edge hash");
+        check(wide_edge_sweep(60, 60, 50, {Cam{"c", 0, 400}}).hash != a.hash, "wide self-check: a camera at the west border changes the wide edge hash");
+        const Measure plain = sweep_wide([](Fnv64& h, int32_t x, int32_t y) { h.flag(kWide.view().contains(x, y)); });
+        const Measure moved = sweep_wide([](Fnv64& h, int32_t x, int32_t y) { h.flag(kWide.view().contains(x - 1, y)); });
+        check(plain.hash != moved.hash && plain.count == kWPixels, "wide self-check: a rectangle that moves by one pixel changes the wide classification hash");
     }
 }
 
@@ -2876,6 +3872,233 @@ const Golden kGoldens[] = {
     {"screen.menu.room.code", 0xab14102277407908, 149},
     {"screen.menu.room.full", 0x073718be4ddb297b, 149},
     {"screen.menu.room.longest_code", 0x054cb5ecb543fd00, 149},
+    // ---- the wide match screen (milestone M3, 960 x 540), computed at the commit that introduced it (the classic numbers above did not move); regenerate only deliberately, see the notes at the top
+    {"hud.wide.start.modal.p0", 0x23a3e6fa712d6a17, 120},
+    {"hud.wide.start.modal.p1", 0xb6395233eeb3f80e, 120},
+    {"hud.wide.start.modal.p2", 0x7296fdf5c1e86a71, 120},
+    {"hud.wide.start.modal.p3", 0x3ba394c1b56fbeb6, 120},
+    {"hud.wide.start.idle.p0", 0x87b290b8f5f47029, 92},
+    {"hud.wide.start.idle.p1", 0x163d4897a3eb3c2f, 92},
+    {"hud.wide.start.idle.p2", 0xfdfb503e7771b154, 92},
+    {"hud.wide.start.idle.p3", 0xaa6e5b010afce335, 92},
+    {"hud.wide.sel.one.worker", 0x9f574f626468af45, 97},
+    {"hud.wide.sel.one.worker2", 0x9f574f626468af45, 97},
+    {"hud.wide.sel.one.bomber", 0x904f3aa0ed9662ce, 100},
+    {"hud.wide.sel.one.fire", 0xa32f2b8b8788f199, 100},
+    {"hud.wide.sel.one.thief", 0x31ce416116c2bc35, 100},
+    {"hud.wide.sel.one.combat", 0x0f148eec302c54c4, 100},
+    {"hud.wide.sel.one.swimmer", 0xf990ec532e809e7b, 100},
+    {"hud.wide.sel.group", 0x7c347ea95ffb34a9, 97},
+    {"hud.wide.sel.group.carrying", 0x96cf6abd1cb941c5, 98},
+    {"hud.wide.sel.enemy", 0x8409a295febc10fb, 91},
+    {"hud.wide.sel.hill.own", 0x6e6b7e04aab3a907, 105},
+    {"hud.wide.sel.hill.own.3eggs", 0x53fd8a321823f29a, 99},
+    {"hud.wide.sel.hill.enemy", 0x7c7584ae396954d4, 94},
+    {"hud.wide.sel.one.p2", 0xfdad54a17c53d550, 97},
+    {"hud.wide.pedestal.rising.100", 0x7e645c8c49199989, 96},
+    {"hud.wide.pedestal.rising.450", 0x8b9daffd2b690e44, 97},
+    {"hud.wide.pedestal.rising.1200", 0x904f3aa0ed9662ce, 100},
+    {"hud.wide.chat.typing.caret_on", 0x30bd2cf8c2db1cb6, 104},
+    {"hud.wide.chat.typing.caret_off", 0x90bfe2670b68c90b, 103},
+    {"hud.wide.chat.typing.long", 0x5b1b04b1fa71b681, 93},
+    {"hud.wide.chat.scrolled", 0x33d3be6ec316db89, 105},
+    {"hud.wide.chat.team.buttons", 0x8d52ea7a41adaf87, 106},
+    {"hud.wide.chat.team.hover_all", 0xab16caad8d1dd151, 107},
+    {"hud.wide.chat.team.pressed_team", 0x08fac61b654fd801, 106},
+    {"hud.wide.chat.off", 0x2176c459fe0b894f, 104},
+    {"hud.wide.minimap.teams", 0x87b290b8f5f47029, 92},
+    {"hud.wide.minimap.frame.tl", 0x87b290b8f5f47029, 92},
+    {"hud.wide.minimap.frame.tr", 0xd41807181f7b3134, 92},
+    {"hud.wide.minimap.frame.bl", 0xdd19e8c009400b6e, 92},
+    {"hud.wide.minimap.frame.br", 0xb38155225c374687, 92},
+    {"hud.wide.minimap.frame.top", 0xba5cf05de4aaa9e0, 92},
+    {"hud.wide.minimap.frame.left", 0xf184363676274d00, 92},
+    {"hud.wide.minimap.frame.mid", 0x8c0e851458f47d49, 92},
+    {"hud.wide.minimap.size.31x31", 0xe27753c21182668f, 92},
+    {"hud.wide.minimap.size.40x40", 0x47928f48aba07cc1, 92},
+    {"hud.wide.minimap.size.14x14", 0x88f40744a47371d8, 92},
+    {"hud.wide.minimap.size.16x16", 0x2a7e1d470c63eae9, 92},
+    {"hud.wide.minimap.size.12x12", 0xb80336ff9f165e67, 92},
+    {"hud.wide.minimap.size.80x50", 0xb5459e2218d0ebfc, 92},
+    {"hud.wide.minimap.size.13x9", 0x7a5ea49c3e17bb06, 92},
+    {"hud.wide.fog.on", 0x5b3c37316548f7ef, 87},
+    {"hud.wide.scores.allied", 0x7be16e93007ce1cf, 95},
+    {"hud.wide.scores.allied.bottom_pair", 0x49aaf278d60ca05c, 93},
+    {"hud.wide.scores.dropped", 0x23827c4c05c2bd28, 90},
+    {"hud.wide.scores.roster.3", 0x984806cf3a592b4d, 85},
+    {"hud.wide.scores.roster.7", 0xbe82e5e47a62ad8d, 88},
+    {"hud.wide.scores.roster.11", 0xeeb5572fc920d069, 89},
+    {"hud.wide.scores.roster.15", 0x87b290b8f5f47029, 92},
+    {"hud.wide.scores.roster.13", 0xfbb7cf88f4aee144, 88},
+    {"hud.wide.scores.two_players.black_local", 0x242bc68e073f94eb, 85},
+    {"hud.wide.scores.names", 0xc5e170d6b9246558, 92},
+    {"hud.wide.quit.open", 0x74ecbfabfa84b377, 118},
+    {"hud.wide.quit.hover_yes", 0x39e84c5babb73d66, 118},
+    {"hud.wide.quit.pressed_no", 0x365f094440e5f86d, 118},
+    {"hud.wide.options.open", 0x24b0385effde8ade, 321},
+    {"hud.wide.options.changed", 0x41290b902f127239, 322},
+    {"hud.wide.options.hover_return", 0xb02bcbda2c97801c, 322},
+    {"hud.wide.quickhelp.open", 0xfd532f0163cdb735, 131},
+    {"hud.wide.quickhelp.hover_return", 0x22c45711aa2b8bfa, 131},
+    {"hud.wide.quickhelp.pressed_return", 0x309bd135f444d165, 131},
+    {"hud.wide.dialog.invitation", 0x05592ab767fd6fd3, 118},
+    {"hud.wide.dialog.invitation.hover_accept", 0x6c241241232828e2, 118},
+    {"hud.wide.dialog.waiting", 0x0b8903b1fe07a413, 117},
+    {"hud.wide.dialog.breakconfirm", 0xe5e6b71a9ecc0f14, 118},
+    {"hud.wide.topbar.hover_help", 0x4ceb06e4bbe7441f, 94},
+    {"hud.wide.topbar.pressed_help", 0x003024266fe4e507, 93},
+    {"hud.wide.topbar.hover_options", 0x507c8f49ce459d9a, 94},
+    {"hud.wide.topbar.pressed_options", 0xce18fcf7df911f27, 93},
+    {"hud.wide.topbar.hover_quit", 0x0851397fd1af6c62, 94},
+    {"hud.wide.topbar.pressed_quit", 0xab8b16065167695c, 93},
+    {"hud.wide.marquee.band", 0xbf9b73e85a6a7307, 93},
+    {"hud.wide.marquee.clamped", 0x693b5ef41c44af39, 93},
+    {"hud.wide.marquee.clamped_low", 0x44e67e014bb8ee2e, 93},
+    {"hud.wide.status.long", 0xce9ae35ae3ce4506, 92},
+    {"ptr.wide.class.map_view", 0x5a1dd554dd5daacd, 518400},
+    {"ptr.wide.class.minimap", 0x412ac51fedbd6f8a, 518400},
+    {"ptr.wide.class.chat_view", 0xd33a82eac3bc5ed7, 518400},
+    {"ptr.wide.edge.60x60.rate50.cam_tl", 0x6120e14a1274a015, 518400},
+    {"ptr.wide.edge.60x60.rate50.cam_t", 0x7845bacfec608f1f, 518400},
+    {"ptr.wide.edge.60x60.rate50.cam_tr", 0xd0a24e8428148eef, 518400},
+    {"ptr.wide.edge.60x60.rate50.cam_l", 0xcef20df609d2b663, 518400},
+    {"ptr.wide.edge.60x60.rate50.cam_mid", 0x89a379e25c82e2cd, 518400},
+    {"ptr.wide.edge.60x60.rate50.cam_r", 0x256d9d28c4c52373, 518400},
+    {"ptr.wide.edge.60x60.rate50.cam_bl", 0x01c9e9d3197b3293, 518400},
+    {"ptr.wide.edge.60x60.rate50.cam_b", 0x76375f7cfd86cacf, 518400},
+    {"ptr.wide.edge.60x60.rate50.cam_br", 0x038a2cf579102b41, 518400},
+    {"ptr.wide.edge.60x60.rate0.all9", 0xfd5a1ca0dba5320d, 4665600},
+    {"ptr.wide.edge.60x60.rate99.all9", 0x1ea2f90a915374fd, 4665600},
+    {"ptr.wide.edge.31x31.rate50.all9", 0x8c4e8a6f60a65ee5, 4665600},
+    {"ptr.wide.edge.40x40.rate25.all9", 0x47ccf33f6f94b285, 4665600},
+    {"ptr.wide.edge.14x14.rate50.all9", 0x823aba4206d1b725, 4665600},
+    {"ptr.wide.edge.16x16.rate50.all9", 0x9ef1663cfe94c0cd, 4665600},
+    {"ptr.wide.edge.12x12.rate50.all9", 0x823aba4206d1b725, 4665600},
+    {"ptr.wide.edge.80x50.rate75.all9", 0xde8fc67ee07f143d, 4665600},
+    {"ptr.wide.edge.13x9.rate50.all9", 0x823aba4206d1b725, 4665600},
+    {"ptr.wide.edge.60x60.rate50.outside_ring.mid", 0xa8728f11e3933925, 49024},
+    {"ptr.wide.minimap.point.60x60", 0x56f0c5e5df3660f1, 518400},
+    {"ptr.wide.minimap.point.31x31", 0xa9401273887159b5, 518400},
+    {"ptr.wide.minimap.point.40x40", 0x3af9ace6fb459db1, 518400},
+    {"ptr.wide.minimap.point.14x14", 0x5bda0cccc11bcc79, 518400},
+    {"ptr.wide.minimap.point.16x16", 0x1d4f96be52e849e9, 518400},
+    {"ptr.wide.minimap.point.80x50", 0x2f4b533746c5632d, 518400},
+    {"ptr.wide.minimap.scroll.60x60.all9", 0x7f6bf7cee9748295, 4665600},
+    {"ptr.wide.minimap.scroll.31x31.all9", 0x9c1e5777a849e54d, 4665600},
+    {"ptr.wide.minimap.scroll.14x14.all9", 0x823aba4206d1b725, 4665600},
+    {"ptr.wide.minimap.scroll.16x16.all9", 0xf7e6e1bc803b0425, 4665600},
+    {"ptr.wide.start_view.origins", 0xaff608621198d0b4, 10613},
+    {"view.wide.camera.clamp", 0x5a8385469ae3abc4, 2023},
+    {"view.wide.camera.center_on", 0x9d5f1216d75aeef5, 7648},
+    {"view.wide.camera.scroll_pixels", 0xc60723ba128ef67b, 2800},
+    {"view.wide.camera.clamp.corner", 0x0693cd6ef68b2b7c, 2023},
+    {"view.wide.camera.center_on.corner", 0xc8338d93cf5a2d35, 7648},
+    {"view.wide.camera.scroll_pixels.corner", 0x75825320271573b3, 2800},
+    {"view.wide.camera.screen_to_world.origin", 0x77e1d653db94b099, 518400},
+    {"view.wide.camera.world_to_screen.origin", 0x0b317b1f5c708ef4, 7622},
+    {"view.wide.camera.screen_to_world.mid", 0x3e1c574045e31501, 518400},
+    {"view.wide.camera.world_to_screen.mid", 0x0b317b1f5c708ef4, 7622},
+    {"view.wide.camera.screen_to_world.far", 0x105c85add91308d9, 518400},
+    {"view.wide.camera.world_to_screen.far", 0x0b317b1f5c708ef4, 7622},
+    {"view.wide.camera.screen_to_world.small16", 0x000e87d6179e245d, 518400},
+    {"view.wide.camera.world_to_screen.small16", 0x0b317b1f5c708ef4, 7622},
+    {"ptr.wide.cursor.idle.cam_mid400", 0xd8b30bda747f1305, 518400},
+    {"ptr.wide.cursor.own_worker.cam_mid400", 0x431ae1bca23bf625, 518400},
+    {"ptr.wide.cursor.own_bomber.cam_mid400", 0xc80b40b060c6aa25, 518400},
+    {"ptr.wide.cursor.own_thief.cam_mid400", 0x4e65737ce1987225, 518400},
+    {"ptr.wide.cursor.bomber_latched.cam_mid400", 0x34d4c425f3c590cd, 518400},
+    {"ptr.wide.cursor.worker_move_latched.cam_mid400", 0x431ae1bca23bf625, 518400},
+    {"ptr.wide.cursor.enemy_inspected.cam_mid400", 0xd8b30bda747f1305, 518400},
+    {"ptr.wide.cursor.hill_own.cam_mid400", 0xd8b30bda747f1305, 518400},
+    {"ptr.wide.cursor.fog_own_worker.cam_mid400", 0x4f69e73cb07afe25, 518400},
+    {"ptr.wide.cursor.options_open.cam_mid400", 0x59af61e6ef65d725, 518400},
+    {"ptr.wide.cursor.quit_open.cam_mid400", 0x59af61e6ef65d725, 518400},
+    {"ptr.wide.cursor.band_dragging.cam_mid400", 0x59af61e6ef65d725, 518400},
+    {"ptr.wide.cursor.button_captured.cam_mid400", 0xe7244f0d10442a25, 518400},
+    {"ptr.wide.cursor.idle.cam_tl", 0x2f04b20490c0bd41, 518400},
+    {"ptr.wide.cursor.idle.cam_t", 0x667ee8dabe9fcb45, 518400},
+    {"ptr.wide.cursor.idle.cam_tr", 0x9d84544b5f12b5b5, 518400},
+    {"ptr.wide.cursor.idle.cam_l", 0x82009ba1806fc619, 518400},
+    {"ptr.wide.cursor.idle.cam_mid", 0x49c68f64404e1065, 518400},
+    {"ptr.wide.cursor.idle.cam_r", 0x7320b165fdde6b15, 518400},
+    {"ptr.wide.cursor.idle.cam_bl", 0x2308e686e9780175, 518400},
+    {"ptr.wide.cursor.idle.cam_b", 0xa5e7f1faf8adbd05, 518400},
+    {"ptr.wide.cursor.idle.cam_br", 0x6a30a3f35183dab5, 518400},
+    {"ptr.wide.cursor.own_worker.cam_tl", 0xcd1732376a270051, 518400},
+    {"ptr.wide.cursor.own_worker.cam_t", 0x1e05154b1615f945, 518400},
+    {"ptr.wide.cursor.own_worker.cam_tr", 0x3b0d9a4009a6fe95, 518400},
+    {"ptr.wide.cursor.own_worker.cam_l", 0x58d456a9d6624875, 518400},
+    {"ptr.wide.cursor.own_worker.cam_mid", 0xd546aeee415dae85, 518400},
+    {"ptr.wide.cursor.own_worker.cam_r", 0x10a9f75aa872b3f5, 518400},
+    {"ptr.wide.cursor.own_worker.cam_bl", 0x11629c939ffc0a55, 518400},
+    {"ptr.wide.cursor.own_worker.cam_b", 0x37e0b46b21df0a25, 518400},
+    {"ptr.wide.cursor.own_worker.cam_br", 0x07b9e9e7fc182395, 518400},
+    {"ptr.wide.click.idle", 0x141e464550b1cbd4, 58422},
+    {"ptr.wide.click.own_worker", 0x70f92850bb3579a2, 89352},
+    {"ptr.wide.click.own_bomber", 0xff1af76ddf37cbe9, 89706},
+    {"ptr.wide.click.hill_own", 0x0cc7d92020d63abb, 58908},
+    {"ptr.wide.click.own_worker.right_button", 0xda185c6d9bc471ee, 88590},
+    {"ptr.wide.click.dialog.quit", 0xbc1fb4292cecb626, 32820},
+    {"ptr.wide.click.dialog.quickhelp", 0xfaea3a9072870ecd, 32742},
+    {"ptr.wide.click.dialog.options", 0x3ddb1c261f808228, 39138},
+    {"ptr.wide.click.dialog.start_modal", 0x99b29917ecef4c65, 32400},
+    {"px.wide.world.MEDIUM.cam_tl", 0x95dc3673d504c028, 518400},
+    {"px.wide.world.MEDIUM.cam_t", 0x66635d7a3a1c809e, 518400},
+    {"px.wide.world.MEDIUM.cam_tr", 0xe0e0c8292973d82b, 518400},
+    {"px.wide.world.MEDIUM.cam_l", 0x29e7dd3ad0a61612, 518400},
+    {"px.wide.world.MEDIUM.cam_mid", 0x952eaa77934a2da3, 518400},
+    {"px.wide.world.MEDIUM.cam_r", 0x7a120c104dfc74e0, 518400},
+    {"px.wide.world.MEDIUM.cam_bl", 0x4e20f8b4530bca8f, 518400},
+    {"px.wide.world.MEDIUM.cam_b", 0x3f2726530c6b9456, 518400},
+    {"px.wide.world.MEDIUM.cam_br", 0xb52a74ecb39993d3, 518400},
+    {"px.wide.world.TINY.cam_tl", 0xbc330da064f78288, 518400},
+    {"px.wide.world.TINY.cam_t", 0xdd6c67bcc0006d25, 518400},
+    {"px.wide.world.TINY.cam_tr", 0x2171c244a56e67de, 518400},
+    {"px.wide.world.TINY.cam_l", 0xadf781277aa85eb1, 518400},
+    {"px.wide.world.TINY.cam_mid", 0x9b962f23d4045bc6, 518400},
+    {"px.wide.world.TINY.cam_r", 0x2d58241d85081213, 518400},
+    {"px.wide.world.TINY.cam_bl", 0x82bc31e0e4b4b1e2, 518400},
+    {"px.wide.world.TINY.cam_b", 0xd374c99d013b8958, 518400},
+    {"px.wide.world.TINY.cam_br", 0xea93e816fb085f57, 518400},
+    {"px.wide.world.GAUNTLET.cam_tl", 0xd699dba2e89e5476, 518400},
+    {"px.wide.world.GAUNTLET.cam_mid", 0x903e0ba3fbac81c2, 518400},
+    {"px.wide.world.ISLANDS.cam_tl", 0x85654509def1e63c, 518400},
+    {"px.wide.world.ISLANDS.cam_mid", 0x15370608dcf36412, 518400},
+    {"px.wide.world.SMALL.cam_tl", 0xc9ef1b48aa675ee9, 518400},
+    {"px.wide.world.SMALL.cam_mid", 0x5c82fc366812687d, 518400},
+    {"px.wide.world.TREASURE.cam_tl", 0x1fbd14a1af47079c, 518400},
+    {"px.wide.world.TREASURE.cam_mid", 0x2edba5c122d49a2c, 518400},
+    {"px.wide.world.small16", 0xda3d4b1c95658b25, 518400},
+    {"px.wide.world.small12", 0xf388b740365b8b25, 518400},
+    {"px.wide.app.setup.before_refresh", 0x8632a02b6a6cfcd8, 518400},
+    {"px.wide.app.setup.refreshed", 0x26d853760c5933a1, 518400},
+    {"px.wide.app.setup.hover_start", 0x5042d296fbb0e0bc, 518400},
+    {"px.wide.app.setup.cursor", 0x43e58d871ee0d00f, 518400},
+    {"px.wide.app.quickhelp.rest", 0x174b067d6bc59e00, 518400},
+    {"px.wide.app.quickhelp.hover_start", 0x76c3bbba45f90b9c, 518400},
+    {"px.wide.app.results", 0x5e72ea394f3c73a0, 518400},
+    {"px.wide.app.match.modal", 0x2a7a1da501b0385f, 518400},
+    {"px.wide.app.match.start_view", 0xf5de043cf57578a6, 518400},
+    {"px.wide.app.match.cam_tl", 0x5dd411abd5a73c4d, 518400},
+    {"px.wide.app.match.cam_t", 0xe0a5c2895e6d309a, 518400},
+    {"px.wide.app.match.cam_tr", 0x814ba71749bf09fa, 518400},
+    {"px.wide.app.match.cam_l", 0xb500897c5813240a, 518400},
+    {"px.wide.app.match.cam_mid", 0x58382e1283d020ee, 518400},
+    {"px.wide.app.match.cam_r", 0x8ddb089445ae3a2c, 518400},
+    {"px.wide.app.match.cam_bl", 0xbdf017eb5b4976e3, 518400},
+    {"px.wide.app.match.cam_b", 0x82ad6281250ba58e, 518400},
+    {"px.wide.app.match.cam_br", 0xf7b783cf65510b44, 518400},
+    {"px.wide.app.match.quit_dialog", 0x9160df5b76116e9c, 518400},
+    {"px.wide.app.match.options_page", 0x081c0c21c66ccd9b, 518400},
+    {"px.wide.app.match.quickhelp_page", 0x10a1df29d7e6ee9c, 518400},
+    {"px.wide.app.match.cursor_map", 0x1207c8923e41a1ff, 518400},
+    {"px.wide.app.match.cursor_edge", 0x0e8c60dc12e41670, 518400},
+    {"px.wide.app.match.cursor_edge_east", 0xcc6b2b17da6ff905, 518400},
+    {"px.wide.app.start.TINY", 0xc16107d6d2f8c83e, 518400},
+    {"px.wide.app.start.SMALL", 0xbb0cdbe0920777b5, 518400},
+    {"px.wide.app.start.ISLANDS", 0x2d232698777053e9, 518400},
+    {"px.wide.app.start.GAUNTLET", 0x7f41e5f3b12a98e2, 518400},
+    {"px.wide.app.start.TREASURE", 0x7e2d4a6943e8100e, 518400},
 };
 // END GOLDEN TABLE
 
@@ -2919,6 +4142,7 @@ int main(int argc, char** argv) {
     }
 
     self_check_scenarios();
+    self_check_wide_scenarios();
     hud_scenarios(arc);
     screen_scenarios(arc);
     menu_scenarios(arc);
@@ -2931,6 +4155,7 @@ int main(int argc, char** argv) {
     world_pixel_scenarios(arc);
     app_pixel_scenarios();
     app_pointer_scenarios();
+    wide_scenarios(arc);
 
     SDL_Quit();
     if (list_only) {

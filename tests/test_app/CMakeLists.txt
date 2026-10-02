@@ -465,3 +465,39 @@ target_compile_definitions(test_canvas_layout PRIVATE
 
 add_test(NAME test_canvas_layout COMMAND test_canvas_layout)
 set_tests_properties(test_canvas_layout PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# Wide match screen (M3 of the widescreen work): the anchoring model of the frame's 14 pieces, the cuts in the art, the composed picture, the HUD at 960 x 540, the view, the pages and dialogs, the picture per screen, the 16:9 default
+add_executable(test_wide_hud
+    test_wide_hud.cpp
+)
+
+target_include_directories(test_wide_hud PRIVATE
+    ${CMAKE_SOURCE_DIR}/include
+)
+
+target_link_libraries(test_wide_hud PRIVATE
+    ants_app
+    ants_ai
+    ants_net
+    ants_sim
+    ants_assets
+)
+
+if(APPLE)
+    target_link_libraries(test_wide_hud PRIVATE
+        "-framework AudioToolbox"
+        "-framework CoreFoundation"
+        "-framework CoreAudio"
+    )
+endif()
+
+if(WIN32)
+    target_link_libraries(test_wide_hud PRIVATE ws2_32 winmm)
+endif()
+
+target_compile_definitions(test_wide_hud PRIVATE
+    ORIGINAL_ASSETS_DIR="${CMAKE_SOURCE_DIR}/Original-Ants"
+)
+
+add_test(NAME test_wide_hud COMMAND test_wide_hud)
+set_tests_properties(test_wide_hud PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")

@@ -170,6 +170,7 @@ bool Application::init(int argc, char* argv[]) {
 
 ApplicationConfig Application::parse_arguments(int argc, char* argv[]) {
     ApplicationConfig cfg{};
+    cfg.aspect = kPlatformDefaultAspect;                                      // 16:9 on a desktop; --aspect and the settings' key win. (A config that is made by hand, as the tests do, is the original's 4:3.)
 #if defined(__EMSCRIPTEN__)
     cfg.label_unnamed_teams = false;                                          // no other players in the browser build: no placeholder labels
 #endif
@@ -468,7 +469,8 @@ bool Application::init(const ApplicationConfig& config) {
     }
 
     renderer_->set_canvas_size(canvas_width_of(aspect_), canvas_height_of(aspect_));         // SDL's logical size: the picture that the window shows
-    picture_ = canvas().centred(layout_.width, layout_.height);                              // the match screen and the pages are the 640 x 480 picture, centred
+    layout_ = ScreenLayout::with_size(canvas_width_of(aspect_), canvas_height_of(aspect_)); // the match screen is as big as the canvas (the original's own screen for 4:3, the wide frame for 16:9)
+    picture_ = picture_for_state();                                                          // the match screen is the whole canvas, the original's pages are its 640 x 480 picture, centred
     renderer_->set_picture(picture_);
     renderer_->set_layout(layout_);
     renderer_->set_level(current_level_);
@@ -489,6 +491,7 @@ bool Application::init(const ApplicationConfig& config) {
             return;
         }
         scorecard_.hide();
+        update_picture();                                             // the match screen is back
         if (bots_) {                                                  // the same seats play again, with new bots
             stop_bots();
             sim_.init(current_level_, config_.random_seed + 1, local_roster_);
@@ -679,14 +682,15 @@ bool Application::init(const ApplicationConfig& config) {
         start_intro_music();             // plays once, then the random in-game pieces follow (also on the setup screen)
     }
 
+    update_picture();                                        // (a game that starts in its match: the match screen is the whole canvas)
+    mouse_screen_x_ = picture_.w / 2;                        // (the pointer starts in the middle of the screen that is up)
+    mouse_screen_y_ = picture_.h / 2;
     is_running_ = true;
     frametime_history_.fill(16.666f);
     frametime_index_ = 0;
     fps_display_value_ = 60.0f;
     fps_time_accumulator_ = 0.0f;
     fps_frame_counter_ = 0;
-    mouse_screen_x_ = layout_.width / 2;
-    mouse_screen_y_ = layout_.height / 2;
     mouse_has_moved_ = false;
 #if defined(__EMSCRIPTEN__)
     // The browser tells when the page is hidden or shown (visibilitychange); a page may also have been opened in a background tab, so ask once now
@@ -699,22 +703,36 @@ bool Application::init(const ApplicationConfig& config) {
 
 void Application::set_layout(const ScreenLayout& layout) {
     layout_ = layout;
-    picture_ = canvas().centred(layout_.width, layout_.height);
-    if (renderer_) {
-        renderer_->set_picture(picture_);
-        renderer_->set_layout(layout_);
-    }
+    update_picture();
+    if (renderer_) renderer_->set_layout(layout_);
     hud_.set_layout(layout_);
 }
 
-// --aspect, else the settings' key `aspect`, else 4:3. The web build is 4:3 until its page can show another shape (milestone M5). A settings file never stops the game: a
-// value that is not 16:9 or 4:3 is reported and ignored.
+// Where the picture that is on screen sits in the canvas: a match is the layout's picture (the whole canvas of its aspect), everything else is a page of the original's own 640 x 480
+// screen (the loading screen, the quick help, the setup screen and the room, the results), centred
+LayoutRect Application::picture_for_state() const {
+    const bool match = state_ == AppState::Playing && !scorecard_.is_open();
+    return match ? canvas().centred(layout_.width, layout_.height) : canvas().centred(ScreenLayout::kClassicWidth, ScreenLayout::kClassicHeight);
+}
+
+// The picture changes when the screen does (a match starts, the results open, the setup screen comes back). The pointer stays where it is on the canvas, so its coordinates, which are the
+// picture's own, move with the corner.
+void Application::update_picture() {
+    const LayoutRect want = picture_for_state();
+    if (want == picture_) return;
+    mouse_screen_x_ += picture_.x - want.x;
+    mouse_screen_y_ += picture_.y - want.y;
+    picture_ = want;
+    if (renderer_) renderer_->set_picture(picture_);
+}
+
+// --aspect, else the settings' key `aspect`, else the default of the platform (parse_arguments puts it into the config: 16:9 on a desktop, 4:3 in the web build until its page shows
+// another shape, milestone M5: kPlatformDefaultAspect in canvas_layout.hpp); a config that is made by hand keeps its own aspect (the original's 4:3 unless it says otherwise). A settings
+// file never stops the game: a value that is not 16:9 or 4:3 is reported and ignored.
 void Application::choose_aspect() {
-    aspect_ = Aspect::Classic4x3;
+    aspect_ = config_.aspect;
 #if !defined(__EMSCRIPTEN__)
-    if (config_.aspect_given) {
-        aspect_ = config_.aspect;
-    } else if (config_store_.has("aspect")) {
+    if (!config_.aspect_given && config_store_.has("aspect")) {
         const std::string text = config_store_.get_string("aspect", "", 16);
         std::string why;
         Aspect from_settings = Aspect::Classic4x3;
@@ -846,6 +864,8 @@ void Application::enter_match() {
     hud_.start_match_modal();
     scorecard_.hide();
     match_over_handled_ = false;
+    state_ = AppState::Playing;
+    update_picture();                                                       // (the match screen replaces whatever page was up)
 
     // Reset simulated cursor to middle of screen until actually seen moving
     mouse_screen_x_ = layout_.width / 2;
@@ -983,6 +1003,7 @@ void Application::quit() {
 // The setup screen is created (again): its labels stay empty until its refresh, 500 ms later
 void Application::enter_map_select() {
     state_ = AppState::MapSelect;
+    update_picture();                                        // (a page of the original's: centred in the canvas)
     closing_click_pending_ = false;                          // (close_quick_help() sets it after this call)
     map_select_.enter();
     // The new screen's buttons are fresh objects in the up state; the INPUT task of the original sends the pointer to the top window in the very input run that
@@ -1016,6 +1037,7 @@ void Application::return_to_map_select() {
     net_notice_.clear();
     enter_map_select();
     scorecard_.hide();
+    update_picture();
     hud_.close_quit_dialog();
     hud_.close_quick_help();
     hud_.close_options();
@@ -1295,6 +1317,7 @@ void Application::handle_events() {
         left_event = (event.type == SDL_MOUSEBUTTONDOWN || event.type == SDL_MOUSEBUTTONUP) && event.button.button == SDL_BUTTON_LEFT;
         left_event_ms = left_event ? event.button.timestamp : 0u;
         if (pointer_gone) pointer_outside_ = true;           // ... marked once that event has been handled (its handlers clear the mark)
+        update_picture();                                    // (a screen that an earlier event of this frame changed)
         pointer_gone = pointer_gone_after(event, event.type == SDL_MOUSEBUTTONUP && button_outside_window(event.button));   // the position before the clamp
         clamp_pointer_event(event, picture_);                // a pointer over a black bar of a wide window is the pointer on the edge of the picture (pointer_clamp.hpp); the canvas's
                                                              // position becomes the picture's own (the picture's corner subtracted): the 640 x 480 picture centred in a 960 x 540 canvas
@@ -1717,6 +1740,7 @@ void Application::check_match_over() {
     match_over_handled_ = true;
     const auto& world = sim_.get_world_state();
     scorecard_.show(world.match_result, local_player_id_);       // "Waiting for scores..."; the cue plays when the rows appear (update_scorecard)
+    update_picture();                                            // the results are a page of the original's
     if (background_stepping_) pending_music_ = PendingMusic::Closed;     // (a hidden page changes no sound: the music closes when the page is shown)
     else close_music();                                          // FUN_010226da closes the music sequencer at once (0x1022714); nothing restarts it
     music_resume_on_activate_ = false;
@@ -1726,6 +1750,7 @@ void Application::check_match_over() {
 // Once per frame: a match that has ended without a tick of this application (a command, a drop-out) opens the results screen too; the screen's clock builds its
 // rows, and with them the one cue of the machine, 250 ms after it opened
 void Application::update_results(float dt) {
+    update_picture();                                            // (the results screen is a page of the original's, whoever opened it)
     if (state_ == AppState::Playing) check_match_over();
     if (!scorecard_.is_open()) return;
     scorecard_.update(dt);
@@ -1968,7 +1993,12 @@ void Application::render_latency_corner(int32_t version_x, int32_t text_y, const
 
 void Application::render_frame() {
     renderer_->begin_frame();
-    renderer_->set_picture(picture_);                    // the screens are the picture (centred in the canvas; the canvas itself for 4:3)
+    update_picture();
+    if (picture_ != canvas().rect()) {                   // a page of the original's own screen in a bigger canvas: the clay of its pages fills what is around it
+        renderer_->set_picture(canvas().rect());
+        renderer_->fill_rect(0, 0, renderer_->canvas_w(), renderer_->canvas_h(), kPageMargin);
+    }
+    renderer_->set_picture(picture_);                    // the screens are the picture (the match: the whole canvas; a page of the original's: centred in it)
 
     if (state_ == AppState::Loading) {
         render_loading_screen();

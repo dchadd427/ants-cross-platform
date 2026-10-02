@@ -316,14 +316,15 @@ ApplicationConfig parse(std::initializer_list<const char*> args) {
 void test_aspect_option() {
     group("option", "--aspect on the command line");
     ApplicationConfig c = parse({"ants"});
-    check(c.aspect == Aspect::Classic4x3 && !c.aspect_given && c.startup_error.empty(), "without the option the aspect is 4:3 and not given");
+    // (M3 rewrote this: the default of a game started from the command line is the platform's, 16:9 on a desktop, not the original's 4:3 any more: the owner's priority, 2026-10-02)
+    check(c.aspect == kPlatformDefaultAspect && !c.aspect_given && c.startup_error.empty(), "without the option the aspect is the platform's default (16:9 on a desktop) and not given");
     c = parse({"ants", "--aspect", "16:9"});
     check(c.aspect == Aspect::Wide16x9 && c.aspect_given && c.startup_error.empty(), "--aspect 16:9");
     c = parse({"ants", "--headless", "--aspect", "4:3", "--map", "x.lvl"});
     check(c.aspect == Aspect::Classic4x3 && c.aspect_given && c.startup_error.empty(), "--aspect 4:3 is given (it beats the settings' key) and is the classic canvas");
     c = parse({"ants", "--aspect", "21:9"});
     check(c.startup_error.find("--aspect") != std::string::npos && c.startup_error.find("21:9") != std::string::npos && c.startup_error.find("only 16:9 and 4:3 for now") != std::string::npos &&
-              !c.aspect_given && c.aspect == Aspect::Classic4x3,
+              !c.aspect_given && c.aspect == kPlatformDefaultAspect,
           "--aspect 21:9 is refused: \"" + c.startup_error + "\"");
     c = parse({"ants", "--aspect"});
     check(c.startup_error.find("--aspect needs 16:9 or 4:3") != std::string::npos, "--aspect without a value is refused");
@@ -447,9 +448,11 @@ void test_application_aspects() {
             int lw = 0, lh = 0;
             SDL_RenderGetLogicalSize(f.app.renderer().get_sdl_renderer(), &lw, &lh);
             check(f.app.aspect() == Aspect::Wide16x9 && f.app.canvas() == CanvasLayout{960, 540} && lw == 960 && lh == 540, "16:9: SDL's logical size is 960 x 540");
-            check(f.app.layout().is_classic() && f.app.renderer().layout().is_classic() && f.app.hud().layout().is_classic(), "16:9 (M2): the match screen is still the classic picture");
-            check_rect(f.app.picture(), LayoutRect{160, 30, 640, 480}, "16:9: the 640 x 480 picture is centred at (160, 30)");
-            check_rect(f.app.renderer().picture(), LayoutRect{160, 30, 640, 480}, "16:9: the renderer has it too");
+            // (M3 rewrote these three: in M2 the match screen was still the classic picture, centred at (160, 30); it is the wide frame now and fills the canvas; the original's pages are still
+            // centred, which the pixels group checks on the setup screen)
+            check(f.app.layout() == ScreenLayout::with_size(960, 540) && f.app.renderer().layout() == f.app.layout() && f.app.hud().layout() == f.app.layout(), "16:9 (M3): the match screen is the wide 960 x 540 picture");
+            check_rect(f.app.picture(), LayoutRect{0, 0, 960, 540}, "16:9: the match is the whole canvas");
+            check_rect(f.app.renderer().picture(), LayoutRect{0, 0, 960, 540}, "16:9: the renderer has it too");
             check(ww == 1280 && wh == 720, "16:9: --window-size wins");
         }
     }
@@ -558,15 +561,27 @@ void test_centred_pixels() {
     }
     classic.app.render_frame();
     wide.app.render_frame();
-    // the match screen: the classic frame (without its corner plate) is the wide frame's picture
-    const std::vector<uint8_t> a = masked(read_canvas(classic.app, 0, 0, 640, 480), 640, 440, 464, 200, 16);
-    const std::vector<uint8_t> b = masked(read_canvas(wide.app, 160, 30, 640, 480), 640, 440, 464, 200, 16);
-    check(a == b, "the match screen of the 16:9 canvas is the 4:3 application's frame, centred at (160, 30)");
+    // the match screen (M3 rewrote this: in M2 the 16:9 match was the classic frame, centred in the canvas, with black bars around it). The wide frame fills the canvas; what the original draws
+    // that is not stretched (the top bar before its cut, the left strip down to its cut, the bottom strip before its cut) is the same pixels at the same place relative to its anchor.
+    const std::vector<uint8_t> a = read_canvas(classic.app, 0, 0, 640, 480);
+    const std::vector<uint8_t> b = read_canvas(wide.app, 0, 0, 960, 540);
+    auto region_equal = [&](int32_t ax, int32_t ay, int32_t bx, int32_t by, int32_t w, int32_t h) {
+        for (int32_t y = 0; y < h; ++y) {
+            for (int32_t x = 0; x < w; ++x) {
+                const size_t ia = (static_cast<size_t>(ay + y) * 640u + static_cast<size_t>(ax + x)) * 4u;
+                const size_t ib = (static_cast<size_t>(by + y) * 960u + static_cast<size_t>(bx + x)) * 4u;
+                if (std::memcmp(&a[ia], &b[ib], 4) != 0) return false;
+            }
+        }
+        return true;
+    };
+    check(region_equal(0, 0, 0, 0, 140, 22) && region_equal(0, 22, 0, 22, 17, 300) && region_equal(17, 461, 17, 521, 15, 19), "the match screen of the 16:9 canvas: the unstretched art (top bar columns 0 - 139, left strip rows 22 - 321, bottom strip columns 0 - 14) is the 4:3 application's pixels");
+    check(!region_equal(500, 100, 500, 100, 100, 100), "... and the rest is not: the right panel is moved (the 4:3 frame's panel is at x = 480, the wide one's map view reaches it)");
     // a frame sets the picture itself, whatever the renderer was left with
-    wide.app.renderer().set_picture(LayoutRect{0, 0, 960, 540});
+    wide.app.renderer().set_picture(LayoutRect{160, 30, 640, 480});
     wide.app.render_frame();
-    check(masked(read_canvas(wide.app, 160, 30, 640, 480), 640, 440, 464, 200, 16) == b, "a frame of the 16:9 application draws the centred picture even when the renderer's picture was changed since the last one");
-    // nothing else is drawn but the plate: the bars are black
+    check(masked(read_canvas(wide.app, 0, 0, 960, 540), 960, 640, 520, 320, 20) == masked(b, 960, 640, 520, 320, 20), "a frame of the 16:9 application draws the whole canvas even when the renderer's picture was changed since the last one");
+    // the match fills the canvas: nothing is a black bar (the frame is there at the corners and the sides)
     auto black = [&](int32_t x, int32_t y, int32_t w, int32_t h) {
         const std::vector<uint8_t> p = read_canvas(wide.app, x, y, w, h);
         for (size_t i = 0; i + 3 < p.size(); i += 4) {
@@ -574,7 +589,7 @@ void test_centred_pixels() {
         }
         return true;
     };
-    check(black(0, 0, 160, 540) && black(800, 0, 160, 510) && black(160, 0, 640, 30) && black(160, 510, 640, 8), "the bars around the picture are black (the plate is below)");
+    check(!black(0, 0, 4, 4) && !black(956, 0, 4, 4) && !black(0, 536, 4, 4) && !black(956, 400, 4, 4), "the match screen: the frame fills the canvas to its corners and sides (no bar)");
     // the plate (the version next to the frame rate) is in the canvas's bottom right corner: rows 527 .. 539, and not in the picture's own corner
     auto bar_pixels = [&](Application& app, int32_t x, int32_t y, int32_t w, int32_t h) {
         const std::vector<uint8_t> p = read_canvas(app, x, y, w, h);
@@ -583,7 +598,7 @@ void test_centred_pixels() {
         return n;
     };
     check(bar_pixels(wide.app, 834, 527, 118, 13) > 20, "16:9: the sparkline is in the canvas's bottom right corner (rows 527 .. 539)");
-    check(bar_pixels(wide.app, 160 + 514, 30 + 467, 118, 13) == 0, "16:9: and not in the picture's corner (the original's place of the plate)");
+    check(bar_pixels(wide.app, 514, 467, 118, 13) == 0, "16:9: and not where the 4:3 picture's corner is (the original's place of the plate)");
     check(bar_pixels(classic.app, 514, 467, 118, 13) > 20, "4:3: it is in the picture's corner, as it was");
     // the setup screen is a page: the same
     AppFixture classic_setup("", config_of(Aspect::Classic4x3, true, 640, 480), false);
@@ -601,50 +616,92 @@ void test_centred_pixels() {
 
 void test_pointer_over_bars() {
     group("pointer", "the pointer in a 16:9 canvas: the picture's own coordinates, and the bars around the picture count as its nearest edge pixel");
-    AppFixture f("", config_of(Aspect::Wide16x9, true, 1920, 1080));       // scale 2 exactly: a canvas pixel is 2 x 2 window pixels
-    check(f.ok && f.window != nullptr, "the 16:9 application runs a match");
-    if (!f.ok || f.window == nullptr) return;
-    f.motion_at_canvas(160 + 100, 30 + 100);
-    f.deliver();
-    check(f.app.mouse_screen_x() == 100 && f.app.mouse_screen_y() == 100, "the canvas point (260, 130) is the picture's (100, 100)");
-    f.motion_at_canvas(160, 30);
-    f.deliver();
-    check(f.app.mouse_screen_x() == 0 && f.app.mouse_screen_y() == 0, "the picture's first pixel is (0, 0)");
-    f.motion_at_canvas(799, 509);
-    f.deliver();
-    check(f.app.mouse_screen_x() == 639 && f.app.mouse_screen_y() == 479, "the picture's last pixel is (639, 479)");
-    // over a bar: the nearest edge pixel; the pointer is not gone and the map scrolls
-    auto center = [&]() { f.app.renderer().camera().center_on(600, 600, f.app.sim().grid().width(), f.app.sim().grid().height()); };
-    center();
-    const int32_t x0 = f.app.renderer().camera().world_x;
-    f.motion_at_canvas(40, 270);                                               // the left bar, level with the picture's middle
-    f.deliver();
-    check(f.app.mouse_screen_x() == 0 && f.app.mouse_screen_y() == 240 && !f.app.pointer_outside(), "over the left bar the pointer is on the picture's left edge, level with the pointer");
-    f.scroll(12);
-    check(f.app.renderer().camera().world_x < x0, "... and the map scrolls west");
-    center();
-    const int32_t x1 = f.app.renderer().camera().world_x;
-    f.motion_at_canvas(930, 270);                                              // the right bar
-    f.deliver();
-    check(f.app.mouse_screen_x() == 639 && f.app.mouse_screen_y() == 240, "over the right bar: the right edge");
-    f.scroll(12);
-    check(f.app.renderer().camera().world_x > x1, "... and the map scrolls east");
-    center();
-    const int32_t y0 = f.app.renderer().camera().world_y;
-    f.motion_at_canvas(480, 10);                                               // the top bar
-    f.deliver();
-    check(f.app.mouse_screen_x() == 320 && f.app.mouse_screen_y() == 0, "over the top bar: the top edge");
-    f.scroll(12);
-    check(f.app.renderer().camera().world_y < y0, "... and the map scrolls north");
-    // far beyond the window
-    SDL_Event e{};
-    e.type = SDL_MOUSEMOTION;
-    e.motion.windowID = SDL_GetWindowID(f.window);
-    e.motion.x = -40000;
-    e.motion.y = 40000;
-    SDL_PushEvent(&e);
-    f.deliver();
-    check(f.app.mouse_screen_x() == 0 && f.app.mouse_screen_y() == 479, "far beyond the window's bottom left corner: the picture's bottom left pixel");
+    // (M3 rewrote this group: in M2 the match was the 640 x 480 picture centred in the canvas, so a pointer over the canvas's margin was over a bar of the picture. The match is the whole canvas now;
+    // the bars of a window are the ones of its shape: above and below in a window that is taller than 16:9 (16:10), left and right in one that is wider (21:9). The pages of the original
+    // are centred with a margin; the pointer's clamp to the page is checked on the setup screen.)
+    {
+        AppFixture f("", config_of(Aspect::Wide16x9, true, 1920, 1200));       // 16:10: the canvas is 2x (1920 x 1080), bars of 60 rows above and below
+        check(f.ok && f.window != nullptr, "the 16:9 application runs a match in a 16:10 window");
+        if (!f.ok || f.window == nullptr) return;
+        f.motion_at_canvas(100, 100);
+        f.deliver();
+        check(f.app.mouse_screen_x() == 100 && f.app.mouse_screen_y() == 100, "the canvas point (100, 100) is the picture's (100, 100): the match is the whole canvas");
+        f.motion_at_canvas(0, 0);
+        f.deliver();
+        check(f.app.mouse_screen_x() == 0 && f.app.mouse_screen_y() == 0, "the picture's first pixel is (0, 0)");
+        f.motion_at_canvas(959, 539);
+        f.deliver();
+        check(f.app.mouse_screen_x() == 959 && f.app.mouse_screen_y() == 539, "the picture's last pixel is (959, 539)");
+        auto center = [&]() { f.app.renderer().camera().center_on(600, 600, f.app.sim().grid().width(), f.app.sim().grid().height()); };
+        auto window_motion = [&](int wx, int wy) {
+            SDL_Event e{};
+            e.type = SDL_MOUSEMOTION;
+            e.motion.windowID = SDL_GetWindowID(f.window);
+            e.motion.x = wx;
+            e.motion.y = wy;
+            SDL_PushEvent(&e);
+            f.deliver();
+        };
+        center();
+        const int32_t y0 = f.app.renderer().camera().world_y;
+        window_motion(960, 20);                                                // the bar above the picture, level with its middle
+        check(f.app.mouse_screen_x() == 480 && f.app.mouse_screen_y() == 0 && !f.app.pointer_outside(), "over the top bar the pointer is on the picture's top edge, level with the pointer");
+        f.scroll(12);
+        check(f.app.renderer().camera().world_y < y0, "... and the map scrolls north");
+        center();
+        const int32_t y1 = f.app.renderer().camera().world_y;
+        window_motion(960, 1190);                                              // the bar below
+        check(f.app.mouse_screen_x() == 480 && f.app.mouse_screen_y() == 539, "over the bottom bar: the bottom edge");
+        f.scroll(12);
+        check(f.app.renderer().camera().world_y > y1, "... and the map scrolls south");
+        // far beyond the window
+        window_motion(-40000, 40000);
+        check(f.app.mouse_screen_x() == 0 && f.app.mouse_screen_y() == 539, "far beyond the window's bottom left corner: the picture's bottom left pixel");
+    }
+    {
+        AppFixture f("", config_of(Aspect::Wide16x9, true, 2560, 1080));       // 21:9: the canvas is 2x (1920 x 1080), bars of 320 columns left and right
+        check(f.ok && f.window != nullptr, "the 16:9 application runs a match in a 21:9 window");
+        if (!f.ok || f.window == nullptr) return;
+        auto center = [&]() { f.app.renderer().camera().center_on(600, 600, f.app.sim().grid().width(), f.app.sim().grid().height()); };
+        auto window_motion = [&](int wx, int wy) {
+            SDL_Event e{};
+            e.type = SDL_MOUSEMOTION;
+            e.motion.windowID = SDL_GetWindowID(f.window);
+            e.motion.x = wx;
+            e.motion.y = wy;
+            SDL_PushEvent(&e);
+            f.deliver();
+        };
+        center();
+        const int32_t x0 = f.app.renderer().camera().world_x;
+        window_motion(40, 540);                                                // the left bar, level with the middle
+        check(f.app.mouse_screen_x() == 0 && f.app.mouse_screen_y() == 270 && !f.app.pointer_outside(), "over the left bar the pointer is on the picture's left edge, level with the pointer");
+        f.scroll(12);
+        check(f.app.renderer().camera().world_x < x0, "... and the map scrolls west");
+        center();
+        const int32_t x1 = f.app.renderer().camera().world_x;
+        window_motion(2520, 540);                                              // the right bar
+        check(f.app.mouse_screen_x() == 959 && f.app.mouse_screen_y() == 270, "over the right bar: the right edge");
+        f.scroll(12);
+        check(f.app.renderer().camera().world_x > x1, "... and the map scrolls east");
+    }
+    {   // a page of the original in the 16:9 canvas: a pointer over the margin is the page's nearest edge pixel (the setup screen is centred at (160, 30))
+        AppFixture f("", config_of(Aspect::Wide16x9, true, 1920, 1080), false);
+        check(f.ok && f.window != nullptr, "the 16:9 application shows its setup screen");
+        if (!f.ok || f.window == nullptr) return;
+        f.motion_at_canvas(160 + 100, 30 + 100);
+        f.deliver();
+        check(f.app.mouse_screen_x() == 100 && f.app.mouse_screen_y() == 100, "the canvas point (260, 130) is the page's (100, 100)");
+        f.motion_at_canvas(160, 30);
+        f.deliver();
+        check(f.app.mouse_screen_x() == 0 && f.app.mouse_screen_y() == 0, "the page's first pixel is (0, 0)");
+        f.motion_at_canvas(799, 509);
+        f.deliver();
+        check(f.app.mouse_screen_x() == 639 && f.app.mouse_screen_y() == 479, "the page's last pixel is (639, 479)");
+        f.motion_at_canvas(40, 270);
+        f.deliver();
+        check(f.app.mouse_screen_x() == 0 && f.app.mouse_screen_y() == 240 && !f.app.pointer_outside(), "over the margin left of the page the pointer is on its left edge, level with the pointer");
+    }
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------------

@@ -17,6 +17,7 @@
 #include "ants_app/screen_button.hpp"
 #include "ants_app/pedestal.hpp"
 #include "ants_app/screen_layout.hpp"
+#include "ants_app/shell_layout.hpp"
 #include "ants_app/status_line.hpp"
 
 namespace ants::app {
@@ -67,8 +68,9 @@ public:
     /// The geometry of the picture that the HUD works in (screen_layout.hpp; the original's 640 x 480 until it is told otherwise). Every rectangle that used to be a number of the
     /// original's screen is placed from it by ONE function (apply_layout), which `init` (so every new match) and `set_layout` both run: a layout that was set earlier is not lost
     /// when the next match resets the HUD. The map view, the minimap, the chat log, the top bar's buttons, the pedestals, the [All] / [Team] buttons, the score slots, the status
-    /// line and the chat input follow it, and so do the pointer's zones (over_map, over_minimap, in_chat_view). The dialogs and the pages (quit, alliance, options, quick help,
-    /// the "get ready" modal) are pictures of the original's screen and stay where they are.
+    /// line and the chat input follow it, and so do the pointer's zones (over_map, over_minimap, in_chat_view). The dialogs (quit, alliance, the "get ready" modal) and the pages (options,
+    /// quick help) are pictures of the original's screen with their own numbers: render() draws them moved by layout().modal_offset() / page_offset() (IRenderer::set_origin) and the
+    /// pointer handlers take the pointer back to those numbers.
     void set_layout(const ScreenLayout& layout);
     const ScreenLayout& layout() const noexcept { return layout_; }
     /// The map view and the minimap of the layout (a press there goes to the map / the minimap): in_map_rect and in_minimap_rect are the original's, these follow the layout
@@ -100,6 +102,10 @@ public:
     // Rendering pipeline
     void render(IRenderer& renderer, const assets::AssetArchive& assets,
                 const sim::WorldState& world, const ViewportCamera& camera);
+
+    /// The frame of the match screen alone (what render() draws first, after the panel's fill): the 14 pieces of the animation uishell, last stored piece first, each placed by its
+    /// anchor in the layout's picture and the stretched ones in parts around one repeated line (shell_layout.hpp). In the original's own picture each is one plain copy at its place.
+    void render_shell(IRenderer& renderer, const assets::AssetArchive& assets);
 
     // Mouse & Keyboard Input Dispatch
     bool handle_mouse_down(int32_t x, int32_t y, uint8_t button,
@@ -364,6 +370,8 @@ private:
     /// clear) and the local team has not dropped out itself
     bool ally_pedestal_possible(const sim::WorldState& world) const;
     void render_quick_help(IRenderer& renderer, const assets::AssetArchive& assets);
+    /// What shows around a page of the original's 640 x 480 screen in a bigger picture
+    void render_page_margin(IRenderer& renderer, const assets::AssetArchive& assets);
     void render_match_start_modal(IRenderer& renderer, const assets::AssetArchive& assets);
     void render_marquee_box(IRenderer& renderer);
     void render_pedestal_glow(IRenderer& renderer, const assets::AssetArchive& assets, int pedestal_idx);

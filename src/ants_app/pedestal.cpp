@@ -114,7 +114,7 @@ void PedestalSlot::advance(const assets::AssetArchive& archive, uint32_t now_ms)
     }
 }
 
-bool PedestalSlot::draw(IRenderer& renderer, const assets::AssetArchive& archive, uint32_t now_ms) {
+bool PedestalSlot::draw(IRenderer& renderer, const assets::AssetArchive& archive, uint32_t now_ms, int32_t dx, int32_t dy) {
     advance(archive, now_ms);
     const std::string* name = nullptr;
     uint32_t elapsed = 0;
@@ -135,7 +135,7 @@ bool PedestalSlot::draw(IRenderer& renderer, const assets::AssetArchive& archive
     }
     const auto& parts = seq->subitems[frame].frames;
     for (size_t k = parts.size(); k-- > 0;) {
-        renderer.draw_sprite(parts[k].sprite_index, parts[k].dx, parts[k].dy);
+        renderer.draw_sprite(parts[k].sprite_index, dx + parts[k].dx, dy + parts[k].dy);
     }
     return true;
 }

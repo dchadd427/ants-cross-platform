@@ -101,6 +101,11 @@ constexpr int PLAYFIELD_H = ScreenLayout::kClassicViewH;
 
 constexpr int TILE_SIZE = 32;
 
+// What fills the canvas around a page of the original's own 640 x 480 screen (the loading screen, the quick help, the setup screen, the results, the options) when the canvas is bigger:
+// the clay of those pages, a flat fill of the colour that the loading screen is filled with (Ants.exe 0x4b13db, (219, 75, 19): the page's own frame stands out against it as a window
+// on a clay desktop). Only a colour of the original's art: nothing is drawn that the original has not.
+inline constexpr ants::assets::ColorRGBA kPageMargin{219, 75, 19, 255};
+
 // Colour modes accepted by TextureCache::get_sprite_texture (the `team_id` argument).
 //   0..3               legacy HUD path: per-team HUD table on palette indices 1..31 plus the +offset ramp shift
 //   TEAM_NONE          raw CHD palette. The original never remaps terrain, map objects, effects, plants or cursors.
@@ -138,6 +143,10 @@ struct ViewportCamera {
     int32_t view_y{PLAYFIELD_Y};
     int32_t viewport_w{PLAYFIELD_W};
     int32_t viewport_h{PLAYFIELD_H};
+    /// A map that is smaller than the view on an axis (a 16 x 16 map is 512 pixels wide, the 16:9 view 762): true centres the map in the view, with black around it, and the camera stays
+    /// fixed on that axis; false (the default) puts it at the view's top left corner. The original's own view is smaller than its smallest map, so nothing of it ever shows there and the
+    /// classic camera keeps the old rule (the fingerprints of the classic picture pin it); Renderer::set_layout sets this for every layout that is not the original's.
+    bool centre_small_maps{false};
 
     /// The view of a layout (ScreenLayout::view()): its origin on the screen and its size
     void set_view(const LayoutRect& view) noexcept {
@@ -169,6 +178,15 @@ public:
     virtual ~IRenderer() = default;
     virtual void draw_sprite(uint32_t sprite_id, int32_t x, int32_t y, bool mirrored = false) = 0;
     virtual void draw_named_sprite(const std::string& name, int32_t x, int32_t y, bool mirrored = false) = 0;
+    /// A part of a sprite, scaled to a rectangle: the source rectangle (sx, sy, sw, sh) of the sprite fills (x, y, w, h). With the same size it is a plain copy of a part; a source
+    /// one pixel wide (high) over a wider (taller) destination repeats that column (row): that is how the frame of the match screen grows (shell_layout.hpp). A renderer that does
+    /// not draw sprites (the test renderers that only count calls) may ignore it.
+    virtual void draw_sprite_region(uint32_t sprite_id, int32_t x, int32_t y, int32_t w, int32_t h, int32_t sx, int32_t sy, int32_t sw, int32_t sh) {
+        (void)sprite_id; (void)x; (void)y; (void)w; (void)h; (void)sx; (void)sy; (void)sw; (void)sh;
+    }
+    /// Everything that is drawn afterwards is moved by (x, y), until set_origin(0, 0): a window of the original's own 640 x 480 screen (the options screen, the quick help, a dialog) is drawn
+    /// with its own numbers and put where the picture wants it. Not a clip: nothing is cut. A renderer that records its calls sees them as they are given (without the move).
+    virtual void set_origin(int32_t x, int32_t y) { (void)x; (void)y; }
     virtual void fill_rect(int32_t x, int32_t y, int32_t w, int32_t h, ants::assets::ColorRGBA color) = 0;
     virtual void draw_rect(int32_t x, int32_t y, int32_t w, int32_t h, ants::assets::ColorRGBA color) = 0;
     virtual void draw_text(const std::string& text, int32_t x, int32_t y, ants::assets::ColorRGBA color) = 0;
@@ -338,6 +356,9 @@ public:
     // IRenderer Implementation
     void draw_sprite(uint32_t sprite_id, int32_t x, int32_t y, bool mirrored = false) override;
     void draw_named_sprite(const std::string& name, int32_t x, int32_t y, bool mirrored = false) override;
+    void draw_sprite_region(uint32_t sprite_id, int32_t x, int32_t y, int32_t w, int32_t h, int32_t sx, int32_t sy, int32_t sw, int32_t sh) override;
+    void set_origin(int32_t x, int32_t y) override { origin_ = LayoutPoint{x, y}; }
+    const LayoutPoint& origin() const noexcept { return origin_; }
     void fill_rect(int32_t x, int32_t y, int32_t w, int32_t h, ants::assets::ColorRGBA color) override;
     void draw_rect(int32_t x, int32_t y, int32_t w, int32_t h, ants::assets::ColorRGBA color) override;
     void draw_text(const std::string& text, int32_t x, int32_t y, ants::assets::ColorRGBA color) override;
@@ -514,8 +535,9 @@ private:
     int32_t canvas_h_{CANVAS_HEIGHT};
     LayoutRect picture_{0, 0, CANVAS_WIDTH, CANVAS_HEIGHT};
     bool picture_inset_{false};            // the picture is smaller than the canvas: its corner is added to every position and it is the clip
-    /// A rectangle of the picture's own coordinates as SDL gets it (the picture's corner added)
-    SDL_Rect placed(int32_t x, int32_t y, int32_t w, int32_t h) const noexcept { return SDL_Rect{x + picture_.x, y + picture_.y, w, h}; }
+    LayoutPoint origin_{};                 // set_origin: what a window of the original's own screen is moved by (nothing, outside the HUD's pages and dialogs)
+    /// A rectangle of the picture's own coordinates as SDL gets it (the picture's corner added, and the origin of a window)
+    SDL_Rect placed(int32_t x, int32_t y, int32_t w, int32_t h) const noexcept { return SDL_Rect{x + picture_.x + origin_.x, y + picture_.y + origin_.y, w, h}; }
     void restore_clip();
     std::vector<TransientEffect> transient_effects_{};
     uint32_t sub_tick_ms_{0};

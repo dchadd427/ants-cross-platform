@@ -45,8 +45,8 @@ class PedestalSlot {
 public:
     // Requests the steady state (kind, mode); the slot plays the transition chain from its current state.
     void request(const assets::AssetArchive& archive, PedestalKind kind, int mode, uint32_t now_ms);
-    // Draws the current frame (parts last-first at their absolute coordinates). Returns true if anything was drawn.
-    bool draw(IRenderer& renderer, const assets::AssetArchive& archive, uint32_t now_ms);
+    // Draws the current frame (parts last-first at their absolute coordinates, moved by (dx, dy): the panel of a bigger picture). Returns true if anything was drawn.
+    bool draw(IRenderer& renderer, const assets::AssetArchive& archive, uint32_t now_ms, int32_t dx = 0, int32_t dy = 0);
 
     PedestalKind resting_kind() const noexcept { return kind_; }
     bool is_settled_and_visible() const noexcept { return !running_ && kind_ != PedestalKind::Hidden; }

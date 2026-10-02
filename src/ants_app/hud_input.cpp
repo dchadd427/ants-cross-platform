@@ -157,6 +157,11 @@ CursorType HUD::evaluate_cursor(int32_t screen_x, int32_t screen_y, const sim::W
     // 5. By panel mode
     const int32_t world_x = camera.world_x + (screen_x - layout_.view().x);
     const int32_t world_y = camera.world_y + (screen_y - layout_.view().y);
+    // A map that is smaller than the view (a 16 x 16 map in the 16:9 view) is centred in it with black around: there is no ground under the pointer there, it is the plain pointer
+    if (world_x < 0 || world_y < 0 || world_x >= static_cast<int32_t>(grid.width()) * 32 || world_y >= static_cast<int32_t>(grid.height()) * 32) {
+        current_cursor_ = CursorType::Normal;
+        return current_cursor_;
+    }
     const int32_t tx = world_x / 32;
     const int32_t ty = world_y / 32;
     const PanelMode panel = panel_mode(world);

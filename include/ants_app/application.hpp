@@ -54,11 +54,13 @@ struct ApplicationConfig {
     int window_width{1280};  // Default 2x integer scale
     int window_height{960};
     bool fullscreen{false};
-    /// --aspect 16:9 | 4:3 (the settings key `aspect` when the command line does not say): the shape of the picture. 4:3 is the original's fixed 640 x 480 canvas (the default); 16:9
-    /// is a fixed 960 x 540 canvas, in which the match screen and the original's pages are still drawn as the 640 x 480 picture, centred. SDL scales the canvas into the window by
+    /// --aspect 16:9 | 4:3 (the settings key `aspect` when the command line does not say): the shape of the picture. 4:3 is the original's fixed 640 x 480 canvas; 16:9 is a fixed
+    /// 960 x 540 canvas, in which the match screen is the wide frame (a 762 x 500 map view, the right panel pinned to the right edge: shell_layout.hpp) and the original's own pages
+    /// (the loading screen, the quick help, the setup screen and the room, the results, the options) are still its 640 x 480 pages, centred. SDL scales the canvas into the window by
     /// the largest scale that fits (whole when the window is a multiple of the canvas, else fractional), centred, with bars; a window of an aspect opens at the largest whole-number
-    /// multiple of the canvas that fits the display (--window-size and --grid still win), and fullscreen is the same canvas filling as much of the monitor as fits. The web build
-    /// stays 4:3. `aspect_given` is true when the command line said it (the settings key then does not count).
+    /// multiple of the canvas that fits the display (--window-size and --grid still win), and fullscreen is the same canvas filling as much of the monitor as fits. A desktop game that is
+    /// started from the command line (parse_arguments) is 16:9 unless it says otherwise (kPlatformDefaultAspect: the web build is 4:3 until its page shows 16:9); a config that is made
+    /// by hand keeps the 4:3 that it is built with. `aspect_given` is true when the command line said it (the settings key then does not count).
     Aspect aspect{Aspect::Classic4x3};
     bool aspect_given{false};
     bool headless{false};
@@ -199,8 +201,10 @@ public:
     Renderer& renderer() noexcept { return *renderer_; }
     /// The geometry of the picture that the HUD, the renderer, the edge scroll and the pointer work in (screen_layout.hpp)
     const ScreenLayout& layout() const noexcept { return layout_; }
-    /// The aspect the game runs in (the command line's, else the settings', else 4:3), the canvas that the window shows (SDL's logical size) and where the picture of `layout()`
-    /// sits in it (centred: the pointer's coordinates are the picture's, the canvas's bars around it count as its nearest edge pixel)
+    /// The aspect the game runs in (the command line's, else the settings', else the platform's default: 16:9 on a desktop), the canvas that the window shows (SDL's logical size) and
+    /// where the picture on screen sits in it (the pointer's coordinates are the picture's, the canvas's bars around it count as its nearest edge pixel): a match is the picture of
+    /// `layout()`, the whole canvas of its aspect; every other screen (the loading screen, the quick help, the setup screen and the room, the results) is the original's own 640 x 480
+    /// page, centred in the canvas
     Aspect aspect() const noexcept { return aspect_; }
     CanvasLayout canvas() const noexcept { return renderer_ ? CanvasLayout{renderer_->canvas_w(), renderer_->canvas_h()} : CanvasLayout::of(aspect_); }
     const LayoutRect& picture() const noexcept { return picture_; }
@@ -347,7 +351,7 @@ private:
     ApplicationConfig config_{};
     ScreenLayout layout_{ScreenLayout::classic()};       // the picture that the match screen is: the HUD, the renderer's view, the edge scroll, the pointer's limits
     Aspect aspect_{Aspect::Classic4x3};
-    LayoutRect picture_{0, 0, ScreenLayout::kClassicWidth, ScreenLayout::kClassicHeight};     // where that picture sits in the canvas (centred; the whole canvas for 4:3)
+    LayoutRect picture_{0, 0, ScreenLayout::kClassicWidth, ScreenLayout::kClassicHeight};     // where the picture that is on screen sits in the canvas (picture_for_state: the match is the whole canvas, a page of the original's is centred)
     AppState state_{AppState::MapSelect};
     bool is_running_{false};
     bool match_started_{false};                           // a match screen was built (the original writes the chat transcript only then)
@@ -462,8 +466,10 @@ private:
     void start_net_bots();                                             // the host of a room: the controller over NetBotSink, for the seats that hold a bot
     void stop_bots();
 
+    LayoutRect picture_for_state() const;                 // where the picture on screen sits in the canvas: the match is the layout's picture, every other screen the original's 640 x 480, centred
+    void update_picture();                                // the screen changed (a match starts, the results open, the setup screen is back): the picture and the pointer's coordinates follow
     void apply_window_layout();                           // --grid / --cell, --window-pos, --window-size, the aspect's first size (native builds)
-    void choose_aspect();                                 // --aspect, else the settings' key `aspect`, else 4:3 (4:3 always in the web build)
+    void choose_aspect();                                 // --aspect, else the settings' key `aspect`, else the config's (the platform's default from parse_arguments: 16:9 on a desktop)
     void update_mouse_grab();                             // fullscreen (SDL's or a macOS Space): SDL keeps the pointer in the window while it has the focus (native builds)
     bool button_outside_window(const SDL_MouseButtonEvent& button) const;   // the position SDL delivered (before the clamp) lies outside the window, not merely the picture
     void show_start_view();                               // the view at the start of a match: scrolled just far enough to show the square around the hill's anchor tile

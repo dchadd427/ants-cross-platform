@@ -148,7 +148,9 @@ void test_sized_layouts() {
     check(w.panel_fill().right() == 960 && w.panel_fill().bottom() == 540, "... it ends at the screen's right and bottom edge");
     const ScoreSlot expected[4] = {{632, 719, 4, 722}, {325, 421, 524, 425}, {483, 571, 524, 574}, {632, 719, 524, 722}};
     for (size_t k = 0; k < 4; ++k) check(w.score_slot(k) == expected[k], "score slot " + std::to_string(k) + " of 960 x 540: the top bar's right anchored, the bottom strip's right and bottom anchored");
-    check(w.score_slot(7) == w.score_slot(3), "a slot past the fourth is the fourth");
+    // (M3 rewrote this line: it said "a slot past the fourth is the fourth" for the wide layout too. A wide strip has room for more slots left of the first, so a slot past the fourth is
+    // a real one now, down to the last that fits (5 bottom slots at 960 wide); the original's picture, which has no room, keeps the old rule above, and test_wide_hud pins the new slots.)
+    check(w.bottom_slot_count() == 5 && w.score_slot(7) == w.score_slot(5) && w.score_slot(4) != w.score_slot(3), "a slot past the last that fits is the last (five bottom slots at 960 wide); slot 4 is a slot of its own");
 
     // a layout is never smaller than the original's screen
     check(ScreenLayout::with_size(600, 400) == ScreenLayout::classic() && ScreenLayout::with_size(639, 479).is_classic() && ScreenLayout::with_size(0, 0).is_classic(), "a smaller canvas gives the classic layout");

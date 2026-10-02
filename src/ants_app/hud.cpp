@@ -419,8 +419,9 @@ void HUD::render(IRenderer& renderer, const assets::AssetArchive& assets,
     renderer.fill_rect(panel.x, panel.y, panel.w, panel.h, hud_bg_colors[local_player_id_ % 4]);
 
     // 1. The static HUD shell: animation uishell = 14 parts (frame borders, top bar, banner, card, chat boxes, status
-    //    box at (479,253)) drawn last part first, exactly as the original composes it. Nothing static is drawn twice.
-    draw_animation_frame0(renderer, assets, "uishell", 0, 0);
+    //    box at (479,253)) drawn last part first, exactly as the original composes it. Nothing static is drawn twice. In a picture bigger than the original's
+    //    screen the pieces are placed by their anchors and the stretched ones repeat one line of themselves (shell_layout.hpp).
+    render_shell(renderer, assets);
 
     // 2. Right Panel Modules (Authentic Ants reconstruction)
     // 2.1 Minimap Radar at (480, 35..126) and decorative bezel x599y35.bmp at (599, 35)
@@ -498,8 +499,8 @@ void HUD::render(IRenderer& renderer, const assets::AssetArchive& assets,
     // Both slots play the original rise / sink / icon-swap / press chains in real time (FUN_01028360)
     left_pedestal_.request(assets, left_kind, left_mode, now_ms);
     right_pedestal_.request(assets, right_kind, right_mode, now_ms);
-    left_pedestal_.draw(renderer, assets, now_ms);
-    right_pedestal_.draw(renderer, assets, now_ms);
+    left_pedestal_.draw(renderer, assets, now_ms, layout_.dx());                       // (the pedestals are in the panel's top part: right anchored)
+    right_pedestal_.draw(renderer, assets, now_ms, layout_.dx());
     // The glow follows the cursor mode alone (FUN_010285f0): move / food over slot 1, target over slot 2
     if (left_pedestal_.is_settled_and_visible() && left_pedestal_.resting_kind() == PedestalKind::Move &&
         (current_cursor_ == CursorType::Move || current_cursor_ == CursorType::Food)) {
@@ -514,15 +515,15 @@ void HUD::render(IRenderer& renderer, const assets::AssetArchive& assets,
             // Egg tray egg<N> (N = min(eggs, 9)) and the Stop button; both are animations with absolute part coordinates
             if (eggs_now > 0) {
                 const std::string tray = "egg" + std::to_string(std::min<uint32_t>(eggs_now, 9u));
-                draw_animation_frame0(renderer, assets, tray.c_str(), 0, 0);
+                draw_animation_frame0(renderer, assets, tray.c_str(), layout_.dx(), 0);
             }
-            draw_animation_frame0(renderer, assets, (stop_button_.is_pressed || flashing(2)) ? "butcand" : "butcanu", 0, 0);
+            draw_animation_frame0(renderer, assets, (stop_button_.is_pressed || flashing(2)) ? "butcand" : "butcanu", layout_.dx(), 0);
         }
         // (an enemy base shows the status box only: the ally pedestal is the left slot)
     } else {
         if (has_friendly_ants) {
             // Stop button (animation butcanu / butcand: label at (595,180), button at (595,198))
-            draw_animation_frame0(renderer, assets, (stop_button_.is_pressed || flashing(2)) ? "butcand" : "butcanu", 0, 0);
+            draw_animation_frame0(renderer, assets, (stop_button_.is_pressed || flashing(2)) ? "butcand" : "butcanu", layout_.dx(), 0);
 
             // Lunchbox indicator (animation UI_LBOX, sprite at (597,131)) only when every selected ant carries food
             bool all_carry = false;
@@ -537,7 +538,7 @@ void HUD::render(IRenderer& renderer, const assets::AssetArchive& assets,
                 all_carry = true;
             }
             if (all_carry) {
-                draw_animation_frame0(renderer, assets, "UI_LBOX", 0, 0);
+                draw_animation_frame0(renderer, assets, "UI_LBOX", layout_.dx(), 0);
             }
         }
     }
@@ -562,13 +563,13 @@ void HUD::render(IRenderer& renderer, const assets::AssetArchive& assets,
     }
     // Chat switched off in the options: chatcovr (three chcovr2 tiles at (478,421/436/445)) covers the input box
     if (!options_.state().chat) {
-        draw_animation_frame0(renderer, assets, "chatcovr", 0, 0);
+        draw_animation_frame0(renderer, assets, "chatcovr", layout_.dx(), layout_.dy());
     }
 
     // "Send to:" buttons (animations butall*, butals*): up / hover ("r" label over the up art) / pressed. [All] is hidden while chat is off,
     // [Team] exists only while the local player has an ally.
     auto send_button = [&](bool down, bool hovered, const char* up, const char* hover, const char* pressed) {
-        draw_animation_frame0(renderer, assets, down ? pressed : (hovered ? hover : up));
+        draw_animation_frame0(renderer, assets, down ? pressed : (hovered ? hover : up), layout_.dx(), layout_.dy());       // (bottom of the panel: right and down)
     };
     if (options_.state().chat) {
         send_button(send_to_button_.is_pressed, send_to_button_.is_hovered, "butallu", "butallr", "butalld");
@@ -586,17 +587,52 @@ void HUD::render(IRenderer& renderer, const assets::AssetArchive& assets,
         render_marquee_box(renderer);
     }
 
-    // 5. Overlays and Dialogs
-    if (show_quick_help_) {
-        render_quick_help(renderer, assets);
-    } else if (options_.is_open()) {
-        options_.render(renderer, assets, clock_ms());
-    } else if (show_quit_dialog_) {
-        render_quit_dialog(renderer, assets);
-    } else if (alliance_dialog_ != AllianceDialog::None) {
-        render_alliance_dialog(renderer, assets);
-    } else if (show_match_start_modal_) {
-        render_match_start_modal(renderer, assets);
+    // 5. Overlays and Dialogs: the pages of the original (the quick help, the options) are its own 640 x 480 screens, centred in a bigger picture over a margin; the dialogs are
+    //    its dialog frame, moved so that it is centred over the map view. They are drawn with their own numbers, moved by the renderer's origin
+    //    (IRenderer::set_origin: nothing moves in the original's own picture)
+    const LayoutPoint page = layout_.page_offset();
+    const LayoutPoint modal = layout_.modal_offset();
+    if (show_quick_help_ || options_.is_open()) {
+        const bool inset = page != LayoutPoint{};                       // (a page of the original's own picture is the whole picture: nothing to cut, nothing around it)
+        render_page_margin(renderer, assets);
+        renderer.set_origin(page.x, page.y);
+        if (inset) renderer.set_clip_rect(0, 0, ScreenLayout::kClassicWidth, ScreenLayout::kClassicHeight);       // the pieces of a page reach beyond its 640 x 480 screen
+        if (show_quick_help_) render_quick_help(renderer, assets);
+        else options_.render(renderer, assets, clock_ms());
+        if (inset) renderer.clear_clip_rect();
+        renderer.set_origin(0, 0);
+    } else if (show_quit_dialog_ || alliance_dialog_ != AllianceDialog::None || show_match_start_modal_) {
+        renderer.set_origin(modal.x, modal.y);
+        if (show_quit_dialog_) render_quit_dialog(renderer, assets);
+        else if (alliance_dialog_ != AllianceDialog::None) render_alliance_dialog(renderer, assets);
+        else render_match_start_modal(renderer, assets);
+        renderer.set_origin(0, 0);
+    }
+}
+
+// What surrounds a page of the original's own 640 x 480 screen in a bigger picture: nothing of the match shows around it (the pages of the original cover the whole screen), so the
+// margin is the clay of its pages, as on the screens outside a match (kPageMargin). The original's own picture has no margin.
+void HUD::render_page_margin(IRenderer& renderer, const assets::AssetArchive& assets) {
+    (void)assets;
+    if (layout_.page_offset() == LayoutPoint{}) return;
+    renderer.fill_rect(0, 0, layout_.width, layout_.height, kPageMargin);
+}
+
+// The frame of the match screen: the 14 pieces of the animation uishell, last stored piece first (the order the original draws them), each where its anchor puts it in this picture and,
+// when it is one of the stretched pieces, in parts around one repeated line (shell_layout.hpp). In the original's own picture every piece is one plain copy at its own place.
+void HUD::render_shell(IRenderer& renderer, const assets::AssetArchive& assets) {
+    const auto* seq = assets.find_animation("uishell");
+    if (!seq || seq->subitems.empty()) return;
+    const auto& frames = seq->subitems[0].frames;
+    for (size_t k = frames.size(); k-- > 0;) {
+        const auto& part = frames[k];
+        const assets::Sprite& sprite = assets.get_sprite(part.sprite_index);
+        const ShellSpans spans = shell_spans(shell_rule(sprite.name), part.dx, part.dy, static_cast<int32_t>(sprite.width), static_cast<int32_t>(sprite.height), layout_);
+        for (size_t i = 0; i < spans.count; ++i) {
+            const ShellSpan& span = spans.span[i];
+            if (span.whole) renderer.draw_sprite(part.sprite_index, span.dst.x, span.dst.y);
+            else renderer.draw_sprite_region(part.sprite_index, span.dst.x, span.dst.y, span.dst.w, span.dst.h, span.src.x, span.src.y, span.src.w, span.src.h);
+        }
     }
 }
 
@@ -625,19 +661,19 @@ void HUD::render_top_bar(IRenderer& renderer, const assets::AssetArchive& archiv
     // the top bar image, hovering draws the small "r" label over it and the pressed art replaces it. A button stays down
     // while the screen it opened is showing.
     if (help_button_.is_pressed || show_quick_help_) {
-        draw_animation_frame0(renderer, archive, "buthlpd");
+        draw_animation_frame0(renderer, archive, "buthlpd", layout_.dx(), 0);
     } else if (help_button_.is_hovered) {
-        draw_animation_frame0(renderer, archive, "buthlpr");
+        draw_animation_frame0(renderer, archive, "buthlpr", layout_.dx(), 0);
     }
     if (options_button_.is_pressed || options_.is_open()) {
-        draw_animation_frame0(renderer, archive, "butoptd");
+        draw_animation_frame0(renderer, archive, "butoptd", layout_.dx(), 0);
     } else if (options_button_.is_hovered) {
-        draw_animation_frame0(renderer, archive, "butoptr");
+        draw_animation_frame0(renderer, archive, "butoptr", layout_.dx(), 0);
     }
     if (quit_button_.is_pressed || show_quit_dialog_) {
-        draw_animation_frame0(renderer, archive, "butqitd");
+        draw_animation_frame0(renderer, archive, "butqitd", layout_.dx(), 0);
     } else if (quit_button_.is_hovered) {
-        draw_animation_frame0(renderer, archive, "butqitr");
+        draw_animation_frame0(renderer, archive, "butqitr", layout_.dx(), 0);
     }
 }
 
@@ -758,14 +794,27 @@ void HUD::render_radar(IRenderer& renderer, const assets::AssetArchive& archive,
 
     // The view frame (0x1009ae2 - 0x1009b6f, drawn last with GDI FrameRect in (251, 251, 255)): the size of the view scaled down plus one, at the view's origin scaled down, moved
     // inside the image when it would end beyond its right or bottom edge
-    const int32_t frame_w = to_image_x(layout_.view().w) + 1;
-    const int32_t frame_h = to_image_y(layout_.view().h) + 1;
-    int32_t fl = rx + to_image_x(static_cast<int32_t>(camera.x));
-    int32_t ft = ry + to_image_y(static_cast<int32_t>(camera.y));
-    int32_t fr = fl + frame_w;
-    int32_t fb = ft + frame_h;
-    if (fr >= rx + rw) { fr = rx + rw; fl = fr - frame_w; }
-    if (fb >= ry + rh) { fb = ry + rh; ft = fb - frame_h; }
+    // (A view bigger than the map on an axis shows all of it there: the frame is the image's whole width / height then. The original's view is smaller than its smallest map;
+    // the 16:9 view of 762 x 500 is bigger than a 16 x 16 map.)
+    int32_t fl, ft, fr, fb;
+    if (world_w_px <= layout_.view().w) {
+        fl = rx;
+        fr = rx + rw;
+    } else {
+        const int32_t frame_w = to_image_x(layout_.view().w) + 1;
+        fl = rx + to_image_x(static_cast<int32_t>(camera.x));
+        fr = fl + frame_w;
+        if (fr >= rx + rw) { fr = rx + rw; fl = fr - frame_w; }
+    }
+    if (world_h_px <= layout_.view().h) {
+        ft = ry;
+        fb = ry + rh;
+    } else {
+        const int32_t frame_h = to_image_y(layout_.view().h) + 1;
+        ft = ry + to_image_y(static_cast<int32_t>(camera.y));
+        fb = ft + frame_h;
+        if (fb >= ry + rh) { fb = ry + rh; ft = fb - frame_h; }
+    }
     renderer.draw_rect(fl, ft, fr - fl, fb - ft, {251, 251, 255, 255});
 }
 
@@ -1124,7 +1173,7 @@ void HUD::render_pedestal_glow(IRenderer& renderer, const assets::AssetArchive& 
     if (sub_idx >= seq->subitems.size()) sub_idx = 0;
     const auto& sub = seq->subitems[sub_idx];
     for (const auto& fr : sub.frames) {
-        renderer.draw_sprite(fr.sprite_index, fr.dx, fr.dy);
+        renderer.draw_sprite(fr.sprite_index, layout_.dx() + fr.dx, fr.dy);
     }
 }
 
@@ -1255,14 +1304,17 @@ bool HUD::handle_mouse_down(int32_t x, int32_t y, uint8_t button,
     mouse_y_ = y;
 
     // 0. Overlays and Modals intercept clicks first
+    // (the pages and the dialogs have the original's own numbers, drawn moved by the layout's page / modal offset: the pointer is taken back to them)
+    const LayoutPoint page = layout_.page_offset();
+    const LayoutPoint modal = layout_.modal_offset();
     if (show_quick_help_) {
-        if (button == SDL_BUTTON_LEFT) quick_help_return_.on_press(x, y);     // the Return button captures (qh_return3 carries no sound); nothing else reacts
+        if (button == SDL_BUTTON_LEFT) quick_help_return_.on_press(x - page.x, y - page.y);     // the Return button captures (qh_return3 carries no sound); nothing else reacts
         return true;
     }
     if (options_.is_open()) {
         // The window takes every press; only the left button acts (the controls' mouse handlers test the left button message): the start of a slider
         // drag, a captured button, the focus of an edit field. Nothing acts before the release, and a press outside the controls does nothing.
-        if (button == SDL_BUTTON_LEFT) options_.on_press(x, y, clock_ms());
+        if (button == SDL_BUTTON_LEFT) options_.on_press(x - page.x, y - page.y, clock_ms());
         return true;
     }
     if (show_match_start_modal_) {
@@ -1271,7 +1323,7 @@ bool HUD::handle_mouse_down(int32_t x, int32_t y, uint8_t button,
     if (alliance_dialog_ != AllianceDialog::None) {
         if (button == SDL_BUTTON_LEFT) {
             for (UIButton* b : {&alliance_button_a_, &alliance_button_b_}) {
-                if (b->w > 0 && b->contains(x, y)) {
+                if (b->w > 0 && b->contains(x - modal.x, y - modal.y)) {
                     b->is_pressed = true;
                     play_sfx(sim::SoundID::ButtonClick);
                     return true;
@@ -1282,12 +1334,12 @@ bool HUD::handle_mouse_down(int32_t x, int32_t y, uint8_t button,
     }
     if (show_quit_dialog_) {
         if (button == SDL_BUTTON_LEFT) {
-            if (yes_button_.contains(x, y)) {
+            if (yes_button_.contains(x - modal.x, y - modal.y)) {
                 yes_button_.is_pressed = true;
                 play_sfx(sim::SoundID::ButtonClick);   // yes3 / no3 carry sound 0
                 return true;
             }
-            if (no_button_.contains(x, y)) {
+            if (no_button_.contains(x - modal.x, y - modal.y)) {
                 no_button_.is_pressed = true;
                 play_sfx(sim::SoundID::ButtonClick);
                 return true;
@@ -1396,13 +1448,15 @@ bool HUD::handle_mouse_up(int32_t x, int32_t y, uint8_t button,
     hatch_button_.is_pressed = false;
     team_up_button_.is_pressed = false;
     is_radar_dragging_ = false;
+    const LayoutPoint page = layout_.page_offset();                       // (the pages and the dialogs: see handle_mouse_down)
+    const LayoutPoint modal = layout_.modal_offset();
     if (show_quick_help_) {
-        if (button == SDL_BUTTON_LEFT && quick_help_return_.on_release(x, y)) close_quick_help();        // the callback runs at the release, on the button
+        if (button == SDL_BUTTON_LEFT && quick_help_return_.on_release(x - page.x, y - page.y)) close_quick_help();        // the callback runs at the release, on the button
         return true;
     }
     if (options_.is_open()) {
         // The callbacks run at the release: Return, the pairs of switches and the sliders' drags (FUN_010115ca, FUN_01011206)
-        if (button == SDL_BUTTON_LEFT) options_.on_release(x, y);
+        if (button == SDL_BUTTON_LEFT) options_.on_release(x - page.x, y - page.y);
         return true;
     }
 
@@ -1414,7 +1468,7 @@ bool HUD::handle_mouse_up(int32_t x, int32_t y, uint8_t button,
         for (UIButton* b : {&alliance_button_a_, &alliance_button_b_}) {
             if (!b->is_pressed) continue;
             b->is_pressed = false;
-            if (b->contains(x, y)) answer_alliance_dialog(sim, b == &alliance_button_a_);      // the action runs at the release, on the button
+            if (b->contains(x - modal.x, y - modal.y)) answer_alliance_dialog(sim, b == &alliance_button_a_);      // the action runs at the release, on the button
             return true;
         }
         return true;
@@ -1423,7 +1477,7 @@ bool HUD::handle_mouse_up(int32_t x, int32_t y, uint8_t button,
     if (show_quit_dialog_) {
         if (yes_button_.is_pressed) {
             yes_button_.is_pressed = false;
-            if (yes_button_.contains(x, y)) {
+            if (yes_button_.contains(x - modal.x, y - modal.y)) {
                 close_quit_dialog();
                 if (on_quit_) on_quit_();
             }
@@ -1431,7 +1485,7 @@ bool HUD::handle_mouse_up(int32_t x, int32_t y, uint8_t button,
         }
         if (no_button_.is_pressed) {
             no_button_.is_pressed = false;
-            if (no_button_.contains(x, y)) {
+            if (no_button_.contains(x - modal.x, y - modal.y)) {
                 close_quit_dialog();
             }
             return true;
@@ -1490,31 +1544,37 @@ bool HUD::handle_mouse_motion(int32_t x, int32_t y,
     options_button_.is_hovered = options_button_.contains(x, y);
     quit_button_.is_hovered = quit_button_.contains(x, y);
 
+    const LayoutPoint page = layout_.page_offset();                       // (the pages and the dialogs: see handle_mouse_down)
+    const LayoutPoint modal = layout_.modal_offset();
     if (show_quick_help_) {
-        quick_help_return_.on_move(x, y);
+        quick_help_return_.on_move(x - page.x, y - page.y);
         return true;
     }
     if (options_.is_open()) {
-        options_.on_move(x, y);                   // hover pictures; a dragged thumb follows the pointer (only the thumb: the value is applied at the release)
+        options_.on_move(x - page.x, y - page.y);                   // hover pictures; a dragged thumb follows the pointer (only the thumb: the value is applied at the release)
         return true;
     }
 
     // The dialogs' buttons are the button class too (FUN_01011281): leaving a pressed button cancels its capture for good, coming back only hovers
     if (alliance_dialog_ != AllianceDialog::None) {
+        const int32_t mx = x - modal.x;
+        const int32_t my = y - modal.y;
         for (UIButton* b : {&alliance_button_a_, &alliance_button_b_}) {
-            if (b->is_pressed && !b->contains(x, y)) b->is_pressed = false;
+            if (b->is_pressed && !b->contains(mx, my)) b->is_pressed = false;
         }
-        alliance_button_a_.is_active = alliance_button_a_.w > 0 && alliance_button_a_.contains(x, y);
-        alliance_button_b_.is_active = alliance_button_b_.w > 0 && alliance_button_b_.contains(x, y);
+        alliance_button_a_.is_active = alliance_button_a_.w > 0 && alliance_button_a_.contains(mx, my);
+        alliance_button_b_.is_active = alliance_button_b_.w > 0 && alliance_button_b_.contains(mx, my);
         return true;
     }
 
     if (show_quit_dialog_) {
+        const int32_t mx = x - modal.x;
+        const int32_t my = y - modal.y;
         for (UIButton* b : {&yes_button_, &no_button_}) {
-            if (b->is_pressed && !b->contains(x, y)) b->is_pressed = false;
+            if (b->is_pressed && !b->contains(mx, my)) b->is_pressed = false;
         }
-        yes_button_.is_active = yes_button_.contains(x, y);
-        no_button_.is_active = no_button_.contains(x, y);
+        yes_button_.is_active = yes_button_.contains(mx, my);
+        no_button_.is_active = no_button_.contains(mx, my);
         return true;
     }
 

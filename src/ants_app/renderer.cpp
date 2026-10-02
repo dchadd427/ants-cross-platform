@@ -126,11 +126,16 @@ void ViewportCamera::center_on(int32_t world_px, int32_t world_py, uint32_t map_
     clamp_to_bounds(map_w, map_h);
 }
 
+// The view never shows beyond the map: the origin stays in [0, map - view]. A map that is smaller than the view on an axis has no such range (a 16 x 16 map is 512 pixels wide, the
+// 16:9 view is 762): the camera is fixed on that axis, at the origin that centres the map in the view when `centre_small_maps` (a negative one: the world pixel 0 is right of the
+// view's left edge; what the map does not cover stays the colour that the frame starts with, black) and at 0 otherwise
 void ViewportCamera::clamp_to_bounds(uint32_t map_w, uint32_t map_h) {
-    float max_x = std::max(0.0f, static_cast<float>(static_cast<int32_t>(map_w * TILE_SIZE) - viewport_w));
-    float max_y = std::max(0.0f, static_cast<float>(static_cast<int32_t>(map_h * TILE_SIZE) - viewport_h));
-    x = std::clamp(x, 0.0f, max_x);
-    y = std::clamp(y, 0.0f, max_y);
+    const int32_t map_px_w = static_cast<int32_t>(map_w * TILE_SIZE);
+    const int32_t map_px_h = static_cast<int32_t>(map_h * TILE_SIZE);
+    if (map_px_w > viewport_w) x = std::clamp(x, 0.0f, static_cast<float>(map_px_w - viewport_w));
+    else x = centre_small_maps ? static_cast<float>((map_px_w - viewport_w) / 2) : 0.0f;
+    if (map_px_h > viewport_h) y = std::clamp(y, 0.0f, static_cast<float>(map_px_h - viewport_h));
+    else y = centre_small_maps ? static_cast<float>((map_px_h - viewport_h) / 2) : 0.0f;
     world_x = static_cast<int32_t>(x);
     world_y = static_cast<int32_t>(y);
 }
@@ -462,6 +467,7 @@ void Renderer::refit_canvas() {
 void Renderer::set_layout(const ScreenLayout& layout) {
     layout_ = layout;
     camera_.set_view(layout_.view());
+    camera_.centre_small_maps = !layout_.is_classic();                                                   // (the wide view is bigger than a small map: the map is centred in it)
     if (map_width_ > 0 && map_height_ > 0) camera_.clamp_to_bounds(map_width_, map_height_);       // a bigger view may not show more than the map has
 }
 
@@ -643,6 +649,7 @@ void Renderer::begin_frame() {
                                                  : SDL_GetTicks() - map_epoch_ms_;
     SDL_SetRenderDrawColor(renderer_, 0, 0, 0, 255); // Black letterbox / background
     SDL_RenderClear(renderer_);
+    origin_ = LayoutPoint{};                         // (a frame starts in the picture's own numbers, whatever window the last one left open)
     restore_clip();                                  // (the picture, when it is smaller than the canvas: nothing is drawn beyond it)
 }
 
@@ -1766,6 +1773,17 @@ void Renderer::draw_sprite(uint32_t sprite_id, int32_t x, int32_t y, bool mirror
     SDL_RenderCopy(renderer_, tex, nullptr, &dst);
 }
 
+// A part of a sprite, scaled to a rectangle (IRenderer::draw_sprite_region): the frame of the match screen is drawn in parts, and a part that is one column or one row wide is
+// repeated over the whole width or height of its rectangle. The scaling is SDL's with the "nearest" filter, so a repeated line is exactly that line.
+void Renderer::draw_sprite_region(uint32_t sprite_id, int32_t x, int32_t y, int32_t w, int32_t h, int32_t sx, int32_t sy, int32_t sw, int32_t sh) {
+    if (!renderer_ || !texture_cache_ || !archive_ || w <= 0 || h <= 0 || sw <= 0 || sh <= 0) return;
+    SDL_Texture* tex = texture_cache_->get_sprite_texture(sprite_id, false, hud_team_id_);
+    if (!tex) return;
+    const SDL_Rect src = {sx, sy, sw, sh};
+    const SDL_Rect dst = placed(x, y, w, h);
+    SDL_RenderCopy(renderer_, tex, &src, &dst);
+}
+
 void Renderer::draw_rgba_image(int32_t x, int32_t y, int32_t w, int32_t h, const uint8_t* rgba) {
     if (!renderer_ || !rgba || w <= 0 || h <= 0) return;
     if (!rgba_texture_ || rgba_texture_w_ != w || rgba_texture_h_ != h) {
@@ -1924,7 +1942,7 @@ void Renderer::draw_text(const std::string& text, int32_t x, int32_t y, ants::as
             for (int col = 0; col < glyph.width; ++col) {
                 if (row_bits & (0x80 >> col)) {
                     if (scale == 1) {
-                        SDL_RenderDrawPoint(renderer_, cur_x + col + picture_.x, y + row + picture_.y);
+                        SDL_RenderDrawPoint(renderer_, cur_x + col + picture_.x + origin_.x, y + row + picture_.y + origin_.y);
                     } else {
                         const SDL_Rect dot = placed(cur_x + col * scale, y + row * scale, scale, scale);
                         SDL_RenderFillRect(renderer_, &dot);

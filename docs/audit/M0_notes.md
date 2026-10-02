@@ -328,3 +328,166 @@ M3 makes the match screen the wide picture itself: `ScreenLayout::with_size(960,
 | M2-54 | `application.cpp`: the cursor is drawn at the canvas, not into the picture | 2 checks |
 | M2-55 | `application.cpp`: set_layout does not move the picture | 4 checks |
 
+## M3: the wide match screen and the 16:9 default (what it does, what is left for M4 and M5)
+
+Milestone M3 of the widescreen work (sections 52 and 70 of the plan; the owner's priority of 2026-10-02): the 16:9 picture of 960 x 540 gets its own frame, grown from the original's art, and a desktop game opens in it. **The original's 4:3 picture is unchanged**: the 307 fingerprints of suite 3.10 did not move, and a screenshot of the match at `--aspect 4:3` is, pixel for pixel, the one of the commit before (the frame-rate plate apart).
+
+### What it does
+
+- **The frame.** `include/ants_app/shell_layout.hpp` (pure, no SDL) classifies the 14 pieces of the animation `uishell` by what they are anchored to: Right (+dx), Bottom (+dy), and the six that grow by repeating ONE line of themselves (`ShellRule`: the cut column or row; `shell_spans` turns a piece into at most three spans: before the cut, the repeated line stretched, after the cut). With dx = dy = 0 every piece is one plain copy at its own place, which is what the original draws and what the 307 classic fingerprints see. `HUD::render_shell` draws the spans last piece first (the original's order); a piece in parts is drawn with the new `IRenderer::draw_sprite_region` (a part of a sprite stretched to a rectangle: a source one pixel wide over a wide destination repeats that column; the renderer's scaling is SDL's nearest filter, so a repeated line is that line, checked pixel for pixel on the real renderer).
+- **The six cuts** (all measured on the art of `ants.chd`, the numbers are in the tests of suite 3.15 group "cuts"; the owner's choice for the right panel, 2026-10-02: "further down on the chat there's a spot that can repeat cleanly"):
+
+| Piece | Cut | Why there | Spans |
+|---|---|---|---|
+| `x0y0` the top bar | column 140 (wider by dx) | columns 138 - 143 are identical; right of the black clock box (its edge is columns 129 - 132), left of the local score label | 3 |
+| `x17y461` the bottom strip | column 15 (wider by dx, down by dy) | columns 13 - 17 are the plain band left of the first score box's recess (edge at column 86); **never inside columns 458 - 482, which are the right panel's own fill** (52.P correction: a stretch there puts a flat block between the strip's end ornament and the panel) | 3 |
+| `x0y22` the left strip | row 300 (taller by dy) | rows 294 - 314 are identical, below the horizontal rule (rows 260 - 266: it stays level with the chat header) | 3 |
+| `x458y35` the strip between the map and the panel | row 322 = canvas y 357 | neighbouring rows differ by 3 and 0 pixels; the nearest ant decoration is 10 rows away | 3 |
+| `wchat` the chat log's box | row 59 = canvas y 357 | a flat fill (rows 3 - 99 identical): the chat log takes the extra height | 3 |
+| `x521y254` the right edge strip | row 103 = canvas y 357 | neighbouring rows differ by 5 and 4 pixels; the nearest ant decoration is 10 rows away (the row 50 that the owner rejected is beside one: the test asserts it fails the same rule) | 3 |
+
+  The other eight pieces move: the three text boxes `wstatus` (right), `wtype` (right and down) and the minimap's bezel `x599y35`, the top of the panel `x458y22`, the status card `x480y126` and the chat header `x480y266` (right), the ant relief `x480y400` and the panel's bottom `x480y466` (right and down). Every piece of the right panel that spans canvas row 357 is cut there: exactly the three.
+- **The result at 960 x 540**: the map view is 762 x 500 at (16, 21), the right panel is pinned to the right edge, the chat log is 161 px tall, the three score boxes sit at the right end of the bottom strip, the top bar's score box and buttons follow the right edge. The composed frame is, pixel for pixel, the owner-approved mock-up (its one-line-repeat rule written out again in the test, independent of the header) at 960 x 540 and at five other sizes, and the real renderer draws it exactly (suite 3.15 groups "compose" and "renderer").
+- **Everything the original draws with absolute numbers inside the panel moves with its anchor**: the pedestals' art (`PedestalSlot::draw` takes an offset), the glow, the egg tray, the Stop button, the lunchbox indicator and the hover / pressed art of the top bar's buttons by (dx, 0); the chat cover and the Send to buttons by (dx, dy). The status line, the chat log, the chat input and the score boxes were placed by M1.
+- **Score boxes by slot, no new 4**: `ScreenLayout::score_slot(k)`: 0 is the local team's (top bar), 1 - 3 the original's bottom slots (right and bottom anchored), and a slot past them is one pitch (148, the original's slot 2 to 3) further LEFT, as long as its 88 px label begins right of the strip's plain band (x 35): 5 bottom slots at 960 wide, 3 in the original's picture, 11 at 1920 x 1080 (`bottom_slot_count()`). More than four players is still the separate project: the art has no recess left of the first three, so a box there would sit on the plain band.
+- **The original's windows in a bigger picture.** The pages (`options`, the in-match quick help) are the original's 640 x 480 screens: drawn with their own numbers under `IRenderer::set_origin(page offset)`, centred in the picture ((160, 30) at 960 x 540), clipped to their 640 x 480 (the art reaches beyond it), over a margin of the clay colour of the pages (the loading screen's own fill, (219, 75, 19), flat: a window on a clay desktop; black was the other candidate, both screenshots were looked at). The dialogs (quit, the three alliance dialogs, "get ready") are drawn the same way under the dialog offset: the frame's centre goes to the centre of the map view ((137, 59) at 960 x 540, `ScreenLayout::modal_offset()`; (0, 0) in the original's picture, where the dialog is where the original puts it). The pointer is taken back to the windows' own numbers in every handler (press, release, hover of the buttons, the options' sliders, the quick help's Return).
+- **The picture of each screen.** The match is the whole canvas; every other screen (loading, quick help, setup and the room, results) is the original's 640 x 480 page centred in it, with the clay around it. `Application::picture_for_state` says which, `update_picture` follows every change of screen (the match starts, the results open, the way back, a new layout) and moves the pointer's numbers with the corner so that the pointer stays where it is on the canvas; the pointer starts in the middle of the picture that is up. A screen that no longer fills the canvas is drawn over the clay by `render_frame`.
+- **Small maps.** A map that is smaller than the view on an axis (a 16 x 16 map is 512 px wide, the view 762) is centred in it with the black that the frame starts with around it and the camera is fixed on that axis (`ViewportCamera::centre_small_maps`, set by `Renderer::set_layout` for every layout but the original's: the original's camera keeps its rule, a small map at the corner, which the classic fingerprints pin). The cursor over the black is the plain pointer, a click there deselects and orders nothing, the rubber band works across it, the minimap's frame is the whole image on an axis where the view covers the map, the edge strips of an axis that cannot move show no arrow, the sound listener is the middle of the map.
+- **The view size is read by**: the camera's limits and `center_on`, the renderer's clip and culling (M1), the edge strips (`edge_scroll_step`: the strips run along the edges of the whole 960 x 540 picture, the target point scales the pointer from the picture to the view), the minimap's drag (a square of half the view), the minimap's view frame (`HUD::render_radar`), the start view (`start_view_origin`), the rubber band's clamp, the cursor's and the clicks' screen to world conversions (`view().x / y`), Ctrl+H / Ctrl+N (`scroll_to_show`), the network overlay's box and the sound listener (`Application`). **For M4 (the wheel zoom)** these are the places that must tell "the rectangle of the view on the screen" from "the world extent that it shows": the camera clamp, the three edge-scroll functions, the frame of the minimap, the start view, `hud_input.cpp` lines that convert screen to world (`evaluate_cursor`, `pointer_click`, `pointer_release`, `pointer_right_click`, `band_rect`), the listener and `Renderer::render_*` (the culling margins, `world_to_screen`).
+- **The flip.** `kPlatformDefaultAspect` (`canvas_layout.hpp`: 16:9 on a desktop, 4:3 under Emscripten) is the aspect that `Application::parse_arguments` puts into the config when nothing says otherwise; `--aspect` and the settings key `aspect` win (the key is read only when the command line did not give the aspect); a config made by hand (the tests') keeps `ApplicationConfig`'s own 4:3, so no test had to change to stay on the classic picture. **M5 (the web page) flips the web with that one constant** (and by letting `choose_aspect` read `?aspect=` / the settings key there: today the key is read in native builds only).
+- **The four-window rig.** `start_game.sh` / `.bat` pass `--grid 2x2 --cell N` and nothing about the shape: with the new default each window is the largest 16:9 rectangle of its cell (on a 1080p display about 885 x 497 each; the cells of `grid_cell_window` were made for any canvas shape by M2). The start-script test checks that no window gets `--aspect` or `--window-size`.
+
+### A known limit: seams at fractional scales, looked at again
+
+The 1 px seams between sprites at a fractional scale (2560 x 1440 shows 960 x 540 at 2.667x) are a property of **SDL's software renderer** (the headless runs and the screenshot tool: it rounds every destination rectangle on its own): they are in the classic picture at 800 x 600 too. With the accelerated renderer (Metal on this Mac, a hidden window of 5120 x 2880 pixels = 5.333x, sampled across the map view) there is not one black pixel. The "render the canvas into a target texture and scale that once" fix was NOT done: it would draw the TrueType text at canvas resolution (its glyphs are rasterised at twice the size and filtered by the window scale, which is what keeps them sharp on a 4K screen), a visible loss for the case that has no problem. If a software-rendering machine ever matters, the fix is to render only the world and the frame into the target and the text afterwards.
+
+### What is left (for M4 and M5)
+
+- **M4 (the wheel zoom)**: see "The view size is read by" above; the HUD's page and dialog offsets do not depend on it. The fingerprint family "*.wide.*" is the oracle of the wide picture, as the classic family is of the original's.
+- **M5 (the web page)**: the constant above, the container and its 16:9 frame, the pages' margin (clay) and the in-match windows are already the game's; `Renderer::save_screenshot`, `Alt+Enter` and the grid are native only.
+- **Not done, by decision**: the original's loading screen and pages are not extended to the wide picture (they are centred, "the original pages themselves unchanged: fingerprints"); a monitor-shaped canvas (`--aspect` takes 16:9 and 4:3 only).
+
+### Proof
+
+- **Suite 3.15 `test_wide_hud`** (`tests/test_app/test_wide_hud.cpp`, 386 checks): the anchoring model (each of the 14 pieces at 960 x 540 and at five other sizes: place, size, spans tiling it without a gap or an overlap), the cuts (every repeated line in a maximal run of identical lines of its own plain part, pinned runs 138 - 143, 13 - 17, 294 - 314; the panel's fill 458 - 482 shown to be identical too and refused; the right panel's three pieces cut at one canvas row, differing from their neighbours by at most 5 pixels and 8 or more rows from an ant decoration, the owner's rejected row 50 failing the same rule; every piece spanning canvas row 357 cut there), the composition (the spans against the mock-up's rule written out independently, pixel for pixel at seven sizes; each stretched piece at its original size equals the original; the original's picture is the 14 plain pieces), the real renderer (the frame at 960 x 540 and 1280 x 720 pixel for pixel in the HUD's colours; the origin of a window moves sprites, fills, frames and clips), the HUD (the frame's calls in order, 18 region calls, the panel's animations at their places + (dx, dy), the glow, the Stop button, the egg tray, the lunchbox, the chat cover, the hover and pressed art of the top bar), the score slots (the model, and the HUD's boxes and covers for six rosters and local colours in both pictures), the windows (the dialog and page offsets, the margin, the clip, the pointer in every handler: the quit dialog, the start dialog, the alliance dialogs, the options, the quick help), the camera (a big map, 16 x 16, 12 x 12, a map 1 px wider than the view), the edge strips (every one of the 518,400 pixels, the inner strips, the corners that cannot scroll, maps smaller than the view), the start view (six maps, every anchor), the minimap's frame, the small-map pointer (cursor, click, rubber band), the application (the picture of each screen and the pointer's move with it, the clay margin on the pages and in a match, the default and its options, the grid's window shape, the pointer over the bars of a 16:10 and a 21:9 window).
+- **Suite 3.10 `test_view_fingerprint`**: 226 new fingerprints ("*.wide.*", golden numbers made at the commit of M3: 82 HUD draw-call scenes, 87 pointer and camera families (every pixel of the 960 x 540 picture for the edge strips from nine cameras and on small maps, the zones, the minimap, 13 cursor states, refined click sweeps), 57 pixel hashes of the real renderer (six maps, nine cameras of two, two synthetic small maps, whole application frames: pages and match)); the 307 classic numbers did not move; new self-checks for the recorder's two new calls.
+- **Suites 3.13 and 3.14**: one assertion of 3.13 and the assertions of 3.14 that encoded M2's interim state were rewritten (see the CHANGELOG, "Rewritten tests"); nothing else changed.
+- **Mutations** (one change at a time in a scratch copy, the six affected suites rebuilt and run, the file restored; the first run with 88, the second with the ones that had not compiled, the survivors and 29 more): 115 mutations of the sources (the model's anchors and cuts, the layout's slots and offsets, the camera, the renderer's part-of-a-sprite and origin, the HUD's moved animations, windows and hit tests, the application's pictures and the default); **110 are killed**, most of them by several suites (the new 3.15 and the wide fingerprints of 3.10; the classic fingerprints, 3.13 and 3.14 catch what touches the original's picture), and five survive for a reason: four because the picture of a screen is updated in more than one place on purpose (by the transition, by `update_results`, by `render_frame` and for every event): removing the end of a match's call (M3-A11), the per-event call (M3-A16) or one of the pair `return_to_map_select` / `enter_map_select` (M3-A12, M3-A13) leaves another to do it, and removing the pair (M3-AX4) or the nets together (M3-AX1, M3-AX5, M3-AX3) is killed; one (M3-A19) is unreachable, the replay callback of the results screen is never called by anything. The first run of 88 left 13 mutations to look at: five did not compile and were written again, and the others got their tests (the hover pictures of the top bar's buttons, of the options' and the quick help's Return and of the alliance dialog, the Stop button of a hill, the pointer's first place, `set_layout`'s picture, the way back from a running match, a map one pixel wider than the view, the part of a sprite under the picture's corner and the origin, a frame's reset of the origin, the pedestal's offset in both directions).
+
+| # | Mutation | Killed by (suite: failing checks) |
+|---|---|---|
+| M3-S01 | `shell_layout.hpp`: top bar cut moved to column 130 (inside the clock box edge) | killed (3.15: 12, 3.10: 102, 3.14: 1) |
+| M3-S02 | `shell_layout.hpp`: bottom strip cut moved to column 470 (the panel fill) | killed (3.15: 11, 3.10: 102) |
+| M3-S03 | `shell_layout.hpp`: left strip cut moved to row 262 (the horizontal rule) | killed (3.15: 11, 3.10: 102, 3.14: 1) |
+| M3-S04 | `shell_layout.hpp`: strip beside the map cut at row 300 (a decoration) | killed (3.15: 12, 3.10: 102) |
+| M3-S05 | `shell_layout.hpp`: chat box cut at row 20 (not canvas row 357) | killed (3.15: 3, 3.10: 82) |
+| M3-S06 | `shell_layout.hpp`: right edge strip cut at row 50 (the rejected row) | killed (3.15: 12, 3.10: 102) |
+| M3-S07 | `shell_layout.hpp`: chat input box not anchored to the bottom | killed (3.15: 11, 3.10: 82) |
+| M3-S08 | `shell_layout.hpp`: status box not anchored to the right | killed (3.15: 11, 3.10: 102) |
+| M3-S09 | `shell_layout.hpp`: the panel bottom piece not anchored to the bottom | killed (3.15: 11, 3.10: 102) |
+| M3-S10 | `shell_layout.hpp`: the minimap bezel not anchored to the right | killed (3.15: 11, 3.10: 102) |
+| M3-S11 | `shell_layout.hpp`: a piece without a rule (name typo) | killed (3.15: 2, 3.10: 102) |
+| M3-S12 | `shell_layout.hpp`: repeated column drawn extra_w wide instead of 1 + extra_w | killed (3.15: 16, 3.10: 102) |
+| M3-S13 | `shell_layout.hpp`: the part after the cut read from column c | killed (3.15: 9, 3.10: 102) |
+| M3-S14 | `shell_layout.hpp`: the repeated row is the row after the cut | killed (3.15: 8, 3.10: 102) |
+| M3-S15 | `shell_layout.hpp`: no span is ever "whole" | killed (3.15: 17, 3.10: 179, 3.1: 15) |
+| M3-S16 | `shell_layout.hpp`: bottom anchors do not move | killed (3.15: 17, 3.10: 102, 3.14: 1) |
+| M3-S17 | `shell_layout.hpp`: right anchors move by dx / 2 | killed (3.15: 26, 3.10: 102) |
+| M3-S18 | `shell_layout.hpp`: a taller piece grows by dy - 1 | killed (3.15: 20, 3.10: 102) |
+| M3-L01 | `screen_layout.hpp`: page offset one pixel off | killed (3.15: 5, 3.10: 19, 3.1: 7) |
+| M3-L02 | `screen_layout.hpp`: dialog offset centres the frame by its corner | killed (3.15: 4, 3.10: 14) |
+| M3-L03 | `screen_layout.hpp`: the original picture has a dialog offset too | killed (3.15: 1, 3.10: 20, 3.1: 11) |
+| M3-L04 | `screen_layout.hpp`: slot pitch 147 | killed (3.15: 1) |
+| M3-L05 | `screen_layout.hpp`: the strip band starts at 200 | killed (3.15: 3, 3.13: 1) |
+| M3-L06 | `screen_layout.hpp`: four bottom slots at least | killed (3.15: 2, 3.13: 1) |
+| M3-L07 | `screen_layout.hpp`: a slot past the last is not clamped | killed (3.15: 2, 3.13: 2) |
+| M3-L08 | `screen_layout.hpp`: further slot label gap 4 | killed (3.15: 2) |
+| M3-R01 | `renderer.cpp`: the camera does not centre a small map in x | killed (3.15: 15, 3.10: 7) |
+| M3-R02 | `renderer.cpp`: the camera does not centre a small map in y | killed (3.15: 3, 3.10: 4) |
+| M3-R03 | `renderer.cpp`: a wide layout does not set the centring flag | killed (3.15: 1, 3.10: 4) |
+| M3-R04 | `renderer.cpp`: draw_sprite_region reads one column too many | killed (3.15: 2, 3.10: 20, 3.14: 1) |
+| M3-R05 | `renderer.hpp`: the origin is not added to y | killed (3.15: 4, 3.10: 4) |
+| M3-R06 | `renderer.hpp`: set_origin forgets x | killed (3.15: 5, 3.10: 4) |
+| M3-R07 | `renderer.cpp`: a camera of a map one pixel wider than the view is centred | killed (3.15: 1) |
+| M3-H01 | `hud.cpp`: the frame is drawn first piece first | killed (3.15: 4, 3.10: 213, 3.1: 1) |
+| M3-H02 | `hud.cpp`: left pedestal not moved | killed (3.15: 3, 3.10: 17) |
+| M3-H03 | `hud.cpp`: right pedestal not moved | killed (3.15: 1, 3.10: 8) |
+| M3-H04 | `hud.cpp`: egg tray not moved | killed (3.15: 1, 3.10: 2) |
+| M3-H05 | `hud.cpp`: Stop button on a hill not moved | killed (3.15: 1, 3.10: 2) |
+| M3-H06 | `hud.cpp`: Stop button of ants not moved | killed (3.15: 2, 3.10: 14) |
+| M3-H07 | `hud.cpp`: lunchbox indicator not moved | killed (3.15: 1, 3.10: 1) |
+| M3-H08 | `hud.cpp`: chat cover not moved down | killed (3.15: 1, 3.10: 3) |
+| M3-H09 | `hud.cpp`: Send to buttons not moved down | killed (3.15: 1, 3.10: 99) |
+| M3-H10 | `hud.cpp`: hovered Help label not moved | killed (3.15: 1, 3.10: 1) |
+| M3-H11 | `hud.cpp`: pressed Options art not moved | killed (3.15: 1, 3.10: 4) |
+| M3-H12 | `hud.cpp`: hovered Quit label not moved | killed (3.15: 1, 3.10: 1) |
+| M3-H13 | `hud.cpp`: pedestal glow not moved | killed (3.15: 1) |
+| M3-H14 | `hud.cpp`: dialogs not moved by the modal offset | killed (3.15: 4, 3.10: 13) |
+| M3-H15 | `hud.cpp`: pages not moved by the page offset | killed (3.15: 3, 3.10: 8) |
+| M3-H16 | `hud.cpp`: no clay margin around a page (a fill of no size) | killed (3.15: 5, 3.10: 8) |
+| M3-H17 | `hud.cpp`: no clip of the page | killed (3.15: 2, 3.10: 7) |
+| M3-H18 | `hud.cpp`: quit Yes hit without the modal offset (press) | killed (3.15: 1, 3.10: 2) |
+| M3-H19 | `hud.cpp`: quit No hit without the modal offset (press) | killed (3.15: 1, 3.10: 2) |
+| M3-H20 | `hud.cpp`: options press without the page offset | killed (3.15: 1, 3.10: 2) |
+| M3-H21 | `hud.cpp`: options release without the page offset | killed (3.15: 1, 3.10: 2) |
+| M3-H22 | `hud.cpp`: options hover without the page offset | killed (3.15: 2, 3.10: 1) |
+| M3-H23 | `hud.cpp`: quick help press without the page offset | killed (3.15: 1, 3.10: 3) |
+| M3-H24 | `hud.cpp`: quick help release without the page offset | killed (3.15: 1, 3.10: 2) |
+| M3-H25 | `hud.cpp`: quick help hover without the page offset | killed (3.15: 2, 3.10: 1) |
+| M3-H26 | `hud.cpp`: alliance press without the modal offset | killed (3.15: 1) |
+| M3-H27 | `hud.cpp`: alliance release without the modal offset | killed (3.15: 1) |
+| M3-H28 | `hud.cpp`: quit release without the modal offset | killed (3.15: 1, 3.10: 2) |
+| M3-H29 | `hud.cpp`: quit hover without the modal offset | killed (3.15: 2, 3.10: 1) |
+| M3-H30 | `hud.cpp`: alliance hover without the modal offset | killed (3.15: 2, 3.10: 1) |
+| M3-H31 | `hud.cpp`: minimap frame ignores a map narrower than the view | killed (3.15: 2, 3.10: 4) |
+| M3-H32 | `hud.cpp`: minimap frame ignores a map shorter than the view | killed (3.15: 1, 3.10: 3) |
+| M3-H33 | `hud.cpp`: every other team in the first bottom slot | killed (3.15: 13, 3.10: 213, 3.13: 4, 3.1: 8) |
+| M3-H34 | `hud_input.cpp`: the cursor over black beside a small map is not plain | killed (3.15: 5) |
+| M3-H35 | `hud_input.cpp`: the right side of a small map counts as ground | killed (3.15: 1) |
+| M3-A01 | `application.cpp`: the match uses the page picture | killed (3.15: 14, 3.10: 23, 3.13: 4, 3.14: 12) |
+| M3-A02 | `application.cpp`: a page uses the match picture | killed (3.15: 8, 3.10: 8, 3.14: 5) |
+| M3-A03 | `application.cpp`: the pointer does not follow a change of picture (x) | killed (3.15: 2) |
+| M3-A04 | `application.cpp`: the pointer does not follow a change of picture (y) | killed (3.15: 2) |
+| M3-A05 | `application.cpp`: no clay margin around a page of the screens | killed (3.15: 1, 3.10: 7) |
+| M3-A06 | `application.cpp`: parse_arguments puts no default | killed (3.15: 5, 3.14: 2) |
+| M3-A07 | `application.cpp`: choose_aspect forgets the config | killed (3.15: 24, 3.10: 31, 3.14: 24) |
+| M3-A08 | `application.cpp`: the layout of the wide aspect is the classic one | killed (3.15: 14, 3.10: 22, 3.14: 11) |
+| M3-A09 | `application.cpp`: enter_match does not update the picture | killed (3.15: 4, 3.10: 1) |
+| M3-A10 | `application.cpp`: update_results does not update the picture | killed (3.15: 2) |
+| M3-A11 | `application.cpp`: the end of a match does not update the picture | SURVIVES: redundant by design (update_results, render_frame and the next event update the picture too); killed together with the others by M3-AX5 |
+| M3-A12 | `application.cpp`: return_to_map_select does not update the picture | SURVIVES: redundant pair with M3-A13 (enter_map_select updates it as well); the pair together is killed by M3-AX4 |
+| M3-A13 | `application.cpp`: enter_map_select does not update the picture | SURVIVES: redundant pair with M3-A12; the pair together is killed by M3-AX4 |
+| M3-A14 | `application.cpp`: render_frame does not update the picture | killed (3.10: 1) |
+| M3-A15 | `application.cpp`: init does not update the picture | killed (3.15: 2) |
+| M3-A16 | `application.cpp`: handle_events does not update the picture per event | SURVIVES: redundant by design (the transitions and the frame update the picture; this one is for a state change in the middle of a queue of events); killed together by M3-AX1 and M3-AX5 |
+| M3-A17 | `canvas_layout.hpp`: the desktop default is the classic picture | killed (3.15: 1) |
+| M3-A18 | `application.cpp`: set_layout does not update the picture | killed (3.15: 1) |
+| M3-A19 | `application.cpp`: the replay does not update the picture | SURVIVES: unreachable (nothing calls the results screen's replay callback: dead code) |
+| M3-A20 | `application.cpp`: the pointer starts at the layout centre, not the picture centre | killed (3.15: 1, 3.14: 1) |
+| M3-S19 | `shell_layout.hpp`: the ant relief under the chat log not anchored to the bottom | killed (3.15: 11, 3.10: 102) |
+| M3-S20 | `shell_layout.hpp`: the status card not right anchored | killed (3.15: 11, 3.10: 102) |
+| M3-S21 | `shell_layout.hpp`: the top of the panel not right anchored | killed (3.15: 11, 3.10: 102) |
+| M3-S22 | `shell_layout.hpp`: the chat box not right anchored | killed (3.15: 11, 3.10: 102) |
+| M3-S23 | `shell_layout.hpp`: the right edge strip not right anchored | killed (3.15: 11, 3.10: 102) |
+| M3-S24 | `shell_layout.hpp`: the strip beside the map not right anchored | killed (3.15: 11, 3.10: 102) |
+| M3-S25 | `shell_layout.hpp`: the chat header not right anchored | killed (3.15: 11, 3.10: 102) |
+| M3-S26 | `shell_layout.hpp`: the ant relief under the chat log not right anchored | killed (3.15: 11, 3.10: 102) |
+| M3-R08 | `renderer.cpp`: draw_sprite_region without the HUD team colour | killed (3.15: 2, 3.10: 20, 3.14: 1) |
+| M3-R09 | `renderer.cpp`: draw_sprite_region ignores the picture and the origin | killed (3.15: 2) |
+| M3-R10 | `renderer.hpp`: the camera centres small maps by default (the original's camera) | killed (3.15: 2, 3.10: 3) |
+| M3-R11 | `renderer.cpp`: the original's layout keeps the centring flag | killed (3.15: 1) |
+| M3-R12 | `renderer.cpp`: a frame does not clear the origin | killed (3.15: 1) |
+| M3-P01 | `pedestal.cpp`: the pedestal ignores dx | killed (3.15: 5, 3.10: 17) |
+| M3-P02 | `pedestal.cpp`: the pedestal ignores dy | killed (3.15: 1) |
+| M3-H37 | `hud.cpp`: the page margin is drawn in the original's picture too | killed (3.15: 1, 3.10: 7, 3.1: 1) |
+| M3-H38 | `hud.cpp`: the page is clipped in the original's picture too | killed (3.15: 1, 3.10: 7) |
+| M3-H39 | `hud.cpp`: quit hover uses the dialog offset of the other axis | killed (3.15: 1, 3.10: 1) |
+| M3-H40 | `hud.cpp`: the dialogs' offset is the page offset | killed (3.15: 4, 3.10: 13) |
+| M3-H41 | `hud.cpp`: a page is drawn with the dialog offset | killed (3.15: 3, 3.10: 8) |
+| M3-A21 | `application.cpp`: the settings key beats --aspect | killed (3.15: 1, 3.14: 2) |
+| M3-A22 | `application.cpp`: the margin fill is never drawn (condition) | killed (3.15: 1, 3.10: 7) |
+| M3-AX1 | `application.cpp`: the three per-frame and per-event updates of the picture removed together | killed (3.15: 2, 3.10: 1) |
+| M3-AX2 | `application.cpp`: the updates at the transitions removed together (enter_match, the end of a match, the way back, init, set_layout) | killed (3.15: 8, 3.10: 1, 3.14: 2) |
+| M3-AX3 | `application.cpp`: no update of the picture anywhere | killed (3.15: 16, 3.10: 23, 3.13: 4, 3.14: 12) |
+| M3-AX4 | `application.cpp`: the way back to the setup screen does not update the picture in either place (return_to_map_select and enter_map_select) | killed (3.15: 2) |
+| M3-AX5 | `application.cpp`: neither the end of a match nor update_results nor the events update the picture | killed (3.15: 2) |

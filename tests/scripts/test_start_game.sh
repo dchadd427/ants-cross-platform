@@ -49,6 +49,8 @@ while IFS= read -r line; do
     check "window $n (${COLOURS[$n]}) sits in cell ${CELLS[$n]}, ${PLACES[$n]} (the owner's layout), not in cell $n" "$([ "$cell" = "${CELLS[$n]}" ]; echo $?)"
     has "$line" "--grid 2x2"; check "window $n: 2 x 2 grid" $?
     has "$line" "--audio-focus"; check "window $n: sound only with the focus" $?
+    has "$line" "--aspect"; [ $? -ne 0 ]; check "window $n: no --aspect, so the window has the game's default shape (16:9) and its cell's largest rectangle of it" $?
+    has "$line" "--window-size"; [ $? -ne 0 ]; check "window $n: no --window-size: the grid's cell decides" $?
     has "$line" "--no-lan"; check "window $n: no announcements on the network" $?
     has "$line" "Ants\\ -\\ ${COLOURS[$n]}\\ \\("; check "window $n: title names the colour ${COLOURS[$n]}" $?
     name="$(word_after "$line" --name)"
