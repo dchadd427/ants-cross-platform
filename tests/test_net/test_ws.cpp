@@ -2162,6 +2162,30 @@ int main() {
         ASSERT_FALSE(b.send(none));
     } TEST_END();
 
+    TEST_CASE("W1.23 A burst of 64 connections that come while the server is not looking are all waiting for it when it looks (the listener's backlog was 32)") {
+        Rig rig;
+        ASSERT_TRUE(rig.start());                                                 // (the listener holds 64 handshakes at the most: max_pending)
+        constexpr size_t kBurst = 64;
+        std::vector<sock_t> socks;
+        for (size_t i = 0; i < kBurst; ++i) {
+            const sock_t s = ::socket(AF_INET, SOCK_STREAM, 0);
+            ASSERT_TRUE(s != kBadSock);
+            sock_nonblocking(s);
+            sockaddr_in a;
+            std::memset(&a, 0, sizeof(a));
+            a.sin_family = AF_INET;
+            a.sin_port = htons(rig.listener->port());
+            a.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+            (void)::connect(s, reinterpret_cast<sockaddr*>(&a), sizeof(a));        // (begun, not waited for: the answer to a burst comes from the operating system)
+            socks.push_back(s);
+        }
+        sleep_ms(300);                                                            // a slow pass of the server's loop: the handshakes are finished, nobody has accepted
+        for (int i = 0; i < 20; ++i) rig.step();                                  // (a call takes in at most 16 sockets)
+        const size_t held = rig.listener->pending();
+        for (const sock_t s : socks) sock_close(s);
+        ASSERT_EQ(held, kBurst);                                                  // all of them were waiting (with a backlog of 32, 32 were, on macOS)
+    } TEST_END();
+
     std::cout << "\n=======================================================\n";
     std::cout << " WebSocket transport: " << g_test_count << " test cases, " << g_assert_count << " assertions, " << g_test_failures << " failures\n";
     std::cout << "=======================================================\n";

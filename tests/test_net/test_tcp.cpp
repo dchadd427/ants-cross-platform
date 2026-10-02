@@ -15,6 +15,7 @@
 #include <iomanip>
 #include <iostream>
 #include <memory>
+#include <set>
 #include <string>
 #include <thread>
 #include <vector>
@@ -663,6 +664,38 @@ int main() {
         }
     } TEST_END();
 #endif
+
+    TEST_CASE("N3.8 TCP: A Burst Of 48 Connections That Come While The Server Is Not Looking Are All Waiting For It When It Looks (The Listener's Backlog Was 8: On macOS 8 Of Them Were Accepted And The Rest Never Came)") {
+        auto listener = TcpListener::listen(0, true);
+        ASSERT_TRUE(listener != nullptr);
+        constexpr size_t kBurst = 48;
+        std::vector<std::unique_ptr<TcpConnection>> clients;
+        for (size_t i = 0; i < kBurst; ++i) {
+            clients.push_back(TcpConnection::connect("127.0.0.1", listener->port()));
+            ASSERT_TRUE(clients.back() != nullptr);
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(300));              // a slow pass of the server's loop: the operating system finishes the handshakes, nobody accepts
+        std::vector<std::unique_ptr<TcpConnection>> servers;
+        while (servers.size() < kBurst + 16) {
+            std::unique_ptr<TcpConnection> c = listener->accept();
+            if (!c) break;
+            servers.push_back(std::move(c));
+        }
+        ASSERT_EQ(servers.size(), kBurst);                                         // all of them were waiting (with a backlog of 8 eight were, on macOS, and the rest never came)
+        // and each one is a connection that works: a message of every client reaches the server, whichever connection it was accepted as
+        for (size_t i = 0; i < kBurst; ++i) ASSERT_TRUE(clients[i]->send({static_cast<uint8_t>(i)}));
+        std::set<uint8_t> got;
+        for (int round = 0; round < 3000 && got.size() < kBurst; ++round) {
+            std::vector<uint8_t> dummy;
+            for (auto& c : clients) c->poll(dummy);
+            for (auto& srv : servers) {
+                std::vector<uint8_t> m;
+                if (srv->poll(m) && m.size() == 1) got.insert(m[0]);
+            }
+            if (got.size() < kBurst) std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+        ASSERT_EQ(got.size(), kBurst);
+    } TEST_END();
 
     std::cout << "\n=======================================================\n Total Test Cases: " << g_test_count << "\n Total Assertions: " << g_assert_count
               << "\n Failed:           " << g_test_failures << "\n=======================================================\n";

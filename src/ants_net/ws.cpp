@@ -40,6 +40,8 @@ constexpr size_t kMaxClosing = 64;                                   // refused 
 constexpr uint32_t kClosingLingerMs = 1000;                          // ... for at most this long
 constexpr size_t kMaxInboxMessages = 4096;                           // received messages waiting to be polled: more and the socket is not read
 constexpr size_t kMaxInboxBytes = 1024 * 1024;                       // (the sender is held back by TCP, as it should be)
+constexpr int kListenBacklog = 64;                                   // connections that have finished their handshake and wait for accept(); what does not fit is dropped (see tcp.cpp:
+                                                                     // a burst of browsers behind the proxy, while a pass of the server's loop is slow, must not lose any)
 
 #ifdef _WIN32
 struct WinsockInit {
@@ -879,7 +881,7 @@ std::unique_ptr<WsListener> WsListener::listen(uint16_t port, bool loopback_only
     addr.sin_family = AF_INET;
     addr.sin_port = htons(port);
     addr.sin_addr.s_addr = htonl(loopback_only ? INADDR_LOOPBACK : INADDR_ANY);
-    if (::bind(s, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) != 0 || ::listen(s, 32) != 0 || !set_nonblocking(s)) {
+    if (::bind(s, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) != 0 || ::listen(s, kListenBacklog) != 0 || !set_nonblocking(s)) {
         close_socket(s);
         return nullptr;
     }

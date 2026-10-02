@@ -32,6 +32,11 @@ namespace ants::net {
 
 namespace {
 
+// Connections that have finished their handshake and wait for accept(). What does not fit is dropped: a lobby may send its players all at once while a pass of the server's loop is
+// slow, and with a backlog of 8 a burst of 48 had 8 accepted on macOS and the other 40 never came (measured for 12 s). 64 holds the whole burst; the operating system caps the value
+// at its own limit (somaxconn, 128 on macOS).
+constexpr int kListenBacklog = 64;
+
 #ifdef _WIN32
 struct WinsockInit {
     WinsockInit() {
@@ -259,7 +264,7 @@ std::unique_ptr<TcpListener> TcpListener::listen(uint16_t port, bool loopback_on
     addr.sin_family = AF_INET;
     addr.sin_port = htons(port);
     addr.sin_addr.s_addr = htonl(loopback_only ? INADDR_LOOPBACK : INADDR_ANY);
-    if (::bind(s, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) != 0 || ::listen(s, 8) != 0 || !set_nonblocking(s)) {
+    if (::bind(s, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) != 0 || ::listen(s, kListenBacklog) != 0 || !set_nonblocking(s)) {
         close_socket(s);
         return nullptr;
     }
