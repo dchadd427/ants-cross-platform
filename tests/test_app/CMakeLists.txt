@@ -575,3 +575,114 @@ target_compile_definitions(test_map_preview PRIVATE
 
 add_test(NAME test_map_preview COMMAND test_map_preview)
 set_tests_properties(test_map_preview PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# Zoom model (M4 of the widescreen work): the levels, which of them a map and a kind of match offers, the camera after a zoom that keeps the point under the pointer, the clamps, the camera's
+# conversions, the edge scroll in screen pixels, the minimap, the start view, the wheel's accumulation and the settings key (pure numbers: no window)
+add_executable(test_zoom_model
+    test_zoom_model.cpp
+)
+
+target_include_directories(test_zoom_model PRIVATE
+    ${CMAKE_SOURCE_DIR}/include
+)
+
+target_link_libraries(test_zoom_model PRIVATE
+    ants_app
+    ants_ai
+    ants_net
+    ants_sim
+    ants_assets
+)
+
+if(APPLE)
+    target_link_libraries(test_zoom_model PRIVATE
+        "-framework AudioToolbox"
+        "-framework CoreFoundation"
+        "-framework CoreAudio"
+    )
+endif()
+
+if(WIN32)
+    target_link_libraries(test_zoom_model PRIVATE ws2_32 winmm)
+endif()
+
+target_compile_definitions(test_zoom_model PRIVATE
+    ORIGINAL_ASSETS_DIR="${CMAKE_SOURCE_DIR}/Original-Ants"
+)
+
+add_test(NAME test_zoom_model COMMAND test_zoom_model)
+set_tests_properties(test_zoom_model PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# Zoom view (M4): the world pass at a zoom against the direct pass (pixel for pixel), the HUD's cursor, clicks, rubber band, minimap and edge scroll at a zoom, and the application's wheel, middle
+# button, anchoring, fairness per kind of match, settings key, start view, listener and a network match with two different zooms
+add_executable(test_zoom_view
+    test_zoom_view.cpp
+)
+
+target_include_directories(test_zoom_view PRIVATE
+    ${CMAKE_SOURCE_DIR}/include
+)
+
+target_link_libraries(test_zoom_view PRIVATE
+    ants_app
+    ants_ai
+    ants_net
+    ants_sim
+    ants_assets
+)
+
+if(APPLE)
+    target_link_libraries(test_zoom_view PRIVATE
+        "-framework AudioToolbox"
+        "-framework CoreFoundation"
+        "-framework CoreAudio"
+    )
+endif()
+
+if(WIN32)
+    target_link_libraries(test_zoom_view PRIVATE ws2_32 winmm)
+endif()
+
+target_compile_definitions(test_zoom_view PRIVATE
+    ORIGINAL_ASSETS_DIR="${CMAKE_SOURCE_DIR}/Original-Ants"
+)
+
+add_test(NAME test_zoom_view COMMAND test_zoom_view)
+set_tests_properties(test_zoom_view PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# Zoom fingerprint (M4): the pictures of the world pass and of whole frames, the minimap's frame, the pointer's edge scroll, cursor and clicks, and the camera's conversions at the zoom levels 0.5 and 2,
+# classic and wide, pinned as golden numbers
+add_executable(test_zoom_fingerprint
+    test_zoom_fingerprint.cpp
+)
+
+target_include_directories(test_zoom_fingerprint PRIVATE
+    ${CMAKE_SOURCE_DIR}/include
+)
+
+target_link_libraries(test_zoom_fingerprint PRIVATE
+    ants_app
+    ants_ai
+    ants_net
+    ants_sim
+    ants_assets
+)
+
+if(APPLE)
+    target_link_libraries(test_zoom_fingerprint PRIVATE
+        "-framework AudioToolbox"
+        "-framework CoreFoundation"
+        "-framework CoreAudio"
+    )
+endif()
+
+if(WIN32)
+    target_link_libraries(test_zoom_fingerprint PRIVATE ws2_32 winmm)
+endif()
+
+target_compile_definitions(test_zoom_fingerprint PRIVATE
+    ORIGINAL_ASSETS_DIR="${CMAKE_SOURCE_DIR}/Original-Ants"
+)
+
+add_test(NAME test_zoom_fingerprint COMMAND test_zoom_fingerprint)
+set_tests_properties(test_zoom_fingerprint PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")

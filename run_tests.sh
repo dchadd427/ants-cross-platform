@@ -189,6 +189,9 @@ CANVAS_LAYOUT_STATUS=0
 WIDE_HUD_STATUS=0
 WIDE_SETUP_STATUS=0
 MAP_PREVIEW_STATUS=0
+ZOOM_MODEL_STATUS=0
+ZOOM_VIEW_STATUS=0
+ZOOM_FINGERPRINT_STATUS=0
 APP_STATUS=0
 E2E_STATUS=0
 START_TIME=$(date +%s)
@@ -564,6 +567,27 @@ if [ "$RUN_APP" -eq 1 ]; then
     echo -e "${BOLD}${BLUE}======================================================================${RESET}"
     "./$BUILD_DIR/tests/test_app/test_map_preview"
     MAP_PREVIEW_STATUS=$?
+
+    echo ""
+    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
+    echo -e "${BOLD}${BLUE}>>> 3.18 RUNNING ZOOM MODEL SUITE (the wheel zoom's levels, anchoring, clamps, camera, edge scroll in screen pixels, start view, wheel accumulation, settings key)...${RESET}"
+    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
+    "./$BUILD_DIR/tests/test_app/test_zoom_model"
+    ZOOM_MODEL_STATUS=$?
+
+    echo ""
+    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
+    echo -e "${BOLD}${BLUE}>>> 3.19 RUNNING ZOOM VIEW SUITE (the world pass against the direct pass, the HUD at a zoom, the wheel, fairness, settings, a network match with a zoom)...${RESET}"
+    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
+    "./$BUILD_DIR/tests/test_app/test_zoom_view"
+    ZOOM_VIEW_STATUS=$?
+
+    echo ""
+    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
+    echo -e "${BOLD}${BLUE}>>> 3.20 RUNNING ZOOM FINGERPRINT SUITE (the pictures and the pointer pinned at the zoom 0.5 and 2, classic and wide)...${RESET}"
+    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
+    "./$BUILD_DIR/tests/test_app/test_zoom_fingerprint"
+    ZOOM_FINGERPRINT_STATUS=$?
 fi
 
 # 6. Execute E2E Opaque-Box Tests
@@ -950,6 +974,27 @@ if [ "$RUN_APP" -eq 1 ]; then
         echo -e " 3.17 Map Preview (test_map_preview):                ${GREEN}PASSED${RESET}"
     else
         echo -e " 3.17 Map Preview (test_map_preview):                ${RED}FAILED (exit code ${MAP_PREVIEW_STATUS})${RESET}"
+        TOTAL_FAILED=$((TOTAL_FAILED + 1))
+    fi
+
+    if [ "$ZOOM_MODEL_STATUS" -eq 0 ]; then
+        echo -e " 3.18 Zoom Model (test_zoom_model):                  ${GREEN}PASSED${RESET}"
+    else
+        echo -e " 3.18 Zoom Model (test_zoom_model):                  ${RED}FAILED (exit code ${ZOOM_MODEL_STATUS})${RESET}"
+        TOTAL_FAILED=$((TOTAL_FAILED + 1))
+    fi
+
+    if [ "$ZOOM_VIEW_STATUS" -eq 0 ]; then
+        echo -e " 3.19 Zoom View (test_zoom_view):                    ${GREEN}PASSED${RESET}"
+    else
+        echo -e " 3.19 Zoom View (test_zoom_view):                    ${RED}FAILED (exit code ${ZOOM_VIEW_STATUS})${RESET}"
+        TOTAL_FAILED=$((TOTAL_FAILED + 1))
+    fi
+
+    if [ "$ZOOM_FINGERPRINT_STATUS" -eq 0 ]; then
+        echo -e " 3.20 Zoom Fingerprint (test_zoom_fingerprint):      ${GREEN}PASSED${RESET}"
+    else
+        echo -e " 3.20 Zoom Fingerprint (test_zoom_fingerprint):      ${RED}FAILED (exit code ${ZOOM_FINGERPRINT_STATUS})${RESET}"
         TOTAL_FAILED=$((TOTAL_FAILED + 1))
     fi
 fi
