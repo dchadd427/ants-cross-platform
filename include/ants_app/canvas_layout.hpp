@@ -27,12 +27,15 @@ enum class Aspect : uint8_t {
 };
 
 /// The aspect of a game that is started from the command line when neither `--aspect` nor the settings say: 16:9 on a desktop (the owner's priority, 2026-10-02: "The default should be
-/// 16x9"), the original's 4:3 in the web build until its page shows 16:9 (milestone M5: this is the one line that flips the web). `Application::parse_arguments` puts it into the config;
-/// an `ApplicationConfig` that is made by hand (the tests') stays at the original's 4:3.
+/// 16x9") and in the web build (milestone M5: the page's game box is 16:9; the page passes the shape it shows as `--aspect`, `?aspect=4:3` on its address asks for the classic one).
+/// `Application::parse_arguments` puts it into the config; an `ApplicationConfig` that is made by hand (the tests') stays at the original's 4:3. The two have names of their own so that a
+/// native test can pin the browser build's default too.
+inline constexpr Aspect kWebDefaultAspect = Aspect::Wide16x9;
+inline constexpr Aspect kDesktopDefaultAspect = Aspect::Wide16x9;
 #if defined(__EMSCRIPTEN__)
-inline constexpr Aspect kPlatformDefaultAspect = Aspect::Classic4x3;
+inline constexpr Aspect kPlatformDefaultAspect = kWebDefaultAspect;
 #else
-inline constexpr Aspect kPlatformDefaultAspect = Aspect::Wide16x9;
+inline constexpr Aspect kPlatformDefaultAspect = kDesktopDefaultAspect;
 #endif
 
 inline constexpr int32_t kWideCanvasWidth = 960;

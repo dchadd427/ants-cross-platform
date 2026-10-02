@@ -2414,18 +2414,22 @@ void test_margin_and_pages_in_match() {
 }
 
 void test_default_and_options() {
-    group("default", "16:9 is the default of a desktop game (the command line and the settings give the classic picture), a config made by hand stays classic, the web build stays 4:3");
+    group("default", "16:9 is the default of a desktop game (the command line and the settings give the classic picture), a config made by hand stays classic, the web build's default is 16:9 too");
     auto parse = [](std::initializer_list<const char*> args) {
         std::vector<std::string> storage(args.begin(), args.end());
         std::vector<char*> argv;
         for (std::string& s : storage) argv.push_back(s.data());
         return Application::parse_arguments(static_cast<int>(argv.size()), argv.data());
     };
+    check(kWebDefaultAspect == Aspect::Wide16x9, "the web build's default is 16:9 (its page gives the game --aspect: 16:9, or 4:3 for ?aspect=4:3)");
+    check(kDesktopDefaultAspect == Aspect::Wide16x9, "a desktop's default is 16:9");
+    check(kPlatformDefaultAspect == (
 #if defined(__EMSCRIPTEN__)
-    check(kPlatformDefaultAspect == Aspect::Classic4x3, "the web build's default is 4:3 until its page shows 16:9");
+              kWebDefaultAspect
 #else
-    check(kPlatformDefaultAspect == Aspect::Wide16x9, "a desktop's default is 16:9");
+              kDesktopDefaultAspect
 #endif
+              ), "this build takes its platform's default");
     ApplicationConfig c = parse({"ants"});
     check(c.aspect == kPlatformDefaultAspect && !c.aspect_given && c.startup_error.empty(), "the command line without the option gives the platform's default and does not say it was given");
     c = parse({"ants", "--aspect", "4:3"});

@@ -732,12 +732,11 @@ void Application::update_picture() {
     if (renderer_) renderer_->set_picture(picture_);
 }
 
-// --aspect, else the settings' key `aspect`, else the default of the platform (parse_arguments puts it into the config: 16:9 on a desktop, 4:3 in the web build until its page shows
-// another shape, milestone M5: kPlatformDefaultAspect in canvas_layout.hpp); a config that is made by hand keeps its own aspect (the original's 4:3 unless it says otherwise). A settings
-// file never stops the game: a value that is not 16:9 or 4:3 is reported and ignored.
+// --aspect, else the settings' key `aspect`, else the default of the platform (parse_arguments puts it into the config: kPlatformDefaultAspect in canvas_layout.hpp, 16:9 on a desktop and
+// in the web build, whose page passes the shape it shows as `--aspect`); a config that is made by hand keeps its own aspect (the original's 4:3 unless it says otherwise). A settings file
+// never stops the game: a value that is not 16:9 or 4:3 is reported and ignored. The settings of the web build are the browser's local storage (the same key).
 void Application::choose_aspect() {
     aspect_ = config_.aspect;
-#if !defined(__EMSCRIPTEN__)
     if (!config_.aspect_given && config_store_.has("aspect")) {
         const std::string text = config_store_.get_string("aspect", "", 16);
         std::string why;
@@ -745,7 +744,6 @@ void Application::choose_aspect() {
         if (parse_aspect(text, from_settings, why)) aspect_ = from_settings;
         else std::cerr << "[Application] settings: aspect=" << why << " (ignored)" << std::endl;
     }
-#endif
 }
 
 // 0x10122d4: the stamp is the C runtime's `_strdate` ("mm/dd/yy") and `_strtime` ("hh:mm:ss") joined by " @ " (the format string "%s @ %s\n\n")

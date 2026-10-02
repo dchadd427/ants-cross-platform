@@ -63,7 +63,7 @@ struct ApplicationConfig {
     /// the largest scale that fits (whole when the window is a multiple of the canvas, else fractional), centred, with bars; a window of an aspect opens at the largest scale in steps of 0.5
     /// of the canvas that fits the display's usable area, at least 1x (--window-size and --grid still win; a game that starts in fullscreen has this size for the way back, Alt+Enter),
     /// and fullscreen is the same canvas filling as much of the monitor as fits. A desktop game that is
-    /// started from the command line (parse_arguments) is 16:9 unless it says otherwise (kPlatformDefaultAspect: the web build is 4:3 until its page shows 16:9); a config that is made
+    /// started from the command line (parse_arguments) is 16:9 unless it says otherwise (kPlatformDefaultAspect: 16:9 in the web build too, whose page passes `--aspect`); a config that is made
     /// by hand keeps the 4:3 that it is built with. `aspect_given` is true when the command line said it (the settings key then does not count).
     Aspect aspect{Aspect::Classic4x3};
     bool aspect_given{false};
@@ -476,7 +476,7 @@ private:
     LayoutRect picture_for_state() const;                 // where the picture on screen sits in the canvas: the match is the layout's picture, every other screen the original's 640 x 480, centred
     void update_picture();                                // the screen changed (a match starts, the results open, the setup screen is back): the picture and the pointer's coordinates follow
     void apply_window_layout();                           // --grid / --cell, --window-pos, --window-size, the aspect's first size (native builds)
-    void choose_aspect();                                 // --aspect, else the settings' key `aspect`, else the config's (the platform's default from parse_arguments: 16:9 on a desktop)
+    void choose_aspect();                                 // --aspect, else the settings' key `aspect`, else the config's (the platform's default from parse_arguments: 16:9, on a desktop and in the web build)
     void update_mouse_grab();                             // fullscreen (SDL's or a macOS Space): SDL keeps the pointer in the window while it has the focus (native builds)
     bool button_outside_window(const SDL_MouseButtonEvent& button) const;   // the position SDL delivered (before the clamp) lies outside the window, not merely the picture
     void show_start_view();                               // the view at the start of a match: scrolled just far enough to show the square around the hill's anchor tile
