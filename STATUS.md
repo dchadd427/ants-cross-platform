@@ -1,18 +1,19 @@
 # Status
 
-_Updated 2026-10-02 10:05 PDT · current release **v0.0.96** · details: [CHANGELOG](CHANGELOG.md)_
+_Updated 2026-10-02 10:23 PDT · current release **v0.0.96** · details: [CHANGELOG](CHANGELOG.md)_
 
 ## In progress
-- **16:9 by default (priority)**: one screen layout and a 960 x 540 canvas done; the wide match screen (more map, frame stretched from the original art) and the web page in 16:9 being built; classic 4:3 stays selectable
-- **Desktop start menu**: Single player with bots per seat, Join with a code, Host an online match · in review
-- **Reconnect** (release A, the server side, off by default): a lost player's seat is held, the match pauses, vote after 30 s · in review
-- **Online rooms**: bots fill the empty seats at START, chat in the waiting room · network side being built
+- **16:9 by default (priority)**: the wide match screen is built (more map, frame grown from the original art) · in review; the web page in 16:9 being built; score boxes spread evenly; classic 4:3 stays selectable
+- **Desktop start menu**: Single player with bots per seat, Join with a code, Host an online match · fixing review findings
+- **Reconnect** (release A, the server side, off by default): a lost player's seat is held, the match pauses, vote after 30 s, a 10 s countdown before the match resumes · fixing review findings
+- **Online rooms**: bots fill the empty seats at START, chat in the waiting room, team chat only to allies · network side done, screens next
 
 ## Next
 - The screens for the online bots and the waiting-room chat (host choice, chat box)
 - Reconnect release B: the games rejoin by themselves (also after a crash or power cut), "Rejoin" in the menu and on the page; then on by default
 - Matches survive a server restart (rooms restored from their turn log)
 - The server uses all cores (worker threads per room) and a load test to run on the VPS
+- A wider setup screen in 16:9 (map preview, waiting-room chat) · mock-ups being made
 - Mouse-wheel zoom; later an option to match the monitor's aspect
 - Touch: tap fixes, two-finger pan, pinch zoom
 - Bots B4a / B4b (power-ups incl. standing on them, raids, defence, fights)
