@@ -26,3 +26,28 @@ target_compile_definitions(test_ai PRIVATE
 )
 
 add_test(NAME test_ai COMMAND test_ai)
+
+# The worker bot suite (run_tests.sh suite 2.22): the economy on every shipped map (matches of the whole length), the pinned baselines (baselines.inc, written by
+# `bot_arena --write-baselines`), the task model. Kept apart from test_ai: it plays about a minute of matches, and the pinned procedure runs on a few threads.
+find_package(Threads REQUIRED)
+add_executable(test_ai_worker
+    test_ai_worker_main.cpp
+    test_ai_worker.cpp
+)
+
+target_link_libraries(test_ai_worker PRIVATE
+    ants_ai
+    ants_sim
+    ants_assets
+    Threads::Threads
+)
+
+target_include_directories(test_ai_worker PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../include
+)
+
+target_compile_definitions(test_ai_worker PRIVATE
+    ORIGINAL_ASSETS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../../Original-Ants"
+)
+
+add_test(NAME test_ai_worker COMMAND test_ai_worker)

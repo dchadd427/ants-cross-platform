@@ -1541,11 +1541,13 @@ void SimulationEngineImpl::deliver_path(uint32_t ant_id, const std::vector<TileC
         stop_sync(*a);
         enter_cant_go(*a);
         post_news(a->player_id, strings::kCantGoThere);
-        // Remake systems waiting for this walk give up with it (attack chase, ability approach, harvest
-        // return, hill entry slot).
+        // Remake systems waiting for this walk give up with it (attack chase, ability approach, hill entry slot).
+        // The food source of a carrier (+0xf4, harvest_origin) stays: the count-0 branch of FUN_0100cba4 (0x100cbe7 ..
+        // 0x100cc29: stop, SetActionDefault(0xb), text 58) writes nothing else, and the only writers of +0xf4 in Ants.exe are
+        // SetHolding (0x101acce) and the arrival of a carrier at a pile (0x101ceb1). A carrier that is sent home later by
+        // hand therefore still walks back to its pile after the delivery (0x101ef83 .. 0x101ef9e).
         a->final_dest = pixel_tile(*a);
         a->ability_target = TileCoord{-1, -1};
-        a->harvest_origin = TileCoord{-1, -1};
         return;
     }
     if (a->loco_action != AntUnit::kActionIdle || a->pause_active || pixel_tile(*a) != path.front()) {

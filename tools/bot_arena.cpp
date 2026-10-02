@@ -5,12 +5,13 @@
 //   bot_arena [--map NAMES] [--seeds A..B] [--seat N=KIND[:LEVEL]]... [--ticks full|N] [--latency-ticks N] [--rotate] [--repeat N] [--replay-check]
 //             [--threads N] [--out report.json] [--quiet] [--no-wall-time] [--maps-dir DIR]
 //   bot_arena --selftest
+//   bot_arena --write-baselines [--threads N] [--maps-dir DIR] > tests/test_ai/baselines.inc
 //
 //   --map NAMES       a comma list of shipped maps by name (TINY, SMALL, MEDIUM, GAUNTLET, TREASURE, ISLANDS, or "shipped" for all six) or paths of .LVL files (default TINY)
 //   --seeds A..B      the engine and controller seeds: "3", "1..8", "1,4,9..12" (default 1)
 //   --seat N=SPEC     a bot on seat N (0 green, 1 red, 2 blue, 3 black); SPEC is KIND, KIND:LEVEL or LEVEL: KIND idle, worker, standard; LEVEL easy, medium, hard.
 //                     Repeat it for every seat that plays. Default: four standard bots at medium level. A seat that is not named has no hill and no ants.
-//                     NOTE (B2): the kinds worker and standard still run the IDLE bot (the worker bot arrives with B3, the standard bot with B4); every report says so.
+//                     idle stands still; worker harvests (B3); standard is an ALIAS of worker until the standard bot with its tactics arrives with B4 (every report says so).
 //   --ticks full|N    play until the match is over (the map's own length, default) or at most N ticks (50 ms each)
 //   --latency-ticks N the sink latency: 0 applies a command the moment a bot releases it; N > 0 plays like a lock-step room (applied at the first 100 ms turn
 //                     boundary at least N ticks later, in canonical order); default 3
@@ -23,6 +24,9 @@
 //   --no-wall-time    leave the wall clock time of each match out of the report, so that the file is bit-reproducible
 //   --maps-dir DIR    where map names are looked for (default: the shipped maps)
 //   --selftest        check the tool itself (determinism, replay check, report, threads)
+//   --write-baselines print the table that tests/test_ai/baselines.inc pins (the worker bot at the three levels on the six shipped maps, a fixed seed set, seats rotated:
+//                     include/ants_ai/baselines.hpp) to stdout; the other options (but --threads and --maps-dir) are ignored. Regenerate it ON PURPOSE, when the bot or the
+//                     hill's banking changed.
 //
 // Exit code: 0 when every match was played and every check passed, 1 on a finding (a match that could not be played, a replay or repeat that differs), 2 on bad usage.
 #include <algorithm>
@@ -45,6 +49,7 @@
 #include <vector>
 
 #include "ants_ai/arena.hpp"
+#include "ants_ai/baselines.hpp"
 #include "ants_ai/bot.hpp"
 #include "ants_ai/bot_view.hpp"
 #include "ants_ai/rng.hpp"
@@ -74,7 +79,7 @@ constexpr const char* kShippedMaps[] = {"TINY", "SMALL", "MEDIUM", "GAUNTLET", "
 constexpr size_t kMaxMatches = 200000;
 
 const char* const kKindsNote =
-    "worker and standard still run the idle bot (the worker bot arrives with milestone B3, the standard bot with B4): scores are 0 until then";
+    "idle stands still; worker harvests (B3); standard is an alias of worker until the standard bot with its tactics arrives with B4";
 
 ARENA_PRINTF(1, 2) std::string fmt(const char* format, ...) {
     va_list args;
@@ -289,6 +294,7 @@ struct Options {
     bool quiet{false};
     bool wall_time{true};
     bool selftest{false};
+    bool write_baselines{false};
     bool help{false};
 };
 
@@ -297,6 +303,7 @@ void print_usage(std::FILE* to) {
         "Usage: bot_arena [--map NAMES] [--seeds A..B] [--seat N=KIND[:LEVEL]]... [--ticks full|N] [--latency-ticks N] [--rotate] [--repeat N]\n"
         "                 [--replay-check] [--threads N] [--out report.json] [--quiet] [--no-wall-time] [--maps-dir DIR]\n"
         "       bot_arena --selftest\n"
+        "       bot_arena --write-baselines [--threads N] [--maps-dir DIR] > tests/test_ai/baselines.inc\n"
         "Plays matches of computer players headless with the real engine. See the top of tools/bot_arena.cpp and docs/BOTS.md.\n"
         "  --map NAMES        shipped maps by name (TINY SMALL MEDIUM GAUNTLET TREASURE ISLANDS, or 'shipped') or .LVL paths, comma separated (default TINY)\n"
         "  --seeds A..B       \"3\", \"1..8\" or \"1,4,9..12\" (default 1)\n"
@@ -312,7 +319,8 @@ void print_usage(std::FILE* to) {
         "  --quiet            no line per match\n"
         "  --no-wall-time     leave wall times out of the report (the file is then bit-reproducible)\n"
         "  --maps-dir DIR     where map names are looked for\n"
-        "  --selftest         check the tool itself\n",
+        "  --selftest         check the tool itself\n"
+        "  --write-baselines  print the pinned reference table of the worker bot (tests/test_ai/baselines.inc) to stdout\n",
         kKindsNote);
 }
 
@@ -360,6 +368,7 @@ bool parse_args(const std::vector<std::string>& a, Options& o, std::string& err)
         uint64_t n = 0;
         if (s == "--help" || s == "-h") o.help = true;
         else if (s == "--selftest") o.selftest = true;
+        else if (s == "--write-baselines") o.write_baselines = true;
         else if (s == "--rotate") o.rotate = true;
         else if (s == "--replay-check") o.replay_check = true;
         else if (s == "--quiet") o.quiet = true;
@@ -788,7 +797,7 @@ int run_tool(const Options& o) {
     bool placeholder = false;
     for (const ai::BotSpec& s : o.seats) {
         kinds += (kinds.empty() ? "" : ", ") + std::to_string(static_cast<unsigned>(s.seat)) + "=" + spec_text(s);
-        placeholder = placeholder || s.kind != "idle";
+        placeholder = placeholder || s.kind == "standard";
     }
     std::printf("bot_arena: %zu match(es): maps %zu, seeds %s, %zu arrangement(s) of [%s], ticks %s, latency %u%s%s\n", jobs.size(), maps.size(), seeds_text(o.seeds).c_str(),
                 arrangements(o.seats, o.rotate).size(), kinds.c_str(), o.ticks == 0 ? "full" : std::to_string(o.ticks).c_str(), o.latency, o.replay_check ? ", replay check" : "",
@@ -821,10 +830,66 @@ int run_tool(const Options& o) {
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------------
+// --write-baselines
+// ---------------------------------------------------------------------------------------------------------------------------------
+
+// The text of tests/test_ai/baselines.inc: one row per shipped map and level (include/ants_ai/baselines.hpp is the procedure, the test that checks the table runs the same code)
+bool baselines_text(const Options& o, std::string& text, std::string& err) {
+    Options mo = o;
+    mo.maps.assign(std::begin(kShippedMaps), std::end(kShippedMaps));
+    const std::vector<LoadedMap> maps = load_maps(mo);
+    for (const LoadedMap& m : maps) {
+        if (!m.ok) { err = m.error; return false; }
+    }
+    const ai::Level levels[] = {ai::Level::Easy, ai::Level::Medium, ai::Level::Hard};
+    const size_t count = maps.size() * 3;
+    std::vector<ai::BaselineRow> rows(count);
+    std::atomic<size_t> next{0};
+    const auto work = [&]() {
+        for (;;) {
+            const size_t i = next.fetch_add(1);
+            if (i >= count) return;
+            rows[i] = ai::measure_baseline(maps[i / 3].level, maps[i / 3].name, levels[i % 3]);
+        }
+    };
+    const unsigned n = std::max(1u, std::min<unsigned>(o.threads, static_cast<unsigned>(count)));
+    if (n == 1) {
+        work();
+    } else {
+        std::vector<std::thread> pool;
+        for (unsigned t = 0; t < n; ++t) pool.emplace_back(work);
+        for (std::thread& t : pool) t.join();
+    }
+    for (const ai::BaselineRow& r : rows) {
+        if (!r.error.empty()) { err = r.map + ": " + r.error; return false; }
+    }
+    std::string seeds;
+    for (const uint32_t s : ai::kBaselineSeeds) seeds += (seeds.empty() ? "" : ", ") + std::to_string(s);
+    text = "// Generated by `bot_arena --write-baselines` (the procedure is include/ants_ai/baselines.hpp): do not edit by hand, regenerate on purpose.\n"
+           "// The worker bot at three levels on the shipped maps; every number is the mean over the seeds " + seeds + ", the arena's sink latency is " + std::to_string(ai::kBaselineLatency) +
+           " ticks, seats are rotated.\n"
+           "//   columns: map, level, {alone against three idle bots, 2 minutes, seats 0..3}, {the same, whole match}, {four workers, whole match, seats 0..3}, sum of those four, reachable pot\n"
+           "// ISLANDS: no hill walks to any food: 0 = 0 until the island hops of B4a.\n";
+    for (const ai::BaselineRow& r : rows) text += ai::baseline_line(r) + "\n";
+    return true;
+}
+
+int write_baselines(const Options& o) {
+    std::string text;
+    std::string err;
+    if (!baselines_text(o, text, err)) {
+        std::fprintf(stderr, "bot_arena: --write-baselines: %s\n", err.c_str());
+        return 1;
+    }
+    std::fputs(text.c_str(), stdout);
+    return 0;
+}
+
+// ---------------------------------------------------------------------------------------------------------------------------------
 // --selftest
 // ---------------------------------------------------------------------------------------------------------------------------------
 
-// A scripted bot that only the self-test uses (the real bots arrive with B3 / B4): at every look it sends one of its ants to a tile near it, so that matches hold commands for the
+// A scripted bot that only the self-test uses (the real worker bot gives a handful of commands a minute, a replay check wants many): at every look it sends one of its ants to a tile near it, so that matches hold commands for the
 // replay check to check. Like every bot it talks through Orders only.
 class SelftestWalker final : public ai::Bot {
 public:
@@ -905,10 +970,31 @@ int selftest() {
         t.check(o.maps.size() == 2 && o.seats.size() == 2 && o.seats[0].seat == 0 && o.ticks == 300 && o.latency == 0 && o.rotate && o.repeat == 2 && o.threads == 3 && !o.wall_time, "and means what it says");
         Options d;
         t.check(parse_args({}, d, err) && d.maps == std::vector<std::string>({"TINY"}) && d.seats.size() == 4 && d.latency == 3 && d.ticks == 0 && d.threads == 1, "the defaults: TINY, four standard bots, latency 3, full length");
+        Options wb;
+        t.check(parse_args({"--write-baselines", "--threads", "2"}, wb, err) && wb.write_baselines && wb.threads == 2 && !d.write_baselines, "--write-baselines is an option of its own (off by default)");
         Options bad;
         t.check(!parse_args({"--seat", "0=idle", "--seat", "0=hard"}, bad, err) && !parse_args({"--ticks", "0"}, bad, err) && !parse_args({"--wat"}, bad, err) &&
                     !parse_args({"--threads", "0"}, bad, err) && !parse_args({"--map"}, bad, err),
                 "two bots on one seat, 0 ticks, an unknown option, 0 threads and a missing value are refused");
+    }
+
+    t.section("the table of baselines (tests/test_ai/baselines.inc)");
+    {
+        ai::BaselineRow row;
+        row.map = "TINY";
+        row.level = ai::Level::Hard;
+        row.solo_2min = {600, 705, 600, 615};
+        row.solo_full = {1725, 1980, 1785, 1800};
+        row.four_full = {1130, 1350, 1140, 1195};
+        row.four_sum = 4815;
+        row.pot = 4800;
+        t.check(ai::baseline_line(row) == "{\"TINY\", Level::Hard, {600, 705, 600, 615}, {1725, 1980, 1785, 1800}, {1130, 1350, 1140, 1195}, 4815, 4800},", "a row is written the way the test includes it");
+        ai::BaselineRow islands;
+        islands.map = "ISLANDS";
+        islands.level = ai::Level::Easy;
+        t.check(ai::baseline_line(islands) == "{\"ISLANDS\", Level::Easy, {0, 0, 0, 0}, {0, 0, 0, 0}, {0, 0, 0, 0}, 0, 0},", "ISLANDS is a row of zeros");
+        t.check(ai::kBaselineLatency == 3 && ai::kBaselineShortTicks == 2400 && sizeof(ai::kBaselineSeeds) / sizeof(ai::kBaselineSeeds[0]) == 2 && ai::kBaselineSeeds[0] == 1 && ai::kBaselineSeeds[1] == 2,
+                "the procedure: latency 3, two minutes, the seeds 1 and 2");
     }
 
     t.section("arrangements of the seats");
@@ -1044,7 +1130,7 @@ int selftest() {
         t.check(JsonChecker(json1).valid(), "the JSON report is valid JSON");
         t.check(json1.find("/Users/") == std::string::npos && json1.find(ORIGINAL_ASSETS_DIR) == std::string::npos && json1.find('\\') == std::string::npos && json1.find(".LVL") == std::string::npos,
                 "the JSON report holds no path");
-        t.check(json1.find(kKindsNote) != std::string::npos, "the report says that worker and standard still run the idle bot");
+        t.check(json1.find(kKindsNote) != std::string::npos, "the report says what the kinds are (standard is an alias of worker until B4)");
         t.check(json1.find("\"wall_ms\"") == std::string::npos, "no wall time with --no-wall-time");
         o.wall_time = true;
         t.check(report_json(o, maps, one).find("\"wall_ms\"") != std::string::npos, "wall times with the default");
@@ -1077,5 +1163,6 @@ int main(int argc, char** argv) {
         return 0;
     }
     if (o.selftest) return selftest();
+    if (o.write_baselines) return write_baselines(o);
     return run_tool(o);
 }

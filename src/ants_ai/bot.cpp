@@ -4,6 +4,7 @@
 #include <limits>
 
 #include "ants_ai/idle_bot.hpp"
+#include "ants_ai/worker_bot.hpp"
 
 namespace ants::ai {
 
@@ -239,7 +240,8 @@ void Orders::push_unchecked(sim::Command command, Priority priority) { intents_.
 
 std::unique_ptr<Bot> make_bot(const BotSpec& spec) {
     if (!known_bot_kind(spec.kind)) return nullptr;
-    return std::make_unique<IdleBot>();          // idle; "worker" and "standard" are the idle bot until the worker bot (B3) and the standard bot (B4) exist
+    if (spec.kind == "idle") return std::make_unique<IdleBot>();
+    return std::make_unique<WorkerBot>();        // "worker"; "standard" is an alias of it until the standard bot (B4) exists
 }
 
 }  // namespace ants::ai

@@ -1378,7 +1378,8 @@ random walks; the models and the remake agree on every path tile and on every po
 - Step cost `FUN_01020951`: `(C(a)+C(b)) >> 1` orthogonally, `trunc((double)(C(a)+C(b)) * 1.4) >> 1` diagonally;
   8000 for enemy or waiting / idle-without-order team-mates, other teams' hill tiles and queue tiles, solid objects
   (except the order's own target), own and allied bombs. Walking team-mates are passable.
-- Delivery (`FUN_0100cba4` + message 6): count 0 -> stop, can't-go animation and "Can't go there." (string 0x3A);
+- Delivery (`FUN_0100cba4` + message 6): count 0 -> stop, can't-go animation and "Can't go there." (string 0x3A), nothing else (the ant keeps
+  its food source `+0xf4`, and nothing retries: 5.40, "Can't go there." for a carrier right after a bite);
   otherwise dropped unless the ant is idle, not waiting and still on `path[0]`; the idle animation restarts and the
   first pixel move follows `idle_dur0 + 2 x walk_dur0` later (250 ms for a grass worker).
 
@@ -1930,7 +1931,7 @@ faithful; the differences were in the input, drawing and sound layers around it.
 Addresses are virtual addresses in `Original-Ants/Ants.exe`. Implemented in `include/ants_sim/grid.hpp` and `src/ants_sim/grid.cpp` (`FoodObject`, `take_food`,
 `set_food_tile`, `drop_lunchbox`), `src/ants_sim/movement_tables.cpp` with the generated `src/ants_sim/food_footprints_data.inc` (`tools/gen_food_footprints.cpp`,
 `include/ants_assets/object_footprint.hpp`), `movement_system.cpp` (`classify_order`, `path_complete` case 5, `set_action`, `loco_on_step`) and `action_system.cpp`
-(`set_holding`, `start_harvest`, `end_harvest`, `harvest_clip_end`). Checked by `tests/test_sim/test_food_actions.cpp` (21 golden cases), `tests/test_assets/test_movement_tables.cpp`
+(`set_holding`, `start_harvest`, `end_harvest`, `harvest_clip_end`). Checked by `tests/test_sim/test_food_actions.cpp` (22 golden cases), `tests/test_assets/test_movement_tables.cpp`
 (7.1, 7.2) and the food cases of `tests/test_app/test_app_integration.cpp` (9.1, 12.5, 12.47, 12.61, 12.63, 12.107, 12.120, 12.121), `test_sim_rules.cpp` (10.6) and
 `test_challenger_m2_2.cpp` (3.4, 3.5).
 
@@ -1981,6 +1982,40 @@ Addresses are virtual addresses in `Original-Ants/Ants.exe`. Implemented in `inc
 * **Crowds.** There are no slots around a pile: the group order (`FUN_010287b5`, closest first, one acknowledgement) sends everybody to the clicked tile, every ant stops
   on the last tile before the first cell of the pile on its path, and a follower whose approach tile is held by an ant that is still busy waits in the re-path loop of
   `TryEnterTile` (5.32) until the holder leaves for its hill. (The HUD's per-ant slot spreading around food and power-ups was invented and is gone.)
+* **"Can't go there." for a carrier right after a bite is the original's behaviour, and nothing in the original retries it** *(read in `Ants.exe` on 2026-10-01 with Capstone and
+  `docs/legacy/Ants.exe.c`; seen in the remake as TINY seat 3 (seeds 2, 5 and 8, the carrier stands at its pile, 7 tiles from the hill) and TREASURE seat 0 (seeds 1, 2, 3, and 5 with
+  four workers: the carrier stands on the waiting tile in front of the gate); the bot's note in `docs/audit/B3_notes.md` called the cause "not isolated" and looked at the ant's own tile,
+  which says nothing)*:
+  * **The mound is solid except the entrance and the doorway above it.** The hill set-up (`0x100ecdf`) clears the solid bit with `FUN_0100660c(.., 0)` for the hill cell and the tile above it
+    (`0x100ed7b`, `0x100ed8d`: the arguments are (row, column, 0) and (row - 1, column, 0)), and stores the special tiles of the team (`+0x2e` .. `+0x46`, 5.35). Every walk home therefore ends
+    through the doorway `(bx+1, by)` into the entrance `(bx+1, by+1)`; one ant standing on the doorway shuts the hill for everybody else.
+  * **What costs 8000 there** (`FUN_01020951`, the step cost; an occupant of the local player's team, `0x10209b6`): an ant whose `+0x60` (ANTPAUSE) is set (`0x10209c3` -> `0x1020bb7`:
+    `mov eax, 0x1f40`), and an ant with no path (`+0xd8 == 0`) in action 0, 3 to 9 or 0xb that has no target tile (`+0xac` is row 0x5a, `0x10209d4` .. `0x10209f9`). A walking team-mate with a
+    path is free. ANTPAUSE (`FUN_0101cc1e`) is set for a walker that finds its next tile held by a moving ant and lasts 300 ms (`0x101cc5a`: `push 0x12c`; `0x101cc6a`: `mov [esi+0x60], 1`).
+  * **PATHMGR reads the costs live, slice by slice.** The task runs every 50 ms (`0x100e4ff`, `push 0x32`), one queued request per run gets one slice of 1000 expansions (`0x10247ac`,
+    `push 0x3e8`); a search that is not finished goes back into the queue and the next slice reads the occupancy again. A popped node with `f >= 8000` ends the search with no path before the
+    goal test (`0x1019ae0` .. `0x1019aec`). The relaxation (`0x1019b5e` .. `0x1019bd8`; the remake's `path_planner.cpp` is the same code) clears only the closed bit of a node that was
+    reached more cheaply and pushes a node only when its opened bit is clear, and the opened bit is never cleared: a node is pushed once, a closed node that is reached again is not
+    expanded again. So a doorway that was blocked when its neighbour was expanded keeps the cost it got then (g about 8088) although it is free by the next slice, and the search can end with
+    no path although a fresh search from the same state finds one (TREASURE seat 0, seed 1: ant 12 is dispatched from the waiting tile at tick 232 while ant 2 stands paused on the doorway
+    `(37, 20)`; the pause ends at tick 233, the doorway is free at tick 234, and the request is answered "no path" at tick 234. The review's trace of the search: the doorway holds g 8088 from
+    slice 1, its other neighbours were already closed in that slice, nothing relaxes it again). This is not the "no decrease-key" of the heap: the relaxation is as the disassembly says.
+  * **The failure itself** (`FUN_0100cba4`, message 6, count 0 at `0x100cbe7`): `FUN_010214d9` (StopSync), `SetActionDefault(0xb)` (`FUN_0101ace3`, the can't-go clip) and text 0x3a
+    "Can't go there." (`FUN_0100e8f5`) at `0x100cc0f` .. `0x100cc29`, and nothing else: no retry, no flag, and **the food source `+0xf4` is not touched**. The only writers of `+0xf4`
+    in the whole `.text` (a Capstone scan for every operand with displacement `0xf4`) are `SetHolding` (`0x101acce`, `FUN_0101ac8c`) and the arrival of a carrier at a pile (`0x101ceb1`); the
+    readers are the UI (`0x1017617`, `0x1017eb0`, `0x1017ebb`) and the order after the enter clip (`0x101ef9e`, guarded by `+0xe8 != 0` and `+0xec == 0` at `0x101ef83`). The remake's
+    `deliver_path` cleared `harvest_origin` here until v0.0.88, so a carrier that was sent home by hand later walked to the idle tile beside its hill after the delivery instead of back to its
+    pile: fixed (`test_food_actions` 3.11, which fails on the old engine; no golden or state hash changes).
+  * **After the clip** (case 0xb of the step callback, `0x101f130` .. `0x101f195`): `SetActionDefault(0)`, the path is cleared, and only when the ant stands on a special base tile
+    (`FUN_0101d822`: HillSpecial, the entrance, the raid tile and the three tiles above the mound) does it get `GoTo(+0x42, tile42)`; every other ant is just stopped (`FUN_010214d9`). The ant
+    stands idle with its food. All 12 call sites of `GoTo` (`FUN_0101fc50`: `0x100fffe` ANTHILLQ, `0x101cacc` the re-path of TryEnterTile, `0x101cee1`, `0x101cfb8` and `0x101d5ee` the path-completion
+    handlers, `0x101ddd3` and `0x101de48` retreat and hit recovery, `0x101f190` this clip end, `0x1020100` the ally-hill confirmation, `0x102517e` HATCHTSK, `0x10289b2` the group order,
+    `0x1028b26` the Stop button) were read: none looks for an idle carrier, and ANTHILLQ only dispatches ants with `+0x68 == 2` (queued): an ant whose dispatch failed has `+0x68 == 0` again
+    (the goal check of `GoTo` clears it) and nothing will ever dispatch it. A human has to click it; a bot has to do the same.
+  * **What frees such an ant in the remake** (probed on TREASURE seed 1, tick 1000, the carrier on the waiting tile with `home_state` 0): a group order to the entrance sets `home_state` 1, the
+    path of length 1 completes at once, the arrival sets `home_state` 2 (queued, priority) and ANTHILLQ dispatches it about 100 ticks later; it enters and delivers (the entrance is replaced by the
+    waiting tile for an ant that is already there: the goal check is the same). When the queue around the gate is long, the dispatch can fail the same way (idle queued ants cost 8000 on the way)
+    and the ant stands again; the next order a while later helps. The worker bot's rescue (`docs/BOTS.md`) is this click, sent after a wait that no queue explains.
 * **Lunchbox** *(`FUN_0100fdf8` -> `FUN_01008ca0`, called when an ant that carries food is removed on land, 5.36)*: a food object of one unit worth the points the dead ant
   carried, stages {1 -> tile 356, 0 -> gone}, appended to the table. A lunchbox is picked up exactly like a pile, by any team's ant that is ordered onto it (there is no
   pick-up by walking over it or standing on it), and two ants that start on it together both get its points.

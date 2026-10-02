@@ -39,7 +39,7 @@ print_usage() {
     echo "Options:"
     echo "  --all            Run all test suites (libants-assets + libants-sim + libants-app + E2E, default)"
     echo "  --assets         Run only asset decoder tests (test_assets)"
-    echo "  --sim            Run only simulation rules tests (test_sim_rules, and the network, bot (test_ai, bot_arena --selftest) and server suites)"
+    echo "  --sim            Run only simulation rules tests (test_sim_rules, and the network, bot (test_ai, bot_arena --selftest, test_ai_worker) and server suites)"
     echo "  --app            Run only application integration tests (test_app_integration)"
     echo "  --e2e            Run only opaque-box E2E test suites (e2e_runner)"
     echo "  --asan           Build and run with AddressSanitizer (build_asan)"
@@ -176,6 +176,7 @@ CHALLENGER_M2_1_STATUS=0
 CHALLENGER_M2_2_STATUS=0
 MAP_SWEEP_STATUS=0
 BOT_ARENA_STATUS=0
+AI_WORKER_STATUS=0
 SERVER_STATUS=0
 AI_STATUS=0
 SERVER_E2E_STATUS=0
@@ -390,6 +391,19 @@ if [ "$RUN_SIM" -eq 1 ]; then
     echo -e "${BOLD}${BLUE}======================================================================${RESET}"
     "./$BUILD_DIR/bot_arena" --selftest
     BOT_ARENA_STATUS=$?
+
+    echo ""
+    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
+    echo -e "${BOLD}${BLUE}>>> 2.22 RUNNING WORKER BOT SUITE (the economy on every shipped map, learning, endgame, budget, pinned baselines)...${RESET}"
+    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
+    # The test filters of a developer (W_ONLY, W_SKIP) must not leak into the master run: a forgotten W_ONLY would run one test and print PASSED. Under ASan + UBSan (unoptimised) the
+    # 18-row pinned table (AI3.9, AI3.12) is about four fifths of the run time and checks numbers, not memory: the sanitizer pass leaves those two out (docs/audit/B3_notes.md).
+    if [ "$RUN_ASAN" -eq 1 ]; then
+        env -u W_ONLY W_SKIP=AI3.9,AI3.12 "./$BUILD_DIR/tests/test_ai/test_ai_worker"
+    else
+        env -u W_ONLY -u W_SKIP "./$BUILD_DIR/tests/test_ai/test_ai_worker"
+    fi
+    AI_WORKER_STATUS=$?
 fi
 
 # 5. Execute Application Integration Tests
@@ -693,6 +707,13 @@ if [ "$RUN_SIM" -eq 1 ]; then
         echo -e " 2.21 Bot Arena (bot_arena --selftest):              ${GREEN}PASSED${RESET}"
     else
         echo -e " 2.21 Bot Arena (bot_arena --selftest):              ${RED}FAILED (exit code ${BOT_ARENA_STATUS})${RESET}"
+        TOTAL_FAILED=$((TOTAL_FAILED + 1))
+    fi
+
+    if [ "$AI_WORKER_STATUS" -eq 0 ]; then
+        echo -e " 2.22 Worker Bot (test_ai_worker):                   ${GREEN}PASSED${RESET}"
+    else
+        echo -e " 2.22 Worker Bot (test_ai_worker):                   ${RED}FAILED (exit code ${AI_WORKER_STATUS})${RESET}"
         TOTAL_FAILED=$((TOTAL_FAILED + 1))
     fi
 fi

@@ -14,7 +14,8 @@ using namespace ants::ai;
 
 namespace {
 
-// A scripted bot (the real ones arrive with B3 / B4): at every look it sends one of its ants to a tile near it, so that a match holds commands for the replay to check
+// A scripted bot (the registry's worker is the economy of B3, the standard bot of B4 is not there yet): at every look it sends one of its ants to a tile near it, so that a match holds
+// commands for the replay to check whatever the registry's bots do
 class WalkerBot final : public Bot {
 public:
     const char* kind() const noexcept override { return "walker"; }
@@ -199,7 +200,7 @@ void run_arena_tests() {
         }
         ASSERT_TRUE(a.log.empty());
         ASSERT_EQ(a.checkpoints.size(), a.ticks / kArenaHashPeriod);
-        // until the worker bot (B3) and the standard bot (B4) exist, their kinds run the idle bot, and the result says so
+        // the kinds that play: "worker" is the worker bot (B3), "standard" is an alias of it until the standard bot (B4) exists, and the result says which one actually played
         ArenaSpec placeholders;
         placeholders.level = &level_of("TINY");
         placeholders.seed = 4;
@@ -207,7 +208,7 @@ void run_arena_tests() {
         placeholders.bots = {seat_spec(0, "worker", Level::Hard), seat_spec(1, "standard", Level::Easy), seat_spec(2, "idle", Level::Medium)};
         const ArenaResult p = play_match(placeholders);
         ASSERT_TRUE(p.error.empty() && p.seats.size() == 3);
-        ASSERT_TRUE(p.seats[0].runs == "idle" && p.seats[1].runs == "idle" && p.seats[2].runs == "idle");
+        ASSERT_TRUE(p.seats[0].runs == "worker" && p.seats[1].runs == "worker" && p.seats[2].runs == "idle");
         ASSERT_TRUE(p.seats[0].spec.kind == "worker" && p.seats[1].spec.kind == "standard");
         ASSERT_EQ(p.seats[0].stats.decisions, 75u);                                              // Hard looks every 4 ticks (the first look is on tick 1)
         ASSERT_EQ(p.seats[1].stats.decisions, 3u);                                               // Easy every 100

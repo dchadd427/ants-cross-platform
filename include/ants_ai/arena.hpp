@@ -53,7 +53,7 @@ struct ArenaSpec {
 
 struct ArenaSeatResult {
     BotSpec spec;                              // what was asked for
-    std::string runs;                          // the kind of bot that actually played ("idle" for "worker" and "standard" until B3 and B4 exist)
+    std::string runs;                          // the kind of bot that actually played ("worker" for "worker" and for "standard", which is an alias of it until B4)
     int32_t score{0};                          // the individual score at the end (what the results screen ranks by, before ties)
     int32_t shown_score{0};                    // the number of the score box (own plus ally's)
     uint32_t ants{0};                          // living ants at the end
@@ -78,6 +78,9 @@ struct ArenaResult {
     bool match_over{false};                    // the engine declared the match over (else max_ticks ended it)
     uint64_t initial_ticks{0};                 // the length of the match on this map, in ticks
     uint64_t hash{0};                          // the engine's state hash after the last tick
+    /// Units still lying on the piles that the hill of some playing seat can walk to (MapInfo's analysis of the start), the object whose units a bite takes counted once: 0 when
+    /// the whole reachable pot was taken
+    uint32_t reachable_units_left{0};
     std::vector<ArenaSeatResult> seats;        // in seat order
     std::vector<uint64_t> checkpoints;         // the state hash after tick 20, 40, 60, ... (while the match lasted)
     std::vector<RecordedCommand> log;          // with ArenaSpec::record

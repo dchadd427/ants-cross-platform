@@ -3,6 +3,7 @@
 // (FUN_0101e342) takes one unit, makes the ant carry the object's points, posts "Got Food!" and redraws a pile whose stage
 // changed; the ant then goes home. A lunchbox is a food object of one unit. (docs/GAME_REVERSE_ENGINEERING.md 5.40)
 #include "ants_assets/lvl_parser.hpp"
+#include "ants_sim/game_strings.hpp"
 #include "ants_sim/movement_tables.hpp"
 #include "ants_sim/sim_engine.hpp"
 
@@ -620,6 +621,36 @@ void run_suite_3_harvest() {
         ASSERT_EQ(ack, near);
         ASSERT_EQ(sim.get_unit(far).orig_order, AntUnit::kOrderHarvest);
         ASSERT_EQ(sim.get_unit(near).orig_order, AntUnit::kOrderHarvest);
+    } TEST_END();
+
+    TEST_CASE("3.11 \"Can't go there.\" with food keeps the food source (+0xf4): a carrier that is sent home later by hand still walks back to its pile (Ants.exe 0x100cbe7: stop, SetActionDefault(0xb), text 58, nothing else)") {
+        SimulationEngine sim;
+        make_world(sim);
+        place_crackers(sim, 15, 10);
+        // a team-mate stands idle on the doorway of the hill (3, 2), the only walkable tile in front of the entrance (3, 3): a same-team occupant without a path or an order costs 8000
+        const uint32_t blocker = sim.spawn_unit(0, AntType::Worker, TileCoord{3, 2});
+        const uint32_t ant = sim.spawn_unit(0, AntType::Worker, TileCoord{13, 10});
+        const AntUnit& a = sim.get_unit(ant);
+        sim.clear_news_events();
+        sim.issue_move_order(ant, TileCoord{15, 10});
+        ASSERT_TRUE(wait_ms(sim, 6000, [&]() { return a.is_holding(); }) >= 0);
+        ASSERT_EQ(a.harvest_origin, (TileCoord{15, 10}));
+        // the walk home is refused: "Can't go there." (text 58)
+        ASSERT_TRUE(wait_ms(sim, 2000, [&]() { return sim.has_news_event(0, strings::kCantGoThere) && a.state == UnitState::CantGo; }) >= 0);
+        ASSERT_EQ(a.harvest_origin, (TileCoord{15, 10}));     // the original's count-0 branch writes nothing but the action: the pile is still remembered
+        ASSERT_TRUE(wait_ms(sim, 2000, [&]() { return a.state == UnitState::Idle; }) >= 0);
+        ASSERT_TRUE(a.is_holding());
+        ASSERT_EQ(a.orig_order, AntUnit::kOrderNone);         // it stands there with its food: nothing retries
+        ASSERT_EQ(a.harvest_origin, (TileCoord{15, 10}));
+        run_ms(sim, 2000);
+        ASSERT_TRUE(a.is_holding() && a.state == UnitState::Idle);
+        // the doorway is free again and a hand sends it home: it delivers, and then it walks back to the pile it came from (order 5), not to the idle tile beside the hill
+        sim.kill_unit(blocker);
+        sim.issue_move_order(ant, TileCoord{3, 3});
+        ASSERT_TRUE(wait_ms(sim, 30000, [&]() { return !a.is_holding(); }) >= 0);
+        ASSERT_EQ(sim.get_player_score(0), 25);
+        ASSERT_TRUE(wait_ms(sim, 6000, [&]() { return a.orig_order == AntUnit::kOrderHarvest; }) >= 0);
+        ASSERT_EQ(a.orig_order_tile, (TileCoord{15, 10}));
     } TEST_END();
 }
 

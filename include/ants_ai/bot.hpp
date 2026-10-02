@@ -44,7 +44,7 @@ struct Profile {
     uint32_t max_ants_per_command{24};   // a larger command is split (never above kHudAntCap)
     uint32_t intent_ttl{60};             // a command that cannot be paid is dropped this many ticks after its release time: the world has moved on
     uint32_t reissue_cooldown{10};       // no second order to the same ant within this many ticks (unless urgent): each order replaces the ant's queued path
-    bool value_aware_piles{true};        // economy (from the worker bot on): pick food piles by points per trip, not the nearest
+    bool value_aware_piles{true};        // economy (the worker bot, B3): pick food piles by points per trip (Medium, Hard), not the nearest (Easy)
     uint32_t max_ants_per_pile{8};
 };
 
@@ -52,8 +52,8 @@ Profile profile_for(Level level) noexcept;
 
 // ---- the specification of a bot seat -------------------------------------------------------------------------------------------------------------
 
-/// Which bot sits at which seat. `kind` is "idle" (stands still: the plumbing's test bot), "worker" or "standard"; until the worker bot (B3) and the standard
-/// bot (B4) exist the last two are accepted names that run the idle bot. `level` picks the Profile.
+/// Which bot sits at which seat. `kind` is "idle" (stands still: the plumbing's test bot), "worker" (harvest only, B3) or "standard" (the bot of the three levels;
+/// until B4 exists it is an alias of the worker). `level` picks the Profile.
 struct BotSpec {
     uint8_t seat{0};
     std::string kind{"standard"};
@@ -158,7 +158,8 @@ public:
     }
 };
 
-/// The bot of a spec; null for a kind that does not exist. (Before B3 / B4 "worker" and "standard" are the idle bot.)
+/// The bot of a spec; null for a kind that does not exist. "idle" is the IdleBot, "worker" the WorkerBot (B3); "standard" is an alias of the worker bot until the standard bot
+/// (B4) exists (kind() of what it returns says "worker").
 std::unique_ptr<Bot> make_bot(const BotSpec& spec);
 
 }  // namespace ants::ai

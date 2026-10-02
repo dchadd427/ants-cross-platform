@@ -103,8 +103,8 @@ struct ApplicationConfig {
     /// --bot SEAT[:SPEC] (repeatable): computer players at these seats (docs/BOTS.md). A local game then plays the seats that are taken (the local player and the bots); with
     /// --host the room shows the bots as players and the host's machine runs them. Empty by default: a game without --bot runs no bot code at all.
     std::vector<ai::BotSpec> bots;
-    /// For the tests: builds the bot of a spec instead of the registry (which has only the idle bot until the worker bot exists), so that the application's door for a
-    /// bot's commands (the local sink, the room's sink) can be exercised with a bot that acts. Empty in a game that is played.
+    /// For the tests: builds the bot of a spec instead of the registry (which has the idle bot and, since B3, the worker bot), so that the application's door for a
+    /// bot's commands (the local sink, the room's sink) can be exercised with a bot of the test's own that acts in a way it wants to. Empty in a game that is played.
     std::function<std::unique_ptr<ai::Bot>(const ai::BotSpec&)> bot_factory;
     /// What is wrong with the command line (parse_arguments cannot fail any other way: a --bot that does not parse). init() refuses to start with it.
     std::string startup_error;

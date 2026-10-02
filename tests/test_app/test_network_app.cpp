@@ -489,7 +489,7 @@ void click_fog(Application& app, bool on) {
     app.map_select().handle_mouse_up(x, y, 1);
 }
 
-// A bot that acts (the registry has only the idle bot until the worker bot exists): at every look it sends its first ant to one of two tiles, alternately
+// A bot of the test's own that acts in a way that it chooses (the registry has the idle bot and the worker bot): at every look it sends its first ant to one of two tiles, alternately
 class MarchingBot final : public ai::Bot {
 public:
     const char* kind() const noexcept override { return "marching"; }
@@ -613,11 +613,11 @@ void run_bot_tests() {
         ASSERT_TRUE(app.bots()->stats(1).decisions == 0 && app.bots()->stats(3).decisions == 0);
         ASSERT_TRUE(ants_of(app.sim(), 2).empty() && !ants_of(app.sim(), 1).empty());
         const uint64_t hash0 = app.sim().state_hash().total;
-        // the ticks of the local loop reach the controller: the bots look at the world (the idle ones never act)
+        // the ticks of the local loop reach the controller: the bots look at the world (the idle one never acts; the standard one is the worker bot of B3 until B4 and sends its ants to the food)
         for (int i = 0; i < 400; ++i) app.update_simulation(0.05f);
         ASSERT_EQ(app.sim().current_tick(), 400u);
         ASSERT_TRUE(app.bots()->stats(1).decisions >= 19 && app.bots()->stats(3).decisions >= 99);                      // medium: every 20 ticks, hard: every 4
-        ASSERT_TRUE(app.bots()->stats(1).released == 0 && app.bots()->stats(3).released == 0 && app.bots()->stats(1).filtered == 0);
+        ASSERT_TRUE(app.bots()->stats(1).released >= 1 && app.bots()->stats(3).released == 0 && app.bots()->stats(1).filtered == 0);
         ASSERT_TRUE(app.sim().state_hash().total != hash0);                                                              // the world moved on (food, queues, clock)
         // the match ends: the results name the bots, and the controller falls silent
         app.sim().set_match_time_remaining_ms(1000);

@@ -1,8 +1,10 @@
 #include "ants_ai/arena.hpp"
 
 #include <algorithm>
+#include <set>
 #include <utility>
 
+#include "ants_ai/map_info.hpp"
 #include "ants_sim/sim_engine.hpp"
 
 namespace ants::ai {
@@ -149,6 +151,15 @@ ArenaResult play_match(const ArenaSpec& spec) {
     out.ticks = sim.current_tick();
     out.steps = steps;
     out.hash = sim.state_hash().total;
+    {
+        std::set<uint32_t> counted;
+        const std::vector<sim::FoodObject>& objects = sim.grid().food_objects();
+        for (const PileInfo& p : controller.map().piles()) {
+            bool reach = false;
+            for (const BotSpec& b : spec.bots) reach = reach || p.approach[b.seat].reachable();
+            if (reach && p.bite_index < objects.size() && counted.insert(p.bite_index).second) out.reachable_units_left += objects[p.bite_index].remaining;
+        }
+    }
     const sim::WorldState& ws = sim.get_world_state();
     for (const BotSpec& b : spec.bots) {
         ArenaSeatResult r;
