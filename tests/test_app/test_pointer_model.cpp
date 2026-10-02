@@ -2287,7 +2287,10 @@ void test_pillarbox() {
 }  // namespace
 
 
-int main() {
+int main(int argc, char* argv[]) {
+    // SDL's headers rename main to SDL_main (SDL2main on Windows calls it): the signature must be this one, or the linker finds no SDL_main (the build guard in CMakeLists.txt checks it)
+    (void)argc;
+    (void)argv;
     test_hit_boxes();
     test_cursor_without_own_ants();
     test_cursor_with_own_ants();

@@ -3101,7 +3101,10 @@ void test_alliance_answers(const assets::AssetArchive&) {
 
 } // namespace
 
-int main() {
+int main(int argc, char* argv[]) {
+    // SDL's headers rename main to SDL_main (SDL2main on Windows calls it): the signature must be this one, or the linker finds no SDL_main (the build guard in CMakeLists.txt checks it)
+    (void)argc;
+    (void)argv;
     assets::AssetArchive arc;
     if (!arc.load_chd(std::string(ORIGINAL_ASSETS_DIR) + "/ants.chd")) {
         std::fprintf(stderr, "cannot load ants.chd\n");

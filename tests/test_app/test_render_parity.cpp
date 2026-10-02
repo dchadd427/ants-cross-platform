@@ -1749,7 +1749,10 @@ void test_fixed_digits(Renderer& r) {
 
 } // namespace
 
-int main() {
+int main(int argc, char* argv[]) {
+    // SDL's headers rename main to SDL_main (SDL2main on Windows calls it): the signature must be this one, or the linker finds no SDL_main (the build guard in CMakeLists.txt checks it)
+    (void)argc;
+    (void)argv;
     SDL_setenv("SDL_VIDEODRIVER", "dummy", 1);
     if (SDL_Init(SDL_INIT_VIDEO) != 0) {
         std::fprintf(stderr, "SDL_Init failed: %s\n", SDL_GetError());

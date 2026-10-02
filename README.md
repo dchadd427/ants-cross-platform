@@ -4,7 +4,7 @@ A faithful, high-performance, deterministic C++17 native engine remake and port 
 
 The engine directly loads raw original binary assets (`ants.chd` and `Maps/*.LVL`) without pre-conversion, faithfully executing authentic gameplay mechanics, deterministic 20Hz simulation, 32-channel spatial audio, MIDI/MP3 score playback, TrueType font rendering, and an SDL2 hardware-accelerated 2D viewport.
 
-**Current version: v0.0.96** (shown on screen next to the FPS meter; in the room and the match of a network game the same corner also shows **ping** and **delay**, see [Network Port](#network-port-in-progress)). What is in progress, next and recently done: **[STATUS.md](STATUS.md)**. Every release is listed in the **[changelog](CHANGELOG.md)**, which is also published at **[beta.playants.org/changelog.html](https://beta.playants.org/changelog.html)**. Since v0.0.24 every system is re-derived from the disassembly of the original `Ants.exe` (see [Reverse Engineering](#reverse-engineering--historical-preservation)); multiplayer over a network (host / join over TCP) works and is still being extended (see [Network Port](#network-port-in-progress)).
+**Current version: v0.0.97** (shown on screen next to the FPS meter; in the room and the match of a network game the same corner also shows **ping** and **delay**, see [Network Port](#network-port-in-progress)). What is in progress, next and recently done: **[STATUS.md](STATUS.md)**. Every release is listed in the **[changelog](CHANGELOG.md)**, which is also published at **[beta.playants.org/changelog.html](https://beta.playants.org/changelog.html)**. Since v0.0.24 every system is re-derived from the disassembly of the original `Ants.exe` (see [Reverse Engineering](#reverse-engineering--historical-preservation)); multiplayer over a network (host / join over TCP) works and is still being extended (see [Network Port](#network-port-in-progress)).
 
 ---
 
@@ -77,7 +77,7 @@ Play the remake instantly in any modern web browser (Chrome, Firefox, Safari, Ed
   - Standalone web inspector (`asset_catalog/index.html`) with responsive design, searching, filtering, and instant asset downloads (⬇ WAV audio, ⬇ PNG sprites, ⬇ composite canvas frames).
 
 - **Automated Verification & Zero-Warning Standard**:
-  - 100% pass rate across **218 application integration tests (8,138 assertions)**, the simulation golden suites (movement, path planner, hill, combat, ability, power-up and food actions), the command-layer / state-hash suite, the lock-step network core, room and TCP transport suites, the render, HUD, status-message, input and pointer model suites, the view fingerprint of the classic 640 x 480 picture and pointer (307 hashes, and 18 more for the desktop start menu's panels) and **506 opaque-box End-to-End (E2E) verification tests** (real counts in [Testing & Verification](#testing--verification)).
+  - 100% pass rate across **219 application integration tests (8,162 assertions)**, the simulation golden suites (movement, path planner, hill, combat, ability, power-up and food actions), the command-layer / state-hash suite, the lock-step network core, room and TCP transport suites, the render, HUD, status-message, input and pointer model suites, the view fingerprint of the classic 640 x 480 picture and pointer (307 hashes, and 18 more for the desktop start menu's panels) and **506 opaque-box End-to-End (E2E) verification tests** (real counts in [Testing & Verification](#testing--verification)).
   - Zero warnings under `-Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion -Wshadow -Wnon-virtual-dtor` (`cmake -B build -DANTS_WERROR=ON` turns them into errors), with clang and, since v0.0.92, also with GCC 12 for the whole project, tests included.
 
 ---
@@ -104,7 +104,7 @@ The remake provides a complete, playable, standalone experience with authentic a
 | **Asset Viewer Overhaul** | 📋 Planned (last) | Verify the viewer's groups and that every animation loads and plays properly, then overhaul it; scheduled after everything else. |
 
 ### Roadmap (in order)
-1. Network port: the in-game host / join screens (the desktop start menu joins and hosts on the game server: in review; the LAN screens remain), the deployment of the server. (The browser's WebSocket connection and the four-games page shipped in v0.0.84 (the Play online page replaced it in v0.0.90), the dedicated server in v0.0.83, host migration in v0.0.47, the alliance dialogs in v0.0.50, the original's end-of-match rules in v0.0.62.)
+1. Network port: the in-game host / join screens (the desktop start menu joins and hosts on the game server since v0.0.97; the LAN screens remain), the deployment of the server. (The browser's WebSocket connection and the four-games page shipped in v0.0.84 (the Play online page replaced it in v0.0.90), the dedicated server in v0.0.83, host migration in v0.0.47, the alliance dialogs in v0.0.50, the original's end-of-match rules in v0.0.62.)
 2. Start-up flow (splash, loading, the single-player notice, More Help). (The results screen shipped in v0.0.63, the setup screen in v0.0.64, the options screen and the remembered settings in v0.0.65, the quick help and the chat input box in v0.0.66.)
 3. Removal of the remaining invented visuals and timings, and the last non-original tests.
 4. Asset viewer overhaul.
@@ -302,7 +302,7 @@ Names and network play:
 
 Try it on one computer: `./start_game.sh --host --loopback --name Alice`, then in a second terminal `./start_game.sh --join 127.0.0.1 --name Bob`.
 
-On a local network: `./start_game.sh --host --name Alice` on one machine; `ants --lan-list` on another prints the room (`192.168.1.20:4001  "Alice"  TINY.LVL  1/4 players  v0.0.96`), and `./start_game.sh --join 192.168.1.20 --name Bob` joins it. The firewall of the host must let UDP and TCP port 4001 in.
+On a local network: `./start_game.sh --host --name Alice` on one machine; `ants --lan-list` on another prints the room (`192.168.1.20:4001  "Alice"  TINY.LVL  1/4 players  v0.0.97`), and `./start_game.sh --join 192.168.1.20 --name Bob` joins it. The firewall of the host must let UDP and TCP port 4001 in.
 
 ---
 
@@ -417,7 +417,7 @@ The original game runs a full TCP mesh (port 4001) in which every machine simula
 | Host / join in the game (`--host`, `--join`), the room with names and connection thumbs, roster (teams without a player do not exist), drop-out through the turn stream, predicted click feedback, chat, waiting / out-of-sync messages, names from the command line | ✅ v0.0.46 |
 | Host migration: the match goes on when the host leaves (as in the original): links between the guests, the turn log, election with epochs, resync, the old host dropped by the first turn of the new one | ✅ v0.0.47 |
 | Games on the local network: an open room announces itself (UDP broadcast, once a second), `--lan-list` shows what is on offer; the in-game screens for a LAN are next | ✅ v0.0.78 (discovery), 📋 LAN screens |
-| The desktop start menu: **Join with a code** and **Host an online match** on the game server (default `beta.playants.org:4001`, `--server`), the room's code shown with Copy, every failure and every Reject reason told, the way back to the menu when a network game ends | ✅ in review (Unreleased) |
+| The desktop start menu: **Join with a code** and **Host an online match** on the game server (default `beta.playants.org:4001`, `--server`), the room's code shown with Copy, every failure and every Reject reason told, the way back to the menu when a network game ends | ✅ v0.0.97 |
 | Internet play: **no NAT traversal in the game**; a dedicated server that everybody can reach hosts the rooms (see below); a lobby may still start the game with addresses on the command line | ✅ server v0.0.83 |
 | The dedicated server (`ants_server`): rooms made over a control interface, a referee per room, TCP and WebSocket, a Docker image | ✅ v0.0.83 |
 | The room's leader starts early: the first player of a server's room has the host's screen with START and starts the match with the players who are there (two at least); `early_start` in the control interface, network protocol 7 | ✅ v0.0.93 |
@@ -460,7 +460,7 @@ What exists (v0.0.85 plus milestones B2 and B3 of the plan in [`docs/BOTS.md`](d
 
 ## Changelog & Versioning
 
-The version (`include/ants_app/version.hpp`, currently `v0.0.96`) is bumped with every release and shown on screen next to the FPS meter. [`CHANGELOG.md`](CHANGELOG.md) lists what changed in every version, newest first, from the first commit to the release in progress; it is published on the beta site at [`/changelog.html`](https://beta.playants.org/changelog.html) and linked from the game page.
+The version (`include/ants_app/version.hpp`, currently `v0.0.97`) is bumped with every release and shown on screen next to the FPS meter. [`CHANGELOG.md`](CHANGELOG.md) lists what changed in every version, newest first, from the first commit to the release in progress; it is published on the beta site at [`/changelog.html`](https://beta.playants.org/changelog.html) and linked from the game page.
 
 ---
 
@@ -485,7 +485,7 @@ To run all test suites in sequence:
 ./run_tests.sh --clean    # Remove the build directories and rebuild first
 ```
 
-### What the Suites Cover (v0.0.96, all passing)
+### What the Suites Cover (v0.0.97, all passing)
 | Suite | What it checks | Size |
 |---|---|---|
 | 1 Asset decoders | `ants.chd` header, palette, sprites, audio, event tags, Table 4 animations, `.LVL` maps, directional mirroring, fuzzing | 9 suites, 70,065 assertions |

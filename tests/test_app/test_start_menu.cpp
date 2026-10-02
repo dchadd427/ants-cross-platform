@@ -299,7 +299,10 @@ std::vector<Variant> all_variants() {
 
 }  // namespace
 
-int main() {
+int main(int argc, char* argv[]) {
+    // SDL's headers rename main to SDL_main (SDL2main on Windows calls it): the signature must be this one, or the linker finds no SDL_main (the build guard in CMakeLists.txt checks it)
+    (void)argc;
+    (void)argv;
     std::cout << "=== Start menu ===\n";
 
     TEST_CASE("M1.1 First panel: the entries in their order, the first selected; Up and Down wrap round, Tab and Shift+Tab do the same; Esc is Quit and asks nothing else") {
@@ -1225,10 +1228,10 @@ int main() {
         const auto menu_for = [](std::vector<std::string> args) {
             std::vector<std::string> full = {"ants"};
             full.insert(full.end(), args.begin(), args.end());
-            std::vector<char*> argv;
-            for (std::string& a : full) argv.push_back(a.data());
-            argv.push_back(nullptr);
-            return Application::parse_arguments(static_cast<int>(full.size()), argv.data());
+            std::vector<char*> arg_ptrs;
+            for (std::string& a : full) arg_ptrs.push_back(a.data());
+            arg_ptrs.push_back(nullptr);
+            return Application::parse_arguments(static_cast<int>(full.size()), arg_ptrs.data());
         };
 #if defined(__EMSCRIPTEN__)
         ASSERT_FALSE(menu_for({}).start_menu);                                              // the web build never shows it
@@ -1278,10 +1281,10 @@ int main() {
         const auto parse = [](std::vector<std::string> args) {
             std::vector<std::string> full = {"ants"};
             full.insert(full.end(), args.begin(), args.end());
-            std::vector<char*> argv;
-            for (std::string& a : full) argv.push_back(a.data());
-            argv.push_back(nullptr);
-            return Application::parse_arguments(static_cast<int>(full.size()), argv.data());
+            std::vector<char*> arg_ptrs;
+            for (std::string& a : full) arg_ptrs.push_back(a.data());
+            arg_ptrs.push_back(nullptr);
+            return Application::parse_arguments(static_cast<int>(full.size()), arg_ptrs.data());
         };
         ApplicationConfig ok = parse({"--server", "play.example.org:4010"});
         ASSERT_TRUE(ok.startup_error.empty());
