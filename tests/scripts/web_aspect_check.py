@@ -181,6 +181,18 @@ PURE_CHECKS = r"""
     var ok = res.capped === c[1] && (c[1] ? (res.rate >= 55 && res.rate <= 62.5) : Math.abs(res.rate - c[0]) < 1.5);
     if (!ok) bad.push('frame cap at ' + c[0] + ' Hz: ' + JSON.stringify(res));
   });
+  // two users of requestAnimationFrame on one page: the callbacks of one display frame share its timestamp and get the same answer, so the second does not take the game's frames
+  (function () {
+    var acc = P.makeFrameLimiter(1000 / 60), t = 1000, a = 0, b = 0, disagree = 0, step = 1000 / 144;
+    for (var i = 0; i < 144 * 10; i++, t += step) {
+      var x = acc(t), y = acc(t);
+      if (x !== y) disagree++;
+      if (x) a++;
+      if (y) b++;
+    }
+    n++;
+    if (disagree || a / 10 < 55 || a / 10 > 62.5 || a !== b) bad.push('two users of one frame: ' + JSON.stringify({ disagree: disagree, first: a / 10, second: b / 10 }));
+  })();
   var gap = run(144, 20, 0.5, [6000, 12000]);                                  // a hidden page for six seconds: no burst after it, the cap goes on
   n++;
   if (!(gap.rate > 30 && gap.rate < 45)) bad.push('frame cap over a hidden gap: ' + JSON.stringify(gap));
@@ -299,6 +311,7 @@ def main():
     ap.add_argument("--browser", default=os.environ.get("CHROME", ""), help="a Chromium-based browser (default: look for one)")
     ap.add_argument("--shots", default="", help="a folder to save the screenshots in")
     ap.add_argument("--quick", action="store_true", help="fewer sizes (1280 x 720, a phone)")
+    ap.add_argument("--logic-only", action="store_true", help="only the page's own logic (ANTS_PAGE): no game, no layout")
     ap.add_argument("--four", action="store_true", help="also check web/four.html (the page that plays seats in frames); needs the game server behind /ws (the stack)")
     args = ap.parse_args()
 
@@ -326,6 +339,10 @@ def main():
         tab.open(web, settle=0.5)
         res = json.loads(tab.ev(PURE_CHECKS))
         check(not res["bad"], "ANTS_PAGE: %d checks%s" % (res["checks"], "" if not res["bad"] else ": " + "; ".join(res["bad"][:6])))
+        if args.logic_only:
+            tab.close()
+            print("[web aspect] %d checks, %d failed" % (count[0], len(failures)))
+            return 1 if failures else 0
 
         def layout_checks(label, g, want_aspect):
             dpr = g["dpr"]

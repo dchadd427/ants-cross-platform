@@ -953,7 +953,9 @@
                 var gaps = [];
                 var capped = false;
                 var measured = false;
-                function accept(ts) {
+                var lastTs = -1;
+                var lastAnswer = true;
+                function decide(ts) {
                     if (!measured) {
                         if (last) gaps.push(ts - last);
                         last = ts;
@@ -969,6 +971,11 @@
                     if (ts + 1.5 < due) return false;                       // not yet (the display's timestamps jitter by a millisecond or so)
                     due = (ts - due > periodMs) ? ts + periodMs : due + periodMs;
                     return true;
+                }
+                // Every callback of one display frame gets the same timestamp and the same answer (a second user of requestAnimationFrame on the page must not take the frame from the game)
+                function accept(ts) {
+                    if (ts !== lastTs) { lastTs = ts; lastAnswer = decide(ts); }
+                    return lastAnswer;
                 }
                 accept.isCapped = function () { return capped; };
                 accept.isMeasured = function () { return measured; };
