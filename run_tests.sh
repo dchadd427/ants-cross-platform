@@ -328,14 +328,14 @@ if [ "$RUN_SIM" -eq 1 ]; then
     echo -e "${BOLD}${BLUE}======================================================================${RESET}"
     echo -e "${BOLD}${BLUE}>>> 2.11 RUNNING LOCK-STEP NETWORK CORE SUITE (protocol, sequencer, sessions, matches)...${RESET}"
     echo -e "${BOLD}${BLUE}======================================================================${RESET}"
-    "./$BUILD_DIR/tests/test_net/test_lockstep"
+    env -u ANTS_TEST_FILTER "./$BUILD_DIR/tests/test_net/test_lockstep"
     LOCKSTEP_STATUS=$?
 
     echo ""
     echo -e "${BOLD}${BLUE}======================================================================${RESET}"
     echo -e "${BOLD}${BLUE}>>> 2.12 RUNNING ROOM SUITE (joining, roster, start barrier)...      ${RESET}"
     echo -e "${BOLD}${BLUE}======================================================================${RESET}"
-    "./$BUILD_DIR/tests/test_net/test_lobby"
+    env -u ANTS_TEST_FILTER "./$BUILD_DIR/tests/test_net/test_lobby"
     LOBBY_STATUS=$?
 
     echo ""
@@ -356,7 +356,7 @@ if [ "$RUN_SIM" -eq 1 ]; then
     echo -e "${BOLD}${BLUE}======================================================================${RESET}"
     echo -e "${BOLD}${BLUE}>>> 2.14 RUNNING NETGAME SUITE (room, start barrier, matches over real sockets)...${RESET}"
     echo -e "${BOLD}${BLUE}======================================================================${RESET}"
-    "./$BUILD_DIR/tests/test_net/test_netgame"
+    env -u ANTS_TEST_FILTER "./$BUILD_DIR/tests/test_net/test_netgame"
     NETGAME_STATUS=$?
 
     echo ""
@@ -391,7 +391,7 @@ if [ "$RUN_SIM" -eq 1 ]; then
     echo -e "${BOLD}${BLUE}======================================================================${RESET}"
     echo -e "${BOLD}${BLUE}>>> 2.19 RUNNING DEDICATED SERVER SUITE (map store, rooms, the door, control calls, real sockets)...${RESET}"
     echo -e "${BOLD}${BLUE}======================================================================${RESET}"
-    "./$BUILD_DIR/tests/test_server/test_server"
+    env -u ANTS_TEST_FILTER "./$BUILD_DIR/tests/test_server/test_server"
     SERVER_STATUS=$?
 
     echo ""
@@ -485,7 +485,7 @@ if [ "$RUN_APP" -eq 1 ]; then
     echo -e "${BOLD}${BLUE}======================================================================${RESET}"
     echo -e "${BOLD}${BLUE}>>> 3.6 RUNNING NETWORK APPLICATION SUITE (names, room, thumbs, start, matches)...${RESET}"
     echo -e "${BOLD}${BLUE}======================================================================${RESET}"
-    "./$BUILD_DIR/tests/test_app/test_network_app"
+    env -u ANTS_TEST_FILTER "./$BUILD_DIR/tests/test_app/test_network_app"
     NETWORK_APP_STATUS=$?
 
     echo ""
@@ -520,14 +520,14 @@ if [ "$RUN_APP" -eq 1 ]; then
     echo -e "${BOLD}${BLUE}======================================================================${RESET}"
     echo -e "${BOLD}${BLUE}>>> 3.11 RUNNING START MENU MODEL SUITE (keys, mouse, fields, seats, servers, codes, settings, layout, drawing, command-line skip rules)...${RESET}"
     echo -e "${BOLD}${BLUE}======================================================================${RESET}"
-    "./$BUILD_DIR/tests/test_app/test_start_menu"
+    env -u ANTS_TEST_FILTER "./$BUILD_DIR/tests/test_app/test_start_menu"
     START_MENU_STATUS=$?
 
     echo ""
     echo -e "${BOLD}${BLUE}======================================================================${RESET}"
     echo -e "${BOLD}${BLUE}>>> 3.12 RUNNING START MENU APPLICATION SUITE (single player, bots, join, host, every failure, cancel, back to the menu; a real room manager over TCP)...${RESET}"
     echo -e "${BOLD}${BLUE}======================================================================${RESET}"
-    "./$BUILD_DIR/tests/test_app/test_start_menu_app"
+    env -u ANTS_TEST_FILTER "./$BUILD_DIR/tests/test_app/test_start_menu_app"
     START_MENU_APP_STATUS=$?
 
     echo ""
