@@ -437,6 +437,7 @@ bool ClientLobby::request_start() {
 
 void ClientLobby::send_hello() {
     if (conn_ == nullptr || phase_ != Phase::Connecting || !conn_->is_open()) return;
+    was_open_ = true;
     HelloMsg h;
     h.name = printable(cfg_.name, kMaxNameChars);
     h.listen_port = cfg_.listen_port;

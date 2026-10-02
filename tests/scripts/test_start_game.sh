@@ -64,6 +64,8 @@ while IFS= read -r line; do
         has "$line" "--host"; [ $? -ne 0 ]; check "window $n does not host" $?
     fi
     has "$line" "--fullscreen"; [ $? -ne 0 ]; check "window $n: not fullscreen" $?
+    # the desktop start menu shows in a native game that has no mode on its command line: every window of the rig has one (--host or --join), so no window shows the menu
+    { has "$line" "--host" || has "$line" "--join"; }; check "window $n carries a mode flag (--host or --join): the start menu never shows in the four-window rig" $?
     n=$((n + 1))
 done <<< "$OUT"
 check "the cells of the four windows, by seat, are 1 2 3 0 (green, red, blue, black)" "$([ "$(cells_of "$OUT")" = "1 2 3 0" ]; echo $?)"
@@ -106,6 +108,10 @@ has "$OUT" "--host"; [ $? -ne 0 ]; check "--single: no room" $?
 has "$OUT" "--map X"; check "--single: the arguments still reach the game" $?
 OUT="$("$SCRIPT" --players 1 --dry-run)"
 check "--players 1 is --single" "$([ "$(echo "$OUT" | wc -l | tr -d ' ')" -eq 1 ]; echo $?)"
+# a plain game has no mode flag at all: that is where the desktop start menu appears (add --map-select to start on the setup screen as before)
+check "--single is the bare program, with no mode flag: the start menu appears" "$([ "$OUT" = "./build/src/ants_app/ants" ]; echo $?)"
+OUT="$("$SCRIPT" --single --dry-run --map-select)"
+check "--single --map-select: the setup screen as before (the option skips the menu)" "$([ "$OUT" = "./build/src/ants_app/ants --map-select" ]; echo $?)"
 # the options of one game make it a single game (what the README shows), unless --players is given
 for one in "--host" "--join 10.0.0.5" "--bot 1:medium" "--lan-list" "--headless" "--screenshot x.png" "--map X.LVL"; do
     OUT="$("$SCRIPT" --dry-run $one)"

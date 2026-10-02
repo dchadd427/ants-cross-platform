@@ -44,11 +44,17 @@ add_library(ants_app STATIC
     text_layout.cpp
     latency_corner.cpp
     net_overlay.cpp
+    start_menu.cpp
+    start_menu_view.cpp
+    host_lookup.cpp
     application.cpp
+    application_menu.cpp
 )
 
 if(NOT EMSCRIPTEN)
     target_sources(ants_app PRIVATE lan_list.cpp)       # UDP sockets exist on native platforms only
+    find_package(Threads REQUIRED)                      # the start menu looks a server's name up on a worker thread (host_lookup.cpp)
+    target_link_libraries(ants_app PUBLIC Threads::Threads)
 endif()
 
 target_include_directories(ants_app PUBLIC

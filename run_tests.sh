@@ -510,6 +510,20 @@ if [ "$RUN_APP" -eq 1 ]; then
     echo -e "${BOLD}${BLUE}======================================================================${RESET}"
     "./$BUILD_DIR/tests/test_app/test_view_fingerprint"
     VIEW_FINGERPRINT_STATUS=$?
+
+    echo ""
+    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
+    echo -e "${BOLD}${BLUE}>>> 3.11 RUNNING START MENU MODEL SUITE (keys, mouse, fields, seats, servers, codes, settings, layout, drawing, command-line skip rules)...${RESET}"
+    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
+    "./$BUILD_DIR/tests/test_app/test_start_menu"
+    START_MENU_STATUS=$?
+
+    echo ""
+    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
+    echo -e "${BOLD}${BLUE}>>> 3.12 RUNNING START MENU APPLICATION SUITE (single player, bots, join, host, every failure, cancel, back to the menu; a real room manager over TCP)...${RESET}"
+    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
+    "./$BUILD_DIR/tests/test_app/test_start_menu_app"
+    START_MENU_APP_STATUS=$?
 fi
 
 # 6. Execute E2E Opaque-Box Tests
@@ -847,6 +861,20 @@ if [ "$RUN_APP" -eq 1 ]; then
         echo -e " 3.10 View Fingerprint (test_view_fingerprint):      ${GREEN}PASSED${RESET}"
     else
         echo -e " 3.10 View Fingerprint (test_view_fingerprint):      ${RED}FAILED (exit code ${VIEW_FINGERPRINT_STATUS})${RESET}"
+        TOTAL_FAILED=$((TOTAL_FAILED + 1))
+    fi
+
+    if [ "$START_MENU_STATUS" -eq 0 ]; then
+        echo -e " 3.11 Start Menu Model (test_start_menu):            ${GREEN}PASSED${RESET}"
+    else
+        echo -e " 3.11 Start Menu Model (test_start_menu):            ${RED}FAILED (exit code ${START_MENU_STATUS})${RESET}"
+        TOTAL_FAILED=$((TOTAL_FAILED + 1))
+    fi
+
+    if [ "$START_MENU_APP_STATUS" -eq 0 ]; then
+        echo -e " 3.12 Start Menu Application (test_start_menu_app):  ${GREEN}PASSED${RESET}"
+    else
+        echo -e " 3.12 Start Menu Application (test_start_menu_app):  ${RED}FAILED (exit code ${START_MENU_APP_STATUS})${RESET}"
         TOTAL_FAILED=$((TOTAL_FAILED + 1))
     fi
 fi

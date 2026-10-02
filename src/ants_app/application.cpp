@@ -174,12 +174,19 @@ ApplicationConfig Application::parse_arguments(int argc, char* argv[]) {
     cfg.label_unnamed_teams = false;                                          // no other players in the browser build: no placeholder labels
 #endif
 
+    // The desktop start menu (start_menu.hpp) is shown by a native game that is started without a mode: every option that starts something directly (a match, a room, a test run, a
+    // screenshot) says so here and skips the menu; the options that only set something up (--name, --settings, --seed, --team-name, --title, the window options ...) do not
+    bool mode_given = false;
+    bool menu_forced = false;
+    bool direct_match = false;                                                 // --map, --open-options, --scorecard: a match starts at once (the menu cannot come first)
     for (int i = 1; i < argc; ++i) {
         if (std::strcmp(argv[i], "--headless") == 0) {
             cfg.headless = true;
+            mode_given = true;
         } else if (std::strcmp(argv[i], "--map") == 0 && i + 1 < argc) {
             cfg.default_map_path = argv[++i];
             cfg.start_in_map_select = false;
+            mode_given = direct_match = true;
         } else if (std::strcmp(argv[i], "--settings") == 0 && i + 1 < argc) {
             cfg.settings_path = argv[++i];
         } else if (std::strcmp(argv[i], "--seed") == 0 && i + 1 < argc) {
@@ -188,24 +195,31 @@ ApplicationConfig Application::parse_arguments(int argc, char* argv[]) {
             cfg.fullscreen = true;
         } else if (std::strcmp(argv[i], "--screenshot") == 0 && i + 1 < argc) {
             cfg.screenshot_path = argv[++i];
+            mode_given = true;
         } else if (std::strcmp(argv[i], "--frames") == 0 && i + 1 < argc) {
             cfg.screenshot_frames = std::stoi(argv[++i]);
         } else if (std::strcmp(argv[i], "--select-ant") == 0 && i + 1 < argc) {
             cfg.select_ant_id = std::stoi(argv[++i]);
+            mode_given = true;
         } else if (std::strcmp(argv[i], "--select-base") == 0 && i + 1 < argc) {
             cfg.select_base_team = std::stoi(argv[++i]);
+            mode_given = true;
         } else if (std::strcmp(argv[i], "--open-options") == 0) {
             cfg.open_options = true;
             cfg.start_in_map_select = false;
+            mode_given = direct_match = true;
         } else if (std::strcmp(argv[i], "--show-grid") == 0) {
             cfg.show_tile_grid = true;
         } else if (std::strcmp(argv[i], "--map-select") == 0) {
             cfg.start_in_map_select = true;
+            mode_given = true;                                                 // "start on the setup screen": today's start, without the menu
         } else if (std::strcmp(argv[i], "--player") == 0 && i + 1 < argc) {
             cfg.local_player_id = static_cast<uint8_t>(std::stoi(argv[++i]));
+            mode_given = true;
         } else if (std::strcmp(argv[i], "--scorecard") == 0) {
             cfg.show_scorecard = true;
             cfg.start_in_map_select = false;
+            mode_given = direct_match = true;
         } else if (std::strcmp(argv[i], "--name") == 0 && i + 1 < argc) {
             cfg.player_name = argv[++i];                                       // this player's name: the room, the HUD, chat, the results
         } else if (std::strcmp(argv[i], "--team-name") == 0 && i + 2 < argc) {   // --team-name <0-3> <name>, for a local game
@@ -217,13 +231,16 @@ ApplicationConfig Application::parse_arguments(int argc, char* argv[]) {
         } else if (std::strncmp(argv[i], "-pnum=", 6) == 0 || std::strncmp(argv[i], "-pnum:", 6) == 0) {
             const int team = std::atoi(argv[i] + 6);                           // the original's local team (its own spelling has the colon, 0x1047134)
             if (team >= 0 && team < 4) cfg.local_player_id = static_cast<uint8_t>(team);
+            mode_given = true;
         } else if (std::strcmp(argv[i], "--host") == 0) {
             cfg.net_role = ApplicationConfig::NetRole::Host;
+            mode_given = true;
             if (i + 1 < argc && argv[i + 1][0] >= '0' && argv[i + 1][0] <= '9') {   // an optional port
                 cfg.net_port = static_cast<uint16_t>(std::stoul(argv[++i]));
             }
         } else if (std::strcmp(argv[i], "--join") == 0 && i + 1 < argc) {
             cfg.net_role = ApplicationConfig::NetRole::Join;
+            mode_given = true;
             std::string target = argv[++i];                                    // host or host:port
             const size_t colon = target.rfind(':');
             if (colon != std::string::npos && target.find(':') == colon) {
@@ -233,6 +250,7 @@ ApplicationConfig Application::parse_arguments(int argc, char* argv[]) {
             cfg.net_address = target;
         } else if (std::strcmp(argv[i], "--join-url") == 0 && i + 1 < argc) {
             cfg.net_role = ApplicationConfig::NetRole::Join;
+            mode_given = true;
             cfg.net_url = argv[++i];                                           // ws:// or wss://: through a game server's WebSocket door
         } else if (std::strcmp(argv[i], "--port") == 0 && i + 1 < argc) {
             cfg.net_port = static_cast<uint16_t>(std::stoul(argv[++i]));
@@ -245,11 +263,14 @@ ApplicationConfig Application::parse_arguments(int argc, char* argv[]) {
         } else if (std::strcmp(argv[i], "--room") == 0 && i + 1 < argc) {
             const std::string code = argv[++i];
             if (net::valid_room_code(code)) cfg.net_room = code;               // letters, digits, '_' and '-' (up to 32); anything else is ignored
+            mode_given = true;
         } else if (std::strcmp(argv[i], "--token") == 0 && i + 1 < argc) {
             cfg.net_token = argv[++i];
+            mode_given = true;
         } else if (std::strcmp(argv[i], "--seat") == 0 && i + 1 < argc) {
             const int seat = std::atoi(argv[++i]);                             // the colour to sit in: 0 green, 1 red, 2 blue, 3 black
             if (seat >= 0 && seat < 4) cfg.net_seat = static_cast<uint8_t>(seat);
+            mode_given = true;
         } else if (std::strcmp(argv[i], "--start-when") == 0 && i + 1 < argc) {
             const int players = std::atoi(argv[++i]);                          // a test hook: the leader of a server's room presses START once this many players are in
             if (players >= 2 && players <= 4) cfg.net_start_when = static_cast<uint8_t>(players);
@@ -273,7 +294,19 @@ ApplicationConfig Application::parse_arguments(int argc, char* argv[]) {
             cfg.display_index = std::max(-1, std::atoi(argv[++i]));
         } else if (std::strcmp(argv[i], "--audio-focus") == 0) {
             cfg.audio_follows_focus = true;
+        } else if (std::strcmp(argv[i], "--server") == 0) {                    // the game server of the start menu's Join and Host: HOST[:PORT]
+            ServerAddress parsed;
+            std::string why;
+            if (i + 1 >= argc) {
+                if (cfg.startup_error.empty()) cfg.startup_error = "--server needs HOST[:PORT], e.g. --server beta.playants.org:4001";
+            } else {
+                cfg.server = argv[++i];
+                if (!parse_server(cfg.server, parsed, why) && cfg.startup_error.empty()) cfg.startup_error = "--server " + cfg.server + ": " + why;
+            }
+        } else if (std::strcmp(argv[i], "--start-menu") == 0) {                // forces the start menu (also headless, with --screenshot: the tests and the screenshots)
+            menu_forced = true;
         } else if (std::strcmp(argv[i], "--bot") == 0) {                       // a computer player: --bot SEAT[:SPEC], repeatable (docs/BOTS.md)
+            mode_given = true;
             ai::BotSpec spec;
             std::string why;
             if (i + 1 >= argc) {
@@ -285,6 +318,21 @@ ApplicationConfig Application::parse_arguments(int argc, char* argv[]) {
             }
         }
     }
+#if !defined(__EMSCRIPTEN__)
+    if (menu_forced) {
+        // The menu comes first and chooses the match: an option that starts a match or a room at once cannot be combined with it
+        if ((direct_match || cfg.net_role != ApplicationConfig::NetRole::None) && cfg.startup_error.empty()) {
+            cfg.startup_error = "--start-menu cannot be combined with --map, --open-options, --scorecard, --host, --join or --join-url: they start a match or a room at once";
+        }
+        cfg.start_menu = true;
+    } else {
+        cfg.start_menu = !mode_given;
+    }
+#else
+    (void)mode_given;                                                          // the browser build never shows the menu (its page has its own controls)
+    (void)menu_forced;
+    (void)direct_match;
+#endif
     return cfg;
 }
 
@@ -385,6 +433,7 @@ bool Application::init(const ApplicationConfig& config) {
         return false;
     }
 
+    window_title_ = config_.title;
     apply_window_layout();
     if (!config_.headless) {
         SDL_RaiseWindow(window_);
@@ -437,7 +486,7 @@ bool Application::init(const ApplicationConfig& config) {
     });
 
     scorecard_.set_on_quit([this]() {
-        quit();
+        leave_game();                                         // (a network match that the start menu led to: back to the menu; a local match, and every run without a menu: the program ends)
     });
     scorecard_.set_on_play_sfx([this](uint32_t sound_id) { play_ui_sound(sound_id); });
 
@@ -478,6 +527,7 @@ bool Application::init(const ApplicationConfig& config) {
                               : (!config_.team_names[my_team].empty() ? config_.team_names[my_team]
                                                                        : (networked ? std::string("Player") : get_system_username()));
     player_name_ = player_name;
+    local_player_name_ = player_name;
     map_select_.set_player_name(player_name);
     map_select_.set_player_team(config_.local_player_id);
     scorecard_.set_local_player_name(player_name);
@@ -501,7 +551,7 @@ bool Application::init(const ApplicationConfig& config) {
     });
     map_select_.set_on_request_start([this]() { net_request_start(); });
     map_select_.set_on_quit([this]() {
-        quit();
+        leave_game();                                         // (a network game that the start menu led to: back to the menu)
     });
     map_select_.set_on_play_sfx([this](uint32_t sound_id) { play_ui_sound(sound_id); });
 
@@ -536,21 +586,19 @@ bool Application::init(const ApplicationConfig& config) {
                 return false;
             }
         }
-        net_->set_on_tick([this]() { post_tick(); });
-        net_->set_on_wake([this]() { background_pump(); });                            // the browser build: a message of the server wakes a hidden page (docs/NETWORK_PORT.md)
-        net_->set_on_chat([this](const net::ChatMsg& m) {
-            if (m.sender == local_player_id_ || m.sender >= 4) return;                // the own text is in the log already
-            hud_.receive_chat_message(m.sender, sim_.get_player_name(m.sender), m.text, m.team, sim_.get_world_state());
-        });
-        hud_.set_on_chat_send([this](const std::string& text, bool team) {
-            if (network_active()) net_->chat(text, team);
-        });
+        attach_net();
         if (net_->is_host() && !map_select_.get_maps().empty()) net_->set_map(map_select_.get_maps()[static_cast<size_t>(map_select_.get_selected_index())].filename);
         sync_room_view();
     } else {
         // the names of a local game (the local player's own name too); a bot is called "Bot (Medium)" unless -N / --team-name says otherwise
         apply_team_names(local_bots ? local_team_names() : config_.team_names, local_bots && !config_.start_in_map_select ? local_roster_ : uint8_t{0x0F});
     }
+
+    // The desktop start menu: part of this run when the config asks for it and nothing starts a match or a room at once (never in the web build)
+#if !defined(__EMSCRIPTEN__)
+    menu_enabled_ = config_.start_menu && config_.start_in_map_select && !networked;
+#endif
+    if (menu_enabled_) init_start_menu();
 
     // --audio-focus: a window that opened behind the others never receives "focus lost": it starts silent and holds its music until it gets the focus
     if (config_.audio_follows_focus && !config_.headless && window_ != nullptr) {
@@ -607,6 +655,8 @@ bool Application::init(const ApplicationConfig& config) {
         if (!config_.skip_intro && !config_.headless) {
             state_ = AppState::Loading;
             intro_ticks_ = 0;
+        } else if (menu_enabled_) {
+            enter_start_menu();
         } else {
             enter_map_select();
         }
@@ -895,8 +945,17 @@ void Application::enter_map_select() {
     if (mouse_has_moved_ && !pointer_outside_) map_select_.handle_mouse_motion(mouse_screen_x_, mouse_screen_y_);
 }
 
-// The loading screen ends: the quick help when the option asks for it, else the setup screen
+// The loading screen ends: the start menu when this run has one, else the screens that follow it
 void Application::finish_loading() {
+    if (menu_enabled_) {
+        enter_start_menu();
+        return;
+    }
+    show_opening_screens();
+}
+
+// The quick help when the option asks for it, else the setup screen: what follows the loading screen of a game without a menu, and the menu's Continue
+void Application::show_opening_screens() {
     if (hud_.is_quick_help_enabled()) {
         state_ = AppState::QuickHelp;
         quick_help_start_.reset();
@@ -1223,6 +1282,11 @@ void Application::handle_events() {
             continue;
         }
 
+        if (state_ == AppState::StartMenu) {
+            handle_menu_event(event);
+            continue;
+        }
+
         if (state_ == AppState::MapSelect) {
             switch (event.type) {
                 case SDL_KEYDOWN:
@@ -1487,7 +1551,7 @@ void Application::update_simulation(float dt) {
         return;
     }
 
-    if (state_ == AppState::MapSelect || is_paused_) {
+    if (state_ == AppState::MapSelect || state_ == AppState::StartMenu || is_paused_) {
         return;
     }
 
@@ -1579,7 +1643,7 @@ void Application::confirm_quit() {
         }
         return;
     }
-    quit();
+    leave_game();                                                // (a network game that the start menu led to: back to the menu)
 }
 
 // ------------------------------------------------------------------------------------------------
@@ -1587,11 +1651,17 @@ void Application::confirm_quit() {
 // ------------------------------------------------------------------------------------------------
 
 void Application::pump_network(float dt, double gap_seconds) {
+    if (menu_enabled_) update_start_menu(dt);                    // the start menu's clock, what it asked for and its connection (application_menu.cpp)
     if (!net_ || !net_->active()) return;
     net_time_ms_ += static_cast<double>(dt) * 1000.0;
     net_->update(static_cast<uint32_t>(net_time_ms_));        // (the connection is read here: whatever waited counts as heard)
     if (gap_seconds > 0.0) net_->note_gap(static_cast<uint32_t>(std::min(gap_seconds * 1000.0, 4.0e9)));   // a host that said nothing has been silent for the gap too
     handle_net_events();
+    if (!net_) return;                                           // (a lost game brought the player back to the start menu, which let go of the net)
+    if (menu_enabled_ && state_ == AppState::MapSelect && (net_->phase() == net::NetGame::Phase::Failed || net_->phase() == net::NetGame::Phase::Over)) {
+        return_to_start_menu(net_->status_text());               // the room is dead (the server closed it, the connection is gone): not a room screen that nothing can happen on
+        return;
+    }
     if (state_ == AppState::MapSelect && net_->active()) {
         sync_room_view();
         // --start-when N (a test hook): the leader of a server's room presses START, as a click or the S key would, once N players are in; again every second until the match starts
@@ -1680,7 +1750,13 @@ void Application::handle_net_events() {
                 break;
             case net::NetGame::Event::Type::HostLeft:                // the host is gone and no other machine could take over (or the server dropped this player for being away)
                 net_notice_ = net_->status_text();                   // the reason, as the network layer says it: "The connection to the other players was lost." or "You were away too long ..."
-                if (state_ == AppState::Playing && !scorecard_.is_open()) return_to_map_select();
+                if (state_ == AppState::Playing && !scorecard_.is_open()) {
+                    if (menu_enabled_) {
+                        return_to_start_menu(net_notice_);                   // (the net is gone: the rest of the events belong to it)
+                        return;
+                    }
+                    return_to_map_select();
+                }
                 break;
             case net::NetGame::Event::Type::Desync:
                 std::cerr << "[Application] The network match is out of sync (turn " << net_->turns_executed() << ")" << std::endl;
@@ -1787,6 +1863,8 @@ void Application::render_frame() {
         render_loading_screen();
     } else if (state_ == AppState::QuickHelp) {
         render_quick_help_screen();
+    } else if (state_ == AppState::StartMenu) {
+        render_start_menu(*renderer_, assets_, start_menu_);
     } else if (state_ == AppState::MapSelect) {
         map_select_.render(*renderer_, assets_);
     } else if (scorecard_.is_open()) {

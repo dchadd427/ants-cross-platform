@@ -195,6 +195,8 @@ public:
     /// The host's Start (valid from Loading on): the map, the seed, the roster
     const StartMsg& start_info() const noexcept { return start_; }
     RejectReason reject_reason() const noexcept { return reject_; }
+    /// The connection was open at some time (the Hello went out): a lobby that closed without it never reached its server
+    bool was_open() const noexcept { return was_open_; }
     CancelMsg::Reason cancel_reason() const noexcept { return cancel_reason_; }
     /// The seat that caused the cancel (a player who left, a machine that could not load the map), 255 when unknown
     uint8_t cancel_player() const noexcept { return cancel_player_; }
@@ -222,6 +224,7 @@ private:
     PingMeter ping_;
     uint32_t next_ping_ms_{0};
     bool ping_armed_{false};                // the first ping goes out as soon as the guest has a seat (the deadline is taken from the clock then: clock.hpp)
+    bool was_open_{false};                  // the connection was open when the Hello was sent
     std::vector<Event> events_;
 };
 

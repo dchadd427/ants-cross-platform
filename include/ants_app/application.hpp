@@ -32,6 +32,8 @@
 #include "ants_app/config_store.hpp"
 #include "ants_app/midi_player.hpp"
 #include "ants_app/map_select.hpp"
+#include "ants_app/host_lookup.hpp"
+#include "ants_app/start_menu.hpp"
 #include "ants_app/window_layout.hpp"
 
 namespace ants::app {
@@ -40,7 +42,8 @@ enum class AppState {
     Loading,
     QuickHelp,
     MapSelect,
-    Playing
+    Playing,
+    StartMenu     // the desktop start menu (start_menu.hpp): after the loading screen, before the quick help, in a native game started without a mode
 };
 
 struct ApplicationConfig {
@@ -109,7 +112,24 @@ struct ApplicationConfig {
     /// For the tests: builds the bot of a spec instead of the registry (which has the idle bot and, since B3, the worker bot), so that the application's door for a
     /// bot's commands (the local sink, the room's sink) can be exercised with a bot of the test's own that acts in a way it wants to. Empty in a game that is played.
     std::function<std::unique_ptr<ai::Bot>(const ai::BotSpec&)> bot_factory;
-    /// What is wrong with the command line (parse_arguments cannot fail any other way: a --bot that does not parse). init() refuses to start with it.
+    /// The desktop start menu (README "Start menu"): after the loading screen and before the quick help, Single player (with computer players per seat), Join with a code, Host an online
+    /// match, Quit. parse_arguments turns it on for a native game that is started without a mode on the command line (no --map, --map-select, --host, --join, --join-url, --room, --token,
+    /// --seat, --bot, --headless, --screenshot, --player / -pnum, --select-ant, --select-base, --open-options, --scorecard) and with --start-menu, which forces it (also headless, for the tests
+    /// and the screenshots). A config that is made by hand has it off, which is the game without a menu exactly; the web build never shows it (its page has its own controls).
+    bool start_menu{false};
+    /// --server HOST[:PORT]: the game server of the menu's Join and Host. Empty: the settings key `server`, else beta.playants.org:4001 (start_menu.hpp parse_server).
+    std::string server;
+    /// For the tests: the system clipboard that the menu pastes from and copies the room's code to (empty: SDL's), and the name lookup of the menu's connection (empty: the system's)
+    std::function<std::string()> clipboard_get;
+    std::function<bool(const std::string&)> clipboard_set;
+    HostLookup::Resolver host_resolver;
+    /// How long the menu's Join or Host may take, from the press of the button to the first message of the room (the name lookup, the connection, the server's welcome), before it
+    /// gives up with "does not answer". A test hook (the player's limit is 20 s): a hung lookup or a server that never answers must end in a message, not in a hang.
+    uint32_t menu_connect_timeout_ms{20000};
+    /// A test hook: the random bits of the code of a hosted room (32 bits per call; empty: the system's entropy). A test that makes the server hold the very code that the menu is about to
+    /// make (the one-in-900-million collision) needs it to be known.
+    std::function<uint32_t()> room_code_random;
+    /// What is wrong with the command line (parse_arguments cannot fail any other way: a --bot or a --server that does not parse). init() refuses to start with it.
     std::string startup_error;
 };
 
@@ -150,6 +170,13 @@ public:
     float get_current_fps() const noexcept { return current_fps_; }
 
     AppState state() const noexcept { return state_; }
+    /// The desktop start menu: the model (the tests drive it with keys and the mouse like the window does), whether this run has one, and the window's title (a room's code is in it
+    /// from the moment the player is in the room until the player is back at the menu)
+    StartMenu& start_menu() noexcept { return start_menu_; }
+    bool start_menu_enabled() const noexcept { return menu_enabled_; }
+    const std::string& window_title() const noexcept { return window_title_; }
+    /// The keys, the text and the mouse of the start menu (what the event loop does with an event while the menu is up; public for the tests)
+    void handle_menu_event(const SDL_Event& event);
     bool start_game(const std::string& map_path);
     void return_to_map_select();
     MapSelectScreen& map_select() noexcept { return map_select_; }
@@ -327,6 +354,22 @@ private:
     bool match_over_handled_{false};
     std::string net_notice_;
     std::string player_name_;
+    std::string local_player_name_;                       // the name of a local game (the system user, --name): what a single-player game after a network game shows again
+    std::string window_title_;                            // what the window's title says now
+    StartMenu start_menu_;                                // the desktop start menu: its model (always there; it is part of a run only when menu_enabled_)
+    HostLookup host_lookup_;                              // the menu's name lookup, on a worker thread
+    bool menu_enabled_{false};                            // this run shows the start menu: a network game that ends brings the player back to it
+    struct MenuConnection {                               // the menu's join or host attempt
+        enum class Stage : uint8_t { None, Lookup, Joining, InRoom };
+        Stage stage{Stage::None};
+        bool hosting{false};
+        std::string room;                                 // the code
+        std::string name;
+        std::string label;                                // the server as the player reads it
+        ServerAddress server;
+        int players{4};                                   // hosting: the seats of the room
+        double elapsed_ms{0.0};                           // how long the attempt has taken (its time limit, menu_connect_timeout_ms)
+    } menu_conn_;
     int32_t mouse_screen_x_{320};
     int32_t mouse_screen_y_{240};
     bool mouse_has_moved_{false};
@@ -338,6 +381,25 @@ private:
     void post_tick();                                     // what every simulation tick shows: HUD, events, audio, the end of the match
     void check_match_over();                              // the match is over and not yet shown: the results screen opens (waiting), the music closes
     void confirm_quit();                                  // the quit dialog's Yes (FUN_0101453f): the quit ends the match while one other side is left, else the player leaves
+
+    // The desktop start menu (application_menu.cpp)
+    void init_start_menu();                               // the menu's settings, server, clipboard and callbacks (when this run has a menu)
+    void enter_start_menu(const std::string& notice = std::string());   // state StartMenu, the first panel (with a line of notice when there is one)
+    void update_start_menu(float dt);                     // the menu's clock, what it asked for, its connection (once per frame, from pump_network)
+    void process_menu_request(const MenuRequest& request);
+    void begin_menu_connection(bool hosting, const std::string& room, const std::string& name, int players);
+    void pump_menu_connection();                          // the name lookup, the join, the room: what became of them
+    void menu_connection_failed(const std::string& message);
+    void abort_menu_connection();                         // Cancel, Back from the room, a failure: nothing of the connection stays
+    void menu_connected();                                // the player is in the server's room
+    void menu_start_single(const std::vector<ai::BotSpec>& bots);
+    std::string menu_failure_text() const;                // what a failed join says, in the menu's words
+    void show_opening_screens();                          // after the menu (or the loading screen of a game without one): the quick help when the option asks for it, else the setup screen
+    void return_to_start_menu(const std::string& notice); // a network game is over (left, ended, lost): back to the menu, nothing of it stays
+    void leave_game();                                    // Leave of a network game's screens: back to the menu when this run has one, else the program ends as always
+    void attach_net();                                    // the tick, chat and HUD hooks of a NetGame that the application owns
+    void apply_player_name(const std::string& name);      // the name that the HUD, the chat, the results and the setup screen show for this player
+    void set_window_title(const std::string& title);
 
     // Network play
     void handle_net_events();

@@ -221,6 +221,7 @@ void NetGame::leave() {
     phase_ = Phase::Off;
     seat_ = 255;
     status_.clear();
+    fail_reason_ = FailReason::None;
 }
 
 std::vector<NetGame::Event> NetGame::take_events() {
@@ -452,10 +453,13 @@ void NetGame::update_client() {
                 }
                 case ClientLobby::Event::Type::Rejected:
                     phase_ = Phase::Failed;
+                    fail_reason_ = FailReason::Rejected;
+                    reject_reason_ = client_lobby_->reject_reason();
                     status_ = reject_text(client_lobby_->reject_reason());
                     events_.push_back(Event{Event::Type::Failed, 255});
                     break;
                 case ClientLobby::Event::Type::Disconnected:
+                    fail_reason_ = phase_ != Phase::Connecting ? FailReason::Closed : (client_lobby_->was_open() ? FailReason::Lost : FailReason::Unreachable);
                     status_ = phase_ == Phase::Connecting ? str::text(str::kUnableToConnect) : std::string("The host closed the room.");
                     phase_ = Phase::Failed;
                     events_.push_back(Event{Event::Type::Failed, 255});

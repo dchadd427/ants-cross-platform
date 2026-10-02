@@ -320,3 +320,75 @@ target_compile_definitions(test_view_fingerprint PRIVATE
 
 add_test(NAME test_view_fingerprint COMMAND test_view_fingerprint)
 set_tests_properties(test_view_fingerprint PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# The desktop start menu in the application: single player (with and without bots), join with a code, host an online match, every failure, the way back after a network game;
+# a real RoomManager behind a real TCP listener on the loopback interface (ants_server_core), the screenshots of the panels (--shots DIR) and the gate's real-server mode (--real-server H:P)
+add_executable(test_start_menu_app
+    test_start_menu_app.cpp
+)
+
+target_include_directories(test_start_menu_app PRIVATE
+    ${CMAKE_SOURCE_DIR}/include
+)
+
+target_link_libraries(test_start_menu_app PRIVATE
+    ants_app
+    ants_ai
+    ants_server_core
+)
+
+target_compile_definitions(test_start_menu_app PRIVATE
+    ORIGINAL_ASSETS_DIR="${CMAKE_SOURCE_DIR}/Original-Ants"
+)
+
+if(APPLE)
+    target_link_libraries(test_start_menu_app PRIVATE
+        "-framework AudioToolbox"
+        "-framework CoreFoundation"
+        "-framework CoreAudio"
+    )
+endif()
+
+if(WIN32)
+    target_link_libraries(test_start_menu_app PRIVATE ws2_32 winmm)
+endif()
+
+add_test(NAME test_start_menu_app COMMAND test_start_menu_app)
+set_tests_properties(test_start_menu_app PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# The desktop start menu as a model: navigation, text fields, the single-player seats and the rule-8 line, the join and host panels, the room's code and the clipboard, servers, room codes,
+# names, the remembered settings, the layout of every panel, what is drawn and how long texts are cut, and which command-line options show or skip the menu (no window, no sockets)
+add_executable(test_start_menu
+    test_start_menu.cpp
+)
+
+target_include_directories(test_start_menu PRIVATE
+    ${CMAKE_SOURCE_DIR}/include
+)
+
+target_link_libraries(test_start_menu PRIVATE
+    ants_app
+    ants_ai
+    ants_net
+    ants_sim
+    ants_assets
+)
+
+target_compile_definitions(test_start_menu PRIVATE
+    ORIGINAL_ASSETS_DIR="${CMAKE_SOURCE_DIR}/Original-Ants"
+)
+
+if(APPLE)
+    target_link_libraries(test_start_menu PRIVATE
+        "-framework AudioToolbox"
+        "-framework CoreFoundation"
+        "-framework CoreAudio"
+    )
+endif()
+
+if(WIN32)
+    target_link_libraries(test_start_menu PRIVATE ws2_32 winmm)
+endif()
+
+add_test(NAME test_start_menu COMMAND test_start_menu)
+set_tests_properties(test_start_menu PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")

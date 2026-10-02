@@ -7,7 +7,8 @@
 #                                   same as the games on web/four.html): black top left, green top right, red bottom left, blue bottom right
 #   ./start_game.sh --players N     N windows (1 - 4); 2 windows sit side by side (green left, red right), 3 are green, red, blue in the first three
 #                                   cells of the grid (black, green, red, blue keep their order without holes), 1 is the plain single game
-#   ./start_game.sh --single        the same as --players 1 (one game, the setup screen, nothing else changes)
+#   ./start_game.sh --single        the same as --players 1 (one plain game: the desktop start menu comes first, then the original's screens as always; add --map-select
+#                                   to start on the setup screen at once). The four windows of the default rig never show the menu: each has --host or --join
 #   ./start_game.sh --dry-run ...   print the command line of every window and stop (nothing is built or started)
 #   every other argument goes to every window (the game's own options, see README.md)
 #   --host, --join, --bot, --lan-list, --headless, --screenshot and --map are options of one game: given without --players they make this a single game,
@@ -86,7 +87,11 @@ if [ "$DRY_RUN" -eq 0 ]; then
     echo "----------------------------------------------------------------------"
     echo "                      AUTHENTIC CONTROL SCHEME                        "
     echo "----------------------------------------------------------------------"
-    echo " SETUP SCREEN (ON LAUNCH):"
+    echo " START MENU (A PLAIN GAME, ./start_game.sh --single; the four-window rig starts in its room):"
+    echo "   * Single player (with computer players per seat), Join with a code, Host an online match, Quit."
+    echo "   * Up / Down and Enter, or the mouse; Esc goes back (on the first panel: quits)."
+    echo ""
+    echo " SETUP SCREEN:"
     echo "   * [1-6] or the arrow keys pick a map; click START (or press Enter) to begin; Esc leaves."
     echo "   * [F] toggles Fog of War. INTRO music plays here; a match plays a random in-game track (Ctrl+M mutes)."
     echo ""

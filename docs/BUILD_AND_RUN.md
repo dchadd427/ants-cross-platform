@@ -34,7 +34,7 @@ cmake -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build -j8
 ./build/src/ants_app/ants
 ```
-`./start_game.sh` builds (when needed) and launches. If the build stops with an Xcode licence error on macOS, accept the licence (`sudo xcodebuild -license`) or set `DEVELOPER_DIR=/Library/Developer/CommandLineTools` for the shell that builds.
+`./build/src/ants_app/ants` with no options opens the desktop start menu (Single player with computer players, Join with a code, Host an online match, Quit; README "Start Menu"); an option that chooses a mode (`--map-select` for the setup screen at once, `--map`, `--host`, `--join`, `--headless` ...) skips it. `./start_game.sh` builds (when needed) and launches (four windows in one match by default; `./start_game.sh --single` is one plain game with the menu). If the build stops with an Xcode licence error on macOS, accept the licence (`sudo xcodebuild -license`) or set `DEVELOPER_DIR=/Library/Developer/CommandLineTools` for the shell that builds.
 
 ## Testing
 All test suites are run with `./run_tests.sh` (macOS, Apple clang). The suites, what each one checks and their current assertion counts are listed in the README under [Testing & Verification](../README.md#testing--verification).
@@ -50,6 +50,7 @@ Or directly execute:
 ```cmd
 build\src\ants_app\Release\ants.exe
 ```
+With no options the game opens the start menu (`start_game.bat --single` does the same; the default four-window rig of `start_game.bat` starts each window in its room and shows no menu). An option that chooses a mode, such as `--map-select`, skips the menu.
 Headless verification with screenshot capture can also be executed:
 ```cmd
 build\src\ants_app\Release\ants.exe --headless --frames 60 --screenshot "output.bmp"

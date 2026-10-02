@@ -53,6 +53,9 @@ public:
         Over,          // the session ended (the host left, the connection is gone)
         Failed         // could not join (refused, full, wrong version, connection failed)
     };
+    /// Why a join ended in Phase::Failed (None until it has): the server was never reached, the server answered with a Reject (reject_reason()), the connection was lost after it
+    /// was made but before the room was joined, or the room's connection ended once the player was in it
+    enum class FailReason : uint8_t { None, Unreachable, Rejected, Lost, Closed };
     struct Event {
         enum class Type : uint8_t {
             RoomChanged,      // somebody joined or left, or the host changed the map or the fog
@@ -114,6 +117,10 @@ public:
     bool is_host() const noexcept { return role_ == Role::Host || host_session_ != nullptr; }
     bool active() const noexcept { return role_ != Role::None; }
     uint8_t my_seat() const noexcept { return seat_; }
+    /// Valid in Phase::Failed (None before): what went wrong, so that the application can say it in its own words
+    FailReason fail_reason() const noexcept { return fail_reason_; }
+    /// The server's reason when fail_reason() is Rejected
+    RejectReason reject_reason() const noexcept { return reject_reason_; }
     uint16_t listen_port() const noexcept { return listen_port_; }
     /// A guest: the port on which the other guests connect to it during the match (0 when it has none)
     uint16_t peer_port() const noexcept { return peer_port_; }
@@ -230,6 +237,8 @@ private:
     uint16_t listen_port_{0};
     uint32_t now_{0};
     std::string status_;
+    FailReason fail_reason_{FailReason::None};
+    RejectReason reject_reason_{RejectReason::BadRequest};
     std::string notice_;                    // a message that replaces the standing prompt for a few seconds (a cancelled start, ...)
     uint32_t notice_until_ms_{0};
     uint32_t phase_since_ms_{0};

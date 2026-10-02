@@ -70,6 +70,7 @@
 #include "ants_app/options_screen.hpp"
 #include "ants_app/renderer.hpp"
 #include "ants_app/scorecard.hpp"
+#include "ants_app/start_menu.hpp"
 #include "ants_assets/asset_archive.hpp"
 #include "ants_assets/lvl_parser.hpp"
 #include "ants_sim/grid.hpp"
@@ -1056,6 +1057,94 @@ void screen_scenarios(const assets::AssetArchive& arc) {
         three.show(make_result(0x0D, false), 0);
         three.update(0.3f);
         frame("screen.results.3teams.gap", [&](FrameRecorder& r) { three.render(r, arc); });
+    }
+}
+
+// The desktop start menu (include/ants_app/start_menu.hpp; remake only, so these fingerprints are new: none of the classic screens above changes): every panel, a selection, the
+// bots, the fields, a failure, the room's code
+void menu_scenarios(const assets::AssetArchive& arc) {
+    const auto menu_frame = [&](const std::string& name, const StartMenu& menu) { frame(name, [&](FrameRecorder& r) { render_start_menu(r, arc, menu); }); };
+    const auto make = [](uint8_t own_seat) {
+        StartMenu menu;
+        MenuSettings settings;
+        settings.name = "Player";
+        menu.set_own_seat(own_seat);
+        menu.set_settings(settings);
+        menu.set_server(ServerAddress{});
+        menu.show_main();
+        return menu;
+    };
+    const auto key = [](StartMenu& m, SDL_Keycode k) { m.on_key(k, 0, false); };
+    {
+        StartMenu m = make(0);
+        menu_frame("screen.menu.main", m);
+        key(m, SDLK_DOWN);
+        menu_frame("screen.menu.main.second_selected", m);
+        key(m, SDLK_DOWN);
+        key(m, SDLK_DOWN);
+        menu_frame("screen.menu.main.quit_selected", m);
+        m.show_main("The connection to the other players was lost.");
+        menu_frame("screen.menu.main.notice", m);
+    }
+    {
+        StartMenu m = make(0);
+        key(m, SDLK_RETURN);
+        menu_frame("screen.menu.single.empty", m);
+        key(m, SDLK_UP);
+        key(m, SDLK_RIGHT);
+        key(m, SDLK_UP);
+        key(m, SDLK_RIGHT);
+        key(m, SDLK_RIGHT);
+        menu_frame("screen.menu.single.two_bots", m);
+        StartMenu own = make(2);
+        key(own, SDLK_RETURN);
+        key(own, SDLK_UP);
+        key(own, SDLK_RIGHT);
+        key(own, SDLK_RIGHT);
+        key(own, SDLK_RIGHT);
+        menu_frame("screen.menu.single.own_seat_2", own);
+    }
+    {
+        StartMenu m = make(0);
+        key(m, SDLK_DOWN);
+        key(m, SDLK_RETURN);
+        menu_frame("screen.menu.join.empty", m);
+        m.on_text("demo-small-2p-x7k2");
+        menu_frame("screen.menu.join.typed", m);
+        m.update(0.15f);
+        menu_frame("screen.menu.join.caret_off", m);
+        key(m, SDLK_UP);
+        m.on_text("Bot (Hard)");
+        key(m, SDLK_DOWN);
+        key(m, SDLK_RETURN);
+        menu_frame("screen.menu.join.name_refused", m);
+        m.on_text("Maya");
+        key(m, SDLK_DOWN);
+        key(m, SDLK_RETURN);
+        menu_frame("screen.menu.connecting", m);
+        m.connection_failed("There is no room with the code demo-small-2p-x7k2 on beta.playants.org:4001. Check the code (capital letters matter).");
+        menu_frame("screen.menu.join.error", m);
+    }
+    {
+        StartMenu m = make(0);
+        key(m, SDLK_DOWN);
+        key(m, SDLK_DOWN);
+        key(m, SDLK_RETURN);
+        menu_frame("screen.menu.host.default", m);
+        key(m, SDLK_UP);
+        key(m, SDLK_UP);
+        key(m, SDLK_UP);
+        key(m, SDLK_RIGHT);
+        key(m, SDLK_RIGHT);
+        key(m, SDLK_DOWN);
+        key(m, SDLK_RIGHT);
+        menu_frame("screen.menu.host.map_and_players", m);
+        m.show_room("demo-medium-2p-k3n7pq", 1, 2);
+        menu_frame("screen.menu.room.code", m);
+        m.set_room_players(2, 2);
+        menu_frame("screen.menu.room.full", m);
+        m.show_room(std::string(32, 'W'), 1, 4);
+        menu_frame("screen.menu.room.longest_code", m);
     }
 }
 
@@ -2765,6 +2854,25 @@ const Golden kGoldens[] = {
     {"ptr.app.edge_gate.cam_tl", 0x715bff47f7920212, 325376},
     {"ptr.app.edge_gate.cam_br", 0xb5c037bc6ed1d351, 325376},
     {"ptr.app.edge_gate.left_window", 0x06fca21281eeb67b, 214},
+    // the desktop start menu (remake only; new: the classic screens above are unchanged): every panel, a selection, the bots, the fields, a failure, the room's code
+    {"screen.menu.main", 0x3590c780bf8d6ce0, 146},
+    {"screen.menu.main.second_selected", 0x7ec2b1c259beacce, 146},
+    {"screen.menu.main.quit_selected", 0x647ac943406089ce, 146},
+    {"screen.menu.main.notice", 0xe9d5e1ba26ad5f25, 156},
+    {"screen.menu.single.empty", 0xc8b734d187555ee9, 206},
+    {"screen.menu.single.two_bots", 0x77194f4bd262b6ab, 207},
+    {"screen.menu.single.own_seat_2", 0xc0fe1dcecbbb77f2, 207},
+    {"screen.menu.join.empty", 0xa3719b0cf65673ec, 148},
+    {"screen.menu.join.typed", 0x97292172383f912c, 149},
+    {"screen.menu.join.caret_off", 0xffc1932a3464e20d, 148},
+    {"screen.menu.join.name_refused", 0x654e9cdadc7be96a, 160},
+    {"screen.menu.connecting", 0xb201962f4fc8ecf3, 114},
+    {"screen.menu.join.error", 0x902ef842457399e8, 158},
+    {"screen.menu.host.default", 0xdcd1457c50dc4b2c, 185},
+    {"screen.menu.host.map_and_players", 0xeb7b5573eb39bea9, 185},
+    {"screen.menu.room.code", 0xab14102277407908, 149},
+    {"screen.menu.room.full", 0x073718be4ddb297b, 149},
+    {"screen.menu.room.longest_code", 0x054cb5ecb543fd00, 149},
 };
 // END GOLDEN TABLE
 
@@ -2810,6 +2918,7 @@ int main(int argc, char** argv) {
     self_check_scenarios();
     hud_scenarios(arc);
     screen_scenarios(arc);
+    menu_scenarios(arc);
     edge_scenarios();
     minimap_scenarios();
     camera_scenarios();
