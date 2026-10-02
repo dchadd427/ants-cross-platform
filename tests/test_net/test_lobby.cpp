@@ -78,9 +78,9 @@ struct Room {
     std::vector<Guest> guests;
     uint32_t now{0};
 
-    explicit Room(HostLobby::Config hc = {}) : host(hc) { host.set_map("TINY.LVL"); }      // a room has a map once its host has chosen one
+    explicit Room(HostLobby::Config hc = {}, bool choose_map = true) : host(hc) { if (choose_map) host.set_map("TINY.LVL"); }      // a room has a map once its host has chosen one
 
-    Guest& join(const std::string& name, LoopbackNetwork::Link link = {10, 0}) {
+    Guest& join(const std::string& name, LoopbackNetwork::Link link = {10, 0}, uint8_t want_seat = 255) {
         auto ends = net.connect(link);
         guests.emplace_back();
         Guest& g = guests.back();
@@ -88,9 +88,16 @@ struct Room {
         g.client_end = ends.second;
         ClientLobby::Config cc;
         cc.name = name;
+        cc.want_seat = want_seat;
         g.lobby = std::make_unique<ClientLobby>(ends.second, cc);
         host.add_connection(ends.first, now);
         return g;
+    }
+    // The same, by index (the vector grows), and the Hello is answered before the next guest comes: the order of the Welcomes is the order of the calls
+    size_t join_seat(const std::string& name, uint8_t want_seat = 255) {
+        join(name, {10, 0}, want_seat);
+        run(100);
+        return guests.size() - 1;
     }
     void run(uint32_t ms) {
         const uint32_t end = now + ms;
@@ -209,7 +216,10 @@ int main() {
         }
         // out of range fields
         std::vector<uint8_t> b = encode(r);
-        b[b.size() - 1] = 4;                                              // you = 4 (only 255 or 0..3)
+        b[b.size() - 2] = 4;                                              // you = 4 (only 255 or 0..3); the last byte is the leader's since protocol 7
+        ASSERT_FALSE(decode(b, r2));
+        b = encode(r);
+        b[b.size() - 1] = 4;                                              // leader = 4 (only 255 or the seat of a guest)
         ASSERT_FALSE(decode(b, r2));
         StartMsg one;
         one.map_name = "SMALL.LVL";
@@ -227,8 +237,17 @@ int main() {
         cb[1] = 1;
         cb[2] = 4;
         ASSERT_FALSE(decode(cb, c2));
+        // protocol 7: a server's room names its leader
+        RoomMsg srv;
+        srv.slots[0] = {SlotState::Client, "Ann", 20};
+        srv.slots[1] = {SlotState::Client, "Bob", 40};
+        srv.map_name = "TINY.LVL";
+        srv.you = 1;
+        srv.leader = 0;
+        ASSERT_TRUE(decode(encode(srv), r2) && r2.leader == 0 && r2.you == 1 && r2.slots[0].name == "Ann");
+        const std::vector<uint8_t> request = encode(StartRequestMsg{});
         // every strict prefix and one extra byte are rejected
-        for (const auto& m : {encode(r), encode(s), encode(l), encode(c)}) {
+        for (const auto& m : {encode(r), encode(s), encode(l), encode(c), encode(srv), request}) {
             for (size_t cut = 0; cut < m.size(); ++cut) {
                 std::vector<uint8_t> sh(m.begin(), m.begin() + static_cast<std::ptrdiff_t>(cut));
                 RoomMsg a; StartMsg bb; LoadedMsg cc; CancelMsg dd;
@@ -240,17 +259,23 @@ int main() {
             ASSERT_FALSE(decode(lg, a) || decode(lg, bb) || decode(lg, cc) || decode(lg, dd));
         }
         Lcg rng(5);
-        const std::vector<std::vector<uint8_t>> seeds = {encode(r), encode(s), encode(l), encode(c)};
+        const std::vector<std::vector<uint8_t>> seeds = {encode(r), encode(s), encode(l), encode(c), encode(srv), request};
         size_t accepted = 0;
         for (int i = 0; i < 300000; ++i) {
             std::vector<uint8_t> buf = seeds[rng.below(static_cast<uint32_t>(seeds.size()))];
             for (uint32_t m = 1 + rng.below(3); m > 0; --m) buf[rng.below(static_cast<uint32_t>(buf.size()))] = static_cast<uint8_t>(rng.below(256));
             if (rng.below(5) == 0) buf.resize(rng.below(static_cast<uint32_t>(buf.size()) + 1));
-            RoomMsg a; StartMsg bb; LoadedMsg cc; CancelMsg dd;
-            if (decode(buf, a)) { ++accepted; ASSERT_TRUE(encode(a) == buf); ASSERT_TRUE(valid_map_name(a.map_name)); }
+            RoomMsg a; StartMsg bb; LoadedMsg cc; CancelMsg dd; StartRequestMsg ee;
+            if (decode(buf, a)) {
+                ++accepted;
+                ASSERT_TRUE(encode(a) == buf);
+                ASSERT_TRUE(valid_map_name(a.map_name));
+                ASSERT_TRUE(a.leader == kNoLeader || (a.leader < sim::MAX_PLAYERS && a.slots[a.leader].state == SlotState::Client));
+            }
             if (decode(buf, bb)) { ++accepted; ASSERT_TRUE(encode(bb) == buf); ASSERT_TRUE(valid_map_name(bb.map_name)); }
             if (decode(buf, cc)) { ++accepted; ASSERT_TRUE(encode(cc) == buf); }
             if (decode(buf, dd)) { ++accepted; ASSERT_TRUE(encode(dd) == buf); }
+            if (decode(buf, ee)) { ++accepted; ASSERT_TRUE(buf == request); }
         }
         ASSERT_TRUE(accepted > 3000);
     } TEST_END();
@@ -453,6 +478,12 @@ int main() {
         ASSERT_FALSE(decode_hello_prefix(torn.data(), torn.size(), old));
         std::vector<uint8_t> coded = {static_cast<uint8_t>(MsgType::Hello), 4, 0, 2, 'O', 0x07};    // nor is a name with a control character
         ASSERT_FALSE(decode_hello_prefix(coded.data(), coded.size(), old));
+        // protocol 6 had this very Hello layout (but not this protocol's Room message): the version number alone makes it "version mismatch"
+        HelloMsg six = h;
+        six.version = 6;
+        const std::vector<uint8_t> v6_hello = encode(six);
+        ASSERT_TRUE(decode(v6_hello.data(), v6_hello.size(), old));
+        ASSERT_EQ(old.version, 6);
         // the current layout must be exact
         std::vector<uint8_t> current = encode(h);
         current.push_back(0);
@@ -470,6 +501,19 @@ int main() {
         ASSERT_TRUE(ends.second->poll(reply));
         RejectMsg rj;
         ASSERT_TRUE(decode(reply, rj) && rj.reason == RejectReason::VersionMismatch);
+        // a client of protocol 6 (the version before the room's leader): the same answer, from a LAN host and from a server's room alike
+        for (const bool server : {false, true}) {
+            HostLobby::Config hc;
+            if (server) hc.host_seat = 255;
+            Room r6(hc);
+            auto e6 = r6.net.connect({10, 0});
+            r6.host.add_connection(e6.first, 0);
+            e6.second->send(v6_hello);
+            r6.run(100);
+            ASSERT_TRUE(e6.second->poll(reply) && decode(reply, rj) && rj.reason == RejectReason::VersionMismatch);
+            ASSERT_EQ(r6.host.players(), server ? size_t{0} : size_t{1});          // nobody was seated, and no leader named
+            ASSERT_EQ(r6.host.leader(), kNoLeader);
+        }
     } TEST_END();
 
     TEST_CASE("N4.3 Leaving: A Guest Who Leaves Frees Its Seat For The Next One, Everybody Is Told") {
@@ -785,6 +829,304 @@ int main() {
         ASSERT_TRUE(host.desyncs().empty());
         ASSERT_TRUE(host.turns_sealed() > 250);
         for (int i = 1; i < 4; ++i) ASSERT_TRUE(sims[static_cast<size_t>(i)]->state_hash() == sims[0]->state_hash());
+    } TEST_END();
+
+    TEST_CASE("N4.10 The Leader Of A Server's Room: The First Guest To Be Welcomed Leads (Not The Lowest Seat), Everybody Is Told, The Earliest Of Those Left Leads When It Goes (Left, Kicked, Cut Off, Thrown Out), A Later Guest Never Takes The Lead; A Host With A Seat, A Room Without Early Start And A Bot Have None") {
+        HostLobby::Config hc;
+        hc.host_seat = 255;                                                         // kNoSeat: a dedicated server's room
+        hc.min_players = 2;
+        Room room(hc);
+        ASSERT_EQ(room.host.leader(), kNoLeader);                                   // nobody is here yet
+        // the host's view and the last Room message of every guest who is still in the room agree on the leader, and each says whether it is itself
+        const auto leader_is = [&room](uint8_t expected) {
+            room.run(300);
+            if (room.host.leader() != expected) return false;
+            for (auto& g : room.guests) {
+                if (g.lobby->phase() != ClientLobby::Phase::InRoom) continue;       // (a guest who left, was cut off or thrown out hears nothing more)
+                if (g.lobby->room().leader != expected || g.lobby->is_leader() != (g.lobby->my_seat() == expected)) return false;
+            }
+            return true;
+        };
+        room.join("Ann", {10, 0}, 3);                                               // the first to be welcomed, in the highest seat (not join_seat: the first Room message must be right
+        const size_t ann = 0;                                                       // by itself, before the thumbs make the host send another one)
+        for (int i = 0; i < 20 && room.guests[ann].lobby->room().slots[3].state == SlotState::Empty; ++i) room.run(10);
+        ASSERT_EQ(room.guests[ann].lobby->room().slots[3].state, SlotState::Client);       // the first Room message that shows Ann in her seat ...
+        ASSERT_EQ(room.guests[ann].lobby->room().leader, 3);                               // ... already names her
+        ASSERT_TRUE(room.guests[ann].lobby->is_leader());                           // the Welcome and the first Room message are enough: it knows at once
+        ASSERT_EQ(room.guests[ann].lobby->my_seat(), 3);
+        ASSERT_TRUE(leader_is(3));
+        const size_t bob = room.join_seat("Bob", 1);
+        const size_t cat = room.join_seat("Cat", 0);                                // the lowest seat, the last to come
+        ASSERT_EQ(room.guests[bob].lobby->my_seat(), 1);
+        ASSERT_EQ(room.guests[cat].lobby->my_seat(), 0);
+        ASSERT_TRUE(leader_is(3));                                                  // still Ann: the order of the Welcomes decides, not the number of the seat
+        ASSERT_TRUE(room.guests[ann].lobby->is_leader() && !room.guests[bob].lobby->is_leader() && !room.guests[cat].lobby->is_leader());
+        room.guests[ann].lobby->leave();                                            // Ann goes: Bob is the earliest of those left (Cat has the lower seat, and does not lead)
+        for (int i = 0; i < 20 && room.guests[bob].lobby->room().slots[3].state != SlotState::Empty; ++i) room.run(10);
+        ASSERT_EQ(room.guests[bob].lobby->room().slots[3].state, SlotState::Empty);        // the first Room message that shows her seat empty ...
+        ASSERT_EQ(room.guests[bob].lobby->room().leader, 1);                               // ... already names Bob
+        ASSERT_TRUE(room.guests[bob].lobby->is_leader());
+        ASSERT_TRUE(leader_is(1));
+        const size_t dan = room.join_seat("Dan");
+        ASSERT_EQ(room.guests[dan].lobby->my_seat(), 2);
+        ASSERT_TRUE(leader_is(1));                                                  // a guest who comes now is the newest: Bob keeps the lead
+        const size_t ann2 = room.join_seat("Ann again");                            // and Ann, back again, is the newest of all: no lead for her
+        ASSERT_EQ(room.guests[ann2].lobby->my_seat(), 3);
+        ASSERT_TRUE(leader_is(1));
+        room.host.kick(1);                                                          // Bob is kicked: Cat is the earliest of Cat, Dan, Ann again
+        ASSERT_TRUE(leader_is(0));
+        ASSERT_EQ(room.guests[bob].lobby->phase(), ClientLobby::Phase::Rejected);
+        room.net.cut(room.guests[cat].client_end, true);                            // Cat's connection dies: Dan
+        ASSERT_TRUE(leader_is(2));
+        for (int i = 0; i < 10; ++i) room.guests[dan].client_end->send({250, 1, 2});    // Dan is thrown out for garbage: Ann, the one who is left
+        ASSERT_TRUE(leader_is(3));
+        ASSERT_FALSE(room.host.occupied(2));
+        room.guests[ann2].lobby->leave();                                           // the last guest leaves: the room has no leader
+        ASSERT_TRUE(leader_is(kNoLeader));
+        ASSERT_EQ(room.host.players(), size_t{0});
+        const size_t eve = room.join_seat("Eve");                                   // and the next one to come leads
+        ASSERT_TRUE(leader_is(room.guests[eve].lobby->my_seat()) && room.guests[eve].lobby->is_leader());
+        {   // the leader leaves while the map loads: the start is cancelled for everybody and the Room message that follows names the new leader
+            Room r(hc);
+            const size_t a = r.join_seat("A");
+            const size_t b = r.join_seat("B");
+            ASSERT_TRUE(r.host.start(1, 1, r.now));
+            r.run(100);
+            ASSERT_EQ(r.host.phase(), HostLobby::Phase::Loading);
+            r.guests[a].lobby->leave();
+            r.run(300);
+            ASSERT_EQ(r.host.phase(), HostLobby::Phase::Room);
+            ASSERT_EQ(r.host.leader(), r.guests[b].lobby->my_seat());
+            ASSERT_TRUE(r.guests[b].lobby->is_leader() && r.guests[b].lobby->phase() == ClientLobby::Phase::InRoom);
+            ASSERT_EQ(r.guests[b].lobby->cancel_reason(), CancelMsg::Reason::PlayerLeft);
+        }
+        {   // a host that holds a seat (a LAN / direct room) has no leader, whoever comes first
+            Room lan;
+            const size_t a = lan.join_seat("A");
+            const size_t b = lan.join_seat("B");
+            lan.run(300);
+            ASSERT_EQ(lan.host.leader(), kNoLeader);
+            ASSERT_TRUE(lan.guests[a].lobby->room().leader == kNoLeader && lan.guests[b].lobby->room().leader == kNoLeader);
+            ASSERT_FALSE(lan.guests[a].lobby->is_leader() || lan.guests[b].lobby->is_leader());
+            lan.host.kick(1);
+            lan.run(200);
+            ASSERT_EQ(lan.host.leader(), kNoLeader);
+            ASSERT_EQ(lan.host.room().leader, kNoLeader);
+        }
+        {   // a room that does not allow an early start has no leader either (nobody would have a START that does anything)
+            HostLobby::Config no = hc;
+            no.early_start = false;
+            Room r(no);
+            const size_t a = r.join_seat("A");
+            r.join_seat("B");
+            r.run(200);
+            ASSERT_EQ(r.host.leader(), kNoLeader);
+            ASSERT_TRUE(r.guests[a].lobby->room().leader == kNoLeader && !r.guests[a].lobby->is_leader());
+        }
+        {   // a computer player is not a guest: it never leads
+            Room r(hc);
+            ASSERT_TRUE(r.host.add_bot(0, "Bot (Easy)"));
+            ASSERT_EQ(r.host.leader(), kNoLeader);
+            const size_t a = r.join_seat("Ann");
+            ASSERT_EQ(r.guests[a].lobby->my_seat(), 1);
+            ASSERT_EQ(r.host.leader(), 1);
+            r.guests[a].lobby->leave();
+            r.run(200);
+            ASSERT_EQ(r.host.leader(), kNoLeader);                                  // the bot is still in seat 0, and leads nothing
+            ASSERT_TRUE(r.host.occupied(0));
+        }
+    } TEST_END();
+
+    TEST_CASE("N4.11 StartRequest In The Room: Only The Leader Is Heard, Only While The Room Can Start; Everything Else Is Ignored And Counted And Costs The Sender Nothing; A Payload Is Garbage; A Host With A Seat Ignores It") {
+        const auto asked = [](HostLobby& host) {                                    // the LeaderStart events: the seats that asked
+            std::vector<uint8_t> seats;
+            for (const auto& e : host.take_events()) {
+                if (e.type == HostLobby::Event::Type::LeaderStart) seats.push_back(e.seat);
+            }
+            return seats;
+        };
+        HostLobby::Config hc;
+        hc.host_seat = 255;
+        hc.min_players = 2;
+        {
+            Room room(hc);
+            const size_t ann = room.join_seat("Ann");
+            asked(room.host);
+            // one player: the leader's request is heard, and nothing happens
+            ASSERT_TRUE(room.guests[ann].lobby->request_start());
+            room.run(100);
+            ASSERT_TRUE(asked(room.host).empty());
+            ASSERT_EQ(room.host.ignored_start_requests(), 1u);
+            ASSERT_EQ(room.host.phase(), HostLobby::Phase::Room);
+            const size_t bob = room.join_seat("Bob");
+            const uint8_t ann_seat = room.guests[ann].lobby->my_seat();
+            const uint8_t bob_seat = room.guests[bob].lobby->my_seat();
+            ASSERT_FALSE(room.guests[bob].lobby->request_start());                  // a guest knows it does not lead: nothing is sent
+            room.run(100);
+            ASSERT_EQ(room.host.ignored_start_requests(), 1u);
+            for (int i = 0; i < 50; ++i) room.guests[bob].client_end->send(encode(StartRequestMsg{}));      // a client that is not the game's sends it anyway
+            room.run(300);
+            ASSERT_TRUE(asked(room.host).empty());                                  // never heard
+            ASSERT_EQ(room.host.ignored_start_requests(), 51u);                     // but counted
+            ASSERT_TRUE(room.host.occupied(bob_seat) && room.guests[bob].lobby->phase() == ClientLobby::Phase::InRoom);       // and no offence: Bob is still here
+            // two players: the leader's request is passed on, once, with the leader's seat; the lobby does not start by itself, its owner decides
+            ASSERT_TRUE(room.guests[ann].lobby->request_start());
+            room.run(100);
+            const std::vector<uint8_t> heard = asked(room.host);
+            ASSERT_TRUE(heard.size() == 1 && heard[0] == ann_seat);
+            ASSERT_EQ(room.host.phase(), HostLobby::Phase::Room);
+            ASSERT_EQ(room.host.ignored_start_requests(), 51u);
+            // the owner starts the match; the leader's second click arrives when the room is loading: ignored, counted, no offence
+            ASSERT_TRUE(room.host.start(5, 5, room.now));
+            room.run(100);
+            for (int i = 0; i < 20; ++i) room.guests[ann].client_end->send(encode(StartRequestMsg{}));
+            room.run(300);
+            ASSERT_TRUE(asked(room.host).empty());
+            ASSERT_EQ(room.host.ignored_start_requests(), 71u);
+            ASSERT_TRUE(room.host.occupied(ann_seat) && room.host.phase() == HostLobby::Phase::Loading);
+            // the cancelled start is back in the room, and the leader may ask again
+            room.host.cancel();
+            room.run(100);
+            ASSERT_TRUE(room.guests[ann].lobby->request_start());
+            room.run(100);
+            ASSERT_EQ(asked(room.host).size(), size_t{1});
+        }
+        {   // a payload is garbage, from the leader and from anybody: eight of them throw the sender out (a violation like any message that a guest may not send)
+            Room room(hc);
+            const size_t ann = room.join_seat("Ann");
+            const size_t bob = room.join_seat("Bob");
+            for (int i = 0; i < 7; ++i) room.guests[ann].client_end->send({static_cast<uint8_t>(MsgType::StartRequest), static_cast<uint8_t>(i)});
+            room.run(200);
+            ASSERT_TRUE(room.host.occupied(room.guests[ann].lobby->my_seat()));    // seven are not enough
+            room.guests[ann].client_end->send({static_cast<uint8_t>(MsgType::StartRequest), 9});
+            room.run(300);
+            ASSERT_FALSE(room.host.occupied(room.guests[ann].lobby->my_seat()));   // the eighth
+            ASSERT_EQ(room.host.leader(), room.guests[bob].lobby->my_seat());      // the leader that was thrown out is replaced
+            ASSERT_EQ(room.host.ignored_start_requests(), 0u);                     // (garbage is no request)
+        }
+        {   // a room that wants more players than are in it: the leader's request is ignored; with a third player it is passed on
+            HostLobby::Config three = hc;
+            three.min_players = 3;
+            Room room(three);
+            const size_t ann = room.join_seat("Ann");
+            room.join_seat("Bob");
+            asked(room.host);
+            ASSERT_TRUE(room.guests[ann].lobby->request_start());
+            room.run(100);
+            ASSERT_TRUE(asked(room.host).empty());
+            ASSERT_EQ(room.host.ignored_start_requests(), 1u);
+            room.join_seat("Cat");
+            asked(room.host);
+            ASSERT_TRUE(room.guests[ann].lobby->request_start());
+            room.run(100);
+            ASSERT_EQ(asked(room.host).size(), size_t{1});
+        }
+        {   // no map chosen yet: the room cannot start, the request is ignored; with a map it is passed on
+            Room room(hc, false);
+            const size_t ann = room.join_seat("Ann");
+            room.join_seat("Bob");
+            asked(room.host);
+            ASSERT_TRUE(room.guests[ann].lobby->request_start());
+            room.run(100);
+            ASSERT_TRUE(asked(room.host).empty());
+            ASSERT_EQ(room.host.ignored_start_requests(), 1u);
+            room.host.set_map("SMALL.LVL");
+            ASSERT_TRUE(room.guests[ann].lobby->request_start());
+            room.run(100);
+            ASSERT_EQ(asked(room.host).size(), size_t{1});
+        }
+        {   // a room without early start: there is no leader, nobody is heard (the request goes through a modified client)
+            HostLobby::Config no = hc;
+            no.early_start = false;
+            Room room(no);
+            const size_t ann = room.join_seat("Ann");
+            room.join_seat("Bob");
+            asked(room.host);
+            ASSERT_FALSE(room.guests[ann].lobby->request_start());                  // nothing to send: Ann is no leader
+            room.guests[ann].client_end->send(encode(StartRequestMsg{}));
+            room.run(100);
+            ASSERT_TRUE(asked(room.host).empty());
+            ASSERT_EQ(room.host.ignored_start_requests(), 1u);
+        }
+        {   // a host that holds a seat: a guest's StartRequest is ignored and counted, never an offence, and the room is not started
+            Room lan;
+            lan.join_seat("Ann");
+            const size_t bob = lan.join_seat("Bob");
+            asked(lan.host);
+            for (int i = 0; i < 100; ++i) lan.guests[bob].client_end->send(encode(StartRequestMsg{}));
+            lan.run(300);
+            ASSERT_TRUE(asked(lan.host).empty());
+            ASSERT_EQ(lan.host.ignored_start_requests(), 100u);
+            ASSERT_TRUE(lan.host.occupied(lan.guests[bob].lobby->my_seat()) && lan.host.phase() == HostLobby::Phase::Room);
+        }
+    } TEST_END();
+
+    TEST_CASE("N4.12 The Leader's Side: request_start() Sends One Byte, And Only From The Leader's Open Room; A Guest, A Machine That Is Not In The Room Yet, One That Is Loading Or Gone Sends Nothing") {
+        LoopbackNetwork net{3};
+        auto ends = net.connect({5, 0});                                            // ends.first plays the server
+        ClientLobby lobby(ends.second, ClientLobby::Config{});
+        uint32_t now = 0;
+        const auto step = [&](uint32_t ms) {
+            for (uint32_t t = 0; t < ms; t += 5) {
+                now += 5;
+                net.set_time(now);
+                lobby.update(now);
+            }
+        };
+        const auto sent_requests = [&]() {                                          // what the server heard since the last call: the StartRequests
+            std::vector<std::vector<uint8_t>> out;
+            std::vector<uint8_t> m;
+            while (ends.first->poll(m)) {
+                if (peek_type(m) == MsgType::StartRequest) out.push_back(m);
+            }
+            return out;
+        };
+        ASSERT_FALSE(lobby.request_start());                                        // not connected yet
+        step(20);                                                                   // the Hello goes out
+        ASSERT_FALSE(lobby.request_start());                                        // not welcomed yet
+        ends.first->send(encode(WelcomeMsg{2, 4}));
+        RoomMsg r;
+        r.slots[0] = {SlotState::Client, "Ann", 10};
+        r.slots[2] = {SlotState::Client, "Me", 0};
+        r.map_name = "TINY.LVL";
+        r.you = 2;
+        r.leader = 0;                                                               // somebody else leads
+        ends.first->send(encode(r));
+        step(40);
+        ASSERT_EQ(lobby.phase(), ClientLobby::Phase::InRoom);
+        ASSERT_EQ(lobby.my_seat(), 2);
+        ASSERT_FALSE(lobby.is_leader());
+        ASSERT_FALSE(lobby.request_start());
+        step(20);
+        ASSERT_TRUE(sent_requests().empty());                                       // nothing went out
+        r.leader = 2;                                                               // the leader left: this machine leads now
+        ends.first->send(encode(r));
+        step(40);
+        ASSERT_TRUE(lobby.is_leader());
+        ASSERT_TRUE(lobby.request_start());
+        step(20);
+        const auto one = sent_requests();
+        ASSERT_EQ(one.size(), size_t{1});
+        ASSERT_TRUE(one[0].size() == 1 && one[0][0] == static_cast<uint8_t>(MsgType::StartRequest));   // exactly the type byte
+        r.leader = 0;                                                               // (leadership can move away only when this machine leaves, but the machine believes the room)
+        ends.first->send(encode(r));
+        step(40);
+        ASSERT_FALSE(lobby.is_leader() || lobby.request_start());
+        r.leader = 2;
+        ends.first->send(encode(r));
+        step(40);
+        StartMsg st;
+        st.map_name = "TINY.LVL";
+        st.roster = 0x05;
+        st.names[0] = "Ann";
+        st.names[2] = "Me";
+        ends.first->send(encode(st));
+        step(40);
+        ASSERT_EQ(lobby.phase(), ClientLobby::Phase::Loading);                      // the room is loading: START is over
+        ASSERT_FALSE(lobby.request_start());
+        lobby.leave();
+        ASSERT_FALSE(lobby.request_start());
+        ASSERT_FALSE(lobby.is_leader());
     } TEST_END();
 
     std::cout << "\n=======================================================\n Total Test Cases: " << g_test_count << "\n Total Assertions: " << g_assert_count

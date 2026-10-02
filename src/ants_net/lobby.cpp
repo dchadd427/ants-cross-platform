@@ -163,6 +163,17 @@ void HostLobby::broadcast_room() {
     }
 }
 
+void HostLobby::elect_leader() {
+    uint8_t best = kNoLeader;
+    if (leads()) {
+        for (uint8_t s = 0; s < sim::MAX_PLAYERS; ++s) {
+            if (guests_[s].conn == nullptr || room_.slots[s].state != SlotState::Client) continue;
+            if (best == kNoLeader || guests_[s].join_order < guests_[best].join_order) best = s;
+        }
+    }
+    room_.leader = best;
+}
+
 void HostLobby::remove_guest(uint8_t seat, bool notify_reject, RejectReason reason) {
     if (seat >= sim::MAX_PLAYERS || guests_[seat].conn == nullptr) return;
     Connection* c = guests_[seat].conn;
@@ -170,6 +181,7 @@ void HostLobby::remove_guest(uint8_t seat, bool notify_reject, RejectReason reas
     if (c->is_open()) c->close();
     guests_[seat] = Guest{};
     room_.slots[seat] = RoomMsg::Slot{};
+    elect_leader();                                              // the leader that left is replaced before anybody is told
     events_.push_back(Event{Event::Type::Left, seat});
     if (phase_ == Phase::Loading) cancel_with(CancelMsg::Reason::PlayerLeft, seat);
     else broadcast_room();
@@ -273,8 +285,10 @@ void HostLobby::handle_hello(Pending& p, const std::vector<uint8_t>& msg, uint32
     guests_[seat].conn = p.conn;
     guests_[seat].address = p.address;
     guests_[seat].listen_port = hello.listen_port;
+    guests_[seat].join_order = ++joins_;
     room_.slots[seat].state = SlotState::Client;
     room_.slots[seat].name = human_name(hello.name, "Player " + std::to_string(static_cast<unsigned>(seat) + 1u));
+    elect_leader();                                              // the first guest to be welcomed leads (a server's room that allows an early start)
     p.conn->send(encode(WelcomeMsg{seat, sim::MAX_PLAYERS}));
     events_.push_back(Event{Event::Type::Joined, seat});
     broadcast_room();
@@ -306,6 +320,15 @@ void HostLobby::handle_guest_message(uint8_t seat, const std::vector<uint8_t>& m
             g.rtt_ms = last_update_ms_ - m.sent_ms;
             room_.slots[seat].rtt_ms = static_cast<uint16_t>(std::min<uint32_t>(g.rtt_ms, 0xFFFEu));
             if (link_quality(room_.slots[seat].rtt_ms) != before) broadcast_room();          // the thumb changed: everybody sees it
+            return;
+        }
+        case MsgType::StartRequest: {
+            StartRequestMsg m;
+            if (!decode(msg, m)) return violation(seat);                  // it has no payload: anything else is garbage
+            // Only the leader of a server's room is heard, and only while the room is open and could start now. A request that cannot be honoured is no offence (the leader's
+            // second click on START arrives when the match is loading already; a host that holds a seat has no leader; a player is told who leads): it is ignored and counted.
+            if (phase_ == Phase::Room && seat == room_.leader && can_start()) events_.push_back(Event{Event::Type::LeaderStart, seat});
+            else ++ignored_start_requests_;
             return;
         }
         case MsgType::Loaded: {
@@ -399,6 +422,11 @@ void ClientLobby::leave() {
         conn_->close();
     }
     if (phase_ != Phase::Begun) phase_ = Phase::Closed;
+}
+
+bool ClientLobby::request_start() {
+    if (conn_ == nullptr || phase_ != Phase::InRoom || !is_leader() || !conn_->is_open()) return false;
+    return conn_->send(encode(StartRequestMsg{}));
 }
 
 void ClientLobby::send_hello() {

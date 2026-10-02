@@ -7,6 +7,8 @@
 //   host:   host(port, name) -> room (guests join, the host picks the map and the fog) -> start_match(seed, map hash) -> every machine loads
 //           (StartRequested event, report_loaded) -> Begun -> the match runs -> freeze() at its end
 //   client: join(address, port, name) -> room (follows the host's map and fog) -> StartRequested -> load, report_loaded -> Begun -> the match runs
+//   leader: the first player in a dedicated server's room (protocol 7) is the room's leader (is_leader()); request_start() asks the server to start with the players who are
+//           there (the server may refuse: fewer than two players), the rest is as for any client
 //
 // During the match the guests are also linked to each other (each guest listens on a port that the host passes on with the roster; the links are made
 // while the map loads). When the host goes, the guests agree on the lowest living seat as the new host and the match goes on (see session.hpp); the
@@ -109,6 +111,13 @@ public:
     const std::string& status_text() const noexcept { return status_; }
     /// The thumb beside a player's name: the host's measured round trip to that seat (the host's own seat is always good)
     LinkQuality seat_quality(uint8_t seat) const noexcept;
+    /// A client in the room (or loading the match) whose seat the last Room message names as the leader: the first player in a dedicated server's room, then, when
+    /// it leaves, the earliest of those who are left (protocol 7). Never true for the host of a LAN room, and in a server's room that does not allow an early start.
+    bool is_leader() const noexcept;
+    /// The leader asks the server to start the match now with the players who are in the room (StartRequest). False (nothing is sent) when this machine is not the leader, the
+    /// room is not open, or fewer than two players are in it: the same answer as the host's START gives when `start_match` refuses (the application plays the can't-go cue).
+    /// True means the request was sent, not that the server will start: it starts at once when it can, otherwise nothing happens.
+    bool request_start();
 
     // ---- the host's controls in the room ---------------------------------------------------------------------------------------------------------
     /// Host only: the map every machine will load (a plain .LVL file name of the maps folder) and the Fog of War option

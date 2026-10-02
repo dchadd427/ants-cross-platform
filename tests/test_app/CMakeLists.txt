@@ -259,12 +259,11 @@ target_include_directories(test_network_app PRIVATE
     ${CMAKE_SOURCE_DIR}/include
 )
 
+# (ants_server_core brings ants_net, ants_sim and ants_assets with it: the real room manager of the dedicated server runs in the tests of the leader of a room)
 target_link_libraries(test_network_app PRIVATE
     ants_app
     ants_ai
-    ants_net
-    ants_sim
-    ants_assets
+    ants_server_core
 )
 
 target_compile_definitions(test_network_app PRIVATE

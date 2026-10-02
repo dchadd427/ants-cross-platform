@@ -154,7 +154,11 @@ void MapSelectScreen::step_map(int32_t delta) {
 }
 
 void MapSelectScreen::start() {
-    if (started_ || !can_change_setup()) return;
+    if (started_ || !has_start_button()) return;
+    if (leads_server_room()) {                                                // a server's room starts when the server says so: the leader asks it
+        if (on_request_start_) on_request_start_();
+        return;
+    }
     trigger_start();
 }
 
@@ -163,7 +167,7 @@ void MapSelectScreen::start() {
 void MapSelectScreen::handle_mouse_down(int32_t screen_x, int32_t screen_y, uint8_t button) {
     if (button != SDL_BUTTON_LEFT) return;
     if (quit_.on_press(screen_x, screen_y)) play_sfx(sim::SoundID::ButtonClick);       // every player of a room can leave
-    if (!can_change_setup() || started_) return;
+    if (is_guest() || started_) return;                                       // (the leader of a server's room has the host's buttons: they act or do not act when released)
     if (up_.on_press(screen_x, screen_y)) play_sfx(sim::SoundID::ButtonClick);
     if (down_.on_press(screen_x, screen_y)) play_sfx(sim::SoundID::ButtonClick);
     fow_on_.on_press(screen_x, screen_y);
@@ -223,6 +227,7 @@ void MapSelectScreen::render(IRenderer& renderer, const ants::assets::AssetArchi
     // (FUN_01014228) is animation 107 "nh_start" (Game Set-Up, Map, WAITING FOR GAME TO START!, a fixed "Fog of War?" box showing No); the local screen is the host's.
     // The frames are drawn in reverse order to produce the 640x480 layout with frames, banners, headers, boxes and the Fog of War texts.
     const bool guest = is_guest();
+    const bool room_choice = guest || leads_server_room();                    // the labels show the room's map, not the entry that the list has selected (the leader has the host's screen)
     const auto* anim = archive.find_animation(guest ? "nh_start" : "st_screen");
     if (anim == nullptr || anim->subitems.empty()) anim = archive.find_animation("st_screen");
     if (anim && !anim->subitems.empty()) {
@@ -257,7 +262,7 @@ void MapSelectScreen::render(IRenderer& renderer, const ants::assets::AssetArchi
 
     // 5. The map name (36, 312) 179 x 26 and its description (36, 380) 293 x 26, 18 px lines. A guest shows the HOST's choice (game message 0x22: the file name; the
     // description comes from the guest's OWN copy of the file, "???" when it has none, and before the host's first message the name is empty).
-    if (guest) {
+    if (room_choice) {
         const MapSelectEntry* own = nullptr;
         for (const auto& m : maps_) {
             if (!room_.map_file.empty() && m.filename == room_.map_file) own = &m;
@@ -271,7 +276,7 @@ void MapSelectScreen::render(IRenderer& renderer, const ants::assets::AssetArchi
         }
         if (!shown_name.empty()) renderer.draw_text(fit_text(renderer, shown_name, NAME_W, FontSize::Px18), LABEL_X, NAME_Y, label_colour, FontSize::Px18);
         renderer.draw_text(fit_text(renderer, info_text, STATUS_W, FontSize::Px18), LABEL_X, INFO_Y, label_colour, FontSize::Px18);
-        if (fog_of_war_) draw_animation_frame0(renderer, archive, "d_fowyes");        // the "Yes" over the fixed "No" box (animation 108, (534, 366))
+        if (guest && fog_of_war_) draw_animation_frame0(renderer, archive, "d_fowyes");        // the "Yes" over the fixed "No" box (animation 108, (534, 366)); the leader's buttons show it
     } else if (selected_index_ >= 0 && selected_index_ < static_cast<int32_t>(maps_.size())) {
         const auto& cur = maps_[static_cast<size_t>(selected_index_)];
         renderer.draw_text(fit_text(renderer, cur.display_name, NAME_W, FontSize::Px18), LABEL_X, NAME_Y, label_colour, FontSize::Px18);

@@ -39,7 +39,7 @@ services:
     # The page web/four.html (Play online) joins rooms named "demo-..." that it makes itself: demo rooms are ON here, at most ANTS_DEMO_ROOMS at a time
     # (default 12) on the map ANTS_DEMO_MAP (default TINY.LVL) unless the code names one of ANTS_DEMO_MAPS (the page's choice; the maps folder must hold them
     # all). Whoever reaches a game port (the site, or TCP port 4001) can fill these rooms; rooms of the control interface keep their own places.
-    # ANTS_DEMO_ROOMS is 1 to 255 (see the header). To switch them off, delete the three demo options. A demo room waits ten minutes for its players.
+    # ANTS_DEMO_ROOMS is 1 to 255 (see the header). To switch them off, delete the three demo options. A demo room waits ten minutes for its players; its first player can start it earlier with START (two players at least).
     command: ["--port", "4001", "--ws-port", "4002", "--ctl-port", "4010", "--demo-rooms", "${ANTS_DEMO_ROOMS:-12}", "--demo-map", "${ANTS_DEMO_MAP:-TINY.LVL}", "--demo-maps", "${ANTS_DEMO_MAPS:-TINY.LVL,SMALL.LVL,MEDIUM.LVL,GAUNTLET.LVL,TREASURE.LVL,ISLANDS.LVL}"]
     environment:
       ANTS_SERVER_SECRET: ${ANTS_SERVER_SECRET:-}

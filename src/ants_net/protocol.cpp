@@ -334,6 +334,7 @@ std::vector<uint8_t> encode(const RoomMsg& m) {
     w.str8(m.map_name);
     w.u8(m.fog ? 1 : 0);
     w.u8(m.you);
+    w.u8(m.leader);
     return out;
 }
 bool decode(const uint8_t* data, size_t size, RoomMsg& out) {
@@ -351,8 +352,11 @@ bool decode(const uint8_t* data, size_t size, RoomMsg& out) {
     m.map_name = r->str8();
     const uint8_t fog = r->u8();
     m.you = r->u8();
+    m.leader = r->u8();
     // an empty map name = the host has not chosen a map yet
     if (!r->done() || fog > 1 || (!m.map_name.empty() && !valid_map_name(m.map_name)) || (m.you != 255 && m.you >= sim::MAX_PLAYERS)) return false;
+    // the leader: nobody (255), or a seat that a person holds as a guest (a server's room has no host in a seat; a bot, an empty seat or the host of a LAN room never leads)
+    if (m.leader != kNoLeader && (m.leader >= sim::MAX_PLAYERS || m.slots[m.leader].state != SlotState::Client)) return false;
     m.fog = fog == 1;
     out = std::move(m);
     return true;
@@ -527,6 +531,11 @@ bool decode(const uint8_t* data, size_t size, PeerHelloMsg& out) {
     if (!r->done() || m.seat >= sim::MAX_PLAYERS) return false;
     out = m;
     return true;
+}
+
+std::vector<uint8_t> encode(const StartRequestMsg&) { return {static_cast<uint8_t>(MsgType::StartRequest)}; }
+bool decode(const uint8_t* data, size_t size, StartRequestMsg&) {
+    return data != nullptr && size == 1 && data[0] == static_cast<uint8_t>(MsgType::StartRequest);
 }
 
 std::vector<uint8_t> encode_leave() { return {static_cast<uint8_t>(MsgType::Leave)}; }

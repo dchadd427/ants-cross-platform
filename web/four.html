@@ -160,7 +160,7 @@
             </select>
             <button id="create" type="button" class="btn primary">Create the match</button>
         </div>
-        <div class="hint">The page makes a code for the match; the room is made on the server when the first player connects, and waits up to ten minutes for the others. The match starts by itself when all its seats are taken (there are no computer players in these rooms yet), and a running match takes nobody new. Afterwards you choose, seat by seat, whether you play it on this page, in a window of its own, or send its link to somebody else.</div>
+        <div class="hint">The page makes a code for the match; the room is made on the server when the first player connects, and waits up to ten minutes for the others. The match starts by itself when all its seats are taken (there are no computer players in these rooms yet), and a running match takes nobody new. The first player in the room can start early with START once at least 2 players are in. Afterwards you choose, seat by seat, whether you play it on this page, in a window of its own, or send its link to somebody else.</div>
     </section>
 
     <section id="join" hidden>
@@ -172,7 +172,7 @@
             <input type="text" id="join-name" placeholder="Player" maxlength="32" autocomplete="off" aria-label="Your name" style="flex: 0 1 160px">
             <button id="join-go" type="button" class="btn primary">Join</button>
         </div>
-        <div class="hint" id="join-hint">The code of a match that somebody else made here (they see it above their seats). It takes you into the game in this window and gives you the first free seat; the match starts by itself when all its seats are filled.</div>
+        <div class="hint" id="join-hint">The code of a match that somebody else made here (they see it above their seats). It takes you into the game in this window and gives you the first free seat; the match starts by itself when all its seats are filled, or earlier: the first player in the room can start it with START once at least 2 players are in.</div>
     </section>
 
     <section id="room-panel" hidden>
@@ -190,6 +190,7 @@
         </div>
         <div id="seat-rows"></div>
         <div class="hint" id="popup-hint" hidden>The browser blocked some of the windows: allow pop-ups for this site, or use the buttons of the seats.</div>
+        <div class="hint">The first player to connect leads the room (not necessarily the green seat): its setup screen has the START button, and pressing it starts the match with the players who are in, once at least 2 are. Everybody else waits for the match to start.</div>
         <div class="hint">A window that is hidden or covered stops playing (the browser stops drawing it) and the match waits for it: keep separate windows side by side, or use this page.</div>
     </section>
 
@@ -405,7 +406,7 @@
             $('room-panel').hidden = false;
             $('room-code').textContent = room;
             $('room-map').textContent = (mapName ? mapName + ' map' : 'a room made some other way') + ', ' + seatCount + ' players';
-            $('subtitle').textContent = 'One match, ' + seatCount + ' seats (' + seats.map(function (x) { return x.name; }).join(', ') + '), all connected to the game server through /ws. Share the code or a link; the match starts when every seat is taken.';
+            $('subtitle').textContent = 'One match, ' + seatCount + ' seats (' + seats.map(function (x) { return x.name; }).join(', ') + '), all connected to the game server through /ws. Share the code or a link; the match starts when every seat is taken, or earlier: the first player in the room can start it with START once at least 2 players are in.';
             $('any-link').value = gameUrl(-1);
             copyButton($('copy-any'), function () { return gameUrl(-1); });
             var holder = $('seat-rows');

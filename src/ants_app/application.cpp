@@ -223,6 +223,9 @@ ApplicationConfig Application::parse_arguments(int argc, char* argv[]) {
         } else if (std::strcmp(argv[i], "--seat") == 0 && i + 1 < argc) {
             const int seat = std::atoi(argv[++i]);                             // the colour to sit in: 0 green, 1 red, 2 blue, 3 black
             if (seat >= 0 && seat < 4) cfg.net_seat = static_cast<uint8_t>(seat);
+        } else if (std::strcmp(argv[i], "--start-when") == 0 && i + 1 < argc) {
+            const int players = std::atoi(argv[++i]);                          // a test hook: the leader of a server's room presses START once this many players are in
+            if (players >= 2 && players <= 4) cfg.net_start_when = static_cast<uint8_t>(players);
         } else if (std::strcmp(argv[i], "--title") == 0 && i + 1 < argc) {
             cfg.title = argv[++i];
         } else if (std::strcmp(argv[i], "--window-pos") == 0 && i + 1 < argc) {
@@ -469,6 +472,7 @@ bool Application::init(const ApplicationConfig& config) {
             if (fog && !net_->room().fog) map_select_.follow_host_choice(net_->room().map_name, false);      // refused (a bot would see through it): the screen shows Off again
         }
     });
+    map_select_.set_on_request_start([this]() { net_request_start(); });
     map_select_.set_on_quit([this]() {
         quit();
     });
@@ -1407,7 +1411,18 @@ void Application::pump_network(float dt) {
     net_time_ms_ += static_cast<double>(dt) * 1000.0;
     net_->update(static_cast<uint32_t>(net_time_ms_));
     handle_net_events();
-    if (state_ == AppState::MapSelect && net_->active()) sync_room_view();
+    if (state_ == AppState::MapSelect && net_->active()) {
+        sync_room_view();
+        // --start-when N (a test hook): the leader of a server's room presses START, as a click or the S key would, once N players are in; again every second until the match starts
+        if (config_.net_start_when > 0 && net_->is_leader() && !map_select_.is_locked() && net_time_ms_ - start_when_pressed_ms_ >= 1000.0) {
+            size_t players = 0;
+            for (const auto& slot : net_->room().slots) players += slot.state != net::SlotState::Empty ? 1u : 0u;
+            if (players >= config_.net_start_when) {
+                start_when_pressed_ms_ = net_time_ms_;
+                map_select_.handle_key_down(SDLK_s);
+            }
+        }
+    }
 }
 
 void Application::sync_room_view() {
@@ -1415,6 +1430,7 @@ void Application::sync_room_view() {
     MapSelectScreen::RoomView view;
     view.networked = true;
     view.is_host = net_->is_host();
+    view.leader = net_->is_leader();                                         // the first player of a server's room: the host's screen with START (protocol 7)
     view.my_seat = net_->my_seat();
     const net::RoomMsg& room = net_->room();
     for (size_t i = 0; i < view.seats.size(); ++i) {
@@ -1433,12 +1449,18 @@ void Application::sync_room_view() {
         view.seats[own].name = player_name_;
         view.seats[own].thumb = MapSelectScreen::Thumb::Good;
     }
-    view.map_file = room.map_name;                                           // a guest shows the host's choice (an empty name before the host's first message)
+    view.map_file = room.map_name;                                           // a guest (and the leader of a server's room) shows the host's / the room's choice (an empty name before the first message)
     view.status = net_->status_text();
     map_select_.set_room(view);
     if (!net_->is_host() && net_->phase() == net::NetGame::Phase::Room) {
         map_select_.follow_host_choice(room.map_name, room.fog);
     }
+}
+
+// START on the leader's screen: the request goes to the server, which starts the match with the players who are in the room if it can. With fewer than two players the
+// answer is the host's: the can't-go cue (and nothing else: no message, no change of the screen); the room of the server has no thumbs to wait for.
+void Application::net_request_start() {
+    if (!net_ || !net_->request_start()) audio_mixer_.play_sfx(sim::SoundID::CantGo, 1.0f, 255);
 }
 
 // START on the setup screen of a room (host only): the map file's hash goes with the Start message so that every machine checks its own copy.
@@ -1466,6 +1488,7 @@ void Application::handle_net_events() {
     for (const net::NetGame::Event& ev : net_->take_events()) {
         switch (ev.type) {
             case net::NetGame::Event::Type::StartRequested:
+                map_select_.lock();                                  // the start is on (a host's START locks the screen itself; the leader's START is answered by this Start): nothing more to press
                 net_load_match();
                 break;
             case net::NetGame::Event::Type::Begun:

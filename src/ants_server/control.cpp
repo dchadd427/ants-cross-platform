@@ -32,6 +32,9 @@ JsonValue status_to_json(const RoomStatus& s) {
     o.set("fog", JsonValue::make_bool(s.fog));
     o.set("expected", JsonValue::make_int(s.expected));
     o.set("joined", JsonValue::make_int(s.joined));
+    o.set("early_start", JsonValue::make_bool(s.early_start));
+    o.set("leader", s.leader < 4 ? JsonValue::make_int(s.leader) : JsonValue::make_null());
+    o.set("ignored_start_requests", JsonValue::make_int(s.ignored_start_requests));
     JsonValue players = JsonValue::make_array();
     for (size_t seat = 0; seat < s.names.size(); ++seat) {
         if (s.names[seat].empty()) continue;
@@ -118,6 +121,13 @@ bool spec_from_json(const JsonValue& body, RoomSpec& out, std::string& error) {
             return false;
         }
         spec.fog = v->as_bool_or(false);
+    }
+    if (const JsonValue* v = body.find("early_start")) {
+        if (!v->is_bool()) {
+            error = "\"early_start\" must be true or false";
+            return false;
+        }
+        spec.early_start = v->as_bool_or(true);
     }
     if (const JsonValue* v = body.find("code")) {
         if (!v->is_string()) {

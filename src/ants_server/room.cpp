@@ -28,8 +28,9 @@ static net::HostLobby::Config lobby_config(const RoomSpec& spec) {
     cfg.room_code = spec.code;
     cfg.host_seat = net::kNoSeat;                    // the server plays nobody
     const uint8_t players = std::max<uint8_t>(2, std::min<uint8_t>(spec.players, sim::MAX_PLAYERS));
-    cfg.min_players = players;
+    cfg.min_players = spec.early_start ? uint8_t{2} : players;       // the leader may start with two; without an early start the room waits for every seat
     cfg.max_players = players;
+    cfg.early_start = spec.early_start;                              // the lobby names the leader only in a room that allows it
     cfg.load_timeout_ms = spec.load_ms;
     return cfg;
 }
@@ -144,6 +145,7 @@ void Room::update(uint32_t now_ms) {
     }
 
     lobby_.update(now_ms);
+    uint8_t asked_by = net::kNoLeader;                               // the leader who asked to start now, in this pass
     for (const net::HostLobby::Event& ev : lobby_.take_events()) {
         if (ev.type == net::HostLobby::Event::Type::Cancelled || ev.type == net::HostLobby::Event::Type::LoadFailed) {
             if (state_ == RoomState::Loading && ++cancels_ >= kMaxFailedStarts) return fail("the start failed too many times (a player could not load the map or left)", now_ms);
@@ -153,16 +155,24 @@ void Room::update(uint32_t now_ms) {
             }
         } else if (ev.type == net::HostLobby::Event::Type::Begun && state_ == RoomState::Loading) {
             begin_match(now_ms);
+        } else if (ev.type == net::HostLobby::Event::Type::LeaderStart) {
+            asked_by = ev.seat;
         }
     }
 
     if (state_ == RoomState::Waiting) {
-        if (lobby_.can_start() && lobby_.players() >= spec_.players) {
+        // The leader's request counts if the room allows it and the leader is still the leader (one who left in this very pass asked for nothing). It starts the match
+        // with the seats that are taken now, as the room would with all of them; a request that falls into the pause after a cancelled start is lost (START again).
+        const bool full = lobby_.players() >= spec_.players;
+        const bool early = spec_.early_start && asked_by != net::kNoLeader && lobby_.leader() == asked_by;
+        if (lobby_.can_start() && (full || early)) {
             uint8_t roster = 0;                                      // the seats that play: a map is playable for some rosters and not for others (a start marker outside the grid)
             for (uint8_t seat = 0; seat < sim::MAX_PLAYERS; ++seat) roster = static_cast<uint8_t>(roster | (lobby_.room().slots[seat].state != net::SlotState::Empty ? 1u << seat : 0u));
             const assets::LevelValidation check = level_.validate(roster);
-            if (!check.playable) return fail("the map cannot be played by these seats: " + check.reason(), now_ms);
-            if (net::time_reached(now_ms, retry_at_ms_) && lobby_.start(seed_, map_.hash, now_ms)) {
+            if (!check.playable) {
+                if (full) return fail("the map cannot be played by these seats: " + check.reason(), now_ms);
+                // (an early start for seats that the map cannot be played by: nothing happens, the room waits for the others, it does not fail)
+            } else if (net::time_reached(now_ms, retry_at_ms_) && lobby_.start(seed_, map_.hash, now_ms)) {
                 state_ = RoomState::Loading;
                 lobby_.host_loaded(true);                            // the server loaded the map when it made the room
             }
@@ -201,6 +211,9 @@ RoomStatus Room::status(uint32_t now_ms) const {
     s.map = map_.name;
     s.fog = spec_.fog;
     s.expected = spec_.players;
+    s.early_start = spec_.early_start;
+    s.leader = state_ == RoomState::Waiting || state_ == RoomState::Loading ? lobby_.leader() : uint8_t{255};      // (the lead means something until the match runs)
+    s.ignored_start_requests = lobby_.ignored_start_requests();
     s.state = state_;
     s.reason = reason_;
     s.joined = static_cast<uint8_t>(lobby_.players());

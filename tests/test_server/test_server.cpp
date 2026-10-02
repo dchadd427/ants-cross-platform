@@ -882,6 +882,380 @@ void run_match_tests() {
     } TEST_END();
 }
 
+// The room's leader (protocol 7): the first player who joined may start the match before every seat is taken
+void run_leader_tests() {
+    TEST_CASE("S3.26 The Leader Starts A Room For Four With Two Players: The Match Runs With Their Two Seats To The End, The Referee And Both Clients Agree, The Status Keeps What Was Asked For And Shows Who Joined; A Player Who Is Not The Leader Is Ignored") {
+        World w;
+        ASSERT_TRUE(w.mgr.create_room(spec_of("LEAD-1", 4), w.now).ok);
+        ASSERT_TRUE(w.status("LEAD-1").early_start);                                     // on by default
+        ASSERT_EQ(w.status("LEAD-1").leader, 255);                                       // nobody has joined yet
+        Client& ann = w.connect("Ann", "LEAD-1");
+        Client& bob = w.connect("Bob", "LEAD-1");
+        w.run(500);
+        RoomStatus s = w.status("LEAD-1");
+        ASSERT_TRUE(s.state == RoomState::Waiting && s.joined == 2 && s.expected == 4);
+        ASSERT_EQ(s.leader, 0);                                                          // Ann was welcomed first: seat 0
+        ASSERT_TRUE(ann.lobby->room().leader == 0 && bob.lobby->room().leader == 0);     // everybody is told
+        ASSERT_TRUE(ann.lobby->is_leader() && !bob.lobby->is_leader());
+        // Bob does not lead: a request of his (from a client that is not the game's) is ignored and counted, and does not cost him his seat
+        bob.end->send(net::encode(net::StartRequestMsg{}));
+        w.run(1500);
+        s = w.status("LEAD-1");
+        ASSERT_TRUE(s.state == RoomState::Waiting && s.ignored_start_requests == 1);
+        ASSERT_EQ(bob.lobby->phase(), net::ClientLobby::Phase::InRoom);
+        // Ann's request starts the match at once with the two of them
+        ASSERT_TRUE(ann.lobby->request_start());
+        w.run(1500);
+        s = w.status("LEAD-1");
+        ASSERT_TRUE(s.state == RoomState::Running);
+        ASSERT_EQ(s.expected, 4);                                                         // as asked
+        ASSERT_EQ(s.joined, 2);                                                           // who is there
+        ASSERT_TRUE(s.names[0] == "Ann" && s.names[1] == "Bob" && s.names[2].empty() && s.names[3].empty());
+        ASSERT_EQ(s.ignored_start_requests, 1u);                                          // (Ann's was honoured, not ignored)
+        ASSERT_TRUE(ann.session != nullptr && bob.session != nullptr);
+        ASSERT_TRUE(ann.sim.roster_mask() == 0x03 && bob.sim.roster_mask() == 0x03);      // the roster is the seats that are taken
+        Client& late = w.connect("Late", "LEAD-1");                                      // a running match takes nobody new
+        w.run(500);
+        ASSERT_TRUE(late.lobby->phase() == net::ClientLobby::Phase::Rejected && late.lobby->reject_reason() == net::RejectReason::MatchRunning);
+        // played to the end: the room finished (it would have failed with a desync) and both clients stand where the referee stands
+        for (int guard = 0; guard < 4000 && w.status("LEAD-1").state == RoomState::Running; ++guard) w.run(250);
+        s = w.status("LEAD-1");
+        ASSERT_TRUE(s.state == RoomState::Finished);
+        ASSERT_TRUE(s.ticks > 1000 && s.turns > 500);
+        ASSERT_EQ(s.rows.size(), size_t{2});                                              // two teams: two rows
+        ASSERT_FALSE(ann.session->desynced() || bob.session->desynced());
+        w.run(Room::kGraceMs + 500);
+        ASSERT_TRUE(ann.sim.state_hash() == bob.sim.state_hash());
+        ASSERT_TRUE(ann.sim.is_match_over() && bob.sim.is_match_over());
+        ASSERT_EQ(ann.sim.current_tick(), bob.sim.current_tick());
+    } TEST_END();
+
+    TEST_CASE("S3.27 A Request That Cannot Be Honoured Does Nothing: One Player Alone, A Room That Does Not Allow An Early Start (No Leader); A Room Whose Seats Are All Taken Still Starts By Itself") {
+        {   // one player alone: nothing happens however often the leader asks, and the leader's screen stays (it is not thrown out)
+            World w;
+            ASSERT_TRUE(w.mgr.create_room(spec_of("ONE-1", 4), w.now).ok);
+            Client& ann = w.connect("Ann", "ONE-1");
+            w.run(300);
+            for (int i = 0; i < 5; ++i) {
+                ASSERT_TRUE(ann.lobby->request_start());
+                w.run(100);
+            }
+            w.run(1500);
+            RoomStatus s = w.status("ONE-1");
+            ASSERT_TRUE(s.state == RoomState::Waiting && s.joined == 1 && s.ignored_start_requests == 5);
+            ASSERT_EQ(ann.lobby->phase(), net::ClientLobby::Phase::InRoom);
+            w.connect("Bob", "ONE-1");                                                    // a second player: the next request works
+            w.run(500);
+            ASSERT_TRUE(ann.lobby->request_start());
+            w.run(1500);
+            ASSERT_TRUE(w.status("ONE-1").state == RoomState::Running);
+        }
+        {   // early_start off: the room has no leader, the request of a modified client is ignored and counted, and the room starts when every seat is taken
+            World w;
+            RoomSpec spec = spec_of("NOEARLY-1", 3);
+            spec.early_start = false;
+            ASSERT_TRUE(w.mgr.create_room(spec, w.now).ok);
+            Client& ann = w.connect("Ann", "NOEARLY-1");
+            Client& bob = w.connect("Bob", "NOEARLY-1");
+            w.run(500);
+            RoomStatus s = w.status("NOEARLY-1");
+            ASSERT_TRUE(!s.early_start && s.leader == 255);
+            ASSERT_TRUE(ann.lobby->room().leader == 255 && !ann.lobby->is_leader());     // nobody is told that they lead
+            ASSERT_FALSE(ann.lobby->request_start());                                     // so the client sends nothing
+            ann.end->send(net::encode(net::StartRequestMsg{}));
+            bob.end->send(net::encode(net::StartRequestMsg{}));
+            w.run(2000);
+            s = w.status("NOEARLY-1");
+            ASSERT_TRUE(s.state == RoomState::Waiting && s.ignored_start_requests == 2);
+            ASSERT_EQ(ann.lobby->phase(), net::ClientLobby::Phase::InRoom);
+            w.connect("Cat", "NOEARLY-1");                                                // the third seat: it starts by itself, as ever
+            w.run(1500);
+            ASSERT_TRUE(w.status("NOEARLY-1").state == RoomState::Running);
+        }
+        {   // every seat taken: the room starts by itself, nobody has to ask (and nothing is counted)
+            World w;
+            ASSERT_TRUE(w.mgr.create_room(spec_of("FULL-1", 3), w.now).ok);
+            for (const char* name : {"Ann", "Bob", "Cat"}) w.connect(name, "FULL-1");
+            w.run(2000);
+            const RoomStatus s = w.status("FULL-1");
+            ASSERT_TRUE(s.state == RoomState::Running && s.joined == 3 && s.ignored_start_requests == 0);
+        }
+        {   // two of three with no request: the room waits (min_players is for the leader's request, not for the room)
+            World w;
+            ASSERT_TRUE(w.mgr.create_room(spec_of("TWO-1", 3), w.now).ok);
+            w.connect("Ann", "TWO-1");
+            w.connect("Bob", "TWO-1");
+            w.run(5000);
+            ASSERT_TRUE(w.status("TWO-1").state == RoomState::Waiting);
+        }
+    } TEST_END();
+
+    TEST_CASE("S3.28 The Leader Leaves: The Earliest Player Who Is Left Leads And Can Start; The Seat That Was Left Is Free And Is Not In The Roster") {
+        World w;
+        ASSERT_TRUE(w.mgr.create_room(spec_of("LEFT-1", 4), w.now).ok);
+        Client& ann = w.connect("Ann", "LEFT-1");
+        Client& bob = w.connect("Bob", "LEFT-1");
+        Client& cat = w.connect("Cat", "LEFT-1");
+        w.run(500);
+        ASSERT_EQ(w.status("LEFT-1").leader, 0);
+        ann.lobby->leave();                                                               // the leader goes
+        w.run(500);
+        RoomStatus s = w.status("LEFT-1");
+        ASSERT_TRUE(s.joined == 2 && s.leader == 1 && s.state == RoomState::Waiting);     // Bob, the earlier of Bob and Cat
+        ASSERT_TRUE(bob.lobby->is_leader() && !cat.lobby->is_leader());
+        ASSERT_TRUE(bob.lobby->room().leader == 1 && cat.lobby->room().leader == 1);      // both were told with the next Room message
+        cat.end->send(net::encode(net::StartRequestMsg{}));                               // Cat does not lead: ignored
+        w.run(1500);
+        s = w.status("LEFT-1");
+        ASSERT_TRUE(s.state == RoomState::Waiting && s.ignored_start_requests == 1);
+        ASSERT_TRUE(bob.lobby->request_start());                                          // Bob starts with himself and Cat: seats 1 and 2
+        w.run(1500);
+        s = w.status("LEFT-1");
+        ASSERT_TRUE(s.state == RoomState::Running);
+        ASSERT_TRUE(s.names[0].empty() && s.names[1] == "Bob" && s.names[2] == "Cat" && s.names[3].empty());
+        ASSERT_TRUE(bob.sim.roster_mask() == 0x06 && cat.sim.roster_mask() == 0x06);
+        w.run(5000);
+        ASSERT_FALSE(bob.session->desynced() || cat.session->desynced());
+        ASSERT_TRUE(w.status("LEFT-1").state == RoomState::Running && w.status("LEFT-1").ticks > 60);
+        {   // a leader who asks and leaves in the same breath (both reach the room in one pass) asked for nothing: the room does not start with the two who are left
+            World v;
+            ASSERT_TRUE(v.mgr.create_room(spec_of("LEFT-2", 4), v.now).ok);
+            Client& a = v.connect("Ann", "LEFT-2", 255, {20, 0});                          // (no jitter: the two messages arrive together)
+            Client& b = v.connect("Bob", "LEFT-2");
+            v.connect("Cat", "LEFT-2");
+            v.run(500);
+            a.end->send(net::encode(net::StartRequestMsg{}));
+            a.end->send(net::encode_leave());
+            v.run(2500);
+            const RoomStatus t = v.status("LEFT-2");
+            ASSERT_TRUE(t.state == RoomState::Waiting && t.joined == 2 && t.leader == 1);
+            ASSERT_TRUE(b.lobby->is_leader());                                              // Bob leads now, and did not ask for anything
+            ASSERT_TRUE(b.lobby->request_start());                                          // when he does, the room starts
+            v.run(1500);
+            ASSERT_TRUE(v.status("LEFT-2").state == RoomState::Running);
+        }
+    } TEST_END();
+
+    TEST_CASE("S3.29 The Early Start Meets The Room's Other Rules: A Client That Cannot Load Cancels It And The Leader Asks Again After The Pause (A Request In The Pause Is Lost); Seats The Map Cannot Be Played By Do Not Start Early And Do Not Fail The Room") {
+        {
+            World w;
+            ASSERT_TRUE(w.mgr.create_room(spec_of("PAUSE-1", 4), w.now).ok);
+            Client& ann = w.connect("Ann", "PAUSE-1");
+            Client& bob = w.connect("Bob", "PAUSE-1");
+            bob.fail_load = true;                                                          // Bob's copy of the map is no good
+            w.run(500);
+            ASSERT_TRUE(ann.lobby->request_start());
+            w.run(1000);
+            ASSERT_TRUE(w.status("PAUSE-1").state == RoomState::Waiting);                  // the start was cancelled, the room waits a moment (two seconds) before another try
+            bob.fail_load = false;                                                         // Bob's map is fine now: a start would work, if the room tried
+            ASSERT_TRUE(ann.lobby->request_start());                                       // a request in the pause is lost (it does not start the match, and it is not kept for later)
+            w.run(500);
+            ASSERT_TRUE(w.status("PAUSE-1").state == RoomState::Waiting);
+            w.run(2500);                                                                   // the pause is over, and nobody asked again: two of four players do not start by themselves
+            ASSERT_TRUE(w.status("PAUSE-1").state == RoomState::Waiting);
+            ASSERT_TRUE(ann.lobby->request_start());
+            w.run(2000);
+            ASSERT_TRUE(w.status("PAUSE-1").state == RoomState::Running);
+        }
+        // TINY with the green start marker moved outside the grid (as in S3.14): the engine loads it, but green cannot play it
+        const std::string dir = temp_dir_for("early_marker");
+        {
+            std::ifstream in(maps_dir() + "/TINY.LVL", std::ios::binary);
+            std::vector<uint8_t> bytes((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+            assets::LevelData tiny;
+            ASSERT_TRUE(tiny.load_from_memory(bytes.data(), bytes.size()));
+            const assets::AnthillSpawn* green = nullptr;
+            for (const auto& sp : tiny.anthill_spawns) {
+                if (sp.tile_id == 154) green = &sp;
+            }
+            ASSERT_TRUE(green != nullptr);
+            const uint8_t pattern[6] = {154, 0, static_cast<uint8_t>(green->y & 0xFF), static_cast<uint8_t>(green->y >> 8), static_cast<uint8_t>(green->x & 0xFF), static_cast<uint8_t>(green->x >> 8)};
+            size_t at = bytes.size();
+            for (size_t i = 0; i + 6 <= bytes.size() && at == bytes.size(); ++i) {
+                if (std::equal(pattern, pattern + 6, bytes.begin() + static_cast<std::ptrdiff_t>(i))) at = i;
+            }
+            ASSERT_TRUE(at < bytes.size());
+            bytes[at + 2] = 200;
+            bytes[at + 3] = 0;
+            std::ofstream out(fs::path(dir) / "BAD.LVL", std::ios::binary | std::ios::trunc);
+            out.write(reinterpret_cast<const char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
+        }
+        const auto run_in = [&dir](World& w, uint32_t ms) {                                // (the clients load the map from this folder)
+            for (uint32_t elapsed = 0; elapsed < ms; elapsed += 10) {
+                w.now += 10;
+                w.net.set_time(w.now);
+                w.mgr.update(w.now);
+                for (auto& c : w.clients) c->update(w.now, dir);
+            }
+        };
+        {   // green (seat 0) and red in a room for four: the leader's request is not honoured (green cannot play this map), the room does not fail, nobody is thrown out
+            World w(ServerLimits(), dir);
+            ASSERT_TRUE(w.mgr.create_room(spec_of("MARK-1", 4, "BAD.LVL"), w.now).ok);
+            Client& ann = w.connect("Ann", "MARK-1", 0);
+            w.connect("Bob", "MARK-1", 1);
+            run_in(w, 500);
+            ASSERT_TRUE(ann.lobby->request_start());
+            run_in(w, 2000);
+            RoomStatus s = w.status("MARK-1");
+            ASSERT_TRUE(s.state == RoomState::Waiting && s.joined == 2);
+            ASSERT_EQ(ann.lobby->phase(), net::ClientLobby::Phase::InRoom);
+            w.connect("Cat", "MARK-1", 2);                                                // with more players still waiting, the room goes on waiting
+            w.connect("Dan", "MARK-1", 3);                                                // when every seat is taken (green among them) the room fails, as it always did
+            run_in(w, 2000);
+            s = w.status("MARK-1");
+            ASSERT_TRUE(s.state == RoomState::Failed && s.reason.find("outside") != std::string::npos);
+        }
+        {   // red and blue: the roster does not contain green, the same map starts early
+            World w(ServerLimits(), dir);
+            ASSERT_TRUE(w.mgr.create_room(spec_of("MARK-2", 4, "BAD.LVL"), w.now).ok);
+            Client& bob = w.connect("Bob", "MARK-2", 1);
+            w.connect("Cat", "MARK-2", 2);
+            run_in(w, 500);
+            ASSERT_TRUE(bob.lobby->request_start());
+            run_in(w, 2000);
+            ASSERT_TRUE(w.status("MARK-2").state == RoomState::Running);
+        }
+        std::error_code ignore;
+        fs::remove_all(dir, ignore);
+    } TEST_END();
+
+    TEST_CASE("S3.30 The Control Interface Knows The Early Start: early_start Goes In And Comes Out (On By Default; A Wrong Type Is A 400), The Status Names The Leader And Counts The Requests That Were Ignored; Demo Rooms Have It On And Their Leader Starts Them") {
+        ServerLimits limits;
+        limits.demo_rooms = 2;
+        limits.demo_map = "TINY.LVL";
+        World w(limits);
+        const auto call = [&w](const char* method, const std::string& path, const std::string& body = std::string()) {
+            ctl::HttpRequest rq;
+            rq.method = method;
+            rq.path = path;
+            rq.body = body;
+            return handle_control(w.mgr, rq, w.now);
+        };
+        const auto json_of = [](const ctl::HttpResponse& r) {
+            ctl::JsonValue v;
+            std::string why;
+            ctl::parse_json(r.body, v, &why);
+            return v;
+        };
+        ctl::HttpResponse r = call("POST", "/rooms", R"({"map":"TINY.LVL","players":4,"code":"J-1"})");
+        ASSERT_EQ(r.status, 201);
+        ctl::JsonValue v = json_of(r);
+        ASSERT_TRUE(v.get("early_start").is_bool() && v.get("early_start").as_bool_or(false));   // the default: on
+        ASSERT_TRUE(v.get("leader").is_null() && v.get("ignored_start_requests").as_int_or(9) == 0);
+        r = call("POST", "/rooms", R"({"map":"TINY.LVL","players":4,"code":"J-2","early_start":false})");
+        ASSERT_EQ(r.status, 201);
+        v = json_of(r);
+        ASSERT_TRUE(v.get("early_start").is_bool() && !v.get("early_start").as_bool_or(true));
+        r = call("POST", "/rooms", R"({"map":"TINY.LVL","players":4,"code":"J-3","early_start":true})");
+        ASSERT_EQ(r.status, 201);
+        ASSERT_TRUE(json_of(r).get("early_start").as_bool_or(false));
+        for (const char* bad : {R"("yes")", "1", "0", "null", "[true]", "{}", R"("")"}) {          // only true or false
+            r = call("POST", "/rooms", std::string(R"({"map":"TINY.LVL","early_start":)") + bad + "}");
+            ASSERT_MSG(r.status == 400, bad);
+            ASSERT_TRUE(json_of(r).get("error").str().find("early_start") != std::string::npos);
+        }
+        ASSERT_EQ(w.mgr.room_count(), size_t{3});                                         // (none of the bad ones made a room)
+        r = call("GET", "/rooms/J-2");
+        ASSERT_TRUE(r.status == 200 && !json_of(r).get("early_start").as_bool_or(true));
+        r = call("GET", "/rooms");
+        ASSERT_TRUE(r.status == 200 && json_of(r).get("rooms").size() == 3);
+        int on = 0;
+        const ctl::JsonValue all = json_of(r);
+        for (size_t i = 0; i < all.get("rooms").size(); ++i) on += all.get("rooms").at(i).get("early_start").as_bool_or(false) ? 1 : 0;
+        ASSERT_EQ(on, 2);
+        // the leader and the ignored requests, seen through the interface
+        Client& ann = w.connect("Ann", "J-1");
+        Client& bob = w.connect("Bob", "J-1");
+        w.run(500);
+        v = json_of(call("GET", "/rooms/J-1"));
+        ASSERT_TRUE(v.get("leader").as_int_or(9) == 0 && v.get("joined").as_int_or(0) == 2 && v.get("players").size() == 2);
+        bob.end->send(net::encode(net::StartRequestMsg{}));
+        w.run(500);
+        ASSERT_EQ(json_of(call("GET", "/rooms/J-1")).get("ignored_start_requests").as_int_or(0), 1);
+        ASSERT_TRUE(ann.lobby->request_start());
+        w.run(1500);
+        v = json_of(call("GET", "/rooms/J-1"));
+        ASSERT_TRUE(v.get("state").str() == "running" && v.get("expected").as_int_or(0) == 4 && v.get("joined").as_int_or(0) == 2);
+        ASSERT_TRUE(v.get("early_start").as_bool_or(false));
+        ASSERT_TRUE(v.get("leader").is_null());                                           // the lead means something until the match runs
+        // a room with early_start off names no leader, and says so
+        Client& cat = w.connect("Cat", "J-2");
+        w.connect("Dan", "J-2");
+        w.run(500);
+        v = json_of(call("GET", "/rooms/J-2"));
+        ASSERT_TRUE(v.get("leader").is_null() && !v.get("early_start").as_bool_or(true) && v.get("joined").as_int_or(0) == 2);
+        ASSERT_FALSE(cat.lobby->is_leader());
+        // a demo room has the early start on, and its leader can start it
+        Client& eve = w.connect("Eve", "demo-small-4p-x1");
+        w.connect("Fay", "demo-small-4p-x1");
+        w.run(500);
+        v = json_of(call("GET", "/rooms/demo-small-4p-x1"));
+        ASSERT_TRUE(v.get("early_start").as_bool_or(false) && v.get("leader").as_int_or(9) == 0 && v.get("state").str() == "waiting");
+        ASSERT_TRUE(eve.lobby->is_leader());
+        ASSERT_TRUE(eve.lobby->request_start());
+        w.run(1500);
+        ASSERT_TRUE(json_of(call("GET", "/rooms/demo-small-4p-x1")).get("state").str() == "running");
+    } TEST_END();
+
+    TEST_CASE("S3.31 Over Real Sockets: The Leader Of A Room For Four Starts It With Two Players, Both Play Bit-Identically") {
+        RoomManager mgr{MapStore(maps_dir())};
+        auto listener = net::TcpListener::listen(0, true);
+        ASSERT_TRUE(listener != nullptr);
+        uint32_t now = 1000;
+        ASSERT_TRUE(mgr.create_room(spec_of("SOCK-4", 4), now).ok);
+        std::vector<std::unique_ptr<Client>> clients;
+        std::vector<std::unique_ptr<net::TcpConnection>> links;
+        for (const char* name : {"Ann", "Bob"}) {
+            links.push_back(net::TcpConnection::connect("127.0.0.1", listener->port()));
+            ASSERT_TRUE(links.back() != nullptr);
+            clients.push_back(std::make_unique<Client>());
+            clients.back()->name = name;
+            clients.back()->room = "SOCK-4";
+            clients.back()->start(links.back().get(), 55u);
+        }
+        const auto pump = [&]() {
+            now += 10;
+            for (int k = 0; k < 4; ++k) {
+                auto c = listener->accept();
+                if (!c) break;
+                mgr.add_connection(std::move(c), "127.0.0.1", now);
+            }
+            mgr.update(now);
+            for (auto& c : clients) c->update(now, maps_dir());
+            std::this_thread::sleep_for(std::chrono::microseconds(200));
+        };
+        for (int i = 0; i < 3000; ++i) {                                                  // both are in the room (the room waits for four)
+            pump();
+            RoomStatus s;
+            mgr.status("SOCK-4", s, now);
+            if (s.joined == 2 && clients[0]->lobby->room().slots[1].state == net::SlotState::Client && clients[0]->lobby->is_leader()) break;
+        }
+        RoomStatus s;
+        ASSERT_TRUE(mgr.status("SOCK-4", s, now));
+        ASSERT_TRUE(s.state == RoomState::Waiting && s.joined == 2 && s.leader < 4);
+        ASSERT_TRUE(clients[0]->lobby->is_leader() && !clients[1]->lobby->is_leader());
+        for (int i = 0; i < 100; ++i) pump();
+        ASSERT_TRUE(clients[0]->lobby->request_start());
+        for (int i = 0; i < 6000; ++i) {
+            pump();
+            mgr.status("SOCK-4", s, now);
+            if (s.state == RoomState::Running && s.ticks > 400) break;
+        }
+        ASSERT_TRUE(s.state == RoomState::Running && s.ticks > 400 && s.joined == 2 && s.expected == 4);
+        ASSERT_FALSE(clients[0]->session->desynced() || clients[1]->session->desynced());
+        ASSERT_TRUE(clients[0]->sim.roster_mask() == 0x03 && clients[1]->sim.roster_mask() == 0x03);
+        bool compared = false;
+        for (int i = 0; i < 400 && !compared; ++i) {
+            pump();
+            if (clients[0]->sim.current_tick() == clients[1]->sim.current_tick()) {
+                ASSERT_TRUE(clients[0]->sim.state_hash() == clients[1]->sim.state_hash());
+                compared = true;
+            }
+        }
+        ASSERT_TRUE(compared);
+    } TEST_END();
+}
+
 void run_control_tests() {
     TEST_CASE("S3.8 Control Interface: Make, Look At, List And Close Rooms With JSON; Every Mistake Gets An Error Object And The Right Status") {
         RoomManager mgr{MapStore(maps_dir())};
@@ -1463,6 +1837,7 @@ int main() {
     run_hardening_tests();
     run_map_tests();
     run_match_tests();
+    run_leader_tests();
     run_control_tests();
     run_socket_tests();
     run_secret_tests();

@@ -79,6 +79,9 @@ struct ApplicationConfig {
     std::string net_room;                       // Join: the room of a server (--room CODE); "" for a LAN / direct host
     std::string net_token;                      // Join: the credential that came with the room code (--token T)
     uint8_t net_seat{255};                      // Join: the seat asked for (--seat N, 0 .. 3: the colours green, red, blue, black); 255: any free seat
+    /// A test hook (--start-when N, 2 .. 4; 0 = off, the default): a headless client has nobody to click START, so when it leads a server's room it presses START itself (the S key
+    /// of the setup screen, the same path as a click) once N players are in the room, again every second until the match starts. A game that is played never uses it.
+    uint8_t net_start_when{0};
     /// Where the window goes (native builds): an explicit position and size (--window-pos X,Y, --window-size W,H), or a cell of a grid over the display's usable
     /// area (--grid CxR --cell N: the start scripts lay four games out as a 2 x 2 grid, each window the largest 4:3 rectangle of its cell); --display N picks the
     /// display (default: the one the window opens on). --title sets the window's title.
@@ -243,6 +246,7 @@ private:
     std::unique_ptr<ai::BotController> bots_;
     std::unique_ptr<net::NetGame> net_;
     double net_time_ms_{0.0};
+    double start_when_pressed_ms_{-1.0e9};                // --start-when: when the hook last pressed START
     bool match_over_handled_{false};
     std::string net_notice_;
     std::string player_name_;
@@ -264,6 +268,7 @@ private:
     void net_begin_match();                               // everybody loaded: the match runs on this machine
     void net_end_session(const std::string& notice);      // leave the room / the match and return to the local setup screen
     void net_start_from_setup(const std::string& map_path);
+    void net_request_start();                             // START of the leader of a server's room: the request goes to the server; the can't-go cue when there is nobody to play with
     void sync_room_view();
     void render_net_overlay();
     void apply_team_names(const std::array<std::string, 4>& names, uint8_t roster);   // simulation texts, HUD labels, results rows

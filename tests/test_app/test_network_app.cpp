@@ -8,6 +8,10 @@
 #include "ants_net/lan.hpp"
 #include "ants_net/netgame.hpp"
 #include "ants_net/protocol.hpp"
+#include "ants_net/tcp.hpp"
+#include "ants_server/map_store.hpp"
+#include "ants_server/room.hpp"
+#include "ants_server/room_manager.hpp"
 #include "ants_sim/game_strings.hpp"
 #include "ants_sim/movement_tables.hpp"
 #include "ants_sim/sim_engine.hpp"
@@ -80,6 +84,9 @@ struct Peer {
     std::vector<net::NetGame::Event> events;
     uint32_t now{1000};
     bool check_hash{true};                  // false: this machine accepts the host's map file whatever its hash says
+    bool hold_report{false};                // true: the map is loaded but the report waits for release_report() (the room stays in its loading phase)
+    bool report_pending{false};
+    bool pending_ok{false};
 
     Peer() {
         net.set_discovery(0);                                              // the tests do not announce on the real network
@@ -98,9 +105,19 @@ struct Peer {
                     sim.set_fog_of_war_enabled(s.fog);
                     sim.init(level, s.seed, s.roster);
                 }
-                net.report_loaded(ok);
+                if (hold_report) {
+                    report_pending = true;
+                    pending_ok = ok;
+                } else {
+                    net.report_loaded(ok);
+                }
             }
         }
+    }
+    void release_report() {
+        if (!report_pending) return;
+        report_pending = false;
+        net.report_loaded(pending_ok);
     }
     bool saw(net::NetGame::Event::Type t) const {
         for (const auto& e : events) {
@@ -167,6 +184,84 @@ struct Trio {
             std::this_thread::sleep_for(std::chrono::milliseconds(1));
         }
         return cond();
+    }
+};
+
+// A dedicated server in the test: the real room manager behind a real TCP listener on the loopback interface. The tests step it together with the application and
+// the bare machines (a room is made with make_room, joined with the room's code; the first player who joins leads it)
+struct Server {
+    server::RoomManager mgr{server::MapStore(std::string(ORIGINAL_ASSETS_DIR) + "/Maps")};
+    std::unique_ptr<net::TcpListener> listener{net::TcpListener::listen(0, true)};
+    uint32_t now{1000};
+
+    bool make_room(const std::string& code, uint8_t players, bool early_start = true) {
+        server::RoomSpec spec;
+        spec.code = code;
+        spec.map = "TINY.LVL";
+        spec.players = players;
+        spec.early_start = early_start;
+        spec.has_seed = true;
+        spec.seed = 4242;
+        return listener != nullptr && mgr.create_room(spec, now).ok;
+    }
+    uint16_t port() const { return listener ? listener->port() : uint16_t{0}; }
+    void update() {
+        if (listener) {
+            for (int k = 0; k < 4; ++k) {
+                auto c = listener->accept();
+                if (!c) break;
+                mgr.add_connection(std::move(c), "127.0.0.1", now);
+            }
+        }
+        mgr.update(now);
+    }
+    server::RoomStatus status(const std::string& code) {
+        server::RoomStatus s;
+        mgr.status(code, s, now);
+        return s;
+    }
+};
+
+// The application, bare machines and a server, stepped together in 10 ms of game time
+struct Hall {
+    Server& server;
+    Application* app{nullptr};
+    std::vector<Peer*> peers;
+    void step(uint32_t ms) {
+        for (uint32_t t = 0; t < ms; t += 10) {
+            if (app != nullptr) {
+                app->pump_network(0.010f);
+                app->update_simulation(0.010f);
+            }
+            for (Peer* p : peers) {
+                p->now += 10;
+                p->update();
+            }
+            server.now += 10;
+            server.update();
+            std::this_thread::sleep_for(std::chrono::microseconds(300));
+        }
+    }
+    bool until(const std::function<bool()>& cond, uint32_t max_ms) {
+        for (uint32_t t = 0; t < max_ms; t += 10) {
+            if (cond()) return true;
+            step(10);
+        }
+        for (int i = 0; i < 2000 && !cond(); ++i) {       // real time for a late kernel, game clock standing still (see Duo)
+            if (app != nullptr) app->pump_network(0.0f);
+            for (Peer* p : peers) p->update();
+            server.update();
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+        return cond();
+    }
+    // Both machines stand at the same tick at some moment: their states are then equal
+    bool identical(const sim::SimulationEngine& a, const sim::SimulationEngine& b) {
+        for (int i = 0; i < 400; ++i) {
+            if (a.current_tick() == b.current_tick()) return a.state_hash() == b.state_hash();
+            step(10);
+        }
+        return false;
     }
 };
 
@@ -1248,6 +1343,240 @@ void run_guest_tests() {
     } TEST_END();
 }
 
+// The first player in the room of a dedicated server is its LEADER (protocol 7): its setup screen is the host's, with START, in a "server room" mode
+void run_leader_tests() {
+    const auto click_start = [](Application& app) {
+        const int32_t x = MapSelectScreen::BTN_START_X + 5;
+        const int32_t y = MapSelectScreen::BTN_START_Y + 5;
+        app.map_select().handle_mouse_motion(x, y);
+        app.map_select().handle_mouse_down(x, y, 1);
+        app.map_select().handle_mouse_up(x, y, 1);
+    };
+    const auto join_config = [](const Server& server, const std::string& room, const std::string& name) {
+        ApplicationConfig cfg = headless_config();
+        cfg.net_role = ApplicationConfig::NetRole::Join;
+        cfg.net_address = "127.0.0.1";
+        cfg.net_port = server.port();
+        cfg.net_room = room;
+        cfg.player_name = name;
+        return cfg;
+    };
+    using Rows = std::array<int8_t, 4>;
+
+    TEST_CASE("N5.20 Leader: The First Player Of A Server's Room Has The Host's Screen With START (The Room's Map And Fog Shown, Nothing To Change), START With Nobody Else Gives The Can't-Go Cue And Sends Nothing, With A Second Player The Server Starts The Match With Both") {
+        Server server;
+        ASSERT_TRUE(server.make_room("LEAD-APP", 4));
+        Application app;
+        ASSERT_TRUE(app.init(join_config(server, "LEAD-APP", "Leader")));
+        Peer bob;
+        Hall hall{server, &app, {&bob}};
+        ASSERT_TRUE(hall.until([&]() { return app.net()->phase() == net::NetGame::Phase::Room && app.net()->my_seat() == 0 && app.net()->room().leader == 0; }, 8000));
+        // alone: the leader. The screen is the host's (START, Up, Down, Fog) but the setup is the room's, and the prompt is the host's
+        ASSERT_TRUE(app.net()->is_leader() && !app.net()->is_host());
+        {
+            const auto& room = app.map_select().room();
+            ASSERT_TRUE(room.networked && !room.is_host && room.leader && room.my_seat == 0);
+            ASSERT_FALSE(app.map_select().is_guest());
+            ASSERT_TRUE(app.map_select().leads_server_room() && app.map_select().has_start_button());
+            ASSERT_FALSE(app.map_select().can_change_setup());                              // the map and the fog are the room's
+            ASSERT_EQ(room.status, std::string(sim::strings::text(sim::strings::kPressStart)));
+            ASSERT_EQ(room.map_file, std::string("TINY.LVL"));
+            ASSERT_EQ(app.map_select().get_maps()[static_cast<size_t>(app.map_select().get_selected_index())].filename, "TINY.LVL");
+            ASSERT_TRUE(room.seats[0].occupied && room.seats[0].name == "Leader" && !room.seats[1].occupied);
+        }
+        // Up, Down, the wrap and the Fog buttons change nothing (and tell nobody)
+        {
+            const int32_t index = app.map_select().get_selected_index();
+            const std::string map_before = app.net()->room().map_name;
+            const auto press = [&](int32_t x, int32_t y) {
+                app.map_select().handle_mouse_motion(x, y);
+                app.map_select().handle_mouse_down(x, y, 1);
+                app.map_select().handle_mouse_up(x, y, 1);
+            };
+            press(MapSelectScreen::BTN_DOWN_X + 3, MapSelectScreen::BTN_DOWN_Y + 3);
+            press(MapSelectScreen::BTN_UP_X + 3, MapSelectScreen::BTN_UP_Y + 3);
+            press(MapSelectScreen::BTN_FOW_ON_X + 2, MapSelectScreen::BTN_FOW_ON_Y + 2);
+            for (int i = 0; i < 12; ++i) {                                                  // (more than the six maps: the wrap)
+                app.map_select().handle_key_down(SDLK_DOWN);
+                app.map_select().handle_key_down(SDLK_UP);
+            }
+            app.map_select().handle_key_down(SDLK_UP);
+            ASSERT_EQ(app.map_select().get_selected_index(), index);
+            ASSERT_FALSE(app.map_select().is_fog_of_war_enabled());
+            hall.step(300);
+            ASSERT_EQ(app.net()->room().map_name, map_before);
+            ASSERT_FALSE(app.net()->room().fog);
+            ASSERT_EQ(server.status("LEAD-APP").map, std::string("TINY.LVL"));
+            ASSERT_FALSE(server.status("LEAD-APP").fog);
+        }
+        // START with nobody to play with: the host's answer to START with too few players, the can't-go cue, and nothing else
+        {
+            const size_t channels = app.audio_mixer().active_channel_count();
+            app.map_select().handle_key_down(SDLK_RETURN);
+            ASSERT_EQ(app.audio_mixer().active_channel_count(), channels + 1);              // the cue (sound 63)
+            click_start(app);
+            ASSERT_EQ(app.audio_mixer().active_channel_count(), channels + 3);              // the click on the pressed button and the cue again
+            hall.step(500);
+            ASSERT_EQ(app.state(), AppState::MapSelect);
+            ASSERT_FALSE(app.map_select().is_locked());
+            const server::RoomStatus s = server.status("LEAD-APP");
+            ASSERT_TRUE(s.state == server::RoomState::Waiting && s.ignored_start_requests == 0);       // nothing was sent: the client knows
+        }
+        // a second player: the leader keeps the screen, the other one has the guest's
+        ASSERT_TRUE(bob.net.join("127.0.0.1", server.port(), "Bob", 255, "LEAD-APP"));
+        ASSERT_TRUE(hall.until([&]() { return bob.net.phase() == net::NetGame::Phase::Room && app.net()->room().slots[1].state == net::SlotState::Client; }, 8000));
+        ASSERT_TRUE(hall.until([&]() { return app.net()->room().slots[1].rtt_ms != net::kRttUnknown; }, 8000));
+        ASSERT_TRUE(app.net()->is_leader() && app.map_select().leads_server_room());
+        ASSERT_FALSE(bob.net.is_leader());
+        ASSERT_FALSE(bob.net.request_start());                                              // a guest sends nothing
+        ASSERT_EQ(bob.net.room().leader, 0);
+        ASSERT_EQ(bob.net.status_text(), std::string(sim::strings::text(sim::strings::kWaitingForHost)));
+        ASSERT_EQ(app.map_select().room().status, std::string(sim::strings::text(sim::strings::kPressStart)));
+        ASSERT_TRUE(app.map_select().room().seats[1].occupied && app.map_select().room().seats[1].name == "Bob");
+        ASSERT_TRUE(MapSelectScreen::row_seats(app.map_select().room()) == Rows({0, 1, -1, -1}));
+        // START: the server starts the match with the two of them (a room for four that is half full)
+        ASSERT_EQ(server.status("LEAD-APP").expected, 4);
+        bob.hold_report = true;                                                              // Bob's machine is slow to report the map: the room stays in its loading phase
+        click_start(app);
+        ASSERT_TRUE(hall.until([&]() { return app.net()->phase() == net::NetGame::Phase::Loading && bob.report_pending; }, 10000));
+        {   // while the map loads the leader keeps the host's screen, locked: START sends nothing more (a second click, Enter, S), Leave works
+            ASSERT_EQ(app.state(), AppState::MapSelect);
+            ASSERT_TRUE(app.net()->is_leader() && app.map_select().leads_server_room() && !app.map_select().is_guest());
+            ASSERT_TRUE(app.map_select().is_locked());
+            click_start(app);
+            app.map_select().handle_key_down(SDLK_RETURN);
+            app.map_select().handle_key_down(SDLK_s);
+            hall.step(300);
+            ASSERT_EQ(server.status("LEAD-APP").ignored_start_requests, 0u);                // nothing was sent
+            ASSERT_TRUE(server.status("LEAD-APP").state == server::RoomState::Loading);
+        }
+        bob.hold_report = false;
+        bob.release_report();
+        ASSERT_TRUE(hall.until([&]() { return app.state() == AppState::Playing && bob.net.phase() == net::NetGame::Phase::Playing; }, 10000));
+        const server::RoomStatus s = server.status("LEAD-APP");
+        ASSERT_TRUE(s.state == server::RoomState::Running && s.joined == 2 && s.expected == 4);
+        ASSERT_TRUE(s.names[0] == "Leader" && s.names[1] == "Bob" && s.names[2].empty());
+        ASSERT_EQ(app.local_player_id(), 0);
+        ASSERT_EQ(app.sim().roster_mask(), 0x03);
+        ASSERT_EQ(bob.sim.roster_mask(), 0x03);
+        ASSERT_TRUE(app.map_select().is_locked());                                          // the Start locked the screen: nothing more to press
+        hall.step(5000);
+        ASSERT_TRUE(hall.identical(app.sim(), bob.sim));
+        ASSERT_FALSE(app.net()->desynced() || bob.net.desynced());
+        ASSERT_TRUE(server.status("LEAD-APP").state == server::RoomState::Running);          // the referee saw no desync
+        app.quit();
+        ASSERT_FALSE(app.network_active());
+    } TEST_END();
+
+    TEST_CASE("N5.21 Leader: A Player Who Is Not The Leader Keeps The Guest's Screen (START Does Nothing); When The Leader Leaves The Next One Gets The Host's Screen At The Next Room Message And Starts The Match With The Players Who Are There") {
+        Server server;
+        ASSERT_TRUE(server.make_room("LEAD-SWITCH", 4));
+        Peer ann;                                                                           // the first to join: the leader
+        ASSERT_TRUE(ann.net.join("127.0.0.1", server.port(), "Ann", 255, "LEAD-SWITCH"));
+        Hall hall{server, nullptr, {&ann}};
+        ASSERT_TRUE(hall.until([&]() { return ann.net.phase() == net::NetGame::Phase::Room && ann.net.is_leader(); }, 8000));
+        ASSERT_EQ(ann.net.status_text(), std::string(sim::strings::text(sim::strings::kPressStart)));       // the leader has the host's prompt
+        ASSERT_FALSE(ann.net.request_start());                                              // alone in the room: nobody to play with, nothing is sent
+        hall.step(300);
+        ASSERT_TRUE(server.status("LEAD-SWITCH").ignored_start_requests == 0 && server.status("LEAD-SWITCH").state == server::RoomState::Waiting);
+        Application app;
+        ASSERT_TRUE(app.init(join_config(server, "LEAD-SWITCH", "Second")));
+        Peer cat;
+        hall.app = &app;
+        hall.peers.push_back(&cat);
+        ASSERT_TRUE(hall.until([&]() { return app.net()->phase() == net::NetGame::Phase::Room && app.net()->my_seat() == 1 && app.net()->room().leader == 0; }, 8000));
+        // not the leader: the guest's screen, the guest's prompt, nothing to press
+        ASSERT_FALSE(app.net()->is_leader());
+        {
+            const auto& room = app.map_select().room();
+            ASSERT_TRUE(room.networked && !room.is_host && !room.leader && room.my_seat == 1);
+            ASSERT_TRUE(app.map_select().is_guest() && !app.map_select().leads_server_room() && !app.map_select().has_start_button());
+            ASSERT_EQ(room.status, std::string(sim::strings::text(sim::strings::kWaitingForHost)));
+            ASSERT_TRUE(MapSelectScreen::row_seats(room) == Rows({1, 0, -1, -1}));          // itself first, then the other
+            app.map_select().handle_key_down(SDLK_RETURN);
+            app.map_select().handle_key_down(SDLK_s);
+            click_start(app);
+            hall.step(1000);
+            const server::RoomStatus s = server.status("LEAD-SWITCH");
+            ASSERT_TRUE(s.state == server::RoomState::Waiting && s.ignored_start_requests == 0 && s.joined == 2);      // nothing was sent
+            ASSERT_EQ(app.state(), AppState::MapSelect);
+        }
+        // the leader leaves: the application is the earliest player who is left, and the screen changes with the next Room message
+        ann.net.leave();
+        ASSERT_TRUE(hall.until([&]() { return app.net()->is_leader(); }, 8000));
+        ASSERT_EQ(app.net()->room().leader, 1);
+        hall.step(100);
+        {
+            const auto& room = app.map_select().room();
+            ASSERT_TRUE(room.leader && app.map_select().leads_server_room() && !app.map_select().is_guest() && app.map_select().has_start_button());
+            ASSERT_EQ(room.status, std::string(sim::strings::text(sim::strings::kPressStart)));
+            ASSERT_TRUE(room.seats[1].occupied && room.seats[1].name == "Second" && !room.seats[0].occupied);
+            ASSERT_TRUE(MapSelectScreen::row_seats(room) == Rows({1, -1, -1, -1}));           // itself first, as before: the rows do not jump when the screen changes
+            ASSERT_EQ(server.status("LEAD-SWITCH").leader, 1);
+            ASSERT_EQ(server.status("LEAD-SWITCH").joined, 1);
+        }
+        // alone again: START is the can't-go cue, nothing is sent
+        app.map_select().handle_key_down(SDLK_RETURN);
+        hall.step(500);
+        ASSERT_TRUE(server.status("LEAD-SWITCH").state == server::RoomState::Waiting && server.status("LEAD-SWITCH").ignored_start_requests == 0);
+        // another player joins (seat 0 is free: it takes it); the leader does not change; Enter starts the match with the two of them
+        ASSERT_TRUE(cat.net.join("127.0.0.1", server.port(), "Cat", 255, "LEAD-SWITCH"));
+        ASSERT_TRUE(hall.until([&]() { return cat.net.phase() == net::NetGame::Phase::Room && app.net()->room().slots[0].state == net::SlotState::Client; }, 8000));
+        ASSERT_TRUE(app.net()->is_leader() && !cat.net.is_leader());
+        ASSERT_EQ(cat.net.my_seat(), 0);
+        ASSERT_TRUE(MapSelectScreen::row_seats(app.map_select().room()) == Rows({1, 0, -1, -1}));
+        app.map_select().handle_key_down(SDLK_RETURN);
+        ASSERT_TRUE(hall.until([&]() { return app.state() == AppState::Playing && cat.net.phase() == net::NetGame::Phase::Playing; }, 10000));
+        ASSERT_EQ(app.local_player_id(), 1);
+        ASSERT_EQ(app.sim().roster_mask(), 0x03);                                           // the seats 0 and 1 (Ann's seat was taken by Cat)
+        ASSERT_EQ(cat.sim.roster_mask(), 0x03);
+        ASSERT_TRUE(server.status("LEAD-SWITCH").state == server::RoomState::Running && server.status("LEAD-SWITCH").expected == 4);
+        hall.step(3000);
+        ASSERT_TRUE(hall.identical(app.sim(), cat.sim));
+    } TEST_END();
+
+    TEST_CASE("N5.22 Leader: --start-when N Is A Test Hook That Presses START For The Leader Of A Server's Room Once N Players Are In (2 To 4 Only); A Game That Does Not Say It Never Does") {
+        {   // the command line
+            std::vector<std::string> args = {"ants", "--join", "127.0.0.1:4001", "--room", "R-1", "--start-when", "2"};
+            std::vector<char*> storage;
+            ASSERT_EQ(Application::parse_arguments(static_cast<int>(args.size()), argv_of(args, storage)).net_start_when, 2);
+            for (const char* value : {"3", "4"}) {
+                args = {"ants", "--start-when", value};
+                ASSERT_EQ(Application::parse_arguments(static_cast<int>(args.size()), argv_of(args, storage)).net_start_when, static_cast<uint8_t>(value[0] - '0'));
+            }
+            for (const char* value : {"0", "1", "5", "-2", "many", ""}) {                    // not a number of players of a match: no hook
+                args = {"ants", "--start-when", value};
+                ASSERT_EQ(Application::parse_arguments(static_cast<int>(args.size()), argv_of(args, storage)).net_start_when, 0);
+            }
+            args = {"ants", "--start-when"};                                                // no value
+            ASSERT_EQ(Application::parse_arguments(static_cast<int>(args.size()), argv_of(args, storage)).net_start_when, 0);
+            args = {"ants", "--join", "127.0.0.1:4001"};
+            ASSERT_EQ(Application::parse_arguments(static_cast<int>(args.size()), argv_of(args, storage)).net_start_when, 0);       // off by default
+        }
+        Server server;
+        ASSERT_TRUE(server.make_room("LEAD-HOOK", 4));
+        ApplicationConfig cfg = join_config(server, "LEAD-HOOK", "Hook");
+        cfg.net_start_when = 3;                                                             // the hook presses START when three are in
+        Application app;
+        ASSERT_TRUE(app.init(cfg));
+        Peer bob;
+        Peer cat;
+        Hall hall{server, &app, {&bob, &cat}};
+        ASSERT_TRUE(bob.net.join("127.0.0.1", server.port(), "Bob", 255, "LEAD-HOOK"));
+        ASSERT_TRUE(hall.until([&]() { return app.net()->phase() == net::NetGame::Phase::Room && app.net()->room().slots[1].state == net::SlotState::Client; }, 8000));
+        ASSERT_TRUE(app.net()->is_leader());                                                // (the application joined first)
+        hall.step(3000);                                                                    // two are in, the hook wants three: nothing is pressed
+        ASSERT_TRUE(server.status("LEAD-HOOK").state == server::RoomState::Waiting && server.status("LEAD-HOOK").ignored_start_requests == 0);
+        ASSERT_EQ(app.state(), AppState::MapSelect);
+        ASSERT_TRUE(cat.net.join("127.0.0.1", server.port(), "Cat", 255, "LEAD-HOOK"));
+        ASSERT_TRUE(hall.until([&]() { return app.state() == AppState::Playing && bob.net.phase() == net::NetGame::Phase::Playing && cat.net.phase() == net::NetGame::Phase::Playing; }, 15000));
+        ASSERT_EQ(app.sim().roster_mask(), 0x07);                                           // the three of them: the room for four started without the fourth
+        ASSERT_TRUE(server.status("LEAD-HOOK").state == server::RoomState::Running && server.status("LEAD-HOOK").joined == 3);
+        hall.step(3000);
+        ASSERT_TRUE(hall.identical(app.sim(), bob.sim) && hall.identical(app.sim(), cat.sim));
+    } TEST_END();
+}
+
 void run_window_tests() {
     TEST_CASE("N5.15 Window: --window-size and --window-pos put the window where they say") {
         ApplicationConfig cfg = headless_config();
@@ -1378,6 +1707,7 @@ int main() {
     run_window_tests();
     run_host_tests();
     run_guest_tests();
+    run_leader_tests();
     std::cout << "\n=======================================================\n Total Test Cases: " << g_test_count << "\n Total Assertions: " << g_assert_count
               << "\n Failed:           " << g_test_failures << "\n=======================================================\n";
     return g_test_failures == 0 ? 0 : 1;

@@ -40,6 +40,10 @@ struct MapSelectEntry {
  * The maps are every `*.lvl` of the Maps folder in the byte order of their file names. All labels, the portraits and the thumbs appear with the
  * first run of the refresh task, 500 ms after the screen was created. The buttons are the original's button class (ScreenButton: the callback runs at the release);
  * the keys are Up / Down (previous / next map, wrapping), Enter, S and s (START), Q, q, X and x (Leave); nothing else does anything. START locks the screen.
+ *
+ * A room on a dedicated server has no host: every player has the guest screen, except the room's LEADER (the first player who joined, protocol 7), who has the host's screen in
+ * a "server room" mode: the room's map is shown (the list has no choice to make: Up, Down and the wrap change nothing), the Fog of War buttons show the room's choice and change
+ * nothing, START asks the server to start the match with the players who are there (`set_on_request_start`), and Leave works as on every screen.
  */
 class MapSelectScreen {
 public:
@@ -165,6 +169,7 @@ public:
     struct RoomView {
         bool networked{false};
         bool is_host{true};
+        bool leader{false};                    // a player of a dedicated server's room who leads it (is_host is false for it): the host's screen with START, the room's setup shown
         uint8_t my_seat{0};
         std::array<RoomSeat, 4> seats{};
         std::string map_file;                  // the host's choice (its file name), what a guest shows ("" before the host's first message)
@@ -173,20 +178,28 @@ public:
     void set_room(const RoomView& room) { room_ = room; }
     const RoomView& room() const noexcept { return room_; }
     /// A player of a room who is not its host: the original shows him ANOTHER screen (FUN_01014228: nh_start, no Up / Down / START / Fog buttons, a fixed
-    /// "Fog of War?" box with the host's choice, only Leave) and its key handler knows Q / X only. A room on a dedicated server has no host: all are guests.
-    bool is_guest() const noexcept { return room_.networked && !room_.is_host; }
-    /// The map, the fog option and START belong to the host of a room; a guest's clicks on them do nothing
-    bool can_change_setup() const noexcept { return !is_guest(); }
+    /// "Fog of War?" box with the host's choice, only Leave) and its key handler knows Q / X only. A room on a dedicated server has no host: all are guests, except its leader (leads_server_room()).
+    bool is_guest() const noexcept { return room_.networked && !room_.is_host && !room_.leader; }
+    /// The leader of a dedicated server's room (RoomView::leader): the host's screen, but the map and the fog option are the room's and cannot be changed, and START is a
+    /// request to the server (set_on_request_start)
+    bool leads_server_room() const noexcept { return room_.networked && !room_.is_host && room_.leader; }
+    /// The map and the fog option belong to the host of a room (and to the local screen); a guest's clicks on them do nothing, and neither do a leader's (it sees the room's)
+    bool can_change_setup() const noexcept { return !is_guest() && !leads_server_room(); }
+    /// START is on the host's screen, the local screen and the leader's; not on a guest's
+    bool has_start_button() const noexcept { return !is_guest(); }
     /// Which seat each of the four rows shows, -1 = the row stays blank (the original's row i is slot i of the machine's own peer table, FUN_010133ef: the local
     /// machine is slot 0 on host and guest alike, a guest's slot 1 is the host, the others follow in the order they were met). A host (and the local screen):
-    /// row r = seat r, a seat that is not taken leaves its row blank. A guest: its own seat first, then the other seats in ascending order (the host is seat 0
-    /// of a LAN room, so it comes right after the guest itself), compact.
+    /// row r = seat r, a seat that is not taken leaves its row blank. A guest, and the leader of a server's room (which has no host that could sit in a
+    /// place of its own, and whose rows must not jump when the lead moves): its own seat first, then the other seats in ascending order (the host is seat 0 of a LAN room,
+    /// so it comes right after the guest itself), compact.
     static std::array<int8_t, 4> row_seats(const RoomView& room) noexcept;
     /// The host changed the map (its file name) or the fog option through the controls
     void set_on_map_changed(std::function<void(const std::string& filename)> cb) { on_map_changed_ = std::move(cb); }
     void set_on_fog_changed(std::function<void(bool)> cb) { on_fog_changed_ = std::move(cb); }
-    /// A guest shows the host's choice (no callbacks fire); false when the map is not in the list
+    /// A guest (and the leader of a server's room) shows the host's / the room's choice (no callbacks fire); false when the map is not in the list
     bool follow_host_choice(const std::string& filename, bool fog);
+    /// START on the leader's screen (button, Enter, S, s): the leader asks the server to start now. Nothing else fires on that screen but Leave.
+    void set_on_request_start(std::function<void()> cb) { on_request_start_ = std::move(cb); }
 
     void set_player_name(std::string name) { player_name_ = std::move(name); }
     void set_player_team(uint8_t team) noexcept { player_team_ = team; }
@@ -218,6 +231,7 @@ private:
     std::function<void(bool)> on_fog_changed_{nullptr};
     void change_fog(bool on);
     std::function<void(const std::string& map_path)> on_start_{nullptr};
+    std::function<void()> on_request_start_{nullptr};
     std::function<void()> on_quit_{nullptr};
     std::function<void(uint32_t)> on_play_sfx_{nullptr};
 };

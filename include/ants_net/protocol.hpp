@@ -18,7 +18,7 @@
 
 namespace ants::net {
 
-inline constexpr uint16_t kProtocolVersion = 6;         // 2: the Room message carries each seat's round trip (the thumbs); 3: host migration (mesh, election); 4: the Quit command (Drop moved from 11 to 12); 5: Hello carries the seat that the guest asks for; 6: map names may hold any printable character that cannot leave the maps folder (up to 64), Hello carries a room code and a token, the slot state Bot, the rejection NoSuchRoom
+inline constexpr uint16_t kProtocolVersion = 7;         // 2: the Room message carries each seat's round trip (the thumbs); 3: host migration (mesh, election); 4: the Quit command (Drop moved from 11 to 12); 5: Hello carries the seat that the guest asks for; 6: map names may hold any printable character that cannot leave the maps folder (up to 64), Hello carries a room code and a token, the slot state Bot, the rejection NoSuchRoom; 7: the Room message names the room's leader (a dedicated server's room: the first player who joined), the message StartRequest (the leader asks the server to start now)
 inline constexpr size_t kMaxMessageBytes = 64 * 1024;
 inline constexpr size_t kMaxTurnCommands = 512;
 inline constexpr size_t kMaxChatChars = 100;        // the original's chat entry
@@ -51,7 +51,8 @@ enum class MsgType : uint8_t {
     Resume = 21,    // new host -> peers: I am the host from this turn on
     Request = 22,   // peer -> peer: send me the turns from this one on
     PeerHello = 23, // guest -> guest on a new link between guests: who I am
-    Last = PeerHello
+    StartRequest = 24,   // leader -> server (protocol 7): start the match now with the players who are here; no payload, only the leader of a server's room is heard
+    Last = StartRequest
 };
 
 /// Longest map file name that travels (a plain name of the maps folder, ending in ".lvl" / ".LVL")
@@ -127,6 +128,9 @@ inline LinkQuality link_quality(uint16_t rtt_ms) noexcept {
     return rtt_ms < kQualityGoodBelowMs ? LinkQuality::Good : (rtt_ms < kQualityOkBelowMs ? LinkQuality::Ok : LinkQuality::Bad);
 }
 
+/// The room's leader in a RoomMsg when the room has none (every LAN / direct room, and a server's room that does not allow an early start)
+inline constexpr uint8_t kNoLeader = 255;
+
 struct RoomMsg {
     struct Slot {
         SlotState state{SlotState::Empty};
@@ -137,7 +141,13 @@ struct RoomMsg {
     std::string map_name;         // the file name of the host's map ("" until the host has chosen one)
     bool fog{false};
     uint8_t you{255};             // the receiver's own seat (set per recipient by the host)
+    /// The seat of the room's leader, kNoLeader (255) when there is none; the same value goes to everybody (protocol 7). Only a dedicated server's room has a leader: the first
+    /// player who joined (the earliest Welcome), and when the leader leaves the earliest of the players who are left. The leader may ask the server to start early (StartRequest).
+    /// A leader is always a seat that a person holds as a guest (SlotState::Client): the decoder refuses anything else.
+    uint8_t leader{kNoLeader};
 };
+/// The leader's request to start the match now with the players who are in the room (protocol 7, client -> server). It has no payload: exactly one byte on the wire.
+struct StartRequestMsg {};
 /// Where a guest accepts connections from the other guests (the host fills it from the address it saw and the port the guest announced)
 struct Endpoint {
     std::string address;
@@ -213,6 +223,7 @@ std::vector<uint8_t> encode(const RefuseMsg&);
 std::vector<uint8_t> encode(const ResumeMsg&);
 std::vector<uint8_t> encode(const RequestMsg&);
 std::vector<uint8_t> encode(const PeerHelloMsg&);
+std::vector<uint8_t> encode(const StartRequestMsg&);
 std::vector<uint8_t> encode_begin();
 std::vector<uint8_t> encode_leave();
 std::vector<uint8_t> encode_ping(const PingMsg&);
@@ -240,6 +251,8 @@ bool decode(const uint8_t* data, size_t size, RefuseMsg& out);
 bool decode(const uint8_t* data, size_t size, ResumeMsg& out);
 bool decode(const uint8_t* data, size_t size, RequestMsg& out);
 bool decode(const uint8_t* data, size_t size, PeerHelloMsg& out);
+/// Exactly the type byte: a StartRequest with a payload is no StartRequest
+bool decode(const uint8_t* data, size_t size, StartRequestMsg& out);
 /// Ping and Pong share the payload; the type byte tells them apart (peek_type).
 bool decode_ping(const uint8_t* data, size_t size, PingMsg& out);
 

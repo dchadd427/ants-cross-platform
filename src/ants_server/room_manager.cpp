@@ -125,6 +125,7 @@ bool RoomManager::make_demo_room(const std::string& code, uint32_t now_ms) {
     const DemoChoice choice = demo_choice_of(code, limits_);
     spec.map = choice.map;
     spec.players = choice.players;
+    spec.early_start = true;                                        // the first player in a demo room may start it with the players who are there (the page tells them)
     spec.wait_ms = limits_.demo_wait_ms;
     spec.keep_ms = 30000;
     spec.run_ms = 30u * 60u * 1000u;                                // a demo room does not hold its slot for longer than half an hour of play

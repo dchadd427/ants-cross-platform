@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # The dedicated server with REAL programs: ants_server (TCP game port, control interface with a bearer secret) and two headless game clients that join a room by its
 # code. Checks: the control interface refuses a missing or a wrong secret, makes a room with the right one, the two clients join, the match starts by itself (nobody
-# presses START), runs, and both clients finish their frames without an error; the server stops cleanly on SIGTERM and writes the result file of a room that was closed.
+# presses START), runs, and both clients finish their frames without an error; a room for four whose leader (the first client to join, --start-when 2: a test hook that
+# presses START for a headless client) starts it with the two players who are there; the server stops cleanly on SIGTERM and writes the result file of a room that was closed.
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 BUILD="${BUILD_DIR:-build}"
 SERVER="$ROOT/$BUILD/src/ants_server/ants_server"
@@ -40,6 +41,8 @@ CODE="E2E-ROOM-$RANDOM"
 CTL="http://127.0.0.1:$CTL_PORT"
 
 cd "$ROOT"
+# the Play online page tells the players what the room's leader can do (protocol 7), in its setup hint, its join hint and the line under the room's title
+check "web/four.html says that the first player in the room can start early with START once at least 2 players are in (setup, join and room hints)" "$([ "$(grep -c 'first player in the room can start' "$ROOT/web/four.html")" -ge 3 ]; echo $?)"
 # the command line: a bad demo-room option is refused at once with status 2 (a server that did start would be stopped by the alarm: status 142)
 exit_of() { perl -e 'alarm 5; exec @ARGV' env ANTS_SERVER_SECRET=x "$SERVER" --maps "$ROOT/Original-Ants/Maps" --port "$(free_port)" "$@" > /dev/null 2>&1; echo $?; }
 check "--demo-rooms without --demo-map is refused" "$([ "$(exit_of --demo-rooms 2)" = "2" ]; echo $?)"
@@ -102,6 +105,42 @@ TICKS="$(curl -s -m 2 -H "Authorization: Bearer $SECRET" "$CTL/rooms/$CODE" | py
 check "the referee's clock runs" "$([ "${TICKS:-0}" -gt 0 ]; echo $?)"
 for p in $CLIENT_PIDS; do wait "$p" 2> /dev/null; done
 check "no client reported an error" "$(grep -qiE 'out of sync|failed|error' "$WORK/c1.log" "$WORK/c2.log"; [ $? -ne 0 ]; echo $?)"
+
+# the leader of a room (protocol 7): a room for four, two headless clients; the first one to join leads the room and presses START itself (--start-when 2: a headless client has
+# nobody to click) once the second one is in: the match starts with the two of them, the room keeps what was asked for (four) and shows who joined (two)
+LEAD="E2E-LEAD-$RANDOM"
+RESP="$(curl -s -m 3 -X POST -H "Authorization: Bearer $SECRET" -d "{\"map\":\"TINY.LVL\",\"players\":4,\"code\":\"$LEAD\",\"seed\":7}" "$CTL/rooms")"
+check "a room for four is made: it allows an early start and has no leader yet" "$(echo "$RESP" | grep -q '"early_start":true' && echo "$RESP" | grep -q '"leader":null'; echo $?)"
+"$GAME" --headless --no-lan --name First --join "127.0.0.1:$GAME_PORT" --room "$LEAD" --start-when 2 --screenshot "$WORK/l1.png" --frames 4000 > "$WORK/l1.log" 2>&1 &
+LEAD_PIDS="$!"
+LED=1
+for _ in $(seq 1 100); do
+    STATUS="$(curl -s -m 2 -H "Authorization: Bearer $SECRET" "$CTL/rooms/$LEAD")"
+    if echo "$STATUS" | grep -q '"leader":0'; then LED=0; break; fi
+    sleep 0.1
+done
+check "the first player to join is the leader of the room (seat 0)" "$LED"
+sleep 2
+check "alone in a room for four the leader starts nothing" "$(curl -s -m 2 -H "Authorization: Bearer $SECRET" "$CTL/rooms/$LEAD" | grep -q '"state":"waiting"'; echo $?)"
+"$GAME" --headless --no-lan --name Second --join "127.0.0.1:$GAME_PORT" --room "$LEAD" --screenshot "$WORK/l2.png" --frames 4000 > "$WORK/l2.log" 2>&1 &
+LEAD_PIDS="$LEAD_PIDS $!"
+STARTED=1
+for _ in $(seq 1 150); do
+    STATUS="$(curl -s -m 2 -H "Authorization: Bearer $SECRET" "$CTL/rooms/$LEAD")"
+    if echo "$STATUS" | grep -q '"state":"running"'; then STARTED=0; break; fi
+    sleep 0.2
+done
+check "the leader pressed START when the second player was in: the match runs (it was not started by the room: two of four)" "$STARTED"
+check "the room keeps what was asked for (4 players) and shows who joined (2: First and Second)" "$(echo "$STATUS" | grep -q '"expected":4' && echo "$STATUS" | grep -q '"joined":2' && echo "$STATUS" | grep -q 'First' && echo "$STATUS" | grep -q 'Second'; echo $?)"
+check "the leader's request was honoured (none ignored)" "$(echo "$STATUS" | grep -q '"ignored_start_requests":0'; echo $?)"
+sleep 1
+TICKS="$(curl -s -m 2 -H "Authorization: Bearer $SECRET" "$CTL/rooms/$LEAD" | python3 -c 'import sys, json; print(json.load(sys.stdin).get("ticks", 0))')"
+check "the referee's clock runs for the two of them" "$([ "${TICKS:-0}" -gt 0 ]; echo $?)"
+check "neither client reported an error" "$(grep -qiE 'out of sync|failed|error' "$WORK/l1.log" "$WORK/l2.log"; [ $? -ne 0 ]; echo $?)"
+check "the room did not fail (no desync)" "$(curl -s -m 2 -H "Authorization: Bearer $SECRET" "$CTL/rooms/$LEAD" | grep -q '"state":"running"'; echo $?)"
+for p in $LEAD_PIDS; do kill "$p" 2> /dev/null; done
+for p in $LEAD_PIDS; do wait "$p" 2> /dev/null; done
+code_of -X DELETE -H "Authorization: Bearer $SECRET" "$CTL/rooms/$LEAD" > /dev/null
 
 # closing the room writes its result; SIGTERM stops the server
 check "the owner closes the room: 200" "$([ "$(code_of -X DELETE -H "Authorization: Bearer $SECRET" "$CTL/rooms/$CODE")" = "200" ]; echo $?)"

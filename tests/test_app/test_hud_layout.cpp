@@ -1931,6 +1931,162 @@ void test_room_screen(const assets::AssetArchive& arc) {
     }
 }
 
+// The LEADER's screen: the first player of a dedicated server's room (protocol 7) has the HOST's composite and buttons (st_screen) in a "server room" mode: the room's map and fog
+// are shown and cannot be changed, START asks the server to start, Leave works; the rows are the guest's (itself first)
+void test_leader_screen(const assets::AssetArchive& arc) {
+    std::printf("[leader] the first player of a server's room: the host's screen with START, the room's setup shown and not changeable, the guest's rows\n");
+    using MS = MapSelectScreen;
+    {
+        MS l;
+        l.init();
+        MS::RoomView v;
+        v.networked = true;
+        v.is_host = false;
+        v.leader = true;
+        v.my_seat = 2;
+        const char* const names[4] = {"Alice", "Bob", "Cara", "Dave"};
+        for (size_t i = 0; i < 4; ++i) v.seats[i] = {true, names[i], MS::Thumb::Ok};
+        v.seats[2].thumb = MS::Thumb::Bad;                                          // the local row is always the good thumb
+        v.map_file = "SMALL.LVL";
+        v.status = "Press START when all players' thumbs have appeared.";
+        l.set_room(v);
+        check(!l.is_guest() && l.leads_server_room() && l.has_start_button() && !l.can_change_setup(), "leader: not a guest, leads a server's room, has START, cannot change the setup");
+        {   // the same questions for every kind of screen
+            MS local;
+            check(!local.is_guest() && !local.leads_server_room() && local.has_start_button() && local.can_change_setup(), "local screen: START, the setup is its own");
+            MS host;
+            MS::RoomView hv = view_of_host_for_art();
+            host.set_room(hv);
+            check(!host.is_guest() && !host.leads_server_room() && host.has_start_button() && host.can_change_setup(), "host screen: START, the setup is its own");
+            MS guest;
+            MS::RoomView gv = v;
+            gv.leader = false;
+            guest.set_room(gv);
+            check(guest.is_guest() && !guest.leads_server_room() && !guest.has_start_button() && !guest.can_change_setup(), "guest screen: no START, no setup");
+            MS::RoomView both = v;
+            both.is_host = true;                                                    // (a host that is also marked leader is a host: the leader flag is for guests of a server's room)
+            guest.set_room(both);
+            check(!guest.is_guest() && !guest.leads_server_room() && guest.has_start_button() && guest.can_change_setup(), "a host with the leader flag is still a host");
+        }
+        l.follow_host_choice("SMALL.LVL", true);                                    // what the application does for a leader, as it does for a guest
+        RecordingRenderer early(arc);
+        l.render(early, arc);                                                       // before the first refresh: the host's art and buttons, no label
+        check(early.has_sprite_at("hostbanr.bmp", 140, 0) && early.has_sprite_at("bstart1.bmp", 526, 439) && early.has_sprite_at("bleave1.bmp", 525, 12), "leader: before the refresh the host's art and its buttons show");
+        check(early.texts.empty() && early.named("thumb1.bmp").empty(), "leader: no label, no portrait and no thumb before the first refresh");
+        l.update(0.5f);
+        RecordingRenderer lr(arc);
+        l.render(lr, arc);
+        check(lr.has_sprite_at("hostbanr.bmp", 140, 0) && lr.has_sprite_at("bstart1.bmp", 526, 439) && lr.has_sprite_at("up1.bmp", 226, 299) && lr.has_sprite_at("down1.bmp", 226, 323) &&
+                  lr.has_sprite_at("bleave1.bmp", 525, 12),
+              "leader: the host's screen: banner, START, Up, Down and Leave");
+        bool guest_art = false;
+        for (const char* n : {"nhbanr.bmp", "waiting.bmp", "nhmap.bmp", "fowno.bmp", "Q_mark.bmp", "fowyes.bmp"}) guest_art = guest_art || !lr.named(n).empty();
+        check(!guest_art, "leader: none of the guest's art (banner, 'WAITING FOR GAME TO START!', the fixed Fog box)");
+        check(lr.has_sprite_at("optond.bmp", 522, 372) && lr.has_sprite_at("dbutoffu.bmp", 576, 373), "leader: the Fog buttons show the room's choice (on): ON down, OFF up");
+        // the rows are the guest's: itself first (seat 2, the good thumb), then the others in ascending order
+        {
+            auto text_row = [&](const char* t, int32_t y) {
+                for (const auto& tx : lr.texts) {
+                    if (tx.text == t && tx.x == 415 && tx.y == y) return true;
+                }
+                return false;
+            };
+            check(text_row("Cara", 95) && text_row("Alice", 145) && text_row("Bob", 195) && text_row("Dave", 245), "leader: the names are Cara, Alice, Bob, Dave from the top (its own name first)");
+            check(lr.has_sprite_at("thumb1.bmp", 540, 95) && lr.has_sprite_at("thumb2.bmp", 540, 145), "leader: the local row has the good thumb, the others their own");
+            check(MS::row_seats(v) == std::array<int8_t, 4>{2, 0, 1, 3}, "leader: row_seats = itself first, then the others");
+        }
+        // the labels: the room's map (the file name of the room, the description from the leader's own copy), '???' when this machine has no such file
+        {
+            bool name_label = false, info_label = false, prompt = false;
+            for (const auto& tx : lr.texts) {
+                if (tx.text == "SMALL" && tx.x == 36 && tx.y == 312) name_label = true;
+                if (tx.x == 36 && tx.y == 380 && tx.text != "???") info_label = true;
+                if (tx.x == 36 && tx.y == 447 && tx.size == FontSize::Px14) prompt = true;
+            }
+            check(name_label && info_label, "leader: the room's map name at (36, 312) and the description of its own copy at (36, 380)");
+            check(prompt, "leader: the prompt (the original's) at (36, 447)");
+            MS::RoomView missing = v;
+            missing.map_file = "NOSUCH.LVL";
+            l.set_room(missing);
+            RecordingRenderer mr(arc);
+            l.render(mr, arc);
+            bool shown_name = false, unknown = false;
+            for (const auto& tx : mr.texts) {
+                if (tx.text == "NOSUCH" && tx.x == 36 && tx.y == 312) shown_name = true;
+                if (tx.text == "???" && tx.x == 36 && tx.y == 380) unknown = true;
+            }
+            check(shown_name && unknown, "leader: a map that this machine does not have: the room's name and the question marks (not another map of the list)");
+            l.set_room(v);
+        }
+        // the controls: Up, Down, the wrap and Fog change nothing and tell nobody; START, Enter, the keypad's Enter, S and s ask; the room is the room's
+        int asked = 0, started = 0, left = 0;
+        std::vector<std::string> maps_chosen;
+        std::vector<bool> fog_chosen;
+        l.set_on_request_start([&]() { ++asked; });
+        l.set_on_start([&](const std::string&) { ++started; });
+        l.set_on_quit([&]() { ++left; });
+        l.set_on_map_changed([&](const std::string& f) { maps_chosen.push_back(f); });
+        l.set_on_fog_changed([&](bool on) { fog_chosen.push_back(on); });
+        const int32_t idx = l.get_selected_index();
+        click(l, MS::BTN_DOWN_X + 3, MS::BTN_DOWN_Y + 3);
+        click(l, MS::BTN_UP_X + 3, MS::BTN_UP_Y + 3);
+        click(l, MS::BTN_FOW_OFF_X + 2, MS::BTN_FOW_OFF_Y + 2);
+        for (int i = 0; i < 14; ++i) {                                              // (more than the six maps: the wrap changes nothing either)
+            l.handle_key_down(SDLK_DOWN);
+            l.handle_key_down(SDLK_UP);
+        }
+        l.handle_key_down(SDLK_UP);
+        l.set_selected_index(idx + 1);
+        check(l.get_selected_index() == idx && l.is_fog_of_war_enabled(), "leader: Up, Down, the wrap and the Fog buttons change neither the map nor the fog option");
+        check(maps_chosen.empty() && fog_chosen.empty() && asked == 0 && started == 0, "leader: and tell nobody; nothing starts");
+        // the buttons answer the pointer as the host's do (the same pictures), they only do nothing
+        l.handle_mouse_motion(MS::BTN_START_X + 5, MS::BTN_START_Y + 5);
+        RecordingRenderer hov(arc);
+        l.render(hov, arc);
+        check(hov.has_sprite_at("bstart2.bmp", 526, 439), "leader: START shows its hover picture");
+        l.handle_mouse_down(MS::BTN_UP_X + 3, MS::BTN_UP_Y + 3, 1);
+        RecordingRenderer prs(arc);
+        l.render(prs, arc);
+        check(prs.has_sprite_at("up3.bmp", 224, 301), "leader: Up shows its pressed picture while it is held");
+        l.handle_mouse_up(MS::BTN_UP_X + 3, MS::BTN_UP_Y + 3, 1);
+        // START
+        click(l, MS::BTN_START_X + 5, MS::BTN_START_Y + 5);
+        check(asked == 1 && started == 0, "leader: the START button asks the server (and does not start by itself)");
+        l.handle_key_down(SDLK_RETURN);
+        check(asked == 2, "leader: Enter asks");
+        l.handle_key_down(SDLK_KP_ENTER);
+        check(asked == 3, "leader: the keypad's Enter asks");
+        l.handle_key_down(SDLK_s);
+        check(asked == 4, "leader: S and s ask (the key is 's' whatever the shift)");
+        l.handle_key_down(SDLK_ESCAPE);
+        l.handle_key_down(SDLK_x + 1000);
+        check(asked == 4 && started == 0 && left == 0, "leader: every other key does nothing (Esc included)");
+        l.lock();                                                                   // the server's Start arrived: the screen is locked, nothing more to ask
+        click(l, MS::BTN_START_X + 5, MS::BTN_START_Y + 5);
+        l.handle_key_down(SDLK_RETURN);
+        l.handle_key_down(SDLK_s);
+        check(asked == 4, "leader: a locked screen asks nobody (a second click on START while the match loads)");
+        l.unlock();                                                                 // the start was cancelled: the leader may ask again
+        l.handle_key_down(SDLK_s);
+        check(asked == 5, "leader: after a cancelled start START asks again");
+        // Leave
+        click(l, MS::BTN_QUIT_X + 5, MS::BTN_QUIT_Y + 5);
+        l.handle_key_down(SDLK_q);
+        l.handle_key_down(SDLK_x);
+        check(left == 3, "leader: the Leave button, Q and X leave");
+        l.lock();
+        click(l, MS::BTN_QUIT_X + 5, MS::BTN_QUIT_Y + 5);
+        check(left == 4, "leader: Leave works on a locked screen too (every player can leave)");
+        // a leader screen that nobody gave a request callback: START is harmless
+        MS bare;
+        bare.init();
+        bare.set_room(v);
+        bare.handle_key_down(SDLK_RETURN);
+        click(bare, MS::BTN_START_X + 5, MS::BTN_START_Y + 5);
+        check(!bare.is_locked(), "leader: START without a callback does nothing at all");
+    }
+}
+
 // The original's button class tests the rectangle of the picture that shows (docs 5.52): the START! buttons of the quick help and of the setup screen, the zones
 // that follow from FUN_010112e9 / FUN_01011281 / FUN_01011206, and the plate that the remake draws in the corner
 void test_button_zones(const assets::AssetArchive& arc) {
@@ -2706,6 +2862,7 @@ int main() {
     test_rubber_band(arc);
     test_screens(arc);
     test_room_screen(arc);
+    test_leader_screen(arc);
     test_button_zones(arc);
     test_more_button_zones(arc);
     test_pedestal_chains(arc);

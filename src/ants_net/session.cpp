@@ -180,6 +180,11 @@ void HostSession::handle_message(uint8_t player, const std::vector<uint8_t>& msg
             if (msg.size() != 1) return violation(player);
             drop(player);                            // a player who quits leaves like one whose connection dies
             return;
+        case MsgType::StartRequest: {                // a dedicated server's leader pressed START a second time: this one crossed the Start on the wire, the match runs already
+            StartRequestMsg m;
+            if (!decode(msg, m) || !seatless()) return violation(player);      // (a host that holds a seat has no leader: nobody sends it one)
+            return;
+        }
         case MsgType::Chat: {
             ChatMsg m;
             if (!decode(msg, m)) return violation(player);

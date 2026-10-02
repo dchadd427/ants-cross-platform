@@ -240,7 +240,7 @@ void NetGame::refresh_status() {
             break;
         }
         case Phase::Room:
-            status_ = str::text(role_ == Role::Host ? str::kPressStart : str::kWaitingForHost);
+            status_ = str::text(role_ == Role::Host || is_leader() ? str::kPressStart : str::kWaitingForHost);      // the leader of a server's room has START: the host's prompt
             break;
         case Phase::Loading:
             status_ = str::text(loaded_reported_ ? str::kWaitingForOthers : str::kLoadingGame);
@@ -257,6 +257,18 @@ LinkQuality NetGame::seat_quality(uint8_t seat) const noexcept {
     if (seat >= sim::MAX_PLAYERS || room_.slots[seat].state == SlotState::Empty) return LinkQuality::Unknown;
     if (room_.slots[seat].state == SlotState::Host) return LinkQuality::Good;
     return link_quality(room_.slots[seat].rtt_ms);
+}
+
+bool NetGame::is_leader() const noexcept {
+    return role_ == Role::Client && (phase_ == Phase::Room || phase_ == Phase::Loading) && seat_ < sim::MAX_PLAYERS && room_.leader == seat_;
+}
+
+bool NetGame::request_start() {
+    if (!is_leader() || phase_ != Phase::Room || !client_lobby_) return false;
+    size_t players = 0;
+    for (const auto& slot : room_.slots) players += slot.state != SlotState::Empty ? 1u : 0u;
+    if (players < 2) return false;                                  // "too few players": as the host's START
+    return client_lobby_->request_start();
 }
 
 void NetGame::update(uint32_t now_ms) {

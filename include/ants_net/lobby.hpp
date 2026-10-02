@@ -8,6 +8,10 @@
 //   client: Hello -> Welcome (seat) -> Room updates ... Start -> load -> Loaded -> Begin
 //   host:   Room broadcast on every change; start(): Start to all; all Loaded -> Begin; a failure or a leaver -> Cancel, back to the room
 //
+// A dedicated server's room (a host without a seat) has a LEADER (protocol 7): the first player who joined, and when it leaves the earliest of those who are left. The Room
+// message names it to everybody (RoomMsg::leader); it may send StartRequest, and the room (ants_server) then starts the match with the players who are there, when it can.
+// A host that holds a seat (LAN / direct) has no leader and ignores StartRequest.
+//
 // Both classes are pure logic over Connection, driven from the main loop like the sessions. The connections stay owned by the caller; when the match
 // begins the host lobby hands them (seat -> connection) to the HostSession.
 
@@ -33,10 +37,15 @@ public:
         uint32_t ping_every_ms{1000};        // the round trip to every guest is measured this often (the thumbs of the setup screen)
         uint8_t min_players{2};              // can_start() needs this many seats taken (a dedicated server's room: the host holds none of them)
         uint8_t max_players{sim::MAX_PLAYERS};   // a Hello beyond this many seats taken is Rejected Full (a server's room that expects 3 players takes no fourth)
+        /// A dedicated server's room only (host_seat = kNoSeat; a host that holds a seat has no leader whatever this says): the first guest to join leads the room
+        /// (RoomMsg::leader) and its StartRequest is passed on to the room (Event::LeaderStart) when the room can start. False: the room has no leader and every StartRequest
+        /// is ignored (the server's `early_start` option of a room).
+        bool early_start{true};
     };
     enum class Phase : uint8_t { Room, Loading, Begun };
     struct Event {
-        enum class Type : uint8_t { Joined, Left, Rejected, LoadFailed, Cancelled, Begun };
+        /// LeaderStart (a dedicated server's room): the leader (`seat`) asked to start now and can_start() holds; the owner of the lobby decides and calls start()
+        enum class Type : uint8_t { Joined, Left, Rejected, LoadFailed, Cancelled, Begun, LeaderStart };
         Type type{Type::Joined};
         uint8_t seat{255};
     };
@@ -48,6 +57,11 @@ public:
     void set_fog(bool fog);
     const std::string& map_name() const noexcept { return room_.map_name; }
     bool fog() const noexcept { return room_.fog; }
+    /// The seat of the room's leader (kNoLeader when there is none: a host that holds a seat, a room without early start, nobody has joined yet)
+    uint8_t leader() const noexcept { return room_.leader; }
+    /// How many StartRequest messages were heard and not acted on: from a guest that is not the leader (every guest of a host that holds a seat), after the room started loading,
+    /// from a room that cannot start (too few players). A request is no offence (the leader's second click on START arrives after the Start), a malformed one is (a violation).
+    uint32_t ignored_start_requests() const noexcept { return ignored_start_requests_; }
 
     /// A connection that the listener accepted; it becomes a seat when its Hello is accepted. `address` is where the connection came from (the host
     /// part only): with the port the guest announces it tells the other guests where to reach it during the match (host migration).
@@ -103,6 +117,7 @@ private:
         uint32_t rtt_ms{0};
         std::string address;                     // where the guest's connection came from
         uint16_t listen_port{0};                 // the port on which it accepts the other guests during the match (0: none)
+        uint32_t join_order{0};                  // 1, 2, 3, ... in the order of the Welcomes: the earliest guest still here leads a server's room
     };
     struct Pending {
         Connection* conn;
@@ -117,6 +132,10 @@ private:
     void handle_guest_message(uint8_t seat, const std::vector<uint8_t>& msg);
     void check_all_loaded();
     void cancel_with(CancelMsg::Reason reason, uint8_t player);
+    /// A dedicated server's room that allows an early start has a leader
+    bool leads() const noexcept { return cfg_.host_seat >= sim::MAX_PLAYERS && cfg_.early_start; }
+    /// The leader is the guest with the earliest Welcome among those who are here (recomputed whenever somebody joins or leaves, before the room is broadcast)
+    void elect_leader();
 
     Config cfg_;
     RoomMsg room_;
@@ -128,6 +147,8 @@ private:
     uint32_t load_started_ms_{0};
     std::vector<Pending> pending_;
     std::vector<Event> events_;
+    uint32_t joins_{0};                      // the Welcomes sent so far (Guest::join_order)
+    uint32_t ignored_start_requests_{0};
 };
 
 class ClientLobby {
@@ -155,6 +176,13 @@ public:
     Phase phase() const noexcept { return phase_; }
     uint8_t my_seat() const noexcept { return seat_; }
     const RoomMsg& room() const noexcept { return room_; }
+    /// This machine leads the room (the last Room message names its seat as the leader; a dedicated server's room only)
+    bool is_leader() const noexcept {
+        return (phase_ == Phase::InRoom || phase_ == Phase::Loading || phase_ == Phase::Loaded) && seat_ < sim::MAX_PLAYERS && room_.leader == seat_;
+    }
+    /// The leader asks the server to start the match now with the players who are here (StartRequest). False unless this machine leads an open room (InRoom) and the message went
+    /// out. The server decides: it starts only when it can (two players at least) and says nothing to a request that it cannot honour.
+    bool request_start();
     /// The host's Start (valid from Loading on): the map, the seed, the roster
     const StartMsg& start_info() const noexcept { return start_; }
     RejectReason reject_reason() const noexcept { return reject_; }

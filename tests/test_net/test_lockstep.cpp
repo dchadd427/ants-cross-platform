@@ -290,9 +290,22 @@ bool any_decodes(const std::vector<uint8_t>& b) {
     RequestMsg m18;
     PeerHelloMsg m19;
     PingMsg m20;
+    StartRequestMsg m21;
     return decode(b, m1) || decode(b, m2) || decode(b, m3) || decode(b, m4) || decode(b, m5) || decode(b, m6) || decode(b, m7) || decode(b, m8) ||
            decode(b, m9) || decode(b, m10) || decode(b, m11) || decode(b, m12) || decode(b, m13) || decode(b, m14) || decode(b, m15) ||
-           decode(b, m16) || decode(b, m17) || decode(b, m18) || decode(b, m19) || decode_ping(b.data(), b.size(), m20);
+           decode(b, m16) || decode(b, m17) || decode(b, m18) || decode(b, m19) || decode_ping(b.data(), b.size(), m20) || decode(b, m21);
+}
+
+// A dedicated server's room as the Room message shows it (protocol 7): three guests (no Host slot), the first of them the leader
+RoomMsg server_room_of(uint8_t leader) {
+    RoomMsg r;
+    r.slots[0] = {SlotState::Client, "Ann", 30};
+    r.slots[1] = {SlotState::Client, "Bob", kRttUnknown};
+    r.slots[3] = {SlotState::Client, "Cat", 1500};
+    r.map_name = "SMALL.LVL";
+    r.you = 1;
+    r.leader = leader;
+    return r;
 }
 
 void run_protocol_tests() {
@@ -395,10 +408,16 @@ void run_protocol_tests() {
         StartMsg start2;
         ASSERT_TRUE(decode(encode(start), start2) && start2.endpoints[2] == start.endpoints[2] && start2.endpoints[3] == start.endpoints[3] &&
                     start2.endpoints[0].address.empty() && start2.endpoints[1].port == 0);
+        // protocol 7: the room names its leader, and the leader's request to start is a message of its own
+        RoomMsg led = server_room_of(3);
+        RoomMsg led2;
+        ASSERT_TRUE(decode(encode(led), led2) && led2.leader == 3 && led2.you == 1 && led2.map_name == "SMALL.LVL" && led2.slots[3].name == "Cat" && led2.slots[2].state == SlotState::Empty);
+        StartRequestMsg sr;
+        ASSERT_TRUE(decode(encode(sr), sr) && peek_type(encode(sr)) == MsgType::StartRequest);
         // every valid message is rejected with a byte too many and with any byte missing
         const std::vector<std::vector<uint8_t>> all = {encode(hello), encode(w),  encode(r),  encode(cm), encode(t),  encode(a),  encode(hm),
                                                        encode(d),     encode(c),  encode(pr), encode(ac), encode(rf), encode(rs), encode(rq),
-                                                       encode(ph),    encode(hello_port), encode(start)};
+                                                       encode(ph),    encode(hello_port), encode(start), encode(led), encode(sr), encode(server_room_of(255))};
         for (const auto& m : all) {
             std::vector<uint8_t> longer = m;
             longer.push_back(0);
@@ -493,11 +512,13 @@ void run_protocol_tests() {
         ASSERT_TRUE(decode(encode(start), start_back) && start_back.endpoints[1].address.empty());
         start.endpoints[1].address = "198.51.100.7";
         ASSERT_TRUE(decode(encode(start), start_back) && start_back.endpoints[1].address == "198.51.100.7");
-        // unknown types
-        for (uint8_t type : std::vector<uint8_t>{0, 24, 100, 255}) {
+        // unknown types (24 was one until protocol 7 gave it to StartRequest)
+        for (uint8_t type : std::vector<uint8_t>{0, 25, 100, 255}) {
             const std::vector<uint8_t> m = {type, 0, 0, 0, 0};
             ASSERT_EQ(peek_type(m), MsgType::None);
         }
+        ASSERT_EQ(peek_type(std::vector<uint8_t>{24}), MsgType::StartRequest);
+        ASSERT_EQ(static_cast<int>(MsgType::Last), 24);
         ASSERT_EQ(peek_type(std::vector<uint8_t>{}), MsgType::None);
     } TEST_END();
 
@@ -512,14 +533,15 @@ void run_protocol_tests() {
         const std::vector<std::vector<uint8_t>> seeds = {encode(turn), encode(hash), encode(CommandMsg{cmd(CommandType::GroupAttack, 2, 255, 5, 5, {1})}),
                                                          encode(ChatMsg{1, true, "hello"}), encode(hello_of(1, "Ann")), encode(WelcomeMsg{1, 4}),
                                                          encode(ProposeMsg{1, 2}), encode(AcceptMsg{1, 100, 98}), encode(RefuseMsg{1, 1}),
-                                                         encode(ResumeMsg{1, 2, 500}), encode(RequestMsg{40}), encode(PeerHelloMsg{3})};
+                                                         encode(ResumeMsg{1, 2, 500}), encode(RequestMsg{40}), encode(PeerHelloMsg{3}),
+                                                         encode(server_room_of(0)), encode(server_room_of(255)), encode(StartRequestMsg{})};
         size_t accepted = 0;
         for (int i = 0; i < 400000; ++i) {
             std::vector<uint8_t> buf;
             if (i % 3 == 0) {
                 buf.resize(rng.below(80));
                 for (auto& x : buf) x = static_cast<uint8_t>(rng.below(256));
-                if (!buf.empty()) buf[0] = static_cast<uint8_t>(1 + rng.below(23));    // a plausible type byte
+                if (!buf.empty()) buf[0] = static_cast<uint8_t>(1 + rng.below(24));    // a plausible type byte
             } else {
                 buf = seeds[rng.below(static_cast<uint32_t>(seeds.size()))];
                 for (uint32_t m = 1 + rng.below(3); m > 0; --m) buf[rng.below(static_cast<uint32_t>(buf.size()))] = static_cast<uint8_t>(rng.below(256));
@@ -537,6 +559,8 @@ void run_protocol_tests() {
             ResumeMsg rs;
             RequestMsg rq;
             PeerHelloMsg ph;
+            RoomMsg room;
+            StartRequestMsg sreq;
             if (decode(buf, t)) {
                 ++accepted;
                 ASSERT_TRUE(encode(t) == buf);
@@ -553,8 +577,109 @@ void run_protocol_tests() {
             if (decode(buf, rs)) { ++accepted; ASSERT_TRUE(encode(rs) == buf); }
             if (decode(buf, rq)) { ++accepted; ASSERT_TRUE(encode(rq) == buf); }
             if (decode(buf, ph)) { ++accepted; ASSERT_TRUE(encode(ph) == buf); }
+            if (decode(buf, room)) {                   // a Room that gets through names a leader that is a guest's seat (or nobody) and encodes back to the same bytes
+                ++accepted;
+                ASSERT_TRUE(encode(room) == buf);
+                ASSERT_TRUE(room.leader == kNoLeader || (room.leader < sim::MAX_PLAYERS && room.slots[room.leader].state == SlotState::Client));
+            }
+            if (decode(buf, sreq)) { ++accepted; ASSERT_TRUE(encode(sreq) == buf && buf.size() == 1); }
         }
         ASSERT_TRUE(accepted > 5000);                  // the mutations of valid messages do get through
+    } TEST_END();
+
+    TEST_CASE("N2.3b Protocol 7: The Room Names Its Leader (Every Value; Only The Seat Of A Guest Or Nobody), StartRequest Is One Byte And Nothing Else, The Layout Of Protocol 6 Is Refused") {
+        ASSERT_EQ(kProtocolVersion, 7);                                    // the Room message grew a byte and a message type was added: a client of protocol 6 cannot play with it
+        ASSERT_EQ(kNoLeader, 255);
+        // every value of the leader: nobody, and each seat that a guest holds; the byte is the last of the message, the receiver's own seat ("you") the one before it
+        for (const uint8_t leader : {uint8_t{255}, uint8_t{0}, uint8_t{1}, uint8_t{3}}) {
+            RoomMsg r = server_room_of(leader);
+            for (const uint8_t you : {uint8_t{255}, uint8_t{0}, uint8_t{1}, uint8_t{3}}) {                     // (the receiver may or may not be the leader)
+                r.you = you;
+                const std::vector<uint8_t> bytes = encode(r);
+                ASSERT_EQ(bytes[bytes.size() - 1], leader);
+                ASSERT_EQ(bytes[bytes.size() - 2], you);
+                RoomMsg back;
+                ASSERT_TRUE(decode(bytes, back) && back.leader == leader && back.you == you);
+                ASSERT_TRUE(encode(back) == bytes);
+            }
+        }
+        {   // a room that names nobody: the default, and what a LAN host's room says
+            RoomMsg none;
+            RoomMsg back;
+            ASSERT_EQ(none.leader, 255);
+            ASSERT_TRUE(decode(encode(none), back) && back.leader == kNoLeader);
+            RoomMsg lan = none;                                            // a host that holds a seat: no leader
+            lan.slots[0] = {SlotState::Host, "Queen", 0};
+            lan.slots[1] = {SlotState::Client, "Bob", 20};
+            ASSERT_TRUE(decode(encode(lan), back) && back.leader == kNoLeader && back.slots[0].state == SlotState::Host);
+        }
+        // what a leader may be: the seat of a person who joined as a guest. Anything else is no message.
+        const std::vector<uint8_t> base = encode(server_room_of(255));
+        RoomMsg out;
+        for (unsigned value = 0; value < 256; ++value) {                   // every byte value in the leader's place
+            std::vector<uint8_t> bytes = base;
+            bytes.back() = static_cast<uint8_t>(value);
+            const bool should = value == 255 || value == 0 || value == 1 || value == 3;      // seats 0, 1 and 3 hold guests, seat 2 is empty
+            ASSERT_EQ(decode(bytes, out), should);
+        }
+        {   // a leader on an empty seat, on a bot, on the host
+            RoomMsg r = server_room_of(0);
+            r.leader = 2;
+            ASSERT_FALSE(decode(encode(r), out));                          // empty
+            r.slots[2] = {SlotState::Bot, "Bot (Medium)", 0};
+            ASSERT_FALSE(decode(encode(r), out));                          // a computer player never leads
+            r.slots[2] = {SlotState::Host, "Queen", 0};
+            ASSERT_FALSE(decode(encode(r), out));                          // nor does a host that holds a seat
+            r.slots[2] = {SlotState::Client, "Dan", 10};
+            ASSERT_TRUE(decode(encode(r), out) && out.leader == 2);        // a guest does
+        }
+        {   // the layout of protocol 6 (no leader byte) is no Room message of this protocol, and neither is one byte too many
+            std::vector<uint8_t> v6 = base;
+            v6.pop_back();
+            ASSERT_FALSE(decode(v6, out));
+            std::vector<uint8_t> longer = base;
+            longer.push_back(255);
+            ASSERT_FALSE(decode(longer, out));
+        }
+        // StartRequest: exactly the type byte
+        const std::vector<uint8_t> request = encode(StartRequestMsg{});
+        ASSERT_TRUE(request.size() == 1 && request[0] == 24);
+        StartRequestMsg sr;
+        ASSERT_TRUE(decode(request, sr));
+        ASSERT_FALSE(decode(std::vector<uint8_t>{}, sr));
+        ASSERT_FALSE(decode(nullptr, 1, sr));
+        for (size_t extra : {size_t{1}, size_t{2}, size_t{9}, size_t{200}, kMaxMessageBytes - 1}) {    // a payload of any size makes it garbage
+            std::vector<uint8_t> payload = request;
+            payload.resize(1 + extra, 0x5A);
+            ASSERT_FALSE(decode(payload, sr));
+        }
+        for (unsigned type = 0; type < 256; ++type) {                      // no other type byte is a StartRequest
+            if (type == 24) continue;
+            ASSERT_FALSE(decode(std::vector<uint8_t>{static_cast<uint8_t>(type)}, sr));
+        }
+        // and the neighbours: no other decoder takes it, and it takes no other message
+        ASSERT_FALSE(any_decodes(std::vector<uint8_t>{24, 0}) || any_decodes(std::vector<uint8_t>{}));
+        for (const auto& m : {encode(server_room_of(0)), encode(hello_of(kProtocolVersion, "A")), encode_begin(), encode_leave(), encode(WelcomeMsg{1, 4})}) {
+            ASSERT_FALSE(decode(m, sr));
+        }
+        // 20,000 messages made of the leader's neighbours: bytes of the Room that were changed, or cut, or lengthened never give a leader that is not a guest's seat
+        Lcg rng(7);
+        size_t with_leader = 0;
+        for (int i = 0; i < 20000; ++i) {
+            std::vector<uint8_t> bytes = encode(server_room_of(static_cast<uint8_t>(i % 2 == 0 ? 0 : 255)));
+            const uint32_t pick = rng.below(12);                                                                 // the leader's byte: mostly a seat number or nobody, sometimes any byte
+            bytes[bytes.size() - 1] = pick < 8 ? static_cast<uint8_t>(pick) : (pick == 8 ? uint8_t{255} : static_cast<uint8_t>(rng.below(256)));
+            if (rng.below(3) == 0) bytes[bytes.size() - 2] = static_cast<uint8_t>(rng.below(256));               // and the receiver's own seat
+            if (rng.below(7) == 0) bytes.resize(rng.below(static_cast<uint32_t>(bytes.size()) + 2));
+            RoomMsg room;
+            if (decode(bytes, room)) {
+                with_leader += room.leader == kNoLeader ? 0u : 1u;
+                ASSERT_TRUE(room.leader == kNoLeader || room.slots[room.leader].state == SlotState::Client);
+                ASSERT_TRUE(room.you == 255 || room.you < sim::MAX_PLAYERS);
+                ASSERT_TRUE(encode(room) == bytes);
+            }
+        }
+        ASSERT_TRUE(with_leader > 1000);
     } TEST_END();
 }
 
@@ -964,6 +1089,35 @@ void run_failure_tests() {
         m.run(1000, false);
         ASSERT_TRUE(m.referee.is_player_dropped(0));
         for (uint8_t p = 1; p < 3; ++p) ASSERT_TRUE(m.sims[p]->is_player_dropped(0));
+    } TEST_END();
+
+    TEST_CASE("S2.5 Dedicated Server: A StartRequest That Reaches A Running Match (The Leader's Second Click Crossed The Start) Is Ignored And Costs Nothing; With A Payload It Is Garbage; A Host That Holds A Seat Has No Leader And Counts It As A Violation") {
+        {
+            ServerMatch m(1, 3, {20, 5});
+            m.run(1000);
+            for (int i = 0; i < 50; ++i) m.client_ends[0]->send(encode(StartRequestMsg{}));          // fifty late clicks: far over the eight violations that throw a client out
+            m.run(500);
+            ASSERT_TRUE(m.host->client_present(0));
+            ASSERT_EQ(m.host->violations(0), 0u);
+            m.client_ends[1]->send({static_cast<uint8_t>(MsgType::StartRequest), 1});               // with a payload: garbage like any other
+            m.run(300);
+            ASSERT_EQ(m.host->violations(1), 1u);
+            ASSERT_TRUE(m.host->client_present(1));
+            m.settle();
+            ASSERT_TRUE(m.all_equal());                                                              // nothing changed in the match
+            ASSERT_TRUE(m.host->desyncs().empty());
+        }
+        {   // a host that plays a seat: nobody in its room leads, so the message is a violation like any other that a guest may not send
+            Match m(1, 3, {20, 0});
+            m.run(1000);
+            m.client_ends[2]->send(encode(StartRequestMsg{}));
+            m.run(300);
+            ASSERT_EQ(m.host->violations(2), 1u);
+            for (int i = 0; i < 10; ++i) m.client_ends[2]->send(encode(StartRequestMsg{}));
+            m.run(300);
+            ASSERT_FALSE(m.host->client_present(2));                                                 // thrown out after eight
+            ASSERT_TRUE(m.host->client_present(1));
+        }
     } TEST_END();
 
     TEST_CASE("N2.13 Desync: A Diverging Client Is Named Within A Second, With The Subsystem, And Sees It Itself") {

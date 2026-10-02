@@ -6,7 +6,9 @@
 // no threads, no blocking, one update(now_ms) per pass.
 //
 //   Waiting  clients join (Hello with the room's code); when `players` seats are taken the room starts: Start goes to all, the server's own copy of the map is
-//            already loaded (the room was refused otherwise), every client loads and reports, and the match begins when all have
+//            already loaded (the room was refused otherwise), every client loads and reports, and the match begins when all have. The first player who joined is the
+//            room's LEADER (the next one when it leaves); with `early_start` on, the leader's StartRequest starts the match at once with the players who are there
+//            (two at least), without waiting for the rest
 //   Loading  a client that cannot load the map or leaves cancels the start: back to Waiting (a few times at most)
 //   Running  the referee executes the turns; a diverging client is named and the room fails; the match end (the clock, the rules) finishes it
 //   Finished the result (rows as the results screen shows them) is kept; the connections close after a short grace period
@@ -32,6 +34,8 @@ struct RoomSpec {
     std::string map;                        // the map's file name in the map store
     bool fog{false};                        // the Fog of War option of the match
     uint8_t players{2};                     // 2 .. 4: the match starts when this many seats are taken (and takes no more)
+    bool early_start{true};                 // the room's leader (the first player who joined) may start the match before all the seats are taken: with at least two players there
+                                            // (the roster is then the seats that are taken). False: the room has no leader and starts only when every seat is taken. Demo rooms have it on.
     bool has_seed{false};
     uint32_t seed{1};                       // the match's random seed (the server draws one when the spec has none)
     uint32_t wait_ms{120000};               // a room that has not started after this long fails ("nobody came", "somebody is missing")
@@ -62,6 +66,9 @@ struct RoomStatus {
     std::string map;
     bool fog{false};
     uint8_t expected{0};
+    bool early_start{true};                 // the room allows the leader's early start
+    uint8_t leader{255};                    // the seat of the leader while the room waits or loads (255: none: nobody has joined yet, the room does not allow an early start, or the match runs)
+    uint32_t ignored_start_requests{0};     // StartRequest messages that were heard and not acted on (a player who is not the leader, a room that cannot start)
     RoomState state{RoomState::Waiting};
     std::string reason;                     // why a room failed, or how it ended ("" while it runs)
     uint8_t joined{0};
