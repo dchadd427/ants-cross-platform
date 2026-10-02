@@ -237,6 +237,29 @@ uint8_t tile_flags_of(uint16_t tile_id) noexcept {
     return tile_id < kTileIdCount ? data::kTileFlags[tile_id] : uint8_t{0};
 }
 
+bool is_powerup_tile(uint16_t tile_id) noexcept {
+    return (tile_flags_of(tile_id) & kTileFlagPowerUp) != 0;
+}
+
+bool is_dropper_plant_tile(uint16_t tile_id) noexcept {
+    return (tile_flags_of(tile_id) & kTileFlagPlant) != 0;
+}
+
+bool is_plant_object_tile(uint16_t tile_id) noexcept {
+    return (tile_flags_of(tile_id) & (kTileFlagPlant | 0x20u)) != 0;
+}
+
+uint8_t ant_type_of_powerup_tile(uint16_t tile_id) noexcept {
+    switch (tile_id) {                                                 // 0x1021087 .. 0x10210be: the five ids in a row, anything else is 0
+        case 0x3E: return kAntCombat;
+        case 0x3F: return kAntThief;
+        case 0x40: return kAntBomber;
+        case 0x41: return kAntSwimmer;
+        case 0x42: return kAntFire;
+        default:   return kAntWorker;
+    }
+}
+
 FootprintSpan food_footprint(uint16_t tile_id) noexcept {
     for (const data::FoodFootprint& f : data::kFoodFootprints) {
         if (f.tile == tile_id) return FootprintSpan{data::kFootprintCells + f.first, f.count};

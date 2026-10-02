@@ -14,6 +14,7 @@
 //   AI1.18  a hand-made world: piles behind a wall, the approach of a pile that shrinks
 //   AI1.19  a pile beyond the path finder's limit is not offered
 //   AI1.20  two objects on one anchor: which one is clicked, which one is bitten, whose points
+//   AI1.22  power-ups are tile ids: a dictionary that calls their entries "." gives the same power-up list, approaches and walls as one that names them
 #include "ai_test.hpp"
 
 #include <algorithm>
@@ -869,5 +870,50 @@ void run_map_tests() {
         for (const PileView& p : v.piles()) listed_last = listed_last || p.index == static_cast<uint32_t>(last);
         ASSERT_TRUE(listed_last);                                                                      // ... which is why a bot must ask MapInfo (clickable cells, bite_index), not only remaining
         ASSERT_FALSE(MapInfo(sim).piles()[static_cast<size_t>(last)].approach[0].reachable());          // and a fresh analysis agrees: the cells are gone
+    } TEST_END();
+    TEST_CASE("AI1.22 Power-Ups Are Tile Ids: A Level Whose Dictionary Calls The Five Power-Up Entries \".\" (Many Community Maps) Has The Same Power-Up List, Approaches And Walls As One That Names Them") {
+        const uint16_t ids[5] = {62, 63, 64, 65, 66};
+        const char* names[5] = {"pu_comb", "pu_thief", "pu_bomb", "pu_swim", "pu_mason"};
+        const sim::AntType kinds[5] = {sim::AntType::Combat, sim::AntType::Thief, sim::AntType::Bomber, sim::AntType::Swimmer, sim::AntType::Fire};
+        const auto make = [&](bool dotted) {
+            assets::LevelData level = level_of("TINY");
+            for (int k = 0; k < 5; ++k) {
+                level.tile_dictionary[ids[k]] = dotted ? "." : names[k];
+                const int x = 12 + 2 * k, y = 10;
+                const size_t i = static_cast<size_t>(y) * level.width() + static_cast<size_t>(x);
+                level.layer2_interactive[i].tile_index = ids[k];
+                level.layer2_interactive[i].flags = 1;
+                level.layer2_interactive[i].properties = static_cast<uint16_t>((x << 8) | y);
+                level.layer1_terrain[i].flags = 1;                                           // the editor's solid bit under the object
+            }
+            return level;
+        };
+        const assets::LevelData named_level = make(false);
+        const assets::LevelData dotted_level = make(true);
+        sim::SimulationEngine named, dotted;
+        named.init(named_level, 1, 0x0F);
+        dotted.init(dotted_level, 1, 0x0F);
+        const MapInfo mn(named), md(dotted);
+        ASSERT_EQ(md.powerups().size(), 5u);
+        ASSERT_EQ(mn.powerups().size(), 5u);
+        for (size_t i = 0; i < 5; ++i) {
+            const PowerUpInfo& a = mn.powerups()[i];
+            const PowerUpInfo& b = md.powerups()[i];
+            ASSERT_TRUE(a.tile == b.tile && a.type == b.type);
+            ASSERT_TRUE(b.tile == tc(12 + 2 * static_cast<int32_t>(i), 10));                // reading order: the five cells of row 10
+            ASSERT_EQ(b.type, kinds[i]);
+            ASSERT_TRUE(dotted.grid().has_powerup_at(b.tile));
+            ASSERT_EQ(dotted.grid().get_powerup_type(b.tile), static_cast<uint8_t>(kinds[i]));
+            for (uint8_t t = 0; t < sim::MAX_PLAYERS; ++t) {
+                ASSERT_EQ(a.approach[t].cost, b.approach[t].cost);
+                ASSERT_TRUE(a.approach[t].click == b.approach[t].click);
+                ASSERT_TRUE(b.approach[t].reachable());                                      // TINY is open ground: every team can walk up to each of them
+                ASSERT_FALSE(MapInfo::walkable(dotted.grid(), t, b.tile));                  // a power-up is a wall for every order but the pick-up
+            }
+        }
+        for (uint8_t t = 0; t < sim::MAX_PLAYERS; ++t) {
+            ASSERT_TRUE(MapInfo::walkable_mask(named.grid(), t) == MapInfo::walkable_mask(dotted.grid(), t));
+            ASSERT_TRUE(mn.cost_field_of(t) == md.cost_field_of(t));
+        }
     } TEST_END();
 }

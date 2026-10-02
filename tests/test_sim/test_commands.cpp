@@ -640,6 +640,8 @@ void run_coverage_tests() {
         // the map's last cell (the whole grid is hashed, not a prefix)
         const TileCell last = w.sim.grid().get_cell(59, 59);
         probe("last cell", [&]() { w.sim.grid_mut().get_cell_mut(59, 59).terrain_id += 1; }, [&]() { w.sim.grid_mut().get_cell_mut(59, 59) = last; });
+        // the level's default ant type (block 3): state that decides what every worker is
+        probe("default ant tile", [&]() { w.sim.grid_mut().set_default_ant_tile(62); }, [&]() { w.sim.grid_mut().set_default_ant_tile(0x7FFE); });
         // hills
         {
             const uint16_t old_x = w.sim.grid_mut().anthills_mut()[0].x;

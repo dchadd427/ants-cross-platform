@@ -553,8 +553,11 @@ void Renderer::set_level(const ants::assets::LevelData& level) {
     for (uint32_t y = 0; y < level.height; ++y) {
         for (uint32_t x = 0; x < level.width; ++x) {
             const auto& c2 = level.get_cell_layer2(x, y);
-            if (c2.tile_index >= level.tile_dictionary.size()) continue;
             if (c2.is_empty() || c2.tile_index == 0xFFFF || c2.tile_index == 0x7FFE) continue;
+            // A power-up is its tile id (62 .. 66), whatever the dictionary calls the entry ("." in many community maps): the ground power-up is drawn exclusively through
+            // cell.has_powerup() (below), the same sprite of the same kind on every map
+            if (ants::sim::movement::is_powerup_tile(c2.tile_index)) continue;
+            if (c2.tile_index >= level.tile_dictionary.size()) continue;
 
             const std::string& tname = level.tile_dictionary[c2.tile_index];
             if (tname.empty() || tname == ".") continue;
@@ -589,8 +592,16 @@ void Renderer::set_level(const ants::assets::LevelData& level) {
     // the y-sorted sprite list at the cell centre with sort key row*32+16 (Ants.exe 0x100e383..0x100e448).
     object_list_sprites_.clear();
     for (const auto& sp_item : level.anthill_spawns) {
-        if (sp_item.team_id != 255 || sp_item.tile_id >= level.tile_dictionary.size()) continue;
-        const int32_t anim_id = tile_anim_id_[sp_item.tile_id];
+        if (sp_item.team_id != 255) continue;
+        // A plant (the clovers 404 .. 408, the flowers 410 .. 416, 420 and 421, ...) is its tile id, which indexes its animation directly, whatever the dictionary calls the entry
+        // ("." in some community maps): the original's name pass makes the graphics of these ids load whatever the dictionary says (the table at 0x1001ba8), so the flowers of a
+        // dropper are always there to see. Any other record keeps the dictionary's name for the animation.
+        int32_t anim_id = -1;
+        if (ants::sim::movement::is_plant_object_tile(sp_item.tile_id)) {
+            if (sp_item.tile_id < anim_count) anim_id = static_cast<int32_t>(sp_item.tile_id);
+        } else if (sp_item.tile_id < level.tile_dictionary.size()) {
+            anim_id = tile_anim_id_[sp_item.tile_id];
+        }
         if (anim_id < 0) continue;
         ObjectListSprite spr{};
         spr.anim_id = anim_id;

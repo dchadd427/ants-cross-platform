@@ -368,6 +368,52 @@ struct Sfx {
     }
 };
 
+// A level whose block 3 names a default ant type (Ants.exe FUN_01007025): every worker of it is that type's ant for the panel, the pedestal and the voices (the selection type
+// FUN_010282e0 and the four voice pickers ask the getter FUN_0100f9cb), but its pick box is that of a worker, because FUN_01026a39 reads the own type field (+0x54): only an ant that
+// took the Combat power-up has the larger box.
+void test_default_type_texts() {
+    g_group = "default type";
+    std::printf("[status] a worker of a default-type level: the panel text and the go voice of its type, the pick box of a worker\n");
+    const uint16_t tiles[5] = {62, 63, 64, 65, 66};                          // Combat, Thief, Bomber, Swimmer, Fire
+    const char* select_text[5] = {"Yessir!", "Thief here", "BomberAnt selected.", "SwimmerAnt selected.", "Where to?"};
+    const char* go_text[5] = {"Movin' out.", "Here I go...", "On my way.", "On my way.", "On my way."};
+    const uint32_t go_lo[5] = {28, 19, 37, 33, 23};                          // combgo1 / combgo2, the thief, bomber, swimmer and fire ant voices (as in test_move_acknowledgement)
+    const uint32_t go_hi[5] = {29, 19, 37, 33, 23};
+    for (int i = 0; i < 5; ++i) {
+        sim::SimulationEngine sim;
+        make_world(sim);
+        sim.grid_mut().set_default_ant_tile(tiles[i]);
+        HUD hud;
+        Sfx sfx;
+        hud.init(0);
+        sfx.attach(hud);
+        const uint32_t ant = sim.spawn_unit(0, sim::AntType::Worker, sim::TileCoord{10, 10});
+        hud.select_ant(ant);
+        run(hud, sim.get_world_state(), 1);
+        check(status_after_render(hud, sim.get_world_state()) == select_text[i], std::string("selecting a worker of the level whose default is ") + select_text[i]);
+        sfx.ids.clear();
+        hud.dispatch_move_order(20, 10, sim);
+        check(status_after_render(hud, sim.get_world_state()) == go_text[i], std::string("the move order of that worker: ") + go_text[i]);
+        check(!sfx.ids.empty() && sfx.ids[0] >= go_lo[i] && sfx.ids[0] <= go_hi[i], "the go voice of the default type");
+    }
+    // the pick box: a marquee that reaches only the extra margin of a combat ant's box (its own type field is Combat) takes that ant, but not a worker of a default Combat level
+    for (int own = 0; own < 2; ++own) {
+        sim::SimulationEngine sim;
+        make_world(sim);
+        if (own == 0) sim.grid_mut().set_default_ant_tile(62);
+        HUD hud;
+        hud.init(0);
+        const uint32_t ant = sim.spawn_unit(0, own == 1 ? sim::AntType::Combat : sim::AntType::Worker, sim::TileCoord{10, 10});
+        const sim::WorldState& world = sim.get_world_state();
+        hud.clear_selection();
+        run(hud, world, 1);
+        hud.select_ants_in_rect(306, 331, 312, 341, world, false);          // x 306 .. 312: inside the combat box (left edge 304), outside the worker's (316)
+        check(hud.is_ant_selected(ant) == (own == 1), own == 1 ? "a combat ant's wider box takes the marquee" : "the worker of a default Combat level has a worker's box");
+        check((hud.pick_ant_at(world, 308, 336) != nullptr) == (own == 1), own == 1 ? "a click in a combat ant's extra margin hits it" : "a click in that margin misses the worker of a default Combat level");
+        check(hud.pick_ant_at(world, 336, 336) != nullptr, "a click on the ant hits it either way");
+    }
+}
+
 void test_move_acknowledgement() {
     g_group = "orders";
     std::printf("[status] a move order: the closest ant answers with its go voice and \"On my way.\" / \"Movin' out.\" / \"Here I go...\"\n");
@@ -876,6 +922,7 @@ int main() {
     test_box_geometry();
     test_box_clip_and_flash();
     test_selection_texts();
+    test_default_type_texts();
     test_type_change_text();
     test_quiet_paths();
     test_move_acknowledgement();

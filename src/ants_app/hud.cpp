@@ -1165,7 +1165,7 @@ void HUD::select_ants_in_rect(int32_t x1, int32_t y1, int32_t x2, int32_t y2, co
     std::vector<uint32_t> picked;
     for (const auto& ant : world.ants) {
         if (ant.player_id != local_player_id_) continue;
-        const bool combat = (ant.type == sim::AntType::Combat);
+        const bool combat = (ant.raw_type == sim::AntType::Combat);       // the own type field, as the hit box reads it (0x1026a3d)
         const int32_t al = ant.px - (combat ? 32 : 20);
         const int32_t ar = ant.px + (combat ? 26 : 20);
         const int32_t at = ant.py - (combat ? 46 : 32);

@@ -226,10 +226,11 @@ void SimulationEngineImpl::set_position(AntUnit& a, int32_t x, int32_t y) {
 }
 
 void SimulationEngineImpl::set_idle_label(AntUnit& a) {
-    if (a.type == AntType::Swimmer && grid_.terrain_class_at(pixel_tile(a)) == movement::kTerrainWater) {
+    const AntType type = type_of(a);                                // the label follows the type the ant IS (the level's default for an ant of type Worker)
+    if (type == AntType::Swimmer && grid_.terrain_class_at(pixel_tile(a)) == movement::kTerrainWater) {
         a.state = UnitState::Swimming;
     } else {
-        a.state = (a.type == AntType::Combat) ? UnitState::GuardIdle : UnitState::Idle;
+        a.state = (type == AntType::Combat) ? UnitState::GuardIdle : UnitState::Idle;
     }
 }
 
@@ -454,11 +455,11 @@ void SimulationEngineImpl::loco_on_step(AntUnit& a, StepEvt& e) {
     occ_move(a, TileCoord{(a.pixel_x + e.dx) / kTile, (a.pixel_y + e.dy) / kTile});
 }
 
-// Step callback, action 0x12 at the last frame (0x101ef14): idle again; a combat ant resumes the order it had before
-// its auto-engage, every other ant ends its order (SetPath(0)).
+// Step callback, action 0x12 at the last frame (0x101ef14): idle again; an ant that is in its auto-engage resumes the order it had before
+// (FUN_0101dd6f, called at 0x101ef4a without any look at the ant's type: only a combat ant ever has the engage flag +0xbc), every other ant ends its order (SetPath(0)).
 void SimulationEngineImpl::attack_clip_end(AntUnit& a) {
     set_action(a, AntUnit::kActionIdle, static_cast<uint8_t>(a.facing), -1, -1, false);
-    if (a.type != AntType::Combat || !resume_after_auto_engage(a)) {
+    if (!resume_after_auto_engage(a)) {
         a.waypoints.clear();
         a.current_waypoint_idx = 0;
         ++a.move_serial;
@@ -485,7 +486,8 @@ void SimulationEngineImpl::set_action(AntUnit& a, uint8_t action, uint8_t dir, i
         supplied = false;
         terr_a = static_cast<int16_t>(grid_.terrain_class_at(pixel_tile(a)));
     }
-    const uint8_t type = static_cast<uint8_t>(a.type);
+    const AntType etype = type_of(a);                               // SetAction asks the getter (0x101ae9f): the clip is that of the type the ant IS
+    const uint8_t type = static_cast<uint8_t>(etype);
     const bool carrying = a.is_holding();
     switch (action) {
         case AntUnit::kActionIdle: {                                // always restarts
@@ -497,7 +499,7 @@ void SimulationEngineImpl::set_action(AntUnit& a, uint8_t action, uint8_t dir, i
             return;
         }
         case AntUnit::kActionWalk: {
-            if (flag && a.type == AntType::Swimmer) {
+            if (flag && etype == AntType::Swimmer) {
                 const bool dive = (terr_a != movement::kTerrainWater && terr_b == movement::kTerrainWater);
                 const bool climb = (terr_a == movement::kTerrainWater && terr_b != movement::kTerrainWater);
                 if (dive || climb) {
@@ -507,7 +509,7 @@ void SimulationEngineImpl::set_action(AntUnit& a, uint8_t action, uint8_t dir, i
                 }
             }
             int16_t tr = !supplied ? terr_a : (flag ? terr_a : terr_b);
-            if (tr == movement::kTerrainWater && a.type != AntType::Swimmer) tr = movement::kTerrainMud;
+            if (tr == movement::kTerrainWater && etype != AntType::Swimmer) tr = movement::kTerrainMud;
             movement::MotionClip clip{};
             if (tr == movement::kTerrainWater) clip = movement::swim_clip(dir);
             else if (tr >= 0 && tr <= 4) clip = movement::walk_clip(type, static_cast<uint8_t>(tr), dir, carrying);
@@ -667,7 +669,7 @@ void SimulationEngineImpl::walk_step(AntUnit& a, StepEvt& e) {
     // D. a fire wall on the tile: every ant on it loses 1 hp and is thrown one tile; a fire ant is immune while it
     //    stands on it and is stunned when it lands or walks onto it.
     if ((e.event == 3 || stationary_end) && grid_.has_fire_at(cur)) {
-        if (a.type != AntType::Fire) {
+        if (type_of(a) != AntType::Fire) {                         // 0x101bc58
             e.dx = 0;
             e.dy = 0;
             blast(a, 1, grid_.get_cell(cur).interactive_owner, false);
@@ -1069,7 +1071,7 @@ bool SimulationEngineImpl::can_enter(const AntUnit& a, TileCoord t, uint32_t fla
     // R1 terrain (0x10049b8): water only for swimmers
     const uint8_t terr = grid_.terrain_class_at(t);
     if (!movement::terrain_walkable(terr)) {
-        if (terr != movement::kTerrainWater || a.type != AntType::Swimmer) return false;
+        if (terr != movement::kTerrainWater || type_of(a) != AntType::Swimmer) return false;       // 0x101f7d8
     }
     // R2 occupant
     AntUnit* occ = occupant_at(t);
@@ -1099,7 +1101,7 @@ bool SimulationEngineImpl::can_enter(const AntUnit& a, TileCoord t, uint32_t fla
     // R4 solid layer-1 object
     if (grid_.is_solid_object(t)) {
         if ((flags & kPowerUpOk) && cell.has_powerup()) return true;
-        if (cell.has_fire() && a.type == AntType::Fire) return true;
+        if (cell.has_fire() && type_of(a) == AntType::Fire) return true;                           // 0x101f946
         const int32_t food = food_object_at(t);
         if (food >= 0 && a.orig_order == AntUnit::kOrderHarvest && a.orig_food_id == food) return true;
         return false;
@@ -1209,7 +1211,7 @@ uint32_t SimulationEngineImpl::step_cost(const AntUnit& a, TileCoord from, TileC
             const bool ok = (a.orig_order_tile == to && cell.has_powerup() && a.orig_order == AntUnit::kOrderPowerUp) ||
                             (food >= 0 && a.orig_order == AntUnit::kOrderHarvest && a.orig_food_id == food) ||
                             (a.orig_order_tile == to && a.orig_order == AntUnit::kOrderRaid) ||
-                            (cell.has_fire() && a.type == AntType::Fire);
+                            (cell.has_fire() && type_of(a) == AntType::Fire);                            // 0x1020b48
             if (!ok) return kBlockedCost;
         }
         if (!(a.orig_order == AntUnit::kOrderBomb && a.orig_order_tile == to) && cell.has_bomb()) {
@@ -1218,7 +1220,7 @@ uint32_t SimulationEngineImpl::step_cost(const AntUnit& a, TileCoord from, TileC
         }
     }
 terrain: {
-        const bool swimmer = (a.type == AntType::Swimmer);
+        const bool swimmer = (type_of(a) == AntType::Swimmer);                                       // 0x10208f6
         const uint32_t ca = movement::terrain_step_weight(grid_.terrain_class_at(from), swimmer);
         const uint32_t cb = movement::terrain_step_weight(grid_.terrain_class_at(to), swimmer);
         if (ca == kBlockedCost || cb == kBlockedCost) return kBlockedCost;
@@ -1357,7 +1359,7 @@ void SimulationEngineImpl::classify_order(AntUnit& a, TileCoord t, bool special,
         // The ability order of the ant's type (FUN_01020655 0x10206ad): bomber 8, or 9 on a tile that cannot take a bomb
         // but holds one; fire ant 6, or 7 on a fire wall; swimmer 0xd, or 0xe on a completed bridge. Worker, thief
         // and combat ants keep order 0 (the original leaves +0xa8 unchanged after SetPath(0)).
-        switch (a.type) {
+        switch (type_of(a)) {                                                                        // 0x10206bb: the getter
             case AntType::Bomber:
                 a.orig_order = AntUnit::kOrderPlant;
                 if (!valid_ground(t, true) && valid_bomb(t)) a.orig_order = AntUnit::kOrderDefuse;
@@ -1453,7 +1455,7 @@ bool SimulationEngineImpl::go_to(AntUnit& a, TileCoord t, bool user_cmd, bool sp
         if (t.x < bx || t.x > bx + 3 || t.y < by || t.y > by + 3) continue;
         if (ah.team_id == a.player_id) {
             t = TileCoord{bx + 1, by + 1};
-        } else if (a.type == AntType::Thief) {
+        } else if (a.type == AntType::Thief) {                  // the ant's OWN type (cmp word ptr [esi + 0x54], 3 at 0x101fcb7), not the getter: the workers of a level whose default is Thief cannot raid
             t = TileCoord{bx + 3, by + 2};
         } else {
             stop_sync(a);

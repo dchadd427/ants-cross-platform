@@ -172,6 +172,7 @@ COMBAT_ACTIONS_STATUS=0
 ABILITY_ACTIONS_STATUS=0
 POWERUP_ACTIONS_STATUS=0
 FOOD_ACTIONS_STATUS=0
+LEVEL_DEFAULTS_STATUS=0
 CHALLENGER_M2_1_STATUS=0
 CHALLENGER_M2_2_STATUS=0
 MAP_SWEEP_STATUS=0
@@ -303,6 +304,13 @@ if [ "$RUN_SIM" -eq 1 ]; then
     echo -e "${BOLD}${BLUE}======================================================================${RESET}"
     "./$BUILD_DIR/tests/test_sim/test_food_actions"
     FOOD_ACTIONS_STATUS=$?
+
+    echo ""
+    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
+    echo -e "${BOLD}${BLUE}>>> 2.9.1 RUNNING LEVEL DEFAULTS SUITE (default ant type of a level, power-ups and droppers by tile id)...${RESET}"
+    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
+    "./$BUILD_DIR/tests/test_sim/test_level_defaults"
+    LEVEL_DEFAULTS_STATUS=$?
 
     echo ""
     echo -e "${BOLD}${BLUE}======================================================================${RESET}"
@@ -641,6 +649,13 @@ if [ "$RUN_SIM" -eq 1 ]; then
         echo -e " 2.9 Food Actions (test_food_actions):               ${GREEN}PASSED${RESET}"
     else
         echo -e " 2.9 Food Actions (test_food_actions):               ${RED}FAILED (exit code ${FOOD_ACTIONS_STATUS})${RESET}"
+        TOTAL_FAILED=$((TOTAL_FAILED + 1))
+    fi
+
+    if [ "$LEVEL_DEFAULTS_STATUS" -eq 0 ]; then
+        echo -e " 2.9.1 Level Defaults (test_level_defaults):         ${GREEN}PASSED${RESET}"
+    else
+        echo -e " 2.9.1 Level Defaults (test_level_defaults):         ${RED}FAILED (exit code ${LEVEL_DEFAULTS_STATUS})${RESET}"
         TOTAL_FAILED=$((TOTAL_FAILED + 1))
     fi
 

@@ -136,6 +136,9 @@ public:
     uint8_t     player_id{0};
     TeamId      team{TeamId::Black};
     uint8_t     target_team_id{4};
+    /// The ant's OWN type, the field at +0x54: Worker (0) from its creation (every ant of the original starts with 0) until it takes a power-up. What the ant IS is this
+    /// for a typed ant and the level's default type (LVL block 3) for a Worker: SimulationEngine::ant_type(), the getter FUN_0100f9cb(ant, 0). Only the pick-up and the
+    /// drop of power-ups, a thief's raid and a few other places read the field itself.
     AntType     type{AntType::Worker};
     UnitState   state{UnitState::Idle};
     DeathStatus death_status{DeathStatus::Alive};

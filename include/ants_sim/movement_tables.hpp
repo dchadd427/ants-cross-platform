@@ -40,12 +40,14 @@ inline constexpr uint8_t kDirectionCount = 8;
 enum : uint8_t { kAntWorker = 0, kAntBomber = 1, kAntFire = 2, kAntThief = 3, kAntCombat = 4, kAntSwimmer = 5 };
 enum : uint8_t { kTerrainGrass = 0, kTerrainSand = 1, kTerrainWater = 2, kTerrainMud = 3, kTerrainDirt = 4 };
 
-// Per-tile flag bits (FUN_0100724c). 0x08, 0x10 and 0x20 exist too; their
-// meaning has not been decoded yet.
+// Per-tile flag bits (FUN_0100724c). 0x08 and 0x20 exist too; their meaning has
+// not been decoded yet (0x20 is set on effect animations: dsplash, bombex, sputter,
+// the FD_* droplets ...).
 enum : uint8_t {
     kTileFlagSolid = 0x01,    // object footprint copied into the map's blocking bit
     kTileFlagFood = 0x02,     // food object (FUN_010071dd)
-    kTileFlagPowerUp = 0x04,  // power-up (FUN_01007202)
+    kTileFlagPowerUp = 0x04,  // power-up (FUN_01007202): the ids 62 .. 66 and no other
+    kTileFlagPlant = 0x10,    // the plant flag that the flower dropper task tests (FUN_01007227): the clovers 404 .. 408 and the flowers 410 .. 416, 420, 421
 };
 
 // Sequence flags of a clip (ants.chd flag1..flag3, read by FUN_0102be51).
@@ -135,6 +137,18 @@ uint8_t terrain_class_of_tile(uint16_t tile_id) noexcept;
 uint8_t terrain_class_of_cell(uint16_t layer1_tile_id, uint16_t layer2_tile_id) noexcept;
 /// Tile flag bits of a CHD tile id (0 for ids >= 1344).
 uint8_t tile_flags_of(uint16_t tile_id) noexcept;
+
+/// FUN_01007202 (0x1007202): the tile id has the power-up flag (`id < 0x540 && flags & 4`). THIS decides whether a layer-2 cell is a power-up, in the original
+/// as in the remake: the tile index of a cell is its tile id (the dictionary remap of FUN_0100674e is the identity, 0x10067a5), the dictionary's NAME of the
+/// index plays no part ("." for a power-up that the map's editor did not list changes nothing).
+bool is_powerup_tile(uint16_t tile_id) noexcept;
+/// FUN_01007227 (0x1007227): the tile id has the plant flag (0x10) that the flower dropper task tests at its plants (0x100fc78).
+bool is_dropper_plant_tile(uint16_t tile_id) noexcept;
+/// The records of block 1 that the match screen makes world objects of, drawn at the centre of their cell (0x100e3b0 - 0x100e436): the tile id has the flag 0x10 or 0x20.
+bool is_plant_object_tile(uint16_t tile_id) noexcept;
+/// FUN_01021087 (0x1021087): the ant type that a power-up tile gives: 62 (0x3e) Combat 4, 63 Thief 3, 64 Bomber 1, 65 Swimmer 5, 66 Fire 2; 0 (Worker) for every
+/// other id, 0x7FFE included. Also the type of the level's default ant (block 3, level+0x70) and, through the getter FUN_0100f9cb, of every ant whose own type is 0.
+uint8_t ant_type_of_powerup_tile(uint16_t tile_id) noexcept;
 
 /// A cell of an object footprint, in columns and rows from the object's anchor tile.
 struct FootprintCell {

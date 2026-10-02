@@ -1345,6 +1345,107 @@ void test_dynamic_items(Renderer& r, const assets::AssetArchive& arc) {
     r.unpin_animation_clock();
 }
 
+// Power-ups and the flowers of the droppers are tile ids, not dictionary names: a community editor often calls the entries of the five power-up ids (62 .. 66) and of the
+// plants "." (the map's own dictionary only decides which graphics the original loads, and it loads these whatever the dictionary says: the table at 0x1001ba8). The game draws the
+// power-up of a kind the same on every map, and the flower the same, so a level whose dictionary says "." must draw exactly as one whose dictionary names them: the same
+// pixels, and the pixels of the animation of that kind (pu_comb, pu_thief, pu_bomb, pu_swim, pu_mason; flower1, dflower1, clover1, ...).
+void test_dotted_power_ups_and_flowers(Renderer& r, const assets::AssetArchive& arc) {
+    std::printf("[tile ids] power-ups and flowers named \".\" in the dictionary are drawn like named ones\n");
+    static const uint16_t kPowerUpIds[5] = { 62, 63, 64, 65, 66 };
+    static const char* kPowerUpNames[5] = { "pu_comb", "pu_thief", "pu_bomb", "pu_swim", "pu_mason" };
+    static const uint16_t kPlantIds[3] = { 421, 410, 404 };                 // flower1, flower1a, clover1
+    // variant 0: the names of the shipped maps; 1: "." (a community editor's); 2: the names of other, visible animations (rocks: a damaged dictionary): none of it changes what the ids are
+    auto make_level = [&](int variant) {
+        const bool dotted = variant == 1;
+        assets::LevelData level;
+        if (!level.load_from_file(std::string(ORIGINAL_ASSETS_DIR) + "/Maps/TINY.LVL")) return level;
+        const int32_t g = arc.find_animation_id("g01a");
+        if (level.tile_dictionary.size() <= static_cast<size_t>(g)) level.tile_dictionary.resize(static_cast<size_t>(g) + 1, ".");
+        level.tile_dictionary[static_cast<size_t>(g)] = "g01a";
+        for (auto& c : level.layer1_terrain) { c.tile_index = static_cast<uint16_t>(g); c.flags = 0; c.properties = 0; }
+        // everything of layer 2 goes but the blue hill (at the right, off the screen): a grid without any hill takes its plant records for hills (Grid::init_from_level's fallback for test grids)
+        for (auto& c : level.layer2_interactive) {
+            const bool blue_hill = c.tile_index < level.tile_dictionary.size() && level.tile_dictionary[c.tile_index] == "BLUEHILL";
+            if (!blue_hill) { c.tile_index = assets::LVL_EMPTY_TILE; c.flags = 0; c.properties = 0; }
+        }
+        level.anthill_spawns.clear();
+        level.food_schedules.clear();
+        level.waypoints.clear();
+        for (int k = 0; k < 5; ++k) {
+            level.tile_dictionary[kPowerUpIds[k]] = variant == 2 ? arc.get_animation(static_cast<uint32_t>(298 + k)).name : dotted ? "." : kPowerUpNames[k];
+            const int x = 2 + 3 * k, y = 3;
+            const size_t i = static_cast<size_t>(y) * level.width + static_cast<size_t>(x);
+            level.layer2_interactive[i].tile_index = kPowerUpIds[k];
+            level.layer2_interactive[i].flags = 1;
+            level.layer2_interactive[i].properties = static_cast<uint16_t>((x << 8) | y);
+            level.layer1_terrain[i].flags = 1;
+        }
+        for (int k = 0; k < 3; ++k) {                                      // the plants of block 1 (the drawing of a flower is an object-list sprite at the cell centre)
+            level.tile_dictionary[kPlantIds[k]] = variant == 2 ? arc.get_animation(static_cast<uint32_t>(302 + k)).name : dotted ? "." : arc.get_animation(kPlantIds[k]).name;
+            assets::AnthillSpawn sp;
+            sp.tile_id = kPlantIds[k];
+            sp.x = static_cast<uint16_t>(3 + 4 * k);
+            sp.y = 11;
+            sp.team_id = 255;
+            level.anthill_spawns.push_back(sp);
+        }
+        return level;
+    };
+    const assets::LevelData named = make_level(0);
+    const assets::LevelData dotted = make_level(1);
+    const assets::LevelData confused = make_level(2);
+    check(named.tile_dictionary[62] == "pu_comb" && dotted.tile_dictionary[62] == "." && confused.tile_dictionary[62] != "pu_comb" && confused.tile_dictionary[62] != ".",
+          "the three levels differ in their dictionaries");
+
+    SDL_Renderer* sr = r.get_sdl_renderer();
+    auto draw = [&](const assets::LevelData& level, uint32_t t) {
+        sim::Grid grid;
+        grid.init_from_level(level);
+        r.set_level(level);
+        r.pin_animation_clock(t);
+        sim::WorldState ws;
+        ws.width = level.width;
+        ws.height = level.height;
+        r.camera().x = 0; r.camera().y = 0; r.camera().clamp_to_bounds(level.width, level.height);
+        SDL_SetRenderDrawColor(sr, 255, 0, 255, 255);
+        SDL_RenderClear(sr);
+        r.render_world(ws, grid, -1, {}, false, false, -1, -1, -1, 0.0f);
+        return read_region(sr, PLAYFIELD_X, PLAYFIELD_Y, PLAYFIELD_W, PLAYFIELD_H);
+    };
+    for (uint32_t t : { 0u, 130u, 410u }) {
+        const Image a = draw(named, t);
+        const Image b = draw(dotted, t);
+        const Image c = draw(confused, t);
+        long diff = 0, diff_confused = 0;
+        for (size_t i = 0; i < a.px.size(); i += 4) {
+            diff += std::memcmp(&a.px[i], &b.px[i], 3) != 0 ? 1 : 0;
+            diff_confused += std::memcmp(&a.px[i], &c.px[i], 3) != 0 ? 1 : 0;
+        }
+        std::printf("[tile ids] t=%3u ms  named vs \".\": differing pixels %ld; named vs other names: %ld\n", t, diff, diff_confused);
+        check(diff == 0, "named and \".\" levels draw the same pixels at t=" + std::to_string(t) + " ms (" + std::to_string(diff) + " differ)");
+        check(diff_confused == 0, "named and damaged-dictionary levels draw the same pixels at t=" + std::to_string(t) + " ms (" + std::to_string(diff_confused) + " differ)");
+        // and both are the animations of the five kinds and of the three plants (a reference that never looks at a dictionary: the CHD animation of the id)
+        Image ref = model_map(arc, named, t);                                // the ground (a flat gravel map): the layer-2 pass skips the power-up cells' names below
+        const auto& pal = arc.get_palette();
+        // the power-up cells are drawn by the map pass in row-major order after the ground, then the flowers (y-sorted sprites) over them
+        for (int k = 0; k < 5; ++k) {
+            const auto& seq = arc.get_animation(kPowerUpIds[k]);
+            model_draw_frame(ref, arc, seq.subitems[model_frame(seq, t)], (2 + 3 * k) * 32, 3 * 32, false, pal);
+        }
+        for (int k = 0; k < 3; ++k) {
+            const auto& seq = arc.get_animation(kPlantIds[k]);
+            model_draw_frame(ref, arc, seq.subitems[model_frame(seq, t)], (3 + 4 * k) * 32 + 16, 11 * 32 + 16, false, pal);
+        }
+        long off = 0;
+        for (int y = 0; y < PLAYFIELD_H; ++y) {
+            for (int x = 0; x < PLAYFIELD_W; ++x) off += std::memcmp(b.at(x, y), ref.at(x, y), 3) != 0 ? 1 : 0;
+        }
+        std::printf("[tile ids] t=%3u ms  \".\" level vs the animations of the ids: differing pixels %ld\n", t, off);
+        check(off == 0, "the \".\" level draws the animations of the ids 62 .. 66 and of the plants at t=" + std::to_string(t) + " ms (" + std::to_string(off) + " differ)");
+    }
+    r.unpin_animation_clock();
+}
+
 // Food stages: the anchor keeps its position and shows the template of the current stage tile (all parts).
 void test_food_stages(Renderer& r, const assets::AssetArchive& arc) {
     std::printf("[food stages] fdpmeat stage tiles keep every part\n");
@@ -1687,6 +1788,7 @@ int main() {
     test_fog_objects(r, arc);
     test_food_fog_footprint(r);
     test_dynamic_items(r, arc);
+    test_dotted_power_ups_and_flowers(r, arc);
     test_effect_rendering(r, arc);
     test_score_bubbles(r, arc);
     test_food_stages(r, arc);

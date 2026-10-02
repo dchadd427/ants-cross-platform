@@ -155,7 +155,7 @@ void SimulationEngineImpl::start_engaged(AntUnit& t, uint8_t dir) {
     t.waypoints.clear();                                   // ClearPath: the order and its target stay
     t.current_waypoint_idx = 0;
     ++t.move_serial;                                       // and no path request that is still queued may arrive
-    if (t.type == AntType::Combat) {
+    if (type_of(t) == AntType::Combat) {                   // 0x1020c9c: the getter
         cancel_combat_timer(t);
         t.auto_engage = false;
     }
@@ -249,10 +249,10 @@ bool SimulationEngineImpl::melee_contact(AntUnit& a, AntUnit& t) {
         post_news(a.player_id, water ? strings::kCantGoThere : strings::kCantDoThat);
         a.waypoints.clear();
         a.current_waypoint_idx = 0;
-        if (a.type == AntType::Combat) resume_after_auto_engage(a);
+        if (a.type == AntType::Combat) resume_after_auto_engage(a);     // the ant's OWN type (cmp word ptr [esi + 0x54], 4 at 0x101c6b0), not the getter
         return false;
     }
-    const bool combat = (a.type == AntType::Combat);
+    const bool combat = (type_of(a) == AntType::Combat);    // the getter: the flight range of 0x101c5f4 (4 tiles, else 1), the 2 hit points of 0x101c624, the range of 0x101a55c
     const uint8_t kdir = knock_dir(t_tile, a_tile, combat ? 4 : 1);
     handle_melee_message(t, a, t_tile, kdir, combat);
     return true;
@@ -411,7 +411,7 @@ void SimulationEngineImpl::drown(AntUnit& a, TileCoord t) {
 
 // FUN_0101e6b3: an ant that lands in (or is put into) water. A swimmer splashes and is stunned, every other ant drowns.
 void SimulationEngineImpl::water_landing(AntUnit& a, TileCoord t) {
-    if (a.type != AntType::Swimmer) {
+    if (type_of(a) != AntType::Swimmer) {                   // 0x101e6c7
         drown(a, t);
         return;
     }
@@ -430,7 +430,7 @@ void SimulationEngineImpl::bridge_gone_scan(TileCoord t) {
         if (!a || a->removed) continue;
         const TileCoord at = a->occ_tile.x >= 0 ? a->occ_tile : pixel_tile(*a);
         if (at != t) continue;
-        if (a->type == AntType::Swimmer) {
+        if (type_of(*a) == AntType::Swimmer) {                // 0x100f96f (the drowning of the others, 0x100f92a)
             a->in_water = true;
             a->was_in_water = true;
             spawn_tile_effect("dsplash", t.x, t.y, effect_spec::kDsplashMs);
@@ -490,7 +490,7 @@ void SimulationEngineImpl::bomb_victim(AntUnit& a, TileCoord at, TileCoord to) {
 // FUN_01021c68 BurnOverlay: the frozen ant is covered by the ?bu clip; when it ends the ant is unfrozen and stunned.
 void SimulationEngineImpl::burn_overlay_start(AntUnit& a) {
     a.frozen = true;
-    const movement::MotionClip clip = movement::action_clip(movement::ActionClip::Burn, static_cast<uint8_t>(a.type), 0, false);
+    const movement::MotionClip clip = movement::action_clip(movement::ActionClip::Burn, static_cast<uint8_t>(type_of(a)), 0, false);   // 0x1021ca6
     a.burn_end_ms = anim_clock_ms_ + clip.total_duration_ms();
     world_state_dirty_ = true;
 }
@@ -510,6 +510,7 @@ void SimulationEngineImpl::burn_overlay_end(AntUnit& a) {
 // on its owner's machine (IsLocal); the owner of a team that dropped out is gone, so nobody drops anything for it.
 void SimulationEngineImpl::finish_death(AntUnit& a) {
     if (a.removed) return;
+    // The ant's OWN type (mov ax, word ptr [esi + 0x54] at 0x1021011), not the getter: an ant that never took a power-up leaves none, whatever its level's default type is
     if (a.type != AntType::Worker && !team_dropped(a.player_id)) drop_powerup(a, pixel_tile(a), powerup_type_of(a.type));
     remove_ant(a);
 }
@@ -603,7 +604,7 @@ void SimulationEngineImpl::start_combat_timer(AntUnit& a, uint32_t ms) {
 // FUN_0101c0d5 CanAutoEngage: a combat ant that got no order for 2 s, is neither stunned, dying, drowning, engaged nor
 // frozen and does not already chase a target.
 bool SimulationEngineImpl::can_auto_engage(const AntUnit& a) const {
-    if (a.type != AntType::Combat || a.removed) return false;
+    if (type_of(a) != AntType::Combat || a.removed) return false;      // 0x101c0db
     if (static_cast<uint32_t>(now_ms_ - a.last_order_ms) <= 2000u) return false;
     const uint8_t act = orig_action_of(a);
     if (act == AntUnit::kActionStun || act == AntUnit::kActionDeath || act == AntUnit::kActionDrown) return false;

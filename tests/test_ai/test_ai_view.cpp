@@ -7,6 +7,7 @@
 #include <set>
 #include <type_traits>
 
+#include "ants_ai/arena.hpp"
 #include "ants_ai/map_info.hpp"
 #include "ants_ai/rng.hpp"
 
@@ -438,5 +439,56 @@ void run_view_tests() {
         ASSERT_EQ(small.second, 48u);                                                                   // a view lists every ant: its own and the three other teams'
         ASSERT_EQ(big.second, 500u);
         ASSERT_TRUE(big.first <= small.first * 25.0 + 20.0);
+    } TEST_END();
+    TEST_CASE("AI1.21 A Level With A Default Ant Type (LVL Block 3: Some Community Maps): Every Ant Of The View Shows That Type, The View Says Which, A Copy Keeps It; The Worker Bot Still Harvests With Them") {
+        const uint16_t tiles[5] = {62, 63, 64, 65, 66};
+        const sim::AntType types[5] = {sim::AntType::Combat, sim::AntType::Thief, sim::AntType::Bomber, sim::AntType::Swimmer, sim::AntType::Fire};
+        for (int k = 0; k < 5; ++k) {
+            assets::LevelData level = level_of("TINY");
+            level.ambient_tile_or_sound = tiles[k];                                          // the entry's name does not matter (this dictionary calls entry 62 "." or not)
+            sim::SimulationEngine sim;
+            sim.init(level, 3, 0x0F);
+            for (uint8_t seat = 0; seat < 4; ++seat) {
+                const BotView v = BotView::build(sim, seat);
+                ASSERT_EQ(v.default_ant_type(), types[k]);
+                ASSERT_EQ(v.mine().size() + v.others().size(), 12u);
+                for (const AntView& a : v.mine()) ASSERT_EQ(a.type, types[k]);              // what the sprite shows
+                for (const AntView& a : v.others()) ASSERT_EQ(a.type, types[k]);
+                const BotView copy = v;
+                ASSERT_EQ(copy.default_ant_type(), types[k]);
+            }
+        }
+        sim::SimulationEngine plain;                                                         // a shipped map: workers
+        start_match(plain, "TINY", 3, 0x0F);
+        ASSERT_EQ(BotView::build(plain, 0).default_ant_type(), sim::AntType::Worker);
+        // an ant that took a power-up shows the type of its own, among the workers of a default level
+        assets::LevelData combat = level_of("TINY");
+        combat.ambient_tile_or_sound = 62;
+        sim::SimulationEngine mixed;
+        mixed.init(combat, 3, 0x0F);
+        const uint32_t thief = mixed.spawn_unit(0, sim::AntType::Thief, sim::TileCoord{12, 10});
+        const BotView mixed_view = BotView::build(mixed, 0);
+        const AntView* seen = find_ant(mixed_view.mine(), thief);
+        ASSERT_TRUE(seen != nullptr);
+        ASSERT_EQ(seen->type, sim::AntType::Thief);
+        // the worker bot of a seat on such a level: its pool is the ants that show the default type, so it harvests as it always did (the idle seats do nothing)
+        for (const uint16_t tile : {uint16_t{62}, uint16_t{65}}) {
+            assets::LevelData lvl = level_of("TINY");
+            lvl.ambient_tile_or_sound = tile;
+            ArenaSpec spec;
+            spec.level = &lvl;
+            spec.seed = 1;
+            spec.max_ticks = 2400;
+            for (uint8_t seat = 0; seat < 4; ++seat) {
+                BotSpec b;
+                b.seat = seat;
+                b.kind = seat == 0 ? "worker" : "idle";
+                b.level = Level::Medium;
+                spec.bots.push_back(b);
+            }
+            const ArenaResult r = play_match(spec);
+            ASSERT_EQ(r.error, std::string());
+            ASSERT_TRUE(r.seats[0].score >= 450);                                            // two minutes of harvesting on TINY (the same 600 as on the shipped map); an economy that finds no worker in the pool scores 0
+        }
     } TEST_END();
 }

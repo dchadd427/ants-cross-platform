@@ -189,6 +189,27 @@ target_compile_definitions(test_food_actions PRIVATE
 
 add_test(NAME test_food_actions COMMAND test_food_actions)
 
+# What a level file says that the engine must obey as the original does, for maps that third-party editors made: the default ant type (block 3) and power-ups / flower
+# droppers by tile id (a dictionary that calls them "." changes nothing); synthetic levels made from the bytes of TINY.LVL
+add_executable(test_level_defaults
+    test_level_defaults.cpp
+)
+
+target_link_libraries(test_level_defaults PRIVATE
+    ants_sim
+    ants_assets
+)
+
+target_include_directories(test_level_defaults PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../include
+)
+
+target_compile_definitions(test_level_defaults PRIVATE
+    ORIGINAL_ASSETS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../../Original-Ants"
+)
+
+add_test(NAME test_level_defaults COMMAND test_level_defaults)
+
 add_executable(test_commands
     test_commands.cpp
 )

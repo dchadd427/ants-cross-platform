@@ -102,33 +102,32 @@ void SimulationEngine::init(const ants::assets::LevelData& level_in, uint32_t ra
     impl_->movement_reset();
 
     impl_->flower_droppers_.clear();
-    // Authentic 1998 logic (Ants.exe 0x100fc00..0x100fdc4): Iterate over Block 1 decor objects
-    // where team_id == 255 and tile property bit 0x10 is set (plants/flowers). Query Block 4
-    // waypoints at the plant root tile (wp.x == sp.x && wp.y == sp.y); if wp.flag == 1, instantiate dropper.
+    // The flower dropper task (FDTASK, Ants.exe 0x100fc0d): it walks the plants of Block 1 (the world objects of 0x100e3b0 - 0x100e436), and a plant whose TILE ID has the plant
+    // flag 0x10 (FUN_01007227 at 0x100fc78: the clovers 404 .. 408, the flowers 410 .. 416, 420, 421, whatever the dictionary calls them) looks up the FIRST Block 4 record at its
+    // cell (FUN_01008d79: the record's row and column are the plant's) and drops when that record's flag dword is not 0 (0x100fcc5). A record that two plants share is one dropper:
+    // the stamp (+0x18) is the record's, so the plant that comes first in the list posts and renews it before the second one is due.
+    std::vector<bool> record_taken(level.waypoints.size(), false);
     for (const auto& sp : level.anthill_spawns) {
-        if (sp.team_id == 255 && sp.tile_id < level.tile_dictionary.size()) {
-            const std::string& tname = level.tile_dictionary[sp.tile_id];
-            std::string lower_name = tname;
-            for (char& ch : lower_name) ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
-            if (lower_name.find("flower") != std::string::npos || lower_name.find("clover") != std::string::npos) {
-                for (const auto& wp : level.waypoints) {
-                    if (wp.x == sp.x && wp.y == sp.y && wp.flag == 1) {
-                        SimulationEngineImpl::FlowerDropper fd;
-                        fd.pos = TileCoord{static_cast<int32_t>(wp.x), static_cast<int32_t>(wp.y)};
-                        // The drop tile: the object's tile plus the offset of its id (table 0x1001af8, FUN_01008d2f): the flowers 410 .. 416, 420 and 421
-                        // drop one row below the stem, the clovers 404 .. 408 and every other id on the tile itself
-                        const bool one_row_down = (sp.tile_id >= 410 && sp.tile_id <= 416) || sp.tile_id == 420 || sp.tile_id == 421;
-                        fd.drop_pos = TileCoord{fd.pos.x, fd.pos.y + (one_row_down ? 1 : 0)};
-                        fd.interval_s = wp.param;                           // +0x10, in seconds (a record without one does not drop: +0xc is tested, the interval is not defaulted)
-                        fd.stamped = false;
-                        fd.is_dropping = false;
-                        fd.powerup_type = 0;
-                        fd.probabilities = wp.probabilities;
-                        impl_->flower_droppers_.push_back(fd);
-                        break;
-                    }
-                }
+        if (!movement::is_dropper_plant_tile(sp.tile_id)) continue;
+        for (size_t w = 0; w < level.waypoints.size(); ++w) {
+            const auto& wp = level.waypoints[w];
+            if (wp.x != sp.x || wp.y != sp.y) continue;
+            if (wp.flag != 0 && !record_taken[w]) {
+                record_taken[w] = true;
+                SimulationEngineImpl::FlowerDropper fd;
+                fd.pos = TileCoord{static_cast<int32_t>(wp.x), static_cast<int32_t>(wp.y)};
+                // The drop tile: the object's tile plus the offset of its id (table 0x1001af8, FUN_01008d2f): the flowers 410 .. 416, 420 and 421
+                // drop one row below the stem, the clovers 404 .. 408 on the tile itself
+                const bool one_row_down = (sp.tile_id >= 410 && sp.tile_id <= 416) || sp.tile_id == 420 || sp.tile_id == 421;
+                fd.drop_pos = TileCoord{fd.pos.x, fd.pos.y + (one_row_down ? 1 : 0)};
+                fd.interval_s = wp.param;                           // +0x10, in seconds (a record without one does not drop: +0xc is tested, the interval is not defaulted)
+                fd.stamped = false;
+                fd.is_dropping = false;
+                fd.powerup_type = 0;
+                fd.probabilities = wp.probabilities;
+                impl_->flower_droppers_.push_back(fd);
             }
+            break;                                                  // the first record at the cell is the one the lookup returns, its flag decides
         }
     }
     // The droppers are exactly the plants of Block 1 whose cell holds a Block 4 record with a trigger (above), the obstacle cells are those of Grid::init_from_level.
@@ -275,7 +274,7 @@ void SimulationEngine::tick() {
         if (impl_->grid_.in_bounds(ant_ptr->pos)) {
             const auto& cell = impl_->grid_.get_cell(ant_ptr->pos);
             if (cell.terrain_type == TERRAIN_WATER && !cell.has_any_bridge()) {
-                if (ant_ptr->type == AntType::Swimmer) {
+                if (impl_->type_of(*ant_ptr) == AntType::Swimmer) {
                     ant_ptr->in_water = true;
                     if (ant_ptr->state == UnitState::Idle) {
                         ant_ptr->state = UnitState::Swimming;
@@ -283,7 +282,7 @@ void SimulationEngine::tick() {
                 }
             }
         }
-        if (ant_ptr->type == AntType::Swimmer && ant_ptr->state == UnitState::Swimming) {
+        if (impl_->type_of(*ant_ptr) == AntType::Swimmer && ant_ptr->state == UnitState::Swimming) {
             ant_ptr->anim_tick++;
             ant_ptr->anim_subitem = ant_ptr->anim_tick;
         }
@@ -515,7 +514,7 @@ bool SimulationEngine::issue_order(const AntOrder& order) {
                     const auto* ah = impl_->grid_.find_anthill(p);
                     if (ah && tx >= ah->x && tx < ah->x + 4 && ty >= ah->y && ty < ah->y + 4) {
                         target_team = p;
-                        if (unit->type == AntType::Thief) {
+                        if (unit->type == AntType::Thief) {                  // the ant's OWN type, as GoTo reads it (0x101fcb7)
                             tx = ah->x + 3;
                             ty = ah->y + 2;
                         } else {
@@ -525,7 +524,7 @@ bool SimulationEngine::issue_order(const AntOrder& order) {
                         break;
                     }
                 }
-            } else if (unit->type == AntType::Thief && target_team < MAX_PLAYERS) {
+            } else if (unit->type == AntType::Thief && target_team < MAX_PLAYERS) {     // (0x101fcb7)
                 const auto* ah = impl_->grid_.find_anthill(target_team);
                 if (ah) {
                     tx = ah->x + 3;
@@ -545,10 +544,10 @@ bool SimulationEngine::issue_order(const AntOrder& order) {
         case OrderType::Cancel:
             unit->ability_target = TileCoord{-1, -1};
             unit->clear_path();
-            if (unit->type == AntType::Swimmer && unit->in_water) {
+            if (impl_->type_of(*unit) == AntType::Swimmer && unit->in_water) {
                 unit->state = UnitState::Swimming;
             } else {
-                unit->state = (unit->type == AntType::Combat) ? UnitState::GuardIdle : UnitState::Idle;
+                unit->state = (impl_->type_of(*unit) == AntType::Combat) ? UnitState::GuardIdle : UnitState::Idle;
             }
             return true;
         default:
@@ -752,7 +751,8 @@ const WorldState& SimulationEngine::get_world_state() const {
             AntSnapshot s{};
             s.id = a->id;
             s.player_id = a->player_id;
-            s.type = a->type;
+            s.type = impl_->type_of(*a);                      // what the ant IS (the getter): the sprite, the voice, the panel, the pedestal, the selection's type
+            s.raw_type = a->type;                              // the ant's own type field (+0x54): the pick box of a combat ant is read from it (0x1026a3d)
             s.px = a->pixel_x;
             s.py = a->pixel_y;
             s.tile_x = a->pos.x;
@@ -771,7 +771,7 @@ const WorldState& SimulationEngine::get_world_state() const {
             s.state = a->state;
             s.frozen = a->frozen;
             if (a->burn_end_ms != 0) {                       // the dud burn overlay (?bu) that covers the frozen ant
-                const uint32_t total = movement::action_clip(movement::ActionClip::Burn, static_cast<uint8_t>(a->type), 0, false).total_duration_ms();
+                const uint32_t total = movement::action_clip(movement::ActionClip::Burn, static_cast<uint8_t>(impl_->type_of(*a)), 0, false).total_duration_ms();
                 const uint32_t remaining = (a->burn_end_ms > impl_->anim_clock_ms_) ? a->burn_end_ms - impl_->anim_clock_ms_ : 0u;
                 s.burn_elapsed_ms = static_cast<int32_t>(total - std::min(total, remaining));
             }
@@ -954,12 +954,16 @@ uint32_t SimulationEngine::spawn_unit(uint8_t player_id, AntType type, TileCoord
     unit->player_id = player_id;
     unit->facing = static_cast<Direction>(level_start ? (impl_->prng_.rand() % 7 + 1) : (impl_->prng_.rand() % 8));
     AntUnit* unit_ptr = unit.get();
+    // The ant is born with the own type `type` (the original's ants all start with 0, the constructor 0x101a77a writes it at 0x101a815); it IS the type of the level's
+    // default when that is Worker (the getter, 0x100f9cb)
+    const AntType is_type = impl_->effective_type(type);
+    if (is_type != type && is_type == AntType::Combat) unit_ptr->state = UnitState::GuardIdle;
     if (impl_->grid_.in_bounds(pos)) {
         const auto& cell = impl_->grid_.get_cell(pos);
         if (cell.terrain_type == TERRAIN_WATER && !cell.has_any_bridge()) {
             unit_ptr->in_water = true;
             unit_ptr->was_in_water = true;
-            if (type == AntType::Swimmer) {
+            if (is_type == AntType::Swimmer) {
                 unit_ptr->state = UnitState::Swimming;
             }
         }
@@ -968,10 +972,14 @@ uint32_t SimulationEngine::spawn_unit(uint8_t player_id, AntType type, TileCoord
     if (unit_ptr->is_alive()) {
         // Register on the occupancy grid at once (the original registers every ant it places).
         impl_->occ_refresh();
-        if (unit_ptr->in_water && type != AntType::Swimmer) impl_->drown(*unit_ptr, pos);   // a placed ant that cannot swim
+        if (unit_ptr->in_water && is_type != AntType::Swimmer) impl_->drown(*unit_ptr, pos);   // a placed ant that cannot swim
     }
     impl_->world_state_dirty_ = true;
     return id;
+}
+
+AntType SimulationEngine::ant_type(const AntUnit& ant) const noexcept {
+    return impl_->type_of(ant);
 }
 
 AntUnit& SimulationEngine::get_unit(uint32_t ant_id) {
@@ -1154,7 +1162,7 @@ bool SimulationEngine::validate_cardinal_placement(TileCoord from, TileCoord to)
 // it stands on (which must be a cardinal neighbour of the target): the clip plays and the world changes when it ends.
 namespace {
 bool ability_ant_ready(const SimulationEngineImpl& impl, const AntUnit* ant, AntType type) {
-    if (!ant || !ant->is_alive() || ant->type != type || ant->engaged || ant->frozen) return false;
+    if (!ant || !ant->is_alive() || impl.type_of(*ant) != type || ant->engaged || ant->frozen) return false;
     const uint8_t act = impl.orig_action_of(*ant);
     return act == 0 || act == 1 || act == 3;
 }
@@ -1162,7 +1170,7 @@ bool ability_ant_ready(const SimulationEngineImpl& impl, const AntUnit* ant, Ant
 
 bool SimulationEngine::plant_bomb(uint32_t ant_id, TileCoord target, bool instant) {
     AntUnit* ant = impl_->find_unit(ant_id);
-    if (!ant || !ant->is_alive() || ant->type != AntType::Bomber) return false;
+    if (!ant || !ant->is_alive() || impl_->type_of(*ant) != AntType::Bomber) return false;
     if (!validate_cardinal_placement(ant->pos, target)) return false;
     if (!impl_->valid_ground(target, false)) return false;
     if (instant) {
@@ -1179,7 +1187,7 @@ bool SimulationEngine::plant_bomb(uint32_t ant_id, TileCoord target, bool instan
 
 bool SimulationEngine::defuse_bomb(uint32_t ant_id, TileCoord target, bool instant) {
     AntUnit* ant = impl_->find_unit(ant_id);
-    if (!ant || !ant->is_alive() || ant->type != AntType::Bomber) return false;
+    if (!ant || !ant->is_alive() || impl_->type_of(*ant) != AntType::Bomber) return false;
     if (!validate_cardinal_placement(ant->pos, target)) return false;
     if (!impl_->valid_bomb(target)) return false;
     if (instant) {
@@ -1197,7 +1205,7 @@ bool SimulationEngine::defuse_bomb(uint32_t ant_id, TileCoord target, bool insta
 
 bool SimulationEngine::ignite_fire(uint32_t ant_id, TileCoord target, bool instant) {
     AntUnit* ant = impl_->find_unit(ant_id);
-    if (!ant || !ant->is_alive() || ant->type != AntType::Fire) return false;
+    if (!ant || !ant->is_alive() || impl_->type_of(*ant) != AntType::Fire) return false;
     if (!validate_cardinal_placement(ant->pos, target)) return false;
     if (!impl_->valid_ground(target, false)) return false;
     if (instant) {
@@ -1216,7 +1224,7 @@ bool SimulationEngine::ignite_fire(uint32_t ant_id, TileCoord target, bool insta
 
 bool SimulationEngine::extinguish_fire(uint32_t ant_id, TileCoord target, bool instant) {
     AntUnit* ant = impl_->find_unit(ant_id);
-    if (!ant || !ant->is_alive() || ant->type != AntType::Fire) return false;
+    if (!ant || !ant->is_alive() || impl_->type_of(*ant) != AntType::Fire) return false;
     if (!validate_cardinal_placement(ant->pos, target)) return false;
     if (!impl_->grid_.has_fire_at(target)) return false;
     if (instant) {
@@ -1232,7 +1240,7 @@ bool SimulationEngine::extinguish_fire(uint32_t ant_id, TileCoord target, bool i
 
 bool SimulationEngine::build_bridge_step(uint32_t ant_id, TileCoord target) {
     AntUnit* ant = impl_->find_unit(ant_id);
-    if (!ant || !ant->is_alive() || ant->type != AntType::Swimmer) return false;
+    if (!ant || !ant->is_alive() || impl_->type_of(*ant) != AntType::Swimmer) return false;
     if (!validate_cardinal_placement(ant->pos, target)) return false;
     if (!impl_->valid_water(target, false)) return false;
     if (!ability_ant_ready(*impl_, ant, AntType::Swimmer)) return false;
@@ -1242,7 +1250,7 @@ bool SimulationEngine::build_bridge_step(uint32_t ant_id, TileCoord target) {
 
 bool SimulationEngine::demolish_bridge_step(uint32_t ant_id, TileCoord target) {
     AntUnit* ant = impl_->find_unit(ant_id);
-    if (!ant || !ant->is_alive() || ant->type != AntType::Swimmer) return false;
+    if (!ant || !ant->is_alive() || impl_->type_of(*ant) != AntType::Swimmer) return false;
     if (!validate_cardinal_placement(ant->pos, target)) return false;
     if (!impl_->grid_.in_bounds(target) || !impl_->grid_.get_cell(target).has_completed_bridge()) return false;
     if (!ability_ant_ready(*impl_, ant, AntType::Swimmer)) return false;

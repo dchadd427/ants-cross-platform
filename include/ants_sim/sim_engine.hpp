@@ -222,7 +222,12 @@ struct NewsEvent {
 struct AntSnapshot {
     uint32_t id{0};
     uint8_t  player_id{0};
+    /// What the ant IS: its own type, or for an ant whose own type is Worker the level's default type (LVL block 3; the getter FUN_0100f9cb(ant, 0)). The sprite,
+    /// the voices, the panel text and pedestal and the selection's common type all read this.
     AntType  type{AntType::Worker};
+    /// The ant's own type field (+0x54): Worker until it takes a power-up, whatever the level's default is. Only a few places read the field itself (its pick box: a
+    /// combat ant's is larger, 0x1026a3d).
+    AntType  raw_type{AntType::Worker};
 
     int32_t  px{0};
     int32_t  py{0};
@@ -481,6 +486,8 @@ public:
     /// (`level_start`) draw it as the original does, rand() % 7 + 1, which is never North.
     uint32_t spawn_unit(uint8_t player_id, AntType type, TileCoord pos, bool level_start = false);
     AntUnit& get_unit(uint32_t ant_id);
+    /// The ant type getter FUN_0100f9cb(ant, 0): what the ant IS (see AntSnapshot::type); AntUnit::type is the field itself.
+    AntType ant_type(const AntUnit& ant) const noexcept;
     void kill_unit(uint32_t ant_id);
 
     void execute_melee_attack(uint32_t attacker_id, uint32_t target_id);

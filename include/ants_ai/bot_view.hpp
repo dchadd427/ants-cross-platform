@@ -37,6 +37,8 @@ namespace ants::ai {
 struct AntView {
     uint32_t id{0};
     uint8_t team{0};
+    /// What the sprite shows (what a person sees): the ant's own type, and for an ant that never took a power-up the level's default type (BotView::default_ant_type(),
+    /// LVL block 3), which is Worker on every shipped map
     sim::AntType type{sim::AntType::Worker};
     sim::TileCoord tile{};
     uint8_t hp{0};                       // own ants only (a player sees the bar of its own selection); another team's ant: 0
@@ -116,6 +118,9 @@ public:
     /// The piles that still have units, by index. The index is the engine's table position, which is MapInfo::piles()'s index for the piles of the map at the start; a lunchbox
     /// (PileView::lunchbox) is added to the table during the match and has an index past the end of MapInfo::piles() (MapInfo::pile() is null for it; approach_now works for it)
     const std::vector<PileView>& piles() const noexcept { return piles_; }
+    /// The type that every ant shows until it takes a power-up: Worker, except on a level whose block 3 names a default type (some community maps: all their workers are
+    /// Combat, Thief, Bomber, Swimmer or Fire ants, as the sprites and the panel say from the first second). An ant whose AntView::type is this one has not (visibly) changed.
+    sim::AntType default_ant_type() const noexcept { return default_ant_type_; }
     /// The analysis of the match, null when the view was built without one
     const MapInfo* map() const noexcept { return map_; }
     /// What the engine's dynamic walking rules need besides the grid for this seat's ants: its ally (own and allied bombs block) and the teams that dropped out (their queue rows are
@@ -154,6 +159,7 @@ private:
     uint8_t invite_from_{255};
     uint32_t eggs_{0};
     bool hatching_{false};
+    sim::AntType default_ant_type_{sim::AntType::Worker};
     std::array<TeamRow, sim::MAX_PLAYERS> rows_{};
     std::vector<AntView> mine_;
     std::vector<AntView> others_;

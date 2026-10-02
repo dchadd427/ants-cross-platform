@@ -238,6 +238,9 @@ StateHash SimulationEngine::state_hash() const {
         h.u32(e.grid_.width());
         h.u32(e.grid_.height());
         h.boolean(e.grid_.exact_solid_bits());
+        // the level's default ant type (block 3, level+0x70) decides what every worker is: it is state. It is mixed in only when the level has one, so that a level without
+        // (every shipped map) keeps the hash that it always had
+        if (e.grid_.default_ant_tile() != TILE_EMPTY) h.u16(e.grid_.default_ant_tile());
         h.size(e.grid_.cells().size());
         for (const TileCell& c : e.grid_.cells()) hash_cell(h, c);
         h.size(e.grid_.anthills().size());

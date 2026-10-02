@@ -311,7 +311,7 @@ void HarvestTask::step(TaskContext& c) {
         size_t queued = 0;                                                                  // idle carriers within the ring of the gate
         if (hill.present) {
             for (const AntView& a : v.mine()) {
-                if (a.type != sim::AntType::Worker || !a.idle() || !(a.holding || a.carried_points > 0)) continue;
+                if (a.type != v.default_ant_type() || !a.idle() || !(a.holding || a.carried_points > 0)) continue;
                 idle_carriers.push_back(&a);
                 queued += far_from_hill(hill, a.tile, params_.ring_tiles) ? 0u : 1u;
             }
@@ -350,7 +350,7 @@ void HarvestTask::step(TaskContext& c) {
     // 2. the pool: idle workers with empty hands that nobody holds and that are not waiting for an order of ours
     std::vector<const AntView*> pool;
     for (const AntView& a : v.mine()) {
-        if (a.type != sim::AntType::Worker || !a.idle() || a.holding || a.carried_points > 0) continue;   // a carrier walks home by itself: never order it (F12b)
+        if (a.type != v.default_ant_type() || !a.idle() || a.holding || a.carried_points > 0) continue;   // a carrier walks home by itself: never order it (F12b)
         const TaskId owner = c.ledger.owner(a.id);
         if (owner != kNoTask && owner != id()) continue;
         if (recs_.count(a.id) != 0) continue;

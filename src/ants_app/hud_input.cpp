@@ -79,7 +79,7 @@ const sim::AntSnapshot* HUD::pick_ant_at(const sim::WorldState& world, int32_t w
         for (int32_t dx = -1; dx <= 1; ++dx) {
             for (const auto& ant : world.ants) {
                 if (ant.tile_x != tx + dx || ant.tile_y != ty + dy) continue;     // the occupant registered on the scanned tile
-                const bool combat = (ant.type == sim::AntType::Combat);
+                const bool combat = (ant.raw_type == sim::AntType::Combat);          // the ant's own type field (cmp word ptr [ecx + 0x54], 4 at 0x1026a3d), not the getter
                 const int32_t left = ant.px - (combat ? 32 : 20);
                 const int32_t right = ant.px + (combat ? 26 : 20);
                 const int32_t top = ant.py - (combat ? 46 : 32);
@@ -291,9 +291,10 @@ uint32_t HUD::issue_group_order(sim::SimulationEngine& sim, sim::TileCoord tile,
     // whatever the GoTos answered, which is what the pedestal feedback follows
     if (result.needing_order == 0) return 0;
     if (ack != 0) {
-        if (attack) voice_attack(sim.get_unit(ack).type);
-        else if (special) voice_special(sim.get_unit(ack).type, result.needing_order);
-        else voice_go(sim.get_unit(ack).type);
+        const sim::AntType voice_type = sim.ant_type(sim.get_unit(ack));          // the voices ask the getter (0x101b680, 0x101b715, 0x101b78e)
+        if (attack) voice_attack(voice_type);
+        else if (special) voice_special(voice_type, result.needing_order);
+        else voice_go(voice_type);
     }
     order_feedback(special, attack);
     return ack;

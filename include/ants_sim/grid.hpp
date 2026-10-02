@@ -242,6 +242,7 @@ public:
         anthills_.clear();
         plants_.clear();
         food_objects_.clear();
+        default_ant_tile_ = TILE_EMPTY;
         return true;
     }
 
@@ -252,6 +253,18 @@ public:
 
     /// True once the solid bits come from an LVL file (init_from_level); part of the state hash
     bool exact_solid_bits() const noexcept { return exact_solid_bits_; }
+
+    /// The level's DEFAULT ANT TYPE (LVL block 3, Ants.exe FUN_01007025 -> level+0x70): the tile id of one of the five power-up tiles (62 Combat, 63 Thief,
+    /// 64 Bomber, 65 Swimmer, 66 Fire), or 0x7FFE (none: every shipped map). Every ant whose own type is Worker (0) is of that type wherever the game asks
+    /// the ant type getter FUN_0100f9cb(ant, 0): the ants a level starts with, the ants that hatch, and the ant that took a power-up and swapped it away.
+    uint16_t default_ant_tile() const noexcept { return default_ant_tile_; }
+    /// FUN_01021087(level+0x70): that tile as an AntType number (0 Worker when there is no default, 1 Bomber, 2 Fire, 3 Thief, 4 Combat, 5 Swimmer)
+    uint8_t default_ant_type() const noexcept { return movement::ant_type_of_powerup_tile(default_ant_tile_); }
+    /// The block-3 store of the original (0x1007048 - 0x100706f): a tile other than 0x7FFE is kept only when it has the power-up flag (the id is the tile index:
+    /// the remap is the identity), otherwise the level has no default (0x7FFE). Tests and tools use it to give a level a default type.
+    void set_default_ant_tile(uint16_t tile) noexcept {
+        default_ant_tile_ = movement::is_powerup_tile(tile) ? tile : TILE_EMPTY;
+    }
 
     uint32_t width() const noexcept { return width_; }
     uint32_t height() const noexcept { return height_; }
@@ -483,6 +496,7 @@ private:
     std::vector<ants::assets::AnthillSpawn> anthills_;
     std::vector<MapPlant> plants_;
     std::vector<FoodObject> food_objects_;
+    uint16_t default_ant_tile_{TILE_EMPTY};   // level+0x70 (block 3), 0x7FFE = none
 };
 
 } // namespace ants::sim

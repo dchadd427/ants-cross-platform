@@ -27,10 +27,17 @@ bool Grid::init_from_level(const ants::assets::LevelData& level) {
     cells_.assign(static_cast<size_t>(width_ * height_), TileCell{});
     exact_solid_bits_ = false;
 
+    // LVL block 3 (FUN_01007025, 0x1007025): the level's default ant type. The word is a tile index and the index is the tile id (the dictionary remap is the
+    // identity, 0x10067a5 - 0x10067c8); it is kept only when that tile has the power-up flag (0x1007068), so a level has a default type exactly when block 3 names
+    // one of the ids 62 .. 66. What the dictionary calls the entry is not looked at. An index outside the dictionary reads the original's remap table out of
+    // bounds (a tile of heap garbage): the remake takes it for "no default".
+    default_ant_tile_ = TILE_EMPTY;
+    if (level.ambient_tile_or_sound < level.tile_dictionary.size()) set_default_ant_tile(level.ambient_tile_or_sound);
+
     // The plants of Block 1 (0x100e3b0 - 0x100e436): each record whose tile id carries property bit 0x10 or 0x20 becomes a world object at its cell
     plants_.clear();
     for (const auto& sp : level.anthill_spawns) {
-        if ((movement::tile_flags_of(sp.tile_id) & 0x30u) != 0) plants_.push_back(MapPlant{sp.tile_id, sp.x, sp.y});
+        if (movement::is_plant_object_tile(sp.tile_id)) plants_.push_back(MapPlant{sp.tile_id, sp.x, sp.y});
     }
 
     // Populate Layer 1
@@ -104,20 +111,19 @@ bool Grid::init_from_level(const ants::assets::LevelData& level) {
             cell.powerup_type = 0;
             cell.is_obstacle_overlay = false;
 
-            if (c2.tile_index != TILE_EMPTY && c2.tile_index != 0xFFFF && c2.tile_index != 0x7FFE) {
+            if (c2.tile_index != TILE_EMPTY && c2.tile_index != 0xFFFF && c2.tile_index != 0x7FFE && movement::is_powerup_tile(c2.tile_index)) {
+                // A power-up is a tile id (FUN_01007202, 0x1007202: the ids 62 .. 66 carry the flag, the five kinds of FUN_01021087), never a dictionary name: community
+                // dictionaries often name these entries "." (the editor did not list them) and the original plays and draws them all the same. The cell is a removable
+                // object (no obstacle overlay): it is solid to every order but the power-up order, and the arrival of that order takes it.
+                cell.is_powerup = true;
+                cell.powerup_type = movement::ant_type_of_powerup_tile(c2.tile_index);
+            } else if (c2.tile_index != TILE_EMPTY && c2.tile_index != 0xFFFF && c2.tile_index != 0x7FFE) {
                 const std::string& tname = level.get_tile_name(c2.tile_index);
                 if (!tname.empty() && tname != ".") {
                     std::string lower_name = tname;
                     for (char& ch : lower_name) ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
                     if (lower_name.rfind("fd", 0) == 0 || lower_name.rfind("food", 0) == 0) {
                         cell.is_food = true;
-                    } else if (lower_name.rfind("pu_", 0) == 0) {
-                        cell.is_powerup = true;
-                        if (lower_name == "pu_comb") cell.powerup_type = 4; // Combat
-                        else if (lower_name == "pu_thief") cell.powerup_type = 3; // Thief
-                        else if (lower_name == "pu_bomb") cell.powerup_type = 1; // Bomber
-                        else if (lower_name == "pu_swim") cell.powerup_type = 5; // Swimmer
-                        else if (lower_name == "pu_mason" || lower_name == "pu_fire") cell.powerup_type = 2; // Fire
                     } else if (lower_name.find("hill") != std::string::npos) {
                         if ((c2.flags & 1) != 0) {
                             // The terrain class stays that of the layer-1 tile (Ants.exe FUN_01008af7).

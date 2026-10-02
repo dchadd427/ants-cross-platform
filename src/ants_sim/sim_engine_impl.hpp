@@ -216,6 +216,17 @@ public:
         return nullptr;
     }
 
+    /// The ant type getter FUN_0100f9cb(ant, 0) (Ants.exe 0x100f9cb): the ant's own type (+0x54), and for an ant whose own type is 0 (Worker) the type of the level's
+    /// default (block 3, level+0x70, through FUN_01021087: 0x100fa35 - 0x100fa47), which is 0 when the level has none. EVERY decision that the original takes through
+    /// the getter uses this: the clip of an action (SetAction), the swimmer, the fire ant, the combat ant's punch and reflex, the special order, the HUD's selection
+    /// type, the voices. What it reads from the field itself (+0x54) uses AntUnit::type: the pick-up and the drop of a power-up (0x1020d4b, 0x1021011), the thief's
+    /// raid at an enemy hill (0x101fcb7), the combat ant's return after a failed attack step (0x101c6b0) and its hit box (0x1026a3d).
+    AntType type_of(const AntUnit& a) const noexcept { return effective_type(a.type); }
+    /// The same for an own type that is not stored in an ant (spawn parameters, the type of a hatch)
+    AntType effective_type(AntType own) const noexcept {
+        return own != AntType::Worker ? own : static_cast<AntType>(grid_.default_ant_type());
+    }
+
 
     // FUN_01020de7: inside the map, no ant, not the layer-1 solid bit (FUN_0100cf0f), not water, layer 2 empty, not one of a live hill's special tiles
     bool is_valid_powerup_drop_tile(TileCoord adj) const noexcept {

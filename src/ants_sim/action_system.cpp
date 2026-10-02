@@ -261,6 +261,8 @@ void SimulationEngineImpl::hatch_run(uint8_t team) {
     AntUnit* n = unit.get();
     ants_.push_back(std::move(unit));
     set_position(*n, centre_x(ent), centre_y(ent));
+    // The newborn's own type is 0 (the constructor 0x101a77a, 0x101a815: the message 5 that creates an ant has no type), and it IS the level's default type when the level
+    // names one: the hatch clip (SetAction below) and everything else the game asks the getter for are those of that type
     const uint8_t dir = static_cast<uint8_t>(prng_.rand() % 7u + 1u);
     set_action(*n, AntUnit::kActionIdle, dir, -1, -1, false);
     set_action(*n, AntUnit::kActionHatch, dir, -1, -1, false);
