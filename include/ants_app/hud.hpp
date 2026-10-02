@@ -376,6 +376,7 @@ private:
     /// clear) and the local team has not dropped out itself
     bool ally_pedestal_possible(const sim::WorldState& world) const;
     void render_quick_help(IRenderer& renderer, const assets::AssetArchive& assets);
+    void render_options_dim(IRenderer& renderer);          // a bigger picture: the checker dither over everything outside the options card, as the original's pieces do in its own picture
     void render_match_start_modal(IRenderer& renderer, const assets::AssetArchive& assets);
     void render_marquee_box(IRenderer& renderer);
     void render_pedestal_glow(IRenderer& renderer, const assets::AssetArchive& assets, int pedestal_idx);

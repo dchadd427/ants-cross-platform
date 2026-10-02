@@ -529,6 +529,7 @@ void HUD::render(IRenderer& renderer, const assets::AssetArchive& assets,
     if (show_quick_help_ || options_.is_open()) {
         const LayoutPoint window = open_window_offset();
         const bool inset = window != LayoutPoint{};                     // (in the original's own picture the window is where it always was: nothing to cut)
+        if (inset && !show_quick_help_) render_options_dim(renderer);   // (the original's window dims the whole picture around its card: in its own picture the window's pieces do that themselves)
         renderer.set_origin(window.x, window.y);
         if (inset) renderer.set_clip_rect(layout_.view().x - window.x, layout_.view().y - window.y, layout_.view().w, layout_.view().h);       // the pieces of a window reach beyond the map view: they stop at it
         if (show_quick_help_) render_quick_help(renderer, assets);
@@ -541,6 +542,33 @@ void HUD::render(IRenderer& renderer, const assets::AssetArchive& assets,
         else if (alliance_dialog_ != AllianceDialog::None) render_alliance_dialog(renderer, assets);
         else render_match_start_modal(renderer, assets);
         renderer.set_origin(0, 0);
+    }
+}
+
+// The options window of the original dims everything of its picture that the card does not cover: op_screen carries 25 pieces of the checker dither (dith100x, dith100y and dith200: every
+// second pixel black, in the pixels where x + y is odd of the window's own numbers), a ring of 20 pixels around the 442 x 440 card and the whole panel to the right of it. In a bigger picture
+// those pieces keep the window's place (they are clipped to the map view with the rest of it, so they dim the view's surroundings of the card only on its left and right, from the ring's width
+// on), and the rest of the picture is dimmed here in the same checker: four bands around the card (above, below, left and right of it, over the whole picture: the map around the card, the
+// frame and the panel), tiled from the corner of the first strip of the original (its own phase: the dithered pixels are the same ones whatever the offset of the window is)
+void HUD::render_options_dim(IRenderer& renderer) {
+    const LayoutRect card = layout_.options_card();
+    const LayoutRect picture{0, 0, layout_.width, layout_.height};
+    const LayoutPoint o = layout_.options_offset();
+    constexpr int32_t kTile = 200;                                       // dith200.bmp
+    const int32_t anchor_x = o.x - 1;                                    // (the top strip's first piece: dith100x at (-1, 0) of the window)
+    const int32_t anchor_y = o.y;
+    const LayoutRect bands[4] = {LayoutRect{picture.x, picture.y, picture.w, card.y - picture.y},
+                                 LayoutRect{picture.x, card.y + card.h, picture.w, picture.y + picture.h - (card.y + card.h)},
+                                 LayoutRect{picture.x, card.y, card.x - picture.x, card.h},
+                                 LayoutRect{card.x + card.w, card.y, picture.x + picture.w - (card.x + card.w), card.h}};
+    for (const LayoutRect& band : bands) {
+        if (band.w <= 0 || band.h <= 0) continue;
+        const auto first = [](int32_t from, int32_t anchor) { const int32_t d = from - anchor; return anchor + (d >= 0 ? d / kTile : -((-d + kTile - 1) / kTile)) * kTile; };
+        renderer.set_clip_rect(band.x, band.y, band.w, band.h);
+        for (int32_t y = first(band.y, anchor_y); y < band.y + band.h; y += kTile) {
+            for (int32_t x = first(band.x, anchor_x); x < band.x + band.w; x += kTile) renderer.draw_named_sprite("dith200.bmp", x, y);
+        }
+        renderer.clear_clip_rect();
     }
 }
 

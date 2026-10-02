@@ -184,6 +184,18 @@ struct ScreenLayout {
     constexpr LayoutPoint options_offset() const noexcept { return centred_in_view(kClassicViewX, kClassicViewY, kClassicViewW, kClassicViewH); }
     constexpr LayoutPoint quick_help_offset() const noexcept { return centred_in_view(0, 0, kClassicWidth, kClassicHeight); }
 
+    /// The part of the options window's picture that the original does not dim (measured on ants.chd: op_screen's 25 pieces of checker dither are a ring around the card, the left strip at
+    /// x -3 .. 16, the top one at y 0 .. 19, the bottom one from y 460, and the whole panel to the right of it from x 459, so the card is 442 x 440 at the window's own (17, 20)). The original's
+    /// whole picture outside the card is dimmed; in a bigger picture the card is where options_offset() puts it and the rest of the picture is dimmed the same way (HUD::render_options_dim).
+    static constexpr int32_t kOptionsCardX = 17;
+    static constexpr int32_t kOptionsCardY = 20;
+    static constexpr int32_t kOptionsCardW = 442;
+    static constexpr int32_t kOptionsCardH = 440;
+    constexpr LayoutRect options_card() const noexcept {
+        const LayoutPoint o = options_offset();
+        return LayoutRect{kOptionsCardX + o.x, kOptionsCardY + o.y, kOptionsCardW, kOptionsCardH};
+    }
+
 private:
     /// The offset that puts the window (x, y, w, h) of the original's pages at the centre of the map view; none for the original's own picture
     constexpr LayoutPoint centred_in_view(int32_t x, int32_t y, int32_t w, int32_t h) const noexcept {

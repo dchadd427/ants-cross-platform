@@ -2298,10 +2298,11 @@ void test_picture_per_screen() {
                 const bool inside = g.app.mouse_screen_x() >= 0 && g.app.mouse_screen_x() < g.app.picture().w && g.app.mouse_screen_y() >= 0 && g.app.mouse_screen_y() < g.app.picture().h;
                 check(g.app.mouse_screen_x() == c.want_x && g.app.mouse_screen_y() == c.want_y && inside, std::string("the results page, the pointer ") + c.what + ": (" + std::to_string(g.app.mouse_screen_x()) + ", " + std::to_string(g.app.mouse_screen_y()) + ")");
             }
-            // the same way back to the match: the page's nearest edge pixel moves with the corner (it was clamped: it does not jump back to where it was)
+            // the way back from a match to the setup screen: that is the whole canvas of the wide picture (no page, no clay), so the pointer stays exactly where it is (the results above
+            // are the page that clamps it)
             f.app.note_pointer(100, 270);
             f.app.return_to_map_select();
-            check(f.app.mouse_screen_x() == 0 && f.app.mouse_screen_y() == 240, "the setup screen (a page too), from a running match: the pointer at the page's left edge");
+            check(f.app.mouse_screen_x() == 100 && f.app.mouse_screen_y() == 270, "the setup screen (the whole canvas, not a page), from a running match: the pointer stays where it is");
             check(f.app.start_game("Original-Ants/Maps/SMALL.LVL") && f.app.mouse_screen_x() == 480 && f.app.mouse_screen_y() == 270, "a match starts: the pointer is in the middle of the picture, as always");
         }
     }
@@ -2419,6 +2420,97 @@ void test_margin_and_pages_in_match() {
         f.app.render_frame();
         px = f.canvas_pixels();
         check(pixel(px, 960, 5, 5) != clay && pixel(px, 960, 900, 300) != clay, "the quit dialog: the match is around it, no margin");
+    }
+}
+
+/// A match with the options window shut and then open, drawn by the real application with the HUD's clock and the animations held (the caret and the pedestals read the one, the ants the other)
+struct OptionsPair {
+    std::vector<uint8_t> shut, open;
+    int32_t width{0}, height{0};
+    LayoutPoint pointer;                                    // where the cursor is drawn (in the canvas)
+    LayoutRect options_button;                              // the top bar's Options button, which shows its pressed art while the window is open
+    bool ok{false};
+};
+
+OptionsPair options_pair(Aspect aspect, int32_t width, int32_t height) {
+    OptionsPair r;
+    AppFixture f(aspect, true, width, height);
+    if (!f.ok) return r;
+    g_clock = 0;
+    f.app.hud().set_ticks_function(&clock_fn);
+    f.app.renderer().pin_animation_clock(1500);
+    f.app.render_frame();
+    r.shut = f.canvas_pixels();
+    f.app.hud().open_options();
+    f.app.render_frame();
+    r.open = f.canvas_pixels();
+    r.width = width;
+    r.height = height;
+    r.pointer = LayoutPoint{f.app.mouse_screen_x() + f.app.picture().x, f.app.mouse_screen_y() + f.app.picture().y};
+    const UIButton& button = f.app.hud().options_button();
+    r.options_button = LayoutRect{button.x, button.y, button.w, button.h};
+    r.ok = true;
+    return r;
+}
+
+/// What the options window does outside its card: every second pixel is the dither's own colour (the pixels where x + y of the window's own numbers is odd), every other pixel is what it was
+/// with the window shut; returns the number of pixels that break that rule. Not looked at: the cursor's area, the corner's plate of the frame rate, the Options button (pressed art while the
+/// window is open), the card's last column (the art of its right edge, with the dither over every second pixel of it) and, in the original's own 640 x 480 picture, the last column of its
+/// bottom right strip (the original's pieces there are 100 wide at x = 459 and 539, so column 639 is the one that its own dim leaves out below y = 400)
+int64_t dim_breaks(const OptionsPair& p, const LayoutPoint& offset, const LayoutRect& card, const std::array<uint8_t, 3>& dither, int64_t* dimmed, int64_t* kept) {
+    int64_t breaks = 0;
+    *dimmed = 0;
+    *kept = 0;
+    for (int32_t y = 0; y < p.height; ++y) {
+        for (int32_t x = 0; x < p.width; ++x) {
+            if (card.contains(x, y)) continue;
+            if (std::abs(x - p.pointer.x) < 40 && std::abs(y - p.pointer.y) < 40) continue;
+            if (x >= p.width - 150 && y >= p.height - 30) continue;
+            if (x >= p.options_button.x - 4 && x < p.options_button.x + p.options_button.w + 4 && y >= p.options_button.y - 4 && y < p.options_button.y + p.options_button.h + 4) continue;
+            if (p.width == 640 && x == 639 && y >= 400) continue;
+            const bool odd = (((x - offset.x) + (y - offset.y)) & 1) != 0;
+            const std::array<uint8_t, 3> now = pixel(p.open, p.width, x, y);
+            const std::array<uint8_t, 3> was = pixel(p.shut, p.width, x, y);
+            if (odd) { ++*dimmed; if (now != dither) ++breaks; }
+            else if (x == card.x + card.w && y >= card.y && y < card.y + card.h) continue;
+            else { ++*kept; if (now != was) ++breaks; }
+        }
+    }
+    return breaks;
+}
+
+void test_options_dim(const assets::AssetArchive& arc) {
+    group("options-dim", "the options window dims everything of the picture outside its card in the original's checker: the classic picture is the oracle for what is dimmed, the 16:9 picture dims the same around the card in the middle of its map view");
+    const std::array<uint8_t, 4> d4 = rgb_of(arc, "dith200.bmp", 175);
+    const std::array<uint8_t, 3> dither{d4[0], d4[1], d4[2]};
+    {   // the original's own picture: the dim is the whole picture except the 442 x 440 card at (17, 20): the ring around it and the whole panel (this is what the 16:9 picture repeats)
+        const OptionsPair p = options_pair(Aspect::Classic4x3, 640, 480);
+        check(p.ok, "the classic application runs a match with the options window");
+        if (p.ok) {
+            const ScreenLayout classic = ScreenLayout::classic();
+            check(classic.options_card() == (LayoutRect{17, 20, 442, 440}), "classic: the card is 442 x 440 at (17, 20)");
+            int64_t dimmed = 0, kept = 0;
+            const int64_t breaks = dim_breaks(p, LayoutPoint{}, classic.options_card(), dither, &dimmed, &kept);
+            check(breaks == 0 && dimmed > 50000 && kept > 50000, "classic: outside the card every pixel with x + y odd is the dither's colour and every other is the shut picture's (" + std::to_string(breaks) + " breaks in " + std::to_string(dimmed + kept) + " pixels)");
+        }
+    }
+    {   // 16:9: the card is centred in the map view (offset (160, 30)), the picture around it is dimmed the same way: the map left and right of it, above and below it, the frame, the panel
+        const OptionsPair p = options_pair(Aspect::Wide16x9, 960, 540);
+        check(p.ok, "the 16:9 application runs a match with the options window");
+        if (p.ok) {
+            const ScreenLayout wide = ScreenLayout::with_size(960, 540);
+            check(wide.options_card() == (LayoutRect{177, 50, 442, 440}), "16:9: the card is 442 x 440 at (177, 50), in the middle of the map view");
+            int64_t dimmed = 0, kept = 0;
+            const int64_t breaks = dim_breaks(p, wide.options_offset(), wide.options_card(), dither, &dimmed, &kept);
+            check(breaks == 0 && dimmed > 150000 && kept > 150000, "16:9: outside the card every pixel with x + y odd is the dither's colour and every other is the shut picture's (" + std::to_string(breaks) + " breaks in " + std::to_string(dimmed + kept) + " pixels)");
+            // the places that were not dimmed before the fix: the map left of the card (x 16 - 176), and the panel
+            check(pixel(p.open, 960, 100, 201) == dither && pixel(p.open, 960, 100, 200) == pixel(p.shut, 960, 100, 200), "the map left of the card is dimmed (141 pixels of the view were not)");
+            check(pixel(p.open, 960, 880, 301) == dither && pixel(p.open, 960, 20, 31) == dither, "the right panel and the frame's left edge are dimmed as in the original's picture");
+        }
+    }
+    {   // another size (a layout that is not the 16:9 one): the dim follows the card's offset, its parity is the window's own
+        const ScreenLayout other = ScreenLayout::with_size(961, 541);
+        check(other.options_card().x == ScreenLayout::kOptionsCardX + other.options_offset().x && other.options_card().y == ScreenLayout::kOptionsCardY + other.options_offset().y, "the card is the window's own rectangle moved by the options offset at any size");
     }
 }
 
@@ -2562,6 +2654,7 @@ int main(int argc, char* argv[]) {
     test_picture_per_screen();
     test_small_levels_in_the_application();
     test_margin_and_pages_in_match();
+    test_options_dim(arc);
     test_default_and_options();
     test_pointer_edges_in_match();
 
